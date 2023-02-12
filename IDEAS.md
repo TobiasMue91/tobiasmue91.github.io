@@ -1,0 +1,65 @@
+## Practical Tools
+- code minifier
+- base64-converter
+- word/character counter
+- basic calculator
+- color picker with hex output
+- csv<->json converter
+- text<->morse converter
+- text<->emoji converter
+- text/code diff tool (ignore whitespaces option)
+- form builder
+- online timer
+- decimal<->binary converter
+- text<->ascii converter
+- file-size-calculator/converter
+- text<->1337-speak converter
+- QR code generator
+
+## Games
+- Memory Match
+- Guess the Number
+- Hangman
+- Blackjack
+- Chess
+- War (Card Game)
+- Snake Ladder
+- Bouncing Ball Shooter
+- Space Invaders
+- Pac-Man clone
+- Tetris
+- Flappy Bird clone
+- Trivia Quiz
+- Word Search
+- Crossword Puzzle
+- Jigsaw Puzzle
+- Solitaire
+- Chess Clock
+- Pinball
+- Roulette
+- Shooting Gallery
+- Scrabble
+- Checkers
+- Backgammon
+- Bingo
+- Racing Game
+- Platformer
+- Maze Runner
+- 2048 clone
+- Sudoku
+- Pinball clone
+- Archery Game
+- Ice Hockey
+- Pinball Breakout clone
+- Pool
+- Basketball
+- Air Hockey
+- Racing Game clone
+- Tower Defense
+- Dragon Slayer
+- Kung Fu Fighting
+- Mastermind
+- Slot Machine
+- Music Rhythm Game
+- Treasure Hunt
+  - Ball Drop Game
