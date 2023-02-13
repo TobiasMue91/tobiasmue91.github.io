@@ -1,3 +1,6 @@
+## Other
+- add sidebar with navigation to tools and games
+
 ## Practical Tools
 - code minifier
 - base64-converter
@@ -62,4 +65,4 @@
 - Slot Machine
 - Music Rhythm Game
 - Treasure Hunt
-  - Ball Drop Game
+- Ball Drop Game
