@@ -37,7 +37,6 @@
 - Crossword Puzzle
 - Jigsaw Puzzle
 - Solitaire
-- Chess Clock
 - Pinball
 - Roulette
 - Shooting Gallery
@@ -53,7 +52,6 @@
 - Pinball clone
 - Archery Game
 - Ice Hockey
-- Pinball Breakout clone
 - Pool
 - Basketball
 - Air Hockey

@@ -27,3 +27,9 @@ Finish where you left off.
 <LAST FEW LINES OF CODE PROVIDED>"
 ```
 The quotation marks are intended.
+
+## Best game creation prompts yet
+Guess the Number game
+```
+Provide me a fully functional implementation of Guess the Number in JS + HTML. Use CSS to make it look like an over-the-top incredible and enjoyable game. Use maximum effort for a great design.
+```
