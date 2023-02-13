@@ -15,6 +15,7 @@
 - `Add customizable options for the player, such as control mapping and graphics settings.`
 - `Implement a save system to allow the player to continue their progress.`
 - `Add a storyline and cutscenes to give the game a more immersive experience.`
+- `Minify the code of the <GAME NAME>.`
 - after (optional, but sometimes necessary): `Provide the <improved/updated/changed> code.` 
 
 ## Continuing code that has been cut off

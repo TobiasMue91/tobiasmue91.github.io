@@ -1,6 +1,8 @@
 # gptgames
 Simple HTML games created with ChatGPT.
 
+---
+
 **Disclaimer:**
 
 ~99.9% of the code has been written and improved by ChatGPT. https://chat.openai.com/
@@ -11,25 +13,7 @@ Some games contain graphics (mostly background images). Those have been generate
 
 https://tobiasmue91.github.io/gptgames/
 
-
-
-
-### Example Prompts I have used to generate those results:
-
-**Finding Game Ideas**
-```
-Give me 10 ideas for little funny games you could easily develop using css, html and js.
-```
-
-**Getting Code for Space Invaders**
-```
-Provide me with a fully functional Space Invaders game. Crtieria: concise and effective code; written in HTML, JS and CSS; modern design; good page structure; keyboard inputs
-```
-
-**Minify the code**
-```
-Minify the code of the space invaders game; add more invaders; player shoots with spacebar and gets point when invader is hit; Provide the updated code.
-```
+---
 
 **Jailbreak - used whenever necessary** ⚠️ Use at own risk! Might be patched already.
 ```
