@@ -1,9 +1,15 @@
 # gptgames
 Simple HTML games created with ChatGPT.
 
-**Disclaimer:** ~99.9% of the code has been written and improved by ChatGPT. https://chat.openai.com/
+**Disclaimer:**
 
-**View current version:** https://tobiasmue91.github.io/gptgames/
+~99.9% of the code has been written and improved by ChatGPT. https://chat.openai.com/
+
+Some games contain graphics (mostly background images). Those have been generated with the help of MidJourney .
+
+**View current version:**
+
+https://tobiasmue91.github.io/gptgames/
 
 
 
