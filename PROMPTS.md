@@ -4,7 +4,7 @@
 - `Provide 10 game ideas for simplistic, small JS games.`
 
 ## Improving the game
-- before: `I am making a <GAME NAME>.`
+- before: `I am making a <GAME/TOOL NAME>.`
 - `Integrate multiplayer functionality into the game code.`
 - `Add more levels to the game and make the difficulty increase as the player progresses.`
 - `Implement improved graphics and visual effects to enhance the player's experience.`
@@ -15,7 +15,9 @@
 - `Add customizable options for the player, such as control mapping and graphics settings.`
 - `Implement a save system to allow the player to continue their progress.`
 - `Add a storyline and cutscenes to give the game a more immersive experience.`
-- `Minify the code of the <GAME NAME>.`
+- `Minify the code.`
+- `Improve this HTML page by adding professional and up to date SEO.`
+- `Improve the accessibility.`
 - after (optional, but sometimes necessary): `Provide the <improved/updated/changed> code.` 
 
 ## Continuing code that has been cut off

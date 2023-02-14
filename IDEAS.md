@@ -2,6 +2,7 @@
 - add sidebar with navigation to tools and games
 
 ## Practical Tools
+- python script to make screenshots of every tool/game
 - code minifier
 - base64-converter
 - word/character counter
