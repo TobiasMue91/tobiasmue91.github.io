@@ -1,4 +1,4 @@
-window.onload = function (event) {
+window.addEventListener('load', function (event) {
   var xhr = new XMLHttpRequest();
   xhr.open("GET", "/gptgames/sidebar.html", true);
   xhr.onreadystatechange = function () {
@@ -10,7 +10,7 @@ window.onload = function (event) {
     }
   };
   xhr.send();
-};
+});
 
 function addSidebarButton() {
   var toggleButton = document.createElement("button");
