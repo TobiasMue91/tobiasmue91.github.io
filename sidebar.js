@@ -6,7 +6,7 @@ window.onload = function (event) {
       var sidebar = document.createElement("div");
       sidebar.innerHTML = xhr.responseText;
       document.body.appendChild(sidebar);
-      addSidebarButton();
+      // addSidebarButton();
     }
   };
   xhr.send();
@@ -14,6 +14,7 @@ window.onload = function (event) {
 
 function addSidebarButton() {
   var toggleButton = document.createElement("button");
+  toggleButton.id = "sidebar-toggle";
   toggleButton.innerHTML = "Toggle Sidebar";
   toggleButton.style.display = "block";
   toggleButton.style.position = "fixed";
