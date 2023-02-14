@@ -21,7 +21,6 @@
 
 ## Games
 - Memory Match
-- Guess the Number
 - Hangman
 - Blackjack
 - Chess
