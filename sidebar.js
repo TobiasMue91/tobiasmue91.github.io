@@ -12,14 +12,27 @@ window.addEventListener('load', function (event) {
   xhr.send();
 });
 
+let currentScript = document.currentScript;
+
 function addSidebarButton() {
+  let position = currentScript.getAttribute('data-position') || 'top-left';
+
   var toggleButton = document.createElement("button");
   toggleButton.id = "sidebar-toggle";
+  toggleButton.classList.add(position);
   toggleButton.innerHTML = "Toggle Sidebar";
   toggleButton.style.display = "inline-block";
   toggleButton.style.position = "fixed";
-  toggleButton.style.left = "10px";
-  toggleButton.style.top = "10px";
+  if (position === 'top-left') {
+    toggleButton.style.left = "10px";
+    toggleButton.style.top = "10px";
+  } else if (position === 'top-right') {
+    toggleButton.style.right = "10px";
+    toggleButton.style.top = "10px";
+  } else if (position === 'bottom-right') {
+    toggleButton.style.right = "10px";
+    toggleButton.style.bottom = "10px";
+  }
   toggleButton.style.border = 'none';
   toggleButton.style.color = 'white';
   toggleButton.style.padding = '7px 12px';
