@@ -6,6 +6,7 @@ window.addEventListener('load', function (event) {
       var sidebar = document.createElement("div");
       sidebar.innerHTML = xhr.responseText;
       document.body.appendChild(sidebar);
+      initSidebarSearch();
       addSidebarButton();
     }
   };
@@ -13,6 +14,31 @@ window.addEventListener('load', function (event) {
 });
 
 let currentScript = document.currentScript;
+
+function initSidebarSearch() {
+  const searchInput = document.getElementById('search-input');
+  const gamesList = document.getElementById('games-list');
+  const toolsList = document.getElementById('tools-list');
+
+  searchInput.addEventListener('keyup', (event) => {
+    const searchTerm = event.target.value.toLowerCase();
+    filterList(gamesList, searchTerm);
+    filterList(toolsList, searchTerm);
+  });
+
+  function filterList(list, searchTerm) {
+    const items = list.getElementsByTagName('li');
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const text = item.textContent.toLowerCase();
+      if (text.includes(searchTerm) || !searchTerm) {
+        item.style.display = 'block';
+      } else {
+        item.style.display = 'none';
+      }
+    }
+  }
+}
 
 function addSidebarButton() {
   let position = currentScript.getAttribute('data-position') || 'top-left';
@@ -52,4 +78,5 @@ function addSidebarButton() {
 function toggleSidebar() {
   var sidebar = document.querySelector(".sidebar");
   sidebar.style.display = (sidebar.style.display === "block") ? "none" : "block";
+  document.getElementById('search-input').focus();
 }
