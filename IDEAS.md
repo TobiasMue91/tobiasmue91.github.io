@@ -19,8 +19,6 @@
 - file-size-calculator/converter
 - text<->1337-speak converter
 - QR code generator
-- URL Encoder/Decoder: A tool that converts special characters in a URL to their encoded counterparts, and vice versa.
-- Lorem Ipsum Generator: A tool that generates placeholder text for design mockups or content prototypes, using the classic Latin filler text.
 - Regular Expression Tester: A tool that allows users to test and experiment with regular expressions, using a visual editor or direct input.
 - Markdown Converter: A tool that converts plain text written in Markdown syntax into HTML, for easy publication on the web.
 - QR Code Generator: A tool that creates QR codes from text or URLs, suitable for use in print or digital media.
