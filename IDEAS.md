@@ -20,8 +20,6 @@
 - text<->1337-speak converter
 - QR code generator
 - Regular Expression Tester: A tool that allows users to test and experiment with regular expressions, using a visual editor or direct input.
-- Markdown Converter: A tool that converts plain text written in Markdown syntax into HTML, for easy publication on the web.
-- QR Code Generator: A tool that creates QR codes from text or URLs, suitable for use in print or digital media.
 - File Format Converter: A tool that converts files from one format to another, such as image or audio files.
 - Time Zone Converter: A tool that converts times and dates between different time zones, using a map or a list of cities.
 - JSON Formatter: A tool that formats and beautifies JSON data, making it easier to read and edit.
