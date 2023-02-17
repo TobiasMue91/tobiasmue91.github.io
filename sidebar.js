@@ -68,7 +68,7 @@ function addSidebarButton() {
   toggleButton.style.margin = '4px 2px';
   toggleButton.style.cursor = 'pointer';
   toggleButton.style.borderRadius = '3px';
-  toggleButton.style.background = '#4CAF50';
+  toggleButton.style.background = '#2b592c';
 
   document.body.appendChild(toggleButton);
 
