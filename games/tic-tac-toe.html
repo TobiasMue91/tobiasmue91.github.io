@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Tic Tac Toe</title>
-  <link href='https://fonts.googleapis.com/css?family=Tetris' rel='stylesheet'>
+  <title>Tic Tac Toe</title>
   <style>
     body {
         background: linear-gradient(#3f3f3f, #0099ff);
@@ -57,7 +56,8 @@
   </style>
 </head>
 <body>
-  <h1 class="centerWhite">Tic Tac Toe</h1>
+<h1 class="centerWhite">Tic Tac Toe</h1>
+<div id="game-area">
   <table id="board">
     <tr>
       <td id="cell-1"></td>
@@ -75,48 +75,149 @@
       <td id="cell-9"></td>
     </tr>
   </table>
-
-
   <div class="centerWhite">Aktueller Spieler: <span id="current">X</span></div>
-  <script>
-    let currentPlayer = "X";
-    let gameWon = false;
-    const cells = document.querySelectorAll("td");
-    cells.forEach(function(cell) {
-      cell.addEventListener("click", function() {
-        if (!gameWon) {
-          if (cell.textContent === "") {
-            cell.textContent = currentPlayer;
-            cell.classList.add(currentPlayer.toLowerCase());
-            checkWin();
-            currentPlayer = currentPlayer === "X" ? "O" : "X";
-            document.querySelector("#current").textContent = currentPlayer;
-          }
+  <div id="game-info"></div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js";
+  import { getDatabase, ref, set, get, onValue, child, onDisconnect, update, remove } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js";
+
+  const app = initializeApp({
+    apiKey: "AIzaSyBJs3yjQtwHmyi6dDrkSt9IGMzAXuQE1Ms",
+    authDomain: "ball-bouncing-game.firebaseapp.com",
+    databaseURL: "https://ball-bouncing-game-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "ball-bouncing-game",
+    storageBucket: "ball-bouncing-game.appspot.com",
+    messagingSenderId: "274565600949",
+    appId: "1:274565600949:web:0c0cd51a223ec0226550fc"
+  });
+
+  const db = getDatabase(app);
+
+  // Game state
+  let gameRef, playerRef;
+  let currentPlayer = "X";
+  let gameWon = false;
+  let gameId = window.location.hash.substr(1);
+  let game, isPlayerTwo, player;
+  if (gameId) {
+    gameRef = ref(db, `games/${gameId}`);
+    isPlayerTwo = true;
+    player = 'O';
+  } else {
+    gameId = Math.random().toString(36).substr(2, 5);
+    gameRef = ref(db, `games/${gameId}`);
+    player = 'X';
+    set(gameRef, {
+      player1: {
+        name: "Player 1",
+        symbol: "X"
+      },
+      player2: null,
+      board: [
+        "", "", "",
+        "", "", "",
+        "", "", ""
+      ],
+      turn: "X",
+      winner: null
+    });
+    window.location.hash = gameId;
+  }
+
+  onDisconnect(child(gameRef, "player2")).remove()
+
+  get(gameRef).then((snapshot) => {
+    game = snapshot.val();
+
+    if (isPlayerTwo) {
+      update(gameRef, {player2: {name: "Player 2", symbol: "O"}});
+    }
+  });
+
+  onValue(gameRef, snapshot => {
+    game = snapshot.val();
+  });
+
+  // Board cells
+  const cells = document.querySelectorAll("td");
+  cells.forEach(function(cell, index){
+    cell.addEventListener("click",function(){
+      get(gameRef).then((snapshot) => {
+        if (player === snapshot.child("turn").val() && snapshot.child(`board/${index}`).val() === "" && !snapshot.child("winner").exists()){
+          game.board[index] = currentPlayer;
+          game.turn = currentPlayer === 'X' ? 'O' : 'X';
+          update(gameRef, game);
         }
       });
     });
-    function checkWin() {
-      // Winning combinations
-      const winningCombinations = [
-        [cells[0], cells[1], cells[2]],
-        [cells[3], cells[4], cells[5]],
-        [cells[6], cells[7], cells[8]],
-        [cells[0], cells[3], cells[6]],
-        [cells[1], cells[4], cells[7]],
-        [cells[2], cells[5], cells[8]],
-        [cells[0], cells[4], cells[8]],
-        [cells[2], cells[4], cells[6]],
-      ];
-      // Check for a win
-      winningCombinations.forEach(function(combination) {
-        if (combination[0].textContent === currentPlayer &&
-            combination[1].textContent === currentPlayer &&
-            combination[2].textContent === currentPlayer) {
-          gameWon = true;
-        }
-      });
+  });
+
+  // Update game state
+  onValue(child(gameRef, "player2"), function(snapshot) {
+    if (snapshot.exists()) {
+      document.querySelector("#game-info").textContent = "The game has started and you are playing against " + snapshot.child("name").val();
+    } else {
+      document.querySelector("#game-info").textContent = "Waiting for other player to join...";
     }
-  </script>
-<script src="../sidebar.js"></script>
+  })
+
+  onValue(child(gameRef, "board"), function(snapshot) {
+    snapshot.val().forEach(function(cell, index){
+      cells[index].textContent = cell;
+      cells[index].classList.remove("x", "o");
+      if (cell === "X") {
+        cells[index].classList.add("x");
+      } else if (cell === "O") {
+        cells[index].classList.add("o");
+      }
+    });
+  });
+
+  onValue(child(gameRef, "turn"), function(snapshot) {
+    currentPlayer = snapshot.val();
+    document.querySelector("#current").textContent = currentPlayer;
+  });
+
+  onValue(child(gameRef, "winner"), function(snapshot) {
+    if (snapshot.exists()) {
+      gameWon = true;
+      document.querySelector("#game-info").textContent = `Player ${snapshot.val()} wins!`;
+    } else if (game && !game.board.includes("")) {
+      gameWon = true;
+      document.querySelector("#game-info").textContent = "It's a tie!";
+    }
+  });
+
+  // Check for a win
+  function checkWin(){
+    if (!game) {
+      return;
+    }
+    const board = game.board;
+    // Winning combinations
+    const winningCombinations = [
+      [0,1,2],
+      [3,4,5],
+      [6,7,8],
+      [0,3,6],
+      [1,4,7],
+      [2,5,8],
+      [0,4,8],
+      [2,4,6],
+    ];
+    winningCombinations.forEach(function(combination){
+      if (board[combination[0]] === currentPlayer && board[combination[1]] === currentPlayer && board[combination[2]] === currentPlayer){
+        set(child(gameRef, "winner"), currentPlayer);
+        remove(gameRef);
+      }
+    });
+  }
+
+  onValue(child(gameRef, "board"), function(snapshot) {
+    checkWin();
+  });
+</script>
 </body>
 </html>
