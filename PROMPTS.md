@@ -18,7 +18,9 @@
 - `Minify the code.`
 - `Improve this HTML page by adding professional and up to date SEO.`
 - `Improve the accessibility.`
-- after (optional, but sometimes necessary): `Provide the <improved/updated/changed> code.` 
+- `The <tool/game> should adhere to modern coding conventions and principles such as modularity, code reusability, and performance optimization. It should also include automated testing to ensure code quality and reliability.`
+- `Put an emphasis on accessibility and user experience. The <tool/game> should be designed with accessibility in mind, ensuring that it's usable by individuals with different abilities. Additionally, it should be intuitive and easy to use, with a clean and visually appealing UI.`
+- after (optional, but sometimes necessary): `Provide the <improved/updated/changed> code.`
 
 ## Continuing code that has been cut off
 ```
