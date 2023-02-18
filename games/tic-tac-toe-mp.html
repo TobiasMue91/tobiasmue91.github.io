@@ -55,11 +55,92 @@
           cursor: pointer;
           margin: 20px auto;
       }
+
+      #share-url {
+          border: 1px solid #ccc;
+          border-radius: 12px;
+          padding: 16px;
+          width: 500px;
+          font-size: 20px;
+          box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px rgba(102, 175, 233, 0.6);
+          text-align: center;
+          background: #0f0c5d;
+          color: white;
+          font-weight: bold;
+          cursor: pointer;
+      }
+
+      #share-url:focus {
+          border-color: #66afe9;
+          outline: 0;
+          box-shadow: 0 0 0 2px rgba(102, 175, 233, 0.6);
+      }
+
+      #name-form {
+          margin-bottom: 1em;
+      }
+
+      #name-form label {
+          display: inline-block;
+          color: white;
+          font-size: 20px;
+      }
+
+      #name-form input {
+          margin-left: 1em;
+          border: 1px solid #ccc;
+          border-radius: 12px;
+          padding: 16px;
+          width: 200px;
+          font-size: 20px;
+          box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px rgba(102, 175, 233, 0.6);
+          text-align: center;
+          background: #0f0c5d;
+          color: white;
+      }
+
+      #game-area {
+          text-align: center;
+      }
+
+      .enter-icon {
+          position: relative;
+          top: 50%;
+          right: -150px;
+          transform: translateY(-120%);
+          font-size: 28px;
+          opacity: 0;
+          color: white;
+          animation: pulse 1s ease-in-out infinite;
+          pointer-events: none;
+      }
+
+      @keyframes pulse {
+          0% {
+              opacity: 0;
+          }
+          50% {
+              opacity: 1;
+          }
+          100% {
+              opacity: 0;
+          }
+      }
+
+      #name-form input:focus + .enter-icon {
+          opacity: 1;
+          animation: none;
+      }
   </style>
 </head>
 <body>
 <h1 class="centerWhite">Tic Tac Toe</h1>
 <div id="game-area">
+  <div id="name-form">
+    <label for="player-name">Your Name:</label>
+    <input type="text" id="player-name"/>
+    <div class="enter-icon">⏎</div>
+  </div>
   <table id="board">
     <tr>
       <td id="cell-1"></td>
@@ -77,8 +158,8 @@
       <td id="cell-9"></td>
     </tr>
   </table>
-  <div class="centerWhite">Aktueller Spieler: <span id="current">X</span></div>
-  <div id="game-info" class="centerWhite"></div>
+  <div class="centerWhite">Current Player: <span id="current">X</span></div>
+  <div id="game-info" class="centerWhite">Waiting for other player to join...</div>
   <button id="restart-button" style="display: none;">Restart</button>
 </div>
 <script type="module">
@@ -111,7 +192,6 @@
 
   // Game state
   let gameRef, player, isPlayerTwo;
-  let currentPlayer = "X";
   let gameWon = false;
   const hash = window.location.hash.substr(1);
   const gameId = hash || Math.random().toString(36).substr(2, 5);
@@ -119,28 +199,46 @@
 
   gameRef = ref(db, `games/${gameId}`);
 
-  if (isNewGame) {
+  // Randomize starting player
+  const randomStartingPlayer = Math.floor(Math.random() * 2) + 1;
+
+  // Display name form if player 1
+  if (isNewGame || localStorage.getItem('isPlayerTwo') === 'no') {
     isPlayerTwo = false;
     localStorage.setItem('isPlayerTwo', 'no');
     const url = window.location.href.split('#')[0] + `#${gameId}`;
-    document.querySelector("#game-info").innerHTML = `New game created: Share the URL with a friend <a href="${url}">${url}</a>`;
+    document.querySelector("#game-info").innerHTML = `New game created: Share the URL with a friend <input type="text" id="share-url" value="${url}" />`;
+    document.querySelector('#share-url').addEventListener('click', e => {
+      const target = e.target;
+      target.title = 'Copied!';
+      setTimeout(() => target.title = '', 5000);
+      navigator.clipboard.writeText(target.value);
+    });
   } else {
     isPlayerTwo = localStorage.getItem('isPlayerTwo') !== 'no';
   }
 
+  console.log(isPlayerTwo);
+
+  document.querySelector("#name-form").style.display = "block";
+
+  // Handle form submission
+  document.querySelector("#player-name").addEventListener("keyup", function (e) {
+    if (e.keyCode !== 13) return;
+    const name = document.querySelector("#player-name").value || (isPlayerTwo ? "Player 2" : "Player 1");
+    update(child(gameRef, isPlayerTwo ? "player2" : "player1"), {name});
+    get(child(gameRef, isPlayerTwo ? "player2" : "player1")).then(snap => {
+      console.log(snap.val());
+    })
+    document.querySelector("#name-form").style.display = "none";
+  });
+
   function init() {
     const initGame = {
-      player1: {
-        name: "Player 1",
-        symbol: "X"
-      },
+      player1: {name: "Player 1", symbol: "X"},
       player2: null,
-      board: [
-        "", "", "",
-        "", "", "",
-        "", "", ""
-      ],
-      turn: "X",
+      board: ["", "", "", "", "", "", "", "", ""],
+      turn: randomStartingPlayer === 1 ? "X" : "O",
       winner: null
     };
     set(gameRef, initGame).catch(() => {
@@ -155,9 +253,9 @@
       init();
     }
     updateGame(snapshot);
-  });
+  })
 
-  onDisconnect(child(gameRef, "player2")).remove()
+  onDisconnect(gameRef).remove()
 
   onValue(gameRef, updateGame);
 
@@ -171,10 +269,11 @@
     }
     if (!game.player2) return;
     player = game[`player${isPlayerTwo ? 2 : 1}`];
-    currentPlayer = game.turn;
-    gameWon = Boolean(game.winner);
 
-    document.querySelector("#current").textContent = currentPlayer;
+    gameWon = Boolean(game.winner);
+    const currentPlayerSymbol = game.turn;
+    const currentPlayer = currentPlayerSymbol === "X" ? game.player1 : game.player2;
+    document.querySelector("#current").textContent = `${currentPlayer.name} - ${currentPlayer.symbol}`;
     if (gameWon) {
       remove(gameRef);
       if (game.winner === player.symbol) {
@@ -182,11 +281,11 @@
       } else {
         document.querySelector("#game-info").textContent = `Player ${game.winner} wins!`;
       }
-      document.querySelector("#restart-button").style.display = "block";
+      if (!isPlayerTwo) {
+        document.querySelector("#restart-button").style.display = "block";
+      }
     } else if (game.player2) {
-      document.querySelector("#game-info").textContent = `The game has started and you are playing against ${
-        isPlayerTwo ? game.player1.name : game.player2.name
-      }`;
+      document.querySelector("#game-info").textContent = `The game has started and you are playing against ${isPlayerTwo ? game.player1.name : game.player2.name}`;
     } else {
       document.querySelector("#game-info").textContent = "Waiting for other player to join...";
     }
@@ -210,6 +309,7 @@
   function checkWin() {
     get(child(gameRef, "board")).then((snapshot) => {
       const board = snapshot.val();
+
       // Winning combinations
       const winningCombinations = [
         [0, 1, 2],
@@ -221,6 +321,7 @@
         [0, 4, 8],
         [2, 4, 6],
       ];
+
       for (let i = 0; i < winningCombinations.length; i++) {
         const [a, b, c] = winningCombinations[i];
         if (board[a] && board[a] === board[b] && board[a] === board[c]) {
@@ -228,10 +329,12 @@
           return;
         }
       }
+
       if (!board.includes("")) {
         set(child(gameRef, "winner"), "tie");
       }
     });
+
   }
 
   onValue(child(gameRef, "board"), function (snapshot) {
@@ -254,7 +357,11 @@
     init();
     document.querySelector("#game-info").textContent = "Waiting for other player to join...";
     document.querySelector("#restart-button").style.display = "none";
+    if (isPlayerTwo) {
+      document.querySelector("#restart-button").style.display = "none";
+    }
   });
 </script>
+
 </body>
 </html>
