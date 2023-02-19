@@ -37,3 +37,9 @@ Guess the Number game
 ```
 Provide me a fully functional implementation of Guess the Number in JS + HTML. Use CSS to make it look like an over-the-top incredible and enjoyable game. Use maximum effort for a great design.
 ```
+
+Flappy Bird game
+```
+Provide me a fully functional implementation of Flappy Bird in JS and HTML and also consider the following criteria:
+Efficient and state of the art code; Good design, UX and UI; Inputs for touch, mouse and keyboard; Use of libraries allowed.
+```
