@@ -3,6 +3,15 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 const renderer = new THREE.WebGLRenderer({canvas: document.getElementById('game-canvas')});
 const clock = new THREE.Clock();
 
+camera.position.set(0, 5, 10);
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+directionalLight.position.set(0, 1, 1);
+scene.add(directionalLight);
+
 // Set up physics engine
 const world = new CANNON.World();
 world.gravity.set(0, -9.82, 0);
@@ -33,21 +42,25 @@ const fruitMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const fruitObjects = [];
 const fruitBodies = [];
 
-// Create the fruits and their physics bodies
-for (let i = 0; i < fruits.length; i++) {
-  const geometry = new THREE.TextGeometry(fruits[i], { size: fruitSize, height: 0.1 });
-  const mesh = new THREE.Mesh(geometry, fruitMaterial);
-  mesh.position.set(Math.random() * 4 - 2, Math.random() * 4 + 4, Math.random() * 4 - 2);
-  scene.add(mesh);
-  fruitObjects.push(mesh);
+const loader = new THREE.FontLoader();
 
-  const shape = new CANNON.Box(new CANNON.Vec3(fruitSize / 2, fruitSize / 2, fruitSize / 2));
-  const body = new CANNON.Body({ mass: 1 });
-  body.addShape(shape);
-  body.position.set(mesh.position.x, mesh.position.y, mesh.position.z);
-  world.addBody(body);
-  fruitBodies.push(body);
-}
+loader.load( 'fonts/helvetiker_regular.typeface.json', function ( font ) {
+// Create the fruits and their physics bodies
+  for (let i = 0; i < fruits.length; i++) {
+    const geometry = new THREE.TextGeometry(fruits[i], {size: fruitSize, height: 0.1, font: font});
+    const mesh = new THREE.Mesh(geometry, fruitMaterial);
+    mesh.position.set(Math.random() * 4 - 2, Math.random() * 4 + 4, Math.random() * 4 - 2);
+    scene.add(mesh);
+    fruitObjects.push(mesh);
+
+    const shape = new CANNON.Box(new CANNON.Vec3(fruitSize / 2, fruitSize / 2, fruitSize / 2));
+    const body = new CANNON.Body({mass: 1});
+    body.addShape(shape);
+    body.position.set(mesh.position.x, mesh.position.y, mesh.position.z);
+    world.addBody(body);
+    fruitBodies.push(body);
+  }
+});
 
 // Create the player's sword
 const swordGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1, 8);
