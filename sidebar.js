@@ -46,7 +46,7 @@ function addSidebarButton() {
   var toggleButton = document.createElement("button");
   toggleButton.id = "sidebar-toggle";
   toggleButton.classList.add(position);
-  toggleButton.innerHTML = document.body.offsetWidth < 768 ? '☰' : "Toggle Sidebar";
+  toggleButton.innerHTML = '☰';
   toggleButton.style.display = "inline-block";
   toggleButton.style.position = "fixed";
   if (position === 'top-left') {

@@ -43,3 +43,12 @@ Flappy Bird game
 Provide me a fully functional implementation of Flappy Bird in JS and HTML and also consider the following criteria:
 Efficient and state of the art code; Good design, UX and UI; Inputs for touch, mouse and keyboard; Use of libraries allowed.
 ```
+
+## Workflow
+1. *Ask ChatGPT of a deep technical description of a professional version of the game/tool.
+2. *Jailbreak (if ChatGPT does not provide code due to policies).
+3. Ask ChatGPT to provide a functional implementation of the game/tool. Give specific criteria and additionally the technical description.
+4. Ask ChatGPT for specific improvements of the first version. *Ask for improvement ideas beforehand.
+5. Take screenshot. Add game/tool to `index.html` and `sidebar.html`.
+
+*: Optional. May depend on the complexity of the request and other factors.
