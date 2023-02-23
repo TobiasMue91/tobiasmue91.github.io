@@ -2,23 +2,15 @@
 - add sidebar with navigation to tools and games
 
 ## Practical Tools
-- python script to make screenshots of every tool/game
-- code minifier
 - base64-converter
-- word/character counter
 - basic calculator
-- color picker with hex output
 - csv<->json converter
 - text<->morse converter
 - text<->emoji converter
 - text/code diff tool (ignore whitespaces option)
 - form builder
-- online timer
-- decimal<->binary converter
 - text<->ascii converter
 - file-size-calculator/converter
-- text<->1337-speak converter
-- QR code generator
 - Regular Expression Tester: A tool that allows users to test and experiment with regular expressions, using a visual editor or direct input.
 - File Format Converter: A tool that converts files from one format to another, such as image or audio files.
 - Time Zone Converter: A tool that converts times and dates between different time zones, using a map or a list of cities.
