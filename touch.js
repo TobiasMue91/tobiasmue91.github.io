@@ -15,16 +15,15 @@ let currentTouch = null;
 let currentDirection = null;
 
 // Add event listeners for touch events
-document.addEventListener("touchstart", handleTouchStart, {passive:false});
-document.addEventListener("touchmove", handleTouchMove, {passive:false});
-document.addEventListener("touchend", handleTouchEnd, {passive:false});
+document.addEventListener("touchstart", handleTouchStart);
+document.addEventListener("touchmove", handleTouchMove);
+document.addEventListener("touchend", handleTouchEnd);
 
 // Handle touch start event
 function handleTouchStart(event) {
   currentTouch = event.touches[0];
   currentDirection = getDirection(currentTouch);
   fireKeyDownEvent(currentDirection);
-  event.preventDefault();
 }
 
 // Handle touch move event
@@ -37,7 +36,6 @@ function handleTouchMove(event) {
     currentDirection = direction;
   }
   currentTouch = touch;
-  event.preventDefault();
 }
 
 // Handle touch end event
@@ -45,7 +43,6 @@ function handleTouchEnd(event) {
   fireKeyUpEvent(currentDirection);
   currentTouch = null;
   currentDirection = null;
-  event.preventDefault();
 }
 
 // Get the direction of a touch based on its position on the screen
