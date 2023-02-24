@@ -31,15 +31,21 @@
 <body>
 <div id="instructions">
   <h1>Escape the Maze</h1>
-  <p>Use arrow keys, tilt controls or WASD to move</p>
+  <p>Use arrow keys, (wonky) tilt controls or WASD to move</p>
 </div>
 <script>
   // Set up scene
   var scene = new THREE.Scene();
   var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   var renderer = new THREE.WebGLRenderer();
+  var ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
+  scene.add(ambientLight);
+
+  var directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+  directionalLight.position.set(1, 1, 1);
+  scene.add(directionalLight);
 
   // Set up player
   var player = new THREE.Mesh(new THREE.BoxGeometry(.5, 1, .5), new THREE.MeshBasicMaterial({color: 0xff0000}));
@@ -57,7 +63,7 @@
 
   // Set up sound effects
   var collectSound = new Howl({src: ["obstacle/score.mp3"]});
-  var unlockSound = new Howl({src: ["obastacle/collision.mp3"]});
+  var unlockSound = new Howl({src: ["obstacle/collision.mp3"]});
 
   // Set up game logic
   var keys = [];
@@ -100,14 +106,36 @@
     maze[maze.length - 2][maze[0].length - 1] = " ";
 
     // Add power-ups to the maze
-    var powerUps = [{type: "speed", color: 0x00ff00}, {type: "life", color: 0x0000ff}, {type: "trap", color: 0xff0000}, {type: "key", color: 0xffff00},];
+    var powerUps = [{type: "speed", color: '#00ff00'}, {type: "life", color: '#0000ff'}, {type: "trap", color: '#ff0000'}, {type: "key", color: '#ffff00'},];
+
+    var textureLoader = new THREE.TextureLoader();
+    var wallTexture = textureLoader.load("wall.jpg");
+    var wallNormalMap = textureLoader.load("wall_normal.jpg");
+
+    const hexToRgb = hex =>
+      hex.replace(/^#?([a-f\d])([a-f\d])([a-f\d])$/i
+        ,(m, r, g, b) => '#' + r + r + g + g + b + b)
+        .substring(1).match(/.{2}/g)
+        .map(x => parseInt(x, 16))
 
     for (var i = 0; i < powerUps.length; i++) {
       var x = Math.floor(Math.random() * (width - 2)) + 1;
       var y = Math.floor(Math.random() * (height - 2)) + 1;
       if (maze[y][x] === " ") {
         maze[y][x] = powerUps[i].type.charAt(0);
-        var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: powerUps[i].color}));
+        var wallMaterial = new THREE.MeshStandardMaterial({
+          map: wallTexture,
+          normalMap: wallNormalMap,
+          normalScale: new THREE.Vector2(0, 0),
+          roughness: 0.8,
+          metalness: 0.2,
+        });
+        wallMaterial.powerup = powerUps[i];
+
+        var rgbValue = hexToRgb(powerUps[i].color);
+        var wallColor = new THREE.Color(`rgba(${rgbValue[0]}, ${rgbValue[1]}, ${rgbValue[2]}, 0.5)`);
+        wallMaterial.color = wallColor;
+        var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), wallMaterial);
         wall.position.set(x - width / 2 + 0.5, 1, -y + height / 2 - 0.5);
         scene.add(wall);
         walls.push(wall);
@@ -118,17 +146,15 @@
     for (var i = 0; i < maze.length; i++) {
       for (var j = 0; j < maze[i].length; j++) {
         if (maze[i][j] === "w") {
-          var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: 0x888888}));
-          wall.position.set(j - width / 2 + 0.5, 1, -i + height / 2 - 0.5);
-          scene.add(wall);
-          walls.push(wall);
-        } else if (maze[i][j] === "t") {
-          var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: 0xff0000}));
-          wall.position.set(j - width / 2 + 0.5, 1, -i + height / 2 - 0.5);
-          scene.add(wall);
-          walls.push(wall);
-        } else if (maze[i][j] === "k") {
-          var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: 0xffff00}));
+          var wallMaterial = new THREE.MeshStandardMaterial({
+            map: wallTexture,
+            normalMap: wallNormalMap,
+            normalScale: new THREE.Vector2(0, 0),
+            roughness: 0.8,
+            metalness: 0.2,
+          });
+          wallMaterial.powerup = {type: "normal", color: '#ffffff'};
+          var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), wallMaterial);
           wall.position.set(j - width / 2 + 0.5, 1, -i + height / 2 - 0.5);
           scene.add(wall);
           walls.push(wall);
@@ -142,7 +168,7 @@
   // Check for collision using raycasting
   function checkCollision() {
     var raycaster = new THREE.Raycaster(player.position, velocity.clone().normalize(), 0, .3);
-    var normalWalls = walls.filter(wall => wall.material.color.getHex() === 0x888888);
+    var normalWalls = walls.filter(wall => wall.material.powerup.color === '#ffffff');
     var intersects = raycaster.intersectObjects(normalWalls);
     if (intersects.length > 0) {
       return true;
@@ -194,6 +220,7 @@
         scene.remove(walls[i]);
       }
       walls = [];
+      keys = [];
       player.position.set(0, 1, 0);
       camera.position.set(0, 20, 0);
       camera.lookAt(player.position);
@@ -206,23 +233,23 @@
         scene.remove(walls[j]);
         scene.remove(walls[i]);
         walls.splice(i, 1);
-        if (walls[i].material.color.getHex() === 0x00ff00) {
+        if (walls[i].material.powerup.color === '#00ff00') {
           collectSound.play();
           speedBoost = 0.2;
-        } else if (walls[i].material.color.getHex() === 0x0000ff) {
+        } else if (walls[i].material.powerup.color === '#0000ff') {
           collectSound.play();
           lives++;
-        } else if (walls[i].material.color.getHex() === 0xff0000) {
+        } else if (walls[i].material.powerup.color === 0xff0000) {
           collectSound.play();
           lives--;
           if (lives === 0) {
             alert("Game Over!");
             location.reload();
           }
-        } else if (walls[i].material.color.getHex() === 0xffff00) {
+        } else if (walls[i].material.powerup.color === '#ffff00') {
           unlockSound.play();
           for (var j = 0; j < walls.length; j++) {
-            if (walls[j].material.color.getHex() === 0x000000) {
+            if (walls[j].material.powerup.color === '#000000') {
               scene.remove(walls[j]);
               walls.splice(j, 1);
               break;
@@ -273,7 +300,7 @@
   window.addEventListener("devicemotion", function(event) {
     var ax = event.accelerationIncludingGravity.x;
     var ay = event.accelerationIncludingGravity.y;
-    // if (Math.abs(ax) > Math.abs(ay)) {
+    if (Math.abs(ax) > Math.abs(ay)) {
       if (ax > 2) {
         keys[37] = true; // left arrow
       } else if (ax < -2) {
@@ -282,7 +309,7 @@
         keys[37] = false;
         keys[39] = false;
       }
-    // } else {
+    } else {
       if (ay > 2) {
         keys[40] = true; // down arrow
       } else if (ay < -2) {
@@ -291,7 +318,7 @@
         keys[38] = false;
         keys[40] = false;
       }
-    // }
+    }
   });
 
   // Start game loop
