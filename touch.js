@@ -77,16 +77,16 @@ function isInsideTriangle(x, y, tri) {
 // Fire a keydown event for the given direction
 function fireKeyDownEvent(direction) {
   if (direction === "left") {
-    const event = new KeyboardEvent("keydown", { keyCode: leftArrowCode });
+    const event = new KeyboardEvent("keydown", { keyCode: leftArrowCode, code: 'ArrowLeft' });
     document.dispatchEvent(event);
   } else if (direction === "top") {
-    const event = new KeyboardEvent("keydown", { keyCode: upArrowCode });
+    const event = new KeyboardEvent("keydown", { keyCode: upArrowCode, code: 'ArrowUp' });
     document.dispatchEvent(event);
   } else if (direction === "right") {
-    const event = new KeyboardEvent("keydown", { keyCode: rightArrowCode });
+    const event = new KeyboardEvent("keydown", { keyCode: rightArrowCode, code: 'ArrowRight' });
     document.dispatchEvent(event);
   } else if (direction === "bottom") {
-    const event = new KeyboardEvent("keydown", { keyCode: downArrowCode });
+    const event = new KeyboardEvent("keydown", { keyCode: downArrowCode, code: 'ArrowDown' });
     document.dispatchEvent(event);
   }
 }
@@ -94,16 +94,16 @@ function fireKeyDownEvent(direction) {
 // Fire a keyup event for the given direction
 function fireKeyUpEvent(direction) {
   if (direction === "left") {
-    const event = new KeyboardEvent("keyup", { keyCode: leftArrowCode });
+    const event = new KeyboardEvent("keyup", { keyCode: leftArrowCode, code: 'ArrowLeft' });
     document.dispatchEvent(event);
   } else if (direction === "top") {
-    const event = new KeyboardEvent("keyup", { keyCode: upArrowCode });
+    const event = new KeyboardEvent("keyup", { keyCode: upArrowCode, code: 'ArrowUp' });
     document.dispatchEvent(event);
   } else if (direction === "right") {
-    const event = new KeyboardEvent("keyup", { keyCode: rightArrowCode });
+    const event = new KeyboardEvent("keyup", { keyCode: rightArrowCode, code: 'ArrowRight' });
     document.dispatchEvent(event);
   } else if (direction === "bottom") {
-    const event = new KeyboardEvent("keyup", { keyCode: downArrowCode });
+    const event = new KeyboardEvent("keyup", { keyCode: downArrowCode, code: 'ArrowDown' });
     document.dispatchEvent(event);
   }
 }
