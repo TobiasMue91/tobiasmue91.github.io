@@ -16,10 +16,15 @@
           background-color: #000;
           color: #fff;
           font-family: sans-serif;
+          text-align: center;
       }
 
       canvas {
           display: block;
+      }
+
+      #instructions {
+          margin: 0 auto;
       }
   </style>
 </head>
@@ -43,26 +48,16 @@
 
   // Set up maze
   var mazeSize = 21;
-  var maze = generateMaze(mazeSize, mazeSize);
   var walls = [];
-  for (var i = 0; i < maze.length; i++) {
-    for (var j = 0; j < maze[i].length; j++) {
-      if (maze[i][j] === "w") {
-        var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: 0x888888}));
-        wall.position.set(j - mazeSize / 2 + 0.5, 1, -i + mazeSize / 2 - 0.5);
-        scene.add(wall);
-        walls.push(wall);
-      }
-    }
-  }
+  var maze = generateMaze(mazeSize, mazeSize);
 
   // Set up camera
   camera.position.set(0, 20, 0);
   camera.lookAt(player.position);
 
   // Set up sound effects
-  var collectSound = new Howl({src: ["collect.mp3"]});
-  var unlockSound = new Howl({src: ["unlock.mp3"]});
+  var collectSound = new Howl({src: ["obstacle/score.mp3"]});
+  var unlockSound = new Howl({src: ["obastacle/collision.mp3"]});
 
   // Set up game logic
   var keys = [];
@@ -100,20 +95,65 @@
     }
 
     recursiveBacktracker(1, 1);
+
     maze[1][0] = " ";
     maze[maze.length - 2][maze[0].length - 1] = " ";
+
+    // Add power-ups to the maze
+    var powerUps = [{type: "speed", color: 0x00ff00}, {type: "life", color: 0x0000ff}, {type: "trap", color: 0xff0000}, {type: "key", color: 0xffff00},];
+
+    for (var i = 0; i < powerUps.length; i++) {
+      var x = Math.floor(Math.random() * (width - 2)) + 1;
+      var y = Math.floor(Math.random() * (height - 2)) + 1;
+      if (maze[y][x] === " ") {
+        maze[y][x] = powerUps[i].type.charAt(0);
+        var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: powerUps[i].color}));
+        wall.position.set(x - width / 2 + 0.5, 1, -y + height / 2 - 0.5);
+        scene.add(wall);
+        walls.push(wall);
+      }
+    }
+
+    // Set color of walls
+    for (var i = 0; i < maze.length; i++) {
+      for (var j = 0; j < maze[i].length; j++) {
+        if (maze[i][j] === "w") {
+          var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: 0x888888}));
+          wall.position.set(j - width / 2 + 0.5, 1, -i + height / 2 - 0.5);
+          scene.add(wall);
+          walls.push(wall);
+        } else if (maze[i][j] === "t") {
+          var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: 0xff0000}));
+          wall.position.set(j - width / 2 + 0.5, 1, -i + height / 2 - 0.5);
+          scene.add(wall);
+          walls.push(wall);
+        } else if (maze[i][j] === "k") {
+          var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: 0xffff00}));
+          wall.position.set(j - width / 2 + 0.5, 1, -i + height / 2 - 0.5);
+          scene.add(wall);
+          walls.push(wall);
+        }
+      }
+    }
+
     return maze;
   }
 
   // Check for collision using raycasting
   function checkCollision() {
     var raycaster = new THREE.Raycaster(player.position, velocity.clone().normalize(), 0, .3);
-    var intersects = raycaster.intersectObjects(walls);
+    var normalWalls = walls.filter(wall => wall.material.color.getHex() === 0x888888);
+    var intersects = raycaster.intersectObjects(normalWalls);
     if (intersects.length > 0) {
       return true;
     } else {
       return false;
     }
+  }
+
+  function isInsideMaze(playerPosition, mazeSize) {
+    var halfMazeSize = mazeSize / 2;
+    return Math.abs(playerPosition.x) <= halfMazeSize && Math.abs(playerPosition.z) <= halfMazeSize;
   }
 
   function update() {
@@ -144,9 +184,26 @@
       camera.position.sub(velocity);
     }
 
+    if (!isInsideMaze(player.position, mazeSize)) {
+      alert("You have escaped!... But have you really?");
+      collectSound.play();
+      difficulty++;
+      speed = speed * 1.5;
+      mazeSize = mazeSize * 2 - 1;
+      for (var i = 0; i < walls.length; i++) {
+        scene.remove(walls[i]);
+      }
+      walls = [];
+      player.position.set(0, 1, 0);
+      camera.position.set(0, 20, 0);
+      camera.lookAt(player.position);
+      maze = generateMaze(mazeSize, mazeSize);
+    }
+
     // Check for power-ups
     for (var i = 0; i < walls.length; i++) {
-      if (player.position.distanceTo(walls[i].position) < .1) {
+      if (player.position.distanceTo(walls[i].position) < .5) {
+        scene.remove(walls[j]);
         scene.remove(walls[i]);
         walls.splice(i, 1);
         if (walls[i].material.color.getHex() === 0x00ff00) {
@@ -155,26 +212,6 @@
         } else if (walls[i].material.color.getHex() === 0x0000ff) {
           collectSound.play();
           lives++;
-        } else if (walls[i].material.color.getHex() === 0xff00ff) {
-          collectSound.play();
-          difficulty++;
-          speed = speed * 1.5;
-          mazeSize = mazeSize * 2 - 1;
-          maze = generateMaze(mazeSize, mazeSize);
-          for (var j = 0; j < walls.length; j++) {
-            scene.remove(walls[j]);
-          }
-          walls = [];
-          for (var j = 0; j < maze.length; j++) {
-            for (var k = 0; k < maze[j].length; k++) {
-              if (maze[j][k] === "w") {
-                var wall = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({color: 0x888888}));
-                wall.position.set(k - mazeSize / 2 + 0.5, 1, -j + mazeSize / 2 - 0.5);
-                scene.add(wall);
-                walls.push(wall);
-              }
-            }
-          }
         } else if (walls[i].material.color.getHex() === 0xff0000) {
           collectSound.play();
           lives--;
@@ -212,6 +249,49 @@
 
   document.addEventListener("keyup", function (event) {
     keys[event.keyCode] = false;
+  });
+
+  // Touch controls
+  var touchX, touchY;
+  document.addEventListener("touchstart", function(event) {
+    touchX = event.touches[0].clientX;
+    touchY = event.touches[0].clientY;
+  }, {passive:false});
+
+  document.addEventListener("touchmove", function(event) {
+    event.preventDefault();
+    touchX = event.touches[0].clientX;
+    touchY = event.touches[0].clientY;
+  }, {passive:false});
+
+  document.addEventListener("touchend", function(event) {
+    touchX = null;
+    touchY = null;
+  }, {passive:false});
+
+  // Tilt controls
+  window.addEventListener("devicemotion", function(event) {
+    var ax = event.accelerationIncludingGravity.x;
+    var ay = event.accelerationIncludingGravity.y;
+    if (Math.abs(ax) > Math.abs(ay)) {
+      if (ax > 2) {
+        keys[39] = true; // right arrow
+      } else if (ax < -2) {
+        keys[37] = true; // left arrow
+      } else {
+        keys[37] = false;
+        keys[39] = false;
+      }
+    } else {
+      if (ay > 2) {
+        keys[40] = true; // down arrow
+      } else if (ay < -2) {
+        keys[38] = true; // up arrow
+      } else {
+        keys[38] = false;
+        keys[40] = false;
+      }
+    }
   });
 
   // Start game loop
