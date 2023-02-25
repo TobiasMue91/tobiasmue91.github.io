@@ -1,5 +1,5 @@
 # gptgames
-Simple HTML games created with ChatGPT.
+Simple HTML games and tools created with ChatGPT.
 
 ---
 
