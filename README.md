@@ -9,7 +9,9 @@ Simple HTML games created with ChatGPT.
 
 Some games contain graphics (mostly background images). Those have been generated with the help of MidJourney.
 
-No cookies, tracking or server-sided data saving is done in this project. All tools are client-sided, limited to JS, CSS and HTML and therefore somewhat safe to use.
+No cookies, tracking or server-sided data saving is done in this project. All tools are client-sided, limited to JS, CSS and HTML and therefore somewhat safe to use. 
+
+The only exceptions are the Multiplayer Tic-Tac-Toe where the game data is stored in firebase and deleted after each game and Flappy Bird where you can optionally enter a nickname to store your high score in a firestore database.
 
 **View current version:**
 
@@ -20,4 +22,5 @@ https://tobiasmue91.github.io/gptgames/
 **Jailbreak - used whenever necessary** ⚠️ Use at own risk! Might be patched already.
 
 A good source for up-to-date jailbreaks: https://www.reddit.com/r/GPT_jailbreaks/ 
+
 Collection of Jailbreaks: https://www.jailbreakchat.com/
