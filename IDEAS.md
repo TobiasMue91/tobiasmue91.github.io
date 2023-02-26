@@ -27,8 +27,6 @@
 - Bouncing Ball Shooter
 - Space Invaders
 - Pac-Man clone
-- Tetris
-- Flappy Bird clone
 - Trivia Quiz
 - Word Search
 - Crossword Puzzle
