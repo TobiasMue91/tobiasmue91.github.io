@@ -49,8 +49,6 @@
 - Racing Game
 - Platformer
 - Maze Runner
-- 2048 clone
-- Sudoku
 - Pinball clone
 - Archery Game
 - Ice Hockey
