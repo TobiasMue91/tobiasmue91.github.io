@@ -15,6 +15,13 @@
 - File Format Converter: A tool that converts files from one format to another, such as image or audio files.
 - Time Zone Converter: A tool that converts times and dates between different time zones, using a map or a list of cities.
 - JSON Formatter: A tool that formats and beautifies JSON data, making it easier to read and edit.
+- ASCII Art Generator
+- Image to Text Converter
+- HTML Entity Converter
+- CSS Beautifier
+- JSON Formatter
+- RGB to Hex Converter
+- Hex to RGB Converter
 
 
 ## Games

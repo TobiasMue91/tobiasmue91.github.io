@@ -1,9 +1,10 @@
-## Asking for game ideas
+## Asking for game/tool ideas
 - `List 10 games that could easily be developed with JS, HTML and CSS.`
   - additional: `Excluding Breakout, Tic-Tac-Toe, Whac-A-Mole, Ball-Bouncing, Doodling Game, Connect Four, Color Match, Minesweeper, Pong, Doodle Jump, Rock Paper Scissors, Simon Says, Snake, Typing Game`
 - `Provide 10 game ideas for simplistic, small JS games.`
+- `Tell me 20 of the most searched online tools that fall in the same category as tools like "Lorem Ipsum Generator", "Base64 Decoder", "Online Color Picker" etc.`
 
-## Improving the game
+## Improving the game/tool
 - before: `I am making a <GAME/TOOL NAME>.`
 - `Integrate multiplayer functionality into the game code.`
 - `Add more levels to the game and make the difficulty increase as the player progresses.`
