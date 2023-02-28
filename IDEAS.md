@@ -17,10 +17,8 @@
 - JSON Formatter: A tool that formats and beautifies JSON data, making it easier to read and edit.
 - ASCII Art Generator
 - Image to Text Converter
-- HTML Entity Converter
 - CSS Beautifier
 - JSON Formatter
-- RGB to Hex Converter
 - Hex to RGB Converter
 
 
@@ -64,3 +62,8 @@
 - Music Rhythm Game
 - Treasure Hunt
 - Ball Drop Game
+
+
+## Card Games
+- use the cards from "vector-playing-cards"
+- don't use alerts
