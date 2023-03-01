@@ -23,17 +23,12 @@
 
 
 ## Games
-- Memory Match
 - Hangman
-- Blackjack
-- Chess
 - War (Card Game)
 - Snake Ladder
 - Bouncing Ball Shooter
-- Space Invaders
 - Pac-Man clone
 - Trivia Quiz
-- Word Search
 - Crossword Puzzle
 - Jigsaw Puzzle
 - Solitaire
@@ -62,6 +57,7 @@
 - Music Rhythm Game
 - Treasure Hunt
 - Ball Drop Game
+- Coding challenges as game idea provider
 
 
 ## Card Games
