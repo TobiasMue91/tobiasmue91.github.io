@@ -1,5 +1,6 @@
 ## Other
-- add sidebar with navigation to tools and games
+- improve chat API by making it automatically minify all the code in all messages so the token requirements are met more easily
+  - automatically reduce the max_token parameter when token requirements are not met anymore. maybe set a minimum limit of 300 tokens?
 
 ## Practical Tools
 - base64-converter
