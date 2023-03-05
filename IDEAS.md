@@ -1,5 +1,6 @@
 ## Other
-- nothing but a placeholder
+- household planner with daily, weekly and monthly tasks
+  - "last time task was finished" timestamp to minimize overhead
 
 ## Practical Tools
 - base64-converter
