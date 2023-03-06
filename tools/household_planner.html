@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Household Planner</title>
+  <style>
+    body {
+      font-family: sans-serif;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1em;
+    }
+
+    th,
+    td {
+      padding: 0.5em;
+      text-align: left;
+    }
+
+    th {
+      border-bottom: 1px solid black;
+    }
+
+    td.completed {
+      background-color: green;
+    }
+
+    td.not-completed {
+      background-color: red;
+    }
+
+    form {
+      display: flex;
+      margin-bottom: 1em;
+    }
+
+    label {
+      margin-right: 0.5em;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select {
+      flex-grow: 1;
+      margin-right: 0.5em;
+    }
+
+  </style>
+</head>
+<body>
+<h1>Household Planner</h1>
+<form id="new-plan">
+  <label for="plan-name">Plan name:</label>
+  <input type="text" id="plan-name" name="plan-name">
+  <button type="submit">Create Plan</button>
+</form>
+<table>
+  <thead>
+  <tr>
+    <th>Task</th>
+    <th>Frequency</th>
+    <th>Last Completed</th>
+    <th>Status</th>
+  </tr>
+  </thead>
+  <tbody id="tasks">
+  </tbody>
+</table>
+<form id="new-task">
+  <label for="task-name">Task:</label>
+  <input type="text" id="task-name" name="task-name">
+  <label for="task-frequency">Frequency:</label>
+  <select id="task-frequency" name="task-frequency">
+    <option value="daily">Daily</option>
+    <option value="weekly">Weekly</option>
+    <option value="monthly">Monthly</option>
+    <option value="custom">Custom</option>
+  </select>
+  <input type="number" id="task-custom-frequency" name="task-custom-frequency" placeholder="Days">
+  <button type="submit">Add Task</button>
+</form>
+<script type="module">
+  import {initializeApp} from "https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js";
+  import {
+    doc,
+    collection,
+    addDoc,
+    onSnapshot,
+    query,
+    where,
+    getDoc,
+    setDoc,
+    updateDoc,
+    getFirestore
+  } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-firestore.js";
+
+  const app = initializeApp({
+    apiKey: "AIzaSyBJs3yjQtwHmyi6dDrkSt9IGMzAXuQE1Ms",
+    authDomain: "ball-bouncing-game.firebaseapp.com",
+    databaseURL: "https://ball-bouncing-game-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "ball-bouncing-game",
+    storageBucket: "ball-bouncing-game.appspot.com",
+    messagingSenderId: "274565600949",
+    appId: "1:274565600949:web:0c0cd51a223ec0226550fc"
+  });
+
+  // Initialize Firebase app and Firestore
+  const db = getFirestore(app);
+
+  // Get the tasks collection and load a specific plan if the planId query parameter is set
+  const tasksCollection = collection(db, "tasks");
+  let planId = getQueryParam("planId");
+  if (planId) {
+    planId = decodeURIComponent(planId);
+    const planDoc = await getDoc(doc(collection(db, "plans"), planId));
+    const planName = planDoc.data().name;
+    document.querySelector("#plan-name").value = planName;
+    document.querySelector("#new-plan").style.display = 'none';
+  } else {
+    planId = null;
+  }
+
+  function getQueryParam(name) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(name);
+  }
+
+  function getCurrentDateTime() {
+    const date = new Date();
+    return `${date.toLocaleDateString()} ${date.getHours()}:${date.getMinutes()}`;
+  }
+
+  document.querySelector("#new-plan").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const planName = event.target.elements["plan-name"].value;
+    const planDoc = await addDoc(collection(db, "plans"), {name: planName});
+    planId = planDoc.id;
+  });
+
+  // Listen for changes in the tasks collection
+  onSnapshot(query(tasksCollection, where("planId", "==", planId)), (snapshot) => {
+    const tasks = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      tasks.push({
+        id: doc.id,
+        name: data.name,
+        frequency: data.frequency,
+        lastCompleted: data.lastCompleted,
+        completed: data.completed
+      });
+    });
+    tasks.sort((a, b) => {
+      if (a.frequency === "daily" && b.frequency !== "daily") {
+        return -1;
+      } else if (a.frequency !== "daily" && b.frequency === "daily") {
+        return 1;
+      } else if (a.frequency === "weekly" && b.frequency === "monthly") {
+        return -1;
+      } else if (a.frequency === "monthly" && b.frequency === "weekly") {
+        return 1;
+      } else if (a.frequency === "custom" && b.frequency !== "custom") {
+        return -1;
+      } else if (a.frequency !== "custom" && b.frequency === "custom") {
+        return 1;
+      } else {
+        return a.name.localeCompare(b.name);
+      }
+    });
+    const tbody = document.querySelector("#tasks");
+    tbody.innerHTML = "";
+    tasks.forEach((task) => {
+      const tr = document.createElement("tr");
+      const nameTd = document.createElement("td");
+      nameTd.textContent = task.name;
+      const frequencyTd = document.createElement("td");
+      frequencyTd.textContent = task.frequency;
+      const lastCompletedTd = document.createElement("td");
+      lastCompletedTd.textContent = task.lastCompleted;
+      const statusTd = document.createElement("td");
+      if (task.completed) {
+        statusTd.className = "completed";
+        statusTd.textContent = "Completed";
+      } else {
+        statusTd.className = "not-completed";
+        statusTd.textContent = "Not Completed";
+      }
+      const toggleButton = document.createElement("button");
+      toggleButton.textContent = "Toggle";
+      toggleButton.addEventListener("click", async () => {
+        await updateDoc(doc(tasksCollection, task.id), {completed: !task.completed, lastCompleted: getCurrentDateTime()});
+      });
+      statusTd.appendChild(toggleButton);
+      tr.appendChild(nameTd);
+      tr.appendChild(frequencyTd);
+      tr.appendChild(lastCompletedTd);
+      tr.appendChild(statusTd);
+      tbody.appendChild(tr);
+    });
+  });
+
+  // Add a new task to the tasks collection
+  const newTaskForm = document.querySelector("#new-task");
+  newTaskForm.addEventListener("submit", async (event) => {
+    debugger;
+    event.preventDefault();
+    const taskName = event.target.elements["task-name"].value;
+    const taskFrequency = event.target.elements["task-frequency"].value;
+    let taskCustomFrequency;
+    if (taskFrequency === "custom") {
+      taskCustomFrequency = event.target.elements["task-custom-frequency"].value;
+    }
+
+    // Create a new task document
+    await addDoc(tasksCollection, {
+      name: taskName,
+      frequency: taskFrequency,
+      customFrequency: taskCustomFrequency || "",
+      lastCompleted: "",
+      completed: false,
+      planId: planId
+    });
+    // Reset the form
+    event.target.reset();
+  });
+</script>
+</body>
+</html>
