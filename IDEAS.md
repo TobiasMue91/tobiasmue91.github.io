@@ -1,6 +1,8 @@
 ## Other
-- household planner with daily, weekly and monthly tasks
-  - "last time task was finished" timestamp to minimize overhead
+- household planner
+  - single time tasks that are removed after being completed
+  - sortable table
+  - removable tasks
 
 ## Practical Tools
 - base64-converter
