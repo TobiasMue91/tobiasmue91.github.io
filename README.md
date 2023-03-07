@@ -5,7 +5,8 @@ Simple HTML games and tools created with ChatGPT.
 
 **Disclaimer:**
 
-~99.9% of the code has been written and improved by ChatGPT. https://chat.openai.com/
+~99.3% of the code has been written and improved by ChatGPT. https://chat.openai.com/
+(0.7% were debugging and minor styling tweaks done by me)
 
 Some games contain graphics (mostly background images). Those have been generated with the help of MidJourney.
 
