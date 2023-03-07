@@ -20,7 +20,6 @@ let running = true;
 
 // Create a function to create a firework at a random location on the screen
 function createFirework() {
-    console.log('creating firework');
     const firework = {
         x: Math.random() * width,
         y: Math.random() * height,
