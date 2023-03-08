@@ -222,6 +222,10 @@
                 margin-right: 5px;
             }
         }
+
+        #controls button {
+            margin: 0 auto;
+        }
     </style>
 </head>
 <body>
@@ -232,7 +236,10 @@
         try out different languages.
     </div>
 
-    <button id="replay" style="display: none;">Play Again</button>
+    <div id="controls">
+        <button id="save-button" style="display: none;">Save and Share this Question</button>
+        <button id="replay" style="display: none;">Play Again</button>
+    </div>
 
     <div id="topic-input">
         <div id="topic-container">
@@ -280,7 +287,7 @@
 </div>
 
 <script src="fireworks.js"></script>
-<script>
+<script type="module">
     const topicInput = document.querySelector("#topic");
     const topicSelectInput = document.querySelector("#topic-select");
     const sendButton = document.querySelector("#send");
@@ -298,9 +305,25 @@
     let gameStarted = false;
     let gameFinished = false;
 
-    function handleResponse(response) {
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js";
+    import { doc, setDoc, getFirestore, getDoc } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-firestore.js";
+
+    initializeApp({
+        apiKey: "AIzaSyBJs3yjQtwHmyi6dDrkSt9IGMzAXuQE1Ms",
+        authDomain: "ball-bouncing-game.firebaseapp.com",
+        databaseURL: "https://ball-bouncing-game-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "ball-bouncing-game",
+        storageBucket: "ball-bouncing-game.appspot.com",
+        messagingSenderId: "274565600949",
+        appId: "1:274565600949:web:0c0cd51a223ec0226550fc"
+    });
+    const db = getFirestore();
+
+    async function handleResponse(response) {
         document.querySelector('#answer-input').style.display = 'flex';
         document.querySelector('#topic-input').style.display = 'none';
+        document.querySelector('#save-button').style.display = 'block';
+
         const responseContent = response.choices[0].message.content;
         const responseJsonStr = responseContent.substring(
             responseContent.indexOf("{"),
@@ -312,6 +335,7 @@
         currentAnswers = responseJsonData.answers;
         currentScore = 0;
         currentWrongAnswers = [];
+
 
         updateBoard();
         updateQuestion();
@@ -403,8 +427,12 @@
         }
     }
 
-    function updateMessage(message) {
-        messageContainer.innerText = message;
+    function updateMessage(message, html = false) {
+        if (html) {
+            messageContainer.innerHTML = message;
+        } else {
+            messageContainer.innerText = message;
+        }
     }
 
     function levenshteinDistance(a, b) {
@@ -536,13 +564,60 @@
         window.location.search = String(urlParams);
     }
 
-    window.addEventListener('load', () => {
+    window.addEventListener('load', async () => {
         let topic = getQueryParam('topic')
         if (topic) {
             topicInput.value = topic;
             sendButton.click();
         }
+
+        // Check if there is a saved combination in the URL
+        const savedCombinationId = getQueryParam("combinationId");
+        if (savedCombinationId) {
+            const docRef = doc(db, "combinations", savedCombinationId);
+            const docSnapshot = await getDoc(docRef);
+            if (docSnapshot.exists()) {
+                const savedCombination = docSnapshot.data();
+                currentQuestion = savedCombination.question;
+                currentAnswers = savedCombination.answers;
+                updateBoard();
+                updateQuestion();
+                updateWrongAnswers();
+                updateMessage("Type your answer in the input field and click 'Submit'");
+                document.querySelector('#answer-input').style.display = 'flex';
+                document.querySelector('#topic-input').style.display = 'none';
+                gameStarted = true;
+                gameFinished = false;
+            } else {
+                console.error("Saved combination not found: ", savedCombinationId);
+                alert("Saved combination not found. Please try again.");
+            }
+        }
     })
+
+    const saveCombination = async () => {
+        saveButton.remove();
+        const answers = [...currentAnswers];
+        for (let i = 0; i < answers.length; i++) {
+            delete answers[i].item;
+        }
+        const combination = {
+            question: currentQuestion,
+            answers,
+        };
+        try {
+            const combinationId = Date.now().toString() + Math.floor(Math.random() * 1000000).toString();
+            await setDoc(doc(db, "combinations", combinationId), combination);
+            const baseUrl = window.location.href.split('?')[0];
+            const url = `${baseUrl}?combinationId=${combinationId}`;
+            updateMessage(`Combination saved successfully! You can replay this game by visiting <a href="${url}" target="_blank">${url}</a> !`, true);
+        } catch (e) {
+            updateMessage("Error saving combination. Please try again.");
+        }
+    };
+
+    const saveButton = document.getElementById("save-button");
+    saveButton.addEventListener("click", saveCombination);
 </script>
 <script src="../sidebar.js"></script>
 </body>
