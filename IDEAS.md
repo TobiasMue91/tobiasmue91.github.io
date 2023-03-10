@@ -24,7 +24,6 @@
 
 
 ## Games
-- Hangman
 - War (Card Game)
 - Snake Ladder
 - Bouncing Ball Shooter
@@ -54,7 +53,6 @@
 - Dragon Slayer
 - Kung Fu Fighting
 - Mastermind
-- Slot Machine
 - Music Rhythm Game
 - Treasure Hunt
 - Ball Drop Game
