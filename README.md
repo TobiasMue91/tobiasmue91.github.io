@@ -29,5 +29,6 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 10.03.2023 - add new game ["Human Benchmark Tests"](https://tobiasmue91.github.io/gptgames/games/human_benchmark.html)
 - 10.03.2023 - add multiple levels of "leetness" to the text to [1337 converter](https://tobiasmue91.github.io/gptgames/games/1337.html)
 - 09.03.2023 - introduction of "[Who Wants to Be a Millionaire?](https://tobiasmue91.github.io/gptgames/games/who_wants_to_be_a_millionaire.html)"
