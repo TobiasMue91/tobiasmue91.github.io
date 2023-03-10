@@ -42,7 +42,6 @@
 - Racing Game
 - Platformer
 - Maze Runner
-- Pinball clone
 - Archery Game
 - Ice Hockey
 - Pool
@@ -57,8 +56,4 @@
 - Treasure Hunt
 - Ball Drop Game
 - Coding challenges as game idea provider
-
-
-## Card Games
-- use the cards from "vector-playing-cards"
-- don't use alerts
+- human benchmark
