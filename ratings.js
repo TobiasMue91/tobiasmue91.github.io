@@ -1,32 +1,5 @@
-import {initializeApp} from "https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js";
-import {
-    doc,
-    getDoc,
-    setDoc,
-    getFirestore
-} from "https://www.gstatic.com/firebasejs/9.17.1/firebase-firestore.js";
-
-import {getAuth, signInAnonymously} from "https://www.gstatic.com/firebasejs/9.17.1/firebase-auth.js";
-
-const app = initializeApp({
-    apiKey: "AIzaSyBJs3yjQtwHmyi6dDrkSt9IGMzAXuQE1Ms",
-    authDomain: "ball-bouncing-game.firebaseapp.com",
-    databaseURL: "https://ball-bouncing-game-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "ball-bouncing-game",
-    storageBucket: "ball-bouncing-game.appspot.com",
-    messagingSenderId: "274565600949",
-    appId: "1:274565600949:web:0c0cd51a223ec0226550fc"
-});
-
-const auth = getAuth();
-
-await signInAnonymously(auth)
-    .then(() => {
-        console.log("Signed in anonymously");
-    })
-    .catch((error) => {
-        console.error("Anonymous authentication failed:", error);
-    });
+import './firebase.js';
+import {doc, getDoc, setDoc, getFirestore} from "https://www.gstatic.com/firebasejs/9.17.1/firebase-firestore.js";
 
 const gameCards = document.querySelectorAll(".game-card");
 
