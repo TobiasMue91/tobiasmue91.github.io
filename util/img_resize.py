@@ -5,7 +5,7 @@ import os
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Define the input and output directories relative to the script directory
-input_dir = os.path.join(script_dir, '../img')
+input_dir = os.path.join(script_dir, '../output')
 output_dir = os.path.join(script_dir, '../output')
 
 # Define the sizes for the small and medium images
