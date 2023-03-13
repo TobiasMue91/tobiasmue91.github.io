@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 13.03.2023 - bugfixes, mobile design and usability update for ["Sudoku"](https://tobiasmue91.github.io/gptgames/games/sudoku.html)
 - 11.03.2023 - add chimp test and several minor improvements to the ["Human Benchmark Tests"](https://tobiasmue91.github.io/gptgames/games/human_benchmark.html)
 - 10.03.2023 - add new game ["Human Benchmark Tests"](https://tobiasmue91.github.io/gptgames/games/human_benchmark.html)
 - 10.03.2023 - add multiple levels of "leetness" to the text to [1337 converter](https://tobiasmue91.github.io/gptgames/games/1337.html)
