@@ -1,7 +1,7 @@
 const _0x250150 = _0x1ee2;
 
 function _0x33b7() {
-    var _0x8437258 = "{{ site.kartoffelsalat }}"
+    var _0x8437258 = "${FIREBASE_API_KEY}"
     const _0x5635a0 = ['1691244BqkUEX', '587688SFZgRT', 'ball-bouncing-game.appspot.com', _0x8437258, '55OGsLOt', 'ball-bouncing-game.firebaseapp.com', '1600890KWOMjS', 'error', 'ball-bouncing-game', '3102939PwpYaa', '49539jjeifk', '1DMGMta', '6HPfyvs', '30240iPLXrS', '936726kQnAZg', '24pMcUTh', 'Anonymous\x20authentication\x20failed:', '274565600949'];
     _0x33b7 = function () {
         return _0x5635a0;
