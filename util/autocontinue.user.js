@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Auto Continue ChatGPT
 // @namespace    http://tampermonkey.net/
-// @version      0.7
+// @version      0.75
 // @description  Toggleable Auto-Continue feature for ChatGPT
 // @author       Tobias Müller
 // @match        https://chat.openai.com/chat*
@@ -37,7 +37,7 @@
         const allMessages = document.querySelectorAll('.w-full.group');
         const lastMessage = allMessages[allMessages.length - 1];
 
-        if (button.innerHTML.includes('<svg')) {
+        if (button && button.innerHTML.includes('<svg')) {
             // Allow the user to choose between two different text options to assign to "textarea.value"
             let textOptionValue = selectedTextOption === 'continue' ? 'continue' : 'the code was cut off. continue where you left off. here is your last message: \n' + lastMessage.textContent;
             textarea.value = textOptionValue;
@@ -50,6 +50,12 @@
                 code: 'Enter',
             });
             textarea.dispatchEvent(event);
+        }
+
+        // Click regenerate button in case there is a Network error (only has "btn-primary" when there is an error)
+        const regenerateButton = document.querySelector('form button.btn-primary');
+        if (regenerateButton) {
+            regenerateButton.click();
         }
     }
 

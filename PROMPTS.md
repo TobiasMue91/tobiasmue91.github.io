@@ -64,3 +64,18 @@ The words used in this game consist of simple english vocabulary. Here are some 
 5. Take screenshot. Add game/tool to `index.html` and `sidebar.html`.
 
 *: Optional. May depend on the complexity of the request and other factors.
+
+
+## Indefinite improvement of existing code (early version)
+
+```
+I have created a "Guess the Number" game in JS and HTML.
+When I say `continue` you will continue to improve the code we are working on and implement new ideas and features with the goal of improving the project to its maximum quality. Remember the changes that were done by your improvements.
+
+Here is the minified code:
+\`\`\`
+<MINIFIED CODE>
+\`\`\`
+
+Now start providing improvements until I don't respond with `continue` anymore.
+```
