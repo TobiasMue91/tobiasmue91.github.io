@@ -68,14 +68,14 @@ The words used in this game consist of simple english vocabulary. Here are some 
 
 ## Indefinite improvement of existing code (early version)
 
-```
-I have created a "Guess the Number" game in JS and HTML.
-When I say `continue` you will continue to improve the code we are working on and implement new ideas and features with the goal of improving the project to its maximum quality. Remember the changes that were done by your improvements.
+````
+We have created a "Guess the Number" game in JS and HTML.
+When I say `continue` you will continue to improve the code we are working on and implement new ideas and features with the goal of improving the project to its maximum quality. Remember the changes that were done by your improvements. I minified it for brevity reasons. Don't worry about the formatting.
 
 Here is the minified code:
-\`\`\`
-<MINIFIED CODE>
-\`\`\`
-
-Now start providing improvements until I don't respond with `continue` anymore.
 ```
+<MINIFIED CODE>
+```
+
+Now start providing improvements until I stop responding with `continue`.
+````
