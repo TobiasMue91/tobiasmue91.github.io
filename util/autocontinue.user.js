@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Auto Continue ChatGPT
 // @namespace    http://tampermonkey.net/
-// @version      0.75
+// @version      0.76
 // @description  Toggleable Auto-Continue feature for ChatGPT
-// @author       Tobias Müller
+// @author       Tobias Müller and ChatGPT
 // @match        https://chat.openai.com/chat*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=openai.com
 // @grant        GM_registerMenuCommand
@@ -17,6 +17,7 @@
     GM_registerMenuCommand('Toggle Script', () => {
         isRunning = !isRunning;
         alert(isRunning ? `Script is now running. Toggle it off as soon as ChatGPT is finished!` : `Script is now paused.`);
+        if (isRunning) startTime = new Date();
     });
 
     let selectedTextOption = 'continue';
@@ -27,8 +28,26 @@
         alert(`Selected text option is now "${selectedTextOption}"`);
     });
 
+    let abortAfterMinutes = 30; // Change this value to the desired time in minutes
+    let startTime;
+
+    GM_registerMenuCommand(`Set Abort Time (${abortAfterMinutes} minutes)`, () => {
+        const newAbortTime = prompt('Enter the number of minutes after which the script should be aborted:', abortAfterMinutes);
+        if (newAbortTime !== null && !isNaN(newAbortTime) && newAbortTime > 0) {
+            abortAfterMinutes = Number(newAbortTime);
+            alert(`Script will now abort after ${abortAfterMinutes} minutes.`);
+        }
+    });
+
     // Set up a function to check if the button content includes '<svg' and, if it does, allow the user to choose between two different text options to assign to "textarea.value"
     function checkButtonContent() {
+        const elapsedTime = () => (new Date() - startTime) / 1000 / 60; // in minutes
+
+        if (elapsedTime() >= abortAfterMinutes) {
+            alert(`Script has been running for more than ${abortAfterMinutes} minutes. Aborting now.`);
+            clearInterval(intervalId);
+            return;
+        }
         if (!isRunning) return;
 
         // Get the button and textarea elements
