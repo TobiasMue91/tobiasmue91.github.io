@@ -29,7 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
-- 16.03.2023 - played around with gpt-4 and created a ["Jigsaw Puzzle Game"]https://tobiasmue91.github.io/gptgames/games/jigsaw.html) (that still has some flaws); improved ["Snake"](https://tobiasmue91.github.io/gptgames/games/snake.html) with the "endless improvement" method (see ["PROMPTS.md"](https://github.com/TobiasMue91/gptgames/blob/main/PROMPTS.md))
+- 16.03.2023 - played around with gpt-4 and created a ["Jigsaw Puzzle Game"](https://tobiasmue91.github.io/gptgames/games/jigsaw.html) (that still has some flaws); improved ["Snake"](https://tobiasmue91.github.io/gptgames/games/snake.html) with the "endless improvement" method (see ["PROMPTS.md"](https://github.com/TobiasMue91/gptgames/blob/main/PROMPTS.md))
 - 14.03.2023 - gpt-4 released, created ["Pong"](https://tobiasmue91.github.io/gptgames/games/pong.html) once again for comparison purposes (gpt-4 provided code improvements by saying which function I have to replace or update instead of providing the full updated code)
 - 13.03.2023 - bugfixes, mobile design and usability update for ["Sudoku"](https://tobiasmue91.github.io/gptgames/games/sudoku.html)
 - 11.03.2023 - add chimp test and several minor improvements to the ["Human Benchmark Tests"](https://tobiasmue91.github.io/gptgames/games/human_benchmark.html)
