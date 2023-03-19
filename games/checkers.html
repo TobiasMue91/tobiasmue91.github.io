@@ -99,7 +99,7 @@
 <div id="app">
     <h1>Checkers</h1>
     <checkerboard :grid="grid" :selected-piece="selectedPiece" @piece-selected="handlePieceSelected"></checkerboard>
-    <turn :player="player"></turn>
+    <turn :player="player" :available-pieces="this.currentPlayerPieces" @restart="reset"></turn>
     <scoreboard :red-score="redScore" :black-score="blackScore"></scoreboard>
 </div>
 <script>
@@ -128,10 +128,16 @@
     };
 
     const Turn = {
-        props: ['player'],
+        props: ['player', 'availablePieces'],
         template: `
           <div class="turn">
-          {{ player }}'s turn
+              <div v-if="availablePieces && availablePieces.length === 0">
+                Game Over! {{ player }} lost <br>
+                <button @click="$emit('restart')">Restart Game</button>
+              </div>
+              <div v-else>
+                {{ player }}'s turn
+              </div>
           </div>
         `
     };
@@ -148,25 +154,43 @@
     const Game = {
         components: {Checkerboard, Turn, Scoreboard},
         data() {
-            return {
-                player: 'red',
-                redScore: 0,
-                blackScore: 0,
-                grid: [
-                    ['red', null, 'red', null, 'red', null, 'red', null],
-                    [null, 'red', null, 'red', null, 'red', null, 'red'],
-                    ['red', null, 'red', null, 'red', null, 'red', null],
-                    [null, null, null, null, null, null, null, null],
-                    [null, null, null, null, null, null, null, null],
-                    [null, 'black', null, 'black', null, 'black', null, 'black'],
-                    ['black', null, 'black', null, 'black', null, 'black', null],
-                    [null, 'black', null, 'black', null, 'black', null, 'black']
-                ],
-                selectedPiece: null,
-                possibleMoves: []
-            };
+            return this.initialData();
+        },
+        computed: {
+            currentPlayerPieces() {
+                return this.grid.flatMap((row, rowIndex) =>
+                    row.reduce((pieces, piece, colIndex) => {
+                        if (piece && piece.startsWith(this.player)) {
+                            pieces.push({ type: piece, row: rowIndex, col: colIndex });
+                        }
+                        return pieces;
+                    }, [])
+                );
+            }
         },
         methods: {
+            initialData() {
+                return {
+                    player: 'black',
+                    redScore: 0,
+                    blackScore: 0,
+                    grid: [
+                        ['red', null, 'red', null, 'red', null, 'red', null],
+                        [null, 'red', null, 'red', null, 'red', null, 'red'],
+                        ['red', null, 'red', null, 'red', null, 'red', null],
+                        [null, null, null, null, null, null, null, null],
+                        [null, null, null, null, null, null, null, null],
+                        [null, 'black', null, 'black', null, 'black', null, 'black'],
+                        ['black', null, 'black', null, 'black', null, 'black', null],
+                        [null, 'black', null, 'black', null, 'black', null, 'black']
+                    ],
+                    selectedPiece: null,
+                    possibleMoves: []
+                };
+            },
+            reset() {
+                Object.assign(this.$data, this.initialData());
+            },
             handlePieceSelected(coords) {
                 // If there is already a selected piece, try to move it to the selected square
                 if (this.selectedPiece) {
@@ -185,28 +209,7 @@
                         // Promote to king if necessary
                         this.promoteToKing(coords.row, coords.col);
 
-                        // Check for captures
-                        const capturedPiece = this.checkForCaptures(coords);
-                        if (capturedPiece) {
-                            // Update the score and remove the captured piece from the grid
-                            if (capturedPiece === 'red') {
-                                this.redScore++;
-                            } else {
-                                this.blackScore++;
-                            }
-                            this.grid[(coords.row + this.selectedPiece.row) / 2][(coords.col + this.selectedPiece.col) / 2] = null;
-                            // Check if there are more captures available for the same piece
-                            this.possibleMoves = this.findPossibleMoves(coords.row, coords.col);
-                            this.multipleCaptures = this.possibleMoves.some(move => Math.abs(move[2] - coords.row) === 2 && Math.abs(move[3] - coords.col) === 2);
-                            if (!this.multipleCaptures) {
-                                this.switchTurns();
-                            } else {
-                                this.selectedPiece.row = coords.row;
-                                this.selectedPiece.col = coords.col;
-                            }
-                        } else {
-                            this.switchTurns();
-                        }
+                        this.handleCaptures(coords);
                     } else {
                         this.selectPiece(coords);
                     }
@@ -216,6 +219,30 @@
                     this.selectPiece(coords);
                 }
             },
+            handleCaptures(coords) {
+                // Check for captures
+                const capturedPiece = this.checkForCaptures(coords);
+                if (capturedPiece) {
+                    // Update the score and remove the captured piece from the grid
+                    if (capturedPiece === 'red') {
+                        this.redScore++;
+                    } else {
+                        this.blackScore++;
+                    }
+                    this.grid[(coords.row + this.selectedPiece.row) / 2][(coords.col + this.selectedPiece.col) / 2] = null;
+                    // Check if there are more captures available for the same piece
+                    this.possibleMoves = this.findPossibleMoves(coords.row, coords.col);
+                    this.multipleCaptures = this.possibleMoves.some(move => Math.abs(move[2] - coords.row) === 2 && Math.abs(move[3] - coords.col) === 2);
+                    if (!this.multipleCaptures) {
+                        this.switchTurns();
+                    } else {
+                        this.selectedPiece.row = coords.row;
+                        this.selectedPiece.col = coords.col;
+                    }
+                } else {
+                    this.switchTurns();
+                }
+            },
             switchTurns() {
                 // Reset the selected piece and possible moves
                 this.selectedPiece = null;
@@ -223,6 +250,10 @@
 
                 // Switch turns
                 this.player = this.player === 'red' ? 'black' : 'red';
+
+                if (this.currentPlayerPieces.length) {
+
+                }
             },
             selectPiece(coords) {
                 // Check if the selected square contains a piece of the current player's color
