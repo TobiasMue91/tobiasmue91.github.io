@@ -1,6 +1,8 @@
 ## Other
 - household planner
   - single time tasks that are removed after being completed
+- autocontinue script
+  - on network error, copy the text that has already been written and append it to the last user message with the words "you already started responding but got cut off due to an error: <cutMessage>"
 
 ## Practical Tools
 - base64-converter
