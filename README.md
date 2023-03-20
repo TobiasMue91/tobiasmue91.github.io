@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 20.03.2023 - updated [Connect Four](https://tobiasmue91.github.io/gptgames/games/connect_four.html) - improved design; added opponent AI
 - 18.03.2023 - added [Calculator](https://tobiasmue91.github.io/gptgames/tools/calculator.html) written in VueJS (Vue 3) using GPT-4
 - 17.03.2023 - implemented [Checkers](https://tobiasmue91.github.io/gptgames/games/checkers.html) in VueJS (Vue 3) using GPT-3.5
 - 16.03.2023 - played around with GPT-4 and created a [Jigsaw Puzzle Game](https://tobiasmue91.github.io/gptgames/games/jigsaw.html) (that still has some flaws); improved [Snake](https://tobiasmue91.github.io/gptgames/games/snake.html) with the "endless improvement" method (see [PROMPTS.md](https://github.com/TobiasMue91/gptgames/blob/main/PROMPTS.md))
