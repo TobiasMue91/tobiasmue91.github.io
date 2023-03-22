@@ -23,6 +23,7 @@
 - CSS Beautifier
 - JSON Formatter
 - Hex to RGB Converter
+- Akinator
 
 
 ## Games
