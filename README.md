@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 22.03.2023 - added end-to-end testing with cypress to the deployment workflow
 - 21.03.2023 - added a new AI-powered tool called [Argumentator](https://tobiasmue91.github.io/gptgames/tools/argumentator/argumentator.html)
 - 20.03.2023 - updated [Connect Four](https://tobiasmue91.github.io/gptgames/games/connect_four.html) - improved design; added opponent AI
 - 18.03.2023 - added [Calculator](https://tobiasmue91.github.io/gptgames/tools/calculator.html) written in VueJS (Vue 3) using GPT-4
