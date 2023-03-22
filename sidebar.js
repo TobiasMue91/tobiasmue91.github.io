@@ -1,6 +1,6 @@
 window.addEventListener('load', function (event) {
   var xhr = new XMLHttpRequest();
-  xhr.open("GET", "/gptgames/sidebar.html", true);
+  xhr.open("GET", "/sidebar.html", true);
   xhr.onreadystatechange = function () {
     if (xhr.readyState === 4 && xhr.status === 200) {
       var sidebar = document.createElement("div");
