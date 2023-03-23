@@ -3,7 +3,7 @@ let timelineHtml = '';
 
 window.addEventListener('load', function (event) {
     var xhr = new XMLHttpRequest();
-    xhr.open("GET", "/timeline.html", true);
+    xhr.open("GET", "timeline.html", true);
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4 && xhr.status === 200) {
             var timeline = document.createElement("div");
