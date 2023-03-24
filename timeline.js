@@ -1,5 +1,7 @@
 let timelineStyles = '';
 let timelineHtml = '';
+let isLoading = false;
+let lastRequestedHash = '';
 
 window.addEventListener('load', function (event) {
     var xhr = new XMLHttpRequest();
@@ -16,17 +18,24 @@ window.addEventListener('load', function (event) {
     xhr.send();
 });
 
-
 const timelineDataUrl = "timeline_data.json"; // URL to the timeline JSON data
 
 function loadIndexHtml(hash) {
+    if (isLoading || hash === lastRequestedHash) {
+        return;
+    }
+
+    lastRequestedHash = hash;
+    isLoading = true;
     fetch(`https://raw.githubusercontent.com/TobiasMue91/gptgames/${hash}/index.html`)
         .then((response) => response.text())
         .then((html) => {
+            isLoading = false;
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, "text/html");
             replaceLinks(doc, hash);
 
+            const thumbPosition = document.querySelector('.slider-thumb').style.left;
 
             // Replace the head and body elements
             document.head.innerHTML = doc.head.innerHTML;
@@ -36,18 +45,11 @@ function loadIndexHtml(hash) {
             document.head.querySelector('style').innerHTML += timelineStyles;
             document.body.innerHTML += timelineHtml;
 
+            document.querySelector('.slider-thumb').style.left = thumbPosition;
+
             addSliderStepEventListeners();
 
             init(false);
-
-            // Update the slider-thumb position
-            const slider = document.getElementById("slider");
-            const steps = Array.from(document.querySelectorAll(".slider-step"));
-            const targetStep = steps.find((step) => step.dataset.hash === hash);
-            if (targetStep) {
-                const sliderThumb = slider.querySelector(".slider-thumb");
-                sliderThumb.style.left = targetStep.style.left;
-            }
         });
 }
 
@@ -58,7 +60,7 @@ function replaceLinks(doc, hash) {
         if (href.startsWith("http") && !href.startsWith("https://raw.githubusercontent.com/")) {
             return;
         }
-        const link = new URL(href, `https://raw.githubusercontent.com/TobiasMue91/gptgames/${hash}/`);
+        const link = new URL(href, `https://github.com/TobiasMue91/gptgames/blob/${hash}/`);
         anchor.setAttribute("href", link.href);
     });
 }
@@ -66,6 +68,9 @@ function replaceLinks(doc, hash) {
 
 function onSliderStepClick(e) {
     const hash = e.target.dataset.hash;
+    const sliderThumb = document.querySelector(".slider-thumb");
+    const clickedStep = e.target;
+    sliderThumb.style.left = (parseInt(clickedStep.style.left) - 2) + 'px';
     loadIndexHtml(hash);
 }
 
@@ -93,16 +98,7 @@ function loadTimelineData() {
                     step.title = "GPT Version: " + item.GptVersion;
                 }
                 slider.appendChild(step);
-
-                // Set the slider-thumb position to the latest step
-                if (index === 0) {
-                    sliderThumb.style.left = step.style.left;
-                }
             });
-
-            // Move the slider-thumb to the latest step
-            const latestStep = slider.querySelector(".slider-step");
-            sliderThumb.style.left = latestStep.style.left;
 
             // Add event listeners to slider steps
             addSliderStepEventListeners();
@@ -110,10 +106,9 @@ function loadTimelineData() {
             // Set the slider max attribute to the number of steps - 1
             slider.setAttribute("max", data.length - 1);
 
-            // Set the slider track width to the offestLeft of the last item
+            // Set the slider track width to the offsetLeft of the last item
             const lastElement = slider.querySelector(".slider-step:last-child");
             slider.querySelector('.slider-track').style.width = lastElement.offsetLeft + 'px';
-            console.log(lastElement.offsetLeft);
 
             timelineHtml = document.querySelector('#timeline-container').outerHTML;
         });
@@ -138,12 +133,22 @@ function onSliderMouseMove(e) {
     if (sliderThumbPosition >= leftBoundary && sliderThumbPosition <= rightBoundary) {
         sliderThumb.style.left = sliderThumbPosition - leftBoundary + "px";
     }
+
+    const nearestStep = getNearestStep();
+    loadIndexHtml(nearestStep.dataset.hash);
 }
 
 function onSliderMouseUp(e) {
     document.removeEventListener("mousemove", onSliderMouseMove);
     document.removeEventListener("mouseup", onSliderMouseUp);
 
+    const sliderThumb = document.querySelector(".slider-thumb");
+    const nearestStep = getNearestStep();
+    sliderThumb.style.left = (parseInt(nearestStep.style.left) - 2) + 'px';
+    loadIndexHtml(nearestStep.dataset.hash);
+}
+
+function getNearestStep() {
     const slider = document.getElementById("slider");
     const sliderThumb = slider.querySelector(".slider-thumb");
     const sliderThumbPosition = parseInt(sliderThumb.style.left, 10);
@@ -162,8 +167,7 @@ function onSliderMouseUp(e) {
         }
     });
 
-    sliderThumb.style.left = nearestStep.style.left;
-    loadIndexHtml(nearestStep.dataset.hash);
+    return nearestStep;
 }
 
 function init(loadData = true) {
