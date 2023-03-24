@@ -2,6 +2,7 @@ let timelineStyles = '';
 let timelineHtml = '';
 let isLoading = false;
 let lastRequestedHash = '';
+let isCollapsed = true;
 
 window.addEventListener('load', function (event) {
     var xhr = new XMLHttpRequest();
@@ -170,6 +171,21 @@ function getNearestStep() {
     return nearestStep;
 }
 
+function toggleTimeline(event) {
+    const container = document.querySelector('#timeline-container');
+    const toggle = document.querySelector('#timeline-toggle');
+
+    if (container.classList.contains('collapsed')) {
+        container.classList.remove('collapsed');
+        toggle.textContent = '∨';
+        isCollapsed = false;
+    } else {
+        container.classList.add('collapsed');
+        toggle.textContent = '∧';
+        isCollapsed = true;
+    }
+}
+
 function init(loadData = true) {
     if (loadData) {
         loadTimelineData();
@@ -177,4 +193,10 @@ function init(loadData = true) {
 
     const sliderThumb = document.getElementById("slider").querySelector(".slider-thumb");
     sliderThumb.addEventListener("mousedown", onSliderMouseDown);
+    document.querySelector('#timeline-toggle').addEventListener('click', toggleTimeline);
+
+    if (!isCollapsed) {
+        document.querySelector('#timeline-container').classList.remove('collapsed');
+        document.querySelector('#timeline-toggle').textContent = '∨'
+    }
 }
