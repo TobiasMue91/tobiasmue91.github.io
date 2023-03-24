@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 24.03.2023 - added [GPTranslator](https://tobiasmue91.github.io/gptgames/tools/gptranslator.html) - a AI-powered translation tool that can translate text from almost any language to many others
 - 23.03.2023 - implemented a timeline feature that lets users see the evolution of the page; clicking on the games or tools on another version will show the user the source code at that point of time
 - 22.03.2023 - added end-to-end testing with cypress to the deployment workflow; new features in [Argumentator](https://tobiasmue91.github.io/gptgames/tools/argumentator/argumentator.html) - adding favorites, creating counterarguments
 - 21.03.2023 - added a new AI-powered tool called [Argumentator](https://tobiasmue91.github.io/gptgames/tools/argumentator/argumentator.html)
