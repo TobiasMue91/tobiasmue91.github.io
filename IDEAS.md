@@ -62,3 +62,10 @@
 - Ball Drop Game
 - Coding challenges as game idea provider
 - human benchmark
+
+
+## Plugins
+- a plugin that looks for the cheapest price of a specific product.
+- a plugin for web developers that lets users perform acceptance (or E2E) tests on a specified web service; can be expanded to let ChatGPT also perform performance checks, look for console errors, check for security flaws and be a mighty tool for asserting the quality a website as a whole while giving improvement suggestions
+- use ChatGPT to assign a trust value to a website; as the web is flooded with scam sites, fake shops and unserious businesses and ChatGPT might be able to detect and analyze such websites before they even appear on TrustPilot and co
+- a "discover" plugin that helps the user to discover new content for specific topics (music, tv series, movies etc.) while ChatGPT considers the users taste based on existing public accessible information (imdb ratings given by the user, spotify favorite song playlists, myanimelist list etc.) or based on a list of favorites provided by the user
