@@ -5,12 +5,14 @@ from tqdm import tqdm
 
 api_endpoint = "https://chatgpt.tobiasmue91.workers.dev/"
 tasks = [
-    "Task: Create a basic neural network from scratch in Python, without using any existing machine learning libraries. The neural network should be able to perform binary classification on a given dataset, with input/output layers and one hidden layer. Include functions for forward propagation, backpropagation, and training using gradient descent.",
-    "Task: Design a web scraper in a language like Python, using concurrency (e.g., threads or asynchronous programming) to efficiently scrape data from multiple web pages simultaneously. The scraper should accept a list of URLs, fetch their content, and extract specific information (e.g., article titles and dates) from each page."
+"Task: Develop a script that uses various machine learning algorithms, such as decision trees, support vector machines, and random forests, to perform classification on a given dataset. The script should include methods for data preprocessing, feature extraction, model training, hyperparameter tuning, and performance evaluation using metrics such as accuracy, precision, recall, and F1 score.",
+"Task: Design a system that can detect and extract key information from unstructured text data, such as news articles or scientific papers. The extracted information should include entities like person names, organizations, locations, dates, and any relevant numerical data. The system should utilize natural language processing techniques and provide the extracted information in a structured format, such as JSON or CSV.",
+"Task: Create a distributed web crawler that can crawl multiple websites simultaneously and collect relevant data based on specified search criteria, such as keywords, date ranges, or content types. The crawler should be able to handle different website structures, respect robots.txt rules, and avoid duplicate content. The collected data should be stored in a database or file system, along with appropriate metadata.",
+"Task: Implement a recommendation system that can analyze user preferences and behavior to provide personalized suggestions for items, such as movies, books, or products. The system should use collaborative filtering, content-based filtering, or a hybrid approach, and provide a flexible API for integrating it with various applications. The recommendation system should also include methods for handling cold start problems and improving recommendations over time based on user feedback."
 ]
 
-temperatures = [0, 0.5, 1, 1.5, 2]
-top_p_values = [0, 0.5, 1]
+temperatures = [0, 0.3, 0.5, 0.7, 1, 1.2, 1.5, 1.7, 2]
+top_p_values = [0, 0.3, 0.5, 0.7, 1]
 
 headers = {
     "content-type": "application/json"
