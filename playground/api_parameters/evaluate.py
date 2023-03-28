@@ -5,12 +5,11 @@ from tqdm import tqdm
 
 api_endpoint = "https://chatgpt.tobiasmue91.workers.dev/"
 tasks = [
-"Task: Implement a program that takes a list of stock prices as input, representing the prices of a stock over a period of time. The program should determine the maximum profit that could have been made by buying a stock at a low price and selling it at a higher price later, and output the maximum profit. Note that the stock must be bought before it can be sold. If no profit can be made, return 0.",
-"Task: Implement a function that takes a string of text as input and returns a dictionary containing the frequency of each word in the input text. The function should be case-insensitive and ignore punctuation marks. The dictionary should have the words as keys and the frequency as values."
+"Task: Implement a Python function that takes a list of stock market data as input, calculates the maximum profit that can be made by buying and selling stocks within the given data, and returns the buying and selling days, as well as the maximum profit. The input list will contain tuples, where the first element is the day number (starting from 0), and the second element is the stock price on that day. You are not allowed to sell a stock before you buy one, and you can only hold one stock at a time.\n\nExample input:\n`stock_data = [(0, 100), (1, 180), (2, 260), (3, 310), (4, 40), (5, 535), (6, 695)]`\n\nExample output:\n`(4, 6, 655)`"
 ]
 
-temperatures = [0, 0.5, 1, 1.5, 2]
-top_p_values = [0, 0.5, 1]
+temperatures = [0.3, 0.5, 1, 1.5, 1.7]
+top_p_values = [0.3, 0.5, 0.7, 1]
 
 headers = {
     "content-type": "application/json"
