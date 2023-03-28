@@ -5,10 +5,10 @@ from tqdm import tqdm
 
 api_endpoint = "https://chatgpt.tobiasmue91.workers.dev/"
 tasks = [
-"Task: Develop a script that uses various machine learning algorithms, such as decision trees, support vector machines, and random forests, to perform classification on a given dataset. The script should include methods for data preprocessing, feature extraction, model training, hyperparameter tuning, and performance evaluation using metrics such as accuracy, precision, recall, and F1 score.",
-"Task: Design a system that can detect and extract key information from unstructured text data, such as news articles or scientific papers. The extracted information should include entities like person names, organizations, locations, dates, and any relevant numerical data. The system should utilize natural language processing techniques and provide the extracted information in a structured format, such as JSON or CSV.",
-"Task: Create a distributed web crawler that can crawl multiple websites simultaneously and collect relevant data based on specified search criteria, such as keywords, date ranges, or content types. The crawler should be able to handle different website structures, respect robots.txt rules, and avoid duplicate content. The collected data should be stored in a database or file system, along with appropriate metadata.",
-"Task: Implement a recommendation system that can analyze user preferences and behavior to provide personalized suggestions for items, such as movies, books, or products. The system should use collaborative filtering, content-based filtering, or a hybrid approach, and provide a flexible API for integrating it with various applications. The recommendation system should also include methods for handling cold start problems and improving recommendations over time based on user feedback."
+"Task: Write a program that takes a user's input of their name and age and then prints a message with their name and the year they will turn 100 years old. Expected output: \"Hello, [Name]. You will turn 100 years old in [Year].\"",
+"Task: Create a function that accepts a list of numbers and returns the sum of all even numbers in the list. \nExample input: [1, 2, 3, 4, 5, 6]\nExpected output: 12",
+"Task: Write a program that prints the multiplication table (up to 10) for a given number entered by the user.\nExample input: 5\nExpected output: `5 x 1 = 5\n5 x 2 = 10\n5 x 3 = 15\n...\n5 x 10 = 50`",
+"Task: Implement a simple text-based \"Rock, Paper, Scissors\" game, where the user can play against the computer. The computer should choose its move randomly.\nExpected behavior: The user enters their choice, the computer chooses its move, and the program displays the result (win, lose, or draw)."
 ]
 
 temperatures = [0, 0.3, 0.5, 0.7, 1, 1.2, 1.5, 1.7, 2]
@@ -18,8 +18,8 @@ headers = {
     "content-type": "application/json"
 }
 
-def evaluate_code_quality(code):
-    evaluation_prompt = f"Please rate the following code snippet in terms of quality, functionality, and efficiency from 1 to 10, and provide a brief explanation of your rating:\n\n```python\n{code}\n```\n"
+def evaluate_code_quality(code, task):
+    evaluation_prompt = f"Please rate the following code snippet in terms of quality, functionality, and efficiency from 1 to 10, and provide a brief explanation of your rating:\n\n```python\n{code}\n```\n\n{task}"
     evaluation_data = {
         "model": "gpt-3.5-turbo-0301",
         "max_tokens": 512,
@@ -74,7 +74,7 @@ for task in progress_bar(tasks, desc="Tasks"):
             response = request_code(task, temperature, top_p)
             if response is not None:
                 code = response['choices'][0]['message']['content']
-                score, evaluation_text = evaluate_code_quality(code)
+                score, evaluation_text = evaluate_code_quality(code, task)
                 setting_key = f"temp_{temperature}_top_p_{top_p}"
                 responses[task_key][setting_key] = {
                     "code": code,
