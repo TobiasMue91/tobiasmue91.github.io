@@ -5,30 +5,36 @@ from tqdm import tqdm
 
 api_endpoint = "https://chatgpt.tobiasmue91.workers.dev/"
 tasks = [
-"Task: Write a program that takes a user's input of their name and age and then prints a message with their name and the year they will turn 100 years old. Expected output: \"Hello, [Name]. You will turn 100 years old in [Year].\"",
-"Task: Create a function that accepts a list of numbers and returns the sum of all even numbers in the list. \nExample input: [1, 2, 3, 4, 5, 6]\nExpected output: 12",
-"Task: Write a program that prints the multiplication table (up to 10) for a given number entered by the user.\nExample input: 5\nExpected output: `5 x 1 = 5\n5 x 2 = 10\n5 x 3 = 15\n...\n5 x 10 = 50`",
-"Task: Implement a simple text-based \"Rock, Paper, Scissors\" game, where the user can play against the computer. The computer should choose its move randomly.\nExpected behavior: The user enters their choice, the computer chooses its move, and the program displays the result (win, lose, or draw)."
+"Task: Write a Python function called \"merge_sorted_lists\" that takes two sorted lists of integers as input and returns a new list containing all the elements from both input lists, sorted in ascending order. The function should work with the following constraints:\n\n- The input lists may have different lengths.\n- The input lists will be sorted in ascending order.\n- The output list should not contain duplicate elements.\n- Do not use built-in Python functions for sorting or merging lists (e.g., `sorted()` or `list.sort()`).\n\nExample:\n\nInput:\nlist1 = [1, 3, 5, 7]\nlist2 = [2, 3, 6, 8]\n\nOutput:\n[1, 2, 3, 5, 6, 7, 8]",
 ]
 
-temperatures = [0, 0.3, 0.5, 0.7, 1, 1.2, 1.5, 1.7, 2]
-top_p_values = [0, 0.3, 0.5, 0.7, 1]
+temperatures = [0, 0.5, 1, 1.5, 2]
+top_p_values = [0, 0.5, 1]
 
 headers = {
     "content-type": "application/json"
 }
 
 def evaluate_code_quality(code, task):
-    evaluation_prompt = f"Please rate the following code snippet in terms of quality, functionality, and efficiency from 1 to 10, and provide a brief explanation of your rating:\n\n```python\n{code}\n```\n\n{task}"
+    evaluation_prompt = f"Please rate the following response from ChatGPT in terms of quality, functionality, and efficiency from 1 to 10, and provide a brief explanation of your rating. Your response should show an overall rating at the very start. If the response contains code, rate the code. If there is no code, rate the relevance and usefulness of the response. Please try to be as consistent as possible in your ratings:\n\n```python\n{code}\n```\n\nTask: {task}"
     evaluation_data = {
         "model": "gpt-3.5-turbo-0301",
         "max_tokens": 512,
+        "temperature": 0,
+        "top_p": 0,
         "messages": [
             {"role": "user", "content": evaluation_prompt}
         ]
     }
     evaluation_response = requests.post(api_endpoint, headers=headers, data=json.dumps(evaluation_data))
-    evaluation_content = evaluation_response.json()['choices'][0]['message']['content']
+
+    try:
+        response_data = evaluation_response.json()
+    except json.JSONDecodeError:
+        with open("error_responses.log", "a") as error_log:
+            error_log.write(f"Error evaluating code quality code: {code} \n {task}\n")
+            error_log.write("=" * 80 + "\n")
+    evaluation_content = response_data['choices'][0]['message']['content']
 
     try:
         score = int(evaluation_content.split()[0])
@@ -40,7 +46,7 @@ def evaluate_code_quality(code, task):
 def request_code(task, temperature, top_p):
     data = {
         "model": "gpt-3.5-turbo-0301",
-        "max_tokens": 1024,
+        "max_tokens": 512,
         "temperature": temperature,
         "top_p": top_p,
         "messages": [
