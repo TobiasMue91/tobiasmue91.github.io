@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 api_endpoint = "https://chatgpt.tobiasmue91.workers.dev/"
 tasks = [
-"Task: Write a Python function called \"merge_sorted_lists\" that takes two sorted lists of integers as input and returns a new list containing all the elements from both input lists, sorted in ascending order. The function should work with the following constraints:\n\n- The input lists may have different lengths.\n- The input lists will be sorted in ascending order.\n- The output list should not contain duplicate elements.\n- Do not use built-in Python functions for sorting or merging lists (e.g., `sorted()` or `list.sort()`).\n\nExample:\n\nInput:\nlist1 = [1, 3, 5, 7]\nlist2 = [2, 3, 6, 8]\n\nOutput:\n[1, 2, 3, 5, 6, 7, 8]",
+"Task: Develop a program that takes a text input and generates a summary using extractive summarization techniques. The program should identify the most important sentences in the text and return them as the summary. Implement a basic algorithm, such as the TextRank algorithm, to weigh the importance of sentences and extract the top-ranked ones.",
 ]
 
 temperatures = [0, 0.5, 1, 1.5, 2]
