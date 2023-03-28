@@ -5,7 +5,8 @@ from tqdm import tqdm
 
 api_endpoint = "https://chatgpt.tobiasmue91.workers.dev/"
 tasks = [
-"Task: Develop a program that takes a text input and generates a summary using extractive summarization techniques. The program should identify the most important sentences in the text and return them as the summary. Implement a basic algorithm, such as the TextRank algorithm, to weigh the importance of sentences and extract the top-ranked ones.",
+"Task: Implement a program that takes a list of stock prices as input, representing the prices of a stock over a period of time. The program should determine the maximum profit that could have been made by buying a stock at a low price and selling it at a higher price later, and output the maximum profit. Note that the stock must be bought before it can be sold. If no profit can be made, return 0.",
+"Task: Implement a function that takes a string of text as input and returns a dictionary containing the frequency of each word in the input text. The function should be case-insensitive and ignore punctuation marks. The dictionary should have the words as keys and the frequency as values."
 ]
 
 temperatures = [0, 0.5, 1, 1.5, 2]
@@ -73,7 +74,7 @@ def progress_bar(iterable, desc=None):
 
 responses = {}
 for task in progress_bar(tasks, desc="Tasks"):
-    task_key = task[:20]
+    task_key = task[:40]
     responses[task_key] = {}
     for temperature in progress_bar(temperatures, desc="Temperatures"):
         for top_p in progress_bar(top_p_values, desc="Top_p values"):

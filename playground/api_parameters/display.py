@@ -9,7 +9,7 @@ results_df = pd.DataFrame(columns=["temperature", "top_p", "score", "file"])
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Loop through the JSON files
-for i in range(1, 8):
+for i in range(1, 10):
     filename = f"code_responses_{str(i).zfill(2)}.json"
     filepath = os.path.join(script_dir, f"{filename}")
     if os.path.exists(filepath):
