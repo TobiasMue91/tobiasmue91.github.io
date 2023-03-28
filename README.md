@@ -29,6 +29,8 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 28.03.2023 - added more practical tools: [JSON Formatter](https://tobiasmue91.github.io/gptgames/tools/json_formatter.html), [Age Calculator](https://tobiasmue91.github.io/gptgames/tools/age_calculator.html), [Emoji Search](https://tobiasmue91.github.io/gptgames/tools/emoji_search.html), [CSS Gradient Generator](https://tobiasmue91.github.io/gptgames/tools/css_gradient_generator.html), [Stopwatch](https://tobiasmue91.github.io/gptgames/tools/stopwatch.html)
+- 26.03.2023 - did some research in /playground/api_parameters to determine the best values for the GPT-API parameters `temperature` and `top_p`
 - 24.03.2023 - added [GPTranslator](https://tobiasmue91.github.io/gptgames/tools/gptranslator.html) - a AI-powered translation tool that can translate text from almost any language to many others
 - 23.03.2023 - implemented a timeline feature that lets users see the evolution of the page; clicking on the games or tools on another version will show the user the source code at that point of time
 - 22.03.2023 - added end-to-end testing with cypress to the deployment workflow; new features in [Argumentator](https://tobiasmue91.github.io/gptgames/tools/argumentator/argumentator.html) - adding favorites, creating counterarguments
