@@ -59,11 +59,13 @@ for old_code, improved_code in improvements:
     old_code_dedent = textwrap.dedent(old_code)
     improved_code_dedent = textwrap.dedent(improved_code)
 
+    # Remove unnecessary newline characters
+    old_code_cleaned = old_code_dedent.strip().replace('\n', '')
+    improved_code_cleaned = improved_code_dedent.strip().replace('\n', '')
+
     # Find the old code in the soup and replace it with the improved code
-    old_code_soup = BeautifulSoup(old_code_dedent, "html.parser")
-    improved_code_soup = BeautifulSoup(improved_code_dedent, "html.parser")
-    old_tag = soup.find_all(text=re.compile(re.escape(old_code_dedent).strip()))[0]
-    old_tag.replace_with(improved_code_soup.prettify())
+    old_tag = soup.find_all(text=re.compile(re.escape(old_code_cleaned)))[0]
+    old_tag.replace_with(improved_code_dedent)
 
 # Save the updated HTML
 with open(file_path, "w", encoding="utf-8") as file:
