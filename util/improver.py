@@ -50,25 +50,23 @@ with open(log_path, "a", encoding="utf-8") as log_file:
     log_file.write("\n\n")
 
 # Extract improvements from the API response
-improvements = re.findall(r'Improvement description: .*?\n\nImprovement:\n\n```\n(.*?)\n```\n\n```\n(.*?)\n```', response.choices[0]['message']['content'], re.DOTALL)
+improvements = re.findall(r'Improvement description: .*?\n\nImprovement:\n\n```(?:html|javascript|css)?\n(.*?)\n```\n\n```(?:html|javascript|css)?\n(.*?)\n```', response.choices[0]['message']['content'], re.DOTALL)
 
-# Parse the HTML with Beautiful Soup
-soup = BeautifulSoup(source_code, "html.parser")
-
+# Apply the improvements to the source code
 for old_code, improved_code in improvements:
-    old_code_dedent = textwrap.dedent(old_code)
-    improved_code_dedent = textwrap.dedent(improved_code)
+    # Normalize the code snippets by removing leading and trailing whitespaces
+    old_code = old_code.strip()
+    improved_code = improved_code.strip()
 
-    # Remove unnecessary newline characters
-    old_code_cleaned = old_code_dedent.strip().replace('\n', '')
-    improved_code_cleaned = improved_code_dedent.strip().replace('\n', '')
+    # Create a pattern for the old code, escaping any special regex characters and
+    # allowing for any number of whitespaces (including newlines) between characters
+    pattern = re.compile(r'\s*'.join(re.escape(char) for char in old_code), re.DOTALL)
 
-    # Find the old code in the soup and replace it with the improved code
-    old_tag = soup.find_all(text=re.compile(re.escape(old_code_cleaned)))[0]
-    old_tag.replace_with(improved_code_dedent)
+    # Replace the old code with the improved code, if found
+    source_code = pattern.sub(improved_code, source_code, count=1)
 
-# Save the updated HTML
+# Save the modified source code to the file
 with open(file_path, "w", encoding="utf-8") as file:
-    file.write(str(soup))
+    file.write(source_code)
 
-print("Source code has been updated.")
+print("Improvements applied successfully.")
