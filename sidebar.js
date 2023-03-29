@@ -1,6 +1,14 @@
 window.addEventListener('load', function (event) {
   var xhr = new XMLHttpRequest();
-  xhr.open("GET", "sidebar.html", true);
+  const getCurrentScriptPath = (function() {
+    const scripts = document.getElementsByTagName('script');
+    const currentScript = scripts[scripts.length - 1];
+    const scriptPath = currentScript.src;
+    return scriptPath.substring(0, scriptPath.lastIndexOf('/'));
+  })();
+
+  const sidebarPath = getCurrentScriptPath + "/sidebar.html";
+  xhr.open("GET", sidebarPath, true);
   xhr.onreadystatechange = function () {
     if (xhr.readyState === 4 && xhr.status === 200) {
       var sidebar = document.createElement("div");
