@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 api_endpoint = "https://chatgpt.tobiasmue91.workers.dev/"
 tasks = [
-"Task: Implement a Python function that takes a list of stock market data as input, calculates the maximum profit that can be made by buying and selling stocks within the given data, and returns the buying and selling days, as well as the maximum profit. The input list will contain tuples, where the first element is the day number (starting from 0), and the second element is the stock price on that day. You are not allowed to sell a stock before you buy one, and you can only hold one stock at a time.\n\nExample input:\n`stock_data = [(0, 100), (1, 180), (2, 260), (3, 310), (4, 40), (5, 535), (6, 695)]`\n\nExample output:\n`(4, 6, 655)`"
+"Task: Create a basic neural network from scratch in Python, without using any existing machine learning libraries. The neural network should be able to perform binary classification on a given dataset, with input/output layers and one hidden layer. Include functions for forward propagation, backpropagation, and training using gradient descent.\nEvaluation criteria: correctness, efficiency, readability, and proper implementation of neural network concepts."
 ]
 
 temperatures = [0.3, 0.5, 1, 1.5, 1.7]
@@ -18,10 +18,10 @@ headers = {
 def evaluate_code_quality(code, task):
     evaluation_prompt = f"Please rate the following response from ChatGPT in terms of quality, functionality, and efficiency from 1 to 10, and provide a brief explanation of your rating. Your response should show an overall rating at the very start. If the response contains code, rate the code. If there is no code, rate the relevance and usefulness of the response. Please try to be as consistent as possible in your ratings:\n\n```python\n{code}\n```\n\nTask: {task}"
     evaluation_data = {
-        "model": "gpt-3.5-turbo-0301",
+        "model": "gpt-4",
         "max_tokens": 512,
-        "temperature": 0,
-        "top_p": 0,
+        "temperature": 0.2,
+        "top_p": 0.2,
         "messages": [
             {"role": "user", "content": evaluation_prompt}
         ]
@@ -45,7 +45,7 @@ def evaluate_code_quality(code, task):
 
 def request_code(task, temperature, top_p):
     data = {
-        "model": "gpt-3.5-turbo-0301",
+        "model": "gpt-4",
         "max_tokens": 512,
         "temperature": temperature,
         "top_p": top_p,
