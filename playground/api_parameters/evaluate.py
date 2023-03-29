@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 api_endpoint = "https://chatgpt.tobiasmue91.workers.dev/"
 tasks = [
-    "Task: Design a web scraper in a language like Python, using concurrency (e.g., threads or asynchronous programming) to efficiently scrape data from multiple web pages simultaneously. The scraper should accept a list of URLs, fetch their content, and extract specific information (e.g., article titles and dates) from each page."
+"Task: Develop a script that uses various machine learning algorithms, such as decision trees, support vector machines, and random forests, to perform classification on a given dataset. The script should include methods for data preprocessing, feature extraction, model training, hyperparameter tuning, and performance evaluation using metrics such as accuracy, precision, recall, and F1 score.",
 ]
 
 temperatures = [0.3, 0.5, 1, 1.5, 1.7]
