@@ -16,7 +16,7 @@ file_path = input("Enter the file path of the HTML tool: ")
 log_path = "logs/api_responses.log"
 
 try:
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding="utf-8") as file:
         source_code = file.read()
 except FileNotFoundError:
     print(f"Error: File not found: {file_path}")
@@ -49,10 +49,11 @@ with open(log_path, "a", encoding="utf-8") as log_file:
     log_file.write(response.choices[0]['message']['content'])
     log_file.write("\n\n")
 
+# Extract improvements from the API response
+improvements = re.findall(r'Improvement description: .*?\n\nImprovement:\n\n```\n(.*?)\n```\n\n```\n(.*?)\n```', response.choices[0]['message']['content'], re.DOTALL)
+
 # Parse the HTML with Beautiful Soup
 soup = BeautifulSoup(source_code, "html.parser")
-
-improvements = re.findall(r'Improvement description: .*?\n\nImprovement:\n\n```\n(.*?)\n```\n\n```\n(.*?)\n```', response.choices[0]['message']['content'], re.DOTALL)
 
 for old_code, improved_code in improvements:
     old_code_dedent = textwrap.dedent(old_code)
@@ -65,7 +66,7 @@ for old_code, improved_code in improvements:
     old_tag.replace_with(improved_code_soup.prettify())
 
 # Save the updated HTML
-with open(file_path, "w") as file:
+with open(file_path, "w", encoding="utf-8") as file:
     file.write(str(soup))
 
 print("Source code has been updated.")

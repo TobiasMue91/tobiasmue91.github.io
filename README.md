@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 29.03.2023 - updated several tools, utils and games to gpt-4
 - 28.03.2023 - added more practical tools: [JSON Formatter](https://tobiasmue91.github.io/gptgames/tools/json_formatter.html), [Age Calculator](https://tobiasmue91.github.io/gptgames/tools/age_calculator.html), [Emoji Search](https://tobiasmue91.github.io/gptgames/tools/emoji_search.html), [CSS Gradient Generator](https://tobiasmue91.github.io/gptgames/tools/css_gradient_generator.html), [Stopwatch](https://tobiasmue91.github.io/gptgames/tools/stopwatch.html)
 - 26.03.2023 - did some research in /playground/api_parameters to determine the best values for the GPT-API parameters `temperature` and `top_p`
 - 24.03.2023 - added [GPTranslator](https://tobiasmue91.github.io/gptgames/tools/gptranslator.html) - a AI-powered translation tool that can translate text from almost any language to many others
