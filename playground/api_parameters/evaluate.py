@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 api_endpoint = "https://chatgpt.tobiasmue91.workers.dev/"
 tasks = [
-"Task: Create a basic neural network from scratch in Python, without using any existing machine learning libraries. The neural network should be able to perform binary classification on a given dataset, with input/output layers and one hidden layer. Include functions for forward propagation, backpropagation, and training using gradient descent.\nEvaluation criteria: correctness, efficiency, readability, and proper implementation of neural network concepts."
+    "Task: Design a web scraper in a language like Python, using concurrency (e.g., threads or asynchronous programming) to efficiently scrape data from multiple web pages simultaneously. The scraper should accept a list of URLs, fetch their content, and extract specific information (e.g., article titles and dates) from each page."
 ]
 
 temperatures = [0.3, 0.5, 1, 1.5, 1.7]
