@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
 
             // Display the notification
-            toastr.warning('Due to hitting the rate limit for the OpenAI API, our AI powered tools are temporarily unavailable. We are working on a solution. We apologize for any inconvenience.');
+            toastr.warning('Due to hitting the usage limit for the OpenAI API, our AI powered tools are temporarily unavailable. We are working on a solution. We apologize for any inconvenience.');
         });
     });
 });

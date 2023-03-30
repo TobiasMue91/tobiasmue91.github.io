@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 30.03.2023 - first time hitting the API usage limit due to excessive usage and research; added [File Size Converter](https://tobiasmue91.github.io/gptgames/tools/file_size_converter.html) which was created using the `developer.py` script
 - 29.03.2023 - updated several tools, utils and games to gpt-4
 - 28.03.2023 - added more practical tools: [JSON Formatter](https://tobiasmue91.github.io/gptgames/tools/json_formatter.html), [Age Calculator](https://tobiasmue91.github.io/gptgames/tools/age_calculator.html), [Emoji Search](https://tobiasmue91.github.io/gptgames/tools/emoji_search.html), [CSS Gradient Generator](https://tobiasmue91.github.io/gptgames/tools/css_gradient_generator.html), [Stopwatch](https://tobiasmue91.github.io/gptgames/tools/stopwatch.html)
 - 26.03.2023 - did some research in /playground/api_parameters to determine the best values for the GPT-API parameters `temperature` and `top_p`
