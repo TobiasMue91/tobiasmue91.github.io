@@ -1,10 +1,8 @@
 window.addEventListener('load', function (event) {
   var xhr = new XMLHttpRequest();
   const getCurrentScriptPath = (function() {
-    const scripts = document.getElementsByTagName('script');
-    const currentScript = scripts[scripts.length - 1];
-    const scriptPath = currentScript.src;
-    return scriptPath.substring(0, scriptPath.lastIndexOf('/'));
+    const script = Array.from(document.scripts).find(s => s.src.includes('sidebar.js'));
+    return script ? new URL(script.src).pathname.replace(/\/[^/]+$/, '') : null;
   })();
 
   const sidebarPath = getCurrentScriptPath + "/sidebar.html";
