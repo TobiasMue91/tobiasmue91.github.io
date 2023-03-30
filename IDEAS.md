@@ -19,16 +19,73 @@
 - text<->ascii converter
 - file-size-calculator/converter
 - Regular Expression Tester: A tool that allows users to test and experiment with regular expressions, using a visual editor or direct input.
-- File Format Converter: A tool that converts files from one format to another, such as image or audio files.
 - Time Zone Converter: A tool that converts times and dates between different time zones, using a map or a list of cities.
-- JSON Formatter: A tool that formats and beautifies JSON data, making it easier to read and edit.
 - ASCII Art Generator
 - Image to Text Converter
 - CSS Beautifier
 - JSON Formatter
 - Hex to RGB Converter
 - Akinator
-
+- CSS Animation Creator: An editor to create custom CSS animations with keyframes, easing, and delay settings.
+- Broken Link Checker: A tool to check a list of URLs for broken links and report their status.
+- JSON Formatter: A tool to format and validate JSON code, making it easier to read and understand.
+- Currency Converter: A real-time currency converter using exchange rate APIs to provide accurate conversions.
+- SVG Editor: A simple SVG editing tool to modify shapes, colors, and sizes of SVG files.
+- Audio Visualizer: A tool to generate visual representations of audio files based on waveform or frequency data.
+- File Size Converter: A converter to display file sizes in different units (e.g., bytes, kilobytes, megabytes, gigabytes).
+- Online Notepad: A simple, auto-saving text editor for users to jot down notes, with the option to export or print.
+- Browser Storage Explorer: A tool to view and manage browser storage (local and session storage) data for debugging purposes.
+- CSS Flexbox Builder: A visual builder for creating and customizing CSS flexbox layouts, generating the corresponding code.
+- Keyboard Shortcut Tester: A tool for users to test and discover various keyboard shortcuts for different operating systems and applications.
+- Favicon Generator: A tool to create and download favicons in multiple sizes and formats from an uploaded image.
+- Image Placeholder Generator: A tool to generate placeholder images with customizable dimensions, colors, and text for use during website development.
+- Base64 Encoder/Decoder: A tool to convert text or binary files to Base64 encoding and vice versa, useful for embedding images in CSS or inline HTML.
+- SVG Path Editor: A tool to create and modify SVG paths interactively, providing a visual interface to edit path commands.
+- Website Color Extractor: A tool to extract the color palette from a website URL or CSS code.
+- Online Flowchart Maker: A simple flowchart creation tool with drag-and-drop functionality.
+- Aspect Ratio Calculator: A tool to calculate the aspect ratio of images or videos, and resize dimensions while maintaining the aspect ratio.
+- CSS Grid Builder: A visual builder for creating and customizing CSS grid layouts, generating the corresponding code.
+- Font Pairing Tool: A tool to preview and compare different font pairings for web design.
+- Image to ASCII Converter: A tool to convert images into ASCII art, with options for customization.
+- Morse Code Translator: A tool to convert text to Morse code and vice versa.
+- Online Banner Maker: A simple banner creation tool to design custom banners for websites and social media.
+- Online Signature Maker: A tool to create and download digital signatures using a drawing interface.
+- CSS Variables Generator: A tool to manage and generate CSS variables for consistent styling across projects.
+- Online Mind Mapping: A simple mind mapping tool to organize and visualize ideas and concepts.
+- HTML Table Generator: A tool to create responsive HTML tables with customizable styles, rows, and columns.
+- CSS Transform Playground: A playground for experimenting with CSS transform properties, such as scale, rotate, and skew.
+- Image Comparison Slider: A tool to create before-and-after image sliders for visual comparison.
+- Browser Compatibility Checker: A tool to check the compatibility of HTML, CSS, and JavaScript features with various browser versions.
+- Online Pixel Art Editor: A simple editor for creating and exporting pixel art, with support for basic drawing tools and color palettes.
+- CSS Blend Modes Generator: A tool to experiment with different CSS blend modes on images or backgrounds.
+- Online Whiteboard: A collaborative whiteboard tool for users to draw, write, and share ideas in real-time.
+- Sitemap Visualizer: A tool to generate visual sitemaps from XML files or website URLs.
+- Web Accessibility Checker: A tool to identify potential accessibility issues in HTML and CSS code.
+- Random Quote Generator: A tool to generate random quotes from a predefined list, with options for customization and sharing.
+- Online Photo Collage Maker: A tool to create custom photo collages from uploaded images.
+- CSS Clip Path Generator: A tool to create and export custom CSS clip paths using a visual editor.
+- Browser Mockup Generator: A tool to generate browser mockups of websites or app interfaces.
+- Online Diagram Maker: A tool for creating various types of diagrams, such as flowcharts, Venn diagrams, and organizational charts.
+- Image to Base64 Converter: A tool to convert images to Base64 encoded strings for embedding in HTML or CSS.
+- Online Sticky Notes: A tool to create, edit, and manage digital sticky notes.
+- Meta Tag Generator: A tool to generate custom meta tags for website SEO and social media sharing.
+- CSS Pseudo-Class Tester: A tool to experiment with various CSS pseudo-classes and see their effects in real-time.
+- Online Logo Maker: A simple logo creation tool with customizable shapes, colors, and fonts.
+- File Format Converter: A tool to convert files between different formats, such as image, audio, or document types.
+- Character Encoding Converter: A tool to convert text between different character encodings, like UTF-8, ISO-8859-1, and Windows-1252.
+- Online Icon Editor: A tool to create and modify icons in various sizes and formats, such as ICO, PNG, and SVG.
+- CSS Filters Playground: A playground for experimenting with different CSS filters, such as blur, brightness, and contrast.
+- Online Post-it Board: A collaborative board for users to create, edit, and organize digital Post-it notes.
+- Image Cropper and Resizer: A tool to crop and resize images with adjustable dimensions and aspect ratios.
+- CSS Selector Tester: A tool to test and experiment with CSS selectors on sample HTML code.
+- Online Voice Recorder: A tool to record and playback audio using the user's microphone, with options to download or share the recordings.
+- CSS Box Model Visualizer: A tool to visualize and understand the CSS box model, with options to modify padding, border, and margin values.
+- Online Business Card Maker: A simple tool to design and download custom business cards in various formats.
+- Online Calendar Creator: A tool to create and download custom calendars with customizable dates, holidays, and events.
+- JavaScript Event Listener Tester: A tool to test and experiment with JavaScript event listeners and their effects on HTML elements.
+- Web Font Tester: A tool to preview and compare different web fonts on sample text, with options to adjust size, color, and other styling properties.
+- Online Receipt Generator: A tool to create and download custom receipts for personal or business purposes.
+- CSS Background Patterns Generator: A tool to create and customize repeating background patterns using CSS.
 
 ## Games
 - War (Card Game)
