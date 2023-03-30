@@ -69,7 +69,7 @@ def save_tool(tool_name, implementation):
 
 def main():
     # Set OpenAI API key
-    openai.api_key = "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"
+    openai.api_key = ""
 
     # Get tool name from user
     tool_name = get_tool_name()
