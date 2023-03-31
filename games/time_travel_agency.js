@@ -211,6 +211,56 @@ let upgrades = [
             timeCrystals: 400000,
             otherUpgrades: ['timeGloves']
         }
+    },
+    {
+        id: 'timeSuit1',
+        name: 'Chrono-Woven Suit',
+        baseCost: 600000,
+        costMultiplier: 1.5,
+        cps: 3000,
+        owned: 0,
+        isVisible: false,
+        requirements: { timeCrystals: 800000, otherUpgrades: ['timeBoots'] }
+    },
+    {
+        id: 'timeSuit2',
+        name: 'Astral Armor',
+        baseCost: 1200000,
+        costMultiplier: 1.6,
+        cps: 5000,
+        owned: 0,
+        isVisible: false,
+        requirements: { timeCrystals: 1600000, otherUpgrades: ['timeSuit1'] }
+    },
+    {
+        id: 'timeHelmet1',
+        name: 'Chrono-Cap',
+        baseCost: 2000000,
+        costMultiplier: 1.8,
+        cps: 7000,
+        owned: 0,
+        isVisible: false,
+        requirements: { timeCrystals: 2500000, otherUpgrades: ['timeSuit2'] }
+    },
+    {
+        id: 'timeHelmet2',
+        name: 'Astral Helm',
+        baseCost: 5000000,
+        costMultiplier: 2,
+        cps: 10000,
+        owned: 0,
+        isVisible: false,
+        requirements: { timeCrystals: 6000000, otherUpgrades: ['timeHelmet1'] }
+    },
+    {
+        id: 'timeKey',
+        name: 'Master Key of Time',
+        baseCost: 10000000,
+        costMultiplier: 2.5,
+        cps: 15000,
+        owned: 0,
+        isVisible: false,
+        requirements: { timeCrystals: 10000000, otherUpgrades: ['timeHelmet2'] }
     }
 ];
 
@@ -254,6 +304,36 @@ let achievements = [
         requirements: {
             allUpgradesUnlocked: true
         }
+    },
+    {
+        id: 'gather100000',
+        name: 'Gather 100,000 Time Crystals',
+        achieved: false,
+        requirements: { timeCrystals: 100000 }
+    },
+    {
+        id: 'gather1000000',
+        name: 'Gather 1,000,000 Time Crystals',
+        achieved: false,
+        requirements: { timeCrystals: 1000000 }
+    },
+    {
+        id: 'gather10000000',
+        name: 'Gather 10,000,000 Time Crystals',
+        achieved: false,
+        requirements: { timeCrystals: 10000000 }
+    },
+    {
+        id: 'unlockAllTimeGear',
+        name: 'Unlock All Time Gear',
+        achieved: false,
+        requirements: { allTimeGearUnlocked: true }
+    },
+    {
+        id: 'recruit5Geniuses',
+        name: 'Recruit 5 Historical Geniuses',
+        achieved: false,
+        requirements: { geniusesRecruited: 5 }
     }
 ];
 
@@ -337,6 +417,22 @@ function isAchievementAchieved(achievement) {
         });
     } else if (achievement.requirements.allUpgradesUnlocked) {
         return upgrades.every(upgrade => upgrade.isVisible);
+    } else if (achievement.requirements.allTimeGearUnlocked) {
+        const timeGear = ['timeGoggles', 'timeGloves', 'timeBoots', 'timeSuit1', 'timeSuit2', 'timeHelmet1', 'timeHelmet2'];
+        return timeGear.every(id => {
+            const requiredUpgrade = upgrades.find(u => u.id === id);
+            return requiredUpgrade && requiredUpgrade.owned > 0;
+        });
+    } else if (achievement.requirements.geniusesRecruited) {
+        const geniuses = ['timeTraveler1', 'timeTraveler2', 'timeTraveler3'];
+        let count = 0;
+        for (const id of geniuses) {
+            const requiredUpgrade = upgrades.find(u => u.id === id);
+            if (requiredUpgrade && requiredUpgrade.owned > 0) {
+                count++;
+            }
+        }
+        return count >= achievement.requirements.geniusesRecruited;
     }
     return false;
 }
