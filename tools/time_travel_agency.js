@@ -133,10 +133,88 @@ let upgrades = [
             timeCrystals: 2000000,
             otherUpgrades: ['timeCapsule1']
         }
+    },
+    {
+        id: 'tardis',
+        name: 'TARDIS',
+        baseCost: 5000000,
+        costMultiplier: 2.5,
+        cps: 10000,
+        owned: 0,
+        isVisible: false,
+        requirements: {
+            timeCrystals: 10000000,
+            otherUpgrades: ['timeCapsule2']
+        }
+    },
+    {
+        id: 'timeCompressor1',
+        name: 'Time Compressor Mk I',
+        baseCost: 2000000,
+        costMultiplier: 1.8,
+        cps: 6000,
+        owned: 0,
+        isVisible: false,
+        requirements: {
+            timeCrystals: 4000000,
+            otherUpgrades: ['timeCapsule2']
+        }
+    },
+    {
+        id: 'timeCompressor2',
+        name: 'Time Compressor Mk II',
+        baseCost: 10000000,
+        costMultiplier: 2,
+        cps: 20000,
+        owned: 0,
+        isVisible: false,
+        requirements: {
+            timeCrystals: 20000000,
+            otherUpgrades: ['timeCompressor1']
+        }
+    },
+    {
+        id: 'timeGoggles',
+        name: 'Time Goggles',
+        baseCost: 75000,
+        costMultiplier: 1.5,
+        cps: 600,
+        owned: 0,
+        isVisible: false,
+        requirements: {
+            timeCrystals: 100000,
+            otherUpgrades: ['timeTraveler3']
+        }
+    },
+    {
+        id: 'timeGloves',
+        name: 'Time Gloves',
+        baseCost: 150000,
+        costMultiplier: 1.5,
+        cps: 1000,
+        owned: 0,
+        isVisible: false,
+        requirements: {
+            timeCrystals: 200000,
+            otherUpgrades: ['timeGoggles']
+        }
+    },
+    {
+        id: 'timeBoots',
+        name: 'Time Boots',
+        baseCost: 300000,
+        costMultiplier: 1.5,
+        cps: 2000,
+        owned: 0,
+        isVisible: false,
+        requirements: {
+            timeCrystals: 400000,
+            otherUpgrades: ['timeGloves']
+        }
     }
 ];
 
-const achievements = [
+let achievements = [
     {
         id: 'gather100',
         name: 'Gather 100 Time Crystals',
@@ -145,7 +223,38 @@ const achievements = [
             timeCrystals: 100
         }
     },
-    /* Add 4 more achievements here*/
+    {
+        id: 'gather1000',
+        name: 'Gather 1,000 Time Crystals',
+        achieved: false,
+        requirements: {
+            timeCrystals: 1000
+        }
+    },
+    {
+        id: 'gather10000',
+        name: 'Gather 10,000 Time Crystals',
+        achieved: false,
+        requirements: {
+            timeCrystals: 10000
+        }
+    },
+    {
+        id: 'recruitAllTimeTravelers',
+        name: 'Recruit All Time Travelers',
+        achieved: false,
+        requirements: {
+            allTimeTravelersRecruited: true
+        }
+    },
+    {
+        id: 'unlockAllUpgrades',
+        name: 'Unlock All Upgrades',
+        achieved: false,
+        requirements: {
+            allUpgradesUnlocked: true
+        }
+    }
 ];
 
 /* Define game functions*/
@@ -218,7 +327,18 @@ function canBuyUpgrade(upgrade) {
 }
 
 function isAchievementAchieved(achievement) {
-    return achievement.requirements.timeCrystals <= timeCrystals;
+    if (achievement.requirements.timeCrystals) {
+        return timeCrystals >= achievement.requirements.timeCrystals;
+    } else if (achievement.requirements.allTimeTravelersRecruited) {
+        const timeTravelers = ['timeTraveler1', 'timeTraveler2', 'timeTraveler3'];
+        return timeTravelers.every(id => {
+            const requiredUpgrade = upgrades.find(u => u.id === id);
+            return requiredUpgrade && requiredUpgrade.owned > 0;
+        });
+    } else if (achievement.requirements.allUpgradesUnlocked) {
+        return upgrades.every(upgrade => upgrade.isVisible);
+    }
+    return false;
 }
 
 function checkAchievements() {
@@ -246,7 +366,8 @@ function saveGame() {
         timeCrystals,
         crystalsPerSecond,
         lastUpdate,
-        upgrades
+        upgrades,
+        achievements
     };
     localStorage.setItem('timeTravelAgency', JSON.stringify(gameData));
 }
@@ -259,6 +380,7 @@ function loadGame() {
         crystalsPerSecond = gameData.crystalsPerSecond;
         lastUpdate = gameData.lastUpdate;
         upgrades = gameData.upgrades;
+        achievements = gameData.achievements;
     }
 }
 
