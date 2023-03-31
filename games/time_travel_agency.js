@@ -340,7 +340,7 @@ let achievements = [
 /* Define game functions*/
 
 function gatherCrystals() {
-    timeCrystals += 1;
+    timeCrystals += crystalsPerSecond ? crystalsPerSecond : 1;
     updateDisplay();
 }
 
@@ -370,7 +370,7 @@ function updateUpgradeDisplay() {
               <div class="upgrade">
                 <h3>${upgrade.name}</h3>
                 <p>Cost: ${numberWithCommas(upgradeCost(upgrade).toFixed(0), 0)} Time Crystals</p>
-                <p>Crystals per Second: ${upgrade.cps}</p>
+                <p>Crystals per Second/Click: ${upgrade.cps}</p>
                 <p>Owned: ${upgrade.owned}</p>
                 <button onclick="purchaseUpgrade('${upgrade.id}')"${buttonDisabled}>Buy</button>
               </div>
@@ -476,7 +476,7 @@ function loadGame() {
         crystalsPerSecond = gameData.crystalsPerSecond;
         lastUpdate = gameData.lastUpdate;
         upgrades = gameData.upgrades;
-        achievements = gameData.achievements;
+        if (gameData.achievements) achievements = gameData.achievements;
     }
 }
 
