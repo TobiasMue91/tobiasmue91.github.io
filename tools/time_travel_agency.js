@@ -3,7 +3,7 @@ let timeCrystals = 0;
 let crystalsPerSecond = 0;
 let lastUpdate = Date.now();
 
-const upgrades = [
+let upgrades = [
     {
         id: 'timeTraveler1',
         name: 'Recruit Albert Einstein',
@@ -136,6 +136,18 @@ const upgrades = [
     }
 ];
 
+const achievements = [
+    {
+        id: 'gather100',
+        name: 'Gather 100 Time Crystals',
+        achieved: false,
+        requirements: {
+            timeCrystals: 100
+        }
+    },
+    /* Add 4 more achievements here*/
+];
+
 /* Define game functions*/
 
 function gatherCrystals() {
@@ -183,8 +195,8 @@ function updateUpgradeDisplay() {
 }
 
 function updateDisplay() {
-    document.getElementById('time-crystals').innerText = timeCrystals.toFixed(0);
-    document.getElementById('crystals-per-second').innerText = crystalsPerSecond.toFixed(1);
+    document.getElementById('time-crystals').innerText = numberWithCommas(timeCrystals.toFixed(0));
+    document.getElementById('crystals-per-second').innerText = numberWithCommas(crystalsPerSecond.toFixed(1));
 
     updateUpgradeDisplay();
 }
@@ -205,7 +217,61 @@ function canBuyUpgrade(upgrade) {
     return timeCrystals >= upgradeCost(upgrade);
 }
 
+function isAchievementAchieved(achievement) {
+    return achievement.requirements.timeCrystals <= timeCrystals;
+}
+
+function checkAchievements() {
+    for (const achievement of achievements) {
+        if (!achievement.achieved && isAchievementAchieved(achievement)) {
+            achievement.achieved = true;
+            /* Display a message or visual feedback for the achieved achievement*/
+            updateAchievementDisplay();
+        }
+    }
+}
+
+function updateAchievementDisplay() {
+    let achievementListHTML = '';
+    for (const achievement of achievements) {
+        if (achievement.achieved) {
+            achievementListHTML += `<div class="achievement"><h3>${achievement.name}</h3></div>`;
+        }
+    }
+    document.getElementById('achievement-list').innerHTML = achievementListHTML;
+}
+
+function saveGame() {
+    const gameData = {
+        timeCrystals,
+        crystalsPerSecond,
+        lastUpdate,
+        upgrades
+    };
+    localStorage.setItem('timeTravelAgency', JSON.stringify(gameData));
+}
+
+function loadGame() {
+    const savedData = localStorage.getItem('timeTravelAgency');
+    if (savedData) {
+        const gameData = JSON.parse(savedData);
+        timeCrystals = gameData.timeCrystals;
+        crystalsPerSecond = gameData.crystalsPerSecond;
+        lastUpdate = gameData.lastUpdate;
+        upgrades = gameData.upgrades;
+    }
+}
+
+function numberWithCommas(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 /*Game loop*/
+
+function saveAndCheckAchievements() {
+    saveGame();
+    checkAchievements();
+}
 
 function gameLoop() {
     const now = Date.now();
@@ -217,7 +283,9 @@ function gameLoop() {
     updateDisplay();
 }
 
+loadGame();
 setInterval(gameLoop, 100);
+setInterval(saveAndCheckAchievements, 5000);
 
 /*Add event listeners*/
 
