@@ -289,7 +289,7 @@ function updateUpgradeDisplay() {
             upgradeListHTML += `
               <div class="upgrade">
                 <h3>${upgrade.name}</h3>
-                <p>Cost: ${upgradeCost(upgrade).toFixed(0)} Time Crystals</p>
+                <p>Cost: ${numberWithCommas(upgradeCost(upgrade).toFixed(0), 0)} Time Crystals</p>
                 <p>Crystals per Second: ${upgrade.cps}</p>
                 <p>Owned: ${upgrade.owned}</p>
                 <button onclick="purchaseUpgrade('${upgrade.id}')"${buttonDisabled}>Buy</button>
@@ -384,9 +384,12 @@ function loadGame() {
     }
 }
 
-function numberWithCommas(x) {
-    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+function numberWithCommas(x, decimals) {
+    const parts = parseFloat(x).toFixed(decimals).toString().split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
 }
+
 
 /*Game loop*/
 
