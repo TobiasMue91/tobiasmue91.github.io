@@ -505,7 +505,7 @@ function gameLoop() {
 }
 
 loadGame();
-setInterval(gameLoop, 100);
+setInterval(gameLoop, 10);
 setInterval(saveAndCheckAchievements, 5000);
 
 /*Add event listeners*/
