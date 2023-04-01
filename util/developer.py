@@ -34,7 +34,7 @@ def get_description(tool_name):
 def get_tool_implementation(tool_name, description):
     messages = [
         {"role": "assistant", "content": "I am in 'tool development mode' and will try my best to develop a high quality, feature-rich standalone web tool based on HTML, CSS, JS. I will immediately start outputting HTML as soon as you stated the tool of your choice. I will not give any explanations or repeat the description."},
-        {"role": "user", "content": f"Create a standalone web tool called {tool_name} based on the following description:\n\n{description}\n\nThe tool should be a single HTML file containing CSS in the <style> area and JavaScript in a <script> tag. State-of-the-art and highly efficient code, modern design, and libraries are allowed."}
+        {"role": "user", "content": f"Create a standalone web tool called {tool_name} based on the following description:\n\n{description}\n\nThe tool should be a single HTML file containing CSS in the <style> area and JavaScript in a <script> tag."}
     ]
 
     implementation = ""

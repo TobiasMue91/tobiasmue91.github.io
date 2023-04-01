@@ -25,7 +25,6 @@
 - Akinator
 - CSS Animation Creator: An editor to create custom CSS animations with keyframes, easing, and delay settings.
 - Broken Link Checker: A tool to check a list of URLs for broken links and report their status.
-- JSON Formatter: A tool to format and validate JSON code, making it easier to read and understand.
 - Currency Converter: A real-time currency converter using exchange rate APIs to provide accurate conversions.
 - SVG Editor: A simple SVG editing tool to modify shapes, colors, and sizes of SVG files.
 - Audio Visualizer: A tool to generate visual representations of audio files based on waveform or frequency data.
@@ -50,7 +49,6 @@
 - Online Mind Mapping: A simple mind mapping tool to organize and visualize ideas and concepts.
 - HTML Table Generator: A tool to create responsive HTML tables with customizable styles, rows, and columns.
 - CSS Transform Playground: A playground for experimenting with CSS transform properties, such as scale, rotate, and skew.
-- Image Comparison Slider: A tool to create before-and-after image sliders for visual comparison.
 - Browser Compatibility Checker: A tool to check the compatibility of HTML, CSS, and JavaScript features with various browser versions.
 - Online Pixel Art Editor: A simple editor for creating and exporting pixel art, with support for basic drawing tools and color palettes.
 - CSS Blend Modes Generator: A tool to experiment with different CSS blend modes on images or backgrounds.
