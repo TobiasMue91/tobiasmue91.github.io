@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 01.04.2023 - removed updates to gpt-4 again, as I somehow lost access to this model; improved `developer.py` and created [Online Notepad](https://tobiasmue91.github.io/gptgames/tools/online_notepad.html) and [Image Comparison Slider](https://tobiasmue91.github.io/gptgames/tools/image_comparison_slider.html)
 - 30.03.2023 - first time hitting the API usage limit due to excessive usage and research; added [File Size Converter](https://tobiasmue91.github.io/gptgames/tools/file_size_converter.html) which was created using the `developer.py` script
 - 29.03.2023 - updated several tools, utils and games to gpt-4
 - 28.03.2023 - added more practical tools: [JSON Formatter](https://tobiasmue91.github.io/gptgames/tools/json_formatter.html), [Age Calculator](https://tobiasmue91.github.io/gptgames/tools/age_calculator.html), [Emoji Search](https://tobiasmue91.github.io/gptgames/tools/emoji_search.html), [CSS Gradient Generator](https://tobiasmue91.github.io/gptgames/tools/css_gradient_generator.html), [Stopwatch](https://tobiasmue91.github.io/gptgames/tools/stopwatch.html)
