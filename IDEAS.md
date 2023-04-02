@@ -34,7 +34,6 @@
 - Keyboard Shortcut Tester: A tool for users to test and discover various keyboard shortcuts for different operating systems and applications.
 - Favicon Generator: A tool to create and download favicons in multiple sizes and formats from an uploaded image.
 - Image Placeholder Generator: A tool to generate placeholder images with customizable dimensions, colors, and text for use during website development.
-- Base64 Encoder/Decoder: A tool to convert text or binary files to Base64 encoding and vice versa, useful for embedding images in CSS or inline HTML.
 - SVG Path Editor: A tool to create and modify SVG paths interactively, providing a visual interface to edit path commands.
 - Website Color Extractor: A tool to extract the color palette from a website URL or CSS code.
 - Online Flowchart Maker: A simple flowchart creation tool with drag-and-drop functionality.
@@ -55,7 +54,6 @@
 - Online Whiteboard: A collaborative whiteboard tool for users to draw, write, and share ideas in real-time.
 - Sitemap Visualizer: A tool to generate visual sitemaps from XML files or website URLs.
 - Web Accessibility Checker: A tool to identify potential accessibility issues in HTML and CSS code.
-- Random Quote Generator: A tool to generate random quotes from a predefined list, with options for customization and sharing.
 - Online Photo Collage Maker: A tool to create custom photo collages from uploaded images.
 - CSS Clip Path Generator: A tool to create and export custom CSS clip paths using a visual editor.
 - Browser Mockup Generator: A tool to generate browser mockups of websites or app interfaces.
