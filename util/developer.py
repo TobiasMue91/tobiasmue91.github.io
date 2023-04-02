@@ -11,7 +11,7 @@ def get_tool_name():
 
 def get_description(tool_name):
     messages = [
-        {"role": "assistant", "content": "I am in 'tool development mode' and will try my best to provide a description in the form of concise bullet points for a practical and convenient online tool of your choice."},
+        {"role": "assistant", "content": "I am in 'tool development mode' and will provide a description in the form of concise bullet points for a practical and convenient online tool of your choice."},
         {"role": "user", "content": f"Provide a streamlined and technical description of a standalone web version of the {tool_name} tool. The tool should be a single HTML file containing CSS in the <style> area and JavaScript in a <script> tag. State-of-the-art and highly efficient code, modern design, and libraries are allowed."}
     ]
 
