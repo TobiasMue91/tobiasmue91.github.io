@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Water Maze Simulation</title>
+  <style>
+    canvas {
+      border: none;
+    }
+    .cell {
+      width: 20px;
+      height: 20px;
+    }
+    .wall {
+      background-color: black;
+    }
+    .path {
+      background-color: white;
+    }
+    .water {
+      background-color: blue;
+    }
+  </style>
+</head>
+<body>
+<label for="mazeSize">Maze Size:</label>
+<input type="number" id="mazeSize" name="mazeSize" min="5" max="100" value="10">
+<button id="generateButton">Generate Maze</button>
+<canvas id="mazeCanvas"></canvas>
+<script type="text/javascript">
+  const cellSize = 20;
+  const canvas = document.getElementById('mazeCanvas');
+  const ctx = canvas.getContext('2d');
+
+  class Maze {
+    constructor(width, height) {
+      this.width = width;
+      this.height = height;
+      this.grid = this.generateMaze();
+    }
+
+    generateMaze() {
+      const grid = Array.from({ length: this.height }, () => Array.from({ length: this.width }, () => 1));
+
+      const frontier = [];
+      const startY = Math.floor(Math.random() * Math.floor((this.height - 1) / 2)) * 2 + 1;
+      const startX = Math.floor(Math.random() * Math.floor((this.width - 1) / 2)) * 2 + 1;
+      grid[startY][startX] = 0;
+
+      const directions = [
+        { dy: -2, dx: 0 },
+        { dy: 2, dx: 0 },
+        { dy: 0, dx: -2 },
+        { dy: 0, dx: 2 },
+      ];
+
+      directions.forEach(dir => {
+        const nextY = startY + dir.dy;
+        const nextX = startX + dir.dx;
+        if (nextY >= 0 && nextY < this.height && nextX >= 0 && nextX < this.width) {
+          frontier.push({ y: nextY, x: nextX, prevY: startY, prevX: startX });
+        }
+      });
+
+      while (frontier.length > 0) {
+        const randIndex = Math.floor(Math.random() * frontier.length);
+        const { y, x, prevY, prevX } = frontier.splice(randIndex, 1)[0];
+        if (grid[y][x] === 1) {
+          grid[y][x] = 0;
+          grid[prevY + (y - prevY) / 2][prevX + (x - prevX) / 2] = 0;
+
+          directions.forEach(dir => {
+            const nextY = y + dir.dy;
+            const nextX = x + dir.dx;
+            if (nextY >= 0 && nextY < this.height && nextX >= 0 && nextX < this.width) {
+              frontier.push({ y: nextY, x: nextX, prevY: y, prevX: x });
+            }
+          });
+        }
+      }
+
+      // Add an opening at the top
+      const topOpeningX = Math.floor(this.width / 2);
+      grid[0][topOpeningX] = 0;
+
+      // Add an opening at the bottom
+      const bottomOpeningX = Math.floor(this.width / 2);
+      grid[this.height - 1][bottomOpeningX] = 0;
+
+      return grid;
+    }
+
+    draw(ctx) {
+      for (let y = 0; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+          ctx.fillStyle = this.grid[y][x] === 1 ? 'black' : 'white';
+          ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+  }
+
+  class Particle {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.vx = 0;
+      this.vy = 0;
+      this.mass = 1;
+      this.density = 0;
+      this.pressure = 0;
+    }
+
+    update(dt) {
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+    }
+  }
+
+  class Water {
+    constructor(maze) {
+      this.maze = maze;
+      this.particles = [new Particle(Math.floor(this.maze.width / 2) * cellSize, 0)];
+      this.gravity = 9.8;
+      this.viscosity = 0.1;
+      this.restDensity = 1000;
+      this.gasConstant = 3000;
+      this.smoothingRadius = 30;
+      this.smoothingRadiusSq = this.smoothingRadius * this.smoothingRadius;
+      this.regionSize = this.smoothingRadius;
+    }
+
+    poly6Kernel(rSq, hSq) {
+      const coef = 315 / (64 * Math.PI * Math.pow(hSq, 3));
+      const diff = hSq - rSq;
+      return coef * diff * diff * diff;
+    }
+
+    spikyKernelGradient(r, h) {
+      const coef = -45 / (Math.PI * Math.pow(h, 6));
+      const diff = h - r;
+      return coef * diff * diff;
+    }
+
+    viscosityKernelLaplacian(r, h) {
+      const coef = 45 / (Math.PI * Math.pow(h, 6));
+      const diff = h - r;
+      return coef * diff;
+    }
+
+    calculateDensityPressure(particles) {
+      for (const particle of particles) {
+        particle.density = 0;
+        for (const neighbor of particles) {
+          const dx = particle.x - neighbor.x;
+          const dy = particle.y - neighbor.y;
+          const rSq = dx * dx + dy * dy;
+
+          if (rSq < this.smoothingRadiusSq) {
+            particle.density += particle.mass * this.poly6Kernel(rSq, this.smoothingRadiusSq);
+          }
+        }
+        particle.pressure = this.gasConstant * (particle.density - this.restDensity);
+      }
+    }
+
+    calculateForces(particles) {
+      for (const particle of particles) {
+        let pressureForceX = 0;
+        let pressureForceY = 0;
+        let viscosityForceX = 0;
+        let viscosityForceY = 0;
+
+        for (const neighbor of particles) {
+          if (particle !== neighbor) {
+            const dx = particle.x - neighbor.x;
+            const dy = particle.y - neighbor.y;
+            const r = Math.sqrt(dx * dx + dy * dy);
+
+            if (r < this.smoothingRadius) {
+              const pressureTerm = -particle.mass * (particle.pressure + neighbor.pressure) / (2 * neighbor.density);
+              const pressureKernel = this.spikyKernelGradient(r, this.smoothingRadius);
+              pressureForceX += pressureTerm * pressureKernel * dx / (r + 1e-6);
+              pressureForceY += pressureTerm * pressureKernel * dy / (r + 1e-6);
+
+              const viscosityTerm = this.viscosity * particle.mass / neighbor.density;
+              const viscosityKernel = this.viscosityKernelLaplacian(r, this.smoothingRadius);
+              viscosityForceX += viscosityTerm * viscosityKernel * (neighbor.vx - particle.vx);
+              viscosityForceY += viscosityTerm * viscosityKernel * (neighbor.vy - particle.vy);
+            }
+          }
+        }
+
+        particle.vx += (pressureForceX + viscosityForceX) * (1 / particle.density);
+        particle.vy += (pressureForceY + viscosityForceY) * (1 / particle.density);
+      }
+    }
+
+    getRegion(x, y) {
+      return {
+        regionX: Math.floor(x / this.regionSize),
+        regionY: Math.floor(y / this.regionSize),
+      };
+    }
+
+    updateRegions(particles) {
+      this.regions = new Map();
+
+      for (const particle of particles) {
+        const { regionX, regionY } = this.getRegion(particle.x, particle.y);
+
+        if (!this.regions.has(regionX)) {
+          this.regions.set(regionX, new Map());
+        }
+
+        if (!this.regions.get(regionX).has(regionY)) {
+          this.regions.get(regionX).set(regionY, []);
+        }
+
+        this.regions.get(regionX).get(regionY).push(particle);
+      }
+    }
+
+    getNeighbors(particle) {
+      const { regionX, regionY } = this.getRegion(particle.x, particle.y);
+      const neighbors = [];
+
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const neighborRegionX = regionX + dx;
+          const neighborRegionY = regionY + dy;
+
+          if (
+                  this.regions.has(neighborRegionX) &&
+                  this.regions.get(neighborRegionX).has(neighborRegionY)
+          ) {
+            for (const neighbor of this.regions.get(neighborRegionX).get(neighborRegionY)) {
+              if (particle !== neighbor) {
+                neighbors.push(neighbor);
+              }
+            }
+          }
+        }
+      }
+
+      return neighbors;
+    }
+
+    update(dt) {
+      this.updateRegions(this.particles);
+      this.calculateDensityPressure(this.particles);
+      this.calculateForces(this.particles);
+
+      const sideForce = 5;
+
+      for (const particle of this.particles) {
+        particle.vy += this.gravity * particle.mass * dt;
+        particle.update(dt);
+
+        if (particle.y < 0) {
+          particle.y = 0;
+          particle.vy = -particle.vy * 0.5;
+        } else if (particle.y > this.maze.height * cellSize - cellSize) {
+          particle.y = this.maze.height * cellSize - cellSize;
+          particle.vy = -particle.vy * 0.5;
+        }
+
+        if (particle.x < 0) {
+          particle.x = 0;
+          particle.vx = -particle.vx * 0.5;
+        } else if (particle.x > this.maze.width * cellSize - cellSize) {
+          particle.x = this.maze.width * cellSize - cellSize;
+          particle.vx = -particle.vx * 0.5;
+        }
+
+        // Improved collision with maze walls
+        const mazeX = Math.floor(particle.x / cellSize);
+        const mazeY = Math.floor(particle.y / cellSize);
+
+        const leftCell = this.maze.grid[mazeY][Math.max(0, mazeX - 1)];
+        const rightCell = this.maze.grid[mazeY][Math.min(this.maze.width - 1, mazeX + 1)];
+        const topCell = this.maze.grid[Math.max(0, mazeY - 1)][mazeX];
+        const bottomCell = this.maze.grid[Math.min(this.maze.height - 1, mazeY + 1)][mazeX];
+
+        const particleLeft = particle.x - cellSize * mazeX;
+        const particleRight = cellSize * (mazeX + 1) - particle.x;
+        const particleTop = particle.y - cellSize * mazeY;
+        const particleBottom = cellSize * (mazeY + 1) - particle.y;
+
+        const wallPadding = cellSize / 8; // Adjust this value to control how close particles can get to the wall
+
+        if (leftCell === 1 && particleLeft < wallPadding) {
+          particle.x = cellSize * mazeX + wallPadding;
+          particle.vx = -particle.vx * 0.1;
+        }
+
+        if (rightCell === 1 && particleRight < wallPadding) {
+          particle.x = cellSize * (mazeX + 1) - wallPadding;
+          particle.vx = -particle.vx * 0.1;
+        }
+
+        if (topCell === 1 && particleTop < wallPadding) {
+          particle.y = cellSize * mazeY + wallPadding;
+          particle.vy = -particle.vy * 0.1;
+        }
+
+        // Check for bottom wall collision
+        if (bottomCell === 1 && particleBottom < wallPadding) {
+          particle.y = cellSize * (mazeY + 1) - wallPadding;
+          particle.vy = -particle.vy * 0.5;
+
+          // Add a horizontal force depending on the side they are closer to
+          if (particleLeft < particleRight) {
+            particle.vx -= sideForce;
+          } else {
+            particle.vx += sideForce;
+          }
+        }
+
+        // Check for bottom left and bottom right wall collisions
+        const bottomLeftCell = this.maze.grid[Math.min(this.maze.height - 1, mazeY + 1)][Math.max(0, mazeX - 1)];
+        const bottomRightCell = this.maze.grid[Math.min(this.maze.height - 1, mazeY + 1)][Math.min(this.maze.width - 1, mazeX + 1)];
+
+        if (bottomLeftCell === 1 && particleLeft < wallPadding && particleBottom < wallPadding) {
+          particle.vx += sideForce;
+        }
+
+        if (bottomRightCell === 1 && particleRight < wallPadding && particleBottom < wallPadding) {
+          particle.vx -= sideForce;
+        }
+      }
+
+      if (this.particles.length < 1000) {
+        this.particles.push(new Particle(Math.floor(this.maze.width / 2) * cellSize, 0));
+      }
+    }
+
+    draw(ctx) {
+      ctx.fillStyle = 'blue';
+      for (const particle of this.particles) {
+        ctx.fillRect(particle.x, particle.y, cellSize / 10, cellSize / 10);
+      }
+    }
+  }
+
+  function main() {
+    const mazeSize = getMazeSize();
+    const maze = new Maze(mazeSize, mazeSize);
+    const water = new Water(maze);
+    canvas.width = maze.width * cellSize;
+    canvas.height = maze.height * cellSize;
+
+    function update(dt) {
+      water.update(dt);
+    }
+
+    function draw() {
+      maze.draw(ctx);
+      water.draw(ctx);
+    }
+
+    function gameLoop() {
+      const dt = 1 / 30;
+      update(dt);
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  }
+
+  function getMazeSize() {
+    const input = document.getElementById('mazeSize');
+    const size = parseInt(input.value, 10);
+    return isNaN(size) ? 10 : size;
+  }
+
+  document.getElementById('generateButton').addEventListener('click', () => {
+    main();
+  });
+
+  main();
+</script>
+</body>
+</html>
