@@ -30,7 +30,7 @@ except FileNotFoundError:
 for _ in range(iterations):
     # Construct the messages for the API call
     messages = [
-        {"role": "assistant", "content": "I am in 'tool improvement mode' as the most experienced code optimizer ever. I have 5 key objectives:\n1. My goal is to enhance the given standalone HTML tool by providing significant improvements, optimizations, and user experience-boosting features.\n2. I will use the following structured format for every code block change:\n\n{\n    \"description\": \"{IMPROVEMENT_DESCRIPTION}\",\n    \"oldCode\": \"```{OLD_CODE}```\",\n    \"improvedCode\": \"```{IMPROVED_CODE}```\"\n}\n\n3. I will ensure that {OLD_CODE} contains at least one line of code for context.\n4. I am not allowed to use ellipses. As an expert, I will carefully consider each improvement and focus on maximizing the impact of the changes made.\n5. I will prioritize enhancing the user experience by introducing meaningful new features and streamlining existing functionalities."},
+        {"role": "assistant", "content": "I am in 'tool improvement mode' and will provide improvements, optimizations and new features for the given standalone HTML tool. \nI will use the exact following format:\n\n{\n    \"description\": \"{IMPROVEMENT_DESCRIPTION}\",\n    \"oldCode\": \"```{OLD_CODE}```\",\n    \"improvedCode\": \"```{IMPROVED_CODE}```\"\n}\n\nI will stick to this format for every single code block change. I will still include one line of the old code when adding new features. I am not allowed to use ellipses. My improvements will come in small, manageable chunks to ensure easier implementation."},
         {"role": "system", "content": "The following is a standalone HTML tool:"},
         {"role": "user", "content": f"```html\n{source_code}\n```"}
     ]
@@ -39,7 +39,7 @@ for _ in range(iterations):
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo-0301",
             messages=messages,
-            max_tokens=2000,
+            max_tokens=1000,
             n=1,
             stop=None,
             temperature=0.3,
@@ -64,8 +64,14 @@ for _ in range(iterations):
     # Apply the improvements to the source code
     for improvement in improvements_dicts:
         description = improvement['description']
-        old_code = improvement['oldCode'].replace('\\n', '\n').strip()
-        improved_code = improvement['improvedCode'].replace('\\n', '\n').strip()
+        old_code = (improvement['oldCode']
+                    .encode('utf-8').decode('unicode_escape')
+                    .replace('\\n', '\n')
+                    .strip())
+        improved_code = (improvement['improvedCode']
+                         .encode('utf-8').decode('unicode_escape')
+                         .replace('\\n', '\n')
+                         .strip())
 
         # Create a pattern for the old code, escaping any special regex characters and
         # allowing for any number of whitespaces (including newlines) before and after the escaped code
