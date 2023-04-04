@@ -85,7 +85,6 @@ function loadTimelineData() {
         .then((response) => response.json())
         .then((data) => {
             const slider = document.getElementById("slider");
-            const sliderThumb = slider.querySelector(".slider-thumb");
 
             data.forEach((item, index) => {
                 const step = document.createElement("div");

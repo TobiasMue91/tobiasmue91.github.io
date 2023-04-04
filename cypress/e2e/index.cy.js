@@ -9,7 +9,7 @@ describe('Index page working as expected', () => {
         });
     });
 
-    it('Checks search functionality and checks if every page has some visible elements', () => {
+    it('Checks search functionality', () => {
         // Intercept all network requests
         cy.intercept('*').as('networkRequest');
 
@@ -26,10 +26,13 @@ describe('Index page working as expected', () => {
 
         // Step 4: Check if there is only one visible "div.game-card" element
         cy.get('div.game-card:visible').should('have.length', 1);
+    });
 
-        cy.get('@searchInput').clear();
+    it('Checks if every page has some visible elements', () => {
+        // Visit the index page
+        cy.visit('index.html');
 
-        // Step 5: Collect all links inside "div.game-card" elements, excluding "top games and tools"
+        // Collect all links inside "div.game-card" elements, excluding "top games and tools"
         cy.get('div.game-card')
             .not('.game-list.top div.game-card')
             .find('a')
@@ -37,19 +40,33 @@ describe('Index page working as expected', () => {
                 const hrefs = $links.map((index, link) => link.getAttribute('href')).get();
 
                 // Visit each link and check if there is anything visible on the loaded page
-                hrefs.forEach((href) => {
-                    // Read the local HTML file
-                    cy.readFile(href, 'utf-8').then((html) => {
-                        // Write the content to the test browser
-                        cy.document().then((doc) => {
-                            doc.documentElement.innerHTML = html;
+                cy.wrap(hrefs).each((href) => {
+                    // Visit the page using the local server
+                    cy.visit(href);
+                    // Write the content to the test browser
+                    cy.document().then((doc) => {
+                        // Check if there is anything visible on the loaded page
+                        expect(doc.body.children.length).to.be.greaterThan(0);
+                        expect(doc.visibilityState).to.equal('visible');
 
-                            // Wait for all network requests to complete
-                            cy.wait('@networkRequest');
+                        const imgs = doc.querySelectorAll('img');
 
-                            // Check if there is anything visible on the loaded page
-                            expect(doc.body.children.length).to.be.greaterThan(0);
-                            expect(doc.visibilityState).to.equal('visible');
+                        // No images found, do nothing
+                        if (imgs.length === 0) {
+                            return;
+                        }
+
+                        // If there are any images on the page, check them
+                        cy.wrap(imgs).each(($img) => {
+                            // Check if the image has a valid src attribute
+                            cy.wrap($img).should('have.attr', 'src').and('not.be.empty');
+
+                            const src = $img.prop('src');
+
+                            if (!src.startsWith('data:')) {
+                                // Check if the image is loaded successfully
+                                cy.request($img.prop('src')).its('status').should('eq', 200);
+                            }
                         });
                     });
                 });
