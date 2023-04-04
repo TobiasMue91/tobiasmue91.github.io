@@ -1,4 +1,14 @@
 describe('Index page working as expected', () => {
+    beforeEach(() => {
+        // Listen for console errors
+        cy.on('window:console', (message) => {
+            if (message.type === 'error') {
+                // Fail the test if there is a console error
+                assert.fail(`Console error: ${message.text}`);
+            }
+        });
+    });
+
     it('Checks search functionality and checks if every page has some visible elements', () => {
         // Intercept all network requests
         cy.intercept('*').as('networkRequest');
@@ -40,14 +50,6 @@ describe('Index page working as expected', () => {
                             // Check if there is anything visible on the loaded page
                             expect(doc.body.children.length).to.be.greaterThan(0);
                             expect(doc.visibilityState).to.equal('visible');
-
-                            // Listen for console errors
-                            cy.on('window:console', (message) => {
-                                if (message.type === 'error') {
-                                    // Fail the test if there is a console error
-                                    assert.fail(`Console error: ${message.text}`);
-                                }
-                            });
                         });
                     });
                 });
