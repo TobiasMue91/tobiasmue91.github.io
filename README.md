@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 05.04.2023 - changed background images; new ones have been generated with MidJourney v5 and prompts created by GPT-4
 - 02.04.2023 - created AI-powered [QuotoSaurus](https://tobiasmue91.github.io/gptgames/tools/quotosaurus.html); added [Base64 Decoder/Encoder](https://tobiasmue91.github.io/gptgames/tools/base64_encoder_decoder.html)
 - 01.04.2023 - removed updates to gpt-4 again, as I somehow lost access to this model; improved `developer.py` and created [Online Notepad](https://tobiasmue91.github.io/gptgames/tools/online_notepad.html) and [Image Comparison Slider](https://tobiasmue91.github.io/gptgames/tools/image_comparison_slider.html)
 - 30.03.2023 - first time hitting the API usage limit due to excessive usage and research; added [File Size Converter](https://tobiasmue91.github.io/gptgames/tools/file_size_converter.html) which was created using the `developer.py` script

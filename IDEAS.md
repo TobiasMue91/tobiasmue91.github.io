@@ -6,7 +6,8 @@
 - argumentator
   - add permalinks to the generated arguments
 - auto-improver script
-  - improvement history, um erneute improvements zu vermeiden
+  - improvement history, to prevent repeated or duplicate improvements
+- userscript to let gpt-4 communicate with gpt-3.5
 
 ## Practical Tools
 - base64-converter
