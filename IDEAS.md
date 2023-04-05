@@ -15,7 +15,6 @@
 - text<->emoji converter (GPTranslator can do that! :D)
 - form builder
 - text<->ascii converter
-- Time Zone Converter: A tool that converts times and dates between different time zones, using a map or a list of cities.
 - ASCII Art Generator
 - Image to Text Converter
 - CSS Beautifier
