@@ -10,15 +10,11 @@
 - userscript to let gpt-4 communicate with gpt-3.5
 
 ## Practical Tools
-- base64-converter
-- basic calculator
 - csv<->json converter
 - text<->morse converter
-- text<->emoji converter
-- text/code diff tool (ignore whitespaces option)
+- text<->emoji converter (GPTranslator can do that! :D)
 - form builder
 - text<->ascii converter
-- file-size-calculator/converter
 - Time Zone Converter: A tool that converts times and dates between different time zones, using a map or a list of cities.
 - ASCII Art Generator
 - Image to Text Converter
@@ -35,7 +31,6 @@
 - Keyboard Shortcut Tester: A tool for users to test and discover various keyboard shortcuts for different operating systems and applications.
 - Favicon Generator: A tool to create and download favicons in multiple sizes and formats from an uploaded image.
 - Image Placeholder Generator: A tool to generate placeholder images with customizable dimensions, colors, and text for use during website development.
-- SVG Path Editor: A tool to create and modify SVG paths interactively, providing a visual interface to edit path commands.
 - Website Color Extractor: A tool to extract the color palette from a website URL or CSS code.
 - Online Flowchart Maker: A simple flowchart creation tool with drag-and-drop functionality.
 - Aspect Ratio Calculator: A tool to calculate the aspect ratio of images or videos, and resize dimensions while maintaining the aspect ratio.
