@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone, timedelta
 
-root_url = 'https://tobiasmue91.github.io/gptgames/'
+root_url = 'https://www.gptgames.dev/'
 
 def generate_sitemap():
     with open('index.html', 'r', encoding='utf-8') as f:
