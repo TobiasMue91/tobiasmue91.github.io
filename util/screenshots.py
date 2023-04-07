@@ -8,7 +8,7 @@ from PIL import Image
 driver = webdriver.Chrome("/usr/local/bin/chromedriver")
 
 # navigate to website
-driver.get("https://tobiasmue91.github.io/gptgames/")
+driver.get("https://www.gptgames.dev/")
 
 # find all links with "gptgames/games" or "gptgames/tools" in them
 links = driver.find_elements_by_xpath("//a[contains(@href, 'games/') or contains(@href, 'tools/')]")
