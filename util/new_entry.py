@@ -10,7 +10,7 @@ entry_name = input("Enter the tool/game name: ")
 description = input("Enter the description: ")
 
 # Create screenshots directory if it doesn't exist
-screenshots_dir = Path("../screenshots")
+screenshots_dir = Path("screenshots")
 screenshots_dir.mkdir(exist_ok=True)
 
 # Determine the screenshot file name

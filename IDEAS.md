@@ -73,6 +73,17 @@
 - Web Font Tester: A tool to preview and compare different web fonts on sample text, with options to adjust size, color, and other styling properties.
 - Online Receipt Generator: A tool to create and download custom receipts for personal or business purposes.
 - CSS Background Patterns Generator: A tool to create and customize repeating background patterns using CSS.
+- "AI Cooking Challenge": Players input ingredients they have on hand, and your API generates creative and unique recipes to try. Players can adjust the complexity, cuisine style, and dietary preferences.
+- "CodeGPT": Players input the desired functionality and language for a simple programming task, and your API generates the necessary code. Players can adjust the level of optimization, readability, and programming paradigms.
+- "AI Poetry Slam": Players input a theme, style, and mood for a poem, and your API generates a unique poem based on their preferences. Players can challenge friends to create better poems with the same parameters and vote on their favorites.
+- "GPT Mind Mapper": Users input a central topic or problem, and your API generates a mind map with related subtopics, ideas, and connections. Users can customize the map's complexity, depth, and level of detail.
+- "AI Study Buddy": Users input a subject, topic, or question, and your API generates a concise summary, explanation, or tutorial. Users can adjust the level of detail, difficulty, and learning style.
+- "GPT DIY Guide": Users input a home improvement or repair project, and your API generates step-by-step instructions and a list of necessary tools and materials. Users can adjust the level of detail, difficulty, and project type.
+- "AI Riddle Inventor": Players input a topic or theme, and your API generates original riddles with answers. Players can adjust the difficulty, humor, and complexity of the riddles.
+- "GPT Skill Builder": Users input a skill they want to learn or improve (e.g., public speaking, negotiation, cooking, etc.) and provide their current level of expertise. Your API generates a customized learning plan with resources, exercises, and milestones. Users can adjust the level of detail, pace, and focus on specific sub-skills.
+- "AI Life Event Planner": Users input the type of event they're planning (wedding, party, corporate function, etc.) and provide relevant details, such as budget, guest count, and theme. Your API generates a comprehensive plan, including checklists, timelines, and vendor recommendations. Users can adjust the level of detail, uniqueness, and formality.
+- "GPT Creative Prompt Generator": Users input a preferred medium (writing, painting, photography, etc.) and a theme or emotion, and your API generates a series of unique creative prompts to inspire their work. Users can customize the level of challenge, abstractness, and number of prompts generated.
+- "AI Text Naturalizer" which aims to modify AI-generated text to make it appear more human-like and less recognizable by tools like ZeroGPT.
 
 ## Games
 - War (Card Game)
