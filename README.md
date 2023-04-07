@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 06.04.2023 - moved to [www.gptgames.dev](https://www.gptgames.dev/) 🥳; added [Paste to Markdown](https://www.gptgames.dev/tools/paste_to_markdown.html) and [HTML Table Generator](https://www.gptgames.dev/tools/html_table_generator.html)
 - 05.04.2023 - changed background images; new ones have been generated with MidJourney v5 and prompts created by GPT-4; added [Time Zone Converter](https://www.gptgames.dev/tools/time_zone_converter.html) and [Online Voice Recorder](https://www.gptgames.dev/tools/online_voice_recorder.html)
 - 02.04.2023 - created AI-powered [QuotoSaurus](https://www.gptgames.dev/tools/quotosaurus.html); added [Base64 Decoder/Encoder](https://www.gptgames.dev/tools/base64_encoder_decoder.html)
 - 01.04.2023 - removed updates to gpt-4 again, as I somehow lost access to this model; improved `developer.py` and created [Online Notepad](https://www.gptgames.dev/tools/online_notepad.html) and [Image Comparison Slider](https://www.gptgames.dev/tools/image_comparison_slider.html)
