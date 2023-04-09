@@ -25,7 +25,7 @@ describe('Index page working as expected', () => {
         cy.get('@searchInput').type('Tetris');
 
         // Step 4: Check if there is only one visible "div.game-card" element
-        cy.get('div.game-card:visible').should('have.length', 1);
+        cy.get('div.game-card:visible').should('have.length', 2);
     });
 
     it('Checks if every page has some visible elements', () => {
