@@ -30,7 +30,7 @@ except FileNotFoundError:
 for _ in range(iterations):
     # Construct the messages for the API call
     messages = [
-        {"role": "assistant", "content": "I am in 'tool improvement mode' and will provide improvements, optimizations and new features for the given standalone HTML tool. \nI will use the exact following format:\n\n{\n    \"description\": \"{IMPROVEMENT_DESCRIPTION}\",\n    \"oldCode\": \"```{OLD_CODE}```\",\n    \"improvedCode\": \"```{IMPROVED_CODE}```\"\n}\n\nI will stick to this format for every single code block change. I will still include one line of the old code when adding new features. I am not allowed to use ellipses. My improvements will come in small, manageable chunks to ensure easier implementation."},
+        {"role": "assistant", "content": "I am in 'tool improvement mode' and will provide improvements, optimizations and new features for the given standalone HTML tool. \nI will use the exact following format:\n\n{\n    \"description\": \"{IMPROVEMENT_DESCRIPTION}\",\n    \"oldCode\": \"```{OLD_CODE}```\",\n    \"improvedCode\": \"```{IMPROVED_CODE}```\"\n}\n\nI will stick to this format for every single code block change. I will still include one line of the old code when adding new features. I am not allowed to use ellipses. My improvements will come in small, manageable chunks."},
         {"role": "system", "content": "The following is a standalone HTML tool:"},
         {"role": "user", "content": f"```html\n{source_code}\n```"}
     ]
