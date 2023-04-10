@@ -30,9 +30,8 @@ except FileNotFoundError:
 for _ in range(iterations):
     # Construct the messages for the API call
     messages = [
-        {"role": "assistant", "content": "I am in 'tool improvement mode' and will provide improvements, optimizations and new features for the given standalone HTML tool. \nI will use the exact following format:\n\n{\n    \"description\": \"{IMPROVEMENT_DESCRIPTION}\",\n    \"oldCode\": \"```{OLD_CODE}```\",\n    \"improvedCode\": \"```{IMPROVED_CODE}```\"\n}\n\nI will stick to this format for every single code block change. I will still include one line of the old code when adding new features. I am not allowed to use ellipses. My improvements will come in small, manageable chunks."},
-        {"role": "system", "content": "The following is a standalone HTML tool:"},
-        {"role": "user", "content": f"```html\n{source_code}\n```"}
+        {"role": "assistant", "content": "1. I am CODEMASTER, an AI coding expert with vast experience in all programming languages, best practices, and efficient coding techniques. I will provide improvements, optimizations and new features of the highest possible quality for the given standalone HTML tool. \n2. I will use the exact following format:\n\n{\n    \"description\": \"{IMPROVEMENT_DESCRIPTION}\",\n    \"oldCode\": \"```{OLD_CODE}```\",\n    \"improvedCode\": \"```{IMPROVED_CODE}```\"\n}\n\n3. I will stick to this format for every single code block change. \n4. I will still include one line of the old code in each improvement. \n5. The improvements will come in small chunks with a maximum of 5 lines."},
+        {"role": "user", "content": f"Please CODEMASTER, provide improvements to the best of your abilities: \n```html\n{source_code}\n```"}
     ]
 
     try:
@@ -56,7 +55,7 @@ for _ in range(iterations):
         log_file.write("\n\n")
 
     # Extract improvements from the API response
-    improvements = re.findall(r'{\s*?"description"\s*?:\s*?"(.*?)"\s*?,\s*?"oldCode"\s*?:\s*?"```\s*?(.*?)\s*?```"\s*?,\s*?"improvedCode"\s*?:\s*?"```\s*?(.*?)\s*?```"\s*?}', response.choices[0]['message']['content'], re.DOTALL)
+    improvements = re.findall(r'{\s*?"description"\s*?:\s*?"(.*?)"\s*?,\s*?"oldCode"\s*?:\s*?(?:```)?\s*?(.*?)\s*?(?:```)?\s*?,\s*?"improvedCode"\s*?:\s*?(?:```)?\s*?(.*?)\s*?(?:```)?\s*?}', response.choices[0]['message']['content'], re.DOTALL)
 
     # Create dictionaries for the improvements
     improvements_dicts = [{'description': desc, 'oldCode': old, 'improvedCode': new} for desc, old, new in improvements]
@@ -67,11 +66,11 @@ for _ in range(iterations):
         old_code = (improvement['oldCode']
                     .encode('utf-8').decode('unicode_escape')
                     .replace('\\n', '\n')
-                    .strip())
+                    .strip().strip('"'))
         improved_code = (improvement['improvedCode']
                          .encode('utf-8').decode('unicode_escape')
                          .replace('\\n', '\n')
-                         .strip())
+                         .strip().strip('"'))
 
         # Create a pattern for the old code, escaping any special regex characters and
         # allowing for any number of whitespaces (including newlines) before and after the escaped code
