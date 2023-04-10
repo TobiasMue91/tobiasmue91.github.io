@@ -41,7 +41,6 @@
 - Online Signature Maker: A tool to create and download digital signatures using a drawing interface.
 - CSS Variables Generator: A tool to manage and generate CSS variables for consistent styling across projects.
 - Online Mind Mapping: A simple mind mapping tool to organize and visualize ideas and concepts.
-- HTML Table Generator: A tool to create responsive HTML tables with customizable styles, rows, and columns.
 - CSS Transform Playground: A playground for experimenting with CSS transform properties, such as scale, rotate, and skew.
 - Browser Compatibility Checker: A tool to check the compatibility of HTML, CSS, and JavaScript features with various browser versions.
 - Online Pixel Art Editor: A simple editor for creating and exporting pixel art, with support for basic drawing tools and color palettes.
@@ -53,9 +52,7 @@
 - CSS Clip Path Generator: A tool to create and export custom CSS clip paths using a visual editor.
 - Browser Mockup Generator: A tool to generate browser mockups of websites or app interfaces.
 - Online Diagram Maker: A tool for creating various types of diagrams, such as flowcharts, Venn diagrams, and organizational charts.
-- Image to Base64 Converter: A tool to convert images to Base64 encoded strings for embedding in HTML or CSS.
 - Online Sticky Notes: A tool to create, edit, and manage digital sticky notes.
-- Meta Tag Generator: A tool to generate custom meta tags for website SEO and social media sharing.
 - CSS Pseudo-Class Tester: A tool to experiment with various CSS pseudo-classes and see their effects in real-time.
 - Online Logo Maker: A simple logo creation tool with customizable shapes, colors, and fonts.
 - File Format Converter: A tool to convert files between different formats, such as image, audio, or document types.
