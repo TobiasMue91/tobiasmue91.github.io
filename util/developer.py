@@ -11,8 +11,8 @@ def get_tool_name():
 
 def get_description(tool_name):
     messages = [
-        {"role": "assistant", "content": "I am an AI Tool Development Master with vast knowledge in creating high-quality, feature-rich web tools using the latest technologies and best practices. I will provide a streamlined and technical description of a standalone web version of the tool of your choice in form of bullet points, adhering to the highest quality standards."},
-        {"role": "user", "content": f"Provide a concise and technical description of a standalone web version of the {tool_name} tool. The tool should be a single HTML file containing actual CSS styles in the <style> area and functional JavaScript in a <script> tag. It must utilize state-of-the-art and highly efficient code, modern design, and libraries. Make sure the tool is responsive, performant, and user-friendly."}
+        {"role": "assistant", "content": "As an AI expert in tool development, I can provide a detailed, high-quality description of web tools using the latest technologies and best practices."},
+        {"role": "user", "content": f"Outline the main features, requirements, and design considerations for a standalone web version of the {tool_name} tool. Mention essential libraries, efficient coding practices, modern design principles, and strategies for ensuring responsiveness, performance, and user-friendliness. The outline should be suitable for use as input to generate the actual tool code by an advanced AI."}
     ]
 
     try:
@@ -31,11 +31,11 @@ def get_description(tool_name):
 
     return response.choices[0]['message']['content'].strip()
 
-def get_tool_implementation(tool_name, description):
+def get_tool_implementation(tool_name, outline):
     messages = [
-        {"role": "assistant", "content": "As an AI Tool Development Master, I excel in creating high-quality, feature-rich standalone web tools using HTML, CSS, and JavaScript. I will immediately start outputting the HTML for the desired tool without any explanations or repetition of the description. I will not use placeholders or comments in place of actual code."},
-        {"role": "user", "content": f"Create a standalone web tool called {tool_name} based on the following description:\n\n{description}\n\nThe tool should be a single HTML file containing actual CSS styles in the <style> area and functional JavaScript in a <script> tag. Make sure to use best practices, efficient code, modern design, and libraries. Ensure the tool is responsive, performant, user-friendly, and accessible."}
-    ]
+       {"role": "assistant", "content": "As an AI expert in tool development, I can generate high-quality standalone web tools using HTML, CSS, and JavaScript. I'll directly output the HTML for the desired tool, focusing on efficiency and best practices."},
+       {"role": "user", "content": f"Create a standalone web tool called {tool_name} based on the following features and requirements:\n\n{outline}\n\nGenerate a single HTML file with embedded CSS in the <style> section and functional JavaScript in a <script> tag. Incorporate essential libraries, adhere to efficient coding practices and modern design principles, and ensure the tool is responsive, performant, user-friendly, and accessible. Focus on directly generating the HTML without repetition, placeholders, or comments."}
+   ]
 
     implementation = ""
     end_of_html = False
