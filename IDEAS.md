@@ -59,9 +59,7 @@
 - Online Icon Editor: A tool to create and modify icons in various sizes and formats, such as ICO, PNG, and SVG.
 - CSS Filters Playground: A playground for experimenting with different CSS filters, such as blur, brightness, and contrast.
 - Online Post-it Board: A collaborative board for users to create, edit, and organize digital Post-it notes.
-- Image Cropper and Resizer: A tool to crop and resize images with adjustable dimensions and aspect ratios.
 - CSS Selector Tester: A tool to test and experiment with CSS selectors on sample HTML code.
-- Online Voice Recorder: A tool to record and playback audio using the user's microphone, with options to download or share the recordings.
 - CSS Box Model Visualizer: A tool to visualize and understand the CSS box model, with options to modify padding, border, and margin values.
 - Online Business Card Maker: A simple tool to design and download custom business cards in various formats.
 - Online Calendar Creator: A tool to create and download custom calendars with customizable dates, holidays, and events.
