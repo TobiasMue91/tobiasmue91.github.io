@@ -9,6 +9,17 @@ def get_tool_name():
     tool_name = input("Enter the name of the tool to be created: ")
     return tool_name
 
+def get_additional_criteria():
+    print("Enter any additional criteria for the tool (press Enter twice to finish):")
+    additional_criteria = []
+    while True:
+        line = input()
+        if line:
+            additional_criteria.append(line)
+        else:
+            break
+    return "\n".join(additional_criteria)
+
 def get_description(tool_name):
     messages = [
         {"role": "assistant", "content": "As an AI expert in tool development, I can provide a detailed, high-quality description of web tools using the latest technologies and best practices."},
@@ -31,10 +42,17 @@ def get_description(tool_name):
 
     return response.choices[0]['message']['content'].strip()
 
-def get_tool_implementation(tool_name, outline):
+def get_tool_implementation(tool_name, outline, additional_criteria):
+    user_content = f"Create a standalone web tool called {tool_name} based on the following features and requirements:\n\n{outline}\n\n"
+
+    if additional_criteria:
+        user_content += f"Also, consider the following additional criteria:\n\n{additional_criteria}\n\n"
+
+    user_content += "Generate a single HTML file with embedded CSS in the <style> section and functional JavaScript in a <script> tag. Incorporate essential libraries, adhere to efficient coding practices and modern design principles, and ensure the tool is responsive, performant, user-friendly, and accessible. Focus on directly generating the HTML without repetition, placeholders, or comments."
+
     messages = [
        {"role": "assistant", "content": "As an AI expert in tool development, I can generate high-quality standalone web tools using HTML, CSS, and JavaScript. I'll directly output the HTML for the desired tool, focusing on efficiency and best practices."},
-       {"role": "user", "content": f"Create a standalone web tool called {tool_name} based on the following features and requirements:\n\n{outline}\n\nGenerate a single HTML file with embedded CSS in the <style> section and functional JavaScript in a <script> tag. Incorporate essential libraries, adhere to efficient coding practices and modern design principles, and ensure the tool is responsive, performant, user-friendly, and accessible. Focus on directly generating the HTML without repetition, placeholders, or comments."}
+       {"role": "user", "content": user_content}
    ]
 
     implementation = ""
@@ -84,13 +102,16 @@ def main():
     # Get tool name from user
     tool_name = get_tool_name()
 
+    # Get additional criteria from user
+    additional_criteria = get_additional_criteria()
+
     # Get tool description
     description = get_description(tool_name)
 
     print(description)
 
     # Get tool implementation
-    implementation = get_tool_implementation(tool_name, description)
+    implementation = get_tool_implementation(tool_name, description, additional_criteria)
 
     # Save the tool implementation to a file
     save_tool(tool_name, implementation)
