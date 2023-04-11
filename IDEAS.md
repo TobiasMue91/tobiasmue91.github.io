@@ -24,7 +24,6 @@
 - Currency Converter: A real-time currency converter using exchange rate APIs to provide accurate conversions.
 - SVG Editor: A simple SVG editing tool to modify shapes, colors, and sizes of SVG files.
 - Audio Visualizer: A tool to generate visual representations of audio files based on waveform or frequency data.
-- File Size Converter: A converter to display file sizes in different units (e.g., bytes, kilobytes, megabytes, gigabytes).
 - Browser Storage Explorer: A tool to view and manage browser storage (local and session storage) data for debugging purposes.
 - CSS Flexbox Builder: A visual builder for creating and customizing CSS flexbox layouts, generating the corresponding code.
 - Keyboard Shortcut Tester: A tool for users to test and discover various keyboard shortcuts for different operating systems and applications.
