@@ -51,7 +51,7 @@ def get_tool_implementation(tool_name, outline, additional_criteria):
     user_content += "Generate a single HTML file with embedded CSS in the <style> section and functional JavaScript in a <script> tag. Incorporate essential libraries, adhere to efficient coding practices and modern design principles, and ensure the tool is responsive, performant, user-friendly, and accessible. Focus on directly generating the HTML without repetition, placeholders, or comments."
 
     messages = [
-       {"role": "assistant", "content": "As an AI expert in tool development, I can generate high-quality standalone web tools using HTML, CSS, and JavaScript. I'll directly output the HTML for the desired tool, focusing on efficiency and best practices."},
+       {"role": "assistant", "content": "As an AI expert in tool development, I can generate high-quality standalone web tools using HTML, CSS, and JavaScript. I'll directly output the HTML for the desired tool without explanations or descriptions, focusing on efficiency and best practices."},
        {"role": "user", "content": user_content}
    ]
 
@@ -64,7 +64,7 @@ def get_tool_implementation(tool_name, outline, additional_criteria):
             response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo-0301",
                 messages=messages,
-                max_tokens=2000,
+                max_tokens=3000,
                 n=1,
                 stop=None,
                 temperature=0.3,

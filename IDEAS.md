@@ -42,7 +42,6 @@
 - Online Mind Mapping: A simple mind mapping tool to organize and visualize ideas and concepts.
 - CSS Transform Playground: A playground for experimenting with CSS transform properties, such as scale, rotate, and skew.
 - Browser Compatibility Checker: A tool to check the compatibility of HTML, CSS, and JavaScript features with various browser versions.
-- Online Pixel Art Editor: A simple editor for creating and exporting pixel art, with support for basic drawing tools and color palettes.
 - CSS Blend Modes Generator: A tool to experiment with different CSS blend modes on images or backgrounds.
 - Online Whiteboard: A collaborative whiteboard tool for users to draw, write, and share ideas in real-time.
 - Sitemap Visualizer: A tool to generate visual sitemaps from XML files or website URLs.
@@ -61,7 +60,6 @@
 - Online Post-it Board: A collaborative board for users to create, edit, and organize digital Post-it notes.
 - CSS Selector Tester: A tool to test and experiment with CSS selectors on sample HTML code.
 - CSS Box Model Visualizer: A tool to visualize and understand the CSS box model, with options to modify padding, border, and margin values.
-- Online Business Card Maker: A simple tool to design and download custom business cards in various formats.
 - Online Calendar Creator: A tool to create and download custom calendars with customizable dates, holidays, and events.
 - JavaScript Event Listener Tester: A tool to test and experiment with JavaScript event listeners and their effects on HTML elements.
 - Web Font Tester: A tool to preview and compare different web fonts on sample text, with options to adjust size, color, and other styling properties.
