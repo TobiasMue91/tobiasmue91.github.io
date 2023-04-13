@@ -22,7 +22,7 @@ def get_additional_criteria():
 
 def get_description(tool_name):
     messages = [
-        {"role": "assistant", "content": "As an AI expert in tool development, I can provide a detailed, high-quality description of web tools using the latest technologies and best practices."},
+        {"role": "assistant", "content": "As an AI expert in tool development, I can provide a detailed, high-quality description of standalone web tools using the latest technologies and best practices."},
         {"role": "user", "content": f"Outline the main features, requirements, and design considerations for a standalone web version of the {tool_name} tool. Mention essential libraries, efficient coding practices, modern design principles, and strategies for ensuring responsiveness, performance, and user-friendliness. The outline should be suitable for use as input to generate the actual tool code by an advanced AI."}
     ]
 
