@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Kanban Board</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dragula/3.7.2/dragula.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://unpkg.com/vue@2.6.12"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dragula/3.7.2/dragula.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <style>
+        /* General styles */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px;
+            overflow-x: auto;
+        }
+
+        .header {
+            background-color: #333;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+
+        /* Column and task styles */
+        .column {
+            flex: 0 0 300px;
+            background-color: #f0f0f0;
+            padding: 10px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .column-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .task {
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 5px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            cursor: move;
+        }
+
+        .task-title {
+            font-weight: bold;
+        }
+
+        .task-details {
+            font-size: 12px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background-color: #fff;
+            border-radius: 5px;
+            padding: 20px;
+            width: 80%;
+            max-width: 500px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .modal-buttons button {
+            margin-left: 10px;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="header">Online Kanban Board</div>
+    <div class="container" ref="board">
+        <div class="column" v-for="column in columns" :key="column.id" :data-id="column.id">
+            <div class="column-title">
+                {{ column.name }}
+                <button @click="editColumnName(column)"><i class="fas fa-edit"></i></button>
+                <button @click="deleteColumn(column)"><i class="fas fa-trash-alt"></i></button>
+            </div>
+            <div class="task" v-for="task in column.tasks" :key="task.id" :data-id="task.id">
+                <div class="task-title">{{ task.title }}</div>
+                <div class="task-details">
+                    <div v-if="task.assignee">Assignee: {{ task.assignee }}</div>
+                    <div v-if="task.dueDate">Due: {{ formatDate(task.dueDate) }}</div>
+                </div>
+                <button @click="openTaskModal('edit', column, task)"><i class="fas fa-edit"></i></button>
+                <button @click="deleteTask(column, task)"><i class="fas fa-trash-alt"></i></button>
+            </div>
+            <button @click="openTaskModal('create', column)"><i class="fas fa-plus"></i> Create Task</button>
+        </div>
+        <div class="board-controls">
+            <button @click="addColumn"><i class="fas fa-plus"></i> Add Column</button>
+        </div>
+    </div>
+    <div class="modal-overlay" v-show="taskModal.visible">
+        <div class="modal">
+            <div id="task-modal" v-show="taskModal.visible">
+                <div>
+                    <label for="task-title">Title:</label>
+                    <input id="task-title" v-model="taskModal.task.title" type="text">
+                </div>
+                <div>
+                    <label for="task-description">Description:</label>
+                    <textarea id="task-description" v-model="taskModal.task.description"></textarea>
+                </div>
+                <div>
+                    <label for="task-assignee">Assignee:</label>
+                    <input id="task-assignee" v-model="taskModal.task.assignee" type="text">
+                </div>
+                <div>
+                    <label for="task-dueDate">Due Date:</label>
+                    <input id="task-dueDate" v-model="taskModal.task.dueDate" type="date">
+                </div>
+                <button @click="saveTask">Save</button>
+                <button @click="closeTaskModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    new Vue({
+        el: '#app',
+        data() {
+            return {
+                columns: [
+                    {
+                        id: 1,
+                        name: 'To Do',
+                        tasks: [
+                            {
+                                id: 1,
+                                title: 'Task 1',
+                                description: 'Task 1 description',
+                                assignee: 'John Doe',
+                                dueDate: '2023-04-18',
+                            },
+                            {
+                                id: 2,
+                                title: 'Task 2',
+                                description: 'Task 2 description',
+                                assignee: 'Jane Smith',
+                                dueDate: '2023-04-20',
+                            },
+                        ],
+                    },
+                    {
+                        id: 2,
+                        name: 'In Progress',
+                        tasks: [
+                            {
+                                id: 3,
+                                title: 'Task 3',
+                                description: 'Task 3 description',
+                                assignee: 'Alice Johnson',
+                                dueDate: '2023-04-22',
+                            },
+                        ],
+                    },
+                    {
+                        id: 3,
+                        name: 'Done',
+                        tasks: [
+                            {
+                                id: 4,
+                                title: 'Task 4',
+                                description: 'Task 4 description',
+                                assignee: 'Bob Brown',
+                                dueDate: '2023-04-15',
+                            },
+                        ],
+                    },
+                ],
+                taskModal: {
+                    visible: false,
+                    mode: 'create',
+                    column: null,
+                    task: {
+                        id: null,
+                        title: '',
+                        description: '',
+                        assignee: '',
+                        dueDate: '',
+                    },
+                },
+            };
+        },
+        mounted() {
+            this.loadFromLocalStorage();
+            this.$nextTick(() => {
+                this.initializeDragula();
+            });
+        },
+        methods: {
+            formatDate(date) {
+                return moment(date).format('MMMM Do, YYYY');
+            },
+            initializeDragula() {
+                const board = this.$refs.board;
+                const columnContainers = board.querySelectorAll('.column');
+                dragula(Array.from(columnContainers), {
+                    moves: (el, source, handle, sibling) => {
+                        return el.classList.contains('task');
+                    },
+                }).on('drop', (el, target, source, sibling) => {
+                    const taskId = parseInt(el.getAttribute('data-id'));
+                    const sourceColumnId = parseInt(source.getAttribute('data-id'));
+                    const targetColumnId = parseInt(target.getAttribute('data-id'));
+                    this.$nextTick(() => {
+                        this.moveTask(taskId, sourceColumnId, targetColumnId);
+                    });
+                });
+            },
+            moveTask(taskId, sourceColumnId, targetColumnId) {
+                const sourceColumn = this.columns.find((column) => column.id === sourceColumnId);
+                const targetColumn = this.columns.find((column) => column.id === targetColumnId);
+                const taskIndex = sourceColumn.tasks.findIndex((task) => task.id === taskId);
+
+                if (sourceColumn === targetColumn) return;
+
+                const [task] = sourceColumn.tasks.splice(taskIndex, 1);
+                targetColumn.tasks.push(task);
+                this.saveToLocalStorage();
+            },
+            editColumnName(column) {
+                const newName = prompt("Enter new column name:", column.name);
+                if (newName && newName !== column.name) {
+                    column.name = newName;
+                }
+                this.saveToLocalStorage();
+            },
+            addColumn() {
+                const columnName = prompt("Enter new column name:");
+                if (columnName) {
+                    const newId = Math.max(...this.columns.map((col) => col.id)) + 1;
+                    this.columns.push({
+                        id: newId,
+                        name: columnName,
+                        tasks: [],
+                    });
+                }
+                this.saveToLocalStorage();
+                this.initializeDragula();
+            },
+            deleteColumn(column) {
+                if (confirm("Are you sure you want to delete this column?")) {
+                    this.columns = this.columns.filter((col) => col.id !== column.id);
+                }
+                this.saveToLocalStorage();
+            },
+            openTaskModal(mode, column, task = null) {
+                this.taskModal.mode = mode;
+                this.taskModal.column = column;
+                this.taskModal.task = task ? JSON.parse(JSON.stringify(task)) : { title: '', description: '', assignee: '', dueDate: '' };
+                this.taskModal.visible = true;
+            },
+            closeTaskModal() {
+                this.taskModal.visible = false;
+            },
+            saveTask() {
+                if (this.taskModal.mode === 'create') {
+                    const newId = Math.max(...this.columns.flatMap((col) => col.tasks).map((t) => t.id)) + 1;
+                    this.taskModal.task.id = newId;
+                    this.taskModal.column.tasks.push(this.taskModal.task);
+                } else {
+                    const taskIndex = this.taskModal.column.tasks.findIndex((t) => t.id === this.taskModal.task.id);
+                    this.taskModal.column.tasks.splice(taskIndex, 1, this.taskModal.task);
+                }
+                this.closeTaskModal();
+                this.saveToLocalStorage();
+            },
+            deleteTask(column, task) {
+                if (confirm("Are you sure you want to delete this task?")) {
+                    column.tasks = column.tasks.filter((t) => t.id !== task.id);
+                }
+                this.saveToLocalStorage();
+            },
+            saveToLocalStorage() {
+                const data = JSON.stringify(this.columns);
+                localStorage.setItem("kanbanBoard", data);
+            },
+            loadFromLocalStorage() {
+                const data = localStorage.getItem("kanbanBoard");
+                if (data) {
+                    this.columns = JSON.parse(data);
+                }
+            }
+        },
+    });
+</script>
+</body>
+</html>
