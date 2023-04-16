@@ -3,7 +3,9 @@ import os
 import re
 import textwrap
 import json
+import ijson
 from bs4 import BeautifulSoup
+from io import StringIO
 
 # Set OpenAI API key
 openai.api_key = ""
@@ -20,6 +22,36 @@ iterations = int(input("Enter the number of times the file should be improved: "
 
 log_path = "logs/api_responses.log"
 
+def handle_incomplete_json(data):
+    items = []
+    current_item = None
+    attributes = ["type", "original_text", "suggested_text", "confidence_score"]
+
+    try:
+        # Parse the JSON data using a streaming parser
+        parser = ijson.parse(StringIO(data))
+
+        # Iterate through the parsed items
+        for prefix, event, value in parser:
+            if event == 'start_map':
+                # Start a new dictionary for the current item
+                current_item = {}
+            elif event == 'map_key':
+                current_key = value
+            elif event == 'string' or event == 'number':
+                if current_key in attributes:
+                    current_item[current_key] = value
+            elif event == 'end_map':
+                # Append the completed item to the list of items, but only if it has all the necessary attributes
+                if all(key in current_item for key in attributes):
+                    items.append(current_item)
+
+    except ijson.JSONError:
+        # Ignore JSON errors, as we expect the JSON to be incomplete
+        pass
+
+    return items
+
 try:
     with open(file_path, "r", encoding="utf-8") as file:
         source_code = file.read()
@@ -30,17 +62,16 @@ except FileNotFoundError:
 for _ in range(iterations):
     # Construct the messages for the API call
     messages = [
-        {"role": "assistant", "content": "1. I am CODEMASTER, an AI coding expert with vast experience in all programming languages, best practices, and efficient coding techniques. I will provide improvements, optimizations and new features of the highest possible quality for the given standalone HTML tool. \n2. I will use the exact following format:\n\n{\n    \"description\": \"{IMPROVEMENT_DESCRIPTION}\",\n    \"oldCode\": \"```{OLD_CODE}```\",\n    \"improvedCode\": \"```{IMPROVED_CODE}```\"\n}\n\n3. I will stick to this format for every single code block change. \n4. I will still include one line of the old code in each improvement. \n5. The improvements will come in small chunks with a maximum of 5 lines."},
-        {"role": "user", "content": f"Please CODEMASTER, provide improvements to the best of your abilities: \n```html\n{source_code}\n```"}
+        {"role": "assistant", "content": "I am CODEMASTER, an AI coding expert with vast experience in all programming languages, best practices, and efficient coding techniques. I will provide improvements, optimizations and new features of the highest possible quality for the given standalone HTML tool. \nI will use the exact following format:\n\n{\n    \"suggested_changes\": [\n        {\n            \"type\": \"{CHANGE_TYPE}\",\n            \"original_text\": \"{OLD_TEXT}\",\n            \"suggested_text\": \"{IMPROVED_TEXT}\",\n            \"confidence_score\": {CONFIDENCE_SCORE}\n        }\n    ],\n    \"metadata\": {\n        \"gpt_version\": \"{GPT_VERSION}\",\n        \"time_stamp\": \"{TIMESTAMP}\"\n    }\n}\nValid change types: [\"replace_word\",\"add_line\",\"remove_paragraph\"].\nI will stick to this format for every single change. \nThe improvements will come in small chunks and I will not repeat the full code.\nI will not change wording or variable naming.\n\n"},
+        {"role": "user", "content": f"Source: \n```html\n{source_code}\n```"}
     ]
 
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo-0301",
             messages=messages,
-            max_tokens=1000,
+            max_tokens=500,
             n=1,
-            stop=None,
             temperature=0.3,
             top_p=0.3,
         )
@@ -54,30 +85,29 @@ for _ in range(iterations):
         log_file.write(response.choices[0]['message']['content'])
         log_file.write("\n\n")
 
-    # Extract improvements from the API response
-    improvements = re.findall(r'{\s*?"description"\s*?:\s*?"(.*?)"\s*?,\s*?"oldCode"\s*?:\s*?(?:```)?\s*?(.*?)\s*?(?:```)?\s*?,\s*?"improvedCode"\s*?:\s*?(?:```)?\s*?(.*?)\s*?(?:```)?\s*?}', response.choices[0]['message']['content'], re.DOTALL)
-
-    # Create dictionaries for the improvements
-    improvements_dicts = [{'description': desc, 'oldCode': old, 'improvedCode': new} for desc, old, new in improvements]
+    response_data = response.choices[0]['message']['content']
+    # Extract the JSON object from the API response
+    response_json = handle_incomplete_json(response_data)
 
     # Apply the improvements to the source code
-    for improvement in improvements_dicts:
-        description = improvement['description']
-        old_code = (improvement['oldCode']
-                    .encode('utf-8').decode('unicode_escape')
-                    .replace('\\n', '\n')
-                    .strip().strip('"'))
-        improved_code = (improvement['improvedCode']
-                         .encode('utf-8').decode('unicode_escape')
-                         .replace('\\n', '\n')
-                         .strip().strip('"'))
+    for change in response_json:
+        change_type = change["type"]
+        original_text = change["original_text"]
+        suggested_text = change["suggested_text"]
+        confidence_score = change["confidence_score"]
 
-        # Create a pattern for the old code, escaping any special regex characters and
-        # allowing for any number of whitespaces (including newlines) before and after the escaped code
-        pattern = re.compile(r'\s*' + re.escape(old_code) + r'\s*', re.DOTALL)
-
-        # Replace the old code with the improved code, if found
-        source_code = pattern.sub(improved_code, source_code, count=1)
+        # Apply the change only if the confidence score is above a certain threshold (e.g., 0.7)
+        if confidence_score >= 0.7:
+            if change_type == "replace_word":
+                # Replace the original text with the suggested text using regex
+                escaped_original_text = re.escape(original_text)
+                source_code = re.sub(escaped_original_text, suggested_text, source_code)
+            elif change_type == "add_line":
+                # Add the suggested line at the end of the source code
+                source_code += f"\n{suggested_text}"
+            elif change_type == "remove_paragraph":
+                # Remove the specified paragraph from the source code
+                source_code = source_code.replace(original_text, "")
 
     # Save the modified source code to the file
     with open(file_path, "w", encoding="utf-8") as file:
