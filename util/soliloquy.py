@@ -1,7 +1,9 @@
 import openai
 import json
-
-openai.api_key = ""
+from dotenv import load_dotenv
+# Access the API key
+load_dotenv()
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 def chat_with_gpt(msgs, user):
     response = openai.ChatCompletion.create(

@@ -76,6 +76,55 @@
 - "AI Life Event Planner": Users input the type of event they're planning (wedding, party, corporate function, etc.) and provide relevant details, such as budget, guest count, and theme. Your API generates a comprehensive plan, including checklists, timelines, and vendor recommendations. Users can adjust the level of detail, uniqueness, and formality.
 - "GPT Creative Prompt Generator": Users input a preferred medium (writing, painting, photography, etc.) and a theme or emotion, and your API generates a series of unique creative prompts to inspire their work. Users can customize the level of challenge, abstractness, and number of prompts generated.
 - "AI Text Naturalizer" which aims to modify AI-generated text to make it appear more human-like and less recognizable by tools like ZeroGPT.
+- CSS Grid Layout Generator
+- Invoice Generator
+- SVG Editor
+- Font Pairing Tool
+- Animated GIF Maker
+- Photo Collage Creator
+- Color Palette Generator
+- Website Screenshot Tool
+- Online Video Trimmer
+- Icon Library and Generator
+- Audio Converter
+- Video to GIF Converter
+- Online Flowchart Maker
+- Online Mind Map Creator
+- Text to Speech Converter
+- Speech to Text Transcription Tool
+- Online Meme Generator
+- Online Video Editor
+- Character Name Generator
+- Online Logo Maker
+- Browser Compatibility Checker
+- Email Signature Generator
+- Language Translator
+- Online Music Editor
+- Social Media Post Designer
+- Recipe Builder
+- Online PDF Editor
+- Banner Ad Creator
+- Online Calendar Maker
+- GIF to Video Converter
+- Online Whiteboard
+- Social Media Image Resizer
+- IP Address Lookup Tool
+- Online File Converter
+- Online XML Editor
+- Resumé Builder
+- Online Sketchpad
+- Website Accessibility Checker
+- Online Video Subtitle Editor
+- Screen Recorder
+- Online Slideshow Maker
+- Online Budget Planner
+- Online Grammar Checker
+- Online Image Vectorizer
+- Color Contrast Checker
+- Meta Tag Analyzer
+- Online Poster Maker
+- Online Typography Generator
+- Online Icon Editor
 
 ## Games
 - War (Card Game)

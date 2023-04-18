@@ -2,9 +2,10 @@ import os
 from datetime import datetime
 import json
 from github import Github
-
-# Replace with your GitHub access token or use an empty string for public repos
-GITHUB_ACCESS_TOKEN = os.environ.get("GITHUB_ACCESS_TOKEN", "")
+from dotenv import load_dotenv
+# Access the API key
+load_dotenv()
+GITHUB_ACCESS_TOKEN = os.getenv('GITHUB_ACCESS_TOKEN')
 
 # Set up the GitHub API client
 g = Github(GITHUB_ACCESS_TOKEN)

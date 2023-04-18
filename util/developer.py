@@ -4,6 +4,8 @@ import re
 import sys
 import textwrap
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+
 
 def get_tool_name():
     tool_name = input("Enter the name of the tool to be created: ")
@@ -23,12 +25,12 @@ def get_additional_criteria():
 def get_description(tool_name):
     messages = [
         {"role": "assistant", "content": "As an AI expert in tool development, I can provide a detailed, high-quality description of standalone web tools using the latest technologies and best practices."},
-        {"role": "user", "content": f"Outline the main features, requirements, and design considerations for a standalone web version of the {tool_name} tool. Mention essential libraries, efficient coding practices, modern design principles, and strategies for ensuring responsiveness, performance, and user-friendliness. The outline should be suitable for use as input to generate the actual tool code by an advanced AI."}
+        {"role": "user", "content": f"Outline the main features, requirements, and design considerations for a standalone web version of the {tool_name} tool. Mention essential libraries, efficient coding practices, modern design principles, and strategies for ensuring responsiveness, performance, and user-friendliness. The outline should be suitable for use as input to generate the actual tool code by an advanced AI. Keep in mind that the tool should work without any backend functionality."}
     ]
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-0301",
+            model="gpt-4",
             messages=messages,
             max_tokens=700,
             n=1,
@@ -62,7 +64,7 @@ def get_tool_implementation(tool_name, outline, additional_criteria):
     while not end_of_html and counter < 2:
         try:
             response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo-0301",
+                model="gpt-4",
                 messages=messages,
                 max_tokens=3000,
                 n=1,
@@ -96,8 +98,9 @@ def save_tool(tool_name, implementation):
     print(f"Tool successfully created and saved as {file_name}")
 
 def main():
-    # Set OpenAI API key
-    openai.api_key = ""
+    # Access the API key
+    load_dotenv()
+    openai.api_key = os.getenv('OPENAI_API_KEY')
 
     # Get tool name from user
     tool_name = get_tool_name()
