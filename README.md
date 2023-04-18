@@ -29,6 +29,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 ---
 
 ## Changelog
+- 18.04.2023 - milestone achieved: 100 different tools and games created with ChatGPT; added the AI powered [Name Generator](https://www.gptgames.dev/tools/name_generator.html), [Movie Script Generator](https://www.gptgames.dev/tools/movie_script_generator.html), [Online Kanban Board](https://www.gptgames.dev/tools/online_kanban_board.html), [Online Pixel Art Editor](https://www.gptgames.dev/tools/online_pixel_art_editor.html), [Image Cropper](https://www.gptgames.dev/tools/image_cropper.html) and many more (admittedly, some of them were very low effort)
 - 06.04.2023 - moved to [www.gptgames.dev](https://www.gptgames.dev/) 🥳; added [Paste to Markdown](https://www.gptgames.dev/tools/paste_to_markdown.html) and [HTML Table Generator](https://www.gptgames.dev/tools/html_table_generator.html)
 - 05.04.2023 - changed background images; new ones have been generated with MidJourney v5 and prompts created by GPT-4; added [Time Zone Converter](https://www.gptgames.dev/tools/time_zone_converter.html) and [Online Voice Recorder](https://www.gptgames.dev/tools/online_voice_recorder.html)
 - 02.04.2023 - created AI-powered [QuotoSaurus](https://www.gptgames.dev/tools/quotosaurus.html); added [Base64 Decoder/Encoder](https://www.gptgames.dev/tools/base64_encoder_decoder.html)
