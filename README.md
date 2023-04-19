@@ -45,7 +45,7 @@ Collection of Jailbreaks: https://www.jailbreakchat.com/
 - 20.03.2023 - updated [Connect Four](https://www.gptgames.dev/games/connect_four.html) - improved design; added opponent AI
 - 18.03.2023 - added [Calculator](https://www.gptgames.dev/tools/calculator.html) written in VueJS (Vue 3) using GPT-4
 - 17.03.2023 - implemented [Checkers](https://www.gptgames.dev/games/checkers.html) in VueJS (Vue 3) using GPT-3.5
-- 16.03.2023 - played around with GPT-4 and created a [Jigsaw Puzzle Game](https://www.gptgames.dev/games/jigsaw.html) (that still has some flaws); improved [Snake](https://www.gptgames.dev/games/snake.html) with the "endless improvement" method (see [PROMPTS.md](https://github.com/TobiasMue91/gptgames/blob/main/PROMPTS.md))
+- 16.03.2023 - played around with GPT-4 and created a [Jigsaw Puzzle Game](https://www.gptgames.dev/games/jigsaw.html) (that still has some flaws); improved [Snake](https://www.gptgames.dev/games/snake.html) with the "endless improvement" method (see [PROMPTS.md](https://github.com/TobiasMue91/tobiasmue91.github.io/blob/main/PROMPTS.md))
 - 14.03.2023 - gpt-4 released, created [Pong](https://www.gptgames.dev/games/pong.html) once again for comparison purposes (GPT-4 provided code improvements by saying which function I have to replace or update instead of providing the full updated code)
 - 13.03.2023 - bugfixes, mobile design and usability update for [Sudoku](https://www.gptgames.dev/games/sudoku.html)
 - 11.03.2023 - add chimp test and several minor improvements to the [Human Benchmark Tests](https://www.gptgames.dev/games/human_benchmark.html)

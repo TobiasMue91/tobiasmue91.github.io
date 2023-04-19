@@ -11,7 +11,7 @@ GITHUB_ACCESS_TOKEN = os.getenv('GITHUB_ACCESS_TOKEN')
 g = Github(GITHUB_ACCESS_TOKEN)
 
 # Set up the repository and file path
-repo = g.get_repo("TobiasMue91/gptgames")
+repo = g.get_repo("TobiasMue91/tobiasmue91.github.io")
 file_path = "index.html"
 
 # Fetch the commit history

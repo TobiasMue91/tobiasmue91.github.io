@@ -28,7 +28,7 @@ function loadIndexHtml(hash) {
 
     lastRequestedHash = hash;
     isLoading = true;
-    fetch(`https://raw.githubusercontent.com/TobiasMue91/gptgames/${hash}/index.html`)
+    fetch(`https://raw.githubusercontent.com/TobiasMue91/tobiasmue91.github.io/${hash}/index.html`)
         .then((response) => response.text())
         .then((html) => {
             isLoading = false;
@@ -61,7 +61,7 @@ function replaceLinks(doc, hash) {
         if (href.startsWith("http") && !href.startsWith("https://raw.githubusercontent.com/")) {
             return;
         }
-        const link = new URL(href, `https://github.com/TobiasMue91/gptgames/blob/${hash}/`);
+        const link = new URL(href, `https://github.com/TobiasMue91/tobiasmue91.github.io/blob/${hash}/`);
         anchor.setAttribute("href", link.href);
     });
 }
