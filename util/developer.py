@@ -30,7 +30,7 @@ def get_description(tool_name):
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-0301",
+            model="gpt-4",
             messages=messages,
             max_tokens=700,
             n=1,
@@ -64,7 +64,7 @@ def get_tool_implementation(tool_name, outline, additional_criteria):
     while not end_of_html and counter < 2:
         try:
             response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo-0301",
+                model="gpt-4",
                 messages=messages,
                 max_tokens=3000,
                 n=1,
