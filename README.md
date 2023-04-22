@@ -12,21 +12,12 @@ Some games contain graphics (mostly background images). Those have been generate
 
 No cookies, tracking or server-sided data saving is done in this project. All tools are client-sided, limited to JS, CSS and HTML and therefore somewhat safe to use. 
 
-The only exceptions are the Multiplayer Tic-Tac-Toe where the game data is stored in firebase and deleted after each game and Flappy Bird where you can optionally enter a nickname to store your high score in a firestore database.
+Some data is stored in firebase and firestore. (highscores in Flappy Bird, savegames in Family Feud and Who Wants to Be a Millionaire and plans from the Household Planner)
 
 **View current version:**
 
 https://www.gptgames.dev/
 
----
-
-**Jailbreak - used whenever necessary** ⚠️ Use at own risk! Might be patched already.
-
-A good source for up-to-date jailbreaks: https://www.reddit.com/r/GPT_jailbreaks/ 
-
-Collection of Jailbreaks: https://www.jailbreakchat.com/
-
----
 
 ## Changelog
 - 18.04.2023 - milestone achieved: 100 different tools and games created with ChatGPT; added the AI powered [Name Generator](https://www.gptgames.dev/tools/name_generator.html), [Movie Script Generator](https://www.gptgames.dev/tools/movie_script_generator.html), [Online Kanban Board](https://www.gptgames.dev/tools/online_kanban_board.html), [Online Pixel Art Editor](https://www.gptgames.dev/tools/online_pixel_art_editor.html), [Image Cropper](https://www.gptgames.dev/tools/image_cropper.html) and many more (admittedly, some of them were very low effort)
