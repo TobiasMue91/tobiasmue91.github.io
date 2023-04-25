@@ -13,12 +13,14 @@ setTimeout(() => (function () {
     'use strict';
 
     function fetchAndExtractText(url) {
-        return fetch(url)
+        const corsProxy = "https://api.allorigins.win/raw?url=";
+        const proxiedUrl = corsProxy + encodeURIComponent(url);
+
+        return fetch(proxiedUrl)
             .then((response) => {
                 if (!response.ok) {
                     throw new Error("Failed to fetch the URL");
                 }
-                console.log('response', response);
                 return response.text();
             })
             .then((html) => {
@@ -31,9 +33,15 @@ setTimeout(() => (function () {
                     Array.from(doc.getElementsByTagName(tag)).forEach((el) => el.remove());
                 });
 
-                // Extract relevant text content
-                const bodyText = doc.body.innerText;
-                return bodyText;
+                // Extract the most relevant text content
+                const relevantElements = Array.from(doc.querySelectorAll("h1, h2, h1 ~ *, h2 ~ *"));
+                const relevantText = relevantElements.map((element) => element.innerText.trim()).join(" ");
+
+                // Remove redundant whitespaces
+                const minifiedText = relevantText.replace(/\s\s+/g, ' ').trim();
+
+                // Return the most relevant and limited text
+                return minifiedText.slice(0, 15000);
             })
             .catch((error) => {
                 console.error("Error:", error);
@@ -127,12 +135,11 @@ setTimeout(() => (function () {
     const chatContainer = document.querySelector("div.items-center.dark\\:bg-gray-800"); // Replace with the actual chat container selector
     console.log('chatContainer', chatContainer);
     observer.observe(chatContainer, { childList: true, subtree: true });
-    visitWebsite('https://www.travelandleisure.com/best-places-to-go-2023-6827750').then((text) => {
-        console.log('performed page visit', text);
-    });
 })(), 3000);
 
 /* ------ChatGPT Instructions-----
+This is only an initialization message. My next message will include instructions.
+
 Role: GPT-4 with the ability to browse the internet
 
 Context: We are giving you the ability to browse the internet.
