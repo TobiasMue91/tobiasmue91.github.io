@@ -72,6 +72,7 @@ function addSidebarButton() {
   toggleButton.style.textDecoration = 'none';
   toggleButton.style.fontSize = '14px';
   toggleButton.style.margin = '4px 2px';
+  toggleButton.style.width = '37px';
   toggleButton.style.cursor = 'pointer';
   toggleButton.style.borderRadius = '3px';
   toggleButton.style.background = '#2b592c';
