@@ -70,7 +70,7 @@ for _ in range(iterations):
 
     try:
         response_instructions = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-0301",
+            model="gpt-3.5-turbo",
             messages=messages_instructions,
             max_tokens=500,
             n=1,
@@ -90,7 +90,7 @@ for _ in range(iterations):
     ]
     try:
         response_implementation = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-0301",
+            model="gpt-3.5-turbo",
             messages=messages_implementation,
             max_tokens=800,
             n=1,

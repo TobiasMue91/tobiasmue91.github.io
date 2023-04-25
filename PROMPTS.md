@@ -67,7 +67,7 @@ fetch('https://chatgpt.tobiasmue91.workers.dev/', {
 "Accept": "*/*"
 },
 'body': JSON.stringify({
-model: "gpt-3.5-turbo-0301",
+model: "gpt-3.5-turbo",
 max_tokens: 300,
 messages: [
 {
