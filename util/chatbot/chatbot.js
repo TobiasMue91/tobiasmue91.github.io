@@ -13,7 +13,7 @@ class Message {
 
 class RetrievalAssistant {
     constructor() {
-        this.conversationHistory = [];
+        this.conversationHistory = JSON.parse(localStorage.getItem('conversationHistory')) || [];
     }
 
     async fetchAssistantResponse(prompt) {
@@ -161,7 +161,9 @@ class RetrievalAssistant {
 
     function loadPreviousMessages() {
         for (const message of assistant.conversationHistory) {
-            addMessageToUI(message.role, message.content);
+            if (message.role !== 'system') {
+                addMessageToUI(message.role, message.content);
+            }
         }
     }
 

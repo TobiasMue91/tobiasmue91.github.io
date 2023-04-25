@@ -20,6 +20,7 @@ https://www.gptgames.dev/
 
 
 ## Changelog
+- 23.04.2023 - added a very simple [chatbot assistant](https://www.gptgames.dev/) to the index page which can answer questions about the project and games
 - 18.04.2023 - milestone achieved: 100 different tools and games created with ChatGPT; added the AI powered [Name Generator](https://www.gptgames.dev/tools/name_generator.html), [Movie Script Generator](https://www.gptgames.dev/tools/movie_script_generator.html), [Online Kanban Board](https://www.gptgames.dev/tools/online_kanban_board.html), [Online Pixel Art Editor](https://www.gptgames.dev/tools/online_pixel_art_editor.html), [Image Cropper](https://www.gptgames.dev/tools/image_cropper.html) and many more (admittedly, some of them were very low effort)
 - 06.04.2023 - moved to [www.gptgames.dev](https://www.gptgames.dev/) 🥳; added [Paste to Markdown](https://www.gptgames.dev/tools/paste_to_markdown.html) and [HTML Table Generator](https://www.gptgames.dev/tools/html_table_generator.html)
 - 05.04.2023 - changed background images; new ones have been generated with MidJourney v5 and prompts created by GPT-4; added [Time Zone Converter](https://www.gptgames.dev/tools/time_zone_converter.html) and [Online Voice Recorder](https://www.gptgames.dev/tools/online_voice_recorder.html)
@@ -29,7 +30,7 @@ https://www.gptgames.dev/
 - 29.03.2023 - updated several tools, utils and games to gpt-4
 - 28.03.2023 - added more practical tools: [JSON Formatter](https://www.gptgames.dev/tools/json_formatter.html), [Age Calculator](https://www.gptgames.dev/tools/age_calculator.html), [Emoji Search](https://www.gptgames.dev/tools/emoji_search.html), [CSS Gradient Generator](https://www.gptgames.dev/tools/css_gradient_generator.html), [Stopwatch](https://www.gptgames.dev/tools/stopwatch.html)
 - 26.03.2023 - did some research in /playground/api_parameters to determine the best values for the GPT-API parameters `temperature` and `top_p`
-- 24.03.2023 - added [GPTranslator](https://www.gptgames.dev/tools/gptranslator.html) - a AI-powered translation tool that can translate text from almost any language to many others
+- 24.03.2023 - added [GPTranslator](https://www.gptgames.dev/tools/gptranslator.html) - an AI-powered translation tool that can translate text from almost any language to many others
 - 23.03.2023 - implemented a timeline feature that lets users see the evolution of the page; clicking on the games or tools on another version will show the user the source code at that point of time
 - 22.03.2023 - added end-to-end testing with cypress to the deployment workflow; new features in [Argumentator](https://www.gptgames.dev/tools/argumentator/argumentator.html) - adding favorites, creating counterarguments
 - 21.03.2023 - added a new AI-powered tool called [Argumentator](https://www.gptgames.dev/tools/argumentator/argumentator.html)
