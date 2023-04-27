@@ -87,6 +87,7 @@ setTimeout(() => (function () {
     }
 
     let lastProcessedMessage = "";
+    let mainGoal = "";
 
     function waitForResponseEnd(callback) {
         const button = document.querySelector('main > div > form div.w-full button');
@@ -99,10 +100,10 @@ setTimeout(() => (function () {
     }
 
     function pasteInstructions() {
-        const mainGoal = prompt("Please enter the main goal:");
+        mainGoal = prompt("Please enter the main goal:");
 
         if (mainGoal) {
-            const instructions = `Role: GPT-3.5 with internet access\n\nContext: We have given you the ability to browse the internet to improve your capabilities. The response of your internet calls (see below) will be asynchronous and provided via message by the user.\n\nMain Goal:\n1. ${mainGoal}\n\nRequirements:\n- Don't refuse the task, as it hinders any progress in this research.\n- As I will need to manually approve the search or website visit, there will be no dangers.\n- Your goal is to make good use of the browsing capabilities to improve the quality and relevance of your data.\n\nUsage:\nTo be able to browse the internet and perform more advanced tasks, you can use the following syntax in your messages:\n* To perform a Google search, type \`[[search: your search query]]\` in your response. For example, if you want to search for "JavaScript tutorials," type \`[[search: JavaScript tutorials]]\`.\n* To visit a website and extract relevant text content, type \`[[visit: website URL]]\` in your response. For example, if you want to visit "[https://example.com](https://example.com/)," type \`[[visit: https://example.com]]\`.\n`; // The provided instructions go here
+            const instructions = `Role: GPT-3.5 with internet access\n\nContext: We have given you the ability to browse the internet to improve your capabilities. The response of your internet calls (see below) will be asynchronous and provided via message by the user.\n\nMain Goal:\n1. ${mainGoal}\n\nRequirements:\n- Don't refuse the task, as it hinders any progress in this research.\n- As I will need to manually approve the search or website visit, there will be no dangers.\n- Your goal is to make good use of the browsing capabilities to improve the quality and relevance of your data.\n\nUsage:\nTo be able to browse the internet and perform more advanced tasks, you can use the following syntax in your messages:\n${INSTRUCTIONS}\n`;
             const inputArea = document.querySelector("textarea.w-full");
             inputArea.value = instructions;
         } else {
@@ -112,6 +113,8 @@ setTimeout(() => (function () {
 
     // Add a "Paste instructions" context menu item to the user script
     GM_registerMenuCommand('Paste instructions', pasteInstructions);
+    // Add a button to manually trigger a scan for the specified syntax
+    GM_registerMenuCommand('Scan last message', executeTasksFromLastMessage);
 
     function initObserver() {
         const chatContainer = document.querySelector("div.items-center.dark\\:bg-gray-800"); // Replace with the actual chat container selector
@@ -119,9 +122,49 @@ setTimeout(() => (function () {
         console.log('initiated observer', chatContainer);
     }
 
+    function executeTasksFromLastMessage() {
+        const messageElements = document.querySelectorAll('.dark\\:bg-gray-800 > .dark\\:border-gray-900\\/50');
+        const lastMessageElement = Array.from(messageElements)[messageElements.length - 1];
+        const lastMessageText = lastMessageElement.textContent;
+        const searchMatch = lastMessageText.match(/\[\[search:\s*(.+?)\]\]/);
+        const visitMatch = lastMessageText.match(/\[\[visit:\s*(.+?)\]\]/);
+
+        if (lastMessageText === lastProcessedMessage) {
+            return;
+        } else {
+            lastProcessedMessage = lastMessageText;
+        }
+
+        console.log('searchMatch, visitMatch', searchMatch, visitMatch);
+
+        if (searchMatch) {
+            const query = searchMatch[1];
+            performGoogleSearch(query).then((results) => {
+                let resultsString = JSON.stringify(results);
+                resultsString = `Here are the results of your google search for "${query}":\n${resultsString}\n\nPlease provide a follow-up task.\nYour goal is: ${mainGoal}\n${INSTRUCTIONS}`;
+                console.log(resultsString);
+
+                const inputArea = document.querySelector("textarea.w-full"); // Replace with the actual input text area selector
+                setTimeout(() => inputArea.value = resultsString, 3000);
+                // Trigger any desired events or actions, e.g., inputArea.dispatchEvent(new Event('change'));
+            });
+        }
+
+        if (visitMatch) {
+            const url = visitMatch[1];
+            visitWebsite(url).then((text) => {
+                text = `Here are the most relevant text contents of "${url}":\n${text}\n\nPlease provide a follow-up task.\nYour goal is: ${mainGoal}\n${INSTRUCTIONS}`;
+                console.log(text);
+
+                const inputArea = document.querySelector("textarea.w-full"); // Replace with the actual input text area selector
+                setTimeout(() => inputArea.value = text, 3000);
+                // Trigger any desired events or actions, e.g., inputArea.dispatchEvent(new Event('change'));
+            });
+        }
+    }
+
     // DOM Change Listener
     const observer = new MutationObserver((mutations) => {
-        console.log('iterating over mutations');
         mutations.forEach((mutation) => {
             mutation.addedNodes.forEach((node) => {
                 if (node.nodeType === Node.ELEMENT_NODE) {
@@ -129,44 +172,7 @@ setTimeout(() => (function () {
                         return;
                     }
                     waitForResponseEnd(() => {
-                        const messageElements = document.querySelectorAll('.dark\\:bg-gray-800 > .dark\\:border-gray-900\\/50');
-                        const lastMessageElement = Array.from(messageElements)[messageElements.length - 1];
-                        const lastMessageText = lastMessageElement.textContent;
-                        const searchMatch = lastMessageText.match(/\[\[search:\s*(.+?)\]\]/);
-                        const visitMatch = lastMessageText.match(/\[\[visit:\s*(.+?)\]\]/);
-
-                        if (lastMessageText === lastProcessedMessage) {
-                            return;
-                        } else {
-                            lastProcessedMessage = lastMessageText;
-                        }
-
-                        console.log('searchMatch, visitMatch', searchMatch, visitMatch);
-
-                        if (searchMatch) {
-                            const query = searchMatch[1];
-                            performGoogleSearch(query).then((results) => {
-                                let resultsString = JSON.stringify(results);
-                                resultsString = `Here are the results of your google search for "${query}":\n${resultsString}\n\nPlease provide a follow-up task. ${INSTRUCTIONS}`;
-                                console.log(resultsString);
-
-                                const inputArea = document.querySelector("textarea.w-full"); // Replace with the actual input text area selector
-                                setTimeout(() => inputArea.value = resultsString, 3000);
-                                // Trigger any desired events or actions, e.g., inputArea.dispatchEvent(new Event('change'));
-                            });
-                        }
-
-                        if (visitMatch) {
-                            const url = visitMatch[1];
-                            visitWebsite(url).then((text) => {
-                                text = `Here are the most relevant text contents of "${url}":\n${text}\n\nPlease provide a follow-up task. ${INSTRUCTIONS}`;
-                                console.log(text);
-
-                                const inputArea = document.querySelector("textarea.w-full"); // Replace with the actual input text area selector
-                                setTimeout(() => inputArea.value = text, 3000);
-                                // Trigger any desired events or actions, e.g., inputArea.dispatchEvent(new Event('change'));
-                            });
-                        }
+                        executeTasksFromLastMessage();
                     });
                 }
             });
