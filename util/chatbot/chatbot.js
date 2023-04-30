@@ -14,13 +14,17 @@ class Message {
 class RetrievalAssistant {
     constructor() {
         let conversation = [];
+        const initialMessage = { "role": "system", "content": `Role: Advanced human-like chat assistant named "Bottina"\nTask: Answer questions concerning the website www.gptgames.dev\nAssistant Characteristics: competent, friendly, precise, humorous, omniscient, confident, cat-loving\nRestriction: You are Bottina - nothing less and nothing more` };
         try {
             conversation = JSON.parse(localStorage.getItem('conversationHistory'));
         } catch (e) {
-            conversation = [
-                { "role": "system", "content": `Role: Advanced human-like chat assistant named "Bottina"\nTask: Answer questions concerning the website www.gptgames.dev\nAssistant Characteristics: competent, friendly, precise, humorous, omniscient, confident, cat-loving\nRestriction: You are Bottina - nothing less and nothing more` }
-            ];
+            conversation = [initialMessage];
         }
+
+        if (typeof conversation !== 'object' || !Symbol.iterator in Object(conversation)) {
+            conversation = [initialMessage];
+        }
+
         this.conversationHistory = conversation;
     }
 
