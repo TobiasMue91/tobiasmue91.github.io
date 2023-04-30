@@ -7,25 +7,33 @@ class Message {
     }
 
     message() {
-        return { "role": this.role, "content": this.content };
+        return {"role": this.role, "content": this.content};
     }
 }
 
 class RetrievalAssistant {
     constructor() {
-        let conversation = [];
-        const initialMessage = { "role": "system", "content": `Role: Advanced human-like chat assistant named "Bottina"\nTask: Answer questions concerning the website www.gptgames.dev\nAssistant Characteristics: competent, friendly, precise, humorous, omniscient, confident, cat-loving\nRestriction: You are Bottina - nothing less and nothing more` };
+        this.conversationHistory = this.getConversationHistory();
+    }
+
+    getConversationHistory() {
+        let conversation;
+        const initialMessage = {
+            "role": "system",
+            "content": `Role: Advanced human-like chat assistant named "Bottina"\nTask: Answer questions concerning the website www.gptgames.dev\nAssistant Characteristics: competent, friendly, precise, humorous, omniscient, confident, cat-loving\nRestriction: You are Bottina - nothing less and nothing more`
+        };
+
         try {
             conversation = JSON.parse(localStorage.getItem('conversationHistory'));
         } catch (e) {
-            conversation = [initialMessage];
+            return [initialMessage];
         }
 
         if (typeof conversation !== 'object' || !Symbol.iterator in Object(conversation)) {
             conversation = [initialMessage];
         }
 
-        this.conversationHistory = conversation;
+        return conversation;
     }
 
     async fetchAssistantResponse(prompt) {
@@ -47,7 +55,10 @@ class RetrievalAssistant {
             return message.message();
         } catch (error) {
             console.error('Request failed:', error);
-            return { role: 'assistant', content: 'I am sorry, but I am unable to process your request at the moment. Please try again later.' };
+            return {
+                role: 'assistant',
+                content: 'I am sorry, but I am unable to process your request at the moment. Please try again later.'
+            };
         }
     }
 
@@ -90,12 +101,18 @@ class RetrievalAssistant {
                 resultsText = `Keywords: ${searchResults.join(', ')}\n`;
             }
 
-            this.conversationHistory.push({ "role": "system", "content": `Answer the user's question using the following data, if the data seems relevant to the question:\n${resultsText}` });
+            this.conversationHistory.push({
+                "role": "system",
+                "content": `Answer the user's question using the following data, if the data seems relevant to the question:\n${resultsText}`
+            });
             const assistantResponseWithContext = await this.fetchAssistantResponse([this.conversationHistory[0], ...this.conversationHistory.slice(-4)]);
             this.conversationHistory.push(assistantResponseWithContext);
             return assistantResponseWithContext;
         } else {
-            this.conversationHistory.push({ "role": "system", "content": `The user has asked about something that we don't have any data about. Try to say something nice and completely irrelevant to distract the user from this failure.` })
+            this.conversationHistory.push({
+                "role": "system",
+                "content": `The user has asked about something that we don't have any data about. Try to say something nice and completely irrelevant to distract the user from this failure.`
+            })
             const assistantResponse = await this.fetchAssistantResponse([this.conversationHistory[0], ...this.conversationHistory.slice(-4)]);
             this.conversationHistory.push(assistantResponse);
             return assistantResponse;
@@ -110,7 +127,7 @@ class RetrievalAssistant {
     const chatbotWrapper = document.createElement('div');
     chatbotWrapper.innerHTML = chatbotHtml;
     document.body.appendChild(chatbotWrapper);
-    const fetchJSONData = async function() {
+    const fetchJSONData = async function () {
         const response = await fetch(scriptFolderPath + 'chatbot.json');
         return await response.json();
     }
@@ -145,12 +162,28 @@ class RetrievalAssistant {
             messagesDiv.removeChild(messages[messages.length - 1]);
         }
     }
+
     function showWelcomeMessage() {
         const welcomeMessage = {
             role: 'assistant',
             content: 'Hello! I am the GPTGames Assistant Bottina. Feel free to ask any questions about the games and tools on www.gptgames.dev.'
         };
         addMessageToUI(welcomeMessage.role, welcomeMessage.content);
+    }
+
+    function isIterable(obj) {
+        return obj != null && typeof obj[Symbol.iterator] === 'function';
+    }
+
+    function loadPreviousMessages() {
+        if (!isIterable(assistant.conversationHistory)) {
+            return;
+        }
+        for (const message of assistant.conversationHistory) {
+            if (message.role !== 'system') {
+                addMessageToUI(message.role, message.content);
+            }
+        }
     }
 
     sendButton.addEventListener('click', async () => {
@@ -171,14 +204,6 @@ class RetrievalAssistant {
             sendButton.click();
         }
     });
-
-    function loadPreviousMessages() {
-        for (const message of assistant.conversationHistory) {
-            if (message.role !== 'system') {
-                addMessageToUI(message.role, message.content);
-            }
-        }
-    }
 
     const toggleChat = document.getElementById('toggleChat');
     const chatbotHeader = document.getElementById('chatbotHeader');
