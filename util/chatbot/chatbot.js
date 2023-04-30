@@ -13,7 +13,15 @@ class Message {
 
 class RetrievalAssistant {
     constructor() {
-        this.conversationHistory = JSON.parse(localStorage.getItem('conversationHistory')) || [];
+        let conversation = [];
+        try {
+            conversation = JSON.parse(localStorage.getItem('conversationHistory'));
+        } catch (e) {
+            conversation = [
+                { "role": "system", "content": `Role: Advanced human-like chat assistant named "Bottina"\nTask: Answer questions concerning the website www.gptgames.dev\nAssistant Characteristics: competent, friendly, precise, humorous, omniscient, confident, cat-loving\nRestriction: You are Bottina - nothing less and nothing more` }
+            ];
+        }
+        this.conversationHistory = conversation;
     }
 
     async fetchAssistantResponse(prompt) {
@@ -43,7 +51,7 @@ class RetrievalAssistant {
     async fetchSearchResults(prompt) {
         const threshold = 0.8; // Adjust the similarity threshold as needed
         const keywords = prompt.toLowerCase().replace(/[^\w\s]/g, '').split(' ').filter(word => word.length > 3);
-        const results = [];
+        let results = [];
 
         for (const key in jsonData) {
             const entryKeywords = key.split(',').flatMap(keyword => keyword.split(' '));
@@ -52,10 +60,11 @@ class RetrievalAssistant {
                 return similarity >= threshold;
             }))) {
                 results.push(jsonData[key]);
-                if (results.length >= 5) {
-                    break;
-                }
             }
+        }
+
+        if (results.length > 5) {
+            results = results.map(str => str.split(' ').slice(0, 15).join(' '));
         }
 
         return results.length > 0 ? results : null;
@@ -78,12 +87,12 @@ class RetrievalAssistant {
             }
 
             this.conversationHistory.push({ "role": "system", "content": `Answer the user's question using the following data, if the data seems relevant to the question:\n${resultsText}` });
-            const assistantResponseWithContext = await this.fetchAssistantResponse(this.conversationHistory.slice(-4));
+            const assistantResponseWithContext = await this.fetchAssistantResponse([this.conversationHistory[0], ...this.conversationHistory.slice(-4)]);
             this.conversationHistory.push(assistantResponseWithContext);
             return assistantResponseWithContext;
         } else {
             this.conversationHistory.push({ "role": "system", "content": `The user has asked about something that we don't have any data about. Try to say something nice and completely irrelevant to distract the user from this failure.` })
-            const assistantResponse = await this.fetchAssistantResponse(this.conversationHistory.slice(-4));
+            const assistantResponse = await this.fetchAssistantResponse([this.conversationHistory[0], ...this.conversationHistory.slice(-4)]);
             this.conversationHistory.push(assistantResponse);
             return assistantResponse;
         }
@@ -113,7 +122,7 @@ class RetrievalAssistant {
     function addMessageToUI(role, content) {
         const messageElement = document.createElement('div');
         messageElement.style.marginBottom = '10px';
-        messageElement.innerHTML = `<strong>${role === 'user' ? 'You' : 'Assistant'}:</strong> ${content}`;
+        messageElement.innerHTML = `<strong>${role === 'user' ? 'You' : 'Bottina'}:</strong> ${content}`;
         messagesDiv.appendChild(messageElement);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
@@ -135,7 +144,7 @@ class RetrievalAssistant {
     function showWelcomeMessage() {
         const welcomeMessage = {
             role: 'assistant',
-            content: 'Hello! I am the GPTGames Assistant. Feel free to ask any questions about the games and tools on www.gptgames.dev.'
+            content: 'Hello! I am the GPTGames Assistant Bottina. Feel free to ask any questions about the games and tools on www.gptgames.dev.'
         };
         addMessageToUI(welcomeMessage.role, welcomeMessage.content);
     }
@@ -175,6 +184,7 @@ class RetrievalAssistant {
         if (chatbotWindow.style.display === 'none') {
             chatbotWindow.style.display = 'flex';
             toggleChat.style.display = 'none';
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         } else {
             chatbotWindow.style.display = 'none';
             toggleChat.style.display = 'flex';
