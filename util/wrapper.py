@@ -24,7 +24,7 @@ def generate_new_tool_name(existing_tools):
 
     messages = [
         {"role": "assistant", "content": "As an AI expert in tool development, I can generate ideas for standalone web tools that work without backend functionality.\nMy output will have the format: \"<TOOL_NAME>: <TOOL_DESCRIPTION>\". I will not output anything else."},
-        {"role": "user", "content": f"Generate a tool name for a practical standalone web tool and a fitting description with less than 24 words that should explain the main functionality of the tool. The tool should not be one of the existing tools nor be similar to them: {', '.join(existing_tools)}."}
+        {"role": "user", "content": f"Generate a tool name for a practical standalone web tool and a fitting description with less than 24 words that should explain the main functionality of the tool. The tool should not be too similar to one of the existing tools: {', '.join(existing_tools)}."}
     ]
 
     try:
@@ -84,13 +84,11 @@ def update_html_files(screenshot_number, file_path, entry_name, description):
     </a>
 </div>
 """
-    index_soup = BeautifulSoup(index_content, "html.parser")
-    last_tool_div = index_soup.find_all("div", class_="game-card")[-1]
-    last_tool_div.insert_after(BeautifulSoup(new_tool_div, "html.parser"))
+    index_content = index_content.replace('<!-- end -->', f'{new_tool_div}\n<!-- end -->')
 
     # Write the updated index.html content
     with open("index.html", "w", encoding="utf-8") as index_file:
-        index_file.write(str(index_soup))
+        index_file.write(index_content)
 
     # Read sidebar.html content
     with open("sidebar.html", "r", encoding="utf-8") as sidebar_file:
@@ -98,13 +96,11 @@ def update_html_files(screenshot_number, file_path, entry_name, description):
 
     # Append new tool list item
     new_tool_li = f'<li><a href="/{file_path}">{entry_name}</a></li>'
-    sidebar_soup = BeautifulSoup(sidebar_content, "html.parser")
-    last_tool_li = sidebar_soup.find_all("li")[-1]
-    last_tool_li.insert_after(BeautifulSoup(new_tool_li, "html.parser"))
+    sidebar_content = sidebar_content.replace('</ul>', f'{new_tool_li}\n</ul>')
 
     # Write the updated sidebar.html content
     with open("sidebar.html", "w", encoding="utf-8") as sidebar_file:
-        sidebar_file.write(str(sidebar_soup))
+        sidebar_file.write(sidebar_content)
 
 def main():
     existing_tools = get_existing_tools()
