@@ -18,20 +18,20 @@ def get_existing_tools():
     tool_names = [link.find("h2").text for link in links]
     return tool_names
 
-def generate_new_tool_name(existing_tools):
+def generate_new_tool_names(existing_tools, num_options=5):
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
 
     messages = [
-        {"role": "assistant", "content": "As an AI expert in tool development, I can generate ideas for standalone web tools that work without backend functionality.\nMy output will have the format: \"<TOOL_NAME>: <TOOL_DESCRIPTION>\". I will not output anything else."},
-        {"role": "user", "content": f"Generate a tool name for a practical standalone web tool and a fitting description with less than 24 words that should explain the main functionality of the tool. The tool should not be too similar to one of the existing tools: {', '.join(existing_tools)}."}
+        {"role": "assistant", "content": "As an AI expert in tool development, I can generate ideas for standalone web tools that work without backend functionality.\nMy output will have the format: \"\nUnit Converter: Transform units like a boss! This unit converter is so epic, it'll make your head spin. Get ready for the ride of your life!\nJSON Formatter: Transform messy JSON into a beautiful and organized format with just a click! Copy and paste your JSON code and voila!\n...\n\".\nI will not output anything else."},
+        {"role": "user", "content": f"Generate {num_options} tool names for practical standalone web tools and fitting descriptions with less than 24 words that should explain the main functionality of the tool. The tools should not be too similar to one of the existing tools: {', '.join(existing_tools)}."}
     ]
 
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=messages,
-            max_tokens=100,
+            max_tokens=300,
             n=1,
             stop=None,
             temperature=0.3,
@@ -39,11 +39,19 @@ def generate_new_tool_name(existing_tools):
         )
     except Exception as e:
         print(f"Error: API call failed: {e}")
-        return None, None
+        return None
 
     response_text = response.choices[0]['message']['content'].strip()
-    tool_name, description = response_text.split(": ", 1)
-    return tool_name.strip(), description.strip()
+    tool_name_and_descriptions = response_text.split('\n')
+
+    tool_names_and_descriptions = []
+    for tool_and_description in tool_name_and_descriptions:
+        # Remove enumeration numbers, if present
+        tool_and_description = re.sub(r'^\d+\.\s*', '', tool_and_description)
+        tool_name, description = tool_and_description.split(": ", 1)
+        tool_names_and_descriptions.append((tool_name.strip(), description.strip()))
+
+    return tool_names_and_descriptions
 
 def take_screenshot(file_path, entry_name, description):
     # Create screenshots directory if it doesn't exist
@@ -75,15 +83,13 @@ def update_html_files(screenshot_number, file_path, entry_name, description):
         index_content = index_file.read()
 
     # Append new tool div block
-    new_tool_div = f"""
-<div class="game-card">
-    <a href="{file_path}">
-        <img src="screenshots/screenshot_{screenshot_number}.png" alt="{entry_name}" loading="lazy">
-        <h2>{entry_name}</h2>
-        <p>{description}</p>
-    </a>
-</div>
-"""
+    new_tool_div = f"""    <div class="game-card">
+        <a href="{file_path}">
+            <img src="screenshots/screenshot_{screenshot_number}.png" alt="{entry_name}" loading="lazy">
+            <h2>{entry_name}</h2>
+            <p>{description}</p>
+        </a>
+    </div>"""
     index_content = index_content.replace('<!-- end -->', f'{new_tool_div}\n<!-- end -->')
 
     # Write the updated index.html content
@@ -95,8 +101,8 @@ def update_html_files(screenshot_number, file_path, entry_name, description):
         sidebar_content = sidebar_file.read()
 
     # Append new tool list item
-    new_tool_li = f'<li><a href="/{file_path}">{entry_name}</a></li>'
-    sidebar_content = sidebar_content.replace('</ul>', f'{new_tool_li}\n</ul>')
+    new_tool_li = f'      <li><a href="/{file_path}">{entry_name}</a></li>'
+    sidebar_content = sidebar_content.replace('<!-- end -->', f'{new_tool_li}\n<!-- end -->')
 
     # Write the updated sidebar.html content
     with open("sidebar.html", "w", encoding="utf-8") as sidebar_file:
@@ -105,12 +111,18 @@ def update_html_files(screenshot_number, file_path, entry_name, description):
 def main():
     existing_tools = get_existing_tools()
     print(existing_tools)
-    tool_name, description = generate_new_tool_name(existing_tools)
-    print(tool_name, description)
 
-    if tool_name is None or description is None:
-        print("Failed to generate a new tool name and description.")
+    tool_names_and_descriptions = generate_new_tool_names(existing_tools)
+    if not tool_names_and_descriptions:
+        print("Failed to generate new tool names and descriptions.")
         return
+
+    print("\nChoose a tool from the list below by entering the corresponding number:")
+    for i, (tool_name, description) in enumerate(tool_names_and_descriptions):
+        print(f"{i + 1}. {tool_name}: {description}")
+
+    choice = int(input("\nEnter your choice: ")) - 1
+    tool_name, description = tool_names_and_descriptions[choice]
 
     file_name = f"{tool_name.lower().replace(' ', '_')}.html"
     file_path = f"tools/{file_name}"
