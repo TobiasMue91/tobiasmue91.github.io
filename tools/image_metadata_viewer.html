@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Metadata Viewer</title>
+  <style>
+    /* Embedded CSS styles */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .form-group {
+      margin-bottom: 10px;
+    }
+    .form-group label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .form-group input[type="file"] {
+      display: block;
+      margin-top: 5px;
+    }
+    .thumbnail {
+      max-width: 100%;
+      height: auto;
+      margin-bottom: 10px;
+    }
+    .metadata-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    .metadata-table th,
+    .metadata-table td {
+      padding: 5px;
+      border: 1px solid #ccc;
+    }
+    .metadata-table th {
+      background-color: #f2f2f2;
+      font-weight: bold;
+      text-align: left;
+    }
+    .metadata-table td {
+      vertical-align: top;
+    }
+    .metadata-table td:first-child {
+      width: 150px;
+    }
+    .metadata-table td pre {
+      margin: 0;
+      white-space: pre-wrap;
+    }
+    .filter-form {
+      margin-bottom: 20px;
+    }
+    .filter-form label {
+      margin-right: 10px;
+    }
+    .filter-form input[type="text"] {
+      width: 200px;
+      margin-right: 10px;
+    }
+    .filter-form button {
+      margin-right: 10px;
+    }
+    .download-btn {
+      display: block;
+      margin-bottom: 20px;
+    }
+    .error-message {
+      color: red;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Image Metadata Viewer</h1>
+    <div id="metadata-container">
+      <form id="upload-form" ref="uploadForm">
+        <div class="form-group">
+          <label for="image-file">Select an image file:</label>
+          <input type="file" id="image-file" accept="image/*" @change="onFileUpload" required>
+        </div>
+      </form>
+      <button @click="downloadMetadata" class="download-btn">Download Metadata as CSV</button>
+      <div v-if="errorMessage" class="error-message">
+        {{ errorMessage }}
+      </div>
+      <table v-if="metadata" class="metadata-table">
+        <thead>
+        <tr>
+          <th>Field</th>
+          <th>Value</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr v-for="(value, field) in filteredExif" :key="field">
+          <td>{{ field }}</td>
+          <td>{{ value }}</td>
+        </tr>
+        </tbody>
+      </table>
+      <form @submit.prevent="filterMetadata" class="filter-form">
+        <label for="filter-field">Filter by:</label>
+        <select id="filter-field" v-model="filterField">
+          <option value="" selected>Show all fields</option>
+          <option :value="field" v-for="field in filterFields" :key="field">
+            {{ field }}
+          </option>
+        </select>
+        <button type="submit">Filter</button>
+      </form>
+    </div>
+  </div>
+  <script src="https://unpkg.com/vue@next"></script>
+  <script src="https://unpkg.com/exifr@7.1.0/dist/full.umd.js"></script>
+  <script>
+    const app = Vue.createApp({
+      data() {
+        return {
+          metadata: null,
+          filteredMetadata: null,
+          filterFields: ['Make', 'Model', 'Software', 'DateTimeOriginal'],
+          errorMessage: null,
+          filterField: '',
+          filterValue: '',
+        };
+      },
+      methods: {
+        async extractMetadata(file) {
+          try {
+            const exifData = await exifr.parse(file, { xmp: true, iptc: true });
+            const metadata = {
+              fileName: file.name,
+              fileSize: file.size,
+              dimensions: `${exifData.PixelXDimension || ''} x ${exifData.PixelYDimension || ''}`,
+              exif: exifData,
+              iptc: exifData.iptc,
+              xmp: exifData.xmp,
+            };
+            this.metadata = metadata;
+            this.filteredMetadata = metadata;
+            this.errorMessage = null;
+          } catch (error) {
+            console.log(error);
+            this.metadata = null;
+            this.filteredMetadata = null;
+            this.errorMessage = 'Error extracting metadata from image.';
+          }
+        },
+        filterMetadata() {
+          const field = this.filterField;
+          const filteredMetadata = { ...this.metadata };
+
+          if (field) {
+            filteredMetadata.exif = Object.fromEntries(
+                    Object.entries(filteredMetadata.exif).filter(([key]) => key === field)
+            );
+            filteredMetadata.iptc = Object.fromEntries(
+                    Object.entries(filteredMetadata.iptc || {}).filter(
+                            ([key]) => key === field
+                    )
+            );
+            filteredMetadata.xmp = Object.fromEntries(
+                    Object.entries(filteredMetadata.xmp || {}).filter(
+                            ([key]) => key === field
+                    )
+            );
+          } else {
+            filteredMetadata.exif = this.metadata.exif;
+            filteredMetadata.iptc = this.metadata.iptc;
+            filteredMetadata.xmp = this.metadata.xmp;
+          }
+          this.filteredMetadata = filteredMetadata;
+        },
+        onFileUpload(event) {
+          event.preventDefault();
+          const file = event.target.files[0];
+          this.extractMetadata(file);
+        },
+        downloadMetadata() {
+          if (!this.filteredMetadata) {
+            return;
+          }
+          const csvData = [];
+          for (const [section, data] of Object.entries(this.filteredMetadata)) {
+            if (typeof data !== 'object') {
+              continue;
+            }
+            csvData.push(`[${section}]`);
+            for (const [field, value] of Object.entries(data)) {
+              csvData.push(`${field},${value}`);
+            }
+          }
+          const csvContent = csvData.join('\n');
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${this.filteredMetadata.fileName}.csv`;
+          link.click();
+        },
+      },
+      computed: {
+        filteredExif() {
+          return this.filteredMetadata?.exif || [];
+        },
+        filteredIptc() {
+          return this.filteredMetadata?.iptc || [];
+        },
+        filteredXmp() {
+          return this.filteredMetadata?.xmp || [];
+        }
+      },
+      mounted() {
+        this.$refs.uploadForm.addEventListener('submit', this.onFileUpload);
+      },
+      watch: {
+        filterValues: {
+          handler: 'filterMetadata',
+          deep: true
+        }
+      }
+    });
+    app.mount('#metadata-container');
+  </script>
+</body>
+</html>
