@@ -24,7 +24,7 @@ def generate_new_tool_names(existing_tools, num_options=5):
 
     messages = [
         {"role": "assistant", "content": "As an AI expert in tool development, I can generate ideas for standalone web tools that work without backend functionality.\nMy output will have the format: \"\nUnit Converter: Transform units like a boss! This unit converter is so epic, it'll make your head spin. Get ready for the ride of your life!\nJSON Formatter: Transform messy JSON into a beautiful and organized format with just a click! Copy and paste your JSON code and voila!\n...\n\".\nI will not output anything else."},
-        {"role": "user", "content": f"Generate {num_options} tool names for practical standalone web tools and fitting descriptions with less than 24 words that should explain the main functionality of the tool. The tools should not be too similar to one of the existing tools: {', '.join(existing_tools)}."}
+        {"role": "user", "content": f"Generate {num_options} tool names for practical standalone web tools and fitting descriptions with less than 24 words that should explain the main functionality of the tool. The tools should be in a similar style as the existing ones: {', '.join(existing_tools)}."}
     ]
 
     try:
@@ -130,7 +130,7 @@ def main():
     print(file_name, file_path)
     # Use developer.py to create the tool
     outline = get_description(tool_name)
-    implementation = get_tool_implementation(tool_name, outline, "")
+    implementation = get_tool_implementation(tool_name, outline, description)
     save_tool(tool_name, implementation)
 
     # Use new_entry.py to take a screenshot and update the HTML files

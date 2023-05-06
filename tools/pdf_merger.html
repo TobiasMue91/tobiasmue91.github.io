@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Merger</title>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f2f2f2;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    }
+    h1 {
+      text-align: center;
+      margin-top: 0;
+    }
+    .dropzone {
+      border: 2px dashed #ccc;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .dropzone:hover {
+      border-color: #aaa;
+    }
+    .file-list {
+      list-style: none;
+      padding: 0;
+      margin: 20px 0;
+    }
+    .file-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px;
+      background-color: #f2f2f2;
+      border-radius: 5px;
+      margin-bottom: 10px;
+    }
+    .file-list li:hover {
+      background-color: #e6e6e6;
+    }
+    .file-list li .file-name {
+      flex-grow: 1;
+      margin-right: 10px;
+    }
+    .file-list li .remove-file {
+      color: #f00;
+      cursor: pointer;
+    }
+    .preview {
+      border: 1px solid #ccc;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .download-btn {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      background-color: #007bff;
+      color: #fff;
+      text-align: center;
+      text-decoration: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    .download-btn:hover {
+      background-color: #0069d9;
+    }
+    .error {
+      color: #f00;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PDF Merger</h1>
+    <div class="dropzone" id="dropzone">
+      <p>Drag and drop your PDF files here or click to select files.</p>
+    </div>
+    <ul class="file-list" id="file-list"></ul>
+    <div class="preview" id="preview"></div>
+    <a href="#" class="download-btn" id="download-btn" download="merged.pdf" disabled>Download Merged PDF</a>
+    <div class="error" id="error"></div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.0.2/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileList = document.getElementById('file-list');
+    const preview = document.getElementById('preview');
+    const downloadBtn = document.getElementById('download-btn');
+    const error = document.getElementById('error');
+    let files = [];
+
+    function handleDrop(e) {
+      e.preventDefault();
+      const newFiles = Array.from(e.dataTransfer.files);
+      addFiles(newFiles);
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    }
+
+    function handleDragLeave(e) {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+    }
+
+    function handleFileSelect(e) {
+      e.preventDefault();
+      const newFiles = Array.from(e.target.files);
+      addFiles(newFiles);
+    }
+
+    function addFiles(newFiles) {
+      newFiles.forEach(file => {
+        if (file.type === 'application/pdf') {
+          files.push(file);
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <span class="file-name">${file.name}</span>
+            <span class="remove-file">&times;</span>
+          `;
+          fileList.appendChild(li);
+          li.querySelector('.remove-file').addEventListener('click', () => {
+            removeFile(file);
+            fileList.removeChild(li);
+          });
+        } else {
+          error.textContent = 'Only PDF files are allowed.';
+        }
+      });
+      if (files.length > 1) {
+        downloadBtn.removeAttribute('disabled');
+      }
+      previewFiles();
+    }
+
+    function removeFile(file) {
+      files = files.filter(f => f !== file);
+      if (files.length < 2) {
+        downloadBtn.setAttribute('disabled', true);
+      }
+      previewFiles();
+    }
+
+    async function previewFiles() {
+      if (files.length > 0) {
+        preview.innerHTML = '';
+        const mergedPdf = await PDFLib.PDFDocument.create();
+
+        const filePromises = files.map(async (file) => {
+          const reader = new FileReader();
+          reader.readAsArrayBuffer(file);
+          await new Promise((resolve) => (reader.onload = resolve));
+          const pdfBytes = new Uint8Array(reader.result);
+
+          const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+          const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
+          copiedPages.forEach((page) => {
+            mergedPdf.addPage(page);
+          });
+
+          // Render the first page of the PDF as an image using pdf.js
+          const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+          const pdf = await loadingTask.promise;
+          const page = await pdf.getPage(1);
+          const viewport = page.getViewport({ scale: 1 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const context = canvas.getContext('2d');
+          const renderTask = page.render({ canvasContext: context, viewport: viewport });
+          await renderTask.promise;
+
+          preview.appendChild(canvas);
+        });
+
+        await Promise.all(filePromises);
+
+        const mergedPdfBytes = await mergedPdf.save();
+        const url = URL.createObjectURL(new Blob([mergedPdfBytes], { type: 'application/pdf' }));
+        downloadBtn.setAttribute('href', url);
+      } else {
+        preview.innerHTML = '<p>No files selected.</p>';
+        downloadBtn.setAttribute('disabled', true);
+      }
+    }
+    dropzone.addEventListener('drop', handleDrop);
+    dropzone.addEventListener('dragover', handleDragOver);
+    dropzone.addEventListener('dragleave', handleDragLeave);
+  </script>
+</body>
+</html>
