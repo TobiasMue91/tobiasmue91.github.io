@@ -22,7 +22,7 @@ def generate_new_tool_names(existing_tools, num_options=5):
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
 
-    forbidden_tools = ["URL Shortener", "Image Watermarker"]
+    forbidden_tools = ["URL Shortener", "Image Watermarker", "Currency Converter"]
 
     messages = [
         {"role": "assistant", "content": "As an AI expert in tool development, I can generate ideas for standalone web tools that work without backend functionality.\nMy output will have the format: \"\nUnit Converter: Transform units like a boss! This unit converter is so epic, it'll make your head spin. Get ready for the ride of your life!\nJSON Formatter: Transform messy JSON into a beautiful and organized format with just a click! Copy and paste your JSON code and voila!\n...\n\".\nI will not output anything else.\nMy suggestions will be creative and good fitting additions to the existing tools."},
