@@ -50,7 +50,7 @@ def get_tool_implementation(tool_name, outline, additional_criteria):
     if additional_criteria:
         user_content += f"Also, consider the following additional criteria:\n\n{additional_criteria}\n\n"
 
-    user_content += "Generate a single HTML file with embedded CSS in the <style> section and functional JavaScript in a <script> tag. Incorporate essential libraries, adhere to efficient coding practices and modern design principles, and ensure the tool is responsive, performant, user-friendly, and accessible. Focus on directly generating the HTML without repetition, placeholders, or comments."
+    user_content += "Generate a single HTML file with embedded CSS in the <style> section and functional JavaScript in a <script> tag. Incorporate essential libraries, adhere to efficient coding practices and modern design principles, and ensure the tool is responsive, performant, user-friendly, and accessible. Focus on directly generating the HTML without repetition, or placeholders."
 
     messages = [
        {"role": "assistant", "content": "As an AI expert in tool development, I can generate high-quality standalone web tools using HTML, CSS, and JavaScript. I'll directly output the HTML for the desired tool without explanations or descriptions, focusing on efficiency and best practices."},
