@@ -32,7 +32,7 @@ def generate_new_tool_names(existing_tools, num_options=8):
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4",
             messages=messages,
             max_tokens=300,
             n=1,
