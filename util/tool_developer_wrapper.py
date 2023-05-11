@@ -22,7 +22,7 @@ def generate_new_tool_names(existing_tools, num_options=8):
     load_dotenv()
     openai.api_key = os.getenv('OPENAI_API_KEY')
 
-    forbidden_tools = ["URL Shortener", "Image Watermarker", "Currency Converter", "File Type Converter", "IP Address Locator", "Text to Speech Converter", "Password Manager", "File Type Detector", "Audio Speed Changer"]
+    forbidden_tools = ["URL Shortener", "Image Watermarker", "Currency Converter", "File Type Converter", "IP Address Locator", "Text to Speech Converter", "Password Manager", "File Type Detector", "Audio Speed Changer", "Image to ASCII Art Converter", "Markdown Editor", "Online Mind Map Maker", "Image to PDF Converter"]
 
     messages = [
         {"role": "assistant", "content": "As an AI expert in tool development, I can generate ideas for standalone web tools that work without backend functionality.The tools should be entirely client-side, not relying on any server-side processing. My output will have the format: \"\nUnit Converter: Transform units like a boss! This unit converter is so epic, it'll make your head spin.\nJSON Formatter: Transform messy JSON into a beautiful and organized format with just a click! Copy and paste your JSON code and voila!\n...\n\".\nMy suggestions will be creative and good fitting additions to the existing tools."},
