@@ -1,0 +1,19 @@
+## Useful Plugins
+- Filtir: factcheck texts
+- Wolfram: must have plugin when chatgpt does anything with math
+- Code Runner: run code from 70 different programming languages
+- CoderPad: run code from 30 different languages
+- KeyMate.AI Search: search engine
+- Web Pilot, Access Link, Web Requests: browse internet
+- Ai PDF, AskYourPdf: lets chatgpt interact with pdfs
+- daigr.am: build charts and graphs
+- Metaphor: recommendations based on your taste (movies, tv shows etc.)
+- FilmFindr AI: movie recommendations
+- Pluginpedia: chatgpt plugin recommendations
+- PuginAI: same as above
+- OpenTools AI: AI tool finder
+- ScholarAI: get data from scientific papers
+- Visla: create short videos using stock footage from just text
+- AI Chatbot Builder: helps to fill a chatbot with data
+- TranslationRater: rate translations
+- What's trending?: explore trends on youtube and other platforms
