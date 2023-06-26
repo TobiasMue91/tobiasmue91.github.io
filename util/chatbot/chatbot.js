@@ -29,7 +29,7 @@ class RetrievalAssistant {
             return [initialMessage];
         }
 
-        if (typeof conversation !== 'object' || !Symbol.iterator in Object(conversation)) {
+        if (typeof conversation !== 'object' || !(Symbol.iterator in Object(conversation))) {
             conversation = [initialMessage];
         }
 
