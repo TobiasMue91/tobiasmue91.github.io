@@ -11,3 +11,7 @@
 
 # Prompt Engineering Tutorials
 - [Prompt engineering techniques by Microsoft](https://learn.microsoft.com/en-us/azure/cognitive-services/openai/concepts/advanced-prompt-engineering)
+
+# Formatting Outputs
+- use markdown to produce structure output (tables, list, images, links, text formatting etc. pp)
+- GPT 3.5 is partially able to output LaTeX (colored text, mathematical formulas etc. pp)
