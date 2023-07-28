@@ -7,10 +7,12 @@
 - periodically ask ChatGPT to [reflect on the code](https://newatlas.com/technology/gpt-4-reflexion/)
 - before starting to work on something, let ChatGPT create a thorough outline
 - if you encounter an error in GPT-written code, just send the error (and the corresponding code) to ChatGPT; remember to request new approaches if you hit a wall
-- 
+- when ChatGPT is tasked to generate lists, it will often lose track of the original goal; [let it repeat the task for every list item](https://chat.openai.com/share/ea65f3cb-d00b-4ce0-87ca-a846d31addba)
 
 # Prompt Engineering Tutorials
 - [Prompt engineering techniques by Microsoft](https://learn.microsoft.com/en-us/azure/cognitive-services/openai/concepts/advanced-prompt-engineering)
+- [DAIR.AI Prompt Engineering Guide](https://github.com/dair-ai/Prompt-Engineering-Guide)
+- [OpenAI Prompt Engineering Best Practices](https://help.openai.com/en/articles/6654000-best-practices-for-prompt-engineering-with-openai-api)
 
 # Formatting Outputs
 - use markdown to produce structure output (tables, list, images, links, text formatting etc. pp)
