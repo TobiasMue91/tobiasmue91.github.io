@@ -3,6 +3,7 @@ from pathlib import Path
 from PIL import Image
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
 if __name__ == "__main__":
     # Prompt user for input
@@ -21,7 +22,7 @@ if __name__ == "__main__":
     # Set up headless browser and take a screenshot
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    driver = webdriver.Chrome(options=chrome_options)
+    driver = webdriver.Chrome(executable_path=ChromeDriverManager().install(), options=chrome_options)
     driver.set_window_size(800, 800)
     driver.get(f"http://localhost:80/{file_path}")
     driver.save_screenshot(str(screenshot_file))
