@@ -218,24 +218,3 @@ world.on('beginContact', (event) => {
         }
     }
 });
-const maxWidth = 450; // Max width of the canvas
-const maxHeight = 800; // Max height of the canvas
-
-function resizeCanvas() {
-    const scaleWidth = window.innerWidth / maxWidth;
-    const scaleHeight = window.innerHeight / maxHeight;
-    const scale = Math.min(scaleWidth, scaleHeight);
-
-    canvas.style.transform = `scale(${scale})`;
-    canvas.style.transformOrigin = 'top left';
-
-    // Center the canvas horizontally after scaling
-    const horizontalOffset = (window.innerWidth - maxWidth * scale) / 2;
-    canvas.style.left = `${horizontalOffset}px`;
-}
-
-// Call this function to initially set the size
-resizeCanvas();
-
-// Add event listener for window resize
-window.addEventListener('resize', resizeCanvas);
