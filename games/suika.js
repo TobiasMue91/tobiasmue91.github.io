@@ -2,7 +2,7 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // Game variables
-const fruits = ['🍒', '🍓', '🍇', '🍋', '🍊', '🍎', '🍈', '🍑', '🍍', '🍉'];
+const fruits = ['🍒', '🍓', '🍇', '🍋', '🍊', '🍎', '🍐', '🍑', '🍍', '🍈', '🍉'];
 let currentFruitIndex = 0;
 let currentFruitX = canvas.width / 2; // Initialize x-position of the current fruit
 let nextFruitIndex = selectNextFruit();
@@ -71,7 +71,7 @@ function drawScore() {
 
 // Main game loop
 function gameLoop() {
-    world.step(1/60);
+    world.step(1/30);
     drawBackground();
     drawFruits();
     drawScore();
@@ -88,6 +88,16 @@ function updateFruitPosition(x, y) {
     }
 }
 
+canvas.addEventListener('touchmove', (event) => {
+    event.preventDefault();
+    if (!(event.touches.length > 0)) {
+        return;
+    }
+    const touch = event.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    currentFruitX = (touch.clientX - rect.left) / (rect.right - rect.left) * canvas.width;
+});
+
 canvas.addEventListener('mousemove', (event) => {
     const rect = canvas.getBoundingClientRect();
     currentFruitX = (event.clientX - rect.left) / (rect.right - rect.left) * canvas.width;
@@ -98,7 +108,7 @@ function selectNextFruit() {
     return Math.floor(Math.random() * 5);
 }
 
-canvas.addEventListener('click', () => {
+function onClick() {
     if (!isFruitDropped) {
         isFruitDropped = true;
         currentFruitBody = createFruit(currentFruitIndex, currentFruitX, 50); // Create the fruit at the current x-position and fixed y-position
@@ -108,9 +118,11 @@ canvas.addEventListener('click', () => {
             currentFruitIndex = nextFruitIndex;
             nextFruitIndex = selectNextFruit();
             isFruitDropped = false;
-        }, 500); // Delay to prepare next fruit
+        }, 600); // Delay to prepare next fruit
     }
-});
+}
+canvas.addEventListener('touchstart', (event) => {event.preventDefault(); onClick();});
+canvas.addEventListener('click', onClick);
 
 // Function to calculate visual fruit radius based on index
 function calculateFruitVisualRadius(index) {
@@ -135,6 +147,7 @@ function createFruit(index, x, y) {
     let fruitBody = new p2.Body({
         mass: mass,
         position: [x, canvas.height - y],
+        velocity: [0, -10],
         angularVelocity: 0
     });
 
@@ -200,7 +213,7 @@ world.on('beginContact', (event) => {
                 let mergedFruit = createFruit(mergedFruitType, avgX, mergedY);
                 world.removeBody(bodyA);
                 world.removeBody(bodyB);
-                score += (mergedFruitType + 1) * 20;
+                score += (mergedFruitType) * 2;
             }
         }
     }
