@@ -40,24 +40,27 @@ const world = new p2.World({
     gravity: [0, -50]
 });
 
+const yOffset = 10;
+const xOffset = 5;
+
 // Function to draw the current and next fruit
 function drawFruits() {
     world.bodies.forEach(body => {
         if (body.fruitType !== undefined) {
-            // const hitboxRadius = body.shapes[0].radius;
+            const hitboxRadius = body.shapes[0].radius;
 
             // Continue drawing the hitbox for debugging
-            // ctx.beginPath();
-            // ctx.arc(body.position[0], canvas.height - body.position[1], hitboxRadius, 0, 2 * Math.PI);
-            // ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-            // ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(body.position[0], canvas.height - body.position[1], hitboxRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+            ctx.stroke();
 
             // Adjusting fruit drawing position
             const visualRadius = calculateFruitVisualRadius(body.fruitType);
             const fontSize = visualRadius * 3;
             ctx.font = useSystemFont ? `${fontSize}px serif` : `${fontSize}px 'Noto Emoji'`;
-            const adjustedX = (body.position[0] - fontSize / 2) - 5; // Half width to the left
-            const adjustedY = (canvas.height - body.position[1] + fontSize / 2) - 10; // Half height down
+            const adjustedX = (body.position[0] - fontSize / 2) - xOffset; // Half width to the left
+            const adjustedY = (canvas.height - body.position[1] + fontSize / 2) - yOffset; // Half height down
             ctx.fillText(currentSkin[body.fruitType], adjustedX, adjustedY);
         }
     });
@@ -67,8 +70,8 @@ function drawFruits() {
         const visualRadius = calculateFruitVisualRadius(currentFruitIndex);
         const fontSize = visualRadius * 3;
         ctx.font = useSystemFont ? `${fontSize}px serif` : `${fontSize}px 'Noto Emoji'`;
-        const adjustedX = (currentFruitX - fontSize / 2) -5;
-        const adjustedY = (50 + fontSize / 2) - 10;
+        const adjustedX = (currentFruitX - fontSize / 2) - xOffset;
+        const adjustedY = (50 + fontSize / 2) - yOffset;
         ctx.fillText(currentSkin[currentFruitIndex], adjustedX, adjustedY);
     }
 
