@@ -47,13 +47,13 @@ const xOffset = 5;
 function drawFruits() {
     world.bodies.forEach(body => {
         if (body.fruitType !== undefined) {
-            const hitboxRadius = body.shapes[0].radius;
-
-            // Continue drawing the hitbox for debugging
-            ctx.beginPath();
-            ctx.arc(body.position[0], canvas.height - body.position[1], hitboxRadius, 0, 2 * Math.PI);
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-            ctx.stroke();
+            // const hitboxRadius = body.shapes[0].radius;
+            //
+            // // Continue drawing the hitbox for debugging
+            // ctx.beginPath();
+            // ctx.arc(body.position[0], canvas.height - body.position[1], hitboxRadius, 0, 2 * Math.PI);
+            // ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+            // ctx.stroke();
 
             // Adjusting fruit drawing position
             const visualRadius = calculateFruitVisualRadius(body.fruitType);
