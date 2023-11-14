@@ -2,7 +2,20 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // Game variables
-const fruits = ['🍒', '🍓', '🍇', '🍋', '🍊', '🍎', '🍐', '🍑', '🍍', '🍈', '🍉'];
+const skins = {
+    fruits: ['🍒', '🍓', '🍇', '🍋', '🍊', '🍎', '🍐', '🍑', '🍍', '🍈', '🍉'],
+    jungleAnimals: ['🐸', '🐍', '🦜', '🦥', '🦧', '🐅', '🦓', '🦒', '🐘', '🦏', '🦍'],
+    underwater: ['🐠', '🐟', '🐡', '🦑', '🐙', '🦈', '🐬', '🐋', '🦭', '🦞', '🐳'],
+    musicalInstruments: ['🪘', '🪕', '🎷', '🎺', '🎸', '🎻', '🪗', '🥁', '🎹', '🎼', '🪐'],
+    ancientCivilizations: ['🏺', '🪔', '⚱️', '🗿', '🛕', '🕌', '🕍', '🏰', '🏯', '🎎', '🏛️'],
+    winter: ['❄️', '🧣', '🧤', '🥶', '⛷️', '⛸️', '🛷', '☃️', '🏔️', '🌨️', '🎿'],
+    garden: ['🌱', '🌿', '🍄', '🌷', '🌻', '🌼', '🌺', '🌸', '🌹', '🥀', '🌲'],
+    dessert: ['🍪', '🧁', '🍩', '🍨', '🍰', '🎂', '🍮', '🍦', '🍧', '🍫', '🍬'],
+    sports: ['🏀', '⚽', '🏈', '⚾', '🏐', '🥎', '🏉', '🎾', '🏓', '🏑', '🏆'],
+    vehicles: ['🚲', '🛴', '🛵', '🚗', '🚚', '🚜', '🚂', '🛶', '🚤', '🛳️', '✈️']
+}
+let currentSkin = skins.fruits;
+
 let currentFruitIndex = 0;
 let currentFruitX = canvas.width / 2; // Initialize x-position of the current fruit
 let nextFruitIndex = selectNextFruit();
@@ -33,7 +46,7 @@ function drawFruits() {
             ctx.font = `${fontSize}px serif`;
             const adjustedX = (body.position[0] - fontSize / 2) - 5; // Half width to the left
             const adjustedY = (canvas.height - body.position[1] + fontSize / 2) - 10; // Half height down
-            ctx.fillText(fruits[body.fruitType], adjustedX, adjustedY);
+            ctx.fillText(currentSkin[body.fruitType], adjustedX, adjustedY);
         }
     });
 
@@ -44,12 +57,12 @@ function drawFruits() {
         ctx.font = `${fontSize}px serif`;
         const adjustedX = (currentFruitX - fontSize / 2) -5;
         const adjustedY = (50 + fontSize / 2) - 10;
-        ctx.fillText(fruits[currentFruitIndex], adjustedX, adjustedY);
+        ctx.fillText(currentSkin[currentFruitIndex], adjustedX, adjustedY);
     }
 
     // Draw the next fruit indicator with a fixed size
     ctx.font = '48px serif';
-    ctx.fillText(fruits[nextFruitIndex], 380, 50);
+    ctx.fillText(currentSkin[nextFruitIndex], 380, 50);
 }
 
 // Load the background image
@@ -206,7 +219,7 @@ world.on('beginContact', (event) => {
     if (bodyA.fruitType !== undefined && bodyB.fruitType !== undefined) {
         if (bodyA.fruitType === bodyB.fruitType) {
             let mergedFruitType = bodyA.fruitType + 1;
-            if (mergedFruitType < fruits.length) {
+            if (mergedFruitType < currentSkin.length) {
                 let avgX = (bodyA.position[0] + bodyB.position[0]) / 2;
                 let avgY = (bodyA.position[1] + bodyB.position[1]) / 2;
                 let mergedY = canvas.height - avgY; // Adjust for canvas coordinate system
@@ -217,4 +230,45 @@ world.on('beginContact', (event) => {
             }
         }
     }
+});
+
+function applySkin(selectedSkin) {
+    if (skins[selectedSkin]) {
+        currentSkin = skins[selectedSkin];
+
+        // Update the valueGrid
+        const valueGrid = document.getElementById('valueGrid');
+        valueGrid.innerHTML = ''; // Clear current content
+
+        // Populate with new skin emojis and their scores
+        currentSkin.forEach((emoji, index) => {
+            const emojiDiv = document.createElement('div');
+            emojiDiv.textContent = emoji;
+            const scoreDiv = document.createElement('div');
+            scoreDiv.textContent = (index + 1) * 2; // Assuming score increases by 2 for each emoji
+            scoreDiv.className = 'text-right';
+
+            valueGrid.appendChild(emojiDiv);
+            valueGrid.appendChild(scoreDiv);
+        });
+    }
+}
+
+function applySettings() {
+    const selectedSkin = document.getElementById('skinSelect').value;
+    applySkin(selectedSkin);
+
+    // Close the modal
+    const modal = document.getElementById('settingsModal');
+    modal.style.display = 'none';
+}
+
+function openSettingsModal() {
+    const modal = document.getElementById('settingsModal');
+    modal.style.display = 'block';
+}
+
+document.addEventListener('DOMContentLoaded', (event) => {
+    const settingsButton = document.getElementById('settingsButton');
+    settingsButton.addEventListener('click', openSettingsModal);
 });
