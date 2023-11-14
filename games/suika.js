@@ -1,6 +1,16 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+WebFont.load({
+    custom: {
+        families: ['Noto Emoji'],
+        urls: ['suika.css']
+    },
+    active: function() {
+        gameLoop();
+    }
+});
+
 // Game variables
 const skins = {
     fruits: ['🍒', '🍓', '🍇', '🍋', '🍊', '🍎', '🍐', '🍑', '🍍', '🍈', '🍉'],
@@ -22,6 +32,8 @@ let nextFruitIndex = selectNextFruit();
 let score = 0;
 let currentFruitBody = null;
 let isFruitDropped = false;
+let currentFruitSpawnDelay = 600;
+let useSystemFont = false;
 
 // Physics variables
 const world = new p2.World({
@@ -32,7 +44,7 @@ const world = new p2.World({
 function drawFruits() {
     world.bodies.forEach(body => {
         if (body.fruitType !== undefined) {
-            const hitboxRadius = body.shapes[0].radius;
+            // const hitboxRadius = body.shapes[0].radius;
 
             // Continue drawing the hitbox for debugging
             // ctx.beginPath();
@@ -43,7 +55,7 @@ function drawFruits() {
             // Adjusting fruit drawing position
             const visualRadius = calculateFruitVisualRadius(body.fruitType);
             const fontSize = visualRadius * 3;
-            ctx.font = `${fontSize}px serif`;
+            ctx.font = useSystemFont ? `${fontSize}px serif` : `${fontSize}px 'Noto Emoji'`;
             const adjustedX = (body.position[0] - fontSize / 2) - 5; // Half width to the left
             const adjustedY = (canvas.height - body.position[1] + fontSize / 2) - 10; // Half height down
             ctx.fillText(currentSkin[body.fruitType], adjustedX, adjustedY);
@@ -54,14 +66,14 @@ function drawFruits() {
     if (!isFruitDropped) {
         const visualRadius = calculateFruitVisualRadius(currentFruitIndex);
         const fontSize = visualRadius * 3;
-        ctx.font = `${fontSize}px serif`;
+        ctx.font = useSystemFont ? `${fontSize}px serif` : `${fontSize}px 'Noto Emoji'`;
         const adjustedX = (currentFruitX - fontSize / 2) -5;
         const adjustedY = (50 + fontSize / 2) - 10;
         ctx.fillText(currentSkin[currentFruitIndex], adjustedX, adjustedY);
     }
 
     // Draw the next fruit indicator with a fixed size
-    ctx.font = '48px serif';
+    ctx.font = useSystemFont ? `48px serif` : `48px 'Noto Emoji'`;
     ctx.fillText(currentSkin[nextFruitIndex], 380, 50);
 }
 
@@ -90,8 +102,6 @@ function gameLoop() {
     drawScore();
     requestAnimationFrame(gameLoop);
 }
-
-gameLoop();
 
 // Function to update fruit position to follow the mouse
 function updateFruitPosition(x, y) {
@@ -131,7 +141,7 @@ function onClick() {
             currentFruitIndex = nextFruitIndex;
             nextFruitIndex = selectNextFruit();
             isFruitDropped = false;
-        }, 600); // Delay to prepare next fruit
+        }, currentFruitSpawnDelay); // Delay to prepare next fruit
     }
 }
 canvas.addEventListener('touchstart', (event) => {event.preventDefault(); onClick();});
@@ -254,19 +264,39 @@ function applySkin(selectedSkin) {
     }
 }
 
+function updateFruitSpawnDelay(newDelay) {
+    currentFruitSpawnDelay = parseInt(newDelay, 10);
+}
+
+function handleSystemFontSetting(newValue) {
+    useSystemFont = newValue;
+}
+
 function applySettings() {
     const selectedSkin = document.getElementById('skinSelect').value;
-    applySkin(selectedSkin);
+    const fruitSpawnDelayInput = document.getElementById('fruitSpawnDelay');
+    const fruitSpawnDelay = fruitSpawnDelayInput.value;
+    const useSystemFontCheckbox = document.getElementById('useSystemFontCheckbox');
+    const useSystemFont = useSystemFontCheckbox.checked;
 
-    // Close the modal
-    const modal = document.getElementById('settingsModal');
-    modal.style.display = 'none';
+    applySkin(selectedSkin);
+    updateFruitSpawnDelay(fruitSpawnDelay);
+    handleSystemFontSetting(useSystemFont);
 }
 
 function openSettingsModal() {
     const modal = document.getElementById('settingsModal');
     modal.style.display = 'block';
 }
+
+function closeSettingsModal() {
+    const modal = document.getElementById('settingsModal');
+    modal.style.display = 'none';
+}
+
+document.getElementById('fruitSpawnDelay').addEventListener('input', function() {
+    document.getElementById('fruitSpawnDelayValue').textContent = this.value;
+});
 
 document.addEventListener('DOMContentLoaded', (event) => {
     const settingsButton = document.getElementById('settingsButton');
