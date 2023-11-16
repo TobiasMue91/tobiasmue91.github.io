@@ -16,7 +16,7 @@ const skins = {
     fruits: ['🍒', '🍓', '🍇', '🍋', '🍊', '🍎', '🍐', '🍑', '🍍', '🍈', '🍉'],
     jungleAnimals: ['🐸', '🐍', '🦜', '🦥', '🦧', '🐅', '🦓', '🦒', '🐘', '🦏', '🦍'],
     underwater: ['🐠', '🐟', '🐡', '🦑', '🐙', '🦈', '🐬', '🐋', '🦭', '🦞', '🐳'],
-    musicalInstruments: ['🪘', '🪕', '🎷', '🎺', '🎸', '🎻', '🪗', '🥁', '🎹', '🎼', '🪐'],
+    musicalInstruments: ['🪘', '🪕', '🎷', '🎺', '🎸', '🎻', '🪗', '🥁', '🎹', '🎼', '📯'],
     ancientCivilizations: ['🏺', '🪔', '⚱️', '🗿', '🛕', '🕌', '🕍', '🏰', '🏯', '🎎', '🏛️'],
     winter: ['❄️', '🧣', '🧤', '🥶', '⛷️', '⛸️', '🛷', '☃️', '🏔️', '🌨️', '🎿'],
     garden: ['🌱', '🌿', '🍄', '🌷', '🌻', '🌼', '🌺', '🌸', '🌹', '🥀', '🌲'],
@@ -35,13 +35,14 @@ let isFruitDropped = false;
 let currentFruitSpawnDelay = 600;
 let useSystemFont = false;
 
+const Y_OFFSET = 10;
+const X_OFFSET = 5;
+const INITIAL_VELOCITY = -30;
+
 // Physics variables
 const world = new p2.World({
     gravity: [0, -50]
 });
-
-const yOffset = 10;
-const xOffset = 5;
 
 // Function to draw the current and next fruit
 function drawFruits() {
@@ -59,8 +60,8 @@ function drawFruits() {
             const visualRadius = calculateFruitVisualRadius(body.fruitType);
             const fontSize = visualRadius * 3;
             ctx.font = useSystemFont ? `${fontSize}px serif` : `${fontSize}px 'Noto Emoji'`;
-            const adjustedX = (body.position[0] - fontSize / 2) - xOffset; // Half width to the left
-            const adjustedY = (canvas.height - body.position[1] + fontSize / 2) - yOffset; // Half height down
+            const adjustedX = (body.position[0] - fontSize / 2) - X_OFFSET; // Half width to the left
+            const adjustedY = (canvas.height - body.position[1] + fontSize / 2) - Y_OFFSET; // Half height down
             ctx.fillText(currentSkin[body.fruitType], adjustedX, adjustedY);
         }
     });
@@ -70,8 +71,8 @@ function drawFruits() {
         const visualRadius = calculateFruitVisualRadius(currentFruitIndex);
         const fontSize = visualRadius * 3;
         ctx.font = useSystemFont ? `${fontSize}px serif` : `${fontSize}px 'Noto Emoji'`;
-        const adjustedX = (currentFruitX - fontSize / 2) - xOffset;
-        const adjustedY = (50 + fontSize / 2) - yOffset;
+        const adjustedX = (currentFruitX - fontSize / 2) - X_OFFSET;
+        const adjustedY = (50 + fontSize / 2) - Y_OFFSET;
         ctx.fillText(currentSkin[currentFruitIndex], adjustedX, adjustedY);
     }
 
@@ -173,7 +174,7 @@ function createFruit(index, x, y) {
     let fruitBody = new p2.Body({
         mass: mass,
         position: [x, canvas.height - y],
-        velocity: [0, -10],
+        velocity: [0, INITIAL_VELOCITY],
         angularVelocity: 0
     });
 
@@ -256,6 +257,7 @@ function applySkin(selectedSkin) {
         // Populate with new skin emojis and their scores
         currentSkin.forEach((emoji, index) => {
             const emojiDiv = document.createElement('div');
+            emojiDiv.className = useSystemFont ? 'emoji' : '';
             emojiDiv.textContent = emoji;
             const scoreDiv = document.createElement('div');
             scoreDiv.textContent = (index + 1) * 2; // Assuming score increases by 2 for each emoji
@@ -267,11 +269,11 @@ function applySkin(selectedSkin) {
     }
 }
 
-function updateFruitSpawnDelay(newDelay) {
+function applyFruitSpawnDelay(newDelay) {
     currentFruitSpawnDelay = parseInt(newDelay, 10);
 }
 
-function handleSystemFontSetting(newValue) {
+function applySystemFontSetting(newValue) {
     useSystemFont = newValue;
 }
 
@@ -283,8 +285,8 @@ function applySettings() {
     const useSystemFont = useSystemFontCheckbox.checked;
 
     applySkin(selectedSkin);
-    updateFruitSpawnDelay(fruitSpawnDelay);
-    handleSystemFontSetting(useSystemFont);
+    applyFruitSpawnDelay(fruitSpawnDelay);
+    applySystemFontSetting(useSystemFont);
 }
 
 function openSettingsModal() {
