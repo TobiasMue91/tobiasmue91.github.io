@@ -1,4 +1,4 @@
-# gptgames
+# GPTGames
 Simple HTML games and tools created with ChatGPT.
 
 ---
