@@ -313,6 +313,12 @@ function applySettings() {
     applySystemFontSetting(useSystemFont);
     applySkin(selectedSkin);
     closeSettingsModal();
+
+    localStorage.setItem('settings', JSON.stringify({
+        selectedSkin,
+        fruitSpawnDelay,
+        useSystemFont
+    }));
 }
 
 function openSettingsModal() {
@@ -330,6 +336,15 @@ document.getElementById('fruitSpawnDelay').addEventListener('input', function() 
 });
 
 document.addEventListener('DOMContentLoaded', (event) => {
-    const settingsButton = document.getElementById('settingsButton');
-    settingsButton.addEventListener('click', openSettingsModal);
+    // Load settings from localStorage
+    const savedSettings = JSON.parse(localStorage.getItem('settings'));
+    if (savedSettings) {
+        document.getElementById('skinSelect').value = savedSettings.selectedSkin;
+        document.getElementById('fruitSpawnDelay').value = savedSettings.fruitSpawnDelay;
+        document.getElementById('useSystemFontCheckbox').checked = savedSettings.useSystemFont;
+
+        applyFruitSpawnDelay(savedSettings.fruitSpawnDelay);
+        applySystemFontSetting(savedSettings.useSystemFont);
+        applySkin(savedSettings.selectedSkin);
+    }
 });
