@@ -131,11 +131,11 @@ function restartGame() {
 
 // Main game loop
 function gameLoop() {
-    world.step(1/30);
+    world.step(1 / 30);
     drawBackground();
     drawFruits();
     drawScore();
-    if (currentFruitBody && currentFruitBody.position[1] > 800) {
+    if (world.bodies.some(body => body.position[1] > 800)) {
         gameOver();
     }
     requestAnimationFrame(gameLoop);
