@@ -34,15 +34,26 @@ let currentFruitBody = null;
 let isFruitDropped = false;
 let currentFruitSpawnDelay = 600;
 let useSystemFont = false;
+let world;
 
 const Y_OFFSET = 10;
 const X_OFFSET = 5;
 const INITIAL_VELOCITY = -30;
 
-// Physics variables
-const world = new p2.World({
-    gravity: [0, -50]
-});
+initialize();
+
+function initialize() {
+    score = 0;
+    if (world) {
+        world.clear();
+    } else {
+        world = new p2.World({
+            gravity: [0, -50]
+        });
+    }
+
+    createCanvasBorders();
+}
 
 // Function to draw the current and next fruit
 function drawFruits() {
@@ -83,7 +94,7 @@ function drawFruits() {
 
 // Load the background image
 let backgroundImage = new Image();
-backgroundImage.src = 'img/background/suikabg.png'; // Replace with your image path
+backgroundImage.src = 'img/background/suikabg.png';
 
 // Draw the background image
 function drawBackground() {
@@ -93,9 +104,29 @@ function drawBackground() {
 }
 
 function drawScore() {
-    ctx.font = '24px Arial'; // Choose a suitable font style
-    ctx.fillStyle = 'black'; // Choose a text color
-    ctx.fillText(`Score: ${score}`, 10, 30); // Draw the score at the top-left corner
+    ctx.font = '24px Arial';
+    ctx.fillStyle = 'black';
+    ctx.fillText(`Score: ${score}`, 10, 30);
+}
+
+function gameOver() {
+    currentFruitBody = null;
+
+    // Show the game over overlay and display the score
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
+    document.getElementById('finalScore').textContent = score;
+}
+
+
+function restartGame() {
+    // Hide the game over overlay
+    document.getElementById('gameOverOverlay').classList.add('hidden');
+
+    // Reset game state variables
+    initialize();
+
+    // Start the game loop again
+    gameLoop();
 }
 
 // Main game loop
@@ -104,6 +135,9 @@ function gameLoop() {
     drawBackground();
     drawFruits();
     drawScore();
+    if (currentFruitBody && currentFruitBody.position[1] > 800) {
+        gameOver();
+    }
     requestAnimationFrame(gameLoop);
 }
 
@@ -190,14 +224,6 @@ function createCanvasBorders() {
     const wallThickness = 50; // Thickness of the walls
     const wallOptions = { isStatic: true };
 
-    // Top wall
-    let topWall = new p2.Body({
-        position: [canvas.width / 2, canvas.height + wallThickness / 2],
-        ...wallOptions
-    });
-    topWall.addShape(new p2.Box({ width: canvas.width, height: wallThickness }));
-    world.addBody(topWall);
-
     // Bottom wall
     let bottomWall = new p2.Body({
         position: [canvas.width / 2, -wallThickness / 2],
@@ -223,7 +249,6 @@ function createCanvasBorders() {
     world.addBody(rightWall);
 }
 
-createCanvasBorders();
 
 // Collision handling
 world.on('beginContact', (event) => {
@@ -257,7 +282,7 @@ function applySkin(selectedSkin) {
         // Populate with new skin emojis and their scores
         currentSkin.forEach((emoji, index) => {
             const emojiDiv = document.createElement('div');
-            emojiDiv.className = useSystemFont ? 'emoji' : '';
+            emojiDiv.className = useSystemFont ? '' : 'emoji';
             emojiDiv.textContent = emoji;
             const scoreDiv = document.createElement('div');
             scoreDiv.textContent = (index + 1) * 2; // Assuming score increases by 2 for each emoji
@@ -284,9 +309,10 @@ function applySettings() {
     const useSystemFontCheckbox = document.getElementById('useSystemFontCheckbox');
     const useSystemFont = useSystemFontCheckbox.checked;
 
-    applySkin(selectedSkin);
     applyFruitSpawnDelay(fruitSpawnDelay);
     applySystemFontSetting(useSystemFont);
+    applySkin(selectedSkin);
+    closeSettingsModal();
 }
 
 function openSettingsModal() {
