@@ -333,6 +333,26 @@ function closeSettingsModal() {
     modal.style.display = 'none';
 }
 
+function scrollToHeaderHeight() {
+    const header = document.querySelector('header');
+    if (header) {
+        const headerHeight = header.offsetHeight;
+        setTimeout(() => window.scrollTo({top: headerHeight, behavior: 'smooth' }), 1000);
+    }
+}
+
+function scrollOnMobile() {
+    function checkScreenWidth() {
+        if (window.innerWidth < 500) {
+            scrollToHeaderHeight();
+        }
+    }
+
+    checkScreenWidth();
+
+    window.addEventListener('resize', checkScreenWidth);
+}
+
 document.getElementById('fruitSpawnDelay').addEventListener('input', function() {
     document.getElementById('fruitSpawnDelayValue').textContent = this.value;
 });
@@ -349,4 +369,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
         applySystemFontSetting(savedSettings.useSystemFont);
         applySkin(savedSettings.selectedSkin);
     }
+
+    scrollOnMobile();
 });
