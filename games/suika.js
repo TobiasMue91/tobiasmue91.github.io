@@ -149,7 +149,7 @@ function updateFruitPosition(x, y) {
     }
 }
 
-canvas.addEventListener('touchmove', (event) => {
+const onTouch = (event) => {
     event.preventDefault();
     if (!(event.touches.length > 0)) {
         return;
@@ -157,7 +157,9 @@ canvas.addEventListener('touchmove', (event) => {
     const touch = event.touches[0];
     const rect = canvas.getBoundingClientRect();
     currentFruitX = (touch.clientX - rect.left) / (rect.right - rect.left) * canvas.width;
-});
+};
+canvas.addEventListener('touchmove', onTouch);
+canvas.addEventListener('touchstart', onTouch);
 
 canvas.addEventListener('mousemove', (event) => {
     const rect = canvas.getBoundingClientRect();
@@ -182,7 +184,7 @@ function onClick() {
         }, currentFruitSpawnDelay); // Delay to prepare next fruit
     }
 }
-canvas.addEventListener('touchstart', (event) => {event.preventDefault(); onClick();});
+canvas.addEventListener('touchend', (event) => {event.preventDefault(); onClick();});
 canvas.addEventListener('click', onClick);
 
 // Function to calculate visual fruit radius based on index
