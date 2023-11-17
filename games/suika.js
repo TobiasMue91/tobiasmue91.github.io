@@ -142,14 +142,6 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Function to update fruit position to follow the mouse
-function updateFruitPosition(x, y) {
-    if (currentFruitBody && !isFruitDropped) {
-        currentFruitBody.position[0] = x;
-        currentFruitBody.position[1] = y;
-    }
-}
-
 const onTouch = (event) => {
     event.preventDefault();
     if (!(event.touches.length > 0)) {
