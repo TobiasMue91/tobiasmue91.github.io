@@ -34,6 +34,7 @@ let currentFruitBody = null;
 let isFruitDropped = false;
 let currentFruitSpawnDelay = 600;
 let useSystemFont = false;
+let gameOverEnabled = true;
 let world;
 
 const Y_OFFSET = 10;
@@ -135,7 +136,7 @@ function gameLoop() {
     drawBackground();
     drawFruits();
     drawScore();
-    if (world.bodies.some(body => body.position[1] > 800)) {
+    if (gameOverEnabled && world.bodies.some(body => body.position[1] > 800)) {
         gameOver();
     }
     requestAnimationFrame(gameLoop);
@@ -304,22 +305,30 @@ function applySystemFontSetting(newValue) {
     useSystemFont = newValue;
 }
 
+function applyGameOver(gameOverEnabledValue) {
+    gameOverEnabled = gameOverEnabledValue;
+}
+
 function applySettings() {
     const selectedSkin = document.getElementById('skinSelect').value;
     const fruitSpawnDelayInput = document.getElementById('fruitSpawnDelay');
     const fruitSpawnDelay = fruitSpawnDelayInput.value;
     const useSystemFontCheckbox = document.getElementById('useSystemFontCheckbox');
     const useSystemFont = useSystemFontCheckbox.checked;
+    const gameOverEnabledCheckbox = document.getElementById('gameOverEnabledCheckbox');
+    const gameOverEnabled = gameOverEnabledCheckbox.checked;
 
     applyFruitSpawnDelay(fruitSpawnDelay);
     applySystemFontSetting(useSystemFont);
     applySkin(selectedSkin);
+    applyGameOver(gameOverEnabled);
     closeSettingsModal();
 
     localStorage.setItem('settings', JSON.stringify({
         selectedSkin,
         fruitSpawnDelay,
-        useSystemFont
+        useSystemFont,
+        gameOverEnabled
     }));
 }
 
@@ -364,10 +373,12 @@ document.addEventListener('DOMContentLoaded', (event) => {
         document.getElementById('skinSelect').value = savedSettings.selectedSkin;
         document.getElementById('fruitSpawnDelay').value = savedSettings.fruitSpawnDelay;
         document.getElementById('useSystemFontCheckbox').checked = savedSettings.useSystemFont;
+        document.getElementById('gameOverEnabledCheckbox').checked = savedSettings.gameOverEnabled;
 
         applyFruitSpawnDelay(savedSettings.fruitSpawnDelay);
         applySystemFontSetting(savedSettings.useSystemFont);
         applySkin(savedSettings.selectedSkin);
+        applyGameOver(savedSettings.gameOverEnabled);
     }
 
     scrollOnMobile();
