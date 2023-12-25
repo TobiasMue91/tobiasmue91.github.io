@@ -29,7 +29,7 @@ Send the following request to DALL-E:
 ```json
 {
   "prompt": "Big plump orange.",
-  "size": "2160×1440",
+  "size": "1792x1024",
   "n": 1
 }
 ```
