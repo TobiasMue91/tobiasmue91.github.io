@@ -22,14 +22,14 @@ if __name__ == "__main__":
     # Set up headless browser and take a screenshot
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    driver = webdriver.Chrome(executable_path=ChromeDriverManager().install(), options=chrome_options)
+    driver = webdriver.Chrome(options=chrome_options)
     driver.set_window_size(800, 800)
     driver.get(f"http://localhost:80/{file_path}")
     driver.save_screenshot(str(screenshot_file))
 
     # resize and save the screenshot
     image = Image.open(screenshot_file)
-    resized_image = image.resize((260, 260), Image.ANTIALIAS)
+    resized_image = image.resize((260, 260), Image.LANCZOS)
     resized_image.save(screenshot_file)
 
     # Print the dynamic HTML block
