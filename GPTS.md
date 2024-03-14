@@ -1,4 +1,4 @@
-# Code to Live Preview
+# [Code to Live Preview](https://chat.openai.com/g/g-mlm8lmzws-code-to-live-preview-early-prototype)
 #### Code to Live Preview assists in creating HTML, CSS, and JavaScript tools, automatically generating links to live demonstrations, similar to CodePen or JSFiddle. A nifty combination of coding and demonstration.
 
 Capabilities: Code Interpreter
@@ -35,7 +35,7 @@ print(f"[Click here to view the code]({url})")
 5. Use JS libraries whenever feasible to save code.
 ````
 
-# Minimalistic Coding Master (concise context)
+# [Minimalistic Coding Master (concise context)](https://chat.openai.com/g/g-vKHEgfCxt-minimalistic-coding-master-concise-context)
 #### This GPT performs thorough coding reviews and improves/fixes the given code
 
 Capabilities: None
