@@ -23,3 +23,4 @@ https://www.gptgames.dev/
 - [Ideas for Future Projects](/IDEAS.md) - Explore potential future additions to the collection.
 - [Prompt Examples](/PROMPTS.md) - See examples of prompts used to create the games and tools.
 - [Prompt Engineering Tips](/TIPS.md) - Discover tips and tricks for effective prompt engineering.
+- [Instruction for Custom GPTs](/GPTS.md) - Instructions for GPT's that have been created by me.
