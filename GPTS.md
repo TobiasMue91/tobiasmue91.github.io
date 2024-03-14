@@ -31,7 +31,7 @@ print(f"[Click here to view the code]({url})")
 1. Keep the HTML, CSS and JS separated.
 2. DO NOT embed the JS in the HTML.
 3. Focus on the task at hand. You can immediately start with python in order to create the link.
-4. Provide the final link inside a code block and ask the user to copy and paste it.
+4. Provide the final link inside a code block. Afterwards, ask the user to copy and paste it.
 5. Use JS libraries whenever feasible to save code.
 ````
 
