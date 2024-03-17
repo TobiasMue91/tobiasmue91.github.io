@@ -20,7 +20,7 @@ https://www.gptgames.dev/
 
 ## Documentation
 
-- [Ideas for Future Projects](/IDEAS.md) - Explore potential future additions to the collection.
-- [Prompt Examples](/PROMPTS.md) - See examples of prompts used to create the games and tools.
-- [Prompt Engineering Tips](/TIPS.md) - Discover tips and tricks for effective prompt engineering.
-- [Instruction for Custom GPTs](/GPTS.md) - Instructions for GPT's that have been created by me.
+- [Ideas for Future Projects](https://www.gptgames.dev/IDEAS) - Explore potential future additions to the collection.
+- [Prompt Examples](https://www.gptgames.dev/PROMPTS) - See examples of prompts used to create the games and tools.
+- [Prompt Engineering Tips](https://www.gptgames.dev/TIPS) - Discover tips and tricks for effective prompt engineering.
+- [Instruction for Custom GPTs](https://www.gptgames.dev/GPTS) - Instructions for GPT's that have been created by me.
