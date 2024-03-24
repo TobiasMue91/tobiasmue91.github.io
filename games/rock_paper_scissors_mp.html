@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Play Rock Paper Scissors online with your friends!">
+    <meta name="keywords" content="Rock Paper Scissors, Multiplayer, Online Game">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✊</text></svg>">
+    <title>Rock Paper Scissors Multiplayer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .choices {
+            display: flex;
+            gap: 20px;
+            font-size: 60px;
+        }
+
+        .choice {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .choice:hover {
+            transform: scale(1.1);
+        }
+
+        #result {
+            font-size: 42px;
+        }
+
+        .selected {
+            border: 2px solid #4CAF50;
+            box-shadow: 0 0 10px #4CAF50;
+            border-radius: 50%;
+            padding: 5px;
+        }
+
+        #share-url:focus {
+            outline: none;
+        }
+
+        #share-url {
+            width: 200px;
+        }
+
+        #game-info, #result {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        input[type="text"] {
+            text-align: center;
+            padding: 10px;
+            margin-top: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 80%;
+            max-width: 300px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 2em;
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <h1>Rock Paper Scissors</h1>
+    <div class="choices">
+        <span title="Rock" class="choice" data-choice="rock">🪨</span>
+        <span title="Paper" class="choice" data-choice="paper">📃</span>
+        <span title="Scissors" class="choice" data-choice="scissors">✂️</span>
+    </div>
+    <div id="game-info">Creating game...</div>
+    <input type="text" id="share-url" class="hidden" readonly>
+    <div id="your-choice" class="hidden"></div>
+    <div id="result" class="hidden"></div>
+</div>
+
+<script type="module">
+    import {app} from '../firebase.js';
+
+    import {
+        getDatabase,
+        ref,
+        set,
+        get,
+        onValue,
+        child,
+        onDisconnect,
+        update
+    } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js";
+
+    const db = getDatabase(app);
+    const hash = window.location.hash.substr(1);
+    const gameId = hash || Math.random().toString(36).substr(2, 5);
+    const isNewGame = hash === '';
+    const gameRef = ref(db, `games/${gameId}`);
+    let isPlayerTwo = !isNewGame;
+    let playerChoice = '';
+    let hasChosen = false;
+
+    if (isNewGame) {
+        const shareUrl = `${window.location.href}#${gameId}`;
+        document.getElementById('share-url').classList.remove('hidden');
+        document.getElementById('share-url').value = shareUrl;
+        document.getElementById('game-info').textContent = 'Share this URL with a friend:';
+    } else {
+        document.getElementById('game-info').textContent = 'Make your choice.';
+    }
+
+    function displayResult(player1Choice, player2Choice) {
+        debugger;
+        const choicesMap = {rock: '🪨', paper: '📃', scissors: '✂️'};
+        const resultElement = document.getElementById('result');
+        const player1Emoji = choicesMap[player1Choice];
+        const player2Emoji = choicesMap[player2Choice];
+        let winnerText = '';
+
+        if (player1Choice === player2Choice) {
+            winnerText = "It's a tie!";
+        } else {
+            const winnerIsPlayerOne = (player1Choice === 'rock' && player2Choice === 'scissors') ||
+                (player1Choice === 'scissors' && player2Choice === 'paper') ||
+                (player1Choice === 'paper' && player2Choice === 'rock');
+            winnerText = winnerIsPlayerOne ? 'Player 1 wins!' : 'Player 2 wins!';
+        }
+
+        resultElement.innerHTML = `<div>${player1Emoji} vs ${player2Emoji}</div><div>${winnerText}</div>`;
+        document.querySelector('.choices').classList.add('hidden');
+        document.getElementById('share-url').classList.add('hidden');
+        resultElement.classList.remove('hidden');
+    }
+
+    function initOrUpdateGame(choice) {
+        if (hasChosen) {
+            alert('You have already made your choice!');
+            return;
+        }
+        hasChosen = true;
+        document.getElementById('game-info').textContent = 'Choice submitted! Please wait for the other player.';
+        playerChoice = choice; // Store player's choice for later
+        document.getElementById('your-choice').textContent = `Your choice: ${choice}`;
+        document.getElementById('your-choice').classList.remove('hidden');
+        get(gameRef).then((snapshot) => {
+            if (!snapshot.exists()) {
+                set(gameRef, {
+                    player1Choice: isNewGame ? choice : null,
+                    player2Choice: isPlayerTwo ? choice : null
+                });
+            } else {
+                update(gameRef, isPlayerTwo ? {player2Choice: choice} : {player1Choice: choice});
+            }
+        });
+    }
+
+    onValue(gameRef, (snapshot) => {
+        const game = snapshot.val();
+        if (!game) return;
+        const {player1Choice, player2Choice} = game;
+        if (player1Choice && player2Choice) {
+            // Both players have made their choices
+            if (player1Choice === player2Choice) {
+                document.getElementById('result').textContent = 'It\'s a tie!';
+            } else if (
+                (player1Choice === 'rock' && player2Choice === 'scissors') ||
+                (player1Choice === 'scissors' && player2Choice === 'paper') ||
+                (player1Choice === 'paper' && player2Choice === 'rock')
+            ) {
+                document.getElementById('result').textContent = isPlayerTwo ? 'Player 1 wins!' : 'You win!';
+            } else {
+                document.getElementById('result').textContent = isPlayerTwo ? 'You win!' : 'Player 2 wins!';
+            }
+            displayResult(player1Choice, player2Choice); // Show both players' choices
+        }
+    });
+
+    document.querySelectorAll('.choice').forEach(element => {
+        element.addEventListener('click', (event) => {
+            event.target.classList.add('selected');
+            const choice = event.target.getAttribute('data-choice');
+            initOrUpdateGame(choice);
+        });
+    });
+
+    document.getElementById('share-url').onclick = function () {
+        if (!this.value) return;
+        navigator.clipboard.writeText(this.value).then(() => {
+            alert('Link copied to clipboard!');
+        });
+    };
+</script>
+</body>
+</html>
