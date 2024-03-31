@@ -13,6 +13,7 @@
 - [Prompt engineering techniques by Microsoft](https://learn.microsoft.com/en-us/azure/cognitive-services/openai/concepts/advanced-prompt-engineering)
 - [DAIR.AI Prompt Engineering Guide](https://github.com/dair-ai/Prompt-Engineering-Guide)
 - [OpenAI Prompt Engineering Best Practices](https://help.openai.com/en/articles/6654000-best-practices-for-prompt-engineering-with-openai-api)
+- [Claude Prompt Engineering Tips](https://www.vellum.ai/blog/prompt-engineering-tips-for-claude)
 
 # Formatting Outputs
 - use markdown to produce structure output (tables, list, images, links, text formatting etc. pp)
