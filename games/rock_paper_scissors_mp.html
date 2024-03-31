@@ -234,31 +234,25 @@
     } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js";
 
     const db = getDatabase(app);
-    const hash = window.location.hash.substr(1);
-    const gameId = hash || Math.random().toString(36).substr(2, 9);
-    const isNewGame = hash === '';
+    const gameIdFromUrl = window.location.hash.substr(1);
+    const gameId = gameIdFromUrl || generateGameId();
+    const isNewGame = gameIdFromUrl === '';
     const gameRef = ref(db, `games/${gameId}`);
     const scoresRef = ref(db, `scores/${gameId}`);
     let isPlayerTwo = !isNewGame;
-    let playerChoice = '';
     let hasChosen = false;
     let playerScore = 0;
     let opponentScore = 0;
 
-    // Load scores from Firebase
     onValue(scoresRef, (snapshot) => {
-        const scores = snapshot.val() || {player1: 0, player2: 0};
-        playerScore = isPlayerTwo ? scores.player2 : scores.player1;
-        opponentScore = isPlayerTwo ? scores.player1 : scores.player2;
+        const {player1 = 0, player2 = 0} = snapshot.val() || {};
+        [playerScore, opponentScore] = isPlayerTwo ? [player2, player1] : [player1, player2];
         document.getElementById('player-score').textContent = playerScore;
         document.getElementById('opponent-score').textContent = opponentScore;
     });
 
     if (isNewGame) {
-        const shareUrl = `${window.location.href}#${gameId}`;
-        document.getElementById('share-url').classList.remove('hidden');
-        document.getElementById('share-url').value = shareUrl;
-        document.getElementById('game-info').textContent = 'Share this URL with a friend:';
+        showShareUrl();
     } else {
         document.getElementById('game-info').textContent = 'Make your choice.';
     }
@@ -266,23 +260,19 @@
     function displayResult(player1Choice, player2Choice, result) {
         const choicesMap = {rock: '🪨', paper: '📃', scissors: '✂️'};
         const resultElement = document.getElementById('result');
-        const player1Emoji = choicesMap[player1Choice];
-        const player2Emoji = choicesMap[player2Choice];
-
-        let winnerText;
-        if (result === 'tie') {
-            winnerText = "It's a tie!";
-        } else {
-            winnerText = result === 'player1' ? `${isPlayerTwo ? 'Opponent wins' : 'You win'}!` : `${isPlayerTwo ? 'You win' : 'Opponent wins'}!`;
-        }
+        const [player1Emoji, player2Emoji] = [choicesMap[player1Choice], choicesMap[player2Choice]];
+        const winnerText = result === 'tie'
+            ? "It's a tie!"
+            : result === 'player1'
+                ? `${isPlayerTwo ? 'Opponent wins' : 'You win'}!`
+                : `${isPlayerTwo ? 'You win' : 'Opponent wins'}!`;
 
         resultElement.innerHTML = `<div>${player1Emoji} vs ${player2Emoji}</div><div>${winnerText}</div>`;
-        document.querySelector('.choices').classList.add('hidden');
-        document.getElementById('share-url').classList.add('hidden');
-        resultElement.classList.remove('hidden');
-
+        toggleElementVisibility('.choices', false);
+        toggleElementVisibility('#share-url', false);
+        toggleElementVisibility('#result', true);
         document.getElementById('modal-result').textContent = winnerText;
-        openModal();
+        modal.open();
     }
 
     function initOrUpdateGame(choice) {
@@ -292,141 +282,124 @@
         }
         hasChosen = true;
         document.getElementById('game-info').textContent = 'Choice submitted! Please wait for the other player.';
-        playerChoice = choice; // Store player's choice for later
         document.getElementById('your-choice').textContent = `Your choice: ${choice}`;
-        document.getElementById('your-choice').classList.remove('hidden');
+        toggleElementVisibility('#your-choice', true);
+
         return get(gameRef).then((snapshot) => {
-            if (!snapshot.exists()) {
-                return set(gameRef, {
-                    player1Choice: isNewGame ? choice : null,
-                    player2Choice: isPlayerTwo ? choice : null
-                });
-            } else {
-                return update(gameRef, isPlayerTwo ? {player2Choice: choice} : {player1Choice: choice});
-            }
+            const updates = {
+                player1Choice: isNewGame ? choice : snapshot.val()?.player1Choice || null,
+                player2Choice: isPlayerTwo ? choice : snapshot.val()?.player2Choice || null
+            };
+            return snapshot.exists() ? update(gameRef, updates) : set(gameRef, updates);
         });
     }
 
-    let processGameUpdate = (player1Choice, player2Choice) => {
-        if (player1Choice && player2Choice) {
-            // Both players have made their choices
-            let result;
-            if (player1Choice === player2Choice) {
-                result = 'tie';
-            } else if (
-                (player1Choice === 'rock' && player2Choice === 'scissors') ||
-                (player1Choice === 'scissors' && player2Choice === 'paper') ||
-                (player1Choice === 'paper' && player2Choice === 'rock')
-            ) {
-                result = 'player1';
-            } else {
-                result = 'player2';
-            }
+    function processGameUpdate(player1Choice, player2Choice) {
+        if (!player1Choice || !player2Choice) return;
 
-            if (result !== 'tie') {
-                if (!isPlayerTwo) {
-                    if (result === 'player1') {
-                        playerScore++;
-                    } else {
-                        opponentScore++;
-                    }
-                    // Update scores in Firebase
-                    const updatedScores = {
-                        player1: playerScore,
-                        player2: opponentScore
-                    };
-                    set(scoresRef, updatedScores);
-                }
-            }
-
-            displayResult(player1Choice, player2Choice, result);
+        const result = getGameResult(player1Choice, player2Choice);
+        if (result !== 'tie' && !isPlayerTwo) {
+            [playerScore, opponentScore] = result === 'player1'
+                ? [playerScore + 1, opponentScore]
+                : [playerScore, opponentScore + 1];
+            updateScores(playerScore, opponentScore);
         }
-    };
+        displayResult(player1Choice, player2Choice, result);
+    }
 
     onValue(ref(db, `games/${gameId}`), (snapshot) => {
-        const game = snapshot.val();
-        if (game) {
-            const {player1Choice, player2Choice} = game;
-            processGameUpdate(player1Choice, player2Choice);
-        }
+        const {player1Choice, player2Choice} = snapshot.val() || {};
+        processGameUpdate(player1Choice, player2Choice);
     });
 
-    document.querySelectorAll('.choice').forEach(element => {
-        element.addEventListener('click', (event) => {
-            event.target.classList.add('selected');
-            const choice = event.target.getAttribute('data-choice');
-            initOrUpdateGame(choice);
-        });
+    document.querySelector('.choices').addEventListener('click', (event) => {
+        if (!event.target.classList.contains('choice')) return;
+        event.target.classList.add('selected');
+        const choice = event.target.dataset.choice;
+        initOrUpdateGame(choice);
     });
 
-    document.getElementById('share-url').onclick = function () {
+    document.getElementById('share-url').addEventListener('click', function() {
         if (!this.value) return;
         navigator.clipboard.writeText(this.value).then(() => {
             alert('Link copied to clipboard!');
         });
-    };
+    });
 
-    // Modal functions
-    const modal = document.getElementById('result-modal');
-    const closeBtn = document.getElementsByClassName('close-btn')[0];
-    const playAgainBtn = document.getElementById('play-again-btn');
-    const resetBtn = document.getElementById('reset-btn');
-
-    function openModal() {
-        modal.style.display = 'block';
-    }
-
-    function closeModal() {
-        modal.style.display = 'none';
-    }
-
-    closeBtn.onclick = closeModal;
-
-    window.onclick = function (event) {
-        if (event.target === modal) {
-            closeModal();
+    const modal = {
+        element: document.getElementById('result-modal'),
+        open() {
+            this.element.style.display = 'block';
+        },
+        close() {
+            this.element.style.display = 'none';
         }
     };
 
-    playAgainBtn.onclick = function () {
-        closeModal();
+    document.getElementsByClassName('close-btn')[0].addEventListener('click', () => modal.close());
+    document.getElementById('play-again-btn').addEventListener('click', () => {
+        modal.close();
         resetGame();
-    };
-
-    resetBtn.onclick = function () {
-        closeModal();
+    });
+    document.getElementById('reset-btn').addEventListener('click', () => {
+        modal.close();
         resetGame(true);
-    };
+    });
+
+    window.addEventListener('click', (event) => {
+        if (event.target === modal.element) modal.close();
+    });
 
     function resetGame(isNewGame = false) {
-        set(gameRef, {
-            player1Choice: null,
-            player2Choice: null
-        });
+        set(gameRef, {player1Choice: null, player2Choice: null});
         if (isNewGame) {
-            set(scoresRef, {
-                player1: 0,
-                player2: 0
-            });
+            updateScores(0, 0);
             isPlayerTwo = false;
         }
         document.getElementById('game-info').textContent = isNewGame ? 'Creating game...' : 'Make your choice.';
-        document.querySelector('.choices').classList.remove('hidden');
-        document.getElementById('result').classList.add('hidden');
-        document.getElementById('your-choice').classList.add('hidden');
-        document.querySelectorAll('.choice').forEach(element => {
-            element.classList.remove('selected');
-        });
+        toggleElementVisibility('.choices', true);
+        toggleElementVisibility('#result', false);
+        toggleElementVisibility('#your-choice', false);
+        document.querySelectorAll('.choice').forEach(element => element.classList.remove('selected'));
         hasChosen = false;
-        playerChoice = '';
+
         if (isNewGame) {
-            const newGameId = Math.random().toString(36).substr(2, 9);
-            const newShareUrl = `${window.location.origin}${window.location.pathname}#${newGameId}`;
+            const newGameId = generateGameId();
             window.location.hash = newGameId;
-            document.getElementById('share-url').value = newShareUrl;
-            document.getElementById('share-url').classList.remove('hidden');
-            document.getElementById('game-info').textContent = 'Share this URL with a friend:';
+            showShareUrl();
         }
+    }
+
+    // Helper functions
+    function generateGameId() {
+        return Math.random().toString(36).substr(2, 9);
+    }
+
+    function showShareUrl() {
+        const shareUrl = `${window.location.origin}${window.location.pathname}#${gameId}`;
+        document.getElementById('share-url').value = shareUrl;
+        toggleElementVisibility('#share-url', true);
+        document.getElementById('game-info').textContent = 'Share this URL with a friend:';
+    }
+
+    function toggleElementVisibility(selector, isVisible) {
+        document.querySelector(selector).style.display = isVisible ? 'block' : 'none';
+    }
+
+    function getGameResult(player1Choice, player2Choice) {
+        if (player1Choice === player2Choice) return 'tie';
+        const winningCombos = [
+            ['rock', 'scissors'],
+            ['scissors', 'paper'],
+            ['paper', 'rock']
+        ];
+        return winningCombos.some(([a, b]) => a === player1Choice && b === player2Choice)
+            ? 'player1'
+            : 'player2';
+    }
+
+    function updateScores(player1Score, player2Score) {
+        set(scoresRef, {player1: player1Score, player2: player2Score});
     }
 </script>
 </body>
