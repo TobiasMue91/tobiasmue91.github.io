@@ -6,11 +6,16 @@ $(function () {
     var mashedButton = '';
     var gameStarted = false;
     var cooldownActive = false;
+    var mousePressed = false;
+    var keyPressed = false;
 
     $("#mashing-button-area").on('mousedown', function () {
         if (!gameStarted && !cooldownActive) {
             startGame();
-        } else if (gameStarted) {
+        }
+        mousePressed = true;
+    }).on('mouseup', function () {
+        if (gameStarted && mousePressed) {
             if (mashedButton === '') {
                 mashedButton = 'Mouse Click';
             }
@@ -19,12 +24,16 @@ $(function () {
                 $("#mashing-counter").text(totalPresses);
             }
         }
+        mousePressed = false;
     });
 
     $(document).on('keydown', function (e) {
         if (!gameStarted && !cooldownActive) {
             startGame();
-        } else if (gameStarted) {
+        }
+        keyPressed = true;
+    }).on('keyup', function (e) {
+        if (gameStarted && keyPressed) {
             if (mashedButton === '') {
                 mashedButton = e.key;
             }
@@ -33,6 +42,7 @@ $(function () {
                 $("#mashing-counter").text(totalPresses);
             }
         }
+        keyPressed = false;
     });
 
     function startGame() {
