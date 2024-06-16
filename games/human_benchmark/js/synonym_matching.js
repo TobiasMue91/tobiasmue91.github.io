@@ -83,7 +83,7 @@ $(function () {
 
     function startGame() {
         score = 0;
-        timeLeft = 60;
+        timeLeft = 30;
         startTime = new Date();
         $('#score').text(score);
         $('#game-area').show();
