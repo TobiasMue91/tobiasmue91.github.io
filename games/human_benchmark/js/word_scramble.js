@@ -9,7 +9,7 @@ const words = [
 let currentWord = '';
 let previousWord = '';
 let timer;
-let timeLeft = 60;
+let timeLeft = 30;
 let score = 0;
 
 function scrambleWord(word) {
