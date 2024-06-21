@@ -27,6 +27,6 @@ $(function () {
         let time = `${endTime - startTime} ms`;
         $("#reaction-time").text(time);
         $("#start-reaction-time-test").show();
-        saveScore('Reaction Time', time);
+        saveScore('Reaction Time', time, true);
     });
 });
