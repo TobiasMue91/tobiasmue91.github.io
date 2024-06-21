@@ -57,8 +57,10 @@ $(function () {
 
         currentCount = Math.floor(Math.random() * 16) + 5;  // Random count between 5 and 20
         let placedCount = 0;
+        let attempts = 0;
+        const maxAttempts = 100;  // Prevent infinite loop
 
-        for (let i = 0; i < 40 && placedCount < currentCount; i++) {
+        while (placedCount < currentCount && attempts < maxAttempts) {
             const emoji = currentEmojis[Math.floor(Math.random() * 3)];
             const size = Math.random() * 20 + 20;  // Random size between 20px and 40px
             const left = Math.random() * (displayWidth - size);
@@ -93,6 +95,43 @@ $(function () {
                     placedCount++;
                 }
             }
+
+            attempts++;
+        }
+
+        // Fill remaining space with non-target emojis
+        while (attempts < maxAttempts) {
+            const emoji = currentEmojis.find(e => e !== targetEmoji);
+            const size = Math.random() * 20 + 20;
+            const left = Math.random() * (displayWidth - size);
+            const top = Math.random() * (displayHeight - size);
+
+            let overlapping = false;
+            $("#emoji-display span").each(function() {
+                const $existing = $(this);
+                const existingLeft = parseFloat($existing.css('left'));
+                const existingTop = parseFloat($existing.css('top'));
+                const existingSize = parseFloat($existing.css('font-size'));
+
+                if (left < existingLeft + existingSize &&
+                    left + size > existingLeft &&
+                    top < existingTop + existingSize &&
+                    top + size > existingTop) {
+                    overlapping = true;
+                    return false;
+                }
+            });
+
+            if (!overlapping) {
+                $('<span>').text(emoji).css({
+                    position: 'absolute',
+                    fontSize: `${size}px`,
+                    left: `${left}px`,
+                    top: `${top}px`
+                }).appendTo($display);
+            }
+
+            attempts++;
         }
 
         $("#guess-input").show();
