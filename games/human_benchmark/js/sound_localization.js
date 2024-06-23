@@ -4,7 +4,7 @@ $(function () {
     let buffer;
     let currentPosition;
     let testCount = 0;
-    const totalTests = 10;
+    const totalTests = 5;
     let errors = [];
     let timerInterval;
 
@@ -27,7 +27,7 @@ $(function () {
         panner.connect(audioContext.destination);
 
         source.start();
-        source.stop(audioContext.currentTime + 1); // Play sound for 0.5 seconds
+        source.stop(audioContext.currentTime + 1);
     }
 
     $("#start-sound-test").click(function () {
