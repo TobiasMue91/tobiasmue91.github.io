@@ -27,6 +27,7 @@ $(function () {
         panner.connect(audioContext.destination);
 
         source.start();
+        source.stop(audioContext.currentTime + 1); // Play sound for 0.5 seconds
     }
 
     $("#start-sound-test").click(function () {
@@ -43,9 +44,15 @@ $(function () {
         updatePercentageDisplay($(this).val());
     });
 
+    $("#sound-slider").on('mouseup touchend', function() {
+        const sliderValue = $(this).val();
+        const position = (sliderValue / 1000) * 2 - 1; // Convert to -1 to 1 range
+        playSound(position);
+    });
+
     function startTimer(duration) {
         let timer = duration;
-        $("#next-sound-timer").removeClass('hidden').text(`Next sound in: ${timer} seconds`);
+        $("#next-sound-timer").removeClass('hidden').html(`Next sound in: <span class="text-2xl">${timer} seconds</span>`);
 
         timerInterval = setInterval(function() {
             timer--;
@@ -53,7 +60,7 @@ $(function () {
                 clearInterval(timerInterval);
                 $("#next-sound-timer").addClass('hidden');
             } else {
-                $("#next-sound-timer").text(`Next sound in: ${timer} seconds`);
+                $("#next-sound-timer").html(`Next sound in: <span class="text-2xl">${timer} seconds</span>`);
             }
         }, 1000);
     }
