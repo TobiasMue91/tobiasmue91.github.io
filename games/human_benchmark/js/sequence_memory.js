@@ -14,22 +14,25 @@ $(function () {
 
             if (index === sequence[round]) {
                 round++;
-                this.classList.add('bg-green-500');
-                setTimeout(() => this.classList.remove('bg-green-500'), 200);
+                flashSquare(this, 'bg-green-500');
 
                 if (round === sequence.length) {
                     playerTurn = false;
                     points++;
-                    pointsDisplay.innerHTML = `Points: ${points}`;
+                    pointsDisplay.textContent = `Points: ${points}`;
                     setTimeout(nextRound, 1000);
                 }
             } else {
-                this.classList.replace('bg-green-500', 'bg-red-500');
-                setTimeout(() => this.classList.replace('bg-red-500', 'bg-green-500'), 500);
+                flashSquare(this, 'bg-red-500');
                 gameOver();
             }
         });
     });
+
+    function flashSquare(square, color) {
+        square.classList.add(color);
+        setTimeout(() => square.classList.remove(color), 300);
+    }
 
     function nextRound() {
         round = 0;
@@ -41,17 +44,17 @@ $(function () {
     function playSequence() {
         sequence.forEach((index, i) => {
             setTimeout(() => {
-                squares[index].classList.replace('bg-gray-200', 'bg-green-500');
-                setTimeout(() => squares[index].classList.replace('bg-green-500', 'bg-gray-200'), 500);
-            }, i * 1000);
+                flashSquare(squares[index], 'bg-blue-500');
+            }, i * 600 + 200);
         });
 
         setTimeout(() => {
             playerTurn = true;
-        }, sequence.length * 1000);
+        }, sequence.length * 600 + 200);
     }
 
     function gameOver() {
+        playerTurn = false;
         alert(`Game Over. Your score is: ${points}`);
         saveScore('Sequence Memory', points);
         startButton.classList.remove('hidden');
@@ -61,7 +64,7 @@ $(function () {
     startButton.addEventListener("click", function () {
         this.classList.add('hidden');
         points = 0;
-        pointsDisplay.innerHTML = `Points: ${points}`;
+        pointsDisplay.textContent = `Points: ${points}`;
         sequence = [];
         nextRound();
     });
