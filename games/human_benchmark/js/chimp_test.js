@@ -45,7 +45,7 @@ $(function () {
             for (var j = 0; j < columns; j++) {
                 var value = grid[i][j];
                 if (value > 0) {
-                    $("#chimp-test .chimp-grid").append(`<div class="chimp-button waves-effect waves-light btn">${value}</div>`);
+                    $("#chimp-test .chimp-grid").append(`<div class="chimp-button bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer">${value}</div>`);
                 } else {
                     $("#chimp-test .chimp-grid").append(`<div class="chimp-button empty"></div>`);
                 }
@@ -55,7 +55,7 @@ $(function () {
     }
 
     function hideNumbers() {
-        $('.chimp-grid').find('.chimp-button.waves-effect').each(function () {
+        $('.chimp-grid').find('.chimp-button:not(.empty)').each(function () {
             $(this).addClass('covered');
         })
     }
@@ -66,17 +66,20 @@ $(function () {
         const $clickedButton = $(event.target);
         var clickedValue = parseInt($clickedButton.text());
         $clickedButton.html('');
-        $clickedButton.removeClass(['waves-effect', 'waves-light', 'btn']);
+        $clickedButton.removeClass(['bg-blue-500', 'hover:bg-blue-700', 'text-white', 'font-bold', 'py-2', 'px-4', 'rounded', 'cursor-pointer', 'covered']);
         $clickedButton.addClass('empty');
 
         if (clickedValue !== expectedClickedValue) {
             saveScore('Chimp Test', level);
-            alert(`You lost. You have reached level ${level}`);
-            $("#start-chimp-test").show();
-            $("#chimp-test .chimp-button-container").show();
-            $("#chimp-test .chimp-grid").html('');
-            level = 1;
-            expectedClickedValue = 1;
+            $("#chimp-test .chimp-button.covered").each((index, button) => button.classList.remove('covered'));
+            setTimeout(() => {
+                alert(`You lost. You have reached level ${level}`);
+                $("#start-chimp-test").show();
+                $("#chimp-test .chimp-button-container").show();
+                $("#chimp-test .chimp-grid").html('');
+                level = 1;
+                expectedClickedValue = 1;
+            }, 0);
             return;
         } else {
             expectedClickedValue++;
