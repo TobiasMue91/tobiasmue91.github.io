@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📷</text></svg>">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta name="description"
+          content="Analyze EXIF data of your images with this advanced, user-friendly Image EXIF Data Viewer tool.">
+    <title>Advanced Image EXIF Data Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+<div class="container mx-auto px-4 py-8"><h1 class="text-3xl font-bold text-center mb-8">Advanced Image EXIF Data
+    Viewer</h1>
+    <div class="mb-6 flex justify-center"><input type="file" id="imageInput" accept="image/*" class="hidden"
+                                                 multiple><label for="imageInput"
+                                                                 class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded cursor-pointer transition duration-300 ease-in-out transform hover:scale-105">Select
+        Image(s)</label></div>
+    <div id="dragDropArea"
+         class="border-4 border-dashed border-gray-300 rounded-lg p-8 mb-6 text-center cursor-pointer hover:border-blue-500 transition duration-300">
+        <p class="text-gray-500">Or drag and drop images here</p></div>
+    <div id="loadingIndicator" class="hidden">
+        <div class="flex justify-center items-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        </div>
+    </div>
+    <div id="imageContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6"></div>
+    <div id="exifData" class="bg-white p-6 rounded shadow-lg mb-6 hidden"></div>
+    <div id="chartContainer" class="bg-white p-6 rounded shadow-lg mb-6 hidden">
+        <canvas id="exifChart"></canvas>
+    </div>
+    <div id="mapContainer" class="bg-white p-6 rounded shadow-lg mb-6 hidden">
+        <div id="map" style="height: 400px;"></div>
+    </div>
+</div>
+<script>const imageInput = document.getElementById('imageInput');
+const dragDropArea = document.getElementById('dragDropArea');
+const loadingIndicator = document.getElementById('loadingIndicator');
+const imageContainer = document.getElementById('imageContainer');
+const exifDataDiv = document.getElementById('exifData');
+const chartContainer = document.getElementById('chartContainer');
+const mapContainer = document.getElementById('mapContainer');
+let chart;
+
+function handleFiles(files) {
+    loadingIndicator.classList.remove('hidden');
+    imageContainer.innerHTML = '';
+    exifDataDiv.innerHTML = '';
+    exifDataDiv.classList.add('hidden');
+    chartContainer.classList.add('hidden');
+    mapContainer.classList.add('hidden');
+    const exifDataArray = [];
+    let processedFiles = 0;
+    for (const file of files) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = document.createElement('img');
+            img.src = e.target.result;
+            img.classList.add('w-full', 'h-auto', 'rounded', 'shadow-lg', 'cursor-pointer', 'transition', 'duration-300', 'ease-in-out', 'transform', 'hover:scale-105');
+            img.onclick = () => showExifData(file);
+            imageContainer.appendChild(img);
+            EXIF.getData(file, function () {
+                const exifData = EXIF.getAllTags(this);
+                exifDataArray.push(exifData);
+                processedFiles++;
+                if (processedFiles === files.length) {
+                    analyzeExifData(exifDataArray);
+                    loadingIndicator.classList.add('hidden');
+                }
+            });
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+imageInput.addEventListener('change', (e) => handleFiles(e.target.files));
+dragDropArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropArea.classList.add('border-blue-500');
+});
+dragDropArea.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropArea.classList.remove('border-blue-500');
+});
+dragDropArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropArea.classList.remove('border-blue-500');
+    const files = e.dataTransfer.files;
+    handleFiles(files);
+});
+
+function showExifData(file) {
+    EXIF.getData(file, function () {
+        const exifData = EXIF.getAllTags(this);
+        let html = '<h2 class="text-2xl font-semibold mb-4">EXIF Data</h2><div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+        for (const tag in exifData) {
+            html += `<div class="bg-gray-100 p-2 rounded"><span class="font-semibold">${tag}:</span> ${exifData[tag]}</div>`;
+        }
+        html += '</div>';
+        exifDataDiv.innerHTML = html;
+        exifDataDiv.classList.remove('hidden');
+        showLocationOnMap(exifData);
+    });
+}
+
+function analyzeExifData(exifDataArray) {
+    const cameraModels = {};
+    const exposureTimes = [];
+    exifDataArray.forEach(exifData => {
+        const model = exifData.Model;
+        if (model) {
+            cameraModels[model] = (cameraModels[model] || 0) + 1;
+        }
+        const exposureTime = exifData.ExposureTime;
+        if (exposureTime) {
+            exposureTimes.push(exposureTime);
+        }
+    });
+    createCameraModelChart(cameraModels);
+    createExposureTimeHistogram(exposureTimes);
+}
+
+function createCameraModelChart(cameraModels) {
+    const ctx = document.getElementById('exifChart').getContext('2d');
+    if (chart) {
+        chart.destroy();
+    }
+    chart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: Object.keys(cameraModels),
+            datasets: [{
+                data: Object.values(cameraModels),
+                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {title: {display: true, text: 'Camera Models Used'}, legend: {position: 'bottom'}}
+        }
+    });
+    chartContainer.classList.remove('hidden');
+}
+
+function createExposureTimeHistogram(exposureTimes) {
+    const ctx = document.getElementById('exifChart').getContext('2d');
+    if (chart) {
+        chart.destroy();
+    }
+    const bins = 10;
+    const minExposure = Math.min(...exposureTimes);
+    const maxExposure = Math.max(...exposureTimes);
+    const binSize = (maxExposure - minExposure) / bins;
+    const histogram = new Array(bins).fill(0);
+    exposureTimes.forEach(time => {
+        const binIndex = Math.min(Math.floor((time - minExposure) / binSize), bins - 1);
+        histogram[binIndex]++;
+    });
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Array.from({length: bins}, (_, i) => `${(minExposure + i * binSize).toFixed(2)}-${(minExposure + (i + 1) * binSize).toFixed(2)}`),
+            datasets: [{label: 'Frequency', data: histogram, backgroundColor: '#36A2EB'}]
+        },
+        options: {responsive: true, plugins: {title: {display: true, text: 'Exposure Time Distribution'}}}
+    });
+    chartContainer.classList.remove('hidden');
+}
+
+function showLocationOnMap(exifData) {
+    if (exifData.GPSLatitude && exifData.GPSLongitude) {
+        const lat = exifData.GPSLatitude[0] + exifData.GPSLatitude[1] / 60 + exifData.GPSLatitude[2] / 3600;
+        const lon = exifData.GPSLongitude[0] + exifData.GPSLongitude[1] / 60 + exifData.GPSLongitude[2] / 3600;
+        mapContainer.classList.remove('hidden');
+        const mapScript = document.createElement('script');
+        mapScript.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyDEikPcNIPeTXdYRLD7gTv0aAX5HHyHpW0&callback=initMap`;
+        mapScript.async = true;
+        document.head.appendChild(mapScript);
+        window.initMap = function () {
+            const map = new google.maps.Map(document.getElementById('map'), {center: {lat, lng: lon}, zoom: 8});
+            new google.maps.Marker({position: {lat, lng: lon}, map: map});
+        };
+    } else {
+        mapContainer.classList.add('hidden');
+    }
+}</script>
+<script src="../sidebar.js"></script>
+</body>
+</html>
