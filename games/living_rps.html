@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Living RPS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
+<div class="w-auto bg-gray-800 p-6 rounded-lg shadow-xl">
+    <div id="playground" class="w-[420px] h-[420px] border border-gray-600 relative overflow-hidden mb-4 rounded-full"></div>
+    <div class="flex justify-between mb-4">
+        <button id="start-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Start</button>
+        <button id="stop-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Stop</button>
+        <button id="reset-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Reset</button>
+    </div>
+    <div id="stats" class="text-lg mb-4 flex justify-center space-x-4"></div>
+    <div class="bg-gray-700 rounded p-4">
+        <h2 class="text-lg font-bold mb-2">Game Options</h2>
+        <div class="mb-4">
+            <label for="entity-count" class="block mb-2">Entity Count: <span id="entity-count-value">100</span></label>
+            <input type="range" min="5" max="500" value="100" class="w-full" id="entity-count">
+        </div>
+        <div class="mb-4">
+            <label for="entity-speed" class="block mb-2">Entity Speed: <span id="entity-speed-value">2</span></label>
+            <input type="range" min="1" max="20" value="2" class="w-full" id="entity-speed">
+        </div>
+        <div>
+            <label for="playground-size" class="block mb-2">Playground Size: <span id="playground-size-value">420</span></label>
+            <input type="range" min="200" max="1000" value="420" class="w-full" id="playground-size">
+        </div>
+    </div>
+</div>
+
+<script>
+    const playground = document.getElementById('playground');
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const statsDiv = document.getElementById('stats');
+    const entityCountSlider = document.getElementById('entity-count');
+    const entityCountValue = document.getElementById('entity-count-value');
+    const entitySpeedSlider = document.getElementById('entity-speed');
+    const entitySpeedValue = document.getElementById('entity-speed-value');
+    const playgroundSizeSlider = document.getElementById('playground-size');
+    const playgroundSizeValue = document.getElementById('playground-size-value');
+
+    const ENTITY_TYPES = ['rock', 'paper', 'scissors'];
+    const ENTITY_SYMBOLS = {
+        rock: '🗿',
+        paper: '📄',
+        scissors: '✂️'
+    };
+
+    let entities = [];
+    let animationId;
+    let lastTime = 0;
+    let entityCount = 100;
+    let speedFactor = 2;
+
+    const ENTITY_SIZE = 20;
+    const CENTER_FORCE = 0.00001;
+    const SAME_TYPE_ATTRACTION = 0.00001;
+    const REPULSION_DISTANCE = ENTITY_SIZE * 1.5;
+    const REPULSION_FORCE = 0.1;
+    let PLAYGROUND_SIZE = 420;
+    let PLAYGROUND_RADIUS = PLAYGROUND_SIZE / 2;
+    let CENTER_X = PLAYGROUND_RADIUS;
+    let CENTER_Y = PLAYGROUND_RADIUS;
+
+    class Entity {
+        constructor(type, x, y) {
+            this.type = type;
+            this.element = document.createElement('div');
+            this.element.classList.add('absolute', 'text-2xl');
+            this.element.textContent = ENTITY_SYMBOLS[type];
+            this.x = x;
+            this.y = y;
+            this.vx = (Math.random() - 0.5) * speedFactor;
+            this.vy = (Math.random() - 0.5) * speedFactor;
+            this.ax = 0;
+            this.ay = 0;
+            playground.appendChild(this.element);
+            this.updatePosition();
+        }
+
+        updatePosition() {
+            this.element.style.left = `${this.x - ENTITY_SIZE / 2}px`;
+            this.element.style.top = `${this.y - ENTITY_SIZE / 2}px`;
+        }
+
+        move(deltaTime) {
+            this.vx += this.ax;
+            this.vy += this.ay;
+            this.vx += (Math.random() - 0.5) * 0.2;
+            this.vy += (Math.random() - 0.5) * 0.2;
+
+            const dx = CENTER_X - this.x;
+            const dy = CENTER_Y - this.y;
+            const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
+            this.vx += dx * CENTER_FORCE * distanceFromCenter;
+            this.vy += dy * CENTER_FORCE * distanceFromCenter;
+
+            this.x += this.vx * deltaTime / 16;
+            this.y += this.vy * deltaTime / 16;
+
+            if (distanceFromCenter > PLAYGROUND_RADIUS - ENTITY_SIZE / 2) {
+                const angle = Math.atan2(dy, dx);
+
+                this.x = CENTER_X + (PLAYGROUND_RADIUS - ENTITY_SIZE / 2 - 1) * Math.cos(angle);
+                this.y = CENTER_Y + (PLAYGROUND_RADIUS - ENTITY_SIZE / 2 - 1) * Math.sin(angle);
+
+                const normalX = Math.cos(angle);
+                const normalY = Math.sin(angle);
+
+                const dotProduct = this.vx * normalX + this.vy * normalY;
+
+                this.vx = this.vx - 2 * dotProduct * normalX;
+                this.vy = this.vy - 2 * dotProduct * normalY;
+
+                if (this.vx * dx + this.vy * dy > 0) {
+                    this.vx = -this.vx;
+                    this.vy = -this.vy;
+                }
+
+                this.vx += (Math.random() - 0.5) * 0.5;
+                this.vy += (Math.random() - 0.5) * 0.5;
+
+                const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                this.vx = (this.vx / speed) * speedFactor;
+                this.vy = (this.vy / speed) * speedFactor;
+            }
+
+            const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+            if (speed > speedFactor) {
+                this.vx = (this.vx / speed) * speedFactor;
+                this.vy = (this.vy / speed) * speedFactor;
+            }
+
+            this.updatePosition();
+            this.ax = 0;
+            this.ay = 0;
+        }
+
+        flock(others) {
+            let avgVx = 0, avgVy = 0;
+            let centerX = 0, centerY = 0;
+            let separationX = 0, separationY = 0;
+            let count = 0;
+
+            others.forEach(other => {
+                if (other !== this) {
+                    const dx = other.x - this.x;
+                    const dy = other.y - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < 70) {
+                        avgVx += other.vx;
+                        avgVy += other.vy;
+                        centerX += other.x;
+                        centerY += other.y;
+                        separationX -= dx / distance;
+                        separationY -= dy / distance;
+                        count++;
+                    }
+
+                    // Apply attraction force for same type entities
+                    if (other.type === this.type) {
+                        this.vx += dx * SAME_TYPE_ATTRACTION;
+                        this.vy += dy * SAME_TYPE_ATTRACTION;
+                    }
+
+                    // Apply repulsion force for close entities
+                    if (distance < REPULSION_DISTANCE) {
+                        const repulsionStrength = (REPULSION_DISTANCE - distance) / REPULSION_DISTANCE;
+                        this.vx -= dx / distance * REPULSION_FORCE * repulsionStrength;
+                        this.vy -= dy / distance * REPULSION_FORCE * repulsionStrength;
+                    }
+                }
+            });
+
+            if (count > 0) {
+                this.ax += (avgVx / count - this.vx) * 0.05;
+                this.ay += (avgVy / count - this.vy) * 0.05;
+                this.ax += (centerX / count - this.x) * 0.0005;
+                this.ay += (centerY / count - this.y) * 0.0005;
+                this.ax += separationX * 0.05;
+                this.ay += separationY * 0.05;
+            }
+        }
+
+        interact(others) {
+            let nearestPrey = null;
+            let nearestPredator = null;
+            let minPreyDist = Infinity;
+            let minPredatorDist = Infinity;
+
+            others.forEach(other => {
+                if (other !== this) {
+                    const dx = other.x - this.x;
+                    const dy = other.y - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < ENTITY_SIZE) {
+                        if (
+                            (this.type === 'rock' && other.type === 'scissors') ||
+                            (this.type === 'paper' && other.type === 'rock') ||
+                            (this.type === 'scissors' && other.type === 'paper')
+                        ) {
+                            other.transform(this.type);
+                        }
+                    } else if (distance < 100) {
+                        if (
+                            (this.type === 'rock' && other.type === 'scissors') ||
+                            (this.type === 'paper' && other.type === 'rock') ||
+                            (this.type === 'scissors' && other.type === 'paper')
+                        ) {
+                            if (distance < minPreyDist) {
+                                minPreyDist = distance;
+                                nearestPrey = other;
+                            }
+                        } else if (
+                            (this.type === 'rock' && other.type === 'paper') ||
+                            (this.type === 'paper' && other.type === 'scissors') ||
+                            (this.type === 'scissors' && other.type === 'rock')
+                        ) {
+                            if (distance < minPredatorDist) {
+                                minPredatorDist = distance;
+                                nearestPredator = other;
+                            }
+                        }
+                    }
+                }
+            });
+
+            const huntStrength = 0.004;
+            const fleeStrength = 0.002;
+
+            if (nearestPrey) {
+                this.ax += (nearestPrey.x - this.x) * huntStrength;
+                this.ay += (nearestPrey.y - this.y) * huntStrength;
+            }
+
+            if (nearestPredator) {
+                this.ax -= (nearestPredator.x - this.x) * fleeStrength;
+                this.ay -= (nearestPredator.y - this.y) * fleeStrength;
+            }
+        }
+
+        transform(newType) {
+            this.type = newType;
+            anime({
+                targets: this.element,
+                scale: [1.5, 1],
+                duration: 300,
+                easing: 'easeOutElastic(1, .5)'
+            });
+            this.element.textContent = ENTITY_SYMBOLS[newType];
+        }
+    }
+
+    function initGame() {
+        entities = [];
+        playground.innerHTML = '';
+        const types = ['rock', 'paper', 'scissors'];
+        let typeIndex = 0;
+        for (let i = 0; i < entityCount; i++) {
+            const type = types[typeIndex];
+            const angle = Math.random() * 2 * Math.PI;
+            const radius = Math.sqrt(Math.random()) * (PLAYGROUND_RADIUS - ENTITY_SIZE / 2);
+            const x = CENTER_X + radius * Math.cos(angle);
+            const y = CENTER_Y + radius * Math.sin(angle);
+            entities.push(new Entity(type, x, y));
+            typeIndex = (typeIndex + 1) % 3;
+        }
+        updatePlaygroundSize();
+    }
+
+    function updateGame(currentTime) {
+        const deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+
+        entities.forEach(entity => {
+            entity.flock(entities);
+            entity.interact(entities);
+        });
+
+        entities.forEach(entity => {
+            entity.move(deltaTime);
+        });
+
+        updateStats();
+
+        if (isGameOver()) {
+            stopGame();
+            startBtn.disabled = false;
+        } else {
+            animationId = requestAnimationFrame(updateGame);
+        }
+    }
+
+    function updateStats() {
+        const stats = entities.reduce((acc, entity) => {
+            acc[entity.type] = (acc[entity.type] || 0) + 1;
+            return acc;
+        }, {});
+
+        statsDiv.innerHTML = ENTITY_TYPES.map(type =>
+            `<span>${ENTITY_SYMBOLS[type]} ${stats[type] || 0}</span>`
+        ).join('');
+    }
+
+    function isGameOver() {
+        return entities.every(entity => entity.type === entities[0].type);
+    }
+
+    function startGame() {
+        if (!animationId) {
+            if (isGameOver()) {
+                initGame();
+            }
+            lastTime = performance.now();
+            animationId = requestAnimationFrame(updateGame);
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+        }
+    }
+
+    function stopGame() {
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+    }
+
+    function resetGame() {
+        stopGame();
+        initGame();
+        updateStats();
+        startBtn.disabled = false;
+    }
+
+    function updatePlaygroundSize() {
+        playground.style.width = `${PLAYGROUND_SIZE}px`;
+        playground.style.height = `${PLAYGROUND_SIZE}px`;
+        const container = playground.parentElement;
+        container.style.width = `${PLAYGROUND_SIZE + 30}px`;
+    }
+
+    startBtn.addEventListener('click', startGame);
+    stopBtn.addEventListener('click', stopGame);
+    resetBtn.addEventListener('click', resetGame);
+
+    entityCountSlider.addEventListener('input', function() {
+        entityCount = parseInt(this.value);
+        entityCountValue.textContent = entityCount;
+        resetGame();
+    });
+
+    entitySpeedSlider.addEventListener('input', function() {
+        speedFactor = parseInt(this.value);
+        entitySpeedValue.textContent = speedFactor;
+        entities.forEach(entity => {
+            const speed = Math.sqrt(entity.vx * entity.vx + entity.vy * entity.vy);
+            entity.vx = (entity.vx / speed) * speedFactor;
+            entity.vy = (entity.vy / speed) * speedFactor;
+        });
+    });
+
+    playgroundSizeSlider.addEventListener('input', function() {
+        PLAYGROUND_SIZE = parseInt(this.value);
+        PLAYGROUND_RADIUS = PLAYGROUND_SIZE / 2;
+        CENTER_X = PLAYGROUND_RADIUS;
+        CENTER_Y = PLAYGROUND_RADIUS;
+        playgroundSizeValue.textContent = PLAYGROUND_SIZE;
+        updatePlaygroundSize();
+        resetGame();
+    });
+
+    initGame();
+    updateStats();
+    updatePlaygroundSize();
+</script>
+</body>
+</html>
