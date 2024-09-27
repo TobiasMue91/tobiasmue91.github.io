@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agar.io Ultimate Edition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>body {
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        background-color: #000;
+        font-family: 'Arial', sans-serif;
+        overflow: hidden
+    }
+
+    #gameContainer {
+        position: relative;
+        width: 100%;
+        height: 100%
+    }
+
+    canvas {
+        position: absolute;
+        top: 0;
+        left: 0
+    }
+
+    #uiLayer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none
+    }
+
+    .screen {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        display: none
+    }
+
+    button {
+        background-color: #4CAF50;
+        border: none;
+        color: white;
+        padding: 15px 32px;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 16px;
+        margin: 4px 2px;
+        cursor: pointer;
+        transition: 0.3s
+    }
+
+    button:hover {
+        background-color: #45a049
+    }
+
+    #minimap {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        width: 150px;
+        height: 150px;
+        border: 2px solid #fff;
+    }
+
+    #chat {
+        position: absolute;
+        left: 10px;
+        bottom: 10px;
+        width: 300px;
+        height: 200px;
+        background-color: rgba(0, 0, 0, 0.5);
+        color: #fff;
+        overflow-y: scroll;
+        padding: 10px
+    }
+
+    #chatInput {
+        position: absolute;
+        left: 10px;
+        bottom: 220px;
+        width: 280px;
+        padding: 5px
+    }</style>
+</head>
+<body>
+<div id="gameContainer">
+    <div id="uiLayer">
+        <div id="startScreen" class="screen"><h1>Agar.io Ultimate Edition</h1><input type="text" id="nameInput"
+                                                                                     placeholder="Dein Name"
+                                                                                     maxlength="15">
+            <button onclick="startGame()">Spiel starten</button>
+            <button onclick="showTutorial()">Tutorial</button>
+            <button onclick="showSettings()">Einstellungen</button>
+        </div>
+        <div id="gameOverScreen" class="screen"><h1>Game Over</h1>
+            <p>Dein Punktestand: <span id="finalScore"></span></p>
+            <p>Überlebenszeit: <span id="survivalTime"></span></p>
+            <button onclick="restartGame()">Erneut spielen</button>
+            <button onclick="showMainMenu()">Hauptmenü</button>
+        </div>
+        <div id="tutorialScreen" class="screen"><h2>Tutorial</h2>
+            <p>1. Bewege dich mit der Maus</p>
+            <p>2. Friss kleinere Spieler und Nahrung</p>
+            <p>3. Sammle Power-Ups für besondere Fähigkeiten</p>
+            <p>4. Drücke Leertaste zum Teilen</p>
+            <p>5. Drücke W zum Auswerfen von Masse</p>
+            <button onclick="closeTutorial()">Verstanden</button>
+        </div>
+        <div id="settingsScreen" class="screen"><h2>Einstellungen</h2><label>Grafikqualität:<select
+                id="graphicsQuality">
+            <option value="low">Niedrig</option>
+            <option value="medium" selected>Mittel</option>
+            <option value="high">Hoch</option>
+        </select></label><br>
+            <button onclick="saveSettings()">Speichern</button>
+        </div>
+        <canvas id="minimap" width="150" height="150"></canvas>
+        <div id="chat"></div>
+        <input type="text" id="chatInput" placeholder="Chatnachricht eingeben..." maxlength="100"></div>
+</div>
+<script>let player;
+let foods = [];
+let enemies = [];
+let powerUps = [];
+let viruses = [];
+let zoom = 1;
+let score = 0;
+let gameState = 'start';
+let gameTime = 0;
+let leaderboard = [];
+let playerName = "Spieler";
+let abilities = {
+    speedBoost: {active: false, duration: 0},
+    shield: {active: false, duration: 0},
+    magnetism: {active: false, duration: 0}
+};
+let particles = [];
+let gameWidth = 4000;
+let gameHeight = 4000;
+let minimapScale;
+let chatMessages = [];
+
+function setup() {
+    let canvas = createCanvas(windowWidth, windowHeight);
+    canvas.parent('gameContainer');
+    minimapScale = 150 / max(gameWidth, gameHeight);
+    let minimap = document.getElementById('minimap');
+    if (minimap) {
+        minimap.width = 150;
+        minimap.height = 150;
+    }
+    document.getElementById('startScreen').style.display = 'block';
+    setupChat();
+    noLoop();
+}
+
+function setupChat() {
+    let chatInput = document.getElementById('chatInput');
+    chatInput.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            let message = chatInput.value.trim();
+            if (message) {
+                addChatMessage(playerName + ": " + message);
+                chatInput.value = ''
+            }
+        }
+    })
+}
+
+function addChatMessage(message) {
+    chatMessages.push(message);
+    if (chatMessages.length > 5) chatMessages.shift();
+    updateChatDisplay()
+}
+
+function updateChatDisplay() {
+    let chatDiv = document.getElementById('chat');
+    chatDiv.innerHTML = chatMessages.join('<br>');
+    chatDiv.scrollTop = chatDiv.scrollHeight
+}
+
+function startGame() {
+    gameState = 'playing';
+    document.getElementById('startScreen').style.display = 'none';
+    playerName = document.getElementById('nameInput').value || "Spieler";
+    initGame();
+    loop();
+}
+
+function showTutorial() {
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('tutorialScreen').style.display = 'block'
+}
+
+function closeTutorial() {
+    document.getElementById('tutorialScreen').style.display = 'none';
+    document.getElementById('startScreen').style.display = 'block'
+}
+
+function showSettings() {
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('settingsScreen').style.display = 'block'
+}
+
+function saveSettings() {
+    let graphicsQuality = document.getElementById('graphicsQuality').value;
+    document.getElementById('settingsScreen').style.display = 'none';
+    document.getElementById('startScreen').style.display = 'block'
+}
+
+function initGame() {
+    player = new Player(gameWidth / 2, gameHeight / 2, 20);
+    foods = [];
+    enemies = [];
+    powerUps = [];
+    viruses = [];
+    particles = [];
+    score = 0;
+    gameTime = 0;
+    for (let i = 0; i < 1000; i++) {
+        foods.push(new Food(random(gameWidth), random(gameHeight)))
+    }
+    for (let i = 0; i < 20; i++) {
+        enemies.push(new Enemy(random(gameWidth), random(gameHeight)))
+    }
+    for (let i = 0; i < 10; i++) {
+        powerUps.push(new PowerUp(random(gameWidth), random(gameHeight)))
+    }
+    for (let i = 0; i < 20; i++) {
+        viruses.push(new Virus(random(gameWidth), random(gameHeight)))
+    }
+}
+
+function draw() {
+    if (gameState === 'playing') {
+        gameTime++;
+        background(0);
+        translate(width / 2, height / 2);
+        let newzoom = 64 / player.r;
+        zoom = lerp(zoom, newzoom, 0.1);
+        scale(zoom);
+        translate(-player.pos.x, -player.pos.y);
+        drawGrid();
+        handleFoods();
+        handleEnemies();
+        handlePowerUps();
+        handleViruses();
+        updateParticles();
+        player.update();
+        player.show();
+        updateLeaderboard();
+        displayHUD();
+        drawMinimap();
+        if (player.r < 10) {
+            gameOver()
+        }
+    }
+}
+
+function drawGrid() {
+    stroke(50);
+    strokeWeight(1 / zoom);
+    let gridSize = 100;
+    for (let x = 0; x < gameWidth; x += gridSize) {
+        line(x, 0, x, gameHeight)
+    }
+    for (let y = 0; y < gameHeight; y += gridSize) {
+        line(0, y, gameWidth, y)
+    }
+}
+
+function handleFoods() {
+    for (let i = foods.length - 1; i >= 0; i--) {
+        foods[i].show();
+        if (player.eats(foods[i])) {
+            foods.splice(i, 1);
+            foods.push(new Food(random(gameWidth), random(gameHeight)));
+            score++;
+            createParticles(player.pos.x, player.pos.y, 5, color(0, 255, 0));
+        }
+    }
+}
+
+function handleEnemies() {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        enemies[i].update();
+        enemies[i].show();
+        if (player.eats(enemies[i])) {
+            enemies.splice(i, 1);
+            enemies.push(new Enemy(random(gameWidth), random(gameHeight)));
+            score += 5;
+            createParticles(player.pos.x, player.pos.y, 10, color(0, 0, 255));
+        } else if (enemies[i].eats(player)) {
+            gameOver();
+            return;
+        }
+    }
+}
+
+function handlePowerUps() {
+    for (let i = powerUps.length - 1; i >= 0; i--) {
+        powerUps[i].show();
+        if (player.eats(powerUps[i])) {
+            powerUps[i].activate(player);
+            powerUps.splice(i, 1);
+            powerUps.push(new PowerUp(random(gameWidth), random(gameHeight)));
+            createParticles(player.pos.x, player.pos.y, 15, color(255, 255, 0))
+        }
+    }
+}
+
+function handleViruses() {
+    for (let virus of viruses) {
+        virus.show();
+        if (player.hits(virus)) {
+            player.split()
+        }
+    }
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].show();
+        if (particles[i].isDead()) {
+            particles.splice(i, 1)
+        }
+    }
+}
+
+function createParticles(x, y, num, color) {
+    for (let i = 0; i < num; i++) {
+        particles.push(new Particle(x, y, color))
+    }
+}
+
+function updateLeaderboard() {
+    leaderboard = enemies.map(e => ({name: e.name, score: e.r}));
+    leaderboard.push({name: playerName, score: player.r});
+    leaderboard.sort((a, b) => b.score - a.score);
+    leaderboard = leaderboard.slice(0, 5)
+}
+
+function displayHUD() {
+    push();
+    translate(player.pos.x - width / 2 / zoom, player.pos.y - height / 2 / zoom);
+    scale(1 / zoom);
+    fill(255);
+    textSize(20);
+    textAlign(LEFT, TOP);
+    text(`Score: ${score}`, 10, 10);
+    let minutes = floor(gameTime / 3600);
+    let seconds = floor((gameTime % 3600) / 60);
+    text(`Zeit: ${nf(minutes, 2)}:${nf(seconds, 2)}`, 10, 40);
+    text("Bestenliste:", 10, 70);
+    for (let i = 0; i < leaderboard.length; i++) {
+        text(`${i + 1}. ${leaderboard[i].name}: ${floor(leaderboard[i].score)}`, 10, 100 + i * 30)
+    }
+    if (abilities.speedBoost.active) {
+        fill(255, 255, 0);
+        text("Geschwindigkeitsschub!", 10, height - 90)
+    }
+    if (abilities.shield.active) {
+        fill(0, 255, 255);
+        text("Schild aktiv!", 10, height - 60)
+    }
+    if (abilities.magnetism.active) {
+        fill(255, 0, 255);
+        text("Magnetismus aktiv!", 10, height - 30)
+    }
+    pop()
+}
+
+function drawMinimap() {
+    let minimap = document.getElementById('minimap');
+    if (!minimap) return; // Sicherheitscheck
+
+    let ctx = minimap.getContext('2d');
+    ctx.clearRect(0, 0, minimap.width, minimap.height);
+
+    // Hintergrund
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, minimap.width, minimap.height);
+
+    // Spieler
+    ctx.fillStyle = 'red';
+    let playerX = (player.pos.x / gameWidth) * minimap.width;
+    let playerY = (player.pos.y / gameHeight) * minimap.height;
+    ctx.beginPath();
+    ctx.arc(playerX, playerY, 3, 0, TWO_PI);
+    ctx.fill();
+
+    // Gegner
+    ctx.fillStyle = 'blue';
+    for (let enemy of enemies) {
+        let enemyX = (enemy.pos.x / gameWidth) * minimap.width;
+        let enemyY = (enemy.pos.y / gameHeight) * minimap.height;
+        ctx.beginPath();
+        ctx.arc(enemyX, enemyY, 2, 0, TWO_PI);
+        ctx.fill();
+    }
+}
+
+function gameOver() {
+    gameState = 'over';
+    noLoop();
+    document.getElementById('gameOverScreen').style.display = 'block';
+    document.getElementById('finalScore').textContent = score;
+    let minutes = floor(gameTime / 3600);
+    let seconds = floor((gameTime % 3600) / 60);
+    document.getElementById('survivalTime').textContent = `${minutes}:${nf(seconds, 2)}`;
+}
+
+function restartGame() {
+    document.getElementById('gameOverScreen').style.display = 'none';
+    gameState = 'playing';
+    initGame();
+    loop();
+}
+
+function showMainMenu() {
+    document.getElementById('gameOverScreen').style.display = 'none';
+    document.getElementById('startScreen').style.display = 'block'
+}
+
+class Player {
+    constructor(x, y, r) {
+        this.pos = createVector(x, y);
+        this.vel = createVector(0, 0);
+        this.acc = createVector(0, 0);
+        this.r = r;
+        this.maxSpeed = 4;
+        this.color = color(255, 0, 0);
+        this.pieces = []
+    }
+
+    applyForce(force) {
+        this.acc.add(force)
+    }
+
+    update() {
+        let mousePos = createVector(mouseX - width / 2, mouseY - height / 2).mult(1 / zoom).add(this.pos);
+        let dir = p5.Vector.sub(mousePos, this.pos);
+        dir.setMag(this.maxSpeed);
+        this.applyForce(dir);
+        this.vel.add(this.acc);
+        this.vel.limit(this.maxSpeed);
+        this.pos.add(this.vel);
+        this.acc.mult(0);
+        this.pos.x = (this.pos.x + gameWidth) % gameWidth;
+        this.pos.y = (this.pos.y + gameHeight) % gameHeight;
+        this.r = max(10, this.r - 0.01);
+        for (let ability in abilities) {
+            if (abilities[ability].active) {
+                abilities[ability].duration--;
+                if (abilities[ability].duration <= 0) {
+                    abilities[ability].active = false
+                }
+            }
+        }
+        if (abilities.magnetism.active) {
+            for (let food of foods) {
+                let d = p5.Vector.dist(this.pos, food.pos);
+                if (d < 200) {
+                    let attractionForce = p5.Vector.sub(this.pos, food.pos);
+                    attractionForce.setMag(0.5);
+                    food.pos.add(attractionForce)
+                }
+            }
+        }
+        for (let piece of this.pieces) {
+            if (piece !== this) {
+                piece.update()
+            }
+        }
+    }
+
+    eats(other) {
+        let d = p5.Vector.dist(this.pos, other.pos);
+        console.log(`Distance: ${d}, Player radius: ${this.r}, Other radius: ${other.r}`);
+        if (d < this.r + other.r && this.r > other.r * 1.2) {
+            console.log("Eating!");
+            let newArea = PI * this.r * this.r + PI * other.r * other.r;
+            this.r = sqrt(newArea / PI);
+            return true;
+        }
+        return false;
+    }
+
+    split() {
+        if (this.pieces.length < 8 && this.r > 20) {
+            let newPiece = new PlayerPiece(this.pos.x, this.pos.y, this.r / sqrt(2));
+            this.r /= sqrt(2);
+            let splitForce = p5.Vector.fromAngle(random(TWO_PI));
+            splitForce.setMag(10);
+            newPiece.applyForce(splitForce);
+            this.pieces.push(newPiece);
+        }
+    }
+
+    show() {
+        // Zeige den Hauptspieler
+        fill(this.color);
+        ellipse(this.pos.x, this.pos.y, this.r * 2);
+
+        // Zeige den Namen
+        fill(255);
+        textAlign(CENTER, CENTER);
+        textSize(this.r * 0.5);
+        text(playerName, this.pos.x, this.pos.y);
+
+        // Zeige das Schild, wenn aktiv
+        if (abilities.shield.active) {
+            noFill();
+            stroke(0, 255, 255, 100);
+            strokeWeight(3);
+            ellipse(this.pos.x, this.pos.y, this.r * 2.2);
+        }
+
+        // Zeige alle zusätzlichen Stücke
+        for (let piece of this.pieces) {
+            piece.showPiece();
+        }
+    }
+
+    showPiece() {
+        // Diese Methode wird für einzelne Stücke verwendet
+        fill(this.color);
+        ellipse(this.pos.x, this.pos.y, this.r * 2);
+    }
+
+    hits(virus) {
+        for (let piece of this.pieces) {
+            let d = p5.Vector.dist(piece.pos, virus.pos);
+            if (d < piece.r + virus.r && piece.r > virus.r) {
+                return true
+            }
+        }
+        return false
+    }
+
+    ejectMass() {
+        if (this.r > 20) {
+            let ejectedMass = new Food(this.pos.x, this.pos.y);
+            let ejectForce = p5.Vector.fromAngle(random(TWO_PI));
+            ejectForce.setMag(10);
+            ejectedMass.vel = ejectForce;
+            foods.push(ejectedMass);
+            this.r -= 1;
+        }
+    }
+}
+
+class PlayerPiece extends Player {
+    constructor(x, y, r) {
+        super(x, y, r);
+    }
+
+    show() {
+        this.showPiece();
+    }
+}
+
+class Enemy extends Player {
+    constructor(x, y) {
+        super(x, y, random(10, 30));
+        this.color = color(0, 0, 255);
+        this.targetFood = null;
+        this.name = "Bot " + floor(random(1000));
+    }
+
+    update() {
+        if (!this.targetFood || this.eats(this.targetFood)) {
+            this.targetFood = random(foods)
+        }
+        let dir = p5.Vector.sub(this.targetFood.pos, this.pos);
+        dir.setMag(this.maxSpeed);
+        this.applyForce(dir);
+        super.update();
+        this.r = max(10, this.r - 0.005)
+    }
+
+    show() {
+        fill(this.color);
+        ellipse(this.pos.x, this.pos.y, this.r * 2);
+        fill(255);
+        textAlign(CENTER, CENTER);
+        textSize(this.r * 0.5);
+        text(this.name, this.pos.x, this.pos.y)
+    }
+}
+
+class Food {
+    constructor(x, y) {
+        this.pos = createVector(x, y);
+        this.r = 5;
+        this.color = color(0, 255, 0);
+    }
+
+    show() {
+        fill(this.color);
+        ellipse(this.pos.x, this.pos.y, this.r * 2);
+    }
+}
+
+class PowerUp {
+    constructor(x, y) {
+        this.pos = createVector(x, y);
+        this.r = 15;
+        this.type = random(['speedBoost', 'shield', 'magnetism']);
+        this.color = this.type === 'speedBoost' ? color(255, 255, 0) : this.type === 'shield' ? color(0, 255, 255) : color(255, 0, 255)
+    }
+
+    show() {
+        fill(this.color);
+        star(this.pos.x, this.pos.y, this.r, this.r * 2, 5)
+    }
+
+    activate(player) {
+        switch (this.type) {
+            case'speedBoost':
+                abilities.speedBoost.active = true;
+                abilities.speedBoost.duration = 300;
+                player.maxSpeed = 6;
+                break;
+            case'shield':
+                abilities.shield.active = true;
+                abilities.shield.duration = 300;
+                break;
+            case'magnetism':
+                abilities.magnetism.active = true;
+                abilities.magnetism.duration = 300;
+                break
+        }
+    }
+}
+
+class Virus {
+    constructor(x, y) {
+        this.pos = createVector(x, y);
+        this.r = 40;
+        this.color = color(0, 255, 0)
+    }
+
+    show() {
+        fill(this.color);
+        beginShape();
+        for (let i = 0; i < TWO_PI; i += 0.1) {
+            let xoff = map(cos(i), -1, 1, 0, 1);
+            let yoff = map(sin(i), -1, 1, 0, 1);
+            let r = map(noise(xoff, yoff), 0, 1, this.r * 0.5, this.r);
+            let x = this.pos.x + r * cos(i);
+            let y = this.pos.y + r * sin(i);
+            vertex(x, y)
+        }
+        endShape(CLOSE)
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.pos = createVector(x, y);
+        this.vel = p5.Vector.random2D().mult(random(1, 3));
+        this.acc = createVector(0, 0);
+        this.color = color;
+        this.lifetime = 255
+    }
+
+    update() {
+        this.vel.add(this.acc);
+        this.pos.add(this.vel);
+        this.acc.mult(0);
+        this.lifetime -= 5
+    }
+
+    show() {
+        stroke(red(this.color), green(this.color), blue(this.color), this.lifetime);
+        strokeWeight(2);
+        point(this.pos.x, this.pos.y)
+    }
+
+    isDead() {
+        return this.lifetime < 0
+    }
+}
+
+function star(x, y, radius1, radius2, npoints) {
+    let angle = TWO_PI / npoints;
+    let halfAngle = angle / 2.0;
+    beginShape();
+    for (let a = 0; a < TWO_PI; a += angle) {
+        let sx = x + cos(a) * radius2;
+        let sy = y + sin(a) * radius2;
+        vertex(sx, sy);
+        sx = x + cos(a + halfAngle) * radius1;
+        sy = y + sin(a + halfAngle) * radius1;
+        vertex(sx, sy)
+    }
+    endShape(CLOSE)
+}
+
+function keyPressed() {
+    if (key === ' ') {
+        player.split();
+    } else if (key === 'w' || key === 'W') {
+        player.ejectMass();
+    }
+}
+
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight)
+}</script>
+</body>
+</html>
