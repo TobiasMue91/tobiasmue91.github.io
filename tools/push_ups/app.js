@@ -10,6 +10,35 @@ let isGoingDown = true;
 let lastPushUpTime = 0;
 let pushUpCooldown = 1000;
 
+let rewards = [
+    { name: 'Extra TV time', cost: 1 },
+    { name: 'Favorite snack', cost: 2 },
+    { name: 'Movie night', cost: 3 }
+];
+
+function loadTokens() {
+    const savedTokens = localStorage.getItem('tokens');
+    if (savedTokens) {
+        tokenCount = parseInt(savedTokens);
+        document.getElementById('tokenCount').textContent = tokenCount;
+    }
+}
+
+function saveTokens() {
+    localStorage.setItem('tokens', tokenCount.toString());
+}
+
+function loadRewards() {
+    const savedRewards = localStorage.getItem('rewards');
+    if (savedRewards) {
+        rewards = JSON.parse(savedRewards);
+    }
+}
+
+function saveRewards() {
+    localStorage.setItem('rewards', JSON.stringify(rewards));
+}
+
 async function setupCamera() {
     video = document.getElementById('video');
     const constraints = {
@@ -74,6 +103,7 @@ function updateStats() {
     if (pushUpCount % pushUpsPerToken === 0) {
         tokenCount++;
         document.getElementById('tokenCount').textContent = tokenCount;
+        saveTokens();
     }
 }
 
@@ -95,15 +125,9 @@ document.getElementById('startStop').addEventListener('click', () => {
     }
 });
 
-const rewards = [
-    { name: 'Extra TV time', cost: 1 },
-    { name: 'Favorite snack', cost: 2 },
-    { name: 'Movie night', cost: 3 }
-];
-
 function displayRewards() {
     const rewardsContainer = document.getElementById('rewards');
-    rewardsContainer.innerHTML = '<h3 class="text-xl font-semibold mb-4">Rewards:</h3>';
+    rewardsContainer.innerHTML = '';
     rewards.forEach(reward => {
         const button = document.createElement('button');
         button.textContent = `${reward.name} (${reward.cost} tokens)`;
@@ -117,13 +141,35 @@ function redeemReward(reward) {
     if (tokenCount >= reward.cost) {
         tokenCount -= reward.cost;
         document.getElementById('tokenCount').textContent = tokenCount;
+        saveTokens();
         alert(`You've redeemed: ${reward.name}`);
     } else {
         alert('Not enough tokens!');
     }
 }
 
+document.getElementById('editRewards').addEventListener('click', () => {
+    const rewardEditor = document.getElementById('rewardEditor');
+    const rewardJSON = document.getElementById('rewardJSON');
+    rewardEditor.classList.toggle('hidden');
+    rewardJSON.value = JSON.stringify(rewards, null, 2);
+});
+
+document.getElementById('saveRewards').addEventListener('click', () => {
+    const rewardJSON = document.getElementById('rewardJSON');
+    try {
+        rewards = JSON.parse(rewardJSON.value);
+        saveRewards();
+        displayRewards();
+        document.getElementById('rewardEditor').classList.add('hidden');
+    } catch (error) {
+        alert('Invalid JSON. Please check your input.');
+    }
+});
+
 async function init() {
+    loadTokens();
+    loadRewards();
     await setupCamera();
     displayRewards();
 }
