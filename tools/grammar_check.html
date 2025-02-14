@@ -12,6 +12,11 @@
             position: relative;
             display: inline-block;
             cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .error-highlight:hover {
+            background-color: rgba(0, 0, 0, 0.05);
         }
 
         .grammar { border-bottom: 2px solid #ef4444; }
@@ -30,28 +35,82 @@
             font-size: 14px;
             white-space: nowrap;
             z-index: 100;
-            transition: visibility 0.2s;
+            opacity: 0;
+            transition: opacity 0.2s, visibility 0.2s;
         }
 
         .error-highlight:hover .tooltip {
             visibility: visible;
+            opacity: 1;
+        }
+
+        .loading-dots:after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80%, 100% { content: ''; }
+        }
+
+        #word-count {
+            transition: all 0.3s ease;
+        }
+
+        .shake {
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
         }
     </style>
 </head>
 <body class="bg-gray-100 flex justify-center items-center min-h-screen">
 <div class="container mx-auto max-w-4xl p-5 bg-white rounded-lg shadow-lg">
-    <h1 class="text-3xl font-bold text-center mb-6">GrammarPro</h1>
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold">GrammarPro</h1>
+        <div class="flex gap-2">
+            <select id="mode-select" class="px-3 py-1 border rounded-md text-sm">
+                <option value="standard">Standard Mode</option>
+                <option value="academic">Academic Writing</option>
+                <option value="business">Business Writing</option>
+                <option value="casual">Casual Writing</option>
+            </select>
+            <button id="theme-toggle" class="p-2 rounded-md bg-gray-200 hover:bg-gray-300">
+                🌙
+            </button>
+        </div>
+    </div>
 
-    <div class="mb-6">
-        <label for="input" class="block text-sm font-medium text-gray-700 mb-2">Enter Text:</label>
+    <div class="mb-4">
+        <div class="flex justify-between items-center mb-2">
+            <label for="input" class="block text-sm font-medium text-gray-700">Enter Text:</label>
+            <div id="word-count" class="text-sm text-gray-500">0 words | 0 characters</div>
+        </div>
         <textarea id="input" rows="6" class="w-full p-3 border rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                   placeholder="Type or paste your text here..."></textarea>
     </div>
 
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex flex-wrap gap-4 mb-6">
         <button id="check-grammar" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             Check Grammar
         </button>
+
+        <button id="clear-text" class="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
+            Clear Text
+        </button>
+
+        <button id="copy-corrected" class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+            Copy Corrected
+        </button>
+
+        <div class="flex-grow"></div>
 
         <div class="flex gap-4">
             <div class="flex items-center">
@@ -73,27 +132,144 @@
         </div>
     </div>
 
+    <div class="mb-4">
+        <div id="stats" class="grid grid-cols-4 gap-4 mb-4 hidden">
+            <div class="p-3 bg-red-100 rounded-lg">
+                <div class="text-red-800 font-semibold">Grammar Errors</div>
+                <div id="grammar-count" class="text-2xl font-bold text-red-600">0</div>
+            </div>
+            <div class="p-3 bg-blue-100 rounded-lg">
+                <div class="text-blue-800 font-semibold">Spelling Errors</div>
+                <div id="spelling-count" class="text-2xl font-bold text-blue-600">0</div>
+            </div>
+            <div class="p-3 bg-green-100 rounded-lg">
+                <div class="text-green-800 font-semibold">Style Issues</div>
+                <div id="style-count" class="text-2xl font-bold text-green-600">0</div>
+            </div>
+            <div class="p-3 bg-yellow-100 rounded-lg">
+                <div class="text-yellow-800 font-semibold">Punctuation Errors</div>
+                <div id="punctuation-count" class="text-2xl font-bold text-yellow-600">0</div>
+            </div>
+        </div>
+    </div>
+
     <div id="result" class="p-4 border rounded-md min-h-[100px] bg-gray-50"></div>
+
+    <div id="history" class="mt-4 hidden">
+        <h3 class="text-lg font-semibold mb-2">Recent Corrections</h3>
+        <div id="history-list" class="space-y-2"></div>
+    </div>
 </div>
 
 <script>
+    let darkMode = false;
+    let errorHistory = [];
+    let currentText = '';
+    let lastCheckTimestamp = 0;
+
+    document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
     document.getElementById('check-grammar').addEventListener('click', checkGrammar);
+    document.getElementById('clear-text').addEventListener('click', clearText);
+    document.getElementById('copy-corrected').addEventListener('click', copyCorrectText);
+    document.getElementById('input').addEventListener('input', updateWordCount);
+
+    function toggleTheme() {
+        darkMode = !darkMode;
+        const body = document.body;
+        const themeToggle = document.getElementById('theme-toggle');
+
+        if (darkMode) {
+            body.classList.add('bg-gray-900');
+            document.querySelector('.container').classList.remove('bg-white');
+            document.querySelector('.container').classList.add('bg-gray-800', 'text-white');
+            themeToggle.textContent = '☀️';
+        } else {
+            body.classList.remove('bg-gray-900');
+            document.querySelector('.container').classList.remove('bg-gray-800', 'text-white');
+            document.querySelector('.container').classList.add('bg-white');
+            themeToggle.textContent = '🌙';
+        }
+    }
+
+    function updateWordCount() {
+        const text = document.getElementById('input').value;
+        const words = text.trim().split(/\s+/).filter(word => word.length > 0).length;
+        const chars = text.length;
+        document.getElementById('word-count').textContent = `${words} words | ${chars} characters`;
+    }
+
+    function clearText() {
+        document.getElementById('input').value = '';
+        document.getElementById('result').innerHTML = '';
+        document.getElementById('stats').classList.add('hidden');
+        updateWordCount();
+    }
+
+    async function copyCorrectText() {
+        const resultText = document.getElementById('result').textContent;
+        if (resultText) {
+            try {
+                await navigator.clipboard.writeText(resultText);
+                showNotification('Text copied to clipboard!');
+            } catch (err) {
+                showNotification('Failed to copy text', 'error');
+            }
+        }
+    }
+
+    function showNotification(message, type = 'success') {
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 p-4 rounded-md ${
+            type === 'success' ? 'bg-green-500' : 'bg-red-500'
+        } text-white`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 3000);
+    }
+
+    function updateErrorStats(errors) {
+        const stats = {
+            grammar: 0,
+            spelling: 0,
+            style: 0,
+            punctuation: 0
+        };
+
+        errors.forEach(error => {
+            stats[error.type]++;
+        });
+
+        document.getElementById('grammar-count').textContent = stats.grammar;
+        document.getElementById('spelling-count').textContent = stats.spelling;
+        document.getElementById('style-count').textContent = stats.style;
+        document.getElementById('punctuation-count').textContent = stats.punctuation;
+        document.getElementById('stats').classList.remove('hidden');
+    }
 
     async function checkGrammar() {
+        const currentTime = Date.now();
+        if (currentTime - lastCheckTimestamp < 3000) {
+            showNotification('Please wait a few seconds before checking again', 'error');
+            return;
+        }
+        lastCheckTimestamp = currentTime;
+
         const inputElement = document.getElementById('input');
         const resultContainer = document.getElementById('result');
         const button = document.getElementById('check-grammar');
+        const mode = document.getElementById('mode-select').value;
 
         const inputText = inputElement.value.trim();
         if (!inputText) {
-            alert('Please enter some text to check.');
+            inputElement.classList.add('shake');
+            setTimeout(() => inputElement.classList.remove('shake'), 500);
             return;
         }
 
         button.disabled = true;
-        button.textContent = 'Checking...';
+        button.innerHTML = 'Checking<span class="loading-dots"></span>';
 
-        const botMessage = `I am a grammar checking API. I analyze text for grammar, spelling, style, and punctuation errors. I always respond in this JSON format:
+        const botMessage = `I am a grammar checking API. I analyze text for grammar, spelling, style, and punctuation errors with a focus on ${mode} writing. I always respond in this JSON format:
             {
                 "detectedLanguage": "string",
                 "errors": [
@@ -102,25 +278,6 @@
                         "text": "original text",
                         "suggestion": "suggested correction",
                         "description": "error description"
-                    }
-                ]
-            }
-
-            Example response for "I dont like there attitude":
-            {
-                "detectedLanguage": "English",
-                "errors": [
-                    {
-                        "type": "spelling",
-                        "text": "dont",
-                        "suggestion": "don't",
-                        "description": "Missing apostrophe in contraction"
-                    },
-                    {
-                        "type": "grammar",
-                        "text": "there",
-                        "suggestion": "their",
-                        "description": "Incorrect use of 'there'. Use 'their' for possession"
                     }
                 ]
             }`;
@@ -156,34 +313,66 @@
 
             const grammarData = JSON5.parse(jsonMatch[0]);
             displayResults(inputText, grammarData.errors);
+            updateErrorStats(grammarData.errors);
+            addToHistory(inputText, grammarData.errors);
 
         } catch (error) {
             console.error('Error:', error);
             resultContainer.textContent = 'An error occurred while checking the text. Please try again.';
+            showNotification('Error checking grammar', 'error');
         } finally {
             button.disabled = false;
             button.textContent = 'Check Grammar';
         }
     }
 
+    function addToHistory(text, errors) {
+        const historyEntry = {
+            text,
+            errors,
+            timestamp: new Date().toLocaleString()
+        };
+        errorHistory.unshift(historyEntry);
+        errorHistory = errorHistory.slice(0, 5); // Keep only last 5 entries
+        updateHistoryDisplay();
+    }
+
+    function updateHistoryDisplay() {
+        const historyContainer = document.getElementById('history');
+        const historyList = document.getElementById('history-list');
+        historyContainer.classList.remove('hidden');
+
+        historyList.innerHTML = errorHistory.map(entry => `
+                <div class="p-2 bg-gray-50 rounded border">
+                    <div class="text-sm text-gray-500">${entry.timestamp}</div>
+                    <div class="text-sm truncate">${entry.text.substring(0, 50)}...</div>
+                    <div class="text-xs text-gray-600">${entry.errors.length} errors found</div>
+                </div>
+            `).join('');
+    }
+
     function displayResults(originalText, errors) {
         const resultContainer = document.getElementById('result');
         let displayText = originalText;
 
-        // Sort errors by position (longest matches first to avoid nested replacements)
         errors.sort((a, b) => b.text.length - a.text.length);
 
-        // Replace each error with highlighted span
         errors.forEach(error => {
             const highlightHtml = `<span class="error-highlight ${error.type}">
                     ${error.text}
-                    <div class="tooltip bg-gray-800 text-white">
-                        ${error.description}<br>
-                        Suggestion: ${error.suggestion}
+                    <div class="tooltip bg-gray-800 text-white p-3 rounded-lg shadow-lg min-w-[200px] max-w-[300px]">
+                        <div class="font-semibold mb-1">${capitalizeFirst(error.type)} Issue</div>
+                        <div class="text-gray-200 mb-2">${error.description}</div>
+                        <div class="border-t border-gray-600 pt-2">
+                            <div class="text-sm text-gray-300">Suggestion:</div>
+                            <div class="text-green-400">${error.suggestion}</div>
+                        </div>
+                        <div class="text-xs text-gray-400 mt-2">Click to apply correction</div>
                     </div>
                 </span>`;
 
-            displayText = displayText.replace(error.text, highlightHtml);
+            const regex = new RegExp(escapeRegExp(error.text), 'g');
+            displayText = displayText.replace(regex, highlightHtml);
         });
 
         resultContainer.innerHTML = displayText;
@@ -194,11 +383,73 @@
                 const error = errors.find(e => e.text === this.textContent.trim());
                 if (error) {
                     const input = document.getElementById('input');
-                    input.value = input.value.replace(error.text, error.suggestion);
+                    const originalText = input.value;
+                    const correctedText = originalText.replace(error.text, error.suggestion);
+                    input.value = correctedText;
+
+                    // Re-run display with updated text
+                    displayResults(correctedText, errors.filter(e => e !== error));
+
+                    // Show confirmation tooltip
+                    showNotification(`Corrected: ${error.text} → ${error.suggestion}`, 'success');
+
+                    // Update word count
+                    updateWordCount();
                 }
             });
         });
     }
+
+    function capitalizeFirst(str) {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // Initialize word count on page load
+    updateWordCount();
+
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey || e.metaKey) {
+            switch(e.key) {
+                case 'Enter':
+                    e.preventDefault();
+                    checkGrammar();
+                    break;
+                case 'l':
+                    e.preventDefault();
+                    clearText();
+                    break;
+                case 'c':
+                    if (document.activeElement !== document.getElementById('input')) {
+                        e.preventDefault();
+                        copyCorrectText();
+                    }
+                    break;
+            }
+        }
+    });
+
+    // Add auto-save feature
+    let autoSaveTimeout;
+    document.getElementById('input').addEventListener('input', function() {
+        clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = setTimeout(() => {
+            localStorage.setItem('grammarProText', this.value);
+        }, 1000);
+    });
+
+    // Load saved text on page load
+    window.addEventListener('load', function() {
+        const savedText = localStorage.getItem('grammarProText');
+        if (savedText) {
+            document.getElementById('input').value = savedText;
+            updateWordCount();
+        }
+    });
 </script>
 </body>
 </html>
