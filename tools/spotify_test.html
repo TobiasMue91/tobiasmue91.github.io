@@ -145,67 +145,49 @@
     }
 
     async function getPlaylistTracks(input) {
-        // Check if input is a playlist URL
+        let playlistId;
+
         if (input.includes('spotify.com/playlist/')) {
-            const playlistId = input.split('/playlist/')[1]?.split('?')[0];
-            if (!playlistId) {
-                throw new Error('Invalid playlist URL format');
+            // Extract playlist ID using regex for more reliable parsing
+            const match = input.match(/playlist\/([a-zA-Z0-9]+)/);
+            if (!match || !match[1]) {
+                throw new Error('Could not extract playlist ID from URL');
             }
+            playlistId = match[1];
+        } else {
+            throw new Error('Invalid playlist URL format');
+        }
 
-            const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('spotify_access_token')}`
-                }
-            });
+        console.log('Attempting to fetch playlist:', playlistId); // For debugging
 
-            if (!response.ok) {
-                throw new Error('Failed to fetch playlist data');
+        const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('spotify_access_token')}`
             }
+        });
 
-            const data = await response.json();
-            return data.items.map(item => ({
+        if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.items || !Array.isArray(data.items)) {
+            throw new Error('Invalid playlist data received');
+        }
+
+        return data.items.map(item => {
+            if (!item.track) {
+                console.warn('Skipping invalid track item');
+                return null;
+            }
+            return {
                 id: item.track.id,
                 name: item.track.name,
                 artist: item.track.artists[0].name,
                 year: item.track.album.release_date.split('-')[0]
-            }));
-        }
-        // Handle direct track URLs input
-        else {
-            const trackUrls = input.split('\n').filter(url => url.trim());
-            const tracks = [];
-
-            for (const url of trackUrls) {
-                if (!url.includes('spotify.com/track/')) {
-                    continue;
-                }
-
-                const trackId = url.split('/track/')[1]?.split('?')[0];
-                if (!trackId) {
-                    continue;
-                }
-
-                const response = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('spotify_access_token')}`
-                    }
-                });
-
-                if (!response.ok) {
-                    continue;
-                }
-
-                const track = await response.json();
-                tracks.push({
-                    id: track.id,
-                    name: track.name,
-                    artist: track.artists[0].name,
-                    year: track.album.release_date.split('-')[0]
-                });
-            }
-
-            return tracks;
-        }
+            };
+        }).filter(track => track !== null);
     }
 
     function createQRCard(track) {
