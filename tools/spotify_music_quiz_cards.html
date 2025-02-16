@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Spotify Music Quiz Cards</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printArea, #printArea * {
+                visibility: visible;
+            }
+            #printArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+            }
+        }
+
+        .card {
+            width: 6cm;
+            height: 6cm;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: white;
+            padding: 10px;
+            margin: 10px;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .page {
+            page-break-after: always !important;
+            page-break-before: always !important;
+            margin-bottom: 2cm;
+        }
+
+        .card-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding: 20px;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .card-page {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding: 20px;
+            page-break-after: always;
+        }
+
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            height: 100%;
+            align-items: center;
+        }
+
+        .metadata {
+            text-align: center;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .metadata .year {
+            font-size: 24px;
+            margin-top: 8px;
+        }
+
+        #printArea {
+            display: block;
+            padding: 1cm;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #pauseResumeButton {
+            width: 60vmin;
+            height: 60vmin;
+            font-size: 30vmin;
+            border: none;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #1DB954, #169c45);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 20px rgba(29, 185, 84, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #pauseResumeButton:hover {
+            transform: scale(1.02);
+            box-shadow: 0 15px 30px rgba(29, 185, 84, 0.4);
+        }
+
+        #pauseResumeButton:active {
+            transform: scale(0.98);
+            box-shadow: 0 5px 15px rgba(29, 185, 84, 0.2);
+        }
+
+        #player {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .scan-button {
+            padding: 1.5rem 3rem;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(145deg, #1e1e1e, #2d2d2d);
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .scan-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .scan-button:active {
+            transform: translateY(1px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+<div id="setup" class="max-w-md mx-auto p-6">
+    <div class="bg-white rounded-lg shadow-xl p-8">
+        <input type="text" id="clientId" placeholder="Enter Spotify Client ID" class="w-full px-4 py-2 mb-4 border rounded">
+        <button onclick="startAuth()" class="w-full bg-green-500 text-white py-2 px-4 rounded">Initialize</button>
+    </div>
+</div>
+
+<div id="player" class="hidden">
+    <div class="button-container">
+        <button id="pauseResumeButton">⏸️</button>
+        <a href="https://www.gptgames.dev/tools/spotify_qr_scanner" class="scan-button">
+            Scan for next song
+        </a>
+    </div>
+    <button id="createQRButton" class="fixed top-4 right-4 bg-green-500 text-white py-2 px-4 rounded">
+        Create QR codes from Playlist
+    </button>
+</div>
+
+<div id="printArea"></div>
+
+<script>
+    let playerInstance = null;
+    let isPlaying = false;
+    const redirectUri = 'http://gptgames.dev/tools/spotify_music_quiz_cards.html';
+
+    function togglePauseResume() {
+        if (isPlaying) {
+            playerInstance.pause();
+        } else {
+            playerInstance.resume();
+        }
+        isPlaying = !isPlaying;
+        pauseResumeButton.textContent = isPlaying ? '⏸️' : '▶️';
+    }
+
+    function getUrlParameter(name) {
+        return new URLSearchParams(window.location.search).get(name);
+    }
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+        const token = localStorage.getItem('spotify_access_token') || getHashParams().access_token;
+        if (token) initializePlayer(token);
+    };
+
+    function startAuth() {
+        const clientId = document.getElementById('clientId').value;
+        localStorage.setItem('spotify_client_id', clientId);
+        const scope = 'streaming user-read-email user-read-private user-modify-playback-state playlist-read-private';
+        window.location.href = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
+    }
+
+    function getHashParams() {
+        const hashParams = {};
+        window.location.hash.substring(1).split('&').forEach(param => {
+            const [key, value] = param.split('=');
+            hashParams[key] = decodeURIComponent(value);
+        });
+        return hashParams;
+    }
+
+    async function getPlaylistTracks(input) {
+        let playlistId = input.match(/playlist\/([a-zA-Z0-9]+)/)?.[1];
+        if (!playlistId) {
+            throw new Error('Could not extract playlist ID from URL');
+        }
+        const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('spotify_access_token')}`
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
+        }
+        const data = await response.json();
+        return data.items
+            .filter(item => item?.track && item.track.album?.release_date)
+            .map(item => ({
+                id: item.track.id || '',
+                name: item.track.name || 'Unknown Title',
+                artist: item.track.artists?.[0]?.name || 'Unknown Artist',
+                year: item.track.album.release_date.split('-')[0] || 'Unknown Year'
+            }));
+    }
+
+    function createQRCard(track, isQRSide) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        if (isQRSide) {
+            const qrContainer = document.createElement('div');
+            qrContainer.className = 'qr-container';
+            qrContainer.id = `qr-${track.id}`;
+            card.appendChild(qrContainer);
+
+            new QRCode(qrContainer, {
+                text: `https://www.gptgames.dev/tools/spotify_test.html?track=${track.id}`,
+                width: 220,
+                height: 220,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        } else {
+            const metadata = document.createElement('div');
+            metadata.className = 'metadata';
+            metadata.innerHTML = `
+                <h3 class="title">${track.name}</h3>
+                <p class="artist">${track.artist}</p>
+                <p class="year">${track.year}</p>
+            `;
+            card.appendChild(metadata);
+        }
+
+        return card;
+    }
+
+    async function createQRCodesFromPlaylist() {
+        const input = prompt("Enter Spotify playlist URL:");
+        if (!input) return;
+
+        try {
+            const tracks = await getPlaylistTracks(input);
+            if (tracks.length === 0) {
+                throw new Error('No valid tracks found in playlist');
+            }
+
+            const printArea = document.getElementById('printArea');
+            printArea.innerHTML = '';
+
+            // Create wrapper divs
+            const qrPage = document.createElement('div');
+            qrPage.className = 'page';
+            const qrContainer = document.createElement('div');
+            qrContainer.className = 'card-container';
+
+            // Create QR codes page
+            const selectedTracks = tracks.slice(0, 21);
+            selectedTracks.forEach(track => {
+                qrContainer.appendChild(createQRCard(track, true));
+            });
+
+            qrPage.appendChild(qrContainer);
+            printArea.appendChild(qrPage);
+
+            // Create metadata page
+            const metadataPage = document.createElement('div');
+            metadataPage.className = 'page';
+            const metadataContainer = document.createElement('div');
+            metadataContainer.className = 'card-container';
+
+            selectedTracks.forEach(track => {
+                metadataContainer.appendChild(createQRCard(track, false));
+            });
+
+            metadataPage.appendChild(metadataContainer);
+            printArea.appendChild(metadataPage);
+
+            setTimeout(() => {
+                window.print();
+            }, 1000);
+
+        } catch (error) {
+            alert('Error processing tracks: ' + error.message);
+            console.error('Detailed error:', error);
+        }
+    }
+
+    function initializePlayer(token) {
+        document.getElementById('setup').classList.add('hidden');
+        document.getElementById('player').classList.remove('hidden');
+        localStorage.setItem('spotify_access_token', token);
+
+        playerInstance = new Spotify.Player({
+            name: 'Development Player',
+            getOAuthToken: cb => {
+                cb(token);
+            }
+        });
+
+        playerInstance.addListener('ready', async ({ device_id }) => {
+            await fetch('https://api.spotify.com/v1/me/player', {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    device_ids: [device_id],
+                    play: true
+                })
+            });
+
+            const trackId = getUrlParameter('track');
+            if (trackId) {
+                await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${device_id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        uris: [`spotify:track:${trackId}`]
+                    })
+                });
+            }
+        });
+
+        document.getElementById('pauseResumeButton').onclick = togglePauseResume;
+        document.getElementById('createQRButton').onclick = createQRCodesFromPlaylist;
+        playerInstance.connect();
+    }
+</script>
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+</body>
+</html>
