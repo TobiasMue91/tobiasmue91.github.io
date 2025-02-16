@@ -219,14 +219,10 @@
         if (!playlistId) {
             throw new Error('Could not extract playlist ID from URL');
         }
-        const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('spotify_access_token')}`
-            }
-        });
-        if (!response.ok) {
-            throw new Error(`API request failed with status ${response.status}`);
-        }
+
+        const response = await spotifyFetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`);
+        if (!response) return []; // Handle case where auth refresh was triggered
+
         const data = await response.json();
         return data.items
             .filter(item => item?.track && item.track.album?.release_date)
@@ -363,7 +359,46 @@
 
         document.getElementById('pauseResumeButton').onclick = togglePauseResume;
         document.getElementById('createQRButton').onclick = createQRCodesFromPlaylist;
+
+        playerInstance.addListener('authentication_error', ({ message }) => {
+            console.error('Authentication error:', message);
+            refreshAuth();
+        });
+
+        playerInstance.addListener('initialization_error', ({ message }) => {
+            console.error('Failed to initialize:', message);
+            refreshAuth();
+        });
+
         playerInstance.connect();
+    }
+
+    function refreshAuth() {
+        const clientId = localStorage.getItem('spotify_client_id');
+        const scope = 'streaming user-read-email user-read-private user-modify-playback-state playlist-read-private';
+        window.location.href = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
+    }
+
+    async function spotifyFetch(url, options = {}) {
+        const response = await fetch(url, {
+            ...options,
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('spotify_access_token')}`,
+                ...options.headers
+            }
+        });
+
+        if (response.status === 401) {
+            // Token is invalid, refresh authentication
+            refreshAuth();
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
+        }
+
+        return response;
     }
 </script>
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
