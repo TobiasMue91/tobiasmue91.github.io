@@ -1,19 +1,108 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Spotify Player</title>
+    <title>Spotify Player & QR Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .hidden { display: none; }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printArea, #printArea * {
+                visibility: visible;
+            }
+            #printArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+            }
+            .card {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+        }
+
+        .card {
+            width: 6cm;
+            height: 6cm;
+            position: relative;
+            perspective: 1000px;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.8s;
+            transform-style: preserve-3d;
+        }
+
+        .card:hover .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: white;
+        }
+
+        .card-back {
+            transform: rotateY(180deg);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #pauseResumeButton {
+            width: 80vmin;
+            height: 80vmin;
+            font-size: 40vmin;
+            border: none;
+            border-radius: 10px;
+            background-color: #1DB954;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        #pauseResumeButton:active {
+            transform: scale(0.98);
+        }
+
+        #player {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
     </style>
 </head>
-<body>
-<div id="setup">
-    <input type="text" id="clientId" placeholder="Enter Spotify Client ID">
-    <button onclick="startAuth()">Initialize</button>
+<body class="bg-gray-100 min-h-screen">
+<div id="setup" class="max-w-md mx-auto p-6">
+    <div class="bg-white rounded-lg shadow-xl p-8">
+        <input type="text" id="clientId" placeholder="Enter Spotify Client ID" class="w-full px-4 py-2 mb-4 border rounded">
+        <button onclick="startAuth()" class="w-full bg-green-500 text-white py-2 px-4 rounded">Initialize</button>
+    </div>
 </div>
+
 <div id="player" class="hidden">
     <button id="pauseResumeButton">⏸️</button>
+    <button id="createQRButton" class="fixed top-4 right-4 bg-green-500 text-white py-2 px-4 rounded">Create QR codes from Playlist</button>
 </div>
+
+<div id="printArea" class="grid grid-cols-3 gap-4 p-4"></div>
 
 <script>
     let playerInstance = null;
@@ -42,7 +131,7 @@
     function startAuth() {
         const clientId = document.getElementById('clientId').value;
         localStorage.setItem('spotify_client_id', clientId);
-        const scope = 'streaming user-read-email user-read-private user-modify-playback-state';
+        const scope = 'streaming user-read-email user-read-private user-modify-playback-state playlist-read-private';
         window.location.href = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
     }
 
@@ -55,9 +144,71 @@
         return hashParams;
     }
 
+    async function getPlaylistTracks(playlistUrl) {
+        const playlistId = playlistUrl.split('/playlist/')[1].split('?')[0];
+        const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('spotify_access_token')}`
+            }
+        });
+        const data = await response.json();
+        return data.items.map(item => ({
+            id: item.track.id,
+            name: item.track.name,
+            artist: item.track.artists[0].name,
+            year: item.track.album.release_date.split('-')[0]
+        }));
+    }
+
+    function createQRCard(track) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+                <div class="card-inner">
+                    <div class="card-front" id="qr-${track.id}"></div>
+                    <div class="card-back">
+                        <div class="p-4">
+                            <h3 class="text-xl font-bold">${track.name}</h3>
+                            <p class="text-gray-600">${track.artist}</p>
+                            <p class="text-gray-500">${track.year}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+        new QRCode(document.getElementById(`qr-${track.id}`), {
+            text: `https://www.gptgames.dev/tools/spotify_test.html?track=${track.id}`,
+            width: 200,
+            height: 200
+        });
+
+        return card;
+    }
+
+    async function createQRCodesFromPlaylist() {
+        const playlistUrl = prompt("Enter Spotify playlist URL:");
+        if (!playlistUrl) return;
+
+        try {
+            const tracks = await getPlaylistTracks(playlistUrl);
+            const printArea = document.getElementById('printArea');
+            printArea.innerHTML = '';
+
+            tracks.forEach(track => {
+                printArea.appendChild(createQRCard(track));
+            });
+
+            window.print();
+        } catch (error) {
+            alert('Error processing playlist: ' + error.message);
+        }
+    }
+
     function initializePlayer(token) {
         document.getElementById('setup').classList.add('hidden');
         document.getElementById('player').classList.remove('hidden');
+
+        localStorage.setItem('spotify_access_token', token);
 
         playerInstance = new Spotify.Player({
             name: 'Development Player',
@@ -88,6 +239,7 @@
         });
 
         document.getElementById('pauseResumeButton').onclick = togglePauseResume;
+        document.getElementById('createQRButton').onclick = createQRCodesFromPlaylist;
         playerInstance.connect();
     }
 </script>
