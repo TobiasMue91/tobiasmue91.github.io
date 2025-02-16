@@ -22,9 +22,15 @@
         button {
             padding: 0.5rem 1rem;
             cursor: pointer;
+            margin: 0.5rem;
         }
         .hidden {
             display: none;
+        }
+        #status {
+            margin: 1rem 0;
+            padding: 1rem;
+            background: #f0f0f0;
         }
     </style>
 </head>
@@ -35,12 +41,28 @@
 </div>
 
 <div id="player" class="hidden">
-    <button onclick="togglePlay()">Play/Pause</button>
+    <div id="status">Status: Initializing...</div>
+    <div>
+        <button onclick="handlePlay()">Play</button>
+        <button onclick="handlePause()">Pause</button>
+        <button onclick="handlePrevious()">Previous</button>
+        <button onclick="handleNext()">Next</button>
+        <button onclick="handleSeek()">Seek to 0</button>
+        <button onclick="getCurrentState()">Get Current State</button>
+        <button onclick="getVolume()">Get Volume</button>
+        <button onclick="setVolume(0.5)">Set Volume 50%</button>
+    </div>
 </div>
 
 <script>
     let playerInstance = null;
     const redirectUri = 'http://gptgames.dev/tools/spotify_test.html';
+    const statusDiv = document.getElementById('status');
+
+    function updateStatus(message) {
+        console.log(message);
+        statusDiv.textContent = `Status: ${message}`;
+    }
 
     window.onSpotifyWebPlaybackSDKReady = () => {
         const params = getHashParams();
@@ -52,7 +74,7 @@
     async function startAuth() {
         const clientId = document.getElementById('clientId').value;
         const state = Math.random().toString(36).substring(7);
-        const scope = 'streaming user-read-email user-read-private';
+        const scope = 'streaming user-read-email user-read-private user-modify-playback-state';
 
         const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}` +
             `&response_type=token` +
@@ -80,33 +102,106 @@
         document.getElementById('setup').classList.add('hidden');
         document.getElementById('player').classList.remove('hidden');
 
+        updateStatus('Initializing player...');
+
         playerInstance = new Spotify.Player({
             name: 'Development Player',
             getOAuthToken: cb => { cb(token); },
             volume: 0.5
         });
 
-        playerInstance.addListener('ready', ({ device_id }) => {
-            console.log('Ready with Device ID', device_id);
-        });
-
+        // Error handling
         playerInstance.addListener('initialization_error', ({ message }) => {
-            console.error('Failed to initialize', message);
+            updateStatus(`Initialization Error: ${message}`);
         });
 
         playerInstance.addListener('authentication_error', ({ message }) => {
-            console.error('Failed to authenticate', message);
+            updateStatus(`Authentication Error: ${message}`);
             document.getElementById('setup').classList.remove('hidden');
             document.getElementById('player').classList.add('hidden');
         });
 
+        playerInstance.addListener('account_error', ({ message }) => {
+            updateStatus(`Account Error: ${message}`);
+        });
+
+        playerInstance.addListener('playback_error', ({ message }) => {
+            updateStatus(`Playback Error: ${message}`);
+        });
+
+        // Playback status updates
+        playerInstance.addListener('player_state_changed', state => {
+            if (state) {
+                updateStatus(`
+                    Track: ${state.track_window.current_track.name}
+                    Artist: ${state.track_window.current_track.artists[0].name}
+                    Playing: ${!state.paused}
+                `);
+            }
+        });
+
+        // Ready
+        playerInstance.addListener('ready', ({ device_id }) => {
+            updateStatus(`Ready with Device ID: ${device_id}`);
+        });
+
+        // Not Ready
+        playerInstance.addListener('not_ready', ({ device_id }) => {
+            updateStatus(`Device ID has gone offline: ${device_id}`);
+        });
+
+        // Connect to the player
         playerInstance.connect();
     }
 
-    function togglePlay() {
-        if (playerInstance) {
-            playerInstance.togglePlay();
+    // Player Controls
+    async function handlePlay() {
+        const result = await playerInstance.resume();
+        updateStatus(`Play result: ${JSON.stringify(result)}`);
+    }
+
+    async function handlePause() {
+        const result = await playerInstance.pause();
+        updateStatus(`Pause result: ${JSON.stringify(result)}`);
+    }
+
+    async function handlePrevious() {
+        const result = await playerInstance.previousTrack();
+        updateStatus(`Previous track result: ${JSON.stringify(result)}`);
+    }
+
+    async function handleNext() {
+        const result = await playerInstance.nextTrack();
+        updateStatus(`Next track result: ${JSON.stringify(result)}`);
+    }
+
+    async function handleSeek() {
+        const result = await playerInstance.seek(0);
+        updateStatus(`Seek result: ${JSON.stringify(result)}`);
+    }
+
+    async function getCurrentState() {
+        const state = await playerInstance.getCurrentState();
+        if (state) {
+            updateStatus(`
+                Current track: ${state.track_window.current_track.name}
+                Artist: ${state.track_window.current_track.artists[0].name}
+                Position: ${state.position}
+                Paused: ${state.paused}
+            `);
+        } else {
+            updateStatus('No current state available');
         }
+    }
+
+    async function getVolume() {
+        const volume = await playerInstance.getVolume();
+        updateStatus(`Current volume: ${volume * 100}%`);
+    }
+
+    async function setVolume(value) {
+        const result = await playerInstance.setVolume(value);
+        updateStatus(`Set volume result: ${JSON.stringify(result)}`);
     }
 </script>
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
