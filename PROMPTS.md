@@ -227,3 +227,34 @@ Our goal is to improve it thoroughly.
 Raise the quality of this standalone page to a highly sophisticated and professional level and provide the updated code.
 </task>
 ```
+
+## Create commit messages
+
+To copy changes to clipboard for pasting:
+
+**Command line:**
+```bash
+git diff | pbcopy  # macOS
+git diff | clip    # Windows
+git diff | xclip   # Linux
+```
+
+**IDEs:**
+- **IntelliJ/WebStorm/PyCharm:** Open Commit panel → select files → right-click → "Copy as Patch to Clipboard"
+- **VS Code:** Install Git Patch extension → right-click file in diff view → "Copy as Git Patch"
+- **Visual Studio:** Team Explorer → Changes → right-click files → "Copy Change"
+- **Eclipse:** Select changed files in Git Staging view → right-click → "Copy Patch to Clipboard"
+
+**Prompt:**
+```
+Please write a concise but technical accurate commit message in the form of bullet points with lowercase first letters in a code block for the attached changes. 
+
+Requirements: 
+* Use backticks whenever appropriate 
+* Focus on major changes 
+* Use hyphens 
+* Avoid redundancy 
+* Use present tense and no conjugation  
+
+If you see any major errors or mistakes, please point them out.
+```
