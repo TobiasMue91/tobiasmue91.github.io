@@ -206,3 +206,24 @@ Here is the minified code:
 
 Now start providing improvements until I stop responding with `continue`.
 ````
+
+## Claude 3.7 Enhance existing tools/games Prompt
+
+```
+<goal>
+As you can see, the attached tool/game is not very sophisticated yet, but the core functionality is working well.
+Our goal is to improve it thoroughly.
+</goal>
+
+<requirements>
+* Don't overengineer.  Add smart, simple and straightforward features.
+* Don't change the core functionality.
+* The tool should stay in the scope of this single HTML page.
+* Provide the updated code with a minimal amount of line breaks and indentations in order to save tokens.
+* Implement modern, well-structured and fitting design, UI and UX.
+</requirements>
+
+<task>
+Raise the quality of this standalone page to a highly sophisticated and professional level and provide the updated code.
+</task>
+```
