@@ -355,10 +355,11 @@
     }
 
     // Filter and display items
-    function filterAndDisplayItems(resetPage = true) {
+    let isInitialLoad = true;
+
+    function filterAndDisplayItems(resetPage = true, updateHistory = true) {
         if (resetPage) currentPage = 1;
 
-        // Apply filters
         let filtered = [...allItems];
 
         if (currentFilter === 'game' || currentFilter === 'tool') {
@@ -371,8 +372,8 @@
             filtered = filtered.filter(item => isNewItem(item));
         }
 
-
         statsContainer.style.display = currentCategory === 'all' && currentFilter === 'all' ? 'flex' : 'none';
+
         if (currentCategory !== 'all') {
             filtered = filtered.filter(item => getCategory(item) === currentCategory);
         }
@@ -388,53 +389,143 @@
             clearSearch.style.display = 'none';
         }
 
-        // Apply sorting
         filtered = sortItems(filtered, currentSort);
-
-        // Update title
         updateTitle(filtered);
 
-        // Check if no results
+        if (updateHistory && !isInitialLoad) {
+            const params = new URLSearchParams();
+            if (currentFilter !== 'all') params.set('filter', currentFilter);
+            if (currentCategory !== 'all') params.set('category', currentCategory);
+            if (currentSort !== 'featured') params.set('sort', currentSort);
+            if (currentSearch) params.set('search', currentSearch);
+            if (isListView) params.set('view', 'list');
+
+            const url = params.toString() ? `?${params.toString()}` : window.location.pathname;
+            history.pushState({ filter: currentFilter, category: currentCategory, sort: currentSort,
+                search: currentSearch, view: isListView ? 'list' : 'grid', page: currentPage }, '', url);
+        }
+
         if (filtered.length === 0) {
             mainGrid.innerHTML = '';
             emptyState.style.display = 'block';
             return;
         }
 
-        // Show results
         emptyState.style.display = 'none';
         displayedItems = filtered;
 
-        // Paginate
         const end = currentPage * itemsPerPage;
         const itemsToShow = filtered.slice(0, end);
 
-        // Set view class
         mainGrid.className = isListView ? 'list-view' : 'grid-view';
-
-        // Render cards
         mainGrid.innerHTML = itemsToShow.map(createCard).join('');
 
-        // Set up read more buttons
         document.querySelectorAll('.read-more').forEach(btn => {
             btn.addEventListener('click', function() {
-                const id = this.getAttribute('data-id');
                 const descContainer = this.previousElementSibling;
                 descContainer.classList.toggle('truncated');
                 this.textContent = descContainer.classList.contains('truncated') ? 'Read more' : 'Read less';
             });
         });
 
-        // make full card clickable
         document.querySelectorAll('.card').forEach(card => {
             card.addEventListener('click', e => {
-                if (!e.target.closest('.read-more')) {
-                    console.log(e.currentTarget);
-                    card.querySelector('a').click();
-                }
+                if (!e.target.closest('.read-more')) card.querySelector('a').click();
             });
-        })
+        });
     }
+
+    async function fetchData() {
+        try {
+            const [gamesResponse, toolsResponse] = await Promise.all([
+                fetch('data/games.json'),
+                fetch('data/tools.json')
+            ]);
+
+            const gamesData = await gamesResponse.json();
+            const toolsData = await toolsResponse.json();
+
+            allItems = [...gamesData, ...toolsData];
+            updateStats();
+
+            const params = new URLSearchParams(window.location.search);
+
+            if (params.get('filter')) {
+                currentFilter = params.get('filter');
+                filterButtons.forEach(btn => {
+                    btn.classList.toggle('active', btn.getAttribute('data-filter') === currentFilter);
+                });
+            }
+
+            if (params.get('category')) {
+                currentCategory = params.get('category');
+                categoryFilter.value = currentCategory;
+            }
+
+            if (params.get('sort')) {
+                currentSort = params.get('sort');
+                sortSelect.value = currentSort;
+            }
+
+            if (params.get('search')) {
+                currentSearch = params.get('search');
+                searchInput.value = currentSearch;
+            }
+
+            if (params.get('view') === 'list') {
+                isListView = true;
+                listViewBtn.classList.add('active');
+                gridViewBtn.classList.remove('active');
+            }
+
+            filterAndDisplayItems(true, false);
+
+            const stateParams = new URLSearchParams();
+            if (currentFilter !== 'all') stateParams.set('filter', currentFilter);
+            if (currentCategory !== 'all') stateParams.set('category', currentCategory);
+            if (currentSort !== 'featured') stateParams.set('sort', currentSort);
+            if (currentSearch) stateParams.set('search', currentSearch);
+            if (isListView) stateParams.set('view', 'list');
+
+            const url = stateParams.toString() ? `?${stateParams.toString()}` : window.location.pathname;
+            history.replaceState({ filter: currentFilter, category: currentCategory, sort: currentSort,
+                search: currentSearch, view: isListView ? 'list' : 'grid', page: currentPage }, '', url);
+
+            isInitialLoad = false;
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            mainGrid.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><h3>Error loading data</h3><p>Please try again later</p></div>`;
+        }
+    }
+
+    window.addEventListener('popstate', function(event) {
+        if (event.state) {
+            currentFilter = event.state.filter || 'all';
+            currentCategory = event.state.category || 'all';
+            currentSort = event.state.sort || 'featured';
+            currentSearch = event.state.search || '';
+            isListView = event.state.view === 'list';
+            currentPage = event.state.page || 1;
+
+            filterButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-filter') === currentFilter);
+            });
+
+            categoryFilter.value = currentCategory;
+            sortSelect.value = currentSort;
+            searchInput.value = currentSearch;
+
+            if (isListView) {
+                listViewBtn.classList.add('active');
+                gridViewBtn.classList.remove('active');
+            } else {
+                gridViewBtn.classList.add('active');
+                listViewBtn.classList.remove('active');
+            }
+
+            filterAndDisplayItems(false, false);
+        }
+    });
 
     // Sort items
     function sortItems(items, sortMethod) {
@@ -504,30 +595,6 @@
 
         const randomItem = allItems[Math.floor(Math.random() * allItems.length)];
         window.location.href = randomItem.url;
-    }
-
-    // Fetch data
-    async function fetchData() {
-        try {
-            const [gamesResponse, toolsResponse] = await Promise.all([
-                fetch('data/games.json'),
-                fetch('data/tools.json')
-            ]);
-
-            const gamesData = await gamesResponse.json();
-            const toolsData = await toolsResponse.json();
-
-            allItems = [...gamesData, ...toolsData];
-
-            // Update statistics
-            updateStats();
-
-            // Initial display - featured items first, then newest
-            filterAndDisplayItems();
-        } catch (error) {
-            console.error('Error fetching data:', error);
-            mainGrid.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><h3>Error loading data</h3><p>Please try again later</p></div>`;
-        }
     }
 
     // Event listeners
