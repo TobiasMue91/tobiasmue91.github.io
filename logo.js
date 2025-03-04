@@ -18,8 +18,10 @@ window.addEventListener('load', function() {
     } else if (position === 'top-right') {
         logo.style.top = '10px';
         logo.style.right = '10px';
+    } else if (position === 'bottom-left') {
+        logo.style.bottom = '10px';
+        logo.style.left = '10px';
     } else {
-        // Default to bottom-right
         logo.style.bottom = '10px';
         logo.style.right = '10px';
     }

@@ -207,6 +207,28 @@ Here is the minified code:
 Now start providing improvements until I stop responding with `continue`.
 ````
 
+## Claude 3.7 Creating new tools/games
+```
+<goal>
+Create a standalone HTML page with embedded scripts and styling. The quality level should be exceptional. This time, we are creating an online ToDo-List.
+</goal>
+
+<requirements>
+* Don't overengineer.  Add smart, simple and straightforward features. If you realize you've overengineered, take a step back and try another approach.
+* Don't change the core functionality.
+* The tool should stay in the scope of this single HTML page.
+* Provide the updated code with a minimal amount of line breaks and indentations in order to save tokens.
+* Implement modern, well-structured and fitting design, UI and UX.
+* Take your time thinking and planning. Don't provide the finalized code before creating a watertight plan.
+* Modern JS, HTML and CSS only.
+* You are allowed/adviced to use external libraries via CDN.
+</requirements>
+
+<task>
+Provide an exceptionally well crafted and feature-rich online ToDo-List.
+</task>
+```
+
 ## Claude 3.7 Enhance existing tools/games Prompt
 
 ```
