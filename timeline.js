@@ -384,13 +384,6 @@ function exitTimeTravel() {
     document.querySelector('#timeline-exit').style.display = 'none';
 
     currentHash = null;
-
-    if (timelineData.length > 0) {
-        const slider = document.getElementById("slider");
-        const lastStep = slider.querySelector(".slider-step:last-child");
-        const sliderThumb = slider.querySelector(".slider-thumb");
-        sliderThumb.style.left = (parseInt(lastStep.style.left) - 2) + 'px';
-    }
 }
 
 function showLoading() {
