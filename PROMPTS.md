@@ -238,7 +238,7 @@ Our goal is to improve it thoroughly.
 </goal>
 
 <requirements>
-* Don't overengineer.  Add smart, simple and straightforward features.
+* Don't overengineer.  Add smart, simple and straightforward features. If some logic grew too complex by accident, take a step back and try another approach.
 * Don't change the core functionality.
 * The tool should stay in the scope of this single HTML page.
 * Provide the updated code with a minimal amount of line breaks and indentations in order to save tokens.
