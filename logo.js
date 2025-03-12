@@ -5,6 +5,7 @@ window.addEventListener('load', function () {
     const l = document.createElement('a');
     l.href = 'https://gptgames.dev';
     l.target = '_blank';
+    l.classList.add('logo')
     l.style.position = 'fixed';
     l.style.zIndex = '9999';
     l.style.transition = 'transform 0.2s ease';
