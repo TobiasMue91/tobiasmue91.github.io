@@ -8,8 +8,7 @@ let dragOffsetX = 0;
 let isAutoScrolling = false;
 let autoScrollDirection = 0;
 let autoScrollSpeed = 0;
-let lastMouseX = 0; // Store the last known mouse X position
-
+let lastMouseX = 0;
 if (window === window.top && !window.timelineInitialized) {
     window.timelineInitialized = true;
     window.addEventListener('load', initTimeline);
@@ -17,66 +16,54 @@ if (window === window.top && !window.timelineInitialized) {
 
 function initTimeline() {
     console.log("Initializing timeline...");
-
-    loadTimelineComponent()
-        .then(() => loadTimelineData())
-        .catch(error => {
-            console.error("Failed to initialize timeline:", error);
-        });
+    loadTimelineComponent().then(() => loadTimelineData()).catch(error => {
+        console.error("Failed to initialize timeline:", error);
+    });
 }
 
 function loadTimelineComponent() {
-    return fetch("timeline.html")
-        .then(response => response.text())
-        .then(html => {
-            const container = document.createElement('div');
-            container.id = 'timeline-overlay';
-            container.style.position = 'fixed';
-            container.style.top = '0';
-            container.style.left = '0';
-            container.style.width = '100%';
-            container.style.zIndex = '9999';
-            container.innerHTML = html;
-
-            document.body.appendChild(container);
-
-            contentFrame = document.createElement('iframe');
-            contentFrame.id = 'historical-content';
-            contentFrame.style.position = 'fixed';
-            contentFrame.style.top = '0';
-            contentFrame.style.left = '0';
-            contentFrame.style.width = '100%';
-            contentFrame.style.height = '100%';
-            contentFrame.style.border = 'none';
-            contentFrame.style.zIndex = '9998';
-            contentFrame.style.display = 'none';
-            contentFrame.style.background = 'white';
-
-            document.body.appendChild(contentFrame);
-
-            const timelineContainer = document.getElementById('timeline-container');
-            if (timelineContainer) {
-                timelineContainer.addEventListener('scroll', function() {
-                    timelineScrollPosition = this.scrollLeft;
-                });
-            }
-        });
+    return fetch("timeline.html").then(response => response.text()).then(html => {
+        const container = document.createElement('div');
+        container.id = 'timeline-overlay';
+        container.style.position = 'fixed';
+        container.style.top = '0';
+        container.style.left = '0';
+        container.style.width = '100%';
+        container.style.zIndex = '9999';
+        container.innerHTML = html;
+        document.body.appendChild(container);
+        contentFrame = document.createElement('iframe');
+        contentFrame.id = 'historical-content';
+        contentFrame.style.position = 'fixed';
+        contentFrame.style.top = '0';
+        contentFrame.style.left = '0';
+        contentFrame.style.width = '100%';
+        contentFrame.style.height = '100%';
+        contentFrame.style.border = 'none';
+        contentFrame.style.zIndex = '9998';
+        contentFrame.style.display = 'none';
+        contentFrame.style.background = 'white';
+        document.body.appendChild(contentFrame);
+        const timelineContainer = document.getElementById('timeline-container');
+        if (timelineContainer) {
+            timelineContainer.addEventListener('scroll', function () {
+                timelineScrollPosition = this.scrollLeft;
+            });
+        }
+    });
 }
 
 function loadTimelineData() {
-    return fetch("timeline_data.json")
-        .then(response => response.json())
-        .then(data => {
-            timelineData = data;
-            renderTimelineSteps(data);
-            setupTimelineEvents();
-        });
+    return fetch("timeline_data.json").then(response => response.json()).then(data => {
+        timelineData = data;
+        renderTimelineSteps(data);
+        setupTimelineEvents();
+    });
 }
 
 function renderTimelineSteps(data) {
     const slider = document.getElementById("slider");
     if (!slider) return;
-
     data.forEach((item, index) => {
         const step = document.createElement("div");
         step.className = "slider-step";
@@ -84,15 +71,12 @@ function renderTimelineSteps(data) {
         step.dataset.hash = item.hash;
         step.dataset.timestamp = item.timestamp;
         step.dataset.date = new Date(item.timestamp).toLocaleDateString();
-
         if (item.GptVersion) {
             step.dataset.gptVersion = item.GptVersion;
             step.title = "GPT Version: " + item.GptVersion;
         }
-
         slider.appendChild(step);
     });
-
     const lastElement = slider.querySelector(".slider-step:last-child");
     if (lastElement && slider.querySelector('.slider-track')) {
         slider.querySelector('.slider-track').style.width = lastElement.offsetLeft + 'px';
@@ -104,22 +88,18 @@ function setupTimelineEvents() {
         step.addEventListener("click", event => {
             const hash = event.target.dataset.hash;
             const sliderThumb = document.querySelector(".slider-thumb");
-
             sliderThumb.style.left = (parseInt(event.target.style.left) - 2) + 'px';
             timeTravel(hash);
         });
     });
-
     const sliderThumb = document.querySelector(".slider-thumb");
     if (sliderThumb) {
         sliderThumb.addEventListener("mousedown", handleSliderMouseDown);
     }
-
     const toggleBtn = document.querySelector('#timeline-toggle');
     if (toggleBtn) {
         toggleBtn.addEventListener('click', toggleTimeline);
     }
-
     addExitButton();
 }
 
@@ -137,16 +117,13 @@ function addExitButton() {
     exitBtn.style.cursor = 'pointer';
     exitBtn.style.zIndex = '10000';
     exitBtn.style.display = 'none';
-
     exitBtn.addEventListener('click', exitTimeTravel);
-
     document.body.appendChild(exitBtn);
 }
 
 function toggleTimeline() {
     const container = document.querySelector('#timeline-container');
     const toggle = document.querySelector('#timeline-toggle');
-
     if (container.classList.contains('collapsed')) {
         container.classList.remove('collapsed');
         toggle.textContent = '∨';
@@ -158,33 +135,25 @@ function toggleTimeline() {
 
 function handleSliderMouseDown(event) {
     event.preventDefault();
-
     const sliderThumb = document.querySelector(".slider-thumb");
     const thumbRect = sliderThumb.getBoundingClientRect();
-
     dragOffsetX = event.clientX - thumbRect.left - (thumbRect.width / 2);
     lastMouseX = event.clientX;
-
     isDragging = true;
-
     document.addEventListener("mousemove", handleSliderMouseMove);
     document.addEventListener("mouseup", handleSliderMouseUp);
 }
 
 function handleSliderMouseMove(event) {
     if (!isDragging) return;
-
     lastMouseX = event.clientX;
-
     const viewportWidth = window.innerWidth;
     const edgeThreshold = 100;
     const maxScrollSpeed = 5;
-
     if (event.clientX < edgeThreshold) {
         const distanceFromEdge = event.clientX;
         autoScrollSpeed = Math.max(1, maxScrollSpeed * (1 - distanceFromEdge / edgeThreshold));
         autoScrollDirection = -1;
-
         if (!isAutoScrolling) {
             isAutoScrolling = true;
             autoScroll();
@@ -193,7 +162,6 @@ function handleSliderMouseMove(event) {
         const distanceFromEdge = viewportWidth - event.clientX;
         autoScrollSpeed = Math.max(1, maxScrollSpeed * (1 - distanceFromEdge / edgeThreshold));
         autoScrollDirection = 1;
-
         if (!isAutoScrolling) {
             isAutoScrolling = true;
             autoScroll();
@@ -201,9 +169,7 @@ function handleSliderMouseMove(event) {
     } else {
         isAutoScrolling = false;
     }
-
     updateThumbPosition();
-
     clearTimeout(sliderMoveTimer);
     sliderMoveTimer = setTimeout(() => {
         const thumbPos = parseInt(document.querySelector(".slider-thumb").style.left);
@@ -217,29 +183,23 @@ function handleSliderMouseMove(event) {
 
 function autoScroll() {
     if (!isAutoScrolling || !isDragging) return;
-
     const timelineContainer = document.querySelector('#timeline-container');
     const timeline = document.querySelector('#timeline');
-
     let scrollChanged = false;
-
     if (timelineContainer && timelineContainer.scrollWidth > timelineContainer.clientWidth) {
         const maxScroll = timelineContainer.scrollWidth - timelineContainer.clientWidth;
         const oldScroll = timelineContainer.scrollLeft;
         const newScroll = Math.max(0, Math.min(maxScroll, timelineContainer.scrollLeft + autoScrollDirection * autoScrollSpeed));
-
         if (oldScroll !== newScroll) {
             timelineContainer.scrollLeft = newScroll;
             timelineScrollPosition = timelineContainer.scrollLeft;
             scrollChanged = true;
         }
     }
-
     if (timeline && timeline.scrollWidth > timeline.clientWidth) {
         const maxScroll = timeline.scrollWidth - timeline.clientWidth;
         const oldScroll = timeline.scrollLeft;
         const newScroll = Math.max(0, Math.min(maxScroll, timeline.scrollLeft + autoScrollDirection * autoScrollSpeed));
-
         if (oldScroll !== newScroll) {
             timeline.scrollLeft = newScroll;
             if (timeline.scrollLeft > 0 || timeline.scrollLeft < maxScroll) {
@@ -248,12 +208,9 @@ function autoScroll() {
             }
         }
     }
-
-    // Update thumb position if scroll position changed
     if (scrollChanged) {
         updateThumbPosition();
     }
-
     requestAnimationFrame(autoScroll);
 }
 
@@ -262,13 +219,10 @@ function updateThumbPosition() {
     const sliderThumb = slider.querySelector(".slider-thumb");
     const timelineContainer = document.querySelector('#timeline-container');
     const sliderRect = slider.getBoundingClientRect();
-
     const desiredLeft = (lastMouseX - sliderRect.left - dragOffsetX) + timelineContainer.scrollLeft;
-
     const minLeft = 0;
     const maxLeft = parseInt(slider.querySelector('.slider-track').style.width) || 10000;
     const thumbLeft = Math.max(minLeft, Math.min(maxLeft, desiredLeft));
-
     sliderThumb.style.left = thumbLeft + "px";
 }
 
@@ -277,13 +231,10 @@ function handleSliderMouseUp() {
     isAutoScrolling = false;
     document.removeEventListener("mousemove", handleSliderMouseMove);
     document.removeEventListener("mouseup", handleSliderMouseUp);
-
     clearTimeout(sliderMoveTimer);
-
     const sliderThumb = document.querySelector(".slider-thumb");
     const thumbPos = parseInt(sliderThumb.style.left);
     const nearestStep = findNearestStep(thumbPos);
-
     if (nearestStep) {
         sliderThumb.style.left = (parseInt(nearestStep.style.left) - 2) + 'px';
         timeTravel(nearestStep.dataset.hash);
@@ -293,86 +244,94 @@ function handleSliderMouseUp() {
 function findNearestStep(position) {
     const steps = Array.from(document.querySelectorAll(".slider-step"));
     if (steps.length === 0) return null;
-
     return steps.reduce((nearest, step) => {
         const stepPos = parseInt(step.style.left);
         const currentDistance = nearest ? Math.abs(position - parseInt(nearest.style.left)) : Infinity;
         const newDistance = Math.abs(position - stepPos);
-
         return newDistance < currentDistance ? step : nearest;
     }, null);
 }
 
+function rewriteAssetUrls(html, hash, currentPath) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const basePath = currentPath.split('/').slice(0, -1).join('/');
+    const baseUrl = `https://raw.githubusercontent.com/TobiasMue91/tobiasmue91.github.io/${hash}/`;
+    const baseTag = document.createElement('base');
+    baseTag.href = basePath ? `${baseUrl}${basePath}/` : baseUrl;
+    doc.head.prepend(baseTag);
+    doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+        const href = link.getAttribute('href');
+        if (href && !href.startsWith('http') && !href.startsWith('//')) {
+            link.setAttribute('href', new URL(href, baseUrl).href);
+        }
+    });
+    doc.querySelectorAll('img').forEach(img => {
+        const src = img.getAttribute('src');
+        if (src && !src.startsWith('http') && !src.startsWith('//')) {
+            img.setAttribute('src', new URL(src, baseUrl).href);
+        }
+    });
+    doc.querySelectorAll('script').forEach(script => {
+        const src = script.getAttribute('src');
+        if (src && !src.startsWith('http') && !src.startsWith('//')) {
+            script.setAttribute('src', new URL(src, baseUrl).href);
+        }
+    });
+    return new XMLSerializer().serializeToString(doc);
+}
+
 function timeTravel(hash, path = 'index.html') {
     if (hash === currentHash && path === 'index.html') return;
-
     showLoading();
-
     const githubUrl = `https://raw.githubusercontent.com/TobiasMue91/tobiasmue91.github.io/${hash}/${path}`;
-
-    fetch(githubUrl)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to fetch content: ${response.status}`);
-            }
-            return response.text();
-        })
-        .then(html => {
-            currentHash = hash;
-
-            if (contentFrame) {
-                contentFrame.remove();
-            }
-
-            contentFrame = document.createElement('iframe');
-            contentFrame.id = 'historical-content';
-            contentFrame.style.position = 'fixed';
-            contentFrame.style.top = '0';
-            contentFrame.style.left = '0';
-            contentFrame.style.width = '100%';
-            contentFrame.style.height = '100%';
-            contentFrame.style.border = 'none';
-            contentFrame.style.zIndex = '9998';
-            contentFrame.style.background = 'white';
-
-            document.body.appendChild(contentFrame);
-
-            contentFrame.style.display = 'block';
-            document.querySelector('#timeline-exit').style.display = 'block';
-
-            const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
-            frameDoc.open();
-            frameDoc.write(html);
-            frameDoc.close();
-
-            setTimeout(() => interceptLinks(frameDoc, hash), 300);
-
-            document.querySelector('#timeline-container').scrollLeft = timelineScrollPosition;
-
-            hideLoading();
-        })
-        .catch(error => {
-            console.error("Time travel failed:", error);
-            showError(`Failed to load content: ${error.message}`);
-            hideLoading();
-        });
+    fetch(githubUrl).then(response => {
+        if (!response.ok) {
+            throw new Error(`Failed to fetch content: ${response.status}`);
+        }
+        return response.text();
+    }).then(html => {
+        html = rewriteAssetUrls(html, hash, path);
+        currentHash = hash;
+        if (contentFrame) {
+            contentFrame.remove();
+        }
+        contentFrame = document.createElement('iframe');
+        contentFrame.id = 'historical-content';
+        contentFrame.style.position = 'fixed';
+        contentFrame.style.top = '0';
+        contentFrame.style.left = '0';
+        contentFrame.style.width = '100%';
+        contentFrame.style.height = '100%';
+        contentFrame.style.border = 'none';
+        contentFrame.style.zIndex = '9998';
+        contentFrame.style.background = 'white';
+        document.body.appendChild(contentFrame);
+        contentFrame.style.display = 'block';
+        document.querySelector('#timeline-exit').style.display = 'block';
+        const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+        frameDoc.open();
+        frameDoc.write(html);
+        frameDoc.close();
+        setTimeout(() => interceptLinks(frameDoc, hash), 300);
+        document.querySelector('#timeline-container').scrollLeft = timelineScrollPosition;
+        hideLoading();
+    }).catch(error => {
+        console.error("Time travel failed:", error);
+        showError(`Failed to load content: ${error.message}`);
+        hideLoading();
+    });
 }
 
 function interceptLinks(doc, hash) {
     const links = doc.querySelectorAll('a');
-
     links.forEach(link => {
         const href = link.getAttribute('href');
         if (!href) return;
-
-        if (href.startsWith('http') ||
-            href.startsWith('#') ||
-            href.startsWith('javascript:') ||
-            href.startsWith('mailto:')) {
+        if (href.startsWith('http') || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:')) {
             return;
         }
-
-        link.addEventListener('click', function(event) {
+        link.addEventListener('click', function (event) {
             event.preventDefault();
             timeTravel(hash, href);
         });
@@ -382,7 +341,6 @@ function interceptLinks(doc, hash) {
 function exitTimeTravel() {
     contentFrame.style.display = 'none';
     document.querySelector('#timeline-exit').style.display = 'none';
-
     currentHash = null;
 }
 
@@ -428,10 +386,8 @@ function showError(message, duration = 5000) {
         errorDiv.style.zIndex = '10000';
         document.body.appendChild(errorDiv);
     }
-
     errorDiv.textContent = message;
     errorDiv.style.display = 'block';
-
     setTimeout(() => {
         errorDiv.style.display = 'none';
     }, duration);
