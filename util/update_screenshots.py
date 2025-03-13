@@ -52,15 +52,34 @@ def get_recently_modified_paths_timestamp(project_root, num_entries=10):
         print(f"Error finding modified files by timestamp: {str(e)}")
         return []
 
-def update_screenshots(entries_file, modified_paths=None, max_entries=10, base_url="http://localhost:80"):
+def get_last_modification_time_git(file_path, project_root):
+    """Get the last modification time of a file using git"""
+    try:
+        # Get the timestamp of the last commit that modified this file
+        result = subprocess.run(
+            ["git", "-C", str(project_root), "log", "-1", "--format=%at", "--", str(file_path)],
+            capture_output=True, text=True, check=True
+        )
+
+        # Parse the output to get the timestamp
+        timestamp = result.stdout.strip()
+        if timestamp:
+            return int(timestamp)
+        return None
+    except Exception as e:
+        print(f"Error getting git modification time for {file_path}: {str(e)}")
+        return None
+
+def update_screenshots(entries_file, modified_paths=None, max_entries=10, base_url="http://localhost:80", screenshot_age_days=7):
     """
-    Update screenshots for recently modified entries in a JSON file
+    Update screenshots for recently modified entries in a JSON file, excluding screenshots updated recently
 
     Args:
         entries_file: Path to the JSON file with entries
         modified_paths: List of recently modified file paths
         max_entries: Maximum number of entries to update
         base_url: Base URL for the local server
+        screenshot_age_days: Skip screenshots updated within this many days
     """
     # Get absolute project root path (2 levels up from the script location)
     script_dir = Path(__file__).resolve().parent
@@ -108,6 +127,43 @@ def update_screenshots(entries_file, modified_paths=None, max_entries=10, base_u
 
     if not entries:
         print("No entries to update.")
+        return
+
+    print(f"Checking {len(entries)} entries for screenshot updates...")
+
+    # Current time as a UNIX timestamp
+    current_time = time.time()
+
+    # Minimum age threshold in seconds
+    age_threshold = current_time - (screenshot_age_days * 24 * 60 * 60)
+
+    # Filter out entries with recently updated screenshots
+    entries_to_update = []
+    for entry in entries:
+        if "url" not in entry or "screenshot" not in entry:
+            continue
+
+        screenshot_path = entry["screenshot"]
+        abs_screenshot_path = project_root / screenshot_path
+
+        # Skip if screenshot doesn't exist yet (always update in this case)
+        if not abs_screenshot_path.exists():
+            entries_to_update.append(entry)
+            continue
+
+        # Check when screenshot was last updated using git
+        last_update = get_last_modification_time_git(abs_screenshot_path, project_root)
+
+        # If we couldn't get git info or the screenshot is older than the threshold, update it
+        if not last_update or last_update < age_threshold:
+            entries_to_update.append(entry)
+        else:
+            print(f"Skipping recently updated screenshot: {screenshot_path}")
+
+    entries = entries_to_update
+
+    if not entries:
+        print("No entries need screenshot updates.")
         return
 
     print(f"Updating screenshots for {len(entries)} entries...")
@@ -203,6 +259,9 @@ if __name__ == "__main__":
     # Get number of entries to update
     max_entries = int(input("\nEnter maximum number of entries to update (default: 10): ") or "10")
 
+    # Get screenshot age threshold
+    screenshot_age_days = int(input("\nSkip screenshots updated within the last X days (default: 7): ") or "7")
+
     # Get modified paths based on chosen method
     modified_paths = None
     if choice == "1":
@@ -223,7 +282,7 @@ if __name__ == "__main__":
             print(f"  - {path}")
 
     # Process games and tools
-    update_screenshots("data/games.json", modified_paths, max_entries, base_url)
-    update_screenshots("data/tools.json", modified_paths, max_entries, base_url)
+    update_screenshots("data/games.json", modified_paths, max_entries, base_url, screenshot_age_days)
+    update_screenshots("data/tools.json", modified_paths, max_entries, base_url, screenshot_age_days)
 
     print("\nScreenshot update process completed!")
