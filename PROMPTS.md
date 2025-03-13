@@ -243,6 +243,7 @@ Our goal is to improve it thoroughly.
 * The tool should stay in the scope of this single HTML page.
 * Provide the updated code with a minimal amount of line breaks and indentations in order to save tokens.
 * Implement modern, well-structured and fitting design, UI and UX.
+* Take your time thinking and planning. Don't provide the finalized code before creating a watertight plan.
 </requirements>
 
 <task>
