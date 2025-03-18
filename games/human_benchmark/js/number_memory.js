@@ -63,11 +63,18 @@ $(function () {
 
             // Start the progress bar animation
             $progressBar.width('100%');
-            $progressBar.animate({width: '0%'}, duration, 'linear');
+            $progressBar.css({
+                'transition': `width ${duration}ms linear`,
+                'width': '0%'
+            });
             timer = setTimeout(() => {
                 $("#number-area").empty();
                 $("#answer-input").show().focus();
                 $("#submit-answer").show();
+                $progressBar.css({
+                    'transition': `none`,
+                    'width': '100%'
+                });
             }, duration);
         }, 1000);
     }
