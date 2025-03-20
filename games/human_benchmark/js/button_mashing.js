@@ -52,11 +52,13 @@ $(function () {
         mashedButton = '';
         $("#mashing-counter").text(totalPresses);
         startTime = new Date();
-        var timer = 10;
         var timerInterval = setInterval(function () {
-            timer -= 0.01;
-            $("#mashing-timer").text(timer.toFixed(3));
-            if (timer <= 0) {
+            var currentTime = new Date();
+            var elapsedSeconds = (currentTime - startTime) / 1000;
+            var remainingTime = Math.max(10 - elapsedSeconds, 0);
+            $("#mashing-timer").text(remainingTime.toFixed(3));
+
+            if (remainingTime <= 0) {
                 clearInterval(timerInterval);
                 endTime = new Date();
                 $("#mashing-instruction").text("Please wait before restarting...");
