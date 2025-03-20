@@ -314,6 +314,7 @@ function rewriteAssetUrls(html, hash, currentPath) {
 function timeTravel(hash, path = 'index.html') {
     if (hash === currentHash && path === 'index.html') return;
     showLoading();
+
     const githubUrl = `https://raw.githubusercontent.com/TobiasMue91/tobiasmue91.github.io/${hash}/${path}`;
     fetch(githubUrl).then(response => {
         if (!response.ok) {
