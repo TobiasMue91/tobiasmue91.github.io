@@ -244,6 +244,7 @@ Our goal is to improve it thoroughly.
 * Provide the updated code with a minimal amount of line breaks and indentations in order to save tokens.
 * Implement modern, well-structured and fitting design, UI and UX.
 * Take your time thinking and planning. Don't provide the finalized code before creating a watertight plan.
+* If parts of the existing implementation don't fit your plan, feel free to remove or change them.
 </requirements>
 
 <task>
