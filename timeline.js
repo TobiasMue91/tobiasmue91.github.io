@@ -252,106 +252,79 @@ function findNearestStep(position) {
     }, null);
 }
 
-function rewriteAssetUrls(html, hash, currentPath) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const basePath = currentPath.split('/').slice(0, -1).join('/');
-    const baseUrl = `https://raw.githubusercontent.com/TobiasMue91/tobiasmue91.github.io/${hash}/`;
-    const baseTag = document.createElement('base');
-    baseTag.href = basePath ? `${baseUrl}${basePath}/` : baseUrl;
-    doc.head.prepend(baseTag);
-
-    // Remove problematic scripts that shouldn't be loaded in time travel mode
-    const scriptsToRemove = [
-        'timeline.js',
-        'sw.js',
-        'chatbot.js',
-        'gc.zgo.at/count.js'
-    ];
-
-    // Remove script tags with matching src attributes
-    doc.querySelectorAll('script').forEach(script => {
-        const src = script.getAttribute('src');
-        if (src && scriptsToRemove.some(badScript => src.includes(badScript))) {
-            script.remove();
-        }
-    });
-
-    // Also remove inline scripts related to service worker registration
-    doc.querySelectorAll('script:not([src])').forEach(script => {
-        if (script.textContent.includes('serviceWorker.register') ||
-            script.textContent.includes('goatcounter')) {
-            script.remove();
-        }
-    });
-
-    // Continue with the existing URL rewriting logic
-    doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
-        const href = link.getAttribute('href');
-        if (href && !href.startsWith('http') && !href.startsWith('//')) {
-            link.setAttribute('href', new URL(href, baseUrl).href);
-        }
-    });
-
-    doc.querySelectorAll('img').forEach(img => {
-        const src = img.getAttribute('src');
-        if (src && !src.startsWith('http') && !src.startsWith('//')) {
-            img.setAttribute('src', new URL(src, baseUrl).href);
-        }
-    });
-
-    // Only rewrite URLs for scripts we're keeping
-    doc.querySelectorAll('script').forEach(script => {
-        const src = script.getAttribute('src');
-        if (src && !src.startsWith('http') && !src.startsWith('//')) {
-            script.setAttribute('src', new URL(src, baseUrl).href);
-        }
-    });
-
-    return new XMLSerializer().serializeToString(doc);
-}
-
 function timeTravel(hash, path = 'index.html') {
     if (hash === currentHash && path === 'index.html') return;
     showLoading();
 
     const githubUrl = `https://raw.githubusercontent.com/TobiasMue91/tobiasmue91.github.io/${hash}/${path}`;
-    fetch(githubUrl).then(response => {
-        if (!response.ok) {
-            throw new Error(`Failed to fetch content: ${response.status}`);
-        }
-        return response.text();
-    }).then(html => {
-        html = rewriteAssetUrls(html, hash, path);
-        currentHash = hash;
-        if (contentFrame) {
-            contentFrame.remove();
-        }
-        contentFrame = document.createElement('iframe');
-        contentFrame.id = 'historical-content';
-        contentFrame.style.position = 'fixed';
-        contentFrame.style.top = '0';
-        contentFrame.style.left = '0';
-        contentFrame.style.width = '100%';
-        contentFrame.style.height = '100%';
-        contentFrame.style.border = 'none';
-        contentFrame.style.zIndex = '9998';
-        contentFrame.style.background = 'white';
-        document.body.appendChild(contentFrame);
-        contentFrame.style.display = 'block';
-        document.querySelector('#timeline-exit').style.display = 'block';
-        const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
-        frameDoc.open();
-        frameDoc.write(html);
-        frameDoc.close();
-        setTimeout(() => interceptLinks(frameDoc, hash), 300);
-        document.querySelector('#timeline-container').scrollLeft = timelineScrollPosition;
-        hideLoading();
-    }).catch(error => {
-        console.error("Time travel failed:", error);
-        showError(`Failed to load content: ${error.message}`);
-        hideLoading();
-    });
+    fetch(githubUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Failed to fetch content: ${response.status}`);
+            }
+            return response.text();
+        })
+        .then(html => {
+            // Skip HTML rewriting entirely and just inject the fetch interceptor directly
+            currentHash = hash;
+
+            if (contentFrame) {
+                contentFrame.remove();
+            }
+
+            contentFrame = document.createElement('iframe');
+            contentFrame.id = 'historical-content';
+            contentFrame.style.position = 'fixed';
+            contentFrame.style.top = '0';
+            contentFrame.style.left = '0';
+            contentFrame.style.width = '100%';
+            contentFrame.style.height = '100%';
+            contentFrame.style.border = 'none';
+            contentFrame.style.zIndex = '9998';
+            contentFrame.style.background = 'white';
+            document.body.appendChild(contentFrame);
+
+            contentFrame.style.display = 'block';
+            document.querySelector('#timeline-exit').style.display = 'block';
+
+            const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+            frameDoc.open();
+            frameDoc.write(html);
+
+            // Inject the fetch interceptor script without modifying anything else
+            const script = frameDoc.createElement('script');
+            script.textContent = `
+                // Intercept fetch for JSON files only
+                const originalFetch = window.fetch;
+                window.fetch = function(url, options) {
+                    if (typeof url === 'string') {
+                        if (url.includes('data/games.json') || url.includes('data/tools.json')) {
+                            const fileName = url.split('/').pop();
+                            const absoluteUrl = "https://raw.githubusercontent.com/TobiasMue91/tobiasmue91.github.io/${hash}/data/" + fileName;
+                            console.log("Rewriting fetch URL:", url, "to", absoluteUrl);
+                            return originalFetch(absoluteUrl, options);
+                        }
+                    }
+                    return originalFetch(url, options);
+                };
+                console.log("Fetch interceptor installed for JSON files");
+            `;
+            frameDoc.head.appendChild(script);
+
+            // Close the document after adding the script
+            frameDoc.close();
+
+            // Set up link interception
+            setTimeout(() => interceptLinks(frameDoc, hash), 300);
+
+            document.querySelector('#timeline-container').scrollLeft = timelineScrollPosition;
+            hideLoading();
+        })
+        .catch(error => {
+            console.error("Time travel failed:", error);
+            showError(`Failed to load content: ${error.message}`);
+            hideLoading();
+        });
 }
 
 function interceptLinks(doc, hash) {
