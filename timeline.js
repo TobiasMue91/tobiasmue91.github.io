@@ -265,7 +265,13 @@ function timeTravel(hash, path = 'index.html') {
             return response.text();
         })
         .then(html => {
-            // Skip HTML rewriting entirely and just inject the fetch interceptor directly
+            // Add base tag without complex HTML parsing
+            const baseUrl = `https://raw.githubusercontent.com/TobiasMue91/tobiasmue91.github.io/${hash}/`;
+            const baseTag = `<base href="${baseUrl}">`;
+
+            // Insert the base tag at the beginning of the head (simple string replace)
+            html = html.replace(/<head>/i, `<head>${baseTag}`);
+
             currentHash = hash;
 
             if (contentFrame) {
@@ -291,32 +297,36 @@ function timeTravel(hash, path = 'index.html') {
             frameDoc.open();
             frameDoc.write(html);
 
-            // Inject the fetch interceptor script without modifying anything else
+            // This is the same fetch interceptor that worked before
             const script = frameDoc.createElement('script');
-            script.textContent = `
-                // Intercept fetch for JSON files only
-                const originalFetch = window.fetch;
-                window.fetch = function(url, options) {
-                    if (typeof url === 'string') {
-                        if (url.includes('data/games.json') || url.includes('data/tools.json')) {
-                            const fileName = url.split('/').pop();
-                            const absoluteUrl = "https://raw.githubusercontent.com/TobiasMue91/tobiasmue91.github.io/${hash}/data/" + fileName;
-                            console.log("Rewriting fetch URL:", url, "to", absoluteUrl);
-                            return originalFetch(absoluteUrl, options);
-                        }
-                    }
-                    return originalFetch(url, options);
-                };
-                console.log("Fetch interceptor installed for JSON files");
-            `;
+            script.textContent =
+                "// Remove problematic scripts\n" +
+                "const scriptsToRemove = ['timeline.js', 'sw.js', 'chatbot.js', 'gc.zgo.at/count.js'];\n" +
+                "document.querySelectorAll('script').forEach(script => {\n" +
+                "  const src = script.getAttribute('src');\n" +
+                "  if (src && scriptsToRemove.some(name => src.includes(name))) {\n" +
+                "    script.remove();\n" +
+                "  }\n" +
+                "});\n" +
+                "\n" +
+                "// Intercept fetch for JSON files\n" +
+                "const originalFetch = window.fetch;\n" +
+                "window.fetch = function(url, options) {\n" +
+                "  if (typeof url === 'string') {\n" +
+                "    if (url.includes('data/games.json') || url.includes('data/tools.json')) {\n" +
+                "      const fileName = url.split('/').pop();\n" +
+                "      const absoluteUrl = '" + baseUrl + "data/' + fileName;\n" +
+                "      console.log('Rewriting fetch URL:', url, 'to', absoluteUrl);\n" +
+                "      return originalFetch(absoluteUrl, options);\n" +
+                "    }\n" +
+                "  }\n" +
+                "  return originalFetch(url, options);\n" +
+                "};";
             frameDoc.head.appendChild(script);
 
-            // Close the document after adding the script
             frameDoc.close();
 
-            // Set up link interception
             setTimeout(() => interceptLinks(frameDoc, hash), 300);
-
             document.querySelector('#timeline-container').scrollLeft = timelineScrollPosition;
             hideLoading();
         })
