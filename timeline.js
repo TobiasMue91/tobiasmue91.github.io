@@ -260,24 +260,54 @@ function rewriteAssetUrls(html, hash, currentPath) {
     const baseTag = document.createElement('base');
     baseTag.href = basePath ? `${baseUrl}${basePath}/` : baseUrl;
     doc.head.prepend(baseTag);
+
+    // Remove problematic scripts that shouldn't be loaded in time travel mode
+    const scriptsToRemove = [
+        'timeline.js',
+        'sw.js',
+        'chatbot.js',
+        'gc.zgo.at/count.js'
+    ];
+
+    // Remove script tags with matching src attributes
+    doc.querySelectorAll('script').forEach(script => {
+        const src = script.getAttribute('src');
+        if (src && scriptsToRemove.some(badScript => src.includes(badScript))) {
+            script.remove();
+        }
+    });
+
+    // Also remove inline scripts related to service worker registration
+    doc.querySelectorAll('script:not([src])').forEach(script => {
+        if (script.textContent.includes('serviceWorker.register') ||
+            script.textContent.includes('goatcounter')) {
+            script.remove();
+        }
+    });
+
+    // Continue with the existing URL rewriting logic
     doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
         const href = link.getAttribute('href');
         if (href && !href.startsWith('http') && !href.startsWith('//')) {
             link.setAttribute('href', new URL(href, baseUrl).href);
         }
     });
+
     doc.querySelectorAll('img').forEach(img => {
         const src = img.getAttribute('src');
         if (src && !src.startsWith('http') && !src.startsWith('//')) {
             img.setAttribute('src', new URL(src, baseUrl).href);
         }
     });
+
+    // Only rewrite URLs for scripts we're keeping
     doc.querySelectorAll('script').forEach(script => {
         const src = script.getAttribute('src');
         if (src && !src.startsWith('http') && !src.startsWith('//')) {
             script.setAttribute('src', new URL(src, baseUrl).href);
         }
     });
+
     return new XMLSerializer().serializeToString(doc);
 }
 
