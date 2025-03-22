@@ -8,27 +8,11 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .drop-zone {
-            border: 2px dashed #d1d5db;
-            transition: all 0.2s ease;
-        }
-        .drop-zone.active {
-            border-color: #3b82f6;
-            background-color: rgba(59, 130, 246, 0.05);
-        }
-        .thumbnail {
-            width: 60px;
-            height: 60px;
-            object-fit: cover;
-            border-radius: 4px;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            appearance: none;
-            width: 16px;
-            height: 16px;
-            background: #3b82f6;
-            border-radius: 50%;
-        }
+        .drop-zone {border: 2px dashed #d1d5db; transition: all 0.2s ease;}
+        .drop-zone.active {border-color: #3b82f6; background-color: rgba(59, 130, 246, 0.05);}
+        .thumbnail {width: 60px; height: 60px; object-fit: cover; border-radius: 4px;}
+        input[type="range"]::-webkit-slider-thumb {appearance: none; width: 16px; height: 16px; background: #3b82f6; border-radius: 50%;}
+        input[type="range"]::-moz-range-thumb {appearance: none; width: 16px; height: 16px; background: #3b82f6; border-radius: 50%; border: none;}
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen py-8">
@@ -235,7 +219,7 @@
 
         <!-- Footer -->
         <footer class="mt-8 text-center text-sm text-gray-500">
-            <p>© 2025 Image Converter Tool. All processing happens in your browser — no files are uploaded to any server.</p>
+            <p>© 2025 Image Converter Tool. All image processing happens in your browser — no files are uploaded to any server.</p>
         </footer>
     </div>
 </div>
@@ -615,50 +599,95 @@
                 const buffer = await image.getBufferAsync(Jimp.MIME_BMP);
                 convertedBlob = new Blob([buffer], { type: 'image/bmp' });
             } else {
-                // Use image-conversion for other formats
-                let options = {
-                    quality: state.compressionLevel / 100,
-                    type: state.format
-                };
-
-                if (state.resize.enabled) {
-                    options.width = parseInt(state.resize.width);
-                    options.height = parseInt(state.resize.height);
-                }
-
-                convertedBlob = await imageConversion.compress(file, options);
-
-                if (state.rotate.enabled && state.rotate.angle !== 0) {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
+                // For PNG, force proper conversion using Canvas
+                if (state.format === 'image/png') {
+                    // Create a canvas to ensure PNG format
                     const img = new Image();
-
-                    await new Promise((resolve) => {
+                    const loadPromise = new Promise((resolve) => {
                         img.onload = resolve;
-                        img.src = URL.createObjectURL(convertedBlob);
+                        img.src = URL.createObjectURL(file);
                     });
 
-                    if (state.rotate.angle === 90 || state.rotate.angle === 270) {
-                        canvas.width = img.height;
-                        canvas.height = img.width;
+                    await loadPromise;
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = state.resize.enabled ? state.resize.width : img.width;
+                    canvas.height = state.resize.enabled ? state.resize.height : img.height;
+
+                    const ctx = canvas.getContext('2d');
+
+                    if (state.rotate.enabled && state.rotate.angle !== 0) {
+                        // Handle rotation for PNG
+                        if (state.rotate.angle === 90 || state.rotate.angle === 270) {
+                            canvas.width = img.height;
+                            canvas.height = img.width;
+                        }
+
+                        ctx.translate(canvas.width / 2, canvas.height / 2);
+                        ctx.rotate(state.rotate.angle * Math.PI / 180);
+                        ctx.drawImage(img, -img.width / 2, -img.height / 2);
                     } else {
-                        canvas.width = img.width;
-                        canvas.height = img.height;
+                        // No rotation, just draw the image
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                     }
 
-                    ctx.translate(canvas.width / 2, canvas.height / 2);
-                    ctx.rotate(state.rotate.angle * Math.PI / 180);
-                    ctx.drawImage(img, -img.width / 2, -img.height / 2);
-
-                    await new Promise(resolve => {
-                        canvas.toBlob((blob) => {
-                            convertedBlob = blob;
-                            resolve();
-                        }, state.format, state.compressionLevel / 100);
+                    // Get PNG data
+                    convertedBlob = await new Promise(resolve => {
+                        canvas.toBlob(blob => resolve(blob), 'image/png');
                     });
+                } else {
+                    // Use image-conversion for JPEG and GIF
+                    let options = {
+                        quality: state.compressionLevel / 100,
+                        type: state.format
+                    };
+
+                    if (state.resize.enabled) {
+                        options.width = parseInt(state.resize.width);
+                        options.height = parseInt(state.resize.height);
+                    }
+
+                    convertedBlob = await imageConversion.compress(file, options);
+
+                    if (state.rotate.enabled && state.rotate.angle !== 0) {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        const img = new Image();
+
+                        await new Promise((resolve) => {
+                            img.onload = resolve;
+                            img.src = URL.createObjectURL(convertedBlob);
+                        });
+
+                        if (state.rotate.angle === 90 || state.rotate.angle === 270) {
+                            canvas.width = img.height;
+                            canvas.height = img.width;
+                        } else {
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                        }
+
+                        ctx.translate(canvas.width / 2, canvas.height / 2);
+                        ctx.rotate(state.rotate.angle * Math.PI / 180);
+                        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+                        await new Promise(resolve => {
+                            canvas.toBlob((blob) => {
+                                convertedBlob = blob;
+                                resolve();
+                            }, state.format, state.compressionLevel / 100);
+                        });
+                    }
                 }
             }
 
+            // Double-check that we're using the correct MIME type
+            if (convertedBlob.type !== state.format) {
+                console.warn(`Blob type mismatch: ${convertedBlob.type} vs expected ${state.format}. Forcing correct type.`);
+                convertedBlob = new Blob([await convertedBlob.arrayBuffer()], { type: state.format });
+            }
+
+            // Add to zip with correct extension
             zip.file(fileName, convertedBlob);
             const blobUrl = URL.createObjectURL(convertedBlob);
             const newSize = convertedBlob.size;
