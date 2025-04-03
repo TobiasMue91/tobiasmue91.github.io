@@ -152,8 +152,16 @@ def take_screenshot(driver, url, screenshot_file):
 if __name__ == "__main__":
     base_dir = get_base_dir()
 
-    # Get the latest added file from git
-    latest_file = get_latest_git_added_file("tools", base_dir) or get_latest_git_added_file("games", base_dir)
+    # Ask the user what type of entry they're adding
+    entry_type = ""
+    while entry_type not in ["tool", "game"]:
+        entry_type = input("Are you adding a tool or a game? (tool/game): ").lower()
+        if entry_type not in ["tool", "game"]:
+            print("Please enter either 'tool' or 'game'.")
+
+    # Get the latest added file from git based on the entry type
+    directory = "tools" if entry_type == "tool" else "games"
+    latest_file = get_latest_git_added_file(directory, base_dir)
 
     if latest_file:
         file_path = latest_file
@@ -174,7 +182,8 @@ if __name__ == "__main__":
         if confirm != "yes":
             entry_name = input("Enter the tool/game name: ")
     else:
-        file_path = input("Enter the file path: ")
+        print(f"No recently added file found in the {directory} directory.")
+        file_path = input(f"Enter the {entry_type} file path: ")
         full_path = base_dir / file_path
 
         # Try to extract name from HTML title
@@ -184,14 +193,11 @@ if __name__ == "__main__":
             print(f"Found title in HTML: {entry_name}")
             confirm = input(f"Use '{entry_name}' as the name? (yes/no): ").lower()
             if confirm != "yes":
-                entry_name = input("Enter the tool/game name: ")
+                entry_name = input(f"Enter the {entry_type} name: ")
         else:
-            entry_name = input("Enter the tool/game name: ")
+            entry_name = input(f"Enter the {entry_type} name: ")
 
     description = input("Enter the description: ")
-
-    # Determine if it's a tool or game based on the file path
-    entry_type = "tool" if "tools" in file_path.lower() else "game"
 
     # Ask for additional JSON fields
     ai_powered = input("Is this AI powered? (yes/no): ").lower() == "yes"
