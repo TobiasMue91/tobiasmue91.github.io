@@ -7,6 +7,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
   <style>
+    /* Keep all existing styles */
     :root {
       --primary-color: #4361ee;
       --secondary-color: #3f37c9;
@@ -168,6 +169,33 @@
         flex-direction: column;
       }
     }
+    /* New styles for warnings and loading */
+    .warning-badge {
+      display: inline-block;
+      padding: 0.25em 0.4em;
+      font-size: 75%;
+      font-weight: 700;
+      line-height: 1;
+      text-align: center;
+      white-space: nowrap;
+      vertical-align: baseline;
+      border-radius: 0.25rem;
+      color: #fff;
+      background-color: #ffc107;
+      color: #212529;
+    }
+    .loading-spinner {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 0.2em solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: spinner-border .75s linear infinite;
+    }
+    @keyframes spinner-border {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -239,6 +267,16 @@
               </div>
             </div>
 
+            <div class="form-group mb-3" id="fit-mode-container">
+              <label for="fit-mode-select" class="form-label">Fitting mode</label>
+              <select class="form-select" id="fit-mode-select">
+                <option value="stretch">Stretch/Compress</option>
+                <option value="crop">Crop to Fill</option>
+                <option value="letterbox">Add Black Bars</option>
+              </select>
+              <small class="form-text text-muted">How to handle aspect ratio differences</small>
+            </div>
+
             <div class="row">
               <div class="col-md-6">
                 <div class="form-group mb-3">
@@ -265,8 +303,12 @@
             <div class="rotate-controls">
               <button class="btn btn-outline-secondary btn-sm" id="rotate-left"><i class="bi bi-arrow-counterclockwise"></i> Rotate Left</button>
               <button class="btn btn-outline-secondary btn-sm" id="rotate-right"><i class="bi bi-arrow-clockwise"></i> Rotate Right</button>
-              <button class="btn btn-outline-secondary btn-sm" id="flip-horizontal"><i class="bi bi-symmetry-horizontal"></i></button>
-              <button class="btn btn-outline-secondary btn-sm" id="flip-vertical"><i class="bi bi-symmetry-vertical"></i></button>
+              <button class="btn btn-outline-secondary btn-sm" id="flip-horizontal">
+                <i class="bi bi-symmetry-vertical"></i>
+              </button>
+              <button class="btn btn-outline-secondary btn-sm" id="flip-vertical">
+                <i class="bi bi-symmetry-horizontal"></i>
+              </button>
             </div>
 
             <div class="d-grid gap-2">
@@ -306,7 +348,7 @@
       </div>
     </div>
     <div class="card-footer bg-white text-center text-muted small py-2">
-      Made with <i class="bi bi-heart-fill text-danger"></i> by GPTGames
+      Made with 🦃 by GPTGames
     </div>
   </div>
 </div>
@@ -347,6 +389,8 @@
     const progressBar = document.getElementById('progress-bar');
     const qualityControl = document.getElementById('quality-control');
     const currentDate = document.getElementById('current-date');
+    const fitModeSelect = document.getElementById('fit-mode-select');
+    const fitModeContainer = document.getElementById('fit-mode-container');
 
     // Variables
     let originalImage = null;
@@ -357,8 +401,28 @@
     let origHeight = 0;
     let imageLoaded = false;
     let resizeTimeout = null;
-    let maxWidth = 2000;
-    let maxHeight = 2000;
+    let processingImage = false;
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_DIMENSION = 4000; // 4000px max dimension
+    const IMAGE_PROCESS_TIMEOUT = 30000; // 30 seconds timeout for processing
+
+    // Browser capability detection
+    const browserSupportsWebP = (() => {
+      const canvas = document.createElement('canvas');
+      if (canvas.getContext && canvas.getContext('2d')) {
+        return canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+      }
+      return false;
+    })();
+
+    // Update WebP option availability
+    if (!browserSupportsWebP) {
+      const webpOption = Array.from(formatSelect.options).find(option => option.value === 'webp');
+      if (webpOption) {
+        webpOption.disabled = true;
+        webpOption.text = 'WebP (not supported)';
+      }
+    }
 
     // Set current date
     const now = new Date();
@@ -366,28 +430,52 @@
 
     // Initialize from localStorage
     function loadSettings() {
-      const settings = JSON.parse(localStorage.getItem('imageResizerSettings')) || {};
-      if (settings.aspectRatio !== undefined) aspectRatioCheckbox.checked = settings.aspectRatio;
-      if (settings.format) formatSelect.value = settings.format;
-      if (settings.quality) {
-        qualityInput.value = settings.quality;
-        qualityValue.textContent = settings.quality + '%';
+      try {
+        const settings = JSON.parse(localStorage.getItem('imageResizerSettings')) || {};
+        if (settings.aspectRatio !== undefined) aspectRatioCheckbox.checked = settings.aspectRatio;
+        if (settings.format) {
+          // Only set format if it's supported
+          if (settings.format !== 'webp' || browserSupportsWebP) {
+            formatSelect.value = settings.format;
+          }
+        }
+        if (settings.quality) {
+          qualityInput.value = settings.quality;
+          qualityValue.textContent = settings.quality + '%';
+        }
+        if (settings.fitMode) {
+          fitModeSelect.value = settings.fitMode;
+        }
+        updateQualityVisibility();
+        updateFitModeVisibility();
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        localStorage.removeItem('imageResizerSettings');
       }
-      updateQualityVisibility();
     }
 
     function saveSettings() {
-      const settings = {
-        aspectRatio: aspectRatioCheckbox.checked,
-        format: formatSelect.value,
-        quality: qualityInput.value
-      };
-      localStorage.setItem('imageResizerSettings', JSON.stringify(settings));
+      try {
+        const settings = {
+          aspectRatio: aspectRatioCheckbox.checked,
+          format: formatSelect.value,
+          quality: qualityInput.value,
+          fitMode: fitModeSelect.value // Save the fit mode
+        };
+        localStorage.setItem('imageResizerSettings', JSON.stringify(settings));
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        showError('Unable to save settings to browser storage');
+      }
+    }
+
+    function updateFitModeVisibility() {
+      fitModeContainer.style.display = aspectRatioCheckbox.checked ? 'none' : 'block';
     }
 
     // Helper functions
     function formatBytes(bytes, decimals = 2) {
-      if (bytes === 0) return '0 Bytes';
+      if (!bytes || bytes === 0) return '0 Bytes';
       const k = 1024;
       const dm = decimals < 0 ? 0 : decimals;
       const sizes = ['Bytes', 'KB', 'MB', 'GB'];
@@ -395,11 +483,22 @@
       return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
     }
 
-    function showError(message) {
+    function showError(message, duration = 5000) {
       errorContainer.innerHTML = `<div class="alert alert-danger">${message}</div>`;
-      setTimeout(() => {
-        errorContainer.innerHTML = '';
-      }, 5000);
+      if (duration > 0) {
+        setTimeout(() => {
+          errorContainer.innerHTML = '';
+        }, duration);
+      }
+    }
+
+    function showWarning(message, duration = 5000) {
+      errorContainer.innerHTML = `<div class="alert alert-warning">${message}</div>`;
+      if (duration > 0) {
+        setTimeout(() => {
+          errorContainer.innerHTML = '';
+        }, duration);
+      }
     }
 
     function showProgress(show) {
@@ -417,12 +516,31 @@
       qualityControl.style.display = (format === 'jpeg' || format === 'webp') ? 'block' : 'none';
     }
 
+    function validateUrl(url) {
+      try {
+        new URL(url);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
     function updateSliderRanges() {
       if (!imageLoaded) return;
 
+      // Determine effective dimensions based on rotation
+      let effectiveWidth = origWidth;
+      let effectiveHeight = origHeight;
+
+      // Swap dimensions if rotated 90 or 270 degrees
+      if (Math.abs(rotation % 180) === 90) {
+        effectiveWidth = origHeight;
+        effectiveHeight = origWidth;
+      }
+
       // Set slider max values based on original image dimensions
-      let widthMax = widthPercent.checked ? 200 : Math.min(maxWidth, origWidth * 2);
-      let heightMax = heightPercent.checked ? 200 : Math.min(maxHeight, origHeight * 2);
+      let widthMax = widthPercent.checked ? 200 : Math.min(MAX_DIMENSION, effectiveWidth * 2);
+      let heightMax = heightPercent.checked ? 200 : Math.min(MAX_DIMENSION, effectiveHeight * 2);
 
       widthSlider.min = widthPercent.checked ? 1 : 1;
       heightSlider.min = heightPercent.checked ? 1 : 1;
@@ -434,54 +552,71 @@
         widthSlider.value = 100;
         widthInput.value = 100;
       } else {
-        widthSlider.value = origWidth;
-        widthInput.value = origWidth;
+        widthSlider.value = effectiveWidth;
+        widthInput.value = effectiveWidth;
       }
 
       if (heightPercent.checked) {
         heightSlider.value = 100;
         heightInput.value = 100;
       } else {
-        heightSlider.value = origHeight;
-        heightInput.value = origHeight;
+        heightSlider.value = effectiveHeight;
+        heightInput.value = effectiveHeight;
       }
     }
 
     function calculateSize(width, height) {
+      if (!imageLoaded) return { width: 0, height: 0 };
+
+      // Determine effective dimensions based on rotation
+      let effectiveWidth = origWidth;
+      let effectiveHeight = origHeight;
+      let effectiveAspectRatio = origWidth / origHeight;
+
+      // Swap dimensions if rotated 90 or 270 degrees
+      if (Math.abs(rotation % 180) === 90) {
+        effectiveWidth = origHeight;
+        effectiveHeight = origWidth;
+        effectiveAspectRatio = origHeight / origWidth;
+      }
+
       if (widthPercent.checked && width) {
-        width = Math.round(origWidth * width / 100);
+        width = Math.round(effectiveWidth * width / 100);
       }
 
       if (heightPercent.checked && height) {
-        height = Math.round(origHeight * height / 100);
+        height = Math.round(effectiveHeight * height / 100);
       }
 
       if (aspectRatioCheckbox.checked) {
-        const aspectRatio = origWidth / origHeight;
-
         if (width && !height) {
-          height = Math.round(width / aspectRatio);
+          height = Math.round(width / effectiveAspectRatio);
         } else if (!width && height) {
-          width = Math.round(height * aspectRatio);
+          width = Math.round(height * effectiveAspectRatio);
         } else if (width && height) {
           // Use the most recently changed dimension as primary
           if (document.activeElement === widthInput || document.activeElement === widthSlider) {
-            height = Math.round(width / aspectRatio);
+            height = Math.round(width / effectiveAspectRatio);
           } else {
-            width = Math.round(height * aspectRatio);
+            width = Math.round(height * effectiveAspectRatio);
           }
         } else {
-          width = origWidth;
-          height = origHeight;
+          width = effectiveWidth;
+          height = effectiveHeight;
         }
       } else {
-        width = width || origWidth;
-        height = height || origHeight;
+        width = width || effectiveWidth;
+        height = height || effectiveHeight;
       }
+
+      // Ensure we have valid dimensions within limits
+      width = Math.max(1, Math.min(MAX_DIMENSION, width));
+      height = Math.max(1, Math.min(MAX_DIMENSION, height));
 
       return { width, height };
     }
 
+    // Fix the updateSizeInputs function to properly respect aspect ratio setting:
     function updateSizeInputs() {
       if (!imageLoaded) return;
 
@@ -491,10 +626,20 @@
       // Determine which input/slider was changed
       if (activeElement === widthInput || activeElement === widthSlider) {
         width = parseInt(widthInput.value) || 0;
-        height = null;
-      } else if (activeElement === heightInput || activeElement === heightSlider) {
-        width = null;
         height = parseInt(heightInput.value) || 0;
+
+        // Only recalculate height if maintaining aspect ratio
+        if (aspectRatioCheckbox.checked) {
+          height = null; // Force recalculation in calculateSize
+        }
+      } else if (activeElement === heightInput || activeElement === heightSlider) {
+        width = parseInt(widthInput.value) || 0;
+        height = parseInt(heightInput.value) || 0;
+
+        // Only recalculate width if maintaining aspect ratio
+        if (aspectRatioCheckbox.checked) {
+          width = null; // Force recalculation in calculateSize
+        }
       } else {
         width = parseInt(widthInput.value) || 0;
         height = parseInt(heightInput.value) || 0;
@@ -502,26 +647,51 @@
 
       const newSize = calculateSize(width, height);
 
-      // Update inputs without triggering events
-      if (activeElement !== widthInput && activeElement !== widthSlider) {
-        widthInput.value = newSize.width;
-        widthSlider.value = widthPercent.checked ? Math.min(200, width || 100) : newSize.width;
+      // Only update the non-active input when aspect ratio is checked
+      if (aspectRatioCheckbox.checked) {
+        // Update width if height was changed
+        if (activeElement === heightInput || activeElement === heightSlider) {
+          widthInput.value = newSize.width;
+          widthSlider.value = widthPercent.checked ?
+                  Math.min(200, Math.round((newSize.width / (Math.abs(rotation % 180) === 90 ? origHeight : origWidth)) * 100)) :
+                  newSize.width;
+        }
+
+        // Update height if width was changed
+        if (activeElement === widthInput || activeElement === widthSlider) {
+          heightInput.value = newSize.height;
+          heightSlider.value = heightPercent.checked ?
+                  Math.min(200, Math.round((newSize.height / (Math.abs(rotation % 180) === 90 ? origWidth : origHeight)) * 100)) :
+                  newSize.height;
+        }
       }
 
-      if (activeElement !== heightInput && activeElement !== heightSlider) {
+      // If no active element (like during initialization), update both
+      if (!activeElement) {
+        widthInput.value = newSize.width;
         heightInput.value = newSize.height;
-        heightSlider.value = heightPercent.checked ? Math.min(200, height || 100) : newSize.height;
+
+        widthSlider.value = widthPercent.checked ?
+                Math.min(200, Math.round((newSize.width / (Math.abs(rotation % 180) === 90 ? origHeight : origWidth)) * 100)) :
+                newSize.width;
+
+        heightSlider.value = heightPercent.checked ?
+                Math.min(200, Math.round((newSize.height / (Math.abs(rotation % 180) === 90 ? origWidth : origHeight)) * 100)) :
+                newSize.height;
       }
 
       // Trigger resize with debounce
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
         resizeImage();
-      }, 100);
+      }, 300);
     }
 
     function syncSliderAndInput(slider, input) {
-      slider.value = input.value;
+      const value = parseInt(input.value) || 0;
+      if (value > 0) {
+        slider.value = Math.min(slider.max, value);
+      }
     }
 
     function syncInputAndSlider(input, slider) {
@@ -559,9 +729,13 @@
     loadUrlBtn.addEventListener('click', () => {
       const url = urlInput.value.trim();
       if (url) {
-        loadImageFromURL(url);
+        if (validateUrl(url)) {
+          loadImageFromURL(url);
+        } else {
+          showError('Please enter a valid URL');
+        }
       } else {
-        showError('Please enter a valid URL');
+        showError('Please enter an image URL');
       }
     });
 
@@ -573,6 +747,13 @@
 
     // Width input and slider events
     widthInput.addEventListener('input', () => {
+      const value = parseInt(widthInput.value) || 0;
+      if (value <= 0) {
+        widthInput.value = 1;
+      } else if (value > MAX_DIMENSION) {
+        widthInput.value = MAX_DIMENSION;
+        showWarning(`Width limited to ${MAX_DIMENSION}px for browser stability`);
+      }
       syncSliderAndInput(widthSlider, widthInput);
       updateSizeInputs();
     });
@@ -584,6 +765,13 @@
 
     // Height input and slider events
     heightInput.addEventListener('input', () => {
+      const value = parseInt(heightInput.value) || 0;
+      if (value <= 0) {
+        heightInput.value = 1;
+      } else if (value > MAX_DIMENSION) {
+        heightInput.value = MAX_DIMENSION;
+        showWarning(`Height limited to ${MAX_DIMENSION}px for browser stability`);
+      }
       syncSliderAndInput(heightSlider, heightInput);
       updateSizeInputs();
     });
@@ -605,40 +793,63 @@
 
     aspectRatioCheckbox.addEventListener('change', () => {
       updateSizeInputs();
+      updateFitModeVisibility();
       saveSettings();
+    });
+
+    fitModeSelect.addEventListener('change', () => {
+      saveSettings();
+      if (imageLoaded) {
+        resizeImage();
+      }
     });
 
     formatSelect.addEventListener('change', () => {
       updateQualityVisibility();
       saveSettings();
-      resizeImage();
+      if (imageLoaded) {
+        resizeImage();
+      }
     });
 
     qualityInput.addEventListener('input', () => {
       qualityValue.textContent = qualityInput.value + '%';
       saveSettings();
-      resizeImage();
+      if (imageLoaded) {
+        // Use debounce for quality changes
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          resizeImage();
+        }, 300);
+      }
     });
 
     rotateLeft.addEventListener('click', () => {
+      if (!imageLoaded) return;
       rotation = (rotation - 90) % 360;
+      if (rotation < 0) rotation += 360;
       updateOriginalPreview();
-      resizeImage();
+      updateSliderRanges();
+      updateSizeInputs();
     });
 
     rotateRight.addEventListener('click', () => {
+      if (!imageLoaded) return;
       rotation = (rotation + 90) % 360;
       updateOriginalPreview();
-      resizeImage();
+      updateSliderRanges();
+      updateSizeInputs();
     });
 
     flipHorizontal.addEventListener('click', () => {
+      if (!imageLoaded) return;
       flipH = !flipH;
       updateOriginalPreview();
       resizeImage();
     });
 
     flipVertical.addEventListener('click', () => {
+      if (!imageLoaded) return;
       flipV = !flipV;
       updateOriginalPreview();
       resizeImage();
@@ -655,13 +866,20 @@
         return;
       }
 
+      if (file.size > MAX_FILE_SIZE) {
+        showWarning(`The file is large (${formatBytes(file.size)}). Processing might be slow or fail.`);
+      }
+
       const reader = new FileReader();
+      showProgress(true);
+
       reader.onload = (e) => {
         loadImage(e.target.result, file.name, file.size);
       };
 
       reader.onerror = () => {
-        showError('Error reading file');
+        showProgress(false);
+        showError('Error reading file. The file may be corrupted or too large.');
       };
 
       reader.readAsDataURL(file);
@@ -670,66 +888,102 @@
     function loadImageFromURL(url) {
       showProgress(true);
 
+      // Clear previous timeouts if any
+      if (window.imageLoadTimeout) {
+        clearTimeout(window.imageLoadTimeout);
+      }
+
+      // Set a timeout for image loading
+      window.imageLoadTimeout = setTimeout(() => {
+        showProgress(false);
+        showError('Image loading timed out. The image might be too large or the server is not responding.');
+      }, 20000); // 20 seconds timeout
+
       const img = new Image();
 
       img.onload = function() {
+        clearTimeout(window.imageLoadTimeout);
         showProgress(false);
 
-        // Convert the image to a data URL
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
+        // Check if image dimensions are too large
+        if (img.width * img.height > MAX_DIMENSION * MAX_DIMENSION) {
+          showWarning(`This image is very large (${img.width}×${img.height}). Processing might be slow.`);
+        }
 
+        // Convert the image to a data URL
         try {
-          const dataUrl = canvas.toDataURL('image/png');
-          loadImage(dataUrl, url.split('/').pop() || 'image', null);
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+
+          try {
+            const dataUrl = canvas.toDataURL('image/png');
+            loadImage(dataUrl, url.split('/').pop() || 'image', null);
+
+            // Clean up
+            canvas.width = 1;
+            canvas.height = 1;
+          } catch (error) {
+            showError('Error processing image from URL. It might be protected or from a different domain.');
+          }
         } catch (error) {
-          showError('Error processing image from URL. It might be protected or from a different domain.');
+          showError('Failed to process the image. The image might be too large or corrupt.');
         }
       };
 
       img.onerror = function() {
+        clearTimeout(window.imageLoadTimeout);
         showProgress(false);
-        showError('Error loading image from URL. Check if the URL is correct and the image is accessible.');
+        showError(`Failed to load image from URL. The image might not exist or CORS policy is preventing access. Try downloading the image and uploading it directly.`);
       };
 
-      img.crossOrigin = 'anonymous';
-
-      // Try with some CORS proxies if direct loading fails
-      const proxies = [
-        '', // Try direct first
-        'https://cors-anywhere.herokuapp.com/',
-        'https://api.allorigins.win/raw?url='
-      ];
-
-      tryLoadWithProxies(proxies, 0);
-
-      function tryLoadWithProxies(proxies, index) {
-        if (index >= proxies.length) {
-          showProgress(false);
-          showError('Could not load image from URL. CORS restrictions may be preventing access.');
-          return;
-        }
-
-        const proxyUrl = proxies[index] + url;
-
-        img.onerror = function() {
-          // Try next proxy
-          tryLoadWithProxies(proxies, index + 1);
-        };
-
-        img.src = proxyUrl;
+      try {
+        img.crossOrigin = 'anonymous';
+        img.src = url;
+      } catch (error) {
+        clearTimeout(window.imageLoadTimeout);
+        showProgress(false);
+        showError('Invalid URL format or access denied.');
       }
     }
 
     function loadImage(src, filename, fileSize) {
+      if (processingImage) return;
+      processingImage = true;
       showProgress(true);
 
-      const img = new Image();
-      img.onload = function() {
+      // Clear previous timeouts if any
+      if (window.imageProcessTimeout) {
+        clearTimeout(window.imageProcessTimeout);
+      }
+
+      // Set a timeout for image processing
+      window.imageProcessTimeout = setTimeout(() => {
+        processingImage = false;
         showProgress(false);
+        showError('Image processing timed out. The image might be too large for your browser to handle.');
+      }, IMAGE_PROCESS_TIMEOUT);
+
+      const img = new Image();
+
+      img.onload = function() {
+        clearTimeout(window.imageProcessTimeout);
+        showProgress(false);
+        processingImage = false;
+
+        // Check image dimensions
+        if (img.width <= 0 || img.height <= 0) {
+          showError('Invalid image dimensions. The image appears to be empty or corrupted.');
+          return;
+        }
+
+        if (img.width > MAX_DIMENSION || img.height > MAX_DIMENSION) {
+          showWarning(`Image dimensions (${img.width}×${img.height}) exceed recommended maximum. Resizing might be limited.`);
+        }
+
+        // Store image data
         originalImage = img;
         origWidth = img.width;
         origHeight = img.height;
@@ -748,9 +1002,9 @@
         // Show image info
         const fileSizeText = fileSize ? formatBytes(fileSize) : 'Unknown';
         originalInfo.innerHTML = `
-            <strong>${filename}</strong><br>
-            Original size: ${origWidth} × ${origHeight} pixels | ${fileSizeText}
-          `;
+          <strong>${filename}</strong><br>
+          Original size: ${origWidth} × ${origHeight} pixels | ${fileSizeText}
+        `;
         originalOverlay.textContent = `${origWidth} × ${origHeight}`;
 
         // Perform initial resize
@@ -758,76 +1012,37 @@
       };
 
       img.onerror = function() {
+        clearTimeout(window.imageProcessTimeout);
         showProgress(false);
-        showError('Error loading image');
+        processingImage = false;
+        showError('Error loading image. The image might be corrupted or in an unsupported format.');
       };
 
-      img.src = src;
+      try {
+        img.src = src;
+      } catch (error) {
+        clearTimeout(window.imageProcessTimeout);
+        showProgress(false);
+        processingImage = false;
+        showError('Failed to process the image data.');
+      }
     }
 
     function updateOriginalPreview() {
       if (!originalImage) return;
 
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
-      // Handle rotation by adjusting canvas dimensions
-      if (rotation % 180 === 0) {
-        canvas.width = originalImage.width;
-        canvas.height = originalImage.height;
-      } else {
-        canvas.width = originalImage.height;
-        canvas.height = originalImage.width;
-      }
-
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Apply transformations
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate((rotation * Math.PI) / 180);
-      ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
-      ctx.drawImage(originalImage, -originalImage.width / 2, -originalImage.height / 2);
-      ctx.restore();
-
-      // Update preview
-      originalPreview.src = canvas.toDataURL();
-    }
-
-    function resizeImage() {
-      if (!originalImage) return;
-
-      const width = parseInt(widthInput.value) || 0;
-      const height = parseInt(heightInput.value) || 0;
-
-      if (width <= 0 && height <= 0) {
-        showError('Please enter valid dimensions');
-        return;
-      }
-
-      // Don't show progress for real-time resizing
-      // showProgress(true);
-
       try {
-        const size = calculateSize(width, height);
-        const format = formatSelect.value;
-        const quality = parseInt(qualityInput.value) / 100;
-
-        // Create a new canvas for the resized image
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
         // Handle rotation by adjusting canvas dimensions
-        let targetWidth = size.width;
-        let targetHeight = size.height;
-
-        if (rotation % 180 !== 0) {
-          [targetWidth, targetHeight] = [targetHeight, targetWidth];
+        if (rotation % 180 === 0) {
+          canvas.width = originalImage.width;
+          canvas.height = originalImage.height;
+        } else {
+          canvas.width = originalImage.height;
+          canvas.height = originalImage.width;
         }
-
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
 
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -837,61 +1052,219 @@
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate((rotation * Math.PI) / 180);
         ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
-
-        const sourceWidth = rotation % 180 !== 0 ? originalImage.height : originalImage.width;
-        const sourceHeight = rotation % 180 !== 0 ? originalImage.width : originalImage.height;
-
-        ctx.drawImage(
-                originalImage,
-                -sourceWidth / 2, -sourceHeight / 2,
-                sourceWidth, sourceHeight
-        );
+        ctx.drawImage(originalImage, -originalImage.width / 2, -originalImage.height / 2);
         ctx.restore();
 
-        // Convert to data URL
-        let mimeType = 'image/jpeg';
-        if (format === 'png') mimeType = 'image/png';
-        else if (format === 'webp') mimeType = 'image/webp';
-        else if (format === 'gif') mimeType = 'image/gif';
+        // Update preview
+        originalPreview.src = canvas.toDataURL();
 
-        let dataUrl;
-        if (format === 'jpeg' || format === 'webp') {
-          dataUrl = canvas.toDataURL(mimeType, quality);
-        } else {
-          dataUrl = canvas.toDataURL(mimeType);
-        }
-
-        // Update preview and download link
-        resultPreview.src = dataUrl;
-        downloadBtn.href = dataUrl;
-        downloadBtn.download = `resized.${format}`;
-        resultContainer.classList.remove('d-none');
-
-        // Calculate file size
-        fetch(dataUrl)
-                .then(res => res.blob())
-                .then(blob => {
-                  const fileSize = blob.size;
-                  resultOverlay.textContent = `${targetWidth} × ${targetHeight} | ${formatBytes(fileSize)}`;
-
-                  // Check compression ratio
-                  if (fileSize) {
-                    const originalSize = originalImage.src.length * 0.75; // Rough estimate for base64
-                    const compressionRatio = (1 - (fileSize / originalSize)) * 100;
-                    if (compressionRatio > 0) {
-                      resultOverlay.textContent += ` | ${compressionRatio.toFixed(0)}% smaller`;
-                    }
-                  }
-                });
-
-        saveSettings();
-
+        // Clean up canvas
+        canvas.width = 1;
+        canvas.height = 1;
       } catch (error) {
-        showError('Error resizing image: ' + error.message);
+        console.error('Error updating preview:', error);
+        showError('Failed to update preview. Try a smaller image or reload the page.');
       }
     }
 
+    function resizeImage() {
+      if (!originalImage || processingImage) return;
+      processingImage = true;
+      const width = parseInt(widthInput.value) || 0;
+      const height = parseInt(heightInput.value) || 0;
+
+      if (width <= 0 && height <= 0) {
+        processingImage = false;
+        showError('Please enter valid dimensions');
+        return;
+      }
+
+      // Optional progress indicator for large images
+      if (origWidth * origHeight > 4000000) { // Over 4 megapixels
+        showProgress(true);
+      }
+
+      // Use requestAnimationFrame to prevent UI blocking
+      requestAnimationFrame(() => {
+        try {
+          const size = calculateSize(width, height);
+          const format = formatSelect.value;
+          const quality = parseInt(qualityInput.value) / 100;
+          const fitMode = aspectRatioCheckbox.checked ? 'maintain' : fitModeSelect.value;
+
+          // Check if WebP is supported when selected
+          if (format === 'webp' && !browserSupportsWebP) {
+            showError('WebP format is not supported in your browser. Using PNG instead.');
+            formatSelect.value = 'png';
+          }
+
+          // Create a new canvas for the resized image
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          // Handle rotation by adjusting canvas dimensions
+          let targetWidth = size.width;
+          let targetHeight = size.height;
+          if (Math.abs(rotation % 180) === 90) {
+            [targetWidth, targetHeight] = [targetHeight, targetWidth];
+          }
+
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+
+          // Clear canvas with black background (for letterbox mode)
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Apply transformations based on fit mode
+          ctx.save();
+
+          // Get source dimensions
+          let sourceWidth = originalImage.width;
+          let sourceHeight = originalImage.height;
+
+          // Calculate source aspect ratio
+          const sourceRatio = sourceWidth / sourceHeight;
+          const targetRatio = targetWidth / targetHeight;
+
+          // Variables for drawing the image
+          let drawWidth, drawHeight, offsetX = 0, offsetY = 0;
+
+          if (fitMode === 'maintain' || fitMode === 'stretch') {
+            // Stretch or maintain aspect ratio - full canvas drawing
+            drawWidth = targetWidth;
+            drawHeight = targetHeight;
+          } else if (fitMode === 'crop') {
+            // Crop to fill - maintain aspect ratio but crop edges
+            if (sourceRatio > targetRatio) {
+              // Source is wider, crop sides
+              drawHeight = targetHeight;
+              drawWidth = targetHeight * sourceRatio;
+              offsetX = (targetWidth - drawWidth) / 2;
+            } else {
+              // Source is taller, crop top/bottom
+              drawWidth = targetWidth;
+              drawHeight = targetWidth / sourceRatio;
+              offsetY = (targetHeight - drawHeight) / 2;
+            }
+          } else if (fitMode === 'letterbox') {
+            // Add black bars - maintain aspect ratio and center
+            if (sourceRatio > targetRatio) {
+              // Source is wider, add black bars on top/bottom
+              drawWidth = targetWidth;
+              drawHeight = targetWidth / sourceRatio;
+              offsetY = (targetHeight - drawHeight) / 2;
+            } else {
+              // Source is taller, add black bars on sides
+              drawHeight = targetHeight;
+              drawWidth = targetHeight * sourceRatio;
+              offsetX = (targetWidth - drawWidth) / 2;
+            }
+          }
+
+          // Apply rotation and flipping
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((rotation * Math.PI) / 180);
+          ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+
+          // Draw the image with the calculated dimensions
+          if (fitMode === 'maintain' || fitMode === 'stretch') {
+            ctx.drawImage(
+                    originalImage,
+                    -targetWidth / 2,
+                    -targetHeight / 2,
+                    targetWidth,
+                    targetHeight
+            );
+          } else {
+            // For crop and letterbox, position relative to calculated offsets
+            ctx.drawImage(
+                    originalImage,
+                    -drawWidth / 2,
+                    -drawHeight / 2,
+                    drawWidth,
+                    drawHeight
+            );
+          }
+
+          ctx.restore();
+
+          // Rest of the function remains the same...
+          let mimeType = 'image/jpeg';
+          if (format === 'png') mimeType = 'image/png';
+          else if (format === 'webp') mimeType = 'image/webp';
+          else if (format === 'gif') mimeType = 'image/gif';
+
+          let dataUrl;
+          try {
+            if (format === 'jpeg' || format === 'webp') {
+              dataUrl = canvas.toDataURL(mimeType, quality);
+            } else {
+              dataUrl = canvas.toDataURL(mimeType);
+            }
+
+            // Update preview and download link
+            resultPreview.src = dataUrl;
+            downloadBtn.href = dataUrl;
+            downloadBtn.download = `resized.${format}`;
+            resultContainer.classList.remove('d-none');
+
+            // Calculate file size
+            fetch(dataUrl)
+                    .then(res => res.blob())
+                    .then(blob => {
+                      const fileSize = blob.size;
+                      resultOverlay.textContent = `${targetWidth} × ${targetHeight} | ${formatBytes(fileSize)}`;
+
+                      // Check compression ratio
+                      if (fileSize) {
+                        const originalSize = originalImage.src.length * 0.75; // Rough estimate for base64
+                        const compressionRatio = (1 - (fileSize / originalSize)) * 100;
+                        if (compressionRatio > 0) {
+                          resultOverlay.textContent += ` | ${compressionRatio.toFixed(0)}% smaller`;
+                        }
+                      }
+                    })
+                    .catch(err => {
+                      console.error('Error calculating file size:', err);
+                    })
+                    .finally(() => {
+                      processingImage = false;
+                      showProgress(false);
+                    });
+
+            saveSettings();
+
+            // Clean up canvas memory
+            setTimeout(() => {
+              canvas.width = 1;
+              canvas.height = 1;
+            }, 100);
+          } catch (error) {
+            processingImage = false;
+            showProgress(false);
+            console.error('Canvas operation error:', error);
+            showError('Error generating image. Try a different format or smaller size.');
+
+            // Clean up
+            canvas.width = 1;
+            canvas.height = 1;
+          }
+        } catch (error) {
+          processingImage = false;
+          showProgress(false);
+          console.error('Resize error:', error);
+          showError('Error resizing image: ' + error.message);
+        }
+      });
+    }
+
     function resetForm() {
+      if (processingImage) {
+        showWarning('Please wait for current processing to complete');
+        return;
+      }
+
       imageInput.value = '';
       urlInput.value = '';
 
@@ -927,6 +1300,23 @@
     // Initialize
     loadSettings();
     updateQualityVisibility();
+
+    // Add window beforeunload warning if processing
+    window.addEventListener('beforeunload', (e) => {
+      if (processingImage) {
+        e.preventDefault();
+        e.returnValue = 'Image processing is still in progress. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    });
+
+    // Clean up on page visibility change
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && !imageLoaded) {
+        // Clean up unused resources when tab is not visible
+        resetForm();
+      }
+    });
   });
 </script>
 <script src="../logo.js"></script>
