@@ -41,7 +41,8 @@ def get_title_from_html(file_path):
 
 def get_next_screenshot_number(screenshots_dir):
     """Get the next available screenshot number by checking existing files."""
-    existing_screenshots = list(screenshots_dir.glob("screenshot_*.png"))
+    # Check both webp and png files for compatibility during transition
+    existing_screenshots = list(screenshots_dir.glob("screenshot_*.webp")) + list(screenshots_dir.glob("screenshot_*.png"))
     if not existing_screenshots:
         return 0
 
@@ -209,7 +210,7 @@ if __name__ == "__main__":
 
     # Determine the screenshot file name using our improved method
     screenshot_number = get_next_screenshot_number(screenshots_dir)
-    screenshot_file = screenshots_dir / f"screenshot_{screenshot_number}.png"
+    screenshot_file = screenshots_dir / f"screenshot_{screenshot_number}.webp"  # Changed to .webp
 
     # Set up headless browser
     chrome_options = Options()
@@ -224,7 +225,7 @@ if __name__ == "__main__":
     # Resize and save the screenshot
     image = Image.open(screenshot_file)
     resized_image = image.resize((260, 260), Image.LANCZOS)
-    resized_image.save(screenshot_file)
+    resized_image.save(screenshot_file, format="WEBP", quality=90, lossless=True)  # WebP settings
 
     # Add the screenshot to git
     git_add_file(screenshot_file)
@@ -237,7 +238,7 @@ if __name__ == "__main__":
         "title": entry_name,
         "description": description,
         "url": file_path,
-        "screenshot": f"screenshots/screenshot_{screenshot_number}.png",
+        "screenshot": f"screenshots/screenshot_{screenshot_number}.webp",  # Changed to .webp
         "type": entry_type,
         "aiPowered": ai_powered,
         "featured": featured,
