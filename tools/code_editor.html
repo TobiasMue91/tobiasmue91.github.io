@@ -115,107 +115,124 @@
     </div>
 </div>
 <script>
-    const container = document.getElementById('container');
-    const toggle = document.getElementById('toggle');
-    const iframe = document.getElementById('preview');
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+const container = document.getElementById('container');
+const toggle = document.getElementById('toggle');
+const iframe = document.getElementById('preview');
+
+function compressAndBase64Encode(str) {
+    return btoa(String.fromCharCode.apply(null, pako.deflate(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64DecodeAndDecompress(base64EncodedData) {
+    const adjustedData = base64EncodedData.replace(/-/g, '+').replace(/_/g, '/');
+    const decodedData = atob(adjustedData);
+    const charData = decodedData.split('').map(c => c.charCodeAt(0));
+    const binData = new Uint8Array(charData);
+    return pako.inflate(binData, { to: 'string' });
+}
+
+function updateURL() {
+    console.log('url updated');
+    const html = compressAndBase64Encode(document.getElementById('htmlCode').value);
+    const css = compressAndBase64Encode(document.getElementById('cssCode').value);
+    const js = compressAndBase64Encode(document.getElementById('jsCode').value);
+    history.replaceState(null, '', `?html=${html}&css=${css}&js=${js}`);
+    updatePreview();
+}
+
+function updatePreview() {
+    const html = document.getElementById('htmlCode').value;
+    const css = document.getElementById('cssCode').value;
+    const js = document.getElementById('jsCode').value;
     
-    function compressAndBase64Encode(str) {
-        return btoa(String.fromCharCode.apply(null, pako.deflate(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    // Create a new iframe to avoid variable redeclaration issues
+    const oldIframe = document.getElementById('preview');
+    const newIframe = document.createElement('iframe');
+    newIframe.id = 'preview';
+    newIframe.style = 'width: 100%; height: 100%; border: none; flex: 1 1 0%;';
+    oldIframe.parentNode.replaceChild(newIframe, oldIframe);
+    
+    // Get the new iframe's document
+    const iframeDoc = newIframe.contentDocument || newIframe.contentWindow.document;
+    
+    // Write content to the new iframe
+    iframeDoc.open();
+    iframeDoc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>${css}</style>
+        </head>
+        <body>${html}
+        <script>${js}<\/script>
+        <script>
+        (function() {
+            function handleInputChange(e) {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                    window.parent.postMessage({
+                        type: 'inputChanged',
+                        html: document.body.innerHTML
+                    }, '*');
+                }
+            }
+            
+            document.addEventListener('input', handleInputChange);
+            document.addEventListener('change', handleInputChange);
+        })();
+        <\/script>
+        </body>
+        </html>
+    `);
+    iframeDoc.close();
+}
+
+function sanitizeEncodedValue(encodedValue) {
+    return encodedValue.replace(/[\s'"]+$/g, '');
+}
+
+function loadFromURL() {
+    let urlParams = new URLSearchParams(window.location.search);
+    let html = urlParams.get('html') ? sanitizeEncodedValue(urlParams.get('html')) : '';
+    let css = urlParams.get('css') ? sanitizeEncodedValue(urlParams.get('css')) : '';
+    let js = urlParams.get('js') ? sanitizeEncodedValue(urlParams.get('js')) : '';
+
+    html = html ? base64DecodeAndDecompress(html) : '';
+    css = css ? base64DecodeAndDecompress(css) : '';
+    js = js ? base64DecodeAndDecompress(js) : '';
+
+    if (html) document.getElementById('htmlCode').value = html;
+    if (css) document.getElementById('cssCode').value = css;
+    if (js) document.getElementById('jsCode').value = js;
+    
+    updatePreview();
+}
+
+document.getElementById('htmlCode').addEventListener('input', updateURL);
+document.getElementById('cssCode').addEventListener('input', updateURL);
+document.getElementById('jsCode').addEventListener('input', updateURL);
+
+window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'inputChanged') {
+        document.getElementById('htmlCode').value = event.data.html;
+        updateURL();
     }
-    
-    function base64DecodeAndDecompress(base64EncodedData) {
-        const adjustedData = base64EncodedData.replace(/-/g, '+').replace(/_/g, '/');
-        const decodedData = atob(adjustedData);
-        const charData = decodedData.split('').map(c => c.charCodeAt(0));
-        const binData = new Uint8Array(charData);
-        return pako.inflate(binData, { to: 'string' });
+});
+
+loadFromURL();
+
+toggle.addEventListener('click', () => {
+    const codeEditor = document.getElementById('codeEditor');
+    const preview = document.getElementById('preview');
+    if (codeEditor.style.display === 'none' || !codeEditor.style.display) {
+        codeEditor.style.display = 'flex';
+        preview.style.flex = '1';
+        container.classList.remove('collapsed');
+    } else {
+        codeEditor.style.display = 'none';
+        preview.style.flex = '0 0 100%';
+        container.classList.add('collapsed');
     }
-    
-    function updateURL() {
-        console.log('url updated');
-        const html = compressAndBase64Encode(document.getElementById('htmlCode').value);
-        const css = compressAndBase64Encode(document.getElementById('cssCode').value);
-        const js = compressAndBase64Encode(document.getElementById('jsCode').value);
-        history.replaceState(null, '', `?html=${html}&css=${css}&js=${js}`);
-        decompressAndInject();
-    }
-    
-    function decompressAndInject() {
-        let urlParams = new URLSearchParams(window.location.search);
-        let html = urlParams.get('html') ? sanitizeEncodedValue(urlParams.get('html')) : '';
-        let css = urlParams.get('css') ? sanitizeEncodedValue(urlParams.get('css')) : '';
-        let js = urlParams.get('js') ? sanitizeEncodedValue(urlParams.get('js')) : '';
-    
-        html = html ? base64DecodeAndDecompress(html) : '';
-        css = css ? base64DecodeAndDecompress(css) : '';
-        js = js ? base64DecodeAndDecompress(js) : '';
-    
-        if (html) document.getElementById('htmlCode').value = html;
-        if (css) document.getElementById('cssCode').value = css;
-        if (js) document.getElementById('jsCode').value = js;
-    
-        iframeDoc.open();
-        iframeDoc.write(`
-            <html>
-            <head>
-                <style>${css}</style>
-            </head>
-            <body>${html}<script>${js}<\/script>
-            <script>
-                document.addEventListener('input', function(e) {
-                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
-                        window.parent.postMessage({
-                            type: 'inputChanged',
-                            html: document.body.innerHTML
-                        }, '*');
-                    }
-                });
-                document.addEventListener('change', function(e) {
-                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
-                        window.parent.postMessage({
-                            type: 'inputChanged',
-                            html: document.body.innerHTML
-                        }, '*');
-                    }
-                });
-            <\/script>
-            </body>
-            </html>
-        `);
-        iframeDoc.close();
-    }
-    
-    function sanitizeEncodedValue(encodedValue) {
-        return encodedValue.replace(/[\s'"]+$/g, '');
-    }
-    
-    document.getElementById('htmlCode').addEventListener('input', updateURL);
-    document.getElementById('cssCode').addEventListener('input', updateURL);
-    document.getElementById('jsCode').addEventListener('input', updateURL);
-    
-    window.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'inputChanged') {
-            document.getElementById('htmlCode').value = event.data.html;
-            updateURL();
-        }
-    });
-    
-    decompressAndInject();
-    
-    toggle.addEventListener('click', () => {
-        const codeEditor = document.getElementById('codeEditor');
-        const preview = document.getElementById('preview');
-        if (codeEditor.style.display === 'none' || !codeEditor.style.display) {
-            codeEditor.style.display = 'flex';
-            preview.style.flex = '1';
-            container.classList.remove('collapsed');
-        } else {
-            codeEditor.style.display = 'none';
-            preview.style.flex = '0 0 100%';
-            container.classList.add('collapsed');
-        }
-    });
+});
 </script>
 <script src="../logo.js"></script>
 </body>
