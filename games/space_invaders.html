@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Space Invaders</title>
+    <style>* {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: radial-gradient(ellipse at center, #0f0f23 0%, #000 100%);
+        font-family: 'Courier New', monospace;
+        color: #00ff41;
+        overflow: hidden;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    canvas {
+        border: 2px solid #00ff41;
+        box-shadow: 0 0 20px #00ff41;
+        background: #000;
+    }
+
+    #ui {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 30px;
+        font-size: 18px;
+        font-weight: bold;
+        text-shadow: 0 0 10px #00ff41;
+    }
+
+    #gameOver {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 30px;
+        border: 2px solid #00ff41;
+        display: none;
+    }
+
+    #gameOver h2 {
+        font-size: 36px;
+        margin-bottom: 20px;
+        color: #ff4444;
+    }
+
+    #gameOver button {
+        background: #000;
+        color: #00ff41;
+        border: 2px solid #00ff41;
+        padding: 10px 20px;
+        font-size: 18px;
+        cursor: pointer;
+        margin: 10px;
+    }
+
+    #gameOver button:hover {
+        background: #00ff41;
+        color: #000;
+    }
+
+    @keyframes stars {
+        0% {
+            transform: translateY(0px);
+        }
+        100% {
+            transform: translateY(-100vh);
+        }
+    }
+
+    body::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 200vh;
+        background-image: radial-gradient(2px 2px at 20px 30px, #eee, transparent), radial-gradient(2px 2px at 40px 70px, rgba(255, 255, 255, 0.8), transparent), radial-gradient(1px 1px at 90px 40px, rgba(255, 255, 255, 0.6), transparent);
+        background-repeat: repeat;
+        background-size: 100px 100px;
+        animation: stars 20s linear infinite;
+        z-index: -1;
+    }</style>
+</head>
+<body>
+<div id="ui">
+    <div>Score: <span id="score">0</span></div>
+    <div>Lives: <span id="lives">3</span></div>
+    <div>Wave: <span id="wave">1</span></div>
+</div>
+<canvas id="game" width="800" height="600"></canvas>
+<div id="gameOver"><h2>Game Over</h2>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <button onclick="game.restart()">Play Again</button>
+</div>
+<script>class Game {
+    constructor() {
+        this.canvas = document.getElementById('game');
+        this.ctx = this.canvas.getContext('2d');
+        this.width = this.canvas.width;
+        this.height = this.canvas.height;
+        this.player = new Player(this.width / 2 - 25, this.height - 60);
+        this.aliens = [];
+        this.bullets = [];
+        this.particles = [];
+        this.alienBullets = [];
+        this.score = 0;
+        this.lives = 3;
+        this.wave = 1;
+        this.alienSpeed = 1;
+        this.alienDirection = 1;
+        this.lastAlienShot = 0;
+        this.keys = {};
+        this.gameRunning = true;
+        this.setupAliens();
+        this.bindEvents();
+        this.gameLoop();
+    }
+
+    setupAliens() {
+        this.aliens = [];
+        for (let row = 0; row < 5; row++) {
+            for (let col = 0; col < 10; col++) {
+                let x = col * 60 + 100;
+                let y = row * 50 + 50;
+                let type = row < 2 ? 2 : row < 4 ? 1 : 0;
+                this.aliens.push(new Alien(x, y, type));
+            }
+        }
+    }
+
+    bindEvents() {
+        document.addEventListener('keydown', e => {
+            this.keys[e.code] = true;
+            if (e.code === 'Space') {
+                e.preventDefault();
+                this.player.shoot(this.bullets);
+            }
+        });
+        document.addEventListener('keyup', e => {
+            this.keys[e.code] = false;
+        });
+    }
+
+    update() {
+        if (!this.gameRunning) return;
+        this.player.update(this.keys, this.width);
+        this.bullets = this.bullets.filter(bullet => {
+            bullet.update();
+            return bullet.y > 0;
+        });
+        this.alienBullets = this.alienBullets.filter(bullet => {
+            bullet.update();
+            return bullet.y < this.height;
+        });
+        this.particles = this.particles.filter(particle => {
+            particle.update();
+            return particle.life > 0;
+        });
+        this.updateAliens();
+        this.checkCollisions();
+        this.updateUI();
+    }
+
+    updateAliens() {
+        if (this.aliens.length === 0) {
+            this.wave++;
+            this.alienSpeed += 0.5;
+            this.setupAliens();
+            return;
+        }
+        let moveDown = false;
+        for (let alien of this.aliens) {
+            if ((alien.x <= 0 && this.alienDirection === -1) || (alien.x >= this.width - 40 && this.alienDirection === 1)) {
+                moveDown = true;
+                break;
+            }
+        }
+        if (moveDown) {
+            this.alienDirection *= -1;
+            for (let alien of this.aliens) {
+                alien.y += 20;
+            }
+        }
+        for (let alien of this.aliens) {
+            alien.x += this.alienSpeed * this.alienDirection;
+            if (Math.random() < 0.001 && Date.now() - this.lastAlienShot > 500) {
+                this.alienBullets.push(new Bullet(alien.x + 20, alien.y + 30, 5));
+                this.lastAlienShot = Date.now();
+            }
+            if (alien.y > this.height - 100) {
+                this.gameOver();
+            }
+        }
+    }
+
+    checkCollisions() {
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            for (let j = this.aliens.length - 1; j >= 0; j--) {
+                if (this.bullets[i] && this.aliens[j] && this.bullets[i].x < this.aliens[j].x + 40 && this.bullets[i].x + 5 > this.aliens[j].x && this.bullets[i].y < this.aliens[j].y + 30 && this.bullets[i].y + 10 > this.aliens[j].y) {
+                    this.score += this.aliens[j].points;
+                    this.createExplosion(this.aliens[j].x + 20, this.aliens[j].y + 15);
+                    this.aliens.splice(j, 1);
+                    this.bullets.splice(i, 1);
+                    break;
+                }
+            }
+        }
+        for (let i = this.alienBullets.length - 1; i >= 0; i--) {
+            if (this.alienBullets[i].x < this.player.x + 50 && this.alienBullets[i].x + 5 > this.player.x && this.alienBullets[i].y < this.player.y + 30 && this.alienBullets[i].y + 10 > this.player.y) {
+                this.lives--;
+                this.alienBullets.splice(i, 1);
+                this.createExplosion(this.player.x + 25, this.player.y + 15);
+                if (this.lives <= 0) {
+                    this.gameOver();
+                }
+            }
+        }
+    }
+
+    createExplosion(x, y) {
+        for (let i = 0; i < 8; i++) {
+            this.particles.push(new Particle(x, y));
+        }
+    }
+
+    gameOver() {
+        this.gameRunning = false;
+        document.getElementById('finalScore').textContent = this.score;
+        document.getElementById('gameOver').style.display = 'block';
+    }
+
+    restart() {
+        this.gameRunning = true;
+        this.score = 0;
+        this.lives = 3;
+        this.wave = 1;
+        this.alienSpeed = 1;
+        this.alienDirection = 1;
+        this.setupAliens();
+        this.bullets = [];
+        this.alienBullets = [];
+        this.particles = [];
+        this.player = new Player(this.width / 2 - 25, this.height - 60);
+        document.getElementById('gameOver').style.display = 'none';
+        this.updateUI();
+    }
+
+    updateUI() {
+        document.getElementById('score').textContent = this.score;
+        document.getElementById('lives').textContent = this.lives;
+        document.getElementById('wave').textContent = this.wave;
+    }
+
+    render() {
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+        this.player.render(this.ctx);
+        this.aliens.forEach(alien => alien.render(this.ctx));
+        this.bullets.forEach(bullet => bullet.render(this.ctx));
+        this.alienBullets.forEach(bullet => bullet.render(this.ctx));
+        this.particles.forEach(particle => particle.render(this.ctx));
+    }
+
+    gameLoop() {
+        this.update();
+        this.render();
+        requestAnimationFrame(() => this.gameLoop());
+    }
+}
+
+class Player {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 50;
+        this.height = 30;
+        this.speed = 5;
+        this.lastShot = 0;
+    }
+
+    update(keys, canvasWidth) {
+        if ((keys['ArrowLeft'] || keys['KeyA']) && this.x > 0) {
+            this.x -= this.speed;
+        }
+        if ((keys['ArrowRight'] || keys['KeyD']) && this.x < canvasWidth - this.width) {
+            this.x += this.speed;
+        }
+    }
+
+    shoot(bullets) {
+        if (Date.now() - this.lastShot > 200) {
+            bullets.push(new Bullet(this.x + 25, this.y, -8));
+            this.lastShot = Date.now();
+        }
+    }
+
+    render(ctx) {
+        ctx.fillStyle = '#00ff41';
+        ctx.fillRect(this.x + 15, this.y, 20, 25);
+        ctx.fillRect(this.x + 5, this.y + 20, 40, 10);
+        ctx.fillRect(this.x, this.y + 25, 50, 5);
+    }
+}
+
+class Alien {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.width = 40;
+        this.height = 30;
+        this.points = [10, 20, 30][type];
+    }
+
+    render(ctx) {
+        ctx.fillStyle = ['#ff4444', '#ffaa00', '#44ff44'][this.type];
+        ctx.fillRect(this.x + 5, this.y, 30, 20);
+        ctx.fillRect(this.x, this.y + 10, 40, 10);
+        ctx.fillRect(this.x + 10, this.y + 20, 20, 10);
+    }
+}
+
+class Bullet {
+    constructor(x, y, speed) {
+        this.x = x;
+        this.y = y;
+        this.speed = speed;
+        this.width = 5;
+        this.height = 10;
+    }
+
+    update() {
+        this.y += this.speed;
+    }
+
+    render(ctx) {
+        ctx.fillStyle = this.speed < 0 ? '#00ff41' : '#ff4444';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+    }
+}
+
+class Particle {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 8;
+        this.vy = (Math.random() - 0.5) * 8;
+        this.life = 30;
+        this.maxLife = 30;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+    }
+
+    render(ctx) {
+        let alpha = this.life / this.maxLife;
+        ctx.fillStyle = `rgba(255,68,68,${alpha})`;
+        ctx.fillRect(this.x, this.y, 3, 3);
+    }
+}
+
+const game = new Game();</script>
+</body>
+</html>
