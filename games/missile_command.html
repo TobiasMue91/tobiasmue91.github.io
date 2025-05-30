@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Missile Command</title>
+    <style>* {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box
+    }
+
+    body {
+        background: #001122;
+        font-family: 'Courier New', monospace;
+        color: #00ffff;
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        user-select: none
+    }
+
+    #gameContainer {
+        position: relative;
+        border: 2px solid #00ffff;
+        border-radius: 8px;
+        box-shadow: 0 0 20px #00ffff44
+    }
+
+    #gameCanvas {
+        display: block;
+        cursor: none;
+        background: #000011
+    }
+
+    #ui {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 18px;
+        pointer-events: none;
+        z-index: 10;
+        text-shadow: 0 0 5px #00ffff
+    }
+
+    #ammoBar {
+        width: 100px;
+        height: 8px;
+        background: #003;
+        border: 1px solid #00ffff;
+        margin-left: 8px
+    }
+
+    #ammoFill {
+        height: 100%;
+        background: #00ff00;
+        transition: width 0.2s
+    }
+
+    #gameOver, #waveComplete {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        background: #001122ee;
+        padding: 30px;
+        border: 2px solid #00ffff;
+        border-radius: 8px;
+        display: none
+    }
+
+    #gameOver h2, #waveComplete h2 {
+        color: #ff4444;
+        margin-bottom: 20px;
+        font-size: 24px
+    }
+
+    #waveComplete h2 {
+        color: #44ff44
+    }
+
+    #gameOver button, #waveComplete button {
+        background: #00ffff;
+        color: #000;
+        border: none;
+        padding: 12px 24px;
+        font-size: 16px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-family: inherit;
+        margin: 5px
+    }
+
+    #gameOver button:hover, #waveComplete button:hover {
+        background: #44ffff
+    }
+
+    #startScreen {
+        position: absolute;
+        inset: 0;
+        background: #001122f0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        z-index: 20
+    }
+
+    #startScreen h1 {
+        font-size: 36px;
+        margin-bottom: 20px;
+        color: #00ffff
+    }
+
+    #startScreen p {
+        margin-bottom: 10px;
+        color: #aacccc
+    }
+
+    #startScreen button {
+        background: #00ffff;
+        color: #000;
+        border: none;
+        padding: 15px 30px;
+        font-size: 18px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-family: inherit;
+        margin-top: 20px
+    }
+
+    #reloadInfo {
+        position: absolute;
+        top: 40px;
+        left: 10px;
+        font-size: 14px;
+        color: #aacccc;
+        pointer-events: none
+    }</style>
+</head>
+<body>
+<div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="ui">
+        <div>Score: <span id="score">0</span></div>
+        <div>Wave: <span id="wave">1</span></div>
+        <div>Cities: <span id="cities">6</span></div>
+        <div>Ammo: <span id="ammo">10</span>
+            <div id="ammoBar">
+                <div id="ammoFill"></div>
+            </div>
+        </div>
+    </div>
+    <div id="reloadInfo">Press R to reload (3 sec) | Click to fire</div>
+    <div id="waveComplete"><h2>WAVE COMPLETE!</h2>
+        <p>Cities Bonus: <span id="cityBonus">0</span></p>
+        <p>Total Score: <span id="totalScore">0</span></p>
+        <button onclick="game.nextWave()">NEXT WAVE</button>
+    </div>
+    <div id="gameOver"><h2>GAME OVER</h2>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <p>Wave Reached: <span id="finalWave">1</span></p>
+        <button onclick="game.restart()">PLAY AGAIN</button>
+        <button onclick="game.showMenu()">MENU</button>
+    </div>
+    <div id="startScreen"><h1>MISSILE COMMAND</h1>
+        <p><strong>Defend your cities from incoming missiles!</strong></p>
+        <p>• Click anywhere to fire interceptor missiles</p>
+        <p>• Press R to reload (takes 3 seconds)</p>
+        <p>• Destroy enemies before they hit your cities</p>
+        <p>• Survive as many waves as possible</p>
+        <button onclick="game.start()">START GAME</button>
+    </div>
+</div>
+<script>class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.width = this.canvas.width;
+        this.height = this.canvas.height;
+        this.gameState = 'menu';
+        this.score = 0;
+        this.wave = 1;
+        this.enemyMissiles = [];
+        this.playerMissiles = [];
+        this.explosions = [];
+        this.cities = [];
+        this.crosshair = {x: 400, y: 300};
+        this.lastSpawn = 0;
+        this.spawnRate = 2500;
+        this.enemiesThisWave = 0;
+        this.maxEnemiesPerWave = 5;
+        this.ammo = 10;
+        this.maxAmmo = 10;
+        this.isReloading = false;
+        this.reloadStartTime = 0;
+        this.reloadDuration = 3000;
+        this.waveCompleteProcessed = false;
+        this.setupCities();
+        this.setupEventListeners();
+        this.gameLoop();
+    }
+
+    setupCities() {
+        this.cities = [];
+        for (let i = 0; i < 6; i++) {
+            this.cities.push({x: 50 + i * 120, y: this.height - 25, width: 60, height: 20, alive: true});
+        }
+    }
+
+    setupEventListeners() {
+        this.canvas.addEventListener('mousemove', e => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.crosshair.x = e.clientX - rect.left;
+            this.crosshair.y = e.clientY - rect.top;
+        });
+        this.canvas.addEventListener('click', e => {
+            if (this.gameState === 'playing' && !this.isReloading && this.ammo > 0) {
+                const rect = this.canvas.getBoundingClientRect();
+                const targetX = e.clientX - rect.left;
+                const targetY = e.clientY - rect.top;
+                this.firePlayerMissile(targetX, targetY);
+            }
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key.toLowerCase() === 'r' && this.gameState === 'playing' && !this.isReloading && this.ammo < this.maxAmmo) {
+                this.startReload();
+            }
+        });
+    }
+
+    start() {
+        this.gameState = 'playing';
+        document.getElementById('startScreen').style.display = 'none';
+        this.restart();
+    }
+
+    showMenu() {
+        this.gameState = 'menu';
+        document.getElementById('gameOver').style.display = 'none';
+        document.getElementById('startScreen').style.display = 'flex';
+    }
+
+    restart() {
+        this.score = 0;
+        this.wave = 1;
+        this.enemyMissiles = [];
+        this.playerMissiles = [];
+        this.explosions = [];
+        this.enemiesThisWave = 0;
+        this.lastSpawn = 0;
+        this.ammo = 10;
+        this.isReloading = false;
+        this.waveCompleteProcessed = false;
+        this.spawnRate = 2500;
+        this.maxEnemiesPerWave = 5;
+        this.setupCities();
+        document.getElementById('gameOver').style.display = 'none';
+        document.getElementById('waveComplete').style.display = 'none';
+        this.updateUI();
+    }
+
+    nextWave() {
+        this.wave++;
+        this.enemiesThisWave = 0;
+        this.maxEnemiesPerWave = Math.min(12, 5 + this.wave);
+        this.spawnRate = Math.max(1000, 2500 - this.wave * 150);
+        this.ammo = this.maxAmmo;
+        this.isReloading = false;
+        this.waveCompleteProcessed = false;
+        this.enemyMissiles = [];
+        this.playerMissiles = [];
+        this.explosions = [];
+        document.getElementById('waveComplete').style.display = 'none';
+        this.updateUI();
+    }
+
+    startReload() {
+        this.isReloading = true;
+        this.reloadStartTime = Date.now();
+    }
+
+    firePlayerMissile(targetX, targetY) {
+        if (this.ammo <= 0 || this.isReloading) return;
+        const startX = this.width / 2;
+        const startY = this.height - 40;
+        const dx = targetX - startX;
+        const dy = targetY - startY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const speed = 7;
+        this.playerMissiles.push({
+            x: startX,
+            y: startY,
+            targetX,
+            targetY,
+            vx: (dx / distance) * speed,
+            vy: (dy / distance) * speed,
+            trail: []
+        });
+        this.ammo--;
+        this.updateUI();
+    }
+
+    spawnEnemyMissile() {
+        if (this.enemiesThisWave >= this.maxEnemiesPerWave) return;
+        const startX = Math.random() * this.width;
+        const aliveCities = this.cities.filter(c => c.alive);
+        if (aliveCities.length === 0) return;
+        const targetCity = aliveCities[Math.floor(Math.random() * aliveCities.length)];
+        const targetX = targetCity.x + targetCity.width / 2;
+        const targetY = targetCity.y;
+        const speed = 1 + this.wave * 0.2;
+        const dx = targetX - startX;
+        const dy = targetY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        this.enemyMissiles.push({
+            x: startX,
+            y: 0,
+            targetX,
+            targetY,
+            vx: (dx / distance) * speed,
+            vy: (dy / distance) * speed,
+            trail: []
+        });
+        this.enemiesThisWave++;
+    }
+
+    update() {
+        if (this.gameState !== 'playing') return;
+        const now = Date.now();
+        if (this.isReloading) {
+            if (now - this.reloadStartTime >= this.reloadDuration) {
+                this.ammo = this.maxAmmo;
+                this.isReloading = false;
+                this.updateUI();
+            }
+        }
+        if (now - this.lastSpawn > this.spawnRate && !this.waveCompleteProcessed) {
+            this.spawnEnemyMissile();
+            this.lastSpawn = now;
+        }
+        this.updateMissiles();
+        this.updateExplosions();
+        this.checkCollisions();
+        this.checkWaveComplete();
+        this.checkGameOver();
+    }
+
+    updateMissiles() {
+        this.enemyMissiles.forEach(missile => {
+            missile.trail.push({x: missile.x, y: missile.y});
+            if (missile.trail.length > 20) missile.trail.shift();
+            missile.x += missile.vx;
+            missile.y += missile.vy;
+        });
+        this.enemyMissiles = this.enemyMissiles.filter(missile => missile.y <= this.height);
+        this.playerMissiles.forEach(missile => {
+            missile.trail.push({x: missile.x, y: missile.y});
+            if (missile.trail.length > 25) missile.trail.shift();
+            missile.x += missile.vx;
+            missile.y += missile.vy;
+            const dx = missile.targetX - missile.x;
+            const dy = missile.targetY - missile.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < 8) {
+                this.createExplosion(missile.x, missile.y);
+                missile.exploded = true;
+            }
+        });
+        this.playerMissiles = this.playerMissiles.filter(missile => !missile.exploded && missile.x > 0 && missile.x < this.width && missile.y > 0 && missile.y < this.height);
+    }
+
+    updateExplosions() {
+        this.explosions.forEach(explosion => {
+            explosion.radius += explosion.growthRate;
+            explosion.life--;
+        });
+        this.explosions = this.explosions.filter(explosion => explosion.life > 0);
+    }
+
+    createExplosion(x, y) {
+        this.explosions.push({x, y, radius: 0, maxRadius: 70, growthRate: 3, life: 25});
+    }
+
+    checkCollisions() {
+        this.explosions.forEach(explosion => {
+            this.enemyMissiles.forEach((missile, index) => {
+                const dx = missile.x - explosion.x;
+                const dy = missile.y - explosion.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < explosion.radius) {
+                    this.enemyMissiles.splice(index, 1);
+                    this.score += 100;
+                    this.createExplosion(missile.x, missile.y);
+                }
+            });
+        });
+        this.enemyMissiles.forEach((missile, missileIndex) => {
+            if (missile.y >= this.height - 5) {
+                this.enemyMissiles.splice(missileIndex, 1);
+                this.createExplosion(missile.x, this.height - 5);
+                return;
+            }
+            this.cities.forEach(city => {
+                if (city.alive && missile.x >= city.x && missile.x <= city.x + city.width && missile.y >= city.y) {
+                    this.createExplosion(missile.x, missile.y);
+                    city.alive = false;
+                    this.enemyMissiles.splice(missileIndex, 1);
+                }
+            });
+        });
+    }
+
+    checkWaveComplete() {
+        if (!this.waveCompleteProcessed && this.enemyMissiles.length === 0 && this.enemiesThisWave >= this.maxEnemiesPerWave) {
+            this.waveCompleteProcessed = true;
+            const aliveCities = this.cities.filter(c => c.alive).length;
+            const cityBonus = aliveCities * 200;
+            this.score += cityBonus;
+            document.getElementById('cityBonus').textContent = cityBonus;
+            document.getElementById('totalScore').textContent = this.score;
+            document.getElementById('waveComplete').style.display = 'block';
+            this.updateUI();
+        }
+    }
+
+    checkGameOver() {
+        const aliveCities = this.cities.filter(c => c.alive).length;
+        if (aliveCities === 0) {
+            this.gameState = 'gameOver';
+            document.getElementById('finalScore').textContent = this.score;
+            document.getElementById('finalWave').textContent = this.wave;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+    }
+
+    updateUI() {
+        document.getElementById('score').textContent = this.score;
+        document.getElementById('wave').textContent = this.wave;
+        document.getElementById('cities').textContent = this.cities.filter(c => c.alive).length;
+        document.getElementById('ammo').textContent = this.ammo;
+        const ammoPercent = (this.ammo / this.maxAmmo) * 100;
+        document.getElementById('ammoFill').style.width = ammoPercent + '%';
+        if (this.isReloading) {
+            const progress = Math.min(1, (Date.now() - this.reloadStartTime) / this.reloadDuration);
+            document.getElementById('ammoFill').style.background = `linear-gradient(90deg, #ffff00 0%, #ffff00 ${progress * 100}%, #003 ${progress * 100}%)`;
+        } else {
+            document.getElementById('ammoFill').style.background = '#00ff00';
+        }
+    }
+
+    render() {
+        this.ctx.fillStyle = '#000011';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+        this.renderGround();
+        this.renderCities();
+        this.renderMissiles();
+        this.renderExplosions();
+        if (this.gameState === 'playing') this.renderCrosshair();
+        if (this.isReloading) this.renderReloadStatus();
+    }
+
+    renderGround() {
+        this.ctx.fillStyle = '#004400';
+        this.ctx.fillRect(0, this.height - 5, this.width, 5);
+    }
+
+    renderCities() {
+        this.cities.forEach(city => {
+            if (city.alive) {
+                this.ctx.fillStyle = '#00ff00';
+                this.ctx.fillRect(city.x, city.y, city.width, city.height);
+                this.ctx.fillStyle = '#44ff44';
+                this.ctx.fillRect(city.x + 10, city.y - 10, 10, 10);
+                this.ctx.fillRect(city.x + 25, city.y - 15, 10, 15);
+                this.ctx.fillRect(city.x + 40, city.y - 8, 8, 8);
+            } else {
+                this.ctx.fillStyle = '#333';
+                this.ctx.fillRect(city.x, city.y + 10, city.width, city.height - 10);
+            }
+        });
+    }
+
+    renderMissiles() {
+        this.enemyMissiles.forEach(missile => {
+            this.renderTrail(missile.trail, '#ff4400');
+            this.ctx.fillStyle = '#ff8800';
+            this.ctx.beginPath();
+            this.ctx.arc(missile.x, missile.y, 3, 0, Math.PI * 2);
+            this.ctx.fill();
+        });
+        this.playerMissiles.forEach(missile => {
+            this.renderTrail(missile.trail, '#00ffff');
+            this.ctx.fillStyle = '#44ffff';
+            this.ctx.beginPath();
+            this.ctx.arc(missile.x, missile.y, 2, 0, Math.PI * 2);
+            this.ctx.fill();
+        });
+    }
+
+    renderTrail(trail, color) {
+        if (trail.length < 2) return;
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        trail.forEach((point, index) => {
+            this.ctx.globalAlpha = index / trail.length * 0.8;
+            if (index === 0) this.ctx.moveTo(point.x, point.y); else this.ctx.lineTo(point.x, point.y);
+        });
+        this.ctx.stroke();
+        this.ctx.globalAlpha = 1;
+    }
+
+    renderExplosions() {
+        this.explosions.forEach(explosion => {
+            const alpha = explosion.life / 25;
+            this.ctx.globalAlpha = alpha;
+            this.ctx.fillStyle = '#ffff44';
+            this.ctx.beginPath();
+            this.ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.strokeStyle = '#ff8800';
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+            this.ctx.globalAlpha = 1;
+        });
+    }
+
+    renderCrosshair() {
+        this.ctx.strokeStyle = '#00ffff';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.crosshair.x - 15, this.crosshair.y);
+        this.ctx.lineTo(this.crosshair.x + 15, this.crosshair.y);
+        this.ctx.moveTo(this.crosshair.x, this.crosshair.y - 15);
+        this.ctx.lineTo(this.crosshair.x, this.crosshair.y + 15);
+        this.ctx.stroke();
+        this.ctx.beginPath();
+        this.ctx.arc(this.crosshair.x, this.crosshair.y, 20, 0, Math.PI * 2);
+        this.ctx.stroke();
+    }
+
+    renderReloadStatus() {
+        const progress = (Date.now() - this.reloadStartTime) / this.reloadDuration;
+        this.ctx.fillStyle = '#ffff0088';
+        this.ctx.fillRect(this.width / 2 - 100, this.height / 2 - 20, 200 * Math.min(1, progress), 40);
+        this.ctx.strokeStyle = '#ffff00';
+        this.ctx.strokeRect(this.width / 2 - 100, this.height / 2 - 20, 200, 40);
+        this.ctx.fillStyle = '#ffff00';
+        this.ctx.font = '16px Courier New';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('RELOADING...', this.width / 2, this.height / 2 + 5);
+    }
+
+    gameLoop() {
+        this.update();
+        this.render();
+        requestAnimationFrame(() => this.gameLoop());
+    }
+}
+
+const game = new Game();</script>
+<script src="../logo.js"></script>
+</body>
+</html>
