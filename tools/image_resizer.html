@@ -7,7 +7,6 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
   <style>
-    /* Keep all existing styles */
     :root {
       --primary-color: #4361ee;
       --secondary-color: #3f37c9;
@@ -68,6 +67,13 @@
       margin-bottom: 15px;
       background-color: #eee;
       text-align: center;
+      background-image:
+              linear-gradient(45deg, #ccc 25%, transparent 25%),
+              linear-gradient(-45deg, #ccc 25%, transparent 25%),
+              linear-gradient(45deg, transparent 75%, #ccc 75%),
+              linear-gradient(-45deg, transparent 75%, #ccc 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
     }
     .image-preview img {
       max-width: 100%;
@@ -196,6 +202,28 @@
     @keyframes spinner-border {
       to { transform: rotate(360deg); }
     }
+    /* Transparency background options styling */
+    .transparency-controls {
+      border: 1px solid #dee2e6;
+      border-radius: var(--border-radius);
+      padding: 15px;
+      margin-bottom: 15px;
+      background-color: #f8f9fa;
+    }
+    .background-color-preview {
+      width: 30px;
+      height: 30px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .transparency-note {
+      font-size: 0.85em;
+      color: #6c757d;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -272,9 +300,50 @@
               <select class="form-select" id="fit-mode-select">
                 <option value="stretch">Stretch/Compress</option>
                 <option value="crop">Crop to Fill</option>
-                <option value="letterbox">Add Black Bars</option>
+                <option value="letterbox">Add Padding</option>
               </select>
               <small class="form-text text-muted">How to handle aspect ratio differences</small>
+            </div>
+
+            <!-- New Transparency Controls -->
+            <div id="transparency-controls" class="transparency-controls d-none">
+              <h6 class="mb-3"><i class="bi bi-transparency me-2"></i>Background & Transparency</h6>
+
+              <div class="form-group mb-3">
+                <label for="transparency-mode" class="form-label">Background handling</label>
+                <select class="form-select" id="transparency-mode">
+                  <option value="preserve">Preserve original transparency</option>
+                  <option value="transparent">Make background transparent</option>
+                  <option value="color">Custom background color</option>
+                </select>
+              </div>
+
+              <div id="background-color-controls" class="d-none">
+                <label class="form-label">Background color</label>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <input type="color" id="background-color" class="form-control form-control-color" value="#ffffff" style="width: 60px;">
+                  <input type="text" id="background-color-hex" class="form-control" value="#ffffff" placeholder="#ffffff" style="width: 100px;">
+                  <div class="background-color-preview" id="background-color-preview"></div>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="background-alpha-check">
+                  <label class="form-check-label" for="background-alpha-check">
+                    Semi-transparent background
+                  </label>
+                </div>
+                <div id="background-alpha-controls" class="mt-2 d-none">
+                  <label class="form-label">Background opacity</label>
+                  <div class="d-flex align-items-center gap-2">
+                    <input type="range" class="form-range" id="background-alpha" min="0" max="100" value="100">
+                    <span id="background-alpha-value" class="text-nowrap">100%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="transparency-note">
+                <i class="bi bi-info-circle me-1"></i>
+                <span id="transparency-note-text">Transparency is supported for PNG, WebP, and GIF formats</span>
+              </div>
             </div>
 
             <div class="row">
@@ -392,6 +461,19 @@
     const fitModeSelect = document.getElementById('fit-mode-select');
     const fitModeContainer = document.getElementById('fit-mode-container');
 
+    // New transparency controls
+    const transparencyControls = document.getElementById('transparency-controls');
+    const transparencyMode = document.getElementById('transparency-mode');
+    const backgroundColorControls = document.getElementById('background-color-controls');
+    const backgroundColor = document.getElementById('background-color');
+    const backgroundColorHex = document.getElementById('background-color-hex');
+    const backgroundColorPreview = document.getElementById('background-color-preview');
+    const backgroundAlphaCheck = document.getElementById('background-alpha-check');
+    const backgroundAlphaControls = document.getElementById('background-alpha-controls');
+    const backgroundAlpha = document.getElementById('background-alpha');
+    const backgroundAlphaValue = document.getElementById('background-alpha-value');
+    const transparencyNoteText = document.getElementById('transparency-note-text');
+
     // Variables
     let originalImage = null;
     let rotation = 0;
@@ -402,6 +484,7 @@
     let imageLoaded = false;
     let resizeTimeout = null;
     let processingImage = false;
+    let hasTransparency = false;
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     const MAX_DIMENSION = 4000; // 4000px max dimension
     const IMAGE_PROCESS_TIMEOUT = 30000; // 30 seconds timeout for processing
@@ -428,6 +511,43 @@
     const now = new Date();
     currentDate.textContent = now.toLocaleDateString();
 
+    // Helper function to check if format supports transparency
+    function formatSupportsTransparency(format) {
+      return ['png', 'webp', 'gif'].includes(format);
+    }
+
+    // Helper function to convert hex to rgba
+    function hexToRgba(hex, alpha = 1) {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (result) {
+        return {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16),
+          a: Math.round(alpha * 255)
+        };
+      }
+      return { r: 255, g: 255, b: 255, a: 255 };
+    }
+
+    // Helper function to detect if image has transparency
+    function detectTransparency(canvas, ctx) {
+      try {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] < 255) {
+            return true;
+          }
+        }
+        return false;
+      } catch (error) {
+        console.warn('Could not detect transparency:', error);
+        return false;
+      }
+    }
+
     // Initialize from localStorage
     function loadSettings() {
       try {
@@ -446,8 +566,24 @@
         if (settings.fitMode) {
           fitModeSelect.value = settings.fitMode;
         }
+        if (settings.transparencyMode) {
+          transparencyMode.value = settings.transparencyMode;
+        }
+        if (settings.backgroundColor) {
+          backgroundColor.value = settings.backgroundColor;
+          backgroundColorHex.value = settings.backgroundColor;
+          updateBackgroundColorPreview();
+        }
+        if (settings.backgroundAlpha !== undefined) {
+          backgroundAlpha.value = settings.backgroundAlpha;
+          backgroundAlphaValue.textContent = settings.backgroundAlpha + '%';
+        }
+        if (settings.backgroundAlphaCheck !== undefined) {
+          backgroundAlphaCheck.checked = settings.backgroundAlphaCheck;
+        }
         updateQualityVisibility();
         updateFitModeVisibility();
+        updateTransparencyControls();
       } catch (error) {
         console.error('Error loading settings:', error);
         localStorage.removeItem('imageResizerSettings');
@@ -460,7 +596,11 @@
           aspectRatio: aspectRatioCheckbox.checked,
           format: formatSelect.value,
           quality: qualityInput.value,
-          fitMode: fitModeSelect.value // Save the fit mode
+          fitMode: fitModeSelect.value,
+          transparencyMode: transparencyMode.value,
+          backgroundColor: backgroundColor.value,
+          backgroundAlpha: backgroundAlpha.value,
+          backgroundAlphaCheck: backgroundAlphaCheck.checked
         };
         localStorage.setItem('imageResizerSettings', JSON.stringify(settings));
       } catch (error) {
@@ -471,6 +611,53 @@
 
     function updateFitModeVisibility() {
       fitModeContainer.style.display = aspectRatioCheckbox.checked ? 'none' : 'block';
+    }
+
+    function updateTransparencyControls() {
+      const format = formatSelect.value;
+      const supportsTransparency = formatSupportsTransparency(format);
+
+      transparencyControls.classList.toggle('d-none', !supportsTransparency);
+
+      if (supportsTransparency) {
+        updateBackgroundColorControls();
+        updateTransparencyNote();
+      }
+    }
+
+    function updateBackgroundColorControls() {
+      const mode = transparencyMode.value;
+      backgroundColorControls.classList.toggle('d-none', mode !== 'color');
+      updateBackgroundAlphaControls();
+    }
+
+    function updateBackgroundAlphaControls() {
+      const isChecked = backgroundAlphaCheck.checked;
+      backgroundAlphaControls.classList.toggle('d-none', !isChecked);
+    }
+
+    function updateBackgroundColorPreview() {
+      const color = backgroundColor.value;
+      const alpha = backgroundAlphaCheck.checked ? backgroundAlpha.value / 100 : 1;
+      backgroundColorPreview.style.backgroundColor = color;
+      backgroundColorPreview.style.opacity = alpha;
+    }
+
+    function updateTransparencyNote() {
+      const mode = transparencyMode.value;
+      const format = formatSelect.value.toUpperCase();
+
+      let noteText = `Transparency is supported for PNG, WebP, and GIF formats`;
+
+      if (mode === 'preserve' && hasTransparency) {
+        noteText = `Original transparency will be preserved in ${format} format`;
+      } else if (mode === 'transparent') {
+        noteText = `Background will be transparent in ${format} format`;
+      } else if (mode === 'color') {
+        noteText = `Custom background will be applied in ${format} format`;
+      }
+
+      transparencyNoteText.textContent = noteText;
     }
 
     // Helper functions
@@ -806,6 +993,7 @@
 
     formatSelect.addEventListener('change', () => {
       updateQualityVisibility();
+      updateTransparencyControls();
       saveSettings();
       if (imageLoaded) {
         resizeImage();
@@ -817,6 +1005,58 @@
       saveSettings();
       if (imageLoaded) {
         // Use debounce for quality changes
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          resizeImage();
+        }, 300);
+      }
+    });
+
+    // New transparency event listeners
+    transparencyMode.addEventListener('change', () => {
+      updateBackgroundColorControls();
+      updateTransparencyNote();
+      saveSettings();
+      if (imageLoaded) {
+        resizeImage();
+      }
+    });
+
+    backgroundColor.addEventListener('input', () => {
+      backgroundColorHex.value = backgroundColor.value;
+      updateBackgroundColorPreview();
+      saveSettings();
+      if (imageLoaded) {
+        resizeImage();
+      }
+    });
+
+    backgroundColorHex.addEventListener('input', () => {
+      const hex = backgroundColorHex.value;
+      if (/^#[0-9A-F]{6}$/i.test(hex)) {
+        backgroundColor.value = hex;
+        updateBackgroundColorPreview();
+        saveSettings();
+        if (imageLoaded) {
+          resizeImage();
+        }
+      }
+    });
+
+    backgroundAlphaCheck.addEventListener('change', () => {
+      updateBackgroundAlphaControls();
+      updateBackgroundColorPreview();
+      saveSettings();
+      if (imageLoaded) {
+        resizeImage();
+      }
+    });
+
+    backgroundAlpha.addEventListener('input', () => {
+      backgroundAlphaValue.textContent = backgroundAlpha.value + '%';
+      updateBackgroundColorPreview();
+      saveSettings();
+      if (imageLoaded) {
         clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(() => {
           resizeImage();
@@ -992,19 +1232,38 @@
         flipH = false;
         flipV = false;
 
+        // Detect transparency by drawing image to canvas and checking alpha channel
+        try {
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = img.width;
+          tempCanvas.height = img.height;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(img, 0, 0);
+          hasTransparency = detectTransparency(tempCanvas, tempCtx);
+
+          // Clean up temp canvas
+          tempCanvas.width = 1;
+          tempCanvas.height = 1;
+        } catch (error) {
+          console.warn('Could not detect transparency:', error);
+          hasTransparency = false;
+        }
+
         // Update UI
         originalContainer.classList.remove('d-none');
         updateOriginalPreview();
+        updateTransparencyControls();
 
         // Set up sliders
         updateSliderRanges();
 
         // Show image info
         const fileSizeText = fileSize ? formatBytes(fileSize) : 'Unknown';
+        const transparencyText = hasTransparency ? ' • Has transparency' : '';
         originalInfo.innerHTML = `
-          <strong>${filename}</strong><br>
-          Original size: ${origWidth} × ${origHeight} pixels | ${fileSizeText}
-        `;
+         <strong>${filename}</strong><br>
+         Original size: ${origWidth} × ${origHeight} pixels | ${fileSizeText}${transparencyText}
+       `;
         originalOverlay.textContent = `${origWidth} × ${origHeight}`;
 
         // Perform initial resize
@@ -1044,7 +1303,7 @@
           canvas.height = originalImage.width;
         }
 
-        // Clear canvas
+        // Clear canvas (transparent by default)
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // Apply transformations
@@ -1056,7 +1315,7 @@
         ctx.restore();
 
         // Update preview
-        originalPreview.src = canvas.toDataURL();
+        originalPreview.src = canvas.toDataURL('image/png');
 
         // Clean up canvas
         canvas.width = 1;
@@ -1091,6 +1350,7 @@
           const format = formatSelect.value;
           const quality = parseInt(qualityInput.value) / 100;
           const fitMode = aspectRatioCheckbox.checked ? 'maintain' : fitModeSelect.value;
+          const transparencyModeValue = transparencyMode.value;
 
           // Check if WebP is supported when selected
           if (format === 'webp' && !browserSupportsWebP) {
@@ -1112,9 +1372,33 @@
           canvas.width = targetWidth;
           canvas.height = targetHeight;
 
-          // Clear canvas with black background (for letterbox mode)
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          // Handle background based on transparency mode and format support
+          const supportsTransparency = formatSupportsTransparency(format);
+
+          if (supportsTransparency && transparencyModeValue === 'transparent') {
+            // Keep canvas transparent (default)
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          } else if (supportsTransparency && transparencyModeValue === 'preserve') {
+            // Keep canvas transparent - original transparency will be preserved
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          } else if (transparencyModeValue === 'color' || !supportsTransparency) {
+            // Fill with background color
+            const bgColor = hexToRgba(backgroundColor.value,
+                    backgroundAlphaCheck.checked ? backgroundAlpha.value / 100 : 1);
+
+            if (supportsTransparency && backgroundAlphaCheck.checked) {
+              // Use semi-transparent background
+              ctx.fillStyle = `rgba(${bgColor.r}, ${bgColor.g}, ${bgColor.b}, ${bgColor.a / 255})`;
+            } else {
+              // Use opaque background
+              ctx.fillStyle = backgroundColor.value;
+            }
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          } else {
+            // Default: white background for formats that don't support transparency
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
 
           // Apply transformations based on fit mode
           ctx.save();
@@ -1148,14 +1432,14 @@
               offsetY = (targetHeight - drawHeight) / 2;
             }
           } else if (fitMode === 'letterbox') {
-            // Add black bars - maintain aspect ratio and center
+            // Add padding - maintain aspect ratio and center
             if (sourceRatio > targetRatio) {
-              // Source is wider, add black bars on top/bottom
+              // Source is wider, add padding on top/bottom
               drawWidth = targetWidth;
               drawHeight = targetWidth / sourceRatio;
               offsetY = (targetHeight - drawHeight) / 2;
             } else {
-              // Source is taller, add black bars on sides
+              // Source is taller, add padding on sides
               drawHeight = targetHeight;
               drawWidth = targetHeight * sourceRatio;
               offsetX = (targetWidth - drawWidth) / 2;
@@ -1189,7 +1473,7 @@
 
           ctx.restore();
 
-          // Rest of the function remains the same...
+          // Generate the final image data
           let mimeType = 'image/jpeg';
           if (format === 'png') mimeType = 'image/png';
           else if (format === 'webp') mimeType = 'image/webp';
@@ -1214,7 +1498,18 @@
                     .then(res => res.blob())
                     .then(blob => {
                       const fileSize = blob.size;
-                      resultOverlay.textContent = `${targetWidth} × ${targetHeight} | ${formatBytes(fileSize)}`;
+                      let overlayText = `${targetWidth} × ${targetHeight} | ${formatBytes(fileSize)}`;
+
+                      // Add transparency info
+                      if (supportsTransparency) {
+                        if (transparencyModeValue === 'transparent') {
+                          overlayText += ' | Transparent';
+                        } else if (transparencyModeValue === 'preserve' && hasTransparency) {
+                          overlayText += ' | Original transparency';
+                        }
+                      }
+
+                      resultOverlay.textContent = overlayText;
 
                       // Check compression ratio
                       if (fileSize) {
@@ -1286,20 +1581,25 @@
         heightPercent.checked = false;
         originalImage = null;
         imageLoaded = false;
+        hasTransparency = false;
 
         originalContainer.classList.add('d-none');
         resultContainer.classList.add('d-none');
+        transparencyControls.classList.add('d-none');
         originalInfo.innerHTML = '';
         errorContainer.innerHTML = '';
       }
 
       // Keep format and quality settings
       updateQualityVisibility();
+      updateTransparencyControls();
     }
 
     // Initialize
     loadSettings();
     updateQualityVisibility();
+    updateTransparencyControls();
+    updateBackgroundColorPreview();
 
     // Add window beforeunload warning if processing
     window.addEventListener('beforeunload', (e) => {
