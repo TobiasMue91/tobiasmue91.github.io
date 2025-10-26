@@ -643,6 +643,7 @@
 
     class NonogramGame {
         constructor() {
+            this.difficultySize = 15;
             this.size = 15;
             this.solution = [];
             this.playerGrid = [];
@@ -650,7 +651,6 @@
             this.colClues = [];
             this.timer = null;
             this.startTime = 0;
-            this.errors = 0;
             this.drawMode = 'fill';
             this.isDrawing = false;
             this.lastDrawState = null;
@@ -676,7 +676,7 @@
                 btn.onclick = () => {
                     document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
-                    this.size = parseInt(btn.dataset.size);
+                    this.difficultySize = parseInt(btn.dataset.size);
                     this.newGame();
                 };
             });
@@ -694,6 +694,7 @@
         }
 
         async newGame() {
+            this.size = this.difficultySize;
             this.updateStatus('Generating puzzle...');
 
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -706,8 +707,10 @@
                 attempts++;
                 this.updateStatus(`Generating puzzle... (attempt ${attempts})`);
 
+                this.size = this.difficultySize;
                 this.currentEmoji = EMOJI_POOL[Math.floor(Math.random() * EMOJI_POOL.length)];
                 await this.generateSolutionFromEmoji();
+                this.trimEmptyBorders();
                 this.calculateClues();
 
                 const solver = new NonogramSolver(this.rowClues, this.colClues);
@@ -739,7 +742,9 @@
             if (!solvable) {
                 this.updateStatus('Failed to generate solvable puzzle. Using simpler pattern...');
                 await new Promise(resolve => setTimeout(resolve, 500));
+                this.size = this.difficultySize;
                 this.generateSimplePattern();
+                this.trimEmptyBorders();
                 this.calculateClues();
             } else {
                 this.updateStatus(`✓ Verified solvable! (${attempts} ${attempts === 1 ? 'attempt' : 'attempts'})`);
@@ -747,9 +752,9 @@
             }
 
             this.playerGrid = Array(this.size).fill().map(() => Array(this.size).fill(0));
-            this.errors = 0;
             this.startTimer();
             this.render();
+            this.updateStats();
         }
 
         async generateSolutionFromEmoji() {
@@ -774,6 +779,57 @@
                     const px = ((y * scale) * canvas.width + (x * scale)) * 4;
                     const brightness = imageData.data[px] + imageData.data[px + 1] + imageData.data[px + 2];
                     this.solution[y][x] = brightness > 100 ? 1 : 0;
+                }
+            }
+        }
+
+        trimEmptyBorders() {
+            let topTrim = 0;
+            for (let y = 0; y < this.size; y++) {
+                if (this.solution[y].some(cell => cell === 1)) break;
+                topTrim++;
+            }
+
+            let bottomTrim = 0;
+            for (let y = this.size - 1; y >= 0; y--) {
+                if (this.solution[y].some(cell => cell === 1)) break;
+                bottomTrim++;
+            }
+
+            let leftTrim = 0;
+            for (let x = 0; x < this.size; x++) {
+                if (this.solution.some(row => row[x] === 1)) break;
+                leftTrim++;
+            }
+
+            let rightTrim = 0;
+            for (let x = this.size - 1; x >= 0; x--) {
+                if (this.solution.some(row => row[x] === 1)) break;
+                rightTrim++;
+            }
+
+            if (topTrim > 0 || bottomTrim > 0 || leftTrim > 0 || rightTrim > 0) {
+                const newHeight = this.size - topTrim - bottomTrim;
+                const newWidth = this.size - leftTrim - rightTrim;
+
+                const newSolution = [];
+                for (let y = topTrim; y < this.size - bottomTrim; y++) {
+                    newSolution.push(this.solution[y].slice(leftTrim, this.size - rightTrim));
+                }
+
+                this.solution = newSolution;
+                this.size = Math.max(newHeight, newWidth);
+
+                while (this.solution.length < this.size) {
+                    this.solution.push(Array(this.solution[0].length).fill(0));
+                }
+
+                if (this.solution[0].length < this.size) {
+                    for (let y = 0; y < this.solution.length; y++) {
+                        while (this.solution[y].length < this.size) {
+                            this.solution[y].push(0);
+                        }
+                    }
                 }
             }
         }
@@ -955,7 +1011,16 @@
             const total = this.solution.flat().filter(c => c === 1).length;
             const progress = total > 0 ? Math.min(100, Math.round((filled / total) * 100)) : 0;
             document.getElementById('progress').textContent = `${progress}%`;
-            document.getElementById('errors').textContent = this.errors;
+
+            let errorCount = 0;
+            for (let y = 0; y < this.size; y++) {
+                for (let x = 0; x < this.size; x++) {
+                    if (this.playerGrid[y][x] === 1 && this.solution[y][x] !== 1) {
+                        errorCount++;
+                    }
+                }
+            }
+            document.getElementById('errors').textContent = errorCount;
         }
 
         checkSolution() {
@@ -974,13 +1039,11 @@
             }
 
             if (!correct) {
-                this.errors++;
                 errorCells.forEach(({x, y}) => {
                     const cell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
                     cell.classList.add('error-flash');
                     setTimeout(() => cell.classList.remove('error-flash'), 400);
                 });
-                this.updateStats();
                 this.playSound('error', 150);
             } else {
                 this.playSound('win', 523);
