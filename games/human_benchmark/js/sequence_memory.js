@@ -1,71 +1,16 @@
-// SEQUENCE MEMORY TEST
-$(function () {
-    const squares = Array.from(document.querySelectorAll(".square"));
-    const startButton = document.querySelector("#start-sequence-memory-test");
-    const pointsDisplay = document.querySelector(".points");
-    let sequence = [];
-    let round = 0;
-    let points = 0;
-    let playerTurn = false;
-
-    squares.forEach((square, index) => {
-        square.addEventListener("click", function () {
-            if (!playerTurn) return;
-
-            if (index === sequence[round]) {
-                round++;
-                flashSquare(this, 'bg-green-500');
-
-                if (round === sequence.length) {
-                    playerTurn = false;
-                    points++;
-                    pointsDisplay.textContent = `Points: ${points}`;
-                    setTimeout(nextRound, 1000);
-                }
-            } else {
-                flashSquare(this, 'bg-red-500');
-                gameOver();
-            }
-        });
-    });
-
-    function flashSquare(square, color) {
-        square.classList.add(color);
-        setTimeout(() => square.classList.remove(color), 300);
-    }
-
-    function nextRound() {
-        round = 0;
-        playerTurn = false;
-        sequence.push(Math.floor(Math.random() * 9));
-        playSequence();
-    }
-
-    function playSequence() {
-        sequence.forEach((index, i) => {
-            setTimeout(() => {
-                flashSquare(squares[index], 'bg-blue-500');
-            }, i * 600 + 200);
-        });
-
-        setTimeout(() => {
-            playerTurn = true;
-        }, sequence.length * 600 + 200);
-    }
-
-    function gameOver() {
-        playerTurn = false;
-        alert(`Game Over. Your score is: ${points}`);
-        saveScore('Sequence Memory', points);
-        startButton.classList.remove('hidden');
-        sequence = [];
-    }
-
-    startButton.addEventListener("click", function () {
-        this.classList.add('hidden');
-        points = 0;
-        pointsDisplay.textContent = `Points: ${points}`;
-        sequence = [];
-        nextRound();
-    });
+// SEQUENCE MEMORY TEST - ENHANCED
+$(function(){
+const game={sequence:[],round:0,level:0,playerTurn:false,bestLevel:null};
+const els={start:$('#start-sequence-memory-test'),squares:$('.square'),levelDisplay:$('#seq-level'),bestDisplay:$('#seq-best')};
+const loadBest=()=>{const scores=JSON.parse(localStorage.getItem('humanBenchmarkScores'))||{};game.bestLevel=scores['Sequence Memory'];if(game.bestLevel)els.bestDisplay.text(game.bestLevel);};
+const updateUI=()=>{els.levelDisplay.text(game.level);};
+const flashSquare=(square,color,duration=300)=>{$(square).addClass(color);HB.playSound('click');setTimeout(()=>$(square).removeClass(color),duration);};
+const nextRound=()=>{game.round=0;game.playerTurn=false;game.sequence.push(Math.floor(Math.random()*9));game.level=game.sequence.length;updateUI();if(game.level%5===0&&game.level>0)HB.showToast(`Level ${game.level}! 🎉`,1500,'success');playSequence();};
+const playSequence=()=>{let delay=0;game.sequence.forEach((idx,i)=>{setTimeout(()=>flashSquare(els.squares[idx],'bg-blue-500'),delay);delay+=600;});setTimeout(()=>game.playerTurn=true,delay+200);};
+const checkClick=function(){if(!game.playerTurn)return;const idx=parseInt($(this).data('index'));if(idx===game.sequence[game.round]){game.round++;flashSquare(this,'bg-green-500');if(game.round===game.sequence.length){game.playerTurn=false;HB.playSound('success');setTimeout(nextRound,1000);}}else{flashSquare(this,'bg-red-500');gameOver();}};
+const gameOver=()=>{game.playerTurn=false;HB.playSound('fail');const isNewRecord=saveScore('Sequence Memory',game.level);if(isNewRecord)game.bestLevel=game.level;HB.showModal({title:isNewRecord?'🎉 New Personal Best!':'Game Over',message:`You reached level <strong>${game.level}</strong>!${game.level>=15?'<br>🏆 Incredible memory!':''}`,score:`Level ${game.level}`,isNewRecord,onRetry:reset,onHome:HB.goHome,icon:'🔗'});};
+const reset=()=>{game.sequence=[];game.round=0;game.level=0;game.playerTurn=false;els.start.show();updateUI();loadBest();};
+els.squares.on('click',checkClick);
+els.start.on('click',()=>{els.start.hide();nextRound();});
+loadBest();updateUI();
 });
