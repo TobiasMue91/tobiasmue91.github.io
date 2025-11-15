@@ -30,8 +30,8 @@ $(function () {
 
     updateText();
 
-    document.addEventListener('keydown', (e) => {
-        // e.preventDefault();
+    const onKeydown = (e) => {
+        e.preventDefault();
         if (!startTime) {
             resetStats();
             resetTimer();
@@ -66,5 +66,11 @@ $(function () {
         if (currentChar === " ") wordCount++, wordCount % 15 === 0 && (textEl.scrollTop = wordCount / 15 * 25);
         else charCount++;
         typed === currentChar ? (allChars[index - 1]?.classList.add('correct'), correct++) : (allChars[index - 1]?.classList.add('incorrect'), incorrect++);
-    });
+    }
+
+    if (window.typingSpeedKeydownHandler) {
+        document.removeEventListener('keydown', window.typingSpeedKeydownHandler);
+    }
+    window.typingSpeedKeydownHandler = onKeydown;
+    document.addEventListener('keydown', onKeydown);
 });
