@@ -1,70 +1,18 @@
-const words = [
-    'apple', 'banana', 'cherry', 'date', 'elderberry', 'fig', 'grapefruit', 'honeydew', 'kiwi', 'lemon',
-    'mango', 'nectarine', 'orange', 'papaya', 'quince', 'raspberry', 'strawberry', 'tangerine', 'umbrella', 'vanilla',
-    'watermelon', 'xigua', 'yellow', 'zucchini', 'apricot', 'blackberry', 'coconut', 'dragonfruit', 'eggplant', 'feijoa',
-    'guava', 'huckleberry', 'jackfruit', 'kumquat', 'lychee', 'mulberry', 'nashi', 'olive', 'persimmon', 'quandong',
-    'rambutan', 'starfruit', 'tamarind', 'ugli', 'victoria', 'wolfberry', 'ximenia', 'yunnan', 'ziziphus'
-];
-
-let currentWord = '';
-let previousWord = '';
-let timer;
-let timeLeft = 30;
-let score = 0;
-
-function scrambleWord(word) {
-    const scrambledWord = word.split('').sort(() => 0.5 - Math.random()).join('');
-    return scrambledWord;
-}
-
-function startGame() {
-    score = 0;
-    document.getElementById('score').textContent = score;
-    nextWord();
-    document.getElementById('game-area').style.display = 'block';
-    document.getElementById('timer-area').style.display = 'block';
-    document.getElementById('score-area').style.display = 'block';
-    document.getElementById('result-area').style.display = 'none';
-    document.getElementById('start-game').style.display = 'none';
-    startTimer();
-}
-
-function nextWord() {
-    previousWord = currentWord;
-    currentWord = words[Math.floor(Math.random() * words.length)];
-    while (currentWord === previousWord) {
-        currentWord = words[Math.floor(Math.random() * words.length)];
-    }
-    document.getElementById('scrambled-word').textContent = scrambleWord(currentWord);
-    document.getElementById('user-input').value = '';
-}
-
-function startTimer() {
-    timeLeft = 60;
-    timer = setInterval(() => {
-        timeLeft--;
-        document.getElementById('timer').textContent = timeLeft;
-        if (timeLeft === 0) {
-            endGame();
-        }
-    }, 1000);
-}
-
-function endGame() {
-    clearInterval(timer);
-    document.getElementById('game-area').style.display = 'none';
-    document.getElementById('timer-area').style.display = 'none';
-    document.getElementById('score-area').style.display = 'none';
-    document.getElementById('result-area').style.display = 'block';
-    document.getElementById('start-game').style.display = 'block';
-    document.getElementById('result-message').textContent = `Time's up! Your score: ${score}`;
-    saveScore('Word Scramble', score);
-}
-
-document.getElementById('user-input').addEventListener('input', function () {
-    if (this.value.toLowerCase() === currentWord) {
-        score++;
-        document.getElementById('score').textContent = score;
-        nextWord();
-    }
+// WORD SCRAMBLE - ENHANCED
+$(function(){
+if(!window.HB){console.error('HB utilities not loaded');return;}
+const words=['apple','banana','cherry','grape','mango','orange','peach','pear','plum','lemon','melon','berry','fig','kiwi','lime','olive','papaya','guava','coconut','avocado','apricot','nectarine','tangerine','grapefruit','watermelon','strawberry','blueberry','raspberry','blackberry','cranberry','pineapple','pomegranate','persimmon','dragonfruit','passionfruit'];
+const game={score:0,timer:60,interval:null,currentWord:'',lastWord:'',bestScore:null};
+const els={start:$('#ws-start'),gameArea:$('#ws-game-area'),scrambled:$('#ws-scrambled'),input:$('#ws-input'),scoreDisplay:$('#ws-score'),timerDisplay:$('#ws-timer'),bestDisplay:$('#ws-best')};
+const loadBest=()=>{const scores=JSON.parse(localStorage.getItem('humanBenchmarkScores'))||{};game.bestScore=scores['Word Scramble'];if(game.bestScore)els.bestDisplay.text(game.bestScore);};
+const updateUI=()=>{els.scoreDisplay.text(game.score);els.timerDisplay.text(game.timer+'s');};
+const scramble=(word)=>{let arr=word.split('');for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr.join('');};
+const nextWord=()=>{let word;do{word=words[Math.floor(Math.random()*words.length)];}while(word===game.lastWord);game.currentWord=word;game.lastWord=word;els.scrambled.text(scramble(word));els.input.val('').focus();};
+const checkAnswer=()=>{const answer=els.input.val().toLowerCase().trim();if(answer===game.currentWord){game.score++;updateUI();HB.playSound('success');if(game.score%5===0)HB.showToast(`${game.score} words! 📚`,1500,'success');nextWord();}};
+const gameOver=()=>{if(game.interval)clearInterval(game.interval);const isNewRecord=saveScore('Word Scramble',game.score);if(isNewRecord)game.bestScore=game.score;HB.showModal({title:isNewRecord?'🎉 New Personal Best!':'Time\'s Up!',message:`You unscrambled <strong>${game.score}</strong> words!${game.score>=15?'<br>🏆 Word wizard!':''}`,score:`${game.score} words`,isNewRecord,onRetry:reset,onHome:HB.goHome,icon:'📝'});};
+const reset=()=>{game.score=0;game.timer=60;if(game.interval)clearInterval(game.interval);els.start.show();els.gameArea.addClass('hidden');updateUI();loadBest();};
+const start=()=>{els.start.hide();els.gameArea.removeClass('hidden');nextWord();game.interval=setInterval(()=>{game.timer--;updateUI();if(game.timer<=0)gameOver();},1000);};
+els.input.on('input',checkAnswer);
+els.start.on('click',start);
+loadBest();updateUI();
 });

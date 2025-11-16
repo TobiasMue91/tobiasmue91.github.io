@@ -1,132 +1,23 @@
-// SOUND LOCALIZATION TEST
-$(function () {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    let buffer;
-    let currentPosition;
-    let testCount = 0;
-    const totalTests = 5;
-    let errors = [];
-    let timerInterval;
-
-    // Load your sound file
-    fetch('audio/ping.mp3')
-        .then(response => response.arrayBuffer())
-        .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
-        .then(decodedBuffer => {
-            buffer = decodedBuffer;
-        });
-
-    function playSound(position) {
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-
-        const panner = audioContext.createStereoPanner();
-        panner.pan.value = position;
-
-        source.connect(panner);
-        panner.connect(audioContext.destination);
-
-        source.start();
-        source.stop(audioContext.currentTime + 1);
-    }
-
-    $("#start-sound-test").click(function () {
-        $(this).hide();
-        $("#average-error").text('');
-        $("#sound-area").removeClass('hidden');
-        $("#feedback").text('');
-        testCount = 0;
-        errors = [];
-        nextTest();
-    });
-
-    $("#sound-slider").on('input', function() {
-        updatePercentageDisplay($(this).val());
-    });
-
-    $("#sound-slider").on('mouseup touchend', function() {
-        const sliderValue = $(this).val();
-        const position = (sliderValue / 1000) * 2 - 1; // Convert to -1 to 1 range
-        playSound(position);
-    });
-
-    function startTimer(duration) {
-        let timer = duration;
-        $("#next-sound-timer").removeClass('hidden').html(`Next sound in: <span class="text-2xl">${timer} seconds</span>`);
-
-        timerInterval = setInterval(function() {
-            timer--;
-            if (timer < 0) {
-                clearInterval(timerInterval);
-                $("#next-sound-timer").addClass('hidden');
-            } else {
-                $("#next-sound-timer").html(`Next sound in: <span class="text-2xl">${timer} seconds</span>`);
-            }
-        }, 1000);
-    }
-
-    $("#confirm-position").click(function () {
-        const sliderValue = $("#sound-slider").val();
-        const userPosition = (sliderValue / 1000) * 2 - 1;
-        const error = Math.abs(currentPosition - userPosition);
-        errors.push(error);
-        testCount++;
-
-        // Display feedback
-        const actualPercentage = positionToPercentage(currentPosition);
-        const userPercentage = positionToPercentage(userPosition);
-        const errorPercentage = (error * 100).toFixed(2);
-        $("#feedback").html(`Actual position: ${actualPercentage}<br>Your guess: ${userPercentage}`);
-
-        const errorColor = getErrorColor(error);
-        $("#error-display").html(`Error: <span style="color: ${errorColor};">${errorPercentage}%</span>`);
-
-
-        $("#test-progress").text(`Tests completed: ${testCount}/${totalTests}`);
-
-        if (testCount < totalTests) {
-            startTimer(3); // Start a 3-second timer
-            setTimeout(nextTest, 3000); // Wait 3 seconds before next test
-        } else {
-            const averageError = errors.reduce((a, b) => a + b, 0) / errors.length;
-            const averageErrorPercent = (averageError * 100).toFixed(2);
-            saveScore('Sound Localization', `${averageErrorPercent}%`, true);
-            $("#average-error").text(`Average Error: ${averageErrorPercent}%`);
-            $("#start-sound-test").show();
-            $("#sound-area").addClass('hidden');
-            $("#test-progress").text('');
-        }
-    });
-
-    function getErrorColor(error) {
-        if (error <= 0.1) return '#00ff00'; // Green for excellent
-        if (error <= 0.2) return '#88ff00'; // Light green for very good
-        if (error <= 0.3) return '#ffff00'; // Yellow for good
-        if (error <= 0.4) return '#ffaa00'; // Orange for fair
-        return '#ff0000'; // Red for poor
-    }
-
-    function nextTest() {
-        clearInterval(timerInterval);
-        currentPosition = Math.round((Math.random() * 2 - 1) * 1000) / 1000; // Random position between -1 and 1, rounded to 2 decimals
-        playSound(currentPosition);
-        $("#sound-slider").val(500); // Reset slider to center
-        updatePercentageDisplay(500);
-        $("#feedback").text('');
-        $("#error-display").text('');
-        $("#next-sound-timer").text('');
-    }
-
-    function updatePercentageDisplay(sliderValue) {
-        const position = (sliderValue / 1000) * 2 - 1;
-        const percentage = Math.abs(position * 100).toFixed(1);
-        const direction = position < 0 ? 'left' : 'right';
-        $("#percentage-display").text(`${percentage}% ${direction}`);
-    }
-
-    function positionToPercentage(position) {
-        const percentage = Math.abs(position * 100).toFixed(1);
-        const direction = position < 0 ? 'left' : 'right';
-        return `${percentage}% ${direction}`;
-    }
+// SOUND LOCALIZATION TEST - ENHANCED
+$(function(){
+if(!window.HB){console.error('HB utilities not loaded');return;}
+let audioCtx,buffer;
+try{audioCtx=new(window.AudioContext||window.webkitAudioContext)();fetch('audio/ping.mp3').then(r=>r.arrayBuffer()).then(ab=>audioCtx.decodeAudioData(ab)).then(db=>{buffer=db;}).catch(e=>console.error('Audio load failed:',e));}catch(e){console.error('AudioContext creation failed:',e);}
+const TOTAL=5;
+const game={round:0,currentPos:0,errors:[],bestScore:null};
+const els={start:$('#sl-start'),testArea:$('#sl-test-area'),slider:$('#sl-slider'),position:$('#sl-position'),confirm:$('#sl-confirm'),feedback:$('#sl-feedback'),roundDisplay:$('#sl-round'),bestDisplay:$('#sl-best')};
+const loadBest=()=>{const scores=JSON.parse(localStorage.getItem('humanBenchmarkScores'))||{};const best=scores['Sound Localization'];if(best){game.bestScore=parseFloat(best);els.bestDisplay.text(best.toFixed(2));}};
+const updateUI=()=>{els.roundDisplay.text(game.round);};
+const playSound=(pos)=>{if(!buffer||!audioCtx)return;try{const src=audioCtx.createBufferSource();src.buffer=buffer;const panner=audioCtx.createStereoPanner();panner.pan.value=pos;src.connect(panner);panner.connect(audioCtx.destination);src.start();src.stop(audioCtx.currentTime+1);}catch(e){console.error('Sound playback failed:',e);}};
+const posToStr=(pos)=>{const pct=Math.abs(pos*100).toFixed(1);const dir=pos<0?'left':pos>0?'right':'center';return pct==='0.0'?'CENTER':`${pct}% ${dir}`;};
+const updateSlider=()=>{const val=els.slider.val();const pos=(val/1000)*2-1;els.position.text(posToStr(pos));};
+const nextTest=()=>{game.currentPos=Math.round((Math.random()*2-1)*1000)/1000;playSound(game.currentPos);els.slider.val(500);updateSlider();els.feedback.text('');};
+const confirm=()=>{const userPos=(els.slider.val()/1000)*2-1;const error=Math.abs(game.currentPos-userPos);game.errors.push(error);game.round++;updateUI();const errorPct=(error*100).toFixed(2);const color=error<=0.1?'#10b981':error<=0.2?'#84cc16':error<=0.3?'#fbbf24':error<=0.4?'#fb923c':'#ef4444';els.feedback.html(`<div><span style="color:${color};">Error: ${errorPct}%</span><br>Actual: ${posToStr(game.currentPos)} | Your guess: ${posToStr(userPos)}</div>`);if(error<=0.1)HB.playSound('perfect');else if(error<=0.3)HB.playSound('success');else HB.playSound('fail');if(game.round<TOTAL){setTimeout(nextTest,2000);}else{const avg=game.errors.reduce((a,b)=>a+b,0)/game.errors.length;const avgPct=(avg*100).toFixed(2);const isNewRecord=!game.bestScore||parseFloat(avgPct)<game.bestScore;if(saveScore('Sound Localization',avgPct)&&isNewRecord){game.bestScore=parseFloat(avgPct);els.bestDisplay.text(avgPct);}HB.showModal({title:isNewRecord?'🎉 New Personal Best!':'Test Complete',message:`Average error: <strong>${avgPct}%</strong>${parseFloat(avgPct)<=10?'<br>🏆 Perfect pitch!':''}`,score:`${avgPct}% error`,isNewRecord,onRetry:reset,onHome:HB.goHome,icon:'🔊'});}};
+const reset=()=>{game.round=0;game.currentPos=0;game.errors=[];els.start.show();els.testArea.addClass('hidden');updateUI();loadBest();};
+const start=()=>{els.start.hide();els.testArea.removeClass('hidden');nextTest();};
+els.slider.on('input',updateSlider);
+els.slider.on('mouseup touchend',()=>playSound((els.slider.val()/1000)*2-1));
+els.confirm.on('click',confirm);
+els.start.on('click',start);
+loadBest();updateUI();
 });

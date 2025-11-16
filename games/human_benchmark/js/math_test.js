@@ -1,75 +1,18 @@
-// MATH TEST
-$(function () {
-    let mathScore = 0;
-    let mathTimer;
-    let timerInterval;
-
-    function generateQuestion() {
-        let ops = ['+', '-', '*', '/'];
-        let op = ops[Math.floor(Math.random() * 4)];
-
-        let num1, num2;
-        do {
-            // Generate numbers within a reasonable range
-            if (op === '+' || op === '-') {
-                num1 = Math.floor(Math.random() * 50) + 1;
-                num2 = Math.floor(Math.random() * 50) + 1;
-            } else if (op === '*') {
-                num1 = Math.floor(Math.random() * 12) + 1;
-                num2 = Math.floor(Math.random() * 12) + 1;
-            } else { // Division
-                num1 = Math.floor(Math.random() * 12) + 1;
-                num2 = Math.floor(Math.random() * 11) + 1; // 1 to 11 to avoid dividing by itself
-                num1 *= num2; // Ensure num1 is a multiple of num2, avoiding decimal results
-            }
-
-        } while (
-            eval(`${num1}${op}${num2}`) <= 0 || // Ensure result is positive
-            eval(`${num1}${op}${num2}`).toString().includes('.') || // Ensure no decimals
-            eval(`${num1}${op}${num2}`).toString().length > 2 // Ensure result is less than 3 digits
-            );
-
-        let question = `${num1} ${op} ${num2}`;
-        $('#math-question').text(question);
-        return eval(question);
-    }
-
-    let correctAnswer;
-
-    $('#start-math-test').click(function () {
-        $(this).hide();
-        $('#math-results').hide();
-        $('#math-answer').val('').show().focus();
-        mathScore = 0;
-        correctAnswer = generateQuestion();
-
-        let timeLeft = 60; // seconds
-        $('#math-timer').text(`Time Left: ${timeLeft}s`).show();
-        timerInterval = setInterval(() => {
-            timeLeft--;
-            $('#math-timer').text(`Time Left: ${timeLeft}s`);
-            if (timeLeft <= 0) {
-                clearInterval(timerInterval);
-            }
-        }, 1000);
-
-        mathTimer = setTimeout(function () {
-            clearInterval(timerInterval);
-            $('#math-timer').hide();
-            $('#math-answer').hide();
-            $('#math-results').show();
-            $('#math-score').text(`${mathScore}`);
-            $('#start-math-test').show();
-            saveScore('Math Test', mathScore);
-        }, 60000); // 60 seconds
-    });
-
-    $('#math-answer').on('keyup', function () {
-        let answer = parseInt($(this).val(), 10);
-        if (answer === correctAnswer) {
-            mathScore++;
-            correctAnswer = generateQuestion();
-            $(this).val('');
-        }
-    });
+// MATH TEST - ENHANCED
+$(function(){
+if(!window.HB){console.error('HB utilities not loaded');return;}
+const game={score:0,timer:60,interval:null,correctAnswer:0,bestScore:null};
+const els={start:$('#mt-start'),questionArea:$('#mt-question-area'),answerArea:$('#mt-answer-area'),input:$('#mt-input'),submit:$('#mt-submit'),scoreDisplay:$('#mt-score'),timerDisplay:$('#mt-timer'),bestDisplay:$('#mt-best')};
+const loadBest=()=>{const scores=JSON.parse(localStorage.getItem('humanBenchmarkScores'))||{};game.bestScore=scores['Math Test'];if(game.bestScore)els.bestDisplay.text(game.bestScore);};
+const updateUI=()=>{els.scoreDisplay.text(game.score);els.timerDisplay.text(game.timer+'s');};
+const generateQuestion=()=>{const ops=['+','-','*'];const op=ops[Math.floor(Math.random()*ops.length)];let num1,num2;if(op==='*'){num1=Math.floor(Math.random()*12)+1;num2=Math.floor(Math.random()*12)+1;}else{num1=Math.floor(Math.random()*50)+1;num2=Math.floor(Math.random()*50)+1;}
+game.correctAnswer=eval(`${num1}${op}${num2}`);els.questionArea.text(`${num1} ${op} ${num2}`);};
+const checkAnswer=()=>{const userAnswer=parseInt(els.input.val());if(userAnswer===game.correctAnswer){game.score++;updateUI();HB.playSound('success');if(game.score%5===0)HB.showToast(`${game.score} correct! 🎉`,1500,'success');els.input.val('');generateQuestion();}else{HB.playSound('fail');els.input.val('').focus();}};
+const gameOver=()=>{if(game.interval)clearInterval(game.interval);const isNewRecord=saveScore('Math Test',game.score);if(isNewRecord)game.bestScore=game.score;HB.showModal({title:isNewRecord?'🎉 New Personal Best!':'Time\'s Up!',message:`You solved <strong>${game.score}</strong> problems!${game.score>=30?'<br>🏆 Math wizard!':''}`,score:`${game.score} correct`,isNewRecord,onRetry:reset,onHome:HB.goHome,icon:'➕'});};
+const reset=()=>{game.score=0;game.timer=60;if(game.interval)clearInterval(game.interval);els.start.show();els.questionArea.addClass('hidden');els.answerArea.addClass('hidden');updateUI();loadBest();};
+const start=()=>{els.start.hide();els.questionArea.removeClass('hidden');els.answerArea.removeClass('hidden');generateQuestion();els.input.focus();game.interval=setInterval(()=>{game.timer--;updateUI();if(game.timer<=0)gameOver();},1000);};
+els.submit.on('click',checkAnswer);
+els.input.on('keypress',e=>{if(e.key==='Enter'){e.preventDefault();checkAnswer();}});
+els.start.on('click',start);
+loadBest();updateUI();
 });
