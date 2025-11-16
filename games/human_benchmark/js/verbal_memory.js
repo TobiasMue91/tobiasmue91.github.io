@@ -14,7 +14,7 @@ els.wordArea.removeClass('text-blue-400').addClass('text-green-400');HB.playSoun
 const handleWrong=()=>{game.lives--;updateUI();els.wordArea.removeClass('text-blue-400').addClass('text-red-400');HB.playSound('fail');if(game.lives<=0){gameOver();}else{HB.showToast(`Wrong! ${game.lives} ${game.lives===1?'life':'lives'} left`,2000,'error');setTimeout(displayWord,1000);}};
 const gameOver=()=>{const isNewRecord=saveScore('Verbal Memory',game.score);if(isNewRecord)game.bestScore=game.score;HB.showModal({title:isNewRecord?'🎉 New Personal Best!':'Game Over',message:`You correctly identified <strong>${game.score}</strong> words!${game.score>=50?'<br>🏆 Exceptional verbal memory!':''}`,score:`${game.score} words`,isNewRecord,onRetry:reset,onHome:HB.goHome,icon:'📚'});};
 const reset=()=>{game.score=0;game.lives=3;game.wordRotation=[];game.shownWords=[];game.lastWordIndex=-1;for(let i=0;i<5;i++)addWordToRotation();els.buttonsArea.addClass('hidden');els.start.show();els.wordArea.text('');updateUI();loadBest();};
-const start=()=>{els.start.hide();els.buttonsArea.removeClass('hidden');displayWord();};
+const start=()=>{if(game.wordRotation.length === 0) {for(let i=0;i<5;i++) addWordToRotation();}els.start.hide();els.buttonsArea.removeClass('hidden');displayWord();};
 const handleSeen=()=>{if(!game.shownWords.includes(game.currentWord)){handleWrong();}else{handleCorrect();}};
 const handleNew=()=>{if(game.shownWords.includes(game.currentWord)){handleWrong();}else{game.shownWords.push(game.currentWord);handleCorrect();}};
 els.start.on('click',start);
