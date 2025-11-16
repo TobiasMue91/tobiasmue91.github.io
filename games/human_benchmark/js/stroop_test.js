@@ -1,102 +1,19 @@
-$(function () {
-    const colors = ['red', 'green', 'blue', 'orange', 'purple', 'pink'];
-    let timer, score, interval;
-
-    function initializeGame() {
-        timer = 30;
-        score = 0;
-
-        $('#progress-bar').css('width', '100%').removeClass('bg-yellow-500 bg-red-500').addClass('bg-blue-600');
-        $('#stroop-timer').text(`Time: ${timer}s`);
-        $('#score').text(`Score: ${score}`);
-
-        $('.start-button-container').show();
-        $('#game-area, #results').addClass('hidden');
-
-        $('#color-buttons').empty();
-        colors.forEach(color => {
-            $('#color-buttons').append(
-                `<button class="bg-${color}-500 hover:bg-${color}-600 active:bg-${color}-700 text-white rounded-md px-6 py-3 font-medium text-lg transition-colors" 
-                         data-color="${color}">${color}</button>`
-            );
-        });
-    }
-
-    function shuffleArray(array) {
-        const newArray = [...array];
-        for (let i = newArray.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-        }
-        return newArray;
-    }
-
-    function gameOver() {
-        clearInterval(interval);
-
-        $('#final-score').text(`Score: ${score}`);
-
-        saveScore("Stroop Test", score);
-
-        $('#game-area').addClass('hidden');
-        $('#results').removeClass('hidden');
-    }
-
-    function generateStroop() {
-        const colorName = colors[Math.floor(Math.random() * colors.length)];
-        const textColor = colors[Math.floor(Math.random() * colors.length)];
-
-        const $stroop = $('#stroop-word');
-
-        colors.forEach(color => {
-            $stroop.removeClass(`text-${color}-500`);
-        });
-
-        $stroop.addClass(`text-${textColor}-500`);
-        $stroop.text(colorName.toUpperCase()).data('color', textColor);
-    }
-
-    initializeGame();
-
-    $('#start-stroop-test').click(function() {
-        $('.start-button-container').hide();
-        $('#game-area').removeClass('hidden');
-
-        generateStroop();
-
-        interval = setInterval(function() {
-            if (timer > 0) {
-                timer--;
-                const percentage = (timer / 30) * 100;
-                $('#progress-bar').css('width', `${percentage}%`);
-
-                if (timer <= 10) {
-                    $('#progress-bar').removeClass('bg-blue-600 bg-yellow-500').addClass('bg-red-500');
-                } else if (timer <= 20) {
-                    $('#progress-bar').removeClass('bg-blue-600 bg-red-500').addClass('bg-yellow-500');
-                }
-
-                $('#stroop-timer').text(`Time: ${timer}s`);
-            } else {
-                gameOver();
-            }
-        }, 1000);
-    });
-
-    $('#play-again').click(function() {
-        initializeGame();
-    });
-
-    $('#color-buttons').on('click', 'button', function() {
-        const chosenColor = $(this).data('color');
-        const correctColor = $('#stroop-word').data('color');
-
-        if (chosenColor === correctColor) {
-            score++;
-            $('#score').text(`Score: ${score}`);
-            generateStroop();
-        } else {
-            gameOver();
-        }
-    });
+// STROOP TEST - ENHANCED
+$(function(){
+if(!window.HB){console.error('HB utilities not loaded');return;}
+const game={score:0,timer:30,interval:null,bestScore:null};
+const colors=['red','green','blue','orange','purple','pink'];
+const colorMap={red:'#ef4444',green:'#10b981',blue:'#3b82f6',orange:'#f97316',purple:'#a855f7',pink:'#ec4899'};
+const els={start:$('#st-start'),wordArea:$('#st-word-area'),buttonsArea:$('#st-buttons-area'),scoreDisplay:$('#st-score'),timerDisplay:$('#st-timer'),bestDisplay:$('#st-best')};
+const loadBest=()=>{const scores=JSON.parse(localStorage.getItem('humanBenchmarkScores'))||{};game.bestScore=scores['Stroop Test'];if(game.bestScore)els.bestDisplay.text(game.bestScore);};
+const updateUI=()=>{els.scoreDisplay.text(game.score);els.timerDisplay.text(game.timer+'s');};
+const generateStroop=()=>{const colorName=colors[Math.floor(Math.random()*colors.length)];const textColor=colors[Math.floor(Math.random()*colors.length)];els.wordArea.text(colorName.toUpperCase()).css('color',colorMap[textColor]).data('color',textColor);};
+const handleClick=function(){const chosen=$(this).data('color');const correct=els.wordArea.data('color');if(chosen===correct){game.score++;updateUI();HB.playSound('success');if(game.score%10===0)HB.showToast(`${game.score} correct! 🎉`,1500,'success');generateStroop();}else{gameOver();}};
+const gameOver=()=>{if(game.interval)clearInterval(game.interval);const isNewRecord=saveScore('Stroop Test',game.score);if(isNewRecord)game.bestScore=game.score;HB.showModal({title:isNewRecord?'🎉 New Personal Best!':'Game Over',message:`You correctly identified <strong>${game.score}</strong> colors!${game.score>=30?'<br>🏆 Incredible focus!':''}`,score:`${game.score} correct`,isNewRecord,onRetry:reset,onHome:HB.goHome,icon:'🌈'});};
+const reset=()=>{game.score=0;game.timer=30;if(game.interval)clearInterval(game.interval);els.start.show();els.wordArea.addClass('hidden');els.buttonsArea.addClass('hidden');updateUI();loadBest();};
+const start=()=>{els.start.hide();els.wordArea.removeClass('hidden');els.buttonsArea.removeClass('hidden');generateStroop();game.interval=setInterval(()=>{game.timer--;updateUI();if(game.timer<=0)gameOver();},1000);};
+els.buttonsArea.empty();colors.forEach(color=>els.buttonsArea.append(`<button class="btn-game" style="background-color:${colorMap[color]};min-width:120px;" data-color="${color}">${color.toUpperCase()}</button>`));
+els.buttonsArea.on('click','button',handleClick);
+els.start.on('click',start);
+loadBest();updateUI();
 });

@@ -1,80 +1,15 @@
-// BUTTON MASHING
-$(function () {
-    var startTime;
-    var endTime;
-    var totalPresses = 0;
-    var mashedButton = '';
-    var gameStarted = false;
-    var cooldownActive = false;
-    var mousePressed = false;
-    var keyPressed = false;
-
-    $("#mashing-button-area").on('mousedown', function () {
-        if (!gameStarted && !cooldownActive) {
-            startGame();
-        }
-        mousePressed = true;
-    }).on('mouseup', function () {
-        if (gameStarted && mousePressed) {
-            if (mashedButton === '') {
-                mashedButton = 'Mouse Click';
-            }
-            if (mashedButton === 'Mouse Click') {
-                totalPresses++;
-                $("#mashing-counter").text(totalPresses);
-            }
-        }
-        mousePressed = false;
-    });
-
-    $(document).on('keydown', function (e) {
-        if (!gameStarted && !cooldownActive) {
-            startGame();
-        }
-        keyPressed = true;
-    }).on('keyup', function (e) {
-        if (gameStarted && keyPressed) {
-            if (mashedButton === '') {
-                mashedButton = e.key;
-            }
-            if (e.key === mashedButton) {
-                totalPresses++;
-                $("#mashing-counter").text(totalPresses);
-            }
-        }
-        keyPressed = false;
-    });
-
-    function startGame() {
-        gameStarted = true;
-        $("#mashing-instruction").text("Mash the button or key!");
-        totalPresses = 0;
-        mashedButton = '';
-        $("#mashing-counter").text(totalPresses);
-        startTime = new Date();
-        var timerInterval = setInterval(function () {
-            var currentTime = new Date();
-            var elapsedSeconds = (currentTime - startTime) / 1000;
-            var remainingTime = Math.max(10 - elapsedSeconds, 0);
-            $("#mashing-timer").text(remainingTime.toFixed(3));
-
-            if (remainingTime <= 0) {
-                clearInterval(timerInterval);
-                endTime = new Date();
-                $("#mashing-instruction").text("Please wait before restarting...");
-                $("#mashed-button").text(mashedButton);
-                $("#total-presses").text(totalPresses);
-                var pressesPerMinute = Math.round((totalPresses / 10) * 60);
-                $("#presses-per-minute").text(pressesPerMinute);
-                saveScore('Button Mashing', totalPresses);
-                gameStarted = false;
-                cooldownActive = true;
-                $("#mashing-results-area").show();
-                setTimeout(function () {
-                    cooldownActive = false;
-                    $("#mashing-instruction").text("Click here or press any key to restart!");
-                }, 5000);
-            }
-        }, 10);
-    }
+// BUTTON MASHING TEST - ENHANCED
+$(function(){
+if(!window.HB){console.error('HB utilities not loaded');return;}
+const game={presses:0,startTime:null,interval:null,mashedButton:'',mouseDown:false,keyDown:false,cooldown:false,bestScore:null};
+const els={gameArea:$('#bm-game-area'),instruction:$('#bm-instruction'),counter:$('#bm-counter'),countDisplay:$('#bm-count'),timerDisplay:$('#bm-timer'),bestDisplay:$('#bm-best')};
+const loadBest=()=>{const scores=JSON.parse(localStorage.getItem('humanBenchmarkScores'))||{};game.bestScore=scores['Button Mashing'];if(game.bestScore)els.bestDisplay.text(game.bestScore);};
+const updateUI=()=>{els.countDisplay.text(game.presses);els.counter.text(game.presses);};
+const updateTimer=()=>{if(!game.startTime)return;const elapsed=(Date.now()-game.startTime)/1000;const remaining=Math.max(10-elapsed,0);els.timerDisplay.text(remaining.toFixed(2)+'s');if(remaining<=0)gameOver();};
+const gameOver=()=>{if(game.interval)clearInterval(game.interval);game.interval=null;const pressesPerMin=Math.round((game.presses/10)*60);const isNewRecord=saveScore('Button Mashing',game.presses);if(isNewRecord)game.bestScore=game.presses;HB.showModal({title:isNewRecord?'🎉 New Personal Best!':'Test Complete',message:`You mashed <strong>${game.presses} times</strong> in 10 seconds!<br>That's ${pressesPerMin} presses per minute using <strong>${game.mashedButton||'unknown input'}</strong>!${game.presses>=100?'<br>🏆 Speed demon!':''}`,score:`${game.presses} presses`,isNewRecord,onRetry:reset,onHome:HB.goHome,icon:'👆'});game.cooldown=true;setTimeout(()=>{game.cooldown=false;els.instruction.text('Click or press any key to restart!');},3000);};
+const reset=()=>{game.presses=0;game.startTime=null;game.mashedButton='';game.mouseDown=false;game.keyDown=false;if(game.interval)clearInterval(game.interval);game.interval=null;els.instruction.text('Click or press any key to start!');updateUI();els.timerDisplay.text('10.00s');loadBest();};
+const start=()=>{if(game.cooldown||game.startTime)return;game.presses=0;game.mashedButton='';updateUI();game.startTime=Date.now();els.instruction.text('Mash as fast as you can!');game.interval=setInterval(updateTimer,50);};
+els.gameArea.on('mousedown',e=>{if(!game.startTime&&!game.cooldown)start();game.mouseDown=true;}).on('mouseup',e=>{if(game.startTime&&game.mouseDown){if(!game.mashedButton)game.mashedButton='Mouse Click';if(game.mashedButton==='Mouse Click'){game.presses++;updateUI();HB.playSound('click');}}game.mouseDown=false;});
+$(document).on('keydown',e=>{if(e.repeat||e.ctrlKey||e.metaKey||e.altKey)return;if(!game.startTime&&!game.cooldown)start();game.keyDown=true;}).on('keyup',e=>{if(game.startTime&&game.keyDown){if(!game.mashedButton)game.mashedButton=e.key.length===1?e.key.toUpperCase():`Key: ${e.key}`;if(e.key===game.mashedButton||e.key.toUpperCase()===game.mashedButton||`Key: ${e.key}`===game.mashedButton){game.presses++;updateUI();HB.playSound('click');}}game.keyDown=false;});
+loadBest();updateUI();
 });

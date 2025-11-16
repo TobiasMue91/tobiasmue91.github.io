@@ -1,32 +1,13 @@
-// REACTION TIME
-$(function () {
-    var startTime;
-    var endTime;
-
-    $("#start-reaction-time-test").click(function () {
-        $(this).hide();
-        $("#wait-area").show();
-        $('#wait-area').click(function () {
-            $("#results-area").show();
-            $("#reaction-time").text(`FAILED`);
-            $("#start-reaction-time-test").show();
-            clearTimeout(showTimeout);
-        })
-        $("#results-area").hide();
-        let showTimeout = setTimeout(function () {
-            $("#wait-area").hide();
-            $("#click-area").show();
-            startTime = new Date();
-        }, Math.floor(Math.random() * 6000) + 2000);
-    });
-
-    $("#click-color-area").mousedown(function () {
-        endTime = new Date();
-        $("#click-area").hide();
-        $("#reaction-time-test #results-area").show();
-        let time = `${endTime - startTime} ms`;
-        $("#reaction-time").text(time);
-        $("#start-reaction-time-test").show();
-        saveScore('Reaction Time', time, true);
-    });
+// REACTION TIME TEST - ENHANCED
+$(function(){
+const game={state:'ready',startTime:0,attempts:0,bestScore:null,timeout:null,scores:[]};
+const els={area:$('#rt-game-area'),content:$('#rt-content'),msg:$('#rt-message'),attempts:$('#rt-attempts'),best:$('#rt-best'),retry:$('#rt-retry'),home:$('#rt-home')};
+const loadBest=()=>{const scores=JSON.parse(localStorage.getItem('humanBenchmarkScores'))||{};game.bestScore=scores['Reaction Time'];if(game.bestScore)els.best.text(game.bestScore);};
+const updateStats=()=>{els.attempts.text(game.attempts);if(game.bestScore)els.best.text(game.bestScore);};
+const setState=(state,color,borderColor,message)=>{game.state=state;els.content.css('background-color',color);els.area.css('border-color',borderColor);els.msg.text(message);};
+const reset=()=>{if(game.timeout)clearTimeout(game.timeout);setState('ready','#dc2626','#dc2626','Click to Start');els.retry.addClass('hidden');els.home.addClass('hidden');game.scores=[];};
+const start=()=>{if(game.state!=='ready')return;setState('waiting','#dc2626','#dc2626','Wait for green...');const delay=Math.floor(Math.random()*4000)+2000;game.timeout=setTimeout(()=>{setState('go','#10b981','#10b981','CLICK NOW!');game.startTime=Date.now();HB.playSound('success');},delay);};
+const handleClick=()=>{if(game.state==='ready'){start();}else if(game.state==='waiting'){if(game.timeout)clearTimeout(game.timeout);setState('tooearly','#eab308','#eab308','Too early! Click to try again.');game.attempts++;updateStats();HB.playSound('fail');}else if(game.state==='go'){const reactionTime=Date.now()-game.startTime;game.attempts++;game.scores.push(reactionTime);const avgTime=Math.round(game.scores.reduce((a,b)=>a+b,0)/game.scores.length);const isNewRecord=saveScore('Reaction Time',`${reactionTime} ms`,true);if(isNewRecord){game.bestScore=`${reactionTime} ms`;HB.playSound('perfect');}else{HB.playSound('success');}
+updateStats();setState('result','#3b82f6','#3b82f6',`${reactionTime}ms${isNewRecord?' 🎉 New Record!':''}`);els.retry.removeClass('hidden');els.home.removeClass('hidden');if(game.scores.length>=3){HB.showModal({title:isNewRecord?'🎉 New Personal Best!':'Test Complete',message:`Your reaction time: ${reactionTime}ms<br>Average: ${avgTime}ms (${game.scores.length} attempts)`,score:`${reactionTime}ms`,isNewRecord,onRetry:reset,onHome:HB.goHome,icon:'⚡'});}}else if(game.state==='tooearly'){reset();start();}else if(game.state==='result'){reset();}};
+els.content.on('click',handleClick);els.retry.on('click',reset);els.home.on('click',HB.goHome);loadBest();updateStats();
 });
