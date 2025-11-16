@@ -13,10 +13,12 @@ const resetGame=()=>{game.index=0;game.correct=0;game.incorrect=0;game.wordCount
 const finishTest=()=>{clearInterval(game.timerId);els.timerEl.text('0s');const wpm=getWPM();const acc=getAccuracy();const isNewRecord=saveScore('Typing Speed Test',wpm);if(isNewRecord){game.bestWPM=wpm;HB.playSound('perfect');}
 HB.showModal({title:isNewRecord?'🎉 New Personal Best!':'Test Complete',message:`<strong>${wpm} WPM</strong><br>Accuracy: ${acc}%<br>Characters: ${game.charCount} (${game.correct} correct, ${game.incorrect} errors)`,score:`${wpm} WPM`,isNewRecord,onRetry:resetGame,onHome:HB.goHome,icon:'⌨️'});els.restartBtn.removeClass('hidden');};
 const handleKeyDown=(e)=>{if(e.ctrlKey||e.metaKey||e.altKey)return;if(!game.startTime){game.startTime=Date.now();game.timerId=setInterval(()=>{const timeLeft=30-((Date.now()-game.startTime)/1000|0);els.timerEl.text(timeLeft+'s');updateLiveStats();if(timeLeft<=0)finishTest();},100);}
-const allChars=$('.letter');const currentChar=allChars.eq(game.index).text();if(e.key==='Backspace'){e.preventDefault();if(game.index>0){game.index--;const lastChar=allChars.eq(game.index);if(lastChar.hasClass('correct'))game.correct--;if(lastChar.hasClass('incorrect'))game.incorrect--;lastChar.removeClass('correct incorrect');if(currentChar===' ')game.wordCount--;updateCursor();}return;}
-if(e.key.length>1)return;e.preventDefault();const typed=e.key.toLowerCase();if(!currentChar||game.index>=allChars.length)return;const isCorrect=typed===currentChar;allChars.eq(game.index).addClass(isCorrect?'correct':'incorrect');if(isCorrect){game.correct++;HB.playSound('click');}else{game.incorrect++;HB.playSound('fail');}
+const currentChar=game.text[game.index];if(e.key==='Backspace'){e.preventDefault();if(game.index>0){game.index--;while(game.index>0&&game.text[game.index]==='~'){game.index--;}
+const lastChar=$(`.letter[data-index="${game.index}"]`);const prevChar=game.text[game.index];if(lastChar.hasClass('correct'))game.correct--;if(lastChar.hasClass('incorrect'))game.incorrect--;lastChar.removeClass('correct incorrect');if(prevChar===' ')game.wordCount--;updateCursor();}return;}
+if(e.key.length>1)return;e.preventDefault();const typed=e.key;if(!currentChar||game.index>=game.text.length)return;const isCorrect=typed===currentChar;$(`.letter[data-index="${game.index}"]`).addClass(isCorrect?'correct':'incorrect');if(isCorrect){game.correct++;HB.playSound('click');}else{game.incorrect++;HB.playSound('fail');}
 if(currentChar===' '){game.wordCount++;if(game.wordCount%15===0)els.textEl[0].scrollTop=game.wordCount/15*25;}else{game.charCount++;}
-game.index++;updateCursor();updateLiveStats();};
+game.index++;while(game.index<game.text.length&&game.text[game.index]==='~'){game.index++;}
+updateCursor();updateLiveStats();};
 $(document).on('keydown',handleKeyDown);
 els.restartBtn.on('click',resetGame);
 loadBest();resetGame();
