@@ -77,7 +77,7 @@ function resetScores(){
 if(confirm('Are you sure you want to reset all scores and history? This cannot be undone!')){
 localStorage.removeItem('humanBenchmarkScores');
 localStorage.removeItem('humanBenchmarkHistory');
-HB.showToast('All scores reset!','success');
+if(window.HB&&HB.showToast)HB.showToast('All scores reset!',2000,'success');
 showScores({preventDefault:()=>{}});
 }
 }
@@ -92,12 +92,12 @@ scoreText+='\n';
 }
 if(Object.keys(scores).length>0){
 navigator.clipboard.writeText(scoreText.trim()).then(()=>{
-HB.showToast('Scores copied to clipboard!',2000,'success');
+if(window.HB&&HB.showToast)HB.showToast('Scores copied to clipboard!',2000,'success');else alert('Scores copied!');
 }).catch(err=>{
 console.error('Failed to copy:',err);
-HB.showToast('Failed to copy scores',2000,'error');
+if(window.HB&&HB.showToast)HB.showToast('Failed to copy scores',2000,'error');else alert('Failed to copy scores');
 });
 }else{
-HB.showToast('No scores to copy',2000,'info');
+if(window.HB&&HB.showToast)HB.showToast('No scores to copy',2000,'info');else alert('No scores to copy');
 }
 }
