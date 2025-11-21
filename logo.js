@@ -21,6 +21,10 @@ window.addEventListener('load', function () {
     } else if (p === 'bottom-left') {
         l.style.bottom = '10px';
         l.style.left = '10px'
+    } else if (p === 'bottom-middle') {
+        l.style.bottom = '10px';
+        l.style.left = '50%';
+        l.style.transform = 'translateX(-50%)'
     } else {
         l.style.bottom = '10px';
         l.style.right = '10px'
@@ -31,10 +35,10 @@ window.addEventListener('load', function () {
     i.style.height = '100%';
     l.appendChild(i);
     l.addEventListener('mouseover', function () {
-        this.style.transform = 'scale(1.2)'
+        this.style.transform = p === 'bottom-middle' ? 'translateX(-50%) scale(1.2)' : 'scale(1.2)'
     });
     l.addEventListener('mouseout', function () {
-        this.style.transform = 'scale(1)'
+        this.style.transform = p === 'bottom-middle' ? 'translateX(-50%) scale(1)' : 'scale(1)'
     });
     l.addEventListener('contextmenu', function (e) {
         e.preventDefault();
