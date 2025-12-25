@@ -154,11 +154,26 @@
             font-size: 1.3rem;
             font-weight: 700;
             color: var(--text-bright);
+            font-variant-numeric: tabular-nums;
+            transition: color 0.2s;
+        }
+
+        .resource.producing .resource-value {
+            color: var(--success);
         }
 
         .resource-rate {
             font-size: 11px;
             color: var(--success);
+        }
+
+        .resource-rate.active {
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
 
         /* Main Production Button */
@@ -835,7 +850,7 @@
     </div>
 
     <section class="resources">
-        <div class="resource">
+        <div class="resource" id="compResource">
             <div class="resource-header">
                 <span class="resource-icon">🔩</span>
                 <span class="resource-label">Components</span>
@@ -843,7 +858,7 @@
             <div class="resource-value" id="componentsVal">0</div>
             <div class="resource-rate" id="componentsRate">+0/s</div>
         </div>
-        <div class="resource">
+        <div class="resource" id="widgetResource">
             <div class="resource-header">
                 <span class="resource-icon">⚙️</span>
                 <span class="resource-label">Widgets</span>
@@ -851,7 +866,7 @@
             <div class="resource-value" id="widgetsVal">0</div>
             <div class="resource-rate" id="widgetsRate">+0/s</div>
         </div>
-        <div class="resource">
+        <div class="resource" id="protoResource">
             <div class="resource-header">
                 <span class="resource-icon">💎</span>
                 <span class="resource-label">Prototypes</span>
@@ -859,7 +874,7 @@
             <div class="resource-value" id="prototypesVal">0</div>
             <div class="resource-rate" id="prototypesRate">+0/s</div>
         </div>
-        <div class="resource">
+        <div class="resource" id="bpResource">
             <div class="resource-header">
                 <span class="resource-icon">📐</span>
                 <span class="resource-label">Blueprints</span>
@@ -1426,16 +1441,41 @@
     let needsRender = { buildings: true, upgrades: true, prestige: true, achieves: true, stats: true };
 
     function updateResources() {
+        // Update resource values
         document.getElementById('componentsVal').textContent = fmt(g.comp);
-        document.getElementById('componentsRate').textContent = '+' + fmt(prodPerSec()) + '/s';
         document.getElementById('widgetsVal').textContent = fmt(g.widgets);
-        document.getElementById('widgetsRate').textContent = '+' + fmt(widgetProd()) + '/s';
         document.getElementById('prototypesVal').textContent = fmt(g.proto);
         document.getElementById('blueprintsVal').textContent = g.bp;
         document.getElementById('blueprintsBonus').textContent = '+' + g.bp + '% prod';
         document.getElementById('clickVal').textContent = '+' + fmt(clickVal()) + '/click';
-        document.getElementById('prodRate').textContent = fmt(prodPerSec()) + '/s total';
 
+        // Update production rates with visual feedback
+        const compProd = prodPerSec();
+        const widgetProdRate = widgetProd();
+
+        document.getElementById('componentsRate').textContent = '+' + fmt(compProd) + '/s';
+        document.getElementById('widgetsRate').textContent = '+' + fmt(widgetProdRate) + '/s';
+        document.getElementById('prodRate').textContent = fmt(compProd) + '/s total';
+
+        // Add visual indicator for active production
+        const compRateEl = document.getElementById('componentsRate');
+        const compResEl = document.getElementById('compResource');
+        if (compProd.gt(0)) {
+            compRateEl.classList.add('active');
+            compResEl.classList.add('producing');
+        } else {
+            compRateEl.classList.remove('active');
+            compResEl.classList.remove('producing');
+        }
+
+        const widgetRateEl = document.getElementById('widgetsRate');
+        if (widgetProdRate.gt(0)) {
+            widgetRateEl.classList.add('active');
+        } else {
+            widgetRateEl.classList.remove('active');
+        }
+
+        // Update prestige info
         const pGain = prestigeGain();
         document.getElementById('prestigeReward').textContent = pGain + ' 📐';
         document.getElementById('prestigeBtn').disabled = pGain <= 0;
@@ -1831,33 +1871,46 @@
 
     // Game Loop
     let lastFrame = performance.now();
+    let loopRunning = false;
 
     function loop(now) {
-        const dt = (now - lastFrame) / 1000;
-        lastFrame = now;
+        try {
+            const dt = Math.min((now - lastFrame) / 1000, 0.1); // Cap dt to prevent huge jumps
+            lastFrame = now;
 
-        g.playTime += dt;
+            g.playTime += dt;
 
-        const prod = prodPerSec().mul(dt);
-        g.comp = g.comp.add(prod);
-        g.totalComp = g.totalComp.add(prod);
-        g.lifeComp = g.lifeComp.add(prod);
+            // Calculate and add production
+            const prod = prodPerSec().mul(dt);
+            if (prod.gt(0)) {
+                g.comp = g.comp.add(prod);
+                g.totalComp = g.totalComp.add(prod);
+                g.lifeComp = g.lifeComp.add(prod);
+            }
 
-        g.widgets = g.widgets.add(widgetProd().mul(dt));
+            // Widget production
+            const widgetProdAmt = widgetProd().mul(dt);
+            if (widgetProdAmt.gt(0)) {
+                g.widgets = g.widgets.add(widgetProdAmt);
+            }
 
-        // Auto-buy
-        if (g.upgrades.includes('a1')) {
-            const cost = bldCost('bench', 1);
-            if (g.comp.gte(cost)) buyBld('bench', 1);
+            // Auto-buy
+            if (g.upgrades.includes('a1')) {
+                const cost = bldCost('bench', 1);
+                if (g.comp.gte(cost)) buyBld('bench', 1);
+            }
+
+            // Bonus expiry
+            if (g.activeBonus && Date.now() >= g.bonusEnd) g.activeBonus = null;
+
+            // Check achievements every ~second
+            if (Math.random() < dt) checkAchieves();
+
+            updateResources();
+        } catch (e) {
+            console.error('Game loop error:', e);
         }
 
-        // Bonus expiry
-        if (g.activeBonus && Date.now() >= g.bonusEnd) g.activeBonus = null;
-
-        // Check achievements every ~second
-        if (Math.random() < dt) checkAchieves();
-
-        updateResources();
         requestAnimationFrame(loop);
     }
 
