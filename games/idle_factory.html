@@ -1271,28 +1271,17 @@
 
         .minigame-item {
             position: absolute;
-            width: 70px;
-            height: 70px;
             z-index: 10;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 40px;
             cursor: pointer;
-            transition: transform 0.1s;
             border-radius: 12px;
             user-select: none;
             -webkit-user-select: none;
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
-        }
-
-        @media (max-width: 600px) {
-            .minigame-item {
-                width: 65px;
-                height: 65px;
-                font-size: 36px;
-            }
+            will-change: left;
         }
 
         .minigame-item.good {
@@ -1330,6 +1319,11 @@
             0% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.3); }
             100% { transform: scale(0); opacity: 0; }
+        }
+
+        @keyframes itemMove {
+            from { left: var(--start-x); }
+            to { left: var(--end-x); }
         }
 
         .minigame-feedback {
@@ -2913,8 +2907,8 @@
         SPAWN_RATE: 800,        // ms between spawns (gets faster)
         GOOD_ITEMS: ['🔩', '⚙️', '🔧', '🔨', '⛏️', '🛠️'],
         BAD_ITEMS: ['💥', '⚠️', '🔥', '💀', '☠️', '🚫'],
-        LANES: 4,
-        ITEM_SPEED: 3,          // seconds to cross screen
+        LANES: 3,               // Reduced from 4 for better mobile fit
+        ITEM_SPEED: 3,          // base seconds to cross screen
     };
 
     let mgState = {
@@ -2953,12 +2947,12 @@
         document.getElementById('mgInstructions').style.display = 'none';
         mgState.active = true;
 
-        // Create conveyor lanes
+        // Create conveyor lanes with dynamic sizing
         const area = document.getElementById('minigameArea');
-        const areaHeight = area.clientHeight;
-        const laneHeight = 90; // Larger lanes for bigger touch targets
+        const areaHeight = area.clientHeight || 300;
+        const laneHeight = Math.min(80, Math.floor(areaHeight / MINIGAME.LANES) - 5);
         const totalLanesHeight = MINIGAME.LANES * laneHeight;
-        const startY = (areaHeight - totalLanesHeight) / 2;
+        const startY = Math.max(10, (areaHeight - totalLanesHeight) / 2);
 
         // Clear old lanes
         area.querySelectorAll('.conveyor-lane').forEach(l => l.remove());
@@ -3003,10 +2997,11 @@
 
     function spawnMinigameItem() {
         const area = document.getElementById('minigameArea');
-        const areaHeight = area.clientHeight;
-        const laneHeight = 90;
+        const areaWidth = area.clientWidth || 300;
+        const areaHeight = area.clientHeight || 300;
+        const laneHeight = Math.min(80, Math.floor(areaHeight / MINIGAME.LANES) - 5);
         const totalLanesHeight = MINIGAME.LANES * laneHeight;
-        const startY = (areaHeight - totalLanesHeight) / 2;
+        const startY = Math.max(10, (areaHeight - totalLanesHeight) / 2);
 
         const isGood = Math.random() > 0.35; // 65% good, 35% bad
         const lane = Math.floor(Math.random() * MINIGAME.LANES);
@@ -3017,12 +3012,31 @@
         item.className = 'minigame-item ' + (isGood ? 'good' : 'bad');
         item.textContent = icon;
         item.dataset.good = isGood;
-        item.style.left = '-80px';
-        item.style.top = (startY + lane * laneHeight + 10) + 'px';
 
-        // Animate across screen
-        const speed = MINIGAME.ITEM_SPEED - (MINIGAME.DURATION - mgState.timeLeft) * 0.03;
-        item.style.transition = `left ${Math.max(1.5, speed)}s linear`;
+        // Calculate positions
+        const itemSize = Math.min(60, laneHeight - 10);
+        const startX = -itemSize - 10;
+        const endX = areaWidth + itemSize;
+        const topPos = startY + lane * laneHeight + (laneHeight - itemSize) / 2;
+
+        item.style.left = startX + 'px';
+        item.style.top = topPos + 'px';
+        item.style.width = itemSize + 'px';
+        item.style.height = itemSize + 'px';
+        item.style.fontSize = Math.floor(itemSize * 0.6) + 'px';
+
+        // Calculate speed based on screen width for consistent visual speed
+        // Target: ~150px per second base speed, gets faster over time
+        const baseSpeed = Math.max(150, areaWidth / 3);
+        const speedMultiplier = 1 + (MINIGAME.DURATION - mgState.timeLeft) * 0.02;
+        const pixelsPerSecond = baseSpeed * speedMultiplier;
+        const travelDistance = endX - startX;
+        const duration = Math.max(1.5, travelDistance / pixelsPerSecond);
+
+        // Use CSS animation for better cross-browser support
+        item.style.setProperty('--start-x', startX + 'px');
+        item.style.setProperty('--end-x', endX + 'px');
+        item.style.animation = `itemMove ${duration}s linear forwards`;
 
         const handleClick = (e) => {
             e.preventDefault();
@@ -3030,6 +3044,7 @@
             if (item.classList.contains('clicked')) return;
 
             item.classList.add('clicked');
+            item.style.animation = 'none';
             const rect = item.getBoundingClientRect();
 
             if (isGood) {
@@ -3038,13 +3053,13 @@
                 mgState.score += points;
                 mgState.combo = Math.min(mgState.combo + 1, 10);
                 mgState.maxCombo = Math.max(mgState.maxCombo, mgState.combo);
-                showMinigameFeedback(rect.left + 30, rect.top, '+' + points, 'good');
+                showMinigameFeedback(rect.left + itemSize/2, rect.top, '+' + points, 'good');
                 audio.click();
             } else {
                 // Bad item clicked = penalty!
                 mgState.score = Math.max(0, mgState.score - 20);
                 mgState.combo = 1;
-                showMinigameFeedback(rect.left + 30, rect.top, '-20', 'bad');
+                showMinigameFeedback(rect.left + itemSize/2, rect.top, '-20', 'bad');
                 audio.prestige(); // Use prestige sound as "error"
             }
 
@@ -3053,25 +3068,19 @@
         };
 
         item.onclick = handleClick;
-        item.ontouchend = handleClick;
+        item.ontouchstart = (e) => { e.preventDefault(); handleClick(e); };
 
         area.appendChild(item);
-
-        // Start animation after append
-        requestAnimationFrame(() => {
-            item.style.left = (area.clientWidth + 70) + 'px';
-        });
 
         // Remove when off screen and penalize missed good items
         setTimeout(() => {
             if (!item.classList.contains('clicked') && item.parentNode) {
                 if (isGood) {
-                    // Missed a good item!
                     mgState.combo = 1;
                 }
                 item.remove();
             }
-        }, (Math.max(1.5, speed) + 0.5) * 1000);
+        }, (duration + 0.3) * 1000);
     }
 
     function showMinigameFeedback(x, y, text, type) {
