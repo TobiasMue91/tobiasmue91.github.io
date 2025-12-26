@@ -598,10 +598,14 @@
             background: var(--bg-panel);
             border-top: 1px solid var(--border);
             padding: 12px 16px;
+            padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
             display: flex;
             justify-content: center;
             align-items: center;
             gap: 20px;
+            z-index: 50;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
         }
 
         .prestige-info {
@@ -1294,11 +1298,6 @@
             background: rgba(248, 81, 73, 0.2);
             border: 2px solid var(--danger);
             box-shadow: 0 0 10px rgba(248, 81, 73, 0.3);
-        }
-
-        @keyframes itemMove {
-            from { transform: translateX(0); }
-            to { transform: translateX(var(--travel-distance)); }
         }
 
         .minigame-item:active {
@@ -3019,41 +3018,57 @@
         // Calculate positions
         const itemSize = Math.min(60, laneHeight - 10);
         const startX = -itemSize - 10;
-        const travelDistance = areaWidth + itemSize * 2 + 20;
+        const endX = areaWidth + itemSize + 10;
         const topPos = startY + lane * laneHeight + (laneHeight - itemSize) / 2;
 
+        item.style.position = 'absolute';
         item.style.left = startX + 'px';
         item.style.top = topPos + 'px';
         item.style.width = itemSize + 'px';
         item.style.height = itemSize + 'px';
         item.style.fontSize = Math.floor(itemSize * 0.6) + 'px';
 
-        // Calculate speed based on screen width for consistent visual speed
-        // Target: ~150px per second base speed, gets faster over time
-        const baseSpeed = Math.max(150, areaWidth / 3);
-        const speedMultiplier = 1 + (MINIGAME.DURATION - mgState.timeLeft) * 0.02;
+        // Calculate speed - pixels per second
+        const baseSpeed = Math.max(120, areaWidth / 4);
+        const speedMultiplier = 1 + (MINIGAME.DURATION - mgState.timeLeft) * 0.015;
         const pixelsPerSecond = baseSpeed * speedMultiplier;
-        const duration = Math.max(1.5, travelDistance / pixelsPerSecond);
 
-        // Use CSS animation with transform for cross-browser support
-        // Transform doesn't conflict with the class-based animations
-        item.style.setProperty('--travel-distance', travelDistance + 'px');
-        item.style.animation = `itemMove ${duration}s linear forwards`;
+        let currentX = startX;
+        let lastTime = performance.now();
+        let animationId = null;
+        let clicked = false;
+
+        // JavaScript-based animation (more reliable than CSS on mobile)
+        function animate(now) {
+            if (clicked || !item.parentNode) return;
+
+            const deltaTime = (now - lastTime) / 1000;
+            lastTime = now;
+
+            currentX += pixelsPerSecond * deltaTime;
+            item.style.left = currentX + 'px';
+
+            if (currentX < endX) {
+                animationId = requestAnimationFrame(animate);
+            } else {
+                // Went off screen
+                if (isGood) mgState.combo = 1;
+                item.remove();
+            }
+        }
 
         const handleClick = (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (item.classList.contains('clicked')) return;
+            if (clicked) return;
+            clicked = true;
 
-            item.classList.add('clicked');
-            // Freeze position and play pop animation
-            const currentTransform = getComputedStyle(item).transform;
-            item.style.transform = currentTransform;
-            item.style.animation = 'itemPop 0.3s ease-out forwards';
+            if (animationId) cancelAnimationFrame(animationId);
+
             const rect = item.getBoundingClientRect();
+            item.style.animation = 'itemPop 0.3s ease-out forwards';
 
             if (isGood) {
-                // Good item clicked = points!
                 const points = 10 * mgState.combo;
                 mgState.score += points;
                 mgState.combo = Math.min(mgState.combo + 1, 10);
@@ -3061,11 +3076,10 @@
                 showMinigameFeedback(rect.left + itemSize/2, rect.top, '+' + points, 'good');
                 audio.click();
             } else {
-                // Bad item clicked = penalty!
                 mgState.score = Math.max(0, mgState.score - 20);
                 mgState.combo = 1;
                 showMinigameFeedback(rect.left + itemSize/2, rect.top, '-20', 'bad');
-                audio.prestige(); // Use prestige sound as "error"
+                audio.prestige();
             }
 
             updateMinigameUI();
@@ -3077,15 +3091,8 @@
 
         area.appendChild(item);
 
-        // Remove when off screen and penalize missed good items
-        setTimeout(() => {
-            if (!item.classList.contains('clicked') && item.parentNode) {
-                if (isGood) {
-                    mgState.combo = 1;
-                }
-                item.remove();
-            }
-        }, (duration + 0.3) * 1000);
+        // Start animation
+        animationId = requestAnimationFrame(animate);
     }
 
     function showMinigameFeedback(x, y, text, type) {
