@@ -861,6 +861,122 @@
             color: var(--text-dim);
         }
 
+        /* Production Breakdown Popup */
+        .breakdown-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg-panel);
+            border: 2px solid var(--accent);
+            border-radius: 12px;
+            padding: 20px;
+            z-index: 600;
+            min-width: 280px;
+            max-width: 90%;
+            animation: popIn 0.2s ease-out;
+        }
+
+        @keyframes popIn {
+            from { transform: translate(-50%, -50%) scale(0.9); opacity: 0; }
+            to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        .breakdown-popup h3 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--accent);
+            margin: 0 0 16px 0;
+            font-size: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .breakdown-popup .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        .breakdown-popup .close-btn:hover {
+            color: var(--text);
+        }
+
+        .breakdown-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .breakdown-row:last-child {
+            border-bottom: none;
+        }
+
+        .breakdown-row.total {
+            font-weight: 700;
+            color: var(--success);
+            margin-top: 8px;
+            padding-top: 12px;
+            border-top: 2px solid var(--border);
+        }
+
+        .breakdown-label {
+            color: var(--text-dim);
+        }
+
+        .breakdown-value {
+            color: var(--text-bright);
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .breakdown-multiplier {
+            color: var(--warning);
+            font-size: 0.85em;
+        }
+
+        .breakdown-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 599;
+        }
+
+        /* Milestone Flash */
+        .milestone-flash {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            color: var(--gold);
+            text-shadow: 0 0 30px var(--gold);
+            z-index: 1000;
+            pointer-events: none;
+            animation: milestoneFlash 1.5s ease-out forwards;
+        }
+
+        @keyframes milestoneFlash {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            20% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            40% { transform: translate(-50%, -50%) scale(1); }
+            100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+        }
+
+        /* Purchase Flash Effect */
+        .purchase-flash {
+            animation: purchaseFlash 0.3s ease-out;
+        }
+
+        @keyframes purchaseFlash {
+            0% { box-shadow: 0 0 0 0 var(--success); }
+            50% { box-shadow: 0 0 20px 5px var(--success); }
+            100% { box-shadow: 0 0 0 0 var(--success); }
+        }
+
         /* Game Hints */
         .game-hint {
             position: fixed;
@@ -2428,6 +2544,7 @@
             lastSave: Date.now(),
             mgBestScore: mgState.bestScore,
             mgCooldownEnd: mgState.cooldownEnd,
+            lastMilestone: lastMilestone,
         };
         try {
             localStorage.setItem('idleFactory', JSON.stringify(data));
@@ -2468,6 +2585,7 @@
             // Load minigame state
             mgState.bestScore = data.mgBestScore || 0;
             mgState.cooldownEnd = data.mgCooldownEnd || 0;
+            lastMilestone = data.lastMilestone || 0;
 
             audio.setVol(g.settings.vol);
             audio.muted = g.settings.muted;
@@ -2929,6 +3047,10 @@
         document.getElementById('mainBtn').onclick = doClick;
         document.getElementById('mainBtn').ontouchstart = (e) => { e.preventDefault(); doClick(e); };
 
+        // Production breakdown (click on rate)
+        document.getElementById('componentsRate').onclick = showProductionBreakdown;
+        document.getElementById('componentsRate').style.cursor = 'pointer';
+
         // Minigame button
         document.getElementById('minigameBtn').onclick = openMinigame;
         document.getElementById('mgStart').onclick = startMinigame;
@@ -2936,6 +3058,9 @@
 
         // Update cooldown bar periodically
         setInterval(updateCooldownBar, 1000);
+
+        // Check milestones periodically
+        setInterval(checkMilestones, 2000);
 
         document.getElementById('saveBtn').onclick = save;
         document.getElementById('muteBtn').onclick = () => {
@@ -3024,6 +3149,100 @@
         });
 
         setInterval(save, 30000);
+    }
+
+    // Production Breakdown Popup
+    function showProductionBreakdown() {
+        // Remove existing
+        document.querySelectorAll('.breakdown-overlay, .breakdown-popup').forEach(el => el.remove());
+
+        const overlay = document.createElement('div');
+        overlay.className = 'breakdown-overlay';
+        overlay.onclick = () => { overlay.remove(); popup.remove(); };
+
+        const popup = document.createElement('div');
+        popup.className = 'breakdown-popup';
+
+        // Calculate breakdown
+        let rows = [];
+        let baseProd = D(0);
+
+        BUILDINGS.forEach(b => {
+            const count = g.buildings[b.id] || 0;
+            if (count > 0) {
+                const prod = bldProd(b.id);
+                baseProd = baseProd.add(prod);
+                rows.push({ label: `${b.icon} ${b.name} (${count})`, value: fmt(prod) + '/s' });
+            }
+        });
+
+        // Multipliers
+        const bpMult = 1 + g.bp * 0.01;
+        const achieveMult = 1 + achieveBonus();
+        const activeMult = (g.activeBonus === 'prod' && Date.now() < g.bonusEnd) ? 2 : 1;
+
+        let html = `<h3>📊 Production Breakdown <button class="close-btn" onclick="this.closest('.breakdown-popup').remove(); document.querySelector('.breakdown-overlay').remove();">×</button></h3>`;
+
+        if (rows.length === 0) {
+            html += `<div class="breakdown-row"><span class="breakdown-label">No buildings yet!</span></div>`;
+        } else {
+            rows.forEach(row => {
+                html += `<div class="breakdown-row"><span class="breakdown-label">${row.label}</span><span class="breakdown-value">${row.value}</span></div>`;
+            });
+
+            html += `<div class="breakdown-row"><span class="breakdown-label">Blueprint Bonus</span><span class="breakdown-multiplier">×${bpMult.toFixed(2)}</span></div>`;
+            html += `<div class="breakdown-row"><span class="breakdown-label">Achievement Bonus</span><span class="breakdown-multiplier">×${achieveMult.toFixed(2)}</span></div>`;
+
+            if (activeMult > 1) {
+                html += `<div class="breakdown-row"><span class="breakdown-label">⚡ Active Boost</span><span class="breakdown-multiplier">×${activeMult}</span></div>`;
+            }
+
+            html += `<div class="breakdown-row total"><span class="breakdown-label">TOTAL</span><span class="breakdown-value">${fmt(prodPerSec())}/s</span></div>`;
+        }
+
+        popup.innerHTML = html;
+        document.body.appendChild(overlay);
+        document.body.appendChild(popup);
+    }
+
+    // Milestone Celebrations
+    const MILESTONES = [1e6, 1e9, 1e12, 1e15, 1e18, 1e21, 1e24];
+    let lastMilestone = 0;
+
+    function checkMilestones() {
+        for (const milestone of MILESTONES) {
+            if (g.totalComp.gte(milestone) && lastMilestone < milestone) {
+                lastMilestone = milestone;
+                showMilestone(milestone);
+                break;
+            }
+        }
+    }
+
+    function showMilestone(value) {
+        const names = {
+            1e6: '1 MILLION!',
+            1e9: '1 BILLION!',
+            1e12: '1 TRILLION!',
+            1e15: '1 QUADRILLION!',
+            1e18: '1 QUINTILLION!',
+            1e21: '1 SEXTILLION!',
+            1e24: '1 SEPTILLION!'
+        };
+
+        const flash = document.createElement('div');
+        flash.className = 'milestone-flash';
+        flash.textContent = '🎉 ' + (names[value] || fmt(value));
+        document.body.appendChild(flash);
+
+        audio.achieve();
+        setTimeout(() => flash.remove(), 1500);
+    }
+
+    // Purchase flash effect
+    function flashPurchase(element) {
+        element.classList.add('purchase-flash');
+        setTimeout(() => element.classList.remove('purchase-flash'), 300);
     }
 
     // Init
