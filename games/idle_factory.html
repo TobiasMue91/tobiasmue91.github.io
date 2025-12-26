@@ -605,6 +605,9 @@
             z-index: 500;
             animation: spin 4s linear infinite;
             filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.5));
+            will-change: transform;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
         @keyframes spin {
@@ -810,8 +813,14 @@
             color: var(--text-dim);
         }
 
-        /* Responsive */
-        @media (max-width: 600px) {
+        /* Touch optimizations */
+        button, .buy-btn, .upgrade, .building-icon, .tab {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Reduce animations on mobile for performance */
+        @media (max-width: 600px), (hover: none) {
             .resources {
                 grid-template-columns: 1fr 1fr;
             }
@@ -834,6 +843,30 @@
             .prestige-bar {
                 flex-direction: column;
                 gap: 10px;
+            }
+
+            /* Reduce animation overhead on mobile */
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.8; }
+            }
+
+            .building-icon:hover {
+                transform: none;
+            }
+
+            /* Faster transitions */
+            * {
+                transition-duration: 0.1s !important;
+            }
+        }
+
+        /* Prefer reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
             }
         }
     </style>
@@ -1322,7 +1355,9 @@
         let b = D(1);
         if (g.upgrades.includes('w2')) b = b.mul(2);
         if (g.upgrades.includes('w3')) b = b.mul(2);
-        return b.mul(Decimal.log10(prodPerSec().add(10)).div(10));
+        // log10() returns a plain number, not a Decimal
+        const logVal = prodPerSec().add(10).log10();
+        return b.mul(logVal / 10);
     }
 
     function achieveBonus() {
@@ -1502,32 +1537,56 @@
     }
 
     function updateButtonStates() {
-        // Update building buy buttons
-        document.querySelectorAll('#buildingGrid .buy-btn').forEach(btn => {
-            const id = btn.dataset.id;
-            const n = btn.dataset.n === 'max' ? maxBuy(id) : parseInt(btn.dataset.n);
-            btn.disabled = !g.comp.gte(bldCost(id, n)) || n <= 0;
-        });
+        const grid = document.getElementById('buildingGrid');
+        if (!grid) return;
 
-        // Update building affordability highlighting
-        document.querySelectorAll('#buildingGrid .building').forEach(div => {
-            const btn = div.querySelector('.buy-btn[data-n="1"]');
-            if (btn) {
-                const id = btn.dataset.id;
-                const canAfford = g.comp.gte(bldCost(id, 1));
-                div.classList.toggle('can-afford', canAfford);
+        // Update building buy buttons and affordability in one pass
+        const buildings = grid.children;
+        for (let i = 0; i < buildings.length; i++) {
+            const div = buildings[i];
+            const buttons = div.querySelectorAll('.buy-btn');
+            let id = null;
+
+            for (let j = 0; j < buttons.length; j++) {
+                const btn = buttons[j];
+                id = btn.dataset.id;
+                const n = btn.dataset.n === 'max' ? maxBuy(id) : parseInt(btn.dataset.n);
+                btn.disabled = !g.comp.gte(bldCost(id, n)) || n <= 0;
             }
-        });
 
-        // Update upgrade affordability
-        document.querySelectorAll('#upgradeGrid .upgrade').forEach(div => {
-            if (div.classList.contains('purchased')) return;
-            const u = UPGRADES.find(x => div.querySelector('.upgrade-name')?.textContent.includes(x.name));
+            if (id) {
+                const canAfford = g.comp.gte(bldCost(id, 1));
+                if (canAfford && !div.classList.contains('can-afford')) {
+                    div.classList.add('can-afford');
+                } else if (!canAfford && div.classList.contains('can-afford')) {
+                    div.classList.remove('can-afford');
+                }
+            }
+        }
+
+        // Update upgrade affordability using data attributes
+        const upgradeGrid = document.getElementById('upgradeGrid');
+        if (!upgradeGrid) return;
+
+        const upgrades = upgradeGrid.children;
+        for (let i = 0; i < upgrades.length; i++) {
+            const div = upgrades[i];
+            if (div.classList.contains('purchased')) continue;
+
+            const uid = div.dataset.uid;
+            if (!uid) continue;
+
+            const u = UPGRADES.find(x => x.id === uid);
             if (u) {
                 const curr = u.costType === 'widgets' ? g.widgets : g.comp;
-                div.classList.toggle('can-afford', curr.gte(u.cost));
+                const canAfford = curr.gte(u.cost);
+                if (canAfford && !div.classList.contains('can-afford')) {
+                    div.classList.add('can-afford');
+                } else if (!canAfford && div.classList.contains('can-afford')) {
+                    div.classList.remove('can-afford');
+                }
             }
-        });
+        }
     }
 
     function renderBuildings() {
@@ -1598,6 +1657,7 @@
 
             const div = document.createElement('div');
             div.className = 'upgrade' + (bought ? ' purchased' : '') + (!avail ? ' locked' : '') + (canAfford && !bought ? ' can-afford' : '');
+            div.dataset.uid = u.id;
             div.innerHTML = `
                 <div class="upgrade-header">
                     <span class="upgrade-name">${u.icon} ${u.name}</span>
@@ -1723,9 +1783,13 @@
         const gear = document.createElement('div');
         gear.className = 'golden-gear';
         gear.textContent = '⚙️';
-        gear.style.left = Math.random() * (window.innerWidth - 60) + 'px';
-        gear.style.top = (100 + Math.random() * (window.innerHeight - 200)) + 'px';
-        gear.onclick = () => collectGear(gear);
+        // Safe positioning for mobile screens
+        const maxX = Math.max(60, window.innerWidth - 60);
+        const maxY = Math.max(150, window.innerHeight - 100);
+        gear.style.left = (30 + Math.random() * (maxX - 60)) + 'px';
+        gear.style.top = (100 + Math.random() * (maxY - 100)) + 'px';
+        // Support both click and touch
+        gear.onclick = gear.ontouchend = (e) => { e.preventDefault(); collectGear(gear); };
         document.body.appendChild(gear);
         setTimeout(() => { if (gear.parentNode) gear.remove(); }, 10000);
     }
@@ -1889,9 +1953,12 @@
         };
     }
 
-    // Game Loop
+    // Game Loop - Optimized for mobile
     let lastFrame = performance.now();
-    let loopRunning = false;
+    let lastUIUpdate = 0;
+    let lastButtonUpdate = 0;
+    const UI_UPDATE_INTERVAL = 50;      // Update resource display every 50ms (20fps)
+    const BUTTON_UPDATE_INTERVAL = 200; // Update button states every 200ms (5fps)
 
     function loop(now) {
         try {
@@ -1914,8 +1981,8 @@
                 g.widgets = g.widgets.add(widgetProdAmt);
             }
 
-            // Auto-buy
-            if (g.upgrades.includes('a1')) {
+            // Auto-buy (throttled)
+            if (g.upgrades.includes('a1') && now - lastButtonUpdate > 500) {
                 const cost = bldCost('bench', 1);
                 if (g.comp.gte(cost)) buyBld('bench', 1);
             }
@@ -1923,15 +1990,38 @@
             // Bonus expiry
             if (g.activeBonus && Date.now() >= g.bonusEnd) g.activeBonus = null;
 
-            // Check achievements every ~second
-            if (Math.random() < dt) checkAchieves();
+            // Throttled UI updates for mobile performance
+            if (now - lastUIUpdate >= UI_UPDATE_INTERVAL) {
+                lastUIUpdate = now;
+                updateResourcesLight();
 
-            updateResources();
+                // Check achievements occasionally
+                if (Math.random() < 0.1) checkAchieves();
+            }
+
+            // Even more throttled button state updates
+            if (now - lastButtonUpdate >= BUTTON_UPDATE_INTERVAL) {
+                lastButtonUpdate = now;
+                updateButtonStates();
+            }
         } catch (e) {
             console.error('Game loop error:', e);
         }
 
         requestAnimationFrame(loop);
+    }
+
+    // Lightweight resource update (no button states)
+    function updateResourcesLight() {
+        document.getElementById('componentsVal').textContent = fmt(g.comp);
+        document.getElementById('widgetsVal').textContent = fmt(g.widgets);
+        document.getElementById('blueprintsVal').textContent = g.bp;
+
+        const compProd = prodPerSec();
+        document.getElementById('componentsRate').textContent = '+' + fmt(compProd) + '/s';
+        document.getElementById('prodRate').textContent = fmt(compProd) + '/s total';
+
+        if (g.totalComp.gt(g.highComp)) g.highComp = g.totalComp;
     }
 
     // Event Setup
