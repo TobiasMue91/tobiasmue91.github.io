@@ -742,6 +742,11 @@
             color: var(--warning);
             text-align: center;
             margin-top: 6px;
+            min-height: 18px;
+        }
+
+        .challenge-timer:empty {
+            display: none;
         }
 
         .challenge-reward-preview {
@@ -3353,12 +3358,12 @@
 
             const card = document.createElement('div');
             card.className = 'challenge-card' + (isActive ? ' active' : '') + (onCooldown ? ' cooldown' : '');
+            card.dataset.challengeId = ch.id;
             card.innerHTML = `
                 <div class="challenge-icon">${ch.icon}</div>
                 <div class="challenge-name">${ch.name}</div>
                 <div class="challenge-desc">${ch.desc}</div>
-                ${isActive ? `<div class="challenge-timer">${timeLeft}s</div>` : ''}
-                ${onCooldown ? `<div class="challenge-timer" style="color:var(--text-dim)">${cooldownRemaining}s</div>` : ''}
+                <div class="challenge-timer" data-timer="${ch.id}">${isActive ? timeLeft + 's' : (onCooldown ? cooldownRemaining + 's' : '')}</div>
                 ${!isActive && !onCooldown ? `<div class="challenge-reward-preview">${ch.reward.mult}x ${ch.reward.type} (${ch.reward.dur}s)</div>` : ''}
             `;
 
@@ -3369,7 +3374,54 @@
             list.appendChild(card);
         });
 
-        // Show active reward indicator
+        updateChallengeRewardIndicator();
+    }
+
+    // Lightweight function to update only timers without rebuilding DOM
+    function updateChallengeTimers() {
+        let needsFullRender = false;
+
+        CHALLENGES.forEach(ch => {
+            const card = document.querySelector(`[data-challenge-id="${ch.id}"]`);
+            const timerEl = document.querySelector(`[data-timer="${ch.id}"]`);
+            if (!timerEl || !card) return;
+
+            const isActive = challengeState.active === ch.id;
+            const onCooldown = Date.now() < (challengeState.cooldowns[ch.id] || 0);
+            const wasOnCooldown = card.classList.contains('cooldown');
+            const wasActive = card.classList.contains('active');
+
+            // Detect state transitions that require full re-render
+            if ((wasOnCooldown && !onCooldown) || (wasActive && !isActive)) {
+                needsFullRender = true;
+                return;
+            }
+
+            if (isActive) {
+                const elapsed = (Date.now() - challengeState.startTime) / 1000;
+                const timeLeft = Math.ceil(ch.duration - elapsed);
+                timerEl.textContent = timeLeft + 's';
+                timerEl.style.color = '';
+            } else if (onCooldown) {
+                const cooldownRemaining = Math.ceil(((challengeState.cooldowns[ch.id] || 0) - Date.now()) / 1000);
+                timerEl.textContent = cooldownRemaining + 's';
+                timerEl.style.color = 'var(--text-dim)';
+            } else {
+                timerEl.textContent = '';
+            }
+        });
+
+        // If any card's state changed, do a full re-render
+        if (needsFullRender) {
+            renderChallenges();
+            return;
+        }
+
+        updateChallengeRewardIndicator();
+    }
+
+    function updateChallengeRewardIndicator() {
+        const rewardIndicator = document.getElementById('challengeRewardIndicator');
         if (challengeState.activeReward && Date.now() < challengeState.rewardEnd) {
             const remaining = Math.ceil((challengeState.rewardEnd - Date.now()) / 1000);
             rewardIndicator.textContent = `🎁 ${challengeState.activeReward.mult}x ${challengeState.activeReward.type} - ${remaining}s remaining`;
@@ -3761,9 +3813,9 @@
             // Throttled UI updates for mobile performance
             if (now - lastUIUpdate >= UI_UPDATE_INTERVAL) {
                 lastUIUpdate = now;
-                // Re-render challenges if active or reward is active (for timer updates)
+                // Update challenge timers (lightweight, no DOM rebuild)
                 if (challengeState.active || challengeState.activeReward) {
-                    renderChallenges();
+                    updateChallengeTimers();
                 }
                 updateResourcesLight();
 
@@ -4440,7 +4492,7 @@
         // Check hints periodically
         setInterval(checkHints, 10000);
 
-        console.log('// IDLE FACTORY v1.0.0');
+        console.log('// IDLE FACTORY v1.1.0');
         console.log('// Keyboard: F=Fabricate, O=Overclock, S=Save, M=Mute, 1-5=Tabs');
     }
 
