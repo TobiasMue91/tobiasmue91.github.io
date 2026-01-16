@@ -790,28 +790,34 @@
         </div>
     </div>
 </div>
-<footer>Time sync via TimeAPI.io / WorldTimeAPI</footer>
+<footer>Time sync via gettimeapi.dev / WorldTimeAPI</footer>
 <script>
     const SYNC_INTERVAL = 600000, MIN_SYNC_GAP = 60000, CACHE_MAX_AGE = 3600000, STORAGE_KEY = 'precision_alarms',
         PREFS_KEY = 'precision_prefs', SYNC_KEY = 'precision_sync';
     const TIME_APIS = [
         {
-            name: 'TimeAPI.io',
-            url: () => `https://timeapi.io/api/time/current/zone?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`,
+            name: 'gettimeapi.dev',
+            url: () =>
+                `https://gettimeapi.dev/v1/time?timezone=${encodeURIComponent(
+                    Intl.DateTimeFormat().resolvedOptions().timeZone
+                )}`,
             parse: d => {
-                const dt = new Date(d.year, d.month - 1, d.day, d.hour, d.minute, d.seconds, d.milliSeconds || 0);
+                const unix = Date.parse(d.iso8601);
                 return {
-                    unix: dt.getTime(),
-                    tz: d.timeZone,
-                    abbr: d.timeZone.split('/').pop().substring(0, 4),
+                    unix,
+                    tz: d.timezone,
+                    abbr: d.timezone.split('/').pop().slice(0, 4),
                     offset: null,
-                    dst: d.dstActive
-                }
+                    dst: null
+                };
             }
         },
         {
             name: 'WorldTimeAPI',
-            url: () => `https://worldtimeapi.org/api/timezone/${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`,
+            url: () =>
+                `https://worldtimeapi.org/api/timezone/${encodeURIComponent(
+                    Intl.DateTimeFormat().resolvedOptions().timeZone
+                )}`,
             parse: d => ({
                 unix: d.unixtime * 1000,
                 tz: d.timezone,
@@ -911,18 +917,41 @@
         const url = typeof api.url === 'function' ? api.url() : api.url;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
+
         try {
             const t0 = performance.now();
-            const res = await fetch(url, {signal: controller.signal, mode: 'cors'});
+            const res = await fetch(url, {
+                signal: controller.signal,
+                mode: 'cors',
+                cache: 'no-store'
+            });
+
             clearTimeout(timeout);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+
+            const text = await res.text();
+            let data;
+
+            try {
+                data = JSON.parse(text);
+            } catch {
+                throw new Error('Invalid JSON');
+            }
+
             const latency = (performance.now() - t0) / 2;
             const parsed = api.parse(data);
-            return {...parsed, latency, name: api.name}
+
+            if (!parsed || typeof parsed.unix !== 'number') {
+                throw new Error('Invalid time payload');
+            }
+
+            return { ...parsed, latency, name: api.name };
         } catch (e) {
             clearTimeout(timeout);
-            throw e
+            throw e;
         }
     }
 
