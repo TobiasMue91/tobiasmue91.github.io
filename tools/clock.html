@@ -790,14 +790,14 @@
         </div>
     </div>
 </div>
-<footer>Time sync via WorldTimeAPI / TimeAPI.io</footer>
+<footer>Time sync via WorldTimeAPI / TimeAPI.io / Cloudflare</footer>
 <script>
     const SYNC_INTERVAL = 600000, MIN_SYNC_GAP = 60000, CACHE_MAX_AGE = 3600000, STORAGE_KEY = 'precision_alarms',
         PREFS_KEY = 'precision_prefs', SYNC_KEY = 'precision_sync';
     const TIME_APIS = [
         {
             name: 'WorldTimeAPI',
-            url: 'https://worldtimeapi.org/api/ip',
+            url: () => `https://worldtimeapi.org/api/timezone/${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`,
             parse: d => ({
                 unix: d.unixtime * 1000,
                 tz: d.timezone,
@@ -821,17 +821,17 @@
             }
         },
         {
-            name: 'Open-Meteo',
-            url: () => `https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current=temperature_2m&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`,
-            parse: d => {
-                const t = d.current?.time;
-                if (!t) throw new Error('No time');
-                const dt = new Date(t);
+            name: 'Cloudflare',
+            url: 'https://www.cloudflare.com/cdn-cgi/trace',
+            isText: true,
+            parse: (text, responseDate) => {
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                const serverTime = new Date(responseDate).getTime();
                 return {
-                    unix: dt.getTime(),
-                    tz: d.timezone,
-                    abbr: d.timezone_abbreviation,
-                    offset: `${d.utc_offset_seconds >= 0 ? '+' : '-'}${String(Math.floor(Math.abs(d.utc_offset_seconds) / 3600)).padStart(2, '0')}:${String(Math.floor((Math.abs(d.utc_offset_seconds) % 3600) / 60)).padStart(2, '0')}`,
+                    unix: serverTime,
+                    tz: tz,
+                    abbr: new Date().toLocaleTimeString('en-US', {timeZone: tz, timeZoneName: 'short'}).split(' ').pop(),
+                    offset: null,
                     dst: null
                 }
             }
@@ -932,9 +932,16 @@
             const res = await fetch(url, {signal: controller.signal});
             clearTimeout(timeout);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
+            const responseDate = res.headers.get('Date');
             const latency = (performance.now() - t0) / 2;
-            const parsed = api.parse(data);
+            let parsed;
+            if (api.isText) {
+                const text = await res.text();
+                parsed = api.parse(text, responseDate);
+            } else {
+                const data = await res.json();
+                parsed = api.parse(data, responseDate);
+            }
             return {...parsed, latency, name: api.name}
         } catch (e) {
             clearTimeout(timeout);
