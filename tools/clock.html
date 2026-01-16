@@ -790,27 +790,16 @@
         </div>
     </div>
 </div>
-<footer>Time sync via WorldTimeAPI / TimeAPI.io / Cloudflare</footer>
+<footer>Time sync via TimeAPI.io / WorldTimeAPI</footer>
 <script>
     const SYNC_INTERVAL = 600000, MIN_SYNC_GAP = 60000, CACHE_MAX_AGE = 3600000, STORAGE_KEY = 'precision_alarms',
         PREFS_KEY = 'precision_prefs', SYNC_KEY = 'precision_sync';
     const TIME_APIS = [
         {
-            name: 'WorldTimeAPI',
-            url: () => `https://worldtimeapi.org/api/timezone/${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`,
-            parse: d => ({
-                unix: d.unixtime * 1000,
-                tz: d.timezone,
-                abbr: d.abbreviation,
-                offset: d.utc_offset,
-                dst: d.dst
-            })
-        },
-        {
             name: 'TimeAPI.io',
             url: () => `https://timeapi.io/api/time/current/zone?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`,
             parse: d => {
-                const dt = new Date(d.year, d.month - 1, d.day, d.hour, d.minute, d.seconds, d.milliSeconds);
+                const dt = new Date(d.year, d.month - 1, d.day, d.hour, d.minute, d.seconds, d.milliSeconds || 0);
                 return {
                     unix: dt.getTime(),
                     tz: d.timeZone,
@@ -821,20 +810,15 @@
             }
         },
         {
-            name: 'Cloudflare',
-            url: 'https://www.cloudflare.com/cdn-cgi/trace',
-            isText: true,
-            parse: (text, responseDate) => {
-                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                const serverTime = new Date(responseDate).getTime();
-                return {
-                    unix: serverTime,
-                    tz: tz,
-                    abbr: new Date().toLocaleTimeString('en-US', {timeZone: tz, timeZoneName: 'short'}).split(' ').pop(),
-                    offset: null,
-                    dst: null
-                }
-            }
+            name: 'WorldTimeAPI',
+            url: () => `https://worldtimeapi.org/api/timezone/${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`,
+            parse: d => ({
+                unix: d.unixtime * 1000,
+                tz: d.timezone,
+                abbr: d.abbreviation,
+                offset: d.utc_offset,
+                dst: d.dst
+            })
         }
     ];
     let timeOffset = 0, syncSource = null, tzData = null, alarms = [], prefs = {format24: true},
@@ -929,19 +913,12 @@
         const timeout = setTimeout(() => controller.abort(), 8000);
         try {
             const t0 = performance.now();
-            const res = await fetch(url, {signal: controller.signal});
+            const res = await fetch(url, {signal: controller.signal, mode: 'cors'});
             clearTimeout(timeout);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const responseDate = res.headers.get('Date');
+            const data = await res.json();
             const latency = (performance.now() - t0) / 2;
-            let parsed;
-            if (api.isText) {
-                const text = await res.text();
-                parsed = api.parse(text, responseDate);
-            } else {
-                const data = await res.json();
-                parsed = api.parse(data, responseDate);
-            }
+            const parsed = api.parse(data);
             return {...parsed, latency, name: api.name}
         } catch (e) {
             clearTimeout(timeout);
