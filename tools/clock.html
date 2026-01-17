@@ -256,11 +256,6 @@
         color: var(--warning)
     }
 
-    .tz-badge.source {
-        font-size: 0.65rem;
-        color: var(--text-dim)
-    }
-
     .alarms-header {
         display: flex;
         justify-content: space-between;
@@ -791,36 +786,21 @@
         </div>
     </div>
 </div>
-<footer>Time sync via timeapi.io / gettimeapi.dev / WorldTimeAPI</footer>
+<footer>Time sync via gettimeapi.dev / WorldTimeAPI</footer>
 <script>
     (function () {
         'use strict';
         const Config = {
-            SYNC_INTERVAL: 600000,
-            MIN_SYNC_GAP: 60000,
-            CACHE_MAX_AGE: 3600000,
-            REQUEST_TIMEOUT: 8000,
+            SYNC_INTERVAL: 300000,
+            MIN_SYNC_GAP: 30000,
+            CACHE_MAX_AGE: 1800000,
+            REQUEST_TIMEOUT: 6000,
+            SYNC_SAMPLES: 3,
             STORAGE_KEY: 'precision_alarms',
             PREFS_KEY: 'precision_prefs',
             SYNC_KEY: 'precision_sync'
         };
         const TimeAPIs = [{
-            name: 'timeapi.io',
-            url: tz => `https://timeapi.io/api/time/current/zone?timeZone=${encodeURIComponent(tz)}`,
-            parse: d => {
-                if (!d || !d.dateTime) throw new Error('Invalid response');
-                const dt = d.dateTime.includes('T') ? d.dateTime : d.dateTime.replace(' ', 'T');
-                const unix = Date.parse(dt);
-                if (isNaN(unix)) throw new Error('Invalid datetime');
-                return {
-                    unix,
-                    tz: d.timeZone,
-                    abbr: d.timeZone?.split('/').pop()?.substring(0, 4) || '',
-                    offset: null,
-                    dst: d.dstActive || false
-                }
-            }
-        }, {
             name: 'gettimeapi.dev',
             url: tz => `https://gettimeapi.dev/v1/time?timezone=${encodeURIComponent(tz)}`,
             parse: d => {
@@ -859,7 +839,23 @@
                 this.lastSuccess = 0;
                 this.failures = 0;
                 this.syncing = false;
-                this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+                this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                this.hiddenSince = null;
+                this.setupVisibilityHandler()
+            }
+
+            setupVisibilityHandler() {
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        this.hiddenSince = Date.now()
+                    } else {
+                        const hiddenDuration = this.hiddenSince ? Date.now() - this.hiddenSince : 0;
+                        this.hiddenSince = null;
+                        if (hiddenDuration > 60000 || Date.now() - this.lastSuccess > Config.SYNC_INTERVAL) {
+                            this.sync(true)
+                        }
+                    }
+                })
             }
 
             async sync(force = false) {
@@ -870,25 +866,44 @@
                 this.syncing = true;
                 this.lastAttempt = now;
                 this.updateUI('syncing', 'Syncing...');
-                let success = false;
+                let bestResult = null;
                 for (const api of TimeAPIs) {
                     try {
-                        const result = await this.tryAPI(api);
-                        this.offset = result.offset;
-                        this.source = result.name;
-                        this.tzData = {tz: result.tz, abbr: result.abbr, offset: result.utcOffset, dst: result.dst};
-                        this.lastSuccess = Date.now();
-                        this.failures = 0;
-                        success = true;
-                        this.saveCache();
-                        this.renderBadges();
-                        this.updateUI('synced', result.name);
-                        break
+                        const samples = [];
+                        for (let i = 0; i < Config.SYNC_SAMPLES; i++) {
+                            try {
+                                const result = await this.fetchTime(api);
+                                samples.push(result);
+                                if (i < Config.SYNC_SAMPLES - 1) await this.delay(100)
+                            } catch (e) {
+                                break
+                            }
+                        }
+                        if (samples.length > 0) {
+                            const best = samples.reduce((a, b) => a.rtt < b.rtt ? a : b);
+                            if (!bestResult || best.rtt < bestResult.rtt) {
+                                bestResult = best
+                            }
+                        }
                     } catch (e) {
                         console.warn(`${api.name} failed:`, e.message)
                     }
                 }
-                if (!success) {
+                if (bestResult) {
+                    this.offset = bestResult.offset;
+                    this.source = bestResult.name;
+                    this.tzData = {
+                        tz: bestResult.tz,
+                        abbr: bestResult.abbr,
+                        offset: bestResult.utcOffset,
+                        dst: bestResult.dst
+                    };
+                    this.lastSuccess = Date.now();
+                    this.failures = 0;
+                    this.saveCache();
+                    this.renderBadges();
+                    this.updateUI('synced', `${bestResult.name} (±${Math.round(bestResult.rtt / 2)}ms)`)
+                } else {
                     this.failures++;
                     const backoff = Math.min(300000, Config.MIN_SYNC_GAP * Math.pow(2, this.failures - 1));
                     this.lastAttempt = Date.now() - Config.MIN_SYNC_GAP + backoff;
@@ -901,29 +916,35 @@
                     }
                 }
                 this.syncing = false;
-                return success
+                return !!bestResult
             }
 
-            async tryAPI(api) {
+            async fetchTime(api) {
                 const controller = new AbortController();
                 const timeout = setTimeout(() => controller.abort(), Config.REQUEST_TIMEOUT);
                 const t0 = performance.now();
                 try {
                     const url = api.url(this.timezone);
                     const res = await fetch(url, {signal: controller.signal, mode: 'cors', cache: 'no-store'});
+                    const data = await res.json();
+                    const t1 = performance.now();
                     clearTimeout(timeout);
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const data = await res.json();
-                    const rtt = performance.now() - t0;
+                    const rtt = t1 - t0;
                     const parsed = api.parse(data);
-                    const latency = rtt / 2;
-                    const serverTime = parsed.unix + latency;
-                    const offset = serverTime - Date.now();
-                    return {...parsed, offset, latency, name: api.name}
+                    const serverTime = parsed.unix;
+                    const localTimeAtResponse = Date.now();
+                    const estimatedServerNow = serverTime + (rtt / 2);
+                    const offset = estimatedServerNow - localTimeAtResponse;
+                    return {...parsed, offset, rtt, name: api.name}
                 } catch (e) {
                     clearTimeout(timeout);
                     throw e
                 }
+            }
+
+            delay(ms) {
+                return new Promise(r => setTimeout(r, ms))
             }
 
             now() {
@@ -943,7 +964,10 @@
 
             renderBadges() {
                 const el = document.getElementById('tzBadges');
-                if (!el || !this.tzData) return;
+                if (!el || !this.tzData) {
+                    if (el) el.innerHTML = '';
+                    return
+                }
                 const badges = [`<div class="tz-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>${this.tzData.abbr || this.tzData.tz.split('/').pop()}</div>`];
                 if (this.tzData.offset) badges.push(`<div class="tz-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>UTC${this.tzData.offset}</div>`);
                 if (this.tzData.dst) badges.push(`<div class="tz-badge dst"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/></svg>DST</div>`);
@@ -988,7 +1012,8 @@
                 this.deleteConfirmId = null;
                 this.deleteTimeout = null;
                 this.audioCtx = null;
-                this.soundInterval = null
+                this.soundInterval = null;
+                this.lastCheckedMinute = null
             }
 
             load() {
@@ -1070,8 +1095,10 @@
             check() {
                 if (this.activeAlarmId) return;
                 const now = this.timeSync.now();
-                const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
-                if (s !== 0) return;
+                const h = now.getHours(), m = now.getMinutes();
+                const currentMinute = `${h}:${m}`;
+                if (currentMinute === this.lastCheckedMinute) return;
+                this.lastCheckedMinute = currentMinute;
                 const t = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
                 const day = now.getDay();
                 for (const a of this.alarms) {
@@ -1194,7 +1221,7 @@
         }
 
         const App = {
-            timeSync: null, alarms: null, prefs: {format24: true},
+            timeSync: null, alarms: null, prefs: {format24: true}, rafId: null, lastSecond: -1,
             init() {
                 this.timeSync = new TimeSync();
                 this.alarms = new AlarmManager(this.timeSync);
@@ -1228,30 +1255,38 @@
                 if (btn) btn.textContent = this.prefs.format24 ? '24h' : '12h'
             },
             startClock() {
-                const update = () => {
+                const tick = () => {
                     const now = this.timeSync.now();
-                    const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
-                    const timeEl = document.getElementById('timeDisplay');
-                    const dateEl = document.getElementById('dateDisplay');
-                    if (timeEl) timeEl.innerHTML = this.formatTime(h, m, s);
-                    if (dateEl) {
-                        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                        dateEl.textContent = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`
+                    const s = now.getSeconds();
+                    if (s !== this.lastSecond) {
+                        this.lastSecond = s;
+                        this.updateDisplay(now);
+                        this.alarms.check()
                     }
-                    this.alarms.check()
+                    this.rafId = requestAnimationFrame(tick)
                 };
-                update();
-                setInterval(update, 1000)
+                tick()
+            },
+            updateDisplay(now) {
+                const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+                const timeEl = document.getElementById('timeDisplay');
+                const dateEl = document.getElementById('dateDisplay');
+                if (timeEl) timeEl.innerHTML = this.formatTime(h, m, s);
+                if (dateEl) {
+                    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    dateEl.textContent = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`
+                }
             },
             formatTime(h, m, s) {
                 const pad = n => String(n).padStart(2, '0');
                 let period = '';
+                let hour = h;
                 if (!this.prefs.format24) {
                     period = h >= 12 ? 'PM' : 'AM';
-                    h = h % 12 || 12
+                    hour = h % 12 || 12
                 }
-                return `${pad(h)}:${pad(m)}<span class="seconds">:${pad(s)}</span>${this.prefs.format24 ? '' : `<span class="period">${period}</span>`}`
+                return `${pad(hour)}:${pad(m)}<span class="seconds">:${pad(s)}</span>${this.prefs.format24 ? '' : `<span class="period">${period}</span>`}`
             },
             bindEvents() {
                 document.getElementById('formatToggle')?.addEventListener('click', () => {
