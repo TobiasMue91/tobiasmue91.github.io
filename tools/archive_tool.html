@@ -640,7 +640,8 @@
             transform: translateY(100px);
             opacity: 0;
             transition: all 0.25s;
-            z-index: 1000
+            z-index: 1000;
+            max-width: 360px
         }
 
         .toast.show {
@@ -839,22 +840,36 @@
             gap: 6px
         }
 
-        .drop-indicator {
-            position: absolute;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: var(--primary);
-            pointer-events: none;
-            display: none
-        }
-
         .dragging {
             opacity: 0.5
         }
 
         .drag-over td {
             background: var(--primary-light) !important
+        }
+
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: var(--bg2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            z-index: 10
+        }
+
+        .loading-overlay i {
+            font-size: 1.5rem;
+            color: var(--primary);
+            animation: spin 1s linear infinite
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
         }
 
         @media (max-width: 640px) {
@@ -956,7 +971,7 @@
                             class="fas fa-check-square"></i> 0 selected</span><span id="stats-shown"><i
                             class="fas fa-file"></i> 0 files</span></div>
                 </div>
-                <div class="file-list" id="extract-file-list">
+                <div class="file-list" id="extract-file-list" style="position:relative">
                     <table class="file-table" role="grid">
                         <thead>
                         <tr>
@@ -970,6 +985,8 @@
                         </thead>
                         <tbody id="file-tbody"></tbody>
                     </table>
+                    <div class="loading-overlay hidden" id="extract-loading"><i class="fas fa-circle-notch"></i><span>Extracting archive...</span>
+                    </div>
                 </div>
                 <div class="progress-container" id="extract-progress">
                     <div class="progress-bar">
@@ -1077,6 +1094,8 @@
         searchQuery: '',
         lastSelectedIdx: null,
         dragSrcIdx: null,
+        Archive: null,
+        libarchiveReady: false,
         init() {
             this.bindEvents();
             this.loadLibarchive();
@@ -1126,7 +1145,7 @@
             });
             cd.addEventListener('dragover', e => {
                 e.preventDefault();
-                ed.classList.add('dragover')
+                cd.classList.add('dragover')
             });
             cd.addEventListener('dragleave', () => cd.classList.remove('dragover'));
             cd.addEventListener('drop', e => {
@@ -1173,13 +1192,14 @@
         },
         async loadLibarchive() {
             try {
-                const workerCode = `importScripts('https://cdn.jsdelivr.net/npm/libarchive.js@1.3.0/dist/worker-bundle.js');`;
-                this.workerUrl = URL.createObjectURL(new Blob([workerCode], {type: 'application/javascript'}));
                 const {Archive} = await import('https://cdn.jsdelivr.net/npm/libarchive.js@1.3.0/+esm');
-                Archive.init({workerUrl: this.workerUrl});
-                this.Archive = Archive
+                Archive.init({workerUrl: 'https://cdn.jsdelivr.net/npm/libarchive.js@1.3.0/dist/worker-bundle.js'});
+                this.Archive = Archive;
+                this.libarchiveReady = true;
+                console.log('libarchive.js loaded successfully')
             } catch (e) {
-                console.warn('libarchive fallback', e)
+                console.warn('libarchive.js failed to load:', e);
+                this.libarchiveReady = false
             }
         },
         switchMode(mode) {
@@ -1246,7 +1266,8 @@
                 txt: 'fa-file-lines',
                 md: 'fa-file-lines',
                 csv: 'fa-file-csv',
-                sql: 'fa-database'
+                sql: 'fa-database',
+                iso: 'fa-compact-disc'
             };
             return m[ext] || 'fa-file'
         },
@@ -1265,7 +1286,7 @@
             t.className = 'toast ' + type + ' show';
             t.querySelector('i').className = 'fas fa-' + (type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'exclamation-triangle');
             t.querySelector('span').textContent = msg;
-            setTimeout(() => t.classList.remove('show'), 3000)
+            setTimeout(() => t.classList.remove('show'), 4000)
         },
         setProgress(id, pct, text, detail = '') {
             const c = document.getElementById(id);
@@ -1274,6 +1295,11 @@
             const spans = c.querySelectorAll('.progress-text span');
             if (text) spans[0].textContent = text;
             spans[1].textContent = detail
+        },
+        showLoading(show, text = 'Extracting archive...') {
+            const el = document.getElementById('extract-loading');
+            el.classList.toggle('hidden', !show);
+            el.querySelector('span').textContent = text
         },
         confirmAction(title, message, callback) {
             document.getElementById('confirm-title').textContent = title;
@@ -1299,16 +1325,24 @@
             this.searchQuery = '';
             this.lastSelectedIdx = null;
             document.getElementById('search-input').value = '';
+            document.getElementById('extract-results').classList.remove('hidden');
+            this.showLoading(true);
             try {
                 if (ext === 'zip') await this.loadZip(file);
                 else if (ext === 'tar' || name.endsWith('.tar.gz') || name.endsWith('.tgz')) await this.loadTar(file);
-                else if (this.Archive && ['7z', 'rar', 'iso'].includes(ext)) await this.loadLibarchiveFile(file);
-                else throw new Error('Unsupported format: .' + ext);
+                else if (['7z', 'rar', 'iso'].includes(ext)) {
+                    if (!this.libarchiveReady) {
+                        throw new Error('libarchive.js not available. Try refreshing the page.')
+                    }
+                    await this.loadLibarchiveFile(file)
+                } else throw new Error('Unsupported format: .' + ext);
+                this.showLoading(false);
                 this.renderArchiveContents();
-                document.getElementById('extract-results').classList.remove('hidden');
                 this.showToast(`Loaded ${this.archiveFiles.length} files from ${this.currentArchive.type}`)
             } catch (e) {
                 console.error(e);
+                this.showLoading(false);
+                this.closeArchive();
                 this.showToast('Failed to load: ' + e.message, 'error')
             }
         },
@@ -1351,10 +1385,16 @@
         async loadLibarchiveFile(file) {
             const archive = await this.Archive.open(file);
             const entries = await archive.getFilesArray();
-            for (const e of entries) {
-                const f = await e.file.extract();
-                const data = new Uint8Array(await f.arrayBuffer());
-                this.archiveFiles.push({path: e.file.path, size: data.length, data})
+            for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                if (e.file.size === 0) continue;
+                try {
+                    const extracted = await e.file.extract();
+                    const data = new Uint8Array(await extracted.arrayBuffer());
+                    this.archiveFiles.push({path: e.file.path, size: data.length, data})
+                } catch (err) {
+                    console.warn('Failed to extract:', e.file.path, err)
+                }
             }
             await archive.close()
         },
