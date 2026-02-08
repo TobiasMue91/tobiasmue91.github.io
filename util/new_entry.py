@@ -34,11 +34,33 @@ def get_latest_git_added_file(directory, base_dir):
         return None
 
 def get_latest_git_added_file_any(base_dir):
+    latest_files = {}
+
     for directory in ["tools", "games"]:
-        latest = get_latest_git_added_file(directory, base_dir)
-        if latest:
-            return latest, "tool" if directory == "tools" else "game"
-    return None, None
+        try:
+            os.chdir(base_dir)
+            result = subprocess.run(
+                ["git", "log", "--diff-filter=A", "--name-only", "--pretty=format:%ct", directory],
+                capture_output=True, text=True, check=True
+            )
+            lines = [line.strip() for line in result.stdout.split('\n') if line.strip()]
+
+            # Lines alternate: timestamp, filename, timestamp, filename...
+            for i in range(0, len(lines), 2):
+                if i + 1 < len(lines):
+                    timestamp = int(lines[i])
+                    filename = lines[i + 1]
+                    latest_files[filename] = (timestamp, "tool" if directory == "tools" else "game")
+                    break  # Get only the most recent from this directory
+        except (subprocess.CalledProcessError, ValueError):
+            continue
+
+    if not latest_files:
+        return None, None
+
+    # Find the file with the most recent timestamp
+    latest_file = max(latest_files.items(), key=lambda x: x[1][0])
+    return latest_file[0], latest_file[1][1]
 
 def parse_html_file(file_path):
     title = None
