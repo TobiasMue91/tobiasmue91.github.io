@@ -3,22 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <meta name="description" content="Compress and trim videos directly in your browser. No uploads, no servers — 100% local processing with adjustable quality, resolution, format, and audio settings.">
-    <meta name="keywords" content="video compressor, compress video online, browser video compression, trim video, reduce video size, MP4 compressor, WebM converter, local video compression, no upload video compressor, free video compressor">
+    <meta name="description"
+          content="Compress and trim videos directly in your browser. No uploads, no servers — 100% local processing with adjustable quality, resolution, format, and audio settings.">
+    <meta name="keywords"
+          content="video compressor, compress video online, browser video compression, trim video, reduce video size, MP4 compressor, WebM converter, local video compression, no upload video compressor, free video compressor">
     <meta name="author" content="Claude Opus 4.6 prompted by Tobias Müller">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://www.gptgames.dev/tools/video_compressor.html">
     <meta property="og:type" content="website">
     <meta property="og:title" content="Video Compressor — Compress & Trim Videos in Your Browser">
-    <meta property="og:description" content="Compress and trim videos directly in your browser. No uploads, no servers — 100% local processing with adjustable quality, resolution, format, and audio settings.">
+    <meta property="og:description"
+          content="Compress and trim videos directly in your browser. No uploads, no servers — 100% local processing with adjustable quality, resolution, format, and audio settings.">
     <meta property="og:url" content="https://www.gptgames.dev/tools/video_compressor.html">
     <meta property="og:image" content="https://www.gptgames.dev/screenshots/screenshot_253.webp">
     <meta property="og:site_name" content="GPT Games">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Video Compressor — Compress & Trim Videos in Your Browser">
-    <meta name="twitter:description" content="Compress and trim videos directly in your browser. No uploads, no servers — 100% local processing with adjustable quality, resolution, format, and audio settings.">
+    <meta name="twitter:description"
+          content="Compress and trim videos directly in your browser. No uploads, no servers — 100% local processing with adjustable quality, resolution, format, and audio settings.">
     <meta name="twitter:image" content="https://www.gptgames.dev/screenshots/screenshot_253.webp">
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Video Compressor","url":"https://www.gptgames.dev/tools/video_compressor.html","description":"Compress and trim videos directly in your browser with no server uploads. Adjust quality, resolution, format, and audio settings.","applicationCategory":"MultimediaApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"image":"https://www.gptgames.dev/screenshots/screenshot_253.webp","author":{"@type":"Person","name":"Tobias Müller"}}</script>
+    <script type="application/ld+json">{
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Video Compressor",
+        "url": "https://www.gptgames.dev/tools/video_compressor.html",
+        "description": "Compress and trim videos directly in your browser with no server uploads. Adjust quality, resolution, format, and audio settings.",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Any",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "image": "https://www.gptgames.dev/screenshots/screenshot_253.webp",
+        "author": {
+            "@type": "Person",
+            "name": "Tobias Müller"
+        }
+    }</script>
     <title>Video Compressor</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -737,299 +759,369 @@
         </div>
     </div>
 </div>
-<script type="module">
-    import {FFmpeg} from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/+esm';
-    import {fetchFile,toBlobURL} from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/+esm';
 
-    const $ = s => document.querySelector(s);
-    const dropZone = $('#dropZone'), fileInput = $('#fileInput'), uploadCard = $('#uploadCard'),
-        editorCard = $('#editorCard'), resultCard = $('#resultCard'), preview = $('#preview'),
-        compressBtn = $('#compressBtn'), progressSection = $('#progressSection'), progressFill = $('#progressFill'),
-        progressLabel = $('#progressLabel'), progressPct = $('#progressPct'), qualitySlider = $('#quality'),
-        qualityLabel = $('#qualityLabel');
-    let ffmpeg = null, sourceFile = null, outputBlob = null, compressing = false, objUrls = [];
+<!--
+  FFmpeg loading strategy (proven approach from github.com/ffmpegwasm/ffmpeg.wasm/discussions/580):
 
-    function fmt(b) {
-        if (b < 1024) return b + ' B';
-        if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
-        if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
-        return (b / 1073741824).toFixed(2) + ' GB'
-    }
+  The UMD build of @ffmpeg/ffmpeg contains a webpack-bundled worker chunk (814.ffmpeg.js).
+  When loaded from a CDN, the browser constructs the worker URL incorrectly (wrong origin/path).
 
-    function fmtTime(s) {
-        const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = Math.floor(s % 60);
-        return [h, m, sec].map(v => String(v).padStart(2, '0')).join(':')
-    }
+  Fix: fetch ffmpeg.js as text, patch the webpack worker URL construction to accept a
+  configurable blob URL, then load everything as same-origin blob URLs.
+-->
+<script>
+    (async function () {
+        "use strict";
 
-    function fmtDur(s) {
-        if (s < 60) return Math.round(s) + 's';
-        if (s < 3600) {
-            const m = Math.floor(s / 60), sc = Math.round(s % 60);
-            return m + 'm ' + sc + 's'
+        // ── CDN base URLs ───────────────────────────────────────────────────
+        const baseURLFFMPEG = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd';
+        const baseURLCore = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
+
+        // ── Helpers to convert CDN resources to same-origin blob URLs ────────
+        const toBlobURL = async (url, mimeType) => {
+            const resp = await fetch(url);
+            const body = await resp.blob();
+            return URL.createObjectURL(new Blob([body], {type: mimeType}));
+        };
+
+        const toBlobURLPatched = async (url, mimeType, patcher) => {
+            const resp = await fetch(url);
+            let body = await resp.text();
+            if (patcher) body = patcher(body);
+            return URL.createObjectURL(new Blob([body], {type: mimeType}));
+        };
+
+        const fetchFile = async (file) => {
+            if (file instanceof File || file instanceof Blob) {
+                const buf = await file.arrayBuffer();
+                return new Uint8Array(buf);
+            }
+            const resp = await fetch(file);
+            const buf = await resp.arrayBuffer();
+            return new Uint8Array(buf);
+        };
+
+        // ── DOM refs ────────────────────────────────────────────────────────
+        const $ = s => document.querySelector(s);
+        const dropZone = $('#dropZone'), fileInput = $('#fileInput'), uploadCard = $('#uploadCard'),
+            editorCard = $('#editorCard'), resultCard = $('#resultCard'), preview = $('#preview'),
+            compressBtn = $('#compressBtn'), progressSection = $('#progressSection'),
+            progressFill = $('#progressFill'), progressLabel = $('#progressLabel'),
+            progressPct = $('#progressPct'), qualitySlider = $('#quality'),
+            qualityLabel = $('#qualityLabel');
+
+        let ffmpeg = null, sourceFile = null, outputBlob = null, compressing = false, objUrls = [];
+
+        // ── Formatting helpers ──────────────────────────────────────────────
+        function fmt(b) {
+            if (b < 1024) return b + ' B';
+            if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+            if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+            return (b / 1073741824).toFixed(2) + ' GB';
         }
-        const h = Math.floor(s / 3600), m = Math.round(s % 3600 / 60);
-        return h + 'h ' + m + 'm'
-    }
 
-    function parseTc(str) {
-        if (!str || !str.trim()) return null;
-        const p = str.trim().split(':').map(Number);
-        if (p.some(isNaN)) return null;
-        if (p.length === 3) return p[0] * 3600 + p[1] * 60 + p[2];
-        if (p.length === 2) return p[0] * 60 + p[1];
-        if (p.length === 1) return p[0];
-        return null
-    }
-
-    function show(el) {
-        el.classList.remove('hidden');
-        el.classList.remove('reveal');
-        void el.offsetWidth;
-        el.classList.add('reveal')
-    }
-
-    function hide(el) {
-        el.classList.add('hidden');
-        el.classList.remove('reveal')
-    }
-
-    function makeUrl(blob) {
-        const u = URL.createObjectURL(blob);
-        objUrls.push(u);
-        return u
-    }
-
-    function cleanUrls() {
-        objUrls.forEach(u => URL.revokeObjectURL(u));
-        objUrls = []
-    }
-
-    const qLabels = crf => {
-        if (crf <= 19) return 'High';
-        if (crf <= 22) return 'Good';
-        if (crf <= 25) return 'Medium';
-        if (crf <= 28) return 'Low';
-        return 'Very Low'
-    };
-    qualitySlider.addEventListener('input', () => {
-        const v = +qualitySlider.value;
-        qualityLabel.textContent = qLabels(v) + ' · ' + v
-    });
-    dropZone.addEventListener('click', () => fileInput.click());
-    dropZone.addEventListener('dragover', e => {
-        e.preventDefault();
-        dropZone.classList.add('dragover')
-    });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-    dropZone.addEventListener('drop', e => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0])
-    });
-    fileInput.addEventListener('change', e => {
-        if (e.target.files.length) handleFile(e.target.files[0])
-    });
-
-    function handleFile(file) {
-        if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|webm|mov|avi|mkv|m4v|flv|wmv)$/i)) {
-            alert('Please select a video file.');
-            return
+        function fmtTime(s) {
+            const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = Math.floor(s % 60);
+            return [h, m, sec].map(v => String(v).padStart(2, '0')).join(':');
         }
-        if (file.size > 2 * 1073741824) {
-            alert('File too large. Maximum is 2 GB.');
-            return
-        }
-        cleanUrls();
-        sourceFile = file;
-        $('#fileName').textContent = file.name;
-        $('#fileMeta').textContent = `${fmt(file.size)} · ${file.type || 'video'}`;
-        const url = makeUrl(file);
-        preview.src = url;
-        $('#trimStart').value = '';
-        $('#trimEnd').value = '';
-        hide(uploadCard);
-        show(editorCard);
-        hide(resultCard);
-        hide(progressSection);
-        compressBtn.disabled = false;
-        compressBtn.innerHTML = 'Compress Video';
-        const sr = $('#statsRow');
-        hide(sr);
-        preview.addEventListener('loadedmetadata', function onMeta() {
-            preview.removeEventListener('loadedmetadata', onMeta);
-            const dur = preview.duration, w = preview.videoWidth, h = preview.videoHeight;
-            $('#statDur').textContent = isFinite(dur) ? fmtDur(dur) : '—';
-            $('#statRes').textContent = (w && h) ? w + '×' + h : '—';
-            $('#statBit').textContent = (isFinite(dur) && dur > 0) ? ((file.size * 8 / dur / 1000).toFixed(0) + ' kbps') : '—';
-            show(sr);
-        }, {once: true});
-    }
 
-    $('#removeBtn').addEventListener('click', () => {
-        sourceFile = null;
-        preview.src = '';
-        cleanUrls();
-        hide(editorCard);
-        show(uploadCard);
-        fileInput.value = ''
-    });
-    $('#setStart').addEventListener('click', () => {
-        if (preview.currentTime >= 0) $('#trimStart').value = fmtTime(preview.currentTime)
-    });
-    $('#setEnd').addEventListener('click', () => {
-        if (preview.currentTime >= 0) $('#trimEnd').value = fmtTime(preview.currentTime)
-    });
-    window.addEventListener('beforeunload', e => {
-        if (compressing) {
+        function fmtDur(s) {
+            if (s < 60) return Math.round(s) + 's';
+            if (s < 3600) return Math.floor(s / 60) + 'm ' + Math.round(s % 60) + 's';
+            return Math.floor(s / 3600) + 'h ' + Math.round(s % 3600 / 60) + 'm';
+        }
+
+        function parseTc(str) {
+            if (!str || !str.trim()) return null;
+            const p = str.trim().split(':').map(Number);
+            if (p.some(isNaN)) return null;
+            if (p.length === 3) return p[0] * 3600 + p[1] * 60 + p[2];
+            if (p.length === 2) return p[0] * 60 + p[1];
+            if (p.length === 1) return p[0];
+            return null;
+        }
+
+        function show(el) {
+            el.classList.remove('hidden');
+            el.classList.remove('reveal');
+            void el.offsetWidth;
+            el.classList.add('reveal');
+        }
+
+        function hide(el) {
+            el.classList.add('hidden');
+            el.classList.remove('reveal');
+        }
+
+        function makeUrl(blob) {
+            const u = URL.createObjectURL(blob);
+            objUrls.push(u);
+            return u;
+        }
+
+        function cleanUrls() {
+            objUrls.forEach(u => URL.revokeObjectURL(u));
+            objUrls = [];
+        }
+
+        function setProgress(pct, label) {
+            progressFill.style.width = pct + '%';
+            progressPct.textContent = pct + '%';
+            if (label) progressLabel.textContent = label;
+        }
+
+        // ── Quality slider ──────────────────────────────────────────────────
+        const qLabels = crf => {
+            if (crf <= 19) return 'High';
+            if (crf <= 22) return 'Good';
+            if (crf <= 25) return 'Medium';
+            if (crf <= 28) return 'Low';
+            return 'Very Low';
+        };
+        qualitySlider.addEventListener('input', () => {
+            const v = +qualitySlider.value;
+            qualityLabel.textContent = qLabels(v) + ' · ' + v;
+        });
+
+        // ── Upload / drop ───────────────────────────────────────────────────
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e => {
             e.preventDefault();
-            e.returnValue = ''
-        }
-    });
-
-    async function loadFFmpeg() {
-        if (ffmpeg && ffmpeg.loaded) return;
-        ffmpeg = new FFmpeg();
-        ffmpeg.on('log', ({message}) => {
-            const m = message.match(/time=(\d+):(\d+):(\d+\.\d+)/);
-            if (m) {
-                const secs = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseFloat(m[3]);
-                if (window._duration && window._duration > 0) {
-                    const pct = Math.min(99, Math.round(secs / window._duration * 100));
-                    setProgress(pct, 'Compressing…')
-                }
-            }
+            dropZone.classList.add('dragover');
         });
-        ffmpeg.on('progress', ({progress}) => {
-            if (progress > 0 && progress <= 1) setProgress(Math.min(99, Math.round(progress * 100)), 'Compressing…')
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
         });
-        setProgress(0, 'Loading FFmpeg engine…');
-        const baseURL='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
-        const classWorkerURL=await toBlobURL('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/worker.js','text/javascript');
-        await ffmpeg.load({
-            coreURL:await toBlobURL(`${baseURL}/ffmpeg-core.js`,'text/javascript'),
-            wasmURL:await toBlobURL(`${baseURL}/ffmpeg-core.wasm`,'application/wasm'),
-            classWorkerURL,
+        fileInput.addEventListener('change', e => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
         });
-    }
 
-    function setProgress(pct, label) {
-        progressFill.style.width = pct + '%';
-        progressPct.textContent = pct + '%';
-        if (label) progressLabel.textContent = label
-    }
-
-    compressBtn.addEventListener('click', async () => {
-        if (!sourceFile) return;
-        const trimS = parseTc($('#trimStart').value), trimE = parseTc($('#trimEnd').value);
-        if (trimS !== null && trimE !== null && trimS >= trimE) {
-            alert('Trim start must be before end.');
-            return
-        }
-        compressBtn.disabled = true;
-        compressBtn.innerHTML = '<span class="spinner"></span> Compressing…';
-        show(progressSection);
-        setProgress(0, 'Loading FFmpeg engine…');
-        compressing = true;
-        const t0 = performance.now();
-        try {
-            await loadFFmpeg();
-            setProgress(5, 'Reading file…');
-            const ext = sourceFile.name.lastIndexOf('.') >= 0 ? sourceFile.name.substring(sourceFile.name.lastIndexOf('.')) : '.mp4';
-            const inputName = 'input' + ext;
-            await ffmpeg.writeFile(inputName, await fetchFile(sourceFile));
-            window._duration = 0;
-            try {
-                const v = document.createElement('video');
-                v.preload = 'metadata';
-                const p = new Promise(r => {
-                    v.onloadedmetadata = () => {
-                        window._duration = v.duration;
-                        r()
-                    };
-                    v.onerror = r
-                });
-                v.src = makeUrl(sourceFile);
-                await p
-            } catch (e) {
+        function handleFile(file) {
+            if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|webm|mov|avi|mkv|m4v|flv|wmv)$/i)) {
+                alert('Please select a video file.');
+                return;
             }
-            if (trimS !== null && trimE !== null) window._duration = trimE - trimS;
-            else if (trimS !== null && window._duration > trimS) window._duration -= trimS;
-            else if (trimE !== null) window._duration = trimE;
-            const fmtVal = $('#format').value, crf = $('#quality').value, res = $('#resolution').value,
-                preset = $('#speed').value, audioMode = $('#audio').value;
-            const outName = 'output.' + (fmtVal === 'webm' ? 'webm' : 'mp4');
-            let args = ['-i', inputName];
-            if (trimS !== null) args.push('-ss', String(trimS));
-            if (trimE !== null) args.push('-to', String(trimE));
-            if (fmtVal === 'webm') {
-                args.push('-c:v', 'libvpx', '-crf', crf, '-b:v', '0');
-                if (audioMode === 'remove') args.push('-an'); else if (audioMode === 'reduce') args.push('-c:a', 'libvorbis', '-q:a', '1'); else args.push('-c:a', 'libvorbis', '-q:a', '4')
-            } else {
-                args.push('-c:v', 'libx264', '-crf', crf, '-preset', preset);
-                if (audioMode === 'remove') args.push('-an'); else if (audioMode === 'reduce') args.push('-c:a', 'aac', '-b:a', '64k'); else args.push('-c:a', 'aac', '-b:a', '128k');
-                args.push('-movflags', '+faststart')
+            if (file.size > 2 * 1073741824) {
+                alert('File too large. Maximum is 2 GB.');
+                return;
             }
-            if (res !== 'original') args.push('-vf', 'scale=' + res + ':-2');
-            args.push('-y', outName);
-            setProgress(10, 'Compressing…');
-            await ffmpeg.exec(args);
-            setProgress(100, 'Done!');
-            const data = await ffmpeg.readFile(outName);
-            const mime = fmtVal === 'webm' ? 'video/webm' : 'video/mp4';
-            outputBlob = new Blob([data.buffer], {type: mime});
-            try {
-                await ffmpeg.deleteFile(inputName);
-                await ffmpeg.deleteFile(outName)
-            } catch (e) {
-            }
-            const elapsed = (performance.now() - t0) / 1000;
-            showResult(sourceFile.size, outputBlob.size, elapsed);
-        } catch (err) {
-            console.error(err);
-            alert('Compression failed: ' + err.message);
+            cleanUrls();
+            sourceFile = file;
+            $('#fileName').textContent = file.name;
+            $('#fileMeta').textContent = `${fmt(file.size)} · ${file.type || 'video'}`;
+            preview.src = makeUrl(file);
+            $('#trimStart').value = '';
+            $('#trimEnd').value = '';
+            hide(uploadCard);
+            show(editorCard);
+            hide(resultCard);
+            hide(progressSection);
             compressBtn.disabled = false;
             compressBtn.innerHTML = 'Compress Video';
-            hide(progressSection)
-        } finally {
-            compressing = false
+            const sr = $('#statsRow');
+            hide(sr);
+            preview.addEventListener('loadedmetadata', function onMeta() {
+                preview.removeEventListener('loadedmetadata', onMeta);
+                const dur = preview.duration, w = preview.videoWidth, h = preview.videoHeight;
+                $('#statDur').textContent = isFinite(dur) ? fmtDur(dur) : '—';
+                $('#statRes').textContent = (w && h) ? w + '×' + h : '—';
+                $('#statBit').textContent = (isFinite(dur) && dur > 0) ? ((file.size * 8 / dur / 1000).toFixed(0) + ' kbps') : '—';
+                show(sr);
+            }, {once: true});
         }
-    });
 
-    function showResult(origBytes, compBytes, elapsed) {
-        cleanUrls();
-        hide(editorCard);
-        show(resultCard);
-        $('#origSize').textContent = fmt(origBytes);
-        $('#compSize').textContent = fmt(compBytes);
-        const saved = Math.round((1 - compBytes / origBytes) * 100);
-        const badge = $('#savingsBadge');
-        if (saved > 0) badge.innerHTML = `<span class="badge badge-success">${saved}% smaller</span>`;
-        else if (saved === 0) badge.innerHTML = `<span class="badge badge-neutral">Same size</span>`;
-        else badge.innerHTML = `<span class="badge badge-danger">${Math.abs(saved)}% larger</span>`;
-        $('#resultMeta').textContent = 'Compressed in ' + fmtDur(elapsed);
-        const url = makeUrl(outputBlob);
-        $('#resultPreview').src = url;
-        const baseName = sourceFile.name.replace(/\.[^.]+$/, '');
-        const outExt = $('#format').value === 'webm' ? '.webm' : '.mp4';
-        $('#downloadBtn').onclick = () => {
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = baseName + '_compressed' + outExt;
-            a.click()
-        };
-    }
+        $('#removeBtn').addEventListener('click', () => {
+            sourceFile = null;
+            preview.src = '';
+            cleanUrls();
+            hide(editorCard);
+            show(uploadCard);
+            fileInput.value = '';
+        });
+        $('#setStart').addEventListener('click', () => {
+            if (preview.currentTime >= 0) $('#trimStart').value = fmtTime(preview.currentTime);
+        });
+        $('#setEnd').addEventListener('click', () => {
+            if (preview.currentTime >= 0) $('#trimEnd').value = fmtTime(preview.currentTime);
+        });
+        window.addEventListener('beforeunload', e => {
+            if (compressing) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
 
-    $('#newBtn').addEventListener('click', () => {
-        sourceFile = null;
-        outputBlob = null;
-        preview.src = '';
-        $('#resultPreview').src = '';
-        fileInput.value = '';
-        cleanUrls();
-        hide(resultCard);
-        hide(editorCard);
-        show(uploadCard)
-    });
+        // ── FFmpeg loading ──────────────────────────────────────────────────
+        // Proven approach from github.com/ffmpegwasm/ffmpeg.wasm/discussions/580
+        // and github.com/ffmpegwasm/ffmpeg.wasm/issues/694
+        //
+        // The UMD build's ffmpeg.js uses webpack chunking to create a Worker via:
+        //   new Worker(new URL(e.p + e.u(814), e.b), { type: void 0 })
+        // This fails when loaded from a CDN (cross-origin worker restriction).
+        //
+        // Fix: patch that expression to use a configurable property (r.workerLoadURL)
+        // that we set to a blob URL of the 814.ffmpeg.js worker chunk.
+
+        async function loadFFmpeg() {
+            if (ffmpeg && ffmpeg.loaded) return;
+
+            setProgress(0, 'Loading FFmpeg engine…');
+
+            // Step 1: Load ffmpeg.js with on-the-fly patch for the worker URL
+            const ffmpegBlobURL = await toBlobURLPatched(
+                `${baseURLFFMPEG}/ffmpeg.js`,
+                'text/javascript',
+                (js) => js.replace('new URL(e.p+e.u(814),e.b)', 'r.workerLoadURL')
+            );
+            await import(/* webpackIgnore: true */ ffmpegBlobURL);
+
+            // Step 2: Create FFmpeg instance (now available as global FFmpegWASM)
+            ffmpeg = new FFmpegWASM.FFmpeg();
+            ffmpeg.on('log', ({message}) => {
+                const m = message.match(/time=(\d+):(\d+):(\d+\.\d+)/);
+                if (m) {
+                    const secs = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseFloat(m[3]);
+                    if (window._duration && window._duration > 0) {
+                        setProgress(Math.min(99, Math.round(secs / window._duration * 100)), 'Compressing…');
+                    }
+                }
+            });
+            ffmpeg.on('progress', ({progress}) => {
+                if (progress > 0 && progress <= 1)
+                    setProgress(Math.min(99, Math.round(progress * 100)), 'Compressing…');
+            });
+
+            // Step 3: Load core with blob URLs — pass workerLoadURL for the 814 chunk
+            await ffmpeg.load({
+                workerLoadURL: await toBlobURL(`${baseURLFFMPEG}/814.ffmpeg.js`, 'text/javascript'),
+                coreURL: await toBlobURL(`${baseURLCore}/ffmpeg-core.js`, 'text/javascript'),
+                wasmURL: await toBlobURL(`${baseURLCore}/ffmpeg-core.wasm`, 'application/wasm'),
+            });
+        }
+
+        // ── Compress ────────────────────────────────────────────────────────
+        compressBtn.addEventListener('click', async () => {
+            if (!sourceFile) return;
+            const trimS = parseTc($('#trimStart').value), trimE = parseTc($('#trimEnd').value);
+            if (trimS !== null && trimE !== null && trimS >= trimE) {
+                alert('Trim start must be before end.');
+                return;
+            }
+            compressBtn.disabled = true;
+            compressBtn.innerHTML = '<span class="spinner"></span> Compressing…';
+            show(progressSection);
+            setProgress(0, 'Loading FFmpeg engine…');
+            compressing = true;
+            const t0 = performance.now();
+            try {
+                await loadFFmpeg();
+                setProgress(5, 'Reading file…');
+                const ext = sourceFile.name.lastIndexOf('.') >= 0 ? sourceFile.name.substring(sourceFile.name.lastIndexOf('.')) : '.mp4';
+                const inputName = 'input' + ext;
+                await ffmpeg.writeFile(inputName, await fetchFile(sourceFile));
+
+                window._duration = 0;
+                try {
+                    const v = document.createElement('video');
+                    v.preload = 'metadata';
+                    const p = new Promise(r => {
+                        v.onloadedmetadata = () => {
+                            window._duration = v.duration;
+                            r();
+                        };
+                        v.onerror = r;
+                    });
+                    v.src = makeUrl(sourceFile);
+                    await p;
+                } catch (e) {
+                }
+                if (trimS !== null && trimE !== null) window._duration = trimE - trimS;
+                else if (trimS !== null && window._duration > trimS) window._duration -= trimS;
+                else if (trimE !== null) window._duration = trimE;
+
+                const fmtVal = $('#format').value, crf = $('#quality').value, res = $('#resolution').value,
+                    preset = $('#speed').value, audioMode = $('#audio').value;
+                const outName = 'output.' + (fmtVal === 'webm' ? 'webm' : 'mp4');
+                let args = ['-i', inputName];
+                if (trimS !== null) args.push('-ss', String(trimS));
+                if (trimE !== null) args.push('-to', String(trimE));
+                if (fmtVal === 'webm') {
+                    args.push('-c:v', 'libvpx', '-crf', crf, '-b:v', '0');
+                    if (audioMode === 'remove') args.push('-an');
+                    else if (audioMode === 'reduce') args.push('-c:a', 'libvorbis', '-q:a', '1');
+                    else args.push('-c:a', 'libvorbis', '-q:a', '4');
+                } else {
+                    args.push('-c:v', 'libx264', '-crf', crf, '-preset', preset);
+                    if (audioMode === 'remove') args.push('-an');
+                    else if (audioMode === 'reduce') args.push('-c:a', 'aac', '-b:a', '64k');
+                    else args.push('-c:a', 'aac', '-b:a', '128k');
+                    args.push('-movflags', '+faststart');
+                }
+                if (res !== 'original') args.push('-vf', 'scale=' + res + ':-2');
+                args.push('-y', outName);
+                setProgress(10, 'Compressing…');
+                await ffmpeg.exec(args);
+                setProgress(100, 'Done!');
+                const data = await ffmpeg.readFile(outName);
+                const mime = fmtVal === 'webm' ? 'video/webm' : 'video/mp4';
+                outputBlob = new Blob([data.buffer], {type: mime});
+                try {
+                    await ffmpeg.deleteFile(inputName);
+                    await ffmpeg.deleteFile(outName);
+                } catch (e) {
+                }
+                showResult(sourceFile.size, outputBlob.size, (performance.now() - t0) / 1000);
+            } catch (err) {
+                console.error(err);
+                alert('Compression failed: ' + err.message);
+                compressBtn.disabled = false;
+                compressBtn.innerHTML = 'Compress Video';
+                hide(progressSection);
+            } finally {
+                compressing = false;
+            }
+        });
+
+        // ── Result ──────────────────────────────────────────────────────────
+        function showResult(origBytes, compBytes, elapsed) {
+            cleanUrls();
+            hide(editorCard);
+            show(resultCard);
+            $('#origSize').textContent = fmt(origBytes);
+            $('#compSize').textContent = fmt(compBytes);
+            const saved = Math.round((1 - compBytes / origBytes) * 100);
+            const badge = $('#savingsBadge');
+            if (saved > 0) badge.innerHTML = `<span class="badge badge-success">${saved}% smaller</span>`;
+            else if (saved === 0) badge.innerHTML = `<span class="badge badge-neutral">Same size</span>`;
+            else badge.innerHTML = `<span class="badge badge-danger">${Math.abs(saved)}% larger</span>`;
+            $('#resultMeta').textContent = 'Compressed in ' + fmtDur(elapsed);
+            const url = makeUrl(outputBlob);
+            $('#resultPreview').src = url;
+            const baseName = sourceFile.name.replace(/\.[^.]+$/, '');
+            const outExt = $('#format').value === 'webm' ? '.webm' : '.mp4';
+            $('#downloadBtn').onclick = () => {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = baseName + '_compressed' + outExt;
+                a.click();
+            };
+        }
+
+        $('#newBtn').addEventListener('click', () => {
+            sourceFile = null;
+            outputBlob = null;
+            preview.src = '';
+            $('#resultPreview').src = '';
+            fileInput.value = '';
+            cleanUrls();
+            hide(resultCard);
+            hide(editorCard);
+            show(uploadCard);
+        });
+    })();
 </script>
 <script src="../logo.js"></script>
 </body>
