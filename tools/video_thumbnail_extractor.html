@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Video Thumbnail Extractor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1c25;
+            --surface2: #242631;
+            --surface3: #2e3042;
+            --border: #353849;
+            --text: #e8e9ed;
+            --text2: #9ca0b0;
+            --accent: #4f7df5;
+            --accent-hover: #6b91f7;
+            --danger: #e54d4d;
+            --success: #3dbd6f;
+            --radius: 10px;
+            --radius-sm: 6px
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.5
+        }
+
+        button {
+            cursor: pointer;
+            font-family: inherit;
+            border: none;
+            outline: none
+        }
+
+        input, select {
+            font-family: inherit;
+            outline: none
+        }
+
+        .app {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px 20px 60px
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            gap: 12px
+        }
+
+        header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -.3px;
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        header h1 svg {
+            color: var(--accent)
+        }
+
+        .badge {
+            font-size: 11px;
+            background: var(--surface2);
+            color: var(--text2);
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-weight: 500
+        }
+
+        .shortcuts {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap
+        }
+
+        .shortcuts kbd {
+            font-size: 11px;
+            background: var(--surface2);
+            color: var(--text2);
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-family: inherit;
+            border: 1px solid var(--border)
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 52px 24px;
+            text-align: center;
+            transition: border-color .2s, background .2s;
+            cursor: pointer;
+            position: relative
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(79, 125, 245, .06)
+        }
+
+        .drop-zone input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer
+        }
+
+        .drop-zone h3 {
+            font-size: 16px;
+            margin-bottom: 6px;
+            font-weight: 600
+        }
+
+        .drop-zone p {
+            color: var(--text2);
+            font-size: 13px
+        }
+
+        .drop-zone svg {
+            color: var(--text2);
+            margin-bottom: 12px
+        }
+
+        .workspace {
+            display: none;
+            margin-top: 24px
+        }
+
+        .workspace.active {
+            display: block
+        }
+
+        .video-section {
+            background: var(--surface);
+            border-radius: var(--radius);
+            overflow: hidden;
+            border: 1px solid var(--border)
+        }
+
+        .video-wrap {
+            position: relative;
+            background: #000;
+            aspect-ratio: 16/9;
+            max-height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .video-wrap video {
+            max-width: 100%;
+            max-height: 100%;
+            display: block
+        }
+
+        .video-controls {
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        .timeline-row {
+            position: relative;
+            height: 36px;
+            background: var(--surface2);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            cursor: pointer
+        }
+
+        .timeline-progress {
+            height: 100%;
+            background: var(--accent);
+            position: absolute;
+            left: 0;
+            top: 0;
+            pointer-events: none;
+            opacity: .25
+        }
+
+        .timeline-handle {
+            width: 3px;
+            height: 100%;
+            background: var(--accent);
+            position: absolute;
+            top: 0;
+            pointer-events: none;
+            z-index: 2
+        }
+
+        .timeline-markers {
+            position: absolute;
+            inset: 0;
+            pointer-events: none
+        }
+
+        .timeline-marker {
+            position: absolute;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            background: var(--success);
+            opacity: .7
+        }
+
+        .controls-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap
+        }
+
+        .controls-row .time {
+            font-size: 12px;
+            color: var(--text2);
+            font-variant-numeric: tabular-nums;
+            min-width: 100px
+        }
+
+        .btn {
+            padding: 7px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: background .15s, opacity .15s
+        }
+
+        .btn svg {
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover)
+        }
+
+        .btn-secondary {
+            background: var(--surface2);
+            color: var(--text)
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface3)
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #fff
+        }
+
+        .btn-danger:hover {
+            opacity: .85
+        }
+
+        .btn-icon {
+            padding: 7px 9px
+        }
+
+        .btn:disabled {
+            opacity: .4;
+            pointer-events: none
+        }
+
+        .spacer {
+            flex: 1
+        }
+
+        .settings-panel {
+            display: grid;
+            grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 16px;
+            border: 1px solid var(--border)
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px
+        }
+
+        .field label {
+            font-size: 12px;
+            color: var(--text2);
+            font-weight: 500
+        }
+
+        .field select, .field input[type=number], .field input[type=range] {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 7px 10px;
+            border-radius: var(--radius-sm);
+            font-size: 13px
+        }
+
+        .field input[type=range] {
+            padding: 0;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            border: none
+        }
+
+        .field input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer
+        }
+
+        .field input[type=range]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            border: none
+        }
+
+        .field .range-val {
+            font-size: 12px;
+            color: var(--text);
+            text-align: right
+        }
+
+        .gallery-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 28px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            gap: 10px
+        }
+
+        .gallery-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .gallery-header .count {
+            font-size: 12px;
+            color: var(--text2);
+            background: var(--surface2);
+            padding: 2px 8px;
+            border-radius: 20px
+        }
+
+        .gallery-actions {
+            display: flex;
+            gap: 8px
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+            gap: 12px
+        }
+
+        .thumb-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: border-color .15s;
+            position: relative
+        }
+
+        .thumb-card:hover {
+            border-color: var(--accent)
+        }
+
+        .thumb-card img {
+            width: 100%;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+            display: block;
+            cursor: pointer
+        }
+
+        .thumb-card .info {
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between
+        }
+
+        .thumb-card .timestamp {
+            font-size: 12px;
+            color: var(--text2);
+            font-variant-numeric: tabular-nums
+        }
+
+        .thumb-card .card-actions {
+            display: flex;
+            gap: 4px
+        }
+
+        .thumb-card .card-actions button {
+            background: none;
+            color: var(--text2);
+            padding: 4px;
+            border-radius: 4px;
+            transition: color .15s, background .15s;
+            display: flex
+        }
+
+        .thumb-card .card-actions button:hover {
+            color: var(--text);
+            background: var(--surface2)
+        }
+
+        .thumb-card .card-actions button svg {
+            width: 16px;
+            height: 16px
+        }
+
+        .thumb-card .badge-num {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(0, 0, 0, .7);
+            color: #fff;
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-weight: 500
+        }
+
+        .empty-gallery {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text2);
+            font-size: 14px
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .85);
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px
+        }
+
+        .modal-overlay.active {
+            display: flex
+        }
+
+        .modal-overlay img {
+            max-width: 95vw;
+            max-height: 90vh;
+            border-radius: var(--radius);
+            object-fit: contain
+        }
+
+        .modal-close {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 101;
+            background: var(--surface2);
+            color: var(--text);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface2);
+            color: var(--text);
+            padding: 10px 20px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            z-index: 200;
+            opacity: 0;
+            transition: opacity .2s;
+            pointer-events: none;
+            border: 1px solid var(--border)
+        }
+
+        .toast.show {
+            opacity: 1
+        }
+
+        .auto-extract-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap
+        }
+
+        .auto-extract-row input[type=number] {
+            width: 70px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 13px
+        }
+
+        .auto-extract-row span {
+            font-size: 13px;
+            color: var(--text2)
+        }
+
+        .progress-bar {
+            height: 3px;
+            background: var(--surface2);
+            border-radius: 2px;
+            overflow: hidden;
+            display: none
+        }
+
+        .progress-bar.active {
+            display: block
+        }
+
+        .progress-bar .fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width .1s
+        }
+
+        @media (max-width: 640px) {
+            .gallery {
+                grid-template-columns:repeat(auto-fill, minmax(160px, 1fr))
+            }
+
+            .video-wrap {
+                aspect-ratio: auto;
+                max-height: 260px
+            }
+
+            .shortcuts {
+                display: none
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <header>
+        <h1>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="2"/>
+                <polygon points="10,8 16,12 10,16"/>
+            </svg>
+            Thumbnail Extractor <span class="badge">v1.0</span></h1>
+        <div class="shortcuts"><kbd>Space</kbd> Play <kbd>←→</kbd> Seek <kbd>C</kbd> Capture <kbd>,.</kbd> Frame</div>
+    </header>
+    <div class="drop-zone" id="dropZone">
+        <input type="file" accept="video/*" id="fileInput">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <h3>Drop your video here</h3>
+        <p>or click to browse &middot; Supports MP4, WebM, MOV, AVI, MKV</p>
+    </div>
+    <div class="workspace" id="workspace">
+        <div class="video-section">
+            <div class="video-wrap">
+                <video id="video" preload="auto"></video>
+            </div>
+            <div class="video-controls">
+                <div class="timeline-row" id="timeline">
+                    <div class="timeline-progress" id="timelineProgress"></div>
+                    <div class="timeline-handle" id="timelineHandle"></div>
+                    <div class="timeline-markers" id="timelineMarkers"></div>
+                </div>
+                <div class="controls-row">
+                    <button class="btn btn-secondary btn-icon" id="btnPlay" title="Play/Pause">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="5,3 19,12 5,21"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-secondary btn-icon" id="btnPrevFrame" title="Previous frame (,)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2">
+                            <polyline points="15,18 9,12 15,6"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-secondary btn-icon" id="btnNextFrame" title="Next frame (.)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2">
+                            <polyline points="9,6 15,12 9,18"/>
+                        </svg>
+                    </button>
+                    <span class="time" id="timeDisplay">0:00.000 / 0:00</span>
+                    <div class="spacer"></div>
+                    <button class="btn btn-primary" id="btnCapture">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+                            <circle cx="12" cy="13" r="4"/>
+                        </svg>
+                        Capture Frame
+                    </button>
+                    <button class="btn btn-secondary" id="btnNewVideo">New Video</button>
+                </div>
+            </div>
+        </div>
+        <div class="settings-panel">
+            <div class="field"><label>Format</label><select id="format">
+                <option value="png">PNG (Lossless)</option>
+                <option value="jpeg">JPEG (Smaller)</option>
+                <option value="webp">WebP (Modern)</option>
+            </select></div>
+            <div class="field"><label>Quality <span class="range-val" id="qualityVal">92%</span></label><input
+                    type="range" id="quality" min="10" max="100" value="92"></div>
+            <div class="field"><label>Resolution Scale</label><select id="scale">
+                <option value="1">Original (1×)</option>
+                <option value="0.75">75%</option>
+                <option value="0.5">50%</option>
+                <option value="0.25">25%</option>
+            </select></div>
+            <div class="field"><label>Auto Extract</label>
+                <div class="auto-extract-row"><span>Every</span><input type="number" id="interval" value="5" min="1"
+                                                                       max="999"><span>seconds</span>
+                    <button class="btn btn-secondary" id="btnAutoExtract">Extract All</button>
+                </div>
+            </div>
+        </div>
+        <div class="progress-bar" id="progressBar">
+            <div class="fill" id="progressFill"></div>
+        </div>
+        <div class="gallery-header" id="galleryHeader" style="display:none">
+            <h2>Extracted Frames <span class="count" id="frameCount">0</span></h2>
+            <div class="gallery-actions">
+                <button class="btn btn-primary" id="btnDownloadAll">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                         stroke-linejoin="round" width="15" height="15">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Download ZIP
+                </button>
+                <button class="btn btn-danger" id="btnClearAll">Clear All</button>
+            </div>
+        </div>
+        <div class="gallery" id="gallery"></div>
+        <div class="empty-gallery" id="emptyGallery" style="display:none">No frames captured yet. Use the Capture button
+            or auto-extract to get started.
+        </div>
+    </div>
+</div>
+<div class="modal-overlay" id="modal">
+    <button class="modal-close" id="modalClose">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+    </button>
+    <img id="modalImg"></div>
+<div class="toast" id="toast"></div>
+<script>
+    (() => {
+        const $ = s => document.querySelector(s);
+        const video = $('#video'), dropZone = $('#dropZone'), fileInput = $('#fileInput'), workspace = $('#workspace');
+        const timeline = $('#timeline'), timelineProgress = $('#timelineProgress'),
+            timelineHandle = $('#timelineHandle'), timelineMarkers = $('#timelineMarkers');
+        const btnPlay = $('#btnPlay'), btnCapture = $('#btnCapture'), btnNewVideo = $('#btnNewVideo');
+        const btnPrevFrame = $('#btnPrevFrame'), btnNextFrame = $('#btnNextFrame'), timeDisplay = $('#timeDisplay');
+        const formatSel = $('#format'), qualitySlider = $('#quality'), qualityVal = $('#qualityVal'),
+            scaleSel = $('#scale');
+        const intervalInput = $('#interval'), btnAutoExtract = $('#btnAutoExtract');
+        const gallery = $('#gallery'), galleryHeader = $('#galleryHeader'), frameCount = $('#frameCount'),
+            emptyGallery = $('#emptyGallery');
+        const btnDownloadAll = $('#btnDownloadAll'), btnClearAll = $('#btnClearAll');
+        const progressBar = $('#progressBar'), progressFill = $('#progressFill');
+        const modal = $('#modal'), modalImg = $('#modalImg'), modalClose = $('#modalClose');
+        const toast = $('#toast');
+        let frames = [], objectURL = null, isPlaying = false, isSeeking = false;
+        const FRAME_STEP = 1 / 30;
+
+        function showToast(msg, dur = 2000) {
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), dur)
+        }
+
+        function formatTime(t, ms = false) {
+            const m = Math.floor(t / 60);
+            const s = Math.floor(t % 60);
+            if (ms) {
+                const mil = Math.floor((t % 1) * 1000);
+                return `${m}:${String(s).padStart(2, '0')}.${String(mil).padStart(3, '0')}`
+            }
+            return `${m}:${String(s).padStart(2, '0')}`
+        }
+
+        function updateTime() {
+            const cur = video.currentTime, dur = video.duration || 0;
+            timeDisplay.textContent = `${formatTime(cur, true)} / ${formatTime(dur)}`;
+            const pct = dur ? cur / dur : 0;
+            timelineProgress.style.width = pct * 100 + '%';
+            timelineHandle.style.left = pct * 100 + '%'
+        }
+
+        function loadVideo(file) {
+            if (objectURL) URL.revokeObjectURL(objectURL);
+            objectURL = URL.createObjectURL(file);
+            video.src = objectURL;
+            video.load();
+            video.onloadedmetadata = () => {
+                workspace.classList.add('active');
+                dropZone.style.display = 'none';
+                updateTime();
+                updateGalleryUI()
+            };
+            video.onerror = () => showToast('Error loading video. Format may not be supported.')
+        }
+
+        dropZone.addEventListener('dragover', e => {
+            e.preventDefault();
+            dropZone.classList.add('dragover')
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const f = e.dataTransfer.files[0];
+            if (f && f.type.startsWith('video/')) loadVideo(f); else showToast('Please drop a video file')
+        });
+        fileInput.addEventListener('change', e => {
+            if (e.target.files[0]) loadVideo(e.target.files[0])
+        });
+        video.addEventListener('timeupdate', updateTime);
+        video.addEventListener('play', () => {
+            isPlaying = true;
+            btnPlay.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
+        });
+        video.addEventListener('pause', () => {
+            isPlaying = false;
+            btnPlay.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>'
+        });
+        btnPlay.addEventListener('click', () => {
+            if (video.paused) video.play(); else video.pause()
+        });
+        btnPrevFrame.addEventListener('click', () => {
+            video.pause();
+            video.currentTime = Math.max(0, video.currentTime - FRAME_STEP)
+        });
+        btnNextFrame.addEventListener('click', () => {
+            video.pause();
+            video.currentTime = Math.min(video.duration, video.currentTime + FRAME_STEP)
+        });
+
+        function seekFromEvent(e) {
+            const rect = timeline.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            video.currentTime = pct * (video.duration || 0);
+            updateTime()
+        }
+
+        timeline.addEventListener('mousedown', e => {
+            isSeeking = true;
+            video.pause();
+            seekFromEvent(e)
+        });
+        document.addEventListener('mousemove', e => {
+            if (isSeeking) seekFromEvent(e)
+        });
+        document.addEventListener('mouseup', () => {
+            isSeeking = false
+        });
+        timeline.addEventListener('touchstart', e => {
+            isSeeking = true;
+            video.pause();
+            seekFromEvent(e.touches[0])
+        }, {passive: true});
+        document.addEventListener('touchmove', e => {
+            if (isSeeking) seekFromEvent(e.touches[0])
+        });
+        document.addEventListener('touchend', () => {
+            isSeeking = false
+        });
+        qualitySlider.addEventListener('input', () => {
+            qualityVal.textContent = qualitySlider.value + '%'
+        });
+
+        function captureFrame() {
+            return new Promise(resolve => {
+                const s = parseFloat(scaleSel.value);
+                const w = Math.round(video.videoWidth * s);
+                const h = Math.round(video.videoHeight * s);
+                const c = document.createElement('canvas');
+                c.width = w;
+                c.height = h;
+                const ctx = c.getContext('2d');
+                ctx.drawImage(video, 0, 0, w, h);
+                const fmt = formatSel.value;
+                const q = parseInt(qualitySlider.value) / 100;
+                const mime = fmt === 'png' ? 'image/png' : fmt === 'webp' ? 'image/webp' : 'image/jpeg';
+                c.toBlob(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const time = video.currentTime;
+                    const idx = frames.length + 1;
+                    frames.push({blob, url, time, idx, fmt});
+                    addMarker(time);
+                    updateGalleryUI();
+                    addThumbCard(frames[frames.length - 1]);
+                    resolve()
+                }, mime, q)
+            })
+        }
+
+        btnCapture.addEventListener('click', async () => {
+            video.pause();
+            await captureFrame();
+            showToast('Frame captured!')
+        });
+
+        function addMarker(time) {
+            const pct = (time / (video.duration || 1)) * 100;
+            const m = document.createElement('div');
+            m.className = 'timeline-marker';
+            m.style.left = pct + '%';
+            timelineMarkers.appendChild(m)
+        }
+
+        function updateGalleryUI() {
+            const n = frames.length;
+            frameCount.textContent = n;
+            galleryHeader.style.display = n ? 'flex' : 'none';
+            emptyGallery.style.display = n ? 'none' : 'block';
+            btnDownloadAll.disabled = !n
+        }
+
+        function addThumbCard(frame) {
+            const card = document.createElement('div');
+            card.className = 'thumb-card';
+            card.innerHTML = `<span class="badge-num">#${frame.idx}</span><img src="${frame.url}" alt="Frame ${frame.idx}"><div class="info"><span class="timestamp">${formatTime(frame.time, true)}</span><div class="card-actions"><button class="dl" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button class="seek" title="Seek to timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button><button class="del" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button></div></div>`;
+            card.querySelector('img').addEventListener('click', () => {
+                modalImg.src = frame.url;
+                modal.classList.add('active')
+            });
+            card.querySelector('.dl').addEventListener('click', () => {
+                const a = document.createElement('a');
+                a.href = frame.url;
+                a.download = `thumb_${frame.idx}_${formatTime(frame.time).replace(':', '-')}.${frame.fmt}`;
+                a.click()
+            });
+            card.querySelector('.seek').addEventListener('click', () => {
+                video.currentTime = frame.time;
+                video.pause();
+                window.scrollTo({top: 0, behavior: 'smooth'})
+            });
+            card.querySelector('.del').addEventListener('click', () => {
+                const i = frames.indexOf(frame);
+                if (i > -1) {
+                    frames.splice(i, 1);
+                    URL.revokeObjectURL(frame.url)
+                }
+                card.remove();
+                rebuildMarkers();
+                updateGalleryUI()
+            });
+            gallery.appendChild(card)
+        }
+
+        function rebuildMarkers() {
+            timelineMarkers.innerHTML = '';
+            frames.forEach(f => addMarker(f.time))
+        }
+
+        btnAutoExtract.addEventListener('click', async () => {
+            const intv = parseFloat(intervalInput.value);
+            if (!intv || intv <= 0) return showToast('Enter a valid interval');
+            const dur = video.duration;
+            if (!dur) return;
+            const wasPlaying = !video.paused;
+            video.pause();
+            const times = [];
+            for (let t = 0; t < dur; t += intv) times.push(t);
+            progressBar.classList.add('active');
+            btnAutoExtract.disabled = true;
+            btnAutoExtract.textContent = 'Extracting...';
+            for (let i = 0; i < times.length; i++) {
+                video.currentTime = times[i];
+                await new Promise(r => {
+                    const h = () => {
+                        video.removeEventListener('seeked', h);
+                        r()
+                    };
+                    video.addEventListener('seeked', h)
+                });
+                await captureFrame();
+                progressFill.style.width = ((i + 1) / times.length * 100) + '%'
+            }
+            progressBar.classList.remove('active');
+            progressFill.style.width = '0%';
+            btnAutoExtract.disabled = false;
+            btnAutoExtract.textContent = 'Extract All';
+            showToast(`Extracted ${times.length} frames!`)
+        });
+        btnDownloadAll.addEventListener('click', async () => {
+            if (!frames.length) return;
+            btnDownloadAll.disabled = true;
+            btnDownloadAll.textContent = 'Zipping...';
+            const zip = new JSZip();
+            const promises = frames.map((f, i) => f.blob.arrayBuffer().then(buf => zip.file(`thumb_${String(i + 1).padStart(3, '0')}_${formatTime(f.time).replace(':', '-')}.${f.fmt}`, buf)));
+            await Promise.all(promises);
+            const content = await zip.generateAsync({type: 'blob'});
+            saveAs(content, 'thumbnails.zip');
+            btnDownloadAll.disabled = false;
+            btnDownloadAll.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download ZIP';
+            showToast('ZIP downloaded!')
+        });
+        btnClearAll.addEventListener('click', () => {
+            if (!frames.length) return;
+            if (!confirm('Clear all captured frames?')) return;
+            frames.forEach(f => URL.revokeObjectURL(f.url));
+            frames = [];
+            gallery.innerHTML = '';
+            timelineMarkers.innerHTML = '';
+            updateGalleryUI();
+            showToast('All frames cleared')
+        });
+        btnNewVideo.addEventListener('click', () => {
+            if (frames.length && !confirm('Load a new video? Current frames will be lost.')) return;
+            frames.forEach(f => URL.revokeObjectURL(f.url));
+            frames = [];
+            gallery.innerHTML = '';
+            timelineMarkers.innerHTML = '';
+            video.src = '';
+            if (objectURL) URL.revokeObjectURL(objectURL);
+            objectURL = null;
+            workspace.classList.remove('active');
+            dropZone.style.display = '';
+            fileInput.value = '';
+            updateGalleryUI()
+        });
+        modalClose.addEventListener('click', () => modal.classList.remove('active'));
+        modal.addEventListener('click', e => {
+            if (e.target === modal) modal.classList.remove('active')
+        });
+        document.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            if (!workspace.classList.contains('active')) return;
+            switch (e.key) {
+                case' ':
+                    e.preventDefault();
+                    if (video.paused) video.play(); else video.pause();
+                    break;
+                case'ArrowLeft':
+                    e.preventDefault();
+                    video.currentTime = Math.max(0, video.currentTime - 5);
+                    break;
+                case'ArrowRight':
+                    e.preventDefault();
+                    video.currentTime = Math.min(video.duration, video.currentTime + 5);
+                    break;
+                case'c':
+                case'C':
+                    e.preventDefault();
+                    video.pause();
+                    captureFrame().then(() => showToast('Frame captured!'));
+                    break;
+                case',':
+                    e.preventDefault();
+                    video.pause();
+                    video.currentTime = Math.max(0, video.currentTime - FRAME_STEP);
+                    break;
+                case'.':
+                    e.preventDefault();
+                    video.pause();
+                    video.currentTime = Math.min(video.duration, video.currentTime + FRAME_STEP);
+                    break;
+                case'Escape':
+                    modal.classList.remove('active');
+                    break
+            }
+        });
+    })();
+</script>
+<script src="../logo.js"></script>
+</body>
+</html>
