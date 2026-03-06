@@ -3,12 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <meta name="description" content="WORD RAIN - A fast-paced typing defense game. Words fall from the sky, type them to survive. Upgrade your arsenal, unlock bombs, nukes, and freeze words. How long can you last?">
-    <meta name="keywords" content="typing game, word game, browser game, typing defense, typing speed, WPM, indie game, keyboard game, word rain">
+    <title>WORD RAIN</title>
+    <meta name="description"
+          content="WORD RAIN - A fast-paced typing defense game. Words fall from the sky, type them to survive. Upgrade your arsenal, unlock bombs, nukes, and freeze words. How long can you last?">
+    <meta name="keywords"
+          content="typing game, word game, browser game, typing defense, typing speed, WPM, indie game, keyboard game, word rain">
     <meta name="author" content="Claude Opus 4.6 prompted by Tobias Müller">
     <meta name="robots" content="index, follow">
     <meta property="og:title" content="WORD RAIN — Type to Survive">
-    <meta property="og:description" content="A fast-paced typing defense game. Words fall from the sky, type them before they hit the ground. Upgrade, prestige, and push your WPM to the limit.">
+    <meta property="og:description"
+          content="A fast-paced typing defense game. Words fall from the sky, type them before they hit the ground. Upgrade, prestige, and push your WPM to the limit.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://www.gptgames.dev/games/word_rain.html">
     <meta property="og:image" content="https://www.gptgames.dev/screenshots/screenshot_258.webp">
@@ -16,10 +20,10 @@
     <meta property="og:site_name" content="GPT Games">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="WORD RAIN — Type to Survive">
-    <meta name="twitter:description" content="A fast-paced typing defense game. Words fall from the sky, type them before they hit the ground. Upgrade, prestige, and push your WPM to the limit.">
+    <meta name="twitter:description"
+          content="A fast-paced typing defense game. Words fall from the sky, type them before they hit the ground. Upgrade, prestige, and push your WPM to the limit.">
     <meta name="twitter:image" content="https://www.gptgames.dev/screenshots/screenshot_258.webp">
     <link rel="canonical" href="https://www.gptgames.dev/games/word_rain.html">
-    <title>WORD RAIN</title>
     <style>:root {
         --bg: #0a0a0f;
         --bg-light: #12121a;
@@ -1432,7 +1436,8 @@ function sndBuy() {
 
 function sndPrestige() {
     for (let i = 0; i < 6; i++) setTimeout(() => playTone(400 + i * 150, 0.2, 'sine', 0.05), i * 60)
-}/* --- Music system --- */
+}
+
 let musicInterval = null;
 const PENTA_CALM = [261.6, 293.7, 329.6, 392.0, 440.0, 523.3, 587.3, 659.3];
 const PENTA_TENSE = [261.6, 311.1, 349.2, 392.0, 466.2, 523.3, 622.3, 698.5];
@@ -1923,7 +1928,8 @@ function splitWord(w) {
             fallSpeed: diff.fallSpeed,
             el: null,
             destroyed: false,
-            fast: false
+            fast: false,
+            critChecked: true
         })
     })
 }
@@ -1963,14 +1969,10 @@ function spawnWord() {
         fallSpeed: isFast ? diff.fallSpeed * 1.8 : diff.fallSpeed,
         el: null,
         destroyed: false,
-        fast: isFast
+        fast: isFast,
+        critChecked: false
     };
-    combat.words.push(newWord);
-    if(getCritCh()>0 && Math.random()<getCritCh() && newWord.type==='normal'){
-        for(let i=0;i<newWord.text.length;i++) newWord.playerTypedChars.add(i);
-        newWord.typedIndex=newWord.text.length;
-        setTimeout(()=>{ if(combat&&combat.running) completeWord(newWord); },150);
-    }
+    combat.words.push(newWord)
 }
 
 function findTarget(ch, excludeId) {
@@ -1978,6 +1980,22 @@ function findTarget(ch, excludeId) {
     for (const w of combat.words) {
         if (w.destroyed || w.id === excludeId) continue;
         if (w.text[w.typedIndex] === ch) {
+            if (w.y > bestY) {
+                bestY = w.y;
+                best = w
+            }
+        }
+    }
+    return best
+}
+
+function findPrefixSwitch(typedPrefix, ch, excludeId) {
+    const full = typedPrefix + ch;
+    let best = null, bestY = -Infinity;
+    for (const w of combat.words) {
+        if (w.destroyed || w.id === excludeId) continue;
+        if (w.typedIndex > 0) continue;
+        if (w.text.length >= full.length && w.text.startsWith(full)) {
             if (w.y > bestY) {
                 bestY = w.y;
                 best = w
@@ -2027,6 +2045,23 @@ function handleKey(e) {
             if (t.typedIndex >= t.text.length) completeWord(t);
             return
         }
+        const typedSoFar = t.text.substring(0, t.typedIndex);
+        const prefixAlt = findPrefixSwitch(typedSoFar, ch, t.id);
+        if (prefixAlt) {
+            combat.targetId = prefixAlt.id;
+            if (combat.autoTargetId === prefixAlt.id) combat.autoTargetId = null;
+            const newIdx = t.typedIndex + 1;
+            for (let i = 0; i < newIdx; i++) prefixAlt.playerTypedChars.add(i);
+            prefixAlt.typedIndex = newIdx;
+            combat.correctKeys++;
+            combat.wpmTimestamps.push(combat.elapsed);
+            sndType();
+            renderWord(prefixAlt);
+            renderWord(t);
+            renderInput();
+            if (prefixAlt.typedIndex >= prefixAlt.text.length) completeWord(prefixAlt);
+            return
+        }
         const alt = findTarget(ch, t.id);
         if (alt) {
             combat.targetId = alt.id;
@@ -2060,16 +2095,6 @@ function handleKey(e) {
         renderInput();
         if (best.typedIndex >= best.text.length) completeWord(best)
     }
-}
-
-function tryCrit(w) {
-    if (getCritCh() > 0 && Math.random() < getCritCh() && w.typedIndex <= 1) {
-        for (let i = 0; i < w.text.length; i++) w.playerTypedChars.add(i);
-        w.typedIndex = w.text.length;
-        showCritFlash(w.x, w.y);
-        return true
-    }
-    return false
 }
 
 function completeWord(w) {
@@ -2190,6 +2215,17 @@ function gameLoop(now) {
     for (let i = combat.words.length - 1; i >= 0; i--) {
         const w = combat.words[i];
         if (w.destroyed) continue;
+        if (!w.critChecked && getCritCh() > 0 && w.typedIndex === 0) {
+            w.critChecked = true;
+            if (Math.random() < getCritCh()) {
+                for (let j = 0; j < w.text.length; j++) w.playerTypedChars.add(j);
+                w.typedIndex = w.text.length;
+                showCritFlash(w.x, w.y);
+                completeWord(w);
+                if (!combat.running) return;
+                continue
+            }
+        }
         if (!isFrozen) {
             let spd = w.fallSpeed;
             if (getMagnetSlow() > 0 && w.y > magnetZone) spd *= (1 - getMagnetSlow());
