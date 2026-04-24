@@ -14,9 +14,20 @@
     <link rel="manifest" href="manifest.json">
     <link rel="canonical" href="https://www.gptgames.dev"/>
     <title>GPTGames: Collection of AI-Generated HTML Games and Utilities</title>
+
+    <!-- Preload JSON fetches so they race with HTML parsing -->
+    <link rel="preload" as="fetch" href="data/games.json" crossorigin>
+    <link rel="preload" as="fetch" href="data/tools.json" crossorigin>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Non-blocking font load via media swap -->
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+          media="print"
+          onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"></noscript>
+
     <style>
         :root{
             --bg:#0d0b14;
@@ -24,8 +35,8 @@
             --panel:#1a1628;
             --panel-2:#221b35;
             --ink:#f5ecd4;
-            --ink-2:#a69bb8;
-            --ink-3:#6b6280;
+            --ink-2:#b5abcc;
+            --ink-3:#968bae;
             --line:#2d2640;
             --line-2:#3a3352;
             --hot:#ff4d2e;
@@ -37,12 +48,25 @@
         }
         *{box-sizing:border-box;margin:0;padding:0}
         html,body{background:var(--bg);color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
-        body{overflow-x:hidden}
+        html{overflow-x:hidden}
+        body{overflow-x:clip}
+        body.drawer-open{overflow:hidden}
         a{color:inherit;text-decoration:none}
         button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         img{display:block;max-width:100%}
 
-        /* CRT base texture */
+        .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+        .skip-link{
+            position:absolute;top:-100px;left:8px;z-index:999;
+            padding:10px 14px;
+            background:var(--amber);color:var(--bg);
+            font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;
+            text-transform:uppercase;letter-spacing:0.08em;
+            border:2px solid var(--ink);box-shadow:3px 3px 0 var(--ink);
+        }
+        .skip-link:focus{top:8px;outline:none}
+
         body::before{
             content:"";
             position:fixed;inset:0;pointer-events:none;z-index:200;
@@ -53,12 +77,13 @@
         body.noscan::before{display:none}
 
         .mono{font-family:'JetBrains Mono',monospace;letter-spacing:0.02em}
+        .tnum{font-variant-numeric:tabular-nums;display:inline-block}
 
         /* ── Top bar ────────────────────────────── */
         .topline{
             max-width:1440px;margin:0 auto;
             padding:6px 28px;
-            display:flex;justify-content:space-between;
+            display:flex;justify-content:space-between;gap:12px;
             font-family:'JetBrains Mono',monospace;font-size:10px;
             color:var(--ink-3);text-transform:uppercase;letter-spacing:0.1em;
             border-bottom:1px solid var(--line);
@@ -77,7 +102,7 @@
             display:flex;align-items:center;gap:20px;
             padding:12px 28px;
         }
-        .logo{display:flex;align-items:center;gap:10px}
+        .logo{display:flex;align-items:center;gap:10px;flex-shrink:0}
         .logo-glyph{
             width:34px;height:34px;
             background:var(--hot);
@@ -104,8 +129,9 @@
             text-transform:uppercase;letter-spacing:0.08em;
         }
         .hdr-nav a:hover{color:var(--amber)}
+        .hdr-nav a:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
         .hdr-nav a.on{color:var(--bg);background:var(--amber)}
-        .hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+        .hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-shrink:0}
         .search{position:relative;width:260px}
         .search input{
             width:100%;height:36px;
@@ -131,12 +157,51 @@
             font-size:11px;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;
             transition:all .1s;
             display:inline-flex;align-items:center;gap:8px;
+            flex-shrink:0;
         }
         .pixbtn:hover{border-color:var(--amber);color:var(--amber);transform:translate(-1px,-1px);box-shadow:2px 2px 0 var(--amber)}
+        .pixbtn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
         .pixbtn.hot{background:var(--hot);border-color:var(--hot);color:#fff}
         .pixbtn.hot:hover{background:var(--hot-2);border-color:var(--hot-2);color:#fff;box-shadow:2px 2px 0 var(--amber)}
 
-        /* ── Hero (compact) ─────────────────────── */
+        /* ── Burger button (mobile only) ──────── */
+        .burger{
+            display:none; /* shown at ≤1000px */
+            width:40px;height:40px;
+            border:2px solid var(--line);background:var(--panel);
+            color:var(--amber);
+            align-items:center;justify-content:center;
+            font-family:'Press Start 2P',monospace;font-size:12px;line-height:1;
+            flex-shrink:0;
+            padding:0;
+            transition:border-color .1s;
+            position:relative;
+        }
+        .burger:hover{border-color:var(--amber)}
+        .burger:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+        .burger-icon{
+            display:flex;flex-direction:column;gap:4px;
+            width:18px;
+        }
+        .burger-icon span{
+            display:block;height:2px;background:var(--amber);
+            transition:transform .2s, opacity .2s;
+        }
+        .burger[aria-expanded="true"] .burger-icon span:nth-child(1){transform:translateY(6px) rotate(45deg)}
+        .burger[aria-expanded="true"] .burger-icon span:nth-child(2){opacity:0}
+        .burger[aria-expanded="true"] .burger-icon span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
+        .burger-dot{
+            position:absolute;top:-4px;right:-4px;
+            min-width:16px;height:16px;padding:0 4px;
+            background:var(--hot);color:#fff;
+            font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;
+            border:1.5px solid var(--bg);
+            display:none;align-items:center;justify-content:center;
+            line-height:1;
+        }
+        .burger.has-filters .burger-dot{display:flex}
+
+        /* ── Hero ────────────────────────────── */
         .hero{
             max-width:1440px;margin:0 auto;
             padding:36px 28px 20px;
@@ -150,11 +215,13 @@
         .hero-kicker::before{content:"";width:28px;height:2px;background:var(--hot)}
         .hero-title{
             font-family:'Press Start 2P',monospace;
-            font-size:clamp(32px, 5.2vw, 68px);
+            font-size:clamp(28px, 5vw, 68px);
             line-height:1.15;letter-spacing:0;
             color:var(--amber);
             margin-bottom:0;
             text-shadow: 4px 4px 0 var(--bg-2);
+            word-wrap:break-word;
+            overflow-wrap:break-word;
         }
         .hero-title .l2{color:var(--cyan);display:block;margin-top:0.3em}
         .hero-title .l3{color:var(--ink);display:block;margin-top:0.3em}
@@ -168,12 +235,17 @@
         .hero-sub p{
             font-size:16px;color:var(--ink-2);
             max-width:58ch;line-height:1.55;
+            min-height:3em;
         }
-        .hero-sub p strong{color:var(--amber);font-weight:600}
+        .hero-sub p strong{color:var(--amber);font-weight:600;font-variant-numeric:tabular-nums}
         .hero-stats{display:flex;gap:0;border:2px solid var(--line)}
         .hero-stat{padding:10px 18px;border-right:2px solid var(--line);text-align:left;min-width:92px}
         .hero-stat:last-child{border-right:none}
-        .hero-stat .n{font-family:'VT323',monospace;font-size:36px;line-height:1;color:var(--amber)}
+        .hero-stat .n{
+            font-family:'VT323',monospace;font-size:36px;line-height:1;color:var(--amber);
+            font-variant-numeric:tabular-nums;
+            display:inline-block;min-width:2ch;
+        }
         .hero-stat .l{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.1em;margin-top:2px}
         .hero-stat:nth-child(2) .n{color:var(--cyan)}
         .hero-stat:nth-child(3) .n{color:var(--magenta)}
@@ -212,6 +284,7 @@
             transition:background .1s;
         }
         .ticker-item:hover{background:rgba(13,11,20,0.08)}
+        .ticker-item:focus-visible{outline:2px solid var(--bg);outline-offset:-4px}
         .ticker-item .tag{
             font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;
             background:var(--bg);color:var(--amber);
@@ -235,7 +308,7 @@
         }
         .aside::-webkit-scrollbar{width:6px}
         .aside::-webkit-scrollbar-thumb{background:var(--line-2)}
-        .aside h4{
+        .aside-group-label{
             font-family:'JetBrains Mono',monospace;font-size:10px;
             text-transform:uppercase;letter-spacing:0.12em;
             color:var(--ink-3);
@@ -243,9 +316,11 @@
             margin-top:14px;
             border-top:1px solid var(--line);
             display:flex;align-items:center;gap:8px;
+            width:100%;
+            font-weight:400;
         }
-        .aside h4::before{content:"▸";color:var(--hot);font-family:'VT323',monospace;font-size:18px;line-height:1}
-        .aside h4:first-child{border-top:none;margin-top:0;padding-top:0}
+        .aside-group-label::before{content:"▸";color:var(--hot);font-family:'VT323',monospace;font-size:18px;line-height:1}
+        .aside-group:first-child .aside-group-label{border-top:none;margin-top:0;padding-top:0}
         .aside ul{list-style:none;margin-bottom:6px}
         .aside li{
             font-family:'JetBrains Mono',monospace;font-size:12px;
@@ -255,10 +330,12 @@
             text-transform:uppercase;letter-spacing:0.04em;
             transition:all .1s;
             border-left:2px solid transparent;
+            user-select:none;
         }
         .aside li:hover{color:var(--amber);background:var(--panel)}
+        .aside li:focus-visible{outline:none;color:var(--amber);background:var(--panel);border-left-color:var(--amber)}
         .aside li.on{color:var(--amber);border-left-color:var(--hot);background:var(--panel);font-weight:700}
-        .aside li .n{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-3);font-weight:400}
+        .aside li .n{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-3);font-weight:400;font-variant-numeric:tabular-nums}
         .aside li.on .n{color:var(--amber)}
         .lucky-btn{
             display:flex;width:100%;
@@ -271,6 +348,130 @@
             transition:all .12s;
         }
         .lucky-btn:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--amber)}
+        .lucky-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+        /* ── Mobile drawer ────────────────────── */
+        .drawer-backdrop{
+            position:fixed;inset:0;z-index:90;
+            background:rgba(13,11,20,0.75);
+            opacity:0;pointer-events:none;
+            transition:opacity .22s ease;
+            backdrop-filter:blur(3px);
+        }
+        .drawer-backdrop.open{opacity:1;pointer-events:auto}
+
+        .drawer{
+            position:fixed;top:0;right:0;bottom:0;z-index:95;
+            width:min(88vw, 360px);
+            background:var(--bg);
+            border-left:2px solid var(--amber);
+            transform:translateX(105%);
+            transition:transform .25s ease;
+            display:flex;flex-direction:column;
+            /* CRT overlay inside drawer for continuity */
+        }
+        .drawer.open{transform:translateX(0)}
+
+        .drawer-head{
+            display:flex;align-items:center;
+            padding:14px 16px;
+            border-bottom:2px dashed var(--line);
+            flex-shrink:0;
+        }
+        .drawer-head h2{
+            font-family:'Press Start 2P',monospace;font-size:12px;
+            color:var(--amber);line-height:1.2;
+            letter-spacing:0;
+        }
+        .drawer-head h2 em{color:var(--cyan);font-style:normal}
+        .drawer-close{
+            margin-left:auto;
+            width:32px;height:32px;
+            border:2px solid var(--line);background:var(--panel);
+            color:var(--ink);
+            display:flex;align-items:center;justify-content:center;
+            font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;
+            transition:all .1s;
+        }
+        .drawer-close:hover{border-color:var(--hot);color:var(--hot)}
+        .drawer-close:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+        .drawer-search{
+            padding:14px 16px;
+            border-bottom:1px dashed var(--line);
+            flex-shrink:0;
+            position:relative;
+        }
+        .drawer-search input{
+            width:100%;height:44px;
+            background:var(--panel);border:2px solid var(--line);
+            padding:0 14px 0 38px;
+            color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:13px;
+            outline:none;transition:border .15s;
+        }
+        .drawer-search input:focus{border-color:var(--amber)}
+        .drawer-search input::placeholder{color:var(--ink-3);text-transform:uppercase;letter-spacing:0.06em}
+        .drawer-search .caret{
+            position:absolute;left:28px;top:26px;
+            font-family:'VT323',monospace;font-size:24px;
+            color:var(--amber);line-height:1;pointer-events:none;
+            animation:blink 1s step-end infinite;
+        }
+
+        .drawer-body{
+            flex:1;overflow-y:auto;
+            padding:10px 16px 20px;
+        }
+        .drawer-body::-webkit-scrollbar{width:6px}
+        .drawer-body::-webkit-scrollbar-thumb{background:var(--line-2)}
+
+        .drawer-group-label{
+            font-family:'JetBrains Mono',monospace;font-size:10px;
+            text-transform:uppercase;letter-spacing:0.12em;
+            color:var(--ink-3);
+            padding:18px 0 8px;
+            margin-top:10px;
+            border-top:1px solid var(--line);
+            display:flex;align-items:center;gap:8px;
+            width:100%;
+        }
+        .drawer-group-label::before{content:"▸";color:var(--hot);font-family:'VT323',monospace;font-size:18px;line-height:1}
+        .drawer-group:first-child .drawer-group-label{border-top:none;margin-top:0;padding-top:6px}
+        .drawer-body ul{list-style:none}
+        .drawer-body li{
+            font-family:'JetBrains Mono',monospace;font-size:13px;
+            color:var(--ink-2);
+            padding:10px 10px;cursor:pointer;
+            display:flex;justify-content:space-between;align-items:center;gap:12px;
+            text-transform:uppercase;letter-spacing:0.04em;
+            transition:all .1s;
+            border-left:2px solid transparent;
+            user-select:none;
+            min-height:44px; /* tap target */
+        }
+        .drawer-body li:hover{color:var(--amber);background:var(--panel)}
+        .drawer-body li:focus-visible{outline:none;color:var(--amber);background:var(--panel);border-left-color:var(--amber)}
+        .drawer-body li.on{color:var(--amber);border-left-color:var(--hot);background:var(--panel);font-weight:700}
+        .drawer-body li .n{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-3);font-weight:400;font-variant-numeric:tabular-nums}
+        .drawer-body li.on .n{color:var(--amber)}
+
+        .drawer-foot{
+            padding:14px 16px;
+            border-top:2px dashed var(--line);
+            flex-shrink:0;
+            display:flex;gap:10px;
+        }
+        .drawer-foot .lucky-btn{margin:0;flex:1;padding:12px 10px}
+        .drawer-foot .drawer-clear{
+            padding:12px 16px;
+            background:var(--panel);border:2px solid var(--line);
+            color:var(--ink-2);
+            font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;
+            text-transform:uppercase;letter-spacing:0.08em;
+            transition:all .1s;
+        }
+        .drawer-foot .drawer-clear:hover{border-color:var(--amber);color:var(--amber)}
+        .drawer-foot .drawer-clear:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 
         /* ── Content side ───────────────────────── */
         .content{min-width:0}
@@ -279,33 +480,53 @@
         .sec-head{
             display:flex;align-items:flex-end;gap:20px;margin-bottom:20px;
             border-bottom:1px solid var(--line);padding-bottom:12px;
+            flex-wrap:wrap;
         }
         .sec-head .hash{
             font-family:'Press Start 2P',monospace;font-size:16px;color:var(--hot);line-height:1;
             padding-bottom:4px;
         }
-        .sec-head h3{
+        .sec-head h2{
             font-family:'Press Start 2P',monospace;font-size:22px;line-height:1.1;
             color:var(--ink);letter-spacing:0;
         }
-        .sec-head h3 em{color:var(--cyan);font-style:normal}
+        .sec-head h2 em{color:var(--cyan);font-style:normal}
         .sec-head .count{
             font-family:'JetBrains Mono',monospace;font-size:11px;
             color:var(--ink-3);text-transform:uppercase;letter-spacing:0.1em;
             margin-left:auto;padding-bottom:4px;
         }
-        .sec-head .count .b{color:var(--amber);font-weight:700}
+        .sec-head .count .b{color:var(--amber);font-weight:700;font-variant-numeric:tabular-nums}
         .sec + .sec{margin-top:48px}
 
-        /* Daily pick strip */
+        /* Active-filter banner — visible on mobile when filter applied */
+        .filter-banner{
+            display:none;
+            align-items:center;gap:10px;
+            padding:10px 14px;margin-bottom:14px;
+            background:var(--panel);border:2px dashed var(--amber);
+            font-family:'JetBrains Mono',monospace;font-size:11px;
+            color:var(--amber);text-transform:uppercase;letter-spacing:0.06em;
+        }
+        .filter-banner.vis{display:flex}
+        .filter-banner .dot{color:var(--hot)}
+        .filter-banner .x{
+            margin-left:auto;
+            padding:4px 8px;
+            border:1px solid var(--line-2);color:var(--ink-2);
+            font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;
+        }
+        .filter-banner .x:hover{border-color:var(--hot);color:var(--hot)}
+
+        /* Daily pick strip — solid, no gradient */
         .dailypick{
-            background:
-                    linear-gradient(135deg, rgba(255,77,46,0.08), transparent 50%),
-                    var(--panel);
+            background:var(--panel);
             border:2px solid var(--line);
+            border-left:6px solid var(--hot);
             display:grid;grid-template-columns: 1.2fr 1fr;
             overflow:hidden;
             margin-bottom:48px;
+            min-height:260px;
         }
         .dailypick-img{
             aspect-ratio:16/10;
@@ -322,6 +543,7 @@
         .dailypick-body{
             padding:24px 26px;
             display:flex;flex-direction:column;gap:12px;
+            min-height:220px;
         }
         .dailypick-kicker{
             font-family:'Press Start 2P',monospace;font-size:10px;
@@ -330,7 +552,7 @@
             display:flex;align-items:center;gap:10px;flex-wrap:wrap;
         }
         .dailypick-kicker .date{color:var(--ink-3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:400;letter-spacing:0.08em}
-        .dailypick-body h2{
+        .dailypick-body h3{
             font-family:'VT323',monospace;font-size:52px;
             line-height:0.95;color:var(--amber);
             letter-spacing:0;
@@ -351,7 +573,7 @@
             border:1px dashed var(--cyan);text-transform:uppercase;
         }
 
-        /* Featured strip: 3 cards */
+        /* Featured strip */
         .feat-grid{
             display:grid;grid-template-columns:repeat(3,1fr);
             gap:14px;margin-bottom:48px;
@@ -365,6 +587,7 @@
             display:flex;flex-direction:column;
         }
         .feat:hover{transform:translate(-3px,-3px);border-color:var(--amber);box-shadow:6px 6px 0 var(--amber)}
+        .feat:focus-visible{outline:none;transform:translate(-3px,-3px);border-color:var(--amber);box-shadow:6px 6px 0 var(--amber)}
         .feat-img{aspect-ratio:16/10;position:relative;overflow:hidden;border-bottom:2px solid var(--line)}
         .feat-img img{width:100%;height:100%;object-fit:cover;image-rendering:pixelated}
         .feat-img::after{
@@ -386,7 +609,7 @@
             border:2px solid var(--ink);
         }
         .feat-badge.tool{background:var(--cyan);color:var(--bg)}
-        .feat-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px;flex:1}
+        .feat-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px;flex:1;min-height:110px}
         .feat-title{
             font-family:'VT323',monospace;font-size:26px;line-height:1;
             color:var(--amber);
@@ -424,6 +647,7 @@
             display:inline-flex;align-items:center;gap:6px;
         }
         .pill-btn:hover{border-color:var(--amber);color:var(--amber)}
+        .pill-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
         .pill-btn.on{background:var(--amber);border-color:var(--amber);color:var(--bg);font-weight:700}
         .pill-btn .n{opacity:0.6;font-size:10px}
         .pill-btn.on .n{opacity:0.9}
@@ -436,6 +660,7 @@
             grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
             gap:14px;
         }
+        .cards > .hidden{display:none !important}
         .cab{
             background:var(--panel);
             border:2px solid var(--line);
@@ -444,6 +669,7 @@
             transition:all .15s;
         }
         .cab:hover{border-color:var(--cyan);transform:translate(-2px,-2px);box-shadow:4px 4px 0 var(--cyan)}
+        .cab:focus-visible{outline:none;border-color:var(--amber);transform:translate(-2px,-2px);box-shadow:4px 4px 0 var(--amber)}
         .cab-img{aspect-ratio:16/10;background:var(--bg-2);overflow:hidden;position:relative;border-bottom:2px solid var(--line)}
         .cab-img img{width:100%;height:100%;object-fit:cover;image-rendering:pixelated}
         .cab-img::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg, rgba(0,0,0,0) 0 2px, rgba(0,0,0,0.2) 2px 3px)}
@@ -459,7 +685,7 @@
         .cab-tag.ai{background:var(--amber);color:var(--bg)}
         .cab-tag.new{background:var(--lime);color:var(--bg)}
         .cab-tag.star{background:var(--magenta);color:#fff}
-        .cab-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:5px;flex:1}
+        .cab-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:5px;flex:1;min-height:90px}
         .cab-title{
             font-family:'VT323',monospace;font-size:22px;line-height:1;
             color:var(--amber);
@@ -488,8 +714,8 @@
             text-transform:uppercase;letter-spacing:0.1em;
         }
         .loadmore:hover{border-color:var(--amber);color:var(--amber)}
+        .loadmore:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 
-        /* Empty state */
         .empty{
             padding:40px;text-align:center;
             border:2px dashed var(--line-2);
@@ -497,7 +723,7 @@
         }
         .empty .sub{display:block;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;margin-top:8px;color:var(--ink-3)}
 
-        /* Toolshed ledger (A-Z) */
+        /* Toolshed ledger */
         .toolshed{margin-top:56px}
         .ledger{
             display:grid;grid-template-columns:repeat(2,1fr);
@@ -512,15 +738,17 @@
             font-family:'JetBrains Mono',monospace;font-size:12px;
             color:var(--ink-2);
             transition:background .1s;
+            min-width:0;
         }
         .ledger-row:hover{background:var(--panel);color:var(--ink)}
-        .ledger-row .idx{color:var(--ink-3);font-size:10px}
-        .ledger-row .t{color:var(--amber);font-family:'VT323',monospace;font-size:20px;line-height:1;letter-spacing:0.01em}
-        .ledger-row .c{color:var(--cyan);font-size:10px;text-transform:uppercase;letter-spacing:0.06em}
-        .ledger-row .go{color:var(--ink-3);font-size:10px;transition:color .1s}
+        .ledger-row:focus-visible{outline:none;background:var(--panel);color:var(--amber)}
+        .ledger-row .idx{color:var(--ink-3);font-size:10px;font-variant-numeric:tabular-nums}
+        .ledger-row .t{color:var(--amber);font-family:'VT323',monospace;font-size:20px;line-height:1;letter-spacing:0.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .ledger-row .c{color:var(--cyan);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap}
+        .ledger-row .go{color:var(--ink-3);font-size:10px;transition:color .1s;white-space:nowrap}
         .ledger-row:hover .go{color:var(--amber)}
 
-        /* ── Footer ─────────────────────────────── */
+        /* Footer */
         .ftr{
             margin-top:80px;
             border-top:2px dashed var(--line);
@@ -537,8 +765,9 @@
             font-family:'JetBrains Mono',monospace;font-size:12px;
             color:var(--ink-2);line-height:1.6;max-width:46ch;margin-top:10px;
         }
-        .ftr h5{
+        .ftr h3{
             font-family:'JetBrains Mono',monospace;font-size:10px;
+            font-weight:400;
             text-transform:uppercase;letter-spacing:0.12em;color:var(--ink-3);
             margin-bottom:10px;
         }
@@ -547,9 +776,10 @@
             font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.06em;
         }
         .ftr a:hover{color:var(--amber)}
+        .ftr a:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
         .ftr-bot{
             max-width:1440px;margin:0 auto;
-            display:flex;justify-content:space-between;
+            display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
             font-family:'JetBrains Mono',monospace;font-size:10px;
             color:var(--ink-3);text-transform:uppercase;letter-spacing:0.1em;
             border-top:1px solid var(--line);padding-top:16px;
@@ -559,7 +789,7 @@
         #tweaks{
             position:fixed;right:20px;bottom:20px;z-index:100;
             background:var(--panel);border:2px solid var(--amber);
-            padding:18px 20px;width:260px;
+            padding:18px 20px;width:260px;max-width:calc(100vw - 40px);
             box-shadow: 6px 6px 0 var(--hot);
             display:none;
         }
@@ -567,17 +797,32 @@
         #tweaks h6{font-family:'Press Start 2P',monospace;font-size:12px;color:var(--amber);margin-bottom:14px;line-height:1.2}
         #tweaks label{display:block;margin-bottom:12px;font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-2)}
         #tweaks label > div{margin-bottom:5px}
-        #tweaks .swatches{display:flex;gap:6px}
+        #tweaks .swatches{display:flex;gap:6px;flex-wrap:wrap}
         #tweaks .sw{width:24px;height:24px;cursor:pointer;border:2px solid var(--line)}
         #tweaks .sw.on{border-color:var(--amber);outline:2px solid var(--bg)}
         #tweaks select{width:100%;padding:6px;font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;border:2px solid var(--line);background:var(--bg);color:var(--ink);outline:none}
 
+        /* Reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration:0.01ms !important;
+                animation-iteration-count:1 !important;
+                transition-duration:0.01ms !important;
+            }
+            .ticker-track{animation:none !important;transform:none !important}
+            body::before{display:none}
+            .topline .coin, .search-caret, .drawer-search .caret{animation:none !important}
+            .drawer{transition:none}
+            .drawer-backdrop{transition:none}
+        }
+
+        /* ── Responsive ──────────────────────── */
         @media (max-width:1000px){
-            .layout{grid-template-columns:1fr;padding-top:28px}
-            .aside{position:static;max-height:none;display:flex;gap:24px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:12px}
-            .aside > div{min-width:140px}
+            .layout{grid-template-columns:1fr;padding:20px 20px 0;gap:0}
+            .aside{display:none}
             .hdr-nav{display:none}
-            .search{width:160px}
+            .hdr .search{display:none} /* Search moved into drawer */
+            .burger{display:flex}
             .hero{padding:24px 20px 16px}
             .hero-sub{grid-template-columns:1fr;gap:18px}
             .hero-stats{overflow-x:auto}
@@ -585,165 +830,245 @@
             .feat-grid{grid-template-columns:repeat(2,1fr)}
             .ledger{grid-template-columns:1fr}
             .ftr-in{grid-template-columns:1fr;gap:24px}
+            .ftr{padding:32px 20px 20px}
+            .topline{padding:6px 20px}
+        }
+
+        @media (max-width:640px){
+            .hdr-in{padding:12px 16px;gap:10px}
+            .topline{display:none}
+            .hero{padding:20px 16px 14px}
+            .hero-title{font-size:clamp(22px, 7vw, 42px);text-shadow:2px 2px 0 var(--bg-2)}
+            .hero-sub p{font-size:14px}
+            .hero-stat{padding:8px 12px;min-width:70px}
+            .hero-stat .n{font-size:28px}
+            .ftr-in{padding-bottom:16px}
+            .ftr-bot{flex-direction:column;gap:6px}
+            .feat-grid{grid-template-columns:1fr;gap:10px}
+            .sec + .sec{margin-top:32px}
+            .dailypick-body{padding:16px 18px;min-height:180px}
+            .dailypick-body h3{font-size:40px}
+            body::before{opacity:0.4}
+            .ticker{height:44px}
+            .ticker-track{font-size:22px}
+            .ticker-track:active{animation-play-state:paused !important}
+            .logo-text{font-size:26px}
+        }
+
+        @media (max-width:480px){
+            .hdr-in{padding:10px 12px;gap:8px}
+            .logo-text{font-size:24px}
+            .logo-glyph{width:30px;height:30px;font-size:12px}
+            .hero{padding:16px 12px 10px}
+            .hero-title{font-size:clamp(20px, 8vw, 36px)}
+            .layout{padding:16px 12px 0}
+            .cards{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+            .ledger-row{grid-template-columns: 20px 1fr auto;gap:8px;padding:8px 10px}
+            .ledger-row .c{display:none}
+            #tweaks{right:10px;bottom:10px;width:calc(100vw - 20px)}
+            /* Keep Random button with its label on small screens for parity with burger width */
+            .hdr-right .pixbtn.hot{padding:0 10px}
         }
     </style>
 </head>
 <body>
 
-<!-- Insert coin bar -->
-<div class="topline">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="topline" aria-hidden="true">
     <span><span class="coin">●</span> INSERT COIN — UNLIMITED CREDITS · OPEN SOURCE · NO TRACKING</span>
-    <span id="topRight">CRT-01 · ONLINE · — ENTRIES LOADED</span>
+    <span id="topRight">CRT-01 · ONLINE · <span class="tnum" style="min-width:3ch">~260</span> ENTRIES LOADED</span>
 </div>
 
 <header class="hdr">
     <div class="hdr-in">
-        <a class="logo" href="#">
-            <span class="logo-glyph">G</span>
-            <span class="logo-text">GPT<em>games</em></span>
+        <a class="logo" href="#" aria-label="GPTGames home">
+            <span class="logo-glyph" aria-hidden="true">G</span>
+            <span class="logo-text" aria-hidden="true">GPT<em>games</em></span>
         </a>
-        <nav class="hdr-nav">
+        <nav class="hdr-nav" aria-label="Primary">
             <a href="#browse" class="on">Browse</a>
             <a href="#toolshed">Toolshed</a>
             <a href="#featured">Featured</a>
             <a href="#about">About</a>
         </nav>
         <div class="hdr-right">
+            <label for="srch" class="sr-only">Search library</label>
             <div class="search">
-                <span class="search-caret">&gt;</span>
-                <input id="srch" placeholder="Search…">
+                <span class="search-caret" aria-hidden="true">&gt;</span>
+                <input id="srch" type="search" placeholder="Search…" autocomplete="off">
             </div>
-            <button class="pixbtn hot" id="luckyBtn">⚀ Random</button>
+            <button class="pixbtn hot" id="luckyBtn" aria-label="Open a random game or tool">
+                <span aria-hidden="true">⚀</span><span class="btn-label">Random</span>
+            </button>
+            <button class="burger" id="burger" aria-label="Open filters and search" aria-controls="drawer" aria-expanded="false">
+                <span class="burger-icon" aria-hidden="true"><span></span><span></span><span></span></span>
+                <span class="burger-dot tnum" id="burgerDot" aria-hidden="true">0</span>
+            </button>
         </div>
     </div>
 </header>
 
-<!-- Hero -->
-<section class="hero">
-    <div class="hero-kicker"><span id="kicker">An open-source arcade</span></div>
-    <h1 class="hero-title">
-        BROWSER TOYS.<span class="l2">TINY TOOLS.</span><span class="l3">MOSTLY AI-MADE.</span>
-    </h1>
-    <div class="hero-sub">
-        <p>A growing catalogue of <strong id="hTools">—</strong> utilities and <strong id="hGames">—</strong> games, where most of the code was written by language models. Everything runs in the browser. Nothing to install. <strong>Pick something up, put it down.</strong></p>
-        <div class="hero-stats">
-            <div class="hero-stat"><div class="n" id="sTools">—</div><div class="l">Tools</div></div>
-            <div class="hero-stat"><div class="n" id="sGames">—</div><div class="l">Games</div></div>
-            <div class="hero-stat"><div class="n" id="sAI">—</div><div class="l">AI-Native</div></div>
+<!-- Drawer backdrop + drawer (mobile only, controlled via JS) -->
+<div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+<aside class="drawer" id="drawer" aria-label="Filters and search" aria-hidden="true" hidden>
+    <div class="drawer-head">
+        <h2>Filter <em>Library</em></h2>
+        <button class="drawer-close" id="drawerClose" aria-label="Close filters">✕</button>
+    </div>
+    <div class="drawer-search">
+        <span class="caret" aria-hidden="true">&gt;</span>
+        <label for="srchMobile" class="sr-only">Search library</label>
+        <input id="srchMobile" type="search" placeholder="Search…" autocomplete="off">
+    </div>
+    <div class="drawer-body">
+        <div class="drawer-group">
+            <div class="drawer-group-label">Type</div>
+            <ul id="mfType" aria-label="Filter by type"></ul>
+        </div>
+        <div class="drawer-group">
+            <div class="drawer-group-label">Specials</div>
+            <ul id="mfSpec" aria-label="Filter by special tag"></ul>
+        </div>
+        <div class="drawer-group">
+            <div class="drawer-group-label">Categories</div>
+            <ul id="mfTags" aria-label="Filter by category"></ul>
         </div>
     </div>
-</section>
-
-<!-- Ticker -->
-<div class="ticker"><div class="ticker-track" id="ticker"></div></div>
-
-<!-- Main layout -->
-<div class="layout">
-    <aside class="aside">
-        <div>
-            <h4>Type</h4>
-            <ul id="typeList"></ul>
-        </div>
-        <div>
-            <h4>Specials</h4>
-            <ul id="specList"></ul>
-        </div>
-        <div>
-            <h4>Categories</h4>
-            <ul id="tagList"></ul>
-        </div>
-        <button class="lucky-btn" id="luckyBtn2">⚀ Feeling Lucky ↗</button>
-    </aside>
-
-    <div class="content">
-
-        <!-- Daily pick -->
-        <section class="sec" id="featured">
-            <div class="sec-head">
-                <span class="hash">▌</span>
-                <h3>Today's <em>Pick</em></h3>
-                <span class="count"><span class="b" id="dateLabel"></span> · rotates daily</span>
-            </div>
-            <div class="dailypick" id="dailypick"></div>
-
-            <div class="sec-head">
-                <span class="hash">▌</span>
-                <h3>Editor's <em>Picks</em></h3>
-                <span class="count"><span class="b" id="featCount">—</span> entries flagged · <span id="featMix">—</span></span>
-            </div>
-            <div class="feat-grid" id="featGrid"></div>
-        </section>
-
-        <!-- Browse -->
-        <section class="sec" id="browse">
-            <div class="sec-head">
-                <span class="hash">▌</span>
-                <h3>Browse <em>Library</em></h3>
-                <span class="count">Showing <span class="b" id="browseCount">—</span> of <span id="browseTotal">—</span></span>
-            </div>
-            <div class="filters">
-                <span class="label">Sort</span>
-                <button class="pill-btn on" data-sort="newest">Newest</button>
-                <button class="pill-btn" data-sort="feat">Featured first</button>
-                <button class="pill-btn" data-sort="az">A–Z</button>
-                <div class="right">
-                    <span class="label" id="activeFilterLabel" style="display:none"></span>
-                    <button class="pill-btn" id="clearFilter" style="display:none">✕ Clear filter</button>
-                </div>
-            </div>
-            <div class="cards" id="cards"></div>
-            <button class="loadmore" id="loadmore">Load more ▾</button>
-        </section>
-
-        <!-- Toolshed A-Z -->
-        <section class="sec toolshed" id="toolshed">
-            <div class="sec-head">
-                <span class="hash">▌</span>
-                <h3>Toolshed <em>A–Z</em></h3>
-                <span class="count"><span class="b" id="ledgerCount">—</span> utilities · client-side · no tracking</span>
-            </div>
-            <div class="ledger" id="ledger"></div>
-        </section>
-
-        <!-- About -->
-        <section class="sec" id="about" style="padding-bottom:24px">
-            <div class="sec-head">
-                <span class="hash">▌</span>
-                <h3>What <em>Is This?</em></h3>
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;font-size:13px;color:var(--ink-2);line-height:1.6">
-                <div>
-                    <div style="font-family:'Press Start 2P',monospace;font-size:11px;color:var(--amber);margin-bottom:10px;line-height:1.3">A LIVING CATALOGUE</div>
-                    A single person's playground for tiny web things — most of the source written by language models, curated and hand-finished. Everything is open on GitHub.
-                </div>
-                <div>
-                    <div style="font-family:'Press Start 2P',monospace;font-size:11px;color:var(--cyan);margin-bottom:10px;line-height:1.3">NO TRACKING, NO ADS</div>
-                    No analytics, no accounts, no storage beyond your browser. Links open plain HTML pages. The whole thing is static.
-                </div>
-                <div>
-                    <div style="font-family:'Press Start 2P',monospace;font-size:11px;color:var(--magenta);margin-bottom:10px;line-height:1.3">CONTRIBUTE</div>
-                    Spot something broken? Want to add your own AI-made tool? Pull requests welcome — the repo is the source of truth.
-                </div>
-            </div>
-        </section>
-
+    <div class="drawer-foot">
+        <button class="drawer-clear" id="drawerClear">✕ Clear</button>
+        <button class="lucky-btn" id="luckyBtnM">⚀ Feeling Lucky</button>
     </div>
-</div>
+</aside>
 
-<!-- Footer -->
+<main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-kicker"><span id="kicker">An open-source arcade</span></div>
+        <h1 class="hero-title" id="hero-title">
+            BROWSER TOYS.<span class="l2">TINY TOOLS.</span><span class="l3">MOSTLY AI-MADE.</span>
+        </h1>
+        <div class="hero-sub">
+            <p>A growing catalogue of <strong><span id="hTools" class="tnum" style="min-width:3ch">~180</span></strong> utilities and <strong><span id="hGames" class="tnum" style="min-width:3ch">~75</span></strong> games, where most of the code was written by language models. Everything runs in the browser. Nothing to install. <strong>Pick something up, put it down.</strong></p>
+            <div class="hero-stats">
+                <div class="hero-stat"><div class="n" id="sTools">180</div><div class="l">Tools</div></div>
+                <div class="hero-stat"><div class="n" id="sGames">75</div><div class="l">Games</div></div>
+                <div class="hero-stat"><div class="n" id="sAI">200</div><div class="l">AI-Native</div></div>
+            </div>
+        </div>
+    </section>
+
+    <div class="ticker" aria-label="Recently added items" aria-live="off"><div class="ticker-track" id="ticker"></div></div>
+
+    <div class="layout">
+        <aside class="aside" aria-label="Library filters">
+            <div class="aside-group">
+                <div class="aside-group-label">Type</div>
+                <ul id="typeList" aria-label="Filter by type"></ul>
+            </div>
+            <div class="aside-group">
+                <div class="aside-group-label">Specials</div>
+                <ul id="specList" aria-label="Filter by special tag"></ul>
+            </div>
+            <div class="aside-group">
+                <div class="aside-group-label">Categories</div>
+                <ul id="tagList" aria-label="Filter by category"></ul>
+            </div>
+            <button class="lucky-btn" id="luckyBtn2">⚀ Feeling Lucky ↗</button>
+        </aside>
+
+        <div class="content">
+
+            <section class="sec" id="featured" aria-labelledby="pick-head">
+                <div class="sec-head">
+                    <span class="hash" aria-hidden="true">▌</span>
+                    <h2 id="pick-head">Today's <em>Pick</em></h2>
+                    <span class="count"><span class="b" id="dateLabel"></span> · rotates daily</span>
+                </div>
+                <div class="dailypick" id="dailypick"></div>
+
+                <div class="sec-head">
+                    <span class="hash" aria-hidden="true">▌</span>
+                    <h2>Editor's <em>Picks</em></h2>
+                    <span class="count"><span class="b" id="featCount">—</span> entries flagged · <span id="featMix">—</span></span>
+                </div>
+                <div class="feat-grid" id="featGrid"></div>
+            </section>
+
+            <section class="sec" id="browse" aria-labelledby="browse-head">
+                <div class="sec-head">
+                    <span class="hash" aria-hidden="true">▌</span>
+                    <h2 id="browse-head">Browse <em>Library</em></h2>
+                    <span class="count">Showing <span class="b" id="browseCount">—</span> of <span id="browseTotal">—</span></span>
+                </div>
+
+                <!-- Active filter banner (visible when filters applied; especially helpful on mobile) -->
+                <div class="filter-banner" id="filterBanner" role="status" aria-live="polite">
+                    <span class="dot" aria-hidden="true">●</span>
+                    <span id="filterBannerText">Filter active</span>
+                    <button class="x" id="filterBannerClear">✕ Clear</button>
+                </div>
+
+                <div class="filters">
+                    <span class="label">Sort</span>
+                    <button class="pill-btn on" data-sort="newest">Newest</button>
+                    <button class="pill-btn" data-sort="feat">Featured first</button>
+                    <button class="pill-btn" data-sort="az">A–Z</button>
+                    <div class="right">
+                        <span class="label" id="activeFilterLabel" style="display:none"></span>
+                        <button class="pill-btn" id="clearFilter" style="display:none">✕ Clear filter</button>
+                    </div>
+                </div>
+                <div class="cards" id="cards"></div>
+                <button class="loadmore" id="loadmore">Load more ▾</button>
+            </section>
+
+            <section class="sec toolshed" id="toolshed" aria-labelledby="toolshed-head">
+                <div class="sec-head">
+                    <span class="hash" aria-hidden="true">▌</span>
+                    <h2 id="toolshed-head">Toolshed <em>A–Z</em></h2>
+                    <span class="count"><span class="b" id="ledgerCount">—</span> utilities · client-side · no tracking</span>
+                </div>
+                <div class="ledger" id="ledger"></div>
+            </section>
+
+            <section class="sec" id="about" style="padding-bottom:24px" aria-labelledby="about-head">
+                <div class="sec-head">
+                    <span class="hash" aria-hidden="true">▌</span>
+                    <h2 id="about-head">What <em>Is This?</em></h2>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;font-size:13px;color:var(--ink-2);line-height:1.6">
+                    <div>
+                        <div style="font-family:'Press Start 2P',monospace;font-size:11px;color:var(--amber);margin-bottom:10px;line-height:1.3">A LIVING CATALOGUE</div>
+                        A single person's playground for tiny web things — most of the source written by language models, curated and hand-finished. Everything is open on GitHub.
+                    </div>
+                    <div>
+                        <div style="font-family:'Press Start 2P',monospace;font-size:11px;color:var(--cyan);margin-bottom:10px;line-height:1.3">NO TRACKING, NO ADS</div>
+                        No analytics, no accounts, no storage beyond your browser. Links open plain HTML pages. The whole thing is static.
+                    </div>
+                    <div>
+                        <div style="font-family:'Press Start 2P',monospace;font-size:11px;color:var(--magenta);margin-bottom:10px;line-height:1.3">CONTRIBUTE</div>
+                        Spot something broken? Want to add your own AI-made tool? Pull requests welcome — the repo is the source of truth.
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </div>
+</main>
+
 <footer class="ftr">
     <div class="ftr-in">
         <div>
-            <div class="ftr-logo">GPT<em>games</em></div>
+            <div class="ftr-logo" aria-hidden="true">GPT<em>games</em></div>
             <div class="ftr-blurb">An open-source collection of browser games and tiny tools, mostly written by language models. Maintained in the open since 2023.</div>
         </div>
         <div>
-            <h5>Elsewhere</h5>
-            <a href="https://github.com/BjoernKW/gptgames.dev" target="_blank">GitHub ↗</a>
-            <a href="https://www.reddit.com/r/gptgames/" target="_blank">Reddit ↗</a>
+            <h3>Elsewhere</h3>
+            <a href="https://github.com/TobiasMue91/tobiasmue91.github.io" target="_blank" rel="noopener">GitHub ↗</a>
+            <a href="https://www.reddit.com/user/tobias_mueller/" target="_blank" rel="noopener">Reddit ↗</a>
         </div>
         <div>
-            <h5>Shortcuts</h5>
+            <h3>Shortcuts</h3>
             <a href="#browse">Browse library</a>
             <a href="#toolshed">Toolshed A–Z</a>
             <a href="#featured">Featured</a>
@@ -755,16 +1080,15 @@
     </div>
 </footer>
 
-<!-- Tweaks panel -->
-<div id="tweaks">
+<div id="tweaks" role="dialog" aria-label="Visual tweaks">
     <h6>TWEAKS</h6>
     <label><div>Accent</div><div class="swatches" id="acSwatches"></div></label>
-    <label><div>Scanlines</div><select id="scanSel"><option value="on">On</option><option value="off">Off</option></select></label>
-    <label><div>Grid density</div><select id="density"><option value="dense">Dense</option><option value="cozy">Cozy</option><option value="compact">Compact</option></select></label>
-    <label><div>Headline style</div><select id="hstyle"><option value="pixel">Pixel (default)</option><option value="chrome">Chrome</option><option value="outline">Outline</option></select></label>
+    <label><div>Scanlines</div><select id="scanSel" aria-label="Scanlines"><option value="on">On</option><option value="off">Off</option></select></label>
+    <label><div>Grid density</div><select id="density" aria-label="Grid density"><option value="dense">Dense</option><option value="cozy">Cozy</option><option value="compact">Compact</option></select></label>
+    <label><div>Headline style</div><select id="hstyle" aria-label="Headline style"><option value="pixel">Pixel (default)</option><option value="chrome">Chrome</option><option value="outline">Outline</option></select></label>
 </div>
 
-<script src="timeline.js"></script>
-<script src="arcade.js"></script>
+<script src="timeline.js" defer></script>
+<script src="arcade.js" defer></script>
 </body>
 </html>
