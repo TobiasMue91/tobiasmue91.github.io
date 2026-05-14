@@ -6,7 +6,7 @@ A free, open-source collection of cognitive benchmark tests. Part of the GPTGame
 
 ## What's here
 
-A static web app with 24 short tests covering reaction time, memory, perception, attention, language, and reasoning. The landing page groups them into six categories. All progress is saved to `localStorage` — no accounts, no backend, no tracking beyond an optional GoatCounter snippet.
+A static web app with 26 short tests covering reaction time, memory, perception, attention, language, and reasoning. The landing page groups them into six categories. All progress is saved to `localStorage` — no accounts, no backend, no tracking beyond an optional GoatCounter snippet.
 
 ## Running locally
 
