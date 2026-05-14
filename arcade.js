@@ -1,4 +1,5 @@
 (async function(){
+  document.querySelector('#srch').focus();
   const SITE='https://www.gptgames.dev/';
   const [games,tools] = await Promise.all([
     fetch('data/games.json').then(r=>r.json()),
@@ -327,6 +328,7 @@
     syncSearchInputs(state.search, e.target);
     updateBurgerDot();
     apply();
+    document.querySelector('#browse-head')?.scrollIntoView({ behavior: 'smooth' });
   }
   const srchEl = document.getElementById('srch');
   if(srchEl) srchEl.addEventListener('input', onSearchInput);
