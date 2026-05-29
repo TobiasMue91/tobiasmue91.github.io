@@ -3425,19 +3425,158 @@
             S.stats.playMs += STEP;
         }
 
+        /* ------------------------------------------------------------
+           THE SKY  (a small gift to the buddy)
+
+           He stands alone in a box; the only thing that ever happened to
+           him was force. So: a sky he can't earn, can't buy, and doesn't
+           react to. It just turns over him whether anyone is watching or
+           not — dawn, day, dusk, night, and back. ~4 minutes a full turn.
+
+           Everything is FLAT colour (no gradients, no alpha) — the horizon
+           is honest bands blocked in like a painter would, the sun and moon
+           are solid discs on an arc, and the stars simply aren't drawn in
+           daylight, then grow in number and size as night deepens. Indifferent
+           and quiet, which is the whole point.
+           ------------------------------------------------------------ */
+        const SKY_PERIOD = 600000; // ms for a full day->night->day cycle
+// four phases, each a [sky, lowSky] pair of flat colours
+        const SKY_KEYS = [
+            {t: 0.00, sky: '#1b2440', low: '#3a3358'}, // deep night
+            {t: 0.12, sky: '#e8d9a8', low: '#f0b27a'}, // pre-dawn glow
+            {t: 0.25, sky: '#bfe0f2', low: '#e9f3f7'}, // morning
+            {t: 0.50, sky: '#a7d4ef', low: '#dfeef6'}, // midday
+            {t: 0.72, sky: '#f3c08a', low: '#e8915f'}, // dusk
+            {t: 0.85, sky: '#5a4a6e', low: '#7a5a72'}, // twilight
+            {t: 1.00, sky: '#1b2440', low: '#3a3358'}  // back to night
+        ];
+// fixed star field, generated once (positions in 0..1 space)
+        let STARS = null;
+
+        function ensureStars() {
+            if (STARS) return;
+            STARS = [];
+            for (let i = 0; i < 90; i++) {
+                STARS.push({
+                    x: Math.random(),
+                    y: Math.random() * 0.7,
+                    r: 0.6 + Math.random() * 1.4,
+                    tw: Math.random() * 6.28,
+                    sp: 0.5 + Math.random() * 1.5
+                });
+            }
+        }
+
+        function hexLerp(a, b, t) {
+            const ai = parseInt(a.slice(1), 16), bi = parseInt(b.slice(1), 16);
+            const ar = (ai >> 16) & 255, ag = (ai >> 8) & 255, ab = ai & 255;
+            const br = (bi >> 16) & 255, bg = (bi >> 8) & 255, bb = bi & 255;
+            const r = Math.round(lerp(ar, br, t)), g = Math.round(lerp(ag, bg, t)), bl = Math.round(lerp(ab, bb, t));
+            return 'rgb(' + r + ',' + g + ',' + bl + ')';
+        }
+
+        function skyPhase() {
+            const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+            return (now % SKY_PERIOD) / SKY_PERIOD; // 0..1
+        }
+
+        function skyColors(p) {
+            let lo = SKY_KEYS[0], hi = SKY_KEYS[SKY_KEYS.length - 1];
+            for (let i = 0; i < SKY_KEYS.length - 1; i++) {
+                if (p >= SKY_KEYS[i].t && p <= SKY_KEYS[i + 1].t) {
+                    lo = SKY_KEYS[i];
+                    hi = SKY_KEYS[i + 1];
+                    break;
+                }
+            }
+            const span = (hi.t - lo.t) || 1, k = clamp((p - lo.t) / span, 0, 1);
+            return {sky: hexLerp(lo.sky, hi.sky, k), low: hexLerp(lo.low, hi.low, k)};
+        }
+
+// how "night" it is, 0 (full day) .. 1 (full night) — drives stars
+        function nightness(p) {
+            // night is near p=0/1; day near p=0.5. cosine gives a smooth bell.
+            return clamp(Math.cos(p * Math.PI * 2) * 0.5 + 0.5, 0, 1);
+        }
+
         function drawRoom() {
+            ensureStars();
+            const p = skyPhase();
+            const c = skyColors(p);
+            const horizon = floorY - 90; // where the low band meets the upper sky
+
+            // upper sky band (flat)
             if (S.settings.trails) {
                 ctx.globalAlpha = 0.22;
-                ctx.fillStyle = '#dfe3ea';
-                ctx.fillRect(-40, -40, W + 80, H + 80);
-                ctx.globalAlpha = 1;
-            } else {
-                ctx.fillStyle = '#dfe3ea';
-                ctx.fillRect(-40, -40, W + 80, H + 80);
             }
-            ctx.fillStyle = '#c7cdd6';
+            ctx.fillStyle = c.sky;
+            ctx.fillRect(-40, -40, W + 80, horizon + 140);
+
+            const night = nightness(p);
+
+            // stars — only when there's any night at all; drawn as solid dots,
+            // count and size scaled by how deep the night is (no alpha fade).
+            if (night > 0.04) {
+                const shown = Math.floor(STARS.length * night);
+                ctx.fillStyle = '#f4f1e4';
+                for (let i = 0; i < shown; i++) {
+                    const s = STARS[i];
+                    const sx = s.x * W, sy = s.y * horizon;
+                    // gentle size twinkle via sine on radius (size, not opacity)
+                    const tw = 0.7 + 0.3 * Math.sin(p * 6.28 * 40 * s.sp + s.tw);
+                    const r = s.r * night * tw;
+                    if (r < 0.25) continue;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, r, 0, 6.2832);
+                    ctx.fill();
+                }
+            }
+
+            // celestial body on a proper arc. Map the phase to an arc angle so the body
+            // rises at the left horizon, peaks high and central, and sets at the right.
+            // Day runs roughly p in [0.12, 0.75]; night is the rest (moon takes over).
+            const horizonY = floorY - 60;     // visual horizon line for rise/set
+            const peakY = 70;                 // highest point in the sky
+            function bodyAt(frac) {           // frac 0=rise(left) .5=peak(center) 1=set(right)
+                const a = frac * Math.PI;       // 0..PI
+                return {x: W * (0.08 + 0.84 * frac), y: lerp(horizonY, peakY, Math.sin(a))};
+            }
+
+            if (night < 0.5) {
+                // SUN — its day fraction maps the daylit part of the phase to 0..1
+                const dayFrac = clamp((p - 0.12) / (0.75 - 0.12), 0, 1);
+                const pos = bodyAt(dayFrac);
+                const r = 26;
+                ctx.fillStyle = '#ffd24a';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, r, 0, 6.2832);
+                ctx.fill();
+                ctx.fillStyle = '#ffe27a';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, r * 0.62, 0, 6.2832);
+                ctx.fill();
+            } else {
+                // MOON — night spans p in [0.75 .. 1] U [0 .. 0.12]; fold into one 0..1 fraction
+                let nf = (p >= 0.75) ? (p - 0.75) / (1.12 - 0.75) : (p + 1 - 0.75) / (1.12 - 0.75);
+                nf = clamp(nf, 0, 1);
+                const pos = bodyAt(nf);
+                const r = 22;
+                ctx.fillStyle = '#eef0e0';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, r, 0, 6.2832);
+                ctx.fill();
+                ctx.fillStyle = c.sky; // carve the crescent with the opaque sky colour
+                ctx.beginPath();
+                ctx.arc(pos.x + r * 0.5, pos.y - r * 0.25, r * 0.92, 0, 6.2832);
+                ctx.fill();
+            }
+
+            // ground (kept solid, slightly tinted toward the low sky at night so it reads as lit)
+            const groundTop = hexLerp('#c7cdd6', '#5a5f70', night);
+            const groundEdge = hexLerp('#aab2bf', '#474c5c', night);
+            ctx.fillStyle = groundTop;
             ctx.fillRect(-40, floorY, W + 80, H - floorY + 80);
-            ctx.fillStyle = '#aab2bf';
+            ctx.fillStyle = groundEdge;
             ctx.fillRect(-40, floorY - 2, W + 80, 2);
         }
 
