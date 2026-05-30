@@ -87,6 +87,7 @@
         </div>
       </div>
     </a>`).join(''));
+  augmentDescriptions(document.getElementById('featGrid'));
 
   // ── Ticker ─────
   const recent = [...all].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,24);
@@ -446,7 +447,50 @@
         </div>
       </a>`;
     }).join(''));
+    augmentDescriptions(document.getElementById('cards'));
   }
+
+  // ── Read-more toggles ─────────
+  // Add a "more" button only to descriptions that are actually clipped.
+  // Detection is layout-based (scrollHeight > clientHeight), so it adapts to
+  // card width, font loading, and viewport without guessing text length.
+  function augmentDescriptions(scope){
+    if(!scope) return;
+    scope.querySelectorAll('.cab-desc, .feat-desc').forEach(d=>{
+      if(d.classList.contains('expanded')) return;
+      if(d.nextElementSibling && d.nextElementSibling.classList.contains('more-toggle')) return;
+      if(d.scrollHeight - d.clientHeight < 2) return; // not clipped
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'more-toggle';
+      btn.textContent = 'More';
+      btn.setAttribute('aria-expanded','false');
+      d.insertAdjacentElement('afterend', btn);
+    });
+  }
+
+  // Toggle expand/collapse without triggering the card's link navigation.
+  document.addEventListener('click', e=>{
+    const btn = e.target.closest('.more-toggle');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const desc = btn.previousElementSibling;
+    if(!desc) return;
+    const open = desc.classList.toggle('expanded');
+    btn.classList.toggle('open', open);
+    btn.textContent = open ? 'Less' : 'More';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  // Re-evaluate clamps when fonts finish loading or the viewport changes width.
+  function reAugmentAll(){
+    augmentDescriptions(document.getElementById('cards'));
+    augmentDescriptions(document.getElementById('featGrid'));
+  }
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(reAugmentAll);
+  let raf;
+  window.addEventListener('resize', ()=>{ cancelAnimationFrame(raf); raf=requestAnimationFrame(reAugmentAll); });
 
   // ── Toolshed ─────────
   const toolsSorted = [...tools].sort((a,b)=>a.title.localeCompare(b.title));
