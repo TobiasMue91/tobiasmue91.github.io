@@ -9,6 +9,7 @@
   const html = (id, v) => { const el = document.getElementById(id); if(el) el.innerHTML = v; };
   const all = [...games, ...tools].map(x=>({...x, url:(x.url||'').replace(/\\/g,'/')}));
   const isNew = x => (Date.now() - new Date(x.date).getTime()) < 1000*60*60*24*120;
+  const lastTouched = x => new Date(x.updated || x.date);
   const img = x => SITE + (x.screenshot||'').replace(/^\//,'');
   const href = x => SITE + (x.url||'').replace(/^\//,'');
   const clean = t => (t||'').replace(/\(AI\)\s*/,'').replace(/&/g,'&amp;');
@@ -376,6 +377,7 @@
       list=list.filter(x=>x.title.toLowerCase().includes(q)||(x.description||'').toLowerCase().includes(q)||(x.tags||[]).some(t=>t.toLowerCase().includes(q)));
     }
     if(state.sort==='newest') list.sort((a,b)=>new Date(b.date)-new Date(a.date));
+    if(state.sort==='updated') list.sort((a,b)=>lastTouched(b)-lastTouched(a));
     if(state.sort==='az') list.sort((a,b)=>a.title.localeCompare(b.title));
     if(state.sort==='feat') list.sort((a,b)=>(b.featured?1:0)-(a.featured?1:0)||new Date(b.date)-new Date(a.date));
 

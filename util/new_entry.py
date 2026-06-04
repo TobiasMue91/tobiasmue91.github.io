@@ -290,6 +290,7 @@ if __name__ == "__main__":
         "aiPowered": ai_powered,
         "featured": featured,
         "date": today,
+        "updated": today,
         "categories": categories,
         "tags": tags
     }
