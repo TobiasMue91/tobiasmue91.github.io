@@ -882,6 +882,11 @@
             overflow: hidden;
         }
 
+        #win > * {
+            position: relative;
+            z-index: 2;
+        }
+
         #win .winGlow {
             position: absolute;
             width: 140vw;
@@ -891,6 +896,8 @@
             transform: translate(-50%, -50%);
             background: radial-gradient(circle, rgba(255, 220, 140, .16), rgba(255, 220, 140, 0) 60%);
             animation: winpulse 4s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
         }
 
         @keyframes winpulse {
@@ -909,7 +916,6 @@
             color: #FFD24A;
             text-shadow: 0 0 40px rgba(255, 210, 74, .9);
             animation: nbpulse 2.4s ease-in-out infinite;
-            z-index: 1;
         }
 
         .winTitle {
@@ -919,7 +925,6 @@
             color: #fff;
             text-shadow: 0 0 60px rgba(255, 210, 120, .6);
             margin-top: 6px;
-            z-index: 1;
         }
 
         .winSub {
@@ -927,7 +932,6 @@
             letter-spacing: clamp(3px, 1vw, 7px);
             color: #FFD24A;
             margin-top: 10px;
-            z-index: 1;
         }
 
         .winFlavor {
@@ -939,12 +943,10 @@
             text-align: center;
             line-height: 1.6;
             font-weight: 400;
-            z-index: 1;
         }
 
         #win .stats {
             margin-top: 24px;
-            z-index: 1;
         }
 
         .hidden {
@@ -1042,6 +1044,12 @@
             <div class="tg" id="t_arrow"></div>
         </div>
         <div class="row">
+            <div class="lwrap"><label>Daylight</label>
+                <div class="desc">brighter, sunlit palette</div>
+            </div>
+            <div class="tg" id="t_daylight"></div>
+        </div>
+        <div class="row">
             <div class="lwrap"><label>Shadows</label>
                 <div class="desc">cast shadows &amp; depth · may cost FPS</div>
             </div>
@@ -1059,34 +1067,24 @@
             </div>
             <input type="range" class="sld" id="s_height" min="0" max="100" value="100"></div>
         <div class="row">
-            <div class="lwrap"><label>Zoom-out Speed</label>
-                <div class="desc">how fast the view pulls back</div>
+            <div class="lwrap"><label>Camera Distance</label>
+                <div class="desc">how much world you see around the void</div>
             </div>
-            <input type="range" class="sld" id="s_zoom" min="60" max="100" value="88"></div>
+            <input type="range" class="sld" id="s_holefrac" min="8" max="28" value="15"></div>
         <div class="row">
             <div class="lwrap"><label>Music Volume</label>
                 <div class="desc"></div>
             </div>
             <input type="range" class="sld" id="s_mvol" min="0" max="100" value="45"></div>
         <div class="row">
-            <div class="lwrap"><label>Rivals</label>
-                <div class="desc">applies on next run</div>
+            <div class="lwrap"><label>Difficulty</label>
+                <div class="desc">rival threat · next run</div>
             </div>
-            <div class="seg" id="seg_rivals">
-                <button data-v="2">2</button>
-                <button data-v="3">3</button>
-                <button data-v="4">4</button>
-                <button data-v="5">5</button>
-            </div>
-        </div>
-        <div class="row">
-            <div class="lwrap"><label>Rival Aggression</label>
-                <div class="desc">applies on next run</div>
-            </div>
-            <div class="seg" id="seg_diff">
-                <button data-v="0">CALM</button>
-                <button data-v="1">NORMAL</button>
-                <button data-v="2">FIERCE</button>
+            <div class="seg" id="seg_difficulty">
+                <button data-v="chill">CHILL</button>
+                <button data-v="normal">NORMAL</button>
+                <button data-v="hard">HARD</button>
+                <button data-v="nightmare">NIGHT­MARE</button>
             </div>
         </div>
         <div class="row">
@@ -1226,9 +1224,9 @@
     //===================================================================== SETTINGS STATE
     const S = {
         music: true, sfx: true, shake: true, arrow: true,
-        height: 1.0, zoom: 0.88, mvol: 0.45,
-        rivals: 3, diff: 1, startChapter: 0,
-        shadows: true, grade: true, pace: 'standard',
+        height: 1.0, zoom: 0.88, mvol: 0.45, holeFrac: 0.15,
+        rivals: 3, diff: 1, startChapter: 0, difficulty: 'normal',
+        shadows: true, grade: true, pace: 'standard', daylight: false,
     };
 
     //===================================================================== HELPERS
@@ -1397,6 +1395,15 @@
         return CHAPTERS[G.chapter];
     }
 
+    // daylight palette: brighten ground colors when daylight is on (space stays dark — it's space)
+    function gp(field) {
+        const c = CH();
+        const v = c[field];
+        if (!S.daylight || c.groundType === 'space') return v;
+        // lighten toward a daytime tone
+        return shade(v, field === 'parkB' || field === 'parkA' ? 64 : 48);
+    }
+
     const TIER_NAMES = ['SPECK', 'NIBBLER', 'PROWLER', 'DEVOURER', 'RAVAGER', 'LEVELLER', 'COLOSSUS', 'TITAN', 'LEVIATHAN', 'CATACLYSM', 'OBLIVION', 'SINGULARITY'];
     const TIER_THRESH = [];
     (function () {
@@ -1423,6 +1430,11 @@
     //===================================================================== WORLD / CHAPTER CONSTS
     const ARENA = 7200, ROAD = 70, AVENUE = 104, MARGIN = 120;
     const GROWTH = 0.34, BASE_STEP = 620, SPEED_K = 0.0052;
+    const SPEED_BASE = 52, SPEED_P = 0.85;   // worldSpeed = SPEED_BASE * r^SPEED_P keeps screen-space speed ~constant
+    function holeSpeed(r) {
+        return SPEED_BASE * Math.pow(Math.max(1, r), SPEED_P);
+    }
+
     const COMBO_WINDOW = 0.6, SOFT_PREY_TARGET = 4200;
     const REBASE = 32;                 // world shrink factor at each chapter jump
 
@@ -1430,17 +1442,34 @@
     // (higher = slower, more deliberate). growth = overall area-gain multiplier. trig = chapter size gate.
     // chMult = per-chapter score multiplier. speed = movement multiplier.
     const PACES = {
-        sprint: {name: 'SPRINT', growth: 2.4, effK: 1.1, trig: 1000, chMult: 3.0, speed: 1.08, endTier: 7},
-        standard: {name: 'STANDARD', growth: 1.35, effK: 1.5, trig: 1300, chMult: 2.5, speed: 1.0, endTier: 9},
-        long: {name: 'LONG', growth: 0.8, effK: 1.9, trig: 1650, chMult: 2.2, speed: 0.97, endTier: 11},
-        marathon: {name: 'MARATHON', growth: 0.5, effK: 2.3, trig: 2000, chMult: 2.0, speed: 0.94, endTier: 13},
-        endless: {name: 'ENDLESS', growth: 0.8, effK: 1.9, trig: 1650, chMult: 2.2, speed: 0.97, endTier: 999},
+        sprint: {name: 'SPRINT', growth: 0.62, effK: 1.3, trig: 1000, chMult: 3.0, speed: 1.08, endTier: 7},
+        standard: {name: 'STANDARD', growth: 0.34, effK: 1.7, trig: 1300, chMult: 2.5, speed: 1.0, endTier: 9},
+        long: {name: 'LONG', growth: 0.19, effK: 2.0, trig: 1650, chMult: 2.2, speed: 0.97, endTier: 11},
+        marathon: {name: 'MARATHON', growth: 0.11, effK: 2.4, trig: 2000, chMult: 2.0, speed: 0.94, endTier: 13},
+        endless: {name: 'ENDLESS', growth: 0.19, effK: 2.0, trig: 1650, chMult: 2.2, speed: 0.97, endTier: 999},
     };
     let TUNE = PACES.standard;
 
     function CHAPTER_TRIGGER_R() {
         return TUNE.trig;
     }
+
+    // DIFFICULTY presets — control rival threat.
+    const DIFFS = {
+        chill: {name: 'CHILL', aggro: 0.78, huntChance: 0.10, keepUp: 0.8, startMul: 0.7, rivals: 2, hunger: 0.9},
+        normal: {name: 'NORMAL', aggro: 0.95, huntChance: 0.30, keepUp: 1.0, startMul: 0.9, rivals: 3, hunger: 1.0},
+        hard: {name: 'HARD', aggro: 1.08, huntChance: 0.55, keepUp: 1.18, startMul: 1.05, rivals: 4, hunger: 1.15},
+        nightmare: {
+            name: 'NIGHTMARE',
+            aggro: 1.18,
+            huntChance: 0.85,
+            keepUp: 1.35,
+            startMul: 1.2,
+            rivals: 5,
+            hunger: 1.3
+        },
+    };
+    let DIF = DIFFS.normal;
 
     //===================================================================== STATE
     const G = {
@@ -2305,6 +2334,7 @@
     //===================================================================== START RUN
     function startRun() {
         TUNE = PACES[S.pace] || PACES.standard;
+        DIF = DIFFS[S.difficulty] || DIFFS.normal;
         G.chapter = S.startChapter | 0;
         G.frameScale = Math.pow(REBASE, G.chapter);
         G.score = 0;
@@ -2351,10 +2381,16 @@
         }
         G.rivals = [];
         const names = CH().rivalNames;
-        for (let i = 0; i < S.rivals; i++) {
-            const ang = (i / S.rivals) * 6.28 + 0.6;
+        const nRivals = DIF.rivals;
+        for (let i = 0; i < nRivals; i++) {
+            const ang = (i / nRivals) * 6.28 + 0.6;
             const rv = newHole(ARENA / 2 + Math.cos(ang) * 1100, ARENA / 2 + Math.sin(ang) * 1100, false);
             rv.name = names[i] || ('R' + i);
+            // rivals start sized relative to the player per difficulty (harder = they start bigger)
+            rv.r = Math.max(9, G.hole.r * DIF.startMul);
+            rv.area = Math.PI * rv.r * rv.r;
+            rv.targetR = rv.r;
+            rv.tierIdx = currentTierIdx(rv.r);
             G.rivals.push(rv);
         }
         G.camera.x = G.hole.x;
@@ -2401,7 +2437,8 @@
         // This breaks the runaway feedback loop — you must keep eating size-appropriate prey to grow.
         const ratio = Math.min(1, o.r / (h.r * 0.7));
         const eff = Math.pow(ratio, TUNE.effK);
-        h.area += Math.PI * o.r * o.r * GROWTH * TUNE.growth * eff;
+        const growMul = h.isPlayer ? 1 : DIF.keepUp;
+        h.area += Math.PI * o.r * o.r * GROWTH * TUNE.growth * eff * growMul;
         h.targetR = radiusFromArea(h);
         if (o.special === 'golden' && h.isPlayer) {
             G.goldenAlive = false;
@@ -2496,8 +2533,6 @@
         const ti = currentTierIdx(h.targetR);
         if (ti > h.tierIdx) {
             h.tierIdx = ti;
-            G.camera.targetZoom *= S.zoom;
-            if (G.camera.targetZoom < 0.012) G.camera.targetZoom = 0.012;
             triggerFlash('255,255,255', 0.08, 0.12);
             SFX.tierup();
             h.rimPulse = 1;
@@ -2747,7 +2782,7 @@
 
         if (!inTransition) {
             const frenzyBoost = effFrenzy() ? 1.35 : 1;
-            let topSpeed = BASE_STEP * TUNE.speed / (1 + h.r * SPEED_K) * frenzyBoost;
+            let topSpeed = holeSpeed(h.r) * TUNE.speed * frenzyBoost;
             if (G.boosting) topSpeed *= 2.15;
             let tvx = 0, tvy = 0;
             const k = G.input.keys;
@@ -2762,8 +2797,9 @@
                 tvy = ky / l * topSpeed;
             } else if (G.input.active) {
                 const dx = G.input.px - h.x, dy = G.input.py - h.y, d = Math.hypot(dx, dy);
+                const ramp = Math.max(80, h.r * 1.2);   // ease into target within ~1.2 radii, not a fixed 130
                 if (d > 2) {
-                    const f = Math.min(1, d / 130);
+                    const f = Math.min(1, d / ramp);
                     tvx = dx / d * topSpeed * f;
                     tvy = dy / d * topSpeed * f;
                 }
@@ -2839,6 +2875,12 @@
         // camera
         G.camera.x += (h.x - G.camera.x) * (1 - Math.pow(1 - 0.1, dt * 60));
         G.camera.y += (h.y - G.camera.y) * (1 - Math.pow(1 - 0.1, dt * 60));
+        // ADAPTIVE ZOOM: keep the hole at a comfortable fraction of the (smaller) viewport dimension,
+        // so it never fills the screen — and naturally zooms out more on small/mobile screens.
+        if (!inTransition) {
+            const want = (S.holeFrac * Math.min(VW, VH)) / Math.max(1, h.r);
+            G.camera.targetZoom = Math.max(0.012, Math.min(2.2, want));
+        }
         G.camera.zoom += (G.camera.targetZoom - G.camera.zoom) * easeOutCubic(Math.min(1, dt * 4));
 
         if (G.shakeT > 0) {
@@ -2992,8 +3034,8 @@
 
     //===================================================================== RIVAL AI
     function updateRival(rv, dt) {
-        const aggro = [0.7, 0.9, 1.05][S.diff];
-        const topSpeed = BASE_STEP * TUNE.speed / (1 + rv.r * SPEED_K) * aggro;
+        const aggro = DIF.aggro;
+        const topSpeed = holeSpeed(rv.r) * TUNE.speed * aggro;
         rv.aiRetarget -= dt;
         let fleeX = 0, fleeY = 0, fleeing = false;
         const all = [G.hole, ...G.rivals];
@@ -3011,12 +3053,14 @@
         if (rv.aiRetarget <= 0 || !rv.aiTarget || rv.aiTarget.eaten) {
             rv.aiRetarget = 0.35 + Math.random() * 0.4;
             rv.huntHole = null;
-            if (S.diff >= 1 && Math.random() < 0.25 * S.diff) {
+            // hunt the player (or any smaller hole) more eagerly on higher difficulty, from farther away
+            if (Math.random() < DIF.huntChance) {
+                const range = 700 + DIF.huntChance * 1400;
                 for (const o of all) {
                     if (o === rv || !o.alive) continue;
-                    if (rv.r > o.r * 1.12) {
+                    if (rv.r > o.r * 1.08) {
                         const dx = o.x - rv.x, dy = o.y - rv.y;
-                        if (dx * dx + dy * dy < 700 * 700) {
+                        if (dx * dx + dy * dy < range * range) {
                             rv.huntHole = o;
                             break;
                         }
@@ -3044,7 +3088,8 @@
             tx += Math.cos(rv.aiJitter) * 40;
             ty += Math.sin(rv.aiJitter * 1.3) * 40;
         }
-        const dx = tx - rv.x, dy = ty - rv.y, d = Math.hypot(dx, dy) || 1, f = Math.min(1, d / 130);
+        const dx = tx - rv.x, dy = ty - rv.y, d = Math.hypot(dx, dy) || 1,
+            f = Math.min(1, d / Math.max(80, rv.r * 1.2));
         const tvx = dx / d * topSpeed * f, tvy = dy / d * topSpeed * f, lp = 1 - Math.pow(1 - 0.15, dt * 60);
         rv.vx += (tvx - rv.vx) * lp;
         rv.vy += (tvy - rv.vy) * lp;
@@ -3474,7 +3519,7 @@
 
     function render() {
         const c = CH();
-        ctx.fillStyle = c.bg;
+        ctx.fillStyle = gp('bg');
         ctx.fillRect(0, 0, VW, VH);
         if (G.state === 'MENU') {
             renderMenuBg();
@@ -3636,12 +3681,20 @@
 
         // POST: subtle chapter color-grade wash + cached vignette for depth/mood
         if (S.grade) {
-            const gr = CH().grade;
-            if (gr) {
-                ctx.globalCompositeOperation = 'overlay';
-                ctx.fillStyle = gr;
+            if (S.daylight && CH().groundType !== 'space') {
+                // warm daylight wash (soft-light brighten) instead of the dark overlay grade
+                ctx.globalCompositeOperation = 'soft-light';
+                ctx.fillStyle = 'rgba(255,240,210,0.5)';
                 ctx.fillRect(0, 0, VW, VH);
                 ctx.globalCompositeOperation = 'source-over';
+            } else {
+                const gr = CH().grade;
+                if (gr) {
+                    ctx.globalCompositeOperation = 'overlay';
+                    ctx.fillStyle = gr;
+                    ctx.fillRect(0, 0, VW, VH);
+                    ctx.globalCompositeOperation = 'source-over';
+                }
             }
             drawVignette();
         }
@@ -3712,19 +3765,19 @@
         const c = CH(), z = G.camera.zoom;
         const gx0 = Math.max(0, vx0), gy0 = Math.max(0, vy0), gx1 = Math.min(ARENA, vx1), gy1 = Math.min(ARENA, vy1);
         if (c.groundType === 'city') {
-            ctx.fillStyle = c.road;
+            ctx.fillStyle = gp('road');
             ctx.fillRect(gx0, gy0, gx1 - gx0, gy1 - gy0);
             for (let i = 0; i < G.blocks.length; i++) {
                 const b = G.blocks[i];
                 if (b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue;
                 if (b.zone === 'park') {
-                    ctx.fillStyle = c.parkA;
+                    ctx.fillStyle = gp('parkA');
                     ctx.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
-                    ctx.fillStyle = c.parkB;
+                    ctx.fillStyle = gp('parkB');
                     const p = 12;
                     ctx.fillRect(b.x0 + p, b.y0 + p, (b.x1 - b.x0) - 2 * p, (b.y1 - b.y0) - 2 * p);
                 } else {
-                    ctx.fillStyle = c.pad;
+                    ctx.fillStyle = gp('pad');
                     ctx.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
                 }
             }
@@ -3746,14 +3799,14 @@
                 }
             }
         } else if (c.groundType === 'terra') {
-            ctx.fillStyle = c.parkB;
+            ctx.fillStyle = gp('parkB');
             ctx.fillRect(gx0, gy0, gx1 - gx0, gy1 - gy0);
-            drawGroundPatches(gx0, gy0, gx1, gy1, c.parkA, 520, 0.5);
+            drawGroundPatches(gx0, gy0, gx1, gy1, gp('parkA'), 520, 0.5);
             if (z > 0.4) groundGrain(gx0, gy0, gx1, gy1);
         } else if (c.groundType === 'ocean') {
-            ctx.fillStyle = c.pad;
+            ctx.fillStyle = gp('pad');
             ctx.fillRect(gx0, gy0, gx1 - gx0, gy1 - gy0);
-            drawGroundPatches(gx0, gy0, gx1, gy1, c.parkB, 640, 0.55);
+            drawGroundPatches(gx0, gy0, gx1, gy1, gp('parkB'), 640, 0.55);
             if (z > 0.4) groundGrain(gx0, gy0, gx1, gy1);
         } else { // space
             ctx.fillStyle = c.bg;
@@ -5158,11 +5211,12 @@
     tg('t_arrow', 'arrow');
     tg('t_shadows', 'shadows');
     tg('t_grade', 'grade');
+    tg('t_daylight', 'daylight');
     document.getElementById('s_height').addEventListener('input', e => {
         S.height = e.target.value / 100;
     });
-    document.getElementById('s_zoom').addEventListener('input', e => {
-        S.zoom = e.target.value / 100;
+    document.getElementById('s_holefrac').addEventListener('input', e => {
+        S.holeFrac = e.target.value / 100;
     });
     document.getElementById('s_mvol').addEventListener('input', e => {
         S.mvol = e.target.value / 100;
@@ -5178,10 +5232,18 @@
         }));
     }
 
-    seg('seg_rivals', 'rivals');
-    seg('seg_diff', 'diff');
     seg('seg_chap', 'startChapter');
-    // skin uses string values + applies live
+
+    // string-valued selectors
+    function segStr(id, setter, getter) {
+        const wrap = document.getElementById(id);
+        wrap.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
+            setter(btn.dataset.v);
+            wrap.querySelectorAll('button').forEach(b => b.classList.toggle('sel', b === btn));
+        }));
+    }
+
+    segStr('seg_difficulty', v => S.difficulty = v);
     (function () {
         const wrap = document.getElementById('seg_pace');
         wrap.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
@@ -5207,11 +5269,11 @@
         document.getElementById('t_arrow').classList.toggle('on', S.arrow);
         document.getElementById('t_shadows').classList.toggle('on', S.shadows);
         document.getElementById('t_grade').classList.toggle('on', S.grade);
+        document.getElementById('t_daylight').classList.toggle('on', S.daylight);
         document.getElementById('s_height').value = S.height * 100;
-        document.getElementById('s_zoom').value = S.zoom * 100;
+        document.getElementById('s_holefrac').value = S.holeFrac * 100;
         document.getElementById('s_mvol').value = S.mvol * 100;
-        document.querySelectorAll('#seg_rivals button').forEach(b => b.classList.toggle('sel', parseInt(b.dataset.v) === S.rivals));
-        document.querySelectorAll('#seg_diff button').forEach(b => b.classList.toggle('sel', parseInt(b.dataset.v) === S.diff));
+        document.querySelectorAll('#seg_difficulty button').forEach(b => b.classList.toggle('sel', b.dataset.v === S.difficulty));
         document.querySelectorAll('#seg_chap button').forEach(b => b.classList.toggle('sel', parseInt(b.dataset.v) === S.startChapter));
         document.querySelectorAll('#seg_skin button').forEach(b => b.classList.toggle('sel', b.dataset.v === G.skin));
         document.querySelectorAll('#seg_pace button').forEach(b => b.classList.toggle('sel', b.dataset.v === S.pace));
@@ -5233,14 +5295,15 @@
     });
 
     // init toggles to current state
-    ['t_music', 't_sfx', 't_shake', 't_arrow', 't_shadows', 't_grade'].forEach(id => {
+    ['t_music', 't_sfx', 't_shake', 't_arrow', 't_shadows', 't_grade', 't_daylight'].forEach(id => {
         const key = {
             t_music: 'music',
             t_sfx: 'sfx',
             t_shake: 'shake',
             t_arrow: 'arrow',
             t_shadows: 'shadows',
-            t_grade: 'grade'
+            t_grade: 'grade',
+            t_daylight: 'daylight'
         }[id];
         document.getElementById(id).classList.toggle('on', S[key]);
     });
