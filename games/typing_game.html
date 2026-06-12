@@ -194,7 +194,7 @@
             position: absolute;
             left: 0;
             top: 0;
-            font-size: 2.7rem;
+            font-size: 2.85rem;
             white-space: nowrap;
             color: var(--dim);
             transform: translate(-50%, -50%);
@@ -240,29 +240,30 @@
             }
         }
 
-        /* depth fog by how far ahead a word is (set per commit, cheap) */
+        /* depth fog by how far ahead a word is (set per commit, cheap) —
+           tuned so the next 2-3 words stay pre-readable */
         .word.f0 {
             opacity: 1;
         }
 
         .word.f1 {
-            opacity: 0.62;
+            opacity: 0.85;
         }
 
         .word.f2 {
-            opacity: 0.4;
+            opacity: 0.62;
         }
 
         .word.f3 {
-            opacity: 0.26;
+            opacity: 0.42;
         }
 
         .word.f4 {
-            opacity: 0.16;
+            opacity: 0.25;
         }
 
         .word.f5 {
-            opacity: 0.09;
+            opacity: 0.12;
         }
 
         /* committed words fly past the camera */
@@ -1553,15 +1554,17 @@
         /* ==================================================================
            The flight path — pure math, no DOM measurement anywhere.
            Word i lives at posOf(i); the camera springs between stops.
+           Long, gentle arcs: consecutive words stay near-collinear so the
+           eye can read ahead down the column, monkeytype-style.
            ================================================================== */
-        var SPAN_Z = 330;   /* distance between words */
+        var SPAN_Z = 300;   /* distance between words */
         var CAM_BACK = 250; /* how far behind the active word the camera flies */
         var CAM_LIFT = -14; /* camera slightly above the path */
 
         function posOf(i) {
             return {
-                x: Math.sin(i * 0.55) * 175,
-                y: Math.sin(i * 0.83) * 48,
+                x: Math.sin(i * 0.21) * 530,
+                y: Math.sin(i * 0.63) * 130,
                 z: -i * SPAN_Z
             };
         }
@@ -1593,7 +1596,7 @@
         function applyCamera() {
             worldEl.style.transform =
                 "translate3d(" + (-cam.x).toFixed(2) + "px," + (-cam.y).toFixed(2) + "px," + (-cam.z).toFixed(2) + "px)";
-            var roll = motionOK ? Math.max(-3.5, Math.min(3.5, -cam.vx * 0.011)) : 0;
+            var roll = motionOK ? Math.max(-3.5, Math.min(3.5, -cam.vx * 0.018)) : 0;
             var pitch = motionOK ? Math.max(-2, Math.min(2, -1 + cam.vz * 0.0011)) : -1;
             rigEl.style.transform = "rotateX(" + pitch.toFixed(2) + "deg) rotateZ(" + roll.toFixed(2) + "deg)";
             /* the graph-paper floor scrolls with flight */
@@ -1901,7 +1904,14 @@
             var pbs = loadJSON("tg:pb", {});
             var pb = pbs[pbKey()];
             test.pbPace = pb ? pb.wpm : null;
-            test.pbMarks = pb && pb.marks && pb.marks.length ? pb.marks : null;
+            var mk = pb && pb.marks && pb.marks.length ? pb.marks : null;
+            if (mk) {
+                /* a replay averaging >5 word-commits per second is not a typing
+                   run — ignore the timeline and fall back to constant pace */
+                var lastT = mk[mk.length - 1];
+                if (!(lastT > 0) || mk.length / lastT > 5) mk = null;
+            }
+            test.pbMarks = mk;
 
             wordsEl.innerHTML = "";
             spawnWords(0, test.words.length);
@@ -2059,7 +2069,8 @@
             test.cur = "";
             ghost.value = "";
             updateFog();
-            if (motionOK) cam.vz -= 240; /* the lunge to the next word */
+            /* only a clean commit earns the lunge — sloppy ones barely nudge */
+            if (motionOK) cam.vz -= perfect ? 240 : 50;
         }
 
         function backToPreviousWord(clearIt) {
@@ -2177,10 +2188,15 @@
             rWpm.textContent = String(net);
             rAcc.textContent = accR + "%";
 
+            /* Runs below 70% accuracy are unranked: they can't set a PB, feed
+               the ghost a timeline, or pollute the trend — spamming through
+               words is its own reward and nothing more. */
+            var ranked = acc !== null && acc >= 70;
+
             var pbs = loadJSON("tg:pb", {});
             var key = pbKey();
             var old = pbs[key];
-            var isNew = !old || net > old.wpm;
+            var isNew = ranked && (!old || net > old.wpm);
             if (isNew) {
                 var entry = {wpm: net, acc: accR, t: Date.now()};
                 if (test.marks.length && test.marks.length <= 240) {
@@ -2192,21 +2208,23 @@
                 store.set("tg:pb", JSON.stringify(pbs));
             }
 
-            /* progress history (for the sparkline) */
-            var hist = loadJSON("tg:hist", []);
-            hist.push({k: histKey(), w: net, a: accR, t: Date.now()});
-            if (hist.length > 90) hist = hist.slice(-90);
-            store.set("tg:hist", JSON.stringify(hist));
+            if (ranked) {
+                /* progress history (for the sparkline) */
+                var hist = loadJSON("tg:hist", []);
+                hist.push({k: histKey(), w: net, a: accR, t: Date.now()});
+                if (hist.length > 90) hist = hist.slice(-90);
+                store.set("tg:hist", JSON.stringify(hist));
 
-            /* lifetime per-key stats (for the all-time heatmap view) */
-            var lifetime = loadJSON("tg:keys", {});
-            for (var kc in test.keys) {
-                var src = test.keys[kc];
-                var dst = lifetime[kc] || (lifetime[kc] = {o: 0, b: 0});
-                dst.o += src.o;
-                dst.b += src.b;
+                /* lifetime per-key stats (for the all-time heatmap view) */
+                var lifetime = loadJSON("tg:keys", {});
+                for (var kc in test.keys) {
+                    var src = test.keys[kc];
+                    var dst = lifetime[kc] || (lifetime[kc] = {o: 0, b: 0});
+                    dst.o += src.o;
+                    dst.b += src.b;
+                }
+                store.set("tg:keys", JSON.stringify(lifetime));
             }
-            store.set("tg:keys", JSON.stringify(lifetime));
 
             var modeStr = config.mode === "time" ? "time " + config.time + "s"
                 : config.mode === "words" ? "words " + config.words : "zen";
@@ -2215,9 +2233,13 @@
 
             var crown = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
                 '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-1.6 10H4.6L3 8z"/></svg>';
-            var pbHTML = isNew
-                ? '<span class="pb-new">' + crown + " new best</span>"
-                : "best <b>" + old.wpm + "</b>";
+            var pbHTML = !ranked
+                ? '<span title="Flights under 70% accuracy don\'t set records">unranked · accuracy &lt; 70%</span>'
+                : isNew
+                    ? '<span class="pb-new">' + crown + " new best</span>"
+                    : old
+                        ? "best <b>" + old.wpm + "</b>"
+                        : "";
 
             rSub.innerHTML =
                 (session.race ? '<span class="pb-new">' + esc(session.race.label) + "</span>" : "") +
@@ -2230,7 +2252,11 @@
                 "<span>" + modeStr + "</span>" +
                 "<span>" + pbHTML + "</span>";
 
-            renderTrend();
+            if (ranked) {
+                renderTrend();
+            } else {
+                rTrend.innerHTML = '<div class="tr-cap">unranked flight — not counted in your trend</div>';
+            }
             kbScope = "flight";
             renderKeys();
             rShare.textContent = "copy race link";
@@ -2498,7 +2524,7 @@
             if (correct) {
                 test.ksCorrect++;
                 sfx.click();
-                if (motionOK) cam.vz -= 95; /* every keystroke is thrust */
+                if (motionOK) cam.vz -= 70; /* every keystroke is thrust */
             } else {
                 test.ksWrong++;
                 errorFeedback();
@@ -2678,6 +2704,9 @@
             cam.x += cam.vx * dt;
             cam.y += cam.vy * dt;
             cam.z += cam.vz * dt;
+            /* terminal velocity — even word-spam can't break the camera */
+            if (cam.vz < -3200) cam.vz = -3200;
+            else if (cam.vz > 3200) cam.vz = 3200;
 
             /* speed sense: blend live wpm with instantaneous velocity */
             var wpmNorm = test.started && !test.finished ? Math.min(1, netWpmNow() / 140) : 0;
