@@ -363,7 +363,7 @@
     reflectSelection(); updateBurgerDot(); apply();
   });
 
-  document.getElementById('loadmore').addEventListener('click',()=>{state.limit+=48;apply()});
+  document.getElementById('loadmore').addEventListener('click',()=>{state.limit+=5555;apply()});
 
   function apply(){
     let list = [...all];
