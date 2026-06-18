@@ -6,7 +6,7 @@
           href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
     <title>Pawpurr — A Game for Cats</title>
     <meta name="description"
-          content="A game for your cat. Prey darts, freezes, and vanishes the way real prey does. Tuned to feline eyes and hunting instincts. Endless, low-clutter, paw-friendly.">
+          content="A game for your cat. Prey darts, freezes, ducks out of sight and peeks back — plus a buzzing fly that swoops by. Tuned to feline eyes and ears. Endless, low-clutter, paw-friendly.">
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
     <style>
@@ -140,10 +140,10 @@
 <div id="veil">
     <div class="paw">🐾</div>
     <h1>Pawpurr</h1>
-    <p>A game for your cat. The critters dart, freeze, and disappear — just like real prey. Lay the tablet flat and let
-        them hunt.</p>
+    <p>A game for your cat. Critters dart, freeze and peek from the edges — and a buzzing fly swoops through. Lay the
+        tablet flat and let them hunt.</p>
     <button id="go">Let them play</button>
-    <div class="tips">Best flat on the floor in a sturdy case. Only a few targets at a time, tuned for cat eyes. It
+    <div class="tips">Best flat on the floor in a sturdy case. A few targets at a time, tuned for cat eyes and ears. It
         never ends — close the tab when playtime's over.
     </div>
 </div>
@@ -174,168 +174,396 @@
         {fill: "#eaf2ff", glow: "rgba(234,242,255,"},
     ];
     const rnd = (a, b) => a + Math.random() * (b - a);
+    const pick = a => a[(Math.random() * a.length) | 0];
     const now = () => performance.now();
+    const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
     // Hardening: clamp any negative radius so the canvas can never throw IndexSizeError.
     const _arc = CanvasRenderingContext2D.prototype.arc;
     CanvasRenderingContext2D.prototype.arc = function (cx, cy, r, a, b, c) {
         return _arc.call(this, cx, cy, r > 0 ? r : 0, a, b, c);
     };
 
-    /* ====== PREY STATE MACHINE (the research core) ======
-       Cats respond to quick DART -> sudden FREEZE -> vanish/HIDE -> reappear,
-       not continuous drift. Max MAX_ACTIVE visible to avoid overstimulation. */
-    const MAX_ACTIVE = 3, POOL = 6;
-    const S = {HIDDEN: 0, EMERGE: 1, FREEZE: 2, DART: 3, FLEE: 4, POP: 5};
+    let bursts = [], ripples = [], particles = [];
+    let score = 0, engage = 0.3, lastPaw = now();
+    const tally = document.getElementById("tally");
+
+    /* ============================================================
+       GROUND CRITTER
+       Movement is built on CONTINUITY, not teleport-hiding.
+       A critter lives a "scene": it enters, does a few dart/freeze
+       beats on screen, then EXITS by one of several behaviors so the
+       cat can keep tracking it:
+         - CROSS:  runs off one edge, re-enters from another edge
+         - EDGE:   skitters along just outside an edge, peeking in/out
+         - DUCK:   ducks down "into a hole" at a spot, peeks back up there
+         - BURROW: the rare quick vanish-in-place (used sparingly)
+       Variety across critters and across a critter's own life is the goal.
+    ============================================================ */
+    const G = {ENTER: 0, DART: 1, FREEZE: 2, EXIT: 3, OFF: 4, PEEK: 5, DUCK: 6};
 
     class Critter {
         constructor() {
-            this.k = KINDS[(Math.random() * KINDS.length) | 0];
+            this.k = pick(KINDS);
             this.r = rnd(16, 24);
             this.face = 0;
             this.tw = Math.random() * 9;
-            // personality: 0 = slow/hesitant lingerer, 1 = quick skittery darter
-            this.skit = Math.random();
-            this.hide(rnd(200, 1800));
-        }
-
-        hide(delay) {
-            this.state = S.HIDDEN;
+            this.skit = Math.random();                       // 0 hesitant … 1 skittery
+            this.beatsLeft = 0;
             this.alpha = 0;
-            this.until = now() + delay;
-            this.x = rnd(this.r * 3, W - this.r * 3);
-            this.y = rnd(this.r * 3, H - this.r * 3);
+            this.scale = 1;
+            this.wounded = 0;
+            this.offUntil = now() + rnd(300, 2200);
+            this.state = G.OFF;
         }
 
-        emerge() {
-            this.state = S.EMERGE;
-            this.until = now() + rnd(180, 420);
-            this.scale = 0;
-            ripples.push({x: this.x, y: this.y, r: 4, a: .6, c: this.k.fill, grow: 1.4});
+        // appear from off an edge, walking inward
+        enter() {
+            this.state = G.ENTER;
+            const e = (Math.random() * 4) | 0;                   // edge of entry
+            if (e === 0) {
+                this.x = rnd(W * .15, W * .85);
+                this.y = -this.r * 2;
+                this.ix = 0;
+                this.iy = 1;
+            } else if (e === 1) {
+                this.x = W + this.r * 2;
+                this.y = rnd(H * .15, H * .85);
+                this.ix = -1;
+                this.iy = 0;
+            } else if (e === 2) {
+                this.x = rnd(W * .15, W * .85);
+                this.y = H + this.r * 2;
+                this.ix = 0;
+                this.iy = -1;
+            } else {
+                this.x = -this.r * 2;
+                this.y = rnd(H * .15, H * .85);
+                this.ix = 1;
+                this.iy = 0;
+            }
+            const dist = rnd(80, 170);
+            this.fromx = this.x;
+            this.fromy = this.y;
+            this.tox = clamp(this.x + this.ix * dist, this.r * 2, W - this.r * 2);
+            this.toy = clamp(this.y + this.iy * dist, this.r * 2, H - this.r * 2);
+            this.t0 = now();
+            this.dur = rnd(260, 460);
+            this.alpha = 1;
+            this.face = Math.atan2(this.iy, this.ix);
+            this.beatsLeft = 2 + (Math.random() * 3 | 0);
+            ripples.push({x: this.tox, y: this.toy, r: 4, a: .5, c: this.k.fill, grow: 1.3});
         }
 
         freeze() {
-            this.state = S.FREEZE;
-            // when the cat's been idle, hold the freeze longer = a real pounce window
-            const linger = engage < 0.25 ? rnd(700, 1500) : rnd(250, 900);
+            this.state = G.FREEZE;
+            const linger = engage < 0.25 ? rnd(650, 1400) : rnd(220, 820);
             this.until = now() + linger;
             this.twitchAt = now() + rnd(120, 500);
         }
 
         dart() {
-            this.state = S.DART;
-            const ang = rnd(0, Math.PI * 2), dist = rnd(90, 260);
+            this.state = G.DART;
+            const ang = rnd(0, Math.PI * 2), dist = rnd(80, 240);
             this.fromx = this.x;
             this.fromy = this.y;
-            this.tox = Math.max(this.r * 2, Math.min(W - this.r * 2, this.x + Math.cos(ang) * dist));
-            this.toy = Math.max(this.r * 2, Math.min(H - this.r * 2, this.y + Math.sin(ang) * dist));
+            this.tox = clamp(this.x + Math.cos(ang) * dist, this.r * 2, W - this.r * 2);
+            this.toy = clamp(this.y + Math.sin(ang) * dist, this.r * 2, H - this.r * 2);
             this.t0 = now();
-            // faster when skittery and when the cat is on a catching streak (adaptive)
-            this.dur = rnd(130, 240) * (1 - this.skit * 0.4) * (1 - engage * 0.25);
+            this.dur = rnd(130, 240) * (1 - this.skit * 0.4) * (1 - engage * 0.22);
             this.face = Math.atan2(this.toy - this.fromy, this.tox - this.fromx);
         }
 
-        // an attention-grab: an injured-prey wiggle-and-bolt, used when the cat goes quiet
         lure() {
-            this.state = S.DART;
-            this.wounded = now() + 260;
-            const ang = rnd(0, Math.PI * 2), dist = rnd(140, 300);
-            this.fromx = this.x;
-            this.fromy = this.y;
-            this.tox = Math.max(this.r * 2, Math.min(W - this.r * 2, this.x + Math.cos(ang) * dist));
-            this.toy = Math.max(this.r * 2, Math.min(H - this.r * 2, this.y + Math.sin(ang) * dist));
-            this.t0 = now();
-            this.dur = rnd(220, 360); // a touch slower/limping = wounded look
-            this.face = Math.atan2(this.toy - this.fromy, this.tox - this.fromx);
+            this.dart();
+            this.wounded = now() + this.dur;
+            this.dur *= 1.5;
+        } // wounded limp
+
+        // choose how to leave when beats run out
+        beginExit() {
+            const roll = Math.random();
+            if (roll < 0.40) {
+                this.exitCross();
+            } else if (roll < 0.72) {
+                this.exitEdge();
+            } else if (roll < 0.90) {
+                this.exitDuck();
+            } else {
+                this.exitBurrow();
+            }
         }
 
-        flee(px, py) {
-            this.state = S.FLEE;
-            const ang = Math.atan2(this.y - py, this.x - px), dist = rnd(180, 320);
+        exitCross() { // run off the nearest-ish edge fast; will re-enter from elsewhere
+            this.state = G.EXIT;
+            this.mode = 'cross';
+            const e = (Math.random() * 4) | 0;
+            let tx, ty;
+            if (e === 0) {
+                tx = this.x;
+                ty = -this.r * 3;
+            } else if (e === 1) {
+                tx = W + this.r * 3;
+                ty = this.y;
+            } else if (e === 2) {
+                tx = this.x;
+                ty = H + this.r * 3;
+            } else {
+                tx = -this.r * 3;
+                ty = this.y;
+            }
             this.fromx = this.x;
             this.fromy = this.y;
-            this.tox = Math.max(this.r * 2, Math.min(W - this.r * 2, this.x + Math.cos(ang) * dist));
-            this.toy = Math.max(this.r * 2, Math.min(H - this.r * 2, this.y + Math.sin(ang) * dist));
+            this.tox = tx;
+            this.toy = ty;
             this.t0 = now();
-            this.dur = rnd(90, 150);
-            this.face = ang;
+            this.dur = rnd(280, 520);
+            this.face = Math.atan2(ty - this.fromy, tx - this.fromx);
         }
 
-        pop() {
-            this.state = S.POP;
-            this.until = now() + 160;
-            // satisfying "kill phase" closure: a little spray of particles
+        exitEdge() { // slip just off an edge, then run ALONG it peeking in repeatedly
+            this.state = G.EXIT;
+            this.mode = 'edge';
+            this.edge = (Math.random() * 4) | 0;
+            // target a point just outside chosen edge nearest current pos
+            let tx = this.x, ty = this.y;
+            if (this.edge === 0) ty = -this.r * 1.4; else if (this.edge === 1) tx = W + this.r * 1.4;
+            else if (this.edge === 2) ty = H + this.r * 1.4; else tx = -this.r * 1.4;
+            this.fromx = this.x;
+            this.fromy = this.y;
+            this.tox = tx;
+            this.toy = ty;
+            this.t0 = now();
+            this.dur = rnd(220, 360);
+            this.face = Math.atan2(ty - this.fromy, tx - this.fromx);
+            this.peeksLeft = 2 + (Math.random() * 3 | 0);
+        }
+
+        exitDuck() { // duck down into a hole right here; will peek back up from same spot
+            this.state = G.DUCK;
+            this.mode = 'duck';
+            this.duckT = now();
+            this.duckDur = 260;
+            this.holeX = this.x;
+            this.holeY = this.y;
+            this.peeksLeft = 2 + (Math.random() * 3 | 0);
+            ripples.push({x: this.x, y: this.y, r: 4, a: .5, c: this.k.fill, grow: 1.4});
+        }
+
+        exitBurrow() {
+            this.state = G.OFF;
+            this.alpha = 0;
+            this.offUntil = now() + rnd(500, 1600);
+        }
+
+        pop() { // caught
+            this.state = G.OFF;
+            this.alpha = 0;
+            this.offUntil = now() + rnd(500, 1700);
             bursts.push({x: this.x, y: this.y, r: 8, a: 1, c: this.k.fill});
-            for (let i = 0; i < 7; i++) {
-                const a = rnd(0, Math.PI * 2), s = rnd(1.5, 4.5);
+            for (let i = 0; i < 8; i++) {
+                const a = rnd(0, Math.PI * 2), s = rnd(1.5, 4.8);
                 particles.push({x: this.x, y: this.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, a: 1, c: this.k.fill});
             }
             onCatch(this);
         }
 
+        flee(px, py) { // pawed but not caught: bolt away, then exit
+            this.state = G.DART;
+            const ang = Math.atan2(this.y - py, this.x - px), dist = rnd(170, 300);
+            this.fromx = this.x;
+            this.fromy = this.y;
+            this.tox = clamp(this.x + Math.cos(ang) * dist, this.r * 2, W - this.r * 2);
+            this.toy = clamp(this.y + Math.sin(ang) * dist, this.r * 2, H - this.r * 2);
+            this.t0 = now();
+            this.dur = rnd(95, 150);
+            this.face = ang;
+            this.beatsLeft = 1;
+        }
+
+        ease(p) {
+            return p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        }
+
         update(t) {
             switch (this.state) {
-                case S.HIDDEN:
-                    if (t >= this.until && activeCount() < MAX_ACTIVE) this.emerge();
+                case G.OFF:
+                    if (t >= this.offUntil && liveCount() < MAX_ACTIVE) this.enter();
                     break;
-                case S.EMERGE: {
-                    const p = 1 - Math.max(0, (this.until - t) / 420);
-                    this.scale = Math.min(1, p * 1.2);
-                    this.alpha = Math.min(1, p * 1.5);
-                    if (t >= this.until) {
-                        this.scale = 1;
-                        this.alpha = 1;
-                        this.freeze();
-                    }
-                    break;
-                }
-                case S.FREEZE:
-                    if (t >= this.twitchAt) {
-                        this.tw += 0.6;
-                        this.twitchAt = t + rnd(150, 500);
-                    }
-                    if (t >= this.until) this.dart();
-                    break;
-                case S.DART:
-                case S.FLEE: {
+                case G.ENTER:
+                case G.DART: {
                     const p = Math.min(1, (t - this.t0) / this.dur);
-                    const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+                    const e = this.ease(p);
                     this.x = this.fromx + (this.tox - this.fromx) * e;
                     this.y = this.fromy + (this.toy - this.fromy) * e;
                     if (p >= 1) {
                         this.wounded = 0;
-                        if (this.state === S.FLEE) {
-                            this.alpha = 1;
-                            this.hide(rnd(500, 1600));
-                        } else {
-                            (Math.random() < 0.7) ? this.freeze() : this.hide(rnd(300, 1100));
+                        if (this.beatsLeft <= 0) this.beginExit();
+                        else {
+                            this.beatsLeft--;
+                            (Math.random() < 0.8) ? this.freeze() : this.dart();
                         }
                     }
                     break;
                 }
-                case S.POP:
-                    this.alpha = Math.max(0, (this.until - t) / 160);
-                    if (t >= this.until) this.hide(rnd(700, 2200));
+                case G.FREEZE:
+                    if (t >= this.twitchAt) {
+                        this.tw += 0.6;
+                        this.twitchAt = t + rnd(150, 500);
+                    }
+                    if (t >= this.until) {
+                        this.beatsLeft--;
+                        (this.beatsLeft <= 0) ? this.beginExit() : this.dart();
+                    }
+                    break;
+                case G.EXIT: {
+                    const p = Math.min(1, (t - this.t0) / this.dur);
+                    const e = this.ease(p);
+                    this.x = this.fromx + (this.tox - this.fromx) * e;
+                    this.y = this.fromy + (this.toy - this.fromy) * e;
+                    if (p >= 1) {
+                        if (this.mode === 'cross') {
+                            this.alpha = 0;
+                            this.state = G.OFF;
+                            this.offUntil = t + rnd(250, 900);
+                        } else if (this.mode === 'edge') {
+                            this.state = G.OFF;
+                            this.alpha = 0;
+                            this.runEdge(t);
+                        }
+                    }
+                    break;
+                }
+                case G.OFF_EDGE:  // (unused placeholder—edge handled via runEdge timer)
+                    break;
+                case G.PEEK: {      // a quick lean back into view from an edge/hole then back out
+                    const p = Math.min(1, (t - this.t0) / this.dur);
+                    const tri = p < 0.5 ? p * 2 : (1 - p) * 2;     // in then out
+                    this.alpha = tri;
+                    this.x = this.peekFromX + (this.peekToX - this.peekFromX) * this.ease(Math.min(1, p * 1.2));
+                    this.y = this.peekFromY + (this.peekToY - this.peekFromY) * this.ease(Math.min(1, p * 1.2));
+                    if (p >= 1) {
+                        this.peeksLeft--;
+                        if (this.peeksLeft > 0) {
+                            this.scheduleNextPeek(t);
+                        } else if (Math.random() < 0.6) {
+                            this.alpha = 1;
+                            this.enterFromHere(t);
+                        } // pop back out to play
+                        else {
+                            this.state = G.OFF;
+                            this.alpha = 0;
+                            this.offUntil = t + rnd(300, 1100);
+                        }
+                    }
+                    break;
+                }
+                case G.DUCK: {
+                    const p = Math.min(1, (t - this.duckT) / this.duckDur);
+                    this.scale = 1 - p;
+                    this.alpha = 1 - p * 0.85;
+                    if (p >= 1) {
+                        this.scale = 0;
+                        this.alpha = 0;
+                        this.state = G.OFF_DUCKED;
+                        this.nextPeek = t + rnd(250, 1100);
+                    }
+                    break;
+                }
+                case G.OFF_DUCKED:
+                    if (t >= this.nextPeek) {
+                        this.startDuckPeek(t);
+                    }
                     break;
             }
         }
 
+        // ---- edge running: after slipping off, hop along outside the edge, peeking ----
+        runEdge(t) {
+            // pick a new peek-in point along the same edge, a bit further along
+            this.state = G.OFF;
+            this.scheduleNextPeek(t, true);
+        }
+
+        scheduleNextPeek(t, firstAlongEdge) {
+            // where along the edge we peek in from
+            let inX, inY, outX, outY;
+            const along = rnd(0.12, 0.88);
+            if (this.edge === 0) {
+                outX = W * along;
+                outY = -this.r * 1.6;
+                inX = outX;
+                inY = this.r * 1.4;
+            } else if (this.edge === 1) {
+                outX = W + this.r * 1.6;
+                outY = H * along;
+                inX = W - this.r * 1.4;
+                inY = outY;
+            } else if (this.edge === 2) {
+                outX = W * along;
+                outY = H + this.r * 1.6;
+                inX = outX;
+                inY = H - this.r * 1.4;
+            } else {
+                outX = -this.r * 1.6;
+                outY = H * along;
+                inX = this.r * 1.4;
+                inY = outY;
+            }
+            this.peekFromX = outX;
+            this.peekFromY = outY;
+            this.peekToX = inX;
+            this.peekToY = inY;
+            this.x = outX;
+            this.y = outY;
+            this.face = Math.atan2(inY - outY, inX - outX);
+            // small idle delay before the peek, so the cat watches the edge
+            this._peekDelay = t + rnd(180, 800);
+            this.state = G.PEEK_WAIT;
+        }
+
+        enterFromHere(t) { // resume normal on-screen play from current spot
+            this.beatsLeft = 2 + (Math.random() * 3 | 0);
+            this.freeze();
+        }
+
+        // ---- duck-and-peek from a fixed hole ----
+        startDuckPeek(t) {
+            this.state = G.PEEK;
+            this.t0 = t;
+            this.dur = rnd(420, 760);
+            this.peekFromX = this.holeX;
+            this.peekFromY = this.holeY + this.r * 0.8;
+            this.peekToX = this.holeX;
+            this.peekToY = this.holeY - this.r * 0.4;
+            this.peeksLeft = this.peeksLeft || 1;
+        }
+
         draw() {
-            if (this.state === S.HIDDEN || this.alpha <= 0.01) return;
-            const a = this.alpha;
-            const g = x.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r * 3);
+            // PEEK_WAIT just holds off-screen; nothing to draw
+            if (this.state === G.OFF || this.state === G.OFF_DUCKED || this.state === G.PEEK_WAIT) {
+                // advance the wait timer here (cheap)
+                if (this.state === G.PEEK_WAIT && now() >= this._peekDelay) {
+                    this.state = G.PEEK;
+                    this.t0 = now();
+                    this.dur = rnd(420, 820);
+                }
+                return;
+            }
+            if (this.alpha <= 0.01) return;
+            const a = clamp(this.alpha, 0, 1), r = this.r;
+            const g = x.createRadialGradient(this.x, this.y, 0, this.x, this.y, r * 3);
             g.addColorStop(0, this.k.glow + (0.5 * a) + ")");
             g.addColorStop(1, "rgba(0,0,0,0)");
             x.fillStyle = g;
             x.beginPath();
-            x.arc(this.x, this.y, this.r * 3, 0, 7);
+            x.arc(this.x, this.y, r * 3, 0, 7);
             x.fill();
-            const sc = this.state === S.EMERGE ? this.scale : 1, r = this.r;
+            const sc = clamp(this.scale, 0, 1);
             x.save();
             x.globalAlpha = a;
             x.translate(this.x, this.y);
-            // a wounded-prey limp: a little extra roll while luring
             let roll = this.face;
-            if (this.wounded && now() < this.wounded + this.dur) roll += Math.sin(now() / 45) * 0.5;
+            if (this.wounded && now() < this.wounded) roll += Math.sin(now() / 45) * 0.5;
             x.rotate(roll);
             x.scale(sc, sc);
             x.fillStyle = this.k.fill;
@@ -369,149 +597,215 @@
             x.stroke();
             x.restore();
         }
+
+        isLive() {
+            return this.state !== G.OFF && this.state !== G.OFF_DUCKED;
+        }
+
+        // occupies one of the MAX_ACTIVE slots if it's committed to a scene —
+        // including ducked/peeking critters that will pop back up. Only fully OFF frees a slot.
+        occupies() {
+            return this.state !== G.OFF;
+        }
+
+        hittable() {
+            return this.alpha > 0.4 && this.isLive() && this.state !== G.PEEK_WAIT;
+        }
     }
 
-    function activeCount() {
-        return critters.filter(c => c.state !== S.HIDDEN).length;
-    }
+    // extra states used above
+    G.OFF_EDGE = 7;
+    G.OFF_DUCKED = 8;
+    G.PEEK_WAIT = 9;
 
-    /* ====== THE STRING: a ribbon that peeks from an edge, wiggles, whips back ====== */
-    class StringTease {
+    /* ============================================================
+       THE FLY — sound-led prey. Loops erratically, lands & goes
+       silent, then takes off with a rising buzz. Volume swells with
+       speed & proximity so it "passes by". Buzzes only in bursts.
+    ============================================================ */
+    class Fly {
         constructor() {
-            this.tipx = null;
-            this.schedule(rnd(4000, 9000));
+            this.k = KINDS[0];
+            this.r = 11;
+            this.reset(rnd(3000, 8000));
         }
 
-        schedule(d) {
-            this.active = false;
-            this.next = now() + d;
-            this.tipx = null;
+        reset(delay) {
+            this.state = 'away';
+            this.until = now() + delay;
+            this.alpha = 0;
+            this.vol = 0;
+            this.x = rnd(W * .2, W * .8);
+            this.y = rnd(H * .2, H * .8);
+            this.vx = 0;
+            this.vy = 0;
+            this.buzzing = false;
         }
 
-        start() {
-            this.active = true;
-            this.t0 = now();
-            this.dur = rnd(2200, 3800);
-            this.edge = (Math.random() * 4) | 0;
-            this.pos = rnd(0.2, 0.8);
-            this.k = KINDS[(Math.random() * KINDS.length) | 0];
-            this.len = rnd(140, 260);
-            this.phase = Math.random() * 9;
+        takeoff() {
+            this.state = 'fly';
+            this.alpha = 1;
+            this.until = now() + rnd(3500, 7000);
+            this.tx = rnd(W * .15, W * .85);
+            this.ty = rnd(H * .15, H * .85);
+            this.changeAt = 0;
+            this.buzzing = true;
+            this.targetVol = 0.0;
         }
+
+        land() {
+            this.state = 'land';
+            this.until = now() + rnd(1200, 3200);
+            this.buzzing = false;
+        }
+
+        newTarget(t) {
+            this.tx = rnd(W * .1, W * .9);
+            this.ty = rnd(H * .1, H * .9);
+            this.changeAt = t + rnd(180, 620);
+        }                 // erratic: frequent re-aim
 
         update(t) {
-            if (!this.active) {
-                if (t >= this.next && activeCount() < MAX_ACTIVE) this.start();
+            if (this.state === 'away') {
+                if (t >= this.until && Math.random() < 0.5) this.takeoff();
                 return;
             }
-            this.phase += 0.18;
-            if (t - this.t0 >= this.dur) this.schedule(rnd(5000, 12000));
+            if (this.state === 'land') {
+                // sit still, occasional tiny crawl; silent
+                if (t >= this.until) {
+                    this.takeoff();
+                }
+                this.targetVol = 0;
+                return;
+            }
+            // flying
+            if (t >= this.changeAt) this.newTarget(t);
+            // accelerate toward a wandering target with overshoot -> loopy path
+            const dx = this.tx - this.x, dy = this.ty - this.y, d = Math.hypot(dx, dy) || 1;
+            const acc = 0.9;
+            this.vx += (dx / d) * acc + rnd(-0.5, 0.5);
+            this.vy += (dy / d) * acc + rnd(-0.5, 0.5);
+            const sp = Math.hypot(this.vx, this.vy), maxs = 9.5;
+            if (sp > maxs) {
+                this.vx *= maxs / sp;
+                this.vy *= maxs / sp;
+            }
+            this.x += this.vx;
+            this.y += this.vy;
+            // bounce softly off edges to stay trackable
+            if (this.x < this.r) {
+                this.x = this.r;
+                this.vx = Math.abs(this.vx);
+            }
+            if (this.x > W - this.r) {
+                this.x = W - this.r;
+                this.vx = -Math.abs(this.vx);
+            }
+            if (this.y < this.r) {
+                this.y = this.r;
+                this.vy = Math.abs(this.vy);
+            }
+            if (this.y > H - this.r) {
+                this.y = H - this.r;
+                this.vy = -Math.abs(this.vy);
+            }
+            // volume swells with speed -> sounds like it's whooshing past, then fades
+            this.targetVol = clamp(sp / maxs, 0, 1) * 0.5;
+            this.face = Math.atan2(this.vy, this.vx);
+            if (t >= this.until && Math.random() < 0.04) this.land();
         }
 
-        draw(t) {
-            if (!this.active) return;
-            const p = (t - this.t0) / this.dur;
-            let ext = p < 0.18 ? (p / 0.18) : p > 0.82 ? (1 - (p - 0.82) / 0.18) : 1;
-            ext = Math.max(0, Math.min(1, ext));          // guard: never negative
-            const L = this.len * ext;
-            let ax, ay, dx, dy;
-            if (this.edge === 0) {
-                ax = W * this.pos;
-                ay = 0;
-                dx = 0;
-                dy = 1;
-            } else if (this.edge === 1) {
-                ax = W;
-                ay = H * this.pos;
-                dx = -1;
-                dy = 0;
-            } else if (this.edge === 2) {
-                ax = W * this.pos;
-                ay = H;
-                dx = 0;
-                dy = -1;
-            } else {
-                ax = 0;
-                ay = H * this.pos;
-                dx = 1;
-                dy = 0;
+        pop() { // swatted
+            bursts.push({x: this.x, y: this.y, r: 8, a: 1, c: "#eaf2ff"});
+            for (let i = 0; i < 9; i++) {
+                const a = rnd(0, Math.PI * 2), s = rnd(2, 5.5);
+                particles.push({x: this.x, y: this.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, a: 1, c: "#eaf2ff"});
             }
+            flyChirp();
+            onCatch(this);
+            this.reset(rnd(2500, 6000));
+        }
+
+        draw() {
+            if (this.state === 'away' || this.alpha <= 0.01) return;
+            const r = this.r;
             x.save();
-            x.lineCap = "round";
-            x.lineJoin = "round";
-            x.strokeStyle = this.k.fill;
-            const seg = 14;
-            let px = ax, py = ay;
-            for (let i = 1; i <= seg; i++) {
-                const f = i / seg, along = L * f;
-                const perp = Math.sin(this.phase + f * 6) * 18 * f * ext;
-                const nx = ax + dx * along + (-dy) * perp, ny = ay + dy * along + (dx) * perp;
-                x.lineWidth = Math.max(1, 9 * (1 - f));
-                x.globalAlpha = 0.9 * ext;
-                x.beginPath();
-                x.moveTo(px, py);
-                x.lineTo(nx, ny);
-                x.stroke();
-                px = nx;
-                py = ny;
-            }
-            x.globalAlpha = ext;
-            x.fillStyle = this.k.fill;
+            x.translate(this.x, this.y);
+            // wing blur
+            const wb = Math.sin(now() / 12) * 0.5 + 0.5;
+            x.globalAlpha = 0.25 + 0.2 * wb;
+            x.fillStyle = "#cfe3ff";
             x.beginPath();
-            x.arc(px, py, 5 * ext, 0, 7);
+            x.ellipse(-2, -r * 0.7, r * 0.7, r * 0.35, -0.5, 0, 7);
             x.fill();
+            x.beginPath();
+            x.ellipse(-2, r * 0.7, r * 0.7, r * 0.35, 0.5, 0, 7);
+            x.fill();
+            // body
+            x.globalAlpha = 1;
+            x.rotate(this.face);
+            x.fillStyle = "#11131c";
+            x.beginPath();
+            x.ellipse(0, 0, r, r * 0.6, 0, 0, 7);
+            x.fill();
+            x.fillStyle = "#3a3f52";
+            x.beginPath();
+            x.arc(r * 0.7, 0, r * 0.45, 0, 7);
+            x.fill();
+            // tiny motion glow so cat eyes catch it
             x.restore();
-            this.tipx = px;
-            this.tipy = py;
+            const g = x.createRadialGradient(this.x, this.y, 0, this.x, this.y, r * 2.4);
+            g.addColorStop(0, "rgba(207,227,255,0.28)");
+            g.addColorStop(1, "rgba(0,0,0,0)");
+            x.fillStyle = g;
+            x.beginPath();
+            x.arc(this.x, this.y, r * 2.4, 0, 7);
+            x.fill();
         }
     }
 
-    /* ====== paws / touch ====== */
-    let lastPaw = now();
+    /* ============================================================
+       AUDIO — WebAudio. A persistent fly-buzz voice whose gain
+       tracks the fly's volume (swell/fade), plus brief catch chirps.
+    ============================================================ */
+    let actx, buzzOsc, buzzVib, buzzGain, buzzVibGain;
 
-    function pawAt(px, py) {
-        lastPaw = now();
-        engage = Math.min(1, engage + 0.12);   // contact raises engagement
-        for (const c of critters) {
-            if (c.state === S.HIDDEN || c.state === S.POP) continue;
-            const d = Math.hypot(c.x - px, c.y - py);
-            if (d < c.r + 26) c.pop(); else if (d < 150) c.flee(px, py);
-        }
-        if (tease.active && tease.tipx != null) {
-            if (Math.hypot(tease.tipx - px, tease.tipy - py) < 40) {
-                tease.t0 = now() - tease.dur * 0.85;
-                chirp(740);
-                bursts.push({x: tease.tipx, y: tease.tipy, r: 6, a: 1, c: tease.k.fill});
-            }
+    function initAudio() {
+        if (actx) return;
+        try {
+            actx = new (window.AudioContext || webkitAudioContext)();
+            // buzzing fly: low saw with a fast vibrato modulating its pitch
+            buzzOsc = actx.createOscillator();
+            buzzOsc.type = "sawtooth";
+            buzzOsc.frequency.value = 150;
+            buzzVib = actx.createOscillator();
+            buzzVib.type = "sine";
+            buzzVib.frequency.value = 42; // flutter
+            buzzVibGain = actx.createGain();
+            buzzVibGain.gain.value = 28;
+            buzzGain = actx.createGain();
+            buzzGain.gain.value = 0.0001;
+            buzzVib.connect(buzzVibGain);
+            buzzVibGain.connect(buzzOsc.frequency);
+            buzzOsc.connect(buzzGain);
+            buzzGain.connect(actx.destination);
+            buzzOsc.start();
+            buzzVib.start();
+        } catch (e) {
         }
     }
 
-    cv.addEventListener("pointerdown", e => pawAt(e.clientX, e.clientY), {passive: true});
-    cv.addEventListener("pointermove", e => {
-        if (e.pressure > 0 || e.buttons) pawAt(e.clientX, e.clientY);
-    }, {passive: true});
-
-    /* ====== catch feedback ====== */
-    let score = 0, bursts = [], ripples = [], particles = [];
-    // engage: 0..1 rolling measure of how active the cat is. Drives adaptive difficulty.
-    let engage = 0.3;
-    const tally = document.getElementById("tally");
-
-    function onCatch(c) {
-        score++;
-        engage = Math.min(1, engage + 0.18);
-        chirp(c.k.fill === "#ffe14d" ? 620 : 760);
-        tally.textContent = "CAUGHT · " + score;
-        tally.style.opacity = .85;
-        clearTimeout(onCatch._t);
-        onCatch._t = setTimeout(() => tally.style.opacity = 0, 1400);
+    function setBuzz(vol) { // vol 0..~0.5
+        if (!actx || !buzzGain) return;
+        const v = clamp(vol, 0, 0.6);
+        buzzGain.gain.setTargetAtTime(v * 0.18 + 0.00001, actx.currentTime, 0.08); // smooth swell/fade
+        // pitch rises a little with intensity, like a fly speeding up
+        if (buzzOsc) buzzOsc.frequency.setTargetAtTime(140 + v * 120, actx.currentTime, 0.1);
     }
-
-    let actx;
 
     function chirp(f) {
+        if (!actx) return;
         try {
-            actx = actx || new (window.AudioContext || webkitAudioContext)();
             const o = actx.createOscillator(), g = actx.createGain();
             o.type = "triangle";
             o.frequency.value = f;
@@ -526,28 +820,88 @@
         }
     }
 
-    /* ====== loop ====== */
+    function flyChirp() {
+        if (!actx) return;
+        try { // a quick descending "got it" blip
+            const o = actx.createOscillator(), g = actx.createGain();
+            o.type = "square";
+            o.frequency.setValueAtTime(900, actx.currentTime);
+            o.frequency.exponentialRampToValueAtTime(180, actx.currentTime + 0.12);
+            o.connect(g);
+            g.connect(actx.destination);
+            g.gain.setValueAtTime(0.05, actx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.14);
+            o.start();
+            o.stop(actx.currentTime + 0.16);
+        } catch (e) {
+        }
+    }
+
+    /* ============================================================
+       paws / touch
+    ============================================================ */
+    function pawAt(px, py) {
+        lastPaw = now();
+        engage = Math.min(1, engage + 0.12);
+        for (const c of critters) {
+            if (!c.hittable()) continue;
+            const d = Math.hypot(c.x - px, c.y - py);
+            if (d < c.r + 26) c.pop(); else if (d < 150) c.flee(px, py);
+        }
+        if (fly.state === 'fly' || fly.state === 'land') {
+            if (Math.hypot(fly.x - px, fly.y - py) < fly.r + 30) fly.pop();
+        }
+    }
+
+    cv.addEventListener("pointerdown", e => {
+        initAudio();
+        pawAt(e.clientX, e.clientY);
+    }, {passive: true});
+    cv.addEventListener("pointermove", e => {
+        if (e.pressure > 0 || e.buttons) pawAt(e.clientX, e.clientY);
+    }, {passive: true});
+
+    function onCatch() {
+        score++;
+        engage = Math.min(1, engage + 0.18);
+        chirp(Math.random() < 0.5 ? 620 : 760);
+        tally.textContent = "CAUGHT · " + score;
+        tally.style.opacity = .85;
+        clearTimeout(onCatch._t);
+        onCatch._t = setTimeout(() => tally.style.opacity = 0, 1400);
+    }
+
+    /* ============================================================
+       world + loop
+    ============================================================ */
+    const MAX_ACTIVE = 3, POOL = 6;
     const critters = Array.from({length: POOL}, () => new Critter());
-    const tease = new StringTease();
+    const fly = new Fly();
+
+    function liveCount() {
+        return critters.filter(c => c.occupies()).length;
+    }
+
     let lureAt = 0;
 
     function frame(t) {
-        // engagement slowly fades; this is what makes prey slow & linger when ignored
         engage = Math.max(0, engage - 0.0012);
-        x.fillStyle = "rgba(7,10,18,0.32)";
+        x.fillStyle = "rgba(7,10,18,0.30)";
         x.fillRect(0, 0, W, H);
 
-        // attention rescue: if untouched for a while, send a wounded-prey lure
+        // idle rescue: wounded-prey lure when untouched a while
         if (t - lastPaw > 4500 && t > lureAt) {
-            const cand = critters.filter(c => c.state === S.FREEZE || c.state === S.EMERGE);
+            const cand = critters.filter(c => c.state === G.FREEZE);
             if (cand.length) {
-                cand[(Math.random() * cand.length) | 0].lure();
+                pick(cand).lure();
             }
             lureAt = t + rnd(2600, 4200);
         }
 
-        tease.update(t);
-        tease.draw(t);
+        fly.update(t);
+        fly.draw();
+        setBuzz(fly.alpha > 0 ? fly.targetVol : 0);
+
         for (const c of critters) {
             c.update(t);
             c.draw();
@@ -591,15 +945,13 @@
             x.globalAlpha = 1;
         }
         particles = particles.filter(pt => pt.a > 0);
+
         requestAnimationFrame(frame);
     }
 
     document.getElementById("go").addEventListener("click", () => {
         document.getElementById("veil").classList.add("gone");
-        try {
-            actx = new (window.AudioContext || webkitAudioContext)();
-        } catch (e) {
-        }
+        initAudio();
         const el = document.documentElement;
         if (el.requestFullscreen) el.requestFullscreen().catch(() => {
         });
