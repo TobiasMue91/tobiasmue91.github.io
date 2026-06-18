@@ -493,14 +493,16 @@
         holdMs: 520,               // catch difficulty
         sessionMin: 0,             // 0 = unlimited
     };
-    const hapticsSupported = typeof navigator !== "undefined" && "vibrate" in navigator;
-
+    // Vibration API: Android-only (Chrome/Firefox). iOS/iPadOS Safari has no support and
+    // never will via web. It also requires a prior user gesture (a tap) before it'll fire,
+    // and never shows a permission prompt. So we gate buzzes behind a real tap.
+    const hapticsSupported = typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
+    let hapticReady = false;             // set true on first pointerdown (satisfies user-gesture rule)
     function buzzHaptic(pattern) {
-        if (settings.haptics && hapticsSupported) {
-            try {
-                navigator.vibrate(pattern);
-            } catch (e) {
-            }
+        if (!settings.haptics || !hapticsSupported || !hapticReady) return;
+        try {
+            navigator.vibrate(pattern);
+        } catch (e) {
         }
     }
 
@@ -1237,7 +1239,7 @@
     ============================================================ */
     class Mouse {
         constructor() {
-            this.r = 15;
+            this.r = 24;
             this.reset(rnd(1000, 3000));
         }
 
@@ -1539,15 +1541,27 @@
         // if something is pinned, keep holding it
         if (captive) {
             touchCapture(px, py);
-            return;
+            return true;
         }
+        // did this paw land on (or very near) an active creature? fire a short touch buzz.
+        let touched = false;
+        for (const c of cast) {
+            if (!c.active()) continue;
+            const d = Math.hypot(c.x - px, c.y - py);
+            if (d < c.r + 34) {
+                touched = true;
+            }
+        }
+        if (touched) buzzHaptic(12);     // brief tap-feedback the moment you touch an animal
         for (const c of cast) {
             if (c.active() && c.hit(px, py)) break;
         }
+        return touched;
     }
 
     cv.addEventListener("pointerdown", e => {
         initAudio();
+        hapticReady = true;
         // start a long-press timer if the touch is in the top-right corner
         if (e.clientX > W - CORNER && e.clientY < CORNER) {
             cornerHold = setTimeout(() => openPanel(), 650);
@@ -1750,17 +1764,24 @@
         if (!hapticsSupported) {
             hapticToggle.classList.remove("on");
             hapticToggle.style.opacity = .4;
-            hapticSub.textContent = "Not supported on this device (iPhone/iPad Safari has no vibration API).";
+            hapticSub.textContent = "Not available on this device. Web vibration works only on Android (Chrome/Firefox); iPhones and iPads don't support it at all.";
             return;
         }
         hapticToggle.classList.toggle("on", settings.haptics);
+        hapticSub.textContent = "Buzz on touch and on catch. Tap the toggle to feel a test pulse.";
     }
 
     hapticToggle.onclick = () => {
         if (!hapticsSupported) return;
+        hapticReady = true;                       // this click is a user gesture
         settings.haptics = !settings.haptics;
         renderHaptic();
-        if (settings.haptics) buzzHaptic(30);
+        if (settings.haptics) {
+            try {
+                navigator.vibrate([20, 40, 30]);
+            } catch (e) {
+            }
+        }  // immediate test buzz
     };
     renderHaptic();
 
