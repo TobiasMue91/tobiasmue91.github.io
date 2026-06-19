@@ -493,16 +493,43 @@
         holdMs: 520,               // catch difficulty
         sessionMin: 0,             // 0 = unlimited
     };
-    // Vibration API: Android-only (Chrome/Firefox). iOS/iPadOS Safari has no support and
-    // never will via web. It also requires a prior user gesture (a tap) before it'll fire,
-    // and never shows a permission prompt. So we gate buzzes behind a real tap.
-    const hapticsSupported = typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
-    let hapticReady = false;             // set true on first pointerdown (satisfies user-gesture rule)
+    /* Vibration API reality (researched):
+       - iOS/iPadOS: never supported (all browsers use WebKit, which lacks it).
+       - Firefox 129+ (Aug 2024): REMOVED navigator.vibrate entirely -> it's undefined.
+       - Desktop Chrome/Edge: navigator.vibrate exists and returns true, but there's no
+         motor, so nothing is felt. Must detect "mobile" before trusting it.
+       - Android Chrome/Edge/Samsung/Opera: works, BUT only after a real tap (user
+         activation), only while the tab is visible, patterns <=10 entries, and very
+         short pulses (<~20ms) may be imperceptible on many motors.
+    */
+    const isMobileUA = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+    const hasVibrate = typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
+    const hapticsSupported = hasVibrate && isMobileUA;       // exists AND a device that can feel it
+    let hapticReady = false;             // becomes true after the first real tap (user activation)
+    function hapticStatus() {
+        if (!hasVibrate) return "removed";        // Firefox 129+ or never had it
+        if (!isMobileUA) return "nomotor";        // desktop: exists but no hardware
+        return "ok";
+    }
+
+    // keep pulses perceptible (>=35ms) and patterns short (<=10 entries)
     function buzzHaptic(pattern) {
         if (!settings.haptics || !hapticsSupported || !hapticReady) return;
+        if (typeof document !== "undefined" && document.hidden) return;   // hidden tab can't vibrate
         try {
             navigator.vibrate(pattern);
         } catch (e) {
+        }
+    }
+
+    // fire a vibrate immediately inside a user gesture (establishes activation + tests motor)
+    function primeHaptic() {
+        hapticReady = true;
+        if (settings.haptics && hapticsSupported && !(typeof document !== "undefined" && document.hidden)) {
+            try {
+                navigator.vibrate(40);
+            } catch (e) {
+            }
         }
     }
 
@@ -530,7 +557,7 @@
         if (captive) return;
         captive = {cr, x: cr.x, y: cr.y, since: now(), lastTouch: now(), col};
         cr.captured = true;
-        buzzHaptic(18);                // a faint tick the instant prey is pinned
+        buzzHaptic(45);                // a tick the instant prey is pinned
     }
 
     function touchCapture(px, py) {
@@ -558,12 +585,12 @@
             if (buzzOsc) buzzOsc.frequency.setTargetAtTime(rnd(160, 300), actx ? actx.currentTime : 0, 0.02);
         }
         // faint repeating tremor while it struggles in the paw
-        if (Math.random() < 0.10) buzzHaptic(10);
+        if (Math.random() < 0.08) buzzHaptic(35);    // occasional struggle pulse
         if (held >= HOLD_MS()) {
             // secured: the kill. payoff burst + a satisfying double-pulse.
             caught(captive.x, captive.y, captive.col);
             burst(captive.x, captive.y, captive.col, 14);
-            buzzHaptic([28, 40, 55]);
+            buzzHaptic([45, 50, 90]);   // strong, satisfying catch
             cr.captured = false;
             cr.reset(rnd(1500, 3800));
             captive = null;
@@ -574,7 +601,7 @@
             cr.captured = false;
             if (cr.escape) cr.escape();
             chirp(300);                 // a low "it got away" blip
-            buzzHaptic(14);             // a tiny "slipped away" nudge
+            buzzHaptic(40);             // a "slipped away" nudge
             captive = null;
         }
     }
@@ -1552,7 +1579,7 @@
                 touched = true;
             }
         }
-        if (touched) buzzHaptic(12);     // brief tap-feedback the moment you touch an animal
+        if (touched) buzzHaptic(35);     // brief tap-feedback the moment you touch an animal
         for (const c of cast) {
             if (c.active() && c.hit(px, py)) break;
         }
@@ -1761,27 +1788,31 @@
     const hapticSub = document.getElementById("hapticSub");
 
     function renderHaptic() {
-        if (!hapticsSupported) {
+        const st = hapticStatus();
+        if (st !== "ok") {
             hapticToggle.classList.remove("on");
             hapticToggle.style.opacity = .4;
-            hapticSub.textContent = "Not available on this device. Web vibration works only on Android (Chrome/Firefox); iPhones and iPads don't support it at all.";
+            hapticSub.textContent = st === "removed"
+                ? "Not available in this browser. Firefox removed web vibration (v129+), and iPhones/iPads never had it. Use Chrome on Android to feel haptics."
+                : "This looks like a desktop browser with no vibration motor. Open the game on an Android phone in Chrome to feel haptics.";
             return;
         }
+        hapticToggle.style.opacity = 1;
         hapticToggle.classList.toggle("on", settings.haptics);
         hapticSub.textContent = "Buzz on touch and on catch. Tap the toggle to feel a test pulse.";
     }
 
     hapticToggle.onclick = () => {
-        if (!hapticsSupported) return;
-        hapticReady = true;                       // this click is a user gesture
+        if (hapticStatus() !== "ok") return;
+        hapticReady = true;                                   // this click is a user gesture
         settings.haptics = !settings.haptics;
         renderHaptic();
         if (settings.haptics) {
             try {
-                navigator.vibrate([20, 40, 30]);
+                navigator.vibrate([60, 60, 120]);
             } catch (e) {
             }
-        }  // immediate test buzz
+        }  // clear test buzz
     };
     renderHaptic();
 
@@ -1818,6 +1849,7 @@
     document.getElementById("go").addEventListener("click", () => {
         document.getElementById("veil").classList.add("gone");
         initAudio();
+        primeHaptic();                 // establish vibration activation within this tap
         sessionStart = now();
         sessionOver = false;
         const el = document.documentElement;
