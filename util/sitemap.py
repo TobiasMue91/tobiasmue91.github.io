@@ -2,7 +2,6 @@ import json
 import subprocess
 from datetime import datetime, timezone
 from html import escape
-from pathlib import Path
 
 root_url = 'https://www.gptgames.dev/'
 
@@ -25,6 +24,8 @@ def get_git_last_modified_date(file_path):
 def format_timestamp(timestamp):
     try:
         dt = datetime.fromisoformat(timestamp)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S+00:00')
     except Exception:
         return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S+00:00')
@@ -57,7 +58,7 @@ def extract_links_from_html(file_path):
         url = content[start:end]
         if not url.startswith('http') and not url.startswith('#') and not url.startswith('mailto:') and is_valid_url(url):
             urls.append(normalize_url(url))
-        start = end
+        start = end + 1
 
     return urls
 
@@ -77,13 +78,24 @@ def load_json_entries(file_path):
             if url.startswith(root_url):
                 url = url[len(root_url):]
 
-            timestamp = file_timestamp
-            if entry.get('date'):
+            # Prefer the per-page commit date written by update_dates.py,
+            # then an explicit 'date', and only fall back to the whole-file
+            # commit time as a last resort.
+            timestamp = None
+            for candidate in (entry.get('updated'), entry.get('date')):
+                if not candidate:
+                    continue
                 try:
-                    dt = datetime.fromisoformat(entry['date'])
+                    dt = datetime.fromisoformat(candidate)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
                     timestamp = dt.astimezone(timezone.utc).isoformat()
+                    break
                 except Exception:
-                    pass
+                    continue
+
+            if timestamp is None:
+                timestamp = file_timestamp
 
             urls.append((url, timestamp))
     except (FileNotFoundError, json.JSONDecodeError) as e:
@@ -113,7 +125,7 @@ def generate_sitemap():
                 'http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">\n')
 
         f.write(f'  <url>\n'
-                f'    <loc>{root_url}</loc>\n'
+                f'    <loc>{escape(root_url)}</loc>\n'
                 f'    <lastmod>{format_timestamp(index_timestamp)}</lastmod>\n'
                 f'    <priority>1.00</priority>\n'
                 f'  </url>\n')
@@ -132,7 +144,7 @@ def generate_sitemap():
                     f'    <priority>0.80</priority>\n'
                     f'  </url>\n')
 
-        f.write('</urlset>')
+        f.write('</urlset>\n')
 
     print(f"Sitemap generated with {len(url_timestamps) + 1} URLs using git timestamps.")
 
