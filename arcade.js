@@ -1,5 +1,10 @@
 (async function(){
-  document.querySelector('#srch').focus();
+  // Focus search only on non-touch / desktop, and without scrolling the page,
+  // so mobile users aren't hit with an unexpected keyboard or layout jump.
+  if(window.matchMedia('(min-width: 1001px)').matches){
+    const s = document.querySelector('#srch');
+    if(s) s.focus({preventScroll:true});
+  }
   const SITE='https://www.gptgames.dev/';
   const [games,tools] = await Promise.all([
     fetch('data/games.json').then(r=>r.json()),
@@ -200,12 +205,12 @@
     lastFocusedBeforeDrawer = document.activeElement;
     drawer.hidden = false;
     backdrop.hidden = false;
+    drawer.removeAttribute('inert');
     // next frame so display change doesn't swallow the transition
     requestAnimationFrame(()=>{
       drawer.classList.add('open');
       backdrop.classList.add('open');
     });
-    drawer.setAttribute('aria-hidden','false');
     burger.setAttribute('aria-expanded','true');
     document.body.classList.add('drawer-open');
     // Focus first focusable in drawer
@@ -217,17 +222,19 @@
   function closeDrawer(opts){
     drawer.classList.remove('open');
     backdrop.classList.remove('open');
-    drawer.setAttribute('aria-hidden','true');
     burger.setAttribute('aria-expanded','false');
     document.body.classList.remove('drawer-open');
+    // Move focus out before making the drawer inert, so focus isn't trapped
+    // on a now-inert element.
+    if(lastFocusedBeforeDrawer && !(opts && opts.skipRefocus)) {
+      try { lastFocusedBeforeDrawer.focus(); } catch(e){}
+    }
+    drawer.setAttribute('inert','');
     // Match transition duration before hiding
     setTimeout(()=>{
       drawer.hidden = true;
       backdrop.hidden = true;
     }, 250);
-    if(lastFocusedBeforeDrawer && !(opts && opts.skipRefocus)) {
-      try { lastFocusedBeforeDrawer.focus(); } catch(e){}
-    }
   }
 
   burger.addEventListener('click', ()=>{
@@ -458,16 +465,23 @@
   // card width, font loading, and viewport without guessing text length.
   function augmentDescriptions(scope){
     if(!scope) return;
+    // Two-phase to avoid forced reflow (layout thrashing): first read all
+    // geometry, then perform all DOM writes. Interleaving reads and writes
+    // forces the browser to re-layout on every iteration.
+    const toClip = [];
     scope.querySelectorAll('.cab-desc, .feat-desc').forEach(d=>{
       if(d.classList.contains('expanded')) return;
       if(d.nextElementSibling && d.nextElementSibling.classList.contains('more-toggle')) return;
-      if(d.scrollHeight - d.clientHeight < 2) return; // not clipped
+      if(d.scrollHeight - d.clientHeight < 2) return; // not clipped (read phase)
+      toClip.push(d);
+    });
+    toClip.forEach(d=>{
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'more-toggle';
       btn.textContent = 'More';
       btn.setAttribute('aria-expanded','false');
-      d.insertAdjacentElement('afterend', btn);
+      d.insertAdjacentElement('afterend', btn); // write phase
     });
   }
 
