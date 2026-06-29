@@ -239,6 +239,20 @@
             transition: opacity .6s
         }
 
+        #hide-prompt {
+            position: absolute;
+            bottom: 92px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: .74rem;
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: #9c9580;
+            text-shadow: 0 0 10px rgba(0, 0, 0, .8);
+            opacity: 0;
+            transition: opacity .3s
+        }
+
         #minimap {
             position: absolute;
             bottom: 22px;
@@ -706,6 +720,7 @@
         <div class="crosshair"></div>
         <div id="topbar">
             <span>Depth <span class="v" id="depth-num">1</span></span>
+            <span id="depth-title" style="color:#9a86c8;font-style:italic;text-transform:none;letter-spacing:.04em">The First Descent</span>
             <span id="biome-name">The Cisterns</span>
             <span id="huntstate" class="v">— calm —</span>
         </div>
@@ -722,6 +737,7 @@
             </div>
         </div>
         <div id="compass">▲ the gate has opened ▲</div>
+        <div id="hide-prompt"></div>
         <div id="minimap">
             <canvas id="minimap-canvas"></canvas>
         </div>
@@ -804,7 +820,14 @@
     <div id="descend" class="overlay hidden">
         <h1 class="title" style="color:#7fd6a8;text-shadow:0 0 40px rgba(46,213,115,.4)"><span class="small">the gate closes behind you</span>Descend
         </h1>
+        <div id="descend-depth-title"
+             style="font-size:1.3rem;font-style:italic;color:#9a86c8;letter-spacing:.06em;margin-bottom:.4em">The
+            Threshold
+        </div>
         <p class="flavor tight" id="descend-flavor">You slip through into colder air. The dark here is older.</p>
+        <div id="descend-fathoms" style="font-size:.95rem;color:#cda45f;letter-spacing:.08em;margin-bottom:1.4em">— 13
+            fathoms below the surface —
+        </div>
         <div class="statgrid">
             <div class="stat">
                 <div class="sv" id="d-depth">1</div>
@@ -819,6 +842,8 @@
                 <div class="sl">time below</div>
             </div>
         </div>
+        <div id="descend-tally"
+             style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;margin-bottom:1.8em;font-size:.82rem;color:#9c9580;letter-spacing:.04em"></div>
         <button class="btn" id="descendBtn">Go Deeper</button>
     </div>
 
@@ -826,6 +851,10 @@
     <div id="over" class="overlay hidden">
         <h1 class="title" style="color:#c0392b;text-shadow:0 0 40px rgba(192,57,43,.4)" id="over-title">The Light
             Died</h1>
+        <div id="over-depth-title"
+             style="font-size:1.2rem;font-style:italic;color:#9a86c8;letter-spacing:.06em;margin-bottom:.4em">The
+            Threshold
+        </div>
         <p class="flavor tight" id="over-flavor">The cold took you. You are part of the Hollow now.</p>
         <div class="statgrid">
             <div class="stat">
@@ -841,6 +870,8 @@
                 <div class="sl">time in the dark</div>
             </div>
         </div>
+        <div id="over-tally"
+             style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;margin-bottom:1.8em;font-size:.82rem;color:#9c9580;letter-spacing:.04em"></div>
         <button class="btn" id="retryBtn">Try Again</button>
         <button class="btn ghost" id="menuBtn">Main Menu</button>
     </div>
@@ -1371,6 +1402,80 @@
             return grid;
         }
 
+        /* ---- ROOMS ----
+           After the maze is carved, stamp a few rectangular chambers into it. Each room
+           is opened fully, then guaranteed to connect to the surrounding maze by
+           knocking a doorway through to the nearest open cell. Returns room descriptors
+           {x0,y0,x1,y1,cx,cy,type} where type ∈ {altar, secret, plain}.
+           `secret` rooms keep a single "false wall" doorway (passable but rendered as a
+           wall) so they read as hidden. */
+        function carveRooms(grid, count) {
+            const size = grid.length;
+            const rooms = [];
+            const overlaps = (x0, y0, x1, y1) => {
+                for (const r of rooms) {
+                    if (x0 <= r.x1 + 1 && x1 >= r.x0 - 1 && y0 <= r.y1 + 1 && y1 >= r.y0 - 1) return true;
+                }
+                return false;
+            };
+            let attempts = 0;
+            while (rooms.length < count && attempts < count * 30) {
+                attempts++;
+                const w = 3 + 2 * ((Math.random() * 2) | 0);   // 3 or 5
+                const h = 3 + 2 * ((Math.random() * 2) | 0);
+                const x0 = 2 + ((Math.random() * (size - w - 3)) | 0);
+                const y0 = 2 + ((Math.random() * (size - h - 3)) | 0);
+                const x1 = x0 + w - 1, y1 = y0 + h - 1;
+                if (x1 >= size - 2 || y1 >= size - 2) continue;
+                // keep rooms away from the spawn cell (1,1)
+                if (x0 <= 3 && y0 <= 3) continue;
+                if (overlaps(x0, y0, x1, y1)) continue;
+                // carve it open
+                for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) grid[y][x] = 0;
+                const cx = (x0 + x1) >> 1, cy = (y0 + y1) >> 1;
+                rooms.push({x0, y0, x1, y1, cx, cy, type: 'plain', secretWall: null});
+            }
+            // ensure every room connects to the maze: from each edge cell, if an adjacent
+            // outside cell is open, we already connect; otherwise punch a doorway.
+            for (const r of rooms) {
+                let connected = false;
+                const edges = [];
+                for (let x = r.x0; x <= r.x1; x++) {
+                    edges.push([x, r.y0, 0, -1]);
+                    edges.push([x, r.y1, 0, 1]);
+                }
+                for (let y = r.y0; y <= r.y1; y++) {
+                    edges.push([r.x0, y, -1, 0]);
+                    edges.push([r.x1, y, 1, 0]);
+                }
+                // shuffle edges
+                for (let i = edges.length - 1; i > 0; i--) {
+                    const j = (Math.random() * (i + 1)) | 0;
+                    [edges[i], edges[j]] = [edges[j], edges[i]];
+                }
+                // first pass: is it already connected (an outside neighbor is open)?
+                for (const [x, y, dx, dy] of edges) {
+                    const ox = x + dx, oy = y + dy;
+                    if (ox > 0 && oy > 0 && ox < size - 1 && oy < size - 1 && grid[oy][ox] === 0) {
+                        connected = true;
+                        break;
+                    }
+                }
+                if (!connected) {
+                    // punch a doorway: open a wall cell one step outside an edge, then continue
+                    for (const [x, y, dx, dy] of edges) {
+                        const ox = x + dx, oy = y + dy, ox2 = x + dx * 2, oy2 = y + dy * 2;
+                        if (ox2 > 0 && oy2 > 0 && ox2 < size - 1 && oy2 < size - 1) {
+                            grid[oy][ox] = 0;
+                            connected = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            return rooms;
+        }
+
         function bfsField(grid, sx, sy) {
             const size = grid.length;
             const dist = Array.from({length: size}, () => new Array(size).fill(-1));
@@ -1547,7 +1652,7 @@
 
             g.userData = {
                 light, flame, flameCore, baseIntensity: 1.8, phase: Math.random() * TWO_PI,
-                gx: cell[0], gy: cell[1], flameColor
+                gx: cell[0], gy: cell[1], wallDx: dx, wallDy: dy, flameColor
             };
             scene.add(g);
             return g;
@@ -1852,6 +1957,195 @@
             return g;
         }
 
+        /* ALTAR — a stone plinth with a floating, glowing relic. Activating it (walk up
+           and it triggers) grants a boon but rings a loud chime that alerts the warden.
+           `boon` ∈ {heart, oil, charm, ward}. */
+        function makeAltar(scene, gx, gy, boon) {
+            const g = new THREE.Group();
+            const stone = new THREE.MeshStandardMaterial({color: 0x2c2a33, roughness: 0.9, metalness: 0.1});
+            // stepped base
+            const base = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.15, 0.35, 8), stone);
+            base.position.y = 0.175;
+            g.add(base);
+            const mid = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.8, 0.7, 8), stone);
+            mid.position.y = 0.6;
+            g.add(mid);
+            const top = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.6, 0.16, 8), stone);
+            top.position.y = 1.03;
+            g.add(top);
+
+            const boonColors = {heart: 0xff4d6d, oil: 0xffb347, charm: 0x8a7dff, ward: 0x7affd1};
+            const col = boonColors[boon] || 0xffd27a;
+            // floating relic
+            const relic = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0),
+                new THREE.MeshStandardMaterial({
+                    color: col,
+                    emissive: col,
+                    emissiveIntensity: 2.2,
+                    roughness: 0.3,
+                    metalness: 0.4
+                }));
+            relic.position.y = 1.7;
+            g.add(relic);
+            const halo = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16),
+                new THREE.MeshBasicMaterial({color: col, transparent: true, opacity: 0.12, side: THREE.BackSide}));
+            halo.position.y = 1.7;
+            g.add(halo);
+            const light = new THREE.PointLight(col, 1.6, 8.0, 1.6);
+            light.position.y = 1.7;
+            g.add(light);
+            // glowing floor ring
+            const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.5, 32),
+                new THREE.MeshBasicMaterial({color: col, transparent: true, opacity: 0.16, side: THREE.DoubleSide}));
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 0.02;
+            g.add(ring);
+
+            g.position.set(gx2w(gx), 0, gx2w(gy));
+            g.userData = {gx, gy, boon, relic, halo, light, ring, used: false, col, phase: Math.random() * TWO_PI};
+            scene.add(g);
+            return g;
+        }
+
+        /* FALSE WALL — a single wall-textured block that the player can pass through,
+           concealing a secret room. Looks identical to surrounding walls. We render it
+           slightly recessed/darker so attentive players might notice the seam. */
+        function makeFalseWall(scene, gx, gy, palette) {
+            const wallTex = Tex.wall(palette.wall);
+            const mat = new THREE.MeshStandardMaterial({
+                map: wallTex, color: 0xbbbbbb, roughness: 0.97, metalness: 0.04,
+                emissive: palette.wallEmissive, emissiveIntensity: 0.06
+            });
+            const m = new THREE.Mesh(new THREE.BoxGeometry(CELL, WALL_H, CELL), mat);
+            m.position.set(gx2w(gx), WALL_H / 2, gx2w(gy));
+            m.userData = {gx, gy};
+            scene.add(m);
+            return m;
+        }
+
+        /* small floor shrine/marker for plain rooms — a low cairn so rooms aren't empty */
+        function makeCairn(scene, gx, gy) {
+            const g = new THREE.Group();
+            const stone = new THREE.MeshStandardMaterial({color: 0x33303a, roughness: 0.95});
+            let y = 0;
+            for (const r of [0.32, 0.24, 0.16, 0.09]) {
+                const s = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), stone);
+                s.position.y = y + r * 0.6;
+                s.scale.y = 0.7;
+                g.add(s);
+                y += r * 1.0;
+            }
+            g.position.set(gx2w(gx), 0, gx2w(gy));
+            scene.add(g);
+            return g;
+        }
+
+        /* ALCOVE — a shallow recess in a corridor wall the player can press into to
+           hide. Rendered as a dark inset niche with a faint frame so it's spottable. */
+        function makeAlcove(scene, gx, gy, dx, dy, palette) {
+            const g = new THREE.Group();
+            // dark inset back panel, set slightly into the wall
+            const back = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.7, WALL_H * 0.7),
+                new THREE.MeshStandardMaterial({color: 0x07070b, roughness: 1.0, side: THREE.DoubleSide}));
+            // niche opening framed with darker stone
+            const frame = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.08, 8, 4),
+                new THREE.MeshStandardMaterial({color: 0x1a1820, roughness: 0.9}));
+            const cx = gx2w(gx), cz = gx2w(gy);
+            const half = CELL / 2 - 0.04;
+            // place on the recess-facing wall
+            g.position.set(cx + dx * half, WALL_H * 0.5, cz + dy * half);
+            const ang = Math.atan2(-dx, -dy);
+            back.rotation.y = ang;
+            frame.rotation.y = ang;
+            frame.rotation.x = Math.PI / 2;
+            back.position.set(0, 0, 0.02);
+            g.add(back);
+            // subtle inward shadow gradient cue: a second smaller darker plane
+            const inner = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.5, WALL_H * 0.5),
+                new THREE.MeshBasicMaterial({
+                    color: 0x000000,
+                    transparent: true,
+                    opacity: 0.6,
+                    side: THREE.DoubleSide
+                }));
+            inner.rotation.y = ang;
+            inner.position.set(0, 0, 0.03);
+            g.add(inner);
+            g.userData = {gx, gy};
+            scene.add(g);
+            return g;
+        }
+
+        /* CRITTER — a rat or a spider. Tiny, dark, no light (cheap). Returns
+           {mesh, type, wanderSpeed, fleeSpeed}. */
+        function makeCritter(scene, gx, gy, type) {
+            const g = new THREE.Group();
+            if (type === 'rat') {
+                const fur = new THREE.MeshStandardMaterial({color: 0x2a2722, roughness: 1.0});
+                const body = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), fur);
+                body.scale.set(1, 0.7, 1.5);
+                body.position.y = 0.04;
+                g.add(body);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), fur);
+                head.position.set(0, 0.05, 0.2);
+                g.add(head);
+                // ears
+                for (const s of [-1, 1]) {
+                    const e = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 4), fur);
+                    e.position.set(s * 0.05, 0.12, 0.18);
+                    g.add(e);
+                }
+                // tail
+                const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.32, 4),
+                    new THREE.MeshStandardMaterial({color: 0x40342f, roughness: 1}));
+                tail.rotation.x = Math.PI / 2.2;
+                tail.position.set(0, 0.04, -0.26);
+                g.add(tail);
+                // eyes (tiny dark beads with faint shine)
+                for (const s of [-1, 1]) {
+                    const ey = new THREE.Mesh(new THREE.SphereGeometry(0.018, 4, 4),
+                        new THREE.MeshBasicMaterial({color: 0x000000}));
+                    ey.position.set(s * 0.04, 0.06, 0.27);
+                    g.add(ey);
+                }
+            } else {
+                const chit = new THREE.MeshStandardMaterial({color: 0x14110f, roughness: 0.7, metalness: 0.1});
+                const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), chit);
+                body.scale.set(1, 0.6, 1.1);
+                body.position.y = 0.02;
+                g.add(body);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), chit);
+                head.position.set(0, 0.01, 0.12);
+                g.add(head);
+                // 8 legs (4 per side), angled; flagged for wiggle animation
+                for (const s of [-1, 1]) {
+                    for (let i = 0; i < 4; i++) {
+                        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.008, 0.22, 4), chit);
+                        const base = s * (0.9 + i * 0.18);
+                        leg.rotation.z = base;
+                        leg.position.set(s * 0.1, 0.04, -0.06 + i * 0.05);
+                        leg.userData = {isLeg: true, base};
+                        g.add(leg);
+                    }
+                }
+                // red eye cluster
+                for (const s of [-1, 1]) {
+                    const ey = new THREE.Mesh(new THREE.SphereGeometry(0.018, 4, 4),
+                        new THREE.MeshBasicMaterial({color: 0x661111}));
+                    ey.position.set(s * 0.03, 0.03, 0.17);
+                    g.add(ey);
+                }
+            }
+            g.position.set(gx2w(gx), 0.12, gx2w(gy));
+            g.userData = {
+                dirX: Math.cos(Math.random() * TWO_PI), dirZ: Math.sin(Math.random() * TWO_PI),
+                changeTimer: Math.random() * 1.5, phase: Math.random() * TWO_PI
+            };
+            g.visible = false;
+            scene.add(g);
+            return {mesh: g, type, wanderSpeed: type === 'rat' ? 1.6 : 1.1, fleeSpeed: type === 'rat' ? 3.6 : 2.6};
+        }
+
         /* THE WARDEN */
         function makeWarden(scene) {
             const g = new THREE.Group();
@@ -1993,10 +2287,13 @@
             scene: null, camera: null, renderer: null, clock: null,
             grid: null, size: 21, world: null, torches: [], embers: [], items: [], gate: null,
             wardens: [], lanternLight: null, lanternSpot: null, catPoster: null,
+            rooms: [], altars: [], falseWalls: [], roomDecor: [], hideSpots: [], critters: [],
             pos: new THREE.Vector3(), yaw: 0, pitch: 0,
             state: 'menu', depth: 1, hearts: 3, embersTotal: 3, embersGot: 0,
             lantern: 1.0, danger: 0, invuln: 0, runStartTime: 0, elapsed: 0,
             biome: null,
+            // run statistics (accumulate across the whole descent)
+            stats: {embers: 0, secrets: 0, altars: 0, critters: 0, hideUses: 0, escapes: 0, deepest: 1},
             // status effects
             hushTimer: 0, hasteTimer: 0, adrenaline: 0,
             // audio cadence
@@ -2114,6 +2411,22 @@
                 return b;
             },
 
+            /* an evocative title for the current depth — a sense of how deep is deep */
+            depthTitle(d) {
+                if (d >= 20) return 'The Unspeakable Floor';
+                if (d >= 15) return 'The Abyssal Reach';
+                if (d >= 11) return 'The Drowned Roots';
+                if (d >= 8) return 'The Deep Dark';
+                if (d >= 6) return 'The Gnawing Hollows';
+                if (d >= 4) return 'The Lower Vaults';
+                if (d >= 2) return 'The Threshold';
+                return 'The First Descent';
+            },
+            // how far below the surface, for tangible progress (fathoms = 6 ft, fun flavor)
+            fathoms(d) {
+                return d * 13;
+            },
+
             /* ---- build a fresh layer ---- */
             buildLayer() {
                 // clear previous
@@ -2128,10 +2441,23 @@
                     this.catPoster = null;
                 }
                 this._catFound = false;
+                this._inHideSpot = false;
+                (this.altars || []).forEach(a => this.scene.remove(a));
+                (this.falseWalls || []).forEach(w => this.scene.remove(w));
+                (this.roomDecor || []).forEach(d => this.scene.remove(d));
+                (this.hideSpots || []).forEach(h => {
+                    if (h.mesh) this.scene.remove(h.mesh);
+                });
+                (this.critters || []).forEach(c => this.scene.remove(c.mesh));
                 this.torches = [];
                 this.embers = [];
                 this.items = [];
                 this.wardens = [];
+                this.altars = [];
+                this.falseWalls = [];
+                this.roomDecor = [];
+                this.hideSpots = [];
+                this.critters = [];
 
                 this.biome = this.chooseBiome();
                 const B = this.biome;
@@ -2142,6 +2468,29 @@
                 this.size = size;
 
                 this.grid = generateMaze(size, Math.floor(size * 0.6));
+
+                // ---- carve chambers (rooms) and assign their types ----
+                const roomCount = Math.min(5, 1 + Math.floor(this.depth / 1.5) + ((Math.random() * 2) | 0));
+                this.rooms = carveRooms(this.grid, roomCount);
+                // assign types: ~1 altar guaranteed (depth>=2), ~1 secret (chance), rest plain
+                if (this.rooms.length) {
+                    const shuffled = [...this.rooms].sort(() => Math.random() - 0.5);
+                    let assigned = 0;
+                    if (this.depth >= 2 && shuffled[assigned]) {
+                        shuffled[assigned].type = 'altar';
+                        assigned++;
+                    }
+                    if (shuffled[assigned] && Math.random() < 0.6) {
+                        shuffled[assigned].type = 'secret';
+                        assigned++;
+                    }
+                    // deeper floors can have a second altar
+                    if (this.depth >= 4 && shuffled[assigned] && Math.random() < 0.5) {
+                        shuffled[assigned].type = 'altar';
+                        assigned++;
+                    }
+                }
+
                 const palette = B.palette;
 
                 this.scene.fog = new THREE.Fog(0x02030a, 3.0 * CELL * 0.3, 14 * CELL * 0.5);
@@ -2166,6 +2515,77 @@
                         if (cand % every === 0) {
                             this.torches.push(makeTorch(this.scene, [x, y], pick(wallDirs), palette));
                         }
+                    }
+                }
+
+                // ---- populate rooms ----
+                const boonPool = ['heart', 'oil', 'charm', 'ward'];
+                // helper: list a room's perimeter cells (these are the ones touching walls)
+                const roomEdgeCells = (r) => {
+                    const cells = [];
+                    for (let x = r.x0; x <= r.x1; x++) {
+                        cells.push([x, r.y0]);
+                        cells.push([x, r.y1]);
+                    }
+                    for (let y = r.y0 + 1; y < r.y1; y++) {
+                        cells.push([r.x0, y]);
+                        cells.push([r.x1, y]);
+                    }
+                    return cells;
+                };
+                for (const r of this.rooms) {
+                    const edges = roomEdgeCells(r);
+                    if (r.type === 'altar') {
+                        const boon = pick(boonPool);
+                        const a = makeAltar(this.scene, r.cx, r.cy, boon);
+                        this.altars.push(a);
+                        // a couple of torches on the room's walls so it feels sacred/lit.
+                        // Place on perimeter cells that actually face a wall (never mid-air).
+                        const wallEdges = edges.filter(([x, y]) => this.wallDirsAt(x, y).length > 0);
+                        for (let i = 0; i < 2 && wallEdges.length; i++) {
+                            const [ex, ey] = wallEdges[(i * Math.floor(wallEdges.length / 2)) % wallEdges.length];
+                            this.placeTorchOnWall(ex, ey, palette, edges);
+                        }
+                    } else if (r.type === 'secret') {
+                        // seal the room behind a single false wall on one of its doorways.
+                        // Find an edge cell of the room whose outside neighbor is open (the
+                        // doorway), then place a false wall there.
+                        let sealed = false;
+                        const edgeOrder = [];
+                        for (let x = r.x0; x <= r.x1; x++) {
+                            edgeOrder.push([x, r.y0, 0, -1]);
+                            edgeOrder.push([x, r.y1, 0, 1]);
+                        }
+                        for (let y = r.y0; y <= r.y1; y++) {
+                            edgeOrder.push([r.x0, y, -1, 0]);
+                            edgeOrder.push([r.x1, y, 1, 0]);
+                        }
+                        for (let i = edgeOrder.length - 1; i > 0; i--) {
+                            const j = (Math.random() * (i + 1)) | 0;
+                            [edgeOrder[i], edgeOrder[j]] = [edgeOrder[j], edgeOrder[i]];
+                        }
+                        for (const [ex, ey, dx, dy] of edgeOrder) {
+                            const ox = ex + dx, oy = ey + dy;
+                            if (ox > 0 && oy > 0 && ox < size - 1 && oy < size - 1 && this.grid[oy][ox] === 0) {
+                                // place false wall AT the doorway cell (between room and corridor):
+                                // we make the doorway itself a passable false-wall block.
+                                // Use the room edge cell's outside neighbor as the visible false wall
+                                // only if it has exactly one open side (a corridor stub). Simpler &
+                                // robust: drop the false wall on the room's own edge cell, keep grid open.
+                                r.secretWall = [ex, ey];
+                                this.falseWalls.push(makeFalseWall(this.scene, ex, ey, palette));
+                                sealed = true;
+                                break;
+                            }
+                        }
+                        // guaranteed reward inside the secret room (often a Still Heart)
+                        this.items.push(makeItem(this.scene, r.cx, r.cy, Math.random() < 0.45 ? 'heart' : pick(['oil', 'charm', 'sight'])));
+                        // a torch on one of the room's walls so it's visible once entered
+                        this.placeTorchOnWall(r.x0, r.y0, palette, edges);
+                    } else {
+                        // plain room: a cairn in the centre + a torch on a wall
+                        this.roomDecor.push(makeCairn(this.scene, r.cx, r.cy));
+                        this.placeTorchOnWall(r.x0, r.y0, palette, edges);
                     }
                 }
 
@@ -2249,6 +2669,13 @@
                     this.wardens.push(w);
                 }
 
+                // ---- critters: ambient rats & spiders ----
+                this.spawnCritters(openCells);
+
+                // ---- hiding spots: alcoves carved into long straight corridors, where the
+                //      player can press in and become briefly invisible to the warden ----
+                this.placeHideSpots(palette);
+
                 // ---- discovery ----
                 this.seen = Array.from({length: size}, () => new Array(size).fill(false));
 
@@ -2259,10 +2686,49 @@
                 this.camera.position.copy(this.pos);
 
                 this.updateHUD();
-                // announce biome
+                // track deepest reached
+                if (this.depth > this.stats.deepest) this.stats.deepest = this.depth;
+                // announce biome + depth title
                 this.flashBig(B.name);
                 this.whisper(B.flavor);
                 document.getElementById('biome-name').textContent = B.name;
+                const dt2 = document.getElementById('depth-title');
+                if (dt2) dt2.textContent = this.depthTitle(this.depth);
+            },
+
+            /* return all grid directions from an open cell (x,y) that face a wall */
+            wallDirsAt(x, y) {
+                const out = [];
+                for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+                    const nx = x + dx, ny = y + dy;
+                    if (ny < 0 || nx < 0 || ny >= this.size || nx >= this.size) continue;
+                    if (this.grid[ny][nx] === 1) out.push([dx, dy]);
+                }
+                return out;
+            },
+            /* place a torch on a wall adjacent to open cell (x,y); returns true if placed.
+               If no wall touches that cell, tries nearby open cells in the room before
+               giving up — guarantees torches never mount onto empty air. */
+            placeTorchOnWall(x, y, palette, fallbackCells) {
+                let dirs = this.wallDirsAt(x, y);
+                if (dirs.length) {
+                    this.torches.push(makeTorch(this.scene, [x, y], pick(dirs), palette));
+                    return true;
+                }
+                // try fallback cells (e.g. other cells in the same room)
+                if (fallbackCells) {
+                    for (const [fx, fy] of fallbackCells) {
+                        if (fx === x && fy === y) continue;
+                        if (this.grid[fy] && this.grid[fy][fx] === 0) {
+                            dirs = this.wallDirsAt(fx, fy);
+                            if (dirs.length) {
+                                this.torches.push(makeTorch(this.scene, [fx, fy], pick(dirs), palette));
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
             },
 
             wardenBaseSpeed() {
@@ -2323,6 +2789,7 @@
                 this.elapsed = (performance.now() - this.runStartTime) / 1000;
                 this.handleLook(dt);
                 this.handleMove(dt);
+                this.updateHideSpots(dt);
                 this.updateLantern(dt);
                 this.updateWardens(dt);
                 this.updateEntities(dt);
@@ -2454,6 +2921,42 @@
             /* ---- lantern: drains over time + running; refuels near torches.
                Tuned so floors are NOT over-lit: torches give a pool, but between them
                it's genuinely dark and oil ticks down. ---- */
+            /* ---- HIDING: player is hidden when pressed into an alcove and nearly still ---- */
+            updateHideSpots(dt) {
+                let inSpot = false, nearSpot = false;
+                const movingFast = this.movingFast;
+                for (const h of this.hideSpots) {
+                    const d = Math.hypot(this.pos.x - h.wx, this.pos.z - h.wz);
+                    if (d < 1.6) nearSpot = true;
+                    // must be close AND not sprinting to count as hidden (you press in & still)
+                    if (d < 0.95 && !movingFast) {
+                        inSpot = true;
+                        h.occupied = true;
+                    } else {
+                        h.occupied = false;
+                    }
+                }
+                const was = this._inHideSpot;
+                this._inHideSpot = inSpot;
+                if (inSpot && !was) {
+                    this.whisper('you press into the dark recess and hold your breath');
+                    this.stats.hideUses++;
+                }
+                // HUD prompt when near but not yet hidden
+                const prompt = document.getElementById('hide-prompt');
+                if (prompt) {
+                    if (inSpot) {
+                        prompt.textContent = '— hidden —';
+                        prompt.style.opacity = '1';
+                        prompt.style.color = '#7fd6a8';
+                    } else if (nearSpot) {
+                        prompt.textContent = 'press in to hide';
+                        prompt.style.opacity = '1';
+                        prompt.style.color = '#9c9580';
+                    } else prompt.style.opacity = '0';
+                }
+            },
+
             updateLantern(dt) {
                 const B = this.biome;
                 let nearestTorch = Infinity;
@@ -2512,7 +3015,7 @@
                     const los = this.hasLineOfSight(w.position.x, w.position.z, this.pos.x, this.pos.z);
 
                     // Hush Charm: invisible to wardens
-                    const hidden = this.hushTimer > 0;
+                    const hidden = this.hushTimer > 0 || this._inHideSpot;
                     const litBonus = this.isInTorchlight() ? 5 : 0;
                     const lanternBonus = this.lantern * 3;
                     // Sight range no longer balloons with aggression — that made breaking
@@ -2550,6 +3053,10 @@
                         // clean break actually shakes the hunt
                         u.aggro = clamp(u.aggro - dt * 0.45, 0, 1);
                         u.state = (u.lastSeen && (this.elapsed - u.lastSeen.t) < 2.5) ? 'hunt' : 'wander';
+                        if (u.state !== 'hunt' && u._wasHunting) {
+                            this.stats.escapes++;
+                            this.whisper(pick(['it loses your scent', 'the dark swallows you again', 'its hunger fades — for now']));
+                        }
                         if (u.state !== 'hunt') u._wasHunting = false;
                     }
 
@@ -2656,6 +3163,36 @@
                         Audio.chime();
                     }
                 }
+                // secret room discovery: count (once) when the player reaches a secret
+                // room's interior, having pushed through its false wall.
+                for (const r of (this.rooms || [])) {
+                    if (r.type !== 'secret' || r._found) continue;
+                    const d = Math.hypot(this.pos.x - gx2w(r.cx), this.pos.z - gx2w(r.cy));
+                    if (d < CELL * 1.2) {
+                        r._found = true;
+                        this.stats.secrets++;
+                        this.flashBig('a hidden room');
+                        this.whisper('the wall was a lie — something waited behind it');
+                        Audio.chime();
+                    }
+                }
+                // ---- ALTARS: float/spin the relic; activate when the player steps in ----
+                for (const a of this.altars) {
+                    const u = a.userData;
+                    if (!u.used) {
+                        u.relic.rotation.y += dt * 1.2;
+                        u.relic.position.y = 1.7 + Math.sin(t * 0.002 + u.phase) * 0.1;
+                        const pulse = 0.85 + 0.15 * Math.sin(t * 0.004 + u.phase);
+                        u.light.intensity = 1.6 * pulse;
+                        const d = Math.hypot(this.pos.x - a.position.x, this.pos.z - a.position.z);
+                        if (d < 1.4) this.activateAltar(a);
+                    } else {
+                        // spent: relic gone, light fades
+                        u.light.intensity = Math.max(0, u.light.intensity - dt * 1.5);
+                    }
+                }
+                // ---- CRITTERS: skitter, flee from light & player, react to the warden ----
+                this.updateCritters(dt, t);
                 // ---- torch flames: flicker the mesh (cheap), but only keep the NEAREST
                 //      few torch POINT LIGHTS enabled. Dynamic lights are the main mobile
                 //      cost, so we budget them and disable distant ones (their glowing
@@ -2705,6 +3242,7 @@
                         e.userData.collected = true;
                         e.visible = false;
                         this.embersGot++;
+                        this.stats.embers++;
                         Audio.ember();
                         this.flashBig('✦');
                         this.lantern = clamp(this.lantern + 0.18, 0, 1);
@@ -2780,13 +3318,200 @@
                 for (let y = 0; y < this.size; y++) for (let x = 0; x < this.size; x++) this.seen[y][x] = true;
             },
 
+            /* altar boon: grants a reward, but the relic's release rings out and ALERTS
+               every warden to your position (the risk that balances the reward). */
+            activateAltar(a) {
+                const u = a.userData;
+                if (u.used) return;
+                u.used = true;
+                u.relic.visible = false;
+                u.halo.visible = false;
+                this.stats.altars++;
+                Audio.chime();
+                switch (u.boon) {
+                    case 'heart':
+                        this.hearts++;
+                        this.flashBig('❤ the altar mends you');
+                        this.whisper('old stone, older mercy — your heart steadies');
+                        break;
+                    case 'oil':
+                        this.lantern = 1.0;
+                        this.flashBig('🛢 the altar feeds your light');
+                        this.whisper('the lantern blazes, full and bright');
+                        break;
+                    case 'charm':
+                        this.hushTimer = 16;
+                        this.flashBig('🕯 the altar hides you');
+                        this.whisper('a veil settles over you — the warden forgets your shape');
+                        break;
+                    case 'ward':
+                        this.hasteTimer = 10;
+                        this.hushTimer = 6;
+                        this.flashBig('✦ the altar quickens you');
+                        this.whisper('warded and swift — run while it lasts');
+                        break;
+                }
+                // the chime betrays you: alert and draw every warden
+                const pcx = w2gx(this.pos.x), pcy = w2gx(this.pos.z);
+                for (const w of this.wardens) {
+                    w.userData.aggro = clamp(w.userData.aggro + 0.5, 0, 1);
+                    w.userData.lastSeen = {x: pcx, y: pcy, t: this.elapsed};
+                    w.userData.state = 'hunt';
+                }
+                Audio.growl(0.8);
+                this.updateHUD();
+            },
+
+            /* ---- CRITTERS (rats & spiders) ---- */
+            spawnCritters(openCells) {
+                const count = 3 + Math.floor(this.size / 8);
+                for (let i = 0; i < count; i++) {
+                    const isSpider = Math.random() < 0.45;
+                    const c = openCells[(Math.random() * openCells.length) | 0];
+                    if (!c) continue;
+                    const crit = makeCritter(this.scene, c[0], c[1], isSpider ? 'spider' : 'rat');
+                    this.critters.push(crit);
+                }
+            },
+
+            /* ---- HIDING SPOTS ----
+               Find cells in long straight corridors and carve a 1-cell alcove into an
+               adjacent wall. Standing in the alcove (and holding still) hides you from
+               the warden, giving a guaranteed escape option on otherwise lethal straights.
+               We DON'T open the grid for the alcove (so it stays a recess, not a path);
+               instead we track its world position and treat the player as "in" it by
+               proximity. */
+            placeHideSpots(palette) {
+                const size = this.size, g = this.grid;
+                const candidates = [];
+                for (let y = 2; y < size - 2; y++) {
+                    for (let x = 2; x < size - 2; x++) {
+                        if (g[y][x] !== 0) continue;
+                        // horizontal corridor cell: open left/right, wall above & below, and an
+                        // adjacent wall we can recess into
+                        const horiz = g[y][x - 1] === 0 && g[y][x + 1] === 0 && g[y - 1][x] === 1 && g[y + 1][x] === 1;
+                        const vert = g[y - 1][x] === 0 && g[y + 1][x] === 0 && g[y][x - 1] === 1 && g[y][x + 1] === 1;
+                        if (horiz) {
+                            // recess up or down (into the wall) — pick a side that has wall beyond
+                            for (const dy of [-1, 1]) if (g[y + dy] && g[y + dy][x] === 1) candidates.push([x, y, 0, dy]);
+                        } else if (vert) {
+                            for (const dx of [-1, 1]) if (g[y][x + dx] === 1) candidates.push([x, y, dx, 0]);
+                        }
+                    }
+                }
+                // thin them out & space them: take roughly 1 per 8 candidates, shuffled
+                for (let i = candidates.length - 1; i > 0; i--) {
+                    const j = (Math.random() * (i + 1)) | 0;
+                    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+                }
+                const want = Math.min(candidates.length, 2 + Math.floor(size / 9));
+                const placed = [];
+                for (const c of candidates) {
+                    if (placed.length >= want) break;
+                    const [x, y] = c;
+                    // keep them apart
+                    if (placed.some(p => Math.abs(p[0] - x) + Math.abs(p[1] - y) < 4)) continue;
+                    // not at spawn
+                    if (x <= 2 && y <= 2) continue;
+                    placed.push(c);
+                }
+                for (const [x, y, dx, dy] of placed) {
+                    const mesh = makeAlcove(this.scene, x, y, dx, dy, palette);
+                    // hide-spot world position: at the corridor cell, nudged toward the recess
+                    this.hideSpots.push({
+                        x, y, dx, dy,
+                        wx: gx2w(x) + dx * 0.55, wz: gx2w(y) + dy * 0.55, mesh, occupied: false
+                    });
+                }
+            },
+
+            updateCritters(dt, t) {
+                for (const c of this.critters) {
+                    const u = c.mesh.userData;
+                    // distance to player & nearest danger (player light + warden)
+                    const dPlayer = Math.hypot(this.pos.x - c.mesh.position.x, this.pos.z - c.mesh.position.z);
+                    // flee target: away from player when close (they're skittish)
+                    let fleeing = false;
+                    if (dPlayer < 4.5) {
+                        fleeing = true;
+                        const ax = c.mesh.position.x - this.pos.x, az = c.mesh.position.z - this.pos.z;
+                        const al = Math.hypot(ax, az) || 1;
+                        u.dirX = ax / al;
+                        u.dirZ = az / al;
+                    }
+                    // also flee from the nearest hunting warden (diegetic warning: critters
+                    // stream away from the warden, so a sudden scatter past you = it's near)
+                    for (const w of this.wardens) {
+                        const dw = Math.hypot(w.position.x - c.mesh.position.x, w.position.z - c.mesh.position.z);
+                        if (dw < 6 && w.userData.state === 'hunt') {
+                            fleeing = true;
+                            const ax = c.mesh.position.x - w.position.x, az = c.mesh.position.z - w.position.z;
+                            const al = Math.hypot(ax, az) || 1;
+                            u.dirX = ax / al;
+                            u.dirZ = az / al;
+                            break;
+                        }
+                    }
+                    // wander: occasionally pick a new direction
+                    u.changeTimer -= dt;
+                    if (!fleeing && u.changeTimer <= 0) {
+                        u.changeTimer = 0.6 + Math.random() * 1.4;
+                        const ang = Math.random() * TWO_PI;
+                        u.dirX = Math.cos(ang);
+                        u.dirZ = Math.sin(ang);
+                    }
+                    const spd = (fleeing ? c.fleeSpeed : c.wanderSpeed);
+                    // try move with simple grid collision (stay in open cells)
+                    const nx = c.mesh.position.x + u.dirX * spd * dt;
+                    const nz = c.mesh.position.z + u.dirZ * spd * dt;
+                    const cellOpen = !this.isWall(w2gx(nx), w2gx(c.mesh.position.z));
+                    const cellOpen2 = !this.isWall(w2gx(c.mesh.position.x), w2gx(nz));
+                    if (cellOpen) c.mesh.position.x = nx; else u.dirX *= -1;
+                    if (cellOpen2) c.mesh.position.z = nz; else u.dirZ *= -1;
+                    // face movement
+                    c.mesh.rotation.y = Math.atan2(u.dirX, u.dirZ);
+                    // little scurry bob / leg wiggle
+                    if (c.type === 'rat') {
+                        c.mesh.position.y = 0.12 + Math.abs(Math.sin(t * 0.02 + u.phase)) * 0.04;
+                    } else {
+                        // spiders hug the floor; legs twitch via slight scale
+                        c.mesh.position.y = 0.14;
+                        c.mesh.children.forEach((leg, idx) => {
+                            if (leg.userData.isLeg) leg.rotation.z = leg.userData.base + Math.sin(t * 0.03 + idx) * 0.12;
+                        });
+                    }
+                    // only visible when reasonably near (perf + spookiness)
+                    c.mesh.visible = dPlayer < (this.scene.fog.far + 2);
+                    // count a sighting once, when it's close & visible
+                    if (!c.seen && c.mesh.visible && dPlayer < 6) {
+                        c.seen = true;
+                        this.stats.critters++;
+                    }
+                }
+            },
+
             openGate() {
                 if (!this.gate) return;
                 this.gate.userData.open = true;
                 Audio.gate();
-                this.flashBig('the gate opens');
-                this.whisper('all three embers burn — the gate has woken');
+                Audio.chime();
+                // a richer payoff: a rising chord + a green screen bloom
+                setTimeout(() => Audio.pianoPhrase(), 300);
+                this.flashBig('✦ the gate awakens ✦');
+                this.whisper('all three embers burn — the way down opens. follow the compass.');
                 document.getElementById('compass').style.opacity = '1';
+                // brief green vignette bloom to signal triumph
+                const rp = document.getElementById('redpulse');
+                if (rp) {
+                    rp.style.boxShadow = 'inset 0 0 220px 80px rgba(46,160,90,0.55)';
+                    rp.style.opacity = '0.7';
+                    setTimeout(() => {
+                        rp.style.opacity = '0';
+                        setTimeout(() => {
+                            rp.style.boxShadow = 'inset 0 0 220px 80px rgba(140,0,0,0.9)';
+                        }, 400);
+                    }, 700);
+                }
                 for (const w of this.wardens) w.userData.aggro = clamp(w.userData.aggro + 0.4, 0, 1);
             },
 
@@ -3128,6 +3853,7 @@
                 this.biome = null;
                 this.pianoTimer = 14;
                 this.adrenaline = 0;
+                this.stats = {embers: 0, secrets: 0, altars: 0, critters: 0, hideUses: 0, escapes: 0, deepest: 1};
                 this.runStartTime = performance.now();
                 document.getElementById('compass').style.opacity = '0';
                 this.buildLayer();
@@ -3177,9 +3903,28 @@
                 Audio.gate();
                 if (document.pointerLockElement) document.exitPointerLock();
                 this.showHUD(false);
+                const nextDepth = this.depth + 1;
                 document.getElementById('d-depth').textContent = this.depth;
                 document.getElementById('d-hearts').textContent = this.hearts;
                 document.getElementById('d-time').textContent = this.fmtTime(this.elapsed);
+                // next layer's title + how deep you're about to be
+                const ddt = document.getElementById('descend-depth-title');
+                if (ddt) ddt.textContent = 'Next: ' + this.depthTitle(nextDepth);
+                const df = document.getElementById('descend-fathoms');
+                if (df) df.textContent = '— ' + this.fathoms(nextDepth) + ' fathoms below the surface —';
+                // accumulated run tally
+                const tally = document.getElementById('descend-tally');
+                if (tally) {
+                    const s = this.stats;
+                    const parts = [
+                        ['✦', s.embers, 'embers'],
+                        ['🗝', s.secrets, 'secrets'],
+                        ['⛩', s.altars, 'altars'],
+                        ['🐀', s.critters, 'creatures'],
+                        ['👁', s.escapes, 'escapes'],
+                    ];
+                    tally.innerHTML = parts.map(([g, n, l]) => `<span><span style="color:#e9d49a;font-size:1.1rem">${n}</span> ${g} ${l}</span>`).join('');
+                }
                 document.getElementById('descend-flavor').textContent = pick([
                     'You slip through into colder air. The dark here is older.',
                     'The gate sighs shut behind you. Something screams, far above.',
@@ -3205,8 +3950,16 @@
                     ? 'The warden folds you into the dark. You were always going to be part of the Hollow.'
                     : 'The cold filled your chest. The lantern was the only thing keeping you.';
                 document.getElementById('o-depth').textContent = this.depth;
-                document.getElementById('o-embers').textContent = this.embersGot + (this.depth - 1) * 3;
+                document.getElementById('o-embers').textContent = this.stats.embers;
                 document.getElementById('o-time').textContent = this.fmtTime(this.elapsed);
+                const odt = document.getElementById('over-depth-title');
+                if (odt) odt.textContent = this.depthTitle(this.stats.deepest) + ' · ' + this.fathoms(this.stats.deepest) + ' fathoms';
+                const ot = document.getElementById('over-tally');
+                if (ot) {
+                    const s = this.stats;
+                    const parts = [['✦', s.embers, 'embers'], ['🗝', s.secrets, 'secrets'], ['⛩', s.altars, 'altars'], ['🐀', s.critters, 'creatures'], ['👁', s.escapes, 'escapes']];
+                    ot.innerHTML = parts.map(([g, n, l]) => `<span><span style="color:#e9d49a;font-size:1.1rem">${n}</span> ${g} ${l}</span>`).join('');
+                }
                 this.show('over');
             },
             toMenu() {
