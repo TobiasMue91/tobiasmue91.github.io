@@ -3,7 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SKYLINE</title>
+    <title>SKYLINE — Stacker Incremental City Builder</title>
+    <meta name="description"
+          content="SKYLINE is a browser incremental game built on the classic Stacker arcade mechanic. Drop sliding blocks to raise a glass skyscraper, chain perfect drops for huge multipliers, weather the storm, and prestige into an architect skill tree. Free to play, no install.">
+    <meta name="keywords"
+          content="skyline, stacker game, incremental game, idle game, tower builder, city builder, browser game, perfect drop, prestige, free online game">
+    <meta name="author" content="gptgames.dev">
+    <meta name="theme-color" content="#0a0e1c">
+    <link rel="canonical" href="https://gptgames.dev/games/skyline.html">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="gptgames.dev">
+    <meta property="og:url" content="https://gptgames.dev/games/skyline.html">
+    <meta property="og:title" content="SKYLINE — Stacker Incremental City Builder">
+    <meta property="og:description"
+          content="Drop sliding blocks to raise a glass skyscraper, chain perfect drops for huge multipliers, weather the storm, and prestige into an architect skill tree. Free to play in your browser.">
+    <meta property="og:image" content="https://gptgames.dev/screenshots/screenshot_277.webp">
+    <meta property="og:image:alt"
+          content="A glass skyscraper rising against a city skyline at dusk in the game SKYLINE">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://gptgames.dev/games/skyline.html">
+    <meta name="twitter:title" content="SKYLINE — Stacker Incremental City Builder">
+    <meta name="twitter:description"
+          content="Drop sliding blocks to raise a glass skyscraper, chain perfect drops, weather the storm, and prestige into an architect skill tree. Free browser game.">
+    <meta name="twitter:image" content="https://gptgames.dev/screenshots/screenshot_277.webp">
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "VideoGame",
+            "name": "SKYLINE",
+            "url": "https://gptgames.dev/games/skyline.html",
+            "description": "A browser incremental game built on the classic Stacker arcade mechanic. Drop sliding blocks to raise a glass skyscraper, chain perfect drops for huge multipliers, weather the storm, and prestige into an architect skill tree.",
+            "image": "https://gptgames.dev/screenshots/screenshot_277.webp",
+            "genre": [
+                "Incremental",
+                "Idle",
+                "Arcade",
+                "Casual"
+            ],
+            "gamePlatform": "Web browser",
+            "applicationCategory": "Game",
+            "operatingSystem": "Any",
+            "playMode": "SinglePlayer",
+            "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+            }
+        }
+    </script>
     <style>
         /* ============================================================
            SKYLINE — design tokens
@@ -1398,6 +1451,8 @@
         <button class="rail-btn" id="btnPrestige" title="Demolish (P)">💥<span class="lbl">ARCH</span><span
                 class="dot"></span></button>
         <button class="rail-btn" id="btnSettings" title="Settings">⚙️<span class="lbl">SET</span></button>
+        <button class="rail-btn active" id="btnMute" title="Mute (M)"><span class="ic">🔊</span><span
+                class="lbl">SOUND</span></button>
     </div>
 
     <button id="recenterBtn" title="Recenter on tower (C)">⊙ <span>Recenter</span></button>
@@ -2228,9 +2283,9 @@
     // world→screen: world y measured upward from foundation (y=0 at base)
     function worldToScreen(wx, wy) {
         const z = cam.zoom;
-        // simpler: scale x around play center
+        // wx is an absolute play-area screen x; scale it around the play centre for zoom
         const cx = playLeft() + playWidth() / 2;
-        let sxx = cx + (wx - playWidth() / 2) * z;
+        let sxx = cx + (wx - cx) * z;
         const baseScreenY = CH * 0.78;          // foundation sits near bottom
         const sy = baseScreenY - (wy - cam.y) * z;
         // storm sway: taller points bend further in the wind (like a real tall building)
@@ -3038,7 +3093,7 @@
         cam.shake = 0.8;
         floatText(playLeft() + playWidth() / 2, r.height * T.BLOCK_H, 'VAULT ×' + mult.toFixed(1) + '!', '#4cc8ff');
         burst(playLeft() + playWidth() / 2, r.height * T.BLOCK_H, '#4cc8ff', 40, 140);
-        playPerfect(10);
+        playCashOut();
         refreshHUD();
     }
 
@@ -3054,25 +3109,65 @@
         ctx.closePath();
     }
 
+    /* ===================== DAY / NIGHT CYCLE (purely visual) ================= */
+    const DAY_LENGTH = 180;   // seconds for a full dawn→day→dusk→night cycle
+    // palette keyframes at phase 0..1: [skyTop, skyMid, horizon]
+    const SKY_KEYS = [
+        {t: 0.00, top: '#1a2740', mid: '#3a3352', hor: '#c9784e'}, // dawn (warm horizon)
+        {t: 0.18, top: '#3d6ea5', mid: '#78a9cc', hor: '#bfe0ee'}, // morning
+        {t: 0.35, top: '#4a86c4', mid: '#8fc0dd', hor: '#dff0f7'}, // day (bright)
+        {t: 0.55, top: '#3d6ea5', mid: '#9db8cc', hor: '#e7c9a0'}, // afternoon
+        {t: 0.70, top: '#2a3a5c', mid: '#7a5a6e', hor: '#e8895a'}, // dusk (warm)
+        {t: 0.82, top: '#141e38', mid: '#2a2848', hor: '#3a2e50'}, // twilight
+        {t: 1.00, top: '#0a0e1c', mid: '#12152a', hor: '#0e1424'}, // night (dark)
+    ];
+
+    function dayPhase() {
+        return ((performance.now() / 1000) % DAY_LENGTH) / DAY_LENGTH;
+    }
+
+    // interpolate the sky palette at the current phase → {top,mid,hor,dark}
+    function skyPalette() {
+        const p = dayPhase();
+        let a = SKY_KEYS[0], b = SKY_KEYS[SKY_KEYS.length - 1];
+        for (let i = 0; i < SKY_KEYS.length - 1; i++) {
+            if (p >= SKY_KEYS[i].t && p <= SKY_KEYS[i + 1].t) {
+                a = SKY_KEYS[i];
+                b = SKY_KEYS[i + 1];
+                break;
+            }
+        }
+        const span = (b.t - a.t) || 1, k = (p - a.t) / span;
+        const top = lerpColor(a.top, b.top, k), mid = lerpColor(a.mid, b.mid, k), hor = lerpColor(a.hor, b.hor, k);
+        // darkness 0(bright day)..1(deep night) — drives stars + window glow
+        const bright = Math.max(0, Math.cos((p - 0.35) * Math.PI * 2) * 0.5 + 0.5); // peak at day (~0.35)
+        const dark = 1 - bright;
+        return {top, mid, hor, dark, phase: p};
+    }
+
     function render() {
         ctx.clearRect(0, 0, CW, CH);
-        // background gradient sky — darkens as the storm builds
+        // background gradient sky — day/night palette, tinted by climb & storm
         const stormIt = stormIntensity();
+        const sky = skyPalette();
         const g = ctx.createLinearGradient(0, 0, 0, CH);
         const climb = Math.min(1, Math.log10(Math.max(1, game.run.height)) / 3.2);
-        let topC = lerpColor('#0a0e14', '#1a0b2e', climb);
-        let midC = lerpColor('#0d1320', '#241038', climb * 0.7);
+        let topC = lerpColor(sky.top, '#1a0b2e', climb * 0.5);
+        let midC = lerpColor(sky.mid, '#241038', climb * 0.4);
+        let horC = sky.hor;
         if (stormIt > 0) { // mix toward a stormy slate
-            topC = lerpColor(topC, '#1a2230', stormIt * 0.7);
-            midC = lerpColor(midC, '#10151d', stormIt * 0.7);
+            topC = lerpColor(topC, '#1a2230', stormIt * 0.75);
+            midC = lerpColor(midC, '#10151d', stormIt * 0.75);
+            horC = lerpColor(horC, '#0c1016', stormIt * 0.8);
         }
         g.addColorStop(0, topC);
-        g.addColorStop(0.6, midC);
-        g.addColorStop(1, '#06090f');
+        g.addColorStop(0.55, midC);
+        g.addColorStop(1, horC);
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, CW, CH);
 
-        drawStars(climb * (1 - stormIt));   // stars fade as the storm clouds gather
+        drawStars(sky.dark * (1 - stormIt));   // stars appear at night, fade in storm
+        drawBackdropCity(sky);  // permanent distant skyline so we're never alone
         drawSkyline();          // §7 background towers
         drawGround();
         drawBestMarker();       // personal-best height line
@@ -3156,16 +3251,111 @@
         ctx.restore();
     }
 
-    function drawStars(climb) {
+    function drawStars(dark) {
+        if (dark <= 0.05) return;
         ctx.save();
-        for (let i = 0; i < 40; i++) {
-            const x = (i * 97.3) % CW, y = (i * 53.7) % (CH * 0.6);
+        // moon rises at night (follows darkness), drawn once
+        if (dark > 0.3) {
+            const mx = CW * 0.78, my = CH * 0.16 + (1 - dark) * 40;
+            ctx.globalAlpha = Math.min(1, (dark - 0.3) / 0.5);
+            ctx.fillStyle = '#e8eef5';
+            ctx.beginPath();
+            ctx.arc(mx, my, 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(180,200,230,0.35)';
+            ctx.beginPath();
+            ctx.arc(mx, my, 22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+        for (let i = 0; i < 60; i++) {
+            const x = (i * 97.3) % CW, y = (i * 53.7) % (CH * 0.62);
             const tw = 0.3 + 0.4 * Math.sin(performance.now() * 0.001 + i);
-            ctx.globalAlpha = (0.2 + tw * 0.3) * (0.4 + climb);
+            ctx.globalAlpha = (0.15 + tw * 0.4) * dark;
             ctx.fillStyle = '#cfe6ff';
             ctx.fillRect(x, y, 1.5, 1.5);
         }
         ctx.restore();
+    }
+
+    // A permanent, non-interactive distant skyline so the world never feels empty.
+    // Two parallax layers of silhouette towers with twinkling windows.
+    let backdropCity = null;
+
+    function buildBackdrop() {
+        const layers = [];
+        // far layer (darker, shorter, denser), near layer (taller, sparser)
+        for (let L = 0; L < 2; L++) {
+            const towers = [];
+            const n = L === 0 ? 26 : 16;
+            for (let i = 0; i < n; i++) {
+                const seed = L * 1000 + i;
+                const rnd = (k) => Math.abs(Math.sin(seed * 12.9898 + k * 78.233) * 43758.5453) % 1;
+                towers.push({
+                    xf: (i + 0.5) / n + (rnd(1) - 0.5) * (0.4 / n),   // fractional x across width
+                    wf: (L === 0 ? 0.028 : 0.05) + rnd(2) * (L === 0 ? 0.02 : 0.035),
+                    hf: (L === 0 ? 0.12 : 0.20) + rnd(3) * (L === 0 ? 0.14 : 0.26), // fraction of CH
+                    rows: 3 + Math.floor(rnd(4) * 6),
+                    seed,
+                });
+            }
+            layers.push(towers);
+        }
+        backdropCity = layers;
+    }
+
+    function drawBackdropCity(sky) {
+        if (!backdropCity) buildBackdrop();
+        const stormIt = stormIntensity();
+        // The distant city's base sits EXACTLY on the ground line — same as the real
+        // ground — so it can never detach or float. Parallax (distance) only affects how
+        // tall the towers appear as you climb, never where their base sits.
+        const [, groundY] = worldToScreen(0, 0);
+        const base = groundY;                       // welded to the ground plane
+        const now = performance.now();
+        for (let L = 0; L < backdropCity.length; L++) {
+            const towers = backdropCity[L];
+            // far layer appears to shrink faster as the camera zooms out (depth cue)
+            // far layer slightly shorter than near layer (depth cue). Fixed height —
+            // the backdrop is a distant static skyline, so it must NOT scale with the
+            // gameplay camera zoom (that caused it to squish as the view zoomed out).
+            const hScale = L === 0 ? 0.9 : 1.0;
+            // silhouette colour darkens with night + storm
+            const baseLum = L === 0 ? 0.16 : 0.13;
+            const nightMix = sky.dark * 0.6 + stormIt * 0.5;
+            const bodyCol = lerpColor(`hsl(215,25%,${Math.round(baseLum * 100)}%)`, '#0a0e18', Math.min(1, nightMix));
+            for (const t of towers) {
+                const w = Math.max(4, t.wf * CW);
+                const h = t.hf * CH * hScale;
+                const x = t.xf * CW - w / 2;
+                const topY = base - h;
+                if (base <= -20) continue;                 // whole ground is off the top of screen
+                // body — always drawn from its top down to the ground line
+                ctx.fillStyle = bodyCol;
+                ctx.fillRect(x, topY, w, base - topY);
+                // subtle top edge
+                ctx.fillStyle = lerpColor(bodyCol, '#2a3a55', 0.5);
+                ctx.fillRect(x, topY, w, 1.5);
+                // windows — brighter and more numerous at night
+                const rnd = (k) => Math.abs(Math.sin(t.seed * 3.1 + k * 17.7) * 4375.5) % 1;
+                const winLit = 0.25 + sky.dark * 0.5;   // fraction lit
+                const cols = Math.max(1, Math.floor(w / 6));
+                const rows = t.rows;
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        if (rnd(r * 10 + c) < winLit) {
+                            const wx = x + 3 + c * 6, wy = topY + 6 + r * (h / (rows + 1));
+                            if (wy > base - 3 || wy < 0) continue;
+                            const flick = 0.6 + 0.4 * Math.sin(now * 0.001 + t.seed + r + c);
+                            ctx.globalAlpha = (0.35 + sky.dark * 0.5) * flick * (1 - stormIt * 0.6);
+                            ctx.fillStyle = sky.dark > 0.4 ? '#ffd98a' : '#bfe0f5';
+                            ctx.fillRect(wx, wy, 2, 2.5);
+                        }
+                    }
+                }
+                ctx.globalAlpha = 1;
+            }
+        }
     }
 
     function drawSkyline() {
@@ -3515,50 +3705,234 @@
     }
 
     /* ============================ AUDIO (tiny synth) ======================= */
-    let actx = null;
+    let actx = null, masterGain = null, musicGain = null, sfxGain = null;
+    let audioMuted = false;
 
     function audio() {
         if (!actx) {
             try {
                 actx = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = actx.createGain();
+                masterGain.gain.value = audioMuted ? 0 : 1;
+                masterGain.connect(actx.destination);
+                musicGain = actx.createGain();
+                musicGain.gain.value = 0.5;
+                musicGain.connect(masterGain);
+                sfxGain = actx.createGain();
+                sfxGain.gain.value = 1;
+                sfxGain.connect(masterGain);
             } catch (e) {
             }
+        }
+        if (actx && actx.state === 'suspended') {
+            actx.resume();
         }
         return actx;
     }
 
+    function setMuted(m) {
+        audioMuted = m;
+        if (masterGain) {
+            masterGain.gain.linearRampToValueAtTime(m ? 0 : 1, actx.currentTime + 0.2);
+        }
+        const btn = document.getElementById('btnMute');
+        if (btn) {
+            btn.classList.toggle('active', !m);
+            btn.querySelector('.ic').textContent = m ? '🔇' : '🔊';
+        }
+    }
+
     function tone(freq, dur, type = 'sine', vol = 0.12) {
         const a = audio();
-        if (!a) return;
+        if (!a || !sfxGain) return;
         const o = a.createOscillator(), g = a.createGain();
         o.type = type;
         o.frequency.value = freq;
         g.gain.setValueAtTime(vol, a.currentTime);
         g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
         o.connect(g);
-        g.connect(a.destination);
+        g.connect(sfxGain);
         o.start();
         o.stop(a.currentTime + dur);
     }
 
+    // a softer, detuned two-oscillator blip for warmth
+    function chime(freq, dur, vol = 0.1, type = 'sine') {
+        const a = audio();
+        if (!a || !sfxGain) return;
+        [0, -4, 7].forEach((cents, i) => {
+            const o = a.createOscillator(), g = a.createGain();
+            o.type = type;
+            o.frequency.value = freq * Math.pow(2, cents / 1200);
+            const v = vol * (i === 0 ? 1 : 0.4);
+            g.gain.setValueAtTime(0, a.currentTime);
+            g.gain.linearRampToValueAtTime(v, a.currentTime + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
+            o.connect(g);
+            g.connect(sfxGain);
+            o.start();
+            o.stop(a.currentTime + dur);
+        });
+    }
+
     function playLand() {
-        tone(220, 0.08, 'triangle', 0.06);
+        tone(200, 0.07, 'triangle', 0.05);
     }
 
     function playPerfect(chain) {
-        const base = 440 + Math.min(chain, 24) * 30;
-        tone(base, 0.12, 'sine', 0.12);
-        setTimeout(() => tone(base * 1.5, 0.14, 'sine', 0.08), 40);
+        // rising warm chime, brighter with the chain
+        const base = 392 + Math.min(chain, 20) * 22;   // G4 up
+        chime(base, 0.35, 0.11, 'sine');
+        setTimeout(() => chime(base * 1.5, 0.4, 0.06, 'sine'), 50);
     }
 
     function playTopple() {
-        tone(120, 0.4, 'sawtooth', 0.12);
-        setTimeout(() => tone(80, 0.5, 'sawtooth', 0.1), 80);
+        tone(120, 0.5, 'sawtooth', 0.12);
+        setTimeout(() => tone(75, 0.6, 'sawtooth', 0.1), 90);
     }
 
     function playStormStart() {
-        tone(70, 0.6, 'sawtooth', 0.08);
-        setTimeout(() => tone(55, 0.8, 'sawtooth', 0.06), 120);
+        tone(65, 0.8, 'sawtooth', 0.07);
+        setTimeout(() => tone(48, 1.0, 'sawtooth', 0.05), 140);
+    }
+
+    function playCashOut() { // satisfying ascending arpeggio for vault/big rewards
+        const a = audio();
+        if (!a) return;
+        [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => chime(f, 0.3, 0.09, 'triangle'), i * 60));
+    }
+
+    /* ---- original composed theme: "City Lights" ---- */
+    /* A real little tune with melody, walking bass, chord comping, and a soft beat.
+       Sequenced on a beat clock so it sounds like a song, not ambient drift.
+       Notes are MIDI numbers; 0 = rest. Tempo ~96 BPM, 8 steps (eighth notes) per bar. */
+    let musicStarted = false, musicTimer = null, musicStep = 0;
+    const BPM = 96, STEP = (60 / BPM) / 2;   // eighth-note step length in seconds
+    function mtof(m) {
+        return m <= 0 ? 0 : 440 * Math.pow(2, (m - 69) / 12);
+    }
+
+    // 8-bar progression in A minor / C major — a wistful, hopeful city theme.
+    // Each bar: 8 eighth-note steps.
+    const CHORDS = [ // root triads (MIDI) comped softly under the melody, one per bar
+        [57, 60, 64],  // Am
+        [53, 57, 60],  // F
+        [55, 59, 62],  // G
+        [48, 55, 64],  // C (open)
+        [57, 60, 64],  // Am
+        [53, 57, 60],  // F
+        [55, 59, 62],  // G
+        [52, 55, 59],  // Em
+    ];
+    // Lead melody — one entry per eighth-note step across 8 bars (64 steps). 0 = rest.
+    const MELODY = [
+        // bar1 Am           bar2 F
+        76, 0, 74, 0, 72, 0, 69, 72, 74, 0, 72, 0, 69, 0, 65, 0,
+        // bar3 G            bar4 C
+        67, 0, 71, 0, 74, 0, 72, 71, 72, 0, 0, 76, 74, 0, 72, 0,
+        // bar5 Am           bar6 F
+        69, 0, 72, 0, 76, 0, 74, 72, 77, 0, 76, 0, 72, 0, 69, 0,
+        // bar7 G            bar8 Em
+        74, 0, 71, 0, 67, 0, 71, 74, 76, 0, 74, 72, 71, 0, 0, 0,
+    ];
+    // Bass — walking eighth pattern per bar root; simple, groovy.
+    const BASSLINE = [
+        45, 0, 45, 52, 45, 0, 48, 0, 45, 0, 41, 0, 36, 0, 41, 0,
+        43, 0, 43, 50, 43, 0, 47, 0, 36, 0, 43, 0, 48, 0, 43, 0,
+        45, 0, 45, 52, 45, 0, 48, 0, 41, 0, 41, 48, 41, 0, 44, 0,
+        43, 0, 43, 50, 43, 0, 47, 0, 40, 0, 43, 47, 40, 0, 43, 0,
+    ];
+
+    function voice(midi, t, dur, type, vol, cutoff) {
+        const a = audio();
+        if (!a || !musicGain || midi <= 0) return;
+        const f = mtof(midi);
+        const o = a.createOscillator(), g = a.createGain(), lp = a.createBiquadFilter();
+        o.type = type;
+        o.frequency.value = f;
+        lp.type = 'lowpass';
+        lp.frequency.value = cutoff || 2000;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(vol, t + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(lp);
+        lp.connect(g);
+        g.connect(musicGain);
+        o.start(t);
+        o.stop(t + dur + 0.02);
+    }
+
+    function drum(t, kind) {
+        const a = audio();
+        if (!a || !musicGain) return;
+        if (kind === 'kick') {
+            const o = a.createOscillator(), g = a.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(120, t);
+            o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+            g.gain.setValueAtTime(0.14, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+            o.connect(g);
+            g.connect(musicGain);
+            o.start(t);
+            o.stop(t + 0.18);
+        } else { // hat: short filtered noise burst via high square
+            const o = a.createOscillator(), g = a.createGain(), hp = a.createBiquadFilter();
+            o.type = 'square';
+            o.frequency.value = 8000;
+            hp.type = 'highpass';
+            hp.frequency.value = 6000;
+            g.gain.setValueAtTime(0.03, t);
+            g.gain.exponentialRampToValueAtTime(0.0005, t + 0.04);
+            o.connect(hp);
+            hp.connect(g);
+            g.connect(musicGain);
+            o.start(t);
+            o.stop(t + 0.05);
+        }
+    }
+
+    // schedule one step at audio time t
+    function playStep(step, t) {
+        const bar = Math.floor(step / 8) % 8;
+        const inBar = step % 8;
+        // chord comp — soft stab on beats 1 and 3 (steps 0 and 4)
+        if (inBar === 0 || inBar === 4) {
+            const ch = CHORDS[bar];
+            ch.forEach(n => voice(n, t, inBar === 0 ? 1.0 : 0.7, 'triangle', 0.022, 1400));
+        }
+        // bass
+        const bn = BASSLINE[step % BASSLINE.length];
+        if (bn > 0) voice(bn, t, 0.22, 'sawtooth', 0.05, 700);
+        // melody — a warm rounded lead
+        const mn = MELODY[step % MELODY.length];
+        if (mn > 0) {
+            voice(mn, t, 0.26, 'triangle', 0.055, 2600);
+            voice(mn + 12, t, 0.20, 'sine', 0.012, 4000); // subtle octave shimmer
+        }
+        // beat: kick on 1 & 5, hats on off-beats
+        if (inBar === 0 || inBar === 4) drum(t, 'kick');
+        if (inBar % 2 === 1) drum(t, 'hat');
+    }
+
+    function startMusic() {
+        if (musicStarted) return;
+        const a = audio();
+        if (!a) return;
+        musicStarted = true;
+        musicStep = 0;
+        let nextTime = a.currentTime + 0.1;
+        const LOOKAHEAD = 0.25; // schedule slightly ahead for tight timing
+        const tick = () => {
+            const now = audio().currentTime;
+            while (nextTime < now + LOOKAHEAD) {
+                playStep(musicStep, nextTime);
+                musicStep++;
+                nextTime += STEP;
+            }
+            musicTimer = setTimeout(tick, 60);
+        };
+        tick();
     }
 
     /* ============================ HUD / UI ================================= */
@@ -4499,6 +4873,10 @@
     document.getElementById('btnShop').onclick = () => openPanel('shopPanel');
     document.getElementById('btnPrestige').onclick = () => openPanel('prestigePanel');
     document.getElementById('btnSettings').onclick = () => openPanel('settingsPanel');
+    document.getElementById('btnMute').onclick = () => {
+        audio();
+        setMuted(!audioMuted);
+    };
     document.getElementById('btnAuto').onclick = () => {
         if (!autoUnlocked()) {
             toast('Buy the Auto-Dropper in the shop first');
@@ -4649,6 +5027,11 @@
             case 'V':
                 cashVault();
                 break;
+            case 'm':
+            case 'M':
+                audio();
+                setMuted(!audioMuted);
+                break;
             case 'c':
             case 'C':
                 recenterCamera();
@@ -4780,6 +5163,7 @@
         document.getElementById('intro').classList.add('hide');
         started = true;
         audio();
+        startMusic();
         if (!game.meta.sawTutorial) {
             setTimeout(startCoach, 400);
         }
