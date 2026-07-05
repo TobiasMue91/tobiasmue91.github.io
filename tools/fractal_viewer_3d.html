@@ -1093,6 +1093,14 @@
                     </div>
                     <input type="range" id="animSp" min="0.02" max="1" step="0.02" value="0.3">
                 </div>
+                <div class="toggle-row animate-feature" style="margin-top:10px">
+                    <span>🕳️ Endless dive <span class="animate-hint">— infinite zoom inward</span></span>
+                    <label class="switch"><input type="checkbox" id="diveTgl"><span class="slider-t"></span></label>
+                </div>
+                <div class="row" id="diveRow" style="display:none;margin-top:12px">
+                    <div class="row-label"><span>Dive speed</span><span class="val" id="diveSpVal">0.35</span></div>
+                    <input type="range" id="diveSp" min="0.05" max="1.2" step="0.05" value="0.35">
+                </div>
             </div>
             <div class="section">
                 <div class="section-title">Geometry</div>
@@ -1212,6 +1220,10 @@
                 <div class="toggle-row">
                     <span>Reflections</span>
                     <label class="switch"><input type="checkbox" id="reflTgl"><span class="slider-t"></span></label>
+                </div>
+                <div class="toggle-row">
+                    <span>Even lighting <span style="color:var(--text-dim);font-size:12px">— for interiors</span></span>
+                    <label class="switch"><input type="checkbox" id="flatTgl"><span class="slider-t"></span></label>
                 </div>
             </div>
             <div class="section">
@@ -1367,7 +1379,8 @@
                 distance estimators for the Mandelbulb, Mandelbox, quaternion Julia set, Menger sponge, Sierpiński
                 tetrahedron, Apollonian gasket, a Kleinian-style set, a Bulbox hybrid, an Amazing Surf, a
                 Pseudo-Kleinian and a rotated Kaleidoscopic-IFS Snowflake — with temporal accumulation, soft shadows,
-                ambient occlusion, fresnel and orbit-trap coloring.</p>
+                ambient occlusion, fresnel and orbit-trap coloring. Toggle Even lighting to explore fractal interiors,
+                or Endless dive for an infinite zoom inward.</p>
             <p style="margin-bottom:0;color:var(--text-dim);font-size:12px">Tip: lower the quality if it runs hot on
                 your device, and turn on <em>Reflections</em> once you find a view worth admiring.</p>
         </div>
@@ -1419,6 +1432,7 @@
     uniform bool  uAO;
     uniform bool  uRefl;
     uniform bool  uAccum;
+    uniform bool  uFlat;          // even/headlamp lighting for exploring interiors
     uniform bool  uInteracting;
 
     const float PI = 3.141592653589793;
@@ -1961,6 +1975,21 @@
       outPos = p; outNrm = n;
 
       vec3 base = surfaceColor(p, n, t);
+
+      if(uFlat){
+        // Even "headlamp" lighting: illuminate from the view direction so every visible
+        // surface is lit regardless of orientation — ideal for flying inside a fractal.
+        // A soft wrap keeps some shape/depth; a small AO touch keeps crevices readable.
+        float vlit = clamp(dot(n, -rd), 0.0, 1.0);
+        float wrap = 0.55 + 0.45*vlit;                 // never fully dark
+        float aoF = uAO ? mix(1.0, calcAO(p, n), 0.4) : 1.0;
+        vec3 col = base * wrap * aoF * (0.9 + 0.5*uLightI);
+        float fres = pow(1.0 - vlit, 4.0);
+        col += fres * vec3(0.35,0.5,0.85) * 0.5;
+        outNrm = n;
+        return col;
+      }
+
       vec3 sun = normalize(uSunDir);
 
       float diff = clamp(dot(n, sun), 0.0, 1.0);
@@ -2246,9 +2275,9 @@
             palA: [0.5, 0.5, 0.5], palB: [0.5, 0.5, 0.5], palC: [1, 1, 1], palD: [0.0, 0.33, 0.67],
             hue: 0, sat: 1, bri: 1, trapMix: 0.6, glow: 0,
             bgType: 0, bgColor: [0.02, 0.024, 0.047], fog: true,
-            quality: 1, shadows: true, ao: true, refl: false, accum: true,
+            quality: 1, shadows: true, ao: true, refl: false, accum: true, flat: false,
             sunE: 45, sunA: 30, lightI: 1.2, ambient: 0.25,
-            fov: 60, orbit: 0, animate: false, animSp: 0.3,
+            fov: 60, orbit: 0, animate: false, animSp: 0.3, dive: false, diveSp: 0.35, frameDist: 2.6,
             // camera (spherical)
             camDist: 2.6, camYaw: 0.9, camPitch: 0.35, target: [0, 0, 0],
             // first-person / flycam
@@ -2359,8 +2388,8 @@
                 scale: true,
                 fold: false,
                 julia: false,
-                radius: 1.4,
-                frame: 2.8,
+                radius: 2.6,
+                frame: 3.6,
                 def: {power: 8, scale: 1.0, iter: 13}
             },
             {
@@ -2680,6 +2709,7 @@
         let MAX_EDGE_RUNTIME = MAX_RENDER_EDGE;  // may shrink adaptively if the GPU struggles
         let perfDowngrades = 0;
         let slowStreak = 0;           // consecutive dangerously-slow frames (needs 2 to downgrade)
+        let justResumed = false;      // set when the tab becomes visible again, to skip the stale first frame
         let warmupFrames = 8;           // first few frames run extra-cheap to prove the GPU is stable
 
         function qualityScale() {
@@ -2787,8 +2817,15 @@
         function render(now) {
             requestAnimationFrame(render);
             if (gl.isContextLost && gl.isContextLost()) return;
-            const dt = now - lastFrameT;
+            let dt = now - lastFrameT;
             lastFrameT = now;
+            // After the tab was backgrounded, rAF is throttled and the first frame back
+            // reports a huge dt (the whole hidden duration). Ignore that frame for the
+            // perf watchdog so it can't falsely trigger a permanent resolution downgrade.
+            if (justResumed) {
+                justResumed = false;
+                dt = 16;
+            }
             const fps = 1000 / Math.max(dt, 1);
             fpsSmooth += (fps - fpsSmooth) * 0.1;
 
@@ -2798,7 +2835,9 @@
             // Only downgrade on *sustained* slowness (two consecutive heavy frames),
             // never on a single spike. A cold shape switch produces exactly one slow
             // frame; counting that would permanently shrink the buffer on every switch.
-            if (warmupFrames === 0 && dt > 320 && !dragging) {
+            // The 900ms ceiling means a monstrous stall (tab switch, GC pause, sleep/wake)
+            // is treated as one anomaly, not sustained GPU struggle.
+            if (warmupFrames === 0 && dt > 320 && dt < 900 && !dragging) {
                 slowStreak++;
             } else {
                 slowStreak = 0;
@@ -2820,6 +2859,18 @@
             // auto-orbit (orbit camera only)
             if (state.orbit > 0 && !dragging && !state.fpsMode) {
                 state.camYaw += state.orbit * dt / 1000 * 0.6;
+                resetAccum();
+            }
+            // endless dive: fly steadily toward the fractal, slowing as we approach so the
+            // descent feels infinite. A slow yaw drift keeps the view alive; when we get
+            // very close, ease back out and continue, so it loops without ever crashing in.
+            if (state.dive && !dragging && !state.fpsMode) {
+                const step = state.diveSp * dt / 1000;
+                state.camDist *= Math.exp(-step);          // exponential approach = constant felt speed
+                state.camYaw += 0.12 * dt / 1000;           // gentle drift for parallax
+                if (state.camDist < 0.28) {
+                    state.camDist = Math.min(state.frameDist || 3.0, 3.0);
+                }
                 resetAccum();
             }
             const animating = state.animate;
@@ -2892,6 +2943,7 @@
             gl.uniform1i(uMain['uAO'], (state.ao && warmupFrames === 0) ? 1 : 0);
             gl.uniform1i(uMain['uRefl'], (state.refl && warmupFrames === 0) ? 1 : 0);
             gl.uniform1i(uMain['uAccum'], doAccum ? 1 : 0);
+            gl.uniform1i(uMain['uFlat'], state.flat ? 1 : 0);
             gl.uniform1i(uMain['uInteracting'], interacting ? 1 : 0);
 
             drawFull();
@@ -3165,6 +3217,15 @@
         window.addEventListener('blur', () => {
             for (const k in keys) keys[k] = false;
         });
+        // When returning to a backgrounded tab, rAF resumes with a huge time gap. Reset
+        // the frame clock and flag the next frame so it's excluded from perf monitoring.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                lastFrameT = performance.now();
+                justResumed = true;
+                slowStreak = 0;
+            }
+        });
 
         let flyLast = performance.now();
 
@@ -3321,7 +3382,7 @@
             const f = fractals[state.type];
             // account for field of view: closer FOV needs more distance
             const fovFactor = 1.0 / Math.tan(state.fov * Math.PI / 360);
-            const dist = Math.max(0.6, f.radius * fovFactor * 1.15);
+            const dist = Math.max(0.6, f.radius * fovFactor * 1.25);
             if (state.fpsMode) {
                 // place the eye back along the current look direction and aim at the origin
                 let dir = fpsForward();
@@ -3338,6 +3399,7 @@
             }
             state.target = [0, 0, 0];
             state.camDist = dist;
+            state.frameDist = dist;
             if (!keepAngle) {
                 state.camYaw = 0.9;
                 state.camPitch = 0.35;
@@ -3443,7 +3505,7 @@
             if (state.fpsMode) exitFps();   // presets carry an orbit-camera view
             // reset visual params to a neutral baseline so presets are self-contained
             Object.assign(state, {
-                sat: 1, bri: 1, hue: 0, glow: 0, trapMix: 0.6, fog: true, orbit: 0, animate: false
+                sat: 1, bri: 1, hue: 0, glow: 0, trapMix: 0.6, fog: true, orbit: 0, animate: false, dive: false
             });
             const c = p.cfg;
             for (const k in c) {
@@ -3455,6 +3517,7 @@
             selectFractal(state.type, false);
             document.getElementById('bgColorRow').style.display = (state.bgType === 2) ? 'flex' : 'none';
             document.getElementById('animRow').style.display = state.animate ? 'block' : 'none';
+            document.getElementById('diveRow').style.display = state.dive ? 'block' : 'none';
             btnOrbit.classList.toggle('active', state.orbit > 0);
             syncUIFromState();
             resetAccum();
@@ -3494,6 +3557,7 @@
         const s_fov = bindSlider('fov', 'fov', v => v.toFixed(0) + '°');
         const s_orbit = bindSlider('orbit', 'orbit', v => v.toFixed(1));
         const s_animSp = bindSlider('animSp', 'animSp', v => v.toFixed(2));
+        const s_diveSp = bindSlider('diveSp', 'diveSp', v => v.toFixed(2));
         const s_sunE = bindSlider('sunE', 'sunE', v => v.toFixed(0) + '°');
         const s_sunA = bindSlider('sunA', 'sunA', v => v.toFixed(0) + '°');
         const s_moveSpeed = bindSlider('moveSpeed', 'moveSpeed', v => v.toFixed(2));
@@ -3530,10 +3594,14 @@
         bindToggle('shadowTgl', 'shadows');
         bindToggle('aoTgl', 'ao');
         bindToggle('reflTgl', 'refl');
+        bindToggle('flatTgl', 'flat');
         bindToggle('accumTgl', 'accum');
         bindToggle('fogTgl', 'fog');
         bindToggle('animTgl', 'animate', v => {
             document.getElementById('animRow').style.display = v ? 'block' : 'none';
+        });
+        bindToggle('diveTgl', 'dive', v => {
+            document.getElementById('diveRow').style.display = v ? 'block' : 'none';
         });
 
 // first-person toggle (special: drives enter/exit, not just a state flag)
