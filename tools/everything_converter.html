@@ -910,8 +910,8 @@
     <div id="dropzone" class="dropzone">
         <div class="dropzone-icon">📥</div>
         <div class="dropzone-text"><strong>Drag & drop files here</strong> or click to browse</div>
-        <div class="dropzone-sub">Images, documents, audio, data files (JSON, CSV, XML, YAML, NDJSON, MessagePack…) & Base64
-            strings
+        <div class="dropzone-sub">Video, audio, images, documents, data files (JSON, CSV, XML, YAML, NDJSON, MessagePack…) &amp;
+            Base64. Drop a <strong>.zip</strong> to convert everything inside it.
         </div>
         <input type="file" id="fileInput" multiple></div>
     <div id="inputSection" style="display:none">
@@ -2115,9 +2115,17 @@ function buildFFmpegJob(fromMime, toMime, inName) {
     const toVideo = toMime.startsWith('video/');
     const toAudio = toMime.startsWith('audio/');
     const toGif = toMime === 'image/gif';
+    const fromVideo = fromMime.startsWith('video/');
+    // Video → still image (poster frame / thumbnail). Only meaningful FROM a video.
+    const toStillFrame = fromVideo && (toMime === 'image/png' || toMime === 'image/jpeg');
     // Per-target encoder settings. '-i input' is prepended by the caller.
     let args;
-    if (toAudio) {
+    if (toStillFrame) {
+        // Grab a single representative frame. We seek ~1s in for a non-black poster frame;
+        // ffmpegConvert retries from t=0 if the clip is shorter than the seek point.
+        // (-frames:v 1 stops after one frame; the encoder is picked by the output extension.)
+        args = ['-frames:v', '1', out];
+    } else if (toAudio) {
         // Strip video, pick a codec appropriate for the container.
         const audioArgs = {
             'audio/mpeg': ['-vn', '-c:a', 'libmp3lame', '-q:a', '2'],
@@ -2164,18 +2172,40 @@ async function ffmpegConvert(blob, fromMime, toMime) {
     // Scale a watchdog to file size: WASM is slow on mobile, so allow generous time
     // (~90s per 10 MB, min 2 min, cap 20 min) but never hang the UI indefinitely.
     const execTimeout = Math.min(1200000, Math.max(120000, Math.round((blob.size / 10485760) * 90000)));
-    try {
-        await withTimeout(ffmpeg.exec(['-i', inName].concat(job.args)), execTimeout, 'Conversion');
-    } catch (e) {
-        const msg = describeError(e);
-        if (/timed out/i.test(msg)) throw new Error('the conversion timed out — the file may be too large for in-browser processing on this device.');
-        throw new Error('FFmpeg processing failed — the file may be corrupt or use an unsupported codec.');
+    const isStillFrame = fromMime.startsWith('video/') && (toMime === 'image/png' || toMime === 'image/jpeg');
+
+    // Helper: run one ffmpeg exec, then report whether it produced a readable output file.
+    const runAttempt = async (fullArgs) => {
+        try {
+            await withTimeout(ffmpeg.exec(fullArgs), execTimeout, 'Conversion');
+        } catch (e) {
+            const msg = describeError(e);
+            if (/timed out/i.test(msg)) throw new Error('the conversion timed out — the file may be too large for in-browser processing on this device.');
+            return null; // treat exec failure as "no output"; caller decides whether to retry/throw
+        }
+        try {
+            return await ffmpeg.readFile(job.out);
+        } catch (_) {
+            return null;
+        }
+    };
+
+    let data = null;
+    if (isStillFrame) {
+        // Prefer a frame ~1s in (skips black/intro frames); seek BEFORE -i for speed.
+        data = await runAttempt(['-ss', '00:00:01', '-i', inName].concat(job.args));
+        // Short clip (<1s): the seek lands past the end and yields nothing — retry from start.
+        if (!data) {
+            try { await ffmpeg.deleteFile(job.out); } catch (_) {}
+            data = await runAttempt(['-i', inName].concat(job.args));
+        }
+    } else {
+        data = await runAttempt(['-i', inName].concat(job.args));
     }
-    let data;
-    try {
-        data = await ffmpeg.readFile(job.out);
-    } catch (e) {
-        throw new Error('FFmpeg produced no output for this conversion.');
+
+    if (!data) {
+        try { await ffmpeg.deleteFile(inName); } catch (_) {}
+        throw new Error('FFmpeg produced no output — the file may be corrupt or use an unsupported codec.');
     }
     // Clean up the virtual filesystem so repeated/batch runs don't collide or leak memory.
     try { await ffmpeg.deleteFile(inName); } catch (_) {}
@@ -2219,6 +2249,17 @@ registerConverter({
     inputs: FFMPEG_AUDIO_INPUTS,
     outputs: FFMPEG_AUDIO_OUTPUTS,
     weight: 5,
+    lib: null,
+    convert: async (blob, from, to) => ffmpegConvert(blob, from, to)
+});
+
+// Video → still image (grab a poster frame / thumbnail as PNG or JPEG).
+registerConverter({
+    id: 'ffmpeg-video-to-frame',
+    name: 'Extract Frame (FFmpeg)',
+    inputs: FFMPEG_VIDEO_INPUTS,
+    outputs: ['image/png', 'image/jpeg'],
+    weight: 6,
     lib: null,
     convert: async (blob, from, to) => ffmpegConvert(blob, from, to)
 });
@@ -3307,28 +3348,94 @@ let mergeEnabled = false;
 let conversionOptions = {quality: 0.92, pdfOrientation: 'auto', indent: 2};
 const $ = id => document.getElementById(id);
 
+// Junk entries that Mac/Windows zip tools add and that nobody wants ingested.
+function isZipJunk(path) {
+    if (path.startsWith('__MACOSX/')) return true;
+    const base = path.split('/').pop();
+    return base === '.DS_Store' || base === 'Thumbs.db' || base === 'desktop.ini' || base === '';
+}
+
+// Turn a single File into an input node (the per-file half of handleFiles).
+async function addFileNode(file) {
+    const uid = 'f_' + Math.random().toString(36).substring(2, 11);
+    const mime = await detectFormat(file);
+    const targetMap = findReachableTargets(mime);
+    const node = {
+        id: uid,
+        file,
+        name: file.name,
+        size: file.size,
+        mime,
+        reachable: targetMap,
+        targetMime: null,
+        status: 'ready',
+        errorMsg: '',
+        convertedBlob: null,
+        convertedName: ''
+    };
+    if (targetMap.size > 0) node.targetMime = Array.from(targetMap.keys())[0];
+    inputFiles.push(node);
+}
+
+// Is this dropped file a plain .zip archive? (docx/xlsx/ods are also ZIP-based, so we
+// key on extension — those office formats stay first-class files, not archives to unpack.)
+function isPlainZip(file) {
+    return /\.zip$/i.test(file.name);
+}
+
+// Extract a .zip and add each contained file to the input list as if dropped individually.
+// Returns the number of files added. One-to-many extraction lives here, at the input stage,
+// so the rest of the pipeline (which is strictly one-blob-in-one-blob-out) is untouched.
+async function ingestZip(file) {
+    if (!window.JSZip) await loadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
+    let archive;
+    try {
+        archive = await JSZip.loadAsync(await file.arrayBuffer());
+    } catch (e) {
+        throw new Error(`"${file.name}" could not be opened as a ZIP archive.`);
+    }
+    // Collect real (non-directory, non-junk) entries first so we can enforce a sane cap.
+    const entries = [];
+    archive.forEach((path, entry) => {
+        if (entry.dir || isZipJunk(path)) return;
+        entries.push({path, entry});
+    });
+    const MAX_ENTRIES = 200; // guard against zip-bombs / accidental huge archives
+    const capped = entries.slice(0, MAX_ENTRIES);
+    let added = 0;
+    for (let i = 0; i < capped.length; i++) {
+        const {path, entry} = capped[i];
+        if (capped.length > 5) showLoading(`Extracting "${file.name}"… ${i + 1}/${capped.length}`);
+        try {
+            const u8 = await entry.async('uint8array');
+            const base = path.split('/').pop();
+            const inferredType = EXT_TO_MIME[(base.split('.').pop() || '').toLowerCase()] || '';
+            const extracted = new File([u8], base, inferredType ? {type: inferredType} : {});
+            await addFileNode(extracted);
+            added++;
+        } catch (_) { /* skip a single unreadable entry, keep going */ }
+    }
+    hideLoading();
+    if (entries.length > MAX_ENTRIES) {
+        alert(`"${file.name}" contains ${entries.length} files; loaded the first ${MAX_ENTRIES}.`);
+    }
+    return added;
+}
+
 async function handleFiles(list) {
     resetOutput();
     $('inputSection').style.display = 'block';
     for (const file of list) {
-        const uid = 'f_' + Math.random().toString(36).substring(2, 11);
-        const mime = await detectFormat(file);
-        const targetMap = findReachableTargets(mime);
-        const node = {
-            id: uid,
-            file,
-            name: file.name,
-            size: file.size,
-            mime,
-            reachable: targetMap,
-            targetMime: null,
-            status: 'ready',
-            errorMsg: '',
-            convertedBlob: null,
-            convertedName: ''
-        };
-        if (targetMap.size > 0) node.targetMime = Array.from(targetMap.keys())[0];
-        inputFiles.push(node);
+        if (isPlainZip(file)) {
+            try {
+                const n = await ingestZip(file);
+                if (n === 0) alert(`"${file.name}" contained no convertible files.`);
+            } catch (e) {
+                alert(e.message || 'Could not read that ZIP archive.');
+            }
+            continue; // the zip itself is expanded, never added as a node
+        }
+        await addFileNode(file);
     }
     renderFileCards();
     updateGlobalOptionsPanel();
@@ -3419,7 +3526,11 @@ function renderFileCards() {
                 if (cats[cat]) {
                     dropdown += `<optgroup label="${CATEGORY_LABELS[cat]}">`;
                     cats[cat].forEach(t => {
-                        dropdown += `<option value="${t.mime}" ${node.targetMime === t.mime ? 'selected' : ''}>→ ${t.ext.toUpperCase()} (${t.label})</option>`;
+                        // When extracting a still image from a video, label it as a frame grab
+                        // so it's not confused with a full transcode.
+                        const isFrameGrab = node.mime.startsWith('video/') && (t.mime === 'image/png' || t.mime === 'image/jpeg');
+                        const optLabel = isFrameGrab ? `${t.label} · single frame` : t.label;
+                        dropdown += `<option value="${t.mime}" ${node.targetMime === t.mime ? 'selected' : ''}>→ ${t.ext.toUpperCase()} (${optLabel})</option>`;
                     });
                     dropdown += `</optgroup>`;
                 }
@@ -3482,7 +3593,7 @@ function updateGlobalOptionsPanel() {
         const grp = document.createElement('div');
         grp.className = 'option-group';
         grp.style.cssText = 'flex-basis:100%;color:var(--text-dim);font-size:11px;line-height:1.5';
-        grp.innerHTML = `<span style="color:var(--accent)">🎬 Audio/video conversion</span> runs entirely in your browser via FFmpeg. The engine (~32 MB) downloads once on first use and is then cached for next time. Larger videos take longer, especially on mobile.`;
+        grp.innerHTML = `<span style="color:var(--accent)">🎬 Audio/video conversion</span> runs entirely in your browser via FFmpeg. The engine (~32 MB) downloads once on first use and is then cached for next time. You can also extract a still frame from a video (pick PNG or JPEG). Larger videos take longer, especially on mobile.`;
         row.appendChild(grp);
     }
     if (useImg) {
