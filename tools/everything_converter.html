@@ -1893,47 +1893,79 @@ registerConverter({
 });
 
 // ===== FFMPEG.WASM ENGINE (video <-> audio <-> video, powers all A/V transcoding) =====
-// Single-threaded core loaded via blob URLs so it works on any static host
-// (no COOP/COEP / SharedArrayBuffer requirement). ~31 MB core, fetched once and reused.
+// Loaded as ES modules via dynamic import(). The UMD ("classic script") builds throw
+// "exports is not defined" when dropped into a plain <script> and also mis-resolve their
+// worker path from a CDN — the ESM build is self-contained and avoids both problems.
+// We use the SINGLE-THREADED core (@ffmpeg/core, not core-mt): it needs neither
+// SharedArrayBuffer nor COOP/COEP headers, so it works on any static host.
 const FFMPEG_VERSION = '0.12.10';
 const FFMPEG_UTIL_VERSION = '0.12.1';
 const FFMPEG_CORE_VERSION = '0.12.10';
-const FFMPEG_UMD = `https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/umd/ffmpeg.js`;
-const FFMPEG_UTIL_UMD = `https://cdn.jsdelivr.net/npm/@ffmpeg/util@${FFMPEG_UTIL_VERSION}/dist/umd/index.js`;
+const FFMPEG_ESM = `https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/esm/index.js`;
+const FFMPEG_UTIL_ESM = `https://cdn.jsdelivr.net/npm/@ffmpeg/util@${FFMPEG_UTIL_VERSION}/dist/esm/index.js`;
 const FFMPEG_CORE_BASE = `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
-// The UMD build spawns an internal worker chunk via a relative path that 404s when
-// the script itself is served cross-origin from a CDN. We blob-ify that chunk and pass
-// it as classWorkerURL so loading works regardless of origin.
-const FFMPEG_CLASS_WORKER = `https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/umd/814.ffmpeg.js`;
 
 let _ffmpegInstance = null;
 let _ffmpegLoading = null;
-let _ffmpegProgress = null; // callback set per-conversion
+let _ffmpegProgress = null;   // callback set per-conversion
+let _ffmpegUtil = null;       // {fetchFile, toBlobURL} once loaded
+
+// Turn any thrown value into a readable string (Error, DOMException, event, string, …).
+function describeError(e) {
+    if (!e) return 'unknown error';
+    if (typeof e === 'string') return e;
+    if (e.message) return e.message;
+    if (e.name) return e.name;
+    try {
+        return JSON.stringify(e);
+    } catch (_) {
+        return String(e);
+    }
+}
 
 async function getFFmpeg() {
     if (_ffmpegInstance) return _ffmpegInstance;
     if (_ffmpegLoading) return _ffmpegLoading;
     _ffmpegLoading = (async () => {
-        // Load the UMD wrappers (they expose window.FFmpegWASM and window.FFmpegUtil)
-        if (!window.FFmpegWASM) await loadLibrary(FFMPEG_UMD, 'FFmpeg engine');
-        if (!window.FFmpegUtil) await loadLibrary(FFMPEG_UTIL_UMD, 'FFmpeg utils');
-        const {FFmpeg} = window.FFmpegWASM;
-        const {toBlobURL} = window.FFmpegUtil;
-        showLoading('Downloading FFmpeg core (~31 MB, first time only)…');
+        showLoading('Loading FFmpeg engine…');
+        // Dynamic import of the ESM builds (works from a non-module script).
+        let FFmpegMod, utilMod;
+        try {
+            [FFmpegMod, utilMod] = await Promise.all([
+                import(/* webpackIgnore: true */ FFMPEG_ESM),
+                import(/* webpackIgnore: true */ FFMPEG_UTIL_ESM)
+            ]);
+        } catch (e) {
+            throw new Error('Could not download the FFmpeg engine files. ' + describeError(e));
+        }
+        const FFmpeg = FFmpegMod.FFmpeg;
+        _ffmpegUtil = {fetchFile: utilMod.fetchFile, toBlobURL: utilMod.toBlobURL};
+        if (typeof FFmpeg !== 'function') throw new Error('FFmpeg module loaded but was not in the expected format.');
+
         const ffmpeg = new FFmpeg();
         ffmpeg.on('progress', ({progress}) => {
             if (_ffmpegProgress && progress >= 0 && progress <= 1) _ffmpegProgress(progress);
         });
-        const cfg = {
-            coreURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-            wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm')
-        };
-        // Provide the class worker as a blob URL so the CDN-hosted UMD build can spawn it.
+        // Surface engine logs to the console — invaluable if a specific codec ever fails.
+        ffmpeg.on('log', ({message}) => {
+            if (message) console.debug('[ffmpeg]', message);
+        });
+
+        showLoading('Downloading FFmpeg core (~31 MB, first time only)…');
+        let cfg;
         try {
-            cfg.classWorkerURL = await toBlobURL(FFMPEG_CLASS_WORKER, 'text/javascript');
-        } catch (_) { /* newer builds inline the worker; ignore if unavailable */
+            cfg = {
+                coreURL: await _ffmpegUtil.toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
+                wasmURL: await _ffmpegUtil.toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm')
+            };
+        } catch (e) {
+            throw new Error('Could not download the FFmpeg core. ' + describeError(e));
         }
-        await ffmpeg.load(cfg);
+        try {
+            await ffmpeg.load(cfg);
+        } catch (e) {
+            throw new Error('The FFmpeg core failed to initialize in this browser. ' + describeError(e));
+        }
         hideLoading();
         _ffmpegInstance = ffmpeg;
         return ffmpeg;
@@ -1941,9 +1973,10 @@ async function getFFmpeg() {
     try {
         return await _ffmpegLoading;
     } catch (e) {
-        _ffmpegLoading = null;
+        _ffmpegLoading = null;   // allow a retry on the next attempt
         hideLoading();
-        throw new Error('Could not load the FFmpeg engine. Check your connection and try again. (' + e.message + ')');
+        // Re-throw with the *real* reason preserved (no more "(undefined)").
+        throw new Error(describeError(e));
     }
 }
 
@@ -1997,7 +2030,7 @@ function buildFFmpegJob(fromMime, toMime, inName) {
 
 async function ffmpegConvert(blob, fromMime, toMime) {
     const ffmpeg = await getFFmpeg();
-    const {fetchFile} = window.FFmpegUtil;
+    const {fetchFile} = _ffmpegUtil;
     const inExt = (FORMAT_REGISTRY[fromMime]?.ext) || 'bin';
     const inName = 'input.' + inExt;
     const job = buildFFmpegJob(fromMime, toMime, inName);
@@ -3522,8 +3555,18 @@ function renderOutputView() {
     const grid = $('outputCards');
     grid.innerHTML = '';
     const success = inputFiles.filter(n => n.status === 'done');
+    const failed = inputFiles.filter(n => n.status === 'error');
+    // Always surface failures visibly (not just as a hover tooltip) so the real reason is clear.
+    if (failed.length > 0) {
+        const errWrap = document.createElement('div');
+        errWrap.className = 'error-box';
+        errWrap.style.margin = '0 0 16px';
+        errWrap.innerHTML = `<div style="font-weight:600;margin-bottom:6px">⚠️ ${failed.length} file${failed.length > 1 ? 's' : ''} could not be converted</div>` +
+            failed.map(n => `<div style="margin-top:4px"><strong>${n.name}</strong>: ${(n.errorMsg || 'Conversion failed').replace(/</g, '&lt;')}</div>`).join('');
+        grid.appendChild(errWrap);
+    }
     if (success.length === 0) {
-        grid.innerHTML = `<div class="error-box" style="margin:0">No files were converted successfully.</div>`;
+        if (failed.length === 0) grid.innerHTML = `<div class="error-box" style="margin:0">No files were converted successfully.</div>`;
         return;
     }// Handle merge
     if (mergeEnabled && success.length > 1) {
