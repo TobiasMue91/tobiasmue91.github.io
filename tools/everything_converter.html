@@ -896,8 +896,7 @@
 <body>
 <div class="container" id="mainContainer">
     <header class="header"><h1><span class="bolt">⚡</span>EVERYTHING CONVERTER</h1>
-        <p class="tagline"><strong>Convert any file to almost any format</strong> — video, audio, images, documents,
-            data,
+        <p class="tagline"><strong>Convert any file to almost any format</strong> — video, audio, images, documents, data,
             and more.
             Runs entirely in your browser. Nothing gets uploaded.</p>
         <div class="feature-pills"><span class="pill pill-accent"><span
@@ -911,8 +910,7 @@
     <div id="dropzone" class="dropzone">
         <div class="dropzone-icon">📥</div>
         <div class="dropzone-text"><strong>Drag & drop files here</strong> or click to browse</div>
-        <div class="dropzone-sub">Images, documents, audio, data files (JSON, CSV, XML, YAML, NDJSON, MessagePack…) &
-            Base64
+        <div class="dropzone-sub">Images, documents, audio, data files (JSON, CSV, XML, YAML, NDJSON, MessagePack…) & Base64
             strings
         </div>
         <input type="file" id="fileInput" multiple></div>
@@ -973,23 +971,19 @@
         <div class="collapsible-body"
              style="font-family:var(--sans);font-size:12px;color:var(--text-dim);line-height:1.7"><p
                 style="margin-bottom:12px">Every supported format is a point on a graph. When you pick a target
-            format, the converter finds the <strong>shortest path</strong> between your file's format and the target —
-            even
+            format, the converter finds the <strong>shortest path</strong> between your file's format and the target — even
             if that means going through intermediate steps automatically.</p>
             <p style="margin-bottom:12px">For example, converting an Excel file to YAML goes through JSON as an
                 intermediate step. You don't need to worry about this — it all happens automatically in the
                 background.</p>
-            <p>External libraries (like SheetJS for spreadsheets) are only loaded when actually needed, so the page
-                stays
+            <p>External libraries (like SheetJS for spreadsheets) are only loaded when actually needed, so the page stays
                 fast.</p></div>
     </div>
     <div id="privacySection" class="collapsible">
         <div class="collapsible-header" onclick="toggleSection('privacySection')">PRIVACY<span
                 class="collapsible-arrow">▶</span></div>
         <div class="collapsible-body"
-             style="font-family:var(--sans);font-size:12px;color:var(--text-dim);line-height:1.7"><p><strong>Your files
-            never leave your device.</strong> All conversions happen locally using JavaScript in your browser. No data
-            is sent to any server. You can even use this tool offline once the page is loaded.</p></div>
+             style="font-family:var(--sans);font-size:12px;color:var(--text-dim);line-height:1.7"><p><strong>Your files never leave your device.</strong> All conversions happen locally using JavaScript in your browser. No data is sent to any server. You can even use this tool offline once the page is loaded.</p></div>
     </div>
 </div>
 <div id="loadingOverlay" class="loading-overlay">
@@ -1894,14 +1888,17 @@ registerConverter({
 
 // ===== FFMPEG.WASM ENGINE (video <-> audio <-> video, powers all A/V transcoding) =====
 // Loaded as ES modules via dynamic import(). The UMD ("classic script") builds throw
-// "exports is not defined" when dropped into a plain <script> and also mis-resolve their
-// worker path from a CDN — the ESM build is self-contained and avoids both problems.
-// We use the SINGLE-THREADED core (@ffmpeg/core, not core-mt): it needs neither
-// SharedArrayBuffer nor COOP/COEP headers, so it works on any static host.
+// "exports is not defined" when dropped into a plain <script>. The ESM build works, but
+// its FFmpeg class spawns an internal Worker from './worker.js' relative to the CDN —
+// browsers refuse to construct a Worker from a cross-origin script. The fix: fetch that
+// worker and re-wrap it as a SAME-ORIGIN blob: URL, then hand it to load() as
+// classWorkerURL. We use the SINGLE-THREADED core (@ffmpeg/core, not core-mt): it needs
+// neither SharedArrayBuffer nor COOP/COEP headers, so it works on any static host.
 const FFMPEG_VERSION = '0.12.10';
 const FFMPEG_UTIL_VERSION = '0.12.1';
 const FFMPEG_CORE_VERSION = '0.12.10';
 const FFMPEG_ESM = `https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/esm/index.js`;
+const FFMPEG_ESM_BASE = `https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/esm`;
 const FFMPEG_UTIL_ESM = `https://cdn.jsdelivr.net/npm/@ffmpeg/util@${FFMPEG_UTIL_VERSION}/dist/esm/index.js`;
 const FFMPEG_CORE_BASE = `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
 
@@ -1916,11 +1913,119 @@ function describeError(e) {
     if (typeof e === 'string') return e;
     if (e.message) return e.message;
     if (e.name) return e.name;
+    try { return JSON.stringify(e); } catch (_) { return String(e); }
+}
+
+// Reject if a promise doesn't settle within `ms`, so a stuck WASM step surfaces an error
+// instead of leaving the UI frozen forever (a real risk on memory-limited mobile browsers).
+function withTimeout(promise, ms, label) {
+    let t;
+    const timeout = new Promise((_, reject) => {
+        t = setTimeout(() => reject(new Error((label || 'operation') + ' timed out after ' + Math.round(ms / 1000) + 's')), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+}
+
+// The FFmpeg class spawns its worker from './worker.js', and that worker in turn does
+// relative `import ... from "./const.js"/"./errors.js"`. If we just blob-ify worker.js,
+// those relative imports resolve against the blob: origin and fail. So we fetch all three
+// files, inline the two dependencies into the worker, and blob-ify the self-contained
+// result — giving a same-origin, dependency-free module worker.
+async function buildFFmpegWorkerBlobURL() {
+    const [workerSrc, constSrc, errorsSrc] = await Promise.all([
+        fetch(`${FFMPEG_ESM_BASE}/worker.js`).then(r => r.text()),
+        fetch(`${FFMPEG_ESM_BASE}/const.js`).then(r => r.text()),
+        fetch(`${FFMPEG_ESM_BASE}/errors.js`).then(r => r.text())
+    ]);
+    // Turn the dependencies' `export const` into plain local declarations.
+    const inlinedDeps = (constSrc + '\n' + errorsSrc).replace(/^\s*export\s+/gm, '');
+    // Drop the worker's relative import lines; everything they provided is now inlined above.
+    const workerNoImports = workerSrc.replace(/^\s*import\s+[^;]*?from\s*["']\.\/(?:const|errors)\.js["'];?\s*$/gm, '');
+    const bundle = inlinedDeps + '\n' + workerNoImports;
+    return URL.createObjectURL(new Blob([bundle], {type: 'text/javascript'}));
+}
+
+// --- Tiny IndexedDB blob cache so the 32 MB core downloads only once, ever ---
+// (survives reloads; the #1 mobile pain point is re-downloading it every visit).
+const FFMPEG_DB = 'ffmpeg-cache';
+const FFMPEG_STORE = 'assets';
+
+function idbOpen() {
+    return new Promise((resolve, reject) => {
+        let req;
+        try { req = indexedDB.open(FFMPEG_DB, 1); } catch (e) { return reject(e); }
+        req.onupgradeneeded = () => {
+            if (!req.result.objectStoreNames.contains(FFMPEG_STORE)) req.result.createObjectStore(FFMPEG_STORE);
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function idbGet(key) {
     try {
-        return JSON.stringify(e);
-    } catch (_) {
-        return String(e);
+        const db = await idbOpen();
+        return await new Promise((resolve) => {
+            const tx = db.transaction(FFMPEG_STORE, 'readonly').objectStore(FFMPEG_STORE).get(key);
+            tx.onsuccess = () => resolve(tx.result || null);
+            tx.onerror = () => resolve(null);
+        });
+    } catch (_) { return null; } // caching is best-effort; never block on it
+}
+
+async function idbSet(key, blob) {
+    try {
+        const db = await idbOpen();
+        await new Promise((resolve) => {
+            const tx = db.transaction(FFMPEG_STORE, 'readwrite');
+            tx.objectStore(FFMPEG_STORE).put(blob, key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+        });
+    } catch (_) { /* ignore */ }
+}
+
+// Get the core .wasm as an object URL — from IndexedDB if cached, else stream+cache it.
+async function loadCoreWasmURL(onProgress) {
+    const key = `wasm:${FFMPEG_CORE_VERSION}`;
+    const cached = await idbGet(key);
+    if (cached) return URL.createObjectURL(cached);
+    // Stream fresh, reporting progress, then persist for next time.
+    const controller = new AbortController();
+    let stall = setTimeout(() => controller.abort(), 45000);
+    const reset = () => { clearTimeout(stall); stall = setTimeout(() => controller.abort(), 45000); };
+    let resp;
+    try {
+        resp = await fetch(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, {signal: controller.signal, cache: 'force-cache'});
+    } catch (e) {
+        clearTimeout(stall);
+        throw new Error(controller.signal.aborted ? 'the core download stalled (slow or lost connection)' : describeError(e));
     }
+    if (!resp.ok) { clearTimeout(stall); throw new Error(`server returned HTTP ${resp.status} for the FFmpeg core`); }
+    const total = parseInt(resp.headers.get('content-length') || '0', 10);
+    if (!resp.body || !resp.body.getReader) {
+        clearTimeout(stall);
+        const blob = await resp.blob();
+        idbSet(key, blob);
+        return URL.createObjectURL(blob);
+    }
+    const reader = resp.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+        let r;
+        try { r = await reader.read(); }
+        catch (e) { clearTimeout(stall); throw new Error(controller.signal.aborted ? 'the core download stalled (slow or lost connection)' : describeError(e)); }
+        if (r.done) break;
+        reset();
+        chunks.push(r.value);
+        received += r.value.length;
+        if (onProgress) onProgress(received, total);
+    }
+    clearTimeout(stall);
+    const blob = new Blob(chunks, {type: 'application/wasm'});
+    idbSet(key, blob); // best-effort persist
+    return URL.createObjectURL(blob);
 }
 
 async function getFFmpeg() {
@@ -1947,22 +2052,38 @@ async function getFFmpeg() {
             if (_ffmpegProgress && progress >= 0 && progress <= 1) _ffmpegProgress(progress);
         });
         // Surface engine logs to the console — invaluable if a specific codec ever fails.
-        ffmpeg.on('log', ({message}) => {
-            if (message) console.debug('[ffmpeg]', message);
-        });
+        ffmpeg.on('log', ({message}) => { if (message) console.debug('[ffmpeg]', message); });
 
-        showLoading('Downloading FFmpeg core (~31 MB, first time only)…');
+        // Build a same-origin, self-contained module worker (see helper above).
+        let classWorkerURL;
+        try {
+            classWorkerURL = await buildFFmpegWorkerBlobURL();
+        } catch (e) {
+            throw new Error('Could not prepare the FFmpeg worker. ' + describeError(e));
+        }
+
+        showLoading('Downloading FFmpeg core (~32 MB, first time only)…');
+        const fmtMB = b => (b / 1048576).toFixed(1);
         let cfg;
         try {
-            cfg = {
-                coreURL: await _ffmpegUtil.toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-                wasmURL: await _ffmpegUtil.toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm')
-            };
+            const [coreURL, wasmURL] = await Promise.all([
+                _ffmpegUtil.toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
+                loadCoreWasmURL((received, total) => {
+                    if (total) {
+                        const pct = Math.round((received / total) * 100);
+                        showLoading(`Downloading FFmpeg core… ${fmtMB(received)} / ${fmtMB(total)} MB (${pct}%)`);
+                    } else {
+                        showLoading(`Downloading FFmpeg core… ${fmtMB(received)} MB`);
+                    }
+                })
+            ]);
+            cfg = {coreURL, wasmURL, classWorkerURL};
         } catch (e) {
-            throw new Error('Could not download the FFmpeg core. ' + describeError(e));
+            throw new Error('Could not download the FFmpeg core — ' + describeError(e) + '.');
         }
+        showLoading('Starting FFmpeg…');
         try {
-            await ffmpeg.load(cfg);
+            await withTimeout(ffmpeg.load(cfg), 60000, 'FFmpeg startup');
         } catch (e) {
             throw new Error('The FFmpeg core failed to initialize in this browser. ' + describeError(e));
         }
@@ -2036,9 +2157,14 @@ async function ffmpegConvert(blob, fromMime, toMime) {
     const job = buildFFmpegJob(fromMime, toMime, inName);
     if (!job) throw new Error(`No FFmpeg recipe for ${fromMime} → ${toMime}`);
     await ffmpeg.writeFile(inName, await fetchFile(blob));
+    // Scale a watchdog to file size: WASM is slow on mobile, so allow generous time
+    // (~90s per 10 MB, min 2 min, cap 20 min) but never hang the UI indefinitely.
+    const execTimeout = Math.min(1200000, Math.max(120000, Math.round((blob.size / 10485760) * 90000)));
     try {
-        await ffmpeg.exec(['-i', inName].concat(job.args));
+        await withTimeout(ffmpeg.exec(['-i', inName].concat(job.args)), execTimeout, 'Conversion');
     } catch (e) {
+        const msg = describeError(e);
+        if (/timed out/i.test(msg)) throw new Error('the conversion timed out — the file may be too large for in-browser processing on this device.');
         throw new Error('FFmpeg processing failed — the file may be corrupt or use an unsupported codec.');
     }
     let data;
@@ -2048,14 +2174,8 @@ async function ffmpegConvert(blob, fromMime, toMime) {
         throw new Error('FFmpeg produced no output for this conversion.');
     }
     // Clean up the virtual filesystem so repeated/batch runs don't collide or leak memory.
-    try {
-        await ffmpeg.deleteFile(inName);
-    } catch (_) {
-    }
-    try {
-        await ffmpeg.deleteFile(job.out);
-    } catch (_) {
-    }
+    try { await ffmpeg.deleteFile(inName); } catch (_) {}
+    try { await ffmpeg.deleteFile(job.out); } catch (_) {}
     const outMime = toMime === 'image/gif' ? 'image/gif' : toMime;
     return new Blob([data.buffer || data], {type: outMime});
 }
@@ -3226,12 +3346,7 @@ async function generateLocalPreview(file, mime, block) {
         el.playsInline = true;
         el.style.cssText = 'max-width:100%;max-height:100%;object-fit:cover;';
         // Seek slightly in so a representative frame is shown rather than black.
-        el.addEventListener('loadeddata', () => {
-            try {
-                el.currentTime = Math.min(0.5, (el.duration || 1) / 2);
-            } catch (_) {
-            }
-        });
+        el.addEventListener('loadeddata', () => { try { el.currentTime = Math.min(0.5, (el.duration || 1) / 2); } catch (_) {} });
         block.appendChild(el);
     } else {
         const ph = document.createElement('div');
@@ -3363,7 +3478,7 @@ function updateGlobalOptionsPanel() {
         const grp = document.createElement('div');
         grp.className = 'option-group';
         grp.style.cssText = 'flex-basis:100%;color:var(--text-dim);font-size:11px;line-height:1.5';
-        grp.innerHTML = `<span style="color:var(--accent)">🎬 Audio/video conversion</span> runs entirely in your browser via FFmpeg. The engine (~31 MB) downloads once on first use, then conversions are instant. Larger videos take longer.`;
+        grp.innerHTML = `<span style="color:var(--accent)">🎬 Audio/video conversion</span> runs entirely in your browser via FFmpeg. The engine (~32 MB) downloads once on first use and is then cached for next time. Larger videos take longer, especially on mobile.`;
         row.appendChild(grp);
     }
     if (useImg) {
@@ -3412,12 +3527,7 @@ async function runSequentialPipeline(blob, path, callback) {
         }
         const isFFmpeg = edge.converter.id && edge.converter.id.startsWith('ffmpeg-');
         if (isFFmpeg) {
-            _ffmpegProgress = (p) => callback({
-                step: i + 1,
-                total: path.length,
-                name: edge.converter.name,
-                pct: Math.round(p * 100)
-            });
+            _ffmpegProgress = (p) => callback({step: i + 1, total: path.length, name: edge.converter.name, pct: Math.round(p * 100)});
         }
         try {
             stream = await edge.converter.convert(stream, edge.from, edge.to, conversionOptions);
