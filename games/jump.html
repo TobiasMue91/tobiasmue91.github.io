@@ -160,8 +160,8 @@
     <div id="overlay">
         <h1 id="overlay-title">Joodle Dump!</h1>
         <p class="final-score" id="overlay-score" style="display:none"></p>
-        <p class="sub" id="overlay-sub">Bounce up forever! 🐇<br>← → / A D to move &nbsp;·&nbsp; on touch: hold left /
-            right half</p>
+        <p class="sub" id="overlay-sub">Bounce up forever! 🐇<br>← → / A D move &nbsp;·&nbsp; ↑ / W / Space shoot<br>Touch:
+            hold a side to move, quick tap to shoot<br>Stomp or shoot the doodle monsters!</p>
         <button id="start-game">Start Game</button>
     </div>
 </div>
@@ -256,6 +256,9 @@
         const sSpring = () => blip(300, 0.3, "sawtooth", 0.05, 1150);
         const sBreak = () => blip(190, 0.18, "triangle", 0.06, 70);
         const sOver = () => blip(420, 0.6, "sawtooth", 0.05, 60);
+        const sShoot = () => blip(900, 0.08, "square", 0.035, 500);
+        const sStomp = () => blip(180, 0.15, "square", 0.06, 420);
+        const sPickup = () => blip(520, 0.25, "triangle", 0.05, 1040);
 
         // ---------- input ----------
         const keys = {left: false, right: false};
@@ -271,6 +274,10 @@
             }
             if ((e.code === "Space" || e.code === "Enter") && state !== "playing") {
                 startBtn.click();
+                e.preventDefault();
+            }
+            if ((e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") && state === "playing") {
+                shoot();
                 e.preventDefault();
             }
         });
@@ -295,10 +302,14 @@
             });
         }
 
+        const touchTimes = new Map();
         canvas.addEventListener("touchstart", (e) => {
             e.preventDefault();
             ensureAudio();
-            for (const t of e.changedTouches) activeTouches.set(t.identifier, touchSide(t));
+            for (const t of e.changedTouches) {
+                activeTouches.set(t.identifier, touchSide(t));
+                touchTimes.set(t.identifier, performance.now());
+            }
             refreshTouchKeys();
         }, {passive: false});
         canvas.addEventListener("touchmove", (e) => {
@@ -307,7 +318,12 @@
             refreshTouchKeys();
         }, {passive: false});
         const clearTouch = (e) => {
-            for (const t of e.changedTouches) activeTouches.delete(t.identifier);
+            for (const t of e.changedTouches) {
+                activeTouches.delete(t.identifier);
+                const started = touchTimes.get(t.identifier);
+                touchTimes.delete(t.identifier);
+                if (started && performance.now() - started < 150) shoot();
+            }
             refreshTouchKeys();
         };
         canvas.addEventListener("touchend", clearTouch);
@@ -315,7 +331,7 @@
 
         // ---------- game state ----------
         let state = "menu";            // menu | playing | over
-        let player, platforms, particles, cameraY, score, lastGenY, startY;
+        let player, platforms, particles, monsters, bullets, cameraY, score, lastGenY, startY, lastMonsterY, fireCd;
         let highScore = parseInt(localStorage.getItem("joodleHighScore") || "0", 10);
         let squash = 0;                // >0 squashed (landing), <0 stretched (spring)
         let time = 0;
@@ -358,16 +374,38 @@
             };
         }
 
+        function monsterChance() {
+            return score < 250 ? 0 : clamp((score - 250) / 2600, 0.04, 0.13);
+        }
+
         function generateUpTo(targetY) {
             while (lastGenY > targetY) {
                 const gap = rand(62, maxGap());
                 const newY = lastGenY - gap;
                 const type = Math.random() < movingChance() ? "moving" : "normal";
-                platforms.push(makePlatform(rand(6, W - PLAT_W - 6), newY, type));
+                const plat = makePlatform(rand(6, W - PLAT_W - 6), newY, type);
+
+                // powerups sit on solid, springless platforms
+                if (!plat.spring && type !== "breaking") {
+                    const r = Math.random();
+                    if (score > 400 && r < 0.012) plat.powerup = "jetpack";
+                    else if (score > 100 && r < 0.035) plat.powerup = "propeller";
+                }
+                platforms.push(plat);
 
                 // breaking platforms are BONUS extras between solid ones — never the only path
                 if (gap > 85 && Math.random() < extraBreakChance()) {
                     platforms.push(makePlatform(rand(6, W - PLAT_W - 6), newY + gap * rand(0.35, 0.6), "breaking"));
+                }
+
+                // monsters: well-spaced, stompable or shootable
+                if (newY < lastMonsterY - 650 && Math.random() < monsterChance()) {
+                    monsters.push({
+                        x: rand(30, W - 84), y: newY - rand(70, 130), w: 54, h: 40,
+                        vx: (Math.random() < 0.5 ? -1 : 1) * rand(45, 95),
+                        t: rand(0, 6), dead: false, deadT: 0,
+                    });
+                    lastMonsterY = newY;
                 }
                 lastGenY = newY;
             }
@@ -377,12 +415,24 @@
         function reset() {
             platforms = [];
             particles = [];
+            monsters = [];
+            bullets = [];
+            lastMonsterY = Infinity;
+            fireCd = 0;
             score = 0;
             cameraY = 0;
             squash = 0;
             time = 0;
             startY = H - 120;
-            player = {x: W / 2 - PLAYER_W / 2, y: startY - PLAYER_H, vx: 0, vy: JUMP_V, dir: 1, minY: startY};
+            player = {
+                x: W / 2 - PLAYER_W / 2,
+                y: startY - PLAYER_H,
+                vx: 0,
+                vy: JUMP_V,
+                dir: 1,
+                minY: startY,
+                power: null
+            };
 
             // guaranteed platform right under the player, then a dense friendly opening
             platforms.push(makePlatform(W / 2 - PLAT_W / 2, startY, "normal"));
@@ -418,9 +468,30 @@
             if (player.x + PLAYER_W / 2 < 0) player.x += W;
             if (player.x + PLAYER_W / 2 > W) player.x -= W;
 
-            // vertical
+            // vertical (powerup flight overrides gravity)
             const prevBottom = player.y + PLAYER_H;
             player.vy += GRAVITY * dt;
+            if (player.power) {
+                player.power.t -= dt;
+                if (player.power.t > 0) {
+                    player.vy = player.power.type === "jetpack" ? -1050 : -680;
+                    if (player.power.type === "jetpack" && Math.random() < 0.5) {
+                        particles.push({
+                            x: player.x + PLAYER_W / 2 + rand(-6, 6),
+                            y: player.y + PLAYER_H,
+                            vx: rand(-40, 40),
+                            vy: rand(120, 260),
+                            life: rand(0.2, 0.4),
+                            rot: 0,
+                            vr: 0,
+                            kind: "flame"
+                        });
+                    }
+                } else {
+                    player.power = null;
+                    player.vy = -150; // gentle handover back to gravity
+                }
+            }
             player.y += player.vy * dt;
             const bottom = player.y + PLAYER_H;
 
@@ -441,6 +512,14 @@
                         }
 
                         player.y = p.y - PLAYER_H;
+
+                        if (p.powerup) {
+                            player.power = {type: p.powerup, t: p.powerup === "jetpack" ? 2.1 : 1.4};
+                            p.powerup = null;
+                            sPickup();
+                            spawnStars(player.x + PLAYER_W / 2, p.y);
+                        }
+
                         const springHit = p.spring &&
                             player.x + PLAYER_W / 2 > p.x + p.springX - 8 &&
                             player.x + PLAYER_W / 2 < p.x + p.springX + 30;
@@ -478,6 +557,58 @@
                 if (p.springT > 0) p.springT -= dt;
             }
 
+            // bullets
+            fireCd -= dt;
+            for (const b of bullets) b.y += -1300 * dt;
+            bullets = bullets.filter(b => b.y > cameraY - 40);
+
+            // monsters: patrol + bob; stomp bounces, shot kills, touch kills YOU
+            for (const m of monsters) {
+                if (m.dead) {
+                    m.deadT += dt;
+                    m.y += 700 * dt;
+                    continue;
+                }
+                m.t += dt;
+                m.x += m.vx * dt;
+                if (m.x < 6) {
+                    m.x = 6;
+                    m.vx *= -1;
+                }
+                if (m.x + m.w > W - 6) {
+                    m.x = W - 6 - m.w;
+                    m.vx *= -1;
+                }
+
+                // bullet hits
+                for (const b of bullets) {
+                    if (b.x > m.x && b.x < m.x + m.w && b.y > m.y && b.y < m.y + m.h) {
+                        m.dead = true;
+                        b.y = -1e9; // cull
+                        sStomp();
+                        spawnStars(m.x + m.w / 2, m.y + m.h / 2);
+                    }
+                }
+                if (m.dead) continue;
+
+                // player collision (forgiving 8px inset); powerup flight passes through
+                if (!player.power &&
+                    player.x + PLAYER_W - 8 > m.x && player.x + 8 < m.x + m.w &&
+                    player.y + PLAYER_H - 6 > m.y && player.y + 6 < m.y + m.h) {
+                    if (player.vy > 0 && prevBottom <= m.y + 14) {
+                        m.dead = true;                    // stomp!
+                        player.vy = JUMP_V * 0.9;
+                        squash = 1;
+                        sStomp();
+                        spawnStars(m.x + m.w / 2, m.y);
+                    } else {
+                        gameOver();
+                        return;
+                    }
+                }
+            }
+            monsters = monsters.filter(m => m.y < cameraY + H + 80 && m.deadT < 1);
+
             // camera: instantly track the player above the camera line (this is the Doodle Jump feel)
             const targetCam = player.y - CAMERA_LINE;
             if (targetCam < cameraY) cameraY = targetCam;
@@ -507,6 +638,13 @@
 
             // death: fell below the screen
             if (player.y > cameraY + H + 40) gameOver();
+        }
+
+        function shoot() {
+            if (state !== "playing" || !player || fireCd > 0) return;
+            fireCd = 0.22;
+            bullets.push({x: player.x + PLAYER_W / 2, y: player.y + 4});
+            sShoot();
         }
 
         function spawnStars(x, y) {
@@ -642,6 +780,43 @@
                 ctx.stroke();
             }
 
+            // powerup icon on the platform
+            if (p.powerup) {
+                const px = p.x + p.w / 2, py = sy - 12;
+                if (p.powerup === "propeller") {
+                    // little red cap with a spinning blade
+                    ctx.fillStyle = "#d64545";
+                    ctx.strokeStyle = "#7c1f1f";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(px, py + 4, 10, Math.PI, 0);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.strokeStyle = "#444";
+                    ctx.lineWidth = 3;
+                    const spin = Math.sin(time * 10 + p.wobble) * 12;
+                    ctx.beginPath();
+                    ctx.moveTo(px - spin, py - 8);
+                    ctx.lineTo(px + spin, py - 8);
+                    ctx.moveTo(px, py - 8);
+                    ctx.lineTo(px, py - 4);
+                    ctx.stroke();
+                } else {
+                    // jetpack: gray tank + red nozzle
+                    ctx.fillStyle = "#9aa2ab";
+                    ctx.strokeStyle = "#4a5158";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.roundRect(px - 9, py - 12, 18, 22, 6);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.fillStyle = "#d64545";
+                    ctx.beginPath();
+                    ctx.roundRect(px - 5, py + 8, 10, 5, 2);
+                    ctx.fill();
+                }
+            }
+
             // spring
             if (p.spring) {
                 const ext = p.springT > 0 ? 10 : 0;
@@ -692,6 +867,39 @@
             // draw wrap ghost when crossing the edge
             if (player.x < 0) drawAt(cx + W);
             if (player.x + PLAYER_W > W) drawAt(cx - W);
+
+            // active powerup gear
+            if (player.power && player.power.t > 0) {
+                ctx.save();
+                ctx.translate(cx, cy + squash * 7);
+                if (player.power.type === "propeller") {
+                    ctx.fillStyle = "#d64545";
+                    ctx.strokeStyle = "#7c1f1f";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(0, -24, 11, Math.PI, 0);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.strokeStyle = "#444";
+                    ctx.lineWidth = 3.5;
+                    const spin = Math.sin(time * 26) * 17;
+                    ctx.beginPath();
+                    ctx.moveTo(-spin, -33);
+                    ctx.lineTo(spin, -33);
+                    ctx.moveTo(0, -33);
+                    ctx.lineTo(0, -28);
+                    ctx.stroke();
+                } else {
+                    ctx.fillStyle = "#9aa2ab";
+                    ctx.strokeStyle = "#4a5158";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.roundRect(-player.dir * 30 - 8, -12, 16, 28, 6);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
         }
 
         function drawParticles() {
@@ -705,12 +913,76 @@
                     ctx.font = "14px serif";
                     ctx.textAlign = "center";
                     ctx.fillText("✦", 0, 0);
+                } else if (pt.kind === "flame") {
+                    ctx.fillStyle = Math.random() < 0.5 ? "#f2b632" : "#e06a2b";
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                    ctx.fill();
                 } else {
                     ctx.fillStyle = "#a97346";
                     ctx.fillRect(-4, -3, 8, 6);
                 }
                 ctx.restore();
             }
+        }
+
+        function drawMonster(m) {
+            const sy = m.y - cameraY;
+            if (sy < -60 || sy > H + 60) return;
+            const bob = Math.sin(m.t * 3.4) * 4;
+            ctx.save();
+            ctx.translate(m.x + m.w / 2, sy + m.h / 2 + bob);
+            if (m.dead) {
+                ctx.rotate(m.deadT * 5);
+                ctx.globalAlpha = clamp(1 - m.deadT * 1.4, 0, 1);
+            }
+            // wobbly doodle blob
+            ctx.fillStyle = "#a06bd1";
+            ctx.strokeStyle = "#553083";
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            for (let i = 0; i <= 16; i++) {
+                const a = (i / 16) * Math.PI * 2;
+                const rr = (m.w / 2) * (1 + Math.sin(a * 3 + m.t * 2.2) * 0.09);
+                const xx = Math.cos(a) * rr;
+                const yy = Math.sin(a) * rr * (m.h / m.w);
+                i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            // angry eyes
+            const look = Math.sign(m.vx) * 3;
+            ctx.fillStyle = "#fff";
+            ctx.beginPath();
+            ctx.ellipse(-9, -4, 7, 8, 0, 0, Math.PI * 2);
+            ctx.ellipse(9, -4, 7, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#2b2b33";
+            ctx.beginPath();
+            ctx.arc(-9 + look, -3, 3, 0, Math.PI * 2);
+            ctx.arc(9 + look, -3, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#2b2b33";
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(-15, -13);
+            ctx.lineTo(-4, -9);
+            ctx.moveTo(15, -13);
+            ctx.lineTo(4, -9);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawBullets() {
+            ctx.save();
+            ctx.fillStyle = "#2b2b33";
+            for (const b of bullets) {
+                ctx.beginPath();
+                ctx.arc(b.x, b.y - cameraY, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
         }
 
         function drawHUD() {
@@ -736,6 +1008,8 @@
         function draw() {
             drawBackground();
             for (const p of platforms) drawPlatform(p);
+            for (const m of monsters) drawMonster(m);
+            drawBullets();
             drawParticles();
             if (player) drawPlayer();
             drawHUD();
