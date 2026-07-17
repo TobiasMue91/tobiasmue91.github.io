@@ -1207,6 +1207,13 @@
     'text/x-rst': {ext: 'rst', label: 'reStructuredText', category: 'text', icon: '📝'},
     'text/x-textile': {ext: 'textile', label: 'Textile', category: 'text', icon: '📝'},
     'text/x-asciidoc': {ext: 'adoc', label: 'AsciiDoc', category: 'text', icon: '📝'},
+    'application/x-subrip': {ext: 'srt', label: 'SRT Subtitles', category: 'text', icon: '💬'},
+    'text/vtt': {ext: 'vtt', label: 'WebVTT Subtitles', category: 'text', icon: '💬'},
+    'application/cbor': {ext: 'cbor', label: 'CBOR', category: 'data', icon: '📦'},
+    'application/x-morse': {ext: 'morse', label: 'Morse Code', category: 'text', icon: '📡'},
+    'text/x-hexdump': {ext: 'hex', label: 'Hex Dump', category: 'text', icon: '🔢'},
+    'text/calendar': {ext: 'ics', label: 'iCalendar', category: 'data', icon: '📅'},
+    'text/vcard': {ext: 'vcf', label: 'vCard Contacts', category: 'data', icon: '👤'},
     'application/octet-stream+base64': {ext: 'b64', label: 'Base64', category: 'text', icon: '🔣'},
     'application/x-base64-source': {ext: 'b64', label: 'Base64 (decode)', category: 'text', icon: '🔣'},
 };
@@ -3817,6 +3824,1268 @@ registerConverter({
     }
 });
 
+// ===== SUBTITLES (SRT / WebVTT) =====
+
+// Parse SRT or VTT into a normalized cue list: [{index, startMs, endMs, text}].
+function parseSubtitles(text) {
+    text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+    const timeRe = /(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/;
+    const cueRe = new RegExp(timeRe.source + '\\s*-->\\s*' + timeRe.source);
+    const toMs = g => ((+(g[0] || 0)) * 3600 + (+g[1]) * 60 + (+g[2])) * 1000 + +(g[3] || '0').padEnd(3, '0');
+    const cues = [];
+    for (const block of text.split(/\n{2,}/)) {
+        const lines = block.split('\n').map(l => l.trim()).filter(l => l);
+        if (!lines.length) continue;
+        const ti = lines.findIndex(l => cueRe.test(l));
+        if (ti === -1) continue; // header (WEBVTT), NOTE/STYLE blocks, stray numbers
+        const m = lines[ti].match(cueRe);
+        const start = toMs(m.slice(1, 5)), end = toMs(m.slice(5, 9));
+        const body = lines.slice(ti + 1).join('\n');
+        cues.push({index: cues.length + 1, startMs: start, endMs: end, text: body});
+    }
+    if (!cues.length) throw new Error('No subtitle cues found - is this a valid SRT/VTT file?');
+    return cues;
+}
+
+function fmtSubTime(ms, sep) {
+    const h = String(Math.floor(ms / 3600000)).padStart(2, '0');
+    const m = String(Math.floor(ms / 60000) % 60).padStart(2, '0');
+    const s = String(Math.floor(ms / 1000) % 60).padStart(2, '0');
+    const f = String(ms % 1000).padStart(3, '0');
+    return `${h}:${m}:${s}${sep}${f}`;
+}
+
+function stringifySrt(cues) {
+    return cues.map((c, i) =>
+        `${i + 1}\n${fmtSubTime(c.startMs, ',')} --> ${fmtSubTime(c.endMs, ',')}\n${c.text}`
+    ).join('\n\n') + '\n';
+}
+
+function stringifyVtt(cues) {
+    // VTT disallows some SRT styling tags; strip font tags, keep the rest.
+    return 'WEBVTT\n\n' + cues.map(c =>
+        `${fmtSubTime(c.startMs, '.')} --> ${fmtSubTime(c.endMs, '.')}\n${c.text.replace(/<\/?font[^>]*>/gi, '')}`
+    ).join('\n\n') + '\n';
+}
+
+function stripSubTags(t) {
+    return t.replace(/<[^>]+>/g, '').replace(/\{\\[^}]*\}/g, '');
+}
+
+// Retime cues: first scale by a speed factor (framerate drift correction, e.g.
+// 23.976→25 fps means times shrink by 23.976/25), then apply a global offset
+// (options.subShiftMs, may be negative). Cues shifted below zero are clamped;
+// cues that would end at/before zero are dropped entirely.
+function applySubShift(cues, options) {
+    const shift = options && options.subShiftMs ? Math.round(options.subShiftMs) : 0;
+    const factor = options && options.subSpeedFactor && options.subSpeedFactor > 0 ? options.subSpeedFactor : 1;
+    if (!shift && factor === 1) return cues;
+    return cues
+        .map(c => ({
+            ...c,
+            startMs: Math.max(0, Math.round(c.startMs * factor) + shift),
+            endMs: Math.round(c.endMs * factor) + shift
+        }))
+        .filter(c => c.endMs > 0)
+        .map((c, i) => ({...c, index: i + 1}));
+}
+
+registerConverter({
+    id: 'subtitle-convert',
+    name: 'Subtitle Converter',
+    inputs: ['application/x-subrip', 'text/vtt'],
+    outputs: ['application/x-subrip', 'text/vtt'],
+    weight: 1,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        const cues = applySubShift(parseSubtitles(await blob.text()), options);
+        if (!cues.length) throw new Error('Time shift moved all cues before 0:00 - nothing left');
+        const out = to === 'text/vtt' ? stringifyVtt(cues) : stringifySrt(cues);
+        return new Blob([out], {type: to});
+    }
+});
+
+registerConverter({
+    id: 'subtitle-to-text',
+    name: 'Subtitles to Transcript',
+    inputs: ['application/x-subrip', 'text/vtt'],
+    outputs: ['text/plain'],
+    weight: 2,
+    lib: null,
+    convert: async (blob) => {
+        const cues = parseSubtitles(await blob.text());
+        // Plain transcript: dialogue only, styling tags stripped, one cue per line.
+        const out = cues.map(c => stripSubTags(c.text).replace(/\n+/g, ' ').trim()).filter(t => t).join('\n');
+        return new Blob([out], {type: 'text/plain'});
+    }
+});
+
+registerConverter({
+    id: 'subtitle-to-json',
+    name: 'Subtitles to JSON',
+    inputs: ['application/x-subrip', 'text/vtt'],
+    outputs: ['application/json'],
+    weight: 2,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        const cues = applySubShift(parseSubtitles(await blob.text()), options).map(c => ({
+            index: c.index,
+            start: fmtSubTime(c.startMs, '.'),
+            end: fmtSubTime(c.endMs, '.'),
+            startMs: c.startMs,
+            endMs: c.endMs,
+            durationMs: c.endMs - c.startMs,
+            text: stripSubTags(c.text)
+        }));
+        return new Blob([JSON.stringify(cues, null, options && options.indent !== undefined ? options.indent : 2)], {type: 'application/json'});
+    }
+});
+
+registerConverter({
+    id: 'json-to-subtitle',
+    name: 'JSON to Subtitles',
+    inputs: ['application/json'],
+    outputs: ['application/x-subrip', 'text/vtt'],
+    weight: 5,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        const data = robustJsonParse(await blob.text());
+        const arr = Array.isArray(data) ? data : [data];
+        const parseT = v => {
+            if (typeof v === 'number') return Math.max(0, Math.round(v));
+            const m = String(v).match(/(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/);
+            if (m) return ((+(m[1] || 0)) * 3600 + (+m[2]) * 60 + (+m[3])) * 1000 + +(m[4] || '0').padEnd(3, '0');
+            const n = parseFloat(v);
+            return isNaN(n) ? 0 : Math.round(n);
+        };
+        const cues = arr.map((o, i) => ({
+            index: i + 1,
+            startMs: parseT(o.startMs !== undefined ? o.startMs : (o.start !== undefined ? o.start : i * 3000)),
+            endMs: parseT(o.endMs !== undefined ? o.endMs : (o.end !== undefined ? o.end : (i + 1) * 3000)),
+            text: String(o.text !== undefined ? o.text : (o.line !== undefined ? o.line : JSON.stringify(o)))
+        })).filter(c => c.text);
+        if (!cues.length) throw new Error('JSON contains no usable cues (expected objects with text + start/end)');
+        const shifted = applySubShift(cues, options);
+        if (!shifted.length) throw new Error('Time shift moved all cues before 0:00 - nothing left');
+        const out = to === 'text/vtt' ? stringifyVtt(shifted) : stringifySrt(shifted);
+        return new Blob([out], {type: to});
+    }
+});
+
+// ===== CBOR (RFC 8949) =====
+
+function cborDecode(u8) {
+    let i = 0;
+    const err = msg => {
+        throw new Error('CBOR: ' + msg);
+    };
+    const need = n => {
+        if (i + n > u8.length) err('unexpected end of data');
+    };
+    const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+
+    function readLen(ai) {
+        if (ai < 24) return ai;
+        if (ai === 24) {
+            need(1);
+            return u8[i++];
+        }
+        if (ai === 25) {
+            need(2);
+            const v = view.getUint16(i);
+            i += 2;
+            return v;
+        }
+        if (ai === 26) {
+            need(4);
+            const v = view.getUint32(i);
+            i += 4;
+            return v;
+        }
+        if (ai === 27) {
+            need(8);
+            const v = view.getBigUint64(i);
+            i += 8;
+            return v <= Number.MAX_SAFE_INTEGER ? Number(v) : v;
+        }
+        if (ai === 31) return -1; // indefinite
+        err('reserved additional info ' + ai);
+    }
+
+    function half(h) { // IEEE 754 half-precision
+        const s = (h & 0x8000) ? -1 : 1, e = (h >> 10) & 0x1f, f = h & 0x3ff;
+        if (e === 0) return s * f * Math.pow(2, -24);
+        if (e === 31) return f ? NaN : s * Infinity;
+        return s * (1024 + f) * Math.pow(2, e - 25);
+    }
+
+    function item() {
+        need(1);
+        const b = u8[i++], major = b >> 5, ai = b & 0x1f;
+        switch (major) {
+            case 0:
+                return readLen(ai);
+            case 1: {
+                const n = readLen(ai);
+                return typeof n === 'bigint' ? -1n - n : -1 - n;
+            }
+            case 2:
+            case 3: {
+                const len = readLen(ai);
+                if (len === -1) { // indefinite: concatenate chunks
+                    const parts = [];
+                    while (u8[i] !== 0xff) parts.push(item());
+                    i++;
+                    if (major === 3) return parts.join('');
+                    let total = 0;
+                    parts.forEach(p => total += p.length);
+                    const outB = new Uint8Array(total);
+                    let o = 0;
+                    parts.forEach(p => {
+                        outB.set(p, o);
+                        o += p.length;
+                    });
+                    return outB;
+                }
+                need(Number(len));
+                const bytes = u8.slice(i, i + Number(len));
+                i += Number(len);
+                return major === 3 ? new TextDecoder().decode(bytes) : bytes;
+            }
+            case 4: {
+                const len = readLen(ai), arr = [];
+                if (len === -1) {
+                    while (u8[i] !== 0xff) arr.push(item());
+                    i++;
+                } else for (let k = 0; k < len; k++) arr.push(item());
+                return arr;
+            }
+            case 5: {
+                const len = readLen(ai), obj = {};
+                const put = () => {
+                    const k = item(), v = item();
+                    obj[typeof k === 'string' ? k : JSON.stringify(k)] = v;
+                };
+                if (len === -1) {
+                    while (u8[i] !== 0xff) put();
+                    i++;
+                } else for (let k = 0; k < len; k++) put();
+                return obj;
+            }
+            case 6: {
+                readLen(ai);
+                return item();
+            } // tag: unwrap, keep payload
+            case 7: {
+                if (ai === 20) return false;
+                if (ai === 21) return true;
+                if (ai === 22 || ai === 23) return null;
+                if (ai === 24) {
+                    need(1);
+                    return u8[i++];
+                } // simple value
+                if (ai === 25) {
+                    need(2);
+                    const v = half(view.getUint16(i));
+                    i += 2;
+                    return v;
+                }
+                if (ai === 26) {
+                    need(4);
+                    const v = view.getFloat32(i);
+                    i += 4;
+                    return v;
+                }
+                if (ai === 27) {
+                    need(8);
+                    const v = view.getFloat64(i);
+                    i += 8;
+                    return v;
+                }
+                err('unsupported simple/float encoding ' + ai);
+            }
+        }
+    }
+
+    const result = item();
+    return result;
+}
+
+// JSON-safe post-processing: byte strings → base64 wrappers, BigInt → string, NaN/Inf → null.
+function cborToJsonSafe(v) {
+    if (v instanceof Uint8Array) {
+        let s = '';
+        v.forEach(b => s += String.fromCharCode(b));
+        return {_cborBytes: btoa(s)};
+    }
+    if (typeof v === 'bigint') return v.toString();
+    if (typeof v === 'number' && !isFinite(v)) return null;
+    if (Array.isArray(v)) return v.map(cborToJsonSafe);
+    if (v && typeof v === 'object') {
+        const o = {};
+        for (const [k, val] of Object.entries(v)) o[k] = cborToJsonSafe(val);
+        return o;
+    }
+    return v;
+}
+
+function cborEncode(value) {
+    const chunks = [];
+    const pushHead = (major, n) => {
+        if (n < 24) chunks.push(new Uint8Array([(major << 5) | n]));
+        else if (n < 0x100) chunks.push(new Uint8Array([(major << 5) | 24, n]));
+        else if (n < 0x10000) {
+            const b = new Uint8Array(3);
+            b[0] = (major << 5) | 25;
+            new DataView(b.buffer).setUint16(1, n);
+            chunks.push(b);
+        } else if (n < 0x100000000) {
+            const b = new Uint8Array(5);
+            b[0] = (major << 5) | 26;
+            new DataView(b.buffer).setUint32(1, n);
+            chunks.push(b);
+        } else {
+            const b = new Uint8Array(9);
+            b[0] = (major << 5) | 27;
+            new DataView(b.buffer).setBigUint64(1, BigInt(n));
+            chunks.push(b);
+        }
+    };
+
+    function enc(v) {
+        if (v === null || v === undefined) {
+            chunks.push(new Uint8Array([0xf6]));
+            return;
+        }
+        if (v === true) {
+            chunks.push(new Uint8Array([0xf5]));
+            return;
+        }
+        if (v === false) {
+            chunks.push(new Uint8Array([0xf4]));
+            return;
+        }
+        if (typeof v === 'number') {
+            if (Number.isInteger(v) && Math.abs(v) <= Number.MAX_SAFE_INTEGER) {
+                v >= 0 ? pushHead(0, v) : pushHead(1, -1 - v);
+            } else {
+                const b = new Uint8Array(9);
+                b[0] = 0xfb;
+                new DataView(b.buffer).setFloat64(1, v);
+                chunks.push(b);
+            }
+            return;
+        }
+        if (typeof v === 'string') {
+            const bytes = new TextEncoder().encode(v);
+            pushHead(3, bytes.length);
+            chunks.push(bytes);
+            return;
+        }
+        if (Array.isArray(v)) {
+            pushHead(4, v.length);
+            v.forEach(enc);
+            return;
+        }
+        if (typeof v === 'object') {
+            // Round-trip byte wrappers produced by cborToJsonSafe back into real byte strings.
+            const keys = Object.keys(v);
+            if (keys.length === 1 && keys[0] === '_cborBytes' && typeof v._cborBytes === 'string') {
+                try {
+                    const bin = atob(v._cborBytes);
+                    const bytes = new Uint8Array(bin.length);
+                    for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+                    pushHead(2, bytes.length);
+                    chunks.push(bytes);
+                    return;
+                } catch (_) { /* fall through: encode as ordinary map */
+                }
+            }
+            pushHead(5, keys.length);
+            keys.forEach(k => {
+                enc(k);
+                enc(v[k]);
+            });
+            return;
+        }
+        enc(String(v));
+    }
+
+    enc(value);
+    let total = 0;
+    chunks.forEach(c => total += c.length);
+    const out = new Uint8Array(total);
+    let o = 0;
+    chunks.forEach(c => {
+        out.set(c, o);
+        o += c.length;
+    });
+    return out;
+}
+
+registerConverter({
+    id: 'cbor-to-json',
+    name: 'CBOR to JSON',
+    inputs: ['application/cbor'],
+    outputs: ['application/json'],
+    weight: 2,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        const u8 = new Uint8Array(await blob.arrayBuffer());
+        const value = cborToJsonSafe(cborDecode(u8));
+        return new Blob([JSON.stringify(value, null, options && options.indent !== undefined ? options.indent : 2)], {type: 'application/json'});
+    }
+});
+
+registerConverter({
+    id: 'json-to-cbor',
+    name: 'JSON to CBOR',
+    inputs: ['application/json'],
+    outputs: ['application/cbor'],
+    weight: 3,
+    lib: null,
+    convert: async (blob) => {
+        const value = robustJsonParse(await blob.text());
+        return new Blob([cborEncode(value)], {type: 'application/cbor'});
+    }
+});
+
+// ===== MORSE CODE =====
+// Text ↔ Morse, plus Morse → real beeping WAV audio. Because the WAV output feeds the
+// existing FFmpeg audio graph, "markdown file → MP3 of Morse code" is now a valid path.
+
+const MORSE_TABLE = {
+    a: '.-', b: '-...', c: '-.-.', d: '-..', e: '.', f: '..-.', g: '--.', h: '....', i: '..',
+    j: '.---', k: '-.-', l: '.-..', m: '--', n: '-.', o: '---', p: '.--.', q: '--.-', r: '.-.',
+    s: '...', t: '-', u: '..-', v: '...-', w: '.--', x: '-..-', y: '-.--', z: '--..',
+    '0': '-----', '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....',
+    '6': '-....', '7': '--...', '8': '---..', '9': '----.',
+    '.': '.-.-.-', ',': '--..--', '?': '..--..', "'": '.----.', '!': '-.-.--', '/': '-..-.',
+    '(': '-.--.', ')': '-.--.-', '&': '.-...', ':': '---...', ';': '-.-.-.', '=': '-...-',
+    '+': '.-.-.', '-': '-....-', '_': '..--.-', '"': '.-..-.', '$': '...-..-', '@': '.--.-.',
+    'ä': '.-.-', 'ö': '---.', 'ü': '..--', 'ß': '...--..', 'é': '..-..', 'è': '.-..-', 'ñ': '--.--'
+};
+const MORSE_REVERSE = Object.fromEntries(Object.entries(MORSE_TABLE).map(([k, v]) => [v, k]));
+
+function textToMorse(text) {
+    return text.toLowerCase().split(/\n/).map(line =>
+        line.trim().split(/\s+/).map(word =>
+            word.split('').map(ch => MORSE_TABLE[ch] || '').filter(c => c).join(' ')
+        ).filter(w => w).join(' / ')
+    ).filter(l => l).join('\n');
+}
+
+function morseToText(morse) {
+    return morse.trim().split(/\n/).map(line =>
+        line.trim().split(/\s*\/\s*|\s{3,}|\t/).map(word =>
+            word.trim().split(/\s+/).map(code => MORSE_REVERSE[code] || (code ? '\u{FFFD}' : '')).join('')
+        ).join(' ')
+    ).join('\n');
+}
+
+registerConverter({
+    id: 'text-to-morse',
+    name: 'Text to Morse Code',
+    inputs: ['text/plain'],
+    outputs: ['application/x-morse'],
+    weight: 4,
+    lib: null,
+    convert: async (blob) => {
+        const morse = textToMorse(await blob.text());
+        if (!morse) throw new Error('No encodable characters found (letters, digits, common punctuation)');
+        return new Blob([morse], {type: 'text/plain'});
+    }
+});
+
+registerConverter({
+    id: 'morse-to-text',
+    name: 'Morse Code to Text',
+    inputs: ['application/x-morse'],
+    outputs: ['text/plain'],
+    weight: 2,
+    lib: null,
+    convert: async (blob) => new Blob([morseToText(await blob.text())], {type: 'text/plain'})
+});
+
+// Morse → audible WAV. 20 WPM (dit = 60 ms), 600 Hz sine, 5 ms attack/release ramps to
+// avoid clicks. Standard spacing: 1 dit between symbols, 3 between letters, 7 between words.
+registerConverter({
+    id: 'morse-to-wav',
+    name: 'Morse Code to Audio',
+    inputs: ['application/x-morse'],
+    outputs: ['audio/wav'],
+    weight: 6,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        const morse = (await blob.text()).trim();
+        if (!morse) throw new Error('Empty Morse input');
+        const wpm = (options && options.morseWpm) || 20;
+        const SR = 44100, DIT = 1.2 / wpm, FREQ = (options && options.morseFreq) || 600, RAMP = 0.005;
+        // Build a schedule of [durationSec, isTone] segments.
+        const segs = [];
+        const lines = morse.split(/\n/).map(l => l.trim()).filter(l => l);
+        lines.forEach((line, li) => {
+            if (li > 0) segs.push([7 * DIT, false]);
+            const words = line.split(/\s*\/\s*|\s{3,}|\t/).filter(w => w.trim());
+            words.forEach((word, wi) => {
+                if (wi > 0) segs.push([7 * DIT, false]);
+                const letters = word.trim().split(/\s+/);
+                letters.forEach((letter, ci) => {
+                    if (ci > 0) segs.push([3 * DIT, false]);
+                    for (let s = 0; s < letter.length; s++) {
+                        if (s > 0) segs.push([DIT, false]);
+                        const ch = letter[s];
+                        if (ch === '.') segs.push([DIT, true]);
+                        else if (ch === '-') segs.push([3 * DIT, true]);
+                    }
+                });
+            });
+        });
+        segs.push([4 * DIT, false]); // trailing silence
+        let totalSec = 0;
+        segs.forEach(s => totalSec += s[0]);
+        if (totalSec > 600) throw new Error('Resulting audio would exceed 10 minutes - input too long');
+        const totalSamples = Math.ceil(totalSec * SR);
+        const pcm = new Int16Array(totalSamples);
+        let pos = 0;
+        for (const [dur, tone] of segs) {
+            const n = Math.round(dur * SR);
+            if (tone) {
+                const rampN = Math.round(RAMP * SR);
+                for (let k = 0; k < n && pos + k < totalSamples; k++) {
+                    let amp = 0.75;
+                    if (k < rampN) amp *= k / rampN;
+                    else if (k > n - rampN) amp *= Math.max(0, (n - k) / rampN);
+                    pcm[pos + k] = Math.round(Math.sin(2 * Math.PI * FREQ * (k / SR)) * amp * 32767);
+                }
+            }
+            pos += n;
+        }
+        // Minimal WAV wrapper (PCM 16-bit mono).
+        const dataLen = pcm.length * 2;
+        const buf = new ArrayBuffer(44 + dataLen);
+        const dv = new DataView(buf);
+        const wstr = (off, s) => {
+            for (let k = 0; k < s.length; k++) dv.setUint8(off + k, s.charCodeAt(k));
+        };
+        wstr(0, 'RIFF');
+        dv.setUint32(4, 36 + dataLen, true);
+        wstr(8, 'WAVE');
+        wstr(12, 'fmt ');
+        dv.setUint32(16, 16, true);
+        dv.setUint16(20, 1, true);
+        dv.setUint16(22, 1, true);
+        dv.setUint32(24, SR, true);
+        dv.setUint32(28, SR * 2, true);
+        dv.setUint16(32, 2, true);
+        dv.setUint16(34, 16, true);
+        wstr(36, 'data');
+        dv.setUint32(40, dataLen, true);
+        new Int16Array(buf, 44).set(pcm);
+        return new Blob([buf], {type: 'audio/wav'});
+    }
+});
+
+// ===== HEX DUMP =====
+// Any file → classic xxd-style dump: offset, 16 hex bytes, ASCII gutter. Terminal by
+// nature (nothing meaningful can chain past it) and capped so a 2 GB video doesn't
+// produce a browser-killing wall of text.
+registerConverter({
+    id: 'any-to-hexdump',
+    name: 'Hex Dump',
+    inputs: Object.keys(FORMAT_REGISTRY).filter(m => m !== 'text/x-hexdump'),
+    outputs: ['text/x-hexdump'],
+    weight: 50,
+    terminal: true,
+    lib: null,
+    convert: async (blob, fromMime) => {
+        const CAP = 2 * 1024 * 1024; // 2 MiB of input ≈ 8.5 MB of text
+        const truncated = blob.size > CAP;
+        const u8 = new Uint8Array(await blob.slice(0, CAP).arrayBuffer());
+        const lines = [];
+        for (let off = 0; off < u8.length; off += 16) {
+            const row = u8.subarray(off, off + 16);
+            let hex = '', ascii = '';
+            for (let k = 0; k < 16; k++) {
+                if (k < row.length) {
+                    hex += row[k].toString(16).padStart(2, '0');
+                    ascii += (row[k] >= 0x20 && row[k] < 0x7f) ? String.fromCharCode(row[k]) : '.';
+                } else hex += '  ';
+                if (k % 2 === 1) hex += ' ';
+            }
+            lines.push(off.toString(16).padStart(8, '0') + ': ' + hex + ' ' + ascii);
+        }
+        if (truncated) lines.push('', `[truncated: showing first ${CAP} of ${blob.size} bytes]`);
+        return new Blob([lines.join('\n') + '\n'], {type: 'text/plain'});
+    }
+});
+
+// ===== iCALENDAR (ICS) & vCARD (VCF) =====
+// Both use the same RFC 5545/6350 line syntax: folded lines, NAME;PARAM=X:value,
+// backslash escaping. Shared low-level parser, format-specific mapping on top.
+
+function unfoldIcsLines(text) {
+    return text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+        .replace(/\n[ \t]/g, '') // unfold continuation lines
+        .split('\n').filter(l => l.trim());
+}
+
+function parseIcsLine(line) {
+    // NAME;PARAM=a;PARAM2="b,c":value  — find the first ':' outside double quotes
+    let inQ = false, ci = -1;
+    for (let k = 0; k < line.length; k++) {
+        if (line[k] === '"') inQ = !inQ;
+        else if (line[k] === ':' && !inQ) {
+            ci = k;
+            break;
+        }
+    }
+    if (ci === -1) return null;
+    const left = line.slice(0, ci), value = line.slice(ci + 1);
+    const parts = left.split(';');
+    const name = parts[0].toUpperCase();
+    const params = {};
+    for (const p of parts.slice(1)) {
+        const eq = p.indexOf('=');
+        if (eq > 0) params[p.slice(0, eq).toUpperCase()] = p.slice(eq + 1).replace(/^"|"$/g, '');
+    }
+    return {name, params, value};
+}
+
+function icsUnescape(v) {
+    return v.replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\');
+}
+
+function icsEscape(v) {
+    return String(v).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+}
+
+// 20260717T140000Z / 20260717T140000 / 20260717 → readable ISO-ish string (kept verbatim
+// if unrecognized, so exotic values survive a round trip).
+function icsDateToIso(v, params) {
+    let m = v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${m[7]}` + (params && params.TZID && !m[7] ? ` (${params.TZID})` : '');
+    m = v.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    return v;
+}
+
+function isoToIcsDate(v) {
+    const s = String(v).trim();
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z?)/);
+    if (m) return {value: `${m[1]}${m[2]}${m[3]}T${m[4]}${m[5]}${m[6] || '00'}${m[7]}`, dateOnly: false};
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return {value: `${m[1]}${m[2]}${m[3]}`, dateOnly: true};
+    if (/^\d{8}(T\d{6}Z?)?$/.test(s)) return {value: s, dateOnly: s.length === 8};
+    const d = new Date(s);
+    if (!isNaN(d)) return {value: d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''), dateOnly: false};
+    return null;
+}
+
+// Fold long ICS output lines at 75 octets (approximated as chars) per RFC 5545.
+function foldIcsLine(line) {
+    if (line.length <= 75) return line;
+    const parts = [line.slice(0, 75)];
+    for (let k = 75; k < line.length; k += 74) parts.push(' ' + line.slice(k, k + 74));
+    return parts.join('\r\n');
+}
+
+const ICS_EVENT_FIELDS = {
+    SUMMARY: 'summary', DESCRIPTION: 'description', LOCATION: 'location', UID: 'uid',
+    STATUS: 'status', URL: 'url', ORGANIZER: 'organizer', 'RECURRENCE-ID': 'recurrenceId',
+    RRULE: 'rrule', CATEGORIES: 'categories', TRANSP: 'transparency', CLASS: 'class'
+};
+
+registerConverter({
+    id: 'ics-to-json',
+    name: 'iCalendar to JSON',
+    inputs: ['text/calendar'],
+    outputs: ['application/json'],
+    weight: 2,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        const lines = unfoldIcsLines(await blob.text());
+        const events = [];
+        let cur = null, depth = [];
+        for (const raw of lines) {
+            const l = parseIcsLine(raw);
+            if (!l) continue;
+            if (l.name === 'BEGIN') {
+                depth.push(l.value.toUpperCase());
+                if (l.value.toUpperCase() === 'VEVENT') cur = {};
+                continue;
+            }
+            if (l.name === 'END') {
+                if (l.value.toUpperCase() === 'VEVENT' && cur) {
+                    events.push(cur);
+                    cur = null;
+                }
+                depth.pop();
+                continue;
+            }
+            if (!cur || depth[depth.length - 1] !== 'VEVENT') continue;
+            if (l.name === 'DTSTART') cur.start = icsDateToIso(l.value, l.params);
+            else if (l.name === 'DTEND') cur.end = icsDateToIso(l.value, l.params);
+            else if (l.name === 'ATTENDEE') (cur.attendees = cur.attendees || []).push(icsUnescape(l.value).replace(/^mailto:/i, ''));
+            else if (ICS_EVENT_FIELDS[l.name]) cur[ICS_EVENT_FIELDS[l.name]] = icsUnescape(l.value).replace(/^mailto:/i, '');
+        }
+        if (!events.length) throw new Error('No VEVENT entries found - is this a valid ICS file?');
+        return new Blob([JSON.stringify(events, null, options && options.indent !== undefined ? options.indent : 2)], {type: 'application/json'});
+    }
+});
+
+registerConverter({
+    id: 'json-to-ics',
+    name: 'JSON to iCalendar',
+    inputs: ['application/json'],
+    outputs: ['text/calendar'],
+    weight: 5,
+    lib: null,
+    convert: async (blob) => {
+        const data = robustJsonParse(await blob.text());
+        const arr = (Array.isArray(data) ? data : [data]).filter(o => o && typeof o === 'object');
+        if (!arr.length) throw new Error('Expected an array of event objects');
+        const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+        const out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//gptgames.dev//Everything Converter//EN'];
+        const rev = Object.fromEntries(Object.entries(ICS_EVENT_FIELDS).map(([k, v]) => [v, k]));
+        arr.forEach((ev, i) => {
+            out.push('BEGIN:VEVENT');
+            out.push('UID:' + icsEscape(ev.uid || `evt-${i + 1}-${now}@everything-converter`));
+            out.push('DTSTAMP:' + now);
+            const ds = isoToIcsDate(ev.start !== undefined ? ev.start : ev.date);
+            if (ds) out.push(ds.dateOnly ? 'DTSTART;VALUE=DATE:' + ds.value : 'DTSTART:' + ds.value);
+            const de = isoToIcsDate(ev.end);
+            if (de) out.push(de.dateOnly ? 'DTEND;VALUE=DATE:' + de.value : 'DTEND:' + de.value);
+            out.push('SUMMARY:' + icsEscape(ev.summary !== undefined ? ev.summary : (ev.title !== undefined ? ev.title : 'Untitled event')));
+            for (const [jsKey, icsKey] of Object.entries(rev)) {
+                if (jsKey === 'summary' || jsKey === 'uid') continue;
+                if (ev[jsKey] !== undefined && ev[jsKey] !== null && ev[jsKey] !== '') out.push(icsKey + ':' + icsEscape(ev[jsKey]));
+            }
+            (Array.isArray(ev.attendees) ? ev.attendees : []).forEach(a => out.push('ATTENDEE:mailto:' + icsEscape(a)));
+            out.push('END:VEVENT');
+        });
+        out.push('END:VCALENDAR');
+        return new Blob([out.map(foldIcsLine).join('\r\n') + '\r\n'], {type: 'text/calendar'});
+    }
+});
+
+const VCARD_FIELDS = {
+    FN: 'name', ORG: 'organization', TITLE: 'title', NOTE: 'note', URL: 'url',
+    NICKNAME: 'nickname', BDAY: 'birthday', ROLE: 'role', UID: 'uid'
+};
+
+registerConverter({
+    id: 'vcard-to-json',
+    name: 'vCard to JSON',
+    inputs: ['text/vcard'],
+    outputs: ['application/json'],
+    weight: 2,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        const lines = unfoldIcsLines(await blob.text());
+        const cards = [];
+        let cur = null;
+        for (const raw of lines) {
+            const l = parseIcsLine(raw);
+            if (!l) continue;
+            if (l.name === 'BEGIN' && l.value.toUpperCase() === 'VCARD') {
+                cur = {};
+                continue;
+            }
+            if (l.name === 'END' && l.value.toUpperCase() === 'VCARD') {
+                if (cur) cards.push(cur);
+                cur = null;
+                continue;
+            }
+            if (!cur) continue;
+            const type = (l.params.TYPE || '').toLowerCase();
+            if (l.name === 'N') {
+                const [family, given] = l.value.split(';').map(icsUnescape);
+                if (family) cur.familyName = family;
+                if (given) cur.givenName = given;
+            } else if (l.name === 'TEL') {
+                (cur.phones = cur.phones || []).push(type ? {
+                    type,
+                    number: icsUnescape(l.value)
+                } : {number: icsUnescape(l.value)});
+            } else if (l.name === 'EMAIL') {
+                (cur.emails = cur.emails || []).push(icsUnescape(l.value));
+            } else if (l.name === 'ADR') {
+                const seg = l.value.split(';').map(icsUnescape);
+                const addr = {
+                    street: seg[2] || '',
+                    city: seg[3] || '',
+                    region: seg[4] || '',
+                    postalCode: seg[5] || '',
+                    country: seg[6] || ''
+                };
+                if (type) addr.type = type;
+                (cur.addresses = cur.addresses || []).push(addr);
+            } else if (VCARD_FIELDS[l.name]) {
+                cur[VCARD_FIELDS[l.name]] = icsUnescape(l.value);
+            }
+        }
+        if (!cards.length) throw new Error('No vCard entries found - is this a valid VCF file?');
+        return new Blob([JSON.stringify(cards, null, options && options.indent !== undefined ? options.indent : 2)], {type: 'application/json'});
+    }
+});
+
+registerConverter({
+    id: 'json-to-vcard',
+    name: 'JSON to vCard',
+    inputs: ['application/json'],
+    outputs: ['text/vcard'],
+    weight: 5,
+    lib: null,
+    convert: async (blob) => {
+        const data = robustJsonParse(await blob.text());
+        const arr = (Array.isArray(data) ? data : [data]).filter(o => o && typeof o === 'object');
+        if (!arr.length) throw new Error('Expected an array of contact objects');
+        const out = [];
+        arr.forEach((c, i) => {
+            out.push('BEGIN:VCARD', 'VERSION:3.0');
+            const fn = c.name || [c.givenName, c.familyName].filter(x => x).join(' ') || c.fn || `Contact ${i + 1}`;
+            out.push('FN:' + icsEscape(fn));
+            if (c.familyName || c.givenName) out.push('N:' + icsEscape(c.familyName || '') + ';' + icsEscape(c.givenName || '') + ';;;');
+            for (const [icsKey, jsKey] of Object.entries(VCARD_FIELDS)) {
+                if (jsKey === 'name') continue;
+                if (c[jsKey] !== undefined && c[jsKey] !== null && c[jsKey] !== '') out.push(icsKey + ':' + icsEscape(c[jsKey]));
+            }
+            (Array.isArray(c.emails) ? c.emails : (c.email ? [c.email] : [])).forEach(e => out.push('EMAIL:' + icsEscape(typeof e === 'object' ? e.address || '' : e)));
+            (Array.isArray(c.phones) ? c.phones : (c.phone ? [c.phone] : [])).forEach(p => {
+                if (typeof p === 'object') out.push('TEL' + (p.type ? ';TYPE=' + p.type : '') + ':' + icsEscape(p.number || ''));
+                else out.push('TEL:' + icsEscape(p));
+            });
+            (Array.isArray(c.addresses) ? c.addresses : []).forEach(a => {
+                out.push('ADR' + (a.type ? ';TYPE=' + a.type : '') + ':;;' + [a.street, a.city, a.region, a.postalCode, a.country].map(x => icsEscape(x || '')).join(';'));
+            });
+            out.push('END:VCARD');
+        });
+        return new Blob([out.map(foldIcsLine).join('\r\n') + '\r\n'], {type: 'text/vcard'});
+    }
+});
+
+// ===== QR CODE ENCODER (ISO/IEC 18004) =====
+// ===== QR CODE ENCODER (ISO/IEC 18004) =====
+// Self-contained: Reed-Solomon ECC, byte mode, versions 1-40, mask evaluation.
+
+// Galois field GF(256) with primitive polynomial 0x11d.
+const GF_EXP = new Uint8Array(512), GF_LOG = new Uint8Array(256);
+(() => {
+    let x = 1;
+    for (let i = 0; i < 255; i++) {
+        GF_EXP[i] = x;
+        GF_LOG[x] = i;
+        x <<= 1;
+        if (x & 0x100) x ^= 0x11d;
+    }
+    for (let i = 255; i < 512; i++) GF_EXP[i] = GF_EXP[i - 255];
+})();
+
+const gfMul = (a, b) => (a === 0 || b === 0) ? 0 : GF_EXP[GF_LOG[a] + GF_LOG[b]];
+
+// Generator polynomial for `degree` ECC codewords, returned highest-degree-first
+// (big-endian) to match rsEncode's indexing.
+function rsGenPoly(degree) {
+    let poly = [1];
+    for (let i = 0; i < degree; i++) {
+        const next = new Array(poly.length + 1).fill(0);
+        for (let j = 0; j < poly.length; j++) {
+            next[j] ^= poly[j];                       // multiply by x
+            next[j + 1] ^= gfMul(poly[j], GF_EXP[i]); // multiply by alpha^i
+        }
+        poly = next;
+    }
+    return poly;
+}
+
+function rsEncode(data, ecLen) {
+    const gen = rsGenPoly(ecLen);
+    const res = new Uint8Array(ecLen);
+    for (const byte of data) {
+        const factor = byte ^ res[0];
+        res.copyWithin(0, 1);
+        res[ecLen - 1] = 0;
+        for (let j = 0; j < ecLen; j++) res[j] ^= gfMul(gen[j + 1], factor);
+    }
+    return res;
+}
+
+// Per-version, per-EC-level: [ecCodewordsPerBlock, numBlocksGroup1, numBlocksGroup2]
+// Index: ECC_TABLE[version][level] where level is L,M,Q,H = 0..3
+// Derived from the ISO tables; totalCodewords - ec*blocks = data capacity.
+const EC_BLOCKS = {
+    // version: {L:[ecPerBlock, blocks], M:..., Q:..., H:...}
+    1: [[7, 1], [10, 1], [13, 1], [17, 1]],
+    2: [[10, 1], [16, 1], [22, 1], [28, 1]],
+    3: [[15, 1], [26, 1], [18, 2], [22, 2]],
+    4: [[20, 1], [18, 2], [26, 2], [16, 4]],
+    5: [[26, 1], [24, 2], [18, 4], [22, 4]],
+    6: [[18, 2], [16, 4], [24, 4], [28, 4]],
+    7: [[20, 2], [18, 4], [18, 6], [26, 5]],
+    8: [[24, 2], [22, 4], [22, 6], [26, 6]],
+    9: [[30, 2], [22, 5], [20, 8], [24, 8]],
+    10: [[18, 4], [26, 5], [24, 8], [28, 8]],
+    11: [[20, 4], [30, 5], [28, 8], [24, 11]],
+    12: [[24, 4], [22, 8], [26, 10], [28, 11]],
+    13: [[26, 4], [22, 9], [24, 12], [22, 16]],
+    14: [[30, 4], [24, 9], [20, 16], [24, 16]],
+    15: [[22, 6], [24, 10], [30, 12], [24, 18]],
+    16: [[24, 6], [28, 10], [24, 17], [30, 16]],
+    17: [[28, 6], [28, 11], [28, 16], [28, 19]],
+    18: [[30, 6], [26, 13], [28, 18], [28, 21]],
+    19: [[28, 7], [26, 14], [26, 21], [26, 25]],
+    20: [[28, 8], [26, 16], [30, 20], [28, 25]],
+    21: [[28, 8], [26, 17], [28, 23], [30, 25]],
+    22: [[28, 9], [28, 17], [30, 23], [24, 34]],
+    23: [[30, 9], [28, 18], [30, 25], [30, 30]],
+    24: [[30, 10], [28, 20], [30, 27], [30, 32]],
+    25: [[26, 12], [28, 21], [30, 29], [30, 35]],
+    26: [[28, 12], [28, 23], [28, 34], [30, 37]],
+    27: [[30, 12], [28, 25], [30, 34], [30, 40]],
+    28: [[30, 13], [28, 26], [30, 35], [30, 42]],
+    29: [[30, 14], [28, 28], [30, 38], [30, 45]],
+    30: [[30, 15], [28, 29], [30, 40], [30, 48]],
+    31: [[30, 16], [28, 31], [30, 43], [30, 51]],
+    32: [[30, 17], [28, 33], [30, 45], [30, 54]],
+    33: [[30, 18], [28, 35], [30, 48], [30, 57]],
+    34: [[30, 19], [28, 37], [30, 51], [30, 60]],
+    35: [[30, 19], [28, 38], [30, 53], [30, 63]],
+    36: [[30, 20], [28, 40], [30, 56], [30, 66]],
+    37: [[30, 21], [28, 43], [30, 59], [30, 70]],
+    38: [[30, 22], [28, 45], [30, 62], [30, 74]],
+    39: [[30, 24], [28, 47], [30, 65], [30, 77]],
+    40: [[30, 25], [28, 49], [30, 68], [30, 81]]
+};
+
+// Total codewords per version (ISO/IEC 18004 Table 1). Using the authoritative table
+// rather than deriving it from module counts: the derivation is subtle enough that a
+// silent off-by-one would corrupt every symbol.
+const TOTAL_CODEWORDS = [
+    26, 44, 70, 100, 134, 172, 196, 242, 292, 346, 404, 466, 532, 581, 655, 733, 815, 901,
+    991, 1085, 1156, 1258, 1364, 1474, 1588, 1706, 1828, 1921, 2051, 2185, 2323, 2465,
+    2611, 2761, 2876, 3034, 3196, 3362, 3532, 3706
+];
+const totalCodewords = version => TOTAL_CODEWORDS[version - 1];
+
+// Alignment pattern centres per version (ISO/IEC 18004 Annex E). Tabulated rather than
+// derived: the spec's spacing rule has irregularities (v32 among them) that a naive
+// even-spacing formula gets wrong, silently corrupting the symbol.
+const ALIGN_POS = [
+    [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34],
+    [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50], [6, 30, 54], [6, 32, 58], [6, 34, 62],
+    [6, 26, 46, 66], [6, 26, 48, 70], [6, 26, 50, 74], [6, 30, 54, 78], [6, 30, 56, 82],
+    [6, 30, 58, 86], [6, 34, 62, 90],
+    [6, 28, 50, 72, 94], [6, 26, 50, 74, 98], [6, 30, 54, 78, 102], [6, 28, 54, 80, 106],
+    [6, 32, 58, 84, 110], [6, 30, 58, 86, 114], [6, 34, 62, 90, 118],
+    [6, 26, 50, 74, 98, 122], [6, 30, 54, 78, 102, 126], [6, 26, 52, 78, 104, 130],
+    [6, 30, 56, 82, 108, 134], [6, 34, 60, 86, 112, 138], [6, 30, 58, 86, 114, 142],
+    [6, 34, 62, 90, 118, 146],
+    [6, 30, 54, 78, 102, 126, 150], [6, 24, 50, 76, 102, 128, 154], [6, 28, 54, 80, 106, 132, 158],
+    [6, 32, 58, 84, 110, 136, 162], [6, 26, 54, 82, 110, 138, 166], [6, 30, 58, 86, 114, 142, 170]
+];
+const alignPositions = version => ALIGN_POS[version - 1];
+
+
+// ---- Full encoder ----
+
+// Data capacity in codewords per version/level = total - ec*blocks.
+function dataCodewords(version, level) {
+    const [ec, blocks] = EC_BLOCKS[version][level];
+    return totalCodewords(version) - ec * blocks;
+}
+
+// Byte-mode character count indicator width.
+const ccBits = version => version <= 9 ? 8 : 16;
+
+function chooseVersion(byteLen, level) {
+    for (let v = 1; v <= 40; v++) {
+        const cap = dataCodewords(v, level) * 8 - 4 - ccBits(v);
+        if (byteLen * 8 <= cap) return v;
+    }
+    return null;
+}
+
+function buildDataCodewords(bytes, version, level) {
+    const bits = [];
+    const push = (val, len) => {
+        for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1);
+    };
+    push(0b0100, 4);                 // byte mode
+    push(bytes.length, ccBits(version));
+    for (const b of bytes) push(b, 8);
+    const capacity = dataCodewords(version, level) * 8;
+    for (let i = 0; i < 4 && bits.length < capacity; i++) bits.push(0); // terminator
+    while (bits.length % 8) bits.push(0);
+    const cw = [];
+    for (let i = 0; i < bits.length; i += 8) {
+        let v = 0;
+        for (let j = 0; j < 8; j++) v = (v << 1) | bits[i + j];
+        cw.push(v);
+    }
+    const pad = [0xEC, 0x11];
+    let pi = 0;
+    while (cw.length < dataCodewords(version, level)) cw.push(pad[pi++ % 2]);
+    return cw;
+}
+
+// Split into blocks, ECC each, then interleave per spec.
+function interleave(dataCw, version, level) {
+    const [ecLen, numBlocks] = EC_BLOCKS[version][level];
+    const total = dataCw.length;
+    const shortLen = Math.floor(total / numBlocks);
+    const numLong = total % numBlocks; // last `numLong` blocks are one longer
+    const blocks = [], ecBlocks = [];
+    let off = 0;
+    for (let i = 0; i < numBlocks; i++) {
+        const len = shortLen + (i >= numBlocks - numLong ? 1 : 0);
+        const blk = dataCw.slice(off, off + len);
+        off += len;
+        blocks.push(blk);
+        ecBlocks.push(rsEncode(blk, ecLen));
+    }
+    const out = [];
+    const maxLen = Math.max(...blocks.map(b => b.length));
+    for (let i = 0; i < maxLen; i++) for (const b of blocks) if (i < b.length) out.push(b[i]);
+    for (let i = 0; i < ecLen; i++) for (const e of ecBlocks) out.push(e[i]);
+    return out;
+}
+
+function buildMatrix(version) {
+    const size = version * 4 + 17;
+    const m = Array.from({length: size}, () => new Int8Array(size).fill(-1)); // -1 = free
+    const set = (r, c, v) => {
+        m[r][c] = v;
+    };
+    // finders + separators
+    const finder = (r0, c0) => {
+        for (let r = -1; r <= 7; r++) for (let c = -1; c <= 7; c++) {
+            const rr = r0 + r, cc = c0 + c;
+            if (rr < 0 || cc < 0 || rr >= size || cc >= size) continue;
+            const inRing = (r >= 0 && r <= 6 && (c === 0 || c === 6)) || (c >= 0 && c <= 6 && (r === 0 || r === 6));
+            const inCore = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+            set(rr, cc, (inRing || inCore) ? 1 : 0);
+        }
+    };
+    finder(0, 0);
+    finder(0, size - 7);
+    finder(size - 7, 0);
+    // timing
+    for (let i = 8; i < size - 8; i++) {
+        set(6, i, i % 2 === 0 ? 1 : 0);
+        set(i, 6, i % 2 === 0 ? 1 : 0);
+    }
+    // alignment
+    const pos = alignPositions(version);
+    for (const r of pos) for (const c of pos) {
+        if ((r <= 8 && c <= 8) || (r <= 8 && c >= size - 9) || (r >= size - 9 && c <= 8)) continue;
+        for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+            const ring = Math.max(Math.abs(dr), Math.abs(dc));
+            set(r + dr, c + dc, (ring === 1) ? 0 : 1);
+        }
+    }
+    // dark module
+    set(size - 8, 8, 1);
+    // reserve format areas (marked 2 = reserved, filled later)
+    for (let i = 0; i < 9; i++) {
+        if (m[8][i] === -1) set(8, i, 2);
+        if (m[i][8] === -1) set(i, 8, 2);
+    }
+    for (let i = 0; i < 8; i++) {
+        if (m[8][size - 1 - i] === -1) set(8, size - 1 - i, 2);
+        if (m[size - 1 - i][8] === -1) set(size - 1 - i, 8, 2);
+    }
+    // reserve version info
+    if (version >= 7) {
+        for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) {
+            set(size - 11 + j, i, 2);
+            set(i, size - 11 + j, 2);
+        }
+    }
+    return m;
+}
+
+function placeData(m, codewords) {
+    const size = m.length;
+    const bits = [];
+    for (const cw of codewords) for (let i = 7; i >= 0; i--) bits.push((cw >> i) & 1);
+    let bi = 0, upward = true;
+    for (let colPair = size - 1; colPair > 0; colPair -= 2) {
+        if (colPair === 6) colPair--; // skip timing column
+        for (let i = 0; i < size; i++) {
+            const row = upward ? size - 1 - i : i;
+            for (const col of [colPair, colPair - 1]) {
+                if (m[row][col] !== -1) continue;
+                m[row][col] = bi < bits.length ? bits[bi++] : 0;
+            }
+        }
+        upward = !upward;
+    }
+    return m;
+}
+
+const MASK_FN = [
+    (r, c) => (r + c) % 2 === 0,
+    (r, c) => r % 2 === 0,
+    (r, c) => c % 3 === 0,
+    (r, c) => (r + c) % 3 === 0,
+    (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+    (r, c) => (r * c) % 2 + (r * c) % 3 === 0,
+    (r, c) => ((r * c) % 2 + (r * c) % 3) % 2 === 0,
+    (r, c) => ((r + c) % 2 + (r * c) % 3) % 2 === 0
+];
+
+// Format info: 5 bits (level+mask) -> 15 bits with BCH(15,5) and mask 0x5412.
+const LEVEL_BITS = [1, 0, 3, 2]; // L,M,Q,H -> 01,00,11,10
+function formatBits(level, mask) {
+    let data = (LEVEL_BITS[level] << 3) | mask;
+    let rem = data << 10;
+    for (let i = 14; i >= 10; i--) if ((rem >> i) & 1) rem ^= 0x537 << (i - 10);
+    return ((data << 10) | rem) ^ 0x5412;
+}
+
+function versionBits(version) {
+    let rem = version << 12;
+    for (let i = 17; i >= 12; i--) if ((rem >> i) & 1) rem ^= 0x1F25 << (i - 12);
+    return (version << 12) | rem;
+}
+
+function applyMaskAndInfo(base, mask, level, version) {
+    const size = base.length;
+    const m = base.map(row => Int8Array.from(row));
+    // Which cells are function patterns (not maskable): recompute from a fresh template.
+    const tmpl = buildMatrix(version);
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
+        if (tmpl[r][c] === -1 && MASK_FN[mask](r, c)) m[r][c] ^= 1;
+    }
+    // format info
+    const fb = formatBits(level, mask);
+    for (let i = 0; i < 15; i++) {
+        const bit = (fb >> i) & 1;
+        // vertical strip (top-left col 8) + horizontal (bottom-left)
+        if (i < 6) m[i][8] = bit;
+        else if (i < 8) m[i + 1][8] = bit;
+        else m[size - 15 + i][8] = bit;
+        // horizontal strip (top-left row 8) + vertical (top-right)
+        if (i < 8) m[8][size - 1 - i] = bit;
+        else if (i < 9) m[8][15 - i - 1 + 1] = bit;
+        else m[8][15 - i - 1] = bit;
+    }
+    m[size - 8][8] = 1; // dark module
+    if (version >= 7) {
+        const vb = versionBits(version);
+        for (let i = 0; i < 18; i++) {
+            const bit = (vb >> i) & 1;
+            const r = Math.floor(i / 3), c = i % 3;
+            m[size - 11 + c][r] = bit;
+            m[r][size - 11 + c] = bit;
+        }
+    }
+    return m;
+}
+
+// Penalty scoring per ISO 18004 §8.8.2
+function penalty(m) {
+    const size = m.length;
+    let score = 0;
+    // Rule 1: runs of 5+
+    for (let dir = 0; dir < 2; dir++) {
+        for (let a = 0; a < size; a++) {
+            let run = 1;
+            for (let b = 1; b < size; b++) {
+                const cur = dir === 0 ? m[a][b] : m[b][a];
+                const prev = dir === 0 ? m[a][b - 1] : m[b - 1][a];
+                if (cur === prev) {
+                    run++;
+                    if (run === 5) score += 3; else if (run > 5) score++;
+                } else run = 1;
+            }
+        }
+    }
+    // Rule 2: 2x2 blocks
+    for (let r = 0; r < size - 1; r++) for (let c = 0; c < size - 1; c++) {
+        const v = m[r][c];
+        if (v === m[r][c + 1] && v === m[r + 1][c] && v === m[r + 1][c + 1]) score += 3;
+    }
+    // Rule 3: finder-like patterns
+    const pat1 = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+    const pat2 = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1];
+    const check = (arr, i, pat) => pat.every((p, k) => arr[i + k] === p);
+    for (let a = 0; a < size; a++) {
+        const row = [], col = [];
+        for (let b = 0; b < size; b++) {
+            row.push(m[a][b]);
+            col.push(m[b][a]);
+        }
+        for (let i = 0; i + 11 <= size; i++) {
+            if (check(row, i, pat1) || check(row, i, pat2)) score += 40;
+            if (check(col, i, pat1) || check(col, i, pat2)) score += 40;
+        }
+    }
+    // Rule 4: dark ratio
+    let dark = 0;
+    for (const row of m) for (const v of row) if (v === 1) dark++;
+    const pct = dark * 100 / (size * size);
+    score += Math.floor(Math.abs(pct - 50) / 5) * 10;
+    return score;
+}
+
+// Returns {matrix (0/1), size, version}
+function qrEncode(bytes, level = 1) {
+    const version = chooseVersion(bytes.length, level);
+    if (!version) throw new Error(`Too much data for a QR code (${bytes.length} bytes; max ~2953)`);
+    const dataCw = buildDataCodewords(bytes, version, level);
+    const all = interleave(dataCw, version, level);
+    const base = placeData(buildMatrix(version), all);
+    // Remaining reserved cells (=2) become 0 before masking evaluation
+    let best = null, bestScore = Infinity;
+    for (let mask = 0; mask < 8; mask++) {
+        const m = applyMaskAndInfo(base, mask, level, version);
+        for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) if (m[r][c] === 2 || m[r][c] === -1) m[r][c] = 0;
+        const s = penalty(m);
+        if (s < bestScore) {
+            bestScore = s;
+            best = m;
+        }
+    }
+    return {matrix: best, size: best.length, version};
+}
+
+registerConverter({
+    id: 'text-to-qr',
+    name: 'Text to QR Code',
+    inputs: ['text/plain', 'text/markdown', 'application/json', 'application/x-morse', 'text/calendar', 'text/vcard', 'text/yaml', 'application/toml', 'application/ini', 'application/x-env', 'text/csv'],
+    outputs: ['image/png'],
+    weight: 4,
+    lib: null,
+    convert: async (blob, fromMime, toMime, options) => {
+        const text = await blob.text();
+        if (!text.trim()) throw new Error('Nothing to encode - the input is empty');
+        const bytes = new TextEncoder().encode(text);
+        const levelIdx = ['L', 'M', 'Q', 'H'].indexOf((options && options.qrLevel) || 'M');
+        const {matrix, size} = qrEncode(bytes, levelIdx < 0 ? 1 : levelIdx);
+        // A 4-module quiet zone is required by the spec - without it many scanners fail.
+        const QUIET = 4, TARGET = 640;
+        const scale = Math.max(2, Math.floor(TARGET / (size + QUIET * 2)));
+        const dim = (size + QUIET * 2) * scale;
+        const c = document.createElement('canvas');
+        c.width = dim;
+        c.height = dim;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, dim, dim);
+        ctx.fillStyle = '#000000';
+        for (let r = 0; r < size; r++) {
+            for (let col = 0; col < size; col++) {
+                if (matrix[r][col]) ctx.fillRect((col + QUIET) * scale, (r + QUIET) * scale, scale, scale);
+            }
+        }
+        return new Promise((resolve, reject) => {
+            c.toBlob(b => b ? resolve(b) : reject(new Error('QR rendering failed')), 'image/png');
+        });
+    }
+});
+
 function findReachableTargets(srcMime) {
     // Dijkstra over the converter graph, with support for TERMINAL edges
     // (converter.terminal === true): valid as the final hop of a path, but never extended.
@@ -3927,8 +5196,17 @@ async function detectFormat(file) {
         if (m === 2 || m === 5) return 'image/x-portable-graymap';
         if (m === 3 || m === 6) return 'image/x-portable-pixmap';
     }
-// MessagePack detection by extension (binary format)
+// MessagePack / CBOR detection by extension (binary formats)
     if (ext === 'msgpack') return 'application/msgpack';
+    if (ext === 'cbor') return 'application/cbor';
+    if (ext === 'morse') return 'application/x-morse';
+    if (ext === 'ics' || ext === 'ical') return 'text/calendar';
+    if (ext === 'vcf' || ext === 'vcard') return 'text/vcard';
+    // Subtitles: sniff the WEBVTT signature so mislabeled files still route correctly
+    if (ext === 'srt' || ext === 'vtt' || ext === 'sub') {
+        const sample = (await file.slice(0, 64).text()).replace(/^\uFEFF/, '').trim();
+        return sample.startsWith('WEBVTT') ? 'text/vtt' : 'application/x-subrip';
+    }
     if (['txt', 'md', 'html', 'json', 'xml', 'yaml', 'toml', 'csv', 'tsv', 'b64', 'ini', 'yml', 'htm', 'jsonl', 'ndjson', 'json5', 'properties', 'env', 'sexp', 'sexpr', 'rst', 'textile', 'adoc', 'asciidoc'].includes(ext)) {
         return await sniffTextStructure(file, ext);
     }
@@ -3961,7 +5239,17 @@ async function sniffTextStructure(file, ext) {
 
 let inputFiles = [];
 let mergeEnabled = false;
-let conversionOptions = {quality: 0.92, pdfOrientation: 'auto', indent: 2, resizeMax: 0};
+let conversionOptions = {
+    quality: 0.92,
+    pdfOrientation: 'auto',
+    indent: 2,
+    resizeMax: 0,
+    subShiftMs: 0,
+    subSpeedFactor: 1,
+    morseWpm: 20,
+    morseFreq: 600,
+    qrLevel: 'M'
+};
 const $ = id => document.getElementById(id);
 
 // Junk entries that Mac/Windows zip tools add and that nobody wants ingested.
@@ -4207,7 +5495,8 @@ function updateGlobalOptionsPanel() {
     const row = $('optionsRow');
     row.innerHTML = '';
     row.style.display = 'none';
-    let useImg = false, usePdf = false, useData = false, useMedia = false, useImgResize = false;
+    let useImg = false, usePdf = false, useData = false, useMedia = false, useImgResize = false, useSubs = false,
+        useMorseAudio = false, useQr = false;
     inputFiles.forEach(n => {
         if (n.targetMime === 'image/jpeg' || n.targetMime === 'image/webp') useImg = true;
         // Resize applies to any raster image produced by the canvas converter.
@@ -4217,8 +5506,11 @@ function updateGlobalOptionsPanel() {
         // Any path that routes through the FFmpeg engine (A/V transcoding or video→gif)
         const path = n.targetMime ? n.reachable.get(n.targetMime) : null;
         if (path && path.some(e => e.converter.id && e.converter.id.startsWith('ffmpeg-'))) useMedia = true;
+        if (path && path.some(e => ['subtitle-convert', 'subtitle-to-json', 'json-to-subtitle'].includes(e.converter.id))) useSubs = true;
+        if (path && path.some(e => e.converter.id === 'morse-to-wav')) useMorseAudio = true;
+        if (path && path.some(e => e.converter.id === 'text-to-qr')) useQr = true;
     });
-    if (useImg || usePdf || useData || useMedia || useImgResize) row.style.display = 'flex';
+    if (useImg || usePdf || useData || useMedia || useImgResize || useSubs || useMorseAudio || useQr) row.style.display = 'flex';
     if (useMedia) {
         const grp = document.createElement('div');
         grp.className = 'option-group';
@@ -4277,6 +5569,65 @@ function updateGlobalOptionsPanel() {
         setTimeout(() => {
             $('dataI').onchange = e => {
                 conversionOptions.indent = parseInt(e.target.value);
+            };
+        }, 0);
+    }
+    if (useSubs) {
+        const grp = document.createElement('div');
+        grp.className = 'option-group';
+        const speeds = [
+            {v: 1, t: 'No speed change'},
+            {v: 23.976 / 25, t: '25 fps \u2192 23.976 fps'},
+            {v: 25 / 23.976, t: '23.976 fps \u2192 25 fps'},
+            {v: 24 / 25, t: '25 fps \u2192 24 fps'},
+            {v: 25 / 24, t: '24 fps \u2192 25 fps'}
+        ];
+        grp.innerHTML = `<label>Subtitle time shift</label><input type="number" id="subShift" step="100" value="${conversionOptions.subShiftMs}" style="width:90px"><span style="color:var(--text-dim)">ms (&plusmn;)</span>`
+            + `<label style="margin-left:10px">Speed</label><select id="subSpeed">${speeds.map(s => `<option value="${s.v}" ${Math.abs(conversionOptions.subSpeedFactor - s.v) < 1e-9 ? 'selected' : ''}>${s.t}</option>`).join('')}</select>`;
+        row.appendChild(grp);
+        setTimeout(() => {
+            $('subShift').oninput = e => {
+                conversionOptions.subShiftMs = parseInt(e.target.value, 10) || 0;
+            };
+            $('subSpeed').onchange = e => {
+                conversionOptions.subSpeedFactor = parseFloat(e.target.value) || 1;
+            };
+        }, 0);
+    }
+    if (useMorseAudio) {
+        const grp = document.createElement('div');
+        grp.className = 'option-group';
+        const wpms = [10, 15, 20, 25, 30];
+        const freqs = [{v: 440, t: '440 Hz (low)'}, {v: 600, t: '600 Hz (classic)'}, {v: 700, t: '700 Hz'}, {
+            v: 800,
+            t: '800 Hz (bright)'
+        }];
+        grp.innerHTML = `<label>Morse speed</label><select id="morseWpm">${wpms.map(w => `<option value="${w}" ${conversionOptions.morseWpm === w ? 'selected' : ''}>${w} WPM</option>`).join('')}</select>`
+            + `<label style="margin-left:10px">Tone</label><select id="morseFreq">${freqs.map(f => `<option value="${f.v}" ${conversionOptions.morseFreq === f.v ? 'selected' : ''}>${f.t}</option>`).join('')}</select>`;
+        row.appendChild(grp);
+        setTimeout(() => {
+            $('morseWpm').onchange = e => {
+                conversionOptions.morseWpm = parseInt(e.target.value, 10) || 20;
+            };
+            $('morseFreq').onchange = e => {
+                conversionOptions.morseFreq = parseInt(e.target.value, 10) || 600;
+            };
+        }, 0);
+    }
+    if (useQr) {
+        const grp = document.createElement('div');
+        grp.className = 'option-group';
+        const levels = [
+            {v: 'L', t: 'L \u2013 7% recovery'},
+            {v: 'M', t: 'M \u2013 15% recovery'},
+            {v: 'Q', t: 'Q \u2013 25% recovery'},
+            {v: 'H', t: 'H \u2013 30% recovery'}
+        ];
+        grp.innerHTML = `<label>QR error correction</label><select id="qrL">${levels.map(l => `<option value="${l.v}" ${conversionOptions.qrLevel === l.v ? 'selected' : ''}>${l.t}</option>`).join('')}</select>`;
+        row.appendChild(grp);
+        setTimeout(() => {
+            $('qrL').onchange = e => {
+                conversionOptions.qrLevel = e.target.value;
             };
         }, 0);
     }
@@ -4454,7 +5805,7 @@ function renderPreviewInPane(pane, blob, mime) {
         pane.innerHTML = `<div style="padding:16px;text-align:center"><video src="${URL.createObjectURL(blob)}" controls style="width:100%;max-width:520px;max-height:340px;border-radius:4px;background:#000"></video></div>`;
     } else if (mime.startsWith('audio/')) {
         pane.innerHTML = `<div style="padding:20px;text-align:center"><audio src="${URL.createObjectURL(blob)}" controls style="width:100%;max-width:460px;"></audio></div>`;
-    } else if (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/xml' || mime === 'application/toml' || mime === 'application/ini' || mime === 'application/jsonl' || mime === 'application/json5' || mime === 'application/x-properties' || mime === 'application/x-env' || mime === 'application/x-sexp') {
+    } else if (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/xml' || mime === 'application/toml' || mime === 'application/ini' || mime === 'application/jsonl' || mime === 'application/json5' || mime === 'application/x-properties' || mime === 'application/x-env' || mime === 'application/x-sexp' || mime === 'application/x-subrip' || mime === 'application/x-morse') {
         blob.text().then(rawText => {
             const pre = document.createElement('pre');
             pre.className = 'output-pre-preview';
