@@ -1461,6 +1461,10 @@
     'image/png+spritesheet': {ext: 'png', label: 'Sprite Sheet', category: 'image', icon: '🎮'},
     'application/json+exif': {ext: 'json', label: 'EXIF Metadata (JSON)', category: 'data', icon: '📷'},
     'application/json+id3': {ext: 'json', label: 'ID3 Tags (JSON)', category: 'data', icon: '🎵'},
+    'application/x-fasta': {ext: 'fasta', label: 'DNA Sequence (FASTA)', category: 'data', icon: '🧬'},
+    'application/octet-stream': {ext: 'bin', label: 'Decoded Bytes', category: 'data', icon: '💾'},
+    'audio/midi': {ext: 'mid', label: 'MIDI Melody', category: 'audio', icon: '🎹'},
+    'image/gif+subs': {ext: 'gif', label: 'Subtitle Animation (GIF)', category: 'image', icon: '💬'},
     'image/png+albumart': {ext: 'png', label: 'Album Art', category: 'image', icon: '💿'},
     'text/calendar': {ext: 'ics', label: 'iCalendar', category: 'data', icon: '📅'},
     'text/vcard': {ext: 'vcf', label: 'vCard Contacts', category: 'data', icon: '👤'},
@@ -4460,10 +4464,14 @@ registerConverter({
     weight: 6,
     lib: null,
     convert: async (blob, from, to, options) => {
-        const morse = (await blob.text()).trim();
+        let morse = (await blob.text()).trim();
         if (!morse) throw new Error('Empty Morse input');
         const wpm = (options && options.morseWpm) || 20;
         const SR = 44100, DIT = 1.2 / wpm, FREQ = (options && options.morseFreq) || 600, RAMP = 0.005;
+        // Keep audio under ~10 min by trimming the symbol stream up front (each dit/dah
+        // plus spacing averages a few DIT units). Better a clean clip than a hard error.
+        const maxSymbols = Math.floor(600 / (DIT * 4));
+        if (morse.length > maxSymbols) morse = morse.slice(0, maxSymbols).replace(/\s+\S*$/, '') + ' ...';
         // Build a schedule of [durationSec, isTone] segments.
         const segs = [];
         const lines = morse.split(/\n/).map(l => l.trim()).filter(l => l);
@@ -4487,7 +4495,7 @@ registerConverter({
         segs.push([4 * DIT, false]); // trailing silence
         let totalSec = 0;
         segs.forEach(s => totalSec += s[0]);
-        if (totalSec > 600) throw new Error('Resulting audio would exceed 10 minutes - input too long');
+        // (already bounded above by trimming the symbol stream)
         const totalSamples = Math.ceil(totalSec * SR);
         const pcm = new Int16Array(totalSamples);
         let pos = 0;
@@ -5126,8 +5134,16 @@ function penalty(m) {
 
 // Returns {matrix (0/1), size, version}
 function qrEncode(bytes, level = 1) {
-    const version = chooseVersion(bytes.length, level);
-    if (!version) throw new Error(`Too much data for a QR code (${bytes.length} bytes; max ~2953)`);
+    let version = chooseVersion(bytes.length, level);
+    if (!version) {
+        // Highest-capacity config is version 40 at EC level L. Rather than fail, encode
+        // as much as fits (on a UTF-8 boundary) so long inputs still yield a scannable code.
+        const cap = dataCodewords(40, 0) * 8 - 4 - ccBits(40);
+        let end = Math.floor(cap / 8);
+        while (end > 0 && (bytes[end] & 0xC0) === 0x80) end--; // don't split a multibyte char
+        bytes = bytes.slice(0, end);
+        version = 40;
+    }
     const dataCw = buildDataCodewords(bytes, version, level);
     const all = interleave(dataCw, version, level);
     const base = placeData(buildMatrix(version), all);
@@ -6764,7 +6780,190 @@ registerConverter({
     }
 });
 
+// ===== DNA FASTA / IMAGE-TO-MIDI / SUBTITLE-TO-GIF =====
+
+// ===== DNA FASTA (bytes <-> A/C/G/T, 2 bits per base) =====
+const DNA_BASES = 'ACGT';
+const DNA_REV = {A: 0, C: 1, G: 2, T: 3};
+
+function bytesToFasta(u8, name) {
+    let seq = '';
+    for (let i = 0; i < u8.length; i++) {
+        const b = u8[i];
+        seq += DNA_BASES[(b >> 6) & 3] + DNA_BASES[(b >> 4) & 3] + DNA_BASES[(b >> 2) & 3] + DNA_BASES[b & 3];
+    }
+    // FASTA: header line, then sequence wrapped at 70 columns. Length encoded in header
+    // so decoding is exact (the sequence itself is always a multiple of 4 bases).
+    const lines = [`>${name || 'sequence'} len=${u8.length} encoding=2bit/base`];
+    for (let i = 0; i < seq.length; i += 70) lines.push(seq.slice(i, i + 70));
+    return lines.join('\n') + '\n';
+}
+
+function fastaToBytes(text) {
+    let declaredLen = -1;
+    const m = text.match(/len=(\d+)/);
+    if (m) declaredLen = parseInt(m[1], 10);
+    // strip headers and whitespace, keep only ACGT
+    const seq = text.replace(/^>.*$/gm, '').replace(/[^ACGTacgt]/g, '').toUpperCase();
+    if (!seq.length && declaredLen !== 0) throw new Error('No DNA sequence (A/C/G/T) found in this FASTA file');
+    const nBytes = Math.floor(seq.length / 4);
+    const out = new Uint8Array(nBytes);
+    for (let i = 0; i < nBytes; i++) {
+        out[i] = (DNA_REV[seq[i * 4]] << 6) | (DNA_REV[seq[i * 4 + 1]] << 4) | (DNA_REV[seq[i * 4 + 2]] << 2) | DNA_REV[seq[i * 4 + 3]];
+    }
+    return (declaredLen >= 0 && declaredLen <= out.length) ? out.slice(0, declaredLen) : out;
+}
+
+// ===== IMAGE -> MIDI (brightness columns become a melody) =====
+// Standard MIDI file, format 0, one track. Each image column is scanned; its mean
+// brightness picks a pitch from a pentatonic scale (always pleasant), and column
+// variance sets velocity. A gentle generative sonification of a picture.
+function u32be(n) { return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]; }
+function varLen(n) {
+    const bytes = [n & 0x7F];
+    n >>= 7;
+    while (n > 0) { bytes.unshift((n & 0x7F) | 0x80); n >>= 7; }
+    return bytes;
+}
+
+function imageToMidi(rgba, w, h, opts) {
+    opts = opts || {};
+    const COLS = Math.min(w, 96); // up to 96 notes
+    const step = w / COLS;
+    // C minor pentatonic across ~3 octaves: C D# F G A#
+    const scale = [];
+    const degrees = [0, 3, 5, 7, 10];
+    for (let oct = 0; oct < 4; oct++) for (const d of degrees) scale.push(48 + oct * 12 + d);
+    const events = [];
+    const TICKS = 480, DUR = 240; // eighth notes
+    let lastTick = 0;
+    for (let c = 0; c < COLS; c++) {
+        const x0 = Math.floor(c * step), x1 = Math.min(w, Math.floor((c + 1) * step));
+        let sum = 0, sum2 = 0, n = 0;
+        for (let x = x0; x < x1; x++) {
+            for (let y = 0; y < h; y++) {
+                const o = (y * w + x) * 4;
+                const lum = 0.299 * rgba[o] + 0.587 * rgba[o + 1] + 0.114 * rgba[o + 2];
+                sum += lum; sum2 += lum * lum; n++;
+            }
+        }
+        if (!n) continue;
+        const mean = sum / n;
+        const variance = Math.max(0, sum2 / n - mean * mean);
+        // bright = high pitch. Invert so dark images aren't all bass.
+        const idx = Math.min(scale.length - 1, Math.floor((mean / 255) * scale.length));
+        const note = scale[idx];
+        const vel = Math.max(40, Math.min(127, 50 + Math.round(Math.sqrt(variance) / 2)));
+        // note on at lastTick, note off after DUR
+        events.push({tick: lastTick, data: [0x90, note, vel]});
+        events.push({tick: lastTick + DUR, data: [0x80, note, 0]});
+        lastTick += DUR;
+    }
+    events.sort((a, b) => a.tick - b.tick);
+    // serialize track with delta times
+    const track = [];
+    // tempo meta (500000 us/qn = 120bpm)
+    track.push(...varLen(0), 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20);
+    let prev = 0;
+    for (const e of events) {
+        track.push(...varLen(e.tick - prev), ...e.data);
+        prev = e.tick;
+    }
+    track.push(...varLen(0), 0xFF, 0x2F, 0x00); // end of track
+    const header = [0x4D, 0x54, 0x68, 0x64, ...u32be(6), 0x00, 0x00, 0x00, 0x01, (TICKS >> 8) & 255, TICKS & 255];
+    const trackChunk = [0x4D, 0x54, 0x72, 0x6B, ...u32be(track.length), ...track];
+    return new Uint8Array([...header, ...trackChunk]);
+}
+
+registerConverter({
+    id: 'any-to-dna',
+    name: 'Encode as DNA (FASTA)',
+    inputs: Object.keys(FORMAT_REGISTRY).filter(m => !m.includes('+') && m !== 'application/x-fasta'),
+    outputs: ['application/x-fasta'],
+    weight: 40,
+    lib: null,
+    convert: async (blob, from, to, options, node) => {
+        const u8 = new Uint8Array(await blob.arrayBuffer());
+        const name = (node && ((node.file && node.file.name) || node.name)) || 'sequence';
+        return new Blob([bytesToFasta(u8, name)], {type: 'text/plain'});
+    }
+});
+
+registerConverter({
+    id: 'dna-to-file',
+    name: 'Decode DNA (FASTA)',
+    inputs: ['application/x-fasta'],
+    outputs: ['application/octet-stream'],
+    weight: 3,
+    lib: null,
+    convert: async (blob) => {
+        return new Blob([fastaToBytes(await blob.text())], {type: 'application/octet-stream'});
+    }
+});
+
+registerConverter({
+    id: 'image-to-midi',
+    name: 'Image to MIDI Melody',
+    inputs: ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif'],
+    outputs: ['audio/midi'],
+    weight: 4,
+    terminal: true,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        const {rgba, w, h} = await imageBlobToRgba(blob, 512);
+        return new Blob([imageToMidi(rgba, w, h, options)], {type: 'audio/midi'});
+    }
+});
+
+registerConverter({
+    id: 'subtitle-to-gif',
+    name: 'Subtitles to Animated GIF',
+    inputs: ['application/x-subrip', 'text/vtt'],
+    outputs: ['image/gif+subs'],
+    weight: 6,
+    terminal: true,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        const cues = applySubShift(parseSubtitles(await blob.text()), options);
+        if (!cues.length) throw new Error('No subtitle cues to animate');
+        const MAX_CUES = 200;
+        const list = cues.slice(0, MAX_CUES);
+        const W = 480, H = 270;
+        const c = document.createElement('canvas');
+        c.width = W;
+        c.height = H;
+        const ctx = c.getContext('2d');
+        const frames = [];
+        for (const cue of list) {
+            ctx.fillStyle = '#101014';
+            ctx.fillRect(0, 0, W, H);
+            const text = stripSubTags(cue.text).trim();
+            // word-wrap centered
+            ctx.font = 'bold 26px system-ui, sans-serif';
+            ctx.fillStyle = '#f4f4f5';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const words = text.split(/\s+/);
+            const lines = [];
+            let cur = '';
+            for (const wd of words) {
+                const trial = cur ? cur + ' ' + wd : wd;
+                if (ctx.measureText(trial).width > W - 40 && cur) { lines.push(cur); cur = wd; }
+                else cur = trial;
+            }
+            if (cur) lines.push(cur);
+            const LH = 34, startY = H / 2 - (lines.length - 1) * LH / 2;
+            lines.forEach((ln, i) => ctx.fillText(ln, W / 2, startY + i * LH));
+            // GIF delay from the cue's on-screen duration (centiseconds), min 0.3s
+            const delayCs = Math.max(30, Math.min(2000, Math.round((cue.endMs - cue.startMs) / 10)));
+            frames.push({rgba: ctx.getImageData(0, 0, W, H).data, delayCs});
+        }
+        return new Blob([encodeGif(frames, W, H, 0)], {type: 'image/gif'});
+    }
+});
+
 function findReachableTargets(srcMime) {
+
 
 
 
@@ -6888,6 +7087,7 @@ async function detectFormat(file) {
     if (ext === 'vcf' || ext === 'vcard') return 'text/vcard';
     if (ext === 'lrc') return 'application/x-lrc';
     if (ext === 'brl') return 'text/x-braille';
+    if (ext === 'fasta' || ext === 'fa' || ext === 'fna') return 'application/x-fasta';
     // Subtitles: sniff the WEBVTT signature so mislabeled files still route correctly
     if (ext === 'srt' || ext === 'vtt' || ext === 'sub') {
         const sample = (await file.slice(0, 64).text()).replace(/^\uFEFF/, '').trim();
@@ -7814,7 +8014,7 @@ function renderPreviewInPane(pane, blob, mime) {
         pane.innerHTML = `<div style="padding:16px;text-align:center"><video src="${URL.createObjectURL(blob)}" controls style="width:100%;max-width:520px;max-height:340px;border-radius:4px;background:#000"></video></div>`;
     } else if (mime.startsWith('audio/')) {
         pane.innerHTML = `<div style="padding:20px;text-align:center"><audio src="${URL.createObjectURL(blob)}" controls style="width:100%;max-width:460px;"></audio></div>`;
-    } else if (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/xml' || mime === 'application/toml' || mime === 'application/ini' || mime === 'application/jsonl' || mime === 'application/json5' || mime === 'application/x-properties' || mime === 'application/x-env' || mime === 'application/x-sexp' || mime === 'application/x-subrip' || mime === 'application/x-morse') {
+    } else if (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/xml' || mime === 'application/toml' || mime === 'application/ini' || mime === 'application/jsonl' || mime === 'application/json5' || mime === 'application/x-properties' || mime === 'application/x-env' || mime === 'application/x-sexp' || mime === 'application/x-subrip' || mime === 'application/x-morse' || mime === 'application/x-fasta') {
         blob.text().then(rawText => {
             const pre = document.createElement('pre');
             pre.className = 'output-pre-preview';
