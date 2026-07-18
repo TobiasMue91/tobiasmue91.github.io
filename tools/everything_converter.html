@@ -1464,6 +1464,9 @@
     'application/x-fasta': {ext: 'fasta', label: 'DNA Sequence (FASTA)', category: 'data', icon: '🧬'},
     'application/octet-stream': {ext: 'bin', label: 'Decoded Bytes', category: 'data', icon: '💾'},
     'audio/midi': {ext: 'mid', label: 'MIDI Melody', category: 'audio', icon: '🎹'},
+    'audio/midi+pitch': {ext: 'mid', label: 'MIDI from Melody (Pitch Detection)', category: 'audio', icon: '🎼'},
+    'model/stl': {ext: 'stl', label: '3D Model (STL)', category: 'model', icon: '🗿'},
+    'model/obj': {ext: 'obj', label: '3D Model (OBJ)', category: 'model', icon: '🧊'},
     'image/gif+subs': {ext: 'gif', label: 'Subtitle Animation (GIF)', category: 'image', icon: '💬'},
     'image/png+albumart': {ext: 'png', label: 'Album Art', category: 'image', icon: '💿'},
     'text/calendar': {ext: 'ics', label: 'iCalendar', category: 'data', icon: '📅'},
@@ -1491,9 +1494,10 @@ const CATEGORY_LABELS = {
     video: 'Video',
     audio: 'Audio',
     data: 'Data Formats',
-    text: 'Text & Markup'
+    text: 'Text & Markup',
+    model: '3D Models'
 };
-const CATEGORY_ORDER = ['image', 'document', 'video', 'audio', 'data', 'text'];
+const CATEGORY_ORDER = ['image', 'document', 'video', 'audio', 'data', 'text', 'model'];
 const MERGEABLE_MIMES = new Set([
     'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'text/csv',
     'text/tab-separated-values', 'application/json', 'application/xml', 'text/yaml',
@@ -2832,11 +2836,13 @@ function makeBlackPngBytes(w, h) {
 
 // Per-container video/audio codec recipes for stills-based video (shared by audio→video
 // and image→video). '-tune stillimage' keeps x264 efficient on a static picture.
+// Note: '-tune stillimage' is deliberately omitted - several ffmpeg.wasm libx264 builds
+// don't include that tuning preset and abort with no output when it's passed.
 const FFMPEG_STILL_VMAP = {
-    'video/mp4': ['-c:v', 'libx264', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart'],
+    'video/mp4': ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart'],
     'video/webm': ['-c:v', 'libvpx', '-b:v', '200k', '-c:a', 'libvorbis'],
-    'video/x-matroska': ['-c:v', 'libx264', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k'],
-    'video/quicktime': ['-c:v', 'libx264', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k'],
+    'video/x-matroska': ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k'],
+    'video/quicktime': ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k'],
     'video/x-msvideo': ['-c:v', 'mpeg4', '-q:v', '5', '-c:a', 'libmp3lame', '-q:a', '4'],
     'video/mpeg': ['-c:v', 'mpeg2video', '-q:v', '5', '-c:a', 'mp2'],
     'video/3gpp': ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '96k']
@@ -2886,8 +2892,11 @@ async function ffmpegImageToVideo(blob, fromMime, toMime) {
     if (!vmap) throw new Error('Unsupported video target for images.');
     // The scale filter rounds dimensions down to even numbers: yuv420p encoders (libx264,
     // mpeg2video) reject odd widths/heights, and user images are arbitrary.
-    const args = ['-loop', '1', '-framerate', '2', '-i', inName, '-i', 'silence.wav',
-        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2'].concat(vmap).concat(['-shortest', out]);
+    // Flatten any alpha onto white, then force even dimensions - transparent PNGs and
+    // odd sizes are the two things that make yuv420p encoders emit nothing.
+    const vf = 'format=rgba,pad=iw:ih:0:0:white@1,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p';
+    const args = ['-loop', '1', '-framerate', '2', '-t', String(DURATION), '-i', inName, '-i', 'silence.wav',
+        '-vf', vf].concat(vmap).concat(['-shortest', out]);
     const cleanup = async () => {
         try {
             await ffmpeg.deleteFile(inName);
@@ -5136,11 +5145,12 @@ function penalty(m) {
 function qrEncode(bytes, level = 1) {
     let version = chooseVersion(bytes.length, level);
     if (!version) {
-        // Highest-capacity config is version 40 at EC level L. Rather than fail, encode
-        // as much as fits (on a UTF-8 boundary) so long inputs still yield a scannable code.
-        const cap = dataCodewords(40, 0) * 8 - 4 - ccBits(40);
+        // Doesn't fit any version at this EC level: truncate to what v40 holds AT THIS
+        // LEVEL (not level L - using L's larger capacity here overfills the matrix and
+        // corrupts the symbol), stopping on a UTF-8 boundary so no character is split.
+        const cap = dataCodewords(40, level) * 8 - 4 - ccBits(40);
         let end = Math.floor(cap / 8);
-        while (end > 0 && (bytes[end] & 0xC0) === 0x80) end--; // don't split a multibyte char
+        while (end > 0 && (bytes[end] & 0xC0) === 0x80) end--;
         bytes = bytes.slice(0, end);
         version = 40;
     }
@@ -6962,7 +6972,284 @@ registerConverter({
     }
 });
 
+// ===== 3D HEIGHTMAP MESH & AUDIO PITCH DETECTION =====
+
+// ===== IMAGE -> 3D HEIGHTMAP MESH (STL / OBJ) =====
+// Brightness becomes height. In lithophane mode the map is inverted (dark = thick) so
+// a 3D print back-lit with a lamp reproduces the photo. The mesh is closed (top
+// surface + walls + bottom) so slicers accept it as watertight.
+
+// Build the height grid from RGBA at a capped resolution.
+function rgbaToHeights(rgba, w, h, opts) {
+    const invert = opts && opts.invert;
+    const heights = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+        const o = i * 4;
+        let lum = (0.299 * rgba[o] + 0.587 * rgba[o + 1] + 0.114 * rgba[o + 2]) / 255;
+        if (invert) lum = 1 - lum;
+        heights[i] = lum;
+    }
+    return heights;
+}
+
+// Generate triangles for a closed heightmap solid.
+// Returns {positions: Float32Array (9 per tri), count}
+// Physical size: width fixed at 100 units (mm), height scaled by aspect,
+// relief depth `depth` units on top of a `base` thick slab.
+function heightmapMesh(heights, w, h, opts) {
+    opts = opts || {};
+    const WIDTH = 100;
+    const depth = opts.depth || 5, base = opts.base || 2;
+    const sx = WIDTH / (w - 1), sy = (WIDTH * (h - 1) / (w - 1)) / (h - 1); // = WIDTH/(w-1)
+    const Z = (x, y) => base + heights[y * w + x] * depth;
+    const tris = [];
+    const P = (x, y, z) => [x * sx, (h - 1 - y) * sy, z]; // flip y so image isn't mirrored
+    // Reversed winding: the y-flip in P mirrors the space, so triangles are emitted
+    // clockwise here to come out counter-clockwise (outward normals) after the flip.
+    const quad = (a, b, c, d) => { tris.push([a, c, b], [a, d, c]); };
+    // top surface
+    for (let y = 0; y < h - 1; y++) {
+        for (let x = 0; x < w - 1; x++) {
+            quad(P(x, y, Z(x, y)), P(x + 1, y, Z(x + 1, y)), P(x + 1, y + 1, Z(x + 1, y + 1)), P(x, y + 1, Z(x, y + 1)));
+        }
+    }
+    // bottom: tessellated as the same grid so wall edges match vertex-for-vertex
+    // (a single big quad would create T-junctions and break watertightness)
+    for (let y = 0; y < h - 1; y++) {
+        for (let x = 0; x < w - 1; x++) {
+            quad(P(x, y, 0), P(x, y + 1, 0), P(x + 1, y + 1, 0), P(x + 1, y, 0));
+        }
+    }
+    // walls: north (y=0), south (y=h-1), west (x=0), east (x=w-1)
+    for (let x = 0; x < w - 1; x++) {
+        quad(P(x, 0, 0), P(x + 1, 0, 0), P(x + 1, 0, Z(x + 1, 0)), P(x, 0, Z(x, 0)));
+        quad(P(x + 1, h - 1, 0), P(x, h - 1, 0), P(x, h - 1, Z(x, h - 1)), P(x + 1, h - 1, Z(x + 1, h - 1)));
+    }
+    for (let y = 0; y < h - 1; y++) {
+        quad(P(0, y + 1, 0), P(0, y, 0), P(0, y, Z(0, y)), P(0, y + 1, Z(0, y + 1)));
+        quad(P(w - 1, y, 0), P(w - 1, y + 1, 0), P(w - 1, y + 1, Z(w - 1, y + 1)), P(w - 1, y, Z(w - 1, y)));
+    }
+    const positions = new Float32Array(tris.length * 9);
+    tris.forEach((t, i) => {
+        for (let v = 0; v < 3; v++) {
+            positions[i * 9 + v * 3] = t[v][0];
+            positions[i * 9 + v * 3 + 1] = t[v][1];
+            positions[i * 9 + v * 3 + 2] = t[v][2];
+        }
+    });
+    return {positions, count: tris.length};
+}
+
+function meshToStl(mesh) {
+    const {positions, count} = mesh;
+    const buf = new ArrayBuffer(84 + count * 50);
+    const dv = new DataView(buf);
+    const header = 'Everything Converter heightmap';
+    for (let i = 0; i < header.length; i++) dv.setUint8(i, header.charCodeAt(i));
+    dv.setUint32(80, count, true);
+    let o = 84;
+    for (let t = 0; t < count; t++) {
+        const p = t * 9;
+        // face normal
+        const ax = positions[p + 3] - positions[p], ay = positions[p + 4] - positions[p + 1], az = positions[p + 5] - positions[p + 2];
+        const bx = positions[p + 6] - positions[p], by = positions[p + 7] - positions[p + 1], bz = positions[p + 8] - positions[p + 2];
+        let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+        const len = Math.hypot(nx, ny, nz) || 1;
+        dv.setFloat32(o, nx / len, true); dv.setFloat32(o + 4, ny / len, true); dv.setFloat32(o + 8, nz / len, true);
+        o += 12;
+        for (let v = 0; v < 9; v++) { dv.setFloat32(o, positions[p + v], true); o += 4; }
+        dv.setUint16(o, 0, true); o += 2;
+    }
+    return new Uint8Array(buf);
+}
+
+function meshToObj(mesh) {
+    const {positions, count} = mesh;
+    const lines = ['# Everything Converter heightmap', 'o heightmap'];
+    for (let i = 0; i < count * 3; i++) {
+        lines.push(`v ${positions[i * 3].toFixed(3)} ${positions[i * 3 + 1].toFixed(3)} ${positions[i * 3 + 2].toFixed(3)}`);
+    }
+    for (let t = 0; t < count; t++) {
+        lines.push(`f ${t * 3 + 1} ${t * 3 + 2} ${t * 3 + 3}`);
+    }
+    return lines.join('\n') + '\n';
+}
+
+// ===== AUDIO -> MIDI (monophonic pitch detection) =====
+// YIN-style normalized autocorrelation per frame, median smoothing, then note
+// segmentation. Works for hummed/whistled/sung melodies and simple instrument lines.
+
+function detectPitchYin(frame, sampleRate, minHz, maxHz) {
+    const n = frame.length;
+    const maxLag = Math.min(Math.floor(sampleRate / minHz), n >> 1);
+    const minLag = Math.max(2, Math.floor(sampleRate / maxHz));
+    // difference function
+    const d = new Float32Array(maxLag + 1);
+    for (let lag = minLag; lag <= maxLag; lag++) {
+        let sum = 0;
+        for (let i = 0; i < n - maxLag; i++) {
+            const diff = frame[i] - frame[i + lag];
+            sum += diff * diff;
+        }
+        d[lag] = sum;
+    }
+    // cumulative mean normalized difference
+    const cmnd = new Float32Array(maxLag + 1);
+    cmnd[0] = 1;
+    let running = 0;
+    for (let lag = 1; lag <= maxLag; lag++) {
+        running += d[lag] || 0;
+        cmnd[lag] = running ? d[lag] * lag / running : 1;
+    }
+    // first dip under threshold
+    const THRESH = 0.15;
+    for (let lag = minLag; lag <= maxLag; lag++) {
+        if (cmnd[lag] < THRESH) {
+            // descend to the local minimum
+            while (lag + 1 <= maxLag && cmnd[lag + 1] < cmnd[lag]) lag++;
+            // parabolic interpolation for sub-sample accuracy
+            let better = lag;
+            if (lag > minLag && lag < maxLag) {
+                const a = cmnd[lag - 1], b = cmnd[lag], c = cmnd[lag + 1];
+                const denom = a - 2 * b + c;
+                if (Math.abs(denom) > 1e-12) better = lag + 0.5 * (a - c) / denom;
+            }
+            return {hz: sampleRate / better, clarity: 1 - cmnd[lag]};
+        }
+    }
+    return null; // unvoiced
+}
+
+const hzToMidi = hz => Math.round(69 + 12 * Math.log2(hz / 440));
+
+// samples -> [{note, startSec, durSec, velocity}]
+function extractNotes(samples, sampleRate) {
+    const FRAME = 2048, HOP = 512;
+    const raw = [];
+    for (let off = 0; off + FRAME <= samples.length; off += HOP) {
+        const frame = samples.subarray(off, off + FRAME);
+        let rms = 0;
+        for (let i = 0; i < FRAME; i++) rms += frame[i] * frame[i];
+        rms = Math.sqrt(rms / FRAME);
+        if (rms < 0.01) { raw.push(null); continue; } // silence
+        const p = detectPitchYin(frame, sampleRate, 60, 1200);
+        raw.push(p ? {midi: hzToMidi(p.hz), rms} : null);
+    }
+    // median-of-5 smoothing on midi numbers to kill octave blips
+    const smooth = raw.map((v, i) => {
+        if (!v) return null;
+        const win = [];
+        for (let k = -2; k <= 2; k++) {
+            const r = raw[i + k];
+            if (r) win.push(r.midi);
+        }
+        win.sort((a, b) => a - b);
+        return {midi: win[win.length >> 1], rms: v.rms};
+    });
+    // segment runs of the same note
+    const secPerHop = HOP / sampleRate;
+    const MIN_DUR = 0.09; // discard blips under ~90ms
+    const notes = [];
+    let cur = null;
+    const flush = endIdx => {
+        if (cur && (endIdx - cur.start) * secPerHop >= MIN_DUR) {
+            notes.push({
+                note: cur.midi,
+                startSec: cur.start * secPerHop,
+                durSec: (endIdx - cur.start) * secPerHop,
+                velocity: Math.max(40, Math.min(127, Math.round(cur.peak * 400)))
+            });
+        }
+        cur = null;
+    };
+    smooth.forEach((v, i) => {
+        if (!v) { flush(i); return; }
+        if (cur && v.midi === cur.midi) { cur.peak = Math.max(cur.peak, v.rms); return; }
+        flush(i);
+        cur = {midi: v.midi, start: i, peak: v.rms};
+    });
+    flush(smooth.length);
+    if (!notes.length) throw new Error('No clear melody detected - works best with humming, whistling or a single instrument');
+    return notes;
+}
+
+// notes -> Standard MIDI File bytes (relies on u32be/varLen from the image-to-MIDI code)
+function notesToMidi(notes) {
+    const TICKS = 480, BPM_US = 500000; // 120 bpm -> 960 ticks/sec
+    const tick = sec => Math.round(sec * (TICKS * 1e6 / BPM_US));
+    const events = [];
+    for (const n of notes) {
+        events.push({tick: tick(n.startSec), data: [0x90, n.note, n.velocity]});
+        events.push({tick: tick(n.startSec + n.durSec), data: [0x80, n.note, 0]});
+    }
+    events.sort((a, b) => a.tick - b.tick || a.data[0] - b.data[0]);
+    const track = [];
+    track.push(...varLen(0), 0xFF, 0x51, 0x03, (BPM_US >> 16) & 255, (BPM_US >> 8) & 255, BPM_US & 255);
+    let prev = 0;
+    for (const e of events) {
+        track.push(...varLen(e.tick - prev), ...e.data);
+        prev = e.tick;
+    }
+    track.push(...varLen(0), 0xFF, 0x2F, 0x00);
+    const header = [0x4D, 0x54, 0x68, 0x64, ...u32be(6), 0, 0, 0, 1, (TICKS >> 8) & 255, TICKS & 255];
+    return new Uint8Array([...header, 0x4D, 0x54, 0x72, 0x6B, ...u32be(track.length), ...track]);
+}
+
+registerConverter({
+    id: 'image-to-3d',
+    name: 'Image to 3D Heightmap',
+    inputs: ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif'],
+    outputs: ['model/stl', 'model/obj'],
+    weight: 5,
+    terminal: true,
+    lib: null,
+    convert: async (blob, from, to, options) => {
+        // Cap the grid so triangle counts stay printable/viewable (~180k tris max).
+        const {rgba, w, h} = await imageBlobToRgba(blob, 200);
+        const heights = rgbaToHeights(rgba, w, h, {invert: options && options.lithophane !== false});
+        const mesh = heightmapMesh(heights, w, h, {depth: (options && options.reliefDepth) || 4, base: 2});
+        if (to === 'model/obj') return new Blob([meshToObj(mesh)], {type: 'text/plain'});
+        return new Blob([meshToStl(mesh)], {type: 'application/octet-stream'});
+    }
+});
+
+registerConverter({
+    id: 'audio-to-midi',
+    name: 'Audio to MIDI (Pitch Detection)',
+    inputs: ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/flac', 'audio/aac', 'audio/mp4'],
+    outputs: ['audio/midi+pitch'],
+    weight: 6,
+    terminal: true,
+    lib: null,
+    convert: async (blob) => {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) throw new Error('Web Audio is not available in this browser');
+        const ac = new AC();
+        let buf;
+        try {
+            buf = await ac.decodeAudioData(await blob.arrayBuffer());
+        } catch (e) {
+            ac.close();
+            throw new Error('Could not decode this audio file');
+        }
+        const n = buf.length;
+        const mono = new Float32Array(n);
+        for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+            const d = buf.getChannelData(ch);
+            for (let i = 0; i < n; i++) mono[i] += d[i] / buf.numberOfChannels;
+        }
+        const sr = buf.sampleRate;
+        ac.close();
+        // Cap analysis at 3 minutes - pitch tracking is O(frames * lag range).
+        const MAX_S = 180;
+        const samples = mono.length > sr * MAX_S ? mono.subarray(0, sr * MAX_S) : mono;
+        const notes = extractNotes(samples, sr);
+        return new Blob([notesToMidi(notes)], {type: 'audio/midi'});
+    }
+});
+
 function findReachableTargets(srcMime) {
+
 
 
 
@@ -7125,7 +7412,7 @@ async function sniffTextStructure(file, ext) {
 
 let inputFiles = [];
 let mergeEnabled = false;
-let conversionOptions = {quality: 0.92, pdfOrientation: 'auto', indent: 2, resizeMax: 0, subShiftMs: 0, subSpeedFactor: 1, morseWpm: 20, morseFreq: 600, qrLevel: 'M', gifFrameFormat: 'png', keepIntermediates: false};
+let conversionOptions = {quality: 0.92, pdfOrientation: 'auto', indent: 2, resizeMax: 0, subShiftMs: 0, subSpeedFactor: 1, morseWpm: 20, morseFreq: 600, qrLevel: 'M', gifFrameFormat: 'png', keepIntermediates: false, lithophane: true, reliefDepth: 4};
 const $ = id => document.getElementById(id);
 
 // Junk entries that Mac/Windows zip tools add and that nobody wants ingested.
@@ -7647,7 +7934,7 @@ function updateGlobalOptionsPanel() {
     const row = $('optionsRow');
     row.innerHTML = '';
     row.style.display = 'none';
-    let useImg = false, usePdf = false, useData = false, useMedia = false, useImgResize = false, useSubs = false, useMorseAudio = false, useQr = false, useGifFrames = false, useIntermediates = false;
+    let useImg = false, usePdf = false, useData = false, useMedia = false, useImgResize = false, useSubs = false, useMorseAudio = false, useQr = false, useGifFrames = false, useIntermediates = false, use3d = false;
     inputFiles.forEach(n => {
         if (n.targetMime === 'image/jpeg' || n.targetMime === 'image/webp') useImg = true;
         // Resize applies to any raster image produced by the canvas converter.
@@ -7662,8 +7949,9 @@ function updateGlobalOptionsPanel() {
         if (path && path.some(e => e.converter.id === 'text-to-qr')) useQr = true;
         if (path && path.some(e => e.converter.id === 'gif-frames-to-zip')) useGifFrames = true;
         if (path && path.length > 1) useIntermediates = true;
+        if (path && path.some(e => e.converter.id === 'image-to-3d')) use3d = true;
     });
-    if (useImg || usePdf || useData || useMedia || useImgResize || useSubs || useMorseAudio || useQr || useGifFrames || useIntermediates) row.style.display = 'flex';
+    if (useImg || usePdf || useData || useMedia || useImgResize || useSubs || useMorseAudio || useQr || useGifFrames || useIntermediates || use3d) row.style.display = 'flex';
     if (useMedia) {
         const grp = document.createElement('div');
         grp.className = 'option-group';
@@ -7794,6 +8082,22 @@ function updateGlobalOptionsPanel() {
         setTimeout(() => {
             $('gifFF').onchange = e => {
                 conversionOptions.gifFrameFormat = e.target.value;
+            };
+        }, 0);
+    }
+    if (use3d) {
+        const grp = document.createElement('div');
+        grp.className = 'option-group';
+        const depths = [2, 4, 6, 10];
+        grp.innerHTML = `<label style="cursor:pointer" title="Lithophane: dark pixels become thick material - back-light the 3D print to see the photo"><input type="checkbox" id="litho" ${conversionOptions.lithophane ? 'checked' : ''} style="vertical-align:-2px;margin-right:5px">Lithophane (invert)</label>`
+            + `<label style="margin-left:10px">Relief</label><select id="relDepth">${depths.map(d => `<option value="${d}" ${conversionOptions.reliefDepth === d ? 'selected' : ''}>${d} mm</option>`).join('')}</select>`;
+        row.appendChild(grp);
+        setTimeout(() => {
+            $('litho').onchange = e => {
+                conversionOptions.lithophane = e.target.checked;
+            };
+            $('relDepth').onchange = e => {
+                conversionOptions.reliefDepth = parseInt(e.target.value, 10) || 4;
             };
         }, 0);
     }
