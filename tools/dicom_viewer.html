@@ -1,0 +1,2217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Lightbox — DICOM viewer</title>
+    <style>
+        :root {
+            --void: #080A0D;
+            --panel: #12161C;
+            --panel-2: #1A202A;
+            --line: #28313D;
+            --line-soft: #1E2530;
+            --text: #C6D0DC;
+            --text-hi: #EAF0F7;
+            --dim: #6B7A8D;
+            --amber: #F0A63C;
+            --amber-dim: #8A6224;
+            --cyan: #4FB3C9;
+            --red: #E0614F;
+            --ui: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            --rail: 200px;
+            --meta: 320px;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        html, body {
+            height: 100%
+        }
+
+        body {
+            margin: 0;
+            background: var(--void);
+            color: var(--text);
+            font-family: var(--ui);
+            font-size: 13px;
+            line-height: 1.45;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        button, input, select {
+            font: inherit;
+            color: inherit
+        }
+
+        ::selection {
+            background: var(--amber);
+            color: #000
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--amber);
+            outline-offset: 2px
+        }
+
+        /* ---------- shell ---------- */
+        .app {
+            display: grid;
+            height: 100dvh;
+            grid-template-columns:var(--rail) 1fr 0;
+            grid-template-rows:auto 1fr auto;
+            grid-template-areas:"top top top" "rail stage meta" "foot foot foot";
+            transition: grid-template-columns .18s ease
+        }
+
+        .app.meta-open {
+            grid-template-columns:var(--rail) 1fr var(--meta)
+        }
+
+        .app.rail-collapsed {
+            --rail: 0px
+        }
+
+        /* ---------- top bar ---------- */
+        .top {
+            grid-area: top;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 0 12px;
+            height: 46px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--line)
+        }
+
+        .brand {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding-right: 14px;
+            border-right: 1px solid var(--line-soft)
+        }
+
+        .brand b {
+            font-size: 14px;
+            font-weight: 650;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: var(--text-hi)
+        }
+
+        .brand span {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--dim);
+            letter-spacing: .06em
+        }
+
+        .tools {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            flex-wrap: wrap
+        }
+
+        .sep {
+            width: 1px;
+            height: 20px;
+            background: var(--line-soft);
+            margin: 0 4px
+        }
+
+        .tb {
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 5px;
+            padding: 5px 9px;
+            cursor: pointer;
+            color: var(--text);
+            white-space: nowrap;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .tb:hover {
+            background: var(--panel-2);
+            border-color: var(--line)
+        }
+
+        .tb[aria-pressed="true"] {
+            background: var(--amber-dim);
+            border-color: var(--amber);
+            color: #FFE9C7
+        }
+
+        .tb kbd {
+            font-family: var(--mono);
+            font-size: 9px;
+            color: var(--dim);
+            border: 1px solid var(--line);
+            border-radius: 3px;
+            padding: 0 3px;
+            line-height: 14px
+        }
+
+        .tb[aria-pressed="true"] kbd {
+            color: #FFE9C7;
+            border-color: #B98431
+        }
+
+        .tb:disabled {
+            opacity: .34;
+            cursor: default
+        }
+
+        .tb:disabled:hover {
+            background: transparent;
+            border-color: transparent
+        }
+
+        .top .spacer {
+            flex: 1
+        }
+
+        .privacy {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--dim);
+            letter-spacing: .04em;
+            display: flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .privacy i {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--cyan);
+            box-shadow: 0 0 8px var(--cyan);
+            font-style: normal
+        }
+
+        /* ---------- series rail ---------- */
+        .rail {
+            grid-area: rail;
+            background: var(--panel);
+            border-right: 1px solid var(--line);
+            overflow-y: auto;
+            overflow-x: hidden;
+            min-width: 0
+        }
+
+        .app.rail-collapsed .rail {
+            border-right: none
+        }
+
+        .rail-head {
+            position: sticky;
+            top: 0;
+            background: var(--panel);
+            z-index: 2;
+            padding: 10px 12px 8px;
+            border-bottom: 1px solid var(--line-soft)
+        }
+
+        .eyebrow {
+            font-family: var(--mono);
+            font-size: 9.5px;
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: var(--dim)
+        }
+
+        .study {
+            margin-top: 5px;
+            font-size: 12px;
+            color: var(--text-hi);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap
+        }
+
+        .serie {
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            border: 0;
+            border-bottom: 1px solid var(--line-soft);
+            border-left: 2px solid transparent;
+            padding: 9px 12px;
+            cursor: pointer;
+            display: block
+        }
+
+        .serie:hover {
+            background: var(--panel-2)
+        }
+
+        .serie[aria-current="true"] {
+            background: var(--panel-2);
+            border-left-color: var(--amber)
+        }
+
+        .serie .n {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--amber);
+            letter-spacing: .08em
+        }
+
+        .serie .d {
+            font-size: 12px;
+            color: var(--text-hi);
+            margin: 2px 0 3px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap
+        }
+
+        .serie .m {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--dim)
+        }
+
+        /* ---------- stage ---------- */
+        .stage {
+            grid-area: stage;
+            position: relative;
+            background: var(--void);
+            overflow: hidden;
+            min-width: 0;
+            touch-action: none
+        }
+
+        #view {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair
+        }
+
+        .stage.mode-pan #view {
+            cursor: grab
+        }
+
+        .stage.mode-pan.dragging #view {
+            cursor: grabbing
+        }
+
+        .stage.mode-zoom #view {
+            cursor: ns-resize
+        }
+
+        .stage.mode-measure #view {
+            cursor: cell
+        }
+
+        /* corner readouts */
+        .hud {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            font-family: var(--mono);
+            font-size: 11px;
+            line-height: 1.55;
+            color: #9FB0C4;
+            text-shadow: 0 1px 3px #000
+        }
+
+        .hud div {
+            position: absolute;
+            padding: 10px 12px;
+            max-width: 44%
+        }
+
+        .hud .tl {
+            top: 0;
+            left: 0
+        }
+
+        .hud .tr {
+            top: 0;
+            right: 0;
+            text-align: right
+        }
+
+        .hud .bl {
+            bottom: 0;
+            left: 0
+        }
+
+        .hud .br {
+            bottom: 0;
+            right: 0;
+            text-align: right
+        }
+
+        .hud .k {
+            color: var(--dim)
+        }
+
+        .hud .hi {
+            color: var(--amber)
+        }
+
+        .orient {
+            position: absolute;
+            color: #7D8FA3;
+            font-family: var(--mono);
+            font-size: 11px;
+            font-weight: 600;
+            text-shadow: 0 1px 3px #000
+        }
+
+        .orient.n {
+            top: 6px;
+            left: 50%;
+            transform: translateX(-50%)
+        }
+
+        .orient.s {
+            bottom: 6px;
+            left: 50%;
+            transform: translateX(-50%)
+        }
+
+        .orient.w {
+            left: 6px;
+            top: 50%;
+            transform: translateY(-50%)
+        }
+
+        .orient.e {
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%)
+        }
+
+        /* signature: film strip scrubber */
+        .film {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 34px;
+            background: linear-gradient(90deg, transparent, #0C1015 45%);
+            border-left: 1px solid var(--line-soft);
+            cursor: ns-resize;
+            touch-action: none
+        }
+
+        .film:before, .film:after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 5px;
+            background-image: repeating-linear-gradient(180deg, #1D2530 0 5px, transparent 5px 13px)
+        }
+
+        .film:before {
+            left: 4px
+        }
+
+        .film:after {
+            right: 4px
+        }
+
+        .film .ticks {
+            position: absolute;
+            left: 11px;
+            right: 11px;
+            top: 0;
+            bottom: 0
+        }
+
+        .film .tick {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #232C38
+        }
+
+        .film .tick.on {
+            background: var(--amber);
+            height: 2px;
+            box-shadow: 0 0 6px var(--amber)
+        }
+
+        .film .cursor {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--amber)
+        }
+
+        .film .num {
+            position: absolute;
+            right: 38px;
+            transform: translateY(-50%);
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--amber);
+            background: #0C1015;
+            border: 1px solid var(--amber-dim);
+            border-radius: 3px;
+            padding: 1px 5px;
+            white-space: nowrap
+        }
+
+        /* ---------- metadata drawer ---------- */
+        .meta {
+            grid-area: meta;
+            background: var(--panel);
+            border-left: 1px solid var(--line);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-width: 0
+        }
+
+        .app:not(.meta-open) .meta {
+            display: none
+        }
+
+        .meta-head {
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--line-soft)
+        }
+
+        .meta-head input {
+            width: 100%;
+            margin-top: 7px;
+            background: var(--void);
+            border: 1px solid var(--line);
+            border-radius: 5px;
+            padding: 5px 8px;
+            font-family: var(--mono);
+            font-size: 11px
+        }
+
+        .meta-head input::placeholder {
+            color: var(--dim)
+        }
+
+        .meta-body {
+            overflow-y: auto;
+            flex: 1;
+            padding: 4px 0 20px
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns:1fr;
+            gap: 1px;
+            padding: 5px 12px;
+            border-bottom: 1px solid var(--line-soft)
+        }
+
+        .row .t {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--dim);
+            display: flex;
+            gap: 7px
+        }
+
+        .row .t b {
+            color: #8296AC;
+            font-weight: 400
+        }
+
+        .row .v {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text-hi);
+            word-break: break-word;
+            white-space: pre-wrap
+        }
+
+        .row.nest {
+            padding-left: 24px;
+            border-left: 1px solid var(--line-soft);
+            margin-left: 12px
+        }
+
+        /* ---------- footer ---------- */
+        .foot {
+            grid-area: foot;
+            height: 26px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0 12px;
+            background: var(--panel);
+            border-top: 1px solid var(--line);
+            font-family: var(--mono);
+            font-size: 10.5px;
+            color: var(--dim);
+            letter-spacing: .03em
+        }
+
+        .foot .ok {
+            color: var(--cyan)
+        }
+
+        .foot .warn {
+            color: var(--amber)
+        }
+
+        .foot .err {
+            color: var(--red)
+        }
+
+        .foot .spacer {
+            flex: 1
+        }
+
+        /* ---------- drop / empty state ---------- */
+        .empty {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            background: var(--void);
+            z-index: 5;
+            padding: 24px
+        }
+
+        .empty .card {
+            max-width: 520px;
+            text-align: center
+        }
+
+        .empty h1 {
+            font-size: clamp(26px, 5vw, 40px);
+            margin: 0 0 4px;
+            font-weight: 600;
+            letter-spacing: -.02em;
+            color: var(--text-hi)
+        }
+
+        .empty h1 em {
+            font-style: normal;
+            color: var(--amber)
+        }
+
+        .empty .sub {
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            color: var(--dim);
+            margin-bottom: 26px
+        }
+
+        .dropzone {
+            border: 1px dashed var(--line);
+            border-radius: 10px;
+            padding: 30px 24px;
+            background: #0C1015;
+            transition: border-color .15s, background .15s
+        }
+
+        .dropzone.hot {
+            border-color: var(--amber);
+            background: #141008
+        }
+
+        .dropzone p {
+            margin: 0 0 16px;
+            color: var(--dim)
+        }
+
+        .btns {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap
+        }
+
+        .big {
+            background: var(--amber);
+            color: #1A1206;
+            border: 0;
+            border-radius: 6px;
+            padding: 9px 16px;
+            font-weight: 600;
+            cursor: pointer
+        }
+
+        .big.ghost {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--line)
+        }
+
+        .big:hover {
+            filter: brightness(1.08)
+        }
+
+        .foot-note {
+            margin-top: 22px;
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--dim);
+            line-height: 1.7
+        }
+
+        .bar {
+            height: 2px;
+            background: var(--line-soft);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 18px
+        }
+
+        .bar i {
+            display: block;
+            height: 100%;
+            width: 0;
+            background: var(--amber);
+            transition: width .12s linear
+        }
+
+        .hidden {
+            display: none !important
+        }
+
+        @media (max-width: 820px) {
+            :root {
+                --rail: 0px;
+                --meta: 100vw
+            }
+
+            .app {
+                grid-template-columns:0 1fr 0
+            }
+
+            .brand span, .privacy {
+                display: none
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                transition: none !important
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app" id="app">
+
+    <header class="top">
+        <div class="brand"><b>Lightbox</b><span>DICOM</span></div>
+        <div class="tools">
+            <button class="tb" id="btnRail" title="Show or hide the series list (S)">Series</button>
+            <span class="sep"></span>
+            <button class="tb" id="mWL" aria-pressed="true" title="Drag to change brightness and contrast">Window
+                <kbd>1</kbd></button>
+            <button class="tb" id="mPan" aria-pressed="false" title="Drag to move the image">Pan <kbd>2</kbd></button>
+            <button class="tb" id="mZoom" aria-pressed="false" title="Drag up and down to zoom">Zoom <kbd>3</kbd>
+            </button>
+            <button class="tb" id="mMeas" aria-pressed="false" title="Drag to measure a distance">Measure <kbd>4</kbd>
+            </button>
+            <span class="sep"></span>
+            <select class="tb" id="preset" title="Window presets"></select>
+            <button class="tb" id="btnInvert" aria-pressed="false" title="Invert grayscale (I)">Invert</button>
+            <button class="tb" id="btnFit" title="Fit image to the viewport (F)">Fit</button>
+            <span class="sep"></span>
+            <button class="tb" id="btnPlay" title="Play through the slices (Space)">Play</button>
+            <button class="tb" id="btnPng" title="Save what you see as a PNG">Save PNG</button>
+            <button class="tb" id="btnMeta" aria-pressed="false" title="Show all DICOM tags (M)">Tags</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="privacy"><i></i>Nothing leaves this device</div>
+    </header>
+
+    <nav class="rail" id="rail" aria-label="Series">
+        <div class="rail-head">
+            <div class="eyebrow">Study</div>
+            <div class="study" id="studyName">—</div>
+        </div>
+        <div id="serieList"></div>
+    </nav>
+
+    <main class="stage mode-wl" id="stage">
+        <canvas id="view"></canvas>
+        <div class="hud" id="hud">
+            <div class="tl" id="hudTL"></div>
+            <div class="tr" id="hudTR"></div>
+            <div class="bl" id="hudBL"></div>
+            <div class="br" id="hudBR"></div>
+            <span class="orient n" id="oN"></span><span class="orient s" id="oS"></span>
+            <span class="orient w" id="oW"></span><span class="orient e" id="oE"></span>
+        </div>
+        <div class="film" id="film" title="Drag to scrub through slices">
+            <div class="ticks" id="filmTicks"></div>
+            <div class="cursor" id="filmCursor"></div>
+            <div class="num" id="filmNum"></div>
+        </div>
+
+        <div class="empty" id="empty">
+            <div class="card">
+                <h1>Open a scan you can <em>actually read</em></h1>
+                <div class="sub">Standalone DICOM viewer · one HTML file</div>
+                <div class="dropzone" id="dropzone">
+                    <p>Drop a folder of DICOM files here</p>
+                    <div class="btns">
+                        <button class="big" id="pickDir">Choose folder</button>
+                        <button class="big ghost" id="pickFiles">Choose files</button>
+                    </div>
+                    <div class="bar hidden" id="progWrap"><i id="prog"></i></div>
+                </div>
+                <div class="foot-note">
+                    Files are read in your browser. No upload, no server, no network.<br>
+                    Works offline — save this page and it keeps working.<br>
+                    Not a medical device. For viewing only, never for diagnosis.
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <aside class="meta" id="metaPanel" aria-label="DICOM tags">
+        <div class="meta-head">
+            <div class="eyebrow">Tags · current slice</div>
+            <input id="metaSearch" placeholder="Filter by name, tag or value" spellcheck="false">
+        </div>
+        <div class="meta-body" id="metaBody"></div>
+    </aside>
+
+    <footer class="foot">
+        <span id="stStatus" class="ok">Ready</span>
+        <span class="spacer"></span>
+        <span id="stTip">Wheel scrolls slices · Ctrl+wheel zooms · Drag adjusts window</span>
+    </footer>
+</div>
+
+<input type="file" id="fileDir" webkitdirectory directory multiple class="hidden">
+<input type="file" id="fileAny" multiple class="hidden">
+
+<script>
+    "use strict";
+    /* ==================== PARSER START ==================== */
+    /* Minimal DICOM part-10 reader: implicit/explicit VR, little/big endian,
+       sequences, multiframe, native + RLE pixel data, encapsulated JPEG passthrough. */
+
+    const VR32 = new Set(["OB", "OW", "OF", "OD", "OL", "OV", "SQ", "UT", "UN", "UC", "UR"]);
+    const VR_NUM = {US: 2, SS: 2, UL: 4, SL: 4, FL: 4, FD: 8, AT: 4, UV: 8, SV: 8};
+    const VR_STR = new Set(["AE", "AS", "CS", "DA", "DS", "DT", "IS", "LO", "LT", "PN", "SH", "ST", "TM", "UC", "UI", "UR", "UT"]);
+
+    const T = {
+        TransferSyntaxUID: 0x00020010,
+        SOPClassUID: 0x00080016, SOPInstanceUID: 0x00080018,
+        StudyDate: 0x00080020, SeriesDate: 0x00080021, StudyTime: 0x00080030,
+        Modality: 0x00080060, Manufacturer: 0x00080070, InstitutionName: 0x00080080,
+        StudyDescription: 0x00081030, SeriesDescription: 0x0008103E,
+        ManufacturerModelName: 0x00081090,
+        PatientName: 0x00100010, PatientID: 0x00100020, PatientBirthDate: 0x00100030,
+        PatientSex: 0x00100040, PatientAge: 0x00101010,
+        BodyPartExamined: 0x00180015, ScanningSequence: 0x00180020,
+        SequenceVariant: 0x00180021, SliceThickness: 0x00180050, KVP: 0x00180060,
+        RepetitionTime: 0x00180080, EchoTime: 0x00180081, MagneticFieldStrength: 0x00180087,
+        SpacingBetweenSlices: 0x00180088, ProtocolName: 0x00181030,
+        StudyInstanceUID: 0x0020000D, SeriesInstanceUID: 0x0020000E,
+        SeriesNumber: 0x00200011, AcquisitionNumber: 0x00200012, InstanceNumber: 0x00200013,
+        ImagePositionPatient: 0x00200032, ImageOrientationPatient: 0x00200037,
+        SliceLocation: 0x00201041,
+        SamplesPerPixel: 0x00280002, PhotometricInterpretation: 0x00280004,
+        PlanarConfiguration: 0x00280006, NumberOfFrames: 0x00280008,
+        Rows: 0x00280010, Columns: 0x00280011, PixelSpacing: 0x00280030,
+        BitsAllocated: 0x00280100, BitsStored: 0x00280101, HighBit: 0x00280102,
+        PixelRepresentation: 0x00280103, WindowCenter: 0x00281050, WindowWidth: 0x00281051,
+        RescaleIntercept: 0x00281052, RescaleSlope: 0x00281053, WindowCenterWidthExplanation: 0x00281055,
+        ImagerPixelSpacing: 0x00181164,
+        PixelData: 0x7FE00010
+    };
+
+    /* VR lookup for implicit-VR datasets (subset + rules for the rest) */
+    const IMPLICIT_VR = (() => {
+        const m = new Map();
+        const put = (t, vr) => m.set(t >>> 0, vr);
+        [T.Rows, T.Columns, T.BitsAllocated, T.BitsStored, T.HighBit, T.PixelRepresentation,
+            T.SamplesPerPixel, T.PlanarConfiguration].forEach(t => put(t, "US"));
+        [T.PixelSpacing, T.ImagerPixelSpacing, T.WindowCenter, T.WindowWidth, T.RescaleIntercept,
+            T.RescaleSlope, T.SliceThickness, T.SliceLocation, T.ImagePositionPatient,
+            T.ImageOrientationPatient, T.SpacingBetweenSlices, T.RepetitionTime, T.EchoTime,
+            T.MagneticFieldStrength, T.KVP].forEach(t => put(t, "DS"));
+        [T.InstanceNumber, T.SeriesNumber, T.AcquisitionNumber, T.NumberOfFrames].forEach(t => put(t, "IS"));
+        [T.StudyInstanceUID, T.SeriesInstanceUID, T.SOPClassUID, T.SOPInstanceUID,
+            T.TransferSyntaxUID].forEach(t => put(t, "UI"));
+        [T.PatientName].forEach(t => put(t, "PN"));
+        [T.StudyDescription, T.SeriesDescription, T.ProtocolName, T.InstitutionName,
+            T.ManufacturerModelName, T.Manufacturer].forEach(t => put(t, "LO"));
+        [T.Modality, T.PhotometricInterpretation, T.BodyPartExamined, T.PatientSex,
+            T.ScanningSequence, T.SequenceVariant, T.PatientAge].forEach(t => put(t, "CS"));
+        [T.StudyDate, T.SeriesDate, T.PatientBirthDate].forEach(t => put(t, "DA"));
+        put(T.StudyTime, "TM");
+        put(T.PatientID, "LO");
+        put(T.PixelData, "OW");
+        return m;
+    })();
+
+    const dec = new TextDecoder("iso-8859-1");
+    const decU = new TextDecoder("utf-8");
+
+    function asciiAt(dv, off, len) {
+        let s = "";
+        for (let i = 0; i < len; i++) s += String.fromCharCode(dv.getUint8(off + i));
+        return s;
+    }
+
+    class DicomError extends Error {
+    }
+
+    /** Parse a DICOM buffer. opts.stopAtPixelData: skip decoding of bulk pixels. */
+    function parseDicom(buffer, opts) {
+        opts = opts || {};
+        const dv = new DataView(buffer);
+        const els = new Map();
+        let pos = 0, little = true, explicit = true;
+
+        if (buffer.byteLength >= 132 && asciiAt(dv, 128, 4) === "DICM") {
+            pos = 132;
+            // file meta group is always explicit VR little endian
+            const metaEnd = readMetaGroup(dv, pos, els);
+            pos = metaEnd;
+            const ts = (elValue(dv, els.get(T.TransferSyntaxUID)) || "1.2.840.10008.1.2.1").trim();
+            if (ts === "1.2.840.10008.1.2") {
+                explicit = false;
+                little = true;
+            } else if (ts === "1.2.840.10008.1.2.2") {
+                explicit = true;
+                little = false;
+            } else {
+                explicit = true;
+                little = true;
+            }
+        } else {
+            // headerless: sniff the first element
+            const s = sniff(dv);
+            if (!s) throw new DicomError("Not a DICOM file");
+            explicit = s.explicit;
+            little = s.little;
+            pos = 0;
+        }
+
+        parseDataset(dv, pos, buffer.byteLength, explicit, little, els, 0, opts);
+        return {
+            els, little, explicit, buffer,
+            transferSyntax: (elValue(dv, els.get(T.TransferSyntaxUID)) || "1.2.840.10008.1.2.1").trim()
+        };
+    }
+
+    function sniff(dv) {
+        if (dv.byteLength < 8) return null;
+        for (const little of [true, false]) {
+            const g = dv.getUint16(0, little);
+            if (g !== 0x0008 && g !== 0x0002) continue;
+            const vr = asciiAt(dv, 4, 2);
+            if (/^[A-Z]{2}$/.test(vr)) return {explicit: true, little};
+            const len = dv.getUint32(4, little);
+            if (len < dv.byteLength) return {explicit: false, little};
+        }
+        return null;
+    }
+
+    function readMetaGroup(dv, pos, els) {
+        const start = pos;
+        let end = dv.byteLength;
+        // (0002,0000) group length tells us where the meta group stops
+        if (dv.getUint16(pos, true) === 0x0002 && dv.getUint16(pos + 2, true) === 0x0000) {
+            const len = dv.getUint16(pos + 6, true);
+            const glen = dv.getUint32(pos + 8, true);
+            end = pos + 8 + len + glen;
+        }
+        end = Math.min(end, dv.byteLength);
+        parseDataset(dv, start, end, true, true, els, 0, {});
+        return end;
+    }
+
+    function parseDataset(dv, pos, end, explicit, little, out, depth, opts) {
+        opts = opts || {};
+        while (pos + 8 <= end) {
+            const group = dv.getUint16(pos, little);
+            const elem = dv.getUint16(pos + 2, little);
+            const tag = ((group << 16) | elem) >>> 0;
+
+            if (group === 0xFFFE) { // item / delimiter — caller handles these
+                return pos;
+            }
+            let p = pos + 4, vr, len;
+            if (explicit) {
+                vr = asciiAt(dv, p, 2);
+                if (!/^[A-Z]{2}$/.test(vr)) { // corrupt or actually implicit
+                    vr = IMPLICIT_VR.get(tag) || "UN";
+                    len = dv.getUint32(p, little);
+                    p += 4;
+                } else if (VR32.has(vr)) {
+                    len = dv.getUint32(p + 4, little);
+                    p += 8;
+                } else {
+                    len = dv.getUint16(p + 2, little);
+                    p += 4;
+                }
+            } else {
+                vr = IMPLICIT_VR.get(tag) || "UN";
+                len = dv.getUint32(p, little);
+                p += 4;
+                if (len === 0xFFFFFFFF && vr === "UN") vr = "SQ";
+            }
+
+            if (tag === T.PixelData) {
+                const el = {tag, vr, off: p, len, little};
+                if (len === 0xFFFFFFFF) {
+                    el.fragments = [];
+                    let q = p;
+                    while (q + 8 <= end) {
+                        const g2 = dv.getUint16(q, little), e2 = dv.getUint16(q + 2, little);
+                        const l2 = dv.getUint32(q + 4, little);
+                        q += 8;
+                        if (g2 === 0xFFFE && e2 === 0xE0DD) break;
+                        if (g2 !== 0xFFFE) break;
+                        el.fragments.push({off: q, len: l2});
+                        q += l2;
+                    }
+                    el.encapsulated = true;
+                    pos = q;
+                } else {
+                    pos = p + len;
+                }
+                out.set(tag, el);
+                if (opts.stopAtPixelData) return pos;
+                continue;
+            }
+
+            if (vr === "SQ") {
+                const el = {tag, vr, off: p, len, little, items: []};
+                let q = p;
+                const bound = (len === 0xFFFFFFFF) ? end : Math.min(p + len, end);
+                while (q + 8 <= bound) {
+                    const g2 = dv.getUint16(q, little), e2 = dv.getUint16(q + 2, little);
+                    const l2 = dv.getUint32(q + 4, little);
+                    q += 8;
+                    if (g2 !== 0xFFFE) break;
+                    if (e2 === 0xE0DD) break;                 // sequence delimiter
+                    if (e2 !== 0xE000) break;
+                    let itemEnd = (l2 === 0xFFFFFFFF) ? bound : Math.min(q + l2, bound);
+                    if (depth < 4) {
+                        const sub = new Map();
+                        const after = parseDataset(dv, q, itemEnd, explicit, little, sub, depth + 1, {});
+                        el.items.push(sub);
+                        if (l2 === 0xFFFFFFFF) {
+                            // scan for the item delimiter (FFFE,E00D)
+                            let r = after;
+                            while (r + 8 <= bound) {
+                                if (dv.getUint16(r, little) === 0xFFFE && dv.getUint16(r + 2, little) === 0xE00D) {
+                                    r += 8;
+                                    break;
+                                }
+                                r += 2;
+                            }
+                            itemEnd = r;
+                        }
+                    }
+                    q = itemEnd;
+                }
+                out.set(tag, el);
+                pos = (len === 0xFFFFFFFF) ? Math.max(q, p) : p + len;
+                if (len === 0xFFFFFFFF) {
+                    // step past sequence delimiter if present
+                    if (pos + 8 <= end && dv.getUint16(pos, little) === 0xFFFE && dv.getUint16(pos + 2, little) === 0xE0DD) pos += 8;
+                }
+                continue;
+            }
+
+            if (len === 0xFFFFFFFF) len = 0; // undefined length on a non-SQ: give up on it
+            if (p + len > end) len = Math.max(0, end - p);
+            out.set(tag, {tag, vr, off: p, len, little});
+            pos = p + len + (len & 1 ? 1 : 0) * 0; // lengths are already even per spec
+            pos = p + len;
+        }
+        return pos;
+    }
+
+    /* ---------- value access ---------- */
+    function elValue(dv, el) {
+        if (!el) return undefined;
+        if (el._v !== undefined) return el._v;
+        let v;
+        if (VR_NUM[el.vr]) {
+            const n = VR_NUM[el.vr], count = Math.floor(el.len / n), arr = [];
+            for (let i = 0; i < count; i++) {
+                const o = el.off + i * n, L = el.little;
+                switch (el.vr) {
+                    case "US":
+                        arr.push(dv.getUint16(o, L));
+                        break;
+                    case "SS":
+                        arr.push(dv.getInt16(o, L));
+                        break;
+                    case "UL":
+                        arr.push(dv.getUint32(o, L));
+                        break;
+                    case "SL":
+                        arr.push(dv.getInt32(o, L));
+                        break;
+                    case "FL":
+                        arr.push(dv.getFloat32(o, L));
+                        break;
+                    case "FD":
+                        arr.push(dv.getFloat64(o, L));
+                        break;
+                    case "AT":
+                        arr.push(dv.getUint16(o, L) * 65536 + dv.getUint16(o + 2, L));
+                        break;
+                    default:
+                        arr.push(0);
+                }
+            }
+            v = arr.length === 1 ? arr[0] : arr;
+        } else if (el.vr === "SQ") {
+            v = el.items;
+        } else if (el.vr === "OB" || el.vr === "OW" || el.vr === "UN" || el.vr === "OF") {
+            v = null; // binary
+        } else {
+            const bytes = new Uint8Array(dv.buffer, dv.byteOffset + el.off, el.len);
+            let s;
+            try {
+                s = decU.decode(bytes);
+                if (/\uFFFD/.test(s)) s = dec.decode(bytes);
+            } catch (e) {
+                s = dec.decode(bytes);
+            }
+            v = s.replace(/\0+$/, "").trim();
+        }
+        el._v = v;
+        return v;
+    }
+
+    function ds(map, dv) {
+        return {
+            map, dv,
+            has(tag) {
+                return map.has(tag);
+            },
+            raw(tag) {
+                return map.get(tag);
+            },
+            str(tag, dflt) {
+                const v = elValue(dv, map.get(tag));
+                return (v === undefined || v === null || v === "") ? dflt : String(v);
+            },
+            num(tag, dflt) {
+                const el = map.get(tag);
+                if (!el) return dflt;
+                const v = elValue(dv, el);
+                if (typeof v === "number") return v;
+                if (Array.isArray(v)) return typeof v[0] === "number" ? v[0] : parseFloat(v[0]);
+                const f = parseFloat(String(v).split("\\")[0]);
+                return isFinite(f) ? f : dflt;
+            },
+            nums(tag) {
+                const el = map.get(tag);
+                if (!el) return [];
+                const v = elValue(dv, el);
+                if (typeof v === "number") return [v];
+                if (Array.isArray(v)) return v.map(Number);
+                return String(v).split("\\").map(parseFloat).filter(isFinite);
+            }
+        };
+    }
+
+    /* ---------- pixel decoding ---------- */
+    const TS_NATIVE = new Set(["1.2.840.10008.1.2", "1.2.840.10008.1.2.1", "1.2.840.10008.1.2.2", "1.2.840.10008.1.2.1.99"]);
+    const TS_RLE = "1.2.840.10008.1.2.5";
+    const TS_JPEG_BROWSER = new Set(["1.2.840.10008.1.2.4.50"]); // baseline 8-bit
+    const TS_NAMES = {
+        "1.2.840.10008.1.2": "Implicit VR Little Endian",
+        "1.2.840.10008.1.2.1": "Explicit VR Little Endian",
+        "1.2.840.10008.1.2.1.99": "Deflated Explicit VR Little Endian",
+        "1.2.840.10008.1.2.2": "Explicit VR Big Endian",
+        "1.2.840.10008.1.2.5": "RLE Lossless",
+        "1.2.840.10008.1.2.4.50": "JPEG Baseline",
+        "1.2.840.10008.1.2.4.51": "JPEG Extended",
+        "1.2.840.10008.1.2.4.57": "JPEG Lossless",
+        "1.2.840.10008.1.2.4.70": "JPEG Lossless SV1",
+        "1.2.840.10008.1.2.4.80": "JPEG-LS Lossless",
+        "1.2.840.10008.1.2.4.81": "JPEG-LS Near-lossless",
+        "1.2.840.10008.1.2.4.90": "JPEG 2000 Lossless",
+        "1.2.840.10008.1.2.4.91": "JPEG 2000",
+        "1.2.840.10008.1.2.4.201": "HTJ2K"
+    };
+
+    function rleDecode(dv, off, len, expected) {
+        const out = new Uint8Array(expected);
+        const nSeg = dv.getUint32(off, true);
+        const offsets = [];
+        for (let i = 0; i < nSeg; i++) offsets.push(dv.getUint32(off + 4 + i * 4, true));
+        const segOut = Math.floor(expected / Math.max(1, nSeg));
+        for (let s = 0; s < nSeg; s++) {
+            let p = off + offsets[s];
+            const segEnd = (s + 1 < nSeg) ? off + offsets[s + 1] : off + len;
+            let o = s; // interleave segments byte-wise (planar within a pixel)
+            const step = nSeg;
+            while (p < segEnd && o < expected) {
+                const n = dv.getInt8(p++);
+                if (n >= 0) {
+                    for (let i = 0; i <= n && p < segEnd && o < expected; i++) {
+                        out[o] = dv.getUint8(p++);
+                        o += step;
+                    }
+                } else if (n !== -128) {
+                    const b = dv.getUint8(p++);
+                    for (let i = 0; i < 1 - n && o < expected; i++) {
+                        out[o] = b;
+                        o += step;
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Turn a parsed dataset into a displayable frame.
+     * Returns {w,h,rgb?,values?,min,max,mono1,slope,intercept,wc,ww,unsupported?}
+     */
+    async function decodeFrame(parsed, frameIndex) {
+        const dv = new DataView(parsed.buffer);
+        const d = ds(parsed.els, dv);
+        const w = d.num(T.Columns, 0) | 0, h = d.num(T.Rows, 0) | 0;
+        const spp = d.num(T.SamplesPerPixel, 1) | 0;
+        const ba = d.num(T.BitsAllocated, 16) | 0;
+        const bs = d.num(T.BitsStored, ba) | 0;
+        const pr = d.num(T.PixelRepresentation, 0) | 0;
+        const photo = d.str(T.PhotometricInterpretation, "MONOCHROME2");
+        const planar = d.num(T.PlanarConfiguration, 0) | 0;
+        const slope = d.num(T.RescaleSlope, 1), intercept = d.num(T.RescaleIntercept, 0);
+        const el = parsed.els.get(T.PixelData);
+        const ts = parsed.transferSyntax;
+
+        if (!w || !h) throw new DicomError("No image in this file");
+        if (!el) throw new DicomError("No pixel data in this file");
+
+        const base = {
+            w, h, slope, intercept,
+            mono1: photo === "MONOCHROME1",
+            wc: d.nums(T.WindowCenter), ww: d.nums(T.WindowWidth),
+            spacing: d.nums(T.PixelSpacing).length ? d.nums(T.PixelSpacing) : d.nums(T.ImagerPixelSpacing)
+        };
+
+        // --- encapsulated (compressed) ---
+        if (el.encapsulated) {
+            if (TS_JPEG_BROWSER.has(ts) && el.fragments.length) {
+                const f = el.fragments[Math.min(frameIndex, el.fragments.length - 1)];
+                const blob = new Blob([new Uint8Array(parsed.buffer, f.off, f.len)], {type: "image/jpeg"});
+                const bmp = await createImageBitmap(blob);
+                const c = document.createElement("canvas");
+                c.width = bmp.width;
+                c.height = bmp.height;
+                c.getContext("2d").drawImage(bmp, 0, 0);
+                const id = c.getContext("2d").getImageData(0, 0, c.width, c.height);
+                return Object.assign(base, {w: c.width, h: c.height, rgb: id.data, min: 0, max: 255});
+            }
+            if (ts === TS_RLE && el.fragments.length) {
+                const f = el.fragments[Math.min(frameIndex, el.fragments.length - 1)];
+                const expected = w * h * spp * Math.ceil(ba / 8);
+                const bytes = rleDecode(dv, f.off, f.len, expected);
+                return finishNative(base, bytes.buffer, 0, {w, h, spp, ba, bs, pr, planar, little: true});
+            }
+            return Object.assign(base, {unsupported: (TS_NAMES[ts] || ts)});
+        }
+
+        // --- native / uncompressed ---
+        const bytesPerSample = Math.max(1, Math.ceil(ba / 8));
+        const frameBytes = w * h * spp * bytesPerSample;
+        const start = el.off + frameIndex * frameBytes;
+        if (start + frameBytes > parsed.buffer.byteLength) {
+            if (frameIndex === 0) throw new DicomError("Pixel data is truncated");
+            throw new DicomError("Frame " + (frameIndex + 1) + " is missing from the file");
+        }
+        const slice = parsed.buffer.slice(start, start + frameBytes);
+        return finishNative(base, slice, 0, {w, h, spp, ba, bs, pr, planar, little: el.little});
+    }
+
+    function finishNative(base, buf, off, o) {
+        const {w, h, spp, ba, bs, pr, planar, little} = o;
+        const n = w * h;
+        if (spp >= 3) {
+            const src = new Uint8Array(buf, off);
+            const rgb = new Uint8ClampedArray(n * 4);
+            for (let i = 0; i < n; i++) {
+                let r, g, b;
+                if (planar === 1) {
+                    r = src[i];
+                    g = src[n + i];
+                    b = src[2 * n + i];
+                } else {
+                    r = src[i * 3];
+                    g = src[i * 3 + 1];
+                    b = src[i * 3 + 2];
+                }
+                rgb[i * 4] = r;
+                rgb[i * 4 + 1] = g;
+                rgb[i * 4 + 2] = b;
+                rgb[i * 4 + 3] = 255;
+            }
+            return Object.assign(base, {rgb, min: 0, max: 255});
+        }
+        let vals;
+        if (ba <= 8) {
+            const src = new Uint8Array(buf, off, n);
+            vals = pr ? Int16Array.from(src, v => (v << 24) >> 24) : Int32Array.from(src);
+        } else {
+            const dvv = new DataView(buf, off);
+            vals = new Int32Array(n);
+            const mask = bs >= 16 ? 0xFFFF : ((1 << bs) - 1);
+            for (let i = 0; i < n; i++) {
+                let v = dvv.getUint16(i * 2, little) & mask;
+                if (pr && bs < 32) {
+                    const sign = 1 << (bs - 1);
+                    if (v & sign) v -= (1 << bs);
+                }
+                vals[i] = v;
+            }
+        }
+        let mn = Infinity, mx = -Infinity;
+        for (let i = 0; i < n; i++) {
+            const v = vals[i];
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+        }
+        return Object.assign(base, {values: vals, min: mn, max: mx});
+    }
+
+    /* Auto window from a value histogram, ignoring the darkest/brightest 1%. */
+    function autoWindow(frame) {
+        if (frame.rgb) return {c: 127.5, w: 255};
+        const {values, min, max} = frame;
+        if (max <= min) return {c: min * frame.slope + frame.intercept, w: 1};
+        const bins = 512, hist = new Uint32Array(bins), scale = (bins - 1) / (max - min);
+        for (let i = 0; i < values.length; i += Math.max(1, (values.length / 40000) | 0)) hist[((values[i] - min) * scale) | 0]++;
+        let total = 0;
+        for (let i = 0; i < bins; i++) total += hist[i];
+        const lo = total * 0.01, hi = total * 0.99;
+        let acc = 0, a = min, b = max;
+        for (let i = 0; i < bins; i++) {
+            acc += hist[i];
+            if (acc >= lo) {
+                a = min + i / scale;
+                break;
+            }
+        }
+        acc = 0;
+        for (let i = 0; i < bins; i++) {
+            acc += hist[i];
+            if (acc >= hi) {
+                b = min + i / scale;
+                break;
+            }
+        }
+        const A = a * frame.slope + frame.intercept, B = b * frame.slope + frame.intercept;
+        return {c: (A + B) / 2, w: Math.max(1, B - A)};
+    }
+
+    /* Apply window/level into an ImageData-compatible buffer. */
+    function windowFrame(frame, center, width, invert, out) {
+        const n = frame.w * frame.h;
+        const px = out || new Uint8ClampedArray(n * 4);
+        if (frame.rgb) {
+            const src = frame.rgb;
+            const lo = center - width / 2, sc = 255 / Math.max(1e-6, width);
+            for (let i = 0; i < n * 4; i += 4) {
+                for (let k = 0; k < 3; k++) {
+                    let v = (src[i + k] - lo) * sc;
+                    v = v < 0 ? 0 : v > 255 ? 255 : v;
+                    px[i + k] = invert ? 255 - v : v;
+                }
+                px[i + 3] = 255;
+            }
+            return px;
+        }
+        const {values, min, max, slope, intercept, mono1} = frame;
+        const inv = invert !== mono1;
+        const lut = new Uint8ClampedArray(max - min + 1);
+        const lo = center - 0.5 - (width - 1) / 2, hi = center - 0.5 + (width - 1) / 2;
+        for (let v = min; v <= max; v++) {
+            const r = v * slope + intercept;
+            let y;
+            if (r <= lo) y = 0; else if (r > hi) y = 255;
+            else y = ((r - lo) / (hi - lo)) * 255;
+            lut[v - min] = inv ? 255 - y : y;
+        }
+        for (let i = 0; i < n; i++) {
+            const y = lut[values[i] - min];
+            const j = i * 4;
+            px[j] = y;
+            px[j + 1] = y;
+            px[j + 2] = y;
+            px[j + 3] = 255;
+        }
+        return px;
+    }
+
+    /* ==================== PARSER END ==================== */
+
+    /* ==================== TAG NAMES ==================== */
+    const TAG_NAMES = {
+        0x00020010: "Transfer Syntax UID", 0x00020002: "Media Storage SOP Class UID",
+        0x00080005: "Specific Character Set", 0x00080008: "Image Type", 0x00080016: "SOP Class UID",
+        0x00080018: "SOP Instance UID", 0x00080020: "Study Date", 0x00080021: "Series Date",
+        0x00080022: "Acquisition Date", 0x00080023: "Content Date", 0x00080030: "Study Time",
+        0x00080031: "Series Time", 0x00080032: "Acquisition Time", 0x00080033: "Content Time",
+        0x00080050: "Accession Number", 0x00080060: "Modality", 0x00080070: "Manufacturer",
+        0x00080080: "Institution Name", 0x00080090: "Referring Physician", 0x00081010: "Station Name",
+        0x00081030: "Study Description", 0x0008103E: "Series Description", 0x00081090: "Model Name",
+        0x00100010: "Patient Name", 0x00100020: "Patient ID", 0x00100030: "Birth Date",
+        0x00100040: "Sex", 0x00101010: "Age", 0x00101020: "Height", 0x00101030: "Weight",
+        0x00180015: "Body Part", 0x00180020: "Scanning Sequence", 0x00180021: "Sequence Variant",
+        0x00180022: "Scan Options", 0x00180023: "MR Acquisition Type", 0x00180024: "Sequence Name",
+        0x00180050: "Slice Thickness", 0x00180060: "kVp", 0x00180080: "Repetition Time",
+        0x00180081: "Echo Time", 0x00180082: "Inversion Time", 0x00180083: "Number of Averages",
+        0x00180084: "Imaging Frequency", 0x00180087: "Field Strength", 0x00180088: "Spacing Between Slices",
+        0x00180089: "Phase Encoding Steps", 0x00180091: "Echo Train Length", 0x00181020: "Software Version",
+        0x00181030: "Protocol Name", 0x00181100: "Reconstruction Diameter", 0x00181164: "Imager Pixel Spacing",
+        0x00181250: "Receive Coil", 0x00181310: "Acquisition Matrix", 0x00181312: "Phase Encoding Direction",
+        0x00181314: "Flip Angle", 0x00185100: "Patient Position",
+        0x0020000D: "Study Instance UID", 0x0020000E: "Series Instance UID", 0x00200010: "Study ID",
+        0x00200011: "Series Number", 0x00200012: "Acquisition Number", 0x00200013: "Instance Number",
+        0x00200032: "Image Position (Patient)", 0x00200037: "Image Orientation (Patient)",
+        0x00200052: "Frame of Reference UID", 0x00201041: "Slice Location",
+        0x00280002: "Samples per Pixel", 0x00280004: "Photometric Interpretation",
+        0x00280006: "Planar Configuration", 0x00280008: "Number of Frames", 0x00280010: "Rows",
+        0x00280011: "Columns", 0x00280030: "Pixel Spacing", 0x00280100: "Bits Allocated",
+        0x00280101: "Bits Stored", 0x00280102: "High Bit", 0x00280103: "Pixel Representation",
+        0x00280106: "Smallest Pixel Value", 0x00280107: "Largest Pixel Value",
+        0x00281050: "Window Center", 0x00281051: "Window Width", 0x00281052: "Rescale Intercept",
+        0x00281053: "Rescale Slope", 0x00281054: "Rescale Type", 0x00281055: "Window Explanation",
+        0x7FE00010: "Pixel Data"
+    };
+    const tagLabel = t => "(" + ((t >>> 16).toString(16).padStart(4, "0") + "," +
+        (t & 0xffff).toString(16).padStart(4, "0")).toUpperCase() + ")";
+
+    /* ==================== APP ==================== */
+    const $ = id => document.getElementById(id);
+    const app = $("app"), stage = $("stage"), canvas = $("view"), ctx = canvas.getContext("2d");
+    const offc = document.createElement("canvas"), offx = offc.getContext("2d");
+
+    const state = {
+        series: [],          // [{key, number, desc, modality, slices:[], head}]
+        active: -1,
+        index: 0,
+        frame: null,
+        parsed: null,
+        wc: 0, ww: 1,
+        invert: false,
+        zoom: 1, panX: 0, panY: 0, fitted: true,
+        mode: "wl",
+        playing: 0,
+        measure: null,
+        cache: new Map(),    // sliceId -> {frame, parsed}
+        cacheOrder: [],
+        loadToken: 0
+    };
+    const CACHE_MAX = 45;
+
+    const PRESETS = [
+        {n: "Auto (from image)", c: null, w: null},
+        {n: "Full range", c: "full", w: "full"},
+        {n: "CT soft tissue", c: 40, w: 400},
+        {n: "CT lung", c: -600, w: 1500},
+        {n: "CT bone", c: 400, w: 1800},
+        {n: "CT brain", c: 40, w: 80},
+        {n: "CT liver", c: 60, w: 160}
+    ];
+    PRESETS.forEach((p, i) => {
+        const o = document.createElement("option");
+        o.value = i;
+        o.textContent = p.n;
+        $("preset").appendChild(o);
+    });
+
+    function status(msg, cls) {
+        const e = $("stStatus");
+        e.textContent = msg;
+        e.className = cls || "ok";
+    }
+
+    /* ---------- loading ---------- */
+    async function loadFiles(files) {
+        const list = Array.from(files).filter(f => f.size > 132 && !/^\./.test(f.name) &&
+            !/(^|\/)DICOMDIR$/i.test(f.name) && !/\.(zip|pdf|txt|xml|json|png|jpe?g|html?)$/i.test(f.name));
+        if (!list.length) {
+            status("No DICOM files found in that selection", "err");
+            return;
+        }
+
+        $("progWrap").classList.remove("hidden");
+        status("Reading " + list.length + " files…", "warn");
+
+        const groups = new Map();
+        let done = 0, failed = 0;
+        const CONC = 8;
+        let cursor = 0;
+
+        async function worker() {
+            while (cursor < list.length) {
+                const f = list[cursor++];
+                try {
+                    const head = await f.slice(0, 96 * 1024).arrayBuffer();
+                    let parsed;
+                    try {
+                        parsed = parseDicom(head, {stopAtPixelData: true});
+                    } catch (e) {
+                        parsed = parseDicom(await f.arrayBuffer(), {stopAtPixelData: true});
+                    }
+                    const dv = new DataView(parsed.buffer);
+                    const d = ds(parsed.els, dv);
+                    if (!d.has(T.Rows) && !d.has(T.Columns)) throw new DicomError("no image");
+                    const key = d.str(T.SeriesInstanceUID, "s" + d.str(T.SeriesNumber, "?"));
+                    if (!groups.has(key)) {
+                        groups.set(key, {
+                            key,
+                            number: d.num(T.SeriesNumber, 0),
+                            desc: d.str(T.SeriesDescription, "") || d.str(T.ProtocolName, "") || "Untitled series",
+                            modality: d.str(T.Modality, "??"),
+                            study: d.str(T.StudyDescription, ""),
+                            patient: d.str(T.PatientName, ""),
+                            rows: d.num(T.Rows, 0), cols: d.num(T.Columns, 0),
+                            slices: []
+                        });
+                    }
+                    const g = groups.get(key);
+                    const nFrames = Math.max(1, d.num(T.NumberOfFrames, 1) | 0);
+                    const pos = d.nums(T.ImagePositionPatient);
+                    const orient = d.nums(T.ImageOrientationPatient);
+                    let proj = null;
+                    if (pos.length === 3 && orient.length === 6) {
+                        const nx = orient[1] * orient[5] - orient[2] * orient[4];
+                        const ny = orient[2] * orient[3] - orient[0] * orient[5];
+                        const nz = orient[0] * orient[4] - orient[1] * orient[3];
+                        proj = pos[0] * nx + pos[1] * ny + pos[2] * nz;
+                    }
+                    for (let fr = 0; fr < nFrames; fr++) {
+                        g.slices.push({
+                            file: f, frame: fr, name: f.name,
+                            instance: d.num(T.InstanceNumber, 0) + fr * 0.001,
+                            loc: proj !== null ? proj : d.num(T.SliceLocation, NaN),
+                            id: f.name + "#" + fr
+                        });
+                    }
+                } catch (e) {
+                    failed++;
+                }
+                done++;
+                if (done % 5 === 0 || done === list.length) {
+                    $("prog").style.width = (100 * done / list.length).toFixed(1) + "%";
+                }
+            }
+        }
+
+        await Promise.all(Array.from({length: Math.min(CONC, list.length)}, worker));
+
+        const series = Array.from(groups.values());
+        if (!series.length) {
+            status("Could not read any DICOM images from that selection", "err");
+            return;
+        }
+
+        for (const s of series) {
+            s.slices.sort((a, b) => {
+                if (isFinite(a.loc) && isFinite(b.loc) && a.loc !== b.loc) return a.loc - b.loc;
+                if (a.instance !== b.instance) return a.instance - b.instance;
+                return a.name.localeCompare(b.name, undefined, {numeric: true});
+            });
+        }
+        series.sort((a, b) => (a.number || 0) - (b.number || 0) || a.desc.localeCompare(b.desc));
+
+        state.series = series;
+        $("studyName").textContent = series[0].study || series[0].patient || "Unnamed study";
+        renderSeriesList();
+        $("empty").classList.add("hidden");
+        $("progWrap").classList.add("hidden");
+        status(series.length + " series · " + list.length + " files" +
+            (failed ? " · " + failed + " skipped" : ""), failed ? "warn" : "ok");
+        selectSeries(0);
+    }
+
+    function renderSeriesList() {
+        const wrap = $("serieList");
+        wrap.textContent = "";
+        state.series.forEach((s, i) => {
+            const b = document.createElement("button");
+            b.className = "serie";
+            b.setAttribute("aria-current", i === state.active);
+            b.innerHTML = '<div class="n">' + s.modality + " · " + (s.number || "—") + '</div>' +
+                '<div class="d"></div>' +
+                '<div class="m">' + s.slices.length + " img · " + s.cols + "×" + s.rows + '</div>';
+            b.querySelector(".d").textContent = s.desc;
+            b.title = s.desc;
+            b.onclick = () => selectSeries(i);
+            wrap.appendChild(b);
+        });
+    }
+
+    function selectSeries(i) {
+        if (i < 0 || i >= state.series.length) return;
+        state.active = i;
+        state.index = 0;
+        state.cache.clear();
+        state.cacheOrder.length = 0;
+        state.fitted = true;
+        state.zoom = 1;
+        state.panX = state.panY = 0;
+        state.measure = null;
+        $("preset").value = "0";
+        Array.from($("serieList").children).forEach((el, k) => el.setAttribute("aria-current", k === i));
+        buildFilm();
+        showSlice(0, true);
+    }
+
+    /* ---------- slice display ---------- */
+    async function getSlice(idx) {
+        const s = state.series[state.active];
+        const sl = s.slices[idx];
+        if (state.cache.has(sl.id)) return state.cache.get(sl.id);
+        const buf = await sl.file.arrayBuffer();
+        const parsed = parseDicom(buf);
+        const frame = await decodeFrame(parsed, sl.frame);
+        const entry = {frame, parsed};
+        state.cache.set(sl.id, entry);
+        state.cacheOrder.push(sl.id);
+        while (state.cacheOrder.length > CACHE_MAX) {
+            const old = state.cacheOrder.shift();
+            if (old !== sl.id) state.cache.delete(old);
+        }
+        return entry;
+    }
+
+    async function showSlice(idx, resetWindow) {
+        const s = state.series[state.active];
+        if (!s) return;
+        idx = Math.max(0, Math.min(s.slices.length - 1, idx));
+        state.index = idx;
+        const token = ++state.loadToken;
+        updateFilm();
+        let entry;
+        try {
+            entry = await getSlice(idx);
+        } catch (e) {
+            if (token !== state.loadToken) return;
+            status(e.message || "Could not read this image", "err");
+            return;
+        }
+        if (token !== state.loadToken) return;
+        state.frame = entry.frame;
+        state.parsed = entry.parsed;
+
+        if (entry.frame.unsupported) {
+            drawUnsupported(entry.frame.unsupported);
+            renderMeta();
+            updateHud();
+            status("Compressed with " + entry.frame.unsupported + " — this viewer cannot decode it", "warn");
+            return;
+        }
+        if (resetWindow) applyPreset(parseInt($("preset").value, 10));
+        render();
+        renderMeta();
+        prefetch(idx);
+        status("Slice " + (idx + 1) + " of " + s.slices.length);
+    }
+
+    function prefetch(idx) {
+        const s = state.series[state.active];
+        [idx + 1, idx - 1, idx + 2].forEach(i => {
+            if (i >= 0 && i < s.slices.length && !state.cache.has(s.slices[i].id)) {
+                getSlice(i).catch(() => {
+                });
+            }
+        });
+    }
+
+    function applyPreset(pi) {
+        const f = state.frame;
+        if (!f) return;
+        const p = PRESETS[pi] || PRESETS[0];
+        if (p.c === null) {
+            if (f.wc && f.wc.length && f.ww && f.ww.length && f.ww[0] > 0) {
+                state.wc = f.wc[0];
+                state.ww = f.ww[0];
+            } else {
+                const a = autoWindow(f);
+                state.wc = a.c;
+                state.ww = a.w;
+            }
+        } else if (p.c === "full") {
+            const lo = f.min * f.slope + f.intercept, hi = f.max * f.slope + f.intercept;
+            state.wc = (lo + hi) / 2;
+            state.ww = Math.max(1, hi - lo);
+        } else {
+            state.wc = p.c;
+            state.ww = p.w;
+        }
+    }
+
+    /* ---------- rendering ---------- */
+    function sizeCanvas() {
+        const r = stage.getBoundingClientRect();
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        canvas.width = Math.max(1, Math.round(r.width * dpr));
+        canvas.height = Math.max(1, Math.round(r.height * dpr));
+        canvas.style.width = r.width + "px";
+        canvas.style.height = r.height + "px";
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function fitZoom() {
+        const f = state.frame;
+        if (!f) return 1;
+        const r = stage.getBoundingClientRect();
+        return Math.min((r.width - 44) / f.w, r.height / f.h);
+    }
+
+    function render() {
+        const f = state.frame;
+        if (!f || f.unsupported) return;
+        offc.width = f.w;
+        offc.height = f.h;
+        const id = offx.createImageData(f.w, f.h);
+        windowFrame(f, state.wc, state.ww, state.invert, id.data);
+        offx.putImageData(id, 0, 0);
+        paint();
+    }
+
+    function paint() {
+        const f = state.frame;
+        if (!f) return;
+        const r = stage.getBoundingClientRect();
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = "#080A0D";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        if (state.fitted) {
+            state.zoom = fitZoom();
+            state.panX = 0;
+            state.panY = 0;
+        }
+        const z = state.zoom;
+        const dw = f.w * z, dh = f.h * z;
+        const x = (r.width - dw) / 2 + state.panX, y = (r.height - dh) / 2 + state.panY;
+        ctx.imageSmoothingEnabled = z < 2.5;
+        ctx.drawImage(offc, x, y, dw, dh);
+
+        if (state.measure && state.measure.b) {
+            const m = state.measure;
+            const p1 = imgToScreen(m.a, x, y, z), p2 = imgToScreen(m.b, x, y, z);
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = "#4FB3C9";
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+            for (const p of [p1, p2]) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, 7);
+                ctx.fillStyle = "#4FB3C9";
+                ctx.fill();
+            }
+            const sp = f.spacing && f.spacing.length === 2 ? f.spacing : null;
+            const dx = (m.b.x - m.a.x) * (sp ? sp[1] : 1), dy = (m.b.y - m.a.y) * (sp ? sp[0] : 1);
+            const dist = Math.hypot(dx, dy);
+            const label = sp ? dist.toFixed(1) + " mm" : Math.round(dist) + " px";
+            ctx.font = "12px ui-monospace, monospace";
+            const tx = (p1.x + p2.x) / 2 + 8, ty = (p1.y + p2.y) / 2 - 8;
+            const wpx = ctx.measureText(label).width;
+            ctx.fillStyle = "rgba(8,10,13,.85)";
+            ctx.fillRect(tx - 4, ty - 13, wpx + 8, 18);
+            ctx.fillStyle = "#8FD6E6";
+            ctx.fillText(label, tx, ty);
+        }
+        updateHud();
+    }
+
+    function imgToScreen(p, x, y, z) {
+        return {x: x + p.x * z, y: y + p.y * z};
+    }
+
+    function screenToImg(sx, sy) {
+        const f = state.frame, r = stage.getBoundingClientRect(), z = state.zoom;
+        const x = (r.width - f.w * z) / 2 + state.panX, y = (r.height - f.h * z) / 2 + state.panY;
+        return {x: (sx - x) / z, y: (sy - y) / z};
+    }
+
+    function drawUnsupported(name) {
+        const r = stage.getBoundingClientRect();
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = "#080A0D";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+        ctx.fillStyle = "#6B7A8D";
+        ctx.textAlign = "center";
+        ctx.font = "13px ui-monospace, monospace";
+        ctx.fillText("This slice uses " + name + " compression.", r.width / 2, r.height / 2 - 10);
+        ctx.fillText("The tags below still read fine.", r.width / 2, r.height / 2 + 12);
+        ctx.textAlign = "left";
+    }
+
+    /* ---------- HUD ---------- */
+    function updateHud() {
+        const s = state.series[state.active];
+        if (!s || !state.parsed) {
+            return;
+        }
+        const d = ds(state.parsed.els, new DataView(state.parsed.buffer));
+        const f = state.frame;
+        const esc = t => String(t == null ? "" : t).replace(/[&<>]/g, c => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;"
+        }[c]));
+        const pname = d.str(T.PatientName, "—").replace(/\^+/g, ", ").replace(/,\s*$/, "");
+        const date = fmtDate(d.str(T.StudyDate, ""));
+
+        $("hudTL").innerHTML =
+            '<div class="hi">' + esc(pname) + '</div>' +
+            '<div><span class="k">ID </span>' + esc(d.str(T.PatientID, "—")) + '</div>' +
+            '<div><span class="k">' + esc([d.str(T.PatientSex, ""), d.str(T.PatientAge, "")].filter(Boolean).join(" · ") || "—") + '</span></div>' +
+            '<div class="k">' + esc(date) + '</div>';
+
+        $("hudTR").innerHTML =
+            '<div class="hi">' + esc(d.str(T.Modality, "") + " · " + (d.str(T.SeriesDescription, "") || s.desc)) + '</div>' +
+            '<div class="k">' + esc(d.str(T.ProtocolName, "—")) + '</div>' +
+            '<div class="k">' + esc(d.str(T.ManufacturerModelName, d.str(T.Manufacturer, "—"))) + '</div>' +
+            (d.has(T.RepetitionTime) ? '<div class="k">TR ' + num(d.num(T.RepetitionTime)) + ' · TE ' + num(d.num(T.EchoTime)) + '</div>' : "");
+
+        const th = d.num(T.SliceThickness, null);
+        $("hudBL").innerHTML =
+            '<div><span class="k">W </span>' + Math.round(state.ww) + '<span class="k">  L </span>' + Math.round(state.wc) + '</div>' +
+            '<div><span class="k">Zoom </span>' + (state.zoom * 100).toFixed(0) + '%' + (state.invert ? '<span class="hi">  INV</span>' : '') + '</div>' +
+            (f && f.spacing && f.spacing.length === 2 ? '<div class="k">' + f.spacing[0].toFixed(2) + ' × ' + f.spacing[1].toFixed(2) + ' mm/px</div>' : '');
+
+        $("hudBR").innerHTML =
+            '<div class="hi">' + (state.index + 1) + ' / ' + s.slices.length + '</div>' +
+            (f ? '<div class="k">' + f.w + ' × ' + f.h + '</div>' : '') +
+            (th ? '<div class="k">' + th + ' mm slice</div>' : '');
+
+        const o = d.nums(T.ImageOrientationPatient);
+        if (o.length === 6) {
+            const lab = v => {
+                const ax = [["L", "R"], ["P", "A"], ["H", "F"]];
+                let out = "", vv = v.slice();
+                for (let k = 0; k < 2; k++) {
+                    let bi = 0;
+                    for (let i = 1; i < 3; i++) if (Math.abs(vv[i]) > Math.abs(vv[bi])) bi = i;
+                    if (Math.abs(vv[bi]) < .2) break;
+                    out += ax[bi][vv[bi] < 0 ? 0 : 1];
+                    vv[bi] = 0;
+                }
+                return out;
+            };
+            const rowV = o.slice(0, 3), colV = o.slice(3, 6);
+            $("oE").textContent = lab(rowV);
+            $("oW").textContent = lab(rowV.map(v => -v));
+            $("oS").textContent = lab(colV);
+            $("oN").textContent = lab(colV.map(v => -v));
+        } else {
+            ["oN", "oS", "oE", "oW"].forEach(i => $(i).textContent = "");
+        }
+    }
+
+    const num = v => (v == null || !isFinite(v)) ? "—" : (Math.round(v * 100) / 100);
+
+    function fmtDate(s) {
+        if (!/^\d{8}$/.test(s)) return s || "—";
+        return s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8);
+    }
+
+    /* ---------- film strip ---------- */
+    function buildFilm() {
+        const s = state.series[state.active];
+        const ticks = $("filmTicks");
+        ticks.textContent = "";
+        if (!s) return;
+        const n = s.slices.length;
+        const step = Math.max(1, Math.ceil(n / 60));
+        for (let i = 0; i < n; i += step) {
+            const t = document.createElement("div");
+            t.className = "tick";
+            t.style.top = (n < 2 ? 50 : (i / (n - 1)) * 100) + "%";
+            ticks.appendChild(t);
+        }
+        updateFilm();
+    }
+
+    function updateFilm() {
+        const s = state.series[state.active];
+        if (!s) return;
+        const n = s.slices.length;
+        const pct = n < 2 ? 50 : (state.index / (n - 1)) * 100;
+        $("filmCursor").style.top = pct + "%";
+        $("filmNum").style.top = pct + "%";
+        $("filmNum").textContent = (state.index + 1) + "/" + n;
+    }
+
+    function filmScrub(clientY) {
+        const s = state.series[state.active];
+        if (!s) return;
+        const r = $("film").getBoundingClientRect();
+        const t = Math.max(0, Math.min(1, (clientY - r.top) / r.height));
+        showSlice(Math.round(t * (s.slices.length - 1)));
+    }
+
+    /* ---------- metadata ---------- */
+    function renderMeta() {
+        if (!app.classList.contains("meta-open")) return;
+        const body = $("metaBody");
+        body.textContent = "";
+        if (!state.parsed) return;
+        const dv = new DataView(state.parsed.buffer);
+        const q = $("metaSearch").value.trim().toLowerCase();
+        const rows = [];
+        const walk = (map, depth) => {
+            const keys = Array.from(map.keys()).sort((a, b) => a - b);
+            for (const k of keys) {
+                const el = map.get(k);
+                const name = TAG_NAMES[k] || "";
+                let val;
+                if (el.vr === "SQ") val = (el.items ? el.items.length : 0) + " item(s)";
+                else if (k === T.PixelData) val = (el.encapsulated ? "encapsulated, " + el.fragments.length + " fragment(s)" : el.len + " bytes");
+                else {
+                    const v = elValue(dv, el);
+                    val = (v === null || v === undefined) ? "<" + el.len + " bytes>" : String(v);
+                }
+                if (val.length > 400) val = val.slice(0, 400) + "…";
+                rows.push({k, name, vr: el.vr, val, depth});
+                if (el.vr === "SQ" && el.items && depth < 2) el.items.forEach(it => walk(it, depth + 1));
+            }
+        };
+        walk(state.parsed.els, 0);
+
+        const frag = document.createDocumentFragment();
+        let shown = 0;
+        for (const r of rows) {
+            const hay = (r.name + " " + tagLabel(r.k) + " " + r.val).toLowerCase();
+            if (q && !hay.includes(q)) continue;
+            shown++;
+            const div = document.createElement("div");
+            div.className = "row" + (r.depth ? " nest" : "");
+            const t = document.createElement("div");
+            t.className = "t";
+            t.innerHTML = "<b>" + tagLabel(r.k) + "</b><span>" + r.vr + "</span><span>" +
+                (r.name || "") + "</span>";
+            const v = document.createElement("div");
+            v.className = "v";
+            v.textContent = r.val;
+            div.appendChild(t);
+            div.appendChild(v);
+            frag.appendChild(div);
+        }
+        if (!shown) {
+            const d = document.createElement("div");
+            d.className = "row";
+            d.innerHTML = '<div class="v" style="color:#6B7A8D">No tag matches that filter.</div>';
+            frag.appendChild(d);
+        }
+        body.appendChild(frag);
+    }
+
+    /* ---------- interaction ---------- */
+    let drag = null;
+    canvas.addEventListener("pointerdown", e => {
+        if (!state.frame || state.frame.unsupported) return;
+        canvas.setPointerCapture(e.pointerId);
+        stage.classList.add("dragging");
+        const mode = (e.button === 2 || e.shiftKey) ? "pan" : state.mode;
+        drag = {
+            x: e.clientX, y: e.clientY, wc: state.wc, ww: state.ww,
+            panX: state.panX, panY: state.panY, zoom: state.zoom, mode
+        };
+        if (mode === "measure") {
+            const p = screenToImg(e.offsetX, e.offsetY);
+            state.measure = {a: p, b: null};
+        }
+    });
+    canvas.addEventListener("pointermove", e => {
+        if (!drag) return;
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        if (drag.mode === "wl") {
+            const span = Math.max(1, state.frame.max - state.frame.min) * state.frame.slope;
+            const k = span / 400;
+            state.ww = Math.max(1, drag.ww + dx * k);
+            state.wc = drag.wc + dy * k;
+            $("preset").value = "0";
+            render();
+        } else if (drag.mode === "pan") {
+            state.fitted = false;
+            state.panX = drag.panX + dx;
+            state.panY = drag.panY + dy;
+            paint();
+        } else if (drag.mode === "zoom") {
+            state.fitted = false;
+            state.zoom = Math.max(.05, Math.min(40, drag.zoom * Math.exp(-dy / 200)));
+            paint();
+        } else if (drag.mode === "measure") {
+            state.measure.b = screenToImg(e.offsetX, e.offsetY);
+            paint();
+        }
+    });
+    const endDrag = () => {
+        drag = null;
+        stage.classList.remove("dragging");
+    };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+    canvas.addEventListener("contextmenu", e => e.preventDefault());
+    canvas.addEventListener("dblclick", () => {
+        state.measure = null;
+        paint();
+    });
+
+    stage.addEventListener("wheel", e => {
+        if (!state.frame) return;
+        e.preventDefault();
+        if (e.ctrlKey || e.metaKey) {
+            state.fitted = false;
+            const before = screenToImg(e.offsetX, e.offsetY);
+            state.zoom = Math.max(.05, Math.min(40, state.zoom * Math.exp(-e.deltaY / 300)));
+            const after = screenToImg(e.offsetX, e.offsetY);
+            state.panX += (after.x - before.x) * state.zoom;
+            state.panY += (after.y - before.y) * state.zoom;
+            paint();
+        } else {
+            showSlice(state.index + (e.deltaY > 0 ? 1 : -1));
+        }
+    }, {passive: false});
+
+    let filmDrag = false;
+    $("film").addEventListener("pointerdown", e => {
+        filmDrag = true;
+        $("film").setPointerCapture(e.pointerId);
+        filmScrub(e.clientY);
+    });
+    $("film").addEventListener("pointermove", e => {
+        if (filmDrag) filmScrub(e.clientY);
+    });
+    $("film").addEventListener("pointerup", () => {
+        filmDrag = false;
+    });
+
+    document.addEventListener("keydown", e => {
+        if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+        const s = state.series[state.active];
+        switch (e.key) {
+            case "ArrowDown":
+            case "ArrowRight":
+                if (s) showSlice(state.index + 1);
+                e.preventDefault();
+                break;
+            case "ArrowUp":
+            case "ArrowLeft":
+                if (s) showSlice(state.index - 1);
+                e.preventDefault();
+                break;
+            case "PageDown":
+                if (s) showSlice(state.index + 10);
+                e.preventDefault();
+                break;
+            case "PageUp":
+                if (s) showSlice(state.index - 10);
+                e.preventDefault();
+                break;
+            case "Home":
+                if (s) showSlice(0);
+                break;
+            case "End":
+                if (s) showSlice(s.slices.length - 1);
+                break;
+            case " ":
+                togglePlay();
+                e.preventDefault();
+                break;
+            case "1":
+                setMode("wl");
+                break;
+            case "2":
+                setMode("pan");
+                break;
+            case "3":
+                setMode("zoom");
+                break;
+            case "4":
+                setMode("measure");
+                break;
+            case "f":
+            case "F":
+                state.fitted = true;
+                paint();
+                break;
+            case "i":
+            case "I":
+                $("btnInvert").click();
+                break;
+            case "m":
+            case "M":
+                $("btnMeta").click();
+                break;
+            case "s":
+            case "S":
+                $("btnRail").click();
+                break;
+            case "Escape":
+                state.measure = null;
+                paint();
+                break;
+        }
+    });
+
+    function setMode(m) {
+        state.mode = m;
+        stage.className = "stage mode-" + m;
+        ({wl: "mWL", pan: "mPan", zoom: "mZoom", measure: "mMeas"});
+        const map = {wl: "mWL", pan: "mPan", zoom: "mZoom", measure: "mMeas"};
+        Object.entries(map).forEach(([k, id]) => $(id).setAttribute("aria-pressed", k === m));
+    }
+
+    $("mWL").onclick = () => setMode("wl");
+    $("mPan").onclick = () => setMode("pan");
+    $("mZoom").onclick = () => setMode("zoom");
+    $("mMeas").onclick = () => setMode("measure");
+
+    function togglePlay() {
+        if (state.playing) {
+            clearInterval(state.playing);
+            state.playing = 0;
+            $("btnPlay").textContent = "Play";
+            $("btnPlay").setAttribute("aria-pressed", "false");
+            return;
+        }
+        const s = state.series[state.active];
+        if (!s || s.slices.length < 2) return;
+        $("btnPlay").textContent = "Pause";
+        $("btnPlay").setAttribute("aria-pressed", "true");
+        state.playing = setInterval(() => {
+            const n = state.series[state.active].slices.length;
+            showSlice((state.index + 1) % n);
+        }, 90);
+    }
+
+    $("btnPlay").onclick = togglePlay;
+
+    $("btnInvert").onclick = e => {
+        state.invert = !state.invert;
+        e.currentTarget.setAttribute("aria-pressed", state.invert);
+        render();
+    };
+    $("btnFit").onclick = () => {
+        state.fitted = true;
+        paint();
+    };
+    $("preset").onchange = e => {
+        applyPreset(parseInt(e.target.value, 10));
+        render();
+    };
+    $("btnMeta").onclick = e => {
+        const on = app.classList.toggle("meta-open");
+        e.currentTarget.setAttribute("aria-pressed", on);
+        sizeCanvas();
+        paint();
+        if (on) renderMeta();
+    };
+    $("btnRail").onclick = () => {
+        app.classList.toggle("rail-collapsed");
+        sizeCanvas();
+        paint();
+    };
+    $("metaSearch").oninput = renderMeta;
+    $("btnPng").onclick = () => {
+        if (!state.frame) return;
+        const s = state.series[state.active];
+        canvas.toBlob(b => {
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(b);
+            a.download = (s.desc.replace(/[^\w\-]+/g, "_") || "slice") + "_" + (state.index + 1) + ".png";
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        });
+    };
+
+    /* ---------- file input & drag-drop ---------- */
+    $("pickDir").onclick = () => $("fileDir").click();
+    $("pickFiles").onclick = () => $("fileAny").click();
+    $("fileDir").onchange = e => loadFiles(e.target.files);
+    $("fileAny").onchange = e => loadFiles(e.target.files);
+
+    const dz = $("dropzone");
+    ["dragenter", "dragover"].forEach(ev => document.addEventListener(ev, e => {
+        e.preventDefault();
+        dz.classList.add("hot");
+    }));
+    ["dragleave", "drop"].forEach(ev => document.addEventListener(ev, e => {
+        if (ev === "dragleave" && e.relatedTarget) return;
+        dz.classList.remove("hot");
+    }));
+    document.addEventListener("drop", async e => {
+        e.preventDefault();
+        const items = e.dataTransfer.items;
+        let files = [];
+        if (items && items.length && items[0].webkitGetAsEntry) {
+            const entries = [];
+            for (const it of items) {
+                const en = it.webkitGetAsEntry();
+                if (en) entries.push(en);
+            }
+            status("Scanning folders…", "warn");
+            for (const en of entries) files = files.concat(await walkEntry(en));
+        } else {
+            files = Array.from(e.dataTransfer.files);
+        }
+        if (files.length) loadFiles(files);
+    });
+
+    function walkEntry(entry, depth) {
+        depth = depth || 0;
+        return new Promise(res => {
+            if (entry.isFile) entry.file(f => res([f]), () => res([]));
+            else if (entry.isDirectory && depth < 12) {
+                const reader = entry.createReader();
+                const all = [];
+                const readBatch = () => reader.readEntries(async batch => {
+                    if (!batch.length) {
+                        const nested = await Promise.all(all.map(en => walkEntry(en, depth + 1)));
+                        res(nested.flat());
+                        return;
+                    }
+                    all.push(...batch);
+                    readBatch();
+                }, () => res([]));
+                readBatch();
+            } else res([]);
+        });
+    }
+
+    window.addEventListener("resize", () => {
+        sizeCanvas();
+        paint();
+    });
+    sizeCanvas();
+    setMode("wl");
+</script>
+</body>
+</html>
