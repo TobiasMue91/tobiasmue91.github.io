@@ -2972,7 +2972,7 @@
             retryBtn = $('calibRetryBtn');
         retryBtn.style.display = 'none';
         calibrating = true;
-        msg.textContent = 'Position your face in the camera…';
+        msg.textContent = 'Position your face in the camera for a quick UP-only calibration…';
         cd.textContent = '';
         fill.style.width = '0%';
         let consecutive = 0;
@@ -3010,45 +3010,33 @@
             return
         }
         fill.style.width = '0%';
-        msg.textContent = 'Get into UP position (arms extended)…';
+        msg.textContent = 'Get into your normal UP position (arms extended)…';
         await calibCountdown(cd);
         msg.textContent = 'Hold UP position…';
         cd.textContent = '';
         fill.style.width = '0%';
         const up = await collectSamples(fill, cd, 3000);
         if (up.length < 5) {
-            msg.textContent = "Couldn't get enough readings. Keep your face visible.";
+            msg.textContent = "Couldn't get a stable UP reading. Keep your face visible and steady.";
             retryBtn.style.display = 'inline-block';
             retryBtn.onclick = () => startCalibFromWarmup();
             calibrating = false;
             finishCalib();
             return
         }
-        fill.style.width = '0%';
-        msg.textContent = 'Now lower to push-up DOWN position…';
-        await calibCountdown(cd);
-        msg.textContent = 'Hold DOWN position — go as low as you would!';
-        cd.textContent = '';
-        fill.style.width = '0%';
-        const dn = await collectSamples(fill, cd, 3000);
-        if (dn.length < 5) {
-            msg.textContent = "Couldn't get enough readings. Keep your face visible.";
-            retryBtn.style.display = 'inline-block';
-            retryBtn.onclick = () => startCalibFromWarmup();
-            calibrating = false;
-            finishCalib();
-            return
-        }
-        const ua = up.reduce((a, b) => a + b, 0) / up.length, da = dn.reduce((a, b) => a + b, 0) / dn.length;
-        if (da <= ua * 1.15) {
-            msg.textContent = 'UP and DOWN look too similar. Try going lower in the DOWN position.';
-            retryBtn.style.display = 'inline-block';
-            retryBtn.onclick = () => startCalibFromWarmup();
-            calibrating = false;
-            finishCalib();
-            return
-        }
-        S.calibration = {up: ua, down: da};
+        // DOWN is intentionally not face-calibrated. At the bottom of a push-up the
+        // face may be too close for BlazeFace, or leave the frame entirely. Instead,
+        // use a conservative virtual DOWN endpoint and let the runtime detector combine
+        // face growth, growth reversal and face-loss/reappearance into one hybrid signal.
+        const ua = robustFaceArea(up);
+        const inferredDown = ua * INFERRED_DOWN_RATIO;
+        S.calibration = {
+            up: ua,
+            down: inferredDown,
+            mode: 'hybrid-up-only-v2',
+            calibratedAt: Date.now()
+        };
+        msg.textContent = 'Calibration complete — face loss at the bottom is supported.';
         save();
         updateCalibUI();
         renderHub();
@@ -3074,6 +3062,16 @@
                 }
             }, 1000)
         })
+    }
+
+    function robustFaceArea(values) {
+        if (!values.length) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        // Trim detector outliers caused by partial boxes and brief tracking jumps.
+        const trim = sorted.length >= 10 ? Math.floor(sorted.length * .2) : 0;
+        const end = trim ? sorted.length - trim : sorted.length;
+        const core = sorted.slice(trim, end);
+        return core.reduce((sum, value) => sum + value, 0) / core.length
     }
 
     function collectSamples(fillEl, cdEl, dur) {
@@ -3113,13 +3111,16 @@
     function updateCalibUI() {
         if (S.calibration) {
             $('camText').textContent = 'Calibrated ✓';
-            $('calibBL').textContent = `UP ${Math.round(S.calibration.up)} · DOWN ${Math.round(S.calibration.down)}`;
+            const hybrid = S.calibration.mode === 'hybrid-up-only-v2';
+            $('calibBL').textContent = hybrid
+                ? `UP ${Math.round(S.calibration.up)} · DOWN auto (close-range ready)`
+                : `UP ${Math.round(S.calibration.up)} · DOWN ${Math.round(S.calibration.down)}`;
             $('calibBtn').classList.remove('primary');
             $('calibBtn').textContent = 'Recalibrate'
         }
     }
 
-    // ===================== DETECTION (proven face-area state machine) =====================
+    // ===================== DETECTION (hybrid face-area / face-loss state machine) =====================
     const DET = {
         state: 'IDLE',
         smooth: 0,
@@ -3137,10 +3138,13 @@
         lastAreaBeforeLoss: 0,
         motionScores: [],
         prevGrayFrame: null,
-        growingFrames: 0
+        growingFrames: 0,
+        descentEvidenceAt: 0,
+        descentStartedAt: 0
     };
-    const EMA = 0.5, COOLDOWN = 250, NOFACE_DESCENT_MS = 3000, FPS_IV = 1000 / 30;
+    const EMA = 0.5, COOLDOWN = 250, NOFACE_DESCENT_MS = 8000, FPS_IV = 1000 / 30;
     const TH_DOWN_ENTER = 0.3, TH_DOWN_CONFIRM = 0.55, TH_UP_CONFIRM = 0.3, FACE_GROWTH_FRAMES = 3;
+    const INFERRED_DOWN_RATIO = 1.9, MIN_PEAK_RATIO = 1.3, DESCENT_EVIDENCE_MS = 1200, MIN_DESCENT_MS = 250;
     let roundActive = false;
     const motionCanvas = document.createElement('canvas');
     motionCanvas.width = 80;
@@ -3165,7 +3169,9 @@
             lastAreaBeforeLoss: 0,
             motionScores: [],
             prevGrayFrame: null,
-            growingFrames: 0
+            growingFrames: 0,
+            descentEvidenceAt: 0,
+            descentStartedAt: 0
         })
     }
 
@@ -3205,6 +3211,8 @@
         DET.peak = 0;
         DET.growingFrames = 0;
         DET.faceWasGrowing = false;
+        DET.descentEvidenceAt = 0;
+        DET.descentStartedAt = 0;
         const cw2 = getComboWindow();
         if (now - DET.lastCombo < cw2) DET.combo++; else DET.combo = 1;
         DET.lastCombo = now;
@@ -3233,7 +3241,10 @@
             }
             if (DET.noFace === 0) DET.noFace = now;
             const lostDuration = now - DET.faceLostAt;
-            if (DET.state === 'DESCENDING' || (DET.state === 'IDLE' && DET.faceWasGrowing) || DET.state === 'AT_BOTTOM') {
+            const recentDescent = now - DET.descentEvidenceAt < DESCENT_EVIDENCE_MS;
+            const enlargedBeforeLoss = S.calibration && DET.lastAreaBeforeLoss > S.calibration.up * 1.18;
+            if (DET.state === 'DESCENDING' || DET.state === 'AT_BOTTOM' ||
+                (DET.state === 'IDLE' && (DET.faceWasGrowing || recentDescent || enlargedBeforeLoss))) {
                 DET.state = 'AT_BOTTOM_LOST';
                 DET.progress = 1;
                 st.textContent = 'At bottom';
@@ -3269,6 +3280,8 @@
             DET.growingFrames = growing ? DET.growingFrames + 1 : 0
         }
         DET.faceWasGrowing = DET.growingFrames >= FACE_GROWTH_FRAMES;
+        const currentProgress = getProgress(DET.smooth);
+        if (DET.faceWasGrowing || currentProgress > TH_DOWN_ENTER * .65) DET.descentEvidenceAt = now;
         const wasLost = DET.faceLostAt > 0;
         if (wasLost) {
             if (DET.state === 'AT_BOTTOM_LOST') {
@@ -3302,6 +3315,8 @@
                 if (DET.progress > TH_DOWN_ENTER || DET.faceWasGrowing) {
                     DET.state = 'DESCENDING';
                     DET.entry = now;
+                    DET.descentStartedAt = now;
+                    DET.descentEvidenceAt = now;
                     DET.peak = DET.smooth
                 }
                 break;
@@ -3312,10 +3327,18 @@
                 if (DET.progress > TH_DOWN_CONFIRM) {
                     DET.state = 'AT_BOTTOM';
                     DET.entry = now
+                } else if (S.calibration && DET.peak > S.calibration.up * MIN_PEAK_RATIO &&
+                    DET.smooth < DET.peak * .96 && now - DET.descentStartedAt > MIN_DESCENT_MS) {
+                    // The face grew substantially and is shrinking again: the user
+                    // reached a bottom even though the detector never produced a stable
+                    // close-range face box.
+                    DET.state = 'ASCENDING';
+                    DET.entry = now
                 } else if (DET.progress < TH_DOWN_ENTER * 0.5 && !DET.faceWasGrowing && now - DET.entry > 500) {
                     DET.state = 'IDLE';
                     DET.entry = now;
-                    DET.growingFrames = 0
+                    DET.growingFrames = 0;
+                    DET.descentStartedAt = 0
                 }
                 break;
             case'AT_BOTTOM':
