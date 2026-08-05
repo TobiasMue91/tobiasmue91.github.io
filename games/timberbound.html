@@ -3108,7 +3108,13 @@
         // single stream, so one extra draw per tree would move every tree in every forest
         // and invalidate the whole terrain audit. Sharing the roll keeps placement
         // bit-identical -- rare below .035, giant in [.035, .115), ordinary above.
-        const GIANT_CHANCE=.08, GIANT_SCALE=2.05, GIANT_GRADE=2.6;
+        // Width and height are SEPARATE, and that is the whole point of this pair. The first
+        // pass drove both off one scale, which made giants tall and thin -- and combined with a
+        // generic bolt-on crown they read as two spheres balanced on a pole. The fix was not
+        // "make them shorter", it was "stop coupling the two", so height could be tuned back up
+        // once the crown was doing its job. Width still leads: a giant reads as OLD because it
+        // is thick, and as BIG because it is also tall. Both, in that order.
+        const GIANT_CHANCE=.08, GIANT_WIDTH=2.05, GIANT_HEIGHT=1.7, GIANT_GRADE=2.6;
         function treeToughness(u){return u.rare?5:u.giant?GIANT_GRADE:1}
         function treeBounty(u){return u.rare?8:u.giant?GIANT_GRADE:1}
         function treeName(u,b){return u.rare?b.rare:u.giant?`Old ${b.tree}`:b.tree}
@@ -3305,39 +3311,48 @@
         }
         function createTree(group,b,bi,x,z,rarityRoll,densityRank=0){
             const rare=rarityRoll<.035,giant=!rare&&rarityRoll<.035+GIANT_CHANCE,tree=new THREE.Group(),rand=seeded(Math.floor((x+130)*917+(z+130)*613+bi*11939));tree.position.set(x,terrainTopLocal(bi,x,z),z);group.add(tree);
-            const scale=giant?GIANT_SCALE:rare?1.25:.88+rand()*.3,trunkWidth=(b.canopy==='ring'?1.25:1)*scale,trunkBlocks=Math.max(4,Math.round((b.canopy==='conifer'?7:b.canopy==='ring'?8:b.canopy==='spire'?10:6)*scale));
+            const scale=giant?GIANT_WIDTH:rare?1.25:.88+rand()*.3,hScale=giant?GIANT_HEIGHT:scale,trunkWidth=(b.canopy==='ring'?1.25:1)*scale,trunkBlocks=Math.max(4,Math.round((b.canopy==='conifer'?7:b.canopy==='ring'?8:b.canopy==='spire'?10:6)*hScale));
             const {trunkMats,leafMat}=treeMaterials(b,rare);
             const shade=makeGroundShadow(1.5+scale*1.35,rare?.62:.5);tree.add(shade);
             const dummy=new THREE.Object3D(),trunkMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(trunkWidth,1,trunkWidth),trunkMats,trunkBlocks);for(let y=0;y<trunkBlocks;y++){dummy.position.set(0,.5+y,0);dummy.scale.set(1,1,1);dummy.rotation.set(0,0,0);dummy.updateMatrix();trunkMesh.setMatrixAt(y,dummy.matrix)}trunkMesh.instanceMatrix.needsUpdate=true;tree.add(trunkMesh);
-            const leaves=[],addLeaf=(lx,ly,lz,size=1.08)=>leaves.push({lx,ly,lz,size}),top=trunkBlocks;if(b.canopy==='conifer'){for(let layer=0;layer<4;layer++){const r=layer<2?2:1,y=top-1+layer;for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++)if(Math.abs(lx)+Math.abs(lz)<=r+1&&!(lx===0&&lz===0&&layer<2))addLeaf(lx,y,lz,1.05)}addLeaf(0,top+3,0,1.05)}else if(b.canopy==='spire'){
+            const leaves=[],addLeaf=(lx,ly,lz,size=1.08)=>leaves.push({lx,ly,lz,size}),top=trunkBlocks;if(b.canopy==='conifer'){
+                // A giant pine is a BROAD skirt tapering to a tip -- the silhouette has to stay
+                // conical or it stops reading as a pine at fifty metres.
+                if(giant){const rows=[4,4,3,3,2,2,1];for(let layer=0;layer<rows.length;layer++){const r=rows[layer],y=top-3+layer;for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++){if(Math.abs(lx)+Math.abs(lz)>r+1)continue;if(lx===0&&lz===0&&layer<rows.length-2)continue;addLeaf(lx,y,lz,1.06)}}addLeaf(0,top+rows.length-3,0,1.0)}
+                else{for(let layer=0;layer<4;layer++){const r=layer<2?2:1,y=top-1+layer;for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++)if(Math.abs(lx)+Math.abs(lz)<=r+1&&!(lx===0&&lz===0&&layer<2))addLeaf(lx,y,lz,1.05)}addLeaf(0,top+3,0,1.05)}}else if(b.canopy==='spire'){
                 // Petrified wood does not spread. The crown is a tapering column with a few
                 // broken-off shelves, so a stand of them reads as ruined pillars.
-                for(let y=-2;y<=4;y++){const r=y>2?0:1;for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++){if(Math.abs(lx)===1&&Math.abs(lz)===1)continue;if(lx===0&&lz===0&&y<0)continue;addLeaf(lx,top+y,lz,y>2?.95:1.06)}}
-                for(const[sx,sz]of[[2,0],[-2,1],[0,-2]])if(rand()<.75)addLeaf(sx,top+Math.floor(rand()*3),sz,.9);
-            }else if(b.canopy==='ring'){for(let i=0;i<18;i++){const a=i/18*Math.PI*2,r=1.2+(i%3)*.55;addLeaf(Math.round(Math.cos(a)*r),top-1+(i%4),Math.round(Math.sin(a)*r),1.1)}for(let y=0;y<3;y++)addLeaf(0,top+y,0,1.1)}else{for(let ly=-1;ly<=2;ly++){const r=ly===2?1:2;for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++){if(Math.abs(lx)===r&&Math.abs(lz)===r&&rand()<.45)continue;if(lx===0&&lz===0&&ly<1)continue;addLeaf(lx,top+ly,lz,1.08)}}}
-            // A giant is not just the ordinary crown scaled up -- that reads as a rendering
-            // bug rather than an old tree. It gets a wider skirt hanging below the canopy
-            // base, a second tier stacked above it, and four boughs pushed out of the bare
-            // trunk, which is the part that actually says "this one has been here a while".
-            if(giant){
-                for(let ly=-2;ly<=0;ly++){
-                    const r=3;
-                    for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++){
-                        const d=Math.abs(lx)+Math.abs(lz);
-                        if(d<r-1||d>r+1)continue;
-                        if(rand()<.28)continue;
-                        addLeaf(lx,top+ly,lz,1.12);
-                    }
+                // A giant one is a THICKER pillar with more broken shelves, not a taller one.
+                // Gildenwaste spires are already the tallest thing in the game.
+                if(giant){
+                    for(let y=-4;y<=4;y++){const r=y>2?1:2;for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++){if(Math.abs(lx)===r&&Math.abs(lz)===r)continue;if(lx===0&&lz===0&&y<0)continue;addLeaf(lx,top+y,lz,y>2?.95:1.06)}}
+                    for(const[sx,sz]of[[3,0],[-3,1],[0,-3],[2,-2],[-2,2]])if(rand()<.75)addLeaf(sx,top+Math.floor(rand()*4)-1,sz,1.0);
+                }else{
+                    for(let y=-2;y<=4;y++){const r=y>2?0:1;for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++){if(Math.abs(lx)===1&&Math.abs(lz)===1)continue;if(lx===0&&lz===0&&y<0)continue;addLeaf(lx,top+y,lz,y>2?.95:1.06)}}
+                    for(const[sx,sz]of[[2,0],[-2,1],[0,-2]])if(rand()<.75)addLeaf(sx,top+Math.floor(rand()*3),sz,.9);
                 }
-                for(let ly=3;ly<=5;ly++){
-                    const r=ly>4?1:2;
-                    for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++){
-                        if(Math.abs(lx)===r&&Math.abs(lz)===r)continue;
-                        addLeaf(lx,top+ly,lz,1.1);
+            }else if(b.canopy==='ring'){
+                // The ring just gets a bigger radius and more of it. Widening a ring is the one
+                // case where "the same shape but larger" is actually the right answer.
+                const n=giant?32:18,base=giant?2.7:1.2,spread=giant?.7:.55,span=giant?5:4,drop=giant?3:1;
+                for(let i=0;i<n;i++){const a=i/n*Math.PI*2,r=base+(i%3)*spread;addLeaf(Math.round(Math.cos(a)*r),top-drop+(i%span),Math.round(Math.sin(a)*r),1.1)}
+                for(let y=0;y<(giant?4:3);y++)addLeaf(0,top+y,0,1.1)}else{
+                // Broadleaf. A giant is a WIDE dome that sits low over the trunk -- rows are
+                // culled to a circle so the profile is round rather than a stack of slabs,
+                // which is what the first attempt looked like.
+                if(giant){
+                    for(const[ly,r]of[[-3,4],[-2,5],[-1,5],[0,4],[1,3],[2,2]]){
+                        for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++){
+                            if(lx*lx+lz*lz>(r+.4)*(r+.4))continue;
+                            if(lx*lx+lz*lz>(r-.6)*(r-.6)&&rand()<.3)continue;
+                            if(lx===0&&lz===0&&ly<1)continue;
+                            addLeaf(lx,top+ly,lz,1.08);
+                        }
                     }
-                }
-                for(const[bx,bz]of[[2,0],[-2,0],[0,2],[0,-2]])if(rand()<.8)addLeaf(bx,top-4,bz,1.02);
-            }
+                    for(const[bx,bz]of[[3,0],[-3,0],[0,3],[0,-3]])if(rand()<.7)addLeaf(bx,top-4,bz,1.02);
+                }else{
+                    for(let ly=-1;ly<=2;ly++){const r=ly===2?1:2;for(let lx=-r;lx<=r;lx++)for(let lz=-r;lz<=r;lz++){if(Math.abs(lx)===r&&Math.abs(lz)===r&&rand()<.45)continue;if(lx===0&&lz===0&&ly<1)continue;addLeaf(lx,top+ly,lz,1.08)}}
+                }}
             const crownTop=leaves.length?Math.max(...leaves.map(p=>p.ly+p.size*.5)):trunkBlocks;
             const leafMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),leafMat,leaves.length);
             leafMesh.userData.windPhase=rand()*Math.PI*2;leaves.forEach((p,i)=>{dummy.position.set(p.lx,p.ly,p.lz);dummy.scale.set(p.size,p.size,p.size);dummy.rotation.set(0,0,0);dummy.updateMatrix();leafMesh.setMatrixAt(i,dummy.matrix)});leafMesh.instanceMatrix.needsUpdate=true;tree.add(leafMesh);
