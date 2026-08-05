@@ -25,7 +25,7 @@
     <meta name="twitter:description" content="Timberbound is a first-person voxel incremental game about felling increasingly impossible trees, hauling strange lumber to a shopkeeper called Mosswick, and becoming gloriously overpowered. Eight forests, eleven axes, a 30-node skill constellation, spreading wildfire and a drone fleet that hauls millions of logs for you.">
     <meta name="twitter:image" content="https://www.gptgames.dev/screenshots/screenshot_282.webp">
     <meta name="twitter:image:alt" content="First-person view of a voxel forest in Timberbound, axe raised before a glowing tree.">
-    <meta name="author" content="Tobias Müller, with GPT-5.6 Thinking and Claude (Anthropic)">
+    <meta name="author" content="Tobias Müller, with GPT-5.6 Sol and Claude Opus 5 (Anthropic)">
     <meta name="theme-color" content="#77e38e">
     <title>Timberbound — a first-person voxel incremental about impossible trees</title>
     <style>
@@ -211,6 +211,15 @@
         body.touch-mode button,.touch-mode select,.touch-mode input{min-height:44px}
 
 
+        /* A one-time banner is easy to miss, and this is the most hidden mechanic in the game
+           -- the owner finished it and never saw the prompt. A persistent chip costs one line
+           of HUD and removes the possibility entirely. Hidden until the aircraft is earned. */
+        #runner-hint{position:absolute;left:18px;bottom:150px;display:none;grid-template-columns:auto auto;align-items:center;gap:9px;padding:7px 11px;border-radius:12px;opacity:.86}
+        #runner-hint.on{display:grid}
+        #runner-hint .key{display:grid;place-items:center;width:22px;height:22px;border-radius:5px;background:rgba(201,255,112,.16);border:1px solid rgba(201,255,112,.45);color:var(--lime);font:1000 12px/1 ui-monospace,monospace}
+        #runner-hint b{display:block;font:900 13px/1 ui-monospace,monospace;letter-spacing:.08em;color:var(--lime)}
+        #runner-hint small{display:block;margin-top:3px;font:700 12px/1 ui-monospace,monospace;color:var(--muted)}
+        body.touch-mode #runner-hint{display:none!important}
         #shop-compass{position:absolute;left:18px;bottom:82px;display:grid;grid-template-columns:34px auto;align-items:center;gap:9px;padding:8px 11px;border-radius:12px;min-width:172px;transition:opacity .2s,transform .2s}
         #shop-compass.near{opacity:.48;transform:scale(.94)}#shop-arrow{position:relative;width:30px;height:30px;display:grid;place-items:center;transition:transform .12s linear;filter:drop-shadow(0 0 8px rgba(201,255,112,.35))}#shop-arrow:before{content:"";left:8px;top:2px;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:18px solid var(--lime);position:absolute;transform:translateY(-4px)}#shop-arrow:after{content:"";left:12px;top:11px;width:5px;height:13px;border-radius:4px;background:rgba(201,255,112,.72);position:absolute;transform:translateY(7px)}#shop-compass b{font:900 14px/1 ui-monospace,monospace;letter-spacing:.12em}#shop-compass small{display:block;margin-top:4px;color:var(--muted);font:800 13px/1 ui-monospace,monospace}
         #achievement-banner{position:fixed;z-index:55;left:50%;top:17%;transform:translate(-50%,-18px) scale(.96);width:min(520px,calc(var(--ui-vw) - 28px));padding:16px 18px;border-radius:16px;display:grid;grid-template-columns:54px 1fr;gap:13px;align-items:center;opacity:0;pointer-events:none;border-color:color-mix(in srgb,var(--banner,#77e38e) 45%,transparent);box-shadow:0 20px 70px rgba(0,0,0,.48),0 0 38px color-mix(in srgb,var(--banner,#77e38e) 18%,transparent);transition:opacity .25s,transform .25s}
@@ -356,6 +365,7 @@
         <div id="fire-card" class="ability panel"><span class="key">🔥</span><div><b>EMBERWAKE</b><small>Felled trees set their neighbours alight</small></div><output id="fire-level">LOCKED</output></div>
         <div id="rush-card" class="ability panel"><span class="key">🏃</span><div><b>FELLER'S RUSH</b><small>Felling grants a speed surge</small></div><output id="rush-level">LOCKED</output></div>
     </section>
+    <section id="runner-hint" class="panel"><span class="key">F</span><div><b id="runner-hint-title">TIMBER RUNNER</b><small id="runner-hint-sub">take it up</small></div></section>
     <section id="shop-compass" class="panel"><span id="shop-arrow"></span><div><b>MOSSWICK</b><small id="shop-distance">20m · AHEAD</small></div></section>
     <section id="achievement-banner" class="panel" role="status" aria-live="polite"><div id="achievement-icon">🪓</div><div><small id="achievement-kicker">COMPANY MILESTONE</small><h3 id="achievement-title">A better edge</h3><p id="achievement-copy">Mosswick has somehow approved this purchase.</p></div></section>
     <div id="toast-stack" role="status" aria-live="polite" aria-atomic="false"></div>
@@ -546,6 +556,7 @@
         // window would be the same bug wearing a different hat.
         const BUCK_WINDOW=3;
         const BASE_CARGO=180, CHARTER_BASE=15000000, CHARTER_GROWTH=2.02;
+        const RUNNER_BOUND=118;   // the forest floor is 210m across; this keeps the plane over it
         // --- first-person axe pose ------------------------------------------------------
         // Resting yaw is negative so the blade's broad face turns AWAY from the camera.
         // The chop is driven mostly by pitch + reach (forward, into the tree) with only a
@@ -672,9 +683,9 @@
             {name:'Gilden Vultures',body:0xcbae67,wing:0x7d6231,size:1.6,flock:5,glow:0,cruise:7.5,call:[[560,.34,.028,'sawtooth',.42]]}
         ];
         const shrineLit=i=>!!state.shrines?.[i];
-        const DEFAULT_STATE=()=>({version:111,money:0,pendingSale:0,cargo:BIOMES.map(()=>0),axe:0,ownedAxes:AXES.map((_,i)=>i===0),upgrades:{holdfold:0,drone:0,manifold:0,bucking:0,seasoning:0,wildfire:0,power:0,haste:0,reach:0,crit:0,double:0,combo:0,surge:0,boots:0,cargo:0,magnet:0,yield:0,overkill:0,regrowth:0,density:0,sale:0,lightning:0,blast:0,wisp:0,crescendo:0,followthrough:0,whistle:0,futures:0,heartwood:0,conductor:0},unlocked:BIOMES.map((_,i)=>i===0),charter:0,achievements:[],legendary:BIOMES.map(()=>false),cutByBiome:BIOMES.map(()=>0),found:KEEPSAKES.map(()=>false),lanterns:[false,false,false,false],shrines:SHRINES.map(()=>false),homecoming:false,biome:0,treesCut:0,bestCombo:0,bestWindthrow:0,totalEarned:0,objective:0,objectiveCount:0,playTime:0,seasonTime:0,lastSave:Date.now(),lastSeen:Date.now(),player:{x:0,z:SPAWN_Z,yaw:SPAWN_YAW,pitch:0},settings:{music:true,sfx:true,musicVolume:.68,sfxVolume:TOUCH_MODE?.55:.65,sensitivity:1,quality:TOUCH_MODE?'medium':'high',uiScale:1,cameraMotion:!TOUCH_MODE&&!REDUCED_MOTION,motionTuned:true,drones:true,toasts:true,fov:72,fullscreen:true,haptics:true,wildlife:true,mobileTuned:TOUCH_MODE}});
+        const DEFAULT_STATE=()=>({version:111,money:0,pendingSale:0,cargo:BIOMES.map(()=>0),axe:0,ownedAxes:AXES.map((_,i)=>i===0),upgrades:{holdfold:0,drone:0,manifold:0,bucking:0,seasoning:0,wildfire:0,power:0,haste:0,reach:0,crit:0,double:0,combo:0,surge:0,boots:0,cargo:0,magnet:0,yield:0,overkill:0,regrowth:0,density:0,sale:0,lightning:0,blast:0,wisp:0,crescendo:0,followthrough:0,whistle:0,futures:0,heartwood:0,conductor:0},unlocked:BIOMES.map((_,i)=>i===0),charter:0,achievements:[],legendary:BIOMES.map(()=>false),runner:false,runnerFelled:0,cutByBiome:BIOMES.map(()=>0),found:KEEPSAKES.map(()=>false),lanterns:[false,false,false,false],shrines:SHRINES.map(()=>false),homecoming:false,biome:0,treesCut:0,bestCombo:0,bestWindthrow:0,totalEarned:0,objective:0,objectiveCount:0,playTime:0,seasonTime:0,lastSave:Date.now(),lastSeen:Date.now(),player:{x:0,z:SPAWN_Z,yaw:SPAWN_YAW,pitch:0},settings:{music:true,sfx:true,musicVolume:.68,sfxVolume:TOUCH_MODE?.55:.65,sensitivity:1,quality:TOUCH_MODE?'medium':'high',uiScale:1,cameraMotion:!TOUCH_MODE&&!REDUCED_MOTION,motionTuned:true,drones:true,toasts:true,fov:72,fullscreen:true,haptics:true,wildlife:true,mobileTuned:TOUCH_MODE}});
         let state=loadState();
-        let scene,camera,renderer,clock,viewScene,viewCamera,axePivot,axeModel,axeHead,axeEdge,shopGroups=[],biomeGroups=[],gateGroups=[],trees=[],obstacles=[],solidColliders=[],pickups=[],saleMotes=[],particles=[],lines=[],stars,clouds,ambientField,ambientPositions,ambientDrift,ambientLight,sunLight,wispMesh,wispLight,waterSurfaces=[];
+        let scene,camera,renderer,clock,viewScene,viewCamera,axePivot,axeModel,axeHead,axeEdge,runnerPivot,shopGroups=[],biomeGroups=[],gateGroups=[],trees=[],obstacles=[],solidColliders=[],pickups=[],saleMotes=[],particles=[],lines=[],stars,clouds,ambientField,ambientPositions,ambientDrift,ambientLight,sunLight,wispMesh,wispLight,waterSurfaces=[];
         const TERRAIN_TILE=4,TERRAIN_HALF=120,TERRAIN_BASE=-5,TERRAIN_N=TERRAIN_HALF*2/TERRAIN_TILE;
         const terrainMaps=[],textureCache=new Map(),pixelMatCache=new Map();
         const windUniform={value:0};
@@ -730,7 +741,7 @@
                 s.ownedAxes=Array.from({length:AXES.length},(_,i)=>!!(raw.ownedAxes?.[i]||i===0));const highestLegacyAxe=s.ownedAxes.reduce((h,owned,i)=>owned?i:h,0);for(let i=0;i<=highestLegacyAxe;i++)s.ownedAxes[i]=true;s.unlocked=Array.from({length:BIOMES.length},(_,i)=>!!(raw.unlocked?.[i]||i===0));
                 s.cargo=Array.from({length:BIOMES.length},(_,i)=>Math.max(0,Number(raw.cargo?.[i])||0));const recoveredSale=Math.max(0,Number(raw.pendingSale)||0);s.money=Math.max(0,Number(s.money)||0)+recoveredSale;s.totalEarned=Math.max(0,Number(s.totalEarned)||0)+recoveredSale;if(recoveredSale&&s.objective===1)s.objective=2;s.pendingSale=0;
                 s.settings.music=!!s.settings.music;s.settings.sfx=!!s.settings.sfx;s.settings.musicVolume=clamp(Number(s.settings.musicVolume)||0,0,1);s.settings.sfxVolume=clamp(Number.isFinite(Number(s.settings.sfxVolume))?Number(s.settings.sfxVolume):(TOUCH_MODE?.55:.65),0,1);s.settings.sensitivity=clamp(Number(s.settings.sensitivity)||1,.45,1.8);s.settings.cameraMotion=s.settings.cameraMotion!==false;if(!raw.settings?.motionTuned){if(REDUCED_MOTION)s.settings.cameraMotion=false;s.settings.motionTuned=true}s.settings.fov=clamp(Number(s.settings.fov)||72,60,90);if(!['low','medium','high'].includes(s.settings.quality))s.settings.quality=TOUCH_MODE?'medium':'high';if(TOUCH_MODE&&!s.settings.mobileTuned){if(s.settings.quality==='high')s.settings.quality='medium';s.settings.cameraMotion=false;s.settings.mobileTuned=true;}
-                for(const[key,d]of Object.entries(UPGRADE_DEFS))s.upgrades[key]=clamp(Math.floor(Number(s.upgrades[key])||0),0,d.max);s.charter=Math.max(0,Math.floor(Number(s.charter)||0));s.settings.uiScale=Math.min(1.5,Math.max(1,Number(s.settings.uiScale)||1));s.legendary=Array.from({length:BIOMES.length},(_,i)=>!!raw.legendary?.[i]);s.cutByBiome=Array.from({length:BIOMES.length},(_,i)=>Math.max(0,Math.floor(Number(raw.cutByBiome?.[i])||0)));s.found=Array.from({length:KEEPSAKES.length},(_,i)=>!!raw.found?.[i]);s.lanterns=Array.from({length:4},(_,i)=>!!raw.lanterns?.[i]);s.shrines=Array.from({length:SHRINES.length},(_,i)=>!!raw.shrines?.[i]);s.homecoming=!!raw.homecoming;
+                for(const[key,d]of Object.entries(UPGRADE_DEFS))s.upgrades[key]=clamp(Math.floor(Number(s.upgrades[key])||0),0,d.max);s.charter=Math.max(0,Math.floor(Number(s.charter)||0));s.runner=!!s.runner;s.runnerFelled=Math.max(0,Math.floor(Number(s.runnerFelled)||0));s.settings.uiScale=Math.min(1.5,Math.max(1,Number(s.settings.uiScale)||1));s.legendary=Array.from({length:BIOMES.length},(_,i)=>!!raw.legendary?.[i]);s.cutByBiome=Array.from({length:BIOMES.length},(_,i)=>Math.max(0,Math.floor(Number(raw.cutByBiome?.[i])||0)));s.found=Array.from({length:KEEPSAKES.length},(_,i)=>!!raw.found?.[i]);s.lanterns=Array.from({length:4},(_,i)=>!!raw.lanterns?.[i]);s.shrines=Array.from({length:SHRINES.length},(_,i)=>!!raw.shrines?.[i]);s.homecoming=!!raw.homecoming;
                 if(s.cutByBiome.every(n=>n===0)&&s.treesCut>0){
                     const open=s.unlocked.map((u,i)=>u?i:-1).filter(i=>i>=0),
                         weights=open.map((_,k)=>Math.pow(.62,k)),
@@ -3367,7 +3378,73 @@
         function createViewModel(){
             const wg=new THREE.Group(),core=new THREE.Mesh(new THREE.OctahedronGeometry(.27,0),makeMat(0x7effe4,.25,0x36ffd3));core.material.emissiveIntensity=1.8;wg.add(core);const ring=new THREE.Mesh(new THREE.TorusGeometry(.42,.035,6,18),new THREE.MeshBasicMaterial({color:0xc9ff70}));ring.rotation.x=Math.PI/2;wg.add(ring);wispLight=new THREE.PointLight(0x70ffe1,2.8,11,2);wg.add(wispLight);wg.visible=state.upgrades.wisp>0;scene.add(wg);wispMesh=wg;
             viewScene=new THREE.Scene();viewCamera=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,.01,20);viewScene.add(new THREE.HemisphereLight(0xffffff,0x5a422f,2.7));const rim=new THREE.DirectionalLight(0xfff2cf,2.45);rim.position.set(-2,3,4);viewScene.add(rim);const fill=new THREE.DirectionalLight(0x86cfff,1.2);fill.position.set(3,1,2);viewScene.add(fill);axePivot=new THREE.Group();axeModel=new THREE.Group();axePivot.add(axeModel);viewScene.add(axePivot);rebuildAxeModel(state.axe);
+            runnerPivot=buildRunnerCockpit();runnerPivot.visible=false;viewScene.add(runnerPivot);
             axePivot.position.set(.60,-.84,-1.46);axePivot.rotation.set(-.05,.10,-.02);
+        }
+        // The Runner is drawn as a cockpit in the SAME overlay scene as the axe, rather than as a
+        // real object in the world. That is not a shortcut for its own sake: the camera sits at
+        // the pilot's eye, so a world-space plane would be a model the player is permanently
+        // inside and clipping through. A frame, a nose and two wing roots read as an aircraft
+        // from the seat, and there is nothing to intersect.
+        // The cockpit, seen from the pilot's seat.
+        //
+        // The first attempt was three slabs -- a wide nose block and two rectangular wing roots,
+        // all of them large and parked about 1.5 units from a 50-degree lens, so they filled the
+        // lower screen as unreadable planks. The owner's screenshot was unambiguous.
+        //
+        // What makes a first-person cockpit read as an aircraft is not detail, it is LAYOUT:
+        // a coaming across the bottom of the view to sit behind, a fuselage that tapers away
+        // from the eye so there is perspective to read, wings that go OUT to the periphery and
+        // sweep back, and something spinning. Everything is pushed further from the lens and
+        // made thinner than feels right in numbers, because at this focal length it is not.
+        function buildRunnerCockpit(){
+            const g=new THREE.Group();
+            const hull=pixelMat(0x707c66,'wood'),
+                dark=pixelMat(0x39432f,'wood'),
+                steel=pixelMat(0x8d9784,'wood'),
+                glow=pixelMat(0xc9ff70,'wood',{emissive:0xc9ff70}),
+                warm=pixelMat(0xffc46a,'wood',{emissive:0xffc46a});
+
+            // Coaming: the lip you sit behind. Low and wide, it frames the bottom of the view
+            // and is what actually tells the eye "you are inside something".
+            const coaming=box(1.9,.16,.46,dark);coaming.position.set(0,-.92,-1.25);coaming.rotation.x=.14;g.add(coaming);
+            const lipL=box(.22,.30,.40,dark);lipL.position.set(-.86,-.86,-1.30);lipL.rotation.z=-.34;g.add(lipL);
+            const lipR=box(.22,.30,.40,dark);lipR.position.set(.86,-.86,-1.30);lipR.rotation.z=.34;g.add(lipR);
+
+            // Fuselage forward of the coaming, stepped down in three tapering blocks so there is
+            // real perspective between the eye and the nose rather than one flat face.
+            const f1=box(1.15,.34,1.30,hull);f1.position.set(0,-1.06,-2.30);g.add(f1);
+            const f2=box(.80,.26,1.20,hull);f2.position.set(0,-1.12,-3.35);g.add(f2);
+            const f3=box(.46,.18,.80,steel);f3.position.set(0,-1.16,-4.20);g.add(f3);
+            const spinner=box(.20,.20,.26,dark);spinner.position.set(0,-1.16,-4.66);g.add(spinner);
+            // The propeller disc. It is a thin cross rather than a blur sprite; spun fast enough
+            // in updateViewModel it reads the same and costs two boxes.
+            const prop=new THREE.Group();
+            const bladeA=box(2.05,.07,.05,steel),bladeB=box(.07,2.05,.05,steel);
+            prop.add(bladeA);prop.add(bladeB);prop.position.set(0,-1.16,-4.80);g.add(prop);
+
+            for(const side of[-1,1]){
+                // Wings: long, thin, swept back and angled up a little, running out past the
+                // edge of the frame so they read as wings rather than as boards.
+                const wing=box(3.30,.10,.86,hull);
+                wing.position.set(side*2.05,-1.14,-2.45);
+                wing.rotation.set(0,side*-.20,side*.05);
+                g.add(wing);
+                const tipLight=box(.10,.10,.10,side<0?warm:glow);
+                tipLight.position.set(side*3.62,-1.10,-2.14);g.add(tipLight);
+                // Nacelle plus a second, smaller prop out on the wing.
+                const nac=box(.36,.30,1.05,dark);nac.position.set(side*1.55,-1.16,-2.85);g.add(nac);
+                const nacProp=new THREE.Group();
+                nacProp.add(box(1.05,.05,.04,steel));nacProp.add(box(.05,1.05,.04,steel));
+                nacProp.position.set(side*1.55,-1.16,-3.42);g.add(nacProp);
+                // Guns, and the flash that only shows on the frames a shot goes out.
+                const barrel=box(.09,.09,1.05,dark);barrel.position.set(side*1.05,-1.30,-3.15);g.add(barrel);
+                const flash=box(.30,.30,.42,warm);flash.position.set(side*1.05,-1.30,-3.85);flash.visible=false;g.add(flash);
+                g.userData[side<0?'flashL':'flashR']=flash;
+                g.userData[side<0?'propL':'propR']=nacProp;
+            }
+            g.userData.prop=prop;
+            return g;
         }
         // The view model renders into a freshly cleared depth buffer (see animate), so it can safely
         // depth-test against itself. With testing off, blade slabs behind the handle painted over it —
@@ -3494,11 +3571,11 @@
             renderer.domElement.addEventListener('click',()=>{if(TOUCH_MODE||locked||document.pointerLockElement===renderer.domElement||!$('menu').classList.contains('hidden')||shopOpen||helpOpen)return;renderer.domElement.requestPointerLock()});
             document.addEventListener('pointerlockchange',()=>{if(TOUCH_MODE)return;const was=locked;locked=document.pointerLockElement===renderer.domElement;if(locked){modalClosing=false;hideResumeCurtain();$('menu').classList.add('hidden')}else if(!shopOpen&&!helpOpen&&!reportOpen&&!modalClosing&&performance.now()>suppressPauseUntil){setMenuMode();$('menu').classList.remove('hidden')}if(was!==locked)resetInput();applySettings()});document.addEventListener('pointerlockerror',()=>{if(TOUCH_MODE)return;if(modalClosing||performance.now()<=suppressPauseUntil){modalClosing=false;showResumeCurtain();return}setMenuMode();$('menu').classList.remove('hidden');toast('CLICK RETURN TO FOREST TO RESUME')});
             document.addEventListener('mousemove',e=>{if(!locked)return;const sens=.0022*state.settings.sensitivity;player.yaw-=e.movementX*sens;player.pitch=clamp(player.pitch-e.movementY*sens,-1.5,1.5)});
-            document.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(k==='escape'){const menuVisible=!$('menu').classList.contains('hidden');escapeArmed=reportOpen?'report':shopOpen?'shop':helpOpen?'help':(menuVisible&&menuView==='options')?'optionsback':(menuVisible&&(sessionStarted||state.playTime>1||state.treesCut>0||state.totalEarned>0))?'resume':resumeCurtainOpen?'curtain':null;if(escapeArmed){e.preventDefault();e.stopImmediatePropagation()}return}if(e.repeat&&['e',' '].includes(k))return;if(k==='w'||k==='a'||k==='s'||k==='d'||k==='shift')keys[k]=true;if(e.code==='Space'){keys.space=true;player.jumpBuffer=.16;e.preventDefault()}if(k==='e'&&locked){if(targetShop)openShop();else if(targetShrine)offerAtShrine(targetShrine)}},true);
+            document.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(k==='escape'){const menuVisible=!$('menu').classList.contains('hidden');escapeArmed=reportOpen?'report':shopOpen?'shop':helpOpen?'help':(menuVisible&&menuView==='options')?'optionsback':(menuVisible&&(sessionStarted||state.playTime>1||state.treesCut>0||state.totalEarned>0))?'resume':resumeCurtainOpen?'curtain':null;if(escapeArmed){e.preventDefault();e.stopImmediatePropagation()}return}if(e.repeat&&['e',' '].includes(k))return;if(k==='w'||k==='a'||k==='s'||k==='d'||k==='shift')keys[k]=true;if(e.code==='Space'){keys.space=true;player.jumpBuffer=.16;e.preventDefault()}if(k==='e'&&locked){if(targetShop)openShop();else if(targetShrine)offerAtShrine(targetShrine)}if(k==='f'&&locked&&state.runner&&!shopOpen&&!helpOpen&&!reportOpen)toggleRunner()},true);
             document.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='escape'){const action=escapeArmed;escapeArmed=null;if(action){e.preventDefault();e.stopImmediatePropagation();if(action==='optionsback')showMenuView('home');else if(action==='report')closeReturnReport();else if(action==='shop')closeShop('escape');else if(action==='help')closeHelp();else if(action==='resume'){suppressPauseUntil=performance.now()+600;startPlay()}else if(action==='curtain'){hideResumeCurtain();setMenuMode();$('menu').classList.remove('hidden')}}return}if(['w','a','s','d','shift'].includes(k))keys[k]=false;if(e.code==='Space')keys.space=false},true);document.addEventListener('mousedown',e=>{if(locked&&e.button===0){mouseDown=true;e.preventDefault()}});document.addEventListener('mouseup',e=>{if(e.button===0)mouseDown=false});document.addEventListener('contextmenu',e=>e.preventDefault());window.addEventListener('blur',resetInput);document.addEventListener('visibilitychange',()=>{resetInput();setMenuMode();if(document.hidden){mobileActive=false;hideResumeCurtain();$('mobile-controls').classList.remove('active');$('menu').classList.remove('hidden');saveState(false);if(audioCtx?.state==='running')audioCtx.suspend().catch(()=>{})}});document.querySelectorAll('.branch-chip').forEach(chip=>chip.onclick=()=>{skillFilter=chip.dataset.branch;selectedSkillKey=skillFocusKey();buildSkillTree();centerSkill(selectedSkillKey)});$('skill-focus-next').onclick=()=>{const key=skillFocusKey();selectSkill(key);centerSkill(key)};if(TOUCH_MODE)bindTouchControls();
             window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();viewCamera.aspect=innerWidth/innerHeight;viewCamera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight,false);renderer.setPixelRatio(renderPixelRatio());applyUiScale()});window.addEventListener('beforeunload',()=>saveState(false));
         }
-        function resetInput(){escapeArmed=null;keys={};mouseDown=false;player.jumpBuffer=0;mobileMove.x=mobileMove.z=0;touchState.moveId=touchState.lookId=null;$('move-knob').style.transform='translate(0px,0px)';document.querySelectorAll('.mobile-btn').forEach(b=>b.classList.remove('active'))}
+        function resetInput(){escapeArmed=null;keys={};mouseDown=false;if(flying)exitRunner();player.jumpBuffer=0;mobileMove.x=mobileMove.z=0;touchState.moveId=touchState.lookId=null;$('move-knob').style.transform='translate(0px,0px)';document.querySelectorAll('.mobile-btn').forEach(b=>b.classList.remove('active'))}
         // Contact shadows cost one extra draw call per visible tree, so LOW quality sheds them.
         // Interface size. `zoom` scales layout as well as glyphs, so fixed-width panels stay
         // proportional instead of overflowing the way a bare font-size bump would.
@@ -3566,7 +3643,7 @@
         }
         function setMenuMode(){showMenuView('home');const played=sessionStarted||state.playTime>1||state.treesCut>0||state.totalEarned>0;$('play-btn').textContent=played?'RETURN TO FOREST':'BEGIN FORESTRY';const next=nextMilestone();$('menu-state').textContent=played?`${BIOMES[state.biome].short} · ${fmt(state.money)} CROWNS · ${fmt(state.treesCut)} TREES FELLED · NEXT: ${next.label}`:'NEW COMPANY · GREENHOLLOW AWAITS'}
         function syncSettingsUI(){$('music-toggle').textContent=state.settings.music?'ON':'OFF';$('music-toggle').classList.toggle('on',state.settings.music);$('sfx-toggle').textContent=state.settings.sfx?'ON':'OFF';$('sfx-toggle').classList.toggle('on',state.settings.sfx);$('motion-toggle').textContent=state.settings.cameraMotion?'ON':'OFF';$('motion-toggle').classList.toggle('on',state.settings.cameraMotion);$('fullscreen-toggle').textContent=state.settings.fullscreen?'ON':'OFF';$('fullscreen-toggle').classList.toggle('on',state.settings.fullscreen);$('haptics-toggle').textContent=state.settings.haptics?'ON':'OFF';$('haptics-toggle').classList.toggle('on',state.settings.haptics);$('drones-toggle').textContent=state.settings.drones?'ON':'OFF';$('drones-toggle').classList.toggle('on',state.settings.drones);$('wildlife-toggle').textContent=state.settings.wildlife!==false?'ON':'OFF';$('wildlife-toggle').classList.toggle('on',state.settings.wildlife!==false);$('toasts-toggle').textContent=state.settings.toasts!==false?'ON':'OFF';$('toasts-toggle').classList.toggle('on',state.settings.toasts!==false);$('music-volume').value=Math.round(state.settings.musicVolume*100);$('music-value').textContent=`${Math.round(state.settings.musicVolume*100)}%`;$('sfx-volume').value=Math.round(state.settings.sfxVolume*100);$('sfx-value').textContent=`${Math.round(state.settings.sfxVolume*100)}%`;$('sensitivity').value=Math.round(state.settings.sensitivity*100);$('sensitivity-value').textContent=`${Math.round(state.settings.sensitivity*100)}%`;$('fov').value=Math.round(state.settings.fov);$('fov-value').textContent=`${Math.round(state.settings.fov)}°`;$('quality').value=state.settings.quality;for(const t of document.querySelectorAll('#settings-grid .toggle'))t.setAttribute('aria-pressed',t.classList.contains('on')?'true':'false');$('music-status').textContent=state.settings.music?(audioCtx?'PROCEDURAL SCORE ACTIVE':'MUSIC STARTS AFTER PLAY'):'MUSIC DISABLED'}
-        function applySettings(){if(!audioCtx)return;if(sfxGain)sfxGain.gain.setTargetAtTime(state.settings.sfx?state.settings.sfxVolume:0,audioCtx.currentTime,.04);if(musicGain)musicGain.gain.setTargetAtTime(musicBusGain(),audioCtx.currentTime,.08);if(state.settings.music)startMusic()}
+        function applySettings(){if(!audioCtx)return;if(sfxGain)sfxGain.gain.setTargetAtTime(sfxBusGain(),audioCtx.currentTime,.04);if(musicGain)musicGain.gain.setTargetAtTime(musicBusGain(),audioCtx.currentTime,.08);if(state.settings.music)startMusic()}
         function requestImmersive(){if(!TOUCH_MODE||!state.settings.fullscreen||document.fullscreenElement)return;try{const request=document.documentElement.requestFullscreen?.({navigationUI:'hide'});request?.then?.(()=>{const orientationLock=screen.orientation?.lock?.('landscape');orientationLock?.catch?.(()=>{})}).catch?.(()=>{});setTimeout(()=>window.dispatchEvent(new Event('resize')),120)}catch(e){}}
         function startPlay(){sessionStarted=true;setMenuMode();requestImmersive();ensureAudio();startMusic();hideResumeCurtain();if(audioCtx?.state==='suspended')audioCtx.resume().catch(()=>{});$('menu').classList.add('hidden');if(TOUCH_MODE){mobileActive=true;$('mobile-controls').classList.add('active');applySettings();return}try{const request=renderer.domElement.requestPointerLock();request?.catch?.(()=>showResumeCurtain())}catch(e){showResumeCurtain()}}
         function openShop(){shopOpen=true;refreshMosswickVoice();hideResumeCurtain();if(TOUCH_MODE){mobileActive=false;$('mobile-controls').classList.remove('active')}else document.exitPointerLock?.();$('shop').classList.remove('hidden');$('menu').classList.add('hidden');buildShopUI();setShopTab(shopTab);ensureAudio();playSound('shop');setTimeout(()=>centerSkill(skillFocusKey(),'auto'),60)}
@@ -3765,10 +3842,209 @@
         function applyBiome(i,instant=false){while(burning.length)extinguish(burning[0]);if(i===6)rebuildSovereign();if(i===4)rebuildCosmicElder();if(i===7)rebuildMidasElder();if(i!==4&&axeVisualIndex!==state.axe)rebuildAxeModel(state.axe);const b=BIOMES[i];scene.fog.color.setHex(b.fog);scene.background=new THREE.Color(b.sky);$('biome-wash').style.background=`#${b.accent.toString(16).padStart(6,'0')}`;$('biome-name').textContent=b.short;biomeTime=instant?1:0;dressFlock(clamp(i,0,FAUNA.length-1))}
 
         function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-lastNow)/1000,.05);lastNow=now;const playing=locked||mobileActive,simulating=playing&&!shopOpen&&!helpOpen&&!reportOpen;fpsFrames++;fpsTimer+=dt;if(fpsTimer>=1){fps=fpsFrames;fpsFrames=0;fpsTimer=0;$('fps').textContent=fps;if(TOUCH_MODE&&simulating){if(fps<38){lowFpsTime++;highFpsTime=0}else if(fps>54){highFpsTime++;lowFpsTime=0}else{lowFpsTime=Math.max(0,lowFpsTime-1);highFpsTime=Math.max(0,highFpsTime-1)}if(lowFpsTime>=3&&perfScale>.72){perfScale=Math.max(.72,perfScale-.1);renderer.setPixelRatio(renderPixelRatio());lowFpsTime=0;toast('MOBILE PERFORMANCE · RESOLUTION ADJUSTED')}else if(highFpsTime>=8&&perfScale<1){perfScale=Math.min(1,perfScale+.05);renderer.setPixelRatio(renderPixelRatio());highFpsTime=0}}}
-            if(simulating){state.playTime+=dt;updatePlayer(dt);updateTarget();updateChopping(dt);updateSellPad(dt);updateTrees(dt);updateWildfire(dt);treeIntegrityTimer-=dt;if(treeIntegrityTimer<=0){treeIntegrityTimer=1.5;repairTreeIntegrity()}updatePickups(dt);updateEffects(dt);updateAmbientField(dt);updateFlock(dt);autosaveTimer+=dt}else targetTree=null;
-            updateSaleMotes(dt);updateWorld(simulating?dt:dt*.12);updateViewModel(dt);visibilityTimer-=dt;if(visibilityTimer<=0){visibilityTimer=TOUCH_MODE?.24:.5;updateRenderVisibility()}uiTimer-=dt;if(uiTimer<=0){uiTimer=.08;updateUI()}achievementTick-=dt;if(achievementTick<=0){achievementTick=.7;checkAchievements()}pumpAchievements(dt);pumpBanners(dt);
+            // Airborne, the ground loop is REPLACED, not supplemented: updatePlayer would fight
+            // the flight model for player.pos and updateChopping would let you swing an axe at a
+            // tree 40m below. Everything after (trees, fire, pickups, flock) still runs, because
+            // the whole point of the Runner is what those systems do in response to it.
+            if(simulating){state.playTime+=dt;if(flying)updateRunner(dt);else{updatePlayer(dt);updateTarget();updateChopping(dt)}updateSellPad(dt);updateTrees(dt);updateWildfire(dt);treeIntegrityTimer-=dt;if(treeIntegrityTimer<=0){treeIntegrityTimer=1.5;repairTreeIntegrity()}updatePickups(dt);updateEffects(dt);updateAmbientField(dt);updateFlock(dt);autosaveTimer+=dt}else targetTree=null;
+            updateSaleMotes(dt);updateWorld(simulating?dt:dt*.12);updateViewModel(dt);visibilityTimer-=dt;if(visibilityTimer<=0){visibilityTimer=TOUCH_MODE?.24:.5;updateRenderVisibility()}uiTimer-=dt;if(uiTimer<=0){uiTimer=.08;updateUI();updateRunnerHint()}achievementTick-=dt;if(achievementTick<=0){achievementTick=.7;checkAchievements();checkRunnerUnlock()}pumpAchievements(dt);pumpBanners(dt);
             if(autosaveTimer>12){autosaveTimer=0;saveState()}if(saveFlash>0){saveFlash-=dt;if(saveFlash<=0)$('save-state').textContent='AUTOSAVED'}
             renderer.autoClear=true;renderer.render(scene,camera);renderer.autoClear=false;renderer.clearDepth();renderer.render(viewScene,viewCamera);
+        }
+        // ===================== THE TIMBER RUNNER =====================================
+        // The secret final unlock: a small aircraft with a piercing gun, earned only after all
+        // eight legendaries are down. It exists to be aimed at the FLOCK, not at the trees --
+        // the game has kept score of how much of each forest you have taken since the first
+        // session and that score has never had a climax. Stripping a stand in ninety seconds is
+        // what `flockStanding` and the silence threshold have been waiting for.
+        //
+        // Every number here is a feel parameter and every one of them is a guess. Nothing in
+        // this environment can see the render, and "wrong" for a flight model is a continuous
+        // quality rather than a visible defect, so these are grouped deliberately: expect the
+        // owner to move all of them and do not scatter them back into the functions.
+        const RUNNER_SPEED_MIN=15, RUNNER_SPEED_MAX=52, RUNNER_BOOST=1.45,
+            RUNNER_TURN=1.75, RUNNER_ROLL=.85, RUNNER_ROLL_EASE=4.5,
+            RUNNER_GROUND=1.6,         // metres of air kept between the belly and the DIRT
+            RUNNER_BOUNCE=.55,         // how much of a floor strike is returned as lift
+            RUNNER_CEILING=110,
+            RUNNER_FIRE_GAP=.085,      // seconds between shots
+            RUNNER_RANGE=150,          // how far down the nose the bore reaches
+            RUNNER_BORE=5.4,           // how forgiving the aim is, on top of each trunk's radius
+            RUNNER_PIERCE=14;          // trunks one shot can pass through
+        // Bore is the lever that matters. At 52 m/s a pass over a stand lasts about four
+        // seconds, so range and fire rate barely move the total -- what decides whether this
+        // reads as "deforestation" or "plinking" is how wide the swathe is. 3.2m cut about
+        // four trunks a second; 5.4m cuts a corridor.
+        let flying=false,runnerSpeed=0,runnerRoll=0,runnerGun=0,runnerFelled=0,runnerFlash=0,runnerMuzzle=false;
+
+        // Unlocked, not bought. There is no shop node for this and no price -- the condition is
+        // simply that every forest's legendary is down, which cannot happen before the player
+        // has felt the quiet version of the game.
+        function runnerEarned(){return state.legendary.length===BIOMES.length&&state.legendary.every(Boolean)}
+        function checkRunnerUnlock(){
+            if(state.runner||!runnerEarned())return;
+            state.runner=true;
+            // `copy`, not `body`. showBanner reads v.copy, so the description line came out
+            // blank -- the one moment the game explains its most hidden mechanic, silently
+            // half-rendered. There is a test now that every showBanner call passes the keys
+            // showBanner actually reads.
+            showBanner({icon:'\u{2708}',kicker:'SOMETHING IS WAITING ON THE ROAD',title:'THE TIMBER RUNNER',
+                copy:'Eight elders are down. Press F to take it up.',color:'#c9ff70'});
+            playSound('unlock');saveState(false);
+        }
+        // The floor is the GROUND, not the canopy. Holding the plane above the treetops meant
+        // every shot was fired down through a crown at a shallow angle and most of them missed
+        // the trunk entirely; flying at tree height and passing straight through the foliage is
+        // both easier to aim and much better to look at. Trees do not collide with the plane on
+        // purpose -- a forest full of 2m-radius colliders at 52 m/s is a wall, not a flight.
+        function runnerFloor(wx,wz){
+            const g=structureTopAt(wx,wz);
+            return (Number.isFinite(g)?g:0)+RUNNER_GROUND;
+        }
+        function enterRunner(){
+            if(!state.runner||flying)return;
+            flying=true;runnerSpeed=RUNNER_SPEED_MIN*1.5;runnerRoll=0;runnerGun=0;runnerFelled=0;
+            player.pos.y=Math.max(player.pos.y,runnerFloor(player.pos.x,player.pos.z));
+            player.vel.set(0,0,0);player.onGround=false;player.pitch=0;
+            // NOTE: no Euler order juggling here. The camera is created in YXZ (see init) and
+            // stays there. An earlier version set YXZ on take-off and "restored" XYZ on landing,
+            // which permanently broke the walking camera -- the pitch axis came back inverted.
+            // The assertion written alongside it asserted 'XYZ' too, so the suite confirmed the
+            // bug instead of catching it. Read the value before restoring it.
+            if(axePivot)axePivot.visible=false;
+            if(runnerPivot)runnerPivot.visible=true;
+            targetTree=null;combo=0;comboTimer=0;
+            playSound('teleport');toast('TIMBER RUNNER \u00B7 AIRBORNE');
+        }
+        function exitRunner(){
+            if(!flying)return;
+            flying=false;runnerSpeed=0;runnerRoll=0;
+            camera.rotation.z=0;   // level the bank; the Euler ORDER was never ours to change
+            player.vel.set(0,0,0);
+            const g=structureTopAt(player.pos.x,player.pos.z);
+            player.pos.y=(Number.isFinite(g)?g:0)+.02;player.onGround=true;player.coyote=.15;
+            if(axePivot)axePivot.visible=true;
+            if(runnerPivot)runnerPivot.visible=false;
+            toast(runnerFelled?`TIMBER RUNNER \u00B7 SET DOWN \u00B7 ${runnerFelled} TRUNKS`:'TIMBER RUNNER \u00B7 SET DOWN');
+            runnerFelled=0;
+        }
+        function toggleRunner(){if(flying)exitRunner();else enterRunner()}
+
+        // One shot. A ray down the nose that keeps going through whatever it hits, up to
+        // RUNNER_PIERCE trunks, nearest first so the pierce order reads correctly.
+        //
+        // Legendaries are excluded here AND `fellTree` refuses them on its own -- that guard is
+        // not duplicated for belt and braces, it is duplicated because skipping them early is
+        // what stops the shot from spending its pierce budget on a tree it cannot fell.
+        function fireRunner(){
+            const origin=camera.position,dir=moveForward,hits=[];
+            for(const t of trees){
+                const u=t.userData;
+                if(u.legendary||!treePresent(t))continue;
+                // A trunk is a vertical COLUMN, not a point. The first version projected the
+                // tree's base onto the ray and measured from there, which meant a diving shot
+                // was tested against the one spot on the ray nearest the roots -- usually
+                // metres below the ground and nowhere near where the shot actually crosses the
+                // tree. It felled one trunk in a pass over a full forest.
+                //
+                // Solve horizontally instead: find where the ray's GROUND TRACK passes closest
+                // to the trunk axis, then ask how high the ray is at that point and whether
+                // that height is inside the column. That is the same question the player is
+                // asking when they line the nose up on a stand.
+                const p=t.getWorldPosition(tmpV);
+                const hLen=dir.x*dir.x+dir.z*dir.z;
+                if(hLen<1e-6)continue;                       // straight up or straight down
+                const along=((p.x-origin.x)*dir.x+(p.z-origin.z)*dir.z)/hLen;
+                if(along<3||along>RUNNER_RANGE)continue;
+                const dx=p.x-(origin.x+dir.x*along),dz=p.z-(origin.z+dir.z*along);
+                const r=RUNNER_BORE+treeCollisionRadius(t);
+                if(dx*dx+dz*dz>r*r)continue;
+                const cy=origin.y+dir.y*along,top=p.y+(u.crownTop||u.trunkBlocks||6);
+                if(cy<p.y-r||cy>top+r)continue;
+                hits.push({t,along});
+            }
+            hits.sort((a,b)=>a.along-b.along);
+            let cut=0,last=null;
+            for(const h of hits){
+                if(cut>=RUNNER_PIERCE)break;
+                if(!treePresent(h.t))continue;   // a cascade may have taken it since the scan
+                // Route the payout through the automatic path: the player cannot stop and walk
+                // over pickups, so wood goes straight to the satchel and only the overflow
+                // drops. Without this a strafing run carpets the forest in logs that exist only
+                // to cost frames.
+                h.t.userData.lastAutomatic=true;
+                last=h;
+                fellTree(h.t);cut++;
+            }
+            runnerFelled+=cut;state.runnerFelled=(state.runnerFelled||0)+cut;
+            // Feedback, all three kinds, and OUTSIDE the hit check. The first version returned
+            // early when a shot hit nothing, so firing over open ground was completely silent
+            // and invisible -- which reads as a broken gun, not as a miss. A shot you can see
+            // and hear is how you learn to aim; a shot that only exists when it connects is
+            // how you conclude the button does nothing.
+            runnerTracer(last?last.along:RUNNER_RANGE*.7);
+            playSound(cut?'runnerHit':'runnerShot');
+        }
+        // Two bolts converging from where the barrels sit, out to whatever the shot reached.
+        // spawnBolt already exists for the wisp and jitters its midpoints, which is the right
+        // look for this at speed -- there is no separate projectile to simulate and nothing to
+        // keep alive between frames.
+        function runnerTracer(reach){
+            const dir=moveForward,o=camera.position;
+            const right=tmpV.set(dir.z,0,-dir.x);
+            if(right.lengthSq()<1e-6)right.set(1,0,0);else right.normalize();
+            const end=new THREE.Vector3(o.x+dir.x*reach,o.y+dir.y*reach,o.z+dir.z*reach);
+            for(const side of[-1,1]){
+                const muzzle=new THREE.Vector3(o.x+right.x*side*1.1+dir.x*2.2,o.y-.9+dir.y*2.2,o.z+right.z*side*1.1+dir.z*2.2);
+                spawnBolt(muzzle,end);
+            }
+            // NO impact ring. spawnRing lays a flat horizontal disc, which is right for a
+            // felling shockwave on the ground and completely wrong hanging in mid-air at trunk
+            // height -- it read as a floating artefact. The tracers converging on the point are
+            // the impact marker; fellTree already throws chips and a burst at each trunk.
+            //
+            // Muzzles alternate rather than both firing every shot. At one shot every 85ms two
+            // synchronised flashes are a strobe; alternating reads as a gun cycling.
+            runnerFlash=.045;runnerMuzzle=!runnerMuzzle;
+        }
+        function updateRunner(dt){
+            camera.rotation.y=player.yaw;camera.rotation.x=player.pitch;camera.rotation.z=runnerRoll;
+            camera.getWorldDirection(moveForward);
+            if(moveForward.lengthSq()<.001)moveForward.set(0,0,-1);else moveForward.normalize();
+            // Throttle on W/S, and A/D yaw the NOSE rather than strafing. That is the whole
+            // difference between flying a plane and floating a camera around.
+            const target=keys.w?RUNNER_SPEED_MAX*(keys.shift?RUNNER_BOOST:1):keys.s?RUNNER_SPEED_MIN:runnerSpeed;
+            runnerSpeed=lerp(runnerSpeed,clamp(target,RUNNER_SPEED_MIN,RUNNER_SPEED_MAX*RUNNER_BOOST),1-Math.exp(-dt*(keys.s?3.2:1.6)));
+            const turn=(keys.a?1:0)-(keys.d?1:0);
+            player.yaw+=turn*RUNNER_TURN*dt;
+            runnerRoll=lerp(runnerRoll,turn*RUNNER_ROLL,1-Math.exp(-dt*RUNNER_ROLL_EASE));
+            player.pitch=clamp(player.pitch,-1.15,1.15);
+            player.vel.copy(moveForward).multiplyScalar(runnerSpeed);
+            player.pos.addScaledVector(player.vel,dt);
+            // Hard floor above the canopy, and it lifts the nose rather than stopping the plane:
+            // a flight model that can wedge itself into terrain is a flight model the player has
+            // to reload out of, and there is no fail state anywhere else in this game.
+            // Touching down does not stop the plane: it skips off. The floor lifts the nose and
+            // returns part of the descent as a hop, so a player who flies into the dirt at full
+            // throttle bounces out of it instead of grinding along the deck. There is no fail
+            // state anywhere else in this game and a vehicle should not introduce the first one.
+            const floor=runnerFloor(player.pos.x,player.pos.z);
+            if(player.pos.y<floor){
+                const bite=floor-player.pos.y;
+                player.pos.y=floor;
+                if(player.pitch<0)player.pitch=Math.min(0,player.pitch*.3+bite*RUNNER_BOUNCE*.35);
+                player.pos.y+=Math.min(1.2,bite*RUNNER_BOUNCE);
+            }
+            const ground=structureTopAt(player.pos.x,player.pos.z),ceil=(Number.isFinite(ground)?ground:0)+RUNNER_CEILING;
+            if(player.pos.y>ceil){player.pos.y=ceil;if(player.pitch>0)player.pitch*=.35}
+            const minX=BIOMES[0].center-RUNNER_BOUND,maxX=BIOMES[BIOMES.length-1].center+RUNNER_BOUND;
+            player.pos.x=clamp(player.pos.x,minX,maxX);
+            player.pos.z=clamp(player.pos.z,-RUNNER_BOUND,RUNNER_BOUND);
+            if(!Number.isFinite(player.pos.x)||!Number.isFinite(player.pos.y)||!Number.isFinite(player.pos.z)){exitRunner();respawnPlayer();return}
+            camera.position.set(player.pos.x,player.pos.y,player.pos.z);
+            player.cameraY=0;
+            runnerGun-=dt;
+            if(mouseDown&&runnerGun<=0){runnerGun=RUNNER_FIRE_GAP;fireRunner()}
         }
         function updatePlayer(dt){
             // Camera and movement share the exact same forward vector. This avoids the classic 90° yaw/sign mismatch.
@@ -4243,6 +4519,22 @@
         }
         function updateViewModel(dt){
             axeAnim=Math.max(0,axeAnim-dt*4.8);
+            if(runnerPivot&&runnerPivot.visible){
+                const u=runnerPivot.userData,spin=dt*(22+runnerSpeed*.5);
+                if(u.prop)u.prop.rotation.z+=spin;
+                if(u.propL)u.propL.rotation.z+=spin*1.3;
+                if(u.propR)u.propR.rotation.z-=spin*1.3;
+                runnerFlash=Math.max(0,runnerFlash-dt);
+                const lit=runnerFlash>0;
+                if(u.flashL)u.flashL.visible=lit&&runnerMuzzle;
+                if(u.flashR)u.flashR.visible=lit&&!runnerMuzzle;
+                // The airframe leans into the turn and pushes back under throttle. Small numbers:
+                // the cockpit is a hand's width from the lens and anything larger reads as a
+                // camera fault rather than as the aeroplane moving.
+                runnerPivot.rotation.z=-runnerRoll*.34;
+                runnerPivot.position.z=-Math.min(.14,runnerSpeed*.0022);
+                runnerPivot.position.y=Math.sin(state.playTime*7)*.006;
+            }
             const moving=Math.hypot(player.vel.x,player.vel.z),
                 walk=(locked||mobileActive)&&player.onGround?Math.sin(player.bobPhase*2)*Math.min(.035,moving*.004):0,
                 // Asymmetric curve: a quick strike (first 35%) and a slower recovery,
@@ -4316,6 +4608,17 @@
         function spawnRing(pos,color){const geo=new THREE.RingGeometry(.5,.7,32),mat=new THREE.MeshBasicMaterial({color,transparent:true,opacity:.9,side:THREE.DoubleSide,depthWrite:false}),m=new THREE.Mesh(geo,mat);m.position.copy(pos).add(new THREE.Vector3(0,.2,0));m.rotation.x=-Math.PI/2;scene.add(m);particles.push({mesh:m,vel:new THREE.Vector3(),life:.6,ring:true})}
         function updateEffects(dt){for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life-=dt;if(p.ring){p.mesh.scale.multiplyScalar(1+dt*10);p.mesh.material.opacity=p.life/.6}else{p.vel.y-=10*dt;p.mesh.position.addScaledVector(p.vel,dt);p.mesh.rotation.x+=dt*8;p.mesh.material.opacity=clamp(p.life*2,0,1)}if(p.life<=0){scene.remove(p.mesh);p.mesh.geometry?.dispose();p.mesh.material?.dispose();particles.splice(i,1)}}for(let i=lines.length-1;i>=0;i--){const l=lines[i];l.life-=dt;l.line.material.opacity=l.life/.25;if(l.life<=0){scene.remove(l.line);l.line.geometry.dispose();l.line.material.dispose();lines.splice(i,1)}}}
         function damageNumber(value,crit,tree){const p=tree.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,3.2,0)).project(camera),el=document.createElement('div');el.className=`damage-number ${crit?'crit':''}`;el.setAttribute('aria-hidden','true');el.textContent=`${crit?'CRIT ':''}-${fmt(value)}`;el.style.left=`${(p.x*.5+.5)*innerWidth}px`;el.style.top=`${(-p.y*.5+.5)*innerHeight}px`;document.body.appendChild(el);setTimeout(()=>el.remove(),800)}
+        // Kept in updateUI rather than toggled at take-off, so it is correct after a reload,
+        // after travelling, and after any path into or out of the aircraft -- including ones
+        // added later that forget this exists.
+        function updateRunnerHint(){
+            const el=$('runner-hint');
+            if(!el)return;
+            el.classList.toggle('on',!!state.runner&&!TOUCH_MODE);
+            if(!state.runner)return;
+            $('runner-hint-title').textContent=flying?'SET DOWN':'TIMBER RUNNER';
+            $('runner-hint-sub').textContent=flying?`${runnerFelled} felled this flight`:'take it up';
+        }
         function toast(text){if(state.settings.toasts===false)return;while($('toast-stack').children.length>=5)$('toast-stack').firstElementChild.remove();const el=document.createElement('div');el.className='toast';el.textContent=text;$('toast-stack').appendChild(el);setTimeout(()=>el.remove(),4700)}
 
         // --- the music bus ---------------------------------------------------------
@@ -4330,11 +4633,19 @@
         // it read as "quiet even at maximum". Measured, not guessed: tests/audio-render.js
         // renders the graph to samples, and drive-audio.js holds the number.
         const MUSIC_BOOST=6;
+        // The SFX bus never got the same treatment the music bus did, and the asymmetry was
+        // the bug: music was measured, raised and asserted, while effects were left on a bare
+        // volume slider with no boost at all. Metered, the median cue peaked at -32.9 dBFS
+        // against a music bed peaking at -11.2 -- so turning the music to zero did not make the
+        // effects audible, it just removed the only thing that WAS. x3.5 puts chops around
+        // -22 dBFS and the heavy cues near -18, which is where a game's effects live.
+        const SFX_BOOST=3.5;
+        function sfxBusGain(){return state.settings.sfx?state.settings.sfxVolume*SFX_BOOST:0}
         function musicBusGain(hush=0){
             const focus=(locked||mobileActive)?1:.72;
             return (state.settings.music?state.settings.musicVolume*MUSIC_BOOST*focus:0)*(1-hush);
         }
-        function ensureAudio(){if(audioCtx)return;audioCtx=new(window.AudioContext||window.webkitAudioContext)();masterGain=audioCtx.createGain();sfxGain=audioCtx.createGain();musicGain=audioCtx.createGain();compressor=audioCtx.createDynamicsCompressor();masterGain.gain.value=.82;sfxGain.gain.value=state.settings.sfx?state.settings.sfxVolume:0;musicGain.gain.value=musicBusGain();compressor.threshold.value=-16;compressor.knee.value=16;compressor.ratio.value=3.2;compressor.attack.value=.008;compressor.release.value=.25;sfxGain.connect(masterGain);musicGain.connect(masterGain);masterGain.connect(compressor);compressor.connect(audioCtx.destination);syncSettingsUI()}
+        function ensureAudio(){if(audioCtx)return;audioCtx=new(window.AudioContext||window.webkitAudioContext)();masterGain=audioCtx.createGain();sfxGain=audioCtx.createGain();musicGain=audioCtx.createGain();compressor=audioCtx.createDynamicsCompressor();masterGain.gain.value=.82;sfxGain.gain.value=sfxBusGain();musicGain.gain.value=musicBusGain();compressor.threshold.value=-16;compressor.knee.value=16;compressor.ratio.value=3.2;compressor.attack.value=.008;compressor.release.value=.25;sfxGain.connect(masterGain);musicGain.connect(masterGain);masterGain.connect(compressor);compressor.connect(audioCtx.destination);syncSettingsUI()}
         // --- SFX voice policy ------------------------------------------------------
         // Every cue used to be scheduled unconditionally. Twenty logs sweeping into the
         // magnet in one frame meant twenty copies of the SAME tone starting on the same
@@ -4351,7 +4662,7 @@
         //    1/sqrt(1+n*.7). Summing n equal voices grows amplitude by n but loudness by
         //    about sqrt(n), so this holds a busy moment near the level of a quiet one
         //    instead of stacking linearly. One voice alone is never attenuated.
-        const CUE_GAP_DEFAULT=.03,CUE_GAP={collect:.05,coin:.045,chop:.02,stepSoft:.07,stepHard:.07,stepSnow:.07,drip:.09,ringTap:.04,wingbeat:.06,gild:.05};
+        const CUE_GAP_DEFAULT=.03,CUE_GAP={runnerShot:.04,runnerHit:.04,collect:.05,coin:.045,chop:.02,stepSoft:.07,stepHard:.07,stepSnow:.07,drip:.09,ringTap:.04,wingbeat:.06,gild:.05};
         const SFX_VOICE_CAP=14;
         let sfxVoiceEnds=[],cueLastAt=Object.create(null);
         function sfxLive(now){
@@ -4361,25 +4672,38 @@
         // Returns the gain a new voice should take, or 0 if the bus is already saturated.
         // A hard cap on top of the duck stops a pathological frame from scheduling a
         // hundred oscillators that are each inaudible but still cost real CPU.
-        function sfxVoiceGain(now,endsAt){
+        // `priority` is for cues the player caused directly and is listening FOR. They bypass
+        // the voice cap and duck to a floor rather than all the way down. The Runner's gun is
+        // the reason this exists: a strafing run fires `fell` and `collect` nine times a second,
+        // and the gun -- the one sound the player is actually steering by -- was being ducked
+        // and capped underneath its own consequences. It was reported as "no sound at all".
+        function sfxVoiceGain(now,endsAt,priority){
             const live=sfxLive(now);
-            if(live>=SFX_VOICE_CAP)return 0;
+            if(live>=SFX_VOICE_CAP&&!priority)return 0;
             sfxVoiceEnds.push(endsAt);
-            return 1/Math.sqrt(1+live*.7);
+            const duck=1/Math.sqrt(1+live*.7);
+            return priority?Math.max(.62,duck):duck;
         }
-        function tone(freq,dur,type='sine',vol=.1,slide=1,delay=0){if(!audioCtx||!state.settings.sfx)return;const t=audioCtx.currentTime+delay,duck=sfxVoiceGain(audioCtx.currentTime,t+dur);if(duck<=0)return;vol*=duck;
+        function tone(freq,dur,type='sine',vol=.1,slide=1,delay=0,priority=false){if(!audioCtx||!state.settings.sfx)return;const t=audioCtx.currentTime+delay,duck=sfxVoiceGain(audioCtx.currentTime,t+dur,priority);if(duck<=0)return;vol*=duck;
             const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,t);o.frequency.exponentialRampToValueAtTime(Math.max(20,freq*slide),t+dur);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g);g.connect(sfxGain);o.start(t);o.stop(t+dur+.02)}
-        function filteredNoise(dur=.1,vol=.025,type='bandpass',freq=600,q=1.2,delay=0){if(!audioCtx||!state.settings.sfx)return;const n=Math.max(1,Math.floor(audioCtx.sampleRate*dur)),b=audioCtx.createBuffer(1,n,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,1.7);const t=audioCtx.currentTime+delay,duck=sfxVoiceGain(audioCtx.currentTime,t+dur);if(duck<=0)return;vol*=duck;
+        function filteredNoise(dur=.1,vol=.025,type='bandpass',freq=600,q=1.2,delay=0,priority=false){if(!audioCtx||!state.settings.sfx)return;const n=Math.max(1,Math.floor(audioCtx.sampleRate*dur)),b=audioCtx.createBuffer(1,n,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,1.7);const t=audioCtx.currentTime+delay,duck=sfxVoiceGain(audioCtx.currentTime,t+dur,priority);if(duck<=0)return;vol*=duck;
             const src=audioCtx.createBufferSource(),filter=audioCtx.createBiquadFilter(),g=audioCtx.createGain();src.buffer=b;filter.type=type;filter.frequency.value=freq;filter.Q.value=q;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+.006);g.gain.exponentialRampToValueAtTime(.0001,t+dur);src.connect(filter);filter.connect(g);g.connect(sfxGain);src.start(t);src.stop(t+dur+.02)}
         function woodImpact(strength=1,delay=0){filteredNoise(.065,.016*strength,'bandpass',520,1.4,delay);tone(148,.095,'sine',.032*strength,.7,delay);tone(245,.052,'triangle',.009*strength,.82,delay+.008)}
         function playSound(type){if(!audioCtx||!state.settings.sfx)return;
+            // The pickup chirp is muted in the air, and this has to be HERE rather than at the
+            // call site: it is raised from two places, fellTree's auto-collect path AND
+            // collectPickup, and the second one is the loud one. `magnetRange()` reaches up to
+            // ~23m, the plane skims at 1.6m, so it hoovers every overflow log it passes over --
+            // a continuous beep under the gun. Guarding only fellTree fixed the quiet half and
+            // left the reported problem completely intact.
+            if(flying&&type==='collect')return;
             const now=audioCtx.currentTime,gap=CUE_GAP[type]!==undefined?CUE_GAP[type]:CUE_GAP_DEFAULT;
             // ?? and not ||. audioCtx.currentTime is 0 on the very first cue of a session,
             // and `0 || -1e9` is -1e9, so the gap silently did nothing for exactly the burst
             // most likely to be a burst.
             if(now-(cueLastAt[type]??-1e9)<gap)return;
             cueLastAt[type]=now;
-            switch(type){case'chop':woodImpact(1);break;case'double':woodImpact(.95);woodImpact(.72,.065);break;case'crit':filteredNoise(.075,.018,'bandpass',760,1.5);tone(285,.15,'sine',.042,1.32);tone(430,.18,'triangle',.021,1.1,.018);break;case'stepSoft':filteredNoise(.06,.0065,'lowpass',430,.9);break;case'stepHard':filteredNoise(.045,.0085,'highpass',880,1.1);tone(165,.04,'triangle',.006,.92);break;case'stepSnow':filteredNoise(.085,.0055,'lowpass',290,.8);break;case'land':filteredNoise(.13,.017,'lowpass',250,.8);tone(88,.13,'sine',.022,.58);break;case'thud':filteredNoise(.26,.03,'lowpass',180,.75);tone(64,.3,'sine',.05,.42);break;case'fell':filteredNoise(.34,.032,'lowpass',270,.7);tone(92,.38,'sine',.045,.48);tone(158,.18,'triangle',.015,.68,.075);break;case'rareFell':filteredNoise(.38,.034,'lowpass',320,.7);tone(84,.42,'sine',.048,.5);[220,330,495].forEach((f,i)=>tone(f,.3,'sine',.026,1.12,.08+i*.07));break;case'collect':tone(470,.055,'sine',.018,1.22);break;case'sellStart':tone(245,.13,'triangle',.027,1.25);break;case'coin':tone(560+Math.random()*110,.06,'sine',.012,1.1);break;case'buy':tone(420,.14,'triangle',.035,1.38);tone(630,.18,'sine',.018,1.08,.045);break;case'unlock':[220,330,440,660].forEach((f,i)=>tone(f,.28,'sine',.028,1.06,i*.075));break;case'teleport':tone(135,.5,'sine',.04,3.5);break;case'lightning':filteredNoise(.16,.025,'bandpass',1050,1.1);tone(760,.13,'triangle',.018,.28);break;case'ignite':filteredNoise(.42,.021,'bandpass',820,.7);tone(150,.34,'sawtooth',.013,2.4);break;case'blast':filteredNoise(.36,.05,'lowpass',220,.65);tone(88,.34,'sine',.055,.3);break;case'windthrow':tone(210,.34,'sawtooth',.014,.34);filteredNoise(.16,.024,'bandpass',1450,1.3,.04);filteredNoise(.42,.03,'lowpass',260,.7,.1);tone(72,.5,'sine',.042,.52,.1);break;case'wingbeat':for(let i=0;i<5;i++)filteredNoise(.075,.011-i*.0014,'bandpass',250+i*46,.85,i*.085);break;case'jump':tone(170,.08,'sine',.016,1.25);break;
+            switch(type){case'chop':woodImpact(1);break;case'double':woodImpact(.95);woodImpact(.72,.065);break;case'crit':filteredNoise(.075,.018,'bandpass',760,1.5);tone(285,.15,'sine',.042,1.32);tone(430,.18,'triangle',.021,1.1,.018);break;case'stepSoft':filteredNoise(.06,.0065,'lowpass',430,.9);break;case'stepHard':filteredNoise(.045,.0085,'highpass',880,1.1);tone(165,.04,'triangle',.006,.92);break;case'stepSnow':filteredNoise(.085,.0055,'lowpass',290,.8);break;case'land':filteredNoise(.13,.017,'lowpass',250,.8);tone(88,.13,'sine',.022,.58);break;case'thud':filteredNoise(.26,.03,'lowpass',180,.75);tone(64,.3,'sine',.05,.42);break;case'fell':filteredNoise(.34,.032,'lowpass',270,.7);tone(92,.38,'sine',.045,.48);tone(158,.18,'triangle',.015,.68,.075);break;case'rareFell':filteredNoise(.38,.034,'lowpass',320,.7);tone(84,.42,'sine',.048,.5);[220,330,495].forEach((f,i)=>tone(f,.3,'sine',.026,1.12,.08+i*.07));break;case'collect':tone(470,.055,'sine',.018,1.22);break;case'sellStart':tone(245,.13,'triangle',.027,1.25);break;case'coin':tone(560+Math.random()*110,.06,'sine',.012,1.1);break;case'buy':tone(420,.14,'triangle',.035,1.38);tone(630,.18,'sine',.018,1.08,.045);break;case'unlock':[220,330,440,660].forEach((f,i)=>tone(f,.28,'sine',.028,1.06,i*.075));break;case'teleport':tone(135,.5,'sine',.04,3.5);break;case'lightning':filteredNoise(.16,.025,'bandpass',1050,1.1);tone(760,.13,'triangle',.018,.28);break;case'ignite':filteredNoise(.42,.021,'bandpass',820,.7);tone(150,.34,'sawtooth',.013,2.4);break;case'blast':filteredNoise(.36,.05,'lowpass',220,.65);tone(88,.34,'sine',.055,.3);break;case'windthrow':tone(210,.34,'sawtooth',.014,.34);filteredNoise(.16,.024,'bandpass',1450,1.3,.04);filteredNoise(.42,.03,'lowpass',260,.7,.1);tone(72,.5,'sine',.042,.52,.1);break;case'wingbeat':for(let i=0;i<5;i++)filteredNoise(.075,.011-i*.0014,'bandpass',250+i*46,.85,i*.085);break;case'jump':tone(170,.08,'sine',.016,1.25);break;case'runnerShot':filteredNoise(.045,.13,'bandpass',2200,1.9,0,true);tone(430,.055,'sawtooth',.095,.28,0,true);tone(150,.09,'sine',.082,.5,.006,true);break;case'runnerHit':filteredNoise(.055,.15,'bandpass',1750,1.5,0,true);tone(340,.075,'sawtooth',.115,.3,0,true);tone(110,.14,'sine',.13,.42,.008,true);tone(600,.045,'square',.052,.72,.018,true);break;
                 case'thunderDry':filteredNoise(.7,.02,'lowpass',220,.6);tone(46,.9,'sine',.018,1.4);break;
                 case'thunder':filteredNoise(.85,.05,'lowpass',300,.6);tone(52,1.2,'sine',.045,1.6);filteredNoise(.2,.03,'highpass',2200,.9,.02);break;
                 case'trueStrike':filteredNoise(.12,.03,'bandpass',1400,1.3);tone(660,.22,'triangle',.038,1.35);tone(990,.18,'sine',.02,1.2,.02);break;
