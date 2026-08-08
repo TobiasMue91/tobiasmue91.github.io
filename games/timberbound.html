@@ -555,6 +555,8 @@
         // window would be the same bug wearing a different hat.
         const BUCK_WINDOW=3;
         const BASE_CARGO=180, CHARTER_BASE=15000000, CHARTER_GROWTH=2.02;
+        // Mobile-only draw-call budget. Neither is read on desktop.
+        const NEIGHBOUR_LEAD=70, PROP_RANGE=74;
         const RUNNER_BOUND=118;   // the forest floor is 210m across; this keeps the plane over it
         // --- first-person axe pose ------------------------------------------------------
         // Resting yaw is negative so the blade's broad face turns AWAY from the camera.
@@ -3341,7 +3343,12 @@
             const rare=rarityRoll<.035,giant=!rare&&rarityRoll<.035+GIANT_CHANCE,tree=new THREE.Group(),rand=seeded(Math.floor((x+130)*917+(z+130)*613+bi*11939));tree.position.set(x,terrainTopLocal(bi,x,z),z);group.add(tree);
             const scale=giant?GIANT_WIDTH:rare?1.25:.88+rand()*.3,hScale=giant?GIANT_HEIGHT:scale,trunkWidth=(b.canopy==='ring'?1.25:1)*scale,trunkBlocks=Math.max(4,Math.round((b.canopy==='conifer'?7:b.canopy==='ring'?8:b.canopy==='spire'?10:6)*hScale));
             const {trunkMats,leafMat}=treeMaterials(b,rare);
-            const shade=makeGroundShadow(1.5+scale*1.35,rare?.62:.5);tree.add(shade);
+            // Every tree is exactly three draw calls: this shadow decal, the trunk, and the
+            // leaves. Dropping the decal on touch removes a FULL THIRD of all tree draw calls --
+            // ~150 per frame at a forest's centre -- and it is the cheapest third to lose: from
+            // a first-person eye at ground level it sits under a canopy that already occludes
+            // it. Desktop keeps it. Measured before and after; see HANDOFF.
+            const shade=TOUCH_MODE?null:makeGroundShadow(1.5+scale*1.35,rare?.62:.5);if(shade)tree.add(shade);
             const dummy=new THREE.Object3D(),trunkMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(trunkWidth,1,trunkWidth),trunkMats,trunkBlocks);for(let y=0;y<trunkBlocks;y++){dummy.position.set(0,.5+y,0);dummy.scale.set(1,1,1);dummy.rotation.set(0,0,0);dummy.updateMatrix();trunkMesh.setMatrixAt(y,dummy.matrix)}trunkMesh.instanceMatrix.needsUpdate=true;tree.add(trunkMesh);
             const leaves=[],addLeaf=(lx,ly,lz,size=1.08)=>leaves.push({lx,ly,lz,size}),top=trunkBlocks;if(b.canopy==='conifer'){
                 // A giant pine is a BROAD skirt tapering to a tip -- the silhouette has to stay
@@ -4516,7 +4523,37 @@
             if(u.fall>(persistsAsLog(u)?.66:1.1)){if(persistsAsLog(u))layFallenLog(t);t.visible=false;u.fall=0;u.landed=false;t.rotation.set(0,0,0)}}else{u.respawn-=dt;if(u.respawn<=0){const distance=Math.sqrt(treeDistanceSq(t));if(u.biome===state.biome&&distance<(u.collisionRadius||.55)+1.85){u.respawn=.8;continue}if(state.upgrades.heartwood>0&&!u.bornRare)applyTreeRarity(t,Math.random()<state.upgrades.heartwood*.03);
             u.hp=u.maxHp;u.shake=0;u.active=true;u.growing=true;u.grow=.22;setStump(t,false);t.visible=true;t.scale.set(1,.22,1);t.rotation.set(u.leanZ||0,Math.random()*.08,u.leanX||0);t.position.y=u.baseY;
             if(u.rare&&u.biome===state.biome&&treeDistanceSq(t)<70*70)spawnRing(t.getWorldPosition(new THREE.Vector3()),BIOMES[u.biome].accent)}}}}
-        function updateRenderVisibility(){if(detailQualityDirty){detailQualityDirty=false;applyDetailLevel()}const nearBiome=clamp(Math.round(player.pos.x/BIOME_SPACING),0,BIOMES.length-1),treeRange=TOUCH_MODE?92:155,rangeSq=treeRange*treeRange;for(let i=0;i<biomeGroups.length;i++)biomeGroups[i].visible=Math.abs(i-nearBiome)<=1;for(const t of trees){if(!biomeGroups[t.userData.biome]?.visible){t.visible=false;continue}if(t.userData.legendary){t.visible=true;continue}const wx=BIOMES[t.userData.biome].center+t.position.x,d2=(wx-player.pos.x)**2+(t.position.z-player.pos.z)**2;t.visible=(treePresent(t)||t.userData.fall>0)&&d2<rangeSq}for(const g of gateGroups)g.visible=Math.abs(g.userData.index-nearBiome)<=1}
+        function updateRenderVisibility(){if(detailQualityDirty){detailQualityDirty=false;applyDetailLevel()}const nearBiome=clamp(Math.round(player.pos.x/BIOME_SPACING),0,BIOMES.length-1),treeRange=TOUCH_MODE?92:155,rangeSq=treeRange*treeRange;
+            // Desktop keeps the neighbouring forest drawn whenever it is adjacent. On a phone
+            // that neighbour costs ~446 draw calls while you are standing in the MIDDLE of your
+            // own forest, 200m away from any of it, and the far plane is 220m so most of it is
+            // barely on screen anyway. Measured, not guessed: see the probe notes in HANDOFF.
+            //
+            // So on touch the neighbour is gated on actually approaching it. The band is
+            // generous enough that the forest is up long before you can read anything in it.
+            const neighbourBand=BIOME_SPACING*.5+NEIGHBOUR_LEAD;
+            for(let i=0;i<biomeGroups.length;i++){
+                const d=Math.abs(i-nearBiome);
+                biomeGroups[i].visible=TOUCH_MODE
+                    ?(d===0||(d===1&&Math.abs(player.pos.x-BIOMES[i].center)<neighbourBand))
+                    :d<=1;
+            }for(const t of trees){if(!biomeGroups[t.userData.biome]?.visible){t.visible=false;continue}if(t.userData.legendary){t.visible=true;continue}const wx=BIOMES[t.userData.biome].center+t.position.x,d2=(wx-player.pos.x)**2+(t.position.z-player.pos.z)**2;t.visible=(treePresent(t)||t.userData.fall>0)&&d2<rangeSq}// Decorative scatter -- boulders, ferns, lanterns -- gets the same distance treatment the
+            // trees already get, and only on touch. It is tagged `userData.prop` at creation, so this
+            // cannot accidentally hide the shop, a shrine, a gate or a keepsake: those carry no tag.
+            if(TOUCH_MODE){
+                const propRangeSq=PROP_RANGE*PROP_RANGE;
+                for(let bi=0;bi<biomeGroups.length;bi++){
+                    const grp=biomeGroups[bi];
+                    if(!grp.visible)continue;
+                    for(const child of grp.children){
+                        if(!child.userData||!child.userData.prop)continue;
+                        const wx=BIOMES[bi].center+child.position.x;
+                        const d2=(wx-player.pos.x)**2+(child.position.z-player.pos.z)**2;
+                        child.visible=d2<propRangeSq;
+                    }
+                }
+            }
+            for(const g of gateGroups)g.visible=Math.abs(g.userData.index-nearBiome)<=1}
         function updateWorld(dt){
             updateDrones(dt);flushStumps();updateGlacierElder(dt);updateRootwakeSovereign(dt);updateKeepsakes(dt);updateBlazes();updateShrines(dt);updateMist(dt,performance.now()*.001);updateWind(dt);updateHomecoming(dt);updateSmallLegendaries(dt);updateStormAndFire(dt);updateCosmicElder(dt);updateMidasElder(dt);
             biomeTime+=dt;const deepest=Math.max(0,state.unlocked.lastIndexOf(true)),progress=deepest/Math.max(1,BIOMES.length-1),
