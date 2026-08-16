@@ -145,6 +145,8 @@
         .songtitle { font-size: 17px; font-weight: 700; letter-spacing: .06em; }
         .songmeta { font-size: 11px; color: var(--dim); display: flex; flex-wrap: wrap; gap: 4px 14px; }
         .songmeta b { color: var(--l2); font-weight: 400; }
+        .btn.preview { align-self: flex-start; padding: 7px 12px; font-size: 10px; margin-top: 2px; }
+        .btn.preview[data-on="1"] { color: var(--l2); border-color: var(--l2); }
 
         details { border-top: 1px solid var(--edge); padding-top: 12px; }
         summary {
@@ -263,6 +265,7 @@
         <div class="songcard" id="songcard">
             <div class="songtitle" id="sTitle">—</div>
             <div class="songmeta mono" id="sMeta">—</div>
+            <button class="btn preview" id="prev">▶ Hear the drop</button>
         </div>
 
         <div class="field">
@@ -889,14 +892,18 @@
                 }
                 let stopped = false;
                 return {
+                    /* setTargetAtTime releases from whatever the envelope is
+                       worth at that instant. Reading gain.value here would
+                       sample it before the attack has even run — for a note
+                       stopped in the same tick it was started, that snaps the
+                       level down and clicks. */
                     stop: t => {
                         if (stopped) return;
                         stopped = true;
-                        const at = Math.max(t, when + .02);
+                        const at = Math.max(t, when + .03);
                         g.gain.cancelScheduledValues(at);
-                        g.gain.setValueAtTime(Math.max(g.gain.value, .0001), at);
-                        g.gain.exponentialRampToValueAtTime(.0001, at + .09);
-                        for (const o of os) o.stop(at + .12);
+                        g.gain.setTargetAtTime(.0001, at, .028);
+                        for (const o of os) o.stop(at + .22);
                     }
                 };
             },
@@ -983,8 +990,8 @@
         const laneDown = [false, false, false, false];
         const laneFlash = [0, 0, 0, 0];
         const voices = new Map();                       // note -> lead voice
-        let particles = [], rings = [], popups = [], shake = 0, beatPulse = 0, sectionFlash = null, judgeFx = null;
-        let lastFrame = 0;
+        let particles = [], rings = [], popups = [], ghosts = [], shake = 0, beatPulse = 0, sectionFlash = null, judgeFx = null;
+        let lastFrame = 0, hudScore = -1, hudAcc = '', hudPct = -1;
 
         /* ── canvas & geometry ─────────────────────────── */
         const cv = $('c'), ctx2d = cv.getContext('2d');
@@ -1063,6 +1070,7 @@
            ═══════════════════════════════════════════════════════════ */
         function startSong(seedStr, dk) {
             if (!A.init()) { alert('This game needs the Web Audio API, which your browser does not seem to support.'); return; }
+            stopPreview();
             A.ctx.resume();
             A.setVolume(S.vol / 100);
             A.killAll();
@@ -1074,9 +1082,10 @@
             autoplay = S.auto;
 
             score = combo = maxCombo = 0; flow = 0; overdrive = false;
+            hudScore = -1; hudAcc = ''; hudPct = -1;
             counts = [0, 0, 0, 0]; accSum = 0; accTotal = 0; holdTicks = 0;
             ptrBacking = 0; ptrMiss = 0;
-            particles = []; rings = []; popups = []; shake = 0; judgeFx = null;
+            particles = []; rings = []; popups = []; ghosts = []; shake = 0; judgeFx = null;
             voices.clear(); lanePtr.clear();
             for (let i = 0; i < 4; i++) { laneKey[i] = laneDown[i] = false; laneFlash[i] = 0; }
             sectionFlash = null;
@@ -1158,6 +1167,7 @@
         function missNote(n) {
             n.state = ST.MISS;
             registerJudge(3);
+            addGhost(n.lane, n.t, n.dur);
             if (A.ok) A.ghost(A.now(), n.m);
             showJudge('MISS', JUDGE[3].color);
         }
@@ -1185,6 +1195,7 @@
                 if (songTime < end - .14) {
                     n.state = ST.BROKEN;
                     registerJudge(3);
+                    addGhost(lane, songTime, end - songTime);
                     showJudge('BREAK', JUDGE[3].color);
                 } else {
                     n.state = ST.HELD;
@@ -1210,6 +1221,11 @@
 
         // One judgement at a time, centred — stacked per-lane labels are unreadable.
         function showJudge(text, color) { judgeFx = {text, color, life: 1}; }
+
+        function addGhost(lane, t, dur) {
+            ghosts.push({lane, t, dur: dur || 0, life: 1});
+            if (ghosts.length > 40) ghosts.shift();
+        }
 
         function popup(text, color, x, y, sc) {
             popups.push({text, color, x, y, sc: sc || 1, life: 1});
@@ -1287,13 +1303,26 @@
             rings = rings.filter(r => r.life > 0);
             for (const p of popups) { p.y -= dt * 34; p.life -= dt * 1.9; }
             popups = popups.filter(p => p.life > 0);
+            for (const g of ghosts) g.life -= dt * 2.2;
+            ghosts = ghosts.filter(g => g.life > 0);
             if (judgeFx && (judgeFx.life -= dt * 2.4) <= 0) judgeFx = null;
             shake = Math.max(0, shake - dt * 22);
 
-            // HUD
-            $('hScore').textContent = score.toLocaleString('en-US');
-            $('hAcc').textContent = (accTotal ? (accSum / accTotal * 100) : 100).toFixed(2) + '%';
-            $('progress').firstElementChild.style.width = clamp(songTime / song.duration, 0, 1) * 100 + '%';
+            // HUD — only touch the DOM when a value actually changed
+            if (score !== hudScore) {
+                hudScore = score;
+                $('hScore').textContent = score.toLocaleString('en-US');
+            }
+            const accNow = (accTotal ? (accSum / accTotal * 100) : 100).toFixed(2) + '%';
+            if (accNow !== hudAcc) {
+                hudAcc = accNow;
+                $('hAcc').textContent = accNow;
+            }
+            const pct = Math.round(clamp(songTime / song.duration, 0, 1) * 400);
+            if (pct !== hudPct) {
+                hudPct = pct;
+                $('progress').firstElementChild.style.width = (pct / 4) + '%';
+            }
 
             if (songTime > song.duration + 1.6) finish();
         }
@@ -1324,6 +1353,7 @@
             drawHighway(c);
             if (mode === 'play' || mode === 'paused') {
                 drawCombo(c);      // sits behind the notes so it never hides one
+                drawGhosts(c);
                 drawNotes(c);
                 drawHitLine(c);
                 drawEffects(c);
@@ -1422,6 +1452,72 @@
             c.restore();
         }
 
+        /* A hold body is a slice of its lane, so it has to taper exactly like
+           the lane does: both ends take their width and centre from the same
+           perspective mapping as the notes. */
+        function drawHoldBody(c, lane, pTail, pHead, active) {
+            const t0 = clamp(pTail, 0, 1.25), t1 = clamp(pHead, 0, 1.25);
+            if (t1 - t0 < .001) return;
+            const yT = yAt(t0), yB = yAt(t1);
+            const cxT = laneCx(lane, t0), cxB = laneCx(lane, t1);
+            const wT = laneW * scaleAt(t0) * .42, wB = laneW * scaleAt(t1) * .42;
+            const col = LANE_COLORS[lane];
+            c.save();
+            c.globalAlpha = active ? .95 : .66;
+            const g = c.createLinearGradient(0, yT, 0, yB);
+            g.addColorStop(0, col + '4d');
+            g.addColorStop(1, col + 'dd');
+            c.fillStyle = g;
+            c.beginPath();
+            c.moveTo(cxT - wT / 2, yT);
+            c.lineTo(cxT + wT / 2, yT);
+            c.lineTo(cxB + wB / 2, yB);
+            c.lineTo(cxB - wB / 2, yB);
+            c.closePath();
+            c.fill();
+            if (pTail >= 0) {           // rounded cap, unless the tail runs off the top
+                c.beginPath();
+                c.ellipse(cxT, yT, wT / 2, wT * .3, 0, 0, Math.PI * 2);
+                c.fill();
+            }
+            if (active) {               // bright seam where it is being consumed
+                c.globalAlpha = .85;
+                c.fillStyle = '#fff';
+                c.beginPath();
+                c.ellipse(cxB, yB, wB / 2, wB * .2, 0, 0, Math.PI * 2);
+                c.fill();
+            }
+            c.restore();
+        }
+
+        // Missed notes keep falling and fade out — snapping them off mid-lane reads as a glitch.
+        function drawGhosts(c) {
+            for (const g of ghosts) {
+                // parked just past the line rather than sliding under the key caps
+                const p = Math.min(pAt(g.t), 1);   // dies on the line, never under the key caps
+                c.save();
+                c.globalAlpha = clamp(g.life, 0, 1) * .34;
+                if (g.dur > 0) {
+                    const t0 = clamp(pAt(g.t + g.dur), 0, 1), t1 = clamp(p, 0, 1);
+                    if (t1 > t0) {
+                        c.fillStyle = '#7c86a6';
+                        c.beginPath();
+                        c.moveTo(laneCx(g.lane, t0) - laneW * scaleAt(t0) * .21, yAt(t0));
+                        c.lineTo(laneCx(g.lane, t0) + laneW * scaleAt(t0) * .21, yAt(t0));
+                        c.lineTo(laneCx(g.lane, t1) + laneW * scaleAt(t1) * .21, yAt(t1));
+                        c.lineTo(laneCx(g.lane, t1) - laneW * scaleAt(t1) * .21, yAt(t1));
+                        c.closePath();
+                        c.fill();
+                    }
+                }
+                const s = scaleAt(p), w = laneW * s * .86, h = w * .26;
+                c.fillStyle = '#8c96b6';
+                roundRect(c, laneCx(g.lane, p) - w / 2, yAt(p) - h / 2, w, h, h / 2);
+                c.fill();
+                c.restore();
+            }
+        }
+
         function drawNotes(c) {
             const from = songTime - .25, to = songTime + approach;
             for (let i = ptrMiss; i < chart.length; i++) {
@@ -1435,19 +1531,7 @@
 
                 // hold body — while held, the tail slides into the hit line
                 if (n.dur > 0) {
-                    const pTail = pAt(n.t + n.dur);
-                    const yTail = yAt(pTail);
-                    const headY = n.state === ST.HOLDING ? hitY : yAt(p);
-                    const w = laneW * s * .40;
-                    c.save();
-                    c.globalAlpha = n.state === ST.HOLDING ? .95 : .62;
-                    const grad = c.createLinearGradient(0, yTail, 0, headY);
-                    grad.addColorStop(0, col + '55');
-                    grad.addColorStop(1, col + 'dd');
-                    c.fillStyle = grad;
-                    roundRect(c, laneCx(n.lane, (p + pTail) / 2) - w / 2, Math.min(yTail, headY), w, Math.abs(headY - yTail), w * .4);
-                    c.fill();
-                    c.restore();
+                    drawHoldBody(c, n.lane, pAt(n.t + n.dur), n.state === ST.HOLDING ? 1 : p, n.state === ST.HOLDING);
                     if (n.state === ST.HOLDING) continue;  // head sits on the line while held
                 }
 
@@ -1661,7 +1745,7 @@
             const dt = Math.min(.05, (now - lastFrame) / 1000);
             lastFrame = now;
             if (mode === 'play') update(dt);
-            else if (mode === 'menu') { beatPulse *= .94; songTime = 0; }
+            else if (mode === 'menu') { beatPulse *= .94; songTime = 0; updatePreview(); }
             draw();
             requestAnimationFrame(frame);
         }
@@ -1676,8 +1760,10 @@
             if (e.code === 'Escape') {
                 if (mode === 'play') { e.preventDefault(); doPause(); }
                 else if (mode === 'paused') { e.preventDefault(); doResume(); }
+                else if (mode === 'results') { e.preventDefault(); quitToMenu(); }
                 return;
             }
+            if (mode === 'results' && e.code === 'Enter') { e.preventDefault(); $('rRetry').click(); return; }
             if (mode === 'menu' && e.code === 'Enter' && $('menu').hidden === false && document.activeElement !== $('dice')) {
                 e.preventDefault(); $('play').click(); return;
             }
@@ -1789,13 +1875,13 @@
             const b = e.target.closest('.diff');
             if (!b) return;
             diffKey = S.diff = b.dataset.d;
-            paintDiffs(); refreshSongCard(); save(); A.ui(760);
+            stopPreview(); paintDiffs(); refreshSongCard(); save(); A.ui(760);
         });
-        $('seed').addEventListener('input', refreshSongCard);
+        $('seed').addEventListener('input', () => { stopPreview(); refreshSongCard(); });
         $('seed').addEventListener('change', () => { S.seed = $('seed').value.trim(); save(); });
         $('dice').addEventListener('click', () => {
             $('seed').value = S.seed = randomSeed();
-            refreshSongCard(); save(); A.ui(880);
+            stopPreview(); refreshSongCard(); save(); A.ui(880);
         });
         $('sSpeed').addEventListener('input', e => { S.speed = +e.target.value; $('vSpeed').textContent = S.speed; save(); });
         $('sVol').addEventListener('input', e => { S.vol = +e.target.value; $('vVol').textContent = S.vol + '%'; A.setVolume(S.vol / 100); save(); });
@@ -1810,7 +1896,7 @@
             $('seed').value = seed; S.seed = seed; save();
             startSong(seed, diffKey);
         });
-        $('helpBtn').addEventListener('click', () => { $('menu').hidden = true; $('help').hidden = false; });
+        $('helpBtn').addEventListener('click', () => { stopPreview(); $('menu').hidden = true; $('help').hidden = false; });
         $('helpBack').addEventListener('click', () => { $('help').hidden = true; $('menu').hidden = false; });
 
         $('rRetry').addEventListener('click', () => startSong(song.seed, diffKey));
@@ -1832,12 +1918,66 @@
         });
 
         /* ═══════════════════════════════════════════════════════════
+           10b · Menu preview
+           Plays four bars of the seed's first drop, lead included, so the
+           menu can answer "what does this seed sound like?" — which is
+           what a perfect run of those bars sounds like.
+           ═══════════════════════════════════════════════════════════ */
+        let preview = null;
+
+        function startPreview() {
+            stopPreview();
+            if (!A.init()) return;
+            A.ctx.resume();
+            A.setVolume(S.vol / 100);
+            const s = composeSong($('seed').value.trim() || 'pulseforge');
+            const drop = s.sections.find(x => x.name === 'DROP') || s.sections[0];
+            const from = drop.t, to = from + 4 * s.barDur;
+            const notes = buildChart(s, diffKey);
+            let bp = 0, np = 0;
+            while (bp < s.backing.length && s.backing[bp].t < from) bp++;
+            while (np < notes.length && notes[np].t < from) np++;
+            preview = {song: s, notes, from, to, bp, np, origin: A.now() + .15 - from};
+            $('prev').textContent = '■ Stop';
+            $('prev').dataset.on = '1';
+        }
+
+        function stopPreview() {
+            if (!preview) return;
+            preview = null;
+            A.killAll();
+            $('prev').textContent = '▶ Hear the drop';
+            delete $('prev').dataset.on;
+        }
+
+        function updatePreview() {
+            if (!preview || !A.ok) return;
+            const {song: s, notes, to, origin} = preview;
+            const t = A.now() - origin, ahead = t + .25;
+            while (preview.bp < s.backing.length && s.backing[preview.bp].t < ahead) {
+                const ev = s.backing[preview.bp++];
+                if (ev.t > to) break;
+                A.playBacking(ev, Math.max(A.now(), origin + ev.t));
+            }
+            while (preview.np < notes.length && notes[preview.np].t < ahead) {
+                const n = notes[preview.np++];
+                if (n.t > to) break;
+                const when = Math.max(A.now(), origin + n.t);
+                A.lead(when, n.m, s.leadWave, true).stop(when + clamp(n.dur || .24, .12, .6));
+            }
+            if (t > to + .9) stopPreview();
+        }
+
+        $('prev').addEventListener('click', () => preview ? stopPreview() : startPreview());
+
+        /* ═══════════════════════════════════════════════════════════
            11 · Tap calibration
            ═══════════════════════════════════════════════════════════ */
         let calibrating = false, calTaps = [], calStart = 0, calTimer = 0, calResult = 0;
         const CAL_BEAT = .5, CAL_TAPS = 12;
 
         $('calBtn').addEventListener('click', () => {
+            stopPreview();
             if (!A.init()) return;
             A.ctx.resume();
             calibrating = true;
@@ -1926,7 +2066,17 @@
         requestAnimationFrame(frame);
 
         // expose a tiny hook so the composer can be inspected/tested
-        window.PULSEFORGE = {composeSong, buildChart, DIFFS, state: () => ({mode, score, combo, counts, notes: chart.length, songTime})};
+        window.PULSEFORGE = {
+            composeSong, buildChart, DIFFS,
+            state: () => ({mode, score, combo, counts, notes: chart.length, songTime, preview: !!preview}),
+            level: () => {
+                if (!A.ok) return -1;
+                A.analyser.getByteFrequencyData(A.freq);
+                let sum = 0;
+                for (const v of A.freq) sum += v;
+                return sum / A.freq.length;
+            }
+        };
     })();
 </script>
 </body>
