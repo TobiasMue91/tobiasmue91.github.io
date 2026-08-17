@@ -3403,6 +3403,10 @@
             const hit=treeMatCache.get(key);if(hit)return hit;
             const built=buildTreeMaterials(b,rare,BARK_TINTS[tint]);treeMatCache.set(key,built);return built;
         }
+        // ONE owner for the rare tree's palette. The standing trunk, the stump it leaves behind,
+        // the log it lays down and the wood it throws all have to agree -- change only the trunk
+        // and a honey tree leaves a lime stump, which is exactly what happened the first time.
+        function rareWood(b){return{bark:b.rareBark??b.accent,glow:b.rareGlowCol??b.accent,intensity:b.rareGlow??.55}}
         function buildTreeMaterials(b,rare,bark=1){
             // Rare trees are a payout tell, and a tell that comes in five shades is not a tell --
             // so they still take one colour, never the BARK_TINTS spread. But the tell was being
@@ -3416,7 +3420,7 @@
             // through it. b.accent is still the emissive hue, so the species reads at distance,
             // and b.accent is untouched elsewhere -- it still drives the shop, beacons and UI wash.
             // Forests that set neither are byte-identical to before.
-            const rareBark=b.rareBark??b.accent, rareGlow=b.rareGlow??.55, rareGlowCol=b.rareGlowCol??b.accent;
+            const rw=rareWood(b), rareBark=rw.bark, rareGlow=rw.intensity, rareGlowCol=rw.glow;
             const barkHue=rare?rareBark:shifted(b.trunk,bark);
             const trunkSide=pixelMat(rare?rareBark:barkHue,'wood',{emissive:rare?rareGlowCol:0,glow:rare?rareGlow:undefined}),
                 trunkTop=pixelMat(rare?shifted(rareBark,1.15):shifted(barkHue,1.25),'rings',{emissive:rare?rareGlowCol:0,glow:rare?rareGlow:undefined}),
@@ -3570,9 +3574,9 @@
         function buildStumpField(group,b,bi,list){
             if(!list.length)return;
             const make=(rare)=>{
-                const base=rare?b.accent:b.trunk,
-                    bark=pixelMat(shifted(base,.86),'wood',{emissive:rare?b.accent:0}),
-                    rings=pixelMat(shifted(base,1.22),'rings',{emissive:rare?b.accent:0});
+                const rw=rareWood(b), base=rare?rw.bark:b.trunk,
+                    bark=pixelMat(shifted(base,.86),'wood',{emissive:rare?rw.glow:0,glow:rare?rw.intensity:undefined}),
+                    rings=pixelMat(shifted(base,1.22),'rings',{emissive:rare?rw.glow:0,glow:rare?rw.intensity:undefined});
                 const mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),blockMats(rings,bark,bark),list.length);
                 mesh.frustumCulled=false;group.add(mesh);
                 const field={mesh,dirty:false,rare};stumpFields.push(field);return field;
@@ -4886,9 +4890,10 @@
             const inner=new THREE.Group();inner.rotation.z=Math.atan2(endY-startY,len);g.add(inner);
             // The end caps below already read `u.rare`; the bark did not, so a rare Pinefall
             // trunk laid down as a plain brown bridge with two glowing ends.
-            const barkMat=pixelMat(u.rare?b.accent:b.trunk,'wood',{emissive:u.rare?b.accent:0});
+            const rw=rareWood(b);
+            const barkMat=pixelMat(u.rare?rw.bark:b.trunk,'wood',{emissive:u.rare?rw.glow:0,glow:u.rare?rw.intensity:undefined});
             const log=box(len,half*1.8,half*1.9,barkMat);inner.add(log);
-            const ringMat=pixelMat(shifted(b.trunk,1.3),'rings',{emissive:u.rare?b.accent:0});
+            const ringMat=pixelMat(shifted(u.rare?rw.bark:b.trunk,1.3),'rings',{emissive:u.rare?rw.glow:0,glow:u.rare?rw.intensity:undefined});
             for(const side of[-1,1]){const cap=box(.14,half*1.72,half*1.82,ringMat);cap.position.x=side*len/2;inner.add(cap)}
             biomeGroups[bi].add(g);
             const seg=addWalkSeg(bi,ax,startY+half*1.85,az,bx,endY+half*1.85,bz,half*1.05);
@@ -4919,7 +4924,7 @@
             const b=BIOMES[rec.bi],pos=rec.g.getWorldPosition(new THREE.Vector3());
             if(--rec.hits>0){
                 playSound('chop');addShake(.06);
-                for(let i=0;i<7;i++){const mesh=box(.08,.08,.08,new THREE.MeshBasicMaterial({color:rec.rare?b.accent:b.trunk}));
+                for(let i=0;i<7;i++){const mesh=box(.08,.08,.08,new THREE.MeshBasicMaterial({color:rec.rare?rareWood(b).bark:b.trunk}));
                     mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-.5)*2,1,(Math.random()-.5)*2));scene.add(mesh);
                     particles.push({mesh,vel:new THREE.Vector3((Math.random()-.5)*5,Math.random()*4,(Math.random()-.5)*5),life:.45+Math.random()*.25})}
                 return;
@@ -5094,7 +5099,7 @@
                 scene.remove(old.mesh);
             }
         }
-        function spawnPickups(tree,amount){const pos=tree.getWorldPosition(new THREE.Vector3()),count=clamp(Math.ceil(amount/6),2,9),per=amount/count,b=BIOMES[tree.userData.biome];for(let i=0;i<count;i++){const mesh=box(.28,.28,.42,pixelMat(tree.userData.rare?b.accent:b.trunk,'wood',{emissive:tree.userData.rare?b.accent:0}));mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-.5)*2,1.2+Math.random()*2,(Math.random()-.5)*2));scene.add(mesh);pickups.push({mesh,biome:tree.userData.biome,amount:per,vel:new THREE.Vector3((Math.random()-.5)*3,3+Math.random()*3,(Math.random()-.5)*3),life:180,blockedUntil:0})}foldOldestPickup()}
+        function spawnPickups(tree,amount){const pos=tree.getWorldPosition(new THREE.Vector3()),count=clamp(Math.ceil(amount/6),2,9),per=amount/count,b=BIOMES[tree.userData.biome];for(let i=0;i<count;i++){const mesh=box(.28,.28,.42,pixelMat(tree.userData.rare?rareWood(b).bark:b.trunk,'wood',{emissive:tree.userData.rare?rareWood(b).glow:0,glow:tree.userData.rare?rareWood(b).intensity:undefined}));mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-.5)*2,1.2+Math.random()*2,(Math.random()-.5)*2));scene.add(mesh);pickups.push({mesh,biome:tree.userData.biome,amount:per,vel:new THREE.Vector3((Math.random()-.5)*3,3+Math.random()*3,(Math.random()-.5)*3),life:180,blockedUntil:0})}foldOldestPickup()}
         function updatePickups(dt){const full=cargoTotal()>=cargoCapacity()-.001,now=performance.now();for(let i=pickups.length-1;i>=0;i--){const p=pickups[i],dist=p.mesh.position.distanceTo(player.pos);if(!(full&&dist<magnetRange()+3))p.life-=dt;const canMagnet=!full&&now>=p.blockedUntil;if(canMagnet&&dist<magnetRange()){tmpV.copy(player.pos).add(new THREE.Vector3(0,1,0));p.mesh.position.lerp(tmpV,1-Math.exp(-dt*(6+magnetRange()*.25)));p.mesh.rotation.x+=dt*8;p.mesh.rotation.y+=dt*11;if(dist<1.15){const done=collectPickup(p);if(done){scene.remove(p.mesh);pickups.splice(i,1);continue}p.blockedUntil=now+900;p.vel.set((Math.random()-.5)*1.2,1.2,(Math.random()-.5)*1.2)}}else{p.vel.y-=12*dt;p.mesh.position.addScaledVector(p.vel,dt);const floor=structureTopAt(p.mesh.position.x,p.mesh.position.z)+.16;if(p.mesh.position.y<floor){p.mesh.position.y=floor;p.vel.y*=-.18;p.vel.x*=.78;p.vel.z*=.78}p.mesh.rotation.x+=dt*3;if(full&&dist<magnetRange()+3)p.mesh.position.y+=Math.sin(now*.004+i)*.0015}if(p.life<=0){scene.remove(p.mesh);pickups.splice(i,1)}}}
         function collectPickup(p){const cap=cargoCapacity(),space=Math.max(0,cap-cargoTotal());if(space<=.001){if(!collectPickup.fullWarn||performance.now()-collectPickup.fullWarn>1800){collectPickup.fullWarn=performance.now();toast('SATCHEL FULL · DROPS WILL WAIT HERE')}return false}const got=Math.min(space,p.amount);state.cargo[p.biome]+=got;p.amount-=got;playSound('collect');
             if(state.upgrades.whistle>0&&combo>0)comboTimer=Math.max(comboTimer,comboWindow()*state.upgrades.whistle*.14);
