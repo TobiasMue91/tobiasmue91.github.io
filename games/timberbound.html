@@ -3825,7 +3825,23 @@
             // a first-person eye at ground level it sits under a canopy that already occludes
             // it. Desktop keeps it. Measured before and after; see HANDOFF.
             const shade=(TOUCH_MODE||!treeShadowsVisible(b))?null:makeGroundShadow(1.5+scale*1.35,rare?.62:.5);if(shade)tree.add(shade);
-            const dummy=new THREE.Object3D(),trunkMesh=new THREE.InstancedMesh(treeBoxGeometry(),trunkMats,trunkBlocks);for(let y=0;y<trunkBlocks;y++){const h=.5+y,off=h*h;dummy.position.set(leanX*off,h,leanZ*off);dummy.scale.set(trunkWidth,1,trunkWidth);dummy.rotation.set(leanZ*h*2,0,-leanX*h*2);dummy.updateMatrix();trunkMesh.setMatrixAt(y,dummy.matrix)}trunkMesh.instanceMatrix.needsUpdate=true;tree.add(trunkMesh);
+            const dummy=new THREE.Object3D(),trunkMesh=new THREE.InstancedMesh(treeBoxGeometry(),trunkMats,trunkBlocks),barkTint=new THREE.Color();
+            // A bole is not a pipe. Every block used to be exactly trunkWidth across, which is why
+            // a trunk read as a length of pipe with bark drawn on it. Two shapes fix that, both
+            // free -- the instance count does not change, only the scale written per block:
+            //   a short BUTTRESS at the foot, kept to 1.12 because collisionRadius is
+            //   trunkWidth*.55 and a wider flare would let the player stand inside the wood;
+            //   a steady TAPER into the crown, which is most of what makes it read as grown.
+            // Bark also gets per-instance colour on the same principle as the leaves: damper and
+            // greener at the foot, paler where the canopy opens. Hashed off the block index and
+            // the tree's own rarityRoll, so it varies per tree and costs no rand() draw.
+            for(let y=0;y<trunkBlocks;y++){const h=.5+y,off=h*h,tt=trunkBlocks>1?y/(trunkBlocks-1):0;
+                const flare=1+.12*Math.pow(1-Math.min(1,tt/.18),2),taper=1-.18*tt,tw=trunkWidth*flare*taper;
+                dummy.position.set(leanX*off,h,leanZ*off);dummy.scale.set(tw,1,tw);dummy.rotation.set(leanZ*h*2,0,-leanX*h*2);dummy.updateMatrix();trunkMesh.setMatrixAt(y,dummy.matrix);
+                let bh=(((y+1)*2654435761)^(Math.round(rarityRoll*99991)*40503))>>>0;bh=(bh^(bh>>>15))>>>0;
+                const moss=Math.pow(1-Math.min(1,tt/.35),2),bv=.9+.14*tt+((bh%1000)/1000-.5)*.06;
+                barkTint.setRGB(bv*(1-.10*moss),bv*(1-.02*moss),bv*(1-.14*moss));trunkMesh.setColorAt(y,barkTint)}
+            trunkMesh.instanceMatrix.needsUpdate=true;if(trunkMesh.instanceColor)trunkMesh.instanceColor.needsUpdate=true;tree.add(trunkMesh);
             // Every leaf keeps its integer lattice address AND a small offset. The address is what
             // the hollowing test and the crown measurements use; the offset is what the player
             // sees. Without it a crown is a hundred cubes with perfectly coplanar faces, which
@@ -4003,7 +4019,35 @@
             // took fifteen geometry assertions down with it. Not worth a bypass of the only
             // path the tests can see. The boot cost is real and the fix for it is dormant
             // trees -- see HANDOFF -- not shaving the matrix write.
-            leafMesh.userData.windPhase=rand()*Math.PI*2;leaves.forEach((p,i)=>{dummy.position.set(p.lx,p.ly,p.lz);dummy.scale.set(p.size,p.size,p.size);dummy.rotation.set(0,0,0);dummy.updateMatrix();leafMesh.setMatrixAt(i,dummy.matrix)});leafMesh.instanceMatrix.needsUpdate=true;
+            leafMesh.userData.windPhase=rand()*Math.PI*2;
+            // The masonry look, finally answered the way this file said to answer it: per-instance
+            // COLOUR, not geometry. Positional jitter was tried and reverted because the crown is a
+            // hollow shell and any gap is a window onto the dark inside of the tree. Colour cannot
+            // open a hole, so it is free to vary as much as it likes.
+            //
+            // Three terms, all of them things a real canopy does. Height: the top of a crown is in
+            // the sun and the bottom is under three metres of its own foliage. Radius: the rim
+            // catches light the interior never sees. Noise: no two leaves are the same leaf.
+            //
+            // The noise is hashed from the leaf's integer lattice address rather than drawn from
+            // rand(), because the scatter is one seeded stream across the whole map -- one extra
+            // draw per leaf would move every tree placed after it.
+            //
+            // instanceColor multiplies DIFFUSE only, so the emissive that lets these leaves
+            // transmit light is untouched and the canopy underside keeps its lift.
+            const spanY=Math.max(1,crownTop-crownBase),maxR=Math.max(1,crownRadius),leafTint=new THREE.Color();
+            leaves.forEach((p,i)=>{dummy.position.set(p.lx,p.ly,p.lz);dummy.scale.set(p.size,p.size,p.size);dummy.rotation.set(0,0,0);dummy.updateMatrix();leafMesh.setMatrixAt(i,dummy.matrix);
+                const t=clamp((p.ly-crownBase)/spanY,0,1),rad=Math.min(1,Math.hypot(p.lx,p.lz)/maxR);
+                // Two scales of noise, because foliage varies in CLUMPS. Per-cube noise alone is
+                // salt and pepper; hashing a halved lattice address as well gives 2x2x2 patches of
+                // lighter and darker leaf, which is what a real crown does, and the fine term then
+                // keeps neighbours inside a clump from being identical.
+                const hx=Math.round(p.lx),hy=Math.round(p.ly),hz=Math.round(p.lz);
+                let hc=((hx>>1)*73856093)^((hy>>1)*19349663)^((hz>>1)*83492791);hc=(hc^(hc>>>13))>>>0;
+                let hf=(hx*2654435761)^(hy*40503)^(hz*30011);hf=(hf^(hf>>>15))>>>0;
+                const v=.90+.26*t+.07*rad+((hc%1000)/1000-.5)*.18+((hf%1000)/1000-.5)*.08;
+                leafTint.setRGB(v*(1+.05*t),v,v*(1-.05*t));leafMesh.setColorAt(i,leafTint)});
+            leafMesh.instanceMatrix.needsUpdate=true;if(leafMesh.instanceColor)leafMesh.instanceColor.needsUpdate=true;
             // Turn the crown. Leaves sit on an integer lattice, so without this every crown
             // in a forest presents the same flat faces on the same two axes -- fine when you
             // could see three of them, a warehouse rack when you are looking through six.
