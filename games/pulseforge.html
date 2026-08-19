@@ -499,7 +499,7 @@
             kick: 'lofi', kickMode: 'soft', snare: 'backbeat', snareVoice: 'rim', hats: 'eighth', ohat: false,
             bass: 'walk', bassMode: 'warm', chords: 'keys', arp: false, seventh: true,
             lead: {wave: 'triangle', cutoff: 1800, cutoffEnd: 700, detune: 3, q: 2, gain: .9},
-            mix: {drums: .7, music: .72, lead: .7, reverb: .7, tone: 6500},
+            mix: {drums: .7, music: .72, lead: .5, reverb: .7, tone: 6500},
             melShift: 1, nouns: ['Window', 'Study', 'Rainfall', 'Tape', 'Afternoon', 'Pillow']
         }, {
             id: 'trance', name: 'Trance',
@@ -570,7 +570,43 @@
                 return scale[((i % n) + n) % n] + 12 * o;
             };
             const chordTones = d => style.seventh ? [d, d + 2, d + 4, d + 6] : [d, d + 2, d + 4];
-            const voicing = d => chordTones(d).map(x => root + 12 + deg(x));
+
+            /* Voice leading. Stacking every chord in root position makes the
+               harmony lurch: each change moved a voice by 5+ semitones on
+               average. Real players hold common tones and move the rest as
+               little as possible, so each voice takes the octave nearest the
+               voice it replaces. */
+            let lastVoicing = null;
+            const voicing = d => {
+                const pcs = chordTones(d).map(x => root + 12 + deg(x));
+                if (!lastVoicing) return lastVoicing = pcs.slice().sort((a, b) => a - b);
+                /* Try every inversion and keep the one that moves the voices
+                   least. Assigning by index instead only got the average
+                   movement from 5.2 to 3.9 semitones, because it forces the
+                   new root to answer the old bass voice. Voice order is then
+                   kept stable, so a voice keeps its identity chord to chord. */
+                const n = pcs.length;
+                let best = null, bestCost = Infinity;
+                for (let rot = 0; rot < n; rot++) {
+                    const cand = [];
+                    let cost = 0;
+                    for (let i = 0; i < n; i++) {
+                        const target = lastVoicing[i];
+                        let x = pcs[(i + rot) % n];
+                        for (let k = 0; k < 4 && x - target > 6; k++) x -= 12;
+                        for (let k = 0; k < 4 && target - x > 6; k++) x += 12;
+                        cand.push(x);
+                        cost += Math.abs(x - target);
+                    }
+                    if (cost < bestCost) { bestCost = cost; best = cand; }
+                }
+                /* Keep the chord in its register. A window this wide let
+                   voice leading walk lo-fi's chords downward until 53% of the
+                   mix sat between 120 and 500Hz. */
+                const mid = best.reduce((a, b) => a + b, 0) / n;
+                const shift = mid > root + 26 ? -12 : mid < root + 11 ? 12 : 0;
+                return lastVoicing = best.map(x => x + shift);
+            };
 
             // ── sections & bars
             const sections = [];
@@ -701,12 +737,13 @@
                 if (style.chords !== 'none' && I >= .22 && b % style.chordBars === 0) {
                     const dur = barDur * style.chordBars * .96;
                     const v = clamp(I * .55 + .15, .15, .7);
+                    const vc = voicing(cd);            // one voicing per chord, reused by every stab
                     if (style.chords === 'stab') {
                         for (const st of (I >= .6 ? [2, 6, 10, 14] : [2, 10])) {
-                            add(t0 + st * six + sw(st), 'chord', {m: voicing(cd), d: six * 2, v, mode: 'stab'});
+                            add(t0 + st * six + sw(st), 'chord', {m: vc, d: six * 2, v, mode: 'stab'});
                         }
                     } else {
-                        add(t0, 'chord', {m: voicing(cd), d: dur, v, mode: style.chords});
+                        add(t0, 'chord', {m: vc, d: dur, v, mode: style.chords});
                     }
                 }
 
@@ -795,6 +832,7 @@
                     if (dist < bestDist) { bestDist = dist; anchor = cd + o; }
                 }
 
+                const phraseStart = melody.length;
                 for (const n of shaped) {
                     const barOff = Math.floor(n.st / 16);
                     if (b + barOff >= bars) continue;
@@ -820,6 +858,26 @@
                         step: st, bar: b + barOff, w: n.w, deg: d,
                         m: midiOf(d), dur: 0, sec: sec.name, i: I
                     });
+                }
+
+                /* Cadence. A phrase that just stops where the random walk left
+                   it sounds unfinished; landing the last note of a section on
+                   the tonic (or its fifth or third) is what makes a section
+                   feel like it ended rather than ran out. */
+                const lastSection = sec === sections[sections.length - 1];
+                if (b + 2 >= sec.bar + sec.bars && melody.length > phraseStart && (lastSection || rnd() < .72)) {
+                    const last = melody[melody.length - 1];
+                    const r = rnd();
+                    const restDeg = r < .6 ? 0 : r < .85 ? 4 : 2;      // tonic / fifth / third
+                    let bestD = last.deg, bd = 1e9;
+                    for (let k = -4; k <= 4; k++) {
+                        const cand = restDeg + k * scale.length, cm = midiOf(cand);
+                        if (cm < LEAD_LO || cm > LEAD_HI) continue;
+                        const dist = Math.abs(cm - midiOf(last.deg));
+                        if (dist < bd) { bd = dist; bestD = cand; }
+                    }
+                    last.deg = bestD;
+                    last.m = midiOf(bestD);
                 }
             }
             melody.sort((a, b) => a.t - b.t);
@@ -2510,7 +2568,7 @@
                     if (ev.k === 'tick' || ev.t < from || ev.t >= from + seconds) continue;
                     A.playBacking(ev, ev.t - from + pad);
                 }
-                const chart = buildChart(s, o.diff || 'normal');
+                const chart = o.noLead ? [] : buildChart(s, o.diff || 'normal');
                 for (const n of chart) {
                     if (n.t < from || n.t >= from + seconds) continue;
                     A.lead(n.t - from + pad, n.m, s.leadVoice, true).stop(n.t - from + pad + clamp(n.dur || .24, .12, .7));
