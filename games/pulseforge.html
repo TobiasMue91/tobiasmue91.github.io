@@ -108,6 +108,11 @@
             color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 15px; padding: 11px 12px;
         }
         input[type=text]:focus { outline: 2px solid var(--l2); outline-offset: 1px; border-color: transparent; }
+        select {
+            width: 100%; background: #070912; border: 1px solid var(--edge-2); border-radius: 8px;
+            color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 14px; padding: 10px 12px;
+        }
+        select:focus { outline: 2px solid var(--l2); outline-offset: 1px; }
 
         button {
             font: inherit; color: inherit; background: none; border: none; cursor: pointer;
@@ -250,8 +255,8 @@
 <!-- ── Menu ────────────────────────────────────────── -->
 <div class="screen" id="menu">
     <h1>Pulseforge</h1>
-    <p class="tagline">A rhythm game with <b>no audio files</b>. Type a word — Pulseforge composes a whole track from it and
-        the melody it writes <b>is</b> the note chart. Same seed, same song, forever.</p>
+    <p class="tagline">A rhythm game with <b>no audio files</b>. Type a word — Pulseforge writes a whole track from it in
+        one of <b>eight styles</b>, and the melody it writes <b>is</b> the note chart. Same seed, same song, forever.</p>
 
     <div class="card">
         <label class="field">
@@ -267,6 +272,11 @@
             <div class="songmeta mono" id="sMeta">—</div>
             <button class="btn preview" id="prev">▶ Hear the drop</button>
         </div>
+
+        <label class="field">
+            <span class="lbl">Style</span>
+            <select id="style" aria-label="Musical style"></select>
+        </label>
 
         <div class="field">
             <span class="lbl">Difficulty</span>
@@ -315,7 +325,7 @@
             <b>Long notes.</b> Bars with a tail must be held until the end.<br>
             <b>Wrong presses cost you.</b> Hitting a lane with nothing in it breaks your combo and shaves a few points — but it never counts against your accuracy, which only ever measures how you timed real notes.<br>
             <b>Overdrive.</b> Chaining hits fills the flow meter on the left. Fill it and every point counts double.<br>
-            <b>Seeds.</b> Any text composes a different song — key, tempo, structure and melody. Share the link to share the exact track.<br>
+            <b>Seeds.</b> Any text composes a different song — style, key, tempo, structure and melody. Synthwave, house, trance, drum &amp; bass, chiptune, lo-fi, trap and cinematic each bring their own drums, instruments and mix. Pick one, or let the seed choose. Share the link to share the exact track.<br>
             <b>Offset.</b> If your hits feel early or late, run the tap calibration in settings. Headphones beat Bluetooth speakers.
         </p>
     </div>
@@ -550,11 +560,14 @@
         const TITLE_A = ['Neon', 'Glass', 'Velvet', 'Iron', 'Paper', 'Hollow', 'Solar', 'Frozen', 'Crimson', 'Quiet',
                          'Electric', 'Midnight', 'Chrome', 'Static', 'Wild', 'Distant', 'Molten', 'Silver', 'Bitter', 'Endless'];
 
-        function composeSong(seedStr) {
+        function composeSong(seedStr, forceStyle) {
             const rnd = mulberry32(xmur3(seedStr || 'pulseforge')());
             const pick = arr => arr[Math.floor(rnd() * arr.length)];
 
-            const style = pick(STYLES);
+            /* The roll happens either way, so asking for the style a seed
+               would have chosen anyway gives back the very same song. */
+            const rolled = pick(STYLES);
+            const style = forceStyle ? (STYLES.find(x => x.id === forceStyle) || rolled) : rolled;
             const bpm = pick(style.bpms);
             const beat = 60 / bpm, barDur = beat * 4, six = beat / 4;
             const scaleName = pick(style.scales);
@@ -1373,14 +1386,16 @@
            4 · Settings
            ═══════════════════════════════════════════════════════════ */
         const SKEY = 'pulseforge.settings';
-        const S = Object.assign({seed: '', diff: 'normal', speed: 5, vol: 80, offset: 0, auto: false}, load());
+        const S = Object.assign({seed: '', diff: 'normal', style: '', speed: 5, vol: 80, offset: 0, auto: false}, load());
 
         function load() { try { return JSON.parse(localStorage.getItem(SKEY)) || {}; } catch (e) { return {}; } }
         function save() { try { localStorage.setItem(SKEY, JSON.stringify(S)); } catch (e) { /* private mode */ } }
-        // v2: the composer was rewritten, so pre-v2 bests are for different music
-        function bestKey(seed, diff) { return 'pulseforge.best.v2.' + diff + '.' + seed.toLowerCase().trim(); }
-        function getBest(seed, diff) { try { return +localStorage.getItem(bestKey(seed, diff)) || 0; } catch (e) { return 0; } }
-        function setBest(seed, diff, v) { try { localStorage.setItem(bestKey(seed, diff), String(v)); } catch (e) { } }
+        /* v2: the composer was rewritten, so pre-v2 bests are for different
+           music. Keyed on the style actually played, so a forced style and a
+           seed that rolls the same style share one best. */
+        function bestKey(seed, diff, style) { return 'pulseforge.best.v2.' + diff + '.' + (style || 'auto') + '.' + seed.toLowerCase().trim(); }
+        function getBest(seed, diff, style) { try { return +localStorage.getItem(bestKey(seed, diff, style)) || 0; } catch (e) { return 0; } }
+        function setBest(seed, diff, style, v) { try { localStorage.setItem(bestKey(seed, diff, style), String(v)); } catch (e) { } }
 
         function randomSeed() {
             const a = ['amber', 'cobalt', 'delta', 'ember', 'flux', 'halcyon', 'indigo', 'krypton', 'lumen', 'nova', 'onyx', 'pulse', 'quartz', 'rift', 'solace', 'tundra', 'umbra', 'vertex', 'wisp', 'zenith'];
@@ -1498,7 +1513,7 @@
             A.setVolume(S.vol / 100);
             A.killAll();
 
-            song = composeSong(seedStr);
+            song = composeSong(seedStr, S.style);
             A.setMix(song.mix);
             diffKey = dk; D = DIFFS[dk];
             chart = buildChart(song, dk);
@@ -2176,9 +2191,9 @@
             $('rAcc').textContent = acc.toFixed(2) + '%';
             $('rCombo').textContent = maxCombo + '/' + chart.length;
 
-            const prev = autoplay ? 0 : getBest(song.seed, diffKey);
+            const prev = autoplay ? 0 : getBest(song.seed, diffKey, song.style);
             const isBest = !autoplay && score > prev;
-            if (isBest) setBest(song.seed, diffKey, score);
+            if (isBest) setBest(song.seed, diffKey, song.style, score);
             $('rBest').textContent = (isBest ? score : prev).toLocaleString('en-US');
             $('rNew').hidden = !isBest;
 
@@ -2307,6 +2322,7 @@
         const params = new URLSearchParams(location.search);
         S.seed = params.get('seed') || S.seed || randomSeed();
         if (params.get('d') && DIFFS[params.get('d')]) S.diff = params.get('d');
+        if (params.get('st') !== null) S.style = STYLES.some(x => x.id === params.get('st')) ? params.get('st') : '';
         diffKey = S.diff;
 
         $('seed').value = S.seed;
@@ -2314,6 +2330,14 @@
         $('sVol').value = S.vol;
         $('sOff').value = S.offset;
         $('cAuto').checked = S.auto;
+
+        $('style').innerHTML = '<option value="">Any — the seed decides</option>' +
+            STYLES.map(x => '<option value="' + x.id + '">' + x.name + '</option>').join('');
+        $('style').value = S.style || '';
+        $('style').addEventListener('change', e => {
+            S.style = e.target.value;
+            stopPreview(); refreshSongCard(); save(); A.ui(700);
+        });
 
         $('diffs').innerHTML = Object.keys(DIFFS).map(k =>
             '<button class="diff" data-d="' + k + '" aria-pressed="false">' + DIFFS[k].label + '<small>' + DIFFS[k].sub + '</small></button>').join('');
@@ -2324,14 +2348,14 @@
 
         function refreshSongCard() {
             const seed = $('seed').value.trim() || 'pulseforge';
-            const s = composeSong(seed);
+            const s = composeSong(seed, S.style);
             const n = buildChart(s, diffKey).length;
             const mins = Math.floor(s.duration / 60), secs = Math.round(s.duration % 60);
             $('sTitle').textContent = s.title;
             $('sMeta').innerHTML = '<span><b>' + s.styleName + '</b></span><span><b>' + s.bpm + '</b> BPM</span><span><b>' + s.key + '</b></span>' +
                 '<span><b>' + mins + ':' + String(secs).padStart(2, '0') + '</b> long</span>' +
                 '<span><b>' + n + '</b> notes</span>' +
-                '<span>best <b>' + getBest(seed, diffKey).toLocaleString('en-US') + '</b></span>';
+                '<span>best <b>' + getBest(seed, diffKey, s.style).toLocaleString('en-US') + '</b></span>';
         }
 
         $('diffs').addEventListener('click', e => {
@@ -2370,7 +2394,8 @@
         });
         $('rMenu').addEventListener('click', quitToMenu);
         $('rShare').addEventListener('click', async () => {
-            const url = location.origin + location.pathname + '?seed=' + encodeURIComponent(song.seed) + '&d=' + diffKey;
+            const url = location.origin + location.pathname + '?seed=' + encodeURIComponent(song.seed) +
+                '&d=' + diffKey + (S.style ? '&st=' + encodeURIComponent(S.style) : '');
             try {
                 await navigator.clipboard.writeText(url);
                 $('rShare').textContent = 'Copied!';
@@ -2393,7 +2418,7 @@
             if (!A.init()) return;
             A.ctx.resume();
             A.setVolume(S.vol / 100);
-            const s = composeSong($('seed').value.trim() || 'pulseforge');
+            const s = composeSong($('seed').value.trim() || 'pulseforge', S.style);
             const drop = s.sections.reduce((a, x) => x.i > a.i ? x : a, s.sections[0]);
             const from = drop.t, to = from + 4 * s.barDur;
             const notes = buildChart(s, diffKey);
@@ -2549,7 +2574,7 @@
                 const o = opts || {};
                 const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
                 if (!OAC) return null;
-                const s = composeSong(seedStr);
+                const s = composeSong(seedStr, o.style);
                 const rate = o.rate || 44100;
                 const octx = new OAC(o.mono ? 1 : 2, Math.ceil(seconds * rate), rate);
                 const keep = {};
