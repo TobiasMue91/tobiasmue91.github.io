@@ -6,8 +6,9 @@ have been built since; the point is the shape of the gap, not the specific sugge
 
 **Games**
 
-- **Hidden-rule deduction.** The game invents a secret rule and answers yes/no to the player's
-  experiments (Zendo, Eleusis). Mastermind is code-breaking; nothing here does rule induction.
+- ~~**Hidden-rule deduction.**~~ Filled by Falsify, which enumerates its own hypothesis space so the
+  count of surviving laws is exact. Still open next door: a *two-player* version where one person
+  invents the rule and the machine only adjudicates.
 - **Pinball.** Flippers, bumpers and ramps are pure physics and vector graphics.
 - **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
   build a deck across a run.
