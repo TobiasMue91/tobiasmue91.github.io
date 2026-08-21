@@ -11,12 +11,17 @@ language models. Plain HTML/CSS/JS, no framework. GitHub Pages runs Jekyll over 
 ## How a page works
 
 Every game and tool is a single self-contained `.html` file in `games/` or `tools/` — markup, CSS and JS
-inline, no shared stylesheet, no bundler. Pages are free to look nothing like each other; the one
-convention they share is the footer include:
+inline, no shared stylesheet, no bundler. Pages are free to look nothing like each other; the closest
+thing to a shared convention is the floating logo:
 
 ```html
-<script src="../logo.js" data-position="bottom-left"></script>
+<script src="../logo.js"></script>
 ```
+
+It is optional, and about a quarter of pages leave it out — a page that already credits gptgames.dev,
+or whose design the floating mark would spoil, does not need it. It sits bottom-right on its own;
+`data-position` (`top-left`, `top-right`, `bottom-left`, `bottom-middle`) is only worth setting on the
+rare page where that corner is already occupied.
 
 Assets are rare. Sound comes from Web Audio, graphics from canvas or CSS, and anything that should be
 reproducible (levels, songs, boards) from a seeded PRNG, so a seed in the URL is a shareable artefact.
@@ -60,29 +65,5 @@ The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 - **Firebase** — 6 pages share one project via `firebase.js` for multiplayer, highscores and saved
   plans. Everything else runs entirely client-side.
 
-`README.md` covers intent and licence; `IDEAS.md` is the long backlog, `PROMPTS.md` and `TIPS.md` the
-prompting notes.
-
-## Ideas worth building
-
-Verified gaps in the current catalogue, picked because they fit the constraints — one file, no assets,
-reproducible from a seed.
-
-**Games**
-
-- **Hidden-rule deduction.** The game invents a secret rule and answers yes/no to the player's
-  experiments (Zendo, Eleusis). Mastermind is code-breaking; nothing here does rule induction.
-- **Pinball.** Flippers, bumpers and ramps are pure physics and vector graphics.
-- **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
-  build a deck across a run.
-- **Line-routing sim.** Mini Metro-shaped: growing demand, limited track, procedural maps.
-- **Air hockey.** 8-ball covers cue sports; nothing covers paddles.
-
-**Tools**
-
-- **CSS keyframe editor.** Nine CSS tools exist and none of them touch `@keyframes`.
-- **Cubic-bezier easing editor.** Pairs naturally with the above.
-- **WCAG contrast checker.** There is a colour-blindness simulator but no contrast ratio checker.
-- **CSS clip-path editor.** Visual polygon editing with copyable output.
-- **Aspect ratio calculator** and **browser storage explorer** — small, useful, long-standing entries
-  in `IDEAS.md`.
+`README.md` covers intent and licence; `IDEAS.md` is the backlog, including a list of gaps checked
+against the current catalogue; `PROMPTS.md` and `TIPS.md` are the prompting notes.

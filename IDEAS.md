@@ -1,3 +1,28 @@
+## Gaps worth filling
+
+Checked against the catalogue on 2026-08-20 (87 games, 196 tools) and picked to fit the constraints the
+rest of the collection works under — one file, no assets, reproducible from a seed. Anything here may
+have been built since; the point is the shape of the gap, not the specific suggestion.
+
+**Games**
+
+- **Hidden-rule deduction.** The game invents a secret rule and answers yes/no to the player's
+  experiments (Zendo, Eleusis). Mastermind is code-breaking; nothing here does rule induction.
+- **Pinball.** Flippers, bumpers and ramps are pure physics and vector graphics.
+- **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
+  build a deck across a run.
+- **Line-routing sim.** Mini Metro-shaped: growing demand, limited track, procedural maps.
+- **Air hockey.** 8-ball covers cue sports; nothing covers paddles.
+
+**Tools**
+
+- **CSS keyframe editor.** Nine CSS tools exist and none of them touch `@keyframes`.
+- **Cubic-bezier easing editor.** Pairs naturally with the above.
+- **WCAG contrast checker.** There is a colour-blindness simulator but no contrast ratio checker.
+- **CSS clip-path editor.** Visual polygon editing with copyable output.
+- **Aspect ratio calculator** and **browser storage explorer** — small, useful, and on the list below
+  for years.
+
 ## Other
 - household planner
   - single time tasks that are removed after being completed
