@@ -1,18 +1,18 @@
 ## Gaps worth filling
 
-Checked against the catalogue on 2026-08-20 (87 games, 196 tools) and picked to fit the constraints the
+Checked against the catalogue on 2026-08-21 (88 games, 196 tools) and picked to fit the constraints the
 rest of the collection works under — one file, no assets, reproducible from a seed. Anything here may
 have been built since; the point is the shape of the gap, not the specific suggestion.
 
 **Games**
 
-- **Hidden-rule deduction.** The game invents a secret rule and answers yes/no to the player's
-  experiments (Zendo, Eleusis). Mastermind is code-breaking; nothing here does rule induction.
 - **Pinball.** Flippers, bumpers and ramps are pure physics and vector graphics.
 - **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
   build a deck across a run.
 - **Line-routing sim.** Mini Metro-shaped: growing demand, limited track, procedural maps.
 - **Air hockey.** 8-ball covers cue sports; nothing covers paddles.
+
+Filled since: hidden-rule deduction, by `games/glyphgate.html`.
 
 **Tools**
 
