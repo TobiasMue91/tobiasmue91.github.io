@@ -1,6 +1,6 @@
 ## Gaps worth filling
 
-Checked against the catalogue on 2026-08-21 (88 games, 196 tools) and picked to fit the constraints the
+Checked against the catalogue on 2026-08-21 (89 games, 196 tools) and picked to fit the constraints the
 rest of the collection works under — one file, no assets, reproducible from a seed. Anything here may
 have been built since; the point is the shape of the gap, not the specific suggestion.
 
@@ -11,8 +11,12 @@ have been built since; the point is the shape of the gap, not the specific sugge
   build a deck across a run.
 - **Line-routing sim.** Mini Metro-shaped: growing demand, limited track, procedural maps.
 - **Air hockey.** 8-ball covers cue sports; nothing covers paddles.
+- **Turn-based tactics.** Into the Breach's shape — a small grid, perfect information, enemies that
+  telegraph next turn's move, so every turn is a solvable puzzle rather than a dice roll. `strategy`
+  is the thinnest category in the catalogue and nothing in it is turn-based tactical.
 
-Filled since: hidden-rule deduction, by `games/glyphgate.html`.
+Filled since: hidden-rule deduction, by `games/glyphgate.html`; cooperating with recordings of your
+own past, by `games/selfsame.html`.
 
 **Tools**
 
