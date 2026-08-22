@@ -27,6 +27,14 @@ own past, by `games/selfsame.html`.
 - **Aspect ratio calculator** and **browser storage explorer** — small, useful, and on the list below
   for years.
 
+Filled since: classical cryptanalysis, by `tools/cribwork.html` — cipher identification from the index of
+coincidence, solvers for the Caesar/affine/substitution/Vigenère/transposition families, and a cryptogram
+worksheet. Nothing in the catalogue had touched ciphers beyond the toy converters (`1337`, `morse_code_translator`,
+`base64_encoder_decoder`), which is the shape of gap worth looking for: a whole subject the collection only
+gestures at. The neighbouring ones still open are **cipher-based puzzle games** (nothing here is a word game
+built on deduction from letter statistics) and an **audio spectrogram / instrument tuner**, which is the same
+kind of gap on the audio side — eleven audio tools and not one that shows you pitch.
+
 ## Other
 - household planner
   - single time tasks that are removed after being completed
