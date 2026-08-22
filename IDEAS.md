@@ -45,8 +45,11 @@ Two things in it are reusable: a YIN detector whose clarity gate was tuned by me
 all 729 octave errors across 5,760 synthetic frames while keeping every clean one), and the observation
 that a pitch track is a moving average of the analysis window, so vibrato depth is attenuated by
 sinc(pi·fv·W/sr) and can be corrected back out. Still open on the audio side: **rhythm and timing**
-(nothing measures how far off the beat you are), and **polyphonic** pitch, which Overtone deliberately
-refuses rather than guessing at.
+(nothing measures how far off the beat you are), and **polyphonic** pitch — Overtone is monophonic and
+reports the common subharmonic of a chord rather than trying to guess that it is hearing one. An attempt
+to detect chords from the spectrum was removed after it turned out to fire on hummed low notes: a
+microphone that rolls off the fundamental leaves a spectrum shaped much like a chord's, and every
+statistic that separated the two also mistook quiet fundamentals for chords.
 
 ## Other
 - household planner

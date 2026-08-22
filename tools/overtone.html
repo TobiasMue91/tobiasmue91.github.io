@@ -65,9 +65,6 @@ input[type=file]{display:none}
 .hz{color:var(--mute);font-size:14px}
 .conf{color:var(--dim);font-size:12.5px}
 #devbar{width:100%;height:26px;display:block}
-.poly{display:none;font-size:12px;color:#e8c99a;background:#241a10;border:1px solid #3d2c18;
-  border-radius:999px;padding:3px 10px}
-.poly.show{display:inline-block}
 
 /* ---- panels ---- */
 .grid{display:grid;grid-template-columns:1fr;gap:12px}
@@ -159,7 +156,6 @@ footer a{color:var(--mute)}
       <span class="dev" id="devTxt">—</span>
       <span class="hz" id="hzTxt"></span>
       <span class="conf" id="confTxt"></span>
-      <span class="poly" id="polyFlag">more than one note at once — showing no pitch</span>
     </div>
     <canvas id="devbar" height="26"></canvas>
   </div>
@@ -203,7 +199,7 @@ footer a{color:var(--mute)}
   <summary>Settings and what the numbers mean</summary>
   <div class="settings">
     <label>Reference A4 <input type="number" id="a4" value="440" min="392" max="494" step="0.1"> Hz</label>
-    <label>Lowest note <input type="number" id="fmin" value="55" min="30" max="400" step="1"> Hz</label>
+    <label>Lowest note <input type="number" id="fmin" value="40" min="30" max="400" step="1"> Hz</label>
     <label>Highest note <input type="number" id="fmax" value="1600" min="400" max="4000" step="10"> Hz</label>
     <label><input type="checkbox" id="justLines"> Just-intonation lines on the ribbon</label>
     <label><input type="checkbox" id="holdRange" checked> Auto-follow the ribbon's range</label>
@@ -213,12 +209,13 @@ footer a{color:var(--mute)}
     <p><b>Confidence.</b> Overtone will not name a note it cannot hear clearly. Below the confidence gate it draws grey and prints nothing, because a tuner that guesses an octave wrong is worse than one that says nothing.</p>
     <p><b>Sway and drift.</b> Sway is how much the pitch moved in total; drift is how far the centre of the note travelled from its first third to its last. Steady vibrato is high sway with near-zero drift. Sagging is the other way round.</p>
     <p><b>Settling.</b> How long after the attack the pitch stayed within 20&nbsp;cents of where it ended up. Wind and voice usually scoop; a plucked string is nearly instant.</p>
-    <p><b>One note at a time.</b> Overtone follows a single voice. Play a chord and the maths
-    genuinely does find a pitch — the lowest note whose harmonics all three sit on, which for a
-    C&nbsp;major triad is a C two octaves below anything you played. That is a real answer to the
-    wrong question, so when the strongest partial sits more than 15&nbsp;semitones above the
-    fundamental it reports a chord instead of a note. Single notes, including instruments with
-    almost no energy at the fundamental, stayed well under that in testing.</p>
+    <p><b>One note at a time.</b> Overtone follows a single voice, so play a chord and it will
+    still show you one number. The maths does find a real pitch — the lowest note whose harmonics
+    all the chord tones sit on, which for a C&nbsp;major triad is a C two octaves below anything
+    you played — but it is a true answer to the wrong question. Trust the reading for one note at
+    a time and treat chords as a curiosity. Overtone does not try to guess which inputs are
+    chords: every test that separated them also mistook quiet fundamentals and hummed low notes
+    for chords, and wrongly refusing a note you really sang is the worse failure.</p>
     <p><b>The cents beside each partial.</b> Ideal harmonics are exact whole-number multiples.
     Real strings are not: their partials go progressively sharp, which is why piano tuners stretch
     the octaves. On a piano note you can watch that number climb as you go up the ladder.</p>
@@ -501,23 +498,7 @@ function harmonics(mag, sr, fftSize, f0, count){
   return out;
 }
 
-/* A monophonic detector handed a chord locks onto the common subharmonic of
-   the notes, so a C major triad is reported, quite correctly, as a very low C
-   that nobody played. It is detectable: measure how far the strongest partial
-   sits above the reported fundamental. Across 48 single notes — the
-   missing-fundamental timbre included, which is a genuine single note with no
-   energy at f0 — that gap never exceeded 12 semitones, while the chords that
-   get past the clarity gate sat at 19 and 28. Flag it above 15 rather than
-   printing a confident note name for something nobody played. */
-const POLY_SEMITONES = 15;
-function looksPolyphonic(partials, f0){
-  if (!partials || !partials.length || !f0) return false;
-  let best = partials[0];
-  for (const p of partials) if (p.amp > best.amp) best = p;
-  return 12*Math.log2(best.freq/f0) > POLY_SEMITONES;
-}
-
-const CORE = {makeFFT, makeDetector, looksPolyphonic, POLY_SEMITONES, pickWindow, CLARITY_GATE, freqToMidi, midiToFreq,
+const CORE = {makeFFT, makeDetector, pickWindow, CLARITY_GATE, freqToMidi, midiToFreq,
                noteInfo, analyseVibrato, analyseNote, harmonics, windowResponse, NAMES};
 global.OVERTONE_CORE = CORE;
 if (typeof module!=='undefined' && module.exports) module.exports = CORE;
@@ -536,7 +517,7 @@ const el = {
   devTxt:$('devTxt'), hzTxt:$('hzTxt'), confTxt:$('confTxt'), devbar:$('devbar'),
   ribbon:$('ribbon'), spec:$('spec'), ladder:$('ladder'), cards:$('cards'),
   a4:$('a4'), fmin:$('fmin'), fmax:$('fmax'), justLines:$('justLines'), holdRange:$('holdRange'),
-  ribbonSub:$('ribbonSub'), cardSub:$('cardSub'), polyFlag:$('polyFlag')
+  ribbonSub:$('ribbonSub'), cardSub:$('cardSub')
 };
 
 /* ---------- state ---------- */
@@ -550,7 +531,7 @@ const S = {
   run:[],                  // current contiguous run of gated frames
   cards:[], refMidi:null,
   view:{lo:57, hi:71},     // ribbon range in midi numbers
-  a4:440, fmin:55, fmax:1600
+  a4:440, fmin:40, fmax:1600
 };
 function detFor(W){ return S.detectors[W] || (S.detectors[W] = C.makeDetector({window:W})); }
 
@@ -901,16 +882,13 @@ function tick(){
   const view = S.time.subarray(S.time.length - W);
   const r = detFor(W).detect(view, sr, S.fmin, S.fmax);
 
-  let gated = r.freq > 0 && r.clarity >= C.CLARITY_GATE;
-  let info = null, midi = null, poly = false, partials = null;
+  const gated = r.freq > 0 && r.clarity >= C.CLARITY_GATE;
+  let info = null, midi = null, partials = null;
 
   if (gated){
     if (!S.mag || S.mag.length !== S.freqDb.length) S.mag = new Float32Array(S.freqDb.length);
     for (let i=0;i<S.freqDb.length;i++) S.mag[i] = Math.pow(10, S.freqDb[i]/20);
     partials = C.harmonics(S.mag, sr, S.specAnalyser.fftSize, r.freq, 16);
-    poly = C.looksPolyphonic(partials, r.freq);
-  }
-  if (gated && !poly){
     S.lastFreq = r.freq;
     const ni = C.noteInfo(r.freq, S.a4);
     info = {name:ni.name, accidental:ni.accidental, octave:ni.octave, cents:ni.cents, hz:r.freq};
@@ -918,9 +896,7 @@ function tick(){
     trackNote(now, r.freq, midi);
   } else {
     if (S.run.length && now - S.run[S.run.length-1].t > 0.14) flushRun();
-    if (poly) gated = false;
   }
-  el.polyFlag.classList.toggle('show', poly);
 
   S.hist.push({t:now, midi, clarity:r.clarity, rms:r.rms});
   while (S.hist.length && S.hist[0].t < now - HISTORY_SECONDS - 1) S.hist.shift();
