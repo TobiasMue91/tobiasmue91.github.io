@@ -6,7 +6,6 @@ have been built since; the point is the shape of the gap, not the specific sugge
 
 **Games**
 
-- **Pinball.** Flippers, bumpers and ramps are pure physics and vector graphics.
 - **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
   build a deck across a run.
 - **Line-routing sim.** Mini Metro-shaped: growing demand, limited track, procedural maps.
@@ -16,7 +15,10 @@ have been built since; the point is the shape of the gap, not the specific sugge
   is the thinnest category in the catalogue and nothing in it is turn-based tactical.
 
 Filled since: hidden-rule deduction, by `games/glyphgate.html`; cooperating with recordings of your
-own past, by `games/selfsame.html`.
+own past, by `games/selfsame.html`; **pinball**, by `games/escapement.html` — swept-circle continuous
+collision so nothing tunnels at any speed, flippers you can cradle on, habitrails, a slingshot that
+throws along its own rubber, and a mission stack that bolts new parts onto the playfield as you go.
+The physics core in it is reusable: air hockey and the line-routing sim would both sit on top of it.
 
 **Tools**
 
