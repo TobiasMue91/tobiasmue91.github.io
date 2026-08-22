@@ -33,9 +33,23 @@ Filled since: classical cryptanalysis, by `tools/cribwork.html` — cipher ident
 coincidence, solvers for the Caesar/affine/substitution/Vigenère/transposition families, and a cryptogram
 worksheet. Nothing in the catalogue had touched ciphers beyond the toy converters (`1337`, `morse_code_translator`,
 `base64_encoder_decoder`), which is the shape of gap worth looking for: a whole subject the collection only
-gestures at. The neighbouring ones still open are **cipher-based puzzle games** (nothing here is a word game
-built on deduction from letter statistics) and an **audio spectrogram / instrument tuner**, which is the same
-kind of gap on the audio side — eleven audio tools and not one that shows you pitch.
+gestures at. The neighbouring one still open is **cipher-based puzzle games** (nothing here is a word game
+built on deduction from letter statistics).
+
+Filled since: **pitch**, by `tools/overtone.html` — the audio-side version of the same gap, where a dozen
+audio tools existed and not one showed you pitch. It is framed as an instrument rather than a tuner: a
+cent-accurate pitch ribbon over time, a log-frequency spectrogram, a harmonic ladder that measures how far
+each partial sits from a whole-number multiple (enough to show piano-string inharmonicity), and per-note
+vibrato rate and depth, attack settling, sway and drift, plus a profile accumulated across held notes.
+Two things in it are reusable: a YIN detector whose clarity gate was tuned by measurement (0.88 removed
+all 729 octave errors across 5,760 synthetic frames while keeping every clean one), and the observation
+that a pitch track is a moving average of the analysis window, so vibrato depth is attenuated by
+sinc(pi·fv·W/sr) and can be corrected back out. Still open on the audio side: **rhythm and timing**
+(nothing measures how far off the beat you are), and **polyphonic** pitch — Overtone is monophonic and
+reports the common subharmonic of a chord rather than trying to guess that it is hearing one. An attempt
+to detect chords from the spectrum was removed after it turned out to fire on hummed low notes: a
+microphone that rolls off the fundamental leaves a spectrum shaped much like a chord's, and every
+statistic that separated the two also mistook quiet fundamentals for chords.
 
 ## Other
 - household planner

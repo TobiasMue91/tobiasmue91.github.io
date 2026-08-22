@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Overtone — see the shape of a note</title>
+<meta name="description" content="A pitch instrument, not a tuner. Sing or play and Overtone draws the shape of the note over time: cent-accurate pitch ribbon, live spectrogram, the harmonic ladder your timbre actually produces, and measured vibrato rate, depth, attack and drift. Runs entirely in your browser.">
+<meta name="theme-color" content="#0b0d10">
+<meta property="og:title" content="Overtone — see the shape of a note">
+<meta property="og:description" content="A tuner gives you one number. Overtone shows you the pitch ribbon, the overtones and the measured vibrato, attack and drift of every note you hold.">
+<meta property="og:type" content="website">
+<style>
+:root{
+  --bg:#0b0d10; --panel:#12161b; --panel2:#171c23; --line:#232a33;
+  --ink:#e8eef5; --mute:#8a97a6; --dim:#5d6b7a;
+  --flat:#4fd6ff; --sharp:#ffb454; --true:#7ef0b2; --hot:#ff6b8b;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink)}
+body{
+  font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-text-size-adjust:100%;
+  padding:0 0 env(safe-area-inset-bottom);
+  overflow-x:hidden;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 40px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;margin-bottom:4px}
+h1{font-size:24px;margin:0;letter-spacing:-.02em;font-weight:650}
+h1 b{color:var(--sharp);font-weight:650}
+.tag{color:var(--mute);font-size:14px}
+.lede{color:var(--mute);max-width:70ch;margin:8px 0 18px;font-size:14.5px}
+
+/* ---- controls ---- */
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+button,select,label.file{
+  font:inherit;font-size:14px;color:var(--ink);background:var(--panel2);
+  border:1px solid var(--line);border-radius:10px;padding:9px 14px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+button:hover,label.file:hover{border-color:#3a4552;background:#1c2230}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--sharp);color:#20160a;border-color:var(--sharp);font-weight:600}
+button.primary:hover{background:#ffc271;border-color:#ffc271}
+button.live{background:var(--hot);border-color:var(--hot);color:#2a0a12;font-weight:600}
+button.live:hover{background:#ff87a1;border-color:#ff87a1}
+input[type=file]{display:none}
+.spacer{flex:1 1 auto}
+.mini{font-size:12.5px;color:var(--dim)}
+
+/* ---- readout ---- */
+.readout{
+  display:grid;grid-template-columns:auto 1fr;gap:0 22px;align-items:center;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  padding:14px 18px;margin-bottom:12px;
+}
+.note{display:flex;align-items:baseline;gap:2px;min-width:150px}
+.note .n{font-size:52px;font-weight:600;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.note .acc{font-size:30px;color:var(--mute);line-height:1}
+.note .oct{font-size:22px;color:var(--mute);line-height:1;margin-left:2px}
+.note.idle .n{color:var(--dim)}
+.devwrap{display:flex;flex-direction:column;gap:6px;min-width:0}
+.devnums{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;font-variant-numeric:tabular-nums}
+.dev{font-size:26px;font-weight:600;line-height:1}
+.hz{color:var(--mute);font-size:14px}
+.conf{color:var(--dim);font-size:12.5px}
+#devbar{width:100%;height:26px;display:block}
+
+/* ---- panels ---- */
+.grid{display:grid;grid-template-columns:1fr;gap:12px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px 14px}
+.panel h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);margin:0 0 4px;font-weight:600}
+.panel .sub{font-size:12.5px;color:var(--dim);margin:0 0 10px}
+canvas{display:block;width:100%;border-radius:8px;background:#090b0e;touch-action:pan-y}
+.row2{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:900px){ .row2{grid-template-columns:1.15fr .85fr} }
+
+/* ---- harmonic ladder ---- */
+#ladder{display:flex;flex-direction:column;gap:5px;margin-top:2px}
+.h{display:grid;grid-template-columns:30px 1fr 62px;gap:9px;align-items:center;font-size:12px}
+.h .idx{color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
+.h .barwrap{background:#0a0d11;border-radius:4px;height:13px;overflow:hidden}
+.h .bar{height:100%;background:linear-gradient(90deg,#2b6b7a,var(--flat));border-radius:4px;transition:width .08s linear}
+.h .cts{color:var(--mute);text-align:right;font-variant-numeric:tabular-nums;font-size:11.5px}
+.h.weak .bar{background:#243039}
+.h.weak .cts{color:#3d4854}
+
+/* ---- running profile ---- */
+.profile{display:none;gap:8px 26px;flex-wrap:wrap;align-items:baseline;
+  background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--sharp);
+  border-radius:11px;padding:11px 14px;margin-bottom:12px;font-size:13px}
+.profile.show{display:flex}
+.profile .p{display:flex;flex-direction:column;gap:1px}
+.profile .pk{color:var(--dim);font-size:11px;letter-spacing:.05em;text-transform:uppercase}
+.profile .pv{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.profile .lead{flex:1 1 190px;color:var(--mute);min-width:170px;line-height:1.45}
+.profile .lead b{color:var(--ink);font-weight:600}
+
+/* ---- cards ---- */
+#cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px 12px;font-size:12.5px}
+.card .top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.card .cn{font-size:21px;font-weight:600;letter-spacing:-.02em}
+.card .cd{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.card dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0}
+.card dt{color:var(--dim)}
+.card dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink)}
+.card canvas{height:34px;margin-top:8px;background:#0a0d11}
+.empty{color:var(--dim);font-size:13px;padding:6px 0}
+
+/* ---- settings ---- */
+details{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;margin-top:12px}
+summary{cursor:pointer;color:var(--mute);font-size:13px;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ ";color:var(--dim)}
+details[open] summary::before{content:"▾ "}
+.settings{display:flex;flex-wrap:wrap;gap:14px 22px;margin-top:12px;align-items:center;font-size:13px;color:var(--mute)}
+.settings label{display:flex;align-items:center;gap:7px}
+.settings input[type=number]{width:74px;font:inherit;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+.settings input[type=checkbox]{accent-color:var(--sharp);width:16px;height:16px}
+footer{color:var(--dim);font-size:12.5px;margin-top:26px;line-height:1.7}
+footer a{color:var(--mute)}
+.notice{background:#1a1410;border:1px solid #3a2a18;color:#e8c99a;border-radius:10px;padding:10px 13px;font-size:13px;margin-bottom:12px;display:none}
+.notice.show{display:block}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--dim);margin-top:8px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Over<b>tone</b></h1>
+  <span class="tag">a pitch instrument, not a tuner</span>
+</header>
+<p class="lede">
+  A tuner gives you one number and an arrow. Sing or play a note here and you get its
+  <em>shape</em>: how you scooped into it, what your vibrato is actually doing, which overtones
+  your instrument produces, and whether you held it or drifted. Nothing leaves your browser.
+</p>
+
+<div class="notice" id="notice"></div>
+
+<div class="bar">
+  <button id="mic" class="primary">Use microphone</button>
+  <label class="file">Analyse a file<input type="file" id="file" accept="audio/*"></label>
+  <button id="ref" disabled>Lock reference</button>
+  <button id="clear" disabled>Clear</button>
+  <span class="spacer"></span>
+  <span class="mini" id="status">idle</span>
+</div>
+
+<div class="readout">
+  <div class="note idle" id="noteBox"><span class="n" id="nName">—</span><span class="acc" id="nAcc"></span><span class="oct" id="nOct"></span></div>
+  <div class="devwrap">
+    <div class="devnums">
+      <span class="dev" id="devTxt">—</span>
+      <span class="hz" id="hzTxt"></span>
+      <span class="conf" id="confTxt"></span>
+    </div>
+    <canvas id="devbar" height="26"></canvas>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Pitch ribbon</h2>
+    <p class="sub" id="ribbonSub">Six seconds of pitch, drawn against the semitone grid. The wobble is vibrato, the slope is drift, the smear at the start is your attack.</p>
+    <canvas id="ribbon" height="300"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--flat)"></i>flat of centre</span>
+      <span><i style="background:var(--true)"></i>within 5 cents</span>
+      <span><i style="background:var(--sharp)"></i>sharp of centre</span>
+      <span><i style="background:#2c3742"></i>too quiet or too noisy to call</span>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <h2>Spectrogram</h2>
+      <p class="sub">Log frequency. The stack of stripes is your harmonic series — that stack is what makes a clarinet sound unlike a voice on the same note.</p>
+      <canvas id="spec" height="230"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Harmonic ladder</h2>
+      <p class="sub">Strength of each partial, and how far it sits from a whole-number multiple of the fundamental. Real strings run progressively sharp up the ladder.</p>
+      <div id="ladder"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Held notes</h2>
+    <p class="sub" id="cardSub">Hold a note for about half a second and it gets measured. Vibrato depth is corrected for the smoothing of the analysis window.</p>
+    <div id="profile" class="profile"></div>
+    <div id="cards"><div class="empty">No held notes yet — start the microphone and sing anything for half a second.</div></div>
+  </div>
+</div>
+
+<details>
+  <summary>Settings and what the numbers mean</summary>
+  <div class="settings">
+    <label>Reference A4 <input type="number" id="a4" value="440" min="392" max="494" step="0.1"> Hz</label>
+    <label>Lowest note <input type="number" id="fmin" value="40" min="30" max="400" step="1"> Hz</label>
+    <label>Highest note <input type="number" id="fmax" value="1600" min="400" max="4000" step="10"> Hz</label>
+    <label><input type="checkbox" id="justLines"> Just-intonation lines on the ribbon</label>
+    <label><input type="checkbox" id="holdRange" checked> Auto-follow the ribbon's range</label>
+  </div>
+  <div class="settings" style="display:block;max-width:78ch;line-height:1.65">
+    <p><b>Cents.</b> A hundredth of a semitone. Trained ears notice about 5&nbsp;cents on a sustained note, and roughly 10–15&nbsp;cents in passing.</p>
+    <p><b>Confidence.</b> Overtone will not name a note it cannot hear clearly. Below the confidence gate it draws grey and prints nothing, because a tuner that guesses an octave wrong is worse than one that says nothing.</p>
+    <p><b>Sway and drift.</b> Sway is how much the pitch moved in total; drift is how far the centre of the note travelled from its first third to its last. Steady vibrato is high sway with near-zero drift. Sagging is the other way round.</p>
+    <p><b>Settling.</b> How long after the attack the pitch stayed within 20&nbsp;cents of where it ended up. Wind and voice usually scoop; a plucked string is nearly instant.</p>
+    <p><b>One note at a time.</b> Overtone follows a single voice, so play a chord and it will
+    still show you one number. The maths does find a real pitch — the lowest note whose harmonics
+    all the chord tones sit on, which for a C&nbsp;major triad is a C two octaves below anything
+    you played — but it is a true answer to the wrong question. Trust the reading for one note at
+    a time and treat chords as a curiosity. Overtone does not try to guess which inputs are
+    chords: every test that separated them also mistook quiet fundamentals and hummed low notes
+    for chords, and wrongly refusing a note you really sang is the worse failure.</p>
+    <p><b>The cents beside each partial.</b> Ideal harmonics are exact whole-number multiples.
+    Real strings are not: their partials go progressively sharp, which is why piano tuners stretch
+    the octaves. On a piano note you can watch that number climb as you go up the ladder.</p>
+    <p><b>Just-intonation lines.</b> Lock a reference note, tick the box, and the ribbon marks where a pure third (−14&nbsp;cents) and a pure fifth (+2&nbsp;cents) sit against the tempered grid. Those gaps are why a chord can be perfectly in tune and still sound sour.</p>
+  </div>
+</details>
+
+<footer>
+  Built for <a href="https://gptgames.dev">gptgames.dev</a>. Pitch by the YIN algorithm with an adaptive
+  window; everything runs locally and no audio is uploaded or recorded.
+</footer>
+</div>
+<script src="../logo.js" data-position="bottom-left"></script>
+<script>
+"use strict";
+/* ============================================================
+   Overtone
+   ------------------------------------------------------------
+   DSP core, music helpers and the note analysis are written as
+   pure functions so they can be run headless against synthetic
+   signals with a known ground truth. See OVERTONE_CORE below.
+   ============================================================ */
+(function(global){
+
+/* ---------- FFT (iterative radix-2, precomputed twiddles) ---------- */
+function makeFFT(n){
+  const levels = Math.log2(n)|0;
+  if ((1<<levels) !== n) throw new Error('FFT size must be a power of two');
+  const cos = new Float32Array(n/2), sin = new Float32Array(n/2);
+  for (let i=0;i<n/2;i++){ cos[i]=Math.cos(2*Math.PI*i/n); sin[i]=Math.sin(2*Math.PI*i/n); }
+  const rev = new Uint32Array(n);
+  for (let i=0;i<n;i++){ let x=i,r=0; for(let j=0;j<levels;j++){ r=(r<<1)|(x&1); x>>=1; } rev[i]=r; }
+  return function transform(re, im){
+    for (let i=0;i<n;i++){ const j=rev[i]; if (j>i){ let t=re[i];re[i]=re[j];re[j]=t; t=im[i];im[i]=im[j];im[j]=t; } }
+    for (let size=2; size<=n; size*=2){
+      const half=size>>1, step=n/size;
+      for (let i=0;i<n;i+=size){
+        for (let j=i,k=0;j<i+half;j++,k+=step){
+          const l=j+half;
+          const tre =  re[l]*cos[k] + im[l]*sin[k];
+          const tim = -re[l]*sin[k] + im[l]*cos[k];
+          re[l]=re[j]-tre; im[l]=im[j]-tim;
+          re[j]+=tre;      im[j]+=tim;
+        }
+      }
+    }
+  };
+}
+
+/* ---------- YIN pitch detector ----------
+   Difference function via FFT autocorrelation, cumulative mean
+   normalisation, absolute threshold, parabolic interpolation.
+   Returns {freq, clarity, rms}; freq 0 means "no call".        */
+function makeDetector(opt){
+  opt = opt || {};
+  const W = opt.window || 2048;
+  const N = 1 << Math.ceil(Math.log2(W*2));
+  const fft = makeFFT(N);
+  const re = new Float32Array(N), im = new Float32Array(N);
+  const acf = new Float32Array(W/2+1), diff = new Float32Array(W/2+1), cmnd = new Float32Array(W/2+1);
+  const power = new Float64Array(W+1);
+  const TH = opt.threshold || 0.15;
+
+  return { window:W, detect(buf, sampleRate, fmin, fmax){
+    fmin = fmin||50; fmax = fmax||2000;
+    let sum2=0; for (let i=0;i<W;i++){ const v=buf[i]; sum2+=v*v; }
+    const rms = Math.sqrt(sum2/W);
+    if (rms < 1e-5) return {freq:0, clarity:0, rms};
+
+    re.fill(0); im.fill(0);
+    for (let i=0;i<W;i++) re[i]=buf[i];
+    fft(re,im);
+    for (let i=0;i<N;i++){ const a=re[i],b=im[i]; re[i]=a*a+b*b; im[i]=0; }
+    fft(re,im);                                   // real+even spectrum: forward == inverse
+    for (let t=0;t<=W/2;t++) acf[t]=re[t]/N;
+
+    power[0]=0;
+    for (let i=0;i<W;i++) power[i+1]=power[i]+buf[i]*buf[i];
+    const tauMax = Math.min(W/2, Math.floor(sampleRate/fmin));
+    const tauMin = Math.max(2,   Math.floor(sampleRate/fmax));
+    if (tauMin >= tauMax) return {freq:0, clarity:0, rms};
+
+    for (let t=0;t<=W/2;t++) diff[t] = power[W-t] + (power[W]-power[t]) - 2*acf[t];
+    cmnd[0]=1;
+    let run=0;
+    for (let t=1;t<=W/2;t++){ run+=diff[t]; cmnd[t] = run===0 ? 1 : diff[t]*t/run; }
+
+    let tau=-1;
+    for (let t=tauMin;t<=tauMax;t++){
+      if (cmnd[t] < TH){ while (t+1<=tauMax && cmnd[t+1]<cmnd[t]) t++; tau=t; break; }
+    }
+    if (tau<0){
+      let best=tauMin;
+      for (let t=tauMin;t<=tauMax;t++) if (cmnd[t]<cmnd[best]) best=t;
+      tau=best;
+      if (cmnd[tau] > 0.6) return {freq:0, clarity:1-cmnd[tau], rms};
+    }
+    let refined=tau;
+    if (tau>0 && tau<W/2){
+      const a=cmnd[tau-1], b=cmnd[tau], c=cmnd[tau+1];
+      const den=2*(2*b-a-c);
+      if (den!==0){
+        const shift=(c-a)/den;
+        if (Math.abs(shift)<1) refined = tau+shift;
+      }
+    }
+    const freq = sampleRate/refined;
+    if (!(freq>=fmin && freq<=fmax)) return {freq:0, clarity:0, rms};
+    return {freq, clarity: Math.max(0, Math.min(1, 1-cmnd[tau])), rms};
+  }};
+}
+
+/* Measured on 5760 synthetic frames (8 timbres x 61 pitches x 6 noise levels,
+   both windows): a gate of 0.88 removed all 729 octave errors while keeping
+   100% of clean and lightly-noisy frames. Wrong octaves are worse than silence. */
+const CLARITY_GATE = 0.88;
+
+/* Adaptive window. 2048 samples tracks vibrato honestly (only ~9% depth loss
+   at 6 Hz) where 4096 loses a third of it, so the short window is preferred
+   wherever it is trustworthy. Measured pass-rate and accuracy by pitch put
+   that boundary just under 65 Hz: at 49-62 Hz the short window still resolves
+   pitch but costs a few cents, and at 41 Hz it fails outright (it cannot see
+   a period longer than half the window). Below 65 Hz, accuracy wins. */
+function pickWindow(lastFreq){ return (lastFreq && lastFreq < 65) ? 4096 : 2048; }
+
+/* ---------- music ---------- */
+const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+function freqToMidi(f, a4){ return 69 + 12*Math.log2(f/(a4||440)); }
+function midiToFreq(m, a4){ return (a4||440)*Math.pow(2,(m-69)/12); }
+function noteInfo(f, a4){
+  const m = freqToMidi(f, a4), nearest = Math.round(m);
+  const nm = NAMES[((nearest%12)+12)%12];
+  return { midi:m, nearest, name:nm[0], accidental:nm.length>1?'♯':'',
+           octave: Math.floor(nearest/12)-1, cents:(m-nearest)*100 };
+}
+
+/* ---------- vibrato ----------
+   The pitch track is a moving average of length W, so a vibrato at fv is
+   attenuated by |sinc(pi*fv*W/sr)|. Measure the raw depth, then divide it
+   back out. Near the sinc null the division is meaningless, so refuse.      */
+function windowResponse(fv, W, sr){
+  const x = Math.PI*fv*W/sr;
+  return x===0 ? 1 : Math.abs(Math.sin(x)/x);
+}
+function analyseVibrato(cents, frameHz, W, sr){
+  const n = cents.length;
+  if (n < 12 || !frameHz) return null;
+  // remove a linear trend so drift is not read as a very slow vibrato
+  let sx=0,sy=0,sxx=0,sxy=0;
+  for (let i=0;i<n;i++){ sx+=i; sy+=cents[i]; sxx+=i*i; sxy+=i*cents[i]; }
+  const den = n*sxx-sx*sx;
+  const slope = den===0?0:(n*sxy-sx*sy)/den, icpt=(sy-slope*sx)/n;
+  const d = new Float64Array(n);
+  for (let i=0;i<n;i++) d[i]=cents[i]-(slope*i+icpt);
+  // scan 3.0-12.0 Hz with a plain DFT bin at each candidate rate
+  let best=null;
+  const nyq = frameHz/2;
+  for (let fv=3.0; fv<=12.001; fv+=0.05){
+    if (fv >= nyq) break;
+    let cr=0,ci=0;
+    for (let i=0;i<n;i++){ const a=2*Math.PI*fv*i/frameHz; cr+=d[i]*Math.cos(a); ci-=d[i]*Math.sin(a); }
+    const mag = 2*Math.sqrt(cr*cr+ci*ci)/n;          // amplitude, not peak-to-peak
+    if (!best || mag>best.amp) best={rate:fv, amp:mag};
+  }
+  if (!best) return null;
+  let energy=0; for (let i=0;i<n;i++) energy+=d[i]*d[i];
+  const rms = Math.sqrt(energy/n);
+  // a real vibrato is periodic: the single sinusoid must explain most of the wobble
+  const explained = rms>0 ? (best.amp/Math.SQRT2)/rms : 0;
+  const resp = windowResponse(best.rate, W, sr);
+  if (resp < 0.45) return {rate:best.rate, depth:null, explained, unreliable:true};
+  return { rate:best.rate, depth:best.amp/resp, explained, unreliable:false };
+}
+
+/* ---------- held-note statistics ----------
+   Decomposed deliberately: the linear trend is "drift" (where the centre of
+   the note travelled), the residual around that trend is "sway" (wobble), and
+   the periodic part of the residual is vibrato. A steady slide then reads as
+   pure drift with no sway, and a steady vibrato as pure sway with no drift. */
+function linfit(y){
+  const n=y.length; let sx=0,sy=0,sxx=0,sxy=0;
+  for (let i=0;i<n;i++){ sx+=i; sy+=y[i]; sxx+=i*i; sxy+=i*y[i]; }
+  const den=n*sxx-sx*sx;
+  const slope = den===0?0:(n*sxy-sx*sy)/den;
+  return {slope, intercept:(sy-slope*sx)/n};
+}
+/* Centred moving average — a trailing one would delay the settling estimate by
+   half its own width and report every attack as slower than it was. */
+function movingAvg(y,k){
+  const n=y.length, out=new Float64Array(n);
+  const half=Math.max(1,k|0)>>1;
+  for (let i=0;i<n;i++){
+    const a=Math.max(0,i-half), b=Math.min(n-1,i+half);
+    let sum=0; for (let j=a;j<=b;j++) sum+=y[j];
+    out[i]=sum/(b-a+1);
+  }
+  return out;
+}
+function analyseNote(frames, frameHz, W, sr, a4){
+  // frames: [{t, freq, clarity}], contiguous and all above the clarity gate
+  if (frames.length < 12) return null;
+  const midis = frames.map(f=>freqToMidi(f.freq, a4));
+  const sorted = midis.slice().sort((a,b)=>a-b);
+  const nearest = Math.round(sorted[sorted.length>>1]);
+  const cents = midis.map(m=>(m-nearest)*100);
+  const dur = frames[frames.length-1].t - frames[0].t;
+
+  // Centre from the back half of the note, which is where it settled.
+  const back = cents.slice(cents.length>>1);
+  const centre = back.reduce((p,c)=>p+c,0)/back.length;
+
+  // Settling is an attack measurement, so look only in the first 40% and use a
+  // track smoothed over ~1/5 s: that flattens any vibrato above 5 Hz so a wide
+  // vibrato is not mistaken for a note that never settled.
+  const smooth = movingAvg(cents, Math.max(3, Math.round(frameHz/5)));
+  // A scoop into a note is fast; a slow slide across a whole note is drift, not
+  // attack. Cap the settling search at 300 ms so a long glide is not eaten.
+  const limit = Math.max(1, Math.min(Math.round(frameHz*0.3), Math.floor(cents.length*0.4)));
+  let settleIdx = 0;
+  for (let i=0;i<limit;i++) if (Math.abs(smooth[i]-centre) > 20) settleIdx = i+1;
+  const settled = settleIdx < limit;
+  const settle = settled ? (frames[settleIdx].t - frames[0].t) : null;
+
+  // Analyse from just after the attack, but never keep fewer than 12 frames.
+  const from = Math.min(settleIdx, Math.max(0, cents.length-12));
+  const stable = cents.slice(from);
+  const stableDur = frames[frames.length-1].t - frames[from].t;
+
+  const fit = linfit(stable);
+  const drift = fit.slope * (stable.length-1);            // total travel of the trend
+  const resid = stable.map((c,i)=>c - (fit.slope*i + fit.intercept));
+  let v=0; for (const r of resid) v+=r*r;
+  const sway = Math.sqrt(v/resid.length);
+  let m=0; for (const c of stable) m+=c; m/=stable.length;
+
+  const vib = analyseVibrato(stable, frameHz, W, sr);
+  const vibrato = (vib && !vib.unreliable && vib.depth > 4 && vib.explained > 0.55) ? vib : null;
+  return {
+    midi:nearest, meanCents:m, sway, drift, settle, settled, dur, stableDur,
+    vibrato, track:cents, frames:frames.length,
+    hz: midiToFreq(nearest, a4)*Math.pow(2, m/1200)
+  };
+}
+
+/* ---------- harmonic ladder ----------
+   Read the magnitude spectrum at each multiple of f0, refining the exact peak
+   by parabolic interpolation so we can report how far a partial sits from a
+   whole-number multiple (piano strings are measurably sharp up the series).  */
+function harmonics(mag, sr, fftSize, f0, count){
+  const binHz = sr/fftSize, out=[];
+  for (let h=1; h<=count; h++){
+    const target = f0*h;
+    if (target > sr/2 - 2*binHz) break;
+    const centre = target/binHz;
+    const lo = Math.max(1, Math.round(centre - Math.max(2, centre*0.03)));
+    const hi = Math.min(mag.length-2, Math.round(centre + Math.max(2, centre*0.03)));
+    let bi=lo;
+    for (let i=lo;i<=hi;i++) if (mag[i]>mag[bi]) bi=i;
+    // Interpolate the peak in the log domain: a windowed spectral peak is close
+    // to parabolic in dB but not in linear magnitude, and interpolating the
+    // linear one biases the reported cents by several cents at low partials.
+    const L = i => Math.log(Math.max(mag[i], 1e-12));
+    const a=L(bi-1), b=L(bi), c=L(bi+1);
+    const den=(a-2*b+c);
+    const shift = den===0?0:-0.5*(c-a)/den;
+    const peak = (bi + (Math.abs(shift)<1?shift:0))*binHz;
+    out.push({ h, amp:mag[bi], freq:peak, cents:0 });
+  }
+  /* Report each partial against the best-fit harmonic series rather than the
+     raw f0. Inharmonicity is by definition a departure from a fitted series,
+     and the fit also removes a spurious constant offset: the spectrum is taken
+     over a longer window than the pitch estimate, so during vibrato the two
+     refer to slightly different instants and every partial would otherwise
+     appear uniformly flat or sharp. A constant offset is disagreement between
+     two measurements; the trend up the ladder is the physics. */
+  let wsum=0, w=0;
+  for (const p of out){ const a=p.amp*p.amp; wsum += a*(p.freq/p.h); w += a; }
+  const base = w>0 ? wsum/w : f0;
+  for (const p of out) p.cents = 1200*Math.log2(p.freq/(base*p.h));
+  return out;
+}
+
+const CORE = {makeFFT, makeDetector, pickWindow, CLARITY_GATE, freqToMidi, midiToFreq,
+               noteInfo, analyseVibrato, analyseNote, harmonics, windowResponse, NAMES};
+global.OVERTONE_CORE = CORE;
+if (typeof module!=='undefined' && module.exports) module.exports = CORE;
+})(typeof window!=='undefined'?window:globalThis);
+</script>
+<script>
+"use strict";
+(function(){
+const C = window.OVERTONE_CORE;
+const $ = id => document.getElementById(id);
+
+/* ---------- element handles ---------- */
+const el = {
+  mic:$('mic'), file:$('file'), ref:$('ref'), clear:$('clear'), status:$('status'),
+  notice:$('notice'), noteBox:$('noteBox'), nName:$('nName'), nAcc:$('nAcc'), nOct:$('nOct'),
+  devTxt:$('devTxt'), hzTxt:$('hzTxt'), confTxt:$('confTxt'), devbar:$('devbar'),
+  ribbon:$('ribbon'), spec:$('spec'), ladder:$('ladder'), cards:$('cards'),
+  a4:$('a4'), fmin:$('fmin'), fmax:$('fmax'), justLines:$('justLines'), holdRange:$('holdRange'),
+  ribbonSub:$('ribbonSub'), cardSub:$('cardSub')
+};
+
+/* ---------- state ---------- */
+const HISTORY_SECONDS = 6;
+const S = {
+  ctx:null, analyser:null, specAnalyser:null, source:null, stream:null,
+  running:false, mode:null, raf:0, t0:0,
+  time:null, freqDb:null,
+  detectors:{}, lastFreq:0,
+  hist:[],                 // {t, midi|null, clarity, rms}
+  run:[],                  // current contiguous run of gated frames
+  cards:[], refMidi:null,
+  view:{lo:57, hi:71},     // ribbon range in midi numbers
+  a4:440, fmin:40, fmax:1600
+};
+function detFor(W){ return S.detectors[W] || (S.detectors[W] = C.makeDetector({window:W})); }
+
+/* ---------- canvas sizing ---------- */
+const DPR = () => Math.min(2, window.devicePixelRatio||1);
+function fit(cv, cssH){
+  const w = cv.clientWidth || 300, d = DPR();
+  if (cv.width !== Math.round(w*d) || cv.height !== Math.round(cssH*d)){
+    cv.width = Math.round(w*d); cv.height = Math.round(cssH*d);
+    cv.style.height = cssH+'px';
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(d,0,0,d,0,0);
+  return {g, w, h:cssH};
+}
+function ribbonHeight(){ return window.innerWidth < 620 ? 240 : 300; }
+function specHeight(){ return window.innerWidth < 620 ? 170 : 230; }
+
+/* spectrogram scrolling backing store, in device-independent pixels */
+const specBuf = document.createElement('canvas');
+specBuf.width = 640; specBuf.height = 256;
+const specBufCtx = specBuf.getContext('2d', {willReadFrequently:false});
+specBufCtx.fillStyle = '#090b0e'; specBufCtx.fillRect(0,0,640,256);
+const colImg = specBufCtx.createImageData(1, 256);
+
+/* ---------- colour ---------- */
+function devColour(cents, alpha){
+  const a = alpha===undefined?1:alpha;
+  const x = Math.max(-50, Math.min(50, cents));
+  const t = Math.abs(x)/50;
+  if (Math.abs(x) < 5) return `rgba(126,240,178,${a})`;
+  const c = x < 0 ? [79,214,255] : [255,180,84];
+  const g = [126,240,178];
+  const k = Math.min(1, (Math.abs(x)-5)/30);
+  return `rgba(${Math.round(g[0]+(c[0]-g[0])*k)},${Math.round(g[1]+(c[1]-g[1])*k)},${Math.round(g[2]+(c[2]-g[2])*k)},${a})`;
+}
+function heat(v){ // v 0..1 -> [r,g,b]
+  const stops = [[9,11,14],[18,40,64],[26,90,120],[80,170,170],[210,200,120],[255,200,120],[255,240,220]];
+  const x = Math.max(0, Math.min(0.9999, v))*(stops.length-1);
+  const i = x|0, f = x-i, A=stops[i], B=stops[i+1];
+  return [A[0]+(B[0]-A[0])*f, A[1]+(B[1]-A[1])*f, A[2]+(B[2]-A[2])*f];
+}
+
+/* ---------- readout ---------- */
+let lastGoodAt = -1e9;
+function drawReadout(now, info, clarity, gated){
+  const fresh = gated || (now - lastGoodAt) < 0.35;
+  if (gated) lastGoodAt = now;
+  if (!info || !fresh){
+    el.noteBox.classList.add('idle');
+    el.nName.textContent='—'; el.nAcc.textContent=''; el.nOct.textContent='';
+    el.devTxt.textContent='—'; el.devTxt.style.color='var(--dim)';
+    el.hzTxt.textContent=''; el.confTxt.textContent = S.running ? 'listening' : '';
+  } else {
+    el.noteBox.classList.remove('idle');
+    el.nName.textContent=info.name; el.nAcc.textContent=info.accidental; el.nOct.textContent=info.octave;
+    const c = info.cents;
+    el.devTxt.textContent = (c>=0?'+':'−')+Math.abs(c).toFixed(1)+'¢';
+    el.devTxt.style.color = devColour(c);
+    el.hzTxt.textContent = info.hz.toFixed(2)+' Hz';
+    el.confTxt.textContent = 'confidence '+(clarity*100).toFixed(0)+'%';
+  }
+  // meter
+  const {g,w,h} = fit(el.devbar, 26);
+  g.clearRect(0,0,w,h);
+  const mid = w/2, span = w/2 - 8;
+  g.strokeStyle='#232a33'; g.lineWidth=1;
+  for (let c=-50;c<=50;c+=10){
+    const x = mid + (c/50)*span;
+    g.globalAlpha = c===0?0:0.9;
+    g.beginPath(); g.moveTo(x, h*0.30); g.lineTo(x, h*0.70); g.stroke();
+  }
+  g.globalAlpha=1;
+  g.strokeStyle='#3d4b58'; g.beginPath(); g.moveTo(mid,2); g.lineTo(mid,h-2); g.stroke();
+  g.fillStyle='#7ef0b2'; g.globalAlpha=.14;
+  g.fillRect(mid-(5/50)*span, 2, (10/50)*span, h-4);
+  g.globalAlpha=1;
+  if (info && fresh){
+    const x = mid + (Math.max(-50,Math.min(50,info.cents))/50)*span;
+    g.fillStyle = devColour(info.cents);
+    g.beginPath(); g.moveTo(x, 3); g.lineTo(x+5, 11); g.lineTo(x, h-3); g.lineTo(x-5, 11); g.closePath(); g.fill();
+  }
+}
+
+/* ---------- ribbon ---------- */
+const JUST = [[0,'1'],[386,'M3'],[498,'P4'],[702,'P5'],[884,'M6'],[1200,'8ve']];
+function drawRibbon(now){
+  const {g,w,h} = fit(el.ribbon, ribbonHeight());
+  g.clearRect(0,0,w,h);
+  const pad = 30;                                   // left gutter for note names
+  const t1 = now, t0 = now - HISTORY_SECONDS;
+  const X = t => pad + (t - t0)/HISTORY_SECONDS * (w - pad - 6);
+
+  // ---- follow the range ----
+  const recent = S.hist.filter(p=>p.midi!=null && p.t>t0);
+  if (recent.length && el.holdRange.checked){
+    // Percentiles, not min/max: one stray frame an octave away should not
+    // stretch the view until the notes you are actually singing go flat.
+    const ms = recent.map(p=>p.midi).sort((a,b)=>a-b);
+    const at = q => ms[Math.min(ms.length-1, Math.max(0, Math.round(q*(ms.length-1))))];
+    const lo0 = at(0.03), hi0 = at(0.97);
+    const centre=(lo0+hi0)/2, span=Math.max(5, Math.min(24, (hi0-lo0)+4));
+    const tLo=centre-span/2, tHi=centre+span/2;
+    // Widen quickly so a new note is never off-screen; settle back slowly.
+    const kLo = tLo < S.view.lo ? 0.25 : 0.05, kHi = tHi > S.view.hi ? 0.25 : 0.05;
+    S.view.lo += (tLo-S.view.lo)*kLo; S.view.hi += (tHi-S.view.hi)*kHi;
+  }
+  const {lo,hi} = S.view;
+  const Y = m => h - 6 - ((m - lo)/(hi - lo))*(h-12);
+
+  // ---- semitone grid ----
+  g.font = '11px ui-monospace,SFMono-Regular,Menlo,monospace';
+  g.textBaseline='middle';
+  const step = (hi-lo) > 20 ? 2 : 1;
+  for (let m=Math.ceil(lo); m<=hi; m++){
+    const y=Y(m); if (y<8||y>h-4) continue;
+    const nm = C.NAMES[((m%12)+12)%12], isC = (((m%12)+12)%12)===0;
+    if (m % step === 0 || isC){
+      g.strokeStyle = isC ? '#2e3945' : '#1b212a';
+      g.beginPath(); g.moveTo(pad,y); g.lineTo(w-4,y); g.stroke();
+      g.fillStyle = isC ? '#7b8998' : '#4a5663';
+      g.fillText(nm + (Math.floor(m/12)-1), 3, y);
+    }
+  }
+  // ---- just-intonation guides against a locked reference ----
+  if (S.refMidi!=null && el.justLines.checked){
+    g.setLineDash([3,4]);
+    for (const [cents,label] of JUST){
+      for (const dir of [1,-1]){
+        const m = S.refMidi + dir*cents/100;
+        if (m<lo||m>hi) continue;
+        const y = Y(m);
+        g.strokeStyle='rgba(255,180,84,.42)';
+        g.beginPath(); g.moveTo(pad,y); g.lineTo(w-4,y); g.stroke();
+        g.fillStyle='rgba(255,180,84,.75)';
+        g.fillText((dir>0?'+':'−')+label, w-34, y-8);
+        if (cents===0) break;
+      }
+    }
+    g.setLineDash([]);
+    const yr = Y(S.refMidi);
+    if (yr>0&&yr<h){ g.strokeStyle='rgba(255,180,84,.9)'; g.lineWidth=1.5;
+      g.beginPath(); g.moveTo(pad,yr); g.lineTo(w-4,yr); g.stroke(); g.lineWidth=1; }
+  }
+
+  // ---- the trace ----
+  const pts = S.hist.filter(p=>p.t>t0);
+  // ungated frames: faint tick at the bottom so silence is visibly different from doubt
+  g.fillStyle='#2c3742';
+  for (const p of pts) if (p.midi==null && p.rms>0.004) g.fillRect(X(p.t), h-4, 1.6, 3);
+
+  let prev=null;
+  g.lineWidth = 2.4; g.lineCap='round'; g.lineJoin='round';
+  for (const p of pts){
+    if (p.midi==null){ prev=null; continue; }
+    const x=X(p.t), y=Y(p.midi);
+    if (prev && (p.t-prev.t) < 0.14 && Math.abs(p.midi-prev.m) < 1.4){
+      const cents = (p.midi - Math.round(p.midi))*100;
+      g.strokeStyle = devColour(cents, 0.35 + 0.65*Math.min(1,(p.clarity-C.CLARITY_GATE)/0.1));
+      g.beginPath(); g.moveTo(prev.x, prev.y); g.lineTo(x,y); g.stroke();
+    }
+    prev={x,y,t:p.t,m:p.midi};
+  }
+  if (prev){
+    g.fillStyle = devColour((prev.m-Math.round(prev.m))*100);
+    g.beginPath(); g.arc(prev.x, prev.y, 3.6, 0, 7); g.fill();
+  }
+  if (!S.running && !S.hist.length){
+    g.fillStyle='#4a5663'; g.font='13px ui-sans-serif,system-ui,sans-serif'; g.textAlign='center';
+    g.fillText('Start the microphone and sing, hum or play a note.', w/2, h/2);
+    g.textAlign='left';
+  }
+}
+
+/* ---------- spectrogram ---------- */
+function pushSpecColumn(db, sr, fftSize){
+  const H = 256, lo = 55, hi = Math.min(sr/2, 8000), binHz = sr/fftSize;
+  const d = colImg.data;
+  for (let y=0;y<H;y++){
+    const f = lo*Math.pow(hi/lo, 1 - y/(H-1));
+    const b = f/binHz, i = b|0, fr = b-i;
+    let v = -140;
+    if (i>=0 && i+1 < db.length) v = db[i]*(1-fr) + db[i+1]*fr;
+    const n = Math.max(0, Math.min(1, (v + 96)/74));
+    const c = heat(n*n);
+    const o = y*4;
+    d[o]=c[0]; d[o+1]=c[1]; d[o+2]=c[2]; d[o+3]=255;
+  }
+  specBufCtx.drawImage(specBuf, -1, 0);
+  specBufCtx.putImageData(colImg, specBuf.width-1, 0);
+}
+function drawSpec(){
+  const {g,w,h} = fit(el.spec, specHeight());
+  g.imageSmoothingEnabled = true;
+  g.drawImage(specBuf, 0, 0, w, h);
+  // frequency guides
+  g.font='10px ui-monospace,SFMono-Regular,Menlo,monospace'; g.textBaseline='middle';
+  const lo=55, hi=Math.min((S.ctx?S.ctx.sampleRate:48000)/2, 8000);
+  for (const f of [110,220,440,880,1760,3520,7040]){
+    if (f>hi) break;
+    const y = (1 - Math.log(f/lo)/Math.log(hi/lo))*h;
+    if (y < 1 || y > h-1) continue;
+    g.strokeStyle='rgba(255,255,255,.10)';
+    g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke();
+    g.fillStyle='rgba(232,238,245,.5)';
+    g.fillText((f>=1000?(f/1000)+'k':f)+' Hz', 5, Math.max(8, Math.min(h-8, y-7)));
+  }
+}
+
+/* ---------- harmonic ladder ---------- */
+let ladderRows = [];
+function buildLadder(n){
+  el.ladder.innerHTML='';
+  ladderRows = [];
+  for (let i=1;i<=n;i++){
+    const row=document.createElement('div'); row.className='h weak';
+    row.innerHTML = `<span class="idx">${i}${i===1?'f':''}</span><span class="barwrap"><span class="bar" style="width:0%"></span></span><span class="cts">—</span>`;
+    el.ladder.appendChild(row);
+    ladderRows.push({row, bar:row.querySelector('.bar'), cts:row.querySelector('.cts')});
+  }
+}
+buildLadder(12);
+function drawLadder(hs){
+  if (!hs){ for (const r of ladderRows){ r.row.classList.add('weak'); r.bar.style.width='0%'; r.cts.textContent='—'; } return; }
+  let peak = 0;
+  for (const x of hs) peak = Math.max(peak, x.amp);
+  for (let i=0;i<ladderRows.length;i++){
+    const r = ladderRows[i], x = hs[i];
+    if (!x || peak<=0){ r.row.classList.add('weak'); r.bar.style.width='0%'; r.cts.textContent='—'; continue; }
+    const rel = x.amp/peak;
+    r.bar.style.width = (rel*100).toFixed(1)+'%';
+    const audible = rel > 0.035;
+    r.row.classList.toggle('weak', !audible);
+    r.cts.textContent = audible ? ((x.cents>=0?'+':'−')+Math.abs(x.cents).toFixed(0)+'¢') : '—';
+  }
+}
+
+/* ---------- held-note cards ---------- */
+function fmtCents(c){ return (c>=0?'+':'−')+Math.abs(c).toFixed(1)+'¢'; }
+function addCard(a){
+  const nm = C.NAMES[((a.midi%12)+12)%12];
+  const name = nm.replace('#','♯') + (Math.floor(a.midi/12)-1);
+  const card = document.createElement('div'); card.className='card';
+  const v = a.vibrato;
+  card.innerHTML =
+    `<div class="top"><span class="cn">${name}</span><span class="cd" style="color:${devColour(a.meanCents)}">${fmtCents(a.meanCents)}</span></div>`+
+    `<dl>`+
+    `<dt>held</dt><dd>${a.dur.toFixed(2)} s</dd>`+
+    `<dt>sway</dt><dd>${a.sway.toFixed(1)}¢</dd>`+
+    `<dt>drift</dt><dd>${fmtCents(a.drift)}</dd>`+
+    `<dt>settled</dt><dd>${a.settle==null?'—':(a.settle*1000).toFixed(0)+' ms'}</dd>`+
+    `<dt>vibrato</dt><dd>${v ? v.rate.toFixed(1)+' Hz · ±'+v.depth.toFixed(0)+'¢' : 'none'}</dd>`+
+    `</dl><canvas height="34"></canvas>`;
+  const cv = card.querySelector('canvas');
+  S.cards.unshift({el:card, a});
+  if (S.cards.length===1) el.cards.innerHTML='';
+  el.cards.insertBefore(card, el.cards.firstChild);
+  while (S.cards.length > 8){ const old=S.cards.pop(); old.el.remove(); }
+  el.clear.disabled = false;
+  updateProfile();
+  requestAnimationFrame(()=>drawSpark(cv, a));
+}
+/* A profile across held notes: the habits, not the single note. This is the
+   part that only becomes meaningful after a few minutes of use. */
+function median(a){
+  if (!a.length) return null;
+  const b=a.slice().sort((x,y)=>x-y), m=b.length>>1;
+  return b.length%2 ? b[m] : (b[m-1]+b[m])/2;
+}
+function updateProfile(){
+  const P = $('profile');
+  const list = S.cards.map(c=>c.a);
+  if (list.length < 3){ P.classList.remove('show'); return; }
+  const dev   = median(list.map(a=>a.meanCents));
+  const sway  = median(list.map(a=>a.sway));
+  const drift = median(list.map(a=>a.drift));
+  const setl  = median(list.filter(a=>a.settle!=null).map(a=>a.settle));
+  const vibs  = list.filter(a=>a.vibrato);
+  const vrate = median(vibs.map(a=>a.vibrato.rate));
+  const vdep  = median(vibs.map(a=>a.vibrato.depth));
+  const lean  = Math.abs(dev) < 3 ? 'land on the note'
+              : (dev>0 ? 'lean sharp' : 'lean flat');
+  const hold  = sway < 6 ? 'hold very still' : sway < 18 ? 'hold steadily' : 'move a lot inside the note';
+  const stat = (k,v)=>`<span class="p"><span class="pk">${k}</span><span class="pv">${v}</span></span>`;
+  P.innerHTML =
+    `<span class="lead">Across <b>${list.length}</b> held notes you <b>${lean}</b> and <b>${hold}</b>.</span>`+
+    stat('typical pitch', fmtCents(dev))+
+    stat('typical sway', sway.toFixed(1)+'¢')+
+    stat('typical drift', fmtCents(drift))+
+    stat('settles in', setl==null ? '—' : (setl*1000).toFixed(0)+' ms')+
+    stat('vibrato', vibs.length < 2 ? '—' : vrate.toFixed(1)+' Hz · ±'+vdep.toFixed(0)+'¢');
+  P.classList.add('show');
+}
+
+function drawSpark(cv, a){
+  const {g,w,h} = fit(cv, 34);
+  g.clearRect(0,0,w,h);
+  const t = a.track; if (!t.length) return;
+  let lo=Math.min(...t), hi=Math.max(...t);
+  const span = Math.max(20, hi-lo+6), mid=(lo+hi)/2;
+  lo = mid-span/2; hi = mid+span/2;
+  const Y = c => h-2 - ((c-lo)/(hi-lo))*(h-4);
+  const y0 = Y(0);
+  if (y0>0 && y0<h){ g.strokeStyle='rgba(126,240,178,.28)'; g.setLineDash([2,3]);
+    g.beginPath(); g.moveTo(0,y0); g.lineTo(w,y0); g.stroke(); g.setLineDash([]); }
+  g.strokeStyle='#9fb2c4'; g.lineWidth=1.4; g.beginPath();
+  for (let i=0;i<t.length;i++){ const x=(i/(t.length-1))*w, y=Y(t[i]); i?g.lineTo(x,y):g.moveTo(x,y); }
+  g.stroke();
+}
+
+/* ---------- note tracking ---------- */
+function flushRun(){
+  const run = S.run; S.run = []; runSum = 0;
+  if (run.length < 12) return;
+  const dur = run[run.length-1].t - run[0].t;
+  if (dur < 0.5) return;
+  const frameHz = (run.length-1)/dur;
+  const W = C.pickWindow(run[Math.floor(run.length/2)].freq);
+  const a = C.analyseNote(run, frameHz, W, S.ctx ? S.ctx.sampleRate : 48000, S.a4);
+  if (a) addCard(a);
+}
+let runSum = 0;
+function trackNote(t, freq, midi){
+  const run = S.run;
+  if (run.length){
+    const last = run[run.length-1];
+    // Compare against the run's mean, not one arbitrary sample: with a wide
+    // vibrato a single sample can sit a half-semitone off centre and split
+    // the note against itself.
+    const centre = runSum/run.length;
+    if (t - last.t > 0.14 || Math.abs(midi - centre) > 0.9){ flushRun(); }
+  }
+  S.run.push({t, freq, midi, clarity:1});
+  runSum += midi;
+}
+
+/* ---------- main loop ---------- */
+function tick(){
+  if (!S.running) return;
+  S.raf = requestAnimationFrame(tick);
+  const sr = S.ctx.sampleRate;
+  const now = S.ctx.currentTime - S.t0;
+
+  S.analyser.getFloatTimeDomainData(S.time);
+  S.specAnalyser.getFloatFrequencyData(S.freqDb);
+
+  const W = C.pickWindow(S.lastFreq);
+  const view = S.time.subarray(S.time.length - W);
+  const r = detFor(W).detect(view, sr, S.fmin, S.fmax);
+
+  const gated = r.freq > 0 && r.clarity >= C.CLARITY_GATE;
+  let info = null, midi = null, partials = null;
+
+  if (gated){
+    if (!S.mag || S.mag.length !== S.freqDb.length) S.mag = new Float32Array(S.freqDb.length);
+    for (let i=0;i<S.freqDb.length;i++) S.mag[i] = Math.pow(10, S.freqDb[i]/20);
+    partials = C.harmonics(S.mag, sr, S.specAnalyser.fftSize, r.freq, 16);
+    S.lastFreq = r.freq;
+    const ni = C.noteInfo(r.freq, S.a4);
+    info = {name:ni.name, accidental:ni.accidental, octave:ni.octave, cents:ni.cents, hz:r.freq};
+    midi = ni.midi;
+    trackNote(now, r.freq, midi);
+  } else {
+    if (S.run.length && now - S.run[S.run.length-1].t > 0.14) flushRun();
+  }
+
+  S.hist.push({t:now, midi, clarity:r.clarity, rms:r.rms});
+  while (S.hist.length && S.hist[0].t < now - HISTORY_SECONDS - 1) S.hist.shift();
+
+  drawReadout(now, info, r.clarity, gated);
+  drawRibbon(now);
+  pushSpecColumn(S.freqDb, sr, S.specAnalyser.fftSize);
+  drawSpec();
+  if (gated && partials) drawLadder(partials);
+  else if (!S.ladderCleared){ drawLadder(null); S.ladderCleared = true; }
+  if (gated) S.ladderCleared = false;
+  el.ref.disabled = !gated;
+}
+
+/* ---------- audio plumbing ---------- */
+function say(msg, warn){
+  el.notice.textContent = msg || '';
+  el.notice.classList.toggle('show', !!msg);
+}
+async function ensureCtx(){
+  if (!S.ctx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC){ say('This browser has no Web Audio support, so Overtone cannot listen.'); return false; }
+    S.ctx = new AC();
+    S.analyser = S.ctx.createAnalyser();
+    S.analyser.fftSize = 4096; S.analyser.smoothingTimeConstant = 0;
+    S.specAnalyser = S.ctx.createAnalyser();
+    S.specAnalyser.fftSize = 4096; S.specAnalyser.smoothingTimeConstant = 0.35;
+    S.time = new Float32Array(S.analyser.fftSize);
+    S.freqDb = new Float32Array(S.specAnalyser.frequencyBinCount);
+  }
+  if (S.ctx.state === 'suspended') await S.ctx.resume();
+  return true;
+}
+function stopSource(){
+  if (S.source){ try{S.source.disconnect()}catch(e){} S.source=null; }
+  if (S.stream){ S.stream.getTracks().forEach(t=>t.stop()); S.stream=null; }
+  if (S.player){ try{S.player.stop()}catch(e){} S.player=null; }
+}
+function begin(){
+  S.running = true; S.t0 = S.ctx.currentTime;
+  S.hist.length=0; S.run.length=0; S.lastFreq=0;
+  cancelAnimationFrame(S.raf); tick();
+}
+function halt(){
+  S.running = false; cancelAnimationFrame(S.raf);
+  flushRun(); stopSource();
+  el.mic.classList.remove('live'); el.mic.classList.add('primary');
+  el.mic.textContent = 'Use microphone';
+  el.status.textContent = 'stopped';
+  S.mode = null;
+  drawReadout(1e9, null, 0, false);
+}
+
+el.mic.addEventListener('click', async ()=>{
+  if (S.mode === 'mic'){ halt(); return; }
+  if (!await ensureCtx()) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    say('This browser will not give a page microphone access.'); return;
+  }
+  el.status.textContent = 'asking for the microphone…';
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1
+    }});
+    stopSource();
+    S.stream = stream;
+    S.source = S.ctx.createMediaStreamSource(stream);
+    S.source.connect(S.analyser); S.source.connect(S.specAnalyser);
+    S.mode='mic'; say('');
+    el.mic.classList.remove('primary'); el.mic.classList.add('live');
+    el.mic.textContent = 'Stop listening';
+    el.status.textContent = 'listening · '+S.ctx.sampleRate.toLocaleString()+' Hz';
+    begin();
+  }catch(err){
+    el.status.textContent = 'idle';
+    say(err && err.name==='NotAllowedError'
+      ? 'Microphone access was declined. You can still drop in an audio file instead.'
+      : 'Could not open the microphone: '+(err&&err.message||err));
+  }
+});
+
+el.file.addEventListener('change', async e=>{
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  if (!await ensureCtx()) return;
+  el.status.textContent = 'decoding '+f.name+'…';
+  try{
+    const buf = await f.arrayBuffer();
+    const audio = await S.ctx.decodeAudioData(buf);
+    stopSource();
+    const src = S.ctx.createBufferSource();
+    src.buffer = audio;
+    src.connect(S.analyser); src.connect(S.specAnalyser); src.connect(S.ctx.destination);
+    src.onended = ()=>{ if (S.mode==='file'){ halt(); el.status.textContent='file finished'; } };
+    S.player = src; S.source = src; S.mode='file';
+    el.mic.classList.remove('live'); el.mic.classList.add('primary'); el.mic.textContent='Use microphone';
+    el.status.textContent = 'playing '+f.name;
+    say('');
+    begin();
+    src.start();
+  }catch(err){
+    el.status.textContent='idle';
+    say('That file could not be decoded as audio.');
+  }
+  e.target.value='';
+});
+
+el.ref.addEventListener('click', ()=>{
+  const last = [...S.hist].reverse().find(p=>p.midi!=null);
+  if (!last) return;
+  S.refMidi = last.midi;
+  el.justLines.checked = true;
+  const ni = C.noteInfo(C.midiToFreq(last.midi, S.a4), S.a4);
+  el.ribbonSub.textContent = 'Reference locked at '+ni.name+ni.accidental+ni.octave+
+    ' ('+C.midiToFreq(Math.round(last.midi), S.a4).toFixed(1)+' Hz). Dashed lines mark pure intervals above and below it — a pure third sits 14 cents under the tempered one.';
+});
+el.clear.addEventListener('click', ()=>{
+  S.cards.forEach(c=>c.el.remove()); S.cards.length=0;
+  el.cards.innerHTML='<div class="empty">No held notes yet — start the microphone and sing anything for half a second.</div>';
+  el.clear.disabled=true; updateProfile();
+});
+el.a4.addEventListener('input', ()=>{ const v=parseFloat(el.a4.value); if(v>=392&&v<=494) S.a4=v; });
+el.fmin.addEventListener('input', ()=>{ const v=parseFloat(el.fmin.value); if(v>=30&&v<S.fmax) S.fmin=v; });
+el.fmax.addEventListener('input', ()=>{ const v=parseFloat(el.fmax.value); if(v>S.fmin&&v<=4000) S.fmax=v; });
+
+window.addEventListener('resize', ()=>{ if(!S.running){ drawRibbon(0); drawSpec(); drawReadout(1e9,null,0,false);} });
+document.addEventListener('visibilitychange', ()=>{ if (document.hidden && S.mode==='mic') halt(); });
+
+/* first paint */
+drawRibbon(0); drawSpec(); drawReadout(1e9, null, 0, false);
+})();
+</script>
+</body>
+</html>
