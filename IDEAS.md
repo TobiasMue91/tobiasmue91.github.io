@@ -10,9 +10,21 @@ have been built since; the point is the shape of the gap, not the specific sugge
   build a deck across a run.
 - **Line-routing sim.** Mini Metro-shaped: growing demand, limited track, procedural maps.
 - **Air hockey.** 8-ball covers cue sports; nothing covers paddles.
-- **Turn-based tactics.** Into the Breach's shape — a small grid, perfect information, enemies that
-  telegraph next turn's move, so every turn is a solvable puzzle rather than a dice roll. `strategy`
-  is the thinnest category in the catalogue and nothing in it is turn-based tactical.
+
+Filled since: **turn-based tactics**, by `games/enfilade.html`, built on the constraint that the player's
+units deal no damage at all — no attack, not even a chip. Every kill comes from an enemy's own telegraphed
+attack landing on its own side, or from a body shoved, dragged or swapped into a chasm, so the turn is spent
+rearranging a formation rather than picking targets. Two things in it are worth reusing. The first is that
+`resolve()` is literally `apply(predict())`: the forecast drawn on the grid and the outcome are the same
+function, so the telegraph cannot lie by construction rather than by care — 1,908 fuzzed player turns found
+no divergence, and hovering any action re-runs the same predictor on a cloned state, which is what makes the
+forecast a planning tool instead of decoration. The second is that a game where the player cannot deal damage
+has to be balanced from the other side entirely: with a beam-search bot the sectors lose 0.78 / 0.99 / 1.18 /
+1.52 relays per mission and friendly-fire kills climb from 55 to 223 as the boards get denser, which is what
+set the starting grid at 6 power (a 60% clear rate for that bot). The mortar needed a reload beat before the
+curve was monotone — an attack that ignores line of sight has no counter in a game whose only defence is
+standing in the way. Still open on the tactics side: **line-routing** (the Mini Metro shape is still nothing
+in the catalogue), and a **deck-builder**, which remains the one card-game gap.
 
 Filled since: hidden-rule deduction, by `games/glyphgate.html`; cooperating with recordings of your
 own past, by `games/selfsame.html`; **pinball**, by `games/escapement.html` — swept-circle continuous
