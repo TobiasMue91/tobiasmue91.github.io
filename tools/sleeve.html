@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sleeve — an MP3 tag editor with a record sleeve in it</title>
-<meta name="description" content="Drag a folder of MP3s in and Sleeve reads their real ID3 frames, batch-edits them like a spreadsheet, pulls tags out of filenames, listens to each track to measure its tempo and key, generates a cover sleeve from the words in the tag, and writes it all back. No upload, no account, nothing leaves your machine.">
+<meta name="description" content="Drag a folder of MP3s in and Sleeve reads their real ID3 frames, batch-edits them like a spreadsheet — resizable columns, edit-in-place cells, find &amp; replace, undo — pulls tags out of filenames, listens to each track to measure its tempo and key, generates a cover sleeve from the words in the tag, and writes it all back into the original files. No upload, no account, nothing leaves your machine.">
 <meta name="theme-color" content="#0a0b0e">
 <meta property="og:title" content="Sleeve — an MP3 tag editor with a record sleeve in it">
 <meta property="og:description" content="Real ID3v2 reading and writing in the browser. Batch edit, filename patterns, measured BPM and key, and a generated cover for every album. Nothing is uploaded.">
@@ -57,7 +57,7 @@ header{
 main{flex:1;display:flex;min-height:0}
 
 /* ---------- list ---------- */
-#listPane{flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--line)}
+#listPane{flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column;border-right:1px solid var(--line)}
 #toolbar{
   display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel)
@@ -65,15 +65,29 @@ main{flex:1;display:flex;min-height:0}
 #toolbar input[type=search]{
   background:#0c0e12;border:1px solid var(--line2);border-radius:8px;padding:6px 10px;width:180px
 }
-#scroll{flex:1;overflow:auto}
-table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}
+#scroll{flex:1;min-width:0;overflow:auto}
+table{border-collapse:separate;border-spacing:0;table-layout:fixed;min-width:100%;font-size:13px}
 thead th{
   position:sticky;top:0;z-index:2;background:#0e1116;text-align:left;
   font-weight:600;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
-  padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap
+  padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
 }
 thead th:hover{color:var(--mute)}
-tbody td{padding:7px 10px;border-bottom:1px solid #171b21;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:1px}
+thead th .grip{
+  position:absolute;top:0;right:0;width:9px;height:100%;z-index:3;
+  cursor:col-resize;touch-action:none
+}
+thead th .grip::after{content:"";position:absolute;top:6px;bottom:6px;left:4px;width:1px;background:var(--line2)}
+thead th .grip:hover::after,thead th .grip.on::after{background:var(--acc);left:3px;width:2px;top:0;bottom:0}
+thead th span.s{color:var(--acc);margin-left:4px}
+body.resizing{cursor:col-resize;user-select:none}
+tbody td{padding:7px 10px;border-bottom:1px solid #171b21;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+tbody td.edit{padding:0}
+tbody td input.ce{
+  width:100%;background:#0b1017;border:1px solid var(--acc);border-radius:0;
+  padding:6px 9px;font-size:13px;outline:none
+}
 tbody tr{cursor:default}
 tbody tr:hover td{background:#12161c}
 tbody tr.sel td{background:#1b2330}
@@ -177,12 +191,15 @@ dialog .df{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8
 <header>
   <div class="brand"><h1>Sleeve</h1><span class="sub">ID3 tags, read and written right here</span></div>
   <button class="btn p" id="bAdd">＋ Add MP3s</button>
+  <button class="btn ghost" id="bFolder" hidden>Open folder…</button>
   <input type="file" id="fileIn" accept=".mp3,audio/mpeg" multiple hidden>
-  <button class="btn ghost" id="bFromName">Tags from filename…</button>
-  <button class="btn ghost" id="bRename">Filename from tags…</button>
+  <button class="btn ghost" id="bFromName">Tags ← filename</button>
+  <button class="btn ghost" id="bRename">Filename ← tags</button>
   <button class="btn ghost" id="bListen">🎧 Listen &amp; measure</button>
   <button class="btn ghost" id="bSheet">Contact sheet</button>
   <span class="spacer"></span>
+  <button class="btn ghost" id="bUndo" title="Undo (⌘Z)" disabled>↶</button>
+  <button class="btn ghost" id="bRedo" title="Redo (⇧⌘Z)" disabled>↷</button>
   <span class="pill" id="stat">no files</span>
   <button class="btn" id="bSave">⤓ Save changed</button>
 </header>
@@ -195,12 +212,18 @@ dialog .df{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8
       <button class="btn sm ghost" id="bNone">None</button>
       <button class="btn sm ghost" id="bInvert">Invert</button>
       <span class="spacer"></span>
+      <button class="btn sm ghost" id="bFind">Find &amp; replace…</button>
+      <button class="btn sm ghost" id="bFit">Fit columns</button>
       <button class="btn sm ghost" id="bNumber">Number tracks 1…n</button>
       <button class="btn sm ghost" id="bTidy">Tidy text</button>
       <button class="btn sm ghost" id="bRemove">Remove</button>
     </div>
     <div id="scroll">
       <table id="tbl" hidden>
+        <colgroup>
+          <col data-k="art"><col data-k="track"><col data-k="title"><col data-k="artist"><col data-k="album">
+          <col data-k="year"><col data-k="bpm"><col data-k="key"><col data-k="dur"><col data-k="name">
+        </colgroup>
         <thead><tr>
           <th data-k="art"></th>
           <th data-k="track" class="n">#</th>
@@ -219,7 +242,9 @@ dialog .df{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8
         <b>Drop MP3s anywhere on this page</b>
         Sleeve opens them locally, reads their real ID3v2 frames and writes them back.<br>
         Nothing is uploaded — there is no server to upload to.<br><br>
-        <span class="kbd">click</span> select · <span class="kbd">shift</span> range · <span class="kbd">⌘/ctrl</span> add · <span class="kbd">space</span> play
+        <span class="kbd">click</span> select · <span class="kbd">shift</span> range · <span class="kbd">⌘/ctrl</span> add<br>
+        <span class="kbd">double-click a cell</span> edit it in place · <span class="kbd">enter</span> play · <span class="kbd">space</span> pause · <span class="kbd">⌘Z</span> undo<br>
+        drag a column edge to resize it, double-click the edge to fit it
       </div>
     </div>
   </section>
@@ -451,11 +476,15 @@ const snap=t=>JSON.stringify(FIELDS.map(k=>t[k]||""));
 const selFiles=()=>files.filter(f=>sel.has(f.uid));
 const nameOf=f=>f.newName||f.name;
 
+/* Accepts Files, or {file,handle,dir} records when the browser gave us real
+   file handles — those are what make writing back in place possible. */
 async function addFiles(list){
-  const arr=[...list].filter(f=>/\.mp3$/i.test(f.name)||f.type==="audio/mpeg");
+  const arr=[...list].map(x=>x instanceof File?{file:x}:x)
+    .filter(x=>x.file&&(/\.mp3$/i.test(x.file.name)||x.file.type==="audio/mpeg"));
   if(!arr.length){ toast("No MP3s in that drop"); return; }
   let added=0;
-  for(const file of arr){
+  for(const rec of arr){
+    const file=rec.file;
     if(files.some(f=>f.name===file.name&&f.size===file.size))continue;
     try{
       const buf=await file.arrayBuffer();
@@ -464,16 +493,49 @@ async function addFiles(list){
         uid:++uid, name:file.name, newName:null, size:file.size, file:file, buf:buf,
         tags:p.tags, art:p.art, audioStart:p.audioStart, audioEnd:p.audioEnd,
         version:p.version||(p.v1?"v1 only":"none"), frames:p.frames,
-        base:"", analysis:null, artUrl:null, saved:false
+        base:"", analysis:null, handle:rec.handle||null, dir:rec.dir||null, saved:false
       };
       f.base=snap(f.tags); f.baseArt=f.art?f.art.data.length:0;
-      if(f.art)f.artUrl=URL.createObjectURL(new Blob([f.art.data],{type:f.art.mime}));
       files.push(f); added++;
     }catch(e){ console.warn(file.name,e); }
   }
-  render(); if(added)toast(added+" file"+(added>1?"s":"")+" opened — nothing left your machine");
+  render();
+  if(added)toast(added+" file"+(added>1?"s":"")+" opened — nothing left your machine");
+  if(added&&files.some(f=>f.handle))$("#bSave").title="Writes back into the files you opened";
 }
 const isDirty=f=>snap(f.tags)!==f.base||(f.art?f.art.data.length:0)!==f.baseArt||!!f.newName;
+
+/* Cover URLs are cached per art object and never revoked, so an undo can put a
+   previous cover straight back on screen. */
+const ARTU=new WeakMap();
+function artUrl(f){
+  if(!f||!f.art)return null;
+  let u=ARTU.get(f.art);
+  if(!u){ u=URL.createObjectURL(new Blob([f.art.data],{type:f.art.mime})); ARTU.set(f.art,u); }
+  return u;
+}
+
+/* ============================ undo ============================ */
+const UNDO=[], REDO=[], HCAP=80;
+function makeSnap(){
+  return {order:files.slice(),
+    st:files.map(f=>({f:f,tags:Object.assign({},f.tags),newName:f.newName,art:f.art}))};
+}
+function applySnap(s){
+  files=s.order.slice();
+  for(const e of s.st){ e.f.tags=Object.assign({},e.tags); e.f.newName=e.newName; e.f.art=e.art; }
+  sel=new Set([...sel].filter(u=>files.some(f=>f.uid===u)));
+}
+function push(){ UNDO.push(makeSnap()); if(UNDO.length>HCAP)UNDO.shift(); REDO.length=0; }
+function mutate(fn){ push(); fn(); render(); }
+$("#bUndo").onclick=()=>{
+  if(!UNDO.length)return;
+  REDO.push(makeSnap()); applySnap(UNDO.pop()); render(); toast("Undone");
+};
+$("#bRedo").onclick=()=>{
+  if(!REDO.length)return;
+  UNDO.push(makeSnap()); applySnap(REDO.pop()); render(); toast("Redone");
+};
 
 /* ============================ render ============================ */
 let sortKey="", sortDir=1;
@@ -502,7 +564,7 @@ function render(){
     if(sel.has(f.uid))tr.className="sel";
     if(playing===f)tr.className+=" playing";
     const th=document.createElement("td"); th.className="thumb";
-    const i=document.createElement("i"); if(f.artUrl)i.style.backgroundImage="url("+f.artUrl+")";
+    const i=document.createElement("i"); const au=artUrl(f); if(au)i.style.backgroundImage="url("+au+")";
     th.appendChild(i); tr.appendChild(th);
     const cells=[["track","n"],["title",""],["artist",""],["album",""],["year","n"],["bpm","n"],["key",""],["dur","n"],["name",""]];
     for(const [k,cls] of cells){
@@ -518,6 +580,9 @@ function render(){
   const d=files.filter(isDirty).length;
   $("#stat").textContent=files.length?files.length+" files · "+sel.size+" selected"+(d?" · "+d+" changed":""):"no files";
   $("#bSave").disabled=!d;
+  $("#bUndo").disabled=!UNDO.length; $("#bRedo").disabled=!REDO.length;
+  if(files.length)autoFitOnce();
+  $("#bSave").textContent=(d&&files.some(f=>f.handle))?"⤓ Save changed to disk":"⤓ Save changed";
   syncEditor();
 }
 
@@ -532,23 +597,232 @@ $("#rows").addEventListener("click",e=>{
   }else if(e.metaKey||e.ctrlKey){
     sel.has(u)?sel.delete(u):sel.add(u); anchor=idx;
   }else{ sel.clear(); sel.add(u); anchor=idx; }
-  render();
+  paintSel();
 });
+/* Repaint the selection without rebuilding the rows, so a double-click still
+   lands on the same element and can open the cell editor. */
+function paintSel(){
+  for(const tr of $("#rows").children)tr.classList.toggle("sel",sel.has(+tr.dataset.uid));
+  const d=files.filter(isDirty).length;
+  $("#stat").textContent=files.length?files.length+" files · "+sel.size+" selected"+(d?" · "+d+" changed":""):"no files";
+  syncEditor();
+}
 $("#rows").addEventListener("dblclick",e=>{
-  const tr=e.target.closest("tr"); if(!tr)return;
-  play(files.find(f=>f.uid===+tr.dataset.uid));
+  const tr=e.target.closest("tr"), td=e.target.closest("td"); if(!tr||!td)return;
+  const uid=+tr.dataset.uid, k=COLKEYS[[...tr.children].indexOf(td)];
+  if(k==="art"||k==="dur")play(files.find(f=>f.uid===uid));
+  else editCell(uid,k);
 });
-$("#bAll").onclick=()=>{view.forEach(f=>sel.add(f.uid));render()};
-$("#bNone").onclick=()=>{sel.clear();render()};
-$("#bInvert").onclick=()=>{view.forEach(f=>sel.has(f.uid)?sel.delete(f.uid):sel.add(f.uid));render()};
+$("#bAll").onclick=()=>{view.forEach(f=>sel.add(f.uid));paintSel()};
+$("#bNone").onclick=()=>{sel.clear();paintSel()};
+$("#bInvert").onclick=()=>{view.forEach(f=>sel.has(f.uid)?sel.delete(f.uid):sel.add(f.uid));paintSel()};
 $("#q").oninput=render;
+function paintSort(){
+  for(const th of $$("thead th")){
+    const old=th.querySelector("span.s"); if(old)old.remove();
+    if(th.dataset.k===sortKey){
+      const sp=document.createElement("span"); sp.className="s";
+      sp.textContent=sortDir>0?"▲":"▼"; th.insertBefore(sp,th.querySelector(".grip"));
+    }
+  }
+}
 $$("thead th").forEach(th=>th.onclick=()=>{
   const k=th.dataset.k; if(!k||k==="art")return;
-  sortDir=sortKey===k?-sortDir:1; sortKey=k; render();
+  sortDir=sortKey===k?-sortDir:1; sortKey=k; paintSort(); render();
 });
+/* ============================ columns ============================ */
+const COLDEF={art:42,track:52,title:230,artist:170,album:180,year:64,bpm:64,key:60,dur:74,name:250};
+let COLW=Object.assign({},COLDEF), userSized=false;
+try{ const st=localStorage.getItem("sleeve.cols"); if(st){Object.assign(COLW,JSON.parse(st));userSized=true} }catch(e){}
+const saveCols=()=>{ userSized=true; try{localStorage.setItem("sleeve.cols",JSON.stringify(COLW))}catch(e){} };
+function applyCols(){
+  let sum=0;
+  for(const col of $$("#tbl col")){
+    const w=COLW[col.dataset.k]||COLDEF[col.dataset.k];
+    col.style.width=w+"px"; sum+=w;
+  }
+  $("#tbl").style.width=sum+"px";
+}
+const measure=(()=>{
+  const c=document.createElement("canvas").getContext("2d");
+  return (txt,font)=>{ c.font=font; return c.measureText(txt).width; };
+})();
+function fitColQuiet(k){
+  if(k==="art")return;
+  const body='13px ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  const head='600 11px ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  const th=$('thead th[data-k="'+k+'"]');
+  let w=measure(th.textContent.trim().toUpperCase(),head)+2.2*th.textContent.trim().length+26;
+  for(const f of view)w=Math.max(w,measure(CELL[k](f)||"",body)+30);
+  COLW[k]=clamp(Math.ceil(w),44,520); applyCols();
+}
+function fitCol(k){ fitColQuiet(k); saveCols(); }
+const FLEX=["title","artist","album","name"];
+/* When space is short the filename column gives way first, then album, then
+   artist — the title is the last thing anyone wants truncated. */
+const SHRINK=[["name",90],["album",96],["artist",96],["title",120]];
+function fillPane(){
+  const avail=$("#scroll").clientWidth-2; if(avail<200)return;
+  let sum=0; for(const k in COLDEF)sum+=COLW[k];
+  let slack=avail-sum;
+  if(Math.abs(slack)<4)return;
+  if(slack<0){
+    for(const [k,floor] of SHRINK){
+      if(slack>=0)break;
+      const give=Math.min(-slack,COLW[k]-floor);
+      if(give>0){ COLW[k]-=give; slack+=give; }
+    }
+  }else{
+    let flexSum=0; for(const k of FLEX)flexSum+=COLW[k];
+    for(const k of FLEX)COLW[k]=Math.round(COLW[k]+slack*COLW[k]/flexSum);
+  }
+  applyCols();
+}
+$("#bFit").onclick=()=>{
+  for(const k in COLDEF)fitCol(k);
+  fillPane(); saveCols();
+  toast("Columns fitted to what is in them");
+};
+let autoFitted=false;
+function autoFitOnce(){
+  if(autoFitted||!files.length||userSized)return;
+  autoFitted=true;
+  for(const k in COLDEF)COLW[k]=COLDEF[k];
+  for(const k in COLDEF)if(k!=="art")fitColQuiet(k);
+  fillPane();
+}
+/* While the user has not sized anything by hand, keep the columns filling the
+   pane as it changes width (the editor opening, the window resizing). */
+new ResizeObserver(()=>{ if(!userSized&&files.length)fillPane(); }).observe($("#scroll"));
+$$("thead th").forEach(th=>{
+  const k=th.dataset.k;
+  const grip=document.createElement("span"); grip.className="grip"; th.appendChild(grip);
+  grip.addEventListener("click",e=>e.stopPropagation());
+  grip.addEventListener("dblclick",e=>{ e.stopPropagation(); fitCol(k); });
+  grip.addEventListener("pointerdown",e=>{
+    e.preventDefault(); e.stopPropagation();
+    const x0=e.clientX, w0=COLW[k]||COLDEF[k];
+    grip.setPointerCapture(e.pointerId); grip.classList.add("on");
+    document.body.classList.add("resizing");
+    const move=ev=>{ COLW[k]=clamp(Math.round(w0+ev.clientX-x0),34,900); applyCols(); };
+    const up=()=>{
+      grip.removeEventListener("pointermove",move); grip.removeEventListener("pointerup",up);
+      grip.classList.remove("on"); document.body.classList.remove("resizing"); saveCols();
+    };
+    grip.addEventListener("pointermove",move); grip.addEventListener("pointerup",up);
+  });
+});
+applyCols();
+
+/* ============================ edit in place ============================ */
+const EDITABLE={track:"TRCK",title:"TIT2",artist:"TPE1",album:"TALB",year:"TYER",bpm:"TBPM",key:"TKEY",name:null};
+const COLKEYS=["art","track","title","artist","album","year","bpm","key","dur","name"];
+let editing=null;
+function editCell(uid,k){
+  if(!(k in EDITABLE))return;
+  const tr=[...$("#rows").children].find(r=>+r.dataset.uid===uid); if(!tr)return;
+  const td=tr.children[COLKEYS.indexOf(k)]; if(!td)return;
+  const f=files.find(x=>x.uid===uid); if(!f)return;
+  const before=k==="name"?nameOf(f):(f.tags[EDITABLE[k]]||"");
+  const inp=document.createElement("input"); inp.className="ce"; inp.value=before;
+  td.textContent=""; td.classList.add("edit"); td.appendChild(inp);
+  inp.focus(); inp.select();
+  editing={uid:uid,k:k};
+  let done=false;
+  const finish=(commit,next)=>{
+    if(done)return; done=true; editing=null;
+    const v=inp.value;
+    if(commit&&v!==before){
+      push();
+      if(k==="name")f.newName=v.replace(/\.mp3$/i,"")+".mp3"; else f.tags[EDITABLE[k]]=v;
+    }
+    render();
+    if(next)next();
+  };
+  inp.addEventListener("blur",()=>finish(true,null));
+  inp.addEventListener("keydown",e=>{
+    e.stopPropagation();
+    if(e.key==="Escape"){ done=true; editing=null; render(); }
+    else if(e.key==="Enter"){
+      const i=view.findIndex(x=>x.uid===uid);
+      const nx=view[i+(e.shiftKey?-1:1)];
+      finish(true,nx?()=>editCell(nx.uid,k):null);
+    }else if(e.key==="Tab"){
+      e.preventDefault();
+      const ks=Object.keys(EDITABLE), i=ks.indexOf(k);
+      const nk=ks[(i+(e.shiftKey?ks.length-1:1))%ks.length];
+      finish(true,()=>editCell(uid,nk));
+    }
+  });
+}
+
+/* ============================ find & replace ============================ */
+const FRFIELDS=[["*","All text fields"],["TIT2","Title"],["TPE1","Artist"],["TALB","Album"],
+  ["TPE2","Album artist"],["TCON","Genre"],["TCOM","Composer"],["COMM","Comment"],["__name","Filename"]];
+$("#bFind").onclick=()=>{
+  const fs=sel.size?selFiles():files; if(!fs.length){toast("Open some files first");return}
+  const box=document.createElement("div");
+  box.innerHTML="<div class='f' style='grid-template-columns:64px 1fr'><label>In</label><select id='fr_f'>"+
+    FRFIELDS.map(x=>"<option value='"+x[0]+"'>"+x[1]+"</option>").join("")+"</select></div>"+
+    "<div class='f' style='grid-template-columns:64px 1fr'><label>Find</label><input id='fr_a'></div>"+
+    "<div class='f' style='grid-template-columns:64px 1fr'><label>Replace</label><input id='fr_b'></div>"+
+    "<div style='display:flex;gap:14px;align-items:center;margin:8px 0 10px;font-size:12px;color:var(--mute)'>"+
+    "<label><input type='checkbox' id='fr_c'> match case</label>"+
+    "<label><input type='checkbox' id='fr_r'> regular expression</label>"+
+    "<span class='spacer' style='flex:1'></span><span class='pill' id='fr_n'></span></div>"+
+    "<div class='pv' id='fr_p'></div>";
+  const keys=k=>k==="*"?["TIT2","TPE1","TALB","TPE2","TCON","TCOM","COMM"]:[k];
+  const build=()=>{
+    const a=box.querySelector("#fr_a").value;
+    if(!a)return null;
+    const flags="g"+(box.querySelector("#fr_c").checked?"":"i");
+    try{ return new RegExp(box.querySelector("#fr_r").checked?a:esc(a),flags); }catch(e){ return false; }
+  };
+  const each=(fn)=>{
+    const re=build(); if(!re)return re;
+    const kk=box.querySelector("#fr_f").value, b=box.querySelector("#fr_b").value;
+    for(const f of fs){
+      if(kk==="__name"){
+        const v=nameOf(f).replace(/\.mp3$/i,""); re.lastIndex=0;
+        if(re.test(v)){ re.lastIndex=0; fn(f,"__name",v,v.replace(re,b)); }
+        continue;
+      }
+      for(const k of keys(kk)){
+        const v=f.tags[k]; if(!v)continue; re.lastIndex=0;
+        if(re.test(v)){ re.lastIndex=0; fn(f,k,v,v.replace(re,b)); }
+      }
+    }
+    return true;
+  };
+  const upd=()=>{
+    const pv=box.querySelector("#fr_p"); pv.textContent=""; let n=0;
+    const ok=each((f,k,v,nv)=>{
+      n++;
+      if(n<=200){
+        const d=document.createElement("div");
+        d.innerHTML="<s>"+v.replace(/</g,"&lt;")+"</s> → <b>"+nv.replace(/</g,"&lt;")+"</b>";
+        pv.appendChild(d);
+      }
+    });
+    box.querySelector("#fr_n").textContent=ok===false?"bad pattern":ok===null?"type something to find":n+" replacement"+(n===1?"":"s");
+  };
+  openDlg("Find & replace in "+fs.length+" tracks",box,[
+    {t:"Replace all",p:true,fn:()=>{
+      const edits=[]; each((f,k,v,nv)=>edits.push([f,k,nv]));
+      if(!edits.length){toast("Nothing matched");return}
+      push();
+      for(const [f,k,nv] of edits){ if(k==="__name")f.newName=nv+".mp3"; else f.tags[k]=nv; }
+      closeDlg(); render(); toast(edits.length+" replacements made");
+    }},{t:"Cancel",fn:closeDlg}
+  ]);
+  box.addEventListener("input",upd); box.addEventListener("change",upd); upd();
+  box.querySelector("#fr_a").focus();
+};
+
 $("#bRemove").onclick=()=>{
   if(!sel.size)return;
-  files=files.filter(f=>{ if(sel.has(f.uid)){ if(f===playing)stop(); if(f.artUrl)URL.revokeObjectURL(f.artUrl); return false;} return true;});
+  push();
+  files=files.filter(f=>{ if(sel.has(f.uid)){ if(f===playing)stop(); return false;} return true;});
   sel.clear(); render();
 };
 
@@ -572,10 +846,10 @@ function syncEditor(){
   }
   guard=false;
   // cover
-  const box=$("#artBox"), art=fs.length===1?fs[0].art:null;
+  const box=$("#artBox");
   const sameArt=fs.every(f=>(f.art?f.art.data.length:0)===(fs[0].art?fs[0].art.data.length:0));
   const show=fs.length===1?fs[0]:(sameArt?fs[0]:null);
-  if(show&&show.artUrl){ box.style.backgroundImage="url("+show.artUrl+")"; box.textContent=""; box.classList.add("has"); }
+  if(show&&artUrl(show)){ box.style.backgroundImage="url("+artUrl(show)+")"; box.textContent=""; box.classList.add("has"); }
   else{ box.style.backgroundImage=""; box.classList.remove("has"); box.textContent=sameArt?"drop an image here":"mixed covers"; }
   const withArt=fs.filter(f=>f.art).length;
   $("#artMeta").innerHTML=withArt?(withArt+" of "+fs.length+" tagged"+(show&&show.art?" · "+(show.art.data.length/1024|0)+" KB "+show.art.mime.replace("image/",""):"")):"no cover on these";
@@ -598,10 +872,14 @@ function syncEditor(){
       "<br>will be written as <b>ID3v2.3</b>, UTF-16";
   }else $("#raw").textContent=fs.length+" files selected";
 }
+let burst=null;
 for(const k of FIELDS){
   const el=document.getElementById("f"+k); if(!el)continue;
+  el.addEventListener("focus",()=>{ burst=makeSnap(); });
+  el.addEventListener("blur",()=>{ burst=null; });
   el.addEventListener("input",()=>{
     if(guard)return;
+    if(burst){ UNDO.push(burst); REDO.length=0; burst=null; if(UNDO.length>HCAP)UNDO.shift(); }
     const v=el.value;
     for(const f of selFiles())f.tags[k]=v;
     el.classList.remove("multi"); el.placeholder="";
@@ -620,11 +898,8 @@ function renderSoft(){
 
 /* ============================ cover art ============================ */
 function setArt(fs,bytes,mime){
-  for(const f of fs){
-    if(f.artUrl)URL.revokeObjectURL(f.artUrl);
-    if(bytes){ f.art={mime:mime,data:bytes}; f.artUrl=URL.createObjectURL(new Blob([bytes],{type:mime})); }
-    else{ f.art=null; f.artUrl=null; }
-  }
+  push();
+  for(const f of fs)f.art=bytes?{mime:mime,data:bytes}:null;
   render();
 }
 function squareJPEG(src,size,q){
@@ -754,13 +1029,11 @@ function makeSleeveCanvas(f,variant,size){
 }
 let variantN=0;
 async function generateFor(fs,variant){
+  push();
   for(const f of fs){
     const cv=makeSleeveCanvas(f,variant,600);
     const blob=await new Promise(r=>cv.toBlob(r,"image/jpeg",.88));
-    const bytes=new Uint8Array(await blob.arrayBuffer());
-    if(f.artUrl)URL.revokeObjectURL(f.artUrl);
-    f.art={mime:"image/jpeg",data:bytes};
-    f.artUrl=URL.createObjectURL(new Blob([bytes],{type:"image/jpeg"}));
+    f.art={mime:"image/jpeg",data:new Uint8Array(await blob.arrayBuffer())};
   }
   render();
 }
@@ -782,8 +1055,8 @@ $("#bSheet").onclick=()=>{
   for(const f of fs){
     const fig=document.createElement("figure");
     const img=document.createElement("img");
-    img.src=f.artUrl||makeSleeveCanvas(f,0,180).toDataURL("image/jpeg",.7);
-    if(!f.artUrl)img.style.opacity=".5";
+    img.src=artUrl(f)||makeSleeveCanvas(f,0,180).toDataURL("image/jpeg",.7);
+    if(!f.art)img.style.opacity=".5";
     const cap=document.createElement("figcaption");
     cap.textContent=f.tags.TIT2||nameOf(f);
     fig.append(img,cap); body.appendChild(fig);
@@ -932,11 +1205,11 @@ $("#bListen").onclick=async()=>{
   toast("Measured "+(done-failed)+" tracks"+(failed?" ("+failed+" would not decode)":""));
 };
 $("#bApplyBpm").onclick=()=>{
-  let n=0; for(const f of selFiles())if(f.analysis){f.tags.TBPM=String(Math.round(f.analysis.bpm));n++}
+  push(); let n=0; for(const f of selFiles())if(f.analysis){f.tags.TBPM=String(Math.round(f.analysis.bpm));n++}
   render(); toast(n?"BPM written to "+n+" tracks":"Nothing measured yet");
 };
 $("#bApplyKey").onclick=()=>{
-  let n=0; for(const f of selFiles())if(f.analysis){f.tags.TKEY=f.analysis.key;n++}
+  push(); let n=0; for(const f of selFiles())if(f.analysis){f.tags.TKEY=f.analysis.key;n++}
   render(); toast(n?"Key written to "+n+" tracks":"Nothing measured yet");
 };
 
@@ -983,7 +1256,7 @@ $("#bFromName").onclick=()=>{
   const foot=document.createElement("span");
   openDlg("Tags from filename",box,[
     {t:"Apply",p:true,fn:()=>{
-      const pat=box.querySelector("#pat").value; let n=0;
+      const pat=box.querySelector("#pat").value; let n=0; push();
       for(const f of fs){const r=applyPattern(f,pat); if(r){Object.assign(f.tags,r);n++}}
       closeDlg(); render(); toast("Tagged "+n+" files from their names");
     }},{t:"Cancel",fn:closeDlg}
@@ -1017,7 +1290,7 @@ $("#bRename").onclick=()=>{
   };
   openDlg("Filename from tags",box,[
     {t:"Apply",p:true,fn:()=>{
-      const pat=box.querySelector("#pat").value; let n=0;
+      const pat=box.querySelector("#pat").value; let n=0; push();
       for(const f of fs){const v=fillPattern(f,pat); if(v){f.newName=v+".mp3";n++}}
       closeDlg(); render(); toast("Renamed "+n+" files (on save)");
     }},{t:"Cancel",fn:closeDlg}
@@ -1026,7 +1299,7 @@ $("#bRename").onclick=()=>{
 };
 $("#bNumber").onclick=()=>{
   const fs=sel.size?selFiles():view; if(!fs.length)return;
-  const order=view.filter(f=>fs.includes(f));
+  const order=view.filter(f=>fs.includes(f)); push();
   order.forEach((f,i)=>{f.tags.TRCK=(i+1)+"/"+order.length});
   render(); toast("Numbered "+order.length+" tracks in the order shown");
 };
@@ -1042,7 +1315,7 @@ function tidy(s){
   return s.replace(/\s*\(\s*/g," (").replace(/\s*\)\s*/g,") ").trim();
 }
 $("#bTidy").onclick=()=>{
-  const fs=sel.size?selFiles():files; if(!fs.length)return;
+  const fs=sel.size?selFiles():files; if(!fs.length)return; push();
   for(const f of fs)for(const k of ["TIT2","TPE1","TALB","TPE2","TCON","TCOM"])if(f.tags[k])f.tags[k]=tidy(f.tags[k]);
   render(); toast("Tidied text on "+fs.length+" tracks");
 };
@@ -1080,8 +1353,50 @@ function download(blob,name){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
-$("#bSave").onclick=()=>{
-  const dirty=files.filter(isDirty); if(!dirty.length)return;
+/* --- writing back into the original files, where the browser allows it --- */
+const CANFS=!!(window.showDirectoryPicker&&window.FileSystemFileHandle&&FileSystemFileHandle.prototype.createWritable);
+if(CANFS)$("#bFolder").hidden=false;
+async function walkDir(dir,out,depth){
+  if(depth>6)return;
+  for await(const [name,h] of dir.entries()){
+    if(h.kind==="file"&&/\.mp3$/i.test(name))out.push({handle:h,dir:dir});
+    else if(h.kind==="directory")await walkDir(h,out,depth+1);
+  }
+}
+$("#bFolder").onclick=async()=>{
+  try{
+    const dir=await window.showDirectoryPicker({mode:"readwrite"});
+    const found=[]; await walkDir(dir,found,0);
+    if(!found.length){toast("No MP3s in that folder");return}
+    toast("Reading "+found.length+" files…");
+    const recs=[];
+    for(const r of found)recs.push({file:await r.handle.getFile(),handle:r.handle,dir:r.dir});
+    await addFiles(recs);
+  }catch(e){ if(e&&e.name!=="AbortError")toast("Could not open that folder"); }
+};
+async function writeInPlace(dirty){
+  let ok=0,fail=0;
+  for(const f of dirty){
+    try{
+      const out=buildFile(f), rename=f.newName&&f.newName!==f.name;
+      let h=f.handle;
+      if(rename&&f.dir)h=await f.dir.getFileHandle(f.newName,{create:true});
+      const w=await h.createWritable();
+      await w.write(out); await w.close();
+      if(rename&&f.dir&&h!==f.handle){ try{ await f.dir.removeEntry(f.name); }catch(e){} f.handle=h; }
+      f.name=nameOf(f); f.newName=null;
+      f.buf=out.buffer; f.size=out.length;
+      const re=parseID3(f.buf);
+      f.audioStart=re.audioStart; f.audioEnd=re.audioEnd; f.frames=re.frames; f.version=re.version;
+      f.file=new File([out],f.name,{type:"audio/mpeg"});
+      f.base=snap(f.tags); f.baseArt=f.art?f.art.data.length:0;
+      ok++;
+    }catch(e){ fail++; console.warn(e); }
+  }
+  render();
+  toast(fail?("Wrote "+ok+", "+fail+" could not be written"):("Wrote "+ok+" files back where they came from"));
+}
+function downloadDirty(dirty){
   if(dirty.length===1){
     const f=dirty[0];
     download(new Blob([buildFile(f)],{type:"audio/mpeg"}),nameOf(f));
@@ -1098,8 +1413,30 @@ $("#bSave").onclick=()=>{
   download(zip(entries),"sleeve-"+new Date().toISOString().slice(0,10)+".zip");
   for(const f of dirty){f.base=snap(f.tags);f.baseArt=f.art?f.art.data.length:0;f.name=nameOf(f);f.newName=null}
   render(); toast("Wrote "+entries.length+" tagged MP3s into a zip");
+}
+$("#bSave").onclick=()=>{
+  const dirty=files.filter(isDirty); if(!dirty.length)return;
+  const live=dirty.filter(f=>f.handle);
+  if(live.length){
+    const box=document.createElement("div");
+    box.innerHTML="<p style='margin:0 0 10px;color:var(--mute)'>These files were opened from a folder you granted write access to, so Sleeve can put the new tags straight back into them. The audio itself is copied through untouched.</p><div class='pv' id='ov'></div>";
+    const pv=box.querySelector("#ov");
+    for(const f of dirty.slice(0,200)){
+      const d=document.createElement("div");
+      d.innerHTML=f.handle
+        ?("<b>"+(f.newName&&f.newName!==f.name?f.name+" → "+f.newName:nameOf(f))+"</b>")
+        :("<s>"+nameOf(f)+" — no write access, needs the zip</s>");
+      pv.appendChild(d);
+    }
+    openDlg("Overwrite "+live.length+" file"+(live.length===1?"":"s")+"?",box,[
+      {t:"Overwrite in place",p:true,fn:()=>{closeDlg();writeInPlace(live)}},
+      {t:"Download instead",fn:()=>{closeDlg();downloadDirty(dirty)}},
+      {t:"Cancel",fn:closeDlg}
+    ]);
+    return;
+  }
+  downloadDirty(dirty);
 };
-
 /* ============================ player ============================ */
 const audio=new Audio(); audio.preload="metadata";
 let waveURL=null;
@@ -1165,6 +1502,20 @@ addEventListener("drop",async e=>{
   if(e.target.closest("#artBox")&&dt.files.length&&/^image\//.test(dt.files[0].type)){
     const a=await artFromBlob(dt.files[0]); setArt(selFiles(),a.data,a.mime); toast("Cover embedded"); return;
   }
+  if(CANFS&&dt.items&&dt.items.length&&dt.items[0].getAsFileSystemHandle){
+    const hs=await Promise.all([...dt.items].map(i=>i.kind==="file"?i.getAsFileSystemHandle().catch(()=>null):null));
+    const found=[];
+    for(const h of hs){
+      if(!h)continue;
+      if(h.kind==="directory"){ try{ await walkDir(h,found,0); }catch(e){} }
+      else if(/\.mp3$/i.test(h.name))found.push({handle:h,dir:null});
+    }
+    if(found.length){
+      const recs=[];
+      for(const r of found){ try{ recs.push({file:await r.handle.getFile(),handle:r.handle,dir:r.dir}); }catch(e){} }
+      if(recs.length){ addFiles(recs); return; }
+    }
+  }
   const items=[...(dt.items||[])].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);
   if(items.length&&items.some(i=>i.isDirectory)){
     const out=[];
@@ -1189,13 +1540,16 @@ addEventListener("keydown",e=>{
   const t=e.target.tagName;
   if(t==="INPUT"||t==="TEXTAREA"||t==="SELECT"){ if(e.key==="Escape")e.target.blur(); return; }
   if(e.key===" "){ e.preventDefault(); $("#bPlay").click(); }
+  else if(e.key==="Enter"){ e.preventDefault(); const f=selFiles()[0]; if(f)play(f); }
   else if(e.key==="a"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); $("#bAll").click(); }
   else if(e.key==="s"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); $("#bSave").click(); }
+  else if(e.key.toLowerCase()==="z"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); (e.shiftKey?$("#bRedo"):$("#bUndo")).click(); }
+  else if(e.key.toLowerCase()==="f"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); $("#bFind").click(); }
   else if(e.key==="ArrowDown"||e.key==="ArrowUp"){
     e.preventDefault(); if(!view.length)return;
     const cur=view.findIndex(f=>sel.has(f.uid));
     const i=clamp((cur<0?0:cur)+(e.key==="ArrowDown"?1:-1),0,view.length-1);
-    sel.clear(); sel.add(view[i].uid); anchor=i; render();
+    sel.clear(); sel.add(view[i].uid); anchor=i; paintSel();
     const row=$("#rows").children[i]; if(row)row.scrollIntoView({block:"nearest"});
   }
 });
