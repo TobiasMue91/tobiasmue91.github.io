@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sleeve — an MP3 tag editor with a record sleeve in it</title>
+<meta name="description" content="Drag a folder of MP3s in and Sleeve reads their real ID3 frames, batch-edits them like a spreadsheet — resizable columns, edit-in-place cells, find &amp; replace, undo — pulls tags out of filenames, listens to each track to measure its tempo and key, generates a cover sleeve from the words in the tag, and writes it all back into the original files. No upload, no account, nothing leaves your machine.">
+<meta name="theme-color" content="#0a0b0e">
+<meta property="og:title" content="Sleeve — an MP3 tag editor with a record sleeve in it">
+<meta property="og:description" content="Real ID3v2 reading and writing in the browser. Batch edit, filename patterns, measured BPM and key, and a generated cover for every album. Nothing is uploaded.">
+<meta property="og:type" content="website">
+<style>
+:root{
+  --bg:#0a0b0e; --panel:#111318; --panel2:#161a20; --raise:#1c212a;
+  --line:#242a34; --line2:#2f3742;
+  --ink:#e9eef6; --mute:#8d99a8; --dim:#5c6775;
+  --acc:#ffcf6b; --acc2:#7ee0c0; --hot:#ff7a93; --cool:#7fb6ff;
+  --r:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-text-size-adjust:100%;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+::selection{background:rgba(255,207,107,.28)}
+
+/* ---------- chrome ---------- */
+header{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:10px 16px; border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#12151b,#0e1116);
+}
+.brand{display:flex;align-items:baseline;gap:9px;margin-right:2px}
+.brand h1{margin:0;font-size:17px;letter-spacing:.2px;font-weight:650}
+.brand .sub{color:var(--dim);font-size:12px}
+.spacer{flex:1}
+.btn{
+  background:var(--raise); border:1px solid var(--line2); color:var(--ink);
+  padding:7px 12px; border-radius:9px; font-size:13px; line-height:1;
+  display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
+  transition:background .12s,border-color .12s,transform .05s;
+}
+.btn:hover{background:#242b35;border-color:#3b4653}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.p{background:var(--acc);border-color:var(--acc);color:#20180a;font-weight:600}
+.btn.p:hover{background:#ffdb8c;border-color:#ffdb8c}
+.btn.ghost{background:transparent;border-color:var(--line2)}
+.btn.sm{padding:5px 9px;font-size:12px;border-radius:8px}
+.pill{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 9px}
+
+main{flex:1;display:flex;min-height:0}
+
+/* ---------- list ---------- */
+#listPane{flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column;border-right:1px solid var(--line)}
+#toolbar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel)
+}
+#toolbar input[type=search]{
+  background:#0c0e12;border:1px solid var(--line2);border-radius:8px;padding:6px 10px;width:180px
+}
+#scroll{flex:1;min-width:0;overflow:auto}
+table{border-collapse:separate;border-spacing:0;table-layout:fixed;min-width:100%;font-size:13px}
+thead th{
+  position:sticky;top:0;z-index:2;background:#0e1116;text-align:left;
+  font-weight:600;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
+  padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+thead th:hover{color:var(--mute)}
+thead th .grip{
+  position:absolute;top:0;right:0;width:9px;height:100%;z-index:3;
+  cursor:col-resize;touch-action:none
+}
+thead th .grip::after{content:"";position:absolute;top:6px;bottom:6px;left:4px;width:1px;background:var(--line2)}
+thead th .grip:hover::after,thead th .grip.on::after{background:var(--acc);left:3px;width:2px;top:0;bottom:0}
+thead th span.s{color:var(--acc);margin-left:4px}
+body.resizing{cursor:col-resize;user-select:none}
+tbody td{padding:7px 10px;border-bottom:1px solid #171b21;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+tbody td.edit{padding:0}
+tbody td input.ce{
+  width:100%;background:#0b1017;border:1px solid var(--acc);border-radius:0;
+  padding:6px 9px;font-size:13px;outline:none
+}
+tbody tr{cursor:default}
+tbody tr:hover td{background:#12161c}
+tbody tr.sel td{background:#1b2330}
+tbody tr.sel:hover td{background:#1f2937}
+tbody tr.playing td:first-child{box-shadow:inset 3px 0 0 var(--acc2)}
+td.n{text-align:right;color:var(--mute);font-variant-numeric:tabular-nums}
+td.thumb{width:34px;max-width:34px;padding:4px 6px 4px 10px}
+.thumb i{display:block;width:26px;height:26px;border-radius:4px;background:#1c212a;background-size:cover;background-position:center}
+.dirty{color:var(--acc)}
+.warn{color:var(--hot)}
+.empty{padding:60px 20px;text-align:center;color:var(--dim)}
+.empty b{display:block;color:var(--mute);font-size:15px;margin-bottom:8px;font-weight:600}
+.kbd{border:1px solid var(--line2);border-bottom-width:2px;border-radius:5px;padding:1px 5px;font-size:11px;color:var(--mute)}
+
+/* ---------- editor ---------- */
+#edit{width:400px;flex:none;display:flex;flex-direction:column;background:var(--panel);overflow:auto}
+#edit.hide{display:none}
+.sec{border-bottom:1px solid var(--line);padding:12px 14px}
+.sec h2{margin:0 0 10px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:600;display:flex;align-items:center;gap:8px}
+.sec h2 .spacer{flex:1}
+.f{display:grid;grid-template-columns:74px 1fr;gap:6px 10px;align-items:center;margin-bottom:6px}
+.f label{color:var(--mute);font-size:12px;text-align:right}
+.f input,.f select,.f textarea{
+  background:#0c0e12;border:1px solid var(--line2);border-radius:8px;padding:6px 9px;width:100%;min-width:0
+}
+.f input:focus,.f textarea:focus,.f select:focus{outline:none;border-color:#4a5766;background:#0e1116}
+.f input.multi::placeholder{color:#6b5a2e;font-style:italic}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hint{color:var(--dim);font-size:11.5px;line-height:1.45;margin:8px 0 0}
+.hint code{background:#0c0e12;border:1px solid var(--line);border-radius:4px;padding:1px 4px;color:var(--acc2)}
+
+/* ---------- art ---------- */
+#artWrap{display:flex;gap:12px;align-items:flex-start}
+#artBox{
+  width:132px;height:132px;flex:none;border-radius:8px;border:1px dashed var(--line2);
+  background:#0c0e12 center/cover no-repeat;display:grid;place-items:center;
+  color:var(--dim);font-size:11px;text-align:center;overflow:hidden;position:relative
+}
+#artBox.has{border-style:solid}
+#artCol{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+#artMeta{color:var(--dim);font-size:11px}
+
+/* ---------- player ---------- */
+footer{
+  border-top:1px solid var(--line);background:linear-gradient(180deg,#0e1116,#0b0d11);
+  padding:8px 14px;display:flex;align-items:center;gap:12px
+}
+#wave{flex:1;height:38px;min-width:0;border-radius:7px;background:#0c0e12;border:1px solid var(--line);cursor:pointer;display:block}
+#nowPlaying{font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:26vw}
+#time{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+.iconbtn{background:transparent;border:1px solid var(--line2);border-radius:999px;width:34px;height:34px;display:grid;place-items:center;flex:none}
+.iconbtn:hover{background:var(--raise)}
+
+/* ---------- overlays ---------- */
+#drop{
+  position:fixed;inset:0;z-index:60;display:none;place-items:center;
+  background:rgba(8,9,12,.82);backdrop-filter:blur(3px)
+}
+#drop.on{display:grid}
+#drop div{border:2px dashed var(--acc);border-radius:20px;padding:44px 66px;font-size:18px;color:var(--acc)}
+#toast{
+  position:fixed;left:50%;bottom:76px;transform:translate(-50%,14px);z-index:70;
+  background:#1b212b;border:1px solid var(--line2);border-radius:10px;padding:9px 15px;font-size:13px;
+  opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;box-shadow:0 12px 40px rgba(0,0,0,.5)
+}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+dialog{
+  border:1px solid var(--line2);background:var(--panel);color:var(--ink);border-radius:14px;
+  padding:0;max-width:min(560px,92vw);box-shadow:0 30px 80px rgba(0,0,0,.6)
+}
+dialog::backdrop{background:rgba(6,7,10,.7)}
+dialog .dh{padding:14px 16px;border-bottom:1px solid var(--line);font-weight:600}
+dialog .db{padding:14px 16px}
+dialog .df{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+.pv{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;font-size:12px}
+.pv div{padding:4px 9px;border-bottom:1px solid #171b21;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv div:last-child{border-bottom:0}
+.pv b{color:var(--acc2);font-weight:500}
+.pv s{color:var(--hot);text-decoration:none;opacity:.7}
+#sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+#sheet figure{margin:0}
+#sheet img{width:100%;aspect-ratio:1;border-radius:6px;display:block;background:#0c0e12}
+#sheet figcaption{font-size:10px;color:var(--dim);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{height:5px;border-radius:3px;background:#0c0e12;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:var(--acc2);width:0;transition:width .2s}
+@media (max-width:1500px){ .brand .sub{display:none} }
+@media (max-width:620px){
+  header{padding:8px 10px;gap:8px}
+  header .btn{padding:6px 9px;font-size:12px}
+  #toolbar .btn.sm{font-size:11px;padding:4px 7px}
+}
+@media (max-width:900px){
+  #edit{position:fixed;inset:auto 0 0 0;top:auto;width:100%;height:62vh;z-index:40;border-top:1px solid var(--line2);border-radius:14px 14px 0 0}
+  #listPane{border-right:0}
+  #nowPlaying{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><h1>Sleeve</h1><span class="sub">ID3 tags, read and written right here</span></div>
+  <button class="btn p" id="bAdd">＋ Add MP3s</button>
+  <button class="btn ghost" id="bFolder" hidden>Open folder…</button>
+  <input type="file" id="fileIn" accept=".mp3,audio/mpeg" multiple hidden>
+  <button class="btn ghost" id="bFromName">Tags ← filename</button>
+  <button class="btn ghost" id="bRename">Filename ← tags</button>
+  <button class="btn ghost" id="bListen">🎧 Listen &amp; measure</button>
+  <button class="btn ghost" id="bSheet">Contact sheet</button>
+  <span class="spacer"></span>
+  <button class="btn ghost" id="bUndo" title="Undo (⌘Z)" disabled>↶</button>
+  <button class="btn ghost" id="bRedo" title="Redo (⇧⌘Z)" disabled>↷</button>
+  <span class="pill" id="stat">no files</span>
+  <button class="btn" id="bSave">⤓ Save changed</button>
+</header>
+
+<main>
+  <section id="listPane">
+    <div id="toolbar">
+      <input type="search" id="q" placeholder="Filter…">
+      <button class="btn sm ghost" id="bAll">Select all</button>
+      <button class="btn sm ghost" id="bNone">None</button>
+      <button class="btn sm ghost" id="bInvert">Invert</button>
+      <span class="spacer"></span>
+      <button class="btn sm ghost" id="bFind">Find &amp; replace…</button>
+      <button class="btn sm ghost" id="bFit">Fit columns</button>
+      <button class="btn sm ghost" id="bNumber">Number tracks 1…n</button>
+      <button class="btn sm ghost" id="bTidy">Tidy text</button>
+      <button class="btn sm ghost" id="bRemove">Remove</button>
+    </div>
+    <div id="scroll">
+      <table id="tbl" hidden>
+        <colgroup>
+          <col data-k="art"><col data-k="track"><col data-k="title"><col data-k="artist"><col data-k="album">
+          <col data-k="year"><col data-k="bpm"><col data-k="key"><col data-k="dur"><col data-k="name">
+        </colgroup>
+        <thead><tr>
+          <th data-k="art"></th>
+          <th data-k="track" class="n">#</th>
+          <th data-k="title">Title</th>
+          <th data-k="artist">Artist</th>
+          <th data-k="album">Album</th>
+          <th data-k="year" class="n">Year</th>
+          <th data-k="bpm" class="n">BPM</th>
+          <th data-k="key">Key</th>
+          <th data-k="dur" class="n">Length</th>
+          <th data-k="name">File</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty">
+        <b>Drop MP3s anywhere on this page</b>
+        Sleeve opens them locally, reads their real ID3v2 frames and writes them back.<br>
+        Nothing is uploaded — there is no server to upload to.<br><br>
+        <span class="kbd">click</span> select · <span class="kbd">shift</span> range · <span class="kbd">⌘/ctrl</span> add<br>
+        <span class="kbd">double-click a cell</span> edit it in place · <span class="kbd">enter</span> play · <span class="kbd">space</span> pause · <span class="kbd">⌘Z</span> undo<br>
+        drag a column edge to resize it, double-click the edge to fit it
+      </div>
+    </div>
+  </section>
+
+  <aside id="edit" class="hide">
+    <div class="sec">
+      <h2><span id="selCount">0 selected</span><span class="spacer"></span><span id="health" class="pill"></span></h2>
+      <div class="f"><label>Title</label><input id="fTIT2" data-f="TIT2"></div>
+      <div class="f"><label>Artist</label><input id="fTPE1" data-f="TPE1"></div>
+      <div class="f"><label>Album</label><input id="fTALB" data-f="TALB"></div>
+      <div class="f"><label>Album art.</label><input id="fTPE2" data-f="TPE2" placeholder="album artist"></div>
+      <div class="f"><label>Genre</label><input id="fTCON" data-f="TCON" list="genres"></div>
+      <datalist id="genres"></datalist>
+      <div class="f"><label>Track / of</label>
+        <div class="row2"><input id="fTRCK" data-f="TRCK" placeholder="3"><input id="fTPOS" data-f="TPOS" placeholder="disc 1/2"></div>
+      </div>
+      <div class="f"><label>Year</label>
+        <div class="row2"><input id="fTYER" data-f="TYER" placeholder="1997"><input id="fTCOM" data-f="TCOM" placeholder="composer"></div>
+      </div>
+      <div class="f"><label>BPM / key</label>
+        <div class="row2"><input id="fTBPM" data-f="TBPM" placeholder="—"><input id="fTKEY" data-f="TKEY" placeholder="—"></div>
+      </div>
+      <div class="f"><label>Comment</label><input id="fCOMM" data-f="COMM"></div>
+      <p class="hint">Type into a field to set it on <b>every selected track at once</b>. A field showing <code>&lt;multiple&gt;</code> is left alone until you touch it.</p>
+    </div>
+
+    <div class="sec">
+      <h2>Cover<span class="spacer"></span><button class="btn sm ghost" id="bArtClear">Clear</button></h2>
+      <div id="artWrap">
+        <div id="artBox">drop an<br>image here</div>
+        <div id="artCol">
+          <button class="btn sm" id="bArtFile">Choose image…</button>
+          <input type="file" id="artIn" accept="image/*" hidden>
+          <button class="btn sm" id="bArtGen">✦ Generate a sleeve</button>
+          <button class="btn sm ghost" id="bArtVary">Another variation</button>
+          <div id="artMeta"></div>
+        </div>
+      </div>
+      <p class="hint">The generated sleeve is drawn from the words in the tag itself — same artist and album, same sleeve, every time. Images are downscaled to 600×600 JPEG before they go into the file.</p>
+    </div>
+
+    <div class="sec">
+      <h2>Measured</h2>
+      <div id="anal" class="hint">Press <b>Listen &amp; measure</b> and Sleeve decodes each selected track, finds the beat by autocorrelating its onset envelope, and estimates the key from a chroma profile. Both can then be written into the <code>TBPM</code> and <code>TKEY</code> frames.</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm ghost" id="bApplyBpm">Write BPM to tag</button>
+        <button class="btn sm ghost" id="bApplyKey">Write key to tag</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>Raw frames</h2>
+      <div id="raw" class="hint">—</div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <button class="iconbtn" id="bPlay" title="Play / pause (space)">▶</button>
+  <div id="nowPlaying">nothing loaded</div>
+  <canvas id="wave" width="1200" height="76"></canvas>
+  <div id="time">0:00 / 0:00</div>
+</footer>
+
+<div id="drop"><div>Drop MP3s to open</div></div>
+<div id="toast"></div>
+
+<dialog id="dlg">
+  <div class="dh" id="dlgTitle"></div>
+  <div class="db" id="dlgBody"></div>
+  <div class="df" id="dlgFoot"></div>
+</dialog>
+
+<script src="../logo.js"></script>
+<script>
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const NUL=String.fromCharCode(0), BOM=String.fromCharCode(0xFEFF);
+const fmtTime=s=>{if(!isFinite(s)||s<0)s=0;const m=Math.floor(s/60);return m+":"+String(Math.floor(s%60)).padStart(2,"0")};
+function toast(msg,ms){const t=$("#toast");t.textContent=msg;t.classList.add("on");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("on"),ms||2200)}
+
+/* ============================ ID3 reading ============================ */
+const LATIN=new TextDecoder("latin1"),U8D=new TextDecoder("utf-8"),U16=new TextDecoder("utf-16le"),U16B=new TextDecoder("utf-16be");
+const syncsafe=(b,i)=>((b[i]&127)<<21)|((b[i+1]&127)<<14)|((b[i+2]&127)<<7)|(b[i+3]&127);
+const be32=(b,i)=>(b[i]<<24|b[i+1]<<16|b[i+2]<<8|b[i+3])>>>0;
+const be24=(b,i)=>(b[i]<<16|b[i+1]<<8|b[i+2])>>>0;
+const strip0=s=>s.split(NUL).join("").split(BOM).join("").trim();
+
+function rawStr(enc,bytes){
+  if(enc===1){
+    if(bytes.length<2)return"";
+    if(bytes[0]===0xFF&&bytes[1]===0xFE)return U16.decode(bytes.subarray(2));
+    if(bytes[0]===0xFE&&bytes[1]===0xFF)return U16B.decode(bytes.subarray(2));
+    return U16.decode(bytes);
+  }
+  if(enc===2)return U16B.decode(bytes);
+  if(enc===3)return U8D.decode(bytes);
+  return LATIN.decode(bytes);
+}
+function decodeStr(enc,bytes){ return strip0(rawStr(enc,bytes)); }
+function readTerm(b,pos,enc){
+  if(enc===1||enc===2){
+    let i=pos; while(i+1<b.length&&!(b[i]===0&&b[i+1]===0))i+=2;
+    return [decodeStr(enc,b.subarray(pos,i)),Math.min(i+2,b.length)];
+  }
+  let i=pos; while(i<b.length&&b[i]!==0)i++;
+  return [decodeStr(enc,b.subarray(pos,i)),Math.min(i+1,b.length)];
+}
+const V22MAP={TT2:"TIT2",TP1:"TPE1",TP2:"TPE2",TAL:"TALB",TRK:"TRCK",TPA:"TPOS",TYE:"TYER",TCO:"TCON",TCM:"TCOM",TBP:"TBPM",TKE:"TKEY",COM:"COMM",PIC:"APIC"};
+const GENRES=["Blues","Classic Rock","Country","Dance","Disco","Funk","Grunge","Hip-Hop","Jazz","Metal","New Age","Oldies","Other","Pop","R&B","Rap","Reggae","Rock","Techno","Industrial","Alternative","Ska","Death Metal","Pranks","Soundtrack","Euro-Techno","Ambient","Trip-Hop","Vocal","Jazz+Funk","Fusion","Trance","Classical","Instrumental","Acid","House","Game","Sound Clip","Gospel","Noise","AlternRock","Bass","Soul","Punk","Space","Meditative","Instrumental Pop","Instrumental Rock","Ethnic","Gothic","Darkwave","Techno-Industrial","Electronic","Pop-Folk","Eurodance","Dream","Southern Rock","Comedy","Cult","Gangsta","Top 40","Christian Rap","Pop/Funk","Jungle","Native American","Cabaret","New Wave","Psychadelic","Rave","Showtunes","Trailer","Lo-Fi","Tribal","Acid Punk","Acid Jazz","Polka","Retro","Musical","Rock & Roll","Hard Rock"];
+
+function parseID3(buf){
+  const b=new Uint8Array(buf);
+  const out={tags:{},art:null,audioStart:0,audioEnd:b.length,version:null,frames:[]};
+  if(b.length>128&&b[b.length-128]===0x54&&b[b.length-127]===0x41&&b[b.length-126]===0x47){
+    out.audioEnd=b.length-128;
+    const base=b.length-128;
+    const g=(o,n)=>strip0(LATIN.decode(b.subarray(base+o,base+o+n)));
+    out.v1={TIT2:g(3,30),TPE1:g(33,30),TALB:g(63,30),TYER:g(93,4),COMM:g(97,28)};
+    const gi=b[b.length-1]; if(gi<GENRES.length)out.v1.TCON=GENRES[gi];
+    const tn=b[base+125]===0?b[base+126]:0; if(tn)out.v1.TRCK=String(tn);
+  }
+  if(!(b[0]===0x49&&b[1]===0x44&&b[2]===0x33)){
+    if(out.v1)out.tags=Object.assign({},out.v1);
+    return out;
+  }
+  const ver=b[3], flags=b[5], size=syncsafe(b,6);
+  out.version="2."+ver+"."+b[4];
+  const end=Math.min(10+size,b.length); out.audioStart=end+((flags&0x10)?10:0);
+  let p=10;
+  if(flags&0x40){ const es=ver===4?syncsafe(b,p):be32(b,p); p+=ver===4?es:es+4; }
+  const hdr=ver===2?6:10;
+  while(p+hdr<=end){
+    let id,fsize;
+    if(ver===2){ id=LATIN.decode(b.subarray(p,p+3)); fsize=be24(b,p+3); }
+    else{ id=LATIN.decode(b.subarray(p,p+4)); fsize=ver===4?syncsafe(b,p+4):be32(b,p+4); }
+    if(!/^[A-Z0-9]{3,4}$/.test(id)||fsize<=0||p+hdr+fsize>end)break;
+    let data=b.subarray(p+hdr,p+hdr+fsize);
+    if(ver>2&&(b[p+9]&1)&&data.length>4)data=data.subarray(4);
+    const key=ver===2?(V22MAP[id]||id):id;
+    out.frames.push({id:id,size:fsize});
+    try{
+      if(key==="APIC"){
+        if(!out.art){
+          let q=1,mime;
+          if(ver===2){ mime="image/"+LATIN.decode(data.subarray(1,4)).toLowerCase().replace("jpg","jpeg"); q=4; }
+          else { const r=readTerm(data,1,0); mime=r[0]||"image/jpeg"; q=r[1]; }
+          q++;
+          q=readTerm(data,q,data[0])[1];
+          const img=data.subarray(q);
+          if(img.length>100)out.art={mime:mime.indexOf("/")>0?mime:"image/jpeg",data:img.slice()};
+        }
+      }else if(key==="COMM"||key==="USLT"){
+        const enc=data[0]; const r=readTerm(data,4,enc);
+        const txt=decodeStr(enc,data.subarray(r[1]));
+        if(key==="COMM"&&txt&&!out.tags.COMM)out.tags.COMM=txt;
+        if(key==="USLT"&&txt)out.tags.USLT=txt;
+      }else if(key[0]==="T"){
+        const v=rawStr(data[0],data.subarray(1)).split(NUL).map(strip0).filter(Boolean).join("; ");
+        if(v)out.tags[key]=v;
+      }
+    }catch(e){}
+    p+=hdr+fsize;
+  }
+  if(out.tags.TCON)out.tags.TCON=out.tags.TCON.replace(/^\((\d+)\)\s*/,function(m,n){return GENRES[+n]?GENRES[+n]+" ":""}).trim();
+  if(!out.tags.TYER&&out.tags.TDRC)out.tags.TYER=out.tags.TDRC.slice(0,4);
+  if(out.v1)for(const k in out.v1)if(!out.tags[k]&&out.v1[k])out.tags[k]=out.v1[k];
+  return out;
+}
+
+/* ============================ ID3 writing (v2.3) ============================ */
+function encUTF16(s){
+  const u=new Uint8Array(2+s.length*2); u[0]=0xFF; u[1]=0xFE;
+  for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);u[2+i*2]=c&255;u[3+i*2]=c>>8}
+  return u;
+}
+function frame(id,payload){
+  const f=new Uint8Array(10+payload.length);
+  for(let i=0;i<4;i++)f[i]=id.charCodeAt(i);
+  const n=payload.length;
+  f[4]=(n>>>24)&255; f[5]=(n>>>16)&255; f[6]=(n>>>8)&255; f[7]=n&255;
+  f.set(payload,10); return f;
+}
+function textFrame(id,val){
+  const e=encUTF16(String(val));
+  const p=new Uint8Array(1+e.length); p[0]=1; p.set(e,1); return frame(id,p);
+}
+function buildTag(tags,art){
+  const parts=[];
+  for(const id of ["TIT2","TPE1","TALB","TPE2","TCON","TRCK","TPOS","TYER","TCOM","TBPM","TKEY"]){
+    const v=tags[id]; if(v!=null&&String(v).trim()!=="")parts.push(textFrame(id,String(v).trim()));
+  }
+  if(tags.COMM&&tags.COMM.trim()){
+    const t=encUTF16(tags.COMM.trim());
+    const p=new Uint8Array(8+t.length);
+    p[0]=1; p[1]=101;p[2]=110;p[3]=103;
+    p[4]=0xFF;p[5]=0xFE;p[6]=0;p[7]=0; p.set(t,8);
+    parts.push(frame("COMM",p));
+  }
+  if(art&&art.data&&art.data.length){
+    const mime=art.mime||"image/jpeg";
+    const p=new Uint8Array(1+mime.length+1+1+2+art.data.length);
+    let q=0; p[q++]=1;
+    for(let i=0;i<mime.length;i++)p[q++]=mime.charCodeAt(i);
+    p[q++]=0; p[q++]=3; p[q++]=0; p[q++]=0;
+    p.set(art.data,q); parts.push(frame("APIC",p));
+  }
+  let total=0; for(const p of parts)total+=p.length;
+  const size=total+Math.min(2048,Math.max(256,total>>3));
+  const out=new Uint8Array(10+size);
+  out[0]=0x49;out[1]=0x44;out[2]=0x33;out[3]=3;out[4]=0;out[5]=0;
+  out[6]=(size>>>21)&127;out[7]=(size>>>14)&127;out[8]=(size>>>7)&127;out[9]=size&127;
+  let o=10; for(const p of parts){out.set(p,o);o+=p.length}
+  return out;
+}
+function buildFile(f){
+  const tag=buildTag(f.tags,f.art);
+  const audio=new Uint8Array(f.buf,f.audioStart,f.audioEnd-f.audioStart);
+  const out=new Uint8Array(tag.length+audio.length);
+  out.set(tag,0); out.set(audio,tag.length);
+  return out;
+}
+
+/* ============================ state ============================ */
+let files=[], view=[], sel=new Set(), anchor=-1, uid=0, playing=null;
+const FIELDS=["TIT2","TPE1","TALB","TPE2","TCON","TRCK","TPOS","TYER","TCOM","TBPM","TKEY","COMM"];
+const snap=t=>JSON.stringify(FIELDS.map(k=>t[k]||""));
+const selFiles=()=>files.filter(f=>sel.has(f.uid));
+const nameOf=f=>f.newName||f.name;
+
+/* Accepts Files, or {file,handle,dir} records when the browser gave us real
+   file handles — those are what make writing back in place possible. */
+async function addFiles(list){
+  const arr=[...list].map(x=>x instanceof File?{file:x}:x)
+    .filter(x=>x.file&&(/\.mp3$/i.test(x.file.name)||x.file.type==="audio/mpeg"));
+  if(!arr.length){ toast("No MP3s in that drop"); return; }
+  let added=0;
+  for(const rec of arr){
+    const file=rec.file;
+    if(files.some(f=>f.name===file.name&&f.size===file.size))continue;
+    try{
+      const buf=await file.arrayBuffer();
+      const p=parseID3(buf);
+      const f={
+        uid:++uid, name:file.name, newName:null, size:file.size, file:file, buf:buf,
+        tags:p.tags, art:p.art, audioStart:p.audioStart, audioEnd:p.audioEnd,
+        version:p.version||(p.v1?"v1 only":"none"), frames:p.frames,
+        base:"", analysis:null, handle:rec.handle||null, dir:rec.dir||null, saved:false
+      };
+      f.base=snap(f.tags); f.baseArt=f.art?f.art.data.length:0;
+      files.push(f); added++;
+    }catch(e){ console.warn(file.name,e); }
+  }
+  render();
+  if(added)toast(added+" file"+(added>1?"s":"")+" opened — nothing left your machine");
+  if(added&&files.some(f=>f.handle))$("#bSave").title="Writes back into the files you opened";
+}
+const isDirty=f=>snap(f.tags)!==f.base||(f.art?f.art.data.length:0)!==f.baseArt||!!f.newName;
+
+/* Cover URLs are cached per art object and never revoked, so an undo can put a
+   previous cover straight back on screen. */
+const ARTU=new WeakMap();
+function artUrl(f){
+  if(!f||!f.art)return null;
+  let u=ARTU.get(f.art);
+  if(!u){ u=URL.createObjectURL(new Blob([f.art.data],{type:f.art.mime})); ARTU.set(f.art,u); }
+  return u;
+}
+
+/* ============================ undo ============================ */
+const UNDO=[], REDO=[], HCAP=80;
+function makeSnap(){
+  return {order:files.slice(),
+    st:files.map(f=>({f:f,tags:Object.assign({},f.tags),newName:f.newName,art:f.art}))};
+}
+function applySnap(s){
+  files=s.order.slice();
+  for(const e of s.st){ e.f.tags=Object.assign({},e.tags); e.f.newName=e.newName; e.f.art=e.art; }
+  sel=new Set([...sel].filter(u=>files.some(f=>f.uid===u)));
+}
+function push(){ UNDO.push(makeSnap()); if(UNDO.length>HCAP)UNDO.shift(); REDO.length=0; }
+function mutate(fn){ push(); fn(); render(); }
+$("#bUndo").onclick=()=>{
+  if(!UNDO.length)return;
+  REDO.push(makeSnap()); applySnap(UNDO.pop()); render(); toast("Undone");
+};
+$("#bRedo").onclick=()=>{
+  if(!REDO.length)return;
+  UNDO.push(makeSnap()); applySnap(REDO.pop()); render(); toast("Redone");
+};
+
+/* ============================ render ============================ */
+let sortKey="", sortDir=1;
+const CELL={
+  track:f=>(f.tags.TRCK||"").split("/")[0],
+  title:f=>f.tags.TIT2||"", artist:f=>f.tags.TPE1||"", album:f=>f.tags.TALB||"",
+  year:f=>f.tags.TYER||"", bpm:f=>f.tags.TBPM||(f.analysis?f.analysis.bpm+"?":""),
+  key:f=>f.tags.TKEY||(f.analysis?f.analysis.key+"?":""),
+  dur:f=>f.analysis?fmtTime(f.analysis.dur):"", name:f=>nameOf(f)
+};
+function render(){
+  const q=$("#q").value.trim().toLowerCase();
+  view=files.filter(f=>!q||(nameOf(f)+" "+FIELDS.map(k=>f.tags[k]||"").join(" ")).toLowerCase().includes(q));
+  if(sortKey){
+    const g=CELL[sortKey]||CELL.name;
+    view=view.slice().sort((a,b)=>{
+      const x=g(a),y=g(b), nx=parseFloat(x),ny=parseFloat(y);
+      if(!isNaN(nx)&&!isNaN(ny)&&/^[\d.]+$/.test(x)&&/^[\d.]+$/.test(y))return (nx-ny)*sortDir;
+      return String(x).localeCompare(String(y),undefined,{numeric:true})*sortDir;
+    });
+  }
+  const tb=$("#rows"); tb.textContent="";
+  for(const f of view){
+    const tr=document.createElement("tr");
+    tr.dataset.uid=f.uid;
+    if(sel.has(f.uid))tr.className="sel";
+    if(playing===f)tr.className+=" playing";
+    const th=document.createElement("td"); th.className="thumb";
+    const i=document.createElement("i"); const au=artUrl(f); if(au)i.style.backgroundImage="url("+au+")";
+    th.appendChild(i); tr.appendChild(th);
+    const cells=[["track","n"],["title",""],["artist",""],["album",""],["year","n"],["bpm","n"],["key",""],["dur","n"],["name",""]];
+    for(const [k,cls] of cells){
+      const td=document.createElement("td"); td.className=cls;
+      let v=CELL[k](f);
+      if(k==="title"&&!v){ td.className+=" warn"; v="(untitled)"; }
+      if(k==="name"&&isDirty(f)){ td.className+=" dirty"; v="• "+v; }
+      td.textContent=v; td.title=v; tr.appendChild(td);
+    }
+    tb.appendChild(tr);
+  }
+  $("#tbl").hidden=!files.length; $("#empty").hidden=!!files.length;
+  const d=files.filter(isDirty).length;
+  $("#stat").textContent=files.length?files.length+" files · "+sel.size+" selected"+(d?" · "+d+" changed":""):"no files";
+  $("#bSave").disabled=!d;
+  $("#bUndo").disabled=!UNDO.length; $("#bRedo").disabled=!REDO.length;
+  if(files.length)autoFitOnce();
+  $("#bSave").textContent=(d&&files.some(f=>f.handle))?"⤓ Save changed to disk":"⤓ Save changed";
+  syncEditor();
+}
+
+/* ============================ selection ============================ */
+$("#rows").addEventListener("click",e=>{
+  const tr=e.target.closest("tr"); if(!tr)return;
+  const u=+tr.dataset.uid, idx=view.findIndex(f=>f.uid===u);
+  if(e.shiftKey&&anchor>=0){
+    const [a,b]=[Math.min(anchor,idx),Math.max(anchor,idx)];
+    if(!(e.metaKey||e.ctrlKey))sel.clear();
+    for(let i=a;i<=b;i++)sel.add(view[i].uid);
+  }else if(e.metaKey||e.ctrlKey){
+    sel.has(u)?sel.delete(u):sel.add(u); anchor=idx;
+  }else{ sel.clear(); sel.add(u); anchor=idx; }
+  paintSel();
+});
+/* Repaint the selection without rebuilding the rows, so a double-click still
+   lands on the same element and can open the cell editor. */
+function paintSel(){
+  for(const tr of $("#rows").children)tr.classList.toggle("sel",sel.has(+tr.dataset.uid));
+  const d=files.filter(isDirty).length;
+  $("#stat").textContent=files.length?files.length+" files · "+sel.size+" selected"+(d?" · "+d+" changed":""):"no files";
+  syncEditor();
+}
+$("#rows").addEventListener("dblclick",e=>{
+  const tr=e.target.closest("tr"), td=e.target.closest("td"); if(!tr||!td)return;
+  const uid=+tr.dataset.uid, k=COLKEYS[[...tr.children].indexOf(td)];
+  if(k==="art"||k==="dur")play(files.find(f=>f.uid===uid));
+  else editCell(uid,k);
+});
+$("#bAll").onclick=()=>{view.forEach(f=>sel.add(f.uid));paintSel()};
+$("#bNone").onclick=()=>{sel.clear();paintSel()};
+$("#bInvert").onclick=()=>{view.forEach(f=>sel.has(f.uid)?sel.delete(f.uid):sel.add(f.uid));paintSel()};
+$("#q").oninput=render;
+function paintSort(){
+  for(const th of $$("thead th")){
+    const old=th.querySelector("span.s"); if(old)old.remove();
+    if(th.dataset.k===sortKey){
+      const sp=document.createElement("span"); sp.className="s";
+      sp.textContent=sortDir>0?"▲":"▼"; th.insertBefore(sp,th.querySelector(".grip"));
+    }
+  }
+}
+$$("thead th").forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k; if(!k||k==="art")return;
+  sortDir=sortKey===k?-sortDir:1; sortKey=k; paintSort(); render();
+});
+/* ============================ columns ============================ */
+const COLDEF={art:42,track:52,title:230,artist:170,album:180,year:64,bpm:64,key:60,dur:74,name:250};
+let COLW=Object.assign({},COLDEF), userSized=false;
+try{ const st=localStorage.getItem("sleeve.cols"); if(st){Object.assign(COLW,JSON.parse(st));userSized=true} }catch(e){}
+const saveCols=()=>{ userSized=true; try{localStorage.setItem("sleeve.cols",JSON.stringify(COLW))}catch(e){} };
+function applyCols(){
+  let sum=0;
+  for(const col of $$("#tbl col")){
+    const w=COLW[col.dataset.k]||COLDEF[col.dataset.k];
+    col.style.width=w+"px"; sum+=w;
+  }
+  $("#tbl").style.width=sum+"px";
+}
+const measure=(()=>{
+  const c=document.createElement("canvas").getContext("2d");
+  return (txt,font)=>{ c.font=font; return c.measureText(txt).width; };
+})();
+function fitColQuiet(k){
+  if(k==="art")return;
+  const body='13px ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  const head='600 11px ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  const th=$('thead th[data-k="'+k+'"]');
+  let w=measure(th.textContent.trim().toUpperCase(),head)+2.2*th.textContent.trim().length+26;
+  for(const f of view)w=Math.max(w,measure(CELL[k](f)||"",body)+30);
+  COLW[k]=clamp(Math.ceil(w),44,520); applyCols();
+}
+function fitCol(k){ fitColQuiet(k); saveCols(); }
+const FLEX=["title","artist","album","name"];
+/* When space is short the filename column gives way first, then album, then
+   artist — the title is the last thing anyone wants truncated. */
+const SHRINK=[["name",90],["album",96],["artist",96],["title",120]];
+function fillPane(){
+  const avail=$("#scroll").clientWidth-2; if(avail<200)return;
+  let sum=0; for(const k in COLDEF)sum+=COLW[k];
+  let slack=avail-sum;
+  if(Math.abs(slack)<4)return;
+  if(slack<0){
+    for(const [k,floor] of SHRINK){
+      if(slack>=0)break;
+      const give=Math.min(-slack,COLW[k]-floor);
+      if(give>0){ COLW[k]-=give; slack+=give; }
+    }
+  }else{
+    let flexSum=0; for(const k of FLEX)flexSum+=COLW[k];
+    for(const k of FLEX)COLW[k]=Math.round(COLW[k]+slack*COLW[k]/flexSum);
+  }
+  applyCols();
+}
+$("#bFit").onclick=()=>{
+  for(const k in COLDEF)fitCol(k);
+  fillPane(); saveCols();
+  toast("Columns fitted to what is in them");
+};
+let autoFitted=false;
+function autoFitOnce(){
+  if(autoFitted||!files.length||userSized)return;
+  autoFitted=true;
+  for(const k in COLDEF)COLW[k]=COLDEF[k];
+  for(const k in COLDEF)if(k!=="art")fitColQuiet(k);
+  fillPane();
+}
+/* While the user has not sized anything by hand, keep the columns filling the
+   pane as it changes width (the editor opening, the window resizing). */
+new ResizeObserver(()=>{ if(!userSized&&files.length)fillPane(); }).observe($("#scroll"));
+$$("thead th").forEach(th=>{
+  const k=th.dataset.k;
+  const grip=document.createElement("span"); grip.className="grip"; th.appendChild(grip);
+  grip.addEventListener("click",e=>e.stopPropagation());
+  grip.addEventListener("dblclick",e=>{ e.stopPropagation(); fitCol(k); });
+  grip.addEventListener("pointerdown",e=>{
+    e.preventDefault(); e.stopPropagation();
+    const x0=e.clientX, w0=COLW[k]||COLDEF[k];
+    grip.setPointerCapture(e.pointerId); grip.classList.add("on");
+    document.body.classList.add("resizing");
+    const move=ev=>{ COLW[k]=clamp(Math.round(w0+ev.clientX-x0),34,900); applyCols(); };
+    const up=()=>{
+      grip.removeEventListener("pointermove",move); grip.removeEventListener("pointerup",up);
+      grip.classList.remove("on"); document.body.classList.remove("resizing"); saveCols();
+    };
+    grip.addEventListener("pointermove",move); grip.addEventListener("pointerup",up);
+  });
+});
+applyCols();
+
+/* ============================ edit in place ============================ */
+const EDITABLE={track:"TRCK",title:"TIT2",artist:"TPE1",album:"TALB",year:"TYER",bpm:"TBPM",key:"TKEY",name:null};
+const COLKEYS=["art","track","title","artist","album","year","bpm","key","dur","name"];
+let editing=null;
+function editCell(uid,k){
+  if(!(k in EDITABLE))return;
+  const tr=[...$("#rows").children].find(r=>+r.dataset.uid===uid); if(!tr)return;
+  const td=tr.children[COLKEYS.indexOf(k)]; if(!td)return;
+  const f=files.find(x=>x.uid===uid); if(!f)return;
+  const before=k==="name"?nameOf(f):(f.tags[EDITABLE[k]]||"");
+  const inp=document.createElement("input"); inp.className="ce"; inp.value=before;
+  td.textContent=""; td.classList.add("edit"); td.appendChild(inp);
+  inp.focus(); inp.select();
+  editing={uid:uid,k:k};
+  let done=false;
+  const finish=(commit,next)=>{
+    if(done)return; done=true; editing=null;
+    const v=inp.value;
+    if(commit&&v!==before){
+      push();
+      if(k==="name")f.newName=v.replace(/\.mp3$/i,"")+".mp3"; else f.tags[EDITABLE[k]]=v;
+    }
+    render();
+    if(next)next();
+  };
+  inp.addEventListener("blur",()=>finish(true,null));
+  inp.addEventListener("keydown",e=>{
+    e.stopPropagation();
+    if(e.key==="Escape"){ done=true; editing=null; render(); }
+    else if(e.key==="Enter"){
+      const i=view.findIndex(x=>x.uid===uid);
+      const nx=view[i+(e.shiftKey?-1:1)];
+      finish(true,nx?()=>editCell(nx.uid,k):null);
+    }else if(e.key==="Tab"){
+      e.preventDefault();
+      const ks=Object.keys(EDITABLE), i=ks.indexOf(k);
+      const nk=ks[(i+(e.shiftKey?ks.length-1:1))%ks.length];
+      finish(true,()=>editCell(uid,nk));
+    }
+  });
+}
+
+/* ============================ find & replace ============================ */
+const FRFIELDS=[["*","All text fields"],["TIT2","Title"],["TPE1","Artist"],["TALB","Album"],
+  ["TPE2","Album artist"],["TCON","Genre"],["TCOM","Composer"],["COMM","Comment"],["__name","Filename"]];
+$("#bFind").onclick=()=>{
+  const fs=sel.size?selFiles():files; if(!fs.length){toast("Open some files first");return}
+  const box=document.createElement("div");
+  box.innerHTML="<div class='f' style='grid-template-columns:64px 1fr'><label>In</label><select id='fr_f'>"+
+    FRFIELDS.map(x=>"<option value='"+x[0]+"'>"+x[1]+"</option>").join("")+"</select></div>"+
+    "<div class='f' style='grid-template-columns:64px 1fr'><label>Find</label><input id='fr_a'></div>"+
+    "<div class='f' style='grid-template-columns:64px 1fr'><label>Replace</label><input id='fr_b'></div>"+
+    "<div style='display:flex;gap:14px;align-items:center;margin:8px 0 10px;font-size:12px;color:var(--mute)'>"+
+    "<label><input type='checkbox' id='fr_c'> match case</label>"+
+    "<label><input type='checkbox' id='fr_r'> regular expression</label>"+
+    "<span class='spacer' style='flex:1'></span><span class='pill' id='fr_n'></span></div>"+
+    "<div class='pv' id='fr_p'></div>";
+  const keys=k=>k==="*"?["TIT2","TPE1","TALB","TPE2","TCON","TCOM","COMM"]:[k];
+  const build=()=>{
+    const a=box.querySelector("#fr_a").value;
+    if(!a)return null;
+    const flags="g"+(box.querySelector("#fr_c").checked?"":"i");
+    try{ return new RegExp(box.querySelector("#fr_r").checked?a:esc(a),flags); }catch(e){ return false; }
+  };
+  const each=(fn)=>{
+    const re=build(); if(!re)return re;
+    const kk=box.querySelector("#fr_f").value, b=box.querySelector("#fr_b").value;
+    for(const f of fs){
+      if(kk==="__name"){
+        const v=nameOf(f).replace(/\.mp3$/i,""); re.lastIndex=0;
+        if(re.test(v)){ re.lastIndex=0; fn(f,"__name",v,v.replace(re,b)); }
+        continue;
+      }
+      for(const k of keys(kk)){
+        const v=f.tags[k]; if(!v)continue; re.lastIndex=0;
+        if(re.test(v)){ re.lastIndex=0; fn(f,k,v,v.replace(re,b)); }
+      }
+    }
+    return true;
+  };
+  const upd=()=>{
+    const pv=box.querySelector("#fr_p"); pv.textContent=""; let n=0;
+    const ok=each((f,k,v,nv)=>{
+      n++;
+      if(n<=200){
+        const d=document.createElement("div");
+        d.innerHTML="<s>"+v.replace(/</g,"&lt;")+"</s> → <b>"+nv.replace(/</g,"&lt;")+"</b>";
+        pv.appendChild(d);
+      }
+    });
+    box.querySelector("#fr_n").textContent=ok===false?"bad pattern":ok===null?"type something to find":n+" replacement"+(n===1?"":"s");
+  };
+  openDlg("Find & replace in "+fs.length+" tracks",box,[
+    {t:"Replace all",p:true,fn:()=>{
+      const edits=[]; each((f,k,v,nv)=>edits.push([f,k,nv]));
+      if(!edits.length){toast("Nothing matched");return}
+      push();
+      for(const [f,k,nv] of edits){ if(k==="__name")f.newName=nv+".mp3"; else f.tags[k]=nv; }
+      closeDlg(); render(); toast(edits.length+" replacements made");
+    }},{t:"Cancel",fn:closeDlg}
+  ]);
+  box.addEventListener("input",upd); box.addEventListener("change",upd); upd();
+  box.querySelector("#fr_a").focus();
+};
+
+$("#bRemove").onclick=()=>{
+  if(!sel.size)return;
+  push();
+  files=files.filter(f=>{ if(sel.has(f.uid)){ if(f===playing)stop(); return false;} return true;});
+  sel.clear(); render();
+};
+
+/* ============================ editor ============================ */
+let guard=false;
+function common(fs,k){
+  const v=fs[0].tags[k]||"";
+  return fs.every(f=>(f.tags[k]||"")===v)?v:null;
+}
+function syncEditor(){
+  const fs=selFiles();
+  $("#edit").classList.toggle("hide",!fs.length);
+  if(!fs.length)return;
+  $("#selCount").textContent=fs.length===1?nameOf(fs[0]):fs.length+" tracks selected";
+  guard=true;
+  for(const k of FIELDS){
+    const el=$("#f"+k); if(!el)continue;
+    const v=common(fs,k);
+    if(v===null){ el.value=""; el.placeholder="<multiple>"; el.classList.add("multi"); }
+    else{ el.value=v; el.placeholder=""; el.classList.remove("multi"); }
+  }
+  guard=false;
+  // cover
+  const box=$("#artBox");
+  const sameArt=fs.every(f=>(f.art?f.art.data.length:0)===(fs[0].art?fs[0].art.data.length:0));
+  const show=fs.length===1?fs[0]:(sameArt?fs[0]:null);
+  if(show&&artUrl(show)){ box.style.backgroundImage="url("+artUrl(show)+")"; box.textContent=""; box.classList.add("has"); }
+  else{ box.style.backgroundImage=""; box.classList.remove("has"); box.textContent=sameArt?"drop an image here":"mixed covers"; }
+  const withArt=fs.filter(f=>f.art).length;
+  $("#artMeta").innerHTML=withArt?(withArt+" of "+fs.length+" tagged"+(show&&show.art?" · "+(show.art.data.length/1024|0)+" KB "+show.art.mime.replace("image/",""):"")):"no cover on these";
+  // health
+  const missing=["TIT2","TPE1","TALB"].filter(k=>fs.some(f=>!f.tags[k]));
+  const noArt=fs.some(f=>!f.art);
+  const score=100-missing.length*22-(noArt?18:0)-(fs.some(f=>!f.tags.TYER)?8:0)-(fs.some(f=>!f.tags.TRCK)?8:0);
+  const h=$("#health"); h.textContent="tag health "+clamp(score,0,100)+"%";
+  h.style.color=score>85?"var(--acc2)":score>55?"var(--acc)":"var(--hot)";
+  // analysis
+  const a=fs.length===1?fs[0].analysis:null;
+  if(a)$("#anal").innerHTML="<b>"+a.bpm+" BPM</b> · key <b>"+a.key+"</b> · "+fmtTime(a.dur)+
+    " · confidence "+Math.round(a.conf*100)+"%"+(a.half?" · half/double ambiguous":"");
+  // raw
+  if(fs.length===1){
+    const f=fs[0];
+    const fr=f.frames.length?f.frames.map(x=>x.id+"("+x.size+")").join(" "):"none";
+    $("#raw").innerHTML="ID3 <b>"+f.version+"</b> · audio bytes "+(f.audioEnd-f.audioStart).toLocaleString()+
+      " of "+f.size.toLocaleString()+"<br><span style='color:var(--dim)'>"+fr+"</span>"+
+      "<br>will be written as <b>ID3v2.3</b>, UTF-16";
+  }else $("#raw").textContent=fs.length+" files selected";
+}
+let burst=null;
+for(const k of FIELDS){
+  const el=document.getElementById("f"+k); if(!el)continue;
+  el.addEventListener("focus",()=>{ burst=makeSnap(); });
+  el.addEventListener("blur",()=>{ burst=null; });
+  el.addEventListener("input",()=>{
+    if(guard)return;
+    if(burst){ UNDO.push(burst); REDO.length=0; burst=null; if(UNDO.length>HCAP)UNDO.shift(); }
+    const v=el.value;
+    for(const f of selFiles())f.tags[k]=v;
+    el.classList.remove("multi"); el.placeholder="";
+    renderSoft();
+  });
+}
+let softT=null;
+function renderSoft(){
+  clearTimeout(softT);
+  softT=setTimeout(()=>{
+    const a=document.activeElement, id=a&&a.id, ss=a&&a.selectionStart, se=a&&a.selectionEnd;
+    render();
+    if(id){const el=document.getElementById(id); if(el){el.focus(); try{el.setSelectionRange(ss,se)}catch(e){}}}
+  },140);
+}
+
+/* ============================ cover art ============================ */
+function setArt(fs,bytes,mime){
+  push();
+  for(const f of fs)f.art=bytes?{mime:mime,data:bytes}:null;
+  render();
+}
+function squareJPEG(src,size,q){
+  return new Promise(res=>{
+    const c=document.createElement("canvas"); c.width=c.height=size;
+    const x=c.getContext("2d");
+    x.fillStyle="#111"; x.fillRect(0,0,size,size);
+    const s=Math.max(size/src.width,size/src.height);
+    const w=src.width*s,h=src.height*s;
+    x.imageSmoothingQuality="high";
+    x.drawImage(src,(size-w)/2,(size-h)/2,w,h);
+    c.toBlob(async b=>res({data:new Uint8Array(await b.arrayBuffer()),mime:"image/jpeg"}),"image/jpeg",q||.86);
+  });
+}
+async function artFromBlob(blob){
+  const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(blob)});
+  const r=await squareJPEG(img,600,.86); URL.revokeObjectURL(img.src); return r;
+}
+$("#bArtFile").onclick=()=>$("#artIn").click();
+$("#artIn").onchange=async e=>{
+  const b=e.target.files[0]; if(!b)return;
+  const a=await artFromBlob(b); setArt(selFiles(),a.data,a.mime); e.target.value=""; toast("Cover embedded");
+};
+$("#bArtClear").onclick=()=>setArt(selFiles(),null);
+
+/* --- the generated sleeve --- */
+function hash32(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed){let a=seed>>>0||1;return()=>{a^=a<<13;a>>>=0;a^=a>>17;a^=a<<5;a>>>=0;return a/4294967296}}
+const PALETTES=[
+  ["#0e1a2b","#1c3f5e","#e9c46a","#f4f1de"],["#180f1f","#5a2a5f","#ff8fab","#ffe5ec"],
+  ["#07130f","#12463a","#79d1b1","#f2f7f4"],["#1b1009","#7a3b1e","#f0a04b","#fff4e0"],
+  ["#0d0d10","#2c2c34","#c9d1d9","#ffffff"],["#101b0c","#3c6b2f","#c8e08a","#f6ffe8"],
+  ["#160b16","#4b1d52","#c77dff","#efe3ff"],["#0a1424","#1f4e79","#6fd3ff","#e8f7ff"],
+  ["#1a0c10","#6b1f35","#ff6b6b","#ffe8e8"],["#0f0f08","#4d4a1f","#d9d24a","#fbfbe8"]
+];
+function drawSleeve(cv,seedStr,variant){
+  const R=rng(hash32(seedStr)+(variant||0)*7919), g=cv.getContext("2d"), S=cv.width;
+  const pal=PALETTES[hash32(seedStr+"#p"+(variant||0))%PALETTES.length];
+  const [bg,mid,acc,ink]=pal;
+  g.fillStyle=bg; g.fillRect(0,0,S,S);
+  const style=hash32(seedStr+"#s"+(variant||0))%6;
+  const px=n=>n*S/600;
+  if(style===0){                      // concentric grooves
+    const cx=S*(.3+R()*.4),cy=S*(.3+R()*.4);
+    for(let r=S*1.1;r>px(6);r-=px(5+R()*16)){
+      g.beginPath();g.arc(cx,cy,r,0,7);
+      g.strokeStyle=R()<.16?acc:mid;g.lineWidth=px(1+R()*5);g.stroke();
+    }
+    g.beginPath();g.arc(cx,cy,px(24),0,7);g.fillStyle=acc;g.fill();
+  }else if(style===1){                // stripe field
+    let y=0;
+    while(y<S){const h=px(4+R()*46);g.fillStyle=R()<.22?acc:(R()<.5?mid:bg);g.fillRect(0,y,S,h);y+=h}
+    g.save();g.translate(S/2,S/2);g.rotate((R()-.5)*.5);
+    g.fillStyle=acc;g.globalAlpha=.9;g.fillRect(-S*.5,-px(3),S,px(6));g.restore();
+  }else if(style===2){                // soft blobs
+    for(let i=0;i<7;i++){
+      const x=R()*S,y=R()*S,r=S*(.18+R()*.4);
+      const gr=g.createRadialGradient(x,y,0,x,y,r);
+      gr.addColorStop(0,(i%3===0?acc:mid)+"cc");gr.addColorStop(1,bg+"00");
+      g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill();
+    }
+  }else if(style===3){                // truchet tiles
+    const n=3+Math.floor(R()*5),t=S/n;
+    for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+      g.save();g.translate(i*t,j*t);
+      g.fillStyle=R()<.35?mid:bg;g.fillRect(0,0,t,t);
+      g.strokeStyle=acc;g.lineWidth=px(3+R()*7);g.lineCap="round";
+      const k=Math.floor(R()*4);
+      g.beginPath();
+      if(k<2){g.arc(0,0,t/2,0,Math.PI/2);g.moveTo(t,t/2);g.arc(t,t,t/2,Math.PI,Math.PI*1.5)}
+      else{g.arc(t,0,t/2,Math.PI/2,Math.PI);g.moveTo(t/2,t);g.arc(0,t,t/2,Math.PI*1.5,Math.PI*2)}
+      g.stroke();g.restore();
+    }
+  }else if(style===4){                // horizon
+    const gr=g.createLinearGradient(0,0,0,S);gr.addColorStop(0,mid);gr.addColorStop(1,bg);
+    g.fillStyle=gr;g.fillRect(0,0,S,S);
+    const hy=S*(.5+R()*.22);
+    g.fillStyle=acc;g.beginPath();g.arc(S*(.3+R()*.4),hy,S*(.12+R()*.16),0,7);g.fill();
+    g.fillStyle=bg;g.fillRect(0,hy,S,S-hy);
+    for(let i=0;i<26;i++){g.globalAlpha=.06+R()*.1;g.fillStyle=acc;g.fillRect(0,hy+i*i*px(.9),S,px(1+R()*2))}
+    g.globalAlpha=1;
+  }else{                              // spectrum bars
+    const n=16+Math.floor(R()*30),w=S/n;
+    for(let i=0;i<n;i++){
+      const h=S*(.08+Math.pow(R(),1.6)*.8);
+      g.fillStyle=i%5===0?acc:mid;g.fillRect(i*w,S-h,w-px(2),h);
+    }
+  }
+  // grain + vignette
+  g.globalAlpha=.05;
+  for(let i=0;i<1400;i++){g.fillStyle=i%2?"#fff":"#000";g.fillRect(R()*S,R()*S,px(2),px(2))}
+  g.globalAlpha=1;
+  const vg=g.createRadialGradient(S/2,S/2,S*.3,S/2,S/2,S*.78);
+  vg.addColorStop(0,"rgba(0,0,0,0)");vg.addColorStop(1,"rgba(0,0,0,.45)");
+  g.fillStyle=vg;g.fillRect(0,0,S,S);
+  return {pal:pal,ink:ink,px:px};
+}
+function labelSleeve(cv,ctx,album,artist){
+  const g=cv.getContext("2d"),S=cv.width,px=n=>n*S/600;
+  const words=(album||"").toUpperCase().split(/\s+/).filter(Boolean);
+  const lines=[]; let line="";
+  g.font="600 "+px(40)+"px ui-sans-serif,system-ui,sans-serif";
+  for(const w of words){
+    const t=line?line+" "+w:w;
+    if(g.measureText(t).width>S-px(80)&&line){lines.push(line);line=w}else line=t;
+  }
+  if(line)lines.push(line);
+  const shown=lines.slice(0,3);
+  const bh=px(30)+shown.length*px(46)+(artist?px(30):0);
+  g.fillStyle="rgba(0,0,0,.42)";g.fillRect(0,S-bh-px(18),S,bh+px(18));
+  g.fillStyle=ctx.ink;g.textBaseline="alphabetic";
+  let y=S-bh+px(24);
+  for(const l of shown){g.font="600 "+px(40)+"px ui-sans-serif,system-ui,sans-serif";g.fillText(l,px(34),y);y+=px(46)}
+  if(artist){
+    g.font="500 "+px(19)+"px ui-sans-serif,system-ui,sans-serif";
+    g.fillStyle=ctx.pal[2];
+    g.fillText(artist.toUpperCase().split("").join(String.fromCharCode(8202)),px(34),y+px(4));
+  }
+  g.strokeStyle="rgba(255,255,255,.12)";g.lineWidth=px(2);g.strokeRect(px(1),px(1),S-px(2),S-px(2));
+}
+function sleeveSeed(f){ return (f.tags.TALB||f.tags.TIT2||nameOf(f))+"|"+(f.tags.TPE2||f.tags.TPE1||""); }
+function makeSleeveCanvas(f,variant,size){
+  const cv=document.createElement("canvas"); cv.width=cv.height=size||600;
+  const ctx=drawSleeve(cv,sleeveSeed(f),variant||0);
+  labelSleeve(cv,ctx,f.tags.TALB||f.tags.TIT2||nameOf(f).replace(/\.mp3$/i,""),f.tags.TPE2||f.tags.TPE1||"");
+  return cv;
+}
+let variantN=0;
+async function generateFor(fs,variant){
+  push();
+  for(const f of fs){
+    const cv=makeSleeveCanvas(f,variant,600);
+    const blob=await new Promise(r=>cv.toBlob(r,"image/jpeg",.88));
+    f.art={mime:"image/jpeg",data:new Uint8Array(await blob.arrayBuffer())};
+  }
+  render();
+}
+$("#bArtGen").onclick=async()=>{
+  const fs=selFiles(); if(!fs.length)return;
+  variantN=0; await generateFor(fs,0); toast("Sleeve drawn from the tag text");
+};
+$("#bArtVary").onclick=async()=>{
+  const fs=selFiles(); if(!fs.length)return;
+  variantN++; await generateFor(fs,variantN);
+};
+
+/* ============================ contact sheet ============================ */
+$("#bSheet").onclick=()=>{
+  const fs=sel.size?selFiles():files;
+  if(!fs.length){toast("Nothing to show");return}
+  const body=document.createElement("div");
+  body.id="sheet";
+  for(const f of fs){
+    const fig=document.createElement("figure");
+    const img=document.createElement("img");
+    img.src=artUrl(f)||makeSleeveCanvas(f,0,180).toDataURL("image/jpeg",.7);
+    if(!f.art)img.style.opacity=".5";
+    const cap=document.createElement("figcaption");
+    cap.textContent=f.tags.TIT2||nameOf(f);
+    fig.append(img,cap); body.appendChild(fig);
+  }
+  openDlg("Contact sheet — "+fs.length+" tracks",body,[
+    {t:"Give every coverless track its sleeve",p:true,fn:async()=>{
+      const need=fs.filter(f=>!f.art);
+      await generateFor(need,0); closeDlg(); toast(need.length+" sleeves generated");
+    }},
+    {t:"Close",fn:closeDlg}
+  ]);
+};
+
+/* ============================ dialog ============================ */
+const dlg=$("#dlg");
+function openDlg(title,body,buttons){
+  $("#dlgTitle").textContent=title;
+  const b=$("#dlgBody"); b.textContent="";
+  if(typeof body==="string")b.innerHTML=body; else b.appendChild(body);
+  const f=$("#dlgFoot"); f.textContent="";
+  for(const x of buttons||[]){
+    const btn=document.createElement("button");
+    btn.className="btn"+(x.p?" p":" ghost"); btn.textContent=x.t; btn.onclick=x.fn;
+    f.appendChild(btn);
+  }
+  if(!dlg.open)dlg.showModal();
+}
+const closeDlg=()=>dlg.close();
+
+/* ============================ listen & measure ============================ */
+const NOTES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const KSmaj=[6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
+const KSmin=[6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
+function corr(a,b){
+  const n=a.length; let ma=0,mb=0;
+  for(let i=0;i<n;i++){ma+=a[i];mb+=b[i]}
+  ma/=n;mb/=n;
+  let num=0,da=0,db=0;
+  for(let i=0;i<n;i++){const x=a[i]-ma,y=b[i]-mb;num+=x*y;da+=x*x;db+=y*y}
+  return num/(Math.sqrt(da*db)||1);
+}
+function goertzel(buf,start,N,f,sr){
+  const k=2*Math.cos(2*Math.PI*f/sr);
+  let s0=0,s1=0,s2=0;
+  for(let i=0;i<N;i++){ s0=buf[start+i]+k*s1-s2; s2=s1; s1=s0; }
+  return Math.sqrt(s1*s1+s2*s2-k*s1*s2);
+}
+function analyse(ab){
+  const ch=ab.numberOfChannels>1?null:ab.getChannelData(0);
+  const N=ab.length, sr=ab.sampleRate;
+  const x=new Float32Array(N);
+  if(ch)x.set(ch);
+  else{
+    const a=ab.getChannelData(0),b=ab.getChannelData(1);
+    for(let i=0;i<N;i++)x[i]=(a[i]+b[i])/2;
+  }
+  // --- onset envelope
+  const hop=512, frames=Math.floor(N/hop);
+  const env=new Float32Array(frames);
+  for(let i=0;i<frames;i++){
+    let s=0; const o=i*hop;
+    for(let j=0;j<hop;j++){const v=x[o+j];s+=v*v}
+    env[i]=Math.sqrt(s/hop);
+  }
+  const on=new Float32Array(frames);
+  for(let i=1;i<frames;i++)on[i]=Math.max(0,env[i]-env[i-1]);
+  let mean=0; for(let i=0;i<frames;i++)mean+=on[i]; mean/=frames||1;
+  for(let i=0;i<frames;i++)on[i]-=mean;
+  const fps=sr/hop;
+  let best=0,bestBpm=120,scores=[];
+  for(let bpm=60;bpm<=190;bpm+=.25){
+    const lag=Math.round(60/bpm*fps);
+    if(lag<2||lag*2>=frames)continue;
+    let s=0;
+    for(let i=0;i+lag*2<frames;i++)s+=on[i]*(on[i+lag]+on[i+lag*2]*.6);
+    s/= (frames-lag*2)||1;
+    scores.push([bpm,s]);
+    if(s>best){best=s;bestBpm=bpm}
+  }
+  let mx=0; for(const s of scores)mx=Math.max(mx,s[1]);
+  let mn=1e9; for(const s of scores)mn=Math.min(mn,s[1]);
+  const conf=mx>0?clamp((mx-mn)/(Math.abs(mx)+1e-9),0,1):0;
+  if(bestBpm<78)bestBpm*=2; else if(bestBpm>168)bestBpm/=2;
+  const half=scores.some(s=>Math.abs(s[0]-bestBpm/2)<1&&s[1]>best*.85);
+  // --- chroma
+  const chroma=new Float64Array(12);
+  const W=8192, take=Math.min(48,Math.max(4,Math.floor(N/W)));
+  const step=Math.max(W,Math.floor((N-W)/take));
+  for(let t=0;t<take;t++){
+    const off=Math.min(N-W-1,t*step); if(off<0)break;
+    for(let m=36;m<84;m++){
+      const f=440*Math.pow(2,(m-69)/12);
+      const mag=goertzel(x,off,W,f,sr);
+      chroma[m%12]+=mag*(m<48?.6:1);
+    }
+  }
+  let cmx=0; for(let i=0;i<12;i++)cmx=Math.max(cmx,chroma[i]);
+  for(let i=0;i<12;i++)chroma[i]/=cmx||1;
+  let bk=0,bs=-2,bmin=false;
+  for(let r=0;r<12;r++){
+    const rot=[]; for(let i=0;i<12;i++)rot.push(chroma[(i+r)%12]);
+    const a=corr(rot,KSmaj), b=corr(rot,KSmin);
+    if(a>bs){bs=a;bk=r;bmin=false}
+    if(b>bs){bs=b;bk=r;bmin=true}
+  }
+  return {
+    bpm:Math.round(bestBpm*10)/10, key:NOTES[bk]+(bmin?"m":""),
+    dur:ab.duration, conf:conf, half:half, keyConf:bs, chroma:Array.from(chroma),
+    peaks:makePeaks(x,900)
+  };
+}
+function makePeaks(x,n){
+  const out=new Float32Array(n), step=Math.floor(x.length/n)||1;
+  for(let i=0;i<n;i++){
+    let m=0; const o=i*step, e=Math.min(x.length,o+step);
+    for(let j=o;j<e;j+=3){const v=Math.abs(x[j]);if(v>m)m=v}
+    out[i]=m;
+  }
+  return out;
+}
+let AC=null;
+const ac=()=>AC||(AC=new (window.AudioContext||window.webkitAudioContext)());
+async function decodeFile(f){
+  const copy=f.buf.slice(f.audioStart,f.audioEnd);
+  return await ac().decodeAudioData(copy);
+}
+$("#bListen").onclick=async()=>{
+  const fs=(sel.size?selFiles():files).filter(f=>!f.analysis);
+  const all=sel.size?selFiles():files;
+  if(!all.length){toast("Open some files first");return}
+  if(!fs.length){toast("Already measured");return}
+  const wrap=document.createElement("div");
+  wrap.innerHTML="<p style='margin:0 0 10px;color:var(--mute)'>Decoding each track, autocorrelating its onset envelope for tempo and matching a chroma profile against Krumhansl key profiles. All local, so it takes a moment.</p><div class='bar'><i></i></div><p id='pg' style='color:var(--dim);font-size:12px;margin:8px 0 0'></p>";
+  openDlg("Listening to "+fs.length+" tracks",wrap,[{t:"Run in background",fn:closeDlg}]);
+  const bar=wrap.querySelector(".bar i"), pg=wrap.querySelector("#pg");
+  let done=0, failed=0;
+  for(const f of fs){
+    pg.textContent=nameOf(f);
+    try{ const ab=await decodeFile(f); f.analysis=analyse(ab); }
+    catch(e){ failed++; }
+    done++; bar.style.width=(done/fs.length*100)+"%";
+    await new Promise(r=>setTimeout(r,0));
+    render();
+  }
+  closeDlg();
+  toast("Measured "+(done-failed)+" tracks"+(failed?" ("+failed+" would not decode)":""));
+};
+$("#bApplyBpm").onclick=()=>{
+  push(); let n=0; for(const f of selFiles())if(f.analysis){f.tags.TBPM=String(Math.round(f.analysis.bpm));n++}
+  render(); toast(n?"BPM written to "+n+" tracks":"Nothing measured yet");
+};
+$("#bApplyKey").onclick=()=>{
+  push(); let n=0; for(const f of selFiles())if(f.analysis){f.tags.TKEY=f.analysis.key;n++}
+  render(); toast(n?"Key written to "+n+" tracks":"Nothing measured yet");
+};
+
+/* ============================ filename patterns ============================ */
+const TOKENS={artist:"TPE1",title:"TIT2",album:"TALB",albumartist:"TPE2",track:"TRCK",year:"TYER",genre:"TCON",comment:"COMM",ignore:null};
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+function patternToRegex(pat){
+  const order=[]; let re="^";
+  const parts=pat.split(/(\{[a-z]+\})/i);
+  for(const p of parts){
+    const m=/^\{([a-z]+)\}$/i.exec(p);
+    if(m&&(m[1].toLowerCase() in TOKENS)){
+      const k=m[1].toLowerCase(); order.push(k);
+      re+= (k==="track"||k==="year")?"(\\d+)":"(.+?)";
+    }else re+=esc(p).replace(/ /g,"\\s*");
+  }
+  return {re:new RegExp(re+"$","i"),order:order};
+}
+function applyPattern(f,pat){
+  const base=nameOf(f).replace(/\.[^.]+$/,"");
+  const {re,order}=patternToRegex(pat);
+  const m=re.exec(base); if(!m)return null;
+  const out={};
+  order.forEach((k,i)=>{ const t=TOKENS[k]; if(t)out[t]=m[i+1].trim().replace(/_/g," ").replace(/\s+/g," "); });
+  return out;
+}
+$("#bFromName").onclick=()=>{
+  const fs=sel.size?selFiles():files; if(!fs.length){toast("Open some files first");return}
+  const box=document.createElement("div");
+  box.innerHTML="<div class='f' style='grid-template-columns:66px 1fr'><label>Pattern</label><input id='pat' value='{artist} - {title}'></div>"+
+    "<div style='text-align:right;margin:-2px 0 6px'><span class='pill' id='cnt'></span></div>"+
+    "<p class='hint' style='margin:2px 0 10px'>Tokens: <code>{artist}</code> <code>{title}</code> <code>{album}</code> <code>{albumartist}</code> <code>{track}</code> <code>{year}</code> <code>{genre}</code> <code>{ignore}</code>. Everything else must match literally.</p><div class='pv' id='pv'></div>";
+  const upd=()=>{
+    const pat=box.querySelector("#pat").value, pv=box.querySelector("#pv");
+    pv.textContent=""; let ok=0;
+    for(const f of fs.slice(0,200)){
+      const r=applyPattern(f,pat); const d=document.createElement("div");
+      if(r){ok++;d.innerHTML="<b>"+Object.entries(r).map(([k,v])=>k.slice(1).toLowerCase()+" = "+v).join(" · ")+"</b>"}
+      else d.innerHTML="<s>"+nameOf(f)+"</s>";
+      pv.appendChild(d);
+    }
+    box.querySelector("#cnt").textContent=ok+" of "+fs.length+" filenames match";
+  };
+  const foot=document.createElement("span");
+  openDlg("Tags from filename",box,[
+    {t:"Apply",p:true,fn:()=>{
+      const pat=box.querySelector("#pat").value; let n=0; push();
+      for(const f of fs){const r=applyPattern(f,pat); if(r){Object.assign(f.tags,r);n++}}
+      closeDlg(); render(); toast("Tagged "+n+" files from their names");
+    }},{t:"Cancel",fn:closeDlg}
+  ]);
+  box.querySelector("#pat").oninput=upd; upd();
+};
+function safeName(s){return String(s).replace(/[\\/:*?"<>|]/g,"-").replace(/\s+/g," ").trim()}
+function fillPattern(f,pat){
+  return pat.replace(/\{([a-z]+)\}/gi,(m,k)=>{
+    k=k.toLowerCase();
+    if(k==="ext")return "mp3";
+    const t=TOKENS[k]; if(!t)return "";
+    let v=f.tags[t]||"";
+    if(k==="track")v=String(v).split("/")[0].padStart(2,"0");
+    return safeName(v);
+  }).replace(/\s+/g," ").trim();
+}
+$("#bRename").onclick=()=>{
+  const fs=sel.size?selFiles():files; if(!fs.length){toast("Open some files first");return}
+  const box=document.createElement("div");
+  box.innerHTML="<div class='f' style='grid-template-columns:66px 1fr'><label>Pattern</label><input id='pat' value='{track} {artist} - {title}'></div>"+
+    "<p class='hint' style='margin:2px 0 10px'>The new name is used when you save. <code>.mp3</code> is added for you.</p><div class='pv' id='pv'></div>";
+  const upd=()=>{
+    const pat=box.querySelector("#pat").value, pv=box.querySelector("#pv");
+    pv.textContent="";
+    for(const f of fs.slice(0,200)){
+      const n=fillPattern(f,pat); const d=document.createElement("div");
+      d.innerHTML=n?"<b>"+n+".mp3</b>":"<s>"+nameOf(f)+" — pattern is empty for this track</s>";
+      pv.appendChild(d);
+    }
+  };
+  openDlg("Filename from tags",box,[
+    {t:"Apply",p:true,fn:()=>{
+      const pat=box.querySelector("#pat").value; let n=0; push();
+      for(const f of fs){const v=fillPattern(f,pat); if(v){f.newName=v+".mp3";n++}}
+      closeDlg(); render(); toast("Renamed "+n+" files (on save)");
+    }},{t:"Cancel",fn:closeDlg}
+  ]);
+  box.querySelector("#pat").oninput=upd; upd();
+};
+$("#bNumber").onclick=()=>{
+  const fs=sel.size?selFiles():view; if(!fs.length)return;
+  const order=view.filter(f=>fs.includes(f)); push();
+  order.forEach((f,i)=>{f.tags.TRCK=(i+1)+"/"+order.length});
+  render(); toast("Numbered "+order.length+" tracks in the order shown");
+};
+const TITLECASE=new Set(["a","an","and","as","at","but","by","for","in","of","on","or","the","to","vs","with"]);
+function tidy(s){
+  if(!s)return s;
+  s=s.replace(/_/g," ").replace(/\s+/g," ").trim();
+  s=s.replace(/^\d{1,3}\s*[-._)]\s*/,"");
+  if(s===s.toUpperCase()||s===s.toLowerCase()){
+    s=s.toLowerCase().split(" ").map((w,i)=>
+      i>0&&TITLECASE.has(w)?w:w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
+  }
+  return s.replace(/\s*\(\s*/g," (").replace(/\s*\)\s*/g,") ").trim();
+}
+$("#bTidy").onclick=()=>{
+  const fs=sel.size?selFiles():files; if(!fs.length)return; push();
+  for(const f of fs)for(const k of ["TIT2","TPE1","TALB","TPE2","TCON","TCOM"])if(f.tags[k])f.tags[k]=tidy(f.tags[k]);
+  render(); toast("Tidied text on "+fs.length+" tracks");
+};
+
+/* ============================ saving ============================ */
+const CRCT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(u8){let c=0xFFFFFFFF;for(let i=0;i<u8.length;i++)c=CRCT[(c^u8[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
+function zip(entries){
+  const enc=new TextEncoder(), locals=[], central=[]; let off=0;
+  for(const e of entries){
+    const nm=enc.encode(e.name), c=crc32(e.data), n=e.data.length;
+    const lh=new Uint8Array(30+nm.length), v=new DataView(lh.buffer);
+    v.setUint32(0,0x04034b50,true); v.setUint16(4,20,true); v.setUint16(6,0x0800,true);
+    v.setUint16(8,0,true); v.setUint16(10,0,true); v.setUint16(12,0x21,true);
+    v.setUint32(14,c,true); v.setUint32(18,n,true); v.setUint32(22,n,true);
+    v.setUint16(26,nm.length,true); lh.set(nm,30);
+    locals.push(lh,e.data);
+    const ch=new Uint8Array(46+nm.length), w=new DataView(ch.buffer);
+    w.setUint32(0,0x02014b50,true); w.setUint16(4,20,true); w.setUint16(6,20,true);
+    w.setUint16(8,0x0800,true); w.setUint16(10,0,true);
+    w.setUint16(12,0,true); w.setUint16(14,0x21,true);
+    w.setUint32(16,c,true); w.setUint32(20,n,true); w.setUint32(24,n,true);
+    w.setUint16(28,nm.length,true); w.setUint32(42,off,true); ch.set(nm,46);
+    central.push(ch);
+    off+=lh.length+n;
+  }
+  let cs=0; for(const c of central)cs+=c.length;
+  const end=new Uint8Array(22), ev=new DataView(end.buffer);
+  ev.setUint32(0,0x06054b50,true); ev.setUint16(8,entries.length,true);
+  ev.setUint16(10,entries.length,true); ev.setUint32(12,cs,true); ev.setUint32(16,off,true);
+  return new Blob([...locals,...central,end],{type:"application/zip"});
+}
+function download(blob,name){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+/* --- writing back into the original files, where the browser allows it --- */
+const CANFS=!!(window.showDirectoryPicker&&window.FileSystemFileHandle&&FileSystemFileHandle.prototype.createWritable);
+if(CANFS)$("#bFolder").hidden=false;
+async function walkDir(dir,out,depth){
+  if(depth>6)return;
+  for await(const [name,h] of dir.entries()){
+    if(h.kind==="file"&&/\.mp3$/i.test(name))out.push({handle:h,dir:dir});
+    else if(h.kind==="directory")await walkDir(h,out,depth+1);
+  }
+}
+$("#bFolder").onclick=async()=>{
+  try{
+    const dir=await window.showDirectoryPicker({mode:"readwrite"});
+    const found=[]; await walkDir(dir,found,0);
+    if(!found.length){toast("No MP3s in that folder");return}
+    toast("Reading "+found.length+" files…");
+    const recs=[];
+    for(const r of found)recs.push({file:await r.handle.getFile(),handle:r.handle,dir:r.dir});
+    await addFiles(recs);
+  }catch(e){ if(e&&e.name!=="AbortError")toast("Could not open that folder"); }
+};
+async function writeInPlace(dirty){
+  let ok=0,fail=0;
+  for(const f of dirty){
+    try{
+      const out=buildFile(f), rename=f.newName&&f.newName!==f.name;
+      let h=f.handle;
+      if(rename&&f.dir)h=await f.dir.getFileHandle(f.newName,{create:true});
+      const w=await h.createWritable();
+      await w.write(out); await w.close();
+      if(rename&&f.dir&&h!==f.handle){ try{ await f.dir.removeEntry(f.name); }catch(e){} f.handle=h; }
+      f.name=nameOf(f); f.newName=null;
+      f.buf=out.buffer; f.size=out.length;
+      const re=parseID3(f.buf);
+      f.audioStart=re.audioStart; f.audioEnd=re.audioEnd; f.frames=re.frames; f.version=re.version;
+      f.file=new File([out],f.name,{type:"audio/mpeg"});
+      f.base=snap(f.tags); f.baseArt=f.art?f.art.data.length:0;
+      ok++;
+    }catch(e){ fail++; console.warn(e); }
+  }
+  render();
+  toast(fail?("Wrote "+ok+", "+fail+" could not be written"):("Wrote "+ok+" files back where they came from"));
+}
+function downloadDirty(dirty){
+  if(dirty.length===1){
+    const f=dirty[0];
+    download(new Blob([buildFile(f)],{type:"audio/mpeg"}),nameOf(f));
+    f.base=snap(f.tags); f.baseArt=f.art?f.art.data.length:0; f.name=nameOf(f); f.newName=null;
+    render(); toast("Saved "+f.name); return;
+  }
+  const used=new Set(), entries=[];
+  for(const f of dirty){
+    let n=nameOf(f), i=2;
+    while(used.has(n.toLowerCase())){n=nameOf(f).replace(/\.mp3$/i,"")+" ("+(i++)+").mp3"}
+    used.add(n.toLowerCase());
+    entries.push({name:n,data:buildFile(f)});
+  }
+  download(zip(entries),"sleeve-"+new Date().toISOString().slice(0,10)+".zip");
+  for(const f of dirty){f.base=snap(f.tags);f.baseArt=f.art?f.art.data.length:0;f.name=nameOf(f);f.newName=null}
+  render(); toast("Wrote "+entries.length+" tagged MP3s into a zip");
+}
+$("#bSave").onclick=()=>{
+  const dirty=files.filter(isDirty); if(!dirty.length)return;
+  const live=dirty.filter(f=>f.handle);
+  if(live.length){
+    const box=document.createElement("div");
+    box.innerHTML="<p style='margin:0 0 10px;color:var(--mute)'>These files were opened from a folder you granted write access to, so Sleeve can put the new tags straight back into them. The audio itself is copied through untouched.</p><div class='pv' id='ov'></div>";
+    const pv=box.querySelector("#ov");
+    for(const f of dirty.slice(0,200)){
+      const d=document.createElement("div");
+      d.innerHTML=f.handle
+        ?("<b>"+(f.newName&&f.newName!==f.name?f.name+" → "+f.newName:nameOf(f))+"</b>")
+        :("<s>"+nameOf(f)+" — no write access, needs the zip</s>");
+      pv.appendChild(d);
+    }
+    openDlg("Overwrite "+live.length+" file"+(live.length===1?"":"s")+"?",box,[
+      {t:"Overwrite in place",p:true,fn:()=>{closeDlg();writeInPlace(live)}},
+      {t:"Download instead",fn:()=>{closeDlg();downloadDirty(dirty)}},
+      {t:"Cancel",fn:closeDlg}
+    ]);
+    return;
+  }
+  downloadDirty(dirty);
+};
+/* ============================ player ============================ */
+const audio=new Audio(); audio.preload="metadata";
+let waveURL=null;
+function play(f){
+  if(!f)return;
+  if(playing===f){ audio.paused?audio.play():audio.pause(); return; }
+  if(waveURL)URL.revokeObjectURL(waveURL);
+  playing=f; waveURL=URL.createObjectURL(f.file);
+  audio.src=waveURL; audio.play().catch(()=>{});
+  $("#nowPlaying").textContent=(f.tags.TPE1?f.tags.TPE1+" — ":"")+(f.tags.TIT2||nameOf(f));
+  render();
+  if(!f.analysis){
+    decodeFile(f).then(ab=>{ f.peaks=makePeaks(ab.getChannelData(0),900); drawWave(); }).catch(()=>{});
+  }
+}
+function stop(){ audio.pause(); audio.removeAttribute("src"); playing=null; }
+$("#bPlay").onclick=()=>{ if(!playing){ play(selFiles()[0]||view[0]); } else { audio.paused?audio.play():audio.pause(); } };
+audio.onplay=()=>$("#bPlay").textContent="❚❚";
+audio.onpause=()=>$("#bPlay").textContent="▶";
+audio.onended=()=>{
+  const i=view.indexOf(playing);
+  if(i>=0&&i+1<view.length)play(view[i+1]); else $("#bPlay").textContent="▶";
+};
+audio.ontimeupdate=()=>{
+  $("#time").textContent=fmtTime(audio.currentTime)+" / "+fmtTime(audio.duration||0);
+  drawWave();
+};
+const wave=$("#wave"), wg=wave.getContext("2d");
+function drawWave(){
+  const W=wave.width,H=wave.height;
+  wg.clearRect(0,0,W,H);
+  const peaks=playing?(playing.analysis?playing.analysis.peaks:playing.peaks):null;
+  const prog=audio.duration?audio.currentTime/audio.duration:0;
+  if(peaks){
+    const n=peaks.length, bw=W/n;
+    for(let i=0;i<n;i++){
+      const h=Math.max(1,Math.pow(peaks[i],.7)*H*.92);
+      wg.fillStyle=(i/n)<prog?"#ffcf6b":"#39424f";
+      wg.fillRect(i*bw,(H-h)/2,Math.max(1,bw-.6),h);
+    }
+  }else{
+    wg.fillStyle="#232a34"; wg.fillRect(0,H/2-2,W,4);
+    wg.fillStyle="#ffcf6b"; wg.fillRect(0,H/2-2,W*prog,4);
+  }
+}
+wave.onclick=e=>{
+  if(!audio.duration)return;
+  const r=wave.getBoundingClientRect();
+  audio.currentTime=clamp((e.clientX-r.left)/r.width,0,1)*audio.duration;
+};
+new ResizeObserver(()=>{ wave.width=wave.clientWidth*2; wave.height=76; drawWave(); }).observe(wave);
+
+/* ============================ input ============================ */
+$("#bAdd").onclick=()=>$("#fileIn").click();
+$("#fileIn").onchange=e=>{ addFiles(e.target.files); e.target.value=""; };
+let dragN=0;
+addEventListener("dragenter",e=>{ e.preventDefault(); dragN++; $("#drop").classList.add("on"); });
+addEventListener("dragover",e=>e.preventDefault());
+addEventListener("dragleave",()=>{ if(--dragN<=0){dragN=0;$("#drop").classList.remove("on")} });
+addEventListener("drop",async e=>{
+  e.preventDefault(); dragN=0; $("#drop").classList.remove("on");
+  const dt=e.dataTransfer;
+  if(e.target.closest("#artBox")&&dt.files.length&&/^image\//.test(dt.files[0].type)){
+    const a=await artFromBlob(dt.files[0]); setArt(selFiles(),a.data,a.mime); toast("Cover embedded"); return;
+  }
+  if(CANFS&&dt.items&&dt.items.length&&dt.items[0].getAsFileSystemHandle){
+    const hs=await Promise.all([...dt.items].map(i=>i.kind==="file"?i.getAsFileSystemHandle().catch(()=>null):null));
+    const found=[];
+    for(const h of hs){
+      if(!h)continue;
+      if(h.kind==="directory"){ try{ await walkDir(h,found,0); }catch(e){} }
+      else if(/\.mp3$/i.test(h.name))found.push({handle:h,dir:null});
+    }
+    if(found.length){
+      const recs=[];
+      for(const r of found){ try{ recs.push({file:await r.handle.getFile(),handle:r.handle,dir:r.dir}); }catch(e){} }
+      if(recs.length){ addFiles(recs); return; }
+    }
+  }
+  const items=[...(dt.items||[])].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);
+  if(items.length&&items.some(i=>i.isDirectory)){
+    const out=[];
+    const walk=entry=>new Promise(res=>{
+      if(entry.isFile)entry.file(f=>{out.push(f);res()},res);
+      else{
+        const rd=entry.createReader();
+        const read=()=>rd.readEntries(async es=>{
+          if(!es.length)return res();
+          for(const x of es)await walk(x);
+          read();
+        },res);
+        read();
+      }
+    });
+    for(const i of items)await walk(i);
+    addFiles(out);
+  }else addFiles(dt.files);
+});
+$("#artBox").addEventListener("dragover",e=>e.preventDefault());
+addEventListener("keydown",e=>{
+  const t=e.target.tagName;
+  if(t==="INPUT"||t==="TEXTAREA"||t==="SELECT"){ if(e.key==="Escape")e.target.blur(); return; }
+  if(e.key===" "){ e.preventDefault(); $("#bPlay").click(); }
+  else if(e.key==="Enter"){ e.preventDefault(); const f=selFiles()[0]; if(f)play(f); }
+  else if(e.key==="a"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); $("#bAll").click(); }
+  else if(e.key==="s"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); $("#bSave").click(); }
+  else if(e.key.toLowerCase()==="z"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); (e.shiftKey?$("#bRedo"):$("#bUndo")).click(); }
+  else if(e.key.toLowerCase()==="f"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); $("#bFind").click(); }
+  else if(e.key==="ArrowDown"||e.key==="ArrowUp"){
+    e.preventDefault(); if(!view.length)return;
+    const cur=view.findIndex(f=>sel.has(f.uid));
+    const i=clamp((cur<0?0:cur)+(e.key==="ArrowDown"?1:-1),0,view.length-1);
+    sel.clear(); sel.add(view[i].uid); anchor=i; paintSel();
+    const row=$("#rows").children[i]; if(row)row.scrollIntoView({block:"nearest"});
+  }
+});
+addEventListener("beforeunload",e=>{ if(files.some(isDirty)){ e.preventDefault(); e.returnValue=""; } });
+
+$("#genres").innerHTML=GENRES.map(g=>"<option value=\""+g+"\">").join("");
+drawWave(); render();
+</script>
+</body>
+</html>
