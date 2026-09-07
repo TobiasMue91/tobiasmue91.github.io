@@ -10,9 +10,6 @@ have been built since; the point is the shape of the gap, not the specific sugge
   build a deck across a run.
 - **Line-routing sim.** Mini Metro-shaped: growing demand, limited track, procedural maps.
 - **Air hockey.** 8-ball covers cue sports; nothing covers paddles.
-- **Turn-based tactics.** Into the Breach's shape — a small grid, perfect information, enemies that
-  telegraph next turn's move, so every turn is a solvable puzzle rather than a dice roll. `strategy`
-  is the thinnest category in the catalogue and nothing in it is turn-based tactical.
 
 Filled since: hidden-rule deduction, by `games/glyphgate.html`; cooperating with recordings of your
 own past, by `games/selfsame.html`; **pinball**, by `games/escapement.html` — swept-circle continuous
@@ -71,6 +68,25 @@ reports the common subharmonic of a chord rather than trying to guess that it is
 to detect chords from the spectrum was removed after it turned out to fire on hummed low notes: a
 microphone that rolls off the fundamental leaves a spectrum shaped much like a chord's, and every
 statistic that separated the two also mistook quiet fundamentals for chords.
+
+## Tried and rejected
+
+Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose
+them, and do not treat the empty space they leave in the catalogue as an opportunity. The catalogue
+being thin somewhere is not on its own a reason to build there.
+
+- **Turn-based tactics on a grid** (Into the Breach's shape: small grid, perfect information, enemies
+  that telegraph next turn's move). Rejected on taste, not on mechanics — it was tried and was not
+  interesting enough to put on the page. `strategy` being the thinnest category does not resurrect it.
+  Nor do its variants: the version where the player has no weapon at all and every kill comes from
+  shoving enemies into each other, into walls, or into their own crossfire, is the same idea and is
+  also rejected.
+
+  Worth keeping from the prototyping, because it generalises past this idea: exhaustive enumeration
+  showed that under 1% of legal turns were both safe and productive, which looked like difficulty and
+  was not. A deliberately myopic greedy player — deflect unit by unit, no lookahead — survived 97% of
+  solvable boards. Density of good plays in an action space measures nothing; the space is mostly
+  pointless wandering. Measure instead whether a stupid heuristic reaches the good play.
 
 ## Other
 - household planner
