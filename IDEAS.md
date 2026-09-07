@@ -36,6 +36,27 @@ worksheet. Nothing in the catalogue had touched ciphers beyond the toy converter
 gestures at. The neighbouring one still open is **cipher-based puzzle games** (nothing here is a word game
 built on deduction from letter statistics).
 
+Filled since: **fonts**, by `tools/sorts.html` — the structural gap in the tool catalogue: 215 tools, a great
+deal of text and typography work among them, and not one that opened a font file. `file_type_identifier` sniffed
+magic bytes and stopped; `character_map_explorer` browsed Unicode knowing nothing about any font. Sorts parses the
+sfnt container itself — cmap, name, OS/2, post, fvar, GSUB/GPOS — and leads with the question people actually have:
+paste your text and it names every character the font cannot draw. Three things in it are worth reusing. The parser
+was checked field by field against fontTools over 147 real fonts and matches exactly, cmap coverage included, which
+is the only reason the coverage and language claims can be stated flatly rather than hedged. Two cheaper approaches
+were measured and thrown away first: detecting coverage by canvas width comparison scored 79.8% against the true
+cmap, and pixel-exact render comparison did worse at 59.4% with 4,442 false positives — both depend on the reader's
+installed fallback fonts, so neither can be trusted to describe a file. And the feature list measures rather than
+asserts: each OpenType feature is rendered on and off and the advance widths compared, so the ones that genuinely
+change your text are marked and the ones that do nothing to it are not oversold.
+
+Still open on this side: **WOFF2 cannot be read byte by byte in a browser.** Its tables live in one Brotli stream and
+`DecompressionStream` offers gzip and deflate but not br (checked, Chrome 141). A dictionary-free Brotli decoder would
+have been small enough to ship, but 274 of 276 real WOFF2 files sampled from Google Fonts use the static dictionary,
+so that shortcut is closed — full support means carrying the ~120KB dictionary. Sorts reads the WOFF2 table directory,
+which is uncompressed, and renders the font, and says plainly that the rest is out of reach. The neighbouring gap still
+open is **hinting and rasterisation**: nothing here shows what a font does at 11px, where hinting and `gasp` decide
+whether it is readable at all.
+
 Filled since: **pitch**, by `tools/overtone.html` — the audio-side version of the same gap, where a dozen
 audio tools existed and not one showed you pitch. It is framed as an instrument rather than a tuner: a
 cent-accurate pitch ribbon over time, a log-frequency spectrogram, a harmonic ladder that measures how far

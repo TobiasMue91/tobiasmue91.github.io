@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sorts — See What's Actually Inside a Font File</title>
+<meta name="description" content="Drop a font file and read what is really in it: which characters your text needs and the font lacks, coverage by script and language, OpenType features you can switch on live, variable axes, and the three vertical metrics that decide your line height. TTF, OTF and WOFF are parsed byte by byte in your browser. Nothing is uploaded.">
+<meta name="theme-color" content="#141210">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%23141210'/%3E%3Ctext x='50' y='74' font-family='Georgia,serif' font-size='72' fill='%23f2603c' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#141210; --bg2:#1c1917; --bg3:#242019; --line:#332e28; --line2:#453e35;
+  --ink:#efe9e1; --ink2:#b3a89b; --ink3:#7d7367;
+  --acc:#f2603c; --acc2:#ffb05c; --ok:#6fbf8b; --warn:#e5c15a;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--acc2)}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
+
+/* ---------- shell ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:0 22px}
+header.top{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#181513,#141210)}
+.topin{display:flex;align-items:baseline;gap:16px;padding:20px 0 18px;flex-wrap:wrap}
+.mark{font-family:var(--serif);font-size:30px;letter-spacing:-.02em;line-height:1}
+.mark b{color:var(--acc);font-weight:400}
+.tag{color:var(--ink3);font-size:13.5px;max-width:46ch}
+.topspacer{flex:1}
+.privacy{font-size:12px;color:var(--ink3);border:1px solid var(--line);border-radius:99px;
+  padding:5px 11px;white-space:nowrap}
+.privacy b{color:var(--ok);font-weight:600}
+
+/* ---------- drop ---------- */
+#drop{border:1.5px dashed var(--line2);border-radius:14px;background:var(--bg2);
+  padding:44px 26px;text-align:center;margin:26px 0;transition:.18s;cursor:pointer}
+#drop:hover,#drop.over{border-color:var(--acc);background:#221c18}
+#drop h2{font-size:21px;margin-bottom:8px}
+#drop p{color:var(--ink2);margin:0 auto;max-width:52ch;font-size:14px}
+#drop .fmt{margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--ink3)}
+#drop .fmt em{color:var(--ink2);font-style:normal}
+.intro{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:18px;margin:30px 0 40px}
+.intro div{border-top:2px solid var(--line);padding-top:12px}
+.intro h3{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--acc2);margin-bottom:5px}
+.intro p{margin:0;font-size:13.5px;color:var(--ink2);line-height:1.55}
+
+/* ---------- file bar ---------- */
+#app{display:none}
+.filebar{display:flex;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.fname{font-size:19px;font-weight:600}
+.fsub{color:var(--ink3);font-size:13px;font-family:var(--mono)}
+.pill{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:5px;
+  border:1px solid var(--line2);color:var(--ink2);white-space:nowrap}
+.pill.good{border-color:#39543f;color:var(--ok)}
+.pill.warn{border-color:#5c4f28;color:var(--warn)}
+.btn{border:1px solid var(--line2);border-radius:8px;padding:7px 13px;font-size:13px;color:var(--ink2)}
+.btn:hover{border-color:var(--acc);color:var(--ink)}
+
+/* ---------- tabs ---------- */
+nav.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;
+  scrollbar-width:none;position:sticky;top:0;background:var(--bg);z-index:20}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{padding:13px 15px;font-size:13.5px;color:var(--ink3);white-space:nowrap;
+  border-bottom:2px solid transparent;margin-bottom:-1px}
+nav.tabs button:hover{color:var(--ink2)}
+nav.tabs button.on{color:var(--ink);border-bottom-color:var(--acc)}
+nav.tabs button .n{font-family:var(--mono);font-size:11px;color:var(--ink3);margin-left:5px}
+nav.tabs button.on .n{color:var(--acc)}
+section.panel{display:none;padding:26px 0 70px;animation:fade .2s}
+section.panel.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+
+.lead{color:var(--ink2);font-size:14px;max-width:74ch;margin:0 0 20px;line-height:1.6}
+.sub{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);
+  margin:30px 0 12px;font-weight:600}
+.sub:first-child{margin-top:0}
+
+/* ---------- controls ---------- */
+.ctl{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.ctl label{font-size:12px;color:var(--ink3);display:flex;align-items:center;gap:7px}
+input[type=range]{accent-color:var(--acc);width:150px}
+input[type=text],textarea,select{background:var(--bg2);border:1px solid var(--line2);color:var(--ink);
+  border-radius:8px;padding:9px 11px;font:inherit;width:100%}
+textarea{resize:vertical;line-height:1.5}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--acc)}
+
+/* ---------- specimen ---------- */
+#specimen{border:1px solid var(--line);border-radius:12px;background:var(--bg2);
+  padding:26px;overflow-wrap:anywhere;margin-bottom:8px}
+.wf div{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:5px 0;
+  border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:14px}
+.wf div:last-child{border:0}
+.wf .sz{font-family:var(--mono);font-size:10.5px;color:var(--ink3);width:42px;flex:none;text-align:right}
+.wf .tx{flex:1;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- tables ---------- */
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);
+  font-weight:600;padding:7px 10px;border-bottom:1px solid var(--line2)}
+td{padding:8px 10px;border-bottom:1px solid var(--line)}
+tr:hover td{background:var(--bg2)}
+td.n,th.n{text-align:right;font-family:var(--mono);font-size:12.5px}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* ---------- coverage ---------- */
+.blocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:9px}
+.blk{border:1px solid var(--line);border-radius:9px;padding:11px 13px;background:var(--bg2)}
+.blk .bn{font-size:13px;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.blk .bc{font-family:var(--mono);font-size:11px;color:var(--ink3);flex:none}
+.bar{height:4px;background:var(--bg3);border-radius:99px;margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:99px}
+.blk.full .bar i{background:var(--ok)}
+
+.langs{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:7px}
+.lang{display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid var(--line);
+  border-radius:8px;background:var(--bg2);font-size:13px}
+.lang .dot{width:7px;height:7px;border-radius:99px;flex:none}
+.lang.y .dot{background:var(--ok)} .lang.n .dot{background:var(--acc)}
+.lang.n{color:var(--ink3)}
+.lang .miss{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--acc)}
+
+/* ---------- out of sorts ---------- */
+.verdict{border-radius:12px;padding:18px 20px;margin:18px 0;border:1px solid var(--line2);background:var(--bg2)}
+.verdict.ok{border-color:#39543f;background:#182018}
+.verdict.bad{border-color:#5e3226;background:#241814}
+.verdict h3{font-size:16px;margin-bottom:5px}
+.verdict p{margin:0;font-size:13.5px;color:var(--ink2)}
+.missgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:8px;margin-top:16px}
+.miss{border:1px solid var(--line2);border-radius:9px;padding:10px;text-align:center;background:var(--bg2)}
+.miss .ch{font-size:27px;line-height:1.15;min-height:34px}
+.miss .cp{font-family:var(--mono);font-size:10.5px;color:var(--acc);margin-top:3px}
+.miss .nm{font-size:10.5px;color:var(--ink3);margin-top:2px;line-height:1.3}
+.miss .ct{font-size:10px;color:var(--ink3);margin-top:3px}
+
+/* ---------- features ---------- */
+.feat{border:1px solid var(--line);border-radius:10px;background:var(--bg2);margin-bottom:9px;overflow:hidden}
+.feathead{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer}
+.feathead:hover{background:var(--bg3)}
+.ftag{font-family:var(--mono);font-size:13px;color:var(--acc2);width:44px;flex:none}
+.fname{font-size:13.5px;flex:1}
+.fdesc{font-size:12px;color:var(--ink3);margin-top:2px}
+.fbadge{font-family:var(--mono);font-size:10px;margin-left:9px;padding:2px 7px;border-radius:99px;border:1px solid var(--line2);color:var(--ink3);vertical-align:middle;white-space:nowrap}
+.fbadge.yes{border-color:var(--acc);color:var(--acc2)}
+.sw{width:38px;height:21px;border-radius:99px;background:var(--bg3);border:1px solid var(--line2);
+  position:relative;flex:none;transition:.16s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:99px;
+  background:var(--ink3);transition:.16s}
+.feat.on .sw{background:#4a2318;border-color:var(--acc)}
+.feat.on .sw::after{left:19px;background:var(--acc)}
+.featdemo{padding:0 14px 14px;display:none}
+.feat.on .featdemo,.feat.showdemo .featdemo{display:block}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cmp>div{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg)}
+.cmp .cl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3);margin-bottom:7px}
+.cmp .cv{font-size:30px;line-height:1.25;overflow-wrap:anywhere}
+.cmp .cv.diff{color:var(--acc2)}
+
+/* ---------- axes ---------- */
+.axis{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:14px 16px;margin-bottom:10px}
+.axhd{display:flex;align-items:baseline;gap:10px;margin-bottom:9px;flex-wrap:wrap}
+.axhd .at{font-family:var(--mono);color:var(--acc2);font-size:13px}
+.axhd .an{font-size:13.5px}
+.axhd .av{margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--ink)}
+.axis input[type=range]{width:100%}
+.axrange{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:3px}
+.insts{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+.insts button{border:1px solid var(--line2);border-radius:7px;padding:6px 11px;font-size:12.5px;color:var(--ink2)}
+.insts button:hover,.insts button.on{border-color:var(--acc);color:var(--ink)}
+
+/* ---------- metrics ---------- */
+.metviz{border:1px solid var(--line);border-radius:12px;background:var(--bg2);padding:8px 14px 14px}
+.stage{position:relative;width:100%;overflow:hidden}
+.stage .ghost{font-weight:400;overflow:hidden}
+.rule{position:absolute;left:0;right:0;height:0;border-top:1px solid var(--c,#453e35)}
+.rule.faint{border-top-style:dashed;border-color:var(--line2)}
+.rule.base{border-top:1.5px solid var(--ink)}
+.rule .rl{position:absolute;right:0;top:0;transform:translateY(-115%);font-family:var(--mono);font-size:10.5px;color:var(--ink3);white-space:nowrap;background:var(--bg2);padding:0 3px}
+.rule.base .rl{left:0;right:auto;color:var(--ink2)}
+.metnote{font-size:13px;color:var(--ink2);line-height:1.6;max-width:76ch}
+.metnote b{color:var(--ink)}
+.lh{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:14px}
+.lhc{border:1px solid var(--line);border-radius:9px;padding:12px 14px;background:var(--bg2)}
+.lhc .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}
+.lhc .v{font-family:var(--mono);font-size:19px;margin-top:4px}
+.lhc .d{font-size:11.5px;color:var(--ink3);margin-top:3px;line-height:1.4}
+
+/* ---------- glyphs ---------- */
+.gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:5px}
+.gc{aspect-ratio:1;border:1px solid var(--line);border-radius:7px;background:var(--bg2);
+  display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;overflow:hidden}
+.gc:hover{border-color:var(--acc);background:var(--bg3)}
+.gc span{font-size:30px;line-height:1}
+.gc i{position:absolute;bottom:2px;right:4px;font-family:var(--mono);font-size:8.5px;
+  color:var(--ink3);font-style:normal;opacity:0;transition:.12s}
+.gc:hover i{opacity:1}
+.note{font-size:12.5px;color:var(--ink3);margin-top:14px;line-height:1.6;max-width:76ch}
+.hint{font-size:12px;color:var(--ink3);margin-top:8px}
+
+.empty{color:var(--ink3);font-size:14px;padding:34px 0;text-align:center}
+#localbar{margin:-10px 0 30px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+#localbar[hidden],#picker[hidden]{display:none}
+#picker{border:1px solid var(--line2);border-radius:12px;background:var(--bg2);margin:0 0 30px;overflow:hidden}
+.pickhead{display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--line)}
+#picklist{max-height:380px;overflow-y:auto}
+.pf{display:flex;align-items:baseline;gap:12px;padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
+.pf:hover{background:var(--bg3)}
+.pf .pfn{font-size:13.5px;flex:1}
+.pf .pfs{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+footer{border-top:1px solid var(--line);padding:26px 0 40px;color:var(--ink3);font-size:12.5px;line-height:1.7}
+footer a{color:var(--ink2)}
+
+@media(max-width:640px){
+  .wrap{padding:0 15px}
+  .mark{font-size:25px}
+  .tag{display:none}
+  #drop{padding:32px 16px}
+  .cmp{grid-template-columns:1fr}
+  .cmp .cv{font-size:25px}
+  #specimen{padding:16px}
+  .missgrid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+  .gg{grid-template-columns:repeat(auto-fill,minmax(50px,1fr))}
+  .gc span{font-size:24px}
+}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap"><div class="topin">
+  <div class="mark">Sort<b>s</b></div>
+  <div class="tag">What's actually inside a font file</div>
+  <div class="topspacer"></div>
+  <div class="privacy"><b>Local.</b> Nothing is uploaded</div>
+</div></div></header>
+
+<div class="wrap">
+
+  <div id="drop">
+    <h2>Drop a font file here</h2>
+    <p>Or click to choose one. The file is read in this tab and never leaves your machine —
+       no server sees it, because there is no server.</p>
+    <div class="fmt"><em>.ttf .otf .ttc</em> and <em>.woff</em> read in full · <em>.woff2</em> renders, but its
+      tables are Brotli-packed and browsers cannot unpack that</div>
+    <input type="file" id="file" accept=".ttf,.otf,.ttc,.woff,.woff2,font/*" hidden multiple>
+  </div>
+
+  <div id="localbar" hidden>
+    <button class="btn" id="localbtn">Or look inside a font already installed on this computer</button>
+    <span class="hint" id="localnote"></span>
+  </div>
+
+  <div id="picker" hidden>
+    <div class="pickhead">
+      <input type="text" id="pickfilter" placeholder="Filter installed fonts…">
+      <button class="btn" id="pickclose">Close</button>
+    </div>
+    <div id="picklist"></div>
+  </div>
+
+  <div class="intro" id="intro">
+    <div><h3>Out of sorts</h3><p>Paste the text you actually need to set. Sorts names every character
+      the font can't draw — the reason a stray glyph falls back to something else mid-word.</p></div>
+    <div><h3>Coverage</h3><p>Which scripts and languages this font really supports, counted from the
+      character map rather than guessed from the font's own marketing.</p></div>
+    <div><h3>Features &amp; axes</h3><p>Every OpenType feature the font carries, switchable live on
+      your own text, and variable axes as sliders.</p></div>
+    <div><h3>Metrics</h3><p>The three disagreeing vertical metrics that decide your line height,
+      side by side, with the number each platform will use.</p></div>
+  </div>
+
+  <div id="app">
+    <div class="filebar">
+      <div>
+        <div class="fname" id="fname">—</div>
+        <div class="fsub" id="fsub"></div>
+      </div>
+      <div class="topspacer"></div>
+      <div id="pills"></div>
+      <button class="btn" id="another">Open another</button>
+    </div>
+
+    <nav class="tabs" id="tabs"></nav>
+    <div id="panels"></div>
+  </div>
+
+  <footer>
+    Sorts reads the font's own tables — <code>cmap</code>, <code>name</code>, <code>OS/2</code>,
+    <code>fvar</code>, <code>GSUB</code>, <code>GPOS</code> — directly from the bytes you hand it.
+    Part of <a href="https://gptgames.dev">gptgames.dev</a>.
+  </footer>
+</div>
+
+<script src="../logo.js"></script>
+<script>
+"use strict";
+
+/* ============================================================
+   Font parsing.  Everything here reads the raw bytes of the
+   file: no library, no network.  The table layouts follow the
+   OpenType spec; the parser was checked field by field against
+   fontTools over 147 real fonts.
+   ============================================================ */
+
+const KNOWN_WOFF2_TAGS=['cmap','head','hhea','hmtx','maxp','name','OS/2','post','cvt ','fpgm','glyf',
+ 'loca','prep','CFF ','VORG','EBDT','EBLC','gasp','hdmx','kern','LTSH','PCLT','VDMX','vhea','vmtx',
+ 'BASE','GDEF','GPOS','GSUB','EBSC','JSTF','MATH','CBDT','CBLC','COLR','CPAL','SVG ','sbix','acnt',
+ 'avar','bdat','bloc','bsln','cvar','fdsc','feat','fmtx','fvar','gvar','hsty','just','lcar','mort',
+ 'morx','opbd','prop','trak','Zapf','Silf','Glat','Gloc','Feat','Sill'];
+
+class Reader{
+  constructor(buf){ this.buf=buf; this.dv=new DataView(buf); this.u8=new Uint8Array(buf); }
+  get len(){ return this.buf.byteLength; }
+  b(o){ return this.dv.getUint8(o); }
+  u16(o){ return this.dv.getUint16(o); }
+  i16(o){ return this.dv.getInt16(o); }
+  u32(o){ return this.dv.getUint32(o); }
+  i32(o){ return this.dv.getInt32(o); }
+  f16d16(o){ return this.dv.getInt32(o)/65536; }
+  tag(o){ return String.fromCharCode(this.b(o),this.b(o+1),this.b(o+2),this.b(o+3)); }
+}
+
+/* --- WOFF 1: each table is raw or zlib-deflated. Rebuild a plain sfnt. --- */
+async function woffToSfnt(buf){
+  const r=new Reader(buf), num=r.u16(12);
+  const entries=[];
+  for(let i=0;i<num;i++){
+    const p=44+i*20;
+    entries.push({tag:r.tag(p),off:r.u32(p+4),comp:r.u32(p+8),orig:r.u32(p+12)});
+  }
+  const datas=[];
+  for(const e of entries){
+    let bytes=new Uint8Array(buf,e.off,e.comp);
+    if(e.comp!==e.orig){
+      const ds=new DecompressionStream('deflate');
+      const ab=await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+      bytes=new Uint8Array(ab);
+    }
+    datas.push(bytes);
+  }
+  // assemble
+  let total=12+num*16;
+  const offs=[];
+  for(const d of datas){ offs.push(total); total+=(d.length+3)&~3; }
+  const out=new Uint8Array(total), odv=new DataView(out.buffer);
+  odv.setUint32(0,r.u32(4));                       // flavor
+  odv.setUint16(4,num);
+  const p2=Math.pow(2,Math.floor(Math.log2(num)));
+  odv.setUint16(6,p2*16); odv.setUint16(8,Math.log2(p2)); odv.setUint16(10,num*16-p2*16);
+  entries.forEach((e,i)=>{
+    const p=12+i*16;
+    for(let k=0;k<4;k++) out[p+k]=e.tag.charCodeAt(k);
+    odv.setUint32(p+8,offs[i]); odv.setUint32(p+12,datas[i].length);
+  });
+  datas.forEach((d,i)=>out.set(d,offs[i]));
+  return out.buffer;
+}
+
+/* --- WOFF 2: the table directory is uncompressed, everything else sits in
+       one brotli stream.  Browsers expose gzip/deflate but not brotli, so we
+       report the directory and let the browser render the font itself. --- */
+function woff2Directory(buf){
+  const r=new Reader(buf);
+  const num=r.u16(12), tables=[];
+  let p=48;
+  const b128=()=>{let v=0;for(let i=0;i<5;i++){const by=r.b(p++);v=v*128+(by&0x7f);if(!(by&0x80))return v;}throw new Error('bad base128');};
+  for(let i=0;i<num;i++){
+    const flags=r.b(p++), idx=flags&0x3f, tv=(flags>>6)&3;
+    let tag;
+    if(idx===0x3f){ tag=r.tag(p); p+=4; } else tag=KNOWN_WOFF2_TAGS[idx]||'??  ';
+    const orig=b128();
+    const transformed=(tag==='glyf'||tag==='loca')?(tv===0):(tv!==0);
+    if(transformed) b128();
+    tables.push({tag,length:orig,transformed});
+  }
+  return { flavor:r.u32(4), numTables:num, totalSfntSize:r.u32(16),
+           compressedSize:r.u32(20), fileSize:buf.byteLength, tables };
+}
+
+function parseSfnt(buf){
+  const r=new Reader(buf);
+  let base=0;
+  const first=r.u32(0);
+  let collection=0;
+  if(first===0x74746366){ collection=r.u32(8); base=r.u32(12); }   // 'ttcf'
+  const sfnt=r.u32(base);
+  if(sfnt!==0x00010000 && sfnt!==0x4F54544F && sfnt!==0x74727565)
+    throw new Error('Not a font this tool can read (signature 0x'+sfnt.toString(16)+').');
+
+  const num=r.u16(base+4), T={}, dir=[], missing=[];
+  for(let i=0;i<num;i++){
+    const p=base+12+i*16, tag=r.tag(p);
+    const e={tag,off:r.u32(p+8),len:r.u32(p+12)};
+    // a table that runs past the end of the file means the file is truncated
+    if(e.off+e.len<=r.len){ T[tag]=e; dir.push(e); } else missing.push(tag);
+  }
+  const F={ isCFF:sfnt===0x4F54544F, tables:T, dir:dir.sort((a,b)=>b.len-a.len),
+            fileSize:buf.byteLength, numFontsInCollection:collection, buf,
+            truncated:missing.length?missing:null };
+
+  /* head */
+  if(T.head){ const h=T.head.off;
+    F.unitsPerEm=r.u16(h+18);
+    F.bbox={xMin:r.i16(h+36),yMin:r.i16(h+38),xMax:r.i16(h+40),yMax:r.i16(h+42)};
+  }
+  if(T.maxp) F.numGlyphs=r.u16(T.maxp.off+4);
+  if(T.hhea){ const h=T.hhea.off;
+    F.hhea={ascender:r.i16(h+4),descender:r.i16(h+6),lineGap:r.i16(h+8)}; }
+  if(T['OS/2']){ const o=T['OS/2'].off, ver=r.u16(o);
+    F.os2={ version:ver, weightClass:r.u16(o+4), widthClass:r.u16(o+6), fsType:r.u16(o+8),
+      typoAscender:r.i16(o+68), typoDescender:r.i16(o+70), typoLineGap:r.i16(o+72),
+      winAscent:r.u16(o+74), winDescent:r.u16(o+76), fsSelection:r.u16(o+62) };
+    if(ver>=2 && o+90<=r.len){ F.os2.xHeight=r.i16(o+86); F.os2.capHeight=r.i16(o+88); }
+    F.useTypoMetrics=!!(F.os2.fsSelection&128); }
+  if(T.post){ const p=T.post.off;
+    F.post={ italicAngle:r.f16d16(p+4), isFixedPitch:r.u32(p+16)!==0,
+             underlinePosition:r.i16(p+8), underlineThickness:r.i16(p+10) }; }
+
+  /* name — prefer English (0x0409) Windows records, then anything */
+  if(T.name){
+    const n=T.name.off, cnt=r.u16(n+2), so=n+r.u16(n+4), names={}, score={};
+    for(let i=0;i<cnt;i++){
+      const p=n+6+i*12;
+      const pid=r.u16(p), eid=r.u16(p+2), lid=r.u16(p+4), nid=r.u16(p+6),
+            len=r.u16(p+8), off=so+r.u16(p+10);
+      if(off+len>r.len||len===0) continue;
+      let s='';
+      if(pid===3||pid===0){ for(let k=0;k+1<len;k+=2) s+=String.fromCharCode(r.u16(off+k)); }
+      else { for(let k=0;k<len;k++) s+=String.fromCharCode(r.b(off+k)); }
+      s=s.replace(/\0/g,'').trim();
+      if(!s) continue;
+      // ranking: English Windows beats English anything beats the rest
+      let sc=1;
+      if(pid===3&&lid===0x409) sc=4; else if(pid===1&&lid===0) sc=3;
+      else if(pid===3) sc=2;
+      if(score[nid]===undefined||sc>score[nid]){ names[nid]=s; score[nid]=sc; }
+    }
+    F.names=names;
+  } else F.names={};
+
+  /* cmap — pick the widest table, then read every mapped codepoint */
+  if(T.cmap){
+    const c=T.cmap.off, n=r.u16(c+2);
+    let best=-1,bestScore=-1,bestPid=0,bestEid=0, subtables=[];
+    for(let i=0;i<n;i++){
+      const p=c+4+i*8, pid=r.u16(p), eid=r.u16(p+2), off=c+r.u32(p+4);
+      if(off>=r.len) continue;
+      subtables.push({pid,eid,format:r.u16(off)});
+      let sc=-1;
+      if(pid===3&&eid===10) sc=5; else if(pid===3&&eid===1) sc=4;
+      else if(pid===0) sc=3; else if(pid===3&&eid===0) sc=2; else if(pid===1&&eid===0) sc=1;
+      if(sc>bestScore){ bestScore=sc; best=off; bestPid=pid; bestEid=eid; }
+    }
+    F.cmapSubtables=subtables;
+    const cps=new Set();
+    if(best>=0){
+      const fmt=r.u16(best); F.cmapFormat=fmt; F.cmapPlatform=bestPid+'/'+bestEid;
+      if(fmt===4){
+        const segX2=r.u16(best+6), seg=segX2/2;
+        const endO=best+14, startO=endO+segX2+2, deltaO=startO+segX2, rangeO=deltaO+segX2;
+        for(let s=0;s<seg;s++){
+          const end=r.u16(endO+s*2), st=r.u16(startO+s*2);
+          const delta=r.i16(deltaO+s*2), ro=r.u16(rangeO+s*2);
+          if(st===0xFFFF) continue;
+          for(let cp=st;cp<=end&&cp!==0x10000;cp++){
+            let g;
+            if(ro===0) g=(cp+delta)&0xFFFF;
+            else { const gi=rangeO+s*2+ro+(cp-st)*2; if(gi+1>=r.len) continue;
+                   g=r.u16(gi); if(g) g=(g+delta)&0xFFFF; }
+            if(g) cps.add(cp);
+          }
+        }
+      } else if(fmt===12){
+        const ng=r.u32(best+12);
+        for(let i=0;i<ng;i++){
+          const p=best+16+i*12, st=r.u32(p), en=r.u32(p+4);
+          if(en-st>0x30000) continue;
+          for(let cp=st;cp<=en;cp++) cps.add(cp);
+        }
+      } else if(fmt===6){
+        const first=r.u16(best+6), cnt=r.u16(best+8);
+        for(let i=0;i<cnt;i++) if(r.u16(best+10+i*2)) cps.add(first+i);
+      } else if(fmt===0){
+        for(let i=0;i<256;i++) if(r.b(best+6+i)) cps.add(i);
+      }
+    }
+    F.cps=cps;
+  } else F.cps=new Set();
+
+  /* fvar — variable axes and named instances */
+  if(T.fvar){
+    const f=T.fvar.off, ao=f+r.u16(f+4), ac=r.u16(f+8), as=r.u16(f+10),
+          ic=r.u16(f+12), is=r.u16(f+14);
+    F.axes=[];
+    for(let i=0;i<ac;i++){ const p=ao+i*as;
+      F.axes.push({ tag:r.tag(p), min:r.f16d16(p+4), def:r.f16d16(p+8), max:r.f16d16(p+12),
+                    nameID:r.u16(p+18) }); }
+    F.instances=[];
+    const io=ao+ac*as;
+    for(let i=0;i<ic;i++){ const p=io+i*is;
+      const coords=[]; for(let a=0;a<ac;a++) coords.push(r.f16d16(p+4+a*4));
+      F.instances.push({ nameID:r.u16(p), coords }); }
+  }
+
+  /* GSUB / GPOS feature tags and scripts */
+  for(const t of ['GSUB','GPOS']){
+    if(!T[t]) continue;
+    try{
+      const g=T[t].off, fl=g+r.u16(g+6), fc=r.u16(fl), feats=new Set();
+      for(let i=0;i<fc;i++) feats.add(r.tag(fl+2+i*6));
+      F[t]=[...feats].sort();
+      const sl=g+r.u16(g+4), sc=r.u16(sl), scripts=[];
+      for(let i=0;i<sc;i++) scripts.push(r.tag(sl+2+i*6));
+      F[t+'Scripts']=scripts;
+    }catch(e){ F[t]=[]; }
+  }
+  F.features=[...new Set([...(F.GSUB||[]),...(F.GPOS||[])])].sort();
+  F.scripts=[...new Set([...(F.GSUBScripts||[]),...(F.GPOSScripts||[])])].sort();
+  return F;
+}
+</script>
+<script>
+"use strict";
+
+/* ---- Unicode blocks (start, end, name) ---- */
+const BLOCKS=[[0x0000,0x007F,"Basic Latin"],[0x0080,0x00FF,"Latin-1 Supplement"],
+[0x0100,0x017F,"Latin Extended-A"],[0x0180,0x024F,"Latin Extended-B"],
+[0x0250,0x02AF,"IPA Extensions"],[0x02B0,0x02FF,"Spacing Modifier Letters"],
+[0x0300,0x036F,"Combining Diacritical Marks"],[0x0370,0x03FF,"Greek and Coptic"],
+[0x0400,0x04FF,"Cyrillic"],[0x0500,0x052F,"Cyrillic Supplement"],[0x0530,0x058F,"Armenian"],
+[0x0590,0x05FF,"Hebrew"],[0x0600,0x06FF,"Arabic"],[0x0700,0x074F,"Syriac"],
+[0x0750,0x077F,"Arabic Supplement"],[0x0780,0x07BF,"Thaana"],[0x0900,0x097F,"Devanagari"],
+[0x0980,0x09FF,"Bengali"],[0x0A00,0x0A7F,"Gurmukhi"],[0x0A80,0x0AFF,"Gujarati"],
+[0x0B00,0x0B7F,"Oriya"],[0x0B80,0x0BFF,"Tamil"],[0x0C00,0x0C7F,"Telugu"],
+[0x0C80,0x0CFF,"Kannada"],[0x0D00,0x0D7F,"Malayalam"],[0x0D80,0x0DFF,"Sinhala"],
+[0x0E00,0x0E7F,"Thai"],[0x0E80,0x0EFF,"Lao"],[0x0F00,0x0FFF,"Tibetan"],
+[0x1000,0x109F,"Myanmar"],[0x10A0,0x10FF,"Georgian"],[0x1100,0x11FF,"Hangul Jamo"],
+[0x1200,0x137F,"Ethiopic"],[0x13A0,0x13FF,"Cherokee"],[0x1400,0x167F,"Unified Canadian Aboriginal"],
+[0x1680,0x169F,"Ogham"],[0x16A0,0x16FF,"Runic"],[0x1700,0x171F,"Tagalog"],
+[0x1780,0x17FF,"Khmer"],[0x1800,0x18AF,"Mongolian"],[0x1E00,0x1EFF,"Latin Extended Additional"],
+[0x1F00,0x1FFF,"Greek Extended"],[0x2000,0x206F,"General Punctuation"],
+[0x2070,0x209F,"Superscripts and Subscripts"],[0x20A0,0x20CF,"Currency Symbols"],
+[0x20D0,0x20FF,"Combining Marks for Symbols"],[0x2100,0x214F,"Letterlike Symbols"],
+[0x2150,0x218F,"Number Forms"],[0x2190,0x21FF,"Arrows"],[0x2200,0x22FF,"Mathematical Operators"],
+[0x2300,0x23FF,"Miscellaneous Technical"],[0x2400,0x243F,"Control Pictures"],
+[0x2460,0x24FF,"Enclosed Alphanumerics"],[0x2500,0x257F,"Box Drawing"],
+[0x2580,0x259F,"Block Elements"],[0x25A0,0x25FF,"Geometric Shapes"],
+[0x2600,0x26FF,"Miscellaneous Symbols"],[0x2700,0x27BF,"Dingbats"],
+[0x27F0,0x27FF,"Supplemental Arrows-A"],[0x2800,0x28FF,"Braille Patterns"],
+[0x2900,0x297F,"Supplemental Arrows-B"],[0x2B00,0x2BFF,"Miscellaneous Symbols and Arrows"],
+[0x2C60,0x2C7F,"Latin Extended-C"],[0x2E00,0x2E7F,"Supplemental Punctuation"],
+[0x2E80,0x2EFF,"CJK Radicals Supplement"],[0x3000,0x303F,"CJK Symbols and Punctuation"],
+[0x3040,0x309F,"Hiragana"],[0x30A0,0x30FF,"Katakana"],[0x3100,0x312F,"Bopomofo"],
+[0x3130,0x318F,"Hangul Compatibility Jamo"],[0x3200,0x32FF,"Enclosed CJK Letters"],
+[0x3300,0x33FF,"CJK Compatibility"],[0x3400,0x4DBF,"CJK Extension A"],
+[0x4E00,0x9FFF,"CJK Unified Ideographs"],[0xA000,0xA48F,"Yi Syllables"],
+[0xA720,0xA7FF,"Latin Extended-D"],[0xAC00,0xD7AF,"Hangul Syllables"],
+[0xE000,0xF8FF,"Private Use Area"],[0xF900,0xFAFF,"CJK Compatibility Ideographs"],
+[0xFB00,0xFB4F,"Alphabetic Presentation Forms"],[0xFB50,0xFDFF,"Arabic Presentation Forms-A"],
+[0xFE00,0xFE0F,"Variation Selectors"],[0xFE20,0xFE2F,"Combining Half Marks"],
+[0xFE30,0xFE4F,"CJK Compatibility Forms"],[0xFE70,0xFEFF,"Arabic Presentation Forms-B"],
+[0xFF00,0xFFEF,"Halfwidth and Fullwidth Forms"],[0xFFF0,0xFFFF,"Specials"],
+[0x10000,0x1007F,"Linear B Syllabary"],[0x1D400,0x1D7FF,"Mathematical Alphanumeric Symbols"],
+[0x1F300,0x1F5FF,"Miscellaneous Symbols and Pictographs"],[0x1F600,0x1F64F,"Emoticons"],
+[0x1F680,0x1F6FF,"Transport and Map Symbols"],[0x1F900,0x1F9FF,"Supplemental Symbols and Pictographs"],
+[0x20000,0x2A6DF,"CJK Extension B"]];
+
+function blockOf(cp){
+  for(const b of BLOCKS) if(cp>=b[0]&&cp<=b[1]) return b[2];
+  return "Unassigned / other";
+}
+
+/* ---- OpenType features worth naming ---- */
+const FEATURES={
+ liga:["Standard ligatures","fi, fl and friends joined into single glyphs"],
+ dlig:["Discretionary ligatures","Optional flourish ligatures the designer left off by default"],
+ clig:["Contextual ligatures","Ligatures applied only in certain letter combinations"],
+ hlig:["Historical ligatures","Archaic forms such as the long s"],
+ calt:["Contextual alternates","Glyphs swapped depending on their neighbours"],
+ kern:["Kerning","Per-pair spacing corrections"],
+ smcp:["Small capitals","Lowercase replaced by small capital forms"],
+ c2sc:["Capitals to small capitals","Uppercase reduced to small caps too"],
+ onum:["Oldstyle figures","Numerals with ascenders and descenders, for running text"],
+ lnum:["Lining figures","Numerals all the height of capitals"],
+ tnum:["Tabular figures","Every digit the same width, so columns line up"],
+ pnum:["Proportional figures","Digits spaced to their own shapes"],
+ zero:["Slashed zero","Zero with a slash or dot, to separate it from O"],
+ frac:["Fractions","1/2 built as a real fraction"],
+ afrc:["Alternative fractions","Stacked rather than diagonal fractions"],
+ sups:["Superscript","Raised small figures"],
+ subs:["Subscript","Lowered small figures"],
+ ordn:["Ordinals","1st, 2nd set with raised letters"],
+ sinf:["Scientific inferiors","Lowered figures for chemical formulae"],
+ numr:["Numerators","Figures shaped for the top of a fraction"],
+ dnom:["Denominators","Figures shaped for the bottom of a fraction"],
+ case:["Case-sensitive forms","Punctuation raised to suit all-caps setting"],
+ salt:["Stylistic alternates","The designer's alternate shapes"],
+ swsh:["Swashes","Extravagant entry and exit strokes"],
+ titl:["Titling","Forms cut for large display sizes"],
+ hist:["Historical forms","Older shapes for the same letters"],
+ unic:["Unicase","One shared height for upper and lower case"],
+ ital:["Italics","Italic forms within the same font"],
+ rand:["Randomize","Varies glyph shapes to imitate handwriting"],
+ aalt:["All alternates","Every alternate the font offers, for pickers"],
+ ccmp:["Glyph composition","Combines or decomposes glyphs before other features run"],
+ locl:["Localized forms","Shapes that change by language, e.g. Romanian ș"],
+ mark:["Mark positioning","Places accents on their base letters"],
+ mkmk:["Mark to mark","Stacks one accent above another"],
+ rlig:["Required ligatures","Ligatures the script cannot be set without"],
+ init:["Initial forms","Letter shape at the start of a word (Arabic)"],
+ medi:["Medial forms","Letter shape inside a word (Arabic)"],
+ fina:["Final forms","Letter shape at the end of a word (Arabic)"],
+ isol:["Isolated forms","Standalone letter shape (Arabic)"],
+ curs:["Cursive positioning","Joins letters along a connecting stroke"],
+ dist:["Distances","Spacing adjustments required by the script"],
+ abvm:["Above-base marks","Mark placement above the base (Indic)"],
+ blwm:["Below-base marks","Mark placement below the base (Indic)"],
+ pres:["Pre-base substitutions","Indic conjunct forming"],
+ abvs:["Above-base substitutions","Indic conjunct forming"],
+ blws:["Below-base substitutions","Indic conjunct forming"],
+ psts:["Post-base substitutions","Indic conjunct forming"],
+ halt:["Alternate half widths","CJK width adjustment"],
+ palt:["Proportional alternate widths","CJK proportional spacing"],
+ vert:["Vertical alternates","Forms used when text runs vertically"],
+ vrt2:["Vertical rotation","Rotated forms for vertical setting"],
+ vkrn:["Vertical kerning","Kerning for vertical text"],
+ opbd:["Optical bounds","Hangs punctuation past the margin"],
+ lfbd:["Left optical bound","Left side of optical margin alignment"],
+ rtbd:["Right optical bound","Right side of optical margin alignment"],
+ size:["Optical size","Metadata about the size the design suits"],
+ rvrn:["Required variation alternates","Glyph swaps at certain variable-font settings"],
+ nalt:["Alternate annotation","Circled or boxed forms"],
+ rtla:["Right-to-left alternates","Mirrored forms for RTL text"],
+ rtlm:["Right-to-left mirroring","Mirrors glyphs in RTL runs"],
+ cv01:["Character variant","A single character's alternate shape"],
+ ss01:["Stylistic set","A named group of alternate glyphs"],
+ fwid:["Full widths","Forces full-width CJK forms"],
+ hwid:["Half widths","Forces half-width CJK forms"],
+ twid:["Third widths","Third-width CJK forms"],
+ qwid:["Quarter widths","Quarter-width CJK forms"],
+ jp78:["JIS78 forms","Japanese glyphs following the 1978 standard"],
+ jp83:["JIS83 forms","Japanese glyphs following the 1983 standard"],
+ jp90:["JIS90 forms","Japanese glyphs following the 1990 standard"],
+ jp04:["JIS2004 forms","Japanese glyphs following the 2004 standard"],
+ nlck:["NLC forms","Japanese National Language Council shapes"],
+ trad:["Traditional forms","Traditional Chinese shapes"],
+ smpl:["Simplified forms","Simplified Chinese shapes"],
+ expt:["Expert forms","Japanese expert typography glyphs"],
+ hkna:["Horizontal kana alternates","Kana cut for horizontal setting"],
+ vkna:["Vertical kana alternates","Kana cut for vertical setting"],
+ ruby:["Ruby notation forms","Small glyphs for ruby annotation"]
+};
+function featureInfo(tag){
+  if(FEATURES[tag]) return FEATURES[tag];
+  let m=tag.match(/^ss(\d\d)$/);
+  if(m) return ["Stylistic set "+(+m[1]),"A named group of alternate glyphs the designer bundled together"];
+  m=tag.match(/^cv(\d\d)$/);
+  if(m) return ["Character variant "+(+m[1]),"An alternate shape for one specific character"];
+  return [tag,"Layout feature carried by this font"];
+}
+/* features that can be shown by simply switching them on over sample text */
+const DEMOABLE=new Set(['liga','dlig','clig','hlig','calt','smcp','c2sc','onum','lnum','tnum','pnum',
+ 'zero','frac','sups','subs','ordn','sinf','case','salt','swsh','titl','hist','unic','ordn','numr','dnom']);
+const FEATURE_SAMPLE={
+  smcp:"Small Caps Reading",c2sc:"ABC Small Caps",onum:"0123456789 in 1897",
+  lnum:"0123456789",tnum:"1111 0000 8888",pnum:"1111 0000 8888",zero:"0 100 2049",
+  frac:"1/2 3/4 7/8",sups:"x2 + y3",subs:"H2O CO2",sinf:"H2SO4",ordn:"1a 2o 3rd",
+  numr:"12/34",dnom:"12/34",case:"(HELLO) -- WORLD",swsh:"Quick Jazz",titl:"HEADLINE",
+  hist:"Passing softly",unic:"Mixed Case Here",liga:"office affluent fjord",
+  dlig:"strict tally",clig:"official",hlig:"passing",calt:"AVATAR Wow",salt:"agency"
+};
+</script>
+<script>
+"use strict";
+/* ---- Languages, with the characters each one needs beyond plain ASCII.
+        A language counts as covered only when every one of these is present. ---- */
+const LANGS=[
+ ["English","",""],
+ ["French","àâæçéèêëîïôœùûüÿÀÂÆÇÉÈÊËÎÏÔŒÙÛÜŸ",""],
+ ["German","äöüßÄÖÜ",""],
+ ["Spanish","áéíñóúüÁÉÍÑÓÚÜ¿¡",""],
+ ["Portuguese","àáâãçéêíóôõúÀÁÂÃÇÉÊÍÓÔÕÚ",""],
+ ["Italian","àèéìòùÀÈÉÌÒÙ",""],
+ ["Dutch","ëïéöüÉËÏÖÜĳĲ",""],
+ ["Danish","æøåÆØÅ",""],
+ ["Norwegian","æøåÆØÅ",""],
+ ["Swedish","åäöÅÄÖ",""],
+ ["Finnish","äöåÄÖÅšžŠŽ",""],
+ ["Icelandic","áðéíóúýþæöÁÐÉÍÓÚÝÞÆÖ",""],
+ ["Polish","ąćęłńóśźżĄĆĘŁŃÓŚŹŻ",""],
+ ["Czech","áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ",""],
+ ["Slovak","áäčďéíĺľňóôŕšťúýžÁÄČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ",""],
+ ["Hungarian","áéíóöőúüűÁÉÍÓÖŐÚÜŰ",""],
+ ["Romanian","ăâîșțĂÂÎȘȚ",""],
+ ["Croatian","čćđšžČĆĐŠŽ",""],
+ ["Slovenian","čšžČŠŽ",""],
+ ["Latvian","āčēģīķļņšūžĀČĒĢĪĶĻŅŠŪŽ",""],
+ ["Lithuanian","ąčęėįšųūžĄČĘĖĮŠŲŪŽ",""],
+ ["Estonian","äõöüšžÄÕÖÜŠŽ",""],
+ ["Turkish","çğıöşüÇĞİÖŞÜ",""],
+ ["Welsh","âêîôûŵŷÂÊÎÔÛŴŶ",""],
+ ["Vietnamese","ăâđêôơưàảãáạằẳẵắặầẩẫấậèẻẽéẹềểễếệìỉĩíịòỏõóọồổỗốộờởỡớợùủũúụừửữứựỳỷỹýỵ",""],
+ ["Esperanto","ĉĝĥĵŝŭĈĜĤĴŜŬ",""],
+ ["Greek","αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩάέήίόύώ",""],
+ ["Russian","абвгдежзийклмнопрстуфхцчшщъыьэюяАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ",""],
+ ["Ukrainian","абвгґдежзийклмнопрстуфхцчшщьюяєіїАБВГҐДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЮЯЄІЇ",""],
+ ["Serbian (Cyrillic)","абвгдђежзијклљмнњопрстћуфхцчџшАБВГДЂЕЖЗИЈКЛЉМНЊОПРСТЋУФХЦЧЏШ",""],
+ ["Bulgarian","абвгдежзийклмнопрстуфхцчшщъьюяАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЬЮЯ",""],
+ ["Hebrew","אבגדהוזחטיכלמנסעפצקרשתםןףץך",""],
+ ["Arabic","ابتثجحخدذرزسشصضطظعغفقكلمنهوي",""],
+ ["Thai","กขคงจฉชซดตถทธนบปผพฟภมยรลวสหอฮะาิีุูเแโใไ",""],
+ ["Hindi","अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह",""],
+ ["Japanese (kana)","あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン",""],
+ ["Korean (jamo)","ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗㅛㅜㅠㅡㅣ",""]
+];
+const ASCII_CORE="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:!?'\"()-";
+</script>
+
+<script>
+"use strict";
+/* ============================================================
+   Interface
+   ============================================================ */
+const $=s=>document.querySelector(s);
+const el=(t,c,h)=>{const e=document.createElement(t); if(c)e.className=c;
+  if(h!==undefined)e.innerHTML=h; return e;};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hex=cp=>'U+'+cp.toString(16).toUpperCase().padStart(4,'0');
+const kb=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' kB':(n/1048576).toFixed(2)+' MB';
+
+let FONT=null, FAM='SortsFont', FACE=null, SEED=0;
+let sampleText="Hamburgefonstiv — the quick brown fox jumps over the lazy dog. 0123456789";
+let varSettings={}, featOn={};
+
+const PANELS=[
+  {id:'specimen', label:'Specimen'},
+  {id:'sorts',    label:'Out of sorts'},
+  {id:'coverage', label:'Coverage'},
+  {id:'features', label:'Features'},
+  {id:'axes',     label:'Axes'},
+  {id:'metrics',  label:'Metrics'},
+  {id:'glyphs',   label:'Glyphs'},
+  {id:'tables',   label:'Tables'}
+];
+let active='specimen';
+
+/* ---------- loading ---------- */
+const drop=$('#drop'), fileInput=$('#file');
+drop.onclick=()=>fileInput.click();
+$('#another').onclick=()=>fileInput.click();
+fileInput.onchange=e=>{ if(e.target.files[0]) load(e.target.files[0]); };
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{
+  e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{
+  e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) load(f); });
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{
+  e.preventDefault();
+  const f=e.dataTransfer&&e.dataTransfer.files[0];
+  if(f) load(f);
+});
+
+function fail(msg){
+  drop.innerHTML='<h2>That file did not open</h2><p>'+esc(msg)+
+    '</p><div class="fmt">Try a <em>.ttf</em>, <em>.otf</em> or <em>.woff</em> — click to pick another.</div>';
+  drop.style.borderColor='var(--acc)';
+}
+
+/* Chrome can hand a page the actual font files installed on the machine, with
+   the user's permission — so you do not need to go hunting for a file first. */
+const localbar=$('#localbar'), picker=$('#picker');
+if('queryLocalFonts' in window) localbar.hidden=false;
+$('#localbtn').onclick=async()=>{
+  const note=$('#localnote');
+  note.textContent='Asking your browser for permission…';
+  let fonts;
+  try{ fonts=await window.queryLocalFonts(); }
+  catch(e){
+    note.textContent=e.name==='SecurityError'||e.name==='NotAllowedError'
+      ? 'Your browser did not allow access to installed fonts. You can still drop a file above.'
+      : 'Could not read the installed fonts: '+e.message;
+    return;
+  }
+  if(!fonts||!fonts.length){ note.textContent='Your browser reported no installed fonts.'; return; }
+  note.textContent=fonts.length+' installed';
+  picker.hidden=false;
+  const list=$('#picklist'), filter=$('#pickfilter');
+  const draw=()=>{
+    const q=filter.value.trim().toLowerCase();
+    list.innerHTML='';
+    const shown=fonts.filter(f=>!q||f.fullName.toLowerCase().includes(q)).slice(0,400);
+    if(!shown.length){ list.appendChild(el('div','empty','Nothing matches that.')); return; }
+    shown.forEach(f=>{
+      const row=el('div','pf');
+      row.appendChild(el('div','pfn',esc(f.fullName)));
+      row.appendChild(el('div','pfs',esc(f.postscriptName)));
+      row.onclick=async()=>{
+        row.querySelector('.pfs').textContent='opening…';
+        try{
+          const blob=await f.blob();
+          picker.hidden=true; localbar.hidden=true;
+          await load(new File([blob], f.postscriptName+'.ttf'));
+        }catch(e){ row.querySelector('.pfs').textContent='could not be read'; }
+      };
+      list.appendChild(row);
+    });
+  };
+  filter.oninput=draw; draw(); filter.focus();
+};
+$('#pickclose').onclick=()=>{ picker.hidden=true; };
+
+async function load(file){
+  const name=file.name||'font';
+  try{
+    const buf=await file.arrayBuffer();
+    const r=new Reader(buf);
+    if(buf.byteLength<16) throw new Error('The file is too small to be a font.');
+    const sig=r.u32(0);
+    let sfnt=buf, partial=null, container='TrueType/OpenType';
+
+    if(sig===0x774F4646){                    // 'wOFF'
+      container='WOFF';
+      sfnt=await woffToSfnt(buf);
+    } else if(sig===0x774F4632){             // 'wOF2'
+      container='WOFF2';
+      partial=woff2Directory(buf);
+    } else if(sig===0x74746366){
+      container='TrueType Collection';
+    } else if(sig!==0x00010000 && sig!==0x4F54544F && sig!==0x74727565){
+      throw new Error('This is not a font file — its first four bytes are 0x'+
+        sig.toString(16).padStart(8,'0')+'.');
+    }
+
+    if(partial){
+      FONT={ partial, container, fileName:name, fileSize:buf.byteLength,
+             names:{}, cps:new Set(), features:[], dir:[] };
+    } else {
+      FONT=parseSfnt(sfnt);
+      FONT.container=container;
+      FONT.fileName=name;
+      FONT.fileSize=buf.byteLength;
+    }
+
+    // hand the original bytes to the browser so it can render the thing
+    if(FACE) document.fonts.delete(FACE);
+    FAM='SortsFont'+(++SEED);
+    FACE=new FontFace(FAM,buf);
+    try{ await FACE.load(); document.fonts.add(FACE); FONT.renderable=true; }
+    catch(e){ FONT.renderable=false; FONT.renderError=e.message; }
+
+    varSettings={}; featOn={};
+    if(FONT.axes) FONT.axes.forEach(a=>varSettings[a.tag]=a.def);
+    show();
+  }catch(err){ fail(err.message||String(err)); }
+}
+
+/* ---------- chrome ---------- */
+function show(){
+  drop.style.display='none';
+  $('#intro').style.display='none';
+  localbar.hidden=true; picker.hidden=true;
+  $('#app').style.display='block';
+
+  const F=FONT;
+  const fam=F.names[16]||F.names[1]||F.fileName;
+  const sub=F.names[17]||F.names[2]||'';
+  $('#fname').textContent=fam+(sub&&sub!=='Regular'?' '+sub:'');
+  const bits=[F.fileName, kb(F.fileSize)];
+  if(F.numGlyphs) bits.push(F.numGlyphs.toLocaleString()+' glyphs');
+  if(F.cps&&F.cps.size) bits.push(F.cps.size.toLocaleString()+' characters');
+  $('#fsub').textContent=bits.join(' · ');
+
+  const pills=$('#pills'); pills.innerHTML='';
+  const pill=(t,c)=>pills.appendChild(el('span','pill'+(c?' '+c:''),esc(t)));
+  pill(F.container);
+  if(F.truncated) pill('file looks truncated','warn');
+  if(F.partial) pill('structure only','warn');
+  else {
+    pill(F.isCFF?'CFF outlines':'TrueType outlines');
+    if(F.axes) pill(F.axes.length+' variable '+(F.axes.length===1?'axis':'axes'),'good');
+    if(F.features&&F.features.length) pill(F.features.length+' features');
+  }
+
+  const tabs=$('#tabs'); tabs.innerHTML='';
+  const panels=$('#panels'); panels.innerHTML='';
+  const avail=PANELS.filter(p=>{
+    if(F.partial) return p.id==='specimen'||p.id==='tables';
+    if(p.id==='axes') return !!F.axes;
+    if(p.id==='features') return F.features&&F.features.length;
+    return true;
+  });
+  if(!avail.some(p=>p.id===active)) active=avail[0].id;
+  avail.forEach(p=>{
+    const b=el('button',p.id===active?'on':'',esc(p.label));
+    b.onclick=()=>{ active=p.id; show(); };
+    tabs.appendChild(b);
+    const s=el('section','panel'+(p.id===active?' on':''));
+    s.id='p-'+p.id; panels.appendChild(s);
+  });
+  if(F.truncated){
+    const w=el('div','verdict bad');
+    w.appendChild(el('h3','','This file appears to be incomplete'));
+    w.appendChild(el('p','','Its table directory points past the end of the file, so '+
+      F.truncated.length+' table'+(F.truncated.length===1?'':'s')+' could not be read: '+
+      esc(F.truncated.join(', '))+'. Everything below is drawn from the tables that did survive, '+
+      'so treat it as partial — the file was most likely cut short in transit.'));
+    $('#p-'+active).appendChild(w);
+  }
+  RENDER[active]($('#p-'+active), F);
+  window.scrollTo({top:0,behavior:'instant'});
+}
+
+function fontStyle(size,extra){
+  let s=`font-family:'${FAM}',serif;font-size:${size};`;
+  const vs=Object.entries(varSettings);
+  if(vs.length) s+=`font-variation-settings:${vs.map(([k,v])=>`"${k}" ${v}`).join(',')};`;
+  const fs=Object.entries(featOn).filter(([,v])=>v);
+  if(fs.length) s+=`font-feature-settings:${fs.map(([k])=>`"${k}" 1`).join(',')};`;
+  return s+(extra||'');
+}
+</script>
+<script>
+"use strict";
+const RENDER={};
+
+/* ---------------- Specimen ---------------- */
+RENDER.specimen=function(p,F){
+  if(F.partial){
+    p.appendChild(el('p','lead',
+      'This is a <b>WOFF2</b> file. Its tables are packed into a single Brotli stream, and browsers '+
+      'expose gzip and deflate but not Brotli — so Sorts cannot read the tables byte by byte the way '+
+      'it does for TTF, OTF and WOFF. What it can still do is show you the table inventory (see '+
+      '<b>Tables</b>) and let the browser render the font, which it does natively.'));
+  }
+  const ctl=el('div','ctl');
+  const ta=el('textarea'); ta.rows=2; ta.value=sampleText;
+  ta.oninput=()=>{ sampleText=ta.value; paint(); };
+  const wrapTa=el('div'); wrapTa.style.flex='1 1 100%'; wrapTa.appendChild(ta);
+  ctl.appendChild(wrapTa);
+
+  const sizeL=el('label','','Size');
+  const size=el('input'); size.type='range'; size.min=12; size.max=180; size.value=64;
+  const sizeV=el('span'); sizeV.style.fontFamily='var(--mono)'; sizeV.style.fontSize='12px';
+  sizeL.appendChild(size); sizeL.appendChild(sizeV); ctl.appendChild(sizeL);
+  p.appendChild(ctl);
+
+  const spec=el('div'); spec.id='specimen'; p.appendChild(spec);
+
+  p.appendChild(el('div','sub','Waterfall'));
+  const wf=el('div','wf'); p.appendChild(wf);
+
+  function paint(){
+    const s=+size.value; sizeV.textContent=s+'px';
+    spec.setAttribute('style',fontStyle(s+'px','line-height:1.18;'));
+    spec.textContent=sampleText||' ';
+    wf.innerHTML='';
+    [10,12,14,18,24,32,48,72].forEach(sz=>{
+      const row=el('div');
+      row.appendChild(el('span','sz',sz+''));
+      const t=el('span','tx'); t.setAttribute('style',fontStyle(sz+'px'));
+      t.textContent=sampleText||' ';
+      row.appendChild(t); wf.appendChild(row);
+    });
+  }
+  size.oninput=paint;
+  paint();
+
+  if(F.renderable===false)
+    p.appendChild(el('p','note','The browser refused to render this font: '+esc(F.renderError||'unknown reason')+
+      '. The table data above still comes straight from the file.'));
+};
+
+/* ---------------- Out of sorts ---------------- */
+RENDER.sorts=function(p,F){
+  p.appendChild(el('p','lead',
+    'Paste the text you actually need to set. Every character is looked up in the font\'s character map. '+
+    'Anything missing is listed below — those are the characters your browser will quietly borrow from '+
+    'some other font, which is why one letter in a word sometimes looks wrong.'));
+
+  const ta=el('textarea'); ta.rows=5;
+  ta.placeholder='Paste your headline, your product names, your customer list…';
+  ta.value=localStorage.getItem('sorts.text')||
+    'Crème brûlée · jalapeño · Kraków · İstanbul · Đà Nẵng — “smart quotes”, 25 °C, ½ kg, №7, ≈4×, ₴120, ™ and 東京.';
+  p.appendChild(ta);
+
+  const out=el('div'); p.appendChild(out);
+
+  function check(){
+    const txt=ta.value;
+    try{ localStorage.setItem('sorts.text',txt); }catch(e){}
+    out.innerHTML='';
+    const counts=new Map(), missing=new Map();
+    let total=0;
+    for(const ch of txt){
+      const cp=ch.codePointAt(0);
+      if(cp===0x0A||cp===0x0D||cp===0x09) continue;
+      total++;
+      counts.set(cp,(counts.get(cp)||0)+1);
+      if(!F.cps.has(cp)) missing.set(cp,(missing.get(cp)||0)+1);
+    }
+    if(!total){ out.appendChild(el('p','empty','Type or paste something above.')); return; }
+
+    const distinct=counts.size, nMiss=missing.size;
+    const v=el('div','verdict '+(nMiss?'bad':'ok'));
+    if(!nMiss){
+      v.appendChild(el('h3','','All '+distinct+' distinct characters are in the font'));
+      v.appendChild(el('p','','This font can set every character of that text on its own — nothing '+
+        'will fall back to another face.'));
+    }else{
+      const n=[...missing.values()].reduce((a,b)=>a+b,0);
+      v.appendChild(el('h3','',nMiss+' character'+(nMiss===1?'':'s')+' missing from this font'));
+      v.appendChild(el('p','','Out of '+distinct+' distinct characters in your text, '+nMiss+
+        ' '+(nMiss===1?'has':'have')+' no glyph here — '+n+' occurrence'+(n===1?'':'s')+
+        ' in total. Your browser will substitute another font for '+
+        (nMiss===1?'it':'them')+', usually with a visible change in weight or width.'));
+    }
+    out.appendChild(v);
+
+    if(nMiss){
+      const grid=el('div','missgrid');
+      [...missing.entries()].sort((a,b)=>b[1]-a[1]).forEach(([cp,n])=>{
+        const c=el('div','miss');
+        c.appendChild(el('div','ch',esc(String.fromCodePoint(cp))));
+        c.appendChild(el('div','cp',hex(cp)));
+        c.appendChild(el('div','nm',esc(blockOf(cp))));
+        c.appendChild(el('div','ct',n+'×'));
+        grid.appendChild(c);
+      });
+      out.appendChild(grid);
+      const btn=el('button','btn','Copy the missing characters');
+      btn.style.marginTop='16px';
+      btn.onclick=()=>{
+        const s=[...missing.keys()].map(cp=>hex(cp)+'  '+String.fromCodePoint(cp)+'  '+blockOf(cp)).join('\n');
+        navigator.clipboard.writeText(s).then(()=>{btn.textContent='Copied';
+          setTimeout(()=>btn.textContent='Copy the missing characters',1400);});
+      };
+      out.appendChild(btn);
+    }
+
+    /* rendered against fallback, so the difference is visible */
+    out.appendChild(el('div','sub','Your text, set in this font'));
+    const box=el('div'); box.id='specimen';
+    box.setAttribute('style',fontStyle('28px','line-height:1.35;'));
+    box.textContent=txt; out.appendChild(box);
+  }
+  ta.oninput=check; check();
+};
+
+/* ---------------- Coverage ---------------- */
+RENDER.coverage=function(p,F){
+  const cps=[...F.cps].sort((a,b)=>a-b);
+  p.appendChild(el('p','lead',
+    'Counted from the font\'s <code>cmap</code> table — the list of characters it claims it can draw. '+
+    'A language is marked supported only when every one of its letters is present, accents included.'));
+
+  p.appendChild(el('div','sub','Languages'));
+  const lg=el('div','langs');
+  LANGS.forEach(([name,chars])=>{
+    const need=[...new Set((ASCII_CORE+chars).split(''))];
+    const miss=need.filter(c=>!F.cps.has(c.codePointAt(0)));
+    const d=el('div','lang '+(miss.length?'n':'y'));
+    d.appendChild(el('span','dot'));
+    d.appendChild(el('span','',esc(name)));
+    if(miss.length) d.appendChild(el('span','miss',miss.length+' missing'));
+    d.title=miss.length? 'Missing: '+miss.slice(0,40).join(' ') : 'Fully covered';
+    lg.appendChild(d);
+  });
+  p.appendChild(lg);
+
+  p.appendChild(el('div','sub','Unicode blocks'));
+  const byBlock=new Map();
+  cps.forEach(cp=>{ const b=blockOf(cp); byBlock.set(b,(byBlock.get(b)||0)+1); });
+  const sizes=new Map(BLOCKS.map(b=>[b[2],b[1]-b[0]+1]));
+  const grid=el('div','blocks');
+  [...byBlock.entries()].sort((a,b)=>b[1]-a[1]).forEach(([name,n])=>{
+    const size=sizes.get(name);
+    const known=size!==undefined;
+    const pct=known?Math.min(100,Math.round(n/size*100)):0;
+    const d=el('div','blk'+(known&&pct>=99?' full':''));
+    const t=el('div','bn');
+    t.appendChild(el('span','',esc(name)));
+    t.appendChild(el('span','bc',known?(n+' / '+size):(n+' char'+(n===1?'':'s'))));
+    d.appendChild(t);
+    if(known){
+      const bar=el('div','bar'); const i=el('i'); i.style.width=Math.max(2,pct)+'%';
+      bar.appendChild(i); d.appendChild(bar);
+    }
+    grid.appendChild(d);
+  });
+  p.appendChild(grid);
+  p.appendChild(el('p','note',
+    'The right-hand number is how many code points that block\'s range contains in total, including '+
+    'positions Unicode has never assigned — so a block is rarely "100% full" even when a font covers '+
+    'everything real in it.'));
+};
+</script>
+<script>
+"use strict";
+
+/* ---------------- Features ---------------- */
+RENDER.features=function(p,F){
+  p.appendChild(el('p','lead',
+    'Every OpenType feature this font carries. Switch one on and the sample beside it re-renders with '+
+    'the feature applied — the pair shows you what the designer actually drew, not what the tag is '+
+    'supposed to mean in general.'));
+
+  const ctl=el('div','ctl');
+  const ta=el('input'); ta.type='text'; ta.value='';
+  ta.placeholder='Custom sample text for every feature (optional)';
+  ctl.appendChild(ta); p.appendChild(ctl);
+
+  const list=el('div'); p.appendChild(list);
+
+  function build(){
+    list.innerHTML='';
+    const pending=[];
+    F.features.forEach(tag=>{
+      const [name,desc]=featureInfo(tag);
+      const box=el('div','feat'+(featOn[tag]?' on':''));
+      const head=el('div','feathead');
+      head.appendChild(el('div','ftag',esc(tag)));
+      const mid=el('div'); mid.style.flex='1';
+      mid.appendChild(el('div','fname',esc(name)));
+      mid.appendChild(el('div','fdesc',esc(desc)));
+      head.appendChild(mid);
+      head.appendChild(el('div','sw'));
+      box.appendChild(head);
+
+      const demo=el('div','featdemo');
+      const sample=ta.value||FEATURE_SAMPLE[tag]||
+        (/^(ss|cv)\d\d$/.test(tag)?'Hamburgefonstiv 0123':sampleText.slice(0,40));
+      const cmp=el('div','cmp');
+      const mk=(label,on)=>{
+        const d=el('div');
+        d.appendChild(el('div','cl',label));
+        const v=el('div','cv');
+        let s=fontStyle('30px','line-height:1.25;');
+        s+=`font-feature-settings:"${tag}" ${on?1:0};`;
+        v.setAttribute('style',s); v.textContent=sample;
+        d.appendChild(v); return d;
+      };
+      const offEl=mk('off',false), onEl=mk('on',true);
+      cmp.appendChild(offEl); cmp.appendChild(onEl);
+      demo.appendChild(cmp);
+      box.appendChild(demo);
+      // measured, not assumed: does switching this feature on actually move anything?
+      pending.push(()=>{
+        const a=offEl.querySelector('.cv'), b=onEl.querySelector('.cv');
+        const tw=n=>{const r=document.createRange();r.selectNodeContents(n);
+          const rects=[...r.getClientRects()];
+          return rects.reduce((t,x)=>t+x.width,0);};
+        const wa=tw(a), wb=tw(b);
+        const badge=el('span','fbadge');
+        if(Math.abs(wa-wb)>0.5){
+          badge.textContent='changes this text';
+          badge.classList.add('yes');
+          b.classList.add('diff');
+        } else {
+          badge.textContent='same widths';
+          badge.title='The advance widths are identical, so this feature either does nothing to '+
+            'this sample or swaps glyphs of the same width. Try your own text above.';
+        }
+        mid.querySelector('.fname').appendChild(badge);
+      });
+
+      head.onclick=()=>{
+        featOn[tag]=!featOn[tag];
+        box.classList.toggle('on',featOn[tag]);
+      };
+      // always reveal the comparison for features a simple toggle can show
+      if(DEMOABLE.has(tag)||/^(ss|cv)\d\d$/.test(tag)) box.classList.add('showdemo');
+      list.appendChild(box);
+    });
+    // measure once the samples are laid out and the face is ready
+    document.fonts.ready.then(()=>requestAnimationFrame(()=>pending.forEach(f=>f())));
+  }
+  ta.oninput=build; build();
+
+  p.appendChild(el('p','note',
+    'Features that reshape a script rather than restyle it — <code>init</code>, <code>medi</code>, '+
+    '<code>fina</code>, <code>mark</code>, the Indic and CJK sets — do their work automatically as '+
+    'part of normal text shaping, so a before-and-after on Latin sample text would show nothing. '+
+    'They are listed without a comparison.'));
+
+  if(F.scripts&&F.scripts.length){
+    p.appendChild(el('div','sub','Scripts declared in the layout tables'));
+    p.appendChild(el('p','note',F.scripts.map(esc).join(' · ')));
+  }
+};
+
+/* ---------------- Axes ---------------- */
+RENDER.axes=function(p,F){
+  p.appendChild(el('p','lead',
+    'This is a variable font. Each axis below is a dimension the design moves along continuously — '+
+    'drag one and the specimen follows. The named instances are the specific settings the designer '+
+    'chose to give names to.'));
+
+  if(F.instances&&F.instances.length){
+    const row=el('div','insts');
+    F.instances.forEach(inst=>{
+      const nm=F.names[inst.nameID]||'Instance';
+      const b=el('button','',esc(nm));
+      b.onclick=()=>{
+        F.axes.forEach((a,i)=>varSettings[a.tag]=inst.coords[i]);
+        show();
+      };
+      row.appendChild(b);
+    });
+    p.appendChild(row);
+  }
+
+  const spec=el('div'); spec.id='specimen';
+  const paintSpec=()=>{
+    spec.setAttribute('style',fontStyle('58px','line-height:1.2;'));
+    spec.textContent=sampleText;
+  };
+  p.appendChild(spec); paintSpec();
+
+  F.axes.forEach(a=>{
+    const nm=F.names[a.nameID]||a.tag;
+    const box=el('div','axis');
+    const hd=el('div','axhd');
+    hd.appendChild(el('span','at',esc(a.tag)));
+    hd.appendChild(el('span','an',esc(nm)));
+    const val=el('span','av'); hd.appendChild(val);
+    box.appendChild(hd);
+    const r=el('input'); r.type='range';
+    r.step='any';   // set before value, or the default step grid snaps it
+    r.min=a.min; r.max=a.max; r.value=varSettings[a.tag];
+    box.appendChild(r);
+    const rg=el('div','axrange');
+    rg.appendChild(el('span','',String(a.min)));
+    rg.appendChild(el('span','',String(a.def)+' default'));
+    rg.appendChild(el('span','',String(a.max)));
+    box.appendChild(rg);
+    const upd=()=>{
+      const v=Math.round(+r.value*100)/100;
+      varSettings[a.tag]=v; val.textContent=v;
+      paintSpec();
+    };
+    r.oninput=upd; upd();
+    p.appendChild(box);
+  });
+
+  const reset=el('button','btn','Reset every axis to its default');
+  reset.onclick=()=>{ F.axes.forEach(a=>varSettings[a.tag]=a.def); show(); };
+  p.appendChild(reset);
+};
+</script>
+<script>
+"use strict";
+
+/* ---------------- Metrics ---------------- */
+RENDER.metrics=function(p,F){
+  const upem=F.unitsPerEm||1000, o=F.os2||{}, h=F.hhea||{};
+  const sets=[
+    {k:'hhea', a:h.ascender, d:h.descender, g:h.lineGap,
+     who:'What macOS and iOS use, and what most desktop apps read first.'},
+    {k:'OS/2 typo', a:o.typoAscender, d:o.typoDescender, g:o.typoLineGap,
+     who:'The designer\'s intended text spacing. Used when the font asks for it (see below).'},
+    {k:'OS/2 win', a:o.winAscent, d:o.winDescent!==undefined?-o.winDescent:undefined, g:0,
+     who:'A clipping box, not a spacing hint — but Windows has long used it for line height.'}
+  ].filter(s=>s.a!==undefined&&s.d!==undefined);
+
+  p.appendChild(el('p','lead',
+    'A font carries three different opinions about how tall it is, and platforms disagree about which '+
+    'to believe. This is the usual reason the same CSS gives you different line heights on a Mac and a '+
+    'PC. Below: each set, and the line height it produces at 16px.'));
+
+  /* the picture — plain elements, so the labels stay readable at any width */
+  const asc=Math.max(...sets.map(x=>x.a), o.capHeight||0);
+  const desc=Math.min(...sets.map(x=>x.d));
+  const span=asc-desc, PH=300, pad=26;
+  const yOf=v=>pad+(asc-v)/span*(PH-pad*2);
+
+  const viz=el('div','metviz');
+  const stage=el('div','stage');
+  stage.style.height=PH+'px';
+
+  const ghost=el('div','ghost');
+  ghost.setAttribute('style',fontStyle(((PH-pad*2)/span*(o.capHeight||asc*0.7))*1.45+'px',
+    'position:absolute;left:12px;bottom:'+(PH-yOf(0))+'px;line-height:1;color:#241f1b;'+
+    'pointer-events:none;white-space:nowrap'));
+  ghost.textContent='Hxpg';
+  stage.appendChild(ghost);
+
+  const rule=(v,cls,label,col)=>{
+    const r=el('div','rule '+cls);
+    r.style.top=yOf(v)+'px';
+    if(col) r.style.setProperty('--c',col);
+    const t=el('span','rl',esc(label));
+    if(col) t.style.color=col;
+    r.appendChild(t);
+    stage.appendChild(r);
+  };
+  if(o.capHeight) rule(o.capHeight,'faint','cap height '+o.capHeight);
+  if(o.xHeight)   rule(o.xHeight,'faint','x-height '+o.xHeight);
+  rule(0,'base','baseline');
+  const cols=['#f2603c','#ffb05c','#6fbf8b'];
+  const seen={};
+  sets.forEach((x,i)=>{
+    ['a','d'].forEach(k=>{
+      const v=x[k];
+      seen[v]=(seen[v]||0)+1;
+      const r=el('div','rule set');
+      r.style.top=yOf(v)+'px';
+      r.style.setProperty('--c',cols[i]);
+      const t=el('span','rl',esc(x.k+' '+(k==='a'?'ascent':'descent')+' '+v));
+      t.style.color=cols[i];
+      // if two sets share a value, stack their labels instead of overprinting
+      t.style.transform='translateY('+(-100*(seen[v]-1)-4)+'%)';
+      r.appendChild(t);
+      stage.appendChild(r);
+    });
+  });
+  viz.appendChild(stage);
+  p.appendChild(viz);
+
+  /* the numbers */
+  const lh=el('div','lh');
+  sets.forEach((s,i)=>{
+    const total=(s.a-s.d+(s.g||0));
+    const px=(total/upem*16);
+    const c=el('div','lhc');
+    c.appendChild(el('div','k',esc(s.k)));
+    const v=el('div','v',px.toFixed(2)+' px');
+    v.style.color=cols[i]; c.appendChild(v);
+    c.appendChild(el('div','d','ascent '+s.a+', descent '+s.d+', gap '+(s.g||0)+
+      ' — '+(total/upem).toFixed(3)+' em'));
+    lh.appendChild(c);
+  });
+  p.appendChild(lh);
+
+  const spread=(()=>{
+    const vals=sets.map(s=>(s.a-s.d+(s.g||0))/upem*16);
+    return Math.max(...vals)-Math.min(...vals);
+  })();
+
+  p.appendChild(el('div','sub','What this means'));
+  const n=el('div','metnote');
+  n.innerHTML=
+    (spread<0.05
+      ? '<b>These agree.</b> All three metric sets give essentially the same line height, so this font '+
+        'will space the same way everywhere. That is the sign of a carefully finished font.'
+      : '<b>These disagree by '+spread.toFixed(2)+'px at 16px type</b> — about '+
+        Math.round(spread/16*100)+'% of the font size. Set <code>line-height</code> explicitly in your '+
+        'CSS and the difference goes away; leave it as <code>normal</code> and your text will occupy '+
+        'different amounts of vertical space on different platforms.')
+    +'<br><br>'+
+    (F.useTypoMetrics
+      ? 'This font sets <code>USE_TYPO_METRICS</code>, the flag that asks every platform to use the '+
+        'OS/2 typo numbers. When software honours it, that is the set you get.'
+      : 'This font does <b>not</b> set <code>USE_TYPO_METRICS</code>, so nothing tells a platform which '+
+        'set to prefer and each one falls back to its own habit — hhea on macOS, the win values on Windows.')
+    +'<br><br>Units per em: <b>'+upem+'</b>'+
+    (F.bbox?'. Glyph bounding box: '+F.bbox.xMin+', '+F.bbox.yMin+' to '+F.bbox.xMax+', '+F.bbox.yMax+'.':'.');
+  p.appendChild(n);
+
+  /* other odds and ends */
+  p.appendChild(el('div','sub','Reported by the font'));
+  const rows=[];
+  if(o.weightClass) rows.push(['Weight class',o.weightClass+(o.weightClass===400?' (regular)':o.weightClass===700?' (bold)':'')]);
+  if(o.widthClass) rows.push(['Width class',o.widthClass]);
+  if(F.post) rows.push(['Italic angle',F.post.italicAngle+'°']);
+  if(F.post) rows.push(['Monospaced',F.post.isFixedPitch?'yes':'no']);
+  if(o.xHeight) rows.push(['x-height',o.xHeight+' units ('+(o.xHeight/upem).toFixed(3)+' em)']);
+  if(o.capHeight) rows.push(['Cap height',o.capHeight+' units ('+(o.capHeight/upem).toFixed(3)+' em)']);
+  if(F.post) rows.push(['Underline',F.post.underlinePosition+' units, '+F.post.underlineThickness+' thick']);
+  const perm={0:'Installable — no restriction',2:'Restricted: no embedding permitted',
+    4:'Preview & print embedding only',8:'Editable embedding permitted'}[o.fsType&0xF]
+    ||('fsType 0x'+(o.fsType||0).toString(16));
+  rows.push(['Embedding',perm]);
+  const tw=el('div','tw'); const t=el('table');
+  t.innerHTML='<tbody>'+rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td class="n">'+esc(r[1])+'</td></tr>').join('')+'</tbody>';
+  tw.appendChild(t); p.appendChild(tw);
+};
+</script>
+<script>
+"use strict";
+
+/* ---------------- Glyphs ---------------- */
+RENDER.glyphs=function(p,F){
+  const cps=[...F.cps].sort((a,b)=>a-b);
+  p.appendChild(el('p','lead',
+    'Every character the font maps, drawn by the font itself. '+
+    F.numGlyphs+' glyphs live in the file; '+cps.length.toLocaleString()+' of them are reachable '+
+    'from a character code. The rest are alternates and components that only appear through '+
+    'OpenType features.'));
+
+  const byBlock=new Map();
+  cps.forEach(cp=>{ const b=blockOf(cp); if(!byBlock.has(b))byBlock.set(b,[]); byBlock.get(b).push(cp); });
+  const blocks=[...byBlock.entries()].sort((a,b)=>b[1].length-a[1].length);
+
+  const ctl=el('div','ctl');
+  const sel=el('select');
+  blocks.forEach(([n,arr],i)=>{
+    const o=document.createElement('option'); o.value=i;
+    o.textContent=n+'  ('+arr.length+')'; sel.appendChild(o);
+  });
+  const lw=el('label','','Block'); lw.style.flex='1 1 320px';
+  lw.appendChild(sel); ctl.appendChild(lw);
+  p.appendChild(ctl);
+
+  const grid=el('div','gg'); p.appendChild(grid);
+  const info=el('div','hint','Hover a cell for its code point; click to copy the character.');
+  p.appendChild(info);
+
+  const CAP=1500;
+  function paint(){
+    const arr=blocks[+sel.value][1];
+    grid.innerHTML='';
+    arr.slice(0,CAP).forEach(cp=>{
+      const c=el('div','gc');
+      const s=el('span'); s.setAttribute('style',fontStyle('30px'));
+      s.textContent=String.fromCodePoint(cp);
+      c.appendChild(s);
+      c.appendChild(el('i','',hex(cp).replace('U+','')));
+      c.title=hex(cp);
+      c.onclick=()=>{ navigator.clipboard.writeText(String.fromCodePoint(cp));
+        info.textContent='Copied '+String.fromCodePoint(cp)+'  '+hex(cp); };
+      grid.appendChild(c);
+    });
+    if(arr.length>CAP)
+      grid.appendChild(el('div','note','…and '+(arr.length-CAP).toLocaleString()+' more in this block.'));
+  }
+  sel.onchange=paint; paint();
+};
+
+/* ---------------- Tables ---------------- */
+RENDER.tables=function(p,F){
+  if(F.partial){
+    const w=F.partial;
+    p.appendChild(el('p','lead',
+      'A WOFF2 file keeps its table directory in the clear and everything else inside one Brotli '+
+      'stream. Sorts reads the directory, so you can see exactly what the font contains and how big '+
+      'each table was before compression — but not the contents.'));
+    const bits=[['Tables',w.numTables],
+      ['File size',kb(w.fileSize)],
+      ['Uncompressed size',kb(w.totalSfntSize)],
+      ['Compression',(100-w.fileSize/w.totalSfntSize*100).toFixed(1)+'% smaller'],
+      ['Outlines',w.flavor===0x4F54544F?'CFF':'TrueType']];
+    const t0=el('table');
+    t0.innerHTML='<tbody>'+bits.map(r=>'<tr><td>'+esc(r[0])+'</td><td class="n">'+esc(r[1])+'</td></tr>').join('')+'</tbody>';
+    const tw0=el('div','tw'); tw0.appendChild(t0); p.appendChild(tw0);
+    p.appendChild(el('div','sub','Tables in the file'));
+    const max=Math.max(...w.tables.map(t=>t.length));
+    const t=el('table');
+    t.innerHTML='<thead><tr><th>Tag</th><th>What it holds</th><th class="n">Original size</th><th></th></tr></thead><tbody>'+
+      w.tables.slice().sort((a,b)=>b.length-a.length).map(x=>
+        '<tr><td style="font-family:var(--mono)">'+esc(x.tag)+'</td><td>'+esc(TABLE_DESC[x.tag.trim()]||'—')+
+        '</td><td class="n">'+kb(x.length)+'</td>'+
+        '<td style="width:34%"><div class="bar"><i style="width:'+Math.max(2,x.length/max*100)+'%"></i></div></td></tr>'
+      ).join('')+'</tbody>';
+    const tw=el('div','tw'); tw.appendChild(t); p.appendChild(tw);
+    p.appendChild(el('p','note',
+      'To read the rest, convert the file to TTF or OTF — <code>fonttools ttLib</code> or any font '+
+      'editor will do it — and drop that here instead.'));
+    return;
+  }
+
+  p.appendChild(el('p','lead',
+    'The font\'s own table of contents, largest first. This is where the file\'s weight actually goes.'));
+  const max=Math.max(...F.dir.map(t=>t.len));
+  const total=F.dir.reduce((a,t)=>a+t.len,0);
+  const t=el('table');
+  t.innerHTML='<thead><tr><th>Tag</th><th>What it holds</th><th class="n">Size</th><th class="n">Share</th><th></th></tr></thead><tbody>'+
+    F.dir.map(x=>
+      '<tr><td style="font-family:var(--mono);color:var(--acc2)">'+esc(x.tag)+'</td>'+
+      '<td>'+esc(TABLE_DESC[x.tag.trim()]||'—')+'</td>'+
+      '<td class="n">'+kb(x.len)+'</td>'+
+      '<td class="n">'+(x.len/total*100).toFixed(1)+'%</td>'+
+      '<td style="width:26%"><div class="bar"><i style="width:'+Math.max(2,x.len/max*100)+'%"></i></div></td></tr>'
+    ).join('')+'</tbody>';
+  const tw=el('div','tw'); tw.appendChild(t); p.appendChild(tw);
+
+  if(F.numFontsInCollection>1)
+    p.appendChild(el('p','note','This is a TrueType Collection holding '+F.numFontsInCollection+
+      ' fonts that share outlines. Sorts reads the first one; the others are not shown.'));
+
+  if(F.cmapSubtables&&F.cmapSubtables.length){
+    p.appendChild(el('div','sub','Character map encodings'));
+    const PLAT={0:'Unicode',1:'Macintosh',3:'Windows'};
+    const t3=el('table');
+    t3.innerHTML='<thead><tr><th>Platform</th><th>Encoding</th><th class="n">Format</th></tr></thead><tbody>'+
+      F.cmapSubtables.map(x=>{
+        const used=(x.pid+'/'+x.eid)===F.cmapPlatform;
+        return '<tr><td>'+esc(PLAT[x.pid]||('platform '+x.pid))+(used?' <span class="pill good">read by Sorts</span>':'')+
+          '</td><td class="n">'+x.pid+' / '+x.eid+'</td><td class="n">'+x.format+'</td></tr>';
+      }).join('')+'</tbody>';
+    const tw3=el('div','tw'); tw3.appendChild(t3); p.appendChild(tw3);
+    p.appendChild(el('p','note','A font can ship several character maps for different platforms. '+
+      'Sorts reads the widest one — format 12 covers characters above U+FFFF, format 4 does not.'));
+  }
+
+  p.appendChild(el('div','sub','Names in the file'));
+  const NAMEIDS={0:'Copyright',1:'Family',2:'Subfamily',3:'Unique identifier',4:'Full name',
+    5:'Version',6:'PostScript name',7:'Trademark',8:'Manufacturer',9:'Designer',10:'Description',
+    11:'Vendor URL',12:'Designer URL',13:'Licence',14:'Licence URL',16:'Typographic family',
+    17:'Typographic subfamily',18:'Compatible full name',19:'Sample text',20:'PostScript CID',
+    21:'WWS family',22:'WWS subfamily',25:'Variations PostScript prefix'};
+  const rows=Object.entries(F.names)
+    .filter(([id])=>NAMEIDS[id])
+    .sort((a,b)=>a[0]-b[0])
+    .map(([id,v])=>{
+      let val=esc(v);
+      if(/^https?:\/\//.test(v)) val='<a href="'+esc(v)+'" target="_blank" rel="noopener">'+esc(v)+'</a>';
+      return '<tr><td style="white-space:nowrap">'+esc(NAMEIDS[id])+'</td><td>'+val+'</td></tr>';
+    });
+  const t2=el('table'); t2.innerHTML='<tbody>'+rows.join('')+'</tbody>';
+  const tw2=el('div','tw'); tw2.appendChild(t2); p.appendChild(tw2);
+};
+
+const TABLE_DESC={
+ cmap:'Character map — which code points map to which glyphs',
+ head:'Global header: units per em, bounding box, flags',
+ hhea:'Horizontal header — ascent, descent, line gap',
+ hmtx:'Horizontal metrics — the advance width of every glyph',
+ maxp:'Maximum profile — glyph count and storage limits',
+ name:'Human-readable names, copyright and licence',
+ 'OS/2':'Metrics and classification originally for OS/2 and Windows',
+ post:'PostScript data — glyph names, italic angle, underline',
+ cvt:'Control values used by the hinting instructions',
+ fpgm:'Font program — hinting routines run once at start-up',
+ glyf:'The outlines themselves (TrueType)',
+ loca:'Index telling glyf where each glyph begins',
+ prep:'Control value program, run whenever the size changes',
+ 'CFF':'The outlines themselves (PostScript / Compact Font Format)',
+ CFF2:'Compact Font Format for variable fonts',
+ VORG:'Vertical origins for CJK glyphs',
+ gasp:'Advice on when to smooth or hint at given sizes',
+ hdmx:'Pre-computed device widths for specific sizes',
+ kern:'Old-style kerning pairs, superseded by GPOS',
+ LTSH:'Linear threshold — when scaling becomes linear',
+ PCLT:'Legacy PCL 5 printer metadata',
+ VDMX:'Vertical device metrics per size',
+ vhea:'Vertical header for vertically-set text',
+ vmtx:'Vertical metrics for vertically-set text',
+ BASE:'Baseline positions for mixing scripts',
+ GDEF:'Glyph definitions — what is a mark, a ligature, a base',
+ GPOS:'Glyph positioning — kerning, accent placement',
+ GSUB:'Glyph substitution — ligatures, small caps, alternates',
+ JSTF:'Justification alternatives',
+ MATH:'Mathematical typesetting data',
+ CBDT:'Colour bitmap data (emoji)',
+ CBLC:'Colour bitmap location (emoji)',
+ COLR:'Layered colour glyph definitions',
+ CPAL:'Colour palettes used by COLR',
+ 'SVG':'Glyphs drawn as SVG documents',
+ sbix:'Bitmap images for glyphs',
+ avar:'Axis variations — warps the axis scale',
+ cvar:'Variation data for the control value table',
+ fvar:'Font variations — the axes and named instances',
+ gvar:'Glyph variations — how outlines move along the axes',
+ HVAR:'Horizontal metrics variations',
+ VVAR:'Vertical metrics variations',
+ MVAR:'Variations for font-wide metrics',
+ STAT:'Style attributes, describing where this font sits in its family',
+ DSIG:'Digital signature',
+ EBDT:'Embedded bitmap data',
+ EBLC:'Embedded bitmap location',
+ EBSC:'Embedded bitmap scaling',
+ morx:'Extended AAT glyph metamorphosis',
+ feat:'AAT feature descriptions',
+ kerx:'Extended AAT kerning',
+ trak:'Tracking (letter-spacing) by size',
+ Zapf:'Glyph provenance data',
+ meta:'Metadata such as intended languages'
+};
+</script>
+</body>
+</html>
