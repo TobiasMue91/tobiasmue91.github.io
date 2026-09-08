@@ -100,6 +100,13 @@
         .bracket-right{right:-10px;border-left:none;border-radius:0 3px 3px 0;}
         .bracket-label{position:absolute;left:-38px;top:50%;transform:translateY(-50%) rotate(-90deg);background:#1e3a5f;color:#fff;padding:2px 6px;border-radius:3px;font-size:0.65rem;font-weight:600;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.2);}
         .visual-emoji{filter:drop-shadow(0 3px 6px rgba(0,0,0,0.2));line-height:1;display:block;}
+        .tiny-stack{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;}
+        .loupe{border-radius:50%;background:rgba(255,255,255,0.96);border:2px solid #1e3a5f;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.18);flex:0 0 auto;}
+        .loupe span{line-height:1;display:block;}
+        .loupe-size{margin-top:3px;background:#1e3a5f;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.6rem;font-weight:700;white-space:nowrap;flex:0 0 auto;}
+        .loupe-mag{margin-top:2px;font-size:0.58rem;font-weight:600;color:#1e3a5f;background:rgba(255,255,255,0.85);padding:0 4px;border-radius:3px;white-space:nowrap;flex:0 0 auto;}
+        .tiny-leader{flex:1 1 auto;min-height:10px;width:0;border-left:2px dotted rgba(30,58,95,0.6);}
+        .tiny-dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#1e3a5f;box-shadow:0 0 0 3px rgba(255,255,255,0.75);}
         .visual-name{background:#fff;padding:3px 8px;border-radius:3px;margin-top:5px;font-weight:600;font-size:0.75rem;box-shadow:0 2px 4px rgba(0,0,0,0.1);z-index:1;text-align:center;max-width:100%;overflow-wrap:normal;line-height:1.2;}
         .scale-info{position:absolute;top:10px;right:10px;z-index:11;background:rgba(255,255,255,0.95);padding:6px 10px;border-radius:5px;font-size:0.75rem;color:#475569;font-weight:500;display:flex;align-items:center;gap:5px;}
         .scale-info.warning{background:#fef3c7;color:#92400e;}
@@ -1271,9 +1278,46 @@
             clearBtn.disabled = selected.length === 0;
         }
 
+        var CALLOUT_BELOW = 13;   // px; below this an animal is magnified instead
+
+        // How wide each animal's column can be for a given number of them. Depends
+        // only on the count, so both human-reference scenarios can be costed.
+        function stageFor(count){
+            var stageW = (comparisonEl.clientWidth || 1200) - 40;
+            var narrow = window.innerWidth <= 768;
+            var rulerW = narrow ? 50 : 54;
+            var labelPad = narrow ? 22 : 42;
+            var gap = narrow ? 16 : 40;
+            function fit(g){ return (stageW - rulerW - 30 - labelPad - (count - 1) * g) / count; }
+            var per = fit(gap);
+            if(per < 170){ gap = narrow ? 10 : 20; per = fit(gap); }
+            return {availablePx: Math.floor(Math.max(45, Math.min(280, per))),
+                    gap: gap, labelPad: labelPad, rulerW: rulerW, narrow: narrow};
+        }
+
+        // Count selected animals too small to draw, for a given cast of characters.
+        function calloutCount(cast){
+            if(!cast.length) return 0;
+            var maxS = Math.max.apply(null, cast.map(metricOf));
+            var px = stageFor(cast.length).availablePx;
+            return selected.filter(function(a){ return (metricOf(a) / maxS) * px < CALLOUT_BELOW; }).length;
+        }
+
+        // A 1.7m human is a useless yardstick beside a group of insects: it makes
+        // every one of them a dot. Keep it unless it actually costs an animal you
+        // could otherwise see.
+        function humanRefHidden(){
+            if(!selected.length || !humanAnimal) return false;
+            if(!showHumanRef || isSelected('Human')) return false;
+            var withRef = selected.concat([humanAnimal]);
+            return calloutCount(withRef) > calloutCount(selected);
+        }
+
         function getDisplayAnimals(){
             var display = selected.slice();
-            if(showHumanRef && !isSelected('Human') && humanAnimal) display.push(Object.assign({}, humanAnimal, {isRef: true}));
+            if(showHumanRef && !isSelected('Human') && humanAnimal && !humanRefHidden()){
+                display.push(Object.assign({}, humanAnimal, {isRef: true}));
+            }
             return display;
         }
 
@@ -1294,6 +1338,11 @@
                 var wRatio = fmtRatio(Math.max.apply(null, weights) / Math.min.apply(null, weights));
                 html += '<p class="comparison-subtitle">Height: ' + hRatio + '× · Length: ' + lRatio + '× · Weight: ' + wRatio + '×</p>';
             }
+            if(humanRefHidden()){
+                var largest = Math.max.apply(null, selected.map(metricOf));
+                html += '<p class="comparison-subtitle">Human reference hidden — it is ' +
+                    fmtRatio(metricOf(humanAnimal) / largest) + '× the size of the largest animal here.</p>';
+            }
             html += '</div><div class="selected-pills">';
             selected.forEach(function(a){
                 html += '<span class="selected-pill"><span class="pill-emoji">' + a.emoji + '</span>' + a.name +
@@ -1313,58 +1362,40 @@
             var maxS = Math.max.apply(null, display.map(metricOf));
             var minS = Math.min.apply(null, display.map(metricOf));
             var ratio = maxS / minS;
-            // Four animals at a fixed 280px need ~1200px of stage. Below that the
-            // wrapper used to clip the last ones away entirely, so scale the
-            // drawing to the width actually available and keep them all on one row.
-            var stageW = (comparisonEl.clientWidth || 1200) - 40;
-            var narrow = window.innerWidth <= 768;
-            var rulerW = narrow ? 50 : 54;
-            var gap = narrow ? 16 : 40;
-            var labelPad = narrow ? 22 : 42;   // room for the first bracket label
-            function fit(g){ return (stageW - rulerW - 30 - labelPad - (display.length - 1) * g) / display.length; }
-            var perAnimal = fit(gap);
-            if(perAnimal < 170){ gap = narrow ? 10 : 20; perAnimal = fit(gap); }
-            var availablePx = Math.floor(Math.max(45, Math.min(280, perAnimal)));
-            // Two different floors. propFloor is how small a true-to-scale drawing
-            // may get before proportional mode stops being worth showing; logFloor
-            // is where the log scale starts, and wants to be comfortably visible
-            // since making the smallest animal visible is the whole point of it.
-            var propFloor = Math.max(5, Math.round(availablePx * 0.05));
-            var logFloor = Math.max(12, Math.round(availablePx * 0.10));
-            var useLog = ratio > 100 || (minS / maxS) * availablePx < propFloor;
-            var minPx = useLog ? logFloor : propFloor;
-
-            function scalePos(s){
-                if(useLog){
-                    var logMin = Math.log10(minS);
-                    var logMax = Math.log10(maxS);
-                    var norm = (Math.log10(s) - logMin) / (logMax - logMin);
-                    return minPx + norm * norm * (availablePx - minPx);
-                }
-                return (s / maxS) * availablePx;
-            }
+            // Four animals at a fixed 280px need ~1200px of stage; below that the
+            // wrapper used to clip the last ones away entirely, so the drawing is
+            // fitted to the width actually available.
+            var stage = stageFor(display.length);
+            var availablePx = stage.availablePx;
+            var gap = stage.gap;
+            var labelPad = stage.labelPad;
+            // The drawing is always to true scale. An animal too small to draw at
+            // this size is not inflated to fit — it stays a speck where it really
+            // is, and gets a magnifier callout saying how much it was enlarged.
+            var calloutBelow = CALLOUT_BELOW;
+            function scalePos(s){ return (s / maxS) * availablePx; }
+            var anyCallout = display.some(function(a){ return scalePos(metricOf(a)) < calloutBelow; });
+            var nameFont = Math.round(Math.max(9, Math.min(12, availablePx / 7)));
+            var loupePx = Math.round(Math.max(34, Math.min(56, availablePx * 0.6)));
+            var stackPx = Math.round(Math.max(78, Math.min(150, availablePx * 0.75)));
 
             html += '<div class="visual-wrapper"><div class="ruler">' + (availablePx >= 140 ? '<span class="ruler-title">' + dimTitles[dimMode] + '</span>' : '');
 
             var ticks = [];
-            if(useLog){
-                var p = Math.floor(Math.log10(minS));
-                while(Math.pow(10, p) <= maxS * 1.1){
-                    var v = Math.pow(10, p);
-                    if(v >= minS * 0.9 && v <= maxS * 1.1){
-                        ticks.push({v: v, pos: scalePos(v), major: true});
-                    }
-                    p++;
-                }
-            } else {
-                var step = 0.5;
-                if(maxS > 3) step = 1;
-                if(maxS > 10) step = 2;
-                if(maxS < 0.5) step = 0.1;
-                if(maxS < 0.1) step = 0.02;
-                for(var v = step; v <= maxS * 1.05; v += step){
-                    ticks.push({v: v, pos: scalePos(v), major: Math.abs(v % 1) < 1e-9 || step >= 1});
-                }
+            function niceStep(x){
+                var m = Math.pow(10, Math.floor(Math.log10(x))), n = x / m;
+                return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * m;
+            }
+            function stepDown(st){
+                var m = Math.pow(10, Math.floor(Math.log10(st * 0.999))), n = st / m;
+                return (n > 5 ? 5 : n > 2 ? 2 : n > 1 ? 1 : 0.5) * m;
+            }
+            var step = niceStep(maxS / Math.max(2, Math.floor(availablePx / 24)));
+            // A short phone ruler can round the step up past the tallest animal,
+            // leaving no ticks at all. Back off until at least two land.
+            for(var guard = 0; guard < 8 && Math.floor(maxS / step) < 2; guard++) step = stepDown(step);
+            for(var v = step; v <= maxS * 1.02; v += step){
+                ticks.push({v: v, pos: scalePos(v), major: true});
             }
             var lastPos = -Infinity;
             ticks.forEach(function(t){
@@ -1375,19 +1406,39 @@
 
             html += '</div>';
             html += '<div class="grass"></div><div class="ground"></div>';
-            html += '<div class="scale-info' + (useLog ? ' warning' : '') + '" title="' + (useLog ? 'These sizes are on a logarithmic scale so the smallest animal stays visible — they are not in true proportion to each other.' : 'Every animal is drawn at its true size relative to the others.') + '">' + (useLog ? '⚠️ Not to scale' : '📏 Proportional') + '</div>';
-            html += '<div class="visual-area" style="min-height:' + (availablePx + Math.round(availablePx * 0.25) + 40) + 'px;padding-top:' + Math.max(16, Math.round(availablePx * 0.2)) + 'px"><div class="visual-row" style="gap:' + gap + 'px;padding-left:' + labelPad + 'px">';
+            html += '<div class="scale-info" title="' + (anyCallout
+                ? 'Every animal is drawn at its true size relative to the others. The ones too small to see are marked with a dot and shown enlarged in a circle.'
+                : 'Every animal is drawn at its true size relative to the others.') + '">📏 True scale' +
+                (anyCallout ? '<span class="dim-label" style="color:#64748b"> · 🔍 enlarged</span>' : '') + '</div>';
+            html += '<div class="visual-area" style="min-height:' + Math.max(availablePx + Math.round(availablePx * 0.25) + 40, anyCallout ? stackPx + 70 : 0) + 'px;padding-top:' + Math.max(16, Math.round(availablePx * 0.2)) + 'px"><div class="visual-row" style="gap:' + gap + 'px;padding-left:' + labelPad + 'px">';
 
-            var nameFont = Math.round(Math.max(9, Math.min(12, availablePx / 7)));
             display.forEach(function(a){
                 var sizePx = scalePos(metricOf(a));
                 var refClass = a.isRef ? ' reference' : '';
                 var dimIcon = metricIcon(a);
+                var label = fmtLen(metricOf(a)) + '<span class="dim-label"> ' + dimIcon + '</span>';
+
+                if(sizePx < calloutBelow){
+                    // Too small to draw here. Leave it at its true size — a speck on
+                    // the ground line — and magnify it in a circle, stating by how
+                    // much, rather than quietly drawing it bigger than it is.
+                    var emojiPx = Math.round(loupePx * 0.62);
+                    html += '<div class="animal-display' + refClass + '" style="width:' + availablePx + 'px">' +
+                        '<div class="tiny-stack" style="height:' + stackPx + 'px">' +
+                        '<div class="loupe" style="width:' + loupePx + 'px;height:' + loupePx + 'px">' +
+                        '<span style="font-size:' + emojiPx + 'px">' + a.emoji + '</span></div>' +
+                        '<div class="loupe-size">' + label + '</div>' +
+                        '<div class="loupe-mag">×' + fmtRatio(emojiPx / Math.max(sizePx, 0.0001)) + '</div>' +
+                        '<div class="tiny-leader"></div>' +
+                        '<div class="tiny-dot" title="Actual size at this scale"></div>' +
+                        '</div><span class="visual-name" style="font-size:' + nameFont + 'px">' + a.name + '</span></div>';
+                    return;
+                }
 
                 html += '<div class="animal-display' + refClass + '" style="width:' + availablePx + 'px">' +
                     '<div class="bracket-container" style="height:' + sizePx + 'px">' +
                     '<div class="bracket-left"></div><div class="bracket-right"></div>' +
-                    '<span class="bracket-label">' + fmtLen(metricOf(a)) + '<span class="dim-label"> ' + dimIcon + '</span></span>' +
+                    '<span class="bracket-label">' + label + '</span>' +
                     '<span class="visual-emoji" style="font-size:' + sizePx + 'px">' + a.emoji + '</span>' +
                     '</div><span class="visual-name" style="font-size:' + nameFont + 'px">' + a.name + '</span></div>';
             });
