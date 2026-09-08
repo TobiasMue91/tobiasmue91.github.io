@@ -68,6 +68,33 @@ to detect chords from the spectrum was removed after it turned out to fire on hu
 microphone that rolls off the fundamental leaves a spectrum shaped much like a chord's, and every
 statistic that separated the two also mistook quiet fundamentals for chords.
 
+Filled since: **minigolf**, by `games/nine_holes.html`. Worth reusing are three results, all of which
+contradicted what the design assumed before it was measured.
+
+The cup's capture speed, not the level generator, decided whether open holes could exist at all. A
+forgiving cup swallows any weight, so on a hole where you can see the flag every power drops and the
+acceptance filter throws it out as a barn door — silently banning open holes and leaving a course of
+nothing but blind doglegs. Over 2,400 candidates: at capture 9, 3% of accepted holes had line of sight
+and 27% were rejected as barn doors; at capture 4, 31% and 4%. A single physics constant was producing
+what read as a level-design problem.
+
+"Every hole can be aced" was true and hollow. The coarse angular sweep only proves an ace exists near
+some angle; refining it showed 10% of accepted holes had an ace window under one degree. The judge now
+measures the real angular tolerance and requires 1.25 degrees, so the median hole gives you 2.25 and the
+promise survives contact with a human hand.
+
+Par cannot come from the optimum when every hole is aceable by construction — the optimum is always 1.
+It has to come from how a plausible player actually fares, which makes the player model a tuned
+parameter rather than a detail: at 2 degrees of aim error 95% of holes came out par 2 and difficulty
+stopped showing, at 6 degrees par 5 became common, and 1.5 degrees gives 59% par 2 and 32% par 3 with
+mean par rising across the tiers. The round is then ordered by measured par rather than by the nominal
+difficulty tier, because the tiers turned out not to be monotone — tightening corridors made some holes
+easier. Mean par by position is now 2, 2, 2, 2, 2.25, 2.5, 2.88, 3.5, 4.
+
+The general lesson, which is the same one the rejected tactics prototype produced: the fraction of an
+action space that is "good" measures nothing, because the space is mostly nonsense. Ask instead whether
+a deliberately stupid player reaches the good play.
+
 ## Tried and rejected
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose

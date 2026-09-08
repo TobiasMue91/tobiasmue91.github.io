@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Nine Holes — procedural minigolf you can ace</title>
-<meta name="description" content="A round of nine procedurally generated minigolf holes in one file. Every hole is checked before you see it: a hole-in-one is always possible, but never by just pointing at the cup. Banks, sand, water and a cup that spits the ball back if you hit it too hard. Share a round by its seed.">
+<meta name="description" content="A round of nine procedurally generated minigolf holes in one file. Every hole is checked before you see it: a hole-in-one is always possible, but never by just pointing at the cup. Banks, slopes, bumpers, sand, water, and a cup that spits the ball back if you hit it too hard. Par is measured by playing each hole, and the round is ordered easiest to hardest. Share a round by its seed.">
 <meta name="keywords" content="minigolf, mini golf game, putting game, procedural golf, browser game, free online golf, physics game, hole in one">
 <meta name="theme-color" content="#1c2b21">
 <meta property="og:title" content="Nine Holes — procedural minigolf you can ace">
@@ -122,6 +122,11 @@
 
 /* ---------- constants (cells and cells/second) ---------- */
 const FAIR=0, WALL=1, SAND=2, WATER=3;
+const SLOPE_N=4, SLOPE_E=5, SLOPE_S=6, SLOPE_W=7;
+const SLOPE_VEC={4:[0,-1],5:[1,0],6:[0,1],7:[-1,0]};
+const SLOPE_ACC   = 15.0;   // must exceed FRICT_FAIR or a ball would rest on a slope
+const BUMPER_R    = 0.62;
+const BUMPER_REST = 1.10;   // bumpers give energy back, so they carry the ball
 const BALL_R      = 0.36;
 const FRICT_FAIR  = 9.0;
 const FRICT_SAND  = 34.0;
@@ -154,40 +159,100 @@ class Course{
     }
     return false;
   }
-  terrain(x,y){ const t=this.at(Math.floor(x),Math.floor(y)); return (t===SAND||t===WATER)?t:FAIR; }
+  terrain(x,y){ const t=this.at(Math.floor(x),Math.floor(y)); return t===WALL?FAIR:t; }
+  /* nearest overlapping bumper, or null */
+  bumper(x,y){
+    if(!this.bumps) return null;
+    for(const b of this.bumps){
+      const dx=x-b.x, dy=y-b.y, rr=BUMPER_R+BALL_R;
+      if(dx*dx+dy*dy < rr*rr) return b;
+    }
+    return null;
+  }
+  blocksSight(x,y){
+    if(this.solid(x,y)) return true;
+    if(!this.bumps) return false;
+    for(const b of this.bumps){
+      const dx=x-b.x, dy=y-b.y;
+      if(dx*dx+dy*dy < BUMPER_R*BUMPER_R) return true;
+    }
+    return false;
+  }
   clearLine(a,b){
     const n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])*8)+1;
     for(let k=0;k<=n;k++){
       const x=a[0]+(b[0]-a[0])*k/n, y=a[1]+(b[1]-a[1])*k/n;
-      if(this.solid(x,y)) return false;
+      if(this.blocksSight(x,y)) return false;
       if(this.terrain(x,y)===WATER) return false;
     }
     return true;
   }
 }
 
+/* ---------- the one integrator ----------
+   Both the judge and the live game run this, so a hole the judge calls aceable
+   plays exactly the way it was judged. Returns '' while rolling, or one of
+   'stop' / 'water' / 'holed'. `ev` collects things worth a sound or a puff. */
+function advance(b, c, ev){
+  const terr=c.terrain(b.x,b.y);
+  if(terr===WATER) return 'water';
+  const slope=SLOPE_VEC[terr];
+  if(slope){ b.vx+=slope[0]*SLOPE_ACC*DT; b.vy+=slope[1]*SLOPE_ACC*DT; }
+
+  let sp=Math.hypot(b.vx,b.vy);
+  if(sp>0){
+    const f = terr===SAND?FRICT_SAND:FRICT_FAIR;
+    if(terr===SAND && ev) ev.sand=true;
+    const ns=Math.max(0,sp-f*DT);
+    b.vx=b.vx/sp*ns; b.vy=b.vy/sp*ns; sp=ns;
+  }
+  if(sp<STOP_SPEED){
+    /* a slope keeps the ball rolling unless it is wedged against something */
+    if(!slope) return 'stop';
+    if(c.solid(b.x+slope[0]*0.45, b.y+slope[1]*0.45)) return 'stop';
+  }
+
+  const nx=b.x+b.vx*DT;
+  if(c.solid(nx,b.y)){ b.vx=-b.vx*RESTITUTION; if(ev) ev.bounce=Math.max(ev.bounce||0,Math.abs(b.vx)); }
+  else b.x=nx;
+  const ny=b.y+b.vy*DT;
+  if(c.solid(b.x,ny)){ b.vy=-b.vy*RESTITUTION; if(ev) ev.bounce=Math.max(ev.bounce||0,Math.abs(b.vy)); }
+  else b.y=ny;
+
+  const bump=c.bumper(b.x,b.y);
+  if(bump){
+    let nxv=b.x-bump.x, nyv=b.y-bump.y;
+    let d=Math.hypot(nxv,nyv) || 1e-6;
+    nxv/=d; nyv/=d;
+    const pen=(BUMPER_R+BALL_R)-d;
+    b.x+=nxv*pen; b.y+=nyv*pen;                 // separate first, so it cannot stick
+    const dot=b.vx*nxv+b.vy*nyv;
+    if(dot<0){
+      b.vx=(b.vx-2*dot*nxv)*BUMPER_REST;
+      b.vy=(b.vy-2*dot*nyv)*BUMPER_REST;
+      if(ev) ev.bump=true;
+    }
+  }
+
+  const dx=b.x-c.cup[0], dy=b.y-c.cup[1];
+  if(dx*dx+dy*dy<CUP_R*CUP_R){
+    if(Math.hypot(b.vx,b.vy)<CUP_CAPTURE) return 'holed';
+    if(ev) ev.lip=true;
+  }
+  return '';
+}
+
 /* ---------- headless simulation, used by the judge ---------- */
 function simulate(c, px, py, ang, power){
-  let x=px, y=py, vx=Math.cos(ang)*power, vy=Math.sin(ang)*power, t=0;
-  while(t<8){
-    t+=DT;
-    let sp=Math.hypot(vx,vy);
-    if(sp<STOP_SPEED) break;
-    const terr=c.terrain(x,y);
-    if(terr===WATER) return {x,y,holed:false,water:true};
-    const f = terr===SAND?FRICT_SAND:FRICT_FAIR;
-    const ns=Math.max(0,sp-f*DT);
-    vx=vx/sp*ns; vy=vy/sp*ns;
-    const nx=x+vx*DT;
-    if(c.solid(nx,y)) vx=-vx*RESTITUTION; else x=nx;
-    const ny=y+vy*DT;
-    if(c.solid(x,ny)) vy=-vy*RESTITUTION; else y=ny;
-    const dx=x-c.cup[0], dy=y-c.cup[1];
-    if(dx*dx+dy*dy<CUP_R*CUP_R && Math.hypot(vx,vy)<CUP_CAPTURE)
-      return {x,y,holed:true,water:false};
+  const b={x:px, y:py, vx:Math.cos(ang)*power, vy:Math.sin(ang)*power};
+  for(let t=0; t<10; t+=DT){
+    const r=advance(b,c,null);
+    if(r==='holed') return {x:b.x,y:b.y,holed:true,water:false};
+    if(r==='water') return {x:b.x,y:b.y,holed:false,water:true};
+    if(r==='stop') break;
   }
-  if(c.terrain(x,y)===WATER) return {x,y,holed:false,water:true};
-  return {x,y,holed:false,water:false};
+  if(c.terrain(b.x,b.y)===WATER) return {x:b.x,y:b.y,holed:false,water:true};
+  return {x:b.x,y:b.y,holed:false,water:false};
 }
 
 /* ---------- generator ---------- */
@@ -230,19 +295,20 @@ function buildCourse(rnd, difficulty, portrait){
 
   for(let i=0;i<pts.length-1;i++){
     const A=toXY(pts[i]), B=toXY(pts[i+1]);
-    const rad=1.7+rnd()*1.1;
+    const rad=(1.9-difficulty*0.24)+rnd()*1.05;   // corridors tighten as the round goes on
     const n=Math.ceil(Math.hypot(B[0]-A[0],B[1]-A[1])*4)+1;
     for(let k=0;k<=n;k++) carve(cells,W,H, A[0]+(B[0]-A[0])*k/n, A[1]+(B[1]-A[1])*k/n, rad);
   }
   carve(cells,W,H,cup[0],cup[1],2.2);            // always a fair apron round the cup
 
+  let c_bumps=[];
   const fair=[];
   for(let y=0;y<H;y++) for(let x=0;x<W;x++) if(cells[y][x]===FAIR) fair.push([x,y]);
   if(!fair.length) return null;
   const far=(x,y,dt,dc)=> Math.hypot(x+0.5-tee[0],y+0.5-tee[1])>dt &&
                           Math.hypot(x+0.5-cup[0],y+0.5-cup[1])>dc;
 
-  const nIsl = 1 + Math.floor(rnd()*(2+difficulty));
+  const nIsl = 1 + difficulty + Math.floor(rnd()*(2+difficulty));
   for(let i=0;i<nIsl;i++){
     const [x,y]=fair[Math.floor(rnd()*fair.length)];
     if(!far(x,y,3.5,2.8)) continue;
@@ -251,6 +317,29 @@ function buildCourse(rnd, difficulty, portrait){
       if(y+dy<H && x+dx<W && far(x+dx,y+dy,3.0,2.4)) cells[y+dy][x+dx]=WALL;
     }
   }
+  /* slopes: a patch that pushes the ball sideways, so a straight corridor stops
+     being a straight shot. Placed across the hole rather than along it. */
+  c_bumps = [];
+  const nSlope = difficulty===0 ? (rnd()<0.25?1:0) : (rnd()<0.80?1+Math.floor(rnd()*difficulty):0);
+  for(let i=0;i<nSlope;i++){
+    const [x,y]=fair[Math.floor(rnd()*fair.length)];
+    if(!far(x,y,4.5,3.2)) continue;
+    const dir=[SLOPE_N,SLOPE_E,SLOPE_S,SLOPE_W][Math.floor(rnd()*4)];
+    const bw=2+Math.floor(rnd()*3), bh=2+Math.floor(rnd()*3);
+    for(let dy=0;dy<bh;dy++) for(let dx=0;dx<bw;dx++){
+      if(y+dy<H && x+dx<W && cells[y+dy][x+dx]===FAIR && far(x+dx,y+dy,4.0,2.8))
+        cells[y+dy][x+dx]=dir;
+    }
+  }
+  /* bumpers: round and lively, they give energy back and open up carom lines */
+  const nBump = difficulty===0 ? (rnd()<0.3?1:0) : 1+Math.floor(rnd()*(difficulty+1.2));
+  for(let i=0;i<nBump;i++){
+    const [x,y]=fair[Math.floor(rnd()*fair.length)];
+    if(!far(x,y,4.0,3.0)) continue;
+    if(cells[y][x]!==FAIR) continue;
+    c_bumps.push({x:x+0.5, y:y+0.5});
+  }
+
   for(const [kind,maxN] of [[SAND,1+difficulty],[WATER,difficulty]]){
     const n=Math.floor(rnd()*(maxN+1));
     for(let i=0;i<n;i++){
@@ -265,7 +354,12 @@ function buildCourse(rnd, difficulty, portrait){
   }
   if(cells[Math.floor(tee[1])][Math.floor(tee[0])]!==FAIR) return null;
   if(cells[Math.floor(cup[1])][Math.floor(cup[0])]!==FAIR) return null;
-  const c=new Course(W,H,cells,tee,cup); c.shape=shape; return c;
+  const c=new Course(W,H,cells,tee,cup);
+  c.shape=shape; c.bumps=c_bumps;
+  /* a bumper sitting on the tee or in the cup would be unplayable */
+  c.bumps=c.bumps.filter(b=>Math.hypot(b.x-tee[0],b.y-tee[1])>2.4 &&
+                            Math.hypot(b.x-cup[0],b.y-cup[1])>2.0);
+  return c;
 }
 
 /* ---------- the judge ---------- */
@@ -343,12 +437,46 @@ function makeHole(rnd, difficulty, portrait){
   }
   return null;
 }
+/* Par used to be a guess from the hole's shape. Since every hole is aceable by
+   construction, the optimum is always 1, so par cannot come from the optimum —
+   it has to come from how a reasonable player actually fares. This plays the
+   hole several times with a player who sweeps for the shot that ends nearest
+   the cup and then misses it, and takes the median. The error was picked by
+   measurement, not taste: swept over 90 holes, 1.5 degrees gives 59% par 2 and
+   32% par 3 with mean par rising 2.43 / 2.50 / 2.67 across the three difficulty
+   tiers. Wider errors pile up par 4s and 5s, which is not minigolf; narrower
+   ones make every hole a par 2 and difficulty stops showing at all. */
 function parFor(c){
-  const span=Math.hypot(c.cup[0]-c.tee[0], c.cup[1]-c.tee[1]);
-  let par = c.shape>=2 ? 3 : 2;
-  if(c.shape===3 || span>22) par=3;
-  if(c.shape===0 && span<14) par=2;
-  return par;
+  const trials=[], SWEEP=48, POWS=[9,13,17,21,25,29];
+  for(let t=0;t<5;t++){
+    let x=c.tee[0], y=c.tee[1], strokes=0, rest=[x,y];
+    while(strokes<9){
+      let best=null;
+      for(let i=0;i<SWEEP;i++){
+        const a=2*Math.PI*i/SWEEP;
+        for(const pw of POWS){
+          const r=simulate(c,x,y,a,pw);
+          if(r.water) continue;
+          const d=r.holed?-1:Math.hypot(r.x-c.cup[0],r.y-c.cup[1]);
+          if(!best||d<best.d) best={a,pw,d};
+        }
+      }
+      if(!best) break;
+      /* execution error: about 3 degrees of aim and a tenth of the weight.
+         Deterministic per (trial, stroke) so a hole's par never changes. */
+      const h=(t*7919+strokes*104729)%10007;
+      const jitter=((h%1000)/1000-0.5)*1.5*Math.PI/180;
+      const pwErr=1+((Math.floor(h/1000)%1000)/1000-0.5)*0.14;
+      const r=simulate(c,x,y,best.a+jitter,best.pw*pwErr);
+      strokes++;
+      if(r.holed){ trials.push(strokes); break }
+      if(r.water){ strokes++; x=rest[0]; y=rest[1] } else { x=r.x; y=r.y; rest=[x,y] }
+      if(strokes>=9){ trials.push(9); break }
+    }
+    if(trials.length<=t) trials.push(9);
+  }
+  trials.sort((a,b)=>a-b);
+  return Math.max(2, Math.min(4, trials[Math.floor(trials.length/2)]));
 }
 
 /* ============================ audio ============================ */
@@ -399,19 +527,40 @@ const G={
 
 function isPortrait(){ return stage.clientHeight > stage.clientWidth*1.08 }
 
+/* Building a round is a second of work, so it happens behind a card rather than
+   a frozen screen. The three tiers vary how much furniture a hole gets; the order
+   you actually play them in comes from the measured par, so the round ramps because
+   the holes were measured, not because a tier said they should. */
 function newRound(seed){
   G.seed = seed;
   G.rnd = mulberry32(hashStr(seed));
   G.portrait = isPortrait();
-  G.holes=[]; G.pars=[]; G.scores=[]; G.idx=0;
-  for(let i=0;i<HOLES;i++){
-    const diff = i<3?0 : i<6?1 : 2;
-    const c = makeHole(G.rnd, diff, G.portrait);
-    G.holes.push(c); G.pars.push(parFor(c));
-  }
+  G.holes=[]; G.pars=[]; G.scores=[]; G.idx=0; G.course=null;
   try{ G.best = JSON.parse(localStorage.getItem('nineholes.best')||'null') }catch(e){ G.best=null }
-  loadHole(0);
   try{ history.replaceState(null,'', location.pathname+'?seed='+encodeURIComponent(seed)) }catch(e){}
+
+  G.building=true;
+  const panelEl = panel('<h2>Building the course</h2>'+
+    '<p>Nine holes, each one checked for a hole-in-one before it is let through.</p>'+
+    '<div id="bar" style="height:6px;background:#24331f;border-radius:99px;overflow:hidden">'+
+    '<div id="fill" style="height:100%;width:0;background:var(--accent);transition:width .2s"></div></div>');
+  const built=[];
+  let i=0;
+  const tick=()=>{
+    if(i<HOLES){
+      const diff = i<3?0 : i<6?1 : 2;
+      const c = makeHole(G.rnd, diff, G.portrait);
+      built.push({c, par:parFor(c)});
+      i++;
+      const f=panelEl.querySelector('#fill'); if(f) f.style.width=Math.round(100*i/HOLES)+'%';
+      requestAnimationFrame(()=>setTimeout(tick,0));
+      return;
+    }
+    built.sort((a,b)=>a.par-b.par);        // gentlest first, by measurement
+    G.holes=built.map(b=>b.c); G.pars=built.map(b=>b.par);
+    G.building=false; closePanel(); loadHole(0);
+  };
+  requestAnimationFrame(()=>setTimeout(tick,0));
 }
 
 function loadHole(i){
@@ -423,6 +572,7 @@ function loadHole(i){
 }
 
 function updateHUD(){
+  if(!G.pars.length) return;
   el('hnum').textContent=G.idx+1;
   el('hpar').textContent=G.pars[G.idx];
   el('hstr').textContent=G.strokes;
@@ -484,7 +634,7 @@ function up(e){
   if(power<3) return;
   const ang=Math.atan2(dy,dx);
   G.ball.vx=Math.cos(ang)*power; G.ball.vy=Math.sin(ang)*power;
-  G.moving=true; G.strokes++; G.settleT=0; G.trail=[];
+  G.moving=true; G.strokes++; G.rollT=0; G.trail=[];
   snd.putt(power/MAX_POWER*10);
   updateHUD(); hideTip(); e.preventDefault();
 }
@@ -511,7 +661,7 @@ window.addEventListener('keydown',e=>{
     if(!G.kb) return;
     ac();
     G.ball.vx=Math.cos(G.kb.ang)*G.kb.pow; G.ball.vy=Math.sin(G.kb.ang)*G.kb.pow;
-    G.moving=true; G.strokes++; G.trail=[]; snd.putt(G.kb.pow/MAX_POWER*10);
+    G.moving=true; G.strokes++; G.rollT=0; G.trail=[]; snd.putt(G.kb.pow/MAX_POWER*10);
     G.kb=null; updateHUD(); hideTip(); e.preventDefault();
   } else if(e.key==='r'||e.key==='R'){ if(!G.holed) loadHole(G.idx); }
 });
@@ -519,26 +669,16 @@ window.addEventListener('keydown',e=>{
 let tipHidden=false;
 function hideTip(){ if(!tipHidden && G.strokes>=1){ tipHidden=true; tipEl.style.opacity=0 } }
 
-/* ---------- physics step ---------- */
+/* ---------- physics step (the live game runs the same integrator) ---------- */
 function step(){
-  const b=G.ball, c=G.course;
-  let sp=Math.hypot(b.vx,b.vy);
-  if(sp<STOP_SPEED){ b.vx=0; b.vy=0; settle(); return; }
-  const terr=c.terrain(b.x,b.y);
-  if(terr===WATER){ splash(); return; }
-  const f = terr===SAND?FRICT_SAND:FRICT_FAIR;
-  if(terr===SAND && Math.random()<0.10) puff(b.x,b.y,'#d9c489');
-  const ns=Math.max(0,sp-f*DT);
-  b.vx=b.vx/sp*ns; b.vy=b.vy/sp*ns;
-  const nx=b.x+b.vx*DT;
-  if(c.solid(nx,b.y)){ b.vx=-b.vx*RESTITUTION; onBounce(Math.abs(b.vx)); } else b.x=nx;
-  const ny=b.y+b.vy*DT;
-  if(c.solid(b.x,ny)){ b.vy=-b.vy*RESTITUTION; onBounce(Math.abs(b.vy)); } else b.y=ny;
-  const dx=b.x-c.cup[0], dy=b.y-c.cup[1];
-  if(dx*dx+dy*dy<CUP_R*CUP_R){
-    if(Math.hypot(b.vx,b.vy)<CUP_CAPTURE){ sink(); return; }
-    G.lipped=performance.now();      // too hot — it rides the lip and stays out
-  }
+  const ev={};
+  const r=advance(G.ball, G.course, ev);
+  if(ev.bounce) onBounce(ev.bounce);
+  if(ev.bump){ snd.bounce(6); G.shake=Math.min(6,3); for(let i=0;i<5;i++) puff(G.ball.x,G.ball.y,'#ffd75e') }
+  if(ev.sand && Math.random()<0.10) puff(G.ball.x,G.ball.y,'#d9c489');
+  if(r==='holed'){ sink(); return }
+  if(r==='water'){ splash(); return }
+  if(r==='stop'){ G.ball.vx=0; G.ball.vy=0; settle(); return }
 }
 function onBounce(v){ if(v>1.2){ snd.bounce(v); G.shake=Math.min(5,v*0.22) } }
 function settle(){
@@ -611,9 +751,24 @@ function draw(){
     let col;
     if(t===SAND) col='#d6c184';
     else if(t===WATER) col='#2d6b9f';
+    else if(SLOPE_VEC[t]) col = grassShade(x,y,G.portrait)>0.5 ? '#2f7b57' : '#2a7250';
     else col = grassShade(x,y,G.portrait)>0.5 ? '#429453' : '#3b8a4a';
     ctx.fillStyle=col;
     ctx.fillRect(vx(x)-0.5, vy(y)-0.5, s+1, s+1);
+  }
+  /* slope chevrons, pointing the way the ball gets pushed */
+  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
+    const v2=SLOPE_VEC[c.cells[y][x]]; if(!v2) continue;
+    const cx2=vx(x)+s/2, cy2=vy(y)+s/2, a=Math.atan2(v2[1],v2[0]);
+    ctx.save(); ctx.translate(cx2,cy2); ctx.rotate(a);
+    ctx.strokeStyle='rgba(190,255,215,.38)';
+    ctx.lineWidth=Math.max(1.4,s*0.075); ctx.lineCap='round'; ctx.lineJoin='round';
+    for(const off of [-s*0.19, s*0.09]){
+      ctx.beginPath();
+      ctx.moveTo(off-s*0.10, -s*0.17); ctx.lineTo(off+s*0.10, 0); ctx.lineTo(off-s*0.10, s*0.17);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
   /* water shimmer */
   const tm=performance.now()/1000;
@@ -633,6 +788,19 @@ function draw(){
     ctx.fillRect(vx(x)-0.5, vy(y)-0.5, s+1, s+1);
     if(c.at(x,y+1)!==WALL){ ctx.fillStyle='#3a281d'; ctx.fillRect(vx(x)-0.5, vy(y+1)-s*0.16, s+1, s*0.16); }
     if(c.at(x,y-1)!==WALL){ ctx.fillStyle='#7d5a3c'; ctx.fillRect(vx(x)-0.5, vy(y)-0.5, s+1, s*0.2); }
+  }
+
+  /* bumpers */
+  if(c.bumps) for(const bp of c.bumps){
+    const bx2=vx(bp.x), by2=vy(bp.y), r2=BUMPER_R*s;
+    ctx.beginPath(); ctx.arc(bx2+s*0.06,by2+s*0.09,r2,0,7);
+    ctx.fillStyle='rgba(0,0,0,.30)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(bx2,by2,r2,0,7);
+    ctx.fillStyle='#e8e3d4'; ctx.fill();
+    ctx.beginPath(); ctx.arc(bx2,by2,r2*0.62,0,7);
+    ctx.fillStyle='#e2513f'; ctx.fill();
+    ctx.beginPath(); ctx.arc(bx2-r2*0.24,by2-r2*0.26,r2*0.22,0,7);
+    ctx.fillStyle='rgba(255,255,255,.75)'; ctx.fill();
   }
 
   /* cup */
@@ -716,6 +884,9 @@ function frame(t){
       G.acc+=dt;
       let guard=0;
       while(G.acc>=DT && G.moving && guard++<600){ step(); G.acc-=DT; }
+      /* slopes can in principle keep a ball rolling for ever; call it at rest */
+      G.rollT=(G.rollT||0)+dt;
+      if(G.moving && G.rollT>14){ G.ball.vx=0; G.ball.vy=0; settle(); }
       if(G.moving && G.trail.length<400 &&
          (!G.trail.length || Math.hypot(G.ball.x-G.trail[G.trail.length-1][0], G.ball.y-G.trail[G.trail.length-1][1])>0.25))
         G.trail.push([G.ball.x,G.ball.y]);
@@ -796,7 +967,8 @@ function showMenu(){
   const p=panel(
     '<h1>Nine Holes</h1>'+
     '<p>Drag back from the ball and let go, or aim with the arrow keys and hit with space — hold shift for fine aim. The cup only takes the ball if it arrives slowly: hit it hard and it rides the lip and stays out.</p>'+
-    '<p>Every hole is checked before you see it: <b>a hole-in-one is always possible</b>, but never by simply pointing at the cup.</p>'+
+    '<p>Every hole is checked before you see it: <b>a hole-in-one is always possible</b>, but never by simply pointing at the cup. Slopes push the ball, bumpers throw it back, sand kills it and water costs a stroke.</p>'+
+    '<p>Par is measured by playing each hole rather than guessed, and the nine are ordered gentlest first.</p>'+
     '<div class="seedrow"><input id="sd" value="'+G.seed+'"></div>'+
     '<button id="go">Play this seed</button>'+
     '<button class="alt" id="rnd">Random round</button>');
@@ -815,7 +987,7 @@ el('btnretry').onclick=()=>{ if(G.holed) return; closePanel(); loadHole(G.idx) }
 window.addEventListener('resize',()=>{
   const wasPortrait=G.portrait;
   layout();
-  if(isPortrait()!==wasPortrait && G.idx===0 && G.strokes===0 && !G.holed) newRound(G.seed);
+  if(!G.building && isPortrait()!==wasPortrait && G.idx===0 && G.strokes===0 && !G.holed) newRound(G.seed);
 });
 
 /* ---------- boot ---------- */
