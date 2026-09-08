@@ -113,6 +113,34 @@ still exists at four lines — at least five of the 6,561, all leaning on a tric
 the same line twice in a row. Verify a stage has an answer before designing around it; two of the six shipped
 here changed shape because the search said no.
 
+A later pass asked whether it had room to grow, and the measuring is the useful part, because almost
+everything obvious turned out to be a dead end. Harder mazes do nothing: the wall-following rule is 200 of
+200 at 25×25 and 200 of 200 with a random start cell and random facing, so difficulty cannot come from the
+boards. An efficiency score is dead too — all 90 universal rulebooks of three and four lines average between
+38.6 and 38.8 steps to the goal, a spread of nothing, against a shortest route of 23.7 that a robot with no
+memory cannot reach. And new *worlds* mostly have no answers at all: one-way doors break the rule hard (12 of
+200) but have no rulebook up to five lines even when given a "the way back is shut" sense; ice tiles (173 of
+200) and spinner tiles (6 of 200) the same. That is three more stage ideas killed by search, on top of the
+loops stage killed earlier.
+
+What does work is the opposite of adding: take tools away. Keep the mazes and shrink the vocabulary, and
+answers keep existing at longer and longer lengths — full vocabulary 3 lines, no side senses 4, only
+wall-senses and no "open ahead" 5, no left turns 6, no side senses *and* no left turns 6. That generalises,
+which is the actual find: a stage is just a subset of the vocabulary, there are 1,023 of them, and
+solvability is monotone, so a subset's answer bounds every superset's. Processing subsets smallest-first and
+inheriting those bounds turns an impossible enumeration into 19 seconds of work, and yields the whole table:
+**163 of the 1,023 vocabularies can solve a maze at all**, with shortest rulebooks of 3 (38 of them), 4 (31),
+5 (9) and 6 (85) lines. Shipping that table is what lets the endless mode hand out a handicap and promise it
+can be beaten, and say in how many lines, without shipping any answers.
+
+Two mechanical notes worth reusing. The table only became affordable after the machine was reimplemented
+allocation-free — boards flattened to a Uint8Array of passable directions, and cycle detection against one
+reusable stamped buffer instead of a Set per run — which was about thirty times faster and, checked against
+the shipped engine over 480,000 runs, agrees on every one. The check earned its keep: the first version of it
+disagreed on 0.17% of runs because the condition indices were mapped in the wrong order, which no amount of
+staring would have caught. And the promise is verified against the boards the game actually generates, not
+the ones the table was built on — every one of 200 Deep rounds re-checked on its own 200 mazes.
+
 Filled since: **minigolf**, by `games/nine_holes.html`. Worth reusing are three results, all of which
 contradicted what the design assumed before it was measured.
 
