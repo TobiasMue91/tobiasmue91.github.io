@@ -8,14 +8,13 @@ have been built since; the point is the shape of the gap, not the specific sugge
 
 - **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
   build a deck across a run.
-- **Line-routing sim.** Mini Metro-shaped: growing demand, limited track, procedural maps.
-- **Air hockey.** 8-ball covers cue sports; nothing covers paddles.
 
 Filled since: hidden-rule deduction, by `games/glyphgate.html`; cooperating with recordings of your
 own past, by `games/selfsame.html`; **pinball**, by `games/escapement.html` — swept-circle continuous
 collision so nothing tunnels at any speed, flippers you can cradle on, habitrails, a slingshot that
 throws along its own rubber, and a mission stack that bolts new parts onto the playfield as you go.
-The physics core in it is reusable: air hockey and the line-routing sim would both sit on top of it.
+The physics core in it is reusable, though the two candidates once listed here for it are both rejected
+below — a reusable core is a reason a build is cheap, never a reason the result is worth playing.
 
 **Tools**
 
@@ -73,7 +72,18 @@ statistic that separated the two also mistook quiet fundamentals for chords.
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose
 them, and do not treat the empty space they leave in the catalogue as an opportunity. The catalogue
-being thin somewhere is not on its own a reason to build there.
+being thin somewhere is not on its own a reason to build there. Two of the entries below were
+recommended as gaps for exactly that bad reason before being turned down; an empty category is
+evidence about the catalogue, not about whether anyone wants to play the thing that would fill it.
+
+- **Air hockey.** Rejected. Not because the physics duplicates `pong` — a free 2D mallet with real
+  momentum transfer is a genuinely different control space from a paddle on a rail — but because
+  nothing about that survives to the catalogue card, where it reads as two paddles and a bouncing
+  thing, and the momentum transfer that makes it interesting is already the whole of `8-ball`. A worse
+  `pong` next to a better `8-ball`.
+
+- **Line-routing sims** (Mini Metro's shape: growing demand, limited track, procedural maps). Rejected
+  on taste. The genre as a whole, not this framing of it.
 
 - **Turn-based tactics on a grid** (Into the Breach's shape: small grid, perfect information, enemies
   that telegraph next turn's move). Rejected on taste, not on mechanics — it was tried and was not
