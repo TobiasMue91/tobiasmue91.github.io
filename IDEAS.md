@@ -104,6 +104,22 @@ them at 0.55 scale and scaling up on composite took a bake from 3.1s to 0.38s wi
 A full-screen vignette gradient filled per frame also cost more than the entire rest of the loop; baking
 it took frames from 20ms to 16.7ms.
 
+A later pass replaced the bitmap smoothing entirely, and the replacement is the reusable part.
+Terrain lives on a grid, but a grid-shaped bunker looks like a spreadsheet, and smoothing the mask as a
+bitmap gave soft mushy edges for a bake of nearly two seconds. Tracing the cell region to a polygon
+instead — walk the boundary between filled and empty cells emitting each edge with the filled side on
+its left, then round it with two passes of Chaikin corner cutting — gives crisp curved edges, exact
+clipping, and a bake of 20ms rather than 1780ms. Two traps came with it, both found by looking at
+screenshots rather than by reasoning. Corner cutting eats into convex corners, so a hazard smoothed
+naively ends up smaller than the cells it stands for and can catch a ball on a square that did not look
+like a hazard; hazards are grown outward first so the painted region is always a superset of the real
+one. And offsetting a polygon by moving each vertex along its normal self-intersects wherever a concave
+inlet is narrower than twice the offset, leaving an inverted loop that punched a hole clean through the
+rail on about one hole in three; stroking the outline at twice the width and clipping to the far side
+has no such failure mode. Unrelated but found the same way: the generator could wall off little pockets
+of green that no ball can reach, which are not playable but do collect the whole of the edge shading and
+render as a black blob, so a flood fill from the tee now turns anything unreachable back into rail.
+
 The general lesson, which is the same one the rejected tactics prototype produced: the fraction of an
 action space that is "good" measures nothing, because the space is mostly nonsense. Ask instead whether
 a deliberately stupid player reaches the good play.

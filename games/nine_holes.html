@@ -356,6 +356,28 @@ function buildCourse(rnd, difficulty, portrait){
   }
   if(cells[Math.floor(tee[1])][Math.floor(tee[0])]!==FAIR) return null;
   if(cells[Math.floor(cup[1])][Math.floor(cup[0])]!==FAIR) return null;
+
+  /* Obstacles and hazards can wall off little pockets of green the ball can never
+     reach. They are not playable, they are noise — and a pocket a cell across also
+     collects the whole of the edge shading and renders as a black blob. Flood from
+     the tee and turn anything unreachable back into rail. If the cup itself is cut
+     off, the hole is not a hole. */
+  const seen=new Array(W*H).fill(false);
+  const stack=[[Math.floor(tee[0]),Math.floor(tee[1])]];
+  seen[stack[0][1]*W+stack[0][0]]=true;
+  while(stack.length){
+    const [px,py]=stack.pop();
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=px+dx, ny=py+dy;
+      if(nx<0||ny<0||nx>=W||ny>=H) continue;
+      const k=ny*W+nx;
+      if(seen[k] || cells[ny][nx]===WALL) continue;
+      seen[k]=true; stack.push([nx,ny]);
+    }
+  }
+  if(!seen[Math.floor(cup[1])*W+Math.floor(cup[0])]) return null;
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++)
+    if(cells[y][x]!==WALL && !seen[y*W+x]) cells[y][x]=WALL;
   const c=new Course(W,H,cells,tee,cup);
   c.shape=shape; c.bumps=c_bumps;
   /* a bumper sitting on the tee or in the cup would be unplayable */
@@ -520,7 +542,7 @@ const stage=document.getElementById('stage'), tipEl=document.getElementById('tip
 const el=id=>document.getElementById(id);
 
 const G={
-  seed:'', rnd:null, holes:[], idx:0, scores:[], pars:[],
+  seed:'', rnd:null, holes:[], idx:0, scores:[], pars:[], spin:[1,0,0,0,1,0,0,0,1],
   course:null, ball:{x:0,y:0,vx:0,vy:0}, rest:[0,0],
   strokes:0, moving:false, holed:false, aiming:false,
   aimFrom:null, aimTo:null, portrait:false, view:null,
@@ -570,6 +592,7 @@ function loadHole(i){
   G.ball.x=G.course.tee[0]; G.ball.y=G.course.tee[1]; G.ball.vx=0; G.ball.vy=0;
   G.rest=[G.ball.x,G.ball.y];
   G.strokes=0; G.moving=false; G.holed=false; G.trail=[]; G.parts=[]; G.kb=null; G.bgKey=null;
+  spinReset(); G.spinFrom=null;
   layout(); updateHUD();
 }
 
@@ -712,42 +735,135 @@ function puff(x,y,col,spd){
                 life:1,col});
 }
 
+/* ---------- region outlines ----------
+   Terrain lives on a grid, but a grid-shaped bunker looks like a spreadsheet. Rather
+   than smoothing a bitmap — which was tried, and gave soft mushy edges and a bake of
+   nearly two seconds — the cell region is traced to a polygon and the polygon is
+   smoothed. Edges come out crisp and curved, clipping is exact, and it costs almost
+   nothing because no large buffers are involved.
+
+   Tracing walks the boundary between filled and empty cells, emitting each edge with
+   the filled side on its left. The loops that fall out are closed, and island holes
+   come back wound the opposite way to the outer boundary, which is what Path2D wants
+   for even-odd filling and what the outward offset below needs to get its sign right. */
+function traceRegion(c, pred){
+  const key=(x,y)=>x+','+y;
+  const out=new Map();                       // start vertex -> list of end vertices
+  const add=(ax,ay,bx,by)=>{
+    const k=key(ax,ay);
+    if(!out.has(k)) out.set(k,[]);
+    out.get(k).push([bx,by]);
+  };
+  const on=(x,y)=> x>=0&&y>=0&&x<c.w&&y<c.h&&pred(c.cells[y][x]);
+  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
+    if(!on(x,y)) continue;
+    if(!on(x,y-1)) add(x,y,x+1,y);           // top,    walking right
+    if(!on(x+1,y)) add(x+1,y,x+1,y+1);       // right,  walking down
+    if(!on(x,y+1)) add(x+1,y+1,x,y+1);       // bottom, walking left
+    if(!on(x-1,y)) add(x,y+1,x,y);           // left,   walking up
+  }
+  const loops=[];
+  for(const [k,list] of out){
+    while(list.length){
+      const startPt=k.split(',').map(Number);
+      let cur=list.pop();
+      const loop=[startPt];
+      let guard=0;
+      while(guard++ < 40000){
+        loop.push(cur);
+        const nk=key(cur[0],cur[1]);
+        const nxt=out.get(nk);
+        if(!nxt || !nxt.length) break;
+        cur = nxt.length===1 ? nxt.pop()
+            : nxt.splice(nxt.length-1,1)[0];
+        if(cur[0]===startPt[0] && cur[1]===startPt[1]) break;
+      }
+      if(loop.length>3) loops.push(loop);
+    }
+  }
+  return loops;
+}
+
+/* Move every vertex out along the average of its two edge normals. The traced
+   winding puts the filled side on the left, so "outward" is the left of travel. */
+function offsetLoop(loop, d){
+  const n=loop.length, out=[];
+  for(let i=0;i<n;i++){
+    const p=loop[i], a=loop[(i-1+n)%n], b=loop[(i+1)%n];
+    let n1x=(p[1]-a[1]), n1y=-(p[0]-a[0]);
+    let n2x=(b[1]-p[1]), n2y=-(b[0]-p[0]);
+    const l1=Math.hypot(n1x,n1y)||1, l2=Math.hypot(n2x,n2y)||1;
+    n1x/=l1; n1y/=l1; n2x/=l2; n2y/=l2;
+    let nx=n1x+n2x, ny=n1y+n2y;
+    const l=Math.hypot(nx,ny);
+    if(l<1e-6){ out.push([p[0],p[1]]); continue }
+    nx/=l; ny/=l;
+    const miter=Math.min(2.2, 1/Math.max(0.35,(nx*n1x+ny*n1y)));
+    out.push([p[0]+nx*d*miter, p[1]+ny*d*miter]);
+  }
+  return out;
+}
+
+/* Chaikin corner cutting: each pass replaces a corner with two points a quarter and
+   three quarters along, which converges on a quadratic B-spline. Two passes is
+   enough to lose the staircase without losing the shape. */
+function chaikin(loop, passes){
+  let pts=loop;
+  for(let k=0;k<passes;k++){
+    const n=pts.length, out=[];
+    for(let i=0;i<n;i++){
+      const p=pts[i], q=pts[(i+1)%n];
+      out.push([p[0]*0.75+q[0]*0.25, p[1]*0.75+q[1]*0.25]);
+      out.push([p[0]*0.25+q[0]*0.75, p[1]*0.25+q[1]*0.75]);
+    }
+    pts=out;
+  }
+  return pts;
+}
+
 /* ---------- rendering ----------
    The scene splits in two. Everything that cannot move — the surround and its
-   planting, the table, felt, sand, slopes, rails and their occlusion — is baked
-   once into an offscreen canvas whenever the hole or the viewport changes. Only
-   the ball, its shadow and trail, the water, the flag and the particles are
-   drawn per frame. That is what makes the detail below affordable: the expensive
-   passes run once per hole rather than sixty times a second. */
+   planting, the table, felt, sand, water, slopes, rails and their occlusion — is
+   baked once into an offscreen canvas whenever the hole or the viewport changes.
+   Only the ball, its shadow and trail, the water surface, the flag and the particles
+   are drawn per frame. That is what makes the detail affordable. */
 
 function hex(h){ h=h.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)] }
 function mix(a,b,t){ const A=hex(a),B=hex(b);
   return 'rgb('+Math.round(A[0]+(B[0]-A[0])*t)+','+Math.round(A[1]+(B[1]-A[1])*t)+','+Math.round(A[2]+(B[2]-A[2])*t)+')' }
 function rnd2(x,y,k){ const n=Math.sin(x*127.1+y*311.7+(k||0)*74.7)*43758.5453; return n-Math.floor(n) }
 
-/* a small tiling grain used to keep large flat areas from looking like plastic */
 let GRAIN=null;
 function grain(){
   if(GRAIN) return GRAIN;
-  const c=document.createElement('canvas'); c.width=c.height=64;
-  const g=c.getContext('2d'), im=g.createImageData(64,64);
+  const k=document.createElement('canvas'); k.width=k.height=64;
+  const g=k.getContext('2d'), im=g.createImageData(64,64);
   for(let i=0;i<64*64;i++){
-    const v=Math.random();
-    im.data[i*4]=im.data[i*4+1]=im.data[i*4+2]= v>0.5?255:0;
+    im.data[i*4]=im.data[i*4+1]=im.data[i*4+2]= Math.random()>0.5?255:0;
     im.data[i*4+3]= Math.random()<0.14 ? 14 : 0;
   }
-  g.putImageData(im,0,0);
-  GRAIN=c; return c;
+  g.putImageData(im,0,0); GRAIN=k; return k;
 }
 
-function grassShade(x,y,portrait){
-  const band = Math.floor((portrait?x:y)/2) & 1;
-  return band*0.7 + rnd2(x,y,1)*0.3;
+let GRAIN_LINES=null, GRAIN_LINES_KEY=0;
+function woodGrain(s){
+  const period=Math.max(4, Math.round(s*0.68));
+  if(GRAIN_LINES && GRAIN_LINES_KEY===period) return GRAIN_LINES;
+  const k=document.createElement('canvas');
+  k.width=Math.max(6,Math.round(s*3)); k.height=period;
+  const g=k.getContext('2d');
+  g.fillStyle='rgba(0,0,0,.13)'; g.fillRect(0,0,k.width,Math.max(1,period*0.10));
+  g.fillStyle='rgba(255,222,182,.07)'; g.fillRect(0,period*0.5,k.width,Math.max(1,period*0.08));
+  for(let i=0;i<14;i++){
+    g.fillStyle='rgba(0,0,0,.05)';
+    g.fillRect(Math.random()*k.width,Math.random()*period,Math.max(1,s*0.3),Math.max(1,period*0.05));
+  }
+  GRAIN_LINES=g.canvas.getContext?k:k; GRAIN_LINES_KEY=period;
+  return k;
 }
+const WALL_LIFT = 0.28;   // in cells: how far the rail tops sit above their footprint
+const RAIL_W    = 0.86;   // in cells: the rail's width outside the green
 
-const WALL_LIFT = 0.26;   // in cells; how far the rail tops sit above their footprint
-
-/* ================= the baked layer ================= */
 function buildStatic(){
   const c=G.course, v=G.view, s=v.s;
   const cv2=document.createElement('canvas');
@@ -756,18 +872,51 @@ function buildStatic(){
   const g=cv2.getContext('2d');
   g.setTransform(dpr,0,0,dpr,0,0);
   const X=x=>v.ox+x*s, Y=y=>v.oy+y*s;
-  /* snap cell rects to whole pixels; fractional edges antialias against whatever is
-     underneath and leave a faint grid across the felt */
-  const cellRect=(ctx2,x,y,style)=>{
-    const a=Math.round(X(x)), b=Math.round(Y(y)), a2=Math.round(X(x+1)), b2=Math.round(Y(y+1));
-    ctx2.fillStyle=style; ctx2.fillRect(a,b,a2-a,b2-b);
+  const R=mulberry32(hashStr(G.seed+'#'+G.idx));
+
+  /* cell region -> smoothed screen-space Path2D. `grow` pushes the outline outward
+     before smoothing: corner cutting eats into convex corners, and for a hazard the
+     painted region must never be smaller than the real one, or a ball could be
+     penalised on a cell that did not look like a hazard. */
+  const area=(loop)=>{
+    let a=0;
+    for(let i=0;i<loop.length;i++){
+      const p1=loop[i], p2=loop[(i+1)%loop.length];
+      a += p1[0]*p2[1]-p2[0]*p1[1];
+    }
+    return a/2;
   };
-  const cellBox=(x,y)=>{
-    const a=Math.round(X(x)), b=Math.round(Y(y));
-    return [a,b,Math.round(X(x+1))-a,Math.round(Y(y+1))-b];
+  const pathOf=(pred, grow, passes)=>{
+    const loops=traceRegion(c,pred);
+    if(!loops.length) return null;
+    const p=new Path2D();
+    /* The biggest loop is the region's outline; anything wound the other way is an
+       island inside it. Offsetting outward shrinks an island rather than growing it,
+       which left a ring of rail with a lawn-coloured hole punched through the middle
+       of every obstacle wider than twice the rail. Islands are simply dropped here:
+       even-odd against the play path then fills them solid, which is what a block of
+       timber in the middle of a green should look like. */
+    let outerSign=0, biggest=0;
+    if(grow) for(const loop of loops){
+      const a=area(loop);
+      if(Math.abs(a)>biggest){ biggest=Math.abs(a); outerSign=Math.sign(a) }
+    }
+    for(let loop of loops){
+      if(grow){
+        if(Math.sign(area(loop))!==outerSign) continue;
+        const before=area(loop), moved=offsetLoop(loop, grow), after=area(moved);
+        if(Math.sign(after)!==Math.sign(before) || Math.abs(after)<Math.abs(before)*0.12) continue;
+        loop=moved;
+      }
+      loop=chaikin(loop, passes==null?2:passes);
+      p.moveTo(X(loop[0][0]), Y(loop[0][1]));
+      for(let i=1;i<loop.length;i++) p.lineTo(X(loop[i][0]), Y(loop[i][1]));
+      p.closePath();
+    }
+    return p;
   };
-  const seed=hashStr(G.seed+'#'+G.idx);
-  const R=mulberry32(seed);
+  const has=(t)=>{ for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++) if(c.cells[y][x]===t) return true; return false };
+
   /* ---- 1. the ground the course stands on ---- */
   const bg=g.createLinearGradient(0,0,v.w*0.4,v.h);
   bg.addColorStop(0,'#1b2a1c'); bg.addColorStop(0.55,'#16211a'); bg.addColorStop(1,'#101a14');
@@ -776,18 +925,15 @@ function buildStatic(){
   const [bx0,by0,bx1,by1]=c.bbox;
   const rx=X(bx0), ry=Y(by0), rw=(bx1-bx0)*s, rh=(by1-by0)*s, rr=Math.min(22,s*1.1);
   const roundPath=(ctx2,x,y,w2,h2,r)=>{ ctx2.beginPath();
-    if(ctx2.roundRect) ctx2.roundRect(x,y,w2,h2,r); else ctx2.rect(x,y,w2,h2); };
+    if(ctx2.roundRect) ctx2.roundRect(x,y,w2,h2,r); else ctx2.rect(x,y,w2,h2) };
 
-  /* planting: bushes, tufts and stones scattered outside the table, never over it */
-  const clear=(px,py,pad)=> px<rx-pad||px>rx+rw+pad||py<ry-pad||py>ry+rh+pad;
+  const clear=(px,py,p2)=> px<rx-p2||px>rx+rw+p2||py<ry-p2||py>ry+rh+p2;
   const bush=(px,py,r0)=>{
     for(let i=0;i<5;i++){
       const a=i/5*6.283+R()*0.7, d=r0*0.55*(0.4+R()*0.8);
       const cx2=px+Math.cos(a)*d, cy2=py+Math.sin(a)*d, rr2=r0*(0.5+R()*0.45);
-      g.beginPath(); g.arc(cx2,cy2+r0*0.14,rr2,0,7);
-      g.fillStyle='rgba(0,0,0,.22)'; g.fill();
-      g.beginPath(); g.arc(cx2,cy2,rr2,0,7);
-      g.fillStyle=mix('#1d3b25','#2f5c35',R()*0.9); g.fill();
+      g.beginPath(); g.arc(cx2,cy2+r0*0.14,rr2,0,7); g.fillStyle='rgba(0,0,0,.22)'; g.fill();
+      g.beginPath(); g.arc(cx2,cy2,rr2,0,7); g.fillStyle=mix('#1d3b25','#2f5c35',R()*0.9); g.fill();
       g.beginPath(); g.arc(cx2-rr2*0.28,cy2-rr2*0.3,rr2*0.42,0,7);
       g.fillStyle='rgba(150,205,150,.10)'; g.fill();
     }
@@ -796,9 +942,9 @@ function buildStatic(){
     g.beginPath();
     for(let i=0;i<7;i++){ const a=i/7*6.283, d=r0*(0.75+rnd2(px,py,i)*0.5);
       const fx=px+Math.cos(a)*d, fy=py+Math.sin(a)*d*0.8;
-      i?g.lineTo(fx,fy):g.moveTo(fx,fy); }
+      i?g.lineTo(fx,fy):g.moveTo(fx,fy) }
     g.closePath();
-    g.fillStyle='rgba(0,0,0,.25)'; g.translate(0,r0*0.2); g.fill(); g.translate(0,-r0*0.2);
+    g.save(); g.translate(0,r0*0.2); g.fillStyle='rgba(0,0,0,.25)'; g.fill(); g.restore();
     g.fillStyle=mix('#3a423c','#5a6157',R()); g.fill();
   };
   const tuft=(px,py,r0)=>{
@@ -806,7 +952,8 @@ function buildStatic(){
     for(let i=0;i<4;i++){
       const a=-1.57+(R()-0.5)*1.5;
       g.beginPath(); g.moveTo(px,py);
-      g.quadraticCurveTo(px+Math.cos(a)*r0*0.5, py+Math.sin(a)*r0*0.8, px+Math.cos(a)*r0, py+Math.sin(a)*r0*1.25);
+      g.quadraticCurveTo(px+Math.cos(a)*r0*0.5, py+Math.sin(a)*r0*0.8,
+                         px+Math.cos(a)*r0, py+Math.sin(a)*r0*1.25);
       g.stroke();
     }
   };
@@ -818,10 +965,10 @@ function buildStatic(){
     if(roll<0.46) bush(px,py,s*(0.5+R()*0.7));
     else if(roll<0.72) tuft(px,py,s*(0.35+R()*0.4));
     else if(roll<0.88) stone(px,py,s*(0.2+R()*0.3));
-    else { g.beginPath(); g.arc(px,py,s*0.07,0,7); g.fillStyle='rgba(120,150,115,.14)'; g.fill(); }
+    else { g.beginPath(); g.arc(px,py,s*0.07,0,7); g.fillStyle='rgba(120,150,115,.14)'; g.fill() }
   }
 
-  /* ---- 2. the table, with a real drop shadow ---- */
+  /* ---- 2. the table ---- */
   g.save();
   g.shadowColor='rgba(0,0,0,.6)'; g.shadowBlur=s*1.5; g.shadowOffsetY=s*0.55;
   roundPath(g,rx,ry,rw,rh,rr); g.fillStyle='#20452a'; g.fill();
@@ -829,211 +976,184 @@ function buildStatic(){
 
   g.save();
   roundPath(g,rx,ry,rw,rh,rr); g.clip();
-  /* the course sits on mown lawn; only the rail itself is timber */
+
   const lawn=g.createLinearGradient(rx,ry,rx+rw*0.5,ry+rh);
   lawn.addColorStop(0,'#274f31'); lawn.addColorStop(1,'#1d3f26');
-  g.save(); roundPath(g,rx,ry,rw,rh,rr); g.clip();
   g.fillStyle=lawn; g.fillRect(rx,ry,rw,rh);
   for(let i=0;i<Math.ceil(rh/(s*1.6));i++){
     if(i&1) continue;
-    g.fillStyle='rgba(255,255,255,.020)';
-    g.fillRect(rx, ry+i*s*1.6, rw, s*1.6);
+    g.fillStyle='rgba(255,255,255,.020)'; g.fillRect(rx, ry+i*s*1.6, rw, s*1.6);
   }
-  g.restore();
-  /* ---- 3. felt ---- */
-  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
-    const t=c.cells[y][x];
-    if(t===WALL) continue;
-    let col;
-    if(t===SAND) col=mix('#cdb87c','#dfcb92',rnd2(x,y,3));
-    else if(t===WATER) col='#245c86';
-    else if(SLOPE_VEC[t]) col = grassShade(x,y,G.portrait)>0.5 ? '#2f7b57' : '#2a7250';
-    else col = grassShade(x,y,G.portrait)>0.5 ? '#469a5e' : '#37844b';
-    cellRect(g,x,y,col);
-  }
-  /* Slopes read as one tilted plane. Shading each cell separately drew a gradient
-     per tile and the grid showed through, so group the patch and light it once. */
-  const seenS=new Set();
-  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
-    const t=c.cells[y][x]; const d=SLOPE_VEC[t]; if(!d) continue;
-    const k0=y*c.w+x; if(seenS.has(k0)) continue;
-    const patch=[], stack=[[x,y]]; seenS.add(k0);
-    while(stack.length){
-      const [px,py]=stack.pop(); patch.push([px,py]);
-      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-        const nx2=px+dx, ny2=py+dy, k=ny2*c.w+nx2;
-        if(nx2<0||ny2<0||nx2>=c.w||ny2>=c.h||seenS.has(k)) continue;
-        if(c.cells[ny2][nx2]!==t) continue;
-        seenS.add(k); stack.push([nx2,ny2]);
-      }
+
+  /* ---- 3. the green ---- */
+  const playPath=pathOf(t=>t!==WALL, 0, 2);
+  g.save();
+  g.clip(playPath);
+
+  const base=g.createLinearGradient(rx,ry,rx+rw*0.6,ry+rh);
+  base.addColorStop(0,'#48a063'); base.addColorStop(1,'#3a8a4f');
+  g.fillStyle=base; g.fillRect(rx-s,ry-s,rw+2*s,rh+2*s);
+
+  const band=s*1.9;                       // mown stripes, continuous across the green
+  if(G.portrait){
+    for(let x=Math.floor((rx-s)/band)*band; x<rx+rw+s; x+=band*2){
+      g.fillStyle='rgba(255,255,255,.055)'; g.fillRect(x,ry-s,band,rh+2*s);
     }
-    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
-    for(const [px,py] of patch){ x0=Math.min(x0,px); y0=Math.min(y0,py); x1=Math.max(x1,px); y1=Math.max(y1,py) }
-    const gx0=X(x0), gy0=Y(y0), gx1=X(x1+1), gy1=Y(y1+1);
+  } else {
+    for(let y=Math.floor((ry-s)/band)*band; y<ry+rh+s; y+=band*2){
+      g.fillStyle='rgba(255,255,255,.055)'; g.fillRect(rx-s,y,rw+2*s,band);
+    }
+  }
+
+  /* slopes: one tilted plane per direction, shaded across the whole patch */
+  for(const dir of [SLOPE_N,SLOPE_E,SLOPE_S,SLOPE_W]){
+    if(!has(dir)) continue;
+    const d=SLOPE_VEC[dir], sp=pathOf(t=>t===dir, 0.10, 2);
+    if(!sp) continue;
+    g.save(); g.clip(sp);
+    /* almost the colour of the green: a ramp is still grass. The shading and the
+       chevrons say which way it falls; a different hue made it look like a pane of
+       glass lying on the course. */
+    g.fillStyle='#3d9560'; g.fillRect(rx-s,ry-s,rw+2*s,rh+2*s);
     const lg=g.createLinearGradient(
-      d[0]>0?gx0:(d[0]<0?gx1:(gx0+gx1)/2), d[1]>0?gy0:(d[1]<0?gy1:(gy0+gy1)/2),
-      d[0]>0?gx1:(d[0]<0?gx0:(gx0+gx1)/2), d[1]>0?gy1:(d[1]<0?gy0:(gy0+gy1)/2));
-    lg.addColorStop(0,'rgba(255,255,255,.16)');
-    lg.addColorStop(0.55,'rgba(255,255,255,.02)');
-    lg.addColorStop(1,'rgba(0,0,0,.26)');
-    g.save(); g.beginPath();
-    for(const [px,py] of patch){ const bb=cellBox(px,py); g.rect(bb[0],bb[1],bb[2],bb[3]) }
-    g.clip(); g.fillStyle=lg; g.fillRect(gx0-s,gy0-s,(gx1-gx0)+2*s,(gy1-gy0)+2*s);
+      d[0]>0?rx:(d[0]<0?rx+rw:rx+rw/2), d[1]>0?ry:(d[1]<0?ry+rh:ry+rh/2),
+      d[0]>0?rx+rw:(d[0]<0?rx:rx+rw/2), d[1]>0?ry+rh:(d[1]<0?ry:ry+rh/2));
+    lg.addColorStop(0,'rgba(255,255,255,.24)');
+    lg.addColorStop(0.5,'rgba(255,255,255,.01)');
+    lg.addColorStop(1,'rgba(0,0,0,.30)');
+    g.fillStyle=lg; g.fillRect(rx-s,ry-s,rw+2*s,rh+2*s);
+    /* a shallow dish rather than a framed rectangle: soft and wide, so the ramp is
+       unmistakable without looking like something laid on the grass */
+    g.strokeStyle='rgba(0,0,0,.065)';
+    for(let i=6;i>=1;i--){ g.lineWidth=i*0.13*s; g.stroke(sp) }
     g.restore();
   }
-  /* chevrons */
+
+  /* sand: grown outward before smoothing, stippled, with a raked lip */
+  const sandP = has(SAND) ? pathOf(t=>t===SAND, 0.14, 2) : null;
+  if(sandP){
+    g.save(); g.clip(sandP);
+    const sg=g.createLinearGradient(rx,ry,rx,ry+rh);
+    sg.addColorStop(0,'#e2ce97'); sg.addColorStop(1,'#c8b076');
+    g.fillStyle=sg; g.fillRect(rx-s,ry-s,rw+2*s,rh+2*s);
+    for(let i=0;i<3000;i++){
+      const px=rx+rnd2(i,1,11)*rw, py=ry+rnd2(i,2,12)*rh;
+      g.fillStyle=(i&1)?'rgba(255,255,255,.20)':'rgba(120,95,50,.18)';
+      g.fillRect(px,py,Math.max(1,s*0.05),Math.max(1,s*0.05));
+    }
+    g.strokeStyle='rgba(92,70,34,.30)';
+    for(let i=5;i>=1;i--){ g.lineWidth=i*0.11*s; g.stroke(sandP) }
+    g.restore();
+  }
+
+  /* water: deep in the middle, a pale shelf at the edge */
+  const waterP = has(WATER) ? pathOf(t=>t===WATER, 0.14, 2) : null;
+  if(waterP){
+    g.save(); g.clip(waterP);
+    const wg=g.createLinearGradient(rx,ry,rx,ry+rh);
+    wg.addColorStop(0,'#3079ab'); wg.addColorStop(1,'#1c4a76');
+    g.fillStyle=wg; g.fillRect(rx-s,ry-s,rw+2*s,rh+2*s);
+    g.strokeStyle='rgba(178,224,245,.13)';
+    for(let i=5;i>=1;i--){ g.lineWidth=i*0.13*s; g.stroke(waterP) }
+    g.restore();
+    G._waterPath=waterP;
+  } else G._waterPath=null;
+
+  /* chevrons on the slopes */
   for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
     const d=SLOPE_VEC[c.cells[y][x]]; if(!d) continue;
-    const cx2=X(x)+s/2, cy2=Y(y)+s/2;
-    g.save(); g.translate(cx2,cy2); g.rotate(Math.atan2(d[1],d[0]));
+    g.save(); g.translate(X(x)+s/2, Y(y)+s/2); g.rotate(Math.atan2(d[1],d[0]));
     g.lineWidth=Math.max(1.4,s*0.07); g.lineCap='round'; g.lineJoin='round';
     for(const off of [-s*0.18, s*0.08]){
       g.beginPath(); g.moveTo(off-s*0.09,-s*0.16); g.lineTo(off+s*0.09,0); g.lineTo(off-s*0.09,s*0.16);
-      g.strokeStyle='rgba(0,0,0,.28)'; g.stroke();
+      g.strokeStyle='rgba(0,0,0,.26)'; g.stroke();
       g.beginPath(); g.moveTo(off-s*0.09,-s*0.16-1); g.lineTo(off+s*0.09,-1); g.lineTo(off-s*0.09,s*0.16-1);
-      g.strokeStyle='rgba(205,255,225,.5)'; g.stroke();
+      g.strokeStyle='rgba(205,255,225,.46)'; g.stroke();
     }
     g.restore();
   }
-  /* sand: stipple and a darker lip where it meets the felt */
-  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
-    if(c.cells[y][x]!==SAND) continue;
-    for(let i=0;i<9;i++){
-      const px=X(x)+rnd2(x*9+i,y,5)*s, py=Y(y)+rnd2(x,y*9+i,6)*s;
-      g.fillStyle= i%2 ? 'rgba(255,255,255,.16)' : 'rgba(120,95,50,.16)';
-      g.fillRect(px,py,Math.max(1,s*0.055),Math.max(1,s*0.055));
-    }
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      if(c.at(x+dx,y+dy)===SAND || c.at(x+dx,y+dy)===WALL) continue;
-      const lg=g.createLinearGradient(X(x)+(dx>0?s:0), Y(y)+(dy>0?s:0),
-                                      X(x)+(dx>0?s:0)-dx*s*0.4, Y(y)+(dy>0?s:0)-dy*s*0.4);
-      lg.addColorStop(0,'rgba(90,70,35,.34)'); lg.addColorStop(1,'rgba(90,70,35,0)');
-      const bx3=cellBox(x,y);
-      g.fillStyle=lg; g.fillRect(bx3[0],bx3[1],bx3[2],bx3[3]);
-    }
-  }
-  /* water: depth toward the middle, a pale shelf at the edge */
-  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
-    if(c.cells[y][x]!==WATER) continue;
-    let edge=false;
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) if(c.at(x+dx,y+dy)!==WATER) edge=true;
-    cellRect(g,x,y, edge ? 'rgba(150,210,235,.20)' : 'rgba(0,20,45,.26)');
-  }
-  /* grain over the whole playing surface */
-  g.save(); g.globalAlpha=0.55;
+
+  /* grain, and the green darkening where it meets the rail */
+  g.save(); g.globalAlpha=0.5;
   g.fillStyle=g.createPattern(grain(),'repeat'); g.fillRect(0,0,v.w,v.h);
   g.restore();
-  /* planting on the rough inside the table, away from anything playable */
+  g.strokeStyle='rgba(0,0,0,.075)';
+  for(let i=7;i>=1;i--){ g.lineWidth=i*0.14*s; g.stroke(playPath) }
+
+  g.restore();   // end green clip
+
+  /* ---- 4. planting on the rough inside the table ---- */
   for(let i=0;i<Math.round(density*1.2);i++){
     const px=rx+R()*rw, py=ry+R()*rh;
     const cx3=Math.floor((px-v.ox)/s), cy3=Math.floor((py-v.oy)/s);
-    let nearPlay=false;
-    for(let dy=-2;dy<=2 && !nearPlay;dy++) for(let dx=-2;dx<=2;dx++)
-      if(c.at(cx3+dx,cy3+dy)!==WALL){ nearPlay=true; break }
-    if(nearPlay) continue;
+    let near=false;
+    for(let dy=-2;dy<=2 && !near;dy++) for(let dx=-2;dx<=2;dx++)
+      if(c.at(cx3+dx,cy3+dy)!==WALL){ near=true; break }
+    if(near) continue;
     const roll=R();
     if(roll<0.5) tuft(px,py,s*(0.3+R()*0.35));
     else if(roll<0.8) bush(px,py,s*(0.30+R()*0.34));
     else stone(px,py,s*(0.14+R()*0.16));
   }
-  /* ---- 4. ambient occlusion: the felt darkens where it meets anything solid ---- */
-  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
-    if(c.cells[y][x]===WALL) continue;
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      if(c.at(x+dx,y+dy)!==WALL) continue;
-      const ex=X(x)+(dx>0?s:0), ey=Y(y)+(dy>0?s:0);
-      const lg=g.createLinearGradient(ex,ey, ex-dx*s*0.55, ey-dy*s*0.55);
-      lg.addColorStop(0,'rgba(0,0,0,.42)'); lg.addColorStop(1,'rgba(0,0,0,0)');
-      const bx4=cellBox(x,y);
-      g.fillStyle=lg; g.fillRect(bx4[0],bx4[1],bx4[2],bx4[3]);
+
+  /* ---- 5. the rail ----
+     A band lying strictly outside the green: the play outline, and the same outline
+     pushed out by the rail's width, filled even-odd. It is drawn after the green so
+     the raised top overhangs it slightly, which is what sells the height. */
+  const lift=s*WALL_LIFT;
+  /* The band is the play outline STROKED at twice the rail width and clipped to the
+     region outside the green, not the outline offset outward. Offsetting a polygon
+     by hand self-intersects wherever a concave inlet is narrower than twice the
+     offset, and the inverted loop it leaves punches a hole clean through the rail —
+     which is what was drawing a dark blob on about one hole in three. A stroke has
+     no such failure mode. Islands are filled separately so an obstacle is solid.
+     The clip is set inside the translate, so the raised top may overhang the green
+     along the near edge — which is what sells the height — but not the far one. */
+  const islands=new Path2D();
+  {
+    const loops=traceRegion(c,t=>t!==WALL);
+    let outerSign=0, biggest=0;
+    for(const lp of loops){ const a=area(lp); if(Math.abs(a)>biggest){ biggest=Math.abs(a); outerSign=Math.sign(a) } }
+    for(const lp of loops){
+      if(Math.sign(area(lp))===outerSign) continue;
+      const sm=chaikin(lp,2);
+      islands.moveTo(X(sm[0][0]),Y(sm[0][1]));
+      for(let i=1;i<sm.length;i++) islands.lineTo(X(sm[i][0]),Y(sm[i][1]));
+      islands.closePath();
     }
   }
-
-  /* ---- 5. rails, extruded ---- */
-  /* The rail is an offset outline of the playable area, not a set of wall tiles.
-     Drawing it tile by tile made it wander between one and two cells thick and
-     read as chunky; dilating the play mask and subtracting it gives a band of
-     even width that follows the hole's real shape, corners and all. */
-  const lift=s*WALL_LIFT, railPx=s*0.92;
-  /* The rail only ever exists inside the table, so the scratch buffers are cropped
-     to that box. Full-viewport buffers made a bake cost three seconds a hole. */
-  const pad=Math.ceil(railPx+lift+4);
-  const RB={ x:Math.floor(rx-pad), y:Math.floor(ry-pad), w:Math.ceil(rw+pad*2), h:Math.ceil(rh+pad*2) };
-  /* The rail buffers are built at reduced resolution and scaled up on composite.
-     Their edge is deliberately blurred, so the resolution buys nothing visually,
-     and at full device resolution the dilation and tint passes cost about two
-     seconds a hole between them. */
-  const RS=0.55, rsc=dpr*RS;
-  const scratch=(fn)=>{
-    const k=document.createElement('canvas');
-    k.width=Math.ceil(RB.w*rsc); k.height=Math.ceil(RB.h*rsc);
-    const kg=k.getContext('2d');
-    kg.setTransform(rsc,0,0,rsc,-RB.x*rsc,-RB.y*rsc);
-    fn(kg,k); return k;
+  const outside=new Path2D();
+  outside.rect(rx-s*2,ry-s*2,rw+s*4,rh+s*4);
+  outside.addPath(playPath);
+  const fillBand=(dy,style)=>{
+    g.save();
+    g.translate(0,dy);
+    g.clip(outside,'evenodd');
+    g.strokeStyle=style; g.fillStyle=style;
+    g.lineWidth=RAIL_W*2*s; g.lineJoin='round'; g.lineCap='round';
+    g.stroke(playPath);
+    g.fill(islands);
+    g.restore();
   };
-  const put=(img,dy)=>g.drawImage(img, RB.x, RB.y+dy, RB.w, RB.h);
-  /* The mask is built from square cells, so a diagonal edge comes out as stairs and
-     the rail inherits them. A slight blur before dilating rounds the outline off. */
-  const maskRaw=scratch((kg)=>{
-    kg.fillStyle='#fff';
-    for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++)
-      if(c.cells[y][x]!==WALL){ const bb=cellBox(x,y); kg.fillRect(bb[0]-1,bb[1]-1,bb[2]+2,bb[3]+2) }
-  });
-  const mask=scratch((kg,k)=>{
-    kg.save(); kg.setTransform(1,0,0,1,0,0);
-    if('filter' in kg) kg.filter='blur('+(s*0.13*rsc).toFixed(1)+'px)';
-    /* redrawing the blurred mask saturates its alpha, which thresholds the soft
-       edge back to a crisp one while keeping the rounded outline */
-    for(let i=0;i<8;i++) kg.drawImage(maskRaw,0,0);
-    kg.restore();
-  });
-  const ring=scratch((kg,k)=>{
-    kg.save(); kg.setTransform(1,0,0,1,0,0);
-    for(let i=0;i<16;i++){
-      const a=i/16*6.283;
-      kg.drawImage(mask, Math.cos(a)*railPx*rsc, Math.sin(a)*railPx*rsc);
-    }
-    kg.globalCompositeOperation='destination-out';
-    kg.drawImage(mask,0,0);
-    kg.restore();
-  });
-  const tint=(src,style)=>scratch((kg,k)=>{
-    kg.save(); kg.setTransform(1,0,0,1,0,0);
-    kg.drawImage(src,0,0);
-    kg.globalCompositeOperation='source-in';
-    kg.fillStyle=style; kg.fillRect(0,0,k.width,k.height);
-    kg.restore();
-  });
-  const railSide=tint(ring,'#3a2619');
-  const railTop=scratch((kg,k)=>{
-    kg.save(); kg.setTransform(1,0,0,1,0,0); kg.drawImage(ring,0,0);
-    kg.globalCompositeOperation='source-in'; kg.setTransform(rsc,0,0,rsc,-RB.x*rsc,-RB.y*rsc);
-    const lg=kg.createLinearGradient(0,ry-lift,0,ry+rh);
-    lg.addColorStop(0,'#8a6242'); lg.addColorStop(0.5,'#6d4a30'); lg.addColorStop(1,'#54391f');
-    kg.fillStyle=lg; kg.fillRect(0,0,v.w,v.h);
-    for(let i=0;i<Math.ceil(v.h/(s*0.34));i++){            // sawn grain
-      kg.fillStyle= i%2 ? 'rgba(0,0,0,.16)' : 'rgba(255,222,182,.09)';
-      kg.fillRect(0, i*s*0.34 + (rnd2(i,3,7)-0.5)*s*0.1, v.w, Math.max(0.7,s*0.055));
-    }
-    kg.globalAlpha=0.5; kg.fillStyle=kg.createPattern(grain(),'repeat');
-    kg.fillRect(0,0,v.w,v.h); kg.globalAlpha=1;
-    kg.restore();
-  });
-  for(let i=Math.round(lift);i>=0;i-=2) put(railSide,-i);                     // the extruded side
-  put(railSide,0);
-  /* Bevel by sandwiching: a light copy sits slightly high and a dark copy slightly
-     low, then the top face covers the middle, so a lit rim survives along every
-     upper edge and a shaded one along every lower edge, whatever shape the rail is. */
-  const bev=Math.max(1,s*0.07);
-  put(tint(ring,'rgba(214,168,120,.55)'),-lift-bev);
-  put(tint(ring,'rgba(24,14,8,.55)'),-lift+bev);
-  put(railTop,-lift);                                                  // the top face
-  /* ---- 6. bumpers: a rubber dome with a cast shadow ---- */
+  for(let i=Math.round(lift);i>=0;i--) fillBand(-i,'#3a2619');       // the extruded side
+  const bev=Math.max(1,s*0.09);
+  fillBand(-lift-bev,'rgba(214,168,120,.6)');                        // lit upper rim
+  fillBand(-lift+bev,'rgba(22,13,7,.6)');                            // shaded lower rim
+  const wood=g.createLinearGradient(0,ry-lift,0,ry+rh);
+  wood.addColorStop(0,'#8a6242'); wood.addColorStop(0.5,'#6d4a30'); wood.addColorStop(1,'#54391f');
+  fillBand(-lift,wood);
+  /* Sawn grain, painted as the stroke's own pattern rather than through a mask.
+     Masking it needed a full-viewport scratch canvas per hole, which cost 750ms; a
+     pattern strokes in for nothing. */
+  fillBand(-lift, g.createPattern(woodGrain(s),'repeat'));
+  fillBand(-lift, g.createPattern(grain(),'repeat'));
+
+  /* ---- 6. bumpers ---- */
   if(c.bumps) for(const bp of c.bumps){
     const bx2=X(bp.x), by2=Y(bp.y), r2=BUMPER_R*s;
     g.save();
     g.beginPath(); g.ellipse(bx2+s*0.07, by2+s*0.16, r2*1.02, r2*0.72, 0,0,7);
-    g.fillStyle='rgba(0,0,0,.38)'; g.filter='blur(2px)'; g.fill(); g.restore();
+    g.fillStyle='rgba(0,0,0,.38)'; if('filter' in g) g.filter='blur(2px)'; g.fill(); g.restore();
     const rg=g.createRadialGradient(bx2-r2*0.35,by2-r2*0.42,r2*0.1, bx2,by2,r2);
     rg.addColorStop(0,'#fffdf6'); rg.addColorStop(0.55,'#e6dfcd'); rg.addColorStop(1,'#a89f8a');
     g.beginPath(); g.arc(bx2,by2,r2,0,7); g.fillStyle=rg; g.fill();
@@ -1043,7 +1163,8 @@ function buildStatic(){
     g.beginPath(); g.ellipse(bx2-r2*0.22,by2-r2*0.3,r2*0.24,r2*0.16,-0.6,0,7);
     g.fillStyle='rgba(255,255,255,.7)'; g.fill();
   }
-  /* ---- 7. the cup, sunk into the felt ---- */
+
+  /* ---- 7. the cup ---- */
   const cx=X(c.cup[0]), cy=Y(c.cup[1]), cr=CUP_R*s;
   const lipG=g.createRadialGradient(cx,cy,cr*0.6, cx,cy,cr*1.7);
   lipG.addColorStop(0,'rgba(0,0,0,.5)'); lipG.addColorStop(1,'rgba(0,0,0,0)');
@@ -1055,7 +1176,7 @@ function buildStatic(){
   g.strokeStyle='rgba(230,245,225,.22)'; g.lineWidth=Math.max(1,s*0.05);
   g.beginPath(); g.arc(cx,cy,cr*0.97,Math.PI*0.9,Math.PI*2.1); g.stroke();
 
-  /* ---- 8. a warm key light across the table ---- */
+  /* ---- 8. key light ---- */
   const key=g.createLinearGradient(rx,ry,rx+rw*0.7,ry+rh);
   key.addColorStop(0,'rgba(255,240,190,.10)'); key.addColorStop(0.5,'rgba(255,255,255,0)');
   key.addColorStop(1,'rgba(0,10,20,.18)');
@@ -1063,13 +1184,46 @@ function buildStatic(){
 
   g.restore();   // end table clip
 
-  /* baked, not drawn per frame: a full-screen gradient fill every frame cost more
-     than everything else in the loop put together */
+  /* baked, not per frame: a full-screen gradient fill every frame cost more than
+     everything else in the loop put together */
   const vg=g.createRadialGradient(v.w*0.5,v.h*0.45,Math.min(v.w,v.h)*0.35,
                                   v.w*0.5,v.h*0.5,Math.max(v.w,v.h)*0.78);
   vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.45)');
   g.fillStyle=vg; g.fillRect(0,0,v.w,v.h);
-  G.bg=cv2; G.bgDpr=dpr;
+
+  G.bg=cv2;
+}
+
+/* ---------- the ball's surface ----------
+   A smooth white circle gives the eye nothing to hold on to, so a putt reads as a
+   sliding dot rather than a rolling ball. These are dimples and a maker's mark on a
+   sphere, rotated by how far the ball has actually rolled: the contact point drags
+   the surface, so travelling d turns the ball d/r radians about the axis lying in
+   the ground plane at right angles to the direction of travel. */
+const BALL_PTS=(()=>{
+  const pts=[], n=27, golden=Math.PI*(3-Math.sqrt(5));
+  for(let i=0;i<n;i++){
+    const z=1-(2*i+1)/n, r=Math.sqrt(Math.max(0,1-z*z)), a=i*golden;
+    pts.push({p:[Math.cos(a)*r, Math.sin(a)*r, z], mark: i===4||i===17});
+  }
+  return pts;
+})();
+function spinReset(){ G.spin=[1,0,0, 0,1,0, 0,0,1] }
+function spinBy(dx,dy){
+  const d=Math.hypot(dx,dy);
+  if(d<1e-5) return;
+  const th=d/BALL_R;                       // rolling without slipping
+  const ax=-dy/d, ay=dx/d;                 // axis: left of the direction of travel
+  const ct=Math.cos(th), st=Math.sin(th), ic=1-ct;
+  /* Rodrigues, for an axis with no z component */
+  const Rm=[ct+ax*ax*ic,  ax*ay*ic,     ay*st,
+            ax*ay*ic,     ct+ay*ay*ic, -ax*st,
+           -ay*st,        ax*st,        ct];
+  const A=G.spin, out=new Array(9);
+  for(let r=0;r<3;r++) for(let col=0;col<3;col++){
+    out[r*3+col]=Rm[r*3]*A[col]+Rm[r*3+1]*A[3+col]+Rm[r*3+2]*A[6+col];
+  }
+  G.spin=out;
 }
 
 /* ================= per frame ================= */
@@ -1093,16 +1247,16 @@ function draw(){
   if(ctx.roundRect) ctx.roundRect(rx,ry,rw,rh,rr); else ctx.rect(rx,ry,rw,rh);
   ctx.clip();
 
-  /* water, alive */
+  /* water, alive: ripples clipped to the pond's own smoothed outline */
   const tm=performance.now()/1000;
-  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
-    if(c.cells[y][x]!==WATER) continue;
-    for(let k=0;k<2;k++){
-      const ph=tm*0.9 + x*0.7 + y*1.1 + k*2.1;
-      const a=0.05+0.05*Math.sin(ph);
-      ctx.fillStyle='rgba(225,245,255,'+a.toFixed(3)+')';
-      ctx.fillRect(vx(x)+s*0.08, vy(y)+s*(0.24+0.34*k)+Math.sin(ph)*s*0.05, s*0.84, s*0.08);
+  if(G._waterPath){
+    ctx.save(); ctx.clip(G._waterPath);
+    for(let k=0;k<9;k++){
+      const ph=tm*0.75+k*1.7;
+      ctx.fillStyle='rgba(228,246,255,'+(0.035+0.035*Math.sin(ph)).toFixed(3)+')';
+      ctx.fillRect(vx(0)-s, vy(0)+k*s*0.62+Math.sin(ph)*s*0.09, c.w*s+2*s, s*0.11);
     }
+    ctx.restore();
   }
 
   /* trail */
@@ -1173,10 +1327,43 @@ function draw(){
     const bgr=ctx.createRadialGradient(bx-r*0.38,by-r*0.44,r*0.08, bx,by,r*1.08);
     bgr.addColorStop(0,'#ffffff'); bgr.addColorStop(0.62,'#eef0e6'); bgr.addColorStop(1,'#b9bfae');
     ctx.beginPath(); ctx.arc(bx,by,r,0,7); ctx.fillStyle=bgr; ctx.fill();
+
+    /* the surface, so the roll is visible */
+    const M=G.spin||[1,0,0,0,1,0,0,0,1];
+    ctx.save(); ctx.beginPath(); ctx.arc(bx,by,r*0.995,0,7); ctx.clip();
+    for(const d of BALL_PTS){
+      const p=d.p;
+      const qx=M[0]*p[0]+M[1]*p[1]+M[2]*p[2];
+      const qy=M[3]*p[0]+M[4]*p[1]+M[5]*p[2];
+      const qz=M[6]*p[0]+M[7]*p[1]+M[8]*p[2];
+      if(qz<-0.05) continue;                      // the far side of the ball
+      const px=bx+qx*r*0.9, py=by+qy*r*0.9;
+      const fore=Math.max(0,qz);                  // foreshortening near the rim
+      const lit=0.55+0.45*(-qx*0.6-qy*0.6);       // same key light as the body
+      if(d.mark){
+        ctx.beginPath();
+        ctx.ellipse(px,py,r*0.165*(0.35+0.65*fore),r*0.165,Math.atan2(qy,qx),0,7);
+        ctx.fillStyle='rgba('+Math.round(198*lit)+','+Math.round(62*lit)+','+Math.round(50*lit)+','+(0.5+0.4*fore).toFixed(2)+')';
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.ellipse(px,py,r*0.115*(0.3+0.7*fore),r*0.115,Math.atan2(qy,qx),0,7);
+        ctx.fillStyle='rgba(122,130,114,'+(0.13+0.17*fore).toFixed(2)+')';
+        ctx.fill();
+        /* a lit lower lip, so a dimple reads as a dent rather than a dot */
+        ctx.beginPath();
+        ctx.ellipse(px+r*0.03,py+r*0.035,r*0.09*(0.3+0.7*fore),r*0.09,Math.atan2(qy,qx),0,7);
+        ctx.fillStyle='rgba(255,255,255,'+(0.10+0.12*fore).toFixed(2)+')';
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+
     ctx.beginPath(); ctx.ellipse(bx-r*0.3,by-r*0.34,r*0.3,r*0.2,-0.6,0,7);
-    ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(bx,by,r*0.99,0.5,2.2);
-    ctx.strokeStyle='rgba(70,80,60,.25)'; ctx.lineWidth=Math.max(1,r*0.14); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fill();
+    const rim=ctx.createRadialGradient(bx-r*0.3,by-r*0.35,r*0.3, bx,by,r);
+    rim.addColorStop(0,'rgba(0,0,0,0)'); rim.addColorStop(1,'rgba(40,48,36,.32)');
+    ctx.beginPath(); ctx.arc(bx,by,r,0,7); ctx.fillStyle=rim; ctx.fill();
   }
 
   /* particles */
@@ -1198,16 +1385,19 @@ function frame(t){
   let dt=Math.min(0.05,(t-G.tPrev)/1000); G.tPrev=t;
   if(G.course){
     if(G.moving){
+      G.spinFrom=G.spinFrom||[G.ball.x,G.ball.y];
       G.acc+=dt;
       let guard=0;
       while(G.acc>=DT && G.moving && guard++<600){ step(); G.acc-=DT; }
       /* slopes can in principle keep a ball rolling for ever; call it at rest */
       G.rollT=(G.rollT||0)+dt;
       if(G.moving && G.rollT>14){ G.ball.vx=0; G.ball.vy=0; settle(); }
+      spinBy(G.ball.x-G.spinFrom[0], G.ball.y-G.spinFrom[1]);
+      G.spinFrom=[G.ball.x,G.ball.y];
       if(G.moving && G.trail.length<400 &&
          (!G.trail.length || Math.hypot(G.ball.x-G.trail[G.trail.length-1][0], G.ball.y-G.trail[G.trail.length-1][1])>0.25))
         G.trail.push([G.ball.x,G.ball.y]);
-    } else G.acc=0;
+    } else { G.acc=0; G.spinFrom=null }
     for(const p of G.parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.94; p.vy*=0.94; p.life-=dt*1.5 }
     G.parts=G.parts.filter(p=>p.life>0);
     draw();
