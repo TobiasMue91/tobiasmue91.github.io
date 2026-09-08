@@ -66,4 +66,5 @@ The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
   plans. Everything else runs entirely client-side.
 
 `README.md` covers intent and licence; `IDEAS.md` is the backlog, including a list of gaps checked
-against the current catalogue; `PROMPTS.md` and `TIPS.md` are the prompting notes.
+against the current catalogue and a **Tried and rejected** list — read that before pitching a new entry,
+so an idea that was already turned down does not come back; `PROMPTS.md` and `TIPS.md` are the prompting notes.

@@ -8,17 +8,13 @@ have been built since; the point is the shape of the gap, not the specific sugge
 
 - **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
   build a deck across a run.
-- **Line-routing sim.** Mini Metro-shaped: growing demand, limited track, procedural maps.
-- **Air hockey.** 8-ball covers cue sports; nothing covers paddles.
-- **Turn-based tactics.** Into the Breach's shape — a small grid, perfect information, enemies that
-  telegraph next turn's move, so every turn is a solvable puzzle rather than a dice roll. `strategy`
-  is the thinnest category in the catalogue and nothing in it is turn-based tactical.
 
 Filled since: hidden-rule deduction, by `games/glyphgate.html`; cooperating with recordings of your
 own past, by `games/selfsame.html`; **pinball**, by `games/escapement.html` — swept-circle continuous
 collision so nothing tunnels at any speed, flippers you can cradle on, habitrails, a slingshot that
 throws along its own rubber, and a mission stack that bolts new parts onto the playfield as you go.
-The physics core in it is reusable: air hockey and the line-routing sim would both sit on top of it.
+The physics core in it is reusable, though the two candidates once listed here for it are both rejected
+below — a reusable core is a reason a build is cheap, never a reason the result is worth playing.
 
 **Tools**
 
@@ -71,6 +67,92 @@ reports the common subharmonic of a chord rather than trying to guess that it is
 to detect chords from the spectrum was removed after it turned out to fire on hummed low notes: a
 microphone that rolls off the fundamental leaves a spectrum shaped much like a chord's, and every
 statistic that separated the two also mistook quiet fundamentals for chords.
+
+Filled since: **minigolf**, by `games/nine_holes.html`. Worth reusing are three results, all of which
+contradicted what the design assumed before it was measured.
+
+The cup's capture speed, not the level generator, decided whether open holes could exist at all. A
+forgiving cup swallows any weight, so on a hole where you can see the flag every power drops and the
+acceptance filter throws it out as a barn door — silently banning open holes and leaving a course of
+nothing but blind doglegs. Over 2,400 candidates: at capture 9, 3% of accepted holes had line of sight
+and 27% were rejected as barn doors; at capture 4, 31% and 4%. A single physics constant was producing
+what read as a level-design problem.
+
+"Every hole can be aced" was true and hollow. The coarse angular sweep only proves an ace exists near
+some angle; refining it showed 10% of accepted holes had an ace window under one degree. The judge now
+measures the real angular tolerance and requires 1.25 degrees, so the median hole gives you 2.25 and the
+promise survives contact with a human hand.
+
+Par cannot come from the optimum when every hole is aceable by construction — the optimum is always 1.
+It has to come from how a plausible player actually fares, which makes the player model a tuned
+parameter rather than a detail: at 2 degrees of aim error 95% of holes came out par 2 and difficulty
+stopped showing, at 6 degrees par 5 became common, and 1.5 degrees gives 59% par 2 and 32% par 3 with
+mean par rising across the tiers. The round is then ordered by measured par rather than by the nominal
+difficulty tier, because the tiers turned out not to be monotone — tightening corridors made some holes
+easier. Mean par by position is now 2, 2, 2, 2, 2.25, 2.5, 2.88, 3.5, 4.
+
+A presentation pass afterwards produced two findings worth reusing for any canvas page here.
+Splitting the scene into a baked layer and a live one is what makes detail affordable: everything that
+cannot move — surround planting, table, felt, sand, slopes, rails, ambient occlusion — is drawn once into
+an offscreen canvas per hole, and only the ball, trail, water, flag and particles are drawn per frame.
+The rail itself is not tiles but an offset outline: dilate the play mask, subtract it, and the band that
+falls out follows the hole's real shape at even width, where drawing it cell by cell wandered between one
+and two cells thick and read as chunky. And the profiler contradicted the obvious guess about cost — the
+blur and the dilation were 10ms and 22ms, while building those alpha buffers at full device resolution
+cost about two seconds a hole. They are deliberately blurred, so resolution buys nothing there: building
+them at 0.55 scale and scaling up on composite took a bake from 3.1s to 0.38s with no visible difference.
+A full-screen vignette gradient filled per frame also cost more than the entire rest of the loop; baking
+it took frames from 20ms to 16.7ms.
+
+A later pass replaced the bitmap smoothing entirely, and the replacement is the reusable part.
+Terrain lives on a grid, but a grid-shaped bunker looks like a spreadsheet, and smoothing the mask as a
+bitmap gave soft mushy edges for a bake of nearly two seconds. Tracing the cell region to a polygon
+instead — walk the boundary between filled and empty cells emitting each edge with the filled side on
+its left, then round it with two passes of Chaikin corner cutting — gives crisp curved edges, exact
+clipping, and a bake of 20ms rather than 1780ms. Two traps came with it, both found by looking at
+screenshots rather than by reasoning. Corner cutting eats into convex corners, so a hazard smoothed
+naively ends up smaller than the cells it stands for and can catch a ball on a square that did not look
+like a hazard; hazards are grown outward first so the painted region is always a superset of the real
+one. And offsetting a polygon by moving each vertex along its normal self-intersects wherever a concave
+inlet is narrower than twice the offset, leaving an inverted loop that punched a hole clean through the
+rail on about one hole in three; stroking the outline at twice the width and clipping to the far side
+has no such failure mode. Unrelated but found the same way: the generator could wall off little pockets
+of green that no ball can reach, which are not playable but do collect the whole of the edge shading and
+render as a black blob, so a flood fill from the tee now turns anything unreachable back into rail.
+
+The general lesson, which is the same one the rejected tactics prototype produced: the fraction of an
+action space that is "good" measures nothing, because the space is mostly nonsense. Ask instead whether
+a deliberately stupid player reaches the good play.
+
+## Tried and rejected
+
+Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose
+them, and do not treat the empty space they leave in the catalogue as an opportunity. The catalogue
+being thin somewhere is not on its own a reason to build there. Two of the entries below were
+recommended as gaps for exactly that bad reason before being turned down; an empty category is
+evidence about the catalogue, not about whether anyone wants to play the thing that would fill it.
+
+- **Air hockey.** Rejected. Not because the physics duplicates `pong` — a free 2D mallet with real
+  momentum transfer is a genuinely different control space from a paddle on a rail — but because
+  nothing about that survives to the catalogue card, where it reads as two paddles and a bouncing
+  thing, and the momentum transfer that makes it interesting is already the whole of `8-ball`. A worse
+  `pong` next to a better `8-ball`.
+
+- **Line-routing sims** (Mini Metro's shape: growing demand, limited track, procedural maps). Rejected
+  on taste. The genre as a whole, not this framing of it.
+
+- **Turn-based tactics on a grid** (Into the Breach's shape: small grid, perfect information, enemies
+  that telegraph next turn's move). Rejected on taste, not on mechanics — it was tried and was not
+  interesting enough to put on the page. `strategy` being the thinnest category does not resurrect it.
+  Nor do its variants: the version where the player has no weapon at all and every kill comes from
+  shoving enemies into each other, into walls, or into their own crossfire, is the same idea and is
+  also rejected.
+
+  Worth keeping from the prototyping, because it generalises past this idea: exhaustive enumeration
+  showed that under 1% of legal turns were both safe and productive, which looked like difficulty and
+  was not. A deliberately myopic greedy player — deflect unit by unit, no lookahead — survived 97% of
+  solvable boards. Density of good plays in an action space measures nothing; the space is mostly
+  pointless wandering. Measure instead whether a stupid heuristic reaches the good play.
 
 ## Other
 - household planner
