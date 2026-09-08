@@ -164,9 +164,8 @@ main{flex:1;display:flex;min-height:0;min-width:0}
 #why{font-size:11.5px;color:var(--bad);margin-top:6px;line-height:1.4;min-height:1px}
 #score b{font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
 #bar{height:5px;border-radius:3px;background:#151d28;margin-top:7px;overflow:hidden;display:flex}
-#barGood{background:var(--good);height:100%;width:0;transition:width .35s}
-#barBad{background:#243244;height:100%;flex:1;transition:background .3s}
-#bar.tested #barBad{background:var(--bad)}
+#barGood{background:var(--good);height:100%;width:0}
+#barBad{background:var(--bad);height:100%;width:0}
 #thumbs{flex:1;overflow-y:auto;padding:9px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-content:start}
 .thumb{
   position:relative;aspect-ratio:1;border-radius:5px;overflow:hidden;
@@ -810,11 +809,12 @@ function renderRules(){
 }
 
 function changed(){
-  stopAnim();
+  stopAnim(); stopSweep(); $("#run").disabled=false;
   G.tested=false;
   renderRules(); save(); paintThumbsIdle(); setVerdict("");
   $("#score").innerHTML='Press <b style="font-size:12.5px">Run</b> to test all '+stage().trial;
   $("#barGood").style.width="0%";
+  $("#barBad").style.width="0%";
   $("#bar").classList.remove("tested");
   $("#why").innerHTML="";
   drawMain();
@@ -859,38 +859,84 @@ function firstFailIndex(){
 }
 
 /* ---------- the proving ground ---------- */
-function paintThumbsIdle(){
+let THUMBS=[], sweepRAF=0;
+
+function thumbCount(){
+  return Math.min(BOARDS.length, window.innerWidth<=860?36:48);
+}
+function buildThumbs(){
   const host=$("#thumbs");
-  host.innerHTML="";
+  host.innerHTML=""; THUMBS=[];
   BOARDS=BOARDS.length?BOARDS:trialBoards();
-  const n=Math.min(BOARDS.length,window.innerWidth<=860?30:48);
+  const n=thumbCount();
   for(let i=0;i<n;i++){
+    const idx=Math.floor(i*BOARDS.length/n);     /* spread across the whole set */
     const d=document.createElement("div");
-    d.className="thumb"+(i===G.showing?" sel":"");
-    d.title="maze "+(i+1);
+    d.className="thumb"; d.title="maze "+(idx+1);
     const cv=document.createElement("canvas");
     d.appendChild(cv); host.appendChild(d);
-    d.onclick=()=>{ showBoard(i); };
-    const b=BOARDS[i];
-    requestAnimationFrame(()=>{
-      const ctx=fitCanvas(cv);
-      ctx.clearRect(0,0,cv.width,cv.height);
-      const res=G.tested?G.results[i]:null;
-      const g=layout(b,cv.width,cv.height,2*DPR());
-      drawBoard(ctx,b,g,{dim:!res,fail:res&&res.result!=="win",
-        path:res?runProgram(b,G.prog,true).path:null});
-    });
-    if(G.tested){
-      d.classList.add(G.results[i].result==="win"?"pass":"fail");
-    }
+    d.onclick=()=>showBoard(idx);
+    THUMBS.push({el:d,cv,idx,shown:false});
   }
+}
+function paintThumb(t,withResult){
+  const b=BOARDS[t.idx];
+  const res=(withResult&&G.tested)?G.results[t.idx]:null;
+  t.el.classList.toggle("pass",!!res&&res.result==="win");
+  t.el.classList.toggle("fail",!!res&&res.result!=="win");
+  t.el.classList.toggle("sel",t.idx===G.showing);
+  const ctx=fitCanvas(t.cv);
+  ctx.clearRect(0,0,t.cv.width,t.cv.height);
+  const g=layout(b,t.cv.width,t.cv.height,2*DPR());
+  drawBoard(ctx,b,g,{dim:!res,fail:res&&res.result!=="win",
+    path:res?runProgram(b,G.prog,true).path:null});
+}
+function paintThumbsIdle(){
+  buildThumbs();
+  requestAnimationFrame(()=>{
+    for(const t of THUMBS){ t.shown=G.tested; paintThumb(t,G.tested); }
+  });
+}
+function stopSweep(){ if(sweepRAF) cancelAnimationFrame(sweepRAF); sweepRAF=0; }
+
+/* Watching the rulebook meet every maze is the whole idea, so a run is shown
+   rather than resolved: the proving ground fills in maze by maze, the count
+   climbs, and only when it is done does it hand you the one that beat you. */
+function sweep(done){
+  const tot=G.results.length;
+  const dur=Math.min(1150,450+tot*1.5);
+  const t0=performance.now();
+  stopSweep();
+  $("#run").disabled=true;
+  const step=now=>{
+    const k=Math.min(1,(now-t0)/dur);
+    const upto=Math.max(1,Math.round(k*tot));
+    let pass=0;
+    for(let i=0;i<upto;i++) if(G.results[i].result==="win") pass++;
+    $("#score").innerHTML=k<1
+      ? "<b>"+pass+"</b> / "+upto+" tested…"
+      : "<b>"+pass+"</b> / "+tot+" mazes solved";
+    $("#barGood").style.width=(100*pass/tot).toFixed(2)+"%";
+    $("#barBad").style.width=(100*(upto-pass)/tot).toFixed(2)+"%";
+    for(const t of THUMBS){
+      const vis=t.idx<upto;
+      if(vis!==t.shown){ t.shown=vis; paintThumb(t,vis); }
+    }
+    if(k<1){ sweepRAF=requestAnimationFrame(step); return; }
+    sweepRAF=0; $("#run").disabled=false;
+    $("#why").innerHTML=breakdown();
+    done(pass);
+  };
+  sweepRAF=requestAnimationFrame(step);
 }
 
 /* ---------- the big board ---------- */
 function showBoard(i){
   G.showing=i;
   stopAnim();
-  paintThumbsIdle();
+  for(const t of THUMBS) t.el.classList.toggle("sel",t.idx===i);
+  const hit=THUMBS.find(t=>t.idx===i);
+  if(hit&&hit.el.scrollIntoView) hit.el.scrollIntoView({block:"nearest",inline:"nearest"});
   playOn(BOARDS[i]);
 }
 
@@ -973,16 +1019,22 @@ function traceSoFar(){
 /* ---------- run ---------- */
 function onRun(){
   if(!G.prog.length){ setVerdict("<b>Your rulebook is empty</b> — add a line","bad"); return; }
-  const pass=testAll();
+  if(sweepRAF) return;                      /* already running */
+  stopAnim();
+  testAll();
   const tot=G.results.length;
-  $("#score").innerHTML="<b>"+pass+"</b> / "+tot+" mazes solved";
-  $("#why").innerHTML=breakdown();
-  $("#barGood").style.width=(100*pass/tot).toFixed(1)+"%";
+  $("#why").innerHTML="";
   $("#bar").classList.add("tested");
-  paintThumbsIdle();
-  if(pass===tot){ stageCleared(); return; }
-  const i=firstFailIndex();
-  showBoard(i);
+  for(const t of THUMBS){ t.shown=false; paintThumb(t,false); }
+  setVerdict("<b>Testing</b> your rulebook on all "+tot+" mazes…");
+  sweep(pass=>{
+    if(pass===tot){
+      setVerdict("<b>All "+tot+"</b> — your rule holds everywhere","good");
+      setTimeout(stageCleared,520);
+      return;
+    }
+    showBoard(firstFailIndex());
+  });
 }
 
 /* ---------- stage flow ---------- */
@@ -1040,15 +1092,17 @@ function startStage(){
   $("#brief").innerHTML="<b>"+s.name+"</b> — "+s.brief+" &nbsp;·&nbsp; up to "+s.slots+" lines";
   $("#score").innerHTML='Press <b style="font-size:12.5px">Run</b> to test all '+s.trial;
   $("#barGood").style.width="0%";
+  $("#barBad").style.width="0%";
   $("#bar").classList.remove("tested");
   $("#why").innerHTML="";
   pips(); renderRules(); paintThumbsIdle(); setVerdict(""); drawMain(); save();
 }
 
 /* ---------- overlay ---------- */
-function card(html,btn,fn,ghost,gfn){
+function card(html,btn,fn,ghost,gfn,dismissible){
   const c=$("#card");
   c.innerHTML=html;
+  G.canDismiss=!!dismissible;
   const b=document.createElement("button");
   b.className="go"; b.textContent=btn;
   b.onclick=()=>{ $("#ov").classList.add("hide"); fn&&fn(); };
@@ -1061,6 +1115,7 @@ function card(html,btn,fn,ghost,gfn){
   }
   $("#ov").classList.remove("hide");
 }
+function closeCard(){ $("#ov").classList.add("hide"); G.canDismiss=false; }
 function intro(){
   const s=STAGES[0];
   card(
@@ -1085,7 +1140,7 @@ function howto(){
     "<li>You win a stage when one rulebook solves <b>every maze</b> in the proving ground.</li>"+
     "</ul>"+
     "<p>Click any maze in the proving ground to watch your rule run on it. Drag a line to move it.</p>",
-    "Back to it"
+    "Back to it", null, null, null, true
   );
 }
 
@@ -1110,7 +1165,8 @@ function boot(){
     card("<h2>"+s.name+"</h2>"+'<p class="sub">a nudge, not the answer — unless you keep asking</p>'+
          "<ul>"+shown+"</ul>",
          more?"Tell me a bit more":"Back to it",
-         ()=>{ if(more){ G.hintAt++; $("#stuckBtn").click(); } });
+         ()=>{ if(more){ G.hintAt++; $("#stuckBtn").click(); } },
+         more?"Back to it":null, null, true);
   };
   $("#resetBtn").onclick=()=>{
     card("<h2>Start over?</h2><p>This clears your progress and your rulebook.</p>",
@@ -1120,8 +1176,11 @@ function boot(){
       },"Keep playing");
   };
   window.addEventListener("resize",()=>{ drawMain(); paintThumbsIdle(); });
+  $("#ov").addEventListener("click",e=>{ if(e.target===$("#ov")&&G.canDismiss) closeCard(); });
   document.addEventListener("keydown",e=>{
-    if(e.key==="Enter"&&!e.repeat&&$("#ov").classList.contains("hide")){ e.preventDefault(); onRun(); }
+    const open=!$("#ov").classList.contains("hide");
+    if(e.key==="Escape"&&open&&G.canDismiss){ e.preventDefault(); closeCard(); return; }
+    if(e.key==="Enter"&&!e.repeat&&!open){ e.preventDefault(); onRun(); }
   });
   const had=load();
   if(had&&G.prog.length){ startStage(); }
