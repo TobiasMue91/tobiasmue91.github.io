@@ -48,7 +48,9 @@
     max-width:min(92%,460px); text-align:center; line-height:1.4;
     transition:opacity .35s; backdrop-filter:blur(6px);
   }
-  @media (max-width:520px){ #tip{ bottom:64px; font-size:12px } }
+  /* in portrait the hole fills the screen, so the hint moves out of the playing
+     area rather than sitting on top of the ball */
+  @media (max-aspect-ratio:1/1){ #tip{ bottom:auto; top:6px; font-size:12px } }
   .panel{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     background:rgba(10,15,11,.9); backdrop-filter:blur(8px); z-index:5; padding:18px;
@@ -567,7 +569,7 @@ function loadHole(i){
   G.idx=i; G.course=G.holes[i];
   G.ball.x=G.course.tee[0]; G.ball.y=G.course.tee[1]; G.ball.vx=0; G.ball.vy=0;
   G.rest=[G.ball.x,G.ball.y];
-  G.strokes=0; G.moving=false; G.holed=false; G.trail=[]; G.parts=[]; G.kb=null;
+  G.strokes=0; G.moving=false; G.holed=false; G.trail=[]; G.parts=[]; G.kb=null; G.bgKey=null;
   layout(); updateHUD();
 }
 
@@ -667,7 +669,8 @@ window.addEventListener('keydown',e=>{
 });
 
 let tipHidden=false;
-function hideTip(){ if(!tipHidden && G.strokes>=1){ tipHidden=true; tipEl.style.opacity=0 } }
+function hideTip(){ if(!tipHidden){ tipHidden=true; tipEl.style.opacity=0 } }
+setTimeout(()=>hideTip(), 9000);      // it has said its piece by then
 
 /* ---------- physics step (the live game runs the same integrator) ---------- */
 function step(){
@@ -709,169 +712,483 @@ function puff(x,y,col,spd){
                 life:1,col});
 }
 
-/* ---------- rendering ---------- */
-function grassShade(x,y,portrait){
-  /* mown stripes across the hole, plus a whisper of per-cell variation */
-  const band = Math.floor((portrait?x:y)/2) & 1;
-  const n=Math.sin(x*12.9898+y*78.233)*43758.5453;
-  return band*0.7 + (n-Math.floor(n))*0.3;
+/* ---------- rendering ----------
+   The scene splits in two. Everything that cannot move — the surround and its
+   planting, the table, felt, sand, slopes, rails and their occlusion — is baked
+   once into an offscreen canvas whenever the hole or the viewport changes. Only
+   the ball, its shadow and trail, the water, the flag and the particles are
+   drawn per frame. That is what makes the detail below affordable: the expensive
+   passes run once per hole rather than sixty times a second. */
+
+function hex(h){ h=h.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)] }
+function mix(a,b,t){ const A=hex(a),B=hex(b);
+  return 'rgb('+Math.round(A[0]+(B[0]-A[0])*t)+','+Math.round(A[1]+(B[1]-A[1])*t)+','+Math.round(A[2]+(B[2]-A[2])*t)+')' }
+function rnd2(x,y,k){ const n=Math.sin(x*127.1+y*311.7+(k||0)*74.7)*43758.5453; return n-Math.floor(n) }
+
+/* a small tiling grain used to keep large flat areas from looking like plastic */
+let GRAIN=null;
+function grain(){
+  if(GRAIN) return GRAIN;
+  const c=document.createElement('canvas'); c.width=c.height=64;
+  const g=c.getContext('2d'), im=g.createImageData(64,64);
+  for(let i=0;i<64*64;i++){
+    const v=Math.random();
+    im.data[i*4]=im.data[i*4+1]=im.data[i*4+2]= v>0.5?255:0;
+    im.data[i*4+3]= Math.random()<0.14 ? 14 : 0;
+  }
+  g.putImageData(im,0,0);
+  GRAIN=c; return c;
 }
+
+function grassShade(x,y,portrait){
+  const band = Math.floor((portrait?x:y)/2) & 1;
+  return band*0.7 + rnd2(x,y,1)*0.3;
+}
+
+const WALL_LIFT = 0.26;   // in cells; how far the rail tops sit above their footprint
+
+/* ================= the baked layer ================= */
+function buildStatic(){
+  const c=G.course, v=G.view, s=v.s;
+  const cv2=document.createElement('canvas');
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  cv2.width=Math.round(v.w*dpr); cv2.height=Math.round(v.h*dpr);
+  const g=cv2.getContext('2d');
+  g.setTransform(dpr,0,0,dpr,0,0);
+  const X=x=>v.ox+x*s, Y=y=>v.oy+y*s;
+  /* snap cell rects to whole pixels; fractional edges antialias against whatever is
+     underneath and leave a faint grid across the felt */
+  const cellRect=(ctx2,x,y,style)=>{
+    const a=Math.round(X(x)), b=Math.round(Y(y)), a2=Math.round(X(x+1)), b2=Math.round(Y(y+1));
+    ctx2.fillStyle=style; ctx2.fillRect(a,b,a2-a,b2-b);
+  };
+  const cellBox=(x,y)=>{
+    const a=Math.round(X(x)), b=Math.round(Y(y));
+    return [a,b,Math.round(X(x+1))-a,Math.round(Y(y+1))-b];
+  };
+  const seed=hashStr(G.seed+'#'+G.idx);
+  const R=mulberry32(seed);
+  /* ---- 1. the ground the course stands on ---- */
+  const bg=g.createLinearGradient(0,0,v.w*0.4,v.h);
+  bg.addColorStop(0,'#1b2a1c'); bg.addColorStop(0.55,'#16211a'); bg.addColorStop(1,'#101a14');
+  g.fillStyle=bg; g.fillRect(0,0,v.w,v.h);
+
+  const [bx0,by0,bx1,by1]=c.bbox;
+  const rx=X(bx0), ry=Y(by0), rw=(bx1-bx0)*s, rh=(by1-by0)*s, rr=Math.min(22,s*1.1);
+  const roundPath=(ctx2,x,y,w2,h2,r)=>{ ctx2.beginPath();
+    if(ctx2.roundRect) ctx2.roundRect(x,y,w2,h2,r); else ctx2.rect(x,y,w2,h2); };
+
+  /* planting: bushes, tufts and stones scattered outside the table, never over it */
+  const clear=(px,py,pad)=> px<rx-pad||px>rx+rw+pad||py<ry-pad||py>ry+rh+pad;
+  const bush=(px,py,r0)=>{
+    for(let i=0;i<5;i++){
+      const a=i/5*6.283+R()*0.7, d=r0*0.55*(0.4+R()*0.8);
+      const cx2=px+Math.cos(a)*d, cy2=py+Math.sin(a)*d, rr2=r0*(0.5+R()*0.45);
+      g.beginPath(); g.arc(cx2,cy2+r0*0.14,rr2,0,7);
+      g.fillStyle='rgba(0,0,0,.22)'; g.fill();
+      g.beginPath(); g.arc(cx2,cy2,rr2,0,7);
+      g.fillStyle=mix('#1d3b25','#2f5c35',R()*0.9); g.fill();
+      g.beginPath(); g.arc(cx2-rr2*0.28,cy2-rr2*0.3,rr2*0.42,0,7);
+      g.fillStyle='rgba(150,205,150,.10)'; g.fill();
+    }
+  };
+  const stone=(px,py,r0)=>{
+    g.beginPath();
+    for(let i=0;i<7;i++){ const a=i/7*6.283, d=r0*(0.75+rnd2(px,py,i)*0.5);
+      const fx=px+Math.cos(a)*d, fy=py+Math.sin(a)*d*0.8;
+      i?g.lineTo(fx,fy):g.moveTo(fx,fy); }
+    g.closePath();
+    g.fillStyle='rgba(0,0,0,.25)'; g.translate(0,r0*0.2); g.fill(); g.translate(0,-r0*0.2);
+    g.fillStyle=mix('#3a423c','#5a6157',R()); g.fill();
+  };
+  const tuft=(px,py,r0)=>{
+    g.strokeStyle='rgba(120,170,115,.30)'; g.lineWidth=Math.max(1,r0*0.16); g.lineCap='round';
+    for(let i=0;i<4;i++){
+      const a=-1.57+(R()-0.5)*1.5;
+      g.beginPath(); g.moveTo(px,py);
+      g.quadraticCurveTo(px+Math.cos(a)*r0*0.5, py+Math.sin(a)*r0*0.8, px+Math.cos(a)*r0, py+Math.sin(a)*r0*1.25);
+      g.stroke();
+    }
+  };
+  const density=Math.round((v.w*v.h)/26000);
+  for(let i=0;i<density;i++){
+    const px=R()*v.w, py=R()*v.h;
+    if(!clear(px,py,s*0.5)) continue;
+    const roll=R();
+    if(roll<0.46) bush(px,py,s*(0.5+R()*0.7));
+    else if(roll<0.72) tuft(px,py,s*(0.35+R()*0.4));
+    else if(roll<0.88) stone(px,py,s*(0.2+R()*0.3));
+    else { g.beginPath(); g.arc(px,py,s*0.07,0,7); g.fillStyle='rgba(120,150,115,.14)'; g.fill(); }
+  }
+
+  /* ---- 2. the table, with a real drop shadow ---- */
+  g.save();
+  g.shadowColor='rgba(0,0,0,.6)'; g.shadowBlur=s*1.5; g.shadowOffsetY=s*0.55;
+  roundPath(g,rx,ry,rw,rh,rr); g.fillStyle='#20452a'; g.fill();
+  g.restore();
+
+  g.save();
+  roundPath(g,rx,ry,rw,rh,rr); g.clip();
+  /* the course sits on mown lawn; only the rail itself is timber */
+  const lawn=g.createLinearGradient(rx,ry,rx+rw*0.5,ry+rh);
+  lawn.addColorStop(0,'#274f31'); lawn.addColorStop(1,'#1d3f26');
+  g.save(); roundPath(g,rx,ry,rw,rh,rr); g.clip();
+  g.fillStyle=lawn; g.fillRect(rx,ry,rw,rh);
+  for(let i=0;i<Math.ceil(rh/(s*1.6));i++){
+    if(i&1) continue;
+    g.fillStyle='rgba(255,255,255,.020)';
+    g.fillRect(rx, ry+i*s*1.6, rw, s*1.6);
+  }
+  g.restore();
+  /* ---- 3. felt ---- */
+  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
+    const t=c.cells[y][x];
+    if(t===WALL) continue;
+    let col;
+    if(t===SAND) col=mix('#cdb87c','#dfcb92',rnd2(x,y,3));
+    else if(t===WATER) col='#245c86';
+    else if(SLOPE_VEC[t]) col = grassShade(x,y,G.portrait)>0.5 ? '#2f7b57' : '#2a7250';
+    else col = grassShade(x,y,G.portrait)>0.5 ? '#469a5e' : '#37844b';
+    cellRect(g,x,y,col);
+  }
+  /* Slopes read as one tilted plane. Shading each cell separately drew a gradient
+     per tile and the grid showed through, so group the patch and light it once. */
+  const seenS=new Set();
+  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
+    const t=c.cells[y][x]; const d=SLOPE_VEC[t]; if(!d) continue;
+    const k0=y*c.w+x; if(seenS.has(k0)) continue;
+    const patch=[], stack=[[x,y]]; seenS.add(k0);
+    while(stack.length){
+      const [px,py]=stack.pop(); patch.push([px,py]);
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx2=px+dx, ny2=py+dy, k=ny2*c.w+nx2;
+        if(nx2<0||ny2<0||nx2>=c.w||ny2>=c.h||seenS.has(k)) continue;
+        if(c.cells[ny2][nx2]!==t) continue;
+        seenS.add(k); stack.push([nx2,ny2]);
+      }
+    }
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for(const [px,py] of patch){ x0=Math.min(x0,px); y0=Math.min(y0,py); x1=Math.max(x1,px); y1=Math.max(y1,py) }
+    const gx0=X(x0), gy0=Y(y0), gx1=X(x1+1), gy1=Y(y1+1);
+    const lg=g.createLinearGradient(
+      d[0]>0?gx0:(d[0]<0?gx1:(gx0+gx1)/2), d[1]>0?gy0:(d[1]<0?gy1:(gy0+gy1)/2),
+      d[0]>0?gx1:(d[0]<0?gx0:(gx0+gx1)/2), d[1]>0?gy1:(d[1]<0?gy0:(gy0+gy1)/2));
+    lg.addColorStop(0,'rgba(255,255,255,.16)');
+    lg.addColorStop(0.55,'rgba(255,255,255,.02)');
+    lg.addColorStop(1,'rgba(0,0,0,.26)');
+    g.save(); g.beginPath();
+    for(const [px,py] of patch){ const bb=cellBox(px,py); g.rect(bb[0],bb[1],bb[2],bb[3]) }
+    g.clip(); g.fillStyle=lg; g.fillRect(gx0-s,gy0-s,(gx1-gx0)+2*s,(gy1-gy0)+2*s);
+    g.restore();
+  }
+  /* chevrons */
+  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
+    const d=SLOPE_VEC[c.cells[y][x]]; if(!d) continue;
+    const cx2=X(x)+s/2, cy2=Y(y)+s/2;
+    g.save(); g.translate(cx2,cy2); g.rotate(Math.atan2(d[1],d[0]));
+    g.lineWidth=Math.max(1.4,s*0.07); g.lineCap='round'; g.lineJoin='round';
+    for(const off of [-s*0.18, s*0.08]){
+      g.beginPath(); g.moveTo(off-s*0.09,-s*0.16); g.lineTo(off+s*0.09,0); g.lineTo(off-s*0.09,s*0.16);
+      g.strokeStyle='rgba(0,0,0,.28)'; g.stroke();
+      g.beginPath(); g.moveTo(off-s*0.09,-s*0.16-1); g.lineTo(off+s*0.09,-1); g.lineTo(off-s*0.09,s*0.16-1);
+      g.strokeStyle='rgba(205,255,225,.5)'; g.stroke();
+    }
+    g.restore();
+  }
+  /* sand: stipple and a darker lip where it meets the felt */
+  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
+    if(c.cells[y][x]!==SAND) continue;
+    for(let i=0;i<9;i++){
+      const px=X(x)+rnd2(x*9+i,y,5)*s, py=Y(y)+rnd2(x,y*9+i,6)*s;
+      g.fillStyle= i%2 ? 'rgba(255,255,255,.16)' : 'rgba(120,95,50,.16)';
+      g.fillRect(px,py,Math.max(1,s*0.055),Math.max(1,s*0.055));
+    }
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      if(c.at(x+dx,y+dy)===SAND || c.at(x+dx,y+dy)===WALL) continue;
+      const lg=g.createLinearGradient(X(x)+(dx>0?s:0), Y(y)+(dy>0?s:0),
+                                      X(x)+(dx>0?s:0)-dx*s*0.4, Y(y)+(dy>0?s:0)-dy*s*0.4);
+      lg.addColorStop(0,'rgba(90,70,35,.34)'); lg.addColorStop(1,'rgba(90,70,35,0)');
+      const bx3=cellBox(x,y);
+      g.fillStyle=lg; g.fillRect(bx3[0],bx3[1],bx3[2],bx3[3]);
+    }
+  }
+  /* water: depth toward the middle, a pale shelf at the edge */
+  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
+    if(c.cells[y][x]!==WATER) continue;
+    let edge=false;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) if(c.at(x+dx,y+dy)!==WATER) edge=true;
+    cellRect(g,x,y, edge ? 'rgba(150,210,235,.20)' : 'rgba(0,20,45,.26)');
+  }
+  /* grain over the whole playing surface */
+  g.save(); g.globalAlpha=0.55;
+  g.fillStyle=g.createPattern(grain(),'repeat'); g.fillRect(0,0,v.w,v.h);
+  g.restore();
+  /* planting on the rough inside the table, away from anything playable */
+  for(let i=0;i<Math.round(density*1.2);i++){
+    const px=rx+R()*rw, py=ry+R()*rh;
+    const cx3=Math.floor((px-v.ox)/s), cy3=Math.floor((py-v.oy)/s);
+    let nearPlay=false;
+    for(let dy=-2;dy<=2 && !nearPlay;dy++) for(let dx=-2;dx<=2;dx++)
+      if(c.at(cx3+dx,cy3+dy)!==WALL){ nearPlay=true; break }
+    if(nearPlay) continue;
+    const roll=R();
+    if(roll<0.5) tuft(px,py,s*(0.3+R()*0.35));
+    else if(roll<0.8) bush(px,py,s*(0.30+R()*0.34));
+    else stone(px,py,s*(0.14+R()*0.16));
+  }
+  /* ---- 4. ambient occlusion: the felt darkens where it meets anything solid ---- */
+  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
+    if(c.cells[y][x]===WALL) continue;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      if(c.at(x+dx,y+dy)!==WALL) continue;
+      const ex=X(x)+(dx>0?s:0), ey=Y(y)+(dy>0?s:0);
+      const lg=g.createLinearGradient(ex,ey, ex-dx*s*0.55, ey-dy*s*0.55);
+      lg.addColorStop(0,'rgba(0,0,0,.42)'); lg.addColorStop(1,'rgba(0,0,0,0)');
+      const bx4=cellBox(x,y);
+      g.fillStyle=lg; g.fillRect(bx4[0],bx4[1],bx4[2],bx4[3]);
+    }
+  }
+
+  /* ---- 5. rails, extruded ---- */
+  /* The rail is an offset outline of the playable area, not a set of wall tiles.
+     Drawing it tile by tile made it wander between one and two cells thick and
+     read as chunky; dilating the play mask and subtracting it gives a band of
+     even width that follows the hole's real shape, corners and all. */
+  const lift=s*WALL_LIFT, railPx=s*0.92;
+  /* The rail only ever exists inside the table, so the scratch buffers are cropped
+     to that box. Full-viewport buffers made a bake cost three seconds a hole. */
+  const pad=Math.ceil(railPx+lift+4);
+  const RB={ x:Math.floor(rx-pad), y:Math.floor(ry-pad), w:Math.ceil(rw+pad*2), h:Math.ceil(rh+pad*2) };
+  /* The rail buffers are built at reduced resolution and scaled up on composite.
+     Their edge is deliberately blurred, so the resolution buys nothing visually,
+     and at full device resolution the dilation and tint passes cost about two
+     seconds a hole between them. */
+  const RS=0.55, rsc=dpr*RS;
+  const scratch=(fn)=>{
+    const k=document.createElement('canvas');
+    k.width=Math.ceil(RB.w*rsc); k.height=Math.ceil(RB.h*rsc);
+    const kg=k.getContext('2d');
+    kg.setTransform(rsc,0,0,rsc,-RB.x*rsc,-RB.y*rsc);
+    fn(kg,k); return k;
+  };
+  const put=(img,dy)=>g.drawImage(img, RB.x, RB.y+dy, RB.w, RB.h);
+  /* The mask is built from square cells, so a diagonal edge comes out as stairs and
+     the rail inherits them. A slight blur before dilating rounds the outline off. */
+  const maskRaw=scratch((kg)=>{
+    kg.fillStyle='#fff';
+    for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++)
+      if(c.cells[y][x]!==WALL){ const bb=cellBox(x,y); kg.fillRect(bb[0]-1,bb[1]-1,bb[2]+2,bb[3]+2) }
+  });
+  const mask=scratch((kg,k)=>{
+    kg.save(); kg.setTransform(1,0,0,1,0,0);
+    if('filter' in kg) kg.filter='blur('+(s*0.13*rsc).toFixed(1)+'px)';
+    /* redrawing the blurred mask saturates its alpha, which thresholds the soft
+       edge back to a crisp one while keeping the rounded outline */
+    for(let i=0;i<8;i++) kg.drawImage(maskRaw,0,0);
+    kg.restore();
+  });
+  const ring=scratch((kg,k)=>{
+    kg.save(); kg.setTransform(1,0,0,1,0,0);
+    for(let i=0;i<16;i++){
+      const a=i/16*6.283;
+      kg.drawImage(mask, Math.cos(a)*railPx*rsc, Math.sin(a)*railPx*rsc);
+    }
+    kg.globalCompositeOperation='destination-out';
+    kg.drawImage(mask,0,0);
+    kg.restore();
+  });
+  const tint=(src,style)=>scratch((kg,k)=>{
+    kg.save(); kg.setTransform(1,0,0,1,0,0);
+    kg.drawImage(src,0,0);
+    kg.globalCompositeOperation='source-in';
+    kg.fillStyle=style; kg.fillRect(0,0,k.width,k.height);
+    kg.restore();
+  });
+  const railSide=tint(ring,'#3a2619');
+  const railTop=scratch((kg,k)=>{
+    kg.save(); kg.setTransform(1,0,0,1,0,0); kg.drawImage(ring,0,0);
+    kg.globalCompositeOperation='source-in'; kg.setTransform(rsc,0,0,rsc,-RB.x*rsc,-RB.y*rsc);
+    const lg=kg.createLinearGradient(0,ry-lift,0,ry+rh);
+    lg.addColorStop(0,'#8a6242'); lg.addColorStop(0.5,'#6d4a30'); lg.addColorStop(1,'#54391f');
+    kg.fillStyle=lg; kg.fillRect(0,0,v.w,v.h);
+    for(let i=0;i<Math.ceil(v.h/(s*0.34));i++){            // sawn grain
+      kg.fillStyle= i%2 ? 'rgba(0,0,0,.16)' : 'rgba(255,222,182,.09)';
+      kg.fillRect(0, i*s*0.34 + (rnd2(i,3,7)-0.5)*s*0.1, v.w, Math.max(0.7,s*0.055));
+    }
+    kg.globalAlpha=0.5; kg.fillStyle=kg.createPattern(grain(),'repeat');
+    kg.fillRect(0,0,v.w,v.h); kg.globalAlpha=1;
+    kg.restore();
+  });
+  for(let i=Math.round(lift);i>=0;i-=2) put(railSide,-i);                     // the extruded side
+  put(railSide,0);
+  /* Bevel by sandwiching: a light copy sits slightly high and a dark copy slightly
+     low, then the top face covers the middle, so a lit rim survives along every
+     upper edge and a shaded one along every lower edge, whatever shape the rail is. */
+  const bev=Math.max(1,s*0.07);
+  put(tint(ring,'rgba(214,168,120,.55)'),-lift-bev);
+  put(tint(ring,'rgba(24,14,8,.55)'),-lift+bev);
+  put(railTop,-lift);                                                  // the top face
+  /* ---- 6. bumpers: a rubber dome with a cast shadow ---- */
+  if(c.bumps) for(const bp of c.bumps){
+    const bx2=X(bp.x), by2=Y(bp.y), r2=BUMPER_R*s;
+    g.save();
+    g.beginPath(); g.ellipse(bx2+s*0.07, by2+s*0.16, r2*1.02, r2*0.72, 0,0,7);
+    g.fillStyle='rgba(0,0,0,.38)'; g.filter='blur(2px)'; g.fill(); g.restore();
+    const rg=g.createRadialGradient(bx2-r2*0.35,by2-r2*0.42,r2*0.1, bx2,by2,r2);
+    rg.addColorStop(0,'#fffdf6'); rg.addColorStop(0.55,'#e6dfcd'); rg.addColorStop(1,'#a89f8a');
+    g.beginPath(); g.arc(bx2,by2,r2,0,7); g.fillStyle=rg; g.fill();
+    const rg2=g.createRadialGradient(bx2-r2*0.25,by2-r2*0.3,r2*0.05, bx2,by2,r2*0.66);
+    rg2.addColorStop(0,'#f4705c'); rg2.addColorStop(1,'#b8301f');
+    g.beginPath(); g.arc(bx2,by2,r2*0.64,0,7); g.fillStyle=rg2; g.fill();
+    g.beginPath(); g.ellipse(bx2-r2*0.22,by2-r2*0.3,r2*0.24,r2*0.16,-0.6,0,7);
+    g.fillStyle='rgba(255,255,255,.7)'; g.fill();
+  }
+  /* ---- 7. the cup, sunk into the felt ---- */
+  const cx=X(c.cup[0]), cy=Y(c.cup[1]), cr=CUP_R*s;
+  const lipG=g.createRadialGradient(cx,cy,cr*0.6, cx,cy,cr*1.7);
+  lipG.addColorStop(0,'rgba(0,0,0,.5)'); lipG.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=lipG; g.beginPath(); g.arc(cx,cy,cr*1.7,0,7); g.fill();
+  g.beginPath(); g.arc(cx,cy,cr,0,7); g.fillStyle='#0a0f08'; g.fill();
+  const inner=g.createLinearGradient(cx,cy-cr,cx,cy+cr);
+  inner.addColorStop(0,'rgba(255,255,255,.16)'); inner.addColorStop(0.45,'rgba(255,255,255,0)');
+  g.fillStyle=inner; g.beginPath(); g.arc(cx,cy,cr,0,7); g.fill();
+  g.strokeStyle='rgba(230,245,225,.22)'; g.lineWidth=Math.max(1,s*0.05);
+  g.beginPath(); g.arc(cx,cy,cr*0.97,Math.PI*0.9,Math.PI*2.1); g.stroke();
+
+  /* ---- 8. a warm key light across the table ---- */
+  const key=g.createLinearGradient(rx,ry,rx+rw*0.7,ry+rh);
+  key.addColorStop(0,'rgba(255,240,190,.10)'); key.addColorStop(0.5,'rgba(255,255,255,0)');
+  key.addColorStop(1,'rgba(0,10,20,.18)');
+  g.fillStyle=key; g.fillRect(rx,ry,rw,rh);
+
+  g.restore();   // end table clip
+
+  /* baked, not drawn per frame: a full-screen gradient fill every frame cost more
+     than everything else in the loop put together */
+  const vg=g.createRadialGradient(v.w*0.5,v.h*0.45,Math.min(v.w,v.h)*0.35,
+                                  v.w*0.5,v.h*0.5,Math.max(v.w,v.h)*0.78);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.45)');
+  g.fillStyle=vg; g.fillRect(0,0,v.w,v.h);
+  G.bg=cv2; G.bgDpr=dpr;
+}
+
+/* ================= per frame ================= */
 function draw(){
-  const c=G.course, v=G.view;
+  const c=G.course, v=G.view, s=v.s;
+  const key=[G.idx,v.s,v.ox,v.oy,v.w,v.h].join(',');
+  if(!G.bg || G.bgKey!==key){ buildStatic(); G.bgKey=key; }
+
   ctx.clearRect(0,0,v.w,v.h);
   ctx.save();
   if(G.shake>0.05){
     ctx.translate((Math.random()*2-1)*G.shake,(Math.random()*2-1)*G.shake);
     G.shake*=0.86;
   }
-  const s=v.s;
+  ctx.drawImage(G.bg,0,0,v.w,v.h);
 
-  /* the course sits on a table: everything is clipped to the hole's own extent,
-     so the surround reads as a rail with an edge rather than a brown ocean */
   const [bx0,by0,bx1,by1]=c.bbox;
-  const rx=vx(bx0), ry=vy(by0), rw=(bx1-bx0)*s, rh=(by1-by0)*s, rr=Math.min(18,s*0.9);
-  /* roundRect is recent (Safari 16.4+); fall back to a plain rect rather than throwing */
-  const roundPath=(x,y,w2,h2,r)=>{
-    ctx.beginPath();
-    if(ctx.roundRect) ctx.roundRect(x,y,w2,h2,r);
-    else ctx.rect(x,y,w2,h2);
-  };
+  const rx=vx(bx0), ry=vy(by0), rw=(bx1-bx0)*s, rh=(by1-by0)*s, rr=Math.min(22,s*1.1);
   ctx.save();
-  ctx.shadowColor='rgba(0,0,0,.55)'; ctx.shadowBlur=s*0.9; ctx.shadowOffsetY=s*0.25;
-  ctx.fillStyle='#4a3325';
-  roundPath(rx,ry,rw,rh,rr); ctx.fill();
-  ctx.restore();
-  ctx.save();
-  roundPath(rx,ry,rw,rh,rr); ctx.clip();
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(rx,ry,rw,rh,rr); else ctx.rect(rx,ry,rw,rh);
+  ctx.clip();
 
-  /* felt */
-  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
-    const t=c.cells[y][x];
-    if(t===WALL) continue;
-    let col;
-    if(t===SAND) col='#d6c184';
-    else if(t===WATER) col='#2d6b9f';
-    else if(SLOPE_VEC[t]) col = grassShade(x,y,G.portrait)>0.5 ? '#2f7b57' : '#2a7250';
-    else col = grassShade(x,y,G.portrait)>0.5 ? '#429453' : '#3b8a4a';
-    ctx.fillStyle=col;
-    ctx.fillRect(vx(x)-0.5, vy(y)-0.5, s+1, s+1);
-  }
-  /* slope chevrons, pointing the way the ball gets pushed */
-  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
-    const v2=SLOPE_VEC[c.cells[y][x]]; if(!v2) continue;
-    const cx2=vx(x)+s/2, cy2=vy(y)+s/2, a=Math.atan2(v2[1],v2[0]);
-    ctx.save(); ctx.translate(cx2,cy2); ctx.rotate(a);
-    ctx.strokeStyle='rgba(190,255,215,.38)';
-    ctx.lineWidth=Math.max(1.4,s*0.075); ctx.lineCap='round'; ctx.lineJoin='round';
-    for(const off of [-s*0.19, s*0.09]){
-      ctx.beginPath();
-      ctx.moveTo(off-s*0.10, -s*0.17); ctx.lineTo(off+s*0.10, 0); ctx.lineTo(off-s*0.10, s*0.17);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-  /* water shimmer */
+  /* water, alive */
   const tm=performance.now()/1000;
   for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
     if(c.cells[y][x]!==WATER) continue;
-    ctx.fillStyle='rgba(255,255,255,'+(0.05+0.045*Math.sin(tm*2+x*0.9+y*1.4))+')';
-    ctx.fillRect(vx(x), vy(y)+s*0.34, s, s*0.16);
-  }
-  /* walls: only the faces bordering playable ground, so it reads as a rail */
-  for(let y=0;y<c.h;y++) for(let x=0;x<c.w;x++){
-    if(c.cells[y][x]!==WALL) continue;
-    let touches=false;
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]])
-      if(c.at(x+dx,y+dy)!==WALL){ touches=true; break }
-    /* every wall cell is painted, so the surround never shows through as a gap */
-    ctx.fillStyle = touches ? '#5d4030' : '#4a3325';
-    ctx.fillRect(vx(x)-0.5, vy(y)-0.5, s+1, s+1);
-    if(c.at(x,y+1)!==WALL){ ctx.fillStyle='#3a281d'; ctx.fillRect(vx(x)-0.5, vy(y+1)-s*0.16, s+1, s*0.16); }
-    if(c.at(x,y-1)!==WALL){ ctx.fillStyle='#7d5a3c'; ctx.fillRect(vx(x)-0.5, vy(y)-0.5, s+1, s*0.2); }
-  }
-
-  /* bumpers */
-  if(c.bumps) for(const bp of c.bumps){
-    const bx2=vx(bp.x), by2=vy(bp.y), r2=BUMPER_R*s;
-    ctx.beginPath(); ctx.arc(bx2+s*0.06,by2+s*0.09,r2,0,7);
-    ctx.fillStyle='rgba(0,0,0,.30)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(bx2,by2,r2,0,7);
-    ctx.fillStyle='#e8e3d4'; ctx.fill();
-    ctx.beginPath(); ctx.arc(bx2,by2,r2*0.62,0,7);
-    ctx.fillStyle='#e2513f'; ctx.fill();
-    ctx.beginPath(); ctx.arc(bx2-r2*0.24,by2-r2*0.26,r2*0.22,0,7);
-    ctx.fillStyle='rgba(255,255,255,.75)'; ctx.fill();
-  }
-
-  /* cup */
-  const cx=vx(c.cup[0]), cy=vy(c.cup[1]);
-  ctx.beginPath(); ctx.arc(cx,cy,CUP_R*s,0,7); ctx.fillStyle='#101709'; ctx.fill();
-  ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=1; ctx.stroke();
-  /* flag */
-  if(!G.holed){
-    ctx.strokeStyle='#e8e8e0'; ctx.lineWidth=Math.max(1.5,s*0.07);
-    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx,cy-s*1.9); ctx.stroke();
-    ctx.fillStyle='#e2513f';
-    ctx.beginPath(); ctx.moveTo(cx,cy-s*1.9); ctx.lineTo(cx+s*1.0,cy-s*1.6); ctx.lineTo(cx,cy-s*1.3); ctx.fill();
+    for(let k=0;k<2;k++){
+      const ph=tm*0.9 + x*0.7 + y*1.1 + k*2.1;
+      const a=0.05+0.05*Math.sin(ph);
+      ctx.fillStyle='rgba(225,245,255,'+a.toFixed(3)+')';
+      ctx.fillRect(vx(x)+s*0.08, vy(y)+s*(0.24+0.34*k)+Math.sin(ph)*s*0.05, s*0.84, s*0.08);
+    }
   }
 
   /* trail */
   if(G.trail.length>1){
-    ctx.strokeStyle='rgba(255,255,255,.16)'; ctx.lineWidth=Math.max(1,s*0.10); ctx.beginPath();
-    ctx.moveTo(vx(G.trail[0][0]),vy(G.trail[0][1]));
-    for(const p of G.trail) ctx.lineTo(vx(p[0]),vy(p[1]));
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.strokeStyle='rgba(255,255,255,.10)'; ctx.lineWidth=Math.max(1.5,s*0.16);
+    ctx.beginPath(); ctx.moveTo(vx(G.trail[0][0]),vy(G.trail[0][1]));
+    for(const q of G.trail) ctx.lineTo(vx(q[0]),vy(q[1]));
+    ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=Math.max(1,s*0.06);
     ctx.stroke();
   }
 
-  /* aim (keyboard) */
-  if(G.kb && !G.moving && !G.holed){
-    const bx=vx(G.ball.x), by=vy(G.ball.y), t=G.kb.pow/MAX_POWER;
-    ctx.save(); ctx.setLineDash([6,6]); ctx.strokeStyle='rgba(255,255,255,.62)'; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(bx,by);
-    ctx.lineTo(bx+Math.cos(G.kb.ang)*t*s*7, by+Math.sin(G.kb.ang)*t*s*7); ctx.stroke();
+  /* the flag, breathing */
+  const cx=vx(c.cup[0]), cy=vy(c.cup[1]);
+  if(!G.holed){
+    const ph=tm*1.7, poleH=s*2.1;
+    ctx.save();
+    ctx.strokeStyle='rgba(0,0,0,.28)'; ctx.lineWidth=Math.max(1.4,s*0.07);
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+s*0.5,cy+s*0.16); ctx.stroke();  // pole shadow
+    const pg=ctx.createLinearGradient(cx-s*0.05,0,cx+s*0.05,0);
+    pg.addColorStop(0,'#cfd4c8'); pg.addColorStop(0.5,'#ffffff'); pg.addColorStop(1,'#9aa294');
+    ctx.strokeStyle=pg; ctx.lineWidth=Math.max(1.6,s*0.075);
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx,cy-poleH); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx,cy-poleH);
+    ctx.quadraticCurveTo(cx+s*0.62, cy-poleH+s*0.10+Math.sin(ph)*s*0.10,
+                         cx+s*1.02, cy-poleH+s*0.30+Math.sin(ph+0.9)*s*0.12);
+    ctx.quadraticCurveTo(cx+s*0.5, cy-poleH+s*0.42+Math.sin(ph+0.5)*s*0.06, cx,cy-poleH+s*0.60);
+    ctx.closePath();
+    const fg=ctx.createLinearGradient(cx,0,cx+s,0);
+    fg.addColorStop(0,'#f0604c'); fg.addColorStop(1,'#c8321f');
+    ctx.fillStyle=fg; ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.14)';
+    ctx.beginPath(); ctx.moveTo(cx,cy-poleH); ctx.lineTo(cx+s*0.7,cy-poleH+s*0.16);
+    ctx.lineTo(cx+s*0.1,cy-poleH+s*0.2); ctx.closePath(); ctx.fill();
     ctx.restore();
-    ctx.beginPath(); ctx.arc(bx,by,s*0.95,-Math.PI/2,-Math.PI/2+t*Math.PI*2);
-    ctx.strokeStyle=t>0.92?'#e2513f':'#ffd75e'; ctx.lineWidth=Math.max(3,s*0.18); ctx.stroke();
   }
 
-  /* aim (drag) */
-  if(G.aiming){
-    const dx=G.aimFrom[0]-G.aimTo[0], dy=G.aimFrom[1]-G.aimTo[1];
-    const len=Math.hypot(dx,dy);
-    const maxDrag=Math.min(170, Math.min(v.w,v.h)*0.42);
-    const t=Math.min(1,len/maxDrag);
-    const ang=Math.atan2(dy,dx);
+  /* aim overlays */
+  const drawAim=(ang,t)=>{
     const bx=vx(G.ball.x), by=vy(G.ball.y);
     ctx.save();
-    ctx.setLineDash([6,6]); ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=2;
+    ctx.setLineDash([Math.max(3,s*0.2),Math.max(4,s*0.22)]);
+    ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=Math.max(1.6,s*0.075); ctx.lineCap='round';
     ctx.beginPath(); ctx.moveTo(bx,by);
     ctx.lineTo(bx+Math.cos(ang)*t*s*7, by+Math.sin(ang)*t*s*7); ctx.stroke();
     ctx.restore();
-    /* power arc round the ball */
     ctx.beginPath(); ctx.arc(bx,by,s*0.95,-Math.PI/2,-Math.PI/2+t*Math.PI*2);
-    ctx.strokeStyle = t>0.92?'#e2513f':'#ffd75e'; ctx.lineWidth=Math.max(3,s*0.18); ctx.stroke();
+    ctx.strokeStyle=t>0.92?'#e2513f':'#ffd75e'; ctx.lineWidth=Math.max(3,s*0.17);
+    ctx.lineCap='round'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(bx,by,s*0.95,0,7);
+    ctx.strokeStyle='rgba(255,255,255,.10)'; ctx.lineWidth=Math.max(2,s*0.17); ctx.stroke();
+  };
+  if(G.kb && !G.moving && !G.holed) drawAim(G.kb.ang, G.kb.pow/MAX_POWER);
+  if(G.aiming){
+    const dx=G.aimFrom[0]-G.aimTo[0], dy=G.aimFrom[1]-G.aimTo[1];
+    const maxDrag=Math.min(170, Math.min(v.w,v.h)*0.42);
+    drawAim(Math.atan2(dy,dx), Math.min(1,Math.hypot(dx,dy)/maxDrag));
   }
 
-  /* ball */
+  /* the ball */
   if(!G.holed){
-    const bx=vx(G.ball.x), by=vy(G.ball.y);
-    ctx.beginPath(); ctx.arc(bx+s*0.08,by+s*0.10,BALL_R*s,0,7);
-    ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(bx,by,BALL_R*s,0,7);
-    ctx.fillStyle='#fdfdf7'; ctx.fill();
-    ctx.beginPath(); ctx.arc(bx-s*0.10,by-s*0.11,BALL_R*s*0.38,0,7);
+    const bx=vx(G.ball.x), by=vy(G.ball.y), r=BALL_R*s;
+    const sh=ctx.createRadialGradient(bx+s*0.10,by+s*0.15,r*0.2, bx+s*0.10,by+s*0.15,r*1.5);
+    sh.addColorStop(0,'rgba(0,0,0,.45)'); sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sh; ctx.beginPath(); ctx.arc(bx+s*0.10,by+s*0.15,r*1.5,0,7); ctx.fill();
+    const bgr=ctx.createRadialGradient(bx-r*0.38,by-r*0.44,r*0.08, bx,by,r*1.08);
+    bgr.addColorStop(0,'#ffffff'); bgr.addColorStop(0.62,'#eef0e6'); bgr.addColorStop(1,'#b9bfae');
+    ctx.beginPath(); ctx.arc(bx,by,r,0,7); ctx.fillStyle=bgr; ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx-r*0.3,by-r*0.34,r*0.3,r*0.2,-0.6,0,7);
     ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(bx,by,r*0.99,0.5,2.2);
+    ctx.strokeStyle='rgba(70,80,60,.25)'; ctx.lineWidth=Math.max(1,r*0.14); ctx.stroke();
   }
-
-  ctx.restore();                     /* end course clip */
 
   /* particles */
   for(const p of G.parts){
     ctx.globalAlpha=Math.max(0,p.life);
     ctx.fillStyle=p.col;
-    ctx.fillRect(vx(p.x)-s*0.09, vy(p.y)-s*0.09, s*0.18, s*0.18);
+    const w2=s*0.17*Math.max(0.4,p.life);
+    ctx.fillRect(vx(p.x)-w2/2, vy(p.y)-w2/2, w2, w2);
   }
   ctx.globalAlpha=1;
+  ctx.restore();   /* end table clip */
+
   ctx.restore();
 }
 

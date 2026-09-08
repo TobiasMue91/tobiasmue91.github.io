@@ -91,6 +91,19 @@ mean par rising across the tiers. The round is then ordered by measured par rath
 difficulty tier, because the tiers turned out not to be monotone — tightening corridors made some holes
 easier. Mean par by position is now 2, 2, 2, 2, 2.25, 2.5, 2.88, 3.5, 4.
 
+A presentation pass afterwards produced two findings worth reusing for any canvas page here.
+Splitting the scene into a baked layer and a live one is what makes detail affordable: everything that
+cannot move — surround planting, table, felt, sand, slopes, rails, ambient occlusion — is drawn once into
+an offscreen canvas per hole, and only the ball, trail, water, flag and particles are drawn per frame.
+The rail itself is not tiles but an offset outline: dilate the play mask, subtract it, and the band that
+falls out follows the hole's real shape at even width, where drawing it cell by cell wandered between one
+and two cells thick and read as chunky. And the profiler contradicted the obvious guess about cost — the
+blur and the dilation were 10ms and 22ms, while building those alpha buffers at full device resolution
+cost about two seconds a hole. They are deliberately blurred, so resolution buys nothing there: building
+them at 0.55 scale and scaling up on composite took a bake from 3.1s to 0.38s with no visible difference.
+A full-screen vignette gradient filled per frame also cost more than the entire rest of the loop; baking
+it took frames from 20ms to 16.7ms.
+
 The general lesson, which is the same one the rejected tactics prototype produced: the fraction of an
 action space that is "good" measures nothing, because the space is mostly nonsense. Ask instead whether
 a deliberately stupid player reaches the good play.
