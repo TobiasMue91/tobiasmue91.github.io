@@ -68,6 +68,51 @@ to detect chords from the spectrum was removed after it turned out to fire on hu
 microphone that rolls off the fundamental leaves a spectrum shaped much like a chord's, and every
 statistic that separated the two also mistook quiet fundamentals for chords.
 
+Filled since: **programming games**, by `games/everywhere.html` — the structural gap on the game side, where
+91 games contained nothing in which the player writes something that then runs without them. The first framing
+was the obvious one, a procedurally generated RoboZZle: one board, find the short looping program. It was
+measured and thrown away, and the measurement is the reusable part. Generating levels by sampling a program and
+carving the path it walked gave boards that were 56% solvable in three instructions or fewer, and across 107
+levels 44 had the *same* answer — walk forward, repeat. Rendering them as ASCII showed why: the colours were
+noise, so either they meant nothing (a straight corridor with random paint) or the solution was an arbitrary
+program nobody could deduce. Generating board-first — pick a path motif, then colour the cells by backtracking
+search so an intended program template traverses it — fixed legibility completely, and made the problem worse:
+colour became signal, and 51 of 60 boards then had *exactly* the template's four-line answer. Every level in a
+family is the same puzzle. The general lesson, which is the third time this list has recorded a version of it:
+in a puzzle whose answer is a short program, the space of sensible answers is small, so procedural boards
+repeat the answer even when they look different.
+
+What survived was the inversion: **the level is not a board, it is a set of boards.** The player writes one
+rulebook and it must solve every maze the stage can generate, including the hundreds it never sees; the game
+answers a failure by showing the specific maze that beat it with the robot's path drawn on it. That framing has
+the property the single-board version lacked, and it was checked by exhaustive enumeration rather than assumed.
+Of all 614,656 rulebooks three lines long, exactly **twelve** solve every perfect maze — six phrasings of the
+right-hand rule and six of the left — and nothing of two lines works at all. Near-misses are dense and
+instructive: the same three instructions in the two other orders fail on all 200 mazes, because a turn on line
+one changes what line two is looking at. The slot budget turns out to be the difficulty dial: of the rulebooks
+that solve the first maze, 100% are universal at four lines, 48% at six, and 5% at ten, with the median failure
+on the third board — so a tight budget forbids overfitting and a generous one guarantees the counterexample
+loop has something to show you.
+
+Two results are worth keeping past this game. The first is a negative one. The intended final stage was mazes
+with loops knocked through, where wall-following provably breaks, with chalk marks on the floor as the fix.
+No small rulebook for it was found: exhaustive search over three lines, 51,840 programs formed by splicing one
+or two chalk instructions into both wall-followers (none scoring above 298/300), seven hand-written
+Trémaux-flavoured strategies (best 70/200), and seeded hill-climbing up to eight lines in two independent
+implementations (best 96/120 at 7×7, decaying to 28/60 at 10×10 — the signature of a rule that is tuned rather
+than general). The stage was cut. **A finite rulebook of this kind that solves braided mazes is still open**,
+and probably needs edge-marks or a turn counter rather than one bit per tile.
+
+The second is the finding that came out of chasing it, and it contradicts the premise the stage was built on:
+**loops are not what beats wall-following.** Sweeping loop density with the goal in a corner, the right-hand
+rule solved 200 of 200 at every density tried, from 0.02 to 0.20. The same rule on the same boards with the
+goal moved to the middle fell from 190 to 57 of 200. Wall-following fails when the goal is not on the wall you
+are holding; the loops were never the problem. The replacement stage came from asking what else breaks it and
+verifying before building: take the sideways senses away and leave only "wall ahead", and a universal answer
+still exists at four lines — at least five of the 6,561, all leaning on a trick the earlier stages never need,
+the same line twice in a row. Verify a stage has an answer before designing around it; two of the six shipped
+here changed shape because the search said no.
+
 Filled since: **minigolf**, by `games/nine_holes.html`. Worth reusing are three results, all of which
 contradicted what the design assumed before it was measured.
 
