@@ -1,20 +1,120 @@
+## Read this first
+
+This file spent a year making the catalogue narrower, and it did it while every individual
+entry in it was true. If you are about to propose something, read this section before the gap
+lists, because the gap lists are not where the pressure comes from.
+
+**The drift, measured on 2026-09-09** (92 games), comparing the 16 most recent against the 76
+before them:
+
+| | earlier 76 | last 16 |
+|---|---|---|
+| `multiplayer` tag | 18 (24%) | **0** |
+| `aiPowered` | 7 in the whole catalogue | **0** |
+| `competitive` tag | 19 | 1 |
+| `card` + `board` + `strategy` + `trivia` categories | 16 | **0** |
+| `logic` tag | 10 (13%) | 5 (31%) |
+| median page size | 38–42 KB | **117 KB** |
+
+Every one of the last sixteen is singleplayer, offline, keeps no shared state, ships no written
+content, and is about three times the historical size. The site's own premise is that language
+models wrote these, a Cloudflare proxy for calling one is already wired up and used by 27 tools,
+and no game has called a model since `death_by_ai`. That is not a run of coincidences. It is this
+file.
+
+**Four things in here caused it.** They are worth naming because each one still looks reasonable
+on its own:
+
+1. *The "Findings worth reusing" essays below are the file's real instructions.* They are two
+   thirds of the curated text, and all six narrate the same method: find a structural gap, run an
+   exhaustive search, ship the table. Nobody wrote "build abstract combinatorial puzzles"
+   anywhere. Six worked examples of one shape did it instead.
+
+2. *The quality bar is denominated in a currency only one genre can pay.* Every essay earns its
+   authority with a number from enumerating a combinatorial space — 614,656 rulebooks, 1,023
+   vocabularies, 2,400 candidate holes. A game about timing, feel, humour, or another person
+   cannot produce that number, so under this file it can never look rigorous, and it gets
+   discarded at the proposal stage before anyone weighs whether it would be good. **Verification
+   should fit the claim, not the file.** If the idea rests on a generator being varied, generate
+   hundreds. If it rests on a joke landing, the verification is that someone laughed. If it rests
+   on a game feeling good in the hand, the verification is playing it and showing the screenshots.
+   An idea is not weaker because its risk cannot be enumerated; it is weaker when nobody checked
+   the thing it actually depends on.
+
+3. *"Tried and rejected" is the same direction three times.* Air hockey, Mini Metro, Into the
+   Breach — every rejection on the list is of something physical, thematic, or genre-shaped. Each
+   was turned down on its own merits and those judgements stand. Read as a block, which is how
+   anyone skimming reads them, they say "non-abstract has been tried and it did not work here."
+   That is not what they say individually and it is not true.
+
+4. *The one force that would have corrected this was explicitly disarmed.* The line "an empty
+   category is evidence about the catalogue, not about whether anyone wants to play the thing that
+   would fill it" is correct as written, and it is also what made `multiplayer` going 24% → 0%
+   unnoticeable for a year. Both halves are true: an empty category is not on its own a reason to
+   build. A category that *emptied out* is a different fact, and it is worth looking at.
+
+Most recently the drift produced a proposal for a language-decipherment deduction game — glyphs,
+procedural grammar, exhaustive identifiability checking — pitched as filling a gap. It was the
+seventh abstract deduction puzzle in a row and it was pitched without noticing that. Set aside for
+that reason rather than on its merits; the idea is not on the rejected list.
+
+## Axes, not categories
+
+The catalogue's variety does not live in the `categories` field. It lives in axes that no field
+records, and the recent entries have collapsed to one end of every one of them. When proposing,
+say where the idea sits on these. Landing at the same end as the last five entries is not
+disqualifying, but it should be a choice.
+
+- **Alone ←→ with someone.** 18 games have a second player; `firebase.js` already carries six
+  pages. Nothing in sixteen months. Pass-and-play on one device counts and needs no backend.
+- **Deterministic ←→ a model in the loop.** `death_by_ai` and `mystery_ai` are among the most
+  distinctive things here and there are seven of them, ever. The interesting version is a model as
+  a *character or a judge* — something to persuade, something that rules on an answer no lookup
+  table could — not a model as a content faucet.
+- **Systems ←→ writing.** Nothing recent has a voice. No jokes, no world, nothing whose appeal is
+  what it says. A page can be worth visiting because it is funny.
+- **Deep ←→ immediate.** Ten-minute depth is a good target and it became the only target. `suika`,
+  `stack_tower` and `downhill_dreamer` are excellent and are none of that.
+- **Screen-only ←→ using the device.** Camera, microphone, pointer, gyroscope, touch. The tools
+  side does this constantly (`ascii_camera`, `online_webcam_filters`, `overtone`); games almost
+  never do.
+- **Novel ←→ well-made version of a known thing.** This is a showcase of what language models
+  write. A genuinely good Pac-Man, jigsaw, crossword or racing game is a legitimate entry, and the
+  Games backlog at the bottom of this file has been listing them unbuilt for years on the unstated
+  grounds that they are unoriginal. Originality of mechanism is one virtue among several.
+- **Big ←→ small.** The historical median page is about 40 KB. The recent median is 117 KB, and
+  three of the last sixteen are over half a megabyte. Nothing was decided to make that happen. A
+  40 KB page is not a lesser entry, and "it would only be small" is not a reason to drop an idea.
+
 ## Gaps worth filling
 
-Checked against the catalogue on 2026-08-21 (89 games, 196 tools) and picked to fit the constraints the
-rest of the collection works under — one file, no assets, reproducible from a seed. Anything here may
-have been built since; the point is the shape of the gap, not the specific suggestion.
+Checked against the catalogue on 2026-09-09 (92 games, 216 tools) and picked to fit the constraints
+the rest of the collection works under — one file, no assets, reproducible from a seed. Anything
+here may have been built since; the point is the shape of the gap, not the specific suggestion.
+These are suggestions, not a queue, and an idea that is on none of these lists is not worse for it.
 
-**Games**
+**Games — mechanism gaps**
 
 - **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
   build a deck across a run.
+- **Cipher-based word game.** Nothing here is a word game built on deduction from letter
+  statistics; `cribwork` covers the workbench side, not the play.
 
-Filled since: hidden-rule deduction, by `games/glyphgate.html`; cooperating with recordings of your
-own past, by `games/selfsame.html`; **pinball**, by `games/escapement.html` — swept-circle continuous
-collision so nothing tunnels at any speed, flippers you can cradle on, habitrails, a slingshot that
-throws along its own rubber, and a mission stack that bolts new parts onto the playfield as you go.
-The physics core in it is reusable, though the two candidates once listed here for it are both rejected
-below — a reusable core is a reason a build is cheap, never a reason the result is worth playing.
+**Games — the axes above**
+
+- **Two players, one device.** Asymmetric information is the cheap way to make this good: the two
+  halves of the screen know different things. No backend, no accounts.
+- **A model you have to talk round.** A character with a position, a secret, or a price, that a
+  language model plays and that you have to move. The proxy is already there.
+- **Something with a voice.** A game that is funny, or that has a world, where the writing is the
+  reason to stay.
+- **Sixty seconds well spent.** One verb, immediate, no tutorial, a score you want to beat once
+  more. Held to the same standard of polish as the ten-minute ones.
+- **A sensor game.** Point the camera at something, blow into the microphone, tilt the phone.
+- **A known genre, done properly.** Pac-Man, a racer, a platformer, a jigsaw from an image the
+  player drops in, a crossword, bingo, a shooting gallery. Listed in the backlog below for years.
+- **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
+  most replayed pages here. There has been nothing like them in a long time.
 
 **Tools**
 
@@ -24,6 +124,26 @@ below — a reusable core is a reason a build is cheap, never a reason the resul
 - **CSS clip-path editor.** Visual polygon editing with copyable output.
 - **Aspect ratio calculator** and **browser storage explorer** — small, useful, and on the list below
   for years.
+- **Rhythm and timing.** Nothing measures how far off the beat you are — the open audio-side gap
+  next to `overtone`, which handles pitch and explicitly does not handle this.
+- **Hinting and rasterisation.** Nothing shows what a font does at 11px, where hinting and `gasp`
+  decide whether it is readable at all. Open next to `sorts`.
+- **Polyphonic pitch.** `overtone` is monophonic by design and reports the common subharmonic of a
+  chord rather than guessing it is hearing one.
+
+## Findings worth reusing
+
+Technique notes from things that shipped. **These are notes on how a specific problem was solved,
+not a template for what to build or a model of how a proposal should read.** Six of them describe
+exhaustive search because six abstract puzzles were built in a row; that is a fact about the last
+year, not a standard. Skim for the one that touches your problem and ignore the rest.
+
+Filled since: hidden-rule deduction, by `games/glyphgate.html`; cooperating with recordings of your
+own past, by `games/selfsame.html`; **pinball**, by `games/escapement.html` — swept-circle continuous
+collision so nothing tunnels at any speed, flippers you can cradle on, habitrails, a slingshot that
+throws along its own rubber, and a mission stack that bolts new parts onto the playfield as you go.
+The physics core in it is reusable, though the two candidates once listed here for it are both rejected
+below — a reusable core is a reason a build is cheap, never a reason the result is worth playing.
 
 Filled since: classical cryptanalysis, by `tools/cribwork.html` — cipher identification from the index of
 coincidence, solvers for the Caesar/affine/substitution/Vigenère/transposition families, and a cryptogram
@@ -204,6 +324,12 @@ them, and do not treat the empty space they leave in the catalogue as an opportu
 being thin somewhere is not on its own a reason to build there. Two of the entries below were
 recommended as gaps for exactly that bad reason before being turned down; an empty category is
 evidence about the catalogue, not about whether anyone wants to play the thing that would fill it.
+
+One caveat on reading this list, added 2026-09-09. All three rejections below are of something
+physical, thematic or genre-shaped, and the taste judgements in them stand exactly as written. But
+three entries pointing the same way is a coincidence of what happened to get prototyped, not a
+ruling on that whole direction, and treating it as one is part of how the catalogue narrowed. These
+reject air hockey, line-routing sims and grid tactics. They do not reject making something physical.
 
 - **Air hockey.** Rejected. Not because the physics duplicates `pong` — a free 2D mallet with real
   momentum transfer is a genuinely different control space from a paddle on a rail — but because

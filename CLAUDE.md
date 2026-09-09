@@ -65,6 +65,7 @@ The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 - **Firebase** — 6 pages share one project via `firebase.js` for multiplayer, highscores and saved
   plans. Everything else runs entirely client-side.
 
-`README.md` covers intent and licence; `IDEAS.md` is the backlog, including a list of gaps checked
-against the current catalogue and a **Tried and rejected** list — read that before pitching a new entry,
-so an idea that was already turned down does not come back; `PROMPTS.md` and `TIPS.md` are the prompting notes.
+`README.md` covers intent and licence; `IDEAS.md` is the backlog — read it before pitching a new entry,
+starting with **Read this first**, which measures how the last year of entries narrowed and names what in
+the file caused it, then **Axes, not categories**, the gap lists, and the **Tried and rejected** list so an
+idea that was already turned down does not come back; `PROMPTS.md` and `TIPS.md` are the prompting notes.
