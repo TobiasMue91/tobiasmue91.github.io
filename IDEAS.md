@@ -78,10 +78,14 @@ disqualifying, but it should be a choice.
 - **Screen-only ←→ using the device.** Camera, microphone, pointer, gyroscope, touch. The tools
   side does this constantly (`ascii_camera`, `online_webcam_filters`, `overtone`); games almost
   never do.
-- **Novel ←→ well-made version of a known thing.** This is a showcase of what language models
-  write. A genuinely good Pac-Man, jigsaw, crossword or racing game is a legitimate entry, and the
-  Games backlog at the bottom of this file has been listing them unbuilt for years on the unstated
-  grounds that they are unoriginal. Originality of mechanism is one virtue among several.
+- **Novel ←→ well-made version of a known thing.** Not a fallback — one of the main themes of the
+  collection, and the clearest way it tracks what AI can actually do. A known game has a fixed,
+  externally-defined target, so how close a model gets to it is a reading you can take year over
+  year in a way that a novel mechanism never gives you: nobody can say whether an invented puzzle
+  came out as well as it could have. A genuinely good Pac-Man, jigsaw, crossword or racing game is
+  a first-class entry, and the Games backlog at the bottom of this file has been listing them
+  unbuilt for years on the unstated grounds that they are unoriginal. Originality of mechanism is
+  one virtue among several, and it is not the one this catalogue exists to demonstrate.
 - **Big ←→ small.** The historical median page is about 40 KB. The recent median is 117 KB, and
   three of the last sixteen are over half a megabyte. Nothing was decided to make that happen. A
   40 KB page is not a lesser entry, and "it would only be small" is not a reason to drop an idea.
