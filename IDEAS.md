@@ -427,6 +427,16 @@ filled hill paths and a handful of clouds every frame cost **39ms a frame at des
 against 16.7ms on a phone**, because none of it moved. Baking the backdrop once per meadow and capping
 the backing store by pixel budget rather than by device ratio alone took it to 16.7ms on both.
 
+A polish pass afterwards produced one note worth reusing for any drawn character on a canvas.
+The bird's wings were stacked **behind** her body, which is invisible at game size and reads as a
+broken sprite the moment anyone actually looks — a bird with no near wing at all. A character seen
+side-on needs both: a far wing behind the body and a near wing in front of it, beating together. The
+way to see this, and the reason it survived a whole build unnoticed, is to render the character on a
+contact sheet at 4x through a full animation cycle and in each of its states. At that size three more
+faults were obvious that no test would ever have failed on — a beak longer than her body, a tail like
+a fish fin, and a downstroke that swung the wing across her chest like a leaf, all of which came from
+numbers that looked reasonable in code.
+
 Still open, and worth knowing before anyone plans around it: **an offline environment cannot verify a
 model-in-the-loop game at all.** The Cloudflare proxy, like every other host, is unreachable from a
 sandboxed session, so the "a model you have to talk round" gap below can be built there but not
