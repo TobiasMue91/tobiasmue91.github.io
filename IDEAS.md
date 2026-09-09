@@ -113,14 +113,18 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   halves of the screen know different things. No backend, no accounts.
   *Filled by `games/alibi.html` — two suspects answering the same questions in secret on one phone.*
 - **A model you have to talk round.** A character with a position, a secret, or a price, that a
-  language model plays and that you have to move. The proxy is already there.
+  language model plays and that you have to move. The proxy is already there. *Read the Curator
+  entry below first: a model's judgement is illegible by construction, and the thing that made that
+  fatal there applies to any game whose difficulty comes from being judged.*
 - **Something with a voice.** A game that is funny, or that has a world, where the writing is the
   reason to stay.
 - **Sixty seconds well spent.** One verb, immediate, no tutorial, a score you want to beat once
   more. Held to the same standard of polish as the ten-minute ones.
 - **A sensor game.** Point the camera at something, blow into the microphone, tilt the phone.
   *Partly filled by `games/hummingbird.html` (microphone). Camera and gyroscope are still open on
-  the games side — `push_mine` is the only other game that touches a sensor.*
+  the games side — `push_mine` is the only other game that touches a sensor. The camera was attempted
+  once and rejected; read the Curator entry under "Tried and rejected" before proposing another, since
+  what killed it was the shape of the game rather than anything about the camera.*
 - **A known genre, done properly.** Pac-Man, a racer, a platformer, a jigsaw from an image the
   player drops in, a crossword, bingo, a shooting gallery. Listed in the backlog below for years.
 - **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
@@ -601,11 +605,14 @@ being thin somewhere is not on its own a reason to build there. Two of the entri
 recommended as gaps for exactly that bad reason before being turned down; an empty category is
 evidence about the catalogue, not about whether anyone wants to play the thing that would fill it.
 
-One caveat on reading this list, added 2026-09-09. All three rejections below are of something
-physical, thematic or genre-shaped, and the taste judgements in them stand exactly as written. But
-three entries pointing the same way is a coincidence of what happened to get prototyped, not a
-ruling on that whole direction, and treating it as one is part of how the catalogue narrowed. These
-reject air hockey, line-routing sims and grid tactics. They do not reject making something physical.
+One caveat on reading this list, added 2026-09-09. Three of the four rejections below are of
+something physical, thematic or genre-shaped, and the taste judgements in them stand exactly as
+written. But three entries pointing the same way is a coincidence of what happened to get
+prototyped, not a ruling on that whole direction, and treating it as one is part of how the
+catalogue narrowed. These reject air hockey, line-routing sims and grid tactics. They do not reject
+making something physical. The fourth, the Curator, points the other way entirely — it rejects a
+camera-and-model game, and it is the only entry here that carries technical findings worth reusing
+rather than only a judgement.
 
 - **Air hockey.** Rejected. Not because the physics duplicates `pong` — a free 2D mallet with real
   momentum transfer is a genuinely different control space from a paddle on a rail — but because
@@ -628,6 +635,76 @@ reject air hockey, line-routing sims and grid tactics. They do not reject making
   was not. A deliberately myopic greedy player — deflect unit by unit, no lookahead — survived 97% of
   solvable boards. Density of good plays in an action space measures nothing; the space is mostly
   pointless wandering. Measure instead whether a stupid heuristic reaches the good play.
+
+- **The Curator** (a camera game judged by a model). Built, measured heavily, and not shipped. A
+  curator of dubious credentials asked for eight exhibits — "something that holds liquid", "something
+  worn out by use", "the least loved object in the room" — and you answered each with a photograph of
+  whatever was in the room plus a one-line label. It ruled on the picture rather than the word, and a
+  refusal was answered with another photograph rather than an argument.
+
+  **Why it was rejected, and this is the part that generalises.** The novelty in it belongs to the
+  model, not to the player. The interesting moment is "it can see my mug", which is a capability demo
+  wearing a game's clothes, and it is over the second time you see it work. The player's action —
+  walk to an object, point a camera — is never the clever part; all the cleverness sits on the judging
+  side, which is backwards. And the obstacle is **illegible**: you cannot build a mental model of a
+  model's judgement, so you cannot form a theory of it, plan against it, or get better at it. That is
+  the exact inverse of the Scatter finding, where four distinguishable ghosts and a quarter of the
+  level spent walking away from you are what make Pac-Man learnable. **Anything whose difficulty comes
+  from a language model's judgement is illegible by construction, and illegibility forecloses
+  mastery.** Worth weighing before building anything for the "a model you have to talk round" gap.
+
+  The measurements agreed and were misread at the time. A careless bot scoring 38% against a
+  deliberate one's 81% looked like the game rewarding skill; "deliberate" only meant *picked a
+  sensible object*, which every player does on their first attempt, and there was no skill above that
+  floor to climb. **Measuring the difference between trying and not trying is not evidence of depth.**
+  A second structural fault, found by arithmetic after the fact: with 13/6/3 demands in the three
+  tiers and 3/3/2 drawn per run, **two of the three interpretive demands appeared in every single
+  game**, so the most distinctive part of it repeated almost exactly each time.
+
+  Five technical findings survive it, and they apply to any page here that wants to show a model a
+  picture.
+
+  **Vision through the shared worker works**, several images per message included, at about 3,073
+  prompt tokens per call at `detail:"low"` — roughly half a cent for a whole eight-round session.
+  Nothing in the collection had ever done this: 14 pages open the camera and 27 call the model, and
+  the two had never met. `gptranslator` is the near miss, sending camera frames to Tesseract and only
+  the text onward.
+
+  **A vision model told what to look for will report seeing it.** Shown a photograph in which the
+  phone is a 25-pixel smudge, with the label "my cracked phone", it answered "a cracked phone screen"
+  3 times out of 3 and accepted; across distant-bluff cases it accepted 9 of 12. The fix is ordering
+  and it is free: make it **describe the frame cold, as if the label did not exist, and only then read
+  the label and rule**. That took distant bluffs to **0 of 12** while honest, genuinely-visible answers
+  held at **16 of 16** and a 44-case grounding set stayed at 44/44. It is not a resolution problem —
+  `detail:"high"` scored 8 of 16 against low's 9 of 16 at 2.8x the tokens.
+
+  **The same bug was found once and not looked for twice.** It was caught in the second-look call,
+  fixed there, and the primary ruling assumed safe because it had passed 44/44 on true/false cases —
+  which it only passed because every photograph in that set either plainly showed the thing or plainly
+  did not. Nothing in it was *too small to tell*. The input class that exposes a bug has to be built on
+  purpose.
+
+  **A spoken appeal cannot be made to work.** Scoring an appeal on grounded / relevant / new reproduces
+  the council result exactly — flattery is immovable, **0 of 16** flips, scoring 0.0 on every axis — but
+  a genuinely good grounded argument also flipped only **6%**. Unwinnable in both directions. Moving the
+  decision out of the model and onto the page fixes that (evidence would flip 16/16, flattery still
+  0/16), except that **outright lies score "grounded" 50% of the time**. Photographs are immune where
+  words are not: a closer shot of the same thing 100%, a different object that genuinely answers 100%,
+  an irrelevant object 0%.
+
+  **A demand is only a demand if a photograph can contradict it.** The interpretive tier was drafted as
+  the interesting one and measured as the weakest: "something you kept for no reason" accepted **14 of
+  14** arbitrary objects. Every candidate also had to *accept a genuinely correct answer*, which cut
+  "something pretending to be a material it is not" at 44% — you cannot tell laminate from oak in a
+  photograph — and rescued another with one word, "older than you are" at 72% becoming "**looks** older
+  than you are" at 94%.
+
+  Two notes on method. **Twice the ground truth was wrong and the model was right** — a mug base that
+  does carry writing, and a celadon ewer filed under kintsugi that is not a repair — and both times the
+  first instinct was to call it a model error. And this sandbox's **headless browser cannot reach the
+  network at all** (every fetch resets, `example.com` included) while `curl` through the egress proxy
+  works, so the page was driven by intercepting its own worker request in Playwright and forwarding it
+  through `curl`: real page, real prompts, real rulings, only the socket substituted.
 
 ## Other
 - household planner
