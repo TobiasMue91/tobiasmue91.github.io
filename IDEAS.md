@@ -66,7 +66,10 @@ say where the idea sits on these. Landing at the same end as the last five entri
 disqualifying, but it should be a choice.
 
 - **Alone ←→ with someone.** 18 games have a second player; `firebase.js` already carries six
-  pages. Nothing in sixteen months. Pass-and-play on one device counts and needs no backend.
+  pages. Pass-and-play on one device counts and needs no backend. Broken 2026-09-09 by
+  `games/alibi.html`; before it, the last game with a second player was `artillery` (2026-02-12),
+  and every hot-seat game here — checkers, ludo, reversi, artillery — is a perfect-information
+  board game. Alibi is the first with information hidden *between the two players*.
 - **Deterministic ←→ a model in the loop.** `death_by_ai` and `mystery_ai` are among the most
   distinctive things here and there are seven of them, ever. The interesting version is a model as
   a *character or a judge* — something to persuade, something that rules on an answer no lookup
@@ -108,6 +111,7 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
 
 - **Two players, one device.** Asymmetric information is the cheap way to make this good: the two
   halves of the screen know different things. No backend, no accounts.
+  *Filled by `games/alibi.html` — two suspects answering the same questions in secret on one phone.*
 - **A model you have to talk round.** A character with a position, a secret, or a price, that a
   language model plays and that you have to move. The proxy is already there.
 - **Something with a voice.** A game that is funny, or that has a world, where the writing is the
@@ -463,6 +467,41 @@ breach has to name which promise it broke and be checked against the real list. 
 survive: characters leak a "private" concern in 45-75% of replies even under pure flattery, so
 hidden levers do not work and the concerns may as well be public; and the setting matters more than
 the machinery — a town planning meeting was correctly rejected as a page nobody would open.
+
+Filled since: **two players on one phone**, by `games/alibi.html` — two suspects corroborating a
+night out under interrogation, answering in secret and passing the phone. Four findings, and the
+first is the one that generalises.
+
+**A coordination game needs a rule the pair can both reason from, or it is a coin flip in costume.**
+The first prototype was 4 arbitrary options per question, and the measurement that mattered was not
+variety — 500 sessions gave 500 unique transcripts on the first try — but what a *briefed* pair
+could do. Simulated pairs who had agreed a story still diverged 74.7% of the time, which is exactly
+1-in-4 arithmetic: there was nothing to reason from. What fixed it was making the cost of an answer
+public and *relative to the crime*: every answer carries tags (unaccounted for, money, a vehicle, a
+witness, late, nothing to back it up), each crime is hot on two of them and says so up front, and
+the cheapest answer is a schelling point both players can find alone. Cracks fell to 21%. Half the
+option sets are built to have a single cheapest answer and half a tie, so the game alternates
+between a rule you can follow and a genuine guess about the other person.
+
+**Three bots, not one, and the interesting one is the worst player.** Careless (uniform), briefed
+(cheapest, ties random) and telepathic (cheapest, ties always agreed) bracket the human band —
+suspicion 56 / 11 / 3, cracks 70% / 21% / 0%. The careless bot found the real defect: with an
+early-out at a suspicion cap it was cut off at question 8 **100% of the time**, so the pair who
+least understood the game never saw the written statement at the end, which is the entire payoff.
+The interview now always runs its full length and only the verdict varies. A bot that plays badly
+is worth more than a bot that plays well.
+
+**Content lumpiness is measurable and worth measuring.** The corpus looked varied and wasn't: 151 of
+~390 authored answers carried a single identical tag, four combinations covered 77% of everything,
+and the risk landscape was bimodal (66% of options free, 33% at maximum, almost nothing between).
+Retagging every item took an hour and moved the cheapest-answer ties, the spread, and the crack rate
+all at once. The same check caught the venue question being 60% pure coin flip — four places, all
+free — which is now 0.2%.
+
+**Not everything could be measured, and it should be said which.** Whether two humans actually reach
+the same answer when the cheapest is *tied* is a question about people, and one person with a
+headless browser cannot answer it. The telepathic bot is an upper bound nobody can hit and the
+briefed bot a lower one; real pairs sit somewhere between and only a real pair can say where.
 
 Filled since: **the material sandbox**, by `games/strata.html` — the "toy, not a game" gap, and the
 first thing here with no win state since `interactive_buddy`. 26 materials, five to start, the rest
