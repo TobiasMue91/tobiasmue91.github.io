@@ -103,7 +103,7 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
 **Games — mechanism gaps**
 
 - **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
-  build a deck across a run.
+  build a deck across a run. *Filled by `games/procession.html`.*
 - **Cipher-based word game.** Nothing here is a word game built on deduction from letter
   statistics; `cribwork` covers the workbench side, not the play.
 
@@ -506,6 +506,79 @@ free — which is now 0.2%.
 the same answer when the cheapest is *tied* is a question about people, and one person with a
 headless browser cannot answer it. The telepathic bot is an upper bound nobody can hit and the
 briefed bot a lower one; real pairs sit somewhere between and only a real pair can say where.
+
+Filled since: **the deck-builder**, by `games/procession.html` — the card games here were all
+fixed-rule classics and nothing built a deck across a run. Nine fights, one card after each, and a
+deck that is **never shuffled**: at end of turn the cards you played drop to the bottom in the order
+you played them and the cards you held follow behind, so the hand you draw three turns from now is
+one you dealt yourself. Nine results, and the first four are about how to tell whether a game of
+choices actually has any.
+
+**Additive cards make drafting irrelevant, and the win rates say so.** The first pool was ordinary —
+more damage, more block, more poison — and random drafting scored **38%** against focused drafting's
+42–56%. Any nine cards were about as good as any other nine, so the draft was decoration. What fixed
+it was making each archetype **superlinear**: one card apiece whose value is a function of what you
+already built (damage = 5 x your Strength; damage = your current Block; double the enemy's Poison; 3
+damage per card already played this turn). That is also the answer to the Curator's failure in this
+file's rejected list — it is the difference between a decision that changes the outcome and one that
+does not.
+
+**Payoff cards look terrible in an unconditioned measurement, and deleting them would be the
+mistake.** Ranked by win-rate lift under *random* drafting, Catalyst sits at **-2.6** and Retribution
+at **-3.7**: bottom of the table, apparently dead weight. Conditioned on whether the deck drafted 3+
+of the matching archetype they roughly double — Catalyst **13.5% -> 31.0%**, Flurry **16.8% ->
+32.5%**, Retribution **16.7% -> 31.6%**, Bastion **34.6% -> 54.8%**. A conditional card is *supposed*
+to be bad in a deck that cannot use it. Measure card strength against the decks that would actually
+play it, or the metric will quietly ask you to remove the only cards that make building matter.
+
+**A naive heuristic that beats random is the bar; one that loses to it is the finding.** Final table
+over 150 runs each: skipping every card **0.0%** (dies on floor 3 every time), taking the
+biggest damage number **20.7%**, drafting at random **24.7%**, and the four archetypes drafted
+competently **34.0–38.7%** with a generalist at **41.3%**. Greedy-damage being *worse than random* is
+the useful number, not the top of the table: it means the game punishes the obvious read, because
+that policy never takes any defence. This is the third time this file has recorded a version of the
+same test and the first time it was run before the page was written.
+
+**Watch the gap, not the win rate — every buff to a weak card raises the floor.** Three cards
+measured as traps (lift -8 to -10) and were given small bodies. That took random drafting from
+**24% to 32%** and compressed the skill gap, which had to be paid back with a difficulty retune. Card
+balance and difficulty are not separable: the policy table has to be re-run after every card change,
+and doing it the other way round cost two rounds of work.
+
+**A run that is one long attrition sum has a cliff instead of a curve.** With a single HP pool across
+nine fights, the outcome reduces to one inequality — total damage taken against starting HP plus
+heals — so everybody crosses the threshold at the same moment. Win rates swung **38% to 2%** on a 5%
+parameter change, twice, before this was diagnosed rather than tuned around. Splitting the run into
+three acts with a full heal between them turns one long inequality into three short ones and makes
+the whole thing tunable.
+
+**Diagnose from the curve, not the outcome.** Aggro sat at 12% and looked like a broken archetype.
+Printing HP floor by floor showed it was not losing fights at all: it reached floor 8 or 9 almost
+every run and ran out of health, bleeding ~20 HP a fight with no way to get any back. The fix was
+burst plus the only sustain card in the game, not more damage. The same printout showed act 1 was
+free — the starter deck beat every act-1 enemy for a total of 7 HP — meaning the first three drafts
+could not matter, which no win rate would ever have said.
+
+**The mechanic's own worst property was invisible in code and obvious in a screenshot.** Because the
+deck keeps its order, **clumps are permanent and self-reinforcing**: cards played together come back
+together, forever. The starting deck was five Strikes then five Defends, so turn one was five Strikes
+and turn two five Defends — the opening had no decisions in it at all, and the queue read as a column
+of identical cards. Interleaving the starter fixed the opening, and the clumping itself turned out to
+be the actual skill of the game rather than a bug: spacing your plays is how you avoid dealing
+yourself a dead hand later. It is now the thing the rules screen leads with.
+
+**A balance table describes whatever engine produced it, so check the shipped one.** The whole tuning
+was done in a Python simulator; the page is a separate implementation. Running 60 scripted scenarios
+through both and comparing every field each turn gives **3,181 comparisons and 0 mismatches** at the
+shipped constants, which is the only reason the numbers above can be stated about the page rather
+than about a script. The first run of that check reported **351 mismatches and every one was the
+instrument** — the harness read the deck after the next hand had been drawn, and read health after
+the victory heal had been applied. Budget for the fact that a cross-check needs debugging before it
+can find anything.
+
+One thing deliberately not measured: whether a person enjoys it. The bots establish that the
+decisions have consequences and that several ways of building all work; they say nothing about
+whether the ten minutes are worth spending, and that stays a question for a human.
 
 Filled since: **the material sandbox**, by `games/strata.html` — the "toy, not a game" gap, and the
 first thing here with no win state since `interactive_buddy`. 26 materials, five to start, the rest
