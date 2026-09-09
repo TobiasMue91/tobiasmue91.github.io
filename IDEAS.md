@@ -121,6 +121,7 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   player drops in, a crossword, bingo, a shooting gallery. Listed in the backlog below for years.
 - **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
   most replayed pages here. There has been nothing like them in a long time.
+  *Filled by `games/strata.html` (a falling-sand world whose materials you discover).*
 
 **Tools**
 
@@ -437,11 +438,121 @@ faults were obvious that no test would ever have failed on — a beak longer tha
 a fish fin, and a downstroke that swung the wing across her chest like a leaf, all of which came from
 numbers that looked reasonable in code.
 
-Still open, and worth knowing before anyone plans around it: **an offline environment cannot verify a
-model-in-the-loop game at all.** The Cloudflare proxy, like every other host, is unreachable from a
-sandboxed session, so the "a model you have to talk round" gap below can be built there but not
-measured there. That is a reason to do that one somewhere with a network, not a reason to keep
-skipping it.
+Once believed, now false, and corrected 2026-09-09: **an offline environment cannot verify a
+model-in-the-loop game at all.** It depends entirely on the sandbox. A later session reached
+`https://chatgpt.tobiasmue91.workers.dev/` fine through its egress proxy and ran ~700 scored calls
+against it. Two mechanical notes for whoever tries next: Python's `urllib` got a flat 403 from that
+proxy where `curl` succeeded, so shell out to `curl` rather than concluding the host is blocked; and
+the worker passes `response_format: {"type":"json_object"}` straight through, which is what makes a
+scored game practical. **Check before assuming you cannot measure it.**
+
+What that session measured, for the still-open "a model you have to talk round" gap. The idea was a
+council you argue in front of, and the finding is worth keeping whatever gets built there:
+**asking a model to play a stubborn character makes it immovable in both directions.** Under a
+"be hard to move by flattery" system prompt, five characters over 300 calls dropped 2.17 points on
+an argument that threatened what they privately wanted and correctly ignored flattery (-0.18) — but
+went *up* on the argument that guaranteed it exactly **0 times out of 60**. Replacing the character
+acting with an explicit numeric rubric, and letting the model judge relevance rather than perform
+stubbornness, separates cleanly: aligned **+2.75 (20/20 up)**, threatening **-3.00 (20/20 down)**,
+flattery **0.00 (20/20 unchanged)**. Scoring a whole five-member room in one call per turn agreed
+with hand labels 94.7% of the time over 320 judgements with **zero false negatives**, and the
+disagreements were mostly the model catching side-effects the labels missed. Broken promises land
+too: contradict an earlier promise and the member relying on it drops 3, 8/8. One defect to design
+around — told "earlier promises: none", it still invented a broken promise and scored it, 8/8, so a
+breach has to name which promise it broke and be checked against the real list. Two things did not
+survive: characters leak a "private" concern in 45-75% of replies even under pure flattery, so
+hidden levers do not work and the concerns may as well be public; and the setting matters more than
+the machinery — a town planning meeting was correctly rejected as a page nobody would open.
+
+Filled since: **the material sandbox**, by `games/strata.html` — the "toy, not a game" gap, and the
+first thing here with no win state since `interactive_buddy`. 26 materials, five to start, the rest
+discovered by putting things together. Five results, and four of them are the same lesson in
+different clothes: *the prototype was faithful about the mechanism and careless about everything
+around it.*
+
+**The stupid-player test is the whole verification, and it must run against the shipped page.** A
+Python prototype of the reaction network said a bot that drops a blob of a random known material in
+a random place, 70 times, ends up knowing 13.4 of 23. The finished engine agreed on the total —
+13.6 — and disagreed completely on the composition: **soil, ore and salt were found 0/10 times.**
+The bot pours from the sky and never digs, so the entire buried layer, and the metal, rust and acid
+gated behind it, was unreachable by anything except an action the game never suggested. Digging now
+discovers what it cuts through and the spade is called Dig, not Erase.
+
+**A hub with one improbable recipe is a dead tree.** Lava gates obsidian, metal, acid and the main
+route to glass, and its only recipe was fire sitting on stone at p=0.006 — which never happens,
+because fire without fuel dies in under a second. It came out **0/10**. Two fixes, both more
+legible than the constant they replaced: heat accumulates in stone and sand under sustained fire, so
+building a bonfire on a stone floor genuinely melts it; and sealed magma chambers sit at the bottom
+of the world, so digging far enough down also works. Lava is now found by 7 of 12 random bots and
+the final curve is 5 -> **mean 18.1 of 26** (min 13, max 25) over 12 runs of 80 drops, with a
+reliable early ladder (plant, salt, ore, oil, wood all 12/12), a middle that half of players reach
+(steam, snow, ice, charcoal, lava 7-9/12) and a real tail still out there (obsidian 2/12, rust 1/12,
+acid 0/12 — reachable, since a deliberate player gets 23/26, just not by accident).
+
+**A simulation will hand the player discoveries nobody earned, and it will do it out of sight.** The
+generated magma reacted with the ore and salt it happened to touch, so **8 of 8 untouched worlds**
+announced Lava and Metal before anyone clicked anything. Sealing the magma in rock did not work
+either — it melts its own cage in about a second and then discovers itself. The fix generalises past
+this game: **player influence is a per-cell property that propagates with the matter.** Painting or
+digging marks a cell; a reaction marks both sides if either was marked; movement carries the mark
+along; and nothing is ever discovered in an unmarked cell. Deep magma can now do whatever it likes
+in the dark. The check that catches this class of bug is one line — *open the world, touch nothing
+for nine seconds, assert the count has not moved* — and it is worth writing for anything with an
+autonomous simulation behind it.
+
+**A world that shows you its own map has nothing to discover.** The strata rendered in full from the
+first frame, so the salt seam was a white stripe you simply dug to. Ground is now opaque until an
+air pocket *the player has reached* touches it, with light creeping through connected air one cell
+per frame. The first attempt at this still leaked, and only a screenshot showed why: unexplored
+caverns were drawn as cave-dark rather than rock, so every cavity in the world was a legible black
+silhouette against the grey. Both the fault and the fix were invisible in code and obvious in a
+picture.
+
+A later pass, driven by playtest feedback, produced two bugs worth keeping and one method note.
+
+**"It crashed" was the world being deleted, and the cause was in the brush, not the simulation.** The
+report was that dragging fire around to clear the board broke the game. Reproducing it rather than
+adding the requested Clear button found the real fault: painting a material *overwrote* whatever
+occupied the cell, so a fire stroke replaced terrain with fire, which then burnt out and left
+nothing. Measured over a scripted eight-stroke sweep, occupied cells fell from **23,263 to 570** —
+bare bedrock. Placing now only fills empty space and Dig is the only thing that removes matter, which
+holds the same sweep at ~17,900. The general point is that a destructive brush is indistinguishable
+from a crash to the person holding it, and the bug report will describe the symptom in the
+simulation's terms even though nothing in the simulation is wrong.
+
+**Anything that converts its neighbours into copies of itself needs a brake, and it will not show up
+in a short test.** Lava's own heat melted the rock around it, so a single pool the player touched
+turned the world molten without limit — 296 cells to 2,098 and still climbing fifteen seconds later
+with no fire anywhere. It never appeared in any earlier measurement because those ran for a few
+seconds and the growth is slow. The fix is physical rather than a fudged constant: molten rock chills
+against cold rock, so lava contributes no heat to melting stone (only real fire does), and a flow with
+few hot neighbours crusts over. Lava now recedes, 296 to 97 over the same run. Worth running any
+autonomous simulation for a minute with nobody touching it and plotting each element's population,
+not just checking it looks right.
+
+**Adding materials moved the tail, not the middle.** Eight more (mud, clay, ceramic, coal, diamond,
+steel, tar, gas) took the set from 26 to 34, extending the burial chain to plant -> oil and charcoal ->
+coal -> diamond. The random-bot curve barely moved — mean 18.1 of 26 became **18.2 of 34** — because
+every new material needs burial, sustained heat, or waiting, and none of that happens by accident.
+That is the right shape for a toy: the same generous early ladder, and sixteen rather than eight
+things left that only a deliberate player will reach. It does mean the headline "found by flailing"
+number stops being a useful summary once a collection grows a deliberate tier, and the reachability
+test for a knowledgeable player becomes the measurement that matters.
+
+**A palette can be measured instead of eyeballed.** The request was a high-contrast mode for telling
+visually similar materials apart. Rather than judging swatches by eye, computing CIE76 distance
+between all pairs names the actual offenders and scores the fix: the normal palette's closest pair is
+**dE 2.1** (soil/mud), with 15 pairs under dE 10; the high-contrast palette went to dE 7.2, and
+tuning the six worst pairs it named took it to **dE 13.0 with nothing under 10**. Three rounds of
+this took a few minutes and are far more reliable than looking at a contact sheet, because the eye
+adapts to a picture and a number does not.
+
+**Two mechanical notes.** Iterating occupied cells instead of scanning the grid was about 30x, and
+is the only reason the headless experiments were affordable at all. And sizing the world from the
+viewport against a fixed **cell budget** — `h = sqrt(33000/aspect)`, clamped — rather than a fixed
+grid gives 237x140 on a desktop and 132x250 on a phone, both filling the screen with no letterbox
+and both landing at 16.7ms median with ~18k occupied cells. Fixing the grid and letterboxing it,
+which was the first attempt, wasted about a third of a phone screen.
 
 ## Tried and rejected
 
