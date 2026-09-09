@@ -321,6 +321,51 @@ The general lesson, which is the same one the rejected tactics prototype produce
 action space that is "good" measures nothing, because the space is mostly nonsense. Ask instead whether
 a deliberately stupid player reaches the good play.
 
+Filled since: **the maze chase**, by `games/scatter.html` — the first entry built deliberately against the
+drift described at the top of this file, and the first "well-made known thing" since the drift began. The
+useful part is that its central premise turned out to be **wrong**, and the measurement that killed it is
+worth more than the game.
+
+The pitch was that the original's four ghost personalities — Blinky chasing, Pinky's four-ahead cut with the
+up-direction overflow bug, Inky's vector doubled through Blinky, Clyde losing his nerve inside eight tiles —
+are not decoration but the entire difficulty, and that the naive all-chase every clone ships cannot catch
+anyone. A Python prototype said exactly that: same evading player, same maze, same speeds, **21 deaths against
+the authentic AI and 0 against naive chase**, with the naive ghosts clumped into one blob 35.6% of the time
+against 15.3%. On that basis the game was approved and built.
+
+Measured again in the finished game, with the same bot driving both builds, it reverses: **0 deaths authentic,
+6 naive**, over 8 runs of 45 seconds each; ghost spread identical at 9.10 against 9.13 tiles; naive pincers
+slightly *more* often, 12.7% against 10.7%. Naive chase is the harder game, and obviously so in hindsight —
+the real ghosts spend **25% of level 1 in scatter**, walking deliberately away from you, and a naive chaser
+never lets up.
+
+Two lessons, and the first is the general one. **The prototype omitted the ghost house.** All four ghosts
+started outside and on top of each other, so "bunching" measured the spawn arrangement rather than the
+targeting, and the effect vanished once ghosts were released on the real dot counters (Pinky at 0, Inky at 30,
+Clyde at 60). The prototype was faithful about the thing being tested and careless about the surrounding
+machinery, which is the failure mode to watch for: it is not the model of the mechanism that is usually wrong,
+it is what was left out around it.
+
+The second is about the original rather than the clone. The ghost AI is not a difficulty system, it is a
+**legibility** system. Four distinguishable characters and a quarter of the level where they let you go is
+what makes Pac-Man learnable, pattern-playable and fair; a relentless chaser is harder and much worse. So the
+fidelity is still worth having — just not for the reason claimed. The game now leads with a target overlay
+that draws each ghost's chosen tile, Inky's construction line through Blinky and Clyde's eight-tile nerve
+radius, which is the honest version of the pitch: not "this is what makes it hard" but "this is what it is
+doing."
+
+Three mechanical notes worth keeping. **The maze has a checksum**: the original is 240 pellets plus 4
+energizers, mirror-symmetric, with every pellet reachable and exactly one sealed region (the 6x3 ghost house).
+A hand-transcribed maze that hits all of those on the first try is almost certainly right, and it caught that
+Pac-Man's start tile had been walled in — walls and empty floor both score zero pellets, so the count alone
+would not have found it. **Tile-centre movement has a trap**: checking the wall ahead only on *arrival* at a
+tile centre lets an actor parked on a centre walk straight into the wall on the next frame; the check has to
+run before each move, not after. That one shipped as Pac-Man strolling through the maze walls and wrapping
+across a row with no tunnel in it. And a **13-check spec suite run against the shipped page** rather than
+against the prototype — the up-overflow firing only when facing up, Inky inheriting it through his own
+two-ahead tile, Clyde flipping at exactly 8 tiles, the door passing eyes but not Pac-Man, the level-1 speed
+and wave tables — is what makes it safe to say "faithful" in the description flatly instead of hedging.
+
 ## Tried and rejected
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose
