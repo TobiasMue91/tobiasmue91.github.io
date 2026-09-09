@@ -508,6 +508,45 @@ caverns were drawn as cave-dark rather than rock, so every cavity in the world w
 silhouette against the grey. Both the fault and the fix were invisible in code and obvious in a
 picture.
 
+A later pass, driven by playtest feedback, produced two bugs worth keeping and one method note.
+
+**"It crashed" was the world being deleted, and the cause was in the brush, not the simulation.** The
+report was that dragging fire around to clear the board broke the game. Reproducing it rather than
+adding the requested Clear button found the real fault: painting a material *overwrote* whatever
+occupied the cell, so a fire stroke replaced terrain with fire, which then burnt out and left
+nothing. Measured over a scripted eight-stroke sweep, occupied cells fell from **23,263 to 570** —
+bare bedrock. Placing now only fills empty space and Dig is the only thing that removes matter, which
+holds the same sweep at ~17,900. The general point is that a destructive brush is indistinguishable
+from a crash to the person holding it, and the bug report will describe the symptom in the
+simulation's terms even though nothing in the simulation is wrong.
+
+**Anything that converts its neighbours into copies of itself needs a brake, and it will not show up
+in a short test.** Lava's own heat melted the rock around it, so a single pool the player touched
+turned the world molten without limit — 296 cells to 2,098 and still climbing fifteen seconds later
+with no fire anywhere. It never appeared in any earlier measurement because those ran for a few
+seconds and the growth is slow. The fix is physical rather than a fudged constant: molten rock chills
+against cold rock, so lava contributes no heat to melting stone (only real fire does), and a flow with
+few hot neighbours crusts over. Lava now recedes, 296 to 97 over the same run. Worth running any
+autonomous simulation for a minute with nobody touching it and plotting each element's population,
+not just checking it looks right.
+
+**Adding materials moved the tail, not the middle.** Eight more (mud, clay, ceramic, coal, diamond,
+steel, tar, gas) took the set from 26 to 34, extending the burial chain to plant -> oil and charcoal ->
+coal -> diamond. The random-bot curve barely moved — mean 18.1 of 26 became **18.2 of 34** — because
+every new material needs burial, sustained heat, or waiting, and none of that happens by accident.
+That is the right shape for a toy: the same generous early ladder, and sixteen rather than eight
+things left that only a deliberate player will reach. It does mean the headline "found by flailing"
+number stops being a useful summary once a collection grows a deliberate tier, and the reachability
+test for a knowledgeable player becomes the measurement that matters.
+
+**A palette can be measured instead of eyeballed.** The request was a high-contrast mode for telling
+visually similar materials apart. Rather than judging swatches by eye, computing CIE76 distance
+between all pairs names the actual offenders and scores the fix: the normal palette's closest pair is
+**dE 2.1** (soil/mud), with 15 pairs under dE 10; the high-contrast palette went to dE 7.2, and
+tuning the six worst pairs it named took it to **dE 13.0 with nothing under 10**. Three rounds of
+this took a few minutes and are far more reliable than looking at a contact sheet, because the eye
+adapts to a picture and a number does not.
+
 **Two mechanical notes.** Iterating occupied cells instead of scanning the grid was about 30x, and
 is the only reason the headless experiments were affordable at all. And sizing the world from the
 viewport against a fixed **cell budget** — `h = sqrt(33000/aspect)`, clamped — rather than a fixed
