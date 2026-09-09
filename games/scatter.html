@@ -36,6 +36,15 @@ canvas{display:block;image-rendering:pixelated;border-radius:10px;background:#00
 .msg h2{margin:0 0 6px;font-size:17px;letter-spacing:.04em}
 .msg p{margin:0;color:var(--dim)}
 .msg kbd{background:#232336;border:1px solid #363652;border-radius:4px;padding:1px 5px;font:inherit;font-size:12px}
+.wave{width:100%;max-width:var(--boardw,448px);display:flex;align-items:center;gap:10px;
+       font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.wave b{color:var(--ink);font-weight:600;min-width:92px}
+.wave span{font-variant-numeric:tabular-nums;min-width:34px;text-align:right}
+.wtrack{flex:1;height:5px;border-radius:3px;background:#1b1b2a;overflow:hidden}
+.wtrack i{display:block;height:100%;width:0;border-radius:3px;background:#5b7fd4;transition:width .12s linear}
+.wave.scatter .wtrack i{background:#4fd48b} .wave.fright .wtrack i{background:#c8a6ff}
+.fruits{display:flex;gap:5px;min-height:12px;align-items:center}
+.fruits i{width:9px;height:9px;border-radius:50%;background:#ff4d4d;box-shadow:0 -3px 0 -2px #7ee07e}
 .bar{width:100%;max-width:var(--boardw,448px);display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 button{font:inherit;font-size:12.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line);
        border-radius:8px;padding:8px 12px;cursor:pointer;transition:.15s;letter-spacing:.02em}
@@ -68,6 +77,7 @@ footer a{color:#9fb4e8}
 <div class="wrap">
   <div class="hud">
     <div><span>Score</span><b id="score">0</b></div>
+    <div style="text-align:center"><span>Best</span><b id="high">0</b></div>
     <div style="text-align:center"><span>Level</span><b id="level">1</b></div>
     <div class="r"><span>Lives</span><b id="lives">3</b></div>
   </div>
@@ -80,6 +90,13 @@ footer a{color:#9fb4e8}
     </div></div>
   </div>
 
+  <div class="wave" id="wave">
+    <b id="waveLabel">Ready</b>
+    <div class="wtrack"><i id="waveFill"></i></div>
+    <span id="waveTime"></span>
+    <div class="fruits" id="fruits"></div>
+  </div>
+
   <div class="pad">
     <button class="a" data-dir="up" aria-label="Up">▲</button>
     <button class="b" data-dir="left" aria-label="Left">◀</button>
@@ -89,6 +106,7 @@ footer a{color:#9fb4e8}
 
   <div class="bar">
     <button id="btnTargets" aria-pressed="false">Show ghost targets</button>
+    <button id="btnPractice" aria-pressed="false" title="Slows the ghosts and lengthens the power pellets. Not how the arcade played.">Practice mode</button>
     <button id="btnSound" aria-pressed="true">Sound on</button>
     <button id="btnPause">Pause</button>
     <button id="btnNew">New game</button>
@@ -181,6 +199,14 @@ function cfg(l){
   return c;
 }
 const SPEED=11*TILE/60;   // px per frame at 100%
+// Practice is a deliberate departure from the arcade: slower ghosts and longer
+// power pellets, so a first level is finishable while you learn to read them.
+let practice=false;
+function levelCfg(l){
+  const c=cfg(l);
+  if(practice){ c.gh*=.76; c.ghF*=.85; c.e1s*=.76; c.e2s*=.76; c.fright=Math.max(c.fright,9); }
+  return c;
+}
 
 /* -------------------------------------------------------------- helpers */
 function passable(tx,ty,ghost,eyes){
@@ -214,22 +240,29 @@ function makeActors(){
 }
 
 /* ---------------------------------------------------------------- state */
-let score=0,lives=3,level=1,dotsEaten=0,pelletsLeft=0,C=cfg(1);
+let score=0,lives=3,level=1,dotsEaten=0,pelletsLeft=0,C=cfg(1),highScore=0,extraAwarded=false;
 let phase='ready',timer=0,waveIx=0,waveT=0,frightT=0,chainIx=0,running=false;
 let fruit=null,fruitT=0,fruitsShown=[],globalDots=null,releaseT=0,started=false;
 let showTargets=false,soundOn=true,paused=false;
 let rngState=1;
 const rnd=()=>((rngState=(rngState*1103515245+12345)&0x7fffffff)/0x7fffffff);
 
+function loadHigh(){ try{ highScore=parseInt(localStorage.getItem('scatter.high')||'0',10)||0; }catch(e){ highScore=0; } }
+function saveHigh(){ try{ localStorage.setItem('scatter.high',String(highScore)); }catch(e){} }
+function addScore(n){
+  score+=n;
+  if(!extraAwarded && score>=10000){ extraAwarded=true; lives++; beep('fruit'); }  // the arcade's extra man
+  if(score>highScore){ highScore=score; saveHigh(); }
+}
 function countPellets(){ let n=0; for(const r of grid) for(const c of r) if(c==='.'||c==='o') n++; return n; }
 
 function newGame(){
-  score=0;lives=3;level=1;fruitsShown=[];rngState=1;
+  score=0;lives=3;level=1;fruitsShown=[];rngState=1;extraAwarded=false;
   startLevel(); setMsg('Scatter','Arrows, WASD or swipe to move.<br>Press <kbd>Space</kbd> or tap to start.');
   started=false; running=false; sync();
 }
 function startLevel(){
-  C=cfg(level); resetGrid(); pelletsLeft=countPellets(); dotsEaten=0;
+  C=levelCfg(level); resetGrid(); pelletsLeft=countPellets(); dotsEaten=0;
   makeActors(); phase='ready'; timer=150; waveIx=0; waveT=0; frightT=0;
   fruit=null; globalDots=null; releaseT=0; sync();
 }
@@ -404,7 +437,7 @@ function eatCheck(){
   if(c==='.'||c==='o'){
     grid[ty][wrapX(tx)]=' ';
     pelletsLeft--; dotsEaten++;
-    score += c==='o'?50:10;
+    addScore(c==='o'?50:10);
     beep(c==='o'?'power':'dot');
     if(globalDots!==null) globalDots++;
     else { const nxt=ghosts.find(g=>g.state==='house'); if(nxt) nxt.dots++; }
@@ -418,14 +451,14 @@ function eatCheck(){
     if(pelletsLeft===0){ phase='clear'; timer=110; }
   }
   if(fruit && Math.abs(pac.x-fruit.x)<7 && Math.abs(pac.y-fruit.y)<7){
-    score+=C.fruit; fruitsShown.push({l:level,pts:C.fruit}); fruit=null; fruitT=0; beep('fruit');
+    addScore(C.fruit); fruitsShown.push({l:level,pts:C.fruit}); fruit=null; fruitT=0; beep('fruit');
   }
   for(const g of ghosts){
     if(g.state!=='out'&&g.state!=='leaving') continue;
     if(Math.abs(pac.x-g.x)<7 && Math.abs(pac.y-g.y)<7){
       if(g.frightened){
         chainIx=Math.min(chainIx+1,4); const pts=200*Math.pow(2,chainIx-1);
-        score+=pts; g.state='eyes'; g.frightened=false; beep('eat');
+        addScore(pts); g.state='eyes'; g.frightened=false; beep('eat');
         phase='eaten'; timer=30; g.flash=pts;
       } else if(phase==='play'){
         phase='dying'; timer=140; pac.dead=1; beep('death');
@@ -642,10 +675,36 @@ function beep(kind){
 const $=id=>document.getElementById(id);
 function sync(){
   $('score').textContent=score;
+  $('high').textContent=highScore;
   $('level').textContent=level;
   $('lives').textContent=Math.max(0,lives);
+  syncWave();
+  const f=$('fruits');
+  if(f && f.childElementCount!==fruitsShown.length){
+    f.innerHTML=''; for(const x of fruitsShown.slice(-7)){ const i=document.createElement('i'); i.title=x.pts+' points'; f.appendChild(i); }
+  }
   const m=$('modeNow');
   if(m) m.textContent = frightT>0 ? 'frightened \u00b7 no targets, they run at random' : (scatterMode()?'scatter \u00b7 heading for their corners':'chase');
+}
+// The wave strip is the one piece of help the arcade never gave you: ghosts run
+// to their corners on a fixed schedule, and knowing when is most of the game.
+function syncWave(){
+  const w=$('wave'),lab=$('waveLabel'),fill=$('waveFill'),tm=$('waveTime');
+  if(!w) return;
+  let cls='',label,frac,left;
+  if(frightT>0){
+    cls='fright'; label='Frightened'; left=frightT/60; frac=frightT/Math.max(C.fright*60,1);
+  } else {
+    const dur=waveIx<C.waves.length?C.waves[waveIx]*60:Infinity;
+    const scat=scatterMode();
+    cls=scat?'scatter':'';
+    if(!isFinite(dur)||dur>1e6){ label='Chase'; frac=1; left=null; }
+    else { label=scat?'Scatter':'Chase'; left=Math.max(0,(dur-waveT)/60); frac=Math.max(0,1-waveT/dur); }
+  }
+  w.className='wave '+cls;
+  lab.textContent=label;
+  fill.style.width=(frac*100).toFixed(1)+'%';
+  tm.textContent=left===null?'\u221e':left.toFixed(1)+'s';
 }
 function setMsg(h,p){ $('msg').innerHTML='<div><h2>'+h+'</h2><p>'+p+'</p></div>'; $('msg').classList.add('on'); }
 function hideMsg(){ $('msg').classList.remove('on'); }
@@ -677,6 +736,8 @@ cv.addEventListener('touchend',e=>{
   pac.want = Math.abs(dx)>Math.abs(dy) ? (dx>0?RIGHT:LEFT) : (dy>0?DOWN:UP);
 },{passive:true});
 cv.addEventListener('click',begin);
+$('msg').addEventListener('click',begin);                      // the overlay sits over the board
+$('msg').addEventListener('touchstart',e=>{e.preventDefault();begin();},{passive:false});
 function toggleTargets(){
   showTargets=!showTargets;
   $('btnTargets').setAttribute('aria-pressed',showTargets);
@@ -684,6 +745,12 @@ function toggleTargets(){
   $('legend').classList.toggle('on',showTargets);
 }
 $('btnTargets').onclick=toggleTargets;
+$('btnPractice').onclick=()=>{
+  practice=!practice; C=levelCfg(level);
+  $('btnPractice').setAttribute('aria-pressed',practice);
+  $('btnPractice').textContent=practice?'Practice mode on':'Practice mode';
+  sync();
+};
 $('btnSound').onclick=()=>{ soundOn=!soundOn; $('btnSound').setAttribute('aria-pressed',soundOn); $('btnSound').textContent=soundOn?'Sound on':'Sound off'; };
 $('btnPause').onclick=()=>{ if(!started) return begin(); paused=!paused; $('btnPause').textContent=paused?'Resume':'Pause'; };
 $('btnNew').onclick=()=>{ newGame(); begin(); };
@@ -698,6 +765,9 @@ function fit(){
   document.documentElement.style.setProperty('--boardw',(MW*s)+'px');
 }
 addEventListener('resize',fit);
+document.addEventListener('visibilitychange',()=>{      // don't die while the tab is in the background
+  if(document.hidden && started && !paused){ paused=true; $('btnPause').textContent='Resume'; }
+});
 
 /* ---------------------------------------------------------------- start */
 let acc=0,last=performance.now();
@@ -708,9 +778,9 @@ function frame(now){
   while(acc>=1000/60){ acc-=1000/60; if(running&&!paused) tick(); }
   draw();
 }
-resetGrid(); newGame(); fit(); requestAnimationFrame(frame);
+loadHigh(); resetGrid(); newGame(); fit(); requestAnimationFrame(frame);
 
-window.__scatter={ahead,targetFor,chooseDir,cfg,MAZE,noUp,UP,LEFT,DOWN,RIGHT,tileOf,centerOf,passable,get pac(){return pac},get ghosts(){return ghosts},get grid(){return grid},get st(){return {phase,score,level,lives,pelletsLeft,frightT,dotsEaten};},
+window.__scatter={ahead,targetFor,chooseDir,cfg,levelCfg,MAZE,noUp,UP,LEFT,DOWN,RIGHT,tileOf,centerOf,passable,get pac(){return pac},get ghosts(){return ghosts},get grid(){return grid},get st(){return {phase,score,level,lives,pelletsLeft,frightT,dotsEaten};},
                  set waveIx(v){waveIx=v}, get waveIx(){return waveIx}, scatterMode};
 })();
 </script>

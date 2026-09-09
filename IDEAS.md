@@ -354,6 +354,16 @@ that draws each ghost's chosen tile, Inky's construction line through Blinky and
 radius, which is the honest version of the pitch: not "this is what makes it hard" but "this is what it is
 doing."
 
+A polish pass added a practice mode and then measured whether it does anything, which produced a more
+useful result than the feature. Against a bot that moves with intent but can only see ghosts two tiles away
+— the obvious model of a beginner — **level 1 is cleared 8 of 8 with practice mode off and 8 of 8 with it
+on**. The assist only starts to matter for a bot that also moves at random 55% of the time, and even there
+it is 0 of 8 against 1 of 8, with average score up 37%. So slowing the ghosts is close to irrelevant: the
+game is not beating people with speed, and an assist aimed at speed is aimed at the wrong thing. What beats
+a human is not knowing where four ghosts are going at once, which is an argument for the target overlay and
+for the new countdown strip to the next scatter, not for a difficulty slider. Practice mode stayed because
+it is harmless and clearly labelled, but it is not the answer and is not described as one.
+
 Three mechanical notes worth keeping. **The maze has a checksum**: the original is 240 pellets plus 4
 energizers, mirror-symmetric, with every pellet reachable and exactly one sealed region (the 6x3 ghost house).
 A hand-transcribed maze that hits all of those on the first try is almost certainly right, and it caught that
