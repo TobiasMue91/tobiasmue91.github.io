@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Hummingbird — a game you play by humming</title>
+<meta name="description" content="A singing game for your browser. Hum, and a little bird follows your voice along a flower vine. It listens to your range first, then writes songs you can actually sing — wider leaps, thinner vines, and stretches where the band drops out and you have to hold the tune alone. No mic? Fly with the mouse.">
+<meta name="theme-color" content="#ffd9a0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🐦</text></svg>">
+<style>
+:root{
+  --ink:#3a2b3f; --ink-soft:#6d5b72;
+  --sky1:#ffe9c9; --sky2:#ffc9a8; --sky3:#f7a8bb;
+  --leaf:#5fb98a; --leaf-dark:#3d8c65;
+  --gold:#ffbf47;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden}
+body{
+  font-family:"Nunito","Quicksand",ui-rounded,"Segoe UI",system-ui,sans-serif;
+  color:var(--ink); background:#ffe9c9;
+  display:flex; align-items:center; justify-content:center;
+  overscroll-behavior:none; touch-action:manipulation;
+}
+#stage{position:relative;width:100%;height:100%;overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+/* ---------- panels ---------- */
+.panel{
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:.9rem;
+  padding:1.4rem; text-align:center; z-index:5;
+  background:radial-gradient(80% 46% at 50% 50%,rgba(255,247,232,.94),rgba(255,240,222,.78) 55%,rgba(255,232,214,.42) 78%,rgba(255,228,210,.12));
+  backdrop-filter:blur(1.5px);
+}
+.panel.hide{display:none}
+h1{font-size:clamp(2.1rem,9vw,3.6rem);margin:0;letter-spacing:-.02em;font-weight:800;line-height:1}
+h1 .b{display:inline-block;animation:bob 2.4s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-9px) rotate(5deg)}}
+.sub{font-size:clamp(1rem,3.6vw,1.22rem);max-width:27rem;color:var(--ink-soft);line-height:1.5;margin:0}
+.tiny{font-size:.84rem;color:var(--ink-soft);opacity:.85;max-width:24rem;line-height:1.45;margin:0}
+button{
+  font:inherit;font-weight:800;font-size:1.05rem;cursor:pointer;
+  border:none;border-radius:999px;padding:.85rem 1.7rem;color:#4a2f18;
+  background:linear-gradient(#ffd479,#ffb43e);
+  box-shadow:0 5px 0 #d98f1f,0 9px 18px rgba(160,90,20,.28);
+  transition:transform .09s,box-shadow .09s;
+}
+button:active{transform:translateY(4px);box-shadow:0 1px 0 #d98f1f,0 4px 10px rgba(160,90,20,.25)}
+button.ghost{
+  background:rgba(255,255,255,.62);color:var(--ink-soft);font-weight:700;font-size:.95rem;
+  box-shadow:0 3px 0 rgba(180,150,160,.45); padding:.66rem 1.3rem;
+}
+button.ghost:active{box-shadow:0 1px 0 rgba(180,150,160,.45)}
+.row{display:flex;gap:.7rem;flex-wrap:wrap;justify-content:center;align-items:center}
+
+/* ---------- listening meter ---------- */
+#tuner{width:min(320px,78vw);height:170px;position:relative;margin:.2rem 0}
+#tunerC{position:absolute;inset:0;width:100%;height:100%}
+.cue{font-size:clamp(1.3rem,5vw,1.7rem);font-weight:800;margin:0}
+.hint{min-height:1.4em;font-size:.98rem;color:var(--ink-soft)}
+
+/* ---------- in-game hud ---------- */
+#hud{
+  position:absolute;top:0;left:0;right:0;z-index:4;pointer-events:none;
+  display:flex;justify-content:space-between;align-items:flex-start;
+  padding:calc(.6rem + env(safe-area-inset-top)) .85rem .6rem;
+  font-weight:800;text-shadow:0 1px 0 rgba(255,255,255,.55);
+}
+#hud[hidden]{display:none}   /* display:flex above would otherwise win */
+#hud .meadow{font-size:.95rem;opacity:.9}
+#hud .flowers{font-size:1.15rem;letter-spacing:.02em}
+body.night #hud{color:#f4ecff;text-shadow:0 1px 8px rgba(20,10,40,.8)}
+body.night #pauseBtn{background:rgba(255,255,255,.18);color:#efe7ff;box-shadow:0 3px 0 rgba(0,0,0,.3)}
+#toast{
+  position:absolute;left:50%;top:22%;transform:translate(-50%,-50%);
+  z-index:4;pointer-events:none;font-weight:800;
+  font-size:clamp(1.2rem,5vw,1.7rem);color:#fff;opacity:0;
+  text-shadow:0 2px 10px rgba(120,60,80,.5),0 0 22px rgba(255,200,120,.7);
+}
+/* bottom-right belongs to the floating gptgames mark, which sat on top of
+   this button and ate its clicks */
+#pauseBtn{position:absolute;left:.6rem;bottom:calc(.6rem + env(safe-area-inset-bottom));z-index:6;
+  pointer-events:auto;font-size:1.2rem;padding:.4rem .7rem;background:rgba(255,255,255,.6);
+  box-shadow:0 3px 0 rgba(180,150,160,.4);color:var(--ink-soft)}
+.scorecard{
+  background:rgba(255,255,255,.6);border-radius:1.2rem;padding:1rem 1.4rem;
+  box-shadow:0 6px 22px rgba(160,110,90,.18); min-width:min(19rem,86vw);
+}
+.scorecard .big{font-size:2.6rem;font-weight:800;line-height:1.1}
+.scorecard .lbl{font-size:.85rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.09em}
+.seed{font-size:.8rem;color:var(--ink-soft);opacity:.8;font-family:ui-monospace,monospace}
+a{color:#c2607f}
+.grow{animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+
+  <div id="hud" hidden>
+    <div class="meadow" id="meadowName">Sunrise Meadow</div>
+    <div class="flowers" id="flowerCount">🌸 0</div>
+  </div>
+  <div id="toast"></div>
+  <button id="pauseBtn" hidden aria-label="Pause">⏸</button>
+
+  <!-- title -->
+  <div class="panel" id="pTitle">
+    <h1><span class="b">🐦</span> Hummingbird</h1>
+    <p class="sub">A little bird follows your voice. Hum, sing, whistle — anything with a note in it — and steer her along the flower vine.</p>
+    <div class="row">
+      <button id="btnMic">🎤 Let me hum</button>
+      <button class="ghost" id="btnMouse">No mic — fly with the mouse</button>
+    </div>
+    <p class="tiny">Your voice never leaves this page. Headphones or a quiet-ish room make her happier.</p>
+  </div>
+
+  <!-- calibration -->
+  <div class="panel hide" id="pCal">
+    <p class="cue" id="calCue">Hum your comfiest <b>low</b> note</p>
+    <div id="tuner"><canvas id="tunerC"></canvas></div>
+    <p class="hint" id="calHint">…listening…</p>
+    <div class="row"><button class="ghost" id="calSkip">skip this</button></div>
+  </div>
+
+  <!-- between meadows -->
+  <div class="panel hide" id="pBrief">
+    <h1 style="font-size:clamp(1.6rem,7vw,2.6rem)" id="briefTitle">Sunrise Meadow</h1>
+    <p class="sub" id="briefText"></p>
+    <div class="row"><button id="btnGo">Off we go</button></div>
+    <p class="seed" id="briefSeed"></p>
+  </div>
+
+  <!-- results -->
+  <div class="panel hide" id="pEnd">
+    <h1 style="font-size:clamp(1.7rem,7vw,2.8rem)" id="endTitle">Nicely sung!</h1>
+    <div class="scorecard grow">
+      <div class="lbl">flowers bloomed</div>
+      <div class="big" id="endFlowers">0</div>
+      <p class="sub" style="font-size:1rem;margin:.4rem 0 0" id="endLine"></p>
+    </div>
+    <div class="row">
+      <button id="btnNext">Next meadow</button>
+      <button class="ghost" id="btnRetry">Sing it again</button>
+    </div>
+    <div class="row"><button class="ghost" id="btnHome">Back to the start</button></div>
+    <p class="seed" id="endSeed"></p>
+  </div>
+</div>
+<script src="../logo.js"></script>
+<script>
+'use strict';
+/* ===========================================================================
+   Hummingbird — a singing game.  Everything is in this one file.
+
+   The listening half is the part with numbers behind it.  The detector is the
+   YIN implementation from tools/overtone.html, re-measured for use as a game
+   controller: over ~120k synthetic frames (3 timbres x 37 pitches x 5 room
+   conditions) a 1024-sample window at a 0.88 clarity gate passed 98-100% of
+   frames with zero octave errors and 0.3 cents of error on a clean tone,
+   locking 23ms after a note starts.  512 samples dropped a third of frames and
+   threw octave jumps; 2048 and 4096 bought nothing but latency.  So: 1024.
+   =========================================================================== */
+
+/* ---------- FFT (radix-2, in place) ---------- */
+function makeFFT(n){
+  const levels = Math.log2(n)|0;
+  const cos = new Float32Array(n/2), sin = new Float32Array(n/2);
+  for (let i=0;i<n/2;i++){ cos[i]=Math.cos(2*Math.PI*i/n); sin[i]=Math.sin(2*Math.PI*i/n); }
+  return function(re,im){
+    for (let i=0;i<n;i++){
+      let j=0,x=i; for (let k=0;k<levels;k++){ j=(j<<1)|(x&1); x>>=1; }
+      if (j>i){ let t=re[i];re[i]=re[j];re[j]=t; t=im[i];im[i]=im[j];im[j]=t; }
+    }
+    for (let size=2;size<=n;size*=2){
+      const half=size/2, step=n/size;
+      for (let i=0;i<n;i+=size){
+        for (let j=i,k=0;j<i+half;j++,k+=step){
+          const l=j+half;
+          const tre= re[l]*cos[k]+im[l]*sin[k];
+          const tim=-re[l]*sin[k]+im[l]*cos[k];
+          re[l]=re[j]-tre; im[l]=im[j]-tim;
+          re[j]+=tre;      im[j]+=tim;
+        }
+      }
+    }
+  };
+}
+
+/* ---------- YIN ---------- */
+function makeDetector(W){
+  const N = 1 << Math.ceil(Math.log2(W*2));
+  const fft = makeFFT(N);
+  const re = new Float32Array(N), im = new Float32Array(N);
+  const acf = new Float32Array(W/2+1), diff = new Float32Array(W/2+1), cmnd = new Float32Array(W/2+1);
+  const power = new Float64Array(W+1);
+  const TH = 0.15;
+  return function detect(buf, sampleRate, fmin, fmax){
+    let sum2=0; for (let i=0;i<W;i++){ const v=buf[i]; sum2+=v*v; }
+    const rms = Math.sqrt(sum2/W);
+    if (rms < 1e-5) return {freq:0, clarity:0, rms};
+    re.fill(0); im.fill(0);
+    for (let i=0;i<W;i++) re[i]=buf[i];
+    fft(re,im);
+    for (let i=0;i<N;i++){ const a=re[i],b=im[i]; re[i]=a*a+b*b; im[i]=0; }
+    fft(re,im);
+    for (let t=0;t<=W/2;t++) acf[t]=re[t]/N;
+    power[0]=0;
+    for (let i=0;i<W;i++) power[i+1]=power[i]+buf[i]*buf[i];
+    const tauMax = Math.min(W/2, Math.floor(sampleRate/fmin));
+    const tauMin = Math.max(2,   Math.floor(sampleRate/fmax));
+    if (tauMin >= tauMax) return {freq:0, clarity:0, rms};
+    for (let t=0;t<=W/2;t++) diff[t] = power[W-t] + (power[W]-power[t]) - 2*acf[t];
+    cmnd[0]=1;
+    let run=0;
+    for (let t=1;t<=W/2;t++){ run+=diff[t]; cmnd[t] = run===0 ? 1 : diff[t]*t/run; }
+    let tau=-1;
+    for (let t=tauMin;t<=tauMax;t++){
+      if (cmnd[t] < TH){ while (t+1<=tauMax && cmnd[t+1]<cmnd[t]) t++; tau=t; break; }
+    }
+    if (tau<0){
+      let best=tauMin;
+      for (let t=tauMin;t<=tauMax;t++) if (cmnd[t]<cmnd[best]) best=t;
+      tau=best;
+      if (cmnd[tau] > 0.6) return {freq:0, clarity:1-cmnd[tau], rms};
+    }
+    let refined=tau;
+    if (tau>0 && tau<W/2){
+      const a=cmnd[tau-1], b=cmnd[tau], c=cmnd[tau+1];
+      const den=2*(2*b-a-c);
+      if (den!==0){ const s=(c-a)/den; if (Math.abs(s)<1) refined = tau+s; }
+    }
+    const freq = sampleRate/refined;
+    if (!(freq>=fmin && freq<=fmax)) return {freq:0, clarity:0, rms};
+    return {freq, clarity: Math.max(0, Math.min(1, 1-cmnd[tau])), rms};
+  };
+}
+
+const WINDOW = 1024, GATE = 0.88, RMS_GATE = 0.006;
+const FMIN = 70, FMAX = 1000;
+
+/* ---------- the ear: mic in, one note out ---------- */
+const Ear = {
+  ready:false, ac:null, analyser:null, buf:null, detect:null, stream:null,
+  midi:0,          // smoothed, in midi numbers (fractional)
+  raw:0,           // this frame's reading, 0 when nothing sung
+  loud:0,          // 0..1 smoothed loudness, for the puff of the bird
+  async start(){
+    this.ac = new (window.AudioContext||window.webkitAudioContext)();
+    this.stream = await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:false, noiseSuppression:false, autoGainControl:false
+    }});
+    const src = this.ac.createMediaStreamSource(this.stream);
+    this.analyser = this.ac.createAnalyser();
+    this.analyser.fftSize = 2048;            // >= WINDOW, we read the tail
+    src.connect(this.analyser);
+    this.buf = new Float32Array(this.analyser.fftSize);
+    this.slice = new Float32Array(WINDOW);
+    this.detect = makeDetector(WINDOW);
+    this.ready = true;
+  },
+  read(){
+    if (!this.ready) return 0;
+    this.analyser.getFloatTimeDomainData(this.buf);
+    this.slice.set(this.buf.subarray(this.buf.length-WINDOW));
+    const r = this.detect(this.slice, this.ac.sampleRate, FMIN, FMAX);
+    const good = r.freq>0 && r.clarity>=GATE && r.rms>=RMS_GATE;
+    this.loud += ((good?Math.min(1,r.rms*14):0) - this.loud)*0.25;
+    if (!good){ this.raw = 0; return 0; }
+    const m = 69 + 12*Math.log2(r.freq/440);
+    this.raw = m;
+    return m;
+  },
+  stop(){ if(this.stream) this.stream.getTracks().forEach(t=>t.stop()); this.ready=false; }
+};
+
+/* ===========================================================================
+   The songs.
+
+   Melodies are grown then judged, because the first version of this generator
+   was measured and it was bad: over 400 lines it produced two-octave leaps,
+   ranges of 26 semitones, and a difficulty dial that ran backwards.  Growing a
+   line and then throwing it away unless it stays inside the singer's range,
+   keeps enough stepwise motion and never leaps further than the tier allows
+   turns that into a ladder that actually climbs: median leap 2 -> 4 -> 5 -> 7
+   semitones and stepwise motion 100% -> 83% -> 77% -> 74% across the tiers.
+   =========================================================================== */
+function rng(a){
+  return function(){ a|=0; a=a+0x6D2B79F5|0;
+    let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t;
+    return ((t^t>>>14)>>>0)/4294967296; };
+}
+const MAJOR=[0,2,4,5,7,9,11];
+const PROGS=[[0,5,3,4],[0,3,4,0],[5,3,0,4],[0,4,5,3],[3,4,0,0],[0,2,3,4]];
+const semisOf = d => Math.floor(d/7)*12 + MAJOR[((d%7)+7)%7];
+
+/* Meadows: the journey.  Each one changes exactly one thing about the last. */
+const MEADOWS = [
+  {name:'Sunrise Meadow', blurb:'Follow the vine. Any sound with a note in it will do — hum, "ooh", "la", whatever feels least silly.',
+   maxLeap:2, minStep:0.80, range:9,  bpm:76, density:[4,2,2], guide:1,   band:1, tol:1.05, acap:0, sky:0},
+  {name:'Bramble Hollow', blurb:'A few small hops now. The bird can jump — you just have to jump with her.',
+   maxLeap:4, minStep:0.70, range:12, bpm:80, density:[2,2,4,1], guide:1, band:1, tol:1.00, acap:0, sky:1},
+  {name:'Thistle Rise', blurb:'The vine is thinner up here, and the little guide note that has been singing along with you goes quiet.',
+   maxLeap:4, minStep:0.70, range:12, bpm:84, density:[2,2,1,4], guide:0, band:1, tol:0.85, acap:0, sky:2},
+  {name:'Windward Field', blurb:'Bigger leaps. Land them by hearing where you are going before you get there.',
+   maxLeap:5, minStep:0.62, range:12, bpm:86, density:[2,1,1,2,4], guide:0, band:1, tol:0.85, acap:0, sky:3},
+  {name:'The Quiet Reach', blurb:'The band stops playing for a bar at a time. Keep going — they come back in, and they will be expecting you in tune.',
+   maxLeap:5, minStep:0.62, range:12, bpm:88, density:[2,1,1,2], guide:0, band:1, tol:0.80, acap:2, sky:4},
+  {name:'Duskfall Ridge', blurb:'Wider still, and the silences are longer. This is the one that takes a few tries.',
+   maxLeap:7, minStep:0.55, range:14, bpm:90, density:[2,1,1,2], guide:0, band:1, tol:0.78, acap:3, sky:5},
+  {name:'Nightbloom', blurb:'Everything at once, under the stars. The flowers here open for anybody who can hold a tune alone.',
+   maxLeap:9, minStep:0.45, range:14, bpm:92, density:[2,1,1,1,2], guide:0, band:1, tol:0.72, acap:4, sky:6}
+];
+
+function growMelody(R, spec){
+  const prog = PROGS[Math.floor(R()*PROGS.length)];
+  const bars = 8, notes = [], phrase = [];
+  const chordOf = r => [r%7,(r+2)%7,(r+4)%7];
+  const leapSteps = Math.max(1, Math.round(spec.maxLeap/2));
+  let deg = 0, dir = R()<0.5?1:-1;
+  for (let bar=0; bar<bars; bar++){
+    if (bar>=4 && phrase[bar-4] && R()<0.65){          // consequent answers antecedent
+      const off = [0,0,-1,1][Math.floor(R()*4)];
+      const echo = phrase[bar-4].map(n=>({deg:n.deg+off, beats:n.beats}));
+      phrase[bar]=echo; notes.push(...echo);
+      deg = echo[echo.length-1].deg;
+      continue;
+    }
+    const chord = chordOf(prog[bar%prog.length]);
+    const barNotes=[]; let left=4;
+    while (left>0){
+      let b = spec.density[Math.floor(R()*spec.density.length)];
+      if (b>left) b=left;
+      if (R()<0.26){                                    // hop to a chord tone
+        const t = chord[Math.floor(R()*3)];
+        let cand = deg + (((t-(((deg%7)+7)%7))%7)+7)%7;
+        if (cand-deg > leapSteps) cand -= 7;
+        if (Math.abs(cand-deg) > leapSteps) cand = deg;
+      	deg = cand;
+      } else {                                          // step
+        if (R()<0.22) dir=-dir;
+        deg += dir*(R()<0.86?1:2);
+      }
+      if (deg>6){ deg-=2; dir=-1; }
+      if (deg<-5){ deg+=2; dir=1; }
+      barNotes.push({deg, beats:b});
+      left -= b;
+    }
+    phrase[bar]=barNotes; notes.push(...barNotes);
+  }
+  notes[notes.length-1].deg = 0;                        // come home
+  return notes;
+}
+
+function judge(notes, spec){
+  const s = notes.map(n=>semisOf(n.deg));
+  let steps=0, moves=0, maxLeap=0;
+  for (let i=1;i<s.length;i++){
+    const d=Math.abs(s[i]-s[i-1]);
+    moves++; if (d<=2) steps++; if (d>maxLeap) maxLeap=d;
+  }
+  const range = Math.max(...s)-Math.min(...s);
+  if (range > spec.range) return null;
+  if (maxLeap > spec.maxLeap) return null;
+  if (steps/moves < spec.minStep) return null;
+  return {range, maxLeap, stepRatio:steps/moves, lo:Math.min(...s), hi:Math.max(...s)};
+}
+
+/* Grow-and-judge until a line passes, then place it inside the singer's range. */
+function makeSong(seed, spec, voiceLo, voiceHi){
+  const R = rng(seed);
+  /* Someone whose comfortable range is eight semitones must not be handed a
+     fourteen-semitone tune: the placement below would shove half of it under
+     their floor.  Ask for no more range than the singer has. */
+  const voiceRange = Math.max(5, voiceHi-voiceLo);
+  spec = Object.assign({}, spec, {
+    range: Math.min(spec.range, voiceRange),
+    maxLeap: Math.min(spec.maxLeap, voiceRange)
+  });
+  let notes=null, m=null, tries=0;
+  while (tries++ < 3000){
+    const cand = growMelody(R, spec);
+    const v = judge(cand, spec);
+    if (v){ notes=cand; m=v; break; }
+  }
+  if (!notes){ notes = growMelody(rng(seed), Object.assign({},spec,{maxLeap:12,minStep:0,range:24}));
+               m = judge(notes,{maxLeap:99,minStep:0,range:99}); }
+  // centre the line in the comfortable part of the voice
+  const voiceMid = (voiceLo+voiceHi)/2, lineMid = (m.lo+m.hi)/2;
+  let tonic = Math.round(voiceMid - lineMid);
+  if (tonic + m.lo < voiceLo) tonic = Math.round(voiceLo - m.lo);
+  if (tonic + m.hi > voiceHi) tonic = Math.round(voiceHi - m.hi);
+  let t=0;
+  const out = notes.map(n=>{
+    const note = {midi: tonic + semisOf(n.deg), beat: t, beats: n.beats};
+    t += n.beats; return note;
+  });
+  return {notes:out, beats:t, tries, stats:m};
+}
+
+/* ===========================================================================
+   The band.  No audio files — a warm pad, a bass note, a shaker, and (in the
+   first two meadows) a little guide note that sings the melody with you.
+   =========================================================================== */
+const Band = {
+  ac:null, master:null, on:true,
+  attach(ac){
+    this.ac = ac;
+    this.master = ac.createGain(); this.master.gain.value = 0.9;
+    this.master.connect(ac.destination);
+  },
+  pad(t, midis, dur, vol){
+    if (!this.ac) return;
+    const g = this.ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t+0.25);
+    g.gain.setTargetAtTime(0.0001, t+dur*0.55, dur*0.3);
+    const f = this.ac.createBiquadFilter();
+    f.type='lowpass'; f.frequency.value=1300; f.Q.value=0.4;
+    g.connect(f); f.connect(this.master);
+    midis.forEach((m,i)=>{
+      [0,-4].forEach(cent=>{
+        const o=this.ac.createOscillator();
+        o.type = i===0?'triangle':'sine';
+        o.frequency.value = 440*Math.pow(2,(m-69)/12);
+        o.detune.value = cent;
+        o.connect(g); o.start(t); o.stop(t+dur+0.4);
+      });
+    });
+  },
+  bass(t, midi, dur){
+    if (!this.ac) return;
+    const g=this.ac.createGain();
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.16,t+0.03);
+    g.gain.setTargetAtTime(0.0001,t+0.1,dur*0.35);
+    const o=this.ac.createOscillator(); o.type='sine';
+    o.frequency.value = 440*Math.pow(2,(midi-69)/12);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t+dur+0.3);
+  },
+  guide(t, midi, dur, vol){
+    if (!this.ac) return;
+    const g=this.ac.createGain();
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.02);
+    g.gain.setTargetAtTime(0.0001,t+dur*0.4,dur*0.35);
+    const o=this.ac.createOscillator(); o.type='triangle';
+    o.frequency.value = 440*Math.pow(2,(midi-69)/12);
+    const f=this.ac.createBiquadFilter(); f.type='lowpass'; f.frequency.value=2600;
+    o.connect(f); f.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t+dur+0.3);
+  },
+  shaker(t, vol){
+    if (!this.ac) return;
+    const n=0.06, sr=this.ac.sampleRate, b=this.ac.createBuffer(1,Math.ceil(sr*n),sr);
+    const d=b.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,3);
+    const s=this.ac.createBufferSource(); s.buffer=b;
+    const f=this.ac.createBiquadFilter(); f.type='highpass'; f.frequency.value=5200;
+    const g=this.ac.createGain(); g.gain.value=vol;
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(t);
+  },
+  chime(t, midi, vol){
+    if (!this.ac) return;
+    const g=this.ac.createGain();
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol||0.14,t+0.01);
+    g.gain.setTargetAtTime(0.0001,t+0.03,0.12);
+    const o=this.ac.createOscillator(); o.type='sine';
+    o.frequency.value=440*Math.pow(2,(midi-69)/12);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t+0.7);
+  }
+};
+
+/* ===========================================================================
+   Game state
+   =========================================================================== */
+const cv = document.getElementById('game'), cx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+let DPR=1, W=0, H=0;
+
+const G = {
+  mode:'title',           // title | cal | brief | play | end
+  input:'mic',            // mic | pointer
+  voiceLo:55, voiceHi:74, // midi, the singer's comfortable span
+  meadow:0, seed:1,
+  song:null, spec:null,
+  t0:0, beatDur:0.75,
+  flowers:0, totalFlowers:0, runFlowers:0,
+  combo:0, bestCombo:0,
+  noteState:[],           // per note: {frames, hits, done, bloom}
+  birdY:0.5, birdTarget:0.5, wing:0,
+  sparks:[], petals:[],
+  sung:0,                 // smoothed midi, 0 = silent
+  silentFor:0,
+  started:false, ended:false, paused:false,
+  countIn:4
+};
+
+function resize(){
+  W = cv.clientWidth; H = cv.clientHeight;
+  /* A 2x backing store on a big desktop window is five megapixels, and the
+     whole of it was being repainted every frame.  Cap the pixel budget as
+     well as the ratio. */
+  DPR = Math.min(2, window.devicePixelRatio||1);
+  const budget = 2.4e6;
+  if (W*H*DPR*DPR > budget) DPR = Math.max(1, Math.sqrt(budget/(W*H)));
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  cx.setTransform(DPR,0,0,DPR,0,0);
+  Baked.dirty = true;
+}
+window.addEventListener('resize', resize);
+
+/* pitch -> screen y.  The window is the song's own range rather than the whole
+   voice, or a nine-note melody sits in a flat stripe across the middle of the
+   screen with two thirds of it empty -- which is exactly what the first
+   screenshots showed. */
+const PAD = 2.5;
+function viewSpan(){
+  if (!G.song) return {lo:G.voiceLo-PAD, hi:G.voiceHi+PAD};
+  return {lo:G.viewLo, hi:G.viewHi};
+}
+function midiToY(m){
+  const v = viewSpan();
+  const f = (m-v.lo)/(v.hi-v.lo);
+  return H*0.86 - f*(H*0.70);
+}
+function yToMidi(y){
+  const v = viewSpan();
+  const f = (H*0.86 - y)/(H*0.70);
+  return v.lo + f*(v.hi-v.lo);
+}
+function semiPx(){ const v=viewSpan(); return Math.min(58,(H*0.70)/(v.hi-v.lo)); }
+/* People happily sing the right note in the wrong octave.  Fold the reading
+   into the range we are drawing before judging it. */
+function foldOctave(m){
+  const v=viewSpan(), lo=v.lo, hi=v.hi;
+  while (m < lo-1 && m+12 <= hi+3) m+=12;
+  while (m > hi+1 && m-12 >= lo-3) m-=12;
+  return m;
+}
+
+/* ===========================================================================
+   Input — a voice, or a mouse for anyone without one
+   =========================================================================== */
+let pointerY = null, keyNudge = 0;
+cv.addEventListener('pointermove', e=>{ pointerY = e.clientY; });
+cv.addEventListener('pointerdown', e=>{ pointerY = e.clientY; });
+window.addEventListener('keydown', e=>{
+  if (e.key==='ArrowUp')   keyNudge = 1;
+  if (e.key==='ArrowDown') keyNudge = -1;
+  if (e.key===' ' && G.mode==='brief'){ e.preventDefault(); $('btnGo').click(); }
+});
+window.addEventListener('keyup', e=>{ if(e.key==='ArrowUp'||e.key==='ArrowDown') keyNudge=0; });
+
+function readVoice(dt){
+  if (G.input==='mic'){
+    const m = Ear.read();
+    if (m){
+      const folded = foldOctave(m);
+      // Smoothing has to do two opposite jobs: iron out the wobble in a held
+      // note, and get out of the way when someone deliberately jumps.  One
+      // time constant cannot do both -- measured through the page, a plain
+      // exponential took 82ms to land a leap where the detector itself takes
+      // 23ms.  So the glide is by distance: small corrections are smoothed
+      // hard, a jump of more than a semitone is followed almost at once.
+      if (!G.sung) G.sung = folded;
+      else {
+        const gap = Math.abs(folded-G.sung);
+        const rate = gap>1.2 ? 45 : gap>0.5 ? 30 : 18;
+        G.sung += (folded-G.sung)*Math.min(1, dt*rate);
+      }
+      G.silentFor = 0;
+    } else {
+      G.silentFor += dt;
+      if (G.silentFor > 0.25) G.sung = 0;
+    }
+    return G.sung;
+  }
+  // pointer / keys
+  if (keyNudge){
+    const span = (G.voiceHi+PAD)-(G.voiceLo-PAD);
+    G.sung = (G.sung||(G.voiceLo+G.voiceHi)/2) + keyNudge*dt*span*0.55;
+    G.sung = Math.max(G.voiceLo-PAD, Math.min(G.voiceHi+PAD, G.sung));
+    G.silentFor = 0; Ear.loud = 1;
+    return G.sung;
+  }
+  if (pointerY==null){ G.sung = 0; Ear.loud=0; return 0; }
+  const target = yToMidi(pointerY);
+  G.sung = G.sung ? G.sung + (target-G.sung)*Math.min(1,dt*18) : target;
+  Ear.loud = 1; G.silentFor = 0;
+  return G.sung;
+}
+
+/* ===========================================================================
+   Calibration — "hum low, hum high", framed as gently as possible
+   =========================================================================== */
+const Cal = {
+  step:0, samples:[], held:0, lo:null, hi:null, raf:0, tc:null, tcx:null,
+  begin(){
+    this.step=0; this.samples=[]; this.held=0; this.lo=null; this.hi=null;
+    this.anchor=null; this.seen=null; this.birdY=null; this.lastHeard=0; this.nudged=false;
+    this.tc = $('tunerC'); this.tcx = this.tc.getContext('2d');
+    show('pCal'); G.mode='cal';
+    this.prompt();
+    this.loop();
+  },
+  prompt(){
+    $('calCue').innerHTML = this.step===0
+      ? 'Hum your comfiest <b>low</b> note'
+      : 'Now your happiest <b>high</b> note';
+    $('calHint').textContent = this.step===0
+      ? 'Somewhere sleepy. Hold it while the leaf fills.'
+      : 'Not a shriek — just the top of easy. Hold it.';
+  },
+  loop(){
+    const d = 1/60;
+    const m = Ear.read();
+    if (m){
+      this.samples.push(m); if (this.samples.length>90) this.samples.shift();
+      this.held = Math.min(1, this.held + d/1.1);
+    } else {
+      this.held = Math.max(0, this.held - d/0.7);
+      if (this.held<=0) this.samples.length = 0;
+    }
+    this.draw(m);
+    if (this.held>=1 && this.samples.length>25){
+      const s = this.samples.slice(-60).sort((a,b)=>a-b);
+      const med = s[s.length>>1];
+      Band.chime(Band.ac.currentTime, 72+this.step*5, 0.12);
+      if (this.step===0){ this.lo=med; this.step=1; this.samples=[]; this.held=0;
+                          this.anchor=null; this.seen=null; this.birdY=null;
+                          this.nudged=false; this.prompt(); }
+      else { this.hi=med; return this.finish(); }
+    }
+    this.raf = requestAnimationFrame(()=>this.loop());
+  },
+  draw(m){
+    const c=this.tc, g=this.tcx;
+    const w=c.clientWidth, h=c.clientHeight, dpr=Math.min(2,window.devicePixelRatio||1);
+    if (c.width!==w*dpr){ c.width=w*dpr; c.height=h*dpr; }
+    g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h);
+
+    // a perch for the bird to sit on, and the bird riding your pitch
+    const railX = w*0.30, top=14, bot=h-14;
+    g.strokeStyle='rgba(95,187,138,.35)'; g.lineWidth=8; g.lineCap='round';
+    g.beginPath(); g.moveTo(railX,top); g.lineTo(railX,bot); g.stroke();
+    if (m){
+      this.seen = m;
+      this.lastHeard = performance.now();
+    }
+    const show = this.seen;
+    if (show!=null){
+      // map an octave and a half around the first thing we heard
+      if (this.anchor==null) this.anchor = show;
+      const f = Math.max(0, Math.min(1, 0.5 + (show-this.anchor)/14));
+      const y = bot - f*(bot-top);
+      this.birdY = this.birdY==null ? y : this.birdY + (y-this.birdY)*0.25;
+      g.save(); g.translate(railX, this.birdY);
+      g.globalAlpha = m?1:0.35;
+      const flap=Math.sin(performance.now()/45);
+      g.fillStyle='#ff9ec4';
+      g.beginPath(); g.ellipse(-2,-3-flap*4,9,4,-0.5+flap*0.4,0,7); g.fill();
+      g.fillStyle='#7ad0e8'; g.beginPath(); g.ellipse(0,0,11,8,0,0,7); g.fill();
+      g.fillStyle='#8fdcf0'; g.beginPath(); g.arc(8,-3,6,0,7); g.fill();
+      g.fillStyle='#ffb347';
+      g.beginPath(); g.moveTo(13,-3); g.lineTo(23,-2); g.lineTo(13,-1); g.closePath(); g.fill();
+      g.fillStyle='#33323f'; g.beginPath(); g.arc(10,-5,1.5,0,7); g.fill();
+      g.restore();
+    }
+
+    // the leaf that fills while you hold
+    const lx=w*0.68, ly=h/2;
+    g.save(); g.translate(lx,ly); g.rotate(-0.5);
+    g.beginPath();
+    g.moveTo(-42,0); g.quadraticCurveTo(0,-31,42,0); g.quadraticCurveTo(0,31,-42,0);
+    g.closePath();
+    g.fillStyle='rgba(255,255,255,.7)'; g.fill();
+    g.save(); g.clip();
+    g.fillStyle='#5fb98a'; g.fillRect(-42,31-62*this.held,84,62);
+    g.restore();
+    g.lineWidth=3; g.strokeStyle='#3d8c65'; g.stroke();
+    g.beginPath(); g.moveTo(-42,0); g.lineTo(42,0);
+    g.strokeStyle='rgba(61,140,101,.45)'; g.lineWidth=2; g.stroke();
+    g.restore();
+
+    g.textAlign='center'; g.font='800 12px system-ui'; g.fillStyle='rgba(109,91,114,.8)';
+    g.fillText(this.step===0?'lower':'higher', railX, h-1);
+
+    // if nothing has been heard for a while, say so kindly
+    const quiet = !this.lastHeard || performance.now()-this.lastHeard > 2600;
+    const hint=$('calHint');
+    if (quiet && !this.nudged){
+      this.nudged=true;
+      hint.textContent = 'Nothing yet — a gentle "mmm" is plenty. Check the mic is on?';
+    } else if (!quiet && this.nudged){
+      this.nudged=false;
+      hint.textContent = this.step===0
+        ? 'Somewhere sleepy. Hold it while the leaf fills.'
+        : 'Not a shriek — just the top of easy. Hold it.';
+    }
+  },
+  finish(){
+    cancelAnimationFrame(this.raf);
+    let lo=Math.min(this.lo,this.hi), hi=Math.max(this.lo,this.hi);
+    if (hi-lo < 7){ const mid=(lo+hi)/2; lo=mid-4; hi=mid+4; }   // shy singer
+    if (hi-lo > 20){ const mid=(lo+hi)/2; lo=mid-9; hi=mid+9; }  // showing off
+    G.voiceLo = Math.round(lo)+1; G.voiceHi = Math.round(hi)-1;
+    startMeadow(0);
+  },
+  skip(){
+    cancelAnimationFrame(this.raf);
+    if (this.step===1 && this.lo!=null){ this.hi=this.lo+11; return this.finish(); }
+    G.voiceLo=57; G.voiceHi=71; startMeadow(0);
+  }
+};
+
+/* ===========================================================================
+   A meadow: build the song, schedule the band, fly it
+   =========================================================================== */
+const BIRD_X = 0.30, BEATS_ON_SCREEN = 6.4;
+let pxPerBeat = 100;
+
+/* Remember the best round in each meadow, so there is something to beat.
+   Wrapped because a browser with storage switched off must not take the
+   game down with it. */
+const Best = {
+  key:'hummingbird.best',
+  all(){ try { return JSON.parse(localStorage.getItem(this.key)||'{}'); } catch(e){ return {}; } },
+  get(name){ return this.all()[name]; },
+  put(name, flowers, notes){
+    try {
+      const a=this.all(), prev=a[name];
+      if (!prev || flowers>prev.f || (flowers===prev.f && notes<prev.n)){
+        a[name]={f:flowers,n:notes};
+        localStorage.setItem(this.key, JSON.stringify(a));
+        return true;
+      }
+    } catch(e){}
+    return false;
+  }
+};
+
+function startMeadow(i, seed){
+  G.meadow = Math.min(i, MEADOWS.length-1);
+  G.spec = MEADOWS[G.meadow];
+  G.seed = seed || (Math.floor(Math.random()*90000)+1000);
+  G.song = makeSong(G.seed, G.spec, G.voiceLo, G.voiceHi);
+  G.noteState = G.song.notes.map(()=>({frames:0,hits:0,done:false,bloom:0,scored:false}));
+  const mids = G.song.notes.map(n=>n.midi);
+  const lo = Math.min(...mids), hi = Math.max(...mids), mid=(lo+hi)/2;
+  const span = Math.max(8, (hi-lo)+5);
+  G.viewLo = mid-span/2; G.viewHi = mid+span/2;
+  G.beatDur = 60/G.spec.bpm;
+  Baked.dirty = true;
+  G.flowers = 0; G.combo = 0; G.bestCombo = 0; G.ended=false; G.started=false;
+  $('briefTitle').textContent = (i>=MEADOWS.length? 'Nightbloom again — ' : '') + G.spec.name;
+  $('briefText').textContent = G.spec.blurb;
+  const best = Best.get(G.spec.name);
+  $('briefSeed').textContent = 'song ' + G.seed +
+    (best ? '   ·   best here: ' + best.f + ' flowers' : '');
+  show('pBrief'); G.mode='brief';
+}
+
+function launch(){
+  hideAll(); $('hud').hidden=false; $('pauseBtn').hidden=false;
+  $('meadowName').textContent = G.spec.name;
+  G.mode='play'; G.started=true;
+  if (Band.ac.state==='suspended') Band.ac.resume();
+  G.t0 = Band.ac.currentTime + 0.35 + G.countIn*G.beatDur;
+  scheduleBand();
+}
+
+function acapBars(){
+  // which bars the band sits out: spread through the second half
+  const n = G.spec.acap, bars=[];
+  const choices=[3,5,6,2,7,4];
+  for (let i=0;i<n;i++) bars.push(choices[i]);
+  return bars;
+}
+
+function scheduleBand(){
+  const bd = G.beatDur, t0 = G.t0;
+  const prog = PROGS[G.seed % PROGS.length];
+  const quiet = acapBars();
+  // count-in
+  for (let b=0;b<G.countIn;b++) Band.shaker(t0 - (G.countIn-b)*bd, b===0?0.16:0.09);
+  const tonicMidi = G.song.notes[0].midi;
+  const key = tonicMidi - semisOf(0);
+  for (let bar=0; bar<8; bar++){
+    const t = t0 + bar*4*bd;
+    if (quiet.includes(bar)) continue;
+    const root = prog[bar%prog.length];
+    const chord = [root,(root+2)%7,(root+4)%7].map(d=>key + MAJOR[d] - 12);
+    Band.pad(t, chord, 4*bd, 0.075);
+    Band.bass(t, chord[0]-12, 2*bd);
+    Band.bass(t+2*bd, chord[0]-12, 2*bd);
+    for (let b=0;b<4;b++) Band.shaker(t+b*bd, b%2?0.05:0.085);
+  }
+  if (G.spec.guide){
+    for (const n of G.song.notes)
+      Band.guide(t0 + n.beat*bd, n.midi, n.beats*bd, 0.085);
+  }
+}
+
+function currentBeat(){
+  if (!G.started) return -G.countIn;
+  return (Band.ac.currentTime - G.t0)/G.beatDur;
+}
+
+function noteAt(beat){
+  const ns = G.song.notes;
+  for (let i=0;i<ns.length;i++)
+    if (beat >= ns[i].beat && beat < ns[i].beat+ns[i].beats) return i;
+  return -1;
+}
+
+function scoreFrame(dt, beat){
+  const i = noteAt(beat);
+  if (i<0) return -1;
+  const st = G.noteState[i], n = G.song.notes[i];
+  st.frames++;
+  const on = G.sung>0 && Math.abs(G.sung - n.midi) <= G.spec.tol;
+  if (on){ st.hits++; }
+  // settle the note once we are 70% through it
+  if (!st.scored && beat > n.beat + n.beats*0.72){
+    st.scored = true;
+    const ratio = st.hits/Math.max(1,st.frames);
+    if (ratio >= 0.5){
+      st.bloom = 1; G.flowers++; G.combo++;
+      G.bestCombo = Math.max(G.bestCombo,G.combo);
+      Band.chime(Band.ac.currentTime, n.midi+12, 0.09);
+      burstPetals(i);
+      if (G.combo>0 && G.combo%6===0) toast(pick(['lovely','that is the one','singing!','look at her go']));
+    } else {
+      if (G.combo>=6) toast('…and breathe');
+      G.combo = 0;
+    }
+  }
+  return on ? i : -1;
+}
+
+function burstPetals(i){
+  const n = G.song.notes[i];
+  const y = midiToY(n.midi), x = W*BIRD_X;
+  for (let k=0;k<10;k++)
+    G.petals.push({x, y, vx:(Math.random()-.3)*70, vy:(Math.random()-.7)*90,
+      life:1, r:3+Math.random()*4, hue:[335,20,48,300][Math.floor(Math.random()*4)]});
+}
+function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+let toastT=0, toastMsg='';
+function toast(m){ toastMsg=m; toastT=1.6; }
+
+function endMeadow(){
+  G.ended = true; G.mode='end';
+  G.runFlowers += G.flowers; G.totalFlowers += G.flowers;
+  const total = G.song.notes.length;
+  const pct = G.flowers/total;
+  const newBest = Best.put(G.spec.name, G.flowers, total);
+  $('endFlowers').textContent = G.flowers + ' / ' + total;
+  $('endTitle').textContent = pct>=0.9 ? 'The whole vine bloomed!' :
+                              pct>=0.6 ? 'Nicely sung!' :
+                              pct>=0.3 ? 'A few buds opened' : 'She got a bit lost';
+  $('endLine').textContent = pct>=0.9 ? 'Not one dropped. The next meadow is going to try harder.' :
+    pct>=0.6 ? 'Longest run without a stumble: ' + G.bestCombo + ' flowers.' :
+    pct>=0.3 ? 'Try leaning into the first note of each phrase — she follows whatever you land on.' :
+    'Hum quietly and steadily rather than loudly. She hears soft notes perfectly well.';
+  $('endSeed').textContent = (newBest && G.flowers>0 ? 'a new best here · ' : '') +
+                             'song ' + G.seed + ' · ' + G.spec.name;
+  $('btnNext').textContent = G.meadow >= MEADOWS.length-1 ? 'Another Nightbloom' : 'Next meadow';
+  $('hud').hidden=true; $('pauseBtn').hidden=true;
+  show('pEnd');
+}
+
+/* ===========================================================================
+   Drawing
+   =========================================================================== */
+const SKIES = [
+  ['#ffe9c9','#ffc9a8','#f7a8bb'],   // sunrise
+  ['#fff2d2','#ffe0ac','#ffbfa2'],   // morning
+  ['#d9f0f7','#bfe6ef','#ffe3c0'],   // bright
+  ['#cfe9f5','#a9d8ee','#ffd7b0'],   // windy
+  ['#e6dcf5','#c9c3ee','#ffc9c0'],   // late
+  ['#b9a4d8','#8f7fc0','#f0a08f'],   // dusk
+  ['#2b2350','#4a3a78','#7b5a9a']    // night
+];
+function skyOf(){ return SKIES[Math.min(SKIES.length-1, G.spec?G.spec.sky:0)]; }
+function isNight(){ return !!(G.spec && G.spec.sky>=5); }
+let nightClass=null;
+function syncTheme(){
+  const n = isNight() && G.mode==='play';
+  if (n===nightClass) return;
+  nightClass=n; document.body.classList.toggle('night', n);
+}
+
+/* Sky, sun or moon, stars and hills never change within a meadow, so they are
+   drawn once into an offscreen canvas and blitted.  Painting them per frame
+   was costing 39ms a frame at desktop size -- 25fps -- against 16.7 on a
+   phone, which is what a full-screen gradient plus three filled hill paths
+   costs when nothing about them moved. */
+const Baked = {c:null, x:null, dirty:true, sky:-1, cloud:null};
+function bake(){
+  const sky = G.spec? G.spec.sky : 0;
+  if (!Baked.dirty && Baked.sky===sky) return;
+  Baked.dirty=false; Baked.sky=sky;
+  if (!Baked.c){ Baked.c=document.createElement('canvas'); Baked.x=Baked.c.getContext('2d'); }
+  Baked.c.width=Math.round(W*DPR); Baked.c.height=Math.round(H*DPR);
+  const g=Baked.x; g.setTransform(DPR,0,0,DPR,0,0);
+  const s=SKIES[Math.min(SKIES.length-1,sky)], night=sky>=5;
+  const grad=g.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,s[0]); grad.addColorStop(.55,s[1]); grad.addColorStop(1,s[2]);
+  g.fillStyle=grad; g.fillRect(0,0,W,H);
+  const sx=W*0.80, sy=H*0.20;
+  if (night){
+    g.fillStyle='rgba(255,250,230,.95)'; g.beginPath(); g.arc(sx,sy,26,0,7); g.fill();
+    g.fillStyle=s[0]; g.beginPath(); g.arc(sx-11,sy-6,24,0,7); g.fill();
+    g.fillStyle='rgba(255,255,255,.8)';
+    for (let i=0;i<70;i++){
+      const x=((i*821)%1000)/1000*W, y=((i*463)%700)/1000*H*0.8;
+      g.globalAlpha=0.25+0.6*(((i*37)%100)/100);
+      g.fillRect(x,y,2,2);
+    }
+    g.globalAlpha=1;
+  } else {
+    const gl=g.createRadialGradient(sx,sy,4,sx,sy,90);
+    gl.addColorStop(0,'rgba(255,246,214,.98)'); gl.addColorStop(1,'rgba(255,240,200,0)');
+    g.fillStyle=gl; g.beginPath(); g.arc(sx,sy,90,0,7); g.fill();
+    g.fillStyle='rgba(255,251,225,.95)'; g.beginPath(); g.arc(sx,sy,24,0,7); g.fill();
+  }
+  const layers = night
+    ? [[0.78,'rgba(38,32,66,.75)'],[0.86,'rgba(27,23,52,.88)'],[0.95,'rgba(17,15,38,.97)']]
+    : [[0.78,'rgba(120,170,130,.35)'],[0.86,'rgba(96,152,116,.55)'],[0.95,'rgba(72,124,96,.85)']];
+  layers.forEach(([yf,col],li)=>{
+    g.fillStyle=col; g.beginPath(); g.moveTo(0,H);
+    const off=li*260;
+    for (let x=0;x<=W+20;x+=20)
+      g.lineTo(x, H*yf + Math.sin((x+off)*0.004)*18 + Math.sin((x+off)*0.011+2)*9);
+    g.lineTo(W,H); g.closePath(); g.fill();
+  });
+  // one cloud sprite, blitted rather than rebuilt
+  if (!Baked.cloud){
+    const c=document.createElement('canvas'); c.width=200; c.height=90;
+    const q=c.getContext('2d');
+    q.fillStyle='#fffefa'; q.globalAlpha=0.62;
+    const el=(x,y,rx,ry)=>{q.beginPath();q.ellipse(x,y,rx,ry,0,0,7);q.fill();};
+    el(100,55,55,20); el(130,44,36,20); el(68,50,30,16); el(104,36,25,16);
+    Baked.cloud=c;
+  }
+}
+
+function drawSky(now){
+  bake();
+  cx.drawImage(Baked.c, 0,0, W,H);
+  // clouds, drifting slowly against the song
+  if (!isNight()){
+    const b0 = G.song? currentBeat():now*0.6;
+    cx.save();
+    for (let i=0;i<5;i++){
+      const seedx=(i*397)%1000/1000, cy=H*(0.10+0.055*((i*7)%5));
+      let cxx = (seedx*W*1.6 - b0*pxPerBeat*0.035 - i*90) % (W*1.5);
+      if (cxx < -220) cxx += W*1.5;
+      const sc = (0.45+0.4*((i*3)%4)/3) * Math.min(1.15, W/900+0.45);
+      cx.drawImage(Baked.cloud, cxx-100*sc, cy-45*sc, 200*sc, 90*sc);
+    }
+    cx.restore();
+  }
+  // pollen / fireflies
+  {
+    const b0 = G.song? currentBeat():now*0.6;
+    cx.save();
+    for (let i=0;i<22;i++){
+      const px=((i*613)%1000)/1000, py=((i*271)%1000)/1000;
+      let x=(px*W - b0*pxPerBeat*0.16 - i*37) % W; if (x<0) x+=W;
+      const y=H*(0.12+py*0.72) + Math.sin(now*0.9+i)*9;
+      const tw=0.45+0.55*Math.sin(now*1.6+i*1.7);
+      cx.globalAlpha=(isNight()?0.85:0.5)*tw;
+      cx.fillStyle=isNight()?'#ffe9a8':'#fffbe0';
+      cx.beginPath(); cx.arc(x,y,isNight()?2.2:2.6,0,7); cx.fill();
+    }
+    cx.restore();
+  }
+}
+
+function xOfBeat(b, beat){ return W*BIRD_X + (b-beat)*pxPerBeat; }
+
+function drawVine(beat){
+  const ns=G.song.notes;
+  /* The tolerance used to *be* the vine, and at desktop width that drew a
+     green slab across the screen.  Now the vine is a slim stem and the
+     tolerance is the soft glow around it, which narrows meadow by meadow. */
+  const stem = Math.max(8, Math.min(16, semiPx()*0.30));
+  const SWOOP = 0.34;      // beats of each note given over to the curve
+  const quiet = acapBars();
+  const night = isNight();
+
+  // the band the band sits out, as a soft wash rather than a hard rectangle
+  for (const bar of quiet){
+    const x1=xOfBeat(bar*4,beat), x2=xOfBeat(bar*4+4,beat);
+    if (x2<-40||x1>W+40) continue;
+    const g=cx.createLinearGradient(x1,0,x2,0);
+    const c = night? '255,255,255' : '255,255,255';
+    g.addColorStop(0,`rgba(${c},0)`); g.addColorStop(.14,`rgba(${c},${night?.13:.34})`);
+    g.addColorStop(.86,`rgba(${c},${night?.13:.34})`); g.addColorStop(1,`rgba(${c},0)`);
+    cx.fillStyle=g; cx.fillRect(x1,0,x2-x1,H);
+    cx.save(); cx.globalAlpha=.8; cx.font='800 13px system-ui'; cx.textAlign='center';
+    cx.fillStyle = night?'#efe6ff':'#7b6480';
+    cx.fillText('· just you ·', (x1+x2)/2, H*0.80);
+    cx.restore();
+  }
+
+  /* Notes butt up against each other, so a naive join draws the pitch change
+     as a vertical wall and the whole vine reads as plumbing.  Each note gives
+     up its last third of a beat to the swoop into the next one. */
+  const path = ()=>{
+    cx.beginPath();
+    for (let i=0;i<ns.length;i++){
+      const n=ns[i], nx=ns[i+1];
+      const swoop = nx ? Math.min(SWOOP, n.beats*0.45) : 0;
+      const x1=xOfBeat(n.beat,beat), x2=xOfBeat(n.beat+n.beats-swoop,beat);
+      const xEnd = nx? xOfBeat(nx.beat,beat) : x2;
+      if (xEnd < -90 || x1 > W+90) continue;
+      const y=midiToY(n.midi);
+      cx.moveTo(x1,y); cx.lineTo(x2,y);
+      if (nx){
+        const y2=midiToY(nx.midi), dx=(xEnd-x2);
+        cx.bezierCurveTo(x2+dx*0.55,y, xEnd-dx*0.55,y2, xEnd, y2);
+      }
+    }
+  };
+  cx.lineCap='round'; cx.lineJoin='round';
+  /* "How close is close enough" is shown on the note you are singing right
+     now, not as a band down the whole vine -- drawn everywhere it was a green
+     slab across the screen. */
+  const act = noteAt(Math.max(0,beat));
+  if (act>=0){
+    const n=ns[act], y=midiToY(n.midi);
+    const x1=xOfBeat(n.beat,beat), x2=xOfBeat(n.beat+n.beats,beat);
+    const band = Math.max(18, G.spec.tol*2*semiPx());
+    const seg = Math.max(24, x2-x1);
+    const c = night? '190,255,225' : '255,255,255';
+    cx.save();
+    cx.translate((x1+x2)/2, y);
+    cx.scale(1, band/seg);
+    const g = cx.createRadialGradient(0,0,seg*0.12,0,0,seg*0.5);
+    g.addColorStop(0,`rgba(${c},${night?.26:.5})`);
+    g.addColorStop(0.55,`rgba(${c},${night?.18:.34})`);
+    g.addColorStop(1,`rgba(${c},0)`);
+    cx.fillStyle=g;
+    cx.beginPath(); cx.arc(0,0,seg*0.5,0,7); cx.fill();
+    cx.restore();
+  }
+  // 2. a shadow under the stem so it lifts off the sky
+  path(); cx.lineWidth=stem+5;
+  cx.strokeStyle = night? 'rgba(20,35,50,.40)' : 'rgba(58,110,80,.22)';
+  cx.stroke();
+  // 3. the stem
+  path(); cx.lineWidth=stem;
+  cx.strokeStyle = night? '#57a385' : '#5fbb8a';
+  cx.stroke();
+  // 4. a highlight along the top of it
+  cx.save(); cx.translate(0,-stem*0.22);
+  path(); cx.lineWidth=Math.max(1.5,stem*0.24);
+  cx.strokeStyle = night? 'rgba(190,255,225,.30)' : 'rgba(255,255,255,.45)';
+  cx.stroke(); cx.restore();
+
+  // leaves, buds and blooms
+  for (let i=0;i<ns.length;i++){
+    const n=ns[i], st=G.noteState[i];
+    const cxp=xOfBeat(n.beat+n.beats/2,beat), y=midiToY(n.midi);
+    if (cxp<-50||cxp>W+50) continue;
+    // a little leaf on the stem of every note, alternating side
+    cx.save(); cx.translate(xOfBeat(n.beat,beat)+8, y); cx.rotate(i%2?0.7:-0.7);
+    cx.fillStyle = night? 'rgba(86,163,133,.9)' : 'rgba(84,178,124,.95)';
+    cx.beginPath(); cx.ellipse(6,0,9,4,0,0,7); cx.fill();
+    cx.restore();
+    if (st.bloom>0){
+      const pop = Math.min(1, st.bloom*4.5);
+      const s = 0.5 + pop*0.5 + 0.06*Math.sin(st.bloom*3);
+      cx.save(); cx.translate(cxp,y); cx.scale(s,s);
+      const hue=[335,20,48,300,190][i%5];
+      cx.shadowColor=`hsla(${hue},90%,70%,.8)`; cx.shadowBlur=night?16:8;
+      for (let p=0;p<5;p++){
+        cx.rotate(Math.PI*2/5);
+        cx.fillStyle=`hsl(${hue} 88% ${night?72:76}%)`;
+        cx.beginPath(); cx.ellipse(0,-10,5.5,10,0,0,7); cx.fill();
+      }
+      cx.shadowBlur=0;
+      cx.fillStyle='#ffd76a'; cx.beginPath(); cx.arc(0,0,5,0,7); cx.fill();
+      cx.restore();
+    } else {
+      cx.fillStyle = night?'rgba(210,240,225,.85)':'rgba(255,255,255,.9)';
+      cx.beginPath(); cx.arc(cxp,y,4.2,0,7); cx.fill();
+      cx.strokeStyle = night?'rgba(30,60,70,.4)':'rgba(90,150,115,.5)';
+      cx.lineWidth=1.5; cx.stroke();
+    }
+  }
+}
+
+function drawBird(now, onNote){
+  const singing = G.sung>0;
+  const y = singing ? midiToY(G.sung) : G.birdY;
+  G.birdY = singing ? y : Math.min(H*0.92, G.birdY + (H*0.0009));
+  const x = W*BIRD_X;
+  G.wing += (singing? 22 : 15) * (1/60);
+  const flap = Math.sin(G.wing*2.2);
+  cx.save(); cx.translate(x, G.birdY);
+  const tilt = Math.max(-0.4,Math.min(0.4,(G.birdTarget-G.birdY)*0.004));
+  G.birdTarget = G.birdY;
+  cx.rotate(tilt);
+  cx.scale(1.35,1.35);
+  if (onNote){
+    cx.save();
+    const gl=cx.createRadialGradient(0,0,2,0,0,34);
+    gl.addColorStop(0,'rgba(255,236,160,.85)'); gl.addColorStop(1,'rgba(255,225,140,0)');
+    cx.fillStyle=gl; cx.beginPath(); cx.arc(0,0,34,0,7); cx.fill();
+    cx.restore();
+  }
+  // wings
+  cx.fillStyle = onNote? '#ff9ec4' : '#c98fd6';
+  cx.beginPath(); cx.ellipse(-3,-4-flap*5, 11,5, -0.5+flap*0.4, 0,7); cx.fill();
+  // body
+  cx.fillStyle = singing? '#7ad0e8' : '#9fb6c6';
+  cx.beginPath(); cx.ellipse(0,0,13,9.5,0,0,7); cx.fill();
+  cx.fillStyle='#5fb2d0';
+  cx.beginPath(); cx.ellipse(-9,3,7,5,0.3,0,7); cx.fill();
+  // head + beak
+  cx.fillStyle= singing? '#8fdcf0':'#b2c6d4';
+  cx.beginPath(); cx.arc(9,-4,7,0,7); cx.fill();
+  cx.fillStyle='#ffb347';
+  cx.beginPath(); cx.moveTo(15,-4); cx.lineTo(28,-2.5); cx.lineTo(15,-1); cx.closePath(); cx.fill();
+  cx.fillStyle='#33323f'; cx.beginPath(); cx.arc(11,-6,1.7,0,7); cx.fill();
+  cx.restore();
+  if (!singing && G.mode==='play'){
+    cx.save(); cx.globalAlpha=.55; cx.font='600 13px system-ui'; cx.textAlign='center';
+    cx.fillStyle=isNight()?'#fff':'#6d5b72';
+    cx.fillText(G.input==='mic'?'…make a sound…':'…move the mouse…', x, G.birdY+34);
+    cx.restore();
+  }
+}
+
+/* A vine and a bird pottering about behind the menus, so the title screen is
+   the same place as the game rather than a form in front of it. */
+function drawIdleVine(now){
+  const yBase = H*0.72, amp = Math.min(70, H*0.09);
+  const wob = x => yBase + Math.sin(x*0.006 + now*0.25)*amp + Math.sin(x*0.017-now*0.15)*amp*0.28;
+  cx.lineCap='round';
+  cx.beginPath(); cx.moveTo(-20, wob(-20));
+  for (let x=-20;x<=W+20;x+=14) cx.lineTo(x, wob(x));
+  cx.lineWidth=16; cx.strokeStyle='rgba(58,110,80,.20)'; cx.stroke();
+  cx.lineWidth=11; cx.strokeStyle='#5fbb8a'; cx.stroke();
+  for (let i=0;i<9;i++){
+    const x = (i+0.5)*W/9, y=wob(x);
+    cx.save(); cx.translate(x,y); cx.scale(1,1);
+    const hue=[335,20,48,300,190][i%5];
+    for (let pp=0;pp<5;pp++){
+      cx.rotate(Math.PI*2/5);
+      cx.fillStyle=`hsl(${hue} 88% 78%)`;
+      cx.beginPath(); cx.ellipse(0,-9,5,9,0,0,7); cx.fill();
+    }
+    cx.fillStyle='#ffd76a'; cx.beginPath(); cx.arc(0,0,4.4,0,7); cx.fill();
+    cx.restore();
+  }
+  // the bird, wandering
+  const bx = W*0.5 + Math.sin(now*0.32)*W*0.34;
+  const by = H*0.19 + Math.sin(now*0.9)*22;
+  const facing = Math.cos(now*0.32) >= 0 ? 1 : -1;
+  cx.save(); cx.translate(bx,by); cx.scale(facing*1.5,1.5);
+  cx.rotate(Math.sin(now*0.9)*0.12);
+  const flap=Math.sin(now*13);
+  cx.fillStyle='#ff9ec4';
+  cx.beginPath(); cx.ellipse(-3,-4-flap*5,11,5,-0.5+flap*0.4,0,7); cx.fill();
+  cx.fillStyle='#7ad0e8';
+  cx.beginPath(); cx.ellipse(0,0,13,9.5,0,0,7); cx.fill();
+  cx.fillStyle='#5fb2d0'; cx.beginPath(); cx.ellipse(-9,3,7,5,0.3,0,7); cx.fill();
+  cx.fillStyle='#8fdcf0'; cx.beginPath(); cx.arc(9,-4,7,0,7); cx.fill();
+  cx.fillStyle='#ffb347';
+  cx.beginPath(); cx.moveTo(15,-4); cx.lineTo(28,-2.5); cx.lineTo(15,-1); cx.closePath(); cx.fill();
+  cx.fillStyle='#33323f'; cx.beginPath(); cx.arc(11,-6,1.7,0,7); cx.fill();
+  cx.restore();
+}
+
+function drawParticles(dt){
+  for (let i=G.petals.length-1;i>=0;i--){
+    const p=G.petals[i];
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=140*dt; p.life-=dt*0.85;
+    if (p.life<=0){ G.petals.splice(i,1); continue; }
+    cx.globalAlpha=Math.max(0,p.life);
+    cx.fillStyle=`hsl(${p.hue} 90% ${isNight()?78:70}%)`;
+    cx.beginPath(); cx.ellipse(p.x,p.y,p.r,p.r*0.6,p.life*4,0,7); cx.fill();
+  }
+  cx.globalAlpha=1;
+}
+
+/* ===========================================================================
+   Loop + wiring
+   =========================================================================== */
+let last = performance.now()/1000;
+function frame(){
+  requestAnimationFrame(frame);
+  const now = performance.now()/1000;
+  let dt = now-last; last = now;
+  if (dt>0.1) dt=0.1;
+  if (!W) resize();
+  pxPerBeat = W/BEATS_ON_SCREEN;
+
+  syncTheme();
+  if (G.mode==='play' && !G.paused){
+    readVoice(dt);
+    const beat = currentBeat();
+    let onNote=-1;
+    if (beat>=0) onNote = scoreFrame(dt, beat);
+    drawSky(now); drawVine(beat);
+    if (onNote>=0 && Math.random()<0.4)
+      G.sparks.push({x:W*BIRD_X-6,y:G.birdY,life:1,r:2+Math.random()*3});
+    for (let i=G.sparks.length-1;i>=0;i--){
+      const s=G.sparks[i]; s.x-=pxPerBeat*dt; s.life-=dt*1.6;
+      if (s.life<=0){ G.sparks.splice(i,1); continue; }
+      cx.globalAlpha=s.life*0.8; cx.fillStyle='#fff3c4';
+      cx.beginPath(); cx.arc(s.x,s.y,s.r*s.life,0,7); cx.fill();
+    }
+    cx.globalAlpha=1;
+    drawBird(now, onNote>=0);
+    drawParticles(dt);
+    // count-in
+    if (beat<0){
+      const n = Math.ceil(-beat);
+      cx.save(); cx.textAlign='center'; cx.globalAlpha=Math.min(1,(1-(-beat%1))*1.4);
+      cx.font='800 clamp(40px,14vw,90px) system-ui';
+      cx.fillStyle=isNight()?'rgba(255,255,255,.9)':'rgba(255,255,255,.85)';
+      cx.strokeStyle='rgba(120,80,90,.25)'; cx.lineWidth=3;
+      cx.fillText(n, W/2, H*0.5); cx.restore();
+    }
+    for (let i=0;i<G.noteState.length;i++) if (G.noteState[i].bloom>0) G.noteState[i].bloom += dt;
+    $('flowerCount').textContent = '🌸 ' + G.flowers + (G.combo>=3? '  ×'+G.combo : '');
+    if (toastT>0){
+      toastT-=dt;
+      const el=$('toast'); el.textContent=toastMsg;
+      el.style.opacity = Math.max(0,Math.min(1,toastT*1.4));
+      el.style.transform = `translate(-50%,${-50-(1.6-toastT)*18}%)`;
+    }
+    if (beat > G.song.beats + 1.2 && !G.ended) endMeadow();
+  } else {
+    drawSky(now);
+    drawIdleVine(now);
+    drawParticles(dt);
+  }
+}
+requestAnimationFrame(frame);
+
+/* ---------- panels ---------- */
+const PANELS=['pTitle','pCal','pBrief','pEnd'];
+function hideAll(){ PANELS.forEach(p=>$(p).classList.add('hide')); }
+function show(id){
+  hideAll(); $(id).classList.remove('hide');
+  $('hud').hidden = true; $('pauseBtn').hidden = true;
+  toastT = 0; $('toast').style.opacity = 0;
+}
+
+function ensureAudio(){
+  if (!Band.ac){
+    const ac = Ear.ac || new (window.AudioContext||window.webkitAudioContext)();
+    Band.attach(ac);
+  }
+  if (Band.ac.state==='suspended') Band.ac.resume();
+}
+
+$('btnMic').addEventListener('click', async ()=>{
+  $('btnMic').textContent='listening…';
+  try {
+    await Ear.start();
+    ensureAudio();
+    G.input='mic';
+    Cal.begin();
+  } catch(e){
+    $('btnMic').textContent='🎤 Let me hum';
+    const p=document.createElement('p');
+    p.className='tiny';
+    p.innerHTML='The browser said no to the microphone. You can still fly her with the mouse — '+
+                'or check the little camera/mic icon in the address bar and try again.';
+    $('pTitle').appendChild(p);
+  }
+});
+$('btnMouse').addEventListener('click', ()=>{
+  ensureAudio(); G.input='pointer';
+  G.voiceLo=57; G.voiceHi=71;
+  startMeadow(0);
+});
+$('calSkip').addEventListener('click', ()=>Cal.skip());
+$('btnGo').addEventListener('click', ()=>launch());
+$('btnNext').addEventListener('click', ()=>startMeadow(G.meadow+1));
+$('btnRetry').addEventListener('click', ()=>startMeadow(G.meadow, G.seed));
+$('btnHome').addEventListener('click', ()=>{ G.runFlowers=0; show('pTitle'); G.mode='title'; });
+$('pauseBtn').addEventListener('click', ()=>{
+  G.paused=!G.paused;
+  $('pauseBtn').textContent = G.paused?'▶':'⏸';
+  if (G.paused) Band.ac.suspend(); else Band.ac.resume();
+});
+document.addEventListener('visibilitychange', ()=>{
+  if (document.hidden && G.mode==='play' && !G.paused) $('pauseBtn').click();
+});
+
+/* a song can be shared: #song=1234&meadow=2 */
+(function fromHash(){
+  const m=/song=(\d+)/.exec(location.hash), md=/meadow=(\d+)/.exec(location.hash);
+  if (m) window.__HB_START = {seed:+m[1], meadow: md?+md[1]:0};
+})();
+const _startMeadow = startMeadow;
+startMeadow = function(i,seed){
+  if (window.__HB_START){ const s=window.__HB_START; window.__HB_START=null;
+    return _startMeadow(s.meadow, s.seed); }
+  return _startMeadow(i,seed);
+};
+
+resize();
+/* exported for the offline test harness in util/ — the shipped code is what
+   gets measured, not a copy of it */
+window.__HB = {makeSong, growMelody, judge, rng, semisOf, MEADOWS, makeDetector,
+               WINDOW, GATE, G, Ear, midiToY, currentBeat, noteAt,
+               startMeadow:(i,s)=>startMeadow(i,s), launch};
+</script>
+</body>
+</html>
