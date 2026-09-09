@@ -115,6 +115,8 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
 - **Sixty seconds well spent.** One verb, immediate, no tutorial, a score you want to beat once
   more. Held to the same standard of polish as the ten-minute ones.
 - **A sensor game.** Point the camera at something, blow into the microphone, tilt the phone.
+  *Partly filled by `games/hummingbird.html` (microphone). Camera and gyroscope are still open on
+  the games side — `push_mine` is the only other game that touches a sensor.*
 - **A known genre, done properly.** Pac-Man, a racer, a platformer, a jigsaw from an image the
   player drops in, a crossword, bingo, a shooting gallery. Listed in the backlog below for years.
 - **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
@@ -375,6 +377,61 @@ across a row with no tunnel in it. And a **13-check spec suite run against the s
 against the prototype — the up-overflow firing only when facing up, Inky inheriting it through his own
 two-ahead tile, Clyde flipping at exactly 8 tiles, the door passing eyes but not Pac-Man, the level-1 speed
 and wave tables — is what makes it safe to say "faithful" in the description flatly instead of hedging.
+
+Filled since: **the microphone**, by `games/hummingbird.html` — you hum, and a bird follows your
+voice along a melody line. Four results are worth keeping.
+
+**A pitch detector tuned for accuracy is the wrong instrument for a controller, and the difference is
+one number.** Overtone's YIN was re-measured against 120,000 synthetic frames (3 timbres x 37 pitches
+x 5 room conditions, including a laptop-mic low-end rolloff) purely on controller terms — latency,
+dropped frames, octave jumps. A **1024-sample window** is the answer: 98-100% of frames pass the
+0.88 clarity gate with **zero octave errors** and 0.3 cents of error on a clean tone. 512 samples
+(12ms) collapses — it drops a third of all frames and throws 1-2% octave errors, which for a
+controller means the avatar teleports an octave. 2048 and 4096 pass just as cleanly and buy nothing
+but latency, so Overtone's default is 23ms of lag this game does not need. False firing turned out to
+be a non-problem: 0 of 239 frames on digital silence, room tone, loud white noise, pink noise, typing
+clicks and 50Hz mains hum.
+
+**Then measure the same thing through the actual page, because it will disagree.** Chromium in a
+container exposes no audio input device at all, so the fake-mic flags are useless; handing the page a
+`MediaStreamAudioDestinationNode` playing a synthesised singer instead exercises the whole real chain
+— getUserMedia, AnalyserNode, YIN, smoothing. It reported 100% detection and zero octave errors over
+23 notes across A2-A4, and **82ms to land a note against the 23ms the offline test promised.** The gap
+was the smoothing. One time constant cannot both iron out the wobble in a held note and get out of
+the way when someone deliberately leaps, so the glide is now chosen by distance — jumps over a
+semitone are followed almost at once — which took it to 65ms, close to the floor of window plus frame.
+
+**The melody generator was measured, was bad, and the fix is the nine_holes shape.** The obvious
+generator — key, chord progression, phrase repetition, step-versus-leap weighting — produced, over 400
+lines, leaps of up to 28 semitones, ranges to 26 semitones (nobody can sing two octaves), and a
+difficulty dial that ran **backwards**, with difficulty 0 leaping more than difficulty 0.5. "400/400
+distinct melodies" was true and measured nothing. Growing a line and then *judging* it against range,
+maximum leap and a minimum proportion of stepwise motion gives a ladder that climbs: median max leap
+2 -> 4 -> 5 -> 7 semitones, stepwise motion 100% -> 85% -> 78% -> 75%, at a rejection cost of a few
+milliseconds. The judge also caught a bug no amount of staring would have: a singer whose comfortable
+range is eight semitones was being handed fourteen-semitone tunes, and the placement code quietly
+shoved half of each one under their floor. Asking for no more range than the singer has fixed it, and
+0% of notes now fall outside the voice across 8,400 songs at three voice widths.
+
+**The sloppy-player model is the tuned parameter, and the first one was nonsense.** Testing the
+difficulty curve with a bot whose pitch was jittered every frame said ±0.9 semitones scored 100% at
+every meadow — because white noise is exactly what the game's own smoothing removes. Real amateur
+singing is slow drift, a per-note bias and a late reaction to a leap. Modelled that way the meadows
+separate properly: a ±0.9-semitone singer goes 100% -> 96% -> 57% -> 43% across the journey while an
+accurate one stays at 100% throughout and a random one never breaks 2%. This is the third time this
+file has recorded a version of the same lesson — *what is wrong is usually the machinery around the
+thing being tested, not the model of the thing itself.*
+
+One mechanical note, and it is the nine_holes finding again: painting a full-screen sky gradient, three
+filled hill paths and a handful of clouds every frame cost **39ms a frame at desktop size — 25fps —
+against 16.7ms on a phone**, because none of it moved. Baking the backdrop once per meadow and capping
+the backing store by pixel budget rather than by device ratio alone took it to 16.7ms on both.
+
+Still open, and worth knowing before anyone plans around it: **an offline environment cannot verify a
+model-in-the-loop game at all.** The Cloudflare proxy, like every other host, is unreachable from a
+sandboxed session, so the "a model you have to talk round" gap below can be built there but not
+measured there. That is a reason to do that one somewhere with a network, not a reason to keep
+skipping it.
 
 ## Tried and rejected
 
