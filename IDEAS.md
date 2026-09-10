@@ -103,7 +103,7 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
 **Games — mechanism gaps**
 
 - **Deck-builder.** The card games here are all classics — blackjack, freecell, crazy eights. None
-  build a deck across a run.
+  build a deck across a run. *Filled by `games/procession.html`.*
 - **Cipher-based word game.** Nothing here is a word game built on deduction from letter
   statistics; `cribwork` covers the workbench side, not the play.
 
@@ -113,14 +113,18 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   halves of the screen know different things. No backend, no accounts.
   *Filled by `games/alibi.html` — two suspects answering the same questions in secret on one phone.*
 - **A model you have to talk round.** A character with a position, a secret, or a price, that a
-  language model plays and that you have to move. The proxy is already there.
+  language model plays and that you have to move. The proxy is already there. *Read the Curator
+  entry below first: a model's judgement is illegible by construction, and the thing that made that
+  fatal there applies to any game whose difficulty comes from being judged.*
 - **Something with a voice.** A game that is funny, or that has a world, where the writing is the
   reason to stay.
 - **Sixty seconds well spent.** One verb, immediate, no tutorial, a score you want to beat once
   more. Held to the same standard of polish as the ten-minute ones.
 - **A sensor game.** Point the camera at something, blow into the microphone, tilt the phone.
   *Partly filled by `games/hummingbird.html` (microphone). Camera and gyroscope are still open on
-  the games side — `push_mine` is the only other game that touches a sensor.*
+  the games side — `push_mine` is the only other game that touches a sensor. The camera was attempted
+  once and rejected; read the Curator entry under "Tried and rejected" before proposing another, since
+  what killed it was the shape of the game rather than anything about the camera.*
 - **A known genre, done properly.** Pac-Man, a racer, a platformer, a jigsaw from an image the
   player drops in, a crossword, bingo, a shooting gallery. Listed in the backlog below for years.
 - **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
@@ -503,6 +507,148 @@ the same answer when the cheapest is *tied* is a question about people, and one 
 headless browser cannot answer it. The telepathic bot is an upper bound nobody can hit and the
 briefed bot a lower one; real pairs sit somewhere between and only a real pair can say where.
 
+Filled since: **the deck-builder**, by `games/procession.html` — the card games here were all
+fixed-rule classics and nothing built a deck across a run. Nine fights, one card after each, and a
+deck that is **never shuffled**: at end of turn the cards you played drop to the bottom in the order
+you played them and the cards you held follow behind, so the hand you draw three turns from now is
+one you dealt yourself. Nine results, and the first four are about how to tell whether a game of
+choices actually has any.
+
+**Additive cards make drafting irrelevant, and the win rates say so.** The first pool was ordinary —
+more damage, more block, more poison — and random drafting scored **38%** against focused drafting's
+42–56%. Any nine cards were about as good as any other nine, so the draft was decoration. What fixed
+it was making each archetype **superlinear**: one card apiece whose value is a function of what you
+already built (damage = 5 x your Strength; damage = your current Block; double the enemy's Poison; 3
+damage per card already played this turn). That is also the answer to the Curator's failure in this
+file's rejected list — it is the difference between a decision that changes the outcome and one that
+does not.
+
+**Payoff cards look terrible in an unconditioned measurement, and deleting them would be the
+mistake.** Ranked by win-rate lift under *random* drafting, Catalyst sits at **-2.6** and Retribution
+at **-3.7**: bottom of the table, apparently dead weight. Conditioned on whether the deck drafted 3+
+of the matching archetype they roughly double — Catalyst **13.5% -> 31.0%**, Flurry **16.8% ->
+32.5%**, Retribution **16.7% -> 31.6%**, Bastion **34.6% -> 54.8%**. A conditional card is *supposed*
+to be bad in a deck that cannot use it. Measure card strength against the decks that would actually
+play it, or the metric will quietly ask you to remove the only cards that make building matter.
+
+**A naive heuristic that beats random is the bar; one that loses to it is the finding.** Final table
+over 150 runs each: skipping every card **0.0%** (dies on floor 3 every time), taking the
+biggest damage number **20.7%**, drafting at random **24.7%**, and the four archetypes drafted
+competently **34.0–38.7%** with a generalist at **41.3%**. Greedy-damage being *worse than random* is
+the useful number, not the top of the table: it means the game punishes the obvious read, because
+that policy never takes any defence. This is the third time this file has recorded a version of the
+same test and the first time it was run before the page was written.
+
+**Watch the gap, not the win rate — every buff to a weak card raises the floor.** Three cards
+measured as traps (lift -8 to -10) and were given small bodies. That took random drafting from
+**24% to 32%** and compressed the skill gap, which had to be paid back with a difficulty retune. Card
+balance and difficulty are not separable: the policy table has to be re-run after every card change,
+and doing it the other way round cost two rounds of work.
+
+**A run that is one long attrition sum has a cliff instead of a curve.** With a single HP pool across
+nine fights, the outcome reduces to one inequality — total damage taken against starting HP plus
+heals — so everybody crosses the threshold at the same moment. Win rates swung **38% to 2%** on a 5%
+parameter change, twice, before this was diagnosed rather than tuned around. Splitting the run into
+three acts with a full heal between them turns one long inequality into three short ones and makes
+the whole thing tunable.
+
+**Diagnose from the curve, not the outcome.** Aggro sat at 12% and looked like a broken archetype.
+Printing HP floor by floor showed it was not losing fights at all: it reached floor 8 or 9 almost
+every run and ran out of health, bleeding ~20 HP a fight with no way to get any back. The fix was
+burst plus the only sustain card in the game, not more damage. The same printout showed act 1 was
+free — the starter deck beat every act-1 enemy for a total of 7 HP — meaning the first three drafts
+could not matter, which no win rate would ever have said.
+
+**The mechanic's own worst property was invisible in code and obvious in a screenshot.** Because the
+deck keeps its order, **clumps are permanent and self-reinforcing**: cards played together come back
+together, forever. The starting deck was five Strikes then five Defends, so turn one was five Strikes
+and turn two five Defends — the opening had no decisions in it at all, and the queue read as a column
+of identical cards. Interleaving the starter fixed the opening, and the clumping itself turned out to
+be the actual skill of the game rather than a bug: spacing your plays is how you avoid dealing
+yourself a dead hand later. It is now the thing the rules screen leads with.
+
+**A balance table describes whatever engine produced it, so check the shipped one.** The whole tuning
+was done in a Python simulator; the page is a separate implementation. Running 60 scripted scenarios
+through both and comparing every field each turn gives **3,181 comparisons and 0 mismatches** at the
+shipped constants, which is the only reason the numbers above can be stated about the page rather
+than about a script. The first run of that check reported **351 mismatches and every one was the
+instrument** — the harness read the deck after the next hand had been drawn, and read health after
+the victory heal had been applied. Budget for the fact that a cross-check needs debugging before it
+can find anything.
+
+A presentation pass afterwards, prompted by the note that it looked like a web interface rather
+than a card game, produced one reusable measurement. The fix was mostly obvious — parchment card
+faces on a dark table, a coloured archetype band, a cost gem, a per-archetype sigil, a fanned
+overlapping hand, a deck drawn as a stack with thickness, and energy as diamonds rather than "3 / 3"
+— but the fan broke the phone. **Five readable cards do not fit across 390px.** At 104px wide with a
+26px overlap each card shows only ~66px, and the rules text is cut off mid-sentence, which is fatal
+in a game where you choose by reading. The check is one line — for each card, the distance to the
+next card's left edge — and it turns an aesthetic argument into a number: the mobile hand now
+scrolls at a 14px overlap and every card shows 91–111px of its 104px width. Two other collisions
+(the End turn button under the fan, the Begin button under the title fan) were found the same way,
+by asserting the button's top sits below the lowest card rather than by looking. And the whole pass
+was checked against the engine cross-check afterwards — still 3,181 comparisons and 0 mismatches, so
+none of the balance work was disturbed by the reskin.
+
+A second pass before handing it over found the worst bug in the game, and it was a dead mechanic
+rather than a wrong number. **The Hexer announced "preparing a hex" and then did nothing at all** —
+the status it applied was written in the simulator and never read, and did not exist in the page
+version at all. In a game whose entire premise is that the enemy tells you its exact next move, a
+move that lies is the one unacceptable defect, and no balance run would ever surface it because the
+bots do not read intents. The check that finds this class of bug is one grep: **for every status
+effect, confirm it is both written and read.** A field that is only ever assigned is a promise the
+game does not keep. Implementing it properly cost nothing in balance — skip-everything still 0%,
+random 29.2%, the four archetypes 36.7–46.7% — and it made the naive attack-only bot notably worse
+(greedy-damage 20.7% -> 10.0%), which is the right direction.
+
+Its sibling: **the hex said "weak 2" and lasted one turn**, because it was applied and expired inside
+the same end-of-turn block. Any duration counter decremented in the same phase that can apply it is
+off by one, and it only shows in a step-by-step trace — asserting the sequence goes 2, 1, 0 across
+three turns took one line and would not have been noticed by playing.
+
+And a mechanical lesson about editing: **a find-and-replace that matches nothing fails silently.**
+The damage-pop and screen-shake CSS was written against a rule that an earlier stylesheet rewrite had
+already deleted, so the entire block vanished while the JS went on adding class names that styled
+nothing. The damage number still appeared — unstyled, laid out as a flex child 94% across the panel —
+which read as a positioning bug and sent the investigation the wrong way for a while. Asserting the
+anchor exists before substituting, and grepping for every marker afterwards, turns a silent no-op
+into an error. That audit is what caught it here.
+
+Three things the interface was missing that the mechanic needs: the cards **already played this turn,
+in order**, since they are about to become the bottom of the deck and that is the whole game; whether
+Block is being **kept** into the next turn; and that you are currently weakened. All three were state
+the engine tracked and the screen never showed.
+
+A third pass, prompted by "the leftmost card is cut off on mobile", found a CSS trap worth
+writing down because it is silent, general, and easy to reintroduce. **A centred flex row that
+overflows makes its leading items unreachable.** `justify-content:center` puts equal overflow on both
+sides, and `scrollLeft` cannot go below zero, so whatever spills off the left of a scrolling row can
+never be brought into view — 12px of the first card at 390px, 30px of the first queue slip at 320px.
+The fix is one keyword, `justify-content: safe center`, which centres while the content fits and
+falls back to start the instant it does not; declare plain `center` first as the fallback. The same
+pattern was present in three places and only one of them had been noticed.
+
+Two things made the diagnosis longer than it should have been, and both are worth knowing.
+**Two rules for the same selector inside one media query**: a later `.hand{padding:22px 0 4px}`
+silently reset the padding an earlier `.hand{padding:26px 18px 14px}` had just added, so the first
+fix appeared to do nothing. And a **plausible wrong theory**: `transform-origin:50% 130%` really does
+swing a rotated card sideways, and a transform really does not contribute scrollable overflow, so the
+fan looked like the culprit. Probing the element — layout box versus visual box, and the *computed*
+`justify-content` and `padding-left` rather than the ones in the file — settled it in one call and
+showed the transform contributed nothing.
+
+The check that catches this whole class, and now runs across eight viewport widths: for every
+scrollable row, assert the first child's left edge is not left of the container's, and that with the
+container scrolled fully right the last child's right edge is not past it. Watch out for two false
+positives it will hand you — a non-scrolling box whose `scrollWidth` merely exceeds its `clientWidth`
+is not clipping anything (the desktop fan is supposed to hang out past its box), and an item outside
+the viewport *inside* a scrollable strip is reachable by swiping. Both looked like defects until the
+probe was taught the difference.
+
+One thing deliberately not measured: whether a person enjoys it. The bots establish that the
+decisions have consequences and that several ways of building all work; they say nothing about
+whether the ten minutes are worth spending, and that stays a question for a human.
+
 Filled since: **the material sandbox**, by `games/strata.html` — the "toy, not a game" gap, and the
 first thing here with no win state since `interactive_buddy`. 26 materials, five to start, the rest
 discovered by putting things together. Five results, and four of them are the same lesson in
@@ -601,11 +747,14 @@ being thin somewhere is not on its own a reason to build there. Two of the entri
 recommended as gaps for exactly that bad reason before being turned down; an empty category is
 evidence about the catalogue, not about whether anyone wants to play the thing that would fill it.
 
-One caveat on reading this list, added 2026-09-09. All three rejections below are of something
-physical, thematic or genre-shaped, and the taste judgements in them stand exactly as written. But
-three entries pointing the same way is a coincidence of what happened to get prototyped, not a
-ruling on that whole direction, and treating it as one is part of how the catalogue narrowed. These
-reject air hockey, line-routing sims and grid tactics. They do not reject making something physical.
+One caveat on reading this list, added 2026-09-09. Three of the four rejections below are of
+something physical, thematic or genre-shaped, and the taste judgements in them stand exactly as
+written. But three entries pointing the same way is a coincidence of what happened to get
+prototyped, not a ruling on that whole direction, and treating it as one is part of how the
+catalogue narrowed. These reject air hockey, line-routing sims and grid tactics. They do not reject
+making something physical. The fourth, the Curator, points the other way entirely — it rejects a
+camera-and-model game, and it is the only entry here that carries technical findings worth reusing
+rather than only a judgement.
 
 - **Air hockey.** Rejected. Not because the physics duplicates `pong` — a free 2D mallet with real
   momentum transfer is a genuinely different control space from a paddle on a rail — but because
@@ -628,6 +777,76 @@ reject air hockey, line-routing sims and grid tactics. They do not reject making
   was not. A deliberately myopic greedy player — deflect unit by unit, no lookahead — survived 97% of
   solvable boards. Density of good plays in an action space measures nothing; the space is mostly
   pointless wandering. Measure instead whether a stupid heuristic reaches the good play.
+
+- **The Curator** (a camera game judged by a model). Built, measured heavily, and not shipped. A
+  curator of dubious credentials asked for eight exhibits — "something that holds liquid", "something
+  worn out by use", "the least loved object in the room" — and you answered each with a photograph of
+  whatever was in the room plus a one-line label. It ruled on the picture rather than the word, and a
+  refusal was answered with another photograph rather than an argument.
+
+  **Why it was rejected, and this is the part that generalises.** The novelty in it belongs to the
+  model, not to the player. The interesting moment is "it can see my mug", which is a capability demo
+  wearing a game's clothes, and it is over the second time you see it work. The player's action —
+  walk to an object, point a camera — is never the clever part; all the cleverness sits on the judging
+  side, which is backwards. And the obstacle is **illegible**: you cannot build a mental model of a
+  model's judgement, so you cannot form a theory of it, plan against it, or get better at it. That is
+  the exact inverse of the Scatter finding, where four distinguishable ghosts and a quarter of the
+  level spent walking away from you are what make Pac-Man learnable. **Anything whose difficulty comes
+  from a language model's judgement is illegible by construction, and illegibility forecloses
+  mastery.** Worth weighing before building anything for the "a model you have to talk round" gap.
+
+  The measurements agreed and were misread at the time. A careless bot scoring 38% against a
+  deliberate one's 81% looked like the game rewarding skill; "deliberate" only meant *picked a
+  sensible object*, which every player does on their first attempt, and there was no skill above that
+  floor to climb. **Measuring the difference between trying and not trying is not evidence of depth.**
+  A second structural fault, found by arithmetic after the fact: with 13/6/3 demands in the three
+  tiers and 3/3/2 drawn per run, **two of the three interpretive demands appeared in every single
+  game**, so the most distinctive part of it repeated almost exactly each time.
+
+  Five technical findings survive it, and they apply to any page here that wants to show a model a
+  picture.
+
+  **Vision through the shared worker works**, several images per message included, at about 3,073
+  prompt tokens per call at `detail:"low"` — roughly half a cent for a whole eight-round session.
+  Nothing in the collection had ever done this: 14 pages open the camera and 27 call the model, and
+  the two had never met. `gptranslator` is the near miss, sending camera frames to Tesseract and only
+  the text onward.
+
+  **A vision model told what to look for will report seeing it.** Shown a photograph in which the
+  phone is a 25-pixel smudge, with the label "my cracked phone", it answered "a cracked phone screen"
+  3 times out of 3 and accepted; across distant-bluff cases it accepted 9 of 12. The fix is ordering
+  and it is free: make it **describe the frame cold, as if the label did not exist, and only then read
+  the label and rule**. That took distant bluffs to **0 of 12** while honest, genuinely-visible answers
+  held at **16 of 16** and a 44-case grounding set stayed at 44/44. It is not a resolution problem —
+  `detail:"high"` scored 8 of 16 against low's 9 of 16 at 2.8x the tokens.
+
+  **The same bug was found once and not looked for twice.** It was caught in the second-look call,
+  fixed there, and the primary ruling assumed safe because it had passed 44/44 on true/false cases —
+  which it only passed because every photograph in that set either plainly showed the thing or plainly
+  did not. Nothing in it was *too small to tell*. The input class that exposes a bug has to be built on
+  purpose.
+
+  **A spoken appeal cannot be made to work.** Scoring an appeal on grounded / relevant / new reproduces
+  the council result exactly — flattery is immovable, **0 of 16** flips, scoring 0.0 on every axis — but
+  a genuinely good grounded argument also flipped only **6%**. Unwinnable in both directions. Moving the
+  decision out of the model and onto the page fixes that (evidence would flip 16/16, flattery still
+  0/16), except that **outright lies score "grounded" 50% of the time**. Photographs are immune where
+  words are not: a closer shot of the same thing 100%, a different object that genuinely answers 100%,
+  an irrelevant object 0%.
+
+  **A demand is only a demand if a photograph can contradict it.** The interpretive tier was drafted as
+  the interesting one and measured as the weakest: "something you kept for no reason" accepted **14 of
+  14** arbitrary objects. Every candidate also had to *accept a genuinely correct answer*, which cut
+  "something pretending to be a material it is not" at 44% — you cannot tell laminate from oak in a
+  photograph — and rescued another with one word, "older than you are" at 72% becoming "**looks** older
+  than you are" at 94%.
+
+  Two notes on method. **Twice the ground truth was wrong and the model was right** — a mug base that
+  does carry writing, and a celadon ewer filed under kintsugi that is not a repair — and both times the
+  first instinct was to call it a model error. And this sandbox's **headless browser cannot reach the
+  network at all** (every fetch resets, `example.com` included) while `curl` through the egress proxy
+  works, so the page was driven by intercepting its own worker request in Playwright and forwarding it
+  through `curl`: real page, real prompts, real rulings, only the socket substituted.
 
 ## Other
 - household planner
