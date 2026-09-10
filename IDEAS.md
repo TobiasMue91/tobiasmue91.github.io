@@ -128,8 +128,9 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   what killed it was the shape of the game rather than anything about the camera.*
 - **A known genre, done properly.** Pac-Man, a racer, a platformer, a jigsaw from an image the
   player drops in, a crossword, bingo, a shooting gallery. Listed in the backlog below for years.
-  *The racer is filled by `games/blind_crest.html`. A platformer, a jigsaw, a crossword and a
-  shooting gallery are all still open.*
+  *The racer is filled by `games/blind_crest.html` and the jigsaw by `games/jigsaw.html`. A
+  platformer, bingo and a shooting gallery are still open. The crossword is **not** — see the
+  cryptic crossword under "Tried and rejected".*
 - **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
   most replayed pages here. There has been nothing like them in a long time.
   *Filled by `games/strata.html` (a falling-sand world whose materials you discover).*
@@ -819,6 +820,80 @@ grid gives 237x140 on a desktop and 132x250 on a phone, both filling the screen 
 and both landing at 16.7ms median with ~18k occupied cells. Fixing the grid and letterboxing it,
 which was the first attempt, wasted about a third of a phone screen.
 
+Filled since: **the jigsaw**, by `games/jigsaw.html` — a photograph you drop in becomes a real
+interlocking puzzle, and pieces that snap stay snapped and move as one lump. A stub of this had been
+sitting in the repo since 2026-09-09 (square tiles, mouse only, a hardcoded 800x600 canvas) and was
+in none of `games.json`, `sidebar.html` or `sitemap.xml`, so it had never appeared on the site.
+Seven results are worth keeping, and the first two are the same lesson from opposite ends.
+
+**Exactness came free from the construction, and the check was worth more than the result.** Every
+internal edge is generated once and walked by both neighbours in opposite directions, so there is
+only one curve between two pieces and nothing to disagree about. Sampling random points and counting
+how many piece paths contain each one gives **0 gaps and 0 overlaps in 15,000 samples** across 12 to
+540 pieces. That number means nothing on its own, so four deliberate defects were injected first --
+bottom edge not reversed, wrong row index, left edge not reversed, every piece rolling its own tabs
+-- and the check reports **145 to 307 gaps** on each. One of those four came back clean at first and
+looked like a hole in the test; it was the *defect injection* that was a no-op, still writing into
+the shared edge array. **Budget for the fact that the negative control needs debugging too**, or it
+will quietly certify a validator that cannot fail.
+
+**The tab shape was wrong twice while every number was green, and only a contact sheet showed it.**
+First version: tall narrow heads on pinched necks, reading as keyholes on stalks. Second: heads with
+flat tops, reading as buckets. Both tiled perfectly. The cause of the second was curvature -- the
+shoulder control points and the head control points were not tangent-continuous, so the outline
+kinked at the join. What fixes it is two rules rather than better numbers: **mirror the control
+points instead of re-deriving them** (symmetry by construction) and **share one tangent direction
+either side of each shoulder join** (smoothness by construction), which leaves `lean` and head height
+as the only two things to taste. Render the piece isolated at 4x, at real size, and at the size the
+540-piece cut uses, all on one sheet; at game size all three versions looked equally fine.
+
+**Canvas shadows are not a decoration, they are the frame budget.** A per-group `shadowBlur` cost
+**158ms a frame at 192 pieces on a desktop and 353ms on a phone** -- three frames a second -- and it
+is completely invisible in a screenshot, which is how it survived a look pass. Baking the shadow into
+each tile once at cut time and keeping a live shadow only for the group under the cursor takes the
+same 540-piece puzzle to **2.07ms a frame on a phone**. Sizing the working image by the piece grid
+rather than the picture's diagonal took tile memory from 49MB to 33MB at the same time.
+
+**Whether a picture makes a good jigsaw is measurable, and eyeballing it is not enough.** Downsample
+every piece-sized cell to 6x6 RGB and ask two questions: how flat is each cell, and how far is it
+from its nearest other cell. Two of the four procedural pictures scored **86% flat / 100% confusable**
+and **79% / 82%** -- regions where a piece carries no information at all, which is not difficulty but
+a dead end -- and both looked perfectly attractive as pictures. Rebuilt against the metric they are
+0% and 0%. The separate trap is repetition: a patchwork of regular patterns produced **genuinely
+identical pieces** (twins 23.8%, nearest-neighbour distance at the 10th percentile of exactly **0**),
+fixed not by an overlay but by giving every repeat of a pattern its own colour at the source
+(9.2%, p10 26.4). A low-frequency hue drift across the whole picture is the other half of it, and it
+is what lets you tell the top-left of a puzzle from the bottom-right -- the thing a real photograph
+gives you for nothing.
+
+**Predicting the layout was wrong in both directions; measuring it was right.** The camera's "fit
+everything" was first computed from the scatter ring's padding. Too tight and 13 pieces sat off the
+edge of a phone screen where they could never be reached; padded to fix that, the puzzle used **54%
+of the display**. Computing the actual bounding box of the pieces that exist gives no clipping at any
+of five viewports and ~70% of the screen. Related, and worth stating separately: **the strewn area
+should be shaped like the screen, not like the picture.** A landscape picture ringed by a
+picture-shaped margin on a portrait phone wasted the top and bottom of the display and left the
+pieces small in the middle of it.
+
+**One finger has to mean two things, and the split is what makes a phone jigsaw work.** A finger that
+lands on a piece drags it; a finger that lands on the felt pans; two fingers pinch. Measured through
+real touch events: dragging a piece moves the camera by 0, panning moves it by exactly the gesture,
+a pinch scales x1.89 against an expected x1.9, and adding a second finger while already holding a
+piece **releases the piece rather than dragging it** to the pinch. Also worth measuring rather than
+eyeballing: on a 390x844 phone the setup panel was 984px tall, so **the one button that starts the
+game was below the fold on every phone size tested**.
+
+**Two of the three times the game looked broken, the instrument was broken.** A drag test that solved
+0 of 12 pieces was aiming at grab points off the edge of the viewport; a rotation mode that "never
+merged" was a harness computing a piece's centre without rotating the half-cell offset. Both times the
+engine was correct and a two-line probe -- print whether `pointerdown` actually picked anything up --
+settled it faster than reading the snapping code. When a mechanism fails a whole-system test, check
+that the test can see the system before changing the mechanism.
+
+One thing deliberately not measured: whether it is *pleasant*. A jigsaw's difficulty dial is honestly
+just the piece count, so it grows rather than develops, and that is a real limitation rather than
+something the measurements above answer.
+
 ## Tried and rejected
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose
@@ -835,6 +910,32 @@ catalogue narrowed. These reject air hockey, line-routing sims and grid tactics.
 making something physical. The fourth, the Curator, points the other way entirely — it rejects a
 camera-and-model game, and it is the only entry here that carries technical findings worth reusing
 rather than only a judgement.
+
+- **A cryptic crossword that shows its working** (procedurally cut grid, every clue carrying a
+  machine-readable parse, wordplay devices introduced one at a time so the page teaches you to solve
+  cryptics). Killed at the verification stage, before anything was built, and both measurements are
+  worth keeping because they close the **crossword** gap in the list above rather than leaving it open.
+
+  **Procedurally generated cryptic clues are sound and unreadable.** 6,300 clues across seven devices
+  (anagram, hidden, charade, container, reversal, deletion, double definition), built over a WordNet
+  lexicon so the wordplay provably yields the answer. The wordplay was fine and the *surfaces* were
+  word salad — "Loose madison domain", "Stamp some of because alan" — because a cryptic clue's
+  surface is a sentence that has to mean something, and nothing in the construction is trying to make
+  it mean anything. Double definitions were the one exception and are genuinely usable ("Duration
+  distance" = LENGTH, "Proceeds outlet" = ISSUE), which is a thin base for a whole grid.
+
+  **So the clues have to be authored, and an authored bank cannot fill a grid.** Backtracking fill
+  with minimum-remaining-values over random 180-degree-symmetric patterns: **0 of 40** 7x7 grids
+  filled from a bank of 300, 500 or 1,000 answers, and 6 of 40 at 2,000. A hand-written bank is a few
+  hundred clues at the outside, so the two halves of the idea are mutually exclusive — generate
+  enough answers to fill a grid and the clues are unreadable; write clues worth reading and there are
+  not enough of them to fill anything.
+
+  A third route, having a model rewrite each generated clue's surface while the wordplay is held fixed
+  and checked programmatically, was not testable: this sandbox's egress policy refused
+  `chatgpt.tobiasmue91.workers.dev` outright (403 on CONNECT), unlike the session recorded above that
+  reached it fine. **Sandbox network access is per-session and cannot be assumed either way** — check
+  it before designing around a model, and check it before concluding you cannot.
 
 - **Air hockey.** Rejected. Not because the physics duplicates `pong` — a free 2D mallet with real
   momentum transfer is a genuinely different control space from a paddle on a rail — but because
@@ -1079,7 +1180,7 @@ rather than only a judgement.
 - Pac-Man clone
 - Trivia Quiz
 - Crossword Puzzle
-- Jigsaw Puzzle
+- Jigsaw Puzzle *(built: `games/jigsaw.html`)*
 - Solitaire
 - Pinball
 - Roulette
