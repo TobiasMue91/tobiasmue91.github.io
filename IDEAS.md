@@ -590,6 +590,35 @@ by asserting the button's top sits below the lowest card rather than by looking.
 was checked against the engine cross-check afterwards — still 3,181 comparisons and 0 mismatches, so
 none of the balance work was disturbed by the reskin.
 
+A second pass before handing it over found the worst bug in the game, and it was a dead mechanic
+rather than a wrong number. **The Hexer announced "preparing a hex" and then did nothing at all** —
+the status it applied was written in the simulator and never read, and did not exist in the page
+version at all. In a game whose entire premise is that the enemy tells you its exact next move, a
+move that lies is the one unacceptable defect, and no balance run would ever surface it because the
+bots do not read intents. The check that finds this class of bug is one grep: **for every status
+effect, confirm it is both written and read.** A field that is only ever assigned is a promise the
+game does not keep. Implementing it properly cost nothing in balance — skip-everything still 0%,
+random 29.2%, the four archetypes 36.7–46.7% — and it made the naive attack-only bot notably worse
+(greedy-damage 20.7% -> 10.0%), which is the right direction.
+
+Its sibling: **the hex said "weak 2" and lasted one turn**, because it was applied and expired inside
+the same end-of-turn block. Any duration counter decremented in the same phase that can apply it is
+off by one, and it only shows in a step-by-step trace — asserting the sequence goes 2, 1, 0 across
+three turns took one line and would not have been noticed by playing.
+
+And a mechanical lesson about editing: **a find-and-replace that matches nothing fails silently.**
+The damage-pop and screen-shake CSS was written against a rule that an earlier stylesheet rewrite had
+already deleted, so the entire block vanished while the JS went on adding class names that styled
+nothing. The damage number still appeared — unstyled, laid out as a flex child 94% across the panel —
+which read as a positioning bug and sent the investigation the wrong way for a while. Asserting the
+anchor exists before substituting, and grepping for every marker afterwards, turns a silent no-op
+into an error. That audit is what caught it here.
+
+Three things the interface was missing that the mechanic needs: the cards **already played this turn,
+in order**, since they are about to become the bottom of the deck and that is the whole game; whether
+Block is being **kept** into the next turn; and that you are currently weakened. All three were state
+the engine tracked and the screen never showed.
+
 One thing deliberately not measured: whether a person enjoys it. The bots establish that the
 decisions have consequences and that several ways of building all work; they say nothing about
 whether the ten minutes are worth spending, and that stays a question for a human.
