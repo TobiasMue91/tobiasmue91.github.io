@@ -516,7 +516,16 @@ function planLine(plan){
 }
 
 /* ---------- the population ---------- */
-const POP=34;
+/* Eighty, not thirty-four. The flatlining was never a selection problem: at 34 the
+   population cannot afford more than one lineage, so within a few generations
+   everything is a copy of the champion and a new body plan has nowhere to live.
+   Measured over 250 generations on flat ground — 34: 7.31m and the leading animal
+   changed shape 1.5 times; 48: 8.39m, 3.5 times; 64: 9.44m, 6 times; 96: 10.62m,
+   7 times. Novelty search with local competition, the published fix for exactly
+   this symptom, was tried first and came out worse (6.37m, 251 generations flat),
+   because splitting 34 creatures across behavioural niches leaves about five in
+   each — too few to optimise anything. The cheap answer was the right one. */
+const POP=80;
 let nudged=false;
 const state={gen:1, pop:[], live:[], stepN:0, playing:true, speed:2, history:[], stale:0,
   best:0, bestGen:null, champIx:0, rnd:mulberry32(1), seed:1, guest:null};
@@ -597,7 +606,12 @@ const clock=()=>(performance.now()-CLK0)/1000;
 /* Ridges drifting behind the action at a fraction of the camera's speed, each
    hazed toward the sky colour so distance reads as distance. */
 function ridge(par,amp,lift,fill,haze){
-  const y0=sy(groundAt(camX))-lift;
+  /* Vertical parallax has to match horizontal parallax: a ridge drawn at a tenth
+     of the camera's horizontal speed must move at a tenth of its vertical speed
+     too. Anchored to the ground under the camera instead, the distant hills rose
+     and fell exactly in step with the animal, which is the one thing distance is
+     supposed to prevent. */
+  const y0=VH*HZ + camY*PPM*par - lift;
   ctx.beginPath(); ctx.moveTo(0,VH);
   for(let px=0;px<=VW;px+=5){
     const w=(px+camX*par*PPM)/165;
@@ -700,12 +714,23 @@ function groundPath(){
 function drawGround(){
   const path=()=>{ ctx.beginPath(); groundPath(); };
   path();
-  /* darkens with depth from wherever the surface currently sits, so the ground
-     recedes instead of sitting there as one big brown slab */
-  const gy0=sy(groundAt(camX));
-  const gg=ctx.createLinearGradient(0,gy0-PPM*0.3,0,gy0+VH*0.40);
-  gg.addColorStop(0,'#5e4c3a'); gg.addColorStop(.05,'#3d3226'); gg.addColorStop(.22,'#241d15');
-  gg.addColorStop(.55,'#120e09'); gg.addColorStop(1,'#080605');
+  /* Darkens with depth, anchored to the highest ground actually on screen — a
+     world position, so the bands stay glued to the terrain. Anchored to the ground
+     under the camera they slid up and down the hillsides as the animal climbed. */
+  let topH=-1e9;
+  {
+    const a=Math.max(0,Math.floor(wx(-40)/CELL)), b=Math.min(HN-1,Math.ceil(wx(VW+40)/CELL));
+    for(let i=a;i<=b;i++) if(world.h[i]>topH) topH=world.h[i];
+    if(topH<-1e8) topH=0;
+  }
+  const gy0=sy(topH);
+  /* Spread wide on purpose: with a short ramp a valley floor two metres below the
+     ridge line came out almost black, because depth from the highest point is not
+     the same thing as depth below your own feet. The topsoil band and the strata
+     carry the near-surface reading; this only has to make the deep ground recede. */
+  const gg=ctx.createLinearGradient(0,gy0-PPM*0.3,0,gy0+VH*0.95);
+  gg.addColorStop(0,'#5e4c3a'); gg.addColorStop(.10,'#463a2c'); gg.addColorStop(.34,'#2d2419');
+  gg.addColorStop(.66,'#191309'); gg.addColorStop(1,'#0b0806');
   ctx.fillStyle=gg; ctx.fill();
 
   ctx.save(); path(); ctx.clip();
@@ -777,11 +802,18 @@ function drawGround(){
 /* A shallow band of mist lying on the ground. It costs one gradient and it does
    more than anything else to stop the animals looking pasted onto the terrain. */
 function groundMist(){
-  const y=sy(groundAt(camX)), h=Math.max(26,PPM*0.9);
-  const g=ctx.createLinearGradient(0,y-h,0,y+h*0.35);
-  g.addColorStop(0,'rgba(150,178,206,0)'); g.addColorStop(.62,'rgba(146,174,204,.10)');
-  g.addColorStop(1,'rgba(140,168,200,.02)');
-  ctx.fillStyle=g; ctx.fillRect(0,y-h,VW,h*1.35);
+  /* Lies along the ground rather than floating at one height: as a flat band it
+     tracked the camera and sat well above or below the hills either side of it. */
+  const h=Math.max(20,PPM*0.75);
+  const i0=Math.max(0,Math.floor(wx(-40)/CELL)), i1=Math.min(HN-1,Math.ceil(wx(VW+40)/CELL));
+  for(const [lift,alpha] of [[h,0.055],[h*0.5,0.055]]){
+    ctx.beginPath();
+    ctx.moveTo(sx(i0*CELL), sy(world.h[i0]));
+    for(let i=i0;i<=i1;i++) ctx.lineTo(sx(i*CELL), sy(world.h[i]));
+    for(let i=i1;i>=i0;i--) ctx.lineTo(sx(i*CELL), sy(world.h[i])-lift);
+    ctx.closePath();
+    ctx.fillStyle='rgba(150,176,206,'+alpha+')'; ctx.fill();
+  }
 }
 
 function waterY(x,t){
@@ -976,10 +1008,15 @@ function drawCreature(c,champ,guest,leadX){
   }
 
   if(!lead){
+    /* The pack is tinted by how many legs each one has, using the same ramp as the
+       census bar. Drawn in one grey it read as a single crowd; several species are
+       usually running at once and there was no way to see it. The ramp stays cool
+       on purpose — warm belongs to the leader, and a tan pack muddies into it. */
     const behind=Math.max(0,(leadX===undefined?0:leadX)-centroid(P).x);
     const f=0.30+0.70*Math.max(0,1-behind/5.5);
-    ctx.strokeStyle='rgba(166,190,220,'+(0.115*f).toFixed(3)+')';
-    ctx.fillStyle='rgba(166,190,220,'+(0.125*f).toFixed(3)+')';
+    const col=LEGRGB[Math.min(5,c.plan.legs.length)];
+    ctx.strokeStyle='rgba('+col+','+(0.13*f).toFixed(3)+')';
+    ctx.fillStyle='rgba('+col+','+(0.14*f).toFixed(3)+')';
     bodyPath(c,0);
     return;
   }
@@ -1072,7 +1109,17 @@ function draw(){
   const guest = state.guest ? state.live[state.live.length-1] : null;
   const champ = leader();
   const leadX = champ?centroid(champ.P).x:START_X;
-  for(const c of state.live) if(c!==champ && c!==guest) drawCreature(c,false,false,leadX);
+  /* Only the front of the field is drawn. Eighty translucent bodies overlapping in
+     the same few metres stack into a solid block however faint each one is, and the
+     ones at the back carry no information the census bar does not already carry.
+     Thinning the alpha does not fix it; drawing fewer of them does. */
+  {
+    const pack=[];
+    for(const c of state.live){ if(c===champ||c===guest) continue; pack.push(c); }
+    pack.sort((a,b)=>b.fit-a.fit);
+    const shown=Math.min(22,pack.length);
+    for(let i=0;i<shown;i++) drawCreature(pack[i],false,false,leadX);
+  }
   drawParts();
   if(guest){ wake(guest); drawCreature(guest,false,true); }
   if(champ){ wake(champ); drawCreature(champ,true,false); }
@@ -1094,10 +1141,17 @@ function draw(){
 /* ---------- main loop ---------- */
 let acc=0;
 let lastFrame=performance.now();
+let skipFrame=0;
 function frame(){
   requestAnimationFrame(frame);
   const nowT=performance.now();
   stepParts(Math.min(0.05,(nowT-lastFrame)/1000)); lastFrame=nowT;
+  if(skipping>0){
+    /* Nothing on screen is being watched during a skip, and repainting eighty
+       creatures sixty times a second was costing more than the generations were. */
+    if((skipFrame++ % 6)===0) draw();
+    return;
+  }
   if(state.playing){
     const n=state.speed;
     for(let k=0;k<n && state.stepN<STEPS;k++){
@@ -1114,7 +1168,7 @@ function frame(){
 let skipping=0;
 function skipSlice(){
   if(skipping<=0) return;
-  const until=performance.now()+26;
+  const until=performance.now()+34;
   while(skipping>0 && performance.now()<until){
     while(state.stepN<STEPS){
       for(const c of state.live) step(c);
@@ -1246,7 +1300,8 @@ function sGen(){
    population is often arguing between two shapes — a run can sit at seventeen
    three-legged against seventeen four-legged for a dozen generations — and none of
    that was visible while only the leader was drawn. */
-const LEGCOL=['#4b5566','#5c7a95','#5f9ba3','#76a97c','#a9a95f','#c08a5c'];
+const LEGCOL=['#54607a','#4d6f9c','#4589a6','#46a08f','#5cb075','#7cbb63'];
+const LEGRGB=['91,100,120','86,107,135','82,124,140','84,138,132','95,145,121','111,150,112'];
 function drawMix(){
   const cvs=document.getElementById('mix'); if(!cvs) return;
   const c=cvs.getContext('2d'), W=cvs.width, H=cvs.height;
