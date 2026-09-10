@@ -189,6 +189,20 @@ note is for the corner you *cannot* see; within sight, the eyes win. With that o
 same comparison flipped to notes winning 35/48, mean 2.9 s, and going off **0.00 times per stage
 against 0.79**. A negative result from an instrument you have not tried to break is not a result.
 
+**Art can silently delete a mechanic, so re-run the measurement after a look pass.** The stage was
+later given biomes, parallax ridgelines, banks and roadside props. Every one of those is a way to
+reveal a corner earlier than the road does — scenery lining a bend, a hillside that follows the
+route — which would have quietly returned the game to the state where the co-driver was
+decorative, and it would have looked like a pure improvement while doing it. The rule that kept it
+honest: anything that correlates with the road's local direction fogs out at exactly the sight
+distance, and anything that does not (distant ridgelines, sky) may be seen. Re-running the same
+notes-versus-eyes A/B afterwards returned 35/48 and 0.00 offs against 0.79, unchanged to three
+figures, which is the evidence that the look pass cost nothing. Also worth keeping: per-segment
+quads for a hillside read as detached glass panels, because each facet is separately fogged; one
+continuous path per side with a gradient anchored to its own near and far ends reads as ground.
+And props lifted onto a bank they are geometrically standing on will look like they are flying if
+you never draw the plateau under them — put them on the plane you actually render.
+
 **Information has no value where mistakes are cheap.** Even with sight cut, arriving thirty km/h too
 hot cost almost nothing, because the run-off was generous and grass barely slowed the car — so
 knowing the corner in advance bought nothing. Tightening what going off costs is what made the

@@ -241,6 +241,64 @@ function minRunUp(vPrev, radius){
   return hi;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   COUNTRY
+   A stage drives through places rather than past the same two props. Each
+   biome sets the ground colour, how steep the banks are, and what grows or
+   stands beside the road. Everything here is fogged at the same rate as the
+   tarmac, so none of it reveals a corner earlier than the road itself does.
+   ═══════════════════════════════════════════════════════════════════════ */
+const BIOMES=[
+  { id:'forest', ground:[46,58,42], bank:[1.0,2.8], near:2.0, density:1.35,
+    props:[['conifer',7,3.5,7],['conifer_tall',4,6,9.5],['stump',1,0.8,1.6],['rock',1,0.7,1.8]] },
+  { id:'moor', ground:[74,72,52], bank:[0.2,1.6], near:6.0, density:0.55,
+    props:[['rock',4,0.8,2.2],['boulder',2,2.2,4.2],['gorse',5,1.0,2.2],['snowpole',2,1.6,1.9]] },
+  { id:'farm', ground:[86,94,54], bank:[0.4,2.2], near:3.0, density:0.95,
+    props:[['fence',9,2.4,2.8],['bale',2,3.0,4.4],['broadleaf',3,4.5,7.5],['gate',1,3,3.4]] },
+  { id:'gorge', ground:[62,60,58], bank:[2.4,5.0], near:1.4, density:1.05,
+    props:[['cliff',8,1.4,3.2],['boulder',3,1.4,3.0],['conifer',1,3,9]] },
+  { id:'hamlet', ground:[72,78,56], bank:[0.3,1.4], near:3.4, density:1.05,
+    props:[['wall',6,2.6,3.2],['barn',2,4.5,7],['crowd',4,2.6,4.2],['broadleaf',2,4.5,7.5]] }
+];
+
+function planCountry(rnd, nSeg){
+  // runs of country, 250–700 m each, never the same twice in a row
+  const track=new Uint8Array(nSeg); let i=0, prev=-1;
+  while(i<nSeg){
+    let b; do { b=Math.floor(rnd()*BIOMES.length); } while(b===prev);
+    prev=b;
+    const run=Math.round((250+rnd()*450)/SEG);
+    for(let k=0;k<run && i<nSeg;k++,i++) track[i]=b;
+  }
+  return track;
+}
+
+function dressStage(segs, track, rnd){
+  const props=[]; for(let i=0;i<segs.length;i++) props.push(null);
+  for(let i=0;i<segs.length;i++){
+    const B=BIOMES[track[i]];
+    for(const side of [-1,1]){
+      let n = rnd()<B.density-1 ? 2 : (rnd()<Math.min(1,B.density) ? 1 : 0);
+      while(n-- > 0){
+      // weighted pick
+      let tot=0; for(const p of B.props) tot+=p[1];
+      let r=rnd()*tot, pick=B.props[0];
+      for(const p of B.props){ r-=p[1]; if(r<=0){ pick=p; break; } }
+      const [type,,lo,hi]=pick;
+      const off = B.near + 2.5 + rnd()*17;
+      const o={side, off, type, s:lo+rnd()*(hi-lo), a:rnd(), b:rnd()};
+      (props[i] || (props[i]=[])).push(o);
+      }
+      // rough grass right on the verge, so the kerb does not meet bare colour
+      if(rnd()<0.8){
+        (props[i] || (props[i]=[])).push({side, off:0.2+rnd()*1.9, type:'tuft',
+          s:0.35+rnd()*0.55, a:rnd(), b:rnd(), bio:track[i]});
+      }
+    }
+  }
+  return props;
+}
+
 function bakeStage(corners, rnd, diff){
   const segs=[];
   const push=(curve,dy)=>segs.push({curve, y:0, dy, crest:false});
@@ -287,7 +345,24 @@ function bakeStage(corners, rnd, diff){
     if(i-lastC < 14) segs[i].crest=false; else lastC=i;
   }
 
-  return {segs, notes};
+  // cumulative heading, so the far ridgelines swing as the road turns
+  let hd=0;
+  for(let i=0;i<segs.length;i++){ hd+=segs[i].curve; segs[i].head=hd; }
+
+  // country, and the banks it cuts the road through
+  const track=planCountry(rnd, segs.length);
+  let bl=1, br=1;
+  for(let i=0;i<segs.length;i++){
+    const B=BIOMES[track[i]];
+    const tgt=B.bank[0]+ (B.bank[1]-B.bank[0]) *
+      (0.5+0.5*Math.sin(i*0.031+track[i]*2.1)) ;
+    bl += (tgt*(0.75+0.5*((i*7919)%97)/97) - bl)*0.06;
+    br += (tgt*(0.75+0.5*((i*6271)%89)/89) - br)*0.06;
+    segs[i].bl=bl; segs[i].br=br; segs[i].bio=track[i];
+  }
+  const props=dressStage(segs, track, rnd);
+
+  return {segs, notes, props, track};
 }
 
 /* The check that matters — and the first version of it was worthless.
@@ -430,20 +505,34 @@ function mix(c1,c2,t){
     +Math.round(lerp(c1[2],c2[2],t))+')';
 }
 
-// palette per stage — dawn through to night
+// Palette per stage — dawn through to night. `sun` is a direction and a
+// colour: everything that stands up beside the road is lit from it, which is
+// most of what stops flat shapes reading as cardboard.
 const LOOKS=[
- {sky:[[92,124,158],[186,202,214]], grass:[[58,74,52],[48,62,44]], road:[[64,66,70],[58,60,64]],
-  rumble:[[176,78,66],[226,226,222]], fogc:[186,202,214], dist:10, name:'Morning'},
- {sky:[[70,96,132],[168,178,190]], grass:[[52,66,48],[43,55,40]], road:[[60,62,66],[54,56,60]],
-  rumble:[[172,74,62],[220,220,216]], fogc:[168,178,190], dist:9, name:'Overcast'},
- {sky:[[122,96,86],[214,164,112]], grass:[[62,60,44],[50,49,37]], road:[[68,64,62],[60,57,56]],
-  rumble:[[196,74,60],[236,228,206]], fogc:[214,164,112], dist:8, name:'Low sun'},
- {sky:[[58,58,74],[142,116,110]], grass:[[44,48,42],[36,40,35]], road:[[54,54,58],[48,48,52]],
-  rumble:[[168,64,54],[210,206,200]], fogc:[142,116,110], dist:7, name:'Dusk'},
- {sky:[[20,24,38],[52,54,74]], grass:[[24,28,26],[19,23,21]], road:[[40,40,44],[35,35,39]],
-  rumble:[[140,54,46],[180,178,174]], fogc:[34,38,52], dist:6, name:'Last light'},
- {sky:[[8,10,18],[16,18,30]], grass:[[13,16,15],[10,13,12]], road:[[30,30,34],[26,26,30]],
-  rumble:[[120,46,40],[160,158,154]], fogc:[10,12,20], dist:5, name:'Night'}
+ {name:'Morning', dist:10,
+  sky:[[86,120,158],[196,214,224]], sun:{x:-0.62,y:0.30,warm:[255,244,214],amb:[150,168,188],str:0.55},
+  grass:[[62,78,54],[52,66,46]], road:[[66,68,72],[58,60,64]],
+  rumble:[[176,78,66],[226,226,222]], fogc:[196,214,224], mist:0.55, stars:0},
+ {name:'Overcast', dist:9,
+  sky:[[96,106,120],[178,186,196]], sun:{x:-0.2,y:0.9,warm:[226,230,236],amb:[150,158,168],str:0.22},
+  grass:[[54,66,48],[45,56,42]], road:[[60,62,66],[54,56,60]],
+  rumble:[[172,74,62],[220,220,216]], fogc:[178,186,196], mist:0.85, stars:0},
+ {name:'Low sun', dist:8,
+  sky:[[128,102,92],[228,172,112]], sun:{x:0.80,y:0.10,warm:[255,206,140],amb:[136,120,120],str:0.85},
+  grass:[[70,64,44],[56,52,37]], road:[[72,66,62],[62,58,56]],
+  rumble:[[186,80,60],[236,228,206]], fogc:[228,172,112], mist:0.5, stars:0},
+ {name:'Dusk', dist:7,
+  sky:[[46,50,74],[168,112,96]], sun:{x:0.9,y:-0.05,warm:[236,150,110],amb:[86,92,116],str:0.55},
+  grass:[[48,50,44],[38,42,37]], road:[[56,56,60],[48,48,52]],
+  rumble:[[162,64,54],[206,202,196]], fogc:[168,112,96], mist:0.6, stars:0.25},
+ {name:'Last light', dist:6,
+  sky:[[16,20,36],[64,60,80]], sun:{x:0.7,y:-0.2,warm:[132,112,128],amb:[38,44,64],str:0.30},
+  grass:[[26,30,28],[21,25,23]], road:[[42,42,46],[36,36,40]],
+  rumble:[[126,52,44],[168,166,162]], fogc:[42,46,62], mist:0.7, stars:0.7},
+ {name:'Night', dist:5,
+  sky:[[6,8,15],[14,17,28]], sun:{x:-0.4,y:0.6,warm:[70,78,104],amb:[16,20,32],str:0.22},
+  grass:[[14,17,16],[11,14,13]], road:[[32,32,36],[28,28,32]],
+  rumble:[[112,44,38],[150,148,144]], fogc:[10,13,22], mist:0.45, stars:1}
 ];
 
 function drawPoly(x1,y1,w1,x2,y2,w2,fill){
@@ -478,6 +567,7 @@ function loadStage(){
   G.finished=false; G.warnT=0;
   for(const c of G.calls) c.spoken=false;
   buildMini();
+  buildRidges(G.seed+'|'+G.stageIdx);
   const key=bestKey();
   try{
     const raw=localStorage.getItem(key);
@@ -629,98 +719,358 @@ function update(dt){
 }
 
 /* ── render ──────────────────────────────────────────────────────────── */
+/* ── far country: ridgelines that parallax as the road turns ─────────── */
+let RIDGE=null;
+function buildRidges(seed){
+  const r=mulberry(hashSeed(seed+'|ridge'));
+  RIDGE=[];
+  for(let layer=0; layer<3; layer++){
+    const w=[];
+    for(let k=0;k<5;k++) w.push({f:0.6+r()*3.4, a:(0.25+r()*0.75)/(k+1), p:r()*6.28});
+    RIDGE.push({w, depth:0.10+layer*0.16, h:(3-layer)*0.030+0.026});
+  }
+}
+function ridgeY(layer, t){
+  let v=0; for(const w of layer.w) v+=Math.sin(t*w.f+w.p)*w.a;
+  return v;
+}
+function drawRidges(L,HOR,head){
+  if(!RIDGE) return;
+  for(let i=RIDGE.length-1;i>=0;i--){
+    const lay=RIDGE[i];
+    // far hills sit between sky and ground, and wash out with distance
+    const base=[0,1,2].map(k=> L.sky[1][k]*0.55 + L.grass[1][k]*0.45);
+    ctx.fillStyle=mix(base, L.fogc, 0.74-0.18*i);
+    ctx.beginPath(); ctx.moveTo(0,HOR+2);
+    const step=Math.max(6, W/70);
+    for(let px=0;px<=W+step;px+=step){
+      const u=(px/W-0.5)*3.2 - head*lay.depth*7.0;
+      ctx.lineTo(px, HOR+2 - (ridgeY(lay,u)*0.5+0.5)*H*lay.h - H*0.006);
+    }
+    ctx.lineTo(W,HOR+2); ctx.closePath(); ctx.fill();
+  }
+}
+
+/* ── the things that stand beside the road ───────────────────────────── */
+function shade(base, lit, L, fog){
+  const S=L.sun;
+  const c=[0,1,2].map(k=> base[k]*(1-S.str) + (lit? S.warm[k] : S.amb[k])*S.str*(base[k]/210+0.35));
+  return mix(c.map(v=>Math.max(0,Math.min(255,v))), L.fogc, fog);
+}
+function tri(x,y,w,h,fill){ ctx.fillStyle=fill; ctx.beginPath();
+  ctx.moveTo(x,y-h); ctx.lineTo(x+w,y); ctx.lineTo(x-w,y); ctx.closePath(); ctx.fill(); }
+
+function drawProp(o, px, gy, m, L, fog){
+  const S=L.sun, lit = (o.side*S.x)<0 ? true : false;
+  const lean = S.x*0.10;
+  const sh=(w,h)=>{ // contact shadow
+    if(S.str<0.3) return;
+    ctx.fillStyle='rgba(0,0,0,'+(0.16*S.str).toFixed(3)+')';
+    ctx.beginPath(); ctx.ellipse(px - S.x*w*0.7, gy, w*1.15, Math.max(1,h*0.05), 0,0,7); ctx.fill();
+  };
+  switch(o.type){
+    case 'conifer': case 'conifer_tall': {
+      const h=o.s*m, w=o.s*(0.20+o.a*0.10)*m;
+      sh(w,h);
+      ctx.fillStyle=shade([54,42,30], lit, L, fog);
+      ctx.fillRect(px-w*0.10, gy-h*0.28, w*0.20, h*0.28);
+      const dark=shade([24,42,30], false, L, fog), brite=shade([46,74,48], true, L, fog);
+      for(let k=0;k<3;k++){
+        const yy=gy-h*(0.18+k*0.27), ww=w*(1-k*0.24), hh=h*(0.42-k*0.06);
+        tri(px+lean*hh, yy, ww, hh, dark);
+        ctx.save(); ctx.beginPath();
+        ctx.moveTo(px+lean*hh, yy-hh); ctx.lineTo(px+lean*hh+(lit?-ww:ww), yy);
+        ctx.lineTo(px+lean*hh, yy); ctx.closePath(); ctx.clip();
+        tri(px+lean*hh, yy, ww, hh, brite); ctx.restore();
+      }
+      break; }
+    case 'broadleaf': {
+      const h=o.s*m, w=o.s*0.34*m; sh(w,h);
+      ctx.fillStyle=shade([58,46,34], lit, L, fog);
+      ctx.fillRect(px-w*0.08, gy-h*0.45, w*0.16, h*0.45);
+      ctx.fillStyle=shade([40,62,38], false, L, fog);
+      ctx.beginPath(); ctx.ellipse(px, gy-h*0.66, w, h*0.34, 0,0,7); ctx.fill();
+      ctx.fillStyle=shade([64,92,52], true, L, fog);
+      ctx.beginPath(); ctx.ellipse(px-(lit?1:-1)*w*0.30, gy-h*0.74, w*0.60, h*0.22, 0,0,7); ctx.fill();
+      break; }
+    case 'stump': {
+      const h=o.s*m*0.5, w=o.s*0.22*m; sh(w,h);
+      ctx.fillStyle=shade([62,50,38], lit, L, fog);
+      ctx.fillRect(px-w/2, gy-h, w, h); break; }
+    case 'rock': case 'boulder': {
+      const h=o.s*m*0.55, w=o.s*m*0.62; sh(w,h);
+      ctx.fillStyle=shade([96,94,88], false, L, fog);
+      ctx.beginPath(); ctx.moveTo(px-w, gy);
+      ctx.lineTo(px-w*0.55, gy-h*0.85); ctx.lineTo(px+w*0.15, gy-h);
+      ctx.lineTo(px+w*0.9, gy-h*0.45); ctx.lineTo(px+w, gy); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=shade([132,130,122], true, L, fog);
+      ctx.beginPath(); ctx.moveTo(px+(lit?-w*0.55:w*0.15), gy-h*0.85);
+      ctx.lineTo(px+w*0.15, gy-h); ctx.lineTo(px+(lit?0:w*0.9), gy-h*0.45); ctx.closePath(); ctx.fill();
+      break; }
+    case 'tuft': {
+      const h=o.s*m, w=o.s*m*0.55;
+      const g=BIOMES[o.bio||0].ground;
+      ctx.fillStyle=mix([g[0]*0.92+18, g[1]*0.92+22, g[2]*0.92+10], L.fogc, fog);
+      for(let k=-1;k<=1;k++){
+        ctx.beginPath();
+        ctx.moveTo(px+k*w*0.45, gy);
+        ctx.lineTo(px+k*w*0.45+w*0.22*(k+o.a), gy-h);
+        ctx.lineTo(px+k*w*0.45+w*0.30, gy);
+        ctx.closePath(); ctx.fill();
+      }
+      break; }
+    case 'gorse': {
+      const h=o.s*m*0.5, w=o.s*m*0.5;
+      ctx.fillStyle=shade([74,80,44], false, L, fog);
+      ctx.beginPath(); ctx.ellipse(px, gy-h*0.4, w*0.7, h*0.45, 0,0,7); ctx.fill();
+      if(o.a>0.5){ ctx.fillStyle=shade([172,150,52], true, L, fog);
+        ctx.beginPath(); ctx.ellipse(px-w*0.2, gy-h*0.6, w*0.3, h*0.18, 0,0,7); ctx.fill(); }
+      break; }
+    case 'snowpole': {
+      const h=o.s*m, w=Math.max(1,0.06*m);
+      ctx.fillStyle=shade([236,232,224], lit, L, fog);
+      ctx.fillRect(px-w/2, gy-h, w, h);
+      ctx.fillStyle=shade([210,72,58], lit, L, fog);
+      ctx.fillRect(px-w/2, gy-h, w, h*0.22); break; }
+    case 'fence': {
+      const h=o.s*m, w=Math.max(1,0.07*m);
+      ctx.fillStyle=shade([88,72,52], lit, L, fog);
+      ctx.fillRect(px-w/2, gy-h, w, h);
+      ctx.fillStyle=shade([70,58,44], lit, L, fog);
+      ctx.fillRect(px-m*1.1, gy-h*0.78, m*2.2, Math.max(1,0.045*m));
+      ctx.fillRect(px-m*1.1, gy-h*0.45, m*2.2, Math.max(1,0.045*m));
+      break; }
+    case 'gate': {
+      const h=o.s*m, w=m*1.7;
+      ctx.fillStyle=shade([176,168,150], lit, L, fog);
+      ctx.fillRect(px-w/2, gy-h, Math.max(1,0.09*m), h);
+      ctx.fillRect(px+w/2, gy-h, Math.max(1,0.09*m), h);
+      for(let k=0;k<4;k++) ctx.fillRect(px-w/2, gy-h+k*h/4, w, Math.max(1,0.05*m));
+      break; }
+    case 'bale': {
+      const h=o.s*m*0.30, w=o.s*m*0.30; sh(w,h);
+      ctx.fillStyle=shade([186,166,102], lit, L, fog);
+      ctx.beginPath(); ctx.ellipse(px, gy-h*0.5, w*0.5, h*0.5, 0,0,7); ctx.fill();
+      break; }
+    case 'wall': {
+      const h=o.s*m*0.45, w=m*3.2;
+      ctx.fillStyle=shade([124,118,104], lit, L, fog);
+      ctx.fillRect(px-w/2, gy-h, w, h);
+      ctx.fillStyle=shade([98,92,80], false, L, fog);
+      for(let k=0;k<3;k++) ctx.fillRect(px-w/2, gy-h+k*h/3, w, Math.max(1,h*0.04));
+      break; }
+    case 'barn': {
+      const h=o.s*m*0.62, w=o.s*m*0.55; sh(w,h);
+      ctx.fillStyle=shade([104,74,58], lit, L, fog);
+      ctx.fillRect(px-w/2, gy-h*0.72, w, h*0.72);
+      ctx.fillStyle=shade([72,66,62], lit, L, fog);
+      ctx.beginPath(); ctx.moveTo(px-w*0.60, gy-h*0.72); ctx.lineTo(px, gy-h*1.06);
+      ctx.lineTo(px+w*0.60, gy-h*0.72); ctx.closePath(); ctx.fill();
+      if(L.stars>0.2){ ctx.fillStyle='rgba(255,214,132,'+(0.85*(1-fog)).toFixed(2)+')';
+        ctx.fillRect(px-w*0.14, gy-h*0.50, w*0.20, h*0.20); }
+      break; }
+    case 'crowd': {
+      const h=o.s*m*0.42;
+      const cols=[[196,72,64],[64,92,168],[212,196,72],[70,150,110],[220,220,224]];
+      for(let k=0;k<3;k++){
+        const c=cols[Math.floor(((o.a*97+k*31)%5))], xx=px+(k-1)*h*0.34;
+        ctx.fillStyle=shade(c, lit, L, fog);
+        ctx.fillRect(xx-h*0.11, gy-h*0.78, h*0.22, h*0.78);
+        ctx.fillStyle=shade([228,196,166], lit, L, fog);
+        ctx.beginPath(); ctx.arc(xx, gy-h*0.88, h*0.13, 0, 7); ctx.fill();
+      }
+      break; }
+    case 'cliff': {
+      const h=o.s*m, w=o.s*m*0.85;
+      ctx.fillStyle=shade([86,82,78], false, L, fog);
+      ctx.beginPath(); ctx.moveTo(px-w, gy);
+      ctx.lineTo(px-w*0.7, gy-h*0.7); ctx.lineTo(px-w*0.1, gy-h);
+      ctx.lineTo(px+w*0.6, gy-h*0.55); ctx.lineTo(px+w, gy); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=shade([116,110,102], true, L, fog);
+      ctx.beginPath(); ctx.moveTo(px-w*0.1, gy-h);
+      ctx.lineTo(px+w*0.6, gy-h*0.55); ctx.lineTo(px+w*0.15, gy-h*0.4); ctx.closePath(); ctx.fill();
+      break; }
+  }
+}
+
+/* ── render ──────────────────────────────────────────────────────────── */
 function render(){
-  const L=G.look, segs=G.stage.segs;
+  const L=G.look, segs=G.stage.segs, props=G.stage.props;
   const HOR=SCENE.hor, FL=SCENE.fl, CAM_H=SCENE.camH;
   const shakeX=(Math.random()-0.5)*G.shake*7, shakeY=(Math.random()-0.5)*G.shake*5;
+  const base=Math.floor(G.pos/SEG);
+  const head=segs[base]?segs[base].head:0;
 
-  // sky
+  // ---- sky
   const sky=ctx.createLinearGradient(0,0,0,HOR+40);
   sky.addColorStop(0,'rgb('+L.sky[0]+')'); sky.addColorStop(1,'rgb('+L.sky[1]+')');
   ctx.fillStyle=sky; ctx.fillRect(0,0,W,HOR+42);
-  // ground fades into the same haze the road does, so the horizon has no seam
+
+  if(L.stars>0){                                   // stars, fixed to the world
+    for(let i=0;i<70;i++){
+      const sx=((i*2654435761)%10000)/10000, sy=((i*40503)%997)/997;
+      const x=(((sx - head*0.02)%1)+1)%1*W, y=sy*HOR*0.82;
+      const tw=0.45+0.55*Math.sin(i*1.7 + G.t*1.6);
+      ctx.fillStyle='rgba(226,232,246,'+(L.stars*tw*(0.30+0.5*sy)).toFixed(3)+')';
+      ctx.fillRect(x, y, 1.6, 1.6);
+    }
+  }
+  { // sun or moon, low and to one side
+    const S=L.sun, sxp=W*(0.5 - S.x*0.42) - head*70, syp=HOR - S.y*HOR*0.72;
+    const rr=Math.min(W,H)*0.055;
+    const g=ctx.createRadialGradient(sxp,syp,rr*0.2,sxp,syp,rr*6);
+    g.addColorStop(0,'rgba('+S.warm+','+(0.42*S.str+0.10).toFixed(2)+')');
+    g.addColorStop(1,'rgba('+S.warm+',0)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,HOR+60);
+    ctx.fillStyle='rgba('+S.warm+','+(0.55+0.4*S.str).toFixed(2)+')';
+    ctx.beginPath(); ctx.arc(sxp,syp,rr*(L.stars>0.8?0.55:0.8),0,7); ctx.fill();
+  }
+  for(let i=0;i<5;i++){                             // cloud bands
+    const cy=HOR*(0.16+i*0.13), cx=(((i*0.23 - head*0.06)%1)+1)%1*(W*1.4)-W*0.2;
+    ctx.fillStyle=mix(L.sky[0], L.sky[1], 0.55+0.35*Math.sin(i));
+    ctx.globalAlpha=0.22+0.10*Math.sin(i*2.1);
+    ctx.beginPath(); ctx.ellipse(cx, cy, W*(0.16+0.10*((i*7)%3)), HOR*0.028, 0,0,7); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  drawRidges(L, HOR, head);
+
+  // ground under everything
   const gnd=ctx.createLinearGradient(0,HOR,0,HOR+H*0.30);
   gnd.addColorStop(0,'rgb('+L.fogc+')'); gnd.addColorStop(1,'rgb('+L.grass[1]+')');
   ctx.fillStyle=gnd; ctx.fillRect(0,HOR,W,H-HOR);
 
-  const base=Math.floor(G.pos/SEG);
   const camY=(segs[base]?segs[base].y:0)+CAM_H;
-  // Draw well past the sight distance but fog to opaque at it, so the road
-  // dissolves into the weather instead of stopping at a visible edge.
-  const drawN=Math.min(52, L.dist*3+14);
+  const drawN=Math.min(56, L.dist*3+16);
 
-  // walk the road forward, accumulating the curve
+  // ---- project the road forward
   let x=0, dx=0;
   const proj=[];
   for(let i=0;i<drawN;i++){
     const idx=base+i; if(idx>=segs.length) break;
-    const s=segs[idx];
+    const sg=segs[idx];
     const z=Math.max(0.6, idx*SEG - G.pos + 1.5);
     const scale=CAM_D/z;
     proj.push({
       sx: W/2 + scale*(x - G.x)*FL + shakeX,
-      sy: HOR - scale*(s.y - camY)*FL + shakeY,
+      sy: HOR - scale*(sg.y - camY)*FL + shakeY,
       sw: scale*ROADW*FL,
       fog: Math.min(1, Math.pow(i/L.dist, 1.35)),
-      idx, s, scale
+      idx, s:sg, scale
     });
-    x += dx; dx += s.curve*SEG;
+    x += dx; dx += sg.curve*SEG;
   }
 
-  // road, near to far, skipping anything hidden behind a crest
+  // ---- road and banks, near to far, skipping whatever a crest hides
   let clipY=H+50;
   const drawn=[];
   for(let i=0;i<proj.length-1;i++){
     const a=proj[i], b=proj[i+1];
     if(b.sy>=clipY || a.fog>=0.999) continue;
-    clipY=b.sy;
-    drawn.push(i);
-    const k=(a.idx>>2)&1;
-    const fog=a.fog, fc=L.fogc;
-    const road=mix(L.road[k], fc, fog*0.9);
-    const grass=mix(L.grass[k], fc, fog*0.9);
-    const rum=mix(L.rumble[k], fc, fog*0.9);
-    // verge
-    drawPoly(a.sx,a.sy,Math.max(a.sw*5.4,W),b.sx,b.sy,Math.max(b.sw*5.4,W), grass);
-    // rumble
+    clipY=b.sy; drawn.push(i);
+    const k=(a.idx>>2)&1, fog=a.fog, fc=L.fogc;
+    const B=BIOMES[a.s.bio!==undefined?a.s.bio:0];
+    const gcol=[ (L.grass[k][0]+B.ground[0])/2, (L.grass[k][1]+B.ground[1])/2,
+                 (L.grass[k][2]+B.ground[2])/2 ];
+    const grass=mix(gcol, fc, fog*0.92);
+    const road=mix(L.road[k], fc, fog*0.92);
+    const rum=mix(L.rumble[a.idx&1], fc, fog*0.92);
+
+    // far ground plane
+    drawPoly(a.sx,a.sy,Math.max(a.sw*7,W),b.sx,b.sy,Math.max(b.sw*7,W), grass);
+
     drawPoly(a.sx,a.sy,a.sw*1.15,b.sx,b.sy,b.sw*1.15, rum);
-    // tarmac
     drawPoly(a.sx,a.sy,a.sw,b.sx,b.sy,b.sw, road);
-    // centre dashes
+    // two darker strips where everyone drives, and a patch here and there
+    if(fog<0.92){
+      const worn=mix([L.road[k][0]*0.90, L.road[k][1]*0.90, L.road[k][2]*0.92], fc, fog*0.92);
+      drawPoly(a.sx-a.sw*0.45,a.sy,a.sw*0.20,b.sx-b.sw*0.45,b.sy,b.sw*0.20, worn);
+      drawPoly(a.sx+a.sw*0.45,a.sy,a.sw*0.20,b.sx+b.sw*0.45,b.sy,b.sw*0.20, worn);
+      if((a.idx*2654435761>>>0)%23===0){
+        const pch=mix([L.road[k][0]*1.16, L.road[k][1]*1.14, L.road[k][2]*1.12], fc, fog*0.92);
+        drawPoly(a.sx+a.sw*0.2,a.sy,a.sw*0.4,b.sx+b.sw*0.2,b.sy,b.sw*0.4, pch);
+      }
+    }
     if(k===0 && fog<0.86)
-      drawPoly(a.sx,a.sy,a.sw*0.035,b.sx,b.sy,b.sw*0.035, mix([210,206,196],fc,fog*0.9));
+      drawPoly(a.sx,a.sy,a.sw*0.035,b.sx,b.sy,b.sw*0.035, mix([214,210,200],fc,fog*0.92));
   }
 
-  // scenery, far to near. Sized in metres and projected, so a tree three
-  // metres away is not the size of a cathedral.
+  // ---- banks, as one continuous hillside per side rather than facets.
+  // Per-segment quads read as detached glass panels. The strip starts a few
+  // segments out because projection explodes at the bonnet, and its gradient
+  // is anchored to the strip's own near and far ends so it fogs with depth.
+  {
+    const list=drawn.filter(i=>i>=5);
+    if(list.length>2){
+      const nearY=proj[list[0]].sy, farY=proj[list[list.length-1]].sy;
+      for(const side of [-1,1]){
+        let any=false;
+        ctx.beginPath();
+        for(let n=0;n<list.length;n++){
+          const p=proj[list[n]];
+          const h=Math.min(5,(side<0?p.s.bl:p.s.br)||0);
+          if(h>0.4) any=true;
+          const m=p.scale*FL;
+          n?ctx.lineTo(p.sx+side*(ROADW+1.2+h*0.7)*m, p.sy-h*m)
+           :ctx.moveTo(p.sx+side*(ROADW+1.2+h*0.7)*m, p.sy-h*m);
+        }
+        for(let n=list.length-1;n>=0;n--){
+          const p=proj[list[n]];
+          ctx.lineTo(p.sx+side*p.sw*1.14, p.sy);
+        }
+        ctx.closePath();
+        if(!any) continue;
+        const B0=BIOMES[segs[base].bio||0];
+        const c=shadeRGB([(L.grass[0][0]+B0.ground[0])/2,(L.grass[0][1]+B0.ground[1])/2,
+                          (L.grass[0][2]+B0.ground[2])/2], side*L.sun.x<0, L);
+        const g=ctx.createLinearGradient(0,farY-H*0.04,0,nearY);
+        g.addColorStop(0,mix(c,L.fogc,0.92));
+        g.addColorStop(1,mix(c,L.fogc,0.12));
+        ctx.fillStyle=g; ctx.fill();
+      }
+    }
+  }
+
+  // ---- everything that stands up, far to near
   for(let n=drawn.length-1;n>=0;n--){
     const i=drawn[n], p=proj[i];
-    if(p.fog>0.97 || i<2) continue;
-    const m2px = p.scale*FL;                 // one metre, in pixels, here
-    if(p.idx%3===0){                            // roadside marker posts
-      const side=(p.idx%6===0)?1:-1;
-      const px=p.sx+side*(ROADW+1.1)*m2px, h=1.05*m2px;
-      ctx.fillStyle=mix([228,225,218], L.fogc, p.fog);
-      ctx.fillRect(px-0.07*m2px, p.sy-h, 0.14*m2px, h);
-      ctx.fillStyle=mix([198,68,56], L.fogc, p.fog);
-      ctx.fillRect(px-0.07*m2px, p.sy-h, 0.14*m2px, h*0.3);
+    if(p.fog>0.985) continue;
+    const m2px=p.scale*FL;
+    const list=(i>=2)?props[p.idx]:null;
+    if(list) for(const o of list){
+      // Props sit on the road plane. Lifting them onto the bank is
+      // geometrically truer but we never draw the plateau they would stand
+      // on, so they read as floating.
+      const px=p.sx + o.side*(ROADW+o.off)*m2px;
+      drawProp(o, px, p.sy, m2px, L, p.fog);
     }
-    if(p.idx%7===0){                            // conifers set back from the road
-      const side=(p.idx%14===0)?1:-1;
-      const off=ROADW+5+((p.idx*7)%13)*1.6, th=5+((p.idx*13)%9)*0.7;
-      const px=p.sx+side*off*m2px, h=th*m2px, w=th*0.30*m2px;
-      ctx.fillStyle=mix([28,38,30], L.fogc, p.fog);
-      ctx.beginPath();
-      ctx.moveTo(px, p.sy-h); ctx.lineTo(px+w, p.sy); ctx.lineTo(px-w, p.sy);
-      ctx.closePath(); ctx.fill();
+    if(p.idx%4===0){                                  // the marker posts
+      const side=(p.idx%8===0)?1:-1;
+      const px=p.sx+side*(ROADW+1.0)*m2px, h=1.05*m2px;
+      ctx.fillStyle=mix([230,227,220], L.fogc, p.fog);
+      ctx.fillRect(px-0.07*m2px, p.sy-h, 0.14*m2px, h);
+      ctx.fillStyle=mix([200,68,56], L.fogc, p.fog);
+      ctx.fillRect(px-0.07*m2px, p.sy-h, 0.14*m2px, h*0.3);
     }
   }
 
-  // headlights on the dark stages
-  if(G.look.dist<=7){
+  // ---- weather: mist drifting across the near ground
+  if(L.mist>0){
+    for(let i=0;i<7;i++){
+      const ph=(G.pos*0.004 + i*0.37)%1;
+      const yy=HOR + ph*H*0.30, aa=L.mist*0.07*(1-Math.abs(ph-0.4)*1.6);
+      if(aa<=0) continue;
+      ctx.fillStyle='rgba('+L.fogc+','+aa.toFixed(3)+')';
+      ctx.fillRect(0, yy, W, H*0.05);
+    }
+  }
+
+  // ---- headlights
+  if(L.dist<=7){
     ctx.globalCompositeOperation='lighter';
     const g=ctx.createRadialGradient(W/2,H*0.80,8,W/2,H*0.80,H*0.62);
-    g.addColorStop(0,'rgba(255,240,198,.26)'); g.addColorStop(0.45,'rgba(255,240,198,.10)'); g.addColorStop(1,'rgba(255,240,198,0)');
+    g.addColorStop(0,'rgba(255,240,198,.26)'); g.addColorStop(0.45,'rgba(255,240,198,.10)');
+    g.addColorStop(1,'rgba(255,240,198,0)');
     ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
     ctx.globalCompositeOperation='source-over';
   }
@@ -729,14 +1079,50 @@ function render(){
   haze.addColorStop(0,'rgba('+L.fogc+',.55)'); haze.addColorStop(1,'rgba('+L.fogc+',0)');
   ctx.fillStyle=haze; ctx.fillRect(0,HOR-H*0.02,W,H*0.12);
 
+  // one soft cone rather than two hard shafts: twin beams read as a V.
+  // Only once it is dark enough that headlights would actually show.
+  if(L.dist<=6){
+    ctx.globalCompositeOperation='lighter';
+    const aim=-G.steer*W*0.26;
+    const g=ctx.createLinearGradient(0,H*0.88,0,HOR+H*0.02);
+    g.addColorStop(0,'rgba(255,238,196,.17)');
+    g.addColorStop(0.55,'rgba(255,238,196,.09)');
+    g.addColorStop(1,'rgba(255,238,196,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.moveTo(W/2-W*0.055, H*0.90); ctx.lineTo(W/2+W*0.055, H*0.90);
+    ctx.lineTo(W/2+W*0.26+aim, HOR+H*0.03);
+    ctx.lineTo(W/2-W*0.26+aim, HOR+H*0.03);
+    ctx.closePath(); ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+  }
+  // dust and gravel where a wheel has dropped off the tarmac
+  if(G.shake>0.02){
+    const B0=BIOMES[segs[base].bio||0];
+    for(let i=0;i<14;i++){
+      const t=(i/14+ (G.t*1.7)%1)%1;
+      const sp=1-t;
+      const x=W/2 + Math.sign(G.x)*W*(0.06+t*0.30)*(0.6+0.8*((i*37)%7)/7);
+      const y=H*(0.90-t*0.20) + ((i*53)%11-5)*2;
+      ctx.fillStyle='rgba('+B0.ground.map(v=>Math.min(255,v+70)).join(',')+','
+        +(0.30*G.shake*sp).toFixed(3)+')';
+      ctx.beginPath(); ctx.arc(x,y, W*0.006*(1+t*3), 0, 7); ctx.fill();
+    }
+  }
+
   drawCar();
 
-  // vignette
   const vg=ctx.createRadialGradient(W/2,H*0.5,H*0.35,W/2,H*0.5,H*0.95);
   vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.55)');
   ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
 
   drawMini();
+}
+
+function shadeRGB(base, lit, L){
+  const S=L.sun;
+  return [0,1,2].map(k=> Math.max(0,Math.min(255,
+    base[k]*(1-S.str*0.7) + (lit?S.warm[k]:S.amb[k])*S.str*0.7*(base[k]/210+0.35))));
 }
 
 function drawCar(){
@@ -755,8 +1141,18 @@ function drawCar(){
   // rear window
   ctx.fillStyle='#0c1219';
   roundRect(-cw*0.27, -ch*1.10, cw*0.54, ch*0.30, ch*0.09); ctx.fill();
-  // lights
-  ctx.fillStyle= (keys['ArrowDown']||keys['s']||touch.b) ? '#ff4436' : '#8d2a22';
+  // lights, with a glow when you are actually hard on the brakes
+  const braking = keys['ArrowDown']||keys['s']||keys['S']||touch.b;
+  if(braking){
+    ctx.globalCompositeOperation='lighter';
+    for(const sx of [-cw*0.33, cw*0.33]){
+      const g=ctx.createRadialGradient(sx,-ch*0.55,1,sx,-ch*0.55,ch*0.9);
+      g.addColorStop(0,'rgba(255,70,52,.55)'); g.addColorStop(1,'rgba(255,70,52,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(sx,-ch*0.55,ch*0.9,0,7); ctx.fill();
+    }
+    ctx.globalCompositeOperation='source-over';
+  }
+  ctx.fillStyle= braking ? '#ff4436' : '#8d2a22';
   roundRect(-cw*0.41, -ch*0.62, cw*0.16, ch*0.14, 3); ctx.fill();
   roundRect( cw*0.25, -ch*0.62, cw*0.16, ch*0.14, 3); ctx.fill();
   // wheels
