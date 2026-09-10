@@ -43,10 +43,14 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .rec{margin-top:3px;display:flex;align-items:baseline;gap:7px}
 .rec b{font-family:var(--serif);font-weight:400;font-size:clamp(17px,4vw,21px);color:var(--ink)}
 .lbl{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+.spark{display:block;width:145px;height:38px;margin-top:5px;opacity:.9}
+@media (max-width:520px){.spark{width:124px;height:32px}}
 
 /* progress of the current run */
-.bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(255,255,255,.07)}
-.bar i{display:block;height:100%;background:var(--amber);width:0}
+.bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.06)}
+.bar i{display:block;height:100%;width:0;
+  background:linear-gradient(90deg,rgba(232,163,61,.55),var(--amber));
+  box-shadow:0 0 8px rgba(232,163,61,.5)}
 
 /* ---------- toolbar ---------- */
 #bar{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--edge);
@@ -139,6 +143,7 @@ h1 em{display:block;font-size:.19em;letter-spacing:.3em;color:var(--amber);font-
         <div class="gen">Generation <span id="genN">1</span> <small id="popN"></small></div>
         <div class="sp" id="species">&nbsp;</div>
         <div class="rec"><b id="best">0.0m</b> <span class="lbl">furthest yet</span></div>
+        <canvas id="spark" class="spark" width="290" height="76"></canvas>
       </div>
     </div>
     <div class="bar"><i id="prog"></i></div>
@@ -163,6 +168,7 @@ h1 em{display:block;font-size:.19em;letter-spacing:.3em;color:var(--amber);font-
       <div class="sep"></div>
       <button class="tool" id="worldBtn">New world</button>
       <button class="tool" id="shelfBtn">Shelf <span id="shelfN" style="color:var(--amber)"></span></button>
+      <button class="tool" id="sndBtn" title="Sound">Sound on</button>
     </div>
     <div class="row">
       <button class="tool wide" id="playBtn">Pause</button>
@@ -440,14 +446,15 @@ function nameOf(g){
 
 /* ---------- the population ---------- */
 const POP=34;
-const state={gen:1, pop:[], live:[], stepN:0, playing:true, speed:2,
+let nudged=false;
+const state={gen:1, pop:[], live:[], stepN:0, playing:true, speed:2, history:[],
   best:0, bestGen:null, champIx:0, rnd:mulberry32(1), seed:1, guest:null};
 
 function seedPopulation(seed){
   state.seed=seed; state.rnd=mulberry32(seed);
   state.pop=[]; for(let i=0;i<POP;i++) state.pop.push(randomGenome(state.rnd));
-  state.gen=1; state.best=0; state.bestGen=null; state.guest=null;
-  restart();
+  state.gen=1; state.best=0; state.bestGen=null; state.guest=null; state.history=[];
+  drawSpark(); restart();
 }
 function restart(){
   state.live=state.pop.map(spawn);
@@ -460,7 +467,10 @@ function scoreAndBreed(){
                          .filter(s=>!state.guest || s.i<POP)   /* a visiting animal does not breed */
                          .sort((a,b)=>b.fit-a.fit);
   const champ=scored[0];
-  if(champ.fit>state.best){ state.best=champ.fit; state.bestGen=clone(champ.c.g); offerKeep(champ.c); }
+  if(champ.fit>state.best){
+    if(state.best>0.6) sChime();
+    state.best=champ.fit; state.bestGen=clone(champ.c.g); offerKeep(champ.c);
+  } else sGen();
   const elite=[clone(scored[0].c.g), clone(scored[1].c.g)];
   const next=elite.slice();
   const pick=()=>{ const a=scored[(rnd()*scored.length)|0], b=scored[(rnd()*scored.length)|0];
@@ -470,6 +480,14 @@ function scoreAndBreed(){
     next.push(mutate(child,rnd,0.28));
   }
   state.pop=next; state.gen++;
+  if(state.gen===5 && state.best<1.2 && !nudged){
+    nudged=true;
+    $('hint').innerHTML='The first generations are all flailing — that is the point. '+
+      '<b>Skip 25 gens</b> to get to the part where something walks.';
+  }
+  state.history.push(Math.max(0,champ.fit));
+  if(state.history.length>400) state.history.shift();
+  drawSpark();
   restart();
 }
 
@@ -646,7 +664,7 @@ function drawGround(){
   const i0=Math.max(0,Math.floor(wx(-40)/CELL)), i1=Math.min(HN-1,Math.ceil(wx(VW+40)/CELL));
   ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=3;
   for(const ice of [false,true]){
-    ctx.strokeStyle = ice ? 'rgba(158,220,238,.85)' : '#78994f';
+    ctx.strokeStyle = ice ? 'rgba(158,220,238,.82)' : '#6d8a4d';
     ctx.beginPath(); let pen=false;
     for(let i=i0;i<=i1;i++){
       const isIce=world.grip[i]<0.5;
@@ -657,7 +675,7 @@ function drawGround(){
     ctx.stroke();
   }
   if(PPM>34){
-    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(146,184,100,.7)';
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(132,166,94,.62)';
     ctx.beginPath();
     for(let i=i0;i<=i1;i++){
       if(world.grip[i]<0.5) continue;
@@ -730,7 +748,7 @@ function waterOver(){
   if(world.water<=-90 || !WPATH) return;
   const t=clock();
   ctx.save(); ctx.clip(WPATH);
-  ctx.fillStyle='rgba(44,112,152,.40)'; ctx.fill(WPATH);
+  ctx.fillStyle='rgba(44,112,152,.32)'; ctx.fill(WPATH);
   /* light raking down through the surface, barely there */
   ctx.globalAlpha=.05; ctx.strokeStyle='#dff4ff'; ctx.lineWidth=Math.max(4,PPM*0.13);
   for(let k=-1;k<6;k++){
@@ -788,6 +806,25 @@ function drawRoof(){
   }
 }
 
+/* The record, standing in the world. Without it a run has no visible stakes —
+   the number in the corner is not something you can watch an animal approach. */
+function recordLine(){
+  if(state.best<=0.6) return;
+  const X=sx(START_X+state.best);
+  if(X<-60||X>VW+60) return;
+  const gy=sy(groundAt(START_X+state.best));
+  ctx.save();
+  ctx.setLineDash([5,7]); ctx.lineWidth=1.5;
+  ctx.strokeStyle='rgba(232,163,61,.42)';
+  ctx.beginPath(); ctx.moveTo(X,gy); ctx.lineTo(X,gy-VH*0.30); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='rgba(232,163,61,.75)';
+  ctx.font='italic 11px "Iowan Old Style",Georgia,serif'; ctx.textAlign='left';
+  ctx.fillText('furthest yet', X+6, gy-VH*0.30+11);
+  ctx.beginPath(); ctx.arc(X,gy,3,0,7); ctx.fill();
+  ctx.restore();
+}
+
 function drawWorld(){
   drawSky();
   ctx.strokeStyle='rgba(255,255,255,.045)'; ctx.lineWidth=1;
@@ -801,6 +838,7 @@ function drawWorld(){
   drawGround();
   groundMist();
   drawRoof();
+  recordLine();
 }
 
 /* ---------- the animals ---------- */
@@ -820,7 +858,7 @@ function bodyPath(c,grow){
     ctx.beginPath(); ctx.arc(sx(p.x),sy(p.y),Math.max(1.5,p.r*PPM+grow),0,7); ctx.fill();
   }
 }
-function drawCreature(c,champ,guest){
+function drawCreature(c,champ,guest,leadX){
   const P=c.P, lead=champ||guest;
 
   if(lead){
@@ -834,8 +872,13 @@ function drawCreature(c,champ,guest){
     }
   }
 
-  if(!lead){                                   /* the pack, as soft shapes behind the leader */
-    ctx.strokeStyle='rgba(166,190,220,.11)'; ctx.fillStyle='rgba(166,190,220,.12)';
+  if(!lead){
+    /* The pack, fading with how far behind it is. Drawn flat, the stragglers bunch
+       at the start line into a wall of shapes that the leader has to be read through. */
+    const behind=Math.max(0,(leadX===undefined?0:leadX)-centroid(P).x);
+    const f=0.30+0.70*Math.max(0,1-behind/5.5);
+    ctx.strokeStyle='rgba(166,190,220,'+(0.115*f).toFixed(3)+')';
+    ctx.fillStyle='rgba(166,190,220,'+(0.125*f).toFixed(3)+')';
     bodyPath(c,0);
     return;
   }
@@ -875,6 +918,7 @@ function wake(c){
       const drop=p._py-p.y;
       if(drop>0.055 && p.y-p.r<=gy+0.03 && p._air){
         const n=Math.min(2,1+Math.floor(drop*14));
+        sFoot(drop);
         for(let k=0;k<n;k++)
           puff(p.x+(Math.random()-0.5)*p.r, gy+p.r*0.3,
                (Math.random()-0.5)*0.9, 0.15+Math.random()*0.4,
@@ -883,6 +927,7 @@ function wake(c){
       if(hasWater){
         const s=world.water;
         if((p._py-p.r>s)!==(p.y-p.r>s) && Math.abs(p._py-p.y)>0.006){
+          sSplash();
           for(let k=0;k<4;k++)
             puff(p.x+(Math.random()-0.5)*p.r*1.4, s+0.05,
                  (Math.random()-0.5)*1.6, 0.7+Math.random()*1.5,
@@ -897,14 +942,30 @@ function wake(c){
 
 function vignette(){ if(vigC) ctx.drawImage(vigC,0,0,VW,VH); }
 
+/* Whoever is fractionally ahead this frame is not "the leader" — recomputing it
+   every frame made the amber body hop between creatures a few times a second, and
+   you cannot follow an animal that keeps changing which animal it is. A challenger
+   has to be clearly ahead before it takes over. */
+function leader(){
+  let held=state.live[state.champIx];
+  if(state.guest && state.champIx===state.live.length-1) held=null;
+  if(held && held.dead) held=null;
+  let best=null, bf=-1e9, bi=0;
+  state.live.forEach((c,i)=>{
+    if(state.guest && i===state.live.length-1) return;
+    if(!c.dead && c.fit>bf){ bf=c.fit; best=c; bi=i; }
+  });
+  if(!best) return null;
+  if(!held || bf > held.fit + 0.35){ state.champIx=bi; return best; }
+  return held;
+}
+
 function draw(){
   drawWorld();
-  let champ=null, champFit=-1e9, guest=null;
-  state.live.forEach((c,i)=>{
-    if(state.guest && i===state.live.length-1){ guest=c; return; }
-    if(!c.dead && c.fit>champFit){ champFit=c.fit; champ=c; }
-  });
-  for(const c of state.live) if(c!==champ && c!==guest) drawCreature(c,false,false);
+  const guest = state.guest ? state.live[state.live.length-1] : null;
+  const champ = leader();
+  const leadX = champ?centroid(champ.P).x:START_X;
+  for(const c of state.live) if(c!==champ && c!==guest) drawCreature(c,false,false,leadX);
   drawParts();
   if(guest){ wake(guest); drawCreature(guest,false,true); }
   if(champ){ wake(champ); drawCreature(champ,true,false); }
@@ -957,6 +1018,120 @@ function skipSlice(){
   document.getElementById('skipBtn').textContent = skipping>0 ? 'Skipping… '+skipping : 'Skip 25 gens';
   if(skipping>0) requestAnimationFrame(skipSlice);
   else document.getElementById('hint').innerHTML='<b>Drag on the world to sculpt it.</b> The animals are bred against whatever you leave behind.';
+}
+
+/* Every generation's best, drawn as a curve. The single number in the corner says
+   how far something once got; the curve says the population is getting better,
+   which is the thing this page is actually about and was otherwise invisible. */
+function drawSpark(){
+  const cvs=document.getElementById('spark'); if(!cvs) return;
+  const c=cvs.getContext('2d'), W=cvs.width, H=cvs.height;
+  c.clearRect(0,0,W,H);
+  const h=state.history;
+  if(h.length<2){
+    c.fillStyle='rgba(255,255,255,.22)';
+    c.font='italic 15px "Iowan Old Style",Georgia,serif'; c.textAlign='left'; c.textBaseline='middle';
+    c.fillText('watching…', 2, H/2);
+    return;
+  }
+  const n=h.length, top=Math.max(0.6,...h);
+  const X=i=>2+(W-4)*(n===1?0:i/(n-1)), Y=v=>H-3-(H-9)*(v/top);
+  c.strokeStyle='rgba(255,255,255,.10)'; c.lineWidth=1;
+  c.beginPath(); c.moveTo(0,H-2.5); c.lineTo(W,H-2.5); c.stroke();
+  /* the area under it, so a thin line still reads at this size */
+  c.beginPath(); c.moveTo(X(0),H-3);
+  for(let i=0;i<n;i++) c.lineTo(X(i),Y(h[i]));
+  c.lineTo(X(n-1),H-3); c.closePath();
+  const g=c.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'rgba(232,163,61,.28)'); g.addColorStop(1,'rgba(232,163,61,0)');
+  c.fillStyle=g; c.fill();
+  c.beginPath();
+  for(let i=0;i<n;i++){ const x=X(i),y=Y(h[i]); i?c.lineTo(x,y):c.moveTo(x,y); }
+  c.strokeStyle='rgba(240,182,86,.95)'; c.lineWidth=2; c.lineJoin='round'; c.stroke();
+  c.beginPath(); c.arc(X(n-1),Y(h[n-1]),3,0,7);
+  c.fillStyle='#f4c268'; c.fill();
+}
+
+/* ---------- sound ----------
+   No files: a little wind, a thud when something lands, a splash when it goes in,
+   and a chime when a record falls. Everything is built from oscillators and one
+   noise buffer, and none of it starts until the Begin button is pressed, so the
+   page never makes a sound before someone has asked it to. */
+const SND={ctx:null,master:null,noise:null,on:true,lastFoot:0,lastSplash:0};
+try{ SND.on = localStorage.getItem('menagerie.sound')!=='0'; }catch(e){}
+
+function audioStart(){
+  if(SND.ctx || !SND.on) return;
+  const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+  const ctx=new AC(); SND.ctx=ctx;
+  const m=ctx.createGain(); m.gain.value=0.0; m.connect(ctx.destination); SND.master=m;
+  m.gain.linearRampToValueAtTime(0.5, ctx.currentTime+2.5);
+
+  const n=ctx.createBuffer(1, ctx.sampleRate*2, ctx.sampleRate);
+  const d=n.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  SND.noise=n;
+
+  /* wind: noise through a slow-breathing lowpass */
+  const src=ctx.createBufferSource(); src.buffer=n; src.loop=true;
+  const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=340; lp.Q.value=0.6;
+  const g=ctx.createGain(); g.gain.value=0.05;
+  const lfo=ctx.createOscillator(); lfo.frequency.value=0.06;
+  const lfoG=ctx.createGain(); lfoG.gain.value=140;
+  lfo.connect(lfoG); lfoG.connect(lp.frequency);
+  src.connect(lp); lp.connect(g); g.connect(m); src.start(); lfo.start();
+
+  /* a low drone under it, two voices a fifth apart and slightly detuned */
+  [55, 82.5].forEach((f,i)=>{
+    const o=ctx.createOscillator(); o.type='triangle'; o.frequency.value=f*(1+(i?0.002:-0.002));
+    const og=ctx.createGain(); og.gain.value=i?0.014:0.022;
+    const of=ctx.createBiquadFilter(); of.type='lowpass'; of.frequency.value=420;
+    o.connect(of); of.connect(og); og.connect(m); o.start();
+  });
+}
+function burst(freq,type,dur,vol,sweep){
+  if(!SND.ctx||!SND.on) return;
+  const c=SND.ctx, t=c.currentTime;
+  const src=c.createBufferSource(); src.buffer=SND.noise;
+  src.loop=true; src.playbackRate.value=0.7+Math.random()*0.6;
+  const f=c.createBiquadFilter(); f.type=type; f.frequency.value=freq; f.Q.value=type==='bandpass'?1.6:0.8;
+  if(sweep) f.frequency.exponentialRampToValueAtTime(Math.max(60,freq*sweep), t+dur);
+  const g=c.createGain();
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  src.connect(f); f.connect(g); g.connect(SND.master);
+  src.start(t); src.stop(t+dur+0.02);
+}
+/* The gains below look enormous and are not: a lowpass at 200Hz throws away most
+   of a noise burst's energy, so the number before the filter has little to do with
+   what comes out of it. These are set from the rendered peak, not by eye. */
+function sFoot(v){
+  const now=performance.now(); if(now-SND.lastFoot<55) return; SND.lastFoot=now;
+  burst(200+Math.random()*90,'lowpass',0.13,Math.min(1.7,0.55+v*5),0.5);
+}
+function sSplash(){
+  const now=performance.now(); if(now-SND.lastSplash<70) return; SND.lastSplash=now;
+  burst(1500+Math.random()*700,'bandpass',0.26,0.62,2.2);
+}
+function sChime(){
+  if(!SND.ctx||!SND.on) return;
+  const c=SND.ctx, t=c.currentTime;
+  [[587.33,0],[880,0.11]].forEach(([f,dt])=>{
+    const o=c.createOscillator(); o.type='triangle'; o.frequency.value=f;
+    const g=c.createGain();
+    g.gain.setValueAtTime(0,t+dt); g.gain.linearRampToValueAtTime(0.26,t+dt+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dt+0.9);
+    o.connect(g); g.connect(SND.master); o.start(t+dt); o.stop(t+dt+0.95);
+  });
+}
+function sGen(){
+  if(!SND.ctx||!SND.on) return;
+  const c=SND.ctx, t=c.currentTime;
+  const o=c.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(320,t);
+  o.frequency.exponentialRampToValueAtTime(180,t+0.07);
+  const g=c.createGain(); g.gain.setValueAtTime(0.10,t);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+0.09);
+  o.connect(g); g.connect(SND.master); o.start(t); o.stop(t+0.1);
 }
 
 /* ---------- sculpting ---------- */
@@ -1035,7 +1210,7 @@ $('waterDn').onclick=()=>{
 function enterWorld(W){
   blankWorld(); W.make(); worldName=W.name;
   colonise();
-  state.best=0; state.bestGen=null; restart();
+  state.best=0; state.bestGen=null; state.history=[]; drawSpark(); restart();
   $('hint').innerHTML='<b>'+W.name+'.</b> '+W.blurb;
 }
 /* Two thirds of the population carries over; the rest arrive from nowhere. Without
@@ -1045,7 +1220,19 @@ function colonise(){
   for(let i=keep;i<POP;i++) state.pop[i]=randomGenome(state.rnd);
 }
 $('worldBtn').onclick=()=>{ worldIx=(worldIx+1)%WORLDS.length; enterWorld(WORLDS[worldIx]); };
-$('begin').onclick=()=>{ $('intro').classList.add('off'); };
+$('begin').onclick=()=>{ $('intro').classList.add('off'); audioStart(); };
+function soundLabel(){
+  $('sndBtn').textContent = SND.on?'Sound on':'Sound off';
+  $('sndBtn').style.color = SND.on?'var(--ink)':'var(--faint)';
+}
+$('sndBtn').onclick=()=>{
+  SND.on=!SND.on;
+  try{ localStorage.setItem('menagerie.sound', SND.on?'1':'0'); }catch(e){}
+  if(SND.on){ audioStart(); if(SND.ctx){ SND.ctx.resume(); SND.master.gain.linearRampToValueAtTime(0.5,SND.ctx.currentTime+0.4); } }
+  else if(SND.ctx) SND.master.gain.linearRampToValueAtTime(0,SND.ctx.currentTime+0.25);
+  soundLabel();
+};
+soundLabel();
 
 /* ---------- the shelf ---------- */
 let shelf=[];
