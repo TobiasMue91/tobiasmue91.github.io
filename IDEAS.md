@@ -576,6 +576,20 @@ instrument** — the harness read the deck after the next hand had been drawn, a
 the victory heal had been applied. Budget for the fact that a cross-check needs debugging before it
 can find anything.
 
+A presentation pass afterwards, prompted by the note that it looked like a web interface rather
+than a card game, produced one reusable measurement. The fix was mostly obvious — parchment card
+faces on a dark table, a coloured archetype band, a cost gem, a per-archetype sigil, a fanned
+overlapping hand, a deck drawn as a stack with thickness, and energy as diamonds rather than "3 / 3"
+— but the fan broke the phone. **Five readable cards do not fit across 390px.** At 104px wide with a
+26px overlap each card shows only ~66px, and the rules text is cut off mid-sentence, which is fatal
+in a game where you choose by reading. The check is one line — for each card, the distance to the
+next card's left edge — and it turns an aesthetic argument into a number: the mobile hand now
+scrolls at a 14px overlap and every card shows 91–111px of its 104px width. Two other collisions
+(the End turn button under the fan, the Begin button under the title fan) were found the same way,
+by asserting the button's top sits below the lowest card rather than by looking. And the whole pass
+was checked against the engine cross-check afterwards — still 3,181 comparisons and 0 mismatches, so
+none of the balance work was disturbed by the reskin.
+
 One thing deliberately not measured: whether a person enjoys it. The bots establish that the
 decisions have consequences and that several ways of building all work; they say nothing about
 whether the ten minutes are worth spending, and that stays a question for a human.
