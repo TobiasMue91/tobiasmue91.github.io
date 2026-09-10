@@ -85,12 +85,20 @@ tr.now td{color:var(--hi)}
 .hide{display:none!important}
 .note{font-size:11px;color:var(--dim);line-height:1.6;margin-top:14px}
 
-/* touch controls */
-#touch{position:absolute;inset:0;display:none}
-#touch .z{position:absolute;bottom:0;height:100%;width:34%;opacity:0}
-#tl{left:0}#tr{right:0}
-#tb{position:absolute;bottom:0;left:34%;right:34%;height:38%;opacity:0}
+/* touch controls: one surface, read analogue */
+#touch{position:absolute;inset:0;display:none;touch-action:none}
 body.touch #touch{display:block}
+#hints{position:absolute;inset:0;pointer-events:none;display:none;
+  transition:opacity .5s;font-size:10px;letter-spacing:.16em;color:rgba(255,255,255,.5)}
+body.touch #hints{display:block}
+#hints .z{position:absolute;bottom:10%;top:36%;
+  border:1px dashed rgba(255,255,255,.16);border-radius:10px}
+#hL{left:2%;width:34%}#hM{left:38%;width:24%}#hR{right:2%;width:34%}
+#hints .t{position:absolute;left:0;right:0;text-align:center;line-height:1.5;
+  font-size:9px;padding:0 4px}
+#hints b{display:block;font-size:17px;color:rgba(255,255,255,.6);font-weight:700}
+#hM .half{position:absolute;left:0;right:0;height:50%}
+#hM .half+.half{top:50%;border-top:1px dashed rgba(255,255,255,.16)}
 </style>
 </head>
 <body>
@@ -113,7 +121,15 @@ body.touch #touch{display:block}
   <div id="call"></div>
   <div id="warn"></div>
 
-  <div id="touch"><div class="z" id="tl"></div><div class="z" id="tr"></div><div id="tb"></div></div>
+  <div id="touch"></div>
+  <div id="hints">
+    <div class="z" id="hL"><div class="t" style="top:12%"><b>&larr;</b>further out,<br>more lock</div></div>
+    <div class="z" id="hM">
+      <div class="half"><div class="t" style="top:18%"><b>&uarr;</b>lift</div></div>
+      <div class="half"><div class="t" style="top:18%"><b>&darr;</b>brake</div></div>
+    </div>
+    <div class="z" id="hR"><div class="t" style="top:12%"><b>&rarr;</b>further out,<br>more lock</div></div>
+  </div>
 
   <div class="screen" id="menu">
     <div class="card">
@@ -125,8 +141,10 @@ body.touch #touch{display:block}
         keeps going, <b>tightens</b> means brake more than you want to,
         <b>into</b> means there is no straight in between.<br>
         <b>Drive.</b> <span class="k">← →</span> steer &middot; <span class="k">↑</span> throttle
-        &middot; <span class="k">↓</span> brake &middot; <span class="k">R</span> restart stage.
-        On a phone, tap the left and right thirds to steer, the middle to brake.<br>
+        &middot; <span class="k">↓</span> brake &middot; <span class="k">R</span> restart stage.<br>
+        <b>On a phone</b> the throttle looks after itself. Hold the left or right side to
+        steer — the further out your thumb, the more lock — and the middle band for speed:
+        lower half brakes, upper half lifts off. Two thumbs work at once.<br>
         <b>The rally.</b> Six stages, they get harder, and the night comes in. Times add up.
       </div>
       <div class="row">
@@ -635,17 +653,46 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>{ keys[e.key]=false; });
 
-const touch={l:false,r:false,b:false};
-function bindZone(id,k){
-  const n=el(id);
-  const on=e=>{ touch[k]=true; e.preventDefault(); };
-  const off=e=>{ touch[k]=false; e.preventDefault(); };
-  n.addEventListener('touchstart',on,{passive:false});
-  n.addEventListener('touchend',off,{passive:false});
-  n.addEventListener('touchcancel',off,{passive:false});
+/* Steering is proportional to how far out your thumb is, not full lock the
+   instant you tap: binary steering on a phone means permanent over-correction.
+   The middle band is speed — lower half brakes, upper half lifts off. All
+   touches are read together, so steering and braking work with two thumbs. */
+const touch={steer:0, brake:false, coast:false};
+function readTouches(e){
+  const w=window.innerWidth, h=window.innerHeight;
+  let steer=0, brake=false, coast=false;
+  for(const t of e.touches){
+    const x=t.clientX, y=t.clientY;
+    if(x < w*0.38){
+      steer=Math.min(steer, -Math.max(0.18, Math.min(1,(w*0.38-x)/(w*0.30))));
+    } else if(x > w*0.62){
+      steer=Math.max(steer,  Math.max(0.18, Math.min(1,(x-w*0.62)/(w*0.30))));
+    } else {
+      if(y > h*0.42) brake=true; else coast=true;
+    }
+  }
+  touch.steer=steer; touch.brake=brake; touch.coast=coast;
+  if(e.cancelable) e.preventDefault();
 }
-bindZone('tl','l'); bindZone('tr','r'); bindZone('tb','b');
+{
+  const n=document.getElementById('touch');
+  for(const ev of ['touchstart','touchmove','touchend','touchcancel'])
+    n.addEventListener(ev, readTouches, {passive:false});
+}
+let hintT=0;
+function showHints(){
+  const h=document.getElementById('hints');
+  if(!h) return;
+  h.style.opacity='1'; hintT=performance.now()+4200;
+}
+
 if(matchMedia('(hover:none)').matches) document.body.classList.add('touch');
+// and switch over the moment a real finger arrives, in case the media query
+// was wrong about the device
+addEventListener('touchstart', function once(){
+  document.body.classList.add('touch');
+  removeEventListener('touchstart', once);
+}, {passive:true, capture:true});
 
 function flash(msg,dur){ G.warnMsg=msg; G.warnT=dur||1.1; }
 
@@ -658,12 +705,16 @@ function update(dt){
   const seg=segs[base];
 
   // ---- driver input
-  const left  = keys['ArrowLeft']||keys['a']||keys['A']||touch.l;
-  const right = keys['ArrowRight']||keys['d']||keys['D']||touch.r;
-  const brake = keys['ArrowDown']||keys['s']||keys['S']||touch.b;
-  const gas   = keys['ArrowUp']||keys['w']||keys['W'] || (document.body.classList.contains('touch') && !brake);
-  const want=(right?1:0)-(left?1:0);
-  G.steer += (want-G.steer)*Math.min(1, dt*11);
+  const left  = keys['ArrowLeft']||keys['a']||keys['A'];
+  const right = keys['ArrowRight']||keys['d']||keys['D'];
+  const isTouch = document.body.classList.contains('touch');
+  const brake = keys['ArrowDown']||keys['s']||keys['S']||touch.brake;
+  const gas   = keys['ArrowUp']||keys['w']||keys['W'] || (isTouch && !brake && !touch.coast);
+  // both at once: a touch laptop should not lose its arrow keys
+  const kb=(right?1:0)-(left?1:0);
+  const want = kb!==0 ? kb : touch.steer;
+  // slower than it was: the old rate hit full lock in a tenth of a second
+  G.steer += (want-G.steer)*Math.min(1, dt*7.5);
 
   // ---- longitudinal
   const onRoad=Math.abs(G.x)<=ROADW;
@@ -716,6 +767,11 @@ function update(dt){
       G.delta=(G.t+G.penalty)-G.bestSplits[G.splits.length-1];
   }
   if(G.warnT>0) G.warnT-=dt;
+  if(hintT && performance.now()>hintT){
+    const h=document.getElementById('hints');
+    if(h) h.style.opacity='0';
+    hintT=0;
+  }
 }
 
 /* ── render ──────────────────────────────────────────────────────────── */
@@ -940,25 +996,35 @@ function render(){
   gnd.addColorStop(0,'rgb('+L.fogc+')'); gnd.addColorStop(1,'rgb('+L.grass[1]+')');
   ctx.fillStyle=gnd; ctx.fillRect(0,HOR,W,H-HOR);
 
-  const camY=(segs[base]?segs[base].y:0)+CAM_H;
   const drawN=Math.min(56, L.dist*3+16);
 
-  // ---- project the road forward
-  let x=0, dx=0;
+  // ---- project the road forward.
+  // Everything is integrated from the car's exact position, not from the
+  // segment boundary behind it. Anchoring to the boundary made the camera
+  // elevation step and the curve accumulation restart every six metres,
+  // which at speed is a visible jolt about seven times a second.
+  const frac=(G.pos - base*SEG)/SEG;
+  const segN=segs[base+1]||segs[base];
+  const camY=(segs[base] ? segs[base].y+(segN.y-segs[base].y)*frac : 0)+CAM_H;
+  const sightM=L.dist*SEG;
+  let x=0, dx=0, span=1-frac;
   const proj=[];
   for(let i=0;i<drawN;i++){
-    const idx=base+i; if(idx>=segs.length) break;
-    const sg=segs[idx];
-    const z=Math.max(0.6, idx*SEG - G.pos + 1.5);
+    const idx=base+i, sg=segs[idx]; if(!sg) break;
+    const z=Math.max(0.9, idx*SEG - G.pos + 1.2);
     const scale=CAM_D/z;
+    const yHere=(i===0) ? camY-CAM_H : sg.y;
     proj.push({
       sx: W/2 + scale*(x - G.x)*FL + shakeX,
-      sy: HOR - scale*(sg.y - camY)*FL + shakeY,
+      sy: HOR - scale*(yHere - camY)*FL + shakeY,
       sw: scale*ROADW*FL,
-      fog: Math.min(1, Math.pow(i/L.dist, 1.35)),
-      idx, s:sg, scale
+      fog: Math.min(1, Math.pow(z/sightM, 1.35)),
+      idx, s:sg, scale, z
     });
-    x += dx; dx += sg.curve*SEG;
+    // advance by the part of this segment that lies ahead of the sample
+    x  += dx*span + 0.5*sg.curve*SEG*span*span;
+    dx += sg.curve*SEG*span;
+    span = 1;
   }
 
   // ---- road and banks, near to far, skipping whatever a crest hides
@@ -996,34 +1062,36 @@ function render(){
   }
 
   // ---- banks, as one continuous hillside per side rather than facets.
-  // Per-segment quads read as detached glass panels. The strip starts a few
-  // segments out because projection explodes at the bonnet, and its gradient
-  // is anchored to the strip's own near and far ends so it fogs with depth.
+  // The strip runs all the way to the car. Starting it a few segments out
+  // left a floating angled edge that slid away as you approached, which read
+  // as walls appearing and vanishing. Near vertices project enormously, so
+  // they are clamped well outside the frame instead of being dropped.
   {
-    const list=drawn.filter(i=>i>=5);
-    if(list.length>2){
-      const nearY=proj[list[0]].sy, farY=proj[list[list.length-1]].sy;
+    const CX=(v)=>Math.max(-2.5*W, Math.min(3.5*W, v));
+    const CY=(v)=>Math.max(-1.5*H, Math.min(2.5*H, v));
+    if(drawn.length>2){
+      const nearY=proj[drawn[0]].sy, farY=proj[drawn[drawn.length-1]].sy;
       for(const side of [-1,1]){
         let any=false;
         ctx.beginPath();
-        for(let n=0;n<list.length;n++){
-          const p=proj[list[n]];
+        for(let n=0;n<drawn.length;n++){
+          const p=proj[drawn[n]];
           const h=Math.min(5,(side<0?p.s.bl:p.s.br)||0);
           if(h>0.4) any=true;
           const m=p.scale*FL;
-          n?ctx.lineTo(p.sx+side*(ROADW+1.2+h*0.7)*m, p.sy-h*m)
-           :ctx.moveTo(p.sx+side*(ROADW+1.2+h*0.7)*m, p.sy-h*m);
+          const ox=CX(p.sx+side*(ROADW+1.2+h*0.7)*m), oy=CY(p.sy-h*m);
+          n?ctx.lineTo(ox,oy):ctx.moveTo(ox,oy);
         }
-        for(let n=list.length-1;n>=0;n--){
-          const p=proj[list[n]];
-          ctx.lineTo(p.sx+side*p.sw*1.14, p.sy);
+        for(let n=drawn.length-1;n>=0;n--){
+          const p=proj[drawn[n]];
+          ctx.lineTo(CX(p.sx+side*p.sw*1.14), CY(p.sy));
         }
         ctx.closePath();
         if(!any) continue;
         const B0=BIOMES[segs[base].bio||0];
         const c=shadeRGB([(L.grass[0][0]+B0.ground[0])/2,(L.grass[0][1]+B0.ground[1])/2,
                           (L.grass[0][2]+B0.ground[2])/2], side*L.sun.x<0, L);
-        const g=ctx.createLinearGradient(0,farY-H*0.04,0,nearY);
+        const g=ctx.createLinearGradient(0,farY-H*0.04,0,Math.min(nearY,H));
         g.addColorStop(0,mix(c,L.fogc,0.92));
         g.addColorStop(1,mix(c,L.fogc,0.12));
         ctx.fillStyle=g; ctx.fill();
@@ -1142,7 +1210,7 @@ function drawCar(){
   ctx.fillStyle='#0c1219';
   roundRect(-cw*0.27, -ch*1.10, cw*0.54, ch*0.30, ch*0.09); ctx.fill();
   // lights, with a glow when you are actually hard on the brakes
-  const braking = keys['ArrowDown']||keys['s']||keys['S']||touch.b;
+  const braking = keys['ArrowDown']||keys['s']||keys['S']||touch.brake;
   if(braking){
     ctx.globalCompositeOperation='lighter';
     for(const sx of [-cw*0.33, cw*0.33]){
@@ -1204,6 +1272,7 @@ function startStage(){
   el('menu').classList.add('hide');
   el('result').classList.add('hide');
   G.running=true;
+  showHints();
   flash('GO', 0.9);
 }
 function restartStage(){

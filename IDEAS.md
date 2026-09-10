@@ -189,6 +189,29 @@ note is for the corner you *cannot* see; within sight, the eyes win. With that o
 same comparison flipped to notes winning 35/48, mean 2.9 s, and going off **0.00 times per stage
 against 0.79**. A negative result from an instrument you have not tried to break is not a result.
 
+**A pseudo-3D road anchored to the segment boundary jolts, and it is invisible in screenshots.**
+The projection took its camera height from `segs[floor(pos/SEG)]` and restarted the curvature
+accumulation at that same boundary. Both are discrete in a quantity the car crosses continuously,
+so at six metres a segment the whole scene snapped about seven times a second at speed — and every
+still frame looked perfect, which is why it survived a full look pass and shipped. Measuring it
+needs motion: step the car forward in even 25 cm increments and diff consecutive rendered frames.
+Before the fix the road 30 m ahead moved **119 px sideways in one 25 cm step, 640x the median**, with
+a jolt every 24 samples; after integrating from the car's exact position (interpolated camera
+height, and a first partial span of `1-frac` segments) the same probe reports **zero** steps above
+4x median across three stages. The general form: **anything sampled per-segment while the camera
+moves per-metre must be interpolated, and a still frame cannot show you the difference.** The same
+mistake in a second place made the roadside banks start five segments out, giving an angled edge
+that slid away as you approached and read as walls appearing and vanishing; the fix is to run the
+strip to the camera and clamp the exploding near vertices off-screen rather than dropping them.
+
+**Binary steering is why a driving game feels bad on a phone.** Tapping a screen third gave full
+lock in about a tenth of a second, so every correction was an over-correction. Making lock
+proportional to how far out the thumb sits, and splitting a middle band into lift and brake so
+there is a throttle at all, brought the touch input model level with the keyboard: driven through
+the real `update()` at matched reaction lag, thumb and keys now score the same offs and times at
+150, 250 and 400 ms. Worth doing before reaching for a wider road — widening would have bought the
+same comfort by weakening the thing the game is about.
+
 **Art can silently delete a mechanic, so re-run the measurement after a look pass.** The stage was
 later given biomes, parallax ridgelines, banks and roadside props. Every one of those is a way to
 reveal a corner earlier than the road does — scenery lining a bend, a hillside that follows the
