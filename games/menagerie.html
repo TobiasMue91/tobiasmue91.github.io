@@ -597,7 +597,12 @@ const clock=()=>(performance.now()-CLK0)/1000;
 /* Ridges drifting behind the action at a fraction of the camera's speed, each
    hazed toward the sky colour so distance reads as distance. */
 function ridge(par,amp,lift,fill,haze){
-  const y0=sy(groundAt(camX))-lift;
+  /* Vertical parallax has to match horizontal parallax: a ridge drawn at a tenth
+     of the camera's horizontal speed must move at a tenth of its vertical speed
+     too. Anchored to the ground under the camera instead, the distant hills rose
+     and fell exactly in step with the animal, which is the one thing distance is
+     supposed to prevent. */
+  const y0=VH*HZ + camY*PPM*par - lift;
   ctx.beginPath(); ctx.moveTo(0,VH);
   for(let px=0;px<=VW;px+=5){
     const w=(px+camX*par*PPM)/165;
@@ -700,12 +705,23 @@ function groundPath(){
 function drawGround(){
   const path=()=>{ ctx.beginPath(); groundPath(); };
   path();
-  /* darkens with depth from wherever the surface currently sits, so the ground
-     recedes instead of sitting there as one big brown slab */
-  const gy0=sy(groundAt(camX));
-  const gg=ctx.createLinearGradient(0,gy0-PPM*0.3,0,gy0+VH*0.40);
-  gg.addColorStop(0,'#5e4c3a'); gg.addColorStop(.05,'#3d3226'); gg.addColorStop(.22,'#241d15');
-  gg.addColorStop(.55,'#120e09'); gg.addColorStop(1,'#080605');
+  /* Darkens with depth, anchored to the highest ground actually on screen — a
+     world position, so the bands stay glued to the terrain. Anchored to the ground
+     under the camera they slid up and down the hillsides as the animal climbed. */
+  let topH=-1e9;
+  {
+    const a=Math.max(0,Math.floor(wx(-40)/CELL)), b=Math.min(HN-1,Math.ceil(wx(VW+40)/CELL));
+    for(let i=a;i<=b;i++) if(world.h[i]>topH) topH=world.h[i];
+    if(topH<-1e8) topH=0;
+  }
+  const gy0=sy(topH);
+  /* Spread wide on purpose: with a short ramp a valley floor two metres below the
+     ridge line came out almost black, because depth from the highest point is not
+     the same thing as depth below your own feet. The topsoil band and the strata
+     carry the near-surface reading; this only has to make the deep ground recede. */
+  const gg=ctx.createLinearGradient(0,gy0-PPM*0.3,0,gy0+VH*0.95);
+  gg.addColorStop(0,'#5e4c3a'); gg.addColorStop(.10,'#463a2c'); gg.addColorStop(.34,'#2d2419');
+  gg.addColorStop(.66,'#191309'); gg.addColorStop(1,'#0b0806');
   ctx.fillStyle=gg; ctx.fill();
 
   ctx.save(); path(); ctx.clip();
@@ -777,11 +793,18 @@ function drawGround(){
 /* A shallow band of mist lying on the ground. It costs one gradient and it does
    more than anything else to stop the animals looking pasted onto the terrain. */
 function groundMist(){
-  const y=sy(groundAt(camX)), h=Math.max(26,PPM*0.9);
-  const g=ctx.createLinearGradient(0,y-h,0,y+h*0.35);
-  g.addColorStop(0,'rgba(150,178,206,0)'); g.addColorStop(.62,'rgba(146,174,204,.10)');
-  g.addColorStop(1,'rgba(140,168,200,.02)');
-  ctx.fillStyle=g; ctx.fillRect(0,y-h,VW,h*1.35);
+  /* Lies along the ground rather than floating at one height: as a flat band it
+     tracked the camera and sat well above or below the hills either side of it. */
+  const h=Math.max(20,PPM*0.75);
+  const i0=Math.max(0,Math.floor(wx(-40)/CELL)), i1=Math.min(HN-1,Math.ceil(wx(VW+40)/CELL));
+  for(const [lift,alpha] of [[h,0.055],[h*0.5,0.055]]){
+    ctx.beginPath();
+    ctx.moveTo(sx(i0*CELL), sy(world.h[i0]));
+    for(let i=i0;i<=i1;i++) ctx.lineTo(sx(i*CELL), sy(world.h[i]));
+    for(let i=i1;i>=i0;i--) ctx.lineTo(sx(i*CELL), sy(world.h[i])-lift);
+    ctx.closePath();
+    ctx.fillStyle='rgba(150,176,206,'+alpha+')'; ctx.fill();
+  }
 }
 
 function waterY(x,t){
