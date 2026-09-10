@@ -117,7 +117,8 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   entry below first: a model's judgement is illegible by construction, and the thing that made that
   fatal there applies to any game whose difficulty comes from being judged.*
 - **Something with a voice.** A game that is funny, or that has a world, where the writing is the
-  reason to stay.
+  reason to stay. *`blind_crest` has a speaking character but no writing to speak of; the gap for
+  something actually funny, or with a world, is untouched.*
 - **Sixty seconds well spent.** One verb, immediate, no tutorial, a score you want to beat once
   more. Held to the same standard of polish as the ten-minute ones.
 - **A sensor game.** Point the camera at something, blow into the microphone, tilt the phone.
@@ -127,6 +128,8 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   what killed it was the shape of the game rather than anything about the camera.*
 - **A known genre, done properly.** Pac-Man, a racer, a platformer, a jigsaw from an image the
   player drops in, a crossword, bingo, a shooting gallery. Listed in the backlog below for years.
+  *The racer is filled by `games/blind_crest.html`. A platformer, a jigsaw, a crossword and a
+  shooting gallery are all still open.*
 - **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
   most replayed pages here. There has been nothing like them in a long time.
   *Filled by `games/strata.html` (a falling-sand world whose materials you discover).*
@@ -152,6 +155,60 @@ Technique notes from things that shipped. **These are notes on how a specific pr
 not a template for what to build or a model of how a proposal should read.** Six of them describe
 exhaustive search because six abstract puzzles were built in a row; that is a fact about the last
 year, not a standard. Skim for the one that touches your problem and ignore the rest.
+
+Filled since: **a racing game**, by `games/blind_crest.html` — the largest genre hole in the
+catalogue (97 games and not one with steering, a track or a lap; the backlog had listed it unbuilt
+for years). It is a rally stage in failing light with a co-driver reading pacenotes aloud, and five
+things in it generalise.
+
+**A feasibility check built from a backward speed pass is a tautology, and it looks exactly like
+rigour.** The pass *defines* a feasible speed profile, so asking whether the road obeys it always
+answers yes: the first version cheerfully passed a fifty-metre run-up into a nine-metre hairpin. I
+wrote the same bug twice, once in a Python prototype and once in the shipped generator, and only
+caught it by feeding it a road that was obviously impossible. **Any validator worth having must be
+shown rejecting something before it is trusted.** The check with content was a different question
+entirely — not *can this corner be taken* but *can you be told in time*: is there room to brake
+between the moment the note is called and the corner arriving.
+
+**Satisfy a fairness constraint by construction rather than by rejection.** Once that check worked
+it threw away 83% of stages, which is not a filter but a bias: the survivors were all long-straight
+layouts. Choosing each straight from the corner that follows it — long enough for the note to land,
+no longer — took rejection to 0% and gave back the whole range of straight lengths. Short straights
+now pair with fast corners, which is also how a real road works.
+
+**The whole game turned on one ratio, and it was measurable before any of the art was.** Braking
+demand across 22,000 corners came out at p50 54 m and p90 117 m. Sight distance above about 120 m
+therefore makes a co-driver *decorative*, and the first build had 468 m. Sweeping it: at 240/150/96/72
+metres of sight an eyes-only bot lapped in 80.1/80.1/80.1/80.2 s — sight is free until it drops under
+roughly 72 m, and only bites hard under 54. The shipped stages run 60 m down to 30 m.
+
+**The A/B nearly died of a bug in the A/B.** Two bots, identical in steering, braking and throttle,
+differing only in information. The notes bot lost 48 stages out of 48 — because it combined the two
+sources as `min(seen, noted)`, which lets a note slow you down but never lets it keep you flat. A
+note is for the corner you *cannot* see; within sight, the eyes win. With that one line corrected the
+same comparison flipped to notes winning 35/48, mean 2.9 s, and going off **0.00 times per stage
+against 0.79**. A negative result from an instrument you have not tried to break is not a result.
+
+**Art can silently delete a mechanic, so re-run the measurement after a look pass.** The stage was
+later given biomes, parallax ridgelines, banks and roadside props. Every one of those is a way to
+reveal a corner earlier than the road does — scenery lining a bend, a hillside that follows the
+route — which would have quietly returned the game to the state where the co-driver was
+decorative, and it would have looked like a pure improvement while doing it. The rule that kept it
+honest: anything that correlates with the road's local direction fogs out at exactly the sight
+distance, and anything that does not (distant ridgelines, sky) may be seen. Re-running the same
+notes-versus-eyes A/B afterwards returned 35/48 and 0.00 offs against 0.79, unchanged to three
+figures, which is the evidence that the look pass cost nothing. Also worth keeping: per-segment
+quads for a hillside read as detached glass panels, because each facet is separately fogged; one
+continuous path per side with a gradient anchored to its own near and far ends reads as ground.
+And props lifted onto a bank they are geometrically standing on will look like they are flying if
+you never draw the plateau under them — put them on the plane you actually render.
+
+**Information has no value where mistakes are cheap.** Even with sight cut, arriving thirty km/h too
+hot cost almost nothing, because the run-off was generous and grass barely slowed the car — so
+knowing the corner in advance bought nothing. Tightening what going off costs is what made the
+knowledge worth having. Related, and the same shape as the Into-the-Breach finding above: measure
+the *stupid* baseline. A reaction-lag sweep put a human-plausible 150–250 ms at zero offs, 400 ms at
+one, 600 ms at nearly four — the curve a difficulty ought to have.
 
 Filled since: hidden-rule deduction, by `games/glyphgate.html`; cooperating with recordings of your
 own past, by `games/selfsame.html`; **pinball**, by `games/escapement.html` — swept-circle continuous
@@ -778,6 +835,22 @@ rather than only a judgement.
   solvable boards. Density of good plays in an action space measures nothing; the space is mostly
   pointless wandering. Measure instead whether a stupid heuristic reaches the good play.
 
+- **Headline sub-editing** (a newspaper game: headlines arrive too long for the column, you delete
+  words to make them fit, and the cut changes what the paper is saying — `MAYOR DENIES TAKING BRIBES
+  FROM CITY CONTRACTOR` cut down to `MAYOR TAKING BRIBES`). Killed at the prototype stage, before
+  anything was built, and the measurement is the interesting part. Tagging four headlines by
+  grammatical role and enumerating every cut that fits, then sweeping the column width from 8 to 38
+  characters: **whether a cut could satisfy both the editor and the lawyer turned out to be
+  completely independent of the width.** Two headlines were a forced compromise at every width, two
+  at none. The moral squeeze — the entire point — is decided when the headline is written, not by
+  anything the player does, so the player's verb is not a lever on the thing the game is about. That
+  is the Curator fault in different clothes. Two lesser faults confirmed it: only three to five
+  distinct readings per headline no matter how many words it had, and every headline is spent the
+  moment you have found its good cut. **Worth keeping generally: when an idea rests on a player
+  choice mattering, sweep the parameter the player controls and check the outcome actually moves
+  with it.** The flip from `DENIES TAKING` to `TAKING` is still a lovely moment and belongs in
+  something; it does not carry a game on its own.
+
 - **The Curator** (a camera game judged by a model). Built, measured heavily, and not shipped. A
   curator of dubious credentials asked for eight exhibits — "something that holds liquid", "something
   worn out by use", "the least loved object in the room" — and you answered each with a photograph of
@@ -992,7 +1065,7 @@ rather than only a judgement.
 - Checkers
 - Backgammon
 - Bingo
-- Racing Game
+- Racing Game *(built: `games/blind_crest.html`)*
 - Platformer
 - Maze Runner
 - Archery Game
@@ -1000,7 +1073,6 @@ rather than only a judgement.
 - Pool
 - Basketball
 - Air Hockey
-- Racing Game clone
 - Tower Defense
 - Dragon Slayer
 - Kung Fu Fighting
