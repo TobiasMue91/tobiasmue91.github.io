@@ -619,6 +619,32 @@ in order**, since they are about to become the bottom of the deck and that is th
 Block is being **kept** into the next turn; and that you are currently weakened. All three were state
 the engine tracked and the screen never showed.
 
+A third pass, prompted by "the leftmost card is cut off on mobile", found a CSS trap worth
+writing down because it is silent, general, and easy to reintroduce. **A centred flex row that
+overflows makes its leading items unreachable.** `justify-content:center` puts equal overflow on both
+sides, and `scrollLeft` cannot go below zero, so whatever spills off the left of a scrolling row can
+never be brought into view — 12px of the first card at 390px, 30px of the first queue slip at 320px.
+The fix is one keyword, `justify-content: safe center`, which centres while the content fits and
+falls back to start the instant it does not; declare plain `center` first as the fallback. The same
+pattern was present in three places and only one of them had been noticed.
+
+Two things made the diagnosis longer than it should have been, and both are worth knowing.
+**Two rules for the same selector inside one media query**: a later `.hand{padding:22px 0 4px}`
+silently reset the padding an earlier `.hand{padding:26px 18px 14px}` had just added, so the first
+fix appeared to do nothing. And a **plausible wrong theory**: `transform-origin:50% 130%` really does
+swing a rotated card sideways, and a transform really does not contribute scrollable overflow, so the
+fan looked like the culprit. Probing the element — layout box versus visual box, and the *computed*
+`justify-content` and `padding-left` rather than the ones in the file — settled it in one call and
+showed the transform contributed nothing.
+
+The check that catches this whole class, and now runs across eight viewport widths: for every
+scrollable row, assert the first child's left edge is not left of the container's, and that with the
+container scrolled fully right the last child's right edge is not past it. Watch out for two false
+positives it will hand you — a non-scrolling box whose `scrollWidth` merely exceeds its `clientWidth`
+is not clipping anything (the desktop fan is supposed to hang out past its box), and an item outside
+the viewport *inside* a scrollable strip is reachable by swiping. Both looked like defects until the
+probe was taught the difference.
+
 One thing deliberately not measured: whether a person enjoys it. The bots establish that the
 decisions have consequences and that several ways of building all work; they say nothing about
 whether the ten minutes are worth spending, and that stays a question for a human.
