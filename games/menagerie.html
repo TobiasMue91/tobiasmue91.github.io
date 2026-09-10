@@ -485,6 +485,7 @@ function resize(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   PPM=Math.max(34,Math.min(74, VW/15));
   HZ = VH>VW ? 0.66 : 0.76;   /* a tall screen should not be four-fifths empty sky */
+  bake();
 }
 addEventListener('resize',resize);
 
@@ -493,138 +494,408 @@ const sy=y=>VH*HZ-(y-camY)*PPM;
 const wx=px=>(px-VW*0.32)/PPM+camX;
 const wy=py=>(VH*HZ-py)/PPM+camY;
 
-/* Two ridges drifting behind the action at a fraction of the camera's speed.
-   Purely scenery — but without them the animals crawl along the floor of an
-   empty blue box, and the page reads as a chart rather than a place. */
-function ridge(par,amp,lift,fill){
+/* ---------- scenery ---------- */
+let CLK0=performance.now();
+const clock=()=>(performance.now()-CLK0)/1000;
+
+/* Ridges drifting behind the action at a fraction of the camera's speed, each
+   hazed toward the sky colour so distance reads as distance. */
+function ridge(par,amp,lift,fill,haze){
   const y0=sy(groundAt(camX))-lift;
   ctx.beginPath(); ctx.moveTo(0,VH);
   for(let px=0;px<=VW;px+=5){
-    const w=(px+camX*par*PPM)/165;          /* shape in screen space, drift by parallax */
+    const w=(px+camX*par*PPM)/165;
     const h=Math.sin(w)*amp + Math.sin(w*2.31+1.7)*amp*0.4 + Math.sin(w*0.43-0.6)*amp*0.8;
     ctx.lineTo(px, y0-h);
   }
   ctx.lineTo(VW,VH); ctx.closePath();
   ctx.fillStyle=fill; ctx.fill();
+  if(haze){ ctx.fillStyle=haze; ctx.fill(); }
+}
+
+/* Specks of dust hanging in the light. Cheap, and they stop the sky being dead. */
+const MOTES=[];
+for(let i=0;i<38;i++) MOTES.push({x:Math.random(),y:Math.random(),r:0.6+Math.random()*1.5,
+  s:0.1+Math.random()*0.3, ph:Math.random()*7});
+function drawMotes(){
+  const t=clock();
+  ctx.fillStyle='rgba(226,196,150,.16)';
+  for(const m of MOTES){
+    const X=((m.x*VW - camX*PPM*m.s*0.06)%VW+VW)%VW;
+    const Y=m.y*VH*0.85 + Math.sin(t*0.23+m.ph)*9;
+    ctx.beginPath(); ctx.arc(X,Y,m.r,0,7); ctx.fill();
+  }
+}
+
+/* Sky, sun and vignette never change between frames, so they are baked once per
+   resize and blitted. Rebuilding three full-screen gradients every frame was a
+   third of the frame budget. */
+let skyC=null, vigC=null;
+function bake(){
+  const mk=()=>{ const c=document.createElement('canvas');
+    c.width=Math.max(1,Math.round(VW*DPR)); c.height=Math.max(1,Math.round(VH*DPR));
+    const x=c.getContext('2d'); x.setTransform(DPR,0,0,DPR,0,0); return [c,x]; };
+  let x;
+  [skyC,x]=mk();
+  const g=x.createLinearGradient(0,0,0,VH);
+  g.addColorStop(0,'#090d16'); g.addColorStop(.34,'#141d2b'); g.addColorStop(.68,'#243549');
+  g.addColorStop(.9,'#3a4a5e'); g.addColorStop(1,'#4d5768');
+  x.fillStyle=g; x.fillRect(0,0,VW,VH);
+  const sunX=VW*0.72, sunY=VH*(HZ-0.30);
+  const glow=x.createRadialGradient(sunX,sunY,0,sunX,sunY,VH*0.62);
+  glow.addColorStop(0,'rgba(252,203,138,.34)'); glow.addColorStop(.3,'rgba(226,152,94,.13)');
+  glow.addColorStop(1,'rgba(224,150,92,0)');
+  x.fillStyle=glow; x.fillRect(0,0,VW,VH);
+  x.beginPath(); x.arc(sunX,sunY,VH*0.026,0,7);
+  x.fillStyle='rgba(255,228,182,.62)'; x.fill();
+  /* a warm band lying along the horizon, under the ridges */
+  const hb=x.createLinearGradient(0,VH*(HZ-0.16),0,VH*HZ);
+  hb.addColorStop(0,'rgba(232,164,104,0)'); hb.addColorStop(1,'rgba(238,172,110,.17)');
+  x.fillStyle=hb; x.fillRect(0,VH*(HZ-0.16),VW,VH*0.16);
+
+  [vigC,x]=mk();
+  const v=x.createRadialGradient(VW*0.5,VH*0.48,VH*0.36,VW*0.5,VH*0.48,VH*0.95);
+  v.addColorStop(0,'rgba(0,0,0,0)'); v.addColorStop(1,'rgba(4,7,12,.5)');
+  x.fillStyle=v; x.fillRect(0,0,VW,VH);
+}
+function drawSky(){
+  if(skyC) ctx.drawImage(skyC,0,0,VW,VH);
+  drawMotes();
+  ridge(0.07, VH*0.062, VH*0.40, '#141d29', 'rgba(58,76,98,.26)');
+  ridge(0.16, VH*0.048, VH*0.26, '#121a25', 'rgba(46,62,84,.15)');
+  ridge(0.34, VH*0.032, VH*0.125,'#101720', 'rgba(36,50,70,.07)');
+}
+
+/* ---------- particles: dust at the feet, spray at the water ---------- */
+const PARTS=[];
+function puff(x,y,vx,vy,r,life,kind){
+  if(PARTS.length>240) return;
+  PARTS.push({x,y,vx,vy,r,t:0,life,kind});
+}
+function stepParts(dt){
+  for(let i=PARTS.length-1;i>=0;i--){
+    const q=PARTS[i]; q.t+=dt;
+    if(q.t>=q.life){ PARTS.splice(i,1); continue; }
+    q.x+=q.vx*dt; q.y+=q.vy*dt;
+    if(q.kind==='spray'){ q.vy-=9.8*dt; q.vx*=0.99; }
+    else { q.vy+=0.35*dt; q.vx*=0.965; q.vy*=0.965; }   /* dust drifts up and hangs */
+  }
+}
+function drawParts(){
+  for(const q of PARTS){
+    const k=1-q.t/q.life;
+    if(q.kind==='spray'){
+      ctx.fillStyle='rgba(178,224,247,'+(k*0.75)+')';
+      ctx.beginPath(); ctx.arc(sx(q.x),sy(q.y),Math.max(0.8,q.r*PPM*(0.5+k*0.5)),0,7); ctx.fill();
+    } else {
+      ctx.fillStyle='rgba(198,180,152,'+(k*0.2)+')';
+      ctx.beginPath(); ctx.arc(sx(q.x),sy(q.y),Math.max(1,q.r*PPM*(1.15-k*0.45)),0,7); ctx.fill();
+    }
+  }
+}
+
+/* ---------- the world ---------- */
+function groundPath(){
+  ctx.moveTo(sx(0)-4000,VH); ctx.lineTo(sx(0)-4000,sy(world.h[0]));
+  for(let i=0;i<HN;i++) ctx.lineTo(sx(i*CELL),sy(world.h[i]));
+  ctx.lineTo(sx(WORLD_W)+4000,sy(world.h[HN-1])); ctx.lineTo(sx(WORLD_W)+4000,VH);
+  ctx.closePath();
+}
+function drawGround(){
+  const path=()=>{ ctx.beginPath(); groundPath(); };
+  path();
+  /* darkens with depth from wherever the surface currently sits, so the ground
+     recedes instead of sitting there as one big brown slab */
+  const gy0=sy(groundAt(camX));
+  const gg=ctx.createLinearGradient(0,gy0-PPM*0.3,0,gy0+VH*0.40);
+  gg.addColorStop(0,'#5e4c3a'); gg.addColorStop(.05,'#3d3226'); gg.addColorStop(.22,'#241d15');
+  gg.addColorStop(.55,'#120e09'); gg.addColorStop(1,'#080605');
+  ctx.fillStyle=gg; ctx.fill();
+
+  ctx.save(); path(); ctx.clip();
+  /* topsoil: a darker band hugging the surface */
+  ctx.beginPath();
+  ctx.moveTo(sx(0)-4000,sy(world.h[0]));
+  for(let i=0;i<HN;i++) ctx.lineTo(sx(i*CELL),sy(world.h[i]));
+  ctx.lineTo(sx(WORLD_W)+4000,sy(world.h[HN-1]));
+  for(let i=HN-1;i>=0;i--) ctx.lineTo(sx(i*CELL),sy(world.h[i]-0.42));
+  ctx.closePath();
+  ctx.fillStyle='rgba(104,84,58,.42)'; ctx.fill();
+  /* strata, sagging slightly so they do not look ruled */
+  ctx.lineWidth=1;
+  for(let d=0.9;d<9;d+=1.15){
+    ctx.strokeStyle='rgba(0,0,0,'+(0.19-d*0.01)+')';
+    ctx.beginPath();
+    ctx.moveTo(sx(0)-4000, sy(world.h[0]-d));
+    for(let i=0;i<HN;i+=4) ctx.lineTo(sx(i*CELL), sy(world.h[i]-d-Math.sin(i*0.19+d)*0.09));
+    ctx.lineTo(sx(WORLD_W)+4000, sy(world.h[HN-1]-d));
+    ctx.stroke();
+  }
+  /* a few stones */
+  ctx.fillStyle='rgba(0,0,0,.2)';
+  for(let i=2;i<HN;i+=17){
+    const x=i*CELL, X=sx(x); if(X<-60||X>VW+60) continue;
+    const d=0.9+((i*37)%23)/14, w=(4+((i*13)%9))*PPM/44;
+    ctx.beginPath(); ctx.ellipse(X, sy(world.h[i]-d), w, w*0.55, ((i*7)%10)/10, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+
+  /* the living crust: grass where there is grip, frost where there is not.
+     Batched into one path per material — stroking each cell separately was most
+     of a frame. */
+  const i0=Math.max(0,Math.floor(wx(-40)/CELL)), i1=Math.min(HN-1,Math.ceil(wx(VW+40)/CELL));
+  ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=3;
+  for(const ice of [false,true]){
+    ctx.strokeStyle = ice ? 'rgba(158,220,238,.85)' : '#78994f';
+    ctx.beginPath(); let pen=false;
+    for(let i=i0;i<=i1;i++){
+      const isIce=world.grip[i]<0.5;
+      if(isIce!==ice){ pen=false; continue; }
+      const X=sx(i*CELL), Y=sy(world.h[i]);
+      if(!pen){ ctx.moveTo(X,Y); pen=true; } else ctx.lineTo(X,Y);
+    }
+    ctx.stroke();
+  }
+  if(PPM>34){
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(146,184,100,.7)';
+    ctx.beginPath();
+    for(let i=i0;i<=i1;i++){
+      if(world.grip[i]<0.5) continue;
+      const n=(i*2654435761)>>>0;                  /* stable per-cell jitter */
+      if((n>>>5)%5>1) continue;                    /* irregular spacing */
+      const X=sx(i*CELL)+((n>>>9)%7-3)*PPM/44, Y=sy(world.h[i]);
+      const sl=slopeAt(i*CELL), lean=Math.max(-0.7,Math.min(0.7,-sl*0.4))+(((n>>>13)%9)-4)/16;
+      const hgt=(2.4+((n>>>17)%6))*PPM/44;
+      ctx.moveTo(X,Y); ctx.quadraticCurveTo(X+lean*hgt*0.4,Y-hgt*0.7,X+lean*hgt,Y-hgt);
+    }
+    ctx.stroke();
+  }
+  ctx.strokeStyle='rgba(255,226,170,.13)'; ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(sx(0)-4000,sy(world.h[0])-2.5);
+  for(let i=0;i<HN;i++) ctx.lineTo(sx(i*CELL),sy(world.h[i])-2.5);
+  ctx.lineTo(sx(WORLD_W)+4000,sy(world.h[HN-1])-2.5);
+  ctx.stroke();
+}
+
+/* A shallow band of mist lying on the ground. It costs one gradient and it does
+   more than anything else to stop the animals looking pasted onto the terrain. */
+function groundMist(){
+  const y=sy(groundAt(camX)), h=Math.max(26,PPM*0.9);
+  const g=ctx.createLinearGradient(0,y-h,0,y+h*0.35);
+  g.addColorStop(0,'rgba(150,178,206,0)'); g.addColorStop(.62,'rgba(146,174,204,.10)');
+  g.addColorStop(1,'rgba(140,168,200,.02)');
+  ctx.fillStyle=g; ctx.fillRect(0,y-h,VW,h*1.35);
+}
+
+function waterY(x,t){
+  return world.water + Math.sin(x*0.9+t*1.5)*0.035 + Math.sin(x*2.3-t*2.1)*0.018;
+}
+/* Open water is exactly the stretches where the ground lies below the water line,
+   from the surface down to the ground. Building that region directly is both
+   correct and cheap; clipping a full-screen fill against the ground is neither —
+   an even-odd subtraction leaves the dry land tinted as though it were flooded. */
+function waterRegion(t){
+  const L=sx(0)-4000, R=sx(WORLD_W)+4000;
+  const P2=new Path2D(); const ctx={beginPath(){},moveTo:(a,b)=>P2.moveTo(a,b),
+    lineTo:(a,b)=>P2.lineTo(a,b), closePath:()=>P2.closePath()};
+  let i=0, any=false;
+  while(i<HN){
+    if(world.h[i]>=world.water){ i++; continue; }
+    let j=i; while(j<HN && world.h[j]<world.water) j++;
+    const x0=(i===0)?L:sx(i*CELL), x1=(j===HN)?R:sx((j-1)*CELL);
+    if(x1>=-60 && x0<=VW+60){
+      any=true;
+      ctx.moveTo(x0, sy(waterY(i*CELL,t)));
+      for(let k=i;k<j;k++) ctx.lineTo(sx(k*CELL), sy(waterY(k*CELL,t)));
+      ctx.lineTo(x1, sy(waterY((j-1)*CELL,t)));
+      for(let k=j-1;k>=i;k--) ctx.lineTo(sx(k*CELL), sy(world.h[k]));
+      ctx.lineTo(x0, sy(world.h[i]));
+      ctx.closePath();
+    }
+    i=j;
+  }
+  return any?P2:null;
+}
+let WPATH=null;
+function waterBody(){
+  if(world.water<=-90) return;
+  WPATH=waterRegion(clock());
+  if(!WPATH) return;
+  const wg=ctx.createLinearGradient(0,sy(world.water),0,sy(world.water)+VH*0.5);
+  wg.addColorStop(0,'#2c6a91'); wg.addColorStop(1,'#0f3047');
+  ctx.fillStyle=wg; ctx.fill(WPATH);
+}
+function waterOver(){
+  if(world.water<=-90 || !WPATH) return;
+  const t=clock();
+  ctx.save(); ctx.clip(WPATH);
+  ctx.fillStyle='rgba(44,112,152,.40)'; ctx.fill(WPATH);
+  /* light raking down through the surface, barely there */
+  ctx.globalAlpha=.05; ctx.strokeStyle='#dff4ff'; ctx.lineWidth=Math.max(4,PPM*0.13);
+  for(let k=-1;k<6;k++){
+    const X=((k*PPM*2.6 - camX*PPM*0.25 + t*7)%(VW+500))-250;
+    ctx.beginPath(); ctx.moveTo(X,sy(world.water)-VH); ctx.lineTo(X-VH*0.9,VH); ctx.stroke();
+  }
+  ctx.globalAlpha=1; ctx.restore();
+  /* the surface itself, drawn only across open water */
+  ctx.save(); ctx.clip(WPATH);
+  ctx.beginPath();
+  for(let px=0;px<=VW;px+=4){ const wxp=wx(px); ctx.lineTo(px, sy(waterY(wxp,t))); }
+  ctx.strokeStyle='rgba(196,236,255,.7)'; ctx.lineWidth=2; ctx.stroke();
+  ctx.beginPath();
+  for(let px=0;px<=VW;px+=4){ const wxp=wx(px); ctx.lineTo(px, sy(waterY(wxp,t))+3.5); }
+  ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=3; ctx.stroke();
+  ctx.restore();
+}
+
+function drawRoof(){
+  let i=0;
+  while(i<HN){
+    if(world.roof[i]>=NO_ROOF-0.01){ i++; continue; }
+    let j=i; while(j<HN && world.roof[j]<NO_ROOF-0.01) j++;
+    const thick=1.8;
+    ctx.beginPath();
+    for(let k=i;k<j;k++) ctx.lineTo(sx(k*CELL), sy(world.roof[k]));
+    for(let k=j-1;k>=i;k--) ctx.lineTo(sx(k*CELL), Math.max(-40,sy(world.roof[k]+thick)));
+    ctx.closePath();
+    let top=1e9,bot=-1e9;
+    for(let k=i;k<j;k++){ top=Math.min(top,sy(world.roof[k]+thick)); bot=Math.max(bot,sy(world.roof[k])); }
+    const rg=ctx.createLinearGradient(0,top,0,bot);
+    /* lit along the top where the sky reaches it, in shadow on the underside */
+    rg.addColorStop(0,'#4a4030'); rg.addColorStop(.35,'#332a1f'); rg.addColorStop(1,'#15110b');
+    ctx.fillStyle=rg; ctx.fill();
+    ctx.save(); ctx.clip();
+    ctx.strokeStyle='rgba(0,0,0,.14)'; ctx.lineWidth=1;
+    for(let d=0.5;d<thick;d+=0.72){
+      ctx.beginPath();
+      for(let k=i;k<j;k+=2) ctx.lineTo(sx(k*CELL), sy(world.roof[k]+d+Math.sin(k*0.3)*0.05));
+      ctx.stroke();
+    }
+    ctx.restore();
+    /* stalactite teeth, so the underside is not a ruled line */
+    ctx.fillStyle='#241d13';
+    for(let k=i;k<j;k+=6){
+      const X=sx(k*CELL); if(X<-30||X>VW+30) continue;
+      const dp=(0.10+((k*17)%7)/34)*PPM;
+      ctx.beginPath(); ctx.moveTo(X-PPM*0.07,sy(world.roof[k]));
+      ctx.lineTo(X, sy(world.roof[k])+dp); ctx.lineTo(X+PPM*0.07,sy(world.roof[k])); ctx.closePath(); ctx.fill();
+    }
+    ctx.beginPath();
+    for(let k=i;k<j;k++) ctx.lineTo(sx(k*CELL), sy(world.roof[k]));
+    ctx.strokeStyle='rgba(255,220,160,.2)'; ctx.lineWidth=2; ctx.stroke();
+    i=j;
+  }
 }
 
 function drawWorld(){
-  /* sky */
-  const g=ctx.createLinearGradient(0,0,0,VH);
-  g.addColorStop(0,'#0c111b'); g.addColorStop(.42,'#182231'); g.addColorStop(.8,'#26374b'); g.addColorStop(1,'#31465e');
-  ctx.fillStyle=g; ctx.fillRect(0,0,VW,VH);
-
-  /* a low sun behind everything */
-  const sun=ctx.createRadialGradient(VW*0.7,VH*0.62,0,VW*0.7,VH*0.62,VH*0.6);
-  sun.addColorStop(0,'rgba(226,168,96,.16)'); sun.addColorStop(1,'rgba(226,168,96,0)');
-  ctx.fillStyle=sun; ctx.fillRect(0,0,VW,VH);
-
-  ridge(0.10, VH*0.055, VH*0.34, '#18232f');
-  ridge(0.30, VH*0.034, VH*0.145,'#202d3c');
-
-  /* distance marks every 5 m, so progress is legible without a number */
-  ctx.strokeStyle='rgba(255,255,255,.055)'; ctx.lineWidth=1;
-  ctx.fillStyle='rgba(255,255,255,.16)'; ctx.font='10px system-ui'; ctx.textAlign='center';
+  drawSky();
+  ctx.strokeStyle='rgba(255,255,255,.045)'; ctx.lineWidth=1;
+  ctx.fillStyle='rgba(255,255,255,.13)'; ctx.font='10px system-ui'; ctx.textAlign='center';
   for(let m=0;m<=WORLD_W;m+=5){
     const X=sx(m); if(X<-40||X>VW+40) continue;
     ctx.beginPath(); ctx.moveTo(X,0); ctx.lineTo(X,VH); ctx.stroke();
     ctx.fillText(m+'m', X, 16);
   }
-
-  /* the roof, where one has been pulled down: a band of rock, drawn in runs so a
-     gap in the cover does not get bridged across */
-  {
-    let i=0;
-    while(i<HN){
-      if(world.roof[i]>=NO_ROOF-0.01){ i++; continue; }
-      let j=i; while(j<HN && world.roof[j]<NO_ROOF-0.01) j++;
-      const thick=1.6;
-      ctx.beginPath();
-      for(let k=i;k<j;k++) ctx.lineTo(sx(k*CELL), sy(world.roof[k]));
-      for(let k=j-1;k>=i;k--) ctx.lineTo(sx(k*CELL), Math.max(-40,sy(world.roof[k]+thick)));
-      ctx.closePath();
-      let top=1e9,bot=-1e9;
-      for(let k=i;k<j;k++){ top=Math.min(top,sy(world.roof[k]+thick)); bot=Math.max(bot,sy(world.roof[k])); }
-      const rg=ctx.createLinearGradient(0,top,0,bot);
-      rg.addColorStop(0,'#191410'); rg.addColorStop(.65,'#2e251c'); rg.addColorStop(1,'#4b4034');
-      ctx.fillStyle=rg; ctx.fill();
-      ctx.beginPath();
-      for(let k=i;k<j;k++) ctx.lineTo(sx(k*CELL), sy(world.roof[k]));
-      ctx.strokeStyle='#6f8a56'; ctx.lineWidth=2.5; ctx.stroke();
-      i=j;
-    }
-  }
-
-  /* water */
-  if(world.water>-90){
-    const Y=sy(world.water);
-    ctx.fillStyle='rgba(61,127,168,.34)';
-    ctx.fillRect(0,Y,VW,VH-Y);
-    ctx.strokeStyle='rgba(140,205,235,.5)'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.moveTo(0,Y+.5); ctx.lineTo(VW,Y+.5); ctx.stroke();
-  }
-
-  /* the ground itself, tinted where it is slippery */
-  /* run the ground out past both ends of the world, so nothing beyond it reads as water */
-  ctx.beginPath();
-  ctx.moveTo(sx(0)-4000,VH); ctx.lineTo(sx(0)-4000,sy(world.h[0]));
-  for(let i=0;i<HN;i++) ctx.lineTo(sx(i*CELL),sy(world.h[i]));
-  ctx.lineTo(sx(WORLD_W)+4000,sy(world.h[HN-1])); ctx.lineTo(sx(WORLD_W)+4000,VH);
-  ctx.closePath();
-  const gg=ctx.createLinearGradient(0,sy(4),0,VH);
-  gg.addColorStop(0,'#54473a'); gg.addColorStop(.25,'#3f352b'); gg.addColorStop(1,'#231c15');
-  ctx.fillStyle=gg; ctx.fill();
-  ctx.save(); ctx.clip();
-  ctx.strokeStyle='rgba(0,0,0,.16)'; ctx.lineWidth=1;
-  for(let d=0.45;d<9;d+=0.62){
-    ctx.beginPath();
-    ctx.moveTo(sx(0)-4000, sy(world.h[0]-d));
-    for(let i=0;i<HN;i+=2) ctx.lineTo(sx(i*CELL), sy(world.h[i]-d-Math.sin(i*0.21)*0.06));
-    ctx.lineTo(sx(WORLD_W)+4000, sy(world.h[HN-1]-d));
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  ctx.lineWidth=2.5; ctx.lineCap='round';
-  ctx.strokeStyle='#6b8a55';
-  ctx.beginPath(); ctx.moveTo(sx(0)-4000,sy(world.h[0])); ctx.lineTo(sx(0),sy(world.h[0])); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(sx(WORLD_W),sy(world.h[HN-1])); ctx.lineTo(sx(WORLD_W)+4000,sy(world.h[HN-1])); ctx.stroke();
-  for(let i=0;i<HN-1;i++){
-    const a=world.grip[i];
-    ctx.strokeStyle = a<0.5 ? 'rgba(127,196,216,'+(0.85-a*0.7)+')' : '#6b8a55';
-    ctx.beginPath(); ctx.moveTo(sx(i*CELL),sy(world.h[i]));
-    ctx.lineTo(sx((i+1)*CELL),sy(world.h[i+1])); ctx.stroke();
-  }
+  waterBody();
+  drawGround();
+  groundMist();
+  drawRoof();
 }
 
-function drawCreature(c,champ,guest){
+/* ---------- the animals ---------- */
+/* Drawn as one body rather than a diagram: every limb and joint is laid down in
+   a single colour, first fat and dark for an outline, then filled. Circles and
+   sticks read as a physics debug view; a silhouette with an eye reads as an
+   animal, and that is most of what this page is for. */
+function bodyPath(c,grow){
   const P=c.P;
-  ctx.lineCap='round';
-  if(champ||guest){
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  for(const m of c.g.muscles){
+    const a=P[m.i], b=P[m.j];
+    ctx.lineWidth=Math.max(1.5, Math.min(a.r,b.r)*PPM*1.3 + grow*2);
+    ctx.beginPath(); ctx.moveTo(sx(a.x),sy(a.y)); ctx.lineTo(sx(b.x),sy(b.y)); ctx.stroke();
+  }
+  for(const p of P){
+    ctx.beginPath(); ctx.arc(sx(p.x),sy(p.y),Math.max(1.5,p.r*PPM+grow),0,7); ctx.fill();
+  }
+}
+function drawCreature(c,champ,guest){
+  const P=c.P, lead=champ||guest;
+
+  if(lead){
     for(const p of P){
       const gy=groundAt(p.x), gap=Math.max(0,p.y-p.r-gy);
-      if(gap<1.1){
-        const a=(1-gap/1.1)*0.34, w=p.r*PPM*(1.5+gap*0.7);
-        ctx.beginPath(); ctx.ellipse(sx(p.x),sy(gy),w,Math.max(1.5,w*0.22),0,0,7);
+      if(gap<1.2){
+        const a=(1-gap/1.2)*0.36, w=p.r*PPM*(1.6+gap*0.8);
+        ctx.beginPath(); ctx.ellipse(sx(p.x),sy(gy),w,Math.max(1.5,w*0.2),0,0,7);
         ctx.fillStyle='rgba(0,0,0,'+a+')'; ctx.fill();
       }
     }
   }
-  const col = guest ? 'rgba(126,195,122,' : champ ? 'rgba(232,163,61,' : 'rgba(150,172,200,';
-  const aM = guest?0.85 : champ?0.92 : 0.075;
-  const aN = guest?0.95 : champ?1.0   : 0.085;
-  ctx.strokeStyle=col+aM+')';
-  ctx.lineWidth=champ||guest?3:2;
-  for(const m of c.g.muscles){
-    const a=P[m.i], b=P[m.j];
-    ctx.beginPath(); ctx.moveTo(sx(a.x),sy(a.y)); ctx.lineTo(sx(b.x),sy(b.y)); ctx.stroke();
+
+  if(!lead){                                   /* the pack, as soft shapes behind the leader */
+    ctx.strokeStyle='rgba(166,190,220,.11)'; ctx.fillStyle='rgba(166,190,220,.12)';
+    bodyPath(c,0);
+    return;
   }
+
+  const skin  = guest ? '#7fc47a' : '#e8a33d';
+  const shade = guest ? '#2c5a2c' : '#66360f';
+  ctx.strokeStyle=shade; ctx.fillStyle=shade; bodyPath(c,2.2);
+  ctx.strokeStyle=skin;  ctx.fillStyle=skin;  bodyPath(c,0);
+
+  /* a warm rim where the sun would catch each joint */
   for(const p of P){
-    ctx.beginPath(); ctx.arc(sx(p.x),sy(p.y),Math.max(2,p.r*PPM),0,7);
-    ctx.fillStyle=col+aN+')'; ctx.fill();
-    if(champ||guest){ ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=1; ctx.stroke(); }
+    const R=Math.max(1.5,p.r*PPM);
+    if(R<4) continue;
+    ctx.beginPath(); ctx.arc(sx(p.x)+R*0.16,sy(p.y)-R*0.2,R*0.62,0,7);
+    ctx.fillStyle= guest?'rgba(196,238,190,.3)':'rgba(255,222,158,.32)'; ctx.fill();
+  }
+
+  /* an eye on whichever joint is furthest forward: the cheapest way to turn a
+     blob into something that is trying to get somewhere */
+  let head=P[0];
+  for(const p of P) if(p.x>head.x || (p.x===head.x && p.y>head.y)) head=p;
+  const R=Math.max(2,head.r*PPM);
+  if(R>4.5){
+    const ex=sx(head.x)+R*0.34, ey=sy(head.y)-R*0.16;
+    ctx.beginPath(); ctx.arc(ex,ey,R*0.30,0,7); ctx.fillStyle='#fdf6e6'; ctx.fill();
+    const look=Math.max(-1,Math.min(1,(head.x-head.px0||0)));
+    ctx.beginPath(); ctx.arc(ex+R*0.10,ey+R*0.03,R*0.155,0,7); ctx.fillStyle='#141018'; ctx.fill();
   }
 }
+
+/* Dust and spray, raised only by the animal you are actually watching. */
+function wake(c){
+  const t=clock(), hasWater=world.water>-90;
+  for(const p of c.P){
+    const gy=groundAt(p.x);
+    if(p._py!==undefined){
+      const drop=p._py-p.y;
+      if(drop>0.055 && p.y-p.r<=gy+0.03 && p._air){
+        const n=Math.min(2,1+Math.floor(drop*14));
+        for(let k=0;k<n;k++)
+          puff(p.x+(Math.random()-0.5)*p.r, gy+p.r*0.3,
+               (Math.random()-0.5)*0.9, 0.15+Math.random()*0.4,
+               p.r*0.3, 0.4+Math.random()*0.35, 'dust');
+      }
+      if(hasWater){
+        const s=world.water;
+        if((p._py-p.r>s)!==(p.y-p.r>s) && Math.abs(p._py-p.y)>0.006){
+          for(let k=0;k<4;k++)
+            puff(p.x+(Math.random()-0.5)*p.r*1.4, s+0.05,
+                 (Math.random()-0.5)*1.6, 0.7+Math.random()*1.5,
+                 p.r*0.28, 0.4+Math.random()*0.4, 'spray');
+        }
+      }
+    }
+    p._air = p.y-p.r > gy+0.05;
+    p._py=p.y;
+  }
+}
+
+function vignette(){ if(vigC) ctx.drawImage(vigC,0,0,VW,VH); }
 
 function draw(){
   drawWorld();
@@ -634,26 +905,30 @@ function draw(){
     if(!c.dead && c.fit>champFit){ champFit=c.fit; champ=c; }
   });
   for(const c of state.live) if(c!==champ && c!==guest) drawCreature(c,false,false);
-  if(guest) drawCreature(guest,false,true);
-  if(champ) drawCreature(champ,true,false);
+  drawParts();
+  if(guest){ wake(guest); drawCreature(guest,false,true); }
+  if(champ){ wake(champ); drawCreature(champ,true,false); }
+  waterOver();
+  vignette();
 
-  /* camera trails the leader */
   const tgt = champ?centroid(champ.P):{x:START_X,y:0};
   camX+=(tgt.x-camX)*0.055;
   camY+=(Math.max(-2,Math.min(6,tgt.y))-camY)*0.04;
 
-  /* readouts */
   document.getElementById('genN').textContent=state.gen;
   document.getElementById('popN').textContent=worldName ? '· '+worldName : '';
   document.getElementById('best').textContent=state.best.toFixed(1)+'m';
-  document.getElementById('species').textContent = champ ? nameOf(champ.g)+' — '+champ.fit.toFixed(1)+'m' : ' ';
+  document.getElementById('species').textContent = champ ? nameOf(champ.g)+' — '+champ.fit.toFixed(1)+'m' : ' ';
   document.getElementById('prog').style.width=(100*state.stepN/STEPS)+'%';
 }
 
 /* ---------- main loop ---------- */
 let acc=0;
+let lastFrame=performance.now();
 function frame(){
   requestAnimationFrame(frame);
+  const nowT=performance.now();
+  stepParts(Math.min(0.05,(nowT-lastFrame)/1000)); lastFrame=nowT;
   if(state.playing){
     const n=state.speed;
     for(let k=0;k<n && state.stepN<STEPS;k++){
