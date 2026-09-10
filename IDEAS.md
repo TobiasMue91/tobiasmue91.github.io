@@ -902,7 +902,7 @@ being thin somewhere is not on its own a reason to build there. Two of the entri
 recommended as gaps for exactly that bad reason before being turned down; an empty category is
 evidence about the catalogue, not about whether anyone wants to play the thing that would fill it.
 
-One caveat on reading this list, added 2026-09-09. Three of the four rejections below are of
+One caveat on reading this list, added 2026-09-09. Three of the rejections below are of
 something physical, thematic or genre-shaped, and the taste judgements in them stand exactly as
 written. But three entries pointing the same way is a coincidence of what happened to get
 prototyped, not a ruling on that whole direction, and treating it as one is part of how the
@@ -936,6 +936,41 @@ rather than only a judgement.
   `chatgpt.tobiasmue91.workers.dev` outright (403 on CONNECT), unlike the session recorded above that
   reached it fine. **Sandbox network access is per-session and cannot be assumed either way** — check
   it before designing around a model, and check it before concluding you cannot.
+
+- **A parser text adventure** (a hand-authored world, dense implementation, a generous parser so the
+  genre's guess-the-verb misery never bites). Killed at the verification stage, before any prose was
+  written. Worth keeping because it closes the **interactive fiction** gap — zero of 99 games and 216
+  tools is a parser game, and that stays true on purpose.
+
+  **Three phrasing corpora, each written from the player's side before seeing the parser's synonym
+  tables**, for the same four-room scene; each scored cold, then the parser was fixed against it, then
+  the next was written. Corpus 1, command-shaped (`x mirror`, `take script`), 239 phrasings: **68.6%**.
+  Corpus 2, held out and more verbose, 119: **58.0%**. Corpus 3, natural rambling (`chuck the script`,
+  `i'm stuck`, `what does the noticeboard say`), 99: **39.4%**.
+
+  **The sweep runs the wrong way, which is what killed it.** The parameter the player controls is how
+  naturally they phrase things, and sweeping it from command-shaped to conversational moves
+  comprehension 68.6% → 39.4%. The interface gets worse exactly as the player relaxes into it. Fitting
+  did not transfer either: every round bought ~30 points on the corpus in front of me and the next cold
+  corpus started *lower*.
+
+  Three findings generalise past this idea.
+
+  **Structure is worth a lot and vocabulary is worth almost nothing.** Six structural rules — a
+  preposition of place dominates the verb (`search behind X` = `look behind X`); a light verb plus a
+  particle takes its meaning from the particle (`get the drawer open` = `open drawer`); question forms;
+  bare prepositional phrases; ditransitives; pull/push on an openable — took corpus 2 from 58.0% to
+  **81.5% with zero regressions and no new words**. A large synonym pass then bought only ten more
+  points. The residual is unbounded English and no amount of synonyms closes it.
+
+  **The forgiving default is the dangerous one.** Defaulting an unrecognised noun phrase to `examine`,
+  added to be kind, is what converts honest confusion into confident wrong action: on corpus 3, **37 of
+  60 failures did something silently wrong** rather than admitting they were lost — `chuck the script`
+  read it, `throw open the french window` examined it, `walk out onto the stage` left by the wrong door.
+  Any page that takes free text should fail loudly; guessing is worse than admitting.
+
+  **Write the test corpus before the thing it tests.** Scoring a parser against phrasings invented after
+  the synonym table exists measures the table, not the player.
 
 - **Air hockey.** Rejected. Not because the physics duplicates `pong` — a free 2D mallet with real
   momentum transfer is a genuinely different control space from a paddle on a rail — but because
