@@ -205,6 +205,32 @@ mistake in a second place made the roadside banks start five segments out, givin
 that slid away as you approached and read as walls appearing and vanishing; the fix is to run the
 strip to the camera and clamp the exploding near vertices off-screen rather than dropping them.
 
+**Periodic shimmer is invisible in a screenshot and easy to measure.** Two surfaces alternated
+colour per-segment — the tarmac every four segments and the kerbs every one — which at 150 km/h is
+a 1.7 Hz and a 7 Hz pulse: slow enough to see, fast enough to irritate, and completely absent from
+any still. The probe is four lines: drive at a fixed speed, take the mean brightness of a few
+horizontal bands each frame, and report the standard deviation and the zero-crossing rate. The mid
+band read **sd 7.7 at 1.2 Hz**; replacing the tarmac alternation with per-segment noise (high
+frequency reads as surface, not throb) and sub-striping the kerbs inside each segment at ~1.5 m
+took it to **sd 2.7**, and the near band from 3.2 to 1.7. Animated screen-space "mist" bands
+sweeping vertically were the other offender and simply came out.
+
+**One number decides whether a pseudo-3D road reads as a lane or a motorway.** The road's
+on-screen half-width at the bottom of the frame is `ROADW*(H-HOR)/(CAM_D*CAM_H)`. At the
+camera height and focal length this shipped with, that came to **2.3x the whole screen width**, so
+the lower half of every frame was featureless grey tarmac and the car looked like it was on a
+dual carriageway. Raising the camera from 1.35 m to 2.6 m and the focal length from 0.86 to 1.15
+brings it to about 0.9x, and nothing else about the scene had to change. Worth computing before
+tuning a camera by eye.
+
+**Timing canvas2d calls measures nothing.** An in-page `performance.now()` around `render()`
+reported 0.4 ms a frame while the page was actually managing 20, because the 2D context queues
+work and the rasteriser bills it later. Forcing synchronous renders in a tight loop gave 50 ms a
+frame instead. The second trap is the sandbox: this headless Chromium rasterises on the CPU, so
+cost scales with raw pixel count (1.0 Mpx 17 ms, 3.9 Mpx 50 ms) and removing even the largest
+fills changed nothing. **Real-device frame rate is not measurable from here** — the useful thing
+the profile still gave was the relative cost of each phase, by re-running with one removed.
+
 **Binary steering is why a driving game feels bad on a phone.** Tapping a screen third gave full
 lock in about a tenth of a second, so every correction was an over-correction. Making lock
 proportional to how far out the thumb sits, and splitting a middle band into lift and brake so
