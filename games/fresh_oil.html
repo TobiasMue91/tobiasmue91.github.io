@@ -43,6 +43,8 @@
     background:#080c13d9;border:1px solid var(--line);border-radius:6px;padding:8px 10px;
     min-width:158px;backdrop-filter:blur(6px)}
   #read b{color:var(--ink);font-weight:600}
+  #read .say{font:500 12px/1.45 var(--sans);color:var(--dim);margin-top:2px;max-width:168px}
+  #read .say b{color:var(--ink)}
   #read .k{color:var(--faint)}
   #read hr{border:0;border-top:1px solid var(--line);margin:6px 0}
   .warn{color:var(--hot)}
@@ -83,9 +85,14 @@
   #throw{background:#22304a;border-color:#3a4c6e;padding:8px 18px}
 
   /* ---- gesture hint ---- */
-  #padHint{position:fixed;left:50%;transform:translateX(-50%);bottom:104px;z-index:5;
-    font:600 11px/1 var(--mono);color:var(--faint);letter-spacing:.14em;pointer-events:none;
-    text-transform:uppercase;transition:opacity .2s}
+  /* the verdict on the shot you have drawn: in the bottom stack, above the
+     commentary and the bar, so it can never collide with either */
+  #padHint{font:500 13px/1.4 var(--sans);color:var(--dim);pointer-events:none;text-align:center;
+    max-width:min(440px,92vw);transition:opacity .2s;background:#080c13cf;border:1px solid var(--line);
+    border-radius:14px;padding:5px 13px;backdrop-filter:blur(6px)}
+  #padHint:empty{display:none}
+  #padHint b{color:var(--ink);font-weight:600}
+  #padHint .warn{color:var(--hot)}
 
   /* ---- overlays ---- */
   #veil{position:fixed;inset:0;z-index:20;background:#04060ae6;display:none;align-items:center;
@@ -120,7 +127,9 @@
     button{padding:7px 8px;font-size:11px;min-width:26px}
     button.val{min-width:34px;font-size:11px}
     #throw{padding:7px 14px}
-    #read{top:auto;bottom:108px;left:6px;font-size:10px;min-width:0;padding:5px 7px;line-height:1.4}
+    /* the lane picture eats half a phone screen, so it is off until asked for */
+    #read{display:none;top:auto;bottom:108px;left:6px;font-size:10px;min-width:0;padding:5px 7px;line-height:1.4}
+    #read.on{display:block}
     #board{top:auto;bottom:108px;right:6px;left:auto;font-size:10px;min-width:0;padding:5px 7px;line-height:1.5}
     #sheet{padding:4px 3px 0}
     #sheetInner{width:100%}
@@ -131,19 +140,19 @@
     .fr .tot{font-size:10px;line-height:16px}
     #who{padding:0 4px;font-size:8px}
     #say{font-size:11.5px;padding:5px 9px;line-height:1.35}
-    #padHint{font-size:9px;letter-spacing:.08em;bottom:96px}
+    #padHint{font-size:11.5px;max-width:90vw;padding:4px 10px}
   }
   @media (max-height:560px){ #read .k, #read hr{display:none} }
 </style>
 </head>
 <body>
 <canvas id="gl"></canvas>
-<div id="padHint" class="hud"></div>
 
 <div class="hud" id="sheet"><div id="sheetInner"></div></div>
 <div class="hud" id="read"></div>
 <div class="hud" id="board"></div>
 <div class="hud" id="ctl">
+  <div id="padHint"></div>
   <div id="say"></div>
   <div id="bar"></div>
 </div>
@@ -505,8 +514,11 @@ const DECK_BACK = FOUL_TO_HEAD + 3 * ROW_DY + 0.28;   // pit edge
 // Fitted against the published carry-versus-entry-angle data: these values put
 // the sim at 58/69/81 per cent carry at 2/4/6 degrees of entry angle.
 const DK = { ballPin: 0.578, ballPinMu: 0.085, pinPin: 0.743, pinPinMu: 0.124,
-             floor: 0.083, floorMu: 0.071, kick: 0.298, kickMu: 0.062,
+             floor: 0.083, floorMu: 0.071, kick: 0.45, kickMu: 0.062,
+             pit: 0.16,                                // the curtain, which is there to kill pins
              tiltDown: 44, moveDown: 0.075 };
+const PIT_BACK = DECK_BACK + 0.62;                     // where the curtain hangs
+const PIT_FLOOR = -1.15;                               // below this nobody can see it
 const KICK_X = LANE_HALF;                              // kickback boards
 
 function pinSpheresWorld(p) {
@@ -599,7 +611,9 @@ function separate(c) {
 // sphere sweeps further in one step than the contact tolerance, which is how a
 // deck full of pins turns into a firework.
 function clampBody(b) {
-  const vcap = b.isBall ? 12 : 10, wcap = b.isBall ? 120 : 52;
+  // A pin caught on its edge helicopters — ten, fifteen turns a second — and the
+  // old cap of 52 rad/s was quietly ironing that out of every shot.
+  const vcap = b.isBall ? 12 : 11, wcap = b.isBall ? 120 : 96;
   const s = vlen(b.v);
   if (s > vcap) b.v = vmul(b.v, vcap / s);
   const ws = vlen(b.w);
@@ -634,7 +648,20 @@ function deckStep(state, dt) {
     }
   }
   for (const p of pins) {
-    if (p.asleep || p.gone) continue;
+    if (p.gone) {
+      // Past the pit edge a pin is out of the shot, but it is still a falling
+      // object: stopping it dead in mid-air over the pit was the one thing on
+      // this deck that never looked like bowling. It keeps its flight and its
+      // spin, bounces off the pit curtain, and drops out of sight.
+      if (p.hidden) continue;
+      p.v.z -= G * dt;
+      p.p = vadd(p.p, vmul(p.v, dt));
+      p.q = qIntegrate(p.q, p.w, dt);
+      if (p.p.y > PIT_BACK && p.v.y > 0) { p.v.y *= -DK.pit; p.v.x *= 0.5; p.w = vmul(p.w, 0.45); }
+      if (p.p.z < PIT_FLOOR) p.hidden = true;
+      continue;
+    }
+    if (p.asleep) continue;
     p.v.z -= G * dt;
     // A pin resting or sliding on the deck is held down by its own weight. Give
     // it the deck friction that weight implies; contact impulses alone will not.
@@ -739,7 +766,7 @@ function deckStep(state, dt) {
   // ---- bookkeeping ----
   for (const p of pins) {
     if (p.gone) continue;
-    if (p.p.y > DECK_BACK || p.p.z < -0.3) { p.gone = true; p.down = true; p.v = v3(); p.L = v3(); continue; }
+    if (p.p.y > DECK_BACK || p.p.z < -0.3) { p.gone = true; p.down = true; continue; }
     const up = mvec(qMat(p.q), v3(0, 0, 1));
     const tilt = Math.acos(Math.max(-1, Math.min(1, up.z))) * 180 / Math.PI;
     const moved = Math.hypot(p.p.x - p.home.x, p.p.y - p.home.y);
@@ -1534,7 +1561,7 @@ const GAME = {
   pattern: null, players: [], turn: 0, frame: 0, standing: [],
   phase: 'title', feet: 22, arrow: 10, speed: 7.9, turn2: 0.5,
   lastShot: null, lastStrikeBall: null, seed: 1, shots: 0, myBall: BALLS[1], hand: 'R',
-  hintHigh: 0, hintLow: 0, hintCorner: 0, fine: false,
+  hintHigh: 0, hintLow: 0, hintCorner: 0, fine: false, showRead: false,
 };
 
 function newPlayer(name, human, cfg) {
@@ -1557,7 +1584,8 @@ function startNight(seed, ballChoice) {
   GAME.speed = 7.9; GAME.turn2 = 0.5; GAME.hand = 'R'; GAME.shots = 0;
   beginTurn();
   setCamera('aim', true);
-  sayLine('Fresh oil. Forty feet, and nobody has thrown on it yet.');
+  sayLine('Fresh oil. Forty feet, and nobody has thrown on it yet. ' +
+    '<i>Draw your shot on the lane and let go of it.</i>');
 }
 
 // ---- scoring ----
@@ -1804,6 +1832,60 @@ function beginTurn() {
     live.wait = 0.45;
   }
   drawSheet(); drawBoard(); drawRead(); layoutBar();
+}
+
+// ---------------------------------------------------------------------------
+// The ball in your hands
+// ---------------------------------------------------------------------------
+// A camera that can see the pins twenty metres away cannot also see the foul
+// line two metres below it — not without a fish-eye — so the ball you pick up
+// is not on the lane. It is held: placed a fixed distance in front of the
+// camera, exactly under your finger, which keeps it the same size wherever you
+// move it and always clear of the bar at the bottom. It still throws a shadow
+// down onto the lane and still reflects in it, which is what makes it read as
+// a real object in the room rather than a cursor.
+const HELD_D = 5.6;
+function heldAt(ndcx, ndcy) {
+  const asp = (VW / VH) || 1;
+  const wide = asp < 1 ? 1 + (1 - asp) * 0.26 : 1;
+  const th = Math.tan((view.fov ?? 0.40) * wide / 2);
+  const e = v3(view.camEye[0], view.camEye[1], view.camEye[2]);
+  const f = vnorm(vsub(v3(view.camAt[0], view.camAt[1], view.camAt[2]), e));
+  const rt = vnorm(vcross(f, v3(0, 0, 1)));
+  const up = vcross(rt, f);
+  return { p: vadd(e, vadd(vmul(f, HELD_D),
+             vadd(vmul(rt, ndcx * th * asp * HELD_D), vmul(up, ndcy * th * HELD_D)))), rt, up };
+}
+// where it rests when nobody is touching it: out in front of where you stand
+function restNdc() {
+  return { x: clamp((GAME.myBall.feet - GAME.feet) * 2 / STROKE.placeBoards, -0.82, 0.82), y: -0.56 };
+}
+view.heldNdc = null;
+function updateHeld(dt) {
+  if (GAME.phase !== 'aim') { view.heldQ = null; return; }
+  const want = view.heldNdc || restNdc();
+  // it eases to where it should be, so a stance change is the ball moving
+  // across rather than teleporting
+  if (!view.heldSm) view.heldSm = { ...want };
+  const k = view.heldNdc ? 1 : (1 - Math.pow(0.0009, dt));
+  view.heldSm.x = lerp(view.heldSm.x, want.x, k);
+  view.heldSm.y = lerp(view.heldSm.y, want.y, k);
+  const h = heldAt(view.heldSm.x, view.heldSm.y);
+  if (!view.heldQ) view.heldQ = { x: 0, y: 0, z: 0, w: 1 };
+  // and it rolls in your hand as you move it, so the oil rings turn
+  if (view.heldPrev) {
+    const dx = view.heldSm.x - view.heldPrev.x, dy = view.heldSm.y - view.heldPrev.y;
+    const d = Math.hypot(dx, dy);
+    if (d > 1e-5) {
+      const ax = vnorm(vadd(vmul(h.rt, dy), vmul(h.up, -dx)));
+      const ang = d * 2.6;
+      const sn = Math.sin(ang / 2);
+      view.heldQ = qnorm(qmul({ w: Math.cos(ang / 2), x: ax.x * sn, y: ax.y * sn, z: ax.z * sn }, view.heldQ));
+    }
+  }
+  view.heldPrev = { ...view.heldSm };
+  view.ball = { p: h.p, q: view.heldQ, held: true };
+  view.ballCol = GAME.myBall.col; view.ballCol2 = GAME.myBall.col2; view.pearl = GAME.myBall.pearl;
 }
 
 // Rolling the whole shot costs a few milliseconds, which is nothing once a
@@ -2177,36 +2259,52 @@ function targetBoard(standing) {
   return xBoard(key.x - Math.sign(side || key.x || 1) * 0.055);
 }
 
+// Plain words, and a picture. Every number in this game now lives behind the
+// ⋯ button: a board count and an entry angle are the right units for someone
+// who already bowls, and noise to everyone else, and the shot is either going
+// where it needs to or it is not.
+function verdict(want) {
+  const pl = view.plan;
+  if (!pl) return '';
+  if (pl.gutter) return '<span class="warn">This one is in the gutter.</span>';
+  const d = pl.entryBoard - want;                 // + is left of where it needs to be
+  const spare = GAME.standing.length < 10;
+  if (spare) {
+    if (Math.abs(d) <= 0.9) return '<b>That should get it.</b>';
+    return Math.abs(d) < 2.2
+      ? 'Close, but a shade ' + (d > 0 ? 'left' : 'right') + ' of it.'
+      : '<span class="warn">Well ' + (d > 0 ? 'left' : 'right') + ' of it.</span>';
+  }
+  if (Math.abs(d) <= 0.65) return pl.entryAngle >= 4
+    ? '<b>Right in the pocket.</b>'
+    : '<b>In the pocket</b>, but coming in flat &mdash; the corner may stand.';
+  if (d > 0) return d > 2 ? '<span class="warn">Far too much of it.</span> Straight in behind the head pin.'
+                          : 'A touch too much &mdash; it comes in behind the head pin.';
+  return d < -2 ? '<span class="warn">Nowhere near enough.</span> It never comes back.'
+                : 'Not quite enough &mdash; it catches the pocket thin.';
+}
+
 function drawRead() {
   const el = $('read');
   // the ball you read the lane from is the one at a full rack
   const L = GAME.lastStrikeBall;
   const want = targetBoard(GAME.standing);
-  // what the shot you have drawn does, against what it needs to do. the first
-  // number is a promise the lane only keeps while the oil is fresh.
-  const pl = GAME.phase === 'aim' ? view.plan : null;
-  let h = '<div class="k">YOUR SHOT</div>' +
-    '<span class="k">needs to arrive at</span> <b>' + want.toFixed(1) + '</b>' +
-    (pl ? (pl.gutter
-        ? '<br><span class="warn">this one is in the gutter</span>'
-        : '<br><span class="k">this one gets to</span> <b>' + pl.entryBoard.toFixed(1) + '</b>' +
-          ' <span class="k">at</span> <b>' + pl.entryAngle.toFixed(1) + '&deg;</b>' +
-          '<br><span class="k">&mdash; as the lane is now</span>') : '') +
-    (GAME.standing.length < 10 && GAME.standing.length <= 2 &&
-     !GAME.standing.includes(1) ? '<br><span class="k">try less hook</span>' : '');
+  let h = '<div class="k">THE LANE</div>';
+  if (GAME.fine) h += '<div class="k" style="margin-top:3px">needs board ' + want.toFixed(1) +
+    (view.plan && !view.plan.gutter && GAME.phase === 'aim'
+      ? ' &middot; this one ' + view.plan.entryBoard.toFixed(1) + ' at ' + view.plan.entryAngle.toFixed(1) + '&deg;'
+      : '') + '</div>';
   el.innerHTML = h;
   el.appendChild(diag);
   const d = document.createElement('div');
-  if (L) {
-    d.innerHTML = '<hr><div class="k">LAST FULL RACK</div>' +
-      (L.gutter || L.entryBoard === null ? '<span class="warn">it never got there</span>' :
-        'break <b>' + L.breakBoard.toFixed(1) + '</b> at <b>' + (L.breakY / 0.3048).toFixed(0) + 'ft</b><br>' +
-        'entry <b>' + L.entryBoard.toFixed(1) + '</b> bd at <b>' + L.entryAngle.toFixed(1) + '&deg;</b><br>' +
-        'flare <b>' + L.flare.toFixed(1) + '</b> in') ;
-  } else {
-    d.innerHTML = innerWidth < 700
-      ? '<hr><div class="k">pocket: board 17.5</div>'
-      : '<hr><div class="k">The pocket is board 17.5,<br>and you want 4&ndash;6 degrees<br>of angle when you get there.</div>';
+  if (GAME.fine) {
+    d.innerHTML = L
+      ? '<hr><div class="k">LAST FULL RACK</div>' +
+        (L.gutter || L.entryBoard === null ? '<span class="warn">it never got there</span>' :
+          'break <b>' + L.breakBoard.toFixed(1) + '</b> at <b>' + (L.breakY / 0.3048).toFixed(0) + 'ft</b><br>' +
+          'entry <b>' + L.entryBoard.toFixed(1) + '</b> bd at <b>' + L.entryAngle.toFixed(1) + '&deg;</b><br>' +
+          'flare <b>' + L.flare.toFixed(1) + '</b> in')
+      : '<hr><div class="k">the pocket is board 17.5,<br>and you want 4&ndash;6 degrees<br>of angle when you get there</div>';
   }
   el.appendChild(d);
   drawDiagram();
@@ -2286,11 +2384,11 @@ function shotLine(r, got) {
       'straight, with no curl in it, and stand across from the pin.</i>';
   const hi = L.entryBoard > 19.5, lo = L.entryBoard < 15.5;
   let why = '';
-  if (hi) why = ' In at ' + L.entryBoard.toFixed(0) + ' &mdash; high. It is hooking earlier than it was.' +
+  if (hi) why = ' That came in behind the head pin &mdash; it is hooking earlier than it was.' +
     (GAME.hintHigh++ < 2 ? ' <i>Stand a board or two left of where you did.</i>' : '');
-  else if (lo) why = ' Light, at ' + L.entryBoard.toFixed(0) + '. Not enough of it came back.' +
+  else if (lo) why = ' It caught the pocket thin. Not enough of it came back.' +
     (GAME.hintLow++ < 2 ? ' <i>Stand a board or two right.</i>' : '');
-  else if (L.entryAngle < 3) why = ' Pocket, but flat &mdash; ' + L.entryAngle.toFixed(1) + '&deg; in.';
+  else if (L.entryAngle < 3) why = ' Pocket, but it arrived flat.';
   return got + '. Left ' + leaveName(r.left) + '.' + why;
 }
 function oppLine(pl, res, got) {
@@ -2330,12 +2428,12 @@ function turnName(t) {
   return best[0];
 }
 const mph = v => (v * 2.2369).toFixed(1);
-const hookBars = () => {
-  const n = Math.round(GAME.turn2 * 5);
+const meter = t => {
+  const n = clamp(Math.round(t * 5), 0, 5);
   return '<span style="color:var(--amber)">' + '▮'.repeat(n) + '</span>' +
-         '<span style="color:var(--faint)">' + '▯'.repeat(5 - n) + '</span>' +
-         (GAME.hand === 'L' ? '<span style="color:var(--cool)"> back-up</span>' : '');
+         '<span style="color:var(--faint)">' + '▯'.repeat(5 - n) + '</span>';
 };
+const paceT = () => (GAME.speed - SPEEDS[0]) / (SPEEDS[SPEEDS.length - 1] - SPEEDS[0]);
 
 // keyboard and the precision panel still speak in boards: one press is the
 // oldest adjustment in bowling, two with the feet and one with the eyes
@@ -2372,20 +2470,25 @@ function layoutBar() {
 
   // The bar is not a control any more — it is the shot you have drawn, read
   // back to you. The lane is the control.
-  let h = '<div class="grp shot"><span class="lab">SHOT</span>' +
-    '<span class="ro"><b>' + mph(GAME.speed) + '</b> mph</span>' +
-    '<span class="ro">hook ' + hookBars() + '</span>' +
-    '<span class="ro">board <b>' + GAME.arrow.toFixed(0) + '</b></span></div>';
+  let h = '<div class="grp shot">' +
+    '<span class="ro"><span class="lab">PACE</span>' + meter(paceT()) + '</span>' +
+    '<span class="ro"><span class="lab">HOOK</span>' + meter(GAME.turn2) +
+      (GAME.hand === 'L' ? '<span style="color:var(--cool)"> back-up</span>' : '') + '</span></div>';
   if (GAME.fine) h += lr(tight ? 'FT' : 'FEET', 'feet', GAME.feet) +
                       lr(tight ? 'EYE' : 'TARGET', 'arrow', GAME.arrow.toFixed(1)) +
-                      pm(tight ? 'SPD' : 'SPEED', 'spd', mph(GAME.speed)) +
+                      pm(tight ? 'MPH' : 'SPEED', 'spd', mph(GAME.speed)) +
                       pm('HAND', 'turn', turnName(GAME.turn2), tight ? 58 : 74);
-  h += '<div class="grp"><button data-a="fine" aria-label="type the numbers instead"' +
+  h += '<div class="grp">' +
+       (tight ? '<button data-a="lane" aria-label="show the lane from above"' +
+         (GAME.showRead ? ' style="color:var(--amber);border-color:var(--amber)"' : '') + '>&#9707;</button>' : '') +
+       '<button data-a="fine" aria-label="show the numbers"' +
          (GAME.fine ? ' style="color:var(--amber);border-color:var(--amber)"' : '') + '>&#8943;</button>' +
        '<button id="throw" data-a="throw">THROW</button></div>';
   bar.innerHTML = h;
-  $('padHint').textContent = (GAME.fine || GAME.shots > 1) ? ''
-    : (tight ? 'draw the shot on the lane' : 'draw the shot on the lane · or press space');
+  // Whether the shot you have drawn is going to work is the only thing you
+  // really need told, so it sits here, right above the bar, on every screen —
+  // not in a corner panel a phone has no room for.
+  $('padHint').innerHTML = GAME.fine ? '' : verdict(targetBoard(GAME.standing));
 }
 
 function act(a) {
@@ -2404,6 +2507,7 @@ function act(a) {
     case 'turn-up': GAME.turn2 = clamp(GAME.turn2 + 0.25, 0, 1); GAME.hand = 'R'; break;
     case 'turn-dn': GAME.turn2 = clamp(GAME.turn2 - 0.25, 0, 1); break;
     case 'fine': GAME.fine = !GAME.fine; break;
+    case 'lane': GAME.showRead = !GAME.showRead; $('read').classList.toggle('on', GAME.showRead); break;
     case 'throw': throwIt(); return;
     default: return;
   }
@@ -2533,7 +2637,9 @@ C.addEventListener('pointerdown', e => {
   audio();
   C.setPointerCapture(e.pointerId);
   ptr = { r: C.getBoundingClientRect(), pts: [{ x: e.clientX, y: e.clientY }], throwing: false };
-  readStroke(ptr);   // the ball steps to your finger the moment you put it down
+  view.grabY = null;
+  grabBall(e.clientX, e.clientY);   // the ball comes to your finger, and stays there
+  readStroke(ptr);
   planDirty = true;
 });
 C.addEventListener('pointermove', e => {
@@ -2541,6 +2647,7 @@ C.addEventListener('pointermove', e => {
   const l = ptr.pts[ptr.pts.length - 1];
   if (Math.hypot(e.clientX - l.x, e.clientY - l.y) < 2) return;
   ptr.pts.push({ x: e.clientX, y: e.clientY });
+  grabBall(e.clientX, e.clientY);
   // drop from the middle, never the front: the first point is where the stroke
   // started, and every number read off the stroke is measured from it
   if (ptr.pts.length > 160) ptr.pts.splice(1, 1);
@@ -2548,9 +2655,22 @@ C.addEventListener('pointermove', e => {
   drawStroke(ptr.throwing ? ptr.pts : null);
   planDirty = true;   // simulated once a frame, in the loop, not once an event
 });
+function grabBall(cx, cy) {
+  const r = C.getBoundingClientRect();
+  const nx = ((cx - r.left) / r.width) * 2 - 1;
+  const ny = 1 - ((cy - r.top) / r.height) * 2;
+  if (view.grabY === null || view.grabY === undefined) view.grabY = ny;
+  // Sideways it is exactly under your finger. Forward it comes only part of
+  // the way with you, and never above the middle of the screen: a ball on a
+  // swing stays low, and one that climbs up over the pins hides the lane you
+  // are trying to aim at.
+  view.heldNdc = { x: clamp(nx, -0.94, 0.94),
+                   y: clamp(restNdc().y + (ny - view.grabY) * 0.40, -0.88, -0.06) };
+}
 function endPtr() {
   if (!ptr) return;
   const g = ptr; ptr = null;
+  view.heldNdc = null;   // let go and it settles back over where you stand
   drawStroke(null);
   // a stroke that went forward and stayed forward is a throw; one you pulled
   // back out of is not, and leaves the shot sitting where you drew it
@@ -2570,9 +2690,10 @@ function showTitle() {
   const draw = () => {
     v.innerHTML = '<div class="card"><h1>Fresh <span>Oil</span></h1>' +
       '<p class="sub">Ten frames. Three other bowlers. Forty feet of conditioner that is not going to last.</p>' +
-      '<p>The pocket is <b>board 17½</b>, and the ball wants to arrive there at <b>four to six degrees</b>. ' +
-      'Getting it there is the whole game: the ball skids on the oil, grips where the oil ends, and turns back. ' +
-      'Every ball thrown on this lane &mdash; yours and theirs &mdash; takes a little of that oil away.</p>' +
+      '<p>The ball skids on the oil, grips where the oil ends, and turns back into the pocket. ' +
+      'Getting it there is the whole game &mdash; and every ball thrown on this lane, yours and the ' +
+      'three other bowlers&rsquo;, takes a little of that oil away. The line that struck in the first ' +
+      'frame comes in heavy by the sixth.</p>' +
       '<p><b>You draw the shot on the lane.</b> Slide sideways first and the ball slides ' +
       'along the foul line with you. Then draw it forward, and the stroke is the throw:</p>' +
       '<ul><li><b>How far</b> you draw it forward is how hard you throw it.</li>' +
@@ -2585,10 +2706,10 @@ function showTitle() {
       'The dotted curve is <b>this exact shot rolled through the physics</b>, on the lane as it ' +
       'is right now, so the hook moves under your finger as you draw. Let go and it throws ' +
       'what you drew.</p>' +
-      '<p class="sub">Which does not make it easy. The pocket is two boards wide, a ball that ' +
-      'arrives flat leaves corner pins however good the line was, and every ball thrown on this ' +
-      'pair &mdash; yours and theirs &mdash; moves the line you just found. ⋯ has the numbers, ' +
-      'if you would rather type.</p>' +
+      '<p class="sub">Which does not make it easy: the pocket is two boards wide, and a ball that ' +
+      'arrives flat leaves corner pins however good the line was. The readout tells you in words ' +
+      'whether the shot you have drawn is going to get there. ⋯ turns the words into numbers &mdash; ' +
+      'boards, entry angle, track flare &mdash; and gives you the controls to type them in.</p>' +
       '<p class="sub">Pick a ball:</p><div class="pick">' +
       BALLS.map((b, i) => '<button data-b="' + i + '"' + (i === chosen ? ' class="sel"' : '') + '>' +
         b.name + '<small>' + b.blurb + '</small></button>').join('') + '</div>' +
@@ -2642,6 +2763,7 @@ let last = performance.now();
   last = now;
   // ~30 Hz while a stroke is being drawn: live to the eye, and half the cost
   if (planDirty && now - lastPlan > 28) { planDirty = false; lastPlan = now; updateAim(); layoutBar(); }
+  updateHeld(dt);
   if (GAME.phase !== 'title' && GAME.phase !== 'over') tick(dt);
   stepCamera(dt);
   render();
