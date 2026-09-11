@@ -74,6 +74,9 @@
     border-radius:5px;padding:8px 10px;cursor:pointer;min-width:30px}
   button:hover{background:#1d2738}
   button:active{transform:translateY(1px)}
+  .grp.shot{gap:9px;padding:6px 10px 6px 4px}
+  .grp.shot .ro{font:600 12px/1 var(--mono);color:var(--dim);white-space:nowrap}
+  .grp.shot .ro b{color:var(--amber);font-weight:700}
   button.val{min-width:42px;background:transparent;border-color:transparent;color:var(--amber);
     cursor:default;font-weight:700}
   button.val:hover{background:transparent}
@@ -128,7 +131,7 @@
     .fr .tot{font-size:10px;line-height:16px}
     #who{padding:0 4px;font-size:8px}
     #say{font-size:11.5px;padding:5px 9px;line-height:1.35}
-    #padHint{display:none}
+    #padHint{font-size:9px;letter-spacing:.08em;bottom:96px}
   }
   @media (max-height:560px){ #read .k, #read hr{display:none} }
 </style>
@@ -1186,7 +1189,11 @@ gl.bindTexture(gl.TEXTURE_2D, coverTex);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
 
 let oilBuf = new Uint8Array(39 * 96);
+const oilCv = document.createElement('canvas');
+const octx = oilCv.getContext('2d');
+let oilDirty = true;
 function uploadOil(P) {
+  oilDirty = true;
   const ny = Math.min(96, P.ny);
   oilBuf.fill(0);
   for (let s = 0; s < ny; s++) for (let b = 0; b < 39; b++)
@@ -1526,8 +1533,8 @@ const FIELD = [
 const GAME = {
   pattern: null, players: [], turn: 0, frame: 0, standing: [],
   phase: 'title', feet: 22, arrow: 10, speed: 7.9, turn2: 0.5,
-  lastShot: null, lastStrikeBall: null, seed: 1, shots: 0, myBall: BALLS[1], flickQuality: undefined,
-  hintHigh: 0, hintLow: 0, hintCorner: 0, fine: false, hook: 2,
+  lastShot: null, lastStrikeBall: null, seed: 1, shots: 0, myBall: BALLS[1], hand: 'R',
+  hintHigh: 0, hintLow: 0, hintCorner: 0, fine: false,
 };
 
 function newPlayer(name, human, cfg) {
@@ -1547,7 +1554,7 @@ function startNight(seed, ballChoice) {
   GAME.turn = 0; GAME.frame = 0; GAME.standing = [1,2,3,4,5,6,7,8,9,10];
   GAME.lastShot = null; GAME.lastStrikeBall = null; GAME.hintHigh = 0; GAME.hintLow = 0; GAME.hintCorner = 0;
   GAME.feet = ballChoice.feet; GAME.arrow = ballChoice.arrow;
-  GAME.hook = 2; GAME.speed = HOOKS[2][1]; GAME.turn2 = HOOKS[2][2]; GAME.shots = 0;
+  GAME.speed = 7.9; GAME.turn2 = 0.5; GAME.hand = 'R'; GAME.shots = 0;
   beginTurn();
   setCamera('aim', true);
   sayLine('Fresh oil. Forty feet, and nobody has thrown on it yet.');
@@ -1589,7 +1596,7 @@ function rescore(pl) {
 }
 
 // ---- a delivery ----
-function buildRelease(feet, arrow, speed, turnT, style, ballSpec, wobble) {
+function buildRelease(feet, arrow, speed, turnT, style, ballSpec, wobble, hand) {
   const relBoard = feet - HAND_OFFSET + (wobble ? gauss() * wobble : 0);
   const tgt = arrow + (wobble ? gauss() * wobble * 0.7 : 0);
   const angle = Math.atan2(boardX(tgt) - boardX(relBoard), ARROWS_Y) * 180 / Math.PI;
@@ -1601,7 +1608,7 @@ function buildRelease(feet, arrow, speed, turnT, style, ballSpec, wobble) {
     speed: (style ? style.speed : speed) * (wobble ? 1 + gauss() * 0.012 : 1),
     rev: rev * (wobble ? 1 + gauss() * 0.03 : 1),
     axisRotDeg: rot * (wobble ? 1 + gauss() * 0.035 : 1),
-    axisTiltDeg: tilt, layoutDeg: 45, ballSpec,
+    axisTiltDeg: tilt, layoutDeg: 45, ballSpec, hand: hand || 'R',
   };
 }
 
@@ -1654,7 +1661,7 @@ function drawBand(VP, x0, y0, x1, y1, w, col, a, dash) {
   gl.uniform1f(progLine.u.uDash, dash ? 1 : 0);
   drawMesh(progLine, quadStrip, m);
 }
-view.aim = null; view.trace = null;
+view.plan = null; view.trace = null;
 const origRender = render;
 render = function () {
   origRender();
@@ -1664,13 +1671,15 @@ render = function () {
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
-  if (view.aim) {
-    const a = view.aim;
-    // Exactly the line the top-down diagram draws: bright from the release to
-    // the arrow you are looking at, faint past it, where the lane takes over.
-    drawBand(VP, a.x0, 0, a.x1, ARROWS_Y, 0.030, [0.98,0.72,0.28], 0.70, true);
-    drawBand(VP, a.x1, ARROWS_Y, a.x2, a.y2, 0.030, [0.98,0.72,0.28], 0.26, true);
-    drawBand(VP, a.x1 - 0.012, ARROWS_Y - 0.16, a.x1 - 0.012, ARROWS_Y + 0.30, 0.055, [1.0,0.85,0.45], 0.85, false);
+  if (view.plan && view.plan.path.length > 1) {
+    const pth = view.plan.path;
+    // fades out down the lane: the far end of any plan is the least reliable
+    // part of it, and on a lane this worn it is a guess
+    for (let i = 2; i < pth.length; i += 2) {
+      const p0 = pth[i - 2], p1 = pth[i];
+      const t = 1 - i / pth.length;
+      drawBand(VP, p0[0], p0[1], p1[0], p1[1], 0.026, [0.98,0.72,0.28], 0.22 + t * 0.5, false);
+    }
   }
   if (view.trace && view.trace.length > 1) {
     for (let i = 1; i < view.trace.length; i++) {
@@ -1797,15 +1806,32 @@ function beginTurn() {
   drawSheet(); drawBoard(); drawRead(); layoutBar();
 }
 
+// Rolling the whole shot costs a few milliseconds, which is nothing once a
+// frame and far too much once a pointer event, so moves only raise a flag.
+//
+// This preview rolls against the lane as it actually is, not against the fresh
+// pattern. Previewing fresh oil was tried and it lies by whole boards once the
+// lane has been used — it will tell you a shot is in the gutter while the real
+// ball strikes — and a preview you cannot trust is worse than none. What is
+// left to play against is still the real game: the pocket window is a couple of
+// boards wide, carry falls off fast below four degrees of entry, and every ball
+// thrown on this pair moves the line you just found.
+let planDirty = false, lastPlan = 0;
+// The aiming line is not a straight line drawn on the floor — it is this exact
+// shot, rolled through the same physics the throw will use, against fresh oil.
+// Change anything about the shot and the curve changes under your finger, which
+// is the only honest way to show what a release actually does to a ball.
 function updateAim() {
-  const x0 = boardX(GAME.feet - HAND_OFFSET);
-  const x1 = boardX(GAME.arrow);
-  // The ball goes straight only as far as the oil does; past the end of the
-  // pattern it grips and turns, and no aiming line can tell you where. So the
-  // line stops where the oil stops, rather than pretending to reach the pins.
-  const y2 = GAME.pattern ? GAME.pattern.len : 12.2;
-  const x2 = x1 + (x1 - x0) * ((y2 - ARROWS_Y) / ARROWS_Y);
-  view.aim = { x0, x1, x2, y2 };
+  if (GAME.phase !== 'aim') { view.plan = null; return; }
+  const rel = buildRelease(GAME.feet, GAME.arrow, GAME.speed, GAME.turn2,
+                           null, GAME.myBall, 0, GAME.hand);
+  // the same 1/480 the live ball is stepped at. A coarser preview is two
+  // milliseconds cheaper and stepped clean over the gutter edge on shots that
+  // skim it, so it promised a pocket hit and the ball went in the channel.
+  const b = rollToPins(makeBall(GAME.myBall), rel, GAME.pattern,
+                       { dt: 1 / 480, wear: false });
+  view.plan = { path: b.path, gutter: b.gutter, entryBoard: b.entryBoard,
+                entryAngle: b.entryAngle, x0: boardX(rel.board) };
   setCamera('aim');
   drawRead();
 }
@@ -1813,19 +1839,18 @@ function updateAim() {
 function throwIt() {
   if (GAME.phase !== 'aim') return;
   const pl = currentPlayer();
-  // A fast, straight flick is a clean release. Pressing THROW is a fair,
-  // unremarkable one. A slow or crooked flick costs you accuracy.
-  const q = GAME.flickQuality === undefined ? 0.62 : GAME.flickQuality;
-  GAME.flickQuality = undefined;
-  const wobble = lerp(0.80, 0.26, clamp(q, 0, 1));
-  const rel = buildRelease(GAME.feet, GAME.arrow, GAME.speed, GAME.turn2, null, GAME.myBall, wobble);
+  // Nobody repeats a shot exactly, so the ball leaves a little off the line you
+  // drew. Not enough to make the drawing pointless — the preview is the shot
+  // you asked for, and this is the hand that has to deliver it.
+  const rel = buildRelease(GAME.feet, GAME.arrow, GAME.speed, GAME.turn2,
+                           null, GAME.myBall, 0.34, GAME.hand);
   const ball = makeBall(GAME.myBall);
   live.b = release(ball, rel);
   live.deck = null; live.t = 0; live.heard = {}; live.result = null; live.entry = null;
   live.rel = rel;
   live.path = [];
   view.ball = live.b;
-  view.aim = null;
+  view.plan = null;
   view.ballCol = GAME.myBall.col; view.ballCol2 = GAME.myBall.col2; view.pearl = GAME.myBall.pearl;
   GAME.phase = 'rolling';
   setCamera('roll');
@@ -2064,16 +2089,26 @@ function drawDiagram() {
   dctx.beginPath(); dctx.rect(0, laneTop, W, bot - laneTop); dctx.clip();
   dctx.fillStyle = '#171009'; dctx.fillRect(0, laneTop, W, bot - laneTop);
   const P = GAME.pattern;
-  if (P) for (let s = 0; s < P.ny; s++) for (let b = 0; b < 39; b++) {
-    const v = clamp(P.f[s * 39 + b], 0, 1);
-    if (v <= 0.02) continue;
-    // stepped bands, so you can see where the oil has gone rather than a wash
-    const t = Math.pow(v, 0.75);
-    const r = Math.round(20 + t * 66), g = Math.round(40 + t * 142), bl = Math.round(62 + t * 170);
-    dctx.fillStyle = 'rgb(' + r + ',' + g + ',' + bl + ')';
-    const y0 = py((s + 1) * OIL_SLICE), y1 = py(s * OIL_SLICE);
-    dctx.fillRect(px(b + 1) - 0.35, y0, W / 39 + 0.7, y1 - y0 + 0.7);
+  // Two thousand little rectangles is fine once a shot and far too much every
+  // frame, and this view now redraws with the aiming curve — so the oil is
+  // painted once into its own canvas and stamped from there until it changes.
+  if (P && (oilDirty || oilCv.width !== diag.width)) {
+    oilDirty = false;
+    oilCv.width = diag.width; oilCv.height = diag.height;
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.clearRect(0, 0, W, H);
+    for (let s = 0; s < P.ny; s++) for (let b = 0; b < 39; b++) {
+      const v = clamp(P.f[s * 39 + b], 0, 1);
+      if (v <= 0.02) continue;
+      // stepped bands, so you can see where the oil has gone rather than a wash
+      const t = Math.pow(v, 0.75);
+      const r = Math.round(20 + t * 66), g = Math.round(40 + t * 142), bl = Math.round(62 + t * 170);
+      octx.fillStyle = 'rgb(' + r + ',' + g + ',' + bl + ')';
+      const y0 = py((s + 1) * OIL_SLICE), y1 = py(s * OIL_SLICE);
+      octx.fillRect(px(b + 1) - 0.35, y0, W / 39 + 0.7, y1 - y0 + 0.7);
+    }
   }
+  if (P) { dctx.save(); dctx.setTransform(1, 0, 0, 1, 0, 0); dctx.drawImage(oilCv, 0, 0); dctx.restore(); }
   // board 10 / 20 / 30 guides and the arrows
   dctx.strokeStyle = '#ffffff14'; dctx.lineWidth = 1;
   for (const b of [10, 20, 30]) { dctx.beginPath(); dctx.moveTo(px(b), laneTop); dctx.lineTo(px(b), bot); dctx.stroke(); }
@@ -2087,21 +2122,13 @@ function drawDiagram() {
       i ? dctx.lineTo(X, Y) : dctx.moveTo(X, Y); });
     dctx.stroke();
   }
-  // The line you are about to play — the same two-part dashed line the 3D view
-  // draws: solid-bright to the arrows, faint on the straight continuation past
-  // them, which is where the ball stops going straight.
-  if (GAME.phase === 'aim') {
-    const x0 = px(GAME.feet - HAND_OFFSET), x1 = px(GAME.arrow);
-    const y2 = P ? P.len : 12.2;
-    const x2 = x1 + (x1 - x0) * ((y2 - ARROWS_Y) / ARROWS_Y);
-    dctx.lineWidth = 1.2; dctx.setLineDash([3, 3]);
-    dctx.strokeStyle = '#f0a63cbb';
-    dctx.beginPath(); dctx.moveTo(x0, py(0)); dctx.lineTo(x1, py(ARROWS_Y)); dctx.stroke();
-    dctx.strokeStyle = '#f0a63c44';
-    dctx.beginPath(); dctx.moveTo(x1, py(ARROWS_Y)); dctx.lineTo(x2, py(y2)); dctx.stroke();
-    dctx.setLineDash([]);
-    dctx.fillStyle = '#f0a63c';
-    dctx.fillRect(x1 - 1, py(ARROWS_Y) - 4, 2, 8);
+  // the shot you are about to play, the same curve the lane view draws
+  if (GAME.phase === 'aim' && view.plan && view.plan.path.length > 1) {
+    dctx.strokeStyle = '#f0a63ccc'; dctx.lineWidth = 1.3; dctx.setLineDash([3, 3]);
+    dctx.beginPath();
+    view.plan.path.forEach((pt, i) => { const X = px(xBoard(pt[0])), Y = py(pt[1]);
+      i ? dctx.lineTo(X, Y) : dctx.moveTo(X, Y); });
+    dctx.stroke(); dctx.setLineDash([]);
   }
   dctx.strokeStyle = '#8e2a22'; dctx.lineWidth = 1;
   dctx.beginPath(); dctx.moveTo(0, py(0) + 0.5); dctx.lineTo(W, py(0) + 0.5); dctx.stroke();
@@ -2155,9 +2182,16 @@ function drawRead() {
   // the ball you read the lane from is the one at a full rack
   const L = GAME.lastStrikeBall;
   const want = targetBoard(GAME.standing);
+  // what the shot you have drawn does, against what it needs to do. the first
+  // number is a promise the lane only keeps while the oil is fresh.
+  const pl = GAME.phase === 'aim' ? view.plan : null;
   let h = '<div class="k">YOUR SHOT</div>' +
-    '<span class="k">aiming at board</span> <b>' + GAME.arrow.toFixed(1) + '</b>' +
-    '<br><span class="k">needs to arrive at</span> <b>' + want.toFixed(1) + '</b>' +
+    '<span class="k">needs to arrive at</span> <b>' + want.toFixed(1) + '</b>' +
+    (pl ? (pl.gutter
+        ? '<br><span class="warn">this one is in the gutter</span>'
+        : '<br><span class="k">this one gets to</span> <b>' + pl.entryBoard.toFixed(1) + '</b>' +
+          ' <span class="k">at</span> <b>' + pl.entryAngle.toFixed(1) + '&deg;</b>' +
+          '<br><span class="k">&mdash; as the lane is now</span>') : '') +
     (GAME.standing.length < 10 && GAME.standing.length <= 2 &&
      !GAME.standing.includes(1) ? '<br><span class="k">try less hook</span>' : '');
   el.innerHTML = h;
@@ -2248,14 +2282,14 @@ function shotLine(r, got) {
   }
   const corner = r.left.length === 1 && (r.left[0] === 7 || r.left[0] === 10);
   if (corner && GAME.hintCorner++ < 1)
-    return 'Left ' + leaveName(r.left) + '. <i>A corner pin is a straight ball: turn the hook down ' +
-      'and move the line toward the pin.</i>';
+    return 'Left ' + leaveName(r.left) + '. <i>A corner pin is a straight ball: draw the stroke ' +
+      'straight, with no curl in it, and stand across from the pin.</i>';
   const hi = L.entryBoard > 19.5, lo = L.entryBoard < 15.5;
   let why = '';
   if (hi) why = ' In at ' + L.entryBoard.toFixed(0) + ' &mdash; high. It is hooking earlier than it was.' +
-    (GAME.hintHigh++ < 2 ? ' <i>Move the line one left.</i>' : '');
+    (GAME.hintHigh++ < 2 ? ' <i>Stand a board or two left of where you did.</i>' : '');
   else if (lo) why = ' Light, at ' + L.entryBoard.toFixed(0) + '. Not enough of it came back.' +
-    (GAME.hintLow++ < 2 ? ' <i>Move the line one right.</i>' : '');
+    (GAME.hintLow++ < 2 ? ' <i>Stand a board or two right.</i>' : '');
   else if (L.entryAngle < 3) why = ' Pocket, but flat &mdash; ' + L.entryAngle.toFixed(1) + '&deg; in.';
   return got + '. Left ' + leaveName(r.left) + '.' + why;
 }
@@ -2274,14 +2308,20 @@ function oppLine(pl, res, got) {
 }
 
 
-// ---- controls ----
-// There are only two decisions in a bowling shot: where to send it, and how
-// much you want it to come back. Speed and hand are not independent knobs to a
-// person who is not already a bowler — they are two ends of the same decision,
-// so they sit on one axis here and the real pair is behind the ⋯ button for
-// anyone who wants to break the diagonal. Board numbers count from the RIGHT
-// edge of the lane, so nothing in this bar is phrased in them: an arrowhead
-// always means "move the line that way on the screen".
+// ---- controls: you draw the shot ----
+// Steppers were the wrong instrument. A bowling shot is one motion, and every
+// number in it — where the ball leaves your hand, what angle it leaves at, how
+// hard, how much hand is on it — is a property of that motion. So the whole
+// shot is one stroke drawn on the lane, and it is read geometrically, with no
+// timing in it anywhere: you can draw it as slowly and deliberately as you
+// like and get exactly the shot you drew.
+//
+//   how far you draw  ->  speed
+//   what angle        ->  the line
+//   how much it curls ->  how much hand you come around it with
+//
+// and the dotted curve on the lane is that shot rolled through the real physics
+// as you draw it, so the ball's actual hook moves under your finger.
 const SPEEDS = [7.0, 7.3, 7.6, 7.9, 8.2, 8.5];
 const TURNS = [['straight up', 0.0], ['a little', 0.25], ['medium', 0.5], ['around it', 0.75], ['all of it', 1.0]];
 function turnName(t) {
@@ -2290,32 +2330,15 @@ function turnName(t) {
   return best[0];
 }
 const mph = v => (v * 2.2369).toFixed(1);
+const hookBars = () => {
+  const n = Math.round(GAME.turn2 * 5);
+  return '<span style="color:var(--amber)">' + '▮'.repeat(n) + '</span>' +
+         '<span style="color:var(--faint)">' + '▯'.repeat(5 - n) + '</span>' +
+         (GAME.hand === 'L' ? '<span style="color:var(--cool)"> back-up</span>' : '');
+};
 
-// One axis, from "fast and straight" to "slow and all of it". Down this
-// diagonal is every release a bowler actually picks between; the corner-pin
-// advice — take your hand out of it and throw it firm — is simply HOOK 0.
-const HOOKS = [
-  ['straight', 8.5, 0.00],
-  ['small',    8.2, 0.25],
-  ['normal',   7.9, 0.50],
-  ['big',      7.6, 0.75],
-  ['huge',     7.3, 1.00],
-];
-function hookName() {
-  // if the fine controls have been used to step off the diagonal, say so
-  const h = HOOKS[GAME.hook];
-  if (!h || Math.abs(h[1] - GAME.speed) > 0.02 || Math.abs(h[2] - GAME.turn2) > 0.01) return 'custom';
-  return h[0];
-}
-function setHook(i) {
-  GAME.hook = clamp(i, 0, HOOKS.length - 1);
-  GAME.speed = HOOKS[GAME.hook][1];
-  GAME.turn2 = HOOKS[GAME.hook][2];
-}
-
-// dir: +1 moves the line left on screen, -1 right. One press is the oldest
-// adjustment in bowling — two boards with the feet, one with the eyes — so the
-// one control that matters is the one move the game is about.
+// keyboard and the precision panel still speak in boards: one press is the
+// oldest adjustment in bowling, two with the feet and one with the eyes
 function moveLine(dir) {
   GAME.feet = clamp(GAME.feet + 2 * dir, 6, 38);
   GAME.arrow = clamp(GAME.arrow + dir, 2, 32);
@@ -2326,6 +2349,10 @@ function stepSpeed(d) {
   let i = SPEEDS.findIndex(v => Math.abs(v - GAME.speed) < 0.02);
   if (i < 0) i = 3;
   GAME.speed = SPEEDS[clamp(i + d, 0, SPEEDS.length - 1)];
+}
+function stepHook(d) {
+  GAME.turn2 = clamp(GAME.turn2 + 0.2 * d, 0, 1);
+  if (GAME.turn2 > 0) GAME.hand = 'R';
 }
 
 function layoutBar() {
@@ -2343,21 +2370,22 @@ function layoutBar() {
     '<button class="val"' + (w ? ' style="min-width:' + w + 'px"' : '') + '>' + val + '</button>' +
     '<button data-a="' + a + '-up" aria-label="more ' + lab + '">+</button></div>';
 
-  // two controls and a throw. everything else is optional.
-  let h = lr('AIM', 'line', GAME.arrow.toFixed(0), tight ? 32 : 40) +
-          pm('HOOK', 'hook', hookName(), tight ? 56 : 66);
+  // The bar is not a control any more — it is the shot you have drawn, read
+  // back to you. The lane is the control.
+  let h = '<div class="grp shot"><span class="lab">SHOT</span>' +
+    '<span class="ro"><b>' + mph(GAME.speed) + '</b> mph</span>' +
+    '<span class="ro">hook ' + hookBars() + '</span>' +
+    '<span class="ro">board <b>' + GAME.arrow.toFixed(0) + '</b></span></div>';
   if (GAME.fine) h += lr(tight ? 'FT' : 'FEET', 'feet', GAME.feet) +
                       lr(tight ? 'EYE' : 'TARGET', 'arrow', GAME.arrow.toFixed(1)) +
                       pm(tight ? 'SPD' : 'SPEED', 'spd', mph(GAME.speed)) +
                       pm('HAND', 'turn', turnName(GAME.turn2), tight ? 58 : 74);
-  h += '<div class="grp"><button data-a="fine" aria-label="show speed and hand separately"' +
+  h += '<div class="grp"><button data-a="fine" aria-label="type the numbers instead"' +
          (GAME.fine ? ' style="color:var(--amber);border-color:var(--amber)"' : '') + '>&#8943;</button>' +
        '<button id="throw" data-a="throw">THROW</button></div>';
   bar.innerHTML = h;
-  // the hint sits just above the bar, so it steps aside when the bar grows
-  $('padHint').textContent = GAME.fine ? ''
-    : tight ? 'drag to aim \u00b7 flick up to throw'
-            : '\u2190 \u2192 aim \u00b7 \u2191 \u2193 hook \u00b7 space to throw';
+  $('padHint').textContent = (GAME.fine || GAME.shots > 1) ? ''
+    : (tight ? 'draw the shot on the lane' : 'draw the shot on the lane · or press space');
 }
 
 function act(a) {
@@ -2365,15 +2393,15 @@ function act(a) {
   switch (a) {
     case 'line-L': moveLine(1); break;
     case 'line-R': moveLine(-1); break;
-    case 'hook-up': setHook(GAME.hook + 1); break;
-    case 'hook-dn': setHook(GAME.hook - 1); break;
+    case 'hook-up': stepHook(1); break;
+    case 'hook-dn': stepHook(-1); break;
     case 'feet-L': shiftFeet(1); break;
     case 'feet-R': shiftFeet(-1); break;
     case 'arrow-L': shiftArrow(1); break;
     case 'arrow-R': shiftArrow(-1); break;
     case 'spd-up': stepSpeed(1); break;
     case 'spd-dn': stepSpeed(-1); break;
-    case 'turn-up': GAME.turn2 = clamp(GAME.turn2 + 0.25, 0, 1); break;
+    case 'turn-up': GAME.turn2 = clamp(GAME.turn2 + 0.25, 0, 1); GAME.hand = 'R'; break;
     case 'turn-dn': GAME.turn2 = clamp(GAME.turn2 - 0.25, 0, 1); break;
     case 'fine': GAME.fine = !GAME.fine; break;
     case 'throw': throwIt(); return;
@@ -2389,7 +2417,6 @@ $('bar').addEventListener('click', e => {
 addEventListener('keydown', e => {
   if (GAME.phase === 'title') { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('veil').querySelector('.go')?.click(); } return; }
   const k = e.key.toLowerCase();
-  // left is left, up is faster, and the fine adjustments sit on the brackets
   const map = { arrowleft: 'line-L', arrowright: 'line-R', a: 'line-L', d: 'line-R',
     arrowup: 'hook-up', arrowdown: 'hook-dn', w: 'hook-up', s: 'hook-dn',
     q: 'turn-dn', e: 'turn-up', '[': 'feet-L', ']': 'feet-R',
@@ -2399,45 +2426,137 @@ addEventListener('keydown', e => {
   if (k === 'f') { act('fine'); layoutBar(); }
 });
 
-// pointer: drag sideways to aim, flick up to throw
+// ---------------------------------------------------------------------------
+// The stroke
+// ---------------------------------------------------------------------------
+// Before it goes anywhere it is a placement: slide left and right and the ball
+// slides along the foul line with you, the line keeping its angle. Push forward
+// and it becomes a throw, and from then on the three things the stroke has to
+// say are read straight off its shape.
+const STROKE = {
+  place: 0.035,        // forward travel below which the stroke is still placing
+  minThrow: 0.10,      // forward travel, in screen heights, that counts as a throw
+  placeBoards: 24,     // boards across the full width of the screen while placing
+  fullPull: 0.46,      // forward travel that means the fastest ball you have
+  // One board at the arrows is about three at the pins, which is the whole
+  // reason bowlers talk in boards — so the stroke's lean is geared down hard.
+  aimGain: 8,          // boards of target per unit of sideways/forward ratio
+  maxLean: 4.5,        // boards of target the lean can move it, either way
+  fullCurl: 0.95,      // radians of curl in the stroke that means all your hand
+  someHand: 0.10,      // nobody releases a ball with no hand on it at all
+};
 let ptr = null;
+
+const stroke = document.createElement('canvas');
+stroke.id = 'stroke';
+stroke.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:6;pointer-events:none;opacity:0;transition:opacity .18s';
+document.body.appendChild(stroke);
+const sctx = stroke.getContext('2d');
+function drawStroke(pts) {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  if (stroke.width !== Math.round(innerWidth * dpr)) {
+    stroke.width = Math.round(innerWidth * dpr); stroke.height = Math.round(innerHeight * dpr);
+  }
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  sctx.clearRect(0, 0, innerWidth, innerHeight);
+  if (!pts || pts.length < 2) { stroke.style.opacity = 0; return; }
+  stroke.style.opacity = 1;
+  // the stroke as drawn, so the curl you put in it is something you can see
+  sctx.lineCap = 'round'; sctx.lineJoin = 'round';
+  // pale, not amber: amber on the lane is the ball's path, and two amber curves
+  // on one screen read as the same thing
+  for (const [w, col] of [[10, '#cfe4ff1f'], [2.5, '#dbe9ffdd']]) {
+    sctx.lineWidth = w; sctx.strokeStyle = col;
+    sctx.beginPath();
+    pts.forEach((q, i) => i ? sctx.lineTo(q.x, q.y) : sctx.moveTo(q.x, q.y));
+    sctx.stroke();
+  }
+  const last = pts[pts.length - 1];
+  sctx.fillStyle = '#eef4ff'; sctx.beginPath(); sctx.arc(last.x, last.y, 5, 0, 7); sctx.fill();
+}
+
+// The angle a ball needs is a consequence of how much hand is on it: take your
+// hand out and you play it straight up your own boards, come around it and you
+// have to send it out to the right to have anywhere to come back from. So the
+// stroke's lean is an adjustment either side of that, not an angle from nothing
+// — which also means the same stroke drawn twice is the same shot twice,
+// instead of walking the line further across the lane every frame.
+function neutralOffset() {
+  return (GAME.hand === 'L' ? 1 : -1) * (4 + 13 * GAME.turn2);
+}
+function setLine(lean) {
+  const relBoard = GAME.feet - HAND_OFFSET;
+  // capped, because one board at the arrows is three at the pins and a stroke
+  // flung out at forty degrees should be a wide shot, not an incoherent one
+  const adj = clamp(lean * STROKE.aimGain, -STROKE.maxLean, STROKE.maxLean);
+  GAME.arrow = clamp(relBoard + neutralOffset() - adj, 2, 32);
+}
+
+// read a stroke into a shot. no clocks — only the shape of what was drawn.
+function readStroke(g) {
+  const pts = g.pts, H = g.r.height, a = pts[0], z = pts[pts.length - 1];
+  const fwd = (a.y - z.y) / H;
+  if (!g.throwing && fwd < STROKE.place) {
+    // still placing: where your finger is on the lane is where you are standing,
+    // measured out from the stance this ball wants to be played from, so the
+    // middle of the screen is always a line worth throwing
+    GAME.feet = clamp(Math.round(GAME.myBall.feet +
+      (g.r.width / 2 - z.x) / (g.r.width / STROKE.placeBoards)), 6, 38);
+    setLine(0);
+    return;
+  }
+  // between placing and throwing is a dead band, so pushing off into the stroke
+  // does not drag your feet along with it
+  if (!g.throwing && fwd < STROKE.minThrow) return;
+  g.throwing = true;
+  // how far forward -> how hard
+  GAME.speed = lerp(SPEEDS[0], SPEEDS[SPEEDS.length - 1],
+                    clamp((fwd - STROKE.minThrow) / (STROKE.fullPull - STROKE.minThrow), 0, 1));
+  const m = pts[Math.floor(pts.length / 2)];
+  const h1 = Math.atan2(m.x - a.x, Math.max(1, a.y - m.y));
+  // how much it curls -> how much hand. the heading of the first half of the
+  // stroke against the heading of the last half: finish it across the ball and
+  // you have come around it, finish it the other way and it is a back-up ball.
+  if (pts.length >= 5) {
+    const h2 = Math.atan2(z.x - m.x, Math.max(1, m.y - z.y));
+    const curl = h1 - h2;
+    const t = clamp(Math.abs(curl) / STROKE.fullCurl, 0, 1);
+    GAME.hand = curl < -0.10 ? 'L' : 'R';
+    GAME.turn2 = GAME.hand === 'L' ? t * 0.6 : Math.max(STROKE.someHand, t);
+  }
+  // and which way you lean the stroke swings that angle open or tucks it in
+  setLine(Math.tan(clamp(h1, -1.1, 1.1)));
+}
+
 C.addEventListener('pointerdown', e => {
   if (GAME.phase !== 'aim') return;
   audio();
   C.setPointerCapture(e.pointerId);
-  ptr = { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0, drift: 0,
-          startArrow: GAME.arrow, startFeet: GAME.feet, mode: null };
+  ptr = { r: C.getBoundingClientRect(), pts: [{ x: e.clientX, y: e.clientY }], throwing: false };
+  readStroke(ptr);   // the ball steps to your finger the moment you put it down
+  planDirty = true;
 });
 C.addEventListener('pointermove', e => {
   if (!ptr || GAME.phase !== 'aim') return;
-  const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
-  ptr.moved = Math.max(ptr.moved, Math.hypot(dx, dy));
-  if (!ptr.mode && ptr.moved > 12) ptr.mode = (Math.abs(dy) > Math.abs(dx) * 1.25 && dy < 0) ? 'throw' : 'aim';
-  if (ptr.mode === 'aim') {
-    // Drag is the LINE control by another name: about one move per 24 px, and
-    // it moves feet and eyes together the way the buttons do, so the line under
-    // your finger is the one the bar is showing.
-    const n = Math.round(-dx / 24);
-    GAME.arrow = clamp(ptr.startArrow + n, 2, 32);
-    GAME.feet = clamp(ptr.startFeet + 2 * n, 6, 38);
-    updateAim(); layoutBar();
-  } else if (ptr.mode === 'throw') {
-    ptr.drift = Math.max(ptr.drift, Math.abs(dx));
-    ptr.peak = Math.max(ptr.peak || 0, -dy);
-  }
+  const l = ptr.pts[ptr.pts.length - 1];
+  if (Math.hypot(e.clientX - l.x, e.clientY - l.y) < 2) return;
+  ptr.pts.push({ x: e.clientX, y: e.clientY });
+  // drop from the middle, never the front: the first point is where the stroke
+  // started, and every number read off the stroke is measured from it
+  if (ptr.pts.length > 160) ptr.pts.splice(1, 1);
+  readStroke(ptr);
+  drawStroke(ptr.throwing ? ptr.pts : null);
+  planDirty = true;   // simulated once a frame, in the loop, not once an event
 });
-function endPtr(e) {
+function endPtr() {
   if (!ptr) return;
-  const dt = (performance.now() - ptr.t) / 1000;
-  if (ptr.mode === 'throw' && (ptr.peak || 0) > 40) {
-    const r = C.getBoundingClientRect();
-    // a fast, straight flick is a clean release; a slow or crooked one is not
-    const vel = (ptr.peak / r.height) / Math.max(0.05, dt);
-    const crooked = clamp(ptr.drift / r.width * 3.2, 0, 1);
-    GAME.flickQuality = clamp(1 - crooked * 0.9, 0, 1) * clamp(vel / 1.5, 0.3, 1);
-    throwIt();
-  }
-  ptr = null;
+  const g = ptr; ptr = null;
+  drawStroke(null);
+  // a stroke that went forward and stayed forward is a throw; one you pulled
+  // back out of is not, and leaves the shot sitting where you drew it
+  const a = g.pts[0], z = g.pts[g.pts.length - 1];
+  if (g.throwing && (a.y - z.y) / g.r.height >= STROKE.minThrow) throwIt();
+  else { updateAim(); layoutBar(); }
 }
 C.addEventListener('pointerup', endPtr);
 C.addEventListener('pointercancel', endPtr);
@@ -2454,16 +2573,22 @@ function showTitle() {
       '<p>The pocket is <b>board 17½</b>, and the ball wants to arrive there at <b>four to six degrees</b>. ' +
       'Getting it there is the whole game: the ball skids on the oil, grips where the oil ends, and turns back. ' +
       'Every ball thrown on this lane &mdash; yours and theirs &mdash; takes a little of that oil away.</p>' +
-      '<p>You get two decisions. <b>Aim</b> &#9664;&#9654; moves your whole line across the lane &mdash; ' +
-      'the way the arrow points &mdash; and <b>hook</b> &minus;&#8239;+ is how hard the ball comes back. ' +
-      'Then throw it. That is all of it: drag the lane to aim, space to throw.</p>' +
-      '<ul><li>The readout tells you which board the ball actually arrived on. ' +
-      'Arriving <b>past 17½</b> means it hooked too early &mdash; aim <b>left</b>. ' +
-      'Short of 17½, aim <b>right</b>.</li>' +
-      '<li>Corner pins are a straight ball: hook down, aim at the pin.</li>' +
-      '<li>Nothing you can do stops the lane changing. Keep moving with it.</li></ul>' +
-      '<p class="sub">⋯ splits hook back into the real speed and hand, and your feet from your target, ' +
-      'if you would rather bowl in those.</p>' +
+      '<p><b>You draw the shot on the lane.</b> Slide sideways first and the ball slides ' +
+      'along the foul line with you. Then draw it forward, and the stroke is the throw:</p>' +
+      '<ul><li><b>How far</b> you draw it forward is how hard you throw it.</li>' +
+      '<li><b>Leaning it</b> right or left swings your angle open or tucks it in. ' +
+      'Drawn straight forward it repeats the line you are already standing on.</li>' +
+      '<li><b>How much you curl it</b> at the end is how far you come around the ball. ' +
+      'A straight stroke is a straight ball; a big hook at the finish is all of your hand. ' +
+      'Curl it the other way and you have thrown a back-up ball.</li></ul>' +
+      '<p>There is no timing in any of that &mdash; draw it as slowly as you like. ' +
+      'The dotted curve is <b>this exact shot rolled through the physics</b>, on the lane as it ' +
+      'is right now, so the hook moves under your finger as you draw. Let go and it throws ' +
+      'what you drew.</p>' +
+      '<p class="sub">Which does not make it easy. The pocket is two boards wide, a ball that ' +
+      'arrives flat leaves corner pins however good the line was, and every ball thrown on this ' +
+      'pair &mdash; yours and theirs &mdash; moves the line you just found. ⋯ has the numbers, ' +
+      'if you would rather type.</p>' +
       '<p class="sub">Pick a ball:</p><div class="pick">' +
       BALLS.map((b, i) => '<button data-b="' + i + '"' + (i === chosen ? ' class="sel"' : '') + '>' +
         b.name + '<small>' + b.blurb + '</small></button>').join('') + '</div>' +
@@ -2480,7 +2605,7 @@ function showTitle() {
 
 function endNight() {
   GAME.phase = 'over';
-  view.aim = null;
+  view.plan = null;
   const me = GAME.players[0];
   const order = GAME.players.slice().sort((a, b) => b.total - a.total);
   const place = order.indexOf(me) + 1;
@@ -2515,6 +2640,8 @@ let last = performance.now();
 (function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
+  // ~30 Hz while a stroke is being drawn: live to the eye, and half the cost
+  if (planDirty && now - lastPlan > 28) { planDirty = false; lastPlan = now; updateAim(); layoutBar(); }
   if (GAME.phase !== 'title' && GAME.phase !== 'over') tick(dt);
   stepCamera(dt);
   render();
