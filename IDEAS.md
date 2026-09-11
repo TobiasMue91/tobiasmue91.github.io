@@ -128,9 +128,9 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   what killed it was the shape of the game rather than anything about the camera.*
 - **A known genre, done properly.** Pac-Man, a racer, a platformer, a jigsaw from an image the
   player drops in, a crossword, bingo, a shooting gallery. Listed in the backlog below for years.
-  *The racer is filled by `games/blind_crest.html` and the jigsaw by `games/jigsaw.html`. A
-  platformer, bingo and a shooting gallery are still open. The crossword is **not** — see the
-  cryptic crossword under "Tried and rejected".*
+  *The racer is filled by `games/blind_crest.html`, the jigsaw by `games/jigsaw.html` and tenpin
+  bowling by `games/fresh_oil.html`. A platformer, bingo and a shooting gallery are still open. The
+  crossword is **not** — see the cryptic crossword under "Tried and rejected".*
 - **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
   most replayed pages here. There has been nothing like them in a long time.
   *Filled by `games/strata.html` (a falling-sand world whose materials you discover).*
@@ -156,6 +156,68 @@ Technique notes from things that shipped. **These are notes on how a specific pr
 not a template for what to build or a model of how a proposal should read.** Six of them describe
 exhaustive search because six abstract puzzles were built in a row; that is a fact about the last
 year, not a standard. Skim for the one that touches your problem and ignore the rest.
+
+Filled since: **a bowling game**, by `games/fresh_oil.html` — a sports sim where the opponent is
+the lane surface rather than the other bowlers. Six things in it generalise.
+
+**Calibrate against published numbers, not against how it feels.** Tenpin is unusually well measured,
+so before writing the game I collected the targets the sim had to hit: a house shot breaks at board
+8–10 at 39–41 ft, the pocket is the ball's centre on board 17½ at 4–6°, carry rises to about 85–90%
+at 6° and falls off well below that, and on a proper strike the ball touches **only pins 1, 3, 5 and
+9** — the other six fall by scatter. Then I fitted the free constants (μ on fresh oil and on dry
+boards, and the exponent linking oil volume to friction) to all four lane targets at once, and the
+nine deck constants to the carry curve. The result: breakpoint 8.1 at 41 ft, entry 17.8 at 4.3°,
+9.7 boards of hook, carry 58/77/87% at 2/4/6°, and the 1-3-5-9 signature on 95–100% of pocket hits.
+That last one was never fitted for; it is what told me the deck was right.
+
+**Model the mechanism and the known behaviour falls out for free — which is the only real test of a
+physical model.** Three things appeared that I did not put in. Track flare peaks at a 45° drilling
+layout and vanishes at 0° and 90°, which is the actual pro-shop rule, and it emerges only because
+the ball carries an inertia tensor with a differential rather than a scalar moment. Its magnitude
+lands where real balls land: 0.15 in for a 0.005 differential, 6.6 in for 0.055. And on a burned
+lane, the correction that brings a high ball back to the pocket is **feet two boards left, target
+one** — "two and one", the oldest adjustment in bowling. A parallel move (feet and target together)
+does almost nothing: it took a ball from 22.6 back to 21.6 where two-and-one took it to 18.8. None
+of that is in the code as a rule. If a model only reproduces what you tuned it to reproduce, you
+have fitted a curve, not built a mechanism.
+
+**A contact solver will politely launch your pins into orbit, and each cause looks like the last
+one.** Five separate bugs produced the same symptom — pins at 28 m/s, sliding kilometres, flying
+back up the lane. In order: the kickback normal was inverted so pins passed through the side walls;
+several spheres of one pin each delivered a full restitution impulse, so a pin was kicked two or
+three times per collision; restitution was re-applied on every step a contact persisted, worth ten
+kicks in one collision; friction was applied along +t for body A when the tangent was defined from
+(v_B − v_A), so it **accelerated** every sliding contact instead of opposing it; and a pin's polar
+moment is tiny, so an off-axis impulse spun it to 1600 rpm, at which speed a sphere sweeps further
+in one step than the contact tolerance and the penetrations explode. The general lesson: restitution
+belongs to the moment two bodies *meet*, one contact per body pair, de-penetration must be
+positional rather than impulsive, and every friction sign should be checked by asking whether a
+body sliding on a static floor slows down.
+
+**Sweep the control the player actually holds, and check the answer moves smoothly with it.** Each
+of the four inputs was swept against where the ball ends up: one board at the arrows is 1.5–3.8
+boards at the pins, one board of feet about 1.8, a 0.3 m/s speed step about 2.5, and the hand moves
+it 5–7 boards a notch while taking the entry angle from 0.9° to 6.7°. All monotonic, none twitchy.
+The same sweep is what exposed the design's real problem: execution noise was only sd 0.45 boards,
+so the misses were **systematic**, not random — the lane was moving faster than the adjustment
+granularity could follow, which is why the target now moves in half boards.
+
+**A strategy is only worth building if you can show what ignoring it costs.** Two bots played whole
+nights through the shipped game loop: one that never moves, and one that reads the entry board and
+applies two-and-one. Never moving averages ~106; chasing the lane averages 176 and peaks at 200 with
+seven strikes. Seventy pins is the game. Getting that number honestly took three tries — the first
+bot corrected on its *spare* ball (so it almost never corrected at all), and the second had the feet
+term backwards, which made it worse than doing nothing. **A negative result from a controller you
+have not checked the sign of is not a result**, and the fix also became the hint the game gives the
+player.
+
+**Two measurement bugs that a screenshot cannot show.** Entry angle read −1.8° on a strike, because
+the reading was taken one step after the headpin had already deflected the ball; it has to come from
+the last clean state before any contact, projected forward to the pin row. And an empty full-screen
+modal overlay at 90% opacity sat over the canvas for the entire first day of work, so every render I
+looked at was a ninth of its real brightness — I retuned the lighting three times against it before
+reading the framebuffer with `readPixels` and finding the render had been correct all along. **When
+a picture and an instrument disagree, believe the instrument, and find out what is between them.**
 
 Filled since: **a racing game**, by `games/blind_crest.html` — the largest genre hole in the
 catalogue (97 games and not one with steering, a track or a lap; the backlog had listed it unbuilt
@@ -1265,6 +1327,7 @@ rather than only a judgement.
 - Music Rhythm Game
 - Treasure Hunt
 - Ball Drop Game
+- Tenpin bowling *(built: `games/fresh_oil.html`)*
 - Coding challenges as game idea provider
 - human benchmark
 
