@@ -1526,7 +1526,7 @@ const GAME = {
   pattern: null, players: [], turn: 0, frame: 0, standing: [],
   phase: 'title', feet: 22, arrow: 10, speed: 7.9, turn2: 0.5,
   lastShot: null, lastStrikeBall: null, seed: 1, shots: 0, myBall: BALLS[1], flickQuality: undefined,
-  hintHigh: 0, hintLow: 0, hintCorner: 0,
+  hintHigh: 0, hintLow: 0, hintCorner: 0, fine: false,
 };
 
 function newPlayer(name, human, cfg) {
@@ -1665,7 +1665,10 @@ render = function () {
   gl.depthMask(false);
   if (view.aim) {
     const a = view.aim;
-    drawBand(VP, a.x0, 0, a.x1, FOUL_TO_HEAD, 0.030, [0.98,0.72,0.28], 0.55, true);
+    // Exactly the line the top-down diagram draws: bright from the release to
+    // the arrow you are looking at, faint past it, where the lane takes over.
+    drawBand(VP, a.x0, 0, a.x1, ARROWS_Y, 0.030, [0.98,0.72,0.28], 0.70, true);
+    drawBand(VP, a.x1, ARROWS_Y, a.x2, a.y2, 0.030, [0.98,0.72,0.28], 0.26, true);
     drawBand(VP, a.x1 - 0.012, ARROWS_Y - 0.16, a.x1 - 0.012, ARROWS_Y + 0.30, 0.055, [1.0,0.85,0.45], 0.85, false);
   }
   if (view.trace && view.trace.length > 1) {
@@ -1796,8 +1799,12 @@ function beginTurn() {
 function updateAim() {
   const x0 = boardX(GAME.feet - HAND_OFFSET);
   const x1 = boardX(GAME.arrow);
-  const dx = (x1 - x0) / ARROWS_Y;
-  view.aim = { x0, x1 };
+  // The ball goes straight only as far as the oil does; past the end of the
+  // pattern it grips and turns, and no aiming line can tell you where. So the
+  // line stops where the oil stops, rather than pretending to reach the pins.
+  const y2 = GAME.pattern ? GAME.pattern.len : 12.2;
+  const x2 = x1 + (x1 - x0) * ((y2 - ARROWS_Y) / ARROWS_Y);
+  view.aim = { x0, x1, x2, y2 };
   setCamera('aim');
   drawRead();
 }
@@ -2031,16 +2038,30 @@ diag.style.cssText = 'display:block;width:100%;height:auto;margin:7px 0 2px;bord
 const dctx = diag.getContext('2d');
 function drawDiagram() {
   const narrow = innerWidth < 700;
-  const W = narrow ? 104 : 150, H = narrow ? 150 : 240, dpr = Math.min(devicePixelRatio || 1, 2);
+  const W = narrow ? 104 : 150, H = narrow ? 170 : 262, dpr = Math.min(devicePixelRatio || 1, 2);
   diag.width = W * dpr; diag.height = H * dpr;
   diag.style.width = W + 'px';
   dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   dctx.clearRect(0, 0, W, H);
-  const top = narrow ? 8 : 14, bot = H - (narrow ? 9 : 12), LY = 19.2;
-  const px = b => (b - 0.5) / 39 * W;                  // board -> x
-  const py = y => bot - (y / LY) * (bot - top);        // metres -> y
-  dctx.fillStyle = '#171009'; dctx.fillRect(0, top, W, bot - top);
-  // oil
+
+  // Sixty feet of lane squeezed into 150 pixels is 140:1 out of proportion, so
+  // a rack drawn at its true board positions in that strip comes out as a flat
+  // smear. The deck therefore gets its own panel on top, drawn to its real
+  // shape, and the lane strip below runs foul line to headpin.
+  const top = narrow ? 7 : 10;
+  const deckH = narrow ? 48 : 66;
+  const laneTop = top + deckH + (narrow ? 5 : 7);
+  const bot = H - (narrow ? 9 : 12);
+  // Board 1 is the RIGHT edge of the lane, so it belongs on the right of the
+  // picture: drawn the other way round, this view was a mirror of the one down
+  // the lane and its aiming line leaned the opposite way to the real one.
+  const px = b => W - (b - 0.5) / 39 * W;                        // board -> x
+  const py = y => bot - (y / FOUL_TO_HEAD) * (bot - laneTop);    // metres -> y
+
+  // ---- the lane, from the foul line to the headpin spot ----
+  dctx.save();
+  dctx.beginPath(); dctx.rect(0, laneTop, W, bot - laneTop); dctx.clip();
+  dctx.fillStyle = '#171009'; dctx.fillRect(0, laneTop, W, bot - laneTop);
   const P = GAME.pattern;
   if (P) for (let s = 0; s < P.ny; s++) for (let b = 0; b < 39; b++) {
     const v = clamp(P.f[s * 39 + b], 0, 1);
@@ -2050,20 +2071,13 @@ function drawDiagram() {
     const r = Math.round(20 + t * 66), g = Math.round(40 + t * 142), bl = Math.round(62 + t * 170);
     dctx.fillStyle = 'rgb(' + r + ',' + g + ',' + bl + ')';
     const y0 = py((s + 1) * OIL_SLICE), y1 = py(s * OIL_SLICE);
-    dctx.fillRect(px(b + 1), y0, W / 39 + 0.7, y1 - y0 + 0.7);
+    dctx.fillRect(px(b + 1) - 0.35, y0, W / 39 + 0.7, y1 - y0 + 0.7);
   }
   // board 10 / 20 / 30 guides and the arrows
   dctx.strokeStyle = '#ffffff14'; dctx.lineWidth = 1;
-  for (const b of [10, 20, 30]) { dctx.beginPath(); dctx.moveTo(px(b), top); dctx.lineTo(px(b), bot); dctx.stroke(); }
+  for (const b of [10, 20, 30]) { dctx.beginPath(); dctx.moveTo(px(b), laneTop); dctx.lineTo(px(b), bot); dctx.stroke(); }
   dctx.fillStyle = '#7d6a52';
   for (let k = 0; k < 7; k++) dctx.fillRect(px(5 + k * 5) - 1, py(ARROWS_Y) - 3, 2, 6);
-  // pins
-  dctx.fillStyle = '#cfd6e2';
-  for (const n of [1,2,3,4,5,6,7,8,9,10]) {
-    const [sx, sy] = PIN_SPOTS[n-1];
-    dctx.fillStyle = (GAME.standing && GAME.standing.includes(n)) ? '#eef2f8' : '#3a4354';
-    dctx.beginPath(); dctx.arc(px(xBoard(sx)), py(FOUL_TO_HEAD + sy), narrow ? 1.7 : 2.1, 0, 7); dctx.fill();
-  }
   // your last shot
   const L = GAME.lastShot;
   if (L && L.path && L.path.length > 1) {
@@ -2072,19 +2086,53 @@ function drawDiagram() {
       i ? dctx.lineTo(X, Y) : dctx.moveTo(X, Y); });
     dctx.stroke();
   }
-  // the line you are about to play
+  // The line you are about to play — the same two-part dashed line the 3D view
+  // draws: solid-bright to the arrows, faint on the straight continuation past
+  // them, which is where the ball stops going straight.
   if (GAME.phase === 'aim') {
     const x0 = px(GAME.feet - HAND_OFFSET), x1 = px(GAME.arrow);
-    dctx.strokeStyle = '#f0a63c88'; dctx.lineWidth = 1.2; dctx.setLineDash([3, 3]);
-    dctx.beginPath(); dctx.moveTo(x0, py(0)); dctx.lineTo(x1, py(ARROWS_Y));
-    dctx.lineTo(x1 + (x1 - x0) * ((FOUL_TO_HEAD - ARROWS_Y) / ARROWS_Y), py(FOUL_TO_HEAD));
-    dctx.stroke(); dctx.setLineDash([]);
+    const y2 = P ? P.len : 12.2;
+    const x2 = x1 + (x1 - x0) * ((y2 - ARROWS_Y) / ARROWS_Y);
+    dctx.lineWidth = 1.2; dctx.setLineDash([3, 3]);
+    dctx.strokeStyle = '#f0a63cbb';
+    dctx.beginPath(); dctx.moveTo(x0, py(0)); dctx.lineTo(x1, py(ARROWS_Y)); dctx.stroke();
+    dctx.strokeStyle = '#f0a63c44';
+    dctx.beginPath(); dctx.moveTo(x1, py(ARROWS_Y)); dctx.lineTo(x2, py(y2)); dctx.stroke();
+    dctx.setLineDash([]);
+    dctx.fillStyle = '#f0a63c';
+    dctx.fillRect(x1 - 1, py(ARROWS_Y) - 4, 2, 8);
   }
   dctx.strokeStyle = '#8e2a22'; dctx.lineWidth = 1;
   dctx.beginPath(); dctx.moveTo(0, py(0) + 0.5); dctx.lineTo(W, py(0) + 0.5); dctx.stroke();
+  dctx.restore();
+
+  // ---- the deck, in its own panel and its own scale ----
+  const IN_W = 36, IN_D = 3 * (ROW_DY / IN);                     // inches across, inches deep
+  const sc = Math.min((W * 0.74) / IN_W, (deckH - (narrow ? 12 : 16)) / IN_D);
+  const cx = W / 2, deckBot = top + deckH - (narrow ? 4 : 6);
+  dctx.fillStyle = '#0b0f16';
+  dctx.fillRect(0, top, W, deckH);
+  dctx.strokeStyle = '#232c3d'; dctx.strokeRect(0.5, top + 0.5, W - 1, deckH - 1);
+  for (const n of [1,2,3,4,5,6,7,8,9,10]) {
+    const [sx, sy] = PIN_SPOTS[n - 1];
+    const X = cx + (sx / IN) * sc, Y = deckBot - (sy / IN) * sc;
+    const up = GAME.standing && GAME.standing.includes(n);
+    dctx.beginPath(); dctx.arc(X, Y, narrow ? 3 : 3.6, 0, 7);
+    if (up) { dctx.fillStyle = '#eef2f8'; dctx.fill(); }
+    else { dctx.strokeStyle = '#2c3546'; dctx.lineWidth = 1; dctx.stroke(); }
+  }
+  // and a tick at the top of the lane strip for the board the ball has to
+  // arrive on, so the readout's number has a place in the picture
+  if (GAME.phase === 'aim') {
+    const X = px(targetBoard(GAME.standing));
+    dctx.fillStyle = '#77c78a';
+    dctx.beginPath(); dctx.moveTo(X, laneTop + 1); dctx.lineTo(X - 3, laneTop - 4);
+    dctx.lineTo(X + 3, laneTop - 4); dctx.closePath(); dctx.fill();
+  }
   dctx.fillStyle = '#5d6a80'; dctx.font = '600 8px ui-monospace,monospace';
   if (!narrow) {
-    dctx.fillText('1', 1, 10); dctx.fillText('20', W / 2 - 5, 10); dctx.fillText('39', W - 12, 10);
+    dctx.fillText('39', 1, laneTop + 9); dctx.fillText('20', W / 2 - 5, laneTop + 9);
+    dctx.fillText('1', W - 6, laneTop + 9);
     dctx.fillText('the oil, from above', 1, H - 2);
   } else dctx.fillText('oil', 1, H - 1);
 }
@@ -2204,9 +2252,9 @@ function shotLine(r, got) {
   const hi = L.entryBoard > 19.5, lo = L.entryBoard < 15.5;
   let why = '';
   if (hi) why = ' In at ' + L.entryBoard.toFixed(0) + ' &mdash; high. It is hooking earlier than it was.' +
-    (GAME.hintHigh++ < 2 ? ' <i>Two and one left: feet +2, arrow +1.</i>' : '');
+    (GAME.hintHigh++ < 2 ? ' <i>Move the line one left.</i>' : '');
   else if (lo) why = ' Light, at ' + L.entryBoard.toFixed(0) + '. Not enough of it came back.' +
-    (GAME.hintLow++ < 2 ? ' <i>Two and one right.</i>' : '');
+    (GAME.hintLow++ < 2 ? ' <i>Move the line one right.</i>' : '');
   else if (L.entryAngle < 3) why = ' Pocket, but flat &mdash; ' + L.entryAngle.toFixed(1) + '&deg; in.';
   return got + '. Left ' + leaveName(r.left) + '.' + why;
 }
@@ -2226,6 +2274,11 @@ function oppLine(pl, res, got) {
 
 
 // ---- controls ----
+// Board numbers count from the right edge, so board 20 is LEFT of board 10 —
+// which made every arrow button on the old bar point one way and move the ball
+// the other. Nothing here is phrased in board numbers any more: an arrowhead
+// always means "move the line that way on the screen", and where a control is
+// an amount rather than a direction it gets a minus and a plus instead.
 const SPEEDS = [7.0, 7.3, 7.6, 7.9, 8.2, 8.5];
 const TURNS = [['straight up', 0.0], ['a little', 0.25], ['medium', 0.5], ['around it', 0.75], ['all of it', 1.0]];
 function turnName(t) {
@@ -2235,38 +2288,68 @@ function turnName(t) {
 }
 const mph = v => (v * 2.2369).toFixed(1);
 
+// dir: +1 moves the line left on screen, -1 right. One press is the oldest
+// adjustment in bowling — two boards with the feet, one with the eyes — so the
+// single control that matters is the single move the game is about.
+function moveLine(dir) {
+  GAME.feet = clamp(GAME.feet + 2 * dir, 6, 38);
+  GAME.arrow = clamp(GAME.arrow + dir, 2, 32);
+}
+const shiftFeet = dir => { GAME.feet = clamp(GAME.feet + dir, 6, 38); };
+const shiftArrow = dir => { GAME.arrow = clamp(GAME.arrow + 0.5 * dir, 2, 32); };
+function stepSpeed(d) {
+  let i = SPEEDS.findIndex(v => Math.abs(v - GAME.speed) < 0.02);
+  if (i < 0) i = 3;
+  GAME.speed = SPEEDS[clamp(i + d, 0, SPEEDS.length - 1)];
+}
+
 function layoutBar() {
   const bar = $('bar');
   if (GAME.phase !== 'aim') { bar.innerHTML = ''; $('padHint').textContent = ''; return; }
   const tight = innerWidth < 700;
-  const L = k => tight ? k[0] : k;
-  bar.innerHTML =
-    '<div class="grp"><span class="lab">' + L('FEET') + '</span><button data-a="feet-1">&#9664;</button>' +
-      '<button class="val" id="vFeet">' + GAME.feet + '</button><button data-a="feet1">&#9654;</button></div>' +
-    '<div class="grp"><span class="lab">' + L('ARROW') + '</span><button data-a="arrow-1">&#9664;</button>' +
-      '<button class="val" id="vArrow">' + GAME.arrow.toFixed(1) + '</button><button data-a="arrow1">&#9654;</button></div>' +
-    '<div class="grp"><span class="lab">' + L('SPEED') + '</span><button data-a="spd-1">&#9664;</button>' +
-      '<button class="val" id="vSpd">' + mph(GAME.speed) + '</button><button data-a="spd1">&#9654;</button></div>' +
-    '<div class="grp"><span class="lab">' + L('HAND') + '</span><button data-a="turn-1">&#9664;</button>' +
-      '<button class="val" id="vTurn" style="min-width:' + (tight ? 58 : 74) + 'px;font-size:' + (tight ? 10 : 11) + 'px">' +
-        turnName(GAME.turn2) + '</button>' +
-      '<button data-a="turn1">&#9654;</button></div>' +
-    '<div class="grp"><button id="throw" data-a="throw">THROW</button></div>';
-  $('padHint').textContent = 'drag to aim · flick up to throw';
+  const lr = (lab, a, val, w) =>
+    '<div class="grp"><span class="lab">' + lab + '</span>' +
+    '<button data-a="' + a + '-L" aria-label="' + lab + ' left">&#9664;</button>' +
+    '<button class="val"' + (w ? ' style="min-width:' + w + 'px"' : '') + '>' + val + '</button>' +
+    '<button data-a="' + a + '-R" aria-label="' + lab + ' right">&#9654;</button></div>';
+  const pm = (lab, a, val, w) =>
+    '<div class="grp"><span class="lab">' + lab + '</span>' +
+    '<button data-a="' + a + '-dn" aria-label="less ' + lab + '">&minus;</button>' +
+    '<button class="val"' + (w ? ' style="min-width:' + w + 'px"' : '') + '>' + val + '</button>' +
+    '<button data-a="' + a + '-up" aria-label="more ' + lab + '">+</button></div>';
+
+  let h = lr('LINE', 'line',
+    tight ? GAME.arrow.toFixed(0)
+          : GAME.feet + '<span style="color:var(--faint)">&nbsp;&rsaquo;&nbsp;</span>' + GAME.arrow.toFixed(1),
+    tight ? 30 : 62);
+  if (GAME.fine) h += lr(tight ? 'FT' : 'FEET', 'feet', GAME.feet) +
+                      lr(tight ? 'AIM' : 'ARROW', 'arrow', GAME.arrow.toFixed(1));
+  h += pm(tight ? 'SPD' : 'SPEED', 'spd', mph(GAME.speed)) +
+       pm('HAND', 'turn', turnName(GAME.turn2), tight ? 58 : 74) +
+       '<div class="grp"><button data-a="fine" aria-label="fine adjustment"' +
+         (GAME.fine ? ' style="color:var(--amber);border-color:var(--amber)"' : '') + '>&#8943;</button>' +
+       '<button id="throw" data-a="throw">THROW</button></div>';
+  bar.innerHTML = h;
+  $('padHint').textContent = 'drag the lane to move the line \u00b7 flick up to throw';
 }
+
 function act(a) {
   if (GAME.phase !== 'aim') return;
-  if (a === 'feet-1') GAME.feet = clamp(GAME.feet - 1, 6, 38);
-  else if (a === 'feet1') GAME.feet = clamp(GAME.feet + 1, 6, 38);
-  else if (a === 'arrow-1') GAME.arrow = clamp(GAME.arrow - 0.5, 2, 32);
-  else if (a === 'arrow1') GAME.arrow = clamp(GAME.arrow + 0.5, 2, 32);
-  else if (a === 'spd-1' || a === 'spd1') {
-    let i = SPEEDS.findIndex(v => Math.abs(v - GAME.speed) < 0.02);
-    if (i < 0) i = 3;
-    GAME.speed = SPEEDS[clamp(i + (a === 'spd1' ? 1 : -1), 0, SPEEDS.length - 1)];
-  } else if (a === 'turn-1') GAME.turn2 = clamp(GAME.turn2 - 0.25, 0, 1);
-  else if (a === 'turn1') GAME.turn2 = clamp(GAME.turn2 + 0.25, 0, 1);
-  else if (a === 'throw') { throwIt(); return; }
+  switch (a) {
+    case 'line-L': moveLine(1); break;
+    case 'line-R': moveLine(-1); break;
+    case 'feet-L': shiftFeet(1); break;
+    case 'feet-R': shiftFeet(-1); break;
+    case 'arrow-L': shiftArrow(1); break;
+    case 'arrow-R': shiftArrow(-1); break;
+    case 'spd-up': stepSpeed(1); break;
+    case 'spd-dn': stepSpeed(-1); break;
+    case 'turn-up': GAME.turn2 = clamp(GAME.turn2 + 0.25, 0, 1); break;
+    case 'turn-dn': GAME.turn2 = clamp(GAME.turn2 - 0.25, 0, 1); break;
+    case 'fine': GAME.fine = !GAME.fine; break;
+    case 'throw': throwIt(); return;
+    default: return;
+  }
   updateAim(); layoutBar();
 }
 $('bar').addEventListener('click', e => {
@@ -2277,26 +2360,24 @@ $('bar').addEventListener('click', e => {
 addEventListener('keydown', e => {
   if (GAME.phase === 'title') { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('veil').querySelector('.go')?.click(); } return; }
   const k = e.key.toLowerCase();
-  const map = { arrowleft: 'feet-1', arrowright: 'feet1', a: 'arrow-1', d: 'arrow1',
-    w: 'spd1', s: 'spd-1', q: 'turn-1', e: 'turn1', ' ': 'throw' };
+  // left is left, up is faster, and the fine adjustments sit on the brackets
+  const map = { arrowleft: 'line-L', arrowright: 'line-R', a: 'line-L', d: 'line-R',
+    arrowup: 'spd-up', arrowdown: 'spd-dn', w: 'spd-up', s: 'spd-dn',
+    q: 'turn-dn', e: 'turn-up', '[': 'feet-L', ']': 'feet-R',
+    ',': 'arrow-L', '.': 'arrow-R', ' ': 'throw' };
   if (map[k] !== undefined) { e.preventDefault(); audio(); act(map[k]); }
   if (k === 'o') { view.showOil = view.showOil > 0.5 ? 0 : 1; }
+  if (k === 'f') { act('fine'); layoutBar(); }
 });
 
 // pointer: drag sideways to aim, flick up to throw
 let ptr = null;
-function pxToBoard(cx) {
-  // map the screen x across the lane at the arrows, as seen by the aim camera
-  const r = C.getBoundingClientRect();
-  const t = (cx - r.left) / r.width;
-  return clamp(Math.round(2 + t * 30), 2, 32);
-}
 C.addEventListener('pointerdown', e => {
   if (GAME.phase !== 'aim') return;
   audio();
   C.setPointerCapture(e.pointerId);
   ptr = { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0, drift: 0,
-          startArrow: GAME.arrow, mode: null };
+          startArrow: GAME.arrow, startFeet: GAME.feet, mode: null };
 });
 C.addEventListener('pointermove', e => {
   if (!ptr || GAME.phase !== 'aim') return;
@@ -2304,9 +2385,12 @@ C.addEventListener('pointermove', e => {
   ptr.moved = Math.max(ptr.moved, Math.hypot(dx, dy));
   if (!ptr.mode && ptr.moved > 12) ptr.mode = (Math.abs(dy) > Math.abs(dx) * 1.25 && dy < 0) ? 'throw' : 'aim';
   if (ptr.mode === 'aim') {
-    const r = C.getBoundingClientRect();
-    // about one board per 26 px, whatever the screen
-    GAME.arrow = clamp(Math.round((ptr.startArrow - dx / 26) * 2) / 2, 2, 32);
+    // Drag is the LINE control by another name: about one move per 24 px, and
+    // it moves feet and eyes together the way the buttons do, so the line under
+    // your finger is the one the bar is showing.
+    const n = Math.round(-dx / 24);
+    GAME.arrow = clamp(ptr.startArrow + n, 2, 32);
+    GAME.feet = clamp(ptr.startFeet + 2 * n, 6, 38);
     updateAim(); layoutBar();
   } else if (ptr.mode === 'throw') {
     ptr.drift = Math.max(ptr.drift, Math.abs(dx));
@@ -2341,10 +2425,13 @@ function showTitle() {
       '<p>The pocket is <b>board 17½</b>, and the ball wants to arrive there at <b>four to six degrees</b>. ' +
       'Getting it there is the whole game: the ball skids on the oil, grips where the oil ends, and turns back. ' +
       'Every ball thrown on this lane &mdash; yours and theirs &mdash; takes a little of that oil away.</p>' +
-      '<ul><li><b>Feet</b> and <b>arrow</b> set your line. The readout tells you which board you actually arrived on.</li>' +
-      '<li>Arriving <b>past 17½</b> means the ball hooked too early. The fix is the oldest rule in bowling: ' +
-      '<b>two and one</b> &mdash; feet two boards left, target one. Arriving short of 17½, go two and one right.</li>' +
-      '<li><b>Speed</b> buys time: faster skids longer and hooks less. <b>Hand</b> is how far you come around it.</li>' +
+      '<ul><li><b>Line</b> &#9664;&#9654; is the whole game. One press moves you the way bowlers move &mdash; ' +
+      'two boards with the feet, one with the eyes &mdash; in the direction the arrow points. ' +
+      'Drag the lane to do the same thing with your finger.</li>' +
+      '<li>The readout tells you which board the ball actually arrived on. ' +
+      'Arriving <b>past 17½</b> means it hooked too early: move <b>left</b>. Short of 17½, move <b>right</b>.</li>' +
+      '<li><b>Speed</b> buys time: faster skids longer and hooks less. <b>Hand</b> is how far you come around it. ' +
+      '<b>⋯</b> opens feet and target separately, if you want to change the angle rather than the line.</li>' +
       '<li>Nothing you can do stops the lane changing. Keep moving with it.</li></ul>' +
       '<p class="sub">Pick a ball:</p><div class="pick">' +
       BALLS.map((b, i) => '<button data-b="' + i + '"' + (i === chosen ? ' class="sel"' : '') + '>' +
