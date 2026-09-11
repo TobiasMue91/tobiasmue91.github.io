@@ -267,6 +267,39 @@ mistake in a second place made the roadside banks start five segments out, givin
 that slid away as you approached and read as walls appearing and vanishing; the fix is to run the
 strip to the camera and clamp the exploding near vertices off-screen rather than dropping them.
 
+**A car that is moved sideways is not a car that is driven.** The original model took the input as
+lateral acceleration: the road curved underneath and you slid across it, never pointing the car
+anywhere. It plays as lane-shifting and reads to a player as the game steering for them. Giving the
+car a heading of its own — steering turns the wheels, the car follows where it points, the road
+turns underneath at its own rate, all in road-relative coordinates — is maybe thirty lines and is
+the difference between a driving game and a dodging game. Two traps inside it:
+
+*Clamping the steering angle after applying it silently makes steering binary.* Capping `delta` to
+what grip allows looks equivalent to limiting the turn and is not: above about a tenth of lock,
+every input at speed clamps to the same angle, so the whole upper range of the control does
+nothing. Take the input as a **fraction of available grip** and convert that to an angle instead —
+then half a thumb is always half a turn, at any speed.
+
+*Yaw rate is proportional to speed, which is true and unplayable.* A car crawling at walking pace
+genuinely cannot be pointed, so a driver who has slowed right down gets stuck facing the wrong way.
+A small constant added to the speed term (`(v+3)`) costs nothing above 30 km/h and removes the trap.
+
+**Constant off-road drag larger than your acceleration is a permanent trap, and only a long run
+finds it.** The verge applied a flat 13.5 m/s² while full throttle from a standstill gives 10.4, so
+a car that stopped on the grass could never move again — stranded, with a stage restart the only
+escape. It survived every short test and only showed up as one seed in eight sitting at zero for
+**712 seconds** in a long bot run; the tell in the logs was a run whose time was the step cap.
+Make verge drag a rolling resistance (`2.0 + 0.30v`), and add a backstop that recovers anything
+stationary off-road for a couple of seconds. **Any "stuck" state a physics model can reach, a
+player will reach.**
+
+**Stability and the reason to listen are the same dial, so sweep them together.** Damping the
+car's heading deviation makes it far more forgiving — offs at a human reaction lag went 0.94 →
+0.11 → 0.00 as damping rose — but a car stable enough survives arriving too fast, and the value of
+being told about the corner collapsed with it (median gain 5.4s → 5.1s → **1.5s**). Neither number
+alone picks a value; measuring both against the same parameter picks 1.3 immediately. Worth doing
+whenever a comfort fix touches the thing the game is about.
+
 **Periodic shimmer is invisible in a screenshot and easy to measure.** Two surfaces alternated
 colour per-segment — the tarmac every four segments and the kerbs every one — which at 150 km/h is
 a 1.7 Hz and a 7 Hz pulse: slow enough to see, fast enough to irritate, and completely absent from
