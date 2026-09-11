@@ -93,7 +93,7 @@ body.touch #touch{display:block}
 body.touch #hints{display:block}
 #hints .z{position:absolute;bottom:10%;top:36%;
   border:1px dashed rgba(255,255,255,.16);border-radius:10px}
-#hL{left:2%;width:34%}#hM{left:38%;width:24%}#hR{right:2%;width:34%}
+#hL{left:2%;width:41%}#hM{left:44%;width:12%}#hR{right:2%;width:41%}
 #hints .t{position:absolute;left:0;right:0;text-align:center;line-height:1.5;
   font-size:9px;padding:0 4px}
 #hints b{display:block;font-size:17px;color:rgba(255,255,255,.6);font-weight:700}
@@ -123,12 +123,12 @@ body.touch #hints{display:block}
 
   <div id="touch"></div>
   <div id="hints">
-    <div class="z" id="hL"><div class="t" style="top:12%"><b>&larr;</b>further out,<br>more lock</div></div>
+    <div class="z" id="hL"><div class="t" style="top:12%"><b>&larr;</b>nearer the edge,<br>sharper the turn</div></div>
     <div class="z" id="hM">
       <div class="half"><div class="t" style="top:18%"><b>&uarr;</b>lift</div></div>
       <div class="half"><div class="t" style="top:18%"><b>&darr;</b>brake</div></div>
     </div>
-    <div class="z" id="hR"><div class="t" style="top:12%"><b>&rarr;</b>further out,<br>more lock</div></div>
+    <div class="z" id="hR"><div class="t" style="top:12%"><b>&rarr;</b>nearer the edge,<br>sharper the turn</div></div>
   </div>
 
   <div class="screen" id="menu">
@@ -137,14 +137,16 @@ body.touch #hints{display:block}
       <p class="sub">You cannot see the corner. She can.</p>
       <div class="rules">
         <b>Pacenotes.</b> Your co-driver reads the road ahead of you. <b>Left 4</b> is a fast
-        left; <b>right 1</b> is a hairpin. Low number, slow corner. <b>Long</b> means it
-        keeps going, <b>tightens</b> means brake more than you want to,
+        left; <b>right 1</b> is a hairpin. Low number, slow corner. A <b>6</b> is flat out
+        and a <b>5</b> is a lift — it is the <b>4</b>s and below you brake for.
+        <b>Long</b> means it keeps going, <b>tightens</b> means brake more than you want to,
         <b>into</b> means there is no straight in between.<br>
         <b>Drive.</b> <span class="k">← →</span> steer &middot; <span class="k">↑</span> throttle
         &middot; <span class="k">↓</span> brake &middot; <span class="k">R</span> restart stage.<br>
-        <b>On a phone</b> the throttle looks after itself. Hold the left or right side to
-        steer — the further out your thumb, the more lock — and the middle band for speed:
-        lower half brakes, upper half lifts off. Two thumbs work at once.<br>
+        <b>On a phone</b> the throttle looks after itself. Hold anywhere on the left or
+        right to steer: the nearer the middle of the screen, the gentler the turn, and the
+        screen edge is full lock. A narrow strip down the centre is speed — lower half
+        brakes, upper half lifts. Two thumbs work at once.<br>
         <b>The rally.</b> Six stages, they get harder, and the night comes in. Times add up.
       </div>
       <div class="row">
@@ -191,8 +193,8 @@ function mulberry(a){
 /* ── constants ───────────────────────────────────────────────────────── */
 const SEG=6;                 // metres per road segment
 const ROADW=4.5;             // half-width of the tarmac, metres
-const GRIP=11.4;             // m/s^2 of lateral grip on tarmac
-const VMAX=54;               // m/s (~194 km/h)
+const GRIP=19.0;             // m/s^2 of lateral grip on tarmac (arcade, ~1.9g)
+const VMAX=50;               // m/s (180 km/h)
 // Camera. The road's on-screen half-width at the bottom of the frame is
 // ROADW*(H-HOR)/(CAM_D*CAM_H); at the original 1.35 / 0.86 that came to 2.3x
 // the screen width, so the near tarmac swallowed the lower half of the frame
@@ -583,7 +585,7 @@ function drawPoly(x1,y1,w1,x2,y2,w2,fill){
 const G={
   seed:'', stageIdx:0, rally:true, nStages:6,
   stage:null, calls:[], look:LOOKS[0],
-  pos:0, x:0, vx:0, v:0, steer:0,
+  pos:0, x:0, vx:0, v:0, steer:0, yaw:0,
   t:0, running:false, finished:false, penalty:0,
   offT:0, shake:0, warnT:0, warnMsg:'',
   results:[], best:null, bestSplits:null, splits:null, delta:null,
@@ -599,7 +601,7 @@ function loadStage(){
   G.stage=makeStage(G.seed, G.stageIdx, diff);
   G.calls=writeNotes(G.stage);
   G.look=LOOKS[G.rally ? Math.min(LOOKS.length-1, G.stageIdx) : 1];
-  G.pos=0; G.x=0; G.vx=0; G.v=0; G.t=0; G.penalty=0; G.offT=0; G.shake=0;
+  G.pos=0; G.x=0; G.vx=0; G.yaw=0; G.v=0; G.t=0; G.penalty=0; G.offT=0; G.shake=0;
   G.finished=false; G.warnT=0;
   for(const c of G.calls) c.spoken=false;
   buildMini();
@@ -680,13 +682,16 @@ function readTouches(e){
   const w=window.innerWidth, h=window.innerHeight;
   let steer=0, brake=false, coast=false;
   for(const t of e.touches){
-    const x=t.clientX, y=t.clientY;
-    if(x < w*0.38){
-      steer=Math.min(steer, -Math.max(0.18, Math.min(1,(w*0.38-x)/(w*0.30))));
-    } else if(x > w*0.62){
-      steer=Math.max(steer,  Math.max(0.18, Math.min(1,(x-w*0.62)/(w*0.30))));
+    // -1 at the far left of the screen, +1 at the far right
+    const u=Math.max(-1, Math.min(1, (t.clientX - w/2)/(w*0.42)));
+    if(Math.abs(u) <= 0.15){
+      // narrow band down the middle is speed, not steering
+      if(t.clientY > h*0.42) brake=true; else coast=true;
     } else {
-      if(y > h*0.42) brake=true; else coast=true;
+      // squared, so a thumb near the middle is a gentle correction and only
+      // the edge of the screen is full lock
+      const m=Math.sign(u)*u*u;
+      if(Math.abs(m) > Math.abs(steer)) steer=m;
     }
   }
   touch.steer=steer; touch.brake=brake; touch.coast=coast;
@@ -739,24 +744,59 @@ function update(dt){
   if(brake)      G.v -= 13.5*dt;
   else if(gas)   G.v += (9.2*(1-G.v/VMAX)+1.2)*dt;
   else           G.v -= 1.4*dt;
-  if(!onRoad)    G.v -= 13.5*dt;   // the verge is not a run-off area
+  // The verge is not a run-off area — but the drag has to be a rolling
+  // resistance, not a constant. A flat 13.5 m/s^2 exceeded what full throttle
+  // gives from a standstill (10.4), so a car that stopped on the grass could
+  // never move again: stuck for good, with only a stage restart to escape.
+  if(!onRoad)    G.v -= (2.0 + 0.30*G.v)*dt;
   G.v=Math.max(0, Math.min(VMAX, G.v));
 
-  // ---- lateral. The road curves under the car; the car can generate at most
-  // GRIP of its own. Arrive too fast and no amount of steering holds the line.
-  const gf = onRoad ? 1 : 0.30;
-  const demand = seg.curve/SEG * G.v * G.v;        // + = road bends right
-  const ax = G.steer*GRIP*gf - demand;
-  G.vx += ax*dt;
-  G.vx *= Math.exp(-2.3*dt);                        // tyre scrub
+  // ---- lateral. The car has a heading of its own now. Steering turns the
+  // front wheels; the car follows where it is pointed, and the road turns
+  // underneath it at its own rate. Before this the input moved the car
+  // sideways without ever pointing it, which is why cornering felt automatic.
+  const gf = onRoad ? 1 : 0.42;
+  const WB = 2.7;                                   // wheelbase, metres
+  const maxLat = GRIP*gf;
+  // The input asks for a FRACTION OF AVAILABLE GRIP, and that is converted
+  // into a steering angle. Steering first and clamping the angle afterwards
+  // looks equivalent and is not: above about a tenth of lock every input
+  // clamps to the same angle at speed, so steering goes binary exactly where
+  // proportional control matters. This way half a thumb is always half a turn.
+  const askLat = G.steer * maxLat;
+  const vEff = Math.max(6, G.v);
+  const lock = 0.50 * (1 - 0.55*Math.min(1, G.v/VMAX));
+  let delta = Math.atan(askLat*WB/(vEff*vEff));
+  delta = Math.max(-lock, Math.min(lock, delta));
+  const roadRate = seg.curve/SEG * G.v;             // how fast the road turns
+  // The +3 is a low-speed assist. Yaw rate is proportional to speed, which is
+  // true of a real car and means a crawling one cannot be pointed at all — so
+  // a driver who has slowed right down gets stuck facing the wrong way.
+  G.yaw += ((G.v+3.0)*Math.tan(delta)/WB - roadRate)*dt;
+  // Damping acts on heading RELATIVE TO THE ROAD, which is zero when you are
+  // following it — so this costs nothing in a steady corner and only pulls
+  // out deviations. Cheap stability.
+  // 1.3 was picked by sweeping it against two measurements at once: offs at a
+  // human reaction lag (0.94 at 0.7, 0.11 here, 0.00 at 1.8) and whether the
+  // co-driver still pays (5.4s, 5.1s, then collapsing to 1.5s at 1.8, because
+  // a car that stable survives arriving too fast and the notes stop mattering).
+  G.yaw *= Math.exp(-1.3*dt);
+  G.yaw = Math.max(-0.5, Math.min(0.5, G.yaw));
+  G.vx  = G.v*Math.sin(G.yaw);                      // sideways speed, for the look
   G.x  += G.vx*dt;
 
   if(!onRoad){ G.offT+=dt; G.shake=Math.min(1, G.shake+dt*3); }
   else { G.offT=0; G.shake=Math.max(0, G.shake-dt*4); }
 
+  // belt and braces: nothing may leave the player stranded
+  if(!onRoad && G.v < 1.2 && G.offT > 2.5){
+    G.penalty+=5; G.x=0; G.vx=0; G.yaw=0; G.v=8; G.offT=0;
+    flash('OFF · +5s', 1.6);
+  }
+
   // beached
   if(Math.abs(G.x)>ROADW*2.0){
-    G.penalty+=5; G.x=0; G.vx=0; G.v=Math.min(G.v,7);
+    G.penalty+=5; G.x=0; G.vx=0; G.yaw=0; G.v=Math.min(G.v,7);
     flash('OFF · +5s', 1.6);
   }
 
@@ -1036,7 +1076,7 @@ function render(){
     const scale=CAM_D/z;
     const yHere=(i===0) ? camY-CAM_H : sg.y;
     proj.push({
-      sx: W/2 + scale*(x - G.x)*FL + shakeX,
+      sx: W/2 + scale*(x - G.x)*FL - G.yaw*0.5*FL + shakeX,
       sy: HOR - scale*(yHere - camY)*FL + shakeY,
       sw: scale*ROADW*FL,
       // smoothstep rather than a power: it flattens out as it reaches the
@@ -1241,7 +1281,7 @@ function drawCar(){
   const body='#22303f', dark='#16202b', glass='#0a1018';
 
   ctx.save();
-  ctx.translate(cx,cy); ctx.rotate(roll*0.55);
+  ctx.translate(cx,cy); ctx.rotate(roll*0.55 + G.yaw*0.55);
 
   // ground shadow, tight under the car
   ctx.fillStyle='rgba(0,0,0,.40)';
