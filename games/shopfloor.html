@@ -381,7 +381,11 @@ function draw(F,hover){
       const f=1-m.prog/spec.time;
       ctx.fillStyle='#f0b42955'; ctx.fillRect(px+4,py+4,(S-8)*f,4);
     }
-    if(m.idleRecent>0.6){ ctx.fillStyle='#d9614c'; ctx.beginPath();
+    if(m.stranded){
+      ctx.strokeStyle='#d9614c'; ctx.lineWidth=2; rr(px+3,py+3,S-6,S-6,6); ctx.stroke();
+      ctx.fillStyle='#d9614c'; ctx.font='700 '+Math.max(10,Math.round(CELL*0.4))+'px '+getComputedStyle(document.body).fontFamily;
+      ctx.textAlign='center'; ctx.fillText('!',px+S-10,py+S*0.42);
+    } else if(m.idleRecent>0.6){ ctx.fillStyle='#d9614c'; ctx.beginPath();
       ctx.arc(px+S-9,py+9,3.2,0,7); ctx.fill(); }
   }
   // items
@@ -509,10 +513,17 @@ function renderOrder(){
 const RULE='Machines take what they need off any belt beside them, and put finished work on any belt beside them that can carry it. A belt that leads nowhere carries nothing.';
 function renderHint(){
   const el=document.getElementById('hint'); if(!el) return;
-  let starved=0,blocked=0;
+  let starved=0,blocked=0,stranded=0;
   for(const m of F.machines){
-    if(m.out) blocked++;
-    else if(!Object.entries(MACHINES[m.type].into).every(([k,n])=>(m.in[k]||0)>=n)) starved++;
+    if(m.out){
+      // two machines pushed up against each other have no room for a belt between them,
+      // which looks exactly like being busy unless the page says otherwise
+      const any=outputBelts(F,m).some(b=>chainTarget(F,b)!==m&&chainAccepts(F,b,m.out));
+      if(any) blocked++; else stranded++;
+      m.stranded=!any;
+    } else { m.stranded=false;
+      if(!Object.entries(MACHINES[m.type].into).every(([k,n])=>(m.in[k]||0)>=n)) starved++;
+    }
   }
   let dead=0;
   for(const b of F.belts.values()) if(chainTarget(F,b)===null) dead++;
@@ -522,7 +533,8 @@ function renderHint(){
   const wrong=Object.keys(F._rate||{}).filter(k=>k!==o.item&&F._rate[k]>0.05);
   if(wrong.length) diag+=`The bay is taking <b style="color:var(--hi)">${wrong.map(w=>w+'s').join(' and ')}</b>, and the order is for ${o.item}s. `;
   if(dead) diag+=`<b style="color:var(--bad)">${dead}</b> belt${dead>1?'s':''} leading nowhere. `;
-  if(blocked) diag+=`<b style="color:var(--bad)">${blocked}</b> with nowhere to put their work. `;
+  if(stranded) diag+=`<b style="color:var(--bad)">${stranded}</b> with no belt beside ${stranded>1?'them':'it'} that can carry the work — machines packed against each other leave no room for one. `;
+  if(blocked) diag+=`<b style="color:var(--bad)">${blocked}</b> backed up. `;
   if(starved) diag+=`<b style="color:var(--hi)">${starved}</b> waiting for parts. `;
   el.innerHTML=diag?diag+'<span style="color:var(--faint)">'+RULE+'</span>':RULE;
 }
@@ -567,6 +579,12 @@ function bindBoard(){
       const b=beltAt(F,x,y);
       if(b) b.dir=({E:'S',S:'W',W:'N',N:'E'})[b.dir];  // tap an existing belt to turn it
       else addBelt(F,x,y,'E');
+    } else if(dragging&&dragging.length>1){
+      // the cell you finished on gets a belt too, carrying on the way you were going —
+      // without this the end of every line you draw is quietly missing
+      const [px,py]=dragging[dragging.length-2], [x,y]=dragging[dragging.length-1];
+      const dx=x-px, dy=y-py;
+      if(!beltAt(F,x,y)) addBelt(F,x,y, dx===1?'E':dx===-1?'W':dy===1?'S':'N');
     }
     dragging=null; draw(F,hover);
   };
