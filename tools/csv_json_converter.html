@@ -40,6 +40,7 @@
         .msg {padding: 0.75rem; margin-top: 1rem; border-radius: 4px; font-weight: 500;}
         .msg.success {background: rgba(76,175,80,0.1); color: var(--success); border: 1px solid var(--success);}
         .msg.error {background: rgba(230,57,70,0.1); color: var(--error); border: 1px solid var(--error);}
+        .msg.warn {background: rgba(255,152,0,0.1); color: #b26a00; border: 1px solid #ff9800;}
         footer {text-align: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.9rem; color: #888;}
         @media (max-width: 768px) {.container {margin: 1rem; padding: 1rem;} .options-grid {grid-template-columns: 1fr;} .action-btns {flex-direction: column;}}
     </style>
@@ -92,7 +93,7 @@
                     <select id="delimiter">
                         <option value=",">Comma (,)</option>
                         <option value=";">Semicolon (;)</option>
-                        <option value="\t">Tab</option>
+                        <option value="	">Tab</option>
                         <option value="|">Pipe (|)</option>
                         <option value=" ">Space</option>
                     </select>
@@ -386,6 +387,82 @@
         }
     }
 
+    // Convert a CSV cell only when the conversion is lossless: "1002" becomes a
+    // number, but "01002", "1.10" and 20-digit ids stay the strings they were.
+    function typeValue(value) {
+        if (typeof value !== 'string') return value;
+        const t = value.trim();
+        if (t === '') return '';
+        if (t === 'true') return true;
+        if (t === 'false') return false;
+        if (t === 'null') return null;
+        if (String(Number(t)) === t) return Number(t);
+        return value;
+    }
+
+    function typeRow(row) {
+        if (Array.isArray(row)) return row.map(typeValue);
+        const out = {};
+        Object.keys(row).forEach(k => {
+            // Cells past the last header would otherwise surface under Papa's
+            // internal __parsed_extra key; give them real column names instead.
+            if (k === '__parsed_extra' && Array.isArray(row[k])) {
+                row[k].forEach((v, i) => { out['extra_' + (i + 1)] = typeValue(v); });
+                return;
+            }
+            out[k] = typeValue(row[k]);
+        });
+        return out;
+    }
+
+    // Accept the JSON shapes people actually paste: a bare array, a single object,
+    // a wrapper like {"data": [...]}, or newline-delimited JSON.
+    function parseJsonInput(text) {
+        const trimmed = text.trim();
+        let data;
+        try {
+            data = JSON.parse(trimmed);
+        } catch (e) {
+            const lines = trimmed.split(/\r?\n/).filter(l => l.trim() !== '');
+            if (lines.length < 2) throw e;
+            data = lines.map(l => JSON.parse(l.replace(/,\s*$/, '')));
+        }
+
+        if (!Array.isArray(data) && typeof data === 'object' && data !== null) {
+            const arrayKeys = Object.keys(data).filter(k => Array.isArray(data[k]));
+            if (arrayKeys.length === 1) return data[arrayKeys[0]];
+            return [data];
+        }
+        return Array.isArray(data) ? data : [data];
+    }
+
+    // Nested values become dotted columns (user.name, tags.0) instead of [object Object].
+    function flattenRow(value, prefix, out) {
+        out = out || {};
+        if (value === null || typeof value !== 'object') {
+            out[prefix || 'value'] = value;
+            return out;
+        }
+        const keys = Array.isArray(value) ? value.map((_, i) => String(i)) : Object.keys(value);
+        if (keys.length === 0) {
+            out[prefix || 'value'] = '';
+            return out;
+        }
+        keys.forEach(k => flattenRow(value[k], prefix ? prefix + '.' + k : k, out));
+        return out;
+    }
+
+    // Columns are the union of every row's keys, in order of first appearance —
+    // not just the keys the first row happened to have.
+    function unionFields(rows) {
+        const fields = [];
+        const seen = {};
+        rows.forEach(row => Object.keys(row).forEach(k => {
+            if (!seen[k]) { seen[k] = true; fields.push(k); }
+        }));
+        return fields;
+    }
+
     function processConversion(inputData, delimiter, quoteChar, jsonFormat, headerRow) {
         try {
             previewArea.value = inputData;
@@ -397,42 +474,46 @@
                     quoteChar: quoteChar,
                     header: headerRow,
                     skipEmptyLines: true,
-                    dynamicTyping: true
+                    dynamicTyping: false
                 });
 
+                const data = parseResult.data.map(typeRow);
+                const indent = jsonFormat === 'pretty' ? 2 : 0;
+                convertedData = JSON.stringify(data, null, indent);
+                resultArea.value = convertedData;
+
+                // Ragged or malformed rows are reported, not thrown away.
                 if (parseResult.errors.length > 0) {
-                    showMessage(`CSV parsing error: ${parseResult.errors[0].message}`, 'error');
+                    const first = parseResult.errors[0];
+                    const where = typeof first.row === 'number' ? ` (row ${first.row + 1})` : '';
+                    const more = parseResult.errors.length > 1
+                        ? ` and ${parseResult.errors.length - 1} more` : '';
+                    outputSection.style.display = 'block';
+                    showMessage(`Converted ${data.length} rows, but the CSV is uneven: ${first.message}${where}${more}. Check the output before using it.`, 'warn');
+                    outputSection.scrollIntoView({ behavior: 'smooth' });
                     return;
                 }
-
-                const indent = jsonFormat === 'pretty' ? 2 : 0;
-                convertedData = JSON.stringify(parseResult.data, null, indent);
-                resultArea.value = convertedData;
             } else {
                 // Convert JSON to CSV
+                let jsonData;
                 try {
-                    let jsonData = JSON.parse(inputData);
-
-                    // If JSON is object, wrap in array
-                    if (!Array.isArray(jsonData)) {
-                        if (typeof jsonData === 'object' && jsonData !== null) {
-                            jsonData = [jsonData];
-                        } else {
-                            throw new Error('JSON data must be an object or array of objects.');
-                        }
-                    }
-
-                    const csv = Papa.unparse(jsonData, {
-                        delimiter: delimiter,
-                        quoteChar: quoteChar
-                    });
-
-                    convertedData = csv;
-                    resultArea.value = csv;
+                    jsonData = parseJsonInput(inputData);
                 } catch (e) {
                     showMessage(`JSON parsing error: ${e.message}`, 'error');
                     return;
                 }
+
+                if (jsonData.length === 0) {
+                    showMessage('No rows found in that JSON.', 'error');
+                    return;
+                }
+
+                const rows = jsonData.map(row => flattenRow(row, '', {}));
+                convertedData = Papa.unparse({ fields: unionFields(rows), data: rows }, {
+                    delimiter: delimiter,
+                    quoteChar: quoteChar
+                });
+                resultArea.value = convertedData;
             }
 
             // Show output section
