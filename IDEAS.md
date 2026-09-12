@@ -161,6 +161,45 @@ not a template for what to build or a model of how a proposal should read.** Six
 exhaustive search because six abstract puzzles were built in a row; that is a fact about the last
 year, not a standard. Skim for the one that touches your problem and ignore the rest.
 
+Filled since: **an automation game**, by `games/shopfloor.html` — a factory on a fixed screen, and
+the first entry here where anything is automated (the six incrementals grow numbers; none has a
+layout). It was chosen by the gate below rather than from a gap list, and three things generalise.
+
+**Ask first whether a stupid local heuristic reaches the ceiling.** Before any interface existed, a
+model of the floor said: draw one sensible layout 1.20, then fiddle with it keeping every change
+that helps 2.00, then search properly accepting setbacks 3.00 — **1.50x headroom above the fiddling
+player**, against 1.10x for the draw-a-structure idea that this killed. What matters is not the
+ratio but *why* it is there: hill-climbing gets stuck because reaching the good layout means
+tearing up a working one and being worse for a while. Look for that shape — interacting choices
+where fixing one thing breaks another — and be suspicious of anything where local improvement
+converges. Two supporting numbers: adding a third stage makes rebuilding the floor worth 1.50x over
+bolting the new stage onto what is there, which is what "keeps developing" looks like as a
+measurement; and the near-optimal layouts found were distinct from each other, so it is craft
+rather than one lookup-able answer.
+
+**Fix the instrument before believing it.** The first version of that model returned a hard zero
+whenever routing failed, so the search was climbing a landscape made of cliffs and reported a
+headroom of exactly 1.00x — a clean, confident, wrong kill. The second version's layout generators
+could not place more than nine machines on a hundred-cell floor, so nothing better was reachable.
+Both bugs produced *plausible* negative results. A negative result from an instrument you have not
+tried to break is not a result, and the tell in both cases was a suspiciously round number.
+
+**A rule that the author keeps getting wrong is too fiddly to ship.** The first connection rule was
+symmetric and tidy: a belt pointing into a machine feeds it, a belt pointing out carries its work
+away, a belt passing by does neither. Every hand-built test layout I wrote under it was broken —
+repeatedly, in the same way, a machine with no valid output stub sitting idle with no symptom. It
+also produced a genuine deadlock: the bench's output belt ran into the press's supply line, so one
+engine parked at the head of a belt the press would never accept and jammed it permanently and
+silently. The fix that solved both was to make belts refuse anything their line cannot use —
+follow the belt to where it actually ends and ask whether that wants the item — after which the
+*forgiving* rule (a machine uses any belt beside it) became safe, and the same layout went from
+0.47 to 0.67 finished units a second with every machine busy. Two lessons: **trace where a
+conveyance actually goes rather than trusting local geometry**, and **if the person who wrote the
+rule keeps violating it, the players will too.** What made it findable at all was running the whole
+chain and reading the per-machine idle times: a roller idle 107 of 120 seconds while the press it
+fed was starved 60 seconds is a contradiction, and contradictions in instrumentation are where the
+bugs are.
+
 Filled since: **a bowling game**, by `games/fresh_oil.html` — a sports sim where the opponent is
 the lane surface rather than the other bowlers. Six things in it generalise.
 
