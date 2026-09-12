@@ -65,8 +65,11 @@ records, and the recent entries have collapsed to one end of every one of them. 
 say where the idea sits on these. Landing at the same end as the last five entries is not
 disqualifying, but it should be a choice.
 
-- **Alone ←→ with someone.** 18 games have a second player; `firebase.js` already carries six
-  pages. Pass-and-play on one device counts and needs no backend. Broken 2026-09-09 by
+- **Alone ←→ with someone.** 18 games have a second player. **No new page should use Firebase, a
+  database, or any other hosted service** — that is a standing decision as of 2026-09-12, not a
+  matter of taste, and it rules out online multiplayer entirely. The six existing `firebase.js`
+  pages stay as they are; nothing new joins them. Pass-and-play on one device is the whole of this
+  axis now, and it needs no backend. Broken 2026-09-09 by
   `games/alibi.html`; before it, the last game with a second player was `artillery` (2026-02-12),
   and every hot-seat game here — checkers, ludo, reversi, artillery — is a perfect-information
   board game. Alibi is the first with information hidden *between the two players*.
@@ -116,9 +119,10 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   language model plays and that you have to move. The proxy is already there. *Read the Curator
   entry below first: a model's judgement is illegible by construction, and the thing that made that
   fatal there applies to any game whose difficulty comes from being judged.*
-- **Something with a voice.** A game that is funny, or that has a world, where the writing is the
-  reason to stay. *`blind_crest` has a speaking character but no writing to speak of; the gap for
-  something actually funny, or with a world, is untouched.*
+- **Something with a voice.** *Built and turned down — see **Toast** under "Tried and rejected",
+  and read it before proposing anything whose appeal is hand-written content, because what killed
+  it was arithmetic about authored material rather than anything about the writing. A game with a
+  **world** — somewhere to be rather than somebody to be — is a different proposition and is open.*
 - **Sixty seconds well spent.** One verb, immediate, no tutorial, a score you want to beat once
   more. Held to the same standard of polish as the ten-minute ones.
 - **A sensor game.** Point the camera at something, blow into the microphone, tilt the phone.
@@ -156,6 +160,45 @@ Technique notes from things that shipped. **These are notes on how a specific pr
 not a template for what to build or a model of how a proposal should read.** Six of them describe
 exhaustive search because six abstract puzzles were built in a row; that is a fact about the last
 year, not a standard. Skim for the one that touches your problem and ignore the rest.
+
+Filled since: **an automation game**, by `games/shopfloor.html` — a factory on a fixed screen, and
+the first entry here where anything is automated (the six incrementals grow numbers; none has a
+layout). It was chosen by the gate below rather than from a gap list, and three things generalise.
+
+**Ask first whether a stupid local heuristic reaches the ceiling.** Before any interface existed, a
+model of the floor said: draw one sensible layout 1.20, then fiddle with it keeping every change
+that helps 2.00, then search properly accepting setbacks 3.00 — **1.50x headroom above the fiddling
+player**, against 1.10x for the draw-a-structure idea that this killed. What matters is not the
+ratio but *why* it is there: hill-climbing gets stuck because reaching the good layout means
+tearing up a working one and being worse for a while. Look for that shape — interacting choices
+where fixing one thing breaks another — and be suspicious of anything where local improvement
+converges. Two supporting numbers: adding a third stage makes rebuilding the floor worth 1.50x over
+bolting the new stage onto what is there, which is what "keeps developing" looks like as a
+measurement; and the near-optimal layouts found were distinct from each other, so it is craft
+rather than one lookup-able answer.
+
+**Fix the instrument before believing it.** The first version of that model returned a hard zero
+whenever routing failed, so the search was climbing a landscape made of cliffs and reported a
+headroom of exactly 1.00x — a clean, confident, wrong kill. The second version's layout generators
+could not place more than nine machines on a hundred-cell floor, so nothing better was reachable.
+Both bugs produced *plausible* negative results. A negative result from an instrument you have not
+tried to break is not a result, and the tell in both cases was a suspiciously round number.
+
+**A rule that the author keeps getting wrong is too fiddly to ship.** The first connection rule was
+symmetric and tidy: a belt pointing into a machine feeds it, a belt pointing out carries its work
+away, a belt passing by does neither. Every hand-built test layout I wrote under it was broken —
+repeatedly, in the same way, a machine with no valid output stub sitting idle with no symptom. It
+also produced a genuine deadlock: the bench's output belt ran into the press's supply line, so one
+engine parked at the head of a belt the press would never accept and jammed it permanently and
+silently. The fix that solved both was to make belts refuse anything their line cannot use —
+follow the belt to where it actually ends and ask whether that wants the item — after which the
+*forgiving* rule (a machine uses any belt beside it) became safe, and the same layout went from
+0.47 to 0.67 finished units a second with every machine busy. Two lessons: **trace where a
+conveyance actually goes rather than trusting local geometry**, and **if the person who wrote the
+rule keeps violating it, the players will too.** What made it findable at all was running the whole
+chain and reading the per-machine idle times: a roller idle 107 of 120 seconds while the press it
+fed was starved 60 seconds is a contradiction, and contradictions in instrumentation are where the
+bugs are.
 
 Filled since: **a bowling game**, by `games/fresh_oil.html` — a sports sim where the opponent is
 the lane surface rather than the other bowlers. Six things in it generalise.
@@ -1031,6 +1074,109 @@ catalogue narrowed. These reject air hockey, line-routing sims and grid tactics.
 making something physical. The fourth, the Curator, points the other way entirely — it rejects a
 camera-and-model game, and it is the only entry here that carries technical findings worth reusing
 rather than only a judgement.
+
+- **Toast** (a best man speech: gather material at the reception, then deliver it to eight guests
+  who each have a private limit and turn on you when you cross it). Built, measured, played, and
+  turned down — by the site's owner, on the honest ground that filling a gap is not the same as
+  being worth playing. It is the **voice** gap above, and that gap is now closed on purpose.
+
+  **Why it was rejected, and this is the part that generalises.** The system renewed and the
+  writing did not, and the writing was the entire reason to be there. Run-to-run variety measured
+  beautifully — 2,952 distinct rooms in 3,000 seeds, five of eight guests changing sensitivities
+  between any two — but that is variety of *constraints*, and nobody arrives for the constraints.
+  The number that mattered was never taken until afterwards: of the ~7.6 notes in your notebook,
+  the count never seen before runs 7.6, 5.9, 4.3, **3.6**, 2.6, 2.1 over successive runs. By the
+  fourth run — about twelve minutes, exactly the horizon that matters — more than half of what you
+  read is a joke you have already read, and a joke you have read is worth a fraction of a new one.
+  **Anything whose appeal is hand-written content has a hard ceiling you can compute before you
+  write a word of it: divide the material by how much a run consumes.** Measure the renewal of the
+  part people come for, not the part that is easy to measure.
+
+  A second lesson about this file: it was picked *because the gap list named it*, which is the
+  exact failure "Read this first" warns about, quoted in the proposal and then done anyway. An
+  empty category still is not a reason.
+
+  Five things from the build survive it, and the first three are one lesson — **a design's central
+  tension is a property of its structure, and you can measure whether you actually built it.**
+
+  **Offence as a tax is a discount on a laugh; offence as a threshold is a game.** The premise was
+  "the funniest line is the one that costs you", priced first as a cost subtracted from the laugh.
+  Over 300 runs at five settings of how strongly funniness correlates with risk, "always play the
+  funniest thing" won at **every** setting (79 against 58 for careful play and 19 for silence) and
+  never once blew up. A tension you pay for linearly is not a tension. Making a guest accumulate
+  offence and *turn* at a private limit flipped the ordering with no renumbering at all: reckless
+  fell to 50 and failed 43% of the time, reading the room rose to 79. **If a sweep says the obvious
+  strategy wins everywhere, the fix is structural — retuning constants only moves where it wins.**
+
+  **Press your luck needs a score that can go down.** Expected score still rose monotonically with
+  speech length (60 at four beats, 108 at twenty-two), because a bad beat was floored at zero, so
+  talking more could only add. Deleting one `Math.max` — a beat that dies subtracts — produced a
+  real interior maximum at 10–12 beats. **A "know when to stop" mechanic is decoration until
+  stopping too late costs, and the sweep that proves it is the sweep that exposed the fake.**
+
+  **A risky option that is merely survivable is a trap, not a gamble.** Recklessness scored 86 when
+  it worked against careful play's 100 — strictly dominated, so the dangerous material was dead
+  weight. Letting the room *enjoy* the danger separated the ceilings properly: reckless and careful
+  both topped out near 155 while never-take-a-risk capped at 119. **Compare the ceiling of each
+  strategy, not only its mean. Lower mean with a higher ceiling is a real choice; lower on both is
+  a trap.**
+
+  **Per-run state written onto shared content objects is invisible in one run and fatal in two.**
+  Marking a note `taken` set the flag on objects in the module-level content array that every run
+  shares. The first playthrough was perfect and every later one had an empty reception. A manual
+  playthrough cannot see this by construction; the loop that caught it was measuring gather yield
+  across 200 runs and reported **0.1 notes of a possible 10**. **Run the content pipeline a few
+  hundred times even when it is not what you are testing — the second run is a different program.**
+
+  **Bots measure whether good play is rewarded, never whether bad play is punished.** A sincere
+  beat meant to take some heat out of the room subtracted a flat amount larger than anything a
+  guest typically held, so one line reset the whole table and two made the game unlosable. Every
+  bot ladder still looked healthy, because none of them was trying to break it. One hand played by
+  hand found it immediately. Also: a `setTimeout` that changes screens must be cancelled by every
+  navigation, and any text keyed to a number (margin notes, verdict bands) should be cut at
+  measured quantiles — the transcript read "the room goes" against every line because the bands
+  were guessed at 3 and 7 when beats actually ran -3 to 25 with a median of 13.
+
+- **A structure you draw, loaded until it breaks** (sketch a bridge or a truss, watch the stress,
+  watch it fail). Killed at verification, before any interface existed, and the measurements are
+  worth keeping because they close this off: a **deformable-structure** game is not an open gap,
+  even though nothing in the catalogue simulates one (`physics_simulator`, `fling`, `escapement`,
+  `interactive_buddy` and `fresh_oil` are all rigid-body).
+
+  A proper 2D pin-jointed truss solver — stiffness matrix, member forces, Euler buckling with the
+  yield crossover calibrated to steel at slenderness ~89 rather than chosen — validated three ways
+  before anything was read from it: it reproduces a two-bar hand calculation exactly (0.7071 per
+  bar), it was shown *rejecting* things (collinear bars and an unbraced square are mechanisms; the
+  same square with one diagonal stands), and truss depth came out with an interior optimum that was
+  never fitted for. Then:
+
+  | the choice the player makes | what it is worth |
+  |---|---|
+  | topology — arch, suspension, warren, pratt, shallow, deep | 1.8x |
+  | sizing — members matched to their forces vs even thickness | 1.5–2.1x |
+  | all of it: best design well built vs worst built evenly | 2.4x |
+  | **searching every node position vs the rule found in two attempts** | **1.10x** |
+
+  **The whole game is reachable by a stupid local rule.** "Triangulate it, then thicken whatever
+  snapped" is what any player does on their second go, and a 220-step optimiser re-sizing at every
+  step beat it by ten per cent. Everything dramatic lives in the binary between *collapses* and
+  *stands*, and that binary is the Curator's trying-versus-not-trying: cleared in one attempt, with
+  nothing above it. The usual rescue — authored levels with tight budgets and awkward terrain — is
+  the Toast content-exhaustion problem in a hard hat.
+
+  **Worth promoting to the first question asked of any proposal: can a stupid local heuristic reach
+  the ceiling?** Toast passed it (the naive rule got 83% of an oracle, and the top scores needed
+  real nerve); this failed it at 91%. It is cheap, it runs before any interface exists, and it is
+  the single most useful gate found so far. Look for it where greedy improvement *cannot* converge
+  — interacting, non-convex choices, where fixing one thing breaks another.
+
+  One modelling note that cost a full pass: a position-based/Verlet solver **cannot be used to
+  answer this kind of question at all**. It enforces distances rather than forces, so stiffness is
+  iteration-dependent and effectively infinite, and every design "held" an identical load including
+  a flat line across the gap. Structural questions need statics. And twice the ground truth was
+  mine and wrong while the solver was right — an A-frame's legs go into *compression* under a
+  downward load at the apex, and a slenderness constant off by a factor of four made every stocky
+  member buckle and deep trusses come out weaker than shallow ones, which is backwards.
 
 - **A cryptic crossword that shows its working** (procedurally cut grid, every clue carrying a
   machine-readable parse, wordplay devices introduced one at a time so the page teaches you to solve

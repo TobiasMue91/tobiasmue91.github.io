@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shopfloor — a factory that only gets one screen</title>
+<meta name="description" content="A factory puzzle on a floor that never grows. Machines take up room and so do the belts feeding them, so every metre you spend on routing is a metre you cannot put a machine in. Fill each order, then watch the next one arrive and make your working layout the wrong one.">
+<meta name="theme-color" content="#141619">
+<style>
+:root{
+  --ink:#e8e6e1; --dim:#9b9891; --faint:#67655f;
+  --bg:#141619; --panel:#1c1f23; --panel2:#242830; --line:#31363e;
+  --hi:#f0b429; --good:#5fb98b; --bad:#d9614c; --belt:#4a525e;
+  --sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+.wrap{max-width:980px;margin:0 auto;padding-block:14px 90px;padding-left:12px;padding-right:12px}
+h1{margin:0;font-size:21px;letter-spacing:.14em;font-weight:600;color:var(--hi)}
+.sub{color:var(--dim);font-size:13px}
+.tag{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--panel);padding:8px 13px;border-radius:9px}
+.btn:hover:not(:disabled){border-color:var(--hi)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.go{border-color:var(--hi);color:var(--hi)}
+
+#board{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px;
+  background:var(--panel);touch-action:none;margin:10px 0}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.tool{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 10px;
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:78px}
+.tool.on{border-color:var(--hi);background:var(--panel2)}
+.tool b{font-size:13px;font-weight:600}
+.tool span{font-size:10.5px;color:var(--faint);white-space:nowrap}
+.hud{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin-top:4px}
+.big{font-variant-numeric:tabular-nums;font-size:22px;color:var(--hi)}
+.meter{height:7px;background:#111316;border:1px solid var(--line);border-radius:5px;overflow:hidden;min-width:150px;flex:1}
+.meter i{display:block;height:100%;background:var(--good);transition:width .25s}
+.order{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 13px;margin:8px 0}
+.recipe{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;background:var(--panel2);
+  border:1px solid var(--hi);color:var(--ink);padding:10px 16px;border-radius:10px;z-index:9;
+  box-shadow:0 6px 24px #0008;max-width:92vw}
+@media (max-width:560px){
+  .wrap{padding-block:10px 90px}
+  .tool{min-width:0;padding:6px 8px} .tool span{display:none}
+  h1{font-size:18px}
+}
+</style>
+</head>
+<body>
+<div class="wrap"><div id="app"></div></div>
+<script src="../logo.js"></script>
+<script>
+/* ------------------------------------------------------------------ the floor */
+const W=12, H=9;                 // column 0 is the feed wall, column W-1 is dispatch
+const BUILD_X0=1, BUILD_X1=W-3;  // machines are 2x2 and must sit inside these columns
+const BELT_SPEED=2.2;            // cells per second
+const SLOT=0.34;                 // items cannot be closer than this along a belt
+
+const ITEMS={
+  ore:  {name:'ore',    col:'#8a7f72'},
+  ingot:{name:'ingot',  col:'#d99a4e'},
+  plate:{name:'plate',  col:'#6fa8c4'},
+  rod:  {name:'rod',    col:'#b6b2a6'},
+  gear: {name:'gear',   col:'#c8794f'},
+  engine:{name:'engine',col:'#7fd0a0'},
+};
+const MACHINES={
+  furnace:{name:'Furnace', into:{ore:1},              out:'ingot', time:1.0, col:'#5a4536'},
+  roller: {name:'Roller',  into:{ingot:1},            out:'plate', time:1.0, col:'#36505a'},
+  lathe:  {name:'Lathe',   into:{ingot:1},            out:'rod',   time:1.0, col:'#4a4a44'},
+  press:  {name:'Press',   into:{plate:2},            out:'gear',  time:1.0, col:'#5a3a2e'},
+  bench:  {name:'Bench',   into:{gear:1,rod:1},       out:'engine',time:1.4, col:'#2f5040'},
+};
+const BUF=6;                     // how much a machine will hold of any one input
+</script>
+<script>
+/* ------------------------------------------------------------------ state */
+function hashSeed(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const key=(x,y)=>y*W+x;
+const DIRS={E:[1,0],W:[-1,0],N:[0,-1],S:[0,1]};
+
+function blankFloor(seed){
+  const r=mulberry32(hashSeed(seed));
+  const F={seed,belts:new Map(),machines:[],blocked:new Set(),
+           shipped:{},t:0,orderIx:0,orderDone:0,done:false,feedRate:0};
+  // a few pillars, so no two floors are the same packing problem
+  const n=3+Math.floor(r()*4);
+  let guard=0;
+  while(F.blocked.size<n&&guard++<400){
+    const x=2+Math.floor(r()*(W-5)), y=1+Math.floor(r()*(H-2));
+    F.blocked.add(key(x,y));
+  }
+  return F;
+}
+const beltAt=(F,x,y)=>F.belts.get(key(x,y));
+function machineAt(F,x,y){
+  for(const m of F.machines) if(x>=m.x&&x<m.x+2&&y>=m.y&&y<m.y+2) return m;
+  return null;
+}
+function cellFree(F,x,y){
+  if(x<0||y<0||x>=W||y>=H) return false;
+  if(F.blocked.has(key(x,y))) return false;
+  if(beltAt(F,x,y)||machineAt(F,x,y)) return false;
+  return true;
+}
+function canPlaceMachine(F,x,y){
+  if(x<BUILD_X0||x>BUILD_X1||y<0||y>H-2) return false;
+  for(let dx=0;dx<2;dx++)for(let dy=0;dy<2;dy++) if(!cellFree(F,x+dx,y+dy)) return false;
+  return true;
+}
+function addMachine(F,x,y,type){
+  if(!canPlaceMachine(F,x,y)) return false;
+  F.machines.push({x,y,type,in:{},out:null,prog:0,idle:0,fed:0});
+  return true;
+}
+function addBelt(F,x,y,dir){
+  if(x<=0||x>=W-1||y<0||y>=H) return false;          // walls are not buildable
+  if(F.blocked.has(key(x,y))||machineAt(F,x,y)) return false;
+  const b=beltAt(F,x,y);
+  if(b){ b.dir=dir; return true }
+  F.belts.set(key(x,y),{x,y,dir,items:[]});
+  return true;
+}
+function removeAt(F,x,y){
+  const m=machineAt(F,x,y);
+  if(m){ F.machines.splice(F.machines.indexOf(m),1); return true }
+  if(beltAt(F,x,y)){ F.belts.delete(key(x,y)); return true }
+  return false;
+}
+
+/* ------------------------------------------------------------------ the simulation
+   Items sit on belt cells with a position along the cell, and cannot overtake or
+   overlap. That is where backpressure comes from: a full belt stops the machine
+   behind it, which is the whole reason a layout can be wrong rather than just slow. */
+function nextCell(b){const d=DIRS[b.dir];return [b.x+d[0],b.y+d[1]]}
+function headroom(F,b){                      // is there room at the start of this belt?
+  const lead=b.items.length?b.items[b.items.length-1].p:99;
+  return lead>=SLOT;
+}
+function pushOnto(F,b,item){
+  if(!headroom(F,b)) return false;
+  b.items.push({t:item,p:0}); return true;
+}
+function stepBelts(F,dt){
+  for(const b of F.belts.values()){
+    const [nx,ny]=nextCell(b);
+    const nb=beltAt(F,nx,ny);
+    const intoDispatch = nx===W-1;
+    const intoMachine = machineAt(F,nx,ny);
+    for(let i=0;i<b.items.length;i++){
+      const it=b.items[i];
+      let limit=1.0;
+      if(i>0) limit=Math.min(limit,b.items[i-1].p-SLOT);   // no overtaking
+      it.p=Math.min(limit,it.p+BELT_SPEED*dt);
+      if(it.p>=1.0-1e-6&&i===0){
+        if(intoDispatch){
+          F.shipped[it.t]=(F.shipped[it.t]||0)+1; b.items.shift(); i--;
+        } else if(nb&&pushOnto(F,nb,it.t)){
+          b.items.shift(); i--;
+        } else if(intoMachine&&feedMachine(F,intoMachine,it.t)){
+          b.items.shift(); i--;
+        } else it.p=1.0;
+      }
+    }
+  }
+}
+function feedMachine(F,m,item){
+  const spec=MACHINES[m.type];
+  if(!spec.into[item]) return false;
+  const have=m.in[item]||0;
+  if(have>=BUF) return false;
+  m.in[item]=have+1; return true;
+}
+const inMachine=(m,x,y)=>x>=m.x&&x<m.x+2&&y>=m.y&&y<m.y+2;
+// Machines use any belt beside them: they take what they need off it, and put finished
+// work on it. What keeps that from turning into chaos is that a belt refuses anything its
+// line cannot actually use (see chainAccepts), so an ore line running past a furnace never
+// ends up carrying ingots. Requiring a dedicated stub on each side was the first design and
+// it was silently unforgiving — one belt pointing the wrong way starved a whole branch with
+// no symptom but a machine sitting still.
+function neighbourBelts(F,m){
+  const out=[];
+  for(let dx=-1;dx<=2;dx++)for(let dy=-1;dy<=2;dy++){
+    if(inMachine(m,m.x+dx,m.y+dy)) continue;
+    if((dx>=0&&dx<2)||(dy>=0&&dy<2)){
+      const b=beltAt(F,m.x+dx,m.y+dy);
+      if(b) out.push(b);
+    }
+  }
+  return out;
+}
+function outputBelts(F,m){ return neighbourBelts(F,m) }
+// Follow a belt to wherever it actually ends up: the dispatch bay, a machine, or nothing.
+function chainTarget(F,b){
+  let cur=b;
+  for(let i=0;i<240;i++){
+    const d=DIRS[cur.dir], nx=cur.x+d[0], ny=cur.y+d[1];
+    if(nx>=W-1) return 'dispatch';
+    const m=machineAt(F,nx,ny); if(m) return m;
+    const nb=beltAt(F,nx,ny); if(!nb) return null;
+    cur=nb;
+  }
+  return null;
+}
+// Nothing is ever put onto a line that leads somewhere it cannot be used. Without this
+// a single engine parks at the head of the press's supply line and jams it for good —
+// silently, with no way back. A belt that leads nowhere useful simply refuses the work,
+// which shows up as a machine backing up, where the player can see it.
+function chainAccepts(F,b,item){
+  const t=chainTarget(F,b);
+  if(t==='dispatch') return true;
+  if(!t||t==='dispatch') return false;
+  return !!MACHINES[t.type].into[item];
+}
+function stepMachines(F,dt){
+  for(const m of F.machines){
+    const spec=MACHINES[m.type];
+    for(const b of neighbourBelts(F,m)){
+      if(!b.items.length) continue;
+      const head=b.items[0];
+      if(head.p<0.5) continue;
+      if(feedMachine(F,m,head.t)) b.items.shift();
+    }
+    if(m.out){                                   // try to hand the finished item out
+      for(const b of outputBelts(F,m)){
+        if(chainTarget(F,b)===m) continue;            // never hand work back to yourself
+        if(!chainAccepts(F,b,m.out)) continue;
+        if(pushOnto(F,b,m.out)){ m.out=null; break }
+      }
+      if(m.out){ m.idle+=dt; continue }          // backed up
+    }
+    if(m.prog<=0){
+      const ready=Object.entries(spec.into).every(([k,n])=>(m.in[k]||0)>=n);
+      if(!ready){ m.idle+=dt; continue }
+      for(const [k,n] of Object.entries(spec.into)) m.in[k]-=n;
+      m.prog=spec.time;
+    }
+    m.prog-=dt;
+    if(m.prog<=0){ m.out=spec.out; m.prog=0; m.fed++ }
+  }
+}
+const FEED_TOTAL=9;              // ore per second for the whole wall, however many ports you open
+function stepFeed(F,dt){
+  // The wall delivers a fixed amount of ore, shared between every belt touching it.
+  // Opening more ports spreads the same ore about; it does not conjure more.
+  const ports=[...F.belts.values()].filter(b=>b.x===1&&chainAccepts(F,b,'ore'));
+  F.feedRate=ports.length;
+  if(!ports.length) return;
+  const each=FEED_TOTAL/ports.length, gap=1/each;
+  for(const b of ports){
+    b.feedT=(b.feedT||0)+dt;
+    while(b.feedT>gap){ b.feedT-=gap; if(!pushOnto(F,b,'ore')){ b.feedT=0; break } }
+  }
+}
+function step(F,dt){
+  if(F.done) return;
+  F.t+=dt; stepFeed(F,dt); stepMachines(F,dt); stepBelts(F,dt);
+}
+</script>
+<script>
+/* ------------------------------------------------------------------ the shift */
+const ORDERS=[
+  {item:'ingot', n:50, unlock:['furnace'],
+   note:'Ore comes in on the left wall. Smelt it and get it to the dispatch bay on the right.'},
+  {item:'plate', n:50, unlock:['roller'],
+   note:'Plates now. A roller wants ingots — which means the furnaces have to reach it, and it has to reach the bay.'},
+  {item:'gear',  n:40, unlock:['press'],
+   note:'Two plates per gear. Whatever you built for plates, it now has to run at twice the rate.'},
+  {item:'rod',   n:50, unlock:['lathe'],
+   note:'Rods, straight from ingots. Quick — but the floor is not getting any bigger.'},
+  {item:'engine',n:30, unlock:['bench'],
+   note:'A bench needs a gear and a rod together. Two chains, one floor, and both have to arrive.'},
+];
+function unlockedBy(ix){
+  const set=new Set();
+  for(let i=0;i<=Math.min(ix,ORDERS.length-1);i++) ORDERS[i].unlock.forEach(u=>set.add(u));
+  return set;
+}
+function order(F){ return ORDERS[Math.min(F.orderIx,ORDERS.length-1)] }
+function progress(F){
+  const o=order(F);
+  return Math.min(1,(F.shipped[o.item]||0)/o.n);
+}
+function advance(F){
+  // returns the order just finished, or null
+  if(F.done) return null;
+  const o=order(F);
+  if((F.shipped[o.item]||0)>=o.n){
+    F.orderIx++;
+    F.splits=F.splits||[]; F.splits.push(F.t);
+    if(F.orderIx>=ORDERS.length){ F.done=true }
+    return o;
+  }
+  return null;
+}
+function rateOf(F,item){
+  F._hist=F._hist||[];
+  return F._rate&&F._rate[item]||0;
+}
+function sampleRates(F){
+  const now=F.t, snap={t:now,s:Object.assign({},F.shipped)};
+  F._hist=F._hist||[]; F._hist.push(snap);
+  while(F._hist.length>2&&now-F._hist[0].t>6) F._hist.shift();
+  const a=F._hist[0], dt=now-a.t;
+  F._rate={};
+  if(dt>0.8) for(const k in F.shipped) F._rate[k]=((F.shipped[k]||0)-(a.s[k]||0))/dt;
+}
+</script>
+<script>
+/* ------------------------------------------------------------------ drawing */
+let cv,ctx,CELL=30,PAD=6;
+function fitCanvas(){
+  const avail=Math.min(cv.parentElement.clientWidth, 900);
+  CELL=Math.max(22,Math.floor((avail-2)/W));
+  const w=CELL*W, h=CELL*H;
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  cv.width=w*dpr; cv.height=h*dpr; cv.style.width=w+'px'; cv.style.height=h+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);}
+function draw(F,hover){
+  const w=CELL*W,h=CELL*H;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#1a1d21'; ctx.fillRect(0,0,w,h);
+  // walls
+  ctx.fillStyle='#20262c'; ctx.fillRect(0,0,CELL,h); ctx.fillRect(w-CELL,0,CELL,h);
+  const fam=getComputedStyle(document.body).fontFamily;
+  const wide=CELL>=34;
+  for(const [cx,txt] of [[CELL/2, wide?'ORE  FEED':'ORE'],[w-CELL/2, wide?'DISPATCH':'OUT']]){
+    ctx.save(); ctx.fillStyle='#6f7681'; ctx.font='600 '+(wide?10:9)+'px '+fam;
+    ctx.translate(cx,h/2); ctx.rotate(-Math.PI/2); ctx.textAlign='center';
+    ctx.fillText(txt,0,3); ctx.restore();
+  }
+  // grid
+  ctx.strokeStyle='#23272d'; ctx.lineWidth=1;
+  for(let x=1;x<W;x++){ctx.beginPath();ctx.moveTo(x*CELL+.5,0);ctx.lineTo(x*CELL+.5,h);ctx.stroke()}
+  for(let y=1;y<H;y++){ctx.beginPath();ctx.moveTo(0,y*CELL+.5);ctx.lineTo(w,y*CELL+.5);ctx.stroke()}
+  // pillars — drawn solid, because they are what every placement has to work around
+  for(const k of F.blocked){ const x=k%W,y=(k-x)/W, px=x*CELL, py=y*CELL;
+    ctx.fillStyle='#0d0f12'; rr(px+2,py+2,CELL-4,CELL-4,4); ctx.fill();
+    ctx.save(); ctx.beginPath(); rr(px+2,py+2,CELL-4,CELL-4,4); ctx.clip();
+    ctx.strokeStyle='#454b55'; ctx.lineWidth=2;
+    for(let o=-CELL;o<CELL*2;o+=7){ ctx.beginPath();
+      ctx.moveTo(px+o,py); ctx.lineTo(px+o+CELL,py+CELL); ctx.stroke(); }
+    ctx.restore();
+    ctx.strokeStyle='#555c66'; ctx.lineWidth=1; rr(px+2,py+2,CELL-4,CELL-4,4); ctx.stroke(); }
+  // belts. A belt whose line ends nowhere is drawn as a dead end, because otherwise the
+  // only symptom is a machine quietly backing up and no way to see why.
+  for(const b of F.belts.values()){
+    const px=b.x*CELL,py=b.y*CELL;
+    const dead=chainTarget(F,b)===null;
+    ctx.fillStyle=dead?'#2e2325':'#272c33'; rr(px+2,py+2,CELL-4,CELL-4,3); ctx.fill();
+    if(dead){ ctx.strokeStyle='#6d3a33'; ctx.lineWidth=1; rr(px+2.5,py+2.5,CELL-5,CELL-5,3); ctx.stroke(); }
+    const d=DIRS[b.dir], cx=px+CELL/2, cy=py+CELL/2, s=CELL*0.19;
+    ctx.strokeStyle=dead?'#8d4c42':'#59626f'; ctx.lineWidth=2; ctx.lineCap='round';
+    for(const o of [-0.26,0.10]){
+      const ox=cx+d[0]*CELL*o, oy=cy+d[1]*CELL*o;
+      ctx.beginPath();
+      ctx.moveTo(ox-d[1]*s-d[0]*s*0.7, oy-d[0]*s-d[1]*s*0.7);
+      ctx.lineTo(ox+d[0]*s*0.7, oy+d[1]*s*0.7);
+      ctx.lineTo(ox+d[1]*s-d[0]*s*0.7, oy+d[0]*s-d[1]*s*0.7);
+      ctx.stroke();
+    }
+  }
+  // machines
+  for(const m of F.machines){
+    const spec=MACHINES[m.type], px=m.x*CELL, py=m.y*CELL, S=CELL*2;
+    ctx.fillStyle=spec.col; rr(px+2,py+2,S-4,S-4,6); ctx.fill();
+    ctx.strokeStyle=m.idleRecent>0.6?'#6b5030':'#000'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle='#0e1013cc'; rr(px+2,py+S-16,S-4,14,3); ctx.fill();
+    ctx.fillStyle='#d8d5cf'; ctx.font='600 '+Math.max(8,Math.round(CELL*0.32))+'px '+getComputedStyle(document.body).fontFamily;
+    ctx.textAlign='center'; ctx.fillText(spec.name,px+S/2,py+S-5);
+    if(m.prog>0){
+      const f=1-m.prog/spec.time;
+      ctx.fillStyle='#f0b42955'; ctx.fillRect(px+4,py+4,(S-8)*f,4);
+    }
+    if(m.stranded){
+      ctx.strokeStyle='#d9614c'; ctx.lineWidth=2; rr(px+3,py+3,S-6,S-6,6); ctx.stroke();
+      ctx.fillStyle='#d9614c'; ctx.font='700 '+Math.max(10,Math.round(CELL*0.4))+'px '+getComputedStyle(document.body).fontFamily;
+      ctx.textAlign='center'; ctx.fillText('!',px+S-10,py+S*0.42);
+    } else if(m.idleRecent>0.6){ ctx.fillStyle='#d9614c'; ctx.beginPath();
+      ctx.arc(px+S-9,py+9,3.2,0,7); ctx.fill(); }
+  }
+  // items
+  for(const b of F.belts.values()){
+    const d=DIRS[b.dir];
+    for(const it of b.items){
+      const cx=(b.x+0.5-d[0]*0.5+d[0]*it.p)*CELL, cy=(b.y+0.5-d[1]*0.5+d[1]*it.p)*CELL;
+      ctx.fillStyle=ITEMS[it.t].col;
+      ctx.beginPath(); ctx.arc(cx,cy,Math.max(2.6,CELL*0.13),0,7); ctx.fill();
+    }
+  }
+  // ghost of what you are about to place
+  if(hover&&hover.ok!==undefined){
+    ctx.globalAlpha=.5;
+    ctx.fillStyle=hover.ok?'#f0b429':'#d9614c';
+    if(hover.size===2) rr(hover.x*CELL+2,hover.y*CELL+2,CELL*2-4,CELL*2-4,6);
+    else rr(hover.x*CELL+3,hover.y*CELL+3,CELL-6,CELL-6,3);
+    ctx.fill(); ctx.globalAlpha=1;
+  }
+}
+</script>
+<script>
+/* ------------------------------------------------------------------ the page */
+const app=document.getElementById('app');
+let F=null, tool='belt', hover=null, raf=null, lastT=0, dragging=null, toastT=0;
+function seedFromUrl(){const m=location.search.match(/[?&]seed=([^&]+)/);return m?decodeURIComponent(m[1]):null}
+function newSeed(){return Math.random().toString(36).slice(2,7)}
+const fmt=t=>{const s=Math.floor(t);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+
+function title(){
+  stop();
+  app.innerHTML=`
+    <h1>SHOPFLOOR</h1>
+    <div class="tag" style="margin-top:4px">a factory that only gets one screen</div>
+    <p style="max-width:38em">Ore arrives on the left wall. Finished work has to reach the bay on the
+    right. Between them is a floor that <em>never gets any bigger</em> — and the belts feeding your
+    machines take up just as much room as the machines do.</p>
+    <p style="max-width:38em;color:var(--dim)">Drag to lay a belt, tap one to turn it. A machine takes
+    what it needs off any belt beside it and puts its work on any belt that can carry it — so what you
+    are really drawing is where everything goes, on a floor with no spare room to go anywhere.</p>
+    <p style="max-width:38em;color:var(--dim)">Five orders. Each one wants something deeper than the
+    last, and the layout that filled the last order is rarely the one that fills the next. You will
+    tear your own factory up. That is the job.</p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn go" id="start">Clock on</button>
+      <span class="sub">floor <input id="seed" value="${(seedFromUrl()||newSeed()).replace(/[<>&"]/g,'')}"
+        style="width:6em;background:var(--panel);border:1px solid var(--line);color:var(--dim);
+        border-radius:6px;padding:5px 7px;font:inherit;font-size:13px"></span>
+    </div>`;
+  document.getElementById('start').onclick=()=>{
+    F=blankFloor(document.getElementById('seed').value.trim()||newSeed());
+    tool='belt'; play();
+  };
+}
+
+function play(){
+  app.innerHTML=`
+    <div class="row" style="justify-content:space-between">
+      <h1>SHOPFLOOR</h1>
+      <div class="row"><span class="tag">shift</span><span class="big" id="clock">0:00</span>
+        <button class="btn" id="giveup" style="padding:5px 10px;font-size:13px">restart</button></div>
+    </div>
+    <div class="order" id="orderbox"></div>
+    <canvas id="board"></canvas>
+    <div class="tools" id="tools"></div>
+    <div class="sub" id="hint" style="margin-top:8px"></div>`;
+  cv=document.getElementById('board'); ctx=cv.getContext('2d');
+  fitCanvas(); window.addEventListener('resize',onResize);
+  bindBoard(); renderTools(); renderOrder();
+  document.getElementById('giveup').onclick=()=>{history.replaceState(null,'',location.pathname);title()};
+  lastT=performance.now(); loop();
+}
+function onResize(){ if(cv){fitCanvas(); if(F) draw(F,hover)} }
+function stop(){ if(raf)cancelAnimationFrame(raf); raf=null; window.removeEventListener('resize',onResize) }
+
+function renderTools(){
+  const el=document.getElementById('tools'); if(!el) return;
+  const have=unlockedBy(F.orderIx);
+  let html=`<button class="tool ${tool==='belt'?'on':''}" data-t="belt"><b>Belt</b><span>drag to lay</span></button>`;
+  for(const k of Object.keys(MACHINES)){
+    if(!have.has(k)) continue;
+    const s=MACHINES[k];
+    const into=Object.entries(s.into).map(([i,n])=>(n>1?n+'x ':'')+i).join(' + ');
+    html+=`<button class="tool ${tool===k?'on':''}" data-t="${k}"><b>${s.name}</b><span>${into} &rarr; ${s.out}</span></button>`;
+  }
+  html+=`<button class="tool ${tool==='del'?'on':''}" data-t="del"><b>Clear</b><span>tap to remove</span></button>`;
+  el.innerHTML=html;
+  el.querySelectorAll('.tool').forEach(b=>b.onclick=()=>{tool=b.dataset.t;renderTools()});
+}
+function renderOrder(){
+  const el=document.getElementById('orderbox'); if(!el) return;
+  if(F.done){
+    const sp=F.splits||[]; let prev=0, rows='';
+    ORDERS.forEach((o,i)=>{ const at=sp[i]; if(at===undefined) return;
+      rows+=`<div class="row" style="justify-content:space-between;max-width:22em">
+        <span class="sub">${o.n} ${o.item}s</span>
+        <span class="sub" style="font-variant-numeric:tabular-nums">+${fmt(at-prev)}</span></div>`;
+      prev=at; });
+    el.innerHTML=`<b style="color:var(--good)">Every order filled.</b>
+      <div class="big" style="margin:4px 0">${fmt(F.t)}</div>${rows}
+      <div class="row" style="margin-top:10px">
+        <button class="btn go" id="again">Another floor</button>
+        <button class="btn" id="same">This floor again</button>
+        <button class="btn" id="copy">Copy the link</button></div>
+      <div class="sub" style="margin-top:6px">floor ${F.seed}</div>`;
+    const g=document.getElementById('again'); if(g&&!g._w){ g._w=1;
+      g.onclick=()=>{history.replaceState(null,'',location.pathname);title()};
+      document.getElementById('same').onclick=()=>{F=blankFloor(F.seed);tool='belt';renderTools()};
+      document.getElementById('copy').onclick=e=>{
+        const u=location.origin+location.pathname+'?seed='+encodeURIComponent(F.seed);
+        navigator.clipboard&&navigator.clipboard.writeText(u); e.target.textContent='Copied';};
+    }
+    return;
+  }
+  const o=order(F), got=F.shipped[o.item]||0, r=(F._rate&&F._rate[o.item])||0;
+  el.innerHTML=`
+    <div class="row" style="justify-content:space-between;align-items:baseline">
+      <div><span class="tag">order ${F.orderIx+1} of ${ORDERS.length}</span>
+        <b style="margin-left:8px">${o.n} ${o.item}s</b></div>
+      <div class="sub">${got} shipped &middot; ${r.toFixed(2)}/s</div>
+    </div>
+    <div class="meter" style="margin:7px 0"><i style="width:${Math.round(progress(F)*100)}%"></i></div>
+    <div class="sub">${o.note}</div>`;
+}
+const RULE='Machines take what they need off any belt beside them, and put finished work on any belt beside them that can carry it. A belt that leads nowhere carries nothing.';
+function renderHint(){
+  const el=document.getElementById('hint'); if(!el) return;
+  let starved=0,blocked=0,stranded=0;
+  for(const m of F.machines){
+    if(m.out){
+      // two machines pushed up against each other have no room for a belt between them,
+      // which looks exactly like being busy unless the page says otherwise
+      const any=outputBelts(F,m).some(b=>chainTarget(F,b)!==m&&chainAccepts(F,b,m.out));
+      if(any) blocked++; else stranded++;
+      m.stranded=!any;
+    } else { m.stranded=false;
+      if(!Object.entries(MACHINES[m.type].into).every(([k,n])=>(m.in[k]||0)>=n)) starved++;
+    }
+  }
+  let dead=0;
+  for(const b of F.belts.values()) if(chainTarget(F,b)===null) dead++;
+  let diag='';
+  // shipping the wrong thing is easy to do and otherwise looks exactly like shipping nothing
+  const o=order(F);
+  const wrong=Object.keys(F._rate||{}).filter(k=>k!==o.item&&F._rate[k]>0.05);
+  if(wrong.length) diag+=`The bay is taking <b style="color:var(--hi)">${wrong.map(w=>w+'s').join(' and ')}</b>, and the order is for ${o.item}s. `;
+  if(dead) diag+=`<b style="color:var(--bad)">${dead}</b> belt${dead>1?'s':''} leading nowhere. `;
+  if(stranded) diag+=`<b style="color:var(--bad)">${stranded}</b> with no belt beside ${stranded>1?'them':'it'} that can carry the work — machines packed against each other leave no room for one. `;
+  if(blocked) diag+=`<b style="color:var(--bad)">${blocked}</b> backed up. `;
+  if(starved) diag+=`<b style="color:var(--hi)">${starved}</b> waiting for parts. `;
+  el.innerHTML=diag?diag+'<span style="color:var(--faint)">'+RULE+'</span>':RULE;
+}
+function toast(msg){
+  const d=document.createElement('div'); d.className='toast'; d.textContent=msg;
+  document.body.appendChild(d); setTimeout(()=>d.remove(),3600);
+}
+
+/* ---- input ---- */
+function cellFromEvent(e){
+  const r=cv.getBoundingClientRect();
+  const x=Math.floor((e.clientX-r.left)/CELL), y=Math.floor((e.clientY-r.top)/CELL);
+  return [x,y];
+}
+function bindBoard(){
+  cv.addEventListener('pointerdown',e=>{
+    cv.setPointerCapture(e.pointerId);
+    const [x,y]=cellFromEvent(e);
+    if(tool==='belt'){ dragging=[[x,y]]; }
+    else if(tool==='del'){ removeAt(F,x,y); }
+    else { if(!addMachine(F,x,y,tool)) toast('No room for that here.'); }
+    draw(F,hover);
+  });
+  cv.addEventListener('pointermove',e=>{
+    const [x,y]=cellFromEvent(e);
+    if(dragging){
+      const last=dragging[dragging.length-1];
+      if(last[0]!==x||last[1]!==y){
+        if(Math.abs(x-last[0])+Math.abs(y-last[1])===1){
+          const dx=x-last[0],dy=y-last[1];
+          addBelt(F,last[0],last[1], dx===1?'E':dx===-1?'W':dy===1?'S':'N');
+          dragging.push([x,y]);
+        } else dragging=[[x,y]];
+      }
+      draw(F,hover); return;
+    }
+    hover=hoverFor(x,y); draw(F,hover);
+  });
+  const up=()=>{
+    if(dragging&&dragging.length===1){                 // a tap, not a drag: a single cell
+      const [x,y]=dragging[0];
+      const b=beltAt(F,x,y);
+      if(b) b.dir=({E:'S',S:'W',W:'N',N:'E'})[b.dir];  // tap an existing belt to turn it
+      else addBelt(F,x,y,'E');
+    } else if(dragging&&dragging.length>1){
+      // the cell you finished on gets a belt too, carrying on the way you were going —
+      // without this the end of every line you draw is quietly missing
+      const [px,py]=dragging[dragging.length-2], [x,y]=dragging[dragging.length-1];
+      const dx=x-px, dy=y-py;
+      if(!beltAt(F,x,y)) addBelt(F,x,y, dx===1?'E':dx===-1?'W':dy===1?'S':'N');
+    }
+    dragging=null; draw(F,hover);
+  };
+  cv.addEventListener('pointerup',up);
+  cv.addEventListener('pointercancel',up);
+  cv.addEventListener('pointerleave',()=>{hover=null;draw(F,hover)});
+}
+function hoverFor(x,y){
+  if(tool==='belt') return {x,y,size:1,ok:x>0&&x<W-1&&!F.blocked.has(key(x,y))&&!machineAt(F,x,y)};
+  if(tool==='del')  return {x,y,size:1,ok:!!(beltAt(F,x,y)||machineAt(F,x,y))};
+  return {x,y,size:2,ok:canPlaceMachine(F,x,y)};
+}
+
+/* ---- loop ---- */
+function loop(){
+  raf=requestAnimationFrame(loop);
+  const now=performance.now();
+  let dt=Math.min(0.05,(now-lastT)/1000); lastT=now;
+  if(!F.done){
+    step(F,dt);
+    for(const m of F.machines){ const was=m.idle; m.idleRecent=(m.idleRecent||0)*0.96+(m.idle-(m._li||0))*8; m._li=m.idle; }
+    sampleRates(F);
+    const finished=advance(F);
+    if(finished){
+      renderTools();
+      if(F.done) toast('Every order filled — '+fmt(F.t)+' on the clock.');
+      else toast('Order filled. Next: '+order(F).n+' '+order(F).item+'s.');
+    }
+  }
+  const c=document.getElementById('clock'); if(c) c.textContent=fmt(F.t);
+  renderOrder(); renderHint();
+  draw(F,hover);
+}
+window.__sf={get F(){return F},blankFloor,addBelt,addMachine,removeAt,step,order,ORDERS,
+  advance,progress,MACHINES,W,H,beltAt,machineAt,canPlaceMachine,outputBelts,DIRS,key,
+  boot:s=>{F=blankFloor(s);play()}};
+title();
+</script>
+</body>
+</html>
