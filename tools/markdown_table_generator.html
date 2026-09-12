@@ -355,6 +355,27 @@
         }
     }
 
+    #import-input {
+        width: calc(100% - 28px);
+        min-height: 90px;
+        padding: 14px;
+        margin-bottom: 16px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background-color: var(--input-bg);
+        color: var(--text);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 14px;
+        resize: vertical;
+        line-height: 1.6
+    }
+
+    .import-hint {
+        font-size: 14px;
+        color: var(--text-light);
+        margin-bottom: 12px
+    }
+
     #markdown-output {
         width: calc(100% - 28px);
         min-height: 120px;
@@ -524,6 +545,16 @@
             </div>
         </div>
         <div class="card">
+            <div class="card-title"><i class="fas fa-file-import"></i> Import</div>
+            <p class="import-hint">Paste a spreadsheet selection, CSV, or an existing markdown table — column
+                alignments are read back too. You can also paste straight into any cell below.</p>
+            <textarea id="import-input" placeholder="Name&#9;Role&#10;Ada&#9;Engineer&#10;Grace&#9;Admiral"></textarea>
+            <div class="actions">
+                <button class="secondary" id="import-clear"><i class="fas fa-eraser"></i> Clear</button>
+                <button id="import-btn"><i class="fas fa-file-import"></i> Import</button>
+            </div>
+        </div>
+        <div class="card">
             <div class="card-title"><i class="fas fa-edit"></i> Table Editor</div>
             <div class="table-wrapper">
                 <div id="table-editor">
@@ -578,6 +609,9 @@
     const applyAlignBtn = document.getElementById('apply-align');
     const toast = document.getElementById('toast');
     const toastMessage = document.getElementById('toast-message');
+    const importInput = document.getElementById('import-input');
+    const importBtn = document.getElementById('import-btn');
+    const importClearBtn = document.getElementById('import-clear');
     let tableData = [];
     let columnAlignments = [];
     let hasHeaderRow = headerRowCheckbox.checked;
@@ -656,13 +690,15 @@
             html += '<tr>';
             for (let j = 0; j < tableData[i].length; j++) {
                 const cellTag = (i === 0 && hasHeaderRow) ? 'th' : 'td';
-                html += `<${cellTag}><input type="text" data-row="${i}" data-col="${j}" value="${tableData[i][j]}" placeholder="Enter content..."></${cellTag}>`;
+                html += `<${cellTag}><input type="text" data-row="${i}" data-col="${j}" placeholder="Enter content..."></${cellTag}>`;
             }
             html += '</tr>';
         }
         html += '</table>';
         tableEditor.innerHTML = html;
         tableEditor.querySelectorAll('input').forEach(input => {
+            input.value = tableData[parseInt(input.dataset.row)][parseInt(input.dataset.col)];
+            input.addEventListener('paste', handleCellPaste);
             input.addEventListener('input', e => {
                 const row = parseInt(e.target.dataset.row);
                 const col = parseInt(e.target.dataset.col);
@@ -712,6 +748,120 @@
 
     function updatePreview(markdown) {
         previewElement.innerHTML = marked.parse(markdown);
+    }
+
+    function splitDelimited(line, delim) {
+        const cells = [];
+        let cell = '', inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (inQuotes) {
+                if (ch === '"') {
+                    if (line[i + 1] === '"') {
+                        cell += '"';
+                        i++;
+                    } else if (i === line.length - 1 || line[i + 1] === delim) {
+                        inQuotes = false;
+                    } else {
+                        // a lone quote mid-field (an inch mark, say) — keep it
+                        cell += ch;
+                    }
+                } else cell += ch;
+            } else if (ch === '"' && cell.trim() === '') {
+                cell = '';
+                inQuotes = true;
+            } else if (ch === delim) {
+                cells.push(cell.trim());
+                cell = '';
+            } else cell += ch;
+        }
+        cells.push(cell.trim());
+        return cells;
+    }
+
+    function splitMarkdownRow(line) {
+        let row = line.trim();
+        if (row.startsWith('|')) row = row.slice(1);
+        if (row.endsWith('|') && !row.endsWith('\\|')) row = row.slice(0, -1);
+        const cells = [];
+        let cell = '';
+        for (let i = 0; i < row.length; i++) {
+            if (row[i] === '\\' && row[i + 1] === '|') {
+                cell += '|';
+                i++;
+            } else if (row[i] === '|') {
+                cells.push(cell.trim());
+                cell = '';
+            } else cell += row[i];
+        }
+        cells.push(cell.trim());
+        return cells;
+    }
+
+    function alignmentFromSeparator(cell) {
+        const s = cell.trim();
+        if (!/^:?-{1,}:?$/.test(s)) return null;
+        if (s.startsWith(':') && s.endsWith(':')) return 'center';
+        if (s.endsWith(':')) return 'right';
+        return 'left';
+    }
+
+    // Accepts a markdown table, TSV (spreadsheet paste) or CSV and returns
+    // {rows, alignments} — alignments only when a markdown separator row was found.
+    function parseTableText(text) {
+        const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim() !== '');
+        if (!lines.length) return null;
+        let rows, alignments = null;
+        const pipeLines = lines.filter(l => l.includes('|'));
+        if (pipeLines.length === lines.length && lines.length > 1) {
+            rows = lines.map(splitMarkdownRow);
+            const sepIndex = rows.findIndex(r => r.length > 1 && r.every(c => alignmentFromSeparator(c)));
+            if (sepIndex > -1) {
+                alignments = rows[sepIndex].map(alignmentFromSeparator);
+                rows.splice(sepIndex, 1);
+            }
+        } else {
+            const delim = lines.some(l => l.includes('\t')) ? '\t'
+                : lines.some(l => l.includes(';')) && !lines.some(l => l.includes(',')) ? ';' : ',';
+            rows = lines.map(l => splitDelimited(l, delim));
+        }
+        if (!rows.length) return null;
+        const width = Math.max(...rows.map(r => r.length));
+        rows = rows.map(r => r.concat(Array(width - r.length).fill('')));
+        if (alignments) alignments = alignments.concat(Array(width - alignments.length).fill('left')).slice(0, width);
+        return {rows, alignments};
+    }
+
+    function loadTable(parsed, message) {
+        tableData = parsed.rows;
+        columnAlignments = parsed.alignments || Array(parsed.rows[0].length).fill('left');
+        updateColumnSelect(columnAlignments.length);
+        rowsInput.value = tableData.length;
+        colsInput.value = columnAlignments.length;
+        renderTable();
+        generateMarkdown();
+        showToast(message);
+    }
+
+    function importText(text, source) {
+        const parsed = text && text.trim() ? parseTableText(text) : null;
+        if (!parsed) {
+            showToast('Nothing table-shaped found in that text');
+            return false;
+        }
+        loadTable(parsed, `Imported ${parsed.rows.length} rows × ${parsed.rows[0].length} columns from ${source}`);
+        return true;
+    }
+
+    // Pasting more than one cell into a cell replaces the table rather than
+    // dumping the whole clipboard into that one input.
+    function handleCellPaste(e) {
+        const text = (e.clipboardData || window.clipboardData).getData('text');
+        if (!text || !/[\t\n]/.test(text)) return;
+        const parsed = parseTableText(text);
+        if (!parsed || (parsed.rows.length < 2 && parsed.rows[0].length < 2)) return;
+        e.preventDefault();
+        loadTable(parsed, `Pasted ${parsed.rows.length} rows × ${parsed.rows[0].length} columns`);
     }
 
     function addRow() {
@@ -811,6 +961,13 @@
     copyBtn.addEventListener('click', copyToClipboard);
     downloadBtn.addEventListener('click', downloadMarkdown);
     applyAlignBtn.addEventListener('click', applyColumnAlignment);
+    importBtn.addEventListener('click', () => {
+        if (importText(importInput.value, 'pasted text')) importInput.value = '';
+    });
+    importClearBtn.addEventListener('click', () => {
+        importInput.value = '';
+        importInput.focus();
+    });
     headerRowCheckbox.addEventListener('change', e => {
         hasHeaderRow = e.target.checked;
         if (tableData.length) {
