@@ -227,6 +227,41 @@
             margin-bottom: 0.5rem;
         }
 
+        .clock-card .offset {
+            font-size: 0.8125rem;
+            color: var(--text-light);
+            margin-top: 0.25rem;
+        }
+
+        .clock-card .day-shift {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .clock-card.is-source {
+            outline: 2px solid var(--primary);
+        }
+
+        .clock-card.is-source .offset {
+            color: var(--primary);
+        }
+
+        .clocks-heading {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 0.5rem 0.75rem;
+        }
+
+        .clocks-heading h2 {
+            margin: 0;
+        }
+
+        .clocks-context {
+            font-size: 0.875rem;
+            color: var(--text-light);
+        }
+
         .remove-btn {
             position: absolute;
             top: 0.5rem;
@@ -403,7 +438,10 @@
     <!-- World Clocks - Moved to the top -->
     <div class="world-clocks">
         <div class="card">
-            <h2>World Clocks</h2>
+            <div class="clocks-heading">
+                <h2>World Clocks</h2>
+                <span class="clocks-context" id="clocks-context"></span>
+            </div>
             <div class="clock-grid" id="clock-grid">
                 <!-- Dynamic content -->
                 <div class="add-clock" id="add-clock">
@@ -502,12 +540,16 @@
 
     // Global variables
     const timeZones = moment.tz.names();
+    let ambiguousCities = {};
     const commonTimeZones = [
         'America/New_York', 'America/Los_Angeles', 'America/Chicago', 'America/Toronto',
         'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
         'Asia/Shanghai', 'Asia/Dubai', 'Australia/Sydney', 'Pacific/Auckland'
     ];
     let favoriteTimeZones = JSON.parse(localStorage.getItem('favoriteTimeZones')) || [];
+    // True while the form still holds "now"; the clocks tick. Editing the date or
+    // time pins the board to that instant instead.
+    let liveMode = true;
 
     // Initialize the app
     function init() {
@@ -516,13 +558,19 @@
         setupEventListeners();
         renderWorldClocks();
         updateAllClocks();
-        setInterval(updateAllClocks, 1000); // Update clocks every second
+        setInterval(() => {
+            if (liveMode) {
+                setCurrentDateAndTime();
+                convertTime();
+            }
+        }, 1000);
         // Perform initial conversion
         convertTime();
     }
 
     // Set current date and time in the form
     function setCurrentDateAndTime() {
+        liveMode = true;
         const now = moment();
         document.getElementById('date').value = now.format('YYYY-MM-DD');
         document.getElementById('time-hour').value = now.format('HH');
@@ -534,6 +582,15 @@
     function populateTimeZoneSelectors() {
         const fromSelect = document.getElementById('from');
         const toSelect = document.getElementById('to');
+
+        // Several zones share a trailing city name ("Buenos Aires", "Istanbul"),
+        // so qualify those with the rest of their path.
+        const cityCounts = {};
+        timeZones.forEach(tz => {
+            const city = tz.split('/').pop();
+            cityCounts[city] = (cityCounts[city] || 0) + 1;
+        });
+        ambiguousCities = cityCounts;
 
         // First add common time zones
         commonTimeZones.forEach(tz => {
@@ -568,24 +625,35 @@
         const option = document.createElement('option');
         option.value = timeZone;
         const offset = moment.tz(timeZone).format('Z');
-        const city = timeZone.split('/').pop().replace(/_/g, ' ');
-        option.textContent = `${city} (GMT${offset})`;
+        const parts = timeZone.split('/');
+        const cityKey = parts.pop();
+        const city = cityKey.replace(/_/g, ' ');
+        const qualifier = (ambiguousCities[cityKey] > 1 && parts.length)
+            ? ` \u2014 ${parts.join('/').replace(/_/g, ' ')}`
+            : '';
+        option.textContent = `${city}${qualifier} (GMT${offset})`;
         return option;
     }
 
     // Setup event listeners
     function setupEventListeners() {
         // Auto-convert on any input change
-        document.getElementById('date').addEventListener('change', convertTime);
+        document.getElementById('date').addEventListener('change', () => {
+            liveMode = false;
+            convertTime();
+        });
         document.getElementById('time-hour').addEventListener('input', () => {
+            liveMode = false;
             validateTimeInput('time-hour', 0, 23);
             convertTime();
         });
         document.getElementById('time-minute').addEventListener('input', () => {
+            liveMode = false;
             validateTimeInput('time-minute', 0, 59);
             convertTime();
         });
         document.getElementById('time-second').addEventListener('input', () => {
+            liveMode = false;
             validateTimeInput('time-second', 0, 59);
             convertTime();
         });
@@ -624,49 +692,65 @@
         }
     }
 
-    // Convert time
-    function convertTime() {
-        const dateValue = document.getElementById('date').value;
+    // The instant the form currently describes, in the source zone.
+    function sourceMoment() {
+        const dateValue = document.getElementById('date').value || moment().format('YYYY-MM-DD');
         const hourValue = document.getElementById('time-hour').value || '00';
         const minuteValue = document.getElementById('time-minute').value || '00';
         const secondValue = document.getElementById('time-second').value || '00';
+        const datetime = `${dateValue} ${hourValue}:${minuteValue}:${secondValue}`;
+        return moment.tz(datetime, 'YYYY-MM-DD HH:mm:ss', document.getElementById('from').value);
+    }
 
-        if (!dateValue) {
+    // Offset between two zones *at the instant being converted*, not at page load:
+    // "5 hours ahead" is only true for the date the user actually asked about.
+    function describeOffset(fromMoment, toMoment) {
+        const minutes = toMoment.utcOffset() - fromMoment.utcOffset();
+        if (minutes === 0) {
+            return 'Same time';
+        }
+        const abs = Math.abs(minutes);
+        const hours = Math.floor(abs / 60);
+        const mins = abs % 60;
+        let amount = hours ? `${hours} hour${hours !== 1 ? 's' : ''}` : '';
+        if (mins) {
+            amount += `${amount ? ' ' : ''}${mins} min`;
+        }
+        return `${amount} ${minutes > 0 ? 'ahead' : 'behind'}`;
+    }
+
+    // "+1 day" / "-1 day" relative to the source zone's calendar date.
+    function describeDayShift(fromMoment, toMoment) {
+        const days = moment(toMoment.format('YYYY-MM-DD'))
+            .diff(moment(fromMoment.format('YYYY-MM-DD')), 'days');
+        if (days === 0) {
+            return '';
+        }
+        return days > 0 ? `+${days} day${days !== 1 ? 's' : ''}` : `${days} day${days !== -1 ? 's' : ''}`;
+    }
+
+    // Convert time
+    function convertTime() {
+        if (!document.getElementById('date').value) {
             document.getElementById('date').value = moment().format('YYYY-MM-DD');
         }
 
-        const fromTz = document.getElementById('from').value;
-        const toTz = document.getElementById('to').value;
-
-        const datetime = `${dateValue} ${hourValue}:${minuteValue}:${secondValue}`;
-        const fromMoment = moment.tz(datetime, 'YYYY-MM-DD HH:mm:ss', fromTz);
-        const toMoment = fromMoment.clone().tz(toTz);
+        const fromMoment = sourceMoment();
+        const toMoment = fromMoment.clone().tz(document.getElementById('to').value);
 
         const resultElement = document.getElementById('result');
         const timeDiffElement = document.getElementById('time-diff');
 
         resultElement.textContent = toMoment.format('HH:mm:ss');
-
-        // Calculate and display time difference
-        const offset1 = moment.tz(fromTz).utcOffset();
-        const offset2 = moment.tz(toTz).utcOffset();
-        const diff = (offset2 - offset1) / 60;
-
-        let diffText = '';
-        if (diff === 0) {
-            diffText = 'Same time zone';
-        } else {
-            diffText = diff > 0
-                ? `${Math.abs(diff)} hour${Math.abs(diff) !== 1 ? 's' : ''} ahead`
-                : `${Math.abs(diff)} hour${Math.abs(diff) !== 1 ? 's' : ''} behind`;
-        }
-
-        timeDiffElement.textContent = diffText;
+        timeDiffElement.textContent = describeOffset(fromMoment, toMoment);
 
         // Show date in result if it's different
         if (fromMoment.format('YYYY-MM-DD') !== toMoment.format('YYYY-MM-DD')) {
             resultElement.textContent += ` (${toMoment.format('MMM D')})`;
         }
+
+        // The board answers the same question, for every zone at once.
+        updateAllClocks();
     }
 
     // Swap time zones
@@ -720,6 +804,9 @@
         const date = document.createElement('div');
         date.className = 'date';
 
+        const offset = document.createElement('div');
+        offset.className = 'offset';
+
         const removeBtn = document.createElement('div');
         removeBtn.className = 'remove-btn';
         removeBtn.textContent = '×';
@@ -731,29 +818,48 @@
         card.appendChild(location);
         card.appendChild(time);
         card.appendChild(date);
+        card.appendChild(offset);
         card.appendChild(removeBtn);
 
-        // Make the card clickable to use this time zone
+        // Make the card the source zone, keeping whatever time was entered.
         card.addEventListener('click', () => {
             document.getElementById('from').value = timeZone;
-            setCurrentDateAndTime();
             convertTime();
         });
 
         return card;
     }
 
+    // Every clock shows the instant the converter is currently asking about.
+    // While the form still holds "now" that is simply the live time, so the board
+    // keeps ticking; once a date or time is entered it pins to that instant.
     function updateAllClocks() {
+        const fromTz = document.getElementById('from').value;
+        const base = liveMode ? moment().tz(fromTz) : sourceMoment();
+        if (!base.isValid()) {
+            return;
+        }
+
         document.querySelectorAll('.clock-card').forEach(card => {
             const timeZone = card.dataset.timezone;
-            const now = moment().tz(timeZone);
+            const local = base.clone().tz(timeZone);
 
-            const timeElem = card.querySelector('.time');
-            const dateElem = card.querySelector('.date');
+            card.classList.toggle('is-source', timeZone === fromTz);
 
-            timeElem.textContent = now.format('HH:mm:ss');
-            dateElem.textContent = now.format('ddd, MMM D');
+            const dayShift = describeDayShift(base, local);
+            card.querySelector('.time').textContent = local.format('HH:mm:ss');
+            card.querySelector('.date').innerHTML = dayShift
+                ? `${local.format('ddd, MMM D')} <span class="day-shift">${dayShift}</span>`
+                : local.format('ddd, MMM D');
+            card.querySelector('.offset').textContent = timeZone === fromTz
+                ? 'Source zone'
+                : describeOffset(base, local);
         });
+
+        const context = document.getElementById('clocks-context');
+        context.textContent = liveMode
+            ? 'Live'
+            : `Showing ${base.format('ddd, MMM D HH:mm')} in ${formatTimeZoneName(fromTz)}`;
     }
 
     function formatTimeZoneName(timeZone) {
