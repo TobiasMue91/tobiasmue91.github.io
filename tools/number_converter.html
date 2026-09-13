@@ -639,7 +639,7 @@
             return;
         }
 
-        const decimal = parseInt(decValue, 10);
+        const decimal = BigInt(decValue);
         let selectedBase = getSelectedBase('target-base');
 
         // Validate custom base
@@ -697,8 +697,9 @@
 
         // Convert to decimal
         try {
-            const result = parseInt(inputValue, sourceBase);
-            decimalResult.textContent = result.toString();
+            const { digits, isNegative } = normalizeInput(inputValue, sourceBase);
+            const result = convertToDecimal(digits, sourceBase);
+            decimalResult.textContent = (isNegative && result !== 0n ? '-' : '') + result.toString();
         } catch (e) {
             otherError.textContent = 'Conversion error';
             otherError.classList.add('visible');
@@ -706,33 +707,55 @@
         }
     }
 
-    function convertToBase(decimal, base) {
-        if (decimal === 0) return '0';
+    const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-        const isNegative = decimal < 0;
-        let number = Math.abs(decimal);
+    // Strip the decoration people actually paste: a base-appropriate prefix
+    // (0x, 0b, 0o, #) and grouping characters, including the ones this tool
+    // emits itself via "Group Digits".
+    function normalizeInput(input, base) {
+        let value = input.trim().replace(/[\s_,:']/g, '');
+        const isNegative = value.startsWith('-');
+        if (isNegative) value = value.substring(1);
+
+        const prefixes = { 2: /^0b/i, 8: /^0o/i, 16: /^(0x|#)/i };
+        const prefix = prefixes[Number(base)];
+        if (prefix) value = value.replace(prefix, '');
+
+        return { digits: value, isNegative };
+    }
+
+    function convertToBase(decimal, base) {
+        const bigBase = BigInt(base);
+        if (decimal === 0n) return '0';
+
+        const isNegative = decimal < 0n;
+        let number = isNegative ? -decimal : decimal;
         let result = '';
 
-        while (number > 0) {
-            let remainder = number % base;
-            if (remainder >= 10) {
-                result = String.fromCharCode(55 + remainder) + result;
-            } else {
-                result = remainder + result;
-            }
-            number = Math.floor(number / base);
+        while (number > 0n) {
+            result = DIGITS[Number(number % bigBase)] + result;
+            number = number / bigBase;
         }
 
         return isNegative ? '-' + result : result;
     }
 
-    function isValidForBase(input, base) {
-        // Remove leading minus for negative numbers
-        const value = input.startsWith('-') ? input.substring(1) : input;
+    function convertToDecimal(digits, base) {
+        const bigBase = BigInt(base);
+        let sum = 0n;
+        for (const digit of digits.toUpperCase()) {
+            sum = sum * bigBase + BigInt(DIGITS.indexOf(digit));
+        }
+        return sum;
+    }
 
-        const validChars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.substring(0, base);
+    function isValidForBase(input, base) {
+        const { digits } = normalizeInput(input, base);
+        if (!digits) return false;
+
+        const validChars = DIGITS.substring(0, Number(base));
         const regex = new RegExp(`^[${validChars}]+$`, 'i');
-        return regex.test(value);
+        return regex.test(digits);
     }
 
     // Helper functions
@@ -806,34 +829,31 @@
     }
 
     function generateDecSteps() {
-        const decimal = parseInt(decimalInput.value) || 0;
+        const rawDecimal = decimalInput.value.trim();
+        const decimal = /^-?\d+$/.test(rawDecimal) ? BigInt(rawDecimal) : 0n;
         let base = getSelectedBase('target-base');
         if (base === 'custom') base = parseInt(customBaseInput.value) || 2;
+        const bigBase = BigInt(base);
 
-        if (decimal === 0) {
+        if (decimal === 0n) {
             stepsContent.innerHTML = '<p>0 in any base is 0.</p>';
             return;
         }
 
         let html = '';
-        let number = Math.abs(decimal);
+        let number = decimal < 0n ? -decimal : decimal;
         let steps = [];
 
-        while (number > 0) {
-            const remainder = number % base;
-            const quotient = Math.floor(number / base);
-            let remainderSymbol = remainder;
-
-            if (remainder >= 10) {
-                remainderSymbol = String.fromCharCode(55 + remainder);
-            }
+        while (number > 0n) {
+            const remainder = number % bigBase;
+            const quotient = number / bigBase;
 
             steps.push({
                 number,
                 base,
                 quotient,
                 remainder,
-                remainderSymbol
+                remainderSymbol: DIGITS[Number(remainder)]
             });
 
             number = quotient;
@@ -843,12 +863,12 @@
 
         steps.forEach((step, i) => {
             html += `<div class="step">
-          <p>${step.number} ÷ ${step.base} = ${step.quotient} with remainder ${step.remainder}${step.remainder >= 10 ? ` (${step.remainderSymbol})` : ''}</p>
+          <p>${step.number} ÷ ${step.base} = ${step.quotient} with remainder ${step.remainder}${step.remainder >= 10n ? ` (${step.remainderSymbol})` : ''}</p>
         </div>`;
         });
 
         let result = steps.map(s => s.remainderSymbol).reverse().join('');
-        if (decimal < 0) result = '-' + result;
+        if (decimal < 0n) result = '-' + result;
 
         html += `<div class="step">
         <p><strong>Final Result:</strong> ${decimal}<sub>10</sub> = ${result}<sub>${base}</sub></p>
@@ -873,27 +893,21 @@
             return;
         }
 
-        // Handle negative numbers
-        const isNegative = input.startsWith('-');
-        const value = isNegative ? input.substring(1) : input;
+        // Handle negative numbers and pasted prefixes/grouping
+        const { digits: value, isNegative } = normalizeInput(input, base);
+        const bigBase = BigInt(base);
 
         let html = `<p>To convert from base-${base} to decimal, multiply each digit by its place value and sum the results:</p>`;
 
-        let sum = 0;
+        let sum = 0n;
         let calculations = [];
 
         for (let i = 0; i < value.length; i++) {
-            let digit = value[i].toUpperCase();
-            let decimalValue;
-
-            if (/[0-9]/.test(digit)) {
-                decimalValue = parseInt(digit);
-            } else {
-                decimalValue = digit.charCodeAt(0) - 55;
-            }
+            const digit = value[i].toUpperCase();
+            const decimalValue = BigInt(DIGITS.indexOf(digit));
 
             const power = value.length - 1 - i;
-            const placeValue = Math.pow(base, power);
+            const placeValue = bigBase ** BigInt(power);
             const product = decimalValue * placeValue;
 
             sum += product;
@@ -923,7 +937,7 @@
         const finalResult = isNegative ? -sum : sum;
 
         html += `<div class="step">
-        <p><strong>Final Result:</strong> ${input}<sub>${base}</sub> = ${finalResult}<sub>10</sub></p>
+        <p><strong>Final Result:</strong> ${isNegative ? '-' : ''}${value.toUpperCase()}<sub>${base}</sub> = ${finalResult}<sub>10</sub></p>
       </div>`;
 
         otherStepsContent.innerHTML = html;
