@@ -188,6 +188,8 @@
     .toast-message {font-size: 0.875rem;}
 
     .validation-error {color: var(--color-error); font-size: 0.75rem; margin-top: 0.25rem;}
+    .validation-note {color: var(--color-text-secondary); font-size: 0.75rem; margin-top: 0.25rem;}
+    .results-stale {opacity: 0.45; transition: opacity 0.15s;}
     @keyframes slideIn {from {transform: translateX(100%); opacity: 0;} to {transform: translateX(0); opacity: 1;}}
     @keyframes fadeOut {to {opacity: 0; transform: translateY(10px);}}
 
@@ -670,6 +672,11 @@ Customer support will never ask for your full credit card number (e.g., 41111111
 
       <div id="result-content" class="text-highlight"></div>
 
+      <div id="replace-output-container" class="mt-4" style="display: none;">
+        <h3 class="mb-2">After Replacement</h3>
+        <div id="replace-output" class="text-highlight"></div>
+      </div>
+
       <div id="matches-container" class="mt-4" style="display: none;">
         <h3 class="mb-2">Matches</h3>
         <div id="matches-list" class="matches-list"></div>
@@ -703,6 +710,8 @@ Customer support will never ask for your full credit card number (e.g., 41111111
   const resultContent = document.getElementById('result-content');
   const matchesContainer = document.getElementById('matches-container');
   const matchesList = document.getElementById('matches-list');
+  const replaceOutputContainer = document.getElementById('replace-output-container');
+  const replaceOutput = document.getElementById('replace-output');
   const explanationContainer = document.getElementById('explanation-container');
   const explanation = document.getElementById('explanation');
   const copyResultsButton = document.getElementById('copy-results');
@@ -727,9 +736,17 @@ Customer support will never ask for your full credit card number (e.g., 41111111
   initializeUI();
 
   // Event listeners
-  regexInput.addEventListener('input', debounce(validateRegex, 300));
-  testButton.addEventListener('click', testRegex);
-  replaceButton.addEventListener('click', replaceMatches);
+  const scheduleRun = debounce(run, 250);
+  regexInput.addEventListener('input', markStaleAndSchedule);
+  testText.addEventListener('input', markStaleAndSchedule);
+  replacementText.addEventListener('input', markStaleAndSchedule);
+  replacementText.addEventListener('focus', scheduleRun);
+  replacementText.addEventListener('blur', scheduleRun);
+  testButton.addEventListener('click', () => run(true));
+  replaceButton.addEventListener('click', () => {
+    replacementText.focus();
+    run(true);
+  });
   clearRegexButton.addEventListener('click', clearRegex);
   copyResultsButton.addEventListener('click', copyResults);
 
@@ -740,7 +757,7 @@ Customer support will never ask for your full credit card number (e.g., 41111111
   exampleItems.forEach(item => {
     item.addEventListener('click', () => {
       regexInput.value = item.dataset.pattern;
-      validateRegex();
+      run(true);
       if (window.innerWidth <= 768) {
         closeSidebar();
       }
@@ -797,183 +814,206 @@ Customer support will never ask for your full credit card number (e.g., 41111111
     validateRegex();
   }
 
-  function validateRegex() {
+  // --- Evaluation engine -------------------------------------------------
+  // Matching runs in a worker so that a catastrophically backtracking pattern
+  // can actually be cut off at executionTimeoutMs instead of wedging the tab.
+  // That is what makes evaluating on every keystroke safe.
+  const workerSource = `
+    // Index -> capture-group name, read off the pattern itself so that
+    // duplicate capture values can't confuse the labelling.
+    function groupNames(src) {
+      var names = [], i = 0, inClass = false;
+      while (i < src.length) {
+        var c = src[i];
+        if (c === '\\\\') { i += 2; continue; }
+        if (inClass) { if (c === ']') inClass = false; i++; continue; }
+        if (c === '[') { inClass = true; i++; continue; }
+        if (c === '(') {
+          var named = src.slice(i).match(/^\\(\\?<([A-Za-z_$][A-Za-z0-9_$]*)>/);
+          if (named) names.push(named[1]);
+          else if (src[i + 1] !== '?') names.push(null);
+        }
+        i++;
+      }
+      return names;
+    }
+
+    self.onmessage = function (e) {
+      var d = e.data, matches = [], m, replaced = null;
+      try {
+        var re = new RegExp(d.pattern, d.flags);
+        var names = groupNames(d.pattern);
+        if (d.flags.indexOf('g') !== -1 || d.flags.indexOf('y') !== -1) {
+          while ((m = re.exec(d.text)) !== null) {
+            matches.push({value: m[0], index: m.index, groups: m.slice(1)});
+            if (!m[0].length) re.lastIndex++;
+            if (matches.length > 20000) break;
+          }
+        } else {
+          m = re.exec(d.text);
+          if (m) matches.push({value: m[0], index: m.index, groups: m.slice(1)});
+        }
+        if (d.replacement !== null) {
+          replaced = d.text.replace(new RegExp(d.pattern, d.flags), d.replacement);
+        }
+        self.postMessage({ok: true, matches: matches, replaced: replaced, names: names, id: d.id});
+      } catch (err) {
+        self.postMessage({ok: false, error: String(err && err.message || err), id: d.id});
+      }
+    };
+  `;
+  const workerUrl = URL.createObjectURL(new Blob([workerSource], {type: 'application/javascript'}));
+  let worker = null;
+  let runId = 0;
+  let runTimer = null;
+  let runStart = 0;
+
+  function getWorker() {
+    if (!worker) {
+      worker = new Worker(workerUrl);
+      worker.onmessage = onWorkerResult;
+    }
+    return worker;
+  }
+
+  function killWorker() {
+    if (worker) {
+      worker.terminate();
+      worker = null;
+    }
+  }
+
+  function markStaleAndSchedule() {
+    if (resultsCard.style.display !== 'none') {
+      resultsCard.classList.add('results-stale');
+    }
+    scheduleRun();
+  }
+
+  // Accept a pasted /pattern/flags literal, the form regexes actually travel in.
+  function unwrapLiteral() {
+    const raw = regexInput.value.trim();
+    const m = raw.match(/^\/(.*)\/([dgimsuvy]*)$/s);
+    if (!m || !m[1]) return false;
+    try { new RegExp(m[1], m[2]); } catch (e) { return false; }
+    regexInput.value = m[1];
+    const known = ['g', 'i', 'm', 's', 'u', 'y'];
+    currentFlags = known.filter(f => m[2].includes(f));
+    flagButtons.forEach(b => b.classList.toggle('active', currentFlags.includes(b.dataset.flag)));
+    return true;
+  }
+
+  function run(immediate) {
+    const unwrapped = unwrapLiteral();
     const pattern = regexInput.value.trim();
 
     if (!pattern) {
       regexValidation.classList.add('hidden');
+      resultsCard.style.display = 'none';
+      resultsCard.classList.remove('results-stale');
+      killWorker();
+      return;
+    }
+
+    if (!validateRegex()) {
+      resultsCard.classList.add('results-stale');
+      return;
+    }
+
+    if (unwrapped) {
+      regexValidation.className = 'validation-note';
+      regexValidation.textContent = 'Read as /pattern/flags — delimiters stripped, flags applied.';
+    }
+
+    const id = ++runId;
+    runStart = performance.now();
+    clearTimeout(runTimer);
+    runTimer = setTimeout(() => {
+      killWorker();
+      isProcessing = false;
+      setButtonLoading(testButton, false);
+      showTimeout(pattern);
+    }, executionTimeoutMs);
+
+    isProcessing = true;
+    if (immediate) setButtonLoading(testButton, true);
+    getWorker().postMessage({
+      id: id,
+      pattern: pattern,
+      flags: currentFlags.join(''),
+      text: testText.value,
+      // An empty replacement is meaningful ("delete every match"), so the
+      // replacement pane follows the field being in use, not being non-empty.
+      replacement: replaceInUse() ? replacementText.value : null
+    });
+  }
+
+  function replaceInUse() {
+    return replacementText.value !== '' || document.activeElement === replacementText;
+  }
+
+  function onWorkerResult(e) {
+    const data = e.data;
+    if (data.id !== runId) return;
+    clearTimeout(runTimer);
+    isProcessing = false;
+    setButtonLoading(testButton, false);
+    resultsCard.classList.remove('results-stale');
+
+    if (!data.ok) {
+      regexValidation.className = 'validation-error';
+      regexValidation.textContent = `Invalid pattern: ${data.error}`;
+      return;
+    }
+
+    const executionTime = (performance.now() - runStart).toFixed(2);
+    displayResults(data.matches, testText.value, executionTime, data.names || []);
+    displayReplacement(data.replaced);
+    displayExplanation(regexInput.value.trim());
+    resultsCard.style.display = 'block';
+  }
+
+  function showTimeout(pattern) {
+    resultsCard.style.display = 'block';
+    resultsCard.classList.remove('results-stale');
+    resultStats.textContent =
+      `Stopped after ${executionTimeoutMs}ms — this pattern is backtracking catastrophically on this input.`;
+    resultContent.textContent = testText.value;
+    matchesContainer.style.display = 'none';
+    replaceOutputContainer.style.display = 'none';
+    displayExplanation(pattern);
+  }
+
+  function displayReplacement(replaced) {
+    if (replaced === null || replaced === undefined) {
+      replaceOutputContainer.style.display = 'none';
+      return;
+    }
+    replaceOutput.textContent = replaced;
+    replaceOutputContainer.style.display = 'block';
+  }
+
+  function validateRegex() {
+    const pattern = regexInput.value.trim();
+
+    if (!pattern) {
+      regexValidation.className = 'validation-error hidden';
       return false;
     }
 
     try {
       // Test the regex pattern
       new RegExp(pattern, currentFlags.join(''));
-      regexValidation.classList.add('hidden');
+      regexValidation.className = 'validation-error hidden';
       return true;
     } catch (error) {
+      regexValidation.className = 'validation-error';
       regexValidation.textContent = `Invalid pattern: ${error.message}`;
-      regexValidation.classList.remove('hidden');
       return false;
     }
   }
 
-  function testRegex() {
-    if (isProcessing) return;
-
-    if (!validateRegex()) {
-      showToast('Please enter a valid regular expression', 'error');
-      return;
-    }
-
-    const pattern = regexInput.value.trim();
-    const text = testText.value;
-
-    if (!pattern) {
-      showToast('Please enter a regular expression pattern', 'warning');
-      return;
-    }
-
-    isProcessing = true;
-    setButtonLoading(testButton, true);
-
-    try {
-      const startTime = performance.now();
-      const regex = new RegExp(pattern, currentFlags.join(''));
-      const matches = [];
-      let match;
-
-      // Use a worker or timeout to prevent browser freeze on complex patterns
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Regex execution timed out. Pattern may be too complex or cause catastrophic backtracking.'));
-        }, executionTimeoutMs);
-      });
-
-      const regexPromise = new Promise((resolve) => {
-        // Collect all matches
-        if (currentFlags.includes('g')) {
-          while ((match = regex.exec(text)) !== null) {
-            matches.push({
-              value: match[0],
-              index: match.index,
-              groups: match.slice(1),
-              input: match.input
-            });
-
-            // Prevent infinite loops
-            if (!match[0].length) {
-              regex.lastIndex++;
-            }
-          }
-        } else {
-          match = regex.exec(text);
-          if (match) {
-            matches.push({
-              value: match[0],
-              index: match.index,
-              groups: match.slice(1),
-              input: match.input
-            });
-          }
-        }
-
-        resolve(matches);
-      });
-
-      // Race the regex execution against a timeout
-      Promise.race([regexPromise, timeoutPromise])
-              .then((matches) => {
-                const endTime = performance.now();
-                const executionTime = (endTime - startTime).toFixed(2);
-
-                displayResults(matches, text, executionTime);
-                displayExplanation(pattern);
-
-                resultsCard.style.display = 'block';
-              })
-              .catch((error) => {
-                showToast(`Error: ${error.message}`, 'error');
-              })
-              .finally(() => {
-                isProcessing = false;
-                setButtonLoading(testButton, false);
-              });
-    } catch (error) {
-      showToast(`Error: ${error.message}`, 'error');
-      isProcessing = false;
-      setButtonLoading(testButton, false);
-    }
-  }
-
-  function replaceMatches() {
-    if (isProcessing) return;
-
-    if (!validateRegex()) {
-      showToast('Please enter a valid regular expression', 'error');
-      return;
-    }
-
-    const pattern = regexInput.value.trim();
-    const text = testText.value;
-    const replacement = replacementText.value;
-
-    if (!pattern) {
-      showToast('Please enter a regular expression pattern', 'warning');
-      return;
-    }
-
-    isProcessing = true;
-    setButtonLoading(replaceButton, true);
-
-    try {
-      const startTime = performance.now();
-
-      // Use a worker or timeout to prevent browser freeze on complex patterns
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Regex execution timed out. Pattern may be too complex or cause catastrophic backtracking.'));
-        }, executionTimeoutMs);
-      });
-
-      const regexPromise = new Promise((resolve) => {
-        const regex = new RegExp(pattern, currentFlags.join(''));
-        const result = text.replace(regex, replacement);
-        resolve(result);
-      });
-
-      // Race the regex execution against a timeout
-      Promise.race([regexPromise, timeoutPromise])
-              .then((result) => {
-                const endTime = performance.now();
-                const executionTime = (endTime - startTime).toFixed(2);
-
-                // Display the replaced text
-                resultContent.textContent = result;
-                resultStats.textContent = `Execution time: ${executionTime}ms`;
-
-                // Hide matches and groups display since we're just showing the replaced text
-                matchesContainer.style.display = 'none';
-                explanationContainer.style.display = 'none';
-
-                resultsCard.style.display = 'block';
-
-                showToast('Replacement completed successfully', 'success');
-              })
-              .catch((error) => {
-                showToast(`Error: ${error.message}`, 'error');
-              })
-              .finally(() => {
-                isProcessing = false;
-                setButtonLoading(replaceButton, false);
-              });
-    } catch (error) {
-      showToast(`Error: ${error.message}`, 'error');
-      isProcessing = false;
-      setButtonLoading(replaceButton, false);
-    }
-  }
-
-  function displayResults(matches, text, executionTime) {
+  function displayResults(matches, text, executionTime, groupNames) {
     // Update stats
     resultStats.textContent = `Found ${matches.length} match${matches.length !== 1 ? 'es' : ''} in ${executionTime}ms`;
 
@@ -1047,9 +1087,12 @@ Customer support will never ask for your full credit card number (e.g., 41111111
           matchHTML += '<div class="match-groups">';
           match.groups.forEach((group, groupIndex) => {
             if (group !== undefined) {
+              const label = groupNames[groupIndex]
+                      ? escapeHTML(groupNames[groupIndex])
+                      : groupIndex + 1;
               matchHTML += `
               <div class="group-item">
-                <div class="group-number">${groupIndex + 1}</div>
+                <div class="group-number">${label}</div>
                 <div class="group-value">${escapeHTML(group)}</div>
               </div>
             `;
@@ -1134,18 +1177,23 @@ Customer support will never ask for your full credit card number (e.g., 41111111
       flagButton.classList.add('active');
     }
 
-    // Validate with new flags
-    validateRegex();
+    // Re-evaluate with the new flag set
+    run(true);
   }
 
   function clearRegex() {
     regexInput.value = '';
-    regexValidation.classList.add('hidden');
+    regexValidation.className = 'validation-error hidden';
     resultsCard.style.display = 'none';
+    resultsCard.classList.remove('results-stale');
+    killWorker();
   }
 
   function copyResults() {
-    const textToCopy = resultContent.textContent;
+    // When a replacement is on screen, that is the thing worth copying out.
+    const textToCopy = replaceOutputContainer.style.display !== 'none'
+            ? replaceOutput.textContent
+            : resultContent.textContent;
     navigator.clipboard.writeText(textToCopy)
             .then(() => showToast('Results copied to clipboard', 'success'))
             .catch(() => showToast('Failed to copy to clipboard', 'error'));
