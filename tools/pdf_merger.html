@@ -256,6 +256,22 @@
             transition: var(--transition)
         }
 
+        .preview-page-error {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 1rem;
+            min-width: 120px;
+            min-height: 150px;
+            border: 1px dashed var(--danger);
+            color: var(--danger);
+            font-size: .8rem;
+            word-break: break-word;
+            background-color: transparent;
+            box-shadow: none
+        }
+
         .preview-page:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, .1)
@@ -518,6 +534,12 @@
         loadingOverlay.classList.remove('active');
     }
 
+    function describeFileList(names) {
+        if (names.length === 1) return `"${names[0]}"`;
+        if (names.length === 2) return `"${names[0]}" and "${names[1]}"`;
+        return `"${names.slice(0, -1).join('", "')}" and "${names[names.length - 1]}"`;
+    }
+
     function showMessage(text, type = 'info') {
         const messageElement = document.createElement('div');
         messageElement.className = `message ${type}`;
@@ -709,9 +731,19 @@
             return;
         }
 
-        try {
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
+        const unreadable = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+
+            const previewPage = document.createElement('div');
+            previewPage.className = 'preview-page';
+            previewPage.setAttribute('data-index', i);
+            preview.appendChild(previewPage);
+
+            // Each file gets its own try: one unreadable PDF must not cost the
+            // thumbnails of every file after it.
+            try {
                 const arrayBuffer = await file.arrayBuffer();
                 const uint8Array = new Uint8Array(arrayBuffer);
 
@@ -721,10 +753,6 @@
                 const page = await pdf.getPage(1);
                 const scale = 0.5;
                 const viewport = page.getViewport({scale});
-
-                const previewPage = document.createElement('div');
-                previewPage.className = 'preview-page';
-                previewPage.setAttribute('data-index', i);
 
                 const canvas = document.createElement('canvas');
                 canvas.width = viewport.width;
@@ -737,11 +765,16 @@
                 }).promise;
 
                 previewPage.appendChild(canvas);
-                preview.appendChild(previewPage);
+            } catch (error) {
+                console.error('Error previewing file:', file.name, error);
+                unreadable.push(file.name);
+                previewPage.classList.add('preview-page-error');
+                previewPage.textContent = `Can't read ${file.name}`;
             }
-        } catch (error) {
-            console.error('Error previewing files:', error);
-            showMessage('Error previewing files. Please try again.', 'error');
+        }
+
+        if (unreadable.length) {
+            showMessage(`Can't read ${describeFileList(unreadable)}. Merging will skip ${unreadable.length > 1 ? 'them' : 'it'}.`, 'error');
         }
     }
 
@@ -757,6 +790,8 @@
 
         try {
             const mergedPdf = await PDFLib.PDFDocument.create();
+            const skipped = [];
+            let mergedCount = 0;
 
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
@@ -764,16 +799,24 @@
                 const pdfBytes = new Uint8Array(arrayBuffer);
 
                 try {
-                    const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+                    // ignoreEncryption lets through the common owner-password-only PDFs
+                    // (bank statements, scanner output) that open fine everywhere else.
+                    const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes, {ignoreEncryption: true});
                     const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
 
                     copiedPages.forEach((page) => {
                         mergedPdf.addPage(page);
                     });
+                    mergedCount++;
                 } catch (error) {
                     console.error('Error processing PDF:', error);
-                    showMessage(`Error processing "${file.name}". The file might be password-protected or corrupt.`, 'error');
+                    skipped.push(file.name);
                 }
+            }
+
+            if (mergedCount === 0) {
+                showMessage(`Could not read ${describeFileList(skipped)}. Nothing was merged.`, 'error');
+                return;
             }
 
             const mergedPdfBytes = await mergedPdf.save();
@@ -784,10 +827,18 @@
 
             const link = document.createElement('a');
             link.href = url;
-            link.download = 'merged.pdf';
+            link.download = skipped.length ? 'merged-incomplete.pdf' : 'merged.pdf';
             link.click();
 
-            showMessage('PDFs merged successfully!', 'success');
+            const pageCount = mergedPdf.getPageCount();
+            if (skipped.length) {
+                showMessage(
+                    `Merged ${mergedCount} of ${files.length} files (${pageCount} pages). ` +
+                    `Could not read ${describeFileList(skipped)} — those pages are NOT in the download.`,
+                    'error');
+            } else {
+                showMessage(`Merged ${files.length} files into ${pageCount} pages.`, 'success');
+            }
         } catch (error) {
             console.error('Error merging PDFs:', error);
             showMessage('Error merging PDFs. Please try again.', 'error');
