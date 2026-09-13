@@ -1085,13 +1085,120 @@
     marked.setOptions({breaks: true, gfm: true});
 
     function createTurndownService() {
-        return new TurndownService({
+        const service = new TurndownService({
             headingStyle: state.turndownOptions.headingStyle,
             codeBlockStyle: state.turndownOptions.codeBlockStyle,
             bulletListMarker: state.turndownOptions.bulletListMarker,
             emDelimiter: state.turndownOptions.emDelimiter,
             strongDelimiter: state.turndownOptions.strongDelimiter,
             linkStyle: state.turndownOptions.linkStyle
+        });
+        addStructureRules(service);
+        return service;
+    }
+
+    // Turndown's core has no rules for tables, strikethrough or task-list
+    // checkboxes, and silently drops the markup while keeping the text — so a
+    // pasted table arrives as a column of orphaned cell values. These rules put
+    // that structure back.
+    function addStructureRules(service) {
+        const colspanOf = (cell) => Math.max(1, parseInt(cell.getAttribute('colspan'), 10) || 1);
+
+        // A cell is a single markdown table cell: pipes would start a new
+        // column and newlines would end the row, so neither can survive raw.
+        const cellToMarkdown = (cell) => service.turndown(cell.innerHTML)
+            .replace(/\|/g, '\\|')
+            .replace(/\s*\n+\s*/g, '<br>')
+            .trim();
+
+        service.addRule('table', {
+            filter: 'table',
+            replacement: (content, node) => {
+                const grid = Array.from(node.rows).map(row => {
+                    const cells = [];
+                    Array.from(row.cells).forEach(cell => {
+                        cells.push(cellToMarkdown(cell));
+                        // A spanned cell still occupies its columns, or every
+                        // row below it lands one column to the left.
+                        for (let i = 1; i < colspanOf(cell); i++) cells.push('');
+                    });
+                    return cells;
+                });
+                const width = grid.reduce((max, row) => Math.max(max, row.length), 0);
+                if (!width) return '';
+                // A table holding a single cell is page furniture, not data —
+                // the layout tables mail clients and older pages are built from.
+                // Boxing its content into one markdown cell would flatten every
+                // heading and paragraph inside it onto one line.
+                if (grid.length === 1 && width === 1) return content;
+
+                const line = (cells) => '| ' + cells.concat(new Array(width - cells.length).fill('')).join(' | ') + ' |';
+                // Markdown has no headerless table, so the first row becomes the
+                // header — otherwise tables from Notion, Sheets and mail clients,
+                // which use no <th> at all, have nowhere to go.
+                const lines = [line(grid[0]), line(new Array(width).fill('---'))]
+                    .concat(grid.slice(1).map(line));
+
+                const caption = node.caption ? cellToMarkdown(node.caption) + '\n\n' : '';
+                return '\n\n' + caption + lines.join('\n') + '\n\n';
+            }
+        });
+
+        service.addRule('strikethrough', {
+            filter: ['del', 's', 'strike'],
+            replacement: (content) => content.trim() ? '~~' + content + '~~' : content
+        });
+
+        service.addRule('taskListItem', {
+            filter: (node) => node.nodeName === 'INPUT'
+                && node.getAttribute('type') === 'checkbox'
+                && node.parentNode && node.parentNode.nodeName === 'LI',
+            replacement: (content, node) => (node.checked ? '[x]' : '[ ]') + ' '
+        });
+
+        const styleOf = (node, prop) => ((node.style && node.style[prop]) || '').toLowerCase();
+        const isBold = (node) => {
+            const weight = styleOf(node, 'fontWeight');
+            return weight === 'bold' || weight === 'bolder' || parseInt(weight, 10) >= 600;
+        };
+        const isItalic = (node) => styleOf(node, 'fontStyle') === 'italic';
+        const isStruck = (node) => (styleOf(node, 'textDecoration') + ' ' + styleOf(node, 'textDecorationLine'))
+            .indexOf('line-through') !== -1;
+
+        // Google Docs wraps a copied selection in <b style="font-weight:normal">,
+        // which Turndown reads as real bold — so a Docs paste comes out fenced in
+        // stray ** and with its actual emphasis, carried on inline styles, gone.
+        service.addRule('unboldWrapper', {
+            filter: (node) => (node.nodeName === 'B' || node.nodeName === 'STRONG')
+                && styleOf(node, 'fontWeight') === 'normal',
+            replacement: (content) => content
+        });
+
+        service.addRule('styledEmphasis', {
+            filter: (node) => node.nodeName === 'SPAN' && (isBold(node) || isItalic(node) || isStruck(node)),
+            replacement: (content, node) => {
+                const lead = content.match(/^\s*/)[0];
+                const trail = content.match(/\s*$/)[0];
+                const core = content.slice(lead.length, content.length - trail.length);
+                if (!core) return content;
+
+                let out = core;
+                if (isStruck(node) && !node.closest('del, s, strike')) {
+                    out = '~~' + out + '~~';
+                }
+                // Don't double up on emphasis a real <em>/<strong> already carries.
+                if (isItalic(node) && !node.closest('em, i')) {
+                    out = state.turndownOptions.emDelimiter + out + state.turndownOptions.emDelimiter;
+                }
+                // Docs marks heading text bold as well as heading it; the ##
+                // already says so, and ## **Title** just adds noise.
+                const alreadyBold = node.closest('h1, h2, h3, h4, h5, h6')
+                    || node.closest('strong:not([style*="normal"]), b:not([style*="normal"])');
+                if (isBold(node) && !alreadyBold) {
+                    out = state.turndownOptions.strongDelimiter + out + state.turndownOptions.strongDelimiter;
+                }
+                return lead + out + trail;
+            }
         });
     }
 
