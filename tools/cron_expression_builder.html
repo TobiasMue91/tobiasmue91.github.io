@@ -181,6 +181,7 @@
             validationError: '',
             explanation: '',
             nextRunTimes: [],
+            cronFields: null,
             parts: {
                 minute: '*',
                 hour: '*',
@@ -212,11 +213,12 @@
                 this.updateNextRunTimes();
             },
             parseExpressionToUI() {
-                const parts = this.cronExpression.trim().split(/\s+/);
-                if (parts.length !== 5) {
-                    this.validationError = 'A cron expression must have 5 parts: minute, hour, day of month, month, day of week';
+                if (!this.validateExpression()) {
+                    this.updateExplanation();
+                    this.updateNextRunTimes();
                     return;
                 }
+                const parts = this.cronFields.expression.split(/\s+/);
                 const partNames = ['minute', 'hour', 'day', 'month', 'weekday'];
                 partNames.forEach((name, index) => {
                     if (parts[index]) {
@@ -238,285 +240,199 @@
                 this.updateExplanation();
                 this.updateNextRunTimes();
             },
+            // Cron is parsed once, here, and the parse is what validation, the
+            // explanation and the next-run search all work from.
+            monthNames: ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'],
+            dayNames: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
+            nicknames: {
+                '@yearly': '0 0 1 1 *',
+                '@annually': '0 0 1 1 *',
+                '@monthly': '0 0 1 * *',
+                '@weekly': '0 0 * * 0',
+                '@daily': '0 0 * * *',
+                '@midnight': '0 0 * * *',
+                '@hourly': '0 * * * *'
+            },
             validateExpression() {
-                if (!this.cronExpression.match(/^(\S+\s){4}\S+$/)) {
-                    this.validationError = 'Invalid cron expression format';
+                try {
+                    this.cronFields = this.parseCron(this.cronExpression);
+                    this.validationError = '';
+                    return true;
+                } catch (e) {
+                    this.cronFields = null;
+                    this.validationError = e.message;
                     return false;
                 }
-                const parts = this.cronExpression.split(/\s+/);
-                // Basic validation for each part
-                const validators = [
-                    { pattern: /^(\*|([0-5]?[0-9])((-([0-5]?[0-9]))?|,([0-5]?[0-9]))*|(\*\/([0-5]?[0-9])))$/, message: 'Minutes must be between 0-59'},
-                    { pattern: /^(\*|(1?[0-9]|2[0-3])((-([1-9]|1[0-9]|2[0-3]))?|,(1?[0-9]|2[0-3]))*|(\*\/(1?[0-9]|2[0-3])))$/, message: 'Hours must be between 0-23'},
-                    { pattern: /^(\*|([1-9]|[12][0-9]|3[01])((-([1-9]|[12][0-9]|3[01]))?|,([1-9]|[12][0-9]|3[01]))*|(\*\/([1-9]|[12][0-9]|3[01]))|L)$/, message: 'Days must be between 1-31'},
-                    { pattern: /^(\*|([1-9]|1[0-2])((-([1-9]|1[0-2]))?|,([1-9]|1[0-2]))*|(\*\/([1-9]|1[0-2])))$/, message: 'Months must be between 1-12'},
-                    { pattern: /^(\*|([0-6])((-([0-6]))?|,([0-6]))*|(\*\/([0-6])))$/, message: 'Weekdays must be between 0-6 (0 = Sunday)'}
-                ];
+            },
+            parseCron(expression) {
+                const normalized = this.normalizeExpression(expression);
+                const parts = normalized.split(/\s+/).filter(Boolean);
+                if (parts.length !== 5) {
+                    throw new Error('A cron expression must have 5 fields: minute, hour, day of month, month, day of week');
+                }
+                return {
+                    expression: normalized,
+                    minute: this.parseField(parts[0], 'Minute', 0, 59, null, {}),
+                    hour: this.parseField(parts[1], 'Hour', 0, 23, null, {}),
+                    dayOfMonth: this.parseField(parts[2], 'Day of month', 1, 31, null, { allowLast: true }),
+                    month: this.parseField(parts[3], 'Month', 1, 12, this.monthNames, {}),
+                    dayOfWeek: this.parseField(parts[4], 'Day of week', 0, 7, this.dayNames, { allowNth: true, sundayIsSeven: true })
+                };
+            },
+            // '@daily' and friends are ordinary expressions in disguise; expand them
+            // up front so everything downstream only ever sees five fields.
+            normalizeExpression(expression) {
+                const trimmed = (expression || '').trim();
+                return this.nicknames[trimmed.toLowerCase()] || trimmed;
+            },
+            // Expands one field into the set of values it matches, accepting the
+            // syntax a real crontab accepts: lists, ranges, steps on ranges, names,
+            // 'L' for the last day of the month and 'day#n' for the nth weekday.
+            parseField(part, label, min, max, names, options) {
+                const field = { values: new Set(), nth: [], last: false, star: part.trim() === '*' };
+                for (const segment of part.split(',')) {
+                    const raw = segment.trim();
+                    if (!raw) throw new Error(`${label}: empty value in "${part}"`);
 
-                for (let i = 0; i < 5; i++) {
-                    if (!validators[i].pattern.test(parts[i])) {
-                        this.validationError = validators[i].message;
-                        return false;
+                    if (options.allowLast && raw.toLowerCase() === 'l') {
+                        field.last = true;
+                        continue;
+                    }
+
+                    if (options.allowNth && raw.includes('#')) {
+                        const [dayPart, nthPart] = raw.split('#');
+                        const nth = Number(nthPart);
+                        if (!Number.isInteger(nth) || nth < 1 || nth > 5) {
+                            throw new Error(`${label}: "${raw}" — the occurrence after # must be 1-5`);
+                        }
+                        field.nth.push({ day: this.fieldValue(dayPart, label, min, max, names) % 7, nth });
+                        continue;
+                    }
+
+                    const [rangePart, stepPart, ...extra] = raw.split('/');
+                    let step = 1;
+                    if (stepPart !== undefined) {
+                        step = Number(stepPart);
+                        if (extra.length || !Number.isInteger(step) || step < 1) {
+                            throw new Error(`${label}: "${raw}" — the step after / must be a whole number of 1 or more`);
+                        }
+                    }
+
+                    let from, to;
+                    if (rangePart === '*') {
+                        from = min;
+                        to = max;
+                    } else if (rangePart.includes('-')) {
+                        const [a, b] = rangePart.split('-');
+                        from = this.fieldValue(a, label, min, max, names);
+                        to = this.fieldValue(b, label, min, max, names);
+                        if (to < from) throw new Error(`${label}: "${raw}" — the range runs backwards`);
+                    } else {
+                        from = this.fieldValue(rangePart, label, min, max, names);
+                        // A bare value with a step means "from here to the end", as in 8/3.
+                        to = stepPart === undefined ? from : max;
+                    }
+
+                    for (let i = from; i <= to; i += step) {
+                        field.values.add(options.sundayIsSeven ? i % 7 : i);
                     }
                 }
-                this.validationError = '';
-                return true;
+                if (!field.values.size && !field.nth.length && !field.last) {
+                    throw new Error(`${label}: "${part}" does not match any value`);
+                }
+                return field;
+            },
+            fieldValue(token, label, min, max, names) {
+                const text = (token || '').trim().toLowerCase();
+                let value;
+                if (names && /^[a-z]{3,}$/.test(text)) {
+                    // Cron matches names on their first three letters, so FRI and
+                    // FRIDAY both work. Month names are 1-based, day names 0-based.
+                    const named = names.indexOf(text.slice(0, 3));
+                    if (named !== -1) value = named + (names === this.monthNames ? 1 : 0);
+                }
+                if (value === undefined) {
+                    if (!/^\d+$/.test(text)) {
+                        throw new Error(`${label}: "${token}" is not a value this field accepts`);
+                    }
+                    value = Number(text);
+                }
+                if (value < min || value > max) {
+                    throw new Error(`${label}: "${token}" is out of range (${min}-${max})`);
+                }
+                return value;
             },
             updateExplanation() {
-                if (this.validationError) {
+                if (this.validationError || !this.cronFields) {
                     this.explanation = '';
                     return;
                 }
                 try {
-                    const readable = cronstrue.toString(this.cronExpression, { verbose: true });
-                    this.explanation = readable;
+                    this.explanation = cronstrue.toString(this.cronFields.expression, { verbose: true });
                 } catch (e) {
                     this.explanation = 'Unable to parse cron expression.';
                 }
             },
             updateNextRunTimes() {
-                if (this.validationError) {
+                if (this.validationError || !this.cronFields) {
                     this.nextRunTimes = [];
                     return;
                 }
-
                 try {
-                    const DateTime = luxon.DateTime;
-                    let now = DateTime.now();
-                    let nextRuns = [];
-
-                    // Use cronstrue to get an approximate frequency for smart calculation
-                    const readableExpression = cronstrue.toString(this.cronExpression).toLowerCase();
-                    const isYearly = readableExpression.includes('year');
-                    const isMonthly = readableExpression.includes('month') && !isYearly;
-                    const isWeekly = readableExpression.includes('week') && !isMonthly && !isYearly;
-                    const isDaily = readableExpression.includes('day') && !isWeekly && !isMonthly && !isYearly;
-
+                    let cursor = luxon.DateTime.now();
+                    const nextRuns = [];
                     for (let i = 0; i < 5; i++) {
-                        const next = this.getNextOccurrence(now, isYearly, isMonthly, isWeekly, isDaily);
-                        if (next) {
-                            nextRuns.push(next.toFormat('EEEE, MMMM d, yyyy \'at\' h:mm a'));
-                            // Add a minute to avoid same result
-                            now = next.plus({ minutes: 1 });
-                        }
+                        const next = this.getNextOccurrence(cursor, this.cronFields);
+                        if (!next) break;
+                        nextRuns.push(next.toFormat('EEEE, MMMM d, yyyy \'at\' h:mm a'));
+                        cursor = next;
                     }
-
+                    if (!nextRuns.length) {
+                        nextRuns.push('This expression has no run times in the next 25 years.');
+                    }
                     this.nextRunTimes = nextRuns;
                 } catch (e) {
                     console.error('Error calculating next run times:', e);
                     this.nextRunTimes = ['Unable to calculate next run times.'];
                 }
             },
-            getNextOccurrence(startDateTime, isYearly, isMonthly, isWeekly, isDaily) {
-                const DateTime = luxon.DateTime;
-                const parts = this.cronExpression.split(' ');
+            // Walks forward a field at a time — skip a whole month, then a day, then
+            // an hour — so a yearly schedule costs about as many steps as a daily one.
+            getNextOccurrence(after, fields) {
+                let candidate = after.set({ second: 0, millisecond: 0 }).plus({ minutes: 1 });
+                const lastYear = after.year + 25;
 
-                const minute = parts[0];
-                const hour = parts[1];
-                const dayOfMonth = parts[2];
-                const month = parts[3];
-                const dayOfWeek = parts[4];
-
-                let candidateDate = startDateTime;
-
-                // Smart jump logic based on expression frequency
-                if (isYearly) {
-                    // For yearly jobs, jump to the specific month
-                    if (month !== '*') {
-                        // If specific month(s) given
-                        const targetMonth = parseInt(month.split(',')[0]);
-                        if (candidateDate.month > targetMonth) {
-                            // If we're past the target month this year, jump to next year
-                            candidateDate = DateTime.fromObject({
-                                year: candidateDate.year + 1,
-                                month: targetMonth,
-                                day: 1,
-                                hour: 0,
-                                minute: 0,
-                                second: 0
-                            });
-                        } else if (candidateDate.month < targetMonth) {
-                            // If we're before the target month this year, jump to it
-                            candidateDate = DateTime.fromObject({
-                                year: candidateDate.year,
-                                month: targetMonth,
-                                day: 1,
-                                hour: 0,
-                                minute: 0,
-                                second: 0
-                            });
-                        }
-                    }
-                } else if (isMonthly) {
-                    // For monthly jobs, jump to the specified day
-                    if (dayOfMonth !== '*') {
-                        const targetDay = parseInt(dayOfMonth.split(',')[0]);
-                        if (candidateDate.day > targetDay) {
-                            // If we're past the target day this month, jump to next month
-                            candidateDate = candidateDate.plus({ months: 1 }).set({ day: 1, hour: 0, minute: 0, second: 0 });
-                        } else if (candidateDate.day < targetDay) {
-                            // If we're before the target day this month, jump to it
-                            candidateDate = candidateDate.set({ day: targetDay, hour: 0, minute: 0, second: 0 });
-                        }
-                    }
-                } else if (isWeekly) {
-                    // For weekly jobs, jump to the specified day of week
-                    if (dayOfWeek !== '*') {
-                        const targetDOW = parseInt(dayOfWeek.split(',')[0]);
-                        const currentDOW = candidateDate.weekday % 7; // Convert Luxon's 1-7 to 0-6
-
-                        if (currentDOW > targetDOW) {
-                            // If we're past the target day this week, jump to next week
-                            const daysToAdd = 7 - currentDOW + targetDOW;
-                            candidateDate = candidateDate.plus({ days: daysToAdd }).set({ hour: 0, minute: 0, second: 0 });
-                        } else if (currentDOW < targetDOW) {
-                            // If we're before the target day this week, jump to it
-                            const daysToAdd = targetDOW - currentDOW;
-                            candidateDate = candidateDate.plus({ days: daysToAdd }).set({ hour: 0, minute: 0, second: 0 });
-                        }
-                    }
-                } else if (isDaily) {
-                    // For daily jobs, jump to the specified hour
-                    if (hour !== '*') {
-                        const targetHour = parseInt(hour.split(',')[0]);
-                        if (candidateDate.hour > targetHour) {
-                            // If we're past the target hour today, jump to tomorrow
-                            candidateDate = candidateDate.plus({ days: 1 }).set({ hour: targetHour, minute: 0, second: 0 });
-                        } else if (candidateDate.hour < targetHour) {
-                            // If we're before the target hour today, jump to it
-                            candidateDate = candidateDate.set({ hour: targetHour, minute: 0, second: 0 });
-                        }
+                while (candidate.year <= lastYear) {
+                    if (!fields.month.values.has(candidate.month)) {
+                        candidate = candidate.plus({ months: 1 }).startOf('month');
+                    } else if (!this.matchesDay(candidate, fields)) {
+                        candidate = candidate.plus({ days: 1 }).startOf('day');
+                    } else if (!fields.hour.values.has(candidate.hour)) {
+                        candidate = candidate.plus({ hours: 1 }).startOf('hour');
+                    } else if (!fields.minute.values.has(candidate.minute)) {
+                        candidate = candidate.plus({ minutes: 1 });
+                    } else {
+                        return candidate;
                     }
                 }
-
-                // Now do more precise checking to find the exact next occurrence
-                const maxIterations = 1000; // Limit iterations to prevent browser freeze
-                let iterationCount = 0;
-
-                while (iterationCount < maxIterations) {
-                    iterationCount++;
-
-                    // Check if current candidate matches all cron parts
-                    if (this.matchesCronPart(candidateDate.minute, minute) &&
-                        this.matchesCronPart(candidateDate.hour, hour) &&
-                        this.matchesCronPart(candidateDate.day, dayOfMonth, 'day') &&
-                        this.matchesCronPart(candidateDate.month, month) &&
-                        this.matchesCronPart(candidateDate.weekday % 7, dayOfWeek)) {
-                        // We found a match!
-                        return candidateDate;
-                    }
-
-                    // If no match, increment appropriately
-                    if (!this.matchesCronPart(candidateDate.minute, minute)) {
-                        // Minute doesn't match, try next minute
-                        candidateDate = candidateDate.plus({ minutes: 1 });
-                    } else if (!this.matchesCronPart(candidateDate.hour, hour)) {
-                        // Hour doesn't match, jump to next hour
-                        candidateDate = candidateDate.plus({ hours: 1 }).set({ minute: 0 });
-                    } else if (!this.matchesCronPart(candidateDate.day, dayOfMonth, 'day') ||
-                        !this.matchesCronPart(candidateDate.weekday % 7, dayOfWeek)) {
-                        // Day doesn't match, jump to next day
-                        candidateDate = candidateDate.plus({ days: 1 }).set({ hour: 0, minute: 0 });
-                    } else if (!this.matchesCronPart(candidateDate.month, month)) {
-                        // Month doesn't match, jump to next month
-                        candidateDate = candidateDate.plus({ months: 1 }).set({ day: 1, hour: 0, minute: 0 });
-                    }
-                }
-
-                // If we reach here, we hit the iteration limit
-                console.warn('Reached maximum iterations while calculating next run time');
                 return null;
             },
-            matchesCronPart(value, cronPart, type = '') {
-                // Handle '*' wildcard
-                if (cronPart === '*') return true;
+            // When both day fields are restricted cron runs on either match, not
+            // both — '0 0 15 * 1' means the 15th *or* any Monday.
+            matchesDay(date, fields) {
+                const dayOfMonth = fields.dayOfMonth;
+                const dayOfWeek = fields.dayOfWeek;
+                const weekday = date.weekday % 7;
 
-                // Handle 'L' for last day of month
-                if (cronPart === 'L' && type === 'day') {
-                    const DateTime = luxon.DateTime;
-                    const lastDay = DateTime.fromObject({
-                        year: value.year,
-                        month: value.month
-                    }).endOf('month').day;
-                    return value === lastDay;
-                }
+                const domMatch = dayOfMonth.star ||
+                    dayOfMonth.values.has(date.day) ||
+                    (dayOfMonth.last && date.day === date.daysInMonth);
+                const dowMatch = dayOfWeek.star ||
+                    dayOfWeek.values.has(weekday) ||
+                    dayOfWeek.nth.some(n => n.day === weekday && Math.ceil(date.day / 7) === n.nth);
 
-                // Handle */n format (every n units)
-                if (cronPart.startsWith('*/')) {
-                    const divisor = parseInt(cronPart.substring(2));
-                    return value % divisor === 0;
-                }
-
-                // Handle comma-separated values
-                if (cronPart.includes(',')) {
-                    return cronPart.split(',').map(n => parseInt(n)).includes(value);
-                }
-
-                // Handle ranges like 1-5
-                if (cronPart.includes('-')) {
-                    const [start, end] = cronPart.split('-').map(n => parseInt(n));
-                    return value >= start && value <= end;
-                }
-
-                // Handle simple number
-                return parseInt(cronPart) === value;
-            },
-            parseCronExpression(cronExpression) {
-                const parts = cronExpression.split(' ');
-                return {
-                    minute: this.expandCronPart(parts[0], 0, 59),
-                    hour: this.expandCronPart(parts[1], 0, 23),
-                    day: this.expandCronPart(parts[2], 1, 31),
-                    month: this.expandCronPart(parts[3], 1, 12),
-                    weekday: this.expandCronPart(parts[4], 0, 6)
-                };
-            },
-            expandCronPart(part, min, max) {
-                // Handle * (all values)
-                if (part === '*') {
-                    let result = [];
-                    for (let i = min; i <= max; i++) {
-                        result.push(i);
-                    }
-                    return result;
-                }
-
-                // Handle */n (every n)
-                if (part.startsWith('*/')) {
-                    const step = parseInt(part.substring(2));
-                    let result = [];
-                    for (let i = min; i <= max; i += step) {
-                        result.push(i);
-                    }
-                    return result;
-                }
-
-                // Handle ranges and comma-separated values
-                if (part.includes(',') || part.includes('-')) {
-                    let result = new Set();
-                    const segments = part.split(',');
-
-                    for (const segment of segments) {
-                        if (segment.includes('-')) {
-                            const [start, end] = segment.split('-').map(Number);
-                            for (let i = start; i <= end; i++) {
-                                result.add(i);
-                            }
-                        } else {
-                            result.add(parseInt(segment));
-                        }
-                    }
-
-                    return Array.from(result).sort((a, b) => a - b);
-                }
-
-                // Handle L (last day of month)
-                if (part === 'L' && min === 1 && max === 31) {
-                    return ['L'];
-                }
-
-                // Simple number
-                return [parseInt(part)];
+                if (dayOfMonth.star || dayOfWeek.star) return domMatch && dowMatch;
+                return domMatch || dowMatch;
             },
             copyToClipboard() {
                 navigator.clipboard.writeText(this.cronExpression).then(() => {
