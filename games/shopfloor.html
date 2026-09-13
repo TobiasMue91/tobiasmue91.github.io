@@ -257,7 +257,7 @@ function feedMachine(F,m,item){
 /* Hand an item from (x,y) to whatever is one step away in direction td. */
 function deliver(F,x,y,item,td){
   const d=DIRS[td], nx=x+d[0], ny=y+d[1];
-  if(nx>=W-1&&ny>=0&&ny<H){ F.ship[item]=(F.ship[item]||0)+1; F.shippedAll=(F.shippedAll||0)+1; return true }
+  if(nx>=W-1&&ny>=0&&ny<H){ F.ship[item]=(F.ship[item]||0)+1; return true }
   if(!inGrid(nx,ny)||nx<=0) return false;
   if(F.blocked.has(key(nx,ny))) return false;
   const m=machineAt(F,nx,ny);
@@ -282,9 +282,10 @@ function stepTransport(F,dt){
         it.p=Math.min(limit,it.p+BELT_SPEED*dt);
         if(i===0&&it.p>=1.0-1e-6){
           let gone=false;
-          for(const td of exitDirs(c,k)){
-            if(deliver(F,c.x,c.y,it.t,td)){
-              if(c.kind==='split') c.rr=(c.rr+exitDirs(c,k).indexOf(td)+1)%3;
+          const outs=exitDirs(c,k);
+          for(let e=0;e<outs.length;e++){
+            if(deliver(F,c.x,c.y,it.t,outs[e])){
+              if(c.kind==='split') c.rr=(c.rr+e+1)%3;   // start at the next one next time
               arr.shift(); i--; gone=true; break;
             }
           }
@@ -411,11 +412,6 @@ function unlockedBy(ix){
   return set;
 }
 function order(F){ return ORDERS[Math.min(F.orderIx,ORDERS.length-1)] }
-function progress(F){
-  const o=order(F); let got=0,need=0;
-  for(const k in o.reqs){ need+=o.reqs[k]; got+=Math.min(o.reqs[k],F.ship[k]||0) }
-  return need?got/need:0;
-}
 function orderFilled(F){
   const o=order(F);
   return Object.entries(o.reqs).every(([k,n])=>(F.ship[k]||0)>=n);
@@ -580,6 +576,11 @@ function title(){
     <p style="max-width:40em;color:var(--dim)"><b style="color:var(--ink)">Machines face one way.</b>
     Finished work leaves through the front — the face with the arrows on it. Every other side is an
     input. Point a machine at a wall and it will fill up and stop.</p>
+    <p style="max-width:40em;color:var(--dim)"><b style="color:var(--ink)">Set two machines flush and
+    they feed each other</b>, with no belt between them at all — a front face pressed against another
+    machine's side hands work straight over. Push one up against the dispatch bay and it ships without
+    a belt too. On a floor this size that is usually the difference between a layout that fits and one
+    that nearly fits.</p>
     <p style="max-width:40em;color:var(--dim)"><b style="color:var(--ink)">Belts do not sort.</b>
     A machine takes only what its recipe asks for. Put the wrong thing on a line and it parks at the
     door and stops everything behind it. Keeping lines pure is most of the game.</p>
@@ -710,6 +711,14 @@ function syncTools(){
   const el=document.getElementById('tools');
   if(el&&el.dataset.sig!==toolSig()) renderTools();
 }
+/* What is coming is worth knowing while you still have the floor open. The whole premise
+   is that the next order makes this layout wrong, and that is a better problem when you can
+   see it arriving than when it ambushes you. */
+function nextLine(F){
+  const n=ORDERS[F.orderIx+1];
+  if(!n) return 'Last order of the shift.';
+  return 'Next up: '+Object.entries(n.reqs).map(([k,q])=>q+' '+k+'s').join(' + ')+'.';
+}
 function renderOrder(){
   const el=document.getElementById('orderbox'); if(!el) return;
   if(F.done){
@@ -750,7 +759,8 @@ function renderOrder(){
       <div><span class="tag">order ${F.orderIx+1} of ${ORDERS.length}</span></div>
       <span class="sub">pays ¤${o.pay}${F.paused?' · <b style="color:var(--hi)">clock stopped</b>':''}</span>
     </div>${reqs}
-    <div class="sub" style="margin-top:7px">${o.note}</div>`;
+    <div class="sub" style="margin-top:7px">${o.note}</div>
+    <div class="sub" style="margin-top:5px;color:var(--faint)">${nextLine(F)}</div>`;
 }
 /* The status line names the one thing most worth fixing. A factory game that leaves you
    staring at a still machine with no idea why is not a puzzle, it is a guessing game. */
@@ -865,8 +875,11 @@ function bindBoard(){
 function hoverFor(x,y){
   if(!inGrid(x,y)) return null;
   if(tool==='del') return {x,y,size:1,ok:!!(cellAt(F,x,y)||machineAt(F,x,y))};
-  if(isPart(tool)) return {x,y,size:1,dir:tool==='cross'?null:dir,
-    ok:canBuildPart(F,x,y)&&F.cash>=PARTS[tool].cost};
+  if(isPart(tool)){
+    const old=cellAt(F,x,y);                       // replacing something only costs the difference
+    const price=PARTS[tool].cost-(old?PARTS[old.kind].cost:0);
+    return {x,y,size:1,dir:tool==='cross'?null:dir,ok:canBuildPart(F,x,y)&&F.cash>=price};
+  }
   return {x,y,size:2,dir,ok:canPlaceMachine(F,x,y)&&F.cash>=MACHINES[tool].cost};
 }
 
@@ -893,7 +906,7 @@ function loop(){
 }
 
 window.__sf={get F(){return F},set F(v){F=v},blankFloor,addPart,addMachine,removeAt,step,order,
-  ORDERS,advance,progress,orderFilled,MACHINES,PARTS,ITEMS,W,H,cellAt,machineAt,canPlaceMachine,
+  ORDERS,advance,orderFilled,MACHINES,PARTS,ITEMS,W,H,cellAt,machineAt,canPlaceMachine,
   frontCells,isFrontCell,DIRS,key,rebuildReach,reachOf,unlockedBy,isJammed,FEED_TOTAL,LANE_RATE,
   boot:s=>{F=blankFloor(s);play()}};
 title();
