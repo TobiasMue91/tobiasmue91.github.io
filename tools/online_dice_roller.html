@@ -251,6 +251,30 @@
             margin-top: 8px;
         }
 
+        .dice-visual.dropped {
+            background-color: transparent;
+            color: var(--text-light);
+            border: 1px dashed var(--border);
+            box-shadow: none;
+            text-decoration: line-through;
+        }
+
+        .result-area.has-error {
+            background-color: rgba(230, 91, 91, 0.12);
+        }
+        .result-area.has-error .dice-result {
+            color: #b23b3b;
+        }
+        .dark .result-area.has-error .dice-result {
+            color: #f0a0a0;
+        }
+
+        .controls-hint {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            margin-bottom: 12px;
+        }
+
         /* History */
         .history-container {
             border: 1px solid var(--border);
@@ -303,6 +327,7 @@
         .history-item-total {
             font-weight: 700;
             color: var(--primary);
+            padding-left: 8px;
         }
 
         /* Notation Input */
@@ -330,7 +355,7 @@
         <h1>🎲 Dice Roller</h1>
 
         <!-- Dice Notation Input -->
-        <input type="text" class="notation-input" id="dice-notation" placeholder="Enter dice notation (e.g., 2d6+3)" value="1d6">
+        <input type="text" class="notation-input" id="dice-notation" placeholder="Enter dice notation (e.g., 2d20kh1, 4d6kh3, 3d6+1d8-2)" value="1d6">
 
         <!-- Preset Buttons -->
         <div class="preset-container">
@@ -343,9 +368,14 @@
             <button class="preset-btn" data-notation="1d100">D100</button>
             <button class="preset-btn" data-notation="2d6">2D6</button>
             <button class="preset-btn" data-notation="4d6">4D6</button>
+            <button class="preset-btn" data-notation="2d20kh1">Adv</button>
+            <button class="preset-btn" data-notation="2d20kl1">Dis</button>
+            <button class="preset-btn" data-notation="4d6kh3">Stats</button>
         </div>
 
         <!-- Range Controls -->
+        <div class="controls-hint" id="controls-hint" hidden>The sliders below can't describe this expression — they'll replace it if you move them.</div>
+
         <div class="control-group">
             <div class="control-label">Number of dice <span class="control-value" id="dice-value">1</span></div>
             <input type="range" class="range-input" id="dice-count" min="1" max="20" value="1">
@@ -412,6 +442,10 @@
         const diceSum = document.querySelector('.dice-sum');
         const historyList = document.getElementById('history-list');
         const presetBtns = document.querySelectorAll('.preset-btn');
+        const controlsHint = document.getElementById('controls-hint');
+
+        const MAX_DICE = 1000;
+        const MAX_SIDES = 1000;
 
         // Dark/Light theme toggle
         themeToggle.addEventListener('click', function() {
@@ -436,14 +470,22 @@
 
         // Dice notation input
         diceNotation.addEventListener('input', function() {
-            parseDiceNotation(this.value);
+            const expr = parseExpression(this.value);
+            if (!expr.error) syncControlsToExpression(expr);
+        });
+
+        // Enter rolls, so the expression box is usable on its own.
+        diceNotation.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') rollDice();
         });
 
         // Preset buttons
         presetBtns.forEach(btn => {
             btn.addEventListener('click', function() {
                 diceNotation.value = this.dataset.notation;
-                parseDiceNotation(this.dataset.notation);
+                const expr = parseExpression(this.dataset.notation);
+                if (!expr.error) syncControlsToExpression(expr);
+                rollDice();
             });
         });
 
@@ -461,109 +503,221 @@
             const dice = diceCount.value;
             const sides = sidesCount.value;
             const operator = modifierType.value;
-            const modifier = modifierValue.value;
+            const modifier = parseInt(modifierValue.value) || 0;
 
             let notation = `${dice}d${sides}`;
-            if (parseInt(modifier) > 0) {
-                notation += `${operator}${modifier}`;
-            }
+            if (modifier > 0) notation += `${operator}${modifier}`;
 
             diceNotation.value = notation;
+            controlsHint.hidden = true;
         }
 
-        function parseDiceNotation(notation) {
-            if (!notation) return;
+        // Parses a dice expression into terms. The expression is the source of
+        // truth for a roll; the sliders only ever write into it.
+        //   term := [count]d(sides|%)[(kh|kl|dh|dl)[n]]  |  integer
+        //   terms are joined by + / -, with an optional trailing *n or /n
+        function parseExpression(notation) {
+            const text = String(notation || '').trim();
+            if (!text) return {error: 'Enter a dice expression, e.g. 2d6+3'};
 
-            const regex = /(\d+)d(\d+)(?:([+\-*/])(\d+))?/i;
-            const match = notation.match(regex);
+            const terms = [];
+            let scaleOp = null, scaleBy = null;
+            let i = 0, sign = 1, expectTerm = true;
 
-            if (match) {
-                const [, dice, sides, operator, value] = match;
+            const skipSpace = () => { while (i < text.length && /\s/.test(text[i])) i++; };
 
-                // Update UI controls
-                diceCount.value = Math.min(parseInt(dice), diceCount.max);
-                sidesCount.value = Math.min(parseInt(sides), sidesCount.max);
-                diceValue.textContent = diceCount.value;
-                sidesValue.textContent = sidesCount.value;
+            skipSpace();
+            if (text[i] === '+' || text[i] === '-') { sign = text[i] === '-' ? -1 : 1; i++; }
 
-                if (operator && value) {
-                    modifierType.value = operator;
-                    modifierValue.value = value;
-                } else {
-                    modifierType.value = '+';
-                    modifierValue.value = '0';
+            while (i < text.length) {
+                skipSpace();
+                if (!expectTerm) {
+                    const op = text[i];
+                    if (op === '+' || op === '-') { sign = op === '-' ? -1 : 1; i++; expectTerm = true; continue; }
+                    if (op === '*' || op === 'x' || op === 'X' || op === '/') {
+                        i++; skipSpace();
+                        const num = /^\d+/.exec(text.slice(i));
+                        if (!num) return {error: `Expected a number after "${op}"`};
+                        i += num[0].length;
+                        scaleOp = (op === '/') ? '/' : '*';
+                        scaleBy = parseInt(num[0], 10);
+                        if (scaleOp === '/' && scaleBy === 0) return {error: 'Cannot divide by zero'};
+                        skipSpace();
+                        if (i < text.length) return {error: `Unexpected "${text.slice(i).trim()}" after the multiplier`};
+                        break;
+                    }
+                    return {error: `Expected + or - before "${text.slice(i).trim()}"`};
                 }
+
+                const m = /^(\d*)d(\d+|%)(?:\s*(kh|kl|dh|dl)\s*(\d*))?/i.exec(text.slice(i));
+                if (m) {
+                    const count = m[1] === '' ? 1 : parseInt(m[1], 10);
+                    const sides = m[2] === '%' ? 100 : parseInt(m[2], 10);
+                    if (count < 1) return {error: 'Roll at least one die'};
+                    if (count > MAX_DICE) return {error: `That is ${count} dice — the limit is ${MAX_DICE}`};
+                    if (sides < 2) return {error: 'A die needs at least 2 sides'};
+                    if (sides > MAX_SIDES) return {error: `d${sides} is bigger than the d${MAX_SIDES} limit`};
+
+                    let keep = null;
+                    if (m[3]) {
+                        const mode = m[3].toLowerCase();
+                        const n = m[4] === '' ? 1 : parseInt(m[4], 10);
+                        if (n < 1) return {error: `${mode}${m[4]} needs a count of at least 1`};
+                        // Keeping more dice than were rolled is harmless — keep them all
+                        // rather than refuse a roll over a typo.
+                        if (n >= count && (mode === 'kh' || mode === 'kl')) {
+                            keep = null;
+                            terms.push({kind: 'dice', sign, count, sides, keep});
+                            i += m[0].length;
+                            expectTerm = false;
+                            continue;
+                        }
+                        if (n >= count) {
+                            return {error: `${mode}${n} drops all ${count} dice`};
+                        }
+                        keep = {mode, n};
+                    }
+                    terms.push({kind: 'dice', sign, count, sides, keep});
+                    i += m[0].length;
+                } else {
+                    const num = /^\d+/.exec(text.slice(i));
+                    if (!num) {
+                        const bad = text.slice(i).split(/[\s+\-*/]/)[0] || text.slice(i);
+                        return {error: `Cannot read "${bad}"`};
+                    }
+                    terms.push({kind: 'flat', sign, value: parseInt(num[0], 10)});
+                    i += num[0].length;
+                }
+                expectTerm = false;
             }
+
+            if (expectTerm) return {error: 'The expression ends with an operator'};
+            if (!terms.some(t => t.kind === 'dice')) return {error: 'No dice in that expression'};
+            const totalDice = terms.reduce((n, t) => n + (t.kind === 'dice' ? t.count : 0), 0);
+            if (totalDice > MAX_DICE) return {error: `That is ${totalDice} dice — the limit is ${MAX_DICE}`};
+
+            return {terms, scaleOp, scaleBy};
+        }
+
+        // Canonical text for a parsed expression, so history records what was rolled.
+        function formatExpression(expr) {
+            let out = expr.terms.map((t, idx) => {
+                const op = idx === 0 ? (t.sign < 0 ? '-' : '') : (t.sign < 0 ? ' - ' : ' + ');
+                const body = t.kind === 'dice'
+                    ? `${t.count}d${t.sides}${t.keep ? t.keep.mode + t.keep.n : ''}`
+                    : `${t.value}`;
+                return op + body;
+            }).join('');
+            if (expr.scaleOp) out += ` ${expr.scaleOp === '*' ? '×' : '÷'} ${expr.scaleBy}`;
+            return out;
+        }
+
+        // Rolls a parsed expression. Returns the dice actually rolled, which of
+        // them counted, and the total.
+        function evaluateExpression(expr) {
+            const dice = [];
+            let total = 0;
+
+            expr.terms.forEach(term => {
+                if (term.kind === 'flat') { total += term.sign * term.value; return; }
+
+                const values = [];
+                for (let n = 0; n < term.count; n++) {
+                    values.push(Math.floor(Math.random() * term.sides) + 1);
+                }
+
+                let kept = values.map((_, idx) => idx);
+                if (term.keep) {
+                    const order = kept.slice().sort((a, b) => values[a] - values[b]);
+                    const {mode, n} = term.keep;
+                    if (mode === 'kh') kept = order.slice(-n);
+                    else if (mode === 'kl') kept = order.slice(0, n);
+                    else if (mode === 'dl') kept = order.slice(n);
+                    else if (mode === 'dh') kept = order.slice(0, order.length - n);
+                }
+                const keptSet = new Set(kept);
+
+                values.forEach((value, idx) => {
+                    const counted = keptSet.has(idx);
+                    dice.push({value, sides: term.sides, sign: term.sign, counted});
+                    if (counted) total += term.sign * value;
+                });
+            });
+
+            if (expr.scaleOp === '*') total *= expr.scaleBy;
+            else if (expr.scaleOp === '/') total = Math.floor(total / expr.scaleBy);
+
+            return {dice, total};
+        }
+
+        // Keeps the sliders in step with the expression when it is simple enough
+        // for them to represent. They are a shortcut, never the source of truth.
+        function syncControlsToExpression(expr) {
+            const simple = expr.terms.length <= 2
+                && expr.terms[0].kind === 'dice'
+                && expr.terms[0].sign > 0
+                && !expr.terms[0].keep
+                && (expr.terms.length === 1 || expr.terms[1].kind === 'flat')
+                && !expr.scaleOp;
+
+            controlsHint.hidden = simple;
+            if (!simple) return;
+
+            const die = expr.terms[0];
+            if (die.count <= parseInt(diceCount.max, 10)) {
+                diceCount.value = die.count;
+                diceValue.textContent = die.count;
+            }
+            if (die.sides <= parseInt(sidesCount.max, 10)) {
+                sidesCount.value = die.sides;
+                sidesValue.textContent = die.sides;
+            }
+            const flat = expr.terms[1];
+            modifierType.value = flat ? (flat.sign < 0 ? '-' : '+') : '+';
+            modifierValue.value = flat ? flat.value : 0;
+        }
+
+        function showError(message) {
+            resultArea.classList.add('has-error');
+            diceResult.textContent = message;
+            diceVisuals.innerHTML = '';
+            diceSum.textContent = '';
         }
 
         function rollDice() {
-            const dice = parseInt(diceCount.value);
-            const sides = parseInt(sidesCount.value);
-            const operator = modifierType.value;
-            const modifier = parseInt(modifierValue.value) || 0;
+            const expr = parseExpression(diceNotation.value);
 
-            // Generate dice rolls
-            let rolls = [];
-            let total = 0;
+            if (expr.error) { showError(expr.error); return; }
 
-            for (let i = 0; i < dice; i++) {
-                const roll = Math.floor(Math.random() * sides) + 1;
-                rolls.push(roll);
-                total += roll;
-            }
+            const canonical = formatExpression(expr);
+            const {dice, total} = evaluateExpression(expr);
 
-            // Apply modifier
-            let modifiedTotal = total;
-            let modifierText = '';
+            resultArea.classList.remove('has-error');
+            diceResult.textContent = canonical;
 
-            if (modifier > 0) {
-                switch(operator) {
-                    case '+':
-                        modifiedTotal = total + modifier;
-                        modifierText = ` + ${modifier}`;
-                        break;
-                    case '-':
-                        modifiedTotal = total - modifier;
-                        modifierText = ` - ${modifier}`;
-                        break;
-                    case '*':
-                        modifiedTotal = total * modifier;
-                        modifierText = ` × ${modifier}`;
-                        break;
-                    case '/':
-                        modifiedTotal = Math.floor(total / modifier);
-                        modifierText = ` ÷ ${modifier}`;
-                        break;
-                }
-            }
-
-            // Update result display
-            diceResult.innerHTML = `[${rolls.join(', ')}]${modifierText}`;
-            diceSum.textContent = `Total: ${modifiedTotal}`;
-
-            // Create visual dice
             diceVisuals.innerHTML = '';
-            rolls.forEach(roll => {
-                const die = document.createElement('div');
-                die.className = 'dice-visual';
-                die.textContent = roll;
-                diceVisuals.appendChild(die);
+            dice.forEach(die => {
+                const el = document.createElement('div');
+                el.className = 'dice-visual' + (die.counted ? '' : ' dropped');
+                el.textContent = die.value;
+                el.title = `d${die.sides}` + (die.counted ? '' : ' — dropped');
+                diceVisuals.appendChild(el);
             });
 
-            // Add to history
-            const now = new Date();
-            const time = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            diceSum.textContent = `Total: ${total}`;
 
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
             const historyItem = document.createElement('div');
             historyItem.className = 'history-item';
-            historyItem.innerHTML = `
-      <div>
-        <span class="history-item-time">${time}</span>
-        <span>${dice}d${sides}${modifierText}</span>
-      </div>
-      <div class="history-item-total">${modifiedTotal}</div>
-    `;
-
+            historyItem.title = dice.map(d => d.counted ? d.value : `(${d.value})`).join(', ');
+            const label = document.createElement('div');
+            label.innerHTML = `<span class="history-item-time"></span><span class="history-item-expr"></span>`;
+            label.querySelector('.history-item-time').textContent = time;
+            label.querySelector('.history-item-expr').textContent = canonical;
+            const sum = document.createElement('div');
+            sum.className = 'history-item-total';
+            sum.textContent = total;
+            historyItem.append(label, sum);
             historyList.prepend(historyItem);
         }
 
@@ -576,6 +730,8 @@
             modifierValue.value = '0';
             diceNotation.value = '1d6';
 
+            controlsHint.hidden = true;
+            resultArea.classList.remove('has-error');
             diceResult.textContent = 'Roll the dice to see results';
             diceVisuals.innerHTML = '';
             diceSum.textContent = '';
