@@ -382,11 +382,12 @@
                     headers.push(`Column ${i + 1}`);
                 }
             }
+            headers = makeHeadersUnique(headers);
             tableData = [];
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
                 const cells = row.querySelectorAll('td,th');
-                const rowData = {};
+                const rowData = Object.create(null);
                 for (let j = 0; j < maxCols; j++) {
                     const header = headers[j];
                     rowData[header] = j < cells.length ? cells[j].textContent.trim() : '';
@@ -407,16 +408,17 @@
                 showMessage('Not enough data to create a table.', 'error');
                 return;
             }
-            const sampleLines = lines.slice(0, Math.min(5, lines.length));
+            const records = joinQuotedRecords(lines);
+            const sampleLines = records.slice(0, Math.min(5, records.length));
             let delimiter = detectDelimiter(sampleLines);
             let maxCols = 0;
-            lines.forEach(function (line) {
-                const values = splitByDelimiter(line, delimiter);
+            records.forEach(function (record) {
+                const values = splitByDelimiter(record, delimiter);
                 maxCols = Math.max(maxCols, values.length);
             });
             headers = [];
-            if (lines.length > 0) {
-                const headerValues = splitByDelimiter(lines[0], delimiter);
+            if (records.length > 0) {
+                const headerValues = splitByDelimiter(records[0], delimiter);
                 for (let i = 0; i < maxCols; i++) {
                     if (i < headerValues.length) {
                         const text = headerValues[i].trim();
@@ -425,11 +427,12 @@
                         headers.push(`Column ${i + 1}`);
                     }
                 }
+                headers = makeHeadersUnique(headers);
             }
             tableData = [];
-            for (let i = 1; i < lines.length; i++) {
-                const values = splitByDelimiter(lines[i], delimiter);
-                const rowData = {};
+            for (let i = 1; i < records.length; i++) {
+                const values = splitByDelimiter(records[i], delimiter);
+                const rowData = Object.create(null);
                 for (let j = 0; j < maxCols; j++) {
                     const header = headers[j];
                     rowData[header] = j < values.length ? values[j].trim() : '';
@@ -444,7 +447,9 @@
 
     function detectDelimiter(lines) {
         const delimiterCounts = {tab: 0, pipe: 0, comma: 0, semicolon: 0};
-        lines.forEach(function (line) {
+        lines.forEach(function (record) {
+            // Delimiters inside a quoted cell are content, not structure.
+            const line = record.replace(/"(?:[^"]|"")*"/g, '');
             delimiterCounts.tab += (line.match(/\t/g) || []).length;
             delimiterCounts.pipe += (line.match(/\|/g) || []).length;
             delimiterCounts.comma += (line.match(/,/g) || []).length;
@@ -482,19 +487,112 @@
     }
 
     function splitByDelimiter(text, delimiter) {
-        if (typeof delimiter === 'string') {
-            if (delimiter === '|') {
-                text = text.replace(/^\s*\|\s*|\s*\|\s*$/g, '');
-            }
-            return text.split(delimiter);
-        } else {
+        if (typeof delimiter !== 'string') {
             return text.split(delimiter);
         }
+        if (delimiter === '|') {
+            text = text.replace(/^\s*\|\s*|\s*\|\s*$/g, '');
+        }
+        const values = [];
+        let value = '';
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (inQuotes) {
+                if (char !== '"') {
+                    value += char;
+                } else if (text[i + 1] === '"') {
+                    value += '"';
+                    i++;
+                } else {
+                    inQuotes = false;
+                }
+            } else if (char === '"' && !value.trim()) {
+                // A quote only opens a field at its start, so 5" pipe keeps its mark.
+                inQuotes = true;
+                value = '';
+            } else if (char === delimiter) {
+                values.push(value);
+                value = '';
+            } else {
+                value += char;
+            }
+        }
+        values.push(value);
+        return values;
     }
+
+    // A quoted cell may span several lines; those belong to one record.
+    const OPENS_QUOTED_FIELD = /(^|[,;\t|])"(?:[^"]|"")*$/;
+
+    function joinQuotedRecords(lines) {
+        const records = [];
+        let pending = null;
+        lines.forEach(function (line) {
+            pending = pending === null ? line : pending + '\n' + line;
+            if (!OPENS_QUOTED_FIELD.test(pending)) {
+                records.push(pending);
+                pending = null;
+            }
+        });
+        if (pending !== null) {
+            records.push(pending);
+        }
+        return records;
+    }
+
+    // Rows are keyed by header, so repeated names would overwrite each other.
+    function makeHeadersUnique(names) {
+        const seen = Object.create(null);
+        return names.map(function (name) {
+            if (!seen[name]) {
+                seen[name] = 1;
+                return name;
+            }
+            let candidate;
+            do {
+                candidate = `${name} (${++seen[name]})`;
+            } while (seen[candidate]);
+            seen[candidate] = 1;
+            return candidate;
+        });
+    }
+
+    // A plain-text paste lands in the contenteditable as one block element per
+    // line, so textContent alone would run every line together into one.
+    const BLOCK_TAGS = new Set(['ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DIV', 'DL', 'DT', 'FIELDSET', 'FIGCAPTION', 'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'HR', 'LI', 'MAIN', 'NAV', 'OL', 'P', 'PRE', 'SECTION', 'TABLE', 'TBODY', 'TFOOT', 'THEAD', 'TR', 'UL']);
 
     function stripHtml(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        return doc.body.textContent || '';
+        let text = '';
+
+        function appendBreak() {
+            if (text && !text.endsWith('\n')) {
+                text += '\n';
+            }
+        }
+
+        (function walk(node) {
+            node.childNodes.forEach(function (child) {
+                if (child.nodeType === 3) {
+                    text += child.nodeValue;
+                    return;
+                }
+                if (child.nodeType !== 1) {
+                    return;
+                }
+                if (child.tagName === 'BR') {
+                    text += '\n';
+                    return;
+                }
+                const isBlock = BLOCK_TAGS.has(child.tagName);
+                if (isBlock) appendBreak();
+                walk(child);
+                if (isBlock) appendBreak();
+            });
+        })(doc.body);
+
+        return text.replace(/\r\n?/g, '\n');
     }
 
     function normalizeTableData() {
@@ -589,7 +687,7 @@
         let tsv = headers.join('\t') + '\n';
         tableData.forEach(function (row) {
             const rowValues = headers.map(function (header) {
-                return (row[header] || '').replace(/\t/g, ' ');
+                return (row[header] || '').replace(/[\t\n]/g, ' ');
             });
             tsv += rowValues.join('\t') + '\n';
         });
@@ -630,7 +728,7 @@
         }).join(' | ') + ' |\n';
         tableData.forEach(function (row) {
             const rowValues = headers.map(function (header) {
-                return (row[header] || '').replace(/\|/g, '\\|');
+                return (row[header] || '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
             });
             markdown += '| ' + rowValues.join(' | ') + ' |\n';
         });
