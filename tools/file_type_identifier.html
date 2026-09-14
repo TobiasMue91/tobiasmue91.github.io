@@ -31,6 +31,10 @@
 		.btn {display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary); color: white; border: none; border-radius: var(--radius); padding: 0.5rem 1rem; cursor: pointer; font-size: 0.9rem; font-weight: 500; transition: all var(--trans);}
 		.btn:hover {background: var(--primary-light);}
 		.btn-sm {padding: 0.25rem 0.75rem; font-size: 0.8rem;}
+		.verdict {grid-column: 1 / -1; padding: 0.75rem 1rem; border-radius: var(--radius); font-weight: 500; border-left: 4px solid;}
+		.verdict.match {background: rgba(56, 176, 0, 0.1); border-color: var(--success);}
+		.verdict.mismatch {background: rgba(230, 57, 70, 0.12); border-color: var(--error);}
+		.verdict.info {background: rgba(67, 97, 238, 0.08); border-color: var(--primary);}
 		.results {display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;}
 		.info-card {background: var(--light); border-radius: var(--radius); padding: 1rem; border: 1px solid var(--light-dark); transition: all var(--trans);}
 		.info-card h3 {font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--dark-light); margin-bottom: 0.25rem; font-weight: 500;}
@@ -203,25 +207,238 @@
 
 			try {
 				const buffer = await readFileAsBuffer(file);
-				const fileType = await fileTypeFromBuffer(buffer);
+				const id = await identify(buffer, file.size);
 
-				if (fileType) {
-					fileData = {
-						name: file.name,
-						type: fileType.mime,
-						ext: fileType.ext,
-						size: formatFileSize(file.size),
-						lastModified: new Date(file.lastModified).toLocaleString()
-					};
+				fileData = {
+					name: file.name,
+					type: id.mime,
+					ext: id.ext,
+					desc: id.desc,
+					extra: id.extra || [],
+					verdict: verdictFor(file.name, id),
+					size: formatFileSize(file.size),
+					lastModified: new Date(file.lastModified).toLocaleString()
+				};
 
-					showResults();
-					addToHistory(fileData);
-				} else {
-					showError('Unable to identify this file type.');
-				}
+				showResults();
+				addToHistory(fileData);
 			} catch (err) {
 				showError(`Error processing file: ${err.message}`);
 			}
+		}
+
+		// Short human names for the binary types file-type reports.
+		const BINARY_NAMES = {
+			png: 'PNG image', jpg: 'JPEG image', gif: 'GIF image', webp: 'WebP image',
+			avif: 'AVIF image', tif: 'TIFF image', bmp: 'BMP image', ico: 'Windows icon',
+			pdf: 'PDF document', zip: 'ZIP archive', gz: 'gzip archive', '7z': '7-Zip archive',
+			rar: 'RAR archive', tar: 'tar archive', mp3: 'MP3 audio', wav: 'WAV audio',
+			flac: 'FLAC audio', ogg: 'Ogg media', mp4: 'MP4 video', webm: 'WebM video',
+			mov: 'QuickTime video', woff: 'WOFF font', woff2: 'WOFF2 font', ttf: 'TrueType font',
+			otf: 'OpenType font', sqlite: 'SQLite database', wasm: 'WebAssembly module',
+			exe: 'Windows executable', elf: 'ELF binary', vcf: 'vCard contact', ics: 'iCalendar'
+		};
+
+		async function identify(buffer, size) {
+			if (size === 0) {
+				return {desc: 'Empty file', mime: 'inode/x-empty', ext: '—', sure: false};
+			}
+
+			const sample = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, SAMPLE_BYTES));
+			const truncated = buffer.byteLength > SAMPLE_BYTES;
+			const binary = await fileTypeFromBuffer(buffer);
+
+			// A binary signature is the strongest evidence there is — except for the
+			// generic application/xml, where the markup itself says more.
+			if (binary && binary.mime !== 'application/xml') {
+				return {
+					desc: BINARY_NAMES[binary.ext] || binary.ext.toUpperCase(),
+					mime: binary.mime, ext: binary.ext, sure: true
+				};
+			}
+
+			const decoded = decodeText(sample);
+			if (!decoded) {
+				if (binary) return {desc: 'XML', mime: binary.mime, ext: binary.ext, sure: true};
+				const hex = Array.from(sample.subarray(0, 16))
+					.map(b => b.toString(16).padStart(2, '0')).join(' ');
+				return {
+					desc: 'Unrecognised binary data', mime: 'application/octet-stream', ext: '—', sure: false,
+					extra: [{label: 'First bytes', value: hex}]
+				};
+			}
+
+			const {text, encoding} = decoded;
+			const hit = sniffText(text);
+			const crlf = (text.match(/\r\n/g) || []).length;
+			const lf = (text.match(/\n/g) || []).length - crlf;
+			const extra = [
+				{label: 'Encoding', value: encoding},
+				{label: truncated ? 'Lines (first 8 MB)' : 'Lines', value: String(text.split(/\r?\n/).length)}
+			];
+			if (crlf || lf) {
+				extra.push({label: 'Line endings', value: crlf && lf ? 'Mixed CRLF/LF' : crlf ? 'CRLF (Windows)' : 'LF (Unix)'});
+			}
+
+			if (hit) return {...hit, extra};
+			if (binary) return {desc: 'XML', mime: binary.mime, ext: binary.ext, sure: true, extra};
+			return {desc: 'Plain text', mime: 'text/plain', ext: 'txt', sure: false, extra};
+		}
+
+		// Extensions that mean the same thing, so a .jpeg holding a JPEG is a match.
+		const EXT_ALIASES = [['jpg', 'jpeg', 'jpe'], ['tif', 'tiff'], ['html', 'htm', 'xhtml'],
+			['yaml', 'yml'], ['sh', 'bash', 'zsh', 'py', 'rb', 'pl', 'js', 'mjs', 'command'],
+			['txt', 'text', 'log', 'md', 'markdown'], ['xml', 'rss', 'atom', 'svg', 'plist'],
+			['env', 'ini', 'cfg', 'conf', 'properties'], ['mp3', 'mpga'], ['sqlite', 'sqlite3', 'db']];
+
+		function extMatches(actual, claimed) {
+			if (!claimed) return false;
+			if (actual === claimed) return true;
+			return EXT_ALIASES.some(g => g.includes(actual) && g.includes(claimed));
+		}
+
+		// The question the tool exists to answer: does the name match the bytes?
+		function verdictFor(name, id) {
+			const claimed = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+			if (!claimed) return {kind: 'info', text: `No extension on the filename — content reads as ${id.desc}.`};
+			if (extMatches(id.ext, claimed)) return {kind: 'match', text: `Content matches the .${claimed} extension — ${id.desc}.`};
+			if (id.sure) return {kind: 'mismatch', text: `Extension says .${claimed}, but the content is ${id.desc}.`};
+			if (id.ext === '—') return {kind: 'info', text: `${id.desc}. Nothing in the content to check the .${claimed} extension against.`};
+			return {kind: 'info', text: `Identified from content as ${id.desc}. The .${claimed} extension can't confirm it.`};
+		}
+
+		// ---- Text identification -------------------------------------------------
+		// file-type only knows binary magic numbers, so every text format lands here.
+		// Everything below judges content, never the filename.
+
+		const SAMPLE_BYTES = 8 * 1024 * 1024;
+
+		function readBOM(u8) {
+			if (u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) return {enc: 'UTF-8 (BOM)', label: 'utf-8', skip: 3};
+			if (u8[0] === 0xFF && u8[1] === 0xFE) return {enc: 'UTF-16 LE (BOM)', label: 'utf-16le', skip: 2};
+			if (u8[0] === 0xFE && u8[1] === 0xFF) return {enc: 'UTF-16 BE (BOM)', label: 'utf-16be', skip: 2};
+			return null;
+		}
+
+		// Returns the decoded text, or null if the bytes are not plausibly text.
+		function decodeText(u8) {
+			const bom = readBOM(u8);
+			let text, encoding;
+			try {
+				if (bom) {
+					text = new TextDecoder(bom.label, {fatal: true}).decode(u8.subarray(bom.skip));
+					encoding = bom.enc;
+				} else {
+					text = new TextDecoder('utf-8', {fatal: true}).decode(u8);
+					encoding = /[^\x00-\x7F]/.test(text) ? 'UTF-8' : 'ASCII';
+				}
+			} catch {
+				// Not UTF-8. Legacy single-byte text is still text, so try
+				// Windows-1252 before giving up and calling it binary.
+				try {
+					text = new TextDecoder('windows-1252').decode(u8);
+					encoding = 'Windows-1252 / Latin-1 (assumed)';
+				} catch {
+					return null;
+				}
+			}
+			// Control characters other than tab/newline/return mean binary.
+			const control = (text.match(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g) || []).length;
+			if (control / Math.max(text.length, 1) > 0.01) return null;
+			return {text, encoding};
+		}
+
+		// Split on newlines that fall outside double quotes, so a quoted field
+		// containing a line break doesn't look like a ragged table.
+		function splitLinesRespectingQuotes(text) {
+			const out = [];
+			let start = 0, quoted = false;
+			for (let i = 0; i < text.length; i++) {
+				const c = text[i];
+				if (c === '"') quoted = !quoted;
+				else if (c === '\n' && !quoted) {
+					out.push(text.slice(start, text[i - 1] === '\r' ? i - 1 : i));
+					start = i + 1;
+				}
+			}
+			if (start < text.length) out.push(text.slice(start));
+			return out.filter(l => l.trim());
+		}
+
+		function delimiterFit(lines, delim) {
+			// Split on the delimiter, honouring double quotes, and require every line
+			// to yield the same field count (> 1).
+			const counts = lines.map(line => {
+				let fields = 1, quoted = false;
+				for (let i = 0; i < line.length; i++) {
+					const c = line[i];
+					if (c === '"') quoted = !quoted;
+					else if (c === delim && !quoted) fields++;
+				}
+				return fields;
+			});
+			return counts[0] > 1 && counts.every(c => c === counts[0]) ? counts[0] : 0;
+		}
+
+		// Structural sniffers, most specific first. `sure` marks a signature strong
+		// enough that a disagreeing extension is worth calling out.
+		function sniffText(text) {
+			const head = text.slice(0, 4096);
+			const trimmed = head.replace(/^\s+/, '');
+			const lines = text.split(/\r?\n/).filter(l => l.trim());
+
+			if (/^#!/.test(text)) {
+				const interp = (text.slice(0, 200).match(/^#!\s*\S*?([\w.-]+)(?:\s|$)/) || [])[1] || '';
+				const known = {python: 'Python', python3: 'Python', node: 'JavaScript', bash: 'Bash',
+					sh: 'Shell', zsh: 'Zsh', perl: 'Perl', ruby: 'Ruby', env: ''};
+				const lang = known[interp] !== undefined ? known[interp] : interp;
+				const viaEnv = interp === 'env' ? (text.slice(0, 200).match(/env\s+([\w.-]+)/) || [])[1] : null;
+				const name = viaEnv ? (known[viaEnv] || viaEnv) : lang;
+				return {desc: (name ? name + ' ' : '') + 'script (shebang)', mime: 'text/x-script', ext: 'sh', sure: true};
+			}
+			if (/^[{[]/.test(trimmed)) {
+				try {
+					JSON.parse(text);
+					return {desc: 'JSON', mime: 'application/json', ext: 'json', sure: true};
+				} catch { /* not valid JSON, keep looking */ }
+			}
+			if (/^<\?xml|^</.test(trimmed)) {
+				if (/<svg[\s>]/i.test(head)) return {desc: 'SVG image', mime: 'image/svg+xml', ext: 'svg', sure: true};
+				if (/^<!doctype\s+html|<html[\s>]/i.test(trimmed)) return {desc: 'HTML document', mime: 'text/html', ext: 'html', sure: true};
+				if (/<rss[\s>]/i.test(head)) return {desc: 'RSS feed (XML)', mime: 'application/rss+xml', ext: 'xml', sure: true};
+				if (/<feed[\s>]/i.test(head)) return {desc: 'Atom feed (XML)', mime: 'application/atom+xml', ext: 'xml', sure: true};
+				if (/^<\?xml/.test(trimmed)) return {desc: 'XML', mime: 'application/xml', ext: 'xml', sure: true};
+			}
+			if (/^<!doctype\s+html|^<html[\s>]/i.test(trimmed)) return {desc: 'HTML document', mime: 'text/html', ext: 'html', sure: true};
+			if (/^diff --git |^Index: |^--- .*\n\+\+\+ /m.test(head)) return {desc: 'Unified diff / patch', mime: 'text/x-diff', ext: 'diff', sure: true};
+			if (/^\d+\s*\r?\n\d{2}:\d{2}:\d{2},\d{3}\s*-->/.test(text)) return {desc: 'SubRip subtitles', mime: 'application/x-subrip', ext: 'srt', sure: true};
+			if (/^WEBVTT/.test(trimmed)) return {desc: 'WebVTT subtitles', mime: 'text/vtt', ext: 'vtt', sure: true};
+			if (/^%YAML|^---\s*$/m.test(head.split('\n')[0] + '\n')) return {desc: 'YAML', mime: 'application/yaml', ext: 'yaml', sure: true};
+			if (/^\s*(CREATE|ALTER|DROP|INSERT INTO|SELECT)\s+/i.test(trimmed)) return {desc: 'SQL', mime: 'application/sql', ext: 'sql', sure: false};
+
+			const rows = splitLinesRespectingQuotes(text);
+			if (rows.length >= 2) {
+				const tsv = delimiterFit(rows, '\t');
+				if (tsv) return {desc: `Tab-separated values (${tsv} columns)`, mime: 'text/tab-separated-values', ext: 'tsv', sure: false};
+				const csv = delimiterFit(rows, ',');
+				if (csv) return {desc: `CSV, comma-separated (${csv} columns)`, mime: 'text/csv', ext: 'csv', sure: false};
+				const scsv = delimiterFit(rows, ';');
+				if (scsv) return {desc: `CSV, semicolon-separated (${scsv} columns)`, mime: 'text/csv', ext: 'csv', sure: false};
+			}
+			// Config: every meaningful line is KEY=value.
+			const body = lines.filter(l => !/^\s*[#;]/.test(l));
+			if (body.length && body.every(l => /^\s*\[.+\]\s*$/.test(l) || /^\s*[A-Za-z_][\w.-]*\s*=/.test(l))) {
+				return {desc: 'Key=value config (.env / INI style)', mime: 'text/plain', ext: 'env', sure: false};
+			}
+			// YAML without a document marker: keys, list items and comments only.
+			if (body.length >= 2 && /:/.test(head) &&
+				body.every(l => /^\s*-\s|^\s*[\w.$/-]+\s*:(\s|$)/.test(l)) && body.some(l => /:(\s|$)/.test(l))) {
+				return {desc: 'YAML', mime: 'application/yaml', ext: 'yaml', sure: false};
+			}
+			if (/^#{1,6}\s+\S/m.test(head) || /^\s*[-*]\s+\S/m.test(head) && /^#{1,6}\s|\[.+\]\(.+\)/m.test(head)) {
+				return {desc: 'Markdown', mime: 'text/markdown', ext: 'md', sure: false};
+			}
+			return null;
 		}
 
 		function readFileAsBuffer(file) {
@@ -244,28 +461,23 @@
 			loader.style.display = 'none';
 			resultContent.style.display = 'block';
 
-			results.innerHTML = `
+			const cards = [
+				{label: 'File Name', value: fileData.name},
+				{label: 'Identified As', value: fileData.desc || fileData.type},
+				{label: 'MIME Type', value: fileData.type},
+				{label: 'Extension', value: fileData.ext},
+				{label: 'Size', value: fileData.size},
+				{label: 'Last Modified', value: fileData.lastModified},
+				...(fileData.extra || [])
+			];
+
+			const v = fileData.verdict;
+			results.innerHTML = (v ? `<div class="verdict ${v.kind}">${escapeHTML(v.text)}</div>` : '') +
+				cards.map(c => `
       <div class="info-card">
-        <h3>File Name</h3>
-        <p>${escapeHTML(fileData.name)}</p>
-      </div>
-      <div class="info-card">
-        <h3>MIME Type</h3>
-        <p>${escapeHTML(fileData.type)}</p>
-      </div>
-      <div class="info-card">
-        <h3>Extension</h3>
-        <p>${escapeHTML(fileData.ext)}</p>
-      </div>
-      <div class="info-card">
-        <h3>Size</h3>
-        <p>${fileData.size}</p>
-      </div>
-      <div class="info-card">
-        <h3>Last Modified</h3>
-        <p>${fileData.lastModified}</p>
-      </div>
-    `;
+        <h3>${escapeHTML(c.label)}</h3>
+        <p>${escapeHTML(c.value)}</p>
+      </div>`).join('');
 		}
 
 		function showError(message) {
@@ -339,13 +551,16 @@
 		function copyToClipboard() {
 			if (!fileData) return;
 
-			const text = `
-File Name: ${fileData.name}
-MIME Type: ${fileData.type}
-Extension: ${fileData.ext}
-Size: ${fileData.size}
-Last Modified: ${fileData.lastModified}
-    `.trim();
+			const text = [
+				fileData.verdict ? fileData.verdict.text : '',
+				`File Name: ${fileData.name}`,
+				`Identified As: ${fileData.desc || fileData.type}`,
+				`MIME Type: ${fileData.type}`,
+				`Extension: ${fileData.ext}`,
+				`Size: ${fileData.size}`,
+				`Last Modified: ${fileData.lastModified}`,
+				...(fileData.extra || []).map(c => `${c.label}: ${c.value}`)
+			].filter(Boolean).join('\n');
 
 			navigator.clipboard.writeText(text)
 					.then(() => showToast('Copied to clipboard!'))
