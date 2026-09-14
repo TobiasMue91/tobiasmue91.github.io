@@ -456,7 +456,7 @@
     let rng, seedStr;
     let panX = 0, aimX = 0, aimY = 0;          // aim is in VIEW coordinates
     let frame, timeLeft, score, ammo, reloadT, cooldown, shots, hits, reloads;
-    let birds, props, puffs, pops, feathers, hills;
+    let birds, props, puffs, pops, feathers;
     let recoil, flash, shakeT, lastTickSec, msg, msgT;
     let spawnAcc, schedule, spawnIndex, giantFrames;
 
@@ -513,19 +513,10 @@
         aimX = VW / 2;
         aimY = VH * 0.55;
 
-        /* rolling hills, seeded so a moor is reproducible */
-        hills = [];
-        for (let layer = 0; layer < 2; layer++) {
-            const pts = [];
-            const step = 90;
-            for (let x = -step; x <= WORLD_W + step; x += step) {
-                pts.push({x: x, y: HORIZON - 14 - layer * 20 - rng() * (26 + layer * 18)});
-            }
-            hills.push(pts);
-        }
+        buildScenery();
 
         /* a first wave so the moor is never empty at the whistle */
-        for (let i = 0; i < 11; i++) spawnBird(true);
+        for (let i = 0; i < 16; i++) spawnBird(true);
 
         document.getElementById('startScreen').classList.add('hidden');
         document.getElementById('overScreen').classList.add('hidden');
@@ -752,7 +743,7 @@
             spawnAcc -= 30;
             /* Density is the difficulty dial. Too many birds and the moor
                rewards hosing the trigger instead of picking a target. */
-            if (birds.filter(b => !b.dead).length < 17) spawnBird(false);
+            if (birds.filter(b => !b.dead).length < 23) spawnBird(false);
         }
         if (giantFrames.length && frame >= giantFrames[0]) {
             giantFrames.shift();
@@ -934,22 +925,238 @@
     });
 
     /* ---- drawing ---------------------------------------------------------- */
+    /* The moor is painted once into three parallax strips at startup and blitted
+       each frame. Pre-rendering buys detail that would be far too expensive to
+       redraw sixty times a second, and it is what lets the scene carry trees,
+       water and reeds instead of flat silhouettes. */
     function sx(worldX) { return worldX - panX; }
+
+    const PAR_BACK = 0.45, PAR_TREE = 0.86;   /* parallax of the painted strips */
+    let cBack, cTree, cGround, cFore;
+
+    function offscreen(w, h) {
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        return c;
+    }
+
+    function buildScenery() {
+        /* Scenery draws from its own stream, so the amount of detail in the
+           landscape can never shift which birds the seed produces. */
+        const R = makeRng((seedFromString(seedStr) ^ 0x9E3779B9) >>> 0);
+
+        /* --- distant ridges and rolling hills --------------------------- */
+        cBack = offscreen(WORLD_W, HORIZON + 30);
+        let g = cBack.getContext('2d');
+        ridge(g, R, HORIZON - 4, 58, '#7b8ba3', '#93a2b6', 150);   /* far, hazy */
+        ridge(g, R, HORIZON + 2, 42, '#6a7f80', '#82969180', 110);
+        ridge(g, R, HORIZON + 6, 30, '#5f7355', '#87996022', 90);  /* near hills */
+
+        /* --- treeline and standing trees -------------------------------- */
+        cTree = offscreen(WORLD_W, HORIZON + 40);
+        g = cTree.getContext('2d');
+        for (let x = -20; x < WORLD_W + 20; x += 9 + R() * 10) {
+            const h = 13 + R() * 16;
+            blob(g, x, HORIZON + 4 - h * 0.4, 7 + R() * 6, h * 0.75, '#33452a');
+        }
+        for (let x = 0; x < WORLD_W; x += 150 + R() * 260) {
+            tree(g, x, HORIZON + 8, 0.75 + R() * 0.6, R);
+        }
+        g.fillStyle = 'rgba(255,214,150,.13)';               /* dawn rim on the canopy */
+        for (let x = -20; x < WORLD_W + 20; x += 9 + R() * 10) {
+            g.fillRect(x, HORIZON - 12 - R() * 8, 5, 2);
+        }
+
+        /* --- the moor floor: peat, water, fence, reeds ------------------- */
+        const GH = VH - HORIZON + 14;
+        cGround = offscreen(WORLD_W, GH);
+        g = cGround.getContext('2d');
+        const gg = g.createLinearGradient(0, 0, 0, GH);
+        gg.addColorStop(0, '#6d7f49');
+        gg.addColorStop(0.30, '#54682f');
+        gg.addColorStop(1, '#2c3a1b');
+        g.fillStyle = gg;
+        g.fillRect(0, 0, WORLD_W, GH);
+
+        /* warm light raking across the field from the low sun */
+        const wg = g.createLinearGradient(0, 0, 0, GH * 0.6);
+        wg.addColorStop(0, 'rgba(255,198,120,.20)');
+        wg.addColorStop(1, 'rgba(255,198,120,0)');
+        g.fillStyle = wg;
+        g.fillRect(0, 0, WORLD_W, GH * 0.6);
+
+        /* feather the far edge into the hills behind it */
+        const eg = g.createLinearGradient(0, 0, 0, 16);
+        eg.addColorStop(0, 'rgba(122,140,116,.85)');
+        eg.addColorStop(1, 'rgba(122,140,116,0)');
+        g.fillStyle = eg;
+        g.fillRect(0, 0, WORLD_W, 16);
+
+        /* peat: dark, low-contrast, never mistakeable for a target */
+        for (let i = 0; i < 150; i++) {
+            const x = R() * WORLD_W, y = 22 + R() * (GH - 40);
+            g.fillStyle = 'rgba(26,38,16,' + (0.14 + R() * 0.16).toFixed(2) + ')';
+            g.beginPath();
+            g.ellipse(x, y, 16 + R() * 34, 2.5 + R() * 3.5, 0, 0, 6.283);
+            g.fill();
+        }
+
+        /* bog pools, holding the colour of the sky */
+        for (let i = 0; i < 22; i++) {
+            const x = R() * WORLD_W, y = 34 + R() * (GH - 60);
+            const near = (y - 34) / (GH - 60);            /* 0 far, 1 underfoot */
+            const rw = (22 + R() * 34) * (0.55 + near * 1.15);
+            const rh = (3.5 + R() * 4) * (0.55 + near * 1.3);
+            const pg = g.createLinearGradient(0, y - rh, 0, y + rh);
+            pg.addColorStop(0, '#a9bfc6');
+            pg.addColorStop(0.5, '#8aa3ac');
+            pg.addColorStop(1, '#5d7370');
+            g.fillStyle = pg;
+            g.beginPath();
+            g.ellipse(x, y, rw, rh, 0, 0, 6.283);
+            g.fill();
+            g.strokeStyle = 'rgba(30,42,20,.45)';
+            g.lineWidth = 1.5;
+            g.stroke();
+            g.fillStyle = 'rgba(255,224,170,.45)';           /* the sun on the water */
+            g.beginPath();
+            g.ellipse(x - rw * 0.2, y - rh * 0.25, rw * 0.42, rh * 0.20, 0, 0, 6.283);
+            g.fill();
+        }
+
+        /* the fence: two rails and posts, with the light on their top edges */
+        const fy = 40;
+        g.fillStyle = '#5c4527';
+        g.fillRect(0, fy, WORLD_W, 3);
+        g.fillRect(0, fy + 9, WORLD_W, 3);
+        g.fillStyle = 'rgba(255,210,150,.35)';
+        g.fillRect(0, fy, WORLD_W, 1);
+        g.fillRect(0, fy + 9, WORLD_W, 1);
+        for (let x = 0; x < WORLD_W; x += 58) {
+            g.fillStyle = '#4c3820';
+            g.fillRect(x, fy - 9, 4, 27);
+            g.fillStyle = 'rgba(255,210,150,.30)';
+            g.fillRect(x, fy - 9, 1.5, 27);
+        }
+
+        /* heather and tussocks: the field was one unbroken green otherwise */
+        for (let i = 0; i < 190; i++) {
+            const x = R() * WORLD_W, y = 20 + R() * (GH - 30);
+            const near = (y - 20) / (GH - 30);
+            const sc = 0.5 + near * 1.1;
+            const heather = R() < 0.42;
+            const n = 3 + Math.floor(R() * 4);
+            for (let k = 0; k < n; k++) {
+                const ox = (R() - 0.5) * 16 * sc, oy = (R() - 0.5) * 4 * sc;
+                g.fillStyle = heather
+                    ? (R() < 0.5 ? 'rgba(122,86,108,.55)' : 'rgba(96,74,96,.50)')
+                    : (R() < 0.5 ? 'rgba(58,74,34,.75)' : 'rgba(78,96,46,.65)');
+                g.beginPath();
+                g.ellipse(x + ox, y + oy, (3 + R() * 4) * sc, (2 + R() * 2.5) * sc, 0, 0, 6.283);
+                g.fill();
+            }
+        }
+
+        /* reed clumps, thickest near the pools */
+        for (let i = 0; i < 230; i++) {
+            const x = R() * WORLD_W, y = 22 + R() * (GH - 34);
+            const near = (y - 22) / (GH - 34);
+            reeds(g, x, y, (5 + R() * 11) * (0.55 + near * 1.1), R);
+        }
+
+        /* --- foreground fringe, drawn over the birds' feet -------------- */
+        cFore = offscreen(WORLD_W, 58);
+        g = cFore.getContext('2d');
+        for (let i = 0; i < 900; i++) {
+            const x = R() * WORLD_W, base = 44 + R() * 14, h = 11 + R() * 22;
+            const lean = (R() - 0.5) * 12;
+            g.strokeStyle = R() < 0.2 ? '#41552b' : '#22301a';
+            g.lineWidth = 1 + R() * 1.4;
+            g.beginPath();
+            g.moveTo(x, base);
+            g.quadraticCurveTo(x + lean * 0.4, base - h * 0.6, x + lean, base - h);
+            g.stroke();
+        }
+
+        function ridge(gc, r, baseY, amp, fill, rim, step) {
+            const pts = [];
+            for (let x = -step; x <= WORLD_W + step; x += step) {
+                pts.push({x: x, y: baseY - 10 - r() * amp});
+            }
+            gc.fillStyle = fill;
+            gc.beginPath();
+            gc.moveTo(-step, baseY + 30);
+            for (let i = 0; i < pts.length; i++) {
+                const a = pts[i], b = pts[Math.min(i + 1, pts.length - 1)];
+                gc.quadraticCurveTo(a.x, a.y, (a.x + b.x) / 2, (a.y + b.y) / 2);
+            }
+            gc.lineTo(WORLD_W + step, baseY + 30);
+            gc.closePath();
+            gc.fill();
+            gc.strokeStyle = rim;
+            gc.lineWidth = 2;
+            gc.stroke();
+        }
+
+        function blob(gc, x, y, rw, rh, col) {
+            gc.fillStyle = col;
+            gc.beginPath();
+            gc.ellipse(x, y, rw, rh, 0, 0, 6.283);
+            gc.fill();
+        }
+
+        function tree(gc, x, groundY, sc, r) {
+            const h = 46 * sc;
+            gc.strokeStyle = '#3b2c1b';
+            gc.lineWidth = 4 * sc;
+            gc.beginPath();
+            gc.moveTo(x, groundY);
+            gc.quadraticCurveTo(x + 3 * sc, groundY - h * 0.6, x + 1 * sc, groundY - h);
+            gc.stroke();
+            const cy = groundY - h - 6 * sc;
+            blob(gc, x - 11 * sc, cy + 5 * sc, 15 * sc, 12 * sc, '#2d3d24');
+            blob(gc, x + 12 * sc, cy + 4 * sc, 14 * sc, 11 * sc, '#2d3d24');
+            blob(gc, x, cy - 4 * sc, 18 * sc, 15 * sc, '#37492b');
+            blob(gc, x - 5 * sc, cy - 9 * sc, 11 * sc, 8 * sc, '#445833');
+            gc.fillStyle = 'rgba(255,214,150,.18)';
+            gc.beginPath();
+            gc.ellipse(x - 7 * sc, cy - 12 * sc, 8 * sc, 4 * sc, -0.4, 0, 6.283);
+            gc.fill();
+            if (r() < 0.5) blob(gc, x + 8 * sc, cy - 7 * sc, 9 * sc, 7 * sc, '#3f5230');
+        }
+
+        function reeds(gc, x, y, h, r) {
+            const n = 4 + Math.floor(r() * 5);
+            for (let k = 0; k < n; k++) {
+                const off = (k - n / 2) * 2.4, lean = off * 0.8 + (r() - 0.5) * 3;
+                gc.strokeStyle = r() < 0.25 ? 'rgba(126,148,78,.85)' : 'rgba(58,78,36,.9)';
+                gc.lineWidth = 1.2;
+                gc.beginPath();
+                gc.moveTo(x + off, y);
+                gc.quadraticCurveTo(x + off + lean * 0.4, y - h * 0.6, x + off + lean, y - h);
+                gc.stroke();
+            }
+        }
+    }
 
     function draw() {
         ctx.save();
         if (shakeT > 0.2) ctx.translate((Math.random() - .5) * shakeT, (Math.random() - .5) * shakeT);
 
         drawSky();
-        drawHills();
-        drawGround();
+        /* the painted strips, each at its own parallax */
+        ctx.drawImage(cBack, -panX * PAR_BACK, 0);
+        ctx.drawImage(cGround, -panX, HORIZON - 14);
+        ctx.drawImage(cTree, -panX * PAR_TREE, 0);
         drawProps();
         drawBirds(false);
         drawFeathers();
-        drawGrass();
-        drawBirds(true);          /* dead birds fall in front of the grass */
+        ctx.drawImage(cFore, -panX, VH - 58);
+        drawBirds(true);          /* dead birds fall in front of the fringe */
         drawPuffs();
         drawPops();
+        drawGrade();
         ctx.restore();
 
         drawGun();
@@ -958,117 +1165,66 @@
     }
 
     function drawSky() {
-        const g = ctx.createLinearGradient(0, 0, 0, HORIZON + 40);
-        g.addColorStop(0, '#7fb4d8');
-        g.addColorStop(0.55, '#bcd8e4');
-        g.addColorStop(1, '#e6dfc0');
+        /* Low morning sun: the warm band at the horizon is what makes the
+           distant birds read as silhouettes against light rather than as
+           smaller versions of the near ones. */
+        const g = ctx.createLinearGradient(0, 0, 0, HORIZON + 20);
+        g.addColorStop(0, '#2f5378');
+        g.addColorStop(0.34, '#6d8ba6');
+        g.addColorStop(0.68, '#c2a68c');
+        g.addColorStop(0.90, '#eec489');
+        g.addColorStop(1, '#f7dda6');
         ctx.fillStyle = g;
-        ctx.fillRect(0, 0, VW, HORIZON + 40);
+        ctx.fillRect(0, 0, VW, HORIZON + 20);
 
-        /* sun sits in the sky, not on the moor: it does not pan */
-        ctx.fillStyle = 'rgba(255,248,214,.85)';
+        /* the sun sits in the sky, so it barely moves as the barrel swings */
+        const sunX = VW * 0.70 - (panX - (WORLD_W - VW) / 2) * 0.05, sunY = HORIZON - 78;
+        const halo = ctx.createRadialGradient(sunX, sunY, 6, sunX, sunY, 128);
+        halo.addColorStop(0, 'rgba(255,240,196,.95)');
+        halo.addColorStop(0.18, 'rgba(255,222,150,.42)');
+        halo.addColorStop(1, 'rgba(255,210,140,0)');
+        ctx.fillStyle = halo;
+        ctx.fillRect(sunX - 140, sunY - 140, 280, 280);
+        ctx.fillStyle = '#fff6d2';
         ctx.beginPath();
-        ctx.arc(VW * 0.78, 58, 26, 0, 6.283);
+        ctx.arc(sunX, sunY, 21, 0, 6.283);
         ctx.fill();
 
-        /* clouds drift with a fraction of the pan, for depth */
-        const cp = panX * 0.25;
-        ctx.fillStyle = 'rgba(255,255,255,.55)';
-        for (let i = 0; i < 9; i++) {
-            const cx = ((i * 317 + 60) - cp) % (WORLD_W * 0.5);
-            const x = cx < -120 ? cx + WORLD_W * 0.5 : cx;
-            const y = 26 + (i % 3) * 26;
-            const s = 0.7 + (i % 4) * 0.22;
+        /* two cloud decks, lit warm underneath */
+        cloudDeck(0.10, 30, 1.15, 'rgba(255,241,219,.78)', 'rgba(232,166,124,.45)');
+        cloudDeck(0.22, 74, 0.80, 'rgba(255,248,233,.62)', 'rgba(236,180,138,.34)');
+    }
+
+    function cloudDeck(par, baseY, scale, top, under) {
+        const span = WORLD_W * 0.7;
+        for (let i = 0; i < 14; i++) {
+            let x = ((i * 231 + 70) - panX * par) % span;
+            if (x < -160) x += span;
+            if (x > VW + 160) continue;
+            const y = baseY + (i % 3) * 19;
+            const sc = (0.6 + (i % 4) * 0.25) * scale;
+            ctx.fillStyle = under;
             ctx.beginPath();
-            ctx.ellipse(x, y, 42 * s, 11 * s, 0, 0, 6.283);
-            ctx.ellipse(x + 26 * s, y + 3, 28 * s, 8 * s, 0, 0, 6.283);
+            ctx.ellipse(x + 6 * sc, y + 5 * sc, 46 * sc, 9 * sc, 0, 0, 6.283);
+            ctx.fill();
+            ctx.fillStyle = top;
+            ctx.beginPath();
+            ctx.ellipse(x, y, 42 * sc, 9 * sc, 0, 0, 6.283);
+            ctx.ellipse(x + 24 * sc, y + 2 * sc, 26 * sc, 7 * sc, 0, 0, 6.283);
+            ctx.ellipse(x - 22 * sc, y + 3 * sc, 20 * sc, 6 * sc, 0, 0, 6.283);
             ctx.fill();
         }
     }
 
-    function drawHills() {
-        const shades = ['#93a78c', '#7b9077'];
-        for (let layer = 0; layer < 2; layer++) {
-            const par = layer === 0 ? 0.55 : 0.78;
-            const pts = hills[layer];
-            ctx.fillStyle = shades[layer];
-            ctx.beginPath();
-            ctx.moveTo(-10, HORIZON + 30);
-            for (const p of pts) {
-                const x = p.x - panX * par;
-                if (x < -120 || x > VW + 120) continue;
-                ctx.lineTo(x, p.y);
-            }
-            ctx.lineTo(VW + 10, HORIZON + 30);
-            ctx.closePath();
-            ctx.fill();
-        }
-    }
-
-    function drawGround() {
-        const g = ctx.createLinearGradient(0, HORIZON, 0, VH);
-        g.addColorStop(0, '#7d9459');
-        g.addColorStop(0.35, '#63813f');
-        g.addColorStop(1, '#31491f');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, HORIZON, VW, VH - HORIZON);
-
-        /* treeline hugging the horizon — the band that sells the distance */
-        ctx.fillStyle = '#3c5530';
-        for (let i = 0; i < 300; i++) {
-            const wx = (i * 67) % WORLD_W, x = wx - panX * 0.94;
-            if (x < -30 || x > VW + 30) continue;
-            const h = 7 + (i * 17) % 13, w = 6 + (i * 7) % 7;
-            ctx.beginPath();
-            ctx.ellipse(x, HORIZON - h * 0.55, w, h * 0.75, 0, 0, 6.283);
-            ctx.fill();
-        }
-        ctx.fillStyle = 'rgba(28,42,22,.5)';
-        ctx.fillRect(0, HORIZON - 2, VW, 3);
-
-        /* fence along the middle distance, giving the moor a readable scale */
-        ctx.strokeStyle = '#6b5433';
-        ctx.lineWidth = 2;
-        const fy = HORIZON + 26;
-        ctx.beginPath();
-        ctx.moveTo(0, fy);
-        ctx.lineTo(VW, fy);
-        ctx.moveTo(0, fy + 7);
-        ctx.lineTo(VW, fy + 7);
-        ctx.stroke();
-        for (let wx = Math.floor(panX / 58) * 58; wx < panX + VW + 58; wx += 58) {
-            const x = sx(wx);
-            ctx.fillStyle = '#6b5433';
-            ctx.fillRect(x, fy - 7, 3, 22);
-        }
-
-        /* peat: dark, narrow and low-contrast, so it reads as wet ground
-           rather than as targets */
-        ctx.fillStyle = 'rgba(28,42,18,.30)';
-        for (let i = 0; i < 40; i++) {
-            const wx = (i * 271) % WORLD_W, x = sx(wx);
-            if (x < -80 || x > VW + 80) continue;
-            const y = HORIZON + 46 + (i * 37) % 118;
-            ctx.beginPath();
-            ctx.ellipse(x, y, 20 + (i % 5) * 7, 3 + (i % 3), 0, 0, 6.283);
-            ctx.fill();
-        }
-
-        /* reed clumps in the middle distance */
-        for (let i = 0; i < 70; i++) {
-            const wx = (i * 197 + 40) % WORLD_W, x = sx(wx);
-            if (x < -20 || x > VW + 20) continue;
-            const y = HORIZON + 42 + (i * 53) % 96;
-            const h = 10 + (i * 11) % 14;
-            ctx.strokeStyle = 'rgba(58,82,34,.75)';
-            ctx.lineWidth = 1.3;
-            ctx.beginPath();
-            for (let k = -2; k <= 2; k++) {
-                ctx.moveTo(x + k * 2, y);
-                ctx.lineTo(x + k * 3.4, y - h + Math.abs(k));
-            }
-            ctx.stroke();
-        }
+    /* warm grade and a vignette, so the frame reads as one painting */
+    function drawGrade() {
+        const v = ctx.createRadialGradient(VW / 2, VH * 0.46, VH * 0.34, VW / 2, VH * 0.5, VH * 1.02);
+        v.addColorStop(0, 'rgba(0,0,0,0)');
+        v.addColorStop(1, 'rgba(26,18,8,.22)');
+        ctx.fillStyle = v;
+        ctx.fillRect(0, 0, VW, VH);
+        ctx.fillStyle = 'rgba(255,196,124,.05)';   /* a whisper of warm air */
+        ctx.fillRect(0, 0, VW, VH);
     }
 
     function drawProps() {
@@ -1083,106 +1239,184 @@
     }
 
     function drawWindmill(x, p) {
-        ctx.fillStyle = '#8a7a5e';
+        ctx.fillStyle = '#6b5636';
         ctx.beginPath();
-        ctx.moveTo(x - 17, HORIZON + 28);
-        ctx.lineTo(x - 10, p.y);
-        ctx.lineTo(x + 10, p.y);
-        ctx.lineTo(x + 17, HORIZON + 28);
+        ctx.moveTo(x - 19, HORIZON + 30);
+        ctx.lineTo(x - 11, p.y);
+        ctx.lineTo(x + 11, p.y);
+        ctx.lineTo(x + 19, HORIZON + 30);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = '#6d5f47';
-        ctx.fillRect(x - 13, p.y - 12, 26, 14);
+        ctx.fillStyle = 'rgba(255,216,150,.34)';        /* sunlit side */
+        ctx.beginPath();
+        ctx.moveTo(x - 19, HORIZON + 30);
+        ctx.lineTo(x - 11, p.y);
+        ctx.lineTo(x - 4, p.y);
+        ctx.lineTo(x - 9, HORIZON + 30);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(30,22,12,.30)';
+        for (let i = 1; i < 4; i++) ctx.fillRect(x - 17 + i, p.y + i * 18, 34 - i * 2.2, 1.5);
+        ctx.fillStyle = '#5e5039';
+        ctx.fillRect(x - 14, p.y - 13, 28, 15);
+        ctx.fillStyle = '#4a3f2c';
+        ctx.beginPath();
+        ctx.moveTo(x - 16, p.y - 13);
+        ctx.lineTo(x, p.y - 24);
+        ctx.lineTo(x + 16, p.y - 13);
+        ctx.closePath();
+        ctx.fill();
         for (let i = 0; i < 4; i++) {
             if (!p.blades[i]) continue;
             const a = p.ang + i * Math.PI / 2;
             ctx.save();
             ctx.translate(x, p.y);
             ctx.rotate(a);
-            ctx.fillStyle = '#efe6c8';
-            ctx.fillRect(6, -4, 44, 8);
-            ctx.fillStyle = '#b9ae8c';
-            ctx.fillRect(6, -4, 44, 3);
+            ctx.fillStyle = '#6a5a3e';
+            ctx.fillRect(6, -1.5, 46, 3);
+            ctx.fillStyle = '#f5ead0';
+            ctx.beginPath();
+            ctx.moveTo(10, -7);
+            ctx.lineTo(50, -5.5);
+            ctx.lineTo(50, 5.5);
+            ctx.lineTo(10, 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = 'rgba(168,144,96,.55)';
+            ctx.fillRect(26, -6.6, 1.4, 11.4);
+            ctx.fillStyle = 'rgba(255,232,182,.45)';
+            ctx.fillRect(10, -7, 40, 2);
+            ctx.fillStyle = 'rgba(70,56,32,.20)';
+            ctx.fillRect(10, 3.4, 40, 1.8);
             ctx.restore();
         }
-        ctx.fillStyle = '#4b4132';
+        ctx.fillStyle = '#3b3325';
         ctx.beginPath();
-        ctx.arc(x, p.y, 5, 0, 6.283);
+        ctx.arc(x, p.y, 5.5, 0, 6.283);
         ctx.fill();
     }
 
     function drawScarecrow(x, p) {
-        ctx.strokeStyle = '#7a6440';
+        ctx.fillStyle = 'rgba(20,26,12,.28)';
+        ctx.beginPath();
+        ctx.ellipse(x, p.y + 2, 17, 4, 0, 0, 6.283);
+        ctx.fill();
+        ctx.strokeStyle = '#6d5a36';
         ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(x, p.y);
-        ctx.lineTo(x, p.y - 42);
-        ctx.moveTo(x - 20, p.y - 30);
-        ctx.lineTo(x + 20, p.y - 30);
+        ctx.lineTo(x, p.y - 44);
+        ctx.moveTo(x - 21, p.y - 31);
+        ctx.lineTo(x + 21, p.y - 31);
         ctx.stroke();
-        ctx.fillStyle = '#9c5a4a';
-        ctx.fillRect(x - 13, p.y - 36, 26, 22);
-        ctx.fillStyle = '#d8c48c';
+        ctx.fillStyle = '#8d4f42';
         ctx.beginPath();
-        ctx.arc(x, p.y - 42, 9, 0, 6.283);
+        ctx.moveTo(x - 14, p.y - 38);
+        ctx.lineTo(x + 14, p.y - 38);
+        ctx.lineTo(x + 11, p.y - 13);
+        ctx.lineTo(x - 11, p.y - 13);
+        ctx.closePath();
         ctx.fill();
-        if (p.hat) {
-            ctx.fillStyle = '#5d4a2c';
-            ctx.fillRect(x - 16, p.y - 49, 32, 3);
-            ctx.fillRect(x - 9, p.y - 58, 18, 10);
+        ctx.fillStyle = 'rgba(255,214,150,.22)';
+        ctx.fillRect(x - 14, p.y - 38, 7, 25);
+        ctx.strokeStyle = '#c9a75e';           /* straw at the cuffs */
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        for (let k = -2; k <= 2; k++) {
+            ctx.moveTo(x - 20, p.y - 31);
+            ctx.lineTo(x - 26, p.y - 31 + k * 2.4);
+            ctx.moveTo(x + 20, p.y - 31);
+            ctx.lineTo(x + 26, p.y - 31 + k * 2.4);
         }
-        if (p.hatFly) {
-            ctx.save();
-            ctx.translate(sx(p.hatFly.x), p.hatFly.y);
-            ctx.rotate(p.hatFly.r);
-            ctx.fillStyle = '#5d4a2c';
-            ctx.fillRect(-16, -2, 32, 3);
-            ctx.fillRect(-9, -11, 18, 10);
-            ctx.restore();
-        }
+        ctx.stroke();
+        ctx.fillStyle = '#d9c084';
+        ctx.beginPath();
+        ctx.arc(x, p.y - 45, 9.5, 0, 6.283);
+        ctx.fill();
+        ctx.fillStyle = '#7a6236';
+        ctx.beginPath();
+        ctx.arc(x - 3, p.y - 47, 1.4, 0, 6.283);
+        ctx.arc(x + 3, p.y - 47, 1.4, 0, 6.283);
+        ctx.fill();
+        if (p.hat) drawHat(x, p.y - 53, 0);
+        if (p.hatFly) drawHat(sx(p.hatFly.x), p.hatFly.y, p.hatFly.r);
+    }
+
+    function drawHat(x, y, rot) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        ctx.fillStyle = '#4f3f22';
+        ctx.beginPath();
+        ctx.ellipse(0, 4, 18, 4.5, 0, 0, 6.283);
+        ctx.fill();
+        ctx.fillStyle = '#5d4a29';
+        ctx.beginPath();
+        ctx.moveTo(-9, 4);
+        ctx.lineTo(-7, -8);
+        ctx.quadraticCurveTo(0, -12, 7, -8);
+        ctx.lineTo(9, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#3c2f19';
+        ctx.fillRect(-8, 0, 16, 3);
+        ctx.fillStyle = 'rgba(255,214,150,.22)';
+        ctx.fillRect(-7, -8, 4, 10);
+        ctx.restore();
     }
 
     function drawSign(x, p) {
-        ctx.fillStyle = '#7a6440';
-        ctx.fillRect(x - 2, p.y - 30, 4, 30);
-        ctx.fillStyle = p.hit ? '#8c6f52' : '#d9cf9e';
-        ctx.fillRect(x - 24, p.y - 34, 48, 20);
-        ctx.fillStyle = p.hit ? '#5a4634' : '#6b5a34';
-        ctx.font = '700 9px system-ui, sans-serif';
+        ctx.fillStyle = '#6d5a36';
+        ctx.fillRect(x - 2.5, p.y - 32, 5, 32);
+        ctx.fillStyle = 'rgba(20,26,12,.25)';
+        ctx.beginPath();
+        ctx.ellipse(x, p.y + 1, 9, 3, 0, 0, 6.283);
+        ctx.fill();
+        ctx.fillStyle = p.hit ? '#8a6a4a' : '#e2d6a6';
+        ctx.fillRect(x - 25, p.y - 36, 50, 21);
+        ctx.fillStyle = 'rgba(255,224,170,.30)';
+        ctx.fillRect(x - 25, p.y - 36, 50, 3);
+        ctx.strokeStyle = '#6d5a36';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 25, p.y - 36, 50, 21);
+        ctx.fillStyle = p.hit ? '#43331f' : '#5f4f2a';
+        ctx.font = '700 10px system-ui, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(p.hit ? '✱#@!' : 'MOOR', x, p.y - 21);
+        ctx.fillText(p.hit ? '✱#@!' : 'MOOR', x, p.y - 22);
         ctx.textAlign = 'left';
     }
 
     function drawBarn(x, p) {
-        ctx.fillStyle = '#7b4a3a';
-        ctx.fillRect(x - 40, p.y - 34, 80, 40);
-        ctx.fillStyle = '#5d3729';
+        ctx.fillStyle = 'rgba(20,26,12,.28)';
         ctx.beginPath();
-        ctx.moveTo(x - 46, p.y - 34);
-        ctx.lineTo(x, p.y - 58);
-        ctx.lineTo(x + 46, p.y - 34);
+        ctx.ellipse(x, p.y + 7, 46, 6, 0, 0, 6.283);
+        ctx.fill();
+        ctx.fillStyle = '#7b4536';
+        ctx.fillRect(x - 42, p.y - 36, 84, 42);
+        ctx.fillStyle = 'rgba(255,200,140,.20)';
+        ctx.fillRect(x - 42, p.y - 36, 22, 42);
+        ctx.fillStyle = 'rgba(40,20,14,.25)';
+        for (let k = 1; k < 7; k++) ctx.fillRect(x - 42 + k * 12, p.y - 36, 1.5, 42);
+        ctx.fillStyle = '#4e2d22';
+        ctx.beginPath();
+        ctx.moveTo(x - 49, p.y - 36);
+        ctx.lineTo(x, p.y - 62);
+        ctx.lineTo(x + 49, p.y - 36);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = '#3d2a20';
-        ctx.fillRect(x - 11, p.y - 18, 22, 24);
-    }
-
-    function drawGrass() {
-        /* foreground tufts, drawn over the birds' feet for depth */
-        ctx.fillStyle = '#35502a';
-        for (let i = 0; i < 90; i++) {
-            const wx = (i * 149) % WORLD_W, x = sx(wx);
-            if (x < -20 || x > VW + 20) continue;
-            const h = 12 + (i * 7) % 16;
-            const y = VH - (i % 4) * 9;
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.quadraticCurveTo(x + 3, y - h * 0.6, x + 7, y - h);
-            ctx.lineTo(x + 2, y);
-            ctx.closePath();
-            ctx.fill();
-        }
+        ctx.fillStyle = 'rgba(255,208,150,.22)';
+        ctx.beginPath();
+        ctx.moveTo(x - 49, p.y - 36);
+        ctx.lineTo(x, p.y - 62);
+        ctx.lineTo(x - 4, p.y - 36);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#33201a';
+        ctx.fillRect(x - 12, p.y - 19, 24, 25);
+        ctx.fillStyle = '#8a5a44';
+        ctx.fillRect(x - 12, p.y - 19, 24, 2);
+        ctx.fillStyle = '#e8d49a';               /* hay loft, catching the sun */
+        ctx.fillRect(x - 6, p.y - 47, 12, 9);
     }
 
     function drawBirds(deadPass) {
@@ -1198,77 +1432,138 @@
     function drawChicken(x, y, b) {
         const s = b.scale;
         const pal = BANDS[b.band];
-        const body = b.giant ? '#8d5f34' : pal.body;
-        const dark = b.giant ? '#6f4724' : pal.dark;
+        const body = b.giant ? '#9a6533' : pal.body;
+        const dark = b.giant ? '#70471f' : pal.dark;
+
+        /* a shadow under the ones standing on the moor */
+        if (b.perched && !b.dead) {
+            ctx.fillStyle = 'rgba(20,26,12,.30)';
+            ctx.beginPath();
+            ctx.ellipse(x, y + 15 * s, 15 * s, 3.5 * s, 0, 0, 6.283);
+            ctx.fill();
+        }
+
         ctx.save();
         ctx.translate(x, y);
         if (b.dead) ctx.rotate(b.bob);
         ctx.scale(b.dir >= 0 ? s : -s, s);
 
         const flap = b.perched || b.dead ? 0 : Math.sin(b.flap);
+        const wingUp = flap > 0;
 
-        /* tail */
+        /* far wing, behind the body, so the flap reads at any size */
+        if (!b.perched && !b.dead) {
+            ctx.fillStyle = dark;
+            ctx.save();
+            ctx.translate(-3, -3);
+            ctx.rotate(-flap * 0.85);
+            ctx.beginPath();
+            ctx.ellipse(-3, -2, 12, 5.5, 0, 0, 6.283);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        /* tail fan */
         ctx.fillStyle = dark;
         ctx.beginPath();
-        ctx.moveTo(-13, -2);
-        ctx.lineTo(-24, -9);
-        ctx.lineTo(-23, 2);
+        ctx.moveTo(-11, -1);
+        ctx.quadraticCurveTo(-22, -14, -26, -6);
+        ctx.quadraticCurveTo(-23, -1, -20, 3);
         ctx.closePath();
         ctx.fill();
 
-        /* body */
+        /* body: rounder than before, which is most of the charm */
         ctx.fillStyle = body;
         ctx.beginPath();
-        ctx.ellipse(0, 0, 14, 10, 0, 0, 6.283);
+        ctx.ellipse(0, 0, 14.5, 11.5, 0, 0, 6.283);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.14)';
+        ctx.fillStyle = 'rgba(255,225,180,.20)';       /* light from the low sun */
         ctx.beginPath();
-        ctx.ellipse(-2, -3, 10, 5, 0, 0, 6.283);
+        ctx.ellipse(-2, -4.5, 10, 5.5, -0.25, 0, 6.283);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(30,20,12,.22)';
+        ctx.beginPath();
+        ctx.ellipse(1, 6, 10, 4, 0, 0, 6.283);
         ctx.fill();
 
-        /* wing */
+        /* near wing */
         ctx.fillStyle = dark;
         ctx.save();
-        ctx.translate(-2, -2);
-        ctx.rotate(flap * 0.7);
+        ctx.translate(-1, -2);
+        ctx.rotate(flap * 0.75);
         ctx.beginPath();
-        ctx.ellipse(0, 0, 11, 5, 0, 0, 6.283);
+        ctx.ellipse(0, 0, 11.5, 5.5, 0, 0, 6.283);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,225,180,.16)';
+        ctx.beginPath();
+        ctx.ellipse(-1, -1.5, 9, 2.6, 0, 0, 6.283);
         ctx.fill();
         ctx.restore();
 
-        /* head, comb, beak */
+        /* neck and head */
         ctx.fillStyle = body;
         ctx.beginPath();
-        ctx.arc(12, -7, 6, 0, 6.283);
+        ctx.ellipse(9, -4, 6, 6.5, -0.3, 0, 6.283);
         ctx.fill();
+        ctx.beginPath();
+        ctx.arc(13, -9.5, 6.6, 0, 6.283);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,225,180,.22)';
+        ctx.beginPath();
+        ctx.arc(11.5, -11.5, 4.2, 0, 6.283);
+        ctx.fill();
+
+        /* comb and wattle */
         ctx.fillStyle = b.giant ? '#c4392f' : pal.comb;
         ctx.beginPath();
-        ctx.moveTo(10, -13);
-        ctx.lineTo(13, -17);
-        ctx.lineTo(15, -12);
+        ctx.moveTo(9, -15);
+        ctx.quadraticCurveTo(11, -20, 13.5, -15.5);
+        ctx.quadraticCurveTo(15.5, -19.5, 17, -14.5);
         ctx.closePath();
         ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(16.5, -5.5, 2.2, 3.4, 0, 0, 6.283);
+        ctx.fill();
+
+        /* beak */
         ctx.fillStyle = b.giant ? '#e3a52c' : pal.beak;
         ctx.beginPath();
-        ctx.moveTo(17, -7);
-        ctx.lineTo(23, -5);
-        ctx.lineTo(17, -3);
+        ctx.moveTo(18, -10.5);
+        ctx.lineTo(25, -8.6);
+        ctx.lineTo(18, -6.6);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = '#12100e';
+
+        /* eye: white, pupil, highlight — the whole face lives here */
+        ctx.fillStyle = '#fbf6ea';
         ctx.beginPath();
-        ctx.arc(14, -9, 1.5, 0, 6.283);
+        ctx.arc(15, -11.5, 2.9, 0, 6.283);
+        ctx.fill();
+        ctx.fillStyle = '#16120d';
+        ctx.beginPath();
+        ctx.arc(15.9, -11.5, 1.7, 0, 6.283);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(15.3, -12.3, 0.7, 0, 6.283);
         ctx.fill();
 
         /* legs, only when it is standing on something */
         if (b.perched) {
             ctx.strokeStyle = pal.beak;
-            ctx.lineWidth = 1.6;
+            ctx.lineWidth = 1.8;
             ctx.beginPath();
-            ctx.moveTo(-2, 9);
+            ctx.moveTo(-2, 10);
             ctx.lineTo(-3, 15);
-            ctx.moveTo(4, 9);
+            ctx.moveTo(4, 10);
             ctx.lineTo(5, 15);
+            ctx.stroke();
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(-6, 15.5);
+            ctx.lineTo(0, 15.5);
+            ctx.moveTo(2, 15.5);
+            ctx.lineTo(8, 15.5);
             ctx.stroke();
         }
         ctx.restore();
@@ -1384,8 +1679,10 @@
     }
 
     function drawHud() {
-        ctx.fillStyle = 'rgba(14,16,8,.80)';
+        ctx.fillStyle = '#12160b';
         ctx.fillRect(0, 0, VW, 40);
+        ctx.fillStyle = 'rgba(255,214,150,.10)';
+        ctx.fillRect(0, 39, VW, 1);
 
         ctx.textAlign = 'left';
         ctx.font = '800 11px system-ui, sans-serif';
@@ -1496,14 +1793,7 @@
     spawnIndex = 0;
     schedule = rollSchedule(60);
     giantFrames = [];
-    hills = [];
-    for (let layer = 0; layer < 2; layer++) {
-        const pts = [];
-        for (let x = -90; x <= WORLD_W + 90; x += 90) {
-            pts.push({x: x, y: HORIZON - 14 - layer * 20 - rng() * (26 + layer * 18)});
-        }
-        hills.push(pts);
-    }
+    buildScenery();
     resize();
     panX = Math.round((WORLD_W - VW) / 2);
     aimX = VW / 2;
