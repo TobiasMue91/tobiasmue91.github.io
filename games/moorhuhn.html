@@ -85,8 +85,11 @@
 
         /* ---------- overlays ---------- */
         .overlay {
-            position: absolute;
+            /* fixed, not absolute: the canvas box can be a short band in
+               portrait, and an overlay clipped to it loses its own content */
+            position: fixed;
             inset: 0;
+            z-index: 20;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -201,6 +204,20 @@
 
         #seedline { font-size: 11px; color: #7c7a62; letter-spacing: .04em }
 
+        .linkbtn {
+            margin-left: 10px;
+            background: none;
+            border: 1px solid #4d4a24;
+            border-radius: 6px;
+            padding: 5px 9px;
+            font: inherit;
+            font-size: 11px;
+            color: #c9bf90;
+            cursor: pointer;
+        }
+
+        .linkbtn:hover { color: #f0e6c8; border-color: #6d6832 }
+
         #seedline input {
             width: 9em;
             background: #1b1c10;
@@ -211,6 +228,20 @@
             font: inherit;
             font-size: 12px;
             text-align: center;
+        }
+
+        /* a landscape phone is ~410 px tall: tighten the briefing so it fits
+           without scrolling rather than hiding the start button below the fold */
+        @media (max-height: 470px) {
+            .overlay { gap: 7px; padding: 12px }
+            .overlay h1 { font-size: clamp(22px, 5vw, 32px) }
+            .overlay p { font-size: 11.5px; line-height: 1.45; max-width: 46em }
+            .pts { gap: 5px; max-width: 52em }
+            .pts span { font-size: 10.5px; padding: 3px 7px }
+            .btn { padding: 9px 24px; font-size: 14px; margin-top: 0 }
+            .stat { gap: 18px; margin: 0 }
+            .stat b { font-size: clamp(16px, 4vw, 21px); margin-top: 1px }
+            .keyrow { font-size: 11px; line-height: 1.5 }
         }
 
         #rotate {
@@ -234,7 +265,7 @@
         <div id="pads">
             <div id="padReload">RELOAD</div>
         </div>
-        <div id="rotate">↻ turn your phone sideways for the full moor</div>
+        <div id="rotate">↻ turn your phone sideways, or tap Fullscreen, for the whole moor</div>
 
         <div class="overlay" id="startScreen">
             <h1>MOOR CHICKEN</h1>
@@ -255,7 +286,9 @@
             </div>
             <div class="keyrow" id="startKeys"></div>
             <button class="btn" id="startBtn">START THE HUNT</button>
-            <div id="seedline">Moor seed <input id="seedInput" spellcheck="false"></div>
+            <div id="seedline">Moor seed <input id="seedInput" spellcheck="false">
+                <button class="linkbtn" id="fsBtn">Fullscreen</button>
+            </div>
         </div>
 
         <div class="overlay hidden" id="overScreen">
@@ -277,7 +310,7 @@
     </div>
 </div>
 
-<script src="../logo.js"></script>
+<script src="../logo.js" data-position="bottom-middle"></script>
 <script>
     'use strict';
 
@@ -347,17 +380,72 @@
     const isTouch = matchMedia('(hover: none)').matches || 'ontouchstart' in window;
     if (isTouch) document.body.classList.add('touch');
 
+    /* ---- fullscreen -------------------------------------------------------
+       A panorama in a phone's portrait window is a letterbox. Going fullscreen
+       and asking for landscape is the difference between a band and a game.
+       Every step is best-effort: iOS phones have no element fullscreen and the
+       orientation lock is refused on most desktops, so nothing here may throw. */
+    function isFullscreen() {
+        return !!(document.fullscreenElement || document.webkitFullscreenElement);
+    }
+
+    function enterFullscreen() {
+        const el = document.documentElement;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (!req) return Promise.reject();
+        let pr;
+        try {
+            pr = req.call(el, {navigationUI: 'hide'});
+        } catch (e) {
+            try { pr = req.call(el); } catch (e2) { return Promise.reject(); }
+        }
+        return Promise.resolve(pr).then(() => {
+            try {
+                if (screen.orientation && screen.orientation.lock) {
+                    const l = screen.orientation.lock('landscape');
+                    if (l && l.catch) l.catch(() => {});
+                }
+            } catch (e) { /* refused: the rotate hint still stands */ }
+        });
+    }
+
+    function exitFullscreen() {
+        try {
+            if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+        } catch (e) { /* nothing to undo */ }
+        const ex = document.exitFullscreen || document.webkitExitFullscreen;
+        if (ex) { try { ex.call(document); } catch (e) { /* already out */ } }
+    }
+
+    function toggleFullscreen() {
+        if (isFullscreen()) exitFullscreen();
+        else enterFullscreen().catch(() => {});
+    }
+
+    for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+        document.addEventListener(ev, () => {
+            const on = isFullscreen();
+            document.body.classList.toggle('fs', on);
+            const btn = document.getElementById('fsBtn');
+            if (btn) btn.textContent = on ? 'Exit fullscreen' : 'Fullscreen';
+            resize();
+        });
+    }
+
     /* ---- canvas ----------------------------------------------------------- */
     const cv = document.getElementById('cv');
     const ctx = cv.getContext('2d');
 
     function resize() {
-        const padX = 8, padTop = 8, padBottom = isTouch ? 50 : 8;
+        const fs = isFullscreen();
+        const padX = fs ? 0 : 8, padTop = fs ? 0 : 8, padBottom = fs ? 0 : 8;
         const availW = window.innerWidth - padX * 2;
         const availH = window.innerHeight - padTop - padBottom;
         /* A panorama wants width. Give it as much as the screen's shape allows,
            within limits that keep the moor bigger than the view. */
-        VW = Math.round(Math.max(520, Math.min(900, VH * (availW / availH))));
+        /* VW follows the window's aspect so the canvas fills it exactly; the
+           cap only stops the view from swallowing the whole moor. */
+        VW = Math.round(Math.max(460, Math.min(WORLD_W * 0.55, VH * (availW / availH))));
         document.body.classList.toggle('portrait', availW < availH);
         document.getElementById('stage').style.paddingBottom = (padBottom - padTop) + 'px';
         const scale = Math.min(availW / VW, availH / VH);
@@ -479,6 +567,7 @@
 
     function start() {
         audio();
+        if (isTouch && !isFullscreen()) enterFullscreen().catch(() => {});
         const raw = (document.getElementById('seedInput').value || '').trim();
         seedStr = raw || String(Math.floor(Math.random() * 1e9));
         document.getElementById('seedInput').value = seedStr;
@@ -914,6 +1003,7 @@
 
     addEventListener('keydown', e => {
         if (e.code === 'KeyR') { e.preventDefault(); reload(); }
+        if (e.code === 'KeyF') { e.preventDefault(); toggleFullscreen(); }
         if (e.code === 'Space' || e.code === 'Enter') {
             e.preventDefault();
             if (state === 'play') shoot();
@@ -1724,7 +1814,7 @@
         }
 
         /* where you are looking, so the moor's width is legible */
-        const fw = 90, fx = VW / 2 - fw / 2, fy = VH - 12;
+        const fw = 90, fx = VW / 2 - fw / 2, fy = 46;   /* clear of the mark below */
         ctx.fillStyle = 'rgba(0,0,0,.35)';
         ctx.fillRect(fx, fy, fw, 5);
         ctx.fillStyle = 'rgba(240,230,190,.7)';
@@ -1767,11 +1857,15 @@
     document.getElementById('seedInput').value = params.get('seed') || '';
     document.getElementById('startKeys').innerHTML = isTouch
         ? 'Tap to fire · drag to swing the barrel · <b>RELOAD</b> when you run dry'
-        : 'Move to aim · <kbd>click</kbd> fire · <kbd>right-click</kbd> or <kbd>R</kbd> reload · edges pan';
+        : 'Move to aim · <kbd>click</kbd> fire · <kbd>right-click</kbd> or <kbd>R</kbd> reload · edges pan · <kbd>F</kbd> fullscreen';
     document.getElementById('startBtn').addEventListener('click', e => { e.stopPropagation(); start(); });
     document.getElementById('againBtn').addEventListener('click', e => { e.stopPropagation(); start(); });
     document.getElementById('seedInput').addEventListener('keydown', e => e.stopPropagation());
     document.getElementById('seedInput').addEventListener('pointerdown', e => e.stopPropagation());
+    document.getElementById('fsBtn').addEventListener('click', e => {
+        e.stopPropagation();
+        toggleFullscreen();
+    });
 
     /* a still moor behind the start screen */
     seedStr = params.get('seed') || String(Math.floor(Math.random() * 1e9));
