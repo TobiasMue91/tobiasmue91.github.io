@@ -1532,7 +1532,7 @@
                         code: getElementOuterHTML(img),
                         fix: `<img src="${img.getAttribute('src')}" alt="Description of this image" ${getAttributesString(img, ['src', 'alt'])}>`
                     })
-                } else if (img.getAttribute('alt').trim() === '' && !img.getAttribute('role') === 'presentation' && !img.getAttribute('role') === 'none') {
+                } else if (img.getAttribute('alt').trim() === '' && img.getAttribute('role') !== 'presentation' && img.getAttribute('role') !== 'none' && !isHiddenFromAssistiveTech(img)) {
                     issues.warnings.push({
                         type: 'empty-alt',
                         element: `img (${index + 1})`,
@@ -1551,15 +1551,10 @@
                 if (control.type === 'hidden' || control.type === 'submit' || control.type === 'button' || control.type === 'reset') {
                     return
                 }
-                const id = control.getAttribute('id');
-                let hasLabel = false;
-                if (id) {
-                    const label = doc.querySelector(`label[for="${id}"]`);
-                    hasLabel = label !== null
+                if (isHiddenFromAssistiveTech(control)) {
+                    return
                 }
-                const hasAriaLabel = control.hasAttribute('aria-label') && control.getAttribute('aria-label').trim() !== '';
-                const hasAriaLabelledBy = control.hasAttribute('aria-labelledby') && control.getAttribute('aria-labelledby').trim() !== '';
-                if (!hasLabel && !hasAriaLabel && !hasAriaLabelledBy) {
+                if (getAccessibleName(control, doc) === '') {
                     const elementType = control.tagName.toLowerCase();
                     const controlType = control.type || 'generic';
                     issues.errors.push({
@@ -1577,7 +1572,10 @@
         function checkEmptyInteractiveElements(doc, issues) {
             const links = doc.querySelectorAll('a');
             links.forEach((link, index) => {
-                if (link.textContent.trim() === '' && !link.hasAttribute('aria-label') && !link.hasAttribute('aria-labelledby') && link.querySelectorAll('img[alt], svg, .icon').length === 0) {
+                if (isHiddenFromAssistiveTech(link)) {
+                    return
+                }
+                if (getAccessibleName(link, doc) === '') {
                     issues.errors.push({
                         type: 'empty-link',
                         element: `a (${index + 1})`,
@@ -1590,7 +1588,10 @@
             });
             const buttons = doc.querySelectorAll('button');
             buttons.forEach((button, index) => {
-                if (button.textContent.trim() === '' && !button.hasAttribute('aria-label') && !button.hasAttribute('aria-labelledby') && button.querySelectorAll('img[alt], svg, .icon').length === 0) {
+                if (isHiddenFromAssistiveTech(button)) {
+                    return
+                }
+                if (getAccessibleName(button, doc) === '') {
                     issues.errors.push({
                         type: 'empty-button',
                         element: `button (${index + 1})`,
@@ -1891,6 +1892,100 @@
             })
         }
 
+        // Accessible name computation, shared by every check that asks "does this element
+        // have a name?". Follows the HTML-AAM order: aria-labelledby, aria-label, an
+        // associated label, name from content, title. Returns '' when the element has none.
+        const NAME_FROM_CONTENT = ['a', 'button', 'summary', 'legend', 'caption', 'th', 'td', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+        const LABELABLE = ['input', 'select', 'textarea', 'button', 'meter', 'output', 'progress'];
+
+        function isHiddenFromAssistiveTech(element) {
+            return element.closest('[aria-hidden="true"]') !== null
+        }
+
+        // Name contributed by an element's own contents: text nodes, plus the names of any
+        // graphics inside it (img alt, svg title, aria-label). aria-hidden subtrees contribute nothing.
+        function getNameFromContent(element) {
+            let name = '';
+            const walk = node => {
+                if (node.nodeType === 3) {
+                    name += node.nodeValue;
+                    return
+                }
+                if (node.nodeType !== 1) return;
+                if (node.getAttribute('aria-hidden') === 'true') return;
+                const ariaLabel = (node.getAttribute('aria-label') || '').trim();
+                if (ariaLabel) {
+                    name += ' ' + ariaLabel;
+                    return
+                }
+                const tag = node.tagName.toLowerCase();
+                if (tag === 'img' || tag === 'area') {
+                    name += ' ' + (node.getAttribute('alt') || '');
+                    return
+                }
+                if (tag === 'svg') {
+                    const title = node.querySelector('title');
+                    name += ' ' + (title ? title.textContent : '');
+                    return
+                }
+                node.childNodes.forEach(walk)
+            };
+            element.childNodes.forEach(walk);
+            return name.replace(/\s+/g, ' ').trim()
+        }
+
+        function getLabelText(label, control) {
+            const ariaLabel = (label.getAttribute('aria-label') || '').trim();
+            if (ariaLabel) return ariaLabel;
+            const clone = label.cloneNode(true);
+            clone.querySelectorAll('input, select, textarea').forEach(node => node.remove());
+            return getNameFromContent(clone)
+        }
+
+        function getAccessibleName(element, doc) {
+            doc = doc || element.ownerDocument;
+            const tag = element.tagName.toLowerCase();
+            const labelledBy = (element.getAttribute('aria-labelledby') || '').trim();
+            if (labelledBy) {
+                const referenced = labelledBy.split(/\s+/)
+                    .map(id => doc.getElementById(id))
+                    .filter(target => target !== null)
+                    .map(target => getNameFromContent(target))
+                    .filter(text => text !== '')
+                    .join(' ');
+                if (referenced) return referenced
+            }
+            const ariaLabel = (element.getAttribute('aria-label') || '').trim();
+            if (ariaLabel) return ariaLabel;
+            if (LABELABLE.includes(tag)) {
+                const id = element.getAttribute('id');
+                if (id) {
+                    const label = doc.querySelector(`label[for="${CSS.escape(id)}"]`);
+                    if (label) {
+                        const text = getLabelText(label, element);
+                        if (text) return text
+                    }
+                }
+                // A control wrapped in a label is labelled by it - no for/id needed.
+                const wrapping = element.closest('label');
+                if (wrapping) {
+                    const text = getLabelText(wrapping, element);
+                    if (text) return text
+                }
+            }
+            if (tag === 'input' && element.getAttribute('type') === 'image') {
+                const alt = (element.getAttribute('alt') || '').trim();
+                if (alt) return alt
+            }
+            if (NAME_FROM_CONTENT.includes(tag)) {
+                const text = getNameFromContent(element);
+                if (text) return text
+            }
+            const title = (element.getAttribute('title') || '').trim();
+            if (title) return title;
+            return ''
+        }
+
         function getElementOuterHTML(element) {
             try {
                 return element.outerHTML
@@ -1957,7 +2052,10 @@
             description.textContent = issue.description;
             const suggestion = document.createElement('p');
             suggestion.className = 'issue-suggestion';
-            suggestion.innerHTML = `<strong>Suggestion:</strong> ${issue.suggestion}`;
+            const suggestionLabel = document.createElement('strong');
+            suggestionLabel.textContent = 'Suggestion:';
+            suggestion.appendChild(suggestionLabel);
+            suggestion.appendChild(document.createTextNode(' ' + issue.suggestion));
             const code = document.createElement('pre');
             code.className = 'issue-code';
             code.textContent = issue.code;
