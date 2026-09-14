@@ -146,6 +146,143 @@
         }
     }
 
+    // --- PHP lexing -------------------------------------------------------
+    // Minifying PHP with plain regexes corrupts real files: quotes inside
+    // comments swallow the code after them, heredoc bodies get rewritten,
+    // #[Attributes] look like # comments, and inline HTML is program output
+    // rather than source. So split the file into typed spans first and only
+    // ever rewrite the spans that are actually code.
+
+    const OPERATOR_CHARS = ';,{}()[].=<>:?!+-*/%&|^';
+    // Character pairs that must not be welded together by removing the space
+    // between them, because the pair means something else entirely.
+    const GLUE_HAZARDS = ['++', '--', '//', '/*', '?>'];
+        const HEREDOC_START = /^<<<[ \t]*(['"]?)([A-Za-z_\x80-\uffff][A-Za-z0-9_\x80-\uffff]*)\1\r?\n/;
+
+    // Skip a {$...} interpolation block, which may contain quotes of its own.
+    const skipBraces = (src, start) => {
+        let i = start, depth = 0;
+        while (i < src.length) {
+            const c = src[i];
+            if (c === '\\') { i += 2; continue; }
+            if (c === '{') { depth++; }
+            else if (c === '}') { depth--; if (depth === 0) return i + 1; }
+            else if (c === "'" || c === '"') { i = readQuoted(src, i); continue; }
+            i++;
+        }
+        return src.length;
+    };
+
+    // Read a '...', "..." or `...` literal, escapes and interpolation included.
+    const readQuoted = (src, start) => {
+        const quote = src[start];
+        let i = start + 1;
+        while (i < src.length) {
+            const c = src[i];
+            if (c === '\\') { i += 2; continue; }
+            if (c === quote) return i + 1;
+            if (quote !== "'" && c === '{' && src[i + 1] === '$') { i = skipBraces(src, i); continue; }
+            i++;
+        }
+        return src.length;
+    };
+
+    // Read a heredoc or nowdoc up to and including its closing label. The body
+    // is significant whitespace, so it is never touched.
+    const readHeredoc = (src, start) => {
+        const opener = HEREDOC_START.exec(src.slice(start));
+        if (!opener) return start;
+        const bodyStart = start + opener[0].length;
+        const closer = new RegExp('^[ \\t]*' + opener[2] + '(?![A-Za-z0-9_])', 'm').exec(src.slice(bodyStart));
+        if (!closer) return src.length;
+        return bodyStart + closer.index + closer[0].length;
+    };
+
+    // Split PHP source into {type, text} spans: 'html', 'open', 'close',
+    // 'code', 'string' and 'comment'.
+    const lexPHP = (src) => {
+        // Short open tags are off by default in PHP, so only <?php and <?=
+        // start a block; anything else stays inline HTML.
+        const openTag = /<\?(php(?![A-Za-z0-9_])|=)/g;
+        const tokens = [];
+        const push = (type, text) => { if (text) tokens.push({ type, text }); };
+        // A pasted fragment with no open tag at all is still PHP code.
+        const tagless = !openTag.test(src);
+        openTag.lastIndex = 0;
+        let i = 0, inPhp = tagless, code = '';
+        const flushCode = () => { push('code', code); code = ''; };
+
+        while (i < src.length) {
+            if (!inPhp) {
+                openTag.lastIndex = i;
+                const tag = openTag.exec(src);
+                if (!tag) { push('html', src.slice(i)); break; }
+                push('html', src.slice(i, tag.index));
+                push('open', tag[0]);
+                i = tag.index + tag[0].length;
+                inPhp = true;
+                continue;
+            }
+            const c = src[i], next = src[i + 1];
+            if (c === '?' && next === '>') {
+                flushCode();
+                push('close', '?>');
+                i += 2;
+                inPhp = false;
+                continue;
+            }
+            if (c === '/' && next === '*') {
+                flushCode();
+                const close = src.indexOf('*/', i + 2);
+                const end = close === -1 ? src.length : close + 2;
+                push('comment', src.slice(i, end));
+                i = end;
+                continue;
+            }
+            // '#[' opens a PHP 8 attribute, not a comment.
+            if ((c === '/' && next === '/') || (c === '#' && next !== '[')) {
+                flushCode();
+                let j = i;
+                while (j < src.length && src[j] !== '\n' && !(src[j] === '?' && src[j + 1] === '>')) j++;
+                push('comment', src.slice(i, j));
+                i = j;
+                continue;
+            }
+            if (c === "'" || c === '"' || c === '`') {
+                flushCode();
+                const end = readQuoted(src, i);
+                push('string', src.slice(i, end));
+                i = end;
+                continue;
+            }
+            if (c === '<' && next === '<' && src[i + 2] === '<') {
+                const end = readHeredoc(src, i);
+                if (end > i) {
+                    flushCode();
+                    push('string', src.slice(i, end));
+                    i = end;
+                    continue;
+                }
+            }
+            code += c;
+            i++;
+        }
+        flushCode();
+        return tokens;
+    };
+
+    // Collapse whitespace inside a run of code, dropping it entirely next to
+    // an operator unless that would weld two characters into a new token.
+    // prev/next are the characters on either side of this run of code, so the
+    // rule holds at a span boundary too.
+    const collapseCode = (text, prev, next) => text.replace(/\s+/g, (run, offset, whole) => {
+        const before = offset === 0 ? prev : whole[offset - 1];
+        const after = offset + run.length === whole.length ? next : whole[offset + run.length];
+        if (before === undefined || after === undefined) return '';
+        if (!OPERATOR_CHARS.includes(before) && !OPERATOR_CHARS.includes(after)) return ' ';
+        return GLUE_HAZARDS.includes(before + after) ? ' ' : '';
+    });
+
     // Enhanced minification function
     const minifyPHP = (code) => {
         if (!code.trim()) return '';
@@ -154,40 +291,36 @@
             removeWhitespace: document.getElementById('remove-whitespace').checked
         };
         try {
-            let result = code;
-            const stringMap = new Map();
-            let placeholderId = 0;
-            // Preserve strings first
-            result = result.replace(/"(?:[^"\\]|\\.)*"/g, match => {
-                const placeholder = `__STR_${placeholderId++}__`;
-                stringMap.set(placeholder, match);
-                return placeholder;
-            }).replace(/'(?:[^'\\]|\\.)*'/g, match => {
-                const placeholder = `__STR_${placeholderId++}__`;
-                stringMap.set(placeholder, match);
-                return placeholder;
-            }).replace(/<<<(['"]?)(\w+)\1[\s\S]*?\r?\n\2;?/g, match => {
-                const placeholder = `__STR_${placeholderId++}__`;
-                stringMap.set(placeholder, match);
-                return placeholder;
+            const spans = lexPHP(code).map(token => {
+                if (token.type !== 'comment') return token;
+                // A dropped comment still separates the code around it.
+                if (options.removeComments) return { type: 'code', text: ' ' };
+                // A kept line comment needs the newline that terminates it.
+                if (!token.text.startsWith('/*')) return { type: 'comment', text: token.text + '\n' };
+                return token;
             });
-            // Remove comments
-            if (options.removeComments) {
-                result = result.replace(/\/\*[\s\S]*?\*\//g, '')
-                    .replace(/\/\/[^\r\n]*|#[^\r\n]*/g, '');
-            }
-            // Handle whitespace
+            // Merge neighbouring code spans so collapsing sees one continuous run.
+            const merged = [];
+            spans.forEach(span => {
+                const last = merged[merged.length - 1];
+                if (last && last.type === 'code' && span.type === 'code') last.text += span.text;
+                else merged.push({ type: span.type, text: span.text });
+            });
             if (options.removeWhitespace) {
-                result = result.replace(/\s+/g, ' ')
-                    .replace(/\s*([;,{}()[\].=<>:?!+\-*\/%&|^])\s*/g, '$1')
-                    .replace(/\s*(===|!==|==|!=|<=|>=|=>|->|::|\|\||&&|\+=|-=|\*=|\/=|%=|\.=|\^=|&=|\|=|<<|>>)\s*/g, '$1')
-                    .trim();
+                merged.forEach((span, n) => {
+                    if (span.type !== 'code') return;
+                    const before = merged[n - 1], after = merged[n + 1];
+                    span.text = collapseCode(span.text, before && before.text.slice(-1), after && after.text[0]);
+                });
+                // PHP requires a whitespace character after '<?php'.
+                merged.forEach((span, n) => {
+                    const before = merged[n - 1];
+                    if (before && before.type === 'open' && /php$/i.test(before.text) && !/^\s/.test(span.text)) {
+                        span.text = ' ' + span.text;
+                    }
+                });
             }
-            // Restore strings
-            stringMap.forEach((value, key) => {
-                result = result.replace(key, value);
-            });
-            return result;
+            return merged.map(span => span.text).join('');
         } catch (error) {
             showToast('Error during minification: ' + error.message, 'error');
             console.error('Minification error:', error);
