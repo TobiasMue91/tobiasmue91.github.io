@@ -68,6 +68,8 @@
 
     .palette-card .card-header {display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;}
     .section-title {font-size: 1.3rem; font-weight: 500;}
+    .palette-note {font-size: 0.85rem; color: var(--text-light); margin: -10px 0 15px;}
+    .palette-note:empty {display: none;}
     .color-palette {display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px;}
     .color-card {border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); transition: var(--transition); background-color: var(--card);}
     .color-card:hover {transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.1);}
@@ -166,6 +168,7 @@
           </button>
         </div>
       </div>
+      <div id="palette-note" class="palette-note"></div>
       <div id="color-palette" class="color-palette">
         <div class="no-results">Extract colors from an image to see your palette</div>
       </div>
@@ -222,6 +225,7 @@
     const imagePreview = document.getElementById('image-preview');
     const loadingOverlay = document.getElementById('loading-overlay');
     const colorPalette = document.getElementById('color-palette');
+    const paletteNote = document.getElementById('palette-note');
     const exportModal = document.getElementById('export-modal');
     const modalClose = document.getElementById('modal-close');
     const exportButtons = document.querySelectorAll('.export-options button');
@@ -351,11 +355,25 @@
       try {
         const colorCount = parseInt(colorCountInput.value) || 5;
         const colorThief = new ColorThief();
-        const colorArray = colorThief.getPalette(currentImage, colorCount);
+        const colorArray = colorThief.getPalette(currentImage, colorCount) || [];
 
-        currentColors = colorArray;
-        calculateColorDistribution(colorArray);
+        // The quantizer pads its result up to the requested count by repeating
+        // clusters, so flat-color images (logos, icons, UI) come back with the
+        // same swatch several times. It can also overshoot a channel to 256,
+        // which formats as a malformed hex. Clamp, then show each color once.
+        const seen = new Set();
+        currentColors = colorArray
+                .map(color => color.map(v => Math.max(0, Math.min(255, Math.round(v)))))
+                .filter(color => {
+                  const key = color.join(',');
+                  if (seen.has(key)) return false;
+                  seen.add(key);
+                  return true;
+                });
+
+        calculateColorDistribution(currentColors);
         renderColorPalette();
+        showPaletteNote(colorCount);
         showLoading(false);
       } catch (error) {
         showLoading(false);
@@ -380,13 +398,18 @@
       // Get pixel data
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const pixels = imageData.data;
-      const totalPixels = canvas.width * canvas.height;
 
       // Initialize counters
       const colorCounts = new Array(colorArray.length).fill(0);
+      let totalPixels = 0;
 
       // Count pixels for each color
       for (let i = 0; i < pixels.length; i += 4) {
+        // Skip transparent pixels: they carry no color, and the palette was
+        // built without them, so counting them as black skews every percentage.
+        if (pixels[i + 3] < 125) continue;
+        totalPixels++;
+
         const r = pixels[i];
         const g = pixels[i + 1];
         const b = pixels[i + 2];
@@ -410,8 +433,19 @@
         colorCounts[closestColorIndex]++;
       }
 
-      // Calculate percentages
-      colorDistribution = colorCounts.map(count => Math.round((count / totalPixels) * 100));
+      // Calculate percentages, as a share of the opaque pixels only
+      colorDistribution = colorCounts.map(count => totalPixels ? Math.round((count / totalPixels) * 100) : 0);
+    }
+
+    function showPaletteNote(requested) {
+      if (!currentColors.length) {
+        paletteNote.textContent = 'No opaque pixels found in this image.';
+        return;
+      }
+      const missing = requested - currentColors.length;
+      paletteNote.textContent = missing > 0
+              ? `Only ${currentColors.length} distinct color${currentColors.length === 1 ? '' : 's'} found in this image.`
+              : '';
     }
 
     function renderColorPalette() {
