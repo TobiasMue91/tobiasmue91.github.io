@@ -255,6 +255,11 @@
 
 		.output-line.unparsed { color: #9B8E7E; font-style: italic; }
 
+		.output-line .estimated {
+			border-bottom: 1px dotted #B5A992;
+			cursor: help;
+		}
+
 		.placeholder-text {
 			padding: 16px;
 			color: #9B8E7E;
@@ -408,12 +413,71 @@
 			'box','boxes','jar','jars','bottle','bottles','sheet','sheets','ear','ears'
 		]);
 
+		// ── Ingredient densities ──
+		// Grams per US cup (236.588 ml). Only solids and thick pastes — things a
+		// metric cook weighs. Liquids are deliberately absent: "240 ml milk" is
+		// already what a jug shows, but nobody owns a 475 ml flour measure.
+		// Figures follow the common US baking references (King Arthur et al.).
+		const DENSITIES = {
+			'all-purpose flour': 125, 'all purpose flour': 125, 'plain flour': 125,
+			'bread flour': 127, 'whole wheat flour': 120, 'wholemeal flour': 120,
+			'cake flour': 114, 'self-rising flour': 125, 'self-raising flour': 125,
+			'almond flour': 96, 'almond meal': 96, 'rye flour': 102, 'flour': 125,
+			'cornstarch': 120, 'cornflour': 120, 'cornmeal': 160, 'semolina': 167,
+			'cocoa powder': 85, 'cocoa': 85,
+			'powdered sugar': 120, 'confectioners sugar': 120, "confectioners' sugar": 120,
+			'icing sugar': 120, 'brown sugar': 213, 'caster sugar': 200,
+			'granulated sugar': 200, 'sugar': 200, 'honey': 340, 'molasses': 337,
+			'maple syrup': 322, 'peanut butter': 258, 'butter': 227, 'margarine': 227,
+			'shortening': 190, 'mayonnaise': 220, 'tomato paste': 262,
+			'rolled oats': 90, 'oats': 90, 'breadcrumbs': 108, 'bread crumbs': 108,
+			'panko': 60, 'rice': 185, 'quinoa': 170, 'couscous': 173, 'lentils': 192,
+			'chickpeas': 200, 'black beans': 194,
+			'parmesan': 90, 'pecorino': 90, 'grated cheese': 113, 'shredded cheese': 113,
+			'mozzarella': 113, 'cheddar': 113, 'cream cheese': 232, 'sour cream': 240,
+			'greek yogurt': 245, 'yogurt': 245, 'ricotta': 246,
+			'chocolate chips': 170, 'chocolate': 170, 'raisins': 145, 'cranberries': 120,
+			'shredded coconut': 85, 'desiccated coconut': 85, 'coconut': 85,
+			'walnuts': 117, 'pecans': 99, 'almonds': 143, 'cashews': 130,
+			'pistachios': 123, 'peanuts': 146, 'hazelnuts': 135, 'nuts': 120,
+			'frozen peas': 134, 'corn kernels': 154, 'sesame seeds': 144,
+			'chia seeds': 163, 'sunflower seeds': 140, 'pumpkin seeds': 129,
+			'poppy seeds': 145, 'flaxseed': 150
+		};
+
+		// Longest key first, so "peanut butter" wins over "butter" and
+		// "brown sugar" over "sugar".
+		const DENSITY_KEYS = Object.keys(DENSITIES).sort((a, b) => b.length - a.length);
+
+		// Below this the spoon measure is the clearer instruction: metric recipes
+		// still say "1 tsp cinnamon", not "2 g cinnamon".
+		const DENSITY_MIN_ML = 30;
+
+		function lookupDensity(ingredient) {
+			if (!ingredient) return null;
+			const text = ingredient.toLowerCase();
+			// Densities here are for the raw ingredient; "cooked rice" weighs
+			// something else entirely, so leave those alone.
+			if (/\bcooked\b/.test(text)) return null;
+			for (const key of DENSITY_KEYS) {
+				const idx = text.indexOf(key);
+				if (idx === -1) continue;
+				// Whole-word match, so "butter" does not fire on "buttermilk".
+				const before = idx === 0 ? ' ' : text[idx - 1];
+				const after = text[idx + key.length] || ' ';
+				if (/[a-z]/.test(before) || /[a-z]/.test(after)) continue;
+				return { key, gPerCup: DENSITIES[key] };
+			}
+			return null;
+		}
+
 		// ── Parser ──
 		function parseLine(raw) {
 			let line = raw;
 			// Strip list markers
 			line = line.replace(/^[\s]*[\-\•\*]\s*/, '');
-			line = line.replace(/^[\s]*\d+[\.\)]\s*/, '');
+			// Require whitespace after the marker, or "1.5 l stock" loses its "1."
+			line = line.replace(/^[\s]*\d+[\.\)]\s+/, '');
 			line = line.trim();
 
 			if (!line) return { raw, quantity: null, unit: null, ingredient: '', parsed: false, blank: true };
@@ -596,6 +660,17 @@
 					// Convert to metric
 					if (def.type === 'volume') {
 						let ml = qty * def.ml;
+						// A cup of flour is weighed, not poured. If we recognise the
+						// ingredient, give grams — the number a metric kitchen can act on.
+						if (ml >= DENSITY_MIN_ML) {
+							const d = lookupDensity(item.ingredient);
+							if (d) {
+								const res = metricMassResult(item, ml / 236.588 * d.gPerCup);
+								res.estimated = true;
+								res.estimateNote = '1 cup ' + d.key + ' \u2248 ' + d.gPerCup + ' g';
+								return res;
+							}
+						}
 						return metricVolumeResult(item, ml);
 					} else {
 						let g = qty * def.g;
@@ -772,8 +847,18 @@
 					const qty = formatQty(item);
 					const unit = item.displayUnit || '';
 					const ing = item.ingredient || '';
-					const parts = [qty, unit, ing].filter(Boolean);
-					div.textContent = parts.join(' ');
+					if (item.estimated) {
+						// Mark the weight as a density estimate, not a measurement.
+						const amount = document.createElement('span');
+						amount.className = 'estimated';
+						amount.title = item.estimateNote;
+						amount.textContent = [qty, unit].filter(Boolean).join(' ');
+						div.appendChild(amount);
+						if (ing) div.appendChild(document.createTextNode(' ' + ing));
+					} else {
+						const parts = [qty, unit, ing].filter(Boolean);
+						div.textContent = parts.join(' ');
+					}
 				}
 
 				container.appendChild(div);
