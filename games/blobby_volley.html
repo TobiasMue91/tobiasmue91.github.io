@@ -178,7 +178,7 @@
 </head>
 <body>
 <div id="stage"><canvas id="c" width="800" height="600"></canvas></div>
-<div id="hint">Esc / P — pause</div>
+<div id="hint">Esc / P — pause · M — sound</div>
 
 <div class="overlay" id="menu">
     <div class="panel">
@@ -301,6 +301,9 @@
     const ctx = canvas.getContext('2d');
 
     const settings = {mode: 'cpu', diff: 1, p1: 'wad', p2: 'arrows', scoring: 'sideout'};
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let muted = false;
+    try { muted = localStorage.getItem('blobby-muted') === '1'; } catch (e) { /* private mode */ }
 
     const game = {
         running: false,
@@ -342,6 +345,7 @@
     }
 
     function blip(freq, dur, type, gain) {
+        if (muted) return;
         const a = audio();
         if (!a) return;
         const o = a.createOscillator(), g = a.createGain();
@@ -408,7 +412,7 @@
         if (!game.ballValid) return;
         game.ballValid = false;
         game.deadTimer = 1.5;
-        game.shake = 6;
+        game.shake = reducedMotion ? 0 : 6;
         if (settings.scoring === 'rally' || winner === game.serving) {
             game.score[winner]++;
             sndPoint();
@@ -681,6 +685,10 @@
     }
 
     addEventListener('keydown', e => {
+        if (e.code === 'KeyM') {
+            toggleMute();
+            return;
+        }
         if (e.code === 'Escape' || e.code === 'KeyP') {
             if (game.running && !game.over) togglePause();
             e.preventDefault();
@@ -704,7 +712,20 @@
         mouse.x = w.x;
         mouse.y = w.y;
     });
-    addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; audio(); });
+    function muteHit(wx, wy) { return wx > W - 42 && wy < 46; }
+
+    function toggleMute() {
+        muted = !muted;
+        try { localStorage.setItem('blobby-muted', muted ? '1' : '0'); } catch (err) { /* ignore */ }
+    }
+
+    addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        audio();
+        const w = toWorld(e.clientX, e.clientY);
+        if (game.running && muteHit(w.x, w.y)) return toggleMute();
+        mouse.down = true;
+    });
     addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
 
     // Touch: the left half of the screen drives the left blob, the right half the right
@@ -726,6 +747,12 @@
         audio();
 
         const now = performance.now();
+        if (e.type === 'touchstart') {
+            for (const t of e.changedTouches) {
+                const w = toWorld(t.clientX, t.clientY);
+                if (muteHit(w.x, w.y)) { toggleMute(); return; }
+            }
+        }
         const seen = [false, false];
 
         for (const t of e.touches) {
@@ -946,6 +973,40 @@
         ctx.restore();
     }
 
+    // a drawn speaker, so the icon looks the same wherever the page runs
+    function drawSpeaker(x, y) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.fillStyle = 'rgba(255,255,255,.55)';
+        ctx.strokeStyle = 'rgba(255,255,255,.55)';
+        ctx.lineWidth = 1.8;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-8, -3);
+        ctx.lineTo(-3, -3);
+        ctx.lineTo(3, -9);
+        ctx.lineTo(3, 9);
+        ctx.lineTo(-3, 3);
+        ctx.lineTo(-8, 3);
+        ctx.closePath();
+        ctx.fill();
+        if (muted) {
+            ctx.beginPath();
+            ctx.moveTo(7, -5);
+            ctx.lineTo(14, 5);
+            ctx.moveTo(14, -5);
+            ctx.lineTo(7, 5);
+            ctx.stroke();
+        } else {
+            for (let i = 1; i <= 2; i++) {
+                ctx.beginPath();
+                ctx.arc(4, 0, 3 + i * 3.5, -Math.PI / 3, Math.PI / 3);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+    }
+
     function drawHud() {
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(10,20,32,.42)';
@@ -977,6 +1038,45 @@
                 ctx.fill();
             }
         }
+
+        // a side that needs one more point
+        if (game.ballValid) {
+            for (let p = 0; p < 2; p++) {
+                const s = game.score;
+                const canWin = s[p] + 1 >= POINT_TO_WIN && s[p] + 1 - s[1 - p] >= 2;
+                const scores = settings.scoring === 'rally' || game.serving === p;
+                if (canWin && scores) {
+                    ctx.font = '700 13px "Segoe UI", system-ui, sans-serif';
+                    ctx.fillStyle = p === LEFT ? '#8ecbff' : '#ffb287';
+                    ctx.fillText('MATCH POINT', p === LEFT ? 160 : W - 160, 62);
+                }
+            }
+        }
+
+        // the ball spends real time above the court: say where it is
+        if (game.ball.y < BALL_RADIUS) {
+            const x = Math.max(22, Math.min(W - 22, game.ball.x));
+            const far = Math.min(1, -game.ball.y / 300);
+            ctx.fillStyle = 'rgba(255,255,255,' + (0.9 - far * 0.3) + ')';
+            ctx.beginPath();
+            ctx.moveTo(x, 5);
+            ctx.lineTo(x - 12, 24);
+            ctx.lineTo(x + 12, 24);
+            ctx.closePath();
+            ctx.fill();
+            // the height read-out would sit on the scoreboard in the middle of the court
+            if (x < NET_POSITION_X - 108 || x > NET_POSITION_X + 108) {
+                ctx.font = '700 11px "Segoe UI", system-ui, sans-serif';
+                ctx.fillStyle = 'rgba(10,20,32,.55)';
+                ctx.beginPath();
+                ctx.roundRect(x - 20, 28, 40, 16, 8);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,.9)';
+                ctx.fillText(Math.round(-game.ball.y / 10) + ' m', x, 40);
+            }
+        }
+
+        drawSpeaker(W - 28, 26);
 
         if (game.messageTimer > 0) {
             ctx.globalAlpha = Math.min(1, game.messageTimer * 2);
@@ -1071,8 +1171,11 @@
         game.paused = !game.paused;
         pauseEl.hidden = !game.paused;
         if (game.paused) {
+            const name = {wad: 'W A D', arrows: 'arrow keys', mouse: 'mouse', ai: 'computer'};
             document.getElementById('pauseScore').textContent =
-                'Left ' + game.score[LEFT] + ' — ' + game.score[RIGHT] + ' Right';
+                'Left ' + game.score[LEFT] + ' — ' + game.score[RIGHT] + ' Right  ·  ' +
+                'left blob: ' + name[controlOf(LEFT)] + ', right blob: ' + name[controlOf(RIGHT)] +
+                (muted ? '  ·  sound off' : '');
             held.clear();
             for (const i of input) i.left = i.right = i.up = false;
         }
