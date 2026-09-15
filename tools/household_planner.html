@@ -619,12 +619,103 @@
         tbody.innerHTML = "";
         tasks.forEach((task) => {
             const tr = document.createElement("tr");
+            // Renaming a chore or changing how often it comes round used to mean deleting
+            // it and adding it again, which threw away everything it knew about itself.
+            // Both cells edit in place, the way the Last Completed cell already did.
             const nameTd = document.createElement("td");
             nameTd.textContent = task.name;
             nameTd.dataset.label = 'Task';
+            nameTd.className = "pointer";
+            nameTd.title = "Click to rename";
+            nameTd.addEventListener("click", () => {
+                if (nameTd.querySelector("input")) {
+                    return;
+                }
+                const input = document.createElement("input");
+                input.type = "text";
+                input.value = task.name;
+                input.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter") {
+                        input.blur();
+                    } else if (event.key === "Escape") {
+                        input.value = task.name;
+                        input.blur();
+                    }
+                });
+                input.addEventListener("blur", async () => {
+                    const name = input.value.trim();
+                    if (name && name !== task.name) {
+                        await updateDoc(doc(tasksCollection, task.id), {name: name});
+                    } else {
+                        nameTd.textContent = task.name;
+                    }
+                }, {once: true});
+                nameTd.textContent = "";
+                nameTd.appendChild(input);
+                input.focus();
+                input.select();
+            });
+
             const frequencyTd = document.createElement("td");
-            frequencyTd.textContent = task.customFrequency > 1 ? `every ${task.customFrequency} days` : task.frequency;
+            frequencyTd.textContent = describeFrequency(task);
             frequencyTd.dataset.label = 'Frequency';
+            frequencyTd.className = "pointer";
+            frequencyTd.title = "Click to change how often";
+            frequencyTd.addEventListener("click", () => {
+                if (frequencyTd.querySelector("select")) {
+                    return;
+                }
+                const select = document.createElement("select");
+                ["daily", "weekly", "monthly", "custom"].forEach((value) => {
+                    const option = document.createElement("option");
+                    option.value = value;
+                    option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+                    option.selected = value === task.frequency;
+                    select.appendChild(option);
+                });
+                const days = document.createElement("input");
+                days.type = "number";
+                days.min = "1";
+                days.placeholder = "Days";
+                days.value = task.frequency === "custom" ? String(Number(task.customFrequency) || 1) : "";
+                days.hidden = task.frequency !== "custom";
+
+                const commit = async () => {
+                    const frequency = select.value;
+                    const customFrequency = frequency === "custom"
+                        ? String(Math.max(1, Math.floor(Number(days.value)) || 1))
+                        : "";
+                    const unchanged = frequency === task.frequency
+                        && customFrequency === (task.frequency === "custom" ? String(Number(task.customFrequency) || 1) : "");
+                    if (unchanged) {
+                        frequencyTd.textContent = describeFrequency(task);
+                    } else {
+                        await updateDoc(doc(tasksCollection, task.id), {
+                            frequency: frequency,
+                            customFrequency: customFrequency
+                        });
+                    }
+                };
+                select.addEventListener("change", () => {
+                    if (select.value === "custom") {
+                        days.hidden = false;
+                        days.focus();
+                    } else {
+                        commit();
+                    }
+                });
+                days.addEventListener("change", commit);
+                days.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter") {
+                        commit();
+                    } else if (event.key === "Escape") {
+                        frequencyTd.textContent = describeFrequency(task);
+                    }
+                });
+                frequencyTd.textContent = "";
+                frequencyTd.append(select, days);
+                select.focus();
+            });
             const lastCompletedTd = document.createElement("td");
             lastCompletedTd.textContent = task.lastCompleted || '😿';
             lastCompletedTd.className = "pointer";
@@ -694,6 +785,15 @@
         });
         window.Sortable.init();
     });
+
+    // A custom chore of one day used to render as the literal word "custom".
+    function describeFrequency(task) {
+        if (task.frequency === "custom") {
+            const days = Number(task.customFrequency) || 1;
+            return days === 1 ? "every day" : `every ${days} days`;
+        }
+        return task.frequency;
+    }
 
     function startOfDay(time) {
         const date = new Date(time);
