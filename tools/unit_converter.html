@@ -18,6 +18,7 @@
             --color-text-secondary: #6c757d;
             --color-text-tertiary: #adb5bd;
             --color-success: #38b000;
+            --color-error: #d90429;
             --color-focus: rgba(67, 97, 238, 0.3);
             --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
             --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
@@ -44,6 +45,7 @@
             --color-text-secondary: #e9ecef;
             --color-text-tertiary: #adb5bd;
             --color-focus: rgba(76, 201, 240, 0.3);
+            --color-error: #ff6b6b;
         }
 
         * {
@@ -261,6 +263,27 @@
 
         .number-input:focus, .unit-select:focus {
             outline: none;
+        }
+
+        .input-wrapper.invalid {
+            border-color: var(--color-error);
+        }
+
+        .input-wrapper.invalid:focus-within {
+            border-color: var(--color-error);
+            box-shadow: 0 0 0 3px rgba(217, 4, 41, 0.25);
+        }
+
+        .parse-hint {
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            color: var(--color-text-secondary);
+            min-height: 1rem;
+            line-height: 1rem;
+        }
+
+        .parse-hint.error {
+            color: var(--color-error);
         }
 
         .number-input::placeholder {
@@ -554,9 +577,10 @@
                             <span>From</span>
                         </div>
                         <div class="input-wrapper">
-                            <input type="number" id="length-from-value" class="number-input" placeholder="Enter value" aria-label="Value to convert">
+                            <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" id="length-from-value" class="number-input" placeholder="Enter value" aria-label="Value to convert">
                             <select id="length-from-unit" class="unit-select" aria-label="Unit to convert from"></select>
                         </div>
+                        <div class="parse-hint" aria-live="polite"></div>
                     </div>
 
                     <button class="swap-btn" aria-label="Swap units">
@@ -580,6 +604,7 @@
                             <input type="text" id="length-to-value" class="number-input readonly-input" placeholder="Result" readonly aria-label="Conversion result">
                             <select id="length-to-unit" class="unit-select" aria-label="Unit to convert to"></select>
                         </div>
+                        <div class="parse-hint" aria-live="polite"></div>
                     </div>
                 </div>
 
@@ -872,7 +897,12 @@
             wrapper.className = 'input-wrapper';
 
             const input = document.createElement('input');
-            input.type = type === 'from' ? 'number' : 'text';
+            input.type = 'text';
+            if (type === 'from') {
+                input.inputMode = 'decimal';
+                input.autocomplete = 'off';
+                input.spellcheck = false;
+            }
             input.id = `${category}-${type}-value`;
             input.className = 'number-input' + (type === 'to' ? ' readonly-input' : '');
             input.placeholder = type === 'from' ? 'Enter value' : 'Result';
@@ -887,8 +917,15 @@
             wrapper.appendChild(input);
             wrapper.appendChild(select);
 
+            // Reserved slot for the "read as" hint; kept on both sides so the
+            // two columns stay the same height.
+            const parseHint = document.createElement('div');
+            parseHint.className = 'parse-hint';
+            parseHint.setAttribute('aria-live', 'polite');
+
             inputGroup.appendChild(label);
             inputGroup.appendChild(wrapper);
+            inputGroup.appendChild(parseHint);
 
             return inputGroup;
         }
@@ -1000,6 +1037,7 @@
         fromValue.addEventListener('input', () => performConversion(category));
 
         fromUnit.addEventListener('change', () => {
+            dropUnitFromField(category);
             performConversion(category);
             updateFormula(category);
         });
@@ -1011,6 +1049,7 @@
 
         // Swap units
         swapBtn.addEventListener('click', () => {
+            dropUnitFromField(category);
             const temp = fromUnit.value;
             fromUnit.value = toUnit.value;
             toUnit.value = temp;
@@ -1031,6 +1070,245 @@
         });
     }
 
+    // --- Input parsing -------------------------------------------------------
+    // The value field accepts what people actually write: decimal commas,
+    // grouped thousands, fractions, feet-and-inches, and a trailing unit.
+
+    // Unit aliases, keyed by the unit codes in unitData above.
+    const unitAliases = {
+        length: {
+            m: ['m', 'meter', 'meters', 'metre', 'metres'],
+            km: ['km', 'kilometer', 'kilometers', 'kilometre', 'kilometres'],
+            cm: ['cm', 'centimeter', 'centimeters', 'centimetre', 'centimetres'],
+            mm: ['mm', 'millimeter', 'millimeters', 'millimetre', 'millimetres'],
+            in: ['in', 'inch', 'inches', '"'],
+            ft: ['ft', 'foot', 'feet', "'"],
+            yd: ['yd', 'yds', 'yard', 'yards'],
+            mi: ['mi', 'mile', 'miles']
+        },
+        area: {
+            'm2': ['m2', 'm²', 'sqm', 'sqmeter', 'sqmeters'],
+            'km2': ['km2', 'km²', 'sqkm'],
+            'cm2': ['cm2', 'cm²', 'sqcm'],
+            'mm2': ['mm2', 'mm²', 'sqmm'],
+            'in2': ['in2', 'in²', 'sqin'],
+            'ft2': ['ft2', 'ft²', 'sqft'],
+            'yd2': ['yd2', 'yd²', 'sqyd'],
+            'mi2': ['mi2', 'mi²', 'sqmi'],
+            ac: ['ac', 'acre', 'acres'],
+            ha: ['ha', 'hectare', 'hectares']
+        },
+        temperature: {
+            c: ['c', '°c', 'celsius', 'centigrade'],
+            f: ['f', '°f', 'fahrenheit'],
+            k: ['k', '°k', 'kelvin', 'kelvins']
+        },
+        weight: {
+            g: ['g', 'gram', 'grams', 'gramme', 'grammes'],
+            kg: ['kg', 'kgs', 'kilo', 'kilos', 'kilogram', 'kilograms', 'kilogramme', 'kilogrammes'],
+            mg: ['mg', 'milligram', 'milligrams'],
+            lb: ['lb', 'lbs', 'pound', 'pounds', '#'],
+            oz: ['oz', 'ounce', 'ounces']
+        },
+        volume: {
+            ml: ['ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres', 'cc'],
+            l: ['l', 'ltr', 'liter', 'liters', 'litre', 'litres'],
+            'm3': ['m3', 'm³', 'cbm'],
+            gal: ['gal', 'gallon', 'gallons'],
+            qt: ['qt', 'quart', 'quarts'],
+            pt: ['pt', 'pint', 'pints'],
+            'fl-oz': ['fl-oz', 'floz', 'flozs', 'fluidounce', 'fluidounces']
+        }
+    };
+
+    // Build a lookup of alias -> unit code, per category.
+    const aliasLookup = {};
+    Object.keys(unitAliases).forEach(category => {
+        const map = {};
+        Object.keys(unitAliases[category]).forEach(code => {
+            unitAliases[category][code].forEach(alias => { map[alias] = code; });
+        });
+        aliasLookup[category] = map;
+    });
+
+    // Turn a numeric string into a Number, working out for itself whether
+    // "." and "," are decimal points or thousands separators.
+    function normalizeNumber(text) {
+        // Spaces and apostrophes between digits are always grouping.
+        let s = text.replace(/(\d)[\s\u00a0\u202f\u2009'](?=\d)/g, '$1').replace(/\s+/g, '');
+
+        let exponent = '';
+        const expMatch = s.match(/^(.*?)[eE]([+-]?\d+)$/);
+        if (expMatch) {
+            s = expMatch[1];
+            exponent = 'e' + expMatch[2];
+        }
+
+        let sign = '';
+        const signMatch = s.match(/^([+-])(.*)$/);
+        if (signMatch) {
+            sign = signMatch[1] === '-' ? '-' : '';
+            s = signMatch[2];
+        }
+
+        if (!/^[\d.,]*$/.test(s) || !/\d/.test(s)) return NaN;
+
+        const lastDot = s.lastIndexOf('.');
+        const lastComma = s.lastIndexOf(',');
+        let decimalSep = null;
+
+        if (lastDot !== -1 && lastComma !== -1) {
+            // Both present: whichever comes last is the decimal point.
+            decimalSep = lastDot > lastComma ? '.' : ',';
+        } else if (lastDot !== -1 || lastComma !== -1) {
+            const sep = lastDot !== -1 ? '.' : ',';
+            const count = s.split(sep).length - 1;
+            const tail = s.slice(s.lastIndexOf(sep) + 1);
+            const head = s.slice(0, s.lastIndexOf(sep));
+            if (count > 1) {
+                decimalSep = null; // 1.234.567 — grouping
+            } else if (sep === ',' && tail.length === 3 && /^[1-9]\d{0,2}$/.test(head)) {
+                decimalSep = null; // 1,234 — read as English grouping
+            } else {
+                decimalSep = sep;
+            }
+        }
+
+        const at = decimalSep ? s.lastIndexOf(decimalSep) : s.length;
+        const head = s.slice(0, at);
+        const tail = decimalSep ? s.slice(at + 1) : '';
+
+        // Anything left in the integer part must be valid grouping: 1.234.567
+        if (/[.,]/.test(head) && !/^[1-9]\d{0,2}([.,]\d{3})+$/.test(head)) return NaN;
+        if (/[.,]/.test(tail)) return NaN;
+
+        const normalized = head.replace(/[.,]/g, '') + (decimalSep ? '.' + tail : '');
+
+        if (!/^\d*\.?\d*$/.test(normalized)) return NaN;
+        const value = Number(sign + normalized + exponent);
+        return Number.isFinite(value) ? value : NaN;
+    }
+
+    // Parse a fraction ("3/4") or mixed fraction ("3 1/2"); NaN if neither.
+    function parseFraction(text) {
+        const sign = /^-/.test(text) ? -1 : 1;
+        const body = text.replace(/^[+-]/, '');
+        const mixed = body.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+        if (mixed) {
+            const denominator = Number(mixed[3]);
+            if (!denominator) return NaN;
+            return sign * (Number(mixed[1]) + Number(mixed[2]) / denominator);
+        }
+        const simple = body.match(/^(\d+)\s*\/\s*(\d+)$/);
+        if (simple) {
+            const denominator = Number(simple[2]);
+            if (!denominator) return NaN;
+            return sign * Number(simple[1]) / denominator;
+        }
+        return NaN;
+    }
+
+    // Parse the whole field: a value, and optionally a unit the user named.
+    // Returns { state: 'empty' | 'ok' | 'error', value, unit, message }.
+    function parseQuantity(raw, category) {
+        const text = raw.trim();
+        if (!text) return { state: 'empty' };
+        // Half-typed input ("-", "1,", "1.") is not an error yet.
+        if (/^[+-]?$/.test(text) || /^[+-]?[\d.,]*[.,]$/.test(text)) return { state: 'empty' };
+        if (/^[+-]?[\d.,]+[eE][+-]?$/.test(text)) return { state: 'empty' };
+
+        const lookup = aliasLookup[category] || {};
+
+        // Feet and inches: 5'11", 5' 11", 6', 5ft 11in, 5 feet 11 inches
+        // (but 1'000.5 is an apostrophe-grouped number, not 1 foot 0.5 inches)
+        const apostropheGrouped = /^[+-]?\d{1,3}('\d{3})+([.,]\d+)?$/.test(text);
+        if (category === 'length' && !apostropheGrouped) {
+            const feetInches = text.match(/^([+-]?[\d.,]+)\s*(?:'|ft|feet|foot)\s*(?:([\d.,]+(?:\s+\d+\s*\/\s*\d+)?|\d+\s*\/\s*\d+)\s*(?:"|''|in|inch|inches)?)?$/i);
+            if (feetInches) {
+                const feet = normalizeNumber(feetInches[1]);
+                let inches = 0;
+                if (feetInches[2] !== undefined) {
+                    inches = parseFraction(feetInches[2].trim());
+                    if (isNaN(inches)) inches = normalizeNumber(feetInches[2].trim());
+                }
+                if (!isNaN(feet) && !isNaN(inches)) {
+                    return { state: 'ok', value: feet + inches / 12, unit: 'ft' };
+                }
+            }
+        }
+
+        // Split off a trailing unit, if there is one.
+        let numberPart = text;
+        let unit = null;
+        const unitMatch = text.match(/^(.*?)\s*(°?[a-zA-Z][a-zA-Z0-9²³-]*|[°²³#"']+)$/);
+        // An exponent ("1e3", "2.5e-3") is part of the number, not a unit.
+        if (unitMatch && /\d/.test(unitMatch[1]) && !/^[eE][+-]?\d+$/.test(unitMatch[2])) {
+            const token = unitMatch[2].toLowerCase();
+            if (Object.prototype.hasOwnProperty.call(lookup, token)) {
+                unit = lookup[token];
+                numberPart = unitMatch[1].trim();
+            } else {
+                return { state: 'error', message: 'Unknown unit "' + unitMatch[2] + '"' };
+            }
+        }
+
+        let value = parseFraction(numberPart);
+        if (isNaN(value)) value = normalizeNumber(numberPart);
+        if (isNaN(value)) return { state: 'error', message: 'Not a number' };
+
+        return { state: 'ok', value: value, unit: unit };
+    }
+
+    // When the user picks a unit from the dropdown (or swaps), a unit still
+    // written in the value field would immediately override them. Drop it, so
+    // the field and the selectors never disagree.
+    function dropUnitFromField(category) {
+        const input = document.getElementById(`${category}-from-value`);
+        if (!input) return;
+        const parsed = parseQuantity(input.value, category);
+        if (parsed.state === 'ok' && parsed.unit) {
+            input.value = String(Number(parsed.value.toPrecision(12)));
+        }
+    }
+
+    // Show how the field was read — or why it could not be.
+    function showParseState(category, parsed) {
+        const input = document.getElementById(`${category}-from-value`);
+        if (!input) return;
+        const wrapper = input.closest('.input-wrapper');
+        const group = input.closest('.input-group');
+        if (!group) return;
+
+        const hint = group.querySelector('.parse-hint');
+        if (!hint) return;
+
+        if (parsed.state === 'error') {
+            if (wrapper) wrapper.classList.add('invalid');
+            hint.classList.add('error');
+            hint.textContent = parsed.message;
+            return;
+        }
+
+        if (wrapper) wrapper.classList.remove('invalid');
+        hint.classList.remove('error');
+
+        if (parsed.state !== 'ok') {
+            hint.textContent = '';
+            return;
+        }
+
+        // Only worth saying when the reading isn't what the user typed.
+        const asTyped = input.value.trim();
+        if (asTyped === String(parsed.value) && !parsed.unit) {
+            hint.textContent = '';
+            return;
+        }
+        const exact = String(Number(parsed.value.toPrecision(12)));
+        const reading = exact.length > 12 ? String(Number(parsed.value.toPrecision(6))) : exact;
+        hint.textContent = '= ' + reading +
+            (parsed.unit ? ' ' + getUnitSymbol(parsed.unit) : '');
+    }
+
     // Perform conversion calculation
     function performConversion(category) {
         const fromValue = document.getElementById(`${category}-from-value`);
@@ -1038,13 +1316,21 @@
         const toValue = document.getElementById(`${category}-to-value`);
         const toUnit = document.getElementById(`${category}-to-unit`);
 
-        const value = parseFloat(fromValue.value);
+        const parsed = parseQuantity(fromValue.value, category);
+        showParseState(category, parsed);
 
-        if (isNaN(value)) {
+        if (parsed.state !== 'ok') {
             toValue.value = '';
             return;
         }
 
+        // The user named a unit in the field — honour it.
+        if (parsed.unit && fromUnit.value !== parsed.unit) {
+            fromUnit.value = parsed.unit;
+            updateFormula(category);
+        }
+
+        const value = parsed.value;
         let result;
 
         // Special handling for temperature
