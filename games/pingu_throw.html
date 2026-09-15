@@ -4,21 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
     <meta name="description"
-          content="Pingu Throw, the 2004 Yetisports classic, rebuilt in the browser. Drop the penguin off the ice wall, time the yeti's club, and the swing angle you catch decides everything: high and short, or flat and skipping. Steer the penguin's spin in the air so it lands belly-first and skims the snow for another hundred metres. No wind, no luck, one number at the end.">
+          content="Pingu Throw, the 2004 Yetisports classic, rebuilt in the browser on its two clicks: one sends the penguin diving off the ice wall, the other swings the club the instant you press. How level the penguin is with the club head is the whole game — dead level is 52 metres per second at 38 degrees and six bounces, a hand too high is a steep lob, a hand too low a flat skidder. No wind, no luck, one number at the end.">
     <meta name="author" content="Claude prompted by Tobias Müller">
     <meta name="robots" content="index,follow">
     <link rel="canonical" href="https://www.gptgames.dev/games/pingu_throw.html">
     <meta property="og:type" content="website">
     <meta property="og:title" content="Pingu Throw">
     <meta property="og:description"
-          content="Time the club, then keep the penguin flat. The yeti classic where every bounce is another hundred metres.">
+          content="One dive, one swing. Catch the penguin level with the club and it skips halfway across the ice.">
     <meta property="og:url" content="https://www.gptgames.dev/games/pingu_throw.html">
     <meta property="og:image" content="https://www.gptgames.dev/screenshots/screenshot_312.webp">
     <meta property="og:site_name" content="GPT Games">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Pingu Throw">
     <meta name="twitter:description"
-          content="Time the club, then keep the penguin flat. The yeti classic where every bounce is another hundred metres.">
+          content="One dive, one swing. Catch the penguin level with the club and it skips halfway across the ice.">
     <meta name="twitter:image" content="https://www.gptgames.dev/screenshots/screenshot_312.webp">
     <title>Pingu Throw</title>
     <style>
@@ -135,12 +135,12 @@
 
 <div class="panel" id="intro">
     <h1>Pingu Throw</h1>
-    <p>Tap once to drop the penguin off the ice wall, tap again to swing the club.
-        <b>When</b> you swing decides the angle — early sends it high and short, late sends it flat.
-        In the air, hold the <b>left or right half</b> of the screen (or ←/→) to spin the penguin:
-        land it belly-first, pointing along its flight, and it skims off the snow for another hundred metres.</p>
+    <p>Tap once and the penguin dives off the ice wall. Tap again and the yeti swings —
+        the club comes through the moment you press, so the only question is
+        <b>how level the penguin is with it</b>. Dead level sends it furthest;
+        a bit high lobs it, a bit low skids it. The dashed line is the club's height.</p>
     <button id="go">Throw</button>
-    <p class="note">Keyboard: space to drop and swing, ← → to spin.</p>
+    <p class="note">Keyboard: space to drop, space to swing.</p>
 </div>
 
 <div class="panel" id="over" hidden>
@@ -163,32 +163,40 @@
     };
 
     // ---- world constants (metres, seconds) -------------------------------
-    const G = 15;                 // gravity
-    const DRAG = 0.003;           // quadratic air drag, keeps long flights honest
+    // The original is two clicks: one drops the penguin off the cliff, one swings
+    // the club. The club is already up — the swing lands the instant you press —
+    // so the only thing that matters is how level the penguin is with the club.
+    const G = 15;                 // gravity in flight
+    const G_DIVE = 6;             // the dive down the ice wall is slower and readable
+    const DRAG = 0.003;
     const TAX = 0.7;              // snow the penguin ploughs through on every landing
-    const PILLAR_X = -1.35;       // where the penguin slides down
-    const PILLAR_TOP = 8.6;
-    const PIVOT = {x: 0.35, y: 2.15};  // yeti's hands
-    const CLUB_LEN = 2.25;
-    const WINDUP = 0.10;          // club pulls back before it sweeps
-    const SWEEP = 0.30;           // sweep duration
-    const A_START = 3.55;         // club arm angle at sweep start (rad, ~203deg, low and behind)
-    const A_END = 1.05;           // and at the end (~60deg, up and through)
-    const DROP_VX = 2.3;          // penguin drifts toward the yeti as it falls
+    const REST = 0.58;            // bounce restitution
+    const KEEP = 0.925;           // horizontal carry-over per bounce
+    const WALL_X = -1.35;         // the ice face the penguin dives down
+    const WALL_TOP = 8.6;
+    const PIVOT = {x: 0.35, y: 2.15};   // yeti's hands
+    const CLUB_LEN = 1.9;
+    const CLUB_REST = 2.79;       // rad, club held out toward the wall (~160deg)
+    const CLUB_SWUNG = 0.70;      // rad, follow-through (~40deg)
+    const SWEET_Y = PIVOT.y + Math.sin(CLUB_REST) * CLUB_LEN;   // club head height
+    const BAND = 1.7;             // how far off that height still connects
+    const ANG_HI = 62, ANG_LO = 14;     // launch angle at the top and bottom of the band
+    const VMAX = 52;              // speed off a perfectly level hit
     const R_PENGU = 0.42;
 
     // ---- state ------------------------------------------------------------
-    let S = 'ready';              // ready | falling | flight | ground | done
-    let p, club, camX, camY, bounces, best, spinInput, contact, lastTs, acc, shake, trail, landMark;
+    let S = 'ready';              // ready | diving | flight | ground | done
+    let p, club, camX, camY, bounces, best, contact, lastTs, acc, shake, trail, landMark, throws;
 
     best = parseFloat(localStorage.getItem('pinguThrowBest') || '0') || 0;
+    throws = parseInt(localStorage.getItem('pinguThrowCount') || '0', 10) || 0;
     if (best > 0) el.best.textContent = best.toFixed(1) + 'm';
 
     function reset() {
-        p = {x: PILLAR_X, y: PILLAR_TOP, vx: 0, vy: 0, a: -Math.PI / 2, av: 0, slide: true, rest: false};
-        club = {armed: false, t: 0, a: A_START, prevA: A_START};
+        p = {x: WALL_X, y: WALL_TOP, vx: 0, vy: 0, a: Math.PI / 2 + 0.22, av: 0};
+        club = {swung: false, t: 0, a: CLUB_REST};
         S = 'ready';
-        camX = 0; camY = 0; bounces = 0; spinInput = 0; contact = null; acc = 0; shake = 0;
+        camX = 0; camY = 0; zoom = 1.45; bounces = 0; contact = null; acc = 0; shake = 0;
         trail = []; landMark = [];
         el.dist.innerHTML = '0.0<small>m</small>';
         el.sub.textContent = 'tap to drop';
@@ -226,41 +234,57 @@
         src.connect(bp).connect(g).connect(a.destination); src.start();
     }
 
-    // ---- input ------------------------------------------------------------
-    function press(side) {
-        audio() && ac.state === 'suspended' && ac.resume();
-        if (S === 'ready') {
-            S = 'falling'; p.slide = true; p.vy = -1.2;
-            el.sub.textContent = 'swing!';
-            setPrompt('Tap to swing');
-            noise(0.18, 0.08, 1500);
-        } else if (S === 'falling' && !club.armed) {
-            club.armed = true; club.t = 0;
+    // ---- the swing --------------------------------------------------------
+    function swing() {
+        club.swung = true; club.t = 0;
+        noise(0.06, 0.12, 2200);
+
+        const dy = p.y - SWEET_Y;                 // + = caught it high, - = caught it low
+        if (Math.abs(dy) > BAND) {                // clean miss, the penguin just drops
+            blip(180, 0.12, 'sine', 0.06, 90);
+            el.sub.textContent = dy > 0 ? 'too early' : 'too late';
             setPrompt('');
-            blip(140, 0.09, 'triangle', 0.1);
-        } else if (S === 'flight') {
-            spinInput = side;
+            return;
+        }
+
+        const k = dy / BAND;
+        const ang = ((ANG_HI + ANG_LO) / 2 + k * (ANG_HI - ANG_LO) / 2) * Math.PI / 180;
+        const q = Math.max(0, 1 - Math.pow(Math.abs(k), 1.5));
+        const speed = VMAX * (0.35 + 0.65 * q);
+
+        p.vx = Math.cos(ang) * speed;
+        p.vy = Math.sin(ang) * speed;
+        p.av = -5 - 4 * q;                        // a tumble that settles as it flies
+        contact = {q: q, dy: dy};
+        S = 'flight';
+        shake = 0.5 + 0.5 * q;
+
+        blip(95, 0.16, 'square', 0.1 + 0.14 * q, 45);
+        noise(0.09, 0.1 + 0.14 * q, 2600);
+        el.sub.textContent = q > 0.9 ? 'right on the club!' : q > 0.65 ? 'solid hit' :
+            q > 0.35 ? 'clipped it' : 'edge of the club';
+        setPrompt('');
+    }
+
+    // ---- input ------------------------------------------------------------
+    function press() {
+        const a = audio(); if (a && a.state === 'suspended') a.resume();
+        if (S === 'ready') {
+            S = 'diving'; p.vy = -0.6;
+            el.sub.textContent = 'swing when it is level';
+            setPrompt('Tap when the penguin is level with the club');
+            noise(0.16, 0.07, 1500);
+        } else if (S === 'diving' && !club.swung) {
+            swing();
         } else if (S === 'done') {
             again();
         }
     }
 
-    function release() { spinInput = 0; }
-
-    function sideOf(clientX) { return clientX < window.innerWidth / 2 ? -1 : 1; }
-
-    cv.addEventListener('pointerdown', e => { e.preventDefault(); press(sideOf(e.clientX)); }, {passive: false});
-    window.addEventListener('pointerup', release);
-    window.addEventListener('pointercancel', release);
-
+    cv.addEventListener('pointerdown', e => { e.preventDefault(); press(); }, {passive: false});
     window.addEventListener('keydown', e => {
         if (e.repeat) return;
-        if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); press(0); }
-        else if (e.code === 'ArrowLeft') { e.preventDefault(); if (S === 'flight') spinInput = -1; }
-        else if (e.code === 'ArrowRight') { e.preventDefault(); if (S === 'flight') spinInput = 1; }
-    });
-    window.addEventListener('keyup', e => {
-        if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') spinInput = 0;
+        if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); press(); }
     });
 
     document.getElementById('go').onclick = () => { el.intro.hidden = true; };
@@ -268,89 +292,36 @@
     function again() { el.over.hidden = true; reset(); }
 
     // ---- physics ----------------------------------------------------------
-    function clubAngle(t) {
-        if (t < WINDUP) {                       // small pull-back
-            const k = t / WINDUP;
-            return A_START + 0.30 * Math.sin(k * Math.PI / 2);
-        }
-        const k = Math.min(1, (t - WINDUP) / SWEEP);
-        const e = k * k * (3 - 2 * k);           // smooth accelerate/decelerate
-        return (A_START + 0.30) + (A_END - A_START - 0.30) * e;
-    }
-
-    function tryHit(dt) {
-        // closest point on the club arm to the penguin
-        const ax = PIVOT.x, ay = PIVOT.y;
-        const bx = ax + Math.cos(club.a) * CLUB_LEN, by = ay + Math.sin(club.a) * CLUB_LEN;
-        const dx = bx - ax, dy = by - ay;
-        let s = ((p.x - ax) * dx + (p.y - ay) * dy) / (dx * dx + dy * dy);
-        s = Math.max(0, Math.min(1, s));
-        const cx = ax + dx * s, cy = ay + dy * s;
-        const d = Math.hypot(p.x - cx, p.y - cy);
-        const omega = Math.abs(club.a - club.prevA) / Math.max(dt, 1e-4);
-        if (d > R_PENGU + 0.26 || omega < 3) return false;
-        const rc = s * CLUB_LEN;                        // contact radius
-        const tip = Math.max(0, 1 - Math.abs(CLUB_LEN - rc) / 1.2);   // 1 at the tip
-        const centred = Math.max(0, 1 - d / (R_PENGU + 0.26));
-        const q = Math.max(0, Math.min(1, 0.55 * tip + 0.45 * centred));
-
-        const dir = club.a - Math.PI / 2;               // tangent of a clockwise sweep
-        const speed = omega * rc * (0.88 + 0.78 * q);
-        p.vx = Math.cos(dir) * speed + 1.0;
-        p.vy = Math.sin(dir) * speed;
-        p.av = -6.0 - 3 * q;          // the club sets it tumbling; the player has to kill that
-        p.slide = false;
-        contact = {q: q, speed: speed, angle: dir};
-        S = 'flight';
-        shake = 0.9;
-        blip(90, 0.16, 'square', 0.22, 42);
-        noise(0.09, 0.22, 2600);
-        el.sub.textContent = 'spin to stay flat';
-        setPrompt('Hold left / right to spin');
-        return true;
-    }
-
     function groundHit() {
-        // how well is the penguin lined up with where it is going?
-        const velA = Math.atan2(p.vy, p.vx);
-        let diff = p.a - velA;
-        while (diff > Math.PI) diff -= 2 * Math.PI;
-        while (diff < -Math.PI) diff += 2 * Math.PI;
-        const q = Math.pow(Math.max(0, Math.cos(diff)), 2.2);   // 1 = belly-first, nose forward
-
         const impact = Math.abs(p.vy);
-        const rest = 0.10 + 0.62 * q;                           // restitution
-        const keep = 0.70 + 0.28 * q;                           // horizontal carry-over
-        p.vy = impact * rest;
-        p.vx = Math.max(0, p.vx * keep - TAX * (1.3 - 0.6 * q));
-        p.y = 0;
-        p.av = p.av * 0.35 + (1 - q) * -2.2;
+        p.vy = impact * REST;
+        p.vx = Math.max(0, p.vx * KEEP - TAX);
+        p.y = R_PENGU;
         bounces++;
         landMark.push(p.x);
-        shake = Math.min(1, impact / 22);
+        shake = Math.min(1, impact / 20);
+        p.av = -3 - impact * 0.15;
 
-        noise(0.13, Math.min(0.32, 0.06 + impact / 90), 500 + 900 * q);
-        blip(70 + 60 * q, 0.1, 'sine', 0.08 + 0.05 * q, 40);
-
+        noise(0.13, Math.min(0.3, 0.06 + impact / 90), 1100);
+        blip(130, 0.1, 'sine', 0.09, 50);
         el.sub.textContent = bounces + (bounces === 1 ? ' bounce' : ' bounces');
-        if (p.vy < 1.6) {                                        // no more hopping: slide it out
-            p.vy = 0; p.rest = true;
-            p.av = 0;
-            S = 'ground';
-            setPrompt('');
-        }
+
+        if (p.vy < 1.6) { p.vy = 0; p.av = 0; S = 'ground'; }
     }
 
     function finish() {
         S = 'done';
         const d = Math.max(0, p.x);
+        throws++;
+        localStorage.setItem('pinguThrowCount', String(throws));
         el.dist.innerHTML = d.toFixed(1) + '<small>m</small>';
         el.finalDist.innerHTML = d.toFixed(1) + '<small>m</small>';
         let note;
-        if (!contact) note = 'Missed the swing entirely.';
+        if (!contact) note = 'The club went through thin air — swing when the penguin is level with it.';
         else if (d > best) note = 'New best — ' + bounces + (bounces === 1 ? ' bounce' : ' bounces') + '.';
-        else note = bounces + (bounces === 1 ? ' bounce' : ' bounces') +
-            ', ' + (best - d).toFixed(1) + 'm off your best.';
+        else if (contact.dy > 0.25) note = 'A touch early: caught it ' + contact.dy.toFixed(1) + 'm above the club.';
+        else if (contact.dy < -0.25) note = 'A touch late: caught it ' + (-contact.dy).toFixed(1) + 'm below the club.';
+        else note = bounces + (bounces === 1 ? ' bounce' : ' bounces') + ', ' + (best - d).toFixed(1) + 'm off your best.';
         el.finalNote.textContent = note;
         if (d > best) {
             best = d;
@@ -361,51 +332,46 @@
         el.over.hidden = false;
     }
 
+    function settle(dt) {
+        // the tumble dies down and the penguin lines up with its own flight path,
+        // which is why a hit skips rather than digs in
+        p.av *= Math.pow(0.25, dt);
+        p.a += p.av * dt;
+        const velA = Math.atan2(p.vy, p.vx);
+        let diff = velA - p.a;
+        while (diff > Math.PI) diff -= 2 * Math.PI;
+        while (diff < -Math.PI) diff += 2 * Math.PI;
+        p.a += diff * Math.min(1, 2.4 * dt);
+    }
+
     function step(dt) {
         if (shake > 0) shake = Math.max(0, shake - dt * 3);
+        if (club.swung && club.t < 1) club.t += dt;
 
-        if (S === 'falling') {
-            if (p.slide) {                       // hugging the ice for the first moment
-                p.vy -= G * 0.55 * dt;
-                p.y += p.vy * dt;
-                p.a = -Math.PI / 2 + 0.3 * Math.sin(p.y);
-                if (p.y < PILLAR_TOP - 2.4) { p.slide = false; p.vx = DROP_VX; }
-            } else {
-                p.vy -= G * dt;
-                p.x += p.vx * dt;
-                p.y += p.vy * dt;
-                p.a += dt * 1.2;
-            }
-            if (club.armed) {
-                club.prevA = club.a;
-                club.t += dt;
-                club.a = clubAngle(club.t);
-                if (club.t > WINDUP && club.t < WINDUP + SWEEP) tryHit(dt);
-            }
-            if (S === 'falling' && p.y <= R_PENGU) {   // clubbed nothing, flopped in the snow
-                p.y = R_PENGU; p.vy = 0; p.vx *= 0.3; S = 'ground'; p.rest = true;
+        if (S === 'diving') {
+            p.vy -= G_DIVE * dt;
+            p.y += p.vy * dt;
+            p.a = Math.PI / 2 + 0.22;              // a clean head-first dive, no flailing
+            if (p.y <= R_PENGU) {                  // never clubbed: it just lands
+                p.y = R_PENGU; p.vy = 0; p.vx = 0; S = 'ground';
                 noise(0.2, 0.18, 400);
-                el.sub.textContent = 'missed';
+                if (!club.swung) el.sub.textContent = 'no swing';
             }
         } else if (S === 'flight') {
             const v = Math.hypot(p.vx, p.vy);
             const dragF = DRAG * v;
             p.vx -= p.vx * dragF * dt;
             p.vy -= (p.vy * dragF + G) * dt;
-            if (spinInput) p.av += spinInput * 22 * dt;
-            p.av *= Math.pow(0.9, dt);
-            p.av = Math.max(-9, Math.min(9, p.av));
-            p.a += p.av * dt;
             p.x += p.vx * dt;
             p.y += p.vy * dt;
+            settle(dt);
             trail.push({x: p.x, y: p.y});
             if (trail.length > 420) trail.shift();
             if (p.y <= R_PENGU) { p.y = R_PENGU; groundHit(); }
             el.dist.innerHTML = Math.max(0, p.x).toFixed(1) + '<small>m</small>';
         } else if (S === 'ground') {
-            const f = 3.4 + 7 * Math.abs(Math.sin(p.a));   // flat penguin slides, upright one digs in
             const sgn = Math.sign(p.vx);
-            p.vx -= sgn * f * dt;
+            p.vx -= sgn * 5 * dt;
             if (sgn !== Math.sign(p.vx)) p.vx = 0;
             p.x += p.vx * dt;
             p.a += p.av * dt;
@@ -416,14 +382,15 @@
     }
 
     // ---- drawing ----------------------------------------------------------
-    let W = 0, H = 0, DPR = 1, PPM = 8, groundY = 0;
+    let W = 0, H = 0, DPR = 1, PPM = 8, basePPM = 8, zoom = 1.45, groundY = 0;
 
     function resize() {
         DPR = Math.min(2, window.devicePixelRatio || 1);
         W = window.innerWidth; H = window.innerHeight;
         cv.width = Math.floor(W * DPR); cv.height = Math.floor(H * DPR);
         ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-        PPM = Math.max(9, Math.min(34, Math.min(H / 22, W / 30)));
+        basePPM = Math.max(8, Math.min(30, Math.min(H / 24, W / 20)));
+        PPM = basePPM * zoom;
         groundY = H * 0.80;
     }
     window.addEventListener('resize', resize);
@@ -435,7 +402,6 @@
         const g = ctx.createLinearGradient(0, 0, 0, groundY);
         g.addColorStop(0, '#2a6ea6'); g.addColorStop(0.5, '#5f9fca'); g.addColorStop(1, '#cfe7f3');
         ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-        // sun
         ctx.fillStyle = 'rgba(255,250,228,.9)';
         ctx.beginPath(); ctx.arc(W * 0.78, H * 0.15, 24, 0, 7); ctx.fill();
         ctx.fillStyle = 'rgba(255,250,228,.18)';
@@ -443,7 +409,6 @@
     }
 
     function drawRange(parY, scale, colour, seedStep, height) {  // parallax ridge
-        // parallax mountain ridge, deterministic from world position
         ctx.fillStyle = colour;
         ctx.beginPath();
         const base = groundY - parY;
@@ -465,7 +430,6 @@
         ctx.fillRect(0, groundY, W, H - groundY);
         ctx.fillStyle = '#dfeaf3';
         ctx.fillRect(0, groundY, W, 5);
-        // metre marks every 25m
         ctx.font = '600 11px system-ui, sans-serif';
         const first = Math.floor((camX - W * 0.28 / PPM) / 25) * 25;
         for (let m = first; m < camX + W / PPM; m += 25) {
@@ -476,7 +440,6 @@
             ctx.fillStyle = 'rgba(58,96,130,.55)';
             ctx.fillText(m + 'm', x + 5, groundY + 22);
         }
-        // craters from earlier bounces
         ctx.fillStyle = 'rgba(150,180,205,.45)';
         for (const m of landMark) {
             const x = sx(m);
@@ -485,9 +448,8 @@
         }
     }
 
-    function drawPillar() {
-        // an ice wall filling the left edge; the penguin slides down its right face
-        const face = sx(PILLAR_X), top = sy(PILLAR_TOP + 0.9), base = sy(0);
+    function drawWall() {
+        const face = sx(WALL_X), top = sy(WALL_TOP + 0.9), base = sy(0);
         const g = ctx.createLinearGradient(face - 3 * PPM, 0, face, 0);
         g.addColorStop(0, '#9dc9de'); g.addColorStop(0.7, '#d7eefa'); g.addColorStop(1, '#f2fbff');
         ctx.fillStyle = g;
@@ -504,7 +466,6 @@
         ctx.lineTo(face - 0.2 * PPM, top); ctx.lineTo(face - 0.2 * PPM, top + 7);
         ctx.lineTo(face - 1.9 * PPM, top - 1); ctx.lineTo(-40, top - 22);
         ctx.closePath(); ctx.fill();
-        // a few cracks so the wall reads as ice
         ctx.strokeStyle = 'rgba(120,170,200,.35)'; ctx.lineWidth = 1.5;
         for (let i = 1; i <= 3; i++) {
             const y = top + (base - top) * (i / 4);
@@ -514,30 +475,47 @@
         }
     }
 
+    function drawStrikeZone() {
+        // the height the club sweeps through, marked on the ice so the timing is readable
+        if (S !== 'ready' && S !== 'diving') return;
+        const x0 = sx(WALL_X) - 2.4 * PPM, x1 = sx(WALL_X) + 0.4 * PPM;
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,255,255,.12)';
+        ctx.fillRect(x0, sy(SWEET_Y + BAND), x1 - x0, (2 * BAND) * PPM);
+        ctx.strokeStyle = 'rgba(255,255,255,.75)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 5]);
+        ctx.beginPath();
+        ctx.moveTo(x0, sy(SWEET_Y)); ctx.lineTo(x1, sy(SWEET_Y));
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+    }
+
     function drawYeti() {
         const x = sx(0), base = sy(0);
-        const sw = club.armed ? 1 : 0;
         ctx.fillStyle = 'rgba(120,155,185,.25)';
         ctx.beginPath(); ctx.ellipse(x, base + 2, 1.1 * PPM, 0.25 * PPM, 0, 0, 7); ctx.fill();
         ctx.save();
         ctx.translate(x, base);
         const s = PPM / 14;
         ctx.scale(s, s);
-        // legs + body
         ctx.fillStyle = '#f6fbff';
         ctx.beginPath(); ctx.ellipse(-6, -10, 8, 11, 0, 0, 7); ctx.fill();
         ctx.beginPath(); ctx.ellipse(-6, -26, 11, 13, 0, 0, 7); ctx.fill();
         ctx.beginPath(); ctx.arc(-4, -44, 9, 0, 7); ctx.fill();
-        // face
         ctx.fillStyle = '#e3c59b';
         ctx.beginPath(); ctx.ellipse(0, -43, 5, 6, 0, 0, 7); ctx.fill();
         ctx.fillStyle = '#20313f';
         ctx.beginPath(); ctx.arc(0.5, -46, 1.3, 0, 7); ctx.fill();
         ctx.beginPath(); ctx.arc(-3, -46, 1.3, 0, 7); ctx.fill();
-        if (sw) { ctx.beginPath(); ctx.ellipse(-0.5, -39, 2.4, 2, 0, 0, 7); ctx.fill(); }
+        if (club.swung) { ctx.beginPath(); ctx.ellipse(-0.5, -39, 2.4, 2, 0, 0, 7); ctx.fill(); }
         ctx.restore();
 
-        // club, drawn about the pivot
+        // the club: held out at the strike height, snapped through on the swing
+        const k = club.swung ? Math.min(1, club.t / 0.16) : 0;
+        const e = k * k * (3 - 2 * k);
+        club.a = CLUB_REST + (CLUB_SWUNG - CLUB_REST) * e;
         const px = sx(PIVOT.x), py = sy(PIVOT.y);
         ctx.save();
         ctx.translate(px, py);
@@ -548,7 +526,6 @@
         ctx.fillStyle = '#a56c3e';
         ctx.beginPath(); ctx.ellipse(CLUB_LEN * PPM * 0.9, 0, 0.42 * PPM, 0.3 * PPM, 0, 0, 7); ctx.fill();
         ctx.restore();
-        // yeti's arm reaching for the club
         ctx.strokeStyle = '#f6fbff'; ctx.lineWidth = 0.22 * PPM; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(sx(-0.1), sy(1.9)); ctx.lineTo(px, py); ctx.stroke();
     }
@@ -561,46 +538,22 @@
         const s = PPM / 8;
         ctx.scale(s, s);
         ctx.fillStyle = '#1b2733';
-        ctx.beginPath(); ctx.ellipse(0, 0, 3.4, 4.2, 0, 0, 7); ctx.fill();      // body
-        ctx.beginPath(); ctx.ellipse(0, -4.4, 2.5, 2.6, 0, 0, 7); ctx.fill();   // head
+        ctx.beginPath(); ctx.ellipse(0, 0, 3.4, 4.2, 0, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0, -4.4, 2.5, 2.6, 0, 0, 7); ctx.fill();
         ctx.fillStyle = '#f7fbff';
-        ctx.beginPath(); ctx.ellipse(0, 0.6, 2.2, 3.1, 0, 0, 7); ctx.fill();    // belly
+        ctx.beginPath(); ctx.ellipse(0, 0.6, 2.2, 3.1, 0, 0, 7); ctx.fill();
         ctx.beginPath(); ctx.ellipse(0, -4.2, 1.6, 1.8, 0, 0, 7); ctx.fill();
         ctx.fillStyle = '#20313f';
         ctx.beginPath(); ctx.arc(-1, -4.8, 0.55, 0, 7); ctx.fill();
         ctx.beginPath(); ctx.arc(1, -4.8, 0.55, 0, 7); ctx.fill();
         ctx.fillStyle = '#f2a33c';
         ctx.beginPath(); ctx.moveTo(0, -3.6); ctx.lineTo(1.9, -2.7); ctx.lineTo(0, -2.2); ctx.closePath(); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(-1.5, 4.3, 1.3, 0.7, 0.3, 0, 7); ctx.fill();   // feet
+        ctx.beginPath(); ctx.ellipse(-1.5, 4.3, 1.3, 0.7, 0.3, 0, 7); ctx.fill();
         ctx.beginPath(); ctx.ellipse(1.5, 4.3, 1.3, 0.7, -0.3, 0, 7); ctx.fill();
         ctx.fillStyle = '#1b2733';
-        ctx.beginPath(); ctx.ellipse(-3.3, 0.4, 1, 2.6, 0.25, 0, 7); ctx.fill();    // flippers
+        ctx.beginPath(); ctx.ellipse(-3.3, 0.4, 1, 2.6, 0.25, 0, 7); ctx.fill();
         ctx.beginPath(); ctx.ellipse(3.3, 0.4, 1, 2.6, -0.25, 0, 7); ctx.fill();
         ctx.restore();
-
-        // alignment ring while flying: green when the landing will skip
-        if (S === 'flight' && contact) {
-            const velA = Math.atan2(p.vy, p.vx);
-            let diff = p.a - velA;
-            while (diff > Math.PI) diff -= 2 * Math.PI;
-            while (diff < -Math.PI) diff += 2 * Math.PI;
-            const q = Math.pow(Math.max(0, Math.cos(diff)), 2.2);
-            const r = 1.6 * PPM;
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = 'rgba(255,255,255,.22)';
-            ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
-            ctx.strokeStyle = 'rgba(' + Math.round(255 - 160 * q) + ',' + Math.round(105 + 120 * q) + ',105,.95)';
-            ctx.beginPath(); ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * q); ctx.stroke();
-            // the line it should be lying along
-            ctx.strokeStyle = 'rgba(255,255,255,.5)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
-            ctx.beginPath();
-            ctx.moveTo(x - Math.cos(velA) * r * 1.5, y + Math.sin(velA) * r * 1.5);
-            ctx.lineTo(x + Math.cos(velA) * r * 1.5, y - Math.sin(velA) * r * 1.5);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
     }
 
     function drawTrail() {
@@ -626,8 +579,12 @@
     }
 
     function render() {
-        // camera: follow the penguin once it is moving, keep it in frame vertically
-        const targetX = (S === 'ready' || S === 'falling') ? 0 : Math.max(0, p.x - W * 0.10 / PPM);
+        // close in on the wall for the timing, pull back once the penguin is flying
+        const targetZoom = (S === 'ready' || S === 'diving') ? 1.45 : 1;
+        zoom += (targetZoom - zoom) * (targetZoom > zoom ? 0.08 : 0.04);
+        PPM = basePPM * zoom;
+
+        const targetX = (S === 'ready' || S === 'diving') ? 0 : Math.max(0, p.x - W * 0.10 / PPM);
         const targetY = Math.max(0, p.y - (groundY - H * 0.30) / PPM);
         camX += (targetX - camX) * 0.12;
         camY += (targetY - camY) * 0.08;
@@ -639,25 +596,18 @@
         drawRange(H * 0.13, 0.30, '#9dc2da', 9, H * 0.09);
         drawGround();
         drawBestFlag();
-        drawPillar();
+        drawWall();
+        drawStrikeZone();
         drawYeti();
         drawTrail();
         drawPengu();
         ctx.restore();
-
-        if (S === 'flight' && spinInput) {           // show which half is being held
-            ctx.save();
-            ctx.globalAlpha = 0.13;
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(spinInput > 0 ? W / 2 : 0, 0, W / 2, H);
-            ctx.restore();
-        }
     }
 
     // ---- loop -------------------------------------------------------------
     function frame(ts) {
         if (!lastTs) lastTs = ts;
-        let dt = Math.min(0.05, (ts - lastTs) / 1000);
+        const dt = Math.min(0.05, (ts - lastTs) / 1000);
         lastTs = ts;
         acc += dt;
         const h = 1 / 240;
