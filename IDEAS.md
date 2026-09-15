@@ -412,6 +412,25 @@ worksheet. Nothing in the catalogue had touched ciphers beyond the toy converter
 gestures at. The neighbouring one still open is **cipher-based puzzle games** (nothing here is a word game
 built on deduction from letter statistics).
 
+Filled since: **Worms**, by `games/worms.html` — the three axes "Read this first" measured going to zero
+(`multiplayer` 24%→0, `competitive` 19→1, `strategy` 16→0) in one entry, and it is the *known thing done well*
+case rather than a novel mechanism: Worms Armageddon is an externally fixed target, so how close this lands is a
+reading you can take. 2–4 teams, each human or CPU in any mix, hot-seat on one device, no backend. Four things
+worth reusing. **The terrain is a pixel mask, not polygons** — a `Uint8Array` the size of the world plus a matching
+offscreen canvas, with craters punching both and only the affected rectangle repainted. That single decision is
+what makes a crater the exact shape its explosion had, and it costs a 2.2 MB array and a median 16.6 ms frame
+through twelve simultaneous 70 px blasts. **The WA constants are worth copying literally**: a worm is a 9×16
+"coffin" that climbs 8 px without jumping, and a test that walks it at 4/8/12 px steps (climbs, climbs, blocked)
+pins the feel more usefully than any amount of playing. **Wind is the balancing asymmetry, not decoration** — it is
+a constant horizontal acceleration applied to rockets and withheld from thrown things, measured here at 243 px of
+spread on an 82-frame bazooka arc and exactly 0 on a grenade; the first cut had it ten times too weak and the shot
+simply did not read as a Worms shot. **And two bugs generalise past this build.** Fall damage never fired, because
+a fast landing always took the bounce branch and the damage lived in the landing branch — the slow falls that did
+land were all below the threshold, so the whole system looked fine and was dead. Separately the first wind test
+measured 2 px of spread and looked like a broken constant; the shot was hitting a cliff face, and the constant was
+right. **Both were instrument failures, not game failures, and both read as the opposite.** A physics value is only
+measured when the measurement runs somewhere the value is the thing deciding the outcome.
+
 Filled since: **fonts**, by `tools/sorts.html` — the structural gap in the tool catalogue: 215 tools, a great
 deal of text and typography work among them, and not one that opened a font file. `file_type_identifier` sniffed
 magic bytes and stopped; `character_map_explorer` browsed Unicode knowing nothing about any font. Sorts parses the
