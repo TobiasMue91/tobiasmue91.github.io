@@ -401,39 +401,210 @@
     function sx(x) { return (x - camX) * PPM + W * 0.28; }
     function sy(y) { return groundY - (y - camY) * PPM; }
 
-    function drawSky() {
-        const g = ctx.createLinearGradient(0, 0, 0, groundY);
-        g.addColorStop(0, '#2a6ea6'); g.addColorStop(0.5, '#5f9fca'); g.addColorStop(1, '#cfe7f3');
-        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = 'rgba(255,250,228,.9)';
-        ctx.beginPath(); ctx.arc(W * 0.78, H * 0.15, 24, 0, 7); ctx.fill();
-        ctx.fillStyle = 'rgba(255,250,228,.18)';
-        ctx.beginPath(); ctx.arc(W * 0.78, H * 0.15, 44, 0, 7); ctx.fill();
+    // ---- background -------------------------------------------------------
+    // Everything back here sits on the same snow plain the penguin lands on, so the
+    // horizon barely moves when the camera rises: a ridge two kilometres out shifts by
+    // almost nothing when you climb twenty metres. Only the near ground follows camY.
+    // The sky and the ridges only ever translate, so each is painted once into its own
+    // offscreen layer and blitted; a layer is repainted only when it has scrolled past the
+    // margin it was drawn with.
+    const layers = {};
+    function getLayer(name, margin, fixedW, fixedH) {
+        const w = fixedW || (W + 2 * margin), h = fixedH || H;
+        let L = layers[name];
+        if (!L || L.w !== w || L.h !== h || L.dpr !== DPR) {
+            const c = document.createElement('canvas');
+            c.width = Math.max(1, Math.ceil(w * DPR));
+            c.height = Math.max(1, Math.ceil(h * DPR));
+            const cx = c.getContext('2d');
+            cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+            L = layers[name] = {canvas: c, cx: cx, w: w, h: h, dpr: DPR, m: margin, shift: null, key: null};
+        }
+        return L;
     }
 
-    function drawRange(parY, scale, colour, seedStep, height, vScale) {  // parallax ridge
-        ctx.fillStyle = colour;
-        ctx.beginPath();
-        const base = groundY - parY - camY * PPM * vScale;   // distant, so it rises less than the ice
-        ctx.moveTo(-10, base + 40);
-        const off = camX * scale;
-        const start = Math.floor((off - 40) / seedStep) * seedStep;
-        for (let wx = start; wx < off + W / PPM + 80; wx += seedStep) {
-            const px = (wx - off) * PPM + W * 0.28;
-            const h = height * (0.55 + 0.45 * Math.abs(Math.sin(wx * 0.37)));
-            ctx.lineTo(px, base - h);
-            ctx.lineTo(px + seedStep * PPM * 0.5, base + 6);
+    function hash1(i) { const v = Math.sin(i * 127.1) * 43758.5453; return v - Math.floor(v); }
+
+    function vnoise(x) {
+        const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f);
+        return hash1(i) * (1 - u) + hash1(i + 1) * u;
+    }
+
+    function fbm(x) {          // ridged noise: sharp summits, soft saddles
+        let n = 0.55 * vnoise(x) + 0.3 * vnoise(x * 2.13 + 11.3) + 0.15 * vnoise(x * 4.31 + 31.7);
+        return Math.pow(1 - Math.abs(2 * n - 1), 1.5);
+    }
+
+    function horizonY() { return groundY - H * 0.20 - camY * PPM * 0.03; }
+
+    function drawSky() {
+        const hz = horizonY();
+        const g = ctx.createLinearGradient(0, 0, 0, Math.max(hz, 1));
+        g.addColorStop(0, '#17558c');
+        g.addColorStop(0.45, '#3f86bd');
+        g.addColorStop(0.82, '#8fc2de');
+        g.addColorStop(1, '#dcf0f8');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, Math.max(hz, 1) + 2);
+
+        // low sun, clear of the play area. The glow is a radial gradient, which is dear to
+        // rasterise, so it is painted once into a small sprite and stamped from then on.
+        const R = H * 0.2, L = getLayer('sun', 0, 2 * R, 2 * R);
+        if (L.key !== 1) {
+            L.key = 1;
+            const cx = L.cx;
+            cx.clearRect(0, 0, 2 * R, 2 * R);
+            const gl = cx.createRadialGradient(R, R, 6, R, R, R);
+            gl.addColorStop(0, 'rgba(255,248,224,.55)');
+            gl.addColorStop(1, 'rgba(255,248,224,0)');
+            cx.fillStyle = gl;
+            cx.fillRect(0, 0, 2 * R, 2 * R);
+            cx.fillStyle = 'rgba(255,252,236,.95)';
+            cx.beginPath(); cx.arc(R, R, H * 0.028, 0, 7); cx.fill();
         }
-        ctx.lineTo(W + 10, base + 40);
-        ctx.closePath(); ctx.fill();
+        ctx.drawImage(L.canvas, W * 0.74 - R, hz - H * 0.34 - R, 2 * R, 2 * R);
+
+        drawClouds(hz);
+    }
+
+    function drawClouds(hz) {
+        // thin, and so far off they barely slide. Like every layer back here they are laid
+        // out in screen pixels against basePPM, so zooming does not reshape them.
+        const par = 0.05, spacing = 360;
+        const shift = camX * par * basePPM;
+        const first = Math.floor((shift - 300) / spacing);
+        for (let i = first; i < first + Math.ceil(W / spacing) + 3; i++) {
+            const x = i * spacing - shift;
+            if (x < -300 || x > W + 300) continue;
+            const r = hash1(i * 3.77), r2 = hash1(i * 9.13 + 5);
+            const y = hz - H * (0.24 + 0.36 * r) - camY * PPM * 0.01;
+            const w = H * (0.12 + 0.10 * r2), h = H * (0.009 + 0.006 * r);
+            ctx.fillStyle = 'rgba(255,255,255,' + (0.09 + 0.09 * r2).toFixed(3) + ')';
+            ctx.beginPath(); ctx.ellipse(x, y, w, h, 0, 0, 7); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x + w * 0.32, y - h * 1.0, w * 0.5, h * 0.95, 0, 0, 7); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x - w * 0.5, y - h * 0.2, w * 0.36, h * 0.75, 0, 0, 7); ctx.fill();
+        }
+    }
+
+    // One mountain layer. `par` is how fast it slides past: 0.04 is a range on the far
+    // horizon, 0.1 is foothills. Its shape lives in screen pixels, so it neither reshapes
+    // when the camera zooms nor climbs when the penguin does.
+    function drawRidge(par, ampF, baseF, rock, freqPx, seed) {
+        const hz = horizonY();
+        const shift = camX * par * basePPM;
+        const base = hz + H * baseF + camY * PPM * par * 0.25;
+        const amp = H * ampF;
+        const snowLine = base - amp * 0.30;
+
+        ctx.save();
+        ctx.beginPath();                              // a ridge stops at its own foot: the
+        ctx.rect(0, 0, W, base + H * 0.012);          // plain carries on in front of it
+        ctx.clip();
+
+        ctx.beginPath();
+        ctx.moveTo(-20, H + 20);
+        for (let px = -20; px <= W + 20; px += 9) {
+            ctx.lineTo(px, base - amp * fbm((px + shift) * freqPx + seed));
+        }
+        ctx.lineTo(W + 20, H + 20);
+        ctx.closePath();
+
+        ctx.fillStyle = rock;
+        ctx.fill();
+        ctx.clip();                                   // everything below is shaped by the ridge
+
+        const sg = ctx.createLinearGradient(0, base - amp * 1.05, 0, snowLine);
+        sg.addColorStop(0, 'rgba(252,254,255,.97)');  // snow over the summits
+        sg.addColorStop(0.72, 'rgba(250,253,255,.85)');
+        sg.addColorStop(1, 'rgba(250,253,255,0)');    // giving way to rock down the flanks
+        ctx.fillStyle = sg;
+        ctx.fillRect(0, base - amp * 1.05, W, amp * 1.05);
+
+        const hazeTop = base - amp * 0.55;            // air thickens toward the foot
+        const hg = ctx.createLinearGradient(0, hazeTop, 0, base + H * 0.03);
+        hg.addColorStop(0, 'rgba(214,233,244,0)');
+        hg.addColorStop(1, 'rgba(214,233,244,' + (0.62 - 2 * par).toFixed(2) + ')');
+        ctx.fillStyle = hg;
+        ctx.fillRect(0, hazeTop, W, base - hazeTop + H * 0.04);
+        ctx.restore();
+    }
+
+    function drawPlain() {
+        // the snow plain runs from the horizon down to the near ice, so climbing opens up
+        // more plain rather than a hole of sky
+        const hz = horizonY(), gy = sy(0);
+        const g = ctx.createLinearGradient(0, hz - 2, 0, Math.max(gy, hz + 8));
+        g.addColorStop(0, '#d9e9f3');
+        g.addColorStop(0.4, '#e9f3fa');
+        g.addColorStop(1, '#f4fafd');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, hz - 2, W, H - hz + 4);
+    }
+
+    function drawDrifts() {
+        // wind drifts scattered over the plain at three depths, so the near ones streak past
+        // during a flight while the far ones crawl
+        const hz = horizonY(), gy = sy(0), span = Math.max(gy - hz, 1);
+        const lanes = [
+            {lift: 0.70, par: 0.16, spacing: 150, w: 0.075, h: 0.011, fill: 'rgba(191,217,234,.6)'},
+            {lift: 0.42, par: 0.34, spacing: 190, w: 0.100, h: 0.017, fill: 'rgba(208,229,243,.75)'},
+            {lift: 0.14, par: 0.62, spacing: 240, w: 0.130, h: 0.024, fill: 'rgba(226,240,249,.9)'}
+        ];
+        for (let li = 0; li < lanes.length; li++) {
+            const L = lanes[li], shift = camX * L.par * basePPM;
+            const first = Math.floor((shift - 300) / L.spacing);
+            for (let i = first; i < first + Math.ceil(W / L.spacing) + 4; i++) {
+                const r = hash1(i * 5.1 + li * 31.3), r2 = hash1(i * 2.7 + li * 17.1);
+                const x = (i + 0.7 * r) * L.spacing - shift;
+                const w = H * L.w * (0.6 + 0.8 * r2), h = H * L.h * (0.6 + 0.7 * r);
+                if (x < -w - 20 || x > W + w + 20) continue;
+                const y = gy - span * L.lift + span * 0.05 * (r2 - 0.5);
+                ctx.fillStyle = L.fill;
+                ctx.beginPath();
+                ctx.moveTo(x - w, y + h * 0.35);
+                ctx.bezierCurveTo(x - w * 0.55, y - h, x + w * 0.45, y - h * 1.1, x + w, y + h * 0.35);
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,.45)';   // wind-polished crest
+                ctx.beginPath();
+                ctx.moveTo(x - w * 0.55, y - h * 0.2);
+                ctx.bezierCurveTo(x - w * 0.25, y - h * 0.95, x + w * 0.2, y - h, x + w * 0.5, y - h * 0.3);
+                ctx.closePath(); ctx.fill();
+            }
+        }
+    }
+
+    function drawSeracs() {
+        // blocks of pressure ice standing on the plain: they give the emptiness a scale
+        const hz = horizonY(), gy = sy(0), span = Math.max(gy - hz, 1);
+        const par = 0.46, spacing = 300, shift = camX * par * basePPM;
+        const first = Math.floor((shift - 200) / spacing);
+        for (let i = first; i < first + Math.ceil(W / spacing) + 3; i++) {
+            const r = hash1(i * 11.3), r2 = hash1(i * 4.9 + 2.5), r3 = hash1(i * 7.1 + 8);
+            if (r3 < 0.34) continue;                       // most of the plain stays empty
+            const x = (i + 0.5 * r) * spacing - shift;
+            const y = gy - span * (0.30 + 0.16 * r2);
+            const w = H * (0.016 + 0.020 * r2), h = H * (0.022 + 0.030 * r);
+            if (x < -60 || x > W + 60) continue;
+            ctx.fillStyle = 'rgba(176,206,226,.85)';       // shaded face
+            ctx.beginPath();
+            ctx.moveTo(x - w, y); ctx.lineTo(x - w * 0.55, y - h * 0.82);
+            ctx.lineTo(x + w * 0.2, y - h); ctx.lineTo(x + w, y - h * 0.34);
+            ctx.lineTo(x + w * 0.85, y); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = 'rgba(248,253,255,.95)';       // sunlit face
+            ctx.beginPath();
+            ctx.moveTo(x - w * 0.55, y - h * 0.82); ctx.lineTo(x + w * 0.2, y - h);
+            ctx.lineTo(x + w * 0.35, y - h * 0.5); ctx.lineTo(x - w * 0.3, y - h * 0.38);
+            ctx.closePath(); ctx.fill();
+        }
     }
 
     function drawGround() {
         const gy = sy(0);                     // the snow sits in the world, not on the screen
-        ctx.fillStyle = '#f2f8fc';
+        const g = ctx.createLinearGradient(0, gy, 0, H);
+        g.addColorStop(0, '#fbfdff'); g.addColorStop(1, '#e7f1f8');
+        ctx.fillStyle = g;
         ctx.fillRect(0, gy, W, H - gy + 2);
-        ctx.fillStyle = '#dfeaf3';
-        ctx.fillRect(0, gy, W, 5);
+        ctx.fillStyle = 'rgba(163,196,217,.55)';
+        ctx.fillRect(0, gy, W, 2);
         ctx.font = '600 11px system-ui, sans-serif';
         const first = Math.floor((camX - W * 0.28 / PPM) / 25) * 25;
         for (let m = first; m < camX + W / PPM; m += 25) {
@@ -444,6 +615,16 @@
             ctx.fillStyle = 'rgba(58,96,130,.55)';
             ctx.fillText(m + 'm', x + 5, gy + 22);
         }
+        ctx.fillStyle = 'rgba(206,226,240,.75)';     // wind streaks, at full speed
+        const sp = 7;
+        const firstS = Math.floor((camX - W * 0.3 / PPM) / sp);
+        for (let i = firstS; i < firstS + Math.ceil(W / (sp * PPM)) + 3; i++) {
+            const r = hash1(i * 6.31), r2 = hash1(i * 2.17 + 4);
+            const x = sx((i + r) * sp), yy = gy + (H - gy) * (0.12 + 0.62 * r2);
+            const len = PPM * (2 + 5 * r);
+            ctx.fillRect(x, yy, len, Math.max(1.5, PPM * 0.055));
+        }
+
         ctx.fillStyle = 'rgba(150,180,205,.45)';
         for (const m of landMark) {
             const x = sx(m);
@@ -602,9 +783,11 @@
     }
 
     function render() {
-        // close in on the wall for the timing, pull back once the penguin is flying
-        const targetZoom = (S === 'ready' || S === 'diving') ? 1.45 : 1;
-        zoom += (targetZoom - zoom) * (targetZoom > zoom ? 0.08 : 0.04);
+        // close in on the wall for the timing; in flight, pull back far enough to hold the
+        // whole arc on screen instead of panning up and leaving the ice behind
+        const fit = (groundY - H * 0.20) / (Math.max(p.y, 6) * basePPM);
+        const targetZoom = (S === 'ready' || S === 'diving') ? 1.45 : Math.max(0.5, Math.min(1, fit));
+        zoom += (targetZoom - zoom) * (targetZoom > zoom ? 0.05 : 0.06);
         PPM = basePPM * zoom;
 
         const targetX = (S === 'ready' || S === 'diving') ? 0 : Math.max(0, p.x - W * 0.10 / PPM);
@@ -615,8 +798,11 @@
         ctx.save();
         if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 7, (Math.random() - 0.5) * shake * 7);
         drawSky();
-        drawRange(H * 0.26, 0.10, '#6f9dc0', 14, H * 0.13, 0.18);
-        drawRange(H * 0.13, 0.30, '#9dc2da', 9, H * 0.09, 0.42);
+        drawPlain();
+        drawRidge(0.045, 0.165, 0.004, '#8fb1cb', 0.0062, 0);
+        drawRidge(0.100, 0.115, 0.032, '#6f96b8', 0.0105, 17.5);
+        drawDrifts();
+        drawSeracs();
         drawGround();
         drawBestFlag();
         drawWall();
