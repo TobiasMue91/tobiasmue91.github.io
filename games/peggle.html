@@ -220,34 +220,18 @@
             font-size: 17px;
         }
 
-        #mute {
-            position: absolute;
-            top: calc(env(safe-area-inset-top, 0px) + 8px);
-            right: 10px;
-            z-index: 4;
-            cursor: pointer;
-            border: 1px solid rgba(140, 170, 230, .28);
-            background: rgba(8, 12, 30, .6);
-            color: var(--dim);
-            border-radius: 10px;
-            width: 34px;
-            height: 30px;
-            font-size: 15px;
-            line-height: 1;
-        }
     </style>
 </head>
 <body>
 <div id="stage">
     <canvas id="board"></canvas>
-    <button id="mute" type="button" title="Sound on/off">&#128266;</button>
-
     <div class="veil" id="menu">
         <div class="panel">
             <h1>PEG FEVER</h1>
             <p class="sub">Clear all <b style="color:#ff8a2b">25 orange pegs</b> with 10 balls.<br>
                 Every peg in one drop is worth more than the last, and the fever meter lifts the whole
                 board to x10 as the oranges fall.</p>
+            <p class="sub" style="margin-bottom:8px">Hit a <b style="color:#4dff9c">green peg</b> to fire your power:</p>
             <div class="chars" id="charList"></div>
             <button class="btn" id="startBtn" type="button">PLAY</button>
             <div class="seed">Board seed
@@ -330,7 +314,7 @@
     var CHARACTERS = [
         {
             id: 'guide', name: 'Bjarne', power: 'Super Guide',
-            blurb: 'The next drop is drawn out three bounces deep.'
+            blurb: 'Your next drop is drawn out three bounces deep.'
         },
         {
             id: 'multi', name: 'Jimbo', power: 'Multiball',
@@ -627,7 +611,7 @@
         purple: null,
         greenArmed: false,
         superGuide: false,
-        pendingMulti: false,
+        guideSpent: false,
         freeBallIndex: 0,
         popups: [],
         parts: [],
@@ -676,7 +660,7 @@
         G.parts = [];
         G.slots = false;
         G.superGuide = false;
-        G.pendingMulti = false;
+        G.guideSpent = false;
         G.greenArmed = false;
         G.styleTimer = 0;
         G.bucketX = W / 2;
@@ -722,7 +706,8 @@
             Math.sin(a) * LAUNCH_SPEED,
             Math.cos(a) * LAUNCH_SPEED
         )];
-        G.pendingMulti = G.character.id === 'multi' && G.greenArmed;
+        /* the guide is good for exactly this one drop, and is spent by it */
+        if (G.superGuide) G.guideSpent = true;
         G.phase = 'shot';
         tone(-12, 0.16, 'square', 0.3);
         noise(0.12, 0.2);
@@ -822,6 +807,7 @@
         G.greenArmed = true;
         if (G.character.id === 'guide') {
             G.superGuide = true;
+            flash('SUPER GUIDE');
         } else if (G.character.id === 'multi') {
             /* Split into three, the way the original does: the ball carries on
              * and two siblings fan out from the same peg. */
@@ -1099,6 +1085,7 @@
         }
         G.mult = feverMult();
         G.greenArmed = false;
+        if (G.guideSpent) { G.superGuide = false; G.guideSpent = false; }
         if (G.slots) { levelOver(true); return; }
         if (G.ballsLeft <= 0) { levelOver(false); return; }
         pickPurple();
@@ -1658,6 +1645,66 @@
         ctx.restore();
     }
 
+    var SOUND_BTN = {x: 24, y: 22, r: 20};
+
+    function drawSpeaker(x, y) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.fillStyle = muted ? 'rgba(150,170,205,.75)' : '#cfe3ff';
+        ctx.beginPath();
+        ctx.moveTo(-8, -4);
+        ctx.lineTo(-3, -4);
+        ctx.lineTo(3, -9);
+        ctx.lineTo(3, 9);
+        ctx.lineTo(-3, 4);
+        ctx.lineTo(-8, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = 1.8;
+        ctx.lineCap = 'round';
+        if (muted) {
+            ctx.beginPath();
+            ctx.moveTo(6, -5);
+            ctx.lineTo(12, 5);
+            ctx.moveTo(12, -5);
+            ctx.lineTo(6, 5);
+            ctx.stroke();
+        } else {
+            for (var i = 1; i <= 2; i++) {
+                ctx.beginPath();
+                ctx.arc(4, 0, 3 + i * 3.2, -0.9, 0.9);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+    }
+
+    /* What the next drop will do, said out loud — the guide only shows up
+     * after a green peg, and only for one shot, so it says so. */
+    function drawPowerBadge() {
+        if (!G.superGuide || G.phase !== 'aim') return;
+        var text = 'SUPER GUIDE · THIS DROP';
+        ctx.save();
+        ctx.font = 'bold 13px "Trebuchet MS", sans-serif';
+        ctx.textAlign = 'center';
+        var w = ctx.measureText(text).width + 26;
+        /* parked in the gap between the launcher and the peg field, so it
+         * covers neither the cannon nor a peg */
+        var top = 1e9;
+        for (var i = 0; i < G.pegs.length; i++) if (G.pegs[i].y < top) top = G.pegs[i].y;
+        var x = W / 2 - w / 2, y = Math.max(112, top - 92);
+        ctx.fillStyle = 'rgba(12,40,28,.85)';
+        roundRect(x, y, w, 24, 12);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(120,255,190,' + (0.5 + 0.35 * Math.sin(perf / 260)) + ')';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#9dffd0';
+        ctx.fillText(text, W / 2, y + 16);
+        ctx.restore();
+    }
+
     function drawBallIcon(x, y, r) {
         var g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
         g.addColorStop(0, '#ffffff');
@@ -1670,7 +1717,7 @@
     }
 
     function drawHud() {
-        var barH = 40;
+        var barH = 44;
         ctx.save();
         var bar = ctx.createLinearGradient(0, 0, 0, barH);
         bar.addColorStop(0, 'rgba(6,10,26,.88)');
@@ -1680,49 +1727,52 @@
         ctx.fillStyle = 'rgba(150,200,255,.25)';
         ctx.fillRect(0, barH - 1, W, 1);
 
+        drawSpeaker(SOUND_BTN.x, SOUND_BTN.y);
+
         ctx.textAlign = 'left';
-        ctx.font = 'bold 22px "Trebuchet MS", sans-serif';
+        ctx.font = 'bold 23px "Trebuchet MS", sans-serif';
         ctx.fillStyle = '#ffd479';
         ctx.shadowColor = 'rgba(255,160,50,.6)';
         ctx.shadowBlur = 12;
-        ctx.fillText(G.score.toLocaleString('en-US'), 12, 28);
+        ctx.fillText(G.score.toLocaleString('en-US'), 48, 30);
         ctx.shadowBlur = 0;
 
         ctx.textAlign = 'center';
         ctx.font = 'bold 13px "Trebuchet MS", sans-serif';
         ctx.fillStyle = 'rgba(190,210,245,.8)';
-        ctx.fillText('LEVEL ' + G.level, W / 2, 25);
+        ctx.fillText('LEVEL ' + G.level, W / 2, 26);
 
         /* laid out from the right edge: the balls left, then the oranges */
         var shown = Math.min(G.ballsLeft, 5);
-        for (var i = 0; i < shown; i++) drawBallIcon(W - 20 - i * 16, 20, 6.5);
-        var cursor = W - 20 - (shown - 1) * 16 - 10;
+        for (var i = 0; i < shown; i++) drawBallIcon(W - 21 - i * 18, 22, 7.5);
+        var cursor = W - 21 - (shown - 1) * 18 - 12;
         if (G.ballsLeft > shown) {
             ctx.textAlign = 'right';
             ctx.font = 'bold 13px "Trebuchet MS", sans-serif';
             ctx.fillStyle = '#c3d8ff';
-            ctx.fillText('+' + (G.ballsLeft - shown), cursor, 25);
+            ctx.fillText('+' + (G.ballsLeft - shown), cursor, 27);
             cursor -= 22;
         }
 
         var left = Math.max(0, G.orangeTotal - G.orangeHit);
         ctx.textAlign = 'right';
-        ctx.font = 'bold 19px "Trebuchet MS", sans-serif';
+        ctx.font = 'bold 20px "Trebuchet MS", sans-serif';
         ctx.fillStyle = '#ffb057';
-        ctx.fillText(String(left), cursor - 8, 27);
+        ctx.fillText(String(left), cursor - 8, 29);
         var numW = ctx.measureText(String(left)).width;
         var ox = cursor - 18 - numW;
-        var og = ctx.createRadialGradient(ox - 3, 17, 2, ox, 20, 8);
+        var og = ctx.createRadialGradient(ox - 3, 19, 2, ox, 22, 9);
         og.addColorStop(0, '#ffdfa6');
         og.addColorStop(1, '#ff8f2e');
         ctx.fillStyle = og;
         ctx.beginPath();
-        ctx.arc(ox, 20, 8, 0, Math.PI * 2);
+        ctx.arc(ox, 22, 9, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
 
         drawFeverMeter();
+        drawPowerBadge();
     }
 
     function drawFeverMeter() {
@@ -1890,14 +1940,24 @@
 
     var pointerDown = false, movedFar = false, downAt = null;
 
+    function onSoundButton(p) {
+        return Math.hypot(p.x - SOUND_BTN.x, p.y - SOUND_BTN.y) < SOUND_BTN.r + 12;
+    }
+
     cvs.addEventListener('pointerdown', function (e) {
         if (G.phase === 'menu') return;
+        var p = toBoard(e.clientX, e.clientY);
+        if (onSoundButton(p)) {     // the speaker sits in the HUD, not over the board
+            audio();
+            toggleMute();
+            e.preventDefault();
+            return;
+        }
         cvs.setPointerCapture(e.pointerId);
         pointerDown = true;
         movedFar = false;
         downAt = {x: e.clientX, y: e.clientY};
         audio();
-        var p = toBoard(e.clientX, e.clientY);
         aimAt(p.x, p.y);
         e.preventDefault();
     });
@@ -1908,7 +1968,7 @@
             if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 8) movedFar = true;
             aimAt(p.x, p.y);
             e.preventDefault();
-        } else if (e.pointerType === 'mouse' && G.phase === 'aim') {
+        } else if (e.pointerType === 'mouse' && G.phase === 'aim' && !onSoundButton(p)) {
             aimAt(p.x, p.y);
         }
     });
@@ -1947,7 +2007,6 @@
     var overTitle = document.getElementById('overTitle');
     var overTally = document.getElementById('overTally');
     var overSeed = document.getElementById('overSeed');
-    var muteBtn = document.getElementById('mute');
 
     CHARACTERS.forEach(function (c, i) {
         var b = document.createElement('button');
@@ -1967,11 +2026,8 @@
 
     function toggleMute() {
         muted = !muted;
-        muteBtn.innerHTML = muted ? '&#128263;' : '&#128266;';
         if (master) master.gain.value = muted ? 0 : 0.32;
     }
-
-    muteBtn.addEventListener('click', toggleMute);
 
     function urlSeed() {
         var m = /[?&]seed=(\d+)/.exec(location.search);
