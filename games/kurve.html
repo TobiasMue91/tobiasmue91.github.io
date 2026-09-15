@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>Kurve — six players, one keyboard</title>
+<meta name="description"
+      content="Achtung, die Kurve! (Zatacka, 1995) rebuilt on measurements taken from the original DOS binary: a 559x480 field, 70 pixels a second, a smallest turning circle 57 pixels across, and a hole in the trail every 190 pixels that is 8 pixels long. Up to six players on one keyboard with the original key pairs, bots to fill the field, two-thumb touch play on a phone, and a seed in the URL so a match repeats exactly.">
+<meta name="author" content="Claude prompted by Tobias Müller">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://www.gptgames.dev/games/kurve.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Kurve">
+<meta property="og:description" content="Six curves, one keyboard, two keys each. Press your key to join.">
+<meta property="og:url" content="https://www.gptgames.dev/games/kurve.html">
+<meta property="og:image" content="https://www.gptgames.dev/screenshots/screenshot_315.webp">
+<meta property="og:site_name" content="GPT Games">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Kurve">
+<meta name="twitter:description" content="Six curves, one keyboard, two keys each. Press your key to join.">
+<meta name="twitter:image" content="https://www.gptgames.dev/screenshots/screenshot_315.webp">
+<style>
+    :root {
+        color-scheme: dark;
+        --ink: #e9eef7;
+        --dim: #8b9bb4;
+        --panel: rgba(12, 14, 20, 0.86);
+        --edge: #2a3140;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #05070b;
+        color: var(--ink);
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        overflow: hidden;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    #stage {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    canvas {
+        display: block;
+        background: #000;
+        border: 1px solid #1c2332;
+        box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+        image-rendering: auto;
+    }
+
+    /* Overlays are anchored to the viewport, never to the canvas box, so a
+       portrait phone never clips them. */
+    .overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 20px 16px;
+        background: rgba(4, 6, 10, 0.82);
+        backdrop-filter: blur(3px);
+        overflow-y: auto;
+        z-index: 20;
+    }
+
+    .overlay.hidden, .hidden { display: none !important; }
+
+    h1 {
+        font-size: clamp(26px, 6vw, 46px);
+        margin: 0;
+        letter-spacing: 0.04em;
+        font-weight: 700;
+    }
+
+    h1 small {
+        display: block;
+        font-size: clamp(11px, 2.6vw, 14px);
+        color: var(--dim);
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        margin-top: 8px;
+        font-weight: 500;
+    }
+
+    .roster {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 8px;
+        width: min(760px, 100%);
+    }
+
+    .slot {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.02);
+        transition: background 0.15s, border-color 0.15s;
+    }
+
+    .slot.joined { background: rgba(255, 255, 255, 0.07); }
+
+    .dot {
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        flex: none;
+        box-shadow: 0 0 10px currentColor;
+        background: currentColor;
+    }
+
+    .keys { font-size: 14px; font-weight: 600; }
+
+    .keys em { font-style: normal; color: var(--dim); font-weight: 400; font-size: 12px; }
+
+    .state { margin-left: auto; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
+
+    .state.ready { font-weight: 700; }
+
+    button {
+        font: inherit;
+        font-weight: 600;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 10px 18px;
+        cursor: pointer;
+    }
+
+    button:hover { background: rgba(255, 255, 255, 0.12); }
+
+    button.primary { background: #2b6cb0; border-color: #3b82c4; }
+
+    .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; }
+
+    p.note { color: var(--dim); font-size: 13px; max-width: 620px; text-align: center; margin: 0; line-height: 1.5; }
+
+    #hud {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 8px 12px;
+        font-size: 14px;
+        background: linear-gradient(rgba(4, 6, 10, 0.75), rgba(4, 6, 10, 0));
+        pointer-events: none;
+        z-index: 10;
+        flex-wrap: wrap;
+    }
+
+    #scores { display: flex; gap: 14px; flex-wrap: wrap; }
+
+    .sc { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+    .sc.dead { opacity: 0.45; }
+
+    #hud .spacer { flex: 1 1 auto; }
+
+    #hud .target { color: var(--dim); font-weight: 500; }
+
+    #tools { position: fixed; right: 10px; bottom: 10px; display: flex; gap: 8px; z-index: 15; }
+
+    #tools button { padding: 7px 12px; font-size: 13px; opacity: 0.7; }
+
+    #tools button:hover { opacity: 1; }
+
+    /* on a touch screen the bottom corners belong to the thumbs */
+    body.touch #tools { top: 6px; bottom: auto; right: 6px; }
+
+    body.touch #hud { padding-right: 190px; }
+
+    #pads { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+
+    .pad {
+        position: absolute;
+        border: 1px dashed rgba(255, 255, 255, 0.18);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        font-weight: 700;
+        color: rgba(255, 255, 255, 0.5);
+        pointer-events: auto;
+    }
+
+    .pad.active { background: rgba(255, 255, 255, 0.14); }
+
+    table.rules { border-collapse: collapse; font-size: 13px; color: var(--dim); }
+
+    table.rules td { padding: 2px 10px 2px 0; vertical-align: top; }
+
+    table.rules td:first-child { color: var(--ink); white-space: nowrap; }
+
+    .winner { font-size: clamp(20px, 5vw, 32px); font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+
+<div id="hud" class="hidden">
+    <div id="scores"></div>
+    <div class="spacer"></div>
+    <div class="target" id="targetTxt"></div>
+</div>
+
+<div id="pads"></div>
+
+<div id="tools">
+    <button id="fsBtn" type="button">Fullscreen</button>
+    <button id="menuBtn" type="button" class="hidden">Menu</button>
+</div>
+
+<div class="overlay" id="lobby">
+    <h1>Kurve<small>Achtung, die Kurve! &mdash; Zatacka, 1995</small></h1>
+    <p class="note">Press one of your two keys to join. Everyone plays on this one keyboard. A curve never
+        stops moving and the only thing you control is left and right &mdash; but every trail has holes in it,
+        and that is the whole game.</p>
+    <div class="roster" id="roster"></div>
+    <div class="row">
+        <button id="addBot" type="button">Add bot</button>
+        <button id="dropBot" type="button">Remove bot</button>
+        <button id="startBtn" type="button" class="primary">Start (Space)</button>
+    </div>
+    <p class="note" id="lobbyHint"></p>
+    <p class="note"><a href="https://www.gptgames.dev/" style="color:#8b9bb4">gptgames.dev</a> &middot; the floating mark is left off here because every corner of the screen is a control</p>
+</div>
+
+<div class="overlay hidden" id="roundOver">
+    <div class="winner" id="roundTxt"></div>
+    <div id="standings"></div>
+    <p class="note">Press Space to play the next round.</p>
+    <div class="row"><button id="nextBtn" type="button" class="primary">Next round</button></div>
+</div>
+
+<div class="overlay hidden" id="gameOver">
+    <div class="winner" id="gameTxt"></div>
+    <div id="finalStandings"></div>
+    <div class="row">
+        <button id="againBtn" type="button" class="primary">Play again</button>
+        <button id="lobbyBtn" type="button">Back to lobby</button>
+    </div>
+    <p class="note" id="seedNote"></p>
+</div>
+
+<script>
+/* ------------------------------------------------------------------
+   Achtung, die Kurve! (Zatacka), Filip Oščádal / Kamil Doležal, 1995.
+
+   The numbers below are measurements, not guesses. The original DOS
+   binary (ZATACKA.EXE, 47,390 bytes, the 1995 build archived at
+   archive.org/details/msdos_Achtung_die_Kurve_1995) was run under
+   DOSBox at VGA 640x480 and the frames were measured pixel by pixel:
+
+     field          559 x 480 px  (score panel occupies x >= 559)
+     line width     3 px
+     speed          ~67 px/s at 3000 cycles, ~71 px/s at 30000 cycles
+                    -> timer-driven, not CPU-bound; call it 70 px/s
+     turning circle 60 px outer diameter while a turn key is held,
+                    i.e. 57 px centre-to-centre -> radius 28.5 px
+                    -> angular rate v/r = 2.46 rad/s = 141 deg/s
+     holes          21 samples, end-to-end 5.8-10.3 px, mean 8.2 px
+     hole spacing   4092 px of drawn trail contained 21 holes
+                    -> one hole per ~195 px of travel (~2.8 s)
+     keys           strings in the binary, in slot order:
+                    (1 Q) (L.Ctrl L.Alt) (M ,) (L.Arrow D.Arrow)
+                    (/ *) (L.Mouse R.Mouse)
+     joining        the original lobby lists those six pairs and a slot
+                    prints READY when one of its keys is pressed
+     scoring        every player still alive when someone dies scores 1
+     collision      own trail kills; any wall kills (no wrap-around)
+
+   Everything here is that, doubled: the simulation runs on a 1118x960
+   field so a 60 Hz step is ~2.3 units rather than ~1.2 px, which keeps
+   the curve smooth without changing a single ratio. Divide any constant
+   below by 2 to get the measured original.
+
+   Where sources disagree, and what was chosen:
+
+   * Hole spacing. The original is random; 195 px is the mean of one
+     sample of 21. Clones vary wildly (mstader's HTML5 clone: a hole
+     every 100-500 steps, 20 steps long). Chosen: uniform 130-250
+     original px (260-500 units) with an 8 px (16 unit) hole, which
+     reproduces the measured mean and the measured hole length.
+   * Target score. Wikipedia and the German Wikipedia both say a match
+     is played to a total that depends on the player count but neither
+     prints the formula, and the binary has no readable text for it. The
+     widely repeated figure is (players - 1) x 10, and two matches were
+     played out under DOSBox to check it: a two-player match ran to
+     10-8 and stopped, and a three-player match ran 17-7-19, then
+     17-7-21, and stopped. Both are exactly (players - 1) x 10. Chosen:
+     (players - 1) x 10.
+   * Two-point lead. Neither observed match could separate "first to the
+     target" from "first to the target, two clear" (10-8 and 21-17 are
+     both two or more clear). Chosen: the target plus a two-point lead,
+     because it is what the surviving clones do and it stops a match
+     ending on a round two people won together.
+   * Keys. (L.Ctrl L.Alt) and the two mouse buttons are the original
+     slots 2 and 6. Ctrl and Alt are kept and defaulted away from the
+     browser; the mouse player is kept as real left/right click. Every
+     slot also has a second, plain-letter pair for keyboards and
+     browsers where the original pair is unusable.
+   * Rollover. Six players on one keyboard is six keys at once, which
+     many membrane keyboards cannot report. Nothing in software fixes
+     that; the lobby says so.
+------------------------------------------------------------------ */
+
+'use strict';
+
+/* ---------- constants (original px x 2) ---------- */
+const IS_TOUCH = matchMedia('(hover: none)').matches || 'ontouchstart' in window;
+// A phone held upright gets the same field turned on its side: same area,
+// same ratios, just the long edge where the screen has it. Everything else
+// on this page is orientation-blind.
+const PORTRAIT = IS_TOUCH && window.innerHeight > window.innerWidth;
+const FW = PORTRAIT ? 960 : 1118;     // field, = 559 x 480 doubled
+const FH = PORTRAIT ? 1118 : 960;
+const SPEED = 140;                    // units/s, = 70 px/s
+const TURN_RADIUS = 57;               // units, = 28.5 px
+const TURN_RATE = SPEED / TURN_RADIUS;// rad/s = 2.456 = 140.7 deg/s
+const LINE_W = 6;                     // units, = 3 px
+const HOLE_LEN = 16;                  // units, = 8 px
+const HOLE_MIN = 260, HOLE_MAX = 500; // units between holes, = 130-250 px
+const DT = 1 / 60;                    // fixed simulation step
+const START_DELAY = 0.6;              // s of stillness before a round runs
+const SPAWN_MARGIN = 120;             // units kept clear of the walls at spawn
+const STAMP_DELAY = 4;                // frames of trail held back from the
+                                      // collision mask so a head never hits
+                                      // the pixels it just drew
+
+const PLAYERS = [
+    { name: 'Red',    color: '#ff2800', keys: ['Digit1', 'KeyQ'],              alt: ['KeyY', 'KeyX'],           label: '1 / Q',           altLabel: 'Y / X' },
+    { name: 'Yellow', color: '#c6c300', keys: ['ControlLeft', 'AltLeft'],      alt: ['KeyC', 'KeyV'],           label: 'L.Ctrl / L.Alt',  altLabel: 'C / V' },
+    { name: 'Orange', color: '#ff7900', keys: ['KeyM', 'Comma'],               alt: ['KeyN', 'KeyB'],           label: 'M / ,',           altLabel: 'N / B' },
+    { name: 'Green',  color: '#00cb00', keys: ['ArrowLeft', 'ArrowDown'],      alt: ['ArrowUp', 'ArrowRight'],  label: '← / ↓', altLabel: '↑ / →' },
+    { name: 'Purple', color: '#c000c0', keys: ['Slash', 'NumpadMultiply'],     alt: ['Semicolon', 'Quote'],     label: '/ / *',           altLabel: '; / ’' },
+    { name: 'Cyan',   color: '#00c0c0', keys: ['__mouseL', '__mouseR'],        alt: ['BracketLeft', 'BracketRight'], label: 'L.Click / R.Click', altLabel: '[ / ]' }
+];
+
+/* ---------- two independent random streams ----------
+   'rng' decides everything the simulation depends on: spawn points,
+   spawn angles, hole placement, bot choices. 'look' decides sparks and
+   other decoration only, so drawing can never bend a match. */
+function mulberry32(a) {
+    return function () {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+
+let seed = 0, rng = null, look = mulberry32(Date.now() & 0xffffffff);
+
+function parseSeed() {
+    const q = new URLSearchParams(location.search).get('seed');
+    if (q !== null && /^[0-9a-z]+$/i.test(q)) return parseInt(q, 36) >>> 0;
+    return (Math.random() * 4294967296) >>> 0;
+}
+
+function seedString() { return seed.toString(36); }
+
+/* ---------- state ---------- */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const trail = document.createElement('canvas');
+trail.width = FW; trail.height = FH;
+const tctx = trail.getContext('2d');
+const mask = new Uint8Array(FW * FH);   // 1 = solid trail
+
+let players = [];       // active participants this match
+let phase = 'lobby';    // lobby | countdown | running | roundover | gameover
+let roundSeed = 0, roundNo = 0, target = 0;
+let acc = 0, last = 0, timer = 0;
+let sparks = [];
+let touchMode = false;
+
+/* ---------- audio ---------- */
+let ac = null;
+function audio() {
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; } }
+    if (ac && ac.state === 'suspended') ac.resume();
+    return ac;
+}
+function beep(freq, dur, type, vol) {
+    const a = audio(); if (!a) return;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type || 'square'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, a.currentTime);
+    g.gain.exponentialRampToValueAtTime(vol || 0.08, a.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(); o.stop(a.currentTime + dur + 0.02);
+}
+function crashSound() {
+    const a = audio(); if (!a) return;
+    const n = a.sampleRate * 0.25, buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5);
+    const s = a.createBufferSource(), g = a.createGain(), f = a.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 1100;
+    g.gain.value = 0.22;
+    s.buffer = buf; s.connect(f); f.connect(g); g.connect(a.destination); s.start();
+}
+
+/* ---------- mask helpers ---------- */
+function clearField() {
+    mask.fill(0);
+    tctx.clearRect(0, 0, FW, FH);
+    tctx.fillStyle = '#000';
+    tctx.fillRect(0, 0, FW, FH);
+}
+
+function stampDisc(x, y, r) {
+    const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(FW - 1, Math.ceil(x + r));
+    const y0 = Math.max(0, Math.floor(y - r)), y1 = Math.min(FH - 1, Math.ceil(y + r));
+    const r2 = r * r;
+    for (let yy = y0; yy <= y1; yy++) {
+        const dy = yy - y, row = yy * FW;
+        for (let xx = x0; xx <= x1; xx++) {
+            const dx = xx - x;
+            if (dx * dx + dy * dy <= r2) mask[row + xx] = 1;
+        }
+    }
+}
+
+function solidAt(x, y) {
+    const xi = Math.round(x), yi = Math.round(y);
+    if (xi < 0 || yi < 0 || xi >= FW || yi >= FH) return true;   // wall = death
+    return mask[yi * FW + xi] === 1;
+}
+
+/* ---------- match / round setup ---------- */
+function makePlayer(idx, kind) {
+    const def = PLAYERS[idx];
+    return {
+        idx, kind, name: def.name, color: def.color,
+        score: 0, alive: false,
+        x: 0, y: 0, ang: 0, left: false, right: false,
+        holeIn: 0, holeLeft: 0, pending: [],
+        botTurn: 0, botHold: 0
+    };
+}
+
+function startMatch() {
+    roundNo = 0;
+    target = Math.max(1, (players.length - 1) * 10);
+    players.forEach(p => { p.score = 0; });
+    rng = mulberry32(seed);
+    newRound();
+}
+
+function newRound() {
+    roundNo++;
+    clearField();
+    sparks = [];
+    const placed = [];
+    for (const p of players) {
+        let x, y, ok = false, tries = 0;
+        do {
+            x = SPAWN_MARGIN + rng() * (FW - 2 * SPAWN_MARGIN);
+            y = SPAWN_MARGIN + rng() * (FH - 2 * SPAWN_MARGIN);
+            ok = placed.every(q => Math.hypot(q[0] - x, q[1] - y) > 220);
+            tries++;
+        } while (!ok && tries < 200);
+        placed.push([x, y]);
+        p.x = x; p.y = y;
+        p.ang = rng() * Math.PI * 2;
+        p.alive = true;
+        p.left = p.right = false;
+        p.pending = [];
+        p.holeLeft = 0;
+        p.holeIn = HOLE_MIN + rng() * (HOLE_MAX - HOLE_MIN);
+        p.botTurn = 0; p.botHold = 0;
+    }
+    timer = START_DELAY;
+    phase = 'countdown';
+    layoutPads();
+    show('hud'); hide('lobby'); hide('roundOver'); hide('gameOver');
+    document.getElementById('menuBtn').classList.remove('hidden');
+    drawScores();
+    render();
+}
+
+/* ---------- simulation ---------- */
+function step() {
+    const stepLen = SPEED * DT;
+
+    for (const p of players) {
+        if (!p.alive) continue;
+        if (p.kind === 'bot') botThink(p);
+
+        let turn = 0;
+        if (p.left && !p.right) turn = -1;
+        else if (p.right && !p.left) turn = 1;
+        p.ang += turn * TURN_RATE * DT;
+
+        p.x += Math.cos(p.ang) * stepLen;
+        p.y += Math.sin(p.ang) * stepLen;
+
+        // hole bookkeeping: distance-based, exactly like a trail that is
+        // punched every so many pixels of travel rather than every so many
+        // frames, so the holes do not move if the frame rate does.
+        let drawing = true;
+        if (p.holeLeft > 0) {
+            p.holeLeft -= stepLen;
+            drawing = false;
+            if (p.holeLeft <= 0) p.holeIn = HOLE_MIN + rng() * (HOLE_MAX - HOLE_MIN);
+        } else {
+            p.holeIn -= stepLen;
+            if (p.holeIn <= 0) { p.holeLeft = HOLE_LEN; drawing = false; }
+        }
+
+        // die first, then commit the pixels: the head is tested against the
+        // world as it stood before this step, minus its own last few frames.
+        if (solidAt(p.x, p.y)) { kill(p); continue; }
+
+        p.pending.push({ x: p.x, y: p.y, draw: drawing });
+        if (p.pending.length > STAMP_DELAY) {
+            const q = p.pending.shift();
+            if (q.draw) {
+                stampDisc(q.x, q.y, LINE_W / 2);
+                tctx.fillStyle = p.color;
+                tctx.beginPath();
+                tctx.arc(q.x, q.y, LINE_W / 2, 0, Math.PI * 2);
+                tctx.fill();
+            }
+        }
+    }
+
+    for (let i = sparks.length - 1; i >= 0; i--) {
+        const s = sparks[i];
+        s.x += s.vx * DT; s.y += s.vy * DT; s.life -= DT;
+        s.vx *= 0.97; s.vy *= 0.97;
+        if (s.life <= 0) sparks.splice(i, 1);
+    }
+
+    const alive = players.filter(p => p.alive);
+    if (alive.length <= (players.length > 1 ? 1 : 0)) endRound();
+}
+
+function kill(p) {
+    p.alive = false;
+    crashSound();
+    // decoration only: fed by the cosmetic stream, never by 'rng'
+    for (let i = 0; i < 26; i++) {
+        const a = look() * Math.PI * 2, sp = 60 + look() * 260;
+        sparks.push({ x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3 + look() * 0.5, color: p.color });
+    }
+    // every player still alive scores one point
+    for (const q of players) if (q.alive) q.score++;
+    drawScores();
+}
+
+function endRound() {
+    phase = 'roundover';
+    timer = 0;
+    const sorted = players.slice().sort((a, b) => b.score - a.score);
+    const top = sorted[0];
+    const won = players.length > 1
+        ? (top.score >= target && (sorted.length < 2 || top.score - sorted[1].score >= 2))
+        : false;
+    const survivor = players.find(p => p.alive);
+    document.getElementById('roundTxt').textContent =
+        survivor ? survivor.name + ' takes round ' + roundNo : 'Round ' + roundNo + ' — nobody left';
+    document.getElementById('standings').innerHTML = standingsHtml(sorted);
+    if (won) {
+        phase = 'gameover';
+        document.getElementById('gameTxt').textContent = top.name + ' wins the match';
+        document.getElementById('finalStandings').innerHTML = standingsHtml(sorted);
+        document.getElementById('seedNote').textContent = 'Seed ' + seedString() + ' — the link in the address bar replays this exact match.';
+        show('gameOver');
+        beep(660, 0.12); setTimeout(() => beep(880, 0.2), 130);
+    } else {
+        show('roundOver');
+        beep(440, 0.1);
+    }
+}
+
+function standingsHtml(sorted) {
+    return '<table class="rules">' + sorted.map(p =>
+        '<tr><td style="color:' + p.color + '">' + p.name + (p.kind === 'bot' ? ' (bot)' : '') + '</td><td>' + p.score + ' / ' + target + '</td></tr>'
+    ).join('') + '</table>';
+}
+
+/* ---------- bots ----------
+   A bot looks ahead along three candidate futures (hard left, straight,
+   hard right) and takes the one that survives longest; ties go to
+   straight. Its coin flips come from 'rng', so a seeded match with bots
+   in it replays exactly. */
+function lookAhead(p, turn, horizon) {
+    let x = p.x, y = p.y, a = p.ang;
+    const stepLen = SPEED * DT * 2;      // coarse probe, 2 frames a step
+    for (let i = 0; i < horizon; i++) {
+        a += turn * TURN_RATE * DT * 2;
+        x += Math.cos(a) * stepLen;
+        y += Math.sin(a) * stepLen;
+        if (solidAt(x, y)) return i;
+    }
+    return horizon;
+}
+
+function botThink(p) {
+    if (p.botHold > 0) { p.botHold--; applyBot(p); return; }
+    const H = 34;
+    const opts = [
+        { t: -1, d: lookAhead(p, -1, H) },
+        { t: 0, d: lookAhead(p, 0, H) },
+        { t: 1, d: lookAhead(p, 1, H) }
+    ];
+    const best = Math.max(opts[0].d, opts[1].d, opts[2].d);
+    if (opts[1].d >= best && opts[1].d >= H) {
+        // safe ahead: wander a little so bots do not draw perfect lines
+        p.botTurn = rng() < 0.06 ? (rng() < 0.5 ? -1 : 1) : 0;
+        p.botHold = 4 + Math.floor(rng() * 10);
+    } else {
+        const good = opts.filter(o => o.d >= best - 1);
+        p.botTurn = good[Math.floor(rng() * good.length)].t;
+        p.botHold = 2 + Math.floor(rng() * 4);
+    }
+    applyBot(p);
+}
+
+function applyBot(p) {
+    p.left = p.botTurn === -1;
+    p.right = p.botTurn === 1;
+}
+
+/* ---------- rendering ---------- */
+let scale = 1, offX = 0, offY = 0;
+
+function resize() {
+    const pad = 8;
+    const w = window.innerWidth - pad * 2, h = window.innerHeight - pad * 2;
+    scale = Math.min(w / FW, h / FH);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.style.width = Math.floor(FW * scale) + 'px';
+    cv.style.height = Math.floor(FH * scale) + 'px';
+    cv.width = Math.floor(FW * scale * dpr);
+    cv.height = Math.floor(FH * scale * dpr);
+    ctx.setTransform(cv.width / FW, 0, 0, cv.height / FH, 0, 0);
+    layoutPads();
+    render();
+}
+
+function render() {
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(trail, 0, 0, FW, FH);
+
+    for (const p of players) {
+        if (!p.alive) continue;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, LINE_W / 2 + 1, 0, Math.PI * 2);
+        ctx.fill();
+        if (phase === 'countdown') {
+            // a nose pointing where the curve will go, so nobody is surprised
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.x + Math.cos(p.ang) * 46, p.y + Math.sin(p.ang) * 46);
+            ctx.stroke();
+        }
+    }
+
+    for (const s of sparks) {
+        ctx.globalAlpha = Math.max(0, s.life * 1.6);
+        ctx.fillStyle = s.color;
+        ctx.fillRect(s.x - 2, s.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+
+    if (phase === 'countdown') {
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = 'bold 74px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(Math.ceil(timer * 3)), FW / 2, FH / 2 + 26);
+        ctx.font = '22px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText('round ' + roundNo, FW / 2, FH / 2 + 66);
+    }
+}
+
+function drawScores() {
+    document.getElementById('scores').innerHTML = players.map(p =>
+        '<span class="sc' + (p.alive ? '' : ' dead') + '"><span class="dot" style="color:' + p.color + '"></span>' +
+        p.score + '</span>').join('');
+    document.getElementById('targetTxt').textContent =
+        players.length > 1 ? 'first to ' + target + ' (+2 clear) · round ' + roundNo + ' · seed ' + seedString()
+                           : 'solo practice · seed ' + seedString();
+}
+
+/* ---------- loop ---------- */
+function frame(now) {
+    requestAnimationFrame(frame);
+    if (!last) last = now;
+    let dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.25) dt = 0.25;
+
+    if (phase === 'countdown') {
+        timer -= dt;
+        if (timer <= 0) { phase = 'running'; acc = 0; beep(880, 0.08); }
+        render();
+        return;
+    }
+    if (phase !== 'running') { if (sparks.length) { acc += dt; while (acc >= DT) { acc -= DT; step(); } render(); } return; }
+
+    acc += dt;
+    let guard = 0;
+    while (acc >= DT && guard++ < 8) { acc -= DT; step(); if (phase !== 'running') break; }
+    render();
+}
+requestAnimationFrame(frame);
+
+/* ---------- lobby ---------- */
+function buildRoster() {
+    document.getElementById('roster').innerHTML = PLAYERS.map((d, i) =>
+        '<div class="slot" id="slot' + i + '">' +
+        '<span class="dot" style="color:' + d.color + '"></span>' +
+        '<span class="keys">' + d.label + ' <em>or ' + d.altLabel + '</em></span>' +
+        '<span class="state" id="state' + i + '"></span></div>'
+    ).join('');
+}
+
+const joined = new Map();   // idx -> 'human' | 'bot'
+
+function refreshLobby() {
+    PLAYERS.forEach((d, D) => {
+        const el = document.getElementById('slot' + D), st = document.getElementById('state' + D);
+        const k = joined.get(D);
+        el.classList.toggle('joined', !!k);
+        st.textContent = k === 'human' ? 'READY' : k === 'bot' ? 'BOT' : '';
+        st.className = 'state' + (k ? ' ready' : '');
+        st.style.color = k ? d.color : '';
+    });
+    const n = joined.size;
+    document.getElementById('lobbyHint').textContent = n === 0
+        ? 'Nobody has joined yet. Press a key from any row above, or add a bot.'
+        : n + ' in — match runs to ' + Math.max(1, (n - 1) * 10) + ' points. Space starts it.'
+          + (n > 3 ? ' (Six keys at once is more than some keyboards can report; if a key stops answering with everyone leaning on theirs, that is the hardware.)' : '');
+}
+
+function join(idx, kind) {
+    if (joined.has(idx)) return false;
+    joined.set(idx, kind || 'human');
+    beep(520 + idx * 60, 0.07, 'triangle');
+    refreshLobby();
+    return true;
+}
+
+function go() {
+    if (joined.size === 0) return;
+    players = [...joined.entries()].sort((a, b) => a[0] - b[0]).map(([i, k]) => makePlayer(i, k));
+    audio();
+    startMatch();
+}
+
+/* ---------- input ---------- */
+const keyOwner = new Map();   // code -> [playerIndex, side]
+PLAYERS.forEach((d, i) => {
+    d.keys.forEach((c, s) => keyOwner.set(c, [i, s]));
+    d.alt.forEach((c, s) => keyOwner.set(c, [i, s]));
+});
+
+function setTurn(idx, side, down) {
+    const p = players.find(q => q.idx === idx);
+    if (!p || p.kind === 'bot') return;
+    if (side === 0) p.left = down; else p.right = down;
+}
+
+window.addEventListener('keydown', e => {
+    if (e.repeat) return;
+    const own = keyOwner.get(e.code);
+    if (own || e.code === 'Space') e.preventDefault();
+
+    if (e.code === 'Space') {
+        if (phase === 'lobby') go();
+        else if (phase === 'roundover') newRound();
+        else if (phase === 'gameover') { startMatch(); }
+        return;
+    }
+    if (e.code === 'Escape' && (phase === 'running' || phase === 'countdown')) { toLobby(); return; }
+    if (!own) return;
+    if (phase === 'lobby') join(own[0]);
+    else setTurn(own[0], own[1], true);
+}, { passive: false });
+
+window.addEventListener('keyup', e => {
+    const own = keyOwner.get(e.code);
+    if (!own) return;
+    e.preventDefault();
+    setTurn(own[0], own[1], false);
+}, { passive: false });
+
+// original slot 6 is the mouse: left button turns left, right turns right
+window.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('mousedown', e => {
+    if (e.button !== 0 && e.button !== 2) return;
+    if (e.target.closest('button')) return;
+    const side = e.button === 0 ? 0 : 1;
+    if (phase === 'lobby') { join(5); e.preventDefault(); }
+    else if (joined.get(5) === 'human') { setTurn(5, side, true); e.preventDefault(); }
+});
+window.addEventListener('mouseup', e => {
+    if (e.button !== 0 && e.button !== 2) return;
+    setTurn(5, e.button === 0 ? 0 : 1, false);
+});
+
+/* ---------- touch ----------
+   Six players on a phone is a fiction, so this does not pretend: touch
+   gives two players four pads, one pair per side of the screen, and the
+   rest of the field can be filled with bots. */
+const padsEl = document.getElementById('pads');
+let padDefs = [];
+
+function layoutPads() {
+    padsEl.innerHTML = '';
+    padDefs = [];
+    if (!touchMode) return;
+    const humans = players.length ? players.filter(p => p.kind === 'human') : [...joined.entries()].filter(e => e[1] === 'human').map(e => ({ idx: e[0] }));
+    const use = humans.slice(0, 2);
+    const portrait = window.innerHeight > window.innerWidth;
+    use.forEach((p, n) => {
+        const col = PLAYERS[p.idx].color;
+        for (let side = 0; side < 2; side++) {
+            const d = document.createElement('div');
+            d.className = 'pad';
+            d.style.color = col;
+            d.style.borderColor = col;
+            d.textContent = side === 0 ? '↶' : '↷';
+            if (portrait) {
+                d.style.left = (side === 0 ? '2%' : '52%');
+                d.style.width = '46%';
+                d.style.height = '20%';
+                d.style.top = n === 0 ? '78%' : '2%';
+                if (n === 1) d.style.transform = 'rotate(180deg)';
+            } else {
+                d.style.width = '16%';
+                d.style.height = '46%';
+                d.style.left = n === 0 ? '1%' : '83%';
+                d.style.top = side === 0 ? '52%' : '2%';
+            }
+            padsEl.appendChild(d);
+            padDefs.push({ el: d, idx: p.idx, side });
+        }
+    });
+}
+
+function padAt(t) {
+    for (const p of padDefs) {
+        const r = p.el.getBoundingClientRect();
+        if (t.clientX >= r.left && t.clientX <= r.right && t.clientY >= r.top && t.clientY <= r.bottom) return p;
+    }
+    return null;
+}
+
+const touchMap = new Map();
+function touchStart(e) {
+    if (!touchMode) return;
+    for (const t of e.changedTouches) {
+        const p = padAt(t);
+        if (!p) continue;
+        touchMap.set(t.identifier, p);
+        p.el.classList.add('active');
+        setTurn(p.idx, p.side, true);
+        e.preventDefault();
+    }
+}
+function touchEnd(e) {
+    for (const t of e.changedTouches) {
+        const p = touchMap.get(t.identifier);
+        if (!p) continue;
+        touchMap.delete(t.identifier);
+        p.el.classList.remove('active');
+        setTurn(p.idx, p.side, false);
+    }
+}
+window.addEventListener('touchstart', touchStart, { passive: false });
+window.addEventListener('touchend', touchEnd);
+window.addEventListener('touchcancel', touchEnd);
+
+/* ---------- buttons ---------- */
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+function toLobby() {
+    phase = 'lobby';
+    players = [];
+    hide('hud'); hide('roundOver'); hide('gameOver');
+    show('lobby');
+    document.getElementById('menuBtn').classList.add('hidden');
+    padsEl.innerHTML = ''; padDefs = [];
+    refreshLobby();
+}
+
+document.getElementById('startBtn').onclick = go;
+document.getElementById('nextBtn').onclick = () => newRound();
+document.getElementById('againBtn').onclick = () => startMatch();
+document.getElementById('lobbyBtn').onclick = toLobby;
+document.getElementById('menuBtn').onclick = toLobby;
+document.getElementById('addBot').onclick = () => {
+    for (let i = 0; i < PLAYERS.length; i++) if (!joined.has(i)) { join(i, 'bot'); return; }
+};
+document.getElementById('dropBot').onclick = () => {
+    const bots = [...joined.entries()].filter(e => e[1] === 'bot');
+    if (bots.length) { joined.delete(bots[bots.length - 1][0]); refreshLobby(); }
+};
+document.getElementById('fsBtn').onclick = () => {
+    if (!document.fullscreenElement) (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement);
+    else document.exitFullscreen();
+};
+
+/* ---------- touch lobby extras ---------- */
+function detectTouch() {
+    touchMode = IS_TOUCH;
+    if (!touchMode) return;
+    document.body.classList.add('touch');
+    const hint = document.createElement('div');
+    hint.className = 'row';
+    hint.innerHTML = '<button id="t1" type="button" class="primary">1 player vs 3 bots</button>' +
+                     '<button id="t2" type="button">2 players, one phone</button>';
+    document.getElementById('lobby').appendChild(hint);
+    const note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = 'On a touch screen each player gets two pads on their own side of the screen. Two is the honest maximum; bots fill the rest.';
+    document.getElementById('lobby').appendChild(note);
+    document.getElementById('t1').onclick = () => { joined.clear(); join(3); join(0, 'bot'); join(1, 'bot'); join(2, 'bot'); go(); };
+    document.getElementById('t2').onclick = () => { joined.clear(); join(3); join(0); join(1, 'bot'); go(); };
+}
+
+/* ---------- start ---------- */
+seed = parseSeed();
+rng = mulberry32(seed);
+{
+    const u = new URL(location.href);
+    if (u.searchParams.get('seed') !== seedString()) {
+        u.searchParams.set('seed', seedString());
+        history.replaceState(null, '', u);
+    }
+}
+buildRoster();
+refreshLobby();
+detectTouch();
+clearField();
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+resize();
+
+/* hooks for the headless tests: nothing here is used by play */
+window.__kurve = {
+    get phase() { return phase; },
+    get players() { return players; },
+    get roundNo() { return roundNo; },
+    get target() { return target; },
+    seed: () => seedString(),
+    join, go, newRound,
+    setSeed: s => { seed = s >>> 0; rng = mulberry32(seed); },
+    place: (i, x, y, a) => { const p = players.find(q => q.idx === i); if (p) { p.x = x; p.y = y; p.ang = a; p.pending = []; } },
+    setHole: (i, inDist, len) => { const p = players.find(q => q.idx === i); if (p) { p.holeIn = inDist; p.holeLeft = len; } },
+    step, clearField, stampDisc, solidAt,
+    constants: { FW, FH, SPEED, TURN_RADIUS, LINE_W, HOLE_LEN, HOLE_MIN, HOLE_MAX, DT },
+    force: ph => { phase = ph; }
+};
+</script>
+</body>
+</html>
