@@ -202,6 +202,12 @@
             white-space: nowrap;
         }
 
+        .due {
+            display: block;
+            font-size: 12px;
+            opacity: 0.85;
+        }
+
         #new-task {
             margin-top: 20px;
         }
@@ -583,7 +589,10 @@
                 frequency: frequency,
                 customFrequency: customFrequency,
                 lastCompleted: lastCompleted ? dateToString(lastCompleted) : "",
-                completed: completed
+                completed: completed,
+                dueAt: lastCompleted
+                    ? lastCompletedStartOfDay.getTime() + getFrequencyInMillis(frequency, customFrequency)
+                    : null
             });
         });
         migrations.forEach(([id, lastCompleted]) => updateDoc(doc(tasksCollection, id), {lastCompleted}));
@@ -595,28 +604,16 @@
             });
         }
         overdueTaskIds = new Set(overdueNow.keys());
+        // Outstanding chores first, as before, but within each block the question a
+        // chore list has to answer is what is furthest past due -- not what starts
+        // with A, and not whether it happens to be a daily or a monthly one.
         tasks.sort((a, b) => {
-            if (a.completed === b.completed) {
-                if (a.frequency === "daily" && b.frequency !== "daily") {
-                    return -1;
-                } else if (a.frequency !== "daily" && b.frequency === "daily") {
-                    return 1;
-                } else if (a.frequency === "weekly" && b.frequency === "monthly") {
-                    return -1;
-                } else if (a.frequency === "monthly" && b.frequency === "weekly") {
-                    return 1;
-                } else if (a.frequency === "custom" && b.frequency !== "custom") {
-                    return -1;
-                } else if (a.frequency !== "custom" && b.frequency === "custom") {
-                    return 1;
-                } else {
-                    return a.name.localeCompare(b.name);
-                }
-            } else if (a.completed === false) {
-                return -1;
-            } else {
-                return 1;
+            if (a.completed !== b.completed) {
+                return a.completed ? 1 : -1;
             }
+            const dueA = a.dueAt === null ? -Infinity : a.dueAt;
+            const dueB = b.dueAt === null ? -Infinity : b.dueAt;
+            return dueA === dueB ? a.name.localeCompare(b.name) : dueA - dueB;
         });
         const tbody = document.querySelector("#tasks");
         tbody.innerHTML = "";
@@ -651,7 +648,10 @@
 
             const statusTd = document.createElement("td");
             const statusTdText = document.createElement("span");
-            statusTd.appendChild(statusTdText);
+            const statusTdDue = document.createElement("small");
+            statusTdDue.className = "due";
+            statusTdDue.textContent = describeDue(task.dueAt);
+            statusTd.append(statusTdText, statusTdDue);
             statusTd.dataset.label = "Status";
             if (task.completed) {
                 statusTd.className = "completed pointer";
@@ -694,6 +694,28 @@
         });
         window.Sortable.init();
     });
+
+    function startOfDay(time) {
+        const date = new Date(time);
+        date.setHours(0, 0, 0, 0);
+        return date.getTime();
+    }
+
+    // Counted in calendar days, which is how people think about chores: something due
+    // late tonight is due today, not "in 0.4 days".
+    function describeDue(dueAt) {
+        if (dueAt === null) {
+            return "never done";
+        }
+        const days = Math.round((startOfDay(dueAt) - startOfDay(Date.now())) / (24 * 60 * 60 * 1000));
+        if (days < 0) {
+            return days === -1 ? "1 day late" : `${-days} days late`;
+        }
+        if (days === 0) {
+            return "due today";
+        }
+        return days === 1 ? "due tomorrow" : `due in ${days} days`;
+    }
 
     function getFrequencyInMillis(frequency, customFrequency) {
         switch (frequency) {
