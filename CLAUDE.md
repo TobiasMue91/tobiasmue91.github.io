@@ -41,6 +41,13 @@ edits). By hand it means five edits:
 2. `data/games.json` / `data/tools.json` — append an entry. `id` matches the filename. `categories` and
    `tags` come from the fixed vocabularies at the top of `util/new_entry.py`. `aiPowered` marks entries
    that call a language model; it, `featured` and the tags drive the homepage filters.
+
+   `featured` defaults to **no**. It is a shelf, not a changelog: roughly one game and one tool a
+   month earn it, and a new entry is not a candidate simply because it is the newest. Ask whether it
+   still belongs there next to what is already featured — if a run of similar entries would all get
+   the flag, feature the best one and leave the rest off. Setting it on a new entry is a good moment
+   to clear it on an older one.
+
 3. `sidebar.html` — one `<li>` before the `<!-- end -->` marker.
 4. `sitemap.xml` — one `<url>` block, in alphabetical order by path.
 5. `screenshots/screenshot_<n>.webp` — next free number, captured at 800×800 with the floating logo

@@ -228,7 +228,7 @@ if __name__ == "__main__":
             description = new_description
 
     ai_powered = input("Is this AI powered? (yes/no): ").lower() == "yes"
-    featured = input("Should this be featured? (yes/no): ").lower() == "yes"
+    featured = input("Should this be featured? Roughly one a month earns it, default no (yes/no): ").lower() == "yes"
 
     # LLM classification
     print("\nClassifying entry with LLM...")
