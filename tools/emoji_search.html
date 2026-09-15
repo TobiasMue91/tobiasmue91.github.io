@@ -294,31 +294,18 @@
 
             emojiData = await response.json();
 
-            // Extract and organize categories
-            const mainCats = ['face', 'person', 'animal', 'food', 'heart', 'activity',
-                'travel', 'object', 'symbol', 'flag'];
             categories.set('all', emojiData.length);
-
-            // Assign categories based on keywords and count them
+            buildSearchIndex(emojiData);
             emojiData.forEach(item => {
-                // Extract emoji description for better category assignment
-                const keywords = item.keywords.toLowerCase();
-                let cat = 'other';
-
-                for (const c of mainCats) {
-                    if (keywords.includes(c)) {
-                        cat = c;
-                        break;
-                    }
-                }
-
-                // Store the category with the emoji data
-                item.category = cat;
-                categories.set(cat, (categories.get(cat) || 0) + 1);
-
-                // Add search terms for better matching
-                item.searchTerms = keywords.split(' ').filter(term => term.length > 2);
+                categories.set(item.category, (categories.get(item.category) || 0) + 1);
             });
+
+            // Categories are the Unicode groups now; drop a remembered category
+            // from the old scheme rather than showing an empty grid.
+            if (!categories.has(currentCategory)) {
+                currentCategory = 'all';
+                localStorage.removeItem('emojiFinderCategory');
+            }
 
             // Load recently used emojis
             try {
@@ -331,18 +318,16 @@
                 console.error('Error loading recent emojis:', error);
             }
 
-            // Create category buttons
-            const sortedCategories = [...categories.entries()]
-                .sort((a, b) => b[1] - a[1])
-                .map(([cat]) => cat);
-
-            sortedCategories.forEach(cat => {
+            // Create category buttons. The data is in Unicode's canonical order,
+            // which is the order a picker wants (smileys first), so keep it —
+            // sorting by size would bury them behind the 270 flags.
+            [...categories.keys()].forEach(cat => {
                 const btn = document.createElement('button');
                 btn.classList.add('category');
                 if (cat === currentCategory) btn.classList.add('active');
 
-                // Capitalize category name and add emoji icon
-                const catName = cat.charAt(0).toUpperCase() + cat.slice(1);
+                // The Unicode group names are already display-ready.
+                const catName = cat === 'all' ? 'All' : cat;
                 const catEmoji = getCategoryEmoji(cat);
                 btn.textContent = `${catEmoji} ${catName}`;
 
@@ -373,21 +358,109 @@
         }
     }
 
+    // Words too common to tell two emoji apart.
+    const STOP_WORDS = new Set(['of', 'with', 'a', 'the', 'and', 'in', 'on', 's', 'o']);
+
+    const stripVariation = str => [...str].filter(c => c !== '\uFE0F' && c !== '\uFE0E').join('');
+
+    // A hyphenated word is indexed whole and in parts, so "x-ray" is found by
+    // either half as well as by the whole. Queries split on hyphens too, which
+    // is what lets "thumbs-up" reach an emoji named "thumbs up".
+    function wordsOf(str) {
+        const words = [];
+        str.toLowerCase().split(/[^a-z0-9+-]+/).forEach(word => {
+            if (!word || STOP_WORDS.has(word)) return;
+            words.push(word);
+            if (word.includes('-')) {
+                word.split('-').forEach(part => {
+                    if (part && !STOP_WORDS.has(part)) words.push(part);
+                });
+            }
+        });
+        return [...new Set(words)];
+    }
+
+    // Each emoji gets two tiers of search words: the words of its name, and the
+    // CLDR keywords people actually type ("happy" for grinning face, "car" for
+    // automobile). They are scored differently — see scoreTerm.
+    function buildSearchIndex(data) {
+        data.forEach(item => {
+            const nameWords = wordsOf(item.keywords);
+            item.name = item.keywords.toLowerCase();
+            item.category = item.group || 'Other';
+            item.nameWords = nameWords;
+            item.headWord = nameWords[nameWords.length - 1];
+            item.kwWords = wordsOf(item.kw || '').filter(w => !nameWords.includes(w));
+            item.allWords = [...new Set([...nameWords, ...item.kwWords])];
+        });
+
+        // A keyword is worth what it is rare: "poop" names one emoji, "face"
+        // names two hundred. Without this, any popular word drags whichever
+        // emoji happens to list it to the top of the results.
+        const docFreq = Object.create(null);
+        data.forEach(item => item.allWords.forEach(w => {
+            docFreq[w] = (docFreq[w] || 0) + 1;
+        }));
+        const total = data.length, lnTotal = Math.log(total);
+
+        data.forEach((item, rank) => {
+            item.kwWeight = Object.create(null);
+            item.kwWords.forEach(w => {
+                item.kwWeight[w] = 5 + 8 * Math.min(1, Math.log(total / docFreq[w]) / lnTotal);
+            });
+            // Prominence. For a single-word query the keyword weight above is
+            // the same for every emoji that lists the word, so something has to
+            // separate "grinning face" from "birthday cake" for "happy". The
+            // file is in Unicode's canonical order — smileys first, then people,
+            // out to symbols and flags — which tracks how central an emoji is
+            // well enough to do it.
+            item.prominence = 4 * (1 - rank / total);
+        });
+    }
+
+    // How well one search term matches one emoji. 0 means no match.
+    function scoreTerm(item, term) {
+        if (item.emoji === term || stripVariation(item.emoji) === term) return 100;
+        let best = 0;
+        for (const word of item.allWords) {
+            if (word === term) {
+                // The head noun of the name is what the emoji *is*; other name
+                // words merely qualify it; a keyword is worth its rarity.
+                const value = item.nameWords.includes(word)
+                    ? (word === item.headWord ? 14 : 12)
+                    : item.kwWeight[word];
+                if (value > best) best = value;
+            } else if (word.startsWith(term) && best < 4) {
+                best = 4;
+            }
+        }
+        return best;
+    }
+
+    // "skiing" should find the skier, which is tagged "ski".
+    function stemTerm(term) {
+        for (const suffix of ['ing', 'ed', 'es', 's']) {
+            if (term.length > suffix.length + 2 && term.endsWith(suffix)) {
+                return term.slice(0, -suffix.length);
+            }
+        }
+        return term;
+    }
+
     // Get representative emoji for each category
     function getCategoryEmoji(category) {
         const categoryEmojis = {
             all: '🔍',
-            face: '😀',
-            person: '👨',
-            animal: '🐶',
-            food: '🍕',
-            heart: '❤️',
-            activity: '⚽',
-            travel: '✈️',
-            object: '📱',
-            symbol: '🔣',
-            flag: '🏁',
-            other: '🔮'
+            'Smileys & Emotion': '😀',
+            'People & Body': '👨',
+            'Animals & Nature': '🐶',
+            'Food & Drink': '🍕',
+            'Travel & Places': '✈️',
+            'Activities': '⚽',
+            'Objects': '📱',
+            'Symbols': '🔣',
+            'Flags': '🏁',
+            Other: '🔮'
         };
         return categoryEmojis[category] || '📋';
     }
@@ -401,31 +474,42 @@
                 currentCategory === 'all' || item.category === currentCategory
             );
         } else {
-            // Enhanced search with partial matching and scoring
-            const searchTerms = term.split(' ').filter(t => t.length > 0);
+            const pool = emojiData.filter(item =>
+                currentCategory === 'all' || item.category === currentCategory);
 
-            filteredEmojis = emojiData
-                .filter(item =>
-                    (currentCategory === 'all' || item.category === currentCategory) &&
-                    searchTerms.some(searchTerm =>
-                        item.keywords.toLowerCase().includes(searchTerm) ||
-                        item.emoji === searchTerm
-                    )
-                )
-                .sort((a, b) => {
-                    // Sort by relevance: exact emoji match first, then keyword match position
-                    const aExactMatch = searchTerms.some(t => a.emoji === t);
-                    const bExactMatch = searchTerms.some(t => b.emoji === t);
+            let searchTerms = term.split(/[\s-]+/).filter(t => t.length > 0);
+            // Only fall back to the stem when the word as typed matches nothing.
+            searchTerms = searchTerms.map(t => {
+                const stem = stemTerm(t);
+                if (stem === t) return t;
+                return pool.some(item => scoreTerm(item, t)) ? t : stem;
+            });
 
-                    if (aExactMatch && !bExactMatch) return -1;
-                    if (!aExactMatch && bExactMatch) return 1;
+            // Every term has to match: searching "thumbs up" should not return
+            // everything that is thumbs or up. If nothing matches all of them,
+            // fall back to matching any, so a long query still returns something.
+            const collect = requireAll => {
+                const scored = [];
+                for (const item of pool) {
+                    let score = 0, matched = 0;
+                    for (const searchTerm of searchTerms) {
+                        const termScore = scoreTerm(item, searchTerm);
+                        if (termScore) { matched++; score += termScore; }
+                    }
+                    if (requireAll ? matched === searchTerms.length : matched > 0) {
+                        if (searchTerms.length > 1 && item.name.startsWith(term)) score += 2;
+                        score -= item.nameWords.length;   // prefer the plainest name for a word
+                        score += item.prominence;
+                        scored.push({ score, item });
+                    }
+                }
+                return scored;
+            };
 
-                    // Sort by earliest occurrence of search term in keywords
-                    const aPos = Math.min(...searchTerms.map(t => a.keywords.toLowerCase().indexOf(t)).filter(pos => pos >= 0), Infinity);
-                    const bPos = Math.min(...searchTerms.map(t => b.keywords.toLowerCase().indexOf(t)).filter(pos => pos >= 0), Infinity);
+            let scored = collect(true);
+            if (!scored.length && searchTerms.length > 1) scored = collect(false);
 
-                    return aPos - bPos;
-                });
+            filteredEmojis = scored.sort((a, b) => b.score - a.score).map(entry => entry.item);
         }
 
         updateResults();
