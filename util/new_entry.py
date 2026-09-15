@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import subprocess
 import requests
@@ -52,7 +53,10 @@ def get_latest_git_added_file_any(base_dir):
             if html_file.stem not in existing_ids:
                 # Use file modification time to determine the newest unregistered file
                 mtime = html_file.stat().st_mtime
-                latest_files[str(html_file.relative_to(base_dir))] = (mtime, entry_type)
+                # as_posix(), not str(): on Windows str() yields "games\\x.html",
+                # which then lands verbatim in the JSON url and the sidebar href.
+                rel = html_file.relative_to(base_dir).as_posix()
+                latest_files[rel] = (mtime, entry_type)
 
     if not latest_files:
         return None, None
@@ -68,13 +72,30 @@ def parse_html_file(file_path):
             soup = BeautifulSoup(f.read(), 'html.parser')
             title_tag = soup.find('title')
             if title_tag and title_tag.string:
-                title = title_tag.string.strip()
+                title = clean_title(title_tag.string.strip())
             meta_desc = soup.find('meta', attrs={'name': 'description'})
             if meta_desc and meta_desc.get('content'):
                 description = meta_desc['content'].strip()
     except Exception as e:
         print(f"Error parsing HTML: {e}")
     return title, description
+
+def clean_title(title):
+    """Strip the site-name suffix some pages carry in their <title>.
+
+    Four sidebar entries read "... | GPTGames" because the raw tag was used
+    as the link text.
+    """
+    if not title:
+        return title
+    for sep in (" | ", " — ", " - "):
+        if title.endswith(sep + "GPTGames"):
+            return title[: -len(sep + "GPTGames")].strip()
+    return title.strip()
+
+def normalise_rel_path(file_path):
+    """Catalogue urls are always forward-slashed, whatever the OS."""
+    return str(file_path).replace("\\", "/").lstrip("/")
 
 def get_next_screenshot_number(screenshots_dir):
     existing_screenshots = list(screenshots_dir.glob("screenshot_*.webp")) + list(screenshots_dir.glob("screenshot_*.png"))
@@ -103,7 +124,10 @@ def update_json_file(json_file_path, new_entry):
     else:
         entries.append(new_entry)
     with open(json_file_path, 'w', encoding='utf-8') as f:
-        json.dump(entries, f, indent=2)
+        # ensure_ascii=False: the default rewrites every em-dash in the file as
+        # \uXXXX, turning one new entry into a diff across the whole catalogue.
+        json.dump(entries, f, indent=2, ensure_ascii=False)
+        f.write('\n')
 
 def update_sidebar(base_dir, file_path, entry_name):
     sidebar_path = base_dir / "sidebar.html"
@@ -128,6 +152,48 @@ def update_sidebar(base_dir, file_path, entry_name):
     except Exception as e:
         print(f"Error updating sidebar: {e}")
         return False
+
+SITE_BASE = "https://www.gptgames.dev/"
+
+def update_sitemap(base_dir, file_path, entry_date):
+    """Add the page to sitemap.xml, alphabetically, if it is not there yet.
+
+    CLAUDE.md lists sitemap.xml as one of the five edits a new entry needs,
+    and this script never made it — which is why ten pages were in the JSON
+    but absent from the sitemap.
+    """
+    sitemap_path = base_dir / "sitemap.xml"
+    try:
+        with open(sitemap_path, 'r', encoding='utf-8') as f:
+            sitemap = f.read()
+    except FileNotFoundError:
+        print("sitemap.xml not found, skipping")
+        return False
+
+    loc = SITE_BASE + normalise_rel_path(file_path)
+    if f"<loc>{loc}</loc>" in sitemap:
+        print(f"Already in sitemap.xml: {loc}")
+        return True
+
+    block = (f"  <url>\n"
+             f"    <loc>{loc}</loc>\n"
+             f"    <lastmod>{entry_date}T00:00:00+00:00</lastmod>\n"
+             f"    <priority>0.80</priority>\n"
+             f"  </url>\n")
+
+    blocks = re.findall(r"  <url>\n.*?\n  </url>\n", sitemap, re.S)
+    for existing in blocks:
+        m = re.search(r"<loc>(.*?)</loc>", existing)
+        if m and m.group(1) != SITE_BASE and m.group(1) > loc:
+            sitemap = sitemap.replace(existing, block + existing, 1)
+            break
+    else:
+        sitemap = sitemap.replace("</urlset>", block + "</urlset>")
+
+    with open(sitemap_path, 'w', encoding='utf-8') as f:
+        f.write(sitemap)
+    print(f"Added entry to sitemap.xml")
+    return True
 
 def git_add_file(file_path):
     try:
@@ -207,7 +273,7 @@ if __name__ == "__main__":
             entry_type = input("Are you adding a tool or a game? (tool/game): ").lower()
             if entry_type not in ["tool", "game"]:
                 print("Please enter either 'tool' or 'game'.")
-        file_path = input(f"Enter the {entry_type} file path: ")
+        file_path = normalise_rel_path(input(f"Enter the {entry_type} file path: "))
         full_path = base_dir / file_path
 
     title, description = parse_html_file(full_path)
@@ -300,6 +366,8 @@ if __name__ == "__main__":
     git_add_file(json_file)
     update_sidebar(base_dir, file_path, title)
     git_add_file(base_dir / "sidebar.html")
+    update_sitemap(base_dir, file_path, today)
+    git_add_file(base_dir / "sitemap.xml")
 
     print(f"\nAdded new {entry_type} entry to {json_file}:")
     print(json.dumps(json_entry, indent=2))
