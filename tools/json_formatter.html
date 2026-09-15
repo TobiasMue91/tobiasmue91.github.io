@@ -201,6 +201,16 @@
             margin-top: 0.5rem;
             font-size: 0.875rem;
         }
+        .error.locatable {
+            cursor: pointer;
+            text-decoration: underline dotted;
+        }
+        .notice {
+            display: none;
+            color: var(--json-string);
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+        }
         .output-container {
             position: relative;
             height: 300px;
@@ -345,6 +355,7 @@
         <label for="json-input">JSON Input</label>
         <textarea id="json-input" placeholder="Paste your JSON here or use the sample/upload buttons" spellcheck="false"></textarea>
         <div id="error-message" class="error"></div>
+        <div id="loose-notice" class="notice"></div>
 
         <div class="toolbar" style="margin-top: 1rem;">
             <button id="format-btn" class="btn btn-primary" title="Format JSON">
@@ -488,6 +499,7 @@
     const downloadBtn = document.getElementById('download-btn');
     const sampleBtn = document.getElementById('sample-btn');
     const errorMessage = document.getElementById('error-message');
+    const looseNotice = document.getElementById('loose-notice');
     const indentSize = document.getElementById('indent-size');
     const sortKeys = document.getElementById('sort-keys');
     const autoFormat = document.getElementById('auto-format');
@@ -499,6 +511,7 @@
 
     // State
     let formattedJson = null;
+    let errorLocation = null;
 
     // Sample JSON data
     const sampleJson = {
@@ -526,9 +539,36 @@
     };
 
     // Helper functions
-    function showError(message) {
-        errorMessage.textContent = message;
+    function showError(message, index) {
+        errorMessage.classList.toggle('locatable', false);
         errorMessage.style.display = message ? 'block' : 'none';
+        errorLocation = null;
+        if (!message) {
+            errorMessage.textContent = '';
+            return;
+        }
+        if (typeof index === 'number' && index >= 0 && index <= jsonInput.value.length) {
+            const before = jsonInput.value.slice(0, index);
+            const line = before.split('\n').length;
+            const column = index - before.lastIndexOf('\n');
+            errorLocation = index;
+            errorMessage.textContent = `${message} — line ${line}, column ${column} (click to jump there)`;
+            errorMessage.classList.toggle('locatable', true);
+        } else {
+            errorMessage.textContent = message;
+        }
+    }
+
+    // Says what the tolerant reader had to assume, so a recovered parse is never
+    // a silent change to someone's data.
+    function showLooseNotice(notes) {
+        if (!notes || !notes.length) {
+            looseNotice.style.display = 'none';
+            looseNotice.textContent = '';
+            return;
+        }
+        looseNotice.textContent = `Recovered from non-strict JSON — assumed: ${notes.join(', ')}.`;
+        looseNotice.style.display = 'block';
     }
 
     function showNotification(message, duration = 3000) {
@@ -548,10 +588,280 @@
         return value === 'tab' ? '\t' : ' '.repeat(parseInt(value));
     }
 
+    // --- Tolerant JSON reader -------------------------------------------------
+    // Strictly valid JSON is the one kind of JSON that does not need a formatter.
+    // What people actually paste is near-JSON: an API response with a log line in
+    // front of it, a config with comments, a JS object literal out of devtools, a
+    // Python dict repr, a few NDJSON records, something that went through a word
+    // processor. parseLooseJSON recovers a value from those and reports what it
+    // had to assume, so the tool never silently changes your data.
+    //
+    // Returns { value, loose, notes }. Throws an Error (with .index) if there is
+    // no value to recover.
+    function parseLooseJSON(text) {
+        if (typeof text !== 'string') return { value: text, loose: false, notes: [] };
+
+        // Valid JSON goes straight to the engine, untouched.
+        try {
+            return { value: JSON.parse(text), loose: false, notes: [] };
+        } catch (ignored) { /* fall through to the tolerant reader */ }
+
+        const notes = new Set();
+        let src = text;
+        // Offsets are reported against the text the user actually typed, so the
+        // error can point at a real place in the textarea.
+        let baseOffset = 0;
+
+        if (src.charCodeAt(0) === 0xFEFF) {
+            src = src.slice(1);
+            baseOffset += 1;
+            notes.add('byte-order mark');
+        }
+
+        const fence = /^(\s*```[A-Za-z0-9]*[ \t]*\r?\n)([\s\S]*?)(?:\r?\n?[ \t]*```\s*)$/.exec(src);
+        if (fence) {
+            src = fence[2];
+            baseOffset += fence[1].length;
+            notes.add('code fence');
+        }
+
+        // Quote characters, grouped: a string opened with any member of a group
+        // ends at the next member of the same group.
+        const QUOTE_GROUP = {
+            '"': 0,
+            "'": 1,
+            '‘': 2, '’': 2,
+            '“': 3, '”': 3, '„': 3
+        };
+        const ESCAPES = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', '0': '\0' };
+        const WORDS = {
+            'true': true, 'false': false, 'null': null,
+            'True': true, 'False': false, 'None': null,
+            'NaN': NaN, 'Infinity': Infinity, 'undefined': null
+        };
+
+        const n = src.length;
+        let i = 0;
+
+        function fail(message) {
+            const error = new Error(message);
+            error.index = i + baseOffset;
+            throw error;
+        }
+
+        function isSpace(c) {
+            return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f' ||
+                c === '\v' || c === ' ' || c === '﻿' || c === ' ' || c === ' ';
+        }
+
+        function skip() {
+            while (i < n) {
+                const c = src[i];
+                if (isSpace(c)) {
+                    if (c === ' ') notes.add('non-breaking space');
+                    i++;
+                    continue;
+                }
+                if (c === '/' && src[i + 1] === '/') {
+                    notes.add('comments');
+                    while (i < n && src[i] !== '\n') i++;
+                    continue;
+                }
+                if (c === '/' && src[i + 1] === '*') {
+                    notes.add('comments');
+                    i += 2;
+                    while (i < n && !(src[i] === '*' && src[i + 1] === '/')) i++;
+                    i += 2;
+                    continue;
+                }
+                if (c === '#') {
+                    notes.add('comments');
+                    while (i < n && src[i] !== '\n') i++;
+                    continue;
+                }
+                break;
+            }
+        }
+
+        function readString() {
+            const group = QUOTE_GROUP[src[i]];
+            if (group === 1) notes.add('single-quoted strings');
+            else if (group >= 2) notes.add('curly quotes');
+            i++;
+            let out = '';
+            while (i < n) {
+                const c = src[i];
+                if (QUOTE_GROUP[c] === group) { i++; return out; }
+                if (c === '\\') {
+                    const e = src[i + 1];
+                    if (e === undefined) fail('Unterminated string');
+                    i += 2;
+                    if (e === 'u' || e === 'x') {
+                        const len = e === 'u' ? 4 : 2;
+                        const hex = src.substr(i, len);
+                        if (hex.length < len || /[^0-9a-fA-F]/.test(hex)) fail('Bad \\' + e + ' escape in string');
+                        out += String.fromCharCode(parseInt(hex, 16));
+                        i += len;
+                    } else if (e === '\n') {
+                        notes.add('escaped line breaks');
+                    } else {
+                        out += (e in ESCAPES) ? ESCAPES[e] : e;
+                    }
+                    continue;
+                }
+                if (c === '\n' || c === '\r' || c === '\t') notes.add('raw line breaks or tabs inside strings');
+                out += c;
+                i++;
+            }
+            fail('Unterminated string');
+        }
+
+        function readWordOrNumber() {
+            const rest = src.slice(i);
+            const word = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(rest);
+            if (word) {
+                const w = word[0];
+                if (Object.prototype.hasOwnProperty.call(WORDS, w)) {
+                    i += w.length;
+                    if (w === 'True' || w === 'False' || w === 'None') notes.add('Python literals');
+                    else if (w === 'NaN' || w === 'Infinity') notes.add('NaN and Infinity');
+                    else if (w === 'undefined') notes.add('undefined read as null');
+                    return WORDS[w];
+                }
+                fail('Unexpected word "' + w + '"');
+            }
+            const num = /^[+-]?(?:0[xX][0-9a-fA-F]+|Infinity|NaN|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)/.exec(rest);
+            if (num) {
+                const t = num[0];
+                i += t.length;
+                let body = t, sign = 1;
+                if (body[0] === '+') { body = body.slice(1); notes.add('leading + on numbers'); }
+                else if (body[0] === '-') { body = body.slice(1); sign = -1; }
+                if (/^0[xX]/.test(body)) notes.add('hex numbers');
+                else if (body[0] === '.' || body[body.length - 1] === '.') notes.add('bare decimal points');
+                return sign * Number(body);
+            }
+            fail('Unexpected character ' + JSON.stringify(src[i] || ''));
+        }
+
+        function readKey() {
+            skip();
+            if (QUOTE_GROUP[src[i]] !== undefined) return readString();
+            const bare = /^[A-Za-z_$][A-Za-z0-9_$.\-]*|^[+-]?\d+(?:\.\d+)?/.exec(src.slice(i));
+            if (bare) {
+                i += bare[0].length;
+                notes.add('unquoted keys');
+                return bare[0];
+            }
+            fail('Expected a property name');
+        }
+
+        function readObject() {
+            i++;
+            const obj = {};
+            for (;;) {
+                skip();
+                if (src[i] === '}') {
+                    i++;
+                    if (Object.keys(obj).length) notes.add('trailing commas');
+                    return obj;
+                }
+                if (i >= n) fail('Unexpected end of input, expected "}"');
+                const key = readKey();
+                skip();
+                if (src[i] !== ':') fail('Expected ":" after property name "' + key + '"');
+                i++;
+                obj[key] = readValue();
+                skip();
+                if (src[i] === ',') { i++; continue; }
+                if (src[i] === '}') { i++; return obj; }
+                if (i >= n) fail('Unexpected end of input, expected "}"');
+                fail('Expected "," or "}" after a property value');
+            }
+        }
+
+        function readArray() {
+            i++;
+            const arr = [];
+            for (;;) {
+                skip();
+                if (src[i] === ']') {
+                    i++;
+                    if (arr.length) notes.add('trailing commas');
+                    return arr;
+                }
+                if (i >= n) fail('Unexpected end of input, expected "]"');
+                arr.push(readValue());
+                skip();
+                if (src[i] === ',') { i++; continue; }
+                if (src[i] === ']') { i++; return arr; }
+                if (i >= n) fail('Unexpected end of input, expected "]"');
+                fail('Expected "," or "]" after an array item');
+            }
+        }
+
+        function readValue() {
+            skip();
+            if (i >= n) fail('Unexpected end of input');
+            const c = src[i];
+            if (c === '{') return readObject();
+            if (c === '[') return readArray();
+            if (QUOTE_GROUP[c] !== undefined) return readString();
+            return readWordOrNumber();
+        }
+
+        // Collect every top-level value, so NDJSON and concatenated documents come
+        // back as one array instead of "unexpected non-whitespace character".
+        function collectFrom(start) {
+            i = start;
+            const values = [];
+            for (;;) {
+                skip();
+                if (i >= n) break;
+                const mark = i;
+                try {
+                    values.push(readValue());
+                } catch (error) {
+                    if (!values.length) throw error;
+                    notes.add('trailing text after the JSON (ignored)');
+                    i = mark;
+                    break;
+                }
+                skip();
+                while (i < n && src[i] === ',') { i++; skip(); }
+                if (i === mark) break;
+            }
+            return values;
+        }
+
+        skip();
+        let start = i;
+        const first = src[start];
+        if (!(first === '{' || first === '[' || QUOTE_GROUP[first] !== undefined)) {
+            const brace = /[{[]/.exec(src.slice(start));
+            if (brace) {
+                start += brace.index;
+                notes.add('leading text before the JSON (ignored)');
+            }
+        }
+
+        const values = collectFrom(start);
+        if (!values.length) fail('No JSON value found');
+        if (values.length > 1) notes.add(values.length + ' separate documents (joined into an array)');
+
+        return {
+            value: values.length > 1 ? values : values[0],
+            loose: true,
+            notes: Array.from(notes)
+        };
+    }
+
     function formatJSON(json, minify = false) {
         try {
             // Parse JSON
-            let parsedJSON = typeof json === 'string' ? JSON.parse(json) : json;
+            const read = parseLooseJSON(json);
+            let parsedJSON = read.value;
+            showLooseNotice(read.loose ? read.notes : null);
 
             // Apply sort if needed
             if (sortKeys.checked && !minify) {
@@ -567,7 +877,8 @@
 
             return parsedJSON;
         } catch (error) {
-            showError(`Invalid JSON: ${error.message}`);
+            showLooseNotice(null);
+            showError(`Invalid JSON: ${error.message}`, error.index);
             return null;
         }
     }
@@ -733,11 +1044,21 @@
                 showNotification('JSON formatted successfully!');
             }
         } catch (error) {
-            showError(`Invalid JSON: ${error.message}`);
+            showError(`Invalid JSON: ${error.message}`, error.index);
         }
     }
 
     // Event listeners
+    errorMessage.addEventListener('click', () => {
+        if (errorLocation === null) return;
+        jsonInput.focus();
+        jsonInput.setSelectionRange(errorLocation, Math.min(errorLocation + 1, jsonInput.value.length));
+        // Scroll the offending line into view in the textarea.
+        const lineHeight = parseFloat(getComputedStyle(jsonInput).lineHeight) || 18;
+        const line = jsonInput.value.slice(0, errorLocation).split('\n').length;
+        jsonInput.scrollTop = Math.max(0, (line - 3) * lineHeight);
+    });
+
     formatBtn.addEventListener('click', validateAndFormat);
 
     copyBtn.addEventListener('click', () => {
@@ -804,7 +1125,7 @@
                 showNotification('JSON minified!');
             }
         } catch (error) {
-            showError(`Invalid JSON: ${error.message}`);
+            showError(`Invalid JSON: ${error.message}`, error.index);
         }
     });
 
