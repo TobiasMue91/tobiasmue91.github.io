@@ -140,6 +140,68 @@
             line-height: 1.5;
         }
 
+        #share {
+            display: flex;
+            align-items: center;
+            max-width: 800px;
+            margin: 0 auto 16px;
+        }
+
+        #share input {
+            flex-grow: 1;
+            margin-right: 8px;
+            border: none;
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 16px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        #copy-link {
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: #fff;
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        #recent-plans {
+            max-width: 800px;
+            margin: 0 auto 16px;
+        }
+
+        #recent-plans-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            background-color: #fff;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        #recent-plans-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee;
+        }
+
+        #recent-plans-list li:last-child {
+            border-bottom: none;
+        }
+
+        .recent-plan-date {
+            color: #777;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
         #new-task {
             margin-top: 20px;
         }
@@ -224,7 +286,16 @@
     <input type="text" id="plan-id" name="planId">
     <button type="submit">Load Plan</button>
 </form>
+<section id="recent-plans" hidden>
+    <h2>Your plans</h2>
+    <ul id="recent-plans-list"></ul>
+</section>
 <h2 id="plan-headline"></h2>
+<div id="share" hidden>
+    <label for="share-link">Plan link:</label>
+    <input type="text" id="share-link" readonly>
+    <button type="button" id="copy-link">Copy link</button>
+</div>
 <table id="task-table" data-sortable>
     <thead>
     <tr>
@@ -291,6 +362,82 @@
     } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-firestore.js";
 
 
+    // The plan id only ever existed in the URL bar, so closing the tab lost the plan
+    // for good. Every plan this browser has opened is kept locally and listed on the
+    // landing screen; the plan itself still lives only in the link.
+    const RECENT_PLANS_KEY = "householdPlannerPlans";
+
+    function readRecentPlans() {
+        try {
+            const stored = JSON.parse(localStorage.getItem(RECENT_PLANS_KEY) || "[]");
+            return Array.isArray(stored) ? stored : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function writeRecentPlans(plans) {
+        try {
+            localStorage.setItem(RECENT_PLANS_KEY, JSON.stringify(plans.slice(0, 12)));
+        } catch (error) {
+            // Private browsing or a full quota. The link still works, it just is not remembered.
+        }
+    }
+
+    function rememberPlan(id, name) {
+        const plans = readRecentPlans().filter((plan) => plan.id !== id);
+        plans.unshift({id: id, name: name, opened: new Date().toISOString()});
+        writeRecentPlans(plans);
+    }
+
+    function forgetPlan(id) {
+        writeRecentPlans(readRecentPlans().filter((plan) => plan.id !== id));
+    }
+
+    function renderRecentPlans() {
+        const plans = readRecentPlans();
+        const section = document.querySelector("#recent-plans");
+        if (!plans.length) {
+            section.hidden = true;
+            return;
+        }
+        const list = document.querySelector("#recent-plans-list");
+        list.innerHTML = "";
+        plans.forEach((plan) => {
+            const item = document.createElement("li");
+            const link = document.createElement("a");
+            link.href = `?planId=${encodeURIComponent(plan.id)}`;
+            link.textContent = plan.name || plan.id;
+            const opened = new Date(plan.opened);
+            const when = document.createElement("span");
+            when.className = "recent-plan-date";
+            when.textContent = isNaN(opened.getTime()) ? "" : `opened ${dateToString(opened)}`;
+            item.append(link, when);
+            list.appendChild(item);
+        });
+        section.hidden = false;
+    }
+
+    function renderShareLink() {
+        document.querySelector("#share-link").value = window.location.href;
+        document.querySelector("#share").hidden = false;
+    }
+
+    document.querySelector("#copy-link").addEventListener("click", async () => {
+        const button = document.querySelector("#copy-link");
+        const input = document.querySelector("#share-link");
+        input.select();
+        try {
+            await navigator.clipboard.writeText(input.value);
+        } catch (error) {
+            document.execCommand("copy");
+        }
+        button.textContent = "Copied";
+        setTimeout(() => {
+            button.textContent = "Copy link";
+        }, 1500);
+    });
+
     // Get the tasks collection and load a specific plan if the planId query parameter is set
     const tasksCollection = collection(db, "tasks");
     let planId = getQueryParam("planId");
@@ -303,14 +450,18 @@
             document.querySelector("#plan-headline").textContent = planName;
             document.querySelector("#new-plan").style.display = 'none';
             document.querySelector("#load-plan").style.display = 'none';
+            rememberPlan(planId, planName);
+            renderShareLink();
         } else {
             document.querySelector("#plan-headline").textContent = `No plan found with the ID “${planId}”.`;
+            forgetPlan(planId);
             planId = null;
         }
     }
     if (!planId) {
         document.querySelector("#new-task").style.display = 'none';
         document.querySelector("#task-table").style.display = 'none';
+        renderRecentPlans();
     }
 
     function getQueryParam(name) {
