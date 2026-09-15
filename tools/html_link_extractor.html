@@ -73,6 +73,7 @@
     .badge-internal {background: var(--success); color: white;}
     .badge-external {background: var(--warning); color: white;}
     .badge-broken {background: var(--danger); color: white;}
+    .badge-other {background: var(--secondary); color: white;}
     .search-container {position: relative;}
     .search-container input {padding-left: 2.5rem;}
     .search-icon {position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--secondary);}
@@ -167,6 +168,10 @@
         <div class="stat-label">External Links</div>
       </div>
       <div class="stat-card">
+        <div id="other-links" class="stat-number">0</div>
+        <div class="stat-label">Mail / Tel / Script</div>
+      </div>
+      <div class="stat-card">
         <div id="unique-domains" class="stat-number">0</div>
         <div class="stat-label">Unique Domains</div>
       </div>
@@ -192,6 +197,7 @@
               <option value="all">All Links</option>
               <option value="internal">Internal Links</option>
               <option value="external">External Links</option>
+              <option value="other">Other (mail, tel, script)</option>
             </select>
           </div>
           <div class="control-item">
@@ -279,6 +285,7 @@
     const totalLinksElement = document.getElementById('total-links');
     const internalLinksElement = document.getElementById('internal-links');
     const externalLinksElement = document.getElementById('external-links');
+    const otherLinksElement = document.getElementById('other-links');
     const uniqueDomainsElement = document.getElementById('unique-domains');
     const showingEntries = document.getElementById('showing-entries');
 
@@ -325,6 +332,37 @@
       }, 3000);
     }
 
+    // A site is identified by its hostname (never URL.host, which carries the
+    // port) with any www. prefix dropped, so that www.example.com, example.com
+    // and example.com:8443 are not counted as three different sites.
+    function normalizeHost(hostname) {
+      return hostname.toLowerCase().replace(/^www\./, '');
+    }
+
+    // Only http(s) hrefs actually point at a page on some site. mailto:, tel:,
+    // javascript: and friends parse fine but their URL.host is the empty string,
+    // which never matches the page host — so without this they each get counted
+    // as a link to a foreign domain, and the empty host inflates the domain
+    // count too. They are still worth listing, just not as external links.
+    function classifyLink(fullUrl, baseHost) {
+      const parsed = new URL(fullUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return { type: 'other', host: '' };
+      }
+      const host = normalizeHost(parsed.hostname);
+      return { type: host === baseHost ? 'internal' : 'external', host: host };
+    }
+
+    // An image-only link still has a label if the image carries alt text, and
+    // those are exactly the links a link audit wants to see.
+    function readAnchorText(link) {
+      const text = link.textContent.trim();
+      if (text) return { anchorText: text, fromAlt: false };
+      const img = link.querySelector('img[alt]');
+      const alt = img ? img.getAttribute('alt').trim() : '';
+      return { anchorText: alt, fromAlt: alt !== '' };
+    }
+
     // Extract links from HTML
     async function extractLinks(url) {
       try {
@@ -348,7 +386,7 @@
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
-        const baseHost = new URL(url).host;
+        const baseHost = normalizeHost(new URL(url).hostname);
         const links = doc.querySelectorAll('a');
 
         if (links.length === 0) {
@@ -365,18 +403,18 @@
 
           try {
             const fullUrl = new URL(href, url).href;
-            const linkHost = new URL(fullUrl).host;
-            domains.add(linkHost);
+            const classified = classifyLink(fullUrl, baseHost);
+            if (classified.host) domains.add(classified.host);
 
-            const type = baseHost === linkHost ? 'internal' : 'external';
-            const anchorText = link.textContent.trim();
+            const text = readAnchorText(link);
             const rel = link.getAttribute('rel') || '';
             const target = link.getAttribute('target') || '';
 
             linkData.push({
               url: fullUrl,
-              type: type,
-              anchorText: anchorText,
+              type: classified.type,
+              anchorText: text.anchorText,
+              anchorTextFromAlt: text.fromAlt,
               rel: rel,
               target: target
             });
@@ -393,6 +431,7 @@
         totalLinksElement.textContent = linkData.length;
         internalLinksElement.textContent = linkData.filter(link => link.type === 'internal').length;
         externalLinksElement.textContent = linkData.filter(link => link.type === 'external').length;
+        otherLinksElement.textContent = linkData.filter(link => link.type === 'other').length;
         uniqueDomainsElement.textContent = domains.size;
 
         showToast(`Successfully extracted ${linkData.length} links from ${url}`);
@@ -490,6 +529,13 @@
         textDiv.className = 'truncate';
         textDiv.textContent = link.anchorText || '(no text)';
         textCell.appendChild(textDiv);
+
+        if (link.anchorTextFromAlt) {
+          const altNote = document.createElement('div');
+          altNote.className = 'link-metadata';
+          altNote.textContent = 'from image alt';
+          textCell.appendChild(altNote);
+        }
 
         // Actions cell
         const actionsCell = document.createElement('td');
@@ -606,13 +652,14 @@
       }
 
       const csvRows = [];
-      csvRows.push(['URL', 'Type', 'Anchor Text', 'Rel', 'Target'].join(','));
+      csvRows.push(['URL', 'Type', 'Anchor Text', 'Anchor Text Source', 'Rel', 'Target'].join(','));
 
       state.currentPageLinkData.forEach(link => {
         const row = [
           `"${link.url.replace(/"/g, '""')}"`,
           link.type,
           `"${(link.anchorText || '').replace(/"/g, '""')}"`,
+          link.anchorTextFromAlt ? 'image-alt' : 'text',
           `"${(link.rel || '').replace(/"/g, '""')}"`,
           `"${(link.target || '').replace(/"/g, '""')}"`
         ];
