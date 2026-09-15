@@ -671,13 +671,104 @@
         setTimeout(() => els.errorMsg.classList.remove('show'), 5000);
     }
 
+    // End index of the quoted run starting at `start`, or -1 if it never closes.
+    function scanQuoted(sql, start, backslashEscapes) {
+        const quote = sql[start];
+        const close = quote === '[' ? ']' : quote;
+        let j = start + 1;
+        while (j < sql.length) {
+            if (backslashEscapes && sql[j] === '\\' && j + 1 < sql.length) { j += 2; continue; }
+            if (sql[j] === close) {
+                if (sql[j + 1] === close) { j += 2; continue; }
+                return j + 1;
+            }
+            j++;
+        }
+        return -1;
+    }
+
+    // Split SQL into string literals, quoted identifiers, comments and code, so that
+    // minifying, validating and analysing never touch the inside of a literal.
+    function tokenizeSQL(sql) {
+        const tokens = [];
+        let code = '';
+        const flush = () => {
+            if (code) {
+                tokens.push({type: 'code', text: code});
+                code = '';
+            }
+        };
+        let i = 0;
+        while (i < sql.length) {
+            const c = sql[i], next = sql[i + 1];
+            // -- line comment
+            if (c === '-' && next === '-') {
+                flush();
+                let j = i;
+                while (j < sql.length && sql[j] !== '\n') j++;
+                tokens.push({type: 'comment', text: sql.slice(i, j), line: true});
+                i = j;
+                continue;
+            }
+            // /* block comment */
+            if (c === '/' && next === '*') {
+                flush();
+                const end = sql.indexOf('*/', i + 2);
+                const stop = end === -1 ? sql.length : end + 2;
+                tokens.push({type: 'comment', text: sql.slice(i, stop), line: false});
+                i = stop;
+                continue;
+            }
+            // $$ ... $$ / $tag$ ... $tag$ dollar-quoted body
+            if (c === '$') {
+                const tag = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/.exec(sql.slice(i));
+                if (tag) {
+                    flush();
+                    const end = sql.indexOf(tag[0], i + tag[0].length);
+                    const stop = end === -1 ? sql.length : end + tag[0].length;
+                    tokens.push({type: 'string', text: sql.slice(i, stop)});
+                    i = stop;
+                    continue;
+                }
+            }
+            // 'string literal' — '' always doubles; \' is an escape in MySQL but not in ANSI,
+            // so try the MySQL reading first and fall back when it runs off the end
+            if (c === "'") {
+                flush();
+                let j = scanQuoted(sql, i, true);
+                if (j === -1) j = scanQuoted(sql, i, false);
+                if (j === -1) j = sql.length;
+                tokens.push({type: 'string', text: sql.slice(i, j)});
+                i = j;
+                continue;
+            }
+            // "quoted identifier", `backticked`, [bracketed] — preserved verbatim, but the
+            // analyser still needs to read the name inside, so they get their own type
+            if (c === '"' || c === '`' || c === '[') {
+                flush();
+                let j = scanQuoted(sql, i, false);
+                if (j === -1) j = sql.length;
+                tokens.push({type: 'ident', text: sql.slice(i, j)});
+                i = j;
+                continue;
+            }
+            code += c;
+            i++;
+        }
+        flush();
+        return tokens;
+    }
+
     function validateSQL(sql) {
         if (!sql.trim()) return {valid: false, error: 'SQL query is empty'};
+        // Keywords and parentheses only count as SQL when they are actually code —
+        // a ':-)' in a WHERE clause is not an unmatched parenthesis.
+        const code = tokenizeSQL(sql).filter(t => t.type === 'code').map(t => t.text).join(' ');
         const keywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER', 'FROM', 'WHERE', 'TABLE'];
-        const hasKeyword = keywords.some(k => sql.toUpperCase().includes(k));
+        const hasKeyword = keywords.some(k => code.toUpperCase().includes(k));
         if (!hasKeyword) return {valid: false, error: 'No recognized SQL keywords found'};
-        const openParens = (sql.match(/\(/g) || []).length;
-        const closeParens = (sql.match(/\)/g) || []).length;
+        const openParens = (code.match(/\(/g) || []).length;
+        const closeParens = (code.match(/\)/g) || []).length;
         if (openParens !== closeParens) return {
             valid: false,
             error: `Unmatched parentheses (${openParens} open, ${closeParens} close)`
@@ -686,15 +777,35 @@
     }
 
     function minifySQL(sql) {
-        let result = sql.trim();
-        if (els.removeComments.checked) {
-            result = result.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        const dropComments = els.removeComments.checked;
+        const aggressive = els.removeNewlines.checked;
+        let out = '';
+        const endsInSpace = () => !out || /\s$/.test(out);
+        for (const t of tokenizeSQL(sql)) {
+            if (t.type === 'string' || t.type === 'ident') {
+                // verbatim: whitespace, -- and /* inside a literal are data, not syntax
+                out += t.text;
+            } else if (t.type === 'comment') {
+                if (dropComments) {
+                    if (!endsInSpace()) out += ' ';
+                } else if (t.line) {
+                    if (!endsInSpace()) out += ' ';
+                    // a kept line comment must still end its line, or it swallows the query;
+                    // aggressive minify wants one line, so re-wrap it as a block comment
+                    if (aggressive) out += '/*' + t.text.slice(2).replace(/\*\//g, '* /') + ' */';
+                    else out += t.text + '\n';
+                } else {
+                    if (!endsInSpace()) out += ' ';
+                    out += t.text;
+                }
+            } else {
+                let text = t.text.replace(/\s+/g, ' ');
+                if (endsInSpace()) text = text.replace(/^ /, '');
+                out += text;
+            }
         }
-        result = result.replace(/\s+/g, ' ').trim();
-        if (els.removeNewlines.checked) {
-            result = result.replace(/\n/g, ' ');
-        }
-        return result;
+        // safe: a literal always ends on its closing quote, so trim can only eat code space
+        return out.trim();
     }
 
     function formatSQL(sql) {
@@ -708,14 +819,25 @@
 
     function analyzeSQL(sql) {
         const tables = new Set();
-        const tableRegex = /(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi;
+        // Analyse code and quoted identifiers only: a table named in a comment or inside
+        // a string literal is not a table this query reads.
+        const code = tokenizeSQL(sql)
+            .map(t => (t.type === 'code' || t.type === 'ident') ? t.text : ' ')
+            .join('');
+        const NAME = '(?:"[^"]*"|`[^`]*`|\\[[^\\]]*\\]|[a-zA-Z_][a-zA-Z0-9_$]*)';
+        const tableRegex = new RegExp('\\b(?:FROM|JOIN)\\s+(' + NAME + '(?:\\s*\\.\\s*' + NAME + ')*)', 'gi');
         let match;
-        while ((match = tableRegex.exec(sql)) !== null) tables.add(match[1]);
-        const joins = (sql.match(/\bJOIN\b/gi) || []).length;
-        const subqueries = (sql.match(/\(\s*SELECT\b/gi) || []).length;
-        const whereCount = (sql.match(/\bWHERE\b/gi) || []).length;
-        const hasGroupBy = /\bGROUP\s+BY\b/i.test(sql);
-        const hasOrderBy = /\bORDER\s+BY\b/i.test(sql);
+        while ((match = tableRegex.exec(code)) !== null) {
+            // keep the table, not the schema it is qualified with
+            const parts = match[1].split('.');
+            const name = parts[parts.length - 1].trim().replace(/^["`\[]|["`\]]$/g, '');
+            if (name) tables.add(name);
+        }
+        const joins = (code.match(/\bJOIN\b/gi) || []).length;
+        const subqueries = (code.match(/\(\s*SELECT\b/gi) || []).length;
+        const whereCount = (code.match(/\bWHERE\b/gi) || []).length;
+        const hasGroupBy = /\bGROUP\s+BY\b/i.test(code);
+        const hasOrderBy = /\bORDER\s+BY\b/i.test(code);
         let complexity = joins * 2 + subqueries * 3 + whereCount + (hasGroupBy ? 2 : 0) + (hasOrderBy ? 1 : 0) + tables.size;
         let complexityLabel = 'Simple';
         if (complexity > 15) complexityLabel = 'Very Complex';
