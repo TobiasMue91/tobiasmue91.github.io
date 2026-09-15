@@ -114,7 +114,12 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
 
 - **Two players, one device.** Asymmetric information is the cheap way to make this good: the two
   halves of the screen know different things. No backend, no accounts.
-  *Filled by `games/alibi.html` — two suspects answering the same questions in secret on one phone.*
+  *Filled by `games/alibi.html` — two suspects answering the same questions in secret on one phone —
+  and `games/blobby_volley.html` on the hot-seat side. Both are two-player. The shape still missing is
+  **many hands on one keyboard**: the named candidate is Achtung, die Kurve! (Zatacka, 1995), up to six
+  players on two keys each, where the mechanism that keeps it from gridlocking is the periodic gap in
+  every player's trail. It needs an honest answer for touch — six thumbs do not fit on a phone — which
+  is the part to settle before building, not after.*
 - **A model you have to talk round.** A character with a position, a secret, or a price, that a
   language model plays and that you have to move. The proxy is already there. *Read the Curator
   entry below first: a model's judgement is illegible by construction, and the thing that made that
@@ -132,9 +137,12 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   what killed it was the shape of the game rather than anything about the camera.*
 - **A known genre, done properly.** Pac-Man, a racer, a platformer, a jigsaw from an image the
   player drops in, a crossword, bingo, a shooting gallery. Listed in the backlog below for years.
-  *The racer is filled by `games/blind_crest.html`, the jigsaw by `games/jigsaw.html` and tenpin
-  bowling by `games/fresh_oil.html`. A platformer, bingo and a shooting gallery are still open. The
-  crossword is **not** — see the cryptic crossword under "Tried and rejected".*
+  *Filled since: the racer by `games/blind_crest.html`, the jigsaw by `games/jigsaw.html`, tenpin
+  bowling by `games/fresh_oil.html`, Pac-Man by `games/scatter.html`, the shooting gallery by
+  `games/moorhuhn.html`, and alongside them minigolf by `games/nine_holes.html` and pinball by
+  `games/escapement.html`. Bingo is still open, and the platformer only partly — the climbers are
+  built, a level-based side-scroller is not. The crossword is **not** open — see the cryptic
+  crossword under "Tried and rejected".*
 - **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
   most replayed pages here. There has been nothing like them in a long time.
   *Filled by `games/strata.html` (a falling-sand world whose materials you discover).*
@@ -1495,40 +1503,56 @@ rather than only a judgement.
 - Online Icon Editor
 
 ## Games
+
+Reconciled against the catalogue on 2026-09-15 (109 games). *built* names the page that
+covers the entry; *rejected* means it is on the "Tried and rejected" list above and should
+not be re-proposed. Matching was done against titles **and** descriptions, not ids — three
+of these were missed on an earlier pass because `scatter`, `nine_holes` and `escapement`
+give no hint in their filenames.
+
 - War (Card Game)
-- Snake Ladder
-- Bouncing Ball Shooter
-- Pac-Man clone
-- Trivia Quiz
-- Crossword Puzzle
+- Snakes and Ladders
+- Bouncing Ball Shooter — meaning a bubble shooter in the Puzzle Bobble sense.
+  `games/ball_bouncing.html` is a keepie-uppie and does not cover it.
+- Pac-Man clone *(built: `games/scatter.html`)*
+- Trivia Quiz *(built: `games/who_wants_to_be_a_millionaire.html`, with `games/family_feud.html`
+  alongside)*
+- Crossword Puzzle — **rejected**, see the cryptic crossword under "Tried and rejected"
 - Jigsaw Puzzle *(built: `games/jigsaw.html`)*
-- Solitaire
-- Pinball
+- Solitaire *(built: `games/solitaire.html` for Klondike, `games/freecell.html` for FreeCell)*
+- Pinball *(built: `games/escapement.html`)*
 - Roulette
-- Shooting Gallery
+- Shooting Gallery *(built: `games/moorhuhn.html` — a panorama you pan under a clock;
+  `games/duck_hunt.html` covers the fixed-screen NES shape)*
 - Scrabble
-- Checkers
-- Backgammon
+- Checkers *(built: `games/checkers.html`)*
+- Backgammon *(built: `games/backgammon.html`)*
 - Bingo
 - Racing Game *(built: `games/blind_crest.html`)*
-- Platformer
-- Maze Runner
+- Platformer — only partly. `games/icy_tower.html` and `games/jump.html` are vertical
+  climbers and `games/void_runner.html` an endless runner; a level-based side-scroller
+  with enemies is still open.
+- Maze Runner *(built: `games/escape_the_maze.html`)*
 - Archery Game
 - Ice Hockey
-- Pool
+- Pool *(built: `games/8-ball.html`)*
 - Basketball
-- Air Hockey
-- Tower Defense
+- Air Hockey — **rejected**, see "Tried and rejected"
+- Tower Defense *(built: `games/mini_tower_defense.html`)*
 - Dragon Slayer
 - Kung Fu Fighting
-- Mastermind
-- Music Rhythm Game
+- Mastermind *(built: `games/mastermind.html`)*
+- Music Rhythm Game *(built: `games/pulseforge.html`)*
 - Treasure Hunt
-- Ball Drop Game
+- Ball Drop Game *(built: `games/peggle.html`; `games/suika.html` covers the merge variant)*
 - Tenpin bowling *(built: `games/fresh_oil.html`)*
 - Coding challenges as game idea provider
-- human benchmark
+- human benchmark *(built: `games/mind_meter.html`)*
 
+Still open and not rejected: War, Snakes and Ladders, a bubble shooter, Roulette, Scrabble,
+Bingo, a side-scrolling platformer, Archery, Ice Hockey, Basketball, Dragon Slayer, Kung Fu
+Fighting, Treasure Hunt. Several of those are thin as written — "Dragon Slayer" and
+"Treasure Hunt" name no mechanism at all — so treat the list as a prompt, not a queue.
 
 ## Plugins
 - a plugin that looks for the cheapest price of a specific product.
