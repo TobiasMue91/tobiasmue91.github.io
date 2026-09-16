@@ -353,7 +353,7 @@
         <button class="pb p1 jump" data-p="1" data-a="up" aria-label="right blob: jump">JUMP</button>
     </div>
 </div>
-<div id="hint">Esc / P — pause · M — sound</div>
+<div id="hint">Esc / P — pause · M — sound · F — fullscreen</div>
 
 <div class="overlay" id="menu">
     <div class="panel">
@@ -417,6 +417,7 @@
         </div>
 
         <button class="primary" id="startBtn">Play</button>
+        <button id="fsBtn" hidden style="width:100%;margin-top:8px">Fullscreen</button>
         <div class="keys" style="margin-top:16px">
             Move with left/right, jump with up — hold the jump key to go higher.<br>
             <kbd>Mouse</kbd> steers the blob towards the pointer; hold the left button to jump.<br>
@@ -958,6 +959,10 @@
             toggleMute();
             return;
         }
+        if (e.code === 'KeyF' && canFullscreen) {
+            toggleFullscreen();
+            return;
+        }
         if (e.code === 'Escape' || e.code === 'KeyP') {
             if (game.running && !game.over) togglePause();
             e.preventDefault();
@@ -988,11 +993,47 @@
         try { localStorage.setItem('blobby-muted', muted ? '1' : '0'); } catch (err) { /* ignore */ }
     }
 
+    // iPhone Safari has no fullscreen for elements — only for video — so the
+    // button only exists where the browser can actually do it.
+    const fsRequest = document.documentElement.requestFullscreen ||
+        document.documentElement.webkitRequestFullscreen;
+    const canFullscreen = !!fsRequest;
+
+    function isFullscreen() {
+        return !!(document.fullscreenElement || document.webkitFullscreenElement);
+    }
+
+    function fsHit(wx, wy) { return canFullscreen && wx > W - 88 && wx < W - 46 && wy < 46; }
+
+    function toggleFullscreen() {
+        try {
+            if (isFullscreen()) {
+                (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+                return;
+            }
+            const p = fsRequest.call(document.documentElement, {navigationUI: 'hide'});
+            // a phone held upright gets turned the right way round, where the
+            // browser allows it; where it does not, the rotate hint still shows
+            if (p && p.then) {
+                p.then(() => {
+                    if (screen.orientation && screen.orientation.lock) {
+                        screen.orientation.lock('landscape').catch(() => { /* not allowed */ });
+                    }
+                }).catch(() => { /* refused */ });
+            }
+        } catch (err) { /* refused */ }
+    }
+
+    for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+        addEventListener(ev, () => { fit(); syncFsBtn(); });
+    }
+
     addEventListener('mousedown', e => {
         if (e.button !== 0) return;
         audio();
         const w = toWorld(e.clientX, e.clientY);
         if (game.running && muteHit(w.x, w.y)) return toggleMute();
+        if (game.running && fsHit(w.x, w.y)) return toggleFullscreen();
         mouse.down = true;
     });
     addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
@@ -1071,18 +1112,30 @@
     function sideOf(worldX) { return worldX < NET_POSITION_X ? LEFT : RIGHT; }
 
     // dragging on your own half of the court is the alternative to the buttons
+    // fingers that landed on the speaker or the fullscreen mark: they toggle it
+    // once, and must not also walk the blob under them
+    const iconTouch = new Set();
+
     function applyCourtTouches(e) {
         enableTouchUI();
         if (!game.running || game.paused) return;
         e.preventDefault();
         audio();
 
+        if (e.type === 'touchstart') {
+            for (const t of e.changedTouches) {
+                const w = toWorld(t.clientX, t.clientY);
+                if (muteHit(w.x, w.y)) { iconTouch.add(t.identifier); toggleMute(); }
+                else if (fsHit(w.x, w.y)) { iconTouch.add(t.identifier); toggleFullscreen(); }
+            }
+        }
+
         const now = performance.now();
         const seen = [false, false];
 
         for (const t of e.touches) {
+            if (iconTouch.has(t.identifier)) continue;
             const w = toWorld(t.clientX, t.clientY);
-            if (muteHit(w.x, w.y)) continue;
             const p = sideOf(w.x);
             if (controlOf(p) === 'ai') continue;
             const st = touchState[p];
@@ -1110,6 +1163,10 @@
             }
             courtHeld[p].left = courtHeld[p].right = false;
             courtHeld[p].up = now < st.jumpUntil;
+        }
+
+        if (e.type === 'touchend' || e.type === 'touchcancel') {
+            for (const t of e.changedTouches) iconTouch.delete(t.identifier);
         }
     }
 
@@ -1763,6 +1820,34 @@
         ctx.restore();
     }
 
+    // four corner brackets, turned inwards once you are already in fullscreen
+    function drawFullscreenMark(x, y) {
+        const inside = isFullscreen();
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.strokeStyle = 'rgba(255,255,255,.55)';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        const o = 10, len = 5, i0 = o - len;
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+            const sx = i & 1 ? 1 : -1, sy = i & 2 ? 1 : -1;
+            if (inside) {
+                // brackets turned in on themselves: the way back out
+                ctx.moveTo(sx * i0, sy * o);
+                ctx.lineTo(sx * i0, sy * i0);
+                ctx.lineTo(sx * o, sy * i0);
+            } else {
+                ctx.moveTo(sx * o, sy * i0);
+                ctx.lineTo(sx * o, sy * o);
+                ctx.lineTo(sx * i0, sy * o);
+            }
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+
     function drawHud() {
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(10,20,32,.42)';
@@ -1833,6 +1918,7 @@
         }
 
         drawSpeaker(W - 28, 26);
+        if (canFullscreen) drawFullscreenMark(W - 67, 26);
 
         if (game.messageTimer > 0) {
             ctx.globalAlpha = Math.min(1, game.messageTimer * 2);
@@ -2005,6 +2091,16 @@
         canvas.style.width = (W * s) + 'px';
         canvas.style.height = (H * s) + 'px';
     }
+
+    const fsBtn = document.getElementById('fsBtn');
+
+    function syncFsBtn() {
+        fsBtn.hidden = !canFullscreen;
+        fsBtn.textContent = isFullscreen() ? 'Leave fullscreen' : 'Fullscreen';
+    }
+
+    fsBtn.addEventListener('click', toggleFullscreen);
+    syncFsBtn();
 
     addEventListener('resize', fit);
     fit();
