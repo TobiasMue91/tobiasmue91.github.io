@@ -1021,52 +1021,139 @@ Example:
             }
         }
 
+        // Elements whose text content is not prose: source code, styling,
+        // embedded documents and form control internals.
+        static SKIP_TAGS = new Set([
+            'SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG', 'MATH', 'IFRAME',
+            'OBJECT', 'EMBED', 'CANVAS', 'AUDIO', 'VIDEO', 'SELECT', 'DATALIST',
+            'HEAD', 'LINK', 'META'
+        ]);
+
+        // Elements that start a new line of text.
+        static BLOCK_TAGS = new Set([
+            'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'CAPTION', 'CENTER',
+            'DD', 'DETAILS', 'DIALOG', 'DIV', 'DL', 'DT', 'FIELDSET',
+            'FIGCAPTION', 'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4',
+            'H5', 'H6', 'HEADER', 'HGROUP', 'HR', 'LEGEND', 'LI', 'MAIN',
+            'MENU', 'NAV', 'OL', 'P', 'PRE', 'SECTION', 'SUMMARY', 'TABLE',
+            'TBODY', 'TFOOT', 'THEAD', 'TR', 'UL'
+        ]);
+
+        // Elements that flow inside a line and must not introduce a space.
+        static INLINE_TAGS = new Set([
+            'A', 'ABBR', 'B', 'BDI', 'BDO', 'BIG', 'BUTTON', 'CITE', 'CODE',
+            'DATA', 'DEL', 'DFN', 'EM', 'FONT', 'I', 'IMG', 'INS', 'KBD',
+            'LABEL', 'MARK', 'NOBR', 'OUTPUT', 'PICTURE', 'Q', 'RUBY', 'S',
+            'SAMP', 'SMALL', 'SPAN', 'STRIKE', 'STRONG', 'SUB', 'SUP', 'TIME',
+            'TT', 'U', 'VAR', 'WBR'
+        ]);
+
         async stripHTMLTags(html) {
             return new Promise((resolve) => {
                 try {
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(html, 'text/html');
+                    const root = doc.body || doc.documentElement;
 
-                    if (this.elements.preserveLinks.checked) {
-                        // Replace links with "text (url)" format
-                        const links = doc.querySelectorAll('a[href]');
-                        links.forEach(link => {
-                            const text = link.textContent.trim();
-                            const href = link.getAttribute('href');
-                            if (text && href && href !== '#') {
-                                link.textContent = `${text} (${href})`;
+                    const lineBreaks = this.elements.preserveLineBreaks.checked;
+                    const preserveLinks = this.elements.preserveLinks.checked;
+                    const { SKIP_TAGS, BLOCK_TAGS, INLINE_TAGS } = HTMLTagStripper;
+
+                    // Separator strength between two pieces of text:
+                    // 1 = space, 2 = tab (table columns), 3 = line break.
+                    // Without line breaks everything collapses to a space, so
+                    // words from neighbouring elements never weld together.
+                    const parts = [];
+                    let pending = 0;
+
+                    const separate = (level) => {
+                        const wanted = lineBreaks ? level : 1;
+                        if (wanted > pending) pending = wanted;
+                    };
+
+                    const emit = (text) => {
+                        if (!text) return;
+                        if (parts.length && pending) {
+                            parts.push(pending === 3 ? '\n' : pending === 2 ? '\t' : ' ');
+                        }
+                        pending = 0;
+                        parts.push(text);
+                    };
+
+                    const walk = (node, inPre) => {
+                        for (const child of node.childNodes) {
+                            if (child.nodeType === Node.TEXT_NODE) {
+                                const raw = child.nodeValue || '';
+                                if (inPre) {
+                                    emit(raw);
+                                    continue;
+                                }
+                                const collapsed = raw.replace(/\s+/g, ' ');
+                                if (collapsed === ' ') {
+                                    separate(1);
+                                    continue;
+                                }
+                                if (collapsed.startsWith(' ')) separate(1);
+                                emit(collapsed.trim());
+                                if (collapsed.endsWith(' ')) separate(1);
+                                continue;
                             }
-                        });
-                    }
 
-                    let result = '';
+                            if (child.nodeType !== Node.ELEMENT_NODE) continue;
 
-                    if (this.elements.preserveLineBreaks.checked) {
-                        // Add line breaks for block elements
-                        const blockElements = doc.querySelectorAll('div, p, br, h1, h2, h3, h4, h5, h6, li, tr, td, th, section, article, header, footer, main, aside');
-                        blockElements.forEach(el => {
-                            if (el.tagName === 'BR') {
-                                el.replaceWith('\n');
-                            } else if (['LI'].includes(el.tagName)) {
-                                el.insertAdjacentText('beforebegin', '• ');
-                                el.insertAdjacentText('afterend', '\n');
-                            } else {
-                                el.insertAdjacentText('afterend', '\n');
+                            const tag = child.tagName.toUpperCase();
+                            if (SKIP_TAGS.has(tag)) continue;
+
+                            if (tag === 'BR') {
+                                separate(3);
+                                continue;
                             }
-                        });
-                    }
 
-                    result = doc.body ? (doc.body.textContent || doc.body.innerText || '') : (doc.textContent || doc.innerText || '');
+                            if (tag === 'TD' || tag === 'TH') {
+                                // Columns keep their own separator so a row
+                                // still reads as a row.
+                                separate(node.firstElementChild === child ? 3 : 2);
+                                walk(child, inPre);
+                                continue;
+                            }
 
-                    // Clean up multiple newlines
-                    if (this.elements.preserveLineBreaks.checked) {
-                        result = result.replace(/\n\s*\n\s*\n/g, '\n\n');
+                            const isBlock = BLOCK_TAGS.has(tag);
+                            // Unknown tags (custom elements, mso-isms) are
+                            // treated as at least a word boundary.
+                            separate(isBlock ? 3 : INLINE_TAGS.has(tag) ? 0 : 1);
+
+                            if (tag === 'LI') {
+                                emit('\u2022');
+                                separate(1);
+                            }
+
+                            const before = parts.length;
+                            walk(child, inPre || tag === 'PRE');
+
+                            if (preserveLinks && tag === 'A') {
+                                const href = child.getAttribute('href');
+                                if (href && href !== '#' && parts.length > before) {
+                                    emit(` (${href})`);
+                                }
+                            }
+
+                            separate(isBlock ? 3 : INLINE_TAGS.has(tag) ? 0 : 1);
+                        }
+                    };
+
+                    if (root) walk(root, false);
+
+                    let result = parts.join('');
+                    if (lineBreaks) {
+                        result = result.replace(/\n[ \t]*\n[ \t]*\n+/g, '\n\n');
                     }
 
                     resolve(result.trim());
                 } catch (error) {
                     // Fallback: simple regex-based tag removal
-                    let result = html.replace(/<[^>]*>/g, '');
+                    let result = html
+                        .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+                        .replace(/<[^>]*>/g, '');
                     resolve(result.trim());
                 }
             });
