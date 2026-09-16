@@ -67,7 +67,11 @@
     padding:9px 15px; font-size:13.5px; z-index:15; pointer-events:none; opacity:0; transition:opacity .25s;
   }
   #toast.on{opacity:1}
-  #seedline{display:flex; gap:7px; align-items:center; margin-top:13px}
+  #sens{display:flex; gap:7px; align-items:center; margin-top:13px}
+  #sens .lbl{color:var(--dim); font-size:11px; letter-spacing:.08em; text-transform:uppercase; flex:0 0 auto}
+  #sens button{flex:1 1 0; padding:8px 4px; font-size:13px}
+  #sens button.on{background:var(--accent); color:#241608; border-color:#f2c27c; font-weight:700}
+  #seedline{display:flex; gap:7px; align-items:center; margin-top:10px}
   #seedline input{
     flex:1; background:#1d130a; border:1px solid var(--line); color:var(--ink);
     border-radius:8px; padding:8px 10px; font:inherit; font-size:14px; min-width:0;
@@ -76,12 +80,14 @@
   /* a phone held sideways has ~340 px of height for the whole overlay,
      and the Start button must be inside it, not below the fold */
   @media (max-height:560px){
-    .card{padding:15px 17px; max-width:560px; border-radius:13px}
-    .card h1{font-size:19px} .card h2{font-size:17px}
-    .card p{font-size:12.5px; line-height:1.42; margin-bottom:7px}
-    .card .row{margin-top:10px}
-    .card .row button{padding:9px 13px; font-size:14px}
-    #seedline{margin-top:9px}
+    .card{padding:13px 16px; max-width:620px; border-radius:13px}
+    .card h1{font-size:18px; margin-bottom:4px} .card h2{font-size:17px}
+    .card p{font-size:12px; line-height:1.38; margin-bottom:6px}
+    .card .row{margin-top:8px}
+    .card .row button{padding:8px 13px; font-size:14px}
+    #sens{margin-top:8px} #sens button{padding:6px 4px; font-size:12px}
+    #seedline{margin-top:7px}
+    #seedline input, #seedline button{padding:6px 9px; font-size:13px}
     .stat{padding:3px 0; font-size:13px}
   }
 </style>
@@ -110,12 +116,16 @@
     <div class="row">
       <button class="primary" id="bStart">Start course</button>
     </div>
+    <div id="sens" role="group" aria-label="Tilt sensitivity">
+      <span class="lbl">Tilt</span>
+      <button data-s="0">Calm</button><button data-s="1">Steady</button><button data-s="2">Quick</button>
+    </div>
     <div id="seedline">
       <input id="iSeed" spellcheck="false" aria-label="Course seed">
       <button id="bSeed">Load seed</button>
       <button id="bRand">Random</button>
     </div>
-    <p class="small" style="margin-top:12px">Desktop: move the <b>mouse</b> over the board to tilt it, or hold the <kbd>arrow</kbd> / <kbd>WASD</kbd> keys. Phone: tilt the phone. <kbd>R</kbd> resets the board, double-tap re-zeroes the tilt.</p>
+    <p class="small" style="margin-top:12px">Desktop: move the <b>mouse</b> over the board to tilt it, or hold the <kbd>arrow</kbd> / <kbd>WASD</kbd> keys. Phone: tilt the phone. <kbd>R</kbd> resets the board, double-tap re-zeroes the tilt, <kbd>[</kbd> <kbd>]</kbd> change the tilt setting mid-run.</p>
   </div>
 </div>
 
@@ -193,7 +203,56 @@ const WALL_T   = 0.006;    // m, wall thickness — the thing that must not be t
 const HOLE_R   = 0.0090;   // m
 const GOAL_R   = 0.0115;   // m
 
-const MAX_TILT = 15 * Math.PI/180;   // hard clamp on board tilt
+/* How far the board can tilt at all. 15 degrees was a wrist-comfort
+ * number and it is far too much for a 238 mm board: it puts the ball
+ * three and a half board widths a second at full deflection, and a fifth
+ * of that deflection still moves it two thirds of the board in a second.
+ * A real labyrinth's knobs give you a handful of degrees. */
+const TILT_BASE = 8 * Math.PI/180;
+/* Feel is personal and depends on how you hold the thing, so the limit
+ * is a setting rather than a verdict. */
+const SENS = [
+  {id:"calm",   label:"Calm",   k:0.70},
+  {id:"steady", label:"Steady", k:1.00},
+  {id:"quick",  label:"Quick",  k:1.45}
+];
+let sensIdx = 1;
+let TILT_LIMIT = TILT_BASE;
+
+/* Degrees of PHONE tilt that count as full deflection. Mapping the wrist
+ * 1:1 onto the board meant every degree of hand tremor was a degree of
+ * board, with nothing left over for fine work. */
+const INPUT_DEG = 20;
+
+/* Exponential input curve, the thing radio-control transmitters have had
+ * for decades for exactly this complaint. It does not touch the physics:
+ * the board still accelerates the ball at (5/7)g*sin(theta), it is only
+ * how much theta your wrist buys that changes. The first half of your
+ * movement is for threading gaps, the last for when the ball has to
+ * move now.
+ *
+ * The exponent has a floor set by a real effect rather than by taste.
+ * The ball does not roll at all until gravity beats rolling resistance,
+ * at tan(theta) > MU_ROLL*7/5 = 0.32 degrees, so whatever the curve does
+ * below that angle is a dead zone in which the controls look broken. At
+ * 1.8 that swallowed the first 18% of the input; 1.5 holds it near 12%,
+ * small enough to read as the ball needing a push rather than as nothing
+ * happening. */
+const EXPO = 1.5;
+function shape(u){
+  if(u < -1) u = -1; else if(u > 1) u = 1;
+  const a = Math.abs(u);
+  return (u < 0 ? -1 : 1) * TILT_LIMIT * Math.pow(a, EXPO);
+}
+function applySens(i, announce){
+  sensIdx = (i + SENS.length) % SENS.length;
+  TILT_LIMIT = TILT_BASE * SENS[sensIdx].k;
+  try{ localStorage.setItem("tiltmaze.sens", SENS[sensIdx].id); }catch(e){}
+  const btns = document.querySelectorAll("#sens button");
+  btns.forEach((b, k) => b.classList.toggle("on", k === sensIdx));
+  if(announce) note(SENS[sensIdx].label + " — board tilts up to " +
+    (TILT_LIMIT*180/Math.PI).toFixed(1) + "\u00b0");
+}
 const TILT_TAU = 0.060;              // s, low-pass time constant on the tilt input
 const DT       = 1/60;               // s, fixed simulation step
 const MAX_SUB  = 96;                 // substep ceiling
@@ -509,11 +568,8 @@ function onOrientation(e){
   Tilt.rawB = clampDeg(e.beta,  55);
   Tilt.rawG = clampDeg(e.gamma, 55);
   const s = orientToScreen(Tilt.rawB - Tilt.zeroB, Tilt.rawG - Tilt.zeroG, screenAngle());
-  /* Map 1° of phone tilt to 1° of board tilt up to the clamp — direct,
-   * no gain. MAX_TILT is 15°, which the wrist reaches comfortably. */
-  const gain = 1.0;
-  Tilt.targetX = clampRad(s.x * gain * Math.PI/180, MAX_TILT);
-  Tilt.targetY = clampRad(s.y * gain * Math.PI/180, MAX_TILT);
+  Tilt.targetX = shape(s.x / INPUT_DEG);
+  Tilt.targetY = shape(s.y / INPUT_DEG);
 }
 function clampRad(v, lim){ return v < -lim ? -lim : (v > lim ? lim : v); }
 
@@ -559,12 +615,14 @@ function sensorNote(){
 
 /* keyboard + mouse: full parity with the sensor, not a fallback */
 function keyTilt(dt){
-  const rate = MAX_TILT / 0.22;       // full deflection in 0.22 s
-  const back = MAX_TILT / 0.16;
+  // keyX/keyY are normalised deflection in -1..1; the curve is applied
+  // afterwards, so a tap is a nudge and a held key is full authority
+  const rate = 1 / 0.28;             // full deflection in 0.28 s
+  const back = 1 / 0.16;
   const k = Tilt.keys;
   const ax = (k.r - k.l), ay = (k.d - k.u);
-  Tilt.keyX = ax ? clampRad(Tilt.keyX + ax*rate*dt, MAX_TILT) : towardZero(Tilt.keyX, back*dt);
-  Tilt.keyY = ay ? clampRad(Tilt.keyY + ay*rate*dt, MAX_TILT) : towardZero(Tilt.keyY, back*dt);
+  Tilt.keyX = ax ? clampRad(Tilt.keyX + ax*rate*dt, 1) : towardZero(Tilt.keyX, back*dt);
+  Tilt.keyY = ay ? clampRad(Tilt.keyY + ay*rate*dt, 1) : towardZero(Tilt.keyY, back*dt);
   return (ax||ay||Tilt.keyX||Tilt.keyY);
 }
 function towardZero(v, d){ return v > d ? v-d : (v < -d ? v+d : 0); }
@@ -574,10 +632,10 @@ function updateTiltTarget(dt){
   const active = keyTilt(dt);
   if(Math.abs(Tilt.keyX) > 1e-5 || Math.abs(Tilt.keyY) > 1e-5 || Tilt.keys.l||Tilt.keys.r||Tilt.keys.u||Tilt.keys.d){
     Tilt.mode = "keys";
-    Tilt.targetX = Tilt.keyX; Tilt.targetY = Tilt.keyY;
+    Tilt.targetX = shape(Tilt.keyX); Tilt.targetY = shape(Tilt.keyY);
   }else if(Tilt.mouseOn){
     Tilt.mode = "mouse";
-    Tilt.targetX = Tilt.mouseX; Tilt.targetY = Tilt.mouseY;
+    Tilt.targetX = shape(Tilt.mouseX); Tilt.targetY = shape(Tilt.mouseY);
   }else{
     Tilt.targetX = 0; Tilt.targetY = 0;
   }
@@ -899,7 +957,7 @@ function draw(now){
   const L = Game.level, s = ORG.s;
   if(!L.cos) buildCosmetics(L);
   // light direction follows the tilt: the board visibly leans
-  const lx = Math.sin(Tilt.x) / MAX_TILT, ly = Math.sin(Tilt.y) / MAX_TILT;   // -1..1
+  const lx = Math.sin(Tilt.x) / TILT_LIMIT, ly = Math.sin(Tilt.y) / TILT_LIMIT;   // -1..1
   const lean = Math.min(VW, VH) * 0.012;
 
   c.save();
@@ -1037,7 +1095,7 @@ function draw(now){
   c.beginPath(); c.arc(ix, iy, ind*0.5, 0, 6.283);
   c.strokeStyle = "rgba(200,170,130,.28)"; c.lineWidth = 1.5; c.stroke();
   c.beginPath(); c.arc(ix + lx*ind*0.42, iy + ly*ind*0.42, ind*0.16, 0, 6.283);
-  c.fillStyle = deg > MAX_TILT*180/Math.PI*0.94 ? "rgba(216,102,78,.95)" : "rgba(232,176,98,.85)";
+  c.fillStyle = deg > TILT_LIMIT*180/Math.PI*0.94 ? "rgba(216,102,78,.95)" : "rgba(232,176,98,.85)";
   c.fill();
   c.font = "11px ui-rounded, sans-serif";
   c.fillStyle = "rgba(200,170,130,.55)";
@@ -1163,8 +1221,8 @@ function mouseTilt(ev){
   const cx = rect.left + ORG.x + MS(BOARD)/2;
   const cy = rect.top  + ORG.y + MS(BOARD)/2;
   const half = MS(BOARD)/2 * 1.15;
-  Tilt.mouseX = clampRad(((ev.clientX - cx)/half) * MAX_TILT, MAX_TILT);
-  Tilt.mouseY = clampRad(((ev.clientY - cy)/half) * MAX_TILT, MAX_TILT);
+  Tilt.mouseX = clampRad((ev.clientX - cx)/half, 1);   // normalised, curved later
+  Tilt.mouseY = clampRad((ev.clientY - cy)/half, 1);
   Tilt.mouseOn = true;
 }
 stage.addEventListener("mousemove", mouseTilt);
@@ -1177,6 +1235,8 @@ addEventListener("keydown", e => {
   if(e.key === "r" || e.key === "R"){ if(Game.running && !Game.fall && !Game.cleared) resetBall(); }
   if(e.key === "c" || e.key === "C") recalibrate();
   if(e.key === "f" || e.key === "F") toggleFull();
+  if(e.key === "[") applySens(sensIdx - 1, true);
+  if(e.key === "]") applySens(sensIdx + 1, true);
   if(e.key === "m" || e.key === "M"){ muted = !muted; if(rollGain) rollGain.gain.value = 0; note(muted ? "Muted" : "Sound on"); }
 });
 addEventListener("keyup", e => { const k = KEYMAP[e.key]; if(k){ Tilt.keys[k] = 0; e.preventDefault(); } });
@@ -1193,6 +1253,8 @@ function toggleFull(){
   if(!document.fullscreenElement){ (d.requestFullscreen || d.webkitRequestFullscreen || function(){}).call(d); }
   else{ (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document); }
 }
+document.querySelectorAll("#sens button").forEach(btn =>
+  btn.addEventListener("click", () => applySens(+btn.dataset.s, true)));
 el("bFull").addEventListener("click", toggleFull);
 el("bZero").addEventListener("click", recalibrate);
 el("bMenu").addEventListener("click", ()=>{
@@ -1224,6 +1286,13 @@ if(screen.orientation && screen.orientation.addEventListener)
 (function boot(){
   const q = new URLSearchParams(location.search);
   setSeed(q.get("seed") || randomSeed(), false);
+  let saved = 1;
+  try{
+    const v = localStorage.getItem("tiltmaze.sens");
+    const i = SENS.findIndex(x => x.id === v);
+    if(i >= 0) saved = i;
+  }catch(e){}
+  applySens(saved, false);
   el("pSensor").textContent = sensorNote();
   el("pHow").textContent =
     "Five boards, one clock. It keeps running when you fall in, so a fall costs you the seconds it takes " +
@@ -1240,7 +1309,10 @@ if(screen.orientation && screen.orientation.addEventListener)
  *  Test hooks — used by the headless verification run.
  * ================================================================== */
 window.TM = {
-  C: {G, ROLL, MU_ROLL, DRAG, REST, BOARD, BALL_R, WALL_T, HOLE_R, GOAL_R, MAX_TILT, TILT_TAU, DT, SUB_TRAVEL, N_BOARDS},
+  C: {G, ROLL, MU_ROLL, DRAG, REST, BOARD, BALL_R, WALL_T, HOLE_R, GOAL_R,
+      TILT_BASE, INPUT_DEG, EXPO, TILT_TAU, DT, SUB_TRAVEL, N_BOARDS,
+      get MAX_TILT(){ return TILT_LIMIT; }},
+  shape, SENS, applySens, sens(){ return SENS[sensIdx]; },
   Ball, Game, Tilt, LEVELS,
   buildLevel, isSolvable, wallMask, punchHole, reachable, orientToScreen, hashStr, RN,
   setLosses(mu, drag){ MU_ROLL = mu; DRAG = drag; },
@@ -1260,8 +1332,8 @@ window.TM = {
   feedOrientation(beta, gamma, angle){
     Tilt.rawB = clampDeg(beta, 55); Tilt.rawG = clampDeg(gamma, 55);
     const s = orientToScreen(Tilt.rawB - Tilt.zeroB, Tilt.rawG - Tilt.zeroG, angle);
-    Tilt.targetX = clampRad(s.x*Math.PI/180, MAX_TILT);
-    Tilt.targetY = clampRad(s.y*Math.PI/180, MAX_TILT);
+    Tilt.targetX = shape(s.x / INPUT_DEG);
+    Tilt.targetY = shape(s.y / INPUT_DEG);
     return {x:Tilt.targetX, y:Tilt.targetY};
   },
   levelSig(L){
