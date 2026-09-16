@@ -174,11 +174,16 @@ details summary{cursor:pointer;color:var(--muted);font-size:.85rem}
     <div class="row" style="margin-top:10px">
       <button class="primary" id="doImport">Import</button>
       <button id="importCurrent">Load current output</button>
+      <div style="flex:2 1 220px" id="ruleWrap" hidden>
+        <label for="ruleSel">This paste holds several rules — which one?</label>
+        <select id="ruleSel"></select>
+      </div>
     </div>
     <p class="msg" id="importMsg"></p>
+    <p class="hint" id="ignoredMsg"></p>
     <p class="hint"><code>from</code> and <code>to</code> are read as <code>0%</code> and <code>100%</code>,
     selector lists like <code>0%, 50%</code> are expanded into separate stops, duplicate percentages collapse
-    into one, and stops are re-sorted. Anything the parser does not recognise is ignored rather than fatal.</p>
+    into one, and stops are re-sorted. Every declaration the editor cannot hold is counted and named below the button rather than quietly dropped, and a paste containing several animations lets you pick which one to load.</p>
   </section>
 </main>
 
@@ -346,10 +351,12 @@ function pctOrNum(v){
   return isFinite(n) ? n*100 : NaN;
 }
 
-function applyTransform(stop,value){
-  var re = /([a-zA-Z]+)\s*\(([^)]*)\)/g, m;
+function applyTransform(stop,value,ignored){
+  var re = /([a-zA-Z0-9]+)\s*\(([^)]*)\)/g, m;
   while((m = re.exec(value))){
     var fn = m[1].toLowerCase();
+    if(!/^(translate|translatex|translatey|translate3d|scale|scalex|scaley|rotate|rotatez|skew|skewx|skewy)$/.test(fn)
+       && ignored) ignored.push("transform: "+m[1]+"()");
     var args = m[2].split(",").map(function(a){return a.trim();});
     var a0 = unit(args[0]), a1 = args.length>1 ? unit(args[1]) : null;
     switch(fn){
@@ -367,11 +374,13 @@ function applyTransform(stop,value){
     }
   }
 }
-function applyFilter(stop,value){
+function applyFilter(stop,value,ignored){
   if(/^\s*none\s*$/i.test(value)){ stop.blur=0;stop.bright=100;stop.sat=100;stop.hue=0;stop.gray=0; return; }
   var re = /([a-zA-Z-]+)\s*\(([^)]*)\)/g, m;
   while((m = re.exec(value))){
     var fn = m[1].toLowerCase(), a = m[2].trim();
+    if(!/^(blur|brightness|saturate|grayscale|hue-rotate)$/.test(fn) && ignored)
+      ignored.push("filter: "+m[1]+"()");
     if(fn==="blur") stop.blur = num(a,stop.blur);
     else if(fn==="brightness") stop.bright = pctOrNumSafe(a,stop.bright);
     else if(fn==="saturate")  stop.sat    = pctOrNumSafe(a,stop.sat);
@@ -381,27 +390,36 @@ function applyFilter(stop,value){
 }
 function pctOrNumSafe(v,d){ var n = pctOrNum(v); return isFinite(n)?n:d; }
 
-// pull the balanced body of the first @keyframes rule
-function extractBlock(css){
-  var m = /@(?:-webkit-|-moz-|-o-)?keyframes\s+("[^"]*"|'[^']*'|[\w-]+)\s*\{/.exec(css);
-  if(!m) return null;
-  var name = m[1].replace(/^["']|["']$/g,"");
-  var i = m.index + m[0].length, depth = 1, start = i;
-  while(i < css.length && depth > 0){
-    var c = css[i];
-    if(c === "{") depth++;
-    else if(c === "}") depth--;
-    i++;
+// pull the balanced body of every @keyframes rule in the paste. Taking only the first
+// silently picks one animation out of a whole stylesheet, which is exactly the kind of
+// quiet loss that makes an importer untrustworthy.
+function extractBlocks(css){
+  var rules = [], re = /@(?:-webkit-|-moz-|-o-)?keyframes\s+("[^"]*"|'[^']*'|[\w-]+)\s*\{/g, m;
+  while((m = re.exec(css))){
+    var name = m[1].replace(/^["']|["']$/g,"");
+    var i = m.index + m[0].length, depth = 1, start = i;
+    while(i < css.length && depth > 0){
+      var c = css[i];
+      if(c === "{") depth++;
+      else if(c === "}") depth--;
+      i++;
+    }
+    if(depth !== 0) continue;           // unbalanced braces: not a usable rule
+    rules.push({name:name, body:css.slice(start, i-1)});
+    re.lastIndex = i;
   }
-  if(depth !== 0) return null;
-  return {name:name, body:css.slice(start, i-1)};
+  return rules;
 }
 
-function parseKeyframes(css){
+function parseKeyframes(css,wanted){
   css = stripComments(css||"");
   if(!css.trim()) throw new Error("Nothing to import — the field is empty.");
-  var blk = extractBlock(css);
-  if(!blk) throw new Error("No complete @keyframes rule found (check the braces).");
+  var rules = extractBlocks(css);
+  if(!rules.length) throw new Error("No complete @keyframes rule found (check the braces).");
+  var blk = null;
+  if(wanted) for(var r=0;r<rules.length;r++) if(rules[r].name === wanted) blk = rules[r];
+  if(!blk) blk = rules[0];
+  var ignored = [];
   var stops = [], re = /([^{}]+)\{([^{}]*)\}/g, m;
   while((m = re.exec(blk.body))){
     var selectors = m[1].split(","), body = m[2];
@@ -421,8 +439,8 @@ function parseKeyframes(css){
       var prop = decl.slice(0,k).trim().toLowerCase(), val = decl.slice(k+1).trim();
       if(!prop || !val) return;
       switch(prop){
-        case "transform": applyTransform(base,val); break;
-        case "filter": applyFilter(base,val); break;
+        case "transform": applyTransform(base,val,ignored); break;
+        case "filter": applyFilter(base,val,ignored); break;
         case "opacity": base.op = clamp(num(val,base.op),0,1); break;
         case "background-color": case "background":
           var c = parseColor(val); if(c) base.bg = c; break;
@@ -430,12 +448,17 @@ function parseKeyframes(css){
         case "border-radius": base.r = num(val,base.r); break;
         case "animation-timing-function": case "-webkit-animation-timing-function":
           base.e = val; break;
+        default: ignored.push(prop);      // nothing this editor can hold — say so, do not swallow it
       }
     });
     pcts.forEach(function(p){ stops.push(Object.assign({},base,{p:p})); });
   }
   if(!stops.length) throw new Error("That @keyframes rule contains no usable stops.");
-  var out = {name:blk.name, stops:stops};
+  var counts = {}, order = [];
+  ignored.forEach(function(k){ if(!counts[k]){ counts[k]=0; order.push(k); } counts[k]++; });
+  order = order.map(function(k){ return counts[k] > 1 ? k+" \u00d7"+counts[k] : k; });
+  var out = {name:blk.name, stops:stops, rules:rules.map(function(r){ return r.name; }),
+             ignored:order, ignoredCount:ignored.length};
   // If an `animation:` shorthand was pasted along with the rule, read the timing off it —
   // duration, delay and the rest live outside @keyframes and would otherwise be lost.
   var sh = /animation\s*:\s*([^;}]+)/i.exec(css.replace(blk.body,""));
@@ -747,22 +770,45 @@ $("copyLink").addEventListener("click", function(){
 });
 
 /* ---------------- import ---------------- */
-function importCSS(text){
-  var parsed = parseKeyframes(text);   // throws on anything unusable
-  var next = Object.assign(clone(state),parsed);
+function importCSS(text,wanted){
+  var parsed = parseKeyframes(text,wanted);   // throws on anything unusable
+  var next = clone(state);
+  ["name","stops","dur","delay","iter","dir","fill"].forEach(function(k){
+    if(parsed[k] !== undefined) next[k] = parsed[k];
+  });
   normalise(next);
   state = next; sel = 0;
   render();
-  return state;
+  return {state:state, rules:parsed.rules, ignored:parsed.ignored, ignoredCount:parsed.ignoredCount};
 }
-$("doImport").addEventListener("click", function(){
+function runImport(wanted){
   try{
-    var st = importCSS($("importIn").value);
-    msg("importMsg","Imported “"+st.name+"” with "+st.stops.length+" stops.",false);
+    var res = importCSS($("importIn").value, wanted);
+    var picker = $("ruleSel");
+    picker.innerHTML = "";
+    res.rules.forEach(function(n){
+      var o = document.createElement("option");
+      o.value = n; o.textContent = n; picker.appendChild(o);
+    });
+    picker.value = res.state.name;
+    $("ruleWrap").hidden = res.rules.length < 2;
+    var text = "Imported “"+res.state.name+"” with "+res.state.stops.length+" stops.";
+    if(res.rules.length > 1)
+      text += " "+res.rules.length+" rules were in the paste — pick another above to switch.";
+    msg("importMsg",text,false);
+    // Anything this editor cannot hold is named, never quietly dropped.
+    $("ignoredMsg").textContent = res.ignoredCount
+      ? res.ignoredCount+" declaration"+(res.ignoredCount===1?"":"s")+
+        " could not be represented and were left out: "+res.ignored.join(", ")+"."
+      : "";
   }catch(e){
+    $("ruleWrap").hidden = true;
+    $("ignoredMsg").textContent = "";
     msg("importMsg",e.message||"Could not parse that CSS.",true);
   }
-});
+}
+$("doImport").addEventListener("click", function(){ runImport(null); });
+$("ruleSel").addEventListener("change", function(){ runImport(this.value); });
 $("importCurrent").addEventListener("click", function(){
   $("importIn").value = buildKeyframes(state);
   msg("importMsg","Current output loaded into the field — press Import to round-trip it.",false);
