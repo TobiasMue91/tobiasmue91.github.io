@@ -73,6 +73,17 @@
     border-radius:8px; padding:8px 10px; font:inherit; font-size:14px; min-width:0;
   }
   @media (max-width:430px){ #hud{gap:9px; font-size:12px} #hud .big{font-size:17px} }
+  /* a phone held sideways has ~340 px of height for the whole overlay,
+     and the Start button must be inside it, not below the fold */
+  @media (max-height:560px){
+    .card{padding:15px 17px; max-width:560px; border-radius:13px}
+    .card h1{font-size:19px} .card h2{font-size:17px}
+    .card p{font-size:12.5px; line-height:1.42; margin-bottom:7px}
+    .card .row{margin-top:10px}
+    .card .row button{padding:9px 13px; font-size:14px}
+    #seedline{margin-top:9px}
+    .stat{padding:3px 0; font-size:13px}
+  }
 </style>
 </head>
 <body>
@@ -599,6 +610,7 @@ function filterTilt(dt){
  * inside it. The count is computed from the current speed each frame,
  * so it costs nothing when the ball is crawling. */
 function stepPhysics(dt){
+  const rx0 = Ball.x, ry0 = Ball.y;
   const sp = Math.hypot(Ball.vx, Ball.vy);
   let sub = Math.ceil((sp*dt) / SUB_TRAVEL);
   if(sub < 1) sub = 1;
@@ -641,7 +653,6 @@ function stepPhysics(dt){
         if(-vn > 0.06) click(Math.min(1, -vn/1.2));
       }
     }
-    Ball.spin += Math.hypot(Ball.vx, Ball.vy) * h / BALL_R;
 
     // holes
     const holes = Game.level.holes;
@@ -653,6 +664,7 @@ function stepPhysics(dt){
     const gd = Math.hypot(Ball.x-Game.level.goal.x, Ball.y-Game.level.goal.y);
     if(gd < Game.level.goal.r - BALL_R*0.35){ clearBoard(); return; }
   }
+  rollFrame(Ball.x - rx0, Ball.y - ry0);
 }
 
 /* ================================================================== *
@@ -722,11 +734,50 @@ const Game = {
   running: false, t: 0, falls: 0,
   fall: null, cleared: null, splits: [], lastHit: 0, best: null, finished: false
 };
-const Ball = {x:0, y:0, vx:0, vy:0, spin:0};
+/* The ball carries an orientation frame — three orthonormal vectors that
+ * are rotated by the real rolling kinematics — purely so you can see it
+ * spin. Without it a rolling sphere and a sliding puck look identical on
+ * screen, which would make the (5/7) factor a thing you have to take on
+ * trust rather than something you can watch. */
+const Ball = {x:0, y:0, vx:0, vy:0, marks:null};
+function resetMarks(){ Ball.marks = [[1,0,0],[0,1,0],[0,0,1]]; }
+resetMarks();
+/* Speckles fixed to the ball's own body, spread over the sphere by the
+ * golden-angle spiral so they never line up into a pattern. Each is
+ * stored as coefficients on the frame above, so one frame rotation
+ * carries all of them, rigidly and for free. */
+const SPECKS = (function(){
+  const out = [], N = 14, ga = Math.PI*(3 - Math.sqrt(5));
+  for(let i=0;i<N;i++){
+    const z = 1 - (2*i + 1)/N, r = Math.sqrt(Math.max(0, 1 - z*z)), th = i*ga;
+    out.push({b:[r*Math.cos(th), r*Math.sin(th), z], s:0.55 + 0.45*((i*7)%5)/4});
+  }
+  return out;
+})();
+/* Rolling without slipping: a displacement d turns the ball by d/r about
+ * the horizontal axis perpendicular to the direction of travel. */
+function rollFrame(dx, dy){
+  const d = Math.hypot(dx, dy);
+  if(d < 1e-9) return;
+  const th = d / BALL_R;
+  const ax = -dy/d, ay = dx/d;          // axis, z-component is zero
+  const c = Math.cos(th), sn = Math.sin(th), k = 1 - c;
+  for(let i=0;i<3;i++){
+    const v = Ball.marks[i];
+    const vx = v[0], vy = v[1], vz = v[2];
+    const dot = ax*vx + ay*vy;
+    v[0] = vx*c + ( ay*vz)*sn + ax*dot*k;   // Rodrigues
+    v[1] = vy*c + (-ax*vz)*sn + ay*dot*k;
+    v[2] = vz*c + (ax*vy - ay*vx)*sn;
+    const L = Math.hypot(v[0], v[1], v[2]) || 1;   // kill numeric drift
+    v[0]/=L; v[1]/=L; v[2]/=L;
+  }
+}
 
 function resetBall(){
   Ball.x = Game.level.start.x; Ball.y = Game.level.start.y;
   Ball.vx = 0; Ball.vy = 0;
+  resetMarks();
   Game.fall = null;
 }
 function dropIn(h){
@@ -956,6 +1007,24 @@ function draw(now){
     bg.addColorStop(0, "#ffffff"); bg.addColorStop(0.22, "#e2e8ee");
     bg.addColorStop(0.62, "#9aa6b2"); bg.addColorStop(1, "#4a545f");
     c.beginPath(); c.arc(px, py, pr, 0, 6.283); c.fillStyle = bg; c.fill();
+    // the mottling on the near hemisphere, carried round by the frame —
+    // at a crawl you can count the turns, at speed it shimmers, which is
+    // what a 12.7 mm ball doing 12 revolutions a second actually does
+    if(!Game.fall && pr > 3){
+      const m0 = Ball.marks[0], m1 = Ball.marks[1], m2 = Ball.marks[2];
+      for(let k=0;k<SPECKS.length;k++){
+        const B = SPECKS[k].b;
+        const wz = B[0]*m0[2] + B[1]*m1[2] + B[2]*m2[2];
+        if(wz <= 0.10) continue;                       // on the far side
+        const wx = B[0]*m0[0] + B[1]*m1[0] + B[2]*m2[0];
+        const wy = B[0]*m0[1] + B[1]*m1[1] + B[2]*m2[1];
+        const mr = pr*0.20*SPECKS[k].s*(0.30 + 0.70*wz);
+        c.beginPath();
+        c.arc(px + wx*pr*0.80, py + wy*pr*0.80, mr, 0, 6.283);
+        c.fillStyle = "rgba(58,72,88," + (0.46*wz*wz).toFixed(3) + ")";
+        c.fill();
+      }
+    }
     c.beginPath(); c.arc(px + pr*0.30, py + pr*0.36, pr*0.42, 0, 6.283);
     c.fillStyle = "rgba(255,226,180,.16)"; c.fill();
   }
@@ -1013,10 +1082,12 @@ function tick(dt){
   filterTilt(dt);
   if(Game.cleared && !Game.running){ Game.cleared = null; return; }
   if(Game.cleared){
+    // the clock stops for the celebration: 1.1 s of animation is not
+    // playing time, and counting it would push a constant offset into
+    // every split after the first
     Game.cleared.t += dt;
-    Game.t += dt;
     if(Game.cleared.t > 1.1) nextBoard();
-    hudUpdate();
+    hudTick();
     return;
   }
   if(!Game.running) return;
@@ -1024,12 +1095,12 @@ function tick(dt){
   if(Game.fall){
     Game.fall.t += dt;
     if(Game.fall.t > 0.75) resetBall();
-    hudUpdate();
+    hudTick();
     return;
   }
   stepPhysics(dt);
   rollSound(Math.hypot(Ball.vx, Ball.vy));
-  hudUpdate();
+  hudTick();
 }
 
 /* ================================================================== *
@@ -1047,6 +1118,8 @@ function hudUpdate(){
   el("hFalls").textContent = String(Game.falls);
   el("hBest").textContent  = fmt(Game.best);
 }
+let hudAt = 0;
+function hudTick(){ if(Game.t - hudAt >= 0.05 || Game.t < hudAt){ hudAt = Game.t; hudUpdate(); } }
 let toastT = 0;
 function note(msg){
   const t = el("toast");
@@ -1153,10 +1226,8 @@ if(screen.orientation && screen.orientation.addEventListener)
   setSeed(q.get("seed") || randomSeed(), false);
   el("pSensor").textContent = sensorNote();
   el("pHow").textContent =
-    "Five boards, one clock. The clock runs from the first board to the last and does not stop when you " +
-    "fall in — a fall costs you the seconds it takes to get back to where you were, which is exactly what " +
-    "it costs on the wooden one. One board with a best time would make every fall a free restart; a course " +
-    "with one clock makes the whole run the thing you are trying to beat.";
+    "Five boards, one clock. It keeps running when you fall in, so a fall costs you the seconds it takes " +
+    "to get back — which is what it costs on the wooden one.";
   resize();
   Game.level = buildLevel(Game.seedNum, 0);
   buildCosmetics(Game.level);
@@ -1207,6 +1278,9 @@ window.TM = {
     return m;
   },
   desktopReady(){ return !Tilt.haveDevice; },
+  marks(){ return Ball.marks.map(v=>v.slice()); },
+  SPECKS,
+  rollFrame,
   simKeys(k){ Tilt.keys.l = k.l||0; Tilt.keys.r = k.r||0; Tilt.keys.u = k.u||0; Tilt.keys.d = k.d||0; }
 };
 </script>
