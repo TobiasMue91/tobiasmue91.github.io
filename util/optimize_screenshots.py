@@ -10,7 +10,7 @@ thumbnails displayed at 320x200 / 400x250 in cards, so a moderate WebP
 quality with the slowest/best compression method shrinks them noticeably
 while staying crisp on screen.
 
-It mirrors update_screenshots.py:
+It mirrors the screenshot pass in update.py:
   - project root is one level up from this script
   - entries are read from data/games.json and data/tools.json
   - each entry's "screenshot" field is a path relative to the project root
