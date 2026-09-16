@@ -558,6 +558,7 @@
         game.deadTimer = 0;
         game.serveTimer = 8;
         game.trail.length = 0;
+        particles.length = 0;
         game.blob[LEFT].x = 200;
         game.blob[RIGHT].x = 600;
         game.blob[LEFT].y = game.blob[RIGHT].y = GROUND_Y;
@@ -620,7 +621,10 @@
         b.x += b.vx;
         b.y += b.vy;
         if (b.y > GROUND_Y) {
-            if (b.vy > 3.5) b.squish = Math.min(1, b.vy / 14);
+            if (b.vy > 3.5) {
+                b.squish = Math.min(1, b.vy / 14);
+                sandPuff(b.x, Math.min(1, b.vy / 16));
+            }
             b.y = GROUND_Y;
             b.vy = 0;
         }
@@ -637,6 +641,7 @@
         ball.vy = ny * BALL_COLLISION_VELOCITY;
         ball.x += ball.vx;
         ball.y += ball.vy;
+        hitBurst(cx + nx * BLOBBY_LOWER_RADIUS * 0.8, cy + ny * BLOBBY_LOWER_RADIUS * 0.8, SKIN[p].rgb);
         registerTouch(p);
         sndHit(p);
     }
@@ -680,11 +685,13 @@
             if (ball.y + BALL_RADIUS > GROUND_PLANE_HEIGHT_MAX) {
                 const side = ball.x < NET_POSITION_X ? LEFT : RIGHT;
                 endRally(1 - side, ball.x < NET_POSITION_X ? 'Down on the left' : 'Down on the right');
+                sandPuff(ball.x, Math.min(1, Math.abs(ball.vy) / 14));
                 ball.vy = -ball.vy * 0.5;
                 ball.vx *= 0.55;
                 ball.y = GROUND_PLANE_HEIGHT_MAX - BALL_RADIUS;
             }
         } else if (ball.y + BALL_RADIUS > GROUND_PLANE_HEIGHT_MAX) {
+            if (Math.abs(ball.vy) > 2) sandPuff(ball.x, Math.min(0.7, Math.abs(ball.vy) / 16));
             ball.vy = -ball.vy * 0.5;
             ball.vx *= 0.55;
             ball.y = GROUND_PLANE_HEIGHT_MAX - BALL_RADIUS;
@@ -737,6 +744,8 @@
 
         game.trail.push({x: ball.x, y: ball.y});
         if (game.trail.length > 11) game.trail.shift();
+
+        stepParticles();
     }
 
     // ---------------------------------------------------------------- computer player
@@ -1043,37 +1052,337 @@
 
     if (matchMedia('(pointer: coarse)').matches) enableTouchUI();
 
+    // ---------------------------------------------------------------- scenery
+    // The sky, the sea and the sand never change, so they are painted once into
+    // an offscreen canvas and blitted per frame; only the clouds, the gulls and
+    // the glitter on the water move.
+    const SEA_Y = 430, WET_Y = 476;
+    const SUN = {x: 690, y: 92, r: 38};
+
+    // seeded, so the sand grains and the wave glitter look the same every load
+    function rng(seed) {
+        return function () {
+            seed |= 0;
+            seed = seed + 0x6D2B79F5 | 0;
+            let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+            t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+    }
+
+    const scene = document.createElement('canvas');
+    scene.width = W + 40;
+    scene.height = H + 40;
+
+    function paintScene() {
+        const g = scene.getContext('2d');
+        g.translate(20, 20);
+        const rnd = rng(20240119);
+
+        // sky: deep at the zenith, washed out towards the horizon
+        const sky = g.createLinearGradient(0, -20, 0, SEA_Y);
+        sky.addColorStop(0, '#0f3d68');
+        sky.addColorStop(0.42, '#2d78b4');
+        sky.addColorStop(0.78, '#79bcdd');
+        sky.addColorStop(1, '#cbe6ef');
+        g.fillStyle = sky;
+        g.fillRect(-20, -20, W + 40, SEA_Y + 20);
+
+        // sun: halo, disc, and the glare it throws across the water
+        const halo = g.createRadialGradient(SUN.x, SUN.y, SUN.r * 0.6, SUN.x, SUN.y, 150);
+        halo.addColorStop(0, 'rgba(255,244,205,.75)');
+        halo.addColorStop(0.35, 'rgba(255,229,150,.28)');
+        halo.addColorStop(1, 'rgba(255,229,150,0)');
+        g.fillStyle = halo;
+        g.fillRect(SUN.x - 160, SUN.y - 160, 320, 320);
+        const disc = g.createRadialGradient(SUN.x, SUN.y - 6, 2, SUN.x, SUN.y, SUN.r);
+        disc.addColorStop(0, '#fffdf2');
+        disc.addColorStop(0.7, '#fff3c4');
+        disc.addColorStop(1, 'rgba(255,238,175,.85)');
+        g.fillStyle = disc;
+        g.beginPath();
+        g.arc(SUN.x, SUN.y, SUN.r, 0, Math.PI * 2);
+        g.fill();
+
+        // far headland, hazy enough to read as distance
+        g.fillStyle = 'rgba(108,150,175,.45)';
+        g.beginPath();
+        g.moveTo(-20, SEA_Y);
+        g.quadraticCurveTo(60, SEA_Y - 34, 150, SEA_Y - 12);
+        g.quadraticCurveTo(210, SEA_Y - 2, 250, SEA_Y);
+        g.closePath();
+        g.fill();
+        g.fillStyle = 'rgba(96,140,168,.35)';
+        g.beginPath();
+        g.moveTo(560, SEA_Y);
+        g.quadraticCurveTo(650, SEA_Y - 20, 740, SEA_Y - 6);
+        g.quadraticCurveTo(790, SEA_Y, W + 20, SEA_Y);
+        g.closePath();
+        g.fill();
+
+        // sea
+        const sea = g.createLinearGradient(0, SEA_Y, 0, WET_Y);
+        sea.addColorStop(0, '#2a7fa6');
+        sea.addColorStop(0.45, '#1f93b8');
+        sea.addColorStop(1, '#63c3cf');
+        g.fillStyle = sea;
+        g.fillRect(-20, SEA_Y, W + 40, WET_Y - SEA_Y);
+        // wave dashes — brighter where the sun lays its glitter path on the water,
+        // which reads as glare without a hard-edged wedge over the sea
+        for (let i = 0; i < 220; i++) {
+            const wy = SEA_Y + 3 + rnd() * (WET_Y - SEA_Y - 6);
+            const depth = (wy - SEA_Y) / (WET_Y - SEA_Y);
+            const wx = rnd() * (W + 40) - 20;
+            const off = Math.abs(wx + 16 - (SUN.x - depth * 26)) / (55 + depth * 120);
+            const glare = Math.max(0, 1 - off * off);
+            const a = 0.09 + depth * 0.2 + glare * 0.45;
+            g.fillStyle = 'rgba(255,253,238,' + Math.min(0.85, a).toFixed(3) + ')';
+            g.fillRect(wx, wy, 5 + depth * 18 + glare * 10, 1 + depth);
+        }
+        // surf line
+        g.fillStyle = 'rgba(255,255,255,.62)';
+        for (let x = -20; x < W + 20; x += 7) {
+            const h = 2.2 + Math.sin(x * 0.07) * 1.4 + rnd() * 1.6;
+            g.fillRect(x, WET_Y - h, 7, h + 2);
+        }
+
+        // wet sand, then the dry court
+        const wet = g.createLinearGradient(0, WET_Y, 0, GROUND_PLANE_HEIGHT_MAX);
+        wet.addColorStop(0, '#c4a877');
+        wet.addColorStop(1, '#e0bf85');
+        g.fillStyle = wet;
+        g.fillRect(-20, WET_Y, W + 40, GROUND_PLANE_HEIGHT_MAX - WET_Y);
+
+        const sand = g.createLinearGradient(0, GROUND_PLANE_HEIGHT_MAX, 0, H + 20);
+        sand.addColorStop(0, '#f0d59b');
+        sand.addColorStop(0.35, '#e5c481');
+        sand.addColorStop(1, '#bf9451');
+        g.fillStyle = sand;
+        g.fillRect(-20, GROUND_PLANE_HEIGHT_MAX, W + 40, H - GROUND_PLANE_HEIGHT_MAX + 40);
+
+        // the lip of the court catches the light
+        g.fillStyle = 'rgba(255,245,215,.55)';
+        g.fillRect(-20, GROUND_PLANE_HEIGHT_MAX, W + 40, 2);
+        g.fillStyle = 'rgba(120,85,40,.16)';
+        g.fillRect(-20, GROUND_PLANE_HEIGHT_MAX + 2, W + 40, 3);
+
+        // sand grain: light specks above, dark specks below, denser at the front
+        for (let i = 0; i < 2600; i++) {
+            const t = rnd();
+            const sy = GROUND_PLANE_HEIGHT_MAX + t * t * (H + 20 - GROUND_PLANE_HEIGHT_MAX);
+            const sx = rnd() * (W + 40) - 20;
+            const light = rnd() > 0.45;
+            g.fillStyle = light ? 'rgba(255,246,222,.5)' : 'rgba(126,90,45,.35)';
+            g.fillRect(sx, sy, 1.4, 1.4);
+        }
+        // a few shallow scuffs, so the court does not look freshly raked
+        g.strokeStyle = 'rgba(150,110,60,.16)';
+        g.lineWidth = 3;
+        for (let i = 0; i < 14; i++) {
+            const sx = rnd() * (W + 40) - 20, sy = GROUND_PLANE_HEIGHT_MAX + 10 + rnd() * 80;
+            g.beginPath();
+            g.moveTo(sx, sy);
+            g.quadraticCurveTo(sx + 20, sy - 4 - rnd() * 5, sx + 46 + rnd() * 30, sy + 2);
+            g.stroke();
+        }
+
+        // court tape: a back line and two side lines running towards the viewer
+        g.strokeStyle = 'rgba(255,255,255,.4)';
+        g.lineWidth = 3;
+        g.beginPath();
+        g.moveTo(34, GROUND_PLANE_HEIGHT_MAX + 16);
+        g.lineTo(W - 34, GROUND_PLANE_HEIGHT_MAX + 16);
+        g.moveTo(34, GROUND_PLANE_HEIGHT_MAX + 16);
+        g.lineTo(-8, H + 10);
+        g.moveTo(W - 34, GROUND_PLANE_HEIGHT_MAX + 16);
+        g.lineTo(W + 8, H + 10);
+        g.stroke();
+
+        g.setTransform(1, 0, 0, 1, 0, 0);
+    }
+
+    paintScene();
+
+    const clouds = [
+        {x: 150, y: 104, s: 1, v: 3.4, a: 0.40},
+        {x: 495, y: 70, s: 0.7, v: 5.2, a: 0.32},
+        {x: 330, y: 168, s: 0.5, v: 7.6, a: 0.22},
+    ];
+    const gulls = [
+        {x: 240, y: 132, s: 1, v: 16, p: 0},
+        {x: 300, y: 154, s: 0.75, v: 16, p: 1.9},
+    ];
+
+    function drawCloud(cx, cy, sc, alpha) {
+        // lit from the sun side, flat-bottomed like the ones over a real beach
+        const grad = ctx.createLinearGradient(cx, cy - 40 * sc, cx, cy + 14 * sc);
+        grad.addColorStop(0, 'rgba(255,253,246,' + alpha * 1.3 + ')');
+        grad.addColorStop(0.55, 'rgba(244,249,254,' + alpha * 0.92 + ')');
+        grad.addColorStop(1, 'rgba(196,219,238,' + alpha * 0.62 + ')');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(cx - 62 * sc, cy + 12 * sc);
+        ctx.arc(cx - 34 * sc, cy + 2 * sc, 26 * sc, Math.PI, Math.PI * 1.55);
+        ctx.arc(cx, cy - 12 * sc, 34 * sc, Math.PI * 1.15, Math.PI * 1.9);
+        ctx.arc(cx + 40 * sc, cy + 2 * sc, 24 * sc, Math.PI * 1.4, Math.PI * 0.1);
+        ctx.lineTo(cx + 62 * sc, cy + 12 * sc);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // ---------------------------------------------------------------- particles
+    // Sand kicked up by a landing, and the little burst where a blob meets the ball.
+    const particles = [];
+
+    function spawn(x, y, n, opts) {
+        if (reducedMotion) return;
+        if (particles.length > 260) return;
+        for (let i = 0; i < n; i++) {
+            const a = opts.angle + (Math.random() - 0.5) * opts.spread;
+            const sp = opts.speed * (0.4 + Math.random() * 0.8);
+            particles.push({
+                x: x + (Math.random() - 0.5) * opts.jitter,
+                y: y + (Math.random() - 0.5) * opts.jitter * 0.4,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp,
+                g: opts.g,
+                r: opts.r * (0.5 + Math.random()),
+                life: 1,
+                decay: opts.decay * (0.7 + Math.random() * 0.6),
+                color: opts.color,
+                ground: opts.ground !== false,
+            });
+        }
+    }
+
+    function sandPuff(x, strength) {
+        spawn(x, GROUND_PLANE_HEIGHT_MAX - 2, Math.round(6 + strength * 12), {
+            angle: -Math.PI / 2, spread: Math.PI * 1.15, speed: 1.4 + strength * 3.4,
+            jitter: 26, g: 0.34, r: 2.6, decay: 0.035, color: '234,205,150',
+        });
+    }
+
+    function hitBurst(x, y, color) {
+        spawn(x, y, 10, {
+            angle: -Math.PI / 2, spread: Math.PI * 2, speed: 3.4,
+            jitter: 10, g: 0.12, r: 2.4, decay: 0.06, color: color, ground: false,
+        });
+    }
+
+    function stepParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += p.g;
+            p.vx *= 0.985;
+            p.life -= p.decay;
+            if (p.ground && p.y > GROUND_PLANE_HEIGHT_MAX + 6) {
+                p.y = GROUND_PLANE_HEIGHT_MAX + 6;
+                p.vy *= -0.3;
+                p.vx *= 0.7;
+                p.life -= p.decay * 2;
+            }
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function drawParticles() {
+        for (const p of particles) {
+            ctx.fillStyle = 'rgba(' + p.color + ',' + Math.max(0, p.life * 0.8).toFixed(3) + ')';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r * (0.4 + p.life * 0.6), 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
     // ---------------------------------------------------------------- drawing
-    function roundedBlob(x, y, color, dark, squish, facing) {
+    const SKIN = [
+        {base: '#4ea8ff', light: '#b6e2ff', dark: '#14539f', line: '#0d3c78', rgb: '120,190,255'},
+        {base: '#ff8f5e', light: '#ffd0ac', dark: '#b8431b', line: '#8c3211', rgb: '255,180,140'},
+    ];
+
+    // The blob is one silhouette: the two spheres joined along their common
+    // tangents, so the outline never cuts across the body and the shading can run
+    // from the head to the foot in one go.
+    const BLOB_TANGENT = Math.acos((BLOBBY_LOWER_RADIUS - BLOBBY_UPPER_RADIUS) /
+        (BLOBBY_LOWER_SPHERE + BLOBBY_UPPER_SPHERE)) - Math.PI / 2;
+
+    function blobPath(p) {
+        p.beginPath();
+        p.arc(0, BLOBBY_LOWER_SPHERE, BLOBBY_LOWER_RADIUS, BLOB_TANGENT, Math.PI - BLOB_TANGENT);
+        p.arc(0, -BLOBBY_UPPER_SPHERE, BLOBBY_UPPER_RADIUS, Math.PI - BLOB_TANGENT, Math.PI * 2 + BLOB_TANGENT);
+        p.closePath();
+    }
+
+    function roundedBlob(x, y, skin, squish, facing, lean) {
         const sq = 1 - squish * 0.28;
         const st = 1 + squish * 0.22;
         ctx.save();
         ctx.translate(x, y);
-        ctx.scale(st, sq);
+        ctx.transform(st, 0, lean * 0.12, sq, 0, 0);
 
-        // shadow-side gradient for a little volume
-        const grad = ctx.createLinearGradient(-BLOBBY_LOWER_RADIUS, 0, BLOBBY_LOWER_RADIUS, 0);
-        grad.addColorStop(0, color);
-        grad.addColorStop(1, dark);
+        blobPath(ctx);
+        // sunlight comes from the top right, so that is where the body is brightest
+        const body = ctx.createRadialGradient(16, -32, 4, 0, 4, BLOBBY_LOWER_RADIUS * 1.85);
+        body.addColorStop(0, skin.light);
+        body.addColorStop(0.42, skin.base);
+        body.addColorStop(1, skin.dark);
+        ctx.fillStyle = body;
+        ctx.fill();
 
-        ctx.fillStyle = grad;
+        ctx.save();
+        ctx.clip();
+        // bounced light off the sand, along the bottom edge
+        const bounce = ctx.createLinearGradient(0, BLOBBY_LOWER_SPHERE + 6, 0, BLOBBY_LOWER_SPHERE + BLOBBY_LOWER_RADIUS);
+        bounce.addColorStop(0, 'rgba(255,224,160,0)');
+        bounce.addColorStop(1, 'rgba(255,224,160,.4)');
+        ctx.fillStyle = bounce;
+        ctx.fillRect(-BLOBBY_LOWER_RADIUS, BLOBBY_LOWER_SPHERE, BLOBBY_LOWER_RADIUS * 2, BLOBBY_LOWER_RADIUS);
+        // sky reflection down the shaded left flank
+        const rim = ctx.createLinearGradient(-BLOBBY_LOWER_RADIUS, 0, -BLOBBY_LOWER_RADIUS * 0.3, 0);
+        rim.addColorStop(0, 'rgba(150,205,240,.5)');
+        rim.addColorStop(1, 'rgba(150,205,240,0)');
+        ctx.fillStyle = rim;
+        ctx.fillRect(-BLOBBY_LOWER_RADIUS, -BLOBBY_UPPER_SPHERE - BLOBBY_UPPER_RADIUS,
+            BLOBBY_LOWER_RADIUS, BLOBBY_HEIGHT);
+        // the shadow the head drops on the shoulders, so the two spheres still read
+        ctx.strokeStyle = 'rgba(16,36,68,.22)';
+        ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.arc(0, BLOBBY_LOWER_SPHERE, BLOBBY_LOWER_RADIUS, 0, Math.PI * 2);
+        ctx.arc(0, -BLOBBY_UPPER_SPHERE, BLOBBY_UPPER_RADIUS - 1, Math.PI * 0.08, Math.PI * 0.4);
+        ctx.moveTo(-BLOBBY_UPPER_RADIUS + 1, -BLOBBY_UPPER_SPHERE);
+        ctx.arc(0, -BLOBBY_UPPER_SPHERE, BLOBBY_UPPER_RADIUS - 1, Math.PI * 0.6, Math.PI * 0.92);
+        ctx.stroke();
+        ctx.restore();
+
+        // the outline keeps the blob readable against the sand
+        ctx.lineWidth = 2.2;
+        ctx.strokeStyle = skin.line;
+        ctx.globalAlpha = 0.45;
+        blobPath(ctx);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // gloss: a soft cap on the head and a small hard glint
+        const gloss = ctx.createLinearGradient(0, -BLOBBY_UPPER_SPHERE - BLOBBY_UPPER_RADIUS, 0, -BLOBBY_UPPER_SPHERE + 6);
+        gloss.addColorStop(0, 'rgba(255,255,255,.55)');
+        gloss.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gloss;
+        ctx.beginPath();
+        ctx.ellipse(3, -BLOBBY_UPPER_SPHERE - 6, BLOBBY_UPPER_RADIUS * 0.72, BLOBBY_UPPER_RADIUS * 0.6, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.75)';
         ctx.beginPath();
-        ctx.arc(0, -BLOBBY_UPPER_SPHERE, BLOBBY_UPPER_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
-        // waist between the two spheres
-        ctx.beginPath();
-        ctx.moveTo(-BLOBBY_UPPER_RADIUS, -BLOBBY_UPPER_SPHERE);
-        ctx.lineTo(-BLOBBY_LOWER_RADIUS, BLOBBY_LOWER_SPHERE);
-        ctx.lineTo(BLOBBY_LOWER_RADIUS, BLOBBY_LOWER_SPHERE);
-        ctx.lineTo(BLOBBY_UPPER_RADIUS, -BLOBBY_UPPER_SPHERE);
-        ctx.closePath();
+        ctx.ellipse(11, -BLOBBY_UPPER_SPHERE - 13, 5.2, 3.4, -0.5, 0, Math.PI * 2);
         ctx.fill();
 
         // eye
         const ex = facing * 9, ey = -BLOBBY_UPPER_SPHERE - 3;
+        ctx.fillStyle = 'rgba(10,25,45,.18)';
+        ctx.beginPath();
+        ctx.arc(ex, ey + 1.5, 8.4, 0, Math.PI * 2);
+        ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.beginPath();
         ctx.arc(ex, ey, 7.5, 0, Math.PI * 2);
@@ -1082,122 +1391,104 @@
         ctx.beginPath();
         ctx.arc(ex + facing * 2.5, ey, 3.6, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.9)';
+        ctx.beginPath();
+        ctx.arc(ex + facing * 1.4, ey - 2, 1.5, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
     }
 
-    function draw() {
+    // A contact shadow that softens and spreads as whatever casts it climbs away.
+    function groundShadow(x, height, radius, strength) {
+        const t = Math.max(0.12, 1 - height / 420);
+        const rx = radius * (0.65 + t * 0.55), ry = Math.max(3, 9 * t);
+        const g = ctx.createRadialGradient(x, GROUND_PLANE_HEIGHT_MAX + 9, 0, x, GROUND_PLANE_HEIGHT_MAX + 9, rx);
+        g.addColorStop(0, 'rgba(92,60,24,' + (strength * t).toFixed(3) + ')');
+        g.addColorStop(0.6, 'rgba(92,60,24,' + (strength * t * 0.55).toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(92,60,24,0)');
         ctx.save();
-        if (game.shake > 0) {
-            ctx.translate((Math.random() - 0.5) * game.shake, (Math.random() - 0.5) * game.shake);
-            game.shake *= 0.86;
-            if (game.shake < 0.3) game.shake = 0;
-        }
-
-        // sky
-        const sky = ctx.createLinearGradient(0, 0, 0, GROUND_PLANE_HEIGHT_MAX);
-        sky.addColorStop(0, '#1b4f7d');
-        sky.addColorStop(0.55, '#3a86bf');
-        sky.addColorStop(1, '#8fc9e6');
-        ctx.fillStyle = sky;
-        ctx.fillRect(-20, -20, W + 40, GROUND_PLANE_HEIGHT_MAX + 20);
-
-        // sun with a soft halo, and two flat-bottomed clouds
-        const halo = ctx.createRadialGradient(690, 92, 10, 690, 92, 110);
-        halo.addColorStop(0, 'rgba(255,241,196,.85)');
-        halo.addColorStop(0.32, 'rgba(255,231,160,.35)');
-        halo.addColorStop(1, 'rgba(255,231,160,0)');
-        ctx.fillStyle = halo;
+        ctx.translate(x, GROUND_PLANE_HEIGHT_MAX + 9);
+        ctx.scale(1, ry / rx);
+        ctx.translate(-x, -(GROUND_PLANE_HEIGHT_MAX + 9));
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(690, 92, 110, 0, Math.PI * 2);
+        ctx.arc(x, GROUND_PLANE_HEIGHT_MAX + 9, rx, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,248,214,.95)';
+        ctx.restore();
+    }
+
+    function drawNet() {
+        const x0 = NET_POSITION_X - NET_RADIUS, w = NET_RADIUS * 2;
+        const top = NET_SPHERE_POSITION, bottom = GROUND_PLANE_HEIGHT_MAX + 12;
+
+        // the post's shadow lying across the sand
+        ctx.fillStyle = 'rgba(92,60,24,.22)';
         ctx.beginPath();
-        ctx.arc(690, 92, 38, 0, Math.PI * 2);
+        ctx.ellipse(NET_POSITION_X - 6, GROUND_PLANE_HEIGHT_MAX + 10, 16, 5, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.22)';
-        for (const cloud of [[150, 104, 1], [495, 74, 0.72]]) {
-            const [cx, cy, sc] = cloud;
-            ctx.beginPath();
-            ctx.moveTo(cx - 62 * sc, cy + 12 * sc);
-            ctx.arc(cx - 34 * sc, cy + 2 * sc, 26 * sc, Math.PI, Math.PI * 1.55);
-            ctx.arc(cx, cy - 12 * sc, 34 * sc, Math.PI * 1.15, Math.PI * 1.9);
-            ctx.arc(cx + 40 * sc, cy + 2 * sc, 24 * sc, Math.PI * 1.4, Math.PI * 0.1);
-            ctx.lineTo(cx + 62 * sc, cy + 12 * sc);
-            ctx.closePath();
-            ctx.fill();
-        }
 
-        // sand
-        const sand = ctx.createLinearGradient(0, GROUND_PLANE_HEIGHT_MAX, 0, H);
-        sand.addColorStop(0, '#e8c887');
-        sand.addColorStop(1, '#c49b58');
-        ctx.fillStyle = sand;
-        ctx.fillRect(-20, GROUND_PLANE_HEIGHT_MAX, W + 40, H - GROUND_PLANE_HEIGHT_MAX + 20);
-        ctx.fillStyle = 'rgba(120,85,40,.18)';
-        ctx.fillRect(-20, GROUND_PLANE_HEIGHT_MAX, W + 40, 4);
-
-        // ball shadow on the sand
-        const sh = Math.max(0.12, 1 - (GROUND_PLANE_HEIGHT_MAX - game.ball.y) / 500);
-        ctx.fillStyle = 'rgba(90,60,25,' + (0.28 * sh) + ')';
+        // mesh: a dark panel with the diamonds knocked out of it in light thread
+        ctx.save();
         ctx.beginPath();
-        ctx.ellipse(game.ball.x, GROUND_PLANE_HEIGHT_MAX + 8, BALL_RADIUS * sh, 7 * sh, 0, 0, Math.PI * 2);
-        ctx.fill();
-        for (let p = 0; p < 2; p++) {
-            const b = game.blob[p];
-            const bs = Math.max(0.2, 1 - (GROUND_Y - b.y) / 400);
-            ctx.fillStyle = 'rgba(90,60,25,' + (0.25 * bs) + ')';
-            ctx.beginPath();
-            ctx.ellipse(b.x, GROUND_PLANE_HEIGHT_MAX + 10, BLOBBY_LOWER_RADIUS * bs, 8 * bs, 0, 0, Math.PI * 2);
-            ctx.fill();
+        ctx.rect(x0, top + 9, w, bottom - top - 9);
+        ctx.clip();
+        ctx.fillStyle = 'rgba(28,44,66,.16)';
+        ctx.fillRect(x0, top + 9, w, bottom - top - 9);
+        ctx.strokeStyle = 'rgba(248,252,255,.72)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let y = top - 10; y < bottom + 20; y += 14) {
+            ctx.moveTo(x0 - 2, y);
+            ctx.lineTo(x0 + w + 2, y + 14);
+            ctx.moveTo(x0 - 2, y + 14);
+            ctx.lineTo(x0 + w + 2, y);
         }
+        ctx.stroke();
+        ctx.restore();
 
-        // net: band from the post down to the sand
-        ctx.strokeStyle = 'rgba(255,255,255,.35)';
-        ctx.lineWidth = 1;
-        ctx.fillStyle = '#f2f4f7';
-        ctx.fillRect(NET_POSITION_X - NET_RADIUS, NET_SPHERE_POSITION, NET_RADIUS * 2, GROUND_PLANE_HEIGHT_MAX - NET_SPHERE_POSITION + 12);
-        ctx.fillStyle = 'rgba(20,30,45,.20)';
-        for (let y = NET_SPHERE_POSITION + 8; y < GROUND_PLANE_HEIGHT_MAX; y += 12) {
-            ctx.fillRect(NET_POSITION_X - NET_RADIUS, y, NET_RADIUS * 2, 2);
-        }
-        ctx.fillStyle = '#ffffff';
+        // tape along the top, and the cord above the sand
+        const tape = ctx.createLinearGradient(x0, 0, x0 + w, 0);
+        tape.addColorStop(0, '#d9e2ee');
+        tape.addColorStop(0.45, '#ffffff');
+        tape.addColorStop(1, '#a9b8cb');
+        ctx.fillStyle = tape;
+        ctx.fillRect(x0 - 1, top + 2, w + 2, 9);
+        ctx.fillStyle = 'rgba(210,220,234,.9)';
+        ctx.fillRect(x0, bottom - 16, w, 3);
+
+        // post cap
+        const cap = ctx.createRadialGradient(NET_POSITION_X + 3, top - 3, 1, NET_POSITION_X, top, NET_RADIUS + 3);
+        cap.addColorStop(0, '#ffffff');
+        cap.addColorStop(1, '#93a5ba');
+        ctx.fillStyle = cap;
         ctx.beginPath();
         ctx.arc(NET_POSITION_X, NET_SPHERE_POSITION, NET_RADIUS + 2, 0, Math.PI * 2);
         ctx.fill();
+    }
 
-        // blobs
-        const facingL = game.ball.x >= game.blob[LEFT].x ? 1 : -1;
-        const facingR = game.ball.x >= game.blob[RIGHT].x ? 1 : -1;
-        roundedBlob(game.blob[LEFT].x, game.blob[LEFT].y, '#4ea8ff', '#1e5fae', game.blob[LEFT].squish, facingL);
-        roundedBlob(game.blob[RIGHT].x, game.blob[RIGHT].y, '#ff8f5e', '#c04f22', game.blob[RIGHT].squish, facingR);
-
-        // ball trail
-        for (let i = 0; i < game.trail.length; i++) {
-            const t = game.trail[i];
-            ctx.fillStyle = 'rgba(255,255,255,' + (i / game.trail.length * 0.14) + ')';
-            ctx.beginPath();
-            ctx.arc(t.x, t.y, BALL_RADIUS * (0.4 + i / game.trail.length * 0.5), 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // ball
+    function drawBall() {
+        const ball = game.ball;
         ctx.save();
-        ctx.translate(game.ball.x, game.ball.y);
-        ctx.rotate(game.ball.rot);
-        const bg = ctx.createRadialGradient(-10, -12, 4, 0, 0, BALL_RADIUS);
-        bg.addColorStop(0, '#fffdf5');
-        bg.addColorStop(1, '#e4dcc4');
+        ctx.translate(ball.x, ball.y);
+        ctx.save();
+        ctx.rotate(ball.rot);
+        const bg = ctx.createRadialGradient(BALL_RADIUS * 0.35, -BALL_RADIUS * 0.4, 3, 0, 0, BALL_RADIUS * 1.1);
+        bg.addColorStop(0, '#fffefa');
+        bg.addColorStop(0.55, '#f6eeda');
+        bg.addColorStop(1, '#cbbf9d');
         ctx.fillStyle = bg;
         ctx.beginPath();
         ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
         ctx.fill();
+
         // volleyball panels: one seam around the middle, two more across it
-        ctx.strokeStyle = 'rgba(45,70,105,.6)';
+        ctx.strokeStyle = 'rgba(38,64,102,.62)';
         ctx.lineWidth = 2.6;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.arc(0, 0, BALL_RADIUS - 1.3, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.strokeStyle = 'rgba(38,64,102,.5)';
         for (let i = 0; i < 3; i++) {
             ctx.save();
             ctx.rotate(i * Math.PI * 2 / 3);
@@ -1208,6 +1499,87 @@
             ctx.restore();
         }
         ctx.restore();
+
+        // shading and highlight stay put while the ball spins under them
+        const shade = ctx.createRadialGradient(BALL_RADIUS * 0.3, -BALL_RADIUS * 0.35, BALL_RADIUS * 0.3,
+            0, 0, BALL_RADIUS);
+        shade.addColorStop(0, 'rgba(60,45,20,0)');
+        shade.addColorStop(0.72, 'rgba(60,45,20,.06)');
+        shade.addColorStop(1, 'rgba(50,38,18,.35)');
+        ctx.fillStyle = shade;
+        ctx.beginPath();
+        ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.7)';
+        ctx.beginPath();
+        ctx.ellipse(BALL_RADIUS * 0.34, -BALL_RADIUS * 0.42, 7.5, 5, -0.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function draw() {
+        const t = performance.now() / 1000;
+        ctx.save();
+        if (game.shake > 0) {
+            ctx.translate((Math.random() - 0.5) * game.shake, (Math.random() - 0.5) * game.shake);
+            game.shake *= 0.86;
+            if (game.shake < 0.3) game.shake = 0;
+        }
+
+        ctx.drawImage(scene, -20, -20);
+
+        // clouds drift, gulls slide along a slow sine
+        for (const c of clouds) {
+            const cx = ((c.x + t * c.v) % (W + 260)) - 130;
+            drawCloud(cx, c.y, c.s, c.a);
+        }
+        ctx.strokeStyle = 'rgba(40,62,84,.42)';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        for (const b of gulls) {
+            const gx = ((b.x + t * b.v) % (W + 200)) - 100;
+            const gy = b.y + Math.sin(t * 0.6 + b.p) * 10;
+            const flap = Math.sin(t * 3.4 + b.p) * 5 * b.s;
+            ctx.beginPath();
+            ctx.moveTo(gx - 9 * b.s, gy + flap);
+            ctx.quadraticCurveTo(gx - 4 * b.s, gy - 4 * b.s, gx, gy);
+            ctx.quadraticCurveTo(gx + 4 * b.s, gy - 4 * b.s, gx + 9 * b.s, gy + flap);
+            ctx.stroke();
+        }
+
+        // shadows first, so everything sits on the sand rather than in front of it
+        groundShadow(game.ball.x, GROUND_PLANE_HEIGHT_MAX - game.ball.y, BALL_RADIUS, 0.34);
+        for (let p = 0; p < 2; p++)
+            groundShadow(game.blob[p].x, GROUND_Y - game.blob[p].y, BLOBBY_LOWER_RADIUS, 0.3);
+
+        drawNet();
+
+        const facingL = game.ball.x >= game.blob[LEFT].x ? 1 : -1;
+        const facingR = game.ball.x >= game.blob[RIGHT].x ? 1 : -1;
+        roundedBlob(game.blob[LEFT].x, game.blob[LEFT].y, SKIN[LEFT],
+            game.blob[LEFT].squish, facingL, game.blob[LEFT].vx / BLOBBY_SPEED);
+        roundedBlob(game.blob[RIGHT].x, game.blob[RIGHT].y, SKIN[RIGHT],
+            game.blob[RIGHT].squish, facingR, game.blob[RIGHT].vx / BLOBBY_SPEED);
+
+        // ball trail
+        for (let i = 0; i < game.trail.length; i++) {
+            const tr = game.trail[i];
+            const f = i / game.trail.length;
+            ctx.fillStyle = 'rgba(255,252,240,' + (f * f * 0.2) + ')';
+            ctx.beginPath();
+            ctx.arc(tr.x, tr.y, BALL_RADIUS * (0.35 + f * 0.55), 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        drawBall();
+        drawParticles();
+
+        // a gentle vignette to pull the eye back to the court
+        const vig = ctx.createRadialGradient(NET_POSITION_X, 300, 240, NET_POSITION_X, 300, 560);
+        vig.addColorStop(0, 'rgba(6,14,26,0)');
+        vig.addColorStop(1, 'rgba(6,14,26,.34)');
+        ctx.fillStyle = vig;
+        ctx.fillRect(-20, -20, W + 40, H + 40);
 
         drawHud();
         ctx.restore();
