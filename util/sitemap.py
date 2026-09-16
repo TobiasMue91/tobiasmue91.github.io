@@ -78,7 +78,7 @@ def load_json_entries(file_path):
             if url.startswith(root_url):
                 url = url[len(root_url):]
 
-            # Prefer the per-page commit date written by update_dates.py,
+            # Prefer the per-page commit date written by update.py,
             # then an explicit 'date', and only fall back to the whole-file
             # commit time as a last resort.
             timestamp = None

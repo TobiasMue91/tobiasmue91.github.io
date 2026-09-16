@@ -2,7 +2,7 @@
 
 - minify code while debugging; minified code without line breaks and redundant whitespaces can save up to 50% tokens
   - even when the minification breaks the syntax, ChatGPT will still understand it and will output code well formatted (most of the time) 
-- use an [autocontinue](https://github.com/TobiasMue91/tobiasmue91.github.io/blob/main/util/autocontinue.user.js) userscript when working with code that has more than 300 lines
+- use an [autocontinue](https://github.com/TobiasMue91/tobiasmue91.github.io/blob/e8fe239df902a7730e147f425379d03ea1586e17/util/autocontinue.user.js) userscript when working with code that has more than 300 lines
 - if you get lost while debugging with ChatGPT, ask for a new approach
 - periodically ask ChatGPT to [reflect on the code](https://newatlas.com/technology/gpt-4-reflexion/)
 - before starting to work on something, let ChatGPT create a thorough outline
