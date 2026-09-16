@@ -520,25 +520,64 @@
         return actx;
     }
 
-    function blip(freq, dur, type, gain) {
+    // A ball hitting a hand is a burst of noise with a short low body under it —
+    // a pitch-swept oscillator on its own is a ray gun, which is what this was.
+    let noiseBuf = null;
+
+    function noise(a) {
+        if (!noiseBuf) {
+            noiseBuf = a.createBuffer(1, Math.floor(a.sampleRate * 0.4), a.sampleRate);
+            const d = noiseBuf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        }
+        return noiseBuf;
+    }
+
+    // `to` is where the pitch lands; leave it out and the note holds.
+    function tone(freq, dur, type, gain, to) {
         if (muted) return;
         const a = audio();
         if (!a) return;
         const o = a.createOscillator(), g = a.createGain();
         o.type = type || 'sine';
         o.frequency.setValueAtTime(freq, a.currentTime);
-        o.frequency.exponentialRampToValueAtTime(Math.max(40, freq * 0.6), a.currentTime + dur);
-        g.gain.setValueAtTime(gain || 0.12, a.currentTime);
+        if (to) o.frequency.exponentialRampToValueAtTime(Math.max(30, to), a.currentTime + dur);
+        g.gain.setValueAtTime(0.0001, a.currentTime);
+        g.gain.exponentialRampToValueAtTime(gain || 0.12, a.currentTime + 0.008);
         g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
         o.connect(g).connect(a.destination);
         o.start();
         o.stop(a.currentTime + dur + 0.02);
     }
 
-    const sndHit = i => blip(320 + i * 260, 0.09, 'square', 0.09);
-    const sndNet = () => blip(180, 0.12, 'triangle', 0.09);
-    const sndPoint = () => { blip(520, 0.16, 'sine', 0.12); setTimeout(() => blip(700, 0.2, 'sine', 0.1), 90); };
-    const sndFault = () => blip(150, 0.3, 'sawtooth', 0.08);
+    // a filtered noise burst: the slap of the contact itself
+    function thock(freq, dur, gain, q) {
+        if (muted) return;
+        const a = audio();
+        if (!a) return;
+        const src = a.createBufferSource();
+        src.buffer = noise(a);
+        const bp = a.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.Q.value = q || 1;
+        bp.frequency.setValueAtTime(freq, a.currentTime);
+        bp.frequency.exponentialRampToValueAtTime(freq * 0.45, a.currentTime + dur);
+        const g = a.createGain();
+        g.gain.setValueAtTime(gain, a.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
+        src.connect(bp).connect(g).connect(a.destination);
+        src.start();
+        src.stop(a.currentTime + dur + 0.02);
+    }
+
+    // the two blobs sound slightly apart, so you can hear whose touch it was
+    const sndHit = i => {
+        thock(1350 + i * 420, 0.07, 0.2, 1.1);
+        tone(210 + i * 45, 0.085, 'sine', 0.1, (210 + i * 45) * 0.7);
+    };
+    const sndNet = () => { thock(620, 0.15, 0.13, 0.7); tone(120, 0.13, 'triangle', 0.06, 88); };
+    const sndPoint = () => { tone(660, 0.15, 'sine', 0.1); setTimeout(() => tone(990, 0.24, 'sine', 0.09), 105); };
+    const sndFault = () => { thock(300, 0.2, 0.1, 0.6); tone(155, 0.24, 'sine', 0.07, 104); };
 
     // ---------------------------------------------------------------- helpers
     const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
@@ -1346,14 +1385,6 @@
         ctx.fillStyle = rim;
         ctx.fillRect(-BLOBBY_LOWER_RADIUS, -BLOBBY_UPPER_SPHERE - BLOBBY_UPPER_RADIUS,
             BLOBBY_LOWER_RADIUS, BLOBBY_HEIGHT);
-        // the shadow the head drops on the shoulders, so the two spheres still read
-        ctx.strokeStyle = 'rgba(16,36,68,.22)';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.arc(0, -BLOBBY_UPPER_SPHERE, BLOBBY_UPPER_RADIUS - 1, Math.PI * 0.08, Math.PI * 0.4);
-        ctx.moveTo(-BLOBBY_UPPER_RADIUS + 1, -BLOBBY_UPPER_SPHERE);
-        ctx.arc(0, -BLOBBY_UPPER_SPHERE, BLOBBY_UPPER_RADIUS - 1, Math.PI * 0.6, Math.PI * 0.92);
-        ctx.stroke();
         ctx.restore();
 
         // the outline keeps the blob readable against the sand
@@ -1364,17 +1395,23 @@
         ctx.stroke();
         ctx.globalAlpha = 1;
 
-        // gloss: a soft cap on the head and a small hard glint
-        const gloss = ctx.createLinearGradient(0, -BLOBBY_UPPER_SPHERE - BLOBBY_UPPER_RADIUS, 0, -BLOBBY_UPPER_SPHERE + 6);
-        gloss.addColorStop(0, 'rgba(255,255,255,.55)');
+        // gloss: light pooled on the crown, falling off to nothing so the head
+        // never shows the edge of the highlight
+        const gx = 6, gy = -BLOBBY_UPPER_SPHERE - 7, gr = BLOBBY_UPPER_RADIUS * 1.05;
+        const gloss = ctx.createRadialGradient(gx, gy, 1, gx, gy, gr);
+        gloss.addColorStop(0, 'rgba(255,255,255,.5)');
+        gloss.addColorStop(0.45, 'rgba(255,255,255,.16)');
         gloss.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = gloss;
         ctx.beginPath();
-        ctx.ellipse(3, -BLOBBY_UPPER_SPHERE - 6, BLOBBY_UPPER_RADIUS * 0.72, BLOBBY_UPPER_RADIUS * 0.6, 0, 0, Math.PI * 2);
+        ctx.arc(gx, gy, gr, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.75)';
+        const glint = ctx.createRadialGradient(11, -BLOBBY_UPPER_SPHERE - 13, 0.5, 11, -BLOBBY_UPPER_SPHERE - 13, 6);
+        glint.addColorStop(0, 'rgba(255,255,255,.8)');
+        glint.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = glint;
         ctx.beginPath();
-        ctx.ellipse(11, -BLOBBY_UPPER_SPHERE - 13, 5.2, 3.4, -0.5, 0, Math.PI * 2);
+        ctx.arc(11, -BLOBBY_UPPER_SPHERE - 13, 6, 0, Math.PI * 2);
         ctx.fill();
 
         // eye
@@ -1466,35 +1503,38 @@
         ctx.fill();
     }
 
+    // A beach ball, not an indoor one: three panels curling round the ball, and
+    // the sphere shading laid over the top so it stays lit while the panels spin.
+    const BALL_PANEL = ['#f4efe0', '#2f7fc4', '#f2c14a'];
+
     function drawBall() {
         const ball = game.ball;
         ctx.save();
         ctx.translate(ball.x, ball.y);
-        ctx.save();
-        ctx.rotate(ball.rot);
+
         const bg = ctx.createRadialGradient(BALL_RADIUS * 0.35, -BALL_RADIUS * 0.4, 3, 0, 0, BALL_RADIUS * 1.1);
-        bg.addColorStop(0, '#fffefa');
-        bg.addColorStop(0.55, '#f6eeda');
-        bg.addColorStop(1, '#cbbf9d');
+        bg.addColorStop(0, '#fffefb');
+        bg.addColorStop(0.6, '#f6f1e4');
+        bg.addColorStop(1, '#dcd3bc');
         ctx.fillStyle = bg;
         ctx.beginPath();
         ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
         ctx.fill();
 
-        // volleyball panels: one seam around the middle, two more across it
-        ctx.strokeStyle = 'rgba(38,64,102,.62)';
-        ctx.lineWidth = 2.6;
-        ctx.lineCap = 'round';
+        ctx.save();
         ctx.beginPath();
-        ctx.arc(0, 0, BALL_RADIUS - 1.3, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = 'rgba(38,64,102,.5)';
+        ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.rotate(ball.rot);
+        ctx.lineWidth = BALL_RADIUS * 0.045;
+        ctx.strokeStyle = 'rgba(255,255,255,.8)';
         for (let i = 0; i < 3; i++) {
             ctx.save();
             ctx.rotate(i * Math.PI * 2 / 3);
             ctx.beginPath();
-            ctx.ellipse(BALL_RADIUS * 0.62, 0, BALL_RADIUS * 0.62, BALL_RADIUS * 0.95,
-                0, Math.PI * 0.62, Math.PI * 1.38);
+            ctx.ellipse(BALL_RADIUS * 0.62, 0, BALL_RADIUS * 0.62, BALL_RADIUS * 0.95, 0, 0, Math.PI * 2);
+            ctx.fillStyle = BALL_PANEL[i];
+            ctx.fill();
             ctx.stroke();
             ctx.restore();
         }
@@ -1503,16 +1543,22 @@
         // shading and highlight stay put while the ball spins under them
         const shade = ctx.createRadialGradient(BALL_RADIUS * 0.3, -BALL_RADIUS * 0.35, BALL_RADIUS * 0.3,
             0, 0, BALL_RADIUS);
-        shade.addColorStop(0, 'rgba(60,45,20,0)');
-        shade.addColorStop(0.72, 'rgba(60,45,20,.06)');
-        shade.addColorStop(1, 'rgba(50,38,18,.35)');
+        shade.addColorStop(0, 'rgba(50,38,18,0)');
+        shade.addColorStop(0.7, 'rgba(50,38,18,.08)');
+        shade.addColorStop(1, 'rgba(34,26,12,.4)');
         ctx.fillStyle = shade;
         ctx.beginPath();
         ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.7)';
+
+        const hx = BALL_RADIUS * 0.34, hy = -BALL_RADIUS * 0.44, hr = BALL_RADIUS * 0.46;
+        const spec = ctx.createRadialGradient(hx, hy, 1, hx, hy, hr);
+        spec.addColorStop(0, 'rgba(255,255,255,.8)');
+        spec.addColorStop(0.45, 'rgba(255,255,255,.2)');
+        spec.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = spec;
         ctx.beginPath();
-        ctx.ellipse(BALL_RADIUS * 0.34, -BALL_RADIUS * 0.42, 7.5, 5, -0.6, 0, Math.PI * 2);
+        ctx.arc(hx, hy, hr, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
