@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Tilt Maze — the wooden labyrinth, tilted with your phone</title>
+<meta name="description" content="The Brio wooden labyrinth in a browser tab: a steel ball, a hole-studded board, and two axes of tilt. On a phone you tilt the actual phone; on a desktop the mouse or the arrow keys tilt the board just as well. The ball is simulated as a solid sphere rolling without slipping, so it accelerates at (5/7)g·sin θ, loses energy to rolling resistance, and bounces off the walls at a coefficient of restitution measured for steel on wood. Five boards per course, one clock, every board checked for a ball-width path before you see it, and the whole course reproducible from a seed in the URL.">
+<meta name="keywords" content="tilt maze, labyrinth game, brio labyrinth, marble maze, gyroscope game, motion controls, mobile browser game, ball maze, physics game, seeded maze">
+<meta name="theme-color" content="#20160e">
+<meta property="og:title" content="Tilt Maze — the wooden labyrinth, tilted with your phone">
+<meta property="og:description" content="A steel ball on a wooden board full of holes. Tilt the phone, or the mouse. Five boards, one clock, a seed you can share.">
+<meta property="og:type" content="website">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --ink:#f6efe4; --dim:#a4917c; --line:#4a3524; --panel:#2a1d12; --accent:#e8b062; --bad:#d8664e; --good:#7fc08a;
+  }
+  html,body{height:100%}
+  body{
+    background:#181009; color:var(--ink);
+    font-family:ui-rounded,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    overflow:hidden; touch-action:none; -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #wrap{position:fixed; inset:0; display:flex; flex-direction:column}
+  #hud{
+    flex:0 0 auto; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:calc(env(safe-area-inset-top) + 9px) 13px 9px;
+    font-variant-numeric:tabular-nums; font-size:13px;
+  }
+  #hud .big{font-weight:700; font-size:19px; letter-spacing:.01em}
+  #hud .lab{color:var(--dim); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase}
+  #hud .grp{display:flex; flex-direction:column; gap:1px; line-height:1.15}
+  #hud .sp{flex:1}
+  button{
+    background:#322315; color:var(--ink); border:1px solid var(--line);
+    border-radius:9px; padding:7px 12px; font:inherit; font-size:13px; cursor:pointer;
+  }
+  button:hover{background:#3f2c1b}
+  button:active{transform:translateY(1px)}
+  button.primary{background:var(--accent); color:#241608; border-color:#f2c27c; font-weight:700}
+  #stage{flex:1 1 auto; position:relative; min-height:0}
+  canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+  .veil{
+    position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center;
+    padding:calc(env(safe-area-inset-top) + 18px) 18px calc(env(safe-area-inset-bottom) + 18px);
+    background:rgba(16,10,5,.86); backdrop-filter:blur(5px); overflow:auto;
+  }
+  .veil[hidden]{display:none}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:22px; max-width:440px; width:100%; margin:auto;
+  }
+  .card h1{font-size:23px; margin-bottom:6px; letter-spacing:.01em}
+  .card h2{font-size:20px; margin-bottom:8px}
+  .card p{color:#d6c6b1; font-size:14px; line-height:1.55; margin-bottom:11px}
+  .card p.small{font-size:12.5px; color:var(--dim)}
+  .card .row{display:flex; gap:9px; flex-wrap:wrap; margin-top:15px}
+  .card .row button{flex:1 1 auto; padding:11px 14px; font-size:15px}
+  .stat{display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #3a2917; font-size:14px}
+  .stat:last-child{border-bottom:0}
+  .stat span:last-child{font-variant-numeric:tabular-nums; font-weight:600}
+  kbd{background:#3d2b1a; border:1px solid var(--line); border-radius:5px; padding:1px 6px; font:inherit; font-size:12px}
+  #toast{
+    position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 22px); transform:translateX(-50%);
+    background:rgba(38,26,16,.95); border:1px solid var(--line); border-radius:10px;
+    padding:9px 15px; font-size:13.5px; z-index:15; pointer-events:none; opacity:0; transition:opacity .25s;
+  }
+  #toast.on{opacity:1}
+  #seedline{display:flex; gap:7px; align-items:center; margin-top:13px}
+  #seedline input{
+    flex:1; background:#1d130a; border:1px solid var(--line); color:var(--ink);
+    border-radius:8px; padding:8px 10px; font:inherit; font-size:14px; min-width:0;
+  }
+  @media (max-width:430px){ #hud{gap:9px; font-size:12px} #hud .big{font-size:17px} }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="grp"><span class="lab">Time</span><span class="big" id="hTime">0.00</span></div>
+    <div class="grp"><span class="lab">Board</span><span class="big" id="hBoard">1 / 5</span></div>
+    <div class="grp"><span class="lab">Falls</span><span class="big" id="hFalls">0</span></div>
+    <div class="grp"><span class="lab">Best</span><span class="big" id="hBest">—</span></div>
+    <span class="sp"></span>
+    <button id="bZero" title="Re-zero the tilt to however you are holding it now">Re-zero</button>
+    <button id="bFull" title="Fullscreen">⛶</button>
+    <button id="bMenu" title="Menu">☰</button>
+  </div>
+  <div id="stage"><canvas id="cv"></canvas></div>
+</div>
+
+<div class="veil" id="vStart">
+  <div class="card">
+    <h1>Tilt Maze</h1>
+    <p>A steel ball on a wooden board with holes in it. Get it to the ring at the far end. Fall in a hole and the board resets — the clock does not.</p>
+    <p id="pHow">Five boards, one running clock.</p>
+    <p class="small" id="pSensor"></p>
+    <div class="row">
+      <button class="primary" id="bStart">Start course</button>
+    </div>
+    <div id="seedline">
+      <input id="iSeed" spellcheck="false" aria-label="Course seed">
+      <button id="bSeed">Load seed</button>
+      <button id="bRand">Random</button>
+    </div>
+    <p class="small" style="margin-top:12px">Desktop: move the <b>mouse</b> over the board to tilt it, or hold the <kbd>arrow</kbd> / <kbd>WASD</kbd> keys. Phone: tilt the phone. <kbd>R</kbd> resets the board, double-tap re-zeroes the tilt.</p>
+  </div>
+</div>
+
+<div class="veil" id="vEnd" hidden>
+  <div class="card">
+    <h2 id="eTitle">Course complete</h2>
+    <p id="eSub"></p>
+    <div id="eStats"></div>
+    <div class="row">
+      <button class="primary" id="bAgain">Run it again</button>
+      <button id="bNew">New course</button>
+    </div>
+    <p class="small" id="eSeed" style="margin-top:12px"></p>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="../logo.js"></script>
+<script>
+"use strict";
+/* ------------------------------------------------------------------ *
+ *  Tilt Maze
+ *  --------------------------------------------------------------
+ *  Physics units are SI. The board is a real 238 mm square, the ball
+ *  is a 12.7 mm steel marble, and everything below is in metres and
+ *  seconds; pixels only appear in the renderer.
+ * ------------------------------------------------------------------ */
+
+/* ---------- seeded randomness: two independent streams ------------ */
+function hashStr(s){
+  let h = 0x811c9dc5 >>> 0;
+  for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+}
+function mulberry32(a){
+  a = a >>> 0;
+  return function(){
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function rndInt(r, n){ return Math.floor(r()*n); }
+function shuffle(r, arr){
+  for(let i=arr.length-1;i>0;i--){ const j = rndInt(r, i+1); const t=arr[i]; arr[i]=arr[j]; arr[j]=t; }
+  return arr;
+}
+
+/* ---------- physical constants ------------------------------------
+ * ROLL = 5/7. A solid sphere rolling without slipping down an incline
+ * accelerates at (5/7)·g·sin θ, not g·sin θ: I = (2/5)mr² of the
+ * released potential energy goes into spin. That single factor is the
+ * difference between a ball and a cursor.
+ * MU_ROLL is the rolling-resistance coefficient — a steel ball on a
+ * hard surface sits around 0.002 (ball-bearing figures); lacquered
+ * wood is rougher, so 0.004. It decelerates at only µ·g·cos θ ≈
+ * 0.04 m/s², which is why the ball keeps running for a long time.
+ * REST = 0.45, a coefficient of restitution in the range reported for
+ * steel dropped on hardwood (~0.4–0.5): a definite click, no bounce
+ * back across the board.
+ * ------------------------------------------------------------------ */
+const G        = 9.81;
+const ROLL     = 5/7;
+let   MU_ROLL  = 0.004;
+let   DRAG     = 0.18;     // 1/s, viscous term; air + the felt of the board
+const REST     = 0.45;     // normal restitution, steel on wood
+const TAN_KEEP = 0.90;     // tangential velocity kept through a wall hit
+
+const BOARD    = 0.238;    // m, playfield edge
+const BALL_R   = 0.00635;  // m, 12.7 mm ball
+const WALL_T   = 0.006;    // m, wall thickness — the thing that must not be tunnelled
+const HOLE_R   = 0.0090;   // m
+const GOAL_R   = 0.0115;   // m
+
+const MAX_TILT = 15 * Math.PI/180;   // hard clamp on board tilt
+const TILT_TAU = 0.060;              // s, low-pass time constant on the tilt input
+const DT       = 1/60;               // s, fixed simulation step
+const MAX_SUB  = 96;                 // substep ceiling
+
+/* Substep rule: never move more than a fraction of a wall thickness in
+ * one substep, so a circle-vs-AABB overlap test can never miss a wall. */
+const SUB_TRAVEL = 0.30 * WALL_T;    // m
+
+const LEVELS = [
+  {n:5, holes:4,  braid:0.26},
+  {n:6, holes:8,  braid:0.24},
+  {n:6, holes:11, braid:0.20},
+  {n:7, holes:15, braid:0.20},
+  {n:7, holes:19, braid:0.16}
+];
+const N_BOARDS = LEVELS.length;
+
+/* ================================================================== *
+ *  Level construction
+ * ================================================================== */
+
+/* A perfect maze by recursive backtracking, then braided: a fraction of
+ * the remaining interior walls is knocked out so the board has loops
+ * and dead ends rather than one forced corridor. */
+function carveMaze(rng, n, braidP){
+  const vOpen = new Uint8Array(n*n);   // edge (i,j)-(i+1,j) is open
+  const hOpen = new Uint8Array(n*n);   // edge (i,j)-(i,j+1) is open
+  const seen  = new Uint8Array(n*n);
+  const stack = [0];
+  seen[0] = 1;
+  while(stack.length){
+    const cur = stack[stack.length-1];
+    const ci = cur % n, cj = (cur - ci)/n;
+    const cand = [];
+    if(ci > 0   && !seen[cur-1]) cand.push(0);
+    if(ci < n-1 && !seen[cur+1]) cand.push(1);
+    if(cj > 0   && !seen[cur-n]) cand.push(2);
+    if(cj < n-1 && !seen[cur+n]) cand.push(3);
+    if(!cand.length){ stack.pop(); continue; }
+    const d = cand[rndInt(rng, cand.length)];
+    let nx = cur;
+    if(d === 0){ vOpen[cur-1] = 1; nx = cur-1; }
+    else if(d === 1){ vOpen[cur] = 1; nx = cur+1; }
+    else if(d === 2){ hOpen[cur-n] = 1; nx = cur-n; }
+    else { hOpen[cur] = 1; nx = cur+n; }
+    seen[nx] = 1;
+    stack.push(nx);
+  }
+  for(let j=0;j<n;j++) for(let i=0;i<n;i++){
+    const c = j*n+i;
+    if(i < n-1 && !vOpen[c] && rng() < braidP) vOpen[c] = 1;
+    if(j < n-1 && !hOpen[c] && rng() < braidP) hOpen[c] = 1;
+  }
+  return {vOpen, hOpen};
+}
+
+function buildWalls(n, cs, maze){
+  const w = [];
+  const T = WALL_T, H = T/2;
+  // border, sitting just outside the playfield
+  w.push({x:-T, y:-T, w:BOARD+2*T, h:T});
+  w.push({x:-T, y:BOARD, w:BOARD+2*T, h:T});
+  w.push({x:-T, y:0, w:T, h:BOARD});
+  w.push({x:BOARD, y:0, w:T, h:BOARD});
+  for(let j=0;j<n;j++) for(let i=0;i<n;i++){
+    const c = j*n+i;
+    if(i < n-1 && !maze.vOpen[c])
+      w.push({x:(i+1)*cs - H, y:j*cs - H, w:T, h:cs + T});
+    if(j < n-1 && !maze.hOpen[c])
+      w.push({x:i*cs - H, y:(j+1)*cs - H, w:cs + T, h:T});
+  }
+  return w;
+}
+
+/* Candidate hole sites. Half sit dead in the middle of a cell, which
+ * plugs that cell outright; half are pushed a quarter-cell to one side,
+ * which leaves a gap the ball can thread if it is going slowly enough.
+ * Which of the two a site is, is drawn from the course stream, not the
+ * cosmetic one — it changes the board. */
+function holeSites(rng, n, cs, startC, goalC){
+  const sites = [];
+  for(let j=0;j<n;j++) for(let i=0;i<n;i++){
+    const c = j*n+i;
+    if(c === startC || c === goalC) continue;
+    const cx = (i+0.5)*cs, cy = (j+0.5)*cs;
+    if(rng() < 0.5){
+      sites.push({x:cx, y:cy, r:HOLE_R});
+    }else{
+      const off = 0.25*cs * (rng() < 0.5 ? 1 : -1);
+      if(rng() < 0.5) sites.push({x:cx+off, y:cy, r:HOLE_R});
+      else            sites.push({x:cx, y:cy+off, r:HOLE_R});
+    }
+  }
+  return shuffle(rng, sites);
+}
+
+/* ---------- geometry helpers -------------------------------------- */
+function circleRectDepth(px, py, r, R){
+  // returns {hit, nx, ny, depth} for a circle against an axis-aligned rect
+  const cx = px < R.x ? R.x : (px > R.x+R.w ? R.x+R.w : px);
+  const cy = py < R.y ? R.y : (py > R.y+R.h ? R.y+R.h : py);
+  let dx = px - cx, dy = py - cy;
+  let d2 = dx*dx + dy*dy;
+  if(d2 > r*r) return null;
+  if(d2 > 1e-18){
+    const d = Math.sqrt(d2);
+    return {nx:dx/d, ny:dy/d, depth:r-d};
+  }
+  // centre is inside the rect: push out along the shallowest face
+  const l = px - R.x, rr = (R.x+R.w) - px, t = py - R.y, b = (R.y+R.h) - py;
+  const m = Math.min(l, rr, t, b);
+  if(m === l)  return {nx:-1, ny:0, depth:r+l};
+  if(m === rr) return {nx: 1, ny:0, depth:r+rr};
+  if(m === t)  return {nx:0, ny:-1, depth:r+t};
+  return {nx:0, ny:1, depth:r+b};
+}
+function clearOfWalls(px, py, r, walls){
+  for(let k=0;k<walls.length;k++) if(circleRectDepth(px, py, r, walls[k])) return false;
+  return true;
+}
+
+/* ================================================================== *
+ *  SOLVABILITY CHECK
+ *  ---------------------------------------------------------------
+ *  No board is ever shown without a proof that a ball can get across
+ *  it, and the proof is on the ball's CENTRE rather than on maze cells,
+ *  so it answers the question that actually matters: is there a
+ *  continuous path a 12.7 mm sphere can physically follow?
+ *
+ *    1. Raster the playfield at 1.1 mm.
+ *    2. A raster point is passable iff a disc of radius BALL_R centred
+ *       there touches no wall, and its centre is further than
+ *       HOLE_R + 0.5 mm from every hole centre.
+ *    3. Flood-fill 4-connected from the start; the board passes iff the
+ *       goal centre is reached.
+ *
+ *  It is run as each hole is placed, not once at the end: a hole that
+ *  severs the last route is un-punched and the site is skipped. The
+ *  empty maze is a carved spanning tree with 28 mm corridors against a
+ *  12.7 mm ball, so step 1 always passes, and every state after it does
+ *  too, by induction. isSolvable() below is an independent re-check
+ *  from scratch, used by the verification run to catch the generator.
+ * ================================================================== */
+const RASTER = 0.0011;   // m
+const RN = Math.ceil(BOARD / RASTER) + 1;
+
+/* Step 1 and 2a: the wall-clearance mask. One pass, reused for every
+ * candidate hole on this board. */
+function wallMask(walls){
+  const mask = new Uint8Array(RN*RN);
+  for(let j=0;j<RN;j++){
+    const y = j*RASTER;
+    for(let i=0;i<RN;i++){
+      if(clearOfWalls(i*RASTER, y, BALL_R, walls)) mask[j*RN+i] = 1;
+    }
+  }
+  return mask;
+}
+/* Step 2b: punch a hole out of the mask, recording what it cleared so the
+ * punch can be undone if the hole turns out to block the board.
+ *
+ * SAFE_GAP is the whole difference between a board that is solvable and
+ * a board that is playable. The ball drops the moment its centre gets
+ * within HOLE_R, so cutting the mask at exactly HOLE_R proves a path
+ * exists that is one atom wide — true, and useless. The mask is cut at
+ * HOLE_R + 3 mm instead, so whatever the flood fill finds, a player has
+ * three millimetres of lateral slack either side of the ball's centre
+ * the whole way across. */
+const SAFE_GAP = 0.003;
+function punchHole(mask, h, undo){
+  const R = h.r + SAFE_GAP, R2 = R*R;
+  const i0 = Math.max(0, Math.floor((h.x-R)/RASTER)), i1 = Math.min(RN-1, Math.ceil((h.x+R)/RASTER));
+  const j0 = Math.max(0, Math.floor((h.y-R)/RASTER)), j1 = Math.min(RN-1, Math.ceil((h.y+R)/RASTER));
+  for(let j=j0;j<=j1;j++){
+    const dy = j*RASTER - h.y;
+    for(let i=i0;i<=i1;i++){
+      const c = j*RN+i;
+      if(!mask[c]) continue;
+      const dx = i*RASTER - h.x;
+      if(dx*dx + dy*dy < R2){ mask[c] = 0; undo.push(c); }
+    }
+  }
+}
+/* Step 3: 4-connected flood fill on the ball's centre. */
+function reachable(mask, n, from, to){
+  const si = Math.round(from.x/RASTER), sj = Math.round(from.y/RASTER);
+  const gi = Math.round(to.x/RASTER),   gj = Math.round(to.y/RASTER);
+  if(si<0||sj<0||gi<0||gj<0||si>=n||sj>=n||gi>=n||gj>=n) return false;
+  if(!mask[sj*n+si] || !mask[gj*n+gi]) return false;
+  const seen = new Uint8Array(n*n);
+  const q = new Int32Array(n*n);
+  let head = 0, tail = 0;
+  q[tail++] = sj*n+si; seen[sj*n+si] = 1;
+  const goal = gj*n+gi;
+  while(head < tail){
+    const c = q[head++];
+    if(c === goal) return true;
+    const i = c % n, j = (c-i)/n;
+    if(i>0   && !seen[c-1] && mask[c-1]){ seen[c-1]=1; q[tail++]=c-1; }
+    if(i<n-1 && !seen[c+1] && mask[c+1]){ seen[c+1]=1; q[tail++]=c+1; }
+    if(j>0   && !seen[c-n] && mask[c-n]){ seen[c-n]=1; q[tail++]=c-n; }
+    if(j<n-1 && !seen[c+n] && mask[c+n]){ seen[c+n]=1; q[tail++]=c+n; }
+  }
+  return false;
+}
+/* The independent verifier: rebuilds the whole mask from the finished
+ * level and re-runs the fill. Nothing is shared with the generator's
+ * incremental bookkeeping, so it can catch the generator being wrong. */
+function isSolvable(level){
+  const mask = wallMask(level.walls);
+  const undo = [];
+  for(const h of level.holes) punchHole(mask, h, undo);
+  return reachable(mask, RN, level.start, level.goal);
+}
+
+function buildLevel(seedNum, idx){
+  const spec = LEVELS[idx];
+  const rng = mulberry32((seedNum ^ Math.imul(idx + 1, 0x9E3779B1)) >>> 0);
+  const n = spec.n, cs = BOARD / n;
+  const maze  = carveMaze(rng, n, spec.braid);
+  const walls = buildWalls(n, cs, maze);
+  const start = {x:cs*0.5, y:cs*0.5};
+  const goal  = {x:BOARD - cs*0.5, y:BOARD - cs*0.5, r:GOAL_R};
+
+  /* Holes are added one at a time and each one has to earn its place:
+   * punch it out of the mask, re-run the fill, and if the board just
+   * stopped being walkable, put the mask back and move to the next
+   * candidate site. So the board is never merely checked afterwards —
+   * it is solvable by construction, at every step of its construction,
+   * and the check is on a ball-width disc rather than on maze cells. */
+  const mask = wallMask(walls);
+  if(!reachable(mask, RN, start, goal))
+    throw new Error("empty maze not walkable — corridor narrower than the ball");
+
+  const sites = holeSites(rng, n, cs, 0, n*n - 1);
+  const holes = [];
+  let rejected = 0;
+  for(let k=0; k<sites.length && holes.length < spec.holes; k++){
+    const h = sites[k];
+    if(Math.hypot(h.x-start.x, h.y-start.y) < h.r + BALL_R + 0.004) continue;
+    if(Math.hypot(h.x-goal.x,  h.y-goal.y)  < h.r + goal.r + 0.002) continue;
+    const undo = [];
+    punchHole(mask, h, undo);
+    if(reachable(mask, RN, start, goal)){
+      holes.push(h);
+    }else{
+      for(let u=0; u<undo.length; u++) mask[undo[u]] = 1;
+      rejected++;
+    }
+  }
+  return {idx, n, cs, walls, holes, start, goal, wanted:spec.holes, rejected};
+}
+
+/* ================================================================== *
+ *  Tilt input
+ * ================================================================== */
+const Tilt = {
+  mode: "none",          // "device" | "mouse" | "keys"
+  haveDevice: false,
+  rawB: 0, rawG: 0,      // last clamped sensor reading, degrees
+  zeroB: 0, zeroG: 0,    // calibration
+  targetX: 0, targetY: 0,// radians, before the low-pass
+  x: 0, y: 0,            // radians, after the low-pass — what the physics sees
+  keys: {l:0, r:0, u:0, d:0},
+  keyX: 0, keyY: 0,
+  mouseX: 0, mouseY: 0, mouseOn: false
+};
+
+function screenAngle(){
+  if(screen.orientation && typeof screen.orientation.angle === "number") return screen.orientation.angle;
+  if(typeof window.orientation === "number") return window.orientation;
+  return 0;
+}
+
+/* beta/gamma are DEVICE axes. In landscape they no longer line up with
+ * what the player is looking at, so the tilt vector is rotated back by
+ * screen.orientation.angle into screen space.
+ *
+ * In screen pixel space (+x right, +y down), the downhill direction is
+ * (gamma, beta) in degrees for small tilts: gamma > 0 is the right edge
+ * dropping, beta > 0 is the far edge lifting, so the ball runs toward
+ * the player, which is +y on screen.
+ *
+ * With the screen rotated by A relative to the device, the same physical
+ * downhill vector reads in device axes as that screen vector rotated by
+ * +A, so undoing it is a rotation by -A (clockwise-positive, y down):
+ *
+ *   sx =  g·cos A + b·sin A
+ *   sy = -g·sin A + b·cos A
+ */
+function orientToScreen(betaDeg, gammaDeg, angleDeg){
+  const a = angleDeg * Math.PI/180;
+  const ca = Math.cos(a), sa = Math.sin(a);
+  return {
+    x:  gammaDeg*ca + betaDeg*sa,
+    y: -gammaDeg*sa + betaDeg*ca
+  };
+}
+
+function clampDeg(v, lim){ return v < -lim ? -lim : (v > lim ? lim : v); }
+
+function onOrientation(e){
+  if(e.beta === null || e.gamma === null || e.beta === undefined || e.gamma === undefined) return;
+  if(!Tilt.haveDevice){
+    Tilt.haveDevice = true;
+    Tilt.mode = "device";
+    note("Tilt control live — hold the phone flat and tap Re-zero any time");
+  }
+  /* gamma is discontinuous near ±90° (it wraps as the device passes
+   * vertical) and beta is unbounded. Nobody plays a marble maze past
+   * 40° of tilt, so both are clamped well short of the bad region
+   * instead of being trusted at the extremes. */
+  Tilt.rawB = clampDeg(e.beta,  55);
+  Tilt.rawG = clampDeg(e.gamma, 55);
+  const s = orientToScreen(Tilt.rawB - Tilt.zeroB, Tilt.rawG - Tilt.zeroG, screenAngle());
+  /* Map 1° of phone tilt to 1° of board tilt up to the clamp — direct,
+   * no gain. MAX_TILT is 15°, which the wrist reaches comfortably. */
+  const gain = 1.0;
+  Tilt.targetX = clampRad(s.x * gain * Math.PI/180, MAX_TILT);
+  Tilt.targetY = clampRad(s.y * gain * Math.PI/180, MAX_TILT);
+}
+function clampRad(v, lim){ return v < -lim ? -lim : (v > lim ? lim : v); }
+
+function recalibrate(){
+  if(Tilt.haveDevice){
+    Tilt.zeroB = Tilt.rawB;
+    Tilt.zeroG = Tilt.rawG;
+    Tilt.targetX = Tilt.targetY = 0;
+    note("Zeroed to how you are holding it now");
+  }else{
+    note("No motion sensor here — mouse and arrow keys tilt the board");
+  }
+}
+
+async function requestSensor(){
+  /* iOS 13+ gates deviceorientation behind an explicit grant that must
+   * be asked for from inside a real user gesture, and in a secure
+   * context. Without it no event ever fires and nothing reports an
+   * error — the page is simply, silently dead. So the ask lives on the
+   * Start button and nowhere else. */
+  const DOE = window.DeviceOrientationEvent;
+  if(DOE && typeof DOE.requestPermission === "function"){
+    try{
+      const r = await DOE.requestPermission();
+      if(r !== "granted"){ note("Motion denied — mouse and keys still work"); return false; }
+    }catch(err){
+      note("Motion unavailable — mouse and keys still work");
+      return false;
+    }
+  }
+  window.addEventListener("deviceorientation", onOrientation, true);
+  return true;
+}
+
+function sensorNote(){
+  const secure = window.isSecureContext;
+  const DOE = window.DeviceOrientationEvent;
+  if(!DOE) return "This browser has no orientation sensor. Mouse and keys are the controls here, and they are not a consolation prize — they tilt the same board.";
+  if(!secure) return "Heads up: this page is not on HTTPS, and browsers only deliver orientation events in a secure context (localhost excepted). Tilt will not fire — mouse and keys will.";
+  if(typeof DOE.requestPermission === "function") return "iOS will ask for motion access when you press Start. It has to be asked from a tap, so this is the only place it can happen.";
+  return "If this device has a tilt sensor, Start will pick it up. If not, mouse and keys tilt the board just as well.";
+}
+
+/* keyboard + mouse: full parity with the sensor, not a fallback */
+function keyTilt(dt){
+  const rate = MAX_TILT / 0.22;       // full deflection in 0.22 s
+  const back = MAX_TILT / 0.16;
+  const k = Tilt.keys;
+  const ax = (k.r - k.l), ay = (k.d - k.u);
+  Tilt.keyX = ax ? clampRad(Tilt.keyX + ax*rate*dt, MAX_TILT) : towardZero(Tilt.keyX, back*dt);
+  Tilt.keyY = ay ? clampRad(Tilt.keyY + ay*rate*dt, MAX_TILT) : towardZero(Tilt.keyY, back*dt);
+  return (ax||ay||Tilt.keyX||Tilt.keyY);
+}
+function towardZero(v, d){ return v > d ? v-d : (v < -d ? v+d : 0); }
+
+function updateTiltTarget(dt){
+  if(Tilt.haveDevice) return;                       // sensor drives targetX/Y directly
+  const active = keyTilt(dt);
+  if(Math.abs(Tilt.keyX) > 1e-5 || Math.abs(Tilt.keyY) > 1e-5 || Tilt.keys.l||Tilt.keys.r||Tilt.keys.u||Tilt.keys.d){
+    Tilt.mode = "keys";
+    Tilt.targetX = Tilt.keyX; Tilt.targetY = Tilt.keyY;
+  }else if(Tilt.mouseOn){
+    Tilt.mode = "mouse";
+    Tilt.targetX = Tilt.mouseX; Tilt.targetY = Tilt.mouseY;
+  }else{
+    Tilt.targetX = 0; Tilt.targetY = 0;
+  }
+}
+
+/* Low-pass. A raw accelerometer feed jitters by a degree or so, and a
+ * degree of jitter is 0.17 m/s² of noise straight into the ball. A
+ * one-pole filter at tau = 60 ms kills it. Going to 150 ms kills it
+ * harder and the board starts feeling like it is on a spring — the
+ * ball answers a flick a tenth of a second late, which on a hole-lined
+ * corridor is the difference between a save and a drop. 60 ms is the
+ * corner: still crisp in the hand, no visible tremor on the ball. */
+function filterTilt(dt){
+  const a = 1 - Math.exp(-dt / TILT_TAU);
+  Tilt.x += (Tilt.targetX - Tilt.x) * a;
+  Tilt.y += (Tilt.targetY - Tilt.y) * a;
+}
+
+/* ================================================================== *
+ *  Simulation
+ * ================================================================== */
+/* One fixed 60 Hz step, internally subdivided.
+ *
+ * THE TUNNELLING RULE: walls are 6 mm thick and the ball can be doing
+ * 1.5 m/s, which is 25 mm in a 60 Hz frame — four wall thicknesses,
+ * straight through. So the frame is split into substeps short enough
+ * that the ball never advances more than 0.3 of a wall thickness at a
+ * time, which makes the discrete overlap test exact: there is no
+ * displacement that can step over a wall without a substep landing
+ * inside it. The count is computed from the current speed each frame,
+ * so it costs nothing when the ball is crawling. */
+function stepPhysics(dt){
+  const sp = Math.hypot(Ball.vx, Ball.vy);
+  let sub = Math.ceil((sp*dt) / SUB_TRAVEL);
+  if(sub < 1) sub = 1;
+  if(sub > MAX_SUB) sub = MAX_SUB;
+  const h = dt / sub;
+  const tx = Tilt.x, ty = Tilt.y;
+  const sinx = Math.sin(tx), siny = Math.sin(ty);
+  const cosT = Math.max(0.2, Math.cos(Math.max(Math.abs(tx), Math.abs(ty))));
+  // (5/7)·g·sin θ, per axis
+  const ax = ROLL * G * sinx;
+  const ay = ROLL * G * siny;
+  const rollDec = MU_ROLL * G * cosT;    // m/s², opposes motion
+
+  for(let s=0; s<sub; s++){
+    Ball.vx += ax*h; Ball.vy += ay*h;
+    // rolling resistance, capped so it can never reverse the ball
+    let v = Math.hypot(Ball.vx, Ball.vy);
+    if(v > 1e-9){
+      const drop = Math.min(v, rollDec*h);
+      Ball.vx -= (Ball.vx/v)*drop; Ball.vy -= (Ball.vy/v)*drop;
+    }
+    // viscous term
+    const k = Math.exp(-DRAG*h);
+    Ball.vx *= k; Ball.vy *= k;
+
+    Ball.x += Ball.vx*h; Ball.y += Ball.vy*h;
+
+    // walls
+    const walls = Game.level.walls;
+    for(let i=0;i<walls.length;i++){
+      const c = circleRectDepth(Ball.x, Ball.y, BALL_R, walls[i]);
+      if(!c) continue;
+      Ball.x += c.nx * c.depth;
+      Ball.y += c.ny * c.depth;
+      const vn = Ball.vx*c.nx + Ball.vy*c.ny;
+      if(vn < 0){
+        const tvx = Ball.vx - vn*c.nx, tvy = Ball.vy - vn*c.ny;
+        Ball.vx = tvx*TAN_KEEP - vn*c.nx*REST;
+        Ball.vy = tvy*TAN_KEEP - vn*c.ny*REST;
+        if(-vn > 0.06) click(Math.min(1, -vn/1.2));
+      }
+    }
+    Ball.spin += Math.hypot(Ball.vx, Ball.vy) * h / BALL_R;
+
+    // holes
+    const holes = Game.level.holes;
+    for(let i=0;i<holes.length;i++){
+      const dx = Ball.x-holes[i].x, dy = Ball.y-holes[i].y;
+      if(dx*dx + dy*dy < holes[i].r*holes[i].r){ dropIn(holes[i]); return; }
+    }
+    // goal
+    const gd = Math.hypot(Ball.x-Game.level.goal.x, Ball.y-Game.level.goal.y);
+    if(gd < Game.level.goal.r - BALL_R*0.35){ clearBoard(); return; }
+  }
+}
+
+/* ================================================================== *
+ *  Audio — Web Audio only, no assets
+ * ================================================================== */
+let AC = null, rollGain = null, rollFilt = null, muted = false;
+function audio(){
+  if(AC) return AC;
+  try{ AC = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ return null; }
+  // a rolling hum: pink-ish noise through a lowpass whose cutoff tracks speed
+  const len = AC.sampleRate * 2;
+  const buf = AC.createBuffer(1, len, AC.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for(let i=0;i<len;i++){ const w = Math.random()*2-1; last = (last + 0.035*w)/1.035; d[i] = last*3.2; }
+  const src = AC.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  rollFilt = AC.createBiquadFilter(); rollFilt.type = "lowpass"; rollFilt.frequency.value = 300;
+  rollGain = AC.createGain(); rollGain.gain.value = 0;
+  src.connect(rollFilt).connect(rollGain).connect(AC.destination);
+  src.start();
+  return AC;
+}
+function blip(f0, f1, dur, type, vol){
+  const ac = audio(); if(!ac || muted) return;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type || "sine";
+  o.frequency.setValueAtTime(f0, ac.currentTime);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), ac.currentTime + dur);
+  g.gain.setValueAtTime(0.0001, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(vol || 0.12, ac.currentTime + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dur);
+  o.connect(g).connect(ac.destination);
+  o.start(); o.stop(ac.currentTime + dur + 0.02);
+}
+function click(strength){
+  const ac = audio(); if(!ac || muted) return;
+  const now = ac.currentTime;
+  if(now - Game.lastHit < 0.02) return;
+  Game.lastHit = now;
+  const o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
+  o.type = "triangle";
+  o.frequency.setValueAtTime(900 + 500*strength, now);
+  o.frequency.exponentialRampToValueAtTime(180, now + 0.05);
+  f.type = "bandpass"; f.frequency.value = 1300; f.Q.value = 1.1;
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.02 + 0.10*strength, now + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+  o.connect(f).connect(g).connect(ac.destination);
+  o.start(now); o.stop(now + 0.09);
+}
+function thud(){ blip(340, 60, 0.42, "sine", 0.18); }
+function fanfare(){ [523.25, 659.25, 783.99, 1046.5].forEach((f,i)=>setTimeout(()=>blip(f, f, 0.22, "triangle", 0.10), i*95)); }
+function finish(){ [392, 523.25, 659.25, 783.99, 1046.5].forEach((f,i)=>setTimeout(()=>blip(f, f*1.002, 0.35, "triangle", 0.11), i*130)); }
+function rollSound(speed){
+  if(!rollGain || muted) return;
+  const s = Math.min(1, speed / 0.9);
+  rollGain.gain.value = s*s*0.075;
+  rollFilt.frequency.value = 160 + 1500*s;
+}
+
+/* ================================================================== *
+ *  Game flow
+ * ================================================================== */
+const Game = {
+  seed: "", seedNum: 0, levels: [], li: 0, level: null,
+  running: false, t: 0, falls: 0,
+  fall: null, cleared: null, splits: [], lastHit: 0, best: null, finished: false
+};
+const Ball = {x:0, y:0, vx:0, vy:0, spin:0};
+
+function resetBall(){
+  Ball.x = Game.level.start.x; Ball.y = Game.level.start.y;
+  Ball.vx = 0; Ball.vy = 0;
+  Game.fall = null;
+}
+function dropIn(h){
+  Game.falls++;
+  Game.fall = {x:h.x, y:h.y, t:0};
+  Ball.vx = Ball.vy = 0;
+  thud(); hudUpdate();
+}
+function clearBoard(){
+  Game.splits.push(Game.t - (Game.splits.length ? Game.splits.reduce((a,b)=>a+b,0) : 0));
+  Game.cleared = {t:0};
+  Ball.vx = Ball.vy = 0;
+  fanfare();
+}
+function nextBoard(){
+  Game.cleared = null;
+  if(Game.li >= N_BOARDS - 1 || !Game.levels[Game.li + 1]){ endCourse(); return; }
+  Game.li++;
+  Game.level = Game.levels[Game.li];
+  buildCosmetics(Game.level);
+  resetBall();
+  hudUpdate();
+}
+function endCourse(){
+  Game.running = false;
+  Game.finished = true;
+  finish();
+  const total = Game.t;
+  const key = "tiltmaze.best." + Game.seed;
+  let prev = null;
+  try{ const v = localStorage.getItem(key); if(v !== null) prev = parseFloat(v); }catch(e){}
+  const isPb = prev === null || total < prev;
+  if(isPb){ try{ localStorage.setItem(key, String(total)); }catch(e){} Game.best = total; }
+  else Game.best = prev;
+  showEnd(total, isPb);
+  hudUpdate();
+}
+function startCourse(){
+  Game.levels = [];
+  for(let i=0;i<N_BOARDS;i++) Game.levels.push(buildLevel(Game.seedNum, i));
+  Game.li = 0;
+  Game.level = Game.levels[0];
+  buildCosmetics(Game.level);
+  Game.t = 0; Game.falls = 0; Game.splits = [];
+  Game.cleared = null; Game.finished = false;
+  Game.running = true;
+  resetBall();
+  loadBest();
+  hudUpdate();
+}
+function loadBest(){
+  try{
+    const v = localStorage.getItem("tiltmaze.best." + Game.seed);
+    Game.best = v === null ? null : parseFloat(v);
+  }catch(e){ Game.best = null; }
+}
+
+/* ================================================================== *
+ *  Cosmetics — a SEPARATE random stream.
+ *  Grain, knots and the inlay pattern are drawn from a stream keyed off
+ *  the seed with a different constant, and they are drawn AFTER the
+ *  course is built. Nothing in here is ever read by the generator or
+ *  the physics, so the look of a board cannot move a wall or a hole.
+ * ================================================================== */
+function buildCosmetics(level){
+  if(level.cos) return;
+  const r = mulberry32((Game.seedNum ^ Math.imul(level.idx + 1, 0x85EBCA6B) ^ 0x27D4EB2F) >>> 0);
+  const grain = [];
+  for(let i=0;i<46;i++){
+    grain.push({y:r()*BOARD, amp:0.0015 + r()*0.004, ph:r()*6.283, w:0.0004 + r()*0.0011, a:0.03 + r()*0.07});
+  }
+  const knots = [];
+  const kn = 1 + rndInt(r, 3);
+  for(let i=0;i<kn;i++) knots.push({x:r()*BOARD, y:r()*BOARD, r:0.006 + r()*0.011, a:0.05 + r()*0.06});
+  level.cos = {grain, knots, hue:(r()*10 - 5)};
+}
+
+/* ================================================================== *
+ *  Rendering
+ * ================================================================== */
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let VW = 0, VH = 0, PX = 1, ORG = {x:0, y:0, s:1};
+
+function resize(){
+  const st = document.getElementById("stage");
+  VW = st.clientWidth; VH = st.clientHeight;
+  PX = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.max(1, Math.round(VW*PX));
+  cv.height = Math.max(1, Math.round(VH*PX));
+  const pad = Math.min(VW, VH) * 0.035 + 9;
+  const s = Math.min(VW - pad*2, VH - pad*2) / BOARD;
+  ORG.s = s;
+  ORG.x = (VW - BOARD*s)/2;
+  ORG.y = (VH - BOARD*s)/2;
+}
+const MX = x => ORG.x + x*ORG.s;
+const MY = y => ORG.y + y*ORG.s;
+const MS = d => d*ORG.s;
+
+function rr(c, x, y, w, h, r){
+  const rad = Math.min(r, w/2, h/2);
+  c.beginPath();
+  c.moveTo(x+rad, y);
+  c.arcTo(x+w, y, x+w, y+h, rad);
+  c.arcTo(x+w, y+h, x, y+h, rad);
+  c.arcTo(x, y+h, x, y, rad);
+  c.arcTo(x, y, x+w, y, rad);
+  c.closePath();
+}
+
+function draw(now){
+  const c = ctx;
+  c.setTransform(PX, 0, 0, PX, 0, 0);
+  c.clearRect(0, 0, VW, VH);
+  c.fillStyle = "#181009";
+  c.fillRect(0, 0, VW, VH);
+  if(!Game.level) return;
+  const L = Game.level, s = ORG.s;
+  if(!L.cos) buildCosmetics(L);
+  // light direction follows the tilt: the board visibly leans
+  const lx = Math.sin(Tilt.x) / MAX_TILT, ly = Math.sin(Tilt.y) / MAX_TILT;   // -1..1
+  const lean = Math.min(VW, VH) * 0.012;
+
+  c.save();
+  c.translate(lx*lean, ly*lean);
+
+  // --- frame ---
+  const fw = MS(WALL_T)*2.6;
+  rr(c, MX(0)-fw, MY(0)-fw, MS(BOARD)+fw*2, MS(BOARD)+fw*2, fw*0.7);
+  c.fillStyle = "#4b331e"; c.fill();
+  c.strokeStyle = "rgba(0,0,0,.5)"; c.lineWidth = 2; c.stroke();
+
+  // --- board face ---
+  c.save();
+  rr(c, MX(0), MY(0), MS(BOARD), MS(BOARD), MS(0.004));
+  c.clip();
+  const g = c.createLinearGradient(MX(0), MY(0), MX(BOARD), MY(BOARD));
+  g.addColorStop(0, "#c29256"); g.addColorStop(0.5, "#b4844a"); g.addColorStop(1, "#a2743e");
+  c.fillStyle = g; c.fillRect(MX(0), MY(0), MS(BOARD), MS(BOARD));
+  // grain
+  const cos = L.cos;
+  c.lineWidth = 1;
+  for(let i=0;i<cos.grain.length;i++){
+    const gr = cos.grain[i];
+    c.strokeStyle = "rgba(90,58,25," + gr.a.toFixed(3) + ")";
+    c.lineWidth = Math.max(0.6, MS(gr.w));
+    c.beginPath();
+    for(let x=0;x<=BOARD+0.001;x+=0.006){
+      const y = gr.y + Math.sin(x*22 + gr.ph)*gr.amp + Math.sin(x*61 + gr.ph*2)*gr.amp*0.3;
+      if(x === 0) c.moveTo(MX(x), MY(y)); else c.lineTo(MX(x), MY(y));
+    }
+    c.stroke();
+  }
+  for(let i=0;i<cos.knots.length;i++){
+    const k = cos.knots[i];
+    for(let q=3;q>=1;q--){
+      c.strokeStyle = "rgba(78,48,20," + (k.a*q/3).toFixed(3) + ")";
+      c.lineWidth = Math.max(0.7, MS(0.0006));
+      c.beginPath(); c.ellipse(MX(k.x), MY(k.y), MS(k.r*q/3), MS(k.r*q/3*0.62), 0.6, 0, 6.283); c.stroke();
+    }
+  }
+  // inner shading, lit from the high corner
+  // the high corner catches the light; the direction never degenerates,
+  // so there is no hard seam when the board is flat
+  const ux = lx*0.75 - 0.5, uy = ly*0.75 - 0.5;
+  const sg = c.createLinearGradient(MX(BOARD*(0.5+ux)), MY(BOARD*(0.5+uy)), MX(BOARD*(0.5-ux)), MY(BOARD*(0.5-uy)));
+  sg.addColorStop(0, "rgba(255,228,184,.13)");
+  sg.addColorStop(0.5, "rgba(255,228,184,0)");
+  sg.addColorStop(1, "rgba(28,12,0,.20)");
+  c.fillStyle = sg; c.fillRect(MX(0), MY(0), MS(BOARD), MS(BOARD));
+  c.restore();
+
+  // --- holes: dark wells, with the far rim catching light ---
+  const hs = MS(0.0016);
+  for(let i=0;i<L.holes.length;i++){
+    const h = L.holes[i];
+    const cx = MX(h.x), cy = MY(h.y), r = MS(h.r);
+    c.beginPath(); c.arc(cx - lx*hs, cy - ly*hs, r*1.04, 0, 6.283);
+    c.fillStyle = "rgba(255,228,186,.22)"; c.fill();
+    const hg = c.createRadialGradient(cx + lx*r*0.3, cy + ly*r*0.3, r*0.1, cx, cy, r);
+    hg.addColorStop(0, "#080604"); hg.addColorStop(0.72, "#120c06"); hg.addColorStop(1, "#2b1d10");
+    c.beginPath(); c.arc(cx, cy, r, 0, 6.283); c.fillStyle = hg; c.fill();
+    c.strokeStyle = "rgba(38,22,8,.7)"; c.lineWidth = 1; c.stroke();
+  }
+
+  // --- goal ---
+  const gx = MX(L.goal.x), gy = MY(L.goal.y), gr2 = MS(L.goal.r);
+  const pulse = 0.5 + 0.5*Math.sin(now/380);
+  c.beginPath(); c.arc(gx, gy, gr2*1.45, 0, 6.283);
+  c.fillStyle = "rgba(232,176,98," + (0.07 + 0.07*pulse).toFixed(3) + ")"; c.fill();
+  c.beginPath(); c.arc(gx, gy, gr2, 0, 6.283);
+  c.strokeStyle = "rgba(240,190,110,.95)"; c.lineWidth = Math.max(1.6, MS(0.0011)); c.stroke();
+  c.beginPath(); c.arc(gx, gy, gr2*0.42, 0, 6.283);
+  c.fillStyle = "rgba(240,190,110," + (0.35 + 0.35*pulse).toFixed(3) + ")"; c.fill();
+
+  // --- walls ---
+  const wsx = -lx*MS(0.0022), wsy = -ly*MS(0.0022);
+  // shadow pass
+  c.save();
+  c.translate(-wsx*2.4, -wsy*2.4);
+  c.fillStyle = "rgba(48,26,6,.34)";
+  for(let i=0;i<L.walls.length;i++){ const w = L.walls[i]; rr(c, MX(w.x), MY(w.y), MS(w.w), MS(w.h), MS(0.0012)); c.fill(); }
+  c.restore();
+  for(let i=0;i<L.walls.length;i++){
+    const w = L.walls[i];
+    rr(c, MX(w.x), MY(w.y), MS(w.w), MS(w.h), MS(0.0012));
+    const wg = c.createLinearGradient(MX(w.x), MY(w.y), MX(w.x+w.w), MY(w.y+w.h));
+    wg.addColorStop(0, "#8a6238"); wg.addColorStop(1, "#5e401f");
+    c.fillStyle = wg; c.fill();
+    c.strokeStyle = "rgba(245,215,170,.20)"; c.lineWidth = 1; c.stroke();
+  }
+
+  // --- ball ---
+  if(!Game.fall || Game.fall.t < 0.42){
+    let bx = Ball.x, by = Ball.y, br = BALL_R;
+    if(Game.fall){
+      const k = Math.min(1, Game.fall.t/0.4);
+      bx = Ball.x + (Game.fall.x - Ball.x)*k;
+      by = Ball.y + (Game.fall.y - Ball.y)*k;
+      br = BALL_R * (1 - 0.75*k);
+    }
+    const px = MX(bx), py = MY(by), pr = MS(br);
+    c.beginPath(); c.ellipse(px - lx*pr*0.55, py - ly*pr*0.55 + pr*0.22, pr*1.02, pr*0.8, 0, 0, 6.283);
+    c.fillStyle = "rgba(40,20,2,.42)"; c.fill();
+    const bg = c.createRadialGradient(px - pr*0.38, py - pr*0.42, pr*0.05, px, py, pr);
+    bg.addColorStop(0, "#ffffff"); bg.addColorStop(0.22, "#e2e8ee");
+    bg.addColorStop(0.62, "#9aa6b2"); bg.addColorStop(1, "#4a545f");
+    c.beginPath(); c.arc(px, py, pr, 0, 6.283); c.fillStyle = bg; c.fill();
+    c.beginPath(); c.arc(px + pr*0.30, py + pr*0.36, pr*0.42, 0, 6.283);
+    c.fillStyle = "rgba(255,226,180,.16)"; c.fill();
+  }
+  c.restore();
+
+  // --- tilt read-out, bottom-left of the viewport ---
+  const deg = Math.hypot(Tilt.x, Tilt.y) * 180/Math.PI;
+  const ind = Math.min(VW, VH)*0.055 + 14;
+  const ix = ind + 6, iy = VH - ind - 6;
+  c.beginPath(); c.arc(ix, iy, ind*0.5, 0, 6.283);
+  c.strokeStyle = "rgba(200,170,130,.28)"; c.lineWidth = 1.5; c.stroke();
+  c.beginPath(); c.arc(ix + lx*ind*0.42, iy + ly*ind*0.42, ind*0.16, 0, 6.283);
+  c.fillStyle = deg > MAX_TILT*180/Math.PI*0.94 ? "rgba(216,102,78,.95)" : "rgba(232,176,98,.85)";
+  c.fill();
+  c.font = "11px ui-rounded, sans-serif";
+  c.fillStyle = "rgba(200,170,130,.55)";
+  c.textAlign = "center";
+  c.fillText(deg.toFixed(1) + "°", ix, iy + ind*0.5 + 14);
+  c.textAlign = "left";
+
+  if(Game.cleared){
+    const a = Math.min(1, Game.cleared.t/0.18);
+    c.fillStyle = "rgba(24,16,9," + (a*0.5).toFixed(3) + ")";
+    c.fillRect(0, 0, VW, VH);
+    c.textAlign = "center";
+    c.fillStyle = "rgba(246,239,228," + a.toFixed(3) + ")";
+    c.font = "700 " + Math.round(Math.min(VW,VH)*0.075) + "px ui-rounded, sans-serif";
+    c.fillText("Board " + (Game.li+1) + " cleared", VW/2, VH/2);
+    c.font = Math.round(Math.min(VW,VH)*0.035) + "px ui-rounded, sans-serif";
+    c.fillStyle = "rgba(232,176,98," + a.toFixed(3) + ")";
+    c.fillText(fmt(Game.splits[Game.splits.length-1]), VW/2, VH/2 + Math.min(VW,VH)*0.07);
+    c.textAlign = "left";
+  }
+}
+
+/* ================================================================== *
+ *  Loop — fixed 60 Hz accumulator, rendering decoupled
+ * ================================================================== */
+let acc = 0, prev = 0;
+function frame(now){
+  requestAnimationFrame(frame);
+  if(!prev) prev = now;
+  let dt = (now - prev)/1000; prev = now;
+  if(dt > 0.25) dt = 0.25;
+  acc += dt;
+  let guard = 0;
+  while(acc >= DT && guard++ < 8){
+    acc -= DT;
+    tick(DT);
+  }
+  draw(now);
+}
+function tick(dt){
+  updateTiltTarget(dt);
+  filterTilt(dt);
+  if(Game.cleared && !Game.running){ Game.cleared = null; return; }
+  if(Game.cleared){
+    Game.cleared.t += dt;
+    Game.t += dt;
+    if(Game.cleared.t > 1.1) nextBoard();
+    hudUpdate();
+    return;
+  }
+  if(!Game.running) return;
+  Game.t += dt;
+  if(Game.fall){
+    Game.fall.t += dt;
+    if(Game.fall.t > 0.75) resetBall();
+    hudUpdate();
+    return;
+  }
+  stepPhysics(dt);
+  rollSound(Math.hypot(Ball.vx, Ball.vy));
+  hudUpdate();
+}
+
+/* ================================================================== *
+ *  UI
+ * ================================================================== */
+function fmt(t){
+  if(t === null || t === undefined) return "—";
+  const m = Math.floor(t/60), s = t - m*60;
+  return m ? m + ":" + (s<10?"0":"") + s.toFixed(2) : s.toFixed(2);
+}
+const el = id => document.getElementById(id);
+function hudUpdate(){
+  el("hTime").textContent  = fmt(Game.t);
+  el("hBoard").textContent = (Game.li+1) + " / " + N_BOARDS;
+  el("hFalls").textContent = String(Game.falls);
+  el("hBest").textContent  = fmt(Game.best);
+}
+let toastT = 0;
+function note(msg){
+  const t = el("toast");
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>t.classList.remove("on"), 2600);
+}
+function showEnd(total, isPb){
+  el("eTitle").textContent = "Course complete";
+  el("eSub").textContent = isPb ? "A new best for this seed." : "Your best on this seed stands at " + fmt(Game.best) + ".";
+  let html = '<div class="stat"><span>Total time</span><span>' + fmt(total) + '</span></div>';
+  Game.splits.forEach((s,i)=>{ html += '<div class="stat"><span>Board ' + (i+1) + '</span><span>' + fmt(s) + '</span></div>'; });
+  html += '<div class="stat"><span>Falls</span><span>' + Game.falls + '</span></div>';
+  el("eStats").innerHTML = html;
+  el("eSeed").textContent = "Seed: " + Game.seed;
+  el("vEnd").hidden = false;
+}
+
+function setSeed(s, push){
+  Game.seed = String(s);
+  Game.seedNum = hashStr(Game.seed);
+  el("iSeed").value = Game.seed;
+  if(push){
+    const u = new URL(location.href);
+    u.searchParams.set("seed", Game.seed);
+    history.replaceState(null, "", u.toString());
+  }
+  loadBest();
+}
+function randomSeed(){
+  const words = "amber,bramble,cinder,dovetail,ember,flint,gable,hazel,indigo,juniper,kestrel,lantern,mortise,nutmeg,oakum,plumb,quarry,rosin,sable,tenon,umber,varnish,walnut,yarrow".split(",");
+  const r = Math.random;
+  return words[Math.floor(r()*words.length)] + "-" + Math.floor(r()*9000+1000);
+}
+
+/* ---------- input wiring ---------- */
+const stage = el("stage");
+function mouseTilt(ev){
+  if(Tilt.haveDevice) return;
+  const rect = cv.getBoundingClientRect();
+  const cx = rect.left + ORG.x + MS(BOARD)/2;
+  const cy = rect.top  + ORG.y + MS(BOARD)/2;
+  const half = MS(BOARD)/2 * 1.15;
+  Tilt.mouseX = clampRad(((ev.clientX - cx)/half) * MAX_TILT, MAX_TILT);
+  Tilt.mouseY = clampRad(((ev.clientY - cy)/half) * MAX_TILT, MAX_TILT);
+  Tilt.mouseOn = true;
+}
+stage.addEventListener("mousemove", mouseTilt);
+stage.addEventListener("mouseleave", ()=>{ Tilt.mouseOn = false; });
+
+const KEYMAP = {ArrowLeft:"l", ArrowRight:"r", ArrowUp:"u", ArrowDown:"d", a:"l", d:"r", w:"u", s:"d", A:"l", D:"r", W:"u", S:"d"};
+addEventListener("keydown", e => {
+  const k = KEYMAP[e.key];
+  if(k){ Tilt.keys[k] = 1; e.preventDefault(); return; }
+  if(e.key === "r" || e.key === "R"){ if(Game.running && !Game.fall && !Game.cleared) resetBall(); }
+  if(e.key === "c" || e.key === "C") recalibrate();
+  if(e.key === "f" || e.key === "F") toggleFull();
+  if(e.key === "m" || e.key === "M"){ muted = !muted; if(rollGain) rollGain.gain.value = 0; note(muted ? "Muted" : "Sound on"); }
+});
+addEventListener("keyup", e => { const k = KEYMAP[e.key]; if(k){ Tilt.keys[k] = 0; e.preventDefault(); } });
+
+let lastTap = 0;
+stage.addEventListener("pointerdown", e => {
+  const now = performance.now();
+  if(now - lastTap < 320) recalibrate();
+  lastTap = now;
+});
+
+function toggleFull(){
+  const d = document.documentElement;
+  if(!document.fullscreenElement){ (d.requestFullscreen || d.webkitRequestFullscreen || function(){}).call(d); }
+  else{ (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document); }
+}
+el("bFull").addEventListener("click", toggleFull);
+el("bZero").addEventListener("click", recalibrate);
+el("bMenu").addEventListener("click", ()=>{
+  Game.running = false;
+  el("vEnd").hidden = true;
+  el("vStart").hidden = false;
+  el("bStart").textContent = "Start course";
+});
+el("bSeed").addEventListener("click", ()=>{ setSeed(el("iSeed").value.trim() || randomSeed(), true); note("Seed set — press Start"); });
+el("bRand").addEventListener("click", ()=>{ setSeed(randomSeed(), true); note("New seed"); });
+el("bStart").addEventListener("click", async ()=>{
+  audio();
+  if(AC && AC.state === "suspended") AC.resume();
+  await requestSensor();
+  setSeed(el("iSeed").value.trim() || Game.seed, true);
+  el("vStart").hidden = true;
+  el("vEnd").hidden = true;
+  startCourse();
+  if(Tilt.haveDevice) setTimeout(recalibrate, 400);
+});
+el("bAgain").addEventListener("click", ()=>{ el("vEnd").hidden = true; startCourse(); });
+el("bNew").addEventListener("click", ()=>{ setSeed(randomSeed(), true); el("vEnd").hidden = true; startCourse(); });
+
+addEventListener("resize", resize);
+if(screen.orientation && screen.orientation.addEventListener)
+  screen.orientation.addEventListener("change", resize);
+
+/* ---------- boot ---------- */
+(function boot(){
+  const q = new URLSearchParams(location.search);
+  setSeed(q.get("seed") || randomSeed(), false);
+  el("pSensor").textContent = sensorNote();
+  el("pHow").textContent =
+    "Five boards, one clock. The clock runs from the first board to the last and does not stop when you " +
+    "fall in — a fall costs you the seconds it takes to get back to where you were, which is exactly what " +
+    "it costs on the wooden one. One board with a best time would make every fall a free restart; a course " +
+    "with one clock makes the whole run the thing you are trying to beat.";
+  resize();
+  Game.level = buildLevel(Game.seedNum, 0);
+  buildCosmetics(Game.level);
+  resetBall();
+  hudUpdate();
+  requestAnimationFrame(frame);
+})();
+
+/* ================================================================== *
+ *  Test hooks — used by the headless verification run.
+ * ================================================================== */
+window.TM = {
+  C: {G, ROLL, MU_ROLL, DRAG, REST, BOARD, BALL_R, WALL_T, HOLE_R, GOAL_R, MAX_TILT, TILT_TAU, DT, SUB_TRAVEL, N_BOARDS},
+  Ball, Game, Tilt, LEVELS,
+  buildLevel, isSolvable, wallMask, punchHole, reachable, orientToScreen, hashStr, RN,
+  setLosses(mu, drag){ MU_ROLL = mu; DRAG = drag; },
+  resetLosses(){ MU_ROLL = 0.004; DRAG = 0.18; },
+  stepPhysics, filterTilt,
+  loadLevel(seedNum, idx){
+    Game.seedNum = seedNum;
+    Game.level = buildLevel(seedNum, idx);
+    buildCosmetics(Game.level);
+    Game.levels = [Game.level]; Game.li = 0;
+    resetBall();
+    return Game.level;
+  },
+  setTilt(x, y){ Tilt.haveDevice = true; Tilt.targetX = x; Tilt.targetY = y; Tilt.x = x; Tilt.y = y; },
+  place(x, y, vx, vy){ Ball.x = x; Ball.y = y; Ball.vx = vx||0; Ball.vy = vy||0; Game.fall = null; },
+  run(n){ for(let i=0;i<n;i++){ if(Game.fall) break; stepPhysics(DT); } return {x:Ball.x, y:Ball.y, vx:Ball.vx, vy:Ball.vy, fell:!!Game.fall}; },
+  feedOrientation(beta, gamma, angle){
+    Tilt.rawB = clampDeg(beta, 55); Tilt.rawG = clampDeg(gamma, 55);
+    const s = orientToScreen(Tilt.rawB - Tilt.zeroB, Tilt.rawG - Tilt.zeroG, angle);
+    Tilt.targetX = clampRad(s.x*Math.PI/180, MAX_TILT);
+    Tilt.targetY = clampRad(s.y*Math.PI/180, MAX_TILT);
+    return {x:Tilt.targetX, y:Tilt.targetY};
+  },
+  levelSig(L){
+    return JSON.stringify({
+      n:L.n,
+      w:L.walls.map(w=>[+w.x.toFixed(6),+w.y.toFixed(6),+w.w.toFixed(6),+w.h.toFixed(6)]),
+      h:L.holes.map(h=>[+h.x.toFixed(6),+h.y.toFixed(6),+h.r.toFixed(6)]),
+      s:[L.start.x, L.start.y], g:[L.goal.x, L.goal.y], rej:L.rejected
+    });
+  },
+  minWallThickness(L){
+    let m = Infinity;
+    for(const w of L.walls) m = Math.min(m, w.w, w.h);
+    return m;
+  },
+  desktopReady(){ return !Tilt.haveDevice; },
+  simKeys(k){ Tilt.keys.l = k.l||0; Tilt.keys.r = k.r||0; Tilt.keys.u = k.u||0; Tilt.keys.d = k.d||0; }
+};
+</script>
+</body>
+</html>
