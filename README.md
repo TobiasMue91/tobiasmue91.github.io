@@ -1,24 +1,39 @@
 # GPTGames
-Simple HTML games and tools created with ChatGPT.
+
+Over 110 browser games and 200 browser tools, almost all of them written by language models.
+Plain HTML, CSS and JS — every page is a single self-contained file, no framework, no build step.
+
+**View current version:** https://www.gptgames.dev/
 
 ---
 
 **Disclaimer:**
 
-~99.3% of the code has been written and improved by [ChatGPT](https://chat.openai.com/) and [Claude](https://claude.ai/). Other AI will also be tested in the future.
+~99.3% of the code has been written and improved by AI — first [ChatGPT](https://chatgpt.com/),
+today mostly [Claude](https://claude.ai/). Other models are tested as they appear.
 (0.7% were debugging and minor styling tweaks done by me)
 
 Some games contain assets (mainly background images). The images have been generated with the help of MidJourney and some sounds have been taken from pixabay.
 
-No cookies, tracking or server-sided data saving is done in this project. Almost all tools are client-sided, limited to JS, CSS and HTML. 
+No cookies, tracking or server-sided data saving is done in this project. Almost all tools are client-sided, limited to JS, CSS and HTML.
 
 Some data is stored in firebase and firestore. (multiplayer functionality in Tic-Tac-Toe and Rock-Paper-Scissors, highscores in Flappy Bird, savegames in Family Feud and Who Wants to Be a Millionaire and plans from the Household Planner)
 
-A few tools make use of the OpenAI Chat Completions API.
+A few dozen tools call a language model through a Cloudflare Worker proxy, so no API key ever sits in a page.
 
-**View current version:**
+## Workflow
 
-https://www.gptgames.dev/
+The early entries were copy-pasted out of a chat window. These days most work runs through
+[Claude Code](https://claude.com/claude-code), usually from the web app against this repository:
+
+- `CLAUDE.md` tells the agent how a page is built and what has to be touched when one is added.
+- `IDEAS.md` is the backlog; new entries are pitched from there.
+- A session develops on its own branch and opens a pull request; merging to `main` publishes,
+  since GitHub Pages serves the repository as-is.
+
+Registering a finished page is still five edits (`games/` or `tools/`, the JSON catalogue,
+`sidebar.html`, `sitemap.xml`, a screenshot) — `util/new_entry.py` does them interactively,
+and `util/update.py` refreshes dates and stale screenshots.
 
 ## Documentation
 
