@@ -442,6 +442,10 @@
             color: #86efac;
         }
 
+        .comment {
+            color: #94a3b8;
+        }
+
         /* For small screens */
         @media (max-width: 640px) {
             .container {
@@ -733,17 +737,38 @@
 
     const htmlEntities = str => {
         if (!str) return '';
-        return str.replace(/([&<>""'])/g, match => ({
+        return str.replace(/[&<>"']/g, match => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         })[match]);
     };
 
+    // Escape a user-supplied value for use inside a double-quoted attribute.
+    // Applied per value as the document is assembled, so a title containing
+    // " or & cannot terminate the attribute it lives in.
+    const attrEscape = str => htmlEntities(str == null ? '' : String(str));
+
+    // Highlight in a single pass over the source, escaping each chunk as it is
+    // emitted. The old version chained three .replace() calls, so the last one
+    // matched the quotes inside the <span class="attr"> markup the previous one
+    // had just produced and left dangling '">' fragments in the output.
     const syntaxHighlight = code => {
-        return code
-            .replace(/(&lt;\/?meta|&lt;\/?link|&lt;\/?title)([^&]*)(&gt;)/g, '<span class="tag">$1</span>$2<span class="tag">$3</span>')
-            .replace(/(name|content|property|rel|href|charset|http-equiv)=/g, '<span class="attr">$1=</span>')
-            .replace(/"([^"]*)"/g, '"<span class="string">$1</span>"');
+        const TOKEN = /(<!--[\s\S]*?-->)|(<\/?[a-zA-Z!][\w!-]*)|([\w:-]+)(=)("[^"]*")|(>)/g;
+        let out = '', last = 0, m;
+        while ((m = TOKEN.exec(code)) !== null) {
+            out += htmlEntities(code.slice(last, m.index));
+            if (m[1]) out += `<span class="comment">${htmlEntities(m[1])}</span>`;
+            else if (m[2]) out += `<span class="tag">${htmlEntities(m[2])}</span>`;
+            else if (m[3]) out += `<span class="attr">${htmlEntities(m[3])}</span>`
+                + htmlEntities(m[4]) + `<span class="string">${htmlEntities(m[5])}</span>`;
+            else out += `<span class="tag">${htmlEntities(m[6])}</span>`;
+            last = TOKEN.lastIndex;
+        }
+        return out + htmlEntities(code.slice(last));
     };
+
+    // The exact source last generated. Copy and download read this rather than
+    // the preview's textContent, which carries the highlighter's own markup.
+    let generatedSource = '';
 
     const updatePreview = () => {
         const title = titleInput.value || 'Your Page Title';
@@ -810,39 +835,41 @@
         const twitterSite = document.getElementById('twitter-site').value;
 
         // Generate meta tags
+        const e = attrEscape;
         let metaTags = `<!DOCTYPE html>
-<html${language ? ` lang="${language}"` : ''}>
+<html${language ? ` lang="${e(language)}"` : ''}>
 <head>
     <meta charset="UTF-8">
-    ${viewport ? `<meta name="viewport" content="${viewport}">` : ''}
-    <title>${title}</title>
+    ${viewport ? `<meta name="viewport" content="${e(viewport)}">` : ''}
+    <title>${e(title)}</title>
 
     <!-- Basic Meta Tags -->
-    <meta name="description" content="${description}">
-    ${keywords ? `<meta name="keywords" content="${keywords}">` : ''}
-    ${author ? `<meta name="author" content="${author}">` : ''}
+    <meta name="description" content="${e(description)}">
+    ${keywords ? `<meta name="keywords" content="${e(keywords)}">` : ''}
+    ${author ? `<meta name="author" content="${e(author)}">` : ''}
     <meta name="robots" content="${index}, ${follow}">
-    ${canonical ? `<link rel="canonical" href="${canonical}">` : ''}
-    ${revisit ? `<meta name="revisit-after" content="${revisit} days">` : ''}
+    ${canonical ? `<link rel="canonical" href="${e(canonical)}">` : ''}
+    ${revisit ? `<meta name="revisit-after" content="${e(revisit)} days">` : ''}
 
     <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="${ogType}">
-    <meta property="og:title" content="${ogTitle}">
-    <meta property="og:description" content="${ogDescription}">
-    ${canonical ? `<meta property="og:url" content="${canonical}">` : ''}
-    ${ogImage ? `<meta property="og:image" content="${ogImage}">` : ''}
+    <meta property="og:type" content="${e(ogType)}">
+    <meta property="og:title" content="${e(ogTitle)}">
+    <meta property="og:description" content="${e(ogDescription)}">
+    ${canonical ? `<meta property="og:url" content="${e(canonical)}">` : ''}
+    ${ogImage ? `<meta property="og:image" content="${e(ogImage)}">` : ''}
 
     <!-- Twitter -->
-    <meta name="twitter:card" content="${twitterCard}">
-    ${twitterSite ? `<meta name="twitter:site" content="${twitterSite}">` : ''}
-    <meta name="twitter:title" content="${ogTitle}">
-    <meta name="twitter:description" content="${ogDescription}">
-    ${canonical ? `<meta name="twitter:url" content="${canonical}">` : ''}
-    ${ogImage ? `<meta name="twitter:image" content="${ogImage}">` : ''}
+    <meta name="twitter:card" content="${e(twitterCard)}">
+    ${twitterSite ? `<meta name="twitter:site" content="${e(twitterSite)}">` : ''}
+    <meta name="twitter:title" content="${e(ogTitle)}">
+    <meta name="twitter:description" content="${e(ogDescription)}">
+    ${canonical ? `<meta name="twitter:url" content="${e(canonical)}">` : ''}
+    ${ogImage ? `<meta name="twitter:image" content="${e(ogImage)}">` : ''}
 </head>`;
 
         // Display the code with syntax highlighting
-        preview.innerHTML = syntaxHighlight(htmlEntities(metaTags));
+        generatedSource = metaTags;
+        preview.innerHTML = syntaxHighlight(metaTags);
 
         // Save form data to localStorage
         saveFormData();
@@ -853,7 +880,8 @@
 
     // Copy button
     copyBtn.addEventListener('click', () => {
-        const metaTagsText = preview.textContent || preview.innerText;
+        const metaTagsText = generatedSource;
+        if (!metaTagsText) return showNotification('Generate your meta tags first.');
 
         navigator.clipboard.writeText(metaTagsText)
             .then(() => showNotification('Copied to clipboard!'))
@@ -862,7 +890,8 @@
 
     // Download button
     downloadBtn.addEventListener('click', () => {
-        const metaTagsText = preview.textContent || preview.innerText;
+        const metaTagsText = generatedSource;
+        if (!metaTagsText) return showNotification('Generate your meta tags first.');
         const blob = new Blob([metaTagsText], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
 
@@ -880,6 +909,7 @@
     // Reset button
     resetBtn.addEventListener('click', () => {
         form.reset();
+        generatedSource = '';
         preview.innerHTML = '<!-- Your meta tags will appear here -->';
         localStorage.removeItem('seoMetaFormData');
 
