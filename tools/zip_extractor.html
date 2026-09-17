@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Free online zip extractor tool. Extract, preview and download files from ZIP, RAR, and 7Z archives directly in your browser. No uploads required - everything runs locally.">
-    <meta name="keywords" content="zip extractor, unzip online, archive extractor, zip viewer, file extractor, online unzip, zip tool, archive tool, RAR extractor, 7z extractor">
+    <meta name="description" content="Free online zip extractor tool. Extract, preview and download files from ZIP archives directly in your browser. No uploads required - everything runs locally.">
+    <meta name="keywords" content="zip extractor, unzip online, archive extractor, zip viewer, file extractor, online unzip, zip tool, archive tool, zip browser, zip preview">
     <meta name="author" content="Claude Sonnet 4 prompted by Tobias Müller">
     <meta name="robots" content="index, follow">
     <meta name="language" content="English">
     <link rel="canonical" href="https://www.gptgames.dev/tools/zip_extractor.html">
     <meta property="og:title" content="Zip Extractor Pro - Extract Archive Files Online">
-    <meta property="og:description" content="Free online zip extractor tool. Extract, preview and download files from ZIP, RAR, and 7Z archives directly in your browser. No uploads required - everything runs locally.">
+    <meta property="og:description" content="Free online zip extractor tool. Extract, preview and download files from ZIP archives directly in your browser. No uploads required - everything runs locally.">
     <meta property="og:image" content="https://www.gptgames.dev/screenshots/screenshot_206.webp">
     <meta property="og:url" content="https://www.gptgames.dev/tools/zip_extractor.html">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="GPT Games">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Zip Extractor Pro - Extract Archive Files Online">
-    <meta name="twitter:description" content="Free online zip extractor tool. Extract, preview and download files from ZIP, RAR, and 7Z archives directly in your browser. No uploads required - everything runs locally.">
+    <meta name="twitter:description" content="Free online zip extractor tool. Extract, preview and download files from ZIP archives directly in your browser. No uploads required - everything runs locally.">
     <meta name="twitter:image" content="https://www.gptgames.dev/screenshots/screenshot_206.webp">
     <meta name="theme-color" content="#3b82f6">
     <meta name="application-name" content="Zip Extractor Pro">
@@ -81,6 +81,8 @@
         .file-actions{display:flex;gap:8px}
         .bulk-actions{background:#f8fafc;padding:16px;border-radius:8px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;border:1px solid #e5e7eb}
         .bulk-actions.hidden{display:none}
+        .controls.hidden{display:none}
+        .empty-state.hidden{display:none}
         .bulk-text{color:#374151;font-weight:500}
         .status{padding:20px 32px;background:#f9fafb;border-top:1px solid #f3f4f6;text-align:center;color:#374151;font-size:0.9rem}
         .preview-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(2px)}
@@ -103,8 +105,8 @@
     <div class="upload-area" id="uploadArea">
         <div class="upload-icon">📁</div>
         <div class="upload-text">Drop your zip file here</div>
-        <div class="upload-subtext">or click to browse • Supports .zip, .rar, .7z files</div>
-        <input type="file" class="file-input" id="fileInput" accept=".zip,.rar,.7z">
+        <div class="upload-subtext">or click to browse • ZIP archives, opened locally in your browser</div>
+        <input type="file" class="file-input" id="fileInput" accept=".zip,application/zip">
     </div>
     <div class="progress hidden" id="progress">
         <div class="progress-bar" id="progressBar"></div>
@@ -116,7 +118,7 @@
         </div>
         <div class="selection-controls">
             <span id="selectionCount" class="file-stats">0 selected</span>
-            <button class="btn btn-small" onclick="downloadAllIndividually()" id="downloadAllBtn">📥 Download All Files</button>
+            <button class="btn btn-small" onclick="downloadAll()" id="downloadAllBtn">📥 Download All</button>
             <button class="btn btn-small secondary" onclick="reset()">🔄 New Archive</button>
         </div>
     </div>
@@ -158,15 +160,36 @@
     uploadArea.addEventListener('drop',e=>{e.preventDefault();uploadArea.classList.remove('dragover');const files=e.dataTransfer.files;if(files.length>0)handleFile(files[0])});
     fileInput.addEventListener('change',e=>{if(e.target.files.length>0)handleFile(e.target.files[0])});
     searchInput.addEventListener('input',e=>filterFiles(e.target.value));
-    async function handleFile(file){const validExtensions=['.zip','.rar','.7z'];const isValid=validExtensions.some(ext=>file.name.toLowerCase().endsWith(ext));if(!isValid){updateStatus('❌ Please select a valid archive file (.zip, .rar, .7z)');return}
+    async function sniffFormat(file){const head=new Uint8Array(await file.slice(0,8).arrayBuffer());const starts=sig=>sig.every((b,k)=>head[k]===b);
+        if(starts([0x50,0x4b]))return 'zip';
+        if(starts([0x52,0x61,0x72,0x21]))return 'rar';
+        if(starts([0x37,0x7a,0xbc,0xaf,0x27,0x1c]))return '7z';
+        if(starts([0x1f,0x8b]))return 'gzip';
+        return 'unknown'}
+    async function handleFile(file){const format=await sniffFormat(file);
+        if(format!=='zip'){const label={rar:'RAR',['7z']:'7z',gzip:'gzip/tar'}[format];
+            updateStatus(label?`❌ This is a ${label} archive. Only ZIP archives can be opened here.`:'❌ That does not look like a ZIP archive.');return}
+        archiveName=file.name.replace(/\.[^.]+$/,'')||'extracted';
         updateStatus('📂 Processing archive file...');showProgress();try{currentZip=new JSZip();const zipData=await currentZip.loadAsync(file);extractedFiles={};selectedFiles.clear();const fileNames=Object.keys(zipData.files).filter(name=>!zipData.files[name].dir);let processed=0;
             for(const fileName of fileNames){const zipEntry=zipData.files[fileName];const content=await zipEntry.async('blob');const originalSize=zipEntry._data?.uncompressedSize||content.size;extractedFiles[fileName]={blob:content,size:content.size,originalSize:originalSize};processed++;updateProgress((processed/fileNames.length)*100)}
-            filteredFiles=Object.keys(extractedFiles);displayFiles();updateStatus(`✅ Extracted ${Object.keys(extractedFiles).length} files successfully`);controls.classList.remove('hidden')}catch(error){updateStatus('❌ Error processing archive: '+error.message)}finally{hideProgress()}}
+            filteredFiles=Object.keys(extractedFiles);displayFiles();updateStatus(`✅ Extracted ${Object.keys(extractedFiles).length} files successfully`);controls.classList.remove('hidden')}catch(error){const msg=/[Ee]ncrypted/.test(error.message)?'❌ This archive is password-protected, which this tool cannot open.':'❌ Could not read this archive — it may be damaged or incomplete.';updateStatus(msg)}finally{hideProgress()}}
     function filterFiles(query){const searchTerm=query.toLowerCase().trim();if(!searchTerm){filteredFiles=Object.keys(extractedFiles)}else{filteredFiles=Object.keys(extractedFiles).filter(fileName=>fileName.toLowerCase().includes(searchTerm))}
         displayFiles()}
     function displayFiles(){fileItems.innerHTML='';if(filteredFiles.length===0){emptyState.classList.remove('hidden');fileItems.style.display='none';return}else{emptyState.classList.add('hidden');fileItems.style.display='block'}
-        filteredFiles.forEach(fileName=>{const fileData=extractedFiles[fileName];const fileItem=document.createElement('div');fileItem.className='file-item';if(selectedFiles.has(fileName))fileItem.classList.add('selected');const ext=fileName.split('.').pop().toLowerCase();const icon=getFileIcon(ext);const size=formatFileSize(fileData.size);
-            fileItem.innerHTML=`<input type="checkbox" class="file-checkbox" ${selectedFiles.has(fileName)?'checked':''} onchange="toggleFileSelection('${fileName}')"><div class="file-icon ${getIconClass(ext)}">${icon}</div><div class="file-info"><div class="file-name">${fileName}</div><div class="file-details"><span>Size: ${size}</span><span>Type: ${ext.toUpperCase()}</span></div></div><div class="file-actions"><button class="btn btn-small" onclick="downloadFile('${fileName}')">📥</button>${canPreview(ext)?`<button class="btn btn-small secondary" onclick="previewFile('${fileName}')">👁️</button>`:''}</div>`;fileItems.appendChild(fileItem)});
+        filteredFiles.forEach(fileName=>{const fileData=extractedFiles[fileName];const ext=fileName.split('.').pop().toLowerCase();
+            const fileItem=document.createElement('div');fileItem.className='file-item';if(selectedFiles.has(fileName))fileItem.classList.add('selected');
+            const cb=document.createElement('input');cb.type='checkbox';cb.className='file-checkbox';cb.checked=selectedFiles.has(fileName);cb.addEventListener('change',()=>toggleFileSelection(fileName));
+            const icon=document.createElement('div');icon.className='file-icon '+getIconClass(ext);icon.textContent=getFileIcon(ext);
+            const info=document.createElement('div');info.className='file-info';
+            const nameEl=document.createElement('div');nameEl.className='file-name';nameEl.textContent=fileName;nameEl.title=fileName;
+            const details=document.createElement('div');details.className='file-details';
+            const sizeEl=document.createElement('span');sizeEl.textContent='Size: '+formatFileSize(fileData.size);
+            const typeEl=document.createElement('span');typeEl.textContent='Type: '+(ext===fileName.toLowerCase()?'FILE':ext.toUpperCase());
+            details.append(sizeEl,typeEl);info.append(nameEl,details);
+            const actions=document.createElement('div');actions.className='file-actions';
+            const dl=document.createElement('button');dl.className='btn btn-small';dl.textContent='📥';dl.title='Download';dl.addEventListener('click',()=>downloadFile(fileName));actions.appendChild(dl);
+            if(canPreview(ext)){const pv=document.createElement('button');pv.className='btn btn-small secondary';pv.textContent='👁️';pv.title='Preview';pv.addEventListener('click',()=>previewFile(fileName));actions.appendChild(pv)}
+            fileItem.append(cb,icon,info,actions);fileItems.appendChild(fileItem)});
         fileList.classList.remove('hidden');updateFileCount();updateSelectionControls()}
     function getFileIcon(ext){const icons={zip:'🗜️',rar:'📦',pdf:'📄',doc:'📝',docx:'📝',txt:'📄',md:'📝',jpg:'🖼️',jpeg:'🖼️',png:'🖼️',gif:'🖼️',bmp:'🖼️',svg:'🎨',mp4:'🎥',avi:'🎥',mp3:'🎵',wav:'🎵',html:'🌐',css:'🎨',js:'⚡',json:'⚡',xml:'📋',csv:'📊'};return icons[ext]||'📄'}
     function getIconClass(ext){if(['jpg','jpeg','png','gif','bmp','svg','webp'].includes(ext))return 'img';if(['txt','md','json','csv','log','yaml','yml'].includes(ext))return 'txt';if(['doc','docx','rtf','odt'].includes(ext))return 'doc';if(['pdf'].includes(ext))return 'pdf';if(['zip','rar','7z','tar','gz'].includes(ext))return 'zip';if(['html','css','js','json','xml','php','py','java','cpp','c','cs'].includes(ext))return 'code';return 'other'}
@@ -180,16 +203,25 @@
     function updateSelectionControls(){const count=selectedFiles.size;selectionCount.textContent=`${count} selected`;document.getElementById('bulkText').textContent=`${count} files selected`;if(count>0){bulkActions.classList.remove('hidden')}else{bulkActions.classList.add('hidden')}
         document.getElementById('previewSelectedBtn').disabled=count===0||count>5;document.getElementById('selectAllCheckbox').checked=count>0&&count===filteredFiles.length}
     function updateFileCount(){document.getElementById('fileCount').textContent=`(${filteredFiles.length} files)`}
-    function downloadFile(fileName){const blob=extractedFiles[fileName].blob;const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=fileName;a.click();URL.revokeObjectURL(url)}
-    async function downloadSelected(){if(selectedFiles.size===0)return;if(selectedFiles.size===1){const fileName=Array.from(selectedFiles)[0];downloadFile(fileName);return}
-        updateStatus(`📥 Downloading ${selectedFiles.size} files...`);selectedFiles.forEach(fileName=>downloadFile(fileName));updateStatus(`✅ Started download of ${selectedFiles.size} files`)}
-    async function downloadAllIndividually(){if(Object.keys(extractedFiles).length===0)return;updateStatus(`📥 Downloading ${Object.keys(extractedFiles).length} files...`);Object.keys(extractedFiles).forEach(fileName=>downloadFile(fileName));updateStatus(`✅ Started download of ${Object.keys(extractedFiles).length} files`)}
+    let archiveName='extracted';
+    function triggerDownload(blob,name){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+    function downloadFile(fileName){triggerDownload(extractedFiles[fileName].blob,fileName.split('/').pop())}
+    async function downloadAsZip(fileNames,zipName){if(fileNames.length===0)return;
+        if(fileNames.length===1){downloadFile(fileNames[0]);updateStatus('✅ Downloaded '+fileNames[0].split('/').pop());return}
+        updateStatus(`🗜️ Packing ${fileNames.length} files...`);showProgress();
+        try{const out=new JSZip();fileNames.forEach(name=>out.file(name,extractedFiles[name].blob));
+            const blob=await out.generateAsync({type:'blob',compression:'DEFLATE'},meta=>updateProgress(meta.percent));
+            triggerDownload(blob,zipName);updateStatus(`✅ Downloaded ${fileNames.length} files as ${zipName}`)}
+        catch(error){updateStatus('❌ Could not build the download: '+error.message)}
+        finally{hideProgress()}}
+    function downloadSelected(){downloadAsZip(Array.from(selectedFiles),archiveName+'-selection.zip')}
+    function downloadAll(){downloadAsZip(Object.keys(extractedFiles),archiveName+'-extracted.zip')}
     async function previewFile(fileName){const fileData=extractedFiles[fileName];const ext=fileName.split('.').pop().toLowerCase();const previewBody=document.getElementById('previewBody');const previewTitle=document.getElementById('previewTitle');previewTitle.textContent=fileName;
-        if(['jpg','jpeg','png','gif','bmp','svg','webp'].includes(ext)){const url=URL.createObjectURL(fileData.blob);previewBody.innerHTML=`<img src="${url}" style="max-width:100%;height:auto;border-radius:8px;display:block;margin:0 auto">`}else if(['txt','json','csv','md','html','css','js','xml','yaml','yml','log'].includes(ext)){const text=await fileData.blob.text();const displayText=text.length>10000?text.substring(0,10000)+'...\n\n[File truncated - showing first 10,000 characters]':text;previewBody.innerHTML=`<pre style="background:#f8fafc;padding:20px;border-radius:8px;overflow:auto;white-space:pre-wrap;max-height:500px;font-family:Monaco,Consolas,monospace;font-size:0.9rem;line-height:1.4">${displayText.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>`}
+        if(['jpg','jpeg','png','gif','bmp','svg','webp'].includes(ext)){const url=URL.createObjectURL(fileData.blob);previewBody.innerHTML=`<img src="${url}" style="max-width:100%;height:auto;border-radius:8px;display:block;margin:0 auto">`}else if(['txt','json','csv','md','html','css','js','xml','yaml','yml','log'].includes(ext)){const text=await fileData.blob.text();const displayText=text.length>10000?text.substring(0,10000)+'...\n\n[File truncated - showing first 10,000 characters]':text;previewBody.innerHTML='';const pre=document.createElement('pre');pre.setAttribute('style','background:#f8fafc;padding:20px;border-radius:8px;overflow:auto;white-space:pre-wrap;max-height:500px;font-family:Monaco,Consolas,monospace;font-size:0.9rem;line-height:1.4');pre.textContent=displayText;previewBody.appendChild(pre)}
         document.getElementById('previewModal').style.display='flex'}
     function previewSelected(){const selected=Array.from(selectedFiles);if(selected.length>0)previewFile(selected[0])}
     function closePreview(){document.getElementById('previewModal').style.display='none'}
-    function reset(){currentZip=null;extractedFiles={};selectedFiles.clear();filteredFiles=[];fileList.classList.add('hidden');controls.classList.add('hidden');bulkActions.classList.add('hidden');fileInput.value='';searchInput.value='';updateStatus('Ready to extract archive files • Drag & drop supported')}
+    function reset(){currentZip=null;archiveName='extracted';extractedFiles={};selectedFiles.clear();filteredFiles=[];fileList.classList.add('hidden');controls.classList.add('hidden');bulkActions.classList.add('hidden');fileInput.value='';searchInput.value='';updateStatus('Ready to extract archive files • Drag & drop supported')}
     function updateStatus(message){status.textContent=message}
     function showProgress(){progress.classList.remove('hidden')}
     function hideProgress(){progress.classList.add('hidden');progressBar.style.width='0%'}
