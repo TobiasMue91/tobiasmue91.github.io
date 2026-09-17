@@ -44,7 +44,8 @@
             --warning-bg: #fef3c7;
             --radius: 8px;
             --radius-sm: 6px;
-            --transition: all .2s ease
+            --transition: all .2s ease;
+            --gutter: 3.25rem
         }
 
         * {
@@ -231,12 +232,9 @@
 
         .editors {
             display: grid;
+            grid-template-columns:1fr 1fr;
             gap: 1.5rem;
             margin-bottom: 1.5rem
-        }
-
-        .editors.split {
-            grid-template-columns:1fr 1fr
         }
 
         .editor-panel {
@@ -289,44 +287,96 @@
             background: var(--bg-secondary);
             border-radius: var(--radius);
             box-shadow: var(--shadow);
-            padding: 1.5rem;
             min-height: 200px;
             display: none;
+            overflow-x: auto;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
             font-size: .875rem;
-            line-height: 1.8;
-            white-space: pre-wrap;
-            word-wrap: break-word
+            line-height: 1.6
         }
 
         #diff-output.visible {
             display: block
         }
 
-        #diff-output span {
-            padding: 2px 0;
-            display: inline
+        /* One row per line. Inline view: a single text column.
+           Split view: original on the left, modified on the right. */
+        .diff-row {
+            display: grid;
+            grid-template-columns:var(--gutter) 1fr;
+            min-width: min-content
         }
 
+        #diff-output.split .diff-row {
+            grid-template-columns:var(--gutter) 1fr var(--gutter) 1fr
+        }
+
+        #diff-output.split .diff-side + .diff-num {
+            border-left: 1px solid var(--border)
+        }
+
+        .diff-num {
+            padding: 0 .75rem;
+            text-align: right;
+            color: var(--text-tertiary);
+            background: var(--bg-tertiary);
+            border-right: 1px solid var(--border);
+            user-select: none;
+            font-variant-numeric: tabular-nums
+        }
+
+        .diff-side {
+            padding: 0 .75rem 0 .5rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--text-primary)
+        }
+
+        .diff-side::before {
+            content: var(--sign, " ");
+            color: var(--text-tertiary);
+            user-select: none
+        }
+
+        .diff-side.add {
+            --sign: "+";
+            background: var(--success-light)
+        }
+
+        .diff-side.del {
+            --sign: "-";
+            background: var(--error-light)
+        }
+
+        .diff-side.add::before {
+            color: #166534
+        }
+
+        .diff-side.del::before {
+            color: #991b1b
+        }
+
+        .diff-num.add {
+            background: var(--success-light);
+            color: #166534
+        }
+
+        .diff-num.del {
+            background: var(--error-light);
+            color: #991b1b
+        }
+
+        /* Character-level highlight inside a changed line pair. */
         .diff-insert {
             background: var(--success-bg);
             color: #166534;
-            padding: 2px 4px;
-            border-radius: 3px;
-            margin: 0 1px
+            border-radius: 3px
         }
 
         .diff-delete {
             background: var(--error-bg);
             color: #991b1b;
-            padding: 2px 4px;
-            border-radius: 3px;
-            text-decoration: line-through;
-            margin: 0 1px
-        }
-
-        .diff-equal {
-            color: var(--text-primary)
+            border-radius: 3px
         }
 
         .empty-state {
@@ -353,8 +403,23 @@
                 display: none
             }
 
-            .editors.split {
+            .editors {
                 grid-template-columns:1fr
+            }
+
+            /* Stacked editors pushed the result off-screen; keep it reachable. */
+            textarea {
+                min-height: 150px
+            }
+
+            /* No room for two code columns on a phone: drop each row's empty or
+               repeated half so the split view reads as an inline diff. */
+            #diff-output.split .diff-row {
+                grid-template-columns:var(--gutter) 1fr
+            }
+
+            #diff-output.split .blank, #diff-output.split .dup {
+                display: none
             }
 
             .stat-item {
@@ -432,19 +497,19 @@
     <div class="stats" id="stats">
         <div class="stat-item">
             <div class="stat-value additions" id="stat-add">0</div>
-            <div class="stat-label">Additions</div>
+            <div class="stat-label">Lines added</div>
         </div>
         <div class="stat-item">
             <div class="stat-value deletions" id="stat-del">0</div>
-            <div class="stat-label">Deletions</div>
+            <div class="stat-label">Lines removed</div>
         </div>
         <div class="stat-item">
             <div class="stat-value unchanged" id="stat-equal">0</div>
-            <div class="stat-label">Unchanged</div>
+            <div class="stat-label">Lines unchanged</div>
         </div>
         <div class="stat-item">
             <div class="stat-value" id="stat-total">0</div>
-            <div class="stat-label">Total Changes</div>
+            <div class="stat-label">Lines changed</div>
         </div>
     </div>
     <div class="editors" id="editors">
@@ -470,8 +535,8 @@
     const dmp = new diff_match_patch(), orig = document.getElementById('original'),
         mod = document.getElementById('modified'), output = document.getElementById('diff-output'),
         ignoreWs = document.getElementById('ignore-ws'), showStats = document.getElementById('show-stats'),
-        statsPanel = document.getElementById('stats'), editors = document.getElementById('editors');
-    let currentView = 'inline';
+        statsPanel = document.getElementById('stats');
+    let currentView = 'inline', lastRows = [];
 
     function updateCounts() {
         const o = orig.value, m = mod.value;
@@ -479,41 +544,174 @@
         document.getElementById('count-mod').textContent = `${m.length} chars, ${m.split('\n').length} lines`
     }
 
+    /* The character diff underneath was always good; what was missing was the
+       line structure to hang it on. Map each distinct line to one character so
+       the diff runs over lines instead of characters. Ids wrap past 65535
+       unique lines; a collision can only cost a little matching quality, never
+       correctness, because every line is displayed and numbered from the source
+       arrays by index. */
+    function encodeLines(lines, ids, key) {
+        let out = '';
+        for (const line of lines) {
+            const k = key(line);
+            let id = ids.get(k);
+            if (id === undefined) {
+                id = ids.size % 65536;
+                ids.set(k, id)
+            }
+            out += String.fromCharCode(id)
+        }
+        return out
+    }
+
+    function buildRows() {
+        const aLines = orig.value.split('\n'), bLines = mod.value.split('\n');
+        // Whitespace is normalised for *comparison* only -- the original text is
+        // what gets displayed, so the option can never eat your indentation.
+        const key = l => ignoreWs.checked ? l.replace(/\s+/g, ' ').trim() : l;
+        const ids = new Map();
+        const diffs = dmp.diff_main(encodeLines(aLines, ids, key), encodeLines(bLines, ids, key), false);
+
+        const rows = [];
+        let ai = 0, bi = 0;
+        diffs.forEach(([op, chars]) => {
+            for (let k = 0; k < chars.length; k++) {
+                // Under "ignore whitespace" a shared line can still differ in raw
+                // text, so each side keeps its own copy to display verbatim.
+                if (op === 0) rows.push({type: 'ctx', a: ai, b: bi, text: aLines[ai++], textB: bLines[bi++]});
+                else if (op === -1) rows.push({type: 'del', a: ai, text: aLines[ai++]});
+                else rows.push({type: 'add', b: bi, text: bLines[bi++]})
+            }
+        });
+        pairRuns(rows);
+        return rows
+    }
+
+    /* Within a run of removals followed by additions, line i on the left is
+       almost always line i on the right. Diff those two against each other so
+       the changed characters stay highlighted the way they used to be. */
+    function pairRuns(rows) {
+        for (let i = 0; i < rows.length;) {
+            if (rows[i].type !== 'del') { i++; continue }
+            let d = i;
+            while (rows[i] && rows[i].type === 'del') i++;
+            const a = i;
+            while (rows[i] && rows[i].type === 'add') i++;
+            for (let k = 0; k < Math.min(a - d, i - a); k++) {
+                const del = rows[d + k], add = rows[a + k];
+                const sub = intraline(del.text, add.text);
+                if (sub) {
+                    del.sub = sub;
+                    add.sub = sub
+                }
+            }
+        }
+    }
+
+    function intraline(before, after) {
+        const longest = Math.max(before.length, after.length);
+        if (!longest) return null;
+        const sub = dmp.diff_main(before, after);
+        dmp.diff_cleanupSemantic(sub);
+        // Two lines that share almost nothing read better as whole-line changes
+        // than as a scatter of matching brackets.
+        let shared = 0;
+        sub.forEach(([op, t]) => {
+            if (op === 0) shared += t.length
+        });
+        return shared / longest < .3 ? null : sub;
+    }
+
+    function fillText(cell, row, side) {
+        if (!row.sub) {
+            cell.textContent = side === 'add' && row.textB !== undefined ? row.textB : row.text;
+            return
+        }
+        const skip = side === 'del' ? 1 : -1;
+        row.sub.forEach(([op, t]) => {
+            if (op === skip) return;
+            const span = document.createElement('span');
+            span.textContent = t;
+            if (op === -1) span.className = 'diff-delete';
+            else if (op === 1) span.className = 'diff-insert';
+            cell.appendChild(span)
+        })
+    }
+
+    function cells(parent, row, side, extra) {
+        const kind = (row && row.type !== 'ctx' ? ' ' + row.type : '') + (row ? '' : ' blank') + (extra || '');
+        const num = document.createElement('span');
+        num.className = 'diff-num' + kind;
+        num.textContent = row ? (side === 'del' ? row.a : row.b) + 1 : '';
+        const text = document.createElement('span');
+        text.className = 'diff-side' + kind;
+        if (row) fillText(text, row, side);
+        parent.appendChild(num);
+        parent.appendChild(text)
+    }
+
+    function renderInline(rows, frag) {
+        rows.forEach(row => {
+            const el = document.createElement('div');
+            el.className = 'diff-row ' + row.type;
+            cells(el, row, row.type === 'add' ? 'add' : 'del');
+            frag.appendChild(el)
+        })
+    }
+
+    /* Side by side: a run of removals and the run of additions that replaces it
+       are zipped by index, so each column keeps its own file's line order and a
+       shorter side just runs out. */
+    function renderSplit(rows, frag) {
+        for (let i = 0; i < rows.length;) {
+            if (rows[i].type === 'ctx') {
+                const el = document.createElement('div');
+                el.className = 'diff-row ctx';
+                cells(el, rows[i], 'del');
+                cells(el, rows[i], 'add', ' dup');
+                frag.appendChild(el);
+                i++;
+                continue
+            }
+            const d = i;
+            while (rows[i] && rows[i].type === 'del') i++;
+            const a = i;
+            while (rows[i] && rows[i].type === 'add') i++;
+            const nd = a - d, na = i - a;
+            for (let k = 0; k < Math.max(nd, na); k++) {
+                const del = k < nd ? rows[d + k] : null, add = k < na ? rows[a + k] : null;
+                const el = document.createElement('div');
+                el.className = 'diff-row ' + (del && add ? 'mod' : del ? 'del' : 'add');
+                cells(el, del, 'del');
+                cells(el, add, 'add');
+                frag.appendChild(el)
+            }
+        }
+    }
+
     function compare() {
         const o = orig.value, m = mod.value;
         updateCounts();
         if (!o && !m) {
             output.innerHTML = '<div class="empty-state">Enter text in both panels to see the differences...</div>';
+            output.classList.add('empty-state');
             output.classList.remove('visible');
             statsPanel.classList.remove('visible');
             return
         }
-        let t1 = o, t2 = m;
-        if (ignoreWs.checked) {
-            t1 = o.replace(/\s+/g, '');
-            t2 = m.replace(/\s+/g, '')
-        }
-        const diffs = dmp.diff_main(t1, t2);
-        dmp.diff_cleanupSemantic(diffs);
+        const rows = lastRows = buildRows();
         output.innerHTML = '';
+        // The placeholder styling centres its text; a diff has to stay left-aligned.
+        output.classList.remove('empty-state');
         output.classList.add('visible');
-        let adds = 0, dels = 0, equals = 0;
-        diffs.forEach(([op, text]) => {
-            const span = document.createElement('span');
-            span.textContent = ignoreWs.checked ? text.replace(/\s+/g, '') : text;
-            if (op === 0) {
-                span.className = 'diff-equal';
-                equals += text.length
-            } else if (op === -1) {
-                span.className = 'diff-delete';
-                dels += text.length
-            } else {
-                span.className = 'diff-insert';
-                adds += text.length
-            }
-            output.appendChild(span)
-        });
+        output.classList.toggle('split', currentView === 'split');
+        const frag = document.createDocumentFragment();
+        (currentView === 'split' ? renderSplit : renderInline)(rows, frag);
+        output.appendChild(frag);
+
         if (showStats.checked) {
+            let adds = 0, dels = 0, equals = 0;
+            rows.forEach(r => r.type === 'add' ? adds++ : r.type === 'del' ? dels++ : equals++);
             document.getElementById('stat-add').textContent = adds;
             document.getElementById('stat-del').textContent = dels;
             document.getElementById('stat-equal').textContent = equals;
@@ -529,8 +727,10 @@
             orig.value = '';
             mod.value = '';
             output.innerHTML = '<div class="empty-state">Enter text in both panels to see the differences...</div>';
+            output.classList.add('empty-state');
             output.classList.remove('visible');
             statsPanel.classList.remove('visible');
+            lastRows = [];
             updateCounts()
         }
     }
@@ -541,7 +741,7 @@
     }
 
     function copyDiff() {
-        const text = output.textContent;
+        const text = lastRows.map(r => (r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' ') + r.text).join('\n');
         navigator.clipboard.writeText(text).then(() => {
             alert('Diff copied to clipboard!')
         }).catch(() => {
@@ -554,7 +754,6 @@
             document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             currentView = btn.dataset.view;
-            editors.classList.toggle('split', currentView === 'split');
             compare()
         })
     });
