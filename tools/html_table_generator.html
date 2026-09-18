@@ -639,6 +639,7 @@
                                     <option value="empty">Empty</option>
                                     <option value="custom">Custom</option>
                                     <option value="sample-data">Sample Data</option>
+                                    <option value="paste">Paste your data</option>
                                 </select>
                             </div>
 
@@ -659,6 +660,19 @@
                                     <option value="countries">Countries</option>
                                     <option value="companies">Companies</option>
                                 </select>
+                            </div>
+
+                            <div id="paste-data-container" class="hidden space-y-2">
+                                <label class="block text-gray-700 dark:text-gray-300 text-sm font-medium"
+                                       for="paste-data">Your Data <span class="text-xs text-gray-500">(paste from a spreadsheet, or CSV / Markdown)</span></label>
+                                <textarea class="shadow-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md w-full py-2 px-3 text-gray-700 dark:text-gray-200 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          id="paste-data" rows="8" spellcheck="false"
+                                          placeholder="Name, Role, Email&#10;Ada, Engineer, ada@example.com&#10;Grace, Admiral, grace@example.com"></textarea>
+                                <label class="flex items-center text-gray-700 dark:text-gray-300 text-sm">
+                                    <input class="mr-2 h-4 w-4" id="paste-header-row" type="checkbox" checked>
+                                    First row is the header
+                                </label>
+                                <p id="paste-status" class="text-xs text-gray-500 dark:text-gray-400">Rows and columns follow your data.</p>
                             </div>
                         </div>
                     </div>
@@ -753,6 +767,9 @@
 </footer>
 
 <script>
+    const MAX_ROWS = 50;
+    const MAX_COLS = 20;
+
     // Templates
     const templates = {
         simple: {
@@ -1166,6 +1183,20 @@
         if (sampleDataContainer) {
             sampleDataContainer.classList.toggle('hidden', contentType !== 'sample-data');
         }
+
+        const pasteDataContainer = getElement('paste-data-container');
+        if (pasteDataContainer) {
+            pasteDataContainer.classList.toggle('hidden', contentType !== 'paste');
+        }
+
+        // Row and column counts come from the pasted data, so stop offering them as inputs.
+        ['rows', 'columns'].forEach(id => {
+            const input = getElement(id);
+            if (input) {
+                input.disabled = contentType === 'paste';
+                input.classList.toggle('opacity-50', contentType === 'paste');
+            }
+        });
     }
 
     // Setup toggle events for conditional displays
@@ -1199,7 +1230,7 @@
 
     // Setup form change events
     function setupFormChangeEvents() {
-        const formInputs = getElements('#table-form input, #table-form select');
+        const formInputs = getElements('#table-form input, #table-form select, #table-form textarea');
         formInputs.forEach(input => {
             input.addEventListener('input', debounce(updatePreviewIfEnabled, 300));
         });
@@ -1386,6 +1417,17 @@
         // Get all form values
         const formValues = getFormValues();
 
+        // Pasted data decides the shape of the table, rather than the row and column inputs.
+        const pasteHeaderRow = getElement('paste-header-row')?.checked !== false;
+        const pastedTable = formValues.contentType === 'paste' ? getPastedTable(pasteHeaderRow) : null;
+
+        if (pastedTable) {
+            formValues.rows = pastedTable.rows.length;
+            formValues.cols = pastedTable.cols;
+            // With no header row in the data there are no headings to put in a thead.
+            formValues.header = formValues.header && pasteHeaderRow;
+        }
+
         // Start building the HTML
         let html = '<table';
 
@@ -1417,7 +1459,9 @@
             html += `\n    <tr style="${headerStyle}">`;
 
             // Get header content
-            if (formValues.contentType === 'custom' && getElement('custom-header').value) {
+            if (pastedTable) {
+                headerContent = pastedTable.headers;
+            } else if (formValues.contentType === 'custom' && getElement('custom-header').value) {
                 headerContent = getElement('custom-header').value.split(',').map(item => item.trim());
             } else if (formValues.contentType === 'sample-data') {
                 const sampleDataType = getElement('sample-data-type').value;
@@ -1442,7 +1486,7 @@
             // Generate header cells
             for (let i = 0; i < formValues.cols; i++) {
                 const scopeAttr = formValues.scopeHeaders ? ' scope="col"' : '';
-                html += `\n      <th${scopeAttr} style="border: ${formValues.borderWidth}px ${formValues.borderStyle} ${formValues.borderColor}; padding: ${formValues.padding}px; text-align: ${formValues.textAlign}; color: ${formValues.textColor}; width: ${formValues.cellWidth}px; height: ${formValues.cellHeight}px;">${escapeHtml(headerContent[i])}</th>`;
+                html += `\n      <th${scopeAttr} style="border: ${formValues.borderWidth}px ${formValues.borderStyle} ${formValues.borderColor}; padding: ${formValues.padding}px; text-align: ${formValues.textAlign}; color: ${formValues.textColor}; width: ${formValues.cellWidth}px; height: ${formValues.cellHeight}px;">${escapeCell(headerContent[i])}</th>`;
             }
 
             html += '\n    </tr>';
@@ -1470,7 +1514,9 @@
             for (let j = 0; j < formValues.cols; j++) {
                 let cellContent = '';
 
-                if (formValues.contentType === 'empty') {
+                if (pastedTable) {
+                    cellContent = pastedTable.rows[i]?.[j] ?? '';
+                } else if (formValues.contentType === 'empty') {
                     cellContent = '';
                 } else if (formValues.contentType === 'sample-data' && bodyContent[i] && bodyContent[i][j] !== undefined) {
                     cellContent = bodyContent[i][j];
@@ -1480,7 +1526,7 @@
 
                 const dataLabel = formValues.responsive ? ` data-label="${escapeHtml(headerContent ? headerContent[j] : `Header ${j + 1}`)}"` : '';
 
-                html += `\n      <td${dataLabel} style="border: ${formValues.borderWidth}px ${formValues.borderStyle} ${formValues.borderColor}; padding: ${formValues.padding}px; text-align: ${formValues.textAlign}; color: ${formValues.textColor}; width: ${formValues.cellWidth}px; height: ${formValues.cellHeight}px;">${escapeHtml(cellContent)}</td>`;
+                html += `\n      <td${dataLabel} style="border: ${formValues.borderWidth}px ${formValues.borderStyle} ${formValues.borderColor}; padding: ${formValues.padding}px; text-align: ${formValues.textAlign}; color: ${formValues.textColor}; width: ${formValues.cellWidth}px; height: ${formValues.cellHeight}px;">${escapeCell(cellContent)}</td>`;
             }
 
             html += '\n    </tr>';
@@ -1526,6 +1572,185 @@
         return html;
     }
 
+    // Turn a pasted block of data (spreadsheet TSV, CSV, or a markdown table) into a grid.
+    // Returns {grid, format} or null when there is nothing usable in the text.
+    function parseTabularData(text) {
+        if (typeof text !== 'string') return null;
+        const normalized = text.replace(/\r\n?/g, '\n').replace(/^﻿/, '');
+        if (!normalized.trim()) return null;
+
+        const grid = looksLikeMarkdownTable(normalized)
+            ? parseMarkdownTable(normalized)
+            : parseDelimited(normalized, detectDelimiter(normalized));
+
+        return grid && grid.length ? {grid: padGrid(grid), format: looksLikeMarkdownTable(normalized) ? 'markdown' : 'delimited'} : null;
+    }
+
+    const MD_SEPARATOR = /^\s*\|?(\s*:?-{1,}:?\s*\|)+\s*:?-{1,}:?\s*\|?\s*$/;
+
+    function looksLikeMarkdownTable(text) {
+        const lines = text.split('\n').filter(line => line.trim());
+        return lines.length >= 2 && lines[0].includes('|') && MD_SEPARATOR.test(lines[1]);
+    }
+
+    function parseMarkdownTable(text) {
+        return text.split('\n')
+            .filter(line => line.trim() && !MD_SEPARATOR.test(line))
+            .map(line => splitMarkdownRow(line));
+    }
+
+    // Split on unescaped pipes, dropping the optional leading and trailing pipe.
+    function splitMarkdownRow(line) {
+        const cells = [];
+        let cell = '';
+        for (let i = 0; i < line.length; i++) {
+            if (line[i] === '\\' && line[i + 1] === '|') {
+                cell += '|';
+                i++;
+            } else if (line[i] === '|') {
+                cells.push(cell);
+                cell = '';
+            } else {
+                cell += line[i];
+            }
+        }
+        cells.push(cell);
+        if (cells.length > 1 && !cells[0].trim()) cells.shift();
+        if (cells.length > 1 && !cells[cells.length - 1].trim()) cells.pop();
+        return cells.map(value => value.trim());
+    }
+
+    // Pick the delimiter that divides the most lines into the same number of fields.
+    function detectDelimiter(text) {
+        const lines = text.split('\n').filter(line => line.trim());
+        let best = null;
+        let bestScore = 0;
+        for (const candidate of ['\t', ',', ';']) {
+            const counts = lines.map(line => countOutsideQuotes(line, candidate));
+            const nonZero = counts.filter(count => count > 0);
+            if (!nonZero.length) continue;
+            const mode = modeOf(nonZero);
+            const score = counts.filter(count => count === mode).length - counts.filter(count => count === 0).length;
+            if (score > bestScore) {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    // Skipping quoted runs keeps "a, b" from looking like two fields, but a line holding an
+    // odd number of quotes is mid-field or carries a stray inch mark, so count it plainly.
+    function countOutsideQuotes(line, delimiter) {
+        const balanced = (line.split('"').length - 1) % 2 === 0;
+        let count = 0;
+        let quoted = false;
+        for (let i = 0; i < line.length; i++) {
+            if (balanced && line[i] === '"') quoted = !quoted;
+            else if (!quoted && line[i] === delimiter) count++;
+        }
+        return count;
+    }
+
+    function modeOf(values) {
+        const tally = new Map();
+        let best = values[0];
+        for (const value of values) {
+            const next = (tally.get(value) || 0) + 1;
+            tally.set(value, next);
+            if (next > (tally.get(best) || 0)) best = value;
+        }
+        return best;
+    }
+
+    // RFC 4180 style scan, so quoted fields may hold the delimiter, newlines and "" escapes.
+    function parseDelimited(text, delimiter) {
+        if (!delimiter) return text.split('\n').filter(line => line.trim()).map(line => [line.trim()]);
+
+        const rows = [];
+        let row = [];
+        let cell = '';
+        let quoted = false;
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (quoted) {
+                if (char === '"' && text[i + 1] === '"') {
+                    cell += '"';
+                    i++;
+                } else if (char === '"') {
+                    quoted = false;
+                } else {
+                    cell += char;
+                }
+            } else if (char === '"' && !cell.trim()) {
+                quoted = true;
+                cell = '';
+            } else if (char === delimiter) {
+                row.push(cell.trim());
+                cell = '';
+            } else if (char === '\n') {
+                row.push(cell.trim());
+                rows.push(row);
+                row = [];
+                cell = '';
+            } else {
+                cell += char;
+            }
+        }
+        row.push(cell.trim());
+        rows.push(row);
+
+        return rows.filter(cells => cells.some(value => value !== ''));
+    }
+
+    function padGrid(grid) {
+        const width = grid.reduce((max, row) => Math.max(max, row.length), 0);
+        return grid.map(row => row.concat(new Array(width - row.length).fill('')));
+    }
+
+    // Read the paste panel into a header row plus body rows, and report what was understood.
+    function getPastedTable(useHeaderRow) {
+        const raw = getElement('paste-data')?.value || '';
+        const parsed = parseTabularData(raw);
+        const status = getElement('paste-status');
+
+        if (!parsed) {
+            if (status) {
+                status.textContent = raw.trim()
+                    ? 'Could not find any rows in that. Separate columns with tabs, commas or semicolons.'
+                    : 'Rows and columns follow your data.';
+            }
+            return null;
+        }
+
+        let grid = parsed.grid;
+        let notes = [];
+
+        if (grid[0].length > MAX_COLS) {
+            grid = grid.map(row => row.slice(0, MAX_COLS));
+            notes.push(`first ${MAX_COLS} columns`);
+        }
+
+        const headers = useHeaderRow ? grid[0] : grid[0].map((cell, i) => `Header ${i + 1}`);
+        let rows = useHeaderRow ? grid.slice(1) : grid;
+
+        if (rows.length > MAX_ROWS) {
+            rows = rows.slice(0, MAX_ROWS);
+            notes.push(`first ${MAX_ROWS} rows`);
+        }
+
+        // Keep the (disabled) row and column inputs honest about what is being built.
+        getElement('rows').value = rows.length;
+        getElement('columns').value = headers.length;
+
+        if (status) {
+            const shape = `${rows.length} row${rows.length === 1 ? '' : 's'} x ${headers.length} column${headers.length === 1 ? '' : 's'}`;
+            status.textContent = notes.length ? `${shape} - showing ${notes.join(' and ')}.` : `Read ${shape}.`;
+        }
+
+        return {headers, rows, cols: headers.length};
+    }
+
     // Get all form values
     function getFormValues() {
         return {
@@ -1569,14 +1794,14 @@
         const rowsEl = getElement('rows');
         const colsEl = getElement('columns');
 
-        if (safeParseInt(rowsEl.value, 0) > 50) {
-            rowsEl.value = 50;
-            showNotification('Maximum 50 rows allowed', 'warning');
+        if (safeParseInt(rowsEl.value, 0) > MAX_ROWS) {
+            rowsEl.value = MAX_ROWS;
+            showNotification(`Maximum ${MAX_ROWS} rows allowed`, 'warning');
         }
 
-        if (safeParseInt(colsEl.value, 0) > 20) {
-            colsEl.value = 20;
-            showNotification('Maximum 20 columns allowed', 'warning');
+        if (safeParseInt(colsEl.value, 0) > MAX_COLS) {
+            colsEl.value = MAX_COLS;
+            showNotification(`Maximum ${MAX_COLS} columns allowed`, 'warning');
         }
     }
 
@@ -1802,6 +2027,11 @@
     function safeParseInt(value, fallback) {
         const parsed = parseInt(value);
         return isNaN(parsed) ? fallback : parsed;
+    }
+
+    // A pasted cell may legitimately contain a line break; HTML collapses one, so keep it as <br>.
+    function escapeCell(text) {
+        return escapeHtml(text).replace(/\n/g, '<br>');
     }
 
     // Utility function to escape HTML special characters
