@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Free online subtitle timing shifter. Adjust SRT and VTT subtitle timing with millisecond precision. Quick shift presets, undo/redo, range selection, and format conversion.">
+    <meta name="description" content="Free online subtitle timing shifter. Adjust SRT and VTT subtitle timing with millisecond precision. Sync by reference point to fix constant offsets and framerate drift, plus quick shift presets, undo/redo, range selection, and format conversion.">
     <meta name="keywords" content="subtitle timing, SRT editor, VTT editor, subtitle sync, subtitle shift, subtitle delay, fix subtitle timing, subtitle tool">
     <meta name="author" content="Claude Opus 4.6 prompted by Tobias Müller">
     <meta name="robots" content="index, follow">
@@ -316,6 +316,61 @@
             background-position: 10px center
         }
 
+        #syncSection input[type=text] {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            background: var(--surface2);
+            color: var(--text);
+            font-size: .85rem;
+            font-family: var(--mono);
+            outline: none;
+            transition: border-color .15s
+        }
+
+        #syncSection input[type=text]:focus {
+            border-color: var(--accent)
+        }
+
+        .sync-readout {
+            margin-top: 10px;
+            font-size: .8rem;
+            color: var(--text2);
+            min-height: 20px
+        }
+
+        .sync-readout b {
+            font-family: var(--mono);
+            color: var(--text);
+            font-weight: 600
+        }
+
+        .sync-readout .fps {
+            color: var(--text3)
+        }
+
+        .sync-readout.bad {
+            color: var(--yellow)
+        }
+
+        .anchor-tag {
+            display: inline-block;
+            min-width: 13px;
+            margin-right: 4px;
+            border-radius: 3px;
+            background: var(--accent);
+            color: #fff;
+            font-size: .62rem;
+            font-weight: 700;
+            text-align: center;
+            line-height: 13px
+        }
+
+        tbody tr {
+            cursor: pointer
+        }
+
         .range-sep {
             flex: 0 0 auto;
             padding-bottom: 8px;
@@ -519,7 +574,8 @@
 
         .idx {
             color: var(--text3);
-            width: 40px
+            width: 56px;
+            white-space: nowrap
         }
 
         .time-original {
@@ -620,7 +676,7 @@
 <div class="container">
     <header>
         <h1>Subtitle Timing Shifter</h1>
-        <p class="subtitle">Adjust subtitle timing with millisecond precision. Supports SRT and VTT.</p>
+        <p class="subtitle">Adjust subtitle timing with millisecond precision, or name where a line should land and let it work out the offset. Supports SRT and VTT.</p>
     </header>
     <div class="card">
         <div class="card-label">Import</div>
@@ -651,6 +707,31 @@
             <button class="qbtn" data-ms="1000" disabled>+1s</button>
             <button class="qbtn" data-ms="2000" disabled>+2s</button>
             <button class="qbtn" data-ms="5000" disabled>+5s</button>
+        </div>
+        <div class="section" id="syncSection">
+            <div class="card-label">Sync by reference point <span
+                    style="font-weight:400;text-transform:none;letter-spacing:0">— tell it where a line should land</span>
+            </div>
+            <div class="row">
+                <div class="narrow"><label>A · cue #</label><input type="number" id="ancACue" min="1" placeholder="—"
+                                                               disabled></div>
+                <div><label>Should start at</label><input type="text" id="ancATime" placeholder="00:00:12,400" disabled>
+                </div>
+            </div>
+            <div class="row" style="margin-top:8px">
+                <div class="narrow"><label>B · cue #</label><input type="number" id="ancBCue" min="1" placeholder="—"
+                                                               disabled></div>
+                <div><label>Should start at <span
+                        style="font-weight:400;text-transform:none;letter-spacing:0">— optional, corrects drift</span></label><input
+                        type="text" id="ancBTime" placeholder="01:48:06,900" disabled></div>
+            </div>
+            <div class="sync-readout" id="syncReadout">Click a row in the preview to pick a cue, then type the time it
+                should appear at.
+            </div>
+            <div class="actions" style="margin-top:10px">
+                <button class="btn btn-primary" id="syncBtn" disabled>Sync</button>
+                <button class="btn btn-ghost" id="clearAncBtn" disabled>Clear points</button>
+            </div>
         </div>
         <div class="section">
             <div class="card-label">Custom Shift</div>
@@ -733,7 +814,10 @@
         previewCard = $('previewCard'), previewBody = $('previewBody'), previewWrap = $('previewWrap'),
         statsEl = $('stats'), applyBtn = $('applyBtn'), resetBtn = $('resetBtn'), downloadBtn = $('downloadBtn'),
         undoBtn = $('undoBtn'), redoBtn = $('redoBtn'), searchInput = $('searchInput'), noResults = $('noResults'),
-        dlFmt = $('dlFmt'), toastEl = $('toast');
+        dlFmt = $('dlFmt'), toastEl = $('toast'),
+        ancACue = $('ancACue'), ancATime = $('ancATime'), ancBCue = $('ancBCue'), ancBTime = $('ancBTime'),
+        syncBtn = $('syncBtn'), clearAncBtn = $('clearAncBtn'), syncReadout = $('syncReadout');
+    const ancInputs = [ancACue, ancATime, ancBCue, ancBTime];
     const qBtns = document.querySelectorAll('.qbtn');
     let originalSubs = [], currentSubs = [], history = [], redoStack = [], fileType = 'srt', fileName = '';
 
@@ -745,9 +829,11 @@
     }
 
     function setEnabled(on) {
-        [applyBtn, resetBtn, downloadBtn, dlFmt].forEach(b => b.disabled = !on);
+        [applyBtn, resetBtn, downloadBtn, dlFmt, clearAncBtn].forEach(b => b.disabled = !on);
         qBtns.forEach(b => b.disabled = !on);
-        updateUndoRedo()
+        ancInputs.forEach(i => i.disabled = !on);
+        updateUndoRedo();
+        updateSync()
     }
 
     function updateUndoRedo() {
@@ -862,6 +948,7 @@
         fileName = '';
         fileInfo.innerHTML = '';
         previewCard.style.display = 'none';
+        ancInputs.forEach(i => i.value = '');
         setEnabled(false);
         fileInput.value = '';
         searchInput.value = ''
@@ -910,6 +997,110 @@
 
     applyBtn.addEventListener('click', () => doShift(getCustomMs()));
 
+    /* Sync by reference point */
+    function parseLooseTime(str) {
+        const t = String(str).trim().replace(',', '.');
+        if (!t || !/^\d{1,3}(:\d{1,2}){0,2}(\.\d{1,3})?$/.test(t)) return null;
+        const [main, frac] = t.split('.');
+        const parts = main.split(':').map(Number);
+        let h = 0, m = 0, sec = 0;
+        if (parts.length === 3) [h, m, sec] = parts; else if (parts.length === 2) [m, sec] = parts; else [sec] = parts;
+        if (m > 59 || sec > 59) return null;
+        return (h * 3600 + m * 60 + sec) * 1000 + (frac ? +(frac + '00').slice(0, 3) : 0)
+    }
+
+    // Subtitles ripped from a different transfer run fast or slow by the ratio of the
+    // two framerates. Naming the pair turns a bare number into a recognisable diagnosis.
+    const FPS_PAIRS = [[25, 23.976], [23.976, 25], [25, 24], [24, 25], [30, 29.97], [29.97, 30], [24, 23.976], [23.976, 24]];
+
+    function fpsHint(scale) {
+        for (const [a, b] of FPS_PAIRS) if (Math.abs(scale - b / a) < 3e-4) return `\u2248 ${a} \u2192 ${b} fps`;
+        return ''
+    }
+
+    // Reads one reference point. null = not filled in, {err} = filled in wrong.
+    function readAnchor(cueEl, timeEl) {
+        const rawCue = cueEl.value.trim(), rawTime = timeEl.value.trim();
+        if (!rawCue && !rawTime) return null;
+        const n = parseInt(rawCue, 10);
+        if (!n || n < 1 || n > currentSubs.length) return {err: `Cue # must be between 1 and ${currentSubs.length}.`};
+        const target = parseLooseTime(rawTime);
+        if (target === null) return {err: 'Enter a target time like 00:01:23,400 or 1:23.4.'};
+        return {i: n - 1, target}
+    }
+
+    // One point gives an offset; two give an offset and a speed, which is the only
+    // thing that fixes timings that drift apart instead of sitting at a fixed distance.
+    function computeSync() {
+        if (!currentSubs.length) return {mode: 'none', msg: 'Load a subtitle file to start.'};
+        const a = readAnchor(ancACue, ancATime), b = readAnchor(ancBCue, ancBTime);
+        if (a && a.err) return {mode: 'bad', msg: a.err};
+        if (b && b.err) return {mode: 'bad', msg: b.err};
+        if (!a) return {mode: 'none', msg: 'Click a row in the preview to pick a cue, then type the time it should appear at.'};
+        if (!b) return {mode: 'offset', ms: a.target - currentSubs[a.i].start, a};
+        if (a.i === b.i) return {mode: 'bad', msg: 'Point B must be a different cue from point A.'};
+        const span = currentSubs[b.i].start - currentSubs[a.i].start;
+        if (!span) return {mode: 'bad', msg: 'Those two cues start at the same time \u2014 pick points further apart.'};
+        const scale = (b.target - a.target) / span;
+        if (!isFinite(scale) || scale <= 0) return {mode: 'bad', msg: 'Point B must come after point A.'};
+        return {mode: 'linear', scale, src: currentSubs[a.i].start, dst: a.target, a, b}
+    }
+
+    function updateSync() {
+        const r = computeSync();
+        syncReadout.classList.toggle('bad', r.mode === 'bad');
+        if (r.mode === 'offset') {
+            syncReadout.innerHTML = r.ms ? `Shift every cue by <b>${fmtOffset(r.ms)}</b>.`
+                : 'That cue already starts at the time you gave.'
+        } else if (r.mode === 'linear') {
+            const hint = fpsHint(r.scale), drift = Math.round((r.scale - 1) * 3600000);
+            syncReadout.innerHTML = `Offset <b>${fmtOffset(r.dst - r.src) || '0ms'}</b> and speed <b>\u00d7${r.scale.toFixed(5)}</b>` +
+                (hint ? ` <span class="fps">${hint}</span>` : '') +
+                `<br><span class="fps">That is ${fmtOffset(drift) || '0ms'} of drift per hour \u2014 a plain shift cannot fix it.</span>`
+        } else {
+            syncReadout.textContent = r.msg
+        }
+        syncBtn.disabled = r.mode === 'linear' ? false : !(r.mode === 'offset' && r.ms)
+    }
+
+    // Same shape as doShift, but maps each timestamp through a line instead of adding a
+    // constant, so it rides the existing undo stack and range selection unchanged.
+    function doRescale(scale, src, dst) {
+        if (!currentSubs.length) return;
+        pushState();
+        const [from, to] = getRange();
+        const map = t => Math.max(0, Math.round((t - src) * scale + dst));
+        let count = 0;
+        currentSubs = currentSubs.map((s, i) => {
+            if (i >= from && i <= to) {
+                count++;
+                return {start: map(s.start), end: map(s.end), text: s.text}
+            }
+            return {...s}
+        });
+        renderPreview();
+        toast(`Resynced ${count} sub${count !== 1 ? 's' : ''} \u00b7 speed \u00d7${scale.toFixed(5)}`)
+    }
+
+    function applySync() {
+        const r = computeSync();
+        if (r.mode === 'offset') doShift(r.ms);
+        else if (r.mode === 'linear') doRescale(r.scale, r.src, r.dst);
+        else return;
+        updateSync()
+    }
+
+    ancInputs.forEach(i => i.addEventListener('input', updateSync));
+    [ancACue, ancBCue].forEach(i => i.addEventListener('input', () => {
+        if (currentSubs.length) renderPreview()
+    }));
+    syncBtn.addEventListener('click', applySync);
+    clearAncBtn.addEventListener('click', () => {
+        ancInputs.forEach(i => i.value = '');
+        updateSync();
+        renderPreview()
+    });
+
     /* Quick shift */
     document.querySelector('.quick-row').addEventListener('click', e => {
         const btn = e.target.closest('.qbtn');
@@ -949,7 +1140,10 @@
     /* Keyboard shortcuts */
     document.addEventListener('keydown', e => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
-            if (e.key === 'Enter' && !applyBtn.disabled) {
+            if (e.key === 'Enter' && e.target.closest('#syncSection')) {
+                e.preventDefault();
+                if (!syncBtn.disabled) applySync()
+            } else if (e.key === 'Enter' && !applyBtn.disabled) {
                 e.preventDefault();
                 doShift(getCustomMs())
             }
@@ -1011,7 +1205,8 @@
             const curCell = isChanged ? `<span class="time-current">${fmtTime(c.start, ft)} → ${fmtTime(c.end, ft)}</span>` : '<span class="time-same">—</span>';
             const offsetCell = isChanged ? `<span class="offset-badge${diff < 0 ? ' neg' : ''}">${fmtOffset(diff)}</span>` : '';
             const textSnip = c.text.replace(/</g, '&lt;').split('\n')[0];
-            html += `<tr${isChanged ? ' class="changed"' : ''}><td class="idx">${i + 1}</td><td class="mono">${origCell}</td><td class="mono">${curCell}</td><td>${offsetCell}</td><td class="text-col" title="${c.text.replace(/"/g, '&quot;')}">${textSnip}</td></tr>`
+            const tag = i === ancIdx('A') ? '<span class="anchor-tag">A</span>' : i === ancIdx('B') ? '<span class="anchor-tag">B</span>' : '';
+            html += `<tr${isChanged ? ' class="changed"' : ''} data-i="${i}"><td class="idx">${tag}${i + 1}</td><td class="mono">${origCell}</td><td class="mono">${curCell}</td><td>${offsetCell}</td><td class="text-col" title="${c.text.replace(/"/g, '&quot;')}">${textSnip}</td></tr>`
         }
         previewBody.innerHTML = html;
         noResults.style.display = filter && !visible ? 'block' : 'none';
@@ -1019,6 +1214,26 @@
     }
 
     searchInput.addEventListener('input', renderPreview);
+
+    function ancIdx(k) {
+        const n = parseInt((k === 'A' ? ancACue : ancBCue).value, 10);
+        return n ? n - 1 : -1
+    }
+
+    // Picking the cue is the hard half of naming a reference point, so let the preview do it.
+    previewBody.addEventListener('click', e => {
+        const tr = e.target.closest('tr');
+        if (!tr || !tr.dataset.i) return;
+        const i = +tr.dataset.i;
+        const k = (!ancACue.value.trim() || ancACue.value.trim() == i + 1) ? 'A' : 'B';
+        const cueEl = k === 'A' ? ancACue : ancBCue, timeEl = k === 'A' ? ancATime : ancBTime;
+        cueEl.value = i + 1;
+        if (!timeEl.value.trim()) timeEl.value = fmtTime(currentSubs[i].start, dlFmt.value || fileType);
+        updateSync();
+        renderPreview();
+        timeEl.focus();
+        timeEl.select()
+    });
 
     /* Download */
     downloadBtn.addEventListener('click', () => {
