@@ -300,6 +300,8 @@
 
                     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 border border-gray-100 dark:border-gray-700">
                         <h3 class="text-lg font-medium mb-4 text-brand-700 dark:text-brand-300">Text Statistics</h3>
+                        <p id="markup-note"
+                           class="hidden mb-4 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 rounded px-3 py-2"></p>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <div class="text-2xl font-bold text-gray-800 dark:text-white" id="word-count">-</div>
@@ -597,12 +599,14 @@
         const readerProfile = parseFloat(document.getElementById('readerProfile').value);
         const contentType = parseFloat(document.getElementById('textComplexity').value);
 
-        // Text statistics
-        const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
-        const charCount = text.length;
-        const sentences = text.split(/[.!?]+\s/).filter(s => s.length > 0);
-        const sentenceCount = sentences.length;
-        const paragraphCount = text.split(/\n+/).filter(p => p.trim().length > 0).length || 1;
+        // Text statistics — measured on the prose, not on the markup around it
+        const prose = toProse(text);
+        const rawWordCount = text.split(/\s+/).filter(word => word.length > 0).length;
+        const wordCount = prose.split(/\s+/).filter(word => word.length > 0).length;
+        const charCount = prose.replace(/\s/g, '').length;
+        const sentences = splitSentences(prose);
+        const sentenceCount = Math.max(1, sentences.length);
+        const paragraphCount = prose.split(/\n+/).filter(p => p.trim().length > 0).length || 1;
         const avgWordsPerSentence = wordCount / sentenceCount;
         const avgCharsPerWord = charCount / wordCount;
 
@@ -612,8 +616,8 @@
         const slowReaderTime = (wordCount / 150) * readerProfile * contentType;
 
         // Readability metrics
-        const syllableCount = countSyllables(text);
-        const complexWords = countComplexWords(text);
+        const syllableCount = countSyllables(prose);
+        const complexWords = countComplexWords(prose);
 
         const fleschReadingEase = 206.835 - 1.015 * avgWordsPerSentence - 84.6 * (syllableCount / wordCount);
         const fleschKincaidGrade = 0.39 * avgWordsPerSentence + 11.8 * (syllableCount / wordCount) - 15.59;
@@ -637,7 +641,8 @@
             fleschKincaidGrade,
             smogIndex,
             automatedReadabilityIndex,
-            keywords: extractKeywords(text)
+            keywords: extractKeywords(prose),
+            rawWordCount
         };
 
         // Update quick results
@@ -659,6 +664,7 @@
         document.getElementById('paragraph-count').textContent = paragraphCount;
         document.getElementById('avg-words-sentence').textContent = avgWordsPerSentence.toFixed(1);
         document.getElementById('avg-chars-word').textContent = avgCharsPerWord.toFixed(1);
+        showMarkupNote(wordCount, rawWordCount);
 
         document.getElementById('grade-level').textContent = Math.round(fleschKincaidGrade);
         document.getElementById('grade-explanation').textContent = getGradeExplanation(fleschKincaidGrade);
@@ -675,6 +681,19 @@
         // Show results
         document.getElementById('results-empty').classList.add('hidden');
         document.getElementById('results-content').classList.remove('hidden');
+    }
+
+    // Say so when the pasted text was mostly markup, so the counts are not a silent surprise.
+    function showMarkupNote(wordCount, rawWordCount) {
+        const note = document.getElementById('markup-note');
+        const dropped = rawWordCount - wordCount;
+        if (dropped > 0 && dropped / rawWordCount >= 0.05) {
+            note.textContent = `Markup ignored: ${wordCount.toLocaleString()} of ${rawWordCount.toLocaleString()} tokens counted as prose. `
+                + 'Headings, list markers, table cells, code blocks and URLs are stripped before measuring.';
+            note.classList.remove('hidden');
+        } else {
+            note.classList.add('hidden');
+        }
     }
 
     function formatTime(minutes) {
@@ -706,6 +725,87 @@
         if (roundedGrade <= 12) return "High school level - somewhat challenging for general readers.";
         if (roundedGrade <= 16) return "College level - may require domain knowledge or advanced vocabulary.";
         return "Graduate level - complex text that requires specialized knowledge.";
+    }
+
+    // People paste markdown drafts and HTML out of a CMS, not clean prose. Reduce
+    // whatever arrives to the words a reader actually reads, so the counts and the
+    // readability indices describe the text rather than its markup.
+    function toProse(raw) {
+        let t = raw;
+
+        if (/<\/?(p|div|br|li|h[1-6]|span|a|strong|em|b|i|table|td|th|tr|ul|ol|img|blockquote|pre|code|section|article)\b/i.test(t)) {
+            t = t.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+                 .replace(/<\/(p|div|h[1-6]|li|tr|blockquote|pre|section|article)>/gi, '\n')
+                 .replace(/<br\s*\/?>/gi, '\n')
+                 .replace(/<[^>]+>/g, '')
+                 .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+                 .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'");
+        }
+
+        return t
+            // fenced code blocks are not prose; the closing fence must be at
+            // least as long as the opening one, so ````…``` nesting survives
+            .replace(/^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?^[ \t]*\2\2*[ \t]*$/gm, '\n')
+            .replace(/^[ \t]*(?:`{3,}|~{3,})[^\n]*$/gm, '') // an unclosed fence marker
+            .replace(/`([^`\n]*)`/g, '$1')                  // inline code keeps its text
+            .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')          // images
+            .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')        // links keep their label
+            .replace(/^\s{0,3}#{1,6}\s+/gm, '')             // heading markers
+            .replace(/^\s{0,3}>\s?/gm, '')                  // block quotes
+            .replace(/^\s{0,3}(?:[-*_]\s*){3,}$/gm, '')     // horizontal rules
+            .replace(/^\s{0,3}[-*+]\s+/gm, '')              // bullets
+            .replace(/^\s{0,3}\d+[.)]\s+/gm, '')            // ordered list markers
+            .replace(/^\s*\|?[\s:|-]{5,}\|?\s*$/gm, '')     // table separator rows
+            .replace(/\|/g, ' ')                            // table cell dividers
+            .replace(/(\*\*|__|\*|_|~~)(?=\S)([\s\S]*?\S)\1/g, '$2')  // emphasis
+            .replace(/https?:\/\/\S+/g, ' ')                // bare URLs are one glyph to a reader
+            .replace(/[ \t]+/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    // Abbreviations short-circuit a naive split on [.!?], and a line break ends a
+    // sentence even when nothing punctuates it — headings and bullet lists rely on that.
+    const SENTENCE_ABBREVIATIONS = new Set([
+        'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'mt', 'vs', 'etc', 'eg', 'ie',
+        'cf', 'al', 'inc', 'ltd', 'co', 'corp', 'dept', 'est', 'fig', 'no', 'pp', 'approx',
+        'am', 'pm', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct',
+        'nov', 'dec', 'us', 'uk', 'eu'
+    ]);
+
+    function splitSentences(text) {
+        const out = [];
+        let start = 0;
+
+        for (let i = 0; i < text.length; i++) {
+            const c = text[i];
+            if (c !== '.' && c !== '!' && c !== '?' && c !== '\n') continue;
+
+            if (c === '\n') {
+                if (text.slice(start, i).trim()) {
+                    out.push(text.slice(start, i).trim());
+                    start = i + 1;
+                }
+                continue;
+            }
+
+            let end = i;
+            while (end + 1 < text.length && '.!?'.includes(text[end + 1])) end++;
+
+            // "3.14" and "e.g." keep going: a real terminator is followed by space or nothing.
+            const after = text.slice(end + 1);
+            if (after && !/^["')\]]*(\s|$)/.test(after)) continue;
+
+            const token = (text.slice(start, i).match(/([A-Za-z.]+)$/) || ['', ''])[1]
+                .replace(/\./g, '').toLowerCase();
+            if (c === '.' && (SENTENCE_ABBREVIATIONS.has(token) || /^[a-z]$/.test(token))) continue;
+
+            out.push(text.slice(start, end + 1).trim());
+            start = end + 1;
+        }
+
+        if (text.slice(start).trim()) out.push(text.slice(start).trim());
+        return out.filter(s => /[A-Za-z0-9]/.test(s));
     }
 
     function countSyllables(text) {
@@ -978,6 +1078,9 @@
         document.getElementById('quick-readability').textContent = getReadabilityLevel(analysis.fleschReadingEase);
         document.getElementById('quick-grade').textContent = Math.round(analysis.fleschKincaidGrade);
         document.getElementById('quick-results').classList.remove('hidden');
+        // The detailed statistics panel is not refreshed here, so the note it
+        // belongs to would describe a different text than the numbers beside it.
+        document.getElementById('markup-note').classList.add('hidden');
 
         // Switch to editor tab
         document.querySelector('[data-tab="editor"]').click();
