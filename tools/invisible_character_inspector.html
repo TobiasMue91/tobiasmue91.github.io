@@ -73,7 +73,7 @@ select{background:var(--panel2);color:var(--fg);border:1px solid var(--line);bor
 #verdict span{color:var(--dim);font-size:.88rem}
 
 /* stats */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:8px;margin-top:12px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:8px;margin-top:12px}
 .stat{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 .stat b{display:block;font-family:var(--mono);font-size:1.05rem}
 .stat span{color:var(--faint);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
@@ -336,8 +336,9 @@ function classify(cp){
     return {cp,name:"CONTROL CHARACTER",abbr:"CTRL",risk:3,group:"control",why:"A control code with no visible shape. It survives copy-paste and confuses parsers.",shown:false};
   if(cp<0x7F) return null;                                      // printable ASCII
   if(cp===0xE0001||(cp>=0xE0020&&cp<=0xE007F)){
-    const a = cp===0xE0001?"⚑":String.fromCharCode(cp-0xE0000);
-    return {cp,name:"TAG "+(cp===0xE0001?"LANGUAGE TAG":"'"+a+"'"),abbr:"TAG:"+a,risk:3,group:"tag",
+    const raw = cp===0xE0001?"⚑":String.fromCharCode(cp-0xE0000);
+    const a = raw===" "?"␣":raw;   /* an empty badge reads as a bug, not a space */
+    return {cp,name:"TAG "+(cp===0xE0001?"LANGUAGE TAG":"'"+raw+"'"),abbr:"TAG:"+a,risk:3,group:"tag",
       why:"An invisible tag character. This block mirrors ASCII one for one and is the usual way a hidden message is smuggled into ordinary-looking text.",shown:false};
   }
   if((cp>=0xFE00&&cp<=0xFE0F)||(cp>=0xE0100&&cp<=0xE01EF))
@@ -349,50 +350,120 @@ function classify(cp){
   const fw = fullwidthAscii(cp);
   if(fw) return {cp,name:"FULLWIDTH '"+fw+"'",abbr:fw,risk:2,group:"fullwidth",
       why:"A fullwidth form of the ASCII character '"+fw+"'. Reads the same to a human, compares as different to a machine.",shown:true};
-  if(CONFUSABLE[cp]) return {cp,name:(scriptOf(ch)||"NON-LATIN")+" LOOKALIKE OF '"+CONFUSABLE[cp]+"'",abbr:CONFUSABLE[cp],risk:2,group:"homoglyph",
+  if(CONFUSABLE[cp]) return {cp,name:(scriptOf(ch)||"NON-LATIN").toUpperCase()+" LOOKALIKE OF '"+CONFUSABLE[cp]+"'",abbr:CONFUSABLE[cp],risk:2,group:"homoglyph",
       why:"Visually identical to the Latin '"+CONFUSABLE[cp]+"' but a different character. Used to fake domains, usernames and keywords.",shown:true};
   if(RE_MARK.test(ch)) return {cp,name:"COMBINING MARK",abbr:"◌",risk:1,group:"combining",
       why:"A mark that attaches to the character before it. Harmless alone, illegible when stacked.",shown:true};
   const sc = scriptOf(ch);
   if(RE_LETTER.test(ch)&&sc==="Latin")
-    return {cp,name:"LATIN LETTER '"+ch+"'",abbr:ch,risk:1,group:"nonascii",why:"An accented or extended Latin letter. Ordinary in most European languages; worth checking in an identifier or a URL.",shown:true};
+    return {cp,name:"LATIN LETTER '"+ch+"'",abbr:ch,risk:1,group:"nonascii",script:"Latin",why:"An accented or extended Latin letter. Ordinary in most European languages; worth checking in an identifier or a URL.",shown:true};
   if(RE_LETTER.test(ch)&&sc&&sc!=="Latin")
-    return {cp,name:sc.toUpperCase()+" LETTER",abbr:ch,risk:1,group:"nonascii",why:"A "+sc+" letter. Expected if the text is in that language.",shown:true};
+    return {cp,name:sc.toUpperCase()+" LETTER",abbr:ch,risk:1,group:"nonascii",script:sc,why:"A "+sc+" letter. Expected if the text is in that language.",shown:true};
   return {cp,name:"NON-ASCII CHARACTER",abbr:ch,risk:1,group:"nonascii",why:"Outside ASCII. Expected in most prose, worth a look in an identifier.",shown:true};
 }
 
 /* ---------- analysis -------------------------------------------------------- */
 function analyze(text){
-  const items=[], byKey=new Map();
+  const items=[];
   let idx=0;
   for(const ch of text){
-    const cp=ch.codePointAt(0), info=classify(cp);
-    const it={ch,cp,info,i:idx};
-    items.push(it);
-    if(info){
-      /* Tag characters are reported as one finding: forty of them are one
-         smuggled sentence, not forty separate discoveries. */
-      const k=info.group==="tag"?"tag":String(cp);
-      let f=byKey.get(k);
-      if(!f){
-        f={...info,count:0,positions:[]};
-        if(k==="tag"){f.name="UNICODE TAG CHARACTER";f.cp=0xE0000;
-          f.why="Invisible characters from the tag block, which mirrors ASCII one for one. A run of them is a message written for a machine to read.";}
-        byKey.set(k,f);
-      }
-      f.count++; if(f.positions.length<200) f.positions.push(idx);
-    }
+    const cp=ch.codePointAt(0);
+    items.push({ch,cp,info:classify(cp),i:idx});
     idx++;
   }
-  /* Lookalikes only really matter inside otherwise-Latin words; note the ones
-     that sit in a word with Latin letters, and soften the rest. */
-  const words=text.split(/[\s\p{P}]+/u).filter(Boolean);
-  let mixedWords=0;
-  for(const w of words){
-    let latin=false, other=false;
-    for(const c of w){ if(RE_LATIN.test(c)) latin=true; else if(CONFUSABLE[c.codePointAt(0)]) other=true; }
-    if(latin&&other) mixedWords++;
+
+  /* A Cyrillic "a" is only a lookalike if it is pretending to be something.
+     In Russian prose it is just a letter, and flagging every one of them
+     would bury the case that matters. So decide per word: a word that mixes
+     scripts is impersonating, and so is a word made entirely of lookalikes
+     sitting in a text that is otherwise Latin. Everything else is prose. */
+  const latinLetters=items.filter(i=>RE_LETTER.test(i.ch)&&RE_LATIN.test(i.ch)).length;
+  const allLetters=items.filter(i=>RE_LETTER.test(i.ch)).length;
+  const latinText = allLetters>0 && latinLetters/allLetters>0.6;
+  let mixedWords=0, word=[];
+  const judgeWord=()=>{
+    if(!word.length) return;
+    const conf=word.filter(it=>it.info&&it.info.group==="homoglyph");
+    if(conf.length){
+      const latin=word.some(it=>RE_LATIN.test(it.ch));
+      const nonConf=word.some(it=>RE_LETTER.test(it.ch)&&!RE_LATIN.test(it.ch)&&!CONFUSABLE[it.cp]);
+      if(latin){
+        mixedWords++;
+        for(const it of conf) it.info.why="Visually identical to the Latin '"+CONFUSABLE[it.cp]+
+          "', but a different character \u2014 and it sits in a word with real Latin letters, which is what an impersonated domain or username looks like.";
+      } else if(latinText&&!nonConf){
+        mixedWords++;
+        for(const it of conf) it.info.why="A whole word of Latin lookalikes in an otherwise Latin text. It reads as '"+
+          word.map(it2=>CONFUSABLE[it2.cp]||it2.ch).join("")+"' but matches nothing that spells it.";
+      } else {
+        /* Ordinary non-Latin prose: demote to a plain letter of its script. */
+        for(const it of conf){
+          const sc=scriptOf(it.ch)||"NON-LATIN";
+          it.info={cp:it.cp,name:sc.toUpperCase()+" LETTER '"+it.ch+"'",abbr:it.ch,risk:1,group:"nonascii",script:sc,
+            why:"A "+sc+" letter used in "+sc+" text. It happens to look like a Latin letter, but nothing here is pretending otherwise.",shown:true};
+        }
+      }
+    }
+    word=[];
+  };
+  for(const it of items){
+    if(RE_LETTER.test(it.ch)||RE_MARK.test(it.ch)||/[0-9]/.test(it.ch)) word.push(it);
+    else judgeWord();
   }
+  judgeWord();
+
+  /* One accent is a language. Three stacked on one letter is someone
+     making text that cannot be read or matched. */
+  let run=[], maxStack=0;
+  const judgeStack=()=>{
+    if(run.length>=3){
+      maxStack=Math.max(maxStack,run.length);
+      for(const it of run){
+        it.info.risk=2;
+        it.info.why="Part of a stack of "+run.length+" marks on a single letter \u2014 deep enough that it is decoration or obfuscation rather than spelling.";
+      }
+    }
+    run=[];
+  };
+  for(const it of items){
+    if(it.info&&it.info.group==="combining") run.push(it); else judgeStack();
+  }
+  judgeStack();
+
+  /* Aggregate once the verdict on each character is final. */
+  const byKey=new Map();
+  for(const it of items){
+    const info=it.info;
+    if(!info) continue;
+    /* Some things are one finding however often they occur: forty tag
+       characters are one smuggled sentence, and a page of Greek prose is
+       "this text is in Greek", not fifty separate discoveries. */
+    let k=String(info.cp), roll=null;
+    if(info.group==="tag"){
+      k="tag";
+      roll={name:"UNICODE TAG CHARACTER",cp:0xE0000,
+        why:"Invisible characters from the tag block, which mirrors ASCII one for one. A run of them is a message written for a machine to read."};
+    } else if(info.group==="nonascii"&&info.script){
+      k="script:"+info.script;
+      roll={name:info.script.toUpperCase()+" LETTERS",
+        why:info.script==="Latin"?"Accented or extended Latin letters. Ordinary in most European languages; worth a glance in an identifier or a URL."
+          :"Letters of the "+info.script+" script. Expected if the text is in that language."};
+    } else if(info.group==="combining"){
+      /* Keyed by risk so a stack of five does not drag every ordinary
+         accent in the text into the same row. */
+      k="combining:"+info.risk;
+      roll=info.risk>1?{name:"STACKED COMBINING MARKS"}
+        :{name:"COMBINING MARKS",why:"Marks that attach to the character before them. Ordinary in many languages, illegible when stacked in quantity."};
+    }
+    let f=byKey.get(k);
+    if(!f){
+      f={...info,count:0,positions:[],rolled:!!roll};
+      if(roll) Object.assign(f,roll);
+      byKey.set(k,f);
+    }
+    f.count++; if(f.positions.length<200) f.positions.push(it.i);
+  }
+
   const findings=[...byKey.values()].sort((a,b)=> b.risk-a.risk || b.count-a.count || a.cp-b.cp);
   const hidden=findings.filter(f=>f.risk===3).reduce((s,f)=>s+f.count,0);
   const suspect=findings.filter(f=>f.risk===2).reduce((s,f)=>s+f.count,0);
@@ -405,7 +476,7 @@ function analyze(text){
     graphemes:seg,
     bytes:new TextEncoder().encode(text).length,
     ascii:items.filter(i=>i.cp<0x80).length,
-    hidden, suspect, mixedWords,
+    hidden, suspect, mixedWords, maxStack,
     nfc:text.normalize("NFC")!==text
   };
   return {items,findings,stats,payloads:decodePayloads(text)};
@@ -485,7 +556,7 @@ function renderReveal(items){
     html+=esc(plain); plain="";
     const f=it.info;
     if(CHIP_GROUPS.has(f.group))
-      html+='<span class="chip r'+f.risk+'" data-cp="'+f.cp+'" title="'+esc(tip(f))+'">'+esc(f.abbr)+"</span>";
+      html+='<span class="chip r'+f.risk+'" data-cp="'+f.cp+'" role="img" aria-label="'+esc(f.name+", "+hex(f.cp))+'" title="'+esc(tip(f))+'">'+esc(f.abbr)+"</span>";
     else
       html+='<span class="glyph r'+f.risk+'" data-cp="'+f.cp+'" title="'+esc(tip(f))+'">'+esc(it.ch)+"</span>";
   }
@@ -499,13 +570,16 @@ function renderVerdict(st,findings){
   if(st.points===0){ cls="";head="Waiting for input";sub="Paste something above."; }
   else if(st.hidden){
     cls="bad";
-    const names=findings.filter(f=>f.risk===3).slice(0,3).map(f=>f.name.toLowerCase()).join(", ");
+    const top=findings.filter(f=>f.risk===3);
+    const names=top.slice(0,3).map(f=>f.name.toLowerCase()+(f.rolled&&f.count>1?"s":"")).join(", ");
     head=st.hidden+" hidden character"+(st.hidden===1?"":"s")+" found";
-    sub="Characters you cannot see are present in this text: "+names+(findings.filter(f=>f.risk===3).length>3?", and more":"")+".";
+    sub="Characters you cannot see are present in this text: "+names+(top.length>3?", and more":"")+".";
   } else if(st.suspect){
     cls="warn";
     head=st.suspect+" character"+(st.suspect===1?"":"s")+" worth a second look";
-    sub=st.mixedWords?"Including "+st.mixedWords+" word"+(st.mixedWords===1?"":"s")+" that mix Latin letters with lookalikes from another script.":"Nothing invisible, but not everything here is what it appears to be.";
+    sub=st.mixedWords?"Including "+st.mixedWords+" word"+(st.mixedWords===1?"":"s")+" that mix Latin letters with lookalikes from another script."
+      :st.maxStack>=3?"Combining marks are stacked up to "+st.maxStack+" deep on a single letter."
+      :"Nothing invisible, but not everything here is what it appears to be.";
   } else {
     cls="clean";head="No hidden characters";
     sub=st.ascii===st.points?"Every character is plain ASCII.":"Nothing invisible or deceptive; the non-ASCII characters present are ordinary text.";
@@ -535,7 +609,7 @@ function renderFindings(findings,st){
   const rows=findings.map(f=>{
     const where=f.positions.slice(0,6).join(", ")+(f.count>f.positions.length||f.count>6?" …":"");
     return "<tr><td><span class=\"sev r"+f.risk+'"></span>'+esc(f.name)+
-      '<span class="why">'+esc(f.why)+"</span></td><td class=\"cp\">"+(f.group==="tag"?"U+E0020\u2026E007F":hex(f.cp))+"<br><span class=\"why\">"+
+      '<span class="why">'+esc(f.why)+"</span></td><td class=\"cp\">"+(f.group==="tag"?"U+E0020\u2026E007F":hex(f.cp)+(f.rolled?" \u2026":""))+"<br><span class=\"why\">"+
       esc(GROUPS[f.group]?GROUPS[f.group].label:f.group)+'</span></td><td class="n">'+f.count+
       '<br><span class="why">at '+esc(where)+"</span></td></tr>";
   }).join("");
@@ -670,7 +744,7 @@ function run(){
   updateClean();
 }
 
-$("input").addEventListener("input",run);
+$("input").addEventListener("input",()=>{ $("srcNote").textContent="type or paste \u00B7 drop a .txt file"; run(); });
 $("clearBtn").addEventListener("click",()=>{ $("input").value=""; $("input").focus(); run(); });
 $("pasteBtn").addEventListener("click",async()=>{
   try{
