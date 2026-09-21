@@ -244,7 +244,7 @@ h3{margin:16px 0 7px;font-size:12px;letter-spacing:.16em;color:var(--dim2);text-
   <div class="big" style="font-size:22px">HOW TO PLAY</div>
   <div class="hgrid">
     <div class="hcell"><b>FLIPPERS</b><span><kbd>←</kbd> <kbd>→</kbd>, <kbd>Z</kbd> <kbd>/</kbd> or either shift key. On a phone, touch the left or right half of the screen.</span></div>
-    <div class="hcell"><b>PLUNGER</b><span>Hold <kbd>space</kbd> (or touch and hold) and let go. Half power drops the ball into the top lanes — that is the skill shot.</span></div>
+    <div class="hcell"><b>PLUNGER</b><span>Hold <kbd>space</kbd> (or touch and hold) and let go. Every pull clears the lane; stop on the blue band on the meter and the ball drops into the top lanes — that is the skill shot. A full pull makes the orbit. If the ball ever ends up back in the shooter lane, the plunger takes it again.</span></div>
     <div class="hcell"><b>NUDGE</b><span><kbd>↓</kbd> to shove the cabinet, <kbd>X</kbd> and <kbd>C</kbd> to shove it sideways. Four shoves in a row and the machine tilts.</span></div>
     <div class="hcell"><b>E–S–C LANES</b><span>Light all three for another bonus multiplier. The flipper buttons rotate which lanes are lit, as on a real machine.</span></div>
   </div>
@@ -467,11 +467,15 @@ function build() {
   push(mseg(30, 159, 16, 163, BACK));
   push(mseg(16, 163, 17, 146, BACK));
 
-  // Deflector at the foot of each orbit lane.  A ball still travelling fast
-  // skips across the outlane mouth onto the sling; a dribbler drops in.
-  const DEF = { r: 1.0, e: 0.48, mu: 0.05, style: 'gate', oneWay: 1 };
-  push(seg(4.6, 139, 8.6, 142.6, Object.assign({ id: 'defL' }, DEF)));
-  push(mseg(4.6, 139, 8.6, 142.6, Object.assign({ id: 'defR' }, DEF)));
+  // Ball guide at the foot of each orbit lane.  It spans the whole return lane
+  // — the old one only covered its outer half, so a ball coming back round the
+  // orbit slipped past the inner edge and went straight down the outlane.  Now
+  // every returning ball is steered across the outlane mouth and onto the
+  // slingshot; the outlane is fed from the sling below it, the way it should be.
+  // One-way, so a kickback still fires straight back up the lane through it.
+  const DEF = { r: 1.0, e: 0.30, mu: 0.04, style: 'gate', oneWay: 1 };
+  push(seg(4.2, 132.0, 16.0, 143.0, Object.assign({ id: 'defL' }, DEF)));
+  push(mseg(4.2, 132.0, 16.0, 143.0, Object.assign({ id: 'defR' }, DEF)));
 
   /* --------------------------------------------------------- inlane rails */
   // the ball rolls down the top of these straight onto the flipper's base
@@ -1013,19 +1017,33 @@ function serve(g, auto, fresh) {
   b.inLane = true;
   g.state = 'plunge';
   g.plunger = 0;
-  if (fresh) { g.saveUntil = w.t + 11; g.savesLeft = 1; }
+  if (fresh) { g.saveUntil = w.t + 11; g.savesLeft = 1; g.skillLit = true; }
   if (auto) { launch(g, 0.72); }
 }
+// The shooter lane is 115 units long, so it takes about 225 units/s just to
+// get the ball out of it.  The old curve started at 186 — the bottom third of
+// the plunger was a dud that left the ball sitting in the lane with no way to
+// shoot it again.  The curve now starts above the escape speed, so every pull
+// puts the ball in play, and the useful range is spread over the whole meter:
+// a feather-light pull dribbles onto the top lanes, a full pull makes the orbit.
+const PLUNGE_MIN = 235, PLUNGE_SPAN = 205;
+// pulls between these two make the soft shot that drops into the E-S-C lanes
+const SKILL_LO = 0.258, SKILL_HI = 0.366;
+
 function launch(g, power) {
   const w = g.w;
+  power = Math.max(0, Math.min(1, power || 0));
+  let fired = false;
   for (const b of w.balls) {
     if (b.inLane) {
       b.inLane = false;
-      b.vy = -(186 + 205 * power);
+      b.vy = -(PLUNGE_MIN + PLUNGE_SPAN * power);
       b.vx = (w.rnd() - 0.5) * 4;
-      ev(w, 'plunge', { power });
+      ev(w, 'plunge', { power, skill: power >= SKILL_LO && power <= SKILL_HI });
+      fired = true;
     }
   }
+  if (!fired) return;              // nothing in the lane — keep waiting for it
   g.state = 'play';
   g.plunger = 0;
 }
@@ -1325,6 +1343,24 @@ function step(g, dt) {
     /* drain + stuck detection */
     for (const b of w.balls) {
       if (!b.alive || b.rail) continue;
+      // Anything that settles in the shooter lane is back on the plunger.  A
+      // ball can only get there by failing to clear the lane, and before this
+      // it just sat there — the plunger had already handed the game to 'play',
+      // so pressing plunge again did nothing at all.
+      if (!b.inLane && b.held <= 0 && b.x > 89.5 && b.y > 176 &&
+          Math.abs(b.vx) < 30 && Math.abs(b.vy) < 30) {
+        b.inLane = true;
+        b.x = 92.5; b.y = 190; b.vx = 0; b.vy = 0;
+        b.anchorT = undefined;
+        if (w.balls.filter((x) => x.alive).length > 1) {
+          launch(g, 0.78);          // mid-multiball: the machine kicks it back out
+        } else {
+          g.state = 'plunge'; g.plunger = 0; g.plungeHold = false;
+          ev(w, 'relane', {});
+        }
+        continue;
+      }
+      if (b.inLane) continue;             // parked on the plunger: not in play yet
       if (b.y > 200 && b.x < 88.5) drain(g, b);
       else if (b.y > H_LIMIT || b.x < -6 || b.x > 106 || !isFinite(b.x) || !isFinite(b.y)) {
         ev(w, 'escaped', { x: b.x, y: b.y });
@@ -1332,7 +1368,17 @@ function step(g, dt) {
       }
       // Ball search, exactly as a real machine does it: if the ball has not
       // gone anywhere in four seconds, shake the cabinet until it does.
-      if (b.anchorT === undefined || Math.hypot(b.x - b.ax0, b.y - b.ay0) > 3) {
+      // A ball cradled on a raised flipper is not a lost ball, so the search
+      // must not shake it off — holding the flipper is a move, not a fault.
+      let cradled = false;
+      for (const f of w.flippers) {
+        if (!f.on || !f.up) continue;
+        const [tx, ty] = C.flipperTip(f);
+        const p = C.closestOnSeg(b.x, b.y, f.px, f.py, tx, ty);
+        if (Math.hypot(b.x - p[0], b.y - p[1]) < b.r + f.r + 1.6) { cradled = true; break; }
+      }
+      if (cradled) { b.ax0 = b.x; b.ay0 = b.y; b.anchorT = w.t; b.searches = 0; }
+      else if (b.anchorT === undefined || Math.hypot(b.x - b.ax0, b.y - b.ay0) > 3) {
         b.ax0 = b.x; b.ay0 = b.y; b.anchorT = w.t; b.searches = 0;
       } else if (w.t - b.anchorT > 4) {
         b.searches = (b.searches || 0) + 1;
@@ -1389,7 +1435,8 @@ function nudge(g, dx, dy) {
 }
 
 function forceInstall(g, id) { const p = PARTS.find((x) => x.id === id); if (p && !g.parts[id]) install(g, p); }
-global.ESC_GAME = { createGame, step, serve, launch, setFlipper, nudge, PARTS, SCORE, resetTable, drain, forceInstall };
+global.ESC_GAME = { createGame, step, serve, launch, setFlipper, nudge, PARTS, SCORE, resetTable, drain, forceInstall,
+                    SKILL_LO, SKILL_HI };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
 <script>
@@ -2261,10 +2308,20 @@ function draw(dt) {
   R.rr(g, px - pw / 2, 196 + pull * 5, pw, 3.4, 1.2); g.fill();
   g.strokeStyle = '#c9a463'; g.lineWidth = 0.35; g.stroke();
   if (plunging) {
-    g.fillStyle = 'rgba(255,180,84,.9)';
-    R.rr(g, px - 1.5, 178, 3, 14 * pull, 0.8); g.fill();
-    g.strokeStyle = 'rgba(255,180,84,.35)'; g.lineWidth = 0.3;
-    R.rr(g, px - 1.5, 178, 3, 14, 0.8); g.stroke();
+    const gy = 178, gh = 14;
+    // the soft-plunge band: stop in here and the ball drops into the E-S-C lanes
+    g.fillStyle = 'rgba(92,225,234,.30)';
+    R.rr(g, px - 1.5, gy + gh * G.SKILL_LO, 3, gh * (G.SKILL_HI - G.SKILL_LO), 0.6); g.fill();
+    const inSkill = pull >= G.SKILL_LO && pull <= G.SKILL_HI;
+    g.fillStyle = inSkill ? 'rgba(92,225,234,.95)' : 'rgba(255,180,84,.9)';
+    R.rr(g, px - 1.5, gy, 3, gh * pull, 0.8); g.fill();
+    // band edges drawn over the fill, so the target stays visible past it
+    g.strokeStyle = 'rgba(92,225,234,.85)'; g.lineWidth = 0.28;
+    for (const f of [G.SKILL_LO, G.SKILL_HI]) {
+      g.beginPath(); g.moveTo(px - 2.4, gy + gh * f); g.lineTo(px + 2.4, gy + gh * f); g.stroke();
+    }
+    g.strokeStyle = inSkill ? 'rgba(92,225,234,.55)' : 'rgba(255,180,84,.35)'; g.lineWidth = 0.3;
+    R.rr(g, px - 1.5, gy, 3, gh, 0.8); g.stroke();
   }
 
   /* the ball, with a short trail */
@@ -2414,12 +2471,16 @@ function hud() {
 
 /* -------------------------------------------------------------- the input */
 const keys = {};
+let swallowSpaceUp = false;
 function press(side, down) { if (game) G.setFlipper(game, side, down); }
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
   if (['arrowleft', 'arrowright', 'arrowdown', ' ', 'shift'].includes(k)) e.preventDefault();
-  if (!running && (k === ' ' || k === 'enter')) { startGame(); return; }
+  // The space that starts the game must not also fire the plunger: its keyup
+  // used to arrive with the plunger at zero, so the ball left the lane at
+  // minimum power before the player had touched anything.
+  if (!running && (k === ' ' || k === 'enter')) { startGame(); swallowSpaceUp = true; return; }
   keys[e.code] = true;
   if (k === 'arrowleft' || k === 'z' || e.code === 'ShiftLeft' || k === 'a') press(-1, true);
   if (k === 'arrowright' || k === '/' || e.code === 'ShiftRight' || k === 'l') press(1, true);
@@ -2435,6 +2496,7 @@ window.addEventListener('keyup', (e) => {
   keys[e.code] = false;
   if (k === 'arrowleft' || k === 'z' || e.code === 'ShiftLeft' || k === 'a') press(-1, false);
   if (k === 'arrowright' || k === '/' || e.code === 'ShiftRight' || k === 'l') press(1, false);
+  if (k === ' ' && swallowSpaceUp) { swallowSpaceUp = false; return; }
   if (k === ' ' && game && game.state === 'plunge') { G.launch(game, game.plunger); game.plungeHold = false; }
 });
 function nudge(dx, dy) { if (game && game.state === 'play') G.nudge(game, dx, dy); shake = Math.max(shake, 2.4); }
