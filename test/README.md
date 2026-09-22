@@ -25,15 +25,17 @@ Chromium rather than unit-testing extracted copies of its code, because the fail
 matter there are the quiet ones — a conversion that returns the wrong file type, a parser
 that drops half its input, a route through five steps that could never work.
 
-Five suites:
+Seven suites:
 
 | suite | what it checks |
 | --- | --- |
 | `graph` | duplicate top-level functions, mimes missing from the registry, formats with no producer or consumer, route lengths, terminal edges used mid-chain, and that everyday conversions stay short |
+| `detect` | what a dropped file is taken to be — extension first, content only when the extension says nothing |
 | `edges` | every declared (converter, input, output) triple against a generated fixture |
 | `roundtrip` | convert out and back, and insist the data survives |
 | `adversarial` | malformed, empty, unicode and otherwise unkind input |
 | `codecs` | the hand-written QR, BMP and TIFF codecs against reference implementations |
+| `ui` | the real page flows with a hostile file name, merging, and the default target a dropped file gets |
 
 Fixtures are generated at runtime — `everything_converter_fixtures.js` is injected into the
 page and builds one sample per format (using the tool's own converters for the formats with

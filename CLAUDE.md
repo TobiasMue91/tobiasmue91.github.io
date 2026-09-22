@@ -71,8 +71,8 @@ suite once a change to one corner can quietly break another.
 
 `test/everything_converter.mjs` is the one that exists so far: it drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
-to it. Five suites — `graph`, `edges`, `roundtrip`, `adversarial`, `codecs` — run together
-or by name (`node test/everything_converter.mjs graph edges`).
+to it. Seven suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `ui` —
+run together or by name (`node test/everything_converter.mjs graph edges`).
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
