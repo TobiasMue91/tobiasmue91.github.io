@@ -5253,6 +5253,51 @@ registerConverter({
     }
 });
 
+// The reverse of the dump above - what `xxd -r` does. Reads both the xxd layout this tool
+// writes ("00000000: 4865 6c6c  Hello") and `hexdump -C` ("00000000  48 65 6c 6c  |Hell|"),
+// so a dump can be edited by hand and turned back into a file.
+function hexdumpToBytes(text) {
+    const out = [];
+    for (const raw of text.split(/\r?\n/)) {
+        const m = raw.match(/^\s*([0-9a-fA-F]{4,16})(:|\s)(.*)$/);
+        if (!m) continue;                               // blank lines, the truncation note
+        // Tell the layouts apart by the offset separator, not the gutter: the ASCII column
+        // can itself contain "|" (byte 0x7c). xxd ends its hex with two spaces; hexdump -C
+        // has a two-space gap mid-row too, so only "  |" ends its hex.
+        const body = m[2] === ':' ? m[3].replace(/^ /, '').split(/ {2,}/)[0] : m[3].split(/\s{2,}\|/)[0];
+        const hex = body.replace(/\s+/g, '');
+        if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2) {
+            throw new Error('Line ' + m[1] + ' is not a hex dump row: ' + JSON.stringify(raw.slice(0, 40)));
+        }
+        for (let i = 0; i < hex.length; i += 2) out.push(parseInt(hex.slice(i, i + 2), 16));
+    }
+    if (!out.length) throw new Error('No hex dump rows found (expected lines like "00000000: 4865 6c6c ...")');
+    if (/\[truncated:/.test(text)) throw new Error('This dump was truncated when it was made, so the original file cannot be rebuilt from it');
+    return new Uint8Array(out);
+}
+
+registerConverter({
+    id: 'hexdump-to-file',
+    name: 'Hex Dump to File',
+    inputs: ['text/x-hexdump'],
+    outputs: ['application/octet-stream'],
+    weight: 2,
+    lib: null,
+    convert: async blob => new Blob([hexdumpToBytes(await blob.text())], {type: 'application/octet-stream'})
+});
+
+// SQL is text. Without this edge an uploaded .sql file could reach nothing but encodings -
+// no Markdown, HTML, PDF or QR - because nothing else accepts application/sql.
+registerConverter({
+    id: 'sql-to-text',
+    name: 'SQL as Plain Text',
+    inputs: ['application/sql'],
+    outputs: ['text/plain'],
+    weight: 1,
+    lib: null,
+    convert: async blob => new Blob([await blob.text()], {type: 'text/plain'})
+});
+
 // ===== iCALENDAR (ICS) & vCARD (VCF) =====
 // Both use the same RFC 5545/6350 line syntax: folded lines, NAME;PARAM=X:value,
 // backslash escaping. Shared low-level parser, format-specific mapping on top.
@@ -8784,6 +8829,33 @@ function isZipJunk(path) {
     return base === '.DS_Store' || base === 'Thumbs.db' || base === 'desktop.ini' || base === '';
 }
 
+// What a person dropping this file most likely came for. Reachable targets are ordered by
+// cost, and cheapest-to-compute is not the same thing: by cost alone every video defaulted
+// to a zip of extracted frames, WAV to a picture of its waveform, and SQL or MIDI to DNA.
+const PREFERRED_TARGETS = {
+    'video/*': ['audio/mpeg', 'video/mp4'],
+    'video/mp4': ['audio/mpeg', 'video/webm'],
+    'audio/*': ['audio/mpeg', 'audio/wav'],
+    'audio/mpeg': ['audio/wav'],
+    'image/heic': ['image/jpeg'],
+    'image/heif': ['image/jpeg']
+};
+
+function pickDefaultTarget(srcMime, targets) {
+    if (!targets || !targets.size) return null;
+    // A preference only counts when the route to it is a real conversion: MIDI is audio/*,
+    // but its only way to MP3 is a raw embed drawn as a picture, made into a video, and
+    // stripped for its (silent) soundtrack.
+    const honest = m => targets.has(m) && !targets.get(m).some(step => step.converter.lossy === true);
+    const prefs = PREFERRED_TARGETS[srcMime] || PREFERRED_TARGETS[srcMime.split('/')[0] + '/*'] || [];
+    for (const m of prefs) if (honest(m)) return m;
+    // Then, cheapest first: a real format reached honestly, then any honest target (a
+    // checksum list or waveform), and only then whatever is cheapest.
+    for (const m of targets.keys()) if (!m.includes('+') && honest(m)) return m;
+    for (const m of targets.keys()) if (honest(m)) return m;
+    return targets.keys().next().value;
+}
+
 // Turn a single File into an input node (the per-file half of handleFiles).
 async function addFileNode(file) {
     const uid = 'f_' + Math.random().toString(36).substring(2, 11);
@@ -8802,7 +8874,7 @@ async function addFileNode(file) {
         convertedBlob: null,
         convertedName: ''
     };
-    if (targetMap.size > 0) node.targetMime = Array.from(targetMap.keys())[0];
+    node.targetMime = pickDefaultTarget(mime, targetMap);
     inputFiles.push(node);
 }
 
@@ -9303,7 +9375,7 @@ function addVia(uid, mime) {
     // Re-validate the target against the new chain base; fall back to the best option.
     const targets = reachableFrom(mime);
     if (!node.targetMime || !targets.has(node.targetMime) || !getNodePath(node)) {
-        node.targetMime = targets.size ? targets.keys().next().value : null;
+        node.targetMime = pickDefaultTarget(mime, targets);
     }
     renderFileCards();
     updateGlobalOptionsPanel();
@@ -9314,8 +9386,8 @@ function removeVia(uid, idx) {
     if (!node || !node.viaMimes) return;
     node.viaMimes.splice(idx, 1);
     if (!node.targetMime || !getNodePath(node)) {
-        const targets = reachableFrom(nodeChainBase(node));
-        node.targetMime = targets.size ? targets.keys().next().value : null;
+        const base = nodeChainBase(node);
+        node.targetMime = pickDefaultTarget(base, reachableFrom(base));
     }
     renderFileCards();
     updateGlobalOptionsPanel();

@@ -160,6 +160,27 @@ if (suites.includes('graph')) {
         ['audio/wav', 'audio/mpeg', 1], ['video/mp4', 'audio/mpeg', 1],
         ['text/plain', 'image/png+qr', 1], ['text/plain', 'application/pdf', 1]
     ];
+    // What a person gets if they just press Convert. Cheapest-to-compute is not the same
+    // as what they came for: by cost alone every video defaulted to a zip of frames.
+    const defaults = [
+        ['video/mp4', 'audio/mpeg'], ['video/quicktime', 'audio/mpeg'], ['video/webm', 'audio/mpeg'],
+        ['audio/wav', 'audio/mpeg'], ['audio/flac', 'audio/mpeg'], ['audio/mp4', 'audio/mpeg'],
+        ['audio/mpeg', 'audio/wav'], ['image/heic', 'image/jpeg'], ['image/png', 'image/jpeg'],
+        ['image/jpeg', 'image/png'], ['text/csv', 'application/json'], ['application/json', 'text/csv'],
+        ['application/x-subrip', 'text/vtt'], ['application/pdf', 'text/plain'], ['application/sql', 'text/plain']
+    ];
+    const picked = await page.evaluate(list => list.map(([m]) => pickDefaultTarget(m, findReachableTargets(m))), defaults);
+    defaults.forEach(([m, want], i) => picked[i] === want ? pass(`default for ${m} is ${want}`)
+        : fail(`default for ${m}`, `is ${picked[i]}, expected ${want}`));
+    // Nothing should default to a reinterpretation when an honest target exists.
+    const lossyDefaults = await page.evaluate(() => Object.keys(FORMAT_REGISTRY).filter(m => {
+        const t = findReachableTargets(m), d = pickDefaultTarget(m, t);
+        const honestExists = [...t.values()].some(p => !p.some(s => s.converter.lossy === true));
+        return d && honestExists && t.get(d).some(s => s.converter.lossy === true);
+    }));
+    lossyDefaults.length ? fail('formats that default to a reinterpretation', lossyDefaults.join(', '))
+        : pass('no format defaults to a reinterpretation when a real conversion exists');
+
     const got = await page.evaluate(list => list.map(([s, d]) => {
         const t = findReachableTargets(s).get(d);
         return t ? t.length : null;
@@ -341,6 +362,8 @@ if (suites.includes('roundtrip')) {
         ['ics -> json -> ics', 'text/calendar', [['ics-to-json', 'application/json'], ['json-to-ics', 'text/calendar']], 'contains:SUMMARY:Meeting'],
         ['vcf -> json -> vcf', 'text/vcard', [['vcard-to-json', 'application/json'], ['json-to-vcard', 'text/vcard']], 'contains:FN:Ada Lovelace'],
         ['csv -> mdtable -> csv', 'text/csv', [['csv-to-mdtable', 'text/markdown'], ['mdtable-to-csv', 'text/csv']], 'exact'],
+        ['bytes -> hexdump -> bytes', 'application/octet-stream', [['any-to-hexdump', 'text/x-hexdump'], ['hexdump-to-file', 'application/octet-stream']], 'bytes'],
+        ['png -> hexdump -> bytes', 'image/png', [['any-to-hexdump', 'text/x-hexdump'], ['hexdump-to-file', 'application/octet-stream']], 'bytes'],
         ['png -> qoi -> png', 'image/png', [['image-to-qoi', 'image/qoi'], ['qoi-to-png', 'image/png']], 'pixels'],
         ['png -> ppm -> png', 'image/png', [['image-to-ppm', 'image/x-portable-pixmap'], ['netpbm-to-png', 'image/png']], 'pixels'],
         ['png -> bmp -> png', 'image/png', [['canvas-image', 'image/bmp'], ['canvas-image', 'image/png']], 'pixels'],
@@ -373,7 +396,11 @@ if (suites.includes('roundtrip')) {
                         {file: new File([blob], 'fixture'), name: 'fixture'});
                     cur = to;
                 }
-                if (mode === 'pixels') {
+                if (mode === 'bytes') {
+                    const a = new Uint8Array(await F[startMime].arrayBuffer()), b = new Uint8Array(await blob.arrayBuffer());
+                    const at = a.findIndex((v, i) => v !== b[i]);
+                    if (a.length !== b.length || at >= 0) rec.err = `bytes changed: ${a.length} -> ${b.length} bytes, first difference at ${at}`;
+                } else if (mode === 'pixels') {
                     const a = await pixelsOf(F[startMime]), b = await pixelsOf(blob);
                     if (a.w !== b.w || a.h !== b.h) rec.err = `size changed: ${a.w}x${a.h} -> ${b.w}x${b.h}`;
                     else {
