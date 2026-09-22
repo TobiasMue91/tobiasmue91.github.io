@@ -250,6 +250,11 @@
 			box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 		}
 
+		.result.binary {
+			white-space: pre;
+			overflow-x: auto;
+		}
+
 		.result {
 			width: 100%;
 			min-height: 200px;
@@ -614,6 +619,7 @@
 			return;
 		}
 
+		decodedBinary = null;
 		try {
 			if (isEncoding) {
 				// Encoding: Text to Base64
@@ -626,29 +632,65 @@
 
 				outputText.textContent = output;
 			} else {
-				// Decoding: Base64 to Text
-				let processedInput = input;
+				// Decoding: Base64 to Text, or to bytes when the payload is not UTF-8.
+				// Accepts data: URIs, line-wrapped input, URL-safe alphabet and missing padding.
+				let processedInput = input.trim();
+				const dataUri = processedInput.match(/^data:([^;,]*)(?:;[^,]*)?,/i);
+				if (dataUri) processedInput = processedInput.slice(dataUri[0].length);
+				processedInput = processedInput.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+				while (processedInput.length % 4) processedInput += '=';
 
-				if (urlSafe.checked) {
-					processedInput = processedInput.replace(/-/g, '+').replace(/_/g, '/');
+				const raw = atob(processedInput);
+				const bytes = Uint8Array.from(raw, c => c.charCodeAt(0));
 
-					// Add padding if needed
-					while (processedInput.length % 4) {
-						processedInput += '=';
-					}
+				try {
+					outputText.textContent = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+				} catch (e) {
+					decodedBinary = { bytes, ...sniffType(bytes, dataUri && dataUri[1]) };
+					outputText.textContent = describeBinary(decodedBinary);
 				}
-
-				const rawOutput = atob(processedInput);
-				const output = decodeURIComponent(escape(rawOutput));
-
-				outputText.textContent = output;
 			}
 		} catch (error) {
 			outputText.textContent = '';
 			showNotification(`Error: ${error.message}`, true);
 		}
 
+		outputText.classList.toggle('binary', !!decodedBinary);
 		updateCounters();
+	}
+
+	// Binary decode results: shown as a hex preview, downloaded as the real bytes
+	let decodedBinary = null;
+
+	function sniffType(bytes, mime) {
+		const magic = [
+			[[0x89, 0x50, 0x4e, 0x47], 'image/png', 'png'],
+			[[0xff, 0xd8, 0xff], 'image/jpeg', 'jpg'],
+			[[0x47, 0x49, 0x46, 0x38], 'image/gif', 'gif'],
+			[[0x25, 0x50, 0x44, 0x46], 'application/pdf', 'pdf'],
+			[[0x50, 0x4b, 0x03, 0x04], 'application/zip', 'zip'],
+			[[0x1f, 0x8b], 'application/gzip', 'gz'],
+			[[0x52, 0x49, 0x46, 0x46, , , , , 0x57, 0x45, 0x42, 0x50], 'image/webp', 'webp']
+		];
+		for (const [sig, type, ext] of magic) {
+			if (sig.every((b, i) => b === undefined || bytes[i] === b)) return { type, ext };
+		}
+		if (mime) return { type: mime, ext: (mime.split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '') || 'bin' };
+		return { type: 'application/octet-stream', ext: 'bin' };
+	}
+
+	function describeBinary({ bytes, type }) {
+		const lines = [`Binary data, ${bytes.length} bytes (${type}) — not UTF-8 text.`,
+			'Use Download to save the decoded file.', ''];
+		const shown = Math.min(bytes.length, 256);
+		for (let off = 0; off < shown; off += 16) {
+			const row = Array.from(bytes.slice(off, Math.min(off + 16, shown)));
+			const hex = row.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(47);
+			const ascii = row.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+			lines.push(`${off.toString(16).padStart(8, '0')}  ${hex}  ${ascii}`);
+		}
+		if (bytes.length > shown) lines.push(`… ${bytes.length - shown} more bytes`);
+		return lines.join('\n');
 	}
 
 	// Utility functions
@@ -669,6 +711,10 @@
 
 	function swapContent() {
 		if (!outputText.textContent) return;
+		if (decodedBinary) {
+			showNotification('Output is binary — download it instead', true);
+			return;
+		}
 
 		inputText.value = outputText.textContent;
 		setMode(isEncoding ? 'decode' : 'encode');
@@ -727,12 +773,14 @@
 			return;
 		}
 
-		const blob = new Blob([outputText.textContent], {type: 'text/plain'});
+		const blob = decodedBinary
+			? new Blob([decodedBinary.bytes], {type: decodedBinary.type})
+			: new Blob([outputText.textContent], {type: 'text/plain'});
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 
 		a.href = url;
-		a.download = isEncoding ? 'encoded.txt' : 'decoded.txt';
+		a.download = isEncoding ? 'encoded.txt' : decodedBinary ? `decoded.${decodedBinary.ext}` : 'decoded.txt';
 		a.click();
 
 		URL.revokeObjectURL(url);
@@ -745,6 +793,7 @@
 	clearInput.addEventListener('click', () => {
 		inputText.value = '';
 		outputText.textContent = '';
+		decodedBinary = null;
 		updateCounters();
 	});
 	copyOutput.addEventListener('click', copyToClipboard);
