@@ -1087,6 +1087,30 @@ One thing deliberately not measured: whether it is *pleasant*. A jigsaw's diffic
 just the piece count, so it grows rather than develops, and that is a real limitation rather than
 something the measurements above answer.
 
+Filled since: **a crossword tile game**, by `games/rack.html` — the Scrabble line in the backlog, and
+the first board game with a computer opponent since the drift above was measured.
+
+**Check the generator against brute force before trusting any number it produces.** The move
+generator (Appel–Jacobson over a first-child/next-sibling trie in typed arrays: 593k nodes, built in
+about 130 ms) was checked two ways. Every move it produced in whole bot games was re-scored by an
+independent validator, the same one the human's moves go through, and matched exactly. Separately,
+every one- and two-tile placement on mid-game boards was tried by brute force through that validator
+and compared set-for-set with what the generator found. The first check proves it never lies; only
+the second proves it never misses anything, and a generator that silently misses moves still produces
+bots that look reasonable.
+
+**The word list decided how the opponent felt, not how strong it was.** The first medium bot averaged
+about 420 a game playing USQUE, SUNKET and NONRATED — all valid, all in a 270,000-word list, and
+exactly what makes a casual player feel cheated rather than outplayed. Restricting the easy and medium
+bots to SCOWL's everyday tiers (about 39,000 words, levels 10–35) fixed the feel and set the ladder
+at the same time: roughly 190 / 330 / 520 points a game for easy / medium / hard, with the human still
+refereed by the full list. It was visible in the first screenshot of a played game and in no
+statistic.
+
+**The coach is what makes it hold up.** Every human turn the worker finds the best available move, and
+the log says "best was QUEENIE for 102" under your 13. The end screen totals it into the share of
+available points you took. That number moves as you learn, which is the reason to play a second game.
+
 ## Tried and rejected
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose
@@ -1526,7 +1550,7 @@ give no hint in their filenames.
 - Roulette
 - Shooting Gallery *(built: `games/moorhuhn.html` — a panorama you pan under a clock;
   `games/duck_hunt.html` covers the fixed-screen NES shape)*
-- Scrabble
+- Scrabble *(built: `games/rack.html`)*
 - Checkers *(built: `games/checkers.html`)*
 - Backgammon *(built: `games/backgammon.html`)*
 - Bingo
