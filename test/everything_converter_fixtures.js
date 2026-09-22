@@ -202,3 +202,77 @@ window.__buildFixtures = async function () {
     window.__F = F;
     return {built: Object.keys(F).filter(k => F[k]).length, missing: log};
 };
+
+// Formats that need one of the page's libraries to create - PDF, spreadsheets, DOCX,
+// MessagePack and the ffmpeg-made media. Run after __buildFixtures(); each one that cannot
+// be made (no network and no --mirror) is simply left out, and the edges that need it are
+// reported as not exercised rather than failed.
+window.__buildLibFixtures = async function () {
+    const F = window.__F, made = [], missing = [];
+    const run = async (id, from, to) => {
+        const c = converters.find(x => x.id === id);
+        if (c.lib) await loadLibrary(c.lib, c.name);
+        return await c.convert(F[from], from, to, {...DEFAULT_OPTIONS}, {file: new File([F[from]], 'fixture'), name: 'fixture'});
+    };
+    const jszip = async () => {
+        if (!window.JSZip) await loadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
+    };
+    const makers = {
+        'application/pdf': () => run('text-to-pdf', 'text/plain', 'application/pdf'),
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+            () => run('json-to-xlsx', 'application/json', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+        'application/vnd.oasis.opendocument.spreadsheet': async () => {
+            if (!window.XLSX) await loadLibrary(sjsUrl, 'SheetJS');
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['name', 'age'], ['Ada', 36], ['Bob', 41]]), 'Sheet1');
+            return new Blob([XLSX.write(wb, {bookType: 'ods', type: 'array'})]);
+        },
+        'application/msgpack': () => run('json-to-msgpack', 'application/json', 'application/msgpack'),
+        // The smallest DOCX Word and mammoth accept: a heading and a bold run.
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': async () => {
+            await jszip();
+            const z = new JSZip();
+            z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+            z.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+            z.file('word/document.xml', '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+                + '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Title</w:t></w:r></w:p>'
+                + '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Bold</w:t></w:r><w:r><w:t xml:space="preserve"> and plain text.</w:t></w:r></w:p></w:body></w:document>');
+            return await z.generateAsync({type: 'blob'});
+        },
+        'audio/mpeg': () => run('ffmpeg-audio-to-audio', 'audio/wav', 'audio/mpeg'),
+        'video/mp4': () => run('ffmpeg-image-to-video', 'image/png', 'video/mp4'),
+        'video/webm': () => run('ffmpeg-image-to-video', 'image/png', 'video/webm'),
+        // An MP3 with a real ID3v2.3 APIC frame, so album-art extraction has something to find.
+        'audio/mpeg+art': async () => {
+            const art = new Uint8Array(await F['image/png'].arrayBuffer());
+            const te = new TextEncoder();
+            const body = [0x00, ...te.encode('image/png'), 0x00, 0x03, 0x00, ...art]; // latin-1, mime, front cover, no description
+            const n = body.length;
+            const frame = [...te.encode('APIC'), (n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255, 0, 0, ...body];
+            const size = frame.length;   // tag sizes are syncsafe: 7 bits per byte
+            const tag = [...te.encode('ID3'), 3, 0, 0, (size >>> 21) & 127, (size >>> 14) & 127, (size >>> 7) & 127, size & 127, ...frame];
+            return new Blob([new Uint8Array(tag), F['audio/mpeg']], {type: 'audio/mpeg'});
+        }
+    };
+    // Every other audio and video container, so each one's decoding is exercised as well.
+    for (const m of ['audio/ogg', 'audio/webm', 'audio/flac', 'audio/aac', 'audio/opus', 'audio/mp4']) {
+        makers[m] = () => run('ffmpeg-audio-to-audio', 'audio/wav', m);
+    }
+    for (const m of ['video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/mpeg', 'video/3gpp']) {
+        makers[m] = () => run('ffmpeg-image-to-video', 'image/png', m);
+    }
+    for (const [mime, make] of Object.entries(makers)) {
+        try {
+            const blob = await Promise.race([make(), new Promise((_, rj) => setTimeout(() => rj(new Error('timed out')), 120000))]);
+            if (!blob || !blob.size) throw new Error('empty');
+            F[mime] = blob;
+            made.push(mime);
+        } catch (e) {
+            missing.push({fixture: mime, error: String((e && e.message) || e).slice(0, 120)});
+        }
+    }
+    return {made, missing};
+};

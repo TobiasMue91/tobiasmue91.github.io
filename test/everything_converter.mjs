@@ -10,12 +10,14 @@
 //   node test/everything_converter.mjs                 # everything
 //   node test/everything_converter.mjs graph edges     # named suites only
 //   node test/everything_converter.mjs --url=http://localhost:8099/tools/everything_converter.html
+//   node test/everything_converter.mjs --mirror            # CDN libraries from node_modules
 //
-// Suites: graph, detect, edges, roundtrip, adversarial, codecs, ui.
+// Suites: graph, detect, edges, roundtrip, adversarial, codecs, media, ui.
 //
 // Needs `npm i -D playwright` and a server on the page's URL (npx http-server -p 8099).
 // Converters that pull a library from a CDN are reported as SKIP when the CDN is
-// unreachable, so the suite is still useful offline. Three optional reference libraries
+// unreachable, so the suite is still useful offline - or, with --mirror, served from locally
+// installed copies so they run offline too (see cdn_mirror.mjs). Optional reference libraries
 // (qrcode, jsqr, utif) turn on cross-checks in the codecs suite if they are installed.
 
 import {chromium} from 'playwright';
@@ -23,13 +25,16 @@ import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
 import {dirname, join} from 'path';
 import {buildTiff} from './tiff_fixtures.mjs';
+import {mirrorCdn} from './cdn_mirror.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const urlArg = args.find(a => a.startsWith('--url='));
 const URL_ = urlArg ? urlArg.slice(6) : 'http://127.0.0.1:8099/tools/everything_converter.html';
 const EXE = process.env.CHROMIUM_PATH || undefined;
-const ALL = ['graph', 'detect', 'edges', 'roundtrip', 'adversarial', 'codecs', 'ui'];
+const mirrorArg = args.find(a => a === '--mirror' || a.startsWith('--mirror='));
+const MIRROR = mirrorArg ? (mirrorArg.includes('=') ? mirrorArg.split('=')[1] : join(HERE, '..', 'node_modules')) : null;
+const ALL = ['graph', 'detect', 'edges', 'roundtrip', 'adversarial', 'codecs', 'media', 'ui'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -59,6 +64,7 @@ const optional = async name => {
 
 const browser = await chromium.launch(EXE ? {executablePath: EXE} : {});
 const page = await browser.newPage();
+const mirrored = MIRROR ? await mirrorCdn(page, MIRROR) : null;
 const pageErrors = [];
 page.on('pageerror', e => pageErrors.push(String(e.message)));
 try {
@@ -252,9 +258,16 @@ if (suites.includes('detect')) {
 
 // ===== fixtures (needed by every suite below) =========================================
 let fixtureMimes = [];
-if (suites.some(s => ['edges', 'roundtrip', 'adversarial', 'codecs'].includes(s))) {
+if (suites.some(s => ['edges', 'roundtrip', 'adversarial', 'codecs', 'media'].includes(s))) {
     await page.addScriptTag({content: readFileSync(join(HERE, 'everything_converter_fixtures.js'), 'utf8')});
     const built = await page.evaluate(() => window.__buildFixtures());
+    if (suites.some(s => ['edges', 'media'].includes(s))) {
+        const lib = await page.evaluate(() => window.__buildLibFixtures());
+        if (lib.missing.length) {
+            console.log(`\n  note: ${lib.missing.length} fixture(s) need a library that could not be loaded`
+                + `${MIRROR ? '' : ' - try --mirror'}:\n        ${lib.missing.map(m => m.fixture).join(', ')}`);
+        }
+    }
     fixtureMimes = await page.evaluate(() => Object.keys(window.__F));
     if (built.missing.length) {
         console.log(`\n  note: ${built.missing.length} fixture(s) could not be derived:`);
@@ -294,7 +307,8 @@ if (suites.includes('edges')) {
                 for (const to of c.outputs) {
                     if (to === from) continue;
                     // EXIF only exists in the fixture that carries an APP1 block.
-                    const input = (c.id === 'jpeg-exif-to-json' && F['image/jpeg+exif']) ? F['image/jpeg+exif'] : fixture;
+                    const input = (c.id === 'jpeg-exif-to-json' && F['image/jpeg+exif']) ? F['image/jpeg+exif']
+                        : (c.id === 'mp3-album-art' && F['audio/mpeg+art']) ? F['audio/mpeg+art'] : fixture;
                     const rec = {id: c.id, from, to, usesLib: !!c.lib};
                     const lib = await window.__ensureLib(c);
                     if (!lib.ok) {
@@ -787,6 +801,74 @@ if (suites.includes('codecs')) {
     if (!qrcode) skip('QR vs reference encoder', 'npm i -D qrcode to enable');
 }
 
+// ===== media: the ffmpeg engine under failure ============================================
+// ffmpeg.wasm fails in ways a single conversion never shows: a failed encode can corrupt the
+// WebAssembly heap for every conversion after it, and exec() reports errors as an exit
+// code rather than throwing. These run only when the engine can be loaded.
+if (suites.includes('media')) {
+    section('media');
+    const ready = await page.evaluate(async () => {
+        try {
+            await getFFmpeg();
+            return true;
+        } catch (e) {
+            return String(e.message || e);
+        }
+    });
+    if (ready !== true) skip('ffmpeg engine', 'could not be loaded' + (MIRROR ? '' : ' - try --mirror'));
+    else {
+        const r = await page.evaluate(async () => {
+            const F = window.__F, out = {};
+            const conv = (id, from, to, blob) => converters.find(c => c.id === id)
+                .convert(blob || F[from], from, to, {...DEFAULT_OPTIONS}, {name: 'fixture'});
+            const tryIt = async fn => {
+                try {
+                    const b = await fn();
+                    return {ok: true, size: b.size, blob: b};
+                } catch (e) {
+                    return {ok: false, err: e.message};
+                }
+            };
+            // A crash mid-conversion is retried on a fresh engine instead of surfacing.
+            const sabotage = async () => {
+                const ff = await getFFmpeg();
+                ff.exec = async () => { throw new Error('RuntimeError: memory access out of bounds'); };
+            };
+            for (const [label, fn] of [
+                ['audio transcode', () => conv('ffmpeg-audio-to-audio', 'audio/wav', 'audio/mpeg')],
+                ['image to video', () => conv('ffmpeg-image-to-video', 'image/png', 'video/mp4')],
+                ['audio to video', () => conv('ffmpeg-audio-to-video', 'audio/wav', 'video/mp4')]]) {
+                await sabotage();
+                out[`${label} survives an engine crash`] = await tryIt(fn);
+            }
+            // Repeated failures must not poison the engine: this used to break every
+            // conversion after the second failed WebM encode.
+            const junk = new Blob([new Uint8Array(400).fill(7)]);
+            for (let i = 0; i < 3; i++) await tryIt(() => conv('ffmpeg-audio-to-audio', 'audio/wav', 'audio/mpeg', junk));
+            out['conversions still work after three failures'] = await tryIt(() => conv('ffmpeg-audio-to-audio', 'audio/wav', 'audio/mpeg'));
+            const bad = await tryIt(() => conv('ffmpeg-audio-to-audio', 'audio/wav', 'audio/mpeg', junk));
+            out['a bad file reports ffmpeg\'s reason'] = {ok: !bad.ok && /Invalid data|could not/i.test(bad.err) && !/no output/i.test(bad.err), err: bad.err};
+            // Formats that failed on every attempt.
+            out['audio to WebM (.weba)'] = await tryIt(() => conv('ffmpeg-audio-to-audio', 'audio/wav', 'audio/webm'));
+            const c = document.createElement('canvas');
+            c.width = 64;
+            c.height = 48;
+            c.getContext('2d').fillStyle = 'rgba(200,40,40,0.5)';
+            c.getContext('2d').fillRect(8, 8, 30, 20);
+            const transparent = await new Promise(res => c.toBlob(res, 'image/png'));
+            out['transparent PNG to WebM (VP8)'] = await tryIt(() => conv('ffmpeg-image-to-video', 'image/png', 'video/webm', transparent));
+            out['audio to WebM video'] = await tryIt(() => conv('ffmpeg-audio-to-video', 'audio/wav', 'video/webm'));
+            // Frames are read by the browser's decoder; a format it cannot play goes via WebM.
+            if (F['video/mp4']) out['frames from a video the browser may not decode'] = await tryIt(() => conv('video-frames-to-zip', 'video/mp4', 'application/zip+videoframes'));
+            for (const v of Object.values(out)) delete v.blob;
+            return out;
+        });
+        for (const [label, v] of Object.entries(r)) {
+            v.ok && (v.size === undefined || v.size > 0) ? pass(`${label}${v.size ? ` (${v.size} B)` : ''}`) : fail(label, v.err || 'empty output');
+        }
+    }
+}
+
 // ===== ui: the real page flows, fed a hostile file name ================================
 // File names are attacker-controlled - a .zip someone sends you is unpacked into this list -
 // so every place the UI shows one, or an error quoting one, must treat it as text.
@@ -888,5 +970,9 @@ if (pageErrors.length) fail('uncaught errors on the page', pageErrors.join('\n')
 else pass('no uncaught page errors');
 
 await browser.close();
+if (mirrored) {
+    console.log(`\n  mirror: served ${mirrored.hits.size} CDN file(s) from ${MIRROR}`
+        + (mirrored.misses.size ? `; not installed: ${[...mirrored.misses].join(', ')}` : ''));
+}
 console.log(`\n${passes} passed, ${failures} failed, ${skips} skipped`);
 process.exit(failures ? 1 : 0);
