@@ -837,6 +837,43 @@ if (suites.includes('ui')) {
         resetAll();
         return out;
     }, evil);
+    // Merging several converted files into one must leave a valid file of that type.
+    const merges = await page.evaluate(async () => {
+        const m = async (mime, a, b) => (await mergeBlobs([{targetMime: mime, convertedBlob: new Blob([a])},
+            {targetMime: mime, convertedBlob: new Blob([b])}])).text();
+        const out = {};
+        let o = await m('application/xml', '<?xml version="1.0"?>\n<a/>', '<?xml version="1.0"?>\n<b/>');
+        out['XML is well-formed'] = !new DOMParser().parseFromString(o, 'application/xml').querySelector('parsererror');
+        o = await m('application/jsonl', '{"a":1}\n', '{"a":2}\n');
+        out['JSON Lines: every line parses'] = o.trim().split('\n').every(l => { try { JSON.parse(l); return true; } catch { return false; } });
+        o = await m('application/toml', 'a = 1\n[t]\nx = 1\n', 'b = 2\n[t]\ny = 2\n');
+        const t = tomlToValue(o);
+        out['TOML merges tables'] = t.a === 1 && t.b === 2 && t.t.x === 1 && t.t.y === 2;
+        o = await m('application/x-properties', 'a=1\n', 'b=2\n');
+        out['.properties gains no junk key'] = Object.keys(parseProperties(o)).join() === 'a,b';
+        o = await m('text/csv', 'name,age\nAda,36\n', 'name,city\nBob,Paris\n');
+        const rows = parseCSVLines(o.trim(), ',');
+        out['CSV matches columns by header'] = rows[0].join() === 'name,age,city' && rows[2].join() === 'Bob,,Paris';
+        o = await m('text/csv', 'n,note\n"A","two\nlines"\n', 'n,note\nB,x\n');
+        out['CSV keeps quoted newlines'] = parseCSVLines(o.trim(), ',').length === 3;
+        o = await m('text/html', '<html><body><p>one</p></body></html>', '<html><body><p>two</p></body></html>');
+        out['HTML becomes one document'] = (o.match(/<html/gi) || []).length === 1 && o.includes('one') && o.includes('two');
+        // The merge checkbox must still turn merging off once it has been turned on.
+        resetAll();
+        await addFileNode(new File(['a,b\n1,2\n'], 'x.csv'));
+        await addFileNode(new File(['a,b\n3,4\n'], 'y.csv'));
+        mergeEnabled = true;
+        renderFileCards();
+        if (typeof updateGlobalOptionsPanel === 'function') updateGlobalOptionsPanel();
+        const box = document.getElementById('mergeCheck');
+        if (box) {
+            box.click();
+            out['merge checkbox turns merging off'] = mergeEnabled === false;
+        }
+        resetAll();
+        return out;
+    });
+    for (const [label, ok] of Object.entries(merges)) ok ? pass(`merge: ${label}`) : fail(`merge: ${label}`);
     r.pwned || r.injected ? fail('hostile file names run no script', `script ran ${r.pwned} time(s); ${r.injected} injected element(s)`)
         : pass('hostile file names run no script');
     r.cardShowsName ? pass('file card shows the name as text') : fail('file card shows the name as text');

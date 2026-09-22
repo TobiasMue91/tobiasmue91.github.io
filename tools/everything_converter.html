@@ -9121,7 +9121,7 @@ function updateMergeRow() {
         return;
     }
     const ext = (FORMAT_REGISTRY[target]?.ext || '').toUpperCase();
-    row.innerHTML = `<label><input type="checkbox" id="mergeCheck" ${mergeEnabled ? 'checked' : ''}onchange="mergeEnabled=this.checked">Merge all files into one ${ext}file</label><span class="merge-info">${inputFiles.length}files → 1 merged file</span>`;
+    row.innerHTML = `<label><input type="checkbox" id="mergeCheck" ${mergeEnabled ? 'checked' : ''} onchange="mergeEnabled=this.checked">Merge all files into one ${ext} file</label><span class="merge-info">${inputFiles.length} files → 1 merged file</span>`;
 }
 
 function renderFileCards() {
@@ -9767,25 +9767,73 @@ async function mergeBlobs(nodes) {
         }
         return new Blob([JSON.stringify(arrays, null, 2)], {type: 'application/json'});
     }
+    // Every other mergeable format is text, but "text" is not one format: joining files with
+    // a "---" line is right for Markdown and YAML and breaks XML, JSON Lines, TOML and
+    // .properties. Each is merged in a way that leaves one valid file of its own type.
+    const texts = [];
+    for (const b of blobs) texts.push((await b.text()).replace(/^\uFEFF/, ''));
     if (mime === 'text/csv' || mime === 'text/tab-separated-values') {
-        const delim = mime === 'text/csv' ? ',' : '\t';
-        const allRows = [];
-        let headerLine = null;
-        for (const b of blobs) {
-            const lines = (await b.text()).trim().split('\n');
-            if (lines.length === 0) continue;
-            if (!headerLine) {
-                headerLine = lines[0];
-                allRows.push(headerLine);
+        // Columns are matched by header, not position. Appending rows blindly put a second
+        // file's header in as a data row and its values under the first file's columns.
+        const header = [], records = [];
+        for (const text of texts) {
+            const rows = parseCSVLines(text.trim(), mime === 'text/csv' ? csvDelimiter(text) : '\t');
+            if (!rows.length) continue;
+            const cols = rows[0].map(c => c.trim());
+            for (const c of cols) if (!header.includes(c)) header.push(c);
+            for (const row of rows.slice(1)) {
+                const rec = {};
+                cols.forEach((c, i) => rec[c] = row[i] === undefined ? '' : row[i]);
+                records.push(rec);
             }
-            allRows.push(...lines.slice(headerLine === lines[0] ? 1 : 0));
         }
-        return new Blob([allRows.join('\n')], {type: mime});
-    }// Text-based:concatenate with separator
-    const separator = mime === 'text/html' ? '\n<hr>\n' : '\n\n---\n\n';
-    const parts = [];
-    for (const b of blobs) parts.push(await b.text());
-    return new Blob([parts.join(separator)], {type: mime});
+        const d = mime === 'text/csv' ? ',' : '\t';
+        const cell = v => {
+            const str = String(v == null ? '' : v);
+            return (str.includes(d) || str.includes('"') || /[\r\n]/.test(str)) ? `"${str.replace(/"/g, '""')}"` : str;
+        };
+        const lines = [header.map(cell).join(d), ...records.map(r => header.map(c => cell(r[c])).join(d))];
+        return new Blob([lines.join('\n') + '\n'], {type: mime});
+    }
+    if (mime === 'application/xml') {
+        // Two documents cannot share a file, so each root becomes a child of one <merged>.
+        const out = document.implementation.createDocument(null, 'merged', null);
+        texts.forEach((text, i) => {
+            const doc = new DOMParser().parseFromString(text, 'application/xml');
+            if (doc.querySelector('parsererror')) throw new Error(`File ${i + 1} is not well-formed XML`);
+            out.documentElement.appendChild(out.importNode(doc.documentElement, true));
+        });
+        return new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(out)], {type: mime});
+    }
+    if (mime === 'application/toml') {
+        // Concatenated TOML repeats tables, which is an error; merge the data instead.
+        const merge = (x, y) => {
+            if (Array.isArray(x) && Array.isArray(y)) return x.concat(y);
+            if (x && y && typeof x === 'object' && typeof y === 'object' && !Array.isArray(x) && !Array.isArray(y)) {
+                const o = {...x};
+                for (const [k, v] of Object.entries(y)) o[k] = k in o ? merge(o[k], v) : v;
+                return o;
+            }
+            return y;
+        };
+        return new Blob([tomlDocument(texts.map(tomlToValue).reduce(merge))], {type: mime});
+    }
+    if (mime === 'text/html') {
+        // One document: each file's body in turn, the first file's title, every file's styles.
+        const docs = texts.map(t => new DOMParser().parseFromString(t, 'text/html'));
+        const title = docs.map(d => d.title).find(Boolean) || 'Merged';
+        const styles = docs.flatMap(d => [...d.querySelectorAll('head style')].map(el => el.outerHTML)).join('\n');
+        const bodies = docs.map(d => d.body ? d.body.innerHTML.trim() : '').join('\n<hr>\n');
+        return new Blob([`<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>${escHtml(title)}</title>\n${styles}</head>\n<body>\n${bodies}\n</body></html>\n`], {type: mime});
+    }
+    if (['application/jsonl', 'application/ini', 'application/x-properties', 'application/x-env'].includes(mime)) {
+        // Line-based formats: one after another, which is what `cat` would do. A "---" line
+        // here was a broken JSON line or a junk key.
+        return new Blob([texts.map(t => t.trim()).filter(Boolean).join('\n') + '\n'], {type: mime});
+    }
+    // Plain text, Markdown and YAML, where a "---" line is a rule or a document separator.
+    const separator = mime === 'text/yaml' ? '\n---\n' : '\n\n---\n\n';
+    return new Blob([texts.map(t => t.replace(/\s+$/, '')).join(separator) + '\n'], {type: mime});
 }
 
 async function executeBatchChain() {
@@ -9805,7 +9853,7 @@ async function executeBatchChain() {
         const node = inputFiles[idx];
         node.status = 'converting';
         renderFileCards();
-        $('progressLabel').textContent = `Converting ${idx + 1}of ${total}:${node.name}`;
+        $('progressLabel').textContent = `Converting ${idx + 1} of ${total}: ${node.name}`;
         $('progressFill').style.width = `${Math.round((completed / total) * 100)}%`;
         $('progressPct').textContent = `${Math.round((completed / total) * 100)}%`;
         try {
@@ -10193,7 +10241,7 @@ function renderOutputView() {
     if (mergeEnabled && success.length > 1) {
         const mergeCard = document.createElement('div');
         mergeCard.className = 'output-card';
-        mergeCard.innerHTML = `<div class="output-header"><div><div class="output-name">Merging ${success.length}files…</div></div></div>`;
+        mergeCard.innerHTML = `<div class="output-header"><div><div class="output-name">Merging ${success.length} files…</div></div></div>`;
         grid.appendChild(mergeCard);
         mergeBlobs(success).then(merged => {
             const ext = FORMAT_REGISTRY[success[0].targetMime]?.ext || 'bin';
@@ -10384,7 +10432,7 @@ function buildFormatMatrix() {
         mimes.forEach(tMime => {
             if (fMime === tMime) html += `<td class="dot-none">—</td>`; else if (targets.has(tMime)) {
                 const steps = targets.get(tMime).length;
-                html += steps === 1 ? `<td class="dot" title="Direct conversion">●</td>` : `<td class="dot-chain" title="Via ${steps}steps">⚯<small>${steps}</small></td>`;
+                html += steps === 1 ? `<td class="dot" title="Direct conversion">●</td>` : `<td class="dot-chain" title="Via ${steps} steps">⚯<small>${steps}</small></td>`;
             } else html += `<td class="dot-none">·</td>`;
         });
         html += `</tr>`;
