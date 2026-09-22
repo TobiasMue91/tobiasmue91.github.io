@@ -11,7 +11,7 @@
 //   node test/everything_converter.mjs graph edges     # named suites only
 //   node test/everything_converter.mjs --url=http://localhost:8099/tools/everything_converter.html
 //
-// Suites: graph, detect, edges, roundtrip, adversarial, codecs.
+// Suites: graph, detect, edges, roundtrip, adversarial, codecs, ui.
 //
 // Needs `npm i -D playwright` and a server on the page's URL (npx http-server -p 8099).
 // Converters that pull a library from a CDN are reported as SKIP when the CDN is
@@ -29,7 +29,7 @@ const args = process.argv.slice(2);
 const urlArg = args.find(a => a.startsWith('--url='));
 const URL_ = urlArg ? urlArg.slice(6) : 'http://127.0.0.1:8099/tools/everything_converter.html';
 const EXE = process.env.CHROMIUM_PATH || undefined;
-const ALL = ['graph', 'detect', 'edges', 'roundtrip', 'adversarial', 'codecs'];
+const ALL = ['graph', 'detect', 'edges', 'roundtrip', 'adversarial', 'codecs', 'ui'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -477,6 +477,10 @@ if (suites.includes('adversarial')) {
         ['srt tolerates BOM and CRLF', 'subtitle-to-json', '﻿1\r\n00:00:01,000 --> 00:00:02,000\r\nHi\r\n', 'application/x-subrip', 'application/json', 'want:"Hi"'],
         ['vtt cue settings are dropped', 'subtitle-convert', 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000 line:90%\nHi\n', 'text/vtt', 'application/x-subrip', 'avoid:line:90%'],
         ['enhanced lrc word timings are stripped', 'lrc-to-subtitle', '[00:01.00]<00:01.00>Hi <00:02.00>there\n', 'application/x-lrc', 'application/x-subrip', 'avoid:<00:'],
+        ['broken JSON is refused, not wrapped as text', 'json-to-csv', '{not json', 'application/json', 'text/csv', 'throws'],
+        ['JSON with trailing commas is repaired', 'json-to-csv', '[{"a":1,},]', 'application/json', 'text/csv', 'want:a'],
+        ['prose still becomes JSON', 'text-to-json', 'Just a sentence.', 'text/plain', 'application/json', 'want:"text"'],
+        ['key=value text becomes an object', 'text-to-json', 'a=1\nb=x', 'text/plain', 'application/json', 'want:"b": "x"'],
         ['oversized QR is refused, not truncated', 'text-to-qr', 'x'.repeat(3500), 'text/plain', 'image/png+qr', 'throws'],
         ['empty input is refused clearly', 'ics-to-json', 'BEGIN:VCALENDAR\nEND:VCALENDAR\n', 'text/calendar', 'application/json', 'throws'],
         ['missing table is refused clearly', 'htmltable-to-csv', '<p>no table</p>', 'text/html', 'text/csv', 'throws']
@@ -781,6 +785,65 @@ if (suites.includes('codecs')) {
         }
     }
     if (!qrcode) skip('QR vs reference encoder', 'npm i -D qrcode to enable');
+}
+
+// ===== ui: the real page flows, fed a hostile file name ================================
+// File names are attacker-controlled - a .zip someone sends you is unpacked into this list -
+// so every place the UI shows one, or an error quoting one, must treat it as text.
+if (suites.includes('ui')) {
+    section('ui');
+    const evil = '<img src=x onerror="__pwned.push(1)">"\'.csv';
+    const r = await page.evaluate(async evil => {
+        window.__pwned = [];
+        resetAll();
+        // Results render after the progress bar's 600 ms fade.
+        const settle = () => new Promise(res => setTimeout(res, 800));
+        const injected = () => document.querySelectorAll('#inputSection img[src="x"], #outputSection img[src="x"], img[src="x"]').length;
+        const out = {};
+        // 1. the file card
+        await addFileNode(new File(['a,b\n1,2\n'], evil));
+        renderFileCards();
+        await settle();
+        const card = document.querySelector('.file-name');
+        out.cardShowsName = !!card && card.textContent === evil;
+        out.defaultTarget = inputFiles[0].targetMime;
+        // 2. a successful conversion and its output card
+        await executeBatchChain();
+        await settle();
+        out.converted = inputFiles[0].status;
+        const outName = document.querySelector('.output-name');
+        out.outputShowsName = !!outName && outName.textContent.startsWith('<img src=x');
+        // 3. a failing conversion, whose error lands in a title attribute and the failed list
+        resetAll();
+        await addFileNode(new File(['{not json'], evil.replace('.csv', '.json')));
+        inputFiles[0].targetMime = 'text/csv';
+        await executeBatchChain();
+        await settle();
+        out.failed = inputFiles[0].status;
+        // 4. the target search box
+        const btn = document.querySelector('.file-card button, .card-actions-row button, .tsel-btn');
+        if (btn) {
+            openTargetSelect(inputFiles[0].id, btn, 'target');
+            const search = document.querySelector('.tsel-search');
+            if (search) {
+                search.value = '<img src=x onerror="__pwned.push(2)">';
+                search.dispatchEvent(new Event('input'));
+            }
+            closeTargetSelect();
+        }
+        await settle();
+        out.injected = injected();
+        out.pwned = window.__pwned.length;
+        resetAll();
+        return out;
+    }, evil);
+    r.pwned || r.injected ? fail('hostile file names run no script', `script ran ${r.pwned} time(s); ${r.injected} injected element(s)`)
+        : pass('hostile file names run no script');
+    r.cardShowsName ? pass('file card shows the name as text') : fail('file card shows the name as text');
+    r.defaultTarget === 'application/json' ? pass('a dropped CSV defaults to JSON') : fail('a dropped CSV defaults to JSON', `got ${r.defaultTarget}`);
+    r.converted === 'done' && r.outputShowsName ? pass('conversion completes and the output card shows the name as text')
+        : fail('conversion completes and the output card shows the name as text', `status ${r.converted}`);
+    r.failed === 'error' ? pass('a failing conversion is reported as failed') : fail('a failing conversion is reported as failed', `status ${r.failed}`);
 }
 
 // ===== uncaught page errors are always a failure ======================================

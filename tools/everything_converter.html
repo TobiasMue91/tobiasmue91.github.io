@@ -1610,6 +1610,13 @@ function loadLibrary(url, name) {
     });
 }
 
+// Anything that came from outside the page - a file name, a zip entry, text typed into a
+// search box, an error that quotes the input - is escaped before it goes into innerHTML.
+// File names are attacker-controlled: a .zip someone sends you is unpacked here, and an
+// entry named <img src=x onerror=...>.txt used to run its script on this page.
+const escHtml = v => String(v == null ? '' : v).replace(/[&<>"']/g,
+    ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[ch]);
+
 const converters = [];
 
 function registerConverter(c) {
@@ -1648,22 +1655,39 @@ function robustJsonParse(text) {// 1. Direct parse
             return parsed;
         } catch (_) {
         }
-    }// 7. Key=value lines → object
+    }
+    // Every repair failed. Say so, with the parser's position, instead of guessing: the
+    // prose heuristics that used to follow here turned a broken .json file into
+    // [{"text": "..."}] and carried on converting it, so the error never surfaced.
+    try {
+        JSON.parse(t);
+    } catch (e) {
+        throw new Error('Not valid JSON: ' + e.message);
+    }
+    throw new Error('Not valid JSON');
+}
+
+// Plain text to a JSON value - the one place guessing is the point. JSON-looking text is
+// parsed as JSON; key=value lines become an object; anything else is wrapped as text.
+function textToJsonValue(text) {
+    try {
+        return robustJsonParse(text);
+    } catch (_) {
+    }
+    const t = text.trim();
+    const lines = t.split('\n').map(l => l.trim()).filter(l => l);
     if (t.includes('=') && !t.startsWith('{')) {
         const obj = {};
         let matched = 0;
         for (const line of lines) {
             const eq = line.indexOf('=');
             if (eq > 0) {
-                const k = line.slice(0, eq).trim();
-                let v = line.slice(eq + 1).trim();
-                if (v === 'true') v = true; else if (v === 'false') v = false; else if (!isNaN(v) && v !== '') v = Number(v);
-                obj[k] = v;
+                obj[line.slice(0, eq).trim()] = scalarFromText(line.slice(eq + 1).trim());
                 matched++;
             }
         }
         if (matched > 0) return obj;
-    }// 8. Last resort:wrap as text object
+    }
     return [{text: text}];
 }
 
@@ -2601,7 +2625,7 @@ registerConverter({
     weight: 2,
     convert: async blob => {
         const text = await blob.text();
-        const parsed = robustJsonParse(text);
+        const parsed = textToJsonValue(text);
         return new Blob([JSON.stringify(parsed, null, 2)], {type: 'application/json'});
     }
 });
@@ -9138,8 +9162,8 @@ function renderFileCards() {
             }
         }// Status badge
         let badge = `<div class="card-status status-ready">Ready</div>`;
-        if (node.status === 'converting') badge = `<div class="card-status status-loading"><div class="mini-spinner"></div>Converting</div>`; else if (node.status === 'done') badge = `<div class="card-status status-success">Done</div>`; else if (node.status === 'error') badge = `<div class="card-status status-fail" title="${node.errorMsg}">Failed</div>`;
-        card.innerHTML = `<div class="card-preview-container" id="pv-${node.id}"></div><div class="file-info"><div class="file-name" title="${node.name}">${node.name}</div><div class="file-meta">${meta.icon} ${meta.label} · ${formatBytes(node.size)}</div><div class="card-actions-row">${dropdown}${applyBtn}${badge}</div>${routeHtml}</div><div class="file-remove" onclick="removeFile('${node.id}')">✕</div>`;
+        if (node.status === 'converting') badge = `<div class="card-status status-loading"><div class="mini-spinner"></div>Converting</div>`; else if (node.status === 'done') badge = `<div class="card-status status-success">Done</div>`; else if (node.status === 'error') badge = `<div class="card-status status-fail" title="${escHtml(node.errorMsg)}">Failed</div>`;
+        card.innerHTML = `<div class="card-preview-container" id="pv-${node.id}"></div><div class="file-info"><div class="file-name" title="${escHtml(node.name)}">${escHtml(node.name)}</div><div class="file-meta">${meta.icon} ${meta.label} · ${formatBytes(node.size)}</div><div class="card-actions-row">${dropdown}${applyBtn}${badge}</div>${routeHtml}</div><div class="file-remove" onclick="removeFile('${node.id}')">✕</div>`;
         container.appendChild(card);
         generateLocalPreview(node.file, node.mime, card.querySelector(`#pv-${node.id}`));
     });
@@ -9244,7 +9268,7 @@ function openTargetSelect(nodeId, btn, mode) {
                 html += `<div class="${cls.join(' ')}" data-idx="${idx}"><span class="tsel-ext">${t.ext.toUpperCase()}</span><span class="tsel-lbl">${t.label}</span></div>`;
             }
         }
-        list.innerHTML = html || `<div class="tsel-empty">No formats match "${search.value}"</div>`;
+        list.innerHTML = html || `<div class="tsel-empty">No formats match "${escHtml(search.value)}"</div>`;
     };
 
     const choose = idx => {
@@ -9921,7 +9945,7 @@ async function renderMidiPreview(pane, blob) {
     try {
         notes = parseMidiNotes(new Uint8Array(await blob.arrayBuffer()));
     } catch (e) {
-        pane.innerHTML = `<div style="padding:14px;font-family:var(--sans);font-size:12px;color:var(--text-dim)">${e.message}</div>`;
+        pane.innerHTML = `<div style="padding:14px;font-family:var(--sans);font-size:12px;color:var(--text-dim)">${escHtml(e.message)}</div>`;
         return;
     }
     const totalSec = Math.max(...notes.map(n => n.startSec + n.durSec));
@@ -10159,7 +10183,7 @@ function renderOutputView() {
         errWrap.className = 'error-box';
         errWrap.style.margin = '0 0 16px';
         errWrap.innerHTML = `<div style="font-weight:600;margin-bottom:6px">⚠️ ${failed.length} file${failed.length > 1 ? 's' : ''} could not be converted</div>` +
-            failed.map(n => `<div style="margin-top:4px"><strong>${n.name}</strong>: ${(n.errorMsg || 'Conversion failed').replace(/</g, '&lt;')}</div>`).join('');
+            failed.map(n => `<div style="margin-top:4px"><strong>${escHtml(n.name)}</strong>: ${escHtml(n.errorMsg || 'Conversion failed')}</div>`).join('');
         grid.appendChild(errWrap);
     }
     if (success.length === 0) {
@@ -10195,7 +10219,7 @@ function renderOutputView() {
                 renderPreviewInPane(pane, merged, success[0].targetMime);
             });
         }).catch(err => {
-            mergeCard.innerHTML = `<div class="error-box" style="margin:0">Merge failed:${err.message}</div>`;
+            mergeCard.innerHTML = `<div class="error-box" style="margin:0">Merge failed:${escHtml(err.message)}</div>`;
         });
     }// Individual files
     if (success.length > 1 && !mergeEnabled) {
@@ -10222,7 +10246,7 @@ function renderOutputView() {
             }).join('<span class="via-arrow">→</span>');
             interimRow = `<div class="interim-row"><span class="interim-label">Chain steps:</span>${links}<span class="via-arrow">→</span><span class="interim-final">${spec.ext.toUpperCase()}</span></div>`;
         }
-        card.innerHTML = `<div class="output-header"><div><div class="output-name">${node.convertedName}</div><div class="output-meta">${spec.icon} ${spec.label} · ${formatBytes(node.convertedBlob.size)}${savings}</div></div><div class="output-actions"><button class="btn-secondary" onclick="togglePreview('${node.id}')">👁 Preview</button>${copyBtn}<button class="btn-download" onclick="downloadFile('${node.id}')">📥 Download</button></div></div>${interimRow}<div class="output-preview-pane" id="pane-${node.id}" style="display:none"></div>`;
+        card.innerHTML = `<div class="output-header"><div><div class="output-name">${escHtml(node.convertedName)}</div><div class="output-meta">${spec.icon} ${spec.label} · ${formatBytes(node.convertedBlob.size)}${savings}</div></div><div class="output-actions"><button class="btn-secondary" onclick="togglePreview('${node.id}')">👁 Preview</button>${copyBtn}<button class="btn-download" onclick="downloadFile('${node.id}')">📥 Download</button></div></div>${interimRow}<div class="output-preview-pane" id="pane-${node.id}" style="display:none"></div>`;
         grid.appendChild(card);
     });
 }
