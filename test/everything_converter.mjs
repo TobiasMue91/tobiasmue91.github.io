@@ -477,6 +477,7 @@ if (suites.includes('adversarial')) {
         ['srt tolerates BOM and CRLF', 'subtitle-to-json', '﻿1\r\n00:00:01,000 --> 00:00:02,000\r\nHi\r\n', 'application/x-subrip', 'application/json', 'want:"Hi"'],
         ['vtt cue settings are dropped', 'subtitle-convert', 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000 line:90%\nHi\n', 'text/vtt', 'application/x-subrip', 'avoid:line:90%'],
         ['enhanced lrc word timings are stripped', 'lrc-to-subtitle', '[00:01.00]<00:01.00>Hi <00:02.00>there\n', 'application/x-lrc', 'application/x-subrip', 'avoid:<00:'],
+        ['oversized QR is refused, not truncated', 'text-to-qr', 'x'.repeat(3500), 'text/plain', 'image/png+qr', 'throws'],
         ['empty input is refused clearly', 'ics-to-json', 'BEGIN:VCALENDAR\nEND:VCALENDAR\n', 'text/calendar', 'application/json', 'throws'],
         ['missing table is refused clearly', 'htmltable-to-csv', '<p>no table</p>', 'text/html', 'text/csv', 'throws']
     ];
@@ -700,6 +701,8 @@ if (suites.includes('codecs')) {
     const qrcode = await optional('qrcode');
     const jsqr = await optional('jsqr');
     const qrCases = [
+        ['digits', '01234567890123'], ['long digits', '7'.repeat(700)],
+        ['uppercase', 'HTTPS://GPTGAMES.DEV/'], ['alnum symbols', '$%*+-./: 09AZ'],
         ['short', 'Hi'], ['url', 'https://gptgames.dev/tools/everything_converter.html'],
         ['unicode', 'Grüße — 日本語'],
         ['vcard', 'BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nEMAIL:ada@example.com\nEND:VCARD']
@@ -739,25 +742,40 @@ if (suites.includes('codecs')) {
             else if (decoded.data !== text) fail(label + ' scans', `decoded to ${JSON.stringify(decoded.data.slice(0, 80))}`);
             else pass(`${label} scans (version ${mine.v})`);
 
-            // Byte mode is all this encoder implements. The reference splits a payload into
-            // numeric/alphanumeric/byte segments when that is smaller, so it legitimately
-            // produces a different - not a wrong - symbol for mixed text. Where both choose
-            // plain byte mode the two must agree bit for bit.
+            // The reference may split mixed text into several segments, which this encoder
+            // does not do; a single-segment payload must encode to the same data. The mask is
+            // compared separately: both encoders pick among eight valid masks by a penalty
+            // score, and they round one penalty rule differently, so an equal-sized symbol
+            // with a different mask is still correct.
             if (qrcode) {
+                let ref = null;
                 try {
-                    const ref = (qrcode.default || qrcode).create(text, {errorCorrectionLevel: level});
-                    const rs = ref.modules.size;
-                    const refStr = Array.from({length: rs}, (_, r) =>
-                        Array.from({length: rs}, (_, c) => ref.modules.get(r, c) ? '1' : '0').join('')).join('\n');
-                    const byteOnly = ref.segments && ref.segments.length === 1 && ref.segments[0].mode
-                        && /byte/i.test(ref.segments[0].mode.id || '');
-                    if (refStr === mine.m) pass(`${label} matches the reference encoder bit for bit`);
-                    else if (byteOnly && rs === mine.size) {
-                        fail(`${label} vs reference`, 'both chose byte mode at the same version, but the symbols differ');
-                    } else skip(`${label} vs reference`,
-                        'reference used mixed-mode segmentation, which this encoder does not implement');
+                    ref = (qrcode.default || qrcode).create(text, {errorCorrectionLevel: level});
                 } catch {
                     skip(`${label} vs reference`, 'reference encoder refused the input');
+                }
+                if (ref) {
+                    const rs = ref.modules.size;
+                    const refRows = Array.from({length: rs}, (_, r) =>
+                        Array.from({length: rs}, (_, c) => ref.modules.get(r, c) ? 1 : 0));
+                    const single = ref.segments && ref.segments.length === 1;
+                    if (refRows.map(r => r.join('')).join('\n') === mine.m) pass(`${label} matches the reference bit for bit`);
+                    else if (!single) skip(`${label} vs reference`, 'reference split the text into mixed segments');
+                    else {
+                        const sameData = await page.evaluate(({text, level, refRows}) => {
+                            const lv = ['L', 'M', 'Q', 'H'].indexOf(level), bytes = new TextEncoder().encode(text);
+                            const mode = qrModeOf(bytes), v = chooseVersion(bytes.length, lv, mode);
+                            if (!v || refRows.length !== 17 + 4 * v) return false;
+                            const base = placeData(buildQrMatrix(v), interleave(buildDataCodewords(bytes, v, lv, mode), v, lv));
+                            for (let k = 0; k < 8; k++) {
+                                const m = applyMaskAndInfo(base, k, lv, v);
+                                if (m.every((row, a) => Array.from(row).every((x, c) => (x === 2 || x === -1 ? 0 : x) === refRows[a][c]))) return true;
+                            }
+                            return false;
+                        }, {text, level, refRows});
+                        sameData ? pass(`${label} encodes the same data as the reference (different, equally valid mask)`)
+                            : fail(`${label} vs reference`, `both used one segment, but the encoded data differs (versions ${mine.v} and ${ref.version})`);
+                    }
                 }
             }
         }

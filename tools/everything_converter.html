@@ -5676,22 +5676,62 @@ function dataCodewords(version, level) {
 // Byte-mode character count indicator width.
 const ccBits = version => version <= 9 ? 8 : 16;
 
-function chooseVersion(byteLen, level) {
+// ---- Encoding modes ----
+// Digits pack 3 to 10 bits and the 45-character uppercase set 2 to 11 bits, against 8 bits a
+// byte in byte mode. A phone number or an uppercase URL therefore fits a much smaller symbol,
+// and smaller symbols scan from further away. One mode serves the whole payload; splitting it
+// into mixed segments would save a little more on text like vCards, but a single mode keeps
+// every symbol bit-for-bit comparable with reference encoders.
+const QR_ALNUM = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+const QR_MODE_BITS = {numeric: 0b0001, alnum: 0b0010, byte: 0b0100};
+
+function qrModeOf(bytes) {
+    if (bytes.length && bytes.every(b => b >= 0x30 && b <= 0x39)) return 'numeric';
+    if (bytes.length && bytes.every(b => b < 0x80 && QR_ALNUM.includes(String.fromCharCode(b)))) return 'alnum';
+    return 'byte';
+}
+
+function qrCcBits(mode, version) {
+    const band = version <= 9 ? 0 : version <= 26 ? 1 : 2;
+    return {numeric: [10, 12, 14], alnum: [9, 11, 13], byte: [8, 16, 16]}[mode][band];
+}
+
+function qrPayloadBits(mode, n) {
+    if (mode === 'numeric') return 10 * Math.floor(n / 3) + [0, 4, 7][n % 3];
+    if (mode === 'alnum') return 11 * Math.floor(n / 2) + 6 * (n % 2);
+    return 8 * n;
+}
+
+function chooseVersion(byteLen, level, mode = 'byte') {
     for (let v = 1; v <= 40; v++) {
-        const cap = dataCodewords(v, level) * 8 - 4 - ccBits(v);
-        if (byteLen * 8 <= cap) return v;
+        const cap = dataCodewords(v, level) * 8;
+        if (4 + qrCcBits(mode, v) + qrPayloadBits(mode, byteLen) <= cap) return v;
     }
     return null;
 }
 
-function buildDataCodewords(bytes, version, level) {
+function buildDataCodewords(bytes, version, level, mode = 'byte') {
     const bits = [];
     const push = (val, len) => {
         for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1);
     };
-    push(0b0100, 4);                 // byte mode
-    push(bytes.length, ccBits(version));
-    for (const b of bytes) push(b, 8);
+    push(QR_MODE_BITS[mode], 4);
+    push(bytes.length, qrCcBits(mode, version));
+    if (mode === 'numeric') {
+        const digits = String.fromCharCode(...bytes);
+        for (let i = 0; i < digits.length; i += 3) {
+            const chunk = digits.slice(i, i + 3);
+            push(parseInt(chunk, 10), [0, 4, 7, 10][chunk.length]);
+        }
+    } else if (mode === 'alnum') {
+        const vals = Array.from(bytes, b => QR_ALNUM.indexOf(String.fromCharCode(b)));
+        for (let i = 0; i < vals.length; i += 2) {
+            if (i + 1 < vals.length) push(vals[i] * 45 + vals[i + 1], 11);
+            else push(vals[i], 6);
+        }
+    } else {
+        for (const b of bytes) push(b, 8);
+    }
     const capacity = dataCodewords(version, level) * 8;
     for (let i = 0; i < 4 && bits.length < capacity; i++) bits.push(0); // terminator
     while (bits.length % 8) bits.push(0);
@@ -5913,18 +5953,19 @@ function penalty(m) {
 
 // Returns {matrix (0/1), size, version}
 function qrEncode(bytes, level = 1) {
-    let version = chooseVersion(bytes.length, level);
+    const mode = qrModeOf(bytes);
+    const version = chooseVersion(bytes.length, level, mode);
     if (!version) {
-        // Doesn't fit any version at this EC level: truncate to what v40 holds AT THIS
-        // LEVEL (not level L - using L's larger capacity here overfills the matrix and
-        // corrupts the symbol), stopping on a UTF-8 boundary so no character is split.
-        const cap = dataCodewords(40, level) * 8 - 4 - ccBits(40);
-        let end = Math.floor(cap / 8);
-        while (end > 0 && (bytes[end] & 0xC0) === 0x80) end--;
-        bytes = bytes.slice(0, end);
-        version = 40;
+        // This used to truncate silently: the symbol scanned fine and quietly held only the
+        // first part of the text. Say so instead, and name a level that would fit.
+        const names = ['L (7%)', 'M (15%)', 'Q (25%)', 'H (30%)'];
+        const fits = [0, 1, 2, 3].filter(l => l < level && chooseVersion(bytes.length, l, mode));
+        const most = Math.floor((dataCodewords(40, level) * 8 - 4 - qrCcBits(mode, 40)) / 8);
+        throw new Error(`Too much for one QR code: ${bytes.length} bytes, and the largest QR code holds about `
+            + `${most} at error correction ${names[level]}.`
+            + (fits.length ? ` It would fit at level ${names[fits[fits.length - 1]]} - set it under "QR error correction".` : ''));
     }
-    const dataCw = buildDataCodewords(bytes, version, level);
+    const dataCw = buildDataCodewords(bytes, version, level, mode);
     const all = interleave(dataCw, version, level);
     const base = placeData(buildQrMatrix(version), all);
     // Remaining reserved cells (=2) become 0 before masking evaluation
@@ -5938,7 +5979,7 @@ function qrEncode(bytes, level = 1) {
             best = m;
         }
     }
-    return {matrix: best, size: best.length, version};
+    return {matrix: best, size: best.length, version, mode};
 }
 
 registerConverter({
@@ -5950,7 +5991,9 @@ registerConverter({
     terminal: true,
     lib: null,
     convert: async (blob, fromMime, toMime, options) => {
-        const text = await blob.text();
+        // Files end with a newline nobody means to encode; left in, it also forces a phone
+        // number or an uppercase code out of the compact numeric/alphanumeric modes.
+        const text = (await blob.text()).replace(/\r?\n$/, '');
         if (!text.trim()) throw new Error('Nothing to encode - the input is empty');
         const bytes = new TextEncoder().encode(text);
         const levelIdx = ['L', 'M', 'Q', 'H'].indexOf((options && options.qrLevel) || 'M');
