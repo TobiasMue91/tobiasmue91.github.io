@@ -482,8 +482,12 @@
 
 			if (!line) return { raw, quantity: null, unit: null, ingredient: '', parsed: false, blank: true };
 
+			// An oven setting is not an amount: it must never scale.
+			if (TEMP_RE.test(line)) return { raw, ingredient: line, parsed: false, blank: false, temperature: true };
+
 			let rest = line;
 			let quantity = null;
+			let qtyHigh = null;
 
 			// Try to extract quantity from start
 			// Pattern: optional word number, or numeric with optional unicode/ascii fraction
@@ -491,6 +495,11 @@
 			if (qResult) {
 				quantity = qResult.value;
 				rest = qResult.rest.trim();
+				// "2-3", "2–3", "2 to 3" is a range; "1-1/2" is a mixed number.
+				const dash = rest.match(/^(?:[-\u2013\u2014]|to\s)\s*/i);
+				const hi = dash && extractQuantity(rest.slice(dash[0].length));
+				if (hi && hi.value > quantity) { qtyHigh = hi.value; rest = hi.rest.trim(); }
+				else if (hi && dash[0][0] === '-' && hi.value < 1) { quantity += hi.value; rest = hi.rest.trim(); }
 			}
 
 			// Try to detect hyphenated unit pattern in rest, e.g. "14-oz" before the unit lookup
@@ -517,27 +526,32 @@
 
 			// Try unit
 			let unit = hyphUnit;
-			if (!unit) {
-				// Check compound units first (two words)
-				const words = rest.split(/\s+/);
-				if (words.length >= 2) {
-					const twoWord = words[0].toLowerCase() + ' ' + words[1].toLowerCase();
-					const canon = UNIT_ALIASES[twoWord];
-					if (canon) {
-						unit = canon;
-						rest = words.slice(2).join(' ');
-					}
+			if (!unit) ({ unit, rest } = takeUnit(rest));
+
+			const def = unit && UNIT_DEFS[unit];
+			if (quantity !== null && def) {
+				// "1 cup + 2 tbsp": fold the second amount into the first unit.
+				const plus = rest.match(/^\+\s*/);
+				const add = plus && extractQuantity(rest.slice(plus[0].length));
+				const addU = add && takeUnit(add.rest.trim());
+				const addDef = addU && addU.unit && UNIT_DEFS[addU.unit];
+				if (addDef && addDef.type === def.type) {
+					const k = def.type === 'volume' ? addDef.ml / def.ml : addDef.g / def.g;
+					quantity += add.value * k;
+					if (qtyHigh !== null) qtyHigh += add.value * k;
+					rest = addU.rest;
 				}
-				if (!unit && words.length >= 1) {
-					const oneWord = words[0].toLowerCase().replace(/[.,]+$/, '');
-					const canon = UNIT_ALIASES[oneWord];
-					if (canon) {
-						unit = canon;
-						rest = words.slice(1).join(' ');
-					} else if (PASSTHROUGH_UNITS.has(oneWord)) {
-						unit = '_' + oneWord; // prefix _ = passthrough
-						rest = words.slice(1).join(' ');
-					}
+			}
+
+			// "1½ cups (190g) flour": remember the author's own conversion.
+			let alt = null;
+			const paren = def && rest.match(/^\(([^)]*)\)\s*/);
+			if (paren) {
+				const aq = extractQuantity(paren[1].trim());
+				const au = aq && takeUnit(aq.rest.trim());
+				if (au && UNIT_DEFS[au.unit] && !au.rest.trim()) {
+					alt = { quantity: aq.value, unit: au.unit };
+					rest = rest.slice(paren[0].length);
 				}
 			}
 
@@ -550,7 +564,38 @@
 			}
 
 			const parsed = quantity !== null;
-			return { raw, quantity, unit, ingredient: rest || raw, parsed, blank: false };
+			return { raw, quantity, qtyHigh, unit, alt, ingredient: rest || raw, parsed, blank: false };
+		}
+
+		function takeUnit(rest) {
+			// Check compound units first (two words)
+			const words = rest.split(/\s+/);
+			if (words.length >= 2) {
+				const canon = UNIT_ALIASES[words[0].toLowerCase() + ' ' + words[1].toLowerCase()];
+				if (canon) return { unit: canon, rest: words.slice(2).join(' ') };
+			}
+			if (words.length >= 1) {
+				const oneWord = words[0].toLowerCase().replace(/[.,]+$/, '');
+				const canon = UNIT_ALIASES[oneWord];
+				if (canon) return { unit: canon, rest: words.slice(1).join(' ') };
+				if (PASSTHROUGH_UNITS.has(oneWord)) return { unit: '_' + oneWord, rest: words.slice(1).join(' ') };
+			}
+			return { unit: null, rest };
+		}
+
+		const TEMP_RE = /(\d+)\s*(?:°|º|degrees?\b)\s*([FC])(?:ahrenheit|elsius)?\b/i;
+
+		function convertTemperatures(text, direction) {
+			// "350°F (175°C)" already carries the author's own conversion.
+			const want = direction === 'imperial-to-metric' ? 'C' : 'F';
+			const all = [...text.matchAll(new RegExp(TEMP_RE.source, 'gi'))];
+			if (all.some(m => m[2].toUpperCase() === want)) return text;
+			return text.replace(new RegExp(TEMP_RE.source, 'gi'), (m, n, scale) => {
+				const f = scale.toUpperCase() === 'F';
+				if (direction === 'imperial-to-metric' && f) return Math.round((n - 32) * 5 / 9 / 10) * 10 + '\u00b0C';
+				if (direction === 'metric-to-imperial' && !f) return Math.round((n * 9 / 5 + 32) / 25) * 25 + '\u00b0F';
+				return m;
+			});
 		}
 
 		function extractQuantity(str) {
@@ -627,6 +672,26 @@
 		// ── Converter ──
 		function convertItems(items, direction, scaleFactor) {
 			return items.map(item => {
+				if (item.temperature) return { ...item, displayText: convertTemperatures(item.raw, direction) };
+				if (item.alt) {
+					// Prefer the author's own number when it is already in the target system.
+					const target = direction === 'imperial-to-metric' ? METRIC_UNITS : IMPERIAL_UNITS;
+					if (target.has(item.alt.unit)) {
+						const r = item.alt.quantity / item.quantity;
+						item = { ...item, unit: item.alt.unit, quantity: item.alt.quantity,
+							qtyHigh: item.qtyHigh === null ? null : item.qtyHigh * r };
+					}
+				}
+				const res = convertOne(item, direction, scaleFactor);
+				if (item.qtyHigh !== null && item.qtyHigh !== undefined && res.converted) {
+					res.high = convertOne({ ...item, quantity: item.qtyHigh }, direction, scaleFactor);
+				}
+				return res;
+			});
+		}
+
+		function convertOne(item, direction, scaleFactor) {
+			{
 				if (!item.parsed || item.quantity === null) {
 					return { ...item, displayQty: null, displayUnit: null, converted: false };
 				}
@@ -692,7 +757,7 @@
 						isMetricResult: isMet, isImperialResult: isImp
 					};
 				}
-			});
+			}
 		}
 
 		function metricVolumeResult(item, ml) {
@@ -827,6 +892,15 @@
 			return String(Math.round(v * 100) / 100);
 		}
 
+		// "2–3 cloves", or "900 ml–1.1 L" when the ends round into different units
+		function amountText(item) {
+			const lo = formatQty(item), unit = item.displayUnit || '';
+			if (!item.high) return [lo, unit].filter(Boolean).join(' ');
+			const hi = formatQty(item.high), hiUnit = item.high.displayUnit || '';
+			if (hiUnit === unit) return [lo + '\u2013' + hi, unit].filter(Boolean).join(' ');
+			return [lo, unit].filter(Boolean).join(' ') + '\u2013' + [hi, hiUnit].filter(Boolean).join(' ');
+		}
+
 		// ── Renderer ──
 		function renderOutput(items) {
 			const container = document.getElementById('output');
@@ -839,25 +913,24 @@
 
 			items.forEach(item => {
 				const div = document.createElement('div');
-				div.className = 'output-line' + ((!item.parsed && !item.blank) ? ' unparsed' : '');
+				div.className = 'output-line' + ((!item.parsed && !item.blank && !item.temperature) ? ' unparsed' : '');
 
-				if (!item.parsed) {
+				if (item.temperature) {
+					div.textContent = item.displayText;
+				} else if (!item.parsed) {
 					div.textContent = item.raw;
 				} else {
-					const qty = formatQty(item);
-					const unit = item.displayUnit || '';
 					const ing = item.ingredient || '';
 					if (item.estimated) {
 						// Mark the weight as a density estimate, not a measurement.
 						const amount = document.createElement('span');
 						amount.className = 'estimated';
 						amount.title = item.estimateNote;
-						amount.textContent = [qty, unit].filter(Boolean).join(' ');
+						amount.textContent = amountText(item);
 						div.appendChild(amount);
 						if (ing) div.appendChild(document.createTextNode(' ' + ing));
 					} else {
-						const parts = [qty, unit, ing].filter(Boolean);
-						div.textContent = parts.join(' ');
+						div.textContent = [amountText(item), ing].filter(Boolean).join(' ');
 					}
 				}
 
@@ -886,11 +959,9 @@
 			return currentItems
 					.filter(i => !i.blank)
 					.map(i => {
+						if (i.temperature) return i.displayText;
 						if (!i.parsed) return i.raw;
-						const qty = formatQty(i);
-						const unit = i.displayUnit || '';
-						const ing = i.ingredient || '';
-						return [qty, unit, ing].filter(Boolean).join(' ');
+						return [amountText(i), i.ingredient || ''].filter(Boolean).join(' ');
 					}).join('\n');
 		}
 
