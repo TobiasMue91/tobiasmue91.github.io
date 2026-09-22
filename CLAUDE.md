@@ -64,17 +64,15 @@ npm run test:cypress        # Cypress e2e — its baseUrl is :8080, so point one
 npm run test:converter      # Everything Converter suite (needs a server on :8099)
 ```
 
-`util/test_everything_converter.mjs` drives `tools/everything_converter.html` in headless
-Chromium and is worth running after any change to it. Five suites — `graph`, `edges`,
-`roundtrip`, `adversarial`, `codecs` — run together or by name
-(`node util/test_everything_converter.mjs graph edges`). It checks the converter graph for
-duplicate globals, unregistered mimes, overlong routes and terminal edges used mid-chain;
-runs every declared converter edge against a generated fixture; asserts that round trips
-come back unchanged; feeds parsers malformed input; and cross-checks the hand-written QR,
-BMP and TIFF codecs against reference implementations. Converters whose library sits on a
-CDN are skipped, not failed, when the network is unavailable, so the suite is still useful
-offline. Fixtures are generated at runtime (`util/converter_fixtures.js`,
-`util/tiff_fixtures.mjs`) — the repo carries no binary test assets.
+`util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
+Page tests live in `test/`, which has its own README; `cypress/` stays separate because
+Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
+suite once a change to one corner can quietly break another.
+
+`test/everything_converter.mjs` is the one that exists so far: it drives
+`tools/everything_converter.html` in headless Chromium and is worth running after any change
+to it. Five suites — `graph`, `edges`, `roundtrip`, `adversarial`, `codecs` — run together
+or by name (`node test/everything_converter.mjs graph edges`).
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

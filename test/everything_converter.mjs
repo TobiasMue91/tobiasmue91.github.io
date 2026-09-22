@@ -7,9 +7,9 @@
 // this drives the REAL page in a real browser and checks the graph and every declared edge
 // rather than unit-testing extracted copies of the code.
 //
-//   node util/test_everything_converter.mjs                 # everything
-//   node util/test_everything_converter.mjs graph edges     # named suites only
-//   node util/test_everything_converter.mjs --url=http://localhost:8099/tools/everything_converter.html
+//   node test/everything_converter.mjs                 # everything
+//   node test/everything_converter.mjs graph edges     # named suites only
+//   node test/everything_converter.mjs --url=http://localhost:8099/tools/everything_converter.html
 //
 // Suites: graph, edges, roundtrip, adversarial, codecs.
 //
@@ -174,7 +174,7 @@ if (suites.includes('graph')) {
 // ===== fixtures (needed by every suite below) =========================================
 let fixtureMimes = [];
 if (suites.some(s => ['edges', 'roundtrip', 'adversarial', 'codecs'].includes(s))) {
-    await page.addScriptTag({content: readFileSync(join(HERE, 'converter_fixtures.js'), 'utf8')});
+    await page.addScriptTag({content: readFileSync(join(HERE, 'everything_converter_fixtures.js'), 'utf8')});
     const built = await page.evaluate(() => window.__buildFixtures());
     fixtureMimes = await page.evaluate(() => Object.keys(window.__F));
     if (built.missing.length) {

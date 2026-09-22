@@ -3,7 +3,7 @@
 // convenient literal form (QOI, PPM, MIDI, FASTA...). Everything here is generated, so the
 // repo carries no binary test assets.
 //
-// Loaded by util/test_everything_converter.mjs - not part of the tool itself.
+// Loaded by test/everything_converter.mjs - not part of the tool itself.
 window.__buildFixtures = async function () {
     const log = [];
     const enc = s => new Blob([s]);
