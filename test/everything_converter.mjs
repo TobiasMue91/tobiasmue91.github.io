@@ -11,7 +11,7 @@
 //   node test/everything_converter.mjs graph edges     # named suites only
 //   node test/everything_converter.mjs --url=http://localhost:8099/tools/everything_converter.html
 //
-// Suites: graph, edges, roundtrip, adversarial, codecs.
+// Suites: graph, detect, edges, roundtrip, adversarial, codecs.
 //
 // Needs `npm i -D playwright` and a server on the page's URL (npx http-server -p 8099).
 // Converters that pull a library from a CDN are reported as SKIP when the CDN is
@@ -29,7 +29,7 @@ const args = process.argv.slice(2);
 const urlArg = args.find(a => a.startsWith('--url='));
 const URL_ = urlArg ? urlArg.slice(6) : 'http://127.0.0.1:8099/tools/everything_converter.html';
 const EXE = process.env.CHROMIUM_PATH || undefined;
-const ALL = ['graph', 'edges', 'roundtrip', 'adversarial', 'codecs'];
+const ALL = ['graph', 'detect', 'edges', 'roundtrip', 'adversarial', 'codecs'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -169,6 +169,64 @@ if (suites.includes('graph')) {
         else if (got[i] > want) fail(`${s} -> ${d} takes ${got[i]} hops, expected at most ${want}`);
         else pass(`${s} -> ${d} in ${got[i]} hop(s)`);
     });
+}
+
+// ===== detect: what a dropped file is taken to be =====================================
+// Detection gates everything after it: a file read as the wrong format is offered the
+// wrong targets and fed to the wrong parser. The extension is an explicit statement and
+// should win; content is only consulted when the extension says nothing.
+if (suites.includes('detect')) {
+    section('detect');
+    const cases = [
+        ['notes.txt', 'Hello, world. Prose, with commas.\nMore.', 'text/plain'],
+        ['readme.md', '# Title, with comma\n\nText', 'text/markdown'],
+        ['config.yaml', 'name: a, b\nage: 3', 'text/yaml'],
+        ['page.html', '<!doctype html><html><body>x</body></html>', 'text/html'],
+        ['page.htm', '<div>fragment</div>', 'text/html'],
+        ['data.xml', '<?xml version="1.0"?><root/>', 'application/xml'],
+        ['data.csv', 'a,b\n1,2', 'text/csv'],
+        ['data.csv', 'a;b\n1;2', 'text/csv'],
+        ['conf.ini', '[s]\na=1, 2', 'application/ini'],
+        ['conf.toml', '[table]\nx = 1', 'application/toml'],
+        ['app.properties', 'a=1, 2', 'application/x-properties'],
+        ['.env', 'A=1,2', 'application/x-env'],
+        ['doc.rst', 'Title, sub\n=====', 'text/x-rst'],
+        ['lines.jsonl', '{"a":1}\n{"a":2}', 'application/jsonl'],
+        ['cfg.json5', '{a: 1, // c\n}', 'application/json5'],
+        ['x.sexp', '(a, b)', 'application/x-sexp'],
+        ['subs.srt', 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHi', 'text/vtt'],
+        ['UPPER.JSON', '{"a":1}', 'application/json'],
+        ['song.mid', 'MThd', 'audio/midi'],
+        ['style.css', 'a{color:red}', 'text/plain'],
+        // generic or missing extensions: the content decides
+        ['dump.txt', '{"a":1}', 'application/json'],
+        ['dump.txt', '{"a":1}\n{"a":2}\n', 'application/jsonl'],
+        ['export.txt', 'a;b;c\n1;2;3', 'text/csv'],
+        ['export.txt', 'a\tb\n1\t2', 'text/tab-separated-values'],
+        ['page.txt', '<!DOCTYPE html><html></html>', 'text/html'],
+        ['noext', '{"a":1}', 'application/json'],
+        ['weird.foo', 'just some text', 'text/plain'],
+        ['program.exe', '__BINARY__', 'application/octet-stream']
+    ];
+    const got = await page.evaluate(async cases => {
+        const out = [];
+        for (const [name, content] of cases) {
+            const body = content === '__BINARY__' ? Uint8Array.from({length: 256}, (_, i) => (i * 37) & 255) : content;
+            const mime = await detectFormat(new File([body], name));
+            out.push({mime, targets: findReachableTargets(mime).size});
+        }
+        return out;
+    }, cases);
+    cases.forEach(([name, content, want], i) => {
+        const label = `${name} ${JSON.stringify(content).slice(0, 30)}`;
+        if (got[i].mime !== want) fail(label, `detected as ${got[i].mime}, expected ${want}`);
+        else if (!got[i].targets) fail(label, `detected as ${want} but offered no targets`);
+        else pass(`${label} -> ${want}`);
+    });
+    // Output-only pseudo-formats must never claim an extension for input.
+    const claimed = await page.evaluate(() => Object.entries(EXT_TO_MIME).filter(([, m]) => m.includes('+')));
+    claimed.length ? fail('pseudo-formats claim input extensions', claimed.map(([e, m]) => `.${e} -> ${m}`).join('\n'))
+        : pass('no pseudo-format claims an input extension');
 }
 
 // ===== fixtures (needed by every suite below) =========================================
@@ -363,6 +421,7 @@ if (suites.includes('adversarial')) {
     //   throws             a clear error is the correct answer
     const cases = [
         ['csv keeps quoted commas', 'csv-to-json', 'name,note\r\n"Ada","hello, world"\r\n', 'text/csv', 'application/json', 'want:hello, world'],
+        ['semicolon csv splits into columns', 'csv-to-json', 'name;city\nAda;London\n', 'text/csv', 'application/json', 'want:"city": "London"'],
         ['csv survives ragged rows', 'csv-to-json', 'a,b,c\n1,2\n1,2,3,4\n', 'text/csv', 'application/json', 'want:"a"'],
         ['empty csv is an empty list', 'csv-to-json', '', 'text/csv', 'application/json', 'want:[]'],
         ['csv keeps leading-zero ids', 'csv-to-json', 'zip\n007\n', 'text/csv', 'application/json', 'want:"007"'],

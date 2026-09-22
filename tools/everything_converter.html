@@ -1535,7 +1535,13 @@
     'application/x-base64-source': {ext: 'b64', label: 'Base64 (decode)', category: 'text', icon: '🔣'},
 };
 const EXT_TO_MIME = {};
-for (const [mime, info] of Object.entries(FORMAT_REGISTRY)) EXT_TO_MIME[info.ext] = mime;
+// Pseudo-formats ("image/png+qr", "application/json+id3") are OUTPUTS that happen to be
+// saved with a real extension. They must never claim that extension for input: last one
+// registered used to win, so a .mid file was read as "MIDI (pitch)" and a .zip as a bundle
+// of video frames.
+for (const [mime, info] of Object.entries(FORMAT_REGISTRY)) {
+    if (!mime.includes('+') && !(info.ext in EXT_TO_MIME)) EXT_TO_MIME[info.ext] = mime;
+}
 Object.assign(EXT_TO_MIME, {
     jpeg: 'image/jpeg', yml: 'text/yaml', htm: 'text/html', txt: 'text/plain', ini: 'application/ini',
     pgm: 'image/x-portable-graymap', pbm: 'image/x-portable-bitmap', ppm: 'image/x-portable-pixmap',
@@ -2475,7 +2481,10 @@ registerConverter({
     inputs: ['text/csv'],
     outputs: ['application/json'],
     weight: 1,
-    convert: async blob => new Blob([JSON.stringify(csvToObj(await blob.text(), ','), null, 2)], {type: 'application/json'})
+    convert: async blob => {
+        const text = await blob.text();
+        return new Blob([JSON.stringify(csvToObj(text, csvDelimiter(text)), null, 2)], {type: 'application/json'});
+    }
 });
 registerConverter({
     id: 'tsv-to-json',
@@ -2654,7 +2663,8 @@ registerConverter({
     lib: sjsUrl,
     convert: async blob => {
         const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(parseCSVLines(await blob.text(), ','));
+        const text = await blob.text();
+        const ws = XLSX.utils.aoa_to_sheet(parseCSVLines(text, csvDelimiter(text)));
         XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
         return new Blob([XLSX.write(wb, {
             bookType: 'xlsx',
@@ -6262,7 +6272,8 @@ registerConverter({
     weight: 2,
     lib: null,
     convert: async (blob) => {
-        const rows = parseCSVLines(await blob.text(), ',');
+        const text = await blob.text();
+        const rows = parseCSVLines(text, csvDelimiter(text));
         if (!rows.length) throw new Error('CSV appears to be empty');
         return new Blob([rowsToMarkdownTable(rows)], {type: 'text/markdown'});
     }
@@ -8635,34 +8646,112 @@ async function detectFormat(file) {
         const sample = (await file.slice(0, 64).text()).replace(/^\uFEFF/, '').trim();
         return sample.startsWith('WEBVTT') ? 'text/vtt' : 'application/x-subrip';
     }
-    if (['txt', 'md', 'html', 'json', 'xml', 'yaml', 'toml', 'csv', 'tsv', 'b64', 'ini', 'yml', 'htm', 'jsonl', 'ndjson', 'json5', 'properties', 'env', 'sexp', 'sexpr', 'rst', 'textile', 'adoc', 'asciidoc'].includes(ext)) {
-        return await sniffTextStructure(file, ext);
-    }
-    return EXT_TO_MIME[ext] || file.type || 'text/plain';
+    const byExt = TEXT_EXT_MIME[ext];
+    // A specific extension is an explicit statement about the file and wins. Sniffing the
+    // content first used to turn any .md, .yaml, .env or .txt whose first line held a comma
+    // into CSV, every .jsonl into JSON (which then failed to parse), and read <?xml as HTML.
+    if (byExt && !TEXT_EXT_SNIFF.has(ext)) return byExt;
+    if (byExt || !file.name.includes('.')) return await sniffTextStructure(file, byExt ? ext : '');
+    if (EXT_TO_MIME[ext]) return EXT_TO_MIME[ext];
+    // An unknown extension: trust the browser's type only when it is one we know, and
+    // otherwise fall back to a type that at least the universal converters accept, so the
+    // file is never offered zero targets.
+    if (file.type && FORMAT_REGISTRY[file.type]) return file.type;
+    return (await looksLikeText(file)) ? 'text/plain' : 'application/octet-stream';
 }
 
+const TEXT_EXT_MIME = {
+    txt: 'text/plain', text: 'text/plain', log: 'text/plain',
+    md: 'text/markdown', markdown: 'text/markdown',
+    html: 'text/html', htm: 'text/html', xhtml: 'text/html',
+    json: 'application/json', geojson: 'application/json',
+    jsonl: 'application/jsonl', ndjson: 'application/jsonl',
+    json5: 'application/json5',
+    xml: 'application/xml', rss: 'application/xml', atom: 'application/xml', xsd: 'application/xml',
+    yaml: 'text/yaml', yml: 'text/yaml',
+    toml: 'application/toml', ini: 'application/ini', cfg: 'application/ini', conf: 'application/ini',
+    csv: 'text/csv', tsv: 'text/tab-separated-values', tab: 'text/tab-separated-values',
+    b64: 'application/x-base64-source', base64: 'application/x-base64-source',
+    properties: 'application/x-properties', env: 'application/x-env',
+    sexp: 'application/x-sexp', sexpr: 'application/x-sexp',
+    rst: 'text/x-rst', textile: 'text/x-textile', adoc: 'text/x-asciidoc', asciidoc: 'text/x-asciidoc',
+    sql: 'application/sql'
+};
+// Extensions too generic to decide on their own: the content says what they hold.
+const TEXT_EXT_SNIFF = new Set(['txt', 'text', 'log']);
+
+// Binary files carry NUL bytes or break UTF-8 early; text does neither.
+async function looksLikeText(file) {
+    const u8 = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+    if (u8.includes(0)) return false;
+    try {
+        new TextDecoder('utf-8', {fatal: true}).decode(u8.subarray(0, u8.length - 4));
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+// Pick the delimiter that splits the first rows into the same number of columns. European
+// spreadsheets export ";" by default, which used to parse as one giant column.
+function csvDelimiter(text) {
+    const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim()).slice(0, 10);
+    if (!lines.length) return ',';
+    let best = ',', bestScore = 0;
+    for (const d of [',', ';', '\t', '|']) {
+        const counts = lines.map(l => {
+            let n = 0, q = false;
+            for (const ch of l) {
+                if (ch === '"') q = !q;
+                else if (ch === d && !q) n++;
+            }
+            return n;
+        });
+        if (!counts[0]) continue;
+        const consistent = counts.filter(c => c === counts[0]).length;
+        const score = consistent * 100 + counts[0];
+        if (score > bestScore) {
+            bestScore = score;
+            best = d;
+        }
+    }
+    return best;
+}
+
+// Content sniffing for files whose extension says nothing (.txt, none at all).
 async function sniffTextStructure(file, ext) {
-    const sample = (await file.slice(0, 2048).text()).trim();
-    if (sample.startsWith('{') || sample.startsWith('[')) return 'application/json';
-    if (sample.startsWith('<?xml') || sample.startsWith('<html') || sample.startsWith('<!DOCTYPE html>')) return 'text/html';
-    if (sample.startsWith('<')) return 'application/xml';
-    const firstLine = sample.split('\n')[0];
-    if (firstLine.includes('\t') && ext !== 'ini' && ext !== 'toml') return 'text/tab-separated-values';
-    if (firstLine.includes(',') && ext !== 'ini' && ext !== 'toml') return 'text/csv';
-    if (ext === 'md') return 'text/markdown';
-    if (ext === 'yaml' || ext === 'yml') return 'text/yaml';
-    if (ext === 'toml') return 'application/toml';
-    if (ext === 'ini') return 'application/ini';
-    if (ext === 'b64') return 'application/x-base64-source';
-    if (ext === 'jsonl' || ext === 'ndjson') return 'application/jsonl';
-    if (ext === 'json5') return 'application/json5';
-    if (ext === 'properties') return 'application/x-properties';
-    if (ext === 'env') return 'application/x-env';
-    if (ext === 'sexp' || ext === 'sexpr') return 'application/x-sexp';
-    if (ext === 'rst') return 'text/x-rst';
-    if (ext === 'textile') return 'text/x-textile';
-    if (ext === 'adoc' || ext === 'asciidoc') return 'text/x-asciidoc';
-    return 'text/plain';
+    const sample = (await file.slice(0, 4096).text()).replace(/^﻿/, '').trim();
+    if (!sample) return TEXT_EXT_MIME[ext] || 'text/plain';
+    const lines = sample.split(/\r?\n/).filter(l => l.trim());
+    if (sample[0] === '{' || sample[0] === '[') {
+        try {
+            JSON.parse(sample);
+            return 'application/json';
+        } catch (_) {
+            // One JSON value per line is JSON Lines, not broken JSON.
+            const full = lines.slice(0, -1);   // the 4 KB sample may cut the last line
+            if (full.length && full.every(l => { try { JSON.parse(l); return true; } catch (_) { return false; } })) return 'application/jsonl';
+            if (sample.length < 4096) return 'text/plain';
+            return 'application/json';
+        }
+    }
+    if (/^<!doctype html|^<html[\s>]/i.test(sample)) return 'text/html';
+    if (/^<\?xml/i.test(sample)) return /<html[\s>]/i.test(sample.slice(0, 512)) ? 'text/html' : 'application/xml';
+    if (sample[0] === '<' && /<\/?[a-z][\w:-]*[\s>]/i.test(sample)) {
+        return /<(p|div|span|body|head|table|h[1-6]|ul|a)[\s>]/i.test(sample) ? 'text/html' : 'application/xml';
+    }
+    if (/^WEBVTT/.test(sample)) return 'text/vtt';
+    if (/^\d+\r?\n\d{2}:\d{2}:\d{2}[,.]\d{3} -->/.test(sample)) return 'application/x-subrip';
+    if (/^BEGIN:VCALENDAR/i.test(sample)) return 'text/calendar';
+    if (/^BEGIN:VCARD/i.test(sample)) return 'text/vcard';
+    // A table only when several rows agree on the column count - one comma in a sentence
+    // is not a CSV.
+    if (lines.length >= 2) {
+        const d = csvDelimiter(sample);
+        const cols = lines.slice(0, 10).map(l => l.split(d).length);
+        if (cols[0] > 1 && cols.every(c => c === cols[0])) return d === '\t' ? 'text/tab-separated-values' : 'text/csv';
+    }
+    return TEXT_EXT_MIME[ext] || 'text/plain';
 }
 
 let inputFiles = [];
