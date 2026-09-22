@@ -47,6 +47,7 @@ window.__buildFixtures = async function () {
     F['text/css+palette'] = enc(':root{--c1:#112233;--c2:#445566;}');
     F['text/plain+ocr'] = enc('OCR text sample\n');
     F['text/plain+hashes'] = enc('md5 abc\n');
+    F['application/octet-stream'] = new Blob([Uint8Array.from({length: 600}, (_, i) => (i * 131 + 7) & 255)]);
     F['model/obj'] = enc('v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 2 3\nf 1 3 4\nf 1 4 2\nf 2 4 3\n');
 
     // --- images ----------------------------------------------------------------------

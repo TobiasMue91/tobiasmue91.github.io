@@ -11,7 +11,7 @@
 //   node test/everything_converter.mjs graph edges     # named suites only
 //   node test/everything_converter.mjs --url=http://localhost:8099/tools/everything_converter.html
 //
-// Suites: graph, edges, roundtrip, adversarial, codecs.
+// Suites: graph, detect, edges, roundtrip, adversarial, codecs, ui.
 //
 // Needs `npm i -D playwright` and a server on the page's URL (npx http-server -p 8099).
 // Converters that pull a library from a CDN are reported as SKIP when the CDN is
@@ -29,7 +29,7 @@ const args = process.argv.slice(2);
 const urlArg = args.find(a => a.startsWith('--url='));
 const URL_ = urlArg ? urlArg.slice(6) : 'http://127.0.0.1:8099/tools/everything_converter.html';
 const EXE = process.env.CHROMIUM_PATH || undefined;
-const ALL = ['graph', 'edges', 'roundtrip', 'adversarial', 'codecs'];
+const ALL = ['graph', 'detect', 'edges', 'roundtrip', 'adversarial', 'codecs', 'ui'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -160,6 +160,27 @@ if (suites.includes('graph')) {
         ['audio/wav', 'audio/mpeg', 1], ['video/mp4', 'audio/mpeg', 1],
         ['text/plain', 'image/png+qr', 1], ['text/plain', 'application/pdf', 1]
     ];
+    // What a person gets if they just press Convert. Cheapest-to-compute is not the same
+    // as what they came for: by cost alone every video defaulted to a zip of frames.
+    const defaults = [
+        ['video/mp4', 'audio/mpeg'], ['video/quicktime', 'audio/mpeg'], ['video/webm', 'audio/mpeg'],
+        ['audio/wav', 'audio/mpeg'], ['audio/flac', 'audio/mpeg'], ['audio/mp4', 'audio/mpeg'],
+        ['audio/mpeg', 'audio/wav'], ['image/heic', 'image/jpeg'], ['image/png', 'image/jpeg'],
+        ['image/jpeg', 'image/png'], ['text/csv', 'application/json'], ['application/json', 'text/csv'],
+        ['application/x-subrip', 'text/vtt'], ['application/pdf', 'text/plain'], ['application/sql', 'text/plain']
+    ];
+    const picked = await page.evaluate(list => list.map(([m]) => pickDefaultTarget(m, findReachableTargets(m))), defaults);
+    defaults.forEach(([m, want], i) => picked[i] === want ? pass(`default for ${m} is ${want}`)
+        : fail(`default for ${m}`, `is ${picked[i]}, expected ${want}`));
+    // Nothing should default to a reinterpretation when an honest target exists.
+    const lossyDefaults = await page.evaluate(() => Object.keys(FORMAT_REGISTRY).filter(m => {
+        const t = findReachableTargets(m), d = pickDefaultTarget(m, t);
+        const honestExists = [...t.values()].some(p => !p.some(s => s.converter.lossy === true));
+        return d && honestExists && t.get(d).some(s => s.converter.lossy === true);
+    }));
+    lossyDefaults.length ? fail('formats that default to a reinterpretation', lossyDefaults.join(', '))
+        : pass('no format defaults to a reinterpretation when a real conversion exists');
+
     const got = await page.evaluate(list => list.map(([s, d]) => {
         const t = findReachableTargets(s).get(d);
         return t ? t.length : null;
@@ -169,6 +190,64 @@ if (suites.includes('graph')) {
         else if (got[i] > want) fail(`${s} -> ${d} takes ${got[i]} hops, expected at most ${want}`);
         else pass(`${s} -> ${d} in ${got[i]} hop(s)`);
     });
+}
+
+// ===== detect: what a dropped file is taken to be =====================================
+// Detection gates everything after it: a file read as the wrong format is offered the
+// wrong targets and fed to the wrong parser. The extension is an explicit statement and
+// should win; content is only consulted when the extension says nothing.
+if (suites.includes('detect')) {
+    section('detect');
+    const cases = [
+        ['notes.txt', 'Hello, world. Prose, with commas.\nMore.', 'text/plain'],
+        ['readme.md', '# Title, with comma\n\nText', 'text/markdown'],
+        ['config.yaml', 'name: a, b\nage: 3', 'text/yaml'],
+        ['page.html', '<!doctype html><html><body>x</body></html>', 'text/html'],
+        ['page.htm', '<div>fragment</div>', 'text/html'],
+        ['data.xml', '<?xml version="1.0"?><root/>', 'application/xml'],
+        ['data.csv', 'a,b\n1,2', 'text/csv'],
+        ['data.csv', 'a;b\n1;2', 'text/csv'],
+        ['conf.ini', '[s]\na=1, 2', 'application/ini'],
+        ['conf.toml', '[table]\nx = 1', 'application/toml'],
+        ['app.properties', 'a=1, 2', 'application/x-properties'],
+        ['.env', 'A=1,2', 'application/x-env'],
+        ['doc.rst', 'Title, sub\n=====', 'text/x-rst'],
+        ['lines.jsonl', '{"a":1}\n{"a":2}', 'application/jsonl'],
+        ['cfg.json5', '{a: 1, // c\n}', 'application/json5'],
+        ['x.sexp', '(a, b)', 'application/x-sexp'],
+        ['subs.srt', 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHi', 'text/vtt'],
+        ['UPPER.JSON', '{"a":1}', 'application/json'],
+        ['song.mid', 'MThd', 'audio/midi'],
+        ['style.css', 'a{color:red}', 'text/plain'],
+        // generic or missing extensions: the content decides
+        ['dump.txt', '{"a":1}', 'application/json'],
+        ['dump.txt', '{"a":1}\n{"a":2}\n', 'application/jsonl'],
+        ['export.txt', 'a;b;c\n1;2;3', 'text/csv'],
+        ['export.txt', 'a\tb\n1\t2', 'text/tab-separated-values'],
+        ['page.txt', '<!DOCTYPE html><html></html>', 'text/html'],
+        ['noext', '{"a":1}', 'application/json'],
+        ['weird.foo', 'just some text', 'text/plain'],
+        ['program.exe', '__BINARY__', 'application/octet-stream']
+    ];
+    const got = await page.evaluate(async cases => {
+        const out = [];
+        for (const [name, content] of cases) {
+            const body = content === '__BINARY__' ? Uint8Array.from({length: 256}, (_, i) => (i * 37) & 255) : content;
+            const mime = await detectFormat(new File([body], name));
+            out.push({mime, targets: findReachableTargets(mime).size});
+        }
+        return out;
+    }, cases);
+    cases.forEach(([name, content, want], i) => {
+        const label = `${name} ${JSON.stringify(content).slice(0, 30)}`;
+        if (got[i].mime !== want) fail(label, `detected as ${got[i].mime}, expected ${want}`);
+        else if (!got[i].targets) fail(label, `detected as ${want} but offered no targets`);
+        else pass(`${label} -> ${want}`);
+    });
+    // Output-only pseudo-formats must never claim an extension for input.
+    const claimed = await page.evaluate(() => Object.entries(EXT_TO_MIME).filter(([, m]) => m.includes('+')));
+    claimed.length ? fail('pseudo-formats claim input extensions', claimed.map(([e, m]) => `.${e} -> ${m}`).join('\n'))
+        : pass('no pseudo-format claims an input extension');
 }
 
 // ===== fixtures (needed by every suite below) =========================================
@@ -283,6 +362,8 @@ if (suites.includes('roundtrip')) {
         ['ics -> json -> ics', 'text/calendar', [['ics-to-json', 'application/json'], ['json-to-ics', 'text/calendar']], 'contains:SUMMARY:Meeting'],
         ['vcf -> json -> vcf', 'text/vcard', [['vcard-to-json', 'application/json'], ['json-to-vcard', 'text/vcard']], 'contains:FN:Ada Lovelace'],
         ['csv -> mdtable -> csv', 'text/csv', [['csv-to-mdtable', 'text/markdown'], ['mdtable-to-csv', 'text/csv']], 'exact'],
+        ['bytes -> hexdump -> bytes', 'application/octet-stream', [['any-to-hexdump', 'text/x-hexdump'], ['hexdump-to-file', 'application/octet-stream']], 'bytes'],
+        ['png -> hexdump -> bytes', 'image/png', [['any-to-hexdump', 'text/x-hexdump'], ['hexdump-to-file', 'application/octet-stream']], 'bytes'],
         ['png -> qoi -> png', 'image/png', [['image-to-qoi', 'image/qoi'], ['qoi-to-png', 'image/png']], 'pixels'],
         ['png -> ppm -> png', 'image/png', [['image-to-ppm', 'image/x-portable-pixmap'], ['netpbm-to-png', 'image/png']], 'pixels'],
         ['png -> bmp -> png', 'image/png', [['canvas-image', 'image/bmp'], ['canvas-image', 'image/png']], 'pixels'],
@@ -315,7 +396,11 @@ if (suites.includes('roundtrip')) {
                         {file: new File([blob], 'fixture'), name: 'fixture'});
                     cur = to;
                 }
-                if (mode === 'pixels') {
+                if (mode === 'bytes') {
+                    const a = new Uint8Array(await F[startMime].arrayBuffer()), b = new Uint8Array(await blob.arrayBuffer());
+                    const at = a.findIndex((v, i) => v !== b[i]);
+                    if (a.length !== b.length || at >= 0) rec.err = `bytes changed: ${a.length} -> ${b.length} bytes, first difference at ${at}`;
+                } else if (mode === 'pixels') {
                     const a = await pixelsOf(F[startMime]), b = await pixelsOf(blob);
                     if (a.w !== b.w || a.h !== b.h) rec.err = `size changed: ${a.w}x${a.h} -> ${b.w}x${b.h}`;
                     else {
@@ -363,6 +448,7 @@ if (suites.includes('adversarial')) {
     //   throws             a clear error is the correct answer
     const cases = [
         ['csv keeps quoted commas', 'csv-to-json', 'name,note\r\n"Ada","hello, world"\r\n', 'text/csv', 'application/json', 'want:hello, world'],
+        ['semicolon csv splits into columns', 'csv-to-json', 'name;city\nAda;London\n', 'text/csv', 'application/json', 'want:"city": "London"'],
         ['csv survives ragged rows', 'csv-to-json', 'a,b,c\n1,2\n1,2,3,4\n', 'text/csv', 'application/json', 'want:"a"'],
         ['empty csv is an empty list', 'csv-to-json', '', 'text/csv', 'application/json', 'want:[]'],
         ['csv keeps leading-zero ids', 'csv-to-json', 'zip\n007\n', 'text/csv', 'application/json', 'want:"007"'],
@@ -391,6 +477,11 @@ if (suites.includes('adversarial')) {
         ['srt tolerates BOM and CRLF', 'subtitle-to-json', '﻿1\r\n00:00:01,000 --> 00:00:02,000\r\nHi\r\n', 'application/x-subrip', 'application/json', 'want:"Hi"'],
         ['vtt cue settings are dropped', 'subtitle-convert', 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000 line:90%\nHi\n', 'text/vtt', 'application/x-subrip', 'avoid:line:90%'],
         ['enhanced lrc word timings are stripped', 'lrc-to-subtitle', '[00:01.00]<00:01.00>Hi <00:02.00>there\n', 'application/x-lrc', 'application/x-subrip', 'avoid:<00:'],
+        ['broken JSON is refused, not wrapped as text', 'json-to-csv', '{not json', 'application/json', 'text/csv', 'throws'],
+        ['JSON with trailing commas is repaired', 'json-to-csv', '[{"a":1,},]', 'application/json', 'text/csv', 'want:a'],
+        ['prose still becomes JSON', 'text-to-json', 'Just a sentence.', 'text/plain', 'application/json', 'want:"text"'],
+        ['key=value text becomes an object', 'text-to-json', 'a=1\nb=x', 'text/plain', 'application/json', 'want:"b": "x"'],
+        ['oversized QR is refused, not truncated', 'text-to-qr', 'x'.repeat(3500), 'text/plain', 'image/png+qr', 'throws'],
         ['empty input is refused clearly', 'ics-to-json', 'BEGIN:VCALENDAR\nEND:VCALENDAR\n', 'text/calendar', 'application/json', 'throws'],
         ['missing table is refused clearly', 'htmltable-to-csv', '<p>no table</p>', 'text/html', 'text/csv', 'throws']
     ];
@@ -614,6 +705,8 @@ if (suites.includes('codecs')) {
     const qrcode = await optional('qrcode');
     const jsqr = await optional('jsqr');
     const qrCases = [
+        ['digits', '01234567890123'], ['long digits', '7'.repeat(700)],
+        ['uppercase', 'HTTPS://GPTGAMES.DEV/'], ['alnum symbols', '$%*+-./: 09AZ'],
         ['short', 'Hi'], ['url', 'https://gptgames.dev/tools/everything_converter.html'],
         ['unicode', 'Grüße — 日本語'],
         ['vcard', 'BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nEMAIL:ada@example.com\nEND:VCARD']
@@ -653,30 +746,141 @@ if (suites.includes('codecs')) {
             else if (decoded.data !== text) fail(label + ' scans', `decoded to ${JSON.stringify(decoded.data.slice(0, 80))}`);
             else pass(`${label} scans (version ${mine.v})`);
 
-            // Byte mode is all this encoder implements. The reference splits a payload into
-            // numeric/alphanumeric/byte segments when that is smaller, so it legitimately
-            // produces a different - not a wrong - symbol for mixed text. Where both choose
-            // plain byte mode the two must agree bit for bit.
+            // The reference may split mixed text into several segments, which this encoder
+            // does not do; a single-segment payload must encode to the same data. The mask is
+            // compared separately: both encoders pick among eight valid masks by a penalty
+            // score, and they round one penalty rule differently, so an equal-sized symbol
+            // with a different mask is still correct.
             if (qrcode) {
+                let ref = null;
                 try {
-                    const ref = (qrcode.default || qrcode).create(text, {errorCorrectionLevel: level});
-                    const rs = ref.modules.size;
-                    const refStr = Array.from({length: rs}, (_, r) =>
-                        Array.from({length: rs}, (_, c) => ref.modules.get(r, c) ? '1' : '0').join('')).join('\n');
-                    const byteOnly = ref.segments && ref.segments.length === 1 && ref.segments[0].mode
-                        && /byte/i.test(ref.segments[0].mode.id || '');
-                    if (refStr === mine.m) pass(`${label} matches the reference encoder bit for bit`);
-                    else if (byteOnly && rs === mine.size) {
-                        fail(`${label} vs reference`, 'both chose byte mode at the same version, but the symbols differ');
-                    } else skip(`${label} vs reference`,
-                        'reference used mixed-mode segmentation, which this encoder does not implement');
+                    ref = (qrcode.default || qrcode).create(text, {errorCorrectionLevel: level});
                 } catch {
                     skip(`${label} vs reference`, 'reference encoder refused the input');
+                }
+                if (ref) {
+                    const rs = ref.modules.size;
+                    const refRows = Array.from({length: rs}, (_, r) =>
+                        Array.from({length: rs}, (_, c) => ref.modules.get(r, c) ? 1 : 0));
+                    const single = ref.segments && ref.segments.length === 1;
+                    if (refRows.map(r => r.join('')).join('\n') === mine.m) pass(`${label} matches the reference bit for bit`);
+                    else if (!single) skip(`${label} vs reference`, 'reference split the text into mixed segments');
+                    else {
+                        const sameData = await page.evaluate(({text, level, refRows}) => {
+                            const lv = ['L', 'M', 'Q', 'H'].indexOf(level), bytes = new TextEncoder().encode(text);
+                            const mode = qrModeOf(bytes), v = chooseVersion(bytes.length, lv, mode);
+                            if (!v || refRows.length !== 17 + 4 * v) return false;
+                            const base = placeData(buildQrMatrix(v), interleave(buildDataCodewords(bytes, v, lv, mode), v, lv));
+                            for (let k = 0; k < 8; k++) {
+                                const m = applyMaskAndInfo(base, k, lv, v);
+                                if (m.every((row, a) => Array.from(row).every((x, c) => (x === 2 || x === -1 ? 0 : x) === refRows[a][c]))) return true;
+                            }
+                            return false;
+                        }, {text, level, refRows});
+                        sameData ? pass(`${label} encodes the same data as the reference (different, equally valid mask)`)
+                            : fail(`${label} vs reference`, `both used one segment, but the encoded data differs (versions ${mine.v} and ${ref.version})`);
+                    }
                 }
             }
         }
     }
     if (!qrcode) skip('QR vs reference encoder', 'npm i -D qrcode to enable');
+}
+
+// ===== ui: the real page flows, fed a hostile file name ================================
+// File names are attacker-controlled - a .zip someone sends you is unpacked into this list -
+// so every place the UI shows one, or an error quoting one, must treat it as text.
+if (suites.includes('ui')) {
+    section('ui');
+    const evil = '<img src=x onerror="__pwned.push(1)">"\'.csv';
+    const r = await page.evaluate(async evil => {
+        window.__pwned = [];
+        resetAll();
+        // Results render after the progress bar's 600 ms fade.
+        const settle = () => new Promise(res => setTimeout(res, 800));
+        const injected = () => document.querySelectorAll('#inputSection img[src="x"], #outputSection img[src="x"], img[src="x"]').length;
+        const out = {};
+        // 1. the file card
+        await addFileNode(new File(['a,b\n1,2\n'], evil));
+        renderFileCards();
+        await settle();
+        const card = document.querySelector('.file-name');
+        out.cardShowsName = !!card && card.textContent === evil;
+        out.defaultTarget = inputFiles[0].targetMime;
+        // 2. a successful conversion and its output card
+        await executeBatchChain();
+        await settle();
+        out.converted = inputFiles[0].status;
+        const outName = document.querySelector('.output-name');
+        out.outputShowsName = !!outName && outName.textContent.startsWith('<img src=x');
+        // 3. a failing conversion, whose error lands in a title attribute and the failed list
+        resetAll();
+        await addFileNode(new File(['{not json'], evil.replace('.csv', '.json')));
+        inputFiles[0].targetMime = 'text/csv';
+        await executeBatchChain();
+        await settle();
+        out.failed = inputFiles[0].status;
+        // 4. the target search box
+        const btn = document.querySelector('.file-card button, .card-actions-row button, .tsel-btn');
+        if (btn) {
+            openTargetSelect(inputFiles[0].id, btn, 'target');
+            const search = document.querySelector('.tsel-search');
+            if (search) {
+                search.value = '<img src=x onerror="__pwned.push(2)">';
+                search.dispatchEvent(new Event('input'));
+            }
+            closeTargetSelect();
+        }
+        await settle();
+        out.injected = injected();
+        out.pwned = window.__pwned.length;
+        resetAll();
+        return out;
+    }, evil);
+    // Merging several converted files into one must leave a valid file of that type.
+    const merges = await page.evaluate(async () => {
+        const m = async (mime, a, b) => (await mergeBlobs([{targetMime: mime, convertedBlob: new Blob([a])},
+            {targetMime: mime, convertedBlob: new Blob([b])}])).text();
+        const out = {};
+        let o = await m('application/xml', '<?xml version="1.0"?>\n<a/>', '<?xml version="1.0"?>\n<b/>');
+        out['XML is well-formed'] = !new DOMParser().parseFromString(o, 'application/xml').querySelector('parsererror');
+        o = await m('application/jsonl', '{"a":1}\n', '{"a":2}\n');
+        out['JSON Lines: every line parses'] = o.trim().split('\n').every(l => { try { JSON.parse(l); return true; } catch { return false; } });
+        o = await m('application/toml', 'a = 1\n[t]\nx = 1\n', 'b = 2\n[t]\ny = 2\n');
+        const t = tomlToValue(o);
+        out['TOML merges tables'] = t.a === 1 && t.b === 2 && t.t.x === 1 && t.t.y === 2;
+        o = await m('application/x-properties', 'a=1\n', 'b=2\n');
+        out['.properties gains no junk key'] = Object.keys(parseProperties(o)).join() === 'a,b';
+        o = await m('text/csv', 'name,age\nAda,36\n', 'name,city\nBob,Paris\n');
+        const rows = parseCSVLines(o.trim(), ',');
+        out['CSV matches columns by header'] = rows[0].join() === 'name,age,city' && rows[2].join() === 'Bob,,Paris';
+        o = await m('text/csv', 'n,note\n"A","two\nlines"\n', 'n,note\nB,x\n');
+        out['CSV keeps quoted newlines'] = parseCSVLines(o.trim(), ',').length === 3;
+        o = await m('text/html', '<html><body><p>one</p></body></html>', '<html><body><p>two</p></body></html>');
+        out['HTML becomes one document'] = (o.match(/<html/gi) || []).length === 1 && o.includes('one') && o.includes('two');
+        // The merge checkbox must still turn merging off once it has been turned on.
+        resetAll();
+        await addFileNode(new File(['a,b\n1,2\n'], 'x.csv'));
+        await addFileNode(new File(['a,b\n3,4\n'], 'y.csv'));
+        mergeEnabled = true;
+        renderFileCards();
+        if (typeof updateGlobalOptionsPanel === 'function') updateGlobalOptionsPanel();
+        const box = document.getElementById('mergeCheck');
+        if (box) {
+            box.click();
+            out['merge checkbox turns merging off'] = mergeEnabled === false;
+        }
+        resetAll();
+        return out;
+    });
+    for (const [label, ok] of Object.entries(merges)) ok ? pass(`merge: ${label}`) : fail(`merge: ${label}`);
+    r.pwned || r.injected ? fail('hostile file names run no script', `script ran ${r.pwned} time(s); ${r.injected} injected element(s)`)
+        : pass('hostile file names run no script');
+    r.cardShowsName ? pass('file card shows the name as text') : fail('file card shows the name as text');
+    r.defaultTarget === 'application/json' ? pass('a dropped CSV defaults to JSON') : fail('a dropped CSV defaults to JSON', `got ${r.defaultTarget}`);
+    r.converted === 'done' && r.outputShowsName ? pass('conversion completes and the output card shows the name as text')
+        : fail('conversion completes and the output card shows the name as text', `status ${r.converted}`);
+    r.failed === 'error' ? pass('a failing conversion is reported as failed') : fail('a failing conversion is reported as failed', `status ${r.failed}`);
 }
 
 // ===== uncaught page errors are always a failure ======================================

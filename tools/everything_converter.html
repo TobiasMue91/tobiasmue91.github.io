@@ -1535,7 +1535,13 @@
     'application/x-base64-source': {ext: 'b64', label: 'Base64 (decode)', category: 'text', icon: '🔣'},
 };
 const EXT_TO_MIME = {};
-for (const [mime, info] of Object.entries(FORMAT_REGISTRY)) EXT_TO_MIME[info.ext] = mime;
+// Pseudo-formats ("image/png+qr", "application/json+id3") are OUTPUTS that happen to be
+// saved with a real extension. They must never claim that extension for input: last one
+// registered used to win, so a .mid file was read as "MIDI (pitch)" and a .zip as a bundle
+// of video frames.
+for (const [mime, info] of Object.entries(FORMAT_REGISTRY)) {
+    if (!mime.includes('+') && !(info.ext in EXT_TO_MIME)) EXT_TO_MIME[info.ext] = mime;
+}
 Object.assign(EXT_TO_MIME, {
     jpeg: 'image/jpeg', yml: 'text/yaml', htm: 'text/html', txt: 'text/plain', ini: 'application/ini',
     pgm: 'image/x-portable-graymap', pbm: 'image/x-portable-bitmap', ppm: 'image/x-portable-pixmap',
@@ -1604,6 +1610,13 @@ function loadLibrary(url, name) {
     });
 }
 
+// Anything that came from outside the page - a file name, a zip entry, text typed into a
+// search box, an error that quotes the input - is escaped before it goes into innerHTML.
+// File names are attacker-controlled: a .zip someone sends you is unpacked here, and an
+// entry named <img src=x onerror=...>.txt used to run its script on this page.
+const escHtml = v => String(v == null ? '' : v).replace(/[&<>"']/g,
+    ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[ch]);
+
 const converters = [];
 
 function registerConverter(c) {
@@ -1642,22 +1655,39 @@ function robustJsonParse(text) {// 1. Direct parse
             return parsed;
         } catch (_) {
         }
-    }// 7. Key=value lines → object
+    }
+    // Every repair failed. Say so, with the parser's position, instead of guessing: the
+    // prose heuristics that used to follow here turned a broken .json file into
+    // [{"text": "..."}] and carried on converting it, so the error never surfaced.
+    try {
+        JSON.parse(t);
+    } catch (e) {
+        throw new Error('Not valid JSON: ' + e.message);
+    }
+    throw new Error('Not valid JSON');
+}
+
+// Plain text to a JSON value - the one place guessing is the point. JSON-looking text is
+// parsed as JSON; key=value lines become an object; anything else is wrapped as text.
+function textToJsonValue(text) {
+    try {
+        return robustJsonParse(text);
+    } catch (_) {
+    }
+    const t = text.trim();
+    const lines = t.split('\n').map(l => l.trim()).filter(l => l);
     if (t.includes('=') && !t.startsWith('{')) {
         const obj = {};
         let matched = 0;
         for (const line of lines) {
             const eq = line.indexOf('=');
             if (eq > 0) {
-                const k = line.slice(0, eq).trim();
-                let v = line.slice(eq + 1).trim();
-                if (v === 'true') v = true; else if (v === 'false') v = false; else if (!isNaN(v) && v !== '') v = Number(v);
-                obj[k] = v;
+                obj[line.slice(0, eq).trim()] = scalarFromText(line.slice(eq + 1).trim());
                 matched++;
             }
         }
         if (matched > 0) return obj;
-    }// 8. Last resort:wrap as text object
+    }
     return [{text: text}];
 }
 
@@ -2475,7 +2505,10 @@ registerConverter({
     inputs: ['text/csv'],
     outputs: ['application/json'],
     weight: 1,
-    convert: async blob => new Blob([JSON.stringify(csvToObj(await blob.text(), ','), null, 2)], {type: 'application/json'})
+    convert: async blob => {
+        const text = await blob.text();
+        return new Blob([JSON.stringify(csvToObj(text, csvDelimiter(text)), null, 2)], {type: 'application/json'});
+    }
 });
 registerConverter({
     id: 'tsv-to-json',
@@ -2592,7 +2625,7 @@ registerConverter({
     weight: 2,
     convert: async blob => {
         const text = await blob.text();
-        const parsed = robustJsonParse(text);
+        const parsed = textToJsonValue(text);
         return new Blob([JSON.stringify(parsed, null, 2)], {type: 'application/json'});
     }
 });
@@ -2654,7 +2687,8 @@ registerConverter({
     lib: sjsUrl,
     convert: async blob => {
         const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(parseCSVLines(await blob.text(), ','));
+        const text = await blob.text();
+        const ws = XLSX.utils.aoa_to_sheet(parseCSVLines(text, csvDelimiter(text)));
         XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
         return new Blob([XLSX.write(wb, {
             bookType: 'xlsx',
@@ -5243,6 +5277,51 @@ registerConverter({
     }
 });
 
+// The reverse of the dump above - what `xxd -r` does. Reads both the xxd layout this tool
+// writes ("00000000: 4865 6c6c  Hello") and `hexdump -C` ("00000000  48 65 6c 6c  |Hell|"),
+// so a dump can be edited by hand and turned back into a file.
+function hexdumpToBytes(text) {
+    const out = [];
+    for (const raw of text.split(/\r?\n/)) {
+        const m = raw.match(/^\s*([0-9a-fA-F]{4,16})(:|\s)(.*)$/);
+        if (!m) continue;                               // blank lines, the truncation note
+        // Tell the layouts apart by the offset separator, not the gutter: the ASCII column
+        // can itself contain "|" (byte 0x7c). xxd ends its hex with two spaces; hexdump -C
+        // has a two-space gap mid-row too, so only "  |" ends its hex.
+        const body = m[2] === ':' ? m[3].replace(/^ /, '').split(/ {2,}/)[0] : m[3].split(/\s{2,}\|/)[0];
+        const hex = body.replace(/\s+/g, '');
+        if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2) {
+            throw new Error('Line ' + m[1] + ' is not a hex dump row: ' + JSON.stringify(raw.slice(0, 40)));
+        }
+        for (let i = 0; i < hex.length; i += 2) out.push(parseInt(hex.slice(i, i + 2), 16));
+    }
+    if (!out.length) throw new Error('No hex dump rows found (expected lines like "00000000: 4865 6c6c ...")');
+    if (/\[truncated:/.test(text)) throw new Error('This dump was truncated when it was made, so the original file cannot be rebuilt from it');
+    return new Uint8Array(out);
+}
+
+registerConverter({
+    id: 'hexdump-to-file',
+    name: 'Hex Dump to File',
+    inputs: ['text/x-hexdump'],
+    outputs: ['application/octet-stream'],
+    weight: 2,
+    lib: null,
+    convert: async blob => new Blob([hexdumpToBytes(await blob.text())], {type: 'application/octet-stream'})
+});
+
+// SQL is text. Without this edge an uploaded .sql file could reach nothing but encodings -
+// no Markdown, HTML, PDF or QR - because nothing else accepts application/sql.
+registerConverter({
+    id: 'sql-to-text',
+    name: 'SQL as Plain Text',
+    inputs: ['application/sql'],
+    outputs: ['text/plain'],
+    weight: 1,
+    lib: null,
+    convert: async blob => new Blob([await blob.text()], {type: 'text/plain'})
+});
+
 // ===== iCALENDAR (ICS) & vCARD (VCF) =====
 // Both use the same RFC 5545/6350 line syntax: folded lines, NAME;PARAM=X:value,
 // backslash escaping. Shared low-level parser, format-specific mapping on top.
@@ -5621,22 +5700,62 @@ function dataCodewords(version, level) {
 // Byte-mode character count indicator width.
 const ccBits = version => version <= 9 ? 8 : 16;
 
-function chooseVersion(byteLen, level) {
+// ---- Encoding modes ----
+// Digits pack 3 to 10 bits and the 45-character uppercase set 2 to 11 bits, against 8 bits a
+// byte in byte mode. A phone number or an uppercase URL therefore fits a much smaller symbol,
+// and smaller symbols scan from further away. One mode serves the whole payload; splitting it
+// into mixed segments would save a little more on text like vCards, but a single mode keeps
+// every symbol bit-for-bit comparable with reference encoders.
+const QR_ALNUM = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+const QR_MODE_BITS = {numeric: 0b0001, alnum: 0b0010, byte: 0b0100};
+
+function qrModeOf(bytes) {
+    if (bytes.length && bytes.every(b => b >= 0x30 && b <= 0x39)) return 'numeric';
+    if (bytes.length && bytes.every(b => b < 0x80 && QR_ALNUM.includes(String.fromCharCode(b)))) return 'alnum';
+    return 'byte';
+}
+
+function qrCcBits(mode, version) {
+    const band = version <= 9 ? 0 : version <= 26 ? 1 : 2;
+    return {numeric: [10, 12, 14], alnum: [9, 11, 13], byte: [8, 16, 16]}[mode][band];
+}
+
+function qrPayloadBits(mode, n) {
+    if (mode === 'numeric') return 10 * Math.floor(n / 3) + [0, 4, 7][n % 3];
+    if (mode === 'alnum') return 11 * Math.floor(n / 2) + 6 * (n % 2);
+    return 8 * n;
+}
+
+function chooseVersion(byteLen, level, mode = 'byte') {
     for (let v = 1; v <= 40; v++) {
-        const cap = dataCodewords(v, level) * 8 - 4 - ccBits(v);
-        if (byteLen * 8 <= cap) return v;
+        const cap = dataCodewords(v, level) * 8;
+        if (4 + qrCcBits(mode, v) + qrPayloadBits(mode, byteLen) <= cap) return v;
     }
     return null;
 }
 
-function buildDataCodewords(bytes, version, level) {
+function buildDataCodewords(bytes, version, level, mode = 'byte') {
     const bits = [];
     const push = (val, len) => {
         for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1);
     };
-    push(0b0100, 4);                 // byte mode
-    push(bytes.length, ccBits(version));
-    for (const b of bytes) push(b, 8);
+    push(QR_MODE_BITS[mode], 4);
+    push(bytes.length, qrCcBits(mode, version));
+    if (mode === 'numeric') {
+        const digits = String.fromCharCode(...bytes);
+        for (let i = 0; i < digits.length; i += 3) {
+            const chunk = digits.slice(i, i + 3);
+            push(parseInt(chunk, 10), [0, 4, 7, 10][chunk.length]);
+        }
+    } else if (mode === 'alnum') {
+        const vals = Array.from(bytes, b => QR_ALNUM.indexOf(String.fromCharCode(b)));
+        for (let i = 0; i < vals.length; i += 2) {
+            if (i + 1 < vals.length) push(vals[i] * 45 + vals[i + 1], 11);
+            else push(vals[i], 6);
+        }
+    } else {
+        for (const b of bytes) push(b, 8);
+    }
     const capacity = dataCodewords(version, level) * 8;
     for (let i = 0; i < 4 && bits.length < capacity; i++) bits.push(0); // terminator
     while (bits.length % 8) bits.push(0);
@@ -5858,18 +5977,19 @@ function penalty(m) {
 
 // Returns {matrix (0/1), size, version}
 function qrEncode(bytes, level = 1) {
-    let version = chooseVersion(bytes.length, level);
+    const mode = qrModeOf(bytes);
+    const version = chooseVersion(bytes.length, level, mode);
     if (!version) {
-        // Doesn't fit any version at this EC level: truncate to what v40 holds AT THIS
-        // LEVEL (not level L - using L's larger capacity here overfills the matrix and
-        // corrupts the symbol), stopping on a UTF-8 boundary so no character is split.
-        const cap = dataCodewords(40, level) * 8 - 4 - ccBits(40);
-        let end = Math.floor(cap / 8);
-        while (end > 0 && (bytes[end] & 0xC0) === 0x80) end--;
-        bytes = bytes.slice(0, end);
-        version = 40;
+        // This used to truncate silently: the symbol scanned fine and quietly held only the
+        // first part of the text. Say so instead, and name a level that would fit.
+        const names = ['L (7%)', 'M (15%)', 'Q (25%)', 'H (30%)'];
+        const fits = [0, 1, 2, 3].filter(l => l < level && chooseVersion(bytes.length, l, mode));
+        const most = Math.floor((dataCodewords(40, level) * 8 - 4 - qrCcBits(mode, 40)) / 8);
+        throw new Error(`Too much for one QR code: ${bytes.length} bytes, and the largest QR code holds about `
+            + `${most} at error correction ${names[level]}.`
+            + (fits.length ? ` It would fit at level ${names[fits[fits.length - 1]]} - set it under "QR error correction".` : ''));
     }
-    const dataCw = buildDataCodewords(bytes, version, level);
+    const dataCw = buildDataCodewords(bytes, version, level, mode);
     const all = interleave(dataCw, version, level);
     const base = placeData(buildQrMatrix(version), all);
     // Remaining reserved cells (=2) become 0 before masking evaluation
@@ -5883,7 +6003,7 @@ function qrEncode(bytes, level = 1) {
             best = m;
         }
     }
-    return {matrix: best, size: best.length, version};
+    return {matrix: best, size: best.length, version, mode};
 }
 
 registerConverter({
@@ -5895,7 +6015,9 @@ registerConverter({
     terminal: true,
     lib: null,
     convert: async (blob, fromMime, toMime, options) => {
-        const text = await blob.text();
+        // Files end with a newline nobody means to encode; left in, it also forces a phone
+        // number or an uppercase code out of the compact numeric/alphanumeric modes.
+        const text = (await blob.text()).replace(/\r?\n$/, '');
         if (!text.trim()) throw new Error('Nothing to encode - the input is empty');
         const bytes = new TextEncoder().encode(text);
         const levelIdx = ['L', 'M', 'Q', 'H'].indexOf((options && options.qrLevel) || 'M');
@@ -6262,7 +6384,8 @@ registerConverter({
     weight: 2,
     lib: null,
     convert: async (blob) => {
-        const rows = parseCSVLines(await blob.text(), ',');
+        const text = await blob.text();
+        const rows = parseCSVLines(text, csvDelimiter(text));
         if (!rows.length) throw new Error('CSV appears to be empty');
         return new Blob([rowsToMarkdownTable(rows)], {type: 'text/markdown'});
     }
@@ -8635,34 +8758,112 @@ async function detectFormat(file) {
         const sample = (await file.slice(0, 64).text()).replace(/^\uFEFF/, '').trim();
         return sample.startsWith('WEBVTT') ? 'text/vtt' : 'application/x-subrip';
     }
-    if (['txt', 'md', 'html', 'json', 'xml', 'yaml', 'toml', 'csv', 'tsv', 'b64', 'ini', 'yml', 'htm', 'jsonl', 'ndjson', 'json5', 'properties', 'env', 'sexp', 'sexpr', 'rst', 'textile', 'adoc', 'asciidoc'].includes(ext)) {
-        return await sniffTextStructure(file, ext);
-    }
-    return EXT_TO_MIME[ext] || file.type || 'text/plain';
+    const byExt = TEXT_EXT_MIME[ext];
+    // A specific extension is an explicit statement about the file and wins. Sniffing the
+    // content first used to turn any .md, .yaml, .env or .txt whose first line held a comma
+    // into CSV, every .jsonl into JSON (which then failed to parse), and read <?xml as HTML.
+    if (byExt && !TEXT_EXT_SNIFF.has(ext)) return byExt;
+    if (byExt || !file.name.includes('.')) return await sniffTextStructure(file, byExt ? ext : '');
+    if (EXT_TO_MIME[ext]) return EXT_TO_MIME[ext];
+    // An unknown extension: trust the browser's type only when it is one we know, and
+    // otherwise fall back to a type that at least the universal converters accept, so the
+    // file is never offered zero targets.
+    if (file.type && FORMAT_REGISTRY[file.type]) return file.type;
+    return (await looksLikeText(file)) ? 'text/plain' : 'application/octet-stream';
 }
 
+const TEXT_EXT_MIME = {
+    txt: 'text/plain', text: 'text/plain', log: 'text/plain',
+    md: 'text/markdown', markdown: 'text/markdown',
+    html: 'text/html', htm: 'text/html', xhtml: 'text/html',
+    json: 'application/json', geojson: 'application/json',
+    jsonl: 'application/jsonl', ndjson: 'application/jsonl',
+    json5: 'application/json5',
+    xml: 'application/xml', rss: 'application/xml', atom: 'application/xml', xsd: 'application/xml',
+    yaml: 'text/yaml', yml: 'text/yaml',
+    toml: 'application/toml', ini: 'application/ini', cfg: 'application/ini', conf: 'application/ini',
+    csv: 'text/csv', tsv: 'text/tab-separated-values', tab: 'text/tab-separated-values',
+    b64: 'application/x-base64-source', base64: 'application/x-base64-source',
+    properties: 'application/x-properties', env: 'application/x-env',
+    sexp: 'application/x-sexp', sexpr: 'application/x-sexp',
+    rst: 'text/x-rst', textile: 'text/x-textile', adoc: 'text/x-asciidoc', asciidoc: 'text/x-asciidoc',
+    sql: 'application/sql'
+};
+// Extensions too generic to decide on their own: the content says what they hold.
+const TEXT_EXT_SNIFF = new Set(['txt', 'text', 'log']);
+
+// Binary files carry NUL bytes or break UTF-8 early; text does neither.
+async function looksLikeText(file) {
+    const u8 = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+    if (u8.includes(0)) return false;
+    try {
+        new TextDecoder('utf-8', {fatal: true}).decode(u8.subarray(0, u8.length - 4));
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+// Pick the delimiter that splits the first rows into the same number of columns. European
+// spreadsheets export ";" by default, which used to parse as one giant column.
+function csvDelimiter(text) {
+    const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim()).slice(0, 10);
+    if (!lines.length) return ',';
+    let best = ',', bestScore = 0;
+    for (const d of [',', ';', '\t', '|']) {
+        const counts = lines.map(l => {
+            let n = 0, q = false;
+            for (const ch of l) {
+                if (ch === '"') q = !q;
+                else if (ch === d && !q) n++;
+            }
+            return n;
+        });
+        if (!counts[0]) continue;
+        const consistent = counts.filter(c => c === counts[0]).length;
+        const score = consistent * 100 + counts[0];
+        if (score > bestScore) {
+            bestScore = score;
+            best = d;
+        }
+    }
+    return best;
+}
+
+// Content sniffing for files whose extension says nothing (.txt, none at all).
 async function sniffTextStructure(file, ext) {
-    const sample = (await file.slice(0, 2048).text()).trim();
-    if (sample.startsWith('{') || sample.startsWith('[')) return 'application/json';
-    if (sample.startsWith('<?xml') || sample.startsWith('<html') || sample.startsWith('<!DOCTYPE html>')) return 'text/html';
-    if (sample.startsWith('<')) return 'application/xml';
-    const firstLine = sample.split('\n')[0];
-    if (firstLine.includes('\t') && ext !== 'ini' && ext !== 'toml') return 'text/tab-separated-values';
-    if (firstLine.includes(',') && ext !== 'ini' && ext !== 'toml') return 'text/csv';
-    if (ext === 'md') return 'text/markdown';
-    if (ext === 'yaml' || ext === 'yml') return 'text/yaml';
-    if (ext === 'toml') return 'application/toml';
-    if (ext === 'ini') return 'application/ini';
-    if (ext === 'b64') return 'application/x-base64-source';
-    if (ext === 'jsonl' || ext === 'ndjson') return 'application/jsonl';
-    if (ext === 'json5') return 'application/json5';
-    if (ext === 'properties') return 'application/x-properties';
-    if (ext === 'env') return 'application/x-env';
-    if (ext === 'sexp' || ext === 'sexpr') return 'application/x-sexp';
-    if (ext === 'rst') return 'text/x-rst';
-    if (ext === 'textile') return 'text/x-textile';
-    if (ext === 'adoc' || ext === 'asciidoc') return 'text/x-asciidoc';
-    return 'text/plain';
+    const sample = (await file.slice(0, 4096).text()).replace(/^﻿/, '').trim();
+    if (!sample) return TEXT_EXT_MIME[ext] || 'text/plain';
+    const lines = sample.split(/\r?\n/).filter(l => l.trim());
+    if (sample[0] === '{' || sample[0] === '[') {
+        try {
+            JSON.parse(sample);
+            return 'application/json';
+        } catch (_) {
+            // One JSON value per line is JSON Lines, not broken JSON.
+            const full = lines.slice(0, -1);   // the 4 KB sample may cut the last line
+            if (full.length && full.every(l => { try { JSON.parse(l); return true; } catch (_) { return false; } })) return 'application/jsonl';
+            if (sample.length < 4096) return 'text/plain';
+            return 'application/json';
+        }
+    }
+    if (/^<!doctype html|^<html[\s>]/i.test(sample)) return 'text/html';
+    if (/^<\?xml/i.test(sample)) return /<html[\s>]/i.test(sample.slice(0, 512)) ? 'text/html' : 'application/xml';
+    if (sample[0] === '<' && /<\/?[a-z][\w:-]*[\s>]/i.test(sample)) {
+        return /<(p|div|span|body|head|table|h[1-6]|ul|a)[\s>]/i.test(sample) ? 'text/html' : 'application/xml';
+    }
+    if (/^WEBVTT/.test(sample)) return 'text/vtt';
+    if (/^\d+\r?\n\d{2}:\d{2}:\d{2}[,.]\d{3} -->/.test(sample)) return 'application/x-subrip';
+    if (/^BEGIN:VCALENDAR/i.test(sample)) return 'text/calendar';
+    if (/^BEGIN:VCARD/i.test(sample)) return 'text/vcard';
+    // A table only when several rows agree on the column count - one comma in a sentence
+    // is not a CSV.
+    if (lines.length >= 2) {
+        const d = csvDelimiter(sample);
+        const cols = lines.slice(0, 10).map(l => l.split(d).length);
+        if (cols[0] > 1 && cols.every(c => c === cols[0])) return d === '\t' ? 'text/tab-separated-values' : 'text/csv';
+    }
+    return TEXT_EXT_MIME[ext] || 'text/plain';
 }
 
 let inputFiles = [];
@@ -8695,6 +8896,33 @@ function isZipJunk(path) {
     return base === '.DS_Store' || base === 'Thumbs.db' || base === 'desktop.ini' || base === '';
 }
 
+// What a person dropping this file most likely came for. Reachable targets are ordered by
+// cost, and cheapest-to-compute is not the same thing: by cost alone every video defaulted
+// to a zip of extracted frames, WAV to a picture of its waveform, and SQL or MIDI to DNA.
+const PREFERRED_TARGETS = {
+    'video/*': ['audio/mpeg', 'video/mp4'],
+    'video/mp4': ['audio/mpeg', 'video/webm'],
+    'audio/*': ['audio/mpeg', 'audio/wav'],
+    'audio/mpeg': ['audio/wav'],
+    'image/heic': ['image/jpeg'],
+    'image/heif': ['image/jpeg']
+};
+
+function pickDefaultTarget(srcMime, targets) {
+    if (!targets || !targets.size) return null;
+    // A preference only counts when the route to it is a real conversion: MIDI is audio/*,
+    // but its only way to MP3 is a raw embed drawn as a picture, made into a video, and
+    // stripped for its (silent) soundtrack.
+    const honest = m => targets.has(m) && !targets.get(m).some(step => step.converter.lossy === true);
+    const prefs = PREFERRED_TARGETS[srcMime] || PREFERRED_TARGETS[srcMime.split('/')[0] + '/*'] || [];
+    for (const m of prefs) if (honest(m)) return m;
+    // Then, cheapest first: a real format reached honestly, then any honest target (a
+    // checksum list or waveform), and only then whatever is cheapest.
+    for (const m of targets.keys()) if (!m.includes('+') && honest(m)) return m;
+    for (const m of targets.keys()) if (honest(m)) return m;
+    return targets.keys().next().value;
+}
+
 // Turn a single File into an input node (the per-file half of handleFiles).
 async function addFileNode(file) {
     const uid = 'f_' + Math.random().toString(36).substring(2, 11);
@@ -8713,7 +8941,7 @@ async function addFileNode(file) {
         convertedBlob: null,
         convertedName: ''
     };
-    if (targetMap.size > 0) node.targetMime = Array.from(targetMap.keys())[0];
+    node.targetMime = pickDefaultTarget(mime, targetMap);
     inputFiles.push(node);
 }
 
@@ -8893,7 +9121,7 @@ function updateMergeRow() {
         return;
     }
     const ext = (FORMAT_REGISTRY[target]?.ext || '').toUpperCase();
-    row.innerHTML = `<label><input type="checkbox" id="mergeCheck" ${mergeEnabled ? 'checked' : ''}onchange="mergeEnabled=this.checked">Merge all files into one ${ext}file</label><span class="merge-info">${inputFiles.length}files → 1 merged file</span>`;
+    row.innerHTML = `<label><input type="checkbox" id="mergeCheck" ${mergeEnabled ? 'checked' : ''} onchange="mergeEnabled=this.checked">Merge all files into one ${ext} file</label><span class="merge-info">${inputFiles.length} files → 1 merged file</span>`;
 }
 
 function renderFileCards() {
@@ -8934,8 +9162,8 @@ function renderFileCards() {
             }
         }// Status badge
         let badge = `<div class="card-status status-ready">Ready</div>`;
-        if (node.status === 'converting') badge = `<div class="card-status status-loading"><div class="mini-spinner"></div>Converting</div>`; else if (node.status === 'done') badge = `<div class="card-status status-success">Done</div>`; else if (node.status === 'error') badge = `<div class="card-status status-fail" title="${node.errorMsg}">Failed</div>`;
-        card.innerHTML = `<div class="card-preview-container" id="pv-${node.id}"></div><div class="file-info"><div class="file-name" title="${node.name}">${node.name}</div><div class="file-meta">${meta.icon} ${meta.label} · ${formatBytes(node.size)}</div><div class="card-actions-row">${dropdown}${applyBtn}${badge}</div>${routeHtml}</div><div class="file-remove" onclick="removeFile('${node.id}')">✕</div>`;
+        if (node.status === 'converting') badge = `<div class="card-status status-loading"><div class="mini-spinner"></div>Converting</div>`; else if (node.status === 'done') badge = `<div class="card-status status-success">Done</div>`; else if (node.status === 'error') badge = `<div class="card-status status-fail" title="${escHtml(node.errorMsg)}">Failed</div>`;
+        card.innerHTML = `<div class="card-preview-container" id="pv-${node.id}"></div><div class="file-info"><div class="file-name" title="${escHtml(node.name)}">${escHtml(node.name)}</div><div class="file-meta">${meta.icon} ${meta.label} · ${formatBytes(node.size)}</div><div class="card-actions-row">${dropdown}${applyBtn}${badge}</div>${routeHtml}</div><div class="file-remove" onclick="removeFile('${node.id}')">✕</div>`;
         container.appendChild(card);
         generateLocalPreview(node.file, node.mime, card.querySelector(`#pv-${node.id}`));
     });
@@ -9040,7 +9268,7 @@ function openTargetSelect(nodeId, btn, mode) {
                 html += `<div class="${cls.join(' ')}" data-idx="${idx}"><span class="tsel-ext">${t.ext.toUpperCase()}</span><span class="tsel-lbl">${t.label}</span></div>`;
             }
         }
-        list.innerHTML = html || `<div class="tsel-empty">No formats match "${search.value}"</div>`;
+        list.innerHTML = html || `<div class="tsel-empty">No formats match "${escHtml(search.value)}"</div>`;
     };
 
     const choose = idx => {
@@ -9214,7 +9442,7 @@ function addVia(uid, mime) {
     // Re-validate the target against the new chain base; fall back to the best option.
     const targets = reachableFrom(mime);
     if (!node.targetMime || !targets.has(node.targetMime) || !getNodePath(node)) {
-        node.targetMime = targets.size ? targets.keys().next().value : null;
+        node.targetMime = pickDefaultTarget(mime, targets);
     }
     renderFileCards();
     updateGlobalOptionsPanel();
@@ -9225,8 +9453,8 @@ function removeVia(uid, idx) {
     if (!node || !node.viaMimes) return;
     node.viaMimes.splice(idx, 1);
     if (!node.targetMime || !getNodePath(node)) {
-        const targets = reachableFrom(nodeChainBase(node));
-        node.targetMime = targets.size ? targets.keys().next().value : null;
+        const base = nodeChainBase(node);
+        node.targetMime = pickDefaultTarget(base, reachableFrom(base));
     }
     renderFileCards();
     updateGlobalOptionsPanel();
@@ -9539,25 +9767,73 @@ async function mergeBlobs(nodes) {
         }
         return new Blob([JSON.stringify(arrays, null, 2)], {type: 'application/json'});
     }
+    // Every other mergeable format is text, but "text" is not one format: joining files with
+    // a "---" line is right for Markdown and YAML and breaks XML, JSON Lines, TOML and
+    // .properties. Each is merged in a way that leaves one valid file of its own type.
+    const texts = [];
+    for (const b of blobs) texts.push((await b.text()).replace(/^\uFEFF/, ''));
     if (mime === 'text/csv' || mime === 'text/tab-separated-values') {
-        const delim = mime === 'text/csv' ? ',' : '\t';
-        const allRows = [];
-        let headerLine = null;
-        for (const b of blobs) {
-            const lines = (await b.text()).trim().split('\n');
-            if (lines.length === 0) continue;
-            if (!headerLine) {
-                headerLine = lines[0];
-                allRows.push(headerLine);
+        // Columns are matched by header, not position. Appending rows blindly put a second
+        // file's header in as a data row and its values under the first file's columns.
+        const header = [], records = [];
+        for (const text of texts) {
+            const rows = parseCSVLines(text.trim(), mime === 'text/csv' ? csvDelimiter(text) : '\t');
+            if (!rows.length) continue;
+            const cols = rows[0].map(c => c.trim());
+            for (const c of cols) if (!header.includes(c)) header.push(c);
+            for (const row of rows.slice(1)) {
+                const rec = {};
+                cols.forEach((c, i) => rec[c] = row[i] === undefined ? '' : row[i]);
+                records.push(rec);
             }
-            allRows.push(...lines.slice(headerLine === lines[0] ? 1 : 0));
         }
-        return new Blob([allRows.join('\n')], {type: mime});
-    }// Text-based:concatenate with separator
-    const separator = mime === 'text/html' ? '\n<hr>\n' : '\n\n---\n\n';
-    const parts = [];
-    for (const b of blobs) parts.push(await b.text());
-    return new Blob([parts.join(separator)], {type: mime});
+        const d = mime === 'text/csv' ? ',' : '\t';
+        const cell = v => {
+            const str = String(v == null ? '' : v);
+            return (str.includes(d) || str.includes('"') || /[\r\n]/.test(str)) ? `"${str.replace(/"/g, '""')}"` : str;
+        };
+        const lines = [header.map(cell).join(d), ...records.map(r => header.map(c => cell(r[c])).join(d))];
+        return new Blob([lines.join('\n') + '\n'], {type: mime});
+    }
+    if (mime === 'application/xml') {
+        // Two documents cannot share a file, so each root becomes a child of one <merged>.
+        const out = document.implementation.createDocument(null, 'merged', null);
+        texts.forEach((text, i) => {
+            const doc = new DOMParser().parseFromString(text, 'application/xml');
+            if (doc.querySelector('parsererror')) throw new Error(`File ${i + 1} is not well-formed XML`);
+            out.documentElement.appendChild(out.importNode(doc.documentElement, true));
+        });
+        return new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(out)], {type: mime});
+    }
+    if (mime === 'application/toml') {
+        // Concatenated TOML repeats tables, which is an error; merge the data instead.
+        const merge = (x, y) => {
+            if (Array.isArray(x) && Array.isArray(y)) return x.concat(y);
+            if (x && y && typeof x === 'object' && typeof y === 'object' && !Array.isArray(x) && !Array.isArray(y)) {
+                const o = {...x};
+                for (const [k, v] of Object.entries(y)) o[k] = k in o ? merge(o[k], v) : v;
+                return o;
+            }
+            return y;
+        };
+        return new Blob([tomlDocument(texts.map(tomlToValue).reduce(merge))], {type: mime});
+    }
+    if (mime === 'text/html') {
+        // One document: each file's body in turn, the first file's title, every file's styles.
+        const docs = texts.map(t => new DOMParser().parseFromString(t, 'text/html'));
+        const title = docs.map(d => d.title).find(Boolean) || 'Merged';
+        const styles = docs.flatMap(d => [...d.querySelectorAll('head style')].map(el => el.outerHTML)).join('\n');
+        const bodies = docs.map(d => d.body ? d.body.innerHTML.trim() : '').join('\n<hr>\n');
+        return new Blob([`<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>${escHtml(title)}</title>\n${styles}</head>\n<body>\n${bodies}\n</body></html>\n`], {type: mime});
+    }
+    if (['application/jsonl', 'application/ini', 'application/x-properties', 'application/x-env'].includes(mime)) {
+        // Line-based formats: one after another, which is what `cat` would do. A "---" line
+        // here was a broken JSON line or a junk key.
+        return new Blob([texts.map(t => t.trim()).filter(Boolean).join('\n') + '\n'], {type: mime});
+    }
+    // Plain text, Markdown and YAML, where a "---" line is a rule or a document separator.
+    const separator = mime === 'text/yaml' ? '\n---\n' : '\n\n---\n\n';
+    return new Blob([texts.map(t => t.replace(/\s+$/, '')).join(separator) + '\n'], {type: mime});
 }
 
 async function executeBatchChain() {
@@ -9577,7 +9853,7 @@ async function executeBatchChain() {
         const node = inputFiles[idx];
         node.status = 'converting';
         renderFileCards();
-        $('progressLabel').textContent = `Converting ${idx + 1}of ${total}:${node.name}`;
+        $('progressLabel').textContent = `Converting ${idx + 1} of ${total}: ${node.name}`;
         $('progressFill').style.width = `${Math.round((completed / total) * 100)}%`;
         $('progressPct').textContent = `${Math.round((completed / total) * 100)}%`;
         try {
@@ -9717,7 +9993,7 @@ async function renderMidiPreview(pane, blob) {
     try {
         notes = parseMidiNotes(new Uint8Array(await blob.arrayBuffer()));
     } catch (e) {
-        pane.innerHTML = `<div style="padding:14px;font-family:var(--sans);font-size:12px;color:var(--text-dim)">${e.message}</div>`;
+        pane.innerHTML = `<div style="padding:14px;font-family:var(--sans);font-size:12px;color:var(--text-dim)">${escHtml(e.message)}</div>`;
         return;
     }
     const totalSec = Math.max(...notes.map(n => n.startSec + n.durSec));
@@ -9955,7 +10231,7 @@ function renderOutputView() {
         errWrap.className = 'error-box';
         errWrap.style.margin = '0 0 16px';
         errWrap.innerHTML = `<div style="font-weight:600;margin-bottom:6px">⚠️ ${failed.length} file${failed.length > 1 ? 's' : ''} could not be converted</div>` +
-            failed.map(n => `<div style="margin-top:4px"><strong>${n.name}</strong>: ${(n.errorMsg || 'Conversion failed').replace(/</g, '&lt;')}</div>`).join('');
+            failed.map(n => `<div style="margin-top:4px"><strong>${escHtml(n.name)}</strong>: ${escHtml(n.errorMsg || 'Conversion failed')}</div>`).join('');
         grid.appendChild(errWrap);
     }
     if (success.length === 0) {
@@ -9965,7 +10241,7 @@ function renderOutputView() {
     if (mergeEnabled && success.length > 1) {
         const mergeCard = document.createElement('div');
         mergeCard.className = 'output-card';
-        mergeCard.innerHTML = `<div class="output-header"><div><div class="output-name">Merging ${success.length}files…</div></div></div>`;
+        mergeCard.innerHTML = `<div class="output-header"><div><div class="output-name">Merging ${success.length} files…</div></div></div>`;
         grid.appendChild(mergeCard);
         mergeBlobs(success).then(merged => {
             const ext = FORMAT_REGISTRY[success[0].targetMime]?.ext || 'bin';
@@ -9991,7 +10267,7 @@ function renderOutputView() {
                 renderPreviewInPane(pane, merged, success[0].targetMime);
             });
         }).catch(err => {
-            mergeCard.innerHTML = `<div class="error-box" style="margin:0">Merge failed:${err.message}</div>`;
+            mergeCard.innerHTML = `<div class="error-box" style="margin:0">Merge failed:${escHtml(err.message)}</div>`;
         });
     }// Individual files
     if (success.length > 1 && !mergeEnabled) {
@@ -10018,7 +10294,7 @@ function renderOutputView() {
             }).join('<span class="via-arrow">→</span>');
             interimRow = `<div class="interim-row"><span class="interim-label">Chain steps:</span>${links}<span class="via-arrow">→</span><span class="interim-final">${spec.ext.toUpperCase()}</span></div>`;
         }
-        card.innerHTML = `<div class="output-header"><div><div class="output-name">${node.convertedName}</div><div class="output-meta">${spec.icon} ${spec.label} · ${formatBytes(node.convertedBlob.size)}${savings}</div></div><div class="output-actions"><button class="btn-secondary" onclick="togglePreview('${node.id}')">👁 Preview</button>${copyBtn}<button class="btn-download" onclick="downloadFile('${node.id}')">📥 Download</button></div></div>${interimRow}<div class="output-preview-pane" id="pane-${node.id}" style="display:none"></div>`;
+        card.innerHTML = `<div class="output-header"><div><div class="output-name">${escHtml(node.convertedName)}</div><div class="output-meta">${spec.icon} ${spec.label} · ${formatBytes(node.convertedBlob.size)}${savings}</div></div><div class="output-actions"><button class="btn-secondary" onclick="togglePreview('${node.id}')">👁 Preview</button>${copyBtn}<button class="btn-download" onclick="downloadFile('${node.id}')">📥 Download</button></div></div>${interimRow}<div class="output-preview-pane" id="pane-${node.id}" style="display:none"></div>`;
         grid.appendChild(card);
     });
 }
@@ -10156,7 +10432,7 @@ function buildFormatMatrix() {
         mimes.forEach(tMime => {
             if (fMime === tMime) html += `<td class="dot-none">—</td>`; else if (targets.has(tMime)) {
                 const steps = targets.get(tMime).length;
-                html += steps === 1 ? `<td class="dot" title="Direct conversion">●</td>` : `<td class="dot-chain" title="Via ${steps}steps">⚯<small>${steps}</small></td>`;
+                html += steps === 1 ? `<td class="dot" title="Direct conversion">●</td>` : `<td class="dot-chain" title="Via ${steps} steps">⚯<small>${steps}</small></td>`;
             } else html += `<td class="dot-none">·</td>`;
         });
         html += `</tr>`;
