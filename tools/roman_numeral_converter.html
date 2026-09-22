@@ -235,6 +235,12 @@
             margin-top: 0.5rem;
         }
 
+        .note-message {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+
         footer {
             margin-top: auto;
             text-align: center;
@@ -293,6 +299,7 @@
                 </button>
             </div>
             <p class="error-message" x-show="errorMessage" x-text="errorMessage"></p>
+            <p class="note-message" x-show="note && !errorMessage" x-text="note"></p>
         </div>
         <div class="result-section">
             <label x-text="resultLabel"></label>
@@ -340,6 +347,7 @@
             inputValue: '',
             result: '',
             errorMessage: '',
+            note: '',
             copied: false,
             conversionHistory: [],
             debounceTimer: null,
@@ -358,12 +366,14 @@
                     this.inputValue = '';
                     this.result = '';
                     this.errorMessage = '';
+                    this.note = '';
                 }
             },
             clearInput() {
                 this.inputValue = '';
                 this.result = '';
                 this.errorMessage = '';
+                this.note = '';
             },
             handleInput() {
                 clearTimeout(this.debounceTimer);
@@ -372,6 +382,7 @@
                 }, 300);
             },
             convert() {
+                this.note = '';
                 if (!this.inputValue) {
                     this.result = '';
                     this.errorMessage = '';
@@ -392,9 +403,11 @@
                 }
             },
             convertArabicToRoman() {
-                const num = parseInt(this.inputValue);
+                // Whole numbers only, optionally grouped in thousands: 2024, 2,024, 2 024, 2'024
+                const text = this.inputValue.trim();
+                const num = /^(\d+|\d{1,3}([,' \u00a0\u202f]\d{3})+)$/.test(text) ? Number(text.replace(/\D/g, '')) : NaN;
                 if (isNaN(num)) {
-                    this.errorMessage = 'Please enter a valid number';
+                    this.errorMessage = 'Please enter a whole number, e.g. 1994';
                     this.result = '';
                     return;
                 }
@@ -424,10 +437,8 @@
                 this.result = result;
             },
             convertRomanToArabic() {
-                const roman = this.inputValue.toUpperCase();
-                if (!/^[IVXLCDM]+$/.test(roman)) {
-                    this.errorMessage = 'Invalid Roman numeral (only I, V, X, L, C, D, M allowed)';
-                    this.result = '';
+                const roman = this.extractRoman(this.inputValue);
+                if (!roman) {
                     return;
                 }
                 const romanValues = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000};
@@ -442,8 +453,17 @@
                     }
                     prevValue = currentValue;
                 }
-                if (this.toRoman(result) !== roman) {
-                    this.errorMessage = 'Invalid Roman numeral format';
+                const standard = this.toRoman(result);
+                // Clock faces and older inscriptions write fours and nines additively: IIII, VIIII, MDCCCCX
+                const additive = roman.replace(/DCCCC/g, 'CM').replace(/CCCC/g, 'CD')
+                    .replace(/LXXXX/g, 'XC').replace(/XXXX/g, 'XL')
+                    .replace(/VIIII/g, 'IX').replace(/IIII/g, 'IV');
+                if (result >= 1 && result <= 3999 && standard !== roman && standard === additive) {
+                    this.note = `Additive form, as on clock faces and older inscriptions. Standard form: ${standard}`;
+                } else if (standard !== roman) {
+                    this.errorMessage = result >= 1 && result <= 3999
+                        ? `Not a well-formed numeral. ${standard} is the standard form of ${result}`
+                        : 'Invalid Roman numeral format';
                     this.result = '';
                     return;
                 }
@@ -454,6 +474,24 @@
                 }
                 this.errorMessage = '';
                 this.result = result.toString();
+            },
+            // Pull the numeral out of whatever was pasted: "MCMXCIV.", "Louis XIV", "M.D.C.C.L.X.X.V.I", "Ⅻ"
+            extractRoman(input) {
+                const text = input.normalize('NFKC').replace(/ↀ/g, 'M').toUpperCase()
+                    .replace(/([IVXLCDM])\.(?=\s*[IVXLCDM]\b)/g, '$1');
+                const words = text.split(/[^A-Z]+/).filter(Boolean);
+                const numerals = words.filter(word => /^[IVXLCDM]+$/.test(word));
+                if (numerals.length === 0) {
+                    this.errorMessage = 'No Roman numeral found (only I, V, X, L, C, D, M allowed)';
+                } else if (numerals.length === words.length) {
+                    return numerals.join('');
+                } else if (numerals.length === 1) {
+                    return numerals[0];
+                } else {
+                    this.errorMessage = `Found several numerals (${numerals.join(', ')}). Enter just one`;
+                }
+                this.result = '';
+                return null;
             },
             toRoman(num) {
                 const romanNumerals = [
