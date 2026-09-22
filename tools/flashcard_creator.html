@@ -581,6 +581,32 @@
             font-weight: 500
         }
 
+        .study-summary {
+            display: none;
+            max-width: 480px;
+            text-align: center;
+            line-height: 1.7;
+            font-size: 1.1rem
+        }
+
+        .study-summary h2 {
+            margin-bottom: .75rem
+        }
+
+        .study-summary .btn {
+            margin-top: 1.25rem
+        }
+
+        .study-mode.finished .study-summary {
+            display: block
+        }
+
+        .study-mode.finished .flashcard,
+        .study-mode.finished .keyboard-hint,
+        .study-mode.finished .study-controls {
+            display: none
+        }
+
         .study-content {
             flex: 1;
             display: flex;
@@ -953,8 +979,11 @@
             <button class="btn btn-secondary btn-sm" onclick="shuffleCards()" id="shuffleBtn">
                 <i data-feather="shuffle"></i> Shuffle
             </button>
+            <button class="btn btn-secondary btn-sm" onclick="startStudyMode(0, 'all')" id="studyAllBtn">
+                <i data-feather="layers"></i> Study All
+            </button>
             <button class="btn btn-sm" onclick="startStudyMode()" id="studyBtn">
-                <i data-feather="play"></i> Study All
+                <i data-feather="play"></i> <span id="studyBtnText">Study Due</span>
             </button>
         </div>
     </div>
@@ -1044,6 +1073,7 @@
         </div>
     </div>
     <div class="study-content">
+        <div class="study-summary" id="studySummary"></div>
         <div class="flashcard" id="flashcard" onclick="flipCard()">
             <div class="flashcard-inner">
                 <div class="flashcard-face">
@@ -1102,6 +1132,28 @@
     let autoAdvanceTimer = null;
     let studyScore = 0;
     let studyStreak = JSON.parse(localStorage.getItem('studyStreak')) || {count: 0, lastDate: null};
+
+    // Leitner boxes: Easy moves a card up a box, Hard sends it back to box 1.
+    // Cards without a due date (new, or from older saves/exports) are due now.
+    const BOX_DAYS = [0, 1, 3, 7, 14, 30];
+    const DAY = 86400000;
+    let session = null;
+
+    function isDue(card, now = Date.now()) {
+        return !card.due || new Date(card.due).getTime() <= now;
+    }
+
+    function describeWait(ms) {
+        const days = Math.round(ms / DAY);
+        if (days < 1) return 'later today';
+        return days === 1 ? 'tomorrow' : `in ${days} days`;
+    }
+
+    function nextDueText(indices) {
+        const now = Date.now();
+        const times = indices.map(i => flashcards[i]).filter(c => c.due && !isDue(c, now)).map(c => new Date(c.due).getTime());
+        return times.length ? `Next card due ${describeWait(Math.min(...times) - now)}.` : '';
+    }
 
     function saveToStorage() {
         localStorage.setItem('flashcards', JSON.stringify(flashcards));
@@ -1228,7 +1280,10 @@ ${Array.from({length: 3}, (_, i) => `<i data-feather="star" class="difficulty-st
             if (visible) visibleCount++;
         });
 
+        document.getElementById('studyAllBtn').style.display = visibleCount > 0 ? 'inline-flex' : 'none';
         document.getElementById('studyBtn').style.display = visibleCount > 0 ? 'inline-flex' : 'none';
+        const dueCount = visibleIndices().filter(i => isDue(flashcards[i])).length;
+        document.getElementById('studyBtnText').textContent = `Study Due (${dueCount})`;
     }
 
     function clearSearch() {
@@ -1356,19 +1411,27 @@ ${Array.from({length: 3}, (_, i) => `<i data-feather="star" class="difficulty-st
         showToast('Cards shuffled!');
     }
 
-    function startStudyMode(startIndex = 0) {
+    function visibleIndices() {
+        const elements = document.querySelectorAll('.card');
+        return flashcards.map((card, index) => index).filter(index => elements[index] && elements[index].style.display !== 'none');
+    }
+
+    function startStudyMode(startIndex = 0, mode = 'due') {
         if (flashcards.length === 0) return;
 
-        const visibleCards = flashcards.map((card, index) => ({card, index})).filter(({index}) => {
-            const cardElement = document.querySelectorAll('.card')[index];
-            return cardElement && cardElement.style.display !== 'none';
-        });
+        const visible = visibleIndices();
+        if (visible.length === 0) return;
 
-        if (visibleCards.length === 0) return;
-
-        if (!isShuffled) {
-            studyOrder = visibleCards.map(({index}) => index);
+        const now = Date.now();
+        const picked = mode === 'all' ? visible : visible.filter(i => isDue(flashcards[i], now));
+        if (picked.length === 0) {
+            showToast(`Nothing due right now. ${nextDueText(visible)} Use Study All to cram.`, 'warning');
+            return;
         }
+
+        studyOrder = isShuffled ? picked.sort(() => Math.random() - 0.5) : picked;
+        session = {seen: new Set(), again: new Set(), promoted: 0};
+        document.getElementById('studyMode').classList.remove('finished');
 
         currentCardIndex = 0;
         studyStartTime = Date.now();
@@ -1381,7 +1444,8 @@ ${Array.from({length: 3}, (_, i) => `<i data-feather="star" class="difficulty-st
     }
 
     function exitStudyMode() {
-        document.getElementById('studyMode').classList.remove('active');
+        document.getElementById('studyMode').classList.remove('active', 'finished');
+        renderCards();
         document.body.style.overflow = 'auto';
         stopStudyTimer();
         if (autoAdvanceTimer) {
@@ -1471,28 +1535,64 @@ ${Array.from({length: 3}, (_, i) => `<i data-feather="star" class="difficulty-st
     function rateDifficulty(difficulty) {
         const cardIndex = studyOrder[currentCardIndex];
         flashcards[cardIndex].difficulty = difficulty;
-        flashcards[cardIndex].lastStudied = new Date().toISOString();
+        const card = flashcards[cardIndex];
+        card.lastStudied = new Date().toISOString();
+        const box = card.box || 0;
+        // A card missed earlier this session has to earn its promotion again tomorrow.
+        const promote = difficulty === 1 && !session.again.has(cardIndex);
+        card.box = promote ? Math.min(box + 1, BOX_DAYS.length - 1) : difficulty === 3 ? 1 : Math.max(box, 1);
+        card.due = new Date(Date.now() + BOX_DAYS[card.box] * DAY).toISOString();
+        session.seen.add(cardIndex);
+        if (promote && card.box > box) session.promoted++;
+        if (difficulty === 3) {
+            // Missed cards come back at the end of this session.
+            session.again.add(cardIndex);
+            studyOrder.push(cardIndex);
+        }
 
         if (difficulty === 1) studyScore += 3;
         else if (difficulty === 2) studyScore += 2;
         else studyScore += 1;
 
         saveToStorage();
+        if (currentCardIndex >= studyOrder.length - 1) {
+            finishSession();
+            return;
+        }
         nextCard();
         showToast(difficulty === 1 ? 'Marked as Easy!' : difficulty === 2 ? 'Marked as Medium' : 'Marked as Hard');
     }
 
+    function finishSession() {
+        stopStudyTimer();
+        const now = Date.now();
+        const stillDue = visibleIndices().filter(i => isDue(flashcards[i], now)).length;
+        const again = session.again.size;
+        document.getElementById('studySummary').innerHTML = `
+            <h2>Session complete</h2>
+            <p>${session.seen.size} card${session.seen.size === 1 ? '' : 's'} reviewed · ${session.promoted} moved up a box · ${again} missed and repeated.</p>
+            <p>${stillDue ? `${stillDue} still due.` : 'Nothing else is due.'} ${nextDueText(visibleIndices())}</p>
+            <button class="btn" onclick="exitStudyMode()">Done</button>`;
+        document.getElementById('progressFill').style.width = '100%';
+        document.getElementById('studyMode').classList.add('finished');
+    }
+
     function toggleShuffle() {
+        // Reorder the cards still ahead in this session, never the whole deck.
+        const done = studyOrder.slice(0, currentCardIndex);
+        const ahead = studyOrder.slice(currentCardIndex);
         if (isShuffled) {
-            studyOrder = [...Array(flashcards.length).keys()];
+            ahead.sort((a, b) => a - b);
             isShuffled = false;
             document.getElementById('shuffleText').textContent = 'Shuffle';
             showToast('Cards unshuffled');
         } else {
-            shuffleCards();
+            ahead.sort(() => Math.random() - 0.5);
+            isShuffled = true;
             document.getElementById('shuffleText').textContent = 'Unshuffled';
+            showToast('Cards shuffled!');
         }
-        currentCardIndex = 0;
+        studyOrder = done.concat(ahead);
         showCurrentCard();
     }
 
