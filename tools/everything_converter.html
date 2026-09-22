@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Everything Converter</title>
     <meta name="description"
-          content="Free browser-based file converter supporting 60+ formats. Convert video, audio, documents, images, and data files instantly without uploads — including MP4 to MP3. Privacy-first:all conversions happen locally in your browser.">
+          content="Free browser-based file converter supporting 85+ formats. Convert video, audio, documents, images, and data files instantly without uploads — including MP4 to MP3, HEIC, AVIF and TIFF. Privacy-first:all conversions happen locally in your browser.">
     <meta name="keywords"
-          content="file converter,format converter,browser converter,online converter,free converter,mp4 to mp3,video converter,audio converter,video to audio,JSON,CSV,XML,YAML,HTML,Markdown,image converter,document converter,privacy,no upload">
+          content="file converter,format converter,browser converter,online converter,free converter,mp4 to mp3,video converter,audio converter,video to audio,JSON,CSV,XML,YAML,HTML,Markdown,TIFF,AVIF,BMP,QR code,image converter,document converter,privacy,no upload">
     <meta name="author" content="Claude Opus 4.6 prompted by Tobias Müller">
     <meta name="robots" content="index,follow">
     <link rel="canonical" href="https://www.gptgames.dev/tools/everything_converter.html">
@@ -1443,6 +1443,7 @@
     'image/x-portable-graymap': {ext: 'pgm', label: 'PGM Image', category: 'image', icon: '🔬'},
     'image/x-portable-bitmap': {ext: 'pbm', label: 'PBM Image', category: 'image', icon: '🔬'},
     'image/qoi': {ext: 'qoi', label: 'QOI Image', category: 'image', icon: '⚡'},
+    'image/avif': {ext: 'avif', label: 'AVIF Image', category: 'image', icon: '🖼️'},
     'application/pdf': {ext: 'pdf', label: 'PDF Document', category: 'document', icon: '📄'},
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
         ext: 'docx',
@@ -1478,6 +1479,7 @@
     'video/mpeg': {ext: 'mpg', label: 'MPEG Video', category: 'video', icon: '🎬'},
     'video/x-flv': {ext: 'flv', label: 'Flash FLV', category: 'video', icon: '🎬'},
     'video/3gpp': {ext: '3gp', label: '3GP Video', category: 'video', icon: '🎬'},
+    'video/ogg': {ext: 'ogv', label: 'OGV Video', category: 'video', icon: '🎬'},
     'application/json': {ext: 'json', label: 'JSON', category: 'data', icon: '📋'},
     'application/jsonl': {ext: 'jsonl', label: 'NDJSON / JSON Lines', category: 'data', icon: '📋'},
     'application/json5': {ext: 'json5', label: 'JSON5', category: 'data', icon: '📋'},
@@ -1544,7 +1546,8 @@ Object.assign(EXT_TO_MIME, {
     m4a: 'audio/mp4', opus: 'audio/opus', weba: 'audio/webm',
     mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
     qt: 'video/quicktime', avi: 'video/x-msvideo', mkv: 'video/x-matroska',
-    mpg: 'video/mpeg', mpeg: 'video/mpeg', flv: 'video/x-flv', '3gp': 'video/3gpp', '3gpp': 'video/3gpp'
+    mpg: 'video/mpeg', mpeg: 'video/mpeg', flv: 'video/x-flv', '3gp': 'video/3gpp', '3gpp': 'video/3gpp',
+    ogv: 'video/ogg', avif: 'image/avif'
 });
 const CATEGORY_LABELS = {
     image: 'Images',
@@ -1658,52 +1661,64 @@ function robustJsonParse(text) {// 1. Direct parse
     return [{text: text}];
 }
 
+// One decode path for every raster converter. TIFF goes through our own reader because no
+// browser but Safari decodes it in an <img>; everything else the browser handles natively.
+// Returns something drawImage accepts, plus its intrinsic size.
+async function decodeImageSource(blob, fromMime) {
+    if (fromMime === 'image/tiff') {
+        const {rgba, w, h} = decodeTIFF(await blob.arrayBuffer());
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        c.getContext('2d').putImageData(new ImageData(rgba, w, h), 0, 0);
+        return {source: c, w, h};
+    }
+    return await new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(blob);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve({source: img, w: img.naturalWidth, h: img.naturalHeight});
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('Could not read image file'));
+        };
+        if (fromMime === 'image/svg+xml') img.crossOrigin = 'anonymous';
+        img.src = url;
+    });
+}
+
 registerConverter({
     id: 'canvas-image',
     name: 'Image Converter',
-    inputs: ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif', 'image/svg+xml', 'image/x-icon', 'image/tiff'],
-    outputs: ['image/png', 'image/jpeg', 'image/webp', 'image/bmp'],
+    inputs: ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif', 'image/svg+xml', 'image/x-icon', 'image/tiff', 'image/avif'],
+    outputs: ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/tiff'],
     weight: 1,
     lib: null,
     convert: async (blob, fromMime, toMime, options) => {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            const url = URL.createObjectURL(blob);
-            img.onload = () => {
-                let w = img.naturalWidth, h = img.naturalHeight;
-                // Optional downscale: cap the longer side to options.resizeMax (never upscale).
-                const cap = options && options.resizeMax;
-                if (cap && cap > 0) {
-                    const longest = Math.max(w, h);
-                    if (longest > cap) {
-                        const scale = cap / longest;
-                        w = Math.max(1, Math.round(w * scale));
-                        h = Math.max(1, Math.round(h * scale));
-                    }
-                }
-                const c = document.createElement('canvas');
-                c.width = w;
-                c.height = h;
-                const ctx = c.getContext('2d');
-                ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = 'high';
-                if (toMime === 'image/jpeg' || toMime === 'image/bmp') {
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.fillRect(0, 0, c.width, c.height);
-                }
-                ctx.drawImage(img, 0, 0, w, h);
-                c.toBlob(b => {
-                    URL.revokeObjectURL(url);
-                    b ? resolve(b) : reject(new Error('Image conversion failed'));
-                }, toMime, options.quality || 0.92);
-            };
-            img.onerror = () => {
-                URL.revokeObjectURL(url);
-                reject(new Error('Could not read image file'));
-            };
-            if (fromMime === 'image/svg+xml') img.crossOrigin = 'anonymous';
-            img.src = url;
-        });
+        const {source, w: iw, h: ih} = await decodeImageSource(blob, fromMime);
+        let w = iw, h = ih;
+        // Optional downscale: cap the longer side to options.resizeMax (never upscale).
+        const cap = options && options.resizeMax;
+        if (cap && cap > 0 && Math.max(w, h) > cap) {
+            const scale = cap / Math.max(w, h);
+            w = Math.max(1, Math.round(w * scale));
+            h = Math.max(1, Math.round(h * scale));
+        }
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        // These three have no alpha channel, so transparency has to land on something.
+        if (toMime === 'image/jpeg' || toMime === 'image/bmp' || toMime === 'image/tiff') {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, w, h);
+        }
+        ctx.drawImage(source, 0, 0, w, h);
+        return await canvasToBlob(c, toMime, options.quality || 0.92);
     }
 });
 // Image → ASCII art (a REAL text conversion, replacing the old base64-garbage image→txt).
@@ -1714,6 +1729,7 @@ registerConverter({
     inputs: ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif'],
     outputs: ['text/plain'],
     weight: 3,
+    lossy: true, // pixels become characters
     lib: null,
     convert: async (blob) => new Promise((resolve, reject) => {
         const img = new Image();
@@ -2026,6 +2042,9 @@ registerConverter({
             if (node.nodeType === 3) return node.textContent;
             if (node.nodeType !== 1) return '';
             const tag = node.tagName.toLowerCase();
+            // Script and style bodies are text nodes too, so without this the reader gets
+            // the page's JavaScript and CSS mixed into the prose.
+            if (tag === 'script' || tag === 'style' || tag === 'noscript' || tag === 'template') return '';
             let inner = '';
             for (const child of node.childNodes) inner += walk(child);
             if (['p', 'div', 'section', 'article', 'header', 'footer', 'main', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ul', 'ol', 'table', 'tr'].includes(tag))
@@ -2125,9 +2144,7 @@ function csvToObj(text, delim = ',') {
     return lines.slice(1).map(row => {
         const o = {};
         heads.forEach((h, i) => {
-            let v = row[i] === undefined ? '' : row[i].trim();
-            if (v === 'true') v = true; else if (v === 'false') v = false; else if (!isNaN(v) && v !== '') v = Number(v);
-            o[h || `field_${i}`] = v;
+            o[h || `field_${i}`] = scalarFromText(row[i] === undefined ? '' : row[i].trim());
         });
         return o;
     });
@@ -2142,48 +2159,81 @@ function objToCsv(obj, delim = ',') {
     });
     const heads = Array.from(headSet);
     const wrap = v => {
-        const s = String(v == null ? '' : v);
+        // A nested object or array has no useful String() form - "[object Object]" threw the
+        // data away. JSON keeps it, and survives the trip back through csv -> json.
+        const s = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v == null ? '' : v);
         return (s.includes(delim) || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s;
     };
+    // Rows of plain scalars (a JSON array of numbers, say) have no keys to make columns
+    // from; give them one named column instead of a table of empty strings.
+    if (heads.length === 0) return ['value', ...arr.map(wrap)].join('\n');
     const headLine = heads.map(wrap).join(delim);
-    const rows = arr.map(row => heads.map(h => wrap(row[h])).join(delim));
+    const rows = arr.map(row => heads.map(h => wrap(row && typeof row === 'object' ? row[h] : row)).join(delim));
     return [headLine, ...rows].join('\n');
+}
+
+// Only coerce a string to a number when the number round-trips back to the same string.
+// "007", "1e5" and "+1 555 0100" are identifiers and phone numbers, not quantities, and
+// turning them into 7, 100000 and NaN loses the original.
+function scalarFromText(inner) {
+    if (inner === 'true') return true;
+    if (inner === 'false') return false;
+    if (inner === '') return inner;
+    const n = Number(inner);
+    return (Number.isFinite(n) && String(n) === inner) ? n : inner;
 }
 
 function xmlToObj(text) {
     const doc = new DOMParser().parseFromString(text, 'application/xml');
     const errNode = doc.querySelector('parsererror');
     if (errNode) throw new Error('Invalid XML:' + (errNode.textContent || '').slice(0, 200));
+    // Attributes are data too - they come back as "@name" keys rather than being dropped.
+    const attrsOf = node => {
+        const out = {};
+        for (const a of node.attributes || []) out['@' + a.name] = scalarFromText(a.value.trim());
+        return out;
+    };
     const parseNode = (node) => {
         if (node.nodeType === 3) return node.nodeValue.trim();
-        if (node.nodeType === 1) {
-            if (node.children.length === 0) {
-                const inner = node.textContent.trim();
-                if (inner === 'true') return true;
-                if (inner === 'false') return false;
-                return (!isNaN(inner) && inner !== '') ? Number(inner) : inner;
-            }
-            const o = {};
-            const tagCount = {};
-            for (const c of node.children) tagCount[c.nodeName] = (tagCount[c.nodeName] || 0) + 1;
-            for (const c of node.children) {
-                const parsedChild = parseNode(c);
-                if (tagCount[c.nodeName] > 1) {
-                    if (!o[c.nodeName]) o[c.nodeName] = [];
-                    o[c.nodeName].push(parsedChild);
-                } else o[c.nodeName] = parsedChild;
-            }
-            return o;
+        if (node.nodeType !== 1) return null;
+        const attrs = attrsOf(node);
+        const hasAttrs = Object.keys(attrs).length > 0;
+        if (node.children.length === 0) {
+            const scalar = scalarFromText(node.textContent.trim());
+            // An element with attributes needs an object to hold them; its text goes to "#text".
+            return hasAttrs ? Object.assign(attrs, scalar === '' ? {} : {'#text': scalar}) : scalar;
         }
-        return null;
+        const o = attrs;
+        const tagCount = {};
+        for (const c of node.children) tagCount[c.nodeName] = (tagCount[c.nodeName] || 0) + 1;
+        for (const c of node.children) {
+            const parsedChild = parseNode(c);
+            if (tagCount[c.nodeName] > 1) {
+                if (!o[c.nodeName]) o[c.nodeName] = [];
+                o[c.nodeName].push(parsedChild);
+            } else o[c.nodeName] = parsedChild;
+        }
+        return o;
     };
-    return doc.documentElement ? {[doc.documentElement.nodeName]: parseNode(doc.documentElement)} : {};
+    if (!doc.documentElement) return {};
+    const root = doc.documentElement;
+    // <root><item/><item/></root>, the shape xmlDocument() writes for an array, comes back
+    // as an array so json -> xml -> json is a round trip instead of a reshaping.
+    const kids = Array.from(root.children);
+    if (root.nodeName === 'root' && kids.length > 0 && kids.every(c => c.nodeName === 'item')
+        && Object.keys(attrsOf(root)).length === 0) {
+        return kids.map(parseNode);
+    }
+    return {[root.nodeName]: parseNode(root)};
 }
 
+// The XML declaration and the single root element are the CALLER's job (xmlDocument);
+// this only ever renders a fragment, so a top-level array can be wrapped rather than
+// emitting one declaration and one root per item - which no XML parser accepts.
 function objToXml(obj, rTag = 'root', spacing = ' ', depth = 0) {
     let pad = spacing ? spacing.repeat(depth) : '';
     let inner = spacing ? spacing.repeat(depth + 1) : '';
-    let xml = depth === 0 ? '<?xml version="1.0" encoding="UTF-8"?>\n' : '';
+    let xml = '';
     if (obj == null) return `${pad}<${rTag}/>`;
     if (typeof obj !== 'object') return `${pad}<${rTag}>${String(obj).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</${rTag}>`;
     if (Array.isArray(obj)) return obj.map(item => objToXml(item, rTag, spacing, depth)).join('\n');
@@ -2195,41 +2245,190 @@ function objToXml(obj, rTag = 'root', spacing = ' ', depth = 0) {
     return xml + `${pad}</${rTag}>`;
 }
 
+// A complete XML document: declaration once, exactly one root element. An array at the
+// top level becomes <root><item/>...</root> - arrays are the common case here, since
+// csv/tsv/xlsx/jsonl all parse to one.
+function xmlDocument(obj, spacing = ' ') {
+    const decl = '<?xml version="1.0" encoding="UTF-8"?>\n';
+    if (Array.isArray(obj)) {
+        const items = obj.map(item => objToXml(item, 'item', spacing, 1)).join('\n');
+        return `${decl}<root>\n${items}\n</root>`;
+    }
+    return decl + objToXml(obj, 'root', spacing, 0);
+}
+
+// TOML value scanner: handles the scalar forms plus inline arrays and inline tables, all
+// of which the previous line-splitting parser turned into strings ("[1, 2, 3]") or numbers.
+function tomlValue(raw) {
+    const text = String(raw).trim();
+    let i = 0;
+    const ws = () => { while (i < text.length && /[\s,]/.test(text[i])) i++; };
+    const parse = () => {
+        ws();
+        const ch = text[i];
+        if (ch === '[') {
+            i++;
+            const arr = [];
+            for (; ;) {
+                ws();
+                if (i >= text.length) break;
+                if (text[i] === ']') { i++; break; }
+                arr.push(parse());
+            }
+            return arr;
+        }
+        if (ch === '{') {
+            i++;
+            const obj = {};
+            for (; ;) {
+                ws();
+                if (i >= text.length || text[i] === '}') { i++; break; }
+                const eq = text.indexOf('=', i);
+                if (eq < 0) break;
+                const k = tomlKey(text.slice(i, eq));
+                i = eq + 1;
+                obj[k] = parse();
+            }
+            return obj;
+        }
+        if (ch === '"' || ch === "'") {
+            const quote = ch;
+            i++;
+            let out = '';
+            while (i < text.length && text[i] !== quote) {
+                if (quote === '"' && text[i] === '\\') {
+                    i++;
+                    const e = text[i++];
+                    out += e === 'n' ? '\n' : e === 't' ? '\t' : e === 'r' ? '\r' : e;
+                } else out += text[i++];
+            }
+            i++;
+            return out;
+        }
+        let start = i;
+        while (i < text.length && !/[,\]}]/.test(text[i])) i++;
+        const bare = text.slice(start, i).trim();
+        return scalarFromText(bare);
+    };
+    const v = parse();
+    return v;
+}
+
+function tomlKey(raw) {
+    const k = String(raw).trim();
+    return (k.length > 1 && ((k[0] === '"' && k.endsWith('"')) || (k[0] === "'" && k.endsWith("'"))))
+        ? k.slice(1, -1) : k;
+}
+
 function parseTOML(text) {
     const out = {};
     let cur = out;
-    for (let line of text.split('\n')) {
-        line = line.trim();
-        if (!line || line.startsWith('#') || line.startsWith(';')) continue;
-        if (line.startsWith('[') && line.endsWith(']')) {
-            const key = line.slice(1, -1).trim();
-            cur = out;
-            for (const n of key.split('.')) {
-                const k = n.trim();
-                if (!cur[k]) cur[k] = {};
-                cur = cur[k];
+    // A TOML value can span lines ("a = [\n 1,\n 2\n]"), so gather a whole value before
+    // parsing it rather than assuming one key per line.
+    const lines = text.split('\n');
+    const descend = (root, parts, makeArray) => {
+        let node = root;
+        for (let j = 0; j < parts.length; j++) {
+            const k = tomlKey(parts[j]);
+            const last = j === parts.length - 1;
+            if (last && makeArray) {
+                if (!Array.isArray(node[k])) node[k] = [];
+                const entry = {};
+                node[k].push(entry);
+                return entry;
             }
+            if (Array.isArray(node[k])) node = node[k][node[k].length - 1];
+            else {
+                if (!node[k] || typeof node[k] !== 'object') node[k] = {};
+                node = node[k];
+            }
+        }
+        return node;
+    };
+    // Split on dots that are not inside quotes.
+    const keyParts = key => {
+        const parts = [];
+        let buf = '', q = null;
+        for (const ch of key) {
+            if (q) { buf += ch; if (ch === q) q = null; continue; }
+            if (ch === '"' || ch === "'") { q = ch; buf += ch; continue; }
+            if (ch === '.') { parts.push(buf); buf = ''; continue; }
+            buf += ch;
+        }
+        parts.push(buf);
+        return parts.map(x => x.trim()).filter(x => x !== '');
+    };
+    for (let li = 0; li < lines.length; li++) {
+        let line = lines[li].trim();
+        if (!line || line.startsWith('#') || line.startsWith(';')) continue;
+        // [[table]] is an ARRAY of tables - the old parser read it as a key named "[table]"
+        // and kept only the last one.
+        if (line.startsWith('[[') && line.endsWith(']]')) {
+            cur = descend(out, keyParts(line.slice(2, -2)), true);
+            continue;
+        }
+        if (line.startsWith('[') && line.endsWith(']')) {
+            cur = descend(out, keyParts(line.slice(1, -1)), false);
             continue;
         }
         const eq = line.indexOf('=');
-        if (eq !== -1) {
-            const k = line.slice(0, eq).trim();
-            let v = line.slice(eq + 1).trim();
-            if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1).replace(/\\"/g, '"'); else if (v === 'true') v = true; else if (v === 'false') v = false; else if (!isNaN(v) && v !== '') v = Number(v);
-            cur[k] = v;
-        }
+        if (eq === -1) continue;
+        const k = line.slice(0, eq);
+        let rest = line.slice(eq + 1).trim();
+        // Keep reading while an inline array or table is still open.
+        const depth = str => {
+            let d = 0, q = null;
+            for (const ch of str) {
+                if (q) { if (ch === q) q = null; continue; }
+                if (ch === '"' || ch === "'") { q = ch; continue; }
+                if (ch === '[' || ch === '{') d++;
+                if (ch === ']' || ch === '}') d--;
+            }
+            return d;
+        };
+        while (depth(rest) > 0 && li + 1 < lines.length) rest += ' ' + lines[++li].trim();
+        const parts = keyParts(k);
+        const leaf = parts.pop();
+        const target = parts.length ? descend(cur, parts, false) : cur;
+        target[tomlKey(leaf)] = tomlValue(rest);
     }
     return out;
+}
+
+function tomlScalar(v) {
+    if (typeof v === 'string') return `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
+    if (Array.isArray(v)) return '[' + v.map(tomlScalar).join(', ') + ']';
+    if (v !== null && typeof v === 'object') return '{' + Object.entries(v).map(([k, x]) => `${k} = ${tomlScalar(x)}`).join(', ') + '}';
+    if (v === null) return '""';
+    return String(v);
+}
+
+// TOML has no top-level array, so an array document (what csv/tsv/xlsx/jsonl all parse
+// to) is carried under a single "items" array of tables and unwrapped again on the way
+// back - the same wrap-and-unwrap contract xmlDocument() uses for XML.
+function tomlDocument(obj) {
+    return stringifyTOML(Array.isArray(obj) ? {items: obj} : obj);
+}
+
+function tomlToValue(text) {
+    const parsed = parseTOML(text);
+    const keys = Object.keys(parsed);
+    if (keys.length === 1 && keys[0] === 'items' && Array.isArray(parsed.items)) return parsed.items;
+    return parsed;
 }
 
 function stringifyTOML(obj, prefix = '') {
     let top = '', blocks = '';
     for (const [k, v] of Object.entries(obj)) {
-        if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-            const key = prefix ? `${prefix}.${k}` : k;
+        const key = prefix ? `${prefix}.${k}` : k;
+        // An array of objects is TOML's [[array of tables]]; String(v) used to write
+        // "k= [object Object]" here, which is not valid TOML at all.
+        if (Array.isArray(v) && v.length > 0 && v.every(x => x !== null && typeof x === 'object' && !Array.isArray(x))) {
+            for (const entry of v) blocks += `\n[[${key}]]\n` + stringifyTOML(entry, key);
+        } else if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
             blocks += `\n[${key}]\n` + stringifyTOML(v, key);
         } else {
-            top += `${k}= ${typeof v === 'string' ? `"${v.replace(/"/g, '\\"')}"` : String(v)}\n`;
+            top += `${k} = ${tomlScalar(v)}\n`;
         }
     }
     return top + blocks;
@@ -2300,7 +2499,7 @@ registerConverter({
     inputs: ['application/toml'],
     outputs: ['application/json'],
     weight: 1,
-    convert: async blob => new Blob([JSON.stringify(parseTOML(await blob.text()), null, 2)], {type: 'application/json'})
+    convert: async blob => new Blob([JSON.stringify(tomlToValue(await blob.text()), null, 2)], {type: 'application/json'})
 });
 registerConverter({
     id: 'ini-to-json',
@@ -2341,7 +2540,7 @@ registerConverter({
     inputs: ['application/json'],
     outputs: ['application/xml'],
     weight: 1,
-    convert: async (blob, f, t, o) => new Blob([objToXml(robustJsonParse(await blob.text()), 'root', o.indent === 0 ? '' : ' '.repeat(o.indent))], {type: 'application/xml'})
+    convert: async (blob, f, t, o) => new Blob([xmlDocument(robustJsonParse(await blob.text()), o.indent === 0 ? '' : ' '.repeat(o.indent))], {type: 'application/xml'})
 });
 registerConverter({
     id: 'json-to-toml',
@@ -2349,7 +2548,7 @@ registerConverter({
     inputs: ['application/json'],
     outputs: ['application/toml'],
     weight: 1,
-    convert: async blob => new Blob([stringifyTOML(robustJsonParse(await blob.text()))], {type: 'application/toml'})
+    convert: async blob => new Blob([tomlDocument(robustJsonParse(await blob.text()))], {type: 'application/toml'})
 });
 registerConverter({
     id: 'json-to-ini',
@@ -3042,7 +3241,7 @@ async function ffmpegAudioToVideo(blob, fromMime, toMime) {
 }
 
 // Source MIME groups the ffmpeg engine can read.
-const FFMPEG_VIDEO_INPUTS = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/mpeg', 'video/x-flv', 'video/3gpp'];
+const FFMPEG_VIDEO_INPUTS = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/mpeg', 'video/x-flv', 'video/3gpp', 'video/ogg'];
 const FFMPEG_AUDIO_INPUTS = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/opus', 'audio/webm', 'audio/flac', 'audio/aac', 'audio/mp4'];
 const FFMPEG_AUDIO_OUTPUTS = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/opus', 'audio/webm', 'audio/flac', 'audio/aac', 'audio/mp4'];
 const FFMPEG_VIDEO_OUTPUTS = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/mpeg', 'video/3gpp'];
@@ -3133,20 +3332,35 @@ registerConverter({
 // ===== HELPER FUNCTIONS FOR NEW FORMATS =====
 
 // --- Properties ---
+// .properties keys may contain escaped separators (a\:b = 1) and a value may continue on
+// the next line after a trailing backslash. Splitting on the first raw ":" or "=" read
+// "a\:b = 1" as the key "a\" with the value "b = 1".
 function parseProperties(text) {
     const out = {};
-    for (let line of text.split('\n')) {
-        line = line.trim();
-        if (!line || line.startsWith('#') || line.startsWith('!')) continue;
-        const match = line.match(/^([^=:]+?)\s*[=:]\s*(.*)/);
-        if (match) {
-            const k = match[1].trim();
-            let v = match[2].trim();
-            if (v === 'true') v = true;
-            else if (v === 'false') v = false;
-            else if (!isNaN(v) && v !== '') v = Number(v);
-            out[k] = v;
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].replace(/^\s+/, '');
+        if (!line.trim() || line.startsWith('#') || line.startsWith('!')) continue;
+        // A trailing odd number of backslashes continues the logical line.
+        while (/(^|[^\\])(\\\\)*\\$/.test(line) && i + 1 < lines.length) {
+            line = line.slice(0, -1) + lines[++i].replace(/^\s+/, '');
         }
+        let k = '', j = 0;
+        for (; j < line.length; j++) {
+            const ch = line[j];
+            if (ch === '\\') { k += line[j] + (line[j + 1] || ''); j++; continue; }
+            if (ch === '=' || ch === ':' || ch === ' ' || ch === '\t') break;
+            k += ch;
+        }
+        // Skip the separator and the whitespace around it.
+        while (j < line.length && /[\s]/.test(line[j])) j++;
+        if (line[j] === '=' || line[j] === ':') j++;
+        while (j < line.length && /[\s]/.test(line[j])) j++;
+        const unescape = str => str.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, e) =>
+            e[0] === 'u' ? String.fromCharCode(parseInt(e.slice(1), 16))
+                : e === 'n' ? '\n' : e === 't' ? '\t' : e === 'r' ? '\r' : e);
+        if (!k) continue;
+        out[unescape(k)] = scalarFromText(unescape(line.slice(j)));
     }
     return out;
 }
@@ -3157,7 +3371,9 @@ function stringifyProperties(obj) {
         for (const [k, v] of Object.entries(o)) {
             const key = prefix ? prefix + '.' + k : k;
             if (v !== null && typeof v === 'object' && !Array.isArray(v)) flatten(v, key);
-            else out += key + '=' + String(v) + '\n';
+            // Escape what parseProperties unescapes, or the value comes back changed.
+            else out += key.replace(/([=:\\ ])/g, '\\$1') + '='
+                + String(v).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\t/g, '\\t') + '\n';
         }
     };
     flatten(obj, '');
@@ -3224,11 +3440,10 @@ function parseSexp(text) {
             atom += text[pos];
             pos++;
         }
-        if (atom === 'true') return true;
-        if (atom === 'false') return false;
+        if (atom === 'true' || atom === '#t') return true;
+        if (atom === 'false' || atom === '#f') return false;
         if (atom === 'nil' || atom === 'null') return null;
-        if (!isNaN(atom) && atom !== '') return Number(atom);
-        return atom;
+        return scalarFromText(atom);
     };
     const readExpr = () => {
         skipWS();
@@ -3710,6 +3925,283 @@ function qoiEncode(width, height, pixels, channels) {
     return new Blob([out.slice(0, pos)], {type: 'image/qoi'});
 }
 
+// ===== BMP =====
+// canvas.toBlob('image/bmp') is NOT supported by any browser - it silently hands back a
+// PNG, so "convert to BMP" used to produce a PNG called .bmp. This writes a real one:
+// 24-bit BGR, bottom-up, rows padded to 4 bytes, which every BMP reader accepts.
+function rgbaToBMP(rgba, w, h) {
+    const rowBytes = w * 3, pad = (4 - (rowBytes % 4)) % 4, stride = rowBytes + pad;
+    const size = 54 + stride * h;
+    const buf = new ArrayBuffer(size), d = new DataView(buf), u8 = new Uint8Array(buf);
+    u8[0] = 0x42;
+    u8[1] = 0x4D;                       // 'BM'
+    d.setUint32(2, size, true);
+    d.setUint32(10, 54, true);          // pixel data offset
+    d.setUint32(14, 40, true);          // BITMAPINFOHEADER
+    d.setInt32(18, w, true);
+    d.setInt32(22, h, true);            // positive height = bottom-up
+    d.setUint16(26, 1, true);           // planes
+    d.setUint16(28, 24, true);          // bits per pixel
+    d.setUint32(34, stride * h, true);  // image size
+    d.setUint32(38, 2835, true);        // ~72 dpi
+    d.setUint32(42, 2835, true);
+    let o = 54;
+    for (let y = h - 1; y >= 0; y--) {          // bottom row first
+        for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4, a = rgba[i + 3] / 255;
+            // BMP has no alpha at 24bpp: composite over white, as the JPEG path does.
+            u8[o++] = Math.round(rgba[i + 2] * a + 255 * (1 - a));
+            u8[o++] = Math.round(rgba[i + 1] * a + 255 * (1 - a));
+            u8[o++] = Math.round(rgba[i] * a + 255 * (1 - a));
+        }
+        o += pad;
+    }
+    return new Blob([buf], {type: 'image/bmp'});
+}
+
+// ===== TIFF =====
+// No browser but Safari decodes TIFF in an <img>, and nothing here produced TIFF at all,
+// so image/tiff was an input that always failed and an output that did not exist. This is
+// a baseline reader (uncompressed / PackBits / LZW, 1- and 8-bit gray, palette, RGB, RGBA,
+// any number of strips, either byte order) and an uncompressed RGB writer.
+function tiffPackBitsDecode(src, from, len, expected) {
+    const out = new Uint8Array(expected);
+    let i = from, o = 0, end = from + len;
+    while (o < expected && i < end) {
+        const n = (src[i++] << 24) >> 24;       // signed byte
+        if (n >= 0) {
+            for (let k = 0; k <= n && o < expected && i < end; k++) out[o++] = src[i++];
+        } else if (n !== -128) {
+            const b = src[i++];
+            for (let k = 0; k < 1 - n && o < expected; k++) out[o++] = b;
+        }
+    }
+    return out;
+}
+
+// TIFF LZW (spec-flavoured: codes are MSB-first and widen one code EARLY versus GIF).
+function tiffLzwDecode(src, from, len, expected) {
+    const out = new Uint8Array(expected);
+    let o = 0, bitPos = 0;
+    const end = len * 8;
+    const read = width => {
+        let v = 0;
+        for (let k = 0; k < width; k++) {
+            if (bitPos >= end) return -1;
+            const byte = src[from + (bitPos >> 3)];
+            v = (v << 1) | ((byte >> (7 - (bitPos & 7))) & 1);
+            bitPos++;
+        }
+        return v;
+    };
+    let dict, next, width, prev;
+    const reset = () => {
+        dict = new Array(4096);
+        for (let i = 0; i < 256; i++) dict[i] = [i];
+        next = 258;
+        width = 9;
+        prev = null;
+    };
+    reset();
+    for (; ;) {
+        const code = read(width);
+        if (code < 0 || code === 257) break;            // EOI
+        if (code === 256) { reset(); continue; }         // ClearCode
+        let entry;
+        if (code < next && dict[code]) entry = dict[code];
+        else if (prev) entry = prev.concat(prev[0]);
+        else break;
+        for (let i = 0; i < entry.length && o < expected; i++) out[o++] = entry[i];
+        if (prev && next < 4096) dict[next++] = prev.concat(entry[0]);
+        prev = entry;
+        // TIFF's "early change": widen one code before the dictionary fills. The +2 is not
+        // a fudge - a decoder adds no entry for the first code after a reset, so its table
+        // trails the encoder's by one, and both must widen on the same code or the bit
+        // stream desynchronises the moment entry 511 is reached.
+        if (next + 2 >= (1 << width) && width < 12) width++;
+        if (o >= expected) break;
+    }
+    return out;
+}
+
+// Returns {rgba, w, h} or throws with a reason the UI can show.
+function decodeTIFF(buffer) {
+    const u8 = new Uint8Array(buffer), d = new DataView(buffer);
+    if (u8.length < 8) throw new Error('TIFF file is truncated');
+    let le;
+    if (u8[0] === 0x49 && u8[1] === 0x49) le = true;
+    else if (u8[0] === 0x4D && u8[1] === 0x4D) le = false;
+    else throw new Error('Not a TIFF file (bad byte-order mark)');
+    if (d.getUint16(2, le) !== 42) throw new Error('Not a TIFF file (bad magic)');
+    const TYPE_SIZE = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8};
+    const readVal = (type, at) => {
+        switch (type) {
+            case 1: case 2: case 7: return u8[at];
+            case 3: return d.getUint16(at, le);
+            case 4: return d.getUint32(at, le);
+            case 6: return (u8[at] << 24) >> 24;
+            case 8: return d.getInt16(at, le);
+            case 9: return d.getInt32(at, le);
+            case 5: return d.getUint32(at, le) / d.getUint32(at + 4, le);
+            case 11: return d.getFloat32(at, le);
+            case 12: return d.getFloat64(at, le);
+            default: return u8[at];
+        }
+    };
+    const ifd = d.getUint32(4, le);
+    if (ifd + 2 > u8.length) throw new Error('TIFF directory offset is out of range');
+    const n = d.getUint16(ifd, le);
+    const tags = {};
+    for (let i = 0; i < n; i++) {
+        const e = ifd + 2 + i * 12;
+        if (e + 12 > u8.length) break;
+        const tag = d.getUint16(e, le), type = d.getUint16(e + 2, le), count = d.getUint32(e + 4, le);
+        const width = TYPE_SIZE[type] || 1, total = width * count;
+        const at = total <= 4 ? e + 8 : d.getUint32(e + 8, le);
+        const vals = [];
+        for (let k = 0; k < count && at + k * width + width <= u8.length; k++) vals.push(readVal(type, at + k * width));
+        tags[tag] = vals;
+    }
+    const one = (tag, dflt) => (tags[tag] && tags[tag].length ? tags[tag][0] : dflt);
+    const w = one(256), h = one(257);
+    if (!w || !h) throw new Error('TIFF is missing its image dimensions');
+    if (w * h > 64e6) throw new Error('TIFF is too large to decode in the browser');
+    const bits = tags[258] && tags[258].length ? tags[258] : [one(258, 1)];
+    const bps = bits[0] || 1;
+    const compression = one(259, 1);
+    const photometric = one(262, 1);
+    const spp = one(277, bits.length || 1);
+    const planar = one(284, 1);
+    const offsets = tags[273] || [];
+    const counts = tags[279] || [];
+    let rowsPerStrip = one(278, h);
+    if (!rowsPerStrip || rowsPerStrip > h) rowsPerStrip = h;
+    if (!offsets.length) throw new Error('TIFF has no image data (no strip offsets)');
+    if (planar !== 1) throw new Error('Planar (non-interleaved) TIFF is not supported');
+    if (![1, 5, 32773].includes(compression)) {
+        throw new Error('This TIFF uses compression ' + compression + ' (only uncompressed, LZW and PackBits are supported)');
+    }
+    if (![1, 8].includes(bps)) throw new Error('This TIFF uses ' + bps + ' bits per sample (only 1 and 8 are supported)');
+    if (bits.some(x => x !== bps)) throw new Error('TIFF samples of differing depths are not supported');
+
+    const bytesPerRow = Math.ceil(w * spp * bps / 8);
+    const palette = tags[320];
+    const predictor = one(317, 1);
+    const rgba = new Uint8ClampedArray(w * h * 4);
+    let row = 0;
+    for (let s = 0; s < offsets.length && row < h; s++) {
+        const rowsHere = Math.min(rowsPerStrip, h - row);
+        const expected = bytesPerRow * rowsHere;
+        const off = offsets[s], len = counts[s] !== undefined ? counts[s] : expected;
+        let strip;
+        if (compression === 1) strip = u8.subarray(off, off + expected);
+        else if (compression === 32773) strip = tiffPackBitsDecode(u8, off, len, expected);
+        else strip = tiffLzwDecode(u8, off, len, expected);
+        for (let y = 0; y < rowsHere; y++) {
+            const base = y * bytesPerRow;
+            if (predictor === 2 && bps === 8) {                 // horizontal differencing
+                for (let x = spp; x < w * spp; x++) strip[base + x] = (strip[base + x] + strip[base + x - spp]) & 255;
+            }
+            for (let x = 0; x < w; x++) {
+                const o = ((row + y) * w + x) * 4;
+                let r, g, bl, a = 255;
+                if (bps === 1) {
+                    const bit = (strip[base + (x >> 3)] >> (7 - (x & 7))) & 1;
+                    const v = photometric === 0 ? (bit ? 0 : 255) : (bit ? 255 : 0);
+                    r = g = bl = v;
+                } else if (palette && photometric === 3) {
+                    const idx = strip[base + x * spp];
+                    // Palette entries are 16-bit, stored as three consecutive runs.
+                    r = (palette[idx] || 0) >> 8;
+                    g = (palette[idx + (palette.length / 3)] || 0) >> 8;
+                    bl = (palette[idx + (2 * palette.length / 3)] || 0) >> 8;
+                } else if (spp >= 3) {
+                    const i = base + x * spp;
+                    r = strip[i];
+                    g = strip[i + 1];
+                    bl = strip[i + 2];
+                    if (spp >= 4) a = strip[i + 3];
+                } else {
+                    const v = strip[base + x * spp];
+                    r = g = bl = photometric === 0 ? 255 - v : v;
+                }
+                rgba[o] = r;
+                rgba[o + 1] = g;
+                rgba[o + 2] = bl;
+                rgba[o + 3] = a;
+            }
+        }
+        row += rowsHere;
+    }
+    if (row === 0) throw new Error('TIFF contained no decodable image rows');
+    return {rgba, w, h};
+}
+
+// Uncompressed little-endian RGB TIFF, one strip. Widely readable and trivially correct.
+function rgbaToTIFF(rgba, w, h) {
+    const nTags = 12, ifdOff = 8, ifdLen = 2 + nTags * 12 + 4;
+    const bitsOff = ifdOff + ifdLen;            // BitsPerSample: 3 shorts, needs its own slot
+    const resOff = bitsOff + 6;                 // XResolution / YResolution rationals
+    const dataOff = resOff + 16;
+    const px = w * h * 3;
+    const buf = new ArrayBuffer(dataOff + px), d = new DataView(buf), u8 = new Uint8Array(buf);
+    u8[0] = 0x49;
+    u8[1] = 0x49;
+    d.setUint16(2, 42, true);
+    d.setUint32(4, ifdOff, true);
+    d.setUint16(ifdOff, nTags, true);
+    let o = ifdOff + 2;
+    const tag = (t, type, count, value) => {
+        d.setUint16(o, t, true);
+        d.setUint16(o + 2, type, true);
+        d.setUint32(o + 4, count, true);
+        // A single short lives in the LOW half of the value field, not as a uint32.
+        if (type === 3 && count === 1) d.setUint16(o + 8, value, true); else d.setUint32(o + 8, value, true);
+        o += 12;
+    };
+    tag(256, 4, 1, w);          // ImageWidth
+    tag(257, 4, 1, h);          // ImageLength
+    tag(258, 3, 3, bitsOff);    // BitsPerSample 8,8,8
+    tag(259, 3, 1, 1);          // Compression: none
+    tag(262, 3, 1, 2);          // Photometric: RGB
+    tag(273, 4, 1, dataOff);    // StripOffsets
+    tag(277, 3, 1, 3);          // SamplesPerPixel
+    tag(278, 4, 1, h);          // RowsPerStrip
+    tag(279, 4, 1, px);         // StripByteCounts
+    tag(282, 5, 1, resOff);     // XResolution
+    tag(283, 5, 1, resOff + 8); // YResolution
+    tag(296, 3, 1, 2);          // ResolutionUnit: inch
+    d.setUint32(o, 0, true);    // no next IFD
+    d.setUint16(bitsOff, 8, true);
+    d.setUint16(bitsOff + 2, 8, true);
+    d.setUint16(bitsOff + 4, 8, true);
+    for (const at of [resOff, resOff + 8]) {
+        d.setUint32(at, 72, true);
+        d.setUint32(at + 4, 1, true);
+    }
+    let p = dataOff;
+    for (let i = 0; i < w * h; i++) {
+        const j = i * 4, a = rgba[j + 3] / 255;     // no alpha channel: composite over white
+        u8[p++] = Math.round(rgba[j] * a + 255 * (1 - a));
+        u8[p++] = Math.round(rgba[j + 1] * a + 255 * (1 - a));
+        u8[p++] = Math.round(rgba[j + 2] * a + 255 * (1 - a));
+    }
+    return new Blob([buf], {type: 'image/tiff'});
+}
+
+// Every raster output goes through here, so the formats the canvas cannot encode itself
+// (BMP, TIFF) are handled instead of silently falling back to PNG.
+function canvasToBlob(canvas, toMime, quality) {
+    if (toMime === 'image/bmp' || toMime === 'image/tiff') {
+        const {width: w, height: h} = canvas;
+        const rgba = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+        return Promise.resolve(toMime === 'image/bmp' ? rgbaToBMP(rgba, w, h) : rgbaToTIFF(rgba, w, h));
+    }
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('Image conversion failed')), toMime, quality);
+    });
+}
+
 // ===== REGISTER NEW CONVERTERS =====
 
 // Netpbm
@@ -4111,6 +4603,7 @@ registerConverter({
     inputs: Object.keys(FORMAT_REGISTRY),
     outputs: ['application/json', 'text/plain'],
     weight: 999,
+    lossy: true, // the bytes are wrapped, not converted
     lib: null,
     convert: async (blob, fromMime, toMime) => {
         const b64 = await new Promise((resolve, reject) => {
@@ -4269,6 +4762,7 @@ registerConverter({
     inputs: ['application/json'],
     outputs: ['application/x-subrip', 'text/vtt'],
     weight: 5,
+    lossy: true, // arbitrary data becomes timed cues
     lib: null,
     convert: async (blob, from, to, options) => {
         const data = robustJsonParse(await blob.text());
@@ -4600,7 +5094,9 @@ function textToMorse(text) {
 function morseToText(morse) {
     return morse.trim().split(/\n/).map(line =>
         line.trim().split(/\s*\/\s*|\s{3,}|\t/).map(word =>
-            word.trim().split(/\s+/).map(code => MORSE_REVERSE[code] || (code ? '\u{FFFD}' : '')).join('')
+            // Anything that is not a known code is dropped rather than turned into U+FFFD -
+            // a row of replacement characters tells the reader nothing and is not text.
+            word.trim().split(/\s+/).map(code => MORSE_REVERSE[code] || '').join('')
         ).join(' ')
     ).join('\n');
 }
@@ -4611,6 +5107,7 @@ registerConverter({
     inputs: ['text/plain'],
     outputs: ['application/x-morse'],
     weight: 4,
+    lossy: true, // characters become timing symbols
     lib: null,
     convert: async (blob) => {
         const morse = textToMorse(await blob.text());
@@ -5177,7 +5674,10 @@ function interleave(dataCw, version, level) {
     return out;
 }
 
-function buildMatrix(version) {
+// Named buildQrMatrix, not buildMatrix: the UI's format-reachability table owns
+// buildFormatMatrix, and two hoisted `function buildMatrix` declarations in one script
+// silently resolve to whichever comes last - which broke every QR conversion.
+function buildQrMatrix(version) {
     const size = version * 4 + 17;
     const m = Array.from({length: size}, () => new Int8Array(size).fill(-1)); // -1 = free
     const set = (r, c, v) => {
@@ -5280,7 +5780,7 @@ function applyMaskAndInfo(base, mask, level, version) {
     const size = base.length;
     const m = base.map(row => Int8Array.from(row));
     // Which cells are function patterns (not maskable): recompute from a fresh template.
-    const tmpl = buildMatrix(version);
+    const tmpl = buildQrMatrix(version);
     for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
         if (tmpl[r][c] === -1 && MASK_FN[mask](r, c)) m[r][c] ^= 1;
     }
@@ -5371,7 +5871,7 @@ function qrEncode(bytes, level = 1) {
     }
     const dataCw = buildDataCodewords(bytes, version, level);
     const all = interleave(dataCw, version, level);
-    const base = placeData(buildMatrix(version), all);
+    const base = placeData(buildQrMatrix(version), all);
     // Remaining reserved cells (=2) become 0 before masking evaluation
     let best = null, bestScore = Infinity;
     for (let mask = 0; mask < 8; mask++) {
@@ -5481,7 +5981,10 @@ function parseLrc(text) {
         // one line can carry multiple timestamps: [00:12.34][00:56.78]text
         const stamps = [...line.matchAll(/\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g)];
         if (!stamps.length) continue;
-        const lyric = line.slice(stamps[stamps.length - 1].index + stamps[stamps.length - 1][0].length).trim();
+        // Enhanced LRC puts per-word timings inline (<00:01.00>Hi <00:02.00>there). They are
+        // timing data, not lyrics, so they are stripped instead of being sung as text.
+        const lyric = line.slice(stamps[stamps.length - 1].index + stamps[stamps.length - 1][0].length)
+            .replace(/<\d{1,2}:\d{2}(?:[.:]\d{1,3})?>/g, '').replace(/\s+/g, ' ').trim();
         for (const s of stamps) {
             const ms = (+s[1]) * 60000 + (+s[2]) * 1000 + +(s[3] || '0').padEnd(3, '0') + offset;
             cues.push({startMs: Math.max(0, ms), text: lyric});
@@ -5732,8 +6235,9 @@ registerConverter({
         // Batched multi-row inserts read better and import faster.
         for (let i = 0; i < arr.length; i += 100) {
             const chunk = arr.slice(i, i + 100);
-            lines.push(`INSERT INTO "data" (${cols.map(ident).join(', ')})
-                        VALUES`);
+            // A template literal broken across source lines carries its own indentation
+            // into the output; the generated SQL had 24 spaces before VALUES.
+            lines.push(`INSERT INTO "data" (${cols.map(ident).join(', ')})`, 'VALUES');
             lines.push(chunk.map(row => '  (' + cols.map(c => sqlEscapeVal(row[c])).join(', ') + ')').join(',\n') + ';');
             lines.push('');
         }
@@ -5781,7 +6285,7 @@ registerConverter({
                 continue;
             } // first table only
             const cells = t.slice(1, -1).split(/(?<!\\)\|/).map(c => c.trim().replace(/\\\|/g, '|'));
-            if (cells.every(c => /^:?-{3,}:?$/.test(c))) continue; // separator row
+            if (cells.every(c => /^:?-+:?$/.test(c))) continue; // separator row (| --- |, | :-- |, | -: |)
             rows.push(cells);
         }
         if (rows.length < 1) throw new Error('No Markdown table found (expected | pipe | rows |)');
@@ -7266,6 +7770,7 @@ registerConverter({
     inputs: Object.keys(FORMAT_REGISTRY).filter(m => !m.includes('+') && m !== 'application/x-fasta'),
     outputs: ['application/x-fasta'],
     weight: 40,
+    lossy: true, // bytes become nucleotides
     lib: null,
     convert: async (blob, from, to, options, node) => {
         const u8 = new Uint8Array(await blob.arrayBuffer());
@@ -7980,59 +8485,73 @@ registerConverter({
     }
 });
 
+// A path may contain at most this many "reinterpretation" hops (converter.lossy):
+// edges that change what the bytes MEAN rather than how they are stored - pixels read as
+// ASCII characters, text read as morse timings, bytes read as nucleotides, or a raw embed.
+// One such hop is the point of this tool. Two in a row is noise: before this limit the
+// graph offered 163 distinct five-and-six-hop pipelines, every one of them a chain of two
+// reinterpretations (image -> ASCII art -> morse -> WAV -> spectrogram, say), and several
+// ended in a step that could only fail - morse audio has no ID3 tags to read.
+const MAX_LOSSY_HOPS = 1;
+
+// And at most this many hops in total. Past four steps a chain is neither predictable nor
+// likely to survive: the routes this cuts are things like image -> PDF -> extracted text
+// -> JSON -> subtitles, where the third step returns nothing because the PDF only ever
+// held a picture. Targets that lose their last real route are not lost to the user - the
+// marked raw embed reaches them in two hops and says plainly what it is. Raising this to
+// 5 brings back 417 five-hop routes; lowering it to 3 costs a seventh of the real ones.
+const MAX_PATH_HOPS = 4;
+
 function findReachableTargets(srcMime) {
-
-
     // Dijkstra over the converter graph, with support for TERMINAL edges
     // (converter.terminal === true): valid as the final hop of a path, but never extended.
-    // Example: audio→video produces a black-screen video, so chaining frame/gif extraction
+    // Example: audio->video produces a black-screen video, so chaining frame/gif extraction
     // past it would only ever yield content-free output; the honest route for such targets
     // is the marked raw embed instead.
     //
-    // Because a terminal edge can only ever END a path, every path has the shape
-    // [non-terminal edges…, optional terminal edge]. We therefore track TWO states per
-    // node: the best distance via an all-non-terminal path (expandable — may be extended)
-    // and the best distance whose last edge is terminal (a dead end). A node settled
-    // cheaply via a terminal edge can still be expanded through a costlier non-terminal
-    // route — e.g. mp3 → gif works via the marked raw-embed → image → video chain even
-    // though the cheaper mp3 → mp4 hop is terminal.
-    const distExp = new Map(), distTerm = new Map();
-    const prevExp = new Map(), prevTerm = new Map();
+    // A search state is therefore a mime PLUS how we arrived at it: whether the path can
+    // still be extended (its last edge was not terminal) and how many reinterpretation
+    // hops it has spent. A node reached cheaply down a dead-end or reinterpretation-heavy
+    // route can still be worth expanding down a costlier one - e.g. mp3 -> gif works via
+    // the marked raw-embed chain even though the cheaper mp3 -> mp4 hop is terminal.
+    const key = (mime, exp, lossy, hops) => mime + '|' + (exp ? 1 : 0) + '|' + lossy + '|' + hops;
+    const dist = new Map(), prev = new Map();
     const reachable = new Map();
-    distExp.set(srcMime, 0);
-    const pq = [{mime: srcMime, cost: 0, exp: true}];
-    const buildPath = (mime, exp) => {
+    dist.set(key(srcMime, true, 0, 0), 0);
+    const pq = [{mime: srcMime, cost: 0, exp: true, lossy: 0, hops: 0}];
+    const buildPath = (mime, exp, lossy, hops) => {
         const path = [];
-        let node = mime, side = exp;
-        while (true) {
-            const step = side ? prevExp.get(node) : prevTerm.get(node);
-            if (!step) break;
+        let k = key(mime, exp, lossy, hops);
+        while (prev.has(k)) {
+            const step = prev.get(k);
             path.unshift(step);
-            node = step.from;
-            side = true; // everything before the last edge is non-terminal by construction
+            k = step.fromKey;
         }
         return path;
     };
     while (pq.length > 0) {
         pq.sort((a, b) => a.cost - b.cost);
-        const {mime: curr, cost, exp} = pq.shift();
-        if (cost > (exp ? distExp : distTerm).get(curr)) continue; // stale entry
-        // The first settle of a mime — in cost order, across both states — is its cheapest
+        const {mime: curr, cost, exp, lossy, hops} = pq.shift();
+        const currKey = key(curr, exp, lossy, hops);
+        if (cost > dist.get(currKey)) continue; // stale entry
+        // The first settle of a mime - in cost order, across all states - is its cheapest
         // path; Map insertion order therefore stays cheapest-first (defaults rely on this).
-        if (curr !== srcMime && !reachable.has(curr)) reachable.set(curr, buildPath(curr, exp));
-        if (!exp) continue; // paths ending in a terminal edge are never extended
+        if (curr !== srcMime && !reachable.has(curr)) reachable.set(curr, buildPath(curr, exp, lossy, hops));
+        if (!exp || hops >= MAX_PATH_HOPS) continue; // terminal edges and the hop cap both stop here
         for (const cnv of converters) {
             if (!cnv.inputs.includes(curr)) continue;
-            const isTerm = cnv.terminal === true;
-            const dist = isTerm ? distTerm : distExp;
-            const prev = isTerm ? prevTerm : prevExp;
+            const nextLossy = lossy + (cnv.lossy === true ? 1 : 0);
+            if (nextLossy > MAX_LOSSY_HOPS) continue;
+            const nextExp = cnv.terminal !== true;
+            const nextHops = hops + 1;
             for (const out of cnv.outputs) {
                 if (out === curr) continue;
                 const nc = cost + cnv.weight;
-                if (!dist.has(out) || nc < dist.get(out)) {
-                    dist.set(out, nc);
-                    prev.set(out, {converter: cnv, from: curr, to: out});
-                    pq.push({mime: out, cost: nc, exp: !isTerm});
+                const outKey = key(out, nextExp, nextLossy, nextHops);
+                if (!dist.has(outKey) || nc < dist.get(outKey)) {
+                    dist.set(outKey, nc);
+                    prev.set(outKey, {converter: cnv, from: curr, to: out, fromKey: currKey});
+                    pq.push({mime: out, cost: nc, exp: nextExp, lossy: nextLossy, hops: nextHops});
                 }
             }
         }
@@ -8069,6 +8588,10 @@ async function detectFormat(file) {
     // ISO Base Media (mp4/mov/m4a/3gp): 'ftyp' box at offset 4, major brand at offset 8
     if (header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70) {
         const brand = String.fromCharCode(...header.slice(8, 12)).trim().toLowerCase();
+        // AVIF and its sequence variant share the ISO-BMFF container with mp4
+        if (brand === 'avif' || brand === 'avis') return 'image/avif';
+        if (brand === 'heic' || brand === 'heix' || brand === 'hevc') return 'image/heic';
+        if (brand === 'mif1' || brand === 'msf1') return ext === 'avif' ? 'image/avif' : 'image/heif';
         if (brand.startsWith('qt')) return 'video/quicktime';
         if (brand.startsWith('3g')) return 'video/3gpp';
         if (brand === 'm4a' || ext === 'm4a') return 'audio/mp4';
@@ -8080,7 +8603,8 @@ async function detectFormat(file) {
     if (header[0] === 0x00 && header[1] === 0x00 && header[2] === 0x01 && (header[3] === 0xBA || header[3] === 0xB3)) return 'video/mpeg';
     // Ogg container — could be Ogg audio or Opus; disambiguate by extension, default ogg
     if (header[0] === 0x4F && header[1] === 0x67 && header[2] === 0x67 && header[3] === 0x53) {
-        return ext === 'opus' ? 'audio/opus' : 'audio/ogg';
+        if (ext === 'opus') return 'audio/opus';
+        return ext === 'ogv' ? 'video/ogg' : 'audio/ogg';
     }
     if (header[0] === 0x50 && header[1] === 0x4B && header[2] === 0x03 && header[3] === 0x04) {
         if (ext === 'docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -8143,7 +8667,9 @@ async function sniffTextStructure(file, ext) {
 
 let inputFiles = [];
 let mergeEnabled = false;
-let conversionOptions = {
+// One source of truth: resetAll() used to rebuild this object from a 4-key literal, which
+// left morseWpm, qrLevel, gifFrameFormat and the rest undefined after a reset.
+const DEFAULT_OPTIONS = {
     quality: 0.92,
     pdfOrientation: 'auto',
     indent: 2,
@@ -8159,6 +8685,7 @@ let conversionOptions = {
     reliefDepth: 4,
     frameIntervalS: 1
 };
+let conversionOptions = {...DEFAULT_OPTIONS};
 const $ = id => document.getElementById(id);
 
 // Junk entries that Mac/Windows zip tools add and that nobody wants ingested.
@@ -9612,7 +10139,7 @@ function togglePreview(uid) {
     renderPreviewInPane(pane, match.convertedBlob, match.targetMime);
 }
 
-function buildMatrix() {
+function buildFormatMatrix() {
     const zone = $('matrixContent');
     if (!zone) return;
     const mimes = Object.keys(FORMAT_REGISTRY);
@@ -9646,7 +10173,7 @@ function buildMatrix() {
 function resetAll() {
     inputFiles = [];
     mergeEnabled = false;
-    conversionOptions = {quality: 0.92, pdfOrientation: 'auto', indent: 2, resizeMax: 0};
+    conversionOptions = {...DEFAULT_OPTIONS};
     $('inputSection').style.display = 'none';
     $('optionsRow').style.display = 'none';
     $('convertBtn').style.display = 'none';
@@ -9665,7 +10192,7 @@ function toggleSection(id) {
         const container = $('mainContainer');
         if (!wasOpen) {
             container.classList.add('wide');
-            buildMatrix();
+            buildFormatMatrix();
         } else {
             container.classList.remove('wide');
         }
