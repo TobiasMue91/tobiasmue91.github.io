@@ -61,7 +61,20 @@ python util/update.py       # refresh entry dates from git, re-shoot stale scree
 python util/new_entry.py    # register a newly added page
 npm run test:server         # http-server on :80
 npm run test:cypress        # Cypress e2e — its baseUrl is :8080, so point one at the other
+npm run test:converter      # Everything Converter suite (needs a server on :8099)
 ```
+
+`util/test_everything_converter.mjs` drives `tools/everything_converter.html` in headless
+Chromium and is worth running after any change to it. Five suites — `graph`, `edges`,
+`roundtrip`, `adversarial`, `codecs` — run together or by name
+(`node util/test_everything_converter.mjs graph edges`). It checks the converter graph for
+duplicate globals, unregistered mimes, overlong routes and terminal edges used mid-chain;
+runs every declared converter edge against a generated fixture; asserts that round trips
+come back unchanged; feeds parsers malformed input; and cross-checks the hand-written QR,
+BMP and TIFF codecs against reference implementations. Converters whose library sits on a
+CDN are skipped, not failed, when the network is unavailable, so the suite is still useful
+offline. Fixtures are generated at runtime (`util/converter_fixtures.js`,
+`util/tiff_fixtures.mjs`) — the repo carries no binary test assets.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
