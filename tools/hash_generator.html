@@ -97,7 +97,7 @@
         </div>
         <div class="algo-option">
           <input type="radio" id="sha3" name="algorithm" value="sha3">
-          <label for="sha3">SHA-3</label>
+          <label for="sha3">SHA3-512</label>
         </div>
       </div>
     </div>
@@ -180,6 +180,72 @@
   let hashTimerId = null;
   const HASH_DELAY = 300; // ms delay for debouncing hash generation
 
+
+  // FIPS 202 SHA3-512. CryptoJS.SHA3 is pre-standard Keccak (0x01 padding), so its output
+  // never matches a published SHA-3 checksum; this uses the standard 0x06 domain padding.
+  const KECCAK_RC = [
+    [0x00000001,0x00000000],[0x00008082,0x00000000],[0x0000808a,0x80000000],[0x80008000,0x80000000],
+    [0x0000808b,0x00000000],[0x80000001,0x00000000],[0x80008081,0x80000000],[0x00008009,0x80000000],
+    [0x0000008a,0x00000000],[0x00000088,0x00000000],[0x80008009,0x00000000],[0x8000000a,0x00000000],
+    [0x8000808b,0x00000000],[0x0000008b,0x80000000],[0x00008089,0x80000000],[0x00008003,0x80000000],
+    [0x00008002,0x80000000],[0x00000080,0x80000000],[0x0000800a,0x00000000],[0x8000000a,0x80000000],
+    [0x80008081,0x80000000],[0x00008080,0x80000000],[0x80000001,0x00000000],[0x80008008,0x80000000]];
+  const KECCAK_ROT = [0,1,62,28,27,36,44,6,55,20,3,10,43,25,39,41,45,15,21,8,18,2,61,56,14];
+
+  function keccakF(lo, hi) {
+    const cl = new Uint32Array(5), ch = new Uint32Array(5), bl = new Uint32Array(25), bh = new Uint32Array(25);
+    for (let r = 0; r < 24; r++) {
+      for (let x = 0; x < 5; x++) {
+        cl[x] = lo[x] ^ lo[x+5] ^ lo[x+10] ^ lo[x+15] ^ lo[x+20];
+        ch[x] = hi[x] ^ hi[x+5] ^ hi[x+10] ^ hi[x+15] ^ hi[x+20];
+      }
+      for (let x = 0; x < 5; x++) {
+        const a = cl[(x+1)%5], b = ch[(x+1)%5];
+        const dl = cl[(x+4)%5] ^ ((a << 1) | (b >>> 31)), dh = ch[(x+4)%5] ^ ((b << 1) | (a >>> 31));
+        for (let y = 0; y < 25; y += 5) { lo[y+x] ^= dl; hi[y+x] ^= dh; }
+      }
+      for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) {
+        const i = x + 5*y, j = y + 5*((2*x + 3*y) % 5), n = KECCAK_ROT[i];
+        let l = lo[i], h = hi[i];
+        if (n >= 32) { const t = l; l = h; h = t; }
+        const m = n % 32;
+        bl[j] = m ? (l << m) | (h >>> (32-m)) : l;
+        bh[j] = m ? (h << m) | (l >>> (32-m)) : h;
+      }
+      for (let y = 0; y < 25; y += 5) for (let x = 0; x < 5; x++) {
+        lo[y+x] = bl[y+x] ^ (~bl[y+(x+1)%5] & bl[y+(x+2)%5]);
+        hi[y+x] = bh[y+x] ^ (~bh[y+(x+1)%5] & bh[y+(x+2)%5]);
+      }
+      lo[0] ^= KECCAK_RC[r][0]; hi[0] ^= KECCAK_RC[r][1];
+    }
+  }
+
+  function sha3_512(input) {
+    let bytes;
+    if (typeof input === 'string') bytes = new TextEncoder().encode(input);
+    else { // CryptoJS WordArray (file input)
+      bytes = new Uint8Array(input.sigBytes);
+      for (let i = 0; i < input.sigBytes; i++) bytes[i] = (input.words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+    }
+    const rate = 72, lo = new Uint32Array(25), hi = new Uint32Array(25);
+    const padded = new Uint8Array(Math.floor(bytes.length / rate) * rate + rate);
+    padded.set(bytes);
+    padded[bytes.length] ^= 0x06;
+    padded[padded.length - 1] ^= 0x80;
+    for (let off = 0; off < padded.length; off += rate) {
+      for (let k = 0; k < rate / 8; k++) {
+        const p = off + k*8;
+        lo[k] ^= padded[p] | (padded[p+1] << 8) | (padded[p+2] << 16) | (padded[p+3] << 24);
+        hi[k] ^= padded[p+4] | (padded[p+5] << 8) | (padded[p+6] << 16) | (padded[p+7] << 24);
+      }
+      keccakF(lo, hi);
+    }
+    let out = '';
+    for (let k = 0; k < 8; k++) for (const w of [lo[k], hi[k]])
+      for (let b = 0; b < 4; b++) out += ((w >>> (8*b)) & 0xff).toString(16).padStart(2, '0');
+    return out;
+  }
+
   // Hash generation functions
   function generateHash(input, algorithm) {
     if (!input) return '';
@@ -189,7 +255,7 @@
       case 'sha1': return CryptoJS.SHA1(input).toString();
       case 'sha256': return CryptoJS.SHA256(input).toString();
       case 'sha512': return CryptoJS.SHA512(input).toString();
-      case 'sha3': return CryptoJS.SHA3(input).toString();
+      case 'sha3': return sha3_512(input);
       default: return CryptoJS.MD5(input).toString();
     }
   }
