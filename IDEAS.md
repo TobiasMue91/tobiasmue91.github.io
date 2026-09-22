@@ -157,6 +157,8 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
   for years.
 - **Rhythm and timing.** Nothing measures how far off the beat you are — the open audio-side gap
   next to `overtone`, which handles pitch and explicitly does not handle this.
+  *Filled by `tools/pocket.html` — offset, spread, drift and per-beat rushing through the microphone,
+  with its own latency calibration.*
 - **Hinting and rasterisation.** Nothing shows what a font does at 11px, where hinting and `gasp`
   decide whether it is readable at all. Open next to `sorts`.
 - **Polyphonic pitch.** `overtone` is monophonic by design and reports the common subharmonic of a
@@ -468,8 +470,8 @@ vibrato rate and depth, attack settling, sway and drift, plus a profile accumula
 Two things in it are reusable: a YIN detector whose clarity gate was tuned by measurement (0.88 removed
 all 729 octave errors across 5,760 synthetic frames while keeping every clean one), and the observation
 that a pitch track is a moving average of the analysis window, so vibrato depth is attenuated by
-sinc(pi·fv·W/sr) and can be corrected back out. Still open on the audio side: **rhythm and timing**
-(nothing measures how far off the beat you are), and **polyphonic** pitch — Overtone is monophonic and
+sinc(pi·fv·W/sr) and can be corrected back out. Still open on the audio side: **polyphonic** pitch (rhythm and timing,
+listed here before, is filled by `tools/pocket.html`) — Overtone is monophonic and
 reports the common subharmonic of a chord rather than trying to guess that it is hearing one. An attempt
 to detect chords from the spectrum was removed after it turned out to fire on hummed low notes: a
 microphone that rolls off the fundamental leaves a spectrum shaped much like a chord's, and every
