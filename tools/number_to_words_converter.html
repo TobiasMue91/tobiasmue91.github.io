@@ -1276,7 +1276,8 @@
                                 Accepts scientific notation (<code>3.5e12</code>), expressions (<code>2^64</code>), and
                                 bases (<code>0xFF</code>).</p>
                             <p style="margin-top:.6rem">Multi-language output for Spanish, French, German, and
-                                Portuguese up to one billion.</p>
+                                Portuguese below one trillion, decimals included. Currency and ordinal
+                                modes are English-only.</p>
                             <p style="margin-top:.6rem"><strong>Shortcuts:</strong> <kbd class="kbd">Ctrl+C</kbd> Copy ·
                                 <kbd class="kbd">Ctrl+K</kbd> Clear · <kbd class="kbd">Space</kbd> Random</p>
                         </div>
@@ -1414,7 +1415,8 @@
         numStr = numStr.replace(/^0+/, '') || '0';
         if (numStr === '0') return {words: 'zero', scale: ''};
         const isNeg = numStr[0] === '-';
-        if (isNeg) numStr = numStr.slice(1);
+        if (isNeg) numStr = numStr.slice(1).replace(/^0+/, '');
+        if (!numStr) return {words: 'zero', scale: ''};
         const chunks = [];
         while (numStr.length > 0) {
             chunks.unshift(numStr.slice(-3));
@@ -1499,11 +1501,12 @@
         if (!r) return {error: 'Number exceeds maximum supported range (10³⁰⁰³)'};
         let res = r.words;
         if (decPart) res += ' point ' + decToWords(decPart);
+        if (/^-0*$/.test(intStr) && /[1-9]/.test(decPart || '')) res = 'negative ' + res;
         return {result: res, scale: r.scale}
     }
 
     /* ====================================================================
-       §2  MULTI-LANGUAGE ENGINES (ES, FR, DE, PT) — up to ~1 billion
+       §2  MULTI-LANGUAGE ENGINES (ES, FR, DE, PT) — below 1 trillion
        ==================================================================== */
     const LANG_LIMIT = 999999999999n; // 1 trillion - 1
 
@@ -1522,6 +1525,19 @@
         return c[Math.floor(n / 100)] + (n % 100 ? ' ' + chunkES(n % 100) : '')
     }
 
+    // "uno" shortens before a noun: veintiún mil, treinta y un millones
+    function apocopeES(w) {
+        return w.replace(/veintiuno$/, 'veintiún').replace(/uno$/, 'un')
+    }
+
+    // 0 … 999 999; Spanish counts millions in thousands (mil millones), not in a new scale word
+    function belowMillionES(n) {
+        const th = Math.floor(n / 1000), r = n % 1000, parts = [];
+        if (th) parts.push(th === 1 ? 'mil' : apocopeES(chunkES(th)) + ' mil');
+        if (r) parts.push(chunkES(r));
+        return parts.join(' ')
+    }
+
     function toWordsES(numStr) {
         numStr = numStr.replace(/^0+/, '') || '0';
         if (numStr === '0') return 'cero';
@@ -1530,29 +1546,9 @@
         const v = BigInt(numStr);
         if (v > LANG_LIMIT) return null;
         const n = Number(v);
-        const scaleNames = ['', 'mil', 'millón', 'mil millones'];// thousand, million, billion(milliard)
-        const chunks = [];
-        let temp = n;
-        while (temp > 0) {
-            chunks.unshift(temp % 1000);
-            temp = Math.floor(temp / 1000)
-        }
-        const parts = [];
-        for (let i = 0; i < chunks.length; i++) {
-            const ch = chunks[i], si = chunks.length - 1 - i;
-            if (ch === 0) continue;
-            let w = '';
-            if (si === 1) {
-                w = ch === 1 ? 'mil' : chunkES(ch) + ' mil'
-            } else if (si === 2) {
-                w = ch === 1 ? 'un millón' : chunkES(ch) + ' millones'
-            } else if (si === 3) {
-                w = ch === 1 ? 'mil' : chunkES(ch) + ' mil'
-            } else {
-                w = chunkES(ch)
-            }
-            parts.push(w)
-        }
+        const m = Math.floor(n / 1e6), rest = n % 1e6, parts = [];
+        if (m) parts.push(m === 1 ? 'un millón' : apocopeES(belowMillionES(m)) + ' millones');
+        if (rest) parts.push(belowMillionES(rest));
         let r = parts.join(' ');
         if (isNeg) r = 'negativo ' + r;
         return r
@@ -1570,7 +1566,7 @@
         }
         if (n < 80) {
             const r = n - 60;
-            return 'soixante' + (r === 11 ? 'et onze' : r === 1 ? ' et un' : '-' + u[r])
+            return 'soixante' + (r === 11 ? ' et onze' : r === 1 ? ' et un' : '-' + u[r])
         }
         if (n === 80) return 'quatre-vingts';
         if (n < 100) return 'quatre-vingt-' + u[n - 80];
@@ -1598,7 +1594,8 @@
             const ch = chunks[i], si = chunks.length - 1 - i;
             if (ch === 0) continue;
             if (si === 1) {
-                parts.push(ch === 1 ? 'mille' : chunkFR(ch) + ' mille')
+                // mille is not a noun, so cents/vingts lose their -s before it
+                parts.push(ch === 1 ? 'mille' : chunkFR(ch).replace(/(cent|vingt)s$/, '$1') + ' mille')
             } else if (si === 2) {
                 parts.push(ch === 1 ? 'un million' : chunkFR(ch) + ' millions')
             } else if (si === 3) {
@@ -1608,7 +1605,7 @@
             }
         }
         let r = parts.join(' ');
-        if (isNeg) r = 'négatif ' + r;
+        if (isNeg) r = 'moins ' + r;
         return r
     }
 
@@ -1624,7 +1621,7 @@
             return r ? (r === 1 ? 'ein' : u[r]) + 'und' + d[t] : d[t]
         }
         const h = Math.floor(n / 100), rem = n % 100;
-        return u[h] + 'hundert' + (rem ? chunkDE(rem, isLast) : '')
+        return (h === 1 ? 'ein' : u[h]) + 'hundert' + (rem ? chunkDE(rem, isLast) : '')
     }
 
     function toWordsDE(numStr) {
@@ -1642,21 +1639,23 @@
             chunks.unshift(temp % 1000);
             temp = Math.floor(temp / 1000)
         }
-        const parts = [];
+        // Millionen and Milliarden are nouns and stand apart; everything below them is one word
+        const nouns = [], compound = [];
         for (let i = 0; i < chunks.length; i++) {
             const ch = chunks[i], si = chunks.length - 1 - i, last = (i === chunks.length - 1);
             if (ch === 0) continue;
             if (si === 1) {
-                parts.push(ch === 1 ? 'eintausend' : chunkDE(ch, false) + 'tausend')
+                compound.push(ch === 1 ? 'eintausend' : chunkDE(ch, false) + 'tausend')
             } else if (si === 2) {
-                parts.push(ch === 1 ? 'eine Million' : chunkDE(ch, false) + ' Millionen')
+                nouns.push(ch === 1 ? 'eine Million' : chunkDE(ch, false).replace(/ein$/, 'eine') + ' Millionen')
             } else if (si === 3) {
-                parts.push(ch === 1 ? 'eine Milliarde' : chunkDE(ch, false) + ' Milliarden')
+                nouns.push(ch === 1 ? 'eine Milliarde' : chunkDE(ch, false).replace(/ein$/, 'eine') + ' Milliarden')
             } else {
-                parts.push(chunkDE(ch, last))
+                compound.push(chunkDE(ch, last))
             }
         }
-        let r = parts.join('');
+        if (compound.length) nouns.push(compound.join(''));
+        let r = nouns.join(' ');
         if (isNeg) r = 'minus ' + r;
         return r
     }
@@ -1694,26 +1693,48 @@
         for (let i = 0; i < chunks.length; i++) {
             const ch = chunks[i], si = chunks.length - 1 - i;
             if (ch === 0) continue;
+            let w;
             if (si === 1) {
-                parts.push(ch === 1 ? 'mil' : chunkPT(ch) + ' mil')
+                w = ch === 1 ? 'mil' : chunkPT(ch) + ' mil'
             } else if (si === 2) {
-                parts.push(ch === 1 ? 'um milhão' : chunkPT(ch) + ' milhões')
+                w = ch === 1 ? 'um milhão' : chunkPT(ch) + ' milhões'
             } else if (si === 3) {
-                parts.push(ch === 1 ? 'um bilhão' : chunkPT(ch) + ' bilhões')
+                w = ch === 1 ? 'um bilhão' : chunkPT(ch) + ' bilhões'
             } else {
-                parts.push(chunkPT(ch))
+                w = chunkPT(ch)
             }
+            parts.push({w, ch})
         }
-        let r = parts.join(' e ');
+        // Groups are separated by commas; "e" joins a group of 100 or less, or a last group in round hundreds
+        let r = parts[0].w;
+        for (let i = 1; i < parts.length; i++) {
+            const {w, ch} = parts[i], isLast = i === parts.length - 1;
+            r += (ch <= 100 || (isLast && ch % 100 === 0) ? ' e ' : ', ') + w
+        }
         if (isNeg) r = 'negativo ' + r;
         return r
     }
 
+    const LANG_WORDS = {
+        es: {fn: toWordsES, point: 'coma', neg: 'negativo', digits: ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']},
+        fr: {fn: toWordsFR, point: 'virgule', neg: 'moins', digits: ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf']},
+        de: {fn: toWordsDE, point: 'Komma', neg: 'minus', digits: ['null', 'eins', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun']},
+        pt: {fn: toWordsPT, point: 'vírgula', neg: 'negativo', digits: ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove']}
+    };
+
+    /** Same input rules as convertEN; returns {result}, {error}, or null when past LANG_LIMIT */
     function convertMultiLang(numStr, lang) {
-        const fn = {es: toWordsES, fr: toWordsFR, de: toWordsDE, pt: toWordsPT}[lang];
-        if (!fn) return null;
-        const result = fn(numStr);
-        return result;
+        const L = LANG_WORDS[lang];
+        if (!L) return null;
+        const cleaned = numStr.replace(/,/g, '').replace(/\s/g, '');
+        if (!/^-?\d+\.?\d*$/.test(cleaned)) return {error: 'Please enter a valid number'};
+        const isNeg = cleaned[0] === '-';
+        const [intPart, decPart] = cleaned.replace('-', '').split('.');
+        const words = L.fn(intPart || '0');
+        if (words === null) return null;
+        let r = words + (decPart ? ' ' + L.point + ' ' + decPart.split('').map(d => L.digits[d]).join(' ') : '');
+        if (isNeg && /[1-9]/.test(cleaned)) r = L.neg + ' ' + r;
+        return {result: r};
     }
 
     /* ====================================================================
@@ -1816,6 +1837,10 @@
         // European style: 1.000.000,50 → 1000000.50
         if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(input)) {
             normalized = input.replace(/\./g, '').replace(',', '.');
+        }
+        // A lone comma not followed by exactly three digits can only be a decimal comma: 19,99 → 19.99
+        else if (/^-?\d+,(\d{1,2}|\d{4,})$/.test(input)) {
+            normalized = input.replace(',', '.');
         }
         // US style commas are already handled by the converter
         return {value: normalized};
@@ -2072,28 +2097,32 @@
 
         // Convert
         let result, error, scale;
-        if (lang === 'en' || mode === 'currency' || mode === 'ordinal') {
-            const r = convertEN(numStr, mode, currencySelect.value);
-            result = r.result;
-            error = r.error;
-            scale = r.scale;
-        } else {
-            // Multi-language — standard mode only
-            const mlResult = convertMultiLang(numStr, lang);
-            if (mlResult === null) {
-                // Fallback to English with note
-                const r = convertEN(numStr, 'standard', 'USD');
+        try {
+            if (lang === 'en' || mode === 'currency' || mode === 'ordinal') {
+                const r = convertEN(numStr, mode, currencySelect.value);
                 result = r.result;
                 error = r.error;
                 scale = r.scale;
-                if (result) result += ' (English fallback — number exceeds language limit)';
+                if (result && lang !== 'en') result += ` (English — ${mode} mode is English-only)`;
             } else {
-                result = mlResult;
-                scale = '';
-                // Get scale from English for stats
+                // Multi-language — standard mode only
+                const ml = convertMultiLang(numStr, lang);
+                // Scale for stats, and the fallback when the number is past the language's range
                 const r = convertEN(numStr, 'standard', 'USD');
                 scale = r.scale || '';
+                if (ml === null) {
+                    result = r.result;
+                    error = r.error;
+                    if (result) result += ' (English fallback — number exceeds language limit)';
+                } else {
+                    result = ml.result;
+                    error = ml.error;
+                }
             }
+        } catch (e) {
+            // Never leave the previous number's words under a new input
+            result = null;
+            error = 'Could not convert this number';
         }
 
         input.classList.toggle('error', !!error);
