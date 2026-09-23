@@ -209,6 +209,39 @@
             font-size: 1.1em;
         }
 
+        .resize-control {
+            margin-top: 24px;
+        }
+
+        .width-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+
+        .width-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .size-warning {
+            display: none;
+            background: #fff5f5;
+            border: 2px solid #fc8181;
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin-bottom: 24px;
+            color: #742a2a;
+            line-height: 1.5;
+        }
+
+        .size-warning.active {
+            display: block;
+        }
+
         .slider {
             width: 100%;
             height: 8px;
@@ -560,7 +593,7 @@
             <div class="png-notice" id="pngNotice">
                 <div class="png-notice-title">⚠️ PNG File Detected</div>
                 <div class="png-notice-text">
-                    PNG files are already compressed and may not reduce much in size. For photos, converting to JPEG typically gives 60-80% size reduction. Transparent images should stay as PNG.
+                    PNG files are already compressed and may not reduce much in size. For photos, converting to JPEG typically gives 60-80% size reduction. Transparent images should stay as PNG. The quality setting only affects JPEG — to shrink a PNG, set a max width below.
                 </div>
                 <div class="png-options">
                     <button class="option-btn" id="convertToJpeg">Convert to JPEG (Best for photos)</button>
@@ -583,6 +616,14 @@
                 <input type="range" id="qualitySlider" class="slider" min="1" max="100" value="80">
             </div>
 
+            <div class="quality-control resize-control">
+                <label class="quality-label" for="maxWidthInput">
+                    <span>Max Width <small>(px, optional)</small></span>
+                    <span class="quality-value" id="maxWidthHint">original size</span>
+                </label>
+                <input type="number" id="maxWidthInput" class="width-input" min="1" step="1" inputmode="numeric" placeholder="e.g. 1920 — leave empty to keep size">
+            </div>
+
             <div class="action-buttons">
                 <button class="btn btn-primary" id="compressBtn">Compress Image</button>
                 <button class="btn btn-secondary" id="resetBtn">Upload New</button>
@@ -597,6 +638,7 @@
 
         <!-- Results -->
         <div class="results-section" id="resultsSection">
+            <div class="size-warning" id="sizeWarning"></div>
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-label">Original Size</div>
@@ -691,6 +733,20 @@
     const pngNotice = document.getElementById('pngNotice');
     const convertToJpegBtn = document.getElementById('convertToJpeg');
     const keepPngBtn = document.getElementById('keepPng');
+    const maxWidthInput = document.getElementById('maxWidthInput');
+    const maxWidthHint = document.getElementById('maxWidthHint');
+    const sizeWarning = document.getElementById('sizeWarning');
+
+    maxWidthInput.addEventListener('input', updateMaxWidthHint);
+
+    function updateMaxWidthHint() {
+        const w = parseInt(maxWidthInput.value, 10);
+        if (!originalImageData || !(w > 0) || w >= originalImageData.width) {
+            maxWidthHint.textContent = originalImageData ? `${originalImageData.width} × ${originalImageData.height} (unchanged)` : 'original size';
+            return;
+        }
+        maxWidthHint.textContent = `${w} × ${Math.round(originalImageData.height * w / originalImageData.width)}`;
+    }
 
     // PNG conversion handlers
     convertToJpegBtn.addEventListener('click', () => {
@@ -785,6 +841,7 @@
                     pngNotice.classList.remove('active');
                 }
 
+                updateMaxWidthHint();
                 uploadZone.style.display = 'none';
                 controlsSection.style.display = 'block';
             };
@@ -818,10 +875,16 @@
             }
         };
 
-        // If PNG and user wants to convert to JPEG
+        // Compressor.js silently turns PNGs over 5 MB into JPEGs (losing transparency)
+        // unless convertSize says otherwise, so only convert when the user asked to.
         if (originalFile.type === 'image/png' && convertPngToJpeg) {
             options.mimeType = 'image/jpeg';
+        } else {
+            options.convertSize = Infinity;
         }
+
+        const maxWidth = parseInt(maxWidthInput.value, 10);
+        if (maxWidth > 0) options.maxWidth = maxWidth;
 
         new Compressor(originalFile, options);
     }
@@ -839,6 +902,21 @@
 
                 const img = new Image();
                 img.onload = () => {
+                    // A different format can come out larger than the original (a screenshot as JPEG);
+                    // if the dimensions did not change either, the original is simply the better file.
+                    const sameSize = img.width === originalImageData.width && img.height === originalImageData.height;
+                    if (compressedFile.size >= originalFile.size) {
+                        sizeWarning.innerHTML = compressedFile.size === originalFile.size
+                            ? `<strong>No smaller file at these settings.</strong> ${compressedFile.type === 'image/png' ? 'PNG ignores the quality setting — set a max width, or convert to JPEG if the image has no transparency.' : 'Try a lower quality or a max width.'}`
+                            : sameSize
+                            ? `<strong>This setting makes the file larger</strong> (${formatBytes(compressedFile.size)} vs ${formatBytes(originalFile.size)}). Keep your original — the download button now gives you the original file.`
+                            : `<strong>Heads up:</strong> the resized file is still larger than the original (${formatBytes(compressedFile.size)} vs ${formatBytes(originalFile.size)}). Try a lower quality or keeping the original format.`;
+                        sizeWarning.classList.add('active');
+                        if (sameSize) compressedBlob = originalFile;
+                    } else {
+                        sizeWarning.classList.remove('active');
+                    }
+
                     // Update stats
                     const savedBytes = originalFile.size - compressedFile.size;
                     const savedPercent = ((savedBytes / originalFile.size) * 100).toFixed(1);
@@ -925,7 +1003,7 @@
         const newExt = compressedBlob.type.split('/')[1];
 
         a.href = url;
-        a.download = `${nameWithoutExt}_compressed.${newExt}`;
+        a.download = compressedBlob === originalFile ? originalName : `${nameWithoutExt}_compressed.${newExt}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -938,6 +1016,8 @@
         originalImageData = null;
         convertPngToJpeg = false;
         fileInput.value = '';
+        maxWidthInput.value = '';
+        sizeWarning.classList.remove('active');
 
         uploadZone.style.display = 'block';
         controlsSection.style.display = 'none';
