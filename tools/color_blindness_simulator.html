@@ -809,8 +809,8 @@ let isPanning = false;
 let lastX, lastY;
 let simulatedImageData = null;
 
-// Color blindness simulation matrices (based on Brettel, Viénot, and Mollon research)
-// Modified for better differentiation between protanopia and deuteranopia
+// Color blindness simulation matrices (Machado, Oliveira & Fernandes 2009, full severity).
+// They are defined on linear-light RGB, so simulate() decodes sRGB before applying them.
 const simulationMatrices = {
     normal: [
         1, 0, 0, 0, 0,
@@ -831,18 +831,47 @@ const simulationMatrices = {
         0, 0, 0, 1, 0
     ],
     tritanopia: [
-        0.95, 0.05, 0, 0, 0,
-        0, 0.433, 0.567, 0, 0,
-        0, 0.475, 0.525, 0, 0,
+        1.255528, -0.076749, -0.178779, 0, 0,
+        -0.078411, 0.930809, 0.147602, 0, 0,
+        0.004733, 0.691367, 0.303900, 0, 0,
         0, 0, 0, 1, 0
     ],
     achromatopsia: [
-        0.299, 0.587, 0.114, 0, 0,
-        0.299, 0.587, 0.114, 0, 0,
-        0.299, 0.587, 0.114, 0, 0,
+        0.2126, 0.7152, 0.0722, 0, 0,
+        0.2126, 0.7152, 0.0722, 0, 0,
+        0.2126, 0.7152, 0.0722, 0, 0,
         0, 0, 0, 1, 0
     ]
 };
+
+// sRGB <-> linear lookup tables: decode is exact per byte, encode is sampled finely enough to round correctly
+const SRGB_TO_LINEAR = new Float32Array(256);
+for (let i = 0; i < 256; i++) {
+    const c = i / 255;
+    SRGB_TO_LINEAR[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+const LINEAR_STEPS = 4095;
+const LINEAR_TO_SRGB = new Uint8Array(LINEAR_STEPS + 1);
+for (let i = 0; i <= LINEAR_STEPS; i++) {
+    const c = i / LINEAR_STEPS;
+    LINEAR_TO_SRGB[i] = Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
+}
+function encodeLinear(c) {
+    return LINEAR_TO_SRGB[Math.round(Math.min(1, Math.max(0, c)) * LINEAR_STEPS)];
+}
+
+// Simulate one sRGB colour: decode, apply matrix blended by severity, re-encode
+function simulate(r, g, b, matrix, severity) {
+    const lr = SRGB_TO_LINEAR[r], lg = SRGB_TO_LINEAR[g], lb = SRGB_TO_LINEAR[b];
+    const sr = lr * matrix[0] + lg * matrix[1] + lb * matrix[2];
+    const sg = lr * matrix[5] + lg * matrix[6] + lb * matrix[7];
+    const sb = lr * matrix[10] + lg * matrix[11] + lb * matrix[12];
+    return [
+        encodeLinear(lr + (sr - lr) * severity),
+        encodeLinear(lg + (sg - lg) * severity),
+        encodeLinear(lb + (sb - lb) * severity)
+    ];
+}
 
 // Alternative color suggestions based on common accessibility palettes
 const alternativeColors = {
@@ -1242,15 +1271,10 @@ function applySimulation() {
         const b = simulatedPixels[i + 2];
         // Alpha channel remains unchanged
 
-        // Apply the simulation matrix
-        const simR = r * matrix[0] + g * matrix[1] + b * matrix[2] + matrix[3] * 255 + matrix[4];
-        const simG = r * matrix[5] + g * matrix[6] + b * matrix[7] + matrix[8] * 255 + matrix[9];
-        const simB = r * matrix[10] + g * matrix[11] + b * matrix[12] + matrix[13] * 255 + matrix[14];
-
-        // Mix original with simulated according to severity
-        simulatedPixels[i] = Math.round(r * (1 - severity) + simR * severity);
-        simulatedPixels[i + 1] = Math.round(g * (1 - severity) + simG * severity);
-        simulatedPixels[i + 2] = Math.round(b * (1 - severity) + simB * severity);
+        const [sr, sg, sb] = simulate(r, g, b, matrix, severity);
+        simulatedPixels[i] = sr;
+        simulatedPixels[i + 1] = sg;
+        simulatedPixels[i + 2] = sb;
     }
 
     // Clear simulated canvas
@@ -1317,15 +1341,7 @@ function updateColorSample() {
     const matrix = simulationMatrices[currentSimulation];
     const severity = currentSeverity / 100;
 
-    // Calculate simulated color
-    const simR = r * matrix[0] + g * matrix[1] + b * matrix[2] + matrix[3] * 255 + matrix[4];
-    const simG = r * matrix[5] + g * matrix[6] + b * matrix[7] + matrix[8] * 255 + matrix[9];
-    const simB = r * matrix[10] + g * matrix[11] + b * matrix[12] + matrix[13] * 255 + matrix[14];
-
-    // Mix original with simulated according to severity
-    const finalR = Math.round(r * (1 - severity) + simR * severity);
-    const finalG = Math.round(g * (1 - severity) + simG * severity);
-    const finalB = Math.round(b * (1 - severity) + simB * severity);
+    const [finalR, finalG, finalB] = simulate(r, g, b, matrix, severity);
 
     // Set simulated color
     simulatedColor.style.backgroundColor = `rgb(${finalR}, ${finalG}, ${finalB})`;
