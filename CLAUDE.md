@@ -63,6 +63,7 @@ npm run test:server         # http-server on :80
 npm run test:cypress        # Cypress e2e — its baseUrl is :8080, so point one at the other
 npm run test:converter      # Everything Converter suite (needs a server on :8099)
 npm run test:pingu          # Pingu Throw suite (plain Node, no server or browser)
+npm run test:moorhuhn       # Moor Chicken suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -70,7 +71,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Two exist so far. `test/everything_converter.mjs` drives
+Three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -80,6 +81,8 @@ install line.
 `test/pingu_throw.mjs` runs `games/pingu_throw.html`'s script in Node against a stub DOM and
 checks every distance against a table recorded before the page was polished, so presentation
 work there cannot quietly change the throw. Run it after any change to that page.
+`test/moorhuhn.mjs` does the same for `games/moorhuhn.html`: a deterministic bot plays whole
+seeded hunts and the second-by-second trace must match its table.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
