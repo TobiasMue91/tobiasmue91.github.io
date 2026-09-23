@@ -65,3 +65,25 @@ rather than skipped.
 
 `qrcode`, `jsqr`, `utif` and `bmp-js` are optional: the `codecs` suite cross-checks against
 them when they are installed and skips those comparisons when they are not.
+
+## Pingu Throw
+
+```sh
+npm run test:pingu                       # or: node test/pingu_throw.mjs
+node test/pingu_throw.mjs gameplay       # one or more named suites
+```
+
+`pingu_throw.mjs` needs no browser and no server. The page is almost all presentation — the
+yeti, the penguin, particles, sound, the result card — around a small fixed-step physics core,
+and the promise is that none of it touches the throw. So the test runs the page's own inline
+script in Node's `vm` against a stub DOM (a canvas context whose every call is a no-op), calls
+`requestAnimationFrame` by hand with exact timestamps and presses Space on chosen frames.
+
+| suite | what it checks |
+| --- | --- |
+| `gameplay` | the stored distance for 21 swings at 60 Hz and 144 Hz, to the centimetre, against a table recorded from the version before the polish (a55e355) |
+| `share` | a challenge link, which carries only the height the penguin was struck at, flies the friend's ghost to the same distance; malformed links are ignored |
+| `result` | the result card: rank, new-best chip, timing in milliseconds, bounces, and the whiff and no-swing cards |
+
+If a change is meant to alter the physics, the `GOLDEN` table has to be re-recorded on
+purpose — that is the point of it.
