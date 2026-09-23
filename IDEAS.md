@@ -152,6 +152,7 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
 - **CSS keyframe editor.** Nine CSS tools exist and none of them touch `@keyframes`.
 - **Cubic-bezier easing editor.** Pairs naturally with the above.
 - **WCAG contrast checker.** There is a colour-blindness simulator but no contrast ratio checker.
+  *Filled by `tools/contrast_checker.html` — ratio, nearest same-hue passing colour, and a palette matrix.*
 - **CSS clip-path editor.** Visual polygon editing with copyable output.
 - **Aspect ratio calculator** and **browser storage explorer** — small, useful, and on the list below
   for years.
