@@ -151,6 +151,8 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
 
 - **CSS keyframe editor.** Nine CSS tools exist and none of them touch `@keyframes`.
 - **Cubic-bezier easing editor.** Pairs naturally with the above.
+  *Filled by `tools/easing_editor.html` — drag the curve, a speed graph under it, and a preview the
+  browser animates with the real timing functions.*
 - **WCAG contrast checker.** There is a colour-blindness simulator but no contrast ratio checker.
   *Filled by `tools/contrast_checker.html` — ratio, nearest same-hue passing colour, and a palette matrix.*
 - **CSS clip-path editor.** Visual polygon editing with copyable output.
