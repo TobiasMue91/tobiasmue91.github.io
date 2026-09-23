@@ -819,7 +819,7 @@
         syncBtn = $('syncBtn'), clearAncBtn = $('clearAncBtn'), syncReadout = $('syncReadout');
     const ancInputs = [ancACue, ancATime, ancBCue, ancBTime];
     const qBtns = document.querySelectorAll('.qbtn');
-    let originalSubs = [], currentSubs = [], history = [], redoStack = [], fileType = 'srt', fileName = '';
+    let originalSubs = [], currentSubs = [], history = [], redoStack = [], fileType = 'srt', fileName = '', vttHeader = 'WEBVTT', vttTail = [];
 
     function toast(msg) {
         toastEl.textContent = msg;
@@ -849,15 +849,10 @@
     }
 
     /* Parsing */
-    function parseTime(s, type) {
-        if (type === 'vtt') {
-            const m = s.trim().match(/(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})/);
-            if (!m) return 0;
-            return ((+m[1] || 0) * 3600 + (+m[2]) * 60 + (+m[3])) * 1000 + (+m[4])
-        }
-        const m = s.trim().match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
-        if (!m) return 0;
-        return ((+m[1]) * 3600 + (+m[2]) * 60 + (+m[3])) * 1000 + (+m[4])
+    function parseTime(s) {
+        const m = s.trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:[,.](\d{1,3}))?$/);
+        if (!m) return null;
+        return ((+m[1] || 0) * 3600 + (+m[2]) * 60 + (+m[3])) * 1000 + +((m[4] || '0') + '00').slice(0, 3)
     }
 
     function fmtTime(ms, type) {
@@ -872,42 +867,43 @@
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}${sep}${String(ml).padStart(3, '0')}`
     }
 
-    function parseSRT(text) {
-        const blocks = text.trim().replace(/\r\n/g, '\n').split(/\n\n+/);
-        const subs = [];
-        for (const b of blocks) {
-            const lines = b.split('\n');
-            if (lines.length < 2) continue;
-            let idx = 0;
-            if (/^\d+$/.test(lines[0].trim())) idx = 1;
-            const tm = (lines[idx] || '').match(/(.+?)\s*-->\s*(.+)/);
-            if (!tm) continue;
-            subs.push({
-                start: parseTime(tm[1], 'srt'),
-                end: parseTime(tm[2], 'srt'),
-                text: lines.slice(idx + 1).join('\n')
-            })
+    /* Cues keep their id and cue settings; VTT blocks that are not cues ride along on the next cue */
+    function parseCues(text, type) {
+        text = text.replace(/\r\n?/g, '\n').trim();
+        let header = '';
+        if (type === 'vtt') {
+            const m = text.match(/^WEBVTT[^\n]*/);
+            header = m ? m[0] : 'WEBVTT';
+            if (m) text = text.slice(m[0].length).replace(/^\n+/, '');
         }
-        return subs
+        const subs = [];
+        let pending = [], bad = 0;
+        for (const b of text.split(/\n\s*\n+/)) {
+            const lines = b.split('\n');
+            const ti = lines.findIndex(l => l.includes('-->'));
+            if (ti < 0 || ti > 1) {
+                if (type === 'vtt') pending.push(b);
+                else if (subs.length && b.trim()) subs[subs.length - 1].text += '\n\n' + b;
+                continue
+            }
+            const tm = lines[ti].match(/^\s*(\S+)\s*-->\s*(\S+)(.*)$/);
+            const start = tm && parseTime(tm[1]), end = tm && parseTime(tm[2]);
+            if (start === null || end === null) {
+                bad++;
+                continue
+            }
+            subs.push({start, end, id: ti ? lines[0].trim() : '', settings: tm[3].trim(), text: lines.slice(ti + 1).join('\n'), pre: pending});
+            pending = []
+        }
+        return {subs, header, tail: pending, bad}
     }
 
-    function parseVTT(text) {
-        const blocks = text.trim().replace(/\r\n/g, '\n').replace(/^WEBVTT[^\n]*\n*/, '').split(/\n\n+/);
-        const subs = [];
-        for (const b of blocks) {
-            const lines = b.split('\n');
-            let idx = 0;
-            if (lines[0] && !lines[0].includes('-->')) idx = 1;
-            if (!lines[idx]) continue;
-            const tm = lines[idx].match(/(.+?)\s*-->\s*(.+)/);
-            if (!tm) continue;
-            subs.push({
-                start: parseTime(tm[1], 'vtt'),
-                end: parseTime(tm[2], 'vtt'),
-                text: lines.slice(idx + 1).join('\n')
-            })
+    function decodeBytes(buf) {
+        try {
+            return {text: new TextDecoder('utf-8', {fatal: true}).decode(buf), enc: 'UTF-8'}
+        } catch (e) {
+            return {text: new TextDecoder('windows-1252').decode(buf), enc: 'Windows-1252'}
         }
-        return subs
     }
 
     /* File handling */
@@ -923,8 +919,11 @@
         dlFmt.value = ext;
         const reader = new FileReader();
         reader.onload = e => {
-            const text = e.target.result;
-            originalSubs = ext === 'vtt' ? parseVTT(text) : parseSRT(text);
+            const {text, enc} = decodeBytes(e.target.result);
+            const parsed = parseCues(text, ext);
+            vttHeader = parsed.header;
+            vttTail = parsed.tail;
+            originalSubs = parsed.subs;
             currentSubs = originalSubs.map(s => ({...s}));
             history = [];
             redoStack = [];
@@ -932,12 +931,12 @@
                 toast('No subtitles found');
                 return
             }
-            fileInfo.innerHTML = `<div class="file-badge"><span class="fname">${fileName}</span><span class="fmeta">${originalSubs.length} subs · ${ext.toUpperCase()}</span><button onclick="clearFile()">Remove</button></div>`;
+            fileInfo.innerHTML = `<div class="file-badge"><span class="fname">${fileName}</span><span class="fmeta">${originalSubs.length} subs · ${ext.toUpperCase()}${enc === 'UTF-8' ? '' : ' · ' + enc}</span><button onclick="clearFile()">Remove</button></div>`;
             setEnabled(true);
             renderPreview();
-            toast('Loaded ' + originalSubs.length + ' subtitles')
+            toast('Loaded ' + originalSubs.length + ' subtitles' + (parsed.bad ? ` — skipped ${parsed.bad} with unreadable times` : ''))
         };
-        reader.readAsText(file)
+        reader.readAsArrayBuffer(file)
     }
 
     function clearFile() {
@@ -982,7 +981,7 @@
         currentSubs = currentSubs.map((s, i) => {
             if (i >= from && i <= to) {
                 count++;
-                return {start: Math.max(0, s.start + ms), end: Math.max(0, s.end + ms), text: s.text}
+                return {...s, start: Math.max(0, s.start + ms), end: Math.max(0, s.end + ms)}
             }
             return {...s}
         });
@@ -1074,7 +1073,7 @@
         currentSubs = currentSubs.map((s, i) => {
             if (i >= from && i <= to) {
                 count++;
-                return {start: map(s.start), end: map(s.end), text: s.text}
+                return {...s, start: map(s.start), end: map(s.end)}
             }
             return {...s}
         });
@@ -1241,10 +1240,13 @@
         const fmt = dlFmt.value;
         let out = '';
         if (fmt === 'vtt') {
-            out = 'WEBVTT\n\n';
-            currentSubs.forEach((s, i) => {
-                out += `${i + 1}\n${fmtTime(s.start, 'vtt')} --> ${fmtTime(s.end, 'vtt')}\n${s.text}\n\n`
-            })
+            out = (fileType === 'vtt' ? vttHeader : 'WEBVTT') + '\n\n';
+            currentSubs.forEach(s => {
+                (s.pre || []).forEach(b => out += b + '\n\n');
+                const set = fileType === 'vtt' && s.settings ? ' ' + s.settings : '';
+                out += `${s.id ? s.id + '\n' : ''}${fmtTime(s.start, 'vtt')} --> ${fmtTime(s.end, 'vtt')}${set}\n${s.text}\n\n`
+            });
+            if (fileType === 'vtt') vttTail.forEach(b => out += b + '\n\n')
         } else {
             currentSubs.forEach((s, i) => {
                 out += `${i + 1}\n${fmtTime(s.start, 'srt')} --> ${fmtTime(s.end, 'srt')}\n${s.text}\n\n`
