@@ -25,7 +25,7 @@ Chromium rather than unit-testing extracted copies of its code, because the fail
 matter there are the quiet ones — a conversion that returns the wrong file type, a parser
 that drops half its input, a route through five steps that could never work.
 
-Seven suites:
+Eight suites:
 
 | suite | what it checks |
 | --- | --- |
@@ -35,6 +35,7 @@ Seven suites:
 | `roundtrip` | convert out and back, and insist the data survives |
 | `adversarial` | malformed, empty, unicode and otherwise unkind input |
 | `codecs` | the hand-written QR, BMP and TIFF codecs against reference implementations |
+| `media` | the ffmpeg engine under failure — crashes, repeated failures, formats that once failed every time |
 | `ui` | the real page flows with a hostile file name, merging, and the default target a dropped file gets |
 
 Fixtures are generated at runtime — `everything_converter_fixtures.js` is injected into the
@@ -44,8 +45,23 @@ byte order, photometric interpretation, strip layout and compression the decoder
 support. Nothing binary is committed.
 
 Converters that fetch a library from a CDN (ffmpeg.wasm, pdf.js, tesseract, JSZip, mammoth,
-js-yaml, marked, xlsx) are reported as **skipped, not passed**, when the network is
-unavailable, so the suite stays useful offline without pretending to cover them.
+js-yaml, marked, xlsx and more) are reported as **skipped, not passed**, when the network is
+unavailable. To run them offline anyway, install the same pinned versions and pass
+`--mirror`, which answers the page's CDN requests from `node_modules` — the exact files
+production loads, with no network:
+
+```sh
+npm i --no-save heic2any@0.0.4 json5@2.2.3 pdf-lib@1.17.1 xlsx@0.18.5 js-yaml@4.1.0 \
+  jszip@3.10.1 mammoth@1.11.0 marked@15.0.4 msgpack-lite@0.1.26 pdfjs-dist@3.11.174 \
+  tesseract.js@5.1.0 turndown@7.2.1 jspdf@2.5.2 @ffmpeg/ffmpeg@0.12.10 \
+  @ffmpeg/util@0.12.1 @ffmpeg/core@0.12.10 @tesseract.js-data/eng
+node test/everything_converter.mjs --mirror
+```
+
+The versions must match the URLs in the page; `cdn_mirror.mjs` lists them and says which it
+could not serve. With the libraries available, fixtures that need them are built too — PDF,
+spreadsheets, DOCX and every audio and video container — so their converters are exercised
+rather than skipped.
 
 `qrcode`, `jsqr`, `utif` and `bmp-js` are optional: the `codecs` suite cross-checks against
 them when they are installed and skips those comparisons when they are not.

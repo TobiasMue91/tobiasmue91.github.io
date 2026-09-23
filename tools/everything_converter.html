@@ -2054,8 +2054,20 @@ registerConverter({
     weight: 2,
     lib: 'https://cdnjs.cloudflare.com/ajax/libs/turndown/7.2.1/turndown.min.js',
     convert: async (blob) => {
-        const td = new TurndownService();
-        return new Blob([td.turndown(await blob.text())], {type: 'text/markdown'});
+        // Only the body is content. Handed the whole document, Turndown wrote the <title>
+        // into the Markdown as a stray first line, along with any inline scripts and styles.
+        const doc = new DOMParser().parseFromString(await blob.text(), 'text/html');
+        doc.querySelectorAll('script, style, noscript, template').forEach(el => el.remove());
+        const td = new TurndownService({headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-'});
+        // Tables become pipe tables; left to Turndown they flattened into one cell per line.
+        td.addRule('table', {
+            filter: 'table',
+            replacement: (content, node) => {
+                const rows = Array.from(node.rows).map(r => Array.from(r.cells).map(c => c.textContent.trim()));
+                return rows.length ? '\n\n' + rowsToMarkdownTable(rows) + '\n' : '';
+            }
+        });
+        return new Blob([td.turndown(doc.body || doc.documentElement)], {type: 'text/markdown'});
     }
 });
 registerConverter({
@@ -2703,12 +2715,12 @@ registerConverter({
     outputs: ['audio/wav'],
     weight: 2,
     lib: null,
-    convert: async (blob) => {
+    convert: async (blob, fromMime) => {
         const ctxClass = window.AudioContext || window.webkitAudioContext;
         if (!ctxClass) throw new Error('Web Audio not supported in this browser');
         const aCtx = new ctxClass();
         try {
-            const buffer = await aCtx.decodeAudioData(await blob.arrayBuffer());
+            const buffer = await decodeAudioBuffer(aCtx, blob, fromMime);
             const numChan = buffer.numberOfChannels, sampleRate = buffer.sampleRate;
             const loc = buffer.length * numChan * 2 + 44;
             const audioArr = new ArrayBuffer(loc);
@@ -2770,6 +2782,84 @@ let _ffmpegInstance = null;
 let _ffmpegLoading = null;
 let _ffmpegProgress = null;   // callback set per-conversion
 let _ffmpegUtil = null;       // {fetchFile, toBlobURL} once loaded
+const _ffmpegLog = [];        // recent engine output, to explain a failure
+
+// Throw the engine away so the next call starts a fresh one. After a failed encode the
+// WebAssembly heap can be left corrupt: the second failed WebM encode in a session made
+// every later conversion - MP3, MP4, anything - die with "memory access out of bounds"
+// until the page was reloaded. A timed-out command is no better: the worker keeps
+// running it and every later command queues behind. Reloading is cheap - the 32 MB core
+// is cached in IndexedDB - so any abnormal ending resets.
+function ffmpegReset() {
+    const inst = _ffmpegInstance;
+    _ffmpegInstance = null;
+    _ffmpegLoading = null;
+    try {
+        if (inst) inst.terminate();
+    } catch (_) {
+    }
+}
+
+// The line in ffmpeg's own output that says what went wrong, if there is one.
+function ffmpegLastError() {
+    const lines = _ffmpegLog.filter(l => /error|invalid|unknown|not found|unsupported|could not|no such|does not/i.test(l)
+        && !/^Conversion failed!?$/.test(l.trim()));
+    return lines.length ? lines[lines.length - 1].replace(/^\[[^\]]*@ 0x[0-9a-f]+\]\s*/i, '').trim() : '';
+}
+
+// Run one ffmpeg command. Resolves only when ffmpeg exited cleanly; exec() RESOLVES with
+// a non-zero exit code rather than throwing, which used to let a failed encode that left
+// an empty file through as a successful, 0-byte conversion.
+async function ffmpegRun(ffmpeg, args, timeoutMs) {
+    _ffmpegLog.length = 0;
+    let code;
+    try {
+        code = await withTimeout(ffmpeg.exec(args), timeoutMs, 'Conversion');
+    } catch (e) {
+        ffmpegReset();
+        if (/timed out/i.test(describeError(e))) {
+            throw new Error('the conversion timed out - the file may be too large for in-browser processing on this device.');
+        }
+        const err = new Error('the FFmpeg engine crashed (' + describeError(e) + ')');
+        err.crashed = true;
+        throw err;
+    }
+    if (code !== 0) {
+        ffmpegReset();
+        throw new Error(ffmpegLastError() || ('FFmpeg exited with code ' + code));
+    }
+}
+
+// Run a whole job again on a fresh engine if the engine crashed during it. The crashes are
+// not tied to the input - the same conversion succeeds on a fresh engine - but surface
+// after many runs in one session, so one retry hides them from the person converting.
+async function ffmpegRetryOnCrash(job) {
+    try {
+        return await job();
+    } catch (e) {
+        if (!e.crashed) throw e;
+        return await job();
+    }
+}
+
+// Read an output file, treating a missing or empty file as no output.
+async function ffmpegReadOutput(ffmpeg, name) {
+    try {
+        const data = await ffmpeg.readFile(name);
+        return data && data.length ? data : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function ffmpegDelete(ffmpeg, names) {
+    for (const n of names) {
+        try {
+            await ffmpeg.deleteFile(n);
+        } catch (_) {
+        }
+    }
+}
 
 // Turn any thrown value into a readable string (Error, DOMException, event, string, …).
 function describeError(e) {
@@ -2938,7 +3028,10 @@ async function getFFmpeg() {
         });
         // Surface engine logs to the console — invaluable if a specific codec ever fails.
         ffmpeg.on('log', ({message}) => {
-            if (message) console.debug('[ffmpeg]', message);
+            if (!message) return;
+            console.debug('[ffmpeg]', message);
+            _ffmpegLog.push(message);
+            if (_ffmpegLog.length > 80) _ffmpegLog.shift();
         });
 
         // Build a same-origin, self-contained module worker (see helper above).
@@ -3015,7 +3108,9 @@ function buildFFmpegJob(fromMime, toMime, inName) {
             'audio/wav': ['-vn', '-c:a', 'pcm_s16le'],
             'audio/ogg': ['-vn', '-c:a', 'libvorbis', '-q:a', '5'],
             'audio/opus': ['-vn', '-c:a', 'libopus', '-b:a', '160k'],
-            'audio/webm': ['-vn', '-c:a', 'libopus', '-b:a', '160k'],
+            // .weba is WebM's audio extension, but ffmpeg only knows the muxer by name
+            // ("output.weba: Invalid argument"), so it is named explicitly.
+            'audio/webm': ['-vn', '-c:a', 'libopus', '-b:a', '160k', '-f', 'webm'],
             'audio/flac': ['-vn', '-c:a', 'flac'],
             'audio/aac': ['-vn', '-c:a', 'aac', '-b:a', '192k'],
             'audio/mp4': ['-vn', '-c:a', 'aac', '-b:a', '192k']
@@ -3025,7 +3120,10 @@ function buildFFmpegJob(fromMime, toMime, inName) {
     } else if (toVideo) {
         const videoArgs = {
             'video/mp4': ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart'],
-            'video/webm': ['-c:v', 'libvpx', '-b:v', '1M', '-c:a', 'libvorbis'],
+            // yuv420p: given a source with alpha, libvpx picks a transparent pixel format that
+            // VP8 cannot encode with its defaults, and fails to open. (VP9 is no alternative:
+            // it crashes this single-threaded core outright.)
+            'video/webm': ['-c:v', 'libvpx', '-b:v', '1M', '-pix_fmt', 'yuv420p', '-c:a', 'libvorbis'],
             'video/x-matroska': ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-b:a', '192k'],
             // Containers without a free/available encoder fall back to a safe H.264/AAC remux target.
             'video/quicktime': ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k'],
@@ -3045,65 +3143,47 @@ function buildFFmpegJob(fromMime, toMime, inName) {
 }
 
 async function ffmpegConvert(blob, fromMime, toMime) {
-    const ffmpeg = await getFFmpeg();
+    await getFFmpeg();
     const {fetchFile} = _ffmpegUtil;
     const inExt = (FORMAT_REGISTRY[fromMime]?.ext) || 'bin';
     const inName = 'input.' + inExt;
     const job = buildFFmpegJob(fromMime, toMime, inName);
     if (!job) throw new Error(`No FFmpeg recipe for ${fromMime} → ${toMime}`);
-    await ffmpeg.writeFile(inName, await fetchFile(blob));
+    const input = await fetchFile(blob);
     // Scale a watchdog to file size: WASM is slow on mobile, so allow generous time
     // (~90s per 10 MB, min 2 min, cap 20 min) but never hang the UI indefinitely.
     const execTimeout = Math.min(1200000, Math.max(120000, Math.round((blob.size / 10485760) * 90000)));
     const isStillFrame = fromMime.startsWith('video/') && (toMime === 'image/png' || toMime === 'image/jpeg');
 
-    // Helper: run one ffmpeg exec, then report whether it produced a readable output file.
-    const runAttempt = async (fullArgs) => {
+    // One attempt: a failure resets the engine, so each attempt fetches it afresh and
+    // writes its own copy of the input (writeFile transfers - and so empties - its buffer).
+    let lastError = null;
+    const attempt = async (pre) => {
+        const ffmpeg = await getFFmpeg();
+        await ffmpeg.writeFile(inName, input.slice());
         try {
-            await withTimeout(ffmpeg.exec(fullArgs), execTimeout, 'Conversion');
+            await ffmpegRun(ffmpeg, pre.concat(['-i', inName], job.args), execTimeout);
+            return await ffmpegReadOutput(ffmpeg, job.out);
         } catch (e) {
-            const msg = describeError(e);
-            if (/timed out/i.test(msg)) throw new Error('the conversion timed out — the file may be too large for in-browser processing on this device.');
-            return null; // treat exec failure as "no output"; caller decides whether to retry/throw
-        }
-        try {
-            return await ffmpeg.readFile(job.out);
-        } catch (_) {
+            if (/timed out/i.test(e.message) || e.crashed) throw e;
+            lastError = e;
             return null;
+        } finally {
+            await ffmpegDelete(ffmpeg, [inName, job.out]);
         }
     };
+    const tryOnce = pre => ffmpegRetryOnCrash(() => attempt(pre)).catch(e => {
+        if (!e.crashed) throw e;
+        lastError = e;
+        return null;
+    });
 
-    let data = null;
-    if (isStillFrame) {
-        // Prefer a frame ~1s in (skips black/intro frames); seek BEFORE -i for speed.
-        data = await runAttempt(['-ss', '00:00:01', '-i', inName].concat(job.args));
-        // Short clip (<1s): the seek lands past the end and yields nothing — retry from start.
-        if (!data) {
-            try {
-                await ffmpeg.deleteFile(job.out);
-            } catch (_) {
-            }
-            data = await runAttempt(['-i', inName].concat(job.args));
-        }
-    } else {
-        data = await runAttempt(['-i', inName].concat(job.args));
-    }
-
+    // A still frame is taken ~1s in, past any black intro; a clip shorter than that
+    // yields nothing, so it is retried from the start.
+    let data = await tryOnce(isStillFrame ? ['-ss', '00:00:01'] : []);
+    if (!data && isStillFrame) data = await tryOnce([]);
     if (!data) {
-        try {
-            await ffmpeg.deleteFile(inName);
-        } catch (_) {
-        }
-        throw new Error('FFmpeg produced no output — the file may be corrupt or use an unsupported codec.');
-    }
-    // Clean up the virtual filesystem so repeated/batch runs don't collide or leak memory.
-    try {
-        await ffmpeg.deleteFile(inName);
-    } catch (_) {
-    }
-    try {
-        await ffmpeg.deleteFile(job.out);
-    } catch (_) {
+        throw new Error('FFmpeg could not convert this file' + (lastError ? ': ' + lastError.message : ' - it produced no output.'));
     }
     const outMime = toMime === 'image/gif' ? 'image/gif' : toMime;
     return new Blob([data.buffer || data], {type: outMime});
@@ -3131,7 +3211,7 @@ function makeBlackPngBytes(w, h) {
 // don't include that tuning preset and abort with no output when it's passed.
 const FFMPEG_STILL_VMAP = {
     'video/mp4': ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart'],
-    'video/webm': ['-c:v', 'libvpx', '-b:v', '200k', '-c:a', 'libvorbis'],
+    'video/webm': ['-c:v', 'libvpx', '-b:v', '200k', '-pix_fmt', 'yuv420p', '-c:a', 'libvorbis'],
     'video/x-matroska': ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k'],
     'video/quicktime': ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k'],
     'video/x-msvideo': ['-c:v', 'mpeg4', '-q:v', '5', '-c:a', 'libmp3lame', '-q:a', '4'],
@@ -3170,6 +3250,10 @@ function makeSilentWavBytes(seconds, sampleRate = 44100) {
 // track). Useful for platforms that only accept video uploads. Uses the same looped-input
 // mechanism as audio→video, so it depends only on demuxers/encoders already exercised there.
 async function ffmpegImageToVideo(blob, fromMime, toMime) {
+    return ffmpegRetryOnCrash(() => ffmpegImageToVideoOnce(blob, fromMime, toMime));
+}
+
+async function ffmpegImageToVideoOnce(blob, fromMime, toMime) {
     const ffmpeg = await getFFmpeg();
     const {fetchFile} = _ffmpegUtil;
     const spec = FORMAT_REGISTRY[toMime];
@@ -3202,20 +3286,17 @@ async function ffmpegImageToVideo(blob, fromMime, toMime) {
         } catch (_) {
         }
     };
+    let data;
     try {
-        await withTimeout(ffmpeg.exec(args), 240000, 'Conversion');
+        await ffmpegRun(ffmpeg, args, 240000);
+        data = await ffmpegReadOutput(ffmpeg, out);
     } catch (e) {
-        const msg = describeError(e);
+        const err = new Error('FFmpeg could not turn this image into a video: ' + e.message);
+        err.crashed = e.crashed;
+        throw err;
+    } finally {
         await cleanup();
-        if (/timed out/i.test(msg)) throw new Error('the conversion timed out — the image may be too large for in-browser processing on this device.');
-        throw new Error('FFmpeg could not turn this image into a video.');
     }
-    let data = null;
-    try {
-        data = await ffmpeg.readFile(out);
-    } catch (_) {
-    }
-    await cleanup();
     if (!data) throw new Error('FFmpeg produced no video output.');
     return new Blob([data.buffer || data], {type: toMime});
 }
@@ -3225,6 +3306,10 @@ async function ffmpegImageToVideo(blob, fromMime, toMime) {
 // filter being compiled into this WASM core). This is a genuine conversion — the output
 // is a valid video file you can upload anywhere that requires video.
 async function ffmpegAudioToVideo(blob, fromMime, toMime) {
+    return ffmpegRetryOnCrash(() => ffmpegAudioToVideoOnce(blob, fromMime, toMime));
+}
+
+async function ffmpegAudioToVideoOnce(blob, fromMime, toMime) {
     const ffmpeg = await getFFmpeg();
     const {fetchFile} = _ffmpegUtil;
     const spec = FORMAT_REGISTRY[toMime];
@@ -3232,46 +3317,39 @@ async function ffmpegAudioToVideo(blob, fromMime, toMime) {
     const inExt = (FORMAT_REGISTRY[fromMime]?.ext) || 'bin';
     const inName = 'input.' + inExt;
     const out = 'output.' + spec.ext;
-    await ffmpeg.writeFile(inName, await fetchFile(blob));
-    await ffmpeg.writeFile('bg.png', makeBlackPngBytes(640, 360));
     const vmap = FFMPEG_STILL_VMAP[toMime];
     if (!vmap) throw new Error('Unsupported video target for audio.');
+    await ffmpeg.writeFile(inName, await fetchFile(blob));
+    await ffmpeg.writeFile('bg.png', makeBlackPngBytes(640, 360));
     const args = ['-loop', '1', '-framerate', '2', '-i', 'bg.png', '-i', inName].concat(vmap).concat(['-shortest', out]);
     const execTimeout = Math.min(1200000, Math.max(120000, Math.round((blob.size / 10485760) * 90000)));
+    let data;
     try {
-        await withTimeout(ffmpeg.exec(args), execTimeout, 'Conversion');
+        await ffmpegRun(ffmpeg, args, execTimeout);
+        data = await ffmpegReadOutput(ffmpeg, out);
     } catch (e) {
-        const msg = describeError(e);
-        try {
-            await ffmpeg.deleteFile(inName);
-        } catch (_) {
-        }
-        try {
-            await ffmpeg.deleteFile('bg.png');
-        } catch (_) {
-        }
-        if (/timed out/i.test(msg)) throw new Error('the conversion timed out — the audio may be too long for in-browser processing on this device.');
-        throw new Error('FFmpeg could not wrap this audio into a video.');
-    }
-    let data = null;
-    try {
-        data = await ffmpeg.readFile(out);
-    } catch (_) {
-    }
-    try {
-        await ffmpeg.deleteFile(inName);
-    } catch (_) {
-    }
-    try {
-        await ffmpeg.deleteFile('bg.png');
-    } catch (_) {
-    }
-    try {
-        await ffmpeg.deleteFile(out);
-    } catch (_) {
+        const err = new Error('FFmpeg could not wrap this audio into a video: ' + e.message);
+        err.crashed = e.crashed;
+        throw err;
+    } finally {
+        await ffmpegDelete(ffmpeg, [inName, 'bg.png', out]);
     }
     if (!data) throw new Error('FFmpeg produced no video output.');
     return new Blob([data.buffer || data], {type: toMime});
+}
+
+// Web Audio decodes only what this browser can play: some builds have no AAC at all, and
+// several refuse raw ADTS .aac. The waveform, spectrogram, pitch-to-MIDI and WAV converters
+// all read audio this way, and failed outright on those files. FFmpeg decodes anything it
+// is given, so a file the browser cannot read goes through a WAV made by FFmpeg instead.
+async function decodeAudioBuffer(ctx, blob, fromMime) {
+    try {
+        return await ctx.decodeAudioData(await blob.arrayBuffer());
+    } catch (e) {
+        if (fromMime === 'audio/wav' || !FFMPEG_AUDIO_INPUTS.includes(fromMime)) throw e;
+        const wav = await ffmpegConvert(blob, fromMime, 'audio/wav');
+        return await ctx.decodeAudioData(await wav.arrayBuffer());
+    }
 }
 
 // Source MIME groups the ffmpeg engine can read.
@@ -6559,13 +6637,13 @@ registerConverter({
     weight: 4,
     terminal: true,
     lib: null,
-    convert: async (blob) => {
+    convert: async (blob, fromMime) => {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) throw new Error('Web Audio is not available in this browser');
         const ac = new AC();
         let buf;
         try {
-            buf = await ac.decodeAudioData(await blob.arrayBuffer());
+            buf = await decodeAudioBuffer(ac, blob, fromMime);
         } catch (e) {
             ac.close();
             throw new Error('Could not decode this audio file');
@@ -7085,13 +7163,13 @@ registerConverter({
     weight: 5,
     terminal: true,
     lib: null,
-    convert: async (blob) => {
+    convert: async (blob, fromMime) => {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) throw new Error('Web Audio is not available in this browser');
         const ac = new AC();
         let buf;
         try {
-            buf = await ac.decodeAudioData(await blob.arrayBuffer());
+            buf = await decodeAudioBuffer(ac, blob, fromMime);
         } catch (e) {
             ac.close();
             throw new Error('Could not decode this audio file');
@@ -8260,13 +8338,13 @@ registerConverter({
     weight: 6,
     terminal: true,
     lib: null,
-    convert: async (blob) => {
+    convert: async (blob, fromMime) => {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) throw new Error('Web Audio is not available in this browser');
         const ac = new AC();
         let buf;
         try {
-            buf = await ac.decodeAudioData(await blob.arrayBuffer());
+            buf = await decodeAudioBuffer(ac, blob, fromMime);
         } catch (e) {
             ac.close();
             throw new Error('Could not decode this audio file');
@@ -8287,6 +8365,141 @@ registerConverter({
     }
 });
 
+// Frames are read by the browser's own <video> decoder, which is fast but knows fewer
+// formats than the inputs listed here: no browser plays AVI or MPEG-PS, and some builds
+// cannot play H.264 at all. Those used to fail outright with "could not decode"; now
+// FFmpeg re-encodes the clip to VP8 WebM, which every current browser plays, and the
+// frames are read from that instead.
+async function videoFramesToZip(blob, options) {
+    if (!window.JSZip) await loadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
+    const url = URL.createObjectURL(blob);
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    try {
+        await new Promise((res, rej) => {
+            video.onloadedmetadata = res;
+            video.onerror = () => rej(new Error('The browser could not decode this video'));
+            video.src = url;
+        });
+        const dur = video.duration;
+        if (!isFinite(dur) || dur <= 0) throw new Error('Could not determine the video duration');
+        const interval = (options && options.frameIntervalS) || 1;
+        const distinctMode = interval === 0; // "All distinct frames" option
+        const MAX_FRAMES = distinctMode ? 300 : 150;
+        const scale = Math.min(1, 1280 / Math.max(video.videoWidth || 1, video.videoHeight || 1));
+        const W = Math.max(2, Math.round((video.videoWidth || 640) * scale));
+        const H = Math.max(2, Math.round((video.videoHeight || 360) * scale));
+        const c = document.createElement('canvas');
+        c.width = W;
+        c.height = H;
+        const ctx = c.getContext('2d');
+        // tiny thumbnail canvas for cheap frame-difference scoring
+        const tc = document.createElement('canvas');
+        tc.width = 32;
+        tc.height = 18;
+        const tctx = tc.getContext('2d', {willReadFrequently: true});
+        let lastThumb = null;
+        const frameDiff = () => {
+            tctx.drawImage(video, 0, 0, 32, 18);
+            const d = tctx.getImageData(0, 0, 32, 18).data;
+            const thumb = new Float32Array(32 * 18);
+            for (let i = 0; i < thumb.length; i++) {
+                thumb[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+            }
+            if (!lastThumb) {
+                lastThumb = thumb;
+                return Infinity;
+            }
+            let sum = 0;
+            for (let i = 0; i < thumb.length; i++) sum += Math.abs(thumb[i] - lastThumb[i]);
+            const mean = sum / thumb.length;
+            if (mean > 3) lastThumb = thumb;
+            return mean;
+        };
+        const zip = new JSZip();
+        const index = ['frame,time_s'];
+        const captured = [];
+        const capture = async t => {
+            ctx.drawImage(video, 0, 0, W, H);
+            const png = await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('Frame capture failed')), 'image/png'));
+            captured.push({png, t});
+        };
+        let truncated = false;
+        if (distinctMode && 'requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+            // Play through (muted, sped up) and let the browser hand us every presented
+            // frame; keep the ones that visibly differ from the last kept frame.
+            video.playbackRate = Math.min(4, Math.max(1, 16 / Math.max(1, dur / 30)));
+            let pendingCaptures = Promise.resolve();
+            await new Promise((resolve, reject) => {
+                const tick = (now, meta) => {
+                    if (video.ended || captured.length >= MAX_FRAMES) {
+                        resolve();
+                        return;
+                    }
+                    const diff = frameDiff();
+                    if (diff > 3) {
+                        const t = meta.mediaTime;
+                        pendingCaptures = pendingCaptures.then(() => capture(t));
+                    }
+                    video.requestVideoFrameCallback(tick);
+                };
+                video.onended = () => resolve();
+                video.onerror = () => reject(new Error('Video decode error during playback capture'));
+                video.requestVideoFrameCallback(tick);
+                video.play().catch(() => {
+                    // Autoplay refused even muted: fall back to seek stepping below.
+                    resolve();
+                });
+                setTimeout(() => resolve(), Math.min(120000, (dur / video.playbackRate + 15) * 1000)); // hard safety stop
+            });
+            video.pause();
+            await pendingCaptures; // let in-flight frame encodes finish
+            captured.sort((x, y) => x.t - y.t);
+            truncated = captured.length >= MAX_FRAMES && !video.ended;
+        }
+        if (!distinctMode || !captured.length) {
+            // Fixed-interval seeking (also the fallback when playback capture yields
+            // nothing). In distinct mode the fallback steps densely and dedups.
+            const stepS = distinctMode ? Math.max(0.2, dur / MAX_FRAMES) : interval;
+            const count = Math.min(MAX_FRAMES, Math.max(1, Math.floor(dur / stepS) + 1));
+            const step = count > 1 ? Math.min(stepS, dur / (count - 1)) : 0;
+            lastThumb = null;
+            for (let i = 0; i < count; i++) {
+                const t = Math.min(dur - 0.01, i * step);
+                await new Promise((res, rej) => {
+                    const tmo = setTimeout(() => rej(new Error('Seeking timed out - the video codec may not support frame-accurate seeks')), 8000);
+                    video.onseeked = () => {
+                        clearTimeout(tmo);
+                        res();
+                    };
+                    video.onerror = () => {
+                        clearTimeout(tmo);
+                        rej(new Error('Video decode error while seeking'));
+                    };
+                    video.currentTime = t;
+                });
+                if (distinctMode && frameDiff() <= 3) continue;
+                await capture(t);
+            }
+            truncated = truncated || (!distinctMode && Math.floor(dur / interval) + 1 > MAX_FRAMES);
+        }
+        if (!captured.length) throw new Error('No frames could be captured from this video');
+        const pad = String(captured.length).length;
+        captured.forEach((f, i) => {
+            const name = `frame-${String(i + 1).padStart(pad, '0')}.png`;
+            zip.file(name, f.png);
+            index.push(`${name},${f.t.toFixed(2)}`);
+        });
+        zip.file('index.csv', index.join('\n') + '\n');
+        if (truncated) zip.file('NOTE.txt', `Capped at ${MAX_FRAMES} frames.`);
+        return await zip.generateAsync({type: 'blob', compression: 'STORE'});
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
 registerConverter({
     id: 'video-frames-to-zip',
     name: 'Video Frames to ZIP',
@@ -8296,132 +8509,11 @@ registerConverter({
     terminal: true,
     lib: null,
     convert: async (blob, from, to, options) => {
-        if (!window.JSZip) await loadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
-        const url = URL.createObjectURL(blob);
-        const video = document.createElement('video');
-        video.muted = true;
-        video.playsInline = true;
-        video.preload = 'auto';
         try {
-            await new Promise((res, rej) => {
-                video.onloadedmetadata = res;
-                video.onerror = () => rej(new Error('The browser could not decode this video'));
-                video.src = url;
-            });
-            const dur = video.duration;
-            if (!isFinite(dur) || dur <= 0) throw new Error('Could not determine the video duration');
-            const interval = (options && options.frameIntervalS) || 1;
-            const distinctMode = interval === 0; // "All distinct frames" option
-            const MAX_FRAMES = distinctMode ? 300 : 150;
-            const scale = Math.min(1, 1280 / Math.max(video.videoWidth || 1, video.videoHeight || 1));
-            const W = Math.max(2, Math.round((video.videoWidth || 640) * scale));
-            const H = Math.max(2, Math.round((video.videoHeight || 360) * scale));
-            const c = document.createElement('canvas');
-            c.width = W;
-            c.height = H;
-            const ctx = c.getContext('2d');
-            // tiny thumbnail canvas for cheap frame-difference scoring
-            const tc = document.createElement('canvas');
-            tc.width = 32;
-            tc.height = 18;
-            const tctx = tc.getContext('2d', {willReadFrequently: true});
-            let lastThumb = null;
-            const frameDiff = () => {
-                tctx.drawImage(video, 0, 0, 32, 18);
-                const d = tctx.getImageData(0, 0, 32, 18).data;
-                const thumb = new Float32Array(32 * 18);
-                for (let i = 0; i < thumb.length; i++) {
-                    thumb[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
-                }
-                if (!lastThumb) {
-                    lastThumb = thumb;
-                    return Infinity;
-                }
-                let sum = 0;
-                for (let i = 0; i < thumb.length; i++) sum += Math.abs(thumb[i] - lastThumb[i]);
-                const mean = sum / thumb.length;
-                if (mean > 3) lastThumb = thumb;
-                return mean;
-            };
-            const zip = new JSZip();
-            const index = ['frame,time_s'];
-            const captured = [];
-            const capture = async t => {
-                ctx.drawImage(video, 0, 0, W, H);
-                const png = await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('Frame capture failed')), 'image/png'));
-                captured.push({png, t});
-            };
-            let truncated = false;
-            if (distinctMode && 'requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-                // Play through (muted, sped up) and let the browser hand us every presented
-                // frame; keep the ones that visibly differ from the last kept frame.
-                video.playbackRate = Math.min(4, Math.max(1, 16 / Math.max(1, dur / 30)));
-                let pendingCaptures = Promise.resolve();
-                await new Promise((resolve, reject) => {
-                    const tick = (now, meta) => {
-                        if (video.ended || captured.length >= MAX_FRAMES) {
-                            resolve();
-                            return;
-                        }
-                        const diff = frameDiff();
-                        if (diff > 3) {
-                            const t = meta.mediaTime;
-                            pendingCaptures = pendingCaptures.then(() => capture(t));
-                        }
-                        video.requestVideoFrameCallback(tick);
-                    };
-                    video.onended = () => resolve();
-                    video.onerror = () => reject(new Error('Video decode error during playback capture'));
-                    video.requestVideoFrameCallback(tick);
-                    video.play().catch(() => {
-                        // Autoplay refused even muted: fall back to seek stepping below.
-                        resolve();
-                    });
-                    setTimeout(() => resolve(), Math.min(120000, (dur / video.playbackRate + 15) * 1000)); // hard safety stop
-                });
-                video.pause();
-                await pendingCaptures; // let in-flight frame encodes finish
-                captured.sort((x, y) => x.t - y.t);
-                truncated = captured.length >= MAX_FRAMES && !video.ended;
-            }
-            if (!distinctMode || !captured.length) {
-                // Fixed-interval seeking (also the fallback when playback capture yields
-                // nothing). In distinct mode the fallback steps densely and dedups.
-                const stepS = distinctMode ? Math.max(0.2, dur / MAX_FRAMES) : interval;
-                const count = Math.min(MAX_FRAMES, Math.max(1, Math.floor(dur / stepS) + 1));
-                const step = count > 1 ? Math.min(stepS, dur / (count - 1)) : 0;
-                lastThumb = null;
-                for (let i = 0; i < count; i++) {
-                    const t = Math.min(dur - 0.01, i * step);
-                    await new Promise((res, rej) => {
-                        const tmo = setTimeout(() => rej(new Error('Seeking timed out - the video codec may not support frame-accurate seeks')), 8000);
-                        video.onseeked = () => {
-                            clearTimeout(tmo);
-                            res();
-                        };
-                        video.onerror = () => {
-                            clearTimeout(tmo);
-                            rej(new Error('Video decode error while seeking'));
-                        };
-                        video.currentTime = t;
-                    });
-                    if (distinctMode && frameDiff() <= 3) continue;
-                    await capture(t);
-                }
-                truncated = truncated || (!distinctMode && Math.floor(dur / interval) + 1 > MAX_FRAMES);
-            }
-            if (!captured.length) throw new Error('No frames could be captured from this video');
-            const pad = String(captured.length).length;
-            captured.forEach((f, i) => {
-                const name = `frame-${String(i + 1).padStart(pad, '0')}.png`;
-                zip.file(name, f.png);
-                index.push(`${name},${f.t.toFixed(2)}`);
-            });
-            zip.file('index.csv', index.join('\n') + '\n');
-            if (truncated) zip.file('NOTE.txt', `Capped at ${MAX_FRAMES} frames.`);
-            return await zip.generateAsync({type: 'blob', compression: 'STORE'});
-        } finally {
-            URL.revokeObjectURL(url);
+            return await videoFramesToZip(blob, options);
+        } catch (e) {
+            if (!/could not decode/i.test(e.message) || from === 'video/webm') throw e;
+            return await videoFramesToZip(await ffmpegConvert(blob, from, 'video/webm'), options);
         }
     }
 });
