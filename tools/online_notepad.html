@@ -840,6 +840,10 @@
 
     function initApp() {
         loadNotesFromStorage();
+        if (app.notes.length) {
+            app.selectedNoteIndex = app.notes.reduce((best, n, i) =>
+                (n.lastModified || "") > (app.notes[best].lastModified || "") ? i : best, 0)
+        }
         setupEventListeners();
         updateUI();
         if (app.darkMode) {
@@ -899,7 +903,6 @@
 
     function updateUI() {
         renderNotesList();
-        updateWordCount();
         updateSaveStatus(false);
         if (app.selectedNoteIndex >= 0 && app.selectedNoteIndex < app.notes.length) {
             const note = app.notes[app.selectedNoteIndex];
@@ -911,6 +914,7 @@
             elements.editor.innerHTML = "";
             elements.deleteNote.classList.add("hidden")
         }
+        updateWordCount();
         updateHistoryButtons()
     }
 
@@ -957,6 +961,7 @@
     }
 
     function createNewNote() {
+        if (app.unsavedChanges) autoSave();
         if (app.unsavedChanges) {
             showConfirmDialog("You have unsaved changes. Are you sure you want to create a new note?", () => {
                 createNoteImpl()
@@ -984,6 +989,7 @@
     }
 
     function selectNote(index) {
+        if (app.unsavedChanges) autoSave();
         if (app.unsavedChanges && app.selectedNoteIndex !== index) {
             showConfirmDialog("You have unsaved changes. Are you sure you want to switch notes?", () => {
                 selectNoteImpl(index)
@@ -1086,12 +1092,14 @@
     function handleEditorChange() {
         app.unsavedChanges = true;
         updateSaveStatus(false);
-        updateWordCount()
+        updateWordCount();
+        scheduleAutosave()
     }
 
     function handleTitleChange() {
         app.unsavedChanges = true;
-        updateSaveStatus(false)
+        updateSaveStatus(false);
+        scheduleAutosave()
     }
 
     function searchInEditor() {
@@ -1218,17 +1226,32 @@
     }
 
     function setupAutosave() {
-        const AUTOSAVE_INTERVAL = 30000;
-        setInterval(() => {
-            if (app.unsavedChanges && app.selectedNoteIndex !== -1) {
-                autoSave()
-            }
-        }, AUTOSAVE_INTERVAL)
+        const flush = () => {
+            if (app.unsavedChanges) autoSave()
+        };
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden") flush()
+        });
+        window.addEventListener("pagehide", flush)
+    }
+
+    function scheduleAutosave() {
+        clearTimeout(app.autosaveTimer);
+        app.autosaveTimer = setTimeout(() => {
+            if (app.unsavedChanges) autoSave()
+        }, 500)
     }
 
     function autoSave() {
+        clearTimeout(app.autosaveTimer);
         const title = elements.noteTitle.value.trim() || "Untitled";
         const body = elements.editor.innerHTML;
+        if (app.selectedNoteIndex === -1) {
+            if (!elements.noteTitle.value.trim() && !elements.editor.innerText.trim()) return;
+            app.notes.unshift({created: new Date().toISOString()});
+            app.selectedNoteIndex = 0;
+            elements.deleteNote.classList.remove("hidden")
+        }
         app.notes[app.selectedNoteIndex] = {
             ...app.notes[app.selectedNoteIndex],
             title,
@@ -1236,6 +1259,7 @@
             lastModified: new Date().toISOString()
         };
         saveNotesToStorage();
+        renderNotesList();
         app.unsavedChanges = false;
         updateSaveStatus(true, true)
     }
@@ -1270,7 +1294,8 @@
         updateHistoryButtons();
         app.history.isRecording = true;
         app.unsavedChanges = true;
-        updateSaveStatus(false)
+        updateSaveStatus(false);
+        scheduleAutosave()
     }
 
     function redo() {
@@ -1284,7 +1309,8 @@
         updateHistoryButtons();
         app.history.isRecording = true;
         app.unsavedChanges = true;
-        updateSaveStatus(false)
+        updateSaveStatus(false);
+        scheduleAutosave()
     }
 
     function updateHistoryButtons() {
