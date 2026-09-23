@@ -14,7 +14,7 @@
 //   node test/moorhuhn.mjs --record            # print a fresh table instead of checking
 //   node test/moorhuhn.mjs --page=path.html    # run against another copy of the page
 //
-// Suites: hunt, cards.
+// Suites: hunt, cards, aim.
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -26,7 +26,7 @@ const args = process.argv.slice(2);
 const pageArg = args.find(a => a.startsWith('--page='));
 const PAGE = pageArg ? pageArg.slice(7) : join(HERE, '..', 'games', 'moorhuhn.html');
 const RECORD = args.includes('--record');
-const ALL = ['hunt', 'cards'];
+const ALL = ['hunt', 'cards', 'aim'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -179,7 +179,8 @@ function hunt(seed) {
                         const x = b.x - panX;
                         if (x < 8 || x > VW - 8 || b.y < 44) continue;
                         const s = ${rule} === 0 ? b.band : ${rule} === 1 ? -b.band : -Math.abs(x - VW / 2);
-                        if (!best || s < best.s) best = {s, x, y: b.y};
+                        const box = birdBox(b);
+                        if (!best || s < best.s) best = {s, x: box.x + box.w / 2 - panX, y: box.y + box.h / 2};
                     }
                     return best && [best.x, best.y];
                 })()`);
@@ -231,6 +232,38 @@ if (suites.includes('cards') && !RECORD) {
     check(page.el('ovScore').textContent.replace(/,/g, '') === String(page.get('score')), 'the card shows the score', page.el('ovScore').textContent);
     check(page.el('ovSeed').textContent === 'moor', 'the card names the seed', page.el('ovSeed').textContent);
     check(!page.el('overScreen').classList.contains('hidden'), 'the card is up');
+}
+
+if (suites.includes('aim') && !RECORD) {
+    // what you see is what you hit: a far bird bobbing off its flight line is hit where it
+    // is drawn, not where its line runs
+    section('aim');
+    const page = load();
+    page.el('seedInput').value = 'moor';
+    page.click('startBtn');
+    let tried = 0, hit = 0;
+    for (let f = 0; f < 60 * 30 && tried < 8; f++) {
+        page.frame();
+        if (page.get('cooldown') > 0 || page.get('reloadT') > 0) continue;
+        if (page.get('ammo') === 0) { page.down(2); continue; }
+        const t = page.get(`(() => {
+            for (const b of birds) {
+                if (b.dead || b.perched || b.band !== 0) continue;
+                // aim at the part of the drawn bird furthest from its line: its back when it has
+                // bobbed up, its belly when it has bobbed down
+                const off = Math.sin(b.bob) * b.bobAmp, x = b.x - panX, half = 15 * b.scale;
+                if (Math.abs(off) > 3 && x > VW * 0.2 && x < VW * 0.8) return [birds.indexOf(b), x, b.y + off + Math.sign(off) * half * 0.75];
+            }
+            return null;
+        })()`);
+        if (!t) continue;
+        tried++;
+        page.move(t[1], t[2]);
+        page.down(0);
+        if (page.get(`birds[${t[0]}].dead`)) hit++;
+    }
+    check(tried >= 5, 'enough far birds bobbed off their line to try', `${tried}`);
+    check(hit === tried, 'every shot at a far bird where it is drawn hits it', `${hit} of ${tried}`);
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

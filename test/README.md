@@ -107,6 +107,7 @@ purpose, rides both edges to pan and reloads when dry.
 | --- | --- |
 | `hunt` | score, hits, shells and reloads at the whistle, and a hash of the second-by-second trace (score, hits, shells, reloads, birds in the air, pan), against the table |
 | `cards` | the results card shows the score and the seed, and the first hunt is stored as the best |
+| `aim` | a shot at the back or belly of a far bird that has bobbed off its flight line hits it: the hit box rides the bob the bird is drawn with |
 
 Everything cosmetic on the page (feathers, dust, shells, shake) draws on `Math.random`, never on
 the seeded stream, which is what lets a repaint leave the trace alone.
