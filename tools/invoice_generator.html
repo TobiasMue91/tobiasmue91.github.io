@@ -807,13 +807,13 @@
                                             <td>Subtotal:</td>
                                             <td id="previewSubtotal">$0.00</td>
                                         </tr>
-                                        <tr id="previewTaxRow">
-                                            <td>Tax:</td>
-                                            <td id="previewTax">$0.00</td>
-                                        </tr>
                                         <tr id="previewDiscountRow">
-                                            <td>Discount:</td>
+                                            <td id="previewDiscountLabel">Discount:</td>
                                             <td id="previewDiscount">$0.00</td>
+                                        </tr>
+                                        <tr id="previewTaxRow">
+                                            <td id="previewTaxLabel">Tax:</td>
+                                            <td id="previewTax">$0.00</td>
                                         </tr>
                                         <tr id="previewShippingRow" style="display:none;">
                                             <td>Shipping:</td>
@@ -1288,7 +1288,7 @@ Your Business</textarea></div>
         const description = row.querySelector('.item-description').value;
         const quantity = parseFloat(row.querySelector('.item-quantity').value) || 0;
         const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
-        const amount = quantity * rate;
+        const amount = Math.round(+(quantity * rate * 100).toPrecision(12)) / 100;
         row.querySelector('.item-amount').value = amount.toFixed(2);
         invoiceData.items[index] = {description, quantity, rate, amount};
         calculateTotals();
@@ -1311,14 +1311,17 @@ Your Business</textarea></div>
     }
 
     function calculateTotals() {
-        let subtotal = invoiceData.items.reduce((sum, item) => sum + item.amount, 0);
+        // Every step is rounded to cents so the printed rows add up to the printed total,
+        // and tax is charged on what the client actually pays: subtotal minus discount.
+        const cents = n => Math.round(+(n * 100).toPrecision(12)) / 100;
+        let subtotal = cents(invoiceData.items.reduce((sum, item) => sum + cents(item.amount), 0));
         const taxRate = parseFloat(taxRateInput.value) || 0;
         const discountType = discountTypeSelect.value;
         const discountValue = parseFloat(discountInput.value) || 0;
-        const shipping = parseFloat(shippingInput.value) || 0;
-        const taxAmount = subtotal * (taxRate / 100);
-        let discountAmount = discountType === 'percentage' ? subtotal * (discountValue / 100) : discountValue;
-        const total = subtotal + taxAmount - discountAmount + shipping;
+        const shipping = cents(parseFloat(shippingInput.value) || 0);
+        let discountAmount = cents(Math.min(subtotal, discountType === 'percentage' ? subtotal * (discountValue / 100) : discountValue));
+        const taxAmount = cents((subtotal - discountAmount) * (taxRate / 100));
+        const total = cents(subtotal - discountAmount + taxAmount + shipping);
         invoiceData.subtotal = subtotal;
         invoiceData.taxRate = taxRate;
         invoiceData.taxAmount = taxAmount;
@@ -1329,6 +1332,7 @@ Your Business</textarea></div>
         const currencySymbol = getCurrencySymbol();
         previewSubtotal.textContent = formatCurrency(subtotal);
         previewTax.textContent = formatCurrency(taxAmount);
+        document.getElementById('previewTaxLabel').textContent = discountAmount > 0 ? `Tax (${taxRate}% of ${formatCurrency(subtotal - discountAmount)}):` : `Tax (${taxRate}%):`;
         if (taxRate > 0) {
             document.getElementById('previewTaxRow').style.display = '';
         } else {
@@ -1336,7 +1340,8 @@ Your Business</textarea></div>
         }
         if (discountValue > 0) {
             document.getElementById('previewDiscountRow').style.display = '';
-            previewDiscount.textContent = discountType === 'percentage' ? `${discountValue}% (${formatCurrency(discountAmount)})` : formatCurrency(discountAmount);
+            document.getElementById('previewDiscountLabel').textContent = discountType === 'percentage' ? `Discount (${discountValue}%):` : 'Discount:';
+            previewDiscount.textContent = `−${formatCurrency(discountAmount)}`;
         } else {
             document.getElementById('previewDiscountRow').style.display = 'none';
         }
