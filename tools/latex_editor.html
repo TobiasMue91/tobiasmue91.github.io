@@ -190,6 +190,24 @@
             margin-bottom: 0.5rem;
         }
 
+        .subsubsection-title { font-weight: bold; margin-top: 1rem; margin-bottom: 0.4rem; }
+        .latex-description { margin: 0 0 1rem 1rem; }
+        .latex-description dt { font-weight: bold; }
+        .latex-description dd { margin: 0 0 0.5rem 1.5rem; }
+        .latex-item-label { font-weight: bold; margin-left: -1.2rem; }
+        .latex-table { border-collapse: collapse; margin: 0.5rem auto 1rem; max-width: 100%; display: block; overflow-x: auto; width: max-content; }
+        .latex-table td { padding: 0.25rem 0.75rem; border-top: 1px solid rgba(128,128,128,.35); border-bottom: 1px solid rgba(128,128,128,.35); }
+        .latex-float { margin: 1rem 0; }
+        .latex-caption { text-align: center; font-size: 0.9em; margin: 0.25rem 0 0.75rem; }
+        .latex-quote { margin: 0 2rem 1rem; }
+        .latex-abstract { margin: 0 2rem 1.5rem; font-size: 0.95em; }
+        .latex-abstract-title { text-align: center; font-weight: bold; margin-bottom: 0.4rem; }
+        .latex-theorem { margin-bottom: 1rem; }
+        .latex-verbatim { font-family: monospace; font-size: 0.9em; white-space: pre-wrap; margin-bottom: 1rem; }
+        .latex-footnotes { border-top: 1px solid rgba(128,128,128,.4); margin-top: 2rem; padding: 0.5rem 0 0 1.5rem; font-size: 0.85em; }
+        .latex-placeholder { opacity: 0.7; font-style: italic; }
+        .latex-unknown { opacity: 0.6; font-family: monospace; font-size: 0.85em; }
+
         footer {
             background-color: #2e3440;
             color: white;
@@ -573,207 +591,459 @@
         shortcutHint.style.display = "none";
     }, 5000);
 
-    // Custom LaTeX to HTML parser
-    function parseLatexToHtml(latexCode) {
-        try {
-            // Extract metadata (title, author, date)
-            let title = "Untitled Document";
-            let author = "";
-            let date = "";
+    // LaTeX to HTML: a single pass over the source that respects brace nesting,
+    // environment nesting and comments. Maths is passed through untouched for MathJax;
+    // everything else is escaped, so what you see is what you typed.
+    const BLOCK_OPEN = '\u0001', BLOCK_CLOSE = '\u0002', PARA = '\u0003';
+    const MATH_ENVS = /^(equation|align|alignat|gather|multline|eqnarray|flalign|displaymath|math)\*?$/;
+    const VERBATIM_ENVS = /^(verbatim|lstlisting|minted|Verbatim)\*?$/;
+    const THEOREM_ENVS = /^(theorem|lemma|corollary|proposition|definition|example|remark|proof|exercise|solution|claim|note)\*?$/;
+    const INLINE_WRAP = {
+        textbf: ['<strong>', '</strong>'], textit: ['<em>', '</em>'], emph: ['<em>', '</em>'],
+        textsl: ['<em>', '</em>'], underline: ['<u>', '</u>'], texttt: ['<code>', '</code>'],
+        textsc: ['<span style="font-variant:small-caps">', '</span>'], textsf: ['<span style="font-family:sans-serif">', '</span>'],
+        textrm: ['', ''], textup: ['', ''], textmd: ['', ''], textnormal: ['', ''], mbox: ['', ''], text: ['', ''],
+        textsuperscript: ['<sup>', '</sup>'], textsubscript: ['<sub>', '</sub>']
+    };
+    const SYMBOLS = {
+        LaTeX: 'L<sup style="font-size:.75em;margin-left:-.3em">A</sup>T<sub style="margin-left:-.1em">E</sub>X', TeX: 'T<sub style="margin-left:-.1em">E</sub>X',
+        ldots: '…', dots: '…', textbackslash: '\\', S: '§', P: '¶', copyright: '©', textregistered: '®',
+        texttrademark: '™', textendash: '–', textemdash: '—', textbullet: '•', dag: '†', ddag: '‡',
+        pounds: '£', euro: '€', textdegree: '°', quad: '&emsp;', qquad: '&emsp;&emsp;', ss: 'ß',
+        newline: '<br>', linebreak: '<br>', par: PARA, indent: '', noindent: '', centering: '',
+        raggedright: '', raggedleft: '', hline: '', toprule: '', midrule: '', bottomrule: '',
+        newpage: '', clearpage: '', pagebreak: '', smallskip: '', medskip: '', bigskip: '',
+        tableofcontents: '', normalsize: '', small: '', footnotesize: '', scriptsize: '', tiny: '',
+        large: '', Large: '', LARGE: '', huge: '', Huge: '', bfseries: '', itshape: '', ttfamily: '',
+        and: '&emsp;', thanks: '', maketitle: '', appendix: '', protect: '', relax: '', hfill: ' ', vfill: '', item: ''
+    };
+    // Commands whose arguments configure the document rather than print anything.
+    const SILENT = new Set(['documentclass', 'usepackage', 'geometry', 'title', 'author', 'date', 'label',
+        'newcommand', 'renewcommand', 'providecommand', 'newenvironment', 'renewenvironment', 'newtheorem',
+        'setlength', 'setcounter', 'addtocounter', 'pagestyle', 'thispagestyle', 'pagenumbering', 'hypersetup',
+        'bibliographystyle', 'bibliography', 'graphicspath', 'definecolor', 'vspace', 'hspace', 'phantom',
+        'addcontentsline', 'lstset', 'captionsetup', 'DeclareMathOperator', 'numberwithin', 'linespread', 'color']);
+    const SECTIONS = {chapter: 0, section: 1, subsection: 2, subsubsection: 3, paragraph: 4, subparagraph: 4};
 
-            const titleMatch = latexCode.match(/\\title\{(.*?)\}/);
-            if (titleMatch) title = titleMatch[1];
+    const escapeHtml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const block = html => BLOCK_OPEN + html + BLOCK_CLOSE;
 
-            const authorMatch = latexCode.match(/\\author\{(.*?)\}/);
-            if (authorMatch) author = authorMatch[1];
+    // Index just past the group that opens at s[i] ('{' or '['), or -1 if it never closes.
+    function groupEnd(s, i) {
+        const open = s[i], close = open === '{' ? '}' : ']';
+        let depth = 0;
+        for (let j = i; j < s.length; j++) {
+            const c = s[j];
+            if (c === '\\') { j++; continue; }
+            if (c === '%') { const nl = s.indexOf('\n', j); if (nl < 0) return -1; j = nl; continue; }
+            if (c === '{') depth++;
+            else if (c === '}') depth--;
+            if (open === '[' && depth === 0 && c === ']') return j + 1;
+            if (open === '{' && depth === 0) return j + 1;
+            if (depth < 0) return -1;
+        }
+        return -1;
+    }
 
-            const dateMatch = latexCode.match(/\\date\{(.*?)\}/);
-            if (dateMatch) date = dateMatch[1];
-            if (date === "\\today") {
-                const today = new Date();
-                date = today.toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+    function skipSpaces(s, i) {
+        while (i < s.length && (s[i] === ' ' || s[i] === '\t')) i++;
+        return i;
+    }
+
+    // Reads an optional [..] then up to `max` {..} arguments, allowing whitespace between them.
+    function readArgs(s, i, max) {
+        const args = [];
+        let opt = null, j = skipSpaces(s, i);
+        if (s[j] === '[') { const e = groupEnd(s, j); if (e > 0) { opt = s.slice(j + 1, e - 1); i = e; } }
+        while (args.length < max) {
+            j = i;
+            while (j < s.length && /\s/.test(s[j]) && !(s[j] === '\n' && /^\n[ \t]*\n/.test(s.slice(j)))) j++;
+            if (s[j] !== '{') break;
+            const e = groupEnd(s, j);
+            if (e < 0) break;
+            args.push(s.slice(j + 1, e - 1));
+            i = e;
+        }
+        return {opt, args, end: i};
+    }
+
+    // Position of the \end{name} that closes a \begin{name} whose body starts at i.
+    function findEnd(s, i, name) {
+        const re = /\\(begin|end)\s*\{([^}]*)\}/g;
+        re.lastIndex = i;
+        let depth = 1, m;
+        while ((m = re.exec(s))) {
+            if (m[2] !== name) continue;
+            depth += m[1] === 'begin' ? 1 : -1;
+            if (depth === 0) return {bodyEnd: m.index, end: re.lastIndex};
+        }
+        return {bodyEnd: s.length, end: s.length};
+    }
+
+    // Unescaped closing math delimiter starting from i.
+    function findMathClose(s, i, delim) {
+        for (let j = i; j < s.length; j++) {
+            if (s[j] === '\\' && !delim.startsWith('\\')) { j++; continue; }
+            if (s.startsWith(delim, j)) return j;
+            if (s[j] === '\\') j++;
+        }
+        return -1;
+    }
+
+    // Splits at top-level separators (outside braces, maths and nested environments).
+    function splitTop(s, test) {
+        const parts = [];
+        let depth = 0, env = 0, start = 0;
+        for (let i = 0; i < s.length; i++) {
+            const c = s[i];
+            if (c === '%') { const nl = s.indexOf('\n', i); i = nl < 0 ? s.length : nl; continue; }
+            if (c === '$') { const d = s[i + 1] === '$' ? '$$' : '$'; const e = findMathClose(s, i + d.length, d); if (e >= 0) { i = e + d.length - 1; continue; } }
+            if (c === '{') depth++;
+            else if (c === '}') depth--;
+            else if (c === '\\') {
+                const m = /^\\(begin|end)\s*\{/.exec(s.slice(i, i + 8));
+                if (m) env += m[1] === 'begin' ? 1 : -1;
+                if (depth === 0 && env === 0) {
+                    const len = test(s, i);
+                    if (len) { parts.push(s.slice(start, i)); start = i + len; i = start - 1; continue; }
+                }
+                i++;
+                continue;
             }
-
-            // Extract content between \begin{document} and \end{document}
-            let content = latexCode;
-            const docMatch = latexCode.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
-            if (docMatch) {
-                content = docMatch[1];
+            if (depth === 0 && env === 0 && c !== '\\') {
+                const len = test(s, i);
+                if (len) { parts.push(s.slice(start, i)); start = i + len; i = start - 1; }
             }
+        }
+        parts.push(s.slice(start));
+        return parts;
+    }
 
-            // Remove \maketitle command and add title/author/date manually
-            let html = '';
-            if (content.includes('\\maketitle')) {
-                content = content.replace(/\\maketitle/, '');
-                html += `<div class="document-title">${title}</div>`;
-                if (author) html += `<div class="document-author">${author}</div>`;
-                if (date) html += `<div class="document-date">${date}</div>`;
-            }
+    function createConverter(meta) {
+        const counters = [0, 0, 0, 0];
+        const footnotes = [];
 
-            // Check if it's a letter format
-            const isLetter = content.includes('\\noindent') && content.includes('Dear ');
-
-            if (isLetter) {
-                // Handle letter format differently
-                return parseLetter(content, title);
-            }
-
-            // Replace section and subsection commands
-            content = content.replace(/\\section\*?\{(.*?)\}/g, '<div class="section-title">$1</div>');
-            content = content.replace(/\\subsection\*?\{(.*?)\}/g, '<div class="subsection-title">$1</div>');
-            content = content.replace(/\\chapter\*?\{(.*?)\}/g, '<div class="section-title">$1</div>');
-
-            // Process environments
-            content = processEnvironments(content);
-
-            // Process line breaks
-            content = content.replace(/\\\\/g, '<br>');
-
-            // Handle special LaTeX commands
-            content = content.replace(/\\noindent\s+/g, '<span class="noindent">');
-            content = content.replace(/\\vspace\{.*?\}/g, '<div class="vspace"></div>');
-            content = content.replace(/\\textbf\{(.*?)\}/g, '<strong>$1</strong>');
-            content = content.replace(/\\textit\{(.*?)\}/g, '<em>$1</em>');
-            content = content.replace(/\\emph\{(.*?)\}/g, '<em>$1</em>');
-
-            // Process content by paragraphs
-            const paragraphs = content.split(/\n\s*\n/);
-
-            for (const para of paragraphs) {
-                if (para.trim() === '') continue;
-
-                // Skip if already a section or subsection
-                if (para.includes('class="section-title"') || para.includes('class="subsection-title"') ||
-                    para.includes('latex-itemize') || para.includes('latex-enumerate')) {
-                    html += para;
+        function convert(s) {
+            let out = '', i = 0;
+            while (i < s.length) {
+                const c = s[i];
+                if (c === '\\') {
+                    const m = /^\\([a-zA-Z]+\*?|.)/s.exec(s.slice(i));
+                    if (!m) { i++; continue; }
+                    const r = command(s, i, m[1], i + m[0].length);
+                    out += r.html;
+                    i = r.end;
+                } else if (c === '$') {
+                    const d = s[i + 1] === '$' ? '$$' : '$';
+                    const e = findMathClose(s, i + d.length, d);
+                    if (e < 0) { out += '$'; i++; continue; }
+                    out += escapeHtml(s.slice(i, e + d.length));
+                    i = e + d.length;
+                } else if (c === '%') {
+                    // A comment runs to the end of its line
+                    const nl = s.indexOf('\n', i);
+                    i = nl < 0 ? s.length : nl;
+                } else if (c === '{') {
+                    const e = groupEnd(s, i);
+                    if (e < 0) { i++; continue; }
+                    out += convert(s.slice(i + 1, e - 1));
+                    i = e;
+                } else if (c === '}') {
+                    i++;
+                } else if (c === '\n') {
+                    const m = /^\n([ \t]*\n)+/.exec(s.slice(i));
+                    if (m) { out += PARA; i += m[0].length; } else { out += '\n'; i++; }
+                } else if (c === '~') {
+                    out += '&nbsp;'; i++;
+                } else if (s.startsWith('---', i)) {
+                    out += '—'; i += 3;
+                } else if (s.startsWith('--', i)) {
+                    out += '–'; i += 2;
+                } else if (s.startsWith('``', i)) {
+                    out += '“'; i += 2;
+                } else if (s.startsWith("''", i)) {
+                    out += '”'; i += 2;
+                } else if (c === '`') {
+                    out += '‘'; i++;
                 } else {
-                    // Regular paragraph
-                    html += `<div class="paragraph">${para}</div>`;
+                    out += escapeHtml(c); i++;
                 }
             }
+            return out;
+        }
 
+        function command(s, start, name, i) {
+            // Single-character commands
+            if (name === '\\') {
+                const o = /^\*?\s*\[[^\]]*\]/.exec(s.slice(i));
+                return {html: '<br>', end: i + (o ? o[0].length : 0)};
+            }
+            if (name === '[' || name === '(') {
+                const close = name === '[' ? '\\]' : '\\)';
+                const e = findMathClose(s, i, close);
+                const end = e < 0 ? s.length : e + 2;
+                return {html: escapeHtml(s.slice(start, end)), end};
+            }
+            if ('%&$#_{}'.includes(name)) return {html: escapeHtml(name), end: i};
+            if (name === ' ' || name === '\n') return {html: ' ', end: i};
+            if (name === ',' || name === ';' || name === ':') return {html: '&thinsp;', end: i};
+            if (name === '-' || name === '/' || name === '@') return {html: '', end: i};
+            if (name.length === 1 && !/[a-zA-Z]/.test(name)) return {html: escapeHtml(name), end: i};
+
+            const star = name.endsWith('*');
+            const base = star ? name.slice(0, -1) : name;
+
+            if (base === 'begin') {
+                const a = readArgs(s, i, 1);
+                const env = (a.args[0] || '').trim();
+                return environment(s, start, env, a.end);
+            }
+            if (base === 'end') return {html: '', end: readArgs(s, i, 1).end};
+
+            if (base in SECTIONS) {
+                const a = readArgs(s, i, 1);
+                const level = SECTIONS[base];
+                let number = '';
+                if (!star && level <= 3) {
+                    counters[level]++;
+                    for (let k = level + 1; k < counters.length; k++) counters[k] = 0;
+                    const first = meta.hasChapter ? 0 : 1;
+                    number = level >= first ? counters.slice(first, level + 1).join('.') + '&ensp;' : '';
+                    if (level === 0) number = 'Chapter ' + counters[0] + '&ensp;';
+                }
+                const cls = level <= 1 ? 'section-title' : level === 2 ? 'subsection-title' : 'subsubsection-title';
+                return {html: block(`<div class="${cls}">${number}${convert(a.args[0] || '')}</div>`), end: a.end};
+            }
+            if (base === 'maketitle') {
+                let html = `<div class="document-title">${convert(meta.title || '')}</div>`;
+                if (meta.author) html += `<div class="document-author">${convert(meta.author)}</div>`;
+                if (meta.date !== '') html += `<div class="document-date">${meta.date === null ? todayString() : convert(meta.date)}</div>`;
+                return {html: block(html), end: i};
+            }
+            if (base === 'today') return {html: todayString(), end: i};
+            if (base in INLINE_WRAP) {
+                const a = readArgs(s, i, 1);
+                const [o, c] = INLINE_WRAP[base];
+                return {html: o + convert(a.args[0] || '') + c, end: a.end};
+            }
+            if (base === 'href' || base === 'url') {
+                const a = readArgs(s, i, base === 'href' ? 2 : 1);
+                const url = (a.args[0] || '').replace(/\\([#%&_~])/g, '$1').trim();
+                const safe = /^(https?:|mailto:|#|\/)/i.test(url) ? escapeHtml(url) : '#';
+                const label = base === 'href' ? convert(a.args[1] || '') : escapeHtml(url);
+                return {html: `<a href="${safe}" target="_blank" rel="noopener">${label}</a>`, end: a.end};
+            }
+            if (base === 'footnote') {
+                const a = readArgs(s, i, 1);
+                footnotes.push(convert(a.args[0] || ''));
+                return {html: `<sup class="footnote-mark">${footnotes.length}</sup>`, end: a.end};
+            }
+            if (base === 'caption') {
+                const a = readArgs(s, i, 1);
+                return {html: block(`<div class="latex-caption">${convert(a.args[0] || '')}</div>`), end: a.end};
+            }
+            if (base === 'includegraphics') {
+                const a = readArgs(s, i, 1);
+                return {html: `<span class="latex-placeholder">[image: ${escapeHtml(a.args[0] || '')}]</span>`, end: a.end};
+            }
+            if (base === 'ref' || base === 'eqref' || base === 'pageref' || base === 'cite' || base === 'autoref') {
+                const a = readArgs(s, i, 1);
+                const key = escapeHtml(a.args[0] || '');
+                return {html: base === 'cite' ? `[${key}]` : `<span class="latex-placeholder">${base === 'eqref' ? '(' + key + ')' : key}</span>`, end: a.end};
+            }
+            if (base === 'vspace' || base === 'bigskip' || base === 'medskip') {
+                const a = readArgs(s, i, base === 'vspace' ? 1 : 0);
+                return {html: block('<div class="vspace"></div>'), end: a.end};
+            }
+            if (SILENT.has(base)) {
+                const counts = {newcommand: 2, renewcommand: 2, providecommand: 2, newenvironment: 3, renewenvironment: 3,
+                    newtheorem: 2, setlength: 2, setcounter: 2, addtocounter: 2, definecolor: 3, DeclareMathOperator: 2,
+                    addcontentsline: 3, numberwithin: 2};
+                const a = readArgs(s, i, counts[base] || 1);
+                return {html: '', end: a.end};
+            }
+            if (base in SYMBOLS) return {html: SYMBOLS[base], end: i};
+            // Unknown command: keep whatever it would print, drop the command itself.
+            const a = readArgs(s, i, 3);
+            if (!a.args.length && a.opt === null) {
+                return {html: `<span class="latex-unknown" title="Not shown in the preview">\\${escapeHtml(name)}</span>`, end: i};
+            }
+            return {html: a.args.map(convert).join(' '), end: a.end};
+        }
+
+        function environment(s, start, env, bodyStart) {
+            const {bodyEnd, end} = findEnd(s, bodyStart, env);
+            const body = s.slice(bodyStart, bodyEnd);
+            const base = env.replace(/\*$/, '');
+
+            if (MATH_ENVS.test(env)) return {html: escapeHtml(s.slice(start, end)), end};
+            if (VERBATIM_ENVS.test(env)) {
+                const code = body.replace(/^\[[^\]\n]*\]/, '').replace(/^\{[^}\n]*\}/, '').replace(/^\n/, '').replace(/\n\s*$/, '');
+                return {html: block(`<pre class="latex-verbatim">${escapeHtml(code)}</pre>`), end};
+            }
+            if (base === 'itemize' || base === 'enumerate' || base === 'description') {
+                return {html: block(list(base, body)), end};
+            }
+            if (base === 'tabular' || base === 'tabularx' || base === 'longtable' || base === 'array') {
+                return {html: block(table(body, base)), end};
+            }
+            if (base === 'center' || base === 'flushleft' || base === 'flushright') {
+                const align = base === 'center' ? 'center' : base === 'flushleft' ? 'left' : 'right';
+                return {html: block(`<div style="text-align:${align}">${flow(convert(body))}</div>`), end};
+            }
+            if (base === 'quote' || base === 'quotation' || base === 'verse') {
+                return {html: block(`<blockquote class="latex-quote">${flow(convert(body))}</blockquote>`), end};
+            }
+            if (base === 'abstract') {
+                return {html: block(`<div class="latex-abstract"><div class="latex-abstract-title">Abstract</div>${flow(convert(body))}</div>`), end};
+            }
+            if (base === 'figure' || base === 'table') {
+                const inner = body.replace(/^\s*\[[^\]]*\]/, '');
+                return {html: block(`<div class="latex-float">${flow(convert(inner))}</div>`), end};
+            }
+            if (THEOREM_ENVS.test(env)) {
+                const a = readArgs(s, bodyStart, 0);
+                const label = base.charAt(0).toUpperCase() + base.slice(1);
+                const note = a.opt ? ` (${convert(a.opt)})` : '';
+                const content = flow(convert(s.slice(a.end, bodyEnd)), true);
+                const tail = base === 'proof' ? '<span style="float:right">∎</span>' : '';
+                return {html: block(`<div class="latex-theorem"><strong>${label}${note}.</strong> ${content}${tail}</div>`), end};
+            }
+            if (base === 'document') return {html: convert(body), end};
+            // Anything else (minipage, multicols, ...): show its contents.
+            return {html: convert(body.replace(/^\s*(\[[^\]]*\])?(\{[^}]*\})?/, '')), end};
+        }
+
+        function list(kind, body) {
+            const parts = splitTop(body, (s, i) => {
+                const m = /^\\item(?![a-zA-Z])/.exec(s.slice(i, i + 6));
+                return m ? m[0].length : 0;
+            });
+            const tag = kind === 'enumerate' ? 'ol' : kind === 'description' ? 'dl' : 'ul';
+            let html = `<${tag} class="latex-${kind === 'description' ? 'description' : kind === 'enumerate' ? 'enumerate' : 'itemize'}">`;
+            for (const raw of parts.slice(1)) {
+                let text = raw, label = null;
+                const t = text.replace(/^\s*/, '');
+                if (t[0] === '[') {
+                    const e = groupEnd(t, 0);
+                    if (e > 0) { label = t.slice(1, e - 1); text = t.slice(e); }
+                }
+                const content = flow(convert(text), true);
+                if (kind === 'description') {
+                    html += `<dt>${label === null ? '' : convert(label)}</dt><dd>${content}</dd>`;
+                } else {
+                    const style = label === null ? '' : ` style="list-style:none" data-label="${escapeHtml(label)}"`;
+                    html += `<li class="latex-item"${style}>${label === null ? '' : `<span class="latex-item-label">${convert(label)}</span> `}${content}</li>`;
+                }
+            }
+            return html + `</${tag}>`;
+        }
+
+        function table(body, kind) {
+            let rest = body;
+            if (kind === 'tabularx') rest = rest.replace(/^\s*\{[^}]*\}/, '');
+            rest = rest.replace(/^\s*\[[^\]]*\]/, '');
+            const spec = /^\s*\{/.test(rest) ? rest.slice(rest.indexOf('{'), groupEnd(rest, rest.indexOf('{'))) : '';
+            rest = spec ? rest.slice(rest.indexOf(spec) + spec.length) : rest;
+            const aligns = (spec.replace(/[{}|@!>]|\d|p\{[^}]*\}/g, m => m.startsWith('p') ? 'l' : '').match(/[lcrXp]/g) || [])
+                .map(a => a === 'c' ? 'center' : a === 'r' ? 'right' : 'left');
+            const rows = splitTop(rest, (s, i) => s.startsWith('\\\\', i) ? 2 : 0)
+                .map(r => r.replace(/^\s*\[[^\]]*\]/, '').replace(/\\(hline|toprule|midrule|bottomrule|cline\{[^}]*\}|cmidrule(\([^)]*\))?\{[^}]*\})/g, ''))
+                .filter(r => r.trim() !== '');
+            let html = '<table class="latex-table">';
+            for (const row of rows) {
+                html += '<tr>';
+                splitTop(row, (s, i) => s[i] === '&' ? 1 : 0).forEach((cell, k) => {
+                    let span = 1, content = cell, align = aligns[k] || 'left';
+                    const mc = /^\s*\\multicolumn\s*\{(\d+)\}\s*\{([^}]*)\}\s*\{/.exec(cell);
+                    if (mc) {
+                        span = +mc[1];
+                        align = /c/.test(mc[2]) ? 'center' : /r/.test(mc[2]) ? 'right' : 'left';
+                        const open = mc[0].length - 1;
+                        content = cell.slice(open + 1, groupEnd(cell, open) - 1);
+                    }
+                    html += `<td${span > 1 ? ` colspan="${span}"` : ''} style="text-align:${align}">${flow(convert(content), true)}</td>`;
+                });
+                html += '</tr>';
+            }
+            return html + '</table>';
+        }
+
+        // Turns converted text into paragraphs, lifting block elements out of them.
+        function flow(text, compact) {
+            let html = '', para = '';
+            const flush = () => {
+                const t = para.replace(/^(\s|<br>)+|(\s|<br>)+$/g, '');
+                if (t) html += compact ? (html ? '<br>' : '') + t : `<div class="paragraph">${t}</div>`;
+                para = '';
+            };
+            const re = new RegExp(`${BLOCK_OPEN}([\\s\\S]*?)${BLOCK_CLOSE}|${PARA}`, 'g');
+            let last = 0, m;
+            while ((m = re.exec(text))) {
+                para += text.slice(last, m.index);
+                flush();
+                if (m[1] !== undefined) html += m[1];
+                last = re.lastIndex;
+            }
+            para += text.slice(last);
+            flush();
+            return html;
+        }
+
+        return {convert, flow, footnotes};
+    }
+
+    function todayString() {
+        return new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+    }
+
+    function parseLatexToHtml(latexCode) {
+        try {
+            const docMatch = latexCode.match(/\\begin\s*\{document\}([\s\S]*?)(\\end\s*\{document\}|$)/);
+            const preamble = docMatch ? latexCode.slice(0, docMatch.index) : latexCode;
+            const body = docMatch ? docMatch[1] : latexCode;
+
+            // Metadata can live in the preamble or the body; read it without comments.
+            const source = (preamble + '\n' + body).replace(/(^|[^\\])%.*$/gm, '$1');
+            const metaArg = name => {
+                const m = new RegExp(`\\\\${name}\\s*(\\[[^\\]]*\\])?\\s*\\{`).exec(source);
+                if (!m) return undefined;
+                const open = m.index + m[0].length - 1;
+                const e = groupEnd(source, open);
+                return e < 0 ? undefined : source.slice(open + 1, e - 1);
+            };
+            const date = metaArg('date');
+            const meta = {
+                title: metaArg('title') || '',
+                author: metaArg('author') || '',
+                // \date omitted or \date{\today} prints today; \date{} prints nothing
+                date: date === undefined || /^\s*\\today\s*$/.test(date) ? null : date,
+                hasChapter: /\\chapter\b/.test(source)
+            };
+
+            // Hand the document's own macro definitions to MathJax so \R and friends render
+            const macroDefs = [];
+            const defRe = /\\(newcommand|renewcommand|providecommand|DeclareMathOperator)\*?\s*\{?\\[a-zA-Z]+\}?/g;
+            let dm;
+            while ((dm = defRe.exec(source))) {
+                const a = readArgs(source, dm.index + dm[0].length, 1);
+                if (!a.args.length) continue;
+                const optArgs = a.opt !== null ? `[${a.opt}]` : '';
+                const name = dm[0].replace(/^\\[a-zA-Z]+\*?\s*\{?|\}?$/g, '');
+                macroDefs.push(dm[1] === 'DeclareMathOperator' ? `\\newcommand{${name}}{\\operatorname{${a.args[0]}}}` : `\\newcommand{${name}}${optArgs}{${a.args[0]}}`);
+            }
+
+            const conv = createConverter(meta);
+            let html = macroDefs.length ? `<span style="display:none">\\(${escapeHtml(macroDefs.join(''))}\\)</span>` : '';
+            html += conv.flow(conv.convert(body));
+            if (conv.footnotes.length) {
+                html += '<ol class="latex-footnotes">' + conv.footnotes.map(f => `<li>${f}</li>`).join('') + '</ol>';
+            }
             return html;
         } catch (err) {
             console.error('LaTeX parsing error:', err);
-            return `<div class="error">Error parsing LaTeX: ${err.message}</div>${latexCode}`;
+            return `<div class="error">Error parsing LaTeX: ${escapeHtml(err.message)}</div><pre>${escapeHtml(latexCode)}</pre>`;
         }
-    }
-
-    // Process LaTeX environments (itemize, enumerate, etc.)
-    function processEnvironments(content) {
-        // Process itemize
-        content = processItemizeEnvironment(content);
-
-        // Process enumerate
-        content = processEnumerateEnvironment(content);
-
-        return content;
-    }
-
-    // Process itemize environment
-    function processItemizeEnvironment(content) {
-        let result = content;
-        const itemizeRegex = /\\begin\{itemize\}([\s\S]*?)\\end\{itemize\}/g;
-
-        result = result.replace(itemizeRegex, function (match, itemsContent) {
-            // Process \item commands
-            const items = itemsContent.split('\\item').filter(item => item.trim() !== '');
-
-            let itemsHtml = '<ul class="latex-itemize">';
-            for (const item of items) {
-                itemsHtml += `<li class="latex-item">${item.trim()}</li>`;
-            }
-            itemsHtml += '</ul>';
-
-            return itemsHtml;
-        });
-
-        return result;
-    }
-
-    // Process enumerate environment
-    function processEnumerateEnvironment(content) {
-        let result = content;
-        const enumerateRegex = /\\begin\{enumerate\}([\s\S]*?)\\end\{enumerate\}/g;
-
-        result = result.replace(enumerateRegex, function (match, itemsContent) {
-            // Process \item commands
-            const items = itemsContent.split('\\item').filter(item => item.trim() !== '');
-
-            let itemsHtml = '<ol class="latex-enumerate">';
-            for (const item of items) {
-                itemsHtml += `<li class="latex-item">${item.trim()}</li>`;
-            }
-            itemsHtml += '</ol>';
-
-            return itemsHtml;
-        });
-
-        return result;
-    }
-
-    // Special parsing for letter format
-    function parseLetter(content, title) {
-        let html = `<div class="document-title">${title || 'Letter'}</div>`;
-        html += '<div class="latex-letter">';
-
-        // Extract sender info
-        const senderMatch = content.match(/\\noindent\s+(.*?)(?=\\vspace|\\noindent|$)/s);
-        if (senderMatch && senderMatch[1]) {
-            const senderInfo = senderMatch[1].replace(/\\\\/g, '<br>');
-            html += `<div class="letter-address">${senderInfo}</div>`;
-        }
-
-        // Extract date
-        const dateMatch = content.match(/(?:May 16, 2025|\\today)/);
-        if (dateMatch) {
-            html += `<div class="letter-date">May 16, 2025</div>`;
-        }
-
-        // Extract recipient
-        const recipientMatch = content.match(/\\noindent\s+Recipient([\s\S]*?)(?=\\vspace|\\noindent|$)/s);
-        if (recipientMatch && recipientMatch[0]) {
-            const recipientInfo = recipientMatch[0].replace(/\\noindent\s+/g, '').replace(/\\\\/g, '<br>');
-            html += `<div class="letter-recipient">${recipientInfo}</div>`;
-        }
-
-        // Extract greeting
-        const greetingMatch = content.match(/\\noindent\s+Dear(.*?)(?=\\vspace|$)/);
-        if (greetingMatch && greetingMatch[0]) {
-            html += `<div class="letter-greeting">${greetingMatch[0].replace(/\\noindent\s+/g, '')},</div>`;
-        }
-
-        // Extract paragraphs
-        const bodyStart = content.indexOf('This is the first paragraph');
-        const bodyEnd = content.indexOf('\\vspace', bodyStart);
-
-        if (bodyStart > -1 && bodyEnd > -1) {
-            const bodyContent = content.substring(bodyStart, bodyEnd);
-            const paragraphs = bodyContent.split(/\n\s*\n/);
-
-            html += '<div class="letter-body">';
-            for (const para of paragraphs) {
-                if (para.trim() !== '') {
-                    html += `<p>${para.trim()}</p>`;
-                }
-            }
-            html += '</div>';
-        }
-
-        // Extract closing
-        const closingMatch = content.match(/\\noindent\s+Sincerely,/);
-        if (closingMatch) {
-            html += `<div class="letter-closing">Sincerely,</div>`;
-        }
-
-        // Extract signature
-        const signatureMatch = content.match(/\\noindent\s+Your Name\s*$/m);
-        if (signatureMatch) {
-            html += `<div class="letter-signature">Your Name</div>`;
-        }
-
-        html += '</div>';
-        return html;
     }
 
     // Update preview function
