@@ -87,3 +87,27 @@ script in Node's `vm` against a stub DOM (a canvas context whose every call is a
 
 If a change is meant to alter the physics, the `GOLDEN` table has to be re-recorded on
 purpose — that is the point of it.
+
+## Moor Chicken
+
+```sh
+npm run test:moorhuhn                    # or: node test/moorhuhn.mjs
+node test/moorhuhn.mjs --record          # print a fresh table instead of checking
+node test/moorhuhn.mjs --page=old.html   # run against another copy of the page
+```
+
+Built like the Pingu Throw suite: the page's inline script runs in Node's `vm` against a stub
+DOM, and `requestAnimationFrame` is called by hand. A deterministic bot then plays whole
+ninety-second hunts on four seeds. It reads the moor the way a player would (which birds are
+in view and where their hit boxes sit), aims at far, near and central birds by turns, knocks
+off the scarecrow's hat, shoots windmill blades and the signpost, fires into the sky on
+purpose, rides both edges to pan and reloads when dry.
+
+| suite | what it checks |
+| --- | --- |
+| `hunt` | score, hits, shells and reloads at the whistle, and a hash of the second-by-second trace (score, hits, shells, reloads, birds in the air, pan), against the table |
+| `cards` | the results card shows the score and the seed, and the first hunt is stored as the best |
+
+Everything cosmetic on the page (feathers, dust, shells, shake) draws on `Math.random`, never on
+the seeded stream, which is what lets a repaint leave the trace alone.
+
