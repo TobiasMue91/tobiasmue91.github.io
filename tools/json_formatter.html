@@ -561,13 +561,19 @@
 
     // Says what the tolerant reader had to assume, so a recovered parse is never
     // a silent change to someone's data.
-    function showLooseNotice(notes) {
-        if (!notes || !notes.length) {
+    function showLooseNotice(notes, duplicates) {
+        const lines = [];
+        if (notes && notes.length) lines.push(`Recovered from non-strict JSON — assumed: ${notes.join(', ')}.`);
+        if (duplicates && duplicates.length) {
+            const names = duplicates.map(k => JSON.stringify(k)).join(', ');
+            lines.push(`Duplicate key${duplicates.length > 1 ? 's' : ''} ${names} — only the last value is kept.`);
+        }
+        if (!lines.length) {
             looseNotice.style.display = 'none';
             looseNotice.textContent = '';
             return;
         }
-        looseNotice.textContent = `Recovered from non-strict JSON — assumed: ${notes.join(', ')}.`;
+        looseNotice.textContent = lines.join(' ');
         looseNotice.style.display = 'block';
     }
 
@@ -596,17 +602,20 @@
     // processor. parseLooseJSON recovers a value from those and reports what it
     // had to assume, so the tool never silently changes your data.
     //
-    // Returns { value, loose, notes }. Throws an Error (with .index) if there is
-    // no value to recover.
+    // Returns { value, loose, notes, duplicates }. Throws an Error (with .index)
+    // if there is no value to recover.
+    //
+    // Valid JSON goes through this reader too, not JSON.parse: the engine turns
+    // every number into a double, so 64-bit IDs, 19.90 and 6.022e23 would come
+    // back rewritten. JSON.parse only decides whether the input was strict.
     function parseLooseJSON(text) {
-        if (typeof text !== 'string') return { value: text, loose: false, notes: [] };
+        if (typeof text !== 'string') return { value: text, loose: false, notes: [], duplicates: [] };
 
-        // Valid JSON goes straight to the engine, untouched.
-        try {
-            return { value: JSON.parse(text), loose: false, notes: [] };
-        } catch (ignored) { /* fall through to the tolerant reader */ }
+        let strict = true;
+        try { JSON.parse(text); } catch (ignored) { strict = false; }
 
         const notes = new Set();
+        const duplicates = new Set();
         let src = text;
         // Offsets are reported against the text the user actually typed, so the
         // error can point at a real place in the textarea.
@@ -739,7 +748,13 @@
                 else if (body[0] === '-') { body = body.slice(1); sign = -1; }
                 if (/^0[xX]/.test(body)) notes.add('hex numbers');
                 else if (body[0] === '.' || body[body.length - 1] === '.') notes.add('bare decimal points');
-                return sign * Number(body);
+                const value = sign * Number(body);
+                // A plain JSON number that a double cannot write back the same way
+                // keeps the digits it was typed with.
+                if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(t) && String(value) !== t) {
+                    return new JSONNumber(t);
+                }
+                return value;
             }
             fail('Unexpected character ' + JSON.stringify(src[i] || ''));
         }
@@ -771,6 +786,7 @@
                 skip();
                 if (src[i] !== ':') fail('Expected ":" after property name "' + key + '"');
                 i++;
+                if (Object.prototype.hasOwnProperty.call(obj, key)) duplicates.add(key);
                 obj[key] = readValue();
                 skip();
                 if (src[i] === ',') { i++; continue; }
@@ -851,9 +867,39 @@
 
         return {
             value: values.length > 1 ? values : values[0],
-            loose: true,
-            notes: Array.from(notes)
+            loose: !strict,
+            notes: strict ? [] : Array.from(notes),
+            duplicates: Array.from(duplicates)
         };
+    }
+
+    // A number kept as the text it was written with.
+    class JSONNumber {
+        constructor(raw) { this.raw = raw; }
+    }
+
+    // JSON.stringify, except that JSONNumbers are written out verbatim.
+    function stringifyJSON(value, indent) {
+        const unit = typeof indent === 'number' ? ' '.repeat(Math.min(10, indent)) : String(indent || '').slice(0, 10);
+        function write(v, pad) {
+            if (v instanceof JSONNumber) return v.raw;
+            if (v === null || typeof v !== 'object') {
+                const out = JSON.stringify(v);
+                return out === undefined ? 'null' : out;
+            }
+            const inner = pad + unit;
+            const open = unit ? '\n' + inner : '';
+            const close = unit ? '\n' + pad : '';
+            const sep = unit ? ',\n' + inner : ',';
+            if (Array.isArray(v)) {
+                if (!v.length) return '[]';
+                return '[' + open + v.map(item => write(item, inner)).join(sep) + close + ']';
+            }
+            const keys = Object.keys(v);
+            if (!keys.length) return '{}';
+            return '{' + open + keys.map(k => JSON.stringify(k) + (unit ? ': ' : ':') + write(v[k], inner)).join(sep) + close + '}';
+        }
+        return write(value, '');
     }
 
     function formatJSON(json, minify = false) {
@@ -861,7 +907,7 @@
             // Parse JSON
             const read = parseLooseJSON(json);
             let parsedJSON = read.value;
-            showLooseNotice(read.loose ? read.notes : null);
+            showLooseNotice(read.loose ? read.notes : null, read.duplicates);
 
             // Apply sort if needed
             if (sortKeys.checked && !minify) {
@@ -869,11 +915,7 @@
             }
 
             // Format JSON with specified indentation
-            formattedJson = JSON.stringify(
-                parsedJSON,
-                null,
-                minify ? 0 : getIndentation()
-            );
+            formattedJson = stringifyJSON(parsedJSON, minify ? 0 : getIndentation());
 
             return parsedJSON;
         } catch (error) {
@@ -884,7 +926,7 @@
     }
 
     function sortObjectKeys(obj) {
-        if (typeof obj !== 'object' || obj === null) return obj;
+        if (typeof obj !== 'object' || obj === null || obj instanceof JSONNumber) return obj;
         if (Array.isArray(obj)) return obj.map(item => sortObjectKeys(item));
 
         const sortedKeys = Object.keys(obj).sort();
@@ -899,7 +941,7 @@
     function createNode(value, parent, key = null) {
         const li = document.createElement('li');
 
-        if (typeof value === 'object' && value !== null) {
+        if (typeof value === 'object' && value !== null && !(value instanceof JSONNumber)) {
             // Handle objects and arrays
             const isArray = Array.isArray(value);
             const itemCount = isArray ? value.length : Object.keys(value).length;
@@ -971,6 +1013,10 @@
             // Add value with appropriate type styling
             let valueType = typeof value;
             if (value === null) valueType = 'null';
+            if (value instanceof JSONNumber) {
+                valueType = 'number';
+                value = value.raw;
+            }
 
             const valueSpan = document.createElement('span');
             valueSpan.className = `json-${valueType}`;
