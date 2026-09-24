@@ -67,6 +67,7 @@ npm run test:pingu          # Pingu Throw suite (plain Node, no server or browse
 npm run test:moorhuhn       # Moor Chicken suite (plain Node, no server or browser)
 npm run test:minesweeper    # Minesweeper suite (plain Node, no server or browser)
 npm run test:connect4       # Connect Four AI suite (plain Node, no server or browser)
+npm run test:downhill       # Downhill Dreamer suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -74,7 +75,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Five exist so far. `test/everything_converter.mjs` drives
+Six exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -92,6 +93,10 @@ cleared without a guess — the one promise on that page nobody can see from the
 `test/connect_four.mjs` runs the computer opponent of `games/connect_four.html` in Node and
 checks that its pruned search returns what plain minimax does, and that no difficulty ever
 misses a win, a block, or hands over a win it could avoid. Run it after touching the AI.
+`test/downhill_dreamer.mjs` runs the DOM-free `<script id="core">` block of
+`games/downhill_dreamer.html` (terrain, flight, rules): bots of four skill levels play whole
+days and must get what each deserves, and the landing guide must show where the bird really
+lands. Run it after touching any number in that block; `--record` re-records its golden table.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

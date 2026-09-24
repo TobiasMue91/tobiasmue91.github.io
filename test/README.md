@@ -162,3 +162,34 @@ Playing strength is not asserted here, because Hard searches against a clock and
 are not reproducible. It was measured when the search went in: against a red bot that looks
 six moves ahead, Hard went 37–0 with 3 draws over 40 games (the old one-move heuristic lost
 39 of 40), and a copy of the search given three seconds a move as red still beats it.
+
+## Downhill Dreamer
+
+```sh
+npm run test:downhill                    # or: node test/downhill_dreamer.mjs  (about 30 seconds)
+node test/downhill_dreamer.mjs rules guide
+node test/downhill_dreamer.mjs --record  # print a fresh golden table instead of checking
+node test/downhill_dreamer.mjs --page=old.html
+```
+
+The page is a one-button game and everything it promises is feel: that diving into the hills
+gets you somewhere, that the landing guide tells the truth, that nobody ever crawls up a hill at
+walking pace, that the night wins in the end. None of that shows in a diff, and every number in
+the tuning table pulls on all of it at once. The page keeps its terrain, fixed-step flight and
+rules in a `<script id="core">` block with no DOM; the suite runs that block alone in Node's
+`vm`. Four bots play whole days on fixed seeds, each deciding 60 times a second and acting after
+a reaction delay: `idle` never presses, `diver` holds whenever the bird is going down, `reader`
+follows the guide ring (ten looks a second, a fifth of a second slow), and `sharp` compares
+diving with floating every frame.
+
+| suite | what it checks |
+| --- | --- |
+| `world` | seeds build the same hills every time; islands start where `islandAt` says and grow longer; no step or cliff at any border out past Dreamland; Dreamland's hills are flatter |
+| `rules` | one landing at a time: perfect, great, good, hop and crash by angle; a slide comes out faster, a crash slower but moving; fever on the third slide, super fever on the eighth, a crash ends both; islands, speed milestones and nightfall |
+| `guide` | from ~800 moments in the air, the prediction behind the ring (float a reaction time, then dive) and the plain dive and float predictions land within 3% of the real flight, with the same verdict |
+| `feel` | each bot's day: the diver still slides more than a quarter of its landings; the reader slides seven in ten and chains a dozen; nobody crawls; skill pays in score, distance and time; the night wins within seven minutes |
+| `golden` | the reader's first 90 seconds on three seeds, to the point; re-record on purpose with `--record` |
+
+Each check has been seen failing: no dive tuck (the feel floors fall), a prediction that forgets
+the push at an island border (the ring drifts), a border blend too short for Dreamland's hills
+(a cliff at island 29), and a fever one slide late.
