@@ -112,3 +112,25 @@ purpose, rides both edges to pan and reloads when dry.
 Everything cosmetic on the page (feathers, dust, shells, shake) draws on `Math.random`, never on
 the seeded stream, which is what lets a repaint leave the trace alone.
 
+## Minesweeper
+
+```sh
+npm run test:minesweeper                 # or: node test/minesweeper.mjs
+node test/minesweeper.mjs solver game    # one or more named suites
+node test/minesweeper.mjs --page=old.html
+```
+
+The page's "No guessing" box promises that every board can be cleared by deduction from the
+first click. A board that secretly needs a coin flip looks exactly like one that does not, so
+the promise cannot be checked by playing. The page keeps its board, game rules, solver and
+generator in a `<script id="core">` block with no DOM; the suite runs that block alone in
+Node's `vm`.
+
+| suite | what it checks |
+| --- | --- |
+| `solver` | on 4,500 random boards the solver never opens a mine or flags a safe cell; it reports a real 50/50 as needing a guess; the subset rule and the mine count each clear a board nothing else would |
+| `generate` | exact mine counts, the first click and its neighbours never mined (with and without no-guess), every no-guess board cleared by the solver, a board too dense for no-guess giving up inside its time budget; prints tries and milliseconds per level |
+| `game` | the first click never loses, re-clicking an open number changes nothing, flags block opening and do not count toward the win, chording opens the right cells and loses on a wrong flag, and solver-played no-guess games are won exactly when the last safe cell opens |
+
+Each check has been seen failing: a solver that settles a subset difference as mines too
+eagerly, a flood fill that reopens open cells, and a deal that spares only the clicked cell.
