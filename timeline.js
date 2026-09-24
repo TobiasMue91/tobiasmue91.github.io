@@ -24,13 +24,18 @@
     let index = 0;          // the point the slider stands on
     let shownIndex = -1;    // the point the frame shows, -1 while on the live site
     let path = 'index.html';
-    let trail = [];         // pages visited inside the current trip, for Back
     let frame = null;
     let request = 0;
     let travelTimer = null;
     const cache = new Map();
 
     const $ = id => document.getElementById(id);
+
+    // A trip lives in the address bar as ?travel=2025-03-01&page=games/snake.html, so
+    // the browser's Back and Forward walk through it and a reload lands in it again.
+    // arcade.js tidies the URL as soon as it runs, so it is read now, before that.
+    const initialParams = new URLSearchParams(location.search);
+    const initialState = history.state || {};
 
     window.__timeTravel = {open: openPath, exit: exit};
 
@@ -47,6 +52,7 @@
                 points.push({live: true, timestamp: new Date().toISOString(), GptVersion: null});
                 index = points.length - 1;
                 build();
+                resumeFromURL();
             })
             .catch(error => console.warn('Time travel unavailable:', error));
     }
@@ -117,24 +123,21 @@
             index = Number(range.value);
             showReadout();
             clearTimeout(travelTimer);
-            travelTimer = setTimeout(() => travel(index), 300);
+            travelTimer = setTimeout(() => jump(index), 300);
         });
         range.addEventListener('change', () => jump(Number(range.value)));
         $('tt-prev').addEventListener('click', () => step(-1));
         $('tt-next').addEventListener('click', () => step(1));
-        $('tt-exit').addEventListener('click', exit);
-        $('tt-back').addEventListener('click', () => {
-            if (!trail.length) return;
-            path = trail.pop();
-            travel(index, true);
-        });
+        $('tt-exit').addEventListener('click', leave);
+        $('tt-back').addEventListener('click', () => history.back());
         models.addEventListener('click', e => {
             const tag = e.target.closest('[data-i]');
             if (tag) jump(Number(tag.dataset.i));
         });
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape' && shownIndex >= 0) exit();
+            if (e.key === 'Escape' && shownIndex >= 0) leave();
         });
+        window.addEventListener('popstate', () => followURL(new URLSearchParams(location.search)));
         window.addEventListener('resize', () => {
             layoutMarks();
             fitFrame();
@@ -190,10 +193,15 @@
         jump(Math.max(0, Math.min(points.length - 1, index + delta)));
     }
 
+    // A new day replaces the current history entry (scrubbing through a year should
+    // not take a year of Back presses to undo); only the step into the past pushes.
     function jump(i) {
         clearTimeout(travelTimer);
+        if (points[i].live) return leave();
         index = i;
         $('tt-range').value = i;
+        if (i === shownIndex && tripDepth() > 0) return showReadout();
+        record(tripDepth() > 0 ? 'replace' : 'push');
         showReadout();
         travel(i);
     }
@@ -221,7 +229,7 @@
         $('tt-prev').disabled = index === 0;
         $('tt-next').disabled = index === points.length - 1;
         $('tt-where').textContent = shownIndex >= 0 && path !== 'index.html' ? '/' + path : '';
-        $('tt-back').hidden = !(shownIndex >= 0 && trail.length);
+        $('tt-back').hidden = !(shownIndex >= 0 && tripDepth() > 1);
         $('tt-exit').hidden = shownIndex < 0;
         const commit = $('tt-commit');
         commit.hidden = p.live;
@@ -248,10 +256,82 @@
         } catch (e) { /* keep it as it is */
         }
         if (!p || p.endsWith('/')) p += 'index.html';
-        if (shownIndex < 0) return;
-        if (p !== path) trail.push(path);
+        if (shownIndex < 0 || p === path) return;
         path = p;
+        record('push');
         travel(index, true);
+    }
+
+    // ---------- History ----------
+
+    function dayOf(p) {
+        return p.timestamp.slice(0, 10);
+    }
+
+    // How many entries of the current trip lie at and behind this one; 0 on the live site.
+    function tripDepth() {
+        return (history.state && history.state.ttDepth) || 0;
+    }
+
+    // The live URL (arcade.js's filters and all) plus the trip, or without it for null.
+    function tripURL(i) {
+        const url = new URL(location.href);
+        url.searchParams.delete('travel');
+        url.searchParams.delete('page');
+        if (i !== null) {
+            url.searchParams.set('travel', dayOf(points[i]));
+            if (path !== 'index.html') url.searchParams.set('page', path);
+        }
+        return url.pathname + url.search.replace(/%2F/gi, '/') + url.hash;
+    }
+
+    // ttRooted: the trip began on the live page in this tab, so the live entry lies
+    // right behind its first step.
+    function record(mode, state) {
+        const now = history.state || {};
+        state = state || (mode === 'push' ?
+            {ttDepth: tripDepth() + 1, ttRooted: tripDepth() > 0 ? !!now.ttRooted : true} :
+            {ttDepth: Math.max(tripDepth(), 1), ttRooted: !!now.ttRooted});
+        history[mode === 'push' ? 'pushState' : 'replaceState'](state, '', tripURL(index));
+    }
+
+    // Back to today steps back past the whole trip, so Forward can return to it. A
+    // trip opened from a shared link has nothing behind it; there the entry is rewritten.
+    function leave() {
+        if (tripDepth() > 0 && history.state.ttRooted) {
+            history.go(-tripDepth());
+        } else {
+            history.replaceState(null, '', tripURL(null));
+            exit();
+        }
+    }
+
+    // After Back or Forward (or on arrival), show whatever the address bar says.
+    function followURL(params) {
+        const day = params.get('travel');
+        const i = day ? points.findIndex(p => !p.live && dayOf(p) >= day) : -1;
+        if (i < 0) {
+            exit();
+            return false;
+        }
+        clearTimeout(travelTimer);
+        index = i;
+        path = params.get('page') || 'index.html';
+        $('tt-range').value = i;
+        travel(i, true);
+        showReadout();
+        return true;
+    }
+
+    function resumeFromURL() {
+        if (!initialParams.has('travel')) return;
+        // arcade.js has rewritten this entry by now and dropped the trip from it.
+        if (followURL(initialParams)) {
+            record('replace', {ttDepth: Math.max(initialState.ttDepth || 0, 1), ttRooted: !!initialState.ttRooted});
+            setOpen(true);
+        } else {
+            history.replaceState(null, '', tripURL(null));
+        }
     }
 
     function travel(i, force) {
@@ -351,7 +431,6 @@
         frame = null;
         shownIndex = -1;
         path = 'index.html';
-        trail = [];
         index = points.length - 1;
         $('tt-range').value = index;
         document.documentElement.classList.remove('tt-travelling');
