@@ -177,7 +177,8 @@
         state.sort = pick(p.get('sort'), SORTS, DEFAULTS.sort);
         state.tag = p.get('tag') || DEFAULTS.tag;   // free-form: tags come from data
         state.limit = 48;
-        return [...p.keys()].length > 0;
+        // Only its own keys count; ?travel=… belongs to the time travel bar (timeline.js).
+        return ['q', 'type', 'filter', 'tag', 'sort'].some(k => p.has(k));
     }
 
     function syncURL() {
