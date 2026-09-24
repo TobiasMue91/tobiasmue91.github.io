@@ -6,34 +6,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <meta name="description"
-          content="PasteTable - Online tool to convert rich text tables into multiple formats including CSV, TSV, JSON, HTML, Markdown, Excel, XML and SQL. Paste a rich text table directly from any website and export it to your needed format.">
+          content="PasteTable - Paste a table from any website or spreadsheet, fix it up in place (edit cells, add, remove, move and sort rows and columns) and export it as CSV, TSV, JSON, HTML, Markdown, Excel, XML or SQL.">
     <meta name="keywords"
-          content="rich text table converter, table export tool, convert rich text to CSV, convert rich text to JSON, rich text to markdown, table format conversion">
+          content="rich text table converter, table export tool, table editor, convert rich text to CSV, convert rich text to JSON, rich text to markdown, table format conversion">
     <title>PasteTable - Table to Any Format Converter</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.11/clipboard.min.js"></script>
     <style>:root {
         --primary-color: #3498db;
         --secondary-color: #2980b9;
         --background-color: #f8f9fa;
         --text-color: #333;
+        --muted-color: #777;
         --border-color: #ddd;
         --success-color: #2ecc71;
         --warning-color: #e74c3c;
         --card-background: #fff;
-        --header-border: #eee
+        --header-border: #eee;
+        --control-background: #eef2f5;
+        --highlight: rgba(52, 152, 219, 0.12);
+        --doomed: rgba(231, 76, 60, 0.16)
     }
 
     @media (prefers-color-scheme: dark) {
         :root {
             --primary-color: #3498db;
-            --secondary-color: #2980b9;
+            --secondary-color: #5dade2;
             --background-color: #1a1a1a;
             --text-color: #f5f5f5;
+            --muted-color: #999;
             --border-color: #444;
             --card-background: #222;
-            --header-border: #333
+            --header-border: #333;
+            --control-background: #2a2d31;
+            --highlight: rgba(52, 152, 219, 0.2);
+            --doomed: rgba(231, 76, 60, 0.28)
         }
     }
 
@@ -67,7 +72,7 @@
 
     main {
         display: grid;
-        grid-template-columns:1fr;
+        grid-template-columns: minmax(0, 1fr);
         gap: 30px
     }
 
@@ -75,7 +80,8 @@
         background-color: var(--card-background);
         border-radius: 5px;
         padding: 20px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1)
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        min-width: 0
     }
 
     h2 {
@@ -87,20 +93,23 @@
         margin-bottom: 15px
     }
 
-    #paste-container {
-        position: relative;
-        margin-bottom: 15px
-    }
-
     #paste-area {
-        min-height: 150px;
+        min-height: 110px;
+        max-height: 220px;
         border: 2px dashed var(--border-color);
         border-radius: 5px;
         padding: 15px;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
         overflow: auto;
+        white-space: pre-wrap;
         background-color: var(--card-background);
         color: var(--text-color)
+    }
+
+    #paste-area:empty::before {
+        content: attr(data-placeholder);
+        color: var(--muted-color);
+        pointer-events: none
     }
 
     #paste-area:focus {
@@ -108,16 +117,27 @@
         outline: none
     }
 
-    #input-note {
+    #paste-area table {
+        border-collapse: collapse;
+        margin: 0
+    }
+
+    #paste-area th, #paste-area td {
+        padding: 1px 10px 1px 0;
+        text-align: left;
+        vertical-align: top
+    }
+
+    .note {
         font-size: 0.9em;
-        color: #777;
-        margin-bottom: 15px
+        color: var(--muted-color)
     }
 
     #input-controls {
         display: flex;
+        align-items: center;
         gap: 10px;
-        margin-bottom: 15px
+        flex-wrap: wrap
     }
 
     button {
@@ -127,11 +147,26 @@
         padding: 10px 15px;
         border-radius: 5px;
         cursor: pointer;
-        transition: all 0.3s ease
+        font: inherit;
+        transition: background-color 0.2s ease
     }
 
     button:hover {
         background-color: var(--secondary-color)
+    }
+
+    button:disabled {
+        opacity: 0.45;
+        cursor: default
+    }
+
+    button:disabled:hover {
+        background-color: var(--primary-color)
+    }
+
+    button:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px
     }
 
     button.secondary {
@@ -142,32 +177,257 @@
         background-color: #7f8c8d
     }
 
+    /* Editor */
+    #editor-toolbar {
+        display: none;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px
+    }
+
+    #editor-toolbar.on {
+        display: flex
+    }
+
+    #editor-toolbar button {
+        padding: 6px 12px;
+        font-size: 0.9em
+    }
+
+    #editor-toolbar .sep {
+        width: 1px;
+        align-self: stretch;
+        background: var(--border-color);
+        margin: 0 4px
+    }
+
+    #editor-toolbar label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.9em;
+        cursor: pointer;
+        user-select: none
+    }
+
+    #table-size {
+        margin-left: auto;
+        font-size: 0.85em;
+        color: var(--muted-color);
+        font-variant-numeric: tabular-nums
+    }
+
     #table-preview {
         overflow: auto;
-        max-height: 300px
+        max-height: 60vh;
+        border-radius: 4px
+    }
+
+    #table-preview .empty {
+        padding: 30px 10px;
+        text-align: center;
+        color: var(--muted-color)
+    }
+
+    #table-preview .empty button {
+        margin-top: 12px
     }
 
     table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px
+        border-collapse: separate;
+        border-spacing: 0
     }
 
-    th, td {
-        border: 1px solid var(--border-color);
-        padding: 8px 12px;
-        text-align: left
+    table.grid {
+        min-width: 100%
     }
 
-    th {
+    .grid th, .grid td {
+        border-right: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--border-color);
+        padding: 7px 10px;
+        text-align: left;
+        vertical-align: top;
+        white-space: pre-wrap;
+        min-width: 70px;
+        max-width: 420px;
+        overflow-wrap: break-word
+    }
+
+    .grid td[data-c], .grid th[data-c] {
+        outline: none;
+        cursor: text
+    }
+
+    .grid td[data-c]:focus, .grid th[data-c]:focus {
+        box-shadow: inset 0 0 0 2px var(--primary-color)
+    }
+
+    .grid thead tr.head th {
         background-color: var(--primary-color);
-        color: white
+        color: white;
+        position: sticky;
+        top: 30px;
+        z-index: 2
     }
 
-    tr:nth-child(even) {
+    .grid thead tr.head th[data-c]:empty::before {
+        content: attr(data-placeholder);
+        opacity: 0.6;
+        font-style: italic
+    }
+
+    .grid thead tr.head th[data-c]:focus {
+        box-shadow: inset 0 0 0 2px white
+    }
+
+    .grid tbody tr:nth-child(even) td {
         background-color: var(--background-color)
     }
 
+    /* Column and row controls */
+    .grid tr.ctl th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        height: 30px;
+        padding: 2px 4px;
+        background: var(--control-background);
+        text-align: center;
+        white-space: nowrap
+    }
+
+    .grid .gutter {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        min-width: 0;
+        width: 1%;
+        padding: 4px 6px;
+        background: var(--control-background);
+        color: var(--muted-color);
+        font-size: 0.8em;
+        font-weight: normal;
+        text-align: right;
+        white-space: nowrap
+    }
+
+    .grid thead .gutter {
+        z-index: 4
+    }
+
+    .grid tr.head .gutter {
+        background: var(--control-background);
+        color: var(--muted-color)
+    }
+
+    .grid .num {
+        display: inline-block;
+        min-width: 1.6em;
+        vertical-align: middle;
+        font-variant-numeric: tabular-nums
+    }
+
+    .grid .ctl-btn {
+        background: transparent;
+        color: var(--muted-color);
+        padding: 0 5px;
+        margin: 0 1px;
+        border-radius: 3px;
+        font-size: 13px;
+        line-height: 22px;
+        opacity: 0.45;
+        vertical-align: middle
+    }
+
+    .grid .ctl-btn:hover, .grid .ctl-btn:focus-visible {
+        opacity: 1;
+        background: var(--highlight);
+        color: var(--text-color)
+    }
+
+    .grid .ctl-btn.del:hover, .grid .ctl-btn.del:focus-visible {
+        background: var(--warning-color);
+        color: white
+    }
+
+    .grid tr:hover .ctl-btn, .grid tr.ctl th:hover .ctl-btn, .grid .ctl-btn.open {
+        opacity: 1
+    }
+
+    .grid .hl {
+        background-color: var(--highlight) !important
+    }
+
+    .grid .doomed {
+        background-color: var(--doomed) !important;
+        text-decoration: line-through
+    }
+
+    .grid tr.head th.hl {
+        background-color: var(--secondary-color) !important
+    }
+
+    .grid tr.head th.doomed {
+        background-color: var(--warning-color) !important
+    }
+
+    @media (hover: none) {
+        .grid .ctl-btn {
+            opacity: 0.8;
+            padding: 0 8px;
+            line-height: 28px
+        }
+    }
+
+    #menu {
+        position: fixed;
+        z-index: 50;
+        display: none;
+        min-width: 180px;
+        padding: 5px;
+        background: var(--card-background);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2)
+    }
+
+    #menu.show {
+        display: block
+    }
+
+    #menu button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        color: var(--text-color);
+        padding: 6px 10px;
+        font-size: 0.9em;
+        border-radius: 4px
+    }
+
+    #menu button:hover, #menu button:focus-visible {
+        background: var(--highlight);
+        outline: none
+    }
+
+    #menu button.danger {
+        color: var(--warning-color)
+    }
+
+    #menu button:disabled:hover {
+        background: transparent
+    }
+
+    #menu hr {
+        border: none;
+        border-top: 1px solid var(--border-color);
+        margin: 4px 0
+    }
+
+    /* Output */
     #format-selector {
         margin-bottom: 15px;
         display: flex;
@@ -196,6 +456,8 @@
         border: 1px solid var(--border-color);
         border-radius: 5px;
         resize: vertical;
+        font-family: Consolas, 'Courier New', monospace;
+        font-size: 0.9em;
         background-color: var(--card-background);
         color: var(--text-color)
     }
@@ -233,34 +495,57 @@
         text-align: center;
         padding-top: 20px;
         border-top: 1px solid var(--header-border);
-        color: #777
+        color: var(--muted-color)
     }
 
-    @media (min-width: 768px) {
-        main {
-            grid-template-columns:repeat(2, 1fr)
+    @media (max-width: 600px) {
+        body {
+            padding: 12px
         }
 
-        #output-section {
-            grid-column: span 2
+        section {
+            padding: 14px
+        }
+
+        #editor-toolbar .sep {
+            display: none
+        }
+
+        #table-size {
+            margin-left: 0;
+            flex-basis: 100%
+        }
+
+        .grid th, .grid td {
+            min-width: 90px
         }
     }</style>
 </head>
 <body>
 <header><h1>PasteTable</h1>
-    <p>Paste any table, convert to various formats</p></header>
+    <p>Paste any table, tidy it up, convert it to various formats</p></header>
 <main>
     <section id="input-section"><h2>Input</h2>
-        <div id="paste-container">
-            <div id="paste-area" contenteditable="true"></div>
-            <div id="input-note">Paste table from any website or spreadsheet - it will automatically be converted</div>
-        </div>
+        <div id="paste-area" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Paste a table here"
+             data-placeholder="Paste a table here (Ctrl+V) — from a website, Excel, Google Sheets, CSV, TSV or Markdown"></div>
         <div id="input-controls">
             <button id="clear-btn" class="secondary">Clear</button>
+            <span class="note">A new paste replaces the old one. Empty rows and empty columns at the edges are dropped.</span>
         </div>
     </section>
-    <section id="preview-section"><h2>Preview</h2>
-        <div id="message"></div>
+    <section id="preview-section"><h2>Table</h2>
+        <div id="message" role="status"></div>
+        <div id="editor-toolbar" role="toolbar" aria-label="Table editing">
+            <button id="add-row-btn" title="Add a row at the bottom">+ Row</button>
+            <button id="add-col-btn" title="Add a column at the right">+ Column</button>
+            <span class="sep"></span>
+            <button id="undo-btn" class="secondary" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+            <button id="redo-btn" class="secondary" title="Redo (Ctrl+Y)" disabled>↷ Redo</button>
+            <span class="sep"></span>
+            <label><input type="checkbox" id="header-toggle" checked> First row is header</label>
+            <button id="tidy-btn" class="secondary" title="Remove every row and column that has no content">Remove empty rows &amp; columns</button>
+            <span id="table-size"></span>
+        </div>
         <div id="table-preview"></div>
     </section>
     <section id="output-section"><h2>Output</h2>
@@ -274,175 +559,208 @@
             <option value="xml">XML</option>
             <option value="sql">SQL INSERT</option>
         </select></div>
-        <div id="text-output-container"><textarea id="text-output" readonly></textarea>
+        <div id="text-output-container"><textarea id="text-output" readonly aria-label="Converted output"></textarea>
             <div class="actions">
-                <button id="copy-btn" data-clipboard-target="#text-output">Copy</button>
+                <button id="copy-btn">Copy</button>
                 <button id="download-btn">Download</button>
             </div>
         </div>
     </section>
 </main>
+<div id="menu" role="menu"></div>
 <footer><p>PasteTable - Convert tables to any format</p></footer>
 <script>document.addEventListener('DOMContentLoaded', function () {
     const pasteArea = document.getElementById('paste-area');
     const clearBtn = document.getElementById('clear-btn');
     const tablePreview = document.getElementById('table-preview');
+    const toolbar = document.getElementById('editor-toolbar');
+    const headerToggle = document.getElementById('header-toggle');
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    const sizeEl = document.getElementById('table-size');
+    const menuEl = document.getElementById('menu');
     const formatSelector = document.getElementById('format');
     const textOutput = document.getElementById('text-output');
     const copyBtn = document.getElementById('copy-btn');
     const downloadBtn = document.getElementById('download-btn');
     const messageEl = document.getElementById('message');
-    const clipboard = new ClipboardJS('#copy-btn');
-    let tableData = [];
-    let headers = [];
+    const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+
+    // The table is a plain grid of strings. When the header toggle is on, row 0
+    // is the header row; switching it off turns that row into data and loses nothing.
+    let grid = [];
+    let headerOn = true;
+    let undoStack = [];
+    let redoStack = [];
     let parseTimeout = null;
+    let outputTimeout = null;
+    let messageTimeout = null;
+    let editSnapshotTaken = false;
+
+    const PLAINTEXT_ONLY = (function () {
+        const probe = document.createElement('div');
+        try {
+            probe.contentEditable = 'plaintext-only';
+            return probe.contentEditable === 'plaintext-only';
+        } catch (e) {
+            return false;
+        }
+    })();
+
+    // ---------- Input ----------
+
+    // Read the clipboard itself rather than whatever the browser makes of it in the
+    // box: a plain-text paste keeps its exact tabs and line breaks that way.
     pasteArea.addEventListener('paste', function (e) {
-        setTimeout(parseTable, 100);
+        const data = e.clipboardData;
+        if (!data) return;
+        const html = data.getData('text/html');
+        const text = data.getData('text/plain');
+        if (!html && !text) return;
+        e.preventDefault();
+        clearTimeout(parseTimeout);
+        showInput(html, text);
+        loadGrid(parseInput(html, text));
     });
     pasteArea.addEventListener('input', function () {
         clearTimeout(parseTimeout);
-        parseTimeout = setTimeout(parseTable, 300);
+        parseTimeout = setTimeout(function () {
+            const html = pasteArea.innerHTML;
+            loadGrid(parseInput(html, stripHtml(html)));
+        }, 300);
     });
     clearBtn.addEventListener('click', function () {
         pasteArea.innerHTML = '';
-        tablePreview.innerHTML = '';
-        textOutput.value = '';
-        tableData = [];
-        headers = [];
+        if (grid.length) pushUndo();
+        grid = [];
+        render();
         hideMessage();
-    });
-    formatSelector.addEventListener('change', updateOutput);
-    downloadBtn.addEventListener('click', downloadOutput);
-    clipboard.on('success', function (e) {
-        showMessage('Copied to clipboard!', 'success');
-        e.clearSelection();
+        pasteArea.focus();
     });
 
-    function parseTable() {
+    function showInput(html, text) {
+        pasteArea.innerHTML = '';
+        const table = html && /<table/i.test(html) ? pickTable(new DOMParser().parseFromString(html, 'text/html')) : null;
+        if (table) {
+            // Only the table survives, and none of its scripts, styles or handlers.
+            const clean = document.createElement('table');
+            Array.from(table.rows).forEach(function (tr) {
+                const row = clean.insertRow();
+                Array.from(tr.cells).forEach(function (cell) {
+                    const c = document.createElement(cell.tagName === 'TH' ? 'th' : 'td');
+                    c.textContent = cellText(cell);
+                    if (cell.colSpan > 1) c.colSpan = cell.colSpan;
+                    if (cell.rowSpan > 1) c.rowSpan = cell.rowSpan;
+                    row.appendChild(c);
+                });
+            });
+            pasteArea.appendChild(clean);
+        } else {
+            pasteArea.textContent = text || stripHtml(html);
+        }
+    }
+
+    function parseInput(html, text) {
         try {
-            let content = pasteArea.innerHTML || '';
-            if (!content.trim()) {
-                tablePreview.innerHTML = '';
-                textOutput.value = '';
-                tableData = [];
-                headers = [];
-                return;
+            if (html && /<table/i.test(html)) {
+                const rows = parseHtmlTable(html);
+                if (rows.length) return tidyEdges(rows);
             }
-            hideMessage();
-            if (content.toLowerCase().includes('<table')) {
-                parseSimpleHtmlTable(content);
-            } else {
-                detectAndParseStructure(content);
-            }
-            if (headers.length > 0 && tableData.length > 0) {
-                normalizeTableData();
-                updatePreview();
-                updateOutput();
-            } else if (tableData.length > 0) {
-                updatePreview();
-                updateOutput();
-            } else {
-                tablePreview.innerHTML = '<p>No valid table data detected.</p>';
-                textOutput.value = '';
-            }
+            return tidyEdges(parseDelimitedText(text || ''));
         } catch (error) {
             console.error('Parsing error:', error);
             showMessage('Error parsing the table. Please try again or check your input.', 'error');
+            return [];
         }
     }
 
-    function parseSimpleHtmlTable(html) {
-        try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const tables = doc.querySelectorAll('table');
-            if (tables.length === 0) {
-                showMessage('No HTML table detected in the pasted content.', 'error');
-                return;
-            }
-            const tableElement = tables[0];
-            const rows = tableElement.querySelectorAll('tr');
-            if (rows.length === 0) {
-                showMessage('Table does not contain any rows.', 'error');
-                return;
-            }
-            let maxCols = 0;
-            for (let i = 0; i < rows.length; i++) {
-                const cells = rows[i].querySelectorAll('th,td');
-                maxCols = Math.max(maxCols, cells.length);
-            }
-            headers = [];
-            const firstRow = rows[0];
-            const firstRowCells = firstRow.querySelectorAll('th,td');
-            for (let i = 0; i < maxCols; i++) {
-                if (i < firstRowCells.length) {
-                    const text = firstRowCells[i].textContent.trim();
-                    headers.push(text || `Column ${i + 1}`);
-                } else {
-                    headers.push(`Column ${i + 1}`);
-                }
-            }
-            headers = makeHeadersUnique(headers);
-            tableData = [];
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                const cells = row.querySelectorAll('td,th');
-                const rowData = Object.create(null);
-                for (let j = 0; j < maxCols; j++) {
-                    const header = headers[j];
-                    rowData[header] = j < cells.length ? cells[j].textContent.trim() : '';
-                }
-                tableData.push(rowData);
-            }
-        } catch (error) {
-            console.error('HTML parsing error:', error);
-            showMessage('Error parsing HTML table. Please check your input.', 'error');
+    function loadGrid(rows) {
+        if (grid.length) pushUndo();
+        grid = rows;
+        render();
+        if (rows.length) {
+            hideMessage();
+        } else if ((pasteArea.textContent || '').trim()) {
+            showMessage('No table data detected in the pasted content.', 'error');
         }
     }
 
-    function detectAndParseStructure(content) {
-        try {
-            const plainText = stripHtml(content);
-            const lines = plainText.split(/\n/g).filter(line => line.trim());
-            if (lines.length < 1) {
-                showMessage('Not enough data to create a table.', 'error');
-                return;
+    // A pasted page fragment can hold several tables, a layout table wrapped round
+    // the data or a small table inside one cell: the data is the one with most cells.
+    function pickTable(doc) {
+        let best = null;
+        let bestCells = -1;
+        doc.querySelectorAll('table').forEach(function (table) {
+            const cells = Array.from(table.rows).reduce(function (n, tr) {
+                return n + tr.cells.length;
+            }, 0);
+            if (cells > bestCells) {
+                best = table;
+                bestCells = cells;
             }
-            const records = joinQuotedRecords(lines);
-            const sampleLines = records.slice(0, Math.min(5, records.length));
-            let delimiter = detectDelimiter(sampleLines);
-            let maxCols = 0;
-            records.forEach(function (record) {
-                const values = splitByDelimiter(record, delimiter);
-                maxCols = Math.max(maxCols, values.length);
-            });
-            headers = [];
-            if (records.length > 0) {
-                const headerValues = splitByDelimiter(records[0], delimiter);
-                for (let i = 0; i < maxCols; i++) {
-                    if (i < headerValues.length) {
-                        const text = headerValues[i].trim();
-                        headers.push(text || `Column ${i + 1}`);
-                    } else {
-                        headers.push(`Column ${i + 1}`);
+        });
+        return best;
+    }
+
+    function parseHtmlTable(html) {
+        const table = pickTable(new DOMParser().parseFromString(html, 'text/html'));
+        if (!table) return [];
+        // table.rows and row.cells stop at this table, so a table nested in a cell
+        // cannot add rows or cells of its own. Spanned cells take up every slot they
+        // cover, or the cells after them would slide one column to the left.
+        const trs = Array.from(table.rows);
+        const rows = [];
+        trs.forEach(function (tr, r) {
+            rows[r] = rows[r] || [];
+            let c = 0;
+            Array.from(tr.cells).forEach(function (cell) {
+                while (rows[r][c] !== undefined) c++;
+                const colSpan = Math.min(Math.max(cell.colSpan || 1, 1), 1000);
+                const rowSpan = cell.rowSpan === 0 ? trs.length - r : Math.min(Math.max(cell.rowSpan || 1, 1), trs.length - r);
+                const text = cellText(cell);
+                for (let dr = 0; dr < rowSpan; dr++) {
+                    rows[r + dr] = rows[r + dr] || [];
+                    for (let dc = 0; dc < colSpan; dc++) {
+                        rows[r + dr][c + dc] = dr === 0 && dc === 0 ? text : '';
                     }
                 }
-                headers = makeHeadersUnique(headers);
-            }
-            tableData = [];
-            for (let i = 1; i < records.length; i++) {
-                const values = splitByDelimiter(records[i], delimiter);
-                const rowData = Object.create(null);
-                for (let j = 0; j < maxCols; j++) {
-                    const header = headers[j];
-                    rowData[header] = j < values.length ? values[j].trim() : '';
-                }
-                tableData.push(rowData);
-            }
-        } catch (error) {
-            console.error('Structure parsing error:', error);
-            showMessage('Error detecting table structure. Please check your input.', 'error');
+                c += colSpan;
+            });
+        });
+        return rows.map(function (row) {
+            return Array.from(row, function (v) {
+                return v === undefined ? '' : v;
+            });
+        });
+    }
+
+    function cellText(cell) {
+        return stripHtml(cell.innerHTML, true).split('\n').map(function (line) {
+            return line.trim();
+        }).join('\n').replace(/^\n+|\n+$/g, '').replace(/\n{3,}/g, '\n\n');
+    }
+
+    function parseDelimitedText(text) {
+        text = text.replace(/\r\n?/g, '\n');
+        const records = joinQuotedRecords(text.split('\n')).filter(function (line) {
+            return line.trim();
+        });
+        if (!records.length) return [];
+        const delimiter = detectDelimiter(records.slice(0, 5));
+        let rows = records.map(function (record) {
+            return splitByDelimiter(record, delimiter).map(function (v) {
+                return v.trim();
+            });
+        });
+        if (delimiter === '|') {
+            // The |---|:---:| line under a Markdown header is not a row.
+            rows = rows.filter(function (row) {
+                return !row.every(function (v) {
+                    return /^:?-{2,}:?$/.test(v);
+                });
+            });
         }
+        return rows;
     }
 
     function detectDelimiter(lines) {
@@ -488,7 +806,8 @@
 
     function splitByDelimiter(text, delimiter) {
         if (typeof delimiter !== 'string') {
-            return text.split(delimiter);
+            // Column-aligned text: the padding at either end of a line is not a column.
+            return text.trim().split(delimiter);
         }
         if (delimiter === '|') {
             text = text.replace(/^\s*\|\s*|\s*\|\s*$/g, '');
@@ -541,28 +860,48 @@
         return records;
     }
 
-    // Rows are keyed by header, so repeated names would overwrite each other.
-    function makeHeadersUnique(names) {
-        const seen = Object.create(null);
-        return names.map(function (name) {
-            if (!seen[name]) {
-                seen[name] = 1;
-                return name;
-            }
-            let candidate;
-            do {
-                candidate = `${name} (${++seen[name]})`;
-            } while (seen[candidate]);
-            seen[candidate] = 1;
-            return candidate;
+    // Pads every row to the same width, then drops rows with no content and the
+    // empty columns at either edge. Those are what a trailing tab or comma on each
+    // line, trailing spaces in aligned text, or a spreadsheet selection that ran
+    // past the data leave behind; an empty column in the middle stays put.
+    function tidyEdges(rows) {
+        const width = rows.reduce(function (w, row) {
+            return Math.max(w, row.length);
+        }, 0);
+        rows = rows.map(function (row) {
+            const padded = row.slice();
+            while (padded.length < width) padded.push('');
+            return padded;
+        }).filter(function (row) {
+            return row.some(hasContent);
         });
+        if (!rows.length) return [];
+        const emptyCol = function (c) {
+            return rows.every(function (row) {
+                return !hasContent(row[c]);
+            });
+        };
+        let first = 0;
+        let last = width - 1;
+        while (first <= last && emptyCol(first)) first++;
+        while (last >= first && emptyCol(last)) last--;
+        return rows.map(function (row) {
+            return row.slice(first, last + 1);
+        });
+    }
+
+    function hasContent(value) {
+        return String(value || '').trim() !== '';
     }
 
     // A plain-text paste lands in the contenteditable as one block element per
     // line, so textContent alone would run every line together into one.
     const BLOCK_TAGS = new Set(['ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DIV', 'DL', 'DT', 'FIELDSET', 'FIGCAPTION', 'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'HR', 'LI', 'MAIN', 'NAV', 'OL', 'P', 'PRE', 'SECTION', 'TABLE', 'TBODY', 'TFOOT', 'THEAD', 'TR', 'UL']);
+    const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT']);
 
-    function stripHtml(html) {
+    // collapse: treat the markup as rendered HTML, where source line breaks and
+    // indentation are only whitespace (a table cell from Excel or a web page).
+    function stripHtml(html, collapse) {
         const doc = new DOMParser().parseFromString(html, 'text/html');
         let text = '';
 
@@ -575,10 +914,10 @@
         (function walk(node) {
             node.childNodes.forEach(function (child) {
                 if (child.nodeType === 3) {
-                    text += child.nodeValue;
+                    text += collapse ? child.nodeValue.replace(/\s+/g, ' ') : child.nodeValue;
                     return;
                 }
-                if (child.nodeType !== 1) {
+                if (child.nodeType !== 1 || SKIP_TAGS.has(child.tagName)) {
                     return;
                 }
                 if (child.tagName === 'BR') {
@@ -589,168 +928,556 @@
                 if (isBlock) appendBreak();
                 walk(child);
                 if (isBlock) appendBreak();
+                // Cells of a table inside a cell would otherwise run together.
+                else if (child.tagName === 'TD' || child.tagName === 'TH') text += ' ';
             });
         })(doc.body);
 
         return text.replace(/\r\n?/g, '\n');
     }
 
-    function normalizeTableData() {
-        tableData.forEach(function (row) {
-            headers.forEach(function (header) {
-                if (!(header in row)) {
-                    row[header] = '';
-                }
-            })
-        })
+    // ---------- Editing ----------
+
+    function width() {
+        return grid.length ? grid[0].length : 0;
     }
 
-    function updatePreview() {
-        if (headers.length === 0 || tableData.length === 0) {
-            tablePreview.innerHTML = '<p>No valid table data detected.</p>';
+    function snapshot() {
+        return {grid: grid.map(function (row) {
+            return row.slice();
+        }), headerOn: headerOn};
+    }
+
+    function pushUndo() {
+        undoStack.push(snapshot());
+        if (undoStack.length > 200) undoStack.shift();
+        redoStack = [];
+        updateUndoButtons();
+    }
+
+    function restore(from, to) {
+        if (!from.length) return;
+        to.push(snapshot());
+        const state = from.pop();
+        grid = state.grid;
+        headerOn = state.headerOn;
+        render();
+    }
+
+    function updateUndoButtons() {
+        undoBtn.disabled = !undoStack.length;
+        redoBtn.disabled = !redoStack.length;
+    }
+
+    // Every structural change goes through here: snapshot, change, redraw, and put
+    // the caret somewhere sensible afterwards.
+    function change(fn, focus) {
+        pushUndo();
+        fn();
+        render();
+        if (focus) focusCell(focus[0], focus[1]);
+    }
+
+    const ops = {
+        insertRow: function (at) {
+            change(function () {
+                grid.splice(at, 0, new Array(width()).fill(''));
+            }, [at, 0]);
+        },
+        deleteRow: function (r) {
+            change(function () {
+                grid.splice(r, 1);
+                if (!grid.length || !width()) grid = [];
+            });
+        },
+        duplicateRow: function (r) {
+            change(function () {
+                grid.splice(r + 1, 0, grid[r].slice());
+            }, [r + 1, 0]);
+        },
+        moveRow: function (r, to) {
+            if (to < 0 || to >= grid.length) return;
+            change(function () {
+                grid.splice(to, 0, grid.splice(r, 1)[0]);
+            }, [to, 0]);
+        },
+        insertCol: function (at) {
+            change(function () {
+                if (!grid.length) grid = [[]];
+                grid.forEach(function (row) {
+                    row.splice(at, 0, '');
+                });
+            }, [0, at]);
+        },
+        deleteCol: function (c) {
+            change(function () {
+                grid.forEach(function (row) {
+                    row.splice(c, 1);
+                });
+                if (!width()) grid = [];
+            });
+        },
+        moveCol: function (c, to) {
+            if (to < 0 || to >= width()) return;
+            change(function () {
+                grid.forEach(function (row) {
+                    row.splice(to, 0, row.splice(c, 1)[0]);
+                });
+            }, [0, to]);
+        },
+        sortCol: function (c, dir) {
+            change(function () {
+                const head = headerOn ? grid.slice(0, 1) : [];
+                const body = headerOn ? grid.slice(1) : grid.slice();
+                const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+                body.sort(function (a, b) {
+                    // Empty cells go last either way.
+                    if (!hasContent(a[c]) || !hasContent(b[c])) return hasContent(b[c]) - hasContent(a[c]);
+                    return dir * collator.compare(a[c], b[c]);
+                });
+                grid = head.concat(body);
+            });
+        }
+    };
+
+    document.getElementById('add-row-btn').addEventListener('click', function () {
+        if (!grid.length) return startEmpty();
+        ops.insertRow(grid.length);
+    });
+    document.getElementById('add-col-btn').addEventListener('click', function () {
+        if (!grid.length) return startEmpty();
+        ops.insertCol(width());
+    });
+    document.getElementById('tidy-btn').addEventListener('click', function () {
+        const before = grid.length + 'x' + width();
+        const keep = grid.filter(function (row, r) {
+            return (headerOn && r === 0) || row.some(hasContent);
+        });
+        const cols = [];
+        for (let c = 0; c < width(); c++) {
+            if (keep.some(function (row) {
+                return hasContent(row[c]);
+            })) cols.push(c);
+        }
+        const next = cols.length ? keep.map(function (row) {
+            return cols.map(function (c) {
+                return row[c];
+            });
+        }) : [];
+        if (next.length + 'x' + (next[0] || []).length === before) {
+            showMessage('Nothing to remove — every row and column has content.', 'success');
             return;
         }
-        let html = '<table><thead><tr>';
-        headers.forEach(function (header) {
-            html += `<th>${escapeHtml(header)}</th>`;
+        change(function () {
+            grid = next;
         });
-        html += '</tr></thead><tbody>';
-        tableData.forEach(function (row) {
-            html += '<tr>';
-            headers.forEach(function (header) {
-                html += `<td>${escapeHtml(row[header] || '')}</td>`;
-            });
+    });
+    headerToggle.addEventListener('change', function () {
+        change(function () {
+            headerOn = headerToggle.checked;
+        });
+    });
+    undoBtn.addEventListener('click', function () {
+        restore(undoStack, redoStack);
+    });
+    redoBtn.addEventListener('click', function () {
+        restore(redoStack, undoStack);
+    });
+    document.addEventListener('keydown', function (e) {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+        const key = e.key.toLowerCase();
+        if (key !== 'z' && key !== 'y') return;
+        // Inside a text field the browser's own undo is the one people expect.
+        const el = document.activeElement;
+        if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+        e.preventDefault();
+        if (key === 'y' || e.shiftKey) restore(redoStack, undoStack);
+        else restore(undoStack, redoStack);
+    });
+
+    function startEmpty() {
+        change(function () {
+            grid = [['', '', ''], ['', '', ''], ['', '', '']];
+            headerOn = true;
+        }, [0, 0]);
+    }
+
+    // ---------- Rendering ----------
+
+    function render() {
+        closeMenu();
+        headerToggle.checked = headerOn;
+        updateUndoButtons();
+        toolbar.classList.toggle('on', grid.length > 0);
+        if (!grid.length) {
+            sizeEl.textContent = '';
+            tablePreview.innerHTML = '<div class="empty">Paste a table above to edit and convert it.<br>' +
+                '<button type="button" data-act="start">Start an empty table</button></div>';
+            updateOutput();
+            return;
+        }
+        const cols = width();
+        const bodyStart = headerOn ? 1 : 0;
+        const dataRows = grid.length - bodyStart;
+        sizeEl.textContent = dataRows + (dataRows === 1 ? ' row' : ' rows') + ' × ' + cols + (cols === 1 ? ' column' : ' columns');
+        const editable = PLAINTEXT_ONLY ? 'plaintext-only' : 'true';
+
+        let html = '<table class="grid"><thead><tr class="ctl"><th class="gutter"></th>';
+        for (let c = 0; c < cols; c++) {
+            html += `<th data-col="${c}"><button type="button" class="ctl-btn del" data-act="del-col" data-i="${c}" title="Delete column ${c + 1}" aria-label="Delete column ${c + 1}">✕</button>` +
+                `<button type="button" class="ctl-btn" data-act="col-menu" data-i="${c}" title="More column actions" aria-label="More actions for column ${c + 1}" aria-haspopup="menu">⋯</button></th>`;
+        }
+        html += '</tr>';
+        if (headerOn) {
+            html += `<tr class="head"><th class="gutter" title="Header row"><button type="button" class="ctl-btn" data-act="ins-row" data-i="1" title="Insert a row below the header" aria-label="Insert a row below the header">+</button></th>`;
+            for (let c = 0; c < cols; c++) {
+                html += `<th contenteditable="${editable}" spellcheck="false" data-r="0" data-c="${c}" data-placeholder="Column ${c + 1}">${escapeHtml(grid[0][c])}</th>`;
+            }
             html += '</tr>';
-        });
+        }
+        html += '</thead><tbody>';
+        for (let r = bodyStart; r < grid.length; r++) {
+            const n = r - bodyStart + 1;
+            html += `<tr><th class="gutter"><button type="button" class="ctl-btn del" data-act="del-row" data-i="${r}" title="Delete row ${n}" aria-label="Delete row ${n}">✕</button>` +
+                `<button type="button" class="ctl-btn" data-act="row-menu" data-i="${r}" title="More row actions" aria-label="More actions for row ${n}" aria-haspopup="menu">⋯</button><span class="num">${n}</span></th>`;
+            for (let c = 0; c < cols; c++) {
+                html += `<td contenteditable="${editable}" spellcheck="false" data-r="${r}" data-c="${c}">${escapeHtml(grid[r][c])}</td>`;
+            }
+            html += '</tr>';
+        }
         html += '</tbody></table>';
         tablePreview.innerHTML = html;
+        updateOutput();
+    }
+
+    function cellAt(r, c) {
+        return tablePreview.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+    }
+
+    function focusCell(r, c) {
+        const cell = cellAt(Math.min(r, grid.length - 1), Math.min(c, width() - 1)) || cellAt(headerOn ? 1 : 0, 0);
+        if (!cell) return;
+        cell.focus();
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    function cellsOf(kind, i) {
+        return Array.from(tablePreview.querySelectorAll(kind === 'col' ? `[data-c="${i}"]` : `[data-r="${i}"]`));
+    }
+
+    tablePreview.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const i = Number(btn.dataset.i);
+        switch (btn.dataset.act) {
+            case 'start':
+                return startEmpty();
+            case 'del-col':
+                return ops.deleteCol(i);
+            case 'del-row':
+                return ops.deleteRow(i);
+            case 'ins-row':
+                return ops.insertRow(i);
+            case 'col-menu':
+                return openMenu(btn, 'col', i);
+            case 'row-menu':
+                return openMenu(btn, 'row', i);
+        }
+    });
+
+    // Point at ✕ and the row or column it would remove turns red first.
+    tablePreview.addEventListener('mouseover', function (e) {
+        const btn = e.target.closest('button.del');
+        if (!btn) return;
+        cellsOf(btn.dataset.act === 'del-col' ? 'col' : 'row', btn.dataset.i).forEach(function (cell) {
+            cell.classList.add('doomed');
+        });
+    });
+    tablePreview.addEventListener('mouseout', function (e) {
+        if (!e.target.closest('button.del')) return;
+        tablePreview.querySelectorAll('.doomed').forEach(function (cell) {
+            cell.classList.remove('doomed');
+        });
+    });
+
+    tablePreview.addEventListener('focusin', function (e) {
+        if (e.target.dataset.c !== undefined) editSnapshotTaken = false;
+    });
+    tablePreview.addEventListener('input', function (e) {
+        const cell = e.target.closest('[data-c]');
+        if (!cell) return;
+        // One undo step per cell visit. The grid still holds the value from before
+        // this keystroke, so the snapshot does too.
+        if (!editSnapshotTaken) {
+            pushUndo();
+            editSnapshotTaken = true;
+        }
+        grid[cell.dataset.r][cell.dataset.c] = readCell(cell);
+        clearTimeout(outputTimeout);
+        outputTimeout = setTimeout(updateOutput, 150);
+    });
+    if (!PLAINTEXT_ONLY) {
+        // Without plaintext-only editing a paste could drop markup into a cell.
+        tablePreview.addEventListener('paste', function (e) {
+            if (!e.target.closest('[data-c]') || !e.clipboardData) return;
+            e.preventDefault();
+            document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+        });
+    }
+    tablePreview.addEventListener('keydown', function (e) {
+        const cell = e.target.closest('[data-c]');
+        if (!cell) return;
+        const r = Number(cell.dataset.r);
+        const c = Number(cell.dataset.c);
+        if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+            // Enter moves down like a spreadsheet; Shift+Enter keeps a line break.
+            e.preventDefault();
+            if (r + 1 < grid.length) focusCell(r + 1, c);
+            else cell.blur();
+        } else if (e.key === 'Escape') {
+            cell.blur();
+        } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            const to = r + (e.key === 'ArrowUp' ? -1 : 1);
+            if (to >= 0 && to < grid.length) focusCell(to, c);
+        }
+    });
+
+    function readCell(cell) {
+        // innerText keeps line breaks; a lone trailing newline is the browser's placeholder.
+        return cell.innerText.replace(/\r\n?/g, '\n').replace(/\n$/, '');
+    }
+
+    // ---------- Row and column menu ----------
+
+    let menuOwner = null;
+
+    function openMenu(btn, kind, i) {
+        if (menuOwner === btn) return closeMenu();
+        closeMenu();
+        const items = kind === 'col' ? [
+            ['Insert column left', function () { ops.insertCol(i); }],
+            ['Insert column right', function () { ops.insertCol(i + 1); }],
+            null,
+            ['Move left', function () { ops.moveCol(i, i - 1); }, i === 0],
+            ['Move right', function () { ops.moveCol(i, i + 1); }, i === width() - 1],
+            null,
+            ['Sort A → Z', function () { ops.sortCol(i, 1); }],
+            ['Sort Z → A', function () { ops.sortCol(i, -1); }],
+            null,
+            ['Delete column', function () { ops.deleteCol(i); }, false, 'danger']
+        ] : [
+            ['Insert row above', function () { ops.insertRow(i); }],
+            ['Insert row below', function () { ops.insertRow(i + 1); }],
+            ['Duplicate row', function () { ops.duplicateRow(i); }],
+            null,
+            ['Move up', function () { ops.moveRow(i, i - 1); }, i === (headerOn ? 1 : 0)],
+            ['Move down', function () { ops.moveRow(i, i + 1); }, i === grid.length - 1],
+            null,
+            ['Delete row', function () { ops.deleteRow(i); }, false, 'danger']
+        ];
+        menuEl.innerHTML = '';
+        items.forEach(function (item) {
+            if (!item) {
+                menuEl.appendChild(document.createElement('hr'));
+                return;
+            }
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.setAttribute('role', 'menuitem');
+            b.textContent = item[0];
+            b.disabled = !!item[2];
+            if (item[3]) b.className = item[3];
+            b.addEventListener('click', function () {
+                closeMenu();
+                item[1]();
+            });
+            menuEl.appendChild(b);
+        });
+        menuOwner = btn;
+        btn.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+        cellsOf(kind, i).forEach(function (cell) {
+            cell.classList.add('hl');
+        });
+        menuEl.classList.add('show');
+        const rect = btn.getBoundingClientRect();
+        const mw = menuEl.offsetWidth;
+        const mh = menuEl.offsetHeight;
+        menuEl.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - mw - 8)) + 'px';
+        menuEl.style.top = (rect.bottom + mh + 8 > window.innerHeight ? Math.max(8, rect.top - mh - 4) : rect.bottom + 4) + 'px';
+        const first = menuEl.querySelector('button:not(:disabled)');
+        if (first) first.focus();
+    }
+
+    function closeMenu() {
+        if (!menuOwner) return;
+        const owner = menuOwner;
+        menuOwner = null;
+        menuEl.classList.remove('show');
+        owner.classList.remove('open');
+        owner.setAttribute('aria-expanded', 'false');
+        tablePreview.querySelectorAll('.hl').forEach(function (cell) {
+            cell.classList.remove('hl');
+        });
+        if (document.activeElement === document.body || menuEl.contains(document.activeElement)) owner.focus();
+    }
+
+    document.addEventListener('mousedown', function (e) {
+        if (menuOwner && !menuEl.contains(e.target) && e.target !== menuOwner) closeMenu();
+    });
+    tablePreview.addEventListener('scroll', function () {
+        if (menuOwner) closeMenu();
+    });
+    window.addEventListener('resize', closeMenu);
+    menuEl.addEventListener('keydown', function (e) {
+        const items = Array.from(menuEl.querySelectorAll('button:not(:disabled)'));
+        const at = items.indexOf(document.activeElement);
+        if (e.key === 'Escape' || e.key === 'Tab') {
+            e.preventDefault();
+            closeMenu();
+        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const step = e.key === 'ArrowDown' ? 1 : -1;
+            items[(at + step + items.length) % items.length].focus();
+        }
+    });
+
+    // ---------- Output ----------
+
+    formatSelector.addEventListener('change', updateOutput);
+    downloadBtn.addEventListener('click', downloadOutput);
+    copyBtn.addEventListener('click', copyOutput);
+
+    function headerNames() {
+        if (!grid.length) return [];
+        return grid[0].map(function (h, i) {
+            return headerOn && h.trim() ? h.trim() : `Column ${i + 1}`;
+        });
+    }
+
+    function bodyRows() {
+        return headerOn ? grid.slice(1) : grid;
     }
 
     function updateOutput() {
-        if (headers.length === 0 || tableData.length === 0) {
-            textOutput.value = 'No valid table data to convert.';
+        clearTimeout(outputTimeout);
+        const isXlsx = formatSelector.value === 'xlsx';
+        copyBtn.disabled = isXlsx || !grid.length;
+        downloadBtn.disabled = !grid.length;
+        if (!grid.length) {
+            textOutput.value = '';
             return;
         }
-        const format = formatSelector.value;
-        let output = '';
+        textOutput.value = isXlsx ? 'Click "Download" to get the Excel file.' : convert(formatSelector.value);
+    }
+
+    function convert(format) {
         switch (format) {
             case'csv':
-                output = convertToCsv();
-                break;
+                return convertToCsv();
             case'tsv':
-                output = convertToTsv();
-                break;
+                return convertToTsv();
             case'json':
-                output = convertToJson();
-                break;
+                return convertToJson();
             case'html':
-                output = convertToHtml();
-                break;
+                return convertToHtml();
             case'markdown':
-                output = convertToMarkdown();
-                break;
+                return convertToMarkdown();
             case'xml':
-                output = convertToXml();
-                break;
+                return convertToXml();
             case'sql':
-                output = convertToSql();
-                break;
-            case'xlsx':
-                output = 'Click "Download" to get the Excel file.';
-                break;
+                return convertToSql();
         }
-        textOutput.value = output;
+        return '';
     }
 
     function convertToCsv() {
-        let csv = headers.map(function (header) {
-            return escapeCsvValue(header);
-        }).join(',') + '\n';
-        tableData.forEach(function (row) {
-            const rowValues = headers.map(function (header) {
-                return escapeCsvValue(row[header] || '');
-            });
-            csv += rowValues.join(',') + '\n';
-        });
-        return csv;
+        const lines = headerOn ? [headerNames()] : [];
+        return lines.concat(bodyRows()).map(function (row) {
+            return row.map(escapeCsvValue).join(',');
+        }).join('\n') + '\n';
     }
 
     function escapeCsvValue(value) {
         value = String(value);
-        if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+        if (/[",\n\r]/.test(value)) {
             return '"' + value.replace(/"/g, '""') + '"';
         }
         return value;
     }
 
     function convertToTsv() {
-        let tsv = headers.join('\t') + '\n';
-        tableData.forEach(function (row) {
-            const rowValues = headers.map(function (header) {
-                return (row[header] || '').replace(/[\t\n]/g, ' ');
-            });
-            tsv += rowValues.join('\t') + '\n';
-        });
-        return tsv;
+        const lines = headerOn ? [headerNames()] : [];
+        return lines.concat(bodyRows()).map(function (row) {
+            return row.map(function (v) {
+                return String(v).replace(/[\t\r\n]+/g, ' ');
+            }).join('\t');
+        }).join('\n') + '\n';
     }
 
     function convertToJson() {
-        return JSON.stringify(tableData, null, 2);
+        const keys = makeNamesUnique(headerNames());
+        return JSON.stringify(bodyRows().map(function (row) {
+            const obj = {};
+            keys.forEach(function (key, i) {
+                obj[key] = row[i];
+            });
+            return obj;
+        }), null, 2);
     }
 
     function convertToHtml() {
-        let html = '<table>\n<thead>\n<tr>\n';
-        headers.forEach(function (header) {
-            html += `<th>${escapeHtml(header)}</th>\n`;
+        let html = '<table>\n';
+        if (headerOn) {
+            html += '<thead>\n<tr>\n' + headerNames().map(function (h) {
+                return `<th>${escapeHtml(h)}</th>\n`;
+            }).join('') + '</tr>\n</thead>\n';
+        }
+        html += '<tbody>\n';
+        bodyRows().forEach(function (row) {
+            html += '<tr>\n' + row.map(function (v) {
+                return `<td>${escapeHtml(v).replace(/\n/g, '<br>')}</td>\n`;
+            }).join('') + '</tr>\n';
         });
-        html += '</tr>\n</thead>\n<tbody>\n';
-        tableData.forEach(function (row) {
-            html += '<tr>\n';
-            headers.forEach(function (header) {
-                html += `<td>${escapeHtml(row[header] || '')}</td>\n`;
-            });
-            html += '</tr>\n';
-        });
-        html += '</tbody>\n</table>';
-        return html;
+        return html + '</tbody>\n</table>';
     }
 
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     function convertToMarkdown() {
-        let markdown = '| ' + headers.join(' | ') + ' |\n';
-        markdown += '| ' + headers.map(function () {
+        const cell = function (v) {
+            return String(v).replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+        };
+        const names = headerNames();
+        let markdown = '| ' + names.map(cell).join(' | ') + ' |\n';
+        markdown += '| ' + names.map(function () {
             return '---';
         }).join(' | ') + ' |\n';
-        tableData.forEach(function (row) {
-            const rowValues = headers.map(function (header) {
-                return (row[header] || '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
-            });
-            markdown += '| ' + rowValues.join(' | ') + ' |\n';
+        bodyRows().forEach(function (row) {
+            markdown += '| ' + row.map(cell).join(' | ') + ' |\n';
         });
         return markdown;
     }
 
     function convertToXml() {
+        const names = safeNames();
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<table>\n';
-        tableData.forEach(function (row, index) {
+        bodyRows().forEach(function (row, index) {
             xml += `<row id="${index + 1}">\n`;
-            headers.forEach(function (header) {
-                const safeName = header.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-                if (!safeName) {
-                    return;
-                }
-                const columnName = safeName || 'column_' + headers.indexOf(header);
-                xml += `<${columnName}>${escapeXml(row[header] || '')}</${columnName}>\n`;
+            names.forEach(function (name, i) {
+                xml += `<${name}>${escapeXml(row[i])}</${name}>\n`;
             });
             xml += '</row>\n';
         });
-        xml += '</table>';
-        return xml;
+        return xml + '</table>';
     }
 
     function escapeXml(text) {
@@ -759,109 +1486,146 @@
 
     function convertToSql() {
         const tableName = 'table_data';
-        let sql = `CREATE TABLE ${tableName}
-                   (  `;
-        sql += headers.map(function (header, index) {
-            const safeName = header.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || 'column_' + index;
-            return ` ${safeName} TEXT`;
-        }).join(',\n');
-        sql += '\n);\n\n';
-        tableData.forEach(function (row) {
-            const columns = headers.map(function (header) {
-                const safeName = header.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || 'column_' + headers.indexOf(header);
-                return safeName;
+        const names = safeNames();
+        let sql = `CREATE TABLE ${tableName} (\n` + names.map(function (name) {
+            return `  ${name} TEXT`;
+        }).join(',\n') + '\n);\n\n';
+        bodyRows().forEach(function (row) {
+            const values = row.map(function (v) {
+                return `'${String(v).replace(/'/g, "''")}'`;
             }).join(', ');
-            const values = headers.map(function (header) {
-                const value = row[header] || '';
-                return `'${value.replace(/'/g, "''")}'`;
-            }).join(', ');
-            sql += `INSERT INTO ${tableName} (${columns})
-                    VALUES (${values});  `;
+            sql += `INSERT INTO ${tableName} (${names.join(', ')}) VALUES (${values});\n`;
         });
         return sql;
     }
 
+    // Column names that are valid XML element names and SQL identifiers alike.
+    function safeNames() {
+        return makeNamesUnique(headerNames().map(function (header, i) {
+            const name = header.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase();
+            if (!name) return `column_${i + 1}`;
+            return /^[0-9]|^xml/.test(name) ? `c_${name}` : name;
+        }), '_');
+    }
+
+    // Repeated names would overwrite each other as JSON keys or clash as columns.
+    function makeNamesUnique(names, joiner) {
+        const seen = Object.create(null);
+        return names.map(function (name) {
+            if (!seen[name]) {
+                seen[name] = 1;
+                return name;
+            }
+            let candidate;
+            do {
+                ++seen[name];
+                candidate = joiner ? `${name}${joiner}${seen[name]}` : `${name} (${seen[name]})`;
+            } while (seen[candidate]);
+            seen[candidate] = 1;
+            return candidate;
+        });
+    }
+
+    function copyOutput() {
+        const text = textOutput.value;
+        const fallback = function () {
+            textOutput.focus();
+            textOutput.select();
+            const ok = document.execCommand('copy');
+            window.getSelection().removeAllRanges();
+            showMessage(ok ? 'Copied to clipboard!' : 'Copy failed — select the output and copy it by hand.', ok ? 'success' : 'error');
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+                showMessage('Copied to clipboard!', 'success');
+            }, fallback);
+        } else {
+            fallback();
+        }
+    }
+
+    const FILE_TYPES = {
+        csv: ['table_data.csv', 'text/csv'],
+        tsv: ['table_data.tsv', 'text/tab-separated-values'],
+        json: ['table_data.json', 'application/json'],
+        html: ['table_data.html', 'text/html'],
+        markdown: ['table_data.md', 'text/markdown'],
+        xml: ['table_data.xml', 'application/xml'],
+        sql: ['table_data.sql', 'application/sql']
+    };
+
     function downloadOutput() {
         const format = formatSelector.value;
-        let content, filename, type;
-        switch (format) {
-            case'csv':
-                content = convertToCsv();
-                filename = 'table_data.csv';
-                type = 'text/csv';
-                break;
-            case'tsv':
-                content = convertToTsv();
-                filename = 'table_data.tsv';
-                type = 'text/tab-separated-values';
-                break;
-            case'json':
-                content = convertToJson();
-                filename = 'table_data.json';
-                type = 'application/json';
-                break;
-            case'html':
-                content = convertToHtml();
-                filename = 'table_data.html';
-                type = 'text/html';
-                break;
-            case'markdown':
-                content = convertToMarkdown();
-                filename = 'table_data.md';
-                type = 'text/markdown';
-                break;
-            case'xml':
-                content = convertToXml();
-                filename = 'table_data.xml';
-                type = 'application/xml';
-                break;
-            case'sql':
-                content = convertToSql();
-                filename = 'table_data.sql';
-                type = 'application/sql';
-                break;
-            case'xlsx':
-                downloadExcel();
-                return;
+        if (format === 'xlsx') {
+            downloadExcel();
+            return;
         }
-        const blob = new Blob([content], {type});
-        saveAs(blob, filename);
+        const [filename, type] = FILE_TYPES[format];
+        saveBlob(new Blob([convert(format)], {type: type + ';charset=utf-8'}), filename);
         showMessage(`Downloaded as ${filename}`, 'success');
     }
 
-    function downloadExcel() {
-        try {
-            const wb = XLSX.utils.book_new();
-            const wsData = [headers];
-            tableData.forEach(function (row) {
-                const rowValues = headers.map(function (header) {
-                    return row[header] || '';
-                });
-                wsData.push(rowValues);
+    function saveBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () {
+            URL.revokeObjectURL(url);
+        }, 1000);
+    }
+
+    // SheetJS is big and only this one format needs it, so it loads on first use.
+    let xlsxLoading = null;
+
+    function loadXlsx() {
+        if (window.XLSX) return Promise.resolve();
+        if (!xlsxLoading) {
+            xlsxLoading = new Promise(function (resolve, reject) {
+                const s = document.createElement('script');
+                s.src = XLSX_URL;
+                s.onload = resolve;
+                s.onerror = function () {
+                    xlsxLoading = null;
+                    reject(new Error('Could not load the Excel library'));
+                };
+                document.head.appendChild(s);
             });
-            const ws = XLSX.utils.aoa_to_sheet(wsData);
+        }
+        return xlsxLoading;
+    }
+
+    function downloadExcel() {
+        loadXlsx().then(function () {
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet((headerOn ? [headerNames()] : []).concat(bodyRows()));
             XLSX.utils.book_append_sheet(wb, ws, 'Table Data');
             XLSX.writeFile(wb, 'table_data.xlsx');
             showMessage('Downloaded as table_data.xlsx', 'success');
-        } catch (error) {
+        }).catch(function (error) {
             console.error('Excel download error:', error);
             showMessage('Error creating Excel file. Please try another format.', 'error');
-        }
+        });
     }
 
     function showMessage(message, type = 'success') {
+        clearTimeout(messageTimeout);
         messageEl.textContent = message;
         messageEl.className = `${type}-message`;
         messageEl.classList.add('show');
-        setTimeout(function () {
-            hideMessage();
-        }, 3000);
+        messageTimeout = setTimeout(hideMessage, 3000);
     }
 
     function hideMessage() {
+        clearTimeout(messageTimeout);
         messageEl.classList.remove('show');
         messageEl.textContent = '';
     }
+
+    render();
 });</script>
 <script src="../logo.js"></script>
 </body>
