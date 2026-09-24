@@ -134,3 +134,31 @@ Node's `vm`.
 
 Each check has been seen failing: a solver that settles a subset difference as mines too
 eagerly, a flood fill that reopens open cells, and a deal that spares only the clicked cell.
+
+## Connect Four
+
+```sh
+npm run test:connect4                    # or: node test/connect_four.mjs
+node test/connect_four.mjs search        # one or more named suites
+node test/connect_four.mjs --page=old.html
+```
+
+The computer opponent is a search — negamax with alpha-beta, a transposition table, history
+ordering and a narrowed window at the root — and every one of those is a way to skip a move
+that should have been looked at. A pruning bug does not crash; it plays a slightly worse move,
+which nobody can see from the page. The suite takes the AI block (`const AI_LEVELS` through
+`function getAIMove()`, which touches no DOM) out of the page, splices a plain minimax beside
+it that shares the board and evaluation, and runs both in Node. It takes about 40 seconds.
+
+| suite | what it checks |
+| --- | --- |
+| `search` | on 400 random positions at depths 1–5 the pruned search returns exactly the minimax score, and the narrowed root finds the same best score and the same set of best moves as a full-window root |
+| `tactics` | on 250 random positions, at every difficulty: the answer is a legal column, a win on the board is taken, a single threat is blocked (even when the game is lost anyway), and no move hands over a win that another move would avoid; each level also finds the last empty column |
+
+Each check has been seen failing: swapped transposition-table bounds, move ordering that drops
+the last candidate, and a lost position where the computer stopped blocking.
+
+Playing strength is not asserted here, because Hard searches against a clock and its games
+are not reproducible. It was measured when the search went in: against a red bot that looks
+six moves ahead, Hard went 37–0 with 3 draws over 40 games (the old one-move heuristic lost
+39 of 40), and a copy of the search given three seconds a move as red still beats it.

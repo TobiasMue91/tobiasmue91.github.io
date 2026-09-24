@@ -151,7 +151,8 @@
     moveHistory: [],
     scores: { red: 0, yellow: 0 },
     winningCells: [],
-    aiThinking: false
+    aiThinking: false,
+    id: 0
   };
 
   // DOM elements
@@ -320,11 +321,19 @@
       game.aiThinking = true;
       updateUI();
 
+      // Let "AI is thinking..." paint, search, then play at the usual pace.
+      // A new game or opponent change while it thinks discards the move.
+      const gameId = game.id;
+      const started = performance.now();
       setTimeout(() => {
+        if (game.id !== gameId) return;
         const aiCol = getAIMove();
-        game.aiThinking = false;
-        makeMove(aiCol);
-      }, 600);
+        setTimeout(() => {
+          if (game.id !== gameId) return;
+          game.aiThinking = false;
+          makeMove(aiCol);
+        }, Math.max(0, 600 - (performance.now() - started)));
+      }, 30);
     }
   }
 
@@ -413,152 +422,241 @@
   }
 
   // AI move logic
-  function getAIMove() {
-    const difficulty = elements.difficulty.value;
-
-    // Check for winning move
-    const winningMove = findWinningMove('yellow');
-    if (winningMove !== -1) return winningMove;
-
-    // Check for blocking opponent's winning move
-    const blockingMove = findWinningMove('red');
-    if (blockingMove !== -1) return blockingMove;
-
-    // Additional AI logic based on difficulty
-    if (difficulty === 'hard') {
-      // Try to create threats
-      const threatMove = findBestMove();
-      if (threatMove !== -1) return threatMove;
-    }
-
-    // Prefer center columns
-    const availableColumns = [];
-    const weightedColumns = [];
-
-    for (let col = 0; col < 7; col++) {
-      if (findAvailableRow(col) !== -1) {
-        availableColumns.push(col);
-
-        // Weight by column position (prefer center)
-        const weight =
-                col === 3 ? 5 :   // Center
-                        col === 2 || col === 4 ? 3 :   // Near center
-                                col === 1 || col === 5 ? 2 :   // Further out
-                                        1;                // Edges
-
-        // Add weighted entries for random selection
-        for (let i = 0; i < weight; i++) {
-          weightedColumns.push(col);
+  // The computer searches ahead instead of scoring one move in isolation:
+  // negamax with alpha-beta over the 69 four-in-a-row windows, a
+  // transposition table, and iterative deepening against a time budget.
+  // Difficulty is how far it looks and how much noise it adds to close calls;
+  // it never plays a move that loses on the spot.
+  const AI_LEVELS = {
+    easy:   { depth: 2,  budget: 100, noise: 40 },
+    medium: { depth: 6,  budget: 300, noise: 6 },
+    hard:   { depth: 42, budget: 700, noise: 0 }
+  };
+  const ai = (() => {
+    const WIN = 100000;
+    const ORDER = [3, 2, 4, 1, 5, 0, 6];
+    const WEIGHT = [0, 1, 5, 40];
+    const windows = [];            // each window: four cell indices (col * 6 + row)
+    const cellWindows = [];        // cell index -> windows through it
+    for (let i = 0; i < 42; i++) cellWindows.push([]);
+    for (let c = 0; c < 7; c++) {
+      for (let r = 0; r < 6; r++) {
+        for (const [dc, dr] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+          const ec = c + 3 * dc, er = r + 3 * dr;
+          if (ec > 6 || er < 0 || er > 5) continue;
+          const w = [];
+          for (let k = 0; k < 4; k++) w.push((c + k * dc) * 6 + r + k * dr);
+          w.forEach(i => cellWindows[i].push(windows.length));
+          windows.push(w);
         }
       }
     }
+    const NW = windows.length;
 
-    if (availableColumns.length === 0) return -1;
+    const cells = new Int8Array(42);          // 0 empty, 1 / 2 players
+    const height = new Int8Array(7);
+    const count = new Int8Array(NW * 3);      // pieces per player in each window
+    let moves = 0;
 
-    if (difficulty === 'easy') {
-      // Truly random for easy
-      return availableColumns[Math.floor(Math.random() * availableColumns.length)];
-    } else {
-      // Weighted random for medium and hard
-      return weightedColumns[Math.floor(Math.random() * weightedColumns.length)];
+    // Zobrist keys, two 32-bit halves
+    const zA = new Int32Array(42 * 3), zB = new Int32Array(42 * 3);
+    for (let i = 0; i < zA.length; i++) {
+      zA[i] = (Math.random() * 4294967296) | 0;
+      zB[i] = (Math.random() * 4294967296) | 0;
     }
-  }
+    let hA = 0, hB = 0;
+    const TT_SIZE = 1 << 20, TT_MASK = TT_SIZE - 1;
+    const ttKey = new Int32Array(TT_SIZE), ttScore = new Int32Array(TT_SIZE);
+    const ttDepth = new Int8Array(TT_SIZE), ttFlag = new Int8Array(TT_SIZE), ttMove = new Int8Array(TT_SIZE);
+    const EXACT = 1, LOWER = 2, UPPER = 3;
+    const history = new Int32Array(84);     // cutoff counts per player and cell
 
-  // Find winning move for player
-  function findWinningMove(player) {
-    for (let col = 0; col < 7; col++) {
-      const row = findAvailableRow(col);
-      if (row === -1) continue;
-
-      // Try this move
-      game.board[row][col] = player;
-      const isWin = checkWin(row, col);
-      game.board[row][col] = null;
-
-      if (isWin) return col;
+    function play(col, p) {
+      const i = col * 6 + height[col]++;
+      cells[i] = p; moves++;
+      hA ^= zA[i * 3 + p]; hB ^= zB[i * 3 + p];
+      const ws = cellWindows[i];
+      for (let k = 0; k < ws.length; k++) count[ws[k] * 3 + p]++;
     }
-    return -1;
-  }
+    function unplay(col) {
+      const i = col * 6 + --height[col], p = cells[i];
+      cells[i] = 0; moves--;
+      hA ^= zA[i * 3 + p]; hB ^= zB[i * 3 + p];
+      const ws = cellWindows[i];
+      for (let k = 0; k < ws.length; k++) count[ws[k] * 3 + p]--;
+    }
+    // Would p complete four by filling cell i?
+    function completes(i, p) {
+      const o = 3 - p, ws = cellWindows[i];
+      for (let k = 0; k < ws.length; k++) {
+        const w = ws[k] * 3;
+        if (count[w + p] === 3 && count[w + o] === 0) return true;
+      }
+      return false;
+    }
+    function winningCol(col, p) {
+      return height[col] < 6 && completes(col * 6 + height[col], p);
+    }
 
-  // Find best strategic move (for hard difficulty)
-  function findBestMove() {
-    let bestScore = -Infinity;
-    let bestCol = 3; // Default to center
+    // Static score for the side to move. Open windows count by how full they
+    // are; a completed-but-for-one cell that is not yet playable is a threat,
+    // and the first player's threats are worth more on odd rows, the second's
+    // on even rows, because zugzwang fills the board in that parity.
+    function evaluate(p) {
+      const o = 3 - p;
+      let s = 0;
+      for (let w = 0; w < NW; w++) {
+        const a = count[w * 3 + p], b = count[w * 3 + o];
+        if (a && !b) s += WEIGHT[a];
+        else if (b && !a) s -= WEIGHT[b];
+      }
+      for (let c = 0; c < 7; c++) {
+        for (let r = height[c] + 1; r < 6; r++) {
+          const i = c * 6 + r;
+          const good = r % 2 === 0 ? 1 : 2;   // row 0 is the bottom row (row 1 on the board)
+          if (completes(i, p)) s += good === p ? 30 : 12;
+          if (completes(i, o)) s -= good === o ? 30 : 12;
+        }
+      }
+      return s;
+    }
 
-    for (let col = 0; col < 7; col++) {
-      const row = findAvailableRow(col);
-      if (row === -1) continue;
+    let deadline = 0, nodes = 0;
+    const ABORT = {};
 
-      game.board[row][col] = 'yellow';
-      const score = evaluateBoard();
-      game.board[row][col] = null;
+    function negamax(depth, alpha, beta, p, ply) {
+      if ((++nodes & 4095) === 0 && performance.now() > deadline) throw ABORT;
+      const o = 3 - p;
+      for (let c = 0; c < 7; c++) if (winningCol(c, p)) return WIN - ply;
+      if (moves === 42) return 0;
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestCol = col;
+      // Opponent threats that are playable right now force our hand.
+      let forced = -1, threats = 0;
+      for (let c = 0; c < 7; c++) if (winningCol(c, o)) { threats++; forced = c; }
+      if (threats > 1) return -(WIN - ply - 1);
+      if (depth <= 0) return evaluate(p);
+
+      const alpha0 = alpha;
+      const slot = hA & TT_MASK;
+      let ttBest = -1;
+      if (ttKey[slot] === hB && ttFlag[slot]) {
+        ttBest = ttMove[slot];
+        if (ttDepth[slot] >= depth) {
+          const v = ttScore[slot], f = ttFlag[slot];
+          if (f === EXACT) return v;
+          if (f === LOWER && v > alpha) alpha = v;
+          else if (f === UPPER && v < beta) beta = v;
+          if (alpha >= beta) return v;
+        }
+      }
+
+      let best = -Infinity, bestCol = -1;
+      let list;
+      if (forced >= 0) list = [forced];
+      else {
+        // Table move first, then moves that caused cutoffs elsewhere, centre first on ties.
+        const hist = history.subarray((p - 1) * 42, p * 42);
+        list = ORDER.filter(c => c !== ttBest && height[c] < 6)
+          .sort((a, b) => hist[b * 6 + height[b]] - hist[a * 6 + height[a]]);
+        if (ttBest >= 0) list.unshift(ttBest);
+      }
+      for (let k = 0; k < list.length; k++) {
+        const c = list[k];
+        if (height[c] >= 6) continue;
+        let v;
+        // Playing under the opponent's winning cell loses at once.
+        if (height[c] < 5 && completes(c * 6 + height[c] + 1, o)) v = -(WIN - ply - 2);
+        else {
+          play(c, p);
+          v = -negamax(depth - 1, -beta, -alpha, o, ply + 1);
+          unplay(c);
+        }
+        if (v > best) { best = v; bestCol = c; }
+        if (v > alpha) alpha = v;
+        if (alpha >= beta) {
+          if (height[c] < 6) history[(p - 1) * 42 + c * 6 + height[c]] += depth * depth;
+          break;
+        }
+      }
+      ttKey[slot] = hB; ttScore[slot] = best; ttDepth[slot] = depth; ttMove[slot] = bestCol;
+      ttFlag[slot] = best <= alpha0 ? UPPER : best >= beta ? LOWER : EXACT;
+      return best;
+    }
+
+    // Scores for every legal root move at a given depth. With narrow set,
+    // moves that cannot match the best so far are only proven worse, which is
+    // all a noiseless pick needs and lets the search go deeper.
+    function scoreRoot(depth, p, prev, narrow) {
+      const o = 3 - p, scores = [];
+      const order = prev ? prev.slice().sort((a, b) => b.score - a.score).map(s => s.col) : ORDER;
+      let best = -Infinity;
+      for (const c of order) {
+        if (height[c] >= 6) continue;
+        let v;
+        if (winningCol(c, p)) v = WIN;
+        else {
+          play(c, p);
+          v = -negamax(depth - 1, -Infinity, narrow && best > -Infinity ? -(best - 1) : Infinity, o, 1);
+          unplay(c);
+        }
+        if (v > best) best = v;
+        scores.push({ col: c, score: v });
+      }
+      return scores;
+    }
+
+    function load(board) {
+      cells.fill(0); height.fill(0); count.fill(0); moves = 0; hA = 0; hB = 0;
+      ttFlag.fill(0); history.fill(0);
+      for (let c = 0; c < 7; c++) {
+        for (let r = 0; r < 6 && board[r][c] !== null; r++) play(c, board[r][c] === 'red' ? 1 : 2);
       }
     }
 
-    return bestCol;
-  }
-
-  // Evaluate board position for AI
-  function evaluateBoard() {
-    let score = 0;
-
-    // Check horizontal windows
-    for (let row = 0; row < 6; row++) {
-      for (let col = 0; col < 4; col++) {
-        score += evaluateWindow(row, col, 0, 1);
+    function chooseMove(board, player, level) {
+      const cfg = AI_LEVELS[level] || AI_LEVELS.medium;
+      const p = player === 'red' ? 1 : 2;
+      load(board);
+      const start = performance.now();
+      deadline = start + cfg.budget;
+      nodes = 0;
+      let scores = null;
+      const maxDepth = Math.min(cfg.depth, 42 - moves);
+      try {
+        for (let d = 1; d <= maxDepth; d++) {
+          scores = scoreRoot(d, p, scores, cfg.noise === 0);
+          if (scores.some(s => Math.abs(s.score) > WIN / 2 && s.score > 0)) break;    // a forced win is found
+          if (scores.every(s => s.score < -WIN / 2)) break;                           // every move loses
+        }
+      } catch (e) {
+        if (e !== ABORT) throw e;
+        load(board);   // an aborted search leaves pieces on the scratch board
       }
-    }
+      if (!scores) { deadline = Infinity; scores = scoreRoot(1, p); }
 
-    // Check vertical windows
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 7; col++) {
-        score += evaluateWindow(row, col, 1, 0);
+      // Noise only reshuffles moves that are close; it never turns a win
+      // down or walks into a loss that another move would avoid.
+      const best = Math.max(...scores.map(s => s.score));
+      // Lost anyway: still block the win on offer and make the opponent find the next one.
+      if (best < -WIN / 2) {
+        const block = scores.find(s => winningCol(s.col, 3 - p));
+        if (block) return block.col;
       }
+      const decisive = Math.abs(best) > WIN / 2;
+      const picked = scores.map(s => ({
+        col: s.col,
+        v: decisive || Math.abs(s.score) > WIN / 2 ? s.score : s.score + (Math.random() * 2 - 1) * cfg.noise
+      }));
+      const top = Math.max(...picked.map(s => s.v));
+      const ties = picked.filter(s => s.v === top);
+      return ties[Math.floor(Math.random() * ties.length)].col;
     }
 
-    // Check diagonal windows
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 4; col++) {
-        score += evaluateWindow(row, col, 1, 1);
-      }
-    }
+    return { chooseMove };
+  })();
 
-    for (let row = 0; row < 3; row++) {
-      for (let col = 3; col < 7; col++) {
-        score += evaluateWindow(row, col, 1, -1);
-      }
-    }
-
-    // Prefer center column
-    for (let row = 0; row < 6; row++) {
-      if (game.board[row][3] === 'yellow') score += 3;
-    }
-
-    return score;
-  }
-
-  // Evaluate a window of 4 cells
-  function evaluateWindow(row, col, dr, dc) {
-    const window = [];
-    for (let i = 0; i < 4; i++) {
-      window.push(game.board[row + i*dr][col + i*dc]);
-    }
-
-    const yellowCount = window.filter(cell => cell === 'yellow').length;
-    const redCount = window.filter(cell => cell === 'red').length;
-    const emptyCount = window.filter(cell => cell === null).length;
-
-    // Score the window
-    if (yellowCount === 4) return 100;
-    if (yellowCount === 3 && emptyCount === 1) return 5;
-    if (yellowCount === 2 && emptyCount === 2) return 2;
-    if (redCount === 3 && emptyCount === 1) return -4;
-
-    return 0;
+  function getAIMove() {
+    return ai.chooseMove(game.board, 'yellow', elements.difficulty.value);
   }
 
   // Undo move
@@ -604,6 +702,7 @@
     game.moveHistory = [];
     game.winningCells = [];
     game.aiThinking = false;
+    game.id++;
 
     // Reset UI
     document.querySelectorAll('.cell').forEach(cell => {
