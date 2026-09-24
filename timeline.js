@@ -514,8 +514,8 @@
         #tt .tt-years span,#tt .tt-models span{position:absolute;transform:translateX(-50%);white-space:nowrap;line-height:1}
         #tt .tt-years span{bottom:0;color:var(--ink-3,#968bae);font-size:10px;padding-left:1px}
         #tt .tt-years span::before{content:"";position:absolute;left:50%;bottom:calc(100% + 2px);height:5px;border-left:1px solid var(--line-2,#3a3352)}
-        #tt .tt-models{position:absolute;left:0;right:0;top:0;height:100%}
-        #tt .tt-models span{color:var(--cyan,#4ee1d2);font-size:10px;cursor:pointer;opacity:0.7}
+        #tt .tt-models{position:absolute;left:0;right:0;top:0;height:100%;pointer-events:none}
+        #tt .tt-models span{color:var(--cyan,#4ee1d2);font-size:10px;cursor:pointer;opacity:0.7;pointer-events:auto}
         #tt .tt-models span.on,#tt .tt-models span:hover{opacity:1;text-decoration:underline}
         #tt .tt-step{flex:none;width:32px;height:32px;border:2px solid var(--line-2,#3a3352);background:none;color:var(--ink,#f5ecd4);cursor:pointer}
         #tt .tt-step:hover:not(:disabled){border-color:var(--amber,#ffc857);color:var(--amber,#ffc857)}
