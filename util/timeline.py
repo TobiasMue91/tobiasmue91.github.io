@@ -1,88 +1,93 @@
-import os
-from datetime import datetime
+"""
+Rebuild timeline_data.json, the list of days the home page's time travel bar can visit.
+
+One snapshot per day on which the catalogue changed: index.html itself, or since 2025
+the data/games.json and data/tools.json it renders. Each snapshot is the last commit
+of that day on the main branch's first-parent line. The model names in "GptVersion"
+are set by hand; they are kept by date, so re-running this never loses them.
+
+Reads the local git history, so it needs a full clone (not a shallow one) but no token.
+
+Usage:
+    python util/timeline.py              # from the main branch
+    python util/timeline.py --ref HEAD   # from whatever is checked out
+"""
+
+import argparse
 import json
-from github import Github
-from dotenv import load_dotenv
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
-# Access the API key
-load_dotenv()
-GITHUB_ACCESS_TOKEN = os.getenv('GITHUB_ACCESS_TOKEN')
+ROOT = Path(__file__).resolve().parent.parent
+OUTPUT = ROOT / "timeline_data.json"
+WATCHED = ["index.html", "data/games.json", "data/tools.json"]
 
-# Set up the GitHub API client with no caching
-g = Github(GITHUB_ACCESS_TOKEN, per_page=100)
 
-# Set up the repository and file path
-repo = g.get_repo("TobiasMue91/tobiasmue91.github.io")
-file_path = "index.html"
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout
 
-# Fetch the commit history for index.html
-index_commits = list(repo.get_commits(path=file_path, sha="main"))
 
-# Also fetch the latest commit from the repository (regardless of file)
-latest_commit = repo.get_commits()[0]  # First commit is the latest
+def resolve_ref(ref: str) -> str:
+    try:
+        git("rev-parse", "--verify", "--quiet", ref)
+        return ref
+    except subprocess.CalledProcessError:
+        print(f"'{ref}' not found, using HEAD", file=sys.stderr)
+        return "HEAD"
 
-# Print the date ranges to verify
-if index_commits:
-    print(f"Oldest index.html commit: {index_commits[-1].commit.author.date}")
-    print(f"Latest index.html commit: {index_commits[0].commit.author.date}")
-    print(f"Total index.html commits found: {len(index_commits)}")
 
-print(f"Latest repository commit: {latest_commit.commit.author.date} (hash: {latest_commit.sha})")
+def daily_snapshots(ref: str) -> list[dict]:
+    """Newest first: the last commit of every day that touched a watched file."""
+    log = git("log", "--first-parent", "--format=%H %cI", ref, "--", *WATCHED)
+    snapshots, seen_days = [], set()
+    for line in log.splitlines():
+        sha, stamp = line.split()
+        when = datetime.fromisoformat(stamp).astimezone(timezone.utc)
+        day = when.date().isoformat()
+        if day in seen_days:
+            continue
+        seen_days.add(day)
+        snapshots.append({"hash": sha, "timestamp": when.isoformat(), "GptVersion": None})
+    return snapshots
 
-# Load existing data to preserve GptVersion values
-existing_data = {}
-try:
-    with open("timeline_data.json", "r") as f:
-        existing_entries = json.load(f)
-        # Create a dictionary with commit hash as key for faster lookup
-        for entry in existing_entries:
-            existing_data[entry["hash"]] = entry
-except FileNotFoundError:
-    pass  # No existing file, that's OK
 
-# Process the commits and generate the JSON data
-timeline_data = []
-last_date = None
+def carry_labels(snapshots: list[dict], previous: list[dict]) -> None:
+    """Put each hand-set model name back on the snapshot of its day, or the next one after."""
+    labels = sorted(
+        (entry["timestamp"][:10], entry["GptVersion"])
+        for entry in previous
+        if entry.get("GptVersion") and entry["GptVersion"] != "CURRENT"
+    )
+    oldest_first = list(reversed(snapshots))
+    for day, label in labels:
+        target = next((s for s in oldest_first if s["timestamp"][:10] >= day), None)
+        if target is None:
+            print(f"No snapshot on or after {day} for '{label}', dropped", file=sys.stderr)
+        elif target["GptVersion"] and target["GptVersion"] != label:
+            print(f"{target['timestamp'][:10]} already has '{target['GptVersion']}', '{label}' dropped", file=sys.stderr)
+        else:
+            target["GptVersion"] = label
 
-for commit in index_commits:
-    commit_date = commit.commit.author.date.date()
 
-    if commit_date != last_date:
-        # Create new entry
-        new_entry = {
-            "hash": commit.sha,
-            "timestamp": commit.commit.author.date.isoformat(),
-            "GptVersion": None  # Default value
-        }
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--ref", default="main", help="branch or commit to read the history of (default: main)")
+    args = parser.parse_args()
 
-        # If this hash exists in our existing data and has a GptVersion, preserve it
-        if commit.sha in existing_data and existing_data[commit.sha].get("GptVersion"):
-            new_entry["GptVersion"] = existing_data[commit.sha]["GptVersion"]
+    if git("rev-parse", "--is-shallow-repository").strip() == "true":
+        sys.exit("This is a shallow clone; run `git fetch --unshallow` first.")
 
-        timeline_data.append(new_entry)
-        last_date = commit_date
+    ref = resolve_ref(args.ref)
+    snapshots = daily_snapshots(ref)
+    previous = json.loads(OUTPUT.read_text()) if OUTPUT.exists() else []
+    carry_labels(snapshots, previous)
 
-# Check if today's date is already in the timeline
-today = datetime.now().date()
-has_today_entry = any(datetime.fromisoformat(entry["timestamp"]).date() == today for entry in timeline_data)
+    OUTPUT.write_text(json.dumps(snapshots, indent=2) + "\n")
+    print(f"{len(snapshots)} snapshots from {snapshots[-1]['timestamp'][:10]} to {snapshots[0]['timestamp'][:10]} "
+          f"written to {OUTPUT.name}")
 
-# If not, add the latest commit from the repository
-if not has_today_entry:
-    latest_entry = {
-        "hash": latest_commit.sha,
-        "timestamp": latest_commit.commit.author.date.isoformat(),
-        "GptVersion": None  # You can set this manually later
-    }
 
-    # If this hash exists in our existing data and has a GptVersion, preserve it
-    if latest_commit.sha in existing_data and existing_data[latest_commit.sha].get("GptVersion"):
-        latest_entry["GptVersion"] = existing_data[latest_commit.sha]["GptVersion"]
-
-    print(f"Adding latest repository commit for today")
-    timeline_data.insert(0, latest_entry)  # Insert at the beginning (most recent)
-
-# Save the JSON data to a file
-with open("timeline_data.json", "w") as f:
-    json.dump(timeline_data, f, indent=2)
-
-print("Timeline data saved to timeline_data.json")
+if __name__ == "__main__":
+    main()
