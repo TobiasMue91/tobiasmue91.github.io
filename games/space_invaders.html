@@ -32,28 +32,53 @@
         color: #00ff41;
         overflow: hidden;
         height: 100vh;
+        height: 100dvh;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 10px;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
     }
 
     canvas {
         border: 2px solid #00ff41;
         box-shadow: 0 0 20px #00ff41;
         background: #000;
+        width: min(96vw, calc((100dvh - 60px) * 4 / 3));
+        height: auto;
+        touch-action: none;
     }
 
     #ui {
-        position: absolute;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
         display: flex;
-        gap: 30px;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 6px 30px;
+        padding: 0 8px;
         font-size: 18px;
         font-weight: bold;
         text-shadow: 0 0 10px #00ff41;
+    }
+
+    #sound {
+        background: none;
+        border: 1px solid #00ff41;
+        color: #00ff41;
+        font: inherit;
+        font-size: 14px;
+        padding: 2px 8px;
+        cursor: pointer;
+    }
+
+    @media (max-width: 520px) {
+        #ui {
+            font-size: 14px;
+            gap: 4px 16px;
+        }
     }
 
     #gameOver {
@@ -115,265 +140,851 @@
 <body>
 <div id="ui">
     <div>Score: <span id="score">0</span></div>
+    <div>Hi: <span id="hi">0</span></div>
     <div>Lives: <span id="lives">3</span></div>
     <div>Wave: <span id="wave">1</span></div>
+    <button id="sound" type="button">Sound: on</button>
 </div>
 <canvas id="game" width="800" height="600"></canvas>
 <div id="gameOver"><h2>Game Over</h2>
+    <p id="overReason"></p>
     <p>Final Score: <span id="finalScore">0</span></p>
     <button onclick="game.restart()">Play Again</button>
 </div>
-<script>class Game {
+<script>
+// Logic runs in fixed 60 Hz ticks, so a 120 Hz screen plays the same game as a 60 Hz one.
+// Distances are in canvas pixels; sprite pixels are 3 canvas pixels.
+const TICK = 1000 / 60;
+const PX = 3;
+const W = 800, H = 600;
+const LEFT = 16, RIGHT = 784;
+const COLS = 11, ROWS = 5, COL_W = 48, ROW_H = 40, CELL_W = 36;
+const DX = 10, DY = 20;
+const PLAYER_Y = 520, GROUND = 560, BUNKER_Y = 430, UFO_Y = 50;
+// How many drops lower each wave starts, as in the arcade: later waves begin just above the bunkers.
+const WAVE_DROPS = [0, 3, 5, 6, 6, 6, 7, 7, 7];
+// Shot types: 0 aims at the player's column, 1 and 2 walk these column tables.
+const SHOT_COLUMNS = [null,
+    [1, 7, 1, 1, 1, 4, 11, 1, 6, 3, 1, 1, 11, 9, 2, 8],
+    [11, 1, 6, 3, 1, 1, 11, 9, 2, 8, 2, 11, 4, 7, 10]];
+const UFO_POINTS = [100, 50, 50, 100, 150, 100, 100, 50, 300, 100, 100, 100, 50, 150, 100];
+
+const SPRITES = {
+    squid: [[
+        '...##...',
+        '..####..',
+        '.######.',
+        '##.##.##',
+        '########',
+        '..#..#..',
+        '.#.##.#.',
+        '#.#..#.#'], [
+        '...##...',
+        '..####..',
+        '.######.',
+        '##.##.##',
+        '########',
+        '.#.##.#.',
+        '#......#',
+        '.#....#.']],
+    crab: [[
+        '..#.....#..',
+        '...#...#...',
+        '..#######..',
+        '.##.###.##.',
+        '###########',
+        '#.#######.#',
+        '#.#.....#.#',
+        '...##.##...'], [
+        '..#.....#..',
+        '#..#...#..#',
+        '#.#######.#',
+        '###.###.###',
+        '###########',
+        '.#########.',
+        '..#.....#..',
+        '.#.......#.']],
+    octopus: [[
+        '....####....',
+        '.##########.',
+        '############',
+        '###..##..###',
+        '############',
+        '...##..##...',
+        '..##.##.##..',
+        '##........##'], [
+        '....####....',
+        '.##########.',
+        '############',
+        '###..##..###',
+        '############',
+        '..###..###..',
+        '.##..##..##.',
+        '..##....##..']],
+    boom: [[
+        '.#..#...#..#.',
+        '..#..#.#..#..',
+        '...#.....#...',
+        '##.........##',
+        '...#.....#...',
+        '..#..#.#..#..',
+        '.#..#...#..#.']],
+    cannon: [[
+        '......#......',
+        '.....###.....',
+        '.....###.....',
+        '.###########.',
+        '#############',
+        '#############',
+        '#############',
+        '#############']],
+    wreck: [[
+        '.....#.......',
+        '...#....#....',
+        '.....#.#..#..',
+        '..#.........#',
+        '...#.###.#...',
+        '#..#####.....',
+        '.###########.',
+        '#############'], [
+        '#.......#...#',
+        '..#.......#..',
+        '....#..#.....',
+        '#......#...#.',
+        '.#.#.##.#....',
+        '...#####..#..',
+        '..#########..',
+        '#############']],
+    ufo: [[
+        '.....######.....',
+        '...##########...',
+        '..############..',
+        '.##.##.##.##.##.',
+        '################',
+        '..###..##..###..',
+        '...#........#...']]
+};
+const BUNKER = [
+    '....##############....',
+    '...################...',
+    '..##################..',
+    '.####################.',
+    '######################',
+    '######################',
+    '######################',
+    '######################',
+    '######################',
+    '######################',
+    '######################',
+    '######################',
+    '#######........#######',
+    '######..........######',
+    '#####............#####',
+    '#####............#####'];
+// What a shot bites out of a bunker, centred on the cell it hits.
+const SPLASH = [
+    '#..#..#.',
+    '..####..',
+    '.######.',
+    '########',
+    '########',
+    '.######.',
+    '..####..',
+    '#..#..#.'];
+// Top row squids, two rows of crabs, two of octopuses; 30, 20 and 10 points.
+const ROW_TYPES = [2, 1, 1, 0, 0];
+const TYPE_SPRITE = ['octopus', 'crab', 'squid'];
+const TYPE_COLOR = ['#ff4444', '#ffaa00', '#44ff44'];
+
+const spriteCache = {};
+function sprite(name, frame, color) {
+    const key = name + frame + color;
+    if (spriteCache[key]) return spriteCache[key];
+    const rows = SPRITES[name][frame % SPRITES[name].length];
+    const c = document.createElement('canvas');
+    c.width = rows[0].length * PX;
+    c.height = rows.length * PX;
+    const g = c.getContext('2d');
+    g.fillStyle = color;
+    rows.forEach((row, y) => [...row].forEach((ch, x) => {
+        if (ch === '#') g.fillRect(x * PX, y * PX, PX, PX);
+    }));
+    return spriteCache[key] = c;
+}
+function spriteW(name) {
+    return SPRITES[name][0][0].length * PX;
+}
+
+class Sound {
+    constructor() {
+        this.ctx = null;
+        this.on = true;
+        try {
+            this.on = localStorage.getItem('si-sound') !== 'off';
+        } catch (e) {
+        }
+        this.ufoOsc = null;
+    }
+
+    unlock() {
+        if (this.ctx || typeof window === 'undefined') return;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) this.ctx = new AC();
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    }
+
+    toggle() {
+        this.on = !this.on;
+        try {
+            localStorage.setItem('si-sound', this.on ? 'on' : 'off');
+        } catch (e) {
+        }
+        if (!this.on) this.ufo(false);
+    }
+
+    tone(freq, dur, type = 'square', vol = 0.12, slideTo = null) {
+        if (!this.on || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, t);
+        if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+        g.gain.setValueAtTime(vol, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        o.connect(g).connect(this.ctx.destination);
+        o.start(t);
+        o.stop(t + dur);
+    }
+
+    noise(dur, vol = 0.2, cutoff = 1800) {
+        if (!this.on || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        const len = Math.floor(this.ctx.sampleRate * dur);
+        const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        const src = this.ctx.createBufferSource(), f = this.ctx.createBiquadFilter(), g = this.ctx.createGain();
+        src.buffer = buf;
+        f.type = 'lowpass';
+        f.frequency.value = cutoff;
+        g.gain.setValueAtTime(vol, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        src.connect(f).connect(g).connect(this.ctx.destination);
+        src.start(t);
+    }
+
+    // The four descending notes of the march; one per swarm step.
+    beat(n) {
+        this.tone([98, 87, 78, 73][n % 4], 0.09, 'triangle', 0.35);
+    }
+
+    ufo(play) {
+        if (!this.ctx) return;
+        if (play && this.on && !this.ufoOsc) {
+            const o = this.ctx.createOscillator(), lfo = this.ctx.createOscillator();
+            const depth = this.ctx.createGain(), g = this.ctx.createGain();
+            o.type = 'square';
+            o.frequency.value = 600;
+            lfo.frequency.value = 8;
+            depth.gain.value = 180;
+            g.gain.value = 0.04;
+            lfo.connect(depth).connect(o.frequency);
+            o.connect(g).connect(this.ctx.destination);
+            o.start();
+            lfo.start();
+            this.ufoOsc = [o, lfo];
+        } else if (!play && this.ufoOsc) {
+            this.ufoOsc.forEach(o => o.stop());
+            this.ufoOsc = null;
+        }
+    }
+}
+
+class Game {
     constructor() {
         this.canvas = document.getElementById('game');
         this.ctx = this.canvas.getContext('2d');
         this.width = this.canvas.width;
         this.height = this.canvas.height;
-        this.player = new Player(this.width / 2 - 25, this.height - 60);
-        this.aliens = [];
-        this.bullets = [];
-        this.particles = [];
-        this.alienBullets = [];
+        this.sound = new Sound();
+        this.keys = {};
+        this.touch = null;
+        this.hi = 0;
+        try {
+            this.hi = +localStorage.getItem('si-hi') || 0;
+        } catch (e) {
+        }
+        this.coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+        this.reset();
+        this.state = 'ready';
+        this.bindEvents();
+        this.last = 0;
+        this.acc = 0;
+        requestAnimationFrame(ts => this.gameLoop(ts));
+    }
+
+    reset() {
         this.score = 0;
         this.lives = 3;
         this.wave = 1;
-        this.alienSpeed = 1;
-        this.alienDirection = 1;
-        this.lastAlienShot = 0;
-        this.keys = {};
-        this.gameRunning = true;
-        this.setupAliens();
-        this.bindEvents();
-        this.gameLoop();
+        this.player = new Player(W / 2 - spriteW('cannon') / 2, PLAYER_Y);
+        this.particles = [];
+        this.popups = [];
+        this.setupWave();
+        this.updateUI();
     }
 
-    setupAliens() {
+    setupWave() {
         this.aliens = [];
-        for (let row = 0; row < 5; row++) {
-            for (let col = 0; col < 10; col++) {
-                let x = col * 60 + 100;
-                let y = row * 50 + 50;
-                let type = row < 2 ? 2 : row < 4 ? 1 : 0;
-                this.aliens.push(new Alien(x, y, type));
+        const idx = this.wave <= WAVE_DROPS.length ? this.wave - 1 : 1 + (this.wave - 2) % (WAVE_DROPS.length - 1);
+        const bottomY = 256 + WAVE_DROPS[idx] * DY;
+        // Bottom-left first: that is the order the swarm moves in, one invader per tick.
+        for (let row = ROWS - 1; row >= 0; row--) {
+            for (let col = 0; col < COLS; col++) {
+                this.aliens.push(new Alien(60 + col * COL_W, bottomY - (ROWS - 1 - row) * ROW_H, ROW_TYPES[row], col));
             }
         }
+        this.cursor = 0;
+        this.alienDirection = 1;
+        this.dropping = false;
+        this.beatN = 0;
+        this.lastBeat = -99;
+        this.bullets = [];
+        this.alienBullets = [];
+        this.reload = 120;
+        this.nextShotType = 0;
+        this.tablePos = [0, 0, 0];
+        this.shotCount = 0;
+        this.ufo = null;
+        this.ufoTimer = 1536;
+        this.bunkers = [0, 1, 2, 3].map(i => new Bunker(W / 2 + (i - 1.5) * 180 - 33, BUNKER_Y));
+        this.ticks = 0;
     }
 
     bindEvents() {
+        const startOrFire = () => {
+            this.sound.unlock();
+            if (this.state === 'ready') this.state = 'playing';
+            else if (this.state === 'over' && this.ticks > 60) this.restart();
+        };
         document.addEventListener('keydown', e => {
+            if (['Space', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
             this.keys[e.code] = true;
-            if (e.code === 'Space') {
-                e.preventDefault();
-                this.player.shoot(this.bullets);
-            }
+            if (e.code === 'Space' || e.code === 'Enter') startOrFire();
+            if (e.code === 'KeyM') this.toggleSound();
         });
         document.addEventListener('keyup', e => {
             this.keys[e.code] = false;
         });
+        // Touch: drag anywhere to steer (the finger need not cover the cannon), hold to fire.
+        document.addEventListener('pointerdown', e => {
+            if (e.target.closest && e.target.closest('button')) return;
+            if (e.pointerType === 'mouse') return startOrFire();
+            this.touch = {id: e.pointerId, x: e.clientX, target: this.player.x};
+            startOrFire();
+        });
+        document.addEventListener('pointermove', e => {
+            if (!this.touch || e.pointerId !== this.touch.id) return;
+            const scale = this.width / this.canvas.getBoundingClientRect().width;
+            this.touch.target += (e.clientX - this.touch.x) * scale * 1.5;
+            this.touch.target = Math.max(LEFT, Math.min(RIGHT - this.player.width, this.touch.target));
+            this.touch.x = e.clientX;
+        });
+        const end = e => {
+            if (this.touch && e.pointerId === this.touch.id) this.touch = null;
+        };
+        document.addEventListener('pointerup', end);
+        document.addEventListener('pointercancel', end);
+        const btn = document.getElementById('sound');
+        // A focused button would take the next Space press as a click, so let focus go.
+        if (btn) btn.addEventListener('click', () => {
+            this.toggleSound();
+            btn.blur();
+        });
     }
 
-    update() {
-        if (!this.gameRunning) return;
-        this.player.update(this.keys, this.width);
-        this.bullets = this.bullets.filter(bullet => {
-            bullet.update();
-            return bullet.y > 0;
-        });
-        this.alienBullets = this.alienBullets.filter(bullet => {
-            bullet.update();
-            return bullet.y < this.height;
-        });
-        this.particles = this.particles.filter(particle => {
-            particle.update();
-            return particle.life > 0;
-        });
-        this.updateAliens();
-        this.checkCollisions();
+    toggleSound() {
+        this.sound.unlock();
+        this.sound.toggle();
         this.updateUI();
     }
 
-    updateAliens() {
-        if (this.aliens.length === 0) {
-            this.wave++;
-            this.alienSpeed += 0.5;
-            this.setupAliens();
+    // One 60 Hz tick of the whole game.
+    step() {
+        this.ticks++;
+        this.particles = this.particles.filter(p => (p.update(), p.life > 0));
+        this.popups = this.popups.filter(p => --p.life > 0);
+        if (this.state === 'dying') {
+            if (--this.timer <= 0) {
+                if (this.lives <= 0) return this.gameOver('The last cannon is gone.');
+                this.player = new Player(LEFT + 20, PLAYER_Y);
+                this.state = 'playing';
+            }
             return;
         }
-        let moveDown = false;
-        for (let alien of this.aliens) {
-            if ((alien.x <= 0 && this.alienDirection === -1) || (alien.x >= this.width - 40 && this.alienDirection === 1)) {
-                moveDown = true;
-                break;
+        if (this.state === 'cleared') {
+            if (--this.timer <= 0) {
+                this.wave++;
+                this.setupWave();
+                this.state = 'playing';
             }
+            return;
         }
-        if (moveDown) {
+        if (this.state !== 'playing') return;
+
+        this.player.update(this.keys, this.touch);
+        if ((this.keys['Space'] || this.touch) && !this.bullets.length) {
+            this.bullets.push(new Bullet(this.player.x + this.player.width / 2 - 1.5, this.player.y - 12, -10, -1));
+            this.shotCount++;
+            this.sound.tone(1200, 0.08, 'square', 0.05, 300);
+        }
+        this.stepSwarm();
+        if (this.state !== 'playing') return;
+        this.fireAliens();
+        this.stepUfo();
+        this.moveBullets();
+        if (this.state === 'playing' && !this.aliens.length) {
+            this.state = 'cleared';
+            this.timer = 90;
+            this.sound.ufo(false);
+        }
+        this.updateUI();
+    }
+
+    // The arcade moved one invader per frame, so the swarm steps faster with every kill and the
+    // last invader races. Moving them one at a time here gives the same speed-up and ripple.
+    stepSwarm() {
+        if (!this.aliens.length) return;
+        if (this.cursor >= this.aliens.length) {
+            this.cursor = 0;
+            this.endPass();
+        }
+        const a = this.aliens[this.cursor++];
+        if (this.dropping) a.y += DY;
+        else a.x += DX * this.alienDirection;
+        a.frame ^= 1;
+        this.bunkers.forEach(b => b.eraseRect(a.left(), a.y, a.width, a.height));
+        if (a.y + a.height >= PLAYER_Y) {
+            this.createExplosion(this.player.x + this.player.width / 2, this.player.y + 12, '#00ff41');
+            this.gameOver('The invaders landed.');
+        }
+    }
+
+    endPass() {
+        if (this.ticks - this.lastBeat >= 5) {
+            this.sound.beat(this.beatN++);
+            this.lastBeat = this.ticks;
+        }
+        if (this.dropping) {
+            this.dropping = false;
+            return;
+        }
+        let minX = Infinity, maxX = -Infinity;
+        for (const a of this.aliens) {
+            minX = Math.min(minX, a.x);
+            maxX = Math.max(maxX, a.x + CELL_W);
+        }
+        if ((this.alienDirection > 0 && maxX + DX > RIGHT) || (this.alienDirection < 0 && minX - DX < LEFT)) {
+            this.dropping = true;
             this.alienDirection *= -1;
-            for (let alien of this.aliens) {
-                alien.y += 20;
-            }
         }
-        for (let alien of this.aliens) {
-            alien.x += this.alienSpeed * this.alienDirection;
-            if (Math.random() < 0.001 && Date.now() - this.lastAlienShot > 500) {
-                this.alienBullets.push(new Bullet(alien.x + 20, alien.y + 30, 5));
-                this.lastAlienShot = Date.now();
+    }
+
+    columnBottom(col) {
+        let best = null;
+        for (const a of this.aliens) if (a.col === col && (!best || a.y > best.y)) best = a;
+        return best;
+    }
+
+    // Three shots at most, one of each kind, fired from the lowest invader in a column. They
+    // reload faster as the score climbs, and one kind always aims at the column you are under.
+    fireAliens() {
+        if (this.reload > 0) {
+            this.reload--;
+            return;
+        }
+        const type = this.nextShotType;
+        this.nextShotType = (type + 1) % 3;
+        if (this.alienBullets.some(b => b.type === type)) return;
+        if (type === 1 && this.aliens.length === 1) return;
+        let shooter = null;
+        if (type === 0) {
+            const px = this.player.x + this.player.width / 2;
+            for (const a of this.aliens) {
+                if (px >= a.x - 6 && px < a.x + COL_W - 6 && (!shooter || a.y > shooter.y)) shooter = a;
             }
-            if (alien.y > this.height - 100) {
-                this.gameOver();
+        } else {
+            const table = SHOT_COLUMNS[type];
+            shooter = this.columnBottom(table[this.tablePos[type]++ % table.length] - 1);
+        }
+        if (!shooter) return;
+        // The arcade moved its three shots in rotation, one per frame, so each falls at about a third
+        // of the speed of yours.
+        const speed = this.aliens.length <= 8 ? 4 : 3;
+        this.alienBullets.push(new Bullet(shooter.left() + shooter.width / 2 - 1.5, shooter.y + shooter.height, speed, type));
+        const s = this.score;
+        this.reload = s < 200 ? 48 : s < 1000 ? 16 : s < 2000 ? 11 : s < 3000 ? 8 : 7;
+    }
+
+    stepUfo() {
+        if (this.ufo) {
+            this.ufo.x += this.ufo.vx;
+            if (this.ufo.x < -60 || this.ufo.x > W + 10) {
+                this.ufo = null;
+                this.sound.ufo(false);
+            }
+        } else if (--this.ufoTimer <= 0) {
+            this.ufoTimer = 1536;
+            if (this.aliens.length >= 8) {
+                const fromLeft = this.shotCount % 2 === 0;
+                this.ufo = {x: fromLeft ? -48 : W, vx: fromLeft ? 3 : -3, width: spriteW('ufo'), height: 21};
+                this.sound.ufo(true);
             }
         }
     }
 
-    checkCollisions() {
-        for (let i = this.bullets.length - 1; i >= 0; i--) {
-            for (let j = this.aliens.length - 1; j >= 0; j--) {
-                if (this.bullets[i] && this.aliens[j] && this.bullets[i].x < this.aliens[j].x + 40 && this.bullets[i].x + 5 > this.aliens[j].x && this.bullets[i].y < this.aliens[j].y + 30 && this.bullets[i].y + 10 > this.aliens[j].y) {
-                    this.score += this.aliens[j].points;
-                    this.createExplosion(this.aliens[j].x + 20, this.aliens[j].y + 15);
-                    this.aliens.splice(j, 1);
-                    this.bullets.splice(i, 1);
-                    break;
-                }
+    moveBullets() {
+        // Shots move in 3 px sub-steps so none can skip over a bunker cell.
+        for (const b of this.bullets) {
+            for (let moved = 0; moved < Math.abs(b.speed) && !b.dead; moved += 3) {
+                b.y -= Math.min(3, Math.abs(b.speed) - moved);
+                this.hitByPlayerShot(b);
             }
         }
-        for (let i = this.alienBullets.length - 1; i >= 0; i--) {
-            if (this.alienBullets[i].x < this.player.x + 50 && this.alienBullets[i].x + 5 > this.player.x && this.alienBullets[i].y < this.player.y + 30 && this.alienBullets[i].y + 10 > this.player.y) {
-                this.lives--;
-                this.alienBullets.splice(i, 1);
-                this.createExplosion(this.player.x + 25, this.player.y + 15);
-                if (this.lives <= 0) {
-                    this.gameOver();
-                }
+        for (const b of this.alienBullets) {
+            for (let moved = 0; moved < b.speed && !b.dead; moved += 3) {
+                b.y += Math.min(3, b.speed - moved);
+                this.hitByAlienShot(b);
+            }
+            b.frame++;
+        }
+        this.bullets = this.bullets.filter(b => !b.dead);
+        this.alienBullets = this.alienBullets.filter(b => !b.dead);
+    }
+
+    hitByPlayerShot(b) {
+        if (b.y < 30) {
+            b.dead = true;
+            this.createExplosion(b.x, 32, '#00ff41', 4);
+            return;
+        }
+        for (let i = 0; i < this.aliens.length; i++) {
+            const a = this.aliens[i];
+            if (overlap(b, a.left(), a.y, a.width, a.height)) {
+                b.dead = true;
+                this.score += a.points;
+                this.createExplosion(a.left() + a.width / 2, a.y + 12, TYPE_COLOR[a.type]);
+                this.popups.push({x: a.left() + a.width / 2, y: a.y, text: null, life: 12, sprite: 'boom', color: TYPE_COLOR[a.type]});
+                this.aliens.splice(i, 1);
+                if (i < this.cursor) this.cursor--;
+                this.sound.noise(0.18, 0.25, 2500);
+                return;
+            }
+        }
+        if (this.ufo && overlap(b, this.ufo.x, UFO_Y, this.ufo.width, this.ufo.height)) {
+            b.dead = true;
+            const pts = UFO_POINTS[this.shotCount % 15];
+            this.score += pts;
+            this.createExplosion(this.ufo.x + 24, UFO_Y + 10, '#ff44cc');
+            this.popups.push({x: this.ufo.x + 24, y: UFO_Y, text: String(pts), life: 70, color: '#ff44cc'});
+            this.ufo = null;
+            this.sound.ufo(false);
+            this.sound.tone(300, 0.5, 'square', 0.08, 1400);
+            return;
+        }
+        for (const e of this.alienBullets) {
+            if (!e.dead && overlap(b, e.x - 2, e.y, e.width + 4, e.height)) {
+                b.dead = e.dead = true;
+                this.createExplosion(b.x, b.y, '#ffffff', 5);
+                return;
+            }
+        }
+        for (const k of this.bunkers) {
+            if (k.hit(b.x + 1, b.y)) {
+                b.dead = true;
+                return;
             }
         }
     }
 
-    createExplosion(x, y) {
-        for (let i = 0; i < 8; i++) {
-            this.particles.push(new Particle(x, y));
+    hitByAlienShot(b) {
+        const tip = b.y + b.height;
+        if (tip >= GROUND) {
+            b.dead = true;
+            this.createExplosion(b.x, GROUND - 2, '#ffffff', 4);
+            return;
+        }
+        for (const k of this.bunkers) {
+            if (k.hit(b.x + 1, tip)) {
+                b.dead = true;
+                return;
+            }
+        }
+        const p = this.player;
+        if (overlap(b, p.x, p.y + 6, p.width, p.height - 6)) {
+            b.dead = true;
+            this.playerHit();
         }
     }
 
-    gameOver() {
-        this.gameRunning = false;
+    playerHit() {
+        this.lives--;
+        this.createExplosion(this.player.x + this.player.width / 2, this.player.y + 12, '#00ff41');
+        this.sound.noise(0.9, 0.35, 900);
+        this.player.dead = true;
+        this.alienBullets = [];
+        this.bullets = [];
+        this.state = 'dying';
+        this.timer = 90;
+        this.updateUI();
+    }
+
+    createExplosion(x, y, color = '#ff4444', n = 8) {
+        for (let i = 0; i < n; i++) {
+            this.particles.push(new Particle(x, y, color));
+        }
+    }
+
+    gameOver(reason) {
+        this.state = 'over';
+        this.ticks = 0;
+        this.sound.ufo(false);
+        if (this.score > this.hi) {
+            this.hi = this.score;
+            try {
+                localStorage.setItem('si-hi', String(this.hi));
+            } catch (e) {
+            }
+        }
+        this.updateUI();
+        document.getElementById('overReason').textContent = reason;
         document.getElementById('finalScore').textContent = this.score;
         document.getElementById('gameOver').style.display = 'block';
     }
 
     restart() {
-        this.gameRunning = true;
-        this.score = 0;
-        this.lives = 3;
-        this.wave = 1;
-        this.alienSpeed = 1;
-        this.alienDirection = 1;
-        this.setupAliens();
-        this.bullets = [];
-        this.alienBullets = [];
-        this.particles = [];
-        this.player = new Player(this.width / 2 - 25, this.height - 60);
+        this.reset();
+        this.state = 'playing';
         document.getElementById('gameOver').style.display = 'none';
-        this.updateUI();
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     }
 
     updateUI() {
         document.getElementById('score').textContent = this.score;
+        document.getElementById('hi').textContent = Math.max(this.hi, this.score);
         document.getElementById('lives').textContent = this.lives;
         document.getElementById('wave').textContent = this.wave;
+        document.getElementById('sound').textContent = 'Sound: ' + (this.sound.on ? 'on' : 'off');
     }
 
     render() {
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.width, this.height);
-        this.player.render(this.ctx);
-        this.aliens.forEach(alien => alien.render(this.ctx));
-        this.bullets.forEach(bullet => bullet.render(this.ctx));
-        this.alienBullets.forEach(bullet => bullet.render(this.ctx));
-        this.particles.forEach(particle => particle.render(this.ctx));
+        const ctx = this.ctx;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, this.width, this.height);
+        ctx.fillStyle = '#00ff41';
+        ctx.fillRect(0, GROUND, W, 2);
+        if (this.state === 'ready') return this.renderTitle(ctx);
+        for (let i = 0; i < this.lives - 1; i++) ctx.drawImage(sprite('cannon', 0, '#00ff41'), 20 + i * 50, GROUND + 12);
+        this.bunkers.forEach(b => b.render(ctx));
+        this.aliens.forEach(a => a.render(ctx));
+        if (this.ufo) ctx.drawImage(sprite('ufo', 0, '#ff44cc'), this.ufo.x, UFO_Y);
+        this.player.render(ctx, this.ticks);
+        this.bullets.forEach(b => b.render(ctx));
+        this.alienBullets.forEach(b => b.render(ctx));
+        this.particles.forEach(p => p.render(ctx));
+        for (const p of this.popups) {
+            if (p.sprite) {
+                const img = sprite(p.sprite, 0, p.color);
+                ctx.drawImage(img, p.x - img.width / 2, p.y);
+            } else {
+                ctx.fillStyle = p.color;
+                ctx.font = 'bold 22px Courier New, monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(p.text, p.x, p.y + 18);
+            }
+        }
+        if (this.state === 'cleared') this.banner(ctx, 'WAVE ' + (this.wave + 1));
     }
 
-    gameLoop() {
-        this.update();
-        this.render();
-        requestAnimationFrame(() => this.gameLoop());
+    banner(ctx, text, y = 300) {
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(0, y - 34, W, 50);
+        ctx.fillStyle = '#00ff41';
+        ctx.font = 'bold 28px Courier New, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(text, W / 2, y);
     }
+
+    renderTitle(ctx) {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#00ff41';
+        ctx.font = 'bold 34px Courier New, monospace';
+        ctx.fillText('SPACE INVADERS', W / 2, 120);
+        ctx.font = 'bold 20px Courier New, monospace';
+        ctx.fillText('*SCORE ADVANCE TABLE*', W / 2, 165);
+        const rows = [['ufo', '#ff44cc', '= ? MYSTERY'], ['squid', TYPE_COLOR[2], '= 30 POINTS'],
+            ['crab', TYPE_COLOR[1], '= 20 POINTS'], ['octopus', TYPE_COLOR[0], '= 10 POINTS']];
+        rows.forEach(([name, color, label], i) => {
+            const img = sprite(name, 0, color);
+            ctx.drawImage(img, 300 - img.width / 2, 185 + i * 40);
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'left';
+            ctx.fillText(label, 340, 203 + i * 40);
+        });
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#00ff41';
+        ctx.font = 'bold 18px Courier New, monospace';
+        const blink = Math.floor(this.ticks / 30) % 2 === 0;
+        if (blink) ctx.fillText(this.coarse ? 'TAP TO START' : 'PRESS SPACE TO START', W / 2, 360);
+        ctx.font = '15px Courier New, monospace';
+        ctx.fillText(this.coarse ? 'drag to move · hold to fire' : '← → or A D to move · Space to fire · M sound', W / 2, 388);
+    }
+
+    gameLoop(ts) {
+        if (!this.last) this.last = ts;
+        this.acc += Math.min(250, ts - this.last);
+        this.last = ts;
+        while (this.acc >= TICK) {
+            this.step();
+            this.acc -= TICK;
+        }
+        if (this.state === 'ready' || this.state === 'over') this.ticks++;
+        this.render();
+        requestAnimationFrame(t => this.gameLoop(t));
+    }
+}
+
+function overlap(b, x, y, w, h) {
+    return b.x < x + w && b.x + b.width > x && b.y < y + h && b.y + b.height > y;
 }
 
 class Player {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.width = 50;
-        this.height = 30;
-        this.speed = 5;
-        this.lastShot = 0;
+        this.width = spriteW('cannon');
+        this.height = 24;
+        this.speed = 4;
+        this.dead = false;
     }
 
-    update(keys, canvasWidth) {
-        if ((keys['ArrowLeft'] || keys['KeyA']) && this.x > 0) {
-            this.x -= this.speed;
+    update(keys, touch) {
+        let dir = 0;
+        if (touch) {
+            const d = touch.target - this.x;
+            dir = Math.abs(d) < this.speed ? 0 : Math.sign(d);
+            if (!dir) this.x = touch.target;
+        } else {
+            if (keys['ArrowLeft'] || keys['KeyA']) dir -= 1;
+            if (keys['ArrowRight'] || keys['KeyD']) dir += 1;
         }
-        if ((keys['ArrowRight'] || keys['KeyD']) && this.x < canvasWidth - this.width) {
-            this.x += this.speed;
-        }
+        this.x = Math.max(LEFT, Math.min(RIGHT - this.width, this.x + dir * this.speed));
     }
 
-    shoot(bullets) {
-        if (Date.now() - this.lastShot > 200) {
-            bullets.push(new Bullet(this.x + 25, this.y, -8));
-            this.lastShot = Date.now();
+    render(ctx, ticks) {
+        if (this.dead) {
+            ctx.drawImage(sprite('wreck', Math.floor(ticks / 6), '#00ff41'), this.x, this.y);
+            return;
+        }
+        ctx.drawImage(sprite('cannon', 0, '#00ff41'), this.x, this.y);
+    }
+}
+
+class Alien {
+    constructor(x, y, type, col) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.col = col;
+        this.frame = 0;
+        this.width = spriteW(TYPE_SPRITE[type]);
+        this.height = 24;
+        this.points = [10, 20, 30][type];
+    }
+
+    // x is the invader's lane; the sprite sits centred in it.
+    left() {
+        return this.x + (CELL_W - this.width) / 2;
+    }
+
+    render(ctx) {
+        ctx.drawImage(sprite(TYPE_SPRITE[this.type], this.frame, TYPE_COLOR[this.type]), this.left(), this.y);
+    }
+}
+
+class Bunker {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.cells = BUNKER.map(row => [...row].map(ch => ch === '#'));
+    }
+
+    // If (x, y) lands on a solid cell, blow a splash out of the bunker around it.
+    hit(x, y) {
+        const cx = Math.floor((x - this.x) / PX), cy = Math.floor((y - this.y) / PX);
+        if (cy < 0 || cy >= this.cells.length || cx < 0 || cx >= this.cells[0].length || !this.cells[cy][cx]) return false;
+        SPLASH.forEach((row, dy) => [...row].forEach((ch, dx) => {
+            const yy = cy + dy - 4, xx = cx + dx - 4;
+            if (ch === '#' && this.cells[yy] && xx >= 0 && xx < this.cells[yy].length) this.cells[yy][xx] = false;
+        }));
+        return true;
+    }
+
+    eraseRect(x, y, w, h) {
+        if (x + w <= this.x || x >= this.x + 66 || y + h <= this.y || y >= this.y + 48) return;
+        for (let cy = 0; cy < this.cells.length; cy++) {
+            for (let cx = 0; cx < this.cells[cy].length; cx++) {
+                const px = this.x + cx * PX, py = this.y + cy * PX;
+                if (px + PX > x && px < x + w && py + PX > y && py < y + h) this.cells[cy][cx] = false;
+            }
         }
     }
 
     render(ctx) {
         ctx.fillStyle = '#00ff41';
-        ctx.fillRect(this.x + 15, this.y, 20, 25);
-        ctx.fillRect(this.x + 5, this.y + 20, 40, 10);
-        ctx.fillRect(this.x, this.y + 25, 50, 5);
-    }
-}
-
-class Alien {
-    constructor(x, y, type) {
-        this.x = x;
-        this.y = y;
-        this.type = type;
-        this.width = 40;
-        this.height = 30;
-        this.points = [10, 20, 30][type];
-    }
-
-    render(ctx) {
-        ctx.fillStyle = ['#ff4444', '#ffaa00', '#44ff44'][this.type];
-        ctx.fillRect(this.x + 5, this.y, 30, 20);
-        ctx.fillRect(this.x, this.y + 10, 40, 10);
-        ctx.fillRect(this.x + 10, this.y + 20, 20, 10);
+        this.cells.forEach((row, cy) => row.forEach((on, cx) => {
+            if (on) ctx.fillRect(this.x + cx * PX, this.y + cy * PX, PX, PX);
+        }));
     }
 }
 
 class Bullet {
-    constructor(x, y, speed) {
+    constructor(x, y, speed, type) {
         this.x = x;
         this.y = y;
         this.speed = speed;
-        this.width = 5;
-        this.height = 10;
-    }
-
-    update() {
-        this.y += this.speed;
+        this.type = type;
+        this.width = 3;
+        this.height = 12;
+        this.frame = 0;
     }
 
     render(ctx) {
-        ctx.fillStyle = this.speed < 0 ? '#00ff41' : '#ff4444';
-        ctx.fillRect(this.x, this.y, this.width, this.height);
+        if (this.type < 0) {
+            ctx.fillStyle = '#00ff41';
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            return;
+        }
+        // Each kind of invader shot has its own shape: rolling, plunger, squiggle.
+        ctx.fillStyle = '#ffffff';
+        const f = Math.floor(this.frame / 4) % 2;
+        if (this.type === 0) {
+            ctx.fillRect(this.x, this.y, 3, 12);
+            ctx.fillRect(this.x + (f ? -3 : 3), this.y + 3 + f * 3, 3, 3);
+        } else if (this.type === 1) {
+            ctx.fillRect(this.x, this.y, 3, 12);
+            ctx.fillRect(this.x - 3, f ? this.y : this.y + 9, 9, 3);
+        } else {
+            for (let i = 0; i < 4; i++) ctx.fillRect(this.x + ((i + f) % 2 ? -2 : 2), this.y + i * 3, 3, 3);
+        }
     }
 }
 
 class Particle {
-    constructor(x, y) {
+    constructor(x, y, color = '#ff4444') {
         this.x = x;
         this.y = y;
+        this.color = color;
         this.vx = (Math.random() - 0.5) * 8;
         this.vy = (Math.random() - 0.5) * 8;
         this.life = 30;
@@ -387,9 +998,10 @@ class Particle {
     }
 
     render(ctx) {
-        let alpha = this.life / this.maxLife;
-        ctx.fillStyle = `rgba(255,68,68,${alpha})`;
+        ctx.globalAlpha = this.life / this.maxLife;
+        ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, 3, 3);
+        ctx.globalAlpha = 1;
     }
 }
 
