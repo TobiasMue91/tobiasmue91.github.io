@@ -68,6 +68,7 @@ npm run test:moorhuhn       # Moor Chicken suite (plain Node, no server or brows
 npm run test:minesweeper    # Minesweeper suite (plain Node, no server or browser)
 npm run test:connect4       # Connect Four AI suite (plain Node, no server or browser)
 npm run test:downhill       # Downhill Dreamer suite (plain Node, no server or browser)
+npm run test:towers         # Three Gates suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -75,7 +76,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Six exist so far. `test/everything_converter.mjs` drives
+Seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -97,6 +98,11 @@ misses a win, a block, or hands over a win it could avoid. Run it after touching
 `games/downhill_dreamer.html` (terrain, flight, rules): bots of four skill levels play whole
 days and must get what each deserves, and the landing guide must show where the bird really
 lands. Run it after touching any number in that block; `--record` re-records its golden table.
+`test/tower_defense.mjs` runs the DOM-free core of `games/mini_tower_defense.html` (Three Gates):
+the maps keep their roads apart, every wave spawns what its preview card said, and bots play whole
+games - a player who builds what the card names must outlast the same player building blind, and
+the old page's two-tower build must fall by the mid-teens. Run it after touching any number in the
+core; the `planner` suite (a bot that tries every purchase in a copy of the game) is slow and opt-in.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
