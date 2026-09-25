@@ -5,9 +5,9 @@ in der es entstanden ist. Alles Nötige steht hier oder im Repo. Wer es liest, �
 Spiel von hier an: Konzept schärfen, mit dem Nutzer abstimmen, bauen, balancieren und in den
 Katalog bringen.
 
-Der Nutzer schreibt Deutsch und testet viel auf dem Handy in der Claude-App. Er mag
-Incrementals und hat klare Vorstellungen. Er gibt gern die Verantwortung ab, erwartet aber
-ehrliche Rückmeldung und Ergebnisse, die er sofort spielen kann.
+Die Person, für die du arbeitest, schreibt Deutsch und testet viel auf dem Handy in der Claude-App.
+Sie mag Incrementals, hat klare Vorstellungen und gibt gern Verantwortung ab, erwartet aber
+ehrliche Rückmeldung und Ergebnisse, die sich sofort spielen lassen.
 
 ---
 
@@ -24,7 +24,7 @@ Ablauf bisher:
 2. Der Nutzer wählte drei davon für Prototypen: **Lawine** (Katamari-artiger Schneeball),
    **Luftpolster** (Luftpolsterfolie ploppen) und **Glühwürmchen**.
 3. Alle drei wurden als Prototypen gebaut, mit Bots durchgespielt und dem Nutzer vorgelegt.
-4. Sein Urteil:
+4. Das Urteil:
    - **Lawine** ist verworfen: Motion Sickness, schwächste Optik, kein spürbares Wachstum.
    - **Luftpolster** wird gerade in einer anderen Sitzung zum vollen Spiel ausgebaut.
      **Die Dateien `playground/luftpolster*.html` und alles zu diesem Spiel bitte nicht
@@ -44,12 +44,12 @@ Sinngemäß:
 Allgemeine Rückmeldungen aus der Luftpolster-Runde, die auch hier gelten:
 - **Spieler wollen ihren Drang, schnell zu spielen, nicht zügeln müssen.** Eine Mechanik, die
   zum Warten oder Langsamsein zwingt, kam schlecht an. Das ist genau der Kern der Kritik oben.
-- Melodische Begleittöne zu jeder Aktion fand er „fragwürdig“. Natürliche Geräusche kamen gut an.
+- Melodische Begleittöne zu jeder Aktion wurden „fragwürdig“ genannt. Natürliche Geräusche kamen gut an.
   In Glühwürmchen sind die Fang-Töne pentatonische Glöckchen. Das passt zum Cozy-Ton eher als ein
-  Tonleiter-Combo, sollte aber zurückhaltend bleiben und mit ihm geprüft werden.
+  Tonleiter-Combo, sollte aber zurückhaltend bleiben und abgestimmt werden.
 - Zu schneller Fortschritt fühlt sich billig an. Die ersten Runden dürfen nicht sofort einen
   halben Baum kaufen.
-- Endgame: Er wünscht sich die incremental-typische **Eskalation**, also absurde Größe und
+- Endgame: Gewünscht ist die incremental-typische **Eskalation**, also absurde Größe und
   absurdes Tempo am Ende.
 
 ## 3. Der Prototyp
@@ -162,9 +162,8 @@ vielleicht eine ganze Milchstraße aus Glühwürmchen. Absurde Zahlen, ein Bilds
 und ein Abspann.
 
 **Name im Katalog:** Die Seite ist englisch. Mögliche Namen sind „Firefly Jar“ oder „Lantern
-Meadow“. Das Luftpolster-Spiel bekommt englische Texte mit deutscher Übersetzung, die sich nach
-der Browsersprache richtet und umschaltbar ist. Mach es hier genauso, damit beide Spiele gleich
-funktionieren.
+Meadow“. Das Spiel wird wie alle anderen Spiele auf gptgames.dev nur englisch, ohne Übersetzung.
+Der Nutzer hat das für Bubble Break ausdrücklich so entschieden.
 
 ## 6. Repo-Konventionen (Kurzfassung von `CLAUDE.md`, bitte trotzdem selbst lesen)
 
@@ -190,7 +189,7 @@ funktionieren.
   Runden). Das lohnt sich hier, weil jede Zahl an allem zieht.
 - **Referenz:** `games/bubble_break.html` (das fertige Luftpolster-Spiel) und `test/bubble_break.mjs`
   auf demselben Branch zeigen das ganze Muster: Core-Block, Bot mit menschlichen Grenzen,
-  Tempo-Prüfungen, englisch/deutsche Texte mit Umschalter. Die Balance-Lehren daraus stehen in
+  Tempo-Prüfungen, englische Texte. Die Balance-Lehren daraus stehen in
   `IDEAS.md` unter „an incremental built to escalate“.
 - Lies auch `IDEAS.md`, zuerst den Abschnitt **Read this first**. Er erklärt, wie der Katalog
   schmaler wurde. Ein Cozy-Incremental mit Stimmung ist dort ausdrücklich willkommen.
@@ -211,8 +210,8 @@ funktionieren.
 1. Diese Datei und `CLAUDE.md` lesen, dann den Prototyp lokal öffnen (`npx http-server -p 8099`)
    und selbst anspielen.
 2. Dem Nutzer ein kurzes Konzept vorlegen: Lösung für das Fangen (als A/B-Labor zum Anfassen),
-   Jahreszeiten-Prestige, Eskalation und ein Name. Auf sein Go warten.
+   Jahreszeiten-Prestige, Eskalation und ein Name. Auf das Go warten.
 3. Die volle Version in `games/<id>.html` bauen: Core-Block, Bot-Suite unter `test/`,
    Tempo-Ziele, Handy und Desktop.
 4. Zwischendurch Artifacts zum Anspielen veröffentlichen und nach Feedback nachbessern.
-5. Katalogeintrag (fünf Schritte), PR nur, wenn der Nutzer ihn möchte.
+5. Katalogeintrag (fünf Schritte), PR nur auf ausdrücklichen Wunsch.
