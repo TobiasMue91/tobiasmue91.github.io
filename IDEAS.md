@@ -1115,8 +1115,8 @@ the log says "best was QUEENIE for 102" under your 13. The end screen totals it 
 available points you took. That number moves as you learn, which is the reason to play a second game.
 
 Filled since: **an incremental built to escalate**, by `games/bubble_break.html` — pop bubble
-wrap on a coffee break, quit for calluses, move from a desk to a warehouse to a factory, pop the
-world. Chosen from three playable prototypes (a Katamari snowball and a firefly jar lost); the
+wrap on a coffee break, quit for calluses, move from a desk to a warehouse to a factory and a city,
+pop the world and then the rest of the universe. Chosen from three playable prototypes (a Katamari snowball and a firefly jar lost); the
 verb was then chosen on a test page of three variants, and the one that made the player slow
 down lost although it made sense. Balanced by a human-limited bot playing the whole career in
 `test/bubble_break.mjs`. Four things generalise.
@@ -1140,6 +1140,22 @@ with the upgrade, or its later levels buy nothing ("8 → 8").
 giant bubbles alone, and a sheet only ends when every bubble is gone, so a machine alone earns
 about a tenth of a player however fast it is. Let it take gold and giants and the same machine
 earns 87 %.
+
+The second version, after the first player's notes, added three more.
+
+**When a stage runs long, add a scale, not more of the same.** The first version's factory took 95
+of its 157 minutes: the numbers kept growing but nothing new happened. A fourth workplace between
+the factory and the world, with a verb whose yield grows with area rather than length (a drawn
+loop pops everything inside it), made the late game shorter and more eventful: the world now
+comes at about 140 minutes, and the city pops some forty times faster than the factory.
+
+**Name a tree by what it costs and when it goes.** The first player could not tell what a tab
+called "Break tree" was for. "Upgrades" beside "Career", with one line under the tabs saying what
+buys them and whether they last, answered it.
+
+**A count and a multiplier must not both wear the ×.** The combo showed "57×" in the middle of the
+screen and "×1.5" in the corner, and it lapsed after half a second without a pop, so it read as
+broken. It now says "57 in a row", shows its multiplier beside it, and draws the time it has left.
 
 ## Tried and rejected
 
