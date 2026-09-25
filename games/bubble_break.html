@@ -1541,7 +1541,9 @@ function audio(){
   mainOut = AC.createGain(); mainOut.connect(AC.destination);
   master = AC.createGain();
   const comp = AC.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 5; comp.attack.value = .002;
-  master.connect(comp).connect(mainOut);
+  // a limiter last: whatever piles up, the sum never clips
+  const lim = AC.createDynamicsCompressor(); lim.threshold.value = -9; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = .001; lim.release.value = .15;
+  master.connect(comp).connect(lim).connect(mainOut);
   musicBus = AC.createGain(); musicBus.connect(mainOut);
   applyVolumes();
   noise = AC.createBuffer(1, AC.sampleRate, AC.sampleRate); const d = noise.getChannelData(0); for(let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
@@ -1568,9 +1570,20 @@ function bakePops(){
   for(let k = 0; k < 5; k++) THICKS.push(bake(popWave(sr, r, { body:.75, dur:.06, thump:150, level:.09 })));
   for(let k = 0; k < 3; k++) BUYS.push(bake(buyWave(sr, r)));
 }
-function play(buf, rate, pan, delay){
+/* Many pops at once must not add up to a roar. Three things keep them in check, as games do:
+   at most POP_VOICES pops sound at the same time (the rest are skipped: the ear cannot count them),
+   each pop is turned down by 1/sqrt of how many started in the last quarter second, and a limiter
+   sits on the sum. */
+const POP_VOICES = 6;
+let popVoices = 0, popTimes = [];
+function popGain(){
+  const t = AC.currentTime; popTimes.push(t); while(popTimes.length && t - popTimes[0] > .25) popTimes.shift();
+  return 1/Math.sqrt(1 + (popTimes.length - 1)/3);
+}
+function play(buf, rate, pan, delay, gain){
   const s = AC.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate;
   let out = s;
+  if(gain != null && gain < 1){ const g = AC.createGain(); g.gain.value = gain; out = out.connect(g); }
   if(pan && AC.createStereoPanner){ const p = AC.createStereoPanner(); p.pan.value = pan; out = s.connect(p); }
   out.connect(master); s.start(delay ? AC.currentTime + delay : 0);
 }
@@ -1590,28 +1603,34 @@ function osc(t, f0, f1, dur, vol, type){
 }
 // a quarter of the way to either speaker at the screen's edge: enough to place a pop, not to pull the ear
 function panAt(x){ panX = W ? Math.max(-.25, Math.min(.25, (x/W - .5)*.5)) : 0; }
+// the big sounds keep a little distance from themselves, so a chain reaction is a rumble, not a wall
+const lastBig = {};
+function spaced(k, gap){ const t = AC.currentTime; if(t - (lastBig[k] || -9) < gap) return false; lastBig[k] = t; return true; }
 const SND = {
   // one pop; pan follows where on the screen it happened, gently
   pop(delay, size, kind){
     if(!AC || !S.ui.sound || !POPS.length) return;
-    const list = kind === 'thick' ? THICKS : POPS;
-    play(list[(Math.random()*list.length)|0], Math.max(.6, Math.min(1.5, (size || 1)*(.88 + Math.random()*.24))), panX, delay);
+    if(popVoices >= POP_VOICES) return;
+    const list = kind === 'thick' ? THICKS : POPS, g = popGain();
+    popVoices++; setTimeout(() => popVoices--, 90 + (delay || 0)*1000);
+    play(list[(Math.random()*list.length)|0], Math.max(.6, Math.min(1.5, (size || 1)*(.88 + Math.random()*.24))), panX, delay, g);
   },
   buy(){ if(!AC || !S.ui.sound || !BUYS.length) return; play(BUYS[(Math.random()*BUYS.length)|0], .97 + Math.random()*.06, 0, 0); },
   pops(n, pitch){ if(!AC || !S.ui.sound || n <= 0) return; const k = Math.min(n, 5); for(let i = 0; i < k; i++) SND.pop(i ? Math.random()*.03 : 0, pitch); if(n > 5) SND.crackle(n); },
   // many at once: a crackle whose loudness follows the count, and a boom for the truly absurd
   crackle(n){
     if(!AC || !S.ui.sound) return; const t = now(); if(t - crackleT < .05) return; crackleT = t;
-    const lg = Math.log10(n), grains = Math.min(26, 4 + lg*5);
-    for(let i = 0; i < grains; i++) nz(t + Math.random()*.12, .01 + Math.random()*.015, 'bandpass', 1200 + Math.random()*3500, 2, .12 + .05*lg);
-    if(n > 3000) osc(t, 90, 38, .35, Math.min(.45, .08*lg));
+    // more bubbles make a denser crackle, hardly a louder one
+    const lg = Math.log10(n), grains = Math.min(12, 3 + lg*2);
+    for(let i = 0; i < grains; i++) nz(t + Math.random()*.12, .01 + Math.random()*.015, 'bandpass', 1200 + Math.random()*3000, 2, Math.min(.11, .05 + .012*lg));
+    if(n > 3000) osc(t, 90, 38, .35, Math.min(.22, .04*lg));
   },
   pfft(){ if(!AC || !S.ui.sound) return; nz(now(), .24, 'lowpass', 850, .7, .3, .025); },
   glint(){ if(!AC || !S.ui.sound) return; const t = now(); nz(t + .01, .16, 'highpass', 5500, 1, .07, .004); nz(t + .05, .12, 'bandpass', 6500, 8, .06); },
   clink(){ if(!AC || !S.ui.sound) return; const t = now(); osc(t + .02, 2480, 2440, .18, .05); osc(t + .02, 3710, 3690, .12, .03); },
-  bang(){ if(!AC || !S.ui.sound) return; const t = now(); nz(t, .09, 'lowpass', 1800, .8, .9); osc(t, 160, 45, .22, .4); for(let i = 0; i < 8; i++) nz(t + .02 + Math.random()*.15, .01, 'bandpass', 2000 + Math.random()*3000, 2, .15); },
+  bang(){ if(!AC || !S.ui.sound || !spaced('bang', .07)) return; const t = now(); nz(t, .09, 'lowpass', 1800, .8, .9); osc(t, 160, 45, .22, .4); for(let i = 0; i < 8; i++) nz(t + .02 + Math.random()*.15, .01, 'bandpass', 2000 + Math.random()*3000, 2, .15); },
   giantHit(k){ if(!AC || !S.ui.sound) return; const t = now(); osc(t, 120 + 25*k, 80, .16, .3, 'sine'); nz(t, .05, 'lowpass', 500, 1, .25); },
-  giant(){ if(!AC || !S.ui.sound) return; const t = now(); nz(t, .012, 'highpass', 1500, .7, .55); nz(t, .5, 'lowpass', 900, .7, .5, .004); osc(t, 110, 32, .6, .45); for(let i = 0; i < 14; i++) nz(t + .05 + Math.random()*.4, .012, 'bandpass', 1400 + Math.random()*2400, 2, .13); },
+  giant(){ if(!AC || !S.ui.sound || !spaced('giant', .15)) return; const t = now(); nz(t, .012, 'highpass', 1500, .7, .55); nz(t, .5, 'lowpass', 900, .7, .5, .004); osc(t, 110, 32, .6, .45); for(let i = 0; i < 14; i++) nz(t + .05 + Math.random()*.4, .012, 'bandpass', 1400 + Math.random()*2400, 2, .13); },
   creak(){ if(!AC || !S.ui.sound) return; const t = now(); const o = AC.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 170 + Math.random()*70; const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 850; f.Q.value = 6; const g = AC.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.04, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + .07); o.connect(f).connect(g).connect(master); o.start(t); o.stop(t + .09); },
   crinkle(v){ if(!AC || !S.ui.sound) return; nz(now(), .004 + Math.random()*.004, 'highpass', 3500 + Math.random()*3000, 1, .04 + .07*v); },
   sheet(){ if(!AC || !S.ui.sound) return; const t = now(); const s = AC.createBufferSource(); s.buffer = noise; const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2; f.frequency.setValueAtTime(600, t); f.frequency.exponentialRampToValueAtTime(3500, t + .35); const g = AC.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.22, t + .08); g.gain.exponentialRampToValueAtTime(.0001, t + .45); s.connect(f).connect(g).connect(master); s.start(t); s.stop(t + .5); for(let i = 0; i < 10; i++) nz(t + Math.random()*.4, .005, 'highpass', 4000, 1, .08); },
@@ -1623,7 +1642,7 @@ const SND = {
   // a zipper: a train of little ticks that speeds up, as long as the zip runs
   zip(dur){ if(!AC || !S.ui.sound) return; const t = now(); dur = Math.min(.9, Math.max(.2, dur)); let x = 0, k = 0; while(x < dur && k < 70){ const rate = 45 + 90*(x/dur); nz(t + x, .006, 'bandpass', 1900 + 1100*(x/dur) + Math.random()*250, 3, .11); x += 1/rate; k++; } },
   // a loop closes: the air goes out of a whole area at once
-  lasso(n){ if(!AC || !S.ui.sound) return; const t = now(); osc(t, 190, 55, .45, .45); nz(t, .35, 'lowpass', 1200, .8, .35, .02); SND.crackle(n); },
+  lasso(n){ if(!AC || !S.ui.sound || !spaced('lasso', .12)) return; const t = now(); osc(t, 190, 55, .45, .45); nz(t, .35, 'lowpass', 1200, .8, .35, .02); SND.crackle(n); },
   // an order done: a small desk bell
   order(){ if(!AC || !S.ui.sound) return; const t = now(); bell(t, 1567.98, .1, 1); bell(t + .004, 3135.96, .025, .45); },
   // a sticker: peeled off its sheet and pressed down
