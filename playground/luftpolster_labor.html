@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Noppen-Labor</title>
+<meta name="description" content="Testseite für Luftpolster: drei Varianten, wie sich das Ploppen anfühlen kann, auf realistischerer Folie und mit neuem Klang. 30-Sekunden-Runden mit Messwerten zum Vergleich.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+:root{
+  --paper:#fbf7ee; --ink:#241d16; --muted:#6f6353; --line:rgba(36,29,22,.15); --accent:#1f5f8b; --warn:#b3452c;
+  --ui:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:#8a5a2e;color:var(--ink);font-family:var(--ui);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+button{font-family:var(--ui);cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#top{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top,0px) + 10px);display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;pointer-events:none}
+.note{background:var(--paper);box-shadow:0 2px 6px rgba(0,0,0,.25);padding:8px 12px;pointer-events:auto}
+#tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#tabs b{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.tab{border:1px solid var(--line);background:#fff;padding:6px 10px;font-size:15px;font-weight:600;color:var(--ink)}
+.tab[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+#desc{flex:1;min-width:240px;font-size:15px;line-height:1.35}
+#desc strong{display:block;font-size:16px}
+#stats{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);font-variant-numeric:tabular-nums;min-width:220px;pointer-events:auto}
+#stats .grid{display:grid;grid-template-columns:1fr auto;gap:2px 14px;font-size:15px}
+#stats .grid span:nth-child(even){font-family:var(--mono);text-align:right}
+#stats .clock{font-family:var(--mono);font-size:28px;line-height:1;margin-bottom:6px}
+#stats .best{margin-top:8px;padding-top:6px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+#stats .best div{display:flex;justify-content:space-between;gap:10px;font-family:var(--mono)}
+#combo{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:42px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.45);pointer-events:none;opacity:0;transition:opacity .25s}
+#result{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(40,25,10,.35)}
+#result .note{width:min(380px,100%);padding:18px 20px;transform:rotate(-1deg)}
+#result h2{margin:0 0 8px;font-size:24px}
+#result p{margin:0 0 12px;font-size:15px;color:var(--muted);line-height:1.4}
+.btn{border:0;background:var(--ink);color:#fff;padding:10px 16px;font-size:16px;font-weight:700;width:100%}
+@media (max-width:560px){
+  #desc{min-width:0;flex-basis:100%;font-size:14px}
+  #stats{left:16px;right:16px;min-width:0;padding:6px 10px}
+  #stats .clock{font-size:20px;display:inline-block;margin-right:10px}
+  #stats .grid{grid-template-columns:repeat(4,auto);font-size:13px}
+  #stats .best{display:none}
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="top">
+  <div class="note" id="tabs"><b>Variante</b>
+    <button class="tab" data-v="press" aria-pressed="true">1 Drücken</button>
+    <button class="tab" data-v="budget" aria-pressed="false">2 Daumenkraft</button>
+    <button class="tab" data-v="speed" aria-pressed="false">3 Tempo</button>
+  </div>
+  <div class="note" id="desc"></div>
+</div>
+<div id="combo"></div>
+<div class="note" id="stats">
+  <div class="clock" id="sClock">0:30</div>
+  <div class="grid">
+    <span>Plopps</span><span id="sPops">0</span>
+    <span>pro Sekunde</span><span id="sRate">–</span>
+    <span>längste Combo</span><span id="sCombo">0</span>
+    <span>Fehlgriffe</span><span id="sMiss">0</span>
+  </div>
+  <div class="best" id="sBest"></div>
+</div>
+<div id="result" hidden><div class="note">
+  <h2 id="rTitle">30 Sekunden um</h2>
+  <p id="rText"></p>
+  <button class="btn" id="rAgain">Neue Folie</button>
+</div></div>
+
+<script>
+'use strict';
+/* ============================================================
+   NOPPEN-LABOR: drei Kernaktionen für Luftpolster im Vergleich.
+   Die Folie wird einmal auf eine eigene Leinwand gemalt; pro Frame
+   werden nur Noppen neu gezeichnet, die sich geändert haben.
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const cv = $('c'), cx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+
+const VARIANTS = {
+  press:  { name:'Drücken', text:'Jeder Druck ploppt, was unter dem Daumen liegt. Wischen bringt nichts. Dicke Noppen kurz halten.' },
+  budget: { name:'Daumenkraft', text:'Wischen ploppt, aber ein Druck hat Kraft für 6 Noppen (Ring am Daumen). Loslassen lädt nach.' },
+  speed:  { name:'Tempo', text:'Wischen ploppt nur, wenn du langsam genug fährst. Zu schnell drückst du die Noppen nur ein.' }
+};
+let variant = 'press';
+try { variant = localStorage.getItem('noppen_labor_v') || 'press'; } catch(e){}
+if(!VARIANTS[variant]) variant = 'press';
+let best = {};
+try { best = JSON.parse(localStorage.getItem('noppen_labor_best')||'{}'); } catch(e){}
+
+const ROUND = 30, COMBO_WIN = .5, BUDGET = 6, BUDGET_REFILL = .35;
+const PRESS_THICK = .28, DWELL = .07, DWELL_THICK = .3;
+
+/* ---------- Audio: ein trockener Plopp, Folienrascheln, kein Tonleiter-Geklimper ---------- */
+let AC = null, master = null, noise = null;
+function audio(){
+  if(AC) return; try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+  master = AC.createGain(); master.gain.value = .9;
+  const comp = AC.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+  master.connect(comp).connect(AC.destination);
+  noise = AC.createBuffer(1, AC.sampleRate*.5, AC.sampleRate); const d = noise.getChannelData(0); for(let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+}
+function nz(t, dur, type, f, q, vol, attack){
+  const s = AC.createBufferSource(); s.buffer = noise; s.playbackRate.value = .8 + Math.random()*.4;
+  const fl = AC.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+  const g = AC.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + (attack||.0008)); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(fl).connect(g).connect(master); s.start(t, Math.random()*.4); s.stop(t + dur + .02);
+}
+let lastPop = 0, popBurst = 0;
+function sndPop(size, thick){
+  if(!AC) return; const t = AC.currentTime;
+  if(t - lastPop < .006){ if(++popBurst > 3) return; } else popBurst = 0;
+  lastPop = t;
+  const body = (thick ? 700 : 1000) + Math.random()*900 - size*8;
+  nz(t, .006, 'highpass', 2500, .7, .9);                 // Knall-Transiente
+  nz(t, .045 + Math.random()*.02, 'bandpass', body, 3.5, .55);  // Resonanz der Blase
+  const o = AC.createOscillator(); o.frequency.setValueAtTime(thick?150:210, t); o.frequency.exponentialRampToValueAtTime(70, t+.04);
+  const g = AC.createGain(); g.gain.setValueAtTime(.18, t); g.gain.exponentialRampToValueAtTime(.0001, t+.05);
+  o.connect(g).connect(master); o.start(t); o.stop(t+.06);
+}
+function sndPfft(){ if(!AC) return; nz(AC.currentTime, .22, 'lowpass', 900, .7, .28, .02); }
+function sndCrinkle(v){ if(!AC) return; nz(AC.currentTime, .004 + Math.random()*.004, 'highpass', 3500 + Math.random()*3000, 1, .05 + .08*v); }
+function sndCreak(){ if(!AC) return; const t = AC.currentTime; const o = AC.createOscillator(); o.type='sawtooth'; o.frequency.value = 180 + Math.random()*60; const f = AC.createBiquadFilter(); f.type='bandpass'; f.frequency.value = 900; f.Q.value = 6; const g = AC.createGain(); g.gain.setValueAtTime(.0001,t); g.gain.linearRampToValueAtTime(.05,t+.01); g.gain.exponentialRampToValueAtTime(.0001,t+.06); o.connect(f).connect(g).connect(master); o.start(t); o.stop(t+.08); }
+
+/* ---------- Schreibtisch (Eiche, prozedural) ---------- */
+let desk = null;
+function makeDesk(){
+  desk = document.createElement('canvas'); desk.width = W*DPR; desk.height = H*DPR; const g = desk.getContext('2d'); g.scale(DPR,DPR);
+  g.fillStyle = '#a8703d'; g.fillRect(0,0,W,H);
+  const plank = 170;
+  for(let py = -20; py < H; py += plank){
+    const tone = 0.9 + Math.random()*.2;
+    g.fillStyle = `rgba(${Math.round(150*tone)},${Math.round(98*tone)},${Math.round(52*tone)},.55)`; g.fillRect(0, py, W, plank);
+    // Maserung: lange, leicht wellige Linien
+    for(let k=0;k<55;k++){
+      const y0 = py + Math.random()*plank, amp = 2 + Math.random()*6, fr = .002 + Math.random()*.006, ph = Math.random()*6;
+      g.strokeStyle = Math.random()<.7 ? `rgba(70,40,15,${.05+Math.random()*.12})` : `rgba(235,190,130,${.05+Math.random()*.08})`;
+      g.lineWidth = .6 + Math.random()*1.6; g.beginPath();
+      for(let x=0;x<=W;x+=12){ const y = y0 + Math.sin(x*fr+ph)*amp + Math.sin(x*fr*3.1+ph)*amp*.3; x?g.lineTo(x,y):g.moveTo(x,y); } g.stroke();
+    }
+    if(Math.random()<.5){ const kx = Math.random()*W, ky = py + plank*(.3+Math.random()*.4); for(let r=14;r>2;r-=2.5){ g.strokeStyle = `rgba(60,32,10,${.12})`; g.lineWidth = 1.2; g.beginPath(); g.ellipse(kx, ky, r*2.2, r*.8, 0, 0, 6.283); g.stroke(); } }
+    g.fillStyle = 'rgba(40,20,5,.45)'; g.fillRect(0, py + plank - 1.5, W, 1.5);
+    g.fillStyle = 'rgba(255,220,170,.12)'; g.fillRect(0, py + plank, W, 1);
+  }
+  // Vignette wie unter einer Schreibtischlampe
+  const v = g.createRadialGradient(W*.45, H*.4, Math.min(W,H)*.2, W*.5, H*.5, Math.max(W,H)*.8);
+  v.addColorStop(0,'rgba(255,230,190,.10)'); v.addColorStop(1,'rgba(20,10,0,.45)'); g.fillStyle = v; g.fillRect(0,0,W,H);
+}
+
+/* ---------- Noppen-Sprites ---------- */
+const cache = new Map();
+function spr(key, r, draw){
+  const k = key+'|'+r.toFixed(1); let c = cache.get(k); if(c) return c;
+  const s = Math.ceil(r*2.8); c = document.createElement('canvas'); c.width = c.height = Math.ceil(s*DPR); const g = c.getContext('2d'); g.scale(DPR,DPR); draw(g, s/2, r); cache.set(k, c); return c;
+}
+// Schatten und Lichtfleck auf dem Tisch, den die Kuppel wirft
+function shadowSprite(r){ return spr('sh', r, (g,m,r) => {
+  const sg = g.createRadialGradient(m+r*.22, m+r*.26, r*.2, m+r*.22, m+r*.26, r*1.05); sg.addColorStop(0,'rgba(30,15,0,.0)'); sg.addColorStop(.6,'rgba(30,15,0,.18)'); sg.addColorStop(1,'rgba(30,15,0,0)'); g.fillStyle = sg; g.fillRect(0,0,m*2,m*2);
+  const cg = g.createRadialGradient(m+r*.28, m+r*.34, 0, m+r*.28, m+r*.34, r*.35); cg.addColorStop(0,'rgba(255,245,220,.35)'); cg.addColorStop(1,'rgba(255,245,220,0)'); g.fillStyle = cg; g.fillRect(0,0,m*2,m*2);
+}); }
+function domeSprite(r, thick){ return spr(thick?'domeT':'dome', r, (g,m,r) => {
+  // verschweißter, flacher Ring um die Kuppel
+  g.strokeStyle = 'rgba(255,255,255,.10)'; g.lineWidth = r*.16; g.beginPath(); g.arc(m,m,r*1.04,0,6.283); g.stroke();
+  // Kuppel: innen klar, zum Rand hin heller (Fresnel)
+  const b = g.createRadialGradient(m-r*.15, m-r*.18, r*.05, m, m, r);
+  b.addColorStop(0, thick ? 'rgba(235,245,255,.20)' : 'rgba(255,255,255,.03)');
+  b.addColorStop(.62, thick ? 'rgba(225,238,250,.26)' : 'rgba(225,238,250,.10)');
+  b.addColorStop(.9, thick ? 'rgba(240,248,255,.48)' : 'rgba(240,248,255,.32)');
+  b.addColorStop(1, 'rgba(255,255,255,.55)');
+  g.fillStyle = b; g.beginPath(); g.arc(m,m,r,0,6.283); g.fill();
+  g.strokeStyle = thick ? 'rgba(90,115,140,.55)' : 'rgba(110,130,150,.35)'; g.lineWidth = thick ? 1.6 : 1; g.stroke();
+  // Innenkante unten rechts: gebrochenes Licht
+  g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = r*.07; g.beginPath(); g.arc(m,m,r*.8,Math.PI*.08,Math.PI*.55); g.stroke();
+  // gespiegeltes Fenster oben links
+  g.save(); g.translate(m-r*.4, m-r*.42); g.rotate(-.35);
+  g.fillStyle = 'rgba(255,255,255,.85)';
+  const pw = r*.16, ph = r*.11, gap = r*.035;
+  for(let i=0;i<2;i++) for(let j=0;j<2;j++){ g.beginPath(); if(g.roundRect) g.roundRect(-pw - gap/2 + i*(pw+gap), -ph - gap/2 + j*(ph+gap), pw, ph, r*.03); else g.rect(-pw - gap/2 + i*(pw+gap), -ph - gap/2 + j*(ph+gap), pw, ph); g.fill(); }
+  g.restore();
+  const hl = g.createRadialGradient(m-r*.42, m-r*.45, 0, m-r*.42, m-r*.45, r*.45); hl.addColorStop(0,'rgba(255,255,255,.35)'); hl.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle = hl; g.beginPath(); g.arc(m,m,r,0,6.283); g.fill();
+}); }
+function saggySprite(r){ return spr('sag', r, (g,m,r) => {
+  g.strokeStyle = 'rgba(255,255,255,.10)'; g.lineWidth = r*.16; g.beginPath(); g.arc(m,m,r*1.04,0,6.283); g.stroke();
+  g.fillStyle = 'rgba(230,238,245,.12)'; g.beginPath(); g.ellipse(m, m+r*.06, r*.95, r*.85, .3, 0, 6.283); g.fill();
+  g.strokeStyle = 'rgba(110,130,150,.3)'; g.lineWidth = 1; g.stroke();
+  // schlaffe Falten statt Glanzpunkt
+  const sg = g.createRadialGradient(m+r*.1, m+r*.15, r*.1, m, m, r*.9); sg.addColorStop(0,'rgba(40,25,10,.10)'); sg.addColorStop(1,'rgba(40,25,10,0)'); g.fillStyle = sg; g.beginPath(); g.arc(m,m,r*.9,0,6.283); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,.3)'; g.lineWidth = 1; g.beginPath(); g.arc(m+r*.05, m+r*.1, r*.62, Math.PI*1.1, Math.PI*1.7); g.stroke();
+  g.fillStyle = 'rgba(255,255,255,.45)'; g.beginPath(); g.ellipse(m-r*.35, m-r*.3, r*.14, r*.05, -.4, 0, 6.283); g.fill();
+}); }
+// geplatzt: zerknitterte, stellenweise weiß gestresste Folie
+function poppedSprite(r, v){ return spr('pop'+v, r, (g,m,r) => {
+  let a = v*9301+49297; const rnd = () => (a = (a*9301+49297) % 233280)/233280;
+  g.strokeStyle = 'rgba(255,255,255,.10)'; g.lineWidth = r*.16; g.beginPath(); g.arc(m,m,r*1.04,0,6.283); g.stroke();
+  // eingefallene Kuppel: unregelmäßiger, flacher Rand
+  const pts = []; for(let i=0;i<14;i++){ const an = i/14*6.283, rr = r*(.78 + rnd()*.18); pts.push([m + Math.cos(an)*rr, m + Math.sin(an)*rr]); }
+  g.fillStyle = 'rgba(255,255,255,.10)'; g.beginPath(); pts.forEach(([x,y],k)=>k?g.lineTo(x,y):g.moveTo(x,y)); g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 1; g.stroke();
+  // Weißbruch: gestresstes Plastik wird milchig
+  const wx = m+(rnd()-.5)*r*.4, wy = m+(rnd()-.5)*r*.4, wg = g.createRadialGradient(wx,wy,0,wx,wy,r*.6); wg.addColorStop(0,'rgba(255,255,255,.22)'); wg.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle = wg; g.beginPath(); pts.forEach(([x,y],k)=>k?g.lineTo(x,y):g.moveTo(x,y)); g.closePath(); g.fill();
+  // zwei, drei lange Falten quer durch
+  g.save(); g.beginPath(); pts.forEach(([x,y],k)=>k?g.lineTo(x,y):g.moveTo(x,y)); g.closePath(); g.clip();
+  const n = 2 + Math.floor(rnd()*2);
+  for(let i=0;i<n;i++){
+    const an = rnd()*3.1416, off = (rnd()-.5)*r*.6, cxp = m + Math.cos(an+1.57)*off, cyp = m + Math.sin(an+1.57)*off;
+    const x1 = cxp - Math.cos(an)*r, y1 = cyp - Math.sin(an)*r, x2 = cxp + Math.cos(an)*r, y2 = cyp + Math.sin(an)*r, bend = (rnd()-.5)*r*.4;
+    const mx = (x1+x2)/2 + Math.cos(an+1.57)*bend, my = (y1+y2)/2 + Math.sin(an+1.57)*bend;
+    g.lineWidth = 1.2; g.strokeStyle = 'rgba(50,30,10,.16)'; g.beginPath(); g.moveTo(x1+1,y1+1); g.quadraticCurveTo(mx+1,my+1,x2+1,y2+1); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,.5)'; g.beginPath(); g.moveTo(x1,y1); g.quadraticCurveTo(mx,my,x2,y2); g.stroke();
+  }
+  g.restore();
+}); }
+
+/* ---------- Folie ---------- */
+let sheet = null, layer = null, lg = null;
+function makeSheet(){
+  const top = Math.ceil($('top').getBoundingClientRect().bottom) + 10, bottom = W < 560 ? Math.ceil(H - $('stats').getBoundingClientRect().top) + 10 : 16, side = 16;
+  const R = { x:side, y:top, w:W-2*side - (W>=560?250:0), h:H-top-bottom };
+  const r = Math.max(15, Math.min(24, R.w/((W<560?8:14)*2.1)));
+  const dx = r*2.14, dy = dx*.866;
+  const cols = Math.floor((R.w - r)/dx), rows = Math.floor((R.h - r*.4)/dy);
+  const ox = R.x + (R.w - (cols-.5)*dx)/2, oy = R.y + (R.h - (rows-1)*dy)/2;
+  const bubbles = [];
+  for(let j=0;j<rows;j++) for(let i=0;i<cols;i++){
+    const x = ox + i*dx + (j%2?dx/2:0), y = oy + j*dy; if(x > R.x + R.w - r*.6) continue;
+    const u = Math.random(); const k = u < .05 ? 'sag' : u < .11 ? 'thick' : 'n';
+    bubbles.push({ x, y, k, popped:false, press:0, dent:0, v:(Math.random()*6)|0, dirty:true });
+  }
+  sheet = { R, r, bubbles, left: bubbles.filter(b=>b.k!=='sag').length };
+  // Folienfläche mit Knitterbändern
+  layer = document.createElement('canvas'); layer.width = W*DPR; layer.height = H*DPR; lg = layer.getContext('2d'); lg.scale(DPR,DPR);
+  sheet.film = document.createElement('canvas'); sheet.film.width = W*DPR; sheet.film.height = H*DPR; const fg = sheet.film.getContext('2d'); fg.scale(DPR,DPR);
+  fg.fillStyle = 'rgba(225,238,250,.10)'; fg.fillRect(R.x, R.y, R.w, R.h);
+  for(let i=0;i<9;i++){ const x = R.x + Math.random()*R.w, a = (Math.random()-.5)*1.2; const gr = fg.createLinearGradient(x, R.y, x + Math.cos(a)*60, R.y + Math.sin(a)*60); gr.addColorStop(0,'rgba(255,255,255,0)'); gr.addColorStop(.5,'rgba(255,255,255,.07)'); gr.addColorStop(1,'rgba(255,255,255,0)'); fg.save(); fg.beginPath(); fg.rect(R.x,R.y,R.w,R.h); fg.clip(); fg.translate(x, R.y + R.h/2); fg.rotate(a); fg.fillStyle = gr; fg.fillRect(-40, -R.h, 80, R.h*2); fg.restore(); }
+  fg.strokeStyle = 'rgba(255,255,255,.35)'; fg.lineWidth = 1.5; fg.strokeRect(R.x, R.y, R.w, R.h);
+  fg.strokeStyle = 'rgba(0,0,0,.12)'; fg.lineWidth = 3; fg.strokeRect(R.x+2, R.y+2, R.w, R.h);
+  paintAll();
+}
+function paintBubble(g, b){
+  const r = sheet.r;
+  if(b.popped){ const s = poppedSprite(r, b.v), w = s.width/DPR; g.drawImage(s, b.x - w/2, b.y - w/2, w, w); return; }
+  if(b.k==='sag'){ const s = saggySprite(r), w = s.width/DPR; g.drawImage(s, b.x - w/2, b.y - w/2, w, w); return; }
+  const sh = shadowSprite(r), ws = sh.width/DPR;
+  const d = b.dent;
+  g.globalAlpha = 1 - .5*d; g.drawImage(sh, b.x - ws/2, b.y - ws/2, ws, ws); g.globalAlpha = 1;
+  // durch die Kuppel sieht man den Tisch leicht vergrößert
+  g.save(); g.beginPath(); g.arc(b.x, b.y, r*(1-.08*d), 0, 6.283); g.clip();
+  const mag = 1.05 - .04*d; g.drawImage(desk, (b.x - r/mag)*DPR, (b.y - r/mag)*DPR, 2*r/mag*DPR, 2*r/mag*DPR, b.x - r, b.y - r, 2*r, 2*r);
+  g.restore();
+  const s = domeSprite(r, b.k==='thick'), w = s.width/DPR;
+  const sx = 1 + .06*d, sy = 1 - .16*d;
+  g.drawImage(s, b.x - w/2*sx, b.y - w/2*sy + r*.05*d, w*sx, w*sy);
+  if(d > .05){ g.fillStyle = `rgba(40,25,10,${.12*d})`; g.beginPath(); g.ellipse(b.x, b.y + r*.05*d, r*sx*.95, r*sy*.95, 0, 0, 6.283); g.fill(); }
+}
+function paintAll(){
+  lg.clearRect(0,0,W,H); lg.drawImage(desk, 0,0,W,H); lg.drawImage(sheet.film, 0,0,W,H);
+  for(const b of sheet.bubbles) paintBubble(lg, b), b.dirty = false;
+}
+function repaintDirty(){
+  const r = sheet.r, pad = r*1.45;
+  for(const b of sheet.bubbles){
+    if(!b.dirty) continue; b.dirty = false;
+    const x0 = Math.floor(b.x-pad), y0 = Math.floor(b.y-pad), x1 = Math.ceil(b.x+pad), y1 = Math.ceil(b.y+pad);
+    lg.save(); lg.beginPath(); lg.rect(x0, y0, x1-x0, y1-y0); lg.clip();
+    lg.drawImage(desk, 0,0,W,H); lg.drawImage(sheet.film, 0,0,W,H);
+    for(const o of sheet.bubbles){ if(Math.abs(o.x-b.x) < pad + r*1.45 && Math.abs(o.y-b.y) < pad + r*1.45) paintBubble(lg, o); }
+    lg.restore();
+  }
+}
+
+/* ---------- Runde ---------- */
+let round = null;
+function newRound(){ round = { t:0, started:false, over:false, pops:0, combo:0, maxCombo:0, miss:0, last:-9 }; makeSheet(); $('result').hidden = true; updateStats(); }
+function pop(b){
+  if(b.popped) return;
+  if(b.k==='sag'){ b.popped = true; b.dirty = true; round.combo = 0; round.miss++; sndPfft(); return; }
+  b.popped = true; b.dirty = true; b.dent = 0;
+  if(!round.started){ round.started = true; }
+  if(round.t - round.last <= COMBO_WIN) round.combo++; else round.combo = 1;
+  round.last = round.t; round.maxCombo = Math.max(round.maxCombo, round.combo); round.pops++; sheet.left--;
+  sndPop(sheet.r, b.k==='thick');
+  puffs.push({ x:b.x, y:b.y, t:0 });
+  if(sheet.left <= 0){ const keep = round; makeSheet(); round = keep; }
+}
+
+/* ---------- Eingabe ---------- */
+const ptr = { x:-99, y:-99, down:false, path:[], budget:BUDGET, lastMove:0, speed:0 };
+const THUMB = () => sheet.r*.55;
+function under(x, y, extra){ const out = []; const R = THUMB() + sheet.r*(extra??.35); for(const b of sheet.bubbles){ if(!b.popped && Math.abs(b.x-x) < R+2 && Math.abs(b.y-y) < R+2 && Math.hypot(b.x-x, b.y-y) < R) out.push(b); } return out; }
+cv.addEventListener('pointerdown', e => {
+  audio(); if(round.over) return;
+  ptr.down = true; ptr.x = e.clientX; ptr.y = e.clientY; ptr.path = [[ptr.x, ptr.y, performance.now()]];
+  try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+  if(variant==='press'){ for(const b of under(ptr.x, ptr.y)) if(b.k!=='thick') pop(b); }
+  if(variant==='budget'){ for(const b of under(ptr.x, ptr.y)) if(b.k!=='thick' && ptr.budget >= 1){ ptr.budget--; pop(b); } }
+});
+cv.addEventListener('pointermove', e => {
+  const evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+  for(const ev of evs){ ptr.x = ev.clientX; ptr.y = ev.clientY; if(ptr.down) ptr.path.push([ptr.x, ptr.y, performance.now()]); }
+});
+const up = () => { ptr.down = false; ptr.path = []; };
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => setVariant(t.dataset.v)));
+$('rAgain').onclick = newRound;
+function setVariant(v){ variant = v; try{ localStorage.setItem('noppen_labor_v', v); }catch(e){} document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-pressed', t.dataset.v===v)); $('desc').innerHTML = `<strong>${VARIANTS[v].name}</strong>${VARIANTS[v].text}`; newRound(); }
+
+// pro Frame: Strecken seit dem letzten Frame auswerten
+function handleInput(dt){
+  const segs = ptr.path; let dist = 0;
+  for(let k=1;k<segs.length;k++) dist += Math.hypot(segs[k][0]-segs[k-1][0], segs[k][1]-segs[k-1][1]);
+  ptr.speed = ptr.speed*.7 + (dist/dt)*.3;
+  if(ptr.down && dist > 2 && Math.random() < Math.min(1, dist/40)) sndCrinkle(Math.min(1, ptr.speed/1500));
+  const touched = new Set();
+  if(ptr.down){
+    // alle Noppen entlang der Strecke dieses Frames einsammeln, in Zugrichtung
+    const pts = segs.length > 1 ? segs : [[ptr.x, ptr.y]];
+    for(let k=0;k<pts.length;k++){ for(const b of under(pts[k][0], pts[k][1])) touched.add(b); if(k>0){ const [ax,ay] = pts[k-1], [bx,by] = pts[k]; const n = Math.ceil(Math.hypot(bx-ax,by-ay)/(sheet.r*.5)); for(let s=1;s<n;s++) for(const b of under(ax+(bx-ax)*s/n, ay+(by-ay)*s/n)) touched.add(b); } }
+    ptr.path = [[ptr.x, ptr.y, performance.now()]];
+  }
+  const still = ptr.speed < 60;
+  for(const b of sheet.bubbles){
+    if(b.popped || b.k==='sag'){ if(touched.has(b) && b.k==='sag' && !b.popped && variant!=='press') pop(b); continue; }
+    const on = touched.has(b);
+    if(on){
+      if(variant==='press'){
+        if(b.k==='thick' && still){ b.press += dt; if(Math.random()<.2) sndCreak(); if(b.press >= PRESS_THICK) pop(b); }
+      } else if(variant==='budget'){
+        if(b.k==='thick'){ if(still){ b.press += dt; if(Math.random()<.2) sndCreak(); if(b.press >= PRESS_THICK && ptr.budget >= 1){ ptr.budget--; pop(b); } } }
+        else if(ptr.budget >= 1){ ptr.budget--; pop(b); }
+      } else if(variant==='speed'){
+        b.press += dt; const need = b.k==='thick' ? DWELL_THICK : DWELL;
+        if(b.press >= need) pop(b); else if(b.k==='thick' && Math.random()<.15) sndCreak();
+      }
+    } else if(b.press > 0){ b.press = Math.max(0, b.press - dt*2); }
+    const target = b.popped ? 0 : on ? (variant==='speed' ? Math.min(1, b.press/(b.k==='thick'?DWELL_THICK:DWELL)) : b.k==='thick' ? Math.min(1, b.press/PRESS_THICK) : .35) : 0;
+    let nd = b.dent + (target - b.dent)*Math.min(1, dt*20);
+    if(Math.abs(target - nd) < .01) nd = target;
+    if(nd !== b.dent){ b.dent = nd; b.dirty = true; }
+  }
+  if(!ptr.down) ptr.budget = Math.min(BUDGET, ptr.budget + dt*BUDGET/BUDGET_REFILL);
+}
+
+/* ---------- Loop ---------- */
+let puffs = [];
+function update(dt){
+  if(round.started && !round.over){ round.t += dt; if(round.t >= ROUND){ round.t = ROUND; finish(); } }
+  if(!round.over) handleInput(dt);
+  if(round.t - round.last > COMBO_WIN) round.combo = 0;
+  for(const p of puffs) p.t += dt; puffs = puffs.filter(p => p.t < .25);
+}
+function finish(){
+  round.over = true; ptr.down = false;
+  const rate = round.pops/ROUND;
+  const prev = best[variant]; if(!prev || round.pops > prev.pops){ best[variant] = { pops:round.pops, combo:round.maxCombo }; try{ localStorage.setItem('noppen_labor_best', JSON.stringify(best)); }catch(e){} }
+  $('rTitle').textContent = `${VARIANTS[variant].name}: ${round.pops} Plopps`;
+  $('rText').textContent = `${rate.toFixed(1).replace('.',',')} pro Sekunde, längste Combo ${round.maxCombo}, ${round.miss} Fehlgriffe. Wie hat es sich angefühlt? Probier danach die anderen Varianten.`;
+  $('result').hidden = false; updateStats();
+}
+function updateStats(){
+  const left = Math.max(0, ROUND - round.t);
+  $('sClock').textContent = '0:' + String(Math.ceil(left)).padStart(2,'0');
+  $('sPops').textContent = round.pops; $('sRate').textContent = round.t > 1 ? (round.pops/round.t).toFixed(1).replace('.',',') : '–';
+  $('sCombo').textContent = round.maxCombo; $('sMiss').textContent = round.miss;
+  $('sBest').innerHTML = '<div><span>Bestwerte</span><span>Plopps</span></div>' + Object.keys(VARIANTS).map(v => `<div><span>${VARIANTS[v].name}</span><span>${best[v]?best[v].pops:'–'}</span></div>`).join('');
+  const c = $('combo'); if(round.combo >= 5){ c.textContent = round.combo + '×'; c.style.opacity = 1; } else c.style.opacity = 0;
+}
+function render(){
+  repaintDirty();
+  cx.setTransform(DPR,0,0,DPR,0,0);
+  cx.drawImage(layer, 0,0,W,H);
+  for(const p of puffs){ const u = p.t/.25; cx.strokeStyle = `rgba(255,255,255,${.5*(1-u)})`; cx.lineWidth = 1.5; cx.beginPath(); cx.arc(p.x, p.y, sheet.r*(1+u*1.2), 0, 6.283); cx.stroke(); }
+  // Daumen
+  if(ptr.x > -50){
+    const R = THUMB();
+    cx.fillStyle = ptr.down ? 'rgba(255,225,200,.22)' : 'rgba(255,255,255,.10)'; cx.strokeStyle = ptr.down ? 'rgba(60,35,20,.5)' : 'rgba(60,35,20,.25)'; cx.lineWidth = 1.5;
+    cx.beginPath(); cx.ellipse(ptr.x, ptr.y, R*1.1, R*1.25, -.3, 0, 6.283); cx.fill(); cx.stroke();
+    if(variant==='budget'){ cx.strokeStyle = '#1f5f8b'; cx.lineWidth = 4; cx.beginPath(); cx.arc(ptr.x, ptr.y, R*1.6, -Math.PI/2, -Math.PI/2 + 6.283*ptr.budget/BUDGET); cx.stroke(); }
+  }
+}
+let lt = performance.now(), statT = 0;
+function frame(t){
+  const dt = Math.min(1/30, (t-lt)/1000) || 1/60; lt = t;
+  update(dt); render();
+  if((statT += dt) > .1){ statT = 0; updateStats(); }
+  requestAnimationFrame(frame);
+}
+function resize(){ DPR = Math.min(2, window.devicePixelRatio||1); W = innerWidth; H = innerHeight; cv.width = W*DPR; cv.height = H*DPR; cache.clear(); makeDesk(); if(round) { makeSheet(); } }
+addEventListener('resize', resize);
+resize(); setVariant(variant);
+requestAnimationFrame(frame);
+window.LABOR = { get round(){return round}, get sheet(){return sheet}, ptr, update, setVariant, handleInput };
+</script>
+</body>
+</html>
