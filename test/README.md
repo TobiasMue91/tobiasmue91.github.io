@@ -193,3 +193,39 @@ diving with floating every frame.
 Each check has been seen failing: no dive tuck (the feel floors fall), a prediction that forgets
 the push at an island border (the ring drifts), a border blend too short for Dreamland's hills
 (a cliff at island 29), and a fever one slide late.
+
+## Three Gates
+
+```sh
+npm run test:towers                       # or: node test/tower_defense.mjs  (about 15 seconds)
+node test/tower_defense.mjs rules balance
+node test/tower_defense.mjs planner       # opt-in, about two minutes
+node test/tower_defense.mjs --page=old.html
+```
+
+`games/mini_tower_defense.html` used to be a tower defense nobody could lose: two fully upgraded
+towers held sixty waves, gold piled up past twenty thousand, and nothing about any wave asked for
+a different answer. The rework rests on three promises a screenshot cannot show - that the card
+naming the next wave tells the truth, that different waves need different towers, and that a board
+which ignores both eventually falls. The page keeps maps, waves, towers and rules in a
+`<script id="core">` block with no DOM; the suite runs that block alone in Node's `vm` and plays
+whole games through the same commands the buttons use, one decision every 0.7 game seconds.
+
+Bots: `idle` builds nothing; `pair` is the old page's winning build (one laser, one gun, fully
+upgraded); `greedy` is its dominant strategy (guns and lasers 2:1 on the best road cells, never
+reading the card); `reader` builds the tower the card names for the coming wave's main threat;
+`unread` is the same player building from a fixed rotation instead; `planner` tries every
+affordable purchase in a copy of the game and plays each forward to the end of the coming wave;
+`blind` is the planner shown a generic wave of the same strength instead of the card.
+
+| suite | what it checks |
+| --- | --- |
+| `maps` | 300 seeds: three gates opening at waves 1, 7 and 15; routes one cell a step and inside the board; no road touches another or itself except where a side road joins; flyers' lines end at the core; room to build |
+| `rules` | armour per hit with a 15% floor; every wave spawns exactly what its card listed, and the card does not depend on how you play; the five-wave introduction and alternating bosses; flyers keep to their line and ground towers never hit them; refunds, early calls, shield and bomb; same seed and play, same game |
+| `balance` | twelve seeds per bot: building nothing loses by wave 5; the old two-tower build and the old greedy strategy fall by the mid-teens; the reader beats its blind twin by two waves at the median and four in the worst game, and beats the old build by four; nothing reaches wave 40 |
+| `planner` | careful play gets five waves past the reader, still ends, and uses all five towers for at least 5% of its damage; reports, without asserting, what the card is worth to it |
+
+Two mutants have been seen failing the balance suite: the old linear health curve (the reader
+survives to wave 61) and a card that always says "grunts" (the reader falls to wave 10, behind
+its blind twin). The planner's number is worth knowing: a bot that can price every answer the
+instant a wave appears gains almost nothing from the card. The card is for people, who cannot.
