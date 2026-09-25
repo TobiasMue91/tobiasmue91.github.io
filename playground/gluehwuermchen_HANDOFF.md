@@ -215,3 +215,53 @@ Der Nutzer hat das für Bubble Break ausdrücklich so entschieden.
    Tempo-Ziele, Handy und Desktop.
 4. Zwischendurch Artifacts zum Anspielen veröffentlichen und nach Feedback nachbessern.
 5. Katalogeintrag (fünf Schritte), PR nur auf ausdrücklichen Wunsch.
+
+## 9. Stand (2026-09-25)
+
+Umgesetzt auf Branch `claude/vibrant-galileo-7uobv0`:
+- **Fang-Labor:** `playground/gluehwuermchen_labor.html`. Der Nutzer hat **Variante A** gewählt: jederzeit
+  fangbar, im Leuchten ×3.
+- **Volles Spiel:** `games/firefly_jar.html`, „Firefly Jar“, nur auf Englisch (Wunsch des Nutzers, wie die
+  übrigen Spiele). Katalogeintrag mit Screenshot 345 ist drin, `featured` steht auf false.
+- **Jahreszeiten:** Sommer (Glühwürmchen), Herbst (Irrlicht-Pfade), Winter (Eiszapfen-Strahlen, Polarlicht),
+  Frühling (Knospen mit Zins), Hochsommer (Eskalation bis zur Milchstraße, danach Abspann). Beim Wechsel
+  erlischt die Krone. Angezündete Laternen kosten beim Wiederanzünden ein Viertel, Ringe kaufen Wurzeln.
+- **Tests:** `test/firefly_jar.mjs` (`npm run test:firefly`), README-Abschnitt in `test/README.md`. Die
+  Preise stammen aus einem Tuner, der jede Jahreszeit auf ihre Zieldauer gebracht hat. Bot-Zeit:
+  Handy etwa 82 min, Desktop etwa 69 min, Menschen etwa das 1,5-Fache.
+
+Offen: Feedback des Nutzers vom Handy, besonders zu Klang (Glas-Klirren statt Glöckchen), Tempo und
+Lesbarkeit des Baums am Handy.
+
+### Version 2 (auch 2026-09-25)
+
+- Der Leuchtbonus (×3) ist weg. Der Nutzer wischt einfach, und ein Blitz ist zu kurz, um ihn gezielt zu
+  treffen. Das Leuchten ist jetzt nur noch Stimmung. Keen Eye, Synchrony, Glow Hunter, Morning Dew und
+  Heartwood haben neue Wirkungen.
+- Neue echte Arten mit echtem Leuchtverhalten und ein Feldtagebuch mit 11 Seiten (+4 % Licht je Seite).
+  Die Wirtschaft ist danach komplett neu abgestimmt.
+- Die Fichte besteht jetzt aus hängenden Zweigen, und die dunklen Glühwürmchen sind besser sichtbar.
+
+### Musik, dritte Fassung
+
+Der Nutzer fand die generative Musik (Eno-Schleifen über Septakkorden) zwar passend, aber weder
+unterhaltsam noch harmonisch. Deshalb hat jetzt jede Jahreszeit ein ausgeschriebenes Stück (`SCORE`
+im Musikteil): eine achttaktige Melodie aus Frage und Antwort, einen zweiten Teil als Kontrast, eine
+schlichte diatonische Akkordfolge und eine gezupfte Begleitung. Sie baut sich pro Durchgang in
+Schichten auf und macht danach ein paar Takte Pause mit Akkorden und einzelnen Tönen.
+
+| Jahreszeit | Instrumente | Tonart und Takt |
+|---|---|---|
+| Sommer | E-Piano, Nylongitarre, leicht geswingt | F-Dur |
+| Herbst | Harfen-Walzer | d-Moll, 3/4 |
+| Winter | Spieluhr | Es-Dur |
+| Frühling | Flöte über Gitarre | G-Dur |
+| Hochsommer | Sommerthema einen Ton höher, schneller und voll besetzt | G-Dur |
+
+Lang klingende Melodietöne stehen immer auf Akkordtönen. Die Pad-Akkorde lassen die große Septime
+weg. Gitarre und Harfe laufen über Karplus-Strong und sind auf etwa 1 Cent genau gestimmt.
+In den Einstellungen gibt es unter „Listen“ eine Jukebox (☀️ 🍂 ❄️ 🌱 ✨), mit der man alle fünf
+Stücke sofort hören kann. Beim Schließen läuft wieder das Stück der aktuellen Jahreszeit.
+Im Finale kehrt das erste Sommerthema zurück, in F, langsamer und auf Spieluhr und Harfe. Nach dem
+Abspann steht es als 🌌 auch in der Jukebox. Ab dem zweiten Durchgang zupft die Begleitung ihr
+Muster jedes zweite Mal andersherum.

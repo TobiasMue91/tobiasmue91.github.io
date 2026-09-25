@@ -70,6 +70,7 @@ npm run test:connect4       # Connect Four AI suite (plain Node, no server or br
 npm run test:downhill       # Downhill Dreamer suite (plain Node, no server or browser)
 npm run test:bubble         # Bubble Break suite (plain Node, no server or browser)
 npm run test:towers         # Three Gates suite (plain Node, no server or browser)
+npm run test:firefly        # Firefly Jar suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -77,7 +78,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Eight exist so far. `test/everything_converter.mjs` drives
+Nine exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -110,6 +111,11 @@ the maps keep their roads apart, every wave spawns what its preview card said, a
 games - a player who builds what the card names must outlast the same player building blind, and
 the old page's two-tower build must fall by the mid-teens. Run it after touching any number in the
 core; the `planner` suite (a bot that tries every purchase in a copy of the game) is slow and opt-in.
+`test/firefly_jar.mjs` runs the DOM-free core of `games/firefly_jar.html`, an incremental: bots with a
+person's reaction time play the whole year on a phone-sized and a desktop meadow, and each season
+must take its share of the two hours, relight the old lanterns fast, climb as a curve rather than a
+jump, and never leave the player saving for long with nothing to buy. Run it after touching any
+price or multiplier; `pace --report` prints the year night by night.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
