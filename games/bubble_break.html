@@ -59,6 +59,7 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
 #hud .sub{font-size:13px;color:#5b4a1c;font-weight:600}
 #mug{width:96px;height:96px;justify-self:center;display:block;margin-top:-4px}
 #combo{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;pointer-events:none;opacity:0;transition:opacity .25s;z-index:1;color:#fff;text-shadow:0 4px 12px rgba(0,0,0,.35)}
+#combo:before{content:"";position:absolute;inset:-26px -60px;background:radial-gradient(closest-side,rgba(35,27,20,.3),rgba(35,27,20,0));z-index:-1}
 #combo .n{font-family:var(--display);font-size:clamp(40px,8vw,72px);line-height:.95;-webkit-text-stroke:2px rgba(35,27,20,.55)}
 #combo .lb{font-family:var(--hand);font-size:clamp(20px,3.4vw,28px);line-height:1;margin-top:2px;color:#fff6de;-webkit-text-stroke:.6px rgba(35,27,20,.5)}
 #combo .mul{font-family:var(--mono);font-weight:600;font-size:18px;margin-top:4px;padding:1px 9px;background:rgba(35,27,20,.55);border-radius:12px}
@@ -345,6 +346,7 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
       <label class="opt"><span data-t="set.music"></span><input type="range" id="vMusic" min="0" max="100" step="5"><output id="oMusic"></output></label>
       <h3 data-t="set.play"></h3>
       <div class="optrow"><span data-t="set.shake"></span><button class="tape" id="tShake"></button></div>
+      <div class="optrow" id="rowVib" hidden><span data-t="set.vibrate"></span><button class="tape" id="tVib"></button></div>
       <div class="optrow"><span data-t="set.hints"></span><button class="tape" id="tHints"></button></div>
       <div class="optrow"><span data-t="set.numbers"></span><button class="tape" id="tNumbers"></button></div>
       <div class="optrow" id="rowIntern" hidden><span data-t="set.intern"></span><button class="tape" id="tIntern"></button></div>
@@ -1319,7 +1321,7 @@ en: {
   'r.order':'Order done: {o}', 'r.sticker':'New sticker: {s}', 'r.stickers':'{n} new stickers. See them under Records.',
   'title.career':'Job {j}, {s}.', 'title.calluses':'{c} calluses.', 'title.best':'Best break: {b} Plopps.',
   'set.title':'Options', 'set.audio':'Sound', 'set.master':'Volume', 'set.sfx':'Pops & effects', 'set.music':'Music',
-  'set.play':'Play', 'set.shake':'Screen shake', 'set.hints':'Hints', 'set.numbers':'Big numbers', 'set.intern':'Intern buys',
+  'set.play':'Play', 'set.shake':'Screen shake', 'set.vibrate':'Vibration', 'set.hints':'Hints', 'set.numbers':'Big numbers', 'set.intern':'Intern buys',
   'set.on':'On', 'set.off':'Off', 'num.short':'1.5M', 'num.sci':'1.5e6',
   'set.save':'Save', 'set.saveHelp':'Your progress lives in this browser. Copy the code to keep it somewhere else, or paste a code here and load it.',
   'set.export':'Copy code', 'set.import':'Load code', 'set.copied':'Copied. Keep it somewhere safe.', 'set.selected':'The code is selected: copy it with Ctrl+C or a long press.',
@@ -1449,7 +1451,7 @@ function applyStatic(){
 const KEY = 'bubble_break_v1';
 let S = BB.newState();
 try { const raw = localStorage.getItem(KEY); if(raw) S = BB.load(raw); } catch(e){}
-S.ui = Object.assign({ sound:true, seen:{}, stageSeen:-1, vol:null, shake:true, hints:true, numbers:'short' }, S.ui || {});
+S.ui = Object.assign({ sound:true, seen:{}, stageSeen:-1, vol:null, shake:true, hints:true, numbers:'short', vibrate:true }, S.ui || {});
 // volumes: the first version only had sound on or off
 if(!S.ui.vol) S.ui.vol = { master: S.ui.sound === false ? 0 : .8, sfx: 1, music: .35 };
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
@@ -1967,6 +1969,15 @@ function drawGiants(v, g, t){
 
 /* ================= effects ================= */
 let parts = [], rings = [], flashes = [], shake = 0;
+/* A phone that can vibrate gives each pop a tick under the thumb. Only for touch, only as often
+   as a motor can follow, and never while the option is off. */
+const canBuzz = typeof navigator !== 'undefined' && 'vibrate' in navigator;
+let buzzT = 0, lastTouch = false;
+function buzz(ms, urgent, anyInput){
+  if(!canBuzz || S.ui.vibrate === false || (!lastTouch && !anyInput)) return;
+  const t = performance.now(); if(t - buzzT < 45 && !urgent) return; buzzT = t;
+  try { navigator.vibrate(ms); } catch(e){}
+}
 const shakeOn = () => S.ui.shake !== false;
 function puff(x, y, r, n, col){ for(let k = 0; k < n; k++){ const a = Math.random()*6.283, sp = r*(2 + Math.random()*4); parts.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, t:0, life: .25 + Math.random()*.2, s: Math.max(1, r*(.12 + Math.random()*.15)), c: col || 'rgba(255,255,255,' }); } }
 function stepFx(dt){ for(const p of parts){ p.t += dt; p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= .9; p.vy *= .9; } parts = parts.filter(p => p.t < p.life); for(const r of rings) r.t += dt; rings = rings.filter(r => r.t < r.life); for(const f of flashes) f.t += dt; flashes = flashes.filter(f => f.t < f.life); shake = Math.max(0, shake - dt*3); if(!shakeOn()) shake = 0; }
@@ -2049,6 +2060,7 @@ function handleEvents(ev, t){
     if(changed.length){ repaintCells(v, changed); if(changed.length < 40) for(const idx of changed){ const j = (idx/sh.cols)|0, i = idx - j*sh.cols; puff(pX(v, i, j), pY(v, j), v.r, 2); } }
   }
   const pops = ev.playerPops + ev.machinePops + ev.chainPops;
+  if(pops && ev.playerPops) buzz(pops > 50 ? 14 : 7);
   if(pops){ panAt(ptr.x); SND.pops(pops, Math.min(1.4, Math.max(.7, 18/Math.max(8, s)))); if(pops > 1 && view.mode === 'pattern' && ev.playerPops) rings.push({ x: ptr.x, y: ptr.y, r0: run.P.reach*s*.6, r1: run.P.reach*s*1.4, t: 0, life: .25, a: .5 }); }
   if(ev.playerPops) hintDone('first');
   if(ev.playerPops && run.down && run.P.budget > 0) hintDone('swipe');
@@ -2060,8 +2072,8 @@ function handleEvents(ev, t){
     if(tp === T.GOLD){ SND.glint(); puff(x, y, Math.max(v.r, 6), 10, 'rgba(255,215,90,'); if(!run.demo) floatText(x, y - 16, '+' + fmt(20*BB.valueNow(run)*BB.comboMul(run)), 'gold'); hintDone('gold'); }
     else if(tp === T.ESPRESSO){ SND.clink(); }
     else if(tp === T.BANG){ SND.bang(); shake = Math.min(1, shake + .35); }
-    else if(tp === T.THICK){ SND.pop(0, .8, 'thick'); hintDone('thick'); }
-    else if(tp === T.GIANT){ SND.giant(); shake = 1; puff(x, y, Math.max(v.s*1.5, 14), 40); if(!run.demo) floatText(x, y - 30, tr('fl.giant', { n: fmt(150*BB.valueNow(run)) }), 'big'); if(v.mode === 'detail') paintAll(v); }
+    else if(tp === T.THICK){ SND.pop(0, .8, 'thick'); hintDone('thick'); buzz(18, true); }
+    else if(tp === T.GIANT){ SND.giant(); buzz([30, 40, 70], true); shake = 1; puff(x, y, Math.max(v.s*1.5, 14), 40); if(!run.demo) floatText(x, y - 30, tr('fl.giant', { n: fmt(150*BB.valueNow(run)) }), 'big'); if(v.mode === 'detail') paintAll(v); }
   }
   for(let k = 0; k < ev.flats.length; k += 3){ if(ev.flats[k+2] === 1){ SND.pfft(); if(!run.demo) floatText(v.ox + ev.flats[k]*s, v.oy + ev.flats[k+1]*s - 14, tr('fl.flat'), 'warn'); } else if(ev.flats[k+2] === 2 && k === 0) SND.pfft(); }
   for(let k = 0; k < ev.rings.length; k += 4){ const x = v.ox + ev.rings[k]*s, y = v.oy + ev.rings[k+1]*s, r = ev.rings[k+2]*s; rings.push({ x, y, r0: r*.3, r1: r, t: 0, life: .3, a: .7, w: 3 }); if(ev.rings[k+3] === 2){ shake = Math.min(1, shake + .5); puff(x, y, r*.08, 24, 'rgba(200,200,190,'); } }
@@ -2070,7 +2082,7 @@ function handleEvents(ev, t){
   for(let k = 0; k < ev.time.length; k += 3){ if(ev.time[k+2] > .01 && !run.demo) floatText(v.ox + ev.time[k]*s, v.oy + ev.time[k+1]*s - 20, tr('fl.time', { n: mul(ev.time[k+2]) }), 'gold'); }
   for(const lp of ev.loops){
     const pts = []; for(let k = 0; k < lp.poly.length; k += 2) pts.push(v.ox + lp.poly[k]*s, v.oy + lp.poly[k+1]*s);
-    flashes.push({ pts, t: 0, life: .55 }); SND.lasso(lp.got); shake = Math.min(1, shake + .3); hintDone('lasso');
+    flashes.push({ pts, t: 0, life: .55 }); SND.lasso(lp.got); buzz(45, true); shake = Math.min(1, shake + .3); hintDone('lasso');
     let mx = 0, my = 0; for(let k = 0; k < pts.length; k += 2){ mx += pts[k]; my += pts[k+1]; } mx /= pts.length/2; my /= pts.length/2;
     if(!run.demo) floatText(mx, my, tr('fl.loop', { n: fmt(lp.got) }), 'big');
   }
@@ -2352,7 +2364,7 @@ function openSettings(from){
   const v = S.ui.vol;
   for(const [id, k] of [['Master', 'master'], ['Sfx', 'sfx'], ['Music', 'music']]){ $('v' + id).value = Math.round(v[k]*100); $('o' + id).textContent = Math.round(v[k]*100); }
   const tog = (id, on, a, b) => { const el = $(id); el.textContent = on ? (a || tr('set.on')) : (b || tr('set.off')); el.classList.toggle('off', !on); };
-  tog('tShake', S.ui.shake !== false); tog('tHints', S.ui.hints !== false); tog('tNumbers', true, S.ui.numbers === 'sci' ? tr('num.sci') : tr('num.short'));
+  tog('tShake', S.ui.shake !== false); $('rowVib').hidden = !canBuzz; tog('tVib', S.ui.vibrate !== false); tog('tHints', S.ui.hints !== false); tog('tNumbers', true, S.ui.numbers === 'sci' ? tr('num.sci') : tr('num.short'));
   $('rowIntern').hidden = !BB.cl(S, 'intern'); tog('tIntern', S.autoBuy);
   $('resetMsg').hidden = true; $('saveMsg').hidden = true; $('bReset').textContent = tr('set.reset'); resetArmed = false;
   show('sSet');
@@ -2362,6 +2374,7 @@ for(const [id, k] of [['Master', 'master'], ['Sfx', 'sfx'], ['Music', 'music']])
   $('v' + id).addEventListener('change', () => { save(); if(k !== 'music') SND.pop(0, 1); });
 }
 $('tShake').onclick = () => { S.ui.shake = S.ui.shake === false; save(); openSettings(); };
+$('tVib').onclick = () => { S.ui.vibrate = S.ui.vibrate === false; save(); openSettings(); if(S.ui.vibrate) buzz(20, true, true); };
 $('tHints').onclick = () => { S.ui.hints = S.ui.hints === false; save(); openSettings(); };
 $('tNumbers').onclick = () => { S.ui.numbers = S.ui.numbers === 'sci' ? 'short' : 'sci'; save(); openSettings(); };
 $('tIntern').onclick = () => { S.autoBuy = !S.autoBuy; save(); openSettings(); };
@@ -3009,6 +3022,7 @@ $('bEndGo').onclick = () => { finale = null; showTitle(); };
 
 /* ================= input ================= */
 cv.addEventListener('pointerdown', e => {
+  lastTouch = e.pointerType === 'touch';
   audio(); ptr.x = e.clientX; ptr.y = e.clientY; ptr.down = true;
   try{ cv.setPointerCapture(e.pointerId); }catch(_){}
   if((mode === 'run' || mode === 'title' || mode === 'epi') && run && !run.over){ const [x, y] = toSheet(ptr.x, ptr.y); BB.press(run, x, y); }
