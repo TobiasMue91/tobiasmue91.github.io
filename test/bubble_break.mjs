@@ -258,6 +258,19 @@ if(suites.includes('rules')){
     check(BB.worldOpen(S1), `${BB.PROMO.world} calluses earned in the city open the world`);
     const S2 = BB.newState(); S2.callusesEarned = 1e9; S2.cycleEarned = BB.STAGES[0].gate; BB.quit(S2);
     check(S2.unlocked === 3 && BB.worldOpen(S2), 'enough calluses skip straight to the city and the world');
+    // a visit: one break somewhere else, and the job is exactly as it was
+    const H = BB.newState(); H.callusesEarned = BB.STAGES[2].promo; BB.promote(H); H.quits = 3; H.stage = 2; Object.assign(H.lv, { thumb:2, strength:3, delivery:2 });
+    const r0 = BB.startRun(H, { aspect: 1.5, seed: 5 }); BB.finish(r0); H.plopps = 777;
+    const before = JSON.stringify({ lv: H.lv, plopps: H.plopps, ce: H.cycleEarned, cr: H.cycleRuns, runs: H.runs, orders: H.orders, stage: H.stage, next: H.next, le: H.lifeEarned, br: H.best.run });
+    check(BB.startVisit(H, 3, { aspect: 1.5, seed: 1 }) === null, 'a workplace not reached cannot be visited');
+    const v = BB.startVisit(H, 0, { aspect: 1.5, seed: 9 });
+    check(v && v.P.stage === 0 && v.P.size === BB.STAGES[0].size[2] && v.P.value > BB.STAGES[0].value, 'a visit to the desk plays the desk with this job\'s upgrades and the career multiplier');
+    const pops0 = H.lifePops, sheets0 = H.stats.sheets, t0 = H.playTime;
+    for(let k = 0; k < 400 && !v.over; k++){ BB.press(v, BB.cx(k % v.sheet.cols, (k*7) % v.sheet.rows), BB.cy((k*7) % v.sheet.rows)); BB.release(v); BB.step(v, 1/20); }
+    BB.finish(v);
+    const after = JSON.stringify({ lv: H.lv, plopps: H.plopps, ce: H.cycleEarned, cr: H.cycleRuns, runs: H.runs, orders: H.orders, stage: H.stage, next: H.next, le: H.lifeEarned, br: H.best.run });
+    check(v.earned > 0 && after === before, 'the Plopps, upgrades, orders and progress of the job are untouched by a visit');
+    check(v.pops > 0 && H.lifePops === pops0 + v.pops && H.stats.sheets === sheets0 + v.sheets && H.playTime > t0, 'the bubbles, sheets and time of a visit count');
   }
   // sugar: a frenzy multiplies everything and holds the combo; machines leave sugar alone
   {
