@@ -234,10 +234,30 @@ if(suites.includes('rules')){
     const vals = []; for(let k = 0; k < 6; k++) vals.push(BB.startRun(S, { seed: k }).P.value);
     check(vals.slice(0, 5).every(v => Math.abs(v - 1.8*vals[5]) < 1e-6*v), 'Coffee fund 2 pays ×1.8 for the first five breaks of a job, then stops');
     S.cycleRuns = 0; S.cycleEarned = 0;
-    S.calluses = 100; S.cl.memory = 2; BB.buyCareer(S, 'ship');
-    check(S.stage === 1, 'buying the warehouse before the first break of a job moves you there at once');
-    const [S2, run] = runWith({}); S2.calluses = 100; S2.cl.memory = 1; BB.finish(run); BB.buyCareer(S2, 'ship');
-    check(S2.stage === 0 && S2.unlocked === 1, 'buying it in the middle of a job waits for the next one');
+  }
+  // workplaces: promoted by calluses earned, never bought; any one you have reached can be the next job
+  {
+    check(!BB.CAREER.some(n => BB.STAGES.some(st => st.id === n.id)), 'no workplace is for sale in the career tree');
+    const S = BB.newState(); const promo = BB.STAGES[1].promo;
+    S.cycleEarned = BB.STAGES[0].gate*1e3; S.callusesEarned = promo - 1; S.calluses = 0;
+    const g = BB.quit(S);
+    check(g > 1 && S.unlocked === 1 && S.stage === 1 && S.promoted === 1, `earning ${promo} calluses in all promotes you to the warehouse, and the next job is there`);
+    const S1 = BB.newState(); S1.callusesEarned = BB.STAGES[2].promo + 5; S1.calluses = 0; S1.cycleEarned = BB.STAGES[0].gate; BB.quit(S1);
+    check(S1.unlocked === 2 && S1.stage === 2, 'a quit that crosses two promotions at once lands at the newer workplace');
+    S1.cl.memory = 2;
+    check(BB.chooseStage(S1, 0) && S1.stage === 0 && S1.lv.strength === 2, 'before the first break, picking the desk moves you there at once, start bonuses and all');
+    check(!BB.chooseStage(S1, 3) && S1.stage === 0, 'a workplace you have not reached cannot be picked');
+    const r = BB.startRun(S1, { aspect: 1.5, seed: 3 }); BB.finish(r);
+    check(BB.chooseStage(S1, 2) && S1.stage === 0 && BB.jobStage(S1) === 2, 'in the middle of a job the pick waits for the next one');
+    BB.chooseStage(S1, 1); S1.cycleEarned = BB.STAGES[0].gate; BB.quit(S1);
+    check(S1.stage === 1 && S1.next === 1, 'an older workplace stays picked from job to job');
+    S1.callusesEarned = BB.STAGES[3].promo; S1.cycleEarned = BB.STAGES[1].gate; BB.quit(S1);
+    check(S1.unlocked === 3 && S1.stage === 3 && S1.next === null, 'a promotion sends the next job to the new workplace');
+    check(!BB.worldOpen(S1), 'the world is not open yet');
+    S1.callusesEarned = BB.PROMO.world; S1.cycleEarned = BB.STAGES[3].gate; BB.quit(S1);
+    check(BB.worldOpen(S1), `${BB.PROMO.world} calluses earned in the city open the world`);
+    const S2 = BB.newState(); S2.callusesEarned = 1e9; S2.cycleEarned = BB.STAGES[0].gate; BB.quit(S2);
+    check(S2.unlocked === 3 && BB.worldOpen(S2), 'enough calluses skip straight to the city and the world');
   }
   // sugar: a frenzy multiplies everything and holds the combo; machines leave sugar alone
   {
@@ -314,11 +334,14 @@ if(suites.includes('rules')){
     const S4 = BB.newState(); const r4 = BB.startRun(S4, { seed: 1 }); BB.press(r4, BB.cx(1, 1), BB.cy(1)); BB.release(r4); BB.finish(r4);
     check(r4.stickers.includes('first') && S4.stickers.first, 'the first pop earns the first sticker');
   }
-  // an older save still loads, and a world bought before the city existed keeps its way there
+  // an older save still loads; workplaces bought in the career tree give their calluses back and stay reached
   {
     const old = { v:1, stage:2, unlocked:2, plopps:5, cycleEarned:0, lifePops:1e9, runs:80, cycleRuns:0, lv:{ break:1 }, cl:{ cv:1, ship:1, factory:1, world:1 }, calluses:3, callusesEarned:900, quits:6, best:{ run:1, combo:1, sheets:1 }, finale:{ done:false, pops:0 } };
     const S = BB.load(JSON.stringify(old));
-    check(S.stats && S.stats.sheets === 0 && S.orders.length === 3 && S.cl.city === 1 && S.unlocked === 3 && S.finale.act === 0, 'a first-version save loads with orders, stats and the city');
+    check(S.stats && S.stats.sheets === 0 && S.orders.length === 3 && S.unlocked === 3 && BB.worldOpen(S) && S.finale.act === 0, 'a first-version save loads with orders, stats, the city and the world');
+    check(S.calluses === 3 + 10 + 180 + 120000 && !['ship', 'factory', 'city', 'world'].some(k => k in S.cl), 'the calluses spent on workplaces come back');
+    const S3 = BB.load(JSON.stringify(Object.assign({}, old, { stage:0, unlocked:1, cl:{ cv:1, ship:1, memory:1, overtime:1 }, calluses:0, callusesEarned:450 })));
+    check(S3.unlocked === 2 && S3.stage === 0 && S3.cl.overtime === 1 && BB.careerVisible(S3, BB.CAREER_BY.overtime), 'a save gets the promotions its calluses have earned, and keeps what it bought past the warehouse');
     const mid = Object.assign({}, old, { stage:1, unlocked:1, cl:{ cv:1, ship:1 }, orders:[{ id:'clean', n:1, best:0, done:false }, { id:'combo', n:250, best:300, done:true }, { id:'gold', n:6, best:2, done:false }] });
     const S2 = BB.load(JSON.stringify(mid));
     check(S2.orders.length === 3 && !S2.orders.some(o => o.id === 'clean') && S2.orders.find(o => o.id === 'combo').done, 'an order the warehouse no longer gives is swapped for one it does, and what was done stays done');
@@ -330,7 +353,7 @@ if(suites.includes('rules')){
    a second across a sheet drawn 900 px wide, goes for special bubbles first (sugar before the
    rest), holds thick ones. With the lasso it draws loops at the same speed instead of swipes.
    Between breaks the intern's rule (cheapest first) buys; forks alternate from job to job. It
-   quits when its callus gain stops growing, and in its career it saves for the next workplace. */
+   quits when its callus gain stops growing, and in its career buys the cheapest thing first. */
 const human = { taps: 4.5, swipe: 1500, aim: 5, screen: 900 };
 function gaussFrom(rnd){ return () => { let u = 0, v = 0; while(!u) u = rnd(); while(!v) v = rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }; }
 function playBreak(S, seed, who){
@@ -363,7 +386,7 @@ function playBreak(S, seed, who){
   }
   return run;
 }
-const STAGE_NODES = ['ship', 'factory', 'city', 'world'];
+const STAGE_NODES = ['ship', 'factory', 'city'];
 function career(seed, maxMin){
   const S = BB.newState(), rnd = BB.mulberry(seed);
   let clock = 0, gains = [], since = 0; const log = [], at = {}, cycles = [], jobs = [];
@@ -380,14 +403,11 @@ function career(seed, maxMin){
     if(g > 0 && (g >= 2*(S.callusesEarned + 2) || stalled || since > 60)){
       const job = { stage: S.stage, breaks: S.cycleRuns, earned: S.cycleEarned, min: clock/60, orders: BB.ordersDone(S) }; job.gain = BB.quit(S); jobs.push(job); since = 0; gains = []; if(S.quits === 1) mark('firstQuit');
       for(let guard = 0; guard < 60; guard++){
-        const pri = STAGE_NODES.map(id => BB.CAREER_BY[id]).find(n => BB.careerVisible(S, n) && BB.cl(S, n.id) < n.max);
-        if(pri && BB.canBuyCareer(S, pri)){ BB.buyCareer(S, pri.id); continue; }
-        const cand = BB.CAREER.filter(n => BB.canBuyCareer(S, n) && !STAGE_NODES.includes(n.id)).sort((a, b) => BB.careerCost(S, a) - BB.careerCost(S, b));
-        if(pri && cand.length && BB.careerCost(S, pri) < 3*S.calluses && BB.careerCost(S, cand[0]) > .15*S.calluses) break;
+        const cand = BB.CAREER.filter(n => BB.canBuyCareer(S, n)).sort((a, b) => BB.careerCost(S, a) - BB.careerCost(S, b));
         if(!cand.length) break; BB.buyCareer(S, cand[0].id);
       }
-      for(const id of STAGE_NODES) if(BB.cl(S, id)) mark(id);
-      if(BB.cl(S, 'world')) break;
+      STAGE_NODES.forEach((id, k) => { if(S.unlocked > k) mark(id); });
+      if(BB.worldOpen(S)){ mark('world'); break; }
     }
   }
   return { S, log, at, cycles, jobs };
@@ -412,7 +432,7 @@ if(suites.includes('idle')){
 /* ---------------- pacing ---------------- */
 if(suites.includes('pacing')){
   section('pacing');
-  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [30, 80], city: [38, 120], world: [110, 200] };
+  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [25, 70], city: [38, 110], world: [70, 160] };
   for(const seed of [1, 2]){
     const t0 = performance.now(), c = career(seed, 300), dur = ((performance.now() - t0)/1000).toFixed(0);
     console.log(`  seed ${seed}: first quit ${c.at.firstQuit?.toFixed(0)} min, warehouse ${c.at.ship?.toFixed(0)}, factory ${c.at.factory?.toFixed(0)}, city ${c.at.city?.toFixed(0)}, world ${c.at.world?.toFixed(0)} (${dur} s to simulate)`);
