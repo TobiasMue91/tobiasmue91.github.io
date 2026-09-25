@@ -1725,7 +1725,8 @@ const SND = {
    of chords and scattered notes, so two hours of it stay easy to listen to.
    Summer: electric piano and nylon guitar, F major, lightly swung. Autumn: a harp waltz in
    D minor. Winter: a music box in E flat. Spring: a flute over guitar in G. Midsummer: the summer
-   tune again, a tone higher and faster, with everything playing. */
+   tune again, a tone higher and faster, with everything playing. When the fireflies rise into the
+   Milky Way it comes home: back in F, slower, on a music box over the harp. */
 // --- score ---
 const SCORE = (() => {
   const SUMMER = {
@@ -1770,6 +1771,9 @@ const SCORE = (() => {
       form:[['intro',0], ['A',1], ['A',2], ['B',2], ['A',3], ['rest',0]] },
     Object.assign({}, SUMMER, { bpm:88, swing:.6, transpose:2, key:7, arp:'harp', perc:'full',
       form:[['intro',2], ['A',2], ['A',3], ['B',3], ['A',3], ['rest',1]] }),
+    // the Milky Way: the first summer's tune comes home, in its own key, on a music box over the harp
+    Object.assign({}, SUMMER, { bpm:66, swing:0, lead:'bell', lead2:'ep', arp:'harp', perc:null,
+      form:[['A',3], ['B',3], ['A',3], ['rest',0], ['A',1], ['rest',0]] }),
   ];
 })();
 // --- end score ---
@@ -1835,7 +1839,10 @@ const MUSIC = (() => {
     for(let i = 0; i < P; i++){ d[i] -= mean; pk = Math.max(pk, Math.abs(d[i])); }
     for(let i = 0; i < P; i++) d[i] /= pk || 1;
     for(let i = P; i < len; i++) d[i] = rho * .5 * (d[i - P] + (i > P ? d[i - P - 1] : 0));
-    return strings[key] = { buf, rate: f / (sr / (P + .5)) };
+    // a high string falls silent long before its time is up; keep only what can be heard
+    let end = len; while(end > P && Math.abs(d[end - 1]) < 2e-4) end--;
+    let b = buf; if(end < len * .8){ b = AC.createBuffer(1, end, sr); b.getChannelData(0).set(d.subarray(0, end)); }
+    return strings[key] = { buf: b, rate: f / (sr / (P + .5)) };
   }
   function env(t, peak, attack, tau, dur, release){
     const g = AC.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + attack);
@@ -1890,7 +1897,7 @@ const MUSIC = (() => {
     else if(kind === 'shaker') nz(.06, 'highpass', 6500, .7, .05 * v, .012, d, 0, ch.perc);
   }
   function useSong(i){
-    song = SONGS[clamp(i, 0, 4)]; formI = 0; barI = 0; cycle = 0;
+    song = SONGS[clamp(i, 0, SONGS.length - 1)]; formI = 0; barI = 0; cycle = 0;
     echo.delay.delayTime.setValueAtTime(60 / song.bpm * .75, AC.currentTime);
   }
   // a high plucked note dies away much sooner than a struck or blown one, so the harp and the music box sing out more
@@ -1907,7 +1914,9 @@ const MUSIC = (() => {
         if(level >= 2 && x.d >= 4) play('bass', x.c.bass + 7, at(x.b + 2) + H(), .55, beat * 1.8, ch.bass); }
     }
     // the picked accompaniment: quarter notes while the tune is away, eighths once it is here
-    song.pattern.forEach((k, s) => {
+    // every other round the hand picks the chord the other way round, so a long season does not wear the tune out
+    const pat = cycle % 2 ? [song.pattern[0], ...song.pattern.slice(1).reverse()] : song.pattern;
+    pat.forEach((k, s) => {
       if(k === null || (level === 0 && s % 2)) return;
       const b = s / 2; if(b >= M) return;
       const m = chordAt(b).tones[k];
@@ -1978,7 +1987,7 @@ const MUSIC = (() => {
   };
   // the jukebox in the settings: fade out what was already scheduled and start the other tune now
   self.play = s => {
-    if(!song || !AC) return; s = clamp(s, 0, 4); if(SONGS[s] === song && pending < 0) return;
+    if(!song || !AC) return; s = clamp(s, 0, SONGS.length - 1); if(SONGS[s] === song && pending < 0) return;
     const old = desk; old.gain.setTargetAtTime(0, AC.currentTime, .12); setTimeout(() => old.disconnect(), 3000);
     wire(); pending = -1; useSong(s); next = AC.currentTime + .15; tick();
   };
@@ -1987,7 +1996,7 @@ const MUSIC = (() => {
   // for rendering offline in tests
   self.prime = until => { while(next < until) next += bar(next); };
   self.parts = () => ch;
-  self.season = s => { if(!song) return; if(SONGS[clamp(s, 0, 4)] !== song) pending = s; };
+  self.season = s => { if(!song) return; if(SONGS[clamp(s, 0, SONGS.length - 1)] !== song) pending = s; };
   // at night the music steps back a little, so the meadow can be heard
   self.mood = night => { self.duck = night ? .7 : 1; self.density = night ? .7 : 1; applyVolumes(); };
   return self;
@@ -2376,7 +2385,10 @@ function startFinale(){
   }
   finale = { t:0, pts, shown:false };
   demo.flies = [];
-  SND.season(); if(AC) for(let i = 0; i < 24; i++) glass(1800 + Math.random() * 2400, .025, 1.2, false, 1 + i * .25);
+  MUSIC.play(5); MUSIC.mood(false);
+  // the jars ring out as the fireflies leave them, in the key the last tune is in
+  const PENTA = [77, 79, 81, 84, 86, 89, 91, 93, 96];
+  SND.season(); if(AC) for(let i = 0; i < 24; i++) glass(440 * Math.pow(2, (PENTA[Math.floor(Math.random() * PENTA.length)] - 69) / 12), .025, 1.2, false, 1 + i * .25);
 }
 function finaleTick(dt){
   finale.t += dt;
@@ -2491,13 +2503,14 @@ function openSettings(from){
   markTune(); show('sSettings');
 }
 // a tune for each season, to hear them all without playing the whole year
-const TUNES = ['☀️', '🍂', '❄️', '🌱', '✨'];
-$('setTunes').innerHTML = TUNES.map((t, i) => `<button type="button" data-tune="${i}" title="${FJ.SEASONS[i]}" aria-label="${FJ.SEASONS[i]}">${t}</button>`).join('');
-function markTune(){ const n = MUSIC.now(); for(const b of $('setTunes').children) b.setAttribute('aria-pressed', +b.dataset.tune === n); }
+const TUNES = ['☀️', '🍂', '❄️', '🌱', '✨', '🌌'];
+$('setTunes').innerHTML = TUNES.map((t, i) => { const nm = FJ.SEASONS[i] || 'The Milky Way'; return `<button type="button" data-tune="${i}" title="${nm}" aria-label="${nm}">${t}</button>`; }).join('');
+// the last tune is the finale's, and waits for it
+function markTune(){ const n = MUSIC.now(); for(const b of $('setTunes').children){ b.setAttribute('aria-pressed', +b.dataset.tune === n); b.hidden = +b.dataset.tune === 5 && !G.done; } }
 for(const b of $('setTunes').children) b.onclick = () => { audio(); MUSIC.play(+b.dataset.tune); markTune(); };
 $('bSettings').onclick = () => openSettings('sStart');
 $('bPauseSet').onclick = () => openSettings('sPause');
-$('bSetDone').onclick = () => { SND.click(); saveSettings(); if(MUSIC.now() !== G.season) MUSIC.play(G.season); show(setBack); };
+$('bSetDone').onclick = () => { SND.click(); saveSettings(); if(MUSIC.now() !== G.season && mode !== 'finale') MUSIC.play(G.season); show(setBack); };
 for(const [id, key] of [['setMusic', 'music'], ['setSfx', 'sfx'], ['setAmb', 'amb']]) $(id).addEventListener('input', e => { SET[key] = e.target.value / 100; applyVolumes(); if(key === 'sfx') SND.click(); });
 $('setMute').onchange = e => { SET.muted = e.target.checked; applyVolumes(); };
 $('setOffset').onchange = e => { SET.offset = e.target.checked; };
@@ -2509,7 +2522,7 @@ $('bReset').onclick = () => {
   newYear();
 };
 function newYear(){ G = FJ.newGame((Math.random() * 2147483647) | 0); save(); finale = null; setSeasonLook(); newDemo(.1, true); refreshStart(); mode = 'menu'; show('sStart'); }
-$('bEndPlay').onclick = () => { finale = null; newDemo(.45); tree.open({ x:0, y: FJ.BASE[4] - 300 }); };
+$('bEndPlay').onclick = () => { MUSIC.season(G.season); finale = null; newDemo(.45); tree.open({ x:0, y: FJ.BASE[4] - 300 }); };
 $('bEndNew').onclick = newYear;
 // pausing a night freezes it where it is
 function pause(){ if(mode !== 'run') return; mode = 'pause'; $('pauseSub').textContent = `${FJ.SEASONS[G.season]} · ${TIMES[Math.min(3, Math.floor(N.t / N.T * 4))]}`; ambience(G.season, .2); show('sPause'); }

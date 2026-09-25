@@ -259,3 +259,6 @@ Lang klingende Melodietöne stehen immer auf Akkordtönen. Die Pad-Akkorde lasse
 weg. Gitarre und Harfe laufen über Karplus-Strong und sind auf etwa 1 Cent genau gestimmt.
 In den Einstellungen gibt es unter „Listen“ eine Jukebox (☀️ 🍂 ❄️ 🌱 ✨), mit der man alle fünf
 Stücke sofort hören kann. Beim Schließen läuft wieder das Stück der aktuellen Jahreszeit.
+Im Finale kehrt das erste Sommerthema zurück, in F, langsamer und auf Spieluhr und Harfe. Nach dem
+Abspann steht es als 🌌 auch in der Jukebox. Ab dem zweiten Durchgang zupft die Begleitung ihr
+Muster jedes zweite Mal andersherum.
