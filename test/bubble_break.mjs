@@ -250,7 +250,7 @@ if(suites.includes('rules')){
     }
     check(!bad, 'the calluses shown during a break are what quitting pays, and the next one comes at the Plopps shown', `${bad} off`);
   }
-  // workplaces: promoted by calluses earned, never bought; any one you have reached can be the next job
+  // workplaces: promoted by calluses earned, never bought; the next job is at the newest
   {
     check(!BB.CAREER.some(n => BB.STAGES.some(st => st.id === n.id)), 'no workplace is for sale in the career tree');
     const S = BB.newState(); const promo = BB.STAGES[1].promo;
@@ -259,15 +259,12 @@ if(suites.includes('rules')){
     check(g > 1 && S.unlocked === 1 && S.stage === 1 && S.promoted === 1, `earning ${promo} calluses in all promotes you to the warehouse, and the next job is there`);
     const S1 = BB.newState(); S1.callusesEarned = BB.STAGES[2].promo + 5; S1.calluses = 0; S1.cycleEarned = BB.STAGES[0].gate; BB.quit(S1);
     check(S1.unlocked === 2 && S1.stage === 2, 'a quit that crosses two promotions at once lands at the newer workplace');
-    S1.cl.memory = 2;
-    check(BB.chooseStage(S1, 0) && S1.stage === 0 && S1.lv.strength === 2, 'before the first break, picking the desk moves you there at once, start bonuses and all');
-    check(!BB.chooseStage(S1, 3) && S1.stage === 0, 'a workplace you have not reached cannot be picked');
-    const r = BB.startRun(S1, { aspect: 1.5, seed: 3 }); BB.finish(r);
-    check(BB.chooseStage(S1, 2) && S1.stage === 0 && BB.jobStage(S1) === 2, 'in the middle of a job the pick waits for the next one');
-    BB.chooseStage(S1, 1); S1.cycleEarned = BB.STAGES[0].gate; BB.quit(S1);
-    check(S1.stage === 1 && S1.next === 1, 'an older workplace stays picked from job to job');
-    S1.callusesEarned = BB.STAGES[3].promo; S1.cycleEarned = BB.STAGES[1].gate; BB.quit(S1);
-    check(S1.unlocked === 3 && S1.stage === 3 && S1.next === null, 'a promotion sends the next job to the new workplace');
+    const r = BB.startRun(S1, { aspect: 1.5, seed: 3 }); BB.finish(r); S1.cycleEarned = BB.STAGES[2].gate; BB.quit(S1);
+    check(S1.stage === 2, 'without a promotion the next job stays where you are');
+    S1.callusesEarned = BB.STAGES[3].promo; S1.cycleEarned = BB.STAGES[2].gate; BB.quit(S1);
+    check(S1.unlocked === 3 && S1.stage === 3, 'a promotion sends the next job to the new workplace');
+    const SL = BB.load(JSON.stringify(Object.assign(BB.newState(), { next: 0, unlocked: 2, stage: 2, callusesEarned: 450 })));
+    check(!('next' in SL) && BB.jobStage(SL) === 2, 'a save that had picked an older workplace goes back to the newest');
     check(!BB.worldOpen(S1), 'the world is not open yet');
     S1.callusesEarned = BB.PROMO.world; S1.cycleEarned = BB.STAGES[3].gate; BB.quit(S1);
     check(BB.worldOpen(S1), `${BB.PROMO.world} calluses earned in the city open the world`);
@@ -276,14 +273,14 @@ if(suites.includes('rules')){
     // a visit: one break somewhere else, and the job is exactly as it was
     const H = BB.newState(); H.callusesEarned = BB.STAGES[2].promo; BB.promote(H); H.quits = 3; H.stage = 2; Object.assign(H.lv, { thumb:2, strength:3, delivery:2 });
     const r0 = BB.startRun(H, { aspect: 1.5, seed: 5 }); BB.finish(r0); H.plopps = 777;
-    const before = JSON.stringify({ lv: H.lv, plopps: H.plopps, ce: H.cycleEarned, cr: H.cycleRuns, runs: H.runs, orders: H.orders, stage: H.stage, next: H.next, le: H.lifeEarned, br: H.best.run });
+    const before = JSON.stringify({ lv: H.lv, plopps: H.plopps, ce: H.cycleEarned, cr: H.cycleRuns, runs: H.runs, orders: H.orders, stage: H.stage, le: H.lifeEarned, br: H.best.run });
     check(BB.startVisit(H, 3, { aspect: 1.5, seed: 1 }) === null, 'a workplace not reached cannot be visited');
     const v = BB.startVisit(H, 0, { aspect: 1.5, seed: 9 });
     check(v && v.P.stage === 0 && v.P.size === BB.STAGES[0].size[2] && v.P.value > BB.STAGES[0].value, 'a visit to the desk plays the desk with this job\'s upgrades and the career multiplier');
     const pops0 = H.lifePops, sheets0 = H.stats.sheets, t0 = H.playTime;
     for(let k = 0; k < 400 && !v.over; k++){ BB.press(v, BB.cx(k % v.sheet.cols, (k*7) % v.sheet.rows), BB.cy((k*7) % v.sheet.rows)); BB.release(v); BB.step(v, 1/20); }
     BB.finish(v);
-    const after = JSON.stringify({ lv: H.lv, plopps: H.plopps, ce: H.cycleEarned, cr: H.cycleRuns, runs: H.runs, orders: H.orders, stage: H.stage, next: H.next, le: H.lifeEarned, br: H.best.run });
+    const after = JSON.stringify({ lv: H.lv, plopps: H.plopps, ce: H.cycleEarned, cr: H.cycleRuns, runs: H.runs, orders: H.orders, stage: H.stage, le: H.lifeEarned, br: H.best.run });
     check(v.earned > 0 && after === before, 'the Plopps, upgrades, orders and progress of the job are untouched by a visit');
     check(v.pops > 0 && H.lifePops === pops0 + v.pops && H.stats.sheets === sheets0 + v.sheets && H.playTime > t0, 'the bubbles, sheets and time of a visit count');
   }
