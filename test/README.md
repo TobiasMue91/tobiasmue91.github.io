@@ -229,3 +229,40 @@ Two mutants have been seen failing the balance suite: the old linear health curv
 survives to wave 61) and a card that always says "grunts" (the reader falls to wave 10, behind
 its blind twin). The planner's number is worth knowing: a bot that can price every answer the
 instant a wave appears gains almost nothing from the card. The card is for people, who cannot.
+
+## Firefly Jar
+
+```sh
+npm run test:firefly                      # or: node test/firefly_jar.mjs  (about 40 seconds)
+node test/firefly_jar.mjs rules skill
+node test/firefly_jar.mjs pace --report   # the bots' year, night by night
+node test/firefly_jar.mjs pace --seed=11  # the same year on another seed
+node test/firefly_jar.mjs --page=old.html
+```
+
+`games/firefly_jar.html` is an incremental, and an incremental goes wrong in ways no single
+screen shows: a season that takes three times as long as the last, two multipliers that feed each
+other until one night earns fifty nights' worth, a wall of saving in front of a gate, jars in the
+grass that play better than the player. The page keeps its rules, its tree and its economy in a
+`<script id="core">` block with no DOM, and the suite runs that block alone in Node's `vm`.
+
+Players look at the meadow every 0.3 s and move the pointer at most 650 px/s on a 390×844 phone
+meadow or 1000 px/s on a 1280×800 desktop one; the jar trails the pointer as it does on the page.
+`hunter` goes for fireflies that will still be glowing when the jar arrives, follows wisp trails,
+rides the aurora and drops its catch at path stones and, every other night, into buds; `sweeper`
+takes whatever is nearest; `idle` never moves. The shop lights whatever is cheapest and turns the
+season once nothing cheaper than the gate is left. A person is assumed to take about half as long
+again as the bots.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | a dark firefly is caught at once and one in the glow is worth ×3; a full jar catches nothing; the lantern takes the whole jar and dawn takes what is left unless Late Homecoming keeps it; no night is longer than 80 s; turning a season darkens the crown, keeps gates and roots, pays rings and remembers levels, relit lanterns cost a quarter (Old Wood a tenth), Relight restores exactly what burned, Embers starts with 6% of the gate; a finished wisp trail lays a path and what is dropped at its stone arrives home; a bud stores the jar and blooms after three nights; a night replays from its seed |
+| `skill` | on both meadows, early, mid and late in summer: hunting the glow pays (×1.08 or more until late summer, never less than ×0.95, ×1.12 on average), sweeping keeps at least 60% of the hunter, and the jars in the grass earn at most 12% of it on their own |
+| `pace` | the whole year on both meadows: Summer 11–20 bot minutes, each later season 9–22, the year 60–105; each later season relights the summer lanterns at least three times as fast as the first summer lit them; outside Midsummer no night earns more than four times the one before; Midsummer runs away over at least seven nights and at most ×16 a night; never more than four nights in a row with nothing to light |
+
+The numbers came from a tuner that priced each season in turn, so that a bot has lit all of its
+lanterns about three minutes before its target and meets a gate worth about two and a half of its
+best nights. Three things the suite caught on the way: paths that multiplied everything by 6.5 and
+turned Autumn into a jump, the prestige re-climb running only 1.5× faster than the first summer
+(a multiplier on income barely shortens an exponential climb; cheaper relights do), and Keen Eye
+widening the glow until hunting it was worth nothing.

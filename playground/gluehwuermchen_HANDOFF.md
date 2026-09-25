@@ -212,3 +212,20 @@ funktionieren.
    Tempo-Ziele, Handy und Desktop.
 4. Zwischendurch Artifacts zum Anspielen veröffentlichen und nach Feedback nachbessern.
 5. Katalogeintrag (fünf Schritte), PR nur, wenn der Nutzer ihn möchte.
+
+## 9. Stand (2026-09-25)
+
+Umgesetzt auf Branch `claude/vibrant-galileo-7uobv0`:
+- **Fang-Labor:** `playground/gluehwuermchen_labor.html`. Der Nutzer hat **Variante A** gewählt: jederzeit
+  fangbar, im Leuchten ×3.
+- **Volles Spiel:** `games/firefly_jar.html`, „Firefly Jar“, nur auf Englisch (Wunsch des Nutzers, wie die
+  übrigen Spiele). Katalogeintrag mit Screenshot 345 ist drin, `featured` steht auf false.
+- **Jahreszeiten:** Sommer (Glühwürmchen), Herbst (Irrlicht-Pfade), Winter (Eiszapfen-Strahlen, Polarlicht),
+  Frühling (Knospen mit Zins), Hochsommer (Eskalation bis zur Milchstraße, danach Abspann). Beim Wechsel
+  erlischt die Krone. Angezündete Laternen kosten beim Wiederanzünden ein Viertel, Ringe kaufen Wurzeln.
+- **Tests:** `test/firefly_jar.mjs` (`npm run test:firefly`), README-Abschnitt in `test/README.md`. Die
+  Preise stammen aus einem Tuner, der jede Jahreszeit auf ihre Zieldauer gebracht hat. Bot-Zeit:
+  Handy etwa 82 min, Desktop etwa 69 min, Menschen etwa das 1,5-Fache.
+
+Offen: Feedback des Nutzers vom Handy, besonders zu Klang (Glas-Klirren statt Glöckchen), Tempo und
+Lesbarkeit des Baums am Handy.
