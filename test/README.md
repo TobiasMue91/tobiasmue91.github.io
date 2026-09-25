@@ -197,7 +197,7 @@ the push at an island border (the ring drifts), a border blend too short for Dre
 ## Bubble Break
 
 ```sh
-npm run test:bubble                      # or: node test/bubble_break.mjs  (about 25 seconds)
+npm run test:bubble                      # or: node test/bubble_break.mjs  (about three minutes)
 node test/bubble_break.mjs sheet rules   # named suites only
 node test/bubble_break.mjs --page=old.html
 ```
@@ -208,18 +208,23 @@ twenty minutes, or a break into one that never ends, and nothing in the diff sho
 keeps its sheets, verbs, trees and economy in a `<script id="core">` block with no DOM; the suite
 runs that block alone in Node's `vm`. Its player is limited the way a person is: five taps a
 second with a few pixels of aim error, swipes at 1,500 px a second across a sheet drawn 900 px
-wide, specials first, thick bubbles held. Between breaks it buys the cheapest thing it can, and
-it quits when its callus gain stops growing.
+wide, specials first (sugar before the rest), thick bubbles held, and once it has Cordon tape it
+draws loops at the same speed. Between breaks it buys the cheapest thing it can, and it quits when
+its callus gain stops growing.
 
 | suite | what it checks |
 | --- | --- |
-| `sheet` | a circle pops exactly the bubbles whose centres lie inside it (480 circles against brute force); the count of bubbles left matches the bitset after mixed actions; a swipe never pops more than its strength; a press, a swipe and a new sheet at half a million bubbles stay within a frame's budget |
-| `rules` | thick bubbles need a held press; pressing a flat one spoils the combo, swiping over it costs strength; machines leave gold and espresso to the player; espresso never adds more than 75 % of the break; giants take exactly their presses, a swipe counts once, and their shockwave pops; a cleared sheet pays and stops the clock while the next slides in; forks, Flexible and the intern; quitting, the coffee fund and when a new workplace takes effect |
-| `idle` | a break without touching the wrap earns nothing; a fully built machine earns under 40 % of a player |
-| `pacing` | two seeded careers: first quit, warehouse, factory and world each inside their window, no break past 90 s, the factory popping over a hundred times faster than the desk, no job handing over half its break tree after one break, one to four jobs per workplace |
+| `sheet` | a circle pops exactly the bubbles whose centres lie inside it (480 circles against brute force), and so does a hand-drawn loop (30 loops); the count of bubbles left matches the bitset after mixed actions; a swipe never pops more than its strength; a press, a swipe and a new sheet at half a million bubbles, and a sheet, a press and a loop at thirty million, stay within a frame's budget |
+| `rules` | thick bubbles need a held press; pressing a flat one spoils the combo, swiping over it costs strength; machines leave gold and espresso to the player; espresso never adds more than 75 % of the break; giants take exactly their presses, a swipe counts once, and their shockwave pops; a cleared sheet pays and stops the clock while the next slides in; forks, Flexible and the intern; quitting, the coffee fund and when a new workplace takes effect; a sugar rush multiplies and holds the combo, and machines leave sugar alone; a zipper opens its row, Cross stitch its column; a closed loop pops its inside and pays triple, an open curve does not; a chain reaction spreads and dies out by itself; Iron thumb; orders, their bonus and who gets which; stickers; a first-version save still loads |
+| `idle` | a break without touching the wrap earns nothing; a fully built machine earns under 40 % of a player, at the desk and in the city |
+| `pacing` | two seeded careers: first quit, warehouse, factory, city and world each inside their window, no break past 90 s, each workplace popping far faster than the last, no job handing over half its break tree after one break, one to four jobs per workplace, orders done along the way |
 
 Each check has been seen failing: bonus time without its cap, flat bubbles that spoil a swipe,
 machines that take gold, a swipe that overshoots its strength, a circle a third of a bubble too
 wide, forks that do not exclude, a giant counted twice by one swipe, thick bubbles that pop at a
 touch, a clock that runs during the slide, a machine that takes gold and giants (87 % of a
-player), a start-of-job lump sum worth most of the tree, and a first break stretched to 137 s.
+player), a start-of-job lump sum worth most of the tree, and a first break stretched to 137 s;
+and for the second version: loops paying single, a chain reaction with no cap (181 blasts
+waiting), machines taking sugar, a missing cross stitch, loop edges rounded instead of floored,
+combos that lapse during a rush, Iron thumb without effect, orders worth nothing, a lost save
+migration, loops without Cordon tape, stickers worth double, and a zipper that stops at one end.

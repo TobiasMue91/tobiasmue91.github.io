@@ -7,7 +7,7 @@
 // that shows in a diff or on a screenshot. The page keeps its sheets, verbs, trees and
 // economy in a <script id="core"> block with no DOM; this runs that block alone in Node.
 //
-//   node test/bubble_break.mjs                  # everything (about a minute)
+//   node test/bubble_break.mjs                  # everything (about three minutes)
 //   node test/bubble_break.mjs sheet rules      # named suites only
 //   node test/bubble_break.mjs --page=old.html  # run against another copy of the page
 //
@@ -105,9 +105,38 @@ if(suites.includes('sheet')){
     check(tSwipe < 120, `a swipe across it takes ${tSwipe.toFixed(1)} ms`);
     check(tMake < 120, `making the sheet takes ${tMake.toFixed(1)} ms`);
   }
+
+  // the lasso's fill: exactly the bubbles whose centres lie inside the loop, against brute force
+  {
+    const inside = (poly, x, y) => { let c = false; const n = poly.length/2; for(let a = 0, b = n - 1; a < n; b = a++){ const xa = poly[2*a], ya = poly[2*a+1], xb = poly[2*b], yb = poly[2*b+1]; if((ya <= y) !== (yb <= y) && x < xa + (y - ya)*(xb - xa)/(yb - ya)) c = !c; } return c; };
+    let bad = 0, cases = 0;
+    for(let n = 0; n < 30; n++){
+      const run = plainRun([450, 2600, 30000][n % 3], 1.5, 300 + n), sh = run.sheet;
+      // a random star-shaped loop, like a hand draws one: a centre and wobbling radii
+      const cx0 = sh.W*(.3 + .4*rnd()), cy0 = sh.H*(.3 + .4*rnd()), R0 = Math.min(sh.W, sh.H)*(.1 + .25*rnd()), k = 5 + Math.floor(rnd()*60), poly = [];
+      for(let q = 0; q < k; q++){ const a = q/k*6.283, r = R0*(.55 + .45*rnd()); poly.push(cx0 + Math.cos(a)*r, cy0 + Math.sin(a)*r); }
+      const before = intactSet(sh); BB.popPolygon(run, poly, 'player'); const after = intactSet(sh);
+      const want = [...before].filter(idx => { const j = (idx/sh.cols)|0, i = idx - j*sh.cols; return inside(poly, BB.cx(i, j), BB.cy(j)); });
+      const gone = [...before].filter(i => !after.has(i));
+      cases++; if(gone.length !== want.length || !want.every(i => !after.has(i))) bad++;
+    }
+    check(bad === 0, `a loop pops exactly the bubbles whose centres lie inside it (${cases} hand-drawn loops)`, `${bad} mismatches`);
+  }
+
+  // thirty million bubbles: the city
+  {
+    const S = BB.newState(); S.stage = S.unlocked = 3; Object.assign(S.lv, { delivery:6, thumb:4, strength:6 }); S.cl.lasso = 1;
+    let t0 = performance.now(); const run = BB.startRun(S, { aspect: 1.5, seed: 4 }); const tMake = performance.now() - t0, sh = run.sheet;
+    t0 = performance.now(); for(let k = 0; k < 10; k++){ BB.press(run, sh.W*(.1 + .08*k), sh.H/2); BB.release(run); } const tPress = (performance.now() - t0)/10;
+    const r = sh.H*.35; t0 = performance.now(); BB.press(run, sh.W/2 + r, sh.H/2); for(let a = 0; a <= 6.6; a += .05) BB.drag(run, sh.W/2 + Math.cos(a)*r, sh.H/2 + Math.sin(a)*r); BB.release(run); const tLoop = performance.now() - t0;
+    check(sh.N > 3e7 && tMake < 400, `a sheet of ${(sh.N/1e6).toFixed(0)} million bubbles takes ${tMake.toFixed(0)} ms to make`);
+    check(tPress < 25, `a press on it takes ${tPress.toFixed(1)} ms`);
+    check(run.bestLoop > 5e6 && tLoop < 250, `a loop around ${(run.bestLoop/1e6).toFixed(0)} million of them takes ${tLoop.toFixed(0)} ms, stroke included`);
+  }
 }
 
 /* ---------------- rules ---------------- */
+const fmtN = n => n >= 1e6 ? (n/1e6).toFixed(1) + ' million' : Math.round(n).toLocaleString('en-US');
 function findSpecial(sh, type){ for(let j = 0; j < sh.rows; j++){ const a = sh.spI[j]; for(let k = 0; k < a.length; k++) if(sh.spT[j][k] === type && BB.isIntact(sh, a[k], j)) return [a[k], j]; } return null; }
 function runWith(lv, cl, opts){ const S = BB.newState(); Object.assign(S.lv, lv || {}); Object.assign(S.cl, cl || {}); if(opts && opts.stage){ S.stage = S.unlocked = opts.stage; } return [S, BB.startRun(S, Object.assign({ aspect: 1.5, seed: 21 }, opts || {}))]; }
 if(suites.includes('rules')){
@@ -206,11 +235,93 @@ if(suites.includes('rules')){
     const [S2, run] = runWith({}); S2.calluses = 100; S2.cl.memory = 1; BB.finish(run); BB.buyCareer(S2, 'ship');
     check(S2.stage === 0 && S2.unlocked === 1, 'buying it in the middle of a job waits for the next one');
   }
+  // sugar: a frenzy multiplies everything and holds the combo; machines leave sugar alone
+  {
+    const [, run] = runWith({ delivery:6, sugar:3, sweettooth:1 }); const sh = run.sheet, p = findSpecial(sh, T.SUGAR);
+    if(!p) fail('a sugar bubble to test on'); else {
+      const v0 = BB.valueNow(run); BB.press(run, BB.cx(p[0], p[1]), BB.cy(p[1])); BB.release(run);
+      const v1 = BB.valueNow(run), f = run.frenzy;
+      run.combo = 40; run.lastPop = run.t; for(let k = 0; k < 60; k++) BB.step(run, 1/30);
+      const kept = run.combo === 40;
+      for(let k = 0; k < Math.ceil(f*30) + 30; k++) BB.step(run, 1/30);
+      check(Math.abs(v1/v0 - run.P.frenzyMul) < 1e-9 && f === run.P.frenzyT, `a sugar bubble starts a ${f} s frenzy paying ×${run.P.frenzyMul}`);
+      check(kept && run.combo === 0 && run.frenzy === 0, 'during the frenzy the combo waits, after it the combo lapses again');
+    }
+    const [, r2] = runWith({ delivery:6, machine:4, sugar:3 });
+    for(let k = 0; k < 20*60 && !r2.over && !r2.sheets; k++) BB.step(r2, 1/60);
+    check(findSpecial(r2.sheet, T.SUGAR) && r2.frenzies === 0, 'a break of machine work leaves the sugar bubbles for the player');
+  }
+  // zippers open their row, and with Cross stitch their column too
+  {
+    const rowLeft = (sh, j) => { let c = 0; for(let i = 0; i < sh.cols; i++){ const k = BB.specialAt(sh, i, j); if(BB.isIntact(sh, i, j) && !(k >= 0 && sh.spT[j][k] === T.GIANT)) c++; } return c; };
+    const [, run] = runWith({ delivery:6, zipper:3 }); const sh = run.sheet, p = findSpecial(sh, T.ZIP);
+    BB.press(run, BB.cx(p[0], p[1]), BB.cy(p[1])); BB.release(run);
+    const e0 = run.earned; let steps = 0; while(run.zips.length && steps < 200){ BB.step(run, 1/30); steps++; }
+    check(rowLeft(sh, p[1]) === 0 && steps < 45 && run.earned > e0, `a zipper opens its whole row of ${sh.cols} in ${(steps/30).toFixed(2)} s`);
+    const [, r2] = runWith({ delivery:6, zipper:3, crosszip:1 }, {}, { seed: 22 }); const s2 = r2.sheet, q = findSpecial(s2, T.ZIP);
+    BB.press(r2, BB.cx(q[0], q[1]), BB.cy(q[1])); BB.release(r2); for(let k = 0; k < 200 && r2.zips.length; k++) BB.step(r2, 1/30);
+    let colLeft = 0; const x = BB.cx(q[0], q[1]); for(let j = 0; j < s2.rows; j++){ const i = Math.round(x - .5 - .5*(j & 1)), k = BB.specialAt(s2, i, j); if(BB.isIntact(s2, i, j) && !(k >= 0 && s2.spT[j][k] === T.GIANT)) colLeft++; }
+    check(rowLeft(s2, q[1]) === 0 && colLeft === 0, 'with Cross stitch it opens its column as well');
+  }
+  // the lasso: a closed loop pops what is inside it, an open curve does not
+  {
+    const loopRun = (lasso, closed) => { const [, run] = runWith({ delivery:6, thumb:1, strength:1 }, { lasso }, { stage: 1, seed: 31 }); const sh = run.sheet, r = sh.H*.3, c = [sh.W/2, sh.H/2];
+      run.budget = 0; BB.press(run, c[0] + r, c[1]); for(let a = 0; a <= (closed ? 6.7 : 4.5); a += .02) BB.drag(run, c[0] + Math.cos(a)*r, c[1] + Math.sin(a)*r); BB.release(run);
+      let left = 0; for(let j = 0; j < sh.rows; j++) for(let i = 0; i < sh.cols; i++){ const k = BB.specialAt(sh, i, j); if(Math.hypot(BB.cx(i, j) - c[0], BB.cy(j) - c[1]) < r*.8 && BB.isIntact(sh, i, j) && !(k >= 0 && sh.spT[j][k] === T.THICK)) left++; }
+      return [run, 0, left]; };
+    const [a, , leftA] = loopRun(1, true), [, , leftB] = loopRun(1, false), [, , leftC] = loopRun(0, true);
+    check(a.loops === 1 && leftA === 0, `a closed loop pops everything inside it but the thick ones (${fmtN(a.bestLoop)} bubbles)`);
+    check(leftB > 100 && leftC > 100, 'an open curve, or a loop without Cordon tape, leaves the inside alone');
+    const [, r2] = runWith({ delivery:6 }, { lasso:1 }, { seed: 31 }); r2.combo = 0; const e0 = r2.earned; const n0 = BB.popPolygon(r2, [0, 0, 6, 0, 6, 6, 0, 6], 'loop'); const e1 = r2.earned - e0;
+    const [, r3] = runWith({ delivery:6 }, { lasso:1 }, { seed: 31 }); const f0 = r3.earned; const n1 = BB.popPolygon(r3, [0, 0, 6, 0, 6, 6, 0, 6], 'player'); const e2 = r3.earned - f0;
+    check(n0 === n1 && e1 > 2.5*e2, 'bubbles roped in by a loop pay triple');
+  }
+  // chain reactions die out by themselves
+  {
+    const blast = (domino, seed) => { const [, run] = runWith({ delivery:6 }, { domino }, { stage: 3, seed }); const sh = run.sheet;
+      run.pending.push({ at: 0, x: sh.W/2, y: sh.H/2, r: 60, who:'chain', ring:true, gen:0 }); let most = 0, k = 0;
+      for(; k < 30*30 && (run.pending.length || k === 0); k++){ BB.step(run, 1/30); most = Math.max(most, run.pending.length); }
+      return { popped: sh.N - BB.intactCount(sh), gens: run.domino, secs: k/30, most }; };
+    const none = blast(0, 40), a = blast(2, 40), b = blast(2, 41);
+    check(a.gens >= 8 && a.popped > 20*none.popped, `with Chain reaction one blast sets off ${a.gens} generations and pops ${fmtN(a.popped)} (alone: ${fmtN(none.popped)})`);
+    check(Math.max(a.secs, b.secs) < 12 && Math.max(a.most, b.most) <= 170, `and dies out by itself within ${Math.max(a.secs, b.secs).toFixed(1)} s, never more than ${Math.max(a.most, b.most)} blasts waiting`);
+  }
+  // Iron thumb: thick bubbles give way under a swipe
+  {
+    const swipeOver = iron => { const [, run] = runWith({ delivery:6, thumb:1, strength:3, iron }, {}, { seed: 50 }); const sh = run.sheet, p = findSpecial(sh, T.THICK); const x = BB.cx(p[0], p[1]), y = BB.cy(p[1]);
+      BB.press(run, x - 3, y); BB.drag(run, x + 3, y); BB.release(run); return !BB.isIntact(sh, p[0], p[1]); };
+    check(!swipeOver(0) && swipeOver(1), 'a swipe passes over thick bubbles, with Iron thumb it pops them');
+  }
+  // orders and stickers
+  {
+    const S = BB.newState();
+    check(S.orders.map(o => o.id).join() === 'sheets,combo,gold', 'the first job asks for sheets, a combo and gold');
+    S.cycleEarned = BB.STAGES[0].gate; const g0 = BB.quitGain(S); S.orders[0].done = true; S.orders[1].done = true; const g2 = BB.quitGain(S);
+    check(g2 === Math.floor(BB.STAGES[0].gain*1.5), `two orders done turn ${g0} calluses into ${g2}`);
+    const S5 = BB.newState(), r5 = BB.startRun(S5, { seed: 3 }); r5.maxCombo = 1e9; BB.finish(r5); const r6 = BB.startRun(S5, { seed: 4 }); BB.finish(r6);
+    check(r5.ordersDone.join() === '1' && S5.orders[1].done && !S5.orders[2].done && r6.ordersDone.length === 0, 'orders are met by what a break did, and stay met');
+    BB.quit(S);
+    check(S.orders.length === 3 && new Set(S.orders.map(o => o.id)).size === 3 && S.orders.every(o => !o.done && !BB.ORDERS_BY[o.id].car), 'quitting brings three new, different orders');
+    const S2 = BB.newState(); S2.stage = S2.unlocked = 3; S2.quits = 4; S2.cl.lasso = 1; S2.cl.headhunter = 1; let sawLoop = false, sizes = new Set();
+    for(let k = 0; k < 40; k++){ const o = BB.newOrders(S2); sizes.add(o.length); if(o.some(x => x.id === 'loop' && x.n === 2e6)) sawLoop = true; }
+    check(sawLoop && sizes.size === 1 && sizes.has(4), 'in the city with Cordon tape a loop order can come up, and Headhunter makes it four orders');
+    const S3 = BB.newState(); const v0 = BB.derive(S3).value; S3.stickers = { first:1, pop1k:1, sheet1:1 }; const v3 = BB.derive(S3).value;
+    check(Math.abs(v3/v0 - 1.03) < 1e-9, 'three stickers add 3 % to everything');
+    const S4 = BB.newState(); const r4 = BB.startRun(S4, { seed: 1 }); BB.press(r4, BB.cx(1, 1), BB.cy(1)); BB.release(r4); BB.finish(r4);
+    check(r4.stickers.includes('first') && S4.stickers.first, 'the first pop earns the first sticker');
+  }
+  // an older save still loads, and a world bought before the city existed keeps its way there
+  {
+    const old = { v:1, stage:2, unlocked:2, plopps:5, cycleEarned:0, lifePops:1e9, runs:80, cycleRuns:0, lv:{ break:1 }, cl:{ cv:1, ship:1, factory:1, world:1 }, calluses:3, callusesEarned:900, quits:6, best:{ run:1, combo:1, sheets:1 }, finale:{ done:false, pops:0 } };
+    const S = BB.load(JSON.stringify(old));
+    check(S.stats && S.stats.sheets === 0 && S.orders.length === 3 && S.cl.city === 1 && S.unlocked === 3 && S.finale.act === 0, 'a first-version save loads with orders, stats and the city');
+  }
 }
 
 /* ---------------- players ----------------
    A human-limited player: taps five a second with a few pixels of aim error, swipes at 1,500 px
-   a second across a sheet drawn 900 px wide, goes for special bubbles first, holds thick ones.
+   a second across a sheet drawn 900 px wide, goes for special bubbles first (sugar before the
+   rest), holds thick ones. With the lasso it draws loops at the same speed instead of swipes.
    Between breaks the intern's rule (cheapest first) buys; forks alternate from job to job. It
    quits when its callus gain stops growing, and in its career it saves for the next workplace. */
 const human = { taps: 4.5, swipe: 1500, aim: 5, screen: 900 };
@@ -220,7 +331,7 @@ function playBreak(S, seed, who){
   if(who === 'idle'){ while(!run.over) BB.step(run, 1/30); return run; }
   const rnd = BB.mulberry(seed ^ 0x5bd1e995), gauss = gaussFrom(rnd), dt = 1/30;
   let wait = 0, mode = 'idle', stroke = null, hold = 0;
-  const targets = () => { const sh = run.sheet, out = []; for(let j = 0; j < sh.rows; j++){ const a = sh.spI[j]; for(let k = 0; k < a.length; k++){ const t = sh.spT[j][k]; if(t >= 2 && t <= 5 && BB.isIntact(sh, a[k], j)) out.push({ x: BB.cx(a[k], j), y: BB.cy(j), t }); } } for(const g of sh.giants) if(g.alive) out.push({ x: g.x, y: g.y, t: 6 }); return out; };
+  const targets = () => { const sh = run.sheet, out = []; for(let j = 0; j < sh.rows; j++){ const a = sh.spI[j]; for(let k = 0; k < a.length; k++){ const t = sh.spT[j][k]; if(t >= 2 && t !== 6 && BB.isIntact(sh, a[k], j)) out.push({ x: BB.cx(a[k], j), y: BB.cy(j), t }); } } for(const g of sh.giants) if(g.alive) out.push({ x: g.x, y: g.y, t: 6 }); return out; };
   const firstIntact = () => { const sh = run.sheet; for(let j = 0; j < sh.rows; j++) for(let w = 0; w < sh.words; w++){ const m = sh.bits[j*sh.words + w] & ~sh.smask[j*sh.words + w]; if(m){ const i = w*32 + (31 - Math.clz32(m & -m)); return { x: BB.cx(i, j), y: BB.cy(j) }; } } return null; };
   while(!run.over && run.t < 400){
     BB.takeEvents(run);
@@ -229,13 +340,15 @@ function playBreak(S, seed, who){
     wait -= dt;
     if(mode === 'hold'){ hold -= dt; if(hold <= 0){ BB.release(run); mode = 'idle'; wait = .05; } }
     else if(mode === 'stroke'){ stroke.x += human.swipe/s*dt; BB.drag(run, stroke.x, stroke.y); if(run.budget < 1 || stroke.x > sh.W + 1){ BB.release(run); mode = 'idle'; wait = .12 + run.P.refill*(1 - run.budget/Math.max(1, run.P.budget)); } }
+    else if(mode === 'loop'){ stroke.a += human.swipe/s/stroke.r*dt; BB.drag(run, stroke.x + Math.cos(stroke.a)*stroke.r, stroke.y + Math.sin(stroke.a)*stroke.r); if(stroke.a > 2*Math.PI + .6){ BB.release(run); mode = 'idle'; wait = .15; } }
     else if(wait <= 0){
       const P = run.P, ts = targets();
       const perTap = Math.max(1, Math.PI*P.reach*P.reach/SQ*.8)*(P.wave ? P.wave*P.wave : 1), perPitch = Math.max(1, 2*P.reach/SQ);
       const swipeYield = P.budget ? P.budget/(P.budget/perPitch/(human.swipe/s) + P.refill + .12) : 0;
-      let tgt = null, bd = Infinity; for(const t of ts){ const d = Math.hypot(t.x - run.x, t.y - run.y); if(d < bd){ bd = d; tgt = t; } }
-      if(tgt){ BB.press(run, tgt.x + gauss()*human.aim/s, tgt.y + gauss()*human.aim/s); if(tgt.t === 2){ mode = 'hold'; hold = P.holdTime + .08; } else { BB.release(run); wait = 1/human.taps; } }
+      let tgt = null, bd = Infinity; for(const t of ts){ const d = Math.hypot(t.x - run.x, t.y - run.y) - (t.t === 7 ? 1e6 : 0); if(d < bd){ bd = d; tgt = t; } }
+      if(tgt){ BB.press(run, tgt.x + gauss()*human.aim/s, tgt.y + gauss()*human.aim/s); if(tgt.t === 2 && !P.iron){ mode = 'hold'; hold = P.holdTime + .08; } else { BB.release(run); wait = 1/human.taps; } }
       else { const f = firstIntact(); if(!f) wait = .1;
+        else if(P.lasso){ const r = Math.min(sh.W, sh.H)*.3, cxl = Math.min(sh.W - r, Math.max(r, f.x + r*.6)), cyl = Math.min(sh.H - r, Math.max(r, f.y + r*.6)); stroke = { x: cxl, y: cyl, r, a: 0 }; BB.press(run, cxl + r, cyl); mode = 'loop'; }
         else if(swipeYield > perTap*human.taps){ const y = f.y + Math.min(P.reach, 1)*.5; BB.press(run, f.x - .2, y); mode = 'stroke'; stroke = { x: f.x - .2, y }; }
         else { BB.press(run, f.x + gauss()*human.aim/s + Math.min(P.reach*.6, 3), f.y + gauss()*human.aim/s + Math.min(P.reach*.5, 3)); BB.release(run); wait = 1/human.taps; } }
     }
@@ -243,33 +356,34 @@ function playBreak(S, seed, who){
   }
   return run;
 }
+const STAGE_NODES = ['ship', 'factory', 'city', 'world'];
 function career(seed, maxMin){
   const S = BB.newState(), rnd = BB.mulberry(seed);
-  let clock = 0, gains = [], since = 0; const log = [], at = {}, cycles = [];
+  let clock = 0, gains = [], since = 0; const log = [], at = {}, cycles = [], jobs = [];
   const mark = k => { if(at[k] == null) at[k] = clock/60; };
   while(clock < maxMin*60){
     const fresh = S.cycleRuns === 0;
-    const lvBefore = Object.values(S.lv).reduce((a, b) => a + b, 0);
     const run = playBreak(S, (rnd()*1e9)|0); clock += run.t + 4; since++;
     BB.autoBuy(S, n => n.id === (S.quits % 2 ? { A:'thorough', B:'wave' } : { A:'rhythm', B:'bang' })[n.fork]);
     const levels = Object.values(S.lv).reduce((a, b) => a + b, 0) - 1, maxLevels = BB.RUN.reduce((a, n) => a + (n.fork ? n.max/2 : n.max), 0) - 1;
     if(fresh) cycles.push({ stage: S.stage, firstBreakLevels: levels, of: maxLevels });
-    log.push({ min: clock/60, stage: S.stage, t: run.t, pops: run.pops, pps: run.pops/run.t, earned: run.earned });
+    log.push({ min: clock/60, stage: S.stage, t: run.t, pops: run.pops, pps: run.pops/run.t, earned: run.earned, orders: BB.ordersDone(S) });
     const g = BB.quitGain(S); gains.push(g); if(gains.length > 4) gains.shift();
     const stalled = gains.length === 4 && g > 0 && g < gains[0]*1.12;
     if(g > 0 && (g >= 2*(S.callusesEarned + 2) || stalled || since > 60)){
-      BB.quit(S); since = 0; gains = []; if(S.quits === 1) mark('firstQuit');
-      for(let guard = 0; guard < 50; guard++){
-        const pri = ['ship', 'factory', 'world'].map(id => BB.CAREER_BY[id]).find(n => BB.careerVisible(S, n) && BB.cl(S, n.id) < n.max);
+      const job = { stage: S.stage, breaks: S.cycleRuns, earned: S.cycleEarned, min: clock/60, orders: BB.ordersDone(S) }; job.gain = BB.quit(S); jobs.push(job); since = 0; gains = []; if(S.quits === 1) mark('firstQuit');
+      for(let guard = 0; guard < 60; guard++){
+        const pri = STAGE_NODES.map(id => BB.CAREER_BY[id]).find(n => BB.careerVisible(S, n) && BB.cl(S, n.id) < n.max);
         if(pri && BB.canBuyCareer(S, pri)){ BB.buyCareer(S, pri.id); continue; }
-        const cand = BB.CAREER.filter(n => BB.canBuyCareer(S, n) && !['ship', 'factory', 'world'].includes(n.id)).sort((a, b) => BB.careerCost(S, a) - BB.careerCost(S, b));
+        const cand = BB.CAREER.filter(n => BB.canBuyCareer(S, n) && !STAGE_NODES.includes(n.id)).sort((a, b) => BB.careerCost(S, a) - BB.careerCost(S, b));
         if(pri && cand.length && BB.careerCost(S, pri) < 3*S.calluses && BB.careerCost(S, cand[0]) > .15*S.calluses) break;
         if(!cand.length) break; BB.buyCareer(S, cand[0].id);
       }
-      if(BB.cl(S, 'ship')) mark('ship'); if(BB.cl(S, 'factory')) mark('factory'); if(BB.cl(S, 'world')){ mark('world'); break; }
+      for(const id of STAGE_NODES) if(BB.cl(S, id)) mark(id);
+      if(BB.cl(S, 'world')) break;
     }
   }
-  return { S, log, at, cycles };
+  return { S, log, at, cycles, jobs };
 }
 
 /* ---------------- idle ---------------- */
@@ -282,25 +396,31 @@ if(suites.includes('idle')){
   let idle = 0, played = 0; for(let k = 0; k < 4; k++){ idle += playBreak(mk(), 30 + k, 'idle').earned; played += playBreak(mk(), 30 + k).earned; }
   console.log(`  machine alone: ${(idle/played*100).toFixed(1)} % of a player`);
   check(idle > 0 && idle < played*.4, `a fully built machine earns ${(idle/played*100).toFixed(0)} % of what a player earns in the same break (under 40 %)`);
+  const mkCity = () => { const S = mk(); S.stage = S.unlocked = 3; S.cl.hydraulic = 2; return S; };
+  let idleC = 0, playedC = 0; for(let k = 0; k < 2; k++){ idleC += playBreak(mkCity(), 60 + k, 'idle').earned; playedC += playBreak(mkCity(), 60 + k).earned; }
+  console.log(`  city convoy alone: ${(idleC/playedC*100).toFixed(1)} % of a player`);
+  check(idleC > 0 && idleC < playedC*.4, `in the city too: the convoy earns ${(idleC/playedC*100).toFixed(0)} % of a player (under 40 %)`);
 }
 
 /* ---------------- pacing ---------------- */
 if(suites.includes('pacing')){
   section('pacing');
-  const win = { firstQuit: [10, 30], ship: [20, 55], factory: [45, 110], world: [100, 210] };
+  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [30, 80], city: [55, 120], world: [110, 200] };
   for(const seed of [1, 2]){
     const t0 = performance.now(), c = career(seed, 300), dur = ((performance.now() - t0)/1000).toFixed(0);
-    console.log(`  seed ${seed}: first quit ${c.at.firstQuit?.toFixed(0)} min, warehouse ${c.at.ship?.toFixed(0)}, factory ${c.at.factory?.toFixed(0)}, world ${c.at.world?.toFixed(0)} (${dur} s to simulate)`);
+    console.log(`  seed ${seed}: first quit ${c.at.firstQuit?.toFixed(0)} min, warehouse ${c.at.ship?.toFixed(0)}, factory ${c.at.factory?.toFixed(0)}, city ${c.at.city?.toFixed(0)}, world ${c.at.world?.toFixed(0)} (${dur} s to simulate)`);
     for(const [k, [lo, hi]] of Object.entries(win)) check(c.at[k] != null && c.at[k] >= lo && c.at[k] <= hi, `seed ${seed}: ${k} within ${lo}-${hi} min`, `at ${c.at[k] == null ? 'never' : c.at[k].toFixed(1)}`);
     const longest = Math.max(...c.log.map(r => r.t));
     check(longest <= 90, `seed ${seed}: no break runs past 90 s (longest ${longest.toFixed(0)} s)`);
     check(c.log.every(r => r.pops > 0), `seed ${seed}: every break pops something`);
-    const pps = [0, 1, 2].map(k => c.log.filter(r => r.stage === k).map(r => r.pps));
-    check(pps.every(a => a.length) && Math.max(...pps[2]) > 100*Math.max(...pps[0]), `seed ${seed}: the factory pops over a hundred times faster than the desk (${Math.round(Math.max(...pps[0]))}/s to ${Math.round(Math.max(...pps[2]))}/s)`);
+    const pps = [0, 1, 2, 3].map(k => c.log.filter(r => r.stage === k).map(r => r.pps)), top = pps.map(a => Math.max(...a));
+    check(pps.every(a => a.length) && top[2] > 100*top[0] && top[3] > 20*top[2], `seed ${seed}: each workplace pops far faster than the last (desk ${fmtN(top[0])}/s, factory ${fmtN(top[2])}/s, city ${fmtN(top[3])}/s)`);
     const easy = c.cycles.filter(x => x.firstBreakLevels > .5*x.of);
     check(!easy.length, `seed ${seed}: no job hands over more than half its break tree after one break`, easy.map(x => `stage ${x.stage}: ${x.firstBreakLevels}/${x.of}`).join(', '));
-    const perStage = [0, 1, 2].map(k => c.cycles.filter(x => x.stage === k).length);
+    const perStage = [0, 1, 2, 3].map(k => c.cycles.filter(x => x.stage === k).length);
     check(perStage.every(n => n >= 1 && n <= 4), `seed ${seed}: one to four jobs per workplace (${perStage.join(', ')})`);
+    const withOrders = c.jobs.filter(j => j.orders > 0).length;
+    check(withOrders >= c.jobs.length*.6, `seed ${seed}: orders get done along the way (in ${withOrders} of ${c.jobs.length} jobs)`);
   }
 }
 
