@@ -315,6 +315,9 @@ if(suites.includes('rules')){
     const old = { v:1, stage:2, unlocked:2, plopps:5, cycleEarned:0, lifePops:1e9, runs:80, cycleRuns:0, lv:{ break:1 }, cl:{ cv:1, ship:1, factory:1, world:1 }, calluses:3, callusesEarned:900, quits:6, best:{ run:1, combo:1, sheets:1 }, finale:{ done:false, pops:0 } };
     const S = BB.load(JSON.stringify(old));
     check(S.stats && S.stats.sheets === 0 && S.orders.length === 3 && S.cl.city === 1 && S.unlocked === 3 && S.finale.act === 0, 'a first-version save loads with orders, stats and the city');
+    const mid = Object.assign({}, old, { stage:1, unlocked:1, cl:{ cv:1, ship:1 }, orders:[{ id:'clean', n:1, best:0, done:false }, { id:'combo', n:250, best:300, done:true }, { id:'gold', n:6, best:2, done:false }] });
+    const S2 = BB.load(JSON.stringify(mid));
+    check(S2.orders.length === 3 && !S2.orders.some(o => o.id === 'clean') && S2.orders.find(o => o.id === 'combo').done, 'an order the warehouse no longer gives is swapped for one it does, and what was done stays done');
   }
 }
 

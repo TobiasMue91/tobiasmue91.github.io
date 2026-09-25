@@ -245,6 +245,8 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
   .menu{gap:7px;margin-top:10px}
   .menu .tape{padding:.45em .9em;font-size:15px}
   .tpop{display:none}
+  #titleNew{font-size:12.5px;padding:4px 7px}
+  .card:has(#titleNew:not([hidden])) #titleText{display:none}
   #trees{overflow-y:auto}
   #trees .tab{padding:6px 9px;font-size:13px}
   #trees .coin{font-size:13px;padding:4px 7px}
@@ -537,6 +539,8 @@ function load(json){
     S.stats = Object.assign(newStats(), o.stats || {}); S.stickers = o.stickers || {}; S.finale = Object.assign({ done:false, pops:0, act:0 }, o.finale || {});
     if(S.cl.world && !S.cl.city){ S.cl.city = 1; S.unlocked = Math.max(S.unlocked, 3); }
     if(!Array.isArray(o.orders)) S.orders = newOrders(S);
+    // an order this workplace no longer gives (say, a clean sheet in the warehouse) makes way for one it does
+    else { S.orders = S.orders.filter(x => ORDERS_BY[x.id] && ORDERS_BY[x.id].n[Math.min(S.stage, 3)] > 0); topUpOrders(S); }
   } catch(e) { }
   return S;
 }
@@ -671,9 +675,11 @@ function newOrders(S){
   return out;
 }
 function topUpOrders(S){
-  const want = 3 + (cl(S, 'headhunter') ? 1 : 0); if(!S.orders || S.orders.length >= want) return;
-  const have = new Set(S.orders.map(o => o.id)), o = ORDERS.find(o => !have.has(o.id) && o.n[Math.min(S.stage, o.n.length - 1)] > 0 && (!o.car || cl(S, o.need)));
-  if(o) S.orders.push({ id:o.id, n: orderTarget(S, o), best:0, done:false });
+  const want = 3 + (cl(S, 'headhunter') ? 1 : 0); if(!S.orders) return;
+  while(S.orders.length < want){
+    const have = new Set(S.orders.map(o => o.id)), o = ORDERS.find(o => !have.has(o.id) && o.n[Math.min(S.stage, o.n.length - 1)] > 0 && (!o.car || cl(S, o.need)));
+    if(!o) break; S.orders.push({ id:o.id, n: orderTarget(S, o), best:0, done:false });
+  }
 }
 function orderValue(id, run){
   switch(id){
@@ -748,7 +754,7 @@ function startRun(S, opts){
   opts = opts || {};
   freshCycleStage(S);
   if(!S.orders) S.orders = newOrders(S);
-  const P = derive(S), rnd = mulberry(opts.seed != null ? opts.seed : (Math.random()*2**31)|0);
+  const P = Object.assign(derive(S), opts.P || {}), rnd = mulberry(opts.seed != null ? opts.seed : (Math.random()*2**31)|0);
   const run = { S, P, rnd, aspect: opts.aspect || 1.5, t:0, time:P.time, bonusT:0, earned:0, pops:0, playerPops:0, machinePops:0,
     combo:0, maxCombo:0, lastPop:-9, sheets:0, slide:0, over:false, down:false, x:0, y:0, moved:0, still:0, hold:0,
     budget:P.budget, aid:0, pending:[], machines:[], machineT:1.5, flats:0, golds:0, giants:0, espressos:0, bangs:0, best:null,
@@ -1154,9 +1160,11 @@ function buyWave(sr, rnd, opt){
 
 /* ================= music =================
    Quiet coffee-shop music, made on the spot: an electric piano (two-operator FM), a round bass,
-   a pad for the bigger workplaces and a soft kick. Each workplace has its own two progressions
-   of jazz sevenths and ninths and its own tempo. It all sits under a low-pass and a slow wobble
-   of tape, below the band where the pops live, and it goes muffled while you are in the menus. */
+   a pad for the bigger workplaces and a soft kick. Each workplace has its own tempo, key and three
+   progressions of jazz sevenths and ninths (A, B, C), laid out in a form of eight-bar sections with
+   a four-bar breakdown (FORM). Piano and bass patterns change per section; the melody is two-bar
+   phrases played twice. It all sits under a low-pass and a slow wobble of tape, below the band
+   where the pops live, and it goes muffled while you are in the menus. */
 const MUSIC = (() => {
   // bass note, then the voicing, as MIDI numbers; four chords to a progression, one per bar
   const SONGS = [
@@ -1242,15 +1250,21 @@ const MUSIC = (() => {
 
   /* ---------- one bar at a time ---------- */
   const pcs = ch => ch.slice(1).map(x => ((x % 12) + 12) % 12);
+  const pc = x => ((x % 12) + 12) % 12;
   // the nearest pitch to m whose pitch class is in the set
-  function nearest(m, set){ for(let d = 0; d < 7; d++){ for(const s of [m - d, m + d]) if(set.includes(((s % 12) + 12) % 12)) return s; } return m; }
-  function scaleStep(m, dir, scale){ let x = m; for(let k = 0; k < 3; k++){ x += dir; if(scale.includes(((x % 12) + 12) % 12)) return x; } return m + dir; }
-  // a two-bar phrase: a lo-fi rhythm and a stepwise line, played twice over four bars
+  function nearest(m, set){ for(let d = 0; d < 7; d++){ for(const s of [m - d, m + d]) if(set.includes(pc(s))) return s; } return m; }
+  // what a melody may use over a chord: its own tones, and the key's other notes unless they rub a
+  // semitone against one of them (the avoid notes)
+  function usable(chord, scale){ return [...new Set([...chord, ...scale.filter(s => !chord.some(c => pc(s - c) === 1 || pc(c - s) === 1))])]; }
+  // n steps up or down through the usable notes
+  function walk(m, n, set){ let x = m; for(let k = 0; k < Math.abs(n); k++){ let y = x; do { y += Math.sign(n); } while(!set.includes(pc(y)) && Math.abs(y - x) < 4); x = y; } return x; }
+  // a two-bar phrase: a lo-fi rhythm and a stepwise contour from a fixed start, played twice over four bars
   const RHY = [[0, 1.5, 2, 3.5, 4.5, 6], [.5, 1, 2.5, 4, 5.5, 6], [0, 1, 1.5, 3, 4, 5, 6.5], [1.5, 2, 3, 5.5, 6, 7], [0, 2, 2.5, 4, 6]];
   function newPhrase(density){
     const r = RHY[(rnd()*RHY.length)|0], steps = [];
-    let x = 0; for(let k = 0; k < r.length; k++){ steps.push(x); x += [-2, -1, -1, 1, 1, 2][(rnd()*6)|0]; }
-    return { r, steps, on: r.map(() => rnd() < density) };
+    let x = 0; for(let k = 0; k < r.length; k++){ steps.push(x); x += [-2, -1, -1, 1, 1, 2][(rnd()*6)|0]; if(x > 4) x -= 2; if(x < -4) x += 2; }
+    const base = Math.max(64, Math.min(74, lastNote));
+    return { r, steps, base, on: r.map(() => rnd() < density) };
   }
   // piano patterns: [beat, length in beats, velocity]; 'arp' breaks the chord into eighths
   const COMP = [ [[0, 1.6, .75], [1.5, 1.2, .55]], [[0, .9, .75], [1.5, .5, .55], [3, .9, .6]], [[0, 1.4, .7], [2, .4, .5], [3.5, .5, .5]], 'arp' ];
@@ -1261,7 +1275,8 @@ const MUSIC = (() => {
     if(!secStyle) secStyle = { comp: drop || calm ? 0 : (rnd()*COMP.length)|0, bass: (rnd()*3)|0, dens: drop ? .25 : calm ? .3 : name === 'B' ? .7 : .55 };
     const beat = 60/song.bpm, sw = beat*.58, P = song.prog[({ A: 0, B: 1, C: 2, drop: 0 })[name] % song.prog.length], ch = P[secBar % 4], next = P[(secBar + 1) % 4];
     const at = b => t0 + Math.floor(b)*beat + (b % 1 ? sw : 0);   // swung eighths
-    const [root, ...voice] = ch, scale = song.scale || [0, 2, 4, 5, 7, 9, 11], chord = pcs(ch);
+    const [root, ...voice] = ch, chord = pcs(ch), avail = usable(chord, song.scale);
+    if(api.log) api.log.push(['bar', t0, ch, 4*beat]);
     const roll = (t, vel, dur) => voice.forEach((m, k) => ep(t + k*.012 + rnd()*.006, m, vel*(.85 + .3*rnd()), dur));
     // piano
     const comp = COMP[secStyle.comp];
@@ -1274,8 +1289,8 @@ const MUSIC = (() => {
     const half = secBar % 2;
     phrase.r.forEach((b, k) => {
       if(!phrase.on[k] || Math.floor(b/4) !== half) return;
-      let m = nearest(lastNote + phrase.steps[k], scale); if(b % 1 === 0) m = nearest(m, chord);
-      if(m > 79) m -= 12; if(m < 62) m += 12;
+      let m = walk(nearest(phrase.base, avail), phrase.steps[k], avail); if(b % 1 === 0) m = nearest(m, chord);
+      if(m > 79) m -= 12; if(m < 60) m += 12;
       ep(at(b % 4), m, .36, beat*(b % 1 ? .6 : .9)); lastNote = m;
     });
     // bass
@@ -1304,7 +1319,8 @@ const MUSIC = (() => {
     while(nextBar < ctx.currentTime + .35) nextBar = scheduleBar(nextBar);
     if(run && !run.demo) setFrenzy(run.frenzy > 0 && mode === 'run');
   }
-  // api.log, when set to an array, records every note: the page's own test reads it
+  // api.log, when set to an array, records every note: a way to check the music from a script or
+  // the console, since nobody can listen to it in a test
   const api = { start, scene, muffle, tick, frenzy: setFrenzy, SONGS, log: null };
   return api;
 })();
@@ -2067,12 +2083,12 @@ $('bEndBreak').onclick = () => { if(mode !== 'pause') return; mode = 'run'; show
 /* The title's sheet is real wrap on a throwaway state: it pops, it sounds, it pays nothing. */
 function startDemo(){
   const TS = BB.newState(); TS.stage = TS.unlocked = S.stage; TS.cycleEarned = 1;
-  Object.assign(TS.lv, [{ delivery:3 }, { delivery:1, thumb:1, strength:2 }, { delivery:1, thumb:2, strength:3 }, { delivery:0, thumb:2, strength:3 }][S.stage] || {});
+  // the desk and the warehouse show their own wrap; the factory's and the city's is too fine to see from
+  // here, so the title lays coarser wrap on the same floor
+  Object.assign(TS.lv, [{ delivery:3 }, { delivery:1, thumb:1, strength:2 }][S.stage] || {});
   if(S.stage === 3 && BB.cl(S, 'lasso')) TS.cl.lasso = 1;
   if(S.stage !== sceneStage){ layout(); paintScene(S.stage); }
-  run = BB.startRun(TS, { aspect: L.w / L.h, seed: S.runs + 7 }); run.demo = true; run.time = run.P.time = 1e9;
-  // the factory's and the city's wrap is too fine to see from here: the title gets coarser wrap on the same floor
-  if(S.stage >= 2){ run.P.size = 1400; run.P.reach = 1.1; run.P.budget = 40; run.budget = 40; run.sheet = BB.makeSheet(run.P, run.aspect, BB.mulberry(S.runs + 7)); }
+  run = BB.startRun(TS, { aspect: L.w / L.h, seed: S.runs + 7, P: S.stage >= 2 ? { size: 1400, reach: 1.1, budget: 40 } : null }); run.demo = true; run.time = run.P.time = 1e9;
   view = makeView(run.sheet); oldView = null;
 }
 function hintFor(){
@@ -2442,7 +2458,7 @@ $('bImport').onclick = () => {
 };
 $('bReset').onclick = () => {
   if(!resetArmed){ resetArmed = true; $('bReset').textContent = tr('set.reset2'); return; }
-  const ui = S.ui; S = BB.newState(); S.ui = Object.assign({}, ui, { seen:{}, stageSeen:-1 }); save();
+  const ui = S.ui; S = BB.newState(); S.ui = Object.assign({}, ui, { seen:{}, stageSeen:-1, news:0 }); save();
   $('resetMsg').textContent = tr('set.resetDone'); $('resetMsg').hidden = false; resetArmed = false; $('bReset').textContent = tr('set.reset');
   run = null; layout(); paintScene(0); startDemo(); refreshTitle();
 };
