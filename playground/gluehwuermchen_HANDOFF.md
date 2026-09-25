@@ -238,3 +238,24 @@ Lesbarkeit des Baums am Handy.
 - Neue echte Arten mit echtem Leuchtverhalten und ein Feldtagebuch mit 11 Seiten (+4 % Licht je Seite).
   Die Wirtschaft ist danach komplett neu abgestimmt.
 - Die Fichte besteht jetzt aus hängenden Zweigen, und die dunklen Glühwürmchen sind besser sichtbar.
+
+### Musik, dritte Fassung
+
+Der Nutzer fand die generative Musik (Eno-Schleifen über Septakkorden) zwar passend, aber weder
+unterhaltsam noch harmonisch. Deshalb hat jetzt jede Jahreszeit ein ausgeschriebenes Stück (`SCORE`
+im Musikteil): eine achttaktige Melodie aus Frage und Antwort, einen zweiten Teil als Kontrast, eine
+schlichte diatonische Akkordfolge und eine gezupfte Begleitung. Sie baut sich pro Durchgang in
+Schichten auf und macht danach ein paar Takte Pause mit Akkorden und einzelnen Tönen.
+
+| Jahreszeit | Instrumente | Tonart und Takt |
+|---|---|---|
+| Sommer | E-Piano, Nylongitarre, leicht geswingt | F-Dur |
+| Herbst | Harfen-Walzer | d-Moll, 3/4 |
+| Winter | Spieluhr | Es-Dur |
+| Frühling | Flöte über Gitarre | G-Dur |
+| Hochsommer | Sommerthema einen Ton höher, schneller und voll besetzt | G-Dur |
+
+Lang klingende Melodietöne stehen immer auf Akkordtönen. Die Pad-Akkorde lassen die große Septime
+weg. Gitarre und Harfe laufen über Karplus-Strong und sind auf etwa 1 Cent genau gestimmt.
+In den Einstellungen gibt es unter „Listen“ eine Jukebox (☀️ 🍂 ❄️ 🌱 ✨), mit der man alle fünf
+Stücke sofort hören kann. Beim Schließen läuft wieder das Stück der aktuellen Jahreszeit.
