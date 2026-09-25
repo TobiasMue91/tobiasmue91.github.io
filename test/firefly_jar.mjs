@@ -91,13 +91,14 @@ function decide(G, N, o, d) {
     const P = N.P, jar = N.jar, left = N.T - N.t, bank = N.lay.bank;
     // where the jar can be emptied: the lantern, flowers, the first stone of a path, and on
     // every other night a bud
-    let drops = [{x: bank.x, y: bank.y}].concat(N.flowers, o.style === 'hunter' ? N.paths.map(p => p.pts[0]) : []);
+    let drops = [{x: bank.x, y: bank.y}].concat(N.flowers, N.paths.map(p => p.pts[0]));
     if (N.buds.length && G.seasonNights % 2 === 0) drops = drops.concat(N.buds);
     const near = drops.reduce((b, q) => !b || d(q.x, q.y) < d(b.x, b.y) ? q : b, null);
     const atBank = jar.n > 0 && (d(bank.x, bank.y) < bank.r || N.flowers.some(f => d(f.x, f.y) < 42));
     if (atBank) return {x: jar.x, y: jar.y};
     if (jar.n >= P.cap || (jar.n > 0 && P.keep < 1 && left < d(near.x, near.y) / o.vmax + 1)) return {x: near.x, y: near.y};
-    if (o.style === 'hunter') {
+    // the season's own mechanics are played by both players; they differ only in which fireflies they go for
+    {
         if (N.aurora && N.aurora.dur - N.aurora.t > 1.5) return {aurora: true};
         if (N.trail) {
             const p = FJ.wispPos(N, N.trail.w[N.trail.next]);
@@ -113,11 +114,8 @@ function decide(G, N, o, d) {
         const tt = d(f.x, f.y) / o.vmax + o.react;
         let s;
         if (o.style === 'hunter') {
-            // is it still (or already again) glowing when the jar gets there?
-            const p = f.ph % 1, on = P.on;
-            const glow = f.k !== 'n' || (p < on && (on - p) * f.T > tt) || ((1 - p) * f.T < tt && (1 - p + on) * f.T > tt);
-            let v = f.k === 'b' ? 4 : f.k === 'g' ? 10 : 1;
-            if (glow) v *= P.glow;
+            // steers for the rarer lights it can reach: they are worth more than the common kind
+            let v = FJ.WORTH[f.k] - (f.k === 'f' ? 1 : 0);
             if (N.crystals.length) v *= Math.pow(P.beamMul, FJ.beamsAt(N, f.x, f.y));
             s = v / (tt + .25);
         } else s = 1 / (tt + .01);
@@ -170,7 +168,8 @@ function rules() {
     const fresh = () => { const G = FJ.newGame(7); return {G, N: FJ.newNight(G, W, H, 11)}; };
     const at = (N, f, dark) => { f.x = N.jar.x; f.y = N.jar.y; f.ph = dark ? .8 : N.P.on / 2; f.sp = 0; };
 
-    // the fix for the prototype's frustration: a dark firefly is always there for the taking
+    // the fix for the prototype's frustration: a dark firefly is always there for the taking,
+    // and since version 2 a flash changes nothing about what a catch is worth
     {
         const {G, N} = fresh(); N.flies = [N.flies[0]]; N.flies[0].k = 'n'; at(N, N.flies[0], true);
         FJ.step(G, N, {x: N.jar.x, y: N.jar.y}, DT);
@@ -178,7 +177,46 @@ function rules() {
         const dark = N.jar.val;
         const b = fresh(); b.N.flies = [b.N.flies[0]]; b.N.flies[0].k = 'n'; at(b.N, b.N.flies[0], false);
         FJ.step(b.G, b.N, {x: b.N.jar.x, y: b.N.jar.y}, DT);
-        check(Math.abs(b.N.jar.val / dark - b.N.P.glow) < 1e-9, `one caught in the glow is worth ×${b.N.P.glow}`, `ratio ${b.N.jar.val / dark}`);
+        check(Math.abs(b.N.jar.val - dark) < 1e-9, 'a firefly is worth the same caught in the flash or between flashes', `${b.N.jar.val} vs ${dark}`);
+    }
+    // the rarer kinds are worth what their pages say
+    {
+        const {G, N} = fresh(); N.flies = [];
+        for (const k of ['b', 'w', 'f', 'c', 'j']) { const f = {k, x: N.jar.x, y: N.jar.y, ph: 0, T: 2, sp: 0, a: 0, extra: true}; N.flies = [f]; N.jar.items = [{v: 0, k: 'n'}]; N.jar.n = 1; N.jar.val = 0; const before = 0;
+            FJ.step(G, N, {x: N.jar.x, y: N.jar.y}, DT); const got = N.jar.val - before;
+            check(Math.abs(got - FJ.WORTH[k] * N.P.value) < 1e-6 || (k === 'f' && N.st.eaten > 0), `a ${k} is worth ×${FJ.WORTH[k]}`, `got ${got}`); }
+        check(N.st.eaten === 1, 'a femme fatale eats one firefly from the jar', `eaten ${N.st.eaten}`);
+    }
+    // a glow-worm stays on her grass stem
+    {
+        const G = FJ.newGame(4); G.lv.glowworm = 1; const N = FJ.newNight(G, W, H, 2);
+        for (let i = 0; i < 60; i++) FJ.step(G, N, null, DT);
+        const w = N.flies.find(f => f.k === 'w'); const x = w && w.x, y = w && w.y;
+        for (let i = 0; i < 120; i++) FJ.step(G, N, null, DT);
+        check(w && w.x === x && w.y === y && FJ.glowOf(N, w) > .4, 'a glow-worm sits still in the grass and never goes dark');
+    }
+    // synchronous fireflies arrive together and flash together, in bursts
+    {
+        const G = FJ.newGame(4); G.season = 3; for (let i = 1; i <= 3; i++) G.gates['gate' + i] = 1; G.lv.carolinus = 1;
+        const N = FJ.newNight(G, W, H, 3); N.flockT = 0; FJ.step(G, N, null, DT);
+        const cloud = N.flies.filter(f => f.k === 'c');
+        let lit = 0, dark = 0, together = true;
+        for (let i = 0; i < 300; i++) { FJ.step(G, N, null, DT); const g = cloud.map(f => FJ.glowOf(N, f) > .3); if (g.some(x => x) && !g.every(x => x)) together = false; g[0] ? lit++ : dark++; }
+        check(cloud.length >= 8 && together && lit > 20 && dark > 100, `a cloud of ${cloud.length} flashes in unison, dark most of the time`, `lit ${lit} dark ${dark} together ${together}`);
+    }
+    // Brimming Jar: a jar that reaches the lantern full counts more
+    {
+        const G = FJ.newGame(7); G.lv.hunter = 1; const N = FJ.newNight(G, W, H, 11); N.flies = [];
+        N.jar.items = Array.from({length: N.P.cap}, () => ({v: 1})); N.jar.n = N.P.cap; N.jar.val = N.P.cap;
+        const b = N.lay.bank; N.jar.x = b.x; N.jar.y = b.y;
+        for (let i = 0; i < 60; i++) FJ.step(G, N, {x: b.x, y: b.y}, DT);
+        check(Math.abs(N.earned - N.P.cap * 1.5) < 1e-9, `a brimming jar of ${N.P.cap} counts ×1.5`, `earned ${N.earned}`);
+    }
+    // every page of the field journal makes all light 4% brighter
+    {
+        const G = FJ.newGame(1), v0 = FJ.params(G).value;
+        FJ.discover(G, null, 'n'); FJ.discover(G, null, 'n'); FJ.discover(G, null, 'w');
+        check(Math.abs(FJ.params(G).value / v0 - 1.08) < 1e-9 && G.journal.n.n === 2, 'two journal pages make light ×1.08; a second meeting only counts');
     }
     // a full jar catches nothing and says so
     {
@@ -264,15 +302,18 @@ function rules() {
 }
 
 /* ---------------- skill ----------------
-   The catch rule has to reward attention without punishing hurry. Three players on the same
-   meadow with the same lanterns lit: one hunts the glow, one sweeps up whatever is nearest,
-   one leaves the jar where it is. */
+   Sweeping is the verb, and nobody should be punished for sweeping. What rewards attention is
+   knowing the rarer lights by their colour and rhythm and steering for them. Three players on
+   the same meadow with the same lanterns lit: one steers for the rare lights it can reach, one
+   sweeps up whatever is nearest, one leaves the jar where it is. */
 function skill() {
     section('skill');
+    const upTo = s => G => { G.season = s; for (let i = 1; i <= s; i++) G.gates['gate' + i] = 1; for (const n of FJ.NODES) if (n.s <= s && !n.gate && !n.final) G.lv[n.id] = n.max; };
     const setups = [
         ['early summer', G => { G.lv.night = 1; G.lv.bright = 2; G.lv.cap = 1; }],
-        ['mid summer', G => Object.assign(G.lv, {night: 3, bright: 4, cap: 3, glass: 2, meadow: 3, eye: 1})],
-        ['late summer', G => { for (const n of FJ.NODES) if (n.s === 0 && !n.gate) G.lv[n.id] = n.max; }],
+        ['late summer', upTo(0)],
+        ['late autumn', upTo(1)],
+        ['late spring', upTo(3)],
     ];
     const ratios = [];
     for (const size of [PHONE, DESK]) for (const [name, lit] of setups) {
@@ -283,16 +324,15 @@ function skill() {
             res[style] = sum / 4;
         }
         const r = res.hunter / res.sweeper;
-        ratios.push(r);
-        // late in a season the meadow glows so often that there is little left to hunt; that is
-        // the reward for the lanterns, and it must not turn into a penalty for paying attention
-        if (name === 'late summer') check(r >= .95, `${size.name}, ${name}: hunting the glow costs nothing (×${r.toFixed(2)})`);
-        else check(r >= 1.08, `${size.name}, ${name}: hunting the glow pays (×${r.toFixed(2)})`);
-        check(res.sweeper >= res.hunter * .6, `${size.name}, ${name}: sweeping is not punished (${(100 * res.sweeper / res.hunter).toFixed(0)}% of the hunter)`);
+        // with nothing rare on the meadow yet, steering is only sweeping by another name
+        if (name === 'early summer') check(r >= .9, `${size.name}, ${name}: steering costs nothing (×${r.toFixed(2)})`);
+        // on a phone the whole meadow is within reach, so a sweeper picks up most rare lights anyway
+        else { ratios.push(r); check(r >= .97, `${size.name}, ${name}: steering for the rare lights never costs (×${r.toFixed(2)})`); }
+        check(res.sweeper >= res.hunter * .6, `${size.name}, ${name}: sweeping is not punished (${(100 * res.sweeper / res.hunter).toFixed(0)}% of the steerer)`);
         check(res.idle <= res.hunter * .12, `${size.name}, ${name}: the jars in the grass never play the game for you (${(100 * res.idle / res.hunter).toFixed(1)}%)`);
     }
     const mean = ratios.reduce((a, b) => a + b, 0) / ratios.length;
-    check(mean >= 1.12, `across the summer, hunting the glow earns ×${mean.toFixed(2)} of sweeping`);
+    check(mean >= 1.12, `once rare lights are about, steering earns ×${mean.toFixed(2)} of sweeping`);
 }
 
 /* ---------------- pace ---------------- */

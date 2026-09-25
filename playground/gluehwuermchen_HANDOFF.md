@@ -229,3 +229,12 @@ Umgesetzt auf Branch `claude/vibrant-galileo-7uobv0`:
 
 Offen: Feedback des Nutzers vom Handy, besonders zu Klang (Glas-Klirren statt Glöckchen), Tempo und
 Lesbarkeit des Baums am Handy.
+
+### Version 2 (auch 2026-09-25)
+
+- Der Leuchtbonus (×3) ist weg. Der Nutzer wischt einfach, und ein Blitz ist zu kurz, um ihn gezielt zu
+  treffen. Das Leuchten ist jetzt nur noch Stimmung. Keen Eye, Synchrony, Glow Hunter, Morning Dew und
+  Heartwood haben neue Wirkungen.
+- Neue echte Arten mit echtem Leuchtverhalten und ein Feldtagebuch mit 11 Seiten (+4 % Licht je Seite).
+  Die Wirtschaft ist danach komplett neu abgestimmt.
+- Die Fichte besteht jetzt aus hängenden Zweigen, und die dunklen Glühwürmchen sind besser sichtbar.
