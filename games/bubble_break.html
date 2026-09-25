@@ -334,7 +334,9 @@ function derive(S){
   const L = id => lv(S, id), C = id => cl(S, id);
   const callusRate = .10 + .02*C('callus');
   const nightshift = Math.pow(2, C('nightshift'));
-  const value = st.value * Math.pow(1.3, L('premium')) * (1 + callusRate*S.callusesEarned) * nightshift;
+  // the coffee fund pays extra for the first break of every job after the first
+  const fund = S.cycleRuns === 0 && S.quits > 0 ? 1 + C('savings') : 1;
+  const value = st.value * Math.pow(1.3, L('premium')) * (1 + callusRate*S.callusesEarned) * nightshift * fund;
   const budgetLv = [0, 6, 10, 16, 25, 40, 60][L('strength')];
   const sizeIdx = Math.min(st.size.length-1, L('delivery'));
   return {
@@ -397,21 +399,25 @@ function buyCareer(S, id){
   freshCycleStage(S);
   return true;
 }
-// a cycle that has not started yet moves straight to the newest workplace
-function freshCycleStage(S){ if(S.cycleRuns === 0 && S.cycleEarned === 0) S.stage = S.unlocked; }
+// a job that has not started yet moves straight to the newest workplace and gets its start bonuses
+function freshCycleStage(S){ if(S.cycleRuns === 0 && S.cycleEarned === 0){ S.stage = S.unlocked; if(S.quits) startBonuses(S); } }
 function quitGain(S){ const st = STAGES[S.stage]; if(S.cycleEarned < st.gate) return 0; return Math.floor(st.gain * Math.cbrt(S.cycleEarned / st.gate)); }
 function quitProgress(S){ return Math.min(1, S.cycleEarned / STAGES[S.stage].gate); }
 function quit(S){
   const g = quitGain(S); if(g <= 0) return 0;
   S.calluses += g; S.callusesEarned += g; S.quits++;
   S.lastCycleEarned = S.cycleEarned;
-  S.plopps = [0, .01, .03, .08][cl(S, 'savings')] * S.cycleEarned;
+  S.plopps = 0;
   S.cycleEarned = 0; S.cycleRuns = 0; S.forks = {};
   S.lv = { break:1 };
-  const m = cl(S, 'memory'); if(m) S.lv.thumb = 1, S.lv.strength = m;
-  if(cl(S, 'pinsub')) S.lv.delivery = Math.max(S.lv.delivery||0, 1), S.lv.machine = 1;
+  startBonuses(S);
   S.stage = S.unlocked;
   return g;
+}
+// what a new job starts with; also applied when you buy one of these before your first break in the job
+function startBonuses(S){
+  const m = cl(S, 'memory'); if(m){ S.lv.thumb = Math.max(lv(S, 'thumb'), 1); S.lv.strength = Math.max(lv(S, 'strength'), m); }
+  if(cl(S, 'pinsub')){ S.lv.delivery = Math.max(lv(S, 'delivery'), 1); S.lv.machine = Math.max(lv(S, 'machine'), 1); }
 }
 
 /* ---------- Sheet ---------- */
@@ -495,8 +501,10 @@ function popSpan(run, j, i0, i1, budget, who){
       const i = spI[k]; if(!isIntact(sh, i, j)) continue;
       const t = sh.spT[j][k], x = cx(i, j), y = cy(j);
       if(t === T.FLAT){
-        clearBit(sh, i, j); run.ev.flats.push(x, y, player ? 1 : 0);
-        if(player){ run.combo = 0; run.flats++; }
+        // pressed on purpose it spoils the combo; swiped over it only costs a little strength
+        clearBit(sh, i, j);
+        if(player && run.swiping){ used++; run.ev.flats.push(x, y, 2); }
+        else { run.ev.flats.push(x, y, player ? 1 : 0); if(player){ run.combo = 0; run.flats++; } }
         continue;
       }
       if(t === T.THICK && player) continue;                         // needs a held press
@@ -594,6 +602,7 @@ function drag(run, x, y){
   const dx = x - run.x, dy = y - run.y, d = Math.hypot(dx, dy);
   if(!run.down || run.slide > 0 || run.P.budget <= 0){ run.x = x; run.y = y; run.moved += d; return; }
   const R = run.P.reach, step = Math.max(.2, R*.5), n = Math.max(1, Math.ceil(d / step));
+  run.swiping = true;
   for(let s = 1; s <= n; s++){
     const px = run.x + dx*s/n, py = run.y + dy*s/n;
     for(const [qx, qy] of toolPoints(run, px, py)){
@@ -603,6 +612,7 @@ function drag(run, x, y){
     }
     if(run.budget < 1){ run.ev.budgetOut = true; break; }
   }
+  run.swiping = false;
   run.x = x; run.y = y; run.moved += d;
 }
 function release(run){ run.down = false; run.hold = 0; }
@@ -718,6 +728,7 @@ return { VERSION, SQ, T, STAGES, RUN, CAREER, RUN_BY, CAREER_BY, mulberry, popcn
    ============================================================ */
 const $ = id => document.getElementById(id);
 const SQ = BB.SQ, T = BB.T;
+const lerp = (a, b, t) => a + (b - a)*t;
 const cv = $('cv'), cx = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1;
 
@@ -728,7 +739,7 @@ en: {
   units:['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'Ud', 'Dd'],
   'title.kicker':'a coffee break incremental',
   'title.text':'A parcel came. What was in it is not important. The bubble wrap is.',
-  'title.help':'Press bubbles to pop them. Hold down on the thick, milky ones. Flat ones spoil your combo.',
+  'title.help':'Press bubbles to pop them. Hold down on the thick, milky ones. Pressing a flat one spoils your combo.',
   'btn.play':'Start break', 'btn.continue':'Next break', 'btn.tree':'Skill tree', 'btn.settings':'Settings', 'btn.close':'Close', 'btn.stay':'Stay',
   'btn.buy':'Pop it', 'btn.startJob':'Start the job', 'btn.world':'Wrap the world',
   'hud.plopps':'Plopps', 'hud.combo':'Combo', 'hud.sheets':'{n} sheets', 'hud.sheet':'1 sheet', 'hud.pps':'{n}/s',
@@ -788,7 +799,7 @@ en: {
     flexible:['Flexible', () => 'Forks stop forcing a choice: take both sides.'],
     ship:['Shipping warehouse', () => 'Next job: a packing table, sheets of thousands of bubbles, a palm instead of a thumb and a floor roller. You move there when your next job starts.'],
     nose:['Nose for gold', (l) => `Gold bubbles ${50*l} % → ${50*(l+1)} % more common.`],
-    savings:['Savings', (l) => `Start each job with ${[0,1,3,8][l]} % → ${[0,1,3,8][l+1]} % of what the last one earned.`],
+    savings:['Coffee fund', (l) => `The first break of every new job pays ×${l+1} → ×${l+2}.`],
     pinsub:['Machine subscription', () => 'Start each job with Bigger delivery and the machine already bought.'],
     overtime:['Overtime', (l) => `Each cleared sheet adds ${sec(.75*l)} → ${sec(.75*(l+1))}.`],
     twohands:['Both hands', () => 'A second hand presses the mirror image of the first.'],
@@ -803,7 +814,7 @@ de: {
   units:['', 'Tsd.', 'Mio.', 'Mrd.', 'Bio.', 'Brd.', 'Trio.', 'Trd.', 'Quadr.', 'Quadrd.', 'Quint.', 'Quintd.', 'Sext.', 'Sextd.'],
   'title.kicker':'ein Kaffeepausen-Incremental',
   'title.text':'Ein Paket ist gekommen. Was drin war, ist egal. Die Luftpolsterfolie nicht.',
-  'title.help':'Drück auf Noppen, um sie zu ploppen. Auf dicken, milchigen kurz draufbleiben. Platte verderben die Combo.',
+  'title.help':'Drück auf Noppen, um sie zu ploppen. Auf dicken, milchigen kurz draufbleiben. Wer auf eine platte drückt, verliert die Combo.',
   'btn.play':'Pause machen', 'btn.continue':'Nächste Pause', 'btn.tree':'Skill-Baum', 'btn.settings':'Einstellungen', 'btn.close':'Schließen', 'btn.stay':'Bleiben',
   'btn.buy':'Ploppen', 'btn.startJob':'Job antreten', 'btn.world':'Die Welt einpacken',
   'hud.plopps':'Plopps', 'hud.combo':'Combo', 'hud.sheets':'{n} Lagen', 'hud.sheet':'1 Lage', 'hud.pps':'{n}/s',
@@ -863,7 +874,7 @@ de: {
     flexible:['Flexibel', () => 'Gabelungen zwingen dich nicht mehr zur Wahl: nimm beide Seiten.'],
     ship:['Versandlager', () => 'Nächster Job: ein Packtisch, Lagen mit Tausenden Noppen, der Handballen statt des Daumens und eine Walze. Du wechselst, sobald dein nächster Job beginnt.'],
     nose:['Goldriecher', (l) => `Goldnoppen ${50*l} % → ${50*(l+1)} % häufiger.`],
-    savings:['Rücklagen', (l) => `Jeder Job beginnt mit ${[0,1,3,8][l]} % → ${[0,1,3,8][l+1]} % von dem, was der letzte eingebracht hat.`],
+    savings:['Kaffeekasse', (l) => `Die erste Pause jedes neuen Jobs zahlt ×${l+1} → ×${l+2}.`],
     pinsub:['Maschinen-Abo', () => 'Jeder Job beginnt mit Größerer Lieferung und schon gekaufter Maschine.'],
     overtime:['Überstunden', (l) => `Jede geschaffte Lage gibt ${sec(.75*l)} → ${sec(.75*(l+1))}.`],
     twohands:['Beidhändig', () => 'Eine zweite Hand drückt spiegelverkehrt mit.'],
@@ -1294,7 +1305,9 @@ function startRun(){
 function hintFor(){
   const h = $('hint'), seen = S.ui.seen;
   let k = null;
+  const hasThick = () => run.sheet.spT.some(a => a.includes(T.THICK));
   if(!seen.first) k = 'first';
+  else if(!seen.thick && hasThick()) k = 'thick';
   else if(run.P.budget > 0 && !seen.swipe) k = 'swipe';
   else if(run.P.gold > 0 && run.P.machine && !seen.gold) k = 'gold';
   if(k){ h.textContent = tr('hint.' + k); h.hidden = false; hintShown = k; } else { h.hidden = true; hintShown = null; }
@@ -1321,16 +1334,20 @@ function handleEvents(ev, t){
     if(tp === T.GOLD){ SND.glint(); puff(x, y, Math.max(v.r, 6), 10, 'rgba(255,215,90,'); floatText(x, y - 16, '+' + fmt(20*run.P.value*BB.comboMul(run)), 'gold'); hintDone('gold'); }
     else if(tp === T.ESPRESSO){ SND.clink(); }
     else if(tp === T.BANG){ SND.bang(); shake = Math.min(1, shake + .35); }
-    else if(tp === T.THICK){ SND.pop(0, .8, 'thick'); }
+    else if(tp === T.THICK){ SND.pop(0, .8, 'thick'); hintDone('thick'); }
     else if(tp === T.GIANT){ SND.giant(); shake = 1; puff(x, y, Math.max(v.s*1.5, 14), 40); floatText(x, y - 30, tr('fl.giant', { n: fmt(150*run.P.value) }), 'big'); if(v.mode === 'detail') paintAll(v); }
   }
-  for(let k = 0; k < ev.flats.length; k += 3){ if(ev.flats[k+2]){ SND.pfft(); floatText(v.ox + ev.flats[k]*s, v.oy + ev.flats[k+1]*s - 14, tr('fl.flat'), 'warn'); } }
-  for(let k = 0; k < ev.rings.length; k += 4){ const x = v.ox + ev.rings[k]*s, y = v.oy + ev.rings[k+1]*s, r = ev.rings[k+2]*s; rings.push({ x, y, r0: r*.3, r1: r, t: 0, life: .3, a: .7, w: 3 }); if(ev.rings[k+3] === 2){ SND.thud(); shake = Math.min(1, shake + .5); puff(x, y, r*.08, 24, 'rgba(200,200,190,'); } }
+  for(let k = 0; k < ev.flats.length; k += 3){ if(ev.flats[k+2] === 1){ SND.pfft(); floatText(v.ox + ev.flats[k]*s, v.oy + ev.flats[k+1]*s - 14, tr('fl.flat'), 'warn'); } else if(ev.flats[k+2] === 2 && k === 0) SND.pfft(); }
+  for(let k = 0; k < ev.rings.length; k += 4){ const x = v.ox + ev.rings[k]*s, y = v.oy + ev.rings[k+1]*s, r = ev.rings[k+2]*s; rings.push({ x, y, r0: r*.3, r1: r, t: 0, life: .3, a: .7, w: 3 }); if(ev.rings[k+3] === 2){ shake = Math.min(1, shake + .5); puff(x, y, r*.08, 24, 'rgba(200,200,190,'); } }
   for(let k = 0; k < ev.giantHits.length; k += 3){ const gi = sh.giants[ev.giantHits[k]]; if(gi){ gi.wob = t; SND.giantHit(ev.giantHits[k+1]); if(v.mode === 'detail'){ const idx = gi.j*sh.cols + gi.i; repaintCells(v, [idx]); } } }
   for(let k = 0; k < ev.time.length; k += 3){ if(ev.time[k+2] > .01) floatText(v.ox + ev.time[k]*s, v.oy + ev.time[k+1]*s - 20, tr('fl.time', { n: mul(ev.time[k+2]) }), 'gold'); }
   if(ev.cleared){ SND.sheet(); floatText(W/2, H*.42, tr('fl.sheet', { n: fmt(ev.cleared) }), 'big'); }
   if(ev.sheet){ oldView = view; view = makeView(run.sheet); }
   if(ev.budgetOut && !run.outShown){ run.outShown = true; }
+  if(run.machines.length > (run.lastMachines || 0)){ const m = run.machines[run.machines.length - 1]; if(m.kind === 'press') SND.thud(); else SND.roll(); }
+  run.lastMachines = run.machines.length;
+  // after the first-tap hint, show the next one this sheet has a reason for
+  if(!hintShown && S.ui.seen.first && !S.ui.seen.thick && mode === 'run') hintFor();
 }
 function endRun(){
   mode = 'end'; ptr.down = false; save();
@@ -1451,6 +1468,7 @@ function refreshTitle(){
   $('bPlay').textContent = S.runs ? tr('btn.continue') : tr('btn.play');
 }
 function showStage(){
+  mode = 'stage';
   const id = BB.STAGES[S.unlocked].id;
   $('stageKicker').textContent = tr('stage.kicker'); $('stageName').textContent = tr('stage.' + id); $('stageText').textContent = tr('stage.' + id + '.t');
   $('bStageGo').textContent = tr('btn.startJob');
@@ -1471,7 +1489,7 @@ function openSettings(){
   show('sSet');
 }
 let resetArmed = false, settingsFrom = 'sTitle';
-$('bSettings').onclick = () => { settingsFrom = 'sTitle'; openSettings(); };
+$('bSettings').onclick = () => { settingsFrom = 'sTitle'; mode = 'title'; openSettings(); };
 $('bSound').onclick = () => { audio(); setSound(!S.ui.sound); save(); openSettings(); };
 $('bLang').onclick = () => { lang = lang === 'de' ? 'en' : 'de'; S.ui.lang = lang; save(); applyStatic(); refreshTitle(); openSettings(); };
 $('bIntern').onclick = () => { S.autoBuy = !S.autoBuy; save(); openSettings(); };
@@ -1635,9 +1653,136 @@ $('bQuitYes').onclick = () => {
   openTrees('career'); floatText(W/2, H*.3, tr('quit.done', { n: fmt(g) }), 'big');
 };
 
-/* ================= finale (filled in below) ================= */
+/* ================= finale: the world, wrapped ================= */
+// Earth's surface at one bubble per square centimetre of 1 cm wrap
+const WORLD = 5.9e18;
+const LONG = { en:[[1e18,'quintillion'],[1e15,'quadrillion'],[1e12,'trillion'],[1e9,'billion'],[1e6,'million']], de:[[1e18,'Trillionen'],[1e15,'Billiarden'],[1e12,'Billionen'],[1e9,'Milliarden'],[1e6,'Millionen']] };
+function fmtLong(n){ for(const [v, w] of LONG[lang]) if(n >= v) return (n/v).toLocaleString(LOC(), { maximumFractionDigits: n/v < 10 ? 2 : 1 }) + ' ' + w; return fmt(n); }
 let finale = null;
-function startFinale(){ /* replaced by the finale module */ }
+function makeFinale(){
+  const MW = 512, MH = 256, map = new Uint8ClampedArray(MW*MH*3), popped = new Uint8Array(MW*MH), rowW = new Float64Array(MH);
+  let total = 0; for(let j = 0; j < MH; j++){ rowW[j] = Math.cos(((j + .5)/MH - .5)*Math.PI); total += rowW[j]*MW; }
+  // a planet from value noise: continents, deserts near the tropics, ice at the poles
+  const rnd = BB.mulberry(4242), G = 48, grid = new Float32Array(G*G); for(let i = 0; i < grid.length; i++) grid[i] = rnd();
+  const sm = t => t*t*(3 - 2*t);
+  const vn = (x, y) => { const x0 = Math.floor(x), y0 = Math.floor(y), fx = sm(x - x0), fy = sm(y - y0); const g = (a, b) => grid[((b % G + G) % G)*G + ((a % G + G) % G)];
+    return (g(x0, y0)*(1 - fx) + g(x0 + 1, y0)*fx)*(1 - fy) + (g(x0, y0 + 1)*(1 - fx) + g(x0 + 1, y0 + 1)*fx)*fy; };
+  for(let j = 0; j < MH; j++) for(let i = 0; i < MW; i++){
+    const u = i/MW*G, v = j/MH*G*.5, lat = Math.abs((j + .5)/MH - .5)*2;
+    let h = 0, a = 1, f = .09; for(let o = 0; o < 5; o++){ h += vn(u*f*8, v*f*8 + o*7)*a; a *= .5; f *= 2; } h /= 1.94;
+    const land = h > .52, k = (j*MW + i)*3;
+    let c;
+    if(lat > .9 - (h - .5)*.3) c = [236 + h*10, 243, 248];
+    else if(land){ const dry = Math.max(0, 1 - Math.abs(lat - .3)*4) * (vn(u*.9, v*.9) > .5 ? 1 : .3); const hi = (h - .52)*4; c = [lerp(62, 190, dry) + hi*40, lerp(118, 160, dry) + hi*20, lerp(58, 100, dry)]; }
+    else { const d = Math.min(1, (.52 - h)*5); c = [lerp(40, 14, d), lerp(110, 50, d), lerp(160, 110, d)]; }
+    map[k] = c[0]; map[k+1] = c[1]; map[k+2] = c[2];
+  }
+  const f = { MW, MH, map, popped, rowW, total, done: 0, rot: 0, tilt: .35, R: 0, Rr: 0, cx: 0, cy: 0, img: null, cv: null, pix: null, last: null, ended: false, endT: 0, flash: 0, stars: null, counter: null };
+  f.frac = () => f.done/f.total;
+  f.reach = () => .13 + .3*f.frac();
+  f.resize = () => {
+    f.R = Math.min(W, H*.86)*.4; f.cx = W/2; f.cy = H*.54; f.Rr = Math.min(170, Math.round(f.R));
+    const n = 2*f.Rr; f.cv = document.createElement('canvas'); f.cv.width = f.cv.height = n; f.g = f.cv.getContext('2d'); f.img = f.g.createImageData(n, n);
+    // per pixel of the disc: latitude, longitude before rotation, and light
+    // the disc's pixels once: where they are and how much light they get; latitude and longitude follow the tilt
+    const L0 = [-.5, -.55, .67], ll = Math.hypot(...L0); const Lx = L0[0]/ll, Ly = L0[1]/ll, Lz = L0[2]/ll;
+    const xyz = [];
+    for(let py = 0; py < n; py++) for(let px = 0; px < n; px++){
+      const x = (px + .5 - f.Rr)/f.Rr, y = (py + .5 - f.Rr)/f.Rr, q = x*x + y*y; if(q >= 1) continue;
+      const z = Math.sqrt(1 - q); xyz.push(py*n + px, x, y, z, Math.max(0, x*Lx + y*Ly + z*Lz));
+    }
+    f.xyz = Float64Array.from(xyz); f.pix = new Float64Array(f.xyz.length); f.pixTilt = null; f.retilt();
+    const sc = document.createElement('canvas'); sc.width = Math.ceil(W*DPR); sc.height = Math.ceil(H*DPR); const g = sc.getContext('2d'); g.scale(DPR, DPR);
+    const bgGr = g.createRadialGradient(W/2, H*.55, 0, W/2, H*.55, Math.max(W, H)*.8); bgGr.addColorStop(0, '#101a33'); bgGr.addColorStop(1, '#03050c'); g.fillStyle = bgGr; g.fillRect(0, 0, W, H);
+    const r2 = BB.mulberry(99); for(let i = 0; i < W*H/1800; i++){ g.fillStyle = `rgba(255,255,245,${.3 + r2()*.7})`; const s = r2() < .9 ? 1 : 2; g.fillRect(r2()*W, r2()*H, s, s); }
+    f.stars = sc;
+  };
+  // the planet nods slowly so that both poles come round
+  f.retilt = () => {
+    const ct = Math.cos(f.tilt), st = Math.sin(f.tilt), A = f.xyz, P = f.pix;
+    for(let k = 0; k < A.length; k += 5){ const x = A[k+1], y = A[k+2], z = A[k+3], y2 = y*ct - z*st, z2 = y*st + z*ct; P[k] = A[k]; P[k+1] = Math.asin(-y2); P[k+2] = Math.atan2(x, z2); P[k+3] = A[k+4]; P[k+4] = z; }
+    f.pixTilt = f.tilt;
+  };
+  // screen point to latitude/longitude, or null off the planet
+  f.toGeo = (px, py) => {
+    const x = (px - f.cx)/f.R, y = (py - f.cy)/f.R, q = x*x + y*y; if(q >= 1) return null;
+    const z = Math.sqrt(1 - q), ct = Math.cos(f.tilt), st = Math.sin(f.tilt), y2 = y*ct - z*st, z2 = y*st + z*ct;
+    return [Math.asin(-y2), Math.atan2(x, z2) + f.rot];
+  };
+  f.popCap = (lat0, lon0, rho) => {
+    let got = 0; const MW = f.MW, MH = f.MH, cr = Math.cos(rho), sl0 = Math.sin(lat0), cl0 = Math.cos(lat0);
+    const j0 = Math.max(0, Math.floor(((lat0 - rho)/Math.PI + .5)*MH)), j1 = Math.min(MH - 1, Math.ceil(((lat0 + rho)/Math.PI + .5)*MH));
+    for(let j = j0; j <= j1; j++){
+      const lat = ((j + .5)/MH - .5)*Math.PI, den = Math.cos(lat)*cl0; let dl;
+      if(den < 1e-9) dl = Math.PI; else { const c = (cr - Math.sin(lat)*sl0)/den; if(c > 1) continue; dl = c < -1 ? Math.PI : Math.acos(c); }
+      const i0 = Math.floor((lon0 - dl)/(2*Math.PI)*MW), i1 = Math.ceil((lon0 + dl)/(2*Math.PI)*MW);
+      for(let i = i0; i <= i1; i++){ const ii = ((i % MW) + MW) % MW, k = j*MW + ii; if(!popped[k]){ popped[k] = 1; got += rowW[j]; } }
+    }
+    f.done += got; return got/f.total*WORLD;
+  };
+  f.hit = (px, py) => {
+    const geo = f.toGeo(px, py); if(!geo) return 0;
+    const n = f.popCap(geo[0], geo[1], f.reach());
+    if(n > 0){ SND.crackle(n); rings.push({ x: px, y: py, r0: 4, r1: f.reach()*f.R*1.1, t: 0, life: .35, a: .8, w: 3 }); puff(px, py, 6, 6); }
+    return n;
+  };
+  f.press = (px, py) => { f.last = [px, py]; if(f.hit(px, py) > 0) SND.giant(); };
+  f.drag = (px, py, down) => { if(!down || !f.last){ f.last = down ? [px, py] : null; return; } const [lx, ly] = f.last, d = Math.hypot(px - lx, py - ly), step = Math.max(4, f.reach()*f.R*.4), n = Math.ceil(d/step); for(let k = 1; k <= n; k++) f.hit(lx + (px - lx)*k/n, ly + (py - ly)*k/n); f.last = [px, py]; };
+  f.release = () => { f.last = null; };
+  f.step = (dt, t) => {
+    f.rot += dt*.22; if(f.flash > 0) f.flash = Math.max(0, f.flash - dt*.6);
+    f.tilt = .62*Math.sin(t*.21); if(Math.abs(f.tilt - f.pixTilt) > .015) f.retilt();
+    if(!f.ended && f.frac() > .985){ f.ended = true; f.endT = t; for(let j = 0; j < f.MH; j++) for(let i = 0; i < f.MW; i++) popped[j*f.MW + i] = 1; f.done = f.total; f.flash = 1; SND.giant(); setTimeout(() => SND.giant(), 180); shake = 1; }
+    if(f.ended && t - f.endT > 2.2 && mode === 'finale') finishFinale();
+    if(f.counter) f.counter.innerHTML = `<div class="hand" style="font-size:19px;color:#5b4a1c">${tr('finale.pct', { p: (Math.floor(f.frac()*1000)/10).toLocaleString(LOC()) })}</div><div style="font-family:var(--mono);font-weight:600;font-size:22px">${fmtLong(f.frac()*WORLD)}</div>`;
+  };
+  f.render = (t) => {
+    cx.setTransform(DPR, 0, 0, DPR, 0, 0); cx.drawImage(f.stars, 0, 0, W, H);
+    const n = 2*f.Rr, d = f.img.data, P = f.pix, K = 36, rot = f.rot, MW = f.MW, MH = f.MH;
+    d.fill(0);
+    for(let k = 0; k < P.length; k += 5){
+      const idx = P[k], lat = P[k+1], lon = P[k+2] + rot, lam = P[k+3], z = P[k+4];
+      const v = Math.min(MH - 1, Math.floor((lat/Math.PI + .5)*MH)), u = ((Math.floor((lon/(2*Math.PI))*MW) % MW) + MW) % MW, mk = (v*MW + u)*3;
+      let r = map[mk], g = map[mk+1], b = map[mk+2];
+      const light = .28 + .72*lam;
+      r *= light; g *= light; b *= light;
+      if(!popped[v*MW + u]){
+        // a bubble of the wrap at this point: its distance from the nearest bubble centre shapes rim and highlight
+        const a = lon*K*Math.cos(lat), bb = lat*K, row = Math.round(bb/SQ), off = (row & 1)*.5, col = Math.round(a - off), dx = a - col - off, dy = bb - row*SQ, dd = Math.sqrt(dx*dx + dy*dy)/.47;
+        const rim = dd > .7 ? Math.min(1, (dd - .7)/.3) : 0, hs = Math.exp(-((dx + .15)*(dx + .15) + (dy - .15)*(dy - .15))/.006)*lam;
+        const w = 30 + 70*rim*rim + 200*hs; r = r*.82 + w; g = g*.82 + w; b = b*.82 + w + 8;
+      } else { const c = ((u*7 + v*13) % 5)*3; r += c; g += c; b += c; }
+      // limb darkening, then the light from the finale's flash
+      const limb = .55 + .45*Math.sqrt(z), fl = f.flash*180;
+      d[idx*4] = Math.min(255, r*limb + fl); d[idx*4 + 1] = Math.min(255, g*limb + fl); d[idx*4 + 2] = Math.min(255, b*limb + fl); d[idx*4 + 3] = 255;
+    }
+    f.g.putImageData(f.img, 0, 0);
+    const sx = shake ? (Math.random() - .5)*shake*10 : 0, sy = shake ? (Math.random() - .5)*shake*10 : 0;
+    cx.save(); cx.translate(sx, sy);
+    const at = cx.createRadialGradient(f.cx, f.cy, f.R*.95, f.cx, f.cy, f.R*1.18); at.addColorStop(0, 'rgba(120,180,255,.35)'); at.addColorStop(1, 'rgba(120,180,255,0)'); cx.fillStyle = at; cx.beginPath(); cx.arc(f.cx, f.cy, f.R*1.18, 0, 6.283); cx.fill();
+    cx.imageSmoothingEnabled = true; cx.drawImage(f.cv, f.cx - f.R, f.cy - f.R, f.R*2, f.R*2);
+    drawFx(cx);
+    if(ptr.x > -500 && !f.ended){ const rr = f.reach()*f.R; cx.strokeStyle = ptr.down ? '#ffd76a' : 'rgba(255,215,106,.6)'; cx.lineWidth = 3; cx.setLineDash([8, 6]); cx.beginPath(); cx.arc(ptr.x, ptr.y, rr, 0, 6.283); cx.stroke(); cx.setLineDash([]); }
+    cx.restore();
+  };
+  f.resize();
+  return f;
+}
+function startFinale(){
+  audio(); finale = makeFinale(); mode = 'finale'; show(null); $('hud').hidden = true;
+  const c = document.createElement('div'); c.className = 'note'; c.id = 'finCounter';
+  c.style.cssText = 'position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 12px);transform:translateX(-50%) rotate(-1deg);padding:8px 16px 10px;z-index:2;text-align:center;font-variant-numeric:tabular-nums;pointer-events:none';
+  document.body.appendChild(c); finale.counter = c;
+  c.innerHTML = '';
+  const h = $('hint'); h.textContent = tr('finale.hint'); h.hidden = false;
+}
+function finishFinale(){
+  mode = 'ended'; S.finale.done = true; S.finale.pops = WORLD; S.lifePops += WORLD; save();
+  const c = $('finCounter'); if(c) c.remove(); $('hint').hidden = true;
+  $('endStats').innerHTML = `<p>${tr('end.stats', { pops: fmtLong(S.lifePops), time: fmtDur(S.playTime), quits: S.quits })}</p>`;
+  applyStatic(); show('sEnd');
+}
+$('bEndGo').onclick = () => { finale = null; mode = 'trees'; layout(); paintScene(S.stage); previewSheet(); openTrees('run'); };
 
 /* ================= input ================= */
 cv.addEventListener('pointerdown', e => {
@@ -1673,9 +1818,9 @@ function frame(now){
     hud();
     if(run.over) endRun();
   }
-  if(mode === 'finale' && finale) finale.step(dt, t);
+  if((mode === 'finale' || mode === 'ended') && finale) finale.step(dt, t);
   stepFx(dt);
-  if(mode === 'finale' && finale) finale.render(t); else render(t);
+  if((mode === 'finale' || mode === 'ended') && finale) finale.render(t); else render(t);
   requestAnimationFrame(frame);
 }
 function resize(){
@@ -1692,7 +1837,7 @@ applyStatic(); refreshTitle();
 W = innerWidth; H = innerHeight; resize(); previewSheet();
 show('sTitle');
 requestAnimationFrame(frame);
-window.BBUI = { get S(){ return S; }, get run(){ return run; }, get view(){ return view; }, get mode(){ return mode; }, startRun, openTrees, toSheet, save };
+window.BBUI = { get S(){ return S; }, get run(){ return run; }, get view(){ return view; }, get mode(){ return mode; }, get finale(){ return finale; }, startRun, openTrees, startFinale, toSheet, save };
 
 </script>
 </body>

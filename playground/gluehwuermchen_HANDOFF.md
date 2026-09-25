@@ -188,6 +188,10 @@ funktionieren.
   `npm`-Skript). Für ein Incremental heißt das: Bots mit menschlichen Grenzen spielen das ganze
   Spiel durch, und die Suite prüft Tempo-Ziele (erstes Prestige, Gesamtdauer, keine endlosen
   Runden). Das lohnt sich hier, weil jede Zahl an allem zieht.
+- **Referenz:** `games/bubble_break.html` (das fertige Luftpolster-Spiel) und `test/bubble_break.mjs`
+  auf demselben Branch zeigen das ganze Muster: Core-Block, Bot mit menschlichen Grenzen,
+  Tempo-Prüfungen, englisch/deutsche Texte mit Umschalter. Die Balance-Lehren daraus stehen in
+  `IDEAS.md` unter „an incremental built to escalate“.
 - Lies auch `IDEAS.md`, zuerst den Abschnitt **Read this first**. Er erklärt, wie der Katalog
   schmaler wurde. Ein Cozy-Incremental mit Stimmung ist dort ausdrücklich willkommen.
 

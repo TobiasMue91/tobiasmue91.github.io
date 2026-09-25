@@ -1114,6 +1114,33 @@ statistic.
 the log says "best was QUEENIE for 102" under your 13. The end screen totals it into the share of
 available points you took. That number moves as you learn, which is the reason to play a second game.
 
+Filled since: **an incremental built to escalate**, by `games/bubble_break.html` — pop bubble
+wrap on a coffee break, quit for calluses, move from a desk to a warehouse to a factory, pop the
+world. Chosen from three playable prototypes (a Katamari snowball and a firefly jar lost); the
+verb was then chosen on a test page of three variants, and the one that made the player slow
+down lost although it made sense. Balanced by a human-limited bot playing the whole career in
+`test/bubble_break.mjs`. Four things generalise.
+
+**Diminishing returns are not a cap.** Bonus time worth less the more you already have still grew
+like a square root: at warehouse scale, with hundreds of espresso bubbles a sheet, a break ran the
+full 400 seconds the bot allowed. What held was a jar — bonus time fills three quarters of the
+base break and no more.
+
+**A share of the last cycle is a lump sum worth the whole tree.** Earnings inside a cycle grow
+exponentially, so "start with 8 % of what you earned" was most of the last break and bought 73 of
+80 tree levels at once. The replacement pays a multiplier on the first break instead: it helps the
+climb and cannot skip it. The check that caught it is general: no new cycle may hand over more than
+half its tree after one run.
+
+**Specials are counted, not sprinkled.** At half a million bubbles a 1.5 % gold rate is 8,400 gold
+bubbles, none of which a player can go and get. Counts are capped per sheet, and the cap grows
+with the upgrade, or its later levels buy nothing ("8 → 8").
+
+**Make automation structurally unable to replace the player.** Machines leave gold, espresso and
+giant bubbles alone, and a sheet only ends when every bubble is gone, so a machine alone earns
+about a tenth of a player however fast it is. Let it take gold and giants and the same machine
+earns 87 %.
+
 ## Tried and rejected
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose

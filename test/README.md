@@ -193,3 +193,33 @@ diving with floating every frame.
 Each check has been seen failing: no dive tuck (the feel floors fall), a prediction that forgets
 the push at an island border (the ring drifts), a border blend too short for Dreamland's hills
 (a cliff at island 29), and a fever one slide late.
+
+## Bubble Break
+
+```sh
+npm run test:bubble                      # or: node test/bubble_break.mjs  (about 25 seconds)
+node test/bubble_break.mjs sheet rules   # named suites only
+node test/bubble_break.mjs --page=old.html
+```
+
+An incremental is a web of numbers in which every constant pulls on all the others: one cheaper
+node, one more second of break time or a bigger sheet can turn a two-and-a-half-hour career into
+twenty minutes, or a break into one that never ends, and nothing in the diff shows it. The page
+keeps its sheets, verbs, trees and economy in a `<script id="core">` block with no DOM; the suite
+runs that block alone in Node's `vm`. Its player is limited the way a person is: five taps a
+second with a few pixels of aim error, swipes at 1,500 px a second across a sheet drawn 900 px
+wide, specials first, thick bubbles held. Between breaks it buys the cheapest thing it can, and
+it quits when its callus gain stops growing.
+
+| suite | what it checks |
+| --- | --- |
+| `sheet` | a circle pops exactly the bubbles whose centres lie inside it (480 circles against brute force); the count of bubbles left matches the bitset after mixed actions; a swipe never pops more than its strength; a press, a swipe and a new sheet at half a million bubbles stay within a frame's budget |
+| `rules` | thick bubbles need a held press; pressing a flat one spoils the combo, swiping over it costs strength; machines leave gold and espresso to the player; espresso never adds more than 75 % of the break; giants take exactly their presses, a swipe counts once, and their shockwave pops; a cleared sheet pays and stops the clock while the next slides in; forks, Flexible and the intern; quitting, the coffee fund and when a new workplace takes effect |
+| `idle` | a break without touching the wrap earns nothing; a fully built machine earns under 40 % of a player |
+| `pacing` | two seeded careers: first quit, warehouse, factory and world each inside their window, no break past 90 s, the factory popping over a hundred times faster than the desk, no job handing over half its break tree after one break, one to four jobs per workplace |
+
+Each check has been seen failing: bonus time without its cap, flat bubbles that spoil a swipe,
+machines that take gold, a swipe that overshoots its strength, a circle a third of a bubble too
+wide, forks that do not exclude, a giant counted twice by one swipe, thick bubbles that pop at a
+touch, a clock that runs during the slide, a machine that takes gold and giants (87 % of a
+player), a start-of-job lump sum worth most of the tree, and a first break stretched to 137 s.
