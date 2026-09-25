@@ -1,7 +1,8 @@
 // Time travel: the bar at the foot of the home page that shows gptgames.dev as it
 // looked on an earlier day. The days come from timeline_data.json (util/timeline.py
 // builds it from git); each one is a commit, and its pages are loaded straight from
-// that commit into a frame over the live page.
+// that commit into a frame over the live page. On a game or tool the slider can walk
+// through that one page instead, commit by commit, from timeline_pages.json.
 (function () {
     if (window !== window.top || window.__timeTravel) return;
 
@@ -21,9 +22,19 @@
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     let points = [];        // oldest first; the last one is the live site
-    let index = 0;          // the point the slider stands on
+    let index = 0;          // the day the slider stands on; in page mode the day the version came from
     let shownIndex = -1;    // the point the frame shows, -1 while on the live site
     let path = 'index.html';
+    // Page mode: on a page with several versions the slider walks through those.
+    let scope = 'page';     // what the visitor last chose to walk through there: 'page' or 'site'
+    let versions = null;    // the versions of the page on show, oldest first; null on the home page
+    let versionsOf = null;  // the path they were looked up for
+    let version = -1;       // the version the slider stands on, -1 if the page did not exist yet
+    let shownVersion = -1;  // the version the frame shows, -1 when it shows a day
+    let wantVersion = null; // a hash from the address bar, until the versions are known
+    let moment = 0;         // the time on show, in ms; a new page opens at its version of that time
+    let marks = null;       // what the slider's marks were last drawn for
+    let pagesRequest = null;
     let frame = null;
     let request = 0;
     let travelTimer = null;
@@ -38,6 +49,11 @@
     const initialState = history.state || {};
 
     window.__timeTravel = {open: openPath, exit: exit};
+    const SCOPE_KEY = 'timeTravelScope';
+    try {
+        if (localStorage.getItem(SCOPE_KEY) === 'site') scope = 'site';
+    } catch (e) { /* no storage, no memory */
+    }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
@@ -83,56 +99,47 @@
                 </div>
                 <div class="tt-row tt-info">
                     <span id="tt-date"></span>
+                    <span id="tt-count"></span>
                     <span id="tt-model"></span>
                     <span id="tt-where"></span>
                     <span id="tt-status" role="status" aria-live="polite"></span>
+                    <span id="tt-scope" role="group" aria-label="What the slider walks through" hidden>
+                        <button type="button" data-scope="site" title="Step through the days of the whole site">Whole site</button>
+                        <button type="button" data-scope="page" title="Step through every version of this page"></button>
+                    </span>
                     <span class="tt-actions">
                         <button type="button" id="tt-back" hidden>↩ Back</button>
                         <a id="tt-commit" target="_blank" rel="noopener" hidden>Commit ↗</a>
                         <button type="button" id="tt-exit" hidden>✕ Back to today</button>
                     </span>
+                    <span id="tt-message" hidden></span>
                 </div>
             </div>`;
         document.body.appendChild(bar);
-
-        const years = bar.querySelector('.tt-years');
-        let lastYear = null;
-        points.forEach((p, i) => {
-            if (p.live) return;
-            const year = new Date(p.timestamp).getFullYear();
-            if (year === lastYear) return;
-            lastYear = year;
-            const tick = document.createElement('span');
-            tick.textContent = year;
-            tick.style.left = pct(i);
-            years.appendChild(tick);
-        });
         const models = bar.querySelector('.tt-models');
-        points.forEach((p, i) => {
-            if (!p.GptVersion) return;
-            const tag = document.createElement('span');
-            tag.textContent = p.GptVersion;
-            tag.style.left = pct(i);
-            tag.dataset.i = i;
-            models.appendChild(tag);
-        });
 
         $('tt-tab').addEventListener('click', () => setOpen($('tt-panel').hidden));
         const range = $('tt-range');
         range.addEventListener('input', () => {
-            index = Number(range.value);
+            const i = Number(range.value);
+            if (pageMode()) version = i;
+            else index = i;
             showReadout();
             clearTimeout(travelTimer);
-            travelTimer = setTimeout(() => jump(index), 300);
+            travelTimer = setTimeout(() => go(i), 300);
         });
-        range.addEventListener('change', () => jump(Number(range.value)));
+        range.addEventListener('change', () => go(Number(range.value)));
+        $('tt-scope').addEventListener('click', e => {
+            const button = e.target.closest('[data-scope]');
+            if (button) setScope(button.dataset.scope);
+        });
         $('tt-prev').addEventListener('click', () => step(-1));
         $('tt-next').addEventListener('click', () => step(1));
         $('tt-exit').addEventListener('click', leave);
         $('tt-back').addEventListener('click', () => history.back());
         models.addEventListener('click', e => {
             const tag = e.target.closest('[data-i]');
-            if (tag) jump(Number(tag.dataset.i));
+            if (tag) go(Number(tag.dataset.i));
         });
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape' && shownIndex >= 0) leave();
@@ -145,9 +152,51 @@
         showReadout();
     }
 
-    // The slider thumb is 16px wide, so point i sits that far in from either end.
-    function pct(i) {
-        return `calc(8px + (100% - 16px) * ${i / (points.length - 1)})`;
+    // The slider thumb is 16px wide, so stop i of n sits that far in from either end.
+    function pct(i, n) {
+        return `calc(8px + (100% - 16px) * ${i / (n - 1)})`;
+    }
+
+    // The slider walks through the days of the site, or through the versions of the
+    // page on show; its range and its marks (years, model names) follow.
+    function syncSlider() {
+        const range = $('tt-range');
+        const page = pageMode();
+        const stops = page ? versions : points;
+        const key = page ? 'page:' + versionsOf : 'site';
+        range.max = stops.length - 1;
+        range.value = page ? version : index;
+        range.setAttribute('aria-label', page ? 'Version of this page' : 'Date to travel to');
+        if (key === marks) return;
+        marks = key;
+        const years = document.querySelector('#tt .tt-years');
+        const models = document.querySelector('#tt .tt-models');
+        years.textContent = models.textContent = '';
+        let lastYear = null;
+        let lastModel = null;
+        stops.forEach((p, i) => {
+            if (p.live === true) return;
+            const year = new Date(p.timestamp).getFullYear();
+            if (year !== lastYear) {
+                lastYear = year;
+                const tick = document.createElement('span');
+                tick.textContent = year;
+                tick.style.left = pct(i, stops.length);
+                years.appendChild(tick);
+            }
+            // A day names the model that arrived on it; a version the model it was made
+            // in, wherever that changes from the version before.
+            const model = page ? modelAtTime(p.t) : p.GptVersion;
+            if (model && model !== lastModel) {
+                const tag = document.createElement('span');
+                tag.textContent = model;
+                tag.style.left = pct(i, stops.length);
+                tag.dataset.i = i;
+                models.appendChild(tag);
+            }
+            if (page) lastModel = model;
+        });
+        if (!$('tt-panel').hidden) layoutMarks();
     }
 
     // Each model name takes the lowest lane where it overlaps no other, and the
@@ -190,7 +239,12 @@
     }
 
     function step(delta) {
-        jump(Math.max(0, Math.min(points.length - 1, index + delta)));
+        if (pageMode()) go(Math.max(0, Math.min(versions.length - 1, version + delta)));
+        else go(Math.max(0, Math.min(points.length - 1, index + delta)));
+    }
+
+    function go(i) {
+        return pageMode() ? jumpVersion(i) : jump(i);
     }
 
     // A new day replaces the current history entry (scrubbing through a year should
@@ -200,10 +254,60 @@
         if (points[i].live) return leave();
         index = i;
         $('tt-range').value = i;
-        if (i === shownIndex && tripDepth() > 0) return showReadout();
+        if (i === shownIndex && shownVersion < 0 && tripDepth() > 0) return showReadout();
+        moment = Date.parse(points[i].timestamp);
+        version = versions ? versionAt(moment) : -1;
         record(tripDepth() > 0 ? 'replace' : 'push');
         showReadout();
-        travel(i);
+        travel();
+    }
+
+    // Page mode is only ever reached inside a trip, so a version never starts one.
+    function jumpVersion(k) {
+        clearTimeout(travelTimer);
+        version = k;
+        moment = versions[k].live;
+        index = dayIndex(liveDay(versions[k]));
+        $('tt-range').value = k;
+        if (k === shownVersion) return showReadout();
+        record('replace');
+        showReadout();
+        travel();
+    }
+
+    // Choosing what the slider walks through reloads the frame from that: the day
+    // holds whatever the page had become by its end, the version only itself.
+    function setScope(next) {
+        if (next === scope && (next === 'site' || pageMode())) return;
+        scope = next;
+        try {
+            localStorage.setItem(SCOPE_KEY, scope);
+        } catch (e) { /* remembered for this visit only */
+        }
+        if (scope === 'page' && versions && version < 0) version = 0;
+        if (scope === 'page' && pageMode()) moment = versions[version].live;
+        record('replace');
+        showReadout();
+        travel();
+    }
+
+    function pageMode() {
+        return scope === 'page' && versions !== null && versions.length > 1 && version >= 0;
+    }
+
+    // The last version that had reached the site by then.
+    function versionAt(time) {
+        let k = -1;
+        versions.forEach((v, i) => {
+            if (v.live <= time) k = i;
+        });
+        return k;
+    }
+
+    // The first day of the site on or after this one; the last one if none is.
+    function dayIndex(day) {
+        const i = points.findIndex(p => !p.live && dayOf(p) >= day);
+        return i < 0 ? points.length - 2 : i;
     }
 
     function formatDate(p) {
@@ -219,25 +323,55 @@
         return null;
     }
 
+    // The same for a moment in between: the last model named on or before its day.
+    function modelAtTime(time) {
+        const day = new Date(time).toISOString().slice(0, 10);
+        let model = null;
+        points.forEach(p => {
+            if (!p.live && p.GptVersion && dayOf(p) <= day) model = p.GptVersion;
+        });
+        return model;
+    }
+
     function showReadout() {
-        const p = points[index];
-        const date = p.live ? 'Today' : formatDate(p);
+        syncSlider();
+        const page = pageMode();
+        const p = page ? versions[version] : points[index];
+        const date = p.live === true ? 'Today' : formatDate(p);
         $('tt-date').textContent = date;
-        const model = p.live ? null : modelAt(index);
+        $('tt-count').textContent = page ? `Version ${version + 1} of ${versions.length}` : '';
+        const model = p.live === true ? null : page ? modelAtTime(p.t) : modelAt(index);
         $('tt-model').textContent = model ? model + ' era' : '';
-        $('tt-range').setAttribute('aria-valuetext', p.live ? 'Today, the live site' : date);
-        $('tt-prev').disabled = index === 0;
-        $('tt-next').disabled = index === points.length - 1;
-        $('tt-where').textContent = shownIndex >= 0 && path !== 'index.html' ? '/' + path : '';
+        $('tt-range').setAttribute('aria-valuetext', p.live === true ? 'Today, the live site' :
+            page ? `${date}, version ${version + 1} of ${versions.length}: ${p.message}` : date);
+        const last = page ? versions.length - 1 : points.length - 1;
+        $('tt-prev').disabled = (page ? version : index) === 0;
+        $('tt-next').disabled = (page ? version : index) === last;
+        [['tt-prev', 'Previous'], ['tt-next', 'Next']].forEach(([id, word]) => {
+            const label = `${word} ${page ? 'version' : 'snapshot'}`;
+            $(id).title = label;
+            $(id).setAttribute('aria-label', label);
+        });
+        $('tt-where').textContent = shownIndex >= 0 && path !== 'index.html' ? '/' + (page ? p.path : path) : '';
+        const message = $('tt-message');
+        message.hidden = !page;
+        message.textContent = page ? p.message : '';
+        message.title = page ? p.message : '';
+        const toggle = $('tt-scope');
+        toggle.hidden = !(shownIndex >= 0 && versions && versions.length > 1);
+        if (versions) toggle.querySelector('[data-scope="page"]').textContent = `This page · ${versions.length} versions`;
+        toggle.querySelectorAll('[data-scope]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.scope === (page ? 'page' : 'site'))));
         $('tt-back').hidden = !(shownIndex >= 0 && tripDepth() > 1);
         $('tt-exit').hidden = shownIndex < 0;
         const commit = $('tt-commit');
-        commit.hidden = p.live;
-        if (!p.live) commit.href = `https://github.com/${REPO}/commit/${p.hash}`;
-        $('tt-tab-label').textContent = shownIndex >= 0 ? 'Time travel · ' + formatDate(points[shownIndex]) : 'Time travel';
+        commit.hidden = p.live === true;
+        if (p.live !== true) commit.href = `https://github.com/${REPO}/commit/${p.hash}`;
+        const shown = shownVersion >= 0 && versions ? versions[shownVersion] : points[shownIndex];
+        $('tt-tab-label').textContent = shownIndex >= 0 ? 'Time travel · ' + formatDate(shown) : 'Time travel';
         document.querySelectorAll('#tt .tt-models span').forEach(tag => {
             tag.classList.toggle('on', tag.textContent === model);
         });
+        fitFrame();
     }
 
     function setStatus(text, isError) {
@@ -258,8 +392,11 @@
         if (!p || p.endsWith('/')) p += 'index.html';
         if (shownIndex < 0 || p === path) return;
         path = p;
+        versions = null;
+        version = -1;
         record('push');
-        travel(index, true);
+        showReadout();
+        travel();
     }
 
     // ---------- History ----------
@@ -268,19 +405,27 @@
         return p.timestamp.slice(0, 10);
     }
 
+    // The day a version reached the site, which for a pull request is its merge.
+    function liveDay(v) {
+        return new Date(v.live).toISOString().slice(0, 10);
+    }
+
     // How many entries of the current trip lie at and behind this one; 0 on the live site.
     function tripDepth() {
         return (history.state && history.state.ttDepth) || 0;
     }
 
     // The live URL (arcade.js's filters and all) plus the trip, or without it for null.
+    // In page mode the trip names its version too: ?travel=…&page=…&v=<commit>. The day
+    // stays the one of the site, so a page opened from 22 Apr is still of 22 Apr for
+    // the home page and the whole-site slider until the page's own slider moves.
     function tripURL(i) {
         const url = new URL(location.href);
-        url.searchParams.delete('travel');
-        url.searchParams.delete('page');
+        ['travel', 'page', 'v'].forEach(key => url.searchParams.delete(key));
         if (i !== null) {
             url.searchParams.set('travel', dayOf(points[i]));
             if (path !== 'index.html') url.searchParams.set('page', path);
+            if (pageMode()) url.searchParams.set('v', versions[version].hash.slice(0, 12));
         }
         return url.pathname + url.search.replace(/%2F/gi, '/') + url.hash;
     }
@@ -306,7 +451,9 @@
         }
     }
 
-    // After Back or Forward (or on arrival), show whatever the address bar says.
+    // After Back or Forward (or on arrival), show whatever the address bar says. A
+    // version in it puts the bar in page mode; without one the page opens as the
+    // visitor last chose, at the version of that day.
     function followURL(params) {
         const day = params.get('travel');
         const i = day ? points.findIndex(p => !p.live && dayOf(p) >= day) : -1;
@@ -316,9 +463,14 @@
         }
         clearTimeout(travelTimer);
         index = i;
-        path = params.get('page') || 'index.html';
-        $('tt-range').value = i;
-        travel(i, true);
+        moment = Date.parse(points[i].timestamp);
+        const next = params.get('page') || 'index.html';
+        if (next !== path) versions = null;
+        path = next;
+        wantVersion = params.get('v');
+        if (wantVersion) scope = 'page';
+        if (versions) pickVersion();
+        travel();
         showReadout();
         return true;
     }
@@ -334,26 +486,85 @@
         }
     }
 
-    function travel(i, force) {
-        const p = points[i];
-        if (p.live) return exit();
-        if (i === shownIndex && !force) return;
+    // Loads what the slider stands on: a version of the page in page mode, else the
+    // page as it was on the day. A page's versions are looked up first, so that one
+    // opened from a day comes up in page mode.
+    function travel() {
+        const i = index;
+        if (points[i].live) return exit();
         const token = ++request;
         setStatus('Travelling…');
-        load(p.hash, path).then(html => {
+        lookUpVersions().then(() => {
             if (token !== request) return;
-            show(i, html);
-            setStatus('');
-        }, error => {
-            if (token !== request) return;
-            if (error.missing && path !== 'index.html') {
-                show(i, missingPage(p));
+            const k = pageMode() ? version : -1;
+            // The address bar may have been written before the versions were known.
+            if (k >= 0) history.replaceState(history.state, '', tripURL(index));
+            showReadout();
+            const p = k >= 0 ? versions[k] : points[index];
+            return load(p.hash, k >= 0 ? p.path : path).then(html => {
+                if (token !== request) return;
+                show(index, k, html);
                 setStatus('');
-            } else {
-                console.error('Time travel failed:', error);
-                setStatus(error.missing ? 'Nothing to show for this day.' : 'Could not load this day — try again.', true);
-            }
+            }, error => {
+                if (token !== request) return;
+                if (error.missing && path !== 'index.html') {
+                    show(index, -1, missingPage());
+                    setStatus('');
+                } else {
+                    console.error('Time travel failed:', error);
+                    setStatus(error.missing ? 'Nothing to show for this day.' : 'Could not load this day — try again.', true);
+                }
+            });
         });
+    }
+
+    // timeline_pages.json is only fetched once a trip leaves the home page. Without it
+    // every page simply travels by day.
+    function loadPages() {
+        if (!pagesRequest) {
+            pagesRequest = fetch('timeline_pages.json')
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
+                .catch(error => {
+                    console.warn('Page versions unavailable:', error);
+                    return {};
+                });
+        }
+        return pagesRequest;
+    }
+
+    function lookUpVersions() {
+        if (path === 'index.html') {
+            versions = versionsOf = null;
+            version = -1;
+            return Promise.resolve();
+        }
+        if (versions && versionsOf === path) return Promise.resolve();
+        const wanted = path;
+        return loadPages().then(pages => {
+            if (path !== wanted) return;
+            let key = path;
+            let rows = pages[key];
+            if (typeof rows === 'string') rows = pages[key = rows];
+            versions = Array.isArray(rows) ? rows.map(([hash, timestamp, message, extra]) => ({
+                hash, timestamp, message,
+                t: Date.parse(timestamp),
+                live: Date.parse((extra && extra.live) || timestamp),
+                path: (extra && extra.path) || key
+            })) : null;
+            versionsOf = path;
+            pickVersion();
+        });
+    }
+
+    // Which version a page opens at: the one the address bar names, or the one that
+    // was on the site at the moment on show; failing that the one of the day.
+    function pickVersion() {
+        version = -1;
+        if (!versions) return;
+        if (wantVersion) version = versions.findIndex(v => v.hash.startsWith(wantVersion));
+        wantVersion = null;
+        if (version < 0) version = versionAt(moment);
+        if (version < 0) version = versionAt(Date.parse(points[index].timestamp));
     }
 
     function load(hash, file) {
@@ -400,7 +611,8 @@
         return (doc.doctype ? '<!DOCTYPE html>\n' : '') + doc.documentElement.outerHTML;
     }
 
-    function missingPage(p) {
+    function missingPage() {
+        const p = points[index];
         const esc = s => s.replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
         return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
             body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0d0b14;color:#f5ecd4;font:15px/1.6 system-ui,sans-serif;text-align:center;padding:20px;box-sizing:border-box}
@@ -409,16 +621,17 @@
             <button type="button" onclick="parent.__timeTravel.open('index.html')">Go to the home page of that day</button></div></body></html>`;
     }
 
-    function show(i, html) {
+    function show(i, k, html) {
         // A fresh frame each time: reusing one would keep the old page's timers running.
         const next = document.createElement('iframe');
         next.id = 'tt-frame';
-        next.title = 'gptgames.dev on ' + formatDate(points[i]);
+        next.title = 'gptgames.dev on ' + formatDate(k >= 0 ? versions[k] : points[i]);
         next.srcdoc = html;
         document.body.appendChild(next);
         if (frame) frame.remove();
         frame = next;
         shownIndex = i;
+        shownVersion = k;
         document.documentElement.classList.add('tt-travelling');
         fitFrame();
         showReadout();
@@ -430,7 +643,10 @@
         if (frame) frame.remove();
         frame = null;
         shownIndex = -1;
+        shownVersion = -1;
         path = 'index.html';
+        versions = versionsOf = null;
+        version = -1;
         index = points.length - 1;
         $('tt-range').value = index;
         document.documentElement.classList.remove('tt-travelling');
@@ -602,6 +818,14 @@
         #tt .tt-info{flex-wrap:wrap;gap:4px 14px;padding:2px 44px 0;min-height:30px}
         #tt-date{color:var(--amber,#ffc857);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em}
         #tt-model{color:var(--cyan,#4ee1d2)}
+        #tt-count{color:var(--ink,#f5ecd4)}
+        #tt-message{order:10;flex:1 1 100%;min-width:0;color:var(--ink-2,#b5abcc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        #tt-scope{display:flex}
+        #tt-scope button{padding:3px 8px;border:2px solid var(--line-2,#3a3352);background:none;color:var(--ink-3,#968bae);cursor:pointer;white-space:nowrap}
+        #tt-scope button+button{border-left:none}
+        #tt-scope button[aria-pressed="true"]{border-color:var(--cyan,#4ee1d2);color:var(--cyan,#4ee1d2)}
+        #tt-scope button[aria-pressed="true"]+button{border-left:2px solid var(--line-2,#3a3352)}
+        #tt-scope button:hover{color:var(--amber,#ffc857)}
         #tt-where{color:var(--ink-2,#b5abcc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40ch}
         #tt-status{color:var(--ink-3,#968bae)}
         #tt-status.err{color:var(--magenta,#ff3ca1)}
