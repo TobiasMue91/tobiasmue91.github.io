@@ -59,7 +59,7 @@ edits). By hand it means five edits:
 npx http-server -p 8099     # serve locally; pages need http, not file://
 python util/update.py       # refresh entry dates from git, re-shoot stale screenshots
 python util/new_entry.py    # register a newly added page
-python util/timeline.py     # rebuild timeline_data.json, the days the home page's time travel bar offers
+python util/timeline.py     # rebuild timeline_data.json and timeline_pages.json: the days and page versions time travel offers
 npm run test:server         # http-server on :80
 npm run test:cypress        # Cypress e2e — its baseUrl is :8080, so point one at the other
 npm run test:converter      # Everything Converter suite (needs a server on :8099)
@@ -69,6 +69,7 @@ npm run test:minesweeper    # Minesweeper suite (plain Node, no server or browse
 npm run test:connect4       # Connect Four AI suite (plain Node, no server or browser)
 npm run test:downhill       # Downhill Dreamer suite (plain Node, no server or browser)
 npm run test:bubble         # Bubble Break suite (plain Node, no server or browser)
+npm run test:towers         # Three Gates suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -76,7 +77,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seven exist so far. `test/everything_converter.mjs` drives
+Eight exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -104,6 +105,11 @@ every special rule, that a machine alone never replaces the player, that chain r
 older saves still load, and a human-limited bot playing the whole career, which must reach each of
 the four workplaces and the finale inside its time window without a break that never ends. Run it
 after touching any number in that block.
+`test/tower_defense.mjs` runs the DOM-free core of `games/mini_tower_defense.html` (Three Gates):
+the maps keep their roads apart, every wave spawns what its preview card said, and bots play whole
+games - a player who builds what the card names must outlast the same player building blind, and
+the old page's two-tower build must fall by the mid-teens. Run it after touching any number in the
+core; the `planner` suite (a bot that tries every purchase in a copy of the game) is slow and opt-in.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
