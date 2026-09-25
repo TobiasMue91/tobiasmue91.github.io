@@ -235,6 +235,21 @@ if(suites.includes('rules')){
     check(vals.slice(0, 5).every(v => Math.abs(v - 1.8*vals[5]) < 1e-6*v), 'Coffee fund 2 pays ×1.8 for the first five breaks of a job, then stops');
     S.cycleRuns = 0; S.cycleEarned = 0;
   }
+  // the live preview of quitting: the gain it shows is the gain you get, and one more comes exactly where it says
+  {
+    let bad = 0;
+    for(let k = 0; k < 200; k++){
+      const S = BB.newState(); S.callusesEarned = 1e5; BB.promote(S); S.stage = k % 4; S.orders = BB.newOrders(S);
+      S.orders.forEach((o, i) => { o.done = (k >> i) & 1 ? true : false; }); S.cl.reference = k % 3; S.cl.headhunter = (k >> 2) % 3;
+      const st = BB.STAGES[S.stage]; S.cycleEarned = st.gate * (1 + (k*37 % 97)*.37);
+      const extra = S.cycleEarned*.1, q = BB.quitInfo(S, extra);
+      const S2 = JSON.parse(JSON.stringify(S)); S2.cycleEarned += extra;
+      if(q.gain !== BB.quitGain(S2)) bad++;
+      S2.cycleEarned = q.next*(1 + 1e-9); if(BB.quitGain(S2) < q.gain + 1) bad++;
+      S2.cycleEarned = q.next*(1 - 1e-6); if(BB.quitGain(S2) !== q.gain) bad++;
+    }
+    check(!bad, 'the calluses shown during a break are what quitting pays, and the next one comes at the Plopps shown', `${bad} off`);
+  }
   // workplaces: promoted by calluses earned, never bought; any one you have reached can be the next job
   {
     check(!BB.CAREER.some(n => BB.STAGES.some(st => st.id === n.id)), 'no workplace is for sale in the career tree');
