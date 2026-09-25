@@ -211,16 +211,16 @@ if(suites.includes('rules')){
     const t0 = run.time; BB.step(run, .2);
     check(run.slide > 0 && run.time === t0, 'the clock stops while the next sheet slides in');
   }
-  // forks and the intern
+  // no forks: both sides of what used to be a choice can be bought, by you or the intern; Own mug
   {
-    const S = BB.newState(); S.plopps = 1e9; S.lv.cup = 1;
-    BB.buyRun(S, 'rhythm');
-    check(!BB.canBuyRun(S, BB.RUN_BY.thorough), 'taking Rhythm rules out Thoroughness in this job');
-    S.cl.flexible = 1;
-    check(BB.canBuyRun(S, BB.RUN_BY.thorough), 'Flexible allows both sides of a fork');
+    const S = BB.newState(); S.plopps = 1e9; S.lv.cup = 1; S.lv.thumb = 1; S.lv.strength = 1;
+    BB.buyRun(S, 'rhythm'); BB.buyRun(S, 'bang');
+    check(BB.canBuyRun(S, BB.RUN_BY.thorough) && BB.canBuyRun(S, BB.RUN_BY.wave), 'Rhythm and Thoroughness, Bang bubbles and Pressure wave all go together');
     const S2 = BB.newState(); S2.plopps = 1e12; Object.assign(S2.lv, { cup:1, thumb:1, strength:1 });
     BB.autoBuy(S2);
-    check(!BB.lv(S2, 'rhythm') && !BB.lv(S2, 'thorough') && !BB.lv(S2, 'bang') && !BB.lv(S2, 'wave'), 'the intern never picks a fork for you');
+    check(BB.lv(S2, 'rhythm') && BB.lv(S2, 'thorough') && BB.lv(S2, 'bang') && BB.lv(S2, 'wave'), 'the intern buys them all');
+    const S3 = BB.newState(); S3.cycleEarned = BB.STAGES[0].gate; S3.cl.flexible = 2; BB.quit(S3);
+    check(S3.lv.cup === 4, 'Own mug 2 starts every job with Bigger mug 4');
   }
   // quitting
   {
@@ -231,8 +231,8 @@ if(suites.includes('rules')){
     S.plopps = 1e6; S.lv.cup = 3; S.cl.memory = 2; S.cl.pinsub = 1; S.cl.savings = 2;
     const g = BB.quit(S);
     check(g === x8 && S.calluses === g && S.plopps === 0 && S.lv.cup === undefined && S.lv.strength === 2 && S.lv.machine === 1, 'quitting pays calluses, empties Plopps and the break tree, and applies the start bonuses');
-    const first = BB.startRun(S, { seed: 1 }).P.value, second = BB.startRun(S, { seed: 2 }).P.value;
-    check(Math.abs(first - 3*second) < 1e-9, 'the coffee fund triples what the first break of a job pays');
+    const vals = []; for(let k = 0; k < 6; k++) vals.push(BB.startRun(S, { seed: k }).P.value);
+    check(vals.slice(0, 5).every(v => Math.abs(v - 1.8*vals[5]) < 1e-6*v), 'Coffee fund 2 pays ×1.8 for the first five breaks of a job, then stops');
     S.cycleRuns = 0; S.cycleEarned = 0;
     S.calluses = 100; S.cl.memory = 2; BB.buyCareer(S, 'ship');
     check(S.stage === 1, 'buying the warehouse before the first break of a job moves you there at once');
@@ -412,7 +412,7 @@ if(suites.includes('idle')){
 /* ---------------- pacing ---------------- */
 if(suites.includes('pacing')){
   section('pacing');
-  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [30, 80], city: [55, 120], world: [110, 200] };
+  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [30, 80], city: [38, 120], world: [110, 200] };
   for(const seed of [1, 2]){
     const t0 = performance.now(), c = career(seed, 300), dur = ((performance.now() - t0)/1000).toFixed(0);
     console.log(`  seed ${seed}: first quit ${c.at.firstQuit?.toFixed(0)} min, warehouse ${c.at.ship?.toFixed(0)}, factory ${c.at.factory?.toFixed(0)}, city ${c.at.city?.toFixed(0)}, world ${c.at.world?.toFixed(0)} (${dur} s to simulate)`);
