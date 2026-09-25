@@ -67,6 +67,17 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
 #combo .bar{width:clamp(90px,16vw,150px);height:5px;margin-top:6px;background:rgba(35,27,20,.35);border-radius:3px;overflow:hidden}
 #combo .bar i{display:block;height:100%;background:#fff6de;transform-origin:left}
 #combo.frz .bar i{background:#ff8fc4}
+#combo.flat{flex-direction:row;align-items:baseline;gap:10px}
+#combo.flat .n{font-size:40px}
+#combo.flat .lb{font-size:22px}
+#combo.flat .bar{width:70px;align-self:center}
+#combo .mul{white-space:nowrap}
+#combo.flat:before{inset:-14px -30px}
+#combo.narrow .n{font-size:clamp(30px,5vw,48px)}
+#combo.over .n{font-size:clamp(26px,6vw,40px)}
+#combo.over .lb{font-size:18px}
+#combo.over .bar{width:90px}
+#combo.over:before{inset:-12px -30px}
 #combo.bump .n{animation:cbump .18s ease-out}
 #combo.broke{transition:opacity .7s .15s}
 #combo.broke .n{animation:cbreak .6s ease-in forwards}
@@ -1619,9 +1630,11 @@ function bell(t, f, vol, dur){
 
 /* ================= layout ================= */
 let L = { x:0, y:0, w:0, h:0 };   // where the sheet may go, in CSS px
+// room is kept for the combo off the sheet: a column on the right of a wide screen, a strip above
+// the sheet on a tall one; a phone on its side has none to spare
 function layout(){
-  const top = W < 560 ? 92 : 112, side = 16, bottom = 16;
-  L = { x: side, y: top + 0, w: W - side*2, h: H - top - bottom };
+  const top = W < 560 ? 92 : 112, side = 16, bottom = 16, wide = W >= H && W >= 900, tall = H > W;
+  L = { x: side, y: top + (tall ? 58 : 0), w: W - side*2 - (wide ? 210 : 0), h: H - top - bottom - (tall ? 58 : 0) };
 }
 
 /* ================= scenes ================= */
@@ -2060,7 +2073,7 @@ function startRun(){
   if(S.ui.stageSeen !== S.unlocked && S.cycleRuns === 0 && S.cycleEarned === 0 && S.unlocked > 0 && S.ui.stageSeen < S.unlocked){ S.stage = S.unlocked; showStage(); return; }
   if(S.stage !== sceneStage){ layout(); paintScene(S.stage); }
   run = BB.startRun(S, { aspect: L.w / L.h });
-  view = makeView(run.sheet); oldView = null; parts = []; rings = []; flashes = [];
+  view = makeView(run.sheet); oldView = null; parts = []; rings = []; flashes = []; placeCombo();
   mode = 'run'; show(null); lastEarned = 0; ppsWin = []; comboShown = 0; mugLast = '';
   $('combo').classList.remove('broke'); $('combo').style.opacity = 0;
   if(typeof MUSIC !== 'undefined') MUSIC.scene(S.stage, false);
@@ -2354,7 +2367,20 @@ function drawMug(t){
     g.beginPath(); g.moveTo(x0, y0 + R*.35); g.bezierCurveTo(x0 + R*.25*Math.sin(ph*3), y0 + R*.2, x0 - R*.25*Math.sin(ph*2.3), y0 + R*.1, x0 + R*.1*Math.sin(ph), y0 - R*.05); g.stroke();
   }
 }
-let comboShown = 0, mulShown = 1;
+let comboShown = 0, mulShown = 1, comboAlpha = .95;
+/* The combo sits where it hides nothing: in free space beside, below or above the sheet if the
+   screen has some, and only as a small, see-through note on the sheet's top edge if it has none. */
+function placeCombo(){
+  const v = view, c = $('combo'); if(!v) return;
+  const hud = W < 560 ? 96 : 118, right = W - (v.ox + v.w), below = H - (v.oy + v.h), above = v.oy - hud;
+  let x, y, cls = '';
+  if(right >= 170){ x = v.ox + v.w + right/2; y = v.oy + v.h/2; if(right < 240) cls = 'narrow'; }
+  else if(v.ox >= 170){ x = v.ox/2; y = v.oy + v.h/2; if(v.ox < 240) cls = 'narrow'; }
+  else if(below >= 120){ x = W/2; y = v.oy + v.h + below/2; cls = 'flat'; }
+  else if(above >= 52){ x = W/2; y = hud + above/2 - 4; cls = 'flat'; }
+  else { x = W/2; y = v.oy + 56; cls = 'over'; }
+  c.style.left = x + 'px'; c.style.top = y + 'px'; c.className = cls; comboAlpha = cls === 'over' ? .7 : .95;
+}
 function hud(t){
   const r = run; if(!r) return;
   drawMug(t);
@@ -2362,7 +2388,7 @@ function hud(t){
   const c = $('combo'), m = BB.comboMul(r);
   if(r.combo >= 10){
     if(comboShown < 10){ c.classList.remove('broke'); }
-    c.style.opacity = .95; c.classList.toggle('frz', r.frenzy > 0);
+    c.style.opacity = comboAlpha; c.classList.toggle('frz', r.frenzy > 0);
     const left = r.frenzy > 0 ? 1 : Math.max(0, 1 - (r.t - r.lastPop)/r.P.comboWin);
     c.querySelector('.bar i').style.transform = `scaleX(${left.toFixed(3)})`;
     if(m > mulShown){ c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
@@ -3160,6 +3186,7 @@ function resize(){
   DPR = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = Math.ceil(W*DPR); cv.height = Math.ceil(H*DPR);
   sprCache.clear(); layout(); paintScene(S.stage);
   if(view){ const sh = view.sh; view = makeView(sh); oldView = null; }
+  if(mode === 'run' || mode === 'pause') placeCombo();
   if(mode === 'trees'){ const d = D; treeAxes(); if(D !== d) buildTree(); else fitTree(); drawTree(); }
   if(finale) finale.resize();
 }
