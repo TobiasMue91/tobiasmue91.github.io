@@ -150,6 +150,10 @@ if(suites.includes('rules')){
       for(let k = 0; k < 4; k++) BB.step(run, run.P.holdTime/3);
       check(after && !BB.isIntact(sh, p[0], p[1]), 'a thick bubble survives a press and gives way to a held one');
       BB.release(run);
+      // wobbling the thumb around on it does not start the hold over
+      const q = findSpecial(sh, T.THICK); if(q){ const qx = BB.cx(q[0], q[1]), qy = BB.cy(q[1]); BB.press(run, qx, qy);
+        for(let k = 0; k < 8; k++){ BB.drag(run, qx + (k % 2 ? .3 : -.3), qy); BB.step(run, run.P.holdTime/6); }
+        check(!BB.isIntact(sh, q[0], q[1]), 'moving the held thumb while the thick bubble stays under it still pops it'); BB.release(run); }
     }
   }
   // flat bubbles: pressing spoils the combo, swiping over one only costs strength
