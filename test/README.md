@@ -316,3 +316,33 @@ Version 3 added weather and years: rain, storms, three more journal pages and ×
 everything richer, so every season's prices were raised by 15 to 60 percent, most in Midsummer
 with its storms and in summer and spring, which see the most rain, until the year took as long as
 before.
+
+## Audio Normalizer
+
+```sh
+npm run test:normalizer                  # or: node test/audio_normalizer.mjs
+node test/audio_normalizer.mjs meter     # one or more named suites
+node test/audio_normalizer.mjs --page=old.html
+```
+
+The page's promise is a number: pick the Podcast preset and a loudness meter reads -16 LUFS,
+with no true peak past -1 dBTP. The page cannot check that itself, because it measures its own
+output with the same meter it normalizes by - the version this replaced reported -16.0 to -16.3
+on six recordings while ffmpeg's `ebur128` read anywhere from -18.3 to -13.8. The meter, the true-peak scan
+and the limiter live in a `<script id="core">` block with no DOM, and the suite runs that block
+in Node's `vm` against references that do not come from the page. Programme material is
+synthesised from a seed (talkers with pauses and plosives, a bass-heavy groove), since no
+recordings are committed. It takes about 7 seconds.
+
+| suite | what it checks |
+| --- | --- |
+| `meter` | EBU Tech 3341 tests 1–5 within ±0.1 LU at 48 and 44.1 kHz; 997 Hz at 0 dBFS reads -3.01; sines from 20 Hz to 10 kHz read the gain of the 48 kHz K-weighting coefficients printed in BS.1770 within 0.05 dB; 30 s of silence inside the programme and a passage 20 dB down both drop out; surrounds count 1.41×, the LFE not at all; silence, under 400 ms, and everything under -70 LUFS have no loudness |
+| `truepeak` | the fast scan agrees with a plain implementation of the Annex 2 interpolator on arrays of awkward lengths with bursts at both ends; a quarter-rate sine at 45° reads 0 dBTP though its samples sit 3 dB lower |
+| `limiter` | speech and music driven 3 to 20 dB over stay under -1 dBTP at 44.1 and 48 kHz; audio under the ceiling passes through bit for bit; a lone spike gets exactly the gain it needs, reached by a straight ramp that starts 5 ms ahead; a file that starts loud and one that ends on a burst are both caught |
+| `render` | speech and music land within 0.1 LU of -23, -16 and -14 under -1 dBTP; a 0 LUFS target stops short instead of piling on gain; without a ceiling it is a plain gain; a DC offset comes off first |
+
+Each check has been seen failing, by planting the bug back into a copy of the page: the
+high-pass Q read as decibels and the missing gate (both in the page this replaced, caught by 12
+and 9 checks), a clamp in place of the limiter (25), a ramp that starts from unity at the top
+of the file (11), a make-up loop that chases an unreachable target (1), surrounds weighted like
+fronts (2), and in-between peaks attributed three samples early (1) or late (10).

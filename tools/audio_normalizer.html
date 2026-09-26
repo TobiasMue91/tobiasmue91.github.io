@@ -712,6 +712,10 @@
             .cmp-grid {
                 grid-template-columns:1fr 1fr
             }
+
+            .cmp-item:last-child:nth-child(odd) {
+                grid-column: 1 / -1
+            }
         }
     </style>
 </head>
@@ -786,8 +790,8 @@
                     <button class="preset-btn" data-mode="peak" data-target="-0.3">CD Master</button>
                 </div>
             </div>
-            <label class="chk-row"><input type="checkbox" id="chkLimiter" checked> Apply limiter to prevent
-                clipping</label>
+            <label class="chk-row" id="limRow"><input type="checkbox" id="chkLimiter" checked> Limit true peaks to
+                −1 dBTP</label>
             <label class="chk-row"><input type="checkbox" id="chkDC"> Remove DC offset</label>
         </div>
         <div class="btn-row">
@@ -826,10 +830,223 @@
     </div>
 </div>
 <div class="toast" id="toast"></div>
+<script id="core">
+    // Loudness as ITU-R BS.1770-4 and EBU R128 define it, true peak, and a look-ahead limiter.
+    // No DOM in here, so test/audio_normalizer.mjs can run this block on its own in Node.
+    const Loudness = (() => {
+        // The K-weighting filters, derived for any sample rate the way libebur128 does it:
+        // these parameters reproduce the coefficients BS.1770 publishes for 48 kHz exactly.
+        function kWeighting(sr) {
+            let K = Math.tan(Math.PI * 1681.974450955533 / sr), Q = 0.7071752369554196;
+            const Vh = Math.pow(10, 3.999843853973347 / 20), Vb = Math.pow(Vh, 0.4996667741545416);
+            let a0 = 1 + K / Q + K * K;
+            const shelf = [(Vh + Vb * K / Q + K * K) / a0, 2 * (K * K - Vh) / a0, (Vh - Vb * K / Q + K * K) / a0,
+                2 * (K * K - 1) / a0, (1 - K / Q + K * K) / a0];
+            K = Math.tan(Math.PI * 38.13547087602444 / sr);
+            Q = 0.5003270373238773;
+            a0 = 1 + K / Q + K * K;
+            return [shelf, [1, -2, 1, 2 * (K * K - 1) / a0, (1 - K / Q + K * K) / a0]]
+        }
+
+        // Surround channels count 1.41x and the LFE not at all (Web Audio's 5.1 order: L R C LFE SL SR)
+        function weights(nc) {
+            return nc === 6 ? [1, 1, 1, 0, 1.41, 1.41] : nc === 4 ? [1, 1, 1.41, 1.41] : new Array(nc).fill(1)
+        }
+
+        // Integrated loudness in LUFS: K-weighted mean square over 400 ms blocks every 100 ms,
+        // dropping blocks under -70 LUFS and then those more than 10 LU below the rest, so that
+        // pauses and silence do not count as quiet programme. -Infinity when nothing is left.
+        function integrated(chans, sr) {
+            const hop = Math.round(sr / 10), hops = Math.floor(chans[0].length / hop);
+            if (hops < 4) return -Infinity;
+            const [s, h] = kWeighting(sr), G = weights(chans.length), e = new Float64Array(hops);
+            chans.forEach((x, c) => {
+                if (!G[c]) return;
+                let x1 = 0, x2 = 0, y1 = 0, y2 = 0, z1 = 0, z2 = 0;
+                for (let k = 0, i = 0; k < hops; k++) {
+                    let sum = 0;
+                    for (const end = i + hop; i < end; i++) {
+                        const v = x[i], y = s[0] * v + s[1] * x1 + s[2] * x2 - s[3] * y1 - s[4] * y2,
+                            z = y - 2 * y1 + y2 - h[3] * z1 - h[4] * z2;
+                        x2 = x1;
+                        x1 = v;
+                        y2 = y1;
+                        y1 = y;
+                        z2 = z1;
+                        z1 = z;
+                        sum += z * z
+                    }
+                    e[k] += G[c] * sum
+                }
+            });
+            const lufs = ms => -0.691 + 10 * Math.log10(ms), mean = a => a.reduce((p, q) => p + q, 0) / a.length;
+            const blocks = [];
+            for (let k = 0; k + 4 <= hops; k++) blocks.push((e[k] + e[k + 1] + e[k + 2] + e[k + 3]) / (4 * hop));
+            const loud = blocks.filter(b => lufs(b) > -70);
+            if (!loud.length) return -Infinity;
+            const gate = lufs(mean(loud)) - 10;
+            return lufs(mean(loud.filter(b => lufs(b) > gate)))
+        }
+
+        // The signal between the samples, by the 4x polyphase interpolator of BS.1770-4 Annex 2
+        // (phases 2 and 3 are phases 1 and 0 reversed). For each i in [from, to) this writes to
+        // out[i - from] the largest of the four values that the 12 samples around i give.
+        const [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11] = [.001708984375, .010986328125, -.0196533203125,
+            .033203125, -.0594482421875, .1373291015625, .97216796875, -.102294921875, .047607421875,
+            -.026611328125, .014892578125, -.00830078125];
+        const [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11] = [-.0291748046875, .029296875, -.0517578125,
+            .089111328125, -.16650390625, .465087890625, .77978515625, -.2003173828125, .1015625,
+            -.0582275390625, .0330810546875, -.0189208984375];
+        const SPAN = 2.02, CHUNK = 256; // no value in between exceeds its 12 neighbours by more than sum|coefficients|
+
+        function between(x, from, to, out) {
+            out.fill(0);
+            const lo = Math.max(from, 6), hi = Math.min(to, x.length - 5);
+            if (lo >= hi) return;
+            let x0 = x[lo - 6], x1 = x[lo - 5], x2 = x[lo - 4], x3 = x[lo - 3], x4 = x[lo - 2], x5 = x[lo - 1],
+                x6 = x[lo], x7 = x[lo + 1], x8 = x[lo + 2], x9 = x[lo + 3], x10 = x[lo + 4], x11, o = lo - from;
+            for (let i = lo; i < hi; i++) {
+                x11 = x[i + 5];
+                let v = a0 * x0 + a1 * x1 + a2 * x2 + a3 * x3 + a4 * x4 + a5 * x5 + a6 * x6 + a7 * x7 + a8 * x8 + a9 * x9 + a10 * x10 + a11 * x11,
+                    m = v < 0 ? -v : v;
+                v = b0 * x0 + b1 * x1 + b2 * x2 + b3 * x3 + b4 * x4 + b5 * x5 + b6 * x6 + b7 * x7 + b8 * x8 + b9 * x9 + b10 * x10 + b11 * x11;
+                if (v < 0) v = -v;
+                if (v > m) m = v;
+                v = b11 * x0 + b10 * x1 + b9 * x2 + b8 * x3 + b7 * x4 + b6 * x5 + b5 * x6 + b4 * x7 + b3 * x8 + b2 * x9 + b1 * x10 + b0 * x11;
+                if (v < 0) v = -v;
+                if (v > m) m = v;
+                v = a11 * x0 + a10 * x1 + a9 * x2 + a8 * x3 + a7 * x4 + a6 * x5 + a5 * x6 + a4 * x7 + a3 * x8 + a2 * x9 + a1 * x10 + a0 * x11;
+                if (v < 0) v = -v;
+                out[o++] = v > m ? v : m;
+                x0 = x1;
+                x1 = x2;
+                x2 = x3;
+                x3 = x4;
+                x4 = x5;
+                x5 = x6;
+                x6 = x7;
+                x7 = x8;
+                x8 = x9;
+                x9 = x10;
+                x10 = x11
+            }
+        }
+
+        // Loudest sample in [from, to) of x, clamped to the array.
+        function peakIn(x, from, to) {
+            let m = 0;
+            for (let i = Math.max(0, from), e = Math.min(x.length, to); i < e; i++) {
+                const a = x[i] < 0 ? -x[i] : x[i];
+                if (a > m) m = a
+            }
+            return m
+        }
+
+        // Linear true peak of all channels. A stretch is only interpolated when it could beat the
+        // running peak, which on most material skips everything quieter than 6 dB below it.
+        function truePeak(chans) {
+            const tmp = new Float32Array(CHUNK);
+            let pk = 0;
+            for (const x of chans) pk = Math.max(pk, peakIn(x, 0, x.length));
+            for (const x of chans) for (let b = 0; b < x.length; b += CHUNK) {
+                if (peakIn(x, b - 6, b + CHUNK + 5) * SPAN <= pk) continue;
+                const e = Math.min(x.length, b + CHUNK);
+                between(x, b, e, tmp.subarray(0, e - b));
+                for (let k = 0; k < e - b; k++) if (tmp[k] > pk) pk = tmp[k]
+            }
+            return pk
+        }
+
+        // Look-ahead peak limiter, all channels linked, working in place. It looks at the true
+        // peak around every sample; the gain starts to fall 5 ms before a peak along a straight
+        // ramp, arrives at exactly what the peak needs, and recovers with a 50 ms release.
+        // Returns the deepest gain reduction in dB, 0 when nothing reached the ceiling.
+        function limit(chans, sr, ceiling) {
+            const n = chans[0].length, L = Math.max(1, Math.round(sr * .005)), tmp = new Float32Array(CHUNK);
+            const g = new Float32Array(n).fill(1);
+            let any = false;
+            for (const x of chans) for (let b = 0; b < n; b += CHUNK) {
+                if (peakIn(x, b - 6, b + CHUNK + 5) * SPAN <= ceiling) continue;
+                const e = Math.min(n, b + CHUNK);
+                between(x, b, e, tmp.subarray(0, e - b));
+                for (let i = b; i < e; i++) {
+                    let a = x[i] < 0 ? -x[i] : x[i];
+                    const t = tmp[i - b];
+                    if (t > a) a = t;
+                    if (a > ceiling) {
+                        const v = ceiling / a;
+                        if (v < g[i]) g[i] = v;
+                        any = true
+                    }
+                }
+            }
+            if (!any) return 0;
+            // the lowest need over the next L samples, with a monotonic queue walking backwards
+            const qi = new Int32Array(L + 1), qv = new Float32Array(L + 1);
+            let head = 0, tail = 0;
+            for (let i = n - 1; i >= 0; i--) {
+                const v = g[i];
+                while (tail > head && qv[(tail - 1) % (L + 1)] >= v) tail--;
+                qi[tail % (L + 1)] = i;
+                qv[tail % (L + 1)] = v;
+                tail++;
+                while (qi[head % (L + 1)] > i + L - 1) head++;
+                g[i] = qv[head % (L + 1)]
+            }
+            // release, then a moving average over L samples, which turns each step into the ramp;
+            // before the first sample it holds what the start needs, so the opening is covered too
+            const rel = 1 - Math.exp(-1 / (.05 * sr)), ring = new Float64Array(L).fill(g[0]);
+            let s = g[0], sum = L * g[0], deepest = 1, j = 0;
+            for (let i = 0; i < n; i++) {
+                const need = g[i], up = s + (1 - s) * rel;
+                s = need < up ? need : up;
+                sum += s - ring[j];
+                ring[j] = s;
+                if (++j === L) j = 0;
+                const v = sum / L;
+                g[i] = v;
+                if (v < deepest) deepest = v
+            }
+            for (const x of chans) for (let i = 0; i < n; i++) x[i] *= g[i];
+            return -20 * Math.log10(deepest)
+        }
+
+        // Writes src into dst scaled by gainDb (DC offsets removed first when given), limited to
+        // ceiling when there is one. Limiting costs some level, so when level() is given the gain
+        // is raised and the whole thing rendered again until it lands within 0.05 dB of target.
+        // Each step allows for the share of every added dB the limiter ate last time, and once it
+        // eats three quarters of it there is nothing left to gain but a flatter file, so it stops
+        // short. onPass(n) is awaited before each pass, and returning false stops there.
+        // Resolves to the gain it ended on and the deepest limiting.
+        async function render(src, dst, sr, {gainDb, dc, ceiling, level, target, onPass}) {
+            let reduction = 0, prev = null;
+            for (let pass = 0; pass < 6; pass++) {
+                if (onPass && await onPass(pass) === false) break;
+                const k = Math.pow(10, gainDb / 20);
+                src.forEach((x, c) => {
+                    const y = dst[c], d = dc ? dc[c] : 0;
+                    for (let i = 0; i < x.length; i++) y[i] = (x[i] - d) * k
+                });
+                reduction = ceiling ? limit(dst, sr, ceiling) : 0;
+                if (!level) break;
+                const got = level(dst), miss = target - got;
+                if (!isFinite(miss) || Math.abs(miss) < .05) break;
+                const slope = prev ? (got - prev.got) / (gainDb - prev.gainDb) : 1;
+                if (!(slope > .25)) break;
+                prev = {gainDb, got};
+                gainDb += miss / Math.max(slope, .5)
+            }
+            return {gainDb, reduction}
+        }
+
+        return {integrated, truePeak, limit, render}
+    })();
+</script>
 <script>
     const $ = id => document.getElementById(id);
     const aC = new (window.AudioContext || window.webkitAudioContext)();
-    let oBuf = null, nBuf = null, oLUFS = null, nLUFS = null, mode = 'peak', abSrc = 'a', fileName = 'audio';
+    const CEILING = Math.pow(10, -1 / 20); // -1 dBTP, the ceiling streaming, podcast and broadcast specs ask for
+    let oBuf = null, nBuf = null, oLUFS = null, nLUFS = null, mode = 'peak', abSrc = 'a', fileName = 'audio', run = 0;
 
     function tick() {
         return new Promise(r => setTimeout(r, 16))
@@ -885,35 +1102,12 @@
         }
     }
 
-    async function lufs(buf) {
-        try {
-            const off = new OfflineAudioContext(buf.numberOfChannels, buf.length, buf.sampleRate);
-            const s = off.createBufferSource();
-            s.buffer = buf;
-            const hs = off.createBiquadFilter();
-            hs.type = 'highshelf';
-            hs.frequency.value = 1500;
-            hs.gain.value = 4;
-            const hp = off.createBiquadFilter();
-            hp.type = 'highpass';
-            hp.frequency.value = 38;
-            hp.Q.value = .5;
-            s.connect(hs);
-            hs.connect(hp);
-            hp.connect(off.destination);
-            s.start();
-            const r = await off.startRendering();
-            let tot = 0;
-            for (let c = 0; c < r.numberOfChannels; c++) {
-                const d = r.getChannelData(c);
-                let sm = 0;
-                for (let i = 0; i < d.length; i++) sm += d[i] * d[i];
-                tot += sm / d.length
-            }
-            return -0.691 + 10 * Math.log10(tot)
-        } catch (e) {
-            return null
-        }
+    function chans(buf) {
+        return Array.from({length: buf.numberOfChannels}, (_, c) => buf.getChannelData(c))
+    }
+
+    function lufs(buf) {
+        return Loudness.integrated(chans(buf), buf.sampleRate)
     }
 
     /* Waveform drawing */
@@ -1097,10 +1291,18 @@
     });
 
     /* Mode & presets */
+    // In Peak mode the gain is set by the peaks themselves, so there is nothing left to limit
+    function syncLimiter() {
+        $('chkLimiter').disabled = mode === 'peak';
+        $('limRow').style.opacity = mode === 'peak' ? .45 : 1
+    }
+
+    syncLimiter();
     document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => {
         document.querySelectorAll('.mode-btn').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         mode = b.dataset.mode;
+        syncLimiter();
         document.querySelectorAll('.preset-btn').forEach(p => p.classList.remove('on'));
         $('targetVal').textContent = parseFloat($('targetSlider').value).toFixed(1) + ' ' + unitLabel()
     }));
@@ -1112,6 +1314,7 @@
         const m = b.dataset.mode, t = parseFloat(b.dataset.target);
         document.querySelectorAll('.mode-btn').forEach(x => x.classList.toggle('active', x.dataset.mode === m));
         mode = m;
+        syncLimiter();
         $('targetSlider').value = t;
         $('targetVal').textContent = t.toFixed(1) + ' ' + unitLabel();
         document.querySelectorAll('.preset-btn').forEach(p => p.classList.remove('on'));
@@ -1133,6 +1336,7 @@
     /* File handling */
     async function handleFile(file) {
         stopAll();
+        run++;
         $('uploadCard').classList.add('hidden');
         $('resultCard').classList.add('hidden');
         $('normalizeBtn').disabled = true;
@@ -1170,8 +1374,9 @@
             oP.initTime();
             $('normalizeBtn').disabled = false;
             toast('File loaded – ready to normalize');
-            oLUFS = await lufs(oBuf);
-            $('sLufs').textContent = oLUFS !== null ? oLUFS.toFixed(1) : '–';
+            await tick();
+            oLUFS = lufs(oBuf);
+            $('sLufs').textContent = dbStr(oLUFS);
         } catch (e) {
             alert('Could not decode audio file.');
             $('uploadCard').classList.remove('hidden')
@@ -1182,67 +1387,71 @@
     async function normalize() {
         if (!oBuf) return;
         const target = parseFloat($('targetSlider').value),
-            useLim = $('chkLimiter').checked,
+            useLim = $('chkLimiter').checked && mode !== 'peak',
             rmDC = $('chkDC').checked;
         const pb = $('pBar'),
             pf = $('pFill');
+        const st = analyze(oBuf), sr = oBuf.sampleRate;
+        if (oLUFS === null) oLUFS = lufs(oBuf);
+        const from = mode === 'peak' ? st.peakDb : mode === 'rms' ? st.rmsDb : oLUFS;
+        if (!isFinite(from)) {
+            toast(isFinite(st.peakDb) ? 'Too short or too quiet to measure loudness – try Peak or RMS' : 'This file is silent – nothing to normalize');
+            return
+        }
+        // Reset, New File or another file while this works makes it stale: it stops at the next pause
+        const my = ++run, stale = () => {
+            if (run === my) return false;
+            pb.classList.remove('on');
+            pf.style.width = '0';
+            return true
+        };
         pb.classList.add('on');
         pf.style.width = '5%';
         await tick();
+        if (stale()) return;
         $('normalizeBtn').disabled = true;
-        const st = analyze(oBuf);
-        let gainDb;
-        if (mode === 'peak') gainDb = target - st.peakDb;
-        else if (mode === 'rms') gainDb = target - st.rmsDb;
-        else {
-            if (oLUFS === null) oLUFS = await lufs(oBuf);
-            gainDb = oLUFS !== null ? target - oLUFS : 0
-        }
-        const gainLin = Math.pow(10, gainDb / 20);
+        const oTP = Loudness.truePeak(chans(oBuf));
         pf.style.width = '20%';
         await tick();
-        nBuf = aC.createBuffer(oBuf.numberOfChannels, oBuf.length, oBuf.sampleRate);
-        let limCount = 0;
-        for (let c = 0; c < oBuf.numberOfChannels; c++) {
-            const inp = oBuf.getChannelData(c), out = nBuf.getChannelData(c);
-            let dc = 0;
-            if (rmDC) {
-                let sm = 0;
-                for (let i = 0; i < inp.length; i++) sm += inp[i];
-                dc = sm / inp.length
+        if (stale()) return;
+        const out = nBuf = aC.createBuffer(oBuf.numberOfChannels, oBuf.length, sr);
+        const {gainDb, reduction} = await Loudness.render(chans(oBuf), chans(nBuf), sr, {
+            gainDb: target - from,
+            dc: rmDC ? chans(oBuf).map(x => x.reduce((s, v) => s + v, 0) / x.length) : null,
+            ceiling: useLim ? CEILING : 0,
+            level: mode === 'lufs' ? ch => Loudness.integrated(ch, sr) : mode === 'rms' ? () => analyze(out).rmsDb : null,
+            target,
+            onPass: async n => {
+                pf.style.width = (20 + 12 * n) + '%';
+                await tick();
+                return run === my
             }
-            for (let i = 0; i < inp.length; i++) {
-                let s = (inp[i] - dc) * gainLin;
-                if (useLim && (s > 1 || s < -1)) {
-                    limCount++;
-                    s = Math.max(-1, Math.min(1, s))
-                }
-                out[i] = s
-            }
-            pf.style.width = (20 + 70 * (c + 1) / oBuf.numberOfChannels) + '%';
-            await tick()
-        }
-        pf.style.width = '95%';
+        });
+        pf.style.width = '90%';
         await tick();
-        const nst = analyze(nBuf);
-        nLUFS = await lufs(nBuf);
+        if (stale()) return;
+        const nst = analyze(nBuf), nTP = Loudness.truePeak(chans(nBuf));
+        nLUFS = lufs(nBuf);
+        let over = 0;
+        for (const x of chans(nBuf)) for (let i = 0; i < x.length; i++) if (x[i] > 1 || x[i] < -1) over++;
         const items = [
             {l: 'Peak (dBFS)', o: dbStr(st.peakDb), n: dbStr(nst.peakDb), c: nst.peakDb > -0.1 ? 'clip' : 'good'},
+            {l: 'True Peak (dBTP)', o: dbStr(20 * Math.log10(oTP)), n: dbStr(20 * Math.log10(nTP)), c: nTP > 1 ? 'clip' : 'good'},
             {l: 'RMS (dBFS)', o: dbStr(st.rmsDb), n: dbStr(nst.rmsDb), c: 'good'},
-            {
-                l: 'LUFS',
-                o: oLUFS !== null ? oLUFS.toFixed(1) : '–',
-                n: nLUFS !== null ? nLUFS.toFixed(1) : '–',
-                c: 'good'
-            },
+            {l: 'LUFS', o: dbStr(oLUFS), n: dbStr(nLUFS), c: mode === 'lufs' && !(Math.abs(nLUFS - target) < .5) ? 'clip' : 'good'},
             {l: 'Gain', o: '', n: (gainDb >= 0 ? '+' : '') + gainDb.toFixed(1) + ' dB', c: '', noOld: true}
         ];
         $('cmpGrid').innerHTML = items.map(i => '<div class="cmp-item"><div class="cmp-lbl">' + i.l + '</div><div class="cmp-vals">' +
             (i.noOld ? '' : '<span class="cmp-old">' + i.o + '</span><span class="cmp-arr">→</span>') +
             '<span class="cmp-new' + (i.c ? ' ' + i.c : '') + '">' + i.n + '</span></div></div>').join('');
-        const ln = $('limiterNote');
-        if (useLim && limCount > 0) {
-            ln.textContent = 'Limiter engaged on ' + limCount.toLocaleString() + ' sample' + (limCount !== 1 ? 's' : '') + ' to prevent clipping.';
+        const ln = $('limiterNote'), got = mode === 'lufs' ? nLUFS : nst.rmsDb;
+        if (reduction >= .05) {
+            ln.textContent = 'Limiter held true peaks to −1 dBTP, turning the loudest moments down by up to ' + reduction.toFixed(1) + ' dB.' +
+                (Math.abs(got - target) >= .5 ? ' ' + target.toFixed(1) + ' ' + unitLabel() + ' is out of reach without flattening the audio, so it stopped at ' + got.toFixed(1) + '.' :
+                    reduction > 6 ? ' That much limiting can be audible – a lower target keeps more of the dynamics.' : '');
+            ln.classList.remove('hidden')
+        } else if (over) {
+            ln.textContent = over.toLocaleString() + ' sample' + (over !== 1 ? 's go' : ' goes') + ' past full scale and will clip in the WAV – turn on the limiter or lower the target.';
             ln.classList.remove('hidden')
         } else ln.classList.add('hidden');
 
@@ -1269,8 +1478,10 @@
 
     $('normalizeBtn').addEventListener('click', normalize);
     $('resetBtn').addEventListener('click', () => {
+        run++;
         cP.stop();
         $('resultCard').classList.add('hidden');
+        $('normalizeBtn').disabled = false;
         nBuf = null;
         nLUFS = null
     });
@@ -1317,6 +1528,7 @@
     $('dlBtn').addEventListener('click', downloadWav);
     $('newBtn').addEventListener('click', () => {
         stopAll();
+        run++;
         oBuf = nBuf = null;
         oLUFS = nLUFS = null;
         fi.value = '';
