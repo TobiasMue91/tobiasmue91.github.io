@@ -265,3 +265,28 @@ Stücke sofort hören kann. Beim Schließen läuft wieder das Stück der aktuell
 Im Finale kehrt das erste Sommerthema zurück, in F, langsamer und auf Spieluhr und Harfe. Nach dem
 Abspann steht es als 🌌 auch in der Jukebox. Ab dem zweiten Durchgang zupft die Begleitung ihr
 Muster jedes zweite Mal andersherum.
+
+### Version 3 (2026-09-26): Wetter, Mond und Jahre
+
+Der Nutzer hat freie Hand gegeben. Umgesetzt:
+
+- **Wetter:** Jede Nacht hat ihren Himmel (`skyFor(G)` im Core). Er folgt nur aus Seed und Nacht, deshalb
+  stimmt die Vorhersage auf der Zusammenfassung. Die ersten drei Nächte sind klar, jede Jahreszeit
+  beginnt mit ihrem eigenen Himmel.
+
+  | Wetter | Wirkung |
+  |---|---|
+  | Regen | ×1,3 Glühwürmchen; Pfützen verdoppeln, was darüber gefangen wird |
+  | Wind | treibt die Glühwürmchen an einen Rand |
+  | Nebel | die Laterne nimmt das Glas von weiter weg |
+  | Gewitter in der Ferne | die Glühwürmchen antworten dem Blitz, danach ×2 für 2,5 s; der Donner kommt 3 s pro km später |
+  | Schnee | Glühwürmchen fliegen langsamer |
+
+  Der Mond hat 8 Phasen: Neumond bringt mehr Glühwürmchen, bei Vollmond blinken sie seltener.
+- **Neue Tagebuchseiten:** Vollmond, Nach dem Regen und Ein Gewitter in der Ferne, also 14 Seiten.
+- **Neue Geräusche:** Laubfrösche nach Regen, Frühlings-Peeper, Waldkauz bei hellem Mond, Tropfen und Donner.
+- **Jahre:** Das Finale hängt den Laternenbaum als Sternbild an den Himmel. „Another year“ behält Tagebuch
+  und Sterne, und jedes vergangene Jahr macht alles Licht ×1,5. Der Bot braucht im zweiten Jahr etwa
+  73 %, im dritten etwa 57 % der Zeit des ersten.
+- **Preise:** Pro Jahreszeit um 15–60 % angehoben, sodass das erste Jahr so lange dauert wie vorher.
+- **Tests:** neue Suite `sky`, Jahr zwei im `pace`-Test.

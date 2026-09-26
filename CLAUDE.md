@@ -114,8 +114,10 @@ core; the `planner` suite (a bot that tries every purchase in a copy of the game
 `test/firefly_jar.mjs` runs the DOM-free core of `games/firefly_jar.html`, an incremental: bots with a
 person's reaction time play the whole year on a phone-sized and a desktop meadow, and each season
 must take its share of the two hours, relight the old lanterns fast, climb as a curve rather than a
-jump, and never leave the player saving for long with nothing to buy. Run it after touching any
-price or multiplier; `pace --report` prints the year night by night.
+jump, and never leave the player saving for long with nothing to buy. The `sky` suite checks that
+each kind of weather does what its forecast says and none spoils a night, and that a second year
+comes round faster without skipping a season. Run it after touching any price or multiplier;
+`pace --report` prints the year night by night.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

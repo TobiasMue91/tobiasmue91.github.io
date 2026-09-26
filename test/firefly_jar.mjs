@@ -15,7 +15,7 @@
 //   node test/firefly_jar.mjs pace --seed=7   # the same year on other seeds
 //   node test/firefly_jar.mjs --page=old.html # run against another copy of the page
 //
-// Suites: rules, skill, pace.
+// Suites: rules, sky (weather, the moon, years), skill, pace.
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -29,7 +29,7 @@ const PAGE = pageArg ? pageArg.slice(7) : join(HERE, '..', 'games', 'firefly_jar
 const REPORT = args.includes('--report');
 const seedArg = args.find(a => a.startsWith('--seed='));
 const SEED = seedArg ? +seedArg.slice(7) : 3;
-const ALL = ['rules', 'skill', 'pace'];
+const ALL = ['rules', 'sky', 'skill', 'pace'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -115,8 +115,7 @@ function decide(G, N, o, d) {
         let s;
         if (o.style === 'hunter') {
             // steers for the rarer lights it can reach: they are worth more than the common kind
-            let v = FJ.WORTH[f.k] - (f.k === 'f' ? 1 : 0);
-            if (N.crystals.length) v *= Math.pow(P.beamMul, FJ.beamsAt(N, f.x, f.y));
+            let v = (FJ.WORTH[f.k] - (f.k === 'f' ? 1 : 0)) * FJ.spotMul(N, f.x, f.y);
             s = v / (tt + .25);
         } else s = 1 / (tt + .01);
         if (s > bs) { bs = s; best = f; }
@@ -146,8 +145,8 @@ function night(G, size, seed, style) {
     while (!N.over) { FJ.step(G, N, act(G, N), DT); N.events.length = 0; }
     return {N, s: FJ.endNight(G, N)};
 }
-function playYear(size, seed) {
-    const G = FJ.newGame(seed), log = [];
+function playYear(size, seed, G0) {
+    const G = G0 || FJ.newGame(seed), log = [];
     let wall = 0, k = 0;
     while (!G.done && k < 400) {
         const {N, s} = night(G, size, seed * 1000 + k++, 'hunter');
@@ -301,6 +300,114 @@ function rules() {
     }
 }
 
+/* ---------------- sky ----------------
+   Weather and the moon make nights different from each other. Each has to do what its forecast
+   says, none may make a night hard to play, and a year after the first must come round faster
+   without skipping a season. */
+// a night under the asked-for sky: the sky follows from the night's number, so look for one
+function under(G, w, moon) {
+    for (let k = 3; k < 2000; k++) { G.nights = k; G.seasonNights = 1 + k; const x = FJ.skyFor(G); if (x.w === w && (moon === undefined ? x.moon % 4 !== 0 : x.moon === moon)) return G; }
+    throw new Error(`no ${w} night`);
+}
+function sky() {
+    section('sky');
+    const W = 800, H = 700;
+    {
+        const G = FJ.newGame(9);
+        let first = true;
+        for (let k = 0; k < 3; k++) { G.nights = k; G.seasonNights = k; if (FJ.skyFor(G).w !== 'clear') first = false; }
+        check(first, 'the first three nights are clear, for learning the jar');
+        for (let s = 0; s < 5; s++) {
+            const cnt = {};
+            for (let k = 3; k < 403; k++) { G.season = s; G.nights = k; G.seasonNights = 1 + k % 9; const w = FJ.skyFor(G).w; cnt[w] = (cnt[w] || 0) + 1; }
+            const kinds = Object.keys(cnt).length, top = Math.max(...Object.values(cnt)) / 400;
+            check(kinds >= 4 && top <= .45, `${FJ.SEASONS[s]} has ${kinds} kinds of night, none more than ${(100 * top).toFixed(0)}% of them`);
+            G.nights = 30; G.seasonNights = 0; const a = FJ.skyFor(G).w; G.seed = 12345; const b = FJ.skyFor(G).w; G.seed = 9;
+            check(a === b, `${FJ.SEASONS[s]} always opens under its own sky (${a})`);
+        }
+        const moons = []; for (let k = 0; k < 16; k++) { G.nights = k; moons.push(FJ.skyFor(G).moon); }
+        check(moons.slice(0, 8).join() === moons.slice(8).join() && new Set(moons).size === 8, 'the moon goes through its eight phases every eight nights');
+    }
+    const fresh = (w, moon, season) => { const G = FJ.newGame(7); if (season) { G.season = season; for (let i = 1; i <= season; i++) G.gates['gate' + i] = 1; } under(G, w, moon); return {G, N: FJ.newNight(G, W, H, 11)}; };
+    const worth = (G, N, x, y) => { N.flies = [{k: 'n', x, y, ph: .8, T: 3, sp: 0, a: 0}]; N.jar.x = x; N.jar.y = y; N.jar.n = 0; N.jar.val = 0; N.jar.items = []; FJ.step(G, N, {x, y}, DT); return N.jar.val; };
+    // after the rain: more fireflies, and a puddle doubles the one above it
+    {
+        const c = fresh('clear'), r = fresh('rain');
+        check(Math.abs(r.N.pop / c.N.pop - 1.3) < .12, `after rain the meadow holds ${(r.N.pop / c.N.pop).toFixed(2)}× the fireflies`);
+        const lay = r.N.lay, ok = r.N.puddles.length >= 2 && r.N.puddles.every(p => Math.hypot(p.x - lay.bank.x, p.y - lay.bank.y) > lay.bank.r);
+        check(ok, `${r.N.puddles.length} puddles lie in the grass, clear of the lantern`);
+        const p = r.N.puddles[0], v1 = worth(r.G, r.N, p.x, p.y - 34), v0 = worth(r.G, r.N, 40, 120);
+        check(Math.abs(v1 / v0 - 2) < 1e-9 && r.G.journal.rain, 'a firefly caught over a puddle brings its reflection along, ×2, and a journal page', `${v1} vs ${v0}`);
+    }
+    // a storm far away: every flash of lightning, the fireflies answer, and catches count double for a moment
+    {
+        const {G, N} = fresh('storm'); N.boltT = 0; FJ.step(G, N, null, DT);
+        check(N.events.some(e => e.e === 'lightning'), 'the storm throws lightning');
+        for (let i = 0; i < 4; i++) FJ.step(G, N, null, DT);
+        const ns = N.flies.filter(f => f.k === 'n'), lit = ns.filter(f => FJ.glowOf(N, f) > .3).length;
+        check(lit / ns.length > .9, `the fireflies flash back at it (${lit} of ${ns.length})`);
+        const v1 = worth(G, N, 400, 300); for (let i = 0; i < 100; i++) FJ.step(G, N, null, DT); N.boltT = 999; const v0 = worth(G, N, 400, 300);
+        check(Math.abs(v1 / v0 - 2) < 1e-9 && G.journal.storm, 'right after a flash a catch counts ×2; three seconds later it does not', `${v1} vs ${v0}`);
+    }
+    // fog: the lantern's light carries further
+    {
+        for (const w of ['fog', 'clear']) {
+            const {G, N} = fresh(w), b = N.lay.bank; N.flies = []; N.jar.items = [{v: 1}]; N.jar.n = 1; N.jar.val = 1;
+            const x = b.x + b.r * 1.35, y = b.y; N.jar.x = x; N.jar.y = y;
+            for (let i = 0; i < 20; i++) FJ.step(G, N, {x, y}, DT);
+            check((N.jar.n === 0) === (w === 'fog'), w === 'fog' ? 'in fog the jar empties from further away' : 'on a clear night it has to come closer');
+        }
+    }
+    // snow slows the fireflies, a full moon makes them flash less often, a dark one brings more
+    {
+        const sp = N => { const ns = N.flies.filter(f => f.k === 'n'); return ns.reduce((a, f) => a + f.sp, 0) / ns.length; };
+        const c = fresh('clear', undefined, 2), sn = fresh('snow', undefined, 2);
+        check(Math.abs(sp(sn.N) / sp(c.N) - .85) < .06, `snow slows the fireflies to ${(100 * sp(sn.N) / sp(c.N)).toFixed(0)}%`);
+        const T = N => { const ns = N.flies.filter(f => f.k === 'n'); return ns.reduce((a, f) => a + f.T, 0) / ns.length; };
+        const full = fresh('clear', 4), half = fresh('clear', 2), dark = fresh('clear', 0);
+        check(T(full.N) / T(half.N) > 1.35, `under a full moon they flash ${(T(full.N) / T(half.N)).toFixed(2)}× as seldom`);
+        check(dark.N.pop > half.N.pop, `a moonless night brings more fireflies (${dark.N.pop} vs ${half.N.pop})`);
+        for (let i = 0; i < 30 * 5; i++) FJ.step(full.G, full.N, {x: 5, y: 5}, DT);
+        check(!!full.G.journal.moon, 'a night under the full moon gets its journal page');
+    }
+    // wind: the fireflies drift downwind and crowd along that edge
+    {
+        const {G, N} = fresh('wind');
+        for (let i = 0; i < 30 * 25; i++) FJ.step(G, N, null, DT);
+        const ns = N.flies.filter(f => f.k === 'n'), lee = ns.filter(f => N.wind > 0 ? f.x > W / 2 : f.x < W / 2).length;
+        check(lee / ns.length > .75 && ns.every(f => f.x > -5 && f.x < W + 5), `in the wind ${lee} of ${ns.length} fireflies drift downwind, and none leave the meadow`);
+    }
+    // no weather makes a night much worse than a clear one
+    {
+        const lit = (G, s) => { G.season = s; for (let i = 1; i <= s; i++) G.gates['gate' + i] = 1; for (const n of FJ.NODES) if (n.s === s && !n.gate && !n.final) G.lv[n.id] = Math.min(n.max, 2); };
+        for (const [w, s] of [['rain', 0], ['storm', 0], ['fog', 1], ['wind', 1], ['snow', 2]]) {
+            let a = 0, b = 0;
+            for (let k = 0; k < 3; k++) {
+                const G1 = FJ.newGame(20 + k); lit(G1, s); under(G1, 'clear'); a += night(G1, PHONE, 900 + k, 'hunter').s.total;
+                const G2 = FJ.newGame(20 + k); lit(G2, s); under(G2, w); b += night(G2, PHONE, 900 + k, 'hunter').s.total;
+            }
+            check(b / a >= .8, `${w}: a night earns ${(b / a).toFixed(2)}× a clear one`);
+        }
+    }
+    // years: the Milky Way hangs the tree in the sky, and another year keeps the journal and the stars
+    {
+        const G = FJ.newGame(3); G.season = 4; G.nights = 60; for (let i = 1; i <= 4; i++) G.gates['gate' + i] = 1;
+        for (const n of FJ.NODES) if (n.s <= 3 && !n.gate && !n.final && n.id !== 'jar' && n.id !== 'nectar') G.ever[n.id] = 1;
+        for (const n of FJ.NODES) if (n.s === 4 && !n.gate && !n.final) { G.lv[n.id] = 1; G.ever[n.id] = 1; }
+        FJ.discover(G, null, 'n'); FJ.discover(G, null, 'b');
+        G.light = FJ.cost(G, FJ.byId.milky); const r = FJ.buy(G, 'milky');
+        const c = G.stars[0], lit = FJ.NODES.filter(n => n.id === 'jar' || n.gate || n.final || G.ever[n.id]).length;
+        // every star hangs on a line, and nothing that was never lit is among them
+        const hung = new Set(c.links.flat());
+        check(r === 'end' && G.stars.length === 1 && c.year === 1 && c.pts.length === lit && hung.size === lit, `the Milky Way hangs this year's tree in the sky: ${c.pts.length} stars, ${c.links.length} lines`);
+        const Y = FJ.nextYear(G, 77), fresh1 = FJ.newGame(77); fresh1.journal = G.journal;
+        check(Y.year === 2 && Y.stars.length === 1 && Object.keys(Y.journal).length === 2 && !Y.done && Y.season === 0 && !Object.keys(Y.lv).length && !Object.keys(Y.roots).length, 'another year starts from summer with an empty tree, and keeps the journal and the stars');
+        check(Math.abs(FJ.params(Y).value / FJ.params(fresh1).value - FJ.YEAR_MUL) < 1e-9, `every year behind you makes all light ×${FJ.YEAR_MUL}`);
+        const old = JSON.parse(JSON.stringify(G)); delete old.stars; old.year = undefined;
+        check(FJ.load(old).stars.length === 1, 'a year finished before constellations existed gets its own when loaded');
+    }
+}
+
 /* ---------------- skill ----------------
    Sweeping is the verb, and nobody should be punished for sweeping. What rewards attention is
    knowing the rarer lights by their colour and rhythm and steering for them. Three players on
@@ -386,6 +493,14 @@ function pace() {
         let dry = 0, longest = 0;
         for (const l of log) { dry = l.bought ? 0 : dry + 1; longest = Math.max(longest, dry); }
         check(longest <= 4, `${tag}: at most ${longest} nights in a row with nothing to light`);
+        // the second year: the same seasons in the same order, faster, but not skipped through
+        if (size === PHONE) {
+            const two = playYear(size, SEED, FJ.nextYear(G, SEED + 1));
+            let st = 0; const lens2 = [];
+            for (const l of two.log) if (l.turned || l === two.log[two.log.length - 1]) { lens2.push(l.wall - st); st = l.wall; }
+            const r = two.wall / wall;
+            check(two.G.done && r >= .55 && r <= .85 && lens2.length === 5 && lens2.every(t => t >= 5 * 60), `${tag}: year two takes ${min(two.wall)}, ${(100 * r).toFixed(0)}% of the first, every season at least 5 min (${lens2.map(t => (t / 60).toFixed(1)).join(' / ')})`);
+        }
         if (REPORT) {
             console.log(`\n  ${tag}: ${log.length} nights, ${min(wall)}`);
             for (const l of log) console.log(`    #${String(l.k + 1).padStart(3)} ${FJ.SEASONS[l.season].padEnd(9)} ${String(l.T).padStart(2)} s  ✦ ${fmt(l.total).padStart(7)}  lit ${String(l.bought).padStart(2)}${l.turned ? '  → season turns' : ''}`);
@@ -393,7 +508,7 @@ function pace() {
     }
 }
 
-const RUN = {rules, skill, pace};
+const RUN = {rules, sky, skill, pace};
 for (const s of suites) {
     if (!RUN[s]) { console.log(`unknown suite ${s}; suites are ${ALL.join(', ')}`); process.exit(1); }
     RUN[s]();

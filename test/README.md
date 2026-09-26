@@ -269,8 +269,8 @@ instant a wave appears gains almost nothing from the card. The card is for peopl
 ## Firefly Jar
 
 ```sh
-npm run test:firefly                      # or: node test/firefly_jar.mjs  (about 40 seconds)
-node test/firefly_jar.mjs rules skill
+npm run test:firefly                      # or: node test/firefly_jar.mjs  (a few minutes)
+node test/firefly_jar.mjs rules sky skill
 node test/firefly_jar.mjs pace --report   # the bots' year, night by night
 node test/firefly_jar.mjs pace --seed=11  # the same year on another seed
 node test/firefly_jar.mjs --page=old.html
@@ -287,15 +287,16 @@ meadow or 1000 px/s on a 1280×800 desktop one; the jar trails the pointer as it
 Both moving players follow wisp trails, ride the aurora and drop their catch at path stones and,
 every other night, into buds; they differ only in which fireflies they go for. `hunter` steers for
 the rarer kinds it can reach (glow-worms, blue ghosts, femmes fatales, synchronous clouds), valued
-at what they are worth; `sweeper` takes whatever is nearest; `idle` never moves. The shop lights
+at what they are worth where they are (a coloured beam, a puddle); `sweeper` takes whatever is nearest; `idle` never moves. The shop lights
 whatever is cheapest and turns the season once nothing cheaper than the gate is left to buy. A
 person is assumed to take about half as long again as the bots.
 
 | suite | what it checks |
 | --- | --- |
 | `rules` | a dark firefly is caught at once and is worth the same as one caught in its flash; each rarer kind is worth what its page says and the femme fatale eats one firefly from the jar; a glow-worm sits still and never goes dark; a synchronous cloud flashes in unison and is dark most of the time; a brimming jar counts ×1.5; each journal page adds 4%; a full jar catches nothing; the lantern takes the whole jar and dawn takes what is left unless Late Homecoming keeps it; no night is longer than 80 s; turning a season darkens the crown, keeps gates and roots, pays rings and remembers levels, relit lanterns cost a quarter (Old Wood a tenth), Relight restores exactly what burned, Embers starts with 6% of the gate; a finished wisp trail lays a path and what is dropped at its stone arrives home; a bud stores the jar and blooms after three nights; a night replays from its seed |
+| `sky` | the first three nights are clear; every season has at least four kinds of night, none more than 45% of them, and always opens under its own sky; the moon runs through eight phases every eight nights; after rain there are 1.3× the fireflies, puddles lie clear of the lantern and a catch over one counts ×2; lightning makes every firefly flash back and doubles catches for a moment; fog lets the jar empty from further away; snow slows the fireflies to 85%; a full moon makes them flash less often and a moonless night brings more; wind drifts them downwind without blowing them off the meadow; no weather earns less than 80% of a clear night; lighting the Milky Way hangs the year's tree in the sky as a constellation, another year keeps the journal and the stars and makes light ×1.5, and an older finished save gets its constellation on load |
 | `skill` | on both meadows, from early summer to late spring: steering for the rare lights never costs more than 3% and earns at least ×1.12 on average once they are about, sweeping keeps at least 60% of the steerer, and the jars in the grass earn at most 12% of it on their own |
-| `pace` | the whole year on both meadows: Summer 11–20 bot minutes, each later season 9–22, the year 60–105; each later season relights the summer lanterns at least three times as fast as the first summer lit them; outside Midsummer no night earns more than four times the one before; Midsummer runs away over at least seven nights and at most ×16 a night; never more than four nights in a row with nothing to light |
+| `pace` | the whole year on both meadows: Summer 11–20 bot minutes, each later season 9–22, the year 60–105; each later season relights the summer lanterns at least three times as fast as the first summer lit them; outside Midsummer no night earns more than four times the one before; Midsummer runs away over at least seven nights and at most ×16 a night; never more than four nights in a row with nothing to light; on the phone meadow, year two takes 55–85% of year one without any season shorter than five minutes |
 
 The numbers came from a tuner that priced each season in turn, so that a bot has lit all of its
 lanterns about three minutes before its target and meets a gate worth about two and a half of its
@@ -305,3 +306,7 @@ turned Autumn into a jump, the prestige re-climb running only 1.5× faster than 
 widening the glow until hunting it was worth nothing. Version 2 then dropped the bonus for catching
 a firefly in its flash altogether (a flash lasts under a second, and people sweep), and moved the
 reason to watch the lights to the rarer species, which are told apart by colour and rhythm.
+Version 3 added weather and years: rain, storms, three more journal pages and ×1.5 a year made
+everything richer, so every season's prices were raised by 15 to 60 percent, most in Midsummer
+with its storms and in summer and spring, which see the most rain, until the year took as long as
+before.
