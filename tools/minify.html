@@ -365,6 +365,441 @@
 <button class="mode-toggle" id="mode-toggle" title="Toggle dark/light mode"><span class="icon">🌓</span></button>
 <div class="notification" id="notification"></div>
 <footer class="footer">HTML Minifier Tool - A simple online tool to minify your HTML code</footer>
+<script id="core">
+    // The minifier itself. No DOM in here, so test/code_minifier.mjs can run this block on
+    // its own in Node.
+
+    // The document is not a flat string: inside <script>, <style>, <pre> and
+    // <textarea>, whitespace and punctuation carry meaning. Those regions are
+    // lifted out and given their own rules, so a collapse meant for markup can
+    // never reach into a string literal, a line comment or a preformatted
+    // block. In the markup, a run of whitespace in text becomes one space, and
+    // only whitespace standing between two block-level tags, where it is never
+    // drawn, is dropped. The page's own CSS can change both: an element it sets to
+    // white-space: pre, pre-wrap, pre-line or break-spaces draws its whitespace, so
+    // everything inside is kept as written, and one it makes inline-level (a row of
+    // display: inline-block divs) draws the space between it and its neighbour.
+    // HTML whitespace is space, tab, newline, return and form feed; a no-break
+    // space is text.
+    const HTML_BLOCK = new Set(['!doctype', 'address', 'article', 'aside', 'base', 'blockquote', 'body', 'caption', 'col', 'colgroup',
+        'dd', 'details', 'dialog', 'div', 'dl', 'dt', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5',
+        'h6', 'head', 'header', 'hgroup', 'hr', 'html', 'li', 'link', 'main', 'menu', 'meta', 'nav', 'ol', 'optgroup', 'option', 'p',
+        'section', 'summary', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'title', 'tr', 'ul']);
+    const HTML_VOID = new Set(['!doctype', 'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+    const HTML_PRE_STYLE = /white-space(-collapse)?\s*:\s*(pre|break-spaces|preserve)/i;
+    const HTML_INLINE_STYLE = /display\s*:\s*(inline|contents|ruby)/i;
+    const REGEX_KEYWORDS = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
+    const JS_TYPES = new Set(['text/javascript', 'application/javascript', 'module']);
+    const isSpace = ch => ch <= ' ';
+
+    function selectorsFor(css, declaration) {
+        // The last compound of every selector whose rule has a matching declaration, as {tag,
+        // ids, classes, attrs}. Matching an element on its last compound alone can only match
+        // too much, which keeps too much whitespace, never too little.
+        const found = [];
+        const flat = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/g, '""');
+        for (const m of flat.matchAll(/([^{};]*)\{([^{}]*)\}/g)) {
+            if (!declaration.test(m[2])) continue;
+            for (const sel of m[1].split(',')) {
+                const last = sel.replace(/:(is|where|not|has)\([^)]*\)/g, '').trim().split(/[\s>+~]+/).pop() || '';
+                const plain = last.replace(/::?[\w-]+(\([^)]*\))?/g, '');
+                found.push({
+                    tag: (/^[a-zA-Z][\w-]*/.exec(plain) || [''])[0].toLowerCase(),
+                    ids: [...plain.matchAll(/#([\w-]+)/g)].map(x => x[1]),
+                    classes: [...plain.matchAll(/\.([\w-]+)/g)].map(x => x[1]),
+                    attrs: [...plain.matchAll(/\[\s*([\w:-]+)/g)].map(x => x[1].toLowerCase())
+                });
+            }
+        }
+        return found;
+    }
+
+    function tagInfo(tag) {
+        const closing = tag[1] === '/';
+        const name = (/^<\/?([a-zA-Z!][a-zA-Z0-9:-]*)/.exec(tag) || ['', ''])[1].toLowerCase();
+        const attrs = {};
+        for (const m of tag.slice(name.length + (closing ? 2 : 1)).matchAll(/([^\s"'>\/=]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)) {
+            attrs[m[1].toLowerCase()] = (m[2] || '').replace(/^["']|["']$/g, '');
+        }
+        return {name, attrs, closing, selfClosing: /\/>$/.test(tag)};
+    }
+
+    function styledAs(info, selectors, declaration) {
+        if (declaration.test(info.attrs.style || '')) return true;
+        const classes = (info.attrs.class || '').split(/[ \t\n\r\f]+/);
+        return selectors.some(s => (!s.tag || s.tag === info.name) && s.ids.every(id => info.attrs.id === id) &&
+            s.classes.every(c => classes.includes(c)) && s.attrs.every(a => a in info.attrs));
+    }
+
+    // Split the document into tags, text and raw-text regions (one part each).
+    function htmlParts(html) {
+        const parts = [], lower = html.toLowerCase();
+        const re = /<!--[\s\S]*?-->|<[a-zA-Z!\/][^>]*>/g;
+        let last = 0, m;
+        while ((m = re.exec(html))) {
+            if (m.index > last) parts.push({type: 'text', text: html.slice(last, m.index)});
+            const raw = /^<(script|style|pre|textarea)\b/i.exec(m[0]);
+            if (raw) {
+                const tag = raw[1].toLowerCase(), at = lower.indexOf('</' + tag, re.lastIndex), gt = at < 0 ? -1 : html.indexOf('>', at);
+                if (gt >= 0) {
+                    parts.push({type: 'raw', tag, open: m[0], inner: html.slice(re.lastIndex, at), close: html.slice(at, gt + 1)});
+                    last = re.lastIndex = gt + 1;
+                    continue;
+                }
+            }
+            parts.push({type: m[0].startsWith('<!--') ? 'comment' : 'tag', text: m[0]});
+            last = re.lastIndex;
+        }
+        if (last < html.length) parts.push({type: 'text', text: html.slice(last)});
+        return parts;
+    }
+
+    // The end of the string or template literal that starts at i. A template's ${...}
+    // holds code of its own - braces, strings, more templates - so it is walked, not
+    // searched for the next } or backtick.
+    function skipString(js, i) {
+        const q = js[i];
+        let j = i + 1;
+        while (j < js.length) {
+            const ch = js[j];
+            if (ch === '\\') { j += 2; continue; }
+            if (ch === q) return j + 1;
+            if (q !== '`' && ch === '\n') return j;
+            if (q === '`' && ch === '$' && js[j + 1] === '{') { j = skipCode(js, j + 2); continue; }
+            j++;
+        }
+        return j;
+    }
+
+    // Just past the } that closes the code inside a template's ${...}.
+    function skipCode(js, i) {
+        let j = i, depth = 0;
+        while (j < js.length) {
+            const ch = js[j];
+            if (ch === '"' || ch === "'" || ch === '`') { j = skipString(js, j); continue; }
+            if (ch === '/' && js[j + 1] === '/') { const nl = js.indexOf('\n', j); j = nl < 0 ? js.length : nl; continue; }
+            if (ch === '/' && js[j + 1] === '*') { const end = js.indexOf('*/', j + 2); j = end < 0 ? js.length : end + 2; continue; }
+            if (ch === '{') depth++;
+            else if (ch === '}') {
+                if (depth === 0) return j + 1;
+                depth--;
+            }
+            j++;
+        }
+        return j;
+    }
+
+    // Walk JavaScript so that strings, template literals, regex literals and
+    // comments are recognised for what they are, instead of being rewritten by
+    // regexes that cannot tell code from text. Runs of plain code are copied in
+    // slices; only the interesting constructs are inspected one character at a
+    // time. A whitespace run containing a newline collapses to a newline, never
+    // to nothing, so automatic semicolon insertion keeps working.
+    function minifyScript(js, stripComments, collapse) {
+        const parts = [];
+        let i = 0, plain = 0, lastSig = -1;
+        const flush = at => { if (at > plain) parts.push(js.slice(plain, at)); };
+        const endsWithNewline = () => parts.length && parts[parts.length - 1].endsWith('\n');
+        // A slash starts a regex literal only where a value may begin.
+        const regexPos = () => {
+            if (lastSig < 0) return true;
+            const ch = js[lastSig];
+            if ('({[,;:=!&|?+-*%~^<>'.indexOf(ch) !== -1) return true;
+            if (!/[\w$]/.test(ch)) return false;
+            let k = lastSig;
+            while (k >= 0 && /[\w$]/.test(js[k])) k--;
+            return js[k] !== '.' && REGEX_KEYWORDS.has(js.slice(k + 1, lastSig + 1));
+        };
+        while (i < js.length) {
+            const c = js[i];
+            if (c === '/' && (js[i + 1] === '/' || js[i + 1] === '*')) {
+                const block = js[i + 1] === '*';
+                let end = block ? js.indexOf('*/', i + 2) : js.indexOf('\n', i);
+                if (end === -1) end = js.length;
+                else if (block) end += 2;
+                if (!stripComments) { i = end; lastSig = end - 1; continue; }
+                flush(i);
+                if (block && js.slice(i, end).indexOf('\n') !== -1 && !endsWithNewline()) parts.push('\n');
+                plain = i = end;
+                continue;
+            }
+            if (c === '"' || c === "'" || c === '`') {
+                const j = skipString(js, i);
+                lastSig = j - 1; i = j;
+                continue;
+            }
+            if (c === '/' && regexPos()) {
+                let j = i + 1, inClass = false, closed = false;
+                while (j < js.length) {
+                    if (js[j] === '\\') { j += 2; continue; }
+                    if (js[j] === '[') inClass = true;
+                    else if (js[j] === ']') inClass = false;
+                    else if (js[j] === '\n') break;
+                    else if (js[j] === '/' && !inClass) { closed = true; j++; break; }
+                    j++;
+                }
+                if (closed) {
+                    while (j < js.length && /[a-z]/i.test(js[j])) j++;
+                    lastSig = j - 1; i = j;
+                    continue;
+                }
+            }
+            if (isSpace(c)) {
+                let j = i, newline = false;
+                while (j < js.length && isSpace(js[j])) {
+                    if (js[j] === '\n' || js[j] === '\r') newline = true;
+                    j++;
+                }
+                if (!collapse) { i = j; continue; }
+                flush(i);
+                const atEdge = (!parts.length && !plain) || j >= js.length;
+                if (!atEdge && !(newline && endsWithNewline())) parts.push(newline ? '\n' : ' ');
+                plain = i = j;
+                continue;
+            }
+            lastSig = i; i++;
+        }
+        flush(js.length);
+        const out = parts.join('');
+        return collapse ? out.trim() : out;
+    }
+
+    // CSS, read as tokens rather than as text. Whitespace means something in three places
+    // a text-level collapse cannot see: in a selector it is the descendant combinator
+    // (".form :valid" is not ".form:valid"), inside calc() it must surround + and -, and
+    // between two words it is what keeps them two words. So the sheet is split into tokens
+    // first (strings, comments, unquoted url()s and escapes are single tokens and are never
+    // touched), every token learns whether it sits in a selector, an at-rule's prelude, a
+    // property name or a value, and a space is dropped only where that position says it
+    // cannot matter. CSS whitespace is space, tab, newline, return and form feed - not the
+    // no-break space that \s also matches.
+    const CSS_PUNCT = '{}()[];:,>+~!/';
+
+    function cssTokens(css) {
+        const out = [], n = css.length;
+        const ws = c => c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
+        const hex = c => c !== undefined && /[0-9a-fA-F]/.test(c);
+        let i = 0;
+        while (i < n) {
+            const c = css[i], start = i;
+            if (ws(c)) {
+                while (i < n && ws(css[i])) i++;
+                out.push({t: 'ws', v: css.slice(start, i)});
+            } else if (c === '/' && css[i + 1] === '*') {
+                const end = css.indexOf('*/', i + 2);
+                i = end < 0 ? n : end + 2;
+                out.push({t: 'comment', v: css.slice(start, i)});
+            } else if (c === '"' || c === "'") {
+                i++;
+                while (i < n && css[i] !== c && css[i] !== '\n' && css[i] !== '\r' && css[i] !== '\f') i += css[i] === '\\' ? 2 : 1;
+                if (css[i] === c) i++;
+                out.push({t: 'str', v: css.slice(start, Math.min(i, n))});
+            } else if (CSS_PUNCT.includes(c)) {
+                i++;
+                out.push({t: 'punct', v: c});
+            } else {
+                while (i < n) {
+                    const d = css[i];
+                    if (d === '\\') {
+                        // An escape belongs to its word, including the one space that may end a
+                        // hex escape: ".\31 0" is the class "10", and ".\310" is something else.
+                        i++;
+                        if (hex(css[i])) {
+                            for (let k = 0; k < 6 && hex(css[i]); k++) i++;
+                            if (css[i] === '\r' && css[i + 1] === '\n') i += 2;
+                            else if (i < n && ws(css[i])) i++;
+                        } else if (i < n) i++;
+                        continue;
+                    }
+                    if (ws(d) || d === '"' || d === "'" || CSS_PUNCT.includes(d)) break;
+                    i++;
+                }
+                let v = css.slice(start, i);
+                if (/^url$/i.test(v) && css[i] === '(') {
+                    // An unquoted url() runs to its closing parenthesis, whatever is inside.
+                    let j = i + 1;
+                    while (j < n && ws(css[j])) j++;
+                    if (css[j] !== '"' && css[j] !== "'") {
+                        while (j < n && css[j] !== ')') j += css[j] === '\\' ? 2 : 1;
+                        i = Math.min(j + 1, n);
+                        v = css.slice(start, i);
+                    }
+                }
+                out.push({t: 'word', v});
+            }
+        }
+        return out;
+    }
+
+    function minifyStyle(css, stripComments, collapse) {
+        const T = cssTokens(css);
+        const n = T.length;
+        const isSig = t => t.t !== 'ws' && t.t !== 'comment';
+        const P = (t, ch) => t.t === 'punct' && t.v === ch;
+
+        // Pass 1: where does each token sit?
+        let kind = null;             // current statement: 'at' | 'sel' | 'decl', null between statements
+        let depth = 0, prop = '', inValue = false;
+        const endStatement = () => { kind = null; depth = 0; inValue = false; };
+        for (let k = 0; k < n; k++) {
+            const t = T[k];
+            if (!isSig(t)) continue;
+            if (kind === null) {
+                if (P(t, '}') || P(t, ';')) { t.ctx = 'struct'; continue; }
+                if (t.t === 'word' && t.v[0] === '@') kind = 'at';
+                else {
+                    // A statement is a rule if a { comes before any ; or }, otherwise a declaration.
+                    let d = 0;
+                    kind = 'decl';
+                    for (let j = k; j < n; j++) {
+                        const u = T[j];
+                        if (u.t !== 'punct') continue;
+                        if (u.v === '(' || u.v === '[') d++;
+                        else if (u.v === ')' || u.v === ']') d = Math.max(0, d - 1);
+                        else if (d === 0 && u.v === '{') { kind = 'sel'; break; }
+                        else if (d === 0 && (u.v === ';' || u.v === '}')) break;
+                    }
+                    prop = '';
+                }
+            }
+            if (t.t === 'punct' && depth === 0 && (t.v === '{' || t.v === ';' || t.v === '}')) {
+                t.ctx = 'struct';
+                if (t.v === ';') t.endsDecl = kind === 'decl';
+                endStatement();
+                continue;
+            }
+            if (t.t === 'punct' && (t.v === '(' || t.v === '[')) depth++;
+            else if (t.t === 'punct' && (t.v === ')' || t.v === ']')) depth = Math.max(0, depth - 1);
+            t.depth = depth;
+            if (kind === 'decl') {
+                if (!inValue) {
+                    if (P(t, ':') && depth === 0) {
+                        t.ctx = 'colon';
+                        inValue = true;
+                        t.custom = prop.startsWith('--');
+                    } else {
+                        t.ctx = 'name';
+                        if (t.t === 'word') prop += t.v.toLowerCase();
+                    }
+                } else t.ctx = 'value';
+            } else t.ctx = kind;
+        }
+
+        // Pass 2: write it out.
+        const DROP = {
+            // after a token / before a token, by position
+            value: ['([,/!', ')],/!'],
+            sel: ['>+~,([', '>+~,)]'],
+            at: ['([,', ')],'],
+            name: ['', '']
+        };
+        const glued = (a, b) => {
+            // Would these two tokens read differently written side by side? Only punctuation
+            // that is always a token of its own is safe; "a" and "(" would become a function.
+            const SAFE = '{}();,[]:!"\'';
+            const x = a.v[a.v.length - 1], y = b.v[0];
+            return !(SAFE.includes(x) || (SAFE.includes(y) && y !== '('));
+        };
+        const space = (a, b) => {
+            if (!a || !b) return '';
+            if (a.ctx === 'struct' || b.ctx === 'struct' || a.ctx === 'colon' || b.ctx === 'colon') return '';
+            const rule = DROP[b.ctx] || DROP.name;
+            if (a.t === 'punct' && rule[0].includes(a.v)) return a.v === '/' && b.v[0] === '*' ? ' ' : '';
+            if (b.t === 'punct' && rule[1].includes(b.v)) return '';
+            if (b.ctx === 'at' && P(a, ':') && a.depth > 0) return '';
+            return ' ';
+        };
+        let out = '', prev = null, gap = [];
+        const flushGap = next => {
+            const comments = gap.filter(g => g.t === 'comment');
+            const hasWs = gap.some(g => g.t === 'ws');
+            if (!gap.length) return '';
+            if (!stripComments && comments.length) {
+                // Comments stay; each run of whitespace around them becomes what the position allows.
+                const sp = space(prev, next);
+                return gap.map(g => g.t === 'comment' ? g.v : (collapse ? sp : g.v)).join('');
+            }
+            if (hasWs) {
+                if (!collapse) return gap.filter(g => g.t === 'ws').map(g => g.v).join('');
+                const sp = space(prev, next);
+                // An empty custom property keeps one space: "--x: ;" is valid everywhere, "--x:;" is not.
+                if (!sp && prev && next && prev.ctx === 'colon' && next.ctx === 'struct' && prev.custom) return ' ';
+                return sp;
+            }
+            // Only a comment separated these two tokens: keep an empty one if they would fuse.
+            return prev && next && glued(prev, next) ? '/**/' : '';
+        };
+        for (let k = 0; k < n; k++) {
+            const t = T[k];
+            if (!isSig(t)) { gap.push(t); continue; }
+            out += flushGap(t);
+            gap = [];
+            if (collapse && t.endsDecl) {
+                let j = k + 1;
+                while (j < n && !isSig(T[j])) j++;
+                if (j < n && P(T[j], '}')) { prev = t; continue; }
+            }
+            out += t.v;
+            prev = t;
+        }
+        return out + flushGap(null);
+    }
+
+    function minifyDocument(code, o) {
+        const parts = [];
+        for (const p of htmlParts(code)) {
+            // Conditional comments are markup, not commentary.
+            if (p.type === 'comment' && o.stripComments && p.text.slice(0, 7).toLowerCase() !== '<!--[if') continue;
+            // text on both sides of a removed comment is one run of text
+            const last = parts[parts.length - 1];
+            if (p.type === 'text' && last && last.type === 'text') last.text += p.text;
+            else parts.push(p);
+        }
+        // First the structure: which elements keep their whitespace, and which tags stand for
+        // a block that whitespace beside it cannot show next to.
+        const css = parts.filter(p => p.type === 'raw' && p.tag === 'style').map(p => p.inner).join('\n');
+        const pre = selectorsFor(css, HTML_PRE_STYLE), inline = selectorsFor(css, HTML_INLINE_STYLE);
+        const open = [];
+        for (const p of parts) {
+            p.keep = open.some(e => e.keep);
+            if (p.type !== 'tag') continue;
+            const info = tagInfo(p.text);
+            let element = {name: info.name, keep: styledAs(info, pre, HTML_PRE_STYLE), inline: styledAs(info, inline, HTML_INLINE_STYLE)};
+            if (info.closing) {
+                const at = open.map(e => e.name).lastIndexOf(info.name);
+                if (at >= 0) { element = open[at]; open.length = at; }
+            } else if (info.name && !HTML_VOID.has(info.name) && !info.selfClosing) open.push(element);
+            p.block = HTML_BLOCK.has(info.name) && !element.inline;
+        }
+        const out = parts.map((p, k) => {
+            if (p.type === 'text') {
+                if (!o.collapse || p.keep) return p.text;
+                const text = p.text.replace(/[ \t\n\r\f]+/g, ' ');
+                if (text !== ' ') return text;
+                // whitespace only: drawn unless both neighbours are blocks
+                const a = parts[k - 1], b = parts[k + 1];
+                return a && b && a.block && b.block ? '' : ' ';
+            }
+            if (p.type !== 'raw') return p.text;
+            if (p.tag === 'script' && o.removeScripts) return '';
+            if (p.tag === 'style' && o.removeStyles) return '';
+            let inner = p.inner;
+            if (p.tag === 'script') {
+                // Data blocks (JSON-LD, templates, shaders) are not JavaScript; JSON loses only
+                // the whitespace between its tokens, anything else is kept as written.
+                const type = /\btype\s*=\s*["']?([^"'\s>]+)/i.exec(p.open);
+                if (!type || JS_TYPES.has(type[1].toLowerCase())) inner = minifyScript(inner, o.stripComments, o.collapse);
+                else if (o.collapse && /json|importmap|speculationrules/i.test(type[1])) {
+                    inner = inner.replace(/("(\\.|[^"\\])*")|[ \t\n\r]+/g, (m, str) => str || '');
+                }
+            } else if (p.tag === 'style') {
+                inner = minifyStyle(inner, o.stripComments, o.collapse);
+            }
+            return p.open + inner + p.close;
+        });
+        return out.join('').replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, '');
+    }
+</script>
 <script>document.addEventListener('DOMContentLoaded', () => {
     const inputElement = document.getElementById('input');
     const outputElement = document.getElementById('output');
@@ -481,231 +916,15 @@
         }
     }
 
-    // The document is not a flat string: inside <script>, <style>, <pre> and
-    // <textarea>, whitespace and punctuation carry meaning. Those regions are
-    // lifted out and given their own rules, so a collapse meant for markup can
-    // never reach into a string literal, a line comment or a preformatted
-    // block.
-    const RAW_TAGS = /<(script|style|pre|textarea)\b[^>]*>/gi;
-    // Whitespace beside an inline element is rendered, so it is never dropped.
-    const INLINE_TAGS = new Set(['a', 'abbr', 'b', 'bdi', 'bdo', 'big', 'button', 'cite', 'code', 'data', 'del', 'dfn', 'em', 'font', 'i', 'img', 'input', 'ins', 'kbd', 'label', 'mark', 'meter', 'output', 'picture', 'progress', 'q', 'ruby', 's', 'samp', 'select', 'small', 'span', 'strong', 'sub', 'sup', 'textarea', 'time', 'tt', 'u', 'var', 'wbr']);
-    const REGEX_KEYWORDS = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
-    const JS_TYPES = new Set(['text/javascript', 'application/javascript', 'module']);
-    const isSpace = ch => ch <= ' ';
-
-    // Split the document into markup and raw-text regions.
-    function tokenize(code) {
-        const tokens = [];
-        const lower = code.toLowerCase();
-        RAW_TAGS.lastIndex = 0;
-        let last = 0, m;
-        while ((m = RAW_TAGS.exec(code))) {
-            const tag = m[1].toLowerCase();
-            const from = m.index + m[0].length;
-            const at = lower.indexOf('</' + tag, from);
-            if (at === -1) continue;
-            const gt = code.indexOf('>', at);
-            if (gt === -1) continue;
-            tokens.push({type: 'markup', text: code.slice(last, m.index)});
-            tokens.push({type: 'raw', tag: tag, open: m[0], inner: code.slice(from, at), close: code.slice(at, gt + 1)});
-            last = RAW_TAGS.lastIndex = gt + 1;
-        }
-        tokens.push({type: 'markup', text: code.slice(last)});
-        return tokens;
-    }
-
-    // Walk JavaScript so that strings, template literals, regex literals and
-    // comments are recognised for what they are, instead of being rewritten by
-    // regexes that cannot tell code from text. Runs of plain code are copied in
-    // slices; only the interesting constructs are inspected one character at a
-    // time. A whitespace run containing a newline collapses to a newline, never
-    // to nothing, so automatic semicolon insertion keeps working.
-    function minifyScript(js, stripComments, collapse) {
-        const parts = [];
-        let i = 0, plain = 0, lastSig = -1;
-        const flush = at => { if (at > plain) parts.push(js.slice(plain, at)); };
-        const endsWithNewline = () => parts.length && parts[parts.length - 1].endsWith('\n');
-        // A slash starts a regex literal only where a value may begin.
-        const regexPos = () => {
-            if (lastSig < 0) return true;
-            const ch = js[lastSig];
-            if ('({[,;:=!&|?+-*%~^<>'.indexOf(ch) !== -1) return true;
-            if (!/[\w$]/.test(ch)) return false;
-            let k = lastSig;
-            while (k >= 0 && /[\w$]/.test(js[k])) k--;
-            return js[k] !== '.' && REGEX_KEYWORDS.has(js.slice(k + 1, lastSig + 1));
-        };
-        while (i < js.length) {
-            const c = js[i];
-            if (c === '/' && (js[i + 1] === '/' || js[i + 1] === '*')) {
-                const block = js[i + 1] === '*';
-                let end = block ? js.indexOf('*/', i + 2) : js.indexOf('\n', i);
-                if (end === -1) end = js.length;
-                else if (block) end += 2;
-                if (!stripComments) { i = end; lastSig = end - 1; continue; }
-                flush(i);
-                if (block && js.slice(i, end).indexOf('\n') !== -1 && !endsWithNewline()) parts.push('\n');
-                plain = i = end;
-                continue;
-            }
-            if (c === '"' || c === "'" || c === '`') {
-                let j = i + 1, depth = 0;
-                while (j < js.length) {
-                    if (js[j] === '\\') { j += 2; continue; }
-                    if (c === '`' && js[j] === '$' && js[j + 1] === '{') { depth++; j += 2; continue; }
-                    if (c === '`' && depth > 0 && js[j] === '}') { depth--; j++; continue; }
-                    if (js[j] === c && depth === 0) { j++; break; }
-                    if (js[j] === '\n' && c !== '`') break;
-                    j++;
-                }
-                lastSig = j - 1; i = j;
-                continue;
-            }
-            if (c === '/' && regexPos()) {
-                let j = i + 1, inClass = false, closed = false;
-                while (j < js.length) {
-                    if (js[j] === '\\') { j += 2; continue; }
-                    if (js[j] === '[') inClass = true;
-                    else if (js[j] === ']') inClass = false;
-                    else if (js[j] === '\n') break;
-                    else if (js[j] === '/' && !inClass) { closed = true; j++; break; }
-                    j++;
-                }
-                if (closed) {
-                    while (j < js.length && /[a-z]/i.test(js[j])) j++;
-                    lastSig = j - 1; i = j;
-                    continue;
-                }
-            }
-            if (isSpace(c)) {
-                let j = i, newline = false;
-                while (j < js.length && isSpace(js[j])) {
-                    if (js[j] === '\n' || js[j] === '\r') newline = true;
-                    j++;
-                }
-                if (!collapse) { i = j; continue; }
-                flush(i);
-                const atEdge = (!parts.length && !plain) || j >= js.length;
-                if (!atEdge && !(newline && endsWithNewline())) parts.push(newline ? '\n' : ' ');
-                plain = i = j;
-                continue;
-            }
-            lastSig = i; i++;
-        }
-        flush(js.length);
-        const out = parts.join('');
-        return collapse ? out.trim() : out;
-    }
-
-    // CSS is where the old `:;{}` collapse always belonged. Comments and string
-    // literals are stepped over so their spacing survives it.
-    const CSS_MARK = String.fromCharCode(1);
-
-    function minifyStyle(css, stripComments, collapse) {
-        const parts = [], strings = [];
-        let i = 0, plain = 0;
-        const flush = at => { if (at > plain) parts.push(css.slice(plain, at)); };
-        while (i < css.length) {
-            const c = css[i];
-            if (c === '/' && css[i + 1] === '*') {
-                let end = css.indexOf('*/', i + 2);
-                end = end === -1 ? css.length : end + 2;
-                if (stripComments) { flush(i); parts.push(' '); plain = i = end; }
-                else i = end;
-                continue;
-            }
-            if (c === '"' || c === "'") {
-                let j = i + 1;
-                while (j < css.length) {
-                    if (css[j] === '\\') { j += 2; continue; }
-                    if (css[j] === c) { j++; break; }
-                    j++;
-                }
-                // Park the literal so the collapse below cannot reach inside it.
-                flush(i);
-                strings.push(css.slice(i, j));
-                parts.push(CSS_MARK + (strings.length - 1) + CSS_MARK);
-                plain = i = j;
-                continue;
-            }
-            i++;
-        }
-        flush(css.length);
-        let out = parts.join('');
-        if (collapse) {
-            out = out.replace(/\s+/g, ' ')
-                .replace(/\s*([{};:,>~+])\s*/g, '$1')
-                .replace(/;}/g, '}')
-                .trim();
-        }
-        return out.split(CSS_MARK).map((seg, ix) => ix % 2 ? strings[+seg] : seg).join('');
-    }
-
-    // In markup, whitespace inside a text node still separates words, so it is
-    // collapsed rather than deleted; only whitespace sitting between two
-    // block-level tags is safe to drop outright.
-    function minifyMarkup(markup, stripComments, collapse) {
-        const parts = [];
-        const re = /<!--[\s\S]*?-->|<[^>]*>/g;
-        let last = 0, m;
-        while ((m = re.exec(markup))) {
-            if (m.index > last) parts.push({type: 'text', text: markup.slice(last, m.index)});
-            parts.push({type: 'tag', text: m[0]});
-            last = re.lastIndex;
-        }
-        if (last < markup.length) parts.push({type: 'text', text: markup.slice(last)});
-
-        const kept = parts.filter(part => {
-            if (part.type !== 'tag' || !part.text.startsWith('<!--')) return true;
-            // Conditional comments are markup, not commentary.
-            if (part.text.slice(0, 7).toLowerCase() === '<!--[if') return true;
-            return !stripComments;
-        });
-
-        const nameOf = tag => {
-            let rest = tag.slice(1);
-            if (rest[0] === '/') rest = rest.slice(1);
-            const name = /^[a-zA-Z][a-zA-Z0-9:_-]*/.exec(rest);
-            return name ? name[0].toLowerCase() : '';
-        };
-        const inlineSide = tag => !tag || tag.startsWith('<!--') || INLINE_TAGS.has(nameOf(tag));
-
-        return kept.map((part, idx) => {
-            if (part.type === 'tag') return part.text;
-            if (!collapse) return part.text;
-            const collapsed = part.text.replace(/\s+/g, ' ');
-            if (collapsed.trim()) return collapsed;
-            const before = idx > 0 ? kept[idx - 1].text : '';
-            const after = idx + 1 < kept.length ? kept[idx + 1].text : '';
-            if (!before || !after) return '';
-            return (inlineSide(before) || inlineSide(after)) ? ' ' : '';
-        }).join('');
-    }
-
     function minify(code) {
         try {
             if (!code.trim()) return '';
-            const stripComments = removeComments.checked;
-            const collapse = collapseWhitespace.checked;
-            return tokenize(code).map(token => {
-                if (token.type === 'markup') return minifyMarkup(token.text, stripComments, collapse);
-                if (token.tag === 'script' && removeScripts.checked) return '';
-                if (token.tag === 'style' && removeStyles.checked) return '';
-                if (token.tag === 'pre' || token.tag === 'textarea') return token.open + token.inner + token.close;
-                let inner = token.inner;
-                if (token.tag === 'script') {
-                    // Data blocks (JSON-LD, HTML templates) are not JavaScript.
-                    const type = /\btype\s*=\s*["']?([^"'\s>]+)/i.exec(token.open);
-                    if (!type || JS_TYPES.has(type[1].toLowerCase())) {
-                        inner = minifyScript(inner, stripComments, collapse);
-                    } else if (collapse) {
-                        inner = inner.replace(/\s+/g, ' ').trim();
-                    }
-                } else if (token.tag === 'style') {
-                    inner = minifyStyle(inner, stripComments, collapse);
-                }
-                return token.open + inner + token.close;
-            }).join('').trim();
+            return minifyDocument(code, {
+                stripComments: removeComments.checked,
+                collapse: collapseWhitespace.checked,
+                removeScripts: removeScripts.checked,
+                removeStyles: removeStyles.checked
+            });
         } catch (error) {
             console.error('Minification error:', error);
             showNotification('Error during minification');

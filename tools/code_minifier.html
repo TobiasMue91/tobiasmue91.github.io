@@ -938,6 +938,724 @@
 </footer>
 <div class="tape" aria-hidden="true"></div>
 
+<script id="core">
+    // The minifiers themselves. No DOM in here, so test/code_minifier.mjs can run this block
+    // on its own in Node. JavaScript goes to Terser, loaded from the CDN above; every other
+    // language is read here, and each is split first into what may be squeezed and what may
+    // not, so that squeezing never changes what the code does.
+
+    /* ---------- CSS ---------- */
+    // CSS, read as tokens rather than as text. Whitespace means something in three places
+    // a text-level collapse cannot see: in a selector it is the descendant combinator
+    // (".form :valid" is not ".form:valid"), inside calc() it must surround + and -, and
+    // between two words it is what keeps them two words. So the sheet is split into tokens
+    // first (strings, comments, unquoted url()s and escapes are single tokens and are never
+    // touched), every token learns whether it sits in a selector, an at-rule's prelude, a
+    // property name or a value, and a space is dropped only where that position says it
+    // cannot matter. CSS whitespace is space, tab, newline, return and form feed - not the
+    // no-break space that \s also matches.
+    const CSS_PUNCT = '{}()[];:,>+~!/';
+    const CSS_MATH = /^(-webkit-|-moz-)?(calc|min|max|clamp|round|mod|rem|abs|sign|sin|cos|tan|asin|acos|atan|atan2|pow|sqrt|hypot|log|exp)$/i;
+    // At-rules whose blocks hold ordinary style rules; anything else (@font-face, @property,
+    // @page, @counter-style) holds descriptors, whose values are left exactly as written.
+    const CSS_STYLE_AT = /^(media|supports|layer|container|scope|document|-moz-document|starting-style)$/i;
+    // Properties where a bare 0 means something other than 0px (flex: 0 is flex-grow 0).
+    const CSS_KEEP_ZERO_UNIT = /flex$|line-height|tab-size|border-image|mask-border/i;
+
+    function cssTokens(css) {
+        const out = [], n = css.length;
+        const ws = c => c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
+        const hex = c => c !== undefined && /[0-9a-fA-F]/.test(c);
+        let i = 0;
+        while (i < n) {
+            const c = css[i], start = i;
+            if (ws(c)) {
+                while (i < n && ws(css[i])) i++;
+                out.push({t: 'ws', v: css.slice(start, i)});
+            } else if (c === '/' && css[i + 1] === '*') {
+                const end = css.indexOf('*/', i + 2);
+                i = end < 0 ? n : end + 2;
+                out.push({t: 'comment', v: css.slice(start, i)});
+            } else if (c === '"' || c === "'") {
+                i++;
+                while (i < n && css[i] !== c && css[i] !== '\n' && css[i] !== '\r' && css[i] !== '\f') i += css[i] === '\\' ? 2 : 1;
+                if (css[i] === c) i++;
+                out.push({t: 'str', v: css.slice(start, Math.min(i, n))});
+            } else if (CSS_PUNCT.includes(c)) {
+                i++;
+                out.push({t: 'punct', v: c});
+            } else {
+                while (i < n) {
+                    const d = css[i];
+                    if (d === '\\') {
+                        // An escape belongs to its word, including the one space that may end a
+                        // hex escape: ".\31 0" is the class "10", and ".\310" is something else.
+                        i++;
+                        if (hex(css[i])) {
+                            for (let k = 0; k < 6 && hex(css[i]); k++) i++;
+                            if (css[i] === '\r' && css[i + 1] === '\n') i += 2;
+                            else if (i < n && ws(css[i])) i++;
+                        } else if (i < n) i++;
+                        continue;
+                    }
+                    if (ws(d) || d === '"' || d === "'" || CSS_PUNCT.includes(d)) break;
+                    i++;
+                }
+                let v = css.slice(start, i);
+                if (/^url$/i.test(v) && css[i] === '(') {
+                    // An unquoted url() runs to its closing parenthesis, whatever is inside.
+                    let j = i + 1;
+                    while (j < n && ws(css[j])) j++;
+                    if (css[j] !== '"' && css[j] !== "'") {
+                        while (j < n && css[j] !== ')') j += css[j] === '\\' ? 2 : 1;
+                        i = Math.min(j + 1, n);
+                        v = css.slice(start, i);
+                    }
+                }
+                out.push({t: 'word', v});
+            }
+        }
+        return out;
+    }
+
+    function minifyCSS(css, o) {
+        const T = cssTokens(css);
+        const n = T.length;
+        const isSig = t => t.t !== 'ws' && t.t !== 'comment';
+        const P = (t, ch) => t.t === 'punct' && t.v === ch;
+
+        // Pass 1: where does each token sit?
+        const stack = [];            // enclosing blocks: at-rule name, or null for a style rule
+        let kind = null;             // current statement: 'at' | 'sel' | 'decl', null between statements
+        let depth = 0, fns = [], atName = '', prop = '', custom = false, inValue = false;
+        const styleBlock = () => !stack.length || stack[stack.length - 1] === null || CSS_STYLE_AT.test(stack[stack.length - 1]);
+        const endStatement = () => { kind = null; depth = 0; fns = []; inValue = false; };
+        for (let k = 0; k < n; k++) {
+            const t = T[k];
+            if (!isSig(t)) continue;
+            if (kind === null) {
+                if (P(t, '}')) { t.ctx = 'struct'; stack.pop(); continue; }
+                if (P(t, ';')) { t.ctx = 'struct'; continue; }
+                if (t.t === 'word' && t.v[0] === '@') {
+                    kind = 'at';
+                    atName = t.v.slice(1).toLowerCase();
+                } else {
+                    // A statement is a rule if a { comes before any ; or }, otherwise a declaration.
+                    let d = 0;
+                    kind = 'decl';
+                    for (let j = k; j < n; j++) {
+                        const u = T[j];
+                        if (u.t !== 'punct') continue;
+                        if (u.v === '(' || u.v === '[') d++;
+                        else if (u.v === ')' || u.v === ']') d = Math.max(0, d - 1);
+                        else if (d === 0 && u.v === '{') { kind = 'sel'; break; }
+                        else if (d === 0 && (u.v === ';' || u.v === '}')) break;
+                    }
+                    prop = '';
+                    custom = false;
+                }
+            }
+            if (t.t === 'punct' && depth === 0 && (t.v === '{' || t.v === ';' || t.v === '}')) {
+                t.ctx = 'struct';
+                if (t.v === ';') t.endsDecl = kind === 'decl';
+                if (t.v === '{') stack.push(kind === 'at' ? atName : null);
+                if (t.v === '}') stack.pop();
+                endStatement();
+                continue;
+            }
+            if (t.t === 'punct' && (t.v === '(' || t.v === '[')) {
+                const before = T[k - 1];
+                fns.push(t.v === '(' && before && before.t === 'word' ? before.v : '');
+                depth++;
+            } else if (t.t === 'punct' && (t.v === ')' || t.v === ']')) {
+                fns.pop();
+                depth = Math.max(0, depth - 1);
+            }
+            t.depth = depth;
+            if (kind === 'decl') {
+                if (!inValue) {
+                    if (P(t, ':') && depth === 0) {
+                        t.ctx = 'colon';
+                        inValue = true;
+                        custom = t.custom = prop.startsWith('--');
+                    } else {
+                        t.ctx = 'name';
+                        if (t.t === 'word') prop += t.v.toLowerCase();
+                    }
+                } else {
+                    t.ctx = custom ? 'custom' : 'value';
+                    t.prop = prop;
+                    t.plain = !custom && styleBlock();
+                    t.top = depth === 0 && !(t.t === 'punct' && t.v === ')');
+                    t.math = fns.some(f => CSS_MATH.test(f));
+                }
+            } else t.ctx = kind;
+        }
+
+        // Pass 2: write it out.
+        const DROP = {
+            // after a token / before a token, by position
+            value: ['([,/!', ')],/!'],
+            custom: ['([,/!', ')],/!'],
+            sel: ['>+~,([', '>+~,)]'],
+            at: ['([,', ')],'],
+            name: ['', '']
+        };
+        const glued = (a, b) => {
+            // Would these two tokens read differently written side by side? Only punctuation
+            // that is always a token of its own is safe; "a" and "(" would become a function.
+            const SAFE = '{}();,[]:!"\'';
+            const x = a.v[a.v.length - 1], y = b.v[0];
+            return !(SAFE.includes(x) || (SAFE.includes(y) && y !== '('));
+        };
+        const space = (a, b) => {
+            if (!a || !b) return '';
+            if (a.ctx === 'struct' || b.ctx === 'struct' || a.ctx === 'colon' || b.ctx === 'colon') return '';
+            const rule = DROP[b.ctx] || DROP.name;
+            if (a.t === 'punct' && rule[0].includes(a.v)) return a.v === '/' && b.v[0] === '*' ? ' ' : '';
+            if (b.t === 'punct' && rule[1].includes(b.v)) return '';
+            if (b.ctx === 'at' && P(a, ':') && a.depth > 0) return '';
+            return ' ';
+        };
+        const word = t => {
+            if (t.ctx !== 'value' || t.t !== 'word' || !t.plain) return t.v;
+            if (o.shortHex) {
+                const m = /^#([0-9a-fA-F])\1([0-9a-fA-F])\2([0-9a-fA-F])\3$/.exec(t.v);
+                if (m) return '#' + m[1] + m[2] + m[3];
+            }
+            if (o.zeroUnits && t.top && !t.math && !CSS_KEEP_ZERO_UNIT.test(t.prop) &&
+                /^[+-]?(\d+\.?\d*|\.\d+)(px|em|rem|vh|vw|pt|ex|ch|vmin|vmax)$/i.test(t.v) && parseFloat(t.v) === 0) return '0';
+            return t.v;
+        };
+        let out = '', prev = null, gap = [];
+        const flushGap = next => {
+            const comments = gap.filter(g => g.t === 'comment');
+            const hasWs = gap.some(g => g.t === 'ws');
+            if (!gap.length) return '';
+            if (!o.comments && comments.length) {
+                // Comments stay; each run of whitespace around them becomes what the position allows.
+                const sp = space(prev, next);
+                return gap.map(g => g.t === 'comment' ? g.v : (o.whitespace ? sp : g.v)).join('');
+            }
+            if (hasWs) {
+                if (!o.whitespace) return gap.filter(g => g.t === 'ws').map(g => g.v).join('');
+                const sp = space(prev, next);
+                // An empty custom property keeps one space: "--x: ;" is valid everywhere, "--x:;" is not.
+                if (!sp && prev && next && prev.ctx === 'colon' && next.ctx === 'struct' && prev.custom) return ' ';
+                return sp;
+            }
+            // Only a comment separated these two tokens: keep an empty one if they would fuse.
+            return prev && next && glued(prev, next) ? '/**/' : '';
+        };
+        for (let k = 0; k < n; k++) {
+            const t = T[k];
+            if (!isSig(t)) { gap.push(t); continue; }
+            out += flushGap(t);
+            gap = [];
+            if (o.whitespace && t.endsDecl) {
+                let j = k + 1;
+                while (j < n && !isSig(T[j])) j++;
+                if (j < n && P(T[j], '}')) { prev = t; continue; }
+            }
+            out += word(t);
+            prev = t;
+        }
+        return out + flushGap(null);
+    }
+
+    /* ---------- HTML ---------- */
+    // HTML, read as tags, text and raw regions. Inside <script>, <style>, <pre> and
+    // <textarea> the text is not markup, so it is handed to the right minifier or kept as
+    // written. In the markup, a run of whitespace in text becomes one space - it still
+    // separates two words - and only whitespace standing between two block-level tags,
+    // where it is never drawn, is dropped. The page's own CSS can change both: an element
+    // it sets to white-space: pre, pre-wrap, pre-line or break-spaces draws its whitespace,
+    // so everything inside is kept as written, and one it makes inline-level (a row of
+    // display: inline-block divs) draws the space between it and its neighbour. HTML
+    // whitespace is space, tab, newline, return and form feed; a no-break space is text.
+    const HTML_BLOCK = new Set(['!doctype', 'address', 'article', 'aside', 'base', 'blockquote', 'body', 'caption', 'col', 'colgroup',
+        'dd', 'details', 'dialog', 'div', 'dl', 'dt', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5',
+        'h6', 'head', 'header', 'hgroup', 'hr', 'html', 'li', 'link', 'main', 'menu', 'meta', 'nav', 'ol', 'optgroup', 'option', 'p',
+        'section', 'summary', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'title', 'tr', 'ul']);
+    const HTML_VOID = new Set(['!doctype', 'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+    const JS_TYPES = /^(text\/javascript|application\/javascript|module|text\/ecmascript|application\/ecmascript)$/i;
+    const HTML_PRE_STYLE = /white-space(-collapse)?\s*:\s*(pre|break-spaces|preserve)/i;
+    const HTML_INLINE_STYLE = /display\s*:\s*(inline|contents|ruby)/i;
+
+    function selectorsFor(css, declaration) {
+        // The last compound of every selector whose rule has a matching declaration, as {tag,
+        // ids, classes, attrs}. Matching an element on its last compound alone can only match
+        // too much, which keeps too much whitespace, never too little.
+        const found = [];
+        const flat = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/g, '""');
+        for (const m of flat.matchAll(/([^{};]*)\{([^{}]*)\}/g)) {
+            if (!declaration.test(m[2])) continue;
+            for (const sel of m[1].split(',')) {
+                const last = sel.replace(/:(is|where|not|has)\([^)]*\)/g, '').trim().split(/[\s>+~]+/).pop() || '';
+                const plain = last.replace(/::?[\w-]+(\([^)]*\))?/g, '');
+                found.push({
+                    tag: (/^[a-zA-Z][\w-]*/.exec(plain) || [''])[0].toLowerCase(),
+                    ids: [...plain.matchAll(/#([\w-]+)/g)].map(x => x[1]),
+                    classes: [...plain.matchAll(/\.([\w-]+)/g)].map(x => x[1]),
+                    attrs: [...plain.matchAll(/\[\s*([\w:-]+)/g)].map(x => x[1].toLowerCase())
+                });
+            }
+        }
+        return found;
+    }
+
+    function tagInfo(tag) {
+        const closing = tag[1] === '/';
+        const name = (/^<\/?([a-zA-Z!][a-zA-Z0-9:-]*)/.exec(tag) || ['', ''])[1].toLowerCase();
+        const attrs = {};
+        for (const m of tag.slice(name.length + (closing ? 2 : 1)).matchAll(/([^\s"'>\/=]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)) {
+            attrs[m[1].toLowerCase()] = (m[2] || '').replace(/^["']|["']$/g, '');
+        }
+        return {name, attrs, closing, selfClosing: /\/>$/.test(tag)};
+    }
+
+    function styledAs(info, selectors, declaration) {
+        if (declaration.test(info.attrs.style || '')) return true;
+        const classes = (info.attrs.class || '').split(/[ \t\n\r\f]+/);
+        return selectors.some(s => (!s.tag || s.tag === info.name) && s.ids.every(id => info.attrs.id === id) &&
+            s.classes.every(c => classes.includes(c)) && s.attrs.every(a => a in info.attrs));
+    }
+
+    function htmlParts(html) {
+        // tags (with raw regions as one part) and the text between them
+        const parts = [], lower = html.toLowerCase();
+        const re = /<!--[\s\S]*?-->|<[a-zA-Z!\/][^>]*>/g;
+        let last = 0, m;
+        while ((m = re.exec(html))) {
+            if (m.index > last) parts.push({type: 'text', text: html.slice(last, m.index)});
+            const raw = /^<(script|style|pre|textarea)\b/i.exec(m[0]);
+            if (raw) {
+                const tag = raw[1].toLowerCase(), at = lower.indexOf('</' + tag, re.lastIndex), gt = at < 0 ? -1 : html.indexOf('>', at);
+                if (gt >= 0) {
+                    parts.push({type: 'raw', tag, open: m[0], inner: html.slice(re.lastIndex, at), close: html.slice(at, gt + 1)});
+                    last = re.lastIndex = gt + 1;
+                    continue;
+                }
+            }
+            parts.push({type: m[0].startsWith('<!--') ? 'comment' : 'tag', text: m[0]});
+            last = re.lastIndex;
+        }
+        if (last < html.length) parts.push({type: 'text', text: html.slice(last)});
+        return parts;
+    }
+
+    function tidyTag(tag, o, xml) {
+        // whitespace between attributes is one space; attribute values are never touched
+        let out = '';
+        for (const piece of tag.split(/("[^"]*"|'[^']*')/)) {
+            if (piece[0] === '"' || piece[0] === "'") out += piece;
+            else out += o.whitespace ? piece.replace(/[ \t\n\r\f]+/g, ' ') : piece;
+        }
+        if (o.attrQuotes && !xml) {
+            // quotes come off only where nothing in the value needs them, and never right
+            // before a slash: <img src="a.png"/> would otherwise read as src="a.png/"
+            out = out.replace(/(\s[a-zA-Z_:][\w:.-]*)="([^"'`=<>\s\/]+)"(?!\/)/g, '$1=$2');
+        }
+        return out;
+    }
+
+    async function minifyHTML(html, o) {
+        const xml = /^\s*<(\?xml|svg)\b/i.test(html);
+        const parts = [];
+        for (const p of htmlParts(html)) {
+            if (p.type === 'comment' && o.comments && !/^<!--\[if/i.test(p.text)) continue;
+            // text on both sides of a removed comment is one run of text
+            const last = parts[parts.length - 1];
+            if (p.type === 'text' && last && last.type === 'text') last.text += p.text;
+            else parts.push(p);
+        }
+        // First the structure: which elements keep their whitespace, and which tags stand for
+        // a block that whitespace beside it cannot show next to.
+        const css = parts.filter(p => p.type === 'raw' && p.tag === 'style').map(p => p.inner).join('\n');
+        const pre = selectorsFor(css, HTML_PRE_STYLE), inline = selectorsFor(css, HTML_INLINE_STYLE);
+        const open = [];
+        for (const p of parts) {
+            p.keep = open.some(e => e.keep);
+            if (p.type === 'raw') { p.block = false; continue; }
+            if (p.type !== 'tag') continue;
+            const info = tagInfo(p.text);
+            let element = {name: info.name, keep: styledAs(info, pre, HTML_PRE_STYLE), inline: styledAs(info, inline, HTML_INLINE_STYLE)};
+            if (info.closing) {
+                const at = open.map(e => e.name).lastIndexOf(info.name);
+                if (at >= 0) { element = open[at]; open.length = at; }
+            } else if (info.name && !HTML_VOID.has(info.name) && !info.selfClosing) open.push(element);
+            p.block = HTML_BLOCK.has(info.name) && !element.inline;
+        }
+        const out = [];
+        for (let k = 0; k < parts.length; k++) {
+            const p = parts[k];
+            if (p.type === 'text') {
+                if (!o.whitespace || p.keep) { out.push(p.text); continue; }
+                const text = p.text.replace(/[ \t\n\r\f]+/g, ' ');
+                if (text !== ' ') { out.push(text); continue; }
+                // whitespace only: drawn unless both neighbours are blocks
+                const a = parts[k - 1], b = parts[k + 1];
+                out.push(a && b && a.block && b.block ? '' : ' ');
+                continue;
+            }
+            if (p.type !== 'raw') { out.push(p.type === 'tag' ? tidyTag(p.text, o, xml) : p.text); continue; }
+            let inner = p.inner;
+            if (o.inline && p.tag === 'style') {
+                inner = minifyCSS(inner, {comments: o.comments, whitespace: true, zeroUnits: true, shortHex: true});
+            } else if (o.inline && p.tag === 'script' && !/\bsrc\s*=/i.test(p.open)) {
+                const type = /\btype\s*=\s*["']?([^"'\s>]+)/i.exec(p.open);
+                if (!type || JS_TYPES.test(type[1])) {
+                    try {
+                        const r = await Terser.minify(inner, {compress: true, mangle: true, module: !!type && /module/i.test(type[1])});
+                        if (r.code !== undefined) inner = r.code;
+                    } catch (e) { /* leave as-is */
+                    }
+                }
+            }
+            out.push(tidyTag(p.open, o, xml) + inner + p.close);
+        }
+        const s = out.join('');
+        return o.whitespace ? s.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, '') : s;
+    }
+
+    /* ---------- JSON ---------- */
+    function minifyJSON(str) {
+        return JSON.stringify(JSON.parse(str));
+    }
+
+    /* ---------- Python ---------- */
+    // Python, split into code, comments and strings before anything is removed. A '#'
+    // inside a string is text, a triple-quoted string can hold blank lines and trailing
+    // spaces that are part of its value, and an f-string's {fields} may hold quotes of
+    // their own - so comments and blank lines are only ever taken out of code.
+    function pyStringEnd(s, i, fstring) {
+        const q = s[i], triple = s.startsWith(q + q + q, i), close = triple ? q + q + q : q;
+        let j = i + close.length, depth = 0;
+        while (j < s.length) {
+            const c = s[j];
+            if (c === '\\') { j += 2; continue; }
+            if (fstring && depth > 0) {
+                if (c === '{') depth++;
+                else if (c === '}') depth--;
+                else if (c === '"' || c === "'") {
+                    let p = j;
+                    while (p > 0 && j - p < 2 && /[rRbBuUfFtT]/.test(s[p - 1])) p--;
+                    j = pyStringEnd(s, j, /[fFtT]/.test(s.slice(p, j)));
+                    continue;
+                }
+                j++;
+                continue;
+            }
+            if (fstring && c === '{') {
+                if (s[j + 1] === '{') { j += 2; continue; }
+                depth = 1;
+                j++;
+                continue;
+            }
+            if (s.startsWith(close, j)) return j + close.length;
+            if (c === '\n' && !triple) return j;
+            j++;
+        }
+        return s.length;
+    }
+
+    function pyPieces(s) {
+        const pieces = [];
+        let i = 0, code = 0;
+        const push = (type, from, to) => { if (to > from) pieces.push({type, text: s.slice(from, to), at: from}); };
+        while (i < s.length) {
+            const c = s[i];
+            if (c === '#') {
+                push('code', code, i);
+                let end = s.indexOf('\n', i);
+                if (end < 0) end = s.length;
+                push('comment', i, end);
+                i = code = end;
+            } else if (c === '"' || c === "'") {
+                // up to two prefix letters (r, b, u, f, t) that are not the tail of a longer name
+                let p = i;
+                while (p > code && i - p < 2 && /[rRbBuUfFtT]/.test(s[p - 1])) p--;
+                if (p > 0 && /[\w\u0080-\uffff]/.test(s[p - 1])) p = i;
+                const end = pyStringEnd(s, i, /[fFtT]/.test(s.slice(p, i)));
+                push('code', code, p);
+                push('string', p, end);
+                i = code = end;
+            } else i += c === '\\' ? 2 : 1;
+        }
+        push('code', code, s.length);
+        return pieces;
+    }
+
+    function minifyPython(src, o) {
+        const s = src.replace(/\r\n/g, '\n');
+        let pieces = pyPieces(s);
+        if (o.comments) {
+            // Line 1 may be a #! line and lines 1-2 an encoding declaration: both are read by
+            // something other than the parser, so they stay.
+            const nl = s.indexOf('\n'), endOfLine2 = nl < 0 ? s.length : (s.indexOf('\n', nl + 1) + 1 || s.length + 1) - 1;
+            const kept = p => (p.at === 0 && p.text.startsWith('#!')) || (p.at < endOfLine2 && /coding[:=][ \t]*[-\w.]+/.test(p.text));
+            const out = [];
+            pieces.forEach((p, k) => {
+                if (p.type === 'comment' && !kept(p)) {
+                    // the spaces before a removed comment are now trailing spaces
+                    const last = out[out.length - 1];
+                    if (last && last.type === 'code') last.text = last.text.replace(/[ \t\f]+$/, '');
+                    return;
+                }
+                if (p.type === 'code') {
+                    let text = p.text.replace(/[ \t\f]+(?=\n)/g, '');
+                    if (k === pieces.length - 1) text = text.replace(/[ \t\f]+$/, '');
+                    const last = out[out.length - 1];
+                    if (last && last.type === 'code') { last.text += text; return; }
+                    out.push({type: 'code', text, at: p.at});
+                    return;
+                }
+                out.push(p);
+            });
+            pieces = out;
+        }
+        if (o.whitespace) {
+            pieces = pieces.map(p => p.type === 'code' ? Object.assign({}, p, {text: p.text.replace(/\n{3,}/g, '\n\n')}) : p);
+            const first = pieces[0], last = pieces[pieces.length - 1];
+            if (first && first.type === 'code') first.text = first.text.replace(/^\n+/, '');
+            if (last && last.type === 'code') last.text = last.text.replace(/\n+$/, '');
+        }
+        return pieces.map(p => p.text).join(''); // indentation is sacred; we do not touch it
+    }
+
+    /* ---------- SQL ---------- */
+    // SQL, split into what may be squeezed and what may not. Quoted strings and names, $tag$
+    // bodies, COPY ... FROM stdin rows and MySQL's /*! ... */ version comments are kept as
+    // written. A # runs to the end of its line and is kept too: it is a comment in MySQL, part
+    // of a name in SQL Server (#temp) and an operator in PostgreSQL, and kept whole it is right
+    // in all three. A newline survives where a script needs one: after a -- or # line, and
+    // around client lines such as GO, DELIMITER, psql's \commands and SQL*Plus's lone slash,
+    // which are kept exactly as written.
+    const SQL_WS = /[ \t\n\r\f\v]/;
+    const SQL_DOLLAR = /^\$([A-Za-z_\u0080-\uffff][\w\u0080-\uffff]*)?\$/;
+    const SQL_CLIENT_LINE = /^[ \t]*(GO([ \t]+\d+)?|DELIMITER[ \t].*|\\.*|\/)[ \t]*(--.*)?\r?$/i;
+
+    function sqlTokens(src) {
+        const toks = [], n = src.length;
+        let i = 0, stmt = 0;
+        const push = (t, from, to) => toks.push({t, v: src.slice(from, to), pos: from});
+        const quoted = (from, q, backslash) => {
+            let j = from + 1;
+            while (j < n) {
+                if (backslash && src[j] === '\\') { j += 2; continue; }
+                if (src[j] === q) {
+                    if (src[j + 1] === q) { j += 2; continue; }
+                    return j + 1;
+                }
+                j++;
+            }
+            return n;
+        };
+        const lineEnd = from => {
+            let j = from;
+            while (j < n && src[j] !== '\n' && src[j] !== '\r') j++;
+            return j;
+        };
+        const dollarAt = at => src[at] === '$' && !/[\w$\u0080-\uffff]/.test(src[at - 1] || '') && SQL_DOLLAR.exec(src.slice(at, at + 64));
+        while (i < n) {
+            const c = src[i], s = i;
+            let m;
+            if ((i === 0 || src[i - 1] === '\n') && SQL_CLIENT_LINE.test(src.slice(i, lineEnd(i)))) {
+                i = lineEnd(i);
+                push('client', s, i);
+            } else if (SQL_WS.test(c)) {
+                while (i < n && SQL_WS.test(src[i])) i++;
+                push('ws', s, i);
+            } else if (c === '-' && src[i + 1] === '-') {
+                i = lineEnd(i);
+                push('line', s, i);
+            } else if (c === '#') {
+                i = lineEnd(i);
+                push('hash', s, i);
+            } else if (c === '/' && src[i + 1] === '*') {
+                const end = src.indexOf('*/', i + 2);
+                i = end < 0 ? n : end + 2;
+                const body = src.slice(s + 2, i);
+                // /*! and /*+ are instructions to MySQL and to optimizers, and a comment that
+                // opens another one ends in different places in different databases.
+                push(/^[!+]/.test(body) || body.includes('/*') ? 'keep' : 'block', s, i);
+            } else if (c === "'" || c === '"') {
+                i = quoted(i, c, true);
+                push('keep', s, i);
+            } else if (c === '`') {
+                i = quoted(i, c, false);
+                push('keep', s, i);
+            } else if (c === '[') {
+                const end = src.indexOf(']', i + 1);
+                i = end < 0 ? n : end + 1;
+                push('keep', s, i);
+            } else if ((m = dollarAt(i))) {
+                const end = src.indexOf(m[0], i + m[0].length);
+                i = end < 0 ? n : end + m[0].length;
+                push('keep', s, i);
+            } else if ('(),;'.includes(c)) {
+                i++;
+                push('punct', s, i);
+                if (c === ';') {
+                    // COPY ... FROM stdin; is followed by raw rows, up to a line holding \.
+                    if (/\bCOPY\b[\s\S]*\bFROM\s+STDIN\b/i.test(src.slice(stmt, i))) {
+                        const end = src.indexOf('\n\\.', i);
+                        const stop = end < 0 ? n : end + 3;
+                        push('keep', i, stop);
+                        i = stop;
+                    }
+                    stmt = i;
+                }
+            } else {
+                while (i < n) {
+                    const d = src[i];
+                    if (SQL_WS.test(d) || '(),;\'"`[#'.includes(d) || (d === '-' && src[i + 1] === '-') ||
+                        (d === '/' && src[i + 1] === '*') || (i > s && dollarAt(i))) break;
+                    i++;
+                }
+                if (i === s) i++;
+                push('code', s, i);
+            }
+        }
+        return toks;
+    }
+
+    function minifySQL(src, o) {
+        const toks = sqlTokens(src);
+        const removable = t => o.comments && (t.t === 'line' || t.t === 'block');
+        const settle = (prev, next, parts) => {
+            if (!o.whitespace) return parts.map(p => p.t === 'ws' ? p.v : p.t === 'block' ? ' ' : '').join('');
+            if (!prev || !next) return '';
+            if (prev.t === 'line' || prev.t === 'hash' || prev.t === 'client' || next.t === 'client') return '\n';
+            return prev.t === 'punct' || next.t === 'punct' ? '' : ' ';
+        };
+        let out = '', prev = null, parts = [];
+        for (const t of toks) {
+            if (t.t === 'ws' || removable(t)) { parts.push(t); continue; }
+            if (parts.length) out += settle(prev, t, parts);
+            parts = [];
+            out += t.v;
+            prev = t;
+        }
+        if (parts.length) out += settle(prev, null, parts);
+        return o.whitespace ? out.trim() : out;
+    }
+
+    /* ---------- PHP ---------- */
+    // PHP, split into what PHP reads as code and everything else. Text outside <?php ... ?>
+    // is output, not code; strings, heredocs and nowdocs are values; #[ opens an attribute,
+    // not a comment; a // or # comment ends at ?> as well as at the end of the line; and
+    // whatever follows __halt_compiler(); is data. Only the code between those is touched.
+    function phpPieces(src) {
+        const pieces = [], n = src.length;
+        let i = 0, code = -1, html = 0;
+        const push = (type, from, to) => { if (to > from) pieces.push({type, text: src.slice(from, to)}); };
+        const quoted = (from, q) => {
+            let j = from + 1, depth = 0;
+            while (j < n) {
+                const c = src[j];
+                if (c === '\\') { j += 2; continue; }
+                if (q !== "'") {
+                    // "{$a["key"]}" - an interpolated expression may hold quotes of its own
+                    if (depth === 0 && c === '{' && src[j + 1] === '$') { depth = 1; j += 2; continue; }
+                    if (depth > 0) {
+                        if (c === '{') depth++;
+                        else if (c === '}') depth--;
+                        else if (c === '"' || c === "'") { j = quoted(j, c); continue; }
+                        j++;
+                        continue;
+                    }
+                }
+                if (c === q) return j + 1;
+                j++;
+            }
+            return n;
+        };
+        while (i < n) {
+            if (code < 0) {
+                // outside PHP: look for the next opening tag
+                const m = /<\?(php(?=[\s])|=)/i.exec(src.slice(i));
+                if (!m) break;
+                const open = i + m.index + m[0].length;
+                push('html', html, open);
+                i = code = open;
+                continue;
+            }
+            const c = src[i];
+            if (c === '?' && src[i + 1] === '>') {
+                push('code', code, i);
+                code = -1;
+                html = i;
+                i += 2;
+                continue;
+            }
+            if ((c === '#' && src[i + 1] !== '[') || (c === '/' && src[i + 1] === '/')) {
+                push('code', code, i);
+                let j = i;
+                while (j < n && src[j] !== '\n' && !(src[j] === '?' && src[j + 1] === '>')) j++;
+                push('comment', i, j);
+                i = code = j;
+                continue;
+            }
+            if (c === '/' && src[i + 1] === '*') {
+                push('code', code, i);
+                const end = src.indexOf('*/', i + 2);
+                const j = end < 0 ? n : end + 2;
+                push('comment', i, j);
+                i = code = j;
+                continue;
+            }
+            if (c === "'" || c === '"' || c === '`') {
+                push('code', code, i);
+                const j = quoted(i, c);
+                push('string', i, j);
+                i = code = j;
+                continue;
+            }
+            const halt = c === '_' && /^__halt_compiler\s*\(\s*\)\s*(;|\?>)/i.exec(src.slice(i, i + 40));
+            if (halt && !/[\w$\x80-\uffff]/.test(src[i - 1] || '')) {
+                push('code', code, i + halt[0].length);
+                push('html', i + halt[0].length, n);
+                return pieces;
+            }
+            const doc = c === '<' && /^<<<[ \t]*(["']?)([A-Za-z_\x80-\uffff][\w\x80-\uffff]*)\1\r?\n/.exec(src.slice(i, i + 200));
+            if (doc) {
+                // the body runs to a line holding only the label (indented, since PHP 7.3)
+                push('code', code, i);
+                const close = new RegExp('\\n[ \\t]*' + doc[2] + '(?![\\w\\x80-\\uffff])').exec(src.slice(i + doc[0].length - 1));
+                const j = close ? i + doc[0].length - 1 + close.index + close[0].length : n;
+                push('string', i, j);
+                i = code = j;
+                continue;
+            }
+            i++;
+        }
+        if (code >= 0) push('code', code, n);
+        else push('html', html, n);
+        return pieces;
+    }
+
+    function minifyPHP(src, o) {
+        const raw = phpPieces(src), pieces = [];
+        raw.forEach((p, k) => {
+            let q = p;
+            if (p.type === 'comment' && o.comments) {
+                // a comment between two words still has to keep them apart
+                const before = (raw[k - 1] || p).text.slice(-1), after = ((raw[k + 1] || {}).text || '')[0] || '';
+                q = {type: 'code', text: /[\w$\x80-\uffff]/.test(before) && /[\w$\x80-\uffff]/.test(after) ? ' ' : ''};
+            }
+            const last = pieces[pieces.length - 1];
+            if (q.type === 'code' && last && last.type === 'code') last.text += q.text;
+            else pieces.push({type: q.type, text: q.text});
+        });
+        if (o.whitespace) {
+            for (const p of pieces) if (p.type === 'code') p.text = p.text.replace(/[ \t\r\n\f\v]+/g, ws => ws.includes('\n') ? '\n' : ' ');
+            const last = pieces[pieces.length - 1];
+            if (last && last.type === 'code') last.text = last.text.replace(/[ \t\r\n\f\v]+$/, '');
+        }
+        return pieces.map(p => p.text).join('');
+    }
+</script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         'use strict';
@@ -1075,164 +1793,6 @@
             clearTimeout(detectTimer);
             detectTimer = setTimeout(syncMode, 400);
         });
-
-        /* ---------- comment-aware string scanner (shared) ---------- */
-
-        // Strips comments outside of string literals. lineComment: array of prefixes; block: [open, close] or null.
-        function stripComments(src, lineComments, block, stringChars, allowBackslashEscape = true) {
-            let out = '', i = 0, n = src.length;
-            while (i < n) {
-                const ch = src[i];
-                // string?
-                if (stringChars.includes(ch)) {
-                    const quote = ch;
-                    out += ch;
-                    i++;
-                    while (i < n) {
-                        if (allowBackslashEscape && src[i] === '\\') {
-                            out += src[i] + (src[i + 1] || '');
-                            i += 2;
-                            continue;
-                        }
-                        out += src[i];
-                        if (src[i] === quote) {
-                            i++;
-                            break;
-                        }
-                        i++;
-                    }
-                    continue;
-                }
-                // block comment?
-                if (block && src.startsWith(block[0], i)) {
-                    const end = src.indexOf(block[1], i + block[0].length);
-                    i = end === -1 ? n : end + block[1].length;
-                    out += ' ';
-                    continue;
-                }
-                // line comment?
-                let hitLine = false;
-                for (const lc of lineComments) {
-                    if (src.startsWith(lc, i)) {
-                        const nl = src.indexOf('\n', i);
-                        i = nl === -1 ? n : nl; // keep the newline
-                        hitLine = true;
-                        break;
-                    }
-                }
-                if (hitLine) continue;
-                out += ch;
-                i++;
-            }
-            return out;
-        }
-
-        /* ---------- minifiers ---------- */
-        function minifyCSS(css, o) {
-            let s = css;
-            if (o.comments) s = s.replace(/\/\*[\s\S]*?\*\//g, '');
-            if (o.whitespace) {
-                s = s.replace(/\s+/g, ' ')
-                    .replace(/\s*([{}:;,>~+])\s*/g, '$1')
-                    .replace(/;}/g, '}')
-                    .trim();
-            }
-            if (o.zeroUnits) s = s.replace(/(^|[\s:,(])0(?:px|em|rem|%|vh|vw|pt|ex|ch|vmin|vmax)/g, '$10');
-            if (o.shortHex) s = s.replace(/#([0-9a-fA-F])\1([0-9a-fA-F])\2([0-9a-fA-F])\3\b/g, '#$1$2$3');
-            return s;
-        }
-
-        async function minifyHTML(html, o) {
-            let s = html;
-            if (o.comments) s = s.replace( /<!--(?!\[if)[\s\S]*?-->/g, '');
-            if (o.inline) {
-                // inline <style>
-                const styleJobs = [];
-                s = s.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (m, open, body, close) =>
-                    open + minifyCSS(body, {
-                        comments: o.comments,
-                        whitespace: true,
-                        zeroUnits: true,
-                        shortHex: true
-                    }) + close);
-                // inline <script> (no src, not JSON/type=module templates we can't parse safely -> best effort)
-                const scripts = [];
-                s = s.replace(/(<script\b(?![^>]*\bsrc=)[^>]*>)([\s\S]*?)(<\/script>)/gi, (m, open, body, close) => {
-                    if (/type\s*=\s*["'](?!.*(javascript|module))/i.test(open) && !/type\s*=\s*["']module/i.test(open)) return m;
-                    scripts.push({open, body, close});
-                    return '\u0000SCRIPT' + (scripts.length - 1) + '\u0000';
-                });
-                for (let k = 0; k < scripts.length; k++) {
-                    try {
-                        const r = await Terser.minify(scripts[k].body, {compress: true, mangle: true});
-                        if (r.code !== undefined) scripts[k].body = r.code;
-                    } catch (e) { /* leave as-is */
-                    }
-                }
-                s = s.replace(/\u0000SCRIPT(\d+)\u0000/g, (m, k) => scripts[+k].open + scripts[+k].body + scripts[+k].close);
-            }
-            if (o.whitespace) {
-                // protect pre/textarea
-                const keep = [];
-                s = s.replace(/<(pre|textarea)\b[\s\S]*?<\/\1>/gi, m => {
-                    keep.push(m);
-                    return '\u0000KEEP' + (keep.length - 1) + '\u0000';
-                });
-                s = s.replace(/\s+/g, ' ').replace(/>\s+</g, '><').trim();
-                s = s.replace(/\u0000KEEP(\d+)\u0000/g, (m, k) => keep[+k]);
-            }
-            if (o.attrQuotes) {
-                s = s.replace(/(\s[a-zA-Z][\w-]*)="([^"'`=<>\s]+)"/g, '$1=$2');
-            }
-            return s;
-        }
-
-        function minifyJSON(str) {
-            return JSON.stringify(JSON.parse(str));
-        }
-
-        function minifyPython(src, o) {
-            let s = src.replace(/\r\n/g, '\n');
-            if (o.comments) {
-                // strip # comments outside strings, line by line with a tiny scanner
-                s = s.split('\n').map(line => {
-                    let inStr = null, i = 0;
-                    while (i < line.length) {
-                        const ch = line[i];
-                        if (inStr) {
-                            if (ch === '\\') {
-                                i += 2;
-                                continue;
-                            }
-                            if (ch === inStr) inStr = null;
-                        } else {
-                            if (ch === '"' || ch === "'") inStr = ch;
-                            else if (ch === '#') return line.slice(0, i).replace(/\s+$/, '');
-                        }
-                        i++;
-                    }
-                    return line.replace(/\s+$/, '');
-                }).join('\n');
-            }
-            if (o.whitespace) {
-                s = s.replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
-            }
-            return s; // indentation is sacred; we do not touch it
-        }
-
-        function minifySQL(src, o) {
-            let s = src;
-            if (o.comments) s = stripComments(s, ['--'], ['/*', '*/'], ["'", '"', '`'], false);
-            if (o.whitespace) s = s.replace(/\s+/g, ' ').replace(/\s*([(),;])\s*/g, '$1').trim();
-            return s;
-        }
-
-        function minifyPHP(src, o) {
-            let s = src;
-            if (o.comments) s = stripComments(s, ['//', '#'], ['/*', '*/'], ["'", '"']);
-            if (o.whitespace) s = s.replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').replace(/\n{2,}/g, '\n').trim();
-            return s;
-        }
 
         /* ---------- lifetime odometer ---------- */
         const odo = $('odometer');
