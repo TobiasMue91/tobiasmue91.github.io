@@ -71,6 +71,7 @@ npm run test:downhill       # Downhill Dreamer suite (plain Node, no server or b
 npm run test:bubble         # Bubble Break suite (plain Node, no server or browser)
 npm run test:towers         # Three Gates suite (plain Node, no server or browser)
 npm run test:firefly        # Firefly Jar suite (plain Node, no server or browser)
+npm run test:normalizer     # Audio Normalizer suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -78,7 +79,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Nine exist so far. `test/everything_converter.mjs` drives
+Ten exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -118,6 +119,12 @@ jump, and never leave the player saving for long with nothing to buy. The `sky` 
 each kind of weather does what its forecast says and none spoils a night, and that a second year
 comes round faster without skipping a season. Run it after touching any price or multiplier;
 `pace --report` prints the year night by night.
+`test/audio_normalizer.mjs` runs the DOM-free core of `tools/audio_normalizer.html` (loudness
+meter, true peak, limiter) against things that are certain: the EBU Tech 3341 signals, the
+K-weighting curve from the coefficients BS.1770 prints, analytic true peaks, and a limiter that
+must hold -1 dBTP from the first sample to the last while each preset lands on its number. The
+page grades its own output with the same meter, so this is the only place a wrong one shows.
+Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
