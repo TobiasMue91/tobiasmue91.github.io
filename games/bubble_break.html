@@ -458,7 +458,7 @@ const STAGES = [
   { id:'city',    size:[1.2e6, 2.2e6, 4e6, 7e6, 1.2e7, 2e7, 3.2e7],                    reach:34,  budget:6000, value:250, cost:2e10, bang:55,  machine:'convoy', gate:1.5e17, gain:1800, promo:4000 },
 ];
 // and the world, once you have earned this many
-const PROMO = { world: 200000 };
+const PROMO = { world: 150000 };
 
 /* ---------- Break tree: bought with Plopps, reset when you quit ----------
    x,y: position on the tree screen, x across from the root in node spacings, y up in rows.
@@ -516,10 +516,12 @@ const CAREER = [
 ];
 /* ---------- Special deliveries: now and then a sheet comes in another material ----------
    Each workplace from the warehouse on brings one. `from` is the workplace where it first comes.
-   jumbo    big bubbles: the first touch squashes one, the next pops it, and a popped bubble sets
-            off every squashed one touching it
-   fragile  a small sheet round something breakable, popped by fingertip; the print on it must not
-            be popped, and a sheet with the print untouched pays four times its bonus
+   jumbo    a small sheet of giant bubbles, as big on screen at the city as at the warehouse: the
+            first touch squashes one, the next pops it, and a popped bubble sets off every squashed
+            one touching it
+   fragile  a small sheet round something breakable, popped by fingertip while the clock runs at half
+            speed; the print on it must not be popped, and a sheet with the print untouched pays four
+            times its bonus
    shrink   a heat gun crosses the sheet, and what it reaches shrinks flat before you can pop it;
             warm bubbles pay half as much again, and nine tenths popped doubles the bonus
    Handling one well counts towards its mastery: four levels, each a lasting bonus. */
@@ -530,7 +532,7 @@ const MATS = [
 ];
 const MASTERY = [2, 8, 20, 50];
 const DELIVER_EVERY = 4;
-const FRAGILE_SIZE = 300;
+const JUMBO_SIZE = 160, FRAGILE_SIZE = 170;
 // the fragile print: the symbols from a parcel label, as strokes in a 10 × 10 box. A bubble is printed
 // when its centre lies under the ink; the page draws the same strokes, so what you see is what counts.
 const PRINTS = {
@@ -538,7 +540,7 @@ const PRINTS = {
   arrows:   [[[3, 8.6], [3, 1.6]], [[1.4, 3.4], [3, 1.2], [4.6, 3.4]], [[7, 8.6], [7, 1.6]], [[5.4, 3.4], [7, 1.2], [8.6, 3.4]], [[1, 9.6], [9, 9.6]]],
   umbrella: [[[1, 4.6], [1.6, 2.6], [3, 1.2], [5, .6], [7, 1.2], [8.4, 2.6], [9, 4.6]], [[1, 4.6], [3.7, 4.6], [6.3, 4.6], [9, 4.6]], [[5, .6], [5, 8.4], [5.5, 9.3], [6.3, 9.3], [6.8, 8.6]]],
 };
-const INK = .58;     // how far from a stroke's centre line the ink reaches, in bubble pitches
+const INK = .5;     // how far from a stroke's centre line the ink reaches, in bubble pitches
 
 const byId = (list) => Object.fromEntries(list.map(n => [n.id, n]));
 const RUN_BY = byId(RUN), CAREER_BY = byId(CAREER);
@@ -860,9 +862,9 @@ function makeSheet(P, aspect, rnd){
 // Printed bubbles are not in `left`: the sheet is done when everything else is popped.
 function printSheet(sh, rnd){
   sh.pmask = new Uint32Array(sh.rows*sh.words); sh.printN = 0; sh.cracked = 0; sh.item = (rnd()*3)|0;
-  // the glass always; beside it the arrows or the umbrella when the sheet is wide enough
-  const names = ['glass']; const u = Math.min(sh.H*.62/10, sh.W*.9/(sh.W/sh.H > 1.2 ? 23 : 10));
-  if(sh.W/sh.H > 1.2) names.push(rnd() < .5 ? 'arrows' : 'umbrella');
+  // the glass always; beside it the arrows or the umbrella on a sheet wide enough for both
+  const two = sh.cols >= 20 && sh.W/sh.H > 1.2, names = ['glass']; const u = Math.min(sh.H*.62/10, sh.W*.9/(two ? 23 : 10));
+  if(two) names.push(rnd() < .5 ? 'arrows' : 'umbrella');
   const wide = (names.length*10 + (names.length - 1)*3)*u, x0 = (sh.W - wide)/2, y0 = (sh.H - 10*u)/2;
   sh.strokes = []; sh.inkW = INK;
   names.forEach((n, k) => { for(const line of PRINTS[n]) sh.strokes.push(line.map(([a, b]) => [x0 + (k*13 + a)*u, y0 + b*u])); });
@@ -882,15 +884,19 @@ function segDist(px, py, ax, ay, bx, by){
 }
 const isPrint = (sh, i, j) => sh.pmask ? (sh.pmask[j*sh.words + (i>>>5)] >>> (i & 31)) & 1 : 0;
 const isDent = (sh, i, j) => sh.dent ? (sh.dent[j*sh.words + (i>>>5)] >>> (i & 31)) & 1 : 0;
+// a small sheet carries a few specials, not the dozens a big one's rates would put on it
+const few = P => ({ goldCap: Math.min(P.goldCap, 3), espressoCap: Math.min(P.espressoCap, 2), bangCap: Math.min(P.bangCap, 2), zipCap: Math.min(P.zipCap, 1), thick: .012, flat: Math.min(P.flat, .018) });
 // what a sheet of each material is played with, from the break's own numbers
 function matP(P, mat){
-  // each jumbo bubble is four ordinary ones: a quarter as many, twice as wide, four times the Plopps, a quarter of the strength
-  if(mat === 'jumbo') return Object.assign({}, P, { mat, size: Math.max(12, Math.round(P.size/4)), reach: P.reach/2, bangR: P.bangR/2, value: P.value*4, budget: P.budget/4, bandMul: .5 });
+  // a few giant bubbles: the thumb covers one, a swipe squashes a stripe of
+  // them however weak the thumb still is, and the machine sits this one out
+  if(mat === 'jumbo') return Object.assign({}, P, { mat, size: JUMBO_SIZE, reach: .8, budget: Math.max(24, 2*P.budget/P.st.budget),
+    bangR: P.bangR/P.st.bang*STAGES[0].bang, machine: 0, giants: 0, ...few(P) });
   if(mat === 'fragile'){
-    // by fingertip, with no machine and nothing that goes off by itself; the sheet is worth what a usual one is
+    // by fingertip, with no machine and nothing that goes off by itself
     const size = FRAGILE_SIZE;
-    return Object.assign({}, P, { mat, size, reach: .42, budget: P.budget/P.st.budget, value: P.value*P.size/size,
-      machine: 0, wave: 0, bang: 0, bangCap: 0, giants: 0, sugar: 0, zip: 0, zipCap: 0, domino: 0, lasso: false, flat: Math.min(P.flat, .03), twoHands: false });
+    return Object.assign({}, P, { mat, size, reach: .42, budget: P.budget/P.st.budget,
+      machine: 0, wave: 0, bang: 0, bangCap: 0, giants: 0, sugar: 0, zip: 0, zipCap: 0, domino: 0, lasso: false, twoHands: false, ...few(P) });
   }
   if(mat === 'shrink') return Object.assign({}, P, { mat, value: P.value*1.5 });
   return P;
@@ -910,17 +916,25 @@ function nextMat(run){
   if(!D.seen[id]){ D.seen[id] = 1; run.ev.matNew = id; }
   return id;
 }
-// the heat gun takes about four fifths of the time you would need to clear the sheet at your pace so far
-function heatPace(run, N){
-  const own = run.t > 5 && run.pops > 0 ? run.pops/run.t : 0, D = run.S.deliv, past = D && D.rate[run.baseP.stage] || 0;
-  const rate = own || past || Math.max(5, run.baseP.reach*run.baseP.reach*12);
-  return Math.max(5, Math.min(40, .8*N/rate));
+// your pace: bubbles a second on ordinary wrap in this break so far, or in the last ones at this workplace
+function normPops(run){ return run.pops - run.matPops - (run.sheet && run.sheet.mat ? run.pops - run.matStart : 0); }
+function paceRate(run){
+  const own = run.normT > 5 && normPops(run) > 0 ? normPops(run)/run.normT : 0, D = run.S.deliv, past = D && D.rate[run.baseP.stage] || 0;
+  return own || past || Math.max(5, run.baseP.reach*run.baseP.reach*12);
 }
+// the heat gun takes about four fifths of the time you would need to clear the sheet at your pace
+function heatPace(run, N){ return Math.max(5, Math.min(40, .8*N/paceRate(run))); }
+// a small sheet of jumbo or fragile wrap is worth what this many seconds of your usual popping would bring
+const WORTH_T = { jumbo: 11, fragile: 4 };
+function fitWorth(run, P){ if(WORTH_T[P.mat]) P.value = paceRate(run)*run.baseP.value*WORTH_T[P.mat]/run.sheet.N; }
 function setSheet(run, mat){
+  if(run.sheet && run.sheet.mat) run.matPops += run.pops - run.matStart;
+  run.matStart = run.pops;
   let P = matP(run.baseP, mat);
   if(mat === 'shrink') P = Object.assign(P, { heatTime: heatPace(run, P.size) });
   run.P = P; run.budget = Math.min(run.budget, P.budget);
   run.sheet = makeSheet(P, run.aspect, run.rnd);
+  fitWorth(run, P);
   run.casc = null;
   if(mat) run.ev.mat = mat;
   // the first sheet of a new material holds the clock for a moment, to read what it does
@@ -945,7 +959,7 @@ function startRun(S, opts){
     combo:0, maxCombo:0, lastPop:-9, sheets:0, slide:0, over:false, down:false, x:0, y:0, moved:0, still:0, hold:0,
     budget:P.budget, aid:0, pending:[], machines:[], machineT:1.5, flats:0, golds:0, giants:0, espressos:0, bangs:0, best:null,
     frenzy:0, frenzies:0, zips:[], zipsDone:0, cleanSheets:0, sheetFlat:false, path:[], pathLen:[], bestLoop:0, loops:0, domino:0,
-    orderT:0, ev: newEvents(), casc:null, mats:{ jumbo:0, fragile:0, shrink:0 }, matSheets:0, cascBest:0, cracks:0, dents:0 };
+    orderT:0, ev: newEvents(), casc:null, mats:{ jumbo:0, fragile:0, shrink:0 }, matSheets:0, cascBest:0, cracks:0, dents:0, normT:0, matPops:0, matStart:0, slowT:0 };
   setSheet(run, nextMat(run));
   S.runs++; S.cycleRuns++;
   return run;
@@ -1291,7 +1305,8 @@ function step(run, dt){
   run.t += dt; (run.home || run.S).playTime += dt;
   if(run.slide > 0){ run.slide = Math.max(0, run.slide - dt/.45); }
   else if(run.grace > 0) run.grace -= dt;
-  else { run.time -= dt; if(run.frenzy > 0) run.frenzy = Math.max(0, run.frenzy - dt); }
+  // careful work on fragile wrap: the clock runs at half speed
+  else { const slow = run.sheet.mat === 'fragile'; run.time -= slow ? dt/2 : dt; if(slow) run.slowT += dt; if(run.frenzy > 0) run.frenzy = Math.max(0, run.frenzy - dt); }
   if(run.time <= 0){ run.time = 0; finish(run); return; }
   const P = run.P;
   // thumb strength comes back while the hand is off the sheet
@@ -1314,7 +1329,7 @@ function step(run, dt){
     }
   }
   if(run.zips.length && run.slide === 0) stepZips(run, dt);
-  if(run.slide === 0){ stepCascade(run, dt); stepHeat(run, dt); }
+  if(run.slide === 0){ stepCascade(run, dt); stepHeat(run, dt); if(!run.sheet.mat) run.normT += dt; }
   stepMachines(run, dt);
   if(run.frenzy <= 0 && run.t - run.lastPop > P.comboWin) run.combo = 0;
   // sheet done: bonus, and the next one slides in
@@ -1382,8 +1397,8 @@ function startVisit(S, k, opts){
 }
 // how fast you pop at this workplace, kept between breaks for the heat gun's pace
 function notePace(run){
-  const D = run.S.deliv; if(!D || run.noMat || run.t < 5 || !run.pops) return;
-  const k = run.baseP.stage, r = run.pops/run.t; D.rate[k] = D.rate[k] ? .5*D.rate[k] + .5*r : r;
+  const D = run.S.deliv, n = normPops(run); if(!D || run.noMat || run.normT < 5 || n <= 0) return;
+  const k = run.baseP.stage, r = n/run.normT; D.rate[k] = D.rate[k] ? .5*D.rate[k] + .5*r : r;
 }
 function finish(run){
   if(run.over) return; run.over = true; run.down = false;
@@ -1412,7 +1427,7 @@ return { VERSION, SQ, T, STAGES, RUN, CAREER, RUN_BY, CAREER_BY, ORDERS, ORDERS_
   newState, load, derive, lv, cl, stickerCount,
   runCost, runVisible, forkBlocked, canBuyRun, buyRun, autoBuy,
   careerCost, careerVisible, canBuyCareer, buyCareer, quitInfo, promote, jobStage, freshCycleStage, worldOpen, PROMO, quitGain, quitProgress, quit, orderBonus, ordersDone, newOrders, checkOrders, checkStickers,
-  MATS, MASTERY, DELIVER_EVERY, FRAGILE_SIZE, matDone, matLevel, matP, nextMat, heatPace,
+  MATS, MASTERY, DELIVER_EVERY, JUMBO_SIZE, FRAGILE_SIZE, matDone, matLevel, matP, nextMat, heatPace, paceRate, fitWorth, WORTH_T,
   makeSheet, cx, cy, isIntact, isPrint, isDent, specialAt, intactCount, neighbours,
   startRun, startVisit, press, drag, release, step, finish, takeEvents, comboMul, valueNow, machinePeriod, popPolygon };
 })();
@@ -1655,7 +1670,7 @@ en: {
   'title.kicker':'a coffee break incremental',
   'title.text':'A parcel came. What was in it is not important. The bubble wrap is.',
   'title.pop':'The wrap behind this note pops too.',
-  'title.new':'New since you last played: special deliveries. Jumbo wrap in the warehouse, fragile wrap in the factory and shrink wrap in the city, each with a mastery that lasts. See them under Jobs.',
+  'title.new':'New since you last played: special deliveries. Jumbo bubbles in the warehouse, fragile wrap in the factory and shrink wrap in the city, each with a mastery that lasts. See them under Jobs.',
   'title.help':'Press bubbles to pop them. Hold down on the thick, milky ones. Pressing a flat one spoils your combo.',
   'btn.play':'Start break', 'btn.continue':'Next break', 'btn.tree':'Upgrades', 'btn.records':'Records', 'btn.settings':'Options', 'btn.close':'Close', 'btn.back':'Back', 'btn.stay':'Stay',
   'btn.resume':'Resume', 'btn.endBreak':'End break now', 'pause.kicker':'coffee on hold', 'pause.title':'Paused', 'pause.txt':'{s} left in this break, {p} Plopps so far.',
@@ -1720,15 +1735,15 @@ en: {
   'stage.desk.t':'A parcel came. What was in it is not important. The bubble wrap is.',
   'stage.ship.t':'Pallets of it. You press with your whole palm now, sheets hold thousands of bubbles, and a floor roller does rounds of its own.',
   'stage.factory.t':'This is where bubble wrap is made. Sheets of half a million, a hydraulic press, and a tool the size of a car.',
-  'stage.ship.m':'New here: jumbo wrap. One sheet in four comes in it from now on.',
+  'stage.ship.m':'New here: jumbo bubbles. One sheet in four comes as a special delivery from now on.',
   'stage.factory.m':'New here: fragile wrap, round something that breaks. Mind the print.',
   'stage.city.m':'New here: shrink wrap, and a heat gun right behind it.',
-  'mat.jumbo':'Jumbo wrap', 'mat.fragile':'Fragile wrap', 'mat.shrink':'Shrink wrap',
-  'mat.jumbo.d':'Big bubbles. The first touch squashes one, the next pops it, and a popped bubble sets off every squashed one touching it. One stroke never pops what it squashed itself.',
-  'mat.fragile.d':'A small sheet round something breakable, popped by fingertip, with no machine. Pop everything but the red print: untouched, it pays four times the sheet bonus.',
+  'mat.jumbo':'Jumbo bubbles', 'mat.fragile':'Fragile wrap', 'mat.shrink':'Shrink wrap',
+  'mat.jumbo.d':'A sheet of giant bubbles, each worth a whole patch of the usual wrap. The first touch squashes one, the next pops it, and a popped bubble sets off every squashed one touching it. One stroke never pops what it squashed itself.',
+  'mat.fragile.d':'A small sheet round something breakable, popped by fingertip, with no machine, while the clock runs at half speed. Pop everything but the red print: untouched, it pays four times the sheet bonus.',
   'mat.shrink.d':'A heat gun crosses the sheet, and what it reaches shrinks flat before you can pop it. Warm bubbles pay half as much again, and nine tenths popped doubles the bonus.',
-  'mat.jumbo.h':'Jumbo wrap: touch to squash, touch again to pop. Squash a lot, then set it all off.',
-  'mat.fragile.h':'Fragile wrap: pop everything but the red print. Fingertip only.',
+  'mat.jumbo.h':'Jumbo bubbles: touch to squash, touch again to pop. Squash a lot, then set it all off.',
+  'mat.fragile.h':'Fragile wrap: pop everything but the red print. Take your time: the clock runs at half speed.',
   'mat.shrink.h':'Shrink wrap: the heat gun is coming from the left. Pop what you can before it gets there.',
   'mat.in':'Special delivery: {m}', 'mat.care':'Handled with care ×4', 'mat.scratch':'Hardly a scratch ×2', 'mat.cracked':'Cracked',
   'mat.beat':'Beat the heat! {p} %', 'mat.saved':'{p} % saved from the heat', 'fl.crack':'crack', 'fl.casc':'{n} set off',
@@ -1818,7 +1833,7 @@ en: {
     pfft:['Pfft', 'Press 25 flat bubbles. Someone had to.'], long:['Long lunch', 'Make one break last a minute.'], orders:['Employee of the month', 'Finish every order in one job.'],
     quit1:['I quit', 'Quit your first job.'], quit10:['Job hopper', 'Quit ten jobs.'], ship:['Forklift licence', 'Work in the warehouse.'], factory:['Hard hat', 'Work in the factory.'],
     city:['Moving day', 'Work in the city.'], loop:['Roped in', 'A million bubbles in one loop.'], domino:['Dominoes', 'A chain reaction twelve blasts deep.'],
-    squash:['Squash', 'Set off 100 squashed bubbles at once.'], care:['Handle with care', 'Clear a fragile sheet without cracking the print.'],
+    squash:['Squash', 'Set off 100 squashed jumbo bubbles at once.'], care:['Handle with care', 'Clear a fragile sheet without cracking the print.'],
     heat:['Beat the heat', 'Pop nine tenths of a shrink-wrap sheet before the heat gun.'], expert:['Materials expert', 'Master all three special deliveries.'],
     world:['Globetrotter', 'Pop the world.'], end:['The last bubble', 'See the end.'],
   },
@@ -2283,6 +2298,9 @@ function makeFilm(v){
   // fragile wrap says so along its bottom edge
   if(v.sh.mat === 'fragile'){ const fs = Math.max(9, Math.min(15, v.s*.27)); g.font = `700 ${fs}px system-ui, sans-serif`; g.fillStyle = 'rgba(200,30,30,.8)'; g.textBaseline = 'bottom'; g.textAlign = 'left';
     g.fillText(w > 520 ? 'FRAGILE · HANDLE WITH CARE · FRAGILE' : 'FRAGILE · HANDLE WITH CARE', x + v.s*.4, y + h - 1); }
+  // and jumbo wrap says what it is, in the supplier's blue
+  if(v.sh.mat === 'jumbo'){ const fs = Math.max(9, Math.min(15, v.s*.2)); g.font = `800 ${fs}px system-ui, sans-serif`; g.fillStyle = 'rgba(30,90,170,.85)'; g.textBaseline = 'bottom'; g.textAlign = 'left';
+    g.fillText(w > 520 ? 'JUMBO BUBBLES · EXTRA LARGE · 50 MM · JUMBO BUBBLES' : 'JUMBO BUBBLES · EXTRA LARGE', x + v.s*.3, y + h - 1); }
   return c;
 }
 const pX = (v, i, j) => v.ox + (i + .5 + .5*(j & 1))*v.s, pY = (v, j) => v.oy + (j*SQ + .5)*v.s;
