@@ -1180,7 +1180,11 @@ sits on the printed domes only, joined by a thin line, so every bubble is either
 
 **Show the last bubbles.** A sheet ends only when every bubble is gone, and the last few are easy to
 lose: on glass over a white vase, or as single pixels on a sheet of half a million. After a moment
-without a pop, a ring pulses round each of the last few; after a longer one, round the last tenth.
+without a pop, a ring pulses round each of the last few; after a longer one, round the last tenth. On a
+sheet of millions the rings go round the patches of screen that still hold a bubble, once there are few
+such patches, and round every special one left. Two things had made city sheets hard to finish on top:
+thick bubbles were not drawn once they were smaller than five pixels, and a Cordon tape loop, which
+promises that everything inside it pops, left the thick ones. Both were rules nobody could see.
 
 **Tie sound to time, not to frames.** Pops were played once per frame, a handful at a time, and the
 voices were freed by timers. At the factory a slow computer draws fifteen frames a second instead of

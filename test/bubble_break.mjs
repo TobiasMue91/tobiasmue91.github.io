@@ -316,10 +316,11 @@ if(suites.includes('rules')){
   {
     const loopRun = (lasso, closed) => { const [, run] = runWith({ delivery:6, thumb:1, strength:1 }, { lasso }, { stage: 1, seed: 31 }); const sh = run.sheet, r = sh.H*.3, c = [sh.W/2, sh.H/2];
       run.budget = 0; BB.press(run, c[0] + r, c[1]); for(let a = 0; a <= (closed ? 6.7 : 4.5); a += .02) BB.drag(run, c[0] + Math.cos(a)*r, c[1] + Math.sin(a)*r); BB.release(run);
-      let left = 0; for(let j = 0; j < sh.rows; j++) for(let i = 0; i < sh.cols; i++){ const k = BB.specialAt(sh, i, j); if(Math.hypot(BB.cx(i, j) - c[0], BB.cy(j) - c[1]) < r*.8 && BB.isIntact(sh, i, j) && !(k >= 0 && sh.spT[j][k] === T.THICK)) left++; }
-      return [run, 0, left]; };
-    const [a, , leftA] = loopRun(1, true), [, , leftB] = loopRun(1, false), [, , leftC] = loopRun(0, true);
-    check(a.loops === 1 && leftA === 0, `a closed loop pops everything inside it but the thick ones (${fmtN(a.bestLoop)} bubbles)`);
+      let left = 0, thick = 0; for(let j = 0; j < sh.rows; j++) for(let i = 0; i < sh.cols; i++){ const k = BB.specialAt(sh, i, j); if(Math.hypot(BB.cx(i, j) - c[0], BB.cy(j) - c[1]) >= r*.8) continue; const t = k >= 0 ? sh.spT[j][k] : -1; if(t === T.FLAT || t === T.GIANT) continue; if(t === T.THICK) thick++; if(BB.isIntact(sh, i, j)) left++; }
+      return [run, thick, left]; };
+    const [a, thickA, leftA] = loopRun(1, true), [, , leftB] = loopRun(1, false), [, , leftC] = loopRun(0, true);
+    // thick ones too: a sheet in the city has dozens, too small to see, and a loop that left them made it one you could not finish
+    check(a.loops === 1 && leftA === 0 && thickA > 0, `a closed loop pops everything inside it, the ${thickA} thick ones too (${fmtN(a.bestLoop)} bubbles)`);
     check(leftB > 100 && leftC > 100, 'an open curve, or a loop without Cordon tape, leaves the inside alone');
     const [, r2] = runWith({ delivery:6 }, { lasso:1 }, { seed: 31 }); r2.combo = 0; const e0 = r2.earned; const n0 = BB.popPolygon(r2, [0, 0, 6, 0, 6, 6, 0, 6], 'loop'); const e1 = r2.earned - e0;
     const [, r3] = runWith({ delivery:6 }, { lasso:1 }, { seed: 31 }); const f0 = r3.earned; const n1 = BB.popPolygon(r3, [0, 0, 6, 0, 6, 6, 0, 6], 'player'); const e2 = r3.earned - f0;
