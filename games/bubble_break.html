@@ -29,7 +29,7 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{height:100%;margin:0}
-body{background:#7a4f2a;color:var(--ink);font-family:var(--ui);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+body{background:#7a4f2a;color:var(--ink);font-family:var(--ui);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 canvas#cv{position:fixed;inset:0;width:100%;height:100%;display:block}
 button{font-family:var(--ui);cursor:pointer;color:inherit}
 button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
@@ -50,9 +50,9 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
 .hand{font-family:var(--hand);font-weight:700}
 
 /* ---------- HUD ---------- */
-#hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 0;display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:start;pointer-events:none;font-variant-numeric:tabular-nums;z-index:2}
+#hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:start;pointer-events:none;font-variant-numeric:tabular-nums;z-index:2}
 #hud .note{padding:6px 12px 8px;min-width:128px}
-#hud .l{justify-self:start;transform:rotate(-1.6deg)}
+#hud .l{justify-self:start;max-width:100%;transform:rotate(-1.6deg)}
 #hud .r{justify-self:end;transform:rotate(1.3deg);text-align:right}
 #hud .lbl{font-family:var(--hand);font-size:19px;line-height:1;color:#5b4a1c}
 #hud .val{font-family:var(--mono);font-weight:600;font-size:23px;line-height:1.15}
@@ -271,8 +271,12 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
   #mug{width:72px;height:72px}
   #frenzy{top:calc(env(safe-area-inset-top,0px) + 84px);font-size:13px}
   #hud .ord span{display:none}
+  #hud .ord{padding-right:12px}
   #hud .rbox{gap:6px}
-  #hud .rbox .note{min-width:74px}
+  #hud .rbox .note{min-width:74px;padding-right:16px}
+  /* the callus line breaks under its bar rather than pushing the note over the mug */
+  #hud .cal{flex-wrap:wrap;row-gap:0}
+  #hud .cal small{white-space:nowrap}
   #bPause{padding:.45em .55em}
   .opt{grid-template-columns:92px 1fr 40px}
   #panel{grid-template-columns:auto 1fr;grid-template-areas:"ic nm" "ds ds" "buy buy";min-height:128px;align-content:start}
@@ -1921,19 +1925,26 @@ function bakePops(){
 /* Many pops at once must not add up to a roar. Three things keep them in check, as games do:
    at most POP_VOICES pops sound at the same time (the rest are skipped: the ear cannot count them),
    each pop is turned down by 1/sqrt of how many started in the last quarter second, and a limiter
-   sits on the sum. */
-const POP_VOICES = 6;
-let popVoices = 0, popTimes = [];
-function popGain(){
-  const t = AC.currentTime; popTimes.push(t); while(popTimes.length && t - popTimes[0] > .25) popTimes.shift();
+   sits on the sum. The voices are counted on the audio clock, not with timers: a slow frame delays
+   timers, and a count that waits on them would silence the pops just when the game is busiest. */
+const POP_VOICES = 6, POP_LEN = .09;
+let popVoices = [], popTimes = [];
+function popGain(t){
+  popTimes.push(t); while(popTimes.length && t - popTimes[0] > .25) popTimes.shift();
   return 1/Math.sqrt(1 + (popTimes.length - 1)/3);
+}
+function popVoice(t){
+  const nowT = AC.currentTime; popVoices = popVoices.filter(v => v[1] > nowT);
+  let busy = 0; for(const v of popVoices) if(v[0] <= t + .001 && v[1] > t) busy++;
+  if(busy >= POP_VOICES) return false;
+  popVoices.push([t, t + POP_LEN]); return true;
 }
 function play(buf, rate, pan, delay, gain){
   const s = AC.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate;
   let out = s;
   if(gain != null && gain < 1){ const g = AC.createGain(); g.gain.value = gain; out = out.connect(g); }
   if(pan && AC.createStereoPanner){ const p = AC.createStereoPanner(); p.pan.value = pan; out = s.connect(p); }
-  out.connect(master); s.start(AC.currentTime + (delay || 0));
+  out.connect(master); s.start(delay ? AC.currentTime + delay : 0);
 }
 // everything else is scheduled a little ahead, so a stalled frame delays it instead of eating it
 const LEAD = .03;
@@ -1958,20 +1969,27 @@ const SND = {
   // one pop; pan follows where on the screen it happened, gently
   pop(delay, size, kind){
     if(!AC || !S.ui.sound || !POPS.length) return;
-    if(popVoices >= POP_VOICES) return;
-    const list = kind === 'thick' ? THICKS : POPS, g = popGain();
-    popVoices++; setTimeout(() => popVoices--, 90 + (delay || 0)*1000);
+    const t = AC.currentTime + (delay || 0); if(!popVoice(t)) return;
+    const list = kind === 'thick' ? THICKS : POPS, g = popGain(t);
     play(list[(Math.random()*list.length)|0], Math.max(.6, Math.min(1.5, (size || 1)*(.88 + Math.random()*.24))), panX, delay, g);
   },
   buy(){ if(!AC || !S.ui.sound || !BUYS.length) return; play(BUYS[(Math.random()*BUYS.length)|0], .97 + Math.random()*.06, 0, 0); },
-  pops(n, pitch){ if(!AC || !S.ui.sound || n <= 0) return; const k = Math.min(n, 5); for(let i = 0; i < k; i++) SND.pop(i ? Math.random()*.03 : 0, pitch); if(n > 5) SND.crackle(n); },
+  /* what one frame popped: n pops over `span` seconds. A slow frame stands for more time, so its pops
+     are spread over that time, a little ahead, rather than all heard at once or not at all */
+  pops(n, pitch, span){
+    if(!AC || !S.ui.sound || n <= 0) return; span = Math.min(.25, span || 0);
+    const k = Math.min(n, Math.max(5, Math.min(24, Math.ceil(span*300))));
+    for(let i = 0; i < k; i++) SND.pop(i ? (span > .02 ? i/k*span : 0) + Math.random()*.03 : 0, pitch);
+    if(n > 5) SND.crackle(n, span);
+  },
   // many at once: a crackle whose loudness follows the count, and a boom for the truly absurd
-  crackle(n){
-    if(!AC || !S.ui.sound) return; const t = now(); if(t - crackleT < .05) return; crackleT = t;
-    // more bubbles make a denser crackle, hardly a louder one
-    const lg = Math.log10(n), grains = Math.min(12, 3 + lg*2);
-    for(let i = 0; i < grains; i++) nz(t + Math.random()*.12, .01 + Math.random()*.015, 'bandpass', 1200 + Math.random()*3000, 2, Math.min(.11, .05 + .012*lg));
-    if(n > 3000) osc(t, 90, 38, .35, Math.min(.22, .04*lg));
+  crackle(n, span){
+    if(!AC || !S.ui.sound) return; const t = now(); span = Math.min(.25, span || 0);
+    if(span < .05 && t - crackleT < .05) return; crackleT = t;
+    // more bubbles make a denser crackle, hardly a louder one; a slow frame's crackle lasts as long as the frame
+    const per = span ? n/(Math.max(span, 1/60)*60) : n, lg = Math.log10(Math.max(1, per)), grains = Math.min(12, 3 + lg*2), reps = Math.max(1, Math.round(span/.05));
+    for(let r = 0; r < reps; r++) for(let i = 0; i < grains; i++) nz(t + r*.05 + Math.random()*.12, .01 + Math.random()*.015, 'bandpass', 1200 + Math.random()*3000, 2, Math.min(.11, .05 + .012*lg));
+    if(per > 3000) osc(t, 90, 38, .35, Math.min(.22, .04*lg));
   },
   pfft(){ if(!AC || !S.ui.sound) return; nz(now(), .24, 'lowpass', 850, .7, .3, .025); },
   glint(){ if(!AC || !S.ui.sound) return; const t = now(); nz(t + .01, .16, 'highpass', 5500, 1, .07, .004); nz(t + .05, .12, 'bandpass', 6500, 8, .06); },
@@ -2387,25 +2405,68 @@ function addCrack(v, px, py){
   }
   if(v.mode === 'detail') paintAll(v);
 }
-// the red print, in ink on the film over the domes; where a printed bubble was popped the ink is scuffed
+// the red print, in ink on the film. Only the printed bubbles carry the ink, so a bubble is either red or
+// free; a thin line joins them into the picture without lying over a neighbour. Where a printed bubble
+// was popped the ink is scuffed.
 function drawPrint(v){
   const sh = v.sh; if(!sh.strokes) return;
-  const s = v.s;
+  const s = v.s, r = v.r;
   cx.save(); cx.lineCap = 'round'; cx.lineJoin = 'round';
-  for(const [w, col] of [[sh.inkW*2*s + 2, 'rgba(120,10,10,.25)'], [sh.inkW*2*s, 'rgba(206,30,34,.78)']]){
-    cx.lineWidth = w; cx.strokeStyle = col; cx.beginPath();
-    for(const line of sh.strokes) line.forEach(([x, y], k) => k ? cx.lineTo(v.ox + x*s, v.oy + y*s) : cx.moveTo(v.ox + x*s, v.oy + y*s));
-    cx.stroke();
-  }
-  // a gloss line along the ink, where the domes catch the light
-  cx.lineWidth = Math.max(1, s*.12); cx.strokeStyle = 'rgba(255,255,255,.22)'; cx.beginPath();
-  for(const line of sh.strokes) line.forEach(([x, y], k) => k ? cx.lineTo(v.ox + x*s - s*.12, v.oy + y*s - s*.14) : cx.moveTo(v.ox + x*s - s*.12, v.oy + y*s - s*.14));
+  cx.lineWidth = Math.max(1.5, s*.14); cx.strokeStyle = 'rgba(206,30,34,.5)'; cx.beginPath();
+  for(const line of sh.strokes) line.forEach(([x, y], k) => k ? cx.lineTo(v.ox + x*s, v.oy + y*s) : cx.moveTo(v.ox + x*s, v.oy + y*s));
   cx.stroke();
   for(let j = 0; j < sh.rows; j++) for(let i = 0; i < sh.cols; i++){
-    if(!BB.isPrint(sh, i, j) || BB.isIntact(sh, i, j)) continue;
+    if(!BB.isPrint(sh, i, j)) continue;
     const x = pX(v, i, j), y = pY(v, j);
-    cx.fillStyle = 'rgba(245,240,235,.55)'; cx.beginPath(); cx.arc(x, y, v.r*.62, 0, 6.283); cx.fill();
-    cx.strokeStyle = 'rgba(60,20,20,.6)'; cx.lineWidth = 1.2; cx.beginPath(); cx.moveTo(x - v.r*.35, y - v.r*.3); cx.lineTo(x + v.r*.05, y + v.r*.05); cx.lineTo(x - v.r*.1, y + v.r*.35); cx.moveTo(x + v.r*.05, y + v.r*.05); cx.lineTo(x + v.r*.38, y - v.r*.1); cx.stroke();
+    if(BB.isIntact(sh, i, j)){
+      // ink on the dome: solid red, a darker rim, and the dome's own highlight still on top
+      const gr = cx.createRadialGradient(x - r*.25, y - r*.3, r*.1, x, y, r*.86);
+      gr.addColorStop(0, 'rgba(236,70,64,.9)'); gr.addColorStop(1, 'rgba(176,18,24,.9)');
+      cx.fillStyle = gr; cx.beginPath(); cx.arc(x, y, r*.86, 0, 6.283); cx.fill();
+      cx.strokeStyle = 'rgba(110,8,12,.55)'; cx.lineWidth = Math.max(1, r*.08); cx.stroke();
+      cx.strokeStyle = 'rgba(255,255,255,.55)'; cx.lineWidth = Math.max(1, r*.12); cx.beginPath(); cx.arc(x, y, r*.55, Math.PI*1.1, Math.PI*1.4); cx.stroke();
+      continue;
+    }
+    cx.fillStyle = 'rgba(245,240,235,.55)'; cx.beginPath(); cx.arc(x, y, r*.62, 0, 6.283); cx.fill();
+    cx.strokeStyle = 'rgba(60,20,20,.6)'; cx.lineWidth = 1.2; cx.beginPath(); cx.moveTo(x - r*.35, y - r*.3); cx.lineTo(x + r*.05, y + r*.05); cx.lineTo(x - r*.1, y + r*.35); cx.moveTo(x + r*.05, y + r*.05); cx.lineTo(x + r*.38, y - r*.1); cx.stroke();
+  }
+  cx.restore();
+}
+/* The last few bubbles of a sheet are easy to lose, on a big sheet most of all, or on glass under a print.
+   When only a handful are left and nothing has popped for a moment, a ring pulses round each of them;
+   after a longer pause, round the last tenth of the sheet too. */
+let strag = null;
+function stragglers(v){
+  const sh = v.sh, idle = run.t - run.lastPop, few = Math.max(4, Math.min(24, Math.round(sh.N*.03)));
+  const cap = idle >= 3 ? Math.max(few, Math.min(60, Math.round(sh.N*.1))) : idle >= 1.2 ? few : 0;
+  if(sh.left > cap || sh.left <= 0){ strag = null; return null; }
+  if(strag && strag.sh === sh && strag.left === sh.left) return strag;
+  const pts = [], giants = new Set();
+  for(let j = 0; j < sh.rows && pts.length < cap; j++) for(let w = 0; w < sh.words; w++){
+    let m = sh.bits[j*sh.words + w] & ~(sh.pmask ? sh.pmask[j*sh.words + w] : 0);
+    while(m){
+      const low = m & -m, i = w*32 + (31 - Math.clz32(low)); m ^= low;
+      if(i >= sh.cols) continue;
+      if(sh.smask[j*sh.words + w] & low){
+        const k = BB.specialAt(sh, i, j), tp = sh.spT[j][k];
+        if(tp === T.FLAT) continue;
+        if(tp === T.GIANT){ const g = sh.spG[j][k]; if(giants.has(g) || !sh.giants[g] || !sh.giants[g].alive) continue; giants.add(g); pts.push([sh.giants[g].x, sh.giants[g].y, 2.2]); continue; }
+      }
+      pts.push([BB.cx(i, j), BB.cy(j), 1]);
+    }
+  }
+  strag = { sh, left: sh.left, pts, since: run.t };
+  return strag;
+}
+function drawStragglers(v, t){
+  if(!run || run.demo || run.slide > 0 || mode !== 'run') return;
+  const st = stragglers(v); if(!st) return;
+  const a = Math.min(1, (run.t - st.since)*3), pulse = 1 + .14*Math.sin(t*6);
+  cx.save(); cx.globalAlpha = a;
+  for(const [x, y, k] of st.pts){
+    const px = v.ox + x*v.s, py = v.oy + y*v.s, rr = Math.max(9, v.r*1.3*k)*pulse;
+    cx.strokeStyle = 'rgba(30,20,10,.35)'; cx.lineWidth = 4; cx.beginPath(); cx.arc(px, py, rr, 0, 6.283); cx.stroke();
+    cx.strokeStyle = 'rgba(255,248,225,.95)'; cx.lineWidth = 2; cx.beginPath(); cx.arc(px, py, rr, 0, 6.283); cx.stroke();
   }
   cx.restore();
 }
@@ -2468,8 +2529,10 @@ function buildPattern(v){
   }
   // tiles: four bubbles across, two rows down
   const tw = 4*s, th = 2*SQ*s, oyb = v.oy + (.5 - SQ/2)*s;
-  v.tmp = document.createElement('canvas'); v.tmp.width = Math.ceil(W*DPR); v.tmp.height = Math.ceil(H*DPR); v.tg = v.tmp.getContext('2d');
-  v.base = document.createElement('canvas'); v.base.width = v.tmp.width; v.base.height = v.tmp.height;
+  // the fresh wrap is masked on a canvas the size of the sheet, not of the screen: a busy frame redoes only that
+  v.rect = { x: Math.floor(v.ox) - 2, y: Math.floor(v.oy) - 2, w: Math.ceil(v.w) + 5, h: Math.ceil(v.h) + 5 };
+  v.tmp = document.createElement('canvas'); v.tmp.width = Math.ceil(v.rect.w*DPR); v.tmp.height = Math.ceil(v.rect.h*DPR); v.tg = v.tmp.getContext('2d');
+  v.base = document.createElement('canvas'); v.base.width = Math.ceil(W*DPR); v.base.height = Math.ceil(H*DPR);
   const bg = v.base.getContext('2d'); bg.setTransform(DPR, 0, 0, DPR, 0, 0);
   let tileI, tileP, m = null;
   if(s >= 3){
@@ -2539,13 +2602,17 @@ function compose(v){
   if(v.mode === 'block') flushBlocks(v);
   if(v.maskDirty){ const d = v.maskDirty; v.mg.putImageData(v.img, 0, 0, d.x0, d.y0, d.x1 - d.x0 + 1, d.y1 - d.y0 + 1); v.maskDirty = null; }
   if(!v.composeDirty) return; v.composeDirty = false;
-  const g = v.tg, s = v.s; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, W, H);
+  const g = v.tg, s = v.s, R = v.rect; g.setTransform(DPR, 0, 0, DPR, -R.x*DPR, -R.y*DPR); g.globalCompositeOperation = 'source-over'; g.clearRect(R.x, R.y, R.w, R.h);
   g.fillStyle = v.patI; g.fillRect(v.ox, v.oy, v.w, v.h);
   g.globalCompositeOperation = 'destination-in'; g.imageSmoothingEnabled = s < 3;
   if(v.mode === 'block') g.drawImage(v.mask, v.ox, v.oy, v.bw*v.bk*s, v.bh*v.bk*SQ*s);
   else g.drawImage(v.mask, v.ox, v.oy + (.5 - SQ/2)*s, v.mask.width*s/2, v.mask.height*SQ*s);
   g.globalCompositeOperation = 'source-over'; g.imageSmoothingEnabled = true;
-  const l = v.lg; l.clearRect(0, 0, W, H); l.drawImage(v.base, 0, 0, W, H); l.drawImage(v.tmp, 0, 0, W, H);
+  // the film around the sheet never changes: after the first time only the sheet's own rectangle is redone
+  const l = v.lg;
+  if(!v.layerInit){ v.layerInit = true; l.clearRect(0, 0, W, H); l.drawImage(v.base, 0, 0, W, H); }
+  else { l.clearRect(R.x, R.y, R.w, R.h); l.drawImage(v.base, R.x*DPR, R.y*DPR, R.w*DPR, R.h*DPR, R.x, R.y, R.w, R.h); }
+  l.drawImage(v.tmp, R.x, R.y, R.w, R.h);
 }
 // specials on big sheets are drawn fresh every frame on top: they are few, and they must be findable
 const GLOW = { [T.GOLD]:'255,210,80', [T.ESPRESSO]:'180,110,60', [T.BANG]:'255,90,60', [T.SUGAR]:'255,110,190', [T.ZIP]:'90,210,225' };
@@ -2681,7 +2748,7 @@ function handleEvents(ev, t){
   }
   const pops = ev.playerPops + ev.machinePops + ev.chainPops;
   if(pops && ev.playerPops) buzz(pops > 50 ? 14 : 7);
-  if(pops){ panAt(ptr.x); SND.pops(pops, Math.min(1.4, Math.max(.7, 18/Math.max(8, s)))); if(pops > 1 && view.mode === 'pattern' && ev.playerPops) rings.push({ x: ptr.x, y: ptr.y, r0: run.P.reach*s*.6, r1: run.P.reach*s*1.4, t: 0, life: .25, a: .5 }); }
+  if(pops){ panAt(ptr.x); SND.pops(pops, Math.min(1.4, Math.max(.7, 18/Math.max(8, s))), frameDt); if(pops > 1 && view.mode === 'pattern' && ev.playerPops) rings.push({ x: ptr.x, y: ptr.y, r0: run.P.reach*s*.6, r1: run.P.reach*s*1.4, t: 0, life: .25, a: .5 }); }
   if(ev.playerPops) hintDone('first');
   if(ev.playerPops && run.down && run.P.budget > 0) hintDone('swipe');
   for(let k = 0; k < ev.specials.length; k += 3){
@@ -2849,6 +2916,7 @@ function drawSheet(v, t){
   if(run && run.machines.length) drawMachines(v, t);
   if(run && v === view){ if(run.zips.length) drawZips(v); if(run.P.lasso && run.down && run.path.length > 3) drawLasso(v); }
   if(v.sh.heat) drawHeat(v, t);
+  if(v === view) drawStragglers(v, t);
 }
 // zipper sliders run out along the row (and column) from the popped zipper
 function drawZips(v){
@@ -3827,6 +3895,8 @@ cv.addEventListener('pointermove', e => {
 });
 const up = () => { ptr.down = false; if(run) BB.release(run); if(finale) finale.release(); };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+// a long press is a thick bubble held down, not a request for a menu
+cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('pointerleave', e => { if(e.pointerType === 'mouse'){ ptr.x = -999; up(); } });
 addEventListener('keydown', e => {
   if(e.key === 'Enter' || e.key === ' '){ if(mode === 'end' || mode === 'title'){ if(document.activeElement && ['BUTTON', 'INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return; e.preventDefault(); startRun(); } }
@@ -3865,11 +3935,11 @@ function updateDents(){
 }
 
 /* ================= loop ================= */
-let lt = performance.now(), holdCreak = 0;
+let lt = performance.now(), holdCreak = 0, frameDt = 1/60;
 function frame(now){
   // whatever goes wrong in one frame, the next one still comes
   requestAnimationFrame(frame);
-  const dt = Math.min(.05, (now - lt)/1000) || 1/60; lt = now; const t = now/1000;
+  const dt = Math.min(.05, (now - lt)/1000) || 1/60; frameDt = Math.min(.25, (now - lt)/1000) || 1/60; lt = now; const t = now/1000;
   if((mode === 'run' || mode === 'title' || mode === 'epi') && run){
     // the last sheet of the game does not get a successor
     if(mode === 'epi' && run.sheet.left <= 0 && !run.epiDone){ run.epiDone = true; SND.sheet(); setTimeout(finishFinale, 1600); }
