@@ -198,7 +198,7 @@ the push at an island border (the ring drifts), a border blend too short for Dre
 
 ```sh
 npm run test:bubble                      # or: node test/bubble_break.mjs  (about three minutes)
-node test/bubble_break.mjs sheet rules   # named suites only
+node test/bubble_break.mjs sheet rules materials   # named suites only
 node test/bubble_break.mjs --page=old.html
 ```
 
@@ -209,13 +209,14 @@ keeps its sheets, verbs, trees and economy in a `<script id="core">` block with 
 runs that block alone in Node's `vm`. Its player is limited the way a person is: five taps a
 second with a few pixels of aim error, swipes at 1,500 px a second across a sheet drawn 900 px
 wide, specials first (sugar before the rest), thick bubbles held, and once it has Cordon tape it
-draws loops at the same speed. Between breaks it buys the cheapest thing it can, and it quits when
-its callus gain stops growing.
+draws loops at the same speed. On fragile wrap it never presses the print and ends a swipe short of
+it. Between breaks it buys the cheapest thing it can, and it quits when its callus gain stops growing.
 
 | suite | what it checks |
 | --- | --- |
 | `sheet` | a circle pops exactly the bubbles whose centres lie inside it (480 circles against brute force), and so does a hand-drawn loop (30 loops); the count of bubbles left matches the bitset after mixed actions; a swipe never pops more than its strength; a press, a swipe and a new sheet at half a million bubbles, and a sheet, a press and a loop at thirty million, stay within a frame's budget |
 | `rules` | thick bubbles need a held press; pressing a flat one spoils the combo, swiping over it costs strength; machines leave gold and espresso to the player; espresso never adds more than 75 % of the break; giants take exactly their presses, a swipe counts once, and their shockwave pops; a cleared sheet pays and stops the clock while the next slides in; no forks (the intern buys both sides), Own mug; quitting and the coffee fund's first five breaks; the calluses shown live during a break are what quitting pays, and the next one comes at exactly the Plopps shown (200 mixed states); workplaces promoted by calluses earned and never sold, the next job always at the newest one (an old save's pick of an older one dropped), the world opened by calluses earned in the city; a visit plays one break at another reached workplace with this job's upgrades, counts its bubbles, sheets and time, and leaves the job's Plopps, upgrades, orders and progress untouched; a sugar rush multiplies and holds the combo, and machines leave sugar alone; a zipper opens its row, Cross stitch its column; a closed loop pops its inside and pays triple, an open curve does not; a chain reaction spreads and dies out by itself; Iron thumb; orders, their bonus and who gets which; stickers; a first-version save still loads, gets back the calluses it spent on workplaces and the promotions it has earned, and an order its workplace no longer gives is swapped on load |
+| `materials` | special deliveries: none at the desk, jumbo wrap on the second sheet in the warehouse and then one sheet in four, fragile wrap first in the factory, a visit brings only its own workplace's; the first sheet of a new material holds the clock. Jumbo: a quarter of the bubbles at four times the Plopps and a quarter of the strength, the first touch only squashes, one stroke never pops what it squashed, and a pop sets off exactly the squashed bubbles connected to it (against a flood fill). Fragile: by fingertip with no machine, no lasso, waves or giants; the print is not in the count and a machine goes round it; pressing it cracks it, pays nothing and ends the combo; an untouched print pays ×4, one crack ×2, more ×1. Shrink: warm bubbles pay ×1.5, the heat takes exactly what is left and pays nothing for it, its pace is four fifths of yours between 5 and 40 s. Mastery levels and what each gives, the four new stickers, a save from before deliveries |
 | `idle` | a break without touching the wrap earns nothing; a fully built machine earns under 40 % of a player, at the desk and in the city |
 | `pacing` | two seeded careers: first quit, warehouse, factory, city and world each inside their window, no break past 90 s, each workplace popping far faster than the last, no job handing over half its break tree after one break, one to four jobs per workplace, orders done along the way |
 
@@ -228,7 +229,12 @@ and for the second version: loops paying single, a chain reaction with no cap (1
 waiting), machines taking sugar, a missing cross stitch, loop edges rounded instead of floored,
 combos that lapse during a rush, Iron thumb without effect, orders worth nothing, a lost save
 migration, loops without Cordon tape, stickers worth double, a zipper that stops at one end, and
-an unreachable order kept in an old save.
+an unreachable order kept in an old save; and for the third: a swipe popping what it squashed
+itself, a machine cracking the print, a crack that keeps the combo, the wrong print bonus, jumbo
+wrap at full strength (the world twelve minutes early), deliveries one sheet too often, the new
+material arriving on the first sheet or at a workplace it does not belong to, a heat gun that pays
+for what it takes or runs at the player's full pace, a cascade that pops unsquashed bubbles, the
+clock running through a new material's first sheet, and the lasso on fragile wrap.
 
 ## Three Gates
 

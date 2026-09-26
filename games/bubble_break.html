@@ -105,6 +105,8 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
 .fl.gold{color:#ffd76a;font-size:20px}
 .fl.big{font-family:var(--display);font-size:30px}
 .fl.warn{color:#ffb2a4}
+.fl.long{animation-duration:2.2s}
+@media (max-width:560px){.fl.big{font-size:23px;white-space:normal;width:min(86vw,340px);text-align:center;line-height:1.1}}
 @keyframes fl{0%{opacity:0;margin-top:6px}12%{opacity:1;margin-top:0}100%{opacity:0;margin-top:-44px}}
 #hud .rbox{justify-self:end;display:flex;gap:8px;align-items:flex-start}
 #bPause{pointer-events:auto;padding:.5em .65em;font-size:14px;margin-top:4px}
@@ -204,6 +206,10 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
 .job .tape{margin-top:4px;font-size:15px}
 .job .jb{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 #jobs .jnote{grid-column:1/-1;margin:0;font-size:13px;color:rgba(255,255,255,.7)}
+#jobs .jhead{grid-column:1/-1;margin:14px 0 -4px;color:#f3efe2;font-size:15px;letter-spacing:.08em;text-transform:uppercase}
+.job .jh em.stars{color:#c9920f;font-size:15px;letter-spacing:1px;text-transform:none}
+.job p.perk{font-weight:600}
+.job p.perk small{font-weight:400;color:var(--muted)}
 .job.world .jh b{font-size:19px}
 #trees .menu-b{background:transparent;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.35);margin-right:6px}
 #trees .wallet{margin-left:auto;display:flex;gap:10px;align-items:center}
@@ -375,7 +381,7 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
 
 <!-- stage intro -->
 <div class="screen" id="sStage" hidden>
-  <div class="card note" style="transform:rotate(.8deg)"><p class="kicker" id="stageKicker"></p><h2 class="logo" style="font-size:clamp(36px,9vw,54px)" id="stageName"></h2><p id="stageText"></p>
+  <div class="card note" style="transform:rotate(.8deg)"><p class="kicker" id="stageKicker"></p><h2 class="logo" style="font-size:clamp(36px,9vw,54px)" id="stageName"></h2><p id="stageText"></p><p id="stageMat" class="small" style="font-weight:600" hidden></p>
     <div class="row"><button class="tape" id="bStageGo"></button></div></div>
 </div>
 
@@ -421,6 +427,8 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
    covers a hundred thousand cells clears whole words at a time. Special bubbles
    (thick, gold, espresso, bang, giant, flat, sugar, zipper) are listed per row and
    masked out of the bitset sweeps; they are few, and each gets its own rules.
+   Special deliveries add a bitset of their own: squashed cells on jumbo wrap, the
+   printed cells on fragile wrap; shrink wrap's heat gun clears whole columns.
    ============================================================ */
 const BB = (() => {
 'use strict';
@@ -447,7 +455,7 @@ const STAGES = [
   { id:'desk',    size:[54, 80, 120, 176, 250, 340, 450],                               reach:.42, budget:1,    value:1,   cost:1,    bang:2.3, machine:'pin',    gate:3e5,   gain:3,    promo:0 },
   { id:'ship',    size:[600, 1000, 1600, 2600, 4200, 6800, 11000],                      reach:1.7, budget:14,   value:6,   cost:120,  bang:5,   machine:'roller', gate:3e8,   gain:24,   promo:12 },
   { id:'factory', size:[16000, 30000, 55000, 100000, 180000, 320000, 560000],           reach:10,  budget:400,  value:40,  cost:4e5,  bang:18,  machine:'press',  gate:1.2e13, gain:220, promo:400 },
-  { id:'city',    size:[1.2e6, 2.2e6, 4e6, 7e6, 1.2e7, 2e7, 3.2e7],                    reach:34,  budget:6000, value:250, cost:2e10, bang:55,  machine:'convoy', gate:1.5e17, gain:1800, promo:5000 },
+  { id:'city',    size:[1.2e6, 2.2e6, 4e6, 7e6, 1.2e7, 2e7, 3.2e7],                    reach:34,  budget:6000, value:250, cost:2e10, bang:55,  machine:'convoy', gate:1.5e17, gain:1800, promo:4000 },
 ];
 // and the world, once you have earned this many
 const PROMO = { world: 200000 };
@@ -506,6 +514,32 @@ const CAREER = [
   { id:'domino',     x:0.65, y:5,   max:2, cost:[8000, 30000],               parent:'chair' },
   { id:'fame',       x:0, y:6,      max:1, cost:[150000],                    parent:'chair' },   // every callus counts for more
 ];
+/* ---------- Special deliveries: now and then a sheet comes in another material ----------
+   Each workplace from the warehouse on brings one. `from` is the workplace where it first comes.
+   jumbo    big bubbles: the first touch squashes one, the next pops it, and a popped bubble sets
+            off every squashed one touching it
+   fragile  a small sheet round something breakable, popped by fingertip; the print on it must not
+            be popped, and a sheet with the print untouched pays four times its bonus
+   shrink   a heat gun crosses the sheet, and what it reaches shrinks flat before you can pop it;
+            warm bubbles pay half as much again, and nine tenths popped doubles the bonus
+   Handling one well counts towards its mastery: four levels, each a lasting bonus. */
+const MATS = [
+  { id:'jumbo',   from:1 },
+  { id:'fragile', from:2 },
+  { id:'shrink',  from:3 },
+];
+const MASTERY = [2, 8, 20, 50];
+const DELIVER_EVERY = 4;
+const FRAGILE_SIZE = 300;
+// the fragile print: the symbols from a parcel label, as strokes in a 10 × 10 box. A bubble is printed
+// when its centre lies under the ink; the page draws the same strokes, so what you see is what counts.
+const PRINTS = {
+  glass:    [[[2, .3], [2.2, 2.6], [3.2, 4.3], [5, 4.9], [6.8, 4.3], [7.8, 2.6], [8, .3]], [[5, 4.9], [5, 8.8]], [[2.6, 9.4], [7.4, 9.4]], [[4.6, .6], [5.5, 1.8], [4.6, 2.7], [5.3, 3.6]]],
+  arrows:   [[[3, 8.6], [3, 1.6]], [[1.4, 3.4], [3, 1.2], [4.6, 3.4]], [[7, 8.6], [7, 1.6]], [[5.4, 3.4], [7, 1.2], [8.6, 3.4]], [[1, 9.6], [9, 9.6]]],
+  umbrella: [[[1, 4.6], [1.6, 2.6], [3, 1.2], [5, .6], [7, 1.2], [8.4, 2.6], [9, 4.6]], [[1, 4.6], [3.7, 4.6], [6.3, 4.6], [9, 4.6]], [[5, .6], [5, 8.4], [5.5, 9.3], [6.3, 9.3], [6.8, 8.6]]],
+};
+const INK = .58;     // how far from a stroke's centre line the ink reaches, in bubble pitches
+
 const byId = (list) => Object.fromEntries(list.map(n => [n.id, n]));
 const RUN_BY = byId(RUN), CAREER_BY = byId(CAREER);
 
@@ -559,17 +593,26 @@ const STICKERS = [
   { id:'city',      t: S => S.unlocked >= 3 },
   { id:'loop',      t: S => S.stats.loop >= 1e6 },
   { id:'domino',    t: S => S.stats.domino >= 12 },
+  { id:'squash',    t: S => S.stats.cascade >= 100 },
+  { id:'care',      t: S => matDone(S, 'fragile') >= 1 },
+  { id:'heat',      t: S => matDone(S, 'shrink') >= 1 },
+  { id:'expert',    t: S => MATS.every(m => matLevel(S, m.id) >= MASTERY.length) },
   { id:'world',     t: S => S.finale.act >= 1 },
   { id:'end',       t: S => S.finale.done },
 ];
 
 /* ---------- State ---------- */
-function newStats(){ return { sheets:0, clean:0, golds:0, giants:0, frenzies:0, zips:0, flats:0, longest:0, allOrders:0, loop:0, domino:0 }; }
+function newStats(){ return { sheets:0, clean:0, golds:0, giants:0, frenzies:0, zips:0, flats:0, longest:0, allOrders:0, loop:0, domino:0, cascade:0, cracks:0 }; }
+// since: sheets since the last special delivery; n: sheets of each material handled well; seen: met yet;
+// rate: bubbles a second at each workplace, from the breaks so far, which sets the heat gun's pace
+function newDeliv(){ return { since:0, n:{}, seen:{}, rate:{} }; }
+const matDone = (S, id) => (S.deliv && S.deliv.n[id]) || 0;
+const matLevel = (S, id) => MASTERY.filter(x => matDone(S, id) >= x).length;
 function newState(){
   const S = { v:VERSION, stage:0, unlocked:0, plopps:0, cycleEarned:0, lastCycleEarned:0, lifeEarned:0, lifePops:0,
            runs:0, cycleRuns:0, lv:{ break:1 }, cl:{ cv:1 }, calluses:0, callusesEarned:0, quits:0,
            forks:{}, best:{ run:0, combo:0, sheets:0 }, playTime:0, autoBuy:true, finale:{ done:false, pops:0, act:0 },
-           stats:newStats(), stickers:{}, orders:null, jobSeed:1, worldOpen:false };
+           stats:newStats(), stickers:{}, orders:null, jobSeed:1, worldOpen:false, deliv:newDeliv() };
   S.orders = newOrders(S);
   return S;
 }
@@ -579,7 +622,8 @@ function load(json){
     const o = typeof json === 'string' ? JSON.parse(json) : json; if(!o || o.v !== VERSION) return S;
     Object.assign(S, o); S.lv.break = 1; S.cl.cv = 1;
     // saves from the first version: fields that came later, and the world, which now lies past the city
-    S.stats = Object.assign(newStats(), o.stats || {}); S.stickers = o.stickers || {}; S.finale = Object.assign({ done:false, pops:0, act:0 }, o.finale || {});
+    S.stats = Object.assign(newStats(), o.stats || {}); S.stickers = o.stickers || {};
+    const d = o.deliv || {}; S.deliv = Object.assign(newDeliv(), d, { n: Object.assign({}, d.n), seen: Object.assign({}, d.seen), rate: Object.assign({}, d.rate) }); S.finale = Object.assign({ done:false, pops:0, act:0 }, o.finale || {});
     // saves from before promotions, when the workplaces were bought in the career tree: those calluses come back
     const OLD = { ship:[1, 10], factory:[2, 180], city:[3, 3000], world:[3, 120000] };
     for(const k in OLD) if(S.cl[k]){ S.calluses += OLD[k][1]; S.unlocked = Math.max(S.unlocked, OLD[k][0]); if(k === 'world') S.worldOpen = true; delete S.cl[k]; }
@@ -600,6 +644,7 @@ function derive(S){
   const st = STAGES[S.stage];
   const L = id => lv(S, id), C = id => cl(S, id);
   const callusRate = .10 + .02*C('callus') + .03*C('fame');
+  const M = id => matLevel(S, id);
   const nightshift = Math.pow(2, C('nightshift'));
   // the coffee fund pays extra for the first five breaks of every job after the first
   const fund = S.cycleRuns < 5 && S.quits > 0 ? 1 + .4*C('savings') : 1;
@@ -610,14 +655,14 @@ function derive(S){
   const size = st.size[sizeIdx];
   return {
     stage: S.stage, st,
-    time: 20 + 3*L('cup') + 5*C('coffee'),
-    reach: st.reach * [1, 1.55, 2.1, 2.8, 3.6][L('thumb')] * (1 + .15*C('chair')),
+    time: 20 + 3*L('cup') + 5*C('coffee') + M('shrink'),
+    reach: st.reach * [1, 1.55, 2.1, 2.8, 3.6][L('thumb')] * (1 + .15*C('chair')) * (1 + .04*M('jumbo')),
     value,
     budget: budgetLv * st.budget * (L('iron') ? 1.5 : 1),
     refill: [.4, .3, .22, .15][L('stamina')],
     size,
     comboCap: 1 + L('rhythm'),            // extra multiplier on top of x1
-    comboWin: .8 + .1*L('rhythm'),
+    comboWin: .8 + .1*L('rhythm') + .1*M('fragile'),
     clearMul: .5 * (1 + 1.5*L('thorough')),
     clearTime: .5*L('thorough') + .75*C('overtime'),
     gold: .015*L('gold') * (1 + .5*C('nose')), goldCap: Math.round(4*L('gold') * (1 + .5*C('nose'))),
@@ -804,7 +849,82 @@ function makeSheet(P, aspect, rnd){
   for(let j = 0; j < rows; j++){ sh.spI[j] = Int32Array.from(sh.spI[j]); sh.spT[j] = Uint8Array.from(sh.spT[j]); sh.spG[j] = Int16Array.from(sh.spG[j]); }
   sh.left = N - sh.flats;
   sh.W = cols + .5; sh.H = (rows-1)*SQ + 1;
+  sh.mat = P.mat || null;
+  // dent: squashed; fresh: squashed by the stroke still going on, which cannot also pop it
+  if(sh.mat === 'jumbo'){ sh.dent = new Uint32Array(rows*words); sh.fresh = new Uint32Array(rows*words); }
+  if(sh.mat === 'fragile') printSheet(sh, rnd);
+  if(sh.mat === 'shrink') sh.heat = { x: -1, t: 0, delay: 1.2, v: (sh.W + 2)/Math.max(1, P.heatTime || 20), lost: 0 };
   return sh;
+}
+// the fragile print: a glass, and an umbrella beside it where there is room, one bubble per dot.
+// Printed bubbles are not in `left`: the sheet is done when everything else is popped.
+function printSheet(sh, rnd){
+  sh.pmask = new Uint32Array(sh.rows*sh.words); sh.printN = 0; sh.cracked = 0; sh.item = (rnd()*3)|0;
+  // the glass always; beside it the arrows or the umbrella when the sheet is wide enough
+  const names = ['glass']; const u = Math.min(sh.H*.62/10, sh.W*.9/(sh.W/sh.H > 1.2 ? 23 : 10));
+  if(sh.W/sh.H > 1.2) names.push(rnd() < .5 ? 'arrows' : 'umbrella');
+  const wide = (names.length*10 + (names.length - 1)*3)*u, x0 = (sh.W - wide)/2, y0 = (sh.H - 10*u)/2;
+  sh.strokes = []; sh.inkW = INK;
+  names.forEach((n, k) => { for(const line of PRINTS[n]) sh.strokes.push(line.map(([a, b]) => [x0 + (k*13 + a)*u, y0 + b*u])); });
+  for(let j = 0; j < sh.rows; j++) for(let i = 0; i < sh.cols; i++){
+    const x = cx(i, j), y = cy(j); let near = false;
+    for(const line of sh.strokes){ for(let q = 1; q < line.length && !near; q++) near = segDist(x, y, line[q-1][0], line[q-1][1], line[q][0], line[q][1]) <= INK; if(near) break; }
+    if(!near) continue;
+    const w = j*sh.words + (i >>> 5), b = (1 << (i & 31)) >>> 0;
+    if(sh.smask[w] & b) continue;                     // a special stays a special
+    sh.pmask[w] |= b; sh.printN++;
+  }
+  sh.left -= sh.printN;
+}
+function segDist(px, py, ax, ay, bx, by){
+  const dx = bx - ax, dy = by - ay, L = dx*dx + dy*dy, t = L ? Math.max(0, Math.min(1, ((px - ax)*dx + (py - ay)*dy)/L)) : 0;
+  return Math.hypot(px - ax - t*dx, py - ay - t*dy);
+}
+const isPrint = (sh, i, j) => sh.pmask ? (sh.pmask[j*sh.words + (i>>>5)] >>> (i & 31)) & 1 : 0;
+const isDent = (sh, i, j) => sh.dent ? (sh.dent[j*sh.words + (i>>>5)] >>> (i & 31)) & 1 : 0;
+// what a sheet of each material is played with, from the break's own numbers
+function matP(P, mat){
+  // each jumbo bubble is four ordinary ones: a quarter as many, twice as wide, four times the Plopps, a quarter of the strength
+  if(mat === 'jumbo') return Object.assign({}, P, { mat, size: Math.max(12, Math.round(P.size/4)), reach: P.reach/2, bangR: P.bangR/2, value: P.value*4, budget: P.budget/4, bandMul: .5 });
+  if(mat === 'fragile'){
+    // by fingertip, with no machine and nothing that goes off by itself; the sheet is worth what a usual one is
+    const size = FRAGILE_SIZE;
+    return Object.assign({}, P, { mat, size, reach: .42, budget: P.budget/P.st.budget, value: P.value*P.size/size,
+      machine: 0, wave: 0, bang: 0, bangCap: 0, giants: 0, sugar: 0, zip: 0, zipCap: 0, domino: 0, lasso: false, flat: Math.min(P.flat, .03), twoHands: false });
+  }
+  if(mat === 'shrink') return Object.assign({}, P, { mat, value: P.value*1.5 });
+  return P;
+}
+// the next sheet's material: a new one comes on the second sheet after it arrives, then one sheet in DELIVER_EVERY
+function nextMat(run){
+  if(run.noMat) return null;
+  const D = run.S.deliv, avail = MATS.filter(m => m.from <= run.baseP.stage);
+  if(!D || !avail.length) return null;
+  D.since = (D.since || 0) + 1;
+  const fresh = avail.find(m => !D.seen[m.id]);
+  let id = null;
+  if(fresh){ if(D.since >= 2) id = fresh.id; }
+  else if(D.since >= DELIVER_EVERY) id = run.rnd() < .5 ? avail[avail.length - 1].id : avail[(run.rnd()*avail.length)|0].id;
+  if(!id) return null;
+  D.since = 0;
+  if(!D.seen[id]){ D.seen[id] = 1; run.ev.matNew = id; }
+  return id;
+}
+// the heat gun takes about four fifths of the time you would need to clear the sheet at your pace so far
+function heatPace(run, N){
+  const own = run.t > 5 && run.pops > 0 ? run.pops/run.t : 0, D = run.S.deliv, past = D && D.rate[run.baseP.stage] || 0;
+  const rate = own || past || Math.max(5, run.baseP.reach*run.baseP.reach*12);
+  return Math.max(5, Math.min(40, .8*N/rate));
+}
+function setSheet(run, mat){
+  let P = matP(run.baseP, mat);
+  if(mat === 'shrink') P = Object.assign(P, { heatTime: heatPace(run, P.size) });
+  run.P = P; run.budget = Math.min(run.budget, P.budget);
+  run.sheet = makeSheet(P, run.aspect, run.rnd);
+  run.casc = null;
+  if(mat) run.ev.mat = mat;
+  // the first sheet of a new material holds the clock for a moment, to read what it does
+  if(mat && run.ev.matNew === mat) run.grace = 3;
 }
 const cx = (i, j) => i + .5 + .5*(j & 1);
 const cy = j => j*SQ + .5;
@@ -821,16 +941,17 @@ function startRun(S, opts){
   freshCycleStage(S);
   if(!S.orders) S.orders = newOrders(S);
   const P = Object.assign(derive(S), opts.P || {}), rnd = mulberry(opts.seed != null ? opts.seed : (Math.random()*2**31)|0);
-  const run = { S, P, rnd, aspect: opts.aspect || 1.5, t:0, time:P.time, bonusT:0, earned:0, pops:0, playerPops:0, machinePops:0,
+  const run = { S, P, baseP: P, rnd, noMat: !!opts.noMat, aspect: opts.aspect || 1.5, t:0, time:P.time, bonusT:0, earned:0, pops:0, playerPops:0, machinePops:0,
     combo:0, maxCombo:0, lastPop:-9, sheets:0, slide:0, over:false, down:false, x:0, y:0, moved:0, still:0, hold:0,
     budget:P.budget, aid:0, pending:[], machines:[], machineT:1.5, flats:0, golds:0, giants:0, espressos:0, bangs:0, best:null,
     frenzy:0, frenzies:0, zips:[], zipsDone:0, cleanSheets:0, sheetFlat:false, path:[], pathLen:[], bestLoop:0, loops:0, domino:0,
-    orderT:0, ev: newEvents() };
-  run.sheet = makeSheet(P, run.aspect, rnd);
+    orderT:0, ev: newEvents(), casc:null, mats:{ jumbo:0, fragile:0, shrink:0 }, matSheets:0, cascBest:0, cracks:0, dents:0 };
+  setSheet(run, nextMat(run));
   S.runs++; S.cycleRuns++;
   return run;
 }
-function newEvents(){ return { spans:[], specials:[], flats:[], rings:[], giantHits:[], sheet:false, cleared:false, playerPops:0, machinePops:0, chainPops:0, value:0, budgetOut:false, time:[], loops:[], orders:[], frenzy:false }; }
+function newEvents(){ return { spans:[], specials:[], flats:[], rings:[], giantHits:[], sheet:false, cleared:false, playerPops:0, machinePops:0, chainPops:0, value:0, budgetOut:false, time:[], loops:[], orders:[], frenzy:false,
+  mat:null, matNew:null, matDone:null, dents:0, casc:0, cracks:[], heat:null, heatLost:0 }; }
 function takeEvents(run){ const e = run.ev; run.ev = newEvents(); return e; }
 
 function comboMul(run){ return 1 + Math.min(run.P.comboCap, Math.floor(run.combo/5)*.1); }
@@ -879,15 +1000,32 @@ function popSpan(run, j, i0, i1, budget, who){
   }
   // ordinary bubbles, a word at a time
   const words = sh.words, base = j*words;
-  let n = 0;
+  let n = 0, dented = 0, cracked = 0;
   for(let w = i0 >>> 5, wEnd = i1 >>> 5; w <= wEnd && used < budget; w++){
     const lo = w === (i0 >>> 5) ? i0 & 31 : 0, hi = w === wEnd ? i1 & 31 : 31;
     let m = sh.bits[base + w] & ~sh.smask[base + w] & wordMask(lo, hi);
+    if(sh.pmask && who === 'machine') m &= ~sh.pmask[base + w];     // a machine leaves the print alone
     if(!m) continue;
     let c = m === -1 || m === 0xFFFFFFFF ? 32 : popcnt(m);
     if(c > budget - used){ let need = budget - used, keep = 0; while(need-- > 0){ const low = m & -m; keep |= low; m ^= low; } m = keep >>> 0; c = popcnt(m); }
-    sh.bits[base + w] &= ~m; used += c; n += c;
+    used += c;
+    // fragile: a printed bubble pops like any other, and cracks what is underneath
+    if(sh.pmask){ const pm = m & sh.pmask[base + w]; if(pm){ sh.bits[base + w] &= ~pm; m &= ~pm; cracked += popcnt(pm); } }
+    // jumbo: an untouched bubble is only squashed; a squashed one pops, and sets off the squashed ones around it
+    if(sh.dent){
+      const d = sh.dent[base + w], fresh = m & ~d, ripe = m & d & (player ? ~sh.fresh[base + w] : -1);
+      if(fresh){ sh.dent[base + w] = (d | fresh) >>> 0; dented += popcnt(fresh); if(player) sh.fresh[base + w] |= fresh; }
+      if(ripe){ sh.dent[base + w] &= ~ripe; seedCascade(run, j, w, ripe >>> 0); }
+      used -= popcnt(m & ~fresh & ~ripe);       // squashed earlier in this stroke: touched, not worked
+      m = ripe;
+    }
+    if(m){ sh.bits[base + w] &= ~m; n += popcnt(m); }
   }
+  if(cracked){
+    sh.cracked += cracked; run.cracks += cracked; run.ev.cracks.push(cx((i0 + i1) >> 1, j), cy(j), cracked);
+    if(player) run.combo = 0;
+  }
+  if(dented){ run.dents += dented; run.ev.dents += dented; }
   if(n){
     sh.left -= n;
     let v = n * valueNow(run);
@@ -896,9 +1034,66 @@ function popSpan(run, j, i0, i1, budget, who){
     else { run.ev.chainPops += n; if(who === 'zip') v *= 2; }
     gained += v;
   }
-  if(used){ run.ev.spans.push(j, i0, i1); run.pops += used; run.maxCombo = Math.max(run.maxCombo, run.combo); }
+  if(used){ run.ev.spans.push(j, i0, i1); run.pops += used - dented; run.maxCombo = Math.max(run.maxCombo, run.combo); }
   if(gained) earn(run, gained);
   return used;
+}
+/* ---------- Jumbo: the squashed bubbles next to a popped one pop too, ring after ring ---------- */
+function seedCascade(run, j, w, bits){
+  const c = run.casc || (run.casc = { front: [], acc: 0, size: 0, speed: Math.max(25, Math.sqrt(run.sheet.N)*1.5) });
+  while(bits){ const low = bits & -bits; c.front.push(w*32 + (31 - Math.clz32(low)), j); bits = (bits ^ low) >>> 0; }
+}
+function stepCascade(run, dt){
+  const c = run.casc; if(!c || !c.front.length) return;
+  const sh = run.sheet, words = sh.words, bits = sh.bits, dent = sh.dent, sm = sh.smask;
+  c.acc += c.speed*dt; let gens = Math.floor(c.acc); if(gens < 1) return; c.acc -= gens;
+  let total = 0;
+  while(gens-- > 0 && c.front.length && total < 60000){
+    const next = []; let n = 0;
+    const take = (a, b) => {
+      if(a < 0 || b < 0 || a >= sh.cols || b >= sh.rows) return;
+      const w = b*words + (a >>> 5), bit = (1 << (a & 31)) >>> 0;
+      if(bits[w] & dent[w] & ~sm[w] & bit){ bits[w] &= ~bit; dent[w] &= ~bit; next.push(a, b); n++; run.ev.spans.push(b, a, a); }
+    };
+    for(let k = 0; k < c.front.length; k += 2){
+      const i = c.front[k], j = c.front[k + 1], o = j & 1;
+      take(i - 1, j); take(i + 1, j); take(i - 1 + o, j - 1); take(i + o, j - 1); take(i - 1 + o, j + 1); take(i + o, j + 1);
+    }
+    c.front = next; total += n;
+    if(n){
+      sh.left -= n; c.size += n; run.cascBest = Math.max(run.cascBest, c.size);
+      run.combo += n; run.lastPop = run.t; run.playerPops += n; run.ev.playerPops += n; run.pops += n; run.ev.casc += n;
+      run.maxCombo = Math.max(run.maxCombo, run.combo);
+      earn(run, n * valueNow(run) * comboMul(run));
+    }
+  }
+  if(!c.front.length){ c.size = 0; c.acc = 0; }
+}
+/* ---------- Shrink: the heat gun moves left to right; what it passes shrinks flat, for nothing ---------- */
+function stepHeat(run, dt){
+  const sh = run.sheet, h = sh.heat; if(!h) return;
+  h.t += dt; if(h.t < h.delay || h.x > sh.W + 1) return;
+  const ox = h.x, nx = h.x = Math.min(sh.W + 1.01, ox + h.v*dt);
+  let lost = 0;
+  for(let j = 0; j < sh.rows; j++){
+    const off = .5 + .5*(j & 1), i0 = Math.max(0, Math.ceil(ox - off)), i1 = Math.min(sh.cols - 1, Math.ceil(nx - off) - 1);
+    if(i0 > i1) continue;
+    const a = sh.spI[j];
+    for(let k = lowerBound(a, i0); k < a.length && a[k] <= i1; k++){
+      const i = a[k]; if(!isIntact(sh, i, j)) continue;
+      const t = sh.spT[j][k];
+      if(t === T.GIANT){ const gi = sh.giants[sh.spG[j][k]]; if(gi.alive){ gi.alive = false; for(const idx of gi.cells){ const jj = (idx/sh.cols)|0, ii = idx - jj*sh.cols; if(isIntact(sh, ii, jj)){ clearBit(sh, ii, jj); sh.left--; lost++; } } } continue; }
+      clearBit(sh, i, j); if(t !== T.FLAT){ sh.left--; lost++; }
+    }
+    const base = j*sh.words;
+    for(let w = i0 >>> 5, wEnd = i1 >>> 5; w <= wEnd; w++){
+      const lo = w === (i0 >>> 5) ? i0 & 31 : 0, hi = w === wEnd ? i1 & 31 : 31;
+      const m = sh.bits[base + w] & ~sh.smask[base + w] & wordMask(lo, hi);
+      if(m){ const c = popcnt(m); sh.bits[base + w] &= ~m; sh.left -= c; lost += c; }
+    }
+  }
+  h.lost += lost; run.ev.heatLost += lost;
+  run.ev.heat = run.ev.heat ? [run.ev.heat[0], nx] : [ox, nx];
 }
 function popCircle(run, x, y, R, budget, who){
   const sh = run.sheet;
@@ -989,6 +1184,7 @@ function stepZips(run, dt){
 function press(run, x, y){
   if(run.over) return;
   run.down = true; run.x = x; run.y = y; run.aid++; run.hold = 0; run.still = 0;
+  if(run.sheet.fresh) run.sheet.fresh.fill(0);          // a new stroke: what the last one squashed can pop now
   run.path = [x, y]; run.pathLen = [0];
   if(run.slide > 0) return;
   const R = run.P.reach;
@@ -1057,7 +1253,9 @@ function launchMachine(run){
     return;
   }
   // a rolling pin (desk), a roller (warehouse) or a convoy of steamrollers (city) crosses the sheet along the fullest rows
-  const band = kind === 'pin' ? [0, 1, 2, 2, 3][L] : kind === 'roller' ? [0, 3, 5, 7, 9][L] * (1 + .4*run.P.hydraulic) : [0, .025, .035, .045, .055][L] * sh.rows * (1 + .4*run.P.hydraulic);
+  // on jumbo wrap a row is twice as tall, so the pin and the roller cover half as many
+  const bm = run.P.bandMul || 1;
+  const band = kind === 'pin' ? [0, 1, 2, 2, 3][L]*bm : kind === 'roller' ? [0, 3, 5, 7, 9][L] * (1 + .4*run.P.hydraulic)*bm : [0, .025, .035, .045, .055][L] * sh.rows * (1 + .4*run.P.hydraulic);
   const rowsCount = [];
   const stride = Math.max(1, sh.words >> 5);   // on huge sheets a sample of each row is enough to find the full ones
   for(let j = 0; j < sh.rows; j++){ let c = 0; for(let w = j % stride; w < sh.words; w += stride) c += popcnt(sh.bits[j*sh.words + w] & ~sh.smask[j*sh.words + w]); rowsCount.push(c); }
@@ -1092,6 +1290,7 @@ function step(run, dt){
   if(run.over) return;
   run.t += dt; (run.home || run.S).playTime += dt;
   if(run.slide > 0){ run.slide = Math.max(0, run.slide - dt/.45); }
+  else if(run.grace > 0) run.grace -= dt;
   else { run.time -= dt; if(run.frenzy > 0) run.frenzy = Math.max(0, run.frenzy - dt); }
   if(run.time <= 0){ run.time = 0; finish(run); return; }
   const P = run.P;
@@ -1115,16 +1314,28 @@ function step(run, dt){
     }
   }
   if(run.zips.length && run.slide === 0) stepZips(run, dt);
+  if(run.slide === 0){ stepCascade(run, dt); stepHeat(run, dt); }
   stepMachines(run, dt);
   if(run.frenzy <= 0 && run.t - run.lastPop > P.comboWin) run.combo = 0;
   // sheet done: bonus, and the next one slides in
-  if(run.slide === 0 && run.sheet.left <= 0){
+  if(run.slide === 0 && run.sheet.left <= 0 && !(run.casc && run.casc.front.length)){
     const sh = run.sheet; run.sheets++;
     if(!run.sheetFlat) run.cleanSheets++;
-    const bonus = sh.N * valueNow(run) * P.clearMul; earn(run, bonus);
+    // a special delivery's bonus depends on how it was handled
+    let mult = 1, good = false, share = 1;
+    if(sh.mat === 'jumbo') good = true;
+    if(sh.mat === 'fragile'){ good = sh.cracked === 0; mult = good ? 4 : sh.cracked <= Math.max(1, sh.printN*.05) ? 2 : 1; }
+    if(sh.mat === 'shrink'){ share = 1 - sh.heat.lost/Math.max(1, sh.N - sh.flats); good = share >= .9; mult = share*(good ? 2 : 1)/1.5; }
+    const bonus = sh.N * valueNow(run) * P.clearMul * mult; earn(run, bonus);
     if(P.clearTime) run.ev.time.push(sh.W/2, sh.H/2, addTime(run, P.clearTime));
     run.ev.cleared = bonus;
-    run.sheet = makeSheet(P, run.aspect, run.rnd); run.slide = 1; run.pending = []; run.machines = []; run.zips = []; run.path = []; run.pathLen = []; run.sheetFlat = false;
+    if(sh.mat){
+      run.matSheets++;
+      if(good){ run.mats[sh.mat]++; const D = run.S.deliv; D.n[sh.mat] = (D.n[sh.mat] || 0) + 1; }
+      run.ev.matDone = { id: sh.mat, good, mult, share, cracked: sh.cracked || 0 };
+    }
+    run.slide = 1; run.pending = []; run.machines = []; run.zips = []; run.path = []; run.pathLen = []; run.sheetFlat = false;
+    setSheet(run, nextMat(run));
     run.ev.sheet = true;
   }
   if((run.orderT -= dt) <= 0){ run.orderT = .25; const d = checkOrders(run.S, run); if(d.length) run.ev.orders.push(...d); }
@@ -1169,10 +1380,17 @@ function startVisit(S, k, opts){
   const run = startRun(V, opts); run.home = S; run.visit = k;
   return run;
 }
+// how fast you pop at this workplace, kept between breaks for the heat gun's pace
+function notePace(run){
+  const D = run.S.deliv; if(!D || run.noMat || run.t < 5 || !run.pops) return;
+  const k = run.baseP.stage, r = run.pops/run.t; D.rate[k] = D.rate[k] ? .5*D.rate[k] + .5*r : r;
+}
 function finish(run){
   if(run.over) return; run.over = true; run.down = false;
+  notePace(run);
   if(run.home){
     const H = run.home, h = H.stats;
+    h.cascade = Math.max(h.cascade, run.cascBest); h.cracks += run.cracks;
     H.lifePops += run.pops;
     H.best.combo = Math.max(H.best.combo, run.maxCombo); H.best.sheets = Math.max(H.best.sheets, run.sheets);
     h.sheets += run.sheets; h.clean += run.cleanSheets; h.golds += run.golds; h.giants += run.giants; h.frenzies += run.frenzies;
@@ -1185,6 +1403,7 @@ function finish(run){
   S.best.run = Math.max(S.best.run, e); S.best.combo = Math.max(S.best.combo, run.maxCombo); S.best.sheets = Math.max(S.best.sheets, run.sheets);
   st.sheets += run.sheets; st.clean += run.cleanSheets; st.golds += run.golds; st.giants += run.giants; st.frenzies += run.frenzies;
   st.zips += run.zipsDone; st.flats += run.flats; st.longest = Math.max(st.longest, run.t); st.loop = Math.max(st.loop, run.bestLoop); st.domino = Math.max(st.domino, run.domino);
+  st.cascade = Math.max(st.cascade, run.cascBest); st.cracks += run.cracks;
   run.ordersDone = checkOrders(S, run);
   run.stickers = checkStickers(S);
 }
@@ -1193,7 +1412,8 @@ return { VERSION, SQ, T, STAGES, RUN, CAREER, RUN_BY, CAREER_BY, ORDERS, ORDERS_
   newState, load, derive, lv, cl, stickerCount,
   runCost, runVisible, forkBlocked, canBuyRun, buyRun, autoBuy,
   careerCost, careerVisible, canBuyCareer, buyCareer, quitInfo, promote, jobStage, freshCycleStage, worldOpen, PROMO, quitGain, quitProgress, quit, orderBonus, ordersDone, newOrders, checkOrders, checkStickers,
-  makeSheet, cx, cy, isIntact, specialAt, intactCount, neighbours,
+  MATS, MASTERY, DELIVER_EVERY, FRAGILE_SIZE, matDone, matLevel, matP, nextMat, heatPace,
+  makeSheet, cx, cy, isIntact, isPrint, isDent, specialAt, intactCount, neighbours,
   startRun, startVisit, press, drag, release, step, finish, takeEvents, comboMul, valueNow, machinePeriod, popPolygon };
 })();
 
@@ -1435,7 +1655,7 @@ en: {
   'title.kicker':'a coffee break incremental',
   'title.text':'A parcel came. What was in it is not important. The bubble wrap is.',
   'title.pop':'The wrap behind this note pops too.',
-  'title.new':'New since you last played: sugar rushes, zippers, orders, stickers, a fourth workplace, a pause, and a longer ending. The tab that was called Break tree is now Upgrades.',
+  'title.new':'New since you last played: special deliveries. Jumbo wrap in the warehouse, fragile wrap in the factory and shrink wrap in the city, each with a mastery that lasts. See them under Jobs.',
   'title.help':'Press bubbles to pop them. Hold down on the thick, milky ones. Pressing a flat one spoils your combo.',
   'btn.play':'Start break', 'btn.continue':'Next break', 'btn.tree':'Upgrades', 'btn.records':'Records', 'btn.settings':'Options', 'btn.close':'Close', 'btn.back':'Back', 'btn.stay':'Stay',
   'btn.resume':'Resume', 'btn.endBreak':'End break now', 'pause.kicker':'coffee on hold', 'pause.title':'Paused', 'pause.txt':'{s} left in this break, {p} Plopps so far.',
@@ -1479,6 +1699,7 @@ en: {
   'r.meta':'break {n} · {s}', 'r.pops':'Bubbles popped', 'r.sheets':'Sheets cleared', 'r.combo':'Best combo', 'r.gold':'Gold bubbles', 'r.giant':'Giant bubbles',
   'r.espresso':'Espresso bubbles', 'r.flat':'Flat ones hit', 'r.machine':'Popped by machine', 'r.frenzy':'Sugar rushes', 'r.zip':'Zippers opened', 'r.loop':'Biggest loop', 'r.domino':'Deepest chain',
   'r.total':'Plopps', 'r.bought':'Intern bought {n} upgrades',
+  'r.mats':'Deliveries done well', 'r.casc':'Biggest cascade', 'r.cracks':'Print cracked',
   'r.afford1':'One upgrade is within reach.', 'r.afford':'{n} upgrades are within reach.',
   'r.order':'Order done: {o}', 'r.sticker':'New sticker: {s}', 'r.stickers':'{n} new stickers. See them under Records.',
   'title.career':'Job {j}, {s}.', 'title.calluses':'{c} calluses.', 'title.best':'Best break: {b} Plopps.',
@@ -1493,11 +1714,28 @@ en: {
   'st.pops':'Bubbles popped', 'st.plopps':'Plopps earned', 'st.time':'Time on break', 'st.breaks':'Breaks', 'st.quits':'Jobs quit', 'st.calluses':'Calluses earned',
   'st.bestRun':'Best break', 'st.bestCombo':'Best combo', 'st.sheets':'Sheets cleared', 'st.golds':'Gold bubbles', 'st.giants':'Giant bubbles', 'st.frenzies':'Sugar rushes',
   'st.zips':'Zippers opened', 'st.loop':'Biggest loop', 'st.domino':'Deepest chain reaction', 'st.stage':'Workplace',
+  'st.cascade':'Biggest cascade', 'st.cracks':'Print cracked', 'st.mats':'Special deliveries handled well',
   'stage.desk':'Office desk', 'stage.ship':'Shipping warehouse', 'stage.factory':'Factory floor', 'stage.city':'The city',
   'stage.kicker':'new job',
   'stage.desk.t':'A parcel came. What was in it is not important. The bubble wrap is.',
   'stage.ship.t':'Pallets of it. You press with your whole palm now, sheets hold thousands of bubbles, and a floor roller does rounds of its own.',
   'stage.factory.t':'This is where bubble wrap is made. Sheets of half a million, a hydraulic press, and a tool the size of a car.',
+  'stage.ship.m':'New here: jumbo wrap. One sheet in four comes in it from now on.',
+  'stage.factory.m':'New here: fragile wrap, round something that breaks. Mind the print.',
+  'stage.city.m':'New here: shrink wrap, and a heat gun right behind it.',
+  'mat.jumbo':'Jumbo wrap', 'mat.fragile':'Fragile wrap', 'mat.shrink':'Shrink wrap',
+  'mat.jumbo.d':'Big bubbles. The first touch squashes one, the next pops it, and a popped bubble sets off every squashed one touching it. One stroke never pops what it squashed itself.',
+  'mat.fragile.d':'A small sheet round something breakable, popped by fingertip, with no machine. Pop everything but the red print: untouched, it pays four times the sheet bonus.',
+  'mat.shrink.d':'A heat gun crosses the sheet, and what it reaches shrinks flat before you can pop it. Warm bubbles pay half as much again, and nine tenths popped doubles the bonus.',
+  'mat.jumbo.h':'Jumbo wrap: touch to squash, touch again to pop. Squash a lot, then set it all off.',
+  'mat.fragile.h':'Fragile wrap: pop everything but the red print. Fingertip only.',
+  'mat.shrink.h':'Shrink wrap: the heat gun is coming from the left. Pop what you can before it gets there.',
+  'mat.in':'Special delivery: {m}', 'mat.care':'Handled with care ×4', 'mat.scratch':'Hardly a scratch ×2', 'mat.cracked':'Cracked',
+  'mat.beat':'Beat the heat! {p} %', 'mat.saved':'{p} % saved from the heat', 'fl.crack':'crack', 'fl.casc':'{n} set off',
+  'dl.head':'Special deliveries', 'dl.note':'From the warehouse on, one sheet in four comes in another material. Handle them well and each gets you a bonus that lasts.',
+  'dl.from':'Comes in the {s}.', 'dl.lv':'mastery {l}/4', 'dl.prog':'{n} of {m} sheets {g} for the next level.', 'dl.max':'{n} sheets {g}. Mastered.',
+  'dl.good.jumbo':'cleared', 'dl.good.fragile':'with the print untouched', 'dl.good.shrink':'nine tenths popped before the heat',
+  'dl.perk.jumbo':'Big hands: reach {a}', 'dl.perk.fragile':'Steady: combos last {a} longer', 'dl.perk.shrink':'Quick: breaks last {a} longer', 'dl.next':'next level: {b}', 'dl.first':'At mastery 1:',
   'stage.city.t':'Moving day, for a whole city. Every tower is wrapped for the trip, one sheet over a dozen blocks, and a convoy of steamrollers is on its way. So are you.',
   'fl.sheet':'Sheet cleared +{n}', 'fl.time':'+{n} s', 'fl.flat':'pfft', 'fl.giant':'GIANT +{n}', 'fl.loop':'{n} roped in', 'fl.order':'Order done', 'fl.sticker':'Sticker: {s}',
   'end.kicker':'the end', 'end.title':'Break’s over.', 'end.go':'Keep popping',
@@ -1580,6 +1818,8 @@ en: {
     pfft:['Pfft', 'Press 25 flat bubbles. Someone had to.'], long:['Long lunch', 'Make one break last a minute.'], orders:['Employee of the month', 'Finish every order in one job.'],
     quit1:['I quit', 'Quit your first job.'], quit10:['Job hopper', 'Quit ten jobs.'], ship:['Forklift licence', 'Work in the warehouse.'], factory:['Hard hat', 'Work in the factory.'],
     city:['Moving day', 'Work in the city.'], loop:['Roped in', 'A million bubbles in one loop.'], domino:['Dominoes', 'A chain reaction twelve blasts deep.'],
+    squash:['Squash', 'Set off 100 squashed bubbles at once.'], care:['Handle with care', 'Clear a fragile sheet without cracking the print.'],
+    heat:['Beat the heat', 'Pop nine tenths of a shrink-wrap sheet before the heat gun.'], expert:['Materials expert', 'Master all three special deliveries.'],
     world:['Globetrotter', 'Pop the world.'], end:['The last bubble', 'See the end.'],
   },
 }
@@ -1588,7 +1828,7 @@ en: {
 const STK_ICON = { first:'thumb', pop1k:'cup', pop1m:'premium', pop1b:'delivery', pop1t:'factory', pop1qa:'city', combo100:'rhythm', combo10k:'wave', combo1m:'domino',
   sheet1:'thorough', sheets100:'overtime', sheets1k:'hydraulic', clean:'qc', gold1:'gold', gold250:'nose', giant1:'giant', giant50:'supplier', frenzy1:'sugar', frenzy50:'sweettooth',
   zip1:'zipper', zip200:'crosszip', pfft:'flat', long:'coffee', orders:'headhunter', quit1:'cv', quit10:'intern', ship:'ship', factory:'factory', city:'city', loop:'lasso',
-  domino:'domino', world:'world', end:'break' };
+  domino:'domino', world:'world', end:'break', squash:'jumbo', care:'fragile', heat:'shrink', expert:'fame' };
 const tr = (k, v) => { let s = STR.en[k] ?? k; if(typeof s === 'string' && v) for(const [a,b] of Object.entries(v)) s = s.split('{'+a+'}').join(b); return s; };
 const LOC = () => 'en-US';
 function fmt(n){
@@ -1617,8 +1857,9 @@ const KEY = 'bubble_break_v1';
 let S = BB.newState();
 try { const raw = localStorage.getItem(KEY); if(raw) S = BB.load(raw); } catch(e){}
 S.ui = Object.assign({ sound:true, seen:{}, stageSeen:-1, jobsSeen:-1, vol:null, shake:true, hints:true, numbers:'short', vibrate:true }, S.ui || {});
-// a save from the first version gets told what is new, once
-if(!S.ui.vol && S.runs > 0) S.ui.news = 1;
+// a save from before this version gets told what is new, once
+if(S.runs > 0 && (S.ui.ver || 0) < 3) S.ui.news = 1;
+S.ui.ver = 3;
 // volumes: the first version only had sound on or off
 if(!S.ui.vol) S.ui.vol = { master: S.ui.sound === false ? 0 : .8, sfx: 1, music: .35 };
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
@@ -1626,7 +1867,7 @@ function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} 
 /* ================= sound ================= */
 // effects run through `master` and a compressor; music has its own bus beside them, so a
 // burst of pops never pumps the music; both meet in the volume knob
-let AC = null, master = null, musicBus = null, mainOut = null, noise = null, crackleT = 0, panX = 0;
+let AC = null, master = null, musicBus = null, mainOut = null, noise = null, crackleT = 0, panX = 0, heatNode = null, sizzleT = 0;
 function audio(){
   if(AC) { if(AC.state === 'suspended') AC.resume(); return; }
   try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
@@ -1737,8 +1978,38 @@ const SND = {
   lasso(n){ if(!AC || !S.ui.sound || !spaced('lasso', .12)) return; const t = now(); osc(t, 190, 55, .45, .45); nz(t, .35, 'lowpass', 1200, .8, .35, .02); SND.crackle(n); },
   // an order done: a small desk bell
   order(){ if(!AC || !S.ui.sound) return; const t = now(); bell(t, 1567.98, .1, 1); bell(t + .004, 3135.96, .025, .45); },
+  // a special delivery at the door: ding, dong
+  delivery(){ if(!AC || !S.ui.sound) return; const t = now(); bell(t, 783.99, .09, 1.1); bell(t + .26, 659.25, .09, 1.4); },
   // a sticker: peeled off its sheet and pressed down
   sticker(){ if(!AC || !S.ui.sound) return; const t = now(); const s = AC.createBufferSource(); s.buffer = noise; const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(3500, t + .18); const g = AC.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.12, t + .06); g.gain.exponentialRampToValueAtTime(.0001, t + .2); s.connect(f).connect(g).connect(master); s.start(t); s.stop(t + .25); osc(t + .22, 140, 60, .12, .35); nz(t + .22, .04, 'lowpass', 700, .8, .25); },
+  // jumbo wrap: a big bubble squashed but not popped, a soft rubbery squeak with the air pushed aside
+  squish(n){ if(!AC || !S.ui.sound || !spaced('squish', .06)) return; const t = now(), lg = Math.log10(1 + n);
+    nz(t, .09 + .03*Math.min(2, lg), 'lowpass', 560, 1.2, Math.min(.5, .24 + .08*lg), .012);
+    const o = AC.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(260 + Math.random()*60, t); o.frequency.exponentialRampToValueAtTime(150, t + .08);
+    const g = AC.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.16, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + .1); o.connect(g).connect(master); o.start(t); o.stop(t + .12); },
+  // fragile: the print gives, and something under it cracks: a tick of glass and a few shards
+  crack(){ if(!AC || !S.ui.sound || !spaced('crack', .08)) return; const t = now();
+    osc(t, 3400, 2900, .05, .09, 'triangle'); nz(t, .05, 'highpass', 4200, .8, .22, .001);
+    for(let i = 0; i < 5; i++){ const f = 4500 + Math.random()*3500; osc(t + .03 + Math.random()*.16, f, f*.97, .04, .035); } },
+  // a fragile sheet cleared with the print untouched: a small bright chime, twice
+  care(){ if(!AC || !S.ui.sound) return; const t = now(); bell(t, 1046.5, .08, .8); bell(t + .09, 1568, .07, .9); bell(t + .18, 2093, .05, 1); },
+  // shrink wrap: the heat gun blows while it crosses the sheet, and what it reaches hisses
+  heat(on){
+    if(!AC || !S.ui.sound){ if(heatNode){ heatNode.g.gain.setTargetAtTime(0, AC ? AC.currentTime : 0, .05); } return; }
+    if(on && !heatNode){
+      const s = AC.createBufferSource(); s.buffer = noise; s.loop = true;
+      const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = .6;
+      const f2 = AC.createBiquadFilter(); f2.type = 'lowpass'; f2.frequency.value = 2400;
+      const hum = AC.createOscillator(); hum.type = 'sawtooth'; hum.frequency.value = 118; const hf = AC.createBiquadFilter(); hf.type = 'lowpass'; hf.frequency.value = 300; const hg = AC.createGain(); hg.gain.value = .25;
+      const g = AC.createGain(); g.gain.value = 0;
+      s.connect(f).connect(f2).connect(g); hum.connect(hf).connect(hg).connect(g); g.connect(master); s.start(); hum.start();
+      heatNode = { s, hum, g };
+    }
+    if(!heatNode) return;
+    heatNode.g.gain.setTargetAtTime(on ? .055 : 0, AC.currentTime, on ? .15 : .08);
+    if(!on){ const n = heatNode; heatNode = null; setTimeout(() => { try { n.s.stop(); n.hum.stop(); } catch(e){} }, 600); }
+  },
+  sizzle(n){ if(!AC || !S.ui.sound) return; const t = now(); if(t - sizzleT < .07) return; sizzleT = t; const lg = Math.log10(1 + n); for(let i = 0; i < Math.min(6, 1 + lg); i++) nz(t + Math.random()*.06, .01 + Math.random()*.02, 'highpass', 5000 + Math.random()*3000, 1, Math.min(.06, .02 + .008*lg)); },
   crumple(){ if(!AC || !S.ui.sound) return; const t = now(); for(let i = 0; i < 30; i++) nz(t + Math.random()*.5, .01 + Math.random()*.02, 'bandpass', 1500 + Math.random()*4000, 1.5, .15); osc(t + .7, 70, 40, .25, .5); nz(t + .7, .1, 'lowpass', 400, 1, .4); },
 };
 function bell(t, f, vol, dur){
@@ -1993,7 +2264,8 @@ function makeView(sh){
   v.layer = document.createElement('canvas'); v.layer.width = Math.ceil(W*DPR); v.layer.height = Math.ceil(H*DPR);
   v.lg = v.layer.getContext('2d'); v.lg.setTransform(DPR, 0, 0, DPR, 0, 0);
   v.film = makeFilm(v);
-  if(v.mode === 'detail'){ v.shown = new Uint8Array(sh.cols*sh.rows); paintAll(v); }
+  if(sh.mat === 'fragile') makeItem(v);
+  if(v.mode === 'detail'){ v.shown = new Uint8Array(sh.cols*sh.rows); if(sh.dent) v.shownD = new Uint8Array(sh.cols*sh.rows); paintAll(v); }
   else { buildPattern(v); if(v.mode === 'block') buildBlocks(v); }
   return v;
 }
@@ -2008,6 +2280,9 @@ function makeFilm(v){
   g.strokeStyle = 'rgba(255,255,255,.05)'; g.lineWidth = 1; for(let i = 0; i < w*h/900; i++){ const px = x + rnd()*w, py = y + rnd()*h; g.beginPath(); g.moveTo(px, py); g.lineTo(px + 6 + rnd()*14, py + (rnd() - .5)*2); g.stroke(); }
   g.restore();
   g.strokeStyle = 'rgba(255,255,255,.45)'; g.lineWidth = 1.2; g.strokeRect(x, y, w, h);
+  // fragile wrap says so along its bottom edge
+  if(v.sh.mat === 'fragile'){ const fs = Math.max(9, Math.min(15, v.s*.27)); g.font = `700 ${fs}px system-ui, sans-serif`; g.fillStyle = 'rgba(200,30,30,.8)'; g.textBaseline = 'bottom'; g.textAlign = 'left';
+    g.fillText(w > 520 ? 'FRAGILE · HANDLE WITH CARE · FRAGILE' : 'FRAGILE · HANDLE WITH CARE', x + v.s*.4, y + h - 1); }
   return c;
 }
 const pX = (v, i, j) => v.ox + (i + .5 + .5*(j & 1))*v.s, pY = (v, j) => v.oy + (j*SQ + .5)*v.s;
@@ -2017,15 +2292,133 @@ function paintCell(v, g, i, j){
   if(t === T.GIANT){ if(!intact) drawSpr(g, poppedSprite(r, (i*7 + j*3) % 6), x, y); return; }
   if(!intact){ drawSpr(g, poppedSprite(r, (i*7 + j*13) % 6), x, y); return; }
   if(t === T.FLAT){ drawSpr(g, flatSprite(r), x, y); return; }
-  const d = v.dents.get(j*sh.cols + i) || 0;
+  const dn = sh.dent && t < 0 ? BB.isDent(sh, i, j) : 0;
+  const d = Math.max(v.dents.get(j*sh.cols + i) || 0, dn ? .9 : 0);
   g.globalAlpha = 1 - .5*d; drawSpr(g, shadowSprite(r), x, y); g.globalAlpha = 1;
   // the desk seen through the dome, a little magnified and pulled towards the light
   g.save(); g.beginPath(); g.arc(x, y, r*(1 - .08*d), 0, 6.283); g.clip();
-  const mag = 1.06 - .04*d, rs = r/mag; g.drawImage(scene, (x - rs - r*.06)*DPR, (y - rs - r*.06)*DPR, 2*rs*DPR, 2*rs*DPR, x - r, y - r, 2*r, 2*r);
+  const mag = 1.06 - .04*d, rs = r/mag; g.drawImage(v.under || scene, (x - rs - r*.06)*DPR, (y - rs - r*.06)*DPR, 2*rs*DPR, 2*rs*DPR, x - r, y - r, 2*r, 2*r);
   g.restore();
   const kind = KIND[t] || 'n';
   drawSpr(g, domeSprite(r, kind, (i*5 + j*11) % 3), x, y + r*.05*d, 1 + .06*d, 1 - .16*d);
   if(d > .05){ g.fillStyle = `rgba(40,25,10,${.12*d})`; g.beginPath(); g.ellipse(x, y + r*.05*d, r*.95, r*.84, 0, 0, 6.283); g.fill(); }
+  // a squashed jumbo bubble: the dome folded in along a crease
+  if(dn){
+    const a = ((i*7 + j*13) % 9)/9*Math.PI, c = Math.cos(a), sn = Math.sin(a), bend = r*.16*(((i + j) & 1) ? 1 : -1);
+    const fold = (off, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); g.moveTo(x - c*r*.62 - sn*off, y - sn*r*.62 + c*off); g.quadraticCurveTo(x - sn*(off + bend), y + c*(off + bend), x + c*r*.62 - sn*off, y + sn*r*.62 + c*off); g.stroke(); };
+    g.lineCap = 'round';
+    fold(r*.06, 'rgba(50,35,20,.35)', Math.max(1, r*.1)); fold(-r*.05, 'rgba(255,255,255,.65)', Math.max(1, r*.07));
+    g.lineCap = 'butt';
+  }
+}
+/* ---- fragile: what the wrap is round, seen through it, and the cracks it takes ---- */
+function makeItem(v){
+  const sh = v.sh, h = Math.min(v.h*.8, v.w*.85), x = v.ox + v.w*(.5 + (sh.item === 1 ? .04 : 0)), y = v.oy + v.h*.52;
+  const c = document.createElement('canvas'); c.width = Math.ceil(W*DPR); c.height = Math.ceil(H*DPR); const g = c.getContext('2d'); g.scale(DPR, DPR);
+  const u = h/100, P = (a, b) => [x + a*u, y + b*u], path = new Path2D();
+  const mv = (a, b) => path.moveTo(...P(a, b)), ln = (a, b) => path.lineTo(...P(a, b)), bz = (a, b, c2, d, e, f) => path.bezierCurveTo(...P(a, b), ...P(c2, d), ...P(e, f));
+  g.save();
+  if(sh.item === 0){
+    // a porcelain vase with a blue pattern
+    mv(-11, -48); bz(-11, -40, -7, -35, -9, -29); bz(-34, -15, -37, 22, -19, 43); ln(-15, 48); ln(15, 48); ln(19, 43); bz(37, 22, 34, -15, 9, -29); bz(7, -35, 11, -40, 11, -48); path.closePath();
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.save(); g.translate(u*3, u*4); g.fill(path); g.restore();
+    const gr = g.createRadialGradient(x - 10*u, y - 5*u, 2*u, x, y, 45*u); gr.addColorStop(0, '#ffffff'); gr.addColorStop(.6, '#e8eef5'); gr.addColorStop(1, '#b9c6d4'); g.fillStyle = gr; g.fill(path);
+    g.save(); g.clip(path); g.strokeStyle = '#2a4f9a'; g.lineWidth = 2.2*u;
+    for(const b of [-24, 30]){ g.beginPath(); g.moveTo(...P(-40, b)); g.lineTo(...P(40, b)); g.stroke(); }
+    g.lineWidth = 1.6*u; for(let k = 0; k < 3; k++){ const ax = -18 + k*18; g.beginPath(); g.arc(...P(ax, 4), 7*u, 0, 6.283); g.stroke(); g.beginPath(); g.moveTo(...P(ax - 7, 4)); g.quadraticCurveTo(...P(ax, -8), ...P(ax + 7, 4)); g.stroke(); }
+    g.restore();
+  } else if(sh.item === 1){
+    // a teapot
+    mv(-26, -14); bz(-40, 0, -34, 30, -14, 34); ln(14, 34); bz(34, 30, 40, 0, 26, -14); path.closePath();
+    const spout = new Path2D(); spout.moveTo(...P(27, 8)); spout.bezierCurveTo(...P(40, 4), ...P(40, -8), ...P(50, -18)); spout.lineTo(...P(53, -15)); spout.bezierCurveTo(...P(46, -2), ...P(44, 16), ...P(30, 22)); spout.closePath();
+    const handle = new Path2D(); handle.moveTo(...P(-28, -6)); handle.bezierCurveTo(...P(-54, -10), ...P(-54, 26), ...P(-30, 22)); handle.lineTo(...P(-31, 16)); handle.bezierCurveTo(...P(-46, 18), ...P(-46, -2), ...P(-28, 0)); handle.closePath();
+    const lid = new Path2D(); lid.ellipse(...P(0, -16), 20*u, 5*u, 0, 0, 6.283); lid.moveTo(...P(-5, -20)); lid.arc(...P(0, -23), 5*u, 0, 6.283);
+    path.addPath(spout); path.addPath(handle); path.addPath(lid);
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.save(); g.translate(u*3, u*4); g.fill(path); g.restore();
+    const gr = g.createRadialGradient(x - 12*u, y - 4*u, 2*u, x, y + 6*u, 48*u); gr.addColorStop(0, '#fff6ea'); gr.addColorStop(.7, '#e9c9a6'); gr.addColorStop(1, '#b98d62'); g.fillStyle = gr; g.fill(path);
+    g.save(); g.clip(path); g.fillStyle = 'rgba(190,60,60,.8)'; for(let k = 0; k < 5; k++){ g.beginPath(); g.arc(...P(-22 + k*11, 12 + (k % 2)*6), 3.2*u, 0, 6.283); g.fill(); } g.restore();
+  } else {
+    // a wine glass, clear, with the light caught in it
+    mv(-20, -46); bz(-22, -20, -14, -2, -2, 2); ln(-2, 36); bz(-2, 40, -18, 42, -20, 46); ln(20, 46); bz(18, 42, 2, 40, 2, 36); ln(2, 2); bz(14, -2, 22, -20, 20, -46); path.closePath();
+    g.fillStyle = 'rgba(0,0,0,.12)'; g.save(); g.translate(u*3, u*4); g.fill(path); g.restore();
+    g.fillStyle = 'rgba(225,238,250,.42)'; g.fill(path);
+    g.fillStyle = 'rgba(150,30,50,.55)'; const wine = new Path2D(); wine.moveTo(...P(-18, -24)); wine.bezierCurveTo(...P(-17, -10), ...P(-10, 0), ...P(0, 1)); wine.bezierCurveTo(...P(10, 0), ...P(17, -10), ...P(18, -24)); wine.closePath(); g.fill(wine);
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 1.4*u; g.stroke(path);
+    g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 2.4*u; g.beginPath(); g.moveTo(...P(-14, -40)); g.quadraticCurveTo(...P(-16, -22), ...P(-9, -10)); g.stroke();
+  }
+  g.restore();
+  v.item = c; v.itemPath = path; v.itemBox = { x, y, h };
+  v.under = document.createElement('canvas'); v.under.width = c.width; v.under.height = c.height;
+  const ug = v.under.getContext('2d'); ug.drawImage(scene, 0, 0); ug.drawImage(c, 0, 0);
+}
+// a crack from where the print gave, jagged, across the item
+function addCrack(v, px, py){
+  if(!v.item) return;
+  const b = v.itemBox, rnd = Math.random, len = b.h*(.25 + rnd()*.25);
+  // start on the item, near where the print gave
+  const sx = b.x + (px - b.x)*.6, sy = b.y + (py - b.y)*.6;
+  for(const g of [v.item.getContext('2d'), v.under.getContext('2d')]){
+    g.save(); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clip(v.itemPath);
+    g.lineJoin = 'miter'; g.lineCap = 'round';
+    for(let arm = 0; arm < 3; arm++){
+      let x = sx, y = sy, a = rnd()*6.283; const pts = [[x, y]];
+      for(let s = 0; s < 7; s++){ a += (rnd() - .5)*1.3; const d = len/7*(.6 + rnd()*.8); x += Math.cos(a)*d; y += Math.sin(a)*d; pts.push([x, y]); }
+      for(const [w, col] of [[2.4, 'rgba(255,255,255,.7)'], [1.2, 'rgba(40,30,30,.85)']]){ g.lineWidth = w*(1 - arm*.2); g.strokeStyle = col; g.beginPath(); pts.forEach(([a1, b1], k) => k ? g.lineTo(a1 + (w > 2 ? .8 : 0), b1 + (w > 2 ? .8 : 0)) : g.moveTo(a1, b1)); g.stroke(); }
+    }
+    g.restore();
+  }
+  if(v.mode === 'detail') paintAll(v);
+}
+// the red print, in ink on the film over the domes; where a printed bubble was popped the ink is scuffed
+function drawPrint(v){
+  const sh = v.sh; if(!sh.strokes) return;
+  const s = v.s;
+  cx.save(); cx.lineCap = 'round'; cx.lineJoin = 'round';
+  for(const [w, col] of [[sh.inkW*2*s + 2, 'rgba(120,10,10,.25)'], [sh.inkW*2*s, 'rgba(206,30,34,.78)']]){
+    cx.lineWidth = w; cx.strokeStyle = col; cx.beginPath();
+    for(const line of sh.strokes) line.forEach(([x, y], k) => k ? cx.lineTo(v.ox + x*s, v.oy + y*s) : cx.moveTo(v.ox + x*s, v.oy + y*s));
+    cx.stroke();
+  }
+  // a gloss line along the ink, where the domes catch the light
+  cx.lineWidth = Math.max(1, s*.12); cx.strokeStyle = 'rgba(255,255,255,.22)'; cx.beginPath();
+  for(const line of sh.strokes) line.forEach(([x, y], k) => k ? cx.lineTo(v.ox + x*s - s*.12, v.oy + y*s - s*.14) : cx.moveTo(v.ox + x*s - s*.12, v.oy + y*s - s*.14));
+  cx.stroke();
+  for(let j = 0; j < sh.rows; j++) for(let i = 0; i < sh.cols; i++){
+    if(!BB.isPrint(sh, i, j) || BB.isIntact(sh, i, j)) continue;
+    const x = pX(v, i, j), y = pY(v, j);
+    cx.fillStyle = 'rgba(245,240,235,.55)'; cx.beginPath(); cx.arc(x, y, v.r*.62, 0, 6.283); cx.fill();
+    cx.strokeStyle = 'rgba(60,20,20,.6)'; cx.lineWidth = 1.2; cx.beginPath(); cx.moveTo(x - v.r*.35, y - v.r*.3); cx.lineTo(x + v.r*.05, y + v.r*.05); cx.lineTo(x - v.r*.1, y + v.r*.35); cx.moveTo(x + v.r*.05, y + v.r*.05); cx.lineTo(x + v.r*.38, y - v.r*.1); cx.stroke();
+  }
+  cx.restore();
+}
+/* ---- shrink: the heat gun crossing the sheet, and the taut shiny film it leaves ---- */
+function drawHeat(v, t){
+  const sh = v.sh, h = sh.heat; if(!h) return;
+  const s = v.s, hx = v.ox + Math.max(0, Math.min(sh.W, h.x))*s, warm = Math.min(1, h.t/h.delay);
+  cx.save(); cx.beginPath(); cx.rect(v.ox - s, v.oy - s, v.w + 2*s, v.h + 2*s); cx.clip();
+  if(hx > v.ox){
+    const gr = cx.createLinearGradient(v.ox, 0, hx, 0); gr.addColorStop(0, 'rgba(176,112,52,.30)'); gr.addColorStop(1, 'rgba(214,138,60,.22)');
+    cx.fillStyle = gr; cx.fillRect(v.ox, v.oy, hx - v.ox, v.h);
+    cx.strokeStyle = 'rgba(255,236,210,.18)'; cx.lineWidth = 1;
+    for(let k = 0; k < 14; k++){ const yy = v.oy + v.h*((k*.618) % 1); cx.beginPath(); cx.moveTo(v.ox, yy); cx.lineTo(Math.min(hx, v.ox + v.w*((k*.37) % 1) + 40), yy + 6); cx.stroke(); }
+  }
+  // the hot air at the front
+  const fw = Math.max(26, s*3), gr2 = cx.createLinearGradient(hx - fw*2.2, 0, hx + fw*.6, 0);
+  gr2.addColorStop(0, 'rgba(255,120,30,0)'); gr2.addColorStop(.75, `rgba(255,120,30,${.34*warm})`); gr2.addColorStop(1, 'rgba(255,170,60,0)');
+  cx.fillStyle = gr2; cx.fillRect(hx - fw*2.2, v.oy, fw*2.8, v.h);
+  cx.strokeStyle = `rgba(255,215,170,${.3*warm})`; cx.lineWidth = 1.5;
+  for(let k = 0; k < 5; k++){ const bx = hx - fw*(.2 + k*.3); cx.beginPath(); for(let yy = 0; yy <= v.h; yy += 8){ const xx = bx + Math.sin(t*14 + yy*.06 + k*1.7)*3; yy ? cx.lineTo(xx, v.oy + yy) : cx.moveTo(xx, v.oy); } cx.stroke(); }
+  cx.restore();
+  // the gun itself, riding the top edge, nozzle down
+  const gy = v.oy - 4, gw = 58, gh = 20;
+  cx.save(); cx.translate(hx, gy);
+  cx.fillStyle = 'rgba(0,0,0,.25)'; cx.fillRect(-gw*.3 + 4, -gh - 10 + 5, gw, gh);
+  cx.fillStyle = '#2d3136'; cx.beginPath(); if(cx.roundRect) cx.roundRect(-gw*.3, -gh - 10, gw, gh, 6); else cx.rect(-gw*.3, -gh - 10, gw, gh); cx.fill();
+  cx.fillStyle = '#e8b41c'; cx.fillRect(gw*.2, -gh - 10, gw*.35, 5);
+  cx.fillStyle = '#4a4f55'; cx.fillRect(-7, -12, 14, 12);
+  const hot = .45 + .45*warm + .1*Math.sin(t*30);
+  cx.fillStyle = `rgba(255,${120 + 60*(1 - warm)|0},40,${hot})`; cx.fillRect(-6, -2, 12, 4);
+  cx.restore();
 }
 function paintAll(v){
   const g = v.lg, sh = v.sh; g.clearRect(0, 0, W, H); g.drawImage(v.film, 0, 0, W, H);
@@ -2087,9 +2480,14 @@ function rangeCount(sh, j, i0, i1){
   for(let w = w0; w <= w1; w++){ let m = sh.bits[base + w]; if(!m) continue; const lo = w === w0 ? i0 & 31 : 0, hi = w === w1 ? i1 & 31 : 31; if(lo || hi !== 31) m &= hi - lo === 31 ? -1 : ((1 << (hi - lo + 1)) - 1) << lo; c += BB.popcnt(m); }
   return c;
 }
+function rangeCountAnd(sh, arr, j, i0, i1){
+  const base = j*sh.words, w0 = i0 >>> 5, w1 = i1 >>> 5; let c = 0;
+  for(let w = w0; w <= w1; w++){ let m = sh.bits[base + w] & arr[base + w]; if(!m) continue; const lo = w === w0 ? i0 & 31 : 0, hi = w === w1 ? i1 & 31 : 31; if(lo || hi !== 31) m &= hi - lo === 31 ? -1 : ((1 << (hi - lo + 1)) - 1) << lo; c += BB.popcnt(m); }
+  return c;
+}
 function blockValue(v, bx, by){
   const sh = v.sh, k = v.bk, j0 = by*k, j1 = Math.min(sh.rows, j0 + k), i0 = bx*k, i1 = Math.min(sh.cols, i0 + k) - 1; let c = 0;
-  for(let j = j0; j < j1; j++) c += rangeCount(sh, j, i0, i1);
+  for(let j = j0; j < j1; j++) c += rangeCount(sh, j, i0, i1) - (sh.dent ? .55*rangeCountAnd(sh, sh.dent, j, i0, i1) : 0);
   return Math.round(255*c/((j1 - j0)*(i1 - i0 + 1)));
 }
 function buildBlocks(v){
@@ -2114,7 +2512,7 @@ function flushBlocks(v){
 }
 function maskSpan(v, j, i0, i1){
   const sh = v.sh, mw = v.mask.width; i0 = Math.max(0, i0); i1 = Math.min(sh.cols - 1, i1);
-  for(let i = i0; i <= i1; i++) if(!BB.isIntact(sh, i, j)){ const p = j*mw + 2*i + (j & 1); v.u32[p] = v.u32[p + 1] = 0; }
+  for(let i = i0; i <= i1; i++){ const p = j*mw + 2*i + (j & 1); v.u32[p] = v.u32[p + 1] = !BB.isIntact(sh, i, j) ? 0 : sh.dent && BB.isDent(sh, i, j) ? 0x70FFFFFF : 0xFFFFFFFF; }
   const d = v.maskDirty || (v.maskDirty = { x0: 1e9, x1: -1, y0: 1e9, y1: -1 });
   d.x0 = Math.min(d.x0, 2*i0); d.x1 = Math.max(d.x1, 2*i1 + 2); d.y0 = Math.min(d.y0, j); d.y1 = Math.max(d.y1, j);
   v.composeDirty = true;
@@ -2178,7 +2576,7 @@ let floatsN = 0;
 function floatText(x, y, txt, cls){
   const f = $('floats'); if(f.children.length > 16) f.firstChild.remove();
   const d = document.createElement('div'); d.className = 'fl ' + (cls || ''); d.textContent = txt;
-  d.style.left = Math.max(50, Math.min(W - 50, x)) + 'px'; d.style.top = Math.max(100, Math.min(H - 30, y)) + 'px'; f.appendChild(d); setTimeout(() => d.remove(), 1150);
+  d.style.left = Math.max(50, Math.min(W - 50, x)) + 'px'; d.style.top = Math.max(100, Math.min(H - 30, y)) + 'px'; f.appendChild(d); setTimeout(() => d.remove(), /long/.test(cls || '') ? 2300 : 1150);
 }
 
 /* ================= run ================= */
@@ -2230,7 +2628,7 @@ function startDemo(){
   Object.assign(TS.lv, [{ delivery:3 }, { delivery:1, thumb:1, strength:2 }][S.stage] || {});
   if(S.stage === 3 && BB.cl(S, 'lasso')) TS.cl.lasso = 1;
   if(S.stage !== sceneStage){ layout(); paintScene(S.stage); }
-  run = BB.startRun(TS, { aspect: L.w / L.h, seed: S.runs + 7, P: S.stage >= 2 ? { size: 1400, reach: 1.1, budget: 40 } : null }); run.demo = true; run.time = run.P.time = 1e9;
+  run = BB.startRun(TS, { aspect: L.w / L.h, seed: S.runs + 7, noMat: true, P: S.stage >= 2 ? { size: 1400, reach: 1.1, budget: 40 } : null }); run.demo = true; run.time = run.P.time = 1e9;
   view = makeView(run.sheet); oldView = null;
 }
 function hintFor(){
@@ -2250,12 +2648,14 @@ function hintFor(){
 function hintDone(k){ if(hintShown === k){ S.ui.seen[k] = 1; $('hint').hidden = true; hintShown = null; } }
 function handleEvents(ev, t){
   const v = view, sh = v.sh, s = v.s;
+  // the heat gun's sweep changes whole columns: as spans, row by row
+  if(ev.heat && sh.heat){ for(let j = 0; j < sh.rows; j++){ const off = .5 + .5*(j & 1), i0 = Math.max(0, Math.ceil(ev.heat[0] - off) - 1), i1 = Math.min(sh.cols - 1, Math.ceil(ev.heat[1] - off)); if(i0 <= i1) ev.spans.push(j, i0, i1); } if(ev.heatLost) SND.sizzle(ev.heatLost); }
   // spans: which cells changed
   if(ev.spans.length){
     const changed = [];
     for(let k = 0; k < ev.spans.length; k += 3){
       const j = ev.spans[k], i0 = Math.max(0, ev.spans[k+1]), i1 = Math.min(sh.cols - 1, ev.spans[k+2]); if(j < 0 || j >= sh.rows) continue;
-      if(v.mode === 'detail'){ for(let i = i0; i <= i1; i++){ const idx = j*sh.cols + i, now = BB.isIntact(sh, i, j); if(v.shown[idx] !== now){ v.shown[idx] = now; changed.push(idx); if(!now) v.anims.push({ idx, t: 0 }); } } }
+      if(v.mode === 'detail'){ for(let i = i0; i <= i1; i++){ const idx = j*sh.cols + i, now = BB.isIntact(sh, i, j), dn = v.shownD ? BB.isDent(sh, i, j) : 0; if(v.shown[idx] !== now || (v.shownD && v.shownD[idx] !== dn)){ v.shown[idx] = now; if(v.shownD) v.shownD[idx] = dn; changed.push(idx); if(!now) v.anims.push({ idx, t: 0 }); } } }
       else if(v.mode === 'block') blockSpan(v, j, i0, i1);
       else maskSpan(v, j, i0, i1);
     }
@@ -2289,13 +2689,34 @@ function handleEvents(ev, t){
     if(!run.demo) floatText(mx, my, tr('fl.loop', { n: fmt(lp.got) }), 'big');
   }
   if(!run.demo) for(const k of ev.orders){ const o = S.orders[k]; if(!o) continue; (run.orderLog = run.orderLog || []).push(k); SND.order(); floatText(W/2, H*.3, tr('fl.order') + ': ' + orderText(o), 'gold'); }
+  // special deliveries
+  if(ev.dents) SND.squish(ev.dents);
+  if(ev.casc){ cascN += ev.casc; } else if(cascN){ if(cascN >= 12 && !run.demo) floatText(ptr.x, ptr.y - 26, tr('fl.casc', { n: fmt(cascN) }), cascN >= 100 ? 'big' : ''); cascN = 0; }
+  for(let k = 0; k < ev.cracks.length; k += 3){
+    const x = v.ox + ev.cracks[k]*s, y = v.oy + ev.cracks[k+1]*s;
+    SND.crack(); addCrack(v, x, y); buzz(30, true); shake = Math.min(1, shake + .25);
+    if(!run.demo) floatText(x, y - 16, tr('fl.crack'), 'warn');
+  }
+  if(ev.matDone && !run.demo){
+    const d = ev.matDone;
+    if(d.id === 'fragile'){ if(d.mult >= 4){ SND.care(); floatText(W/2, H*.5, tr('mat.care'), 'gold'); } else floatText(W/2, H*.5, tr(d.mult >= 2 ? 'mat.scratch' : 'mat.cracked'), d.mult >= 2 ? 'gold' : 'warn'); }
+    if(d.id === 'shrink'){ const p = Math.round(d.share*100); if(d.good) SND.care(); floatText(W/2, H*.5, tr(d.good ? 'mat.beat' : 'mat.saved', { p }), d.good ? 'gold' : 'warn'); }
+  }
   if(ev.cleared){ SND.sheet(); if(!run.demo) floatText(W/2, H*.66, tr('fl.sheet', { n: fmt(ev.cleared) }), 'big'); }
-  if(ev.sheet){ oldView = view; view = makeView(run.sheet); }
+  if(ev.sheet){ oldView = view; view = makeView(run.sheet); if(hintShown === 'mat'){ $('hint').hidden = true; hintShown = null; } }
+  if(ev.mat && !run.demo) announceMat(ev.mat);
   if(ev.budgetOut && !run.outShown){ run.outShown = true; }
   if(run.machines.length > (run.lastMachines || 0)){ const m = run.machines[run.machines.length - 1]; if(m.kind === 'press') SND.thud(); else SND.roll(); }
   run.lastMachines = run.machines.length;
   // after the first-tap hint, show the next one this sheet has a reason for
   if(!hintShown && S.ui.seen.first && mode === 'run' && (ev.sheet || !S.ui.seen.thick)) hintFor();
+}
+// a special delivery slides in: its name, and for its first few sheets what to do with it
+let cascN = 0, heatSounding = false;
+function announceMat(m){
+  SND.delivery(); floatText(W/2, H*.4, tr('mat.in', { m: tr('mat.' + m) }), 'big long');
+  const seen = S.ui.seen, key = 'mat_' + m;
+  if(S.ui.hints !== false && (seen[key] || 0) < 3){ seen[key] = (seen[key] || 0) + 1; const h = $('hint'); h.textContent = tr('mat.' + m + '.h'); h.hidden = false; hintShown = 'mat'; }
 }
 function endRun(){
   mode = 'end'; ptr.down = false; save();
@@ -2314,6 +2735,7 @@ function showReceipt(bought){
   if(r.golds) h += ln('r.gold', r.golds); if(r.giants) h += ln('r.giant', r.giants); if(r.espressos) h += ln('r.espresso', r.espressos); if(r.flats) h += ln('r.flat', r.flats);
   if(r.frenzies) h += ln('r.frenzy', r.frenzies); if(r.zipsDone) h += ln('r.zip', r.zipsDone); if(r.bestLoop) h += ln('r.loop', fmt(r.bestLoop)); if(r.domino > 2) h += ln('r.domino', r.domino);
   if(r.machinePops) h += ln('r.machine', fmt(r.machinePops));
+  h += matLines(r, ln);
   h += `<div class="sep"></div><div class="ln tot${r.earned >= S.best.run ? ' rec' : ''}"><span>${tr('r.total')}</span><span>${fmt(r.earned)}</span></div>`;
   for(const k of new Set([...(r.orderLog || []), ...(r.ordersDone || [])])) if(S.orders[k]) h += `<div class="gate" style="color:var(--ink);font-weight:600">✓ ${tr('r.order', { o: orderText(S.orders[k]) })}</div>`;
   const ns = r.stickers || [];
@@ -2329,6 +2751,14 @@ function showReceipt(bought){
   $('rNext').onclick = startRun; $('rTree').onclick = () => openTrees('run'); $('rMenu').onclick = showTitle;
   setTimeout(() => { try { $('rNext').focus({ preventScroll: true }); } catch(e){} }, 50);
 }
+// special deliveries on the receipt: how many were handled well, the biggest cascade, the print cracked
+function matLines(r, ln){
+  let h = '';
+  if(r.matSheets) h += ln('r.mats', `${BB.MATS.reduce((a, m) => a + (r.mats[m.id] || 0), 0)} / ${r.matSheets}`);
+  if(r.cascBest >= 12) h += ln('r.casc', fmt(r.cascBest));
+  if(r.cracks) h += ln('r.cracks', fmt(r.cracks));
+  return h;
+}
 function showVisitReceipt(){
   const r = run, k = r.visit, st = tr('stage.' + BB.STAGES[k].id);
   const ln = (key, v) => `<div class="ln"><span>${tr(key)}</span><span>${v}</span></div>`;
@@ -2337,6 +2767,7 @@ function showVisitReceipt(){
   if(r.golds) h += ln('r.gold', r.golds); if(r.giants) h += ln('r.giant', r.giants); if(r.frenzies) h += ln('r.frenzy', r.frenzies);
   if(r.zipsDone) h += ln('r.zip', r.zipsDone); if(r.bestLoop) h += ln('r.loop', fmt(r.bestLoop)); if(r.domino > 2) h += ln('r.domino', r.domino);
   if(r.machinePops) h += ln('r.machine', fmt(r.machinePops));
+  h += matLines(r, ln);
   h += `<div class="sep"></div><div class="ln tot"><span>${tr('r.total')}</span><span>${fmt(r.earned)}</span></div>`;
   for(const id of r.stickers || []) h += `<div class="gate" style="color:#8a5a00;font-weight:600">★ ${tr('r.sticker', { s: STR.en.stk[id][0] })}</div>`;
   h += `<div class="gate">${tr('v.note', { s: tr('place.' + BB.STAGES[S.stage].id) })}</div>`;
@@ -2390,13 +2821,16 @@ function render(t){
   cx.restore();
 }
 function drawSheet(v, t){
+  if(v.item) cx.drawImage(v.item, 0, 0, W, H);
   cx.drawImage(v.layer, 0, 0, W, H);
+  if(v.sh.pmask) drawPrint(v);
   // pop animation in detail mode: the dome collapsing for a few frames
   if(v.mode === 'detail'){ for(const a of v.anims){ a.t += 1/60; const j = (a.idx/v.sh.cols)|0, i = a.idx - j*v.sh.cols, u = a.t/.09; if(u < 1){ cx.globalAlpha = 1 - u; drawSpr(cx, domeSprite(v.r, 'n', 0), pX(v, i, j), pY(v, j), 1 + .1*u, 1 - .6*u); cx.globalAlpha = 1; } } v.anims = v.anims.filter(a => a.t < .09); }
   else drawSpecialsOver(v, cx, t);
   drawGiants(v, cx, t);
   if(run && run.machines.length) drawMachines(v, t);
   if(run && v === view){ if(run.zips.length) drawZips(v); if(run.P.lasso && run.down && run.path.length > 3) drawLasso(v); }
+  if(v.sh.heat) drawHeat(v, t);
 }
 // zipper sliders run out along the row (and column) from the popped zipper
 function drawZips(v){
@@ -2617,6 +3051,7 @@ function showStage(){
   mode = 'stage';
   const id = BB.STAGES[S.stage].id;
   $('stageKicker').textContent = tr('stage.kicker'); $('stageName').textContent = tr('stage.' + id); $('stageText').textContent = tr('stage.' + id + '.t');
+  const m = STR.en['stage.' + id + '.m']; $('stageMat').textContent = m || ''; $('stageMat').hidden = !m;
   $('bStageGo').textContent = tr('btn.startJob');
   layout(); paintScene(S.stage); previewSheet();
   show('sStage');
@@ -2686,7 +3121,8 @@ function openRecords(tab){
       ['st.stage', tr('stage.' + BB.STAGES[S.unlocked].id)], ['st.pops', fmtLong(S.lifePops)], ['st.plopps', fmt(S.lifeEarned)], ['st.time', fmtDur(S.playTime)],
       ['st.breaks', fmt(S.runs)], ['st.quits', fmt(S.quits)], ['st.calluses', fmt(S.callusesEarned)], ['st.bestRun', fmt(S.best.run)], ['st.bestCombo', fmt(S.best.combo)],
       ['st.sheets', fmt(st.sheets)], ['st.golds', fmt(st.golds)], ['st.giants', fmt(st.giants)], ['st.frenzies', fmt(st.frenzies)], ['st.zips', fmt(st.zips)],
-      ['st.loop', fmt(st.loop)], ['st.domino', fmt(st.domino)] ];
+      ['st.loop', fmt(st.loop)], ['st.domino', fmt(st.domino)],
+      ['st.mats', fmt(BB.MATS.reduce((a, m) => a + BB.matDone(S, m.id), 0))], ['st.cascade', fmt(st.cascade || 0)], ['st.cracks', fmt(st.cracks || 0)] ];
     b.innerHTML = `<div class="stats">${rows.map(([k, v]) => `<div><span>${tr(k)}</span><span>${v}</span></div>`).join('')}</div>`;
   } else {
     const n = BB.stickerCount(S), m = BB.STICKERS.length;
@@ -2756,6 +3192,9 @@ const ICONS = {
   office:'<path d="M4 21V3.5h11V21"/><path d="M15 8h5v13"/><path d="M2.5 21h19"/><path d="M7 7h1.5M10.5 7H12M7 10.5h1.5M10.5 10.5H12M7 14h1.5M10.5 14H12"/><path d="M8.5 21v-3h2v3"/>',
   chair:'<path d="M8 3.5h8l-.8 8H8.8z"/><path d="M6.5 12.5h11"/><path d="M12 12.5v4.5"/><path d="M7 20l5-3 5 3"/><path d="M5.5 10v2.5M18.5 10v2.5"/>',
   fame:'<path d="M12 3l2.6 5.5 6 .8-4.4 4.1 1.1 6L12 16.5l-5.3 2.9 1.1-6L3.4 9.3l6-.8z"/>',
+  jumbo:'<circle cx="9" cy="10" r="6"/><circle cx="18" cy="16" r="3.8"/><circle cx="7.5" cy="19.5" r="1.8"/><path d="M6 8.3a3.4 3.4 0 0 1 2.4-1.8"/>',
+  fragile:'<path d="M7 3h10c0 5.2-2.2 8.3-5 8.6C9.2 11.3 7 8.2 7 3z"/><path d="M12 11.6V19.5"/><path d="M8.5 20.5h7"/><path d="M11.2 3.4l1.4 2.6-1.3 1.8 1 1.9"/>',
+  shrink:'<path d="M2.5 8.5h10.5l2 1.8v2.4l-2 1.8H8.6l-1 5.5H4.8l1-5.5H2.5z"/><path d="M17.5 9.2c1.1.8 1.1 3.8 0 4.6M20 7.5c2.2 1.8 2.2 6.2 0 8"/>',
 };
 const icon = (id, cls) => `<svg class="${cls || 'ico'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[id] || ICONS.plus}</svg>`;
 // level ring: one segment per level, or a single arc when there are too many levels to count
@@ -2823,9 +3262,29 @@ function drawJobs(){
   else if(!S.finale.done) wb += `<button class="tape red" data-world="1">${tr(S.finale.act ? 'btn.worldGo' : 'btn.world')}</button>`;
   h += `<div class="job world${w ? '' : ' locked'}"><div class="jh">${icon(w ? 'world' : 'plus', 'jico')}<b>${cap(tr('place.world'))}</b></div>${wb}</div>`;
   if(S.unlocked > 0) h += `<p class="jnote">${tr('job.visitNote')}</p>`;
+  h += delivHtml();
   const box = $('jobs'); box.innerHTML = h;
   box.querySelectorAll('[data-v]').forEach(b => b.onclick = () => startVisit(+b.dataset.v));
   const wb2 = box.querySelector('[data-world]'); if(wb2) wb2.onclick = () => startFinale();
+}
+// special deliveries: what each does, its mastery, and what that gives
+const PERK = { jumbo: l => '+' + fmt(4*l) + ' %', fragile: l => sec(.1*l), shrink: l => sec(l) };
+function delivHtml(){
+  let h = `<h3 class="jhead">${tr('dl.head')}</h3><p class="jnote">${tr('dl.note')}</p>`;
+  for(const m of BB.MATS){
+    const open = S.unlocked >= m.from, n = BB.matDone(S, m.id), l = BB.matLevel(S, m.id), M = BB.MASTERY;
+    let body = `<p>${tr('mat.' + m.id + '.d')}</p>`;
+    if(!open) body += `<p class="lock">${tr('dl.from', { s: tr('place.' + BB.STAGES[m.from].id) })}</p>`;
+    else {
+      const g = tr('dl.good.' + m.id);
+      body += l < M.length ? `<p class="lock">${tr('dl.prog', { n: fmt(n), m: fmt(M[l]), g })}</p><div class="bar"><i style="transform:scaleX(${Math.min(1, n/M[l])})"></i></div>` : `<p class="lock">${tr('dl.max', { n: fmt(n), g })}</p>`;
+      body += l ? `<p class="perk">${tr('dl.perk.' + m.id, { a: PERK[m.id](l) })}${l < M.length ? ` <small>${tr('dl.next', { b: PERK[m.id](l + 1) })}</small>` : ''}</p>`
+                : `<p class="perk"><small>${tr('dl.first')}</small> ${tr('dl.perk.' + m.id, { a: PERK[m.id](1) })}</p>`;
+    }
+    const stars = open ? `<em class="stars" aria-label="${tr('dl.lv', { l })}">${'★'.repeat(l)}${'☆'.repeat(M.length - l)}</em>` : '';
+    h += `<div class="job mat${open ? '' : ' locked'}"><div class="jh">${icon(open ? m.id : 'plus', 'jico')}<b>${tr('mat.' + m.id)}</b>${stars}</div>${body}</div>`;
+  }
+  return h;
 }
 function ordersHtml(){
   const os = S.orders || []; if(!os.length) return '';
@@ -3319,7 +3778,7 @@ function startEpilogue(){
   finale = null; mode = 'epi'; $('hint').textContent = tr('finale.epi'); $('hint').hidden = false;
   const c = $('finCounter'); if(c) c.remove();
   layout(); paintScene(0);
-  const TS = BB.newState(); run = BB.startRun(TS, { aspect: L.w/L.h, seed: 5 }); run.demo = true; run.time = run.P.time = 1e9;
+  const TS = BB.newState(); run = BB.startRun(TS, { aspect: L.w/L.h, seed: 5, noMat: true }); run.demo = true; run.time = run.P.time = 1e9;
   run.P.size = 12; run.sheet = BB.makeSheet(Object.assign({}, run.P, { flat: 0, thick: 0 }), run.aspect, BB.mulberry(3)); view = makeView(run.sheet); oldView = null;
   if(typeof MUSIC !== 'undefined') MUSIC.scene(0, true);
   caption(tr('finale.cap.4'), 3600);
@@ -3402,6 +3861,9 @@ function frame(now){
     updateDents();
     if(mode === 'run'){ hud(t); if(run.over) endRun(); }
   }
+  // the heat gun blows while it crosses a sheet in a break that is running
+  const hh = mode === 'run' && run && !run.over && run.slide === 0 && run.sheet.heat, hs = !!(hh && hh.t >= hh.delay*.5 && hh.x < run.sheet.W);
+  if(hs !== heatSounding){ heatSounding = hs; SND.heat(hs); }
   if(typeof MUSIC !== 'undefined') MUSIC.tick(t);
   if((mode === 'finale' || mode === 'ended') && finale) finale.step(dt, t);
   stepFx(dt);

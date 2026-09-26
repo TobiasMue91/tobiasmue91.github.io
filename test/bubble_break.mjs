@@ -11,7 +11,7 @@
 //   node test/bubble_break.mjs sheet rules      # named suites only
 //   node test/bubble_break.mjs --page=old.html  # run against another copy of the page
 //
-// Suites: sheet, rules, idle, pacing.
+// Suites: sheet, rules, materials, idle, pacing.
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -22,7 +22,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const pageArg = args.find(a => a.startsWith('--page='));
 const PAGE = pageArg ? pageArg.slice(7) : join(HERE, '..', 'games', 'bubble_break.html');
-const ALL = ['sheet', 'rules', 'idle', 'pacing'];
+const ALL = ['sheet', 'rules', 'materials', 'idle', 'pacing'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -373,6 +373,142 @@ if(suites.includes('rules')){
   }
 }
 
+/* ---------------- materials ---------------- */
+// a run whose current sheet is of one material, with the clock stopped
+function matRun(mat, stage, lv, seed){
+  const S = BB.newState(); S.callusesEarned = BB.STAGES[stage].promo; BB.promote(S); S.quits = 3; Object.assign(S.lv, lv || {});
+  const run = BB.startRun(S, { aspect: 1.5, seed: seed || 5, noMat: true });
+  run.time = 1e9;
+  const P = BB.matP(run.baseP, mat); if(mat === 'shrink') P.heatTime = 12;
+  run.P = P; run.sheet = BB.makeSheet(P, 1.5, BB.mulberry(seed || 5)); run.budget = P.budget;
+  return [S, run];
+}
+const printAt = (sh, i, j) => (sh.pmask[j*sh.words + (i >>> 5)] >>> (i & 31)) & 1;
+const dentAt = (sh, i, j) => (sh.dent[j*sh.words + (i >>> 5)] >>> (i & 31)) & 1;
+function settle(run, sec){ for(let t = 0; t < sec; t += 1/60) BB.step(run, 1/60); }
+if(suites.includes('materials')){
+  section('materials');
+  // when they come
+  {
+    const S0 = BB.newState(), r0 = BB.startRun(S0, { aspect: 1.5, seed: 1 }), seq0 = [];
+    for(let k = 0; k < 40; k++) seq0.push(BB.nextMat(r0));
+    check(seq0.every(m => m === null), 'no special deliveries at the desk');
+    const S1 = BB.newState(); S1.callusesEarned = BB.STAGES[1].promo; BB.promote(S1); S1.quits = 1;
+    const r1 = BB.startRun(S1, { aspect: 1.5, seed: 1 }), seq1 = [];
+    for(let k = 0; k < 13; k++) seq1.push(BB.nextMat(r1));
+    check(r1.sheet.mat === null && seq1[0] === 'jumbo' && seq1.slice(1).every((m, k) => (k + 1) % BB.DELIVER_EVERY === 0 ? m === 'jumbo' : m === null),
+      `in the warehouse jumbo wrap comes on the second sheet, then one sheet in ${BB.DELIVER_EVERY}`, seq1.join(' '));
+    const S2 = BB.newState(); S2.callusesEarned = BB.STAGES[2].promo; BB.promote(S2); S2.quits = 2; S2.deliv.seen.jumbo = 1;
+    const r2 = BB.startRun(S2, { aspect: 1.5, seed: 2 }), seq2 = []; for(let k = 0; k < 400; k++) seq2.push(BB.nextMat(r2));
+    const got = seq2.filter(Boolean), frag = got.filter(m => m === 'fragile').length;
+    check(got[0] === 'fragile' && !got.includes('shrink') && frag > .6*got.length && frag < .9*got.length, `in the factory fragile wrap comes first, then mostly it and some jumbo, never shrink wrap (${frag} of ${got.length})`);
+    const S3 = BB.newState(); S3.callusesEarned = BB.STAGES[3].promo; BB.promote(S3); S3.quits = 4; Object.assign(S3.deliv.seen, { jumbo:1, fragile:1, shrink:1 });
+    const v = BB.startVisit(S3, 1, { aspect: 1.5, seed: 3 }), seqV = []; for(let k = 0; k < 60; k++) seqV.push(BB.nextMat(v));
+    check(seqV.filter(Boolean).length > 0 && seqV.every(m => m === null || m === 'jumbo'), 'a visit to the warehouse brings only what the warehouse brings');
+    // the first sheet of a new material holds the clock a moment, to read what it is; the next one does not
+    const Sg = BB.newState(); Sg.callusesEarned = BB.STAGES[1].promo; BB.promote(Sg); Sg.quits = 1;
+    const rg = BB.startRun(Sg, { aspect: 1.5, seed: 1 }); rg.P.reach = 1e4; let hold = null, t0 = rg.time, guard = 0;
+    while(!rg.sheet.mat && guard++ < 20){ BB.press(rg, 1, 1); for(let k = 0; k < 40; k++) BB.step(rg, 1/60); BB.release(rg); }
+    if(rg.sheet.mat === 'jumbo'){ for(let k = 0; k < 40; k++) BB.step(rg, 1/60); const a = rg.time; for(let k = 0; k < 60; k++) BB.step(rg, 1/60); hold = a - rg.time; }
+    check(hold !== null && hold < .05, 'the first jumbo sheet holds the clock for its first seconds', `clock moved ${hold}`);
+    const rn = BB.startRun(S3, { aspect: 1.5, seed: 4, noMat: true }), seqN = []; for(let k = 0; k < 20; k++) seqN.push(BB.nextMat(rn));
+    check(seqN.every(m => m === null), 'the title screen\'s sheet never gets one');
+  }
+  // jumbo: squash, then pop, and a pop runs through every squashed bubble touching it and no further
+  {
+    const [S, r] = matRun('jumbo', 1, { thumb: 1, strength: 6 }), sh = r.sheet, B = r.baseP;
+    check(Math.abs(sh.N - B.size/4) <= Math.max(3, .05*sh.N) && r.P.reach === B.reach/2 && r.P.value === 4*B.value && r.P.budget === B.budget/4,
+      'jumbo wrap has a quarter of the bubbles, each twice as wide and worth four, for a quarter of the strength');
+    const ax = sh.W*.25, bx = sh.W*.75, y = sh.H/2, R = r.P.reach;
+    // a stripe squashed from A to the right
+    BB.press(r, ax, y); for(let k = 1; k <= 5; k++) BB.drag(r, ax + k*R*.5, y); BB.release(r); let ev = BB.takeEvents(r);
+    check(ev.dents > 0 && ev.playerPops === 0 && r.earned === 0 && sh.left === sh.N - sh.flats, 'the first touch only squashes: nothing pops and nothing is earned');
+    // one swipe squashes a stripe and pops none of it, however often it passes a bubble
+    const [, rs] = matRun('jumbo', 1, { thumb: 1, strength: 6 }, 7), ss = rs.sheet;
+    BB.press(rs, ss.W*.2, ss.H/2); for(let k = 1; k <= 40; k++) BB.drag(rs, ss.W*.2 + (k % 2 ? 3*R : 0), ss.H/2); BB.release(rs); ev = BB.takeEvents(rs);
+    check(ev.dents > 0 && ev.playerPops === 0 && rs.earned === 0, 'a swipe back and forth only squashes: a stroke cannot pop what it squashed itself');
+    // and a patch at B that does not touch it
+    BB.press(r, bx, y); BB.release(r); settle(r, 1); BB.takeEvents(r);
+    // what a second press at A should set off: the squashed cells connected to the ones it pops
+    const snap = new Set(); for(let j = 0; j < sh.rows; j++) for(let i = 0; i < sh.cols; i++) if(BB.isIntact(sh, i, j) && dentAt(sh, i, j) && BB.specialAt(sh, i, j) < 0) snap.add(j*sh.cols + i);
+    const before = intactSet(sh);
+    BB.press(r, ax, y); BB.release(r); settle(r, 2);
+    const after = intactSet(sh), popped = [...before].filter(k => !after.has(k));
+    const seeds = popped.filter(k => Math.hypot(BB.cx(k % sh.cols, (k/sh.cols)|0) - ax, BB.cy((k/sh.cols)|0) - y) <= R + .01);
+    const want = new Set(seeds), q = [...seeds];
+    while(q.length){ const k = q.pop(), i = k % sh.cols, j = (k/sh.cols)|0; for(const [a, b] of BB.neighbours(i, j)){ const kk = b*sh.cols + a; if(a >= 0 && b >= 0 && a < sh.cols && b < sh.rows && snap.has(kk) && !want.has(kk)){ want.add(kk); q.push(kk); } } }
+    const same = popped.length === want.size && popped.every(k => want.has(k));
+    const bLeft = [...snap].filter(k => Math.abs(BB.cx(k % sh.cols, (k/sh.cols)|0) - bx) < R + 1).every(k => after.has(k));
+    check(same && bLeft && popped.length > seeds.length, `a second press pops what it touches and every squashed bubble connected to that, and no other (${seeds.length} pressed, ${popped.length - seeds.length} set off)`, `popped ${popped.length}, expected ${want.size}`);
+    check(r.cascBest === popped.length - seeds.length, 'the chain is counted as one cascade', `best ${r.cascBest}`);
+    // the whole sheet: squash it all, pop it all, and it counts as a jumbo sheet handled
+    const [S2, r2] = matRun('jumbo', 1, { thumb: 1 }, 9);
+    r2.P.reach = 1e4; BB.press(r2, r2.sheet.W/2, r2.sheet.H/2); BB.release(r2); BB.press(r2, r2.sheet.W/2, r2.sheet.H/2);
+    let done = null; for(let t = 0; t < 3 && !done; t += 1/60){ BB.step(r2, 1/60); const e = BB.takeEvents(r2); if(e.matDone) done = e.matDone; }
+    BB.release(r2);
+    check(done && done.id === 'jumbo' && done.good && BB.matDone(S2, 'jumbo') === 1 && r2.sheets === 1, 'a cleared jumbo sheet counts towards its mastery');
+  }
+  // fragile: by fingertip, the print untouched by machines, a crack costs the combo, and care pays four times the bonus
+  {
+    const [S, r] = matRun('fragile', 2, { thumb: 3, strength: 3, machine: 3, delivery: 3 }), sh = r.sheet, B = r.baseP;
+    const [, rl] = matRun('fragile', 3, { thumb: 1 }, 4); const withLasso = BB.matP(Object.assign({}, rl.baseP, { lasso: true }), 'fragile');
+    check(!withLasso.lasso, 'the cordon tape stays in its box on fragile wrap');
+    check(r.P.machine === 0 && !r.P.lasso && r.P.reach === .42 && r.P.budget === B.budget/B.st.budget && !r.P.wave && !r.P.giants, 'fragile wrap is by fingertip: no machine, no lasso, no waves or giants');
+    check(sh.printN >= 18 && sh.left === sh.N - sh.flats - sh.printN && Math.abs(sh.N*r.P.value - B.size*B.value) < 1e-6*B.size*B.value, `the print (${sh.printN} bubbles) is not part of what has to be popped, and the sheet is worth a usual one`);
+    let specialOnPrint = false; for(let j = 0; j < sh.rows; j++) for(let i = 0; i < sh.cols; i++) if(printAt(sh, i, j) && BB.specialAt(sh, i, j) >= 0) specialOnPrint = true;
+    check(!specialOnPrint, 'no special bubble is printed over');
+    // a machine let loose on it anyway goes round the print
+    const [, rm] = matRun('fragile', 2, { thumb: 1 }, 6); rm.P = Object.assign({}, rm.P, { machine: 4 }); const shm = rm.sheet, pn = shm.printN, l0 = shm.left;
+    settle(rm, 25);
+    let printLeft = 0; for(let j = 0; j < shm.rows; j++) for(let i = 0; i < shm.cols; i++) if(printAt(shm, i, j) && BB.isIntact(shm, i, j)) printLeft++;
+    check(printLeft === pn && shm.left < l0 && shm.cracked === 0, 'a machine pops round the print and never cracks it');
+    // pressing the print
+    let pi = -1, pj = -1; for(let j = 0; j < sh.rows && pi < 0; j++) for(let i = 0; i < sh.cols; i++) if(printAt(sh, i, j)){ pi = i; pj = j; break; }
+    r.combo = 30; r.lastPop = r.t; const e0 = r.earned;
+    BB.press(r, BB.cx(pi, pj), BB.cy(pj)); BB.release(r); const ev = BB.takeEvents(r);
+    check(sh.cracked === 1 && r.combo === 0 && r.earned === e0 && ev.cracks.length === 3 && !BB.isIntact(sh, pi, pj), 'pressing the print cracks it: it pays nothing and the combo goes');
+    // care: four times the bonus untouched, twice with a crack or so, once after that
+    const clearAll = (run) => { const s2 = run.sheet; for(let j = 0; j < s2.rows; j++) for(let i = 0; i < s2.cols; i++){ if(!BB.isIntact(s2, i, j) || printAt(s2, i, j)) continue; BB.press(run, BB.cx(i, j), BB.cy(j)); settle(run, .35); BB.release(run); } let d = null; for(let t = 0; t < 1 && !d; t += 1/60){ BB.step(run, 1/60); const e = BB.takeEvents(run); if(e.matDone) d = e.matDone; } return d; };
+    const mults = [0, 1, 4].map(n => { const [Sx, rx] = matRun('fragile', 2, { thumb: 1 }, 12), s2 = rx.sheet; let c = 0;
+      for(let j = 0; j < s2.rows && c < n; j++) for(let i = 0; i < s2.cols && c < n; i++) if(printAt(s2, i, j)){ BB.press(rx, BB.cx(i, j), BB.cy(j)); BB.release(rx); c++; }
+      const d = clearAll(rx); return d ? [d.mult, d.good, BB.matDone(Sx, 'fragile')] : null; });
+    check(mults.every(Boolean) && mults[0][0] === 4 && mults[0][1] && mults[0][2] === 1 && mults[1][0] === 2 && !mults[1][1] && mults[2][0] === 1 && mults[2][2] === 0,
+      'an untouched print pays four times the sheet bonus and counts towards mastery; one crack pays twice; more pay once', JSON.stringify(mults));
+  }
+  // shrink: the heat takes what you leave, pays nothing for it, and is paced by how fast you pop
+  {
+    const [S, r] = matRun('shrink', 3, {}), sh = r.sheet;
+    check(r.P.value === 1.5*r.baseP.value, 'warm bubbles pay half as much again');
+    let t = 0, done = null; while(!done && t < 20){ BB.step(r, 1/30); t += 1/30; const e = BB.takeEvents(r); if(e.matDone) done = e.matDone; }
+    check(done && !done.good && done.share === 0 && r.earned === 0 && t <= 12 + 1.2 + .3 && BB.intactCount(sh) === 0 && sh.left === 0, `left alone, the heat gun takes the whole sheet in its time and it pays nothing (${t.toFixed(1)} s)`);
+    const [S2, r2] = matRun('shrink', 3, {}, 8); r2.P.reach = 1e4; BB.press(r2, r2.sheet.W/2, r2.sheet.H/2);
+    let d2 = null; for(let k = 0; k < 60 && !d2; k++){ BB.step(r2, 1/60); const e = BB.takeEvents(r2); if(e.matDone) d2 = e.matDone; }
+    BB.release(r2);
+    check(d2 && d2.good && d2.share === 1 && d2.mult > 1.3 && BB.matDone(S2, 'shrink') === 1, 'popped before the heat reaches it, it counts as beaten and doubles the bonus');
+    const [, r3] = matRun('shrink', 3, {}, 3); r3.t = 10; r3.pops = 1000;
+    const slow = BB.heatPace(r3, 8000), mid = BB.heatPace(r3, 1000); r3.pops = 1e7; const fast = BB.heatPace(r3, 8000);
+    check(slow === 40 && Math.abs(mid - 8) < 1e-9 && fast === 5, 'the heat gun takes four fifths of the time you would need at your pace so far, between 5 and 40 s');
+    // half popped by hand, then the heat: what the heat takes is what was left
+    const [, r4] = matRun('shrink', 3, { thumb: 1 }, 10), s4 = r4.sheet; r4.P.reach = s4.H; BB.press(r4, s4.W*.75, s4.H/2); BB.release(r4);
+    const left4 = s4.left; let d4 = null; for(let k = 0; k < 20*60 && !d4; k++){ BB.step(r4, 1/60); const e = BB.takeEvents(r4); if(e.matDone) d4 = e.matDone; }
+    check(d4 && Math.abs(s4.heat.lost - left4) <= 0 && Math.abs(d4.share - (1 - left4/(s4.N - s4.flats))) < 1e-9, 'the heat takes exactly what is still there when it arrives');
+  }
+  // mastery, and what it gives
+  {
+    const S = BB.newState(); const lvl = n => { S.deliv.n.jumbo = n; return BB.matLevel(S, 'jumbo'); };
+    check([0, 1, 2, 7, 8, 19, 20, 49, 50, 500].map(lvl).join() === '0,0,1,1,2,2,3,3,4,4', `mastery levels at ${BB.MASTERY.join(', ')} sheets handled well`);
+    S.deliv.n = {}; const a = BB.derive(S); S.deliv.n = { jumbo: 50, fragile: 20, shrink: 8 }; const b = BB.derive(S);
+    check(Math.abs(b.reach/a.reach - 1.16) < 1e-9 && b.time - a.time === 2 && Math.abs(b.comboWin - a.comboWin - .3) < 1e-9,
+      'mastery gives reach for jumbo wrap (+4 % a level), combo time for fragile wrap (+0.1 s) and break time for shrink wrap (+1 s)');
+    S.stats.cascade = 100; S.deliv.n = { jumbo: 50, fragile: 50, shrink: 50 }; const got = BB.checkStickers(S);
+    check(['squash', 'care', 'heat', 'expert'].every(id => got.includes(id)), 'stickers for a cascade of 100, the first careful and the first beaten sheet, and all three mastered');
+    // a save from before special deliveries
+    const old = JSON.parse(JSON.stringify(BB.newState())); delete old.deliv; delete old.stats.cascade; delete old.stats.cracks;
+    const L = BB.load(JSON.stringify(old));
+    check(L.deliv && L.deliv.since === 0 && L.deliv.n && L.stats.cascade === 0 && L.stats.cracks === 0, 'a save from before special deliveries loads with none met yet');
+  }
+}
+
 /* ---------------- players ----------------
    A human-limited player: taps five a second with a few pixels of aim error, swipes at 1,500 px
    a second across a sheet drawn 900 px wide, goes for special bubbles first (sugar before the
@@ -387,14 +523,16 @@ function playBreak(S, seed, who){
   const rnd = BB.mulberry(seed ^ 0x5bd1e995), gauss = gaussFrom(rnd), dt = 1/30;
   let wait = 0, mode = 'idle', stroke = null, hold = 0;
   const targets = () => { const sh = run.sheet, out = []; for(let j = 0; j < sh.rows; j++){ const a = sh.spI[j]; for(let k = 0; k < a.length; k++){ const t = sh.spT[j][k]; if(t >= 2 && t !== 6 && BB.isIntact(sh, a[k], j)) out.push({ x: BB.cx(a[k], j), y: BB.cy(j), t }); } } for(const g of sh.giants) if(g.alive) out.push({ x: g.x, y: g.y, t: 6 }); return out; };
-  const firstIntact = () => { const sh = run.sheet; for(let j = 0; j < sh.rows; j++) for(let w = 0; w < sh.words; w++){ const m = sh.bits[j*sh.words + w] & ~sh.smask[j*sh.words + w]; if(m){ const i = w*32 + (31 - Math.clz32(m & -m)); return { x: BB.cx(i, j), y: BB.cy(j) }; } } return null; };
+  // on fragile wrap it leaves the print alone: never pressed, and a swipe stops short of it
+  const firstIntact = () => { const sh = run.sheet; for(let j = 0; j < sh.rows; j++) for(let w = 0; w < sh.words; w++){ const m = sh.bits[j*sh.words + w] & ~sh.smask[j*sh.words + w] & ~(sh.pmask ? sh.pmask[j*sh.words + w] : 0); if(m){ const i = w*32 + (31 - Math.clz32(m & -m)); return { x: BB.cx(i, j), y: BB.cy(j), i, j }; } } return null; };
+  const printStop = (i, j) => { const sh = run.sheet; if(!sh.pmask) return Infinity; for(let k = i + 1; k < sh.cols; k++) if((sh.pmask[j*sh.words + (k >>> 5)] >>> (k & 31)) & 1) return BB.cx(k, j) - .5 - run.P.reach; return Infinity; };
   while(!run.over && run.t < 400){
     BB.takeEvents(run);
     const sh = run.sheet, s = human.screen / sh.W;
     if(run.slide > 0){ if(run.down) BB.release(run); mode = 'idle'; BB.step(run, dt); continue; }
     wait -= dt;
     if(mode === 'hold'){ hold -= dt; if(hold <= 0){ BB.release(run); mode = 'idle'; wait = .05; } }
-    else if(mode === 'stroke'){ stroke.x += human.swipe/s*dt; BB.drag(run, stroke.x, stroke.y); if(run.budget < 1 || stroke.x > sh.W + 1){ BB.release(run); mode = 'idle'; wait = .12 + run.P.refill*(1 - run.budget/Math.max(1, run.P.budget)); } }
+    else if(mode === 'stroke'){ stroke.x = Math.min(stroke.x + human.swipe/s*dt, stroke.stop); BB.drag(run, stroke.x, stroke.y); if(run.budget < 1 || stroke.x > sh.W + 1 || stroke.x >= stroke.stop){ BB.release(run); mode = 'idle'; wait = .12 + run.P.refill*(1 - run.budget/Math.max(1, run.P.budget)); } }
     else if(mode === 'loop'){ stroke.a += human.swipe/s/stroke.r*dt; BB.drag(run, stroke.x + Math.cos(stroke.a)*stroke.r, stroke.y + Math.sin(stroke.a)*stroke.r); if(stroke.a > 2*Math.PI + .6){ BB.release(run); mode = 'idle'; wait = .15; } }
     else if(wait <= 0){
       const P = run.P, ts = targets();
@@ -404,7 +542,7 @@ function playBreak(S, seed, who){
       if(tgt){ BB.press(run, tgt.x + gauss()*human.aim/s, tgt.y + gauss()*human.aim/s); if(tgt.t === 2 && !P.iron){ mode = 'hold'; hold = P.holdTime + .08; } else { BB.release(run); wait = 1/human.taps; } }
       else { const f = firstIntact(); if(!f) wait = .1;
         else if(P.lasso){ const r = Math.min(sh.W, sh.H)*.3, cxl = Math.min(sh.W - r, Math.max(r, f.x + r*.6)), cyl = Math.min(sh.H - r, Math.max(r, f.y + r*.6)); stroke = { x: cxl, y: cyl, r, a: 0 }; BB.press(run, cxl + r, cyl); mode = 'loop'; }
-        else if(swipeYield > perTap*human.taps){ const y = f.y + Math.min(P.reach, 1)*.5; BB.press(run, f.x - .2, y); mode = 'stroke'; stroke = { x: f.x - .2, y }; }
+        else if(swipeYield > perTap*human.taps && printStop(f.i, f.j) > f.x + 1.5){ const y = f.y + Math.min(P.reach, 1)*.5; BB.press(run, f.x - .2, y); mode = 'stroke'; stroke = { x: f.x - .2, y, stop: printStop(f.i, f.j) }; }
         else { BB.press(run, f.x + gauss()*human.aim/s + Math.min(P.reach*.6, 3), f.y + gauss()*human.aim/s + Math.min(P.reach*.5, 3)); BB.release(run); wait = 1/human.taps; } }
     }
     BB.step(run, dt);
@@ -422,7 +560,7 @@ function career(seed, maxMin){
     BB.autoBuy(S, n => n.id === (S.quits % 2 ? { A:'thorough', B:'wave' } : { A:'rhythm', B:'bang' })[n.fork]);
     const levels = Object.values(S.lv).reduce((a, b) => a + b, 0) - 1, maxLevels = BB.RUN.reduce((a, n) => a + (n.fork ? n.max/2 : n.max), 0) - 1;
     if(fresh) cycles.push({ stage: S.stage, firstBreakLevels: levels, of: maxLevels });
-    log.push({ min: clock/60, stage: S.stage, t: run.t, pops: run.pops, pps: run.pops/run.t, earned: run.earned, orders: BB.ordersDone(S) });
+    log.push({ min: clock/60, stage: S.stage, t: run.t, pops: run.pops, pps: run.pops/run.t, earned: run.earned, orders: BB.ordersDone(S), sheets: run.sheets, matSheets: run.matSheets, mats: Object.assign({}, run.mats), cracks: run.cracks, casc: run.cascBest });
     const g = BB.quitGain(S); gains.push(g); if(gains.length > 4) gains.shift();
     const stalled = gains.length === 4 && g > 0 && g < gains[0]*1.12;
     if(g > 0 && (g >= 2*(S.callusesEarned + 2) || stalled || since > 60)){
@@ -457,7 +595,7 @@ if(suites.includes('idle')){
 /* ---------------- pacing ---------------- */
 if(suites.includes('pacing')){
   section('pacing');
-  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [25, 70], city: [38, 110], world: [70, 160] };
+  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [25, 70], city: [34, 110], world: [70, 160] };
   for(const seed of [1, 2]){
     const t0 = performance.now(), c = career(seed, 300), dur = ((performance.now() - t0)/1000).toFixed(0);
     console.log(`  seed ${seed}: first quit ${c.at.firstQuit?.toFixed(0)} min, warehouse ${c.at.ship?.toFixed(0)}, factory ${c.at.factory?.toFixed(0)}, city ${c.at.city?.toFixed(0)}, world ${c.at.world?.toFixed(0)} (${dur} s to simulate)`);

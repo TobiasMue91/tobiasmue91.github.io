@@ -1157,6 +1157,30 @@ buys them and whether they last, answered it.
 screen and "×1.5" in the corner, and it lapsed after half a second without a pop, so it read as
 broken. It now says "57 in a row", shows its multiplier beside it, and draws the time it has left.
 
+The third version answered the first player's "harder wrap, maybe of other materials": one sheet
+in four comes as a special delivery, a new material at each workplace from the warehouse on, each
+with a mastery that lasts. Four more things generalise.
+
+**A stroke is one touch.** Jumbo wrap squashes a bubble on the first touch and pops it on the next,
+but a swipe is dozens of overlapping circles, so as first written it squashed and popped every
+bubble it crossed and the rule never showed. A bubble squashed by the stroke still going on cannot
+be popped by that stroke: a second swipe, or a tap, sets it off.
+
+**Precision does not scale with the tool, so bring the tool back.** A print you must pop around
+needs gaps wider than the thumb, and from the factory on the thumb is the size of a car. Fragile
+wrap is instead a small sheet popped by fingertip, with the machines off: a desk-sized interlude in
+the middle of the hydraulic presses, worth what an ordinary sheet is.
+
+**Print on a hex grid in strokes, not pixels.** A glass symbol drawn one bubble per pixel fell apart
+into scattered dots, because every other row is offset by half a bubble. The print is now a few
+strokes in a 10 × 10 box; a bubble is printed when its centre lies under the ink, and the page draws
+the same strokes, so what the player sees is exactly what counts.
+
+**Pace a pursuer by the player, not by the sheet.** The heat gun crossing shrink wrap takes four
+fifths of the time this player would need at their pace so far in the break (or the last one at
+that workplace), so it presses a beginner and a veteran alike instead of being trivial for one and
+impossible for the other.
+
 ## Tried and rejected
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose
