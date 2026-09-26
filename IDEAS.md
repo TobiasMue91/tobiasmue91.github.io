@@ -1173,8 +1173,20 @@ the middle of the hydraulic presses, worth what an ordinary sheet is.
 
 **Print on a hex grid in strokes, not pixels.** A glass symbol drawn one bubble per pixel fell apart
 into scattered dots, because every other row is offset by half a bubble. The print is now a few
-strokes in a 10 × 10 box; a bubble is printed when its centre lies under the ink, and the page draws
-the same strokes, so what the player sees is exactly what counts.
+strokes in a 10 × 10 box; a bubble is printed when its centre lies under the ink. Drawing those same
+strokes at full width was not enough, though: an ink band one bubble wide half covers the free bubbles
+beside it, the first player took them for print, left them, and the sheet never ended. The ink now
+sits on the printed domes only, joined by a thin line, so every bubble is either red or free.
+
+**Show the last bubbles.** A sheet ends only when every bubble is gone, and the last few are easy to
+lose: on glass over a white vase, or as single pixels on a sheet of half a million. After a moment
+without a pop, a ring pulses round each of the last few; after a longer one, round the last tenth.
+
+**Tie sound to time, not to frames.** Pops were played once per frame, a handful at a time, and the
+voices were freed by timers. At the factory a slow computer draws fifteen frames a second instead of
+sixty, so it heard a quarter of the pops, and late timers kept the voices busy: the big sounds came
+through and the small bubbles went quiet. What a frame popped is now spread over the time that frame
+stood for, and the voices are counted on the audio clock.
 
 **Pace a pursuer by the player, not by the sheet.** The heat gun crossing shrink wrap takes four
 fifths of the time this player would need at their pace so far in the break (or the last one at
