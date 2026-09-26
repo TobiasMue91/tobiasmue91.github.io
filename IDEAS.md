@@ -1188,6 +1188,13 @@ sixty, so it heard a quarter of the pops, and late timers kept the voices busy: 
 through and the small bubbles went quiet. What a frame popped is now spread over the time that frame
 stood for, and the voices are counted on the audio clock.
 
+**Below a pixel, draw the material, not the bubbles.** In the city a bubble is a third of a pixel, and
+the wrap was a flat milky veil; next to it the popped wrap read as dark holes. Fresh wrap is now a fine
+grain of little domes with a glare, long folds and the seams between rolls, taped down at its edges, and
+the mask keeps the shine only where bubbles are left, so popped wrap is clear, crinkled film. The city
+under it stands up off the ground: roofs over south walls, shadows to the lower right like every
+bubble's, towers downtown, houses at the edge, and some buildings already wrapped for moving day.
+
 **Pace a pursuer by the player, not by the sheet.** The heat gun crossing shrink wrap takes four
 fifths of the time this player would need at their pace so far in the break (or the last one at
 that workplace), so it presses a beginner and a veteran alike instead of being trivial for one and
