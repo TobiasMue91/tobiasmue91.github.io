@@ -500,6 +500,10 @@ if(suites.includes('materials')){
     const slow = BB.heatPace(r3, 8000), mid = BB.heatPace(r3, 1000); r3.pops = r3.matStart = 1e7; const fast = BB.heatPace(r3, 8000);
     r3.pops = r3.matStart = 1000; r3.pops = 1400; const own = BB.heatPace(r3, 1000);     // 400 more on this sheet change nothing
     check(slow === 40 && Math.abs(mid - 8) < 1e-9 && fast === 5 && Math.abs(own - 8) < 1e-9, 'the heat gun takes four fifths of the time you would need at your pace on ordinary wrap, between 5 and 40 s, whatever you pop on the special sheets');
+    // most of it saved, not nine tenths: it counts towards the mastery, but the bonus is not doubled
+    const [S5, r5] = matRun('shrink', 3, { thumb: 1 }, 11), s5 = r5.sheet; BB.popPolygon(r5, [s5.W*.14, -1, s5.W + 1, -1, s5.W + 1, s5.H + 1, s5.W*.14, s5.H + 1], 'player');
+    let d5 = null; for(let k = 0; k < 30*60 && !d5; k++){ BB.step(r5, 1/60); const e = BB.takeEvents(r5); if(e.matDone) d5 = e.matDone; }
+    check(d5 && d5.share >= .8 && d5.share < .9 && d5.well && !d5.good && BB.matDone(S5, 'shrink') === 1, `${d5 ? Math.round(d5.share*100) : '?'} % saved from the heat counts towards the mastery without doubling the bonus`);
     // half popped by hand, then the heat: what the heat takes is what was left
     const [, r4] = matRun('shrink', 3, { thumb: 1 }, 10), s4 = r4.sheet; r4.P.reach = s4.H; BB.press(r4, s4.W*.75, s4.H/2); BB.release(r4);
     const left4 = s4.left; let d4 = null; for(let k = 0; k < 20*60 && !d4; k++){ BB.step(r4, 1/60); const e = BB.takeEvents(r4); if(e.matDone) d4 = e.matDone; }
@@ -607,7 +611,9 @@ if(suites.includes('idle')){
 /* ---------------- pacing ---------------- */
 if(suites.includes('pacing')){
   section('pacing');
-  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [25, 70], city: [34, 110], world: [70, 160] };
+  // the world's lower bound was 70 until a six-seed run of the unchanged game landed at 66 to 76 minutes:
+  // two seeds only ever show part of that spread, and a hair either way is not a pacing change
+  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [25, 70], city: [34, 110], world: [65, 160] };
   for(const seed of [1, 2]){
     const t0 = performance.now(), c = career(seed, 300), dur = ((performance.now() - t0)/1000).toFixed(0);
     console.log(`  seed ${seed}: first quit ${c.at.firstQuit?.toFixed(0)} min, warehouse ${c.at.ship?.toFixed(0)}, factory ${c.at.factory?.toFixed(0)}, city ${c.at.city?.toFixed(0)}, world ${c.at.world?.toFixed(0)} (${dur} s to simulate)`);

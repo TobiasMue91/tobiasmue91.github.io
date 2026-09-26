@@ -580,7 +580,7 @@ const STICKERS = [
   { id:'combo1m',   t: S => S.best.combo >= 1e6 },
   { id:'sheet1',    t: S => S.stats.sheets >= 1 },
   { id:'sheets100', t: S => S.stats.sheets >= 100 },
-  { id:'sheets1k',  t: S => S.stats.sheets >= 1000 },
+  { id:'sheets1k',  t: S => S.stats.sheets >= 400 },     // was a thousand: hours past the end
   { id:'clean',     t: S => S.stats.clean >= 1 },
   { id:'gold1',     t: S => S.stats.golds >= 1 },
   { id:'gold250',   t: S => S.stats.golds >= 250 },
@@ -603,7 +603,9 @@ const STICKERS = [
   { id:'squash',    t: S => S.stats.cascade >= 100 },
   { id:'care',      t: S => matDone(S, 'fragile') >= 1 },
   { id:'heat',      t: S => matDone(S, 'shrink') >= 1 },
-  { id:'expert',    t: S => MATS.every(m => matLevel(S, m.id) >= MASTERY.length) },
+  { id:'expert',    t: S => MATS.every(m => matLevel(S, m.id) >= 3) },                // three stars each; the fourth is for the long haul
+  { id:'allrun',    t: S => RUN.every(n => lv(S, n.id) >= n.max) },
+  { id:'allcareer', t: S => CAREER.every(n => cl(S, n.id) >= n.max) },
   { id:'world',     t: S => S.finale.act >= 1 },
   { id:'end',       t: S => S.finale.done },
 ];
@@ -915,7 +917,12 @@ function nextMat(run){
   const fresh = avail.find(m => !D.seen[m.id]);
   let id = null;
   if(fresh){ if(D.since >= 2) id = fresh.id; }
-  else if(D.since >= DELIVER_EVERY) id = run.rnd() < .5 ? avail[avail.length - 1].id : avail[(run.rnd()*avail.length)|0].id;
+  else if(D.since >= DELIVER_EVERY){
+    // half the time the newest material, else any; once the world is open, the one with the fewest stars
+    // comes most, so the three can be brought level after the end
+    if(worldOpen(run.S)){ const lv = avail.map(m => matLevel(run.S, m.id)), lo = Math.min(...lv), c = avail.filter((m, k) => lv[k] === lo); id = c[(run.rnd()*c.length)|0].id; }
+    else id = run.rnd() < .5 ? avail[avail.length - 1].id : avail[(run.rnd()*avail.length)|0].id;
+  }
   if(!id) return null;
   D.since = 0;
   if(!D.seen[id]){ D.seen[id] = 1; run.ev.matNew = id; }
@@ -927,7 +934,8 @@ function paceRate(run){
   const own = run.normT > 5 && normPops(run) > 0 ? normPops(run)/run.normT : 0, D = run.S.deliv, past = D && D.rate[run.baseP.stage] || 0;
   return own || past || Math.max(5, run.baseP.reach*run.baseP.reach*12);
 }
-// the heat gun takes about four fifths of the time you would need to clear the sheet at your pace
+// the heat gun takes about four fifths of the time you would need to clear the sheet at your pace, so at
+// your usual pace, popping just ahead of it, you save about four fifths
 function heatPace(run, N){ return Math.max(5, Math.min(40, .8*N/paceRate(run))); }
 // a small sheet of jumbo or fragile wrap is worth what this many seconds of your usual popping would bring
 const WORTH_T = { jumbo: 11, fragile: 4 };
@@ -1346,13 +1354,16 @@ function step(run, dt){
     if(sh.mat === 'jumbo') good = true;
     if(sh.mat === 'fragile'){ good = sh.cracked === 0; mult = good ? 4 : sh.cracked <= Math.max(1, sh.printN*.05) ? 2 : 1; }
     if(sh.mat === 'shrink'){ share = 1 - sh.heat.lost/Math.max(1, sh.N - sh.flats); good = share >= .9; mult = share*(good ? 2 : 1)/1.5; }
+    // handled well, for the mastery: shrink wrap with four fifths saved, which your usual pace can do; nine
+    // tenths, which takes more than your usual pace, doubles the bonus on top
+    const well = sh.mat === 'shrink' ? share >= .8 : good;
     const bonus = sh.N * valueNow(run) * P.clearMul * mult; earn(run, bonus);
     if(P.clearTime) run.ev.time.push(sh.W/2, sh.H/2, addTime(run, P.clearTime));
     run.ev.cleared = bonus;
     if(sh.mat){
       run.matSheets++;
-      if(good){ run.mats[sh.mat]++; const D = run.S.deliv; D.n[sh.mat] = (D.n[sh.mat] || 0) + 1; }
-      run.ev.matDone = { id: sh.mat, good, mult, share, cracked: sh.cracked || 0 };
+      if(well){ run.mats[sh.mat]++; const D = run.S.deliv; D.n[sh.mat] = (D.n[sh.mat] || 0) + 1; }
+      run.ev.matDone = { id: sh.mat, good, well, mult, share, cracked: sh.cracked || 0 };
     }
     run.slide = 1; run.pending = []; run.machines = []; run.zips = []; run.path = []; run.pathLen = []; run.sheetFlat = false;
     setSheet(run, nextMat(run));
@@ -1746,15 +1757,15 @@ en: {
   'mat.jumbo':'Jumbo bubbles', 'mat.fragile':'Fragile wrap', 'mat.shrink':'Shrink wrap',
   'mat.jumbo.d':'A sheet of giant bubbles, each worth a whole patch of the usual wrap. The first touch squashes one, the next pops it, and a popped bubble sets off every squashed one touching it. One stroke never pops what it squashed itself.',
   'mat.fragile.d':'A small sheet round something breakable, popped by fingertip, with no machine, while the clock runs at half speed. Pop everything but the red print: untouched, it pays four times the sheet bonus.',
-  'mat.shrink.d':'A heat gun crosses the sheet, and what it reaches shrinks flat before you can pop it. Warm bubbles pay half as much again, and nine tenths popped doubles the bonus.',
+  'mat.shrink.d':'A heat gun crosses the sheet, and what it reaches shrinks flat before you can pop it. Warm bubbles pay half as much again; pop just ahead of the gun. Four fifths saved counts towards the mastery, nine tenths doubles the bonus.',
   'mat.jumbo.h':'Jumbo bubbles: touch to squash, touch again to pop. Squash a lot, then set it all off.',
   'mat.fragile.h':'Fragile wrap: pop everything but the red print. Take your time: the clock runs at half speed.',
   'mat.shrink.h':'Shrink wrap: the heat gun is coming from the left. Pop what you can before it gets there.',
   'mat.in':'Special delivery: {m}', 'mat.care':'Handled with care ×4', 'mat.scratch':'Hardly a scratch ×2', 'mat.cracked':'Cracked',
-  'mat.beat':'Beat the heat! {p} %', 'mat.saved':'{p} % saved from the heat', 'fl.crack':'crack', 'fl.casc':'{n} set off',
+  'mat.beat':'Beat the heat! {p} %', 'mat.kept':'Kept from the heat: {p} %', 'mat.saved':'{p} % saved from the heat', 'fl.crack':'crack', 'fl.casc':'{n} set off',
   'dl.head':'Special deliveries', 'dl.note':'From the warehouse on, one sheet in four comes in another material. Handle them well and each gets you a bonus that lasts.',
   'dl.from':'Comes in the {s}.', 'dl.lv':'mastery {l}/4', 'dl.prog':'{n} of {m} sheets {g} for the next level.', 'dl.max':'{n} sheets {g}. Mastered.',
-  'dl.good.jumbo':'cleared', 'dl.good.fragile':'with the print untouched', 'dl.good.shrink':'nine tenths popped before the heat',
+  'dl.good.jumbo':'cleared', 'dl.good.fragile':'with the print untouched', 'dl.good.shrink':'four fifths saved from the heat',
   'dl.perk.jumbo':'Big hands: reach {a}', 'dl.perk.fragile':'Steady: combos last {a} longer', 'dl.perk.shrink':'Quick: breaks last {a} longer', 'dl.next':'next level: {b}', 'dl.first':'At mastery 1:',
   'stage.city.t':'Moving day, for a whole city. Every tower is wrapped for the trip, one sheet over a dozen blocks, and a convoy of steamrollers is on its way. So are you.',
   'fl.sheet':'Sheet cleared +{n}', 'fl.time':'+{n} s', 'fl.flat':'pfft', 'fl.giant':'GIANT +{n}', 'fl.loop':'{n} roped in', 'fl.order':'Order done', 'fl.sticker':'Sticker: {s}',
@@ -1813,7 +1824,7 @@ en: {
     flexible:['Own mug', (l) => `Bring your own mug: every job starts with Bigger mug at level ${2*l} → ${2*(l+1)}.`],
     reference:['Reference letter', (l) => `Your old boss writes well of you: quitting pays ${25*l} % → ${25*(l+1)} % more calluses.`],
     nose:['Nose for gold', (l) => `Gold bubbles ${50*l} % → ${50*(l+1)} % more common.`],
-    savings:['Coffee fund', (l) => `The first five breaks of every new job pay ×${l+1} → ×${l+2}.`],
+    savings:['Coffee fund', (l) => `The first five breaks of every new job pay ×${mul(1 + .4*l)} → ×${mul(1 + .4*(l + 1))}.`],
     pinsub:['Machine subscription', () => 'Start each job with Bigger delivery and the machine already bought.'],
     overtime:['Overtime', (l) => `Each cleared sheet adds ${sec(.75*l)} → ${sec(.75*(l+1))}.`],
     twohands:['Both hands', () => 'A second hand presses the mirror image of the first.'],
@@ -1832,14 +1843,15 @@ en: {
     first:['First pop', 'Pop a bubble.'], pop1k:['Warm-up', 'Pop 1,000 bubbles.'], pop1m:['Regular', 'Pop a million bubbles.'], pop1b:['Habit', 'Pop a billion bubbles.'],
     pop1t:['Lifestyle', 'Pop a trillion bubbles.'], pop1qa:['Force of nature', 'Pop a quadrillion bubbles.'],
     combo100:['In the zone', 'A combo of 100.'], combo10k:['Flow', 'A combo of 10,000.'], combo1m:['Unbroken', 'A combo of a million.'],
-    sheet1:['Tidy', 'Clear a sheet.'], sheets100:['Neat freak', 'Clear 100 sheets.'], sheets1k:['Recycler', 'Clear 1,000 sheets.'], clean:['Clean sheet', 'Clear a sheet without pressing a flat bubble.'],
+    sheet1:['Tidy', 'Clear a sheet.'], sheets100:['Neat freak', 'Clear 100 sheets.'], sheets1k:['Recycler', 'Clear 400 sheets.'], clean:['Clean sheet', 'Clear a sheet without pressing a flat bubble.'],
     gold1:['Shiny', 'Pop a gold bubble.'], gold250:['Gold rush', 'Pop 250 gold bubbles.'], giant1:['Big one', 'Pop a giant bubble.'], giant50:['Giant slayer', 'Pop 50 giant bubbles.'],
     frenzy1:['Sugar rush', 'Pop a sugar bubble.'], frenzy50:['Sugar high', 'Start 50 sugar rushes.'], zip1:['Unzipped', 'Open a zipper.'], zip200:['Tailor', 'Open 200 zippers.'],
     pfft:['Pfft', 'Press 25 flat bubbles. Someone had to.'], long:['Long lunch', 'Make one break last a minute.'], orders:['Employee of the month', 'Finish every order in one job.'],
     quit1:['I quit', 'Quit your first job.'], quit10:['Job hopper', 'Quit ten jobs.'], ship:['Forklift licence', 'Work in the warehouse.'], factory:['Hard hat', 'Work in the factory.'],
     city:['Moving day', 'Work in the city.'], loop:['Roped in', 'A million bubbles in one loop.'], domino:['Dominoes', 'A chain reaction twelve blasts deep.'],
     squash:['Squash', 'Set off 100 squashed jumbo bubbles at once.'], care:['Handle with care', 'Clear a fragile sheet without cracking the print.'],
-    heat:['Beat the heat', 'Pop nine tenths of a shrink-wrap sheet before the heat gun.'], expert:['Materials expert', 'Master all three special deliveries.'],
+    heat:['Beat the heat', 'Save four fifths of a shrink-wrap sheet from the heat gun.'], expert:['Materials expert', 'Three stars in all three special deliveries.'],
+    allrun:['Fully stocked', 'Every break upgrade at its top level, in one job.'], allcareer:['Lifetime achievement', 'Every career upgrade bought.'],
     world:['Globetrotter', 'Pop the world.'], end:['The last bubble', 'See the end.'],
   },
 }
@@ -1848,7 +1860,7 @@ en: {
 const STK_ICON = { first:'thumb', pop1k:'cup', pop1m:'premium', pop1b:'delivery', pop1t:'factory', pop1qa:'city', combo100:'rhythm', combo10k:'wave', combo1m:'domino',
   sheet1:'thorough', sheets100:'overtime', sheets1k:'hydraulic', clean:'qc', gold1:'gold', gold250:'nose', giant1:'giant', giant50:'supplier', frenzy1:'sugar', frenzy50:'sweettooth',
   zip1:'zipper', zip200:'crosszip', pfft:'flat', long:'coffee', orders:'headhunter', quit1:'cv', quit10:'intern', ship:'ship', factory:'factory', city:'city', loop:'lasso',
-  domino:'domino', world:'world', end:'break', squash:'jumbo', care:'fragile', heat:'shrink', expert:'fame' };
+  domino:'domino', world:'world', end:'break', squash:'jumbo', care:'fragile', heat:'shrink', expert:'fame', allrun:'machine', allcareer:'office' };
 const tr = (k, v) => { let s = STR.en[k] ?? k; if(typeof s === 'string' && v) for(const [a,b] of Object.entries(v)) s = s.split('{'+a+'}').join(b); return s; };
 const LOC = () => 'en-US';
 function fmt(n){
@@ -3105,7 +3117,7 @@ function handleEvents(ev, t){
   if(ev.matDone && !run.demo){
     const d = ev.matDone;
     if(d.id === 'fragile'){ if(d.mult >= 4){ SND.care(); floatText(W/2, H*.5, tr('mat.care'), 'gold'); } else floatText(W/2, H*.5, tr(d.mult >= 2 ? 'mat.scratch' : 'mat.cracked'), d.mult >= 2 ? 'gold' : 'warn'); }
-    if(d.id === 'shrink'){ const p = Math.round(d.share*100); if(d.good) SND.care(); floatText(W/2, H*.5, tr(d.good ? 'mat.beat' : 'mat.saved', { p }), d.good ? 'gold' : 'warn'); }
+    if(d.id === 'shrink'){ const p = Math.round(d.share*100); if(d.good) SND.care(); floatText(W/2, H*.5, tr(d.good ? 'mat.beat' : d.well ? 'mat.kept' : 'mat.saved', { p }), d.well ? 'gold' : 'warn'); }
   }
   if(ev.cleared){ SND.sheet(); if(!run.demo) floatText(W/2, H*.66, tr('fl.sheet', { n: fmt(ev.cleared) }), 'big'); }
   if(ev.sheet){ oldView = view; view = makeView(run.sheet); if(hintShown === 'mat'){ $('hint').hidden = true; hintShown = null; } }

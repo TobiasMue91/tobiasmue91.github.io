@@ -1186,6 +1186,15 @@ such patches, and round every special one left. Two things had made city sheets 
 thick bubbles were not drawn once they were smaller than five pixels, and a Cordon tape loop, which
 promises that everything inside it pops, left the thick ones. Both were rules nobody could see.
 
+**Measure the stickers too.** The first player to reach the end had three stickers left and called it a
+skill issue. A bot career said otherwise: a thousand sheets and four stars on all three deliveries each
+took hours past the end, and in the city two deliveries in three were shrink wrap, so the others hardly
+came. Saving nine tenths from the heat gun takes more than your own pace, by construction. Now four
+fifths saved counts towards the mastery (nine tenths still doubles the bonus), the expert sticker asks for
+three stars, the sheet sticker for 400, and once the world is open the delivery with the fewest stars comes
+next. A bot gets all three within half an hour of the end. The pacing test's world window also moved: a
+six-seed run of the unchanged game spread over 66 to 76 minutes, wider than its two seeds had shown.
+
 **Tie sound to time, not to frames.** Pops were played once per frame, a handful at a time, and the
 voices were freed by timers. At the factory a slow computer draws fifteen frames a second instead of
 sixty, so it heard a quarter of the pops, and late timers kept the voices busy: the big sounds came
