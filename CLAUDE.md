@@ -72,6 +72,7 @@ npm run test:bubble         # Bubble Break suite (plain Node, no server or brows
 npm run test:towers         # Three Gates suite (plain Node, no server or browser)
 npm run test:firefly        # Firefly Jar suite (plain Node, no server or browser)
 npm run test:normalizer     # Audio Normalizer suite (plain Node, no server or browser)
+npm run test:minifier       # Crusher and HTML Minify suite (Playwright's Chromium, no server)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -79,7 +80,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Ten exist so far. `test/everything_converter.mjs` drives
+Eleven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -125,6 +126,12 @@ K-weighting curve from the coefficients BS.1770 prints, analytic true peaks, and
 must hold -1 dBTP from the first sample to the last while each preset lands on its number. The
 page grades its own output with the same meter, so this is the only place a wrong one shows.
 Run it after touching the core.
+`test/code_minifier.mjs` runs the DOM-free cores of `tools/code_minifier.html` (The Crusher) and
+`tools/minify.html` and judges what they return with things that do not come from the pages:
+Chromium's own parser and layout for CSS and HTML - every stylesheet and every page on this site
+goes through, and must mean and draw the same - Python's `ast` over the local standard library,
+PHP's tokenizer, and SQL scripts written out exactly. A minifier that changes what code does
+looks exactly like one that does not, so run it after touching either page's core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

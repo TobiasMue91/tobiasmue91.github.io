@@ -346,3 +346,43 @@ high-pass Q read as decibels and the missing gate (both in the page this replace
 and 9 checks), a clamp in place of the limiter (25), a ramp that starts from unity at the top
 of the file (11), a make-up loop that chases an unreachable target (1), surrounds weighted like
 fronts (2), and in-between peaks attributed three samples early (1) or late (10).
+
+## The Crusher and HTML Minify
+
+```sh
+npm run test:minifier                    # or: node test/code_minifier.mjs
+node test/code_minifier.mjs css sql      # one or more named suites
+node test/code_minifier.mjs css --css=node_modules/bootstrap/dist/css/bootstrap.css
+node test/code_minifier.mjs --page=old.html --minify-page=old.html
+```
+
+A minifier makes one promise: what it hands back does what it was given. A broken result
+looks exactly like a working one, so nothing on either page can show whether the promise was
+kept. The version of `tools/code_minifier.html` this replaced minified every language but
+JavaScript with regular expressions over raw text: Bootstrap came back without its responsive
+headings and its form-validation messages, 45 of this site's own 330 pages drew differently
+at desktop width once their stylesheets went through it (51 at phone width) and 70 once the
+whole page did (72), three Python standard library modules came back as syntax errors, and SQL
+strings lost their double spaces.
+`tools/minify.html` had the same stylesheet collapse. Both pages keep their minifiers in a
+`<script id="core">` block with no DOM; the suite runs those blocks in Node's `vm` and judges
+what they return with things that do not come from the pages. It needs Playwright's Chromium,
+no server, and takes about two and a half minutes, nearly all of it the `html` suite. Without
+python3 or php those suites run their written-out cases only and say what they skipped; with
+terser installed (`npm i --no-save terser@5.16.1`) the `html` suite also checks minify.html's
+own JavaScript scanner.
+
+| suite | what it checks |
+| --- | --- |
+| `css` | every `<style>` block on the site (344), through The Crusher with its defaults and with comments kept, and through minify.html: Chromium parses the result to the same rules in the same order, with the same computed value for every declaration (values that use `var()` or `env()`, and custom properties, compared as written, strings exactly); thirty-one sheets that each hold one trap - spaces around `+` in `calc()`, `.form :valid`, `0%` in a custom property, a zero inside `calc()`, `flex: 0px`, strings and no-break spaces, escapes, unquoted `url()`s, `@supports selector()`, a comment between two words, hex in a custom property, nesting - come out meaning the same and written as expected |
+| `html` | every page on the site, drawn with scripts off at 1280 and 390 px as written and through each minifier (The Crusher with unquoted attributes on): the same visible text, the same box for every element, the same attributes; written cases for spaces between inline elements, no-break spaces, `<pre>` and `<textarea>`, an element the page's CSS sets to `pre-wrap` or `inline-block`, text beside a `<script>`, JSON-LD and shader blocks, conditional comments, `<img src="a.png"/>` and SVG; with terser, all ~390 inline scripts on the site through minify.html's scanner print the same syntax tree |
+| `python` | eight written cases (a `#` in a string, blank lines in a triple-quoted string, a verbose regex, f-string fields holding quotes, the `#!` and encoding lines, string prefixes, a line continuation); with python3, every module of its standard library, minified with each combination of options, has the same `ast.dump` as the original |
+| `sql` | ten scripts written out exactly: string contents, a mysqldump (version comments, backslash escapes, a `#` comment), SQL Server's `GO`, `#temp` and `[names]`, `DELIMITER`, psql's `COPY ... FROM stdin` rows and `\commands`, a `$$` body in PL/Python, PostgreSQL's `#>`, SQL*Plus's lone slash, a comment that opens another; with both options off nothing changes |
+| `php` | one file with an attribute, a heredoc and a nowdoc, interpolation holding quotes, output outside `<?php`, a comment ending at `?>` and data after `__halt_compiler()`: all kept, comments gone; with php, each combination of options lints, tokenizes to the same tokens and prints the same when run |
+
+Each judge has been seen failing. The replaced page fails 12 of the thirty-one CSS traps, and its
+Python, SQL and PHP paths fail 23 of the 39 checks in those suites; deleting the whitespace
+between tags, as its HTML path did, is caught on the two pages the suite plants it in; and
+minify.html's JavaScript scanner, before template literals inside `${...}` were walked rather
+than searched, printed a different tree for one inline script on the site
+(`tools/html_template_generator.html`).
