@@ -1181,6 +1181,14 @@ fifths of the time this player would need at their pace so far in the break (or 
 that workplace), so it presses a beginner and a veteran alike instead of being trivial for one and
 impossible for the other.
 
+**Price a side sheet in seconds, not in sheets.** Jumbo and fragile wrap first paid what an ordinary
+sheet of that workplace was worth. In the city an ordinary sheet outlasts a whole break, so a small
+special sheet cleared in fifteen seconds paid six times the player's usual rate. Each is now worth a
+number of seconds of the player's own pace on ordinary wrap, and that pace is measured on ordinary
+wrap only, or the special sheets drag it down themselves. The first player also found jumbo wrap hard
+to tell apart and fragile wrap too slow: jumbo bubbles are now the same giant size at every workplace,
+and a small sheet carries three gold bubbles, not the twelve its rate asked for.
+
 ## Tried and rejected
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose

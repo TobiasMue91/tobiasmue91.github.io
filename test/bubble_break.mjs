@@ -381,6 +381,7 @@ function matRun(mat, stage, lv, seed){
   run.time = 1e9;
   const P = BB.matP(run.baseP, mat); if(mat === 'shrink') P.heatTime = 12;
   run.P = P; run.sheet = BB.makeSheet(P, 1.5, BB.mulberry(seed || 5)); run.budget = P.budget;
+  BB.fitWorth(run, P);
   return [S, run];
 }
 const printAt = (sh, i, j) => (sh.pmask[j*sh.words + (i >>> 5)] >>> (i & 31)) & 1;
@@ -417,8 +418,10 @@ if(suites.includes('materials')){
   // jumbo: squash, then pop, and a pop runs through every squashed bubble touching it and no further
   {
     const [S, r] = matRun('jumbo', 1, { thumb: 1, strength: 6 }), sh = r.sheet, B = r.baseP;
-    check(Math.abs(sh.N - B.size/4) <= Math.max(3, .05*sh.N) && r.P.reach === B.reach/2 && r.P.value === 4*B.value && r.P.budget === B.budget/4,
-      'jumbo wrap has a quarter of the bubbles, each twice as wide and worth four, for a quarter of the strength');
+    const worth = Math.abs(sh.N*r.P.value - BB.paceRate(r)*B.value*BB.WORTH_T.jumbo) < 1e-6*sh.N*r.P.value;
+    const [, rc] = matRun('jumbo', 3, { thumb: 4, strength: 6, delivery: 6, machine: 4 }, 3);
+    check(Math.abs(sh.N - BB.JUMBO_SIZE) <= 12 && Math.abs(rc.sheet.N - BB.JUMBO_SIZE) <= 12 && worth && rc.P.machine === 0 && rc.P.reach === .8 && r.P.budget >= 24,
+      `jumbo bubbles are a sheet of about ${BB.JUMBO_SIZE} giant bubbles at every workplace, worth ${BB.WORTH_T.jumbo} s of your usual popping, with the machine off and some strength for a swipe`);
     const ax = sh.W*.25, bx = sh.W*.75, y = sh.H/2, R = r.P.reach;
     // a stripe squashed from A to the right
     BB.press(r, ax, y); for(let k = 1; k <= 5; k++) BB.drag(r, ax + k*R*.5, y); BB.release(r); let ev = BB.takeEvents(r);
@@ -454,9 +457,15 @@ if(suites.includes('materials')){
     const [, rl] = matRun('fragile', 3, { thumb: 1 }, 4); const withLasso = BB.matP(Object.assign({}, rl.baseP, { lasso: true }), 'fragile');
     check(!withLasso.lasso, 'the cordon tape stays in its box on fragile wrap');
     check(r.P.machine === 0 && !r.P.lasso && r.P.reach === .42 && r.P.budget === B.budget/B.st.budget && !r.P.wave && !r.P.giants, 'fragile wrap is by fingertip: no machine, no lasso, no waves or giants');
-    check(sh.printN >= 18 && sh.left === sh.N - sh.flats - sh.printN && Math.abs(sh.N*r.P.value - B.size*B.value) < 1e-6*B.size*B.value, `the print (${sh.printN} bubbles) is not part of what has to be popped, and the sheet is worth a usual one`);
+    const tf = r.time; settle(r, 2); const tj = r.time;
+    check(Math.abs((tf - tj) - 1) < .02, 'on fragile wrap the clock runs at half speed', `${(tf - tj).toFixed(3)} s in 2 s`);
+    check(sh.printN >= 14 && sh.left === sh.N - sh.flats - sh.printN && Math.abs(sh.N*r.P.value - BB.paceRate(r)*B.value*BB.WORTH_T.fragile) < 1e-6*sh.N*r.P.value, `the print (${sh.printN} bubbles) is not part of what has to be popped, and the sheet is worth ${BB.WORTH_T.fragile} s of your usual popping`);
     let specialOnPrint = false; for(let j = 0; j < sh.rows; j++) for(let i = 0; i < sh.cols; i++) if(printAt(sh, i, j) && BB.specialAt(sh, i, j) >= 0) specialOnPrint = true;
     check(!specialOnPrint, 'no special bubble is printed over');
+    const rich = { thumb: 3, strength: 4, gold: 4, espresso: 3, bang: 3, zipper: 3, qc: 0 };
+    const nsp = sh2 => { let n = 0; for(let j = 0; j < sh2.rows; j++) n += sh2.spI[j].length; return n; };
+    const counts = ['fragile', 'jumbo'].map(m => nsp(matRun(m, 2, rich, 11)[1].sheet));
+    check(counts.every(n => n <= 14), `a small sheet carries a few specials, not the dozens its rates would give (${counts.join(', ')})`);
     // a machine let loose on it anyway goes round the print
     const [, rm] = matRun('fragile', 2, { thumb: 1 }, 6); rm.P = Object.assign({}, rm.P, { machine: 4 }); const shm = rm.sheet, pn = shm.printN, l0 = shm.left;
     settle(rm, 25);
@@ -485,9 +494,11 @@ if(suites.includes('materials')){
     let d2 = null; for(let k = 0; k < 60 && !d2; k++){ BB.step(r2, 1/60); const e = BB.takeEvents(r2); if(e.matDone) d2 = e.matDone; }
     BB.release(r2);
     check(d2 && d2.good && d2.share === 1 && d2.mult > 1.3 && BB.matDone(S2, 'shrink') === 1, 'popped before the heat reaches it, it counts as beaten and doubles the bonus');
-    const [, r3] = matRun('shrink', 3, {}, 3); r3.t = 10; r3.pops = 1000;
-    const slow = BB.heatPace(r3, 8000), mid = BB.heatPace(r3, 1000); r3.pops = 1e7; const fast = BB.heatPace(r3, 8000);
-    check(slow === 40 && Math.abs(mid - 8) < 1e-9 && fast === 5, 'the heat gun takes four fifths of the time you would need at your pace so far, between 5 and 40 s');
+    // 1,000 bubbles in 10 s on ordinary wrap, none yet on this sheet
+    const [, r3] = matRun('shrink', 3, {}, 3); r3.t = r3.normT = 10; r3.pops = r3.matStart = 1000;
+    const slow = BB.heatPace(r3, 8000), mid = BB.heatPace(r3, 1000); r3.pops = r3.matStart = 1e7; const fast = BB.heatPace(r3, 8000);
+    r3.pops = r3.matStart = 1000; r3.pops = 1400; const own = BB.heatPace(r3, 1000);     // 400 more on this sheet change nothing
+    check(slow === 40 && Math.abs(mid - 8) < 1e-9 && fast === 5 && Math.abs(own - 8) < 1e-9, 'the heat gun takes four fifths of the time you would need at your pace on ordinary wrap, between 5 and 40 s, whatever you pop on the special sheets');
     // half popped by hand, then the heat: what the heat takes is what was left
     const [, r4] = matRun('shrink', 3, { thumb: 1 }, 10), s4 = r4.sheet; r4.P.reach = s4.H; BB.press(r4, s4.W*.75, s4.H/2); BB.release(r4);
     const left4 = s4.left; let d4 = null; for(let k = 0; k < 20*60 && !d4; k++){ BB.step(r4, 1/60); const e = BB.takeEvents(r4); if(e.matDone) d4 = e.matDone; }
@@ -539,7 +550,7 @@ function playBreak(S, seed, who){
       const perTap = Math.max(1, Math.PI*P.reach*P.reach/SQ*.8)*(P.wave ? P.wave*P.wave : 1), perPitch = Math.max(1, 2*P.reach/SQ);
       const swipeYield = P.budget ? P.budget/(P.budget/perPitch/(human.swipe/s) + P.refill + .12) : 0;
       let tgt = null, bd = Infinity; for(const t of ts){ const d = Math.hypot(t.x - run.x, t.y - run.y) - (t.t === 7 ? 1e6 : 0); if(d < bd){ bd = d; tgt = t; } }
-      if(tgt){ BB.press(run, tgt.x + gauss()*human.aim/s, tgt.y + gauss()*human.aim/s); if(tgt.t === 2 && !P.iron){ mode = 'hold'; hold = P.holdTime + .08; } else { BB.release(run); wait = 1/human.taps; } }
+      if(tgt){ BB.press(run, tgt.x + gauss()*human.aim/s, tgt.y + gauss()*human.aim/s); if(tgt.t === 2){ mode = 'hold'; hold = P.holdTime + .08; } else { BB.release(run); wait = 1/human.taps; } }
       else { const f = firstIntact(); if(!f) wait = .1;
         else if(P.lasso){ const r = Math.min(sh.W, sh.H)*.3, cxl = Math.min(sh.W - r, Math.max(r, f.x + r*.6)), cyl = Math.min(sh.H - r, Math.max(r, f.y + r*.6)); stroke = { x: cxl, y: cyl, r, a: 0 }; BB.press(run, cxl + r, cyl); mode = 'loop'; }
         else if(swipeYield > perTap*human.taps && printStop(f.i, f.j) > f.x + 1.5){ const y = f.y + Math.min(P.reach, 1)*.5; BB.press(run, f.x - .2, y); mode = 'stroke'; stroke = { x: f.x - .2, y, stop: printStop(f.i, f.j) }; }
@@ -560,7 +571,7 @@ function career(seed, maxMin){
     BB.autoBuy(S, n => n.id === (S.quits % 2 ? { A:'thorough', B:'wave' } : { A:'rhythm', B:'bang' })[n.fork]);
     const levels = Object.values(S.lv).reduce((a, b) => a + b, 0) - 1, maxLevels = BB.RUN.reduce((a, n) => a + (n.fork ? n.max/2 : n.max), 0) - 1;
     if(fresh) cycles.push({ stage: S.stage, firstBreakLevels: levels, of: maxLevels });
-    log.push({ min: clock/60, stage: S.stage, t: run.t, pops: run.pops, pps: run.pops/run.t, earned: run.earned, orders: BB.ordersDone(S), sheets: run.sheets, matSheets: run.matSheets, mats: Object.assign({}, run.mats), cracks: run.cracks, casc: run.cascBest });
+    log.push({ min: clock/60, stage: S.stage, t: run.t, pops: run.pops, pps: run.pops/run.t, earned: run.earned, orders: BB.ordersDone(S), sheets: run.sheets, slowT: run.slowT, matSheets: run.matSheets, mats: Object.assign({}, run.mats), cracks: run.cracks, casc: run.cascBest });
     const g = BB.quitGain(S); gains.push(g); if(gains.length > 4) gains.shift();
     const stalled = gains.length === 4 && g > 0 && g < gains[0]*1.12;
     if(g > 0 && (g >= 2*(S.callusesEarned + 2) || stalled || since > 60)){
@@ -600,8 +611,9 @@ if(suites.includes('pacing')){
     const t0 = performance.now(), c = career(seed, 300), dur = ((performance.now() - t0)/1000).toFixed(0);
     console.log(`  seed ${seed}: first quit ${c.at.firstQuit?.toFixed(0)} min, warehouse ${c.at.ship?.toFixed(0)}, factory ${c.at.factory?.toFixed(0)}, city ${c.at.city?.toFixed(0)}, world ${c.at.world?.toFixed(0)} (${dur} s to simulate)`);
     for(const [k, [lo, hi]] of Object.entries(win)) check(c.at[k] != null && c.at[k] >= lo && c.at[k] <= hi, `seed ${seed}: ${k} within ${lo}-${hi} min`, `at ${c.at[k] == null ? 'never' : c.at[k].toFixed(1)}`);
-    const longest = Math.max(...c.log.map(r => r.t));
-    check(longest <= 90, `seed ${seed}: no break runs past 90 s (longest ${longest.toFixed(0)} s)`);
+    // on the coffee's clock; fragile wrap's half-speed clock stretches a break a little in real time
+    const longest = Math.max(...c.log.map(r => r.t - r.slowT/2)), slowest = Math.max(...c.log.map(r => r.slowT/2));
+    check(longest <= 90 && slowest <= 20, `seed ${seed}: no break's clock runs past 90 s (longest ${longest.toFixed(0)} s), and fragile wrap adds at most 20 s to one (${slowest.toFixed(0)} s)`);
     check(c.log.every(r => r.pops > 0), `seed ${seed}: every break pops something`);
     const pps = [0, 1, 2, 3].map(k => c.log.filter(r => r.stage === k).map(r => r.pps)), top = pps.map(a => Math.max(...a));
     check(pps.every(a => a.length) && top[2] > 100*top[0] && top[3] > 20*top[2], `seed ${seed}: each workplace pops far faster than the last (desk ${fmtN(top[0])}/s, factory ${fmtN(top[2])}/s, city ${fmtN(top[3])}/s)`);
