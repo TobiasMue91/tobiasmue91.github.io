@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description"
-          content="Create retro game sounds, UI effects, and more with this free online Sound Effect Generator. Features oscillator controls, ADSR envelope, filters, distortion, and WAV export.">
+          content="Create retro game sounds and UI effects. Every preset is a family: click it again for another coin, laser or explosion, and Mutate nudges the one you almost like. Oscillator, ADSR envelope, filters, distortion and WAV export.">
     <meta name="keywords"
           content="sound effect generator, sfx maker, game sounds, retro sounds, audio synthesizer, web audio, wav export, free sound effects, UI sounds, 8-bit sounds">
     <meta name="author" content="Claude Opus 4.5 prompted by Tobias Müller">
@@ -213,6 +213,23 @@
 
         .preset-btn.active svg {
             color: #fff
+        }
+
+        .preset-btn.active::after {
+            content: '';
+            margin-left: auto;
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+            background: currentColor;
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 4v6h-6M1 20v-6h6'/%3E%3Cpath d='M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15'/%3E%3C/svg%3E") center/contain no-repeat;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 4v6h-6M1 20v-6h6'/%3E%3Cpath d='M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15'/%3E%3C/svg%3E") center/contain no-repeat
+        }
+
+        .card-hint {
+            margin-left: auto;
+            font-size: 0.65rem;
+            color: var(--muted)
         }
 
         .visualizer {
@@ -823,6 +840,7 @@
                         <circle cx="12" cy="12" r="10"/>
                     </svg>
                     <span class="card-title">Presets</span>
+                    <span class="card-hint">click again for another</span>
                 </div>
                 <div class="card-body">
                     <div class="preset-grid">
@@ -1182,6 +1200,12 @@
                             </svg>
                             Random
                         </button>
+                        <button class="btn btn-secondary" id="mutateBtn" title="Nudge this sound a little">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 21l11-11M15 3v3M15 12v3M9 7h3M18 7h3M17.5 4.5l1.5-1.5M12.5 9.5L11 11"/>
+                            </svg>
+                            Mutate
+                        </button>
                         <button class="btn btn-secondary" id="undoBtn" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
@@ -1207,6 +1231,7 @@
                     <div class="keyboard-hint">
                         <span>Press</span><span class="key">Space</span><span>play</span>
                         <span class="key">R</span><span>random</span>
+                        <span class="key">M</span><span>mutate</span>
                         <span class="key">Ctrl+Z</span><span>undo</span>
                     </div>
                 </div>
@@ -1235,6 +1260,7 @@
     const playIndicator = document.getElementById('playIndicator');
     let analyser, dataArray, animationId, isPlaying = false;
     const lockedParams = new Set();
+    let family = null;
     const history = [];
     const maxHistory = 20;
     const params = {
@@ -1478,11 +1504,30 @@
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
+    // Noise has a pitch, as on a chip's noise channel: each random value is held
+    // for a sixteenth of a period of the note the oscillator would be playing, so
+    // Frequency, Freq Slide and Vibrato move noise the way they move a tone -
+    // low is a rumble, high is a hiss.
+    const NOISE_STEPS = 16;
+
     function createNoiseBuffer(ctx, dur) {
-        const sz = ctx.sampleRate * dur;
-        const buf = ctx.createBuffer(1, sz, ctx.sampleRate);
+        const sr = ctx.sampleRate, sz = Math.ceil(sr * dur);
+        const buf = ctx.createBuffer(1, sz, sr);
         const out = buf.getChannelData(0);
-        for (let i = 0; i < sz; i++) out[i] = Math.random() * 2 - 1;
+        const f0 = params.frequency, f1 = Math.max(20, params.frequency + params.freqSlide);
+        const vib = params.vibratoRate > 0 ? params.vibratoDepth : 0;
+        let phase = 1, v = 0;
+        for (let i = 0; i < sz; i++) {
+            const t = i / sr;
+            let f = t < params.duration ? f0 + (f1 - f0) * t / params.duration : f1;
+            f += vib * Math.sin(2 * Math.PI * params.vibratoRate * t);
+            phase += NOISE_STEPS * Math.max(f, 1) / sr;
+            if (phase >= 1) {
+                phase -= Math.floor(phase);
+                v = Math.random() * 2 - 1
+            }
+            out[i] = v
+        }
         return buf
     }
 
@@ -1635,19 +1680,22 @@
         }, duration * 1000)
     }
 
+    // History holds the sounds you had before each change, so Undo after a roll
+    // brings back exactly the one before it.
     function saveToHistory() {
-        history.push(JSON.stringify(params));
+        const snap = JSON.stringify({params, family});
+        if (history[history.length - 1] !== snap) history.push(snap);
         if (history.length > maxHistory) history.shift();
-        document.getElementById('undoBtn').disabled = history.length <= 1
+        document.getElementById('undoBtn').disabled = !history.length
     }
 
     function undo() {
-        if (history.length <= 1) return;
-        history.pop();
-        const prev = JSON.parse(history[history.length - 1] || JSON.stringify(defaults));
-        Object.assign(params, prev);
+        if (!history.length) return;
+        const prev = JSON.parse(history.pop());
+        Object.assign(params, prev.params);
+        family = prev.family;
         updateUI();
-        document.getElementById('undoBtn').disabled = history.length <= 1
+        document.getElementById('undoBtn').disabled = !history.length
     }
 
     function updateUI() {
@@ -1672,16 +1720,199 @@
         document.querySelectorAll('.wave-btn').forEach(b => b.classList.toggle('active', b.dataset.wave === params.waveType));
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === params.filterType));
         document.querySelectorAll('.lock-btn').forEach(b => b.classList.toggle('locked', lockedParams.has(b.dataset.param)));
+        document.querySelectorAll('.preset-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.preset === family);
+            b.title = b.dataset.preset === family ? 'Click for another ' + b.textContent.trim() : ''
+        });
         drawADSR()
+    }
+
+    // Every preset is a family, not one sound. The first click plays the preset
+    // as written; each further click on the same button rolls another sound from
+    // its family, the way sfxr's generator buttons work. A family names only what
+    // varies - everything else stays as the preset has it.
+    const roll = {
+        range: (a, b) => a + Math.random() * (b - a),
+        log: (a, b) => a * Math.pow(b / a, Math.random()),
+        pick: list => list[Math.floor(Math.random() * list.length)],
+        chance: p => Math.random() < p
+    };
+    const families = {
+        coin: r => {
+            const shimmer = r.chance(0.2);
+            return {
+                waveType: r.pick(['square', 'square', 'square', 'triangle', 'sawtooth']),
+                frequency: r.log(650, 1700), duration: r.range(0.07, 0.2),
+                attack: r.range(0.001, 0.004), decay: r.range(0.03, 0.08), sustain: r.range(0.2, 0.5), release: r.range(0.06, 0.16),
+                freqSlide: r.chance(0.3) ? 0 : r.range(150, 800),
+                vibratoRate: shimmer ? r.range(15, 25) : 0, vibratoDepth: shimmer ? r.range(15, 40) : 0,
+                filterType: r.chance(0.4) ? 'lowpass' : 'none', filterFreq: r.log(3000, 8000), filterQ: r.range(0.7, 2)
+            }
+        },
+        jump: r => ({
+            waveType: r.pick(['square', 'square', 'triangle', 'sine']),
+            frequency: r.log(180, 480), duration: r.range(0.14, 0.32),
+            attack: r.range(0.001, 0.01), decay: r.range(0.06, 0.16), sustain: r.range(0.1, 0.35), release: r.range(0.06, 0.16),
+            freqSlide: r.range(300, 950),
+            filterType: r.chance(0.6) ? 'lowpass' : 'none', filterFreq: r.log(2000, 6000), filterQ: r.range(0.7, 2)
+        }),
+        laser: r => {
+            const frequency = r.log(800, 2000), zap = r.chance(0.25);
+            return {
+                waveType: r.pick(['sawtooth', 'sawtooth', 'square', 'triangle']),
+                frequency, duration: r.range(0.1, 0.32),
+                attack: r.range(0.001, 0.003), decay: r.range(0.04, 0.12), sustain: r.range(0.05, 0.3), release: r.range(0.04, 0.12),
+                freqSlide: -frequency * r.range(0.45, 0.9),
+                vibratoRate: zap ? r.range(20, 30) : 0, vibratoDepth: zap ? r.range(30, 80) : 0,
+                ...r.pick([
+                    {filterType: 'lowpass', filterFreq: r.log(2500, 7000), filterQ: r.range(1, 6)},
+                    {filterType: 'lowpass', filterFreq: r.log(2500, 7000), filterQ: r.range(1, 6)},
+                    {filterType: 'highpass', filterFreq: r.log(200, 700), filterQ: r.range(0.7, 2)},
+                    {filterType: 'none'}
+                ]),
+                distortion: r.chance(0.5) ? 0 : r.range(10, 30)
+            }
+        },
+        explosion: r => {
+            const frequency = r.log(50, 260), rumble = r.chance(0.5);
+            return {
+                frequency, duration: r.range(0.5, 1.2),
+                attack: r.range(0.001, 0.01), decay: r.range(0.15, 0.45), sustain: r.range(0.15, 0.5), release: r.range(0.3, 0.8),
+                freqSlide: -frequency * r.range(0.1, 0.7),
+                vibratoRate: rumble ? r.range(8, 20) : 0, vibratoDepth: rumble ? frequency * r.range(0.2, 0.5) : 0,
+                filterFreq: r.log(350, 1600), filterQ: r.range(0.5, 2), distortion: r.range(20, 60)
+            }
+        },
+        powerup: r => {
+            const wobble = r.chance(0.7);
+            return {
+                waveType: r.pick(['sine', 'square', 'square', 'triangle']),
+                frequency: r.log(220, 520), duration: r.range(0.35, 0.8),
+                attack: r.range(0.005, 0.03), decay: r.range(0.06, 0.15), sustain: r.range(0.45, 0.8), release: r.range(0.12, 0.3),
+                freqSlide: r.range(450, 1000),
+                vibratoRate: wobble ? r.range(5, 14) : 0, vibratoDepth: wobble ? r.range(6, 25) : 0,
+                filterType: r.chance(0.4) ? 'lowpass' : 'none', filterFreq: r.log(2500, 6000), filterQ: r.range(0.7, 2)
+            }
+        },
+        hit: r => {
+            const waveType = r.pick(['square', 'sawtooth', 'noise']), noise = waveType === 'noise';
+            const frequency = noise ? r.log(200, 700) : r.log(90, 300);
+            return {
+                waveType, frequency, duration: r.range(0.07, 0.18),
+                attack: r.range(0.001, 0.003), decay: r.range(0.03, 0.08), sustain: r.range(0.05, 0.25), release: r.range(0.03, 0.08),
+                freqSlide: -frequency * r.range(0.3, 0.8),
+                filterFreq: noise ? r.log(800, 3000) : r.log(500, 1800), filterQ: r.range(1, 6), distortion: r.range(15, 55)
+            }
+        },
+        click: r => {
+            const frequency = r.log(900, 2000);
+            return {
+                waveType: r.pick(['sine', 'square', 'triangle']),
+                frequency, duration: r.range(0.05, 0.06),
+                attack: r.range(0.001, 0.002), decay: r.range(0.008, 0.025), sustain: r.range(0.05, 0.2), release: r.range(0.01, 0.025),
+                freqSlide: r.chance(0.7) ? 0 : r.range(-400, 400),
+                // a high-pass trims the click's body; above the tone it would remove the click
+                filterType: r.chance(0.7) ? 'highpass' : 'none', filterFreq: frequency * r.range(0.4, 0.9), filterQ: r.range(0.7, 2)
+            }
+        },
+        notification: r => {
+            const wobble = r.chance(0.5);
+            return {
+                waveType: r.pick(['sine', 'sine', 'triangle']),
+                frequency: r.log(520, 1500), duration: r.range(0.25, 0.5),
+                attack: r.range(0.005, 0.02), decay: r.range(0.06, 0.15), sustain: r.range(0.35, 0.6), release: r.range(0.1, 0.25),
+                freqSlide: r.chance(0.75) ? r.range(120, 400) : -r.range(100, 300),
+                vibratoRate: wobble ? r.range(3, 7) : 0, vibratoDepth: wobble ? r.range(4, 12) : 0
+            }
+        },
+        success: r => {
+            const wobble = r.chance(0.25);
+            return {
+                waveType: r.pick(['sine', 'sine', 'triangle']),
+                frequency: r.log(330, 900), duration: r.range(0.3, 0.6),
+                attack: r.range(0.005, 0.02), decay: r.range(0.06, 0.15), sustain: r.range(0.4, 0.65), release: r.range(0.15, 0.3),
+                freqSlide: r.range(180, 650),
+                vibratoRate: wobble ? r.range(4, 7) : 0, vibratoDepth: wobble ? r.range(3, 8) : 0
+            }
+        },
+        error: r => {
+            const wobble = r.chance(0.7);
+            return {
+                waveType: r.pick(['square', 'square', 'sawtooth']),
+                frequency: r.log(160, 400), duration: r.range(0.22, 0.45),
+                attack: r.range(0.005, 0.02), decay: r.range(0.08, 0.16), sustain: r.range(0.25, 0.45), release: r.range(0.08, 0.16),
+                freqSlide: -r.range(60, 220),
+                vibratoRate: wobble ? r.range(8, 16) : 0, vibratoDepth: wobble ? r.range(10, 25) : 0,
+                filterFreq: r.log(700, 1800), filterQ: r.range(1, 3), distortion: r.range(10, 25)
+            }
+        },
+        whoosh: r => {
+            const frequency = r.log(200, 1000);
+            const freqSlide = r.chance(0.6) ? -frequency * r.range(0.5, 0.8) : Math.min(1000, frequency * r.range(0.8, 1.5));
+            const top = Math.max(frequency, frequency + freqSlide);
+            return {
+                frequency, freqSlide, duration: r.range(0.2, 0.45),
+                attack: r.range(0.03, 0.12), decay: r.range(0.08, 0.2), sustain: r.range(0.1, 0.3), release: r.range(0.08, 0.2),
+                // pitched noise carries most of its power around four times its frequency;
+                // the filter sits above the whole sweep, or is wide, so the sweep is heard
+                ...(r.chance(0.7)
+                    ? {filterType: 'lowpass', filterFreq: top * r.range(4, 7), filterQ: r.range(0.7, 2)}
+                    : {filterType: 'bandpass', filterFreq: 4 * Math.sqrt(frequency * (frequency + freqSlide)), filterQ: r.range(0.7, 1.5)})
+            }
+        },
+        blip: r => {
+            const frequency = r.log(350, 1500);
+            return {
+                waveType: r.pick(['sine', 'square', 'square', 'triangle']),
+                frequency, duration: r.range(0.05, 0.1),
+                attack: r.range(0.001, 0.005), decay: r.range(0.015, 0.04), sustain: r.range(0.1, 0.35), release: r.range(0.015, 0.04),
+                freqSlide: r.chance(0.7) ? 0 : r.range(-200, 200),
+                filterType: r.chance(0.3) ? 'highpass' : 'none', filterFreq: frequency * r.range(0.3, 0.8), filterQ: r.range(0.7, 2)
+            }
+        }
+    };
+
+    // Rolled and nudged values land on what the sliders can show.
+    function fitToSlider(el, v) {
+        const min = +el.min, max = +el.max, step = +el.step || 1;
+        return +(min + Math.round((Math.min(max, Math.max(min, v)) - min) / step) * step).toFixed(3)
+    }
+
+    function fitToSliders(p) {
+        document.querySelectorAll('input[type="range"]').forEach(el => p[el.id] = fitToSlider(el, p[el.id]));
+        return p
+    }
+
+    function rollFamily(name) {
+        const p = fitToSliders({...presets[name], ...families[name](roll)});
+        lockedParams.forEach(k => p[k] = params[k]);
+        return p
     }
 
     function loadPreset(name) {
         const p = presets[name];
         if (!p) return;
         saveToHistory();
-        Object.assign(params, p);
+        Object.assign(params, family === name ? rollFamily(name) : p);
+        family = name;
         updateUI();
-        document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', b.dataset.preset === name));
+        playSound()
+    }
+
+    // Nudge a sound you almost like: each unlocked setting has an even chance of
+    // moving a little - a twentieth of its slider, pitches by up to a quarter
+    // octave. Wave, filter type and volume stay put, and whatever is off stays off.
+    function mutate() {
+        saveToHistory();
+        document.querySelectorAll('input[type="range"]').forEach(el => {
+            const id = el.id;
+            if (id === 'volume' || lockedParams.has(id) || params[id] === 0 || roll.chance(0.5)) return;
+            const nudge = roll.range(-1, 1);
+            params[id] = fitToSlider(el, id === 'frequency' || id === 'filterFreq'
+                ? params[id] * Math.pow(2, nudge / 4)
+                : params[id] + nudge * 0.05 * (el.max - el.min))
+        });
+        updateUI();
         playSound()
     }
 
@@ -1704,7 +1935,7 @@
         if (!lockedParams.has('filterFreq')) params.filterFreq = Math.floor(Math.random() * 5000) + 500;
         if (!lockedParams.has('filterQ')) params.filterQ = Math.round((Math.random() * 8 + 0.1) * 10) / 10;
         if (!lockedParams.has('distortion')) params.distortion = Math.random() > 0.6 ? Math.floor(Math.random() * 40) : 0;
-        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        family = null;
         updateUI();
         playSound()
     }
@@ -1831,8 +2062,8 @@
             saveToHistory();
             const saved = favs[idx];
             Object.assign(params, saved.params);
+            family = null;
             updateUI();
-            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
             showToast('Loaded: ' + saved.name)
         } else if (action === 'delete') {
             favs.splice(idx, 1);
@@ -1859,19 +2090,23 @@
     }));
     ['frequency', 'duration', 'volume', 'attack', 'decay', 'sustain', 'release', 'freqSlide', 'vibratoRate', 'vibratoDepth', 'filterFreq', 'filterQ', 'distortion'].forEach(id => {
         const el = document.getElementById(id);
+        let dragging = false;
         el.addEventListener('input', () => {
+            if (!dragging) saveToHistory();
+            dragging = true;
             params[id] = parseFloat(el.value);
             updateUI()
         });
-        el.addEventListener('change', () => saveToHistory());
+        el.addEventListener('change', () => dragging = false);
         el.addEventListener('dblclick', () => {
-            params[id] = parseFloat(el.dataset.default);
             saveToHistory();
+            params[id] = parseFloat(el.dataset.default);
             updateUI()
         })
     });
     document.getElementById('playBtn').addEventListener('click', playSound);
     document.getElementById('randomBtn').addEventListener('click', randomize);
+    document.getElementById('mutateBtn').addEventListener('click', mutate);
     document.getElementById('undoBtn').addEventListener('click', undo);
     document.getElementById('saveBtn').addEventListener('click', openSaveModal);
     document.getElementById('downloadBtn').addEventListener('click', downloadWAV);
@@ -1894,6 +2129,10 @@
             e.preventDefault();
             randomize()
         }
+        if (e.code === 'KeyM' && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault();
+            mutate()
+        }
         if (e.code === 'KeyZ' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             undo()
@@ -1903,7 +2142,6 @@
             openSaveModal()
         }
     });
-    saveToHistory();
     updateUI();
     renderFavorites();
     drawIdleWaveform();
