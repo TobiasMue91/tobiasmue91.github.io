@@ -2,18 +2,21 @@
 // Test suite for playground/underfoot_tempo.html, the "tempo" prototype.
 //
 // The prototype's claims are about speed: that it builds only by running on without a stop, that
-// every move keeps it or loses it the way the page says, that the escape home is fair, and that
-// the ranks mean something. The first two are checked in small rooms with the real physics; the
-// last two by bots that play the real level: a search bot for the fastest line, and the same
-// search with the tiers switched off, which is the most a player who never gets past running
-// speed could do.
+// every move keeps it or loses it the way the page says, that each level's way home is hard in its
+// own way but fair, and that the ranks mean something. The first two are checked in small rooms
+// with the real physics, the third on the real levels. The last are measured by bots that play the
+// levels: a search bot for the fastest line; the same search with the tiers switched off, which is
+// the most a player who never gets past running speed could do; and that one again with a pause
+// forced on it every few moves on the way home, standing in for a player who hesitates.
 //
-//   node test/underfoot_tempo.mjs                  # everything (about a minute)
-//   node test/underfoot_tempo.mjs moves escape     # named suites only
-//   node test/underfoot_tempo.mjs route --record   # print a new LINE for the page's ghost
+//   node test/underfoot_tempo.mjs                        # moves, escape, lines (about 15 s)
+//   node test/underfoot_tempo.mjs moves escape           # named suites only
+//   node test/underfoot_tempo.mjs route                  # the bots, every level (several minutes)
+//   node test/underfoot_tempo.mjs route --level=drain    # one level's
+//   node test/underfoot_tempo.mjs route --record         # and print new LINES for the page's ghost
 //   node test/underfoot_tempo.mjs --page=other.html
 //
-// Suites: moves, escape, route.
+// Suites: moves, escape, lines, and the slow route.
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -22,12 +25,13 @@ import vm from 'vm';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
-const pageArg = args.find(a => a.startsWith('--page='));
-const PAGE = pageArg ? pageArg.slice(7) : join(HERE, '..', 'playground', 'underfoot_tempo.html');
+const argOf = name => { const a = args.find(x => x.startsWith(`--${name}=`)); return a ? a.slice(name.length + 3) : null; };
+const PAGE = argOf('page') || join(HERE, '..', 'playground', 'underfoot_tempo.html');
 const RECORD = args.includes('--record');
-const ALL = ['moves', 'escape', 'route'];
+const ONLY = argOf('level');
+const DEFAULT = ['moves', 'escape', 'lines'];
 const picked = args.filter(a => !a.startsWith('--'));
-const suites = picked.length ? picked : ALL;
+const suites = picked.length ? picked : DEFAULT;
 
 let failures = 0, passes = 0;
 const fail = (what, detail) => { failures++; console.log(`  FAIL  ${what}${detail ? '\n          ' + detail : ''}`); };
@@ -42,14 +46,14 @@ const block = id => HTML.match(new RegExp(`<script id="${id}">([\\s\\S]*?)<\\/sc
 function load(noTiers) {
     const ctx = vm.createContext({});
     vm.runInContext(block('core') + '\nthis.UF = UF;', ctx);
-    vm.runInContext(block('levels') + '\nthis.LEVELS = LEVELS; this.LINE = LINE; this.LINE_FRAMES = LINE_FRAMES;', ctx);
+    vm.runInContext(block('levels') + '\nthis.LEVELS = LEVELS; this.LINES = LINES;', ctx);
     if (noTiers) vm.runInContext('UF.P.TIERS[1] = UF.P.TIERS[2] = UF.P.TIERS[0]; UF.P.CHARGE = 1e9;', ctx);
     return ctx;
 }
 const CTX = load(false);
-const {UF, LEVELS, LINE, LINE_FRAMES} = CTX;
+const {UF, LEVELS, LINES} = CTX;
 const P = UF.P, FX = UF.FX, TILE = UF.TILE, IN = UF.IN, T = UF.T;
-const DEF = LEVELS[0];
+const byId = id => LEVELS.find(l => l.id === id);
 const fmt = v => (Math.round(v * 100) / 100).toFixed(2);
 const secs = frames => (frames / 60).toFixed(2) + ' s';
 const RUN = IN.R | IN.B, RUN_L = IN.L | IN.B;
@@ -259,61 +263,152 @@ if (suites.includes('moves')) {
 }
 
 /* ================= escape ================= */
+// put the mouse on the ground `dx` tiles from a level's item, and step onto it
+function atItem(id, dx) {
+    const def = byId(id), s = UF.newGame(UF.parseLevel(def), {viewW: 20}), it = s.level.item;
+    s.p.x = (it.tx + dx) * TILE + TILE / 2;
+    s.p.y = (it.ty + 1) * TILE;
+    s.p.onGround = true;
+    UF.snapCamera(s);
+    const took = events(s, 90, dx < 0 ? IN.R : IN.L, 'escape', t => t.escape);
+    return {s, def, took: took.length};
+}
 if (suites.includes('escape')) {
     section('escape');
-    const L0 = UF.parseLevel(DEF);
+    for (const def of LEVELS) {
+        const L = UF.parseLevel(def);
+        check(L.item && L.home && L.home.tx !== undefined, `${def.id}: the level has an item and a way home`);
+        check(def.ranks && def.ranks.length === 3 && def.ranks[0] < def.ranks[1] && def.ranks[1] < def.ranks[2], `${def.id}: three ranks, in order`);
+        check(!!(LINES[def.id]), `${def.id}: the page has a fastest line for its ghost`);
+    }
+
+    // the seed sack: a clock, and the level turned round
+    const SACK = byId('sack');
+    const L0 = UF.parseLevel(SACK);
     const find = t => { for (let i = 0; i < L0.tiles.length; i++) if (L0.tiles[i] === t) return {tx: i % L0.w, ty: (i / L0.w) | 0}; return null; };
-    const bag = find(T.BAG), board = find(T.ESC_OFF), crate = find(T.ESC_ON), home = find(T.HOME);
-    check(bag && board && crate && home, 'the level has a sack, boards, crates and a way home');
-    // stand beside the sack and step onto it
-    const atSack = () => {
-        const s = UF.newGame(UF.parseLevel(DEF), {viewW: 20});
-        s.p.x = (bag.tx - 2) * TILE + TILE / 2;
-        s.p.y = (bag.ty + 1) * TILE;
-        s.p.onGround = true;
-        UF.snapCamera(s);
-        return s;
-    };
-    let s = atSack();
-    check(UF.solidAt(s.level, board.tx, board.ty) && !UF.solidAt(s.level, crate.tx, crate.ty), 'before the sack: boards are solid, crates are not there');
-    const start = events(s, 60, IN.R, 'escape', t => t.escape);
-    check(start.length === 1 && s.escape, 'taking the sack starts the escape');
-    check(!UF.solidAt(s.level, board.tx, board.ty) && UF.solidAt(s.level, crate.tx, crate.ty), 'and swaps them: the boards give way, the crates are in the way');
-    check(s.escapeT === DEF.escapeTime * 60, `the clock starts at ${DEF.escapeTime} s`);
+    const board = find(T.ESC_OFF), crate = find(T.ESC_ON), home = L0.home, item = L0.item;
+    let {s, took} = atItem('sack', -2);
+    check(took === 1 && s.escape, 'taking the sack starts the escape');
+    check(!UF.solidAt(s.level, board.tx, board.ty) && UF.solidAt(s.level, crate.tx, crate.ty), 'and turns the level round: the boards give way, the crates are in the way');
+    check(s.escapeT === SACK.escape.time * 60, `the clock starts at ${SACK.escape.time} s`);
     check(s.ents.length === s.level.spawns.length && s.ents.every(e => !e.gone && !e.active && e.state === 'walk'), 'every creature is back where it started');
+    const fresh = UF.newGame(UF.parseLevel(SACK), {viewW: 20});
+    check(UF.solidAt(fresh.level, board.tx, board.ty) && !UF.solidAt(fresh.level, crate.tx, crate.ty), 'before it, boards were solid and the crates not there');
     run(s, 120, 0);
-    check(s.p.onGround && s.p.y > (bag.ty + 3) * TILE, 'the sack sat on a loose board: you drop to the way underneath', `feet at row ${fmt(s.p.y / TILE)}`);
+    check(s.p.onGround && s.p.y > (item.ty + 3) * TILE, 'the sack sat on a loose board: you drop to the way underneath', `feet at row ${fmt(s.p.y / TILE)}`);
     // too slow: back to the sack, and the level as it was when the sack was taken
     const clodAt = (() => { for (let i = 0; i < s.level.tiles.length; i++) if (s.level.tiles[i] === T.BRICK && (i % s.level.w) > 120) return i; return -1; })();
     s.level.tiles[clodAt] = T.EMPTY;
     s.escapeT = 2;
     const late = events(s, 3, 0, 'late');
-    check(late.length === 1 && s.escape && s.escapeT === DEF.escapeTime * 60 - 1, 'when the clock runs out the escape starts again, clock and all');
+    check(late.length === 1 && late[0].why === 'time' && s.escape && s.escapeT === SACK.escape.time * 60 - 1, 'when the clock runs out the escape starts again, clock and all');
     check(s.level.tiles[clodAt] === T.BRICK, 'with what was smashed on the way back put back');
-    check(Math.abs(s.p.x - (bag.tx * TILE + TILE / 2)) < TILE, 'from the sack');
+    check(Math.abs(s.p.x - (item.tx * TILE + TILE / 2)) < TILE, 'from the sack');
     // a pit on the way home costs time
-    s = atSack(); run(s, 60, IN.R); run(s, 120, 0);
+    ({s} = atItem('sack', -2)); run(s, 120, 0);
     const before = s.escapeT;
     s.p.y = (s.level.h + 6) * TILE; s.p.onGround = false;
     const f = events(s, 1, 0, 'fell');
     check(f.length === 1 && before - s.escapeT === P.FALL_COST + 1, `a fall on the way home costs ${P.FALL_COST / 60} s`);
     // home: nothing before the sack, the end after it
-    s = UF.newGame(UF.parseLevel(DEF), {viewW: 20});
+    s = UF.newGame(UF.parseLevel(SACK), {viewW: 20});
     run(s, 200, RUN_L);
     check(s.p.mode === 'play', 'the mouse hole does nothing before the sack is taken');
-    s = atSack(); run(s, 60, IN.R);
+    ({s} = atItem('sack', -2));
     s.p.x = (home.tx + 3) * TILE; s.p.y = (home.ty + 2) * TILE; s.p.onGround = true; s.p.vx = 0;
     const clear = events(s, 120, RUN_L, 'clear');
     check(clear.length === 1 && s.p.mode === 'clear', 'after it, the mouse hole ends the run');
+
+    // the drain: water rises from below, and waits for nobody
+    const DRAIN = byId('drain'), W = DRAIN.escape;
+    ({s, took} = atItem('drain', 2));
+    check(took === 1 && s.chase && s.escapeT === 0, 'taking the button lets the water in');
+    const surface0 = s.chase.pos;
+    run(s, W.delay - 2, 0);
+    check(s.chase.pos === surface0, `the water waits ${W.delay} frames`);
+    run(s, 62, 0);
+    check(s.chase.pos < surface0 && s.chase.pos >= surface0 - 62 * W.speed * FX, `then rises at ${W.speed} px/f`);
+    const drowned = events(s, 3000, 0, 'late', t => t.events.some(e => e.type === 'late'));
+    check(drowned.length === 1 && drowned[0].why === 'water', 'stand still and it catches you');
+    check(s.escape && s.chase.pos === surface0 && Math.abs(s.p.x - s.item.x) < 1, 'and it all starts again at the button, the water back down');
+    // climb far above it and it hurries to catch up, but never jumps
+    ({s} = atItem('drain', 2));
+    run(s, W.delay + 5, 0);
+    s.p.y -= 30 * TILE;
+    const y0 = s.chase.pos;
+    run(s, 10, 0);
+    check(y0 - s.chase.pos === 10 * 3 * Math.round(W.speed * FX), `left ${W.gap} tiles behind, it rises three times as fast`);
+
+    // the river bank: it falls away behind you, towards home
+    const BANK = byId('bank'), K2 = BANK.escape;
+    ({s, took} = atItem('bank', 2));
+    check(took === 1 && s.chase && s.level.escape.dir === -1, 'taking the strawberry starts the bank crumbling, towards home');
+    const edge0 = s.chase.pos;
+    run(s, K2.delay + 20, 0);
+    check(s.chase.pos < edge0, 'the edge comes on');
+    const behind = Math.floor(s.chase.pos / TILE) + 2;               // two columns behind the edge
+    let solidBehind = 0, stone = 0;
+    for (let ty = 0; ty < s.level.h; ty++) {
+        const t = UF.tileAt(s.level, behind, ty);
+        if (t === T.GROUND || t === T.GRASS) solidBehind++;
+    }
+    check(solidBehind === 0, 'and the bank behind it is gone, all the way down');
+    // stone stays: a small bank with a stone slab over the path, and the edge sent past it
+    const slab = UF.newGame(UF.parseLevel({id: 't', escape: {kind: 'crumble', from: 1, delay: 0, speed: 2, gap: 99}, rows: [
+        '............................................................',
+        '........................................XX..................',
+        '............................................................',
+        'HH..@.....................................................Q.',
+        '############################################################',
+        '############################################################']}), {viewW: 16});
+    slab.p.x = 57 * TILE + TILE / 2; slab.p.y = 4 * TILE;
+    run(slab, 30, IN.R, t => t.escape);
+    run(slab, 400, RUN_L, t => t.chase && t.chase.pos < 39 * TILE);
+    for (let tx = 40; tx <= 41; tx++) if (UF.tileAt(slab.level, tx, 1) === T.STONE) stone++;
+    check(slab.escape && slab.chase.pos < 39 * TILE && stone === 2 && UF.tileAt(slab.level, 40, 4) === T.EMPTY,
+        'stone stays, where the earth under it went', `edge at ${fmt(slab.chase.pos / TILE)}, stone ${stone}`);
+    const fellIn = events(s, 3000, 0, 'late', t => t.events.some(e => e.type === 'late'));
+    check(fellIn.length === 1 && fellIn[0].why === 'crumble', 'stand still and it takes you with it');
+    let restored = 0;
+    for (let ty = 0; ty < s.level.h; ty++) if (UF.solidAt(s.level, behind, ty)) restored++;
+    check(restored > 0 && s.chase.pos === edge0, 'and it all starts again at the strawberry, the bank whole');
+}
+
+/* ================= lines ================= */
+// each level's stored fastest line: the ghost on the page, and the proof that S can be had
+const replay = (ctx, def, log, until) => {
+    const s = ctx.UF.newGame(def, {viewW: 20}), seen = new Set();
+    for (const [v, n] of log) for (let i = 0; i < n; i++) {
+        ctx.UF.step(s, {h: v & 63, p: v >> 6});
+        for (const e of s.events) seen.add(e.type);
+        if (until && until(s)) return {s, seen};
+    }
+    return {s, seen};
+};
+if (suites.includes('lines')) {
+    section('lines');
+    for (const def of LEVELS) {
+        const L = LINES[def.id];
+        if (!L) { fail(`${def.id}: no stored line`); continue; }
+        const {s, seen} = replay(CTX, def, L.log, t => t.p.mode === 'clear');
+        check(s.p.mode === 'clear' && s.time === L.frames, `${def.id}: the stored line still gets home, in ${secs(L.frames)}`,
+            `mode ${s.p.mode} at ${secs(s.time)}; re-record with: node test/underfoot_tempo.mjs route --level=${def.id} --record`);
+        check(L.frames <= def.ranks[0] * 60 * 0.9, `${def.id}: S (${def.ranks[0]} s) is within reach, with ${secs(def.ranks[0] * 60 - L.frames)} to spare`);
+        for (const move of ['tier', 'kick', 'slide', 'knock'])
+            check(seen.has(move), `${def.id}: the fastest line uses '${move}'`);
+        const a = replay(CTX, def, L.log).s, b = replay(CTX, def, L.log).s;
+        check(UF.hash(a) === UF.hash(b), `${def.id}: a replayed run comes out the same every time`);
+    }
 }
 
 /* ================= route ================= */
-// Beam search over short held inputs, steered along the level's route: out to the sack, then home.
-function searchBot(ctx, chunk = 6, beam = 60, coarse = false) {
-    const U = ctx.UF, D = ctx.LEVELS[0];
+// Beam search over short held inputs, steered along the level's route: out to the item, then home.
+// `pause`: on the way home, every pause-th move is forced to be standing still.
+function searchBot(ctx, def, {chunk = 6, beam = 60, coarse = false, pause = 0} = {}) {
+    const U = ctx.UF;
     const acts = [RUN, RUN_L, 0, RUN | IN.J, RUN_L | IN.J, IN.J, IN.D, -RUN, -RUN_L];     // negative: a short hop
     const score = (s, w) => {
-        const p = s.p, route = s.escape ? D.route.back : D.route.out;
+        const p = s.p, route = s.escape ? def.route.back : def.route.out;
         let i = s.escape ? w.b : w.o;
         const px = p.x / TILE, py = p.y / TILE;
         while (i < route.length && p.onGround && Math.abs(px - route[i][0]) < 1.2 && Math.abs(py - route[i][1]) < 1.2) i++;
@@ -326,34 +421,29 @@ function searchBot(ctx, chunk = 6, beam = 60, coarse = false) {
         return coarse ? [Math.round(p.x / FX / 8), Math.round(p.y / FX / 8), Math.sign(p.vx), p.tier, s.escape ? 1 : 0].join()
             : [Math.round(p.x / FX / 3), Math.round(p.y / FX / 3), Math.round(p.vx / FX * 2), Math.round(p.vy / FX * 2), p.tier, p.onGround ? 1 : 0, s.escape ? 1 : 0].join();
     };
-    let nodes = [{s: U.newGame(D, {viewW: 20}), w: {o: 0, b: 0}, log: []}], best = null;
-    for (let c = 0; c < 1500 && !best; c++) {
+    let nodes = [{s: U.newGame(def, {viewW: 20}), w: {o: 0, b: 0}, log: [], k: 0, lead: Infinity}], best = null;
+    for (let c = 0; c < 2500 && !best && nodes.length; c++) {
         const next = new Map();
-        for (const n of nodes) for (const a of acts) {
+        for (const n of nodes) for (const a of pause && n.s.escape && (n.k + 1) % pause === 0 ? [0] : acts) {
             const s = U.clone(n.s), w = Object.assign({}, n.w), log = n.log.slice();
+            let lead = n.lead, caught = false;
             for (let f = 0; f < chunk; f++) {
                 const h = a < 0 ? -a | (f < 2 ? IN.J : 0) : a;
                 U.step(s, {h});
                 log.push(h);
+                if (s.events.some(e => e.type === 'late')) { caught = true; break; }
+                if (s.escape) lead = Math.min(lead, U.danger(s));
                 if (s.p.mode === 'clear') break;
             }
-            if (s.p.mode === 'clear') { if (!best || s.time < best.s.time) best = {s, log}; continue; }
-            const sc = score(s, w), k = key(s), old = next.get(k);
-            if (!old || old.sc < sc) next.set(k, {s, w, log, sc});
+            if (caught) continue;
+            if (s.p.mode === 'clear') { if (!best || s.time < best.s.time) best = {s, log, lead}; continue; }
+            const sc = score(s, w), kk = key(s), old = next.get(kk);
+            if (!old || old.sc < sc) next.set(kk, {s, w, log, sc, k: n.s.escape ? n.k + 1 : 0, lead});
         }
         nodes = [...next.values()].sort((a, b) => b.sc - a.sc).slice(0, beam);
     }
     return best;
 }
-const replay = (ctx, log, until) => {
-    const s = ctx.UF.newGame(ctx.LEVELS[0], {viewW: 20}), seen = new Set();
-    for (const [v, n] of log) for (let i = 0; i < n; i++) {
-        ctx.UF.step(s, {h: v & 63, p: v >> 6});
-        for (const e of s.events) seen.add(e.type);
-        if (until && until(s)) return {s, seen};
-    }
-    return {s, seen};
-};
 const rle = frames => {
     const out = [];
     for (const v of frames) { const l = out[out.length - 1]; if (l && l[0] === v) l[1]++; else out.push([v, 1]); }
@@ -362,40 +452,39 @@ const rle = frames => {
 
 if (suites.includes('route')) {
     section('route');
-    const [S, A, B] = DEF.ranks;
-    const t0 = Date.now();
-    const fast = searchBot(CTX);
-    check(!!fast, 'the search bot gets out to the sack and home again');
-    if (fast) {
-        const s = fast.s, out = s.bagTime, back = s.time - s.bagTime;
-        note(`fastest line: ${secs(s.time)} (out ${secs(out)}, home ${secs(back)}), ${s.bestCombo} hits in a row, ${s.deaths} falls (${((Date.now() - t0) / 1000).toFixed(0)} s to find)`);
-        const {seen} = replay(CTX, rle(fast.log));
-        for (const move of ['tier', 'kick', 'slide', 'break', 'knock'])
-            check(seen.has(move), `the fastest line uses '${move}'`);
-        check(s.time <= S * 60 * 0.9, `S (${S} s) is within reach: the line beats it by ${secs(S * 60 - s.time)}`);
-        check(back * 2 <= DEF.escapeTime * 60, `the fastest way home takes under half the escape clock (${secs(back)} of ${DEF.escapeTime} s)`);
-        if (RECORD) {
-            console.log(`\nconst LINE = ${JSON.stringify(rle(fast.log))};\nconst LINE_FRAMES = ${s.time};\n`);
+    const record = {};
+    const slowCtx = load(true);
+    for (const def of LEVELS) {
+        if (ONLY && def.id !== ONLY) continue;
+        const [S, A, B] = def.ranks, X = def.escape;
+        const lead = r => X.kind === 'clock' ? `${secs(X.time * 60 - (r.s.time - r.s.itemTime))} of the clock left` : `never nearer than ${fmt(r.lead)} tiles`;
+        const t0 = Date.now();
+        const fast = searchBot(CTX, def);
+        check(!!fast, `${def.id}: the search bot gets out and home again`);
+        if (fast) {
+            const s = fast.s;
+            note(`${def.id}: fastest line ${secs(s.time)} (out ${secs(s.itemTime)}, home ${secs(s.time - s.itemTime)}, ${lead(fast)}) (${((Date.now() - t0) / 1000).toFixed(0)} s to find)`);
+            check(s.time <= S * 60 * 0.9, `${def.id}: S (${S} s) is within reach: the line beats it by ${secs(S * 60 - s.time)}`);
+            record[def.id] = {frames: s.time, log: rle(fast.log)};
         }
+        const sdef = slowCtx.LEVELS.find(l => l.id === def.id);
+        const slow = searchBot(slowCtx, sdef, {beam: 80, coarse: true});
+        check(!!slow, `${def.id}: it can be finished without ever getting past running speed`);
+        if (slow) {
+            const s = slow.s;
+            note(`${def.id}: never faster than running ${secs(s.time)} (out ${secs(s.itemTime)}, home ${secs(s.time - s.itemTime)}, ${lead(slow)})`);
+            check(s.time > S * 60, `${def.id}: S needs the tiers: the best run without them takes ${secs(s.time)}, over ${S} s`);
+            check(s.time <= A * 60, `${def.id}: A (${A} s) is what a flawless run at running speed gets`);
+            check(B >= A * 1.3, `${def.id}: B (${B} s) leaves room for mistakes`);
+        }
+        const halting = searchBot(slowCtx, sdef, {beam: 80, coarse: true, pause: 5});
+        check(!!halting, `${def.id}: running speed, and standing still for a moment every half second on the way home, still gets home`);
+        if (halting) note(`${def.id}: with the pauses ${secs(halting.s.time)} (home ${secs(halting.s.time - halting.s.itemTime)}, ${lead(halting)})`);
     }
-    // the same search with the tiers switched off: never faster than running
-    const t1 = Date.now();
-    const slow = searchBot(load(true), 6, 80, true);
-    check(!!slow, 'the level can be finished without ever getting past running speed');
-    if (slow) {
-        const s = slow.s, back = s.time - s.bagTime;
-        note(`never faster than running: ${secs(s.time)} (out ${secs(s.bagTime)}, home ${secs(back)}) (${((Date.now() - t1) / 1000).toFixed(0)} s to find)`);
-        check(s.time > S * 60, `S needs the tiers: the best run without them takes ${secs(s.time)}, over ${S} s`);
-        check(s.time <= A * 60, `A (${A} s) is what a flawless run at running speed gets`);
-        check(B >= A * 1.3, `B (${B} s) leaves room for mistakes`);
-        check(DEF.escapeTime * 60 - back >= 8 * 60, `even at running speed the way home leaves ${secs(DEF.escapeTime * 60 - back)} of the clock for mistakes`);
+    if (RECORD) {
+        console.log('\n// paste into the page, or into the level builder\'s parameters:');
+        for (const [id, r] of Object.entries(record)) console.log(`    ${id}: {frames: ${r.frames}, log: ${JSON.stringify(r.log)}},`);
     }
-    // the ghost on the page: the stored line still plays out, frame for frame
-    const line = replay(CTX, LINE, t => t.p.mode === 'clear').s;
-    check(line.p.mode === 'clear' && line.time === LINE_FRAMES, `the page's fastest-line ghost still reaches home, in ${secs(LINE_FRAMES)}`,
-        `mode ${line.p.mode} at ${secs(line.time)}; re-record with: node test/underfoot_tempo.mjs route --record`);
-    const a = replay(CTX, LINE).s, b = replay(CTX, LINE).s;
-    check(UF.hash(a) === UF.hash(b), 'a replayed run comes out the same every time');
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

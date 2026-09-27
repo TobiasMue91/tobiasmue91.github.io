@@ -11,9 +11,10 @@ aber dafür fehlt der Bedarf. Es braucht eine eigene Identität. Aus vier Konzep
 gewählt, die jetzt als spielbare Prototypen nebeneinander liegen: **A „Vier Jahreszeiten“** und
 **C „Tempo“**. Beide sind in **Abschnitt 15** beschrieben. Nach dem Vergleich am Handy hat der
 Nutzer **Tempo gewählt** (Abschnitt 16): Jahreszeiten sei „mega kreativ“, Tempo gefalle vom
-Gameplay besser, und darauf lasse sich langfristig besser aufbauen. Weitergebaut wird also
-`playground/underfoot_tempo.html`; der nächste Schritt wartet auf sein Feedback zum Spielgefühl
-(16.3). Die Abschnitte 1 bis 12 beschreiben noch den ursprünglichen SMB-Plan. Steuerung,
+Gameplay besser, und darauf lasse sich langfristig besser aufbauen. Weitergebaut wird
+`playground/underfoot_tempo.html`. **T1 ist gebaut** (Abschnitt 17): Das Rutschen kostet kein Tempo
+mehr, und es gibt drei Level mit drei Arten von Flucht (Uhr, steigendes Wasser, wegbrechendes
+Ufer). Das wartet auf das Urteil des Nutzers. Die Abschnitte 1 bis 12 beschreiben noch den ursprünglichen SMB-Plan. Steuerung,
 Fairness-Schicht, Levelformat und Testweise gelten weiter.
 
 **Was der Nutzer nach M1 gesagt hat (gilt für alles Weitere):** Die Maus „rutscht ständig über den
@@ -993,3 +994,147 @@ noch überrascht. Das lässt sich mit drei grauen Leveln billiger klären als mi
 - **Was gestört hat:** Steuerung am Handy, Crash, Rutschen, Wandsprung, Lesbarkeit bei hohem
   Tempo.
 
+---
+
+## 17. Stand: T1, drei Fluchten (2026-09-27)
+
+### Was der Nutzer zu Tempo gesagt hat
+
+- Die 30 Sekunden Uhr seien ihm „gar nicht so bewusst aufgefallen“.
+- Das Tempo der Stufen passe, und es sei „punishing genug“.
+- Frustrierend war nur, beim Rutschen unter den Blöcken das Tempo zu verlieren.
+
+### Rutschen kostet nichts mehr
+
+Ein Rutschen lief 40 Frames und hielt einen dann an, wenn unten noch gedrückt war, samt Verlust der
+Stufe. Mit dem Daumen passiert genau das: Zieht man ihn etwas zu früh nach unten, kriecht man durch
+den Tunnel; hält man ihn etwas zu lange, bleibt man direkt dahinter stehen.
+
+Jetzt gilt:
+- Ein Rutschen läuft mindestens 40 Frames.
+- Es läuft weiter, solange unten gehalten wird oder über einem kein Platz zum Aufstehen ist.
+- Man kommt mit dem Tempo und der Stufe heraus, mit denen man hineinging.
+
+Zwei Prüfungen machen es so, wie ein Daumen es tut, und scheitern an der alten Regel.
+
+### Der Kern, aufgeräumt
+
+Aus dem Tempo-Kern ist alles SMB-Erbe entfernt, das Tempo nicht braucht:
+- klassische Beschleunigung;
+- Fahne und Mast;
+- Erdbeeren und Fragezeichenblöcke;
+- Röhren;
+- klein und groß (die Maus ist immer zwei Kacheln hoch);
+- Tod und Kontrollpunkte.
+
+Eine **Flucht** ist jetzt Teil der Leveldefinition:
+
+| Art | Parameter | Gefahr |
+|---|---|---|
+| `clock` | `time` | Uhr |
+| `water` | `from`, `delay`, `speed`, `gap` | Wasser steigt von unten, nie mehr als `gap` Kacheln unter einem (sonst holt es dreimal so schnell auf) |
+| `crumble` | `from`, `delay`, `speed`, `gap` | Das Ufer bricht hinter einem weg, Richtung Zuhause; Stein bleibt stehen |
+
+- **Eingeholt oder zu spät:** Die Flucht beginnt neu am Gegenstand, mit dem Level, wie es beim
+  Nehmen war.
+- **`danger()`** sagt, wie nah die Gefahr ist: Sekunden auf der Uhr oder Kacheln bis zum Wasser oder
+  zur Kante. Die Anzeige, der Herzschlag, die Vignette und das Beben hängen daran.
+- **Kamera:** Die Vorausschau ist auf 30 % der Bildbreite begrenzt. Hochkant am Handy schob sie
+  die Maus bei Höchsttempo sonst an den Bildrand.
+
+### Die drei Level
+
+| # | Level | Gegenstand | Flucht | Form |
+|---|---|---|---|---|
+| 1 | The seed sack | Samensack | Uhr, 30 s | waagerecht, 176 × 20; über die Bank hin, darunter zurück |
+| 2 | The drain | Knopf | Wasser steigt (0,27 px/f, höchstens 7 Kacheln unter einem) | senkrecht, 40 × 58; fünf Gänge übereinander |
+| 3 | The river bank | Erdbeere | Ufer bricht weg (2 px/f, höchstens 12 Kacheln hinter einem) | waagerecht, 168 × 20; über einen Kamm hin, darunter zurück |
+
+**The drain:**
+- **Aufbau:** Fünf Gänge, acht Reihen übereinander, an wechselnden Enden verbunden.
+- **Hinweg:** Man fällt durch ein Loch am Ende eines Gangs in einen Schacht und rutscht unter einer
+  hängenden Wand heraus in den nächsten Gang.
+- **Rückweg:** Dieselben Schächte, andersherum. Man rutscht unter der Wand hinein und springt
+  zwischen ihr und der Außenwand im Zickzack hoch.
+- Unterwegs liegen Kisten als Hürden.
+
+**The river bank:**
+- **Hinweg:** Man rutscht unter einem Stamm durch und springt zwischen ihm und einem Baumstumpf
+  auf einen Kamm.
+- **Rückweg:** Man läuft unter dem Kamm zurück, wo auf dem Hinweg Bretter waren, und rutscht unter
+  einem umgestürzten Stamm durch.
+
+Jedes Level hat:
+- einen goldenen Samen abseits der Linie;
+- eigene Ränge;
+- einen eigenen Bestlauf-Geist;
+- eine eigene Bot-Linie.
+
+### Die Seite
+
+- **Levelauswahl im Menü:** Rang und Bestzeit je Level. Die Siegtafel bietet „Next level“ an.
+- **Bestläufe:** Sie werden je Level mit einem Fingerabdruck aus Kern und Level gespeichert.
+  Ändert sich eines davon, verfällt nur dieser Bestlauf.
+- **Hintergründe:**
+  - Garten;
+  - Abfluss: Erde und alte Ziegel unter dem Rasen;
+  - Ufer: der Fluss in den Lücken.
+- **Wasser:** Eine steigende Wasseroberfläche mit Blasen.
+- **Die bröckelnde Kante:** ein Vorhang aus fallender Erde; Brocken fallen aus jeder Spalte.
+- **Anzeige oben in der Mitte:** Uhr, Kacheln über dem Wasser oder Kacheln vor der Kante.
+- **Geräusche:** Rauschen beim Wassereinbruch, Blubbern, wenn es nah ist, Grollen des Ufers,
+  ein heller Ton für den goldenen Samen.
+
+### Messungen (`node test/underfoot_tempo.mjs route`, einige Minuten)
+
+Je Level drei Strahlsuch-Bots:
+- **schnellste Linie:** alle Züge erlaubt;
+- **ohne Stufen:** nie schneller als Laufen;
+- **ohne Stufen, mit Pausen:** Auf dem Rückweg ist jeder fünfte Zug erzwungenes Stehenbleiben.
+  Weil jede Pause auch wieder anlaufen kostet, ist das eher 40 % als 20 % langsamer als
+  fehlerfrei.
+
+| Level | schnellste Linie | ohne Stufen | ohne Stufen, mit Pausen | Ränge S / A / B |
+|---|---|---|---|---|
+| Seed sack (Uhr 30 s) | 24,55 s (18,6 s Uhr übrig) | 37,28 s (11,5 s übrig) | 38,93 s (9,9 s übrig) | 30 / 38 / 55 |
+| Drain (Wasser) | 33,98 s (nie näher als 3,3 Kacheln) | 47,67 s (2,5 Kacheln) | 49,30 s (1,9 Kacheln) | 41 / 48 / 70 |
+| River bank (Ufer) | 23,52 s (7,5 Kacheln) | 33,52 s (7,4 Kacheln) | 34,52 s (2,9 Kacheln) | 29 / 34 / 50 |
+
+Beim Ufer gilt: Wer fehlerfrei läuft (2,5 px/f), ist schneller als die Kante (2,4 px/f) und
+verliert nie Boden. Wer stockt, verliert welchen. Mit 2,0 px/f kam selbst der Bot mit Pausen der
+Kante nie näher als sieben Kacheln, die Kante war also nur Kulisse. Deshalb ist sie jetzt
+schneller.
+
+**Regeln für Ränge und Gefahr:**
+- S liegt bei etwa dem 1,2-Fachen der schnellsten Linie.
+- A ist die Zeit ohne Stufen, aufgerundet.
+- B ist A mal 1,45.
+- Die Gefahr ist so eingestellt, dass auch der Bot mit Pausen heimkommt. Das ist die
+  Fairness-Messlatte: wer nie schneller als Laufen wird und öfter stockt, schafft es trotzdem.
+
+Die gespeicherten Linien (die Geister auf der Seite) prüft die schnelle Suite `lines` bei jedem
+Lauf: Kommt jede noch framegenau heim? Ist S damit erreichbar? Nutzt sie Stufen, Wandsprung,
+Rutschen und Käfer?
+
+### Tests: `node test/underfoot_tempo.mjs`, 91 Prüfungen, unter einer Sekunde
+
+- **`moves`:** wie bisher, dazu das Rutschen, wie ein Daumen es tut.
+- **`escape`:**
+  - je Level: Gegenstand, Heimweg, drei Ränge, eine Linie;
+  - Sack: Uhr, Falltür, Neustart, Kosten einer Grube;
+  - Wasser: wartet, steigt, holt auf, holt einen ein, beginnt neu;
+  - Ufer: bricht bis ganz unten weg, lässt Stein stehen, holt einen ein, steht wieder ganz da.
+- **`lines`:** die gespeicherten Linien.
+- **Mutationsproben:** Sieben absichtlich eingebaute Fehler an den Fluchten werden alle erkannt.
+
+### Was T1 beantworten soll, und was der Nutzer beurteilen muss
+
+Die Frage aus 16.2 war, ob „hin, nehmen, fliehen“ über mehrere Level trägt. Die drei Fluchten
+spielen sich messbar verschieden:
+- **Uhr:** eine Zahl, die drängt.
+- **Wasser:** senkrecht, man muss klettern.
+- **Ufer:** Man darf nie stehen bleiben.
+
+Ob sie sich auch verschieden *anfühlen*, und welche am meisten Lust auf mehr macht, kann nur der
+Nutzer sagen. Außerdem ist offen, ob die Kante hinter einem genug sichtbar ist. Hochkant liegt sie
+oft außerhalb des Bildes; dann sagen nur Zahl, Beben und Grollen, wie nah sie ist.

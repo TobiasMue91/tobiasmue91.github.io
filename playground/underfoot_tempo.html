@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>Underfoot — Tempo</title>
-<meta name="description" content="A prototype for Underfoot, a platformer about a mouse: run out along the garden path for the seed sack and race home underneath the bench before the clock runs out. Speed builds the longer you keep running. Keyboard, gamepad or touch.">
+<meta name="description" content="A prototype for Underfoot, a platformer about a mouse: three levels, each sending you out for something and then home again, against a clock, ahead of rising water or before the bank crumbles away. Speed builds the longer you keep running. Keyboard, gamepad or touch.">
 <style>
     :root {
         --frame: #14171d;
@@ -171,6 +171,30 @@
 
     .rank[data-rank=S] { color: #ff6b4a }
     .rank[data-rank=C] { color: var(--dim) }
+
+    .levels { display: grid; gap: 8px; margin-top: 8px }
+
+    .levels button {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        text-align: left;
+    }
+
+    .levels button span { flex: 1 }
+    .levels button small { display: block; font-weight: 400; font-size: 12.5px; color: var(--dim) }
+
+    .levels b {
+        flex: none;
+        width: 34px;
+        font: 900 22px/1 system-ui, sans-serif;
+        text-align: center;
+        color: var(--dim);
+    }
+
+    .levels b[data-rank=S] { color: #ff6b4a }
+    .levels b[data-rank=A], .levels b[data-rank=B] { color: var(--accent) }
 </style>
 </head>
 <body>
@@ -180,9 +204,13 @@
 <div id="menu" class="overlay" hidden>
     <div class="panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
         <h1 id="menu-title">Underfoot · Tempo</h1>
-        <p class="sub">A prototype. Run out to the seed sack at the far end of the garden, then home to
-            the mouse hole before the clock runs out. Keep running and you get faster, twice: fast
-            enough to burst clods and bowl beetles over. Stop, turn round or get knocked, and it is gone.</p>
+        <p class="sub">A prototype. Each level sends you out for something, and taking it turns the
+            level round: home again, against a clock, rising water or a bank that falls away behind
+            you. Keep running and you get faster, twice: fast enough to burst clods and bowl beetles
+            over. Stop, turn round or get knocked, and it is gone.</p>
+
+        <h2>Levels</h2>
+        <div class="levels" id="level-list"></div>
 
         <h2>Moves</h2>
         <p class="keys"><b>Faster</b> keep running without a stop or a turn: the trail behind you
@@ -226,7 +254,7 @@
         <div class="btns">
             <button class="primary" id="b-resume" type="button">Resume</button>
             <button id="b-restart" type="button">Restart the run</button>
-            <button id="b-forget" type="button">Forget my best</button>
+            <button id="b-forget" type="button">Forget my best here</button>
         </div>
     </div>
 </div>
@@ -239,34 +267,29 @@
         <dl class="stats" id="done-stats"></dl>
         <div class="btns">
             <button class="primary" id="b-again" type="button">Run it again</button>
-            <button id="b-settings" type="button">Settings</button>
+            <button id="b-next" type="button">Next level</button>
+            <button id="b-settings" type="button">Levels and settings</button>
         </div>
     </div>
 </div>
 
 <script id="core">
-/* Underfoot: the game's rules. No DOM here; test/underfoot.mjs runs this block in Node.
+/* Underfoot · Tempo: the game's rules. No DOM here; test/underfoot_tempo.mjs runs this block in Node.
 
-   Units: 1 px = 4096 units. Super Mario Bros. keeps horizontal speed in 1/16 px per frame
-   and changes it by multiples of 1/4096 px per frame², and keeps vertical speed as whole
-   pixels plus a 1/256 fraction. At 1/4096 px every one of its table values is an exact
-   integer, so the numbers below are the original bytes with their unit written next to
-   them. Positions are feet (bottom centre). One step is one 60 Hz frame. */
+   Units: 1 px = 4096 units, so every speed and gravity below is an exact integer. The jumps are
+   Super Mario Bros.' own tables (its bytes are kept, with their unit written next to them); the
+   running is a responsive profile with speed tiers on top. Positions are feet (bottom centre).
+   One step is one 60 Hz frame, and the same inputs always give the same run: that is what lets a
+   best run come back as a ghost. */
 const UF = (() => {
 'use strict';
 const FX = 4096, TILE = 16 * FX, VIEW_H = 15;
 
 const P = {
-    // horizontal: MaxRightXSpdData, FrictionData (speed bytes are 1/16 px/f, so x256)
     WALK_MAX: 0x18 * 256,          // 1.5 px/f
     RUN_MAX: 0x28 * 256,           // 2.5 px/f
-    ACC_WALK: 0x98,                // 0.0371 px/f²
-    ACC_RUN: 0xE4,                 // 0.0557 px/f²
-    DEC_FAST: 0xD0,                // 0.0508 px/f², used while faster than walking
-    MIN_WALK: 0x130,               // first step from a standstill, 0.074 px/f
-    SKID_TURN: 0x0B * 256,         // skidding below 0.69 px/f turns you round (ProcSkid)
-    RUN_TIMER: 10,                 // frames run speed stays allowed after B is let go
-    AIR_FAST: 0x19 * 256,          // in the air at or above 1.56 px/f: running limits
+    RUN_TIMER: 10,                 // frames running stays allowed after the run button is let go
+    AIR_FAST: 0x19 * 256,          // taking off at or above 1.56 px/f keeps that speed in the air
     // vertical: PlayerYSpdData, JumpMForceData, FallMForceData, chosen by take-off speed.
     // Gravity bytes are 1/256 px/f², so x16. [take-off speed below, v0, rising, otherwise]
     JUMP_ROWS: [
@@ -274,18 +297,16 @@ const P = {
         [0x19 * 256, 4 * FX, 0x1E * 16, 0x60 * 16],
         [Infinity, 5 * FX, 0x28 * 16, 0x90 * 16],
     ],
-    MAX_FALL: 4.5 * FX,            // 4.5 px/f
-    BONK_VY: 1 * FX,               // head hits a block: 1 px/f downward at once (NYSpd)
-    STOMP_VY: 4 * FX,              // bouncing off an enemy (SBnce: lda #$fc)
+    MAX_FALL: 4.5 * FX,
+    BONK_VY: 1 * FX,               // head hits a block: 1 px/f downward at once
+    STOMP_VY: 4 * FX,              // bouncing off a creature
     // the fairness layer (all switchable, see assist)
     COYOTE: 6,                     // frames after leaving a ledge that a jump still counts
-    BUFFER: 6,                     // frames a jump pressed before landing is kept
+    BUFFER: 6,                     // frames a jump pressed early is kept, for ground or a wall
     CORNER: 4 * FX,                // head overlap a block corner may be slid past
-    // bodies
-    W: 12 * FX, H_SMALL: 14 * FX, H_BIG: 28 * FX,
-    POLE_SLIDE: 2 * FX,
-    FALL_OUT: 3 * TILE,            // this far below the level bottom is a death
-    INVULNERABLE: 120,             // frames of blinking after being hit while big
+    // the mouse: two tiles tall, one when ducking or sliding
+    W: 12 * FX, H: 28 * FX, H_DUCK: 14 * FX,
+    FALL_OUT: 3 * TILE,            // this far below the level bottom is a fall
     // tempo: hold a run long enough at full speed and it steps up, twice
     TIERS: [0x28 * 256, 3.25 * FX, 4 * FX],   // run, dash, blaze (px/f)
     CHARGE: 45,                    // frames at a tier's top speed before the next
@@ -293,92 +314,92 @@ const P = {
     WALL_SLIDE: 1.5 * FX,          // pressed against a wall, you slide no faster than this
     WALL_GRACE: 6,                 // frames after leaving a wall that a kick still counts
     KICK_VY: 4.5 * FX,
-    SLIDE: 40,                     // frames a slide keeps its speed
-    SLIDE_MIN: 2 * FX,             // how fast you must be going to slide rather than duck
-    CRAWL: 0.75 * FX,              // ducking with a direction held, or out of slide under a ceiling
     KICK_LOCK: 10,                 // frames after a kick that the stick cannot pull you back
+    SLIDE: 40,                     // frames a slide lasts at least; longer while down is held
+    SLIDE_MIN: 2 * FX,             // how fast you must be going to slide rather than duck
+    CRAWL: 0.75 * FX,              // ducking with a direction held
     STUN: 24,                      // frames without control after a crash or a knock
+    INVULNERABLE: 60,              // frames after a knock that nothing else can knock you
     COMBO_TIME: 180,               // frames a combo waits for the next hit
-    FALL_COST: 180,                // frames a fall into a pit takes off the escape clock
+    FALL_COST: 180,                // frames a fall into a pit takes off an escape clock
 };
 
-// How horizontal speed changes. 'classic' is the ROM's tables above: a slow build-up and
-// long skids. 'snappy' is the default: speed moves towards where the stick points at a
-// fixed rate, fast enough to feel direct, on the ground and in the air.
-const FEEL = {
-    snappy: {
-        ACC: 0.5 * FX,             // standstill to walking speed in 3 frames
-        RUN_ACC: 0.125 * FX,       // walking to running speed in 8 more
-        STOP: 0.5 * FX,            // let go: walking stops in 3 frames, running in 5
-        TURN: 0.75 * FX,           // pressing against the motion: a walk turns round in 5 frames
-        OVER: 0.125 * FX,          // run let go: back down to walking speed in 8
-        AIR_ACC: 0.5 * FX,         // in the air, as direct as on the ground
-        AIR_DRAG: 0.125 * FX,      // in the air with no direction: eases off, never stops dead
-    },
+// How speed follows the stick: fast enough to feel direct, on the ground and in the air.
+const MOVE = {
+    ACC: 0.5 * FX,                 // standstill to walking speed in 3 frames
+    RUN_ACC: 0.125 * FX,           // walking to running speed in 8 more
+    STOP: 0.5 * FX,                // let go: walking stops in 3 frames, running in 5
+    TURN: 0.75 * FX,               // pressing against the motion
+    OVER: 0.125 * FX,              // faster than allowed: back down at this rate
+    AIR_ACC: 0.5 * FX,             // in the air, as direct as on the ground
+    AIR_DRAG: 0.125 * FX,          // in the air with no direction: eases off, never stops dead
 };
 
-// creatures and things
+// creatures
 const E = {
-    WALK: 0.5 * FX,                // beetles and snails, like the goomba's 0x08
-    SHELL: 3 * FX,                 // a kicked shell outruns a running player
-    BERRY: 1 * FX,                 // a rolling strawberry, like the mushroom's 0x10
+    WALK: 0.5 * FX,                // beetles and snails
+    SHELL: 3 * FX,                 // a kicked shell outruns a running mouse
     GRAV: 0.375 * FX,
     MAX_FALL: 4 * FX,
-    ACTIVE: 16 * TILE,             // things wake when the player comes this close
-    GONE: 32 * TILE,               // and are dropped once this far behind
+    ACTIVE: 16 * TILE,             // things wake when the mouse comes this close
+    GONE: 32 * TILE,               // and are dropped once this far away
     WAKE: 420,                     // frames an empty shell lies still before the snail comes out
     KICK_GRACE: 12,                // frames a just-kicked shell cannot hurt its kicker
-    SIZE: {beetle: [14, 12], snail: [14, 18], shell: [14, 13], berry: [12, 12]},
+    SIZE: {beetle: [14, 12], snail: [14, 18], shell: [14, 13]},
 };
 
 // input bits
 const IN = {L: 1, R: 2, U: 4, D: 8, J: 16, B: 32};
 
 // tiles
-const T = {EMPTY: 0, GROUND: 1, GRASS: 2, STONE: 3, QBLOCK: 4, USED: 5, BRICK: 6, ONEWAY: 7,
-    PIPE_TL: 8, PIPE_TR: 9, PIPE_L: 10, PIPE_R: 11, SEED: 12, POLE: 13, WALL: 14, BERRY: 15,
-    GOLD: 16, ESC_ON: 17, ESC_OFF: 18, BAG: 19, HOME: 20, WOOD: 21};
-const CHAR = {'.': T.EMPTY, '#': T.GROUND, '=': T.GRASS, 'X': T.STONE, '?': T.QBLOCK, 'U': T.USED,
-    'B': T.BRICK, '-': T.ONEWAY, '(': T.PIPE_TL, ')': T.PIPE_TR, '[': T.PIPE_L, ']': T.PIPE_R,
-    'o': T.SEED, '*': T.BERRY, 'G': T.GOLD, 'e': T.ESC_ON, 'n': T.ESC_OFF, 'Q': T.BAG, 'H': T.HOME, 'W': T.WOOD};
+const T = {EMPTY: 0, GROUND: 1, GRASS: 2, STONE: 3, BRICK: 4, ONEWAY: 5, SEED: 6, GOLD: 7, WALL: 8,
+    WOOD: 9, ESC_ON: 10, ESC_OFF: 11, ITEM: 12, HOME: 13};
+const CHAR = {'.': T.EMPTY, '#': T.GROUND, '=': T.GRASS, 'X': T.STONE, 'B': T.BRICK, '-': T.ONEWAY,
+    'o': T.SEED, 'G': T.GOLD, 'W': T.WOOD, 'e': T.ESC_ON, 'n': T.ESC_OFF, 'Q': T.ITEM, 'H': T.HOME};
 const SPAWN = {b: {kind: 'beetle'}, s: {kind: 'snail', red: false}, r: {kind: 'snail', red: true}};
-const SOLID = new Uint8Array(32);
-for (const t of [T.GROUND, T.GRASS, T.STONE, T.QBLOCK, T.USED, T.BRICK, T.PIPE_TL, T.PIPE_TR,
-    T.PIPE_L, T.PIPE_R, T.WALL, T.BERRY, T.WOOD]) SOLID[t] = 1;
+const SOLID = new Uint8Array(16);
+for (const t of [T.GROUND, T.GRASS, T.STONE, T.BRICK, T.WALL, T.WOOD]) SOLID[t] = 1;
+// what a crumbling bank takes with it: everything but stone and the way home
+const CRUMBLES = new Uint8Array(16);
+for (const t of [T.GROUND, T.GRASS, T.BRICK, T.WOOD, T.ONEWAY, T.SEED, T.GOLD, T.ESC_ON, T.ESC_OFF]) CRUMBLES[t] = 1;
 
 const fdiv = (a, b) => Math.floor(a / b);
 const sign = v => v > 0 ? 1 : v < 0 ? -1 : 0;
 const approach = (v, target, rate) => v < target ? Math.min(target, v + rate) : Math.max(target, v - rate);
 
 /* ---------------- levels ---------------- */
+// An escape is how the way home is made hard:
+//   {kind: 'clock', time}                   seconds to get home
+//   {kind: 'water', from, delay, speed, gap}     water rises, starting `from` tiles below the
+//                                                item, `delay` frames after it is taken, at
+//                                                `speed` px/f, never more than `gap` tiles below you
+//   {kind: 'crumble', from, delay, speed, gap}   the ground falls away behind you, towards home
 function parseLevel(def) {
     const rows = def.rows, h = rows.length, w = rows[0].length;
     const tiles = new Uint8Array(w * h);
-    let start = null, flag = null, golds = 0;
-    const checkpoints = [], spawns = [];
+    let start = null, item = null, home = null, golds = 0;
+    const spawns = [];
     for (let y = 0; y < h; y++) {
         if (rows[y].length !== w) throw new Error(`row ${y} is ${rows[y].length} wide, not ${w}`);
         for (let x = 0; x < w; x++) {
             const c = rows[y][x];
             if (c === '@') start = {tx: x, ty: y};
-            else if (c === '!') checkpoints.push({tx: x, ty: y});
-            else if (c === 'F') flag = {tx: x, top: y};
             else if (c in SPAWN) spawns.push(Object.assign({tx: x, ty: y}, SPAWN[c]));
-            else if (c in CHAR) { tiles[y * w + x] = CHAR[c]; if (c === 'G') golds++; }
-            else throw new Error(`unknown tile '${c}' at ${x},${y}`);
+            else if (c in CHAR) {
+                tiles[y * w + x] = CHAR[c];
+                if (c === 'G') golds++;
+                if (c === 'Q' && !item) item = {tx: x, ty: y};
+                if (c === 'H' && !home) home = {tx: x, ty: y};
+            } else throw new Error(`unknown tile '${c}' at ${x},${y}`);
         }
     }
     if (!start) throw new Error('level has no start (@)');
-    if (!flag) flag = {tx: -1, top: 0, base: 0};
-    if (flag.tx >= 0) {
-        let b = flag.top;
-        while (b < h && !SOLID[tiles[b * w + flag.tx]]) tiles[b++ * w + flag.tx] = T.POLE;
-        flag.base = b;                       // the row the pole stands on
-    }
-    checkpoints.sort((a, b) => a.tx - b.tx);
-    return {id: def.id, name: def.name, w, h, tiles, orig: tiles.slice(), start, flag, golds,
-        checkpoints, spawns, labels: def.labels || [], idea: def.idea || '', escape: false,
-        escapeTime: def.escapeTime || 60, ranks: def.ranks || null};
+    const escape = Object.assign({kind: 'clock', time: 60, from: 4, delay: 0, speed: 0, gap: 8}, def.escape);
+    // which way home lies from the item: the crumbling runs that way
+    escape.dir = item && home ? sign(home.tx - item.tx) || -1 : -1;
+    return {id: def.id, name: def.name, w, h, tiles, orig: tiles.slice(), start, item, home, golds,
+        spawns, labels: def.labels || [], idea: def.idea || '', escape, ranks: def.ranks || null,
+        on: false};
 }
 
 function tileAt(L, tx, ty) {
@@ -387,16 +408,16 @@ function tileAt(L, tx, ty) {
     return L.tiles[ty * L.w + tx];
 }
 // solid tiles, including the ones the escape adds ('e') and takes away ('n')
-const isSolid = (L, t) => SOLID[t] === 1 || (t === T.ESC_ON && L.escape) || (t === T.ESC_OFF && !L.escape);
+const isSolid = (L, t) => SOLID[t] === 1 || (t === T.ESC_ON && L.on) || (t === T.ESC_OFF && !L.on);
 const solidAt = (L, tx, ty) => isSolid(L, tileAt(L, tx, ty));
 
 /* ---------------- state ---------------- */
-function newPlayer(x, y, big) {
-    return {x, y, vx: 0, vy: 0, w: P.W, h: big ? P.H_BIG : P.H_SMALL, big: !!big, duck: false,
+function newPlayer(x, y) {
+    return {x, y, vx: 0, vy: 0, w: P.W, h: P.H, duck: false,
         onGround: true, facing: 1, runTimer: 0, air: 0, jumped: false, fall: true,
         gUp: 0, gDown: P.JUMP_ROWS[0][3], row: 0, jumpY: y, jumpX: x, buffer: 0, airMax: P.WALK_MAX,
         skid: false, mode: 'play', modeT: 0, peak: y, lastJump: null, lastVy: 0, inv: 0,
-        chain: 0, hop: false, tier: 0, charge: 0, wall: 0, wallT: 0, slide: 0, stun: 0,
+        chain: 0, tier: 0, charge: 0, wall: 0, wallT: 0, slide: 0, stun: 0,
         combo: 0, comboT: 0, touchWall: false, kickT: 0};
 }
 
@@ -412,20 +433,18 @@ function spawnAll(L) {
 function newGame(def, opts = {}) {
     const level = def.tiles ? def : parseLevel(def);
     level.tiles.set(level.orig);
+    level.on = false;
     const sx = level.start.tx * TILE + TILE / 2, sy = (level.start.ty + 1) * TILE;
-    level.escape = false;
     const s = {
         level, frame: 0, time: 0, seeds: 0, deaths: 0, events: [], prevHeld: 0,
-        escape: false, escapeT: 0, bag: null, bagTime: 0, score: 0, bestCombo: 0, safe: null,
-        feel: opts.feel || 'snappy',
+        escape: false, escapeT: 0, chase: null, item: null, itemTime: 0,
+        score: 0, bestCombo: 0, safe: null, start: {x: sx, y: sy},
         assist: Object.assign({coyote: true, buffer: true, corner: true}, opts.assist),
-        checkpoint: {x: sx, y: sy, i: -1},
-        p: newPlayer(sx, sy, opts.big !== false),
+        p: newPlayer(sx, sy),
         ents: spawnAll(level), nextId: level.spawns.length, goldGot: [],
         viewW: opts.viewW || 16,
         cam: {x: 0, y: 0, look: 0, dir: 1, ref: sy},
     };
-    s.snap = {tiles: level.tiles.slice(), seeds: 0, goldGot: []};
     snapCamera(s);
     return s;
 }
@@ -522,43 +541,25 @@ function supported(L, p) {
     return false;
 }
 
+// a head hitting a block from below: a clod breaks, and whatever sits on top is knocked off
 function strike(s, p, tx, ty) {
     const L = s.level, t = tileAt(L, tx, ty);
     event(s, 'bump', {tx, ty, tile: t});
-    if (t === T.QBLOCK || (t === T.BERRY && p.big)) {
-        L.tiles[ty * L.w + tx] = T.USED;
-        s.seeds++;
-        event(s, 'seed', {tx, ty: ty - 1, pop: true});
-    } else if (t === T.BERRY) {
-        L.tiles[ty * L.w + tx] = T.USED;
-        const e = addEnt(s, 'berry', tx * TILE + TILE / 2, (ty + 1) * TILE);
-        e.state = 'rise';
-        e.dir = 1;
-        e.active = true;
-        event(s, 'sprout', {tx, ty});
-    } else if (t === T.BRICK && p.big) {
+    if (t === T.BRICK) {
         L.tiles[ty * L.w + tx] = T.EMPTY;
         event(s, 'break', {tx, ty});
     }
-    // a seed sitting on the struck block is knocked up and collected
     if (tileAt(L, tx, ty - 1) === T.SEED) {
         L.tiles[(ty - 1) * L.w + tx] = T.EMPTY;
         s.seeds++;
         event(s, 'seed', {tx, ty: ty - 1, pop: true});
     }
-    // and whatever stands on it is knocked off: enemies for good, a strawberry into a hop
     const l = tx * TILE, r = l + TILE;
     for (const e of s.ents) {
-        if (!e.active || e.gone || !e.onGround || e.y !== ty * TILE) continue;
+        if (!e.active || e.gone || !e.onGround || e.y !== ty * TILE || e.state === 'flip') continue;
         if (e.x + e.w / 2 <= l || e.x - e.w / 2 >= r) continue;
-        if (e.kind === 'berry') {
-            e.vy = -3 * FX;
-            e.onGround = false;
-            e.dir = e.x < p.x ? -1 : 1;
-        } else if (e.state !== 'flip') {
-            flip(s, e, e.x < p.x ? -1 : 1);
-            event(s, 'knock', {id: e.id, kind: e.kind});
-        }
+        flip(s, e, e.x < p.x ? -1 : 1);
+        event(s, 'knock', {id: e.id, kind: e.kind});
     }
 }
 
@@ -566,11 +567,18 @@ function event(s, type, data) {
     s.events.push(Object.assign({type, frame: s.frame}, data));
 }
 
-/* ---------------- the player ---------------- */
+/* ---------------- the mouse ---------------- */
 function jumpRow(vx) {
     const a = Math.abs(vx);
     for (let i = 0; i < P.JUMP_ROWS.length; i++) if (a < P.JUMP_ROWS[i][0]) return i;
     return P.JUMP_ROWS.length - 1;
+}
+
+// how fast you may go in the air: what you took off with, but never more than your tier allows,
+// so speed without the tier behind it (a slide, a crash) is not kept by hopping
+function airCap(p) {
+    const a = Math.abs(p.vx);
+    return a >= P.AIR_FAST ? Math.max(P.RUN_MAX, Math.min(a, P.TIERS[p.tier])) : P.WALK_MAX;
 }
 
 function startJump(s, p, early) {
@@ -591,69 +599,40 @@ function startJump(s, p, early) {
     // a jump out of a slide stands you up, if there is room
     if (p.slide) {
         p.slide = 0;
-        if (!overlaps(s.level, p.x, p.y, p.w, P.H_BIG)) { p.duck = false; p.h = P.H_BIG; }
+        if (!overlaps(s.level, p.x, p.y, p.w, P.H)) { p.duck = false; p.h = P.H; }
     }
 }
 
-// how fast you may go in the air: what you took off with, but never more than your tier allows,
-// so speed without the tier behind it (a slide, a crash) is not kept by hopping
-function airCap(p) {
-    const a = Math.abs(p.vx);
-    return a >= P.AIR_FAST ? Math.max(P.RUN_MAX, Math.min(a, P.TIERS[p.tier])) : P.WALK_MAX;
-}
-
-function groundClassic(p, dir, running) {
+// on the ground: full speed held long enough steps up a tier
+function ground(s, p, dir, running, down) {
     const a = Math.abs(p.vx), moving = sign(p.vx);
-    p.skid = false;
-    if (dir && !p.duck) {
-        const max = running ? P.RUN_MAX : P.WALK_MAX;
-        if (moving === 0 || moving === dir) {
-            let v;
-            if (a > max) v = Math.max(max, a - P.DEC_FAST);          // let go of run
-            else v = Math.min(max, Math.max(P.MIN_WALK, a + (running ? P.ACC_RUN : P.ACC_WALK)));
-            p.vx = dir * v;
-        } else {
-            // pressing against the motion: skid at twice the braking rate, turn when slow
-            const v = a - 2 * (a > P.WALK_MAX ? P.DEC_FAST : P.ACC_WALK);
-            if (v < P.SKID_TURN) p.vx = 0;
-            else { p.vx = moving * v; p.skid = true; }
-        }
-    } else {
-        const v = Math.max(0, a - (a > P.WALK_MAX ? P.DEC_FAST : P.ACC_WALK));
-        p.vx = moving * v;
-    }
-}
-
-// the responsive feel with tempo on top: full speed held long enough steps up a tier
-function groundTempo(s, p, dir, running, down) {
-    const F = FEEL.snappy, a = Math.abs(p.vx), moving = sign(p.vx);
     const cap = running ? P.TIERS[p.tier] : P.WALK_MAX;
     p.skid = false;
-    if (p.stun > 0) { p.vx = approach(p.vx, 0, F.STOP / 2); return; }
+    if (p.stun > 0) { p.vx = approach(p.vx, 0, MOVE.STOP / 2); return; }
     if (p.duck) {
         // a slide keeps its speed and its tier: at least SLIDE frames, and on for as long as
         // down is held or there is no room to stand up
         if (p.slide > 0 && a >= P.CRAWL) {
-            if (p.slide > 1 || (!down && !overlaps(s.level, p.x, p.y, p.w, P.H_BIG))) p.slide--;
+            if (p.slide > 1 || (!down && !overlaps(s.level, p.x, p.y, p.w, P.H))) p.slide--;
             return;
         }
         p.slide = 0;
         p.tier = 0;
         p.charge = 0;
-        p.vx = approach(p.vx, dir * P.CRAWL, F.STOP);       // crawl, or stop
+        p.vx = approach(p.vx, dir * P.CRAWL, MOVE.STOP);    // crawl, or stop
         return;
     }
-    if (!dir) { p.vx = approach(p.vx, 0, F.STOP); p.tier = 0; p.charge = 0; return; }
+    if (!dir) { p.vx = approach(p.vx, 0, MOVE.STOP); p.tier = 0; p.charge = 0; return; }
     if (moving === -dir) {
-        p.vx = approach(p.vx, dir * cap, F.TURN);
+        p.vx = approach(p.vx, dir * cap, MOVE.TURN);
         p.skid = a > P.WALK_MAX / 2;
         p.tier = 0;
         p.charge = 0;
         return;
     }
-    if (a > cap) p.vx = dir * Math.max(cap, a - F.OVER);
-    else if (a < P.WALK_MAX) p.vx = dir * Math.min(P.WALK_MAX, a + F.ACC);
-    else p.vx = dir * Math.min(cap, a + (a < P.RUN_MAX ? F.RUN_ACC : P.TIER_ACC));
+    if (a > cap) p.vx = dir * Math.max(cap, a - MOVE.OVER);
+    else if (a < P.WALK_MAX) p.vx = dir * Math.min(P.WALK_MAX, a + MOVE.ACC);
+    else p.vx = dir * Math.min(cap, a + (a < P.RUN_MAX ? MOVE.RUN_ACC : P.TIER_ACC));
     if (!running) { p.tier = 0; p.charge = 0; return; }
     if (Math.abs(p.vx) >= cap && p.tier < 2 && ++p.charge >= P.CHARGE) {
         p.tier++;
@@ -662,76 +641,43 @@ function groundTempo(s, p, dir, running, down) {
     }
 }
 
-function airTempo(p, dir) {
-    const F = FEEL.snappy;
+function air(p, dir) {
     if (p.kickT > 0 || p.stun > 0) return;                  // just kicked off a wall, or thrown
-    if (!dir) { p.vx = approach(p.vx, 0, F.AIR_DRAG); return; }
+    if (!dir) { p.vx = approach(p.vx, 0, MOVE.AIR_DRAG); return; }
     if (sign(p.vx) === -dir && p.tier) { p.tier = 0; p.charge = 0; p.airMax = Math.min(p.airMax, P.RUN_MAX); }
-    p.vx = approach(p.vx, dir * p.airMax, F.AIR_ACC);
-}
-
-function groundSnappy(p, dir, running) {
-    const F = FEEL.snappy, a = Math.abs(p.vx), moving = sign(p.vx);
-    const max = running ? P.RUN_MAX : P.WALK_MAX;
-    p.skid = false;
-    if (!dir || p.duck) p.vx = approach(p.vx, 0, F.STOP);
-    else if (moving === -dir) {
-        p.vx = approach(p.vx, dir * max, F.TURN);
-        p.skid = a > P.WALK_MAX / 2;
-    } else if (a > max) p.vx = dir * Math.max(max, a - F.OVER);
-    else if (a < P.WALK_MAX) p.vx = dir * Math.min(P.WALK_MAX, a + F.ACC);
-    else p.vx = dir * Math.min(max, a + F.RUN_ACC);
-}
-
-function airClassic(p, dir) {
-    if (!dir) return;                       // no drag in the air: momentum is kept
-    const fast = Math.abs(p.vx) >= P.AIR_FAST;
-    const max = fast ? P.RUN_MAX : P.WALK_MAX;
-    let v = p.vx + dir * (fast ? P.ACC_RUN : P.ACC_WALK);
-    if (dir > 0 && v > max) v = Math.max(p.vx, max);
-    if (dir < 0 && v < -max) v = Math.min(p.vx, -max);
-    p.vx = v;
-}
-
-function airSnappy(p, dir) {
-    const F = FEEL.snappy;
-    if (!dir) p.vx = approach(p.vx, 0, F.AIR_DRAG);
-    else p.vx = approach(p.vx, dir * p.airMax, F.AIR_ACC);
+    p.vx = approach(p.vx, dir * p.airMax, MOVE.AIR_ACC);
 }
 
 function step(s, input = {h: 0, p: 0}) {
     s.events.length = 0;
     const p = s.p, L = s.level;
-    let held = input.h | 0, pressed = (input.p | 0) | (held & ~s.prevHeld);
+    const held = input.h | 0;
+    let pressed = (input.p | 0) | (held & ~s.prevHeld);
     s.prevHeld = held;
     s.frame++;
 
-    if (p.mode === 'dead' || p.mode === 'pole' || p.mode === 'clear') {
-        stepMode(s, p);
+    if (p.mode === 'clear') {
+        p.modeT++;
         updateCamera(s);
         return s;
     }
-    if (p.mode === 'walk') { held = IN.R; pressed = 0; }      // off the pole and away
-    else s.time++;
+    s.time++;
     if (p.inv > 0) p.inv--;
     if (p.stun > 0) { p.stun--; pressed &= ~IN.J; }
     if (p.kickT > 0) p.kickT--;
     if (p.comboT > 0 && --p.comboT === 0) { event(s, 'comboEnd', {n: p.combo}); p.combo = 0; }
-    if (s.escape && --s.escapeT <= 0) { late(s); updateCamera(s); return s; }
+    if (s.escape && stepEscape(s)) { updateCamera(s); return s; }
 
     const dir = (held & IN.R ? 1 : 0) - (held & IN.L ? 1 : 0);
-    const classic = s.feel === 'classic';
 
-    // ducking (big only): kept through a jump, dropped on the ground once there is room
-    if (p.big) {
-        if (p.onGround) {
-            if (held & IN.D && !p.duck && Math.abs(p.vx) >= P.SLIDE_MIN) { p.slide = P.SLIDE; event(s, 'slide', {}); }
-            // a slide, once started, runs its course whether or not down is still held
-            if (held & IN.D) p.duck = true;
-            else if (p.duck && !p.slide && !overlaps(L, p.x, p.y, p.w, P.H_BIG)) p.duck = false;
-        }
-        p.h = p.duck ? P.H_SMALL : P.H_BIG;
+    // ducking and sliding: decided on the ground, kept through a jump
+    if (p.onGround) {
+        if (held & IN.D && !p.duck && Math.abs(p.vx) >= P.SLIDE_MIN) { p.slide = P.SLIDE; event(s, 'slide', {}); }
+        // a slide, once started, runs its course whether or not down is still held
+        if (held & IN.D) p.duck = true;
+        else if (p.duck && !p.slide && !overlaps(L, p.x, p.y, p.w, P.H)) p.duck = false;
     }
+    p.h = p.duck ? P.H_DUCK : P.H;
 
     // jump: a press may come up to BUFFER frames before the jump it makes, and a jump may
     // come up to COYOTE frames after the last frame with ground underfoot
@@ -743,8 +689,8 @@ function step(s, input = {h: 0, p: 0}) {
     if (held & IN.B) p.runTimer = P.RUN_TIMER;
     else if (p.runTimer > 0) p.runTimer--;
     if (dir && !(p.onGround && p.duck)) p.facing = dir;
-    if (p.onGround) groundTempo(s, p, dir, p.runTimer > 0, held & IN.D);
-    else airTempo(p, dir);
+    if (p.onGround) ground(s, p, dir, p.runTimer > 0, held & IN.D);
+    else air(p, dir);
 
     // against a wall in the air: slide down it, and a jump kicks off it with the tier kept
     p.touchWall = false;
@@ -796,10 +742,7 @@ function step(s, input = {h: 0, p: 0}) {
         p.vy = -2.5 * FX;
         p.onGround = false;
         p.jumped = true;
-        p.duck = false;
         p.slide = 0;
-        p.h = p.big ? P.H_BIG : P.H_SMALL;
-        if (overlaps(L, p.x, p.y, p.w, p.h)) { p.duck = true; p.h = P.H_SMALL; }
         p.fall = true;
         p.gDown = P.JUMP_ROWS[0][3];
         p.tier = 0;
@@ -833,17 +776,11 @@ function step(s, input = {h: 0, p: 0}) {
     }
     if (wasGround && !p.onGround && !p.jumped) event(s, 'ledge', {});
 
-    if (p.mode === 'play') {
-        stepEnts(s);
-        touchEnts(s, p, prevY, held);
-    }
+    stepEnts(s);
+    touchEnts(s, p, prevY, held);
     pickups(s, p);
     if (s.p === p && p.mode === 'play' && p.onGround && supported(L, p)) s.safe = {x: p.x, y: p.y, facing: p.facing};
     if (p.y - p.h > L.h * TILE + P.FALL_OUT) fell(s);
-    if (p.mode === 'walk' && ++p.modeT >= 100) {
-        p.mode = 'clear';
-        event(s, 'clear', {time: s.time});
-    }
     updateCamera(s);
     return s;
 }
@@ -871,46 +808,119 @@ function pickups(s, p) {
                 L.tiles[ty * L.w + tx] = T.EMPTY;
                 s.seeds++;
                 event(s, 'seed', {tx, ty});
-            } else if (t === T.BAG && !s.escape) {
-                L.tiles[ty * L.w + tx] = T.EMPTY;
-                s.escape = true;
-                L.escape = true;
-                s.escapeT = L.escapeTime * 60;
-                s.bag = {x: tx * TILE + TILE / 2, y: (ty + 1) * TILE};
-                s.bagTime = s.time;
-                s.ents = spawnAll(L);
-                s.nextId = L.spawns.length;
-                s.snapEscape = {tiles: L.tiles.slice(), seeds: s.seeds};
-                event(s, 'escape', {time: s.time});
-            } else if (t === T.HOME && s.escape && p.mode === 'play') {
-                p.mode = 'clear';
-                p.vx = 0;
-                event(s, 'clear', {time: s.time, escape: s.time - s.bagTime});
             } else if (t === T.GOLD) {
                 L.tiles[ty * L.w + tx] = T.EMPTY;
                 s.goldGot.push(ty * L.w + tx);
                 event(s, 'gold', {tx, ty, n: s.goldGot.length});
-            } else if (t === T.POLE && p.mode === 'play') {
-                p.mode = 'pole';
-                p.modeT = 0;
-                p.vx = p.vy = 0;
-                p.x = tx * TILE + TILE / 2 - p.w / 2 - FX;
-                const f = L.flag;
-                const grab = 1 - (p.y / TILE - f.top) / (f.base - f.top);
-                event(s, 'pole', {grab: Math.max(0, Math.min(1, grab)), time: s.time});
+            } else if (t === T.ITEM && !s.escape) {
+                L.tiles[ty * L.w + tx] = T.EMPTY;
+                startEscape(s, tx, ty);
+            } else if (t === T.HOME && s.escape && p.mode === 'play') {
+                p.mode = 'clear';
+                p.vx = 0;
+                event(s, 'clear', {time: s.time, escape: s.time - s.itemTime});
             }
         }
-    for (let i = 0; i < L.checkpoints.length; i++) {
-        const c = L.checkpoints[i];
-        if (i > s.checkpoint.i && p.x >= c.tx * TILE && p.mode === 'play') {
-            s.checkpoint = {x: c.tx * TILE + TILE / 2, y: (c.ty + 1) * TILE, i};
-            s.snap = {tiles: L.tiles.slice(), seeds: s.seeds, goldGot: s.goldGot.slice()};
-            event(s, 'checkpoint', {i});
-        }
-    }
 }
 
-// in Tempo a hit never kills: it throws you back, and costs the tier and the combo
+/* ---------------- the escape ---------------- */
+// Taking the item turns the level round: 'n' tiles give way, 'e' tiles are there, every
+// creature is back, and the clock or the chase starts.
+function startEscape(s, tx, ty) {
+    const L = s.level, X = L.escape;
+    s.escape = true;
+    L.on = true;
+    s.item = {x: tx * TILE + TILE / 2, y: (ty + 1) * TILE};
+    s.itemTime = s.time;
+    s.ents = spawnAll(L);
+    s.nextId = L.spawns.length;
+    s.snapEscape = {tiles: L.tiles.slice(), seeds: s.seeds, goldGot: s.goldGot.slice()};
+    resetEscape(s);
+    event(s, 'escape', {time: s.time, kind: X.kind});
+}
+
+function resetEscape(s) {
+    const X = s.level.escape;
+    s.escapeT = X.kind === 'clock' ? X.time * 60 : 0;
+    s.chase = null;
+    if (X.kind === 'water') s.chase = {pos: s.item.y + X.from * TILE, wait: X.delay};
+    if (X.kind === 'crumble') s.chase = {pos: s.item.x - X.dir * X.from * TILE, wait: X.delay};
+}
+
+// one frame of the escape; true if it ended the frame (caught, or out of time)
+function stepEscape(s) {
+    const X = s.level.escape, p = s.p, L = s.level;
+    if (X.kind === 'clock') {
+        if (--s.escapeT <= 0) { late(s, 'time'); return true; }
+        return false;
+    }
+    s.escapeT++;
+    const c = s.chase;
+    if (c.wait > 0) { c.wait--; return false; }
+    const speed = Math.round(X.speed * FX), far = X.gap * TILE;
+    if (X.kind === 'water') {
+        // the surface rises; if you have climbed far ahead of it, it catches up three times as fast
+        c.pos -= p.y + far < c.pos ? 3 * speed : speed;
+        if (c.pos < p.y - p.h / 2) { late(s, 'water'); return true; }
+    } else {
+        // the edge of the crumbling runs towards home; every column it passes falls away
+        const d = X.dir, back = p.x - d * p.w / 2;
+        const before = c.pos;
+        c.pos += d * ((back - c.pos) * d > far ? 3 * speed : speed);
+        const tx0 = fdiv(Math.min(before, c.pos), TILE), tx1 = fdiv(Math.max(before, c.pos), TILE);
+        for (let tx = Math.max(0, tx0); tx <= Math.min(L.w - 1, tx1); tx++) {
+            if ((tx * TILE + TILE / 2 - c.pos) * d > 0) continue;     // not yet past this column's middle
+            let fell = 0;
+            for (let ty = 0; ty < L.h; ty++) {
+                const i = ty * L.w + tx;
+                if (CRUMBLES[L.tiles[i]]) { L.tiles[i] = T.EMPTY; fell++; }
+            }
+            if (fell) event(s, 'crumble', {tx});
+        }
+        if ((c.pos - back) * d >= 0) { late(s, 'crumble'); return true; }
+    }
+    return false;
+}
+
+// how close the danger is: seconds left on a clock, tiles between you and the water or the edge
+function danger(s) {
+    if (!s.escape) return null;
+    const X = s.level.escape, p = s.p;
+    if (X.kind === 'clock') return s.escapeT / 60;
+    if (X.kind === 'water') return (s.chase.pos - (p.y - p.h / 2)) / TILE;
+    return (p.x - X.dir * p.w / 2 - s.chase.pos) * X.dir / TILE;
+}
+
+// caught, or out of time: start the escape again from the item, with the level as it was then
+function late(s, why) {
+    const L = s.level;
+    L.tiles.set(s.snapEscape.tiles);
+    s.seeds = s.snapEscape.seeds;
+    s.goldGot = s.snapEscape.goldGot.slice();
+    s.ents = spawnAll(L);
+    s.nextId = L.spawns.length;
+    s.p = newPlayer(s.item.x, s.item.y);
+    s.p.facing = L.escape.dir;
+    s.safe = null;
+    s.deaths++;
+    resetEscape(s);
+    snapCamera(s);
+    event(s, 'late', {why});
+}
+
+// into a pit: back on the last ground you stood on, a little later. Nothing is lost but time.
+function fell(s) {
+    const q = s.safe || s.start;
+    s.deaths++;
+    if (s.escape && s.level.escape.kind === 'clock' && (s.escapeT -= P.FALL_COST) <= 0) { late(s, 'time'); return; }
+    const p = s.p = newPlayer(q.x, q.y);
+    p.facing = q.facing || 1;
+    p.inv = P.INVULNERABLE;
+    snapCamera(s);
+    event(s, 'fell', {cost: s.escape && s.level.escape.kind === 'clock' ? P.FALL_COST : 0});
+}
+
+// a knock never kills: it throws you back, and costs the tier and the combo
 function hurt(s, p) {
     if (p.inv > 0 || p.mode !== 'play') return;
     p.vx = -p.facing * 2 * FX;
@@ -924,7 +934,7 @@ function hurt(s, p) {
     p.charge = 0;
     p.slide = 0;
     p.stun = P.STUN;
-    p.inv = 60;
+    p.inv = P.INVULNERABLE;
     if (p.combo) event(s, 'comboEnd', {n: p.combo, broken: true});
     p.combo = 0;
     p.comboT = 0;
@@ -939,90 +949,7 @@ function combo(s, p) {
     event(s, 'combo', {n: p.combo});
 }
 
-// out of time, or into a pit, on the way back: start the escape again from the bag
-function late(s) {
-    const L = s.level;
-    L.tiles.set(s.snapEscape.tiles);
-    s.seeds = s.snapEscape.seeds;
-    s.escapeT = L.escapeTime * 60;
-    s.ents = spawnAll(L);
-    s.nextId = L.spawns.length;
-    s.p = newPlayer(s.bag.x, s.bag.y, true);
-    s.p.facing = -1;
-    s.safe = null;
-    s.deaths++;
-    snapCamera(s);
-    event(s, 'late', {});
-}
-
-// into a pit: back on the last ground you stood on, a little later. Nothing is lost but time.
-function fell(s) {
-    const q = s.safe || s.checkpoint;
-    s.deaths++;
-    if (s.escape && (s.escapeT -= P.FALL_COST) <= 0) { late(s); return; }
-    const p = s.p = newPlayer(q.x, q.y, true);
-    p.facing = q.facing || 1;
-    p.inv = 60;
-    snapCamera(s);
-    event(s, 'fell', {cost: s.escape ? P.FALL_COST : 0});
-}
-
-function die(s, p, cause) {
-    if (p.mode !== 'play') return;
-    p.mode = 'dead';
-    p.modeT = 0;
-    p.hop = cause === 'hit';
-    p.vx = 0;
-    p.vy = 0;
-    s.deaths++;
-    event(s, 'die', {cause});
-}
-
-// back to the last checkpoint, small, with the level as it was when that checkpoint was reached
-function respawn(s) {
-    const c = s.checkpoint, L = s.level;
-    L.tiles.set(s.snap.tiles);
-    s.seeds = s.snap.seeds;
-    s.goldGot = s.snap.goldGot.slice();
-    s.ents = spawnAll(L);
-    s.nextId = L.spawns.length;
-    s.p = newPlayer(c.x, c.y, true);
-    snapCamera(s);
-    event(s, 'respawn', {});
-}
-
-function stepMode(s, p) {
-    p.modeT++;
-    const L = s.level;
-    if (p.mode === 'dead') {
-        // struck down: a moment's pause, a hop, and a fall through the floor
-        if (p.hop && p.modeT === 24) p.vy = -4 * FX;
-        if (p.hop && p.modeT > 24) { p.y += p.vy; p.vy = Math.min(P.MAX_FALL, p.vy + FX / 4); }
-        if (p.modeT >= (p.hop ? 110 : 50)) respawn(s);
-    } else if (p.mode === 'pole') {
-        const base = L.flag.base * TILE;
-        if (p.y < base) p.y = Math.min(base, p.y + P.POLE_SLIDE);
-        else if (p.modeT > 30) {
-            p.mode = 'walk';
-            p.modeT = 0;
-            p.facing = 1;
-            p.x += p.w + 2 * FX;                            // step round to the far side
-            p.onGround = supported(L, p);
-            p.fall = true;
-            p.gDown = P.JUMP_ROWS[0][3];
-        }
-    }
-}
-
 /* ---------------- creatures ---------------- */
-function addEnt(s, kind, x, y) {
-    const [w, h] = E.SIZE[kind];
-    const e = {id: s.nextId++, kind, red: false, x, y, w: w * FX, h: h * FX, vx: 0, vy: 0, dir: 1,
-        state: 'walk', t: 0, onGround: false, active: true, gone: false, chain: 0, grace: 0};
-    s.ents.push(e);
-    return e;
-}
-
 function setShape(e, kind) {
     const [w, h] = E.SIZE[kind];
     e.w = w * FX;
@@ -1041,31 +968,24 @@ function stepEnts(s) {
     for (const e of s.ents) {
         if (e.gone) continue;
         if (!e.active) {
-            if (Math.abs(e.x - p.x) < E.ACTIVE) e.active = true;
+            if (Math.abs(e.x - p.x) < E.ACTIVE && Math.abs(e.y - p.y) < E.ACTIVE) e.active = true;
             else continue;
         }
         if (Math.abs(e.x - p.x) > E.GONE || e.y > L.h * TILE + P.FALL_OUT) { e.gone = true; continue; }
         e.t++;
         if (e.grace > 0) e.grace--;
-        switch (e.state) {
-            case 'flip':                         // knocked out: falls through everything
-                e.x += e.vx;
-                e.y += e.vy;
-                e.vy = Math.min(E.MAX_FALL, e.vy + E.GRAV);
-                continue;
-            case 'flat':                         // stomped flat, gone after half a second
-                if (e.t > 30) e.gone = true;
-                continue;
-            case 'rise':                         // a strawberry climbing out of its block
-                e.y -= FX / 2;
-                if (e.t >= 32) { e.state = 'walk'; e.t = 0; }
-                continue;
+        if (e.state === 'flip') {                // knocked out: falls through everything
+            e.x += e.vx;
+            e.y += e.vy;
+            e.vy = Math.min(E.MAX_FALL, e.vy + E.GRAV);
+            continue;
         }
-        // walking, rolling, sliding or lying still: the same body under gravity
-        let speed = 0;
-        if (e.kind === 'beetle' || e.kind === 'snail') speed = E.WALK;
-        else if (e.kind === 'berry') speed = E.BERRY;
-        else if (e.kind === 'shell') speed = e.state === 'slide' ? E.SHELL : 0;
+        if (e.state === 'flat') {                // stomped flat, gone after half a second
+            if (e.t > 30) e.gone = true;
+            continue;
+        }
+        // walking, sliding or lying still: the same body under gravity
+        const speed = e.kind === 'shell' ? (e.state === 'slide' ? E.SHELL : 0) : E.WALK;
         e.vx = e.dir * speed;
         if (moveX(L, e)) {
             e.dir = -e.dir;
@@ -1094,8 +1014,7 @@ function stepEnts(s) {
         }
     }
     // creatures meeting: a sliding shell knocks out whatever it hits; walkers turn round
-    const act = s.ents.filter(e => e.active && !e.gone && e.state !== 'flip' && e.state !== 'flat'
-        && e.state !== 'rise' && e.kind !== 'berry');
+    const act = s.ents.filter(e => e.active && !e.gone && e.state !== 'flip' && e.state !== 'flat');
     for (let i = 0; i < act.length; i++) for (let j = i + 1; j < act.length; j++) {
         const a = act[i], b = act[j];
         if (a.gone || b.gone || a.state === 'flip' || b.state === 'flip') continue;
@@ -1119,27 +1038,15 @@ function touching(a, b) {
     return Math.abs(a.x - b.x) < (a.w + b.w) / 2 && a.y - a.h < b.y && b.y - b.h < a.y;
 }
 
-// the player against every creature: stomp, kick, pick up, or get hurt
+// the mouse against every creature: run it down, stomp it, kick it, or be knocked back
 function touchEnts(s, p, prevY, held) {
     const inset = 2 * FX;
     for (const e of s.ents) {
-        if (!e.active || e.gone || e.state === 'flip' || e.state === 'flat' || e.state === 'rise') continue;
+        if (!e.active || e.gone || e.state === 'flip' || e.state === 'flat') continue;
         // the hurting box is a little smaller than the drawing
         const hx = Math.abs(p.x - e.x) < (p.w + e.w) / 2 - inset;
         const hy = p.y - p.h < e.y && e.y - e.h + inset < p.y;
-        if (!hx || !hy) continue;
-        if (e.kind === 'berry') {
-            e.gone = true;
-            if (p.big) { s.seeds++; event(s, 'seed', {tx: fdiv(e.x, TILE), ty: fdiv(e.y, TILE) - 1, pop: true}); }
-            else {
-                p.big = true;
-                p.h = P.H_BIG;
-                if (overlaps(s.level, p.x, p.y, p.w, P.H_BIG)) { p.duck = true; p.h = P.H_SMALL; }
-                event(s, 'grow', {});
-            }
-            continue;
-        }
-        if (p.inv > 0) continue;
+        if (!hx || !hy || p.inv > 0) continue;
         // at a dash, or sliding fast, whatever is in the way is run down
         if (p.tier >= 1 || (p.slide > 0 && Math.abs(p.vx) >= P.SLIDE_MIN)) {
             flip(s, e, sign(p.vx) || p.facing);
@@ -1148,8 +1055,7 @@ function touchEnts(s, p, prevY, held) {
             continue;
         }
         // a stomp: coming down, with the feet above the creature's middle a frame ago
-        const stomp = p.y > prevY && prevY <= e.y - e.h / 2;
-        if (stomp) {
+        if (p.y > prevY && prevY <= e.y - e.h / 2) {
             p.chain++;
             if (e.kind === 'beetle') { e.state = 'flat'; e.t = 0; }
             else if (e.kind === 'snail') { e.kind = 'shell'; e.state = 'still'; e.t = 0; setShape(e, 'shell'); }
@@ -1157,7 +1063,7 @@ function touchEnts(s, p, prevY, held) {
             else { e.state = 'slide'; e.dir = p.x < e.x ? 1 : -1; e.grace = E.KICK_GRACE; e.chain = 0; event(s, 'kick', {id: e.id}); }
             event(s, 'stomp', {id: e.id, kind: e.kind, chain: p.chain});
             combo(s, p);
-            bounce(s, p, held);
+            bounce(p, held);
             continue;
         }
         if (e.kind === 'shell' && e.state === 'still') {
@@ -1171,12 +1077,11 @@ function touchEnts(s, p, prevY, held) {
         }
         if (e.grace > 0) continue;
         hurt(s, p);
-        if (p.mode !== 'play') return;
     }
 }
 
-// off an enemy's back: holding jump makes it a full jump, letting go a small hop
-function bounce(s, p, held) {
+// off a creature's back: holding jump makes it a full jump, letting go a small hop
+function bounce(p, held) {
     p.vy = -P.STOMP_VY;
     p.onGround = false;
     p.jumped = true;
@@ -1188,11 +1093,11 @@ function bounce(s, p, held) {
 }
 
 /* ---------------- camera ---------------- */
-// Horizontal: the camera follows the player one-to-one with a look-ahead in the direction
-// of travel, which grows with speed and swings round at a limited rate. Vertical: it rests
-// on the height the player last stood at, leads a fall, and chases when the player nears an edge.
-// where the feet sit in the view, from the top: nine tiles above for the highest jump, six below
-const CAM_FEET = 0.6;
+// Horizontal: the camera follows the mouse one-to-one with a look-ahead in the direction of
+// travel, which grows with speed and swings round at a limited rate. Vertical: it rests on the
+// height the mouse last stood at, leads a fall, and chases when the mouse nears an edge. With
+// water rising below, it sits higher, so more of what is coming up can be seen.
+const feet = s => s.escape && s.level.escape.kind === 'water' ? 0.5 : 0.6;
 
 function camTargets(s) {
     const p = s.p, c = s.cam;
@@ -1200,7 +1105,8 @@ function camTargets(s) {
     if (Math.abs(p.vx) >= FX) c.dir = sign(p.vx);
     const t = Math.min(1, Math.max(0, (Math.abs(p.vx) - FX) / (P.RUN_MAX - FX)));
     const t2 = Math.min(1, Math.max(0, (Math.abs(p.vx) - P.RUN_MAX) / (P.TIERS[2] - P.RUN_MAX)));
-    const lookTarget = c.dir * Math.round(2 * TILE + 3 * TILE * t + 3 * TILE * t2);
+    // never so far ahead that the mouse is pushed to the edge of a narrow (upright phone) view
+    const lookTarget = c.dir * Math.round(Math.min(2 * TILE + 3 * TILE * t + 3 * TILE * t2, VW * 0.3));
     return {VW, VH, lookTarget};
 }
 
@@ -1216,7 +1122,7 @@ function snapCamera(s) {
     c.look = lookTarget;
     c.ref = p.y;
     c.x = p.x + c.look - VW / 2;
-    c.y = c.ref - Math.round(VH * CAM_FEET);
+    c.y = c.ref - Math.round(VH * feet(s));
     clampCam(s);
 }
 
@@ -1226,18 +1132,16 @@ function updateCamera(s) {
     const rate = 1.25 * FX + Math.abs(p.vx) / 3;
     c.look += Math.max(-rate, Math.min(rate, lookTarget - c.look));
     c.x = p.x + c.look - VW / 2;
-    if (p.onGround || p.mode === 'pole') c.ref = p.y;
-    let ty = c.ref - Math.round(VH * CAM_FEET), ease = 8;
+    if (p.onGround) c.ref = p.y;
+    let ty = c.ref - Math.round(VH * feet(s)), ease = 8;
     // falling below the last ground: lead the fall, so the landing comes into view early
     if (!p.onGround && p.vy > 2 * FX && p.y > c.ref && p.mode === 'play') { ty = p.y - Math.round(VH * 0.45); ease = 4; }
     const dy = ty - c.y;
-    if (p.mode !== 'dead') c.y += Math.abs(dy) <= FX ? dy : Math.round(dy / ease);
-    // never let the player leave the screen vertically
+    c.y += Math.abs(dy) <= FX ? dy : Math.round(dy / ease);
+    // never let the mouse leave the screen vertically
     const margin = 2 * TILE;
-    if (p.mode !== 'dead') {
-        if (p.y > c.y + VH - margin / 2) c.y = p.y - VH + margin / 2;
-        if (p.y - p.h < c.y + margin) c.y = p.y - p.h - margin;
-    }
+    if (p.y > c.y + VH - margin / 2) c.y = p.y - VH + margin / 2;
+    if (p.y - p.h < c.y + margin) c.y = p.y - p.h - margin;
     clampCam(s);
 }
 
@@ -1247,24 +1151,14 @@ function setViewWidth(s, tiles) {
     clampCam(s);
 }
 
-function setBig(s, big) {
-    const p = s.p;
-    if (big === p.big) return true;
-    if (big && overlaps(s.level, p.x, p.y, p.w, P.H_BIG)) return false;
-    p.big = big;
-    p.duck = false;
-    p.h = big ? P.H_BIG : P.H_SMALL;
-    return true;
-}
-
 // A copy that can be run forward without touching the original: bots and the jump preview.
 function clone(s) {
     return Object.assign({}, s, {
         level: Object.assign({}, s.level, {tiles: s.level.tiles.slice()}),
-        p: Object.assign({}, s.p), cam: Object.assign({}, s.cam),
-        checkpoint: Object.assign({}, s.checkpoint), events: [],
+        p: Object.assign({}, s.p), cam: Object.assign({}, s.cam), events: [],
         ents: s.ents.map(e => Object.assign({}, e)), goldGot: s.goldGot.slice(),
-        bag: s.bag && Object.assign({}, s.bag), safe: s.safe && Object.assign({}, s.safe),
+        item: s.item && Object.assign({}, s.item), safe: s.safe && Object.assign({}, s.safe),
+        chase: s.chase && Object.assign({}, s.chase),
     });
 }
 
@@ -1282,37 +1176,39 @@ function predict(s, inputs, frames) {
 function hash(s) {
     const p = s.p;
     let h = 2166136261;
-    const vals = [p.x, p.y, p.vx, p.vy, s.frame, s.seeds, s.deaths, p.big ? 1 : 0, p.tier, s.score, s.escape ? s.escapeT : -1];
+    const vals = [p.x, p.y, p.vx, p.vy, s.frame, s.seeds, s.deaths, p.tier, s.score, s.escape ? s.escapeT : -1, s.chase ? s.chase.pos : 0];
     for (const e of s.ents) vals.push(e.x, e.y, e.state, e.kind);
     for (const v of vals)
         for (const b of String(v)) h = Math.imul(h ^ b.charCodeAt(0), 16777619);
     return (h >>> 0).toString(16);
 }
 
-return {FX, TILE, VIEW_H, P, E, FEEL, IN, T, SOLID, parseLevel, newGame, step, tileAt, solidAt,
-    overlaps, supported, box, jumpRow, predict, clone, respawn, setViewWidth, setBig, hash, snapCamera};
+return {FX, TILE, VIEW_H, P, E, MOVE, IN, T, SOLID, parseLevel, newGame, step, tileAt, solidAt,
+    overlaps, supported, box, jumpRow, predict, clone, setViewWidth, hash, snapCamera, danger};
 })();
 </script>
 <script id="levels">
 /* Levels are ASCII, one character a tile, 15 or more rows high.
    .  air          #  earth        =  grass top     X  stone         W  wood        -  one-way ledge
-   B  earth clod (a dash bursts it)                 o  seed
-   n  boards: there until the sack is taken         e  crates: there once the sack is taken
-   Q  the seed sack                                 H  home, the mouse hole
-   b  beetle       s  snail          r  red snail (turns at ledges)
-   @  start        !  checkpoint
-   labels: [x, y, text] in tiles, drawn on the background.
-   route: the way a bot is steered, out to the sack and back home (tile x, feet row). */
-const LEVELS = [{
-    id: 'rush',
-    name: 'The seed sack',
-    idea: 'Out along the path and over the bench for the seed sack, then home underneath before the clock runs out.',
-    escapeTime: 30,
-    ranks: [30, 38, 55],                    // seconds for S, A and B: see test/underfoot_tempo.mjs
+   B  earth clod (a dash bursts it)                 o  seed          G  golden seed
+   n  boards: there until the item is taken         e  crates: there once it is taken
+   Q  the item to fetch                             H  home, the mouse hole
+   b  beetle       s  snail          r  red snail (turns at ledges)    @  start
+   escape: what the way home is up against (see parseLevel); ranks: seconds for S, A and B
+   (see test/underfoot_tempo.mjs); route: how a bot is steered, out and back (tile x, feet row). */
+const LEVELS = [
+{
+    id: "sack",
+    name: "The seed sack",
+    item: "sack",
+    backdrop: "garden",
+    idea: "Out along the path and over the bench for the seed sack, then home underneath before the clock runs out.",
+    escape: {"kind": "clock", "time": 30},
+    ranks: [30, 38, 55],
     rows: [
         'XX...........................................................................................................................................................................XXX',
         'XX...........................................................................................................................................................................XXX',
-        'XX...........................................................................................................................................................................XXX',
+        'XX......................................................................................................................................G....................................XXX',
         'XX...................................................................................................................................o.o.o.o.................................XXX',
         'XX........................................................................................................................WW.............b...................................XXX',
         'XX..............................................................................................................BB........WW........WWWWWWWWWW...............................XXX',
@@ -1331,13 +1227,121 @@ const LEVELS = [{
         '#######################################################..........#############################################.....##########################################################XXX',
         '#######################################################..........#############################################.....##########################################################XXX',
     ],
-    labels: [[12, 10, 'KEEP RUNNING: FAST, FASTER, FASTEST'], [73, 11, 'DOWN: SLIDE'], [91.5, 6, 'JUMP AT A WALL, THEN AGAIN']],
-    route: {out: [[92, 16], [97, 8], [167, 8]], back: [[92, 16], [1, 16]]},
+    labels: [[12, 10, "KEEP RUNNING: FAST, FASTER, FASTEST"], [73, 11, "DOWN: SLIDE"], [91.5, 6, "JUMP AT A WALL, THEN AGAIN"]],
+    route: {"out": [[92, 16], [97, 8], [167, 8]], "back": [[166, 16], [92, 16], [1, 16]]},
+},
+{
+    id: "drain",
+    name: "The drain",
+    item: "button",
+    backdrop: "drain",
+    idea: "Down through the drain for a lost button, then back up the shafts before the water catches you.",
+    escape: {"kind": "water", "from": 6, "delay": 60, "speed": 0.27, "gap": 7},
+    ranks: [41, 48, 70],
+    rows: [
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'XX......................................',
+        'HH........o..o..o..o..o..o..o...........',
+        'HH..@...................................',
+        '===================================...==',
+        'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX...XX',
+        'XX...............................XX...XX',
+        'XX...............................XX...XX',
+        'XX...............................XX...XX',
+        'XX...............................XX...XX',
+        'XX......o..o..o..o..o..o..o..o...XX...XX',
+        'XX................b...b...b...........XX',
+        'XX...XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+        'XX...XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+        'XX...XX.............G.................XX',
+        'XX...XX...............................XX',
+        'XX...XX...............................XX',
+        'XX...XX.............BB................XX',
+        'XX...XX......e......BB......e.........XX',
+        'XX...........e......BB......e..b......XX',
+        'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX...XX',
+        'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX...XX',
+        'XX..................XXXX.........XX...XX',
+        'XX..................XXXX.........XX...XX',
+        'XX..................XXXX.........XX...XX',
+        'XX..................XXXX.........XX...XX',
+        'XX..................XXXX.........XX...XX',
+        'XX...........b..b...........s.........XX',
+        'XX...XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+        'XX...XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+        'XX...XX...............................XX',
+        'XX...XX...............................XX',
+        'XX...XX...............................XX',
+        'XX...XX...............................XX',
+        'XX...XX..........XX...................XX',
+        'XX..........e....XX.....b..b..b.e.....XX',
+        'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX...XX',
+        'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX...XX',
+        'XX...............................XX...XX',
+        'XX...............................XX...XX',
+        'XX...............................XX...XX',
+        'XX............BB.................XX...XX',
+        'XX......o..o..BB.o..o..o..o..o...XX...XX',
+        'XX.Q..........BB....b....b............XX',
+        'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    ],
+    labels: [[16, 10, "DOWN THE DRAIN FOR THE LOST BUTTON"], [26, 18, "DOWN: SLIDE UNDER THE WALL"], [24, 50, "ON THE WAY UP: SLIDE IN, KICK UP"]],
+    route: {"out": [[36.5, 22], [3.5, 30], [36.5, 38], [3.5, 46], [36.5, 54], [3.5, 54]], "back": [[36.5, 54], [34, 46], [3.5, 46], [5, 38], [36.5, 38], [34, 30], [3.5, 30], [5, 22], [36.5, 22], [34, 14], [1, 14]]},
+},
+{
+    id: "bank",
+    name: "The river bank",
+    item: "berry",
+    backdrop: "river",
+    idea: "Along the river bank for the last strawberry, then home with the bank falling away behind you.",
+    escape: {"kind": "crumble", "from": 7, "delay": 30, "speed": 2.4, "gap": 10},
+    ranks: [29, 34, 50],
+    rows: [
+        'XX............................................................WW................................................................................................XXXXXXXX',
+        'XX............................................................WW..................................G.............................................................XXXXXXXX',
+        'XX............................................................WW................................................................................................XXXXXXXX',
+        'XX............................................................WW............................BB..................................................................XXXXXXXX',
+        'XX............................................................WW........o..o..o..o..o..o..o.Bo..o..o............................................................XXXXXXXX',
+        'XX............................................................WW..............b..b..b.......BB..................................................................XXXXXXXX',
+        'XX............................................................WW....WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW.......................................................XXXXXXXX',
+        'XX............................................................WW....WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW.......................................................XXXXXXXX',
+        'XX............................................................WW....WW..........WWWWWWWWW...............n.......................................................XXXXXXXX',
+        'XX............................................................WW....WW..........WWWWWWWWW...............n.......................................................XXXXXXXX',
+        'XX............................................................WW....WW..........WWWWWWWWW...............n.......................................................XXXXXXXX',
+        'XX............................................................WW....WW..........WWWWWWWWW...............n.......................................................XXXXXXXX',
+        'XX............................................................WW....nn..........WWWWWWWWW...............n.......................................................XXXXXXXX',
+        'XX............................................................WW....nn..........WWWWWWWWW...............n............--...................BB....................XXXXXXXX',
+        'HH......o.o.o.o.o.............................WW..............WW....nn..........WWWWWWWWW...............n.................................BB....................XXXXXXXX',
+        'HH..@...............b..b................e.....WW....e..s............nn.........................b..b.....n.....e...............e.b..b......BB............Q.......XXXXXXXX',
+        '===============================.....==============================================================================........======================================XXXXXXXX',
+        '###############################.....##############################################################################........######################################XXXXXXXX',
+        '###############################.....##############################################################################........######################################XXXXXXXX',
+        '###############################.....##############################################################################........######################################XXXXXXXX',
+    ],
+    labels: [[14, 10, "ALONG THE BANK FOR THE LAST STRAWBERRY"], [56, 10, "SLIDE UNDER, THEN KICK UP"]],
+    route: {"out": [[65.5, 16], [70, 6], [110, 16], [152, 16]], "back": [[106, 16], [66, 16], [1, 16]]},
 }];
 
-// The fastest line the search bot in test/underfoot_tempo.mjs found: [input, frames], ...
-const LINE = [[34,6],[50,2],[34,178],[50,8],[34,22],[50,2],[34,16],[50,14],[34,10],[50,2],[34,28],[50,6],[34,18],[50,6],[34,18],[8,6],[34,48],[16,6],[49,6],[50,6],[49,2],[33,4],[50,26],[34,46],[8,6],[34,96],[50,18],[34,12],[50,6],[34,24],[50,6],[34,18],[50,6],[34,30],[50,2],[34,16],[50,6],[34,18],[50,2],[34,16],[50,6],[34,6],[0,12],[33,168],[8,6],[34,42],[33,24],[49,8],[33,100],[8,6],[34,36],[33,66],[49,12],[33,102],[49,14],[33,22],[49,14],[33,22],[49,8],[33,52]];
-const LINE_FRAMES = 1494;
+// The fastest line the search bot in test/underfoot_tempo.mjs found, per level: [input, frames], ...
+const LINES = {
+    sack: {frames: 1473, log: [[34,6],[50,2],[34,178],[50,8],[34,22],[50,2],[34,16],[50,14],[34,10],[50,2],[34,28],[50,6],[34,18],[50,6],[34,18],[8,6],[34,48],[16,6],[49,6],[50,6],[49,2],[33,4],[50,26],[34,46],[8,6],[34,96],[50,18],[34,12],[50,6],[34,24],[50,6],[34,18],[50,2],[34,28],[50,6],[34,18],[50,2],[34,16],[50,6],[34,18],[50,2],[34,16],[0,18],[33,138],[8,6],[34,36],[33,6],[49,8],[33,22],[49,2],[33,94],[8,6],[34,42],[33,18],[49,14],[33,22],[49,18],[33,48],[49,6],[33,18],[49,14],[33,22],[49,14],[33,22],[49,14],[33,22],[49,6],[33,51]]},
+    drain: {frames: 2039, log: [[34,6],[50,2],[34,154],[8,6],[0,18],[33,12],[34,36],[33,84],[8,6],[0,18],[34,72],[50,2],[34,64],[0,18],[33,12],[8,6],[34,30],[33,6],[8,6],[34,30],[33,42],[8,6],[0,18],[34,24],[50,6],[34,18],[50,12],[34,78],[0,18],[33,12],[8,6],[34,24],[49,6],[33,18],[49,6],[33,12],[49,6],[33,18],[49,6],[33,18],[0,6],[34,6],[50,2],[34,34],[50,6],[34,18],[50,6],[34,42],[8,6],[34,60],[8,6],[34,12],[16,6],[50,8],[34,4],[50,6],[49,18],[33,6],[49,2],[33,64],[49,6],[33,24],[16,6],[49,6],[0,6],[33,6],[8,6],[34,18],[16,6],[49,2],[33,4],[50,6],[34,6],[50,2],[34,4],[49,2],[33,4],[34,66],[8,6],[34,42],[8,6],[34,12],[50,2],[34,4],[50,6],[49,2],[33,4],[50,2],[34,4],[50,12],[33,12],[49,14],[33,22],[49,6],[33,18],[49,6],[33,24],[8,6],[34,24],[16,6],[49,2],[33,4],[49,6],[34,6],[50,2],[34,4],[49,2],[33,4],[34,24],[50,6],[34,18],[50,6],[34,18],[50,2],[34,16],[50,6],[34,6],[0,6],[34,6],[8,6],[34,12],[16,6],[50,2],[34,4],[50,12],[16,12],[0,6],[49,6],[34,6],[50,2],[34,4],[33,137]]},
+    bank: {frames: 1411, log: [[34,6],[50,2],[34,142],[50,2],[34,16],[50,6],[34,18],[50,8],[34,34],[50,6],[34,18],[8,6],[34,18],[50,6],[49,6],[50,2],[34,4],[50,36],[34,6],[50,18],[34,48],[8,6],[34,108],[50,2],[34,10],[0,6],[34,30],[0,30],[34,12],[50,24],[34,24],[50,2],[34,16],[50,8],[34,16],[50,6],[34,18],[50,2],[34,16],[50,6],[0,6],[34,6],[0,6],[33,12],[49,2],[33,124],[49,2],[33,28],[49,6],[33,18],[49,6],[33,96],[8,6],[34,30],[33,60],[8,6],[34,12],[49,14],[33,16],[49,14],[33,22],[49,8],[33,16],[49,8],[33,136],[34,1]]},
+};
+
 </script>
 <script>
 /* Underfoot: everything the player sees and touches. The simulation is UF (above), stepped
@@ -1369,6 +1373,8 @@ const C = {
     beetle: '#3a3f4b', beetleHi: '#6f7888', beetleLeg: '#23262d',
     snailFoot: '#b9c49d', snailFootLo: '#8f9b73', shellY: '#dea946', shellYLo: '#a8741f', shellR: '#cf5b48', shellRLo: '#963a2c',
     berry: '#df4540', berryLo: '#a92a27', berrySeed: '#f6e08e', leaf: '#4d9b55',
+    river: '#4f8fb8', riverHi: 'rgba(255,255,255,.35)', flood: 'rgba(52,120,196,.62)', floodHi: 'rgba(170,215,255,.85)',
+    drain: '#3a2c24', drainEsc: '#2e2830', drainLine: 'rgba(0,0,0,.18)', button: '#d9564a', buttonHi: '#f08a7e', buttonLo: '#9c3128',
     duskTop: '#6b4a78', duskLow: '#f08a5a', hillDuskFar: '#8a6a7c', hillDuskNear: '#6e5566', cloudDusk: '#f6b99a',
     under: 'rgba(58,40,30,.28)', wood: '#9a6a42', woodHi: '#c08d5e', woodLo: '#6f4a2c',
     board: '#c79a63', boardLo: '#8f6a3e', crate: '#c8683f', crateLo: '#8f4226', crateHi: '#e79568',
@@ -1376,26 +1382,33 @@ const C = {
 };
 
 /* ---------------- settings and the best run, kept per browser ---------------- */
-const KEY = 'underfoot_tempo', BEST_KEY = 'underfoot_tempo_best';
+const KEY = 'underfoot_tempo', BEST_KEY = 'underfoot_tempo_bests';
 const opt = {coyote: true, buffer: true, corner: true, debug: false, slow: false,
-    run: true, sound: true, vibe: true, ghost: 'best'};
+    run: true, sound: true, vibe: true, ghost: 'best', level: LEVELS[0].id};
 try { Object.assign(opt, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* none */ }
 const query = new URLSearchParams(location.search);
 if (query.has('debug')) opt.debug = true;
 if (query.has('pure')) opt.coyote = opt.buffer = opt.corner = false;
 if (['best', 'line', 'off'].includes(query.get('ghost'))) opt.ghost = query.get('ghost');
+if (LEVELS.some(l => l.id === query.get('level'))) opt.level = query.get('level');
+if (!LEVELS.some(l => l.id === opt.level)) opt.level = LEVELS[0].id;
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(opt)); } catch (e) { /* none */ } };
-// a best run is its inputs, frame by frame; it only replays true on the rules it was run on
-const VERSION = (() => {
+// A best run is its inputs, frame by frame, so it only replays true on the rules and the level it
+// was run on: each is kept with a fingerprint of both, and dropped when either changes.
+const fingerprint = def => {
     let h = 2166136261;
-    for (const id of ['core', 'levels']) for (const ch of $(id).textContent) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    for (const ch of $('core').textContent + JSON.stringify(def)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
     return (h >>> 0).toString(36);
-})();
-let best = null;
+};
+const bests = {};
 try {
-    const b = JSON.parse(localStorage.getItem(BEST_KEY) || 'null');
-    if (b && b.v === VERSION && b.log && b.frames) best = b;
+    const all = JSON.parse(localStorage.getItem(BEST_KEY) || '{}');
+    for (const def of LEVELS) {
+        const b = all[def.id];
+        if (b && b.v === fingerprint(def) && b.log && b.frames) bests[def.id] = b;
+    }
 } catch (e) { /* none */ }
+const saveBests = () => { try { localStorage.setItem(BEST_KEY, JSON.stringify(bests)); } catch (e) { /* none */ } };
 
 /* ---------------- layout ---------------- */
 // The view is always 15 tiles high. Upright on a touch screen it is 16 tiles wide (the width
@@ -1440,10 +1453,22 @@ function layout() {
 }
 
 /* ---------------- the game ---------------- */
-const DEF = LEVELS[0];
-const level = UF.parseLevel(DEF);
-let totalSeeds = 0;
-for (const t of level.orig) if (t === T.SEED || t === T.QBLOCK) totalSeeds++;
+// what each level sends you for, and what the way home is up against
+const ITEM = {sack: 'the seed sack', button: 'the button', berry: 'the strawberry'};
+const GOAL = {sack: 'Fetch the seed sack from the far end of the garden →', button: 'Down the drain for the lost button ↓',
+    berry: 'Along the bank for the last strawberry →'};
+const FLEE = {clock: '← Home to the mouse hole, quick!', water: '↑ Back up, before the water catches you!',
+    crumble: '← Home! The bank is giving way behind you'};
+const LATE = {time: 'Too slow! Back to ITEM, and the clock starts again', water: 'The water caught you! Back to ITEM',
+    crumble: 'The bank gave way under you! Back to ITEM'};
+let DEF = null, level = null, totalSeeds = 0, lateWhy = 'time';
+function loadLevel(id) {
+    DEF = LEVELS.find(l => l.id === id) || LEVELS[0];
+    level = UF.parseLevel(DEF);
+    totalSeeds = 0;
+    for (const t of level.orig) if (t === T.SEED) totalSeeds++;
+    restart();
+}
 let game = null, prev = null, arcs = null, paused = false, hint = 1, lastHeld = 0;
 const fx = [];                        // particles
 const bumps = new Map();              // tile index -> frames since it was struck
@@ -1485,7 +1510,8 @@ const rle = frames => {
     return out;
 };
 function makeGhost() {
-    const src = opt.ghost === 'line' ? {log: LINE, assist: {coyote: true, buffer: true, corner: true}, frames: LINE_FRAMES}
+    const line = LINES[DEF.id], best = bests[DEF.id];
+    const src = opt.ghost === 'line' && line ? {log: line.log, assist: {coyote: true, buffer: true, corner: true}, frames: line.frames}
         : opt.ghost === 'best' && best ? best : null;
     if (!src) return null;
     return {s: UF.newGame(UF.parseLevel(DEF), {assist: src.assist, viewW: 16}), log: src.log, i: 0, n: 0,
@@ -1687,6 +1713,10 @@ const sound = (() => {
         tick: () => tone('square', 2200, 2200, 0.025, 0.03),
         fell: () => noise(0.35, 0.3, 1600, 0.8, 300),
         late: () => { tone('sine', 220, 70, 0.5, 0.14); noise(0.5, 0.3, 400, 0.8, 120, 'lowpass'); },
+        gold: () => { for (let i = 0; i < 3; i++) tone('sine', 1568 * (1 + i * 0.26), 1568 * (1 + i * 0.26), 0.2, 0.035, i * 0.07); },
+        gush: () => { noise(1.2, 0.5, 300, 0.6, 120, 'lowpass'); noise(0.8, 0.25, 1800, 0.7, 700, 'bandpass', 0.1); },
+        bubble: () => tone('sine', 300 + Math.random() * 300, 700 + Math.random() * 400, 0.06, 0.04),
+        rumble: v => noise(0.4, 0.25 + 0.35 * v, 110, 0.7, 60, 'lowpass'),
         clear: () => { noise(0.5, 0.25, 800, 0.8, 4000); tone('sine', 660, 660, 0.12, 0.05, 0.05); tone('sine', 990, 990, 0.25, 0.05, 0.14); },
     };
 })();
@@ -1729,9 +1759,12 @@ function step() {
     if (goalFx > 0) goalFx--;
     // the escape: a heartbeat that quickens as the clock runs down, and a tick for the last five
     if (game.escape && p.mode === 'play') {
-        const left = game.escapeT / 60, gap = left < 10 ? 18 + left * 1.2 : 34;
-        if (++beat >= gap) { beat = 0; sound.beat(left < 10); }
-        if (left < 5.5 && game.escapeT % 60 === 0) sound.tick();
+        const kind = level.escape.kind, d = UF.danger(game);
+        const close = kind === 'clock' ? d < 10 : d < 3, gap = kind === 'clock' ? (close ? 18 + d * 1.2 : 34) : Math.max(16, Math.min(34, 12 + d * 3));
+        if (++beat >= gap) { beat = 0; sound.beat(close); }
+        if (kind === 'clock' && d < 5.5 && game.escapeT % 60 === 0) sound.tick();
+        if (kind === 'water' && d < 6 && game.frame % 9 === 0 && Math.random() < 0.5) sound.bubble();
+        if (kind === 'crumble') shake = Math.max(shake, Math.max(0, 4 - d) * 0.8);
     }
     if (opt.debug) computeArcs(h);
 }
@@ -1834,7 +1867,7 @@ function onEvent(e) {
             sound.bump();
             break;
         case 'escape': {
-            sound.escape();
+            if (e.kind === 'water') sound.gush(); else sound.escape();
             buzz(40);
             shake = 8;
             goalFx = 200;
@@ -1851,6 +1884,7 @@ function onEvent(e) {
             break;
         }
         case 'late':
+            lateWhy = e.why;
             sound.late();
             buzz(60);
             lateFx = 120;
@@ -1863,6 +1897,22 @@ function onEvent(e) {
             prev = snap();
             dust(p.x / FX, p.y / FX, 6, 0);
             if (e.cost) popup(`−${e.cost / 60} s`, p.x / FX, p.y / FX - 34, '#d6324a', 70);
+            break;
+        case 'crumble': {
+            // the column comes apart: chunks from its top, and a rumble now and then
+            const L = game.level;
+            let top = 0;
+            while (top < L.h && !UF.SOLID[L.orig[top * L.w + e.tx]] && L.orig[top * L.w + e.tx] !== T.ESC_OFF) top++;
+            for (let k = 0; k < 3 && top < L.h; k++) fx.push({kind: 'clod', x: e.tx * 16 + 3 + k * 5, y: top * 16 + 4 + k * 3,
+                vx: (Math.random() - 0.5) * 1.2, vy: -1 - Math.random() * 1.5, g: 0.3, drag: 0.99, life: 50, max: 50,
+                rot: Math.random() * 3, spin: (Math.random() - 0.5) * 0.3, wood: L.orig[top * L.w + e.tx] === T.WOOD});
+            if (e.tx % 3 === 0) sound.rumble(Math.max(0, Math.min(1, 1 - UF.danger(game) / 12)));
+            break;
+        }
+        case 'gold':
+            sound.gold();
+            for (let i = 0; i < 3; i++) sparkle(e.tx * 16 + 8, e.ty * 16 + 8);
+            popup('a golden seed', e.tx * 16 + 8, e.ty * 16 - 6, C.goldLo, 80);
             break;
         case 'clear':
             sound.clear();
@@ -1914,10 +1964,37 @@ function computeArcs(h) {
 
 /* ---------------- overlays ---------------- */
 const CHECKS = ['coyote', 'buffer', 'corner', 'debug', 'slow', 'run', 'sound', 'vibe'];
+const clock = frames => {
+    const s = frames / 60, m = Math.floor(s / 60);
+    return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`;
+};
+// ranks: S is within reach of the search bot's line, A is what a flawless run gets that never
+// goes past running speed, B leaves room for mistakes (see test/underfoot_tempo.mjs)
+const rankOf = (def, frames) => { const i = def.ranks.findIndex(t => frames <= t * 60); return i < 0 ? 'C' : 'SAB'[i]; };
+const KIND = {clock: 'against the clock', water: 'ahead of the rising water', crumble: 'before the bank gives way'};
+function listLevels() {
+    const list = $('level-list');
+    list.textContent = '';
+    LEVELS.forEach((def, i) => {
+        const b = document.createElement('button'), best = bests[def.id];
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(def.id === DEF.id));
+        const r = document.createElement('b'), t = document.createElement('span'), small = document.createElement('small');
+        r.textContent = best ? rankOf(def, best.frames) : '–';
+        if (best) r.dataset.rank = r.textContent;
+        t.textContent = `${i + 1} · ${def.name}`;
+        small.textContent = `Home ${KIND[def.escape.kind]}` + (best ? ` · best ${clock(best.frames)}` : '');
+        t.append(small);
+        b.append(r, t);
+        b.addEventListener('click', () => { setOpt('level', def.id); loadLevel(def.id); closeOverlays(); });
+        list.append(b);
+    });
+}
 function openMenu() {
     for (const k of CHECKS) $('o-' + k).checked = !!opt[k];
     $('o-ghost-' + opt.ghost).checked = true;
-    $('b-forget').disabled = !best;
+    $('b-forget').disabled = !bests[DEF.id];
+    listLevels();
     $('menu').hidden = false;
     $('menu').querySelector('.panel').scrollTop = 0;
     keys.clear();
@@ -1945,45 +2022,42 @@ for (const g of ['best', 'line', 'off'])
 $('b-resume').addEventListener('click', closeOverlays);
 $('b-restart').addEventListener('click', () => { restart(); closeOverlays(); });
 $('b-forget').addEventListener('click', () => {
-    best = null;
-    try { localStorage.removeItem(BEST_KEY); } catch (e) { /* none */ }
+    delete bests[DEF.id];
+    saveBests();
     $('b-forget').disabled = true;
+    listLevels();
     if (opt.ghost === 'best') ghost = null;
 });
 $('b-again').addEventListener('click', () => { restart(); closeOverlays(); });
+const nextLevel = () => LEVELS[(LEVELS.indexOf(DEF) + 1) % LEVELS.length];
+$('b-next').addEventListener('click', () => { const n = nextLevel(); setOpt('level', n.id); loadLevel(n.id); closeOverlays(); });
 $('b-settings').addEventListener('click', () => { $('done').hidden = true; openMenu(); });
 for (const id of ['menu', 'done'])
     $(id).addEventListener('pointerdown', e => { if (e.target.id === id) closeOverlays(); });
 
-const clock = frames => {
-    const s = frames / 60, m = Math.floor(s / 60);
-    return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`;
-};
-// ranks: S is within reach of the search bot's line, A beats a bot that never goes past
-// running speed, B is a clean run at a relaxed pace (see test/underfoot_tempo.mjs)
-const RANKS = DEF.ranks;
-const rankOf = frames => RANKS.findIndex(t => frames <= t * 60) < 0 ? 'C' : 'SAB'[RANKS.findIndex(t => frames <= t * 60)];
 function showClear() {
     if (shownClear) return;
     shownClear = true;
-    const t = game.time, esc = game.time - game.bagTime, rank = rankOf(t);
-    const was = best ? best.frames : null, isBest = !best || t < best.frames;
+    const t = game.time, esc = game.time - game.itemTime, rank = rankOf(DEF, t), R = DEF.ranks;
+    const old = bests[DEF.id], was = old ? old.frames : null, isBest = !old || t < old.frames;
     if (isBest) {
-        best = {v: VERSION, frames: t, log: rle(rec), assist: assist()};
-        try { localStorage.setItem(BEST_KEY, JSON.stringify(best)); } catch (e) { /* none */ }
+        bests[DEF.id] = {v: fingerprint(DEF), frames: t, log: rle(rec), assist: assist()};
+        saveBests();
     }
+    const idx = 'SABC'.indexOf(rank);
     $('done-rank').textContent = rank;
     $('done-rank').dataset.rank = rank;
-    const idx = 'SABC'.indexOf(rank);
+    $('done-title').textContent = `Home with ${ITEM[DEF.item]}`;
     $('done-sub').textContent = (isBest && was ? `A new best, ${((was - t) / 60).toFixed(2)} s faster. ` : '')
-        + (idx > 0 ? `${'SAB'[idx - 1]} is ${RANKS[idx - 1]} seconds or less.` : 'That is about as fast as it goes.');
+        + (idx > 0 ? `${'SAB'[idx - 1]} is ${R[idx - 1]} seconds or less.` : 'That is about as fast as it goes.');
     const rows = [
         ['Time', clock(t)],
-        ['Best', clock(best.frames)],
-        ['Out to the sack', clock(game.bagTime)],
-        ['Home again', `${clock(esc)} of ${DEF.escapeTime} s`],
+        ['Best', clock(bests[DEF.id].frames)],
+        [`Out to ${ITEM[DEF.item]}`, clock(game.itemTime)],
+        ['Home again', clock(esc) + (level.escape.kind === 'clock' ? ` of ${level.escape.time} s` : '')],
         ['Longest run of hits', String(game.bestCombo)],
         ['Seeds', `${game.seeds} of ${totalSeeds}`],
+        ...(level.golds ? [['Golden seed', game.goldGot.length ? 'found' : 'still out there']] : []),
         ['Falls and misses', String(game.deaths)],
     ];
     const dl = $('done-stats');
@@ -1994,6 +2068,7 @@ function showClear() {
         dd.textContent = v;
         dl.append(dt, dd);
     }
+    $('b-next').textContent = `Next: ${nextLevel().name}`;
     $('done').hidden = false;
     $('b-again').focus({preventScroll: true});
 }
@@ -2025,13 +2100,39 @@ function render(alpha) {
     ctx.clip();
 
     // sky: a morning on the way out, a red evening on the way home
-    const esc = game.escape;
+    const esc = game.escape, kind = level.escape.kind;
     const sky = ctx.createLinearGradient(0, vy0, 0, vy0 + vh);
     sky.addColorStop(0, esc ? C.duskTop : C.morningTop);
     sky.addColorStop(1, esc ? C.duskLow : C.morningLow);
     ctx.fillStyle = sky;
     ctx.fillRect(vx0, vy0, vw, vh);
     scenery(vx0, vy0, vw, vh, K, camX, esc);
+    const groundY = (level.start.ty + 1) * 16;             // the top of the ground at the start
+    if (DEF.backdrop === 'river') {
+        // the river, seen wherever the bank has a gap
+        const wy = Y(groundY + 10);
+        ctx.fillStyle = C.river;
+        ctx.fillRect(vx0, wy, vw, vy0 + vh - wy);
+        ctx.fillStyle = C.riverHi;
+        for (let i = 0; i < vw; i += 18 * K) ctx.fillRect(vx0 + i + ((game.frame * 0.4 * K) % (18 * K)), wy + 2 * K, 8 * K, K);
+    } else if (DEF.backdrop === 'drain') {
+        // under the lawn: packed earth, and the brick of the old drain further back
+        const top = Y(groundY + 16);
+        if (top < vy0 + vh) {
+            ctx.fillStyle = esc ? C.drainEsc : C.drain;
+            ctx.fillRect(vx0, Math.max(vy0, top), vw, vy0 + vh - Math.max(vy0, top));
+            ctx.fillStyle = C.drainLine;
+            const bx = camX * 0.5, by = camY * 0.5, bw = 24, bhh = 10;
+            for (let row = Math.floor(by / bhh); row * bhh - by < VIEW_H * 16; row++) {
+                const yy = vy0 + (row * bhh - by) * K;
+                if (yy < top) continue;
+                ctx.fillRect(vx0, yy, vw, Math.max(1, K * 0.6));
+                for (let col = Math.floor(bx / bw) - 1; (col * bw - bx) * K < vw; col++) {
+                    ctx.fillRect(vx0 + (col * bw + (row % 2) * bw / 2 - bx) * K, yy, Math.max(1, K * 0.6), bhh * K);
+                }
+            }
+        }
+    }
     const tx0 = Math.floor(camX / 16), tx1 = Math.ceil((camX + view.tiles * 16) / 16);
     const ty0 = Math.floor(camY / 16), ty1 = Math.ceil((camY + VIEW_H * 16) / 16);
     for (let tx = tx0; tx <= tx1 && opt.debug; tx++) {
@@ -2059,7 +2160,6 @@ function render(alpha) {
         const q = prev.ents.get(e.id);
         return q ? [lerp(q.x, e.x, alpha) / FX, lerp(q.y, e.y, alpha) / FX] : [e.x / FX, e.y / FX];
     };
-    for (const e of game.ents) if (!e.gone && e.state === 'rise') { const [ex, ey] = entPos(e); drawEnt(e, ox + ex * K, oy + ey * K, K); }
 
     // shade under the bench, so the way underneath reads as a place
     for (let tx = Math.max(0, tx0); tx < Math.min(level.w, tx1 + 1); tx++) {
@@ -2099,7 +2199,7 @@ function render(alpha) {
     ctx.globalAlpha = 1;
 
     for (const e of game.ents) {
-        if (e.gone || !e.active || e.state === 'rise' || e.state === 'flip') continue;
+        if (e.gone || !e.active || e.state === 'flip') continue;
         const [ex, ey] = entPos(e);
         if (ex < camX - 24 || ex > camX + view.tiles * 16 + 24) continue;
         drawEnt(e, ox + ex * K, oy + ey * K, K);
@@ -2129,6 +2229,42 @@ function render(alpha) {
     ctx.globalAlpha = 1;
     for (const e of game.ents) if (!e.gone && e.state === 'flip') { const [ex, ey] = entPos(e); drawEnt(e, ox + ex * K, oy + ey * K, K); }
 
+    // the rising water: over everything below its surface
+    if (esc && kind === 'water' && game.chase) {
+        const wy = Y(game.chase.pos / FX);
+        if (wy < vy0 + vh) {
+            ctx.fillStyle = C.flood;
+            ctx.fillRect(vx0, wy, vw, vy0 + vh - wy);
+            ctx.fillStyle = C.floodHi;
+            ctx.beginPath();
+            ctx.moveTo(vx0, wy);
+            for (let x = 0; x <= vw; x += 6 * K) ctx.lineTo(vx0 + x, wy + Math.sin((x / K + game.frame * 2) * 0.08) * 1.5 * K);
+            ctx.lineTo(vx0 + vw, wy + 3 * K);
+            ctx.lineTo(vx0, wy + 3 * K);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,.35)';
+            for (let i = 0; i < 12; i++) {
+                const bx = hash(i * 17 + (game.frame >> 5)) * vw, rise = (game.frame * (0.6 + hash(i) * 0.6) + i * 40) % 90;
+                ctx.beginPath();
+                ctx.arc(vx0 + bx, wy + (90 - rise) * K, (1 + hash(i * 3)) * K, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+    // the edge of the crumbling: a curtain of falling earth where the bank is giving way
+    if (esc && kind === 'crumble' && game.chase) {
+        const fxX = X(game.chase.pos / FX), d = level.escape.dir;
+        const g = ctx.createLinearGradient(fxX - d * 40 * K, 0, fxX, 0);
+        g.addColorStop(0, 'rgba(90,60,40,0)');
+        g.addColorStop(1, 'rgba(90,60,40,.55)');
+        ctx.fillStyle = g;
+        ctx.fillRect(Math.min(fxX, fxX - d * 40 * K), vy0, 40 * K, vh);
+        ctx.fillStyle = C.soil;
+        for (let i = 0; i < 16; i++) {
+            const yy = ((game.frame * (3 + hash(i) * 3) + i * 37) % 260) - 20;
+            ctx.fillRect(fxX - d * (hash(i * 7) * 14) * K, vy0 + yy * K, (2 + hash(i * 5) * 3) * K, (2 + hash(i * 5) * 3) * K);
+        }
+    }
     for (const f of fx) {
         const a = f.life / f.max;
         if (f.kind === 'seed') {
@@ -2139,6 +2275,14 @@ function render(alpha) {
             ctx.fillStyle = C.seedHi;
             const r = Math.max(1, Math.round(1.2 * K));
             ctx.fillRect(X(f.x) - r / 2, Y(f.y) - r / 2, r, r);
+        } else if (f.kind === 'clod') {
+            ctx.globalAlpha = Math.min(1, a * 3);
+            ctx.fillStyle = f.wood ? C.wood : C.soil;
+            ctx.save();
+            ctx.translate(X(f.x), Y(f.y));
+            ctx.rotate(f.rot);
+            ctx.fillRect(-3 * K, -3 * K, 6 * K, 6 * K);
+            ctx.restore();
         } else if (f.kind === 'shard' || f.kind === 'plank') {
             ctx.globalAlpha = Math.min(1, a * 3);
             ctx.save();
@@ -2181,11 +2325,13 @@ function render(alpha) {
 
     // the escape: the evening reddens, and the edges pulse as the clock runs down
     if (esc) {
-        const left = game.escapeT / 60;
-        const pulse = left < 10 ? (0.5 + 0.5 * Math.sin(game.frame * (0.12 + (10 - left) * 0.02))) * (1 - left / 10) : 0;
+        const d = UF.danger(game);
+        const near = kind === 'clock' ? Math.max(0, 1 - d / 10) : Math.max(0, 1 - d / 4);
+        const pulse = near > 0 ? (0.5 + 0.5 * Math.sin(game.frame * (0.12 + near * 0.2))) * near : 0;
+        const tint = kind === 'water' ? '30,80,200' : '200,30,20';
         const g = ctx.createRadialGradient(vx0 + vw / 2, vy0 + vh / 2, Math.min(vw, vh) * 0.35, vx0 + vw / 2, vy0 + vh / 2, Math.max(vw, vh) * 0.75);
-        g.addColorStop(0, 'rgba(200,30,20,0)');
-        g.addColorStop(1, `rgba(200,30,20,${0.18 + pulse * 0.35})`);
+        g.addColorStop(0, `rgba(${tint},0)`);
+        g.addColorStop(1, `rgba(${tint},${0.18 + pulse * 0.35})`);
         ctx.fillStyle = g;
         ctx.fillRect(vx0, vy0, vw, vh);
     }
@@ -2258,18 +2404,6 @@ function drawTile(t, x, y, w, h, u, tx, ty) {
         case T.GOLD:
             drawGold(x + w / 2, y + h / 2, u, tx);
             break;
-        case T.QBLOCK:
-        case T.BERRY:
-            bevel(x, y, w, h, u, C.q, C.qHi, C.qLo);
-            ctx.fillStyle = C.qInk;
-            ctx.font = `800 ${Math.round(11 * u)}px system-ui, sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('?', x + w / 2, y + h / 2 + u * 0.5);
-            break;
-        case T.USED:
-            bevel(x, y, w, h, u, C.used, '#a69c8e', C.usedLo);
-            break;
         case T.BRICK: {
             ctx.fillStyle = C.brick;
             ctx.fillRect(x, y, w, h);
@@ -2295,39 +2429,8 @@ function drawTile(t, x, y, w, h, u, tx, ty) {
             ctx.fillRect(x + r(11), y + r(5), r(1.5), r(4));
             ctx.globalAlpha = 1;
             break;
-        case T.PIPE_TL:
-        case T.PIPE_TR: {
-            const left = t === T.PIPE_TL;
-            ctx.fillStyle = C.pipeLo;
-            ctx.fillRect(x - (left ? r(1) : 0), y, w + r(1), h);
-            ctx.fillStyle = C.pipe;
-            ctx.fillRect(x + (left ? 0 : 0), y + r(1), w - (left ? 0 : r(1)), h - r(2));
-            if (left) {
-                ctx.fillStyle = C.pipeHi;
-                ctx.fillRect(x + r(3), y + r(2), r(3), h - r(4));
-            }
-            break;
-        }
-        case T.PIPE_L:
-        case T.PIPE_R: {
-            const left = t === T.PIPE_L;
-            const inset = r(2);
-            ctx.fillStyle = C.pipeLo;
-            ctx.fillRect(left ? x + inset - r(1) : x, y, w - inset + r(1), h);
-            ctx.fillStyle = C.pipe;
-            ctx.fillRect(left ? x + inset : x, y, w - inset - (left ? 0 : r(1)), h);
-            if (left) {
-                ctx.fillStyle = C.pipeHi;
-                ctx.fillRect(x + inset + r(3), y, r(3), h);
-            }
-            break;
-        }
         case T.SEED:
             drawSeed(x + w / 2, y + h / 2 + Math.sin(game.frame * 0.07 + tx * 0.8) * u, u, tx);
-            break;
-        case T.POLE:
-            ctx.fillStyle = C.pole;
-            ctx.fillRect(x + Math.round(w / 2) - r(1), y, r(2), h);
             break;
         case T.WOOD: {
             // the bench: planks laid lengthways, a lit edge on top
@@ -2347,7 +2450,7 @@ function drawTile(t, x, y, w, h, u, tx, ty) {
         }
         case T.ESC_OFF:
             // boards: nailed across until the sack is taken, then only a faint mark where they were
-            if (!level.escape) {
+            if (!level.on) {
                 ctx.fillStyle = C.board;
                 ctx.fillRect(x, y, w, h);
                 ctx.fillStyle = C.boardLo;
@@ -2366,7 +2469,7 @@ function drawTile(t, x, y, w, h, u, tx, ty) {
             break;
         case T.ESC_ON:
             // crates: only an outline until the sack is taken, then there they are, in the way
-            if (level.escape) {
+            if (level.on) {
                 bevel(x, y, w, h, u, C.crate, C.crateHi, C.crateLo);
                 ctx.strokeStyle = C.crateLo;
                 ctx.lineWidth = Math.max(1, u * 1.2);
@@ -2382,35 +2485,16 @@ function drawTile(t, x, y, w, h, u, tx, ty) {
                 ctx.setLineDash([]);
             }
             break;
-        case T.BAG: {
-            // the seed sack, bobbing a little, with a glint so it reads from far off
-            const bob = Math.sin(game.frame * 0.08) * u;
-            const cx = x + w / 2, by = y + h;
+        case T.ITEM: {
+            // what the level sends you for, bobbing a little, with a glow so it reads from far off
+            const bob = Math.sin(game.frame * 0.08) * u, cx = x + w / 2, by = y + h;
             ctx.globalAlpha = 0.3 + 0.2 * Math.sin(game.frame * 0.1);
             ctx.fillStyle = '#fff3c4';
             ctx.beginPath();
             ctx.arc(cx, by - r(8), r(13), 0, Math.PI * 2);
             ctx.fill();
             ctx.globalAlpha = 1;
-            ctx.fillStyle = C.sack;
-            ctx.strokeStyle = C.sackLo;
-            ctx.lineWidth = Math.max(1, u);
-            ctx.beginPath();
-            ctx.moveTo(cx - r(6), by);
-            ctx.quadraticCurveTo(cx - r(9), by - r(9) + bob, cx - r(3), by - r(13) + bob);
-            ctx.lineTo(cx + r(3), by - r(13) + bob);
-            ctx.quadraticCurveTo(cx + r(9), by - r(9) + bob, cx + r(6), by);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = C.sackTie;
-            ctx.fillRect(cx - r(3.5), by - r(13) + bob, r(7), r(1.8));
-            ctx.fillStyle = C.seed;
-            for (const [sx, sy] of [[-2, -15], [1, -16], [3, -14.5]]) {
-                ctx.beginPath();
-                ctx.ellipse(cx + r(sx), by + r(sy) + bob, r(1.3), r(1.8), 0, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            drawItem(DEF.item, cx, by + bob, u);
             break;
         }
         case T.HOME: {
@@ -2438,6 +2522,78 @@ function drawTile(t, x, y, w, h, u, tx, ty) {
             break;
         }
     }
+}
+
+// the three things a level can send you for, standing on (cx, by)
+function drawItem(kind, cx, by, u) {
+    ctx.save();
+    ctx.translate(cx, by);
+    ctx.scale(u, u);
+    ctx.lineWidth = 1;
+    if (kind === 'sack') {
+        ctx.fillStyle = C.sack;
+        ctx.strokeStyle = C.sackLo;
+        ctx.beginPath();
+        ctx.moveTo(-6, 0);
+        ctx.quadraticCurveTo(-9, -9, -3, -13);
+        ctx.lineTo(3, -13);
+        ctx.quadraticCurveTo(9, -9, 6, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = C.sackTie;
+        ctx.fillRect(-3.5, -13, 7, 1.8);
+        ctx.fillStyle = C.seed;
+        for (const [sx, sy] of [[-2, -15], [1, -16], [3, -14.5]]) {
+            ctx.beginPath();
+            ctx.ellipse(sx, sy, 1.3, 1.8, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    } else if (kind === 'button') {
+        // a lost coat button, stood on its edge
+        ctx.fillStyle = C.buttonLo;
+        ctx.beginPath();
+        ctx.arc(0, -7.5, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = C.button;
+        ctx.beginPath();
+        ctx.arc(0, -7.5, 6.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = C.buttonLo;
+        ctx.beginPath();
+        ctx.arc(0, -7.5, 4.4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = C.buttonLo;
+        for (const [hx, hy] of [[-1.5, -9], [1.5, -9], [-1.5, -6], [1.5, -6]]) ctx.fillRect(hx - 0.7, hy - 0.7, 1.4, 1.4);
+        ctx.fillStyle = C.buttonHi;
+        ctx.beginPath();
+        ctx.ellipse(-3, -11, 1.8, 1, -0.6, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        // the last strawberry
+        ctx.translate(0, -7);
+        ctx.fillStyle = C.berry;
+        ctx.beginPath();
+        ctx.moveTo(0, 7);
+        ctx.quadraticCurveTo(-8, 2.5, -6.5, -3.5);
+        ctx.quadraticCurveTo(-3.5, -7, 0, -5.5);
+        ctx.quadraticCurveTo(3.5, -7, 6.5, -3.5);
+        ctx.quadraticCurveTo(8, 2.5, 0, 7);
+        ctx.fill();
+        ctx.fillStyle = C.berryLo;
+        ctx.beginPath();
+        ctx.ellipse(2, 1.8, 2.5, 3.4, 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = C.berrySeed;
+        for (const [sx, sy] of [[-3.5, -1.5], [0, -2.3], [3.5, -1.3], [-1.8, 1.6], [2, 1.8], [0, 4.5]]) ctx.fillRect(sx - 0.5, sy - 0.6, 1, 1.2);
+        ctx.fillStyle = C.leaf;
+        for (let i = 0; i < 5; i++) {
+            ctx.beginPath();
+            ctx.ellipse(0, -6, 3.6, 1.2, i / 5 * Math.PI, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    ctx.restore();
 }
 
 function drawSeed(cx, cy, u) {
@@ -2516,18 +2672,8 @@ function drawPlayer(p, x, y, u, tint) {
     ctx.beginPath();
     ctx.arc(f * (bw / 2 - 0.2), -h + 7, 1.1, 0, Math.PI * 2);
     ctx.fill();
-    // the sack, once it is taken
-    if (own && game.escape) {
-        ctx.fillStyle = C.sack;
-        ctx.strokeStyle = C.sackLo;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.ellipse(-f * (bw / 2 + 1), -h * 0.55, 4.2, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = C.sackTie;
-        ctx.fillRect(-f * (bw / 2 + 1) - 1.5, -h * 0.55 - 5.5, 3, 1.5);
-    }
+    // the item, carried on the back once it is taken
+    if (own && game.escape) drawItem(DEF.item, -f * (bw / 2 + 1), -h * 0.25, 0.6);
     // feet, which run when running
     ctx.fillStyle = C.ink;
     const stride = p.onGround && Math.abs(p.vx) > 0 && !p.duck ? Math.sin(game.frame * (0.18 + Math.abs(p.vx) / P.RUN_MAX * 0.3)) * 2 : 0;
@@ -2712,30 +2858,6 @@ function drawEnt(e, x, y, u) {
         ctx.beginPath();
         ctx.ellipse(-2.5, -3.2, 2.2, 1.2, -0.5, 0, Math.PI * 2);
         ctx.fill();
-    } else if (e.kind === 'berry') {
-        const wob = e.state === 'walk' && e.onGround ? Math.sin(e.x / FX * 0.35) * 0.12 : 0;
-        ctx.translate(0, -6);
-        ctx.rotate(wob);
-        ctx.fillStyle = C.berry;
-        ctx.beginPath();
-        ctx.moveTo(0, 6);
-        ctx.quadraticCurveTo(-7, 2, -5.6, -3);
-        ctx.quadraticCurveTo(-3, -6.2, 0, -4.8);
-        ctx.quadraticCurveTo(3, -6.2, 5.6, -3);
-        ctx.quadraticCurveTo(7, 2, 0, 6);
-        ctx.fill();
-        ctx.fillStyle = C.berryLo;
-        ctx.beginPath();
-        ctx.ellipse(1.8, 1.5, 2.2, 3, 0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = C.berrySeed;
-        for (const [sx, sy] of [[-3, -1.5], [0, -2], [3, -1.2], [-1.6, 1.4], [1.8, 1.6], [0, 4]]) ctx.fillRect(sx - 0.5, sy - 0.6, 1, 1.2);
-        ctx.fillStyle = C.leaf;
-        for (let i = 0; i < 5; i++) {
-            ctx.beginPath();
-            ctx.ellipse(0, -5.3, 3.2, 1.1, i / 5 * Math.PI, 0, Math.PI * 2);
-            ctx.fill();
-        }
     }
     ctx.restore();
 }
@@ -2843,19 +2965,25 @@ function drawHud(dpr) {
         ctx.fillStyle = 'rgba(255,255,255,.55)';
         ctx.fillRect(cx0 + bh / 4, y + bh - 4 * dpr, (w - bh / 2) * p.comboT / P.COMBO_TIME, 2 * dpr);
     }
-    // the escape clock, big and in the middle
+    // the escape, big and in the middle: the clock, or how far behind the water or the edge is
     if (game.escape && p.mode === 'play') {
-        const left = Math.max(0, game.escapeT) / 60;
-        const big = Math.round(22 * s * dpr * (left < 10 && game.escapeT % 60 > 50 ? 1.08 : 1));
+        const kind = level.escape.kind, d = Math.max(0, UF.danger(game)), close = kind === 'clock' ? d < 10 : d < 3;
+        const big = Math.round(22 * s * dpr * (close && game.frame % 60 > 50 ? 1.08 : 1));
         ctx.font = `800 ${big}px system-ui, sans-serif`;
-        const t = left.toFixed(1), w = ctx.measureText('00.0').width + pad * 2.4, cx = (view.x + view.w / 2) * dpr;
+        const t = Math.min(99, d).toFixed(1);
+        const w = ctx.measureText('00.0').width + pad * 2.4, cx = (view.x + view.w / 2) * dpr;
         const yy = Math.round(view.y * dpr) + pad + (view.w < 520 ? bh + pad * 0.6 : 0);
-        ctx.fillStyle = left < 10 ? 'rgba(170,20,20,.88)' : 'rgba(31,36,45,.85)';
+        ctx.fillStyle = close ? 'rgba(170,20,20,.88)' : kind === 'water' ? 'rgba(20,60,110,.85)' : 'rgba(31,36,45,.85)';
         roundRect(cx - w / 2, yy, w, big * 1.5, big * 0.5);
         ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.textAlign = 'center';
         ctx.fillText(t, cx, yy + big * 0.78);
+        if (kind !== 'clock') {
+            ctx.font = `700 ${Math.round(big * 0.42)}px system-ui, sans-serif`;
+            ctx.fillStyle = 'rgba(255,255,255,.8)';
+            ctx.fillText(kind === 'water' ? 'tiles above the water' : 'tiles ahead of the edge', cx, yy + big * 1.5 + big * 0.45);
+        }
         ctx.textAlign = 'left';
     }
     ctx.font = `700 ${fs}px system-ui, sans-serif`;
@@ -2888,9 +3016,9 @@ function drawHud(dpr) {
 
     // what to do: fetch the sack, then run home; and a controls hint until something is pressed
     const notes = [];
-    if (lateFx > 0) notes.push(['Too slow! Back to the sack, and the clock starts again', Math.min(1, lateFx / 30), 'rgba(150,20,20,.9)']);
+    if (lateFx > 0) notes.push([LATE[lateWhy].replace('ITEM', ITEM[DEF.item]), Math.min(1, lateFx / 30), 'rgba(150,20,20,.9)']);
     else if (goalFx > 0 && p.mode === 'play')
-        notes.push([game.escape ? '← Home to the mouse hole, quick!' : 'Fetch the seed sack from the far end of the garden →', Math.min(1, goalFx / 40)]);
+        notes.push([game.escape ? FLEE[level.escape.kind] : GOAL[DEF.item], Math.min(1, goalFx / 40)]);
     if (hint > 0 && !(view.pad && view.pad.h > 60)) {
         if (hint < 1) hint = Math.max(0, hint - 0.02);
         notes.push([touchUI ? 'Left thumb: slide it the way you want to go, pull down to slide  ·  Right thumb: jump'
@@ -3014,11 +3142,11 @@ function frame(now) {
 addEventListener('resize', layout);
 addEventListener('orientationchange', () => setTimeout(layout, 150));
 layout();
-restart();
+loadLevel(opt.level);
 if (query.has('menu')) openMenu();
 requestAnimationFrame(frame);
 window.UNDERFOOT = {get game() { return game; }, get ghost() { return ghost; }, opt, view, step, restart, setOpt,
-    script: fn => { scripted = fn; }, pause: v => { paused = v; }, LINE};
+    script: fn => { scripted = fn; }, pause: v => { paused = v; }, loadLevel, LINES, get level() { return DEF.id; }};
 })();
 </script>
 </body>
