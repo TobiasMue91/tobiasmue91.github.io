@@ -389,3 +389,37 @@ between tags, as its HTML path did, is caught on the two pages the suite plants 
 minify.html's JavaScript scanner, before template literals inside `${...}` were walked rather
 than searched, printed a different tree for one inline script on the site
 (`tools/html_template_generator.html`).
+
+## Family Tree Builder
+
+```sh
+npm run test:familytree                   # or: node test/family_tree.mjs
+node test/family_tree.mjs layout messy    # one or more named suites
+node test/family_tree.mjs --page=old.html
+```
+
+The page draws a family as rows of generations: partners side by side, a child under the
+middle of its two parents. The version this replaced stored a family as a plain graph and laid
+it out breadth-first, so a married-in partner came out on their own children's row and a child
+could only be given one parent. Entered through its own form, 21 generated families (729 people)
+kept 50% of their parent links and put 0 of 347 couples on one row; trees built up from one
+person kept 66% and 45%. Whether the new layout holds
+for a real family - in-laws with their own parents, second partners, half-siblings, a tree
+started from yourself and built upwards - is not something the sample shows, so the page keeps
+its family model and layout in a `<script id="core">` block with no DOM and no Cytoscape, and the
+suite runs that block alone in Node's `vm`. It takes about three seconds.
+
+| suite | what it checks |
+| --- | --- |
+| `layout` | 155 generated families of three kinds - four generations of descendants, the same with in-laws' parents and siblings, and a tree built from one person up both sides of their family - plus own trees entered in shuffled order: every parent exactly one row above their child, every couple side by side, no two cards closer than a partner's width; plain descendant trees drawn with no crossing lines, and children on average within three quarters of a card of the middle of their parents; two small families that can be drawn without a crossing and must be (a father's second partner and their son; a couple with four generations of ancestors on both sides); a 500-person tree laid out in under five seconds (it takes about 0.1). Prints crossings per tree and how far off centre children sit for each kind |
+| `messy` | what old saves and imports can hold: an empty tree, strangers, two people each the other's parent, a three-cycle, someone partnered with a grandparent or their own child, three parents, self links, links to nobody, a chain of four partners, five partners, duplicates, cousins who marry, someone whose two partners are a generation apart - everyone placed once, nobody overlapping, and the consistent part of the family still in clean generations |
+| `links` | what the Link button refuses: linking someone to themselves, a link that exists, a third parent (asked either way round), a partner as the other's parent, a grandchild as a parent or a grandparent as a child, a partner who is already an ancestor; and what it allows |
+| `rows` | the "Generations" figure: none for an empty tree, one for one person, the taller of two separate families, and partners' ancestries counted side by side rather than added |
+
+Each check has been seen failing, against copies of the page with one thing broken: partners
+not grouped, rows counted from the top only, the pull-down that keeps an in-law's parents above
+them removed, no gap between groups, no final centring pass, no reordering, only one starting
+order or no turning a group round (the half-brother family then crosses), the cycle or
+two-parent refusal missing, and the generation count off by one. One refinement is measured but
+not asserted, because it only moves an average: starting from a depth-first order, which takes
+own trees from 0.5 crossings a tree to 0.4.
