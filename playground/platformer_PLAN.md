@@ -14,7 +14,8 @@ Nutzer **Tempo gewählt** (Abschnitt 16): Jahreszeiten sei „mega kreativ“, T
 Gameplay besser, und darauf lasse sich langfristig besser aufbauen. Weitergebaut wird
 `playground/underfoot_tempo.html`. **T1 ist gebaut** (Abschnitt 17): Das Rutschen kostet kein Tempo
 mehr, und es gibt drei Level mit drei Arten von Flucht (Uhr, steigendes Wasser, wegbrechendes
-Ufer). Das wartet auf das Urteil des Nutzers. Die Abschnitte 1 bis 12 beschreiben noch den ursprünglichen SMB-Plan. Steuerung,
+Ufer). Dem Nutzer gefällt das; beim Ufer hat er „den Druck richtig gespürt“. Danach kam **T3,
+die Grafik** (Abschnitt 18), vorgezogen auf seinen Wunsch: „mehr Details und mehr Ästhetik“. Die Abschnitte 1 bis 12 beschreiben noch den ursprünglichen SMB-Plan. Steuerung,
 Fairness-Schicht, Levelformat und Testweise gelten weiter.
 
 **Was der Nutzer nach M1 gesagt hat (gilt für alles Weitere):** Die Maus „rutscht ständig über den
@@ -1138,3 +1139,94 @@ spielen sich messbar verschieden:
 Ob sie sich auch verschieden *anfühlen*, und welche am meisten Lust auf mehr macht, kann nur der
 Nutzer sagen. Außerdem ist offen, ob die Kante hinter einem genug sichtbar ist. Hochkant liegt sie
 oft außerhalb des Bildes; dann sagen nur Zahl, Beben und Grollen, wie nah sie ist.
+
+---
+
+## 18. Stand: T3, die Grafik (2026-09-27)
+
+Der Nutzer nach T1: „Okay, gefällt mir. Beim dritten Level hab ich den Druck richtig gespürt.
+Jetzt wäre es aber allmählich an der Zeit, die Grafik aufs nächste Level zu bringen. Mehr Details
+und mehr Ästhetik.“
+
+### Die Richtung
+
+Ein Bilderbuch-Garten aus Mausperspektive, weich gezeichnet statt Pixelgrafik:
+- **Figuren und Gegenstände:** mit dunkler, warmer Kontur, damit sie vor allem anderen lesbar sind.
+- **Gelände:** schattiert statt umrandet.
+- **Hintergründe:** heller und dunstiger, je weiter hinten.
+
+Morgens ist es warm und hell. Auf dem Heimweg wird es Abend: violett-orange, mit Glühwürmchen.
+
+### Was gezeichnet wird
+
+- **Erde:** wird mit der Tiefe dunkler, mit Krümeln, Kieseln, Wurzeln. An offenen Seiten ein Rand,
+  an Decken hängende Wurzeln.
+- **Gras:** eine gerundete Kante mit Halmen, die an offenen Enden überhängt. Hier und da ein
+  Gänseblümchen, Klee oder ein Fliegenpilz.
+- **Stein** je nach Ort:
+  - Garten: Ziegel der Hauswand;
+  - Abfluss: nasse graue Quader mit Moos oben und Tropfen unten;
+  - Ufer: verwitterter Fels.
+- **Holz** läuft längs seiner längeren Seite: Planken mit Maserung, Ästen und Nägeln über ein
+  Deck, Rinde mit Jahresringen oben an einem Stamm.
+- **Weitere Kacheln:**
+  - Erdklumpen: rissig, mit Keimen obendrauf;
+  - Zweig als Trittstein;
+  - Bretter quer vernagelt;
+  - Kisten;
+  - ein beleuchtetes Mauseloch mit Türrahmen und Fußmatte.
+- **Sammeln:** Sonnenblumenkerne; der goldene Samen glüht und blinkt.
+- **Gegenstände:** Jutesack, Mantelknopf mit Faden, Erdbeere.
+- **Die Maus:** Fell mit Schatten und hellem Bauch, Ohren mit Rosa innen, Schnauze mit Nase und
+  Schnurrhaaren, blinzelndes Auge, Arm und Füße im Laufzyklus.
+  - Neu ist ein **roter Schal**, dessen Enden bei Tempo nach hinten flattern.
+  - Auf dem Heimweg trägt sie den Gegenstand auf dem Rücken.
+  - Geist und Nachbilder sind ihre Silhouette.
+- **Käfer:** glänzender Panzer mit Naht und Glanzlicht. **Schnecke:** mit feuchtem Körper und
+  einem Haus, das von oben links beleuchtet ist.
+- **Hintergründe:** drei Ebenen je Ort, dazu der Himmel mit Sonne:
+  - Garten: Zaun, riesige Blumen, Grashalme so hoch wie Bäume, Klee;
+  - Ufer: Weiden, Rohrkolben, der Fluss in den Lücken;
+  - Abfluss: unter dem Rasen Erde mit alten Ziegelbögen und Wurzeln.
+- **Licht:** morgens Lichtstrahlen, Pollen, eine weiche Vignette; das Wasser mit Lichtspiel
+  unter der Oberfläche.
+
+### Wie es schnell bleibt
+
+- **Einmal malen, dann kopieren:** Alles Unbewegliche wird einmal in kleine Bilder gemalt und
+  danach nur noch kopiert.
+  - Kacheln sind nach Art, Nachbarn, Variante (8 je Art) und Tiefe gespeichert. Zerbricht ein
+    Klumpen, sucht sich der Nachbar einfach sein anderes Bild.
+  - Hintergründe, Himmel und Vignetten werden beim Laden eines Levels gemalt, für beide
+    Tageszeiten. Das Nehmen des Gegenstands stockt deshalb nicht.
+- **Nahtlos:** Eine Kachel ist jetzt eine ganze Zahl von Bildschirmpixeln breit; so stoßen die
+  gemalten Kacheln ohne Naht aneinander.
+- **Speicher:** Hintergründe werden höchstens mit 3,2 Bildschirmpixeln je Spielpixel gemalt und
+  darüber gestreckt. Himmel und Vignette sind höchstens 1400 Pixel breit. Auf einem 4K-Schirm
+  belegen die Hintergründe so 38 MB statt mehrerer hundert.
+
+**Messung** (Chromium ohne Grafikkarte, Handy hochkant 390 × 844, jedes Bild erzwungen fertig
+gemalt):
+
+| Stand | Median je Bild | 95 % |
+|---|---|---|
+| alte Grafik | 5 ms | 8–9 ms |
+| neue Grafik, erster Versuch | 13–15 ms | 17–22 ms |
+| neue Grafik, fertig | 4,4–5,9 ms | 7–9 ms |
+
+Quer liegt der Median bei 7–9 ms. Auf einem Handy mit Grafikkarte ist es weniger.
+
+Im ersten Versuch kosteten zwei Dinge fast alles:
+- der Himmel mit zwei Verläufen über das ganze Bild, 3,6 ms;
+- die auf halber Auflösung gemalten und hochskalierten Ebenen, 5,8 ms.
+
+Beides wird jetzt einmal fertig gemalt. Scheinbare Ruckler von 600 ms in der ersten Messung waren
+ein Messfehler: Ohne Anzeige malt Chromium gesammelt. Die Messung erzwingt deshalb jedes Bild
+fertig.
+
+### Offen
+
+- **Anzeige und Menü:** noch im alten, schlichten Stil.
+- **Bewegung der Figuren:** alles gezeichnet, keine Einzelbilder. Hat die Maus genug Ausdruck?
+  Das muss der Nutzer sagen.
+- **Musik:** noch keine (T3 hatte Ton und Musik mit vorgesehen).

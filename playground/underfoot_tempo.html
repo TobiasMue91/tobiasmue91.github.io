@@ -1437,6 +1437,9 @@ function layout() {
         tiles = Math.min(26, W / tile);
         if (tiles < 16) { tiles = 16; tile = W / 16; }
     }
+    // a whole number of device pixels to a tile, so the painted tiles meet without seams
+    tile = Math.max(1, Math.floor(tile * dpr)) / dpr;
+    tiles = Math.min(26, W / tile);
     view.tile = tile;
     view.tiles = tiles;
     view.w = tiles * tile;
@@ -2074,94 +2077,1005 @@ function showClear() {
 }
 
 /* ---------------- drawing ---------------- */
+// Everything that does not move is painted once, in detail, into small canvases at the current
+// scale and then only copied: tiles by kind, neighbours and variant, backgrounds by level and time
+// of day. What moves (the mouse, creatures, seeds, water) is drawn fresh every frame.
 const lerp = (a, b, t) => a + (b - a) * t;
+const TAU = Math.PI * 2;
+const hash = n => { let h = Math.imul(n ^ 0x9E3779B9, 0x85EBCA6B); h ^= h >>> 13; h = Math.imul(h, 0xC2B2AE35); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+const hash2 = (x, y) => hash(x * 73856093 ^ y * 19349663);
 function menuRect() {
     const s = Math.max(36, Math.min(48, view.tile * 1.3));
     return {x: view.x + view.w - s - 8, y: view.y + 8, s};
 }
 
+// the looks: one palette per place, each with a morning and an evening
+const LOOK = {
+    garden: {
+        day: {skyTop: '#9cc8e8', skyLow: '#f6ecd6', sun: 'rgba(255,238,190,', far: '#b9d2cf', farDark: '#a3c0bd', mid: '#8fbf86', midDark: '#6ea56a', near: '#5f9b53', nearDark: '#447f3e', flower: ['#f4f1ea', '#f2c14e', '#e8786a', '#c98bd8'], haze: 'rgba(246,236,214,.35)'},
+        dusk: {skyTop: '#4b3a6e', skyLow: '#f1935e', sun: 'rgba(255,150,90,', far: '#8a6e86', farDark: '#76607a', mid: '#6a5f6e', midDark: '#564d5d', near: '#4a4652', nearDark: '#383541', flower: ['#d9b9b0', '#d99a5a', '#c0615c', '#9a78a8'], haze: 'rgba(241,147,94,.22)'},
+    },
+    river: {
+        day: {skyTop: '#a3cbe6', skyLow: '#eef0de', sun: 'rgba(255,240,200,', far: '#aecbc0', farDark: '#96b7ab', mid: '#86b37c', midDark: '#6a9a62', near: '#5a944f', nearDark: '#3f7839', flower: ['#f3efe3', '#e9c75a', '#d8745f', '#a98bd0'], haze: 'rgba(238,240,222,.35)'},
+        dusk: {skyTop: '#46386a', skyLow: '#ee8f5e', sun: 'rgba(255,150,90,', far: '#7f6a82', farDark: '#6d5c74', mid: '#625a69', midDark: '#4f4958', near: '#44414d', nearDark: '#34323d', flower: ['#d6b8ad', '#d69857', '#bd5f59', '#9577a5'], haze: 'rgba(238,143,94,.22)'},
+    },
+    drain: {
+        day: {skyTop: '#9cc8e8', skyLow: '#f6ecd6', sun: 'rgba(255,238,190,', far: '#b9d2cf', farDark: '#a3c0bd', mid: '#8fbf86', midDark: '#6ea56a', near: '#5f9b53', nearDark: '#447f3e', flower: ['#f4f1ea', '#f2c14e', '#e8786a', '#c98bd8'], haze: 'rgba(246,236,214,.35)',
+            under: '#2d231d', underLo: '#211a15', brick: '#4a3a31', brickLo: '#3a2d26', root: '#5a4231'},
+        dusk: {skyTop: '#4b3a6e', skyLow: '#f1935e', sun: 'rgba(255,150,90,', far: '#8a6e86', farDark: '#76607a', mid: '#6a5f6e', midDark: '#564d5d', near: '#4a4652', nearDark: '#383541', flower: ['#d9b9b0', '#d99a5a', '#c0615c', '#9a78a8'], haze: 'rgba(241,147,94,.22)',
+            under: '#262028', underLo: '#1b171d', brick: '#3c3238', brickLo: '#2f282d', root: '#4a3a3c'},
+    },
+};
+const TH = {garden: 0, river: 1, drain: 2};
+
+// the ground, the stone, the wood: shared by all places except where noted
+const S = {
+    soil: ['#8a5d3b', '#76502f', '#634326', '#533820', '#472f1b'], soilDot: '#5a3c23', soilHi: '#a57550', pebble: '#9d8f80', pebbleHi: '#c4b8aa',
+    root: '#a07850', rootLo: '#7a5a3e',
+    grass: '#72bd4e', grassHi: '#a8e06f', grassLo: '#4d9a3c', grassDark: '#357a2e', grassShade: 'rgba(40,30,15,.35)',
+    brick: ['#b86b50', '#a95f47', '#c27a5c', '#9f5842'], mortar: '#dcc7ab', brickHi: 'rgba(255,230,200,.35)', brickLo: 'rgba(60,25,15,.35)',
+    dstone: ['#7c878b', '#6f7a7f', '#86918f', '#737d86'], dstoneHi: 'rgba(220,235,240,.4)', dstoneLo: 'rgba(20,28,35,.45)', moss: '#6d9a4a', mossHi: '#94c066', wet: 'rgba(200,225,240,.35)',
+    rock: ['#8f8a82', '#827d76', '#9a948b', '#7a766f'], rockHi: 'rgba(255,250,235,.35)', rockLo: 'rgba(30,25,20,.4)',
+    wood: '#b07844', woodHi: '#d69c63', woodLo: '#7f5230', grain: 'rgba(90,55,25,.45)', knot: '#6d4526',
+    bark: '#7a5638', barkHi: '#9c7453', barkLo: '#5a3d27', ring: '#caa06e', ringLo: '#9c7449',
+    clod: '#9c6d48', clodHi: '#bd8d63', clodLo: '#6f4a2e', crack: 'rgba(60,35,18,.6)',
+    twig: '#8a6340', twigHi: '#b08858', leaf: '#6fae4c', leafLo: '#4f8a38',
+    board: '#d2a974', boardHi: '#ecc995', boardLo: '#9c7547', nail: '#4a4550',
+    crate: '#c98b52', crateHi: '#e9b57a', crateLo: '#8e5a2f', crateMark: 'rgba(120,60,30,.55)',
+    ink: '#3a2a22',
+};
+
+/* ----- the sprite cache ----- */
+const SPR = {K: 0, map: new Map()};
+function spriteScale(K) {
+    if (SPR.K !== K) { SPR.K = K; SPR.map.clear(); BG.map.clear(); }
+}
+// a picture of w x h game px whose origin (0, 0) sits ox, oy game px inside it
+function cached(key, w, h, ox, oy, paint) {
+    let s = SPR.map.get(key);
+    if (!s) {
+        const K = SPR.K, c = document.createElement('canvas');
+        const oxD = Math.ceil(ox * K), oyD = Math.ceil(oy * K);
+        c.width = Math.max(1, Math.ceil(w * K) + 1);
+        c.height = Math.max(1, Math.ceil(h * K) + 1);
+        const g = c.getContext('2d');
+        g.translate(oxD, oyD);
+        g.scale(K, K);
+        g.lineJoin = g.lineCap = 'round';
+        paint(g);
+        s = {c, ox: oxD, oy: oyD};
+        SPR.map.set(key, s);
+    }
+    return s;
+}
+const blit = (s, x, y) => ctx.drawImage(s.c, x - s.ox, y - s.oy);
+
+// little drawing helpers on any context
+function blob(g, x, y, rx, ry, color, rot = 0) {
+    g.fillStyle = color;
+    g.beginPath();
+    g.ellipse(x, y, rx, ry, rot, 0, TAU);
+    g.fill();
+}
+function rrect(g, x, y, w, h, r) {
+    g.beginPath();
+    if (g.roundRect) g.roundRect(x, y, w, h, r);
+    else g.rect(x, y, w, h);
+}
+
+/* ----- tiles ----- */
+// which neighbours are solid ground, as bits: up 1, right 2, down 4, left 8
+function mask(L, tx, ty) {
+    const s = (x, y) => { const t = UF.tileAt(L, x, y); return t === T.WALL || (UF.SOLID[t] && t !== T.BRICK); };
+    return (s(tx, ty - 1) ? 1 : 0) | (s(tx + 1, ty) ? 2 : 0) | (s(tx, ty + 1) ? 4 : 0) | (s(tx - 1, ty) ? 8 : 0);
+}
+// how far below open air an earth tile lies (0 at the top), for the soil to darken with depth
+function depthOf(L, tx, ty) {
+    for (let d = 0; d < 4; d++) {
+        const t = UF.tileAt(L, tx, ty - d - 1);
+        if (!(t === T.GROUND || t === T.GRASS || t === T.STONE || t === T.WOOD)) return d;
+    }
+    return 4;
+}
+// wood runs along its longer side: planks across a deck, bark up a trunk
+function grainOf(L, tx, ty) {
+    let h = 1, v = 1;
+    for (let d = 1; d < 4 && UF.tileAt(L, tx - d, ty) === T.WOOD; d++) h++;
+    for (let d = 1; d < 4 && UF.tileAt(L, tx + d, ty) === T.WOOD; d++) h++;
+    for (let d = 1; d < 4 && UF.tileAt(L, tx, ty - d) === T.WOOD; d++) v++;
+    for (let d = 1; d < 4 && UF.tileAt(L, tx, ty + d) === T.WOOD; d++) v++;
+    return v > h + 1 ? 1 : 0;
+}
+
+function paintSoil(g, depth, v, m) {
+    const grad = g.createLinearGradient(0, 0, 0, 16);
+    grad.addColorStop(0, S.soil[Math.min(4, depth)]);
+    grad.addColorStop(1, S.soil[Math.min(4, depth + 1)]);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 16, 16);
+    // specks and the odd pebble
+    for (let i = 0; i < 5; i++) {
+        const r = hash(v * 31 + i * 7);
+        blob(g, 1.5 + hash(v * 17 + i) * 13, 1.5 + r * 13, 0.5 + r * 0.7, 0.4 + r * 0.5, i % 2 ? S.soilDot : 'rgba(255,220,180,.12)');
+    }
+    if (v === 3) {
+        const px = 3 + hash(v + 91 + depth) * 9, py = 5 + hash(v + 13 + depth) * 8;
+        blob(g, px, py, 1.7, 1.2, S.pebble);
+        blob(g, px - 0.5, py - 0.4, 0.7, 0.4, S.pebbleHi);
+    }
+    if (depth <= 1 && v === 1) {
+        // a thin root wandering through
+        g.strokeStyle = S.root;
+        g.lineWidth = 0.5;
+        g.beginPath();
+        g.moveTo(hash(v + 5) * 16, 0);
+        g.bezierCurveTo(4 + hash(v) * 6, 5, 12 - hash(v + 2) * 6, 9, 3 + hash(v + 4) * 10, 16);
+        g.stroke();
+    }
+    // open sides: a darker rim with crumbs; open underneath: shadow and dangling roots
+    if (!(m & 8)) edgeRim(g, 0, 1);
+    if (!(m & 2)) edgeRim(g, 16, -1);
+    if (!(m & 4)) {
+        const sh = g.createLinearGradient(0, 11, 0, 16);
+        sh.addColorStop(0, 'rgba(30,18,8,0)');
+        sh.addColorStop(1, 'rgba(30,18,8,.45)');
+        g.fillStyle = sh;
+        g.fillRect(0, 11, 16, 5);
+        g.fillStyle = S.soil[2];
+        for (let i = 0; i < 4; i++) blob(g, 2 + i * 4 + hash(v + i) * 2, 16, 1.6, 0.9 + hash(v * 3 + i) * 0.8, S.soil[2]);
+        g.strokeStyle = S.rootLo;
+        g.lineWidth = 0.6;
+        for (let i = 0; i < 1 + v % 2; i++) {
+            const x = 3 + hash(v * 9 + i) * 10, len = 3 + hash(v + i * 5) * 5;
+            g.beginPath();
+            g.moveTo(x, 15);
+            g.quadraticCurveTo(x + 1.5, 16 + len / 2, x - 0.5, 16 + len);
+            g.stroke();
+        }
+    }
+}
+function edgeRim(g, x, dir) {
+    const sh = g.createLinearGradient(x, 0, x + dir * 4, 0);
+    sh.addColorStop(0, 'rgba(35,20,10,.4)');
+    sh.addColorStop(1, 'rgba(35,20,10,0)');
+    g.fillStyle = sh;
+    g.fillRect(Math.min(x, x + dir * 4), 0, 4, 16);
+    g.fillStyle = S.soilHi;
+    g.fillRect(dir > 0 ? x : x - 0.8, 0, 0.8, 16);
+}
+
+function paintTurf(g, v, m) {
+    const openL = !(m & 8), openR = !(m & 2);
+    // under the turf, a soft shadow on the soil
+    g.fillStyle = S.grassShade;
+    g.fillRect(0, 4, 16, 2.5);
+    // the turf: a rounded lip, curling over an open edge
+    const l = openL ? -1.5 : 0, r = openR ? 17.5 : 16;
+    g.fillStyle = S.grassLo;
+    g.beginPath();
+    g.moveTo(l, 1);
+    g.lineTo(r, 1);
+    g.quadraticCurveTo(r + (openR ? 0.8 : 0), 5, r - (openR ? 1.5 : 0), 5.5);
+    for (let x = 14; x >= 2; x -= 3) g.quadraticCurveTo(x + 1.5, 7 + hash(v * 7 + x) * 1.2, x, 5.4);
+    g.quadraticCurveTo(l - (openL ? 0.8 : 0), 5, l, 1);
+    g.fill();
+    g.fillStyle = S.grass;
+    g.beginPath();
+    g.moveTo(l, 0.5);
+    g.lineTo(r, 0.5);
+    g.lineTo(r - (openR ? 0.6 : 0), 3.8);
+    for (let x = 14; x >= 2; x -= 4) g.quadraticCurveTo(x + 2, 5 + hash(v * 5 + x) * 0.8, x, 3.8);
+    g.lineTo(l + (openL ? 0.6 : 0), 3.8);
+    g.fill();
+    g.fillStyle = S.grassHi;
+    g.fillRect(l + 0.5, 0.2, r - l - 1, 0.9);
+    // blades standing up out of it, lit on one side
+    const n = 7 + (v % 3);
+    for (let i = 0; i < n; i++) {
+        const x = (i + 0.5) * 16 / n + (hash(v * 13 + i) - 0.5) * 1.8;
+        const hgt = 2 + hash(v * 29 + i) * 3.5, lean = (hash(v * 3 + i) - 0.5) * 2.2;
+        g.fillStyle = i % 3 === 0 ? S.grassDark : i % 3 === 1 ? S.grassLo : S.grass;
+        g.beginPath();
+        g.moveTo(x - 0.8, 1.2);
+        g.quadraticCurveTo(x + lean * 0.4, 1 - hgt * 0.5, x + lean, 1 - hgt);
+        g.quadraticCurveTo(x + lean * 0.3 + 0.4, 1 - hgt * 0.4, x + 0.8, 1.2);
+        g.fill();
+    }
+    // something growing here, now and then: a daisy, clover, a toadstool
+    const cx = 4 + hash(v * 41) * 8;
+    if (v === 5) {
+        g.strokeStyle = S.grassLo;
+        g.lineWidth = 0.7;
+        g.beginPath();
+        g.moveTo(cx, 1);
+        g.quadraticCurveTo(cx - 1, -3, cx + 0.5, -6.5);
+        g.stroke();
+        for (let k = 0; k < 7; k++) blob(g, cx + 0.5 + Math.cos(k / 7 * TAU) * 1.9, -6.5 + Math.sin(k / 7 * TAU) * 1.2, 1.1, 0.7, '#fbf8f0', k / 7 * TAU);
+        blob(g, cx + 0.5, -6.5, 1, 0.8, '#f2c14e');
+    } else if (v === 6) {
+        g.strokeStyle = S.grassLo;
+        g.lineWidth = 0.6;
+        g.beginPath();
+        g.moveTo(cx, 1);
+        g.lineTo(cx + 0.3, -2.5);
+        g.stroke();
+        for (let k = 0; k < 3; k++) blob(g, cx + 0.3 + Math.cos(k / 3 * TAU - 1.57) * 1.5, -2.8 + Math.sin(k / 3 * TAU - 1.57) * 1.2, 1.3, 1.1, k ? S.grass : S.grassHi);
+    } else if (v === 7) {
+        blob(g, cx, -0.5, 0.9, 1.8, '#efe6d6');
+        g.fillStyle = '#d2483c';
+        g.beginPath();
+        g.ellipse(cx, -2.2, 2.6, 2, 0, Math.PI, 0);
+        g.fill();
+        blob(g, cx - 1, -3, 0.45, 0.35, '#fff');
+        blob(g, cx + 1.1, -2.6, 0.4, 0.3, '#fff');
+    }
+}
+
+function paintBricks(g, v, m, ty) {
+    // a house wall: two courses a tile, every other course shifted half a brick
+    g.fillStyle = S.mortar;
+    g.fillRect(0, 0, 16, 16);
+    for (let row = 0; row < 2; row++) {
+        const shift = ((ty * 2 + row) % 2) * 8;
+        for (let b = -1; b < 2; b++) {
+            const x = b * 16 + shift, y = row * 8;
+            const col = S.brick[Math.floor(hash(v * 11 + row * 3 + b + ty) * 4)];
+            g.fillStyle = col;
+            rrect(g, x + 0.6, y + 0.6, 14.8, 6.8, 1);
+            g.fill();
+            g.fillStyle = S.brickHi;
+            g.fillRect(x + 1.2, y + 1, 13.6, 0.8);
+            g.fillStyle = S.brickLo;
+            g.fillRect(x + 1.2, y + 6.4, 13.6, 0.8);
+            if (hash(v + row * 5 + b) > 0.6) blob(g, x + 4 + hash(v + b) * 8, y + 3.5, 1.2, 0.5, 'rgba(60,25,15,.25)');
+        }
+    }
+    if (!(m & 1)) { g.fillStyle = 'rgba(255,240,215,.35)'; g.fillRect(0, 0, 16, 1); }
+    if (!(m & 8)) { g.fillStyle = 'rgba(40,20,10,.25)'; g.fillRect(0, 0, 1, 16); }
+    if (!(m & 2)) { g.fillStyle = 'rgba(40,20,10,.35)'; g.fillRect(15, 0, 1, 16); }
+}
+
+function paintDrainStone(g, v, m, ty) {
+    // the old drain: big grey blocks, damp, with moss where the light gets at them
+    g.fillStyle = '#4e575c';
+    g.fillRect(0, 0, 16, 16);
+    for (let row = 0; row < 2; row++) {
+        const shift = ((ty * 2 + row) % 2) * 8;
+        for (let b = -1; b < 2; b++) {
+            const x = b * 16 + shift, y = row * 8;
+            g.fillStyle = S.dstone[Math.floor(hash(v * 7 + row * 5 + b + ty * 3) * 4)];
+            rrect(g, x + 0.5, y + 0.5, 15, 7, 1.6);
+            g.fill();
+            g.fillStyle = S.dstoneHi;
+            g.fillRect(x + 1.5, y + 1, 12, 0.7);
+            g.fillStyle = S.dstoneLo;
+            g.fillRect(x + 1, y + 6.4, 14, 1);
+        }
+    }
+    if (v % 3 === 0) {
+        // a wet streak running down
+        g.fillStyle = S.wet;
+        g.fillRect(3 + hash(v) * 9, 0, 0.8, 16);
+    }
+    if (v === 4) {
+        g.strokeStyle = 'rgba(20,28,35,.5)';
+        g.lineWidth = 0.5;
+        g.beginPath();
+        g.moveTo(4, 9); g.lineTo(6, 11); g.lineTo(5.5, 14);
+        g.stroke();
+    }
+    if (!(m & 1)) {
+        // moss on top, hanging a little over
+        for (let i = 0; i < 6; i++) blob(g, 1 + i * 2.8 + hash(v + i) * 1.4, 0.4, 1.8 + hash(v * 3 + i), 1.2 + hash(v * 5 + i) * 0.8, i % 2 ? S.moss : S.mossHi);
+    }
+    if (!(m & 4)) {
+        g.fillStyle = 'rgba(10,15,20,.35)';
+        g.fillRect(0, 14.5, 16, 1.5);
+        if (v % 2) blob(g, 4 + hash(v * 17) * 8, 16.6, 0.6, 0.9, 'rgba(190,220,240,.7)');
+    }
+    if (!(m & 8)) { g.fillStyle = 'rgba(220,235,240,.18)'; g.fillRect(0, 0, 1, 16); }
+    if (!(m & 2)) { g.fillStyle = 'rgba(10,15,20,.35)'; g.fillRect(15, 0, 1, 16); }
+}
+
+function paintRock(g, v, m) {
+    // the steep bank: weathered rock in rounded lumps
+    g.fillStyle = '#6f6a63';
+    g.fillRect(0, 0, 16, 16);
+    for (let i = 0; i < 4; i++) {
+        const x = (i % 2) * 8 + 4 + (hash(v * 5 + i) - 0.5) * 3, y = Math.floor(i / 2) * 8 + 4 + (hash(v * 9 + i) - 0.5) * 3;
+        g.fillStyle = S.rock[Math.floor(hash(v * 3 + i * 7) * 4)];
+        g.beginPath();
+        g.ellipse(x, y, 5.2, 4.6, hash(v + i) * 3, 0, TAU);
+        g.fill();
+        blob(g, x - 1.5, y - 1.8, 2.4, 1.2, S.rockHi, -0.3);
+        blob(g, x + 1.2, y + 2.4, 3, 1, S.rockLo, 0.2);
+    }
+    if (!(m & 1)) for (let i = 0; i < 5; i++) blob(g, 1 + i * 3.4, 0.3, 1.8, 1.1, i % 2 ? S.grassLo : S.grass);
+}
+
+function paintPlanks(g, v, m) {
+    // planks along the length, two to a tile, with grain, a knot now and then, and nails
+    for (let row = 0; row < 2; row++) {
+        const y = row * 8;
+        g.fillStyle = row ? S.wood : '#b8804b';
+        g.fillRect(0, y, 16, 8);
+        g.strokeStyle = S.grain;
+        g.lineWidth = 0.4;
+        for (let k = 0; k < 3; k++) {
+            const gy = y + 1.8 + k * 2.2 + (hash(v * 7 + row * 3 + k) - 0.5);
+            g.beginPath();
+            g.moveTo(0, gy);
+            g.bezierCurveTo(5, gy + (hash(v + k) - 0.5) * 1.4, 11, gy - (hash(v * 2 + k) - 0.5) * 1.4, 16, gy);
+            g.stroke();
+        }
+        if (hash(v * 13 + row) > 0.7) {
+            const kx = 3 + hash(v + row * 9) * 10;
+            blob(g, kx, y + 4, 1.3, 0.9, S.knot);
+            blob(g, kx, y + 4, 0.6, 0.4, S.woodLo);
+        }
+        g.fillStyle = S.woodHi;
+        g.fillRect(0, y, 16, 0.8);
+        g.fillStyle = S.woodLo;
+        g.fillRect(0, y + 7.2, 16, 0.8);
+        // a joint between two planks, with its nails
+        const joint = [3, 11, 7, 13][(v + row) % 4];
+        if ((v + row) % 3 === 0) {
+            g.fillStyle = S.woodLo;
+            g.fillRect(joint, y, 0.8, 8);
+            blob(g, joint - 1.2, y + 2, 0.45, 0.45, S.nail);
+            blob(g, joint + 2, y + 5.8, 0.45, 0.45, S.nail);
+        }
+    }
+    if (!(m & 1)) { g.fillStyle = 'rgba(255,235,200,.45)'; g.fillRect(0, 0, 16, 1); }
+    if (!(m & 4)) { g.fillStyle = 'rgba(40,20,5,.35)'; g.fillRect(0, 15, 16, 1); }
+    if (!(m & 8)) { g.fillStyle = S.woodLo; g.fillRect(0, 0, 0.8, 16); }
+    if (!(m & 2)) { g.fillStyle = S.woodLo; g.fillRect(15.2, 0, 0.8, 16); }
+}
+
+function paintBark(g, v, m) {
+    // a trunk: bark in long ridges; its cut top shows the rings
+    g.fillStyle = S.bark;
+    g.fillRect(0, 0, 16, 16);
+    for (let i = 0; i < 6; i++) {
+        const x = 1 + i * 2.7 + (hash(v * 5 + i) - 0.5);
+        g.fillStyle = i % 2 ? S.barkLo : S.barkHi;
+        g.beginPath();
+        g.moveTo(x, 0);
+        g.bezierCurveTo(x + 0.8, 5, x - 0.8, 11, x + (hash(v + i) - 0.5), 16);
+        g.lineTo(x + 0.9, 16);
+        g.bezierCurveTo(x + 0.2, 11, x + 1.6, 5, x + 0.9, 0);
+        g.fill();
+    }
+    if (!(m & 8)) { g.fillStyle = 'rgba(255,230,190,.2)'; g.fillRect(0, 0, 1.2, 16); }
+    if (!(m & 2)) { g.fillStyle = 'rgba(20,10,5,.35)'; g.fillRect(14.5, 0, 1.5, 16); }
+    if (!(m & 1)) {
+        blob(g, 8, 1.5, 8.5, 2.6, S.ringLo);
+        blob(g, 8, 1.2, 8, 2.2, S.ring);
+        g.strokeStyle = S.ringLo;
+        g.lineWidth = 0.4;
+        for (let k = 1; k < 4; k++) { g.beginPath(); g.ellipse(8, 1.2, k * 2, k * 0.55, 0, 0, TAU); g.stroke(); }
+    }
+    if (v === 3) { blob(g, 5, 9, 1.4, 2, S.barkLo); blob(g, 5, 9, 0.7, 1.2, '#3e2a1b'); }
+}
+
+function paintClod(g, v, m, openL, openR) {
+    // a clod of packed earth: a rough lump, cracked, easy to burst
+    const l = openL ? 0.8 : 0, r = openR ? 15.2 : 16;
+    g.fillStyle = S.clodLo;
+    rrect(g, l, 0.8, r - l, 15.2, [openL ? 4 : 0, openR ? 4 : 0, openR ? 3 : 0, openL ? 3 : 0]);
+    g.fill();
+    g.fillStyle = S.clod;
+    rrect(g, l + 0.4, 0.4, r - l - 0.8, 14.2, [openL ? 4 : 0, openR ? 4 : 0, openR ? 3 : 0, openL ? 3 : 0]);
+    g.fill();
+    for (let i = 0; i < 4; i++) blob(g, 3 + hash(v * 7 + i) * 10, 3 + hash(v * 3 + i) * 9, 1.6, 1.1, i % 2 ? S.clodHi : 'rgba(80,50,28,.35)');
+    g.strokeStyle = S.crack;
+    g.lineWidth = 0.55;
+    g.beginPath();
+    const cx = 5 + hash(v) * 6;
+    g.moveTo(cx, 1);
+    g.lineTo(cx + 1.5, 5);
+    g.lineTo(cx - 0.5, 8);
+    g.lineTo(cx + 2, 12);
+    g.moveTo(cx + 1.5, 5);
+    g.lineTo(cx + 4.5, 6.5);
+    g.stroke();
+    if (!(m & 1)) {
+        g.fillStyle = S.clodHi;
+        g.fillRect(l + 1.5, 0.6, r - l - 3, 0.8);
+        for (let i = 0; i < 3; i++) {
+            const x = 3 + i * 5 + hash(v + i) * 2;
+            g.fillStyle = S.grass;
+            g.beginPath();
+            g.moveTo(x - 0.6, 1);
+            g.quadraticCurveTo(x, -1, x + 0.4, -2.2 - hash(v * 9 + i) * 1.5);
+            g.lineTo(x + 0.6, 1);
+            g.fill();
+        }
+    }
+}
+
+function paintTwig(g, v, joinL, joinR) {
+    // a twig laid across: bark on top, a leaf hanging here and there
+    const l = joinL ? 0 : 1.5, r = joinR ? 16 : 14.5;
+    g.fillStyle = S.twig;
+    rrect(g, l, 0.5, r - l, 3.6, joinL && joinR ? 0 : 1.8);
+    g.fill();
+    g.fillStyle = S.twigHi;
+    g.fillRect(l + 1, 0.8, r - l - 2, 0.8);
+    g.strokeStyle = 'rgba(60,40,20,.5)';
+    g.lineWidth = 0.35;
+    for (let i = 0; i < 3; i++) { const x = 2 + i * 5 + hash(v + i) * 2; g.beginPath(); g.moveTo(x, 1.6); g.lineTo(x + 2, 1.9); g.stroke(); }
+    if (v % 2 === 0) {
+        const x = 4 + hash(v * 5) * 8;
+        g.fillStyle = S.leaf;
+        g.beginPath();
+        g.moveTo(x, 3.8);
+        g.quadraticCurveTo(x + 3.5, 5.5, x + 1.5, 9);
+        g.quadraticCurveTo(x - 1.5, 6, x, 3.8);
+        g.fill();
+        g.strokeStyle = S.leafLo;
+        g.lineWidth = 0.35;
+        g.beginPath(); g.moveTo(x, 4); g.lineTo(x + 1.4, 8.4); g.stroke();
+    }
+    if (!joinL) { blob(g, 1.6, 2.3, 1.5, 1.8, S.ringLo); blob(g, 1.6, 2.3, 0.9, 1.2, S.ring); }
+    if (!joinR) { blob(g, 14.4, 2.3, 1.5, 1.8, S.ringLo); blob(g, 14.4, 2.3, 0.9, 1.2, S.ring); }
+}
+
+function paintBoards(g, v, on, across) {
+    // boards nailed up: solid until the item is taken, then only a faint outline where they were
+    if (on) {
+        g.strokeStyle = 'rgba(90,60,35,.35)';
+        g.lineWidth = 0.5;
+        g.setLineDash([1.5, 1.5]);
+        g.strokeRect(1, 1, 14, 14);
+        g.setLineDash([]);
+        return;
+    }
+    // three boards nailed across, none quite straight
+    for (let row = 0; row < 3; row++) {
+        const y = row * 5.33, tilt = (hash(v * 3 + row) - 0.5) * 0.9;
+        g.save();
+        g.translate(8, y + 2.6);
+        g.rotate(tilt * 0.06);
+        g.fillStyle = S.boardLo;
+        g.fillRect(-8.5, -2.6, 17, 5.2);
+        g.fillStyle = (row + v) % 2 ? S.board : S.boardHi;
+        g.fillRect(-8.5, -2.6, 17, 4.5);
+        g.strokeStyle = 'rgba(120,80,40,.35)';
+        g.lineWidth = 0.35;
+        g.beginPath(); g.moveTo(-8, -0.6 + tilt); g.bezierCurveTo(-3, 0.4, 3, -1.2, 8, -0.2); g.stroke();
+        g.restore();
+    }
+    if (across && v % 3 === 0) {
+        g.strokeStyle = 'rgba(80,50,20,.55)';
+        g.lineWidth = 0.5;
+        g.beginPath(); g.moveTo(5, 0.5); g.lineTo(7, 3.5); g.lineTo(6, 5); g.stroke();
+    }
+    for (const [x, y] of [[1.8, 2.5], [14.2, 2.8], [1.8, 7.9], [14.2, 8.1], [1.8, 13.2], [14.2, 13.4]]) blob(g, x, y, 0.45, 0.45, S.nail);
+}
+
+function paintCrate(g, v, on) {
+    // crates, dropped across the way home: only an outline until they are there
+    if (!on) {
+        g.fillStyle = 'rgba(201,139,82,.12)';
+        g.fillRect(1, 1, 14, 14);
+        g.strokeStyle = 'rgba(201,139,82,.55)';
+        g.lineWidth = 0.6;
+        g.setLineDash([1.6, 1.4]);
+        g.strokeRect(1, 1, 14, 14);
+        g.setLineDash([]);
+        return;
+    }
+    g.fillStyle = S.crateLo;
+    g.fillRect(0, 0, 16, 16);
+    for (let i = 0; i < 3; i++) {
+        g.fillStyle = i === 1 ? S.crateHi : S.crate;
+        g.fillRect(0.6, 0.6 + i * 5, 14.8, 4.4);
+    }
+    g.fillStyle = S.crateLo;
+    g.fillRect(0, 0, 2, 16);
+    g.fillRect(14, 0, 2, 16);
+    g.fillStyle = S.crate;
+    g.fillRect(0.4, 0.4, 1.4, 15.2);
+    g.fillRect(14.2, 0.4, 1.4, 15.2);
+    g.strokeStyle = S.crateMark;
+    g.lineWidth = 0.7;
+    g.beginPath(); g.arc(8, 8, 2.4, 0, TAU); g.stroke();
+    for (const [x, y] of [[1.1, 2], [1.1, 14], [14.9, 2], [14.9, 14]]) blob(g, x, y, 0.45, 0.45, S.nail);
+}
+
+function paintHome(g, top, left, theme) {
+    // the mouse hole: an arch cut into the wall, a warm room beyond, a doormat
+    const wall = theme === TH.drain ? paintDrainStone : theme === TH.river ? paintRock : paintBricks;
+    const cx = left ? 16 : 0, cy = top ? 22 : 6;           // the middle of the whole hole
+    const warm = () => {
+        const glow = g.createRadialGradient(cx, cy, 1, cx, cy, 22);
+        glow.addColorStop(0, 'rgba(255,196,120,.6)');
+        glow.addColorStop(1, 'rgba(255,196,120,0)');
+        g.fillStyle = '#231710';
+        g.fillRect(-16, -16, 48, 48);
+        g.fillStyle = glow;
+        g.fillRect(-16, -16, 48, 48);
+    };
+    if (top) {
+        wall(g, 2, 15, 0);
+        g.save();
+        g.beginPath();
+        g.arc(cx, 16, 13, Math.PI, 0);
+        g.closePath();
+        g.clip();
+        warm();
+        g.restore();
+        g.strokeStyle = '#7d4d2f';
+        g.lineWidth = 1.8;
+        g.beginPath();
+        g.arc(cx, 16, 13.8, Math.PI, 0);
+        g.stroke();
+        g.strokeStyle = '#b07a4f';
+        g.lineWidth = 0.6;
+        g.beginPath();
+        g.arc(cx, 16, 13.2, Math.PI, 0);
+        g.stroke();
+    } else {
+        g.save();
+        g.beginPath();
+        g.rect(0, 0, 16, 16);
+        g.clip();
+        warm();
+        g.restore();
+        g.fillStyle = '#6d4329';
+        g.fillRect(0, 14.4, 16, 1.6);
+        g.fillStyle = '#b8503f';
+        g.fillRect(left ? 4 : 0, 13.3, left ? 12 : 9, 1.2);
+        g.fillStyle = '#7d4d2f';
+        g.fillRect(left ? 0 : 14.2, 0, 1.8, 16);
+    }
+}
+
+// the static picture of the tile at (tx, ty), or null for tiles drawn every frame
+function tileSprite(L, t, tx, ty, theme) {
+    const v = Math.floor(hash2(tx, ty) * 8);
+    switch (t) {
+        case T.GROUND: case T.GRASS: {
+            const m = mask(L, tx, ty), d = t === T.GRASS ? 0 : depthOf(L, tx, ty);
+            const turf = t === T.GRASS && !(m & 1);
+            return cached(1e6 + ((t * 16 + m) * 8 + v) * 8 + d, 22, 32, 3, 10, g => {
+                paintSoil(g, d, v, m);
+                if (turf) paintTurf(g, v, m);
+            });
+        }
+        case T.STONE: {
+            const m = mask(L, tx, ty), par = ty & 1;
+            return cached(2e6 + ((theme * 16 + m) * 8 + v) * 2 + par, 22, 26, 3, 5, g => {
+                if (theme === TH.drain) paintDrainStone(g, v, m, par);
+                else if (theme === TH.river) paintRock(g, v, m);
+                else paintBricks(g, v, m, par);
+            });
+        }
+        case T.WOOD: {
+            const m = mask(L, tx, ty), gr = grainOf(L, tx, ty);
+            return cached(3e6 + ((gr * 16 + m) * 8 + v), 22, 24, 3, 5, g => gr ? paintBark(g, v, m) : paintPlanks(g, v, m));
+        }
+        case T.BRICK: {
+            const m = mask(L, tx, ty);
+            const openL = UF.tileAt(L, tx - 1, ty) !== T.BRICK, openR = UF.tileAt(L, tx + 1, ty) !== T.BRICK;
+            const openU = UF.tileAt(L, tx, ty - 1) !== T.BRICK && !(m & 1);
+            return cached(4e6 + ((openL * 2 + openR) * 2 + openU) * 8 + v, 22, 24, 3, 5, g => paintClod(g, v, openU ? 0 : 1, openL, openR));
+        }
+        case T.ONEWAY: {
+            const jl = UF.tileAt(L, tx - 1, ty) === T.ONEWAY, jr = UF.tileAt(L, tx + 1, ty) === T.ONEWAY;
+            return cached(5e6 + (jl * 2 + jr) * 8 + v, 22, 26, 3, 5, g => paintTwig(g, v, jl, jr));
+        }
+        case T.ESC_OFF: {
+            const across = UF.tileAt(L, tx - 1, ty) === T.WOOD || UF.tileAt(L, tx + 1, ty) === T.WOOD ||
+                UF.tileAt(L, tx - 1, ty) === T.ESC_OFF && UF.tileAt(L, tx + 1, ty) === T.ESC_OFF;
+            return cached(6e6 + (L.on * 2 + across) * 8 + v, 20, 20, 2, 2, g => paintBoards(g, v, L.on, across));
+        }
+        case T.ESC_ON:
+            return cached(7e6 + L.on * 8 + v, 20, 20, 2, 2, g => paintCrate(g, v, L.on));
+        case T.HOME: {
+            const top = UF.tileAt(L, tx, ty - 1) !== T.HOME, left = UF.tileAt(L, tx - 1, ty) !== T.HOME || tx === 0;
+            return cached(8e6 + (theme * 2 + top) * 2 + left, 18, 18, 1, 1, g => paintHome(g, top, left, theme));
+        }
+    }
+    return null;
+}
+
+/* ----- things drawn every frame, from their own cached pictures ----- */
+const seedSprite = () => cached(9e6, 12, 14, 6, 7, g => {
+    // a sunflower seed: dark, striped, with a shine
+    g.save();
+    g.rotate(0.25);
+    g.fillStyle = S.ink;
+    g.beginPath(); g.ellipse(0, 0, 3.3, 5.3, 0, 0, TAU); g.fill();
+    g.fillStyle = '#4a4650';
+    g.beginPath(); g.moveTo(0, -4.8); g.quadraticCurveTo(3.2, -1, 0, 4.8); g.quadraticCurveTo(-3.2, -1, 0, -4.8); g.fill();
+    g.fillStyle = '#e8e2d2';
+    for (const x of [-1.4, 0, 1.4]) { g.beginPath(); g.ellipse(x, 0.2, 0.35, 3.8 - Math.abs(x) * 0.8, 0, 0, TAU); g.fill(); }
+    blob(g, -1.2, -2.4, 0.7, 1.2, 'rgba(255,255,255,.55)', -0.3);
+    g.restore();
+});
+const goldSprite = () => cached(9e6 + 1, 24, 24, 12, 12, g => {
+    const glow = g.createRadialGradient(0, 0, 1, 0, 0, 11);
+    glow.addColorStop(0, 'rgba(255,230,140,.8)');
+    glow.addColorStop(1, 'rgba(255,230,140,0)');
+    g.fillStyle = glow;
+    g.fillRect(-12, -12, 24, 24);
+    g.save();
+    g.rotate(0.25);
+    const gr = g.createLinearGradient(-3, -5, 3, 5);
+    gr.addColorStop(0, '#fff0a8');
+    gr.addColorStop(0.5, '#f2b631');
+    gr.addColorStop(1, '#b9780f');
+    g.fillStyle = '#8a5a0a';
+    g.beginPath(); g.ellipse(0, 0, 3.9, 6, 0, 0, TAU); g.fill();
+    g.fillStyle = gr;
+    g.beginPath(); g.ellipse(0, 0, 3.3, 5.4, 0, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(255,250,220,.8)';
+    for (const x of [-1.3, 0, 1.3]) { g.beginPath(); g.ellipse(x, 0.2, 0.3, 3.6 - Math.abs(x) * 0.8, 0, 0, TAU); g.fill(); }
+    g.restore();
+});
+
+/* ----- backgrounds ----- */
+// Each place has three layers that slide past slower the further back they are, painted once
+// (at half resolution: they are soft anyway) and repeated sideways.
+const BG = {map: new Map()};
+const BG_H = 244, BG_BASE = 230, BG_W = 480;           // game px: height, where the ground line is, repeat width
+const BG_FILL = ['far', 'midDark', null, null];        // the colour each layer continues in below its picture
+// backgrounds are soft: past 3.2 device px a game px (big, sharp screens) they are painted at
+// that and stretched, which keeps each under 5 MB
+const bgScale = () => Math.min(SPR.K, 3.2);
+function bgLayer(theme, dusk, which) {
+    const key = theme * 100 + dusk * 10 + which;
+    let c = BG.map.get(key);
+    if (c) return c;
+    const s = bgScale(), look = LOOK[Object.keys(TH)[theme]][dusk ? 'dusk' : 'day'];
+    // only one place is kept at once, in both its times of day
+    for (const k of [...BG.map.keys()]) if (Math.floor(k / 100) !== theme) BG.map.delete(k);
+    c = document.createElement('canvas');
+    c.width = Math.ceil(BG_W * s);
+    c.height = Math.ceil(BG_H * s);
+    const g = c.getContext('2d');
+    g.scale(s, s);
+    g.lineCap = 'round';
+    // everything drawn three times, a repeat apart, so the picture wraps without a seam
+    const wrap = fn => { for (const o of [-BG_W, 0, BG_W]) { g.save(); g.translate(o, 0); fn(); g.restore(); } };
+    const R = (i, k = 0) => hash(i * 977 + which * 131 + theme * 17 + k);
+    if (which === 0) {
+        // far: soft clouds, and the garden's giants in the haze
+        wrap(() => {
+            g.fillStyle = dusk ? 'rgba(255,190,160,.55)' : 'rgba(255,255,255,.8)';
+            for (let i = 0; i < 5; i++) {
+                const x = i * 150 + R(i) * 60, y = 30 + R(i, 1) * 50, sc = 0.8 + R(i, 2) * 0.7;
+                for (const [dx, dy, rr] of [[-18, 4, 11], [0, -2, 15], [18, 3, 12], [8, 7, 10], [-8, 8, 9]]) {
+                    g.beginPath(); g.arc(x + dx * sc, y + dy * sc, rr * sc, 0, TAU); g.fill();
+                }
+            }
+            if (theme === TH.river) {
+                // willows along the far bank
+                for (let i = 0; i < 5; i++) {
+                    const x = i * 150 + R(i, 3) * 80, h = 110 + R(i, 4) * 50;
+                    g.strokeStyle = look.farDark;
+                    g.lineWidth = 5;
+                    g.beginPath(); g.moveTo(x, BG_BASE); g.quadraticCurveTo(x - 4, BG_BASE - h * 0.5, x + 2, BG_BASE - h * 0.85); g.stroke();
+                    g.fillStyle = look.farDark;
+                    for (let k = 0; k < 5; k++) { g.beginPath(); g.ellipse(x - 26 + k * 13, BG_BASE - h * (0.82 + R(i, k + 20) * 0.1), 14, 10, 0, 0, TAU); g.fill(); }
+                    // long drooping strands of leaves
+                    for (let k = 0; k < 22; k++) {
+                        const sx = x - 34 + k * 3.2, top = BG_BASE - h * (0.8 + R(i, k + 40) * 0.1), len = h * (0.35 + R(i, k) * 0.3);
+                        g.strokeStyle = k % 2 ? look.far : look.farDark;
+                        g.lineWidth = 2.2;
+                        g.beginPath(); g.moveTo(sx, top); g.quadraticCurveTo(sx + 3, top + len * 0.5, sx + 1.5, top + len); g.stroke();
+                    }
+                }
+            } else {
+                // a fence far off, and flowers taller than houses
+                g.fillStyle = look.farDark;
+                for (let x = 0; x < BG_W; x += 22) {
+                    g.beginPath();
+                    g.moveTo(x, BG_BASE); g.lineTo(x, BG_BASE - 118); g.lineTo(x + 8, BG_BASE - 126); g.lineTo(x + 16, BG_BASE - 118); g.lineTo(x + 16, BG_BASE);
+                    g.fill();
+                }
+                g.fillRect(0, BG_BASE - 100, BG_W, 6);
+                g.fillRect(0, BG_BASE - 40, BG_W, 6);
+                for (let i = 0; i < 6; i++) {
+                    const x = i * 125 + R(i, 5) * 60, h = 140 + R(i, 6) * 60;
+                    g.strokeStyle = look.far;
+                    g.lineWidth = 5;
+                    g.beginPath(); g.moveTo(x, BG_BASE); g.quadraticCurveTo(x - 10, BG_BASE - h / 2, x + 4, BG_BASE - h); g.stroke();
+                    g.fillStyle = look.far;
+                    g.beginPath(); g.ellipse(x - 14, BG_BASE - h * 0.45, 16, 5, -0.5, 0, TAU); g.fill();
+                    const kind = i % 3;
+                    if (kind === 0) {
+                        for (let k = 0; k < 14; k++) { g.beginPath(); g.ellipse(x + 4 + Math.cos(k / 14 * TAU) * 16, BG_BASE - h + Math.sin(k / 14 * TAU) * 16, 9, 4, k / 14 * TAU, 0, TAU); g.fill(); }
+                        g.fillStyle = look.farDark;
+                        g.beginPath(); g.arc(x + 4, BG_BASE - h, 11, 0, TAU); g.fill();
+                    } else if (kind === 1) {
+                        g.beginPath(); g.moveTo(x - 10, BG_BASE - h + 4); g.quadraticCurveTo(x + 4, BG_BASE - h + 26, x + 18, BG_BASE - h + 4);
+                        g.lineTo(x + 12, BG_BASE - h - 14); g.lineTo(x + 4, BG_BASE - h - 4); g.lineTo(x - 4, BG_BASE - h - 14); g.closePath(); g.fill();
+                    } else {
+                        g.fillStyle = look.haze;
+                        g.beginPath(); g.arc(x + 4, BG_BASE - h, 18, 0, TAU); g.fill();
+                        g.strokeStyle = look.far;
+                        g.lineWidth = 0.8;
+                        for (let k = 0; k < 20; k++) { g.beginPath(); g.moveTo(x + 4, BG_BASE - h); g.lineTo(x + 4 + Math.cos(k / 20 * TAU) * 17, BG_BASE - h + Math.sin(k / 20 * TAU) * 17); g.stroke(); }
+                    }
+                }
+            }
+            g.fillStyle = look.far;
+            g.fillRect(-10, BG_BASE - 8, BG_W + 20, BG_H);
+        });
+        g.globalCompositeOperation = 'source-atop';
+        g.fillStyle = look.haze.replace(/[\d.]+\)$/, '.5)');
+        g.fillRect(0, 0, BG_W, BG_H);
+    } else if (which === 1) {
+        // middle: blades of grass as tall as trees, and the odd flower on its stalk
+        wrap(() => {
+            for (let i = 0; i < 26; i++) {
+                const x = i * 28 + R(i) * 20, h = 70 + R(i, 1) * 90, lean = (R(i, 2) - 0.5) * 50;
+                g.fillStyle = i % 3 ? look.mid : look.midDark;
+                g.beginPath();
+                g.moveTo(x - 6, BG_BASE + 10);
+                g.quadraticCurveTo(x + lean * 0.3, BG_BASE - h * 0.5, x + lean, BG_BASE - h);
+                g.quadraticCurveTo(x + lean * 0.2 + 3, BG_BASE - h * 0.45, x + 6, BG_BASE + 10);
+                g.fill();
+            }
+            for (let i = 0; i < 4; i++) {
+                const x = i * 180 + R(i, 3) * 90, h = 90 + R(i, 4) * 40, col = look.flower[Math.floor(R(i, 5) * 4)];
+                g.strokeStyle = look.midDark;
+                g.lineWidth = 2.4;
+                g.beginPath(); g.moveTo(x, BG_BASE + 5); g.quadraticCurveTo(x + 8, BG_BASE - h / 2, x, BG_BASE - h); g.stroke();
+                g.fillStyle = col;
+                for (let k = 0; k < 6; k++) { g.beginPath(); g.ellipse(x + Math.cos(k / 6 * TAU) * 7, BG_BASE - h + Math.sin(k / 6 * TAU) * 7, 6, 3.5, k / 6 * TAU, 0, TAU); g.fill(); }
+                g.fillStyle = look.flower[1];
+                g.beginPath(); g.arc(x, BG_BASE - h, 4, 0, TAU); g.fill();
+            }
+            if (theme === TH.river) {
+                // bulrushes
+                for (let i = 0; i < 9; i++) {
+                    const x = i * 80 + R(i, 7) * 40, h = 90 + R(i, 8) * 50;
+                    g.strokeStyle = look.midDark;
+                    g.lineWidth = 1.6;
+                    g.beginPath(); g.moveTo(x, BG_BASE + 5); g.lineTo(x + 2, BG_BASE - h); g.stroke();
+                    g.fillStyle = dusk ? '#4a3a36' : '#7a5234';
+                    rrect(g, x - 2.2, BG_BASE - h + 6, 5, 20, 2.5); g.fill();
+                }
+            }
+            g.fillStyle = look.midDark;
+            g.fillRect(-10, BG_BASE + 4, BG_W + 20, BG_H);
+        });
+        g.globalCompositeOperation = 'source-atop';
+        g.fillStyle = look.haze.replace(/[\d.]+\)$/, '.25)');
+        g.fillRect(0, 0, BG_W, BG_H);
+    } else if (which === 2) {
+        // near: thick tufts and clover right behind the path
+        wrap(() => {
+            for (let i = 0; i < 60; i++) {
+                const x = i * 12 + R(i) * 10, h = 14 + R(i, 1) * 26, lean = (R(i, 2) - 0.5) * 14;
+                g.fillStyle = i % 2 ? look.near : look.nearDark;
+                g.beginPath();
+                g.moveTo(x - 3, BG_BASE + 4);
+                g.quadraticCurveTo(x + lean * 0.4, BG_BASE - h * 0.5, x + lean, BG_BASE - h);
+                g.quadraticCurveTo(x + lean * 0.2 + 1.5, BG_BASE - h * 0.4, x + 3, BG_BASE + 4);
+                g.fill();
+            }
+            for (let i = 0; i < 8; i++) {
+                const x = i * 90 + R(i, 3) * 50;
+                g.fillStyle = look.near;
+                for (let k = 0; k < 3; k++) { g.beginPath(); g.arc(x + Math.cos(k / 3 * TAU - 1.57) * 6, BG_BASE - 22 + Math.sin(k / 3 * TAU - 1.57) * 6, 6, 0, TAU); g.fill(); }
+                g.strokeStyle = look.nearDark;
+                g.lineWidth = 1.2;
+                g.beginPath(); g.moveTo(x, BG_BASE); g.lineTo(x, BG_BASE - 22); g.stroke();
+            }
+        });
+    } else if (which === 3) {
+        // under the lawn, for the drain: packed earth, old brick arches, roots
+        g.fillStyle = look.under;
+        g.fillRect(0, 0, BG_W, BG_H);
+        // this one repeats up and down as well, so wrap it both ways
+        const wrap2 = fn => { for (const oy of [-BG_H, 0, BG_H]) { g.save(); g.translate(0, oy); wrap(fn); g.restore(); } };
+        wrap2(() => {
+            for (let i = 0; i < 4; i++) {
+                const x = i * 180 + 40, y = 60 + (i % 2) * 110;
+                g.fillStyle = look.brick;
+                g.beginPath(); g.arc(x + 50, y + 60, 50, Math.PI, 0); g.lineTo(x + 100, y + 110); g.lineTo(x, y + 110); g.fill();
+                g.fillStyle = look.underLo;
+                g.beginPath(); g.arc(x + 50, y + 62, 38, Math.PI, 0); g.lineTo(x + 88, y + 110); g.lineTo(x + 12, y + 110); g.fill();
+                g.strokeStyle = look.brickLo;
+                g.lineWidth = 1.5;
+                for (let k = 0; k < 9; k++) {
+                    const a = Math.PI + k / 8 * Math.PI;
+                    g.beginPath(); g.moveTo(x + 50 + Math.cos(a) * 38, y + 62 + Math.sin(a) * 38); g.lineTo(x + 50 + Math.cos(a) * 50, y + 60 + Math.sin(a) * 50); g.stroke();
+                }
+            }
+            g.strokeStyle = look.root;
+            for (let i = 0; i < 10; i++) {
+                const x = R(i) * BG_W, y = R(i, 1) * BG_H;
+                g.lineWidth = 1 + R(i, 2) * 2;
+                g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + 20, y + 30, x - 15, y + 50, x + 10 + R(i, 3) * 20, y + 90); g.stroke();
+            }
+            for (let i = 0; i < 70; i++) blob(g, R(i, 4) * BG_W, R(i, 5) * BG_H, 1 + R(i, 6) * 2.5, 1 + R(i, 7) * 1.5, look.underLo);
+        });
+    }
+    BG.map.set(key, c);
+    return c;
+}
+// draw one layer: sliding at f of the camera's speed, its ground line pulled towards the real one
+function drawLayer(c, f, camX, groundScreen, vx0, vy0, vw, vh, fill) {
+    const up = SPR.K / bgScale(), W = Math.round(c.width * up), H = Math.round(c.height * up), anchor = vy0 + vh * 0.72;
+    const gy = anchor + (groundScreen - anchor) * (0.35 + f * 0.65);
+    const top = Math.round(gy - BG_BASE * SPR.K);
+    const period = BG_W * SPR.K;
+    let x = -((camX * SPR.K * f) % period);
+    if (x > 0) x -= period;
+    for (; x < vw; x += period) up === 1 ? ctx.drawImage(c, vx0 + Math.round(x), top) : ctx.drawImage(c, vx0 + Math.round(x), top, W, H);
+    if (fill && top + H < vy0 + vh) {
+        ctx.fillStyle = fill;
+        ctx.fillRect(vx0, top + H - 1, vw, vy0 + vh - top - H + 1);
+    }
+}
+// pictures the size of the view, painted once for each size: the sky with its sun, and the vignette
+let warmFor = '';
+const VIEWPICS = new Map();
+const skyPic = (theme, dusk, vw, vh) => viewPic(`sky${theme}${dusk}`, vw, vh, g => {
+    const look = LOOK[Object.keys(TH)[theme]][dusk ? 'dusk' : 'day'];
+    const sky = g.createLinearGradient(0, 0, 0, vh);
+    sky.addColorStop(0, look.skyTop);
+    sky.addColorStop(1, look.skyLow);
+    g.fillStyle = sky;
+    g.fillRect(0, 0, vw, vh);
+    const sunX = vw * (dusk ? 0.82 : 0.22), sunY = vh * (dusk ? 0.62 : 0.2);
+    const sun = g.createRadialGradient(sunX, sunY, 0, sunX, sunY, vh * 0.8);
+    sun.addColorStop(0, look.sun + '.9)');
+    sun.addColorStop(0.08, look.sun + '.55)');
+    sun.addColorStop(1, look.sun + '0)');
+    g.fillStyle = sun;
+    g.fillRect(0, 0, vw, vh);
+});
+const vignette = (tint, vw, vh) => viewPic(`vig${tint}`, vw, vh, g => {
+    const r = g.createRadialGradient(vw / 2, vh * 0.48, Math.min(vw, vh) * 0.38, vw / 2, vh * 0.48, Math.max(vw, vh) * 0.78);
+    r.addColorStop(0, `rgba(${tint},0)`);
+    r.addColorStop(1, `rgba(${tint},1)`);
+    g.fillStyle = r;
+    g.fillRect(0, 0, vw, vh);
+});
+function viewPic(key, vw, vh, paint) {
+    const k = `${key}:${vw}x${vh}`;
+    let c = VIEWPICS.get(k);
+    if (!c) {
+        if (VIEWPICS.size > 12) VIEWPICS.clear();
+        // smooth gradients only: on a big screen, painted smaller and stretched
+        const sc = Math.min(1, 1400 / Math.max(vw, vh));
+        c = document.createElement('canvas');
+        c.width = Math.ceil(vw * sc);
+        c.height = Math.ceil(vh * sc);
+        const g = c.getContext('2d');
+        g.scale(sc, sc);
+        paint(g);
+        VIEWPICS.set(k, c);
+    }
+    return c;
+}
+
+/* ----- the world ----- */
 function render(alpha) {
     const dpr = view.dpr;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = C.frame;
-    ctx.fillRect(0, 0, cv.width, cv.height);
     const vx0 = Math.round(view.x * dpr), vy0 = Math.round(view.y * dpr);
     const vw = Math.round(view.w * dpr), vh = Math.round(view.h * dpr);
+    // the frame round the view (the view itself is all painted over)
+    ctx.fillStyle = C.frame;
+    ctx.fillRect(0, 0, cv.width, vy0);
+    ctx.fillRect(0, vy0 + vh, cv.width, cv.height - vy0 - vh);
+    ctx.fillRect(0, vy0, vx0, vh);
+    ctx.fillRect(vx0 + vw, vy0, cv.width - vx0 - vw, vh);
     const K = view.tile / 16 * dpr;                     // device pixels per game pixel
-    const p = game.p;
+    spriteScale(K);
+    const p = game.p, L = game.level;
     const sh = shake > 0 ? shake * (((game.frame * 7) % 5) / 2 - 1) : 0;
     const camX = lerp(prev.cx, game.cam.x, alpha) / FX + sh, camY = lerp(prev.cy, game.cam.y, alpha) / FX - sh * 0.5;
     const ox = vx0 - Math.round(camX * K), oy = vy0 - Math.round(camY * K);
     const X = gx => ox + Math.round(gx * K), Y = gy => oy + Math.round(gy * K);
+    const esc = game.escape, kind = level.escape.kind, theme = TH[DEF.backdrop] || 0;
+    const look = LOOK[DEF.backdrop][esc ? 'dusk' : 'day'];
+    // Everything painted once is painted now, at the start, for both times of day: then taking
+    // the item never stalls on the evening's pictures.
+    if (warmFor !== `${theme}:${K}:${vw}x${vh}`) {
+        warmFor = `${theme}:${K}:${vw}x${vh}`;
+        for (const d of [0, 1]) for (let i = 0; i < (theme === TH.drain ? 4 : 3); i++) bgLayer(theme, d, i);
+        for (const d of [0, 1]) skyPic(theme, d, vw, vh);
+        for (const tint of ['30,20,10', '30,80,200', '200,40,30']) vignette(tint, vw, vh);
+    }
 
     ctx.save();
     ctx.beginPath();
     ctx.rect(vx0, vy0, vw, vh);
     ctx.clip();
 
-    // sky: a morning on the way out, a red evening on the way home
-    const esc = game.escape, kind = level.escape.kind;
-    const sky = ctx.createLinearGradient(0, vy0, 0, vy0 + vh);
-    sky.addColorStop(0, esc ? C.duskTop : C.morningTop);
-    sky.addColorStop(1, esc ? C.duskLow : C.morningLow);
-    ctx.fillStyle = sky;
-    ctx.fillRect(vx0, vy0, vw, vh);
-    scenery(vx0, vy0, vw, vh, K, camX, esc);
-    const groundY = (level.start.ty + 1) * 16;             // the top of the ground at the start
-    if (DEF.backdrop === 'river') {
-        // the river, seen wherever the bank has a gap
-        const wy = Y(groundY + 10);
-        ctx.fillStyle = C.river;
+    // the sky, and the sun low in it
+    ctx.drawImage(skyPic(theme, esc ? 1 : 0, vw, vh), vx0, vy0, vw, vh);
+
+    // the layers behind
+    const groundY = (level.start.ty + 1) * 16, gs = Y(groundY);
+    const layerFs = [0.12, 0.3, 0.55];
+    for (let i = 0; i < 3; i++) drawLayer(bgLayer(theme, esc ? 1 : 0, i), layerFs[i], camX, gs, vx0, vy0, vw, vh, BG_FILL[i] && look[BG_FILL[i]]);
+
+    if (DEF.backdrop === 'garden') {
+        // the dark of a hole in the ground, wherever the path has a gap
+        const top = Y(groundY + 6);
+        if (top < vy0 + vh) {
+            const pg = ctx.createLinearGradient(0, top, 0, top + 70 * K);
+            pg.addColorStop(0, '#4a3322');
+            pg.addColorStop(1, '#140d08');
+            ctx.fillStyle = pg;
+            ctx.fillRect(vx0, top, vw, vy0 + vh - top);
+        }
+    } else if (DEF.backdrop === 'river') {
+        // the river, wherever the bank has a gap
+        const wy = Y(groundY + 11);
+        const rg = ctx.createLinearGradient(0, wy, 0, wy + 60 * K);
+        rg.addColorStop(0, esc ? '#6a6488' : '#5b9cc4');
+        rg.addColorStop(1, esc ? '#2d2a40' : '#2c5d80');
+        ctx.fillStyle = rg;
         ctx.fillRect(vx0, wy, vw, vy0 + vh - wy);
-        ctx.fillStyle = C.riverHi;
-        for (let i = 0; i < vw; i += 18 * K) ctx.fillRect(vx0 + i + ((game.frame * 0.4 * K) % (18 * K)), wy + 2 * K, 8 * K, K);
+        ctx.fillStyle = 'rgba(255,255,255,.4)';
+        for (let i = 0; i < 12; i++) {
+            const x = ((hash(i) * 900 - camX * 0.9 * K + game.frame * 0.3 * K) % (vw + 60 * K) + vw + 60 * K) % (vw + 60 * K) - 30 * K;
+            ctx.fillRect(vx0 + x, wy + (2 + hash(i * 3) * 12) * K, (6 + hash(i * 5) * 10) * K, 0.8 * K);
+        }
     } else if (DEF.backdrop === 'drain') {
-        // under the lawn: packed earth, and the brick of the old drain further back
         const top = Y(groundY + 16);
         if (top < vy0 + vh) {
-            ctx.fillStyle = esc ? C.drainEsc : C.drain;
-            ctx.fillRect(vx0, Math.max(vy0, top), vw, vy0 + vh - Math.max(vy0, top));
-            ctx.fillStyle = C.drainLine;
-            const bx = camX * 0.5, by = camY * 0.5, bw = 24, bhh = 10;
-            for (let row = Math.floor(by / bhh); row * bhh - by < VIEW_H * 16; row++) {
-                const yy = vy0 + (row * bhh - by) * K;
-                if (yy < top) continue;
-                ctx.fillRect(vx0, yy, vw, Math.max(1, K * 0.6));
-                for (let col = Math.floor(bx / bw) - 1; (col * bw - bx) * K < vw; col++) {
-                    ctx.fillRect(vx0 + (col * bw + (row % 2) * bw / 2 - bx) * K, yy, Math.max(1, K * 0.6), bhh * K);
-                }
-            }
+            const c = bgLayer(theme, esc ? 1 : 0, 3), W = BG_W * K, H = BG_H * K, up = K / bgScale();
+            const bx = -((camX * K * 0.5) % W), by = ((camY * K * 0.5) % H);
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(vx0, Math.max(vy0, top), vw, vy0 + vh - Math.max(vy0, top));
+            ctx.clip();
+            for (let x = bx - (bx > 0 ? W : 0); x < vw; x += W)
+                for (let y = -by; y < vh + H; y += H) up === 1 ? ctx.drawImage(c, vx0 + Math.round(x), vy0 + Math.round(y)) : ctx.drawImage(c, vx0 + Math.round(x), vy0 + Math.round(y), Math.ceil(W), Math.ceil(H));
+            ctx.restore();
         }
     }
-    const tx0 = Math.floor(camX / 16), tx1 = Math.ceil((camX + view.tiles * 16) / 16);
-    const ty0 = Math.floor(camY / 16), ty1 = Math.ceil((camY + VIEW_H * 16) / 16);
-    for (let tx = tx0; tx <= tx1 && opt.debug; tx++) {
-        ctx.fillStyle = tx % 5 === 0 ? C.grid5 : C.grid;
-        ctx.fillRect(X(tx * 16), vy0, 1, vh);
-    }
-    for (let ty = ty0; ty <= ty1 && opt.debug; ty++) {
-        ctx.fillStyle = ty % 5 === 0 ? C.grid5 : C.grid;
-        ctx.fillRect(vx0, Y(ty * 16), vw, 1);
+    // morning light through the leaves
+    if (!esc && (DEF.backdrop !== 'drain' || gs > vy0)) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 4; i++) {
+            const x = vx0 + ((hash(i * 7) * vw * 1.6 - camX * K * 0.2) % (vw * 1.4) + vw * 1.4) % (vw * 1.4) - vw * 0.2;
+            const w = (20 + hash(i * 3) * 30) * K, a = 0.05 + 0.03 * Math.sin(game.frame * 0.01 + i);
+            const g = ctx.createLinearGradient(x, vy0, x + vh * 0.5, vy0 + vh);
+            g.addColorStop(0, `rgba(255,240,200,${a})`);
+            g.addColorStop(1, 'rgba(255,240,200,0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.moveTo(x, vy0); ctx.lineTo(x + w, vy0); ctx.lineTo(x + w + vh * 0.5, vy0 + vh); ctx.lineTo(x + vh * 0.5, vy0 + vh);
+            ctx.fill();
+        }
+        ctx.restore();
     }
 
-    // station labels
-    ctx.fillStyle = C.label;
-    ctx.font = `700 ${Math.round(7 * K)}px system-ui, sans-serif`;
+    const tx0 = Math.floor(camX / 16) - 1, tx1 = Math.ceil((camX + view.tiles * 16) / 16) + 1;
+    const ty0 = Math.floor(camY / 16) - 1, ty1 = Math.ceil((camY + VIEW_H * 16) / 16) + 1;
+    if (opt.debug) {
+        for (let tx = tx0; tx <= tx1; tx++) { ctx.fillStyle = tx % 5 === 0 ? C.grid5 : C.grid; ctx.fillRect(X(tx * 16), vy0, 1, vh); }
+        for (let ty = ty0; ty <= ty1; ty++) { ctx.fillStyle = ty % 5 === 0 ? C.grid5 : C.grid; ctx.fillRect(vx0, Y(ty * 16), vw, 1); }
+    }
+
+    // signs, painted on the background
+    ctx.font = `800 ${Math.round(6.5 * K)}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const [lx, ly, text] of level.labels) {
         const x = X(lx * 16);
-        if (x < vx0 - 200 * dpr || x > vx0 + vw + 200 * dpr) continue;
+        if (x < vx0 - 300 * dpr || x > vx0 + vw + 300 * dpr) continue;
+        ctx.fillStyle = 'rgba(255,255,255,.28)';
+        ctx.fillText(text, x + K * 0.6, Y(ly * 16 + 8) + K * 0.6);
+        ctx.fillStyle = esc ? 'rgba(40,25,35,.4)' : 'rgba(45,55,40,.42)';
         ctx.fillText(text, x, Y(ly * 16 + 8));
     }
 
-    // creatures: where each was a step ago, and where it is now
-    const entPos = e => {
-        const q = prev.ents.get(e.id);
-        return q ? [lerp(q.x, e.x, alpha) / FX, lerp(q.y, e.y, alpha) / FX] : [e.x / FX, e.y / FX];
-    };
-
-    // shade under the bench, so the way underneath reads as a place
+    // shade under the bench and the ridge, so the way underneath reads as a place
     for (let tx = Math.max(0, tx0); tx < Math.min(level.w, tx1 + 1); tx++) {
         const deck = t => t === T.WOOD || t === T.ESC_OFF;
         let ty = 0;
@@ -2170,34 +3084,49 @@ function render(alpha) {
         let end = ty;
         while (end < level.h && !UF.SOLID[level.orig[end * level.w + tx]]) end++;
         if (end === ty || ty >= level.h) continue;
-        ctx.fillStyle = C.under;
+        const g = ctx.createLinearGradient(0, Y(ty * 16), 0, Y(end * 16));
+        g.addColorStop(0, 'rgba(40,25,15,.45)');
+        g.addColorStop(1, 'rgba(40,25,15,.12)');
+        ctx.fillStyle = g;
         ctx.fillRect(X(tx * 16), Y(ty * 16), X(tx * 16 + 16) - X(tx * 16), Y(end * 16) - Y(ty * 16));
     }
 
-    // tiles
+    // the tiles: painted pictures, copied
     for (let ty = Math.max(0, ty0); ty < Math.min(level.h, ty1 + 1); ty++) {
         for (let tx = Math.max(0, tx0); tx < Math.min(level.w, tx1 + 1); tx++) {
-            const t = level.tiles[ty * level.w + tx];
+            const t = L.tiles[ty * L.w + tx];
             if (!t) continue;
             let x = X(tx * 16), y = Y(ty * 16);
-            const w = X(tx * 16 + 16) - x, h = Y(ty * 16 + 16) - y;
-            const b = bumps.get(ty * level.w + tx);
+            const b = bumps.get(ty * L.w + tx);
             if (b !== undefined) y -= Math.round(Math.sin(b / 10 * Math.PI) * 5 * K);
-            drawTile(t, x, y, w, h, K, tx, ty);
+            if (t === T.SEED) { blit(seedSprite(), x + 8 * K, y + (8 + Math.sin(game.frame * 0.07 + tx * 0.8)) * K); continue; }
+            if (t === T.GOLD) {
+                const s = goldSprite(), bob = Math.sin(game.frame * 0.05 + tx) * K;
+                blit(s, x + 8 * K, y + 8 * K + bob);
+                if (game.frame % 40 < 20) { ctx.fillStyle = 'rgba(255,255,230,.9)'; const r = (game.frame % 40) / 20; ctx.fillRect(x + (8 - 5 * r) * K, y + 3 * K + bob, 10 * r * K, K * 0.6); }
+                continue;
+            }
+            if (t === T.ITEM) { drawItemTile(x, y, K); continue; }
+            const s = tileSprite(L, t, tx, ty, theme);
+            if (s) blit(s, x, y);
         }
     }
 
-    // particles behind the player
+    // particles behind the mouse
     for (const f of fx) if (f.kind === 'dust') {
         const a = f.life / f.max;
-        ctx.globalAlpha = a * 0.9;
-        ctx.fillStyle = C.dust;
+        ctx.globalAlpha = a * 0.75;
+        ctx.fillStyle = DEF.backdrop === 'drain' && f.y > groundY ? '#b9aa98' : '#f5efe2';
         ctx.beginPath();
-        ctx.arc(X(f.x), Y(f.y), f.r * K * (1.4 - a * 0.4), 0, Math.PI * 2);
+        ctx.arc(X(f.x), Y(f.y), f.r * K * (1.5 - a * 0.5), 0, TAU);
         ctx.fill();
     }
     ctx.globalAlpha = 1;
 
+    const entPos = e => {
+        const q = prev.ents.get(e.id);
+        return q ? [lerp(q.x, e.x, alpha) / FX, lerp(q.y, e.y, alpha) / FX] : [e.x / FX, e.y / FX];
+    };
     for (const e of game.ents) {
         if (e.gone || !e.active || e.state === 'flip') continue;
         const [ex, ey] = entPos(e);
@@ -2208,24 +3137,22 @@ function render(alpha) {
     // the ghost of a recorded run
     if (ghost && ghost.s.p.mode === 'play') {
         const g = ghost.s.p, gx = lerp(prev.gx, g.x, alpha) / FX, gy = lerp(prev.gy, g.y, alpha) / FX;
-        ctx.globalAlpha = 0.38;
-        drawPlayer(g, ox + gx * K, oy + gy * K, K, ghost.line ? '#b9d7ff' : '#e9ddff');
+        ctx.globalAlpha = 0.42;
+        drawMouse(g, ox + gx * K, oy + gy * K, K, ghost.line ? '#a9cbff' : '#dccbff');
         ctx.globalAlpha = 1;
     }
     // afterimages at speed, in the colour of the tier
     for (const a of trail) {
-        if (a.life % 2) continue;
-        ctx.globalAlpha = a.life / 14 * 0.45;
-        ctx.fillStyle = TIER_COLOR[a.tier];
-        roundRect(X(a.x - 6), Y(a.y - a.h), 12 * K, a.h * K, 4 * K);
-        ctx.fill();
+        if (a.life % 4) continue;
+        ctx.globalAlpha = a.life / 14 * 0.32;
+        drawMouse({facing: a.f, h: a.h * FX, w: P.W, vx: a.f * P.TIERS[a.tier], onGround: true, duck: a.h < 20, tier: a.tier, slide: 0, stun: 0, touchWall: false},
+            X(a.x), Y(a.y), K, TIER_COLOR[a.tier]);
     }
     ctx.globalAlpha = 1;
-    // the player: blinking while it cannot be hurt
+    // the mouse: blinking while it cannot be hurt
     const px = lerp(prev.px, p.x, alpha) / FX, py = lerp(prev.py, p.y, alpha) / FX;
-    const blink = p.inv > 0 && (game.frame >> 2) % 2 === 0;
-    if (blink) ctx.globalAlpha = 0.3;
-    drawPlayer(p, ox + px * K, oy + py * K, K);
+    if (p.inv > 0 && (game.frame >> 2) % 2 === 0) ctx.globalAlpha = 0.35;
+    drawMouse(p, ox + px * K, oy + py * K, K);
     ctx.globalAlpha = 1;
     for (const e of game.ents) if (!e.gone && e.state === 'flip') { const [ex, ey] = entPos(e); drawEnt(e, ox + ex * K, oy + ey * K, K); }
 
@@ -2233,20 +3160,33 @@ function render(alpha) {
     if (esc && kind === 'water' && game.chase) {
         const wy = Y(game.chase.pos / FX);
         if (wy < vy0 + vh) {
-            ctx.fillStyle = C.flood;
+            const wg = ctx.createLinearGradient(0, wy, 0, wy + 90 * K);
+            wg.addColorStop(0, 'rgba(70,140,205,.62)');
+            wg.addColorStop(1, 'rgba(20,55,110,.85)');
+            ctx.fillStyle = wg;
             ctx.fillRect(vx0, wy, vw, vy0 + vh - wy);
-            ctx.fillStyle = C.floodHi;
+            // light playing under the surface
+            ctx.strokeStyle = 'rgba(190,230,255,.18)';
+            ctx.lineWidth = K;
+            for (let i = 0; i < 6; i++) {
+                const yy = wy + (8 + i * 9) * K;
+                if (yy > vy0 + vh) break;
+                ctx.beginPath();
+                for (let x = 0; x <= vw; x += 8 * K) ctx.lineTo(vx0 + x, yy + Math.sin((x / K + camX + game.frame * (1 + i * 0.3)) * 0.06 + i) * 2 * K);
+                ctx.stroke();
+            }
+            ctx.fillStyle = 'rgba(220,245,255,.9)';
             ctx.beginPath();
             ctx.moveTo(vx0, wy);
-            for (let x = 0; x <= vw; x += 6 * K) ctx.lineTo(vx0 + x, wy + Math.sin((x / K + game.frame * 2) * 0.08) * 1.5 * K);
-            ctx.lineTo(vx0 + vw, wy + 3 * K);
-            ctx.lineTo(vx0, wy + 3 * K);
+            for (let x = 0; x <= vw; x += 4 * K) ctx.lineTo(vx0 + x, wy + Math.sin((x / K + camX + game.frame * 2) * 0.08) * 1.3 * K);
+            ctx.lineTo(vx0 + vw, wy + 1.6 * K);
+            ctx.lineTo(vx0, wy + 1.6 * K);
             ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,.35)';
-            for (let i = 0; i < 12; i++) {
+            ctx.fillStyle = 'rgba(255,255,255,.4)';
+            for (let i = 0; i < 14; i++) {
                 const bx = hash(i * 17 + (game.frame >> 5)) * vw, rise = (game.frame * (0.6 + hash(i) * 0.6) + i * 40) % 90;
                 ctx.beginPath();
-                ctx.arc(vx0 + bx, wy + (90 - rise) * K, (1 + hash(i * 3)) * K, 0, Math.PI * 2);
+                ctx.arc(vx0 + bx, wy + (90 - rise) * K, (0.8 + hash(i * 3) * 1.2) * K, 0, TAU);
                 ctx.fill();
             }
         }
@@ -2254,57 +3194,57 @@ function render(alpha) {
     // the edge of the crumbling: a curtain of falling earth where the bank is giving way
     if (esc && kind === 'crumble' && game.chase) {
         const fxX = X(game.chase.pos / FX), d = level.escape.dir;
-        const g = ctx.createLinearGradient(fxX - d * 40 * K, 0, fxX, 0);
-        g.addColorStop(0, 'rgba(90,60,40,0)');
-        g.addColorStop(1, 'rgba(90,60,40,.55)');
+        const g = ctx.createLinearGradient(fxX - d * 50 * K, 0, fxX, 0);
+        g.addColorStop(0, 'rgba(110,80,55,0)');
+        g.addColorStop(1, 'rgba(110,80,55,.6)');
         ctx.fillStyle = g;
-        ctx.fillRect(Math.min(fxX, fxX - d * 40 * K), vy0, 40 * K, vh);
-        ctx.fillStyle = C.soil;
-        for (let i = 0; i < 16; i++) {
-            const yy = ((game.frame * (3 + hash(i) * 3) + i * 37) % 260) - 20;
-            ctx.fillRect(fxX - d * (hash(i * 7) * 14) * K, vy0 + yy * K, (2 + hash(i * 5) * 3) * K, (2 + hash(i * 5) * 3) * K);
+        ctx.fillRect(Math.min(fxX, fxX - d * 50 * K), vy0, 50 * K, vh);
+        for (let i = 0; i < 26; i++) {
+            const yy = ((game.frame * (2.5 + hash(i) * 3.5) + i * 37) % 280) - 20, sz = (1.5 + hash(i * 5) * 3.5) * K;
+            ctx.fillStyle = i % 3 ? S.soil[1] : S.soil[3];
+            ctx.fillRect(fxX - d * (hash(i * 7) * 18) * K, vy0 + yy * K, sz, sz);
         }
     }
+
+    // bits flying about
     for (const f of fx) {
         const a = f.life / f.max;
         if (f.kind === 'seed') {
             ctx.globalAlpha = Math.min(1, a * 2);
-            drawSeed(X(f.x), Y(f.y), K, 0);
+            blit(seedSprite(), X(f.x), Y(f.y));
         } else if (f.kind === 'spark') {
             ctx.globalAlpha = a;
-            ctx.fillStyle = C.seedHi;
-            const r = Math.max(1, Math.round(1.2 * K));
-            ctx.fillRect(X(f.x) - r / 2, Y(f.y) - r / 2, r, r);
-        } else if (f.kind === 'clod') {
-            ctx.globalAlpha = Math.min(1, a * 3);
-            ctx.fillStyle = f.wood ? C.wood : C.soil;
+            ctx.fillStyle = '#fff6c8';
+            const r = Math.max(1, 1.4 * K * a + K * 0.4);
             ctx.save();
             ctx.translate(X(f.x), Y(f.y));
-            ctx.rotate(f.rot);
-            ctx.fillRect(-3 * K, -3 * K, 6 * K, 6 * K);
+            ctx.rotate(0.785);
+            ctx.fillRect(-r / 2, -r / 2, r, r);
             ctx.restore();
-        } else if (f.kind === 'shard' || f.kind === 'plank') {
+        } else if (f.kind === 'clod' || f.kind === 'shard' || f.kind === 'plank') {
             ctx.globalAlpha = Math.min(1, a * 3);
             ctx.save();
             ctx.translate(X(f.x), Y(f.y));
             ctx.rotate(f.rot);
             if (f.kind === 'plank') {
-                ctx.fillStyle = C.board;
+                ctx.fillStyle = S.board;
                 ctx.fillRect(-6 * K, -1.5 * K, 12 * K, 3 * K);
-                ctx.fillStyle = C.boardLo;
-                ctx.fillRect(-6 * K, 0.5 * K, 12 * K, 1 * K);
+                ctx.fillStyle = S.boardLo;
+                ctx.fillRect(-6 * K, 0.5 * K, 12 * K, K);
             } else {
-                ctx.fillStyle = C.brick;
-                ctx.fillRect(-3 * K, -3 * K, 6 * K, 6 * K);
-                ctx.fillStyle = C.brickLo;
-                ctx.fillRect(-3 * K, 1.5 * K, 6 * K, 1.5 * K);
+                ctx.fillStyle = f.wood ? S.wood : S.clod;
+                ctx.beginPath();
+                ctx.moveTo(-3 * K, -2 * K); ctx.lineTo(0, -3.2 * K); ctx.lineTo(3 * K, -1.5 * K); ctx.lineTo(2.5 * K, 2.8 * K); ctx.lineTo(-2.5 * K, 2.2 * K);
+                ctx.fill();
+                ctx.fillStyle = f.wood ? S.woodHi : S.clodHi;
+                ctx.fillRect(-2 * K, -2.4 * K, 3 * K, K);
             }
             ctx.restore();
         } else if (f.kind === 'streak') {
             ctx.globalAlpha = a;
             ctx.fillStyle = TIER_COLOR[f.tier];
             ctx.beginPath();
-            ctx.arc(X(f.x), Y(f.y), 1.6 * K * a + K * 0.5, 0, Math.PI * 2);
+            ctx.arc(X(f.x), Y(f.y), 1.6 * K * a + K * 0.5, 0, TAU);
             ctx.fill();
         } else if (f.kind === 'star') {
             ctx.globalAlpha = Math.min(1, a * 2);
@@ -2314,7 +3254,7 @@ function render(alpha) {
             ctx.fillStyle = '#ffd24a';
             ctx.beginPath();
             for (let i = 0; i < 10; i++) {
-                const r = (i % 2 ? 1.2 : 3) * K, t = i / 10 * Math.PI * 2;
+                const r = (i % 2 ? 1.2 : 3) * K, t = i / 10 * TAU;
                 i ? ctx.lineTo(Math.cos(t) * r, Math.sin(t) * r) : ctx.moveTo(Math.cos(t) * r, Math.sin(t) * r);
             }
             ctx.fill();
@@ -2323,18 +3263,34 @@ function render(alpha) {
     }
     ctx.globalAlpha = 1;
 
-    // the escape: the evening reddens, and the edges pulse as the clock runs down
+    // drifting in the air: pollen by day, fireflies on the way home, dust in the drain
+    for (let i = 0; i < 18; i++) {
+        const speed = 0.15 + hash(i * 3) * 0.25;
+        const mx = ((hash(i) * 2000 - camX * K * (0.7 + hash(i * 5) * 0.3) + game.frame * speed * K) % (vw + 40) + vw + 40) % (vw + 40) - 20;
+        const my = ((hash(i * 7) * vh + Math.sin(game.frame * 0.013 + i) * 14 * K - camY * K * 0.3) % vh + vh) % vh;
+        const r = (0.5 + hash(i * 11) * 0.8) * K;
+        if (esc) {
+            const glow = 0.4 + 0.6 * Math.max(0, Math.sin(game.frame * 0.05 + i * 1.7));
+            ctx.fillStyle = `rgba(255,230,120,${0.15 * glow})`;
+            ctx.beginPath(); ctx.arc(vx0 + mx, vy0 + my, r * 4, 0, TAU); ctx.fill();
+            ctx.fillStyle = `rgba(255,245,170,${0.8 * glow})`;
+        } else ctx.fillStyle = 'rgba(255,248,215,.55)';
+        ctx.beginPath(); ctx.arc(vx0 + mx, vy0 + my, r, 0, TAU); ctx.fill();
+    }
+
+    // the escape: the evening reddens, and the edges pulse as the danger nears
     if (esc) {
         const d = UF.danger(game);
         const near = kind === 'clock' ? Math.max(0, 1 - d / 10) : Math.max(0, 1 - d / 4);
         const pulse = near > 0 ? (0.5 + 0.5 * Math.sin(game.frame * (0.12 + near * 0.2))) * near : 0;
-        const tint = kind === 'water' ? '30,80,200' : '200,30,20';
-        const g = ctx.createRadialGradient(vx0 + vw / 2, vy0 + vh / 2, Math.min(vw, vh) * 0.35, vx0 + vw / 2, vy0 + vh / 2, Math.max(vw, vh) * 0.75);
-        g.addColorStop(0, `rgba(${tint},0)`);
-        g.addColorStop(1, `rgba(${tint},${0.18 + pulse * 0.35})`);
-        ctx.fillStyle = g;
-        ctx.fillRect(vx0, vy0, vw, vh);
+        ctx.globalAlpha = 0.14 + pulse * 0.35;
+        ctx.drawImage(vignette(kind === 'water' ? '30,80,200' : '200,40,30', vw, vh), vx0, vy0, vw, vh);
+    } else {
+        // a soft vignette, always
+        ctx.globalAlpha = 0.22;
+        ctx.drawImage(vignette('30,20,10', vw, vh), vx0, vy0, vw, vh);
     }
+    ctx.globalAlpha = 1;
     if (lateFx > 0) {
         ctx.fillStyle = `rgba(20,10,10,${Math.min(0.6, lateFx / 120)})`;
         ctx.fillRect(vx0, vy0, vw, vh);
@@ -2362,477 +3318,388 @@ function render(alpha) {
     }
 }
 
-function bevel(x, y, w, h, u, fill, hi, lo) {
-    const e = Math.max(1, Math.round(u * 1.5));
-    ctx.fillStyle = fill;
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = hi;
-    ctx.fillRect(x, y, w, e);
-    ctx.fillRect(x, y, e, h);
-    ctx.fillStyle = lo;
-    ctx.fillRect(x, y + h - e, w, e);
-    ctx.fillRect(x + w - e, y, e, h);
-}
-
-function drawTile(t, x, y, w, h, u, tx, ty) {
-    const r = n => Math.max(1, Math.round(n * u));
-    switch (t) {
-        case T.GROUND:
-        case T.GRASS: {
-            ctx.fillStyle = C.soil;
-            ctx.fillRect(x, y, w, h);
-            const k = (tx * 7 + ty * 13) % 5;
-            ctx.fillStyle = C.soilDot;
-            ctx.fillRect(x + r(3 + k), y + r(6 + (k * 3) % 7), r(2), r(2));
-            ctx.fillRect(x + r(10 - k), y + r(11 - k % 3), r(2), r(1));
-            if (t === T.GRASS) {
-                // a turf edge with a few blades standing up out of it
-                ctx.fillStyle = C.grassLo;
-                ctx.fillRect(x, y, w, r(6));
-                ctx.fillStyle = C.grass;
-                ctx.fillRect(x, y, w, r(5));
-                ctx.fillStyle = C.grassHi;
-                ctx.fillRect(x, y, w, r(1.5));
-                ctx.fillStyle = C.grass;
-                for (const bx of [2 + k, 8 + (k * 2) % 5, 13 - k % 3]) ctx.fillRect(x + r(bx), y - r(2), r(1.5), r(2));
-            }
-            break;
-        }
-        case T.STONE:
-            bevel(x, y, w, h, u, C.stone, C.stoneHi, C.stoneLo);
-            break;
-        case T.GOLD:
-            drawGold(x + w / 2, y + h / 2, u, tx);
-            break;
-        case T.BRICK: {
-            ctx.fillStyle = C.brick;
-            ctx.fillRect(x, y, w, h);
-            ctx.fillStyle = C.brickLo;
-            const m = r(1);
-            ctx.fillRect(x, y + Math.round(h / 2) - m, w, m);
-            ctx.fillRect(x, y + h - m, w, m);
-            ctx.fillRect(x + Math.round(w / 2), y, m, Math.round(h / 2));
-            ctx.fillRect(x, y + Math.round(h / 2), m, Math.round(h / 2));
-            ctx.fillStyle = C.brickHi;
-            ctx.fillRect(x, y, w, m);
-            break;
-        }
-        case T.ONEWAY:
-            ctx.fillStyle = C.ledge;
-            ctx.fillRect(x, y, w, r(5));
-            ctx.fillStyle = C.ledgeHi;
-            ctx.fillRect(x, y, w, r(1.5));
-            ctx.fillStyle = C.ledgeLo;
-            ctx.fillRect(x, y + r(5) - r(1), w, r(1));
-            ctx.globalAlpha = 0.35;
-            ctx.fillRect(x + r(3), y + r(5), r(1.5), r(4));
-            ctx.fillRect(x + r(11), y + r(5), r(1.5), r(4));
-            ctx.globalAlpha = 1;
-            break;
-        case T.SEED:
-            drawSeed(x + w / 2, y + h / 2 + Math.sin(game.frame * 0.07 + tx * 0.8) * u, u, tx);
-            break;
-        case T.WOOD: {
-            // the bench: planks laid lengthways, a lit edge on top
-            const top = level.tiles[(ty - 1) * level.w + tx] !== T.WOOD || ty === 0;
-            ctx.fillStyle = C.wood;
-            ctx.fillRect(x, y, w, h);
-            ctx.fillStyle = C.woodLo;
-            ctx.fillRect(x, y + Math.round(h / 2) - r(0.5), w, r(1));
-            ctx.fillRect(x, y + h - r(1), w, r(1));
-            if ((tx * 3 + ty) % 4 === 0) ctx.fillRect(x + r(9), y, r(1), Math.round(h / 2));
-            if ((tx * 5 + ty) % 3 === 0) ctx.fillRect(x + r(4), y + Math.round(h / 2), r(1), Math.round(h / 2));
-            if (top) {
-                ctx.fillStyle = C.woodHi;
-                ctx.fillRect(x, y, w, r(2));
-            }
-            break;
-        }
-        case T.ESC_OFF:
-            // boards: nailed across until the sack is taken, then only a faint mark where they were
-            if (!level.on) {
-                ctx.fillStyle = C.board;
-                ctx.fillRect(x, y, w, h);
-                ctx.fillStyle = C.boardLo;
-                ctx.fillRect(x, y + Math.round(h / 2) - r(0.5), w, r(1));
-                ctx.fillRect(x, y + h - r(1), w, r(1));
-                ctx.fillStyle = C.ink;
-                ctx.fillRect(x + r(2), y + r(3), r(1.2), r(1.2));
-                ctx.fillRect(x + w - r(3.2), y + r(11), r(1.2), r(1.2));
-            } else {
-                ctx.strokeStyle = 'rgba(80,55,35,.3)';
-                ctx.lineWidth = Math.max(1, u * 0.6);
-                ctx.setLineDash([r(2), r(3)]);
-                ctx.strokeRect(x + r(1), y + r(1), w - r(2), h - r(2));
-                ctx.setLineDash([]);
-            }
-            break;
-        case T.ESC_ON:
-            // crates: only an outline until the sack is taken, then there they are, in the way
-            if (level.on) {
-                bevel(x, y, w, h, u, C.crate, C.crateHi, C.crateLo);
-                ctx.strokeStyle = C.crateLo;
-                ctx.lineWidth = Math.max(1, u * 1.2);
-                ctx.beginPath();
-                ctx.moveTo(x + r(3), y + r(3)); ctx.lineTo(x + w - r(3), y + h - r(3));
-                ctx.moveTo(x + w - r(3), y + r(3)); ctx.lineTo(x + r(3), y + h - r(3));
-                ctx.stroke();
-            } else {
-                ctx.strokeStyle = 'rgba(200,104,63,.45)';
-                ctx.lineWidth = Math.max(1, u * 0.8);
-                ctx.setLineDash([r(2), r(2.5)]);
-                ctx.strokeRect(x + r(1), y + r(1), w - r(2), h - r(2));
-                ctx.setLineDash([]);
-            }
-            break;
-        case T.ITEM: {
-            // what the level sends you for, bobbing a little, with a glow so it reads from far off
-            const bob = Math.sin(game.frame * 0.08) * u, cx = x + w / 2, by = y + h;
-            ctx.globalAlpha = 0.3 + 0.2 * Math.sin(game.frame * 0.1);
-            ctx.fillStyle = '#fff3c4';
-            ctx.beginPath();
-            ctx.arc(cx, by - r(8), r(13), 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-            drawItem(DEF.item, cx, by + bob, u);
-            break;
-        }
-        case T.HOME: {
-            // the mouse hole: dark, arched at the top, warm inside once you are on the way home
-            const top = level.tiles[(ty - 1) * level.w + tx] !== T.HOME;
-            ctx.fillStyle = C.stone;
-            ctx.fillRect(x, y, w, h);
-            ctx.fillStyle = C.hole;
-            ctx.beginPath();
-            if (top) {
-                const left = tx === 0 || level.tiles[ty * level.w + tx - 1] !== T.HOME;
-                const cx = left ? x + w : x;
-                ctx.moveTo(x, y + h);
-                ctx.lineTo(x, y + (left ? h * 0.9 : 0));
-                ctx.arc(cx, y + h, w, left ? Math.PI : Math.PI * 1.5, left ? Math.PI * 1.5 : 0);
-                ctx.lineTo(x + w, y + h);
-            } else ctx.rect(x, y, w, h);
-            ctx.fill();
-            if (game.escape) {
-                ctx.globalAlpha = 0.25 + 0.2 * Math.sin(game.frame * 0.15);
-                ctx.fillStyle = '#ffb35c';
-                ctx.fillRect(x, y + (top ? h * 0.45 : 0), w, top ? h * 0.55 : h);
-                ctx.globalAlpha = 1;
-            }
-            break;
-        }
+// the item the level sends you for, in its tile: glowing, bobbing
+function drawItemTile(x, y, K) {
+    const cx = x + 8 * K, by = y + 16 * K, bob = Math.sin(game.frame * 0.08) * K;
+    const a = 0.35 + 0.2 * Math.sin(game.frame * 0.1);
+    const g = ctx.createRadialGradient(cx, by - 8 * K, 0, cx, by - 8 * K, 16 * K);
+    g.addColorStop(0, `rgba(255,243,196,${a})`);
+    g.addColorStop(1, 'rgba(255,243,196,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - 16 * K, by - 24 * K, 32 * K, 32 * K);
+    ctx.save();
+    ctx.translate(cx, by + bob);
+    ctx.scale(K, K);
+    drawItem(ctx, DEF.item);
+    ctx.restore();
+    if (game.frame % 50 < 25) {
+        const r = (game.frame % 50) / 25;
+        ctx.fillStyle = `rgba(255,255,240,${1 - r})`;
+        ctx.fillRect(cx + (4 - 3 * r) * K, by - (14 + r * 4) * K, 1.2 * K, 1.2 * K);
     }
 }
 
-// the three things a level can send you for, standing on (cx, by)
-function drawItem(kind, cx, by, u) {
-    ctx.save();
-    ctx.translate(cx, by);
-    ctx.scale(u, u);
-    ctx.lineWidth = 1;
+// the three things a level can send you for, in game px, standing on (0, 0)
+function drawItem(g, kind) {
+    g.lineJoin = g.lineCap = 'round';
+    g.lineWidth = 0.9;
+    g.strokeStyle = S.ink;
     if (kind === 'sack') {
-        ctx.fillStyle = C.sack;
-        ctx.strokeStyle = C.sackLo;
-        ctx.beginPath();
-        ctx.moveTo(-6, 0);
-        ctx.quadraticCurveTo(-9, -9, -3, -13);
-        ctx.lineTo(3, -13);
-        ctx.quadraticCurveTo(9, -9, 6, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = C.sackTie;
-        ctx.fillRect(-3.5, -13, 7, 1.8);
-        ctx.fillStyle = C.seed;
-        for (const [sx, sy] of [[-2, -15], [1, -16], [3, -14.5]]) {
-            ctx.beginPath();
-            ctx.ellipse(sx, sy, 1.3, 1.8, 0, 0, Math.PI * 2);
-            ctx.fill();
+        // a little burlap sack, tied at the neck, seeds showing at the top
+        const body = () => {
+            g.beginPath();
+            g.moveTo(-6.5, 0);
+            g.quadraticCurveTo(-9.5, -7, -4, -11.5);
+            g.lineTo(-2.5, -12.5);
+            g.lineTo(2.5, -12.5);
+            g.lineTo(4, -11.5);
+            g.quadraticCurveTo(9.5, -7, 6.5, 0);
+            g.closePath();
+        };
+        body();
+        g.fillStyle = '#cfa96b';
+        g.fill();
+        g.save();
+        body();
+        g.clip();
+        g.strokeStyle = 'rgba(120,85,40,.35)';
+        g.lineWidth = 0.35;
+        for (let i = -12; i < 12; i += 1.4) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 6, -13); g.stroke(); g.beginPath(); g.moveTo(i, -13); g.lineTo(i + 6, 0); g.stroke(); }
+        blob(g, -3, -6, 2.5, 4, 'rgba(255,240,200,.25)');
+        blob(g, 4, -3, 3, 3, 'rgba(90,60,25,.2)');
+        g.restore();
+        body();
+        g.lineWidth = 0.9;
+        g.strokeStyle = S.ink;
+        g.stroke();
+        g.fillStyle = '#8a6437';
+        rrect(g, -4, -12.8, 8, 1.8, 0.8);
+        g.fill();
+        g.stroke();
+        for (const [sx, sy, r] of [[-2, -14.5, -0.3], [0.8, -15.3, 0.1], [2.8, -14.2, 0.4]]) {
+            g.save(); g.translate(sx, sy); g.rotate(r);
+            blob(g, 0, 0, 1.2, 1.9, '#3a3940');
+            g.fillStyle = '#e8e2d2';
+            g.fillRect(-0.2, -1.4, 0.4, 2.8);
+            g.restore();
         }
     } else if (kind === 'button') {
-        // a lost coat button, stood on its edge
-        ctx.fillStyle = C.buttonLo;
-        ctx.beginPath();
-        ctx.arc(0, -7.5, 7.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = C.button;
-        ctx.beginPath();
-        ctx.arc(0, -7.5, 6.3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = C.buttonLo;
-        ctx.beginPath();
-        ctx.arc(0, -7.5, 4.4, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = C.buttonLo;
-        for (const [hx, hy] of [[-1.5, -9], [1.5, -9], [-1.5, -6], [1.5, -6]]) ctx.fillRect(hx - 0.7, hy - 0.7, 1.4, 1.4);
-        ctx.fillStyle = C.buttonHi;
-        ctx.beginPath();
-        ctx.ellipse(-3, -11, 1.8, 1, -0.6, 0, Math.PI * 2);
-        ctx.fill();
+        // a lost coat button, stood on its edge, with a thread still through it
+        blob(g, 0, -7.5, 7.6, 7.6, '#8f2c24');
+        g.beginPath(); g.arc(0, -7.5, 7.6, 0, TAU); g.stroke();
+        const bg = g.createRadialGradient(-2, -10, 1, 0, -7.5, 7);
+        bg.addColorStop(0, '#f39486');
+        bg.addColorStop(1, '#c9463b');
+        g.fillStyle = bg;
+        g.beginPath(); g.arc(0, -7.5, 6.4, 0, TAU); g.fill();
+        g.strokeStyle = 'rgba(120,30,25,.6)';
+        g.lineWidth = 0.6;
+        g.beginPath(); g.arc(0, -7.5, 4.4, 0, TAU); g.stroke();
+        for (const [hx, hy] of [[-1.5, -9], [1.5, -9], [-1.5, -6], [1.5, -6]]) blob(g, hx, hy, 0.75, 0.75, '#5e1a15');
+        g.strokeStyle = '#f2e6c9';
+        g.lineWidth = 0.55;
+        g.beginPath(); g.moveTo(-1.5, -9); g.lineTo(1.5, -6); g.moveTo(1.5, -9); g.lineTo(-1.5, -6); g.stroke();
+        blob(g, -3, -11, 1.8, 1, 'rgba(255,230,220,.8)', -0.6);
     } else {
-        // the last strawberry
-        ctx.translate(0, -7);
-        ctx.fillStyle = C.berry;
-        ctx.beginPath();
-        ctx.moveTo(0, 7);
-        ctx.quadraticCurveTo(-8, 2.5, -6.5, -3.5);
-        ctx.quadraticCurveTo(-3.5, -7, 0, -5.5);
-        ctx.quadraticCurveTo(3.5, -7, 6.5, -3.5);
-        ctx.quadraticCurveTo(8, 2.5, 0, 7);
-        ctx.fill();
-        ctx.fillStyle = C.berryLo;
-        ctx.beginPath();
-        ctx.ellipse(2, 1.8, 2.5, 3.4, 0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = C.berrySeed;
-        for (const [sx, sy] of [[-3.5, -1.5], [0, -2.3], [3.5, -1.3], [-1.8, 1.6], [2, 1.8], [0, 4.5]]) ctx.fillRect(sx - 0.5, sy - 0.6, 1, 1.2);
-        ctx.fillStyle = C.leaf;
+        // the last strawberry of the summer
+        g.save();
+        g.translate(0, -7.5);
+        const berry = () => {
+            g.beginPath();
+            g.moveTo(0, 7.5);
+            g.quadraticCurveTo(-8.5, 2.5, -6.8, -3.6);
+            g.quadraticCurveTo(-3.6, -7.2, 0, -5.6);
+            g.quadraticCurveTo(3.6, -7.2, 6.8, -3.6);
+            g.quadraticCurveTo(8.5, 2.5, 0, 7.5);
+        };
+        berry();
+        const rg = g.createRadialGradient(-2.5, -2.5, 1, 0, 0, 9);
+        rg.addColorStop(0, '#ff7a6a');
+        rg.addColorStop(0.6, '#df3f36');
+        rg.addColorStop(1, '#a92a27');
+        g.fillStyle = rg;
+        g.fill();
+        g.stroke();
+        for (let i = 0; i < 14; i++) {
+            const a = hash(i * 3) * TAU, r = Math.sqrt(hash(i * 5)) * 5.5;
+            const sx = Math.cos(a) * r * 0.9, sy = Math.sin(a) * r * 0.8 + 0.5;
+            g.fillStyle = '#f7e39a';
+            g.beginPath(); g.ellipse(sx, sy, 0.35, 0.6, a, 0, TAU); g.fill();
+        }
+        blob(g, -3, -2.5, 1.6, 1, 'rgba(255,255,255,.55)', -0.5);
+        g.fillStyle = '#4f9a45';
+        g.strokeStyle = '#2f6b2a';
+        g.lineWidth = 0.6;
         for (let i = 0; i < 5; i++) {
-            ctx.beginPath();
-            ctx.ellipse(0, -6, 3.6, 1.2, i / 5 * Math.PI, 0, Math.PI * 2);
-            ctx.fill();
+            g.save(); g.translate(0, -5.8); g.rotate(-Math.PI / 2 + (i - 2) * 0.55);
+            g.beginPath(); g.ellipse(2.6, 0, 2.8, 1.1, 0, 0, TAU); g.fill(); g.stroke();
+            g.restore();
         }
+        g.strokeStyle = '#3d7a33';
+        g.lineWidth = 0.9;
+        g.beginPath(); g.moveTo(0, -6); g.quadraticCurveTo(0.5, -8.5, 2, -9.5); g.stroke();
+        g.restore();
     }
-    ctx.restore();
 }
 
-function drawSeed(cx, cy, u) {
-    ctx.fillStyle = C.seed;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, 3.4 * u, 5 * u, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = C.seedHi;
-    ctx.beginPath();
-    ctx.ellipse(cx - 1.1 * u, cy - 1.6 * u, 1.1 * u, 2 * u, 0, 0, Math.PI * 2);
-    ctx.fill();
-}
-
-function drawPlayer(p, x, y, u, tint) {
-    const w = p.w / FX, f = p.facing, h = p.h / FX;
-    const fast = Math.abs(p.vx) >= P.RUN_MAX;
-    const own = !tint;
-    // speed lines at full run
-    if (own && fast && p.onGround) {
-        ctx.fillStyle = p.tier ? TIER_COLOR[p.tier] : 'rgba(60,70,90,.35)';
-        for (let i = 0; i < 3; i++) {
-            const ly = y - (4 + i * 5) * u, len = (6 + p.tier * 4 + ((game.frame + i * 3) % 5)) * u;
-            ctx.fillRect(x - f * (w / 2 + 3) * u - (f > 0 ? len : 0), ly, len, Math.max(1, u));
-        }
-    }
+/* ----- the mouse ----- */
+// Drawn around its feet at (x, y) in device px, u device px to a game px. A tint draws only the
+// silhouette, in that colour: for the ghost and the afterimages.
+const FUR = {fur: '#f1e8dc', furShade: '#d9cabb', belly: '#fcf8f1', ear: '#f3b8b6', earIn: '#e48e92', nose: '#e0717a', tail: '#e7a9a4', foot: '#f2c9c3', scarf: '#d8453b', scarfLo: '#a7322a'};
+function drawMouse(p, x, y, u, tint) {
+    const f = p.facing, h = p.h / FX;
+    const speed = Math.abs(p.vx) / FX, fast = speed >= 2.4;
+    const low = p.duck || h < 20;
+    const air = !p.onGround;
+    const t = game.frame;
+    const run = p.onGround && speed > 0.3 && !low;
+    const phase = run ? t * (0.2 + speed * 0.09) : 0;
+    const col = k => tint || FUR[k];
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(u, u);
-    const lean = p.skid ? -f * 0.2 : p.touchWall ? -f * 0.12 : fast ? f * (0.14 + p.tier * 0.05) : Math.abs(p.vx) > P.WALK_MAX * 0.6 ? f * 0.07 : 0;
+    if (!tint) {
+        // a soft shadow on the ground
+        if (p.onGround) blob(ctx, 0, 0, low ? 8 : 6.5, 1.3, 'rgba(30,20,10,.22)');
+    }
+    const lean = p.skid ? -f * 0.18 : p.touchWall ? -f * 0.1 : fast ? f * (0.12 + p.tier * 0.05) : speed > 1 ? f * 0.07 : 0;
     ctx.transform(1, 0, -lean, 1, 0, 0);
-    if (own) ctx.scale(sq.x, sq.y);
-    if (p.stun > 0 && own) ctx.rotate(Math.sin(game.frame * 0.6) * 0.12);
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = C.ink;
-    // tail, streaming out behind at speed
-    const stream = Math.min(1, Math.abs(p.vx) / P.TIERS[2]);
-    ctx.beginPath();
-    ctx.moveTo(-f * (w / 2 - 1), -3);
-    ctx.quadraticCurveTo(-f * (w / 2 + 5 + stream * 3), -2 + stream, -f * (w / 2 + 6 + stream * 5), -7 + stream * 5 - Math.sin(game.frame * 0.2) * (Math.abs(p.vx) > 0 ? 1.5 : 0.5));
-    ctx.stroke();
-    // ears, swept back when fast
-    for (const ex of [-3.4, 3.4]) {
-        const sweep = -f * stream * 1.5;
-        ctx.fillStyle = tint || C.body;
-        ctx.beginPath();
-        ctx.arc(ex + f * 0.8 + sweep, -h + 0.5, 2.8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = C.ear;
-        ctx.beginPath();
-        ctx.arc(ex + f * 0.8 + sweep, -h + 0.5, 1.4, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    // body, stretched long in a slide
-    ctx.fillStyle = tint || C.body;
-    ctx.beginPath();
-    const bw = p.duck && Math.abs(p.vx) > FX ? w + 4 : w;
-    if (ctx.roundRect) ctx.roundRect(-bw / 2, -h, bw, h, [5, 5, 3, 3]);
-    else ctx.rect(-bw / 2, -h, bw, h);
-    ctx.fill();
-    ctx.stroke();
-    // eye and nose, looking where it faces; screwed shut when dazed
-    ctx.fillStyle = C.ink;
-    if (p.stun > 0) {
-        ctx.lineWidth = 0.9;
-        ctx.beginPath();
-        ctx.moveTo(f * 2.2 - 1.3, -h + 3.7); ctx.lineTo(f * 2.2 + 1.3, -h + 6.3);
-        ctx.moveTo(f * 2.2 + 1.3, -h + 3.7); ctx.lineTo(f * 2.2 - 1.3, -h + 6.3);
-        ctx.stroke();
-    } else {
-        ctx.beginPath();
-        ctx.arc(f * 2.2, -h + 5, 1.2, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    ctx.fillStyle = C.ear;
-    ctx.beginPath();
-    ctx.arc(f * (bw / 2 - 0.2), -h + 7, 1.1, 0, Math.PI * 2);
-    ctx.fill();
-    // the item, carried on the back once it is taken
-    if (own && game.escape) drawItem(DEF.item, -f * (bw / 2 + 1), -h * 0.25, 0.6);
-    // feet, which run when running
-    ctx.fillStyle = C.ink;
-    const stride = p.onGround && Math.abs(p.vx) > 0 && !p.duck ? Math.sin(game.frame * (0.18 + Math.abs(p.vx) / P.RUN_MAX * 0.3)) * 2 : 0;
-    ctx.fillRect(-3.5 + stride, -1.2, 3, 1.4);
-    ctx.fillRect(0.5 - stride, -1.2, 3, 1.4);
-    ctx.restore();
-}
+    if (!tint) ctx.scale(sq.x, sq.y);
+    if (p.stun > 0 && !tint) ctx.rotate(Math.sin(t * 0.6) * 0.12);
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.strokeStyle = tint ? 'rgba(0,0,0,0)' : S.ink;
+    ctx.scale(f, 1);                                    // from here on, +x is the way it faces
 
-// hills and clouds behind a level: three layers that move slower the further away they are
-const hash = n => { let h = Math.imul(n ^ 0x9E3779B9, 0x85EBCA6B); h ^= h >>> 13; h = Math.imul(h, 0xC2B2AE35); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
-function scenery(vx0, vy0, vw, vh, K, camX, dusk) {
-    const layers = [
-        {f: 0.12, gap: 150, kind: 'cloud', y: 0.08},
-        {f: 0.3, gap: 110, kind: 'hill', base: 0.8, color: dusk ? C.hillDuskFar : C.hillFar, r: [60, 100]},
-        {f: 0.55, gap: 90, kind: 'hill', base: 0.9, color: dusk ? C.hillDuskNear : C.hillNear, r: [34, 62]},
-    ];
-    for (const L of layers) {
-        const off = camX * L.f;
-        const i0 = Math.floor(off / L.gap) - 2, i1 = Math.ceil((off + vw / K) / L.gap) + 2;
-        ctx.fillStyle = L.kind === 'cloud' ? (dusk ? C.cloudDusk : C.cloud) : L.color;
-        for (let i = i0; i <= i1; i++) {
-            const r = hash(i * 7 + L.gap);
-            const cx = vx0 + (i * L.gap + r * L.gap * 0.5 - off) * K;
-            if (L.kind === 'hill') {
-                const rad = (L.r[0] + (L.r[1] - L.r[0]) * hash(i * 13 + 5)) * K;
-                ctx.beginPath();
-                ctx.ellipse(cx, vy0 + vh * L.base, rad * 1.35, rad, 0, Math.PI, 0);
-                ctx.fill();
-            } else {
-                const cy = vy0 + vh * (L.y + r * 0.22), s = (0.8 + hash(i * 3 + 1) * 0.6) * K;
-                ctx.globalAlpha = 0.85;
-                for (const [dx, dy, rr] of [[-14, 2, 8], [0, -3, 11], [14, 1, 9], [6, 4, 8], [-6, 5, 7]]) {
-                    ctx.beginPath();
-                    ctx.arc(cx + dx * s, cy + dy * s, rr * s, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                ctx.globalAlpha = 1;
-            }
+    // geometry: standing, or low for a duck and a slide
+    const bodyY = low ? -5.2 : -9.5, bodyRx = low ? 8 : 6, bodyRy = low ? 5.2 : 8.8;
+    const headX = low ? 6.5 : 1.2, headY = low ? -8 : -20.5, headR = low ? 5.4 : 6.1;
+    const stream = Math.min(1, speed / 4);
+
+    // tail, behind everything: a long pink curve, streaming out at speed
+    ctx.strokeStyle = tint ? tint : FUR.tail;
+    ctx.lineWidth = 1.5;
+    const wag = Math.sin(t * 0.18) * (1 - stream) * 2;
+    ctx.beginPath();
+    ctx.moveTo(-bodyRx + 1, bodyY + (low ? 2 : 6));
+    ctx.bezierCurveTo(-bodyRx - 6, bodyY + 8 - stream * 6 + wag, -bodyRx - 10 - stream * 4, bodyY + 2 - stream * 4, -bodyRx - 14 - stream * 6, bodyY - 3 + stream * 3 - wag);
+    ctx.stroke();
+
+    // the scarf: a collar round the neck, knotted at the back, its two ends flying behind
+    const a0 = low ? 0.55 * Math.PI : 0.3 * Math.PI, a1 = low ? 1.25 * Math.PI : 1.02 * Math.PI;
+    const knotX = headX + Math.cos(a1) * (headR - 0.3), knotY = headY + Math.sin(a1) * (headR - 0.3);
+    {
+        const flap = Math.sin(t * (0.3 + stream * 0.4)) * (1.2 + stream * 1.5);
+        const len = 4.5 + stream * 9 + (air ? 3 : 0), droop = (1 - stream) * (low ? 1 : 4);
+        ctx.fillStyle = tint || FUR.scarf;
+        for (const k of [0, 1]) {
+            const end = knotY + droop + flap * (k ? 1 : -0.7) + k * 1.2;
+            ctx.beginPath();
+            ctx.moveTo(knotX, knotY - 0.8 + k * 0.6);
+            ctx.quadraticCurveTo(knotX - len * 0.5, knotY + droop * 0.5 + flap * (k ? -0.6 : 1), knotX - len, end);
+            ctx.lineTo(knotX - len + 0.6, end + 1.8);
+            ctx.quadraticCurveTo(knotX - len * 0.5, knotY + 1.6 + droop * 0.5 + flap * (k ? -0.6 : 1), knotX, knotY + 1 + k * 0.6);
+            ctx.fill();
         }
-        if (L.kind === 'hill') ctx.fillRect(vx0, vy0 + vh * L.base - 1, vw, vh * (1 - L.base) + 1);
     }
-}
 
-function drawGold(cx, cy, u, tx) {
-    const t = game.frame * 0.05 + tx;
-    ctx.save();
-    ctx.translate(cx, cy + Math.sin(t) * u);
-    ctx.globalAlpha = 0.35 + 0.15 * Math.sin(t * 2);
-    ctx.fillStyle = C.goldHi;
-    ctx.beginPath();
-    ctx.arc(0, 0, 8 * u, 0, Math.PI * 2);
+    // ears, behind the head: the far one darker
+    const earY = headY - headR + (low ? 1.2 : 0.2), earBack = low ? -2.8 : 0;
+    const ears = [[-3 + earBack, earY - 0.5, 3.6, 0.5], [2.4 + earBack, earY - 1, 4, 1]];
+    ctx.strokeStyle = S.ink;
+    for (const [ex, ey, er, near] of ears) {
+        const flat = low ? 0.7 : 1;
+        ctx.fillStyle = tint || (near ? FUR.fur : FUR.furShade);
+        ctx.beginPath(); ctx.ellipse(ex, ey, er * flat, er, low ? -0.9 : 0, 0, TAU); ctx.fill();
+        if (!tint) {
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            blob(ctx, ex + 0.3, ey + 0.4, er * 0.5 * flat, er * 0.55, near ? FUR.ear : FUR.earIn, low ? -0.9 : 0);
+        }
+    }
+
+    // feet and legs: a run cycle on the ground, tucked in the air
+    const step = run ? Math.sin(phase) : 0, lift = run ? Math.max(0, Math.cos(phase)) : 0;
+    const feet = low ? [[-5, -0.6], [3.5, -0.6]] : air ? [[-2.5, -3 - (p.vy < 0 ? 1.5 : 0)], [2.8, -2.5]] : [[-2.5 + step * 3.2, -0.8 - lift * 1.6], [2.5 - step * 3.2, -0.8 - Math.max(0, -Math.cos(phase)) * 1.6]];
+    for (const [fx2, fy] of feet) {
+        ctx.fillStyle = tint || FUR.foot;
+        ctx.beginPath(); ctx.ellipse(fx2 + 0.8, fy, 2.4, 1.3, 0, 0, TAU); ctx.fill();
+        if (!tint) { ctx.lineWidth = 0.8; ctx.stroke(); }
+    }
+
+    // body and head, one silhouette: outlines first, then the fills over them
+    const shape = () => {
+        ctx.beginPath();
+        ctx.ellipse(0, bodyY, bodyRx, bodyRy, 0, 0, TAU);
+        ctx.moveTo(headX + headR, headY);
+        ctx.arc(headX, headY, headR, 0, TAU);
+        // the snout, pointing where it faces
+        ctx.moveTo(headX + headR * 0.3, headY - headR * 0.75);
+        ctx.quadraticCurveTo(headX + headR + 3.2, headY - 0.3, headX + headR + 2.4, headY + 1.2);
+        ctx.quadraticCurveTo(headX + headR * 0.6, headY + headR * 0.9, headX, headY + headR * 0.6);
+        ctx.closePath();
+    };
+    if (!tint) {
+        ctx.strokeStyle = S.ink;
+        ctx.lineWidth = 2;
+        shape();
+        ctx.stroke();
+    }
+    ctx.fillStyle = tint || FUR.fur;
+    shape();
     ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.scale(u, u);
-    ctx.fillStyle = C.goldLo;
-    ctx.beginPath();
-    ctx.ellipse(0, 0.6, 4.8, 6.8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = C.gold;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 4.4, 6.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = C.goldHi;
-    ctx.beginPath();
-    ctx.ellipse(-1.5, -2.2, 1.4, 2.6, -0.2, 0, Math.PI * 2);
-    ctx.fill();
-    // a turning glint
-    ctx.rotate(t);
-    ctx.fillRect(-0.4, -9, 0.8, 3);
-    ctx.fillRect(-0.4, 6, 0.8, 3);
+    if (!tint) {
+        // shading on the back, a pale belly, a blush
+        ctx.save();
+        shape();
+        ctx.clip();
+        blob(ctx, -bodyRx * 0.7, bodyY + 1, bodyRx * 0.6, bodyRy * 0.95, FUR.furShade);
+        blob(ctx, headX - headR * 0.8, headY + 0.5, headR * 0.5, headR * 0.9, FUR.furShade);
+        blob(ctx, bodyRx * 0.35, bodyY + 1.5, bodyRx * 0.55, bodyRy * 0.7, FUR.belly);
+        ctx.restore();
+        blob(ctx, headX + 2.2, headY + 2.4, 1.4, 0.9, 'rgba(240,140,140,.45)');
+        // nose and whiskers
+        blob(ctx, headX + headR + 2.5, headY + 0.4, 1.25, 1.05, FUR.nose);
+        ctx.strokeStyle = 'rgba(80,60,55,.6)';
+        ctx.lineWidth = 0.35;
+        for (const [dy, len] of [[-0.6, 5], [0.8, 5.5], [2, 4.5]]) {
+            ctx.beginPath(); ctx.moveTo(headX + headR + 1.2, headY + 1 + dy * 0.3); ctx.quadraticCurveTo(headX + headR + 3, headY + dy, headX + headR + 1 + len, headY + dy * 1.6 + 0.4); ctx.stroke();
+        }
+        // the eye: shut when dazed, a blink now and then, otherwise bright
+        const ex = headX + 2.4, ey = headY - 1.2;
+        ctx.strokeStyle = S.ink;
+        if (p.stun > 0) {
+            ctx.lineWidth = 0.8;
+            ctx.beginPath(); ctx.moveTo(ex - 1.2, ey - 1.2); ctx.lineTo(ex + 1.2, ey + 1.2); ctx.moveTo(ex + 1.2, ey - 1.2); ctx.lineTo(ex - 1.2, ey + 1.2); ctx.stroke();
+        } else if (t % 210 < 7) {
+            ctx.lineWidth = 0.8;
+            ctx.beginPath(); ctx.moveTo(ex - 1.2, ey + 0.3); ctx.quadraticCurveTo(ex, ey + 1.1, ex + 1.2, ey + 0.3); ctx.stroke();
+        } else {
+            blob(ctx, ex, ey, 1.25, 1.65, '#1f1a1c');
+            blob(ctx, ex + 0.45, ey - 0.6, 0.5, 0.5, '#fff');
+        }
+    }
+
+    // the collar of the scarf, and its knot
+    if (!tint) {
+        ctx.strokeStyle = S.ink;
+        ctx.lineWidth = 3.4;
+        ctx.beginPath(); ctx.arc(headX, headY, headR - 0.3, a0, a1); ctx.stroke();
+    }
+    ctx.strokeStyle = tint || FUR.scarf;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.arc(headX, headY, headR - 0.3, a0, a1); ctx.stroke();
+    if (!tint) {
+        ctx.strokeStyle = FUR.scarfLo;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.arc(headX, headY, headR + 0.3, a0 + 0.15, a1 - 0.1); ctx.stroke();
+    }
+    blob(ctx, knotX, knotY + 0.3, 1.5, 1.3, tint || FUR.scarfLo);
+
+    // the item, carried on the back on the way home
+    if (!tint && p === game.p && game.escape) {
+        ctx.save();
+        ctx.translate(-bodyRx + (low ? 1 : 0.5), bodyY + (low ? -2 : 1.5));
+        ctx.scale(0.55, 0.55);
+        drawItem(ctx, DEF.item);
+        ctx.restore();
+    }
+    // a front paw, swinging with the stride, thrown up in a jump, or reaching for a wall
+    if (!low && !tint && (run || air || p.touchWall)) {
+        const pawX = p.touchWall ? 6.6 : air ? 5 : 4.6 - step * 2.2, pawY = p.touchWall ? -17 : air ? (p.vy < 0 ? -17 : -12.5) : -9.5 + lift * 0.8;
+        // a little arm from the shoulder: outline, fur, and a pink hand
+        for (const [w, c] of [[2.8, S.ink], [1.6, FUR.fur]]) {
+            ctx.strokeStyle = c;
+            ctx.lineWidth = w;
+            ctx.beginPath(); ctx.moveTo(1.5, -13.2); ctx.quadraticCurveTo((1.5 + pawX) / 2 + 0.8, (pawY - 13.2) / 2 + 1, pawX, pawY); ctx.stroke();
+        }
+        blob(ctx, pawX, pawY, 0.95, 0.85, FUR.foot);
+    }
     ctx.restore();
 }
 
-// Creatures, drawn around their feet (x, y) in device pixels, u device pixels to a game pixel.
-// Each faces left unless it walks right.
+/* ----- creatures ----- */
+// drawn around their feet (x, y) in device px, u device px to a game px; each faces left unless
+// it walks right
 function drawEnt(e, x, y, u) {
     const t = game.frame + e.id * 7;
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(u, u);
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = C.ink;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.strokeStyle = S.ink;
     if (e.state === 'flip') { ctx.translate(0, -e.h / FX); ctx.scale(1, -1); }
+    if (e.state !== 'flip') blob(ctx, 0, 0, 7, 1.2, 'rgba(30,20,10,.2)');
     if (e.kind === 'beetle') {
         if (e.dir > 0) ctx.scale(-1, 1);
         if (e.state === 'flat') {
-            ctx.fillStyle = C.beetle;
-            ctx.beginPath();
-            ctx.ellipse(0, -2, 8, 2.6, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = C.beetleHi;
-            ctx.fillRect(-4, -3.5, 5, 1);
+            blob(ctx, 0, -1.8, 8.5, 2.4, '#1c2536');
+            ctx.lineWidth = 0.8;
+            ctx.beginPath(); ctx.ellipse(0, -1.8, 8.5, 2.4, 0, 0, TAU); ctx.stroke();
+            blob(ctx, -2, -2.6, 3.5, 0.8, 'rgba(160,190,255,.5)');
         } else {
-            const step = Math.sin(t * 0.35) * 1.2;
-            ctx.strokeStyle = C.beetleLeg;
-            ctx.lineWidth = 1.2;
-            for (const [lx, s] of [[-4, 1], [0.5, -1], [5, 1]]) {
-                ctx.beginPath();
-                ctx.moveTo(lx, -3);
-                ctx.lineTo(lx - 1.5 + step * s, 0);
-                ctx.stroke();
+            // legs first, stepping in threes
+            const stepA = Math.sin(t * 0.4) * 1.3;
+            ctx.strokeStyle = '#1a1d24';
+            ctx.lineWidth = 1;
+            for (const [lx, s] of [[-4.5, 1], [0.5, -1], [4.5, 1]]) {
+                ctx.beginPath(); ctx.moveTo(lx, -3.5); ctx.lineTo(lx - 1.5 + stepA * s, -1.5); ctx.lineTo(lx - 2.5 + stepA * s, 0); ctx.stroke();
             }
-            ctx.fillStyle = C.beetle;
-            ctx.beginPath();
-            ctx.ellipse(1, -5.5, 7, 5.5, 0, Math.PI, 0);
-            ctx.lineTo(8, -3);
-            ctx.lineTo(-6, -3);
+            // the shell: a glossy dome with a seam down the middle
+            const shell = () => { ctx.beginPath(); ctx.ellipse(1.2, -5.8, 7.2, 5.6, 0, Math.PI, 0); ctx.lineTo(8.4, -3); ctx.quadraticCurveTo(1.2, -1.6, -6, -3); ctx.closePath(); };
+            shell();
+            const sg = ctx.createLinearGradient(0, -11, 0, -2);
+            sg.addColorStop(0, '#5a7bb8');
+            sg.addColorStop(0.5, '#2c3f6b');
+            sg.addColorStop(1, '#1a2440');
+            ctx.fillStyle = sg;
             ctx.fill();
-            ctx.fillStyle = C.beetleHi;
-            ctx.beginPath();
-            ctx.ellipse(0, -8, 3.4, 1.4, -0.25, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = C.beetleLeg;
-            ctx.beginPath();
-            ctx.moveTo(1.5, -10.8);
-            ctx.lineTo(1.5, -3.5);
+            ctx.lineWidth = 0.9;
+            ctx.strokeStyle = S.ink;
             ctx.stroke();
+            ctx.strokeStyle = 'rgba(10,15,30,.6)';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath(); ctx.moveTo(1.5, -11.3); ctx.quadraticCurveTo(2.5, -7, 1.8, -2.2); ctx.stroke();
+            blob(ctx, -1.5, -8.6, 3.2, 1.2, 'rgba(210,230,255,.65)', -0.35);
+            blob(ctx, 4.5, -8, 1.2, 0.6, 'rgba(210,230,255,.4)', 0.3);
             // head, eye, feelers
-            ctx.fillStyle = C.beetleLeg;
-            ctx.beginPath();
-            ctx.arc(-6.4, -4.6, 2.7, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(-7.3, -5.4, 0.9, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(-7.5, -6.8);
-            ctx.quadraticCurveTo(-10, -9.5 + step * 0.3, -11.5, -8.5);
-            ctx.stroke();
+            blob(ctx, -6.4, -4.6, 2.9, 2.6, '#1f2230');
+            ctx.lineWidth = 0.8;
+            ctx.strokeStyle = S.ink;
+            ctx.beginPath(); ctx.ellipse(-6.4, -4.6, 2.9, 2.6, 0, 0, TAU); ctx.stroke();
+            blob(ctx, -7.3, -5.4, 0.9, 0.9, '#fff');
+            blob(ctx, -7.5, -5.3, 0.45, 0.45, '#111');
+            ctx.strokeStyle = '#1a1d24';
+            ctx.lineWidth = 0.6;
+            ctx.beginPath(); ctx.moveTo(-7.5, -6.8); ctx.quadraticCurveTo(-10, -9.5 + stepA * 0.3, -11.8, -8.2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-6.6, -7); ctx.quadraticCurveTo(-8, -10.5, -10, -10.5 - stepA * 0.3); ctx.stroke();
         }
     } else if (e.kind === 'snail' || e.kind === 'shell') {
-        const [shell, shellLo] = e.red ? [C.shellR, C.shellRLo] : [C.shellY, C.shellYLo];
+        const [sh, shLo] = e.red ? ['#e0705c', '#9a3a2c'] : ['#f0bb55', '#a8741f'];
         if (e.kind === 'snail') {
             if (e.dir > 0) ctx.scale(-1, 1);
             const creep = Math.sin(t * 0.2) * 0.6;
-            ctx.fillStyle = C.snailFoot;
+            // the soft body, glistening
+            ctx.fillStyle = '#b8c49c';
             ctx.beginPath();
             ctx.moveTo(8.5, 0);
             ctx.lineTo(-8 - creep, 0);
-            ctx.quadraticCurveTo(-10.5 - creep, -1, -9 - creep, -6);
-            ctx.quadraticCurveTo(-8, -9, -6, -6);
+            ctx.quadraticCurveTo(-10.8 - creep, -1, -9.2 - creep, -6.2);
+            ctx.quadraticCurveTo(-8, -9.2, -6, -6.2);
             ctx.lineTo(-5, -3.5);
             ctx.lineTo(7, -3.5);
             ctx.closePath();
             ctx.fill();
-            ctx.fillStyle = C.snailFootLo;
-            ctx.fillRect(-8, -1, 16, 1);
-            ctx.strokeStyle = C.snailFootLo;
-            ctx.lineWidth = 1;
-            for (const [sx, sy] of [[-9.5, -13.5], [-7, -14]]) {
-                ctx.beginPath();
-                ctx.moveTo(-8 - creep, -7);
-                ctx.lineTo(sx - creep, sy);
-                ctx.stroke();
-                ctx.fillStyle = C.ink;
-                ctx.beginPath();
-                ctx.arc(sx - creep, sy, 1, 0, Math.PI * 2);
-                ctx.fill();
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+            blob(ctx, -8.4 - creep, -5.5, 1.1, 0.6, 'rgba(255,255,255,.6)');
+            ctx.fillStyle = 'rgba(255,255,255,.35)';
+            ctx.fillRect(-6, -1.6, 12, 0.6);
+            ctx.strokeStyle = '#8f9b73';
+            ctx.lineWidth = 0.9;
+            for (const [sx, sy] of [[-9.8, -13.5], [-7.2, -14]]) {
+                ctx.beginPath(); ctx.moveTo(-8 - creep, -7); ctx.lineTo(sx - creep, sy); ctx.stroke();
+                blob(ctx, sx - creep, sy, 1.1, 1.1, '#2a2a2a');
+                blob(ctx, sx - creep - 0.3, sy - 0.3, 0.35, 0.35, '#fff');
             }
             ctx.translate(2, -10);
         } else {
@@ -2840,24 +3707,26 @@ function drawEnt(e, x, y, u) {
             if (e.state === 'slide') ctx.rotate(-e.dir * t * 0.6);
             else if (e.t > UF.E.WAKE - 70) ctx.rotate(Math.sin(e.t * 0.9) * 0.18);
         }
-        ctx.fillStyle = shell;
-        ctx.beginPath();
-        ctx.arc(0, 0, e.kind === 'snail' ? 7 : 6.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = shellLo;
+        // the shell: a spiral, lit from the top left
+        const r0 = e.kind === 'snail' ? 7 : 6.5;
+        const sg = ctx.createRadialGradient(-2.5, -3, 1, 0, 0, r0);
+        sg.addColorStop(0, '#fff2c8');
+        sg.addColorStop(0.35, sh);
+        sg.addColorStop(1, shLo);
+        ctx.fillStyle = sg;
+        ctx.beginPath(); ctx.arc(0, 0, r0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = S.ink;
+        ctx.lineWidth = 0.9;
         ctx.stroke();
+        ctx.strokeStyle = shLo;
+        ctx.lineWidth = 0.8;
         ctx.beginPath();
-        for (let a = 0; a < Math.PI * 5; a += 0.3) {
+        for (let a = 0; a < Math.PI * 5; a += 0.25) {
             const r = 0.6 + a * 0.36;
-            const px = Math.cos(a) * r, py = Math.sin(a) * r;
-            a === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+            a === 0 ? ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
         }
         ctx.stroke();
-        ctx.fillStyle = 'rgba(255,255,255,.35)';
-        ctx.beginPath();
-        ctx.ellipse(-2.5, -3.2, 2.2, 1.2, -0.5, 0, Math.PI * 2);
-        ctx.fill();
+        blob(ctx, -2.6, -3.3, 2.2, 1.1, 'rgba(255,255,255,.5)', -0.5);
     }
     ctx.restore();
 }
@@ -3146,7 +4015,8 @@ loadLevel(opt.level);
 if (query.has('menu')) openMenu();
 requestAnimationFrame(frame);
 window.UNDERFOOT = {get game() { return game; }, get ghost() { return ghost; }, opt, view, step, restart, setOpt,
-    script: fn => { scripted = fn; }, pause: v => { paused = v; }, loadLevel, LINES, get level() { return DEF.id; }};
+    script: fn => { scripted = fn; }, pause: v => { paused = v; }, loadLevel, LINES, get level() { return DEF.id; },
+    render: () => render(1), bgLayer, BG, SPR};
 })();
 </script>
 </body>
