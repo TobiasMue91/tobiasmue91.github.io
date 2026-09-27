@@ -1221,6 +1221,30 @@ wrap only, or the special sheets drag it down themselves. The first player also 
 to tell apart and fragile wrap too slow: jumbo bubbles are now the same giant size at every workplace,
 and a small sheet carries three gold bubbles, not the twelve its rate asked for.
 
+The fourth version added what the first player asked for next: lightning, and one more workplace, the
+country, where a sheet holds billions. Four more things generalise.
+
+**A power that takes from the player must pay what the player would have.** Lightning pops wrap the
+player was about to pop anyway, and its strikes first paid the plain rate while the player's own pops
+carried a combo of up to ×6: the bot earned less with lightning bought than without it. Strikes now pay
+the combo and keep it alive, and the test checks that a bolt at a high combo pays more than at none.
+
+**A new stage needs room of its own, or it eats the one before.** The country's promotion was first set
+between the city's and the world's, and the city shrank from half an hour to six minutes on one seed: the
+new workplace came out of the old one's time. Promoting to the country at the calluses that used to open
+the world kept the city as it was and put the country on top.
+
+**Scale the cell, not the count.** A sheet of three billion bubbles cannot be a bitset of three billion.
+In the country one cell stands for a hundred bubbles and every count and payout is multiplied, so the grid,
+the geometry and the frame budget are the city's.
+
+**Most of a frame is pixels.** At the factory, with the CPU slowed to half, a frame at twice the pixel
+density took a median 150 ms against 17 ms at one. Part of it was a pattern refilled on every pop at a
+scale that is never quite 1, which costs a resample of each pixel; laid out once, it halved. The rest is
+simply four times the pixels, so the sharpness is an option now, and on Auto it steps down, for good, when
+most frames of three seconds in a break are slower than a 30 fps screen gives. And in a game about bubbles,
+a round white cloud with a highlight is a bubble: the country's clouds are one soft body each, flat below.
+
 ## Tried and rejected
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose
