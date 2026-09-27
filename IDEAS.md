@@ -1245,6 +1245,13 @@ simply four times the pixels, so the sharpness is an option now, and on Auto it 
 most frames of three seconds in a break are slower than a 30 fps screen gives. And in a game about bubbles,
 a round white cloud with a highlight is a bubble: the country's clouds are one soft body each, flat below.
 
+**A bigger scale needs something known in it.** The first player could hardly tell the country from the
+city: both were wrap over a map, with the same grain, the same tape and two machines the same size. Now
+the city from the last job lies down there by the river, a grey patch under its own sheet, the grain is
+half as coarse, the tape half as long, and the combines are a fleet of specks where the steamrollers were
+a few big machines. And an effect that fires on nothing looks broken: a bolt now goes only where a strike
+can still pop something, keeps its charge otherwise, and stays away from fragile wrap, whose print it cracked.
+
 ## Tried and rejected
 
 Built or prototyped, then deliberately not shipped. These are **not** open gaps — do not re-propose

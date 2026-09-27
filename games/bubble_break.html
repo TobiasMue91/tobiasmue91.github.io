@@ -920,7 +920,7 @@ function matP(P, mat){
     // by fingertip, with no machine and nothing that goes off by itself
     const size = FRAGILE_SIZE;
     return Object.assign({}, P, { mat, size, unit: 1, reach: .42, budget: P.budget/P.st.budget,
-      machine: 0, wave: 0, bang: 0, bangCap: 0, giants: 0, sugar: 0, zip: 0, zipCap: 0, domino: 0, lasso: false, twoHands: false, ...few(P) });
+      machine: 0, wave: 0, bang: 0, bangCap: 0, giants: 0, sugar: 0, zip: 0, zipCap: 0, domino: 0, lasso: false, twoHands: false, bolt: null, ...few(P) });
   }
   if(mat === 'shrink') return Object.assign({}, P, { mat, value: P.value*1.5 });
   return P;
@@ -1296,12 +1296,15 @@ function tracePath(run, x, y){
    its own. Strikes pop like a bang does, specials and thick ones too, but they come from the thumb: they
    pay the combo and keep it alive, so a bolt never takes a bubble that popping by hand would have paid more for. */
 function boltNeed(run){ const R = run.P.reach; return Math.max(1, Math.PI*R*R/SQ)*run.P.bolt.need; }
-// how many of seven points round x,y still have a bubble under them
+// how many of seven points round x,y still have a bubble under them that a strike could pop
 function liveNear(sh, x, y, r){
   let c = 0;
   for(let k = 0; k < 7; k++){
     const a = k*1.047, d = k ? r*.6 : 0, px = x + Math.cos(a)*d, py = y + Math.sin(a)*d, j = Math.round((py - .5)/SQ);
-    if(j < 0 || j >= sh.rows) continue; const i = Math.round(px - .5 - .5*(j & 1)); if(i >= 0 && i < sh.cols && isIntact(sh, i, j)) c++;
+    if(j < 0 || j >= sh.rows) continue; const i = Math.round(px - .5 - .5*(j & 1)); if(i < 0 || i >= sh.cols || !isIntact(sh, i, j)) continue;
+    // a giant or a flat one is nothing a strike can take
+    if((sh.smask[j*sh.words + (i >>> 5)] >>> (i & 31)) & 1){ const t = sh.spT[j][specialAt(sh, i, j)]; if(t === T.GIANT || t === T.FLAT) continue; }
+    c++;
   }
   return c;
 }
@@ -1310,9 +1313,10 @@ function bolt(run, x, y, jumps, depth, delay){
   const rs = Math.max(.8, R*.62)*B.wide, hop = Math.max(2.4, R*2.4)*B.wide;
   const pts = [x, y]; let px = x, py = y, n = 0;
   for(let k = 0; k < jumps; k++){
-    let best = null, bn = -1;
-    for(let q = 0; q < 7; q++){
-      const a = run.rnd()*6.283, d = hop*(.55 + .65*run.rnd()), tx = px + Math.cos(a)*d, ty = py + Math.sin(a)*d;
+    // the fullest of a few places a hop away; if none has a bubble left, a wider look, then the bolt stops
+    let best = null, bn = 0;
+    for(let q = 0; q < 14 && !(q >= 7 && best); q++){
+      const a = run.rnd()*6.283, d = hop*(q < 7 ? .55 + .65*run.rnd() : 1.2 + 1.8*run.rnd()), tx = px + Math.cos(a)*d, ty = py + Math.sin(a)*d;
       if(tx < 0 || ty < 0 || tx > sh.W || ty > sh.H) continue;
       const c = liveNear(sh, tx, ty, rs); if(c > bn){ bn = c; best = [tx, ty]; }
     }
@@ -1322,18 +1326,27 @@ function bolt(run, x, y, jumps, depth, delay){
     run.pending.push({ at: run.t + at, x: px, y: py, r: rs, who: 'bolt', ring: false, gen: 0 });
     if(depth === 0 && B.fork && run.rnd() < B.fork) n += bolt(run, px, py, Math.max(1, Math.ceil(jumps/2)), 1, at);
   }
-  run.ev.bolts.push({ pts, depth, delay, r: rs });
+  if(pts.length > 2) run.ev.bolts.push({ pts, depth, delay, r: rs });
   return n;
 }
+// a bolt only goes when it has somewhere to go: with nothing left in reach the charge waits
 function discharge(run, x, y){
   const n = bolt(run, x, y, run.P.bolt.jumps, 0, 0);
+  if(!n) return false;
   run.bolts++; run.bestBolt = Math.max(run.bestBolt, n);
+  return true;
 }
 function stepStatic(run, dt){
   const P = run.P; if(!P.bolt || run.slide > 0) return;
   const need = boltNeed(run); run.charge = Math.min(run.charge, need); run.boltT -= dt;
-  if(run.charge >= need && run.boltT <= 0){ run.charge = 0; run.boltT = .3; discharge(run, run.x, run.y); }
-  if(P.bolt.storm && run.frenzy > 0 && (run.stormT -= dt) <= 0){ run.stormT = [0, 1.1, .6][P.bolt.storm]; discharge(run, run.rnd()*run.sheet.W, run.rnd()*run.sheet.H); }
+  if(run.charge >= need && run.boltT <= 0){ run.boltT = .3; if(discharge(run, run.x, run.y)) run.charge = 0; }
+  // the storm strikes where there is still wrap: the fullest of a few spots
+  if(P.bolt.storm && run.frenzy > 0 && (run.stormT -= dt) <= 0){
+    run.stormT = [0, 1.1, .6][P.bolt.storm];
+    const sh = run.sheet, rs = Math.max(.8, P.reach*.62)*P.bolt.wide; let best = null, bn = 0;
+    for(let q = 0; q < 8; q++){ const x = run.rnd()*sh.W, y = run.rnd()*sh.H, c = liveNear(sh, x, y, rs*2); if(c > bn){ bn = c; best = [x, y]; } }
+    if(best) discharge(run, best[0], best[1]);
+  }
 }
 
 /* ---------- Machines ---------- */
@@ -1842,7 +1855,7 @@ en: {
   'dl.from':'Comes in the {s}.', 'dl.lv':'mastery {l}/4', 'dl.prog':'{n} of {m} sheets {g} for the next level.', 'dl.max':'{n} sheets {g}. Mastered.',
   'dl.good.jumbo':'cleared', 'dl.good.fragile':'with the print untouched', 'dl.good.shrink':'four fifths saved from the heat',
   'dl.perk.jumbo':'Big hands: reach {a}', 'dl.perk.fragile':'Steady: combos last {a} longer', 'dl.perk.shrink':'Quick: breaks last {a} longer', 'dl.next':'next level: {b}', 'dl.first':'At mastery 1:',
-  'stage.country.t':'Moving day, for everyone at once. Fields, woods, villages and the river between them lie under one sheet, the harvest waits, and the combines are already rolling. Somewhere down there is your old desk.',
+  'stage.country.t':'Moving day, for everyone at once. Fields, woods, villages and the river between them lie under one sheet, the harvest waits, and the combines are already rolling. The city you wrapped is down there by the river, a grey patch under its sheet.',
   'stage.city.t':'Moving day, for a whole city. Every tower is wrapped for the trip, one sheet over a dozen blocks, and a convoy of steamrollers is on its way. So are you.',
   'fl.sheet':'Sheet cleared +{n}', 'fl.time':'+{n} s', 'fl.flat':'pfft', 'fl.giant':'GIANT +{n}', 'fl.loop':'{n} roped in', 'fl.order':'Order done', 'fl.sticker':'Sticker: {s}',
   'end.kicker':'the end', 'end.title':'Break’s over.', 'end.go':'Keep popping',
@@ -2547,7 +2560,11 @@ function paintCountry(g, rnd){
   const lake = () => { g.beginPath(); for(let k = 0; k <= 24; k++){ const a = k/24*6.283, r = lr*(1 + .22*Math.sin(a*3 + 1) + .12*Math.sin(a*5)); g.lineTo(lx + Math.cos(a)*r*1.3, ly + Math.sin(a)*r*.8); } g.closePath(); };
   g.save(); g.translate(0, 0); lake(); g.lineWidth = 7; g.strokeStyle = '#6f9a4e'; g.stroke(); g.lineWidth = 3; g.strokeStyle = '#d8c89a'; g.stroke(); const lg = g.createRadialGradient(lx - lr*.3, ly - lr*.3, lr*.1, lx, ly, lr*1.3); lg.addColorStop(0, '#5a97b5'); lg.addColorStop(1, '#3a7090'); g.fillStyle = lg; g.fill(); g.restore();
   const inLake = (x, y, pad) => { const dx = (x - lx)/(lr*1.45 + (pad || 0)), dy = (y - ly)/(lr*.95 + (pad || 0)); return dx*dx + dy*dy < 1; };
-  const dry = (x, y, pad) => Math.abs(y - rv(x)) > rw + (pad || 0) && !inLake(x, y, pad);
+  // the city from the last job: a small grey patch astride the river, still under its sheet of wrap
+  let ctx0 = W*rr(.2, .8); for(let k = 0; k < 8 && Math.abs(ctx0 - lx) < lr*2.2; k++) ctx0 = W*rr(.15, .85);
+  const cw = fs*rr(1.05, 1.3), ch = fs*rr(.8, .95), cx0 = ctx0 - cw/2, cy0 = rv(ctx0) - ch/2;
+  const inCity = (x, y, pad) => x > cx0 - (pad || 0) && x < cx0 + cw + (pad || 0) && y > cy0 - (pad || 0) && y < cy0 + ch + (pad || 0);
+  const dry = (x, y, pad) => Math.abs(y - rv(x)) > rw + (pad || 0) && !inLake(x, y, pad) && !inCity(x, y, (pad || 0) + 6);
   // woods: tight clumps of trees, darker at the heart
   const trees = [];
   for(let k = 0; k < Math.max(6, W*H/90000); k++){
@@ -2596,6 +2613,27 @@ function paintCountry(g, rnd){
     const roof = pick(['#b5543c', '#9a4a36', '#a65c3f', '#6f6a66', '#8a6a4f']);
     if(w >= hh){ g.fillStyle = shadeHex(roof, 1.2); g.fillRect(h.x, h.y, w, hh/2); g.fillStyle = shadeHex(roof, .78); g.fillRect(h.x, h.y + hh/2, w, hh/2); }
     else { g.fillStyle = shadeHex(roof, 1.2); g.fillRect(h.x, h.y, w/2, hh); g.fillStyle = shadeHex(roof, .78); g.fillRect(h.x + w/2, h.y, w/2, hh); }
+  }
+  // the city itself: blocks between streets, a park or two, the river through it, and the wrap over all of it
+  {
+    const B = 4.2, st = 1.3;
+    g.save(); g.beginPath(); if(g.roundRect) g.roundRect(cx0, cy0, cw, ch, 5); else g.rect(cx0, cy0, cw, ch); g.clip();
+    g.fillStyle = '#6d7075'; g.fillRect(cx0, cy0, cw, ch);
+    for(let y = cy0; y < cy0 + ch; y += B + st) for(let x = cx0; x < cx0 + cw; x += B + st){
+      if(Math.abs(y + B/2 - rv(x + B/2)) < rw/2 + 2) continue;
+      const r = rnd(); g.fillStyle = r < .08 ? '#6e9651' : r < .5 ? '#b9b2a4' : r < .8 ? '#a8a296' : '#c9c3b6'; g.fillRect(x, y, B, B);
+      if(r > .85){ g.fillStyle = 'rgba(15,20,35,.35)'; g.fillRect(x + B*.6, y + B*.6, B*.6, B*.5); }
+    }
+    band(0); g.fillStyle = '#3f7390'; g.fill();
+    g.restore();
+    // the sheet over it: a pale film with a glare across, taped at the corners
+    g.save(); g.beginPath(); if(g.roundRect) g.roundRect(cx0 - 2, cy0 - 2, cw + 4, ch + 4, 6); else g.rect(cx0 - 2, cy0 - 2, cw + 4, ch + 4); g.clip();
+    g.fillStyle = 'rgba(232,242,250,.34)'; g.fillRect(cx0 - 2, cy0 - 2, cw + 4, ch + 4);
+    g.fillStyle = 'rgba(255,255,255,.35)'; for(let y = cy0; y < cy0 + ch; y += 2.2) for(let x = cx0 + ((y - cy0)/2.2 & 1)*1.1; x < cx0 + cw; x += 2.2) g.fillRect(x, y, .7, .7);
+    const gl = g.createLinearGradient(cx0, cy0, cx0 + cw, cy0 + ch); gl.addColorStop(.25, 'rgba(255,255,255,0)'); gl.addColorStop(.35, 'rgba(255,255,255,.45)'); gl.addColorStop(.45, 'rgba(255,255,255,0)'); g.fillStyle = gl; g.fillRect(cx0 - 2, cy0 - 2, cw + 4, ch + 4);
+    g.restore();
+    g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 1; g.strokeRect(cx0 - 1.5, cy0 - 1.5, cw + 3, ch + 3);
+    g.fillStyle = 'rgba(199,152,84,.95)'; for(const [x, y] of [[cx0, cy0], [cx0 + cw, cy0], [cx0, cy0 + ch], [cx0 + cw, cy0 + ch]]){ g.save(); g.translate(x, y); g.rotate(x > cx0 + 1 === y > cy0 + 1 ? .8 : -.8); g.fillRect(-4, -1.2, 8, 2.4); g.restore(); }
   }
   // clouds, high up: a few small cumulus, one soft body each (a sphere per puff reads as a bubble), their shadows on the fields
   const clouds = [];
@@ -2766,7 +2804,7 @@ function makeView(sh){
   else { buildPattern(v); if(v.mode === 'block') buildBlocks(v); }
   // a sheet over a dozen blocks is taped down: across its corners, and across its edges between them
   if(v.mode === 'block'){ const rnd = BB.mulberry(sh.id + 1), x = v.ox, y = v.oy, w = v.w, h = v.h; v.tapes = [[x, y, -.8], [x + w, y, .8], [x, y + h, .8], [x + w, y + h, -.8]];
-    v.tapeL = Math.max(22, Math.min(46, Math.min(w, h)*.07));
+    v.tapeL = Math.max(22, Math.min(46, Math.min(w, h)*.07))*((sh.unit || 1) > 1 ? .55 : 1);
     const nx = w > 700 ? 2 : 1, ny = h > 700 ? 2 : 1;
     for(let k = 1; k <= nx; k++){ const tx = x + w*k/(nx + 1) + (rnd() - .5)*w*.08; v.tapes.push([tx, y, Math.PI/2 + (rnd() - .5)*.2], [tx + (rnd() - .5)*w*.1, y + h, Math.PI/2 + (rnd() - .5)*.2]); }
     for(let k = 1; k <= ny; k++){ const ty = y + h*k/(ny + 1) + (rnd() - .5)*h*.08; v.tapes.push([x, ty, (rnd() - .5)*.2], [x + w, ty + (rnd() - .5)*h*.1, (rnd() - .5)*.2]); } }
@@ -3046,16 +3084,18 @@ function buildPattern(v){
        not one by one), popped wrap as clear film with a few crinkles; both at the screen's own resolution */
     const grain = (w, h, fn) => { const c = document.createElement('canvas'); c.width = Math.round(w*DPR); c.height = Math.round(h*DPR); const g = c.getContext('2d'); g.scale(c.width/w, c.height/h); fn(g); return c; };
     // over the city the fresh wrap is thinner, so the streets show through it
-    const thin = v.mode === 'block';
+    const thin = v.mode === 'block', far = (v.sh.unit || 1) > 1;
     tileI = grain(16, 14, g => {
       g.fillStyle = thin ? 'rgba(232,242,250,.2)' : 'rgba(232,242,250,.26)'; g.fillRect(0, 0, 16, 14);
       // each dome clear in the middle, its rim catching the light, a hot spot up and to the left
-      for(let row = -1; row <= 4; row++) for(let k = -1; k <= 4; k++){
-        const x = k*4 + (row & 1)*2 + 2, y = row*3.5 + 1.75;
-        g.fillStyle = 'rgba(255,255,255,.16)'; g.beginPath(); g.arc(x, y, 1.55, 0, 6.283); g.fill();
-        g.strokeStyle = 'rgba(30,50,70,.24)'; g.lineWidth = .5; g.beginPath(); g.arc(x, y, 1.5, -.3, 1.9); g.stroke();
-        g.strokeStyle = 'rgba(255,255,255,.62)'; g.beginPath(); g.arc(x, y, 1.45, 2.4, 4.9); g.stroke();
-        g.fillStyle = 'rgba(255,255,255,.95)'; g.fillRect(x - .9, y - .9, .8, .8);
+      // over the country, a hundred times as many bubbles to the screen: the grain is half as coarse
+      const q = far ? .5 : 1;
+      for(let row = -1; row <= 4/q; row++) for(let k = -1; k <= 4/q; k++){
+        const x = (k*4 + (row & 1)*2 + 2)*q, y = (row*3.5 + 1.75)*q;
+        g.fillStyle = 'rgba(255,255,255,.16)'; g.beginPath(); g.arc(x, y, 1.55*q, 0, 6.283); g.fill();
+        g.strokeStyle = 'rgba(30,50,70,.24)'; g.lineWidth = .5*q; g.beginPath(); g.arc(x, y, 1.5*q, -.3, 1.9); g.stroke();
+        g.strokeStyle = 'rgba(255,255,255,.62)'; g.beginPath(); g.arc(x, y, 1.45*q, 2.4, 4.9); g.stroke();
+        g.fillStyle = 'rgba(255,255,255,.95)'; g.fillRect(x - .9*q, y - .9*q, .8*q, .8*q);
       }
     });
     tileP = grain(40, 40, g => {
@@ -3644,9 +3684,10 @@ function drawConvoy(v, m, y0, y1){
 /* the country's machine: combine harvesters side by side, rolling to the right, each a wide cutting
    header in front, a green body with the cab and the grain tank, and the chaff blowing out behind */
 function drawCombines(v, m, y0, y1){
-  const x = v.ox + m.x*v.s, n = Math.max(2, Math.min(6, Math.round((y1 - y0)/40))), lane = (y1 - y0)/n, S = Math.max(.6, Math.min(1.6, lane/34));
-  for(let k = 0; k < n; k++){
-    const cy0 = y0 + (k + .5)*lane, off = (k % 2)*10*S;
+  // seen from this high a combine is a few pixels: a whole fleet works the band, in staggered ranks
+  const S = .3, lane = 40*S, n = Math.max(1, Math.min(16, Math.round((y1 - y0)/lane))), step = (y1 - y0)/n, x = v.ox + m.x*v.s;
+  for(let c = 0; c < 3; c++) for(let k = 0; k < n; k++){
+    const cy0 = y0 + (k + .5)*step, off = (k % 2)*14*S - c*150*S - ((k*7 + c*3) % 5)*4*S;
     cx.save(); cx.translate(x + off, cy0); cx.scale(S, S);
     // dust and chaff behind it
     for(let q = 0; q < 5; q++){ cx.fillStyle = `rgba(225,205,150,${.18 - q*.03})`; cx.beginPath(); cx.arc(-46 - q*9, (q % 2 ? 3 : -3), 7 + q*2.5, 0, 6.283); cx.fill(); }
