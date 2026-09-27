@@ -104,10 +104,10 @@ misses a win, a block, or hands over a win it could avoid. Run it after touching
 days and must get what each deserves, and the landing guide must show where the bird really
 lands. Run it after touching any number in that block; `--record` re-records its golden table.
 `test/bubble_break.mjs` runs the DOM-free `<script id="core">` block of `games/bubble_break.html`
-(sheets, verbs, trees, economy, orders, stickers, special deliveries): the sheet and lasso geometry
+(sheets, verbs, trees, economy, orders, stickers, special deliveries, lightning): the sheet and lasso geometry
 against brute force, every special rule and material, that a machine alone never replaces the player, that chain reactions die out, that
 older saves still load, and a human-limited bot playing the whole career, which must reach each of
-the four workplaces and the finale inside its time window without a break that never ends. Run it
+the five workplaces and the finale inside its time window without a break that never ends. Run it
 after touching any number in that block.
 `test/tower_defense.mjs` runs the DOM-free core of `games/mini_tower_defense.html` (Three Gates):
 the maps keep their roads apart, every wave spawns what its preview card said, and bots play whole

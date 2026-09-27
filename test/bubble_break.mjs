@@ -7,7 +7,7 @@
 // that shows in a diff or on a screenshot. The page keeps its sheets, verbs, trees and
 // economy in a <script id="core"> block with no DOM; this runs that block alone in Node.
 //
-//   node test/bubble_break.mjs                  # everything (about three minutes)
+//   node test/bubble_break.mjs                  # everything (about five minutes)
 //   node test/bubble_break.mjs sheet rules      # named suites only
 //   node test/bubble_break.mjs --page=old.html  # run against another copy of the page
 //
@@ -267,9 +267,9 @@ if(suites.includes('rules')){
     check(!('next' in SL) && BB.jobStage(SL) === 2, 'a save that had picked an older workplace goes back to the newest');
     check(!BB.worldOpen(S1), 'the world is not open yet');
     S1.callusesEarned = BB.PROMO.world; S1.cycleEarned = BB.STAGES[3].gate; BB.quit(S1);
-    check(BB.worldOpen(S1), `${BB.PROMO.world} calluses earned in the city open the world`);
+    check(BB.worldOpen(S1), `${BB.PROMO.world} calluses earned open the world`);
     const S2 = BB.newState(); S2.callusesEarned = 1e9; S2.cycleEarned = BB.STAGES[0].gate; BB.quit(S2);
-    check(S2.unlocked === 3 && BB.worldOpen(S2), 'enough calluses skip straight to the city and the world');
+    check(S2.unlocked === BB.STAGES.length - 1 && BB.worldOpen(S2), 'enough calluses skip straight to the country and the world');
     // a visit: one break somewhere else, and the job is exactly as it was
     const H = BB.newState(); H.callusesEarned = BB.STAGES[2].promo; BB.promote(H); H.quits = 3; H.stage = 2; Object.assign(H.lv, { thumb:2, strength:3, delivery:2 });
     const r0 = BB.startRun(H, { aspect: 1.5, seed: 5 }); BB.finish(r0); H.plopps = 777;
@@ -341,6 +341,41 @@ if(suites.includes('rules')){
     const swipeOver = iron => { const [, run] = runWith({ delivery:6, thumb:1, strength:3, iron }, {}, { seed: 50 }); const sh = run.sheet, p = findSpecial(sh, T.THICK); const x = BB.cx(p[0], p[1]), y = BB.cy(p[1]);
       BB.press(run, x - 3, y); BB.drag(run, x + 3, y); BB.release(run); return !BB.isIntact(sh, p[0], p[1]); };
     check(!swipeOver(0) && swipeOver(1), 'a swipe passes over thick bubbles, with Iron thumb it pops them');
+  }
+  // lightning: popping by hand charges it, a bolt jumps from patch to patch, and it pays the combo
+  {
+    const LV = { delivery:6, thumb:1, strength:2, wave:1 };
+    const boltRun = (lv, seed) => { const [, run] = runWith(Object.assign({}, LV, lv), {}, { seed, noMat: true }); run.x = run.sheet.W/2; run.y = run.sheet.H/2; return run; };
+    const r0 = boltRun({}, 60); r0.charge = 1e9; BB.step(r0, 1/30);
+    check(!r0.bolts && !r0.pending.length, 'without Static charge a full charge does nothing');
+    const r1 = boltRun({ static:1 }, 60), sh = r1.sheet, before = BB.intactCount(sh);
+    BB.press(r1, sh.W*.2, sh.H*.2); BB.release(r1);
+    check(r1.charge > 0 && r1.charge < BB.boltNeed(r1), `a press charges the static (${fmtN(r1.charge)} of ${fmtN(BB.boltNeed(r1))})`);
+    r1.charge = BB.boltNeed(r1); const mid = BB.intactCount(sh); BB.step(r1, 1/30);
+    const strikes = r1.pending.filter(q => q.who === 'bolt').length;
+    for(let k = 0; k < 30; k++) BB.step(r1, 1/30);
+    const got = mid - BB.intactCount(sh);
+    check(r1.bolts === 1 && strikes === r1.P.bolt.jumps && got > 0 && r1.charge === 0, `a full charge lets a bolt go: ${strikes} strikes pop ${fmtN(got)} bubbles, and they charge nothing back`);
+    const paid = combo => { const r = boltRun({ static:1 }, 61); r.combo = combo; r.lastPop = r.t; r.charge = BB.boltNeed(r); const e0 = r.earned; for(let k = 0; k < 30; k++) BB.step(r, 1/30); return r.earned - e0; };
+    check(paid(1e6) > 1.5*paid(0), 'a bolt pays the combo, so it never takes a bubble popping by hand would have paid more for');
+    const strikesWith = fork => { let n = 0; for(let s2 = 0; s2 < 12; s2++){ const r = boltRun({ static:1, fork }, 70 + s2); r.charge = BB.boltNeed(r); BB.step(r, 1/30); n += r.pending.filter(q => q.who === 'bolt').length; } return n; };
+    const plain = strikesWith(0), forked = strikesWith(3);
+    check(forked > 1.5*plain, `forked lightning branches: ${forked} strikes in twelve bolts against ${plain}`);
+    const rs = boltRun({ static:1, storm:1 }, 80); rs.frenzy = 5; for(let k = 0; k < 90; k++) BB.step(rs, 1/30);
+    const rq = boltRun({ static:1, storm:1 }, 80); for(let k = 0; k < 90; k++) BB.step(rq, 1/30);
+    check(rs.bolts >= 2 && !rq.bolts, `in a sugar rush Thunderstorm strikes on its own (${rs.bolts} bolts in 3 s, none without the rush)`);
+    const SC = BB.newState(); SC.cl.coil = 1; SC.cycleEarned = BB.STAGES[0].gate; BB.quit(SC);
+    const rc = BB.startRun(SC, { aspect: 1.5, seed: 3 });
+    check(rc.P.bolt && BB.lv(SC, 'static') >= 1, 'with the Tesla coil a new job starts with Static charge');
+  }
+  // the country: a cell of the sheet stands for a hundred bubbles, and counts and pays as that many
+  {
+    const [, run] = runWith({ delivery:6, thumb:1, strength:2 }, {}, { stage: 4, seed: 90, noMat: true }), sh = run.sheet, U = sh.unit;
+    const P = run.P.size;
+    check(U === 100 && Math.abs(sh.N*U/P - 1) < .05, `a country sheet holds ${fmtN(sh.N)} cells of ${U}: ${fmtN(sh.N*U)} bubbles, as its size says (${fmtN(P)})`);
+    const [, city] = runWith({ delivery:6, thumb:1, strength:2 }, {}, { stage: 3, seed: 90, noMat: true });
+    BB.press(run, sh.W/2, sh.H/2); BB.release(run); BB.press(city, city.sheet.W/2, city.sheet.H/2); BB.release(city);
+    check(run.pops % U === 0 && run.pops > 20*city.pops, `a press there pops ${fmtN(run.pops)} bubbles, a hundred at a time (in the city: ${fmtN(city.pops)})`);
   }
   // orders and stickers
   {
@@ -500,6 +535,10 @@ if(suites.includes('materials')){
     const slow = BB.heatPace(r3, 8000), mid = BB.heatPace(r3, 1000); r3.pops = r3.matStart = 1e7; const fast = BB.heatPace(r3, 8000);
     r3.pops = r3.matStart = 1000; r3.pops = 1400; const own = BB.heatPace(r3, 1000);     // 400 more on this sheet change nothing
     check(slow === 40 && Math.abs(mid - 8) < 1e-9 && fast === 5 && Math.abs(own - 8) < 1e-9, 'the heat gun takes four fifths of the time you would need at your pace on ordinary wrap, between 5 and 40 s, whatever you pop on the special sheets');
+    // most of it saved, not nine tenths: it counts towards the mastery, but the bonus is not doubled
+    const [S5, r5] = matRun('shrink', 3, { thumb: 1 }, 11), s5 = r5.sheet; BB.popPolygon(r5, [s5.W*.14, -1, s5.W + 1, -1, s5.W + 1, s5.H + 1, s5.W*.14, s5.H + 1], 'player');
+    let d5 = null; for(let k = 0; k < 30*60 && !d5; k++){ BB.step(r5, 1/60); const e = BB.takeEvents(r5); if(e.matDone) d5 = e.matDone; }
+    check(d5 && d5.share >= .8 && d5.share < .9 && d5.well && !d5.good && BB.matDone(S5, 'shrink') === 1, `${d5 ? Math.round(d5.share*100) : '?'} % saved from the heat counts towards the mastery without doubling the bonus`);
     // half popped by hand, then the heat: what the heat takes is what was left
     const [, r4] = matRun('shrink', 3, { thumb: 1 }, 10), s4 = r4.sheet; r4.P.reach = s4.H; BB.press(r4, s4.W*.75, s4.H/2); BB.release(r4);
     const left4 = s4.left; let d4 = null; for(let k = 0; k < 20*60 && !d4; k++){ BB.step(r4, 1/60); const e = BB.takeEvents(r4); if(e.matDone) d4 = e.matDone; }
@@ -561,7 +600,7 @@ function playBreak(S, seed, who){
   }
   return run;
 }
-const STAGE_NODES = ['ship', 'factory', 'city'];
+const STAGE_NODES = ['ship', 'factory', 'city', 'country'];
 function career(seed, maxMin){
   const S = BB.newState(), rnd = BB.mulberry(seed);
   let clock = 0, gains = [], since = 0; const log = [], at = {}, cycles = [], jobs = [];
@@ -607,20 +646,22 @@ if(suites.includes('idle')){
 /* ---------------- pacing ---------------- */
 if(suites.includes('pacing')){
   section('pacing');
-  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [25, 70], city: [34, 110], world: [70, 160] };
+  // with the country the world came at 87 to 94 minutes over four seeds (66 to 76 before it); two seeds
+  // only ever show part of that spread, and a hair either way is not a pacing change
+  const win = { firstQuit: [8, 25], ship: [14, 45], factory: [25, 70], city: [34, 110], country: [45, 140], world: [70, 180] };
   for(const seed of [1, 2]){
     const t0 = performance.now(), c = career(seed, 300), dur = ((performance.now() - t0)/1000).toFixed(0);
-    console.log(`  seed ${seed}: first quit ${c.at.firstQuit?.toFixed(0)} min, warehouse ${c.at.ship?.toFixed(0)}, factory ${c.at.factory?.toFixed(0)}, city ${c.at.city?.toFixed(0)}, world ${c.at.world?.toFixed(0)} (${dur} s to simulate)`);
+    console.log(`  seed ${seed}: first quit ${c.at.firstQuit?.toFixed(0)} min, warehouse ${c.at.ship?.toFixed(0)}, factory ${c.at.factory?.toFixed(0)}, city ${c.at.city?.toFixed(0)}, country ${c.at.country?.toFixed(0)}, world ${c.at.world?.toFixed(0)} (${dur} s to simulate)`);
     for(const [k, [lo, hi]] of Object.entries(win)) check(c.at[k] != null && c.at[k] >= lo && c.at[k] <= hi, `seed ${seed}: ${k} within ${lo}-${hi} min`, `at ${c.at[k] == null ? 'never' : c.at[k].toFixed(1)}`);
     // on the coffee's clock; fragile wrap's half-speed clock stretches a break a little in real time
     const longest = Math.max(...c.log.map(r => r.t - r.slowT/2)), slowest = Math.max(...c.log.map(r => r.slowT/2));
     check(longest <= 90 && slowest <= 20, `seed ${seed}: no break's clock runs past 90 s (longest ${longest.toFixed(0)} s), and fragile wrap adds at most 20 s to one (${slowest.toFixed(0)} s)`);
     check(c.log.every(r => r.pops > 0), `seed ${seed}: every break pops something`);
-    const pps = [0, 1, 2, 3].map(k => c.log.filter(r => r.stage === k).map(r => r.pps)), top = pps.map(a => Math.max(...a));
-    check(pps.every(a => a.length) && top[2] > 100*top[0] && top[3] > 20*top[2], `seed ${seed}: each workplace pops far faster than the last (desk ${fmtN(top[0])}/s, factory ${fmtN(top[2])}/s, city ${fmtN(top[3])}/s)`);
+    const pps = [0, 1, 2, 3, 4].map(k => c.log.filter(r => r.stage === k).map(r => r.pps)), top = pps.map(a => Math.max(...a));
+    check(pps.every(a => a.length) && top[2] > 100*top[0] && top[3] > 20*top[2] && top[4] > 20*top[3], `seed ${seed}: each workplace pops far faster than the last (desk ${fmtN(top[0])}/s, factory ${fmtN(top[2])}/s, city ${fmtN(top[3])}/s, country ${fmtN(top[4])}/s)`);
     const easy = c.cycles.filter(x => x.firstBreakLevels > .5*x.of);
     check(!easy.length, `seed ${seed}: no job hands over more than half its break tree after one break`, easy.map(x => `stage ${x.stage}: ${x.firstBreakLevels}/${x.of}`).join(', '));
-    const perStage = [0, 1, 2, 3].map(k => c.cycles.filter(x => x.stage === k).length);
+    const perStage = [0, 1, 2, 3, 4].map(k => c.cycles.filter(x => x.stage === k).length);
     check(perStage.every(n => n >= 1 && n <= 4), `seed ${seed}: one to four jobs per workplace (${perStage.join(', ')})`);
     const withOrders = c.jobs.filter(j => j.orders > 0).length;
     check(withOrders >= c.jobs.length*.6, `seed ${seed}: orders get done along the way (in ${withOrders} of ${c.jobs.length} jobs)`);
