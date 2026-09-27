@@ -5,9 +5,14 @@ ohne Zugriff auf diese Unterhaltung soll damit weiterbauen können. Offene Entsc
 gesammelt in **Abschnitt 11**. Der Nutzer hat dem Plan als Ganzem zugestimmt, also gelten dort die
 empfohlenen Antworten.
 
-**Wo das Projekt steht:** M1 (Graubox) und M2 (Figuren, Validator, Level 1-1) sind gebaut. M2
-wartet auf das Urteil des Nutzers. Was es gibt und was gemessen wurde, steht in **Abschnitt 13**
-(M1) und **Abschnitt 14** (M2). Als Nächstes kommt M3, die Grafik.
+**Wo das Projekt steht:** M1 (Graubox) und M2 (Figuren, Validator, Level 1-1) sind gebaut. Danach
+hat der Nutzer das Konzept „SMB1 mit neuem Anstrich“ verworfen: Die Steuerung fühlt sich gut an,
+aber dafür fehlt der Bedarf. Es braucht eine eigene Identität. Aus vier Konzepten hat er zwei
+gewählt, die jetzt als spielbare Prototypen nebeneinander liegen: **A „Vier Jahreszeiten“** und
+**C „Tempo“**. Beide warten auf seinen Vergleich am Handy. Alles dazu steht in **Abschnitt 15**.
+M3 (Grafik) ist zurückgestellt, bis ein Konzept gewählt ist. Die Abschnitte 1 bis 12 beschreiben
+noch den ursprünglichen SMB-Plan. Steuerung, Fairness-Schicht, Levelformat und Testweise gelten
+für beide Prototypen weiter.
 
 **Was der Nutzer nach M1 gesagt hat (gilt für alles Weitere):** Die Maus „rutscht ständig über den
 Boden“. Gewünscht ist eine reaktionsschnellere Steuerung wie bei **Hollow Knight**: schnelles
@@ -802,3 +807,147 @@ ein Haus. Beides gehört zu dem, was erst der Nutzer beim Spielen beurteilen kan
   aus gemessen sind es 10 oder mehr.
 - **Kamerarahmen und Leveldesign sind dieselbe Frage.** Die Regel „Landestelle beim Absprung im
   Bild“ hat einen Kamerafehler gefunden und keinen Levelfehler.
+
+---
+
+## 15. Neuausrichtung: vier Konzepte, zwei Prototypen (2026-09-27)
+
+### Was der Nutzer nach M2 gesagt hat
+
+„Okay, fühlt sich gut an. Aber wir brauchen glaube ich ein anderes Konzept abseits von ‚SMB1 mit
+neuem Anstrich‘. Da fehlt absolut der Bedarf für. Etwas mehr Alleinstellungsmerkmale oder eine
+speziellere Identität wären gut. Oder wir orientieren uns grundsätzlich eher an moderneren
+Jump'n'Runs.“
+
+Die Steuerung aus M2 (reaktionsschnelles Profil, SMB-Sprünge, Fairness-Schicht) bleibt also.
+Gesucht ist, *wofür* man sie benutzt.
+
+### Die vier Konzepte
+
+| | Konzept | Kern | Prototyp |
+|---|---|---|---|
+| **A** | Vier Jahreszeiten | ein zusammenhängender Garten statt einer Levelreihe; die Jahreszeit verwandelt dieselbe Karte | ein kleines Gebiet in mehreren Jahreszeiten |
+| B | Tandem, zwei Mäuse am Faden | je ein Daumen pro Maus, allein oder zu zweit | Faden-Physik und Zwei-Daumen-Steuerung |
+| **C** | Tempo | kurze Level mit Schwung, am Ende die Flucht zurück gegen die Uhr | ein Level mit Rückweg |
+| D | Zurückspulen statt sterben | Fehler zurückspulen, Rätsel mit Dingen außerhalb der Zeit | drei kleine Zeiträtsel |
+
+**Gewählt: A und C**, als kleine spielbare Prototypen zum Vergleich am Handy. B und D sind nicht
+verworfen, nur nicht gebaut.
+
+Beide Prototypen sind eigene Seiten unter `playground/`. Sie kopieren den M2-Kern und ändern ihn
+dort, wo das Konzept es verlangt. `underfoot.html` bleibt der M2-Stand. Welche Seite weiterlebt,
+entscheidet der Nutzer. Den Kern danach wieder zusammenzuführen ist Arbeit für die Zeit nach der
+Wahl.
+
+### Prototyp A: `playground/underfoot_seasons.html`
+
+- **Ein Garten, 110 × 44 Kacheln:** Rasen, Teich, Schuppen, Zaun und Apfelbaum, oben im Baum das
+  Nest als Ziel. An einem **Baumstumpf** wechselt man mit ↑ die Jahreszeit. Dieselbe Karte ändert
+  sich dann:
+  - im **Sommer** wächst Laub als Stufen am Baum hoch;
+  - im **Herbst** treiben Blätter als Flöße auf dem Teich, und neben dem Schuppen steigt Wind auf;
+  - im **Winter** friert der Teich zu, und Schnee weht gegen den Baum.
+- **Jahreszeiten muss man erst finden:** Das Herbstblatt liegt im Sommer erreichbar, der
+  Winterkristall erst im Herbst.
+- **Schwimmen** nutzt die Schwimmzeilen von SMB, mit einem festen Sprung über zwei Kacheln an der
+  Oberfläche.
+- **Präsentation:** eine Palette und ein Wetter je Jahreszeit; ein kreisförmiger Übergang vom
+  Stumpf aus; eine Karte mit dem, was man gesehen hat (M, Knopf oder Select).
+- **Test:** `node test/underfoot_seasons.mjs`, 41 Prüfungen, etwa 11 s. Ein Erreichbarkeitsgraph
+  über (Jahreszeit, Bodenstück) spielt mit der echten Physik, wechselt nur an Stümpfen und nur mit
+  gefundenem Token. Ergebnis:
+  - Sommer erreicht 60 % des Bodens, mit Herbst 71 %, mit Winter 100 %;
+  - das Nest nur mit Winter;
+  - keine Sackgasse;
+  - alle drei goldenen Samen erreichbar.
+
+  Der Graph hat unterwegs drei Löcher in der Karte gefunden, alle behoben.
+
+### Prototyp C: `playground/underfoot_tempo.html`
+
+**Ein Level, hin und zurück.** Man läuft vom Mauseloch den Gartenweg entlang und über eine Bank
+zum Samensack am anderen Ende. Der Sack liegt auf einem losen Brett. Nimmt man ihn, gibt das Brett
+nach, man fällt auf den Weg unter der Bank, und die **Flucht** beginnt: 30 Sekunden Uhr zurück zum
+Mauseloch. Der Rückweg führt durch das, was auf dem Hinweg verschlossen war. Die Bretter unter der
+Bank (`n`) fallen weg, dafür liegen Kisten (`e`) als Hürden auf dem Weg, die man vorher nur als
+gestrichelten Umriss sah. Der Himmel wird abendrot, ein Herzschlag beschleunigt sich, und in den
+letzten zehn Sekunden pulsiert der Rand.
+
+**Schwung in Stufen** (`TIERS`: 2,5 / 3,25 / 4 px/f):
+- **Aufbau:** Wer ohne Halt voll läuft, wird nach 0,90 s schneller („dash“) und nach 1,73 s noch
+  einmal („blaze“). Nachbilder und Tempo-Anzeige färben sich orange, dann rot.
+- **Wirkung ab der ersten Stufe:** Erdklumpen zerplatzen, Käfer werden umgeworfen (das zählt für
+  die Kombo).
+- **Was die Stufe nimmt:**
+  - loslassen, umdrehen oder den Rennknopf loslassen;
+  - in der Luft umkehren;
+  - ein Treffer;
+  - ein Crash: Wer ab der ersten Stufe auf den Füßen gegen eine Wand rennt, wird zurückgeworfen und
+    ist kurz benommen.
+- **Was die Stufe hält:** ein Sprung (die Luftgeschwindigkeit bleibt) und ein Rutschen. Eine Wand
+  in der Luft ist kein Crash, man rutscht an ihr herunter und kann mit der Stufe abspringen.
+- **Kein Tempo geschenkt:** Tempo ohne Stufe (aus einem Rutschen oder Crash) lässt sich nicht durch
+  Hüpfen halten. Die Luftgeschwindigkeit ist auf die Stufe begrenzt. Das hat der Such-Bot als
+  Lücke gefunden.
+
+**Wandsprung, Rutschen, Kriechen:**
+- **Wand:** Man rutscht höchstens 1,5 px/f schnell herunter. Sprung beim Berühren (bis 6 Frames
+  vorher gedrückt) stößt mit Lauftempo oder Stufentempo ab. 10 Frames lang zieht der Stick einen
+  nicht zurück. Ein 4 Kacheln breiter Schacht lässt sich im Zickzack hochklettern.
+- **Rutschen:** ↓ im Lauf, einmal tippen reicht. Es läuft 40 Frames mit dem Anfangstempo und endet
+  nicht, solange über einem kein Platz zum Aufstehen ist. So kommt man durch jeden Tunnel von einer
+  Kachel Höhe. Ein Sprung beendet es. Geduckt mit Richtung kriecht man.
+
+**Keine Tode.**
+- Ein Käfer wirft einen zurück und kostet Stufe und Kombo.
+- Eine Grube setzt einen auf den letzten Boden zurück; auf dem Rückweg kostet das 3 s.
+- Läuft die Uhr ab, beginnt die Flucht neu am Sack, mit dem Level so, wie es beim Nehmen war.
+
+**Ränge und Geist.**
+- Ränge nach Gesamtzeit: S bis 30 s, A bis 38 s, B bis 55 s, sonst C.
+- Der eigene Bestlauf wird als Eingabefolge gespeichert und läuft als Geist mit. Er ist framegenau,
+  weil der Kern deterministisch ist, und wird verworfen, sobald sich Kern oder Level ändern.
+- Wahlweise läuft stattdessen die schnellste Linie des Such-Bots mit, um zu zeigen, was geht.
+
+**Steuerung:** „Immer rennen“ ist hier voreingestellt. Am Handy: Daumen links in die Richtung
+schieben, nach unten ziehen zum Rutschen; rechts springen.
+
+**Test:** `node test/underfoot_tempo.mjs`, 62 Prüfungen, etwa 55 s.
+- `moves`: Stufen, was sie nimmt und hält, Wandrutschen und Wandsprung samt Puffer und Sperre,
+  Schachtklettern, Rutschen durch 30 Kacheln Tunnel, Kriechen, Klumpen, Crash, Käfer, Gruben.
+- `escape`: Sack, Bretter und Kisten, Falltür, Uhr, Neustart mit wiederhergestelltem Level,
+  Kosten einer Grube, Mauseloch.
+- `route`: zwei Strahlsuch-Bots auf dem echten Level:
+
+| Bot | gesamt | hin | zurück |
+|---|---|---|---|
+| schnellste Linie | 24,85 s | 13,15 s | 11,70 s |
+| nie schneller als Laufen (Stufen abgeschaltet) | 37,08 s | 18,80 s | 18,28 s |
+
+Daraus folgen die Ränge und die Uhr:
+- S (30 s) braucht die Stufen.
+- A (38 s) ist ein fehlerfreier Lauf ohne sie.
+- Auch ohne Stufen bleiben auf dem Rückweg fast 12 s der Uhr für Fehler.
+- Die schnellste Linie nutzt jeden Zug: Stufen, Wandsprung, Rutschen, Klumpen, Käfer.
+
+`--record` gibt nach einer Änderung an Kern oder Level eine neue Linie für den Geist aus. Der Test
+prüft, dass die gespeicherte Linie noch framegenau ins Ziel kommt. Mutationsproben (neun
+absichtlich eingebaute Regelfehler) werden alle erkannt.
+
+### Was die Prototypen *nicht* beantworten
+
+- **Die Uhr ist aus Bots abgeleitet, nicht aus Menschen.** Ob 30 Sekunden Flucht beim ersten Mal
+  spannend oder frustrierend sind, zeigt erst das Spielen. Das ist die wichtigste Frage an den
+  Nutzer.
+- **Grafik:** Beide sind über der M2-Graubox, aber noch kein M3.
+- **Umfang:** A ist eine Karte, C ist ein Level. Wie viele Level oder Gebiete ein ganzes Spiel
+  trüge, ist offen.
+
+### Worauf der Nutzer beim Vergleich achten soll
+
+- **A:** Macht es Spaß, dieselbe Stelle in einer anderen Jahreszeit wiederzuerkennen? Ist das
+  Suchen der Jahreszeiten ein Ziel oder ein Umweg?
+- **C:** Fühlt sich der Schwung verdient an? Tut der Verlust einer Stufe weh, aber nicht zu sehr?
+  Reicht die Uhr? Will man nach dem Rang noch einmal laufen?
+- **Beide:** Welche Welt will man auf dem Handy länger als fünf Minuten spielen?
+
