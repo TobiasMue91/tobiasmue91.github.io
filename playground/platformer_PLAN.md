@@ -9,10 +9,12 @@ empfohlenen Antworten.
 hat der Nutzer das Konzept „SMB1 mit neuem Anstrich“ verworfen: Die Steuerung fühlt sich gut an,
 aber dafür fehlt der Bedarf. Es braucht eine eigene Identität. Aus vier Konzepten hat er zwei
 gewählt, die jetzt als spielbare Prototypen nebeneinander liegen: **A „Vier Jahreszeiten“** und
-**C „Tempo“**. Beide warten auf seinen Vergleich am Handy. Alles dazu steht in **Abschnitt 15**.
-M3 (Grafik) ist zurückgestellt, bis ein Konzept gewählt ist. Die Abschnitte 1 bis 12 beschreiben
-noch den ursprünglichen SMB-Plan. Steuerung, Fairness-Schicht, Levelformat und Testweise gelten
-für beide Prototypen weiter.
+**C „Tempo“**. Beide sind in **Abschnitt 15** beschrieben. Nach dem Vergleich am Handy hat der
+Nutzer **Tempo gewählt** (Abschnitt 16): Jahreszeiten sei „mega kreativ“, Tempo gefalle vom
+Gameplay besser, und darauf lasse sich langfristig besser aufbauen. Weitergebaut wird also
+`playground/underfoot_tempo.html`; der nächste Schritt wartet auf sein Feedback zum Spielgefühl
+(16.3). Die Abschnitte 1 bis 12 beschreiben noch den ursprünglichen SMB-Plan. Steuerung,
+Fairness-Schicht, Levelformat und Testweise gelten weiter.
 
 **Was der Nutzer nach M1 gesagt hat (gilt für alles Weitere):** Die Maus „rutscht ständig über den
 Boden“. Gewünscht ist eine reaktionsschnellere Steuerung wie bei **Hollow Knight**: schnelles
@@ -950,4 +952,44 @@ absichtlich eingebaute Regelfehler) werden alle erkannt.
 - **C:** Fühlt sich der Schwung verdient an? Tut der Verlust einer Stufe weh, aber nicht zu sehr?
   Reicht die Uhr? Will man nach dem Rang noch einmal laufen?
 - **Beide:** Welche Welt will man auf dem Handy länger als fünf Minuten spielen?
+
+---
+
+## 16. Entscheidung: Tempo (2026-09-27)
+
+„Also Seasons ist mega kreativ, aber vom Gameplay gefällt mir Tempo besser. Ich glaub auf Tempo
+lässt sich auf lange Sicht besser aufbauen.“
+
+### 16.1 Was aus den Jahreszeiten wird
+
+Der Prototyp bleibt unter `playground/` liegen, samt Test. Verworfen ist er nicht, nur als
+*Struktur* (eine offene Karte, die sich verwandelt). Seine Einfälle passen gut als **Welten** in
+Tempo. Jede Jahreszeit bringt eine Eigenheit mit, die das Tempo verändert:
+- **Frühling:** der Gartenweg von heute.
+- **Sommer:** der Teich, mit Wasser, das bremst, und Seerosen als Trittsteinen.
+- **Herbst:** Wind, der einen im Lauf nach oben trägt, und Laubhaufen, die etwas verstecken.
+- **Winter:** Eis, auf dem der Schwung nicht abreißt, aber auch nicht bremst.
+
+So bleibt das Kreative, und das Spielgefühl, das der Nutzer mag, bleibt der Kern.
+
+### 16.2 Vorschlag für den Weg zum fertigen Spiel
+
+| Stufe | Inhalt | Beantwortet |
+|---|---|---|
+| **T1** | Feinschliff nach dem Feedback des Nutzers; toten SMB-Code aus dem Tempo-Kern entfernen (Fahne, Erdbeere, klein/groß); dazu zwei weitere kurze Level mit je einer **anderen Flucht** (z. B. der Weg bricht hinter einem weg, Wasser steigt, das Licht geht aus) und eine Levelauswahl mit Rang je Level | Trägt die Schleife „hin, nehmen, fliehen“ über mehrere Level, oder nutzt sie sich ab? |
+| T2 | eine Welt von vier bis fünf Leveln, am Ende eine Verfolgung (die Katze?) statt einer Uhr | Ist das genug Abwechslung für eine ganze Welt? |
+| T3 | Grafik (das alte M3) und Ton: Figuren, Kacheln, Hintergründe, Musik für die Flucht | Sieht es aus wie ein Spiel aus einem Guss? |
+| T4 | weitere Welten nach 16.1, jede mit ihrer Eigenheit | Wie groß wird das Spiel? |
+| T5 | Veröffentlichung unter `games/`, mit Katalogeintrag, Bildschirmfoto, Sitemap | – |
+
+Die Empfehlung ist T1 zuerst. Die größte offene Frage ist, ob die Flucht auch beim dritten Mal
+noch überrascht. Das lässt sich mit drei grauen Leveln billiger klären als mit einem schönen.
+
+### 16.3 Was vom Nutzer noch fehlt
+
+- **Die Uhr:** Waren 30 Sekunden Flucht beim ersten Versuch spannend, zu knapp oder zu locker?
+- **Die Stufen:** Stimmt das Tempo, in dem sie kommen (0,9 s und 1,7 s)? Tut ein Verlust weh,
+  aber nicht zu sehr?
+- **Was gestört hat:** Steuerung am Handy, Crash, Rutschen, Wandsprung, Lesbarkeit bei hohem
+  Tempo.
 
