@@ -28,7 +28,7 @@ import xml.etree.ElementTree as ET
 import requests
 
 EMOJI_TEST = ("https://raw.githubusercontent.com/unicode-org/unicodetools/"
-              "main/unicodetools/data/emoji/17.0/emoji-test.txt")
+              "main/unicodetools/data/emoji/18.0/emoji-test.txt")
 CLDR = ("https://raw.githubusercontent.com/unicode-org/cldr/main/common/"
         "{}/en.xml")
 
