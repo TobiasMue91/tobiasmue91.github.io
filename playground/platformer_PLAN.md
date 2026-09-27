@@ -5,8 +5,15 @@ ohne Zugriff auf diese Unterhaltung soll damit weiterbauen können. Offene Entsc
 gesammelt in **Abschnitt 11**. Der Nutzer hat dem Plan als Ganzem zugestimmt, also gelten dort die
 empfohlenen Antworten.
 
-**Wo das Projekt steht:** M1 (Graubox) ist gebaut und wartet auf das Urteil des Nutzers zum
-Spielgefühl. Was es gibt, was gemessen wurde und wie es weitergeht, steht in **Abschnitt 13**.
+**Wo das Projekt steht:** M1 (Graubox) und M2 (Figuren, Validator, Level 1-1) sind gebaut. M2
+wartet auf das Urteil des Nutzers. Was es gibt und was gemessen wurde, steht in **Abschnitt 13**
+(M1) und **Abschnitt 14** (M2). Als Nächstes kommt M3, die Grafik.
+
+**Was der Nutzer nach M1 gesagt hat (gilt für alles Weitere):** Die Maus „rutscht ständig über den
+Boden“. Gewünscht ist eine reaktionsschnellere Steuerung wie bei **Hollow Knight**: schnelles
+Reagieren auf Richtungswechsel am Boden und in der Luft, weniger Rutschen. Und: „Grafiktechnisch
+ist noch viel Luft nach oben.“ Deshalb ist die horizontale Bewegung seit M2 ein eigenes Profil
+(3.3), und die Sprünge bleiben die des ROMs.
 
 Die Seite selbst wird englisch (wie alle Seiten im Katalog). Dieses Dokument ist deutsch, weil der
 Nutzer deutsch schreibt.
@@ -22,10 +29,11 @@ Nutzer deutsch schreibt.
 - **Warum:** `IDEAS.md` führt den Plattformer seit Jahren als offen: *„the climbers are built, a
   level-based side-scroller is not“* (`Games`-Backlog und „A known genre, done properly“). Es ist der
   größte klassische Genre-Baustein, der im Katalog fehlt.
-- **Der Kern ist die Steuerung.** Die Bewegung übernimmt die Physiktabellen von SMB1 **wörtlich**
-  (aus dem disassemblierten Original gelesen, Abschnitt 3.1). Darauf kommt eine moderne
-  Fairness-Schicht mit Coyote Time, Sprungpuffer und Eckenkorrektur. Beides wird gemessen, nicht
-  geschätzt.
+- **Der Kern ist die Steuerung.** Die Sprünge übernehmen die Physiktabellen von SMB1 **wörtlich**
+  (aus dem disassemblierten Original gelesen, Abschnitt 3.1). Die horizontale Bewegung ist seit
+  M2 auf Wunsch des Nutzers ein reaktionsschnelles Profil; das Original bleibt als „1985 momentum“
+  wählbar. Darauf kommt eine moderne Fairness-Schicht mit Coyote Time, Sprungpuffer und
+  Eckenkorrektur. Alles wird gemessen, nicht geschätzt.
 - **Der Plan wird in Stufen gebaut, jede davon spielbar**, zuerst als Graubox nur mit der Steuerung.
   Sie muss sich auf Handy **und** Tastatur richtig anfühlen, bevor irgendetwas anderes gebaut wird.
 - **Empfohlene Welt:** *Underfoot*. Ein Garten aus der Sicht einer Maus: Grashalme als Plattformen,
@@ -168,6 +176,29 @@ zusätzlich das Zeitfenster.
 | nie | ≥ 8 | ≥ 6 | Lücken, die nur mit dem Maximum gehen (8,6 ist das Limit) |
 
 ### 3.3 Wo wir vom Original abweichen, und warum
+
+**Seit M2 das Wichtigste zuerst: die horizontale Bewegung.** Nach dem Spieltest von M1 ist das
+Standardprofil „responsive“. Die Geschwindigkeit läuft mit festen Raten auf ihr Ziel zu, am Boden
+wie in der Luft (`FEEL.snappy` im Kern):
+
+| | 1985 (ROM) | responsive (Standard) |
+|---|---|---|
+| Stand → Gehtempo | 40 Frames | 3 Frames |
+| Stand → Renntempo | 45 Frames | 11 Frames |
+| Loslassen aus Gehtempo | 41 Frames, rutscht 30 px | 3 Frames, 1,5 px |
+| Loslassen aus Renntempo | 60 Frames, rutscht 68 px | 5 Frames, 5 px |
+| Wende aus dem Gehen (volles Gehtempo in Gegenrichtung) | 51 Frames | 5 Frames |
+| Wende aus dem Rennen bis Gehtempo in Gegenrichtung | 48 Frames | 6 Frames |
+| Wende in der Luft (Geh-/Renntempo) | schafft sie vor der Landung nicht | 6 / 10 Frames |
+| in der Luft ohne Richtung | Schwung bleibt ganz | läuft in 20 Frames aus (Renntempo) |
+
+(Alles gemessen mit dem Kern der Seite, nicht geschätzt.)
+
+Gleich geblieben sind alle Sprünge: Höhe je Absprungtempo, Schwerkraftwechsel beim Loslassen,
+Fallgrenze. Ein Test prüft, dass sie im neuen Profil Frame für Frame die des ROMs sind. Weiter gilt:
+Das Tempolimit in der Luft richtet sich nach dem Absprung.
+
+Die übrigen Abweichungen:
 
 Übernommen wird das Gefühl, nicht jede Macke. Jede Abweichung wird im Test als Schalter gebaut,
 damit man ihren Effekt messen kann (Bot mit menschlicher Reaktionszeit, mit und ohne Schalter):
@@ -488,8 +519,9 @@ und im Review prüfen, bei etwa 3 KB pro Level. Skizze:
     '=================================================..=======....====',
     '#################################################..#######....####',
   ] }
-// @ Start  = Grasnarbe  # Erde  ? Honigwabe  B Erdklumpen  ( ) Rinnenkopf  [ ] Rinnenschaft
-// b Laufkäfer  s Schnecke  o Samen  G goldener Samen  ! Kontrollpunkt  F Ziel  - Plattform von unten
+// @ Start  = Grasnarbe  # Erde  ? Samenblock  * Erdbeerblock  B Erdklumpen  X Stein
+// ( ) Rinnenkopf  [ ] Rinnenschaft  - Plattform von unten  o Samen  G goldener Samen
+// b Laufkäfer  s Schnecke  r rote Schnecke (dreht an Kanten)  ! Kontrollpunkt  F Ziel
 ```
 
 ### 8.3 Tests (`test/<id>.mjs`, reines Node)
@@ -520,7 +552,7 @@ von ihm.
 | # | Inhalt | Prüfstein |
 |---|---|---|
 | **M1 Graubox** (gebaut, siehe 13) | Core-Physik, Kollision und Kamera. Ein Testlevel aus grauen Blöcken mit Lücken, Treppen, Decken und einem Block-Parcours. Tastatur, Gamepad, Touch (beide Layouts), Debug-Ansicht, `physics`- und `collision`-Suite | **Der Nutzer spielt und beurteilt das Gefühl.** Erst wenn das sitzt, geht es weiter. |
-| **M2 Werkzeuge** | Levelformat, Validator samt Nachweis, dass er ablehnt, Bots; Käfer und Schnecke mit Haus, Blöcke, Erdbeere; 1-1 als Graubox | Validator und Bots laufen; 1-1 ist in Graubox spielbar |
+| **M2 Werkzeuge** (gebaut, siehe 14) | Levelformat, Validator samt Nachweis, dass er ablehnt, Bots; Käfer und Schnecke mit Haus, Blöcke, Erdbeere; 1-1 als Graubox | Validator und Bots laufen; 1-1 ist in Graubox spielbar |
 | **M3 Vertikalschnitt** | Stil: Rig der Maus, Kacheln der Welt 1, Parallaxe, HUD, Soundeffekte, Thema der Welt 1. 1-1 fertig gestaltet | **Urteil des Nutzers über den Look.** Kontaktbogen und Screenshots |
 | **M4 Welt 1** | 1-2 bis 1-4, Titelbild, Weltkarte, Speichern, goldene Samen | Welt 1 von vorn bis hinten spielbar |
 | **M5 Welten 2–4** | je Welt: ihre Mechanik, 2–3 Gegner, Musik, Elster-Kampf | Nach jeder Welt spielt der Nutzer |
@@ -670,3 +702,103 @@ Levelformat mit Figuren, der richtige Validator (A* über Makro-Eingaben, klein 
 Softlock-Suche, Sichtbarkeit der Landestelle bei 16 Kacheln), der Bot mit menschlicher
 Reaktionszeit, Laufkäfer und Schnecke mit Haus, Erdbeere, und 1-1 als Graubox. Der
 Jump-and-Measure-Bot aus `course` ist der Anfang des Validators.
+
+---
+
+## 14. Stand: M2, Figuren, Validator und Level 1-1 (2026-09-27)
+
+### Was dazugekommen ist
+
+- **Reaktionsschnelle Bewegung als Standard** (siehe 3.3), nach der Rückmeldung zu M1. Im Menü
+  unter „Movement“ lässt sich auf „1985 momentum“ zurückschalten; die Sprünge sind in beiden
+  Profilen die des ROMs.
+- **Figuren im Kern:** Laufkäfer (0,5 px/F, wie der Gumba), Schnecke und rote Schnecke. Gestampft
+  bleibt ein Haus liegen; ein Kick oder ein Sprung darauf schickt es mit 3 px/F los, schneller als
+  man rennt. Es prallt an Wänden ab, räumt Gegner in Serie ab und trifft einen auf dem Rückweg
+  selbst. Nach 7 Sekunden kommt die Schnecke wieder heraus. Dazu die Erdbeere aus dem `*`-Block:
+  Sie klettert heraus, rollt nach rechts, prallt ab und macht groß; groß gibt der Block einen
+  Samen. Wer einen Block von unten anstößt, schlägt Gegner darauf aus dem Spiel und lässt eine
+  Erdbeere hüpfen.
+- **Treffer und Tod:** Ein Treffer macht aus groß klein und gibt 2 s Blinken; klein ist er tödlich,
+  mit einem kurzen Hüpfer aus dem Bild. Man startet am letzten Kontrollpunkt neu, klein, und das
+  Level steht wieder so da wie beim Erreichen des Kontrollpunkts: Blöcke, Samen, Gegner.
+- **Stampfen ist großzügig:** Es zählt, wenn man fällt und die Füße im Frame davor über der Mitte
+  des Gegners waren. Wer den Sprungknopf hält, federt einen vollen Sprung hoch, sonst einen
+  kleinen Hüpfer. Figuren wachen erst auf, wenn man 16 Kacheln nah ist, egal wie breit der
+  Bildschirm ist. So spielt sich das Spiel auf jedem Gerät gleich.
+- **Level 1-1 „Morning Dew“** (212 Kacheln, 15 hoch): Nach dem ersten Block kommt der Blockcluster
+  mit Erdbeere, unter dem der erste Käfer ankommt. Die Erdbeere prallt an der ersten Rinne ab und
+  kommt zurück. Rinnen 2/3/4/3 mit Käfern im Tal, drei Gruben, ein Regal aus Erdklumpen mit Samen,
+  der Kontrollpunkt, eine Schnecke vor zwei Käfern (zum Kicken), eine rote Schnecke auf einem
+  Sims, zwei Stufenpyramiden (die zweite mit Lücke) und die große Treppe zur Fahne. Drei goldene
+  Samen: auf dem obersten Block, hoch über der zweiten Grube (nur mit Anlauf) und hoch über der
+  Lücke zwischen den Pyramiden. Der Generator lag in dieser Sitzung im Scratchpad; das Level steht
+  als ASCII in der Seite.
+- **Darstellung:** Käfer, Schnecke, Haus (dreht sich beim Schlittern, wackelt vor dem Aufwachen),
+  Erdbeere und goldener Same sind gezeichnet, dazu ein Morgenhimmel mit Hügeln und Wolken in drei
+  Parallaxe-Ebenen, Erde mit Grasnarbe und Einblendungen für Serien („×2“) und goldene Samen. Das
+  HUD zeigt die goldenen Samen. Im Menü gibt es jetzt die Levelauswahl. Der Rest der Grafik ist M3.
+- **Kamera:** Die Füße sitzen jetzt bei 60 % statt 80 % der Bildhöhe, man sieht also 6 Kacheln nach
+  unten. Der Validator hatte gezeigt, dass man vorher von einer 5er-Wand den eigenen Landeplatz
+  nicht sah.
+
+### Der Validator (`node test/underfoot.mjs levels`)
+
+`node test/underfoot.mjs` hat jetzt 138 Prüfungen in fünf Suiten und läuft etwa 30 s: `physics`
+(beide Profile), `assists`, `collision`, `creatures` (Käfer, Schnecken, Häuser, Erdbeere, Stampfen,
+Treffer, Neustart; per Mutationstest geprüft, dass sie Fehler finden) und `levels`.
+
+- **Der vorsichtige Bot** spielt jedes Level klein und ohne Fairness-Schicht. Er nimmt die weiteste
+  Plattform, die mit mindestens 8 Frames Spielraum erreichbar ist (6 im Testparcours), springt aus
+  der Mitte dieses Fensters und nie auf einen Fleck, von dem kein Weg weiterführt. Gemessen wird
+  jedes Sprungfenster, und zwar vom hinteren Ende der Plattform aus, wie ein Mensch mit Anlauf.
+  Außerdem wird geprüft, dass die Landestelle beim Absprung auf einem 16 Kacheln breiten
+  Bildschirm zu sehen ist.
+- **Der Erreichbarkeitsgraph** lässt die Figuren weg. Von jedem erreichbaren Stück Boden aus
+  probiert er Züge in beide Richtungen und prüft, dass man überall entweder zum Ziel kommt oder
+  wenigstens in eine Grube fallen und neu anfangen kann. Außerdem, dass jeder goldene Same
+  erreichbar ist.
+- **Beide Werkzeuge müssen erst ablehnen:** eine Lücke von 11 Kacheln und eine ummauerte Grube, in
+  die man fallen, aus der man aber nie heraus kann. Beide werden abgewiesen.
+- **Ergebnis für 1-1:** Der Bot kommt ohne Tod ins Ziel. Jeder Pflichtsprung hat mindestens
+  10 Frames Spielraum, jede Landestelle ist im Bild, es gibt keine Sackgasse, und alle drei
+  goldenen Samen sind erreichbar.
+
+**Was der Validator am Level geändert hat:** Das Tal zwischen zwei 4er-Rinnen mit zwei Käfern ließ
+nur 3 Frames Spielraum. Jetzt ist es breiter, die zweite Rinne 3 hoch, und die Käfer stehen weiter
+auseinander. Die Landefläche nach der Pyramidenlücke war nur eine Kachel breit, jetzt sind es
+zwei. Drei Käfer im Gleichschritt direkt nach der Schnecke waren die Stelle, an der der Bot mit
+ungenauer Hand fast alle Tode und Hänger hatte; jetzt sind es zwei mit Abstand.
+
+### Die ungenaue Hand (`node test/underfoot.mjs hands`, langsam, etwa 3 Minuten)
+
+Derselbe Plan, aber jeder Absprung und jedes Loslassen landet zufällig um ±1, ±2 oder ±3 Frames
+daneben (Normalverteilung). Der Bot spielt nach einem Tod vom Kontrollpunkt aus weiter. Je 6 Läufe:
+
+| Streuung | Fairness aus: Tode in 6 Läufen | Fairness an: Tode in 6 Läufen | ins Ziel |
+|---|---|---|---|
+| ±1 Frame | 0 | 1 | immer |
+| ±2 Frames | 1 | 2 | immer |
+| ±3 Frames | 4 | 2 | immer |
+
+Die Tode liegen an der zweiten Grube unter dem Erdklumpen-Regal (Kachel 88), bei den Käfern nach
+der Schnecke (118) und am Sims mit der roten Schnecke (126). Die Fairness-Schicht macht in *diesem*
+Modell keinen messbaren Unterschied, und das liegt am Modell. Der Bot irrt symmetrisch um die Mitte
+eines Fensters. Menschen irren typisch in eine Richtung, zu spät von der Kante oder zu früh vor der
+Landung, und genau das fangen Coyote Time und Sprungpuffer auf. Ein Bot mit dieser Schieflage wäre
+die nächste Verfeinerung.
+
+Das ist eine Messung der *Ausführung*, nicht der Reaktion. Wie schnell ein Mensch auf einen Käfer
+reagiert, misst sie nicht, denn der Bot plant mit vollem Wissen. Er kickt außerdem nie absichtlich
+ein Haus. Beides gehört zu dem, was erst der Nutzer beim Spielen beurteilen kann.
+
+### Lehren aus M2
+
+- **Ein Bot, der nur vorwärts kann, bleibt dort hängen, wo ein Mensch kurz wartet.** Vor dem
+  Käferpulk fand er keinen sicheren Vorwärtszug. Erst Ausweichzüge (warten, auf der Stelle hüpfen,
+  zurückweichen) machten die Messung brauchbar. Sie zählen nicht als Sprünge des Levels.
+- **Das Sprungfenster gehört dem Level, nicht der Stelle, an der der Bot zufällig steht.** Direkt an
+  der Kante gemessen, schrumpfte ein bequemer Pyramidensprung auf 6 Frames. Vom Anfang der Plattform
+  aus gemessen sind es 10 oder mehr.
+- **Kamerarahmen und Leveldesign sind dieselbe Frage.** Die Regel „Landestelle beim Absprung im
+  Bild“ hat einen Kamerafehler gefunden und keinen Levelfehler.
