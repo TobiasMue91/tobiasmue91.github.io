@@ -11,8 +11,11 @@ Two upstream files, both authoritative:
 The previous version of this script scraped the HTML emoji chart and kept only
 the name column, which is why searching for "happy" used to find nothing.
 
-Skin-tone variants are skipped: the picker has no tone selector, and including
-them would multiply the grid roughly sixfold.
+Skin-tone variants are not rows of their own - that would multiply the grid
+roughly sixfold. An emoji that takes a skin tone carries its light-skin-tone
+form instead, under ``tone``; the picker swaps U+1F3FB for whichever of the
+five modifiers the reader picked. Only uniform tones are kept: a couple with
+two different tones is RGI too, but a single tone picker cannot ask for it.
 
 Usage: python util/emoji_fetcher.py
 """
@@ -30,6 +33,7 @@ CLDR = ("https://raw.githubusercontent.com/unicode-org/cldr/main/common/"
         "{}/en.xml")
 
 SKIN_TONES = set("\U0001F3FB\U0001F3FC\U0001F3FD\U0001F3FE\U0001F3FF")
+LIGHT = "\U0001F3FB"
 OUT = os.path.join(os.path.dirname(__file__), "..", "tools", "emoji_data.json")
 
 # Concepts no emoji is tagged with upstream, but that people search for anyway.
@@ -53,10 +57,11 @@ def strip_vs(text):
 
 
 def fetch_rgi():
-    """Every fully-qualified, non-skin-toned emoji, in canonical order."""
+    """Every fully-qualified, non-skin-toned emoji, in canonical order, with the
+    light-skin-tone form of those that take a tone."""
     text = requests.get(EMOJI_TEST, timeout=60).text
     pattern = re.compile(r"^([0-9A-F ]+);\s*(\S+)\s*#\s*(\S+)\s+E(\S+)\s+(.*)$")
-    rows, group = [], None
+    rows, toned, group = [], {}, None
     for line in text.splitlines():
         if line.startswith("# group:"):
             group = line.split(":", 1)[1].strip()
@@ -65,10 +70,25 @@ def fetch_rgi():
         if not match:
             continue
         _, status, glyph, version, name = match.groups()
-        if status != "fully-qualified" or SKIN_TONES & set(glyph):
+        if status != "fully-qualified":
+            continue
+        tones = [c for c in glyph if c in SKIN_TONES]
+        if tones:
+            if len(set(tones)) == 1:
+                base = strip_vs("".join(c for c in glyph if c not in SKIN_TONES))
+                toned.setdefault(base, {})[tones[0]] = glyph
             continue
         rows.append({"emoji": glyph, "name": name.strip(),
                      "group": group, "ver": version})
+    for row in rows:
+        variants = toned.get(strip_vs(row["emoji"]), {})
+        if variants:
+            # The picker derives the other four from this one, which only
+            # works if upstream really has all five.
+            assert len(variants) == 5, row["emoji"]
+            for tone, glyph in variants.items():
+                assert glyph == variants[LIGHT].replace(LIGHT, tone), glyph
+            row["tone"] = variants[LIGHT]
     return rows
 
 
@@ -98,9 +118,12 @@ def build():
         # Keywords that merely repeat the name earn nothing and cost bytes.
         keywords = [k.lower() for k in dict.fromkeys(found.get("kw", []))]
         keywords = [k for k in keywords if k not in name_words]
-        data.append({"emoji": row["emoji"], "keywords": name,
-                     "kw": " ".join(keywords), "group": row["group"],
-                     "ver": row["ver"]})
+        item = {"emoji": row["emoji"], "keywords": name,
+                "kw": " ".join(keywords), "group": row["group"],
+                "ver": row["ver"]}
+        if "tone" in row:
+            item["tone"] = row["tone"]
+        data.append(item)
 
     by_emoji = {strip_vs(item["emoji"]): item for item in data}
     for concept, glyphs in CONCEPTS.items():
