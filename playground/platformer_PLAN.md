@@ -2,7 +2,11 @@
 
 Stand 2026-09-27. Dieses Dokument ist der Bauplan und zugleich die Übergabe: Eine spätere Sitzung
 ohne Zugriff auf diese Unterhaltung soll damit weiterbauen können. Offene Entscheidungen stehen
-gesammelt in **Abschnitt 11**. Bis sie getroffen sind, gelten die dort empfohlenen Antworten.
+gesammelt in **Abschnitt 11**. Der Nutzer hat dem Plan als Ganzem zugestimmt, also gelten dort die
+empfohlenen Antworten.
+
+**Wo das Projekt steht:** M1 (Graubox) ist gebaut und wartet auf das Urteil des Nutzers zum
+Spielgefühl. Was es gibt, was gemessen wurde und wie es weitergeht, steht in **Abschnitt 13**.
 
 Die Seite selbst wird englisch (wie alle Seiten im Katalog). Dieses Dokument ist deutsch, weil der
 Nutzer deutsch schreibt.
@@ -97,10 +101,10 @@ Beschleunigungen in 1/4096 px/Frame².
 | Höchsttempo Gehen | `$18` | 1,5 | 5,6 Kacheln/s |
 | Höchsttempo Rennen (B gehalten) | `$28` | 2,5 | 9,4 Kacheln/s |
 | Höchsttempo unter Wasser | `$10` | 1,0 | |
-| Beschleunigung Gehen | `$98` | 0,0371 | 0 → Gehen in 41 Frames |
+| Beschleunigung Gehen | `$98` | 0,0371 | 0 → Gehen in 40 Frames (erster Schritt `$130`) |
 | Beschleunigung Rennen | `$E4` | 0,0557 | 0 → Rennen in 45 Frames, 3,6 Kacheln Anlauf |
 | Abbremsen (Richtung losgelassen / aus dem Rennen) | `$D0` | 0,0508 | |
-| Schlittern (Gegenrichtung) | doppelter Wert, z. B. `$1A0` | 0,1016 | Stopp aus vollem Lauf in 25 Frames |
+| Schlittern (Gegenrichtung) | doppelter Wert, z. B. `$1A0` | 0,1016 | aus vollem Lauf bis zur Wende in 21 Frames |
 | Nachlauf nach Loslassen von B | `RunningTimer = $0A` | | 10 Frames bleibt Renntempo erlaubt |
 
 **Vertikal** (`JumpMForceData`, `FallMForceData`, `PlayerYSpdData`). Die Zeile hängt davon ab,
@@ -150,7 +154,7 @@ Scheitelhöhe in Kacheln, abhängig davon, wie viele Frames der Knopf gehalten w
 
 | gehalten | 1 F | 4 F | 8 F | 12 F | 16 F | 24 F | 32 F |
 |---|---|---|---|---|---|---|---|
-| Stand | 1,45 | 1,94 | 2,52 | 3,01 | 3,41 | 3,95 | 4,12 |
+| Stand | 1,45 | 1,94 | 2,52 | 3,01 | 3,41 | 3,95 | 4,13 |
 | Rennen | 1,77 | 2,39 | 3,13 | 3,75 | 4,26 | 4,93 | 5,16 |
 
 **Daraus ergibt sich die Grammatik fürs Leveldesign.** Das sind Obergrenzen; der Validator prüft
@@ -177,14 +181,16 @@ damit man ihren Effekt messen kann (Bot mit menschlicher Reaktionszeit, mit und 
 | **Höher abfedern**: wer beim Stampfen den Knopf hält, federt höher | | Das kam mit SMB3/SMW und ist heute erwartet |
 | **Blickrichtung in der Luft** folgt dem Stick | | SMB1 friert sie ein, was modern falsch wirkt |
 | **Getrennte Subpixel** für Tempo und Position | | Im Original teilen sie sich ein Byte, was reines Rauschen ist |
+| **B loslassen im Rennen**: sanft mit `$D0` auf Gehtempo abbremsen | 20 Frames | Das ROM kappt nach 10 Frames Nachlauf sofort auf Gehtempo, ein Ruck von 60 px/s |
 | Kein Mondlauf, kein Wand-Zipping, keine anderen Glitches | | |
 
 **Nicht** hinzukommen: Wandsprung, Doppelsprung, Dash. Das wäre ein anderes Spiel.
 
 ### 3.4 Takt, Determinismus, Eingabe-Latenz
 
-- **Feste 60-Hz-Simulation mit Ganzzahl-Arithmetik** (Positionen in 1/256 px als Integer), damit
-  jeder Durchlauf auf jedem Gerät identisch ist. Gerendert wird mit der Bildwiederholrate des
+- **Feste 60-Hz-Simulation mit Ganzzahl-Arithmetik** (Positionen und Tempo in 1/4096 px als
+  Integer; so ist jeder Tabellenwert des ROMs exakt), damit jeder Durchlauf auf jedem Gerät
+  identisch ist. Gerendert wird mit der Bildwiederholrate des
   Displays, zwischen zwei Simulationsschritten interpoliert (bei 120-Hz-Handys wichtig). Nach einem
   Hänger werden höchstens 5 Schritte nachgeholt, damit sich nichts aufschaukelt.
 - **Determinismus ist Voraussetzung, keine Kür.** Er ermöglicht Wiederholungen, einen Geist der
@@ -200,7 +206,7 @@ damit man ihren Effekt messen kann (Bot mit menschlicher Reaktionszeit, mit und 
   höchstens 4,5 px pro Frame und 16-px-Kacheln kann nichts durch eine Wand tunneln. Ein Test
   bestätigt das mit 100.000 Zufallsschritten: niemand steckt je in einem festen Block.
 - Die Spielfigur hat einen Hitbox-Sarg wie bei Worms, nur kleiner als die Grafik. Klein: 12×14 px,
-  groß: 12×28 px, geduckt: 12×14 px. Diese Werte werden in M1 festgezurrt.
+  groß: 12×28 px, geduckt: 12×14 px. So ist es seit M1 umgesetzt.
 - Dazu kommen Plattformen, durch die man von unten springt (Grashalme, Wurzeln), und bewegliche
   Plattformen, die einen mitnehmen (erst in Welt 3–4).
 - **Keine Schrägen in v1.** SMB1 kommt ohne aus, und Schrägen sind die klassische Zeitfalle bei der
@@ -216,6 +222,9 @@ damit man ihren Effekt messen kann (Bot mit menschlicher Reaktionszeit, mit und 
 - Vertikal: Die Kamera rastet auf Plattformhöhen ein (wie in Super Mario World). Sie bewegt sich
   erst nach der Landung auf einer neuen Höhe oder wenn man den Bildrand erreicht, und springt
   deshalb nicht bei jedem Hüpfer mit.
+- **Fällt man unter die letzte Standhöhe, eilt die Kamera voraus** und hält die Figur bei 45 % der
+  Bildhöhe. So sieht man, wo man landet. Das kam in M1 dazu: Vorher klebte die Figur beim Fallen
+  am unteren Rand.
 - Anders als SMB1 darf man zurücklaufen. Die Levels laufen trotzdem fast immer nach rechts.
 - **Keine Sprünge ins Ungewisse:** Beim Absprung muss die Landestelle zu sehen sein. Auch das prüft
   der Validator.
@@ -473,21 +482,21 @@ und im Review prüfen, bei etwa 3 KB pro Level. Skizze:
     '.....................?...................................?B?B.....',
     '..................................................................',
     '.................................()...............................',
-    '.........?.....B?B?B.............||.........()....................',
-    '.................................||.........||....................',
-    '..@.............b................||....b....||.......b.s..........',
+    '.........?.....B?B?B.............[].........()....................',
+    '.................................[].........[]....................',
+    '..@.............b................[]....b....[].......b.s..........',
     '=================================================..=======....====',
     '#################################################..#######....####',
   ] }
-// @ Start  = Grasnarbe  # Erde  ? Honigwabe  B Erdklumpen  () || Rinne
-// b Laufkäfer  s Schnecke  o Samen  G goldener Samen  | Kontrollpunkt  F Ziel
+// @ Start  = Grasnarbe  # Erde  ? Honigwabe  B Erdklumpen  ( ) Rinnenkopf  [ ] Rinnenschaft
+// b Laufkäfer  s Schnecke  o Samen  G goldener Samen  ! Kontrollpunkt  F Ziel  - Plattform von unten
 ```
 
 ### 8.3 Tests (`test/<id>.mjs`, reines Node)
 
 | Suite | prüft |
 |---|---|
-| `physics` | Die Konstanten gegen die Tabelle in 3.1: Sprunghöhen 4,12 / 4,39 / 5,16 Kacheln, 41 und 45 Frames Anlauf, 25 Frames Schlittern, Fallgrenze. Legt das Gefühl fest wie der Coffin-Test bei Worms |
+| `physics` | Die Konstanten gegen die Tabelle in 3.1: Sprunghöhen 4,125 / 4,39 / 5,16 Kacheln, 40 und 45 Frames Anlauf, 21 Frames Schlittern bis zur Wende, Fallgrenze. Legt das Gefühl fest wie der Coffin-Test bei Worms |
 | `collision` | Nichts tunnelt, bei 100.000 Zufallsschritten steckt die Figur nie im Block, Eckenkorrektur an den Grenzfällen (3/4/5 px), Plattformen von unten durchspringbar, Mitnahme auf bewegten Plattformen |
 | `levels` | **Der Validator.** Eine Suche (A* über Makro-Eingaben mit der echten Physik) findet für jedes Level einen Weg ins Ziel, **klein und groß**, denn Ziegel dürfen den kleinen Helden nie aussperren. Für jeden Pflichtsprung misst sie, **wie viele Frames Absprungfenster** bleiben (Welt 1 ≥ 10 F, später ≥ 5 F). Dazu: keine Softlocks (von jeder erreichbaren Stelle geht es zum Ziel oder man kann sterben), jeder goldene Samen ist erreichbar, und die Landestelle ist beim Absprung schon bei 16 Kacheln Sichtbreite zu sehen |
 | `bots` | Ein Bot mit menschlichen Grenzen (Reaktionszeit 150/250/400 ms, Zittern im Timing von σ ≈ 2 F) spielt jedes Level viele Male. Heraus kommen Todesrate, Todesursache und die Schwierigkeitskurve. Die Levelreihenfolge richtet sich nach der **gemessenen** Schwierigkeit (wie der Par in `nine_holes`) |
@@ -510,7 +519,7 @@ von ihm.
 
 | # | Inhalt | Prüfstein |
 |---|---|---|
-| **M1 Graubox** | Core-Physik, Kollision und Kamera. Ein Testlevel aus grauen Blöcken mit Lücken, Treppen, Decken und einem Block-Parcours. Tastatur, Gamepad, Touch (beide Layouts), Debug-Ansicht, `physics`- und `collision`-Suite | **Der Nutzer spielt und beurteilt das Gefühl.** Erst wenn das sitzt, geht es weiter. |
+| **M1 Graubox** (gebaut, siehe 13) | Core-Physik, Kollision und Kamera. Ein Testlevel aus grauen Blöcken mit Lücken, Treppen, Decken und einem Block-Parcours. Tastatur, Gamepad, Touch (beide Layouts), Debug-Ansicht, `physics`- und `collision`-Suite | **Der Nutzer spielt und beurteilt das Gefühl.** Erst wenn das sitzt, geht es weiter. |
 | **M2 Werkzeuge** | Levelformat, Validator samt Nachweis, dass er ablehnt, Bots; Käfer und Schnecke mit Haus, Blöcke, Erdbeere; 1-1 als Graubox | Validator und Bots laufen; 1-1 ist in Graubox spielbar |
 | **M3 Vertikalschnitt** | Stil: Rig der Maus, Kacheln der Welt 1, Parallaxe, HUD, Soundeffekte, Thema der Welt 1. 1-1 fertig gestaltet | **Urteil des Nutzers über den Look.** Kontaktbogen und Screenshots |
 | **M4 Welt 1** | 1-2 bis 1-4, Titelbild, Weltkarte, Speichern, goldene Samen | Welt 1 von vorn bis hinten spielbar |
@@ -559,3 +568,105 @@ Bis zur Antwort gilt jeweils die **fett** markierte Empfehlung.
 - `IDEAS.md`: „Read this first“, „Axes, not categories“, die Abschnitte zu `blind_crest`, `worms`,
   `nine_holes`, `scatter`, `jigsaw` und *Toast*.
 - `playground/gluehwuermchen_HANDOFF.md`: was dem Nutzer bei früheren Spielen wichtig war.
+
+---
+
+## 13. Stand: M1, die Graubox (2026-09-27)
+
+### Was es gibt
+
+- **`playground/underfoot.html`** (rund 80 KB, eine Datei, keine Assets). Öffnen über einen lokalen
+  Server (`npx http-server -p 8099`, dann `/playground/underfoot.html`) oder nach dem Merge unter
+  gptgames.dev/playground/underfoot.html. URL-Parameter: `?debug` (Debug-Ansicht), `?big` (groß
+  starten), `?pure` (Fairness-Schicht aus), `?menu` (mit offenem Menü starten).
+- Drei Skriptblöcke wie in 8.1 geplant: `core` (ohne DOM), `levels` (der Testparcours als ASCII),
+  und die Darstellung.
+- **Der Testparcours** ist rund 320 Kacheln lang, mit beschrifteten Stationen: Anlauf und Schlittern,
+  Stufen, Lücken 2/3/4 (gehend) und 5/6/7 (rennend), Kontrollpunkt, Blöcke, Decke mit Löchern von
+  1/1/2 Kacheln (für die Eckenkorrektur), Tunnel, ein Turm aus Plattformen mit Sprung nach unten
+  (Kamera), Wände von 4 Kacheln (aus dem Stand) und 5 Kacheln (nur mit Anlauf), Röhren 2/3/4,
+  Säulen über einer Grube, Treppe und Fahne. Der Generator dafür lag in dieser Sitzung im
+  Scratchpad. Neue Levels schreibt man ohnehin direkt als ASCII.
+- **Steuerung:** Tastatur, Gamepad (Standard-Mapping) und Touch in beiden Layouts. Hochformat:
+  Bedienfeld unter dem Bild. Querformat: halbtransparente Zonen über dem Bild. Der Stick sitzt dort,
+  wo der Daumen aufsetzt: Gehen ab 9 px Weg, Rennen ab 44 px (zurück ab 36 px), und bei mehr als
+  70 px Überschuss wandert die Mitte mit.
+- **Menü:** die drei Schalter der Fairness-Schicht (einzeln oder alle auf einmal: „wie 1985“),
+  klein/groß, Debug-Ansicht, Zeitlupe (¼), „immer rennen“, Ton, Vibration. Die Einstellungen
+  bleiben im Browser gespeichert (`localStorage`, Schlüssel `underfoot_m1`).
+- **Debug-Ansicht:** Hitbox; Tempo in px/F und Kacheln/s; welche Sprungzeile und welche Schwerkraft
+  gerade gilt; Höhe und Weite des letzten Sprungs; die Sprungbahn für voll gehaltenen und für kurz
+  getippten Sprung (blau und orange) samt Landestelle; Kachelnummern; und kurze Einblendungen, wenn
+  die Fairness-Schicht eingegriffen hat („coyote +3f“, „buffer 4f“, „corner 2px“).
+- **Platzhalter-Töne** (Web Audio, leise): Sprung, Block, Samen, Bröseln, Fahne. Die richtigen
+  kommen mit M3.
+
+### Tests: `node test/underfoot.mjs` (etwa 7 s, reines Node)
+
+60 Prüfungen in vier Suiten, alle grün:
+
+- `physics`: Die Konstanten der Seite sind die ROM-Bytes. Sprünge, Anlauf, Schlittern, Loslassen und
+  die Höhe je Haltedauer stimmen **exakt** mit einem Referenzmodell überein, das getrennt von der
+  Seite direkt aus den Bytes gerechnet wird. Außerdem: kein Luftwiderstand ohne Eingabe, ein
+  gehender Sprung erreicht in der Luft kein Renntempo, die Fallgrenze liegt bei 4,5 px/F, und ein
+  Kopfstoß setzt 1 px/F nach unten.
+- `assists`: Coyote Time erlaubt genau 6 Frames, der Sprungpuffer genau 6 Frames, und die
+  Eckenkorrektur verschiebt bei 1–4 px und lässt 5–6 px stoßen, auf beiden Seiten. Ausgeschaltet
+  ist jeweils kein Frame und kein Pixel Nachsicht übrig. Wer den Sprungknopf durch eine Landung
+  hält, springt nicht erneut.
+- `collision`: kein Tunneln, bündiger Stopp an Wänden, Plattformen von unten durchspringbar und von
+  der Seite durchlaufbar, groß passt durch den Tunnel, Wachsen unter niedriger Decke wird
+  verweigert. Dazu 100.000 Zufallsframes über den ganzen Parcours, klein und groß, ohne dass die
+  Figur je in einem Block steckt, und Determinismus: 20.000 Eingaben ergeben zweimal denselben
+  Zustand.
+- `course`: Der Parcours ist gültig. Die Kamera hält die Figur bei 16, 20 und 26 Kacheln
+  Sichtbreite immer im Bild. Und **ein Bot springt vom Start bis zur Fahne, klein und ohne
+  Fairness-Schicht.** Jeder seiner Sprünge hat mindestens 6 Frames Absprungfenster; die engsten
+  sind die Blöcke (6 F), die Deckenlöcher (7 F), die Stufen (10 F) und die Säulen (11 F).
+
+Die Suite wurde geprüft, indem Fehler in die Seite eingebaut wurden. Eine verstellte Beschleunigung,
+Coyote Time 5 statt 6, Eckenkorrektur 5 statt 4 px, ein vertauschter Schwerkraftwechsel und eine
+Eckenkorrektur, die die Figur nicht wirklich verschiebt: Jeder dieser Fehler lässt mindestens eine
+Prüfung durchfallen.
+
+Im Browser (Playwright/Chromium) geprüft: keine Konsolenfehler, Tastatur, simuliertes Gamepad und
+echte Touch-Ereignisse (Gehen 1,5, Rennen 2,5 px/F, Springen mit dem zweiten Daumen, Menüknopf),
+Zeitlupe mit genau 15 Simulationsschritten pro Sekunde, Erdklumpen zerbröseln nur groß, und die
+Fahne führt zur Auswertung und zum Neustart.
+
+### Was M1 gelehrt hat (Kandidaten für `IDEAS.md`, wenn das Spiel erscheint)
+
+- **Rechne in der Einheit des Originals, dann sind seine Zahlen exakt.** Bei 1/4096 px ist jeder Wert
+  der SMB-Tabellen eine ganze Zahl. Die Seite lässt sich dann auf den Frame genau gegen ein
+  unabhängig geschriebenes Modell prüfen. Nachgiebige Toleranzen hätten zum Beispiel übersehen,
+  dass das ROM den Kopfstoß *nach* der Schwerkraft setzt. Die erste Fassung addierte im selben
+  Frame noch einmal Schwerkraft (1,44 statt 1 px/F).
+- **Ein Sprungfenster, gemessen an der weitesten Landung, misst die Gier des Bots.** Die erste
+  Messung zählte, wie viele Absprung-Frames genau dort landen, wo der weiteste Sprung landet. Das
+  ergab überall 1 bis 3 Frames, weil der weiteste Sprung per Definition am Rand liegt. Richtig ist:
+  Absprünge zählen, die auf *derselben Plattform* landen, und den Bot wie einen vorsichtigen
+  Menschen die weiteste Plattform wählen lassen, die mit 6 Frames Reserve erreichbar ist. Danach
+  lag kein Sprung mehr unter 6 Frames.
+- **Die Kamera muss beim Fallen vorauseilen.** Die Regel „nie den Bildrand verlassen“ hielt die Figur
+  beim Fallen genau am unteren Rand, wo sie nichts unter sich sieht. Mit der vorauseilenden Kamera
+  kommt der Boden bei einem Sprung von 12 Kacheln nach der Hälfte des Falls ins Bild.
+- **Ein Zufallstest, der stirbt, testet nur den Anfang.** Er kam nie über Kachel 90 hinaus, weil der
+  zufällige Spieler in jede Lücke fiel. Setzt man ihn regelmäßig an zufälliger Stelle neu ab,
+  deckt er den ganzen Parcours ab.
+
+### Worauf der Nutzer beim Spielen achten soll
+
+1. **Handy, Hochformat:** Reicht der Stick? Ist die Rennschwelle (44 px) zu nah oder zu weit? Fühlt
+   sich der Sprung mit dem rechten Daumen direkt an?
+2. **Handy, Querformat:** Stören die Zonen über dem Bild?
+3. **Einmal mit „wie 1985“ und einmal mit allem an:** Merkt man den Unterschied, und fühlt sich
+   die moderne Fassung fair an, ohne weich zu wirken?
+4. **Wände 4 und 5, Lücke 7, Deckenlöcher:** Sind sie fordernd, aber fair?
+5. **Kamera:** Sieht man beim Rennen genug nach vorn? Ist beim Sprung vom Turm etwas unangenehm?
+
+### Als Nächstes: M2
+
+Levelformat mit Figuren, der richtige Validator (A* über Makro-Eingaben, klein und groß,
+Softlock-Suche, Sichtbarkeit der Landestelle bei 16 Kacheln), der Bot mit menschlicher
+Reaktionszeit, Laufkäfer und Schnecke mit Haus, Erdbeere, und 1-1 als Graubox. Der
+Jump-and-Measure-Bot aus `course` ist der Anfang des Validators.
