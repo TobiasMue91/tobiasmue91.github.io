@@ -174,6 +174,27 @@ if (suites.includes('moves')) {
     run(s, 50, RUN);
     const slides = events(s, 200, RUN | IN.D, 'slide');
     check(slides.length === 1, 'down while running starts one slide, however long it is held');
+    // the way a thumb does it: pulled down well before the tunnel (down alone, no direction), held
+    // all the way through and out the other side, then pushed forward again. Nothing is lost.
+    s = room(tunnel);
+    run(s, 400, RUN, t => t.p.x > 16 * TILE);
+    const held0 = {vx: s.p.vx, tier: s.p.tier};
+    let least = Infinity, lowest = 9;
+    for (let i = 0; i < 400 && s.p.x < 80 * TILE; i++) {
+        UF.step(s, {h: IN.D});
+        least = Math.min(least, Math.abs(s.p.vx));
+        lowest = Math.min(lowest, s.p.tier);
+    }
+    check(s.p.x >= 80 * TILE && least === Math.abs(held0.vx) && lowest === held0.tier,
+        `down held from 24 tiles before a tunnel to 10 past it keeps the speed and the tier (${fmt(held0.vx / FX)} px/f, tier ${held0.tier})`,
+        `reached x ${fmt(s.p.x / TILE)}, slowest ${least / FX}, lowest tier ${lowest}`);
+    run(s, 3, RUN);
+    check(!s.p.duck && s.p.tier === held0.tier && Math.abs(s.p.vx) === Math.abs(held0.vx), 'let go and push on: up and running, as fast as before');
+    s = room(flat());
+    run(s, 400, RUN, t => t.p.tier === 2);
+    UF.step(s, {h: RUN | IN.D});
+    run(s, P.SLIDE + 5, RUN);
+    check(!s.p.duck && s.p.tier === 2, 'a slide tapped in the open runs its course and leaves the tier as it was');
     s = room(tunnel);
     run(s, 400, RUN, t => t.p.x > 37 * TILE);
     const v0 = Math.abs(s.p.vx);
