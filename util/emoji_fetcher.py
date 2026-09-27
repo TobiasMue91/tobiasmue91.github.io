@@ -39,15 +39,14 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "tools", "emoji_data.json")
 # Concepts no emoji is tagged with upstream, but that people search for anyway.
 # Keep this list short: it is for ideas that have no emoji of their own, not a
 # place to re-add synonyms CLDR already carries.
+# Seasons and holidays live in the page instead (OCCASIONS in
+# tools/emoji_search.html): there they are also hand-picked collections,
+# and their names become search keywords of their members when it loads.
 CONCEPTS = {
     "airport": "\u2708\uFE0F \U0001F6EB \U0001F6EC \U0001F9F3 \U0001F6C4",
-    "winter": "\u2744\uFE0F \u26C4 \U0001F328\uFE0F \U0001F9E3 \U0001F9E4",
-    "easter": "\U0001F430 \U0001F95A \U0001F423 \U0001F337",
-    "new year": "\U0001F386 \U0001F387 \U0001F942 \U0001F37E \U0001F38A",
     "bluetooth": "\U0001F4F6 \U0001F6DC",
     "submarine": "\U0001F6A2 \U0001F419 \U0001F30A",
     "ink": "\U0001F58B\uFE0F \U0001F58A\uFE0F \U0001F5A8\uFE0F",
-    "thanksgiving": "\U0001F983 \U0001F967 \U0001F342",
 }
 
 
