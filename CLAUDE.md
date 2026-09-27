@@ -73,6 +73,7 @@ npm run test:towers         # Three Gates suite (plain Node, no server or browse
 npm run test:firefly        # Firefly Jar suite (plain Node, no server or browser)
 npm run test:normalizer     # Audio Normalizer suite (plain Node, no server or browser)
 npm run test:minifier       # Crusher and HTML Minify suite (Playwright's Chromium, no server)
+npm run test:familytree     # Family Tree Builder suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -80,7 +81,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Eleven exist so far. `test/everything_converter.mjs` drives
+Twelve exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -132,6 +133,11 @@ Chromium's own parser and layout for CSS and HTML - every stylesheet and every p
 goes through, and must mean and draw the same - Python's `ast` over the local standard library,
 PHP's tokenizer, and SQL scripts written out exactly. A minifier that changes what code does
 looks exactly like one that does not, so run it after touching either page's core.
+`test/family_tree.mjs` runs the DOM-free core of `tools/family_tree_builder.html` (the family
+model, its generation layout and the Link rules) against families generated the way people enter
+them - descendants, in-laws with their own parents, a tree built up from one person - and against
+the contradictions old saves can hold: every parent one row above their child, every couple side
+by side, nobody overlapping. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

@@ -95,6 +95,12 @@
         .help-content kbd{background:var(--border);padding:2px 6px;border-radius:4px;font-family:monospace;font-size:12px}
         .shortcut{display:flex;justify-content:space-between;padding:8px;border-radius:4px;margin:4px 0}
         .shortcut:hover{background:var(--border)}
+        #relOptions:empty{display:none}
+        .form-group label.check{display:flex;align-items:center;gap:8px;font-weight:400;margin:6px 0;cursor:pointer}
+        .form-group label.check input{width:auto;padding:0}
+        .form-note{font-size:13px;color:var(--text-secondary)}
+        .link-choices{display:flex;flex-direction:column;gap:10px}
+        .link-choices .btn{justify-content:flex-start;white-space:normal;text-align:left}
         @media(max-width:768px){.toolbar{flex-direction:column;gap:8px;padding:12px}.btn{width:100%;justify-content:center}.search-box{width:100%}.stats{bottom:10px;right:10px;padding:12px;min-width:150px;font-size:12px}.welcome h1{font-size:32px}.welcome p{font-size:14px}}
     </style>
 </head>
@@ -105,6 +111,7 @@
     <button class="btn secondary" onclick="app.addRelative('spouse')" title="Add spouse to selected person (S)">💑 Spouse</button>
     <button class="btn secondary" onclick="app.addRelative('parent')" title="Add parent to selected person (P)">👪 Parent</button>
     <button class="btn secondary" onclick="app.addRelative('sibling')" title="Add sibling to selected person">👫 Sibling</button>
+    <button class="btn secondary" onclick="app.startLink()" title="Connect the selected person to someone already in the tree (K)">🔗 Link</button>
     <button class="btn outline" onclick="app.autoLayout()" title="Auto-arrange tree (L)">🔄 Layout</button>
     <button class="btn outline" onclick="app.fitView()" title="Fit all to view (F)">🔍 Fit</button>
     <input type="text" class="search-box" placeholder="🔎 Search..." oninput="app.search(this.value)" title="Search by name or notes">
@@ -150,6 +157,7 @@
                     <option value="other">Other</option>
                 </select>
             </div>
+            <div class="form-group" id="relOptions"></div>
             <div class="form-group">
                 <label>Birth Date</label>
                 <input type="date" id="birth">
@@ -188,11 +196,14 @@
                 <li><strong>Drag</strong> to pan, <strong>scroll</strong> to zoom</li>
                 <li><strong>Click</strong> a person to select them</li>
                 <li><strong>Hover</strong> over a person to see quick info</li>
+                <li><strong>Link</strong> connects two people already in the tree: select one, click Link, then click the other</li>
+                <li><strong>Click a line</strong> to remove that relationship</li>
             </ul>
             <h3>Keyboard Shortcuts</h3>
             <div class="shortcut"><span>Select person & press <kbd>C</kbd></span><span>Add Child</span></div>
             <div class="shortcut"><span>Select person & press <kbd>S</kbd></span><span>Add Spouse</span></div>
             <div class="shortcut"><span>Select person & press <kbd>P</kbd></span><span>Add Parent</span></div>
+            <div class="shortcut"><span>Select person & press <kbd>K</kbd></span><span>Link to Someone in the Tree</span></div>
             <div class="shortcut"><span>Select person & press <kbd>E</kbd></span><span>Edit Person</span></div>
             <div class="shortcut"><span>Select person & press <kbd>Delete</kbd></span><span>Delete Person</span></div>
             <div class="shortcut"><span><kbd>Ctrl/Cmd + Z</kbd></span><span>Undo</span></div>
@@ -203,6 +214,7 @@
             <h3>Tips</h3>
             <ul>
                 <li>Color coding: Blue = Male, Pink = Female, Purple = Other</li>
+                <li>Each row is a generation; partners stand side by side</li>
                 <li>Solid lines = Parent-child relationships</li>
                 <li>Dashed lines = Spouse/marriage relationships</li>
                 <li>Age is calculated automatically from birth date</li>
@@ -220,6 +232,7 @@
     <div class="context-menu-item" onclick="app.addRelative('spouse')">💑 Add Spouse</div>
     <div class="context-menu-item" onclick="app.addRelative('parent')">👪 Add Parent</div>
     <div class="context-menu-item" onclick="app.addRelative('sibling')">👫 Add Sibling</div>
+    <div class="context-menu-item" onclick="app.startLink()">🔗 Link to Someone in the Tree</div>
     <hr>
     <div class="context-menu-item danger" onclick="app.deletePerson()">🗑️ Delete Person</div>
 </div>
@@ -228,9 +241,472 @@
     <div class="tooltip-info"></div>
 </div>
 <div class="toast" id="toast"></div>
+<div class="toast" id="linkBanner" style="bottom:90px"></div>
+<div class="modal" id="linkModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="linkTitle">Link</h2>
+            <button class="close" onclick="app.cancelLink()" title="Close (Esc)">&times;</button>
+        </div>
+        <p class="form-note" id="linkNote" style="margin:-15px 0 20px"></p>
+        <div class="link-choices" id="linkChoices"></div>
+    </div>
+</div>
 <input type="file" id="importFile" accept=".json" style="display:none" onchange="app.loadImportedFile(this)">
+<script id="core">
+// The family model and its layout. No DOM and no Cytoscape in here, so test/family_tree.mjs
+// can run this block on its own in Node.
+const FT = (() => {
+    const CARD = 120, PARTNER_GAP = 40, SIBLING_GAP = 50, FAMILY_GAP = 110, ROW = 260, COMPONENT_GAP = 240;
+    const STEP = CARD + PARTNER_GAP;
+
+    // nodes: [{id, birth}] in the order they were added. links: [{kind, source, target}] where
+    // kind is 'parent' (source is the parent of target) or 'partner'.
+    function model(nodes, links) {
+        const index = new Map(nodes.map((n, i) => [n.id, i]));
+        const birth = new Map(nodes.map(n => [n.id, n.birth || '']));
+        const parentsOf = new Map(), childrenOf = new Map(), partnersOf = new Map();
+        for (const n of nodes) {
+            parentsOf.set(n.id, []);
+            childrenOf.set(n.id, []);
+            partnersOf.set(n.id, []);
+        }
+        const add = (map, k, v) => map.get(k).includes(v) || map.get(k).push(v);
+        for (const l of links) {
+            if (!index.has(l.source) || !index.has(l.target) || l.source === l.target) continue;
+            if (l.kind === 'parent') {
+                add(parentsOf, l.target, l.source);
+                add(childrenOf, l.source, l.target);
+            } else {
+                add(partnersOf, l.source, l.target);
+                add(partnersOf, l.target, l.source);
+            }
+        }
+        return {ids: nodes.map(n => n.id), index, birth, parentsOf, childrenOf, partnersOf};
+    }
+
+    function unionFind(ids) {
+        const up = new Map(ids.map(id => [id, id]));
+        const find = x => {
+            while (up.get(x) !== x) {
+                up.set(x, up.get(up.get(x)));
+                x = up.get(x);
+            }
+            return x;
+        };
+        return {find, union: (a, b) => { a = find(a); b = find(b); if (a !== b) up.set(b, a); }};
+    }
+
+    const isAncestor = (m, a, b) => {   // is a an ancestor of b?
+        const seen = new Set(), stack = [...m.parentsOf.get(b)];
+        while (stack.length) {
+            const p = stack.pop();
+            if (p === a) return true;
+            if (!seen.has(p)) { seen.add(p); stack.push(...m.parentsOf.get(p)); }
+        }
+        return false;
+    };
+
+    // Why a link cannot be made, or null. kind: 'partner', 'parent' (a is b's parent) or 'child'.
+    function linkProblem(m, kind, a, b) {
+        if (a === b) return 'self';
+        if (kind === 'child') return linkProblem(m, 'parent', b, a);
+        if (kind === 'partner') {
+            if (m.partnersOf.get(a).includes(b)) return 'already';
+            if (isAncestor(m, a, b) || isAncestor(m, b, a)) return 'ancestor';
+            return null;
+        }
+        if (m.parentsOf.get(b).includes(a)) return 'already';
+        if (m.parentsOf.get(b).length >= 2) return 'two-parents';
+        if (m.partnersOf.get(a).includes(b)) return 'partners';
+        if (isAncestor(m, b, a)) return 'cycle';
+        return null;
+    }
+
+    // Partners and a child's two parents share a row and stand together: one group. Rows are
+    // worked out between groups, from the parent links that join them.
+    function generations(m) {
+        const uf = unionFind(m.ids);
+        for (const id of m.ids) {
+            for (const p of m.partnersOf.get(id)) uf.union(id, p);
+            const ps = m.parentsOf.get(id);
+            for (let i = 1; i < ps.length; i++) uf.union(ps[0], ps[i]);
+        }
+        const groupOf = new Map(m.ids.map(id => [id, uf.find(id)]));
+        const groups = new Map();
+        for (const id of m.ids) {
+            const g = groupOf.get(id);
+            if (!groups.has(g)) groups.set(g, []);
+            groups.get(g).push(id);
+        }
+        const keys = [...groups.keys()];
+        const up = new Map(keys.map(g => [g, new Set()])), down = new Map(keys.map(g => [g, new Set()]));
+        for (const c of m.ids) for (const p of m.parentsOf.get(c)) {
+            const gp = groupOf.get(p), gc = groupOf.get(c);
+            if (gp !== gc) { down.get(gp).add(gc); up.get(gc).add(gp); }
+        }
+        // Topological order. A cycle can only come from contradictory data; it is broken at the
+        // earliest-added group still waiting, and the links that closed it are ignored.
+        const order = [], placed = new Set(), waiting = new Map(keys.map(g => [g, up.get(g).size]));
+        const kept = new Map(keys.map(g => [g, []])), ready = keys.filter(g => !waiting.get(g));
+        while (order.length < keys.length) {
+            if (!ready.length) ready.push(keys.find(g => !placed.has(g)));
+            const g = ready.shift();
+            if (placed.has(g)) continue;
+            placed.add(g);
+            order.push(g);
+            for (const k of down.get(g)) {
+                if (placed.has(k)) continue;
+                kept.get(k).push(g);
+                waiting.set(k, waiting.get(k) - 1);
+                if (!waiting.get(k)) ready.push(k);
+            }
+        }
+        const kids = new Map(keys.map(g => [g, []]));
+        for (const g of keys) for (const p of kept.get(g)) kids.get(p).push(g);
+        // Walk outwards from the first person entered, a child one row down and a parent one
+        // row up, so every link is exactly one row long wherever the data allows it. Then push
+        // down anyone that ended up level with or above a parent (a marriage across
+        // generations, say), and pull a group down to sit just above its highest child.
+        const gen = new Map();
+        for (const s of keys) {
+            if (gen.has(s)) continue;
+            gen.set(s, 0);
+            const queue = [s];
+            while (queue.length) {
+                const g = queue.shift();
+                for (const k of kids.get(g)) if (!gen.has(k)) { gen.set(k, gen.get(g) + 1); queue.push(k); }
+                for (const p of kept.get(g)) if (!gen.has(p)) { gen.set(p, gen.get(g) - 1); queue.push(p); }
+            }
+        }
+        for (const g of order) for (const p of kept.get(g)) gen.set(g, Math.max(gen.get(g), gen.get(p) + 1));
+        for (let i = order.length - 1; i >= 0; i--) {
+            const g = order[i], ks = kids.get(g);
+            if (ks.length) gen.set(g, Math.max(gen.get(g), Math.min(...ks.map(k => gen.get(k))) - 1));
+        }
+        return {groupOf, groups, gen};
+    }
+
+    // A group's members in a line, each partner beside the one they are with: walk the chain
+    // of partners and co-parents from one end.
+    function lineUp(m, members) {
+        if (members.length < 3) return members.slice();
+        const inGroup = new Set(members), nb = new Map(members.map(id => [id, new Set()]));
+        for (const id of members) {
+            for (const p of m.partnersOf.get(id)) if (inGroup.has(p)) nb.get(id).add(p);
+            for (const c of m.childrenOf.get(id)) for (const p of m.parentsOf.get(c)) if (p !== id && inGroup.has(p)) nb.get(id).add(p);
+        }
+        const start = members.find(id => nb.get(id).size === 1) || members[0];
+        const out = [], seen = new Set();
+        const walk = id => {
+            seen.add(id);
+            out.push(id);
+            const next = [...nb.get(id)].filter(n => !seen.has(n)).sort((a, b) => nb.get(a).size - nb.get(b).size);
+            if (next.length) walk(next[next.length - 1]);
+        };
+        walk(start);
+        for (const id of members) if (!seen.has(id)) walk(id);
+        return out;
+    }
+
+    // Pool adjacent violators: positions x minimising sum w(x - d)^2 that keep the boxes in
+    // order with x[i+1] - x[i] >= s[i]. Equal wishes spread evenly around their mean.
+    function pack(d, w, s) {
+        const c = [0];
+        for (let i = 1; i < d.length; i++) c[i] = c[i - 1] + s[i - 1];
+        const pools = [];
+        d.forEach((v, i) => {
+            let b = {v: v - c[i], w: w[i], n: 1};
+            while (pools.length && pools[pools.length - 1].v > b.v) {
+                const a = pools.pop();
+                b = {v: (a.v * a.w + b.v * b.w) / (a.w + b.w), w: a.w + b.w, n: a.n + b.n};
+            }
+            pools.push(b);
+        });
+        const x = [];
+        for (const b of pools) for (let k = 0; k < b.n; k++) x.push(b.v + c[x.length]);
+        return x;
+    }
+
+    function placeComponent(m, G, groups) {
+        const base = Math.min(...groups.map(g => G.gen.get(g)));
+        const rowOfGroup = g => G.gen.get(g) - base, rowOf = id => rowOfGroup(G.groupOf.get(id));
+        const R = Math.max(...groups.map(rowOfGroup)) + 1, here = new Set(groups);
+        const lined = new Map(groups.map(g => [g, lineUp(m, G.groups.get(g))])), line = new Map(lined);
+        const byAge = (a, b) => (m.birth.get(a) || '~').localeCompare(m.birth.get(b) || '~') || m.index.get(a) - m.index.get(b);
+
+        // Families: the children of one set of parents, whose parents always share a group.
+        const families = new Map();
+        for (const c of [...m.ids].sort(byAge)) {
+            const ps = m.parentsOf.get(c);
+            if (!ps.length || !here.has(G.groupOf.get(c))) continue;
+            const key = [...ps].sort().join('|');
+            if (!families.has(key)) families.set(key, {parents: ps, children: [], group: G.groupOf.get(ps[0])});
+            families.get(key).children.push(c);
+        }
+        const familyOf = new Map();
+        for (const [key, f] of families) for (const c of f.children) familyOf.set(c, key);
+        const familiesOf = new Map(groups.map(g => [g, []]));
+        for (const f of families.values()) familiesOf.get(f.group).push(f);
+
+        // First order: depth-first from the eldest group, an in-law's parents before the
+        // children, children oldest first - which keeps each branch together. It is tried with
+        // every group facing each way, since the sweeps below cannot always turn one round.
+        const rows = Array.from({length: R}, () => []);
+        const firstOrder = turn => {
+            const seen = new Set();
+            rows.forEach(r => { r.length = 0; });
+            for (const g of groups) line.set(g, turn ? [...lined.get(g)].reverse() : lined.get(g));
+            const visit = g => {
+                if (seen.has(g)) return;
+                seen.add(g);
+                rows[rowOfGroup(g)].push(g);
+                for (const id of line.get(g)) for (const p of m.parentsOf.get(id)) visit(G.groupOf.get(p));
+                const at = new Map(line.get(g).map((id, i) => [id, i]));
+                const middle = f => f.parents.reduce((s, p) => s + at.get(p), 0) / f.parents.length;
+                for (const f of familiesOf.get(g).sort((a, b) => middle(a) - middle(b))) for (const c of f.children) visit(G.groupOf.get(c));
+            };
+            [...groups].sort((a, b) => rowOfGroup(a) - rowOfGroup(b) || m.index.get(a) - m.index.get(b)).forEach(visit);
+        };
+
+        // Slots: each person's place in their row, scaled to 0..1 so rows of different lengths compare.
+        const slot = new Map();
+        const number = r => {
+            const n = rows[r].reduce((s, g) => s + line.get(g).length, 0);
+            let i = 0;
+            for (const g of rows[r]) for (const id of line.get(g)) slot.set(id, (i++ + 0.5) / n);
+        };
+        const numberAll = () => rows.forEach((_, r) => number(r));
+        const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+        // Each child's parents in the row just above, if any.
+        const above = new Map(m.ids.filter(id => here.has(G.groupOf.get(id))).map(id =>
+            [id, m.parentsOf.get(id).filter(p => rowOf(p) === rowOf(id) - 1)]));
+        const crossingsAt = r => {   // between row r and row r + 1
+            if (r < 0 || r + 1 >= R) return 0;
+            const seg = [];
+            for (const g of rows[r + 1]) for (const c of line.get(g)) {
+                const ps = above.get(c);
+                if (ps.length) seg.push([mean(ps.map(p => slot.get(p))), slot.get(c)]);
+            }
+            // lines cross where their order above and below disagree: count inversions
+            seg.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+            const inversions = a => {
+                if (a.length < 2) return [a, 0];
+                const [l, x] = inversions(a.slice(0, a.length >> 1)), [r, y] = inversions(a.slice(a.length >> 1));
+                const out = [];
+                let n = x + y, i = 0, j = 0;
+                while (i < l.length || j < r.length) {
+                    if (j >= r.length || (i < l.length && l[i] <= r[j])) out.push(l[i++]);
+                    else { out.push(r[j++]); n += l.length - i; }
+                }
+                return [out, n];
+            };
+            return inversions(seg.map(s => s[1]))[1];
+        };
+        const crossings = () => {
+            let n = 0;
+            for (let r = 0; r + 1 < R; r++) n += crossingsAt(r);
+            return n;
+        };
+        // Where a group's lines end in the rows either side: its members' parents above, its
+        // families' children below.
+        const ends = (g, r) => {
+            const up = [], down = [];
+            for (const id of line.get(g)) if (above.get(id).length) up.push(mean(above.get(id).map(p => slot.get(p))));
+            for (const f of familiesOf.get(g)) for (const c of f.children) if (rowOf(c) === r + 1) down.push(slot.get(c));
+            return [up, down];
+        };
+        // Sort a row by where each group's lines end in the row above or below; a group with
+        // no lines that way keeps its place.
+        const reorder = (r, dir) => {
+            const key = new Map();
+            for (const g of rows[r]) {
+                const t = ends(g, r)[dir < 0 ? 0 : 1];
+                key.set(g, mean(t.length ? t : line.get(g).map(id => slot.get(id))));
+            }
+            rows[r].sort((a, b) => key.get(a) - key.get(b));
+            number(r);
+        };
+        // Turning a group round only changes how its own lines cross each other.
+        const ownCrossings = (g, r) => {   // [as it stands, turned round]
+            const l = line.get(g), at = new Map(l.map((id, i) => [id, i])), up = [], down = [];
+            for (const id of l) if (above.get(id).length) up.push([at.get(id), mean(above.get(id).map(p => slot.get(p)))]);
+            for (const f of familiesOf.get(g)) {
+                const a = mean(f.parents.map(p => at.get(p)));
+                for (const c of f.children) if (rowOf(c) === r + 1) down.push([a, slot.get(c)]);
+            }
+            let now = 0, turned = 0;
+            for (const seg of [up, down]) for (let i = 0; i < seg.length; i++) for (let j = i + 1; j < seg.length; j++) {
+                const d = (seg[i][0] - seg[j][0]) * (seg[i][1] - seg[j][1]);
+                if (d < 0) now++;
+                else if (d > 0) turned++;
+            }
+            return [now, turned];
+        };
+        // Swap neighbours in a row while that uncrosses lines above or below it, and turn a
+        // group round if that does - someone with a partner on each side, say, whose two
+        // families belong on opposite sides. Swapping two neighbours only changes whether their
+        // own lines cross each other: a line of the left one crosses a line of the right one
+        // when its far end lies further right.
+        const transpose = () => {
+            const crossed = (l, r) => {
+                let n = 0;
+                for (let k = 0; k < 2; k++) for (const a of l[k]) for (const b of r[k]) if (a > b) n++;
+                return n;
+            };
+            for (let pass = 0, better = true; better && pass < 4; pass++) {
+                better = false;
+                for (let r = 0; r < R; r++) {
+                    const row = rows[r], e = new Map(row.map(g => [g, ends(g, r)]));
+                    for (let i = 0; i + 1 < row.length; i++) {
+                        const a = e.get(row[i]), b = e.get(row[i + 1]);
+                        if (crossed(b, a) < crossed(a, b)) {
+                            [row[i], row[i + 1]] = [row[i + 1], row[i]];
+                            better = true;
+                        }
+                    }
+                    for (const g of row) {
+                        if (line.get(g).length < 2) continue;
+                        const [now, turned] = ownCrossings(g, r);
+                        if (turned < now) {
+                            line.set(g, [...line.get(g)].reverse());
+                            better = true;
+                        }
+                    }
+                    number(r);
+                }
+            }
+        };
+        let best = Infinity, bestRows, bestLine;
+        const keep = () => {
+            const n = crossings();
+            if (n < best) { best = n; bestRows = rows.map(r => [...r]); bestLine = new Map(line); }
+        };
+        for (const turn of [false, true]) {
+            if (!best) break;
+            firstOrder(turn);
+            numberAll();
+            keep();
+            for (let round = 0; round < 12 && best > 0; round++) {
+                for (let r = 1; r < R; r++) reorder(r, -1);
+                for (let r = R - 2; r >= 0; r--) reorder(r, 1);
+                transpose();
+                keep();
+            }
+        }
+        rows.splice(0, R, ...bestRows);
+        for (const [g, l] of bestLine) line.set(g, l);
+        numberAll();
+
+        // Positions. Each row is packed as tightly as its order allows, then each group is moved
+        // towards the midpoint of its parents above and the middle of its children below, and
+        // last of all parents are centred over their children where the row has room.
+        const off = new Map();
+        for (const l of line.values()) l.forEach((id, i) => off.set(id, i * STEP));
+        const bx = new Map();
+        const x = id => bx.get(G.groupOf.get(id)) + off.get(id);
+        const width = g => (line.get(g).length - 1) * STEP + CARD;
+        const related = (a, b) => line.get(a).some(i => line.get(b).some(j => familyOf.has(i) && familyOf.get(i) === familyOf.get(j)));
+        const place = (r, fromParents, fromChildren) => {
+            const row = rows[r];
+            if (!row.length) return;
+            const d = [], w = [], s = [];
+            row.forEach((g, i) => {
+                const t = [];
+                if (fromParents) for (const id of line.get(g)) {
+                    const ps = m.parentsOf.get(id).filter(p => bx.has(G.groupOf.get(p)) && rowOf(p) < r);
+                    if (ps.length) t.push(mean(ps.map(x)) - off.get(id));
+                }
+                if (fromChildren) for (const f of familiesOf.get(g)) {
+                    const cs = f.children.filter(c => bx.has(G.groupOf.get(c)) && rowOf(c) > r);
+                    if (cs.length) t.push(mean(cs.map(x)) - mean(f.parents.map(p => off.get(p))));
+                }
+                d.push(t.length ? mean(t) : bx.has(g) ? bx.get(g) : 0);
+                w.push(t.length || 0.01);
+                if (i + 1 < row.length) s.push(width(g) + (related(g, row[i + 1]) ? SIBLING_GAP : FAMILY_GAP));
+            });
+            pack(d, w, s).forEach((v, i) => bx.set(row[i], v));
+        };
+        for (let r = 0; r < R; r++) place(r, true, false);
+        for (let it = 0; it < 30; it++) {
+            for (let r = R - 2; r >= 0; r--) place(r, false, true);
+            for (let r = 1; r < R; r++) place(r, true, true);
+        }
+        for (let r = R - 2; r >= 0; r--) place(r, false, true);
+        // Each family's line runs along a bar between the rows. Where two families' bars would
+        // overlap they are given different heights, so a child is never left between two.
+        const level = {};
+        for (let r = 0; r + 1 < R; r++) {
+            const bars = [];
+            for (const f of families.values()) {
+                const cs = f.children.filter(c => rowOf(c) === r + 1);
+                if (!cs.length || rowOf(f.parents[0]) !== r) continue;
+                const xs = [mean(f.parents.map(x)), ...cs.map(x)];
+                bars.push({f, cs, lo: Math.min(...xs), hi: Math.max(...xs)});
+            }
+            bars.sort((a, b) => a.lo - b.lo);
+            const ends = [];
+            for (const b of bars) {
+                let k = ends.findIndex(e => e < b.lo - 30);
+                if (k < 0) { k = ends.length; ends.push(0); }
+                ends[k] = b.hi;
+                for (const c of b.cs) level[c] = k;
+            }
+        }
+        const pos = {};
+        let lo = Infinity, hi = -Infinity;
+        for (const g of groups) for (const id of line.get(g)) {
+            pos[id] = {x: x(id), y: rowOfGroup(g) * ROW};
+            lo = Math.min(lo, pos[id].x);
+            hi = Math.max(hi, pos[id].x);
+        }
+        return {pos, level, rows: R, lo, hi, crossings: best};
+    }
+
+    // Everyone connected by any link, as lists of groups.
+    function components(m, G) {
+        const comp = unionFind(m.ids);
+        for (const c of m.ids) for (const p of [...m.parentsOf.get(c), ...m.partnersOf.get(c)]) comp.union(p, c);
+        const comps = new Map();
+        for (const g of G.groups.keys()) {
+            const k = comp.find(g);
+            if (!comps.has(k)) comps.set(k, []);
+            comps.get(k).push(g);
+        }
+        return [...comps.values()];
+    }
+
+    // How many generations the tallest family spans.
+    function rows(m) {
+        const G = generations(m);
+        return Math.max(0, ...components(m, G).map(gs => {
+            const r = gs.map(g => G.gen.get(g));
+            return Math.max(...r) - Math.min(...r) + 1;
+        }));
+    }
+
+    // Positions for everyone: {pos: {id: {x, y}}, level: {id: bar height}, rows}. Separate
+    // families sit side by side.
+    function layout(m) {
+        const G = generations(m);
+        const pos = {}, level = {};
+        let left = 0, rows = 0, crossings = 0;
+        for (const groups of components(m, G)) {
+            const c = placeComponent(m, G, groups);
+            for (const id in c.pos) pos[id] = {x: c.pos[id].x - c.lo + left, y: c.pos[id].y};
+            Object.assign(level, c.level);
+            left += c.hi - c.lo + CARD + COMPONENT_GAP;
+            rows = Math.max(rows, c.rows);
+            crossings += c.crossings;
+        }
+        return {pos, level, rows, crossings};
+    }
+
+    return {model, layout, rows, linkProblem, CARD, PARTNER_GAP, ROW};
+})();
+</script>
 <script>
-    const app={cy:null,selectedNode:null,editingNode:null,relationshipMode:null,undoStack:[],maxUndoSteps:10,tooltipTimeout:null,init(){this.cy=cytoscape({container:document.getElementById('cy'),style:[{selector:'node',style:{'background-color':'data(color)','label':'data(label)','text-valign':'center','text-halign':'center','width':120,'height':120,'font-size':13,'color':'#fff','text-wrap':'wrap','text-max-width':100,'shape':'roundrectangle','border-width':4,'border-color':'#fff','background-image':'data(photo)','background-fit':'cover','background-clip':'none','text-background-color':'rgba(0,0,0,0.4)','text-background-opacity':1,'text-background-shape':'roundrectangle','text-background-padding':'3px','font-weight':600,'transition-property':'border-color, border-width','transition-duration':'0.2s'}},{selector:'edge',style:{'width':3,'line-color':'#bdc3c7','target-arrow-color':'#bdc3c7','curve-style':'bezier','opacity':0.7}},{selector:'.parent-edge',style:{'target-arrow-shape':'triangle','line-style':'solid','width':3}},{selector:'.spouse-edge',style:{'line-style':'dashed','width':2}},{selector:'.highlighted',style:{'border-color':'#f39c12','border-width':6}},{selector:'.dimmed',style:{opacity:0.25}}],layout:{name:'preset'},minZoom:0.3,maxZoom:3});this.cy.on('tap','node',e=>this.selectNode(e.target));this.cy.on('cxttap','node',e=>this.showContextMenu(e));this.cy.on('tap',e=>{if(e.target===this.cy){this.deselectNode();this.hideContextMenu()}});this.cy.on('mouseover','node',e=>this.showTooltip(e));this.cy.on('mouseout','node',()=>this.hideTooltip());document.addEventListener('click',()=>this.hideContextMenu());document.getElementById('personForm').onsubmit=e=>{e.preventDefault();this.savePerson()};this.setupKeyboardShortcuts();this.loadFromStorage();if(this.cy.nodes().length===0){document.getElementById('welcome').style.display='block'}else{document.getElementById('welcome').style.display='none'}this.updateStats()},setupKeyboardShortcuts(){document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;if(e.key==='Escape'){this.closeModal();this.closeHelpModal();this.deselectNode();this.hideContextMenu()}if(!this.selectedNode)return;if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();this.deletePerson()}if(e.key.toLowerCase()==='e'){e.preventDefault();this.editPerson()}if(e.key.toLowerCase()==='c'){e.preventDefault();this.addRelative('child')}if(e.key.toLowerCase()==='s'){e.preventDefault();this.addRelative('spouse')}if(e.key.toLowerCase()==='p'){e.preventDefault();this.addRelative('parent')}});document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();this.undo()}if(e.key.toLowerCase()==='l'&&!e.ctrlKey&&!e.metaKey&&e.target.tagName!=='INPUT'){e.preventDefault();this.autoLayout()}if(e.key.toLowerCase()==='f'&&!e.ctrlKey&&!e.metaKey&&e.target.tagName!=='INPUT'){e.preventDefault();this.fitView()}if(e.key.toLowerCase()==='h'&&!e.ctrlKey&&!e.metaKey&&e.target.tagName!=='INPUT'){e.preventDefault();this.showHelp()}})},selectNode(node){if(this.selectedNode){this.selectedNode.removeClass('highlighted')}this.selectedNode=node;node.addClass('highlighted')},deselectNode(){if(this.selectedNode){this.selectedNode.removeClass('highlighted');this.selectedNode=null}},showContextMenu(e){e.preventDefault();this.selectNode(e.target);const menu=document.getElementById('contextMenu');const x=Math.min(e.renderedPosition.x,window.innerWidth-200);const y=Math.min(e.renderedPosition.y,window.innerHeight-250);menu.style.left=x+'px';menu.style.top=y+'px';menu.classList.add('active')},hideContextMenu(){document.getElementById('contextMenu').classList.remove('active')},showTooltip(e){clearTimeout(this.tooltipTimeout);this.tooltipTimeout=setTimeout(()=>{const data=e.target.data();const tooltip=document.getElementById('tooltip');const name=tooltip.querySelector('.tooltip-name');const info=tooltip.querySelector('.tooltip-info');name.textContent=data.name;let infoHTML='';if(data.birth){const age=this.calculateAge(data.birth,data.death);infoHTML+=`<div>📅 Born: ${this.formatDate(data.birth)}</div>`;if(data.death){infoHTML+=`<div>⚰️ Died: ${this.formatDate(data.death)} (Age ${age})</div>`}else{infoHTML+=`<div>🎂 Age: ${age}</div>`}}const children=this.cy.edges(`[source="${data.id}"]`).filter('.parent-edge').length;const spouses=this.cy.edges(`[source="${data.id}"], [target="${data.id}"]`).filter('.spouse-edge').length;if(children>0)infoHTML+=`<div>👶 Children: ${children}</div>`;if(spouses>0)infoHTML+=`<div>💑 Spouses: ${spouses}</div>`;if(data.notes)infoHTML+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">📝 ${data.notes.substring(0,100)}${data.notes.length>100?'...':''}</div>`;info.innerHTML=infoHTML;const x=Math.min(e.renderedPosition.x+20,window.innerWidth-320);const y=Math.min(e.renderedPosition.y+20,window.innerHeight-200);tooltip.style.left=x+'px';tooltip.style.top=y+'px';tooltip.classList.add('active')},500)},hideTooltip(){clearTimeout(this.tooltipTimeout);document.getElementById('tooltip').classList.remove('active')},calculateAge(birth,death){if(!birth)return'?';const start=new Date(birth);const end=death?new Date(death):new Date();const age=Math.floor((end-start)/(365.25*24*60*60*1000));return age>=0?age:'?'},formatDate(dateStr){if(!dateStr)return'';const d=new Date(dateStr);return d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})},showToast(message,type='info'){const toast=document.getElementById('toast');toast.textContent=message;toast.className='toast active '+type;setTimeout(()=>toast.classList.remove('active'),3000)},openModal(title='Add Person'){document.getElementById('modalTitle').textContent=title;document.getElementById('personModal').classList.add('active');setTimeout(()=>document.getElementById('name').focus(),100)},closeModal(){document.getElementById('personModal').classList.remove('active');document.getElementById('personForm').reset();document.getElementById('photoPreview').classList.remove('active');this.editingNode=null},showHelp(){document.getElementById('helpModal').classList.add('active')},closeHelpModal(){document.getElementById('helpModal').classList.remove('active')},previewPhoto(input){const preview=document.getElementById('photoPreview');if(input.files&&input.files[0]){if(input.files[0].size>2*1024*1024){this.showToast('Photo too large. Please use an image under 2MB','warning');input.value='';return}const reader=new FileReader();reader.onload=e=>{preview.src=e.target.result;preview.classList.add('active')};reader.readAsDataURL(input.files[0])}},addRootPerson(){if(this.cy.nodes().length>0){this.showToast('Tree already has people. Select someone and add relatives.','warning');return}this.relationshipMode=null;this.openModal('Add First Person')},addRelative(type){if(!this.selectedNode){this.showToast('Please select a person first','warning');return}this.relationshipMode=type;const typeNames={child:'Child',spouse:'Spouse',parent:'Parent',sibling:'Sibling'};this.openModal(`Add ${typeNames[type]}`)},editPerson(){if(!this.selectedNode)return;this.editingNode=this.selectedNode;const data=this.selectedNode.data();document.getElementById('name').value=data.name||'';document.getElementById('gender').value=data.gender||'male';document.getElementById('birth').value=data.birth||'';document.getElementById('death').value=data.death||'';document.getElementById('notes').value=data.notes||'';if(data.photoData){document.getElementById('photoPreview').src=data.photoData;document.getElementById('photoPreview').classList.add('active')}this.openModal('Edit Person');this.hideContextMenu()},saveState(){const state=JSON.stringify({nodes:this.cy.nodes().map(n=>({data:n.data(),position:n.position()})),edges:this.cy.edges().map(e=>({data:e.data(),classes:e.classes()}))});this.undoStack.push(state);if(this.undoStack.length>this.maxUndoSteps){this.undoStack.shift()}document.getElementById('undoBtn').disabled=false},undo(){if(this.undoStack.length===0)return;const state=JSON.parse(this.undoStack.pop());this.cy.elements().remove();state.nodes.forEach(n=>this.cy.add({group:'nodes',data:n.data,position:n.position}));state.edges.forEach(e=>this.cy.add({group:'edges',data:e.data,classes:e.classes.join(' ')}));this.deselectNode();this.saveToStorage();this.updateStats();this.showToast('Undo successful','success');if(this.undoStack.length===0){document.getElementById('undoBtn').disabled=true}},savePerson(){const name=document.getElementById('name').value.trim();if(!name){this.showToast('Name is required','error');return}const gender=document.getElementById('gender').value;const birth=document.getElementById('birth').value;const death=document.getElementById('death').value;const notes=document.getElementById('notes').value.trim();if(birth&&death&&new Date(birth)>new Date(death)){this.showToast('Birth date cannot be after death date','error');return}const photoFile=document.getElementById('photo').files[0];const processData=photoData=>{const color=gender==='male'?'#3498db':gender==='female'?'#e91e63':'#9b59b6';const age=this.calculateAge(birth,death);let label=name;if(birth){label+=`\n${age!=='?'?age+' yrs':'Born '+birth.split('-')[0]}`}if(death){label+=` ⚰️`}if(this.editingNode){this.saveState();this.editingNode.data({name,gender,birth,death,notes,label,color,photoData:photoData||this.editingNode.data('photoData'),photo:photoData||this.editingNode.data('photo')});this.showToast('Person updated','success')}else{this.saveState();const id=Date.now().toString();const newNode=this.cy.add({group:'nodes',data:{id,name,gender,birth,death,notes,label,color,photoData,photo:photoData},position:{x:400,y:300}});if(this.relationshipMode&&this.selectedNode){const parentId=this.selectedNode.id();if(this.relationshipMode==='child'){this.cy.add({group:'edges',data:{source:parentId,target:id},classes:'parent-edge'})}else if(this.relationshipMode==='spouse'){this.cy.add({group:'edges',data:{source:parentId,target:id},classes:'spouse-edge'})}else if(this.relationshipMode==='parent'){this.cy.add({group:'edges',data:{source:id,target:parentId},classes:'parent-edge'})}else if(this.relationshipMode==='sibling'){const parentEdges=this.cy.edges(`[target="${parentId}"]`).filter('.parent-edge');if(parentEdges.length>0){const commonParent=parentEdges[0].source().id();this.cy.add({group:'edges',data:{source:commonParent,target:id},classes:'parent-edge'})}}}this.selectNode(newNode);setTimeout(()=>this.autoLayout(),100);this.showToast('Person added','success')}document.getElementById('welcome').style.display='none';this.saveToStorage();this.updateStats();this.closeModal()};if(photoFile){const reader=new FileReader();reader.onload=e=>processData(e.target.result);reader.readAsDataURL(photoFile)}else{processData(this.editingNode?this.editingNode.data('photoData'):null)}},deletePerson(){if(!this.selectedNode)return;const name=this.selectedNode.data('name');if(confirm(`Delete ${name} and all their connections?\n\nThis cannot be undone.`)){this.saveState();this.selectedNode.remove();this.selectedNode=null;this.saveToStorage();this.updateStats();this.showToast('Person deleted','success');if(this.cy.nodes().length===0){document.getElementById('welcome').style.display='block'}}this.hideContextMenu()},autoLayout(){if(this.cy.nodes().length===0)return;const roots=this.cy.nodes().filter(n=>n.indegree()===0);if(roots.length===0){this.showToast('Auto-layout works best with clear parent-child relationships','warning');return}const layout=this.cy.layout({name:'breadthfirst',directed:true,roots:roots,padding:80,spacingFactor:1.8,avoidOverlap:true,animate:true,animationDuration:500,fit:true});layout.run();this.showToast('Layout applied','success')},fitView(){if(this.cy.nodes().length===0)return;this.cy.fit(null,80);this.cy.center()},search(query){if(!query){this.cy.nodes().removeClass('dimmed highlighted');return}const q=query.toLowerCase();const matches=this.cy.nodes().filter(n=>n.data('name').toLowerCase().includes(q)||n.data('notes').toLowerCase().includes(q));this.cy.nodes().addClass('dimmed');matches.removeClass('dimmed').addClass('highlighted');if(matches.length>0){this.cy.animate({fit:{eles:matches,padding:100},duration:300})}},toggleToolbar(){document.getElementById('toolbar').classList.toggle('collapsed')},saveToStorage(){const data={nodes:this.cy.nodes().map(n=>({data:n.data(),position:n.position()})),edges:this.cy.edges().map(e=>({data:e.data(),classes:e.classes()}))};localStorage.setItem('familyTree',JSON.stringify(data))},loadFromStorage(){const saved=localStorage.getItem('familyTree');if(saved){try{const data=JSON.parse(saved);data.nodes.forEach(n=>this.cy.add({group:'nodes',data:n.data,position:n.position}));data.edges.forEach(e=>this.cy.add({group:'edges',data:e.data,classes:e.classes.join(' ')}));this.fitView()}catch(e){console.error('Error loading saved data',e)}}},exportJSON(){const data={nodes:this.cy.nodes().map(n=>({data:n.data(),position:n.position()})),edges:this.cy.edges().map(e=>({data:e.data(),classes:e.classes()})),exportDate:new Date().toISOString(),version:'1.0'};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='family-tree-'+new Date().toISOString().split('T')[0]+'.json';a.click();URL.revokeObjectURL(url);this.showToast('Family tree exported','success')},exportPNG(){if(this.cy.nodes().length===0){this.showToast('Nothing to export','warning');return}const png=this.cy.png({output:'blob',bg:'white',full:true,scale:2});const url=URL.createObjectURL(png);const a=document.createElement('a');a.href=url;a.download='family-tree-'+new Date().toISOString().split('T')[0]+'.png';a.click();URL.revokeObjectURL(url);this.showToast('Image exported','success')},importJSON(){document.getElementById('importFile').click()},loadImportedFile(input){if(!input.files||!input.files[0])return;const reader=new FileReader();reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(this.cy.nodes().length>0&&!confirm('This will replace your current tree. Continue?')){return}this.saveState();this.cy.elements().remove();data.nodes.forEach(n=>this.cy.add({group:'nodes',data:n.data,position:n.position}));data.edges.forEach(e=>this.cy.add({group:'edges',data:e.data,classes:e.classes.join(' ')}));this.fitView();this.saveToStorage();this.updateStats();document.getElementById('welcome').style.display='none';this.showToast('Family tree loaded successfully','success')}catch(err){this.showToast('Invalid file format','error')}};reader.readAsText(input.files[0]);input.value=''},clearTree(){if(this.cy.nodes().length===0)return;if(confirm('Clear entire family tree?\n\nThis will delete all people and relationships.\nThis cannot be undone.')){this.saveState();this.cy.elements().remove();this.saveToStorage();this.updateStats();document.getElementById('welcome').style.display='block';this.showToast('Tree cleared','success')}},loadSampleData(){if(this.cy.nodes().length>0&&!confirm('This will replace your current tree. Continue?')){return}this.cy.elements().remove();const sample=[{id:'1',name:'Robert Smith',gender:'male',birth:'1920-03-15',death:'1995-08-20',notes:'Family patriarch, WWII veteran',x:400,y:100},{id:'2',name:'Mary Johnson',gender:'female',birth:'1922-07-22',death:'2010-12-05',notes:'Homemaker and community volunteer',x:600,y:100},{id:'3',name:'John Smith',gender:'male',birth:'1945-05-10',death:'',notes:'Engineer, loves woodworking',x:300,y:300},{id:'4',name:'Patricia Davis',gender:'female',birth:'1947-09-18',death:'',notes:'Teacher for 35 years',x:500,y:300},{id:'5',name:'Susan Smith',gender:'female',birth:'1950-11-30',death:'',notes:'Doctor, classical pianist',x:700,y:300},{id:'6',name:'Michael Brown',gender:'male',birth:'1948-02-14',death:'',notes:'Architect, marathon runner',x:900,y:300},{id:'7',name:'Jennifer Smith',gender:'female',birth:'1975-04-25',death:'',notes:'Software engineer at tech startup',x:200,y:500},{id:'8',name:'David Smith',gender:'male',birth:'1978-08-30',death:'',notes:'High school math teacher',x:400,y:500},{id:'9',name:'Emily Wilson',gender:'female',birth:'1980-12-10',death:'',notes:'Graphic designer, yoga instructor',x:600,y:500},{id:'10',name:'Sarah Brown',gender:'female',birth:'1976-06-15',death:'',notes:'Veterinarian, animal rescue advocate',x:800,y:500},{id:'11',name:'Christopher Brown',gender:'male',birth:'1979-03-20',death:'',notes:'Chef and restaurant owner',x:1000,y:500}];sample.forEach(p=>{this.cy.add({group:'nodes',data:{id:p.id,name:p.name,gender:p.gender,birth:p.birth,death:p.death,notes:p.notes,color:p.gender==='male'?'#3498db':p.gender==='female'?'#e91e63':'#9b59b6',label:p.name+'\n'+(p.birth?this.calculateAge(p.birth,p.death)+' yrs':'')+(p.death?' ⚰️':'')},position:{x:p.x,y:p.y}})});const edges=[['1','3'],['1','5'],['2','3'],['2','5'],['3','7'],['3','8'],['4','7'],['4','8'],['5','10'],['5','11'],['6','10'],['6','11'],['3','4','spouse'],['5','6','spouse'],['8','9','spouse']];edges.forEach(e=>{this.cy.add({group:'edges',data:{source:e[0],target:e[1]},classes:e[2]==='spouse'?'spouse-edge':'parent-edge'})});document.getElementById('welcome').style.display='none';this.saveToStorage();this.updateStats();this.fitView();this.showToast('Sample family loaded - explore and edit!','success')},updateStats(){const nodes=this.cy.nodes();const count=nodes.length;const living=nodes.filter(n=>!n.data('death')).length;const marriages=this.cy.edges('.spouse-edge').length;let maxGen=0;nodes.forEach(n=>{const depth=this.cy.edges(`[target="${n.id()}"]`).filter('.parent-edge').length;maxGen=Math.max(maxGen,depth)});document.getElementById('statPeople').textContent=count;document.getElementById('statGen').textContent=count>0?maxGen+1:0;document.getElementById('statMarriage').textContent=Math.floor(marriages/2);document.getElementById('statLiving').textContent=living}};window.onload=()=>app.init();
+    const app={cy:null,selectedNode:null,editingNode:null,relationshipMode:null,undoStack:[],maxUndoSteps:10,tooltipTimeout:null,init(){this.cy=cytoscape({container:document.getElementById('cy'),style:[{selector:'node',style:{'background-color':'data(color)','label':'data(label)','text-valign':'center','text-halign':'center','width':120,'height':120,'font-size':13,'color':'#fff','text-wrap':'wrap','text-max-width':100,'shape':'roundrectangle','border-width':4,'border-color':'#fff','background-image':'data(photo)','background-fit':'cover','background-clip':'none','text-background-color':'rgba(0,0,0,0.4)','text-background-opacity':1,'text-background-shape':'roundrectangle','text-background-padding':'3px','font-weight':600,'transition-property':'border-color, border-width','transition-duration':'0.2s'}},{selector:'edge',style:{'width':3,'line-color':'#bdc3c7','target-arrow-color':'#bdc3c7','curve-style':'bezier','opacity':0.7}},{selector:'.parent-edge',style:{'curve-style':'taxi','taxi-direction':'downward','line-style':'solid','width':3,'opacity':1}},{selector:'.spouse-edge',style:{'line-style':'dashed','width':2}},{selector:'.highlighted',style:{'border-color':'#f39c12','border-width':6}},{selector:'.dimmed',style:{opacity:0.25}}],layout:{name:'preset'},minZoom:0.1,maxZoom:3});this.cy.on('tap','node',e=>this.linkFrom?this.pickLinkTarget(e.target):this.selectNode(e.target));this.cy.on('tap','edge',e=>this.removeLink(e.target));this.cy.on('cxttap','node',e=>this.showContextMenu(e));this.cy.on('tap',e=>{if(e.target===this.cy){this.deselectNode();this.hideContextMenu()}});this.cy.on('mouseover','node',e=>this.showTooltip(e));this.cy.on('mouseout','node',()=>this.hideTooltip());document.addEventListener('click',()=>this.hideContextMenu());document.getElementById('personForm').onsubmit=e=>{e.preventDefault();this.savePerson()};this.setupKeyboardShortcuts();this.loadFromStorage();if(this.cy.nodes().length===0){document.getElementById('welcome').style.display='block'}else{document.getElementById('welcome').style.display='none'}this.updateStats()},setupKeyboardShortcuts(){document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;if(e.key==='Escape'){this.closeModal();this.closeHelpModal();this.cancelLink();this.deselectNode();this.hideContextMenu()}if(!this.selectedNode)return;if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();this.deletePerson()}if(e.key.toLowerCase()==='e'){e.preventDefault();this.editPerson()}if(e.key.toLowerCase()==='c'){e.preventDefault();this.addRelative('child')}if(e.key.toLowerCase()==='s'){e.preventDefault();this.addRelative('spouse')}if(e.key.toLowerCase()==='p'){e.preventDefault();this.addRelative('parent')}if(e.key.toLowerCase()==='k'){e.preventDefault();this.startLink()}});document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();this.undo()}if(e.key.toLowerCase()==='l'&&!e.ctrlKey&&!e.metaKey&&e.target.tagName!=='INPUT'){e.preventDefault();this.autoLayout()}if(e.key.toLowerCase()==='f'&&!e.ctrlKey&&!e.metaKey&&e.target.tagName!=='INPUT'){e.preventDefault();this.fitView()}if(e.key.toLowerCase()==='h'&&!e.ctrlKey&&!e.metaKey&&e.target.tagName!=='INPUT'){e.preventDefault();this.showHelp()}})},selectNode(node){if(this.selectedNode){this.selectedNode.removeClass('highlighted')}this.selectedNode=node;node.addClass('highlighted')},deselectNode(){if(this.selectedNode){this.selectedNode.removeClass('highlighted');this.selectedNode=null}},showContextMenu(e){e.preventDefault();this.selectNode(e.target);const menu=document.getElementById('contextMenu');const x=Math.min(e.renderedPosition.x,window.innerWidth-200);const y=Math.min(e.renderedPosition.y,window.innerHeight-250);menu.style.left=x+'px';menu.style.top=y+'px';menu.classList.add('active')},hideContextMenu(){document.getElementById('contextMenu').classList.remove('active')},showTooltip(e){clearTimeout(this.tooltipTimeout);this.tooltipTimeout=setTimeout(()=>{const data=e.target.data();const tooltip=document.getElementById('tooltip');const name=tooltip.querySelector('.tooltip-name');const info=tooltip.querySelector('.tooltip-info');name.textContent=data.name;let infoHTML='';if(data.birth){const age=this.calculateAge(data.birth,data.death);infoHTML+=`<div>📅 Born: ${this.formatDate(data.birth)}</div>`;if(data.death){infoHTML+=`<div>⚰️ Died: ${this.formatDate(data.death)} (Age ${age})</div>`}else{infoHTML+=`<div>🎂 Age: ${age}</div>`}}const children=this.cy.edges(`[source="${data.id}"]`).filter('.parent-edge').length;const spouses=this.cy.edges(`[source="${data.id}"], [target="${data.id}"]`).filter('.spouse-edge').length;if(children>0)infoHTML+=`<div>👶 Children: ${children}</div>`;if(spouses>0)infoHTML+=`<div>💑 Spouses: ${spouses}</div>`;if(data.notes)infoHTML+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">📝 ${data.notes.substring(0,100)}${data.notes.length>100?'...':''}</div>`;info.innerHTML=infoHTML;const x=Math.min(e.renderedPosition.x+20,window.innerWidth-320);const y=Math.min(e.renderedPosition.y+20,window.innerHeight-200);tooltip.style.left=x+'px';tooltip.style.top=y+'px';tooltip.classList.add('active')},500)},hideTooltip(){clearTimeout(this.tooltipTimeout);document.getElementById('tooltip').classList.remove('active')},calculateAge(birth,death){if(!birth)return'?';const start=new Date(birth);const end=death?new Date(death):new Date();const age=Math.floor((end-start)/(365.25*24*60*60*1000));return age>=0?age:'?'},formatDate(dateStr){if(!dateStr)return'';const d=new Date(dateStr);return d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})},showToast(message,type='info'){const toast=document.getElementById('toast');toast.textContent=message;toast.className='toast active '+type;setTimeout(()=>toast.classList.remove('active'),3000)},openModal(title='Add Person'){document.getElementById('modalTitle').textContent=title;document.getElementById('personModal').classList.add('active');setTimeout(()=>document.getElementById('name').focus(),100)},closeModal(){document.getElementById('personModal').classList.remove('active');document.getElementById('personForm').reset();document.getElementById('relOptions').innerHTML='';document.getElementById('photoPreview').classList.remove('active');this.editingNode=null},showHelp(){document.getElementById('helpModal').classList.add('active')},closeHelpModal(){document.getElementById('helpModal').classList.remove('active')},previewPhoto(input){const preview=document.getElementById('photoPreview');if(input.files&&input.files[0]){if(input.files[0].size>2*1024*1024){this.showToast('Photo too large. Please use an image under 2MB','warning');input.value='';return}const reader=new FileReader();reader.onload=e=>{preview.src=e.target.result;preview.classList.add('active')};reader.readAsDataURL(input.files[0])}},addRootPerson(){if(this.cy.nodes().length>0){this.showToast('Tree already has people. Select someone and add relatives.','warning');return}this.relationshipMode=null;this.openModal('Add First Person')},addRelative(type){if(!this.selectedNode){this.showToast('Please select a person first','warning');return}const id=this.selectedNode.id(),name=this.selectedNode.data('name'),m=this.familyModel(),parents=m.parentsOf.get(id);if(type==='parent'&&parents.length>=2){this.showToast(`${name} already has two parents. A step-parent is added as the partner of one of them.`,'warning');return}if(type==='sibling'&&!parents.length){this.showToast(`Siblings are joined through their parents. Add a parent to ${name} first.`,'warning');return}this.relationshipMode=type;const typeNames={child:'Child',spouse:'Spouse',parent:'Parent',sibling:'Sibling'};this.openModal(`Add ${typeNames[type]} of ${name}`);this.fillRelOptions(type,id,m)},fillRelOptions(type,id,m){const box=document.getElementById('relOptions'),name=x=>this.escapeHtml(this.cy.getElementById(x).data('name')),parents=m.parentsOf.get(id);if(type==='child'){const partners=m.partnersOf.get(id),others=[...new Set([...partners,...m.childrenOf.get(id).flatMap(c=>m.parentsOf.get(c)).filter(p=>p!==id)])];if(!others.length)return;const pick=partners.length?partners[partners.length-1]:others[0];box.innerHTML=`<label for="otherParent">Other parent</label><select id="otherParent">${others.map(o=>`<option value="${o}"${o===pick?' selected':''}>${name(o)}</option>`).join('')}<option value="">Not in the tree</option></select>`}else if(type==='spouse'){const kids=m.childrenOf.get(id).filter(c=>m.parentsOf.get(c).length===1),alone=!m.partnersOf.get(id).length;if(!kids.length)return;box.innerHTML=`<label>Also the parent of</label>${kids.map(c=>`<label class="check"><input type="checkbox" data-child value="${c}"${alone?' checked':''}> ${name(c)}</label>`).join('')}`}else if(type==='parent'&&parents.length===1){box.innerHTML=`<label class="check"><input type="checkbox" id="partnerOfParent" checked> Partner of ${name(parents[0])}</label>`}else if(type==='sibling'){box.innerHTML=`<span class="form-note">Child of ${parents.map(name).join(' and ')}</span>`}},escapeHtml(t){const d=document.createElement('div');d.textContent=t||'';return d.innerHTML},editPerson(){if(!this.selectedNode)return;this.editingNode=this.selectedNode;const data=this.selectedNode.data();document.getElementById('name').value=data.name||'';document.getElementById('gender').value=data.gender||'male';document.getElementById('birth').value=data.birth||'';document.getElementById('death').value=data.death||'';document.getElementById('notes').value=data.notes||'';if(data.photoData){document.getElementById('photoPreview').src=data.photoData;document.getElementById('photoPreview').classList.add('active')}this.openModal('Edit Person');this.hideContextMenu()},saveState(){const state=JSON.stringify({nodes:this.cy.nodes().map(n=>({data:n.data(),position:n.position()})),edges:this.cy.edges().map(e=>({data:e.data(),classes:e.classes()}))});this.undoStack.push(state);if(this.undoStack.length>this.maxUndoSteps){this.undoStack.shift()}document.getElementById('undoBtn').disabled=false},undo(){if(this.undoStack.length===0)return;const state=JSON.parse(this.undoStack.pop());this.cy.elements().remove();state.nodes.forEach(n=>this.cy.add({group:'nodes',data:n.data,position:n.position}));state.edges.forEach(e=>this.cy.add({group:'edges',data:e.data,classes:e.classes.join(' ')}));this.deselectNode();this.autoLayout(false);this.saveToStorage();this.updateStats();this.showToast('Undo successful','success');if(this.undoStack.length===0){document.getElementById('undoBtn').disabled=true}},savePerson(){const name=document.getElementById('name').value.trim();if(!name){this.showToast('Name is required','error');return}const gender=document.getElementById('gender').value;const birth=document.getElementById('birth').value;const death=document.getElementById('death').value;const notes=document.getElementById('notes').value.trim();if(birth&&death&&new Date(birth)>new Date(death)){this.showToast('Birth date cannot be after death date','error');return}const photoFile=document.getElementById('photo').files[0];const processData=photoData=>{const color=gender==='male'?'#3498db':gender==='female'?'#e91e63':'#9b59b6';const age=this.calculateAge(birth,death);let label=name;if(birth){label+=`\n${age!=='?'?age+' yrs':'Born '+birth.split('-')[0]}`}if(death){label+=` ⚰️`}if(this.editingNode){this.saveState();this.editingNode.data({name,gender,birth,death,notes,label,color,photoData:photoData||this.editingNode.data('photoData'),photo:photoData||this.editingNode.data('photo')});this.showToast('Person updated','success')}else{this.saveState();const id=Date.now().toString();const newNode=this.cy.add({group:'nodes',data:{id,name,gender,birth,death,notes,label,color,photoData,photo:photoData},position:{x:400,y:300}});if(this.relationshipMode&&this.selectedNode){this.linkNew(this.relationshipMode,this.selectedNode.id(),id)}this.selectNode(newNode);setTimeout(()=>this.autoLayout(),100);this.showToast('Person added','success')}document.getElementById('welcome').style.display='none';this.saveToStorage();this.updateStats();this.closeModal()};if(photoFile){const reader=new FileReader();reader.onload=e=>processData(e.target.result);reader.readAsDataURL(photoFile)}else{processData(this.editingNode?this.editingNode.data('photoData'):null)}},linkNew(type,sel,id){const m=this.familyModel(),edge=(s,t,c)=>this.cy.add({group:'edges',data:{source:s,target:t},classes:c}),other=document.getElementById('otherParent'),partner=document.getElementById('partnerOfParent');if(type==='child'){edge(sel,id,'parent-edge');if(other&&other.value)edge(other.value,id,'parent-edge')}else if(type==='spouse'){edge(sel,id,'spouse-edge');document.querySelectorAll('#relOptions input[data-child]:checked').forEach(c=>edge(id,c.value,'parent-edge'))}else if(type==='parent'){const before=m.parentsOf.get(sel);edge(id,sel,'parent-edge');if(before.length===1&&partner&&partner.checked)edge(before[0],id,'spouse-edge')}else if(type==='sibling'){m.parentsOf.get(sel).forEach(p=>edge(p,id,'parent-edge'))}},familyModel(){return FT.model(this.cy.nodes().map(n=>({id:n.id(),birth:n.data('birth')})),this.cy.edges().map(e=>({kind:e.hasClass('spouse-edge')?'partner':'parent',source:e.source().id(),target:e.target().id()})))},startLink(){if(!this.selectedNode){this.showToast('Select a person first, then choose Link','warning');return}this.hideContextMenu();this.linkFrom=this.selectedNode;const b=document.getElementById('linkBanner');b.textContent=`Now click the person to connect to ${this.linkFrom.data('name')} (Esc to cancel)`;b.classList.add('active')},pickLinkTarget(node){if(node.id()===this.linkFrom.id())return;this.linkTo=node;const a=node.data('name'),b=this.linkFrom.data('name');this.choose(`${a} and ${b}`,'How are they related?',[[`💑 ${a} is ${b}'s partner`,()=>this.applyLink('partner')],[`👪 ${a} is ${b}'s parent`,()=>this.applyLink('parent')],[`👶 ${a} is ${b}'s child`,()=>this.applyLink('child')]])},choose(title,note,choices){document.getElementById('linkTitle').textContent=title;document.getElementById('linkNote').textContent=note;const box=document.getElementById('linkChoices');box.innerHTML='';const button=(label,cls,run)=>{const b=document.createElement('button');b.className='btn '+cls;b.textContent=label;b.onclick=run;box.appendChild(b)};choices.forEach(([label,run])=>button(label,'secondary',run));button('Cancel','outline',()=>this.cancelLink());document.getElementById('linkModal').classList.add('active')},cancelLink(){this.linkFrom=null;this.linkTo=null;document.getElementById('linkBanner').classList.remove('active');document.getElementById('linkModal').classList.remove('active')},applyLink(kind){const a=this.linkTo,b=this.linkFrom;if(!a||!b)return;const A=a.data('name'),B=b.data('name'),problem=FT.linkProblem(this.familyModel(),kind,a.id(),b.id());if(problem){const why={already:`${A} and ${B} are already linked that way.`,ancestor:`${A} and ${B} are already related by descent.`,'two-parents':`${kind==='parent'?B:A} already has two parents.`,partners:`${A} and ${B} are partners.`,cycle:'That would make someone their own ancestor.'};this.showToast(why[problem],'error');return}this.saveState();const edge=(s,t,c)=>this.cy.add({group:'edges',data:{source:s.id(),target:t.id()},classes:c});if(kind==='partner')edge(b,a,'spouse-edge');else if(kind==='parent')edge(a,b,'parent-edge');else edge(b,a,'parent-edge');this.cancelLink();this.saveToStorage();this.updateStats();this.autoLayout();this.showToast(`Linked ${A} and ${B}`,'success')},removeLink(edge){if(this.linkFrom)return;const note='Both people stay in the tree; only the line goes.',unlink=e=>()=>{this.cancelLink();this.saveState();e.remove();this.saveToStorage();this.updateStats();this.autoLayout()};if(edge.hasClass('spouse-edge')){const s=edge.source().data('name'),t=edge.target().data('name');this.choose(`${s} and ${t}`,note,[[`Remove ${s} and ${t} as partners`,unlink(edge)]]);return}const child=edge.target().data('name');this.choose(`${child}'s parents`,note,this.cy.edges('.parent-edge').filter(e=>e.target().id()===edge.target().id()).map(e=>[`Remove ${e.source().data('name')} as ${child}'s parent`,unlink(e)]))},deletePerson(){if(!this.selectedNode)return;const name=this.selectedNode.data('name');if(confirm(`Delete ${name} and all their connections?\n\nThis cannot be undone.`)){this.saveState();this.selectedNode.remove();this.selectedNode=null;this.saveToStorage();this.updateStats();this.showToast('Person deleted','success');if(this.cy.nodes().length===0){document.getElementById('welcome').style.display='block'}}this.hideContextMenu()},autoLayout(animate=true){if(this.cy.nodes().length===0)return;const m=this.familyModel(),r=FT.layout(m),xs=Object.values(r.pos).map(p=>p.x),ys=Object.values(r.pos).map(p=>p.y),M=FT.CARD/2+4,x1=Math.min(...xs)-M,y1=Math.min(...ys)-M;this.cy.layout({name:'preset',positions:n=>r.pos[n.id()],animate,animationDuration:500,fit:false,...this.view({x1,y1,w:Math.max(...xs)+M-x1,h:Math.max(...ys)+M-y1})}).run();this.drawLines(m,r);if(animate)this.showToast('Layout applied','success')},drawLines(m,r){const P=r.pos,H=FT.CARD/2,lift=[0,-22,22,-44,44];this.cy.edges('.parent-edge').forEach(e=>{const s=e.source().id(),c=e.target().id(),S=P[s],T=P[c],o=m.parentsOf.get(c).find(p=>p!==s),pair=o&&P[o].y===S.y&&Math.abs(P[o].x-S.x)<=FT.CARD+FT.PARTNER_GAP+1,sx=pair?(S.x+P[o].x)/2:S.x,sy=pair?S.y:S.y+H,bar=S.y+FT.ROW/2+lift[(r.level[c]||0)%lift.length],pts=[[sx,bar],[T.x,bar]],vx=T.x-S.x,vy=T.y-S.y,l2=vx*vx+vy*vy||1;e.style({'curve-style':'segments','edge-distances':'node-position','source-endpoint':`${sx-S.x}px ${sy-S.y}px`,'target-endpoint':`0px ${-H}px`,'segment-weights':pts.map(([x,y])=>((x-S.x)*vx+(y-S.y)*vy)/l2).join(' '),'segment-distances':pts.map(([x,y])=>(vx*(y-S.y)-vy*(x-S.x))/Math.sqrt(l2)).join(' ')})})},fitView(){if(this.cy.nodes().length===0)return;this.cy.viewport(this.view(this.cy.elements().boundingBox()))},view(bb){const w=this.cy.width(),h=this.cy.height(),t=document.getElementById('toolbar'),b=t.classList.contains('collapsed')?0:t.getBoundingClientRect().bottom,top=b<h/3?b:0,p=60,z=Math.max(this.cy.minZoom(),Math.min(this.cy.maxZoom(),(w-2*p)/bb.w,(h-top-2*p)/bb.h));return{zoom:z,pan:{x:w/2-z*(bb.x1+bb.w/2),y:top+(h-top)/2-z*(bb.y1+bb.h/2)}}},search(query){if(!query){this.cy.nodes().removeClass('dimmed highlighted');return}const q=query.toLowerCase();const matches=this.cy.nodes().filter(n=>n.data('name').toLowerCase().includes(q)||n.data('notes').toLowerCase().includes(q));this.cy.nodes().addClass('dimmed');matches.removeClass('dimmed').addClass('highlighted');if(matches.length>0){this.cy.animate({fit:{eles:matches,padding:100},duration:300})}},toggleToolbar(){document.getElementById('toolbar').classList.toggle('collapsed')},saveToStorage(){const data={nodes:this.cy.nodes().map(n=>({data:n.data(),position:n.position()})),edges:this.cy.edges().map(e=>({data:e.data(),classes:e.classes()}))};localStorage.setItem('familyTree',JSON.stringify(data))},loadFromStorage(){const saved=localStorage.getItem('familyTree');if(saved){try{const data=JSON.parse(saved);data.nodes.forEach(n=>this.cy.add({group:'nodes',data:n.data,position:n.position}));data.edges.forEach(e=>this.cy.add({group:'edges',data:e.data,classes:e.classes.join(' ')}));this.autoLayout(false)}catch(e){console.error('Error loading saved data',e)}}},exportJSON(){const data={nodes:this.cy.nodes().map(n=>({data:n.data(),position:n.position()})),edges:this.cy.edges().map(e=>({data:e.data(),classes:e.classes()})),exportDate:new Date().toISOString(),version:'1.0'};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='family-tree-'+new Date().toISOString().split('T')[0]+'.json';a.click();URL.revokeObjectURL(url);this.showToast('Family tree exported','success')},exportPNG(){if(this.cy.nodes().length===0){this.showToast('Nothing to export','warning');return}const png=this.cy.png({output:'blob',bg:'white',full:true,scale:2});const url=URL.createObjectURL(png);const a=document.createElement('a');a.href=url;a.download='family-tree-'+new Date().toISOString().split('T')[0]+'.png';a.click();URL.revokeObjectURL(url);this.showToast('Image exported','success')},importJSON(){document.getElementById('importFile').click()},loadImportedFile(input){if(!input.files||!input.files[0])return;const reader=new FileReader();reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(this.cy.nodes().length>0&&!confirm('This will replace your current tree. Continue?')){return}this.saveState();this.cy.elements().remove();data.nodes.forEach(n=>this.cy.add({group:'nodes',data:n.data,position:n.position}));data.edges.forEach(e=>this.cy.add({group:'edges',data:e.data,classes:e.classes.join(' ')}));this.autoLayout(false);this.saveToStorage();this.updateStats();document.getElementById('welcome').style.display='none';this.showToast('Family tree loaded successfully','success')}catch(err){this.showToast('Invalid file format','error')}};reader.readAsText(input.files[0]);input.value=''},clearTree(){if(this.cy.nodes().length===0)return;if(confirm('Clear entire family tree?\n\nThis will delete all people and relationships.\nThis cannot be undone.')){this.saveState();this.cy.elements().remove();this.saveToStorage();this.updateStats();document.getElementById('welcome').style.display='block';this.showToast('Tree cleared','success')}},loadSampleData(){if(this.cy.nodes().length>0&&!confirm('This will replace your current tree. Continue?')){return}this.cy.elements().remove();const sample=[{id:'1',name:'Robert Smith',gender:'male',birth:'1920-03-15',death:'1995-08-20',notes:'Family patriarch, WWII veteran'},{id:'2',name:'Mary Johnson',gender:'female',birth:'1922-07-22',death:'2010-12-05',notes:'Homemaker and community volunteer'},{id:'3',name:'John Smith',gender:'male',birth:'1945-05-10',death:'',notes:'Engineer, loves woodworking'},{id:'4',name:'Patricia Davis',gender:'female',birth:'1947-09-18',death:'',notes:'Teacher for 35 years'},{id:'5',name:'Susan Smith',gender:'female',birth:'1950-11-30',death:'',notes:'Doctor, classical pianist'},{id:'6',name:'Michael Brown',gender:'male',birth:'1948-02-14',death:'',notes:'Architect, marathon runner'},{id:'7',name:'Jennifer Smith',gender:'female',birth:'1975-04-25',death:'',notes:'Software engineer at tech startup'},{id:'8',name:'David Smith',gender:'male',birth:'1978-08-30',death:'',notes:'High school math teacher'},{id:'9',name:'Emily Wilson',gender:'female',birth:'1980-12-10',death:'',notes:'Graphic designer, yoga instructor'},{id:'10',name:'Sarah Brown',gender:'female',birth:'1976-06-15',death:'',notes:'Veterinarian, animal rescue advocate'},{id:'11',name:'Christopher Brown',gender:'male',birth:'1979-03-20',death:'',notes:'Chef and restaurant owner'}];sample.forEach(p=>{this.cy.add({group:'nodes',data:{id:p.id,name:p.name,gender:p.gender,birth:p.birth,death:p.death,notes:p.notes,color:p.gender==='male'?'#3498db':p.gender==='female'?'#e91e63':'#9b59b6',label:p.name+'\n'+(p.birth?this.calculateAge(p.birth,p.death)+' yrs':'')+(p.death?' ⚰️':'')}})});const edges=[['1','3'],['1','5'],['2','3'],['2','5'],['3','7'],['3','8'],['4','7'],['4','8'],['5','10'],['5','11'],['6','10'],['6','11'],['1','2','spouse'],['3','4','spouse'],['5','6','spouse'],['8','9','spouse']];edges.forEach(e=>{this.cy.add({group:'edges',data:{source:e[0],target:e[1]},classes:e[2]==='spouse'?'spouse-edge':'parent-edge'})});document.getElementById('welcome').style.display='none';this.autoLayout(false);this.saveToStorage();this.updateStats();this.showToast('Sample family loaded - explore and edit!','success')},updateStats(){const nodes=this.cy.nodes();const count=nodes.length;const living=nodes.filter(n=>!n.data('death')).length;const marriages=this.cy.edges('.spouse-edge').length;document.getElementById('statPeople').textContent=count;document.getElementById('statGen').textContent=FT.rows(this.familyModel());document.getElementById('statMarriage').textContent=marriages;document.getElementById('statLiving').textContent=living}};window.onload=()=>app.init();
 </script>
 <script src="../logo.js"></script>
 </body>
