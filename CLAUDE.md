@@ -60,6 +60,7 @@ npx http-server -p 8099     # serve locally; pages need http, not file://
 python util/update.py       # refresh entry dates from git, re-shoot stale screenshots
 python util/new_entry.py    # register a newly added page
 python util/timeline.py     # rebuild timeline_data.json and timeline_pages.json: the days and page versions time travel offers
+node util/trailer/render.mjs # the site's trailer, filmed from its own history - four steps, see util/trailer/README.md
 npm run test:server         # http-server on :80
 npm run test:cypress        # Cypress e2e — its baseUrl is :8080, so point one at the other
 npm run test:converter      # Everything Converter suite (needs a server on :8099)
