@@ -426,3 +426,61 @@ order or no turning a group round (the half-brother family then crosses), the cy
 two-parent refusal missing, and the generation count off by one. One refinement is measured but
 not asserted, because it only moves an average: starting from a depth-first order, which takes
 own trees from 0.5 crossings a tree to 0.4.
+
+## Frame Extractor and Thumbnail Extractor
+
+```sh
+npm run test:frames                       # or: node test/frame_step.mjs
+node test/frame_step.mjs step vfr         # one or more named suites
+node test/frame_step.mjs --only=frame     # one page: frame or thumbnail
+node test/frame_step.mjs --frame-page=old.html --thumbnail-page=old2.html
+```
+
+`tools/video_frame_extractor.html` and `tools/video_thumbnail_extractor.html` exist to get one
+exact frame out of a video, and a step that lands on the wrong frame looks exactly like one that
+lands on the right one. Both pages stepped by adding 1/30 s to `currentTime`: every video that is
+not 30 fps stepped wrong, and in WebM, whose frame times are rounded to the millisecond, half of
+those exact-boundary seeks landed just before the frame they meant. Both now read the start time
+of each frame the video presents (`requestVideoFrameCallback`), learn the frame duration from
+those when a video loads, and step to the middle of the neighbouring frame - or, where frames
+are not on a regular grid, search seek times for where the picture changes, because a browser
+seeking through a recording does not always show a frame from its own start time. Such a video
+is labelled "variable frame rate", and its frames by their start times only: a number worked
+out from the time would be a guess, and for the uneven recording below one counted 110 frames
+in a file that holds 71.
+
+The suite drives both real pages in headless Chromium. It needs Playwright's Chromium and an
+ffmpeg that writes VP8 WebM (Playwright's own, installed beside its browsers, is found
+automatically; `FFMPEG` names another), no server, and takes about nine minutes. Every clip is
+made at run time and carries its own number, in blocks, on every frame, so the suite reads which
+frame is on screen and which is in each grab from the pixels: eight clips from ffmpeg (24, 25,
+29.97, 30, 50, 60 and 120 fps, and 30 fps starting at 0.5 s) and two recordings made with
+MediaRecorder the way a screen recorder makes them, one with uneven gaps and held frames and one
+steady, both with no duration in the file. What a recording holds is found by brute force on a
+plain `<video>`, seeking every 2 ms.
+
+| suite | what it checks |
+| --- | --- |
+| `step` | the frame count; 30 presses of next frame show frames 1 to 30 and 10 of previous walk back; six quick presses move six frames; previous on the first frame and next on the last stay put, and the last frame is called by the right number; the frame number shown is the frame on screen |
+| `grab` | a grab holds the frame on screen, including the same frame twice and a grab clicked straight after next frame, and is labelled with its number and its start time to the millisecond |
+| `slider` | the Frame Extractor's slider runs over the real frames, lands on the frame it names, and a fast drag ends on the frame it was let go at |
+| `batch` | extracting every 0.5 s (Frame Extractor) or 1 s (Thumbnail Extractor) takes, for each of those times, the frame a plain `<video>` shows there, each frame once - on every clip and both recordings |
+| `vfr` | on both recordings, next frame visits every frame once, in order, and stops at the last; previous walks back through every frame; grabs clicked straight after previous frame hold the frames it lands on, though a step here takes a search; any frame number a page shows is the frame's own |
+
+Every judge has been seen failing. Against the pages this replaced, 30 presses of next frame
+stayed put 7, 6, 2, 10, 0, 0, 0 and 10 times, and skipped a frame 0, 0, 1, 9, 19, 20, 30 and 9
+times, on the 24, 25, 29.97, 30, 50, 60 and 120 fps clips and the one starting at 0.5 s -
+the same on both pages - and next frame stepped over frames in both recordings. Their extraction
+every N seconds was already right apart from taking one frame twice, and it still seeks by time.
+
+Knowing which frame a seek showed is the hard part, and it went wrong twice, each time on only
+the odd load - one or two in a full run. Taking the first frame presented after setting
+`currentTime` let a seek finish during the next one (seen with the suite running beside another
+run); waiting for both `seeked` and a presented frame still took the wrong one, because Chromium
+can present the frame already on screen once more as a new seek begins (seen on a quiet run). The
+pages now count a presented frame as the seek's own once the seek has ended, or before that if it
+is a different frame, and accept a repeat of the frame already on screen only when nothing newer
+follows. A grab waits behind any step still seeking - without that, a grab clicked straight
+after a step through a recording took whatever frame the search was passing. The whole suite
+passes idle and with three CPU-bound processes running beside it, and 160 loads of ten clips
+measure right either way.
