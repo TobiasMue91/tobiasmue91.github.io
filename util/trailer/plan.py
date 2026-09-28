@@ -23,8 +23,8 @@ BEAT, BAR, DURATION = 0.5, 2.0, 96.0
 
 # When each model's name fills the screen, on a bar line. They are the names the time
 # travel bar carries (timeline_data.json); a new one needs a slot here and in the music.
-ERAS = [(16.0, 'GPT 4.0'), (20.0, 'Claude 3.0'), (24.0, 'Claude 3.5'), (28.0, 'GPT 4.5'), (30.0, 'Claude 3.7'),
-        (34.0, 'Claude 4.5'), (38.0, 'Claude 4.7'), (42.0, 'Claude 5.0'), (46.0, 'Claude 5.5')]
+ERAS = [(16.0, 'GPT 4.0'), (20.0, 'Claude 3.0'), (24.0, 'Claude 3.5'), (28.0, 'Claude 3.7'), (32.0, 'Claude 4.0'),
+        (36.0, 'Claude 4.6'), (40.0, 'Claude 4.8'), (42.0, 'Claude 5.0'), (46.0, 'Claude 5.5')]
 # One page, version by version, from 50 s: how long each version stays (8 s in all).
 SNAKE = 'games/snake.html'
 SNAKE_HOLDS = [1.0, 0.25, 0.25, 0.5, 0.25, 0.25, 1.5] + [0.25] * 9 + [1.0, 0.25, 0.5]

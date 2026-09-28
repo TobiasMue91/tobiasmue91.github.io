@@ -411,7 +411,7 @@ for era in plan['eras']:
     crash(era['t'], 0.9)
     boom(era['t'], 0.55, dur=1.6)
 reverse_swell(20.0, 0.6)
-reverse_swell(38.0, 0.6)
+reverse_swell(36.0, 0.6)
 reverse_swell(42.0, 0.8)
 riser(44.0, 48.0, 0.6)
 for k in range(8):
