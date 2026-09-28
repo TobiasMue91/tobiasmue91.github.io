@@ -1230,3 +1230,165 @@ fertig.
 - **Bewegung der Figuren:** alles gezeichnet, keine Einzelbilder. Hat die Maus genug Ausdruck?
   Das muss der Nutzer sagen.
 - **Musik:** noch keine (T3 hatte Ton und Musik mit vorgesehen).
+
+## 19. Stand: T4, Schal, Kamera, Tempo-Stufen, Level 4 und 5 (2026-09-28)
+
+Der Nutzer nach T3: „Der Schal sieht etwas falsch/unrealistisch aus. Ansonsten gefällt mir das
+Grafik-Update aber sehr gut. Ich muss sagen, dass die Kamerabewegungen allerdings teilweise etwas zu
+hektisch sind. Und durch die häufig auftretenden Richtungswechsel kommt man eigentlich nie dazu, mit
+maximaler Geschwindigkeit durch die Level zu laufen. Kannst du dir dafür eventuell eine elegante
+Lösung ausdenken? Außerdem fänd ichs gut, wenn du die nächsten Level bauen würdest.“
+
+### Die Stufen laufen aus, statt zu verfallen
+
+Bisher kostete jede Wende und jeder Halt die Stufe sofort. In Leveln, die hin und zurück führen,
+kam man so kaum je auf die höchste Stufe.
+
+- **Neu:** Eine Stufe wartet eine halbe Sekunde (`HOLD` = 30 Bilder). Wer in der Zeit wieder läuft,
+  behält sie. Wer länger unter Laufgeschwindigkeit bleibt, verliert eine Stufe je halbe Sekunde.
+- **Wende:**
+  - am Boden: Die Stufe bleibt; nach zwei Dritteln einer Sekunde ist man mit voller Geschwindigkeit
+    in der anderen Richtung.
+  - in der Luft: Die Stufe bleibt, aber man fliegt nur mit Laufgeschwindigkeit zurück, bis man
+    landet.
+- **Alles auf einmal** nehmen nur noch ein Aufprall und ein Treffer.
+- **Anzeige:** Ein blinkender Pfeil zeigt, dass die Stufe wartet. Ein leises Rauschen begleitet den
+  Abstieg.
+- **Schlupfloch:** Der Such-Bot fand eines: Hüpfen auf der Stelle hielt die Stufe ewig, weil die
+  Wartezeit nur am Boden lief. Sie läuft jetzt auch in der Luft. Ein Test hält das fest.
+
+### Ruhigere Kamera
+
+- **Vorlauf:** Der Blick nach vorn hängt an einer gedämpften Feder statt am Tempo.
+- **Richtungswechsel:** Die Kamera schwenkt erst um, wenn man 20 Bilder lang in die andere Richtung
+  läuft. Ein kurzes Zurück bewegt sie nicht mehr.
+- **Senkrecht:** Sie folgt der Höhe nur, wenn man steht oder an einer Wand hängt, ebenfalls mit
+  Feder. Ein Sprung schaukelt das Bild nicht mehr.
+- **Rütteln:** Schwächer, und als Sinus statt Zufall, also ein Wackeln statt eines Zitterns.
+
+### Der Schal
+
+Ein Band um den Hals mit Knoten im Nacken, dazu zwei Enden, die eigene kleine Seile sind: je
+sechs Punkte, mit dem Spiel gerechnet.
+
+- **Luft:** Jedes Bild geht 18 % ihrer Geschwindigkeit verloren. Das ist Stoff: Er hängt im Stand am
+  Rücken, weht beim Laufen fast waagerecht und steigt beim Fallen.
+- **Länge:** Die Seile dehnen sich nicht; jeder Punkt folgt dem vorigen im festen Abstand. Der Zug
+  wird dem Punkt davor wieder abgezogen, sonst peitschen die Enden.
+- **Knoten:** Er sitzt, wo die Zeichnung ihn hat, samt Neigung beim Rennen.
+- **Rutschen:** Das Band liegt quer im Nacken, und die Enden fliegen über den Rücken statt hinter
+  ihm.
+
+### Level 4: Der lange Rasen
+
+Ein langer Rasen, hin und zurück derselbe Weg, und nichts darauf, wofür man anhalten müsste. Der
+Level ist für das Laufen auf höchster Stufe gebaut.
+
+- **Weg:**
+  - Beeteinfassungen;
+  - eine Bank mit Käfern darauf (wer darunter hochhüpft, wirft sie herunter);
+  - drei Hecken;
+  - ein Erdklumpen-Wall;
+  - eine lange, hohe Hecke mit einer Lücke unten zum Durchrutschen;
+  - eine Schnecke;
+  - der Teich mit Wasser und Seerosenblättern.
+- **Die Murmel:** Sie liegt oben auf einem Baumstumpf an der Gartenmauer. Man rutscht durch seine
+  hohle Wurzel und springt zwischen Stumpf und Mauer mit Wandsprüngen hoch.
+- **Warum so:** Die schnellste Linie soll jede Bewegung brauchen, und der Test prüft das. Im ersten
+  Entwurf sprang der Bot über die Schubkarre, statt darunter zu rutschen, und wendete an der
+  Murmel ohne Wandsprung.
+- **Fliegenpilze (neu, `M`):** Sie sitzen im Rasen, immer zwei Kacheln breit. Wer darüberläuft oder
+  darauf landet, wird hochgeworfen. Mit gehaltenem Sprung sind es 8 Kacheln, ohne 2. Tempo und
+  Stufe bleiben.
+- **Hecken (neu, `h`):** 4 hoch, 3 breit. Der Pilz liegt 4 Kacheln davor; das ergab die Rechnung.
+  - Mit 6 px/Bild Wurf lag das Fenster beim Laufen bei ±5 px, mit 6,5 px/Bild sind es ±20 px, und
+    das bei Lauf-, Dash- und Blaze-Tempo.
+  - Ohne Pilz kommt man bei Laufgeschwindigkeit nicht darüber.
+- **Der Mäher (neue Flucht `mower`):** Ein Mähroboter fährt den Rasen entlang Richtung Mauseloch.
+  - Was auf dem Rasen steht (Hecken, Einfassungen, Rasensprenger) oder eine Lücke darin (der Teich),
+    umfährt er mit 30 % seiner Geschwindigkeit. Er wird hinter den Kacheln gezeichnet und
+    verschwindet dabei wirklich hinter der Hecke.
+  - Er schneidet nichts ab; der Weg bleibt.
+  - Er fährt 2,25 px/Bild, etwas langsamer als Laufen, und ist nie mehr als 10 Kacheln zurück.
+  - Zu Hause kommen Rasensprenger aus dem Rasen (die `e`-Kacheln dieses Levels), mit Wasserfächer.
+- **Warum der Mäher nicht schneller ist als Laufen:**
+  - Die Fairness-Regel verlangt, dass man auch mit Laufgeschwindigkeit und kurzen Halten nach
+    Hause kommt. Schneller als Laufen hielt das nicht.
+  - Der Druck kommt aus den Hecken: Ein verpatzter Pilzsprung kostet eine gute Sekunde, und so
+    nah ist der Mäher.
+- **Randmarkierung (für Mäher und Katze):** Ist der Verfolger außer Sicht, zeigt ein kleines
+  Abzeichen am Bildrand, wo er ist. Es pulsiert, je näher er kommt.
+- **Ton:** Der Mäher surrt (Sägezahn und Dreieck, durch einen Tiefpass, mit Messerflattern). Das
+  Surren wird lauter, je näher er ist, und verstummt bei Pause und Menü. Grasschnipsel fliegen.
+
+### Level 5: Die Katze bekommt eine Glocke
+
+Äsops Fabel, andersherum: Die Mäuse wollen der Katze eine Glocke umhängen, keine traut sich. Diese
+Maus trägt die Glocke auf dem Rücken hin.
+
+- **Hinweg:**
+  1. durch den Garten, unter der Hecke durchrutschen;
+  2. zwischen Hecke und Schuppen mit Wandsprüngen hoch;
+  3. übers Dach, am Ofenrohr vorbei zur schlafenden Katze.
+- **Die Katze wacht auf:** Man hängt ihr die Glocke um, sie schreckt hoch (eine Sekunde, mit
+  Fauchen), und dann ist sie hinter einem her.
+- **Heimweg:**
+  1. durch lose Dachbretter in den Schuppen;
+  2. übers Regal, unter der Tür durch, die jetzt unten offen ist;
+  3. unter der Hecke hindurch und durch den Garten nach Hause.
+- **Die Katze (neue Flucht `cat`):** Sie folgt der Spur der Maus, genau dort, wo sie lief: auch die
+  Wand hoch, durchs Dachloch, über jeden Sprung.
+  - Wo die Maus sich duckte oder rutschte, muss sich die Katze durchquetschen, mit 35 % ihres
+    Tempos. Durch die niedrigen Stellen zu rutschen ist also die Art, sie abzuhängen.
+  - Sie läuft 2,5 px/Bild, so schnell wie die Maus ohne Stufe, und ist nie mehr als 7 Kacheln Spur
+    zurück.
+- **Die Spur, sauber gezählt:**
+  - Am Boden und an Wänden wird jeder Schritt gemerkt, in der Luft nur der Scheitel eines Sprungs.
+  - Eine Strecke zählt nach der längeren Achse. Ein Sprung zählt quer, und senkrecht nur so weit,
+    wie die Landung von der Absprunghöhe abweicht.
+  - Das ist ganzzahlig, also reproduzierbar für Geister und Tests.
+  - Grund: Mit einfacher Weglänge (quer plus hoch) machte Dauerhüpfen die Spur um ein Drittel länger.
+    Der Pausen-Bot war damit gegen jede Katzengeschwindigkeit sicher, auch gegen 3,1 px/Bild. Jetzt
+    ist Hüpfen für die Katze so weit wie Laufen; ein Test hält es fest.
+- **Grafik:**
+  - Ein rotgetigerter Kater, 1,3-fach groß: schlafend eingerollt mit „z“, aufgeschreckt sitzend mit
+    Ausrufezeichen, im Galopp oder flach gequetscht. Beim Klettern neigt er sich entlang der Spur.
+  - Die Glocke bimmelt im Galopptakt, lauter, je näher er ist.
+  - Der Schuppen hat innen eine Bretterwand mit Licht durch die Ritzen.
+- **Gefundene Falle:** Eine niedrige Werkbank vor der Tür. Wer vom Regal sprang, landete auf ihr
+  statt davor und kam nicht mehr unter die Tür. Sie ist ersetzt durch einen Kompostsack zum
+  Durchbrechen.
+
+### Die Bots
+
+- **Bewertung:** Der schnelle Such-Bot bevorzugt Zustände in Bewegung. Mit der neuen Stufenregel
+  füllte sich der Strahl sonst mit Zuständen, die mit voller Stufe vor einer Kiste standen.
+- **Kriechen:** Unten plus Richtung ist jetzt eine eigene Aktion. Menschen können kriechen.
+- **Pausen:** Der Pausen-Bot bleibt nur noch am Boden stehen, beim ersten Halt nach fünf Zügen. Eine
+  „Pause“ mitten im Sprung ist kein Stehenbleiben, sondern ein verpatzter Sprung.
+
+**Zahlen** (Routen-Prüfung, alle 35 Punkte bestanden):
+
+| Level | schnellster Bot | ohne Stufen | ohne Stufen, mit Halten | S / A / B |
+|---|---|---|---|---|
+| 1 Saatsack | 24,25 s | 37,28 s | 38,47 s | 30 / 38 / 55 |
+| 2 Abfluss | 32,98 s | 47,67 s | 50,37 s | 41 / 50 / 70 |
+| 3 Flussufer | 21,58 s | 33,48 s | 34,38 s | 29 / 36 / 50 |
+| 4 Rasen | 28,15 s | 47,42 s | 47,92 s | 35 / 48 / 65 |
+| 5 Katze | 19,02 s | 29,27 s | 29,82 s | 25 / 31 / 42 |
+
+- **Knapp:** Der Bot mit Halten kommt dem Mäher bis auf 0,78 Kacheln nahe, der Katze bis auf 1,65,
+  dem Wasser bis auf 1,93 Kacheln.
+- **Neue Grenzen:** Für den Abfluss und das Ufer stieg A um eine und zwei Sekunden, weil der Bot
+  ohne Stufen mit den neuen Aktionen anders sucht.
+- **Grafikzeit:** Auf dem Handy-Format liegt der Median bei 6,4–7,7 ms je Bild, ohne Ausreißer über
+  30 ms. Gemessen wurde, während nebenher ein Bot lief; die neuen Level sind nicht teurer als die
+  alten.
+
+### Offen
+
+- **Druck auf dem Rasen:** Der Mäher bedroht vor allem, wer an einer Hecke patzt. Will der Nutzer
+  mehr Druck, müsste die Fairness-Regel für diesen Level nachgeben.
+- **Musik:** Es gibt noch keine.
+- **Rückmeldung:** Wie sich die neue Stufenregel und die ruhigere Kamera anfühlen, muss der Nutzer
+  sagen.

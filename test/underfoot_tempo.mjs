@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // Test suite for playground/underfoot_tempo.html, the "tempo" prototype.
 //
-// The prototype's claims are about speed: that it builds only by running on without a stop, that
-// every move keeps it or loses it the way the page says, that each level's way home is hard in its
-// own way but fair, and that the ranks mean something. The first two are checked in small rooms
-// with the real physics, the third on the real levels. The last are measured by bots that play the
-// levels: a search bot for the fastest line; the same search with the tiers switched off, which is
-// the most a player who never gets past running speed could do; and that one again with a pause
-// forced on it every few moves on the way home, standing in for a player who hesitates.
+// The prototype's claims are about speed: that it builds by running on, that every move keeps it or
+// loses it the way the page says, that each level's way home is hard in its own way but fair, and
+// that the ranks mean something. The first two are checked in small rooms with the real physics,
+// the third on the real levels and on small ones for the mower and the cat. The last are measured
+// by bots that play the levels: a search bot for the fastest line; the same search with the tiers
+// switched off, which is the most a player who never gets past running speed could do; and that one
+// again made to stand still on the ground every few moves on the way home, standing in for a
+// player who hesitates.
 //
 //   node test/underfoot_tempo.mjs                        # moves, escape, lines (about 15 s)
 //   node test/underfoot_tempo.mjs moves escape           # named suites only
@@ -98,13 +99,24 @@ if (suites.includes('moves')) {
     }
     check(s.p.tier === 2 && Math.abs(s.p.vx) === P.TIERS[2], `blaze runs at ${P.TIERS[2] / FX} px/f`, `vx ${s.p.vx / FX}`);
     const blaze = UF.clone(s);
-    // what takes it away
-    s = UF.clone(blaze); run(s, 1, 0);
-    check(s.p.tier === 0, 'letting go of the stick for one frame loses the tier');
-    s = UF.clone(blaze); run(s, 1, RUN_L);
-    check(s.p.tier === 0, 'turning round loses it');
-    s = UF.clone(blaze); run(s, P.RUN_TIMER + 1, IN.R);
-    check(s.p.tier === 0, 'so does letting go of run');
+    // what keeps it, and what takes it away: a tier waits a moment for you to get going again
+    s = UF.clone(blaze); run(s, 40, RUN_L);
+    check(s.p.tier === 2 && s.p.vx === -P.TIERS[2], 'a turn keeps the tier: the other way at full speed within two thirds of a second',
+        `tier ${s.p.tier}, vx ${s.p.vx / FX}`);
+    s = UF.clone(blaze);
+    run(s, 20, 0); const t20 = s.p.tier;
+    run(s, 30, 0); const t50 = s.p.tier;
+    run(s, 40, 0); const t90 = s.p.tier;
+    check(t20 === 2 && t50 === 1 && t90 === 0, `standing still, it waits ${P.HOLD} frames, then goes a step at a time`, `tiers ${t20}, ${t50}, ${t90}`);
+    s = UF.clone(blaze); run(s, 5, 0); run(s, 60, RUN);
+    check(s.p.tier === 2 && s.p.vx === P.TIERS[2], 'a short stop costs nothing but the time');
+    s = UF.clone(blaze); run(s, 8, 0);
+    for (let i = 0; i < 4; i++) { run(s, 2, IN.J); run(s, 60, 0, t => t.p.onGround); }
+    check(s.p.tier === 0, 'hopping on the spot is standing still: it runs down just the same', `tier ${s.p.tier}`);
+    s = UF.clone(blaze);
+    run(s, P.RUN_TIMER + 20, IN.R); const w20 = s.p.tier;
+    run(s, 100, IN.R);
+    check(w20 === 2 && s.p.tier === 0, 'letting go of run runs it down the same way');
     s = UF.clone(blaze);
     UF.step(s, {h: RUN | IN.J, p: IN.J}); run(s, 20, RUN | IN.J);
     check(!s.p.onGround && s.p.tier === 2 && Math.abs(s.p.vx) === P.TIERS[2], 'a jump keeps the tier, and the speed in the air');
@@ -112,8 +124,11 @@ if (suites.includes('moves')) {
     check(s.p.onGround && s.p.tier === 2, 'and it is still there on landing');
     s = UF.clone(blaze);
     UF.step(s, {h: RUN | IN.J, p: IN.J}); run(s, 5, RUN | IN.J); run(s, 20, RUN_L | IN.J);
-    check(s.p.tier === 0 && Math.abs(s.p.vx) <= P.RUN_MAX, 'turning round in the air loses the tier, and the speed with it',
+    check(s.p.tier === 2 && Math.abs(s.p.vx) <= P.RUN_MAX, 'turning round in the air keeps the tier, but only a run the other way',
         `tier ${s.p.tier}, vx ${s.p.vx / FX}`);
+    run(s, 120, RUN_L, t => t.p.onGround);
+    run(s, 20, RUN_L);
+    check(s.p.tier === 2 && s.p.vx === -P.TIERS[2], 'and on the ground it is soon full speed again');
     // speed without the tier behind it is not kept by hopping
     s = room(flat());
     run(s, 30, RUN);
@@ -260,6 +275,41 @@ if (suites.includes('moves')) {
     const fell = events(s, 400, () => down ? 0 : RUN, 'fell', t => { down = down || t.events.some(e => e.type === 'fell'); return false; });
     check(fell.length === 1 && s.p.mode === 'play' && s.p.onGround && Math.abs(s.p.x - 30 * TILE) < TILE && s.deaths === 1,
         'running into a pit puts you back at its edge', `at x ${fmt(s.p.x / TILE)}`);
+
+    // mushrooms in the lawn: on one and you go up, as high as jump is held, speed and tier kept
+    const lawn = (w, at) => {
+        const rows = [];
+        for (let y = 0; y < 14; y++) rows.push('.'.repeat(w));
+        rows.push('.@' + '.'.repeat(w - 2));
+        rows.push('='.repeat(at) + 'MM' + '='.repeat(w - at - 2));
+        rows.push('#'.repeat(w));
+        return rows;
+    };
+    const bounce = (s, h) => {
+        let peak = Infinity, boing = 0;
+        for (let i = 0; i < 300; i++) {
+            UF.step(s, {h});
+            if (s.events.some(e => e.type === 'boing')) { boing++; if (boing === 1) peak = s.p.y; }
+            if (boing) peak = Math.min(peak, s.p.y);
+            if (boing && s.p.onGround) break;
+        }
+        return {boing, rise: (15 * TILE - peak) / TILE};
+    };
+    s = room(lawn(80, 20));
+    run(s, 60, RUN, t => t.p.x > 12 * TILE);
+    let b = bounce(s, RUN);
+    check(b.boing >= 1 && b.rise > 1.5 && b.rise < 3, `running over a mushroom throws you up a little (${fmt(b.rise)} tiles)`);
+    s = room(lawn(80, 20));
+    run(s, 60, RUN, t => t.p.x > 12 * TILE);
+    b = bounce(s, RUN | IN.J);
+    check(b.boing >= 1 && b.rise > 7.5, `with jump held, higher than any jump (${fmt(b.rise)} tiles)`);
+    s = room(lawn(300, 140));
+    run(s, 600, RUN, t => t.p.x > 135 * TILE);
+    const t0 = s.p.tier;
+    run(s, 60, RUN, t => t.events.some(e => e.type === 'boing'));
+    run(s, 3, RUN);
+    check(t0 === 2 && !s.p.onGround && s.p.tier === 2 && s.p.vx === P.TIERS[2], 'and a blaze stays a blaze, in the air at full speed',
+        `tier ${t0} then ${s.p.tier}, vx ${s.p.vx / FX}, ground ${s.p.onGround}, x ${fmt(s.p.x / TILE)}`);
 }
 
 /* ================= escape ================= */
@@ -372,6 +422,92 @@ if (suites.includes('escape')) {
     let restored = 0;
     for (let ty = 0; ty < s.level.h; ty++) if (UF.solidAt(s.level, behind, ty)) restored++;
     check(restored > 0 && s.chase.pos === edge0, 'and it all starts again at the strawberry, the bank whole');
+
+    // the mower: along the lawn towards home, round what stands on it, and it cuts nothing
+    const yard = (escape, extra = []) => {
+        const rows = [];
+        for (let y = 0; y < 13; y++) rows.push('XX' + '.'.repeat(68));
+        rows.push('HH' + '.'.repeat(68));
+        rows.push('HH..@' + '.'.repeat(63) + 'Q.');
+        rows.push('='.repeat(70));
+        rows.push('#'.repeat(70));
+        for (const [x, y, str] of extra) rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length);
+        return UF.newGame(UF.parseLevel({id: 't', escape, rows}), {viewW: 16});
+    };
+    const take = s => { s.p.x = 66 * TILE + TILE / 2; s.p.y = 15 * TILE; UF.snapCamera(s); run(s, 30, IN.R, t => t.escape); return s; };
+    // hold the mouse where `at(i)` says, as if it walked there: the trail and the lead see only where it is
+    const hold = (s, n, at, until) => {
+        for (let i = 0; i < n; i++) {
+            const [x, y, low] = at(i);
+            Object.assign(s.p, {x: Math.round(x * TILE), y: Math.round(y * TILE), vx: 0, vy: 0, h: low ? P.H_DUCK : P.H, duck: !!low, onGround: true});
+            UF.step(s, {h: 0});
+            if (until && until(s)) return i + 1;
+        }
+        return n;
+    };
+    const MOW = {kind: 'mower', from: 1, delay: 0, speed: 2, gap: 99, round: 0.25};
+    s = take(yard(MOW, [[40, 14, 'hh']]));
+    check(s.escape && s.chase && s.chase.pos > s.p.x, 'taking the item starts the mower, beyond it');
+    const steps = [];
+    let pos = s.chase.pos;
+    const caught = [];
+    hold(s, 2000, () => [10.5, 15], t => {
+        if (t.events.some(e => e.type === 'late')) { caught.push(...t.events.filter(e => e.type === 'late')); return true; }
+        steps.push({d: pos - t.chase.pos, round: t.chase.round}); pos = t.chase.pos; return false;
+    });
+    const open = steps.filter(x => !x.round), round = steps.filter(x => x.round);
+    check(open.length > 100 && open.every(x => x.d === 2 * FX), 'on open lawn it comes on at its speed');
+    check(round.length > 20 && round.every(x => x.d === 0.5 * FX), 'round the hedge a quarter as fast', `${round.length} frames going round`);
+    let grass = 0;
+    for (let tx = 0; tx < 70; tx++) if (UF.tileAt(s.level, tx, 15) === T.GRASS) grass++;
+    check(grass === 70 && UF.tileAt(s.level, 40, 14) === T.HEDGE, 'and the lawn and the hedge are all still there');
+    check(caught.length === 1 && caught[0].why === 'mower', 'stand in its way and it catches you');
+    check(Math.abs(s.p.x - (68 * TILE + TILE / 2)) < TILE && s.chase.pos > s.p.x, 'and it starts again at the item, the mower behind it');
+
+    // the cat: it follows the trail wherever it went, squeezes where you went low, and waits for no one
+    const CAT = {kind: 'cat', delay: 30, speed: 2, gap: 99, squeeze: 0.25};
+    s = take(yard(CAT));
+    check(s.escape && s.chase && s.chase.path.length === 1, 'taking the item wakes the cat, where the item was');
+    // out over an arch three tiles high, then low for a stretch, then on at a run
+    const trail = i => {
+        const x = 68.5 - i * 0.12;
+        if (x > 60) return [x, 15];
+        if (x > 54) return [x, 15 - 3 * Math.sin((60 - x) / 6 * Math.PI)];
+        if (x > 44) return [x, 15, true];
+        return [Math.max(x, 12.5), 15];
+    };
+    let top = Infinity, woke = -1, lowRate = [], runRate = [];
+    let last = null;
+    const n = hold(s, 1500, trail, t => {
+        const c = t.chase;
+        if (c.wait === 0 && woke < 0) woke = t.escapeT;
+        const a = UF.catAt(c);
+        if (a.x > 54 * TILE && a.x < 60 * TILE) top = Math.min(top, a.y);
+        if (last && c.wait === 0 && c.path.length > 2) (a.low ? lowRate : runRate).push(Math.abs(a.x - last.x) + Math.abs(a.y - last.y));
+        last = a;
+        return t.events.some(e => e.type === 'late');
+    });
+    check(woke === CAT.delay, `it wakes ${CAT.delay} frames after`, `at ${woke}`);
+    check(top < 13 * TILE, 'over the arch the cat goes up it, where the mouse went', `highest ${fmt(15 - top / TILE)} tiles up`);
+    const mid = arr => arr.slice().sort((a, b) => a - b)[arr.length >> 1];
+    check(lowRate.length > 10 && runRate.length > 10 && mid(lowRate) <= mid(runRate) * 0.3,
+        'where the mouse went low, the cat squeezes after it, slowly', `low ${fmt(mid(lowRate) / FX)} px/f, running ${fmt(mid(runRate) / FX)} px/f`);
+    check(s.events.some(e => e.type === 'late' && e.why === 'cat') && n < 1500, 'and when the mouse stops, the cat catches up');
+    // hopping home is no further for the cat than running home
+    const trailOf = hop => {
+        const s = take(yard(Object.assign({}, CAT, {delay: 1e6}))), x0 = s.p.x;     // a cat that sleeps on
+        for (let i = 0; i < 150; i++) UF.step(s, {h: RUN_L | (hop && i % 24 < 12 ? IN.J : 0)});
+        return {per: s.chase.len / (x0 - s.p.x), hops: hop};
+    };
+    const flatRun = trailOf(false), hops = trailOf(true);
+    check(flatRun.per < 1.05 && hops.per < 1.1, 'hopping all the way does not make the trail longer for the cat',
+        `trail per tile run ${fmt(flatRun.per)}, hopped ${fmt(hops.per)}`);
+    // a pit: the trail goes on from its edge, not from the bottom
+    s = take(yard(CAT));
+    hold(s, 60, i => [66.5 - i * 0.1, 15]);
+    s.p.y = (s.level.h + 6) * TILE; s.p.onGround = false;
+    UF.step(s, {h: 0});
+    check(s.chase.path.every(q => q[1] <= s.level.h * TILE), 'into a pit and back: the cat is not sent down it');
 }
 
 /* ================= lines ================= */
@@ -403,10 +539,11 @@ if (suites.includes('lines')) {
 
 /* ================= route ================= */
 // Beam search over short held inputs, steered along the level's route: out to the item, then home.
-// `pause`: on the way home, every pause-th move is forced to be standing still.
+// `pause`: on the way home, once every `pause` moves the mouse has to stand still for one, at its
+// first chance on the ground.
 function searchBot(ctx, def, {chunk = 6, beam = 60, coarse = false, pause = 0} = {}) {
     const U = ctx.UF;
-    const acts = [RUN, RUN_L, 0, RUN | IN.J, RUN_L | IN.J, IN.J, IN.D, -RUN, -RUN_L];     // negative: a short hop
+    const acts = [RUN, RUN_L, 0, RUN | IN.J, RUN_L | IN.J, IN.J, IN.D, IN.D | IN.R, IN.D | IN.L, -RUN, -RUN_L];     // negative: a short hop; down with a direction: a crawl
     const score = (s, w) => {
         const p = s.p, route = s.escape ? def.route.back : def.route.out;
         let i = s.escape ? w.b : w.o;
@@ -414,7 +551,8 @@ function searchBot(ctx, def, {chunk = 6, beam = 60, coarse = false, pause = 0} =
         while (i < route.length && p.onGround && Math.abs(px - route[i][0]) < 1.2 && Math.abs(py - route[i][1]) < 1.2) i++;
         if (s.escape) w.b = i; else w.o = i;
         const [wx, wy] = route[Math.min(i, route.length - 1)];
-        return (s.escape ? 1e6 : 0) + i * 1e4 - Math.hypot(px - wx, py - wy) * 10 + p.tier * 2;
+        // nearer the next waypoint is better, and a tier, and going: pressed against a wall is not
+        return (s.escape ? 1e6 : 0) + i * 1e4 - Math.hypot(px - wx, py - wy) * 10 + p.tier * 2 + (coarse ? 0 : Math.abs(p.vx) / FX * 3);
     };
     const key = s => {
         const p = s.p;
@@ -424,21 +562,25 @@ function searchBot(ctx, def, {chunk = 6, beam = 60, coarse = false, pause = 0} =
     let nodes = [{s: U.newGame(def, {viewW: 20}), w: {o: 0, b: 0}, log: [], k: 0, lead: Infinity}], best = null;
     for (let c = 0; c < 2500 && !best && nodes.length; c++) {
         const next = new Map();
-        for (const n of nodes) for (const a of pause && n.s.escape && (n.k + 1) % pause === 0 ? [0] : acts) {
-            const s = U.clone(n.s), w = Object.assign({}, n.w), log = n.log.slice();
-            let lead = n.lead, caught = false;
-            for (let f = 0; f < chunk; f++) {
-                const h = a < 0 ? -a | (f < 2 ? IN.J : 0) : a;
-                U.step(s, {h});
-                log.push(h);
-                if (s.events.some(e => e.type === 'late')) { caught = true; break; }
-                if (s.escape) lead = Math.min(lead, U.danger(s));
-                if (s.p.mode === 'clear') break;
+        for (const n of nodes) {
+            // a pause is standing still: it comes at the first chance on the ground once `pause` moves have gone by
+            const forced = pause && n.s.escape && n.k + 1 >= pause && n.s.p.onGround;
+            for (const a of forced ? [0] : acts) {
+                const s = U.clone(n.s), w = Object.assign({}, n.w), log = n.log.slice();
+                let lead = n.lead, caught = false;
+                for (let f = 0; f < chunk; f++) {
+                    const h = a < 0 ? -a | (f < 2 ? IN.J : 0) : a;
+                    U.step(s, {h});
+                    log.push(h);
+                    if (s.events.some(e => e.type === 'late')) { caught = true; break; }
+                    if (s.escape) lead = Math.min(lead, U.danger(s));
+                    if (s.p.mode === 'clear') break;
+                }
+                if (caught) continue;
+                if (s.p.mode === 'clear') { if (!best || s.time < best.s.time) best = {s, log, lead}; continue; }
+                const sc = score(s, w), kk = key(s), old = next.get(kk);
+                if (!old || old.sc < sc) next.set(kk, {s, w, log, sc, k: n.s.escape && !forced ? n.k + 1 : 0, lead});
             }
-            if (caught) continue;
-            if (s.p.mode === 'clear') { if (!best || s.time < best.s.time) best = {s, log, lead}; continue; }
-            const sc = score(s, w), kk = key(s), old = next.get(kk);
-            if (!old || old.sc < sc) next.set(kk, {s, w, log, sc, k: n.s.escape ? n.k + 1 : 0, lead});
         }
         nodes = [...next.values()].sort((a, b) => b.sc - a.sc).slice(0, beam);
     }

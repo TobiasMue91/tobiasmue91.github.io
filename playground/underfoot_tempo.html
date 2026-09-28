@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>Underfoot — Tempo</title>
-<meta name="description" content="A prototype for Underfoot, a platformer about a mouse: three levels, each sending you out for something and then home again, against a clock, ahead of rising water or before the bank crumbles away. Speed builds the longer you keep running. Keyboard, gamepad or touch.">
+<meta name="description" content="A prototype for Underfoot, a platformer about a mouse: five levels, each sending you out for something and then home again, against a clock, ahead of rising water, before the bank crumbles away, in front of a robot mower, and with a belled cat on your trail. Speed builds the longer you keep running. Keyboard, gamepad or touch.">
 <style>
     :root {
         --frame: #14171d;
@@ -205,18 +205,19 @@
     <div class="panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
         <h1 id="menu-title">Underfoot · Tempo</h1>
         <p class="sub">A prototype. Each level sends you out for something, and taking it turns the
-            level round: home again, against a clock, rising water or a bank that falls away behind
-            you. Keep running and you get faster, twice: fast enough to burst clods and bowl beetles
-            over. Stop, turn round or get knocked, and it is gone.</p>
+            level round: home again, against a clock, rising water, a bank that falls away behind
+            you, a mower, a cat. Keep running and you get faster, twice: fast enough to burst clods
+            and bowl beetles over. A turn or a moment's stop keeps it; slow down for longer and it
+            ebbs away a step at a time; a crash or a knock takes it all.</p>
 
         <h2>Levels</h2>
         <div class="levels" id="level-list"></div>
 
         <h2>Moves</h2>
-        <p class="keys"><b>Faster</b> keep running without a stop or a turn: the trail behind you
-            turns orange, then red · <b>Slide</b> down while running: it keeps your speed for as long as
-            you hold it, and under anything low ·
-            <b>Wall kick</b> jump at a wall, and jump again while you touch it</p>
+        <p class="keys"><b>Faster</b> keep running: the trail behind you turns orange, then red ·
+            <b>Slide</b> down while running: it keeps your speed for as long as you hold it, and under
+            anything low · <b>Wall kick</b> jump at a wall, and jump again while you touch it ·
+            <b>Mushroom</b> run over one with jump held, and it throws you high, at full speed</p>
 
         <h2>Ghost</h2>
         <label class="row"><input type="radio" name="ghost" id="o-ghost-best" value="best"><span>Your best run<small>Race
@@ -310,6 +311,7 @@ const P = {
     // tempo: hold a run long enough at full speed and it steps up, twice
     TIERS: [0x28 * 256, 3.25 * FX, 4 * FX],   // run, dash, blaze (px/f)
     CHARGE: 45,                    // frames at a tier's top speed before the next
+    HOLD: 30,                      // frames a tier waits, below running speed, before dropping a step
     TIER_ACC: 0.125 * FX,
     WALL_SLIDE: 1.5 * FX,          // pressed against a wall, you slide no faster than this
     WALL_GRACE: 6,                 // frames after leaving a wall that a kick still counts
@@ -322,6 +324,7 @@ const P = {
     INVULNERABLE: 60,              // frames after a knock that nothing else can knock you
     COMBO_TIME: 180,               // frames a combo waits for the next hit
     FALL_COST: 180,                // frames a fall into a pit takes off an escape clock
+    BOING: 6.5 * FX,               // a mushroom throws you up this fast: 8 tiles with jump held, 2 without
 };
 
 // How speed follows the stick: fast enough to feel direct, on the ground and in the air.
@@ -353,15 +356,16 @@ const IN = {L: 1, R: 2, U: 4, D: 8, J: 16, B: 32};
 
 // tiles
 const T = {EMPTY: 0, GROUND: 1, GRASS: 2, STONE: 3, BRICK: 4, ONEWAY: 5, SEED: 6, GOLD: 7, WALL: 8,
-    WOOD: 9, ESC_ON: 10, ESC_OFF: 11, ITEM: 12, HOME: 13};
+    WOOD: 9, ESC_ON: 10, ESC_OFF: 11, ITEM: 12, HOME: 13, SHROOM: 14, HEDGE: 15};
 const CHAR = {'.': T.EMPTY, '#': T.GROUND, '=': T.GRASS, 'X': T.STONE, 'B': T.BRICK, '-': T.ONEWAY,
-    'o': T.SEED, 'G': T.GOLD, 'W': T.WOOD, 'e': T.ESC_ON, 'n': T.ESC_OFF, 'Q': T.ITEM, 'H': T.HOME};
+    'o': T.SEED, 'G': T.GOLD, 'W': T.WOOD, 'e': T.ESC_ON, 'n': T.ESC_OFF, 'Q': T.ITEM, 'H': T.HOME,
+    'M': T.SHROOM, 'h': T.HEDGE};
 const SPAWN = {b: {kind: 'beetle'}, s: {kind: 'snail', red: false}, r: {kind: 'snail', red: true}};
-const SOLID = new Uint8Array(16);
-for (const t of [T.GROUND, T.GRASS, T.STONE, T.BRICK, T.WALL, T.WOOD]) SOLID[t] = 1;
+const SOLID = new Uint8Array(32);
+for (const t of [T.GROUND, T.GRASS, T.STONE, T.BRICK, T.WALL, T.WOOD, T.SHROOM, T.HEDGE]) SOLID[t] = 1;
 // what a crumbling bank takes with it: everything but stone and the way home
-const CRUMBLES = new Uint8Array(16);
-for (const t of [T.GROUND, T.GRASS, T.BRICK, T.WOOD, T.ONEWAY, T.SEED, T.GOLD, T.ESC_ON, T.ESC_OFF]) CRUMBLES[t] = 1;
+const CRUMBLES = new Uint8Array(32);
+for (const t of [T.GROUND, T.GRASS, T.BRICK, T.WOOD, T.ONEWAY, T.SEED, T.GOLD, T.ESC_ON, T.ESC_OFF, T.SHROOM, T.HEDGE]) CRUMBLES[t] = 1;
 
 const fdiv = (a, b) => Math.floor(a / b);
 const sign = v => v > 0 ? 1 : v < 0 ? -1 : 0;
@@ -374,6 +378,10 @@ const approach = (v, target, rate) => v < target ? Math.min(target, v + rate) : 
 //                                                item, `delay` frames after it is taken, at
 //                                                `speed` px/f, never more than `gap` tiles below you
 //   {kind: 'crumble', from, delay, speed, gap}   the ground falls away behind you, towards home
+//   {kind: 'mower', from, delay, speed, gap, round}   a mower comes along the lawn towards home; what
+//                                                stands on the lawn it goes round, at `round` of its speed
+//   {kind: 'cat', delay, speed, gap, squeeze}    the cat follows your trail, wherever it went: where
+//                                                you went low, it squeezes through at `squeeze` of its speed
 function parseLevel(def) {
     const rows = def.rows, h = rows.length, w = rows[0].length;
     const tiles = new Uint8Array(w * h);
@@ -394,7 +402,7 @@ function parseLevel(def) {
         }
     }
     if (!start) throw new Error('level has no start (@)');
-    const escape = Object.assign({kind: 'clock', time: 60, from: 4, delay: 0, speed: 0, gap: 8}, def.escape);
+    const escape = Object.assign({kind: 'clock', time: 60, from: 4, delay: 0, speed: 0, gap: 8, round: 0.3, squeeze: 0.35}, def.escape);
     // which way home lies from the item: the crumbling runs that way
     escape.dir = item && home ? sign(home.tx - item.tx) || -1 : -1;
     return {id: def.id, name: def.name, w, h, tiles, orig: tiles.slice(), start, item, home, golds,
@@ -417,7 +425,7 @@ function newPlayer(x, y) {
         onGround: true, facing: 1, runTimer: 0, air: 0, jumped: false, fall: true,
         gUp: 0, gDown: P.JUMP_ROWS[0][3], row: 0, jumpY: y, jumpX: x, buffer: 0, airMax: P.WALK_MAX,
         skid: false, mode: 'play', modeT: 0, peak: y, lastJump: null, lastVy: 0, inv: 0,
-        chain: 0, tier: 0, charge: 0, wall: 0, wallT: 0, slide: 0, stun: 0,
+        chain: 0, tier: 0, charge: 0, hold: P.HOLD, wall: 0, wallT: 0, slide: 0, stun: 0,
         combo: 0, comboT: 0, touchWall: false, kickT: 0};
 }
 
@@ -443,7 +451,7 @@ function newGame(def, opts = {}) {
         p: newPlayer(sx, sy),
         ents: spawnAll(level), nextId: level.spawns.length, goldGot: [],
         viewW: opts.viewW || 16,
-        cam: {x: 0, y: 0, look: 0, dir: 1, ref: sy},
+        cam: {x: 0, y: 0, look: 0, lookV: 0, dir: 1, commit: 0, sp: 0, ref: sy, yv: 0},
     };
     snapCamera(s);
     return s;
@@ -603,7 +611,8 @@ function startJump(s, p, early) {
     }
 }
 
-// on the ground: full speed held long enough steps up a tier
+// on the ground: full speed held long enough steps up a tier. Nothing here takes a tier away;
+// pace() lets it run down when you are not keeping it up.
 function ground(s, p, dir, running, down) {
     const a = Math.abs(p.vx), moving = sign(p.vx);
     const cap = running ? P.TIERS[p.tier] : P.WALK_MAX;
@@ -617,23 +626,19 @@ function ground(s, p, dir, running, down) {
             return;
         }
         p.slide = 0;
-        p.tier = 0;
-        p.charge = 0;
         p.vx = approach(p.vx, dir * P.CRAWL, MOVE.STOP);    // crawl, or stop
         return;
     }
-    if (!dir) { p.vx = approach(p.vx, 0, MOVE.STOP); p.tier = 0; p.charge = 0; return; }
+    if (!dir) { p.vx = approach(p.vx, 0, MOVE.STOP); return; }
     if (moving === -dir) {
         p.vx = approach(p.vx, dir * cap, MOVE.TURN);
         p.skid = a > P.WALK_MAX / 2;
-        p.tier = 0;
-        p.charge = 0;
         return;
     }
     if (a > cap) p.vx = dir * Math.max(cap, a - MOVE.OVER);
     else if (a < P.WALK_MAX) p.vx = dir * Math.min(P.WALK_MAX, a + MOVE.ACC);
     else p.vx = dir * Math.min(cap, a + (a < P.RUN_MAX ? MOVE.RUN_ACC : P.TIER_ACC));
-    if (!running) { p.tier = 0; p.charge = 0; return; }
+    if (!running) return;
     if (Math.abs(p.vx) >= cap && p.tier < 2 && ++p.charge >= P.CHARGE) {
         p.tier++;
         p.charge = 0;
@@ -641,10 +646,24 @@ function ground(s, p, dir, running, down) {
     }
 }
 
+// A tier waits, a moment, for you to get going again: a turn, a short stop, a wall kick keep it.
+// Below running speed for longer, on the ground or off it (hopping on the spot is not running), it
+// drops a step at a time. Only a crash or a knock takes it all at once.
+function pace(s, p) {
+    if (p.onGround && Math.abs(p.vx) < P.TIERS[p.tier]) p.charge = 0;
+    if (!p.tier || Math.abs(p.vx) >= P.RUN_MAX * 0.95) { p.hold = P.HOLD; return; }
+    if (--p.hold <= 0) {
+        p.tier--;
+        p.hold = P.HOLD;
+        event(s, 'tierDown', {tier: p.tier});
+    }
+}
+
 function air(p, dir) {
     if (p.kickT > 0 || p.stun > 0) return;                  // just kicked off a wall, or thrown
     if (!dir) { p.vx = approach(p.vx, 0, MOVE.AIR_DRAG); return; }
-    if (sign(p.vx) === -dir && p.tier) { p.tier = 0; p.charge = 0; p.airMax = Math.min(p.airMax, P.RUN_MAX); }
+    // turning round in the air keeps the tier, but not the speed: back the other way at a run
+    if (sign(p.vx) === -dir) { p.charge = 0; p.airMax = Math.min(p.airMax, P.RUN_MAX); }
     p.vx = approach(p.vx, dir * p.airMax, MOVE.AIR_ACC);
 }
 
@@ -691,6 +710,7 @@ function step(s, input = {h: 0, p: 0}) {
     if (dir && !(p.onGround && p.duck)) p.facing = dir;
     if (p.onGround) ground(s, p, dir, p.runTimer > 0, held & IN.D);
     else air(p, dir);
+    pace(s, p);
 
     // against a wall in the air: slide down it, and a jump kicks off it with the tier kept
     p.touchWall = false;
@@ -775,6 +795,7 @@ function step(s, input = {h: 0, p: 0}) {
         }
     }
     if (wasGround && !p.onGround && !p.jumped) event(s, 'ledge', {});
+    if (p.onGround && p.stun === 0) boing(s, p);
 
     stepEnts(s);
     touchEnts(s, p, prevY, held);
@@ -797,6 +818,30 @@ function land(s, p) {
     }
     p.jumped = false;
     event(s, 'land', {vy: fallSpeed / FX});
+}
+
+// A mushroom in the lawn throws you up the moment you are on it, running or landing, keeping your
+// speed and your tier: hold jump for the high bounce, as with any jump.
+function boing(s, p) {
+    const b = box(p), ty = p.y / TILE;
+    for (let tx = fdiv(b.l, TILE); tx <= fdiv(b.r - 1, TILE); tx++) {
+        if (tileAt(s.level, tx, ty) !== T.SHROOM) continue;
+        if (p.slide) { p.slide = 0; if (!overlaps(s.level, p.x, p.y, p.w, P.H)) { p.duck = false; p.h = P.H; } }
+        p.vy = -P.BOING;
+        p.onGround = false;
+        p.jumped = true;
+        p.fall = false;
+        p.gUp = P.JUMP_ROWS[2][2];
+        p.gDown = P.JUMP_ROWS[2][3];
+        p.jumpY = p.y;
+        p.jumpX = p.x;
+        p.peak = p.y;
+        p.air = 0;
+        p.buffer = 0;
+        p.airMax = airCap(p);
+        event(s, 'boing', {tx, ty});
+        return;
+    }
 }
 
 function pickups(s, p) {
@@ -844,7 +889,10 @@ function resetEscape(s) {
     s.escapeT = X.kind === 'clock' ? X.time * 60 : 0;
     s.chase = null;
     if (X.kind === 'water') s.chase = {pos: s.item.y + X.from * TILE, wait: X.delay};
-    if (X.kind === 'crumble') s.chase = {pos: s.item.x - X.dir * X.from * TILE, wait: X.delay};
+    if (X.kind === 'crumble' || X.kind === 'mower') s.chase = {pos: s.item.x - X.dir * X.from * TILE, wait: X.delay, round: false};
+    // the cat's trail: the points you passed, from where it is now to where you are; how far along
+    // the first stretch it is; how long the trail is; and how much of it lies ahead of the cat
+    if (X.kind === 'cat') s.chase = {path: [[s.item.x, s.item.y, 0]], along: 0, len: 0, pos: 0, wait: X.delay, rising: false};
 }
 
 // one frame of the escape; true if it ended the frame (caught, or out of time)
@@ -856,8 +904,20 @@ function stepEscape(s) {
     }
     s.escapeT++;
     const c = s.chase;
+    if (X.kind === 'cat') return stepCat(s);
     if (c.wait > 0) { c.wait--; return false; }
     const speed = Math.round(X.speed * FX), far = X.gap * TILE;
+    if (X.kind === 'mower') {
+        // along the lawn towards home; whatever stands on the lawn, or a gap in it, it goes the
+        // long way round
+        const d = X.dir, back = p.x - d * p.w / 2, lane = L.start.ty, tx = fdiv(c.pos, TILE);
+        c.round = solidAt(L, tx, lane) || !solidAt(L, tx, lane + 1);
+        let v = (back - c.pos) * d > far ? 3 * speed : speed;
+        if (c.round) v = Math.round(v * X.round);
+        c.pos += d * v;
+        if ((c.pos - back) * d >= 0) { late(s, 'mower'); return true; }
+        return false;
+    }
     if (X.kind === 'water') {
         // the surface rises; if you have climbed far ahead of it, it catches up three times as fast
         c.pos -= p.y + far < c.pos ? 3 * speed : speed;
@@ -882,11 +942,55 @@ function stepEscape(s) {
     return false;
 }
 
+// The cat: the trail grows by where you are, and the cat eats it up from the other end. On the
+// ground and on walls every step is kept; in the air only the top of a leap, so the cat leaps
+// where you leapt. A stretch is as long as the more it goes, across or up; a leap counts across,
+// and up or down only as far as where it lands is from where it left. Hopping all the way home
+// leaves the cat no further to go than running.
+// A point is [x, y, low], and a leap's top also carries the height it left from.
+const stretch = (a, b) => b.length > 3 ? Math.abs(b[0] - a[0])
+    : Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - (a.length > 3 ? a[3] : a[1])));
+function stepCat(s) {
+    const X = s.level.escape, p = s.p, c = s.chase, path = c.path, last = path[path.length - 1];
+    const top = !p.onGround && !p.touchWall && c.rising && p.vy >= 0;
+    c.rising = !p.onGround && p.vy < 0;
+    if ((p.x !== last[0] || p.y !== last[1]) && (p.onGround || p.touchWall || top)) {
+        const q = [p.x, p.y, p.h < P.H ? 1 : 0];
+        if (top) q.push(last.length > 3 ? last[3] : last[1]);
+        c.len += stretch(last, q);
+        path.push(q);
+    }
+    if (c.wait > 0) c.wait--;
+    else {
+        const speed = Math.round(X.speed * FX);
+        let v = c.len - c.along > X.gap * TILE ? 3 * speed : speed;
+        if (path.length > 1 && path[1][2]) v = Math.round(v * X.squeeze);
+        c.along += v;
+        while (path.length > 1) {
+            const seg = stretch(path[0], path[1]);
+            if (c.along < seg) break;
+            c.along -= seg;
+            c.len -= seg;
+            path.shift();
+        }
+        if (path.length === 1) c.along = 0;
+    }
+    c.pos = c.len - c.along;
+    if (c.pos < TILE * 3 / 4 && !c.wait) { late(s, 'cat'); return true; }
+    return false;
+}
+// where the cat is on its trail, and which way it is going
+function catAt(c) {
+    const a = c.path[0], b = c.path[1] || a, seg = stretch(a, b), f = seg ? c.along / seg : 0;
+    return {x: a[0] + (b[0] - a[0]) * f, y: a[1] + (b[1] - a[1]) * f, dir: sign(b[0] - a[0]), low: !!b[2]};
+}
+
 // how close the danger is: seconds left on a clock, tiles between you and the water or the edge
 function danger(s) {
     if (!s.escape) return null;
     const X = s.level.escape, p = s.p;
     if (X.kind === 'clock') return s.escapeT / 60;
+    if (X.kind === 'cat') return (s.chase.pos + s.chase.wait * X.speed * FX) / TILE;
     if (X.kind === 'water') return (s.chase.pos - (p.y - p.h / 2)) / TILE;
     return (p.x - X.dir * p.w / 2 - s.chase.pos) * X.dir / TILE;
 }
@@ -913,6 +1017,14 @@ function fell(s) {
     const q = s.safe || s.start;
     s.deaths++;
     if (s.escape && s.level.escape.kind === 'clock' && (s.escapeT -= P.FALL_COST) <= 0) { late(s, 'time'); return; }
+    // the cat does not follow you down the pit: your trail goes on from its edge
+    if (s.escape && s.chase && s.chase.path) {
+        const c = s.chase, path = c.path, bottom = s.level.h * TILE;
+        while (path.length > 1 && path[path.length - 1][1] > bottom) {
+            const a = path[path.length - 2], b = path.pop();
+            c.len -= stretch(a, b);
+        }
+    }
     const p = s.p = newPlayer(q.x, q.y);
     p.facing = q.facing || 1;
     p.inv = P.INVULNERABLE;
@@ -1093,18 +1205,19 @@ function bounce(p, held) {
 }
 
 /* ---------------- camera ---------------- */
-// Horizontal: the camera follows the mouse one-to-one with a look-ahead in the direction of
-// travel, which grows with speed and swings round at a limited rate. Vertical: it rests on the
-// height the mouse last stood at, leads a fall, and chases when the mouse nears an edge. With
-// water rising below, it sits higher, so more of what is coming up can be seen.
+// Calm, above all. Horizontally the camera keeps the mouse where it is and looks ahead the way it is
+// going, further the faster it goes; but it only turns to look the other way once the mouse has
+// really gone that way for a third of a second, and it swings round on a spring, not at once.
+// Vertically it rests on the height the mouse last stood (or clung to a wall) at, leads a fall,
+// and gets there on a spring too. With water rising below, it sits higher, to show what is coming.
 const feet = s => s.escape && s.level.escape.kind === 'water' ? 0.5 : 0.6;
+const CAM = {COMMIT: 20, LOOK_K: 0.004, Y_K: 0.012, FALL_K: 0.03};
 
 function camTargets(s) {
     const p = s.p, c = s.cam;
     const VW = Math.round(s.viewW * TILE), VH = VIEW_H * TILE;
-    if (Math.abs(p.vx) >= FX) c.dir = sign(p.vx);
-    const t = Math.min(1, Math.max(0, (Math.abs(p.vx) - FX) / (P.RUN_MAX - FX)));
-    const t2 = Math.min(1, Math.max(0, (Math.abs(p.vx) - P.RUN_MAX) / (P.TIERS[2] - P.RUN_MAX)));
+    const t = Math.min(1, Math.max(0, (c.sp - FX) / (P.RUN_MAX - FX)));
+    const t2 = Math.min(1, Math.max(0, (c.sp - P.RUN_MAX) / (P.TIERS[2] - P.RUN_MAX)));
     // never so far ahead that the mouse is pushed to the edge of a narrow (upright phone) view
     const lookTarget = c.dir * Math.round(Math.min(2 * TILE + 3 * TILE * t + 3 * TILE * t2, VW * 0.3));
     return {VW, VH, lookTarget};
@@ -1113,14 +1226,20 @@ function camTargets(s) {
 function clampCam(s) {
     const L = s.level, c = s.cam, VW = Math.round(s.viewW * TILE), VH = VIEW_H * TILE;
     c.x = Math.max(0, Math.min(L.w * TILE - VW, c.x));
-    c.y = Math.max(Math.min(0, L.h * TILE - VH), Math.min(L.h * TILE - VH, c.y));
+    const y = Math.max(Math.min(0, L.h * TILE - VH), Math.min(L.h * TILE - VH, c.y));
+    if (y !== c.y) { c.y = y; c.yv = 0; }
 }
 
 function snapCamera(s) {
     const p = s.p, c = s.cam;
+    c.dir = p.facing;
+    c.commit = 0;
+    c.sp = Math.abs(p.vx);
     const {VW, VH, lookTarget} = camTargets(s);
     c.look = lookTarget;
+    c.lookV = 0;
     c.ref = p.y;
+    c.yv = 0;
     c.x = p.x + c.look - VW / 2;
     c.y = c.ref - Math.round(VH * feet(s));
     clampCam(s);
@@ -1128,20 +1247,26 @@ function snapCamera(s) {
 
 function updateCamera(s) {
     const p = s.p, c = s.cam;
+    // the way it looks: turned only by a third of a second's going the other way
+    const d = Math.abs(p.vx) >= FX ? sign(p.vx) : 0;
+    if (d && d !== c.dir) { if (++c.commit >= CAM.COMMIT) { c.dir = d; c.commit = 0; } }
+    else c.commit = Math.max(0, c.commit - 2);
+    c.sp += (Math.abs(p.vx) - c.sp) * 0.05;
     const {VW, VH, lookTarget} = camTargets(s);
-    const rate = 1.25 * FX + Math.abs(p.vx) / 3;
-    c.look += Math.max(-rate, Math.min(rate, lookTarget - c.look));
-    c.x = p.x + c.look - VW / 2;
-    if (p.onGround) c.ref = p.y;
-    let ty = c.ref - Math.round(VH * feet(s)), ease = 8;
+    // a critically damped spring: it sets off gently and settles without overshooting
+    c.lookV += (lookTarget - c.look) * CAM.LOOK_K - c.lookV * 2 * Math.sqrt(CAM.LOOK_K);
+    c.look += c.lookV;
+    c.x = Math.round(p.x + c.look - VW / 2);
+    if (p.onGround || p.touchWall) c.ref = p.y;
+    let ty = c.ref - Math.round(VH * feet(s)), k = CAM.Y_K;
     // falling below the last ground: lead the fall, so the landing comes into view early
-    if (!p.onGround && p.vy > 2 * FX && p.y > c.ref && p.mode === 'play') { ty = p.y - Math.round(VH * 0.45); ease = 4; }
-    const dy = ty - c.y;
-    c.y += Math.abs(dy) <= FX ? dy : Math.round(dy / ease);
-    // never let the mouse leave the screen vertically
-    const margin = 2 * TILE;
-    if (p.y > c.y + VH - margin / 2) c.y = p.y - VH + margin / 2;
-    if (p.y - p.h < c.y + margin) c.y = p.y - p.h - margin;
+    if (!p.onGround && p.vy > 2 * FX && p.y > c.ref && p.mode === 'play') { ty = p.y - Math.round(VH * 0.45); k = CAM.FALL_K; }
+    c.yv += (ty - c.y) * k - c.yv * 2 * Math.sqrt(k);
+    c.y = Math.round(c.y + c.yv);
+    // and never let the mouse leave the screen
+    const top = 1.5 * TILE, bottom = TILE;
+    if (p.y > c.y + VH - bottom) { c.y = p.y - VH + bottom; c.yv = Math.max(c.yv, 0); }
+    if (p.y - p.h < c.y + top) { c.y = p.y - p.h - top; c.yv = Math.min(c.yv, 0); }
     clampCam(s);
 }
 
@@ -1158,7 +1283,7 @@ function clone(s) {
         p: Object.assign({}, s.p), cam: Object.assign({}, s.cam), events: [],
         ents: s.ents.map(e => Object.assign({}, e)), goldGot: s.goldGot.slice(),
         item: s.item && Object.assign({}, s.item), safe: s.safe && Object.assign({}, s.safe),
-        chase: s.chase && Object.assign({}, s.chase),
+        chase: s.chase && Object.assign({}, s.chase, s.chase.path ? {path: s.chase.path.slice()} : null),
     });
 }
 
@@ -1176,7 +1301,7 @@ function predict(s, inputs, frames) {
 function hash(s) {
     const p = s.p;
     let h = 2166136261;
-    const vals = [p.x, p.y, p.vx, p.vy, s.frame, s.seeds, s.deaths, p.tier, s.score, s.escape ? s.escapeT : -1, s.chase ? s.chase.pos : 0];
+    const vals = [p.x, p.y, p.vx, p.vy, s.frame, s.seeds, s.deaths, p.tier, s.score, s.escape ? s.escapeT : -1, s.chase ? s.chase.pos : 0, s.chase && s.chase.path ? s.chase.path.length : 0];
     for (const e of s.ents) vals.push(e.x, e.y, e.state, e.kind);
     for (const v of vals)
         for (const b of String(v)) h = Math.imul(h ^ b.charCodeAt(0), 16777619);
@@ -1184,7 +1309,7 @@ function hash(s) {
 }
 
 return {FX, TILE, VIEW_H, P, E, MOVE, IN, T, SOLID, parseLevel, newGame, step, tileAt, solidAt,
-    overlaps, supported, box, jumpRow, predict, clone, setViewWidth, hash, snapCamera, danger};
+    overlaps, supported, box, jumpRow, predict, clone, setViewWidth, hash, snapCamera, danger, catAt};
 })();
 </script>
 <script id="levels">
@@ -1193,9 +1318,12 @@ return {FX, TILE, VIEW_H, P, E, MOVE, IN, T, SOLID, parseLevel, newGame, step, t
    B  earth clod (a dash bursts it)                 o  seed          G  golden seed
    n  boards: there until the item is taken         e  crates: there once it is taken
    Q  the item to fetch                             H  home, the mouse hole
+   M  mushroom: throws you up, higher with jump held                h  hedge
    b  beetle       s  snail          r  red snail (turns at ledges)    @  start
    escape: what the way home is up against (see parseLevel); ranks: seconds for S, A and B
-   (see test/underfoot_tempo.mjs); route: how a bot is steered, out and back (tile x, feet row). */
+   (see test/underfoot_tempo.mjs); route: how a bot is steered, out and back (tile x, feet row);
+   inside: tile rectangles [x0, y0, x1, y1] with a back wall behind them, a shed's;
+   pits: 'pond' fills the gaps in the ground with water, and makes its ledges lily pads. */
 const LEVELS = [
 {
     id: "sack",
@@ -1237,7 +1365,7 @@ const LEVELS = [
     backdrop: "drain",
     idea: "Down through the drain for a lost button, then back up the shafts before the water catches you.",
     escape: {"kind": "water", "from": 6, "delay": 60, "speed": 0.27, "gap": 7},
-    ranks: [41, 48, 70],
+    ranks: [41, 50, 70],
     rows: [
         'XX......................................',
         'XX......................................',
@@ -1308,7 +1436,7 @@ const LEVELS = [
     backdrop: "river",
     idea: "Along the river bank for the last strawberry, then home with the bank falling away behind you.",
     escape: {"kind": "crumble", "from": 7, "delay": 30, "speed": 2.4, "gap": 10},
-    ranks: [29, 34, 50],
+    ranks: [29, 36, 50],
     rows: [
         'XX............................................................WW................................................................................................XXXXXXXX',
         'XX............................................................WW..................................G.............................................................XXXXXXXX',
@@ -1333,13 +1461,85 @@ const LEVELS = [
     ],
     labels: [[14, 10, "ALONG THE BANK FOR THE LAST STRAWBERRY"], [56, 10, "SLIDE UNDER, THEN KICK UP"]],
     route: {"out": [[65.5, 16], [70, 6], [110, 16], [152, 16]], "back": [[106, 16], [66, 16], [1, 16]]},
+},
+{
+    id: "lawn",
+    name: "The long lawn",
+    item: "marble",
+    backdrop: "garden",
+    idea: "All the way down the lawn for a lost marble, then home in front of the mower.",
+    escape: {"kind": "mower", "from": 2, "delay": 45, "speed": 2.25, "gap": 10, "round": 0.3},
+    ranks: [35, 48, 65],
+    rows: [
+        'XX..............................................................................................................................................................................................................XXXXXXXX',
+        'XX..............................................................................................................................................................................................................XXXXXXXX',
+        'XX..............................................................................................................................................................................................................XXXXXXXX',
+        'XX..............................................................................................................................................................................................................XXXXXXXX',
+        'XX..............................................................................................................................................................................................................XXXXXXXX',
+        'XX..............................................................................................................................................................................................................XXXXXXXX',
+        'XX................................................................................................................G.............................................................................................XXXXXXXX',
+        'XX..............................................................................................................................................................................................................XXXXXXXX',
+        'XX.........................................................................................................................................................................................................Q....XXXXXXXX',
+        'XX................................................o..o..o..o...............................................................................................................................................WW...XXXXXXXX',
+        'XX........................................................................................hhhhhhhh.........................................................................................................WW...XXXXXXXX',
+        'XX................................b....b..................................................hhhhhhhh.........................................................................................................WW...XXXXXXXX',
+        'XX..............................WWWWWWWWWW...........hhh..................................hhhhhhhh...............hhh.......................................hhh.............................................WW...XXXXXXXX',
+        'XX...................................................hhh.......................BB.........hhhhhhhh...............hhh.......................................hhh.....................o.o.o...................WW...XXXXXXXX',
+        'HH......o.o.o.o.o.o.o................................hhh.......................BB.........hhhhhhhh...............hhh.......................................hhh.............................................WW...XXXXXXXX',
+        'HH..@....................XX..e.......X...............hhh..........e..b..b......BB.........o.o.o.o....e...........hhh...............s......b..b...e.........hhh............X......................e..............XXXXXXXX',
+        '=================================================MM=======MM=================================================MM=======MM===============================MM=======MM================..-..-..======================XXXXXXXX',
+        '##################################################################################################################################################################################........######################XXXXXXXX',
+        '##################################################################################################################################################################################........######################XXXXXXXX',
+        '##################################################################################################################################################################################........######################XXXXXXXX',
+    ],
+    labels: [[14, 10, "DOWN THE LAWN FOR THE LOST MARBLE"], [45, 8, "ON A MUSHROOM, HOLD JUMP"], [93, 7, "DOWN: SLIDE THROUGH"], [199, 5, "JUMP AT A WALL, THEN AGAIN"]],
+    route: {"out": [[206, 16], [203.5, 9]], "back": [[1, 16]]},
+    pits: "pond",
+},
+{
+    id: "cat",
+    name: "Belling the cat",
+    item: "bell",
+    backdrop: "garden",
+    idea: "Up onto the shed roof to hang a bell on the sleeping cat, then home before it catches you.",
+    escape: {"kind": "cat", "delay": 60, "speed": 2.5, "gap": 7, "squeeze": 0.35},
+    ranks: [25, 31, 42],
+    rows: [
+        'XX..........................................................................................................................................XXXXXXXXXX',
+        'XX..........................................................................................................................................XXXXXXXXXX',
+        'XX.......................................................................................................G..................................XXXXXXXXXX',
+        'XX..........................................................................................................................................XXXXXXXXXX',
+        'XX....................................................................................................hh.............XX.....................XXXXXXXXXX',
+        'XX....................................................................................................hh.....o.o.o.o.XX.....................XXXXXXXXXX',
+        'XX....................................................................................................hh........b....XX..............Q......XXXXXXXXXX',
+        'XX....................................................................................................hh...WWWWWWWWWWWWWWWWWnnnWWWWWWWWWWW..XXXXXXXXXX',
+        'XX....................................................................................................hh...W.............................W..XXXXXXXXXX',
+        'XX....................................................................................................hh...W.............................W..XXXXXXXXXX',
+        'XX....................................................................................................hh...W.............................W..XXXXXXXXXX',
+        'XX....................................................................................................hh...W.............................W..XXXXXXXXXX',
+        'XX....................................................................................................hh...W.......WWWWWWWWWWWWWWWWW.....W..XXXXXXXXXX',
+        'XX..............................b....b................................................................hh...W.............................W..XXXXXXXXXX',
+        'XX............................WWWWWWWWWW..............................................................hh...W.............................W..XXXXXXXXXX',
+        'XX....................................................BB..............................................hh...W.............................W..XXXXXXXXXX',
+        'HH......o.o.o.o.o.o....XX.............................BB.....WWWWWWWWWW..................WW...........hh...W...BB........................W..XXXXXXXXXX',
+        'HH..@...............e..XX..........X........eb..b.....BB......o.o.o.o.........--......e..WW...b..b.........n...BB..o.o.o.o...............W..XXXXXXXXXX',
+        '============================================================================.......=========================================================XXXXXXXXXX',
+        '############################################################################.......#########################################################XXXXXXXXXX',
+        '############################################################################.......#########################################################XXXXXXXXXX',
+        '############################################################################.......#########################################################XXXXXXXXXX',
+    ],
+    labels: [[14, 12, "HANG THE BELL ON THE CAT"], [65, 12, "DOWN: SLIDE UNDER"], [96, 8, "JUMP AT A WALL, THEN AGAIN"]],
+    route: {"out": [[105, 18], [108, 7], [133, 7]], "back": [[122, 12], [104, 18], [1, 18]]},
+    inside: [[108, 8, 136, 17]],
 }];
 
 // The fastest line the search bot in test/underfoot_tempo.mjs found, per level: [input, frames], ...
 const LINES = {
-    sack: {frames: 1473, log: [[34,6],[50,2],[34,178],[50,8],[34,22],[50,2],[34,16],[50,14],[34,10],[50,2],[34,28],[50,6],[34,18],[50,6],[34,18],[8,6],[34,48],[16,6],[49,6],[50,6],[49,2],[33,4],[50,26],[34,46],[8,6],[34,96],[50,18],[34,12],[50,6],[34,24],[50,6],[34,18],[50,2],[34,28],[50,6],[34,18],[50,2],[34,16],[50,6],[34,18],[50,2],[34,16],[0,18],[33,138],[8,6],[34,36],[33,6],[49,8],[33,22],[49,2],[33,94],[8,6],[34,42],[33,18],[49,14],[33,22],[49,18],[33,48],[49,6],[33,18],[49,14],[33,22],[49,14],[33,22],[49,14],[33,22],[49,6],[33,51]]},
-    drain: {frames: 2039, log: [[34,6],[50,2],[34,154],[8,6],[0,18],[33,12],[34,36],[33,84],[8,6],[0,18],[34,72],[50,2],[34,64],[0,18],[33,12],[8,6],[34,30],[33,6],[8,6],[34,30],[33,42],[8,6],[0,18],[34,24],[50,6],[34,18],[50,12],[34,78],[0,18],[33,12],[8,6],[34,24],[49,6],[33,18],[49,6],[33,12],[49,6],[33,18],[49,6],[33,18],[0,6],[34,6],[50,2],[34,34],[50,6],[34,18],[50,6],[34,42],[8,6],[34,60],[8,6],[34,12],[16,6],[50,8],[34,4],[50,6],[49,18],[33,6],[49,2],[33,64],[49,6],[33,24],[16,6],[49,6],[0,6],[33,6],[8,6],[34,18],[16,6],[49,2],[33,4],[50,6],[34,6],[50,2],[34,4],[49,2],[33,4],[34,66],[8,6],[34,42],[8,6],[34,12],[50,2],[34,4],[50,6],[49,2],[33,4],[50,2],[34,4],[50,12],[33,12],[49,14],[33,22],[49,6],[33,18],[49,6],[33,24],[8,6],[34,24],[16,6],[49,2],[33,4],[49,6],[34,6],[50,2],[34,4],[49,2],[33,4],[34,24],[50,6],[34,18],[50,6],[34,18],[50,2],[34,16],[50,6],[34,6],[0,6],[34,6],[8,6],[34,12],[16,6],[50,2],[34,4],[50,12],[16,12],[0,6],[49,6],[34,6],[50,2],[34,4],[33,137]]},
-    bank: {frames: 1411, log: [[34,6],[50,2],[34,142],[50,2],[34,16],[50,6],[34,18],[50,8],[34,34],[50,6],[34,18],[8,6],[34,18],[50,6],[49,6],[50,2],[34,4],[50,36],[34,6],[50,18],[34,48],[8,6],[34,108],[50,2],[34,10],[0,6],[34,30],[0,30],[34,12],[50,24],[34,24],[50,2],[34,16],[50,8],[34,16],[50,6],[34,18],[50,2],[34,16],[50,6],[0,6],[34,6],[0,6],[33,12],[49,2],[33,124],[49,2],[33,28],[49,6],[33,18],[49,6],[33,96],[8,6],[34,30],[33,60],[8,6],[34,12],[49,14],[33,16],[49,14],[33,22],[49,8],[33,16],[49,8],[33,136],[34,1]]},
+    sack: {frames: 1455, log: [[34,240],[50,12],[34,78],[8,6],[34,36],[16,6],[34,6],[16,6],[50,6],[49,6],[50,2],[34,4],[50,8],[34,4],[49,6],[34,6],[0,6],[34,30],[50,8],[34,22],[50,2],[34,28],[50,2],[34,16],[33,12],[34,6],[49,6],[50,12],[34,36],[50,8],[34,64],[50,2],[34,16],[50,6],[34,18],[50,2],[34,16],[50,6],[34,12],[0,6],[34,6],[0,6],[33,138],[8,6],[34,36],[33,6],[49,8],[33,22],[49,2],[33,94],[8,6],[34,42],[33,18],[49,14],[33,22],[49,18],[33,48],[49,6],[33,18],[49,14],[33,22],[49,14],[33,22],[49,14],[33,22],[49,6],[33,51]]},
+    drain: {frames: 1979, log: [[34,156],[33,6],[34,6],[0,6],[33,6],[0,6],[33,6],[8,6],[34,6],[49,6],[33,12],[16,6],[33,18],[49,6],[33,78],[34,6],[33,6],[34,18],[8,6],[34,6],[50,6],[34,12],[50,6],[34,18],[50,8],[34,16],[50,8],[34,16],[50,6],[34,18],[33,6],[34,6],[0,6],[33,18],[8,6],[34,6],[50,2],[34,4],[50,2],[34,4],[33,24],[8,6],[34,18],[49,6],[33,18],[49,6],[33,18],[8,6],[34,6],[0,6],[33,6],[34,6],[0,6],[34,24],[50,6],[34,24],[50,8],[34,76],[9,6],[34,6],[33,6],[0,6],[33,12],[34,18],[50,2],[34,4],[50,2],[34,4],[33,30],[49,8],[33,22],[49,2],[33,16],[49,6],[33,18],[0,6],[34,24],[50,2],[34,94],[8,6],[34,12],[50,2],[34,4],[50,8],[34,4],[49,6],[50,2],[34,4],[50,6],[33,12],[49,6],[33,18],[49,6],[33,18],[49,6],[33,12],[49,12],[33,12],[8,6],[33,12],[34,18],[50,6],[33,6],[49,6],[50,2],[34,4],[50,2],[34,4],[49,6],[34,66],[8,6],[34,42],[8,6],[34,12],[50,2],[34,4],[50,8],[34,4],[49,6],[50,2],[34,4],[50,6],[33,18],[49,6],[33,18],[49,14],[33,22],[49,14],[33,22],[10,6],[34,12],[50,8],[34,4],[50,2],[34,4],[49,6],[50,12],[34,114],[8,6],[34,12],[50,2],[34,4],[50,6],[49,2],[33,4],[50,2],[34,4],[50,12],[33,137]]},
+    bank: {frames: 1295, log: [[34,132],[16,6],[34,48],[50,12],[34,12],[0,6],[34,42],[8,6],[34,12],[49,6],[50,8],[34,4],[50,6],[49,2],[33,4],[49,6],[50,6],[49,6],[34,24],[50,6],[34,18],[50,8],[34,16],[50,6],[34,18],[50,2],[34,16],[50,6],[34,18],[50,2],[34,16],[33,6],[34,18],[0,6],[34,30],[50,6],[0,6],[34,132],[33,42],[49,14],[33,22],[49,2],[33,16],[49,6],[33,36],[49,6],[33,18],[49,2],[33,94],[8,6],[34,36],[49,2],[33,58],[8,6],[34,6],[49,14],[33,22],[49,2],[33,22],[49,8],[33,28],[49,6],[33,137]]},
+    lawn: {frames: 1689, log: [[34,108],[50,2],[34,46],[50,6],[34,6],[50,6],[34,12],[50,2],[34,16],[50,30],[34,138],[8,6],[34,36],[50,14],[34,22],[50,8],[34,10],[50,8],[34,34],[50,2],[34,16],[50,6],[34,18],[50,2],[34,16],[50,6],[34,18],[50,6],[34,18],[50,12],[34,12],[50,6],[34,30],[50,14],[34,22],[50,6],[34,18],[50,6],[34,12],[0,6],[34,66],[8,6],[34,6],[50,2],[34,4],[50,8],[34,4],[49,2],[33,4],[50,2],[34,10],[33,6],[49,8],[33,46],[49,14],[33,22],[49,6],[33,18],[49,12],[33,18],[49,6],[33,18],[49,48],[33,30],[49,2],[33,16],[49,6],[33,18],[49,6],[33,18],[49,2],[33,22],[49,6],[33,12],[49,2],[33,34],[49,6],[33,24],[8,6],[34,30],[49,6],[33,18],[49,12],[33,18],[49,6],[33,18],[49,2],[33,16],[49,6],[33,18],[49,14],[33,28],[49,6],[33,18],[49,2],[33,10],[49,2],[33,4],[49,6],[33,24],[49,8],[33,109]]},
+    cat: {frames: 1141, log: [[34,66],[50,2],[34,16],[50,8],[34,28],[50,6],[34,54],[50,8],[34,34],[50,2],[34,22],[50,6],[34,36],[50,6],[34,24],[50,6],[34,12],[50,8],[34,22],[50,14],[34,22],[50,6],[34,18],[8,6],[34,12],[49,6],[50,8],[34,4],[50,2],[34,4],[49,6],[50,2],[34,4],[50,2],[34,4],[49,6],[34,30],[50,14],[34,64],[33,36],[8,6],[0,6],[33,18],[34,6],[49,2],[33,40],[9,6],[34,36],[33,12],[49,20],[33,22],[49,12],[33,42],[8,6],[34,36],[49,20],[33,22],[49,14],[33,22],[49,2],[33,10],[49,2],[33,4],[49,6],[33,12],[49,6],[33,6],[49,18],[33,90],[34,1]]},
 };
 
 </script>
@@ -1457,13 +1657,20 @@ function layout() {
 
 /* ---------------- the game ---------------- */
 // what each level sends you for, and what the way home is up against
-const ITEM = {sack: 'the seed sack', button: 'the button', berry: 'the strawberry'};
+const ITEM = {sack: 'the seed sack', button: 'the button', berry: 'the strawberry', marble: 'the marble', bell: 'the cat'};
 const GOAL = {sack: 'Fetch the seed sack from the far end of the garden →', button: 'Down the drain for the lost button ↓',
-    berry: 'Along the bank for the last strawberry →'};
+    berry: 'Along the bank for the last strawberry →', marble: 'All the way down the lawn for the lost marble →',
+    bell: 'Up on the shed roof, the cat is asleep. Bell it →'};
 const FLEE = {clock: '← Home to the mouse hole, quick!', water: '↑ Back up, before the water catches you!',
-    crumble: '← Home! The bank is giving way behind you'};
+    crumble: '← Home! The bank is giving way behind you', mower: '← Home! The mower is out',
+    cat: '← The cat is awake. Home!'};
 const LATE = {time: 'Too slow! Back to ITEM, and the clock starts again', water: 'The water caught you! Back to ITEM',
-    crumble: 'The bank gave way under you! Back to ITEM'};
+    crumble: 'The bank gave way under you! Back to ITEM', mower: 'The mower caught up! Back to ITEM',
+    cat: 'The cat caught you! Back to ITEM'};
+// what the way home is up against, as the level list and the escape counter put it
+const KIND = {clock: 'against the clock', water: 'ahead of the rising water', crumble: 'before the bank gives way',
+    mower: 'ahead of the mower', cat: 'with the cat on your trail'};
+const AHEAD = {water: 'tiles above the water', crumble: 'tiles ahead of the edge', mower: 'tiles ahead of the mower', cat: 'tiles ahead of the cat'};
 let DEF = null, level = null, totalSeeds = 0, lateWhy = 'time';
 function loadLevel(id) {
     DEF = LEVELS.find(l => l.id === id) || LEVELS[0];
@@ -1485,6 +1692,8 @@ let ghost = null;                     // a recorded run, replayed beside this on
 const assist = () => ({coyote: opt.coyote, buffer: opt.buffer, corner: opt.corner});
 function restart() {
     game = UF.newGame(level, {assist: assist(), viewW: view.tiles});
+    SCARF.tails = null;
+    catView.x = null;
     fx.length = 0;
     flashes.length = 0;
     trail.length = 0;
@@ -1655,7 +1864,7 @@ function heldBits() {
 
 /* ---------------- sound: soft, mostly noise, nothing that plays a tune at you ---------------- */
 const sound = (() => {
-    let ac = null, out = null;
+    let ac = null, out = null, hum = null;
     function unlock() {
         if (!opt.sound) return;
         try {
@@ -1708,6 +1917,7 @@ const sound = (() => {
         kick: () => { noise(0.08, 0.45, 180, 1.2); tone('sine', 120, 70, 0.08, 0.12); noise(0.14, 0.2, 1400, 0.8, 3000, 'bandpass', 0.02); },
         knock: n => { tone('sine', 520 + Math.min(n, 12) * 45, 180, 0.09, 0.09); noise(0.05, 0.3, 900, 1); },
         tier: t => noise(0.35, 0.35, t > 1 ? 900 : 600, 1.2, t > 1 ? 5200 : 3600),
+        tierDown: () => noise(0.3, 0.18, 1800, 1, 500),
         slide: () => noise(0.3, 0.3, 2400, 0.6, 900),
         crash: () => { noise(0.25, 0.7, 260, 0.8, 90); tone('sine', 90, 40, 0.2, 0.2); },
         bonk: () => { tone('sine', 240, 90, 0.14, 0.12); noise(0.06, 0.3, 500, 1); },
@@ -1720,6 +1930,33 @@ const sound = (() => {
         gush: () => { noise(1.2, 0.5, 300, 0.6, 120, 'lowpass'); noise(0.8, 0.25, 1800, 0.7, 700, 'bandpass', 0.1); },
         bubble: () => tone('sine', 300 + Math.random() * 300, 700 + Math.random() * 400, 0.06, 0.04),
         rumble: v => noise(0.4, 0.25 + 0.35 * v, 110, 0.7, 60, 'lowpass'),
+        boing: () => { tone('sine', 150, 480, 0.2, 0.14); noise(0.07, 0.35, 260, 1); },
+        // a small brass bell: three partials that do not agree, dying away
+        jingle: v => { for (const [f, a, dl] of [[2890, 1, 0], [4120, 0.6, 0.004], [5530, 0.35, 0.03]]) tone('sine', f * (0.99 + Math.random() * 0.02), f, 0.22, 0.03 * v * a, dl); },
+        hiss: () => { noise(0.75, 0.35, 5200, 0.6, 3000, 'highpass'); noise(0.3, 0.12, 700, 1.2, 400, 'bandpass', 0.02); },
+        swipe: () => { noise(0.18, 0.5, 2600, 0.8, 600); tone('sine', 320, 90, 0.2, 0.1); },
+        mowerOn: () => { tone('sawtooth', 40, 118, 0.6, 0.05); noise(0.5, 0.2, 400, 0.8, 1500, 'bandpass'); },
+        // the mower's whirr, held for as long as it is out, louder as it nears
+        motor: v => {
+            if (!ac) return;
+            if (!hum) {
+                if (!v || !opt.sound) return;
+                const o = ac.createOscillator(), o2 = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain();
+                const f = ac.createBiquadFilter(), g = ac.createGain(), g2 = ac.createGain();
+                o.type = 'sawtooth'; o.frequency.value = 118;
+                o2.type = 'triangle'; o2.frequency.value = 355;
+                g2.gain.value = 0.35;
+                f.type = 'lowpass'; f.frequency.value = 800; f.Q.value = 1.2;
+                lfo.frequency.value = 13; lg.gain.value = 180;          // the blades, chopping the air
+                lfo.connect(lg).connect(f.frequency);
+                g.gain.value = 0;
+                o.connect(f); o2.connect(g2).connect(f); f.connect(g).connect(out);
+                for (const x of [o, o2, lfo]) x.start();
+                hum = {o, g};
+            }
+            hum.g.gain.setTargetAtTime(opt.sound ? v * 0.07 : 0, ac.currentTime, 0.06);
+            hum.o.frequency.setTargetAtTime(112 + v * 14, ac.currentTime, 0.1);
+        },
         clear: () => { noise(0.5, 0.25, 800, 0.8, 4000); tone('sine', 660, 660, 0.12, 0.05, 0.05); tone('sine', 990, 990, 0.25, 0.05, 0.14); },
     };
 })();
@@ -1735,6 +1972,8 @@ function step() {
     if (game.p.mode === 'play') rec.push(h | (pr & 63) << 6);
     UF.step(game, {h, p: pr});
     stepGhost();
+    stepScarf();
+    stepChaser();
     const p = game.p;
     for (const e of game.events) onEvent(e);
     // presentation that should move at game speed lives here, not in render()
@@ -1767,7 +2006,7 @@ function step() {
         if (++beat >= gap) { beat = 0; sound.beat(close); }
         if (kind === 'clock' && d < 5.5 && game.escapeT % 60 === 0) sound.tick();
         if (kind === 'water' && d < 6 && game.frame % 9 === 0 && Math.random() < 0.5) sound.bubble();
-        if (kind === 'crumble') shake = Math.max(shake, Math.max(0, 4 - d) * 0.8);
+        if (kind === 'crumble') shake = Math.max(shake, Math.max(0, 3 - d) * 0.5);
     }
     if (opt.debug) computeArcs(h);
 }
@@ -1800,7 +2039,7 @@ function onEvent(e) {
             break;
         case 'break':
             sound.brk();
-            shake = Math.max(shake, 2);
+            shake = Math.max(shake, 1);
             for (let i = 0; i < 4; i++) fx.push({kind: 'shard', x: e.tx * 16 + 4 + (i % 2) * 8,
                 y: e.ty * 16 + 4 + (i >> 1) * 8, vx: (i % 2 ? 1 : -1) * (1 + Math.random() * 0.6) + (e.smash ? p.vx / FX * 0.6 : 0),
                 vy: -3.4 + (i >> 1) * 1.2, g: 0.28, drag: 0.99, life: 50, max: 50, rot: 0,
@@ -1820,6 +2059,9 @@ function onEvent(e) {
             }
             popup(e.tier > 1 ? 'FASTEST' : 'FASTER', p.x / FX, p.y / FX - 34, TIER_COLOR[e.tier], 40);
             break;
+        case 'tierDown':
+            sound.tierDown();
+            break;
         case 'kick':
             if (e.id !== undefined) { sound.kick(); break; }       // a shell, kicked
             sound.kick();
@@ -1835,7 +2077,7 @@ function onEvent(e) {
         case 'crash':
             sound.crash();
             buzz(30);
-            shake = 7;
+            shake = 5;
             for (let i = 0; i < 5; i++) fx.push({kind: 'star', x: p.x / FX, y: p.y / FX - 26, vx: (Math.random() - 0.5) * 2.4,
                 vy: -1.5 - Math.random() * 1.5, g: 0.12, drag: 0.97, life: 40, max: 40, rot: 0, spin: 0.2});
             popup('CRASH', p.x / FX, p.y / FX - 36, '#6b7280', 40);
@@ -1843,7 +2085,7 @@ function onEvent(e) {
         case 'bonked':
             sound.bonk();
             buzz(20);
-            shake = Math.max(shake, 3);
+            shake = Math.max(shake, 2);
             break;
         case 'stomp': {
             const e2 = game.ents.find(x => x.id === e.id);
@@ -1863,6 +2105,14 @@ function onEvent(e) {
             if (e.n % 10 === 0) popup(`${e.n} in a row`, p.x / FX, p.y / FX - 40, TIER_COLOR[Math.max(1, p.tier)], 50);
             break;
         }
+        case 'boing': {
+            sound.boing();
+            sq.x = 0.75; sq.y = 1.3;
+            const L = game.level;
+            for (const k of [-1, 0, 1]) if (UF.tileAt(L, e.tx + k, e.ty) === T.SHROOM) bumps.set(e.ty * L.w + e.tx + k, 0);
+            dust(p.x / FX, p.y / FX, 4, 0);
+            break;
+        }
         case 'comboEnd':
             if (e.n >= 3) popup(e.broken ? `run of ${e.n} broken` : `${e.n} in a row`, p.x / FX, p.y / FX - 40, '#2b3240', 60);
             break;
@@ -1870,9 +2120,12 @@ function onEvent(e) {
             sound.bump();
             break;
         case 'escape': {
-            if (e.kind === 'water') sound.gush(); else sound.escape();
+            if (e.kind === 'water') sound.gush();
+            else if (e.kind === 'mower') { sound.escape(); sound.mowerOn(); }
+            else if (e.kind === 'cat') { sound.hiss(); catView.x = null; }
+            else sound.escape();
             buzz(40);
-            shake = 8;
+            shake = 5;
             goalFx = 200;
             beat = 0;
             // the boards that held come apart
@@ -1888,7 +2141,9 @@ function onEvent(e) {
         }
         case 'late':
             lateWhy = e.why;
+            if (e.why === 'cat') sound.swipe();
             sound.late();
+            catView.x = null;
             buzz(60);
             lateFx = 120;
             trail.length = 0;
@@ -1974,7 +2229,6 @@ const clock = frames => {
 // ranks: S is within reach of the search bot's line, A is what a flawless run gets that never
 // goes past running speed, B leaves room for mistakes (see test/underfoot_tempo.mjs)
 const rankOf = (def, frames) => { const i = def.ranks.findIndex(t => frames <= t * 60); return i < 0 ? 'C' : 'SAB'[i]; };
-const KIND = {clock: 'against the clock', water: 'ahead of the rising water', crumble: 'before the bank gives way'};
 function listLevels() {
     const list = $('level-list');
     list.textContent = '';
@@ -2050,13 +2304,13 @@ function showClear() {
     const idx = 'SABC'.indexOf(rank);
     $('done-rank').textContent = rank;
     $('done-rank').dataset.rank = rank;
-    $('done-title').textContent = `Home with ${ITEM[DEF.item]}`;
+    $('done-title').textContent = DEF.item === 'bell' ? 'Home, and the cat is belled' : `Home with ${ITEM[DEF.item]}`;
     $('done-sub').textContent = (isBest && was ? `A new best, ${((was - t) / 60).toFixed(2)} s faster. ` : '')
         + (idx > 0 ? `${'SAB'[idx - 1]} is ${R[idx - 1]} seconds or less.` : 'That is about as fast as it goes.');
     const rows = [
         ['Time', clock(t)],
         ['Best', clock(bests[DEF.id].frames)],
-        [`Out to ${ITEM[DEF.item]}`, clock(game.itemTime)],
+        [DEF.item === 'bell' ? 'Out to the cat' : `Out to ${ITEM[DEF.item]}`, clock(game.itemTime)],
         ['Home again', clock(esc) + (level.escape.kind === 'clock' ? ` of ${level.escape.time} s` : '')],
         ['Longest run of hits', String(game.bestCombo)],
         ['Seeds', `${game.seeds} of ${totalSeeds}`],
@@ -2122,6 +2376,8 @@ const S = {
     twig: '#8a6340', twigHi: '#b08858', leaf: '#6fae4c', leafLo: '#4f8a38',
     board: '#d2a974', boardHi: '#ecc995', boardLo: '#9c7547', nail: '#4a4550',
     crate: '#c98b52', crateHi: '#e9b57a', crateLo: '#8e5a2f', crateMark: 'rgba(120,60,30,.55)',
+    shroom: '#d9483b', shroomHi: '#f07a5e', shroomLo: '#a8342c', gill: '#efe2c4',
+    hedge: '#4a7f43', hedgeMid: '#3d6d3b', hedgeLo: '#2d5332', hedgeHi: '#77ab5b', hedgeTip: '#a2d073',
     ink: '#3a2a22',
 };
 
@@ -2173,7 +2429,8 @@ function mask(L, tx, ty) {
 function depthOf(L, tx, ty) {
     for (let d = 0; d < 4; d++) {
         const t = UF.tileAt(L, tx, ty - d - 1);
-        if (!(t === T.GROUND || t === T.GRASS || t === T.STONE || t === T.WOOD)) return d;
+        if (!(t === T.GROUND || t === T.GRASS || t === T.STONE || t === T.WOOD)) return t === T.SHROOM ? d + 1 : d;
+        if (t === T.GRASS) return d + 1;        // what stands on the grass is not more earth
     }
     return 4;
 }
@@ -2494,6 +2751,27 @@ function paintClod(g, v, m, openL, openR) {
     }
 }
 
+// a lily pad on the pond, now and then with its flower
+function paintLily(g, v) {
+    blob(g, 8, 4.2, 9, 2, 'rgba(20,50,70,.35)');
+    g.fillStyle = '#5f9e46';
+    g.beginPath();
+    g.ellipse(8, 2.6, 8.6, 2.6, 0, 0.35, TAU - 0.05);
+    g.lineTo(8, 2.6);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = '#3d6f30';
+    g.lineWidth = 0.6;
+    g.stroke();
+    blob(g, 5.5, 1.8, 4, 0.9, '#86c264');
+    g.strokeStyle = 'rgba(40,90,40,.6)';
+    g.lineWidth = 0.35;
+    for (const a of [0.9, 1.9, 2.9, 3.9, 4.9]) { g.beginPath(); g.moveTo(8, 2.6); g.lineTo(8 + Math.cos(a) * 7, 2.6 + Math.sin(a) * 2.1); g.stroke(); }
+    if (v % 3 === 0) {
+        for (let k = 0; k < 6; k++) blob(g, 11 + Math.cos(k / 6 * TAU) * 1.6, 0.4 + Math.sin(k / 6 * TAU) * 0.7 - 1, 1.5, 0.8, k % 2 ? '#f6c6d6' : '#fbe2ea', k / 6 * TAU);
+        blob(g, 11, -0.6, 0.8, 0.6, '#f2c14e');
+    }
+}
 function paintTwig(g, v, joinL, joinR) {
     // a twig laid across: bark on top, a leaf hanging here and there
     const l = joinL ? 0 : 1.5, r = joinR ? 16 : 14.5;
@@ -2554,6 +2832,28 @@ function paintBoards(g, v, on, across) {
     for (const [x, y] of [[1.8, 2.5], [14.2, 2.8], [1.8, 7.9], [14.2, 8.1], [1.8, 13.2], [14.2, 13.4]]) blob(g, x, y, 0.45, 0.45, S.nail);
 }
 
+// a pop-up sprinkler in the lawn: a cap in the grass, until the gardener turns the water on
+function paintSprinkler(g, v, on) {
+    g.strokeStyle = S.ink;
+    g.lineWidth = 0.8;
+    if (on) {
+        g.fillStyle = '#2f5d3a';
+        rrect(g, 3.6, 2.5, 8.8, 13, 1.5);
+        g.fill();
+        g.stroke();
+        blob(g, 5.6, 9, 1, 5, 'rgba(160,220,170,.35)');
+        g.fillStyle = '#c9a24a';
+        rrect(g, 2.6, 0, 10.8, 3.4, 1.4);
+        g.fill();
+        g.stroke();
+        blob(g, 5, 0.9, 2.4, 0.6, '#f0d27f');
+        g.fillStyle = '#3a3a40';
+        g.fillRect(7.2, -1.2, 1.6, 1.4);
+    }
+    g.fillStyle = '#39463c';
+    g.beginPath(); g.ellipse(8, 15.4, 6.8, 1.6, 0, 0, TAU); g.fill(); g.stroke();
+    blob(g, 7, 15, 3.5, 0.6, 'rgba(255,255,255,.25)');
+}
 function paintCrate(g, v, on) {
     // crates, dropped across the way home: only an outline until they are there
     if (!on) {
@@ -2582,6 +2882,77 @@ function paintCrate(g, v, on) {
     g.lineWidth = 0.7;
     g.beginPath(); g.arc(8, 8, 2.4, 0, TAU); g.stroke();
     for (const [x, y] of [[1.1, 2], [1.1, 14], [14.9, 2], [14.9, 14]]) blob(g, x, y, 0.45, 0.45, S.nail);
+}
+
+// a fly agaric in the lawn, two tiles across: `half` is which of them this is (0 left, 1 right)
+function paintShroom(g, v, half) {
+    paintSoil(g, 0, v, 14);
+    g.save();
+    g.beginPath();
+    g.rect(half ? 0 : -3, -10, 19, 30);
+    g.clip();
+    if (half) g.translate(-16, 0);
+    // the gills, pale under the rim
+    g.fillStyle = S.gill;
+    g.beginPath(); g.ellipse(16, 4.2, 13.5, 2.6, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(150,120,80,.5)';
+    g.lineWidth = 0.4;
+    for (let x = 5; x <= 27; x += 2) { g.beginPath(); g.moveTo(x, 3.2); g.lineTo(16 + (x - 16) * 0.8, 5.8); g.stroke(); }
+    // the cap
+    const cap = () => {
+        g.beginPath();
+        g.moveTo(0.8, 4);
+        g.bezierCurveTo(0.5, -4.5, 8, -8.2, 16, -8.2);
+        g.bezierCurveTo(24, -8.2, 31.5, -4.5, 31.2, 4);
+        g.quadraticCurveTo(16, 1.6, 0.8, 4);
+        g.closePath();
+    };
+    cap();
+    g.fillStyle = S.shroom;
+    g.fill();
+    g.save();
+    cap();
+    g.clip();
+    blob(g, 16, 5, 17, 5, S.shroomLo);
+    blob(g, 10, -4.5, 7, 3, S.shroomHi, -0.2);
+    // white warts, flatter towards the rim
+    for (const [x, y, r] of [[9, -4, 1.5], [16, -6.4, 1.3], [22.5, -4.2, 1.7], [5.5, 0.2, 1.1], [13, -1.2, 1.2], [19.5, -0.8, 1], [27, 0, 1.2], [24.5, -6.5, 0.8]])
+        blob(g, x + (hash(v * 3 + x) - 0.5) * 0.8, y, r, r * 0.75, '#fbf5e8');
+    g.restore();
+    cap();
+    g.strokeStyle = S.ink;
+    g.lineWidth = 0.9;
+    g.stroke();
+    g.restore();
+}
+// a clipped hedge: dark inside, leaves in clumps, lit along the top; `m` is which neighbours are hedge
+function paintHedge(g, v, m) {
+    const openU = !(m & 1), openR = !(m & 2), openD = !(m & 4), openL = !(m & 8);
+    const l = openL ? 0.6 : 0, r = openR ? 15.4 : 16, t = openU ? 1.5 : 0, b = openD ? 15 : 16;
+    g.fillStyle = S.hedgeLo;
+    rrect(g, l, t, r - l, b - t, [openU && openL ? 5 : 0, openU && openR ? 5 : 0, openD && openR ? 4 : 0, openD && openL ? 4 : 0]);
+    g.fill();
+    // clumps: the dark ones deep in, then the mid, then a few lit
+    for (let i = 0; i < 16; i++) {
+        const x = l + 1.5 + hash(v * 17 + i) * (r - l - 3), y = t + 1.5 + hash(v * 29 + i * 3) * (b - t - 3), rr = 1.8 + hash(v * 5 + i) * 1.6;
+        blob(g, x, y, rr, rr * 0.8, i < 6 ? S.hedgeMid : i < 13 ? S.hedge : S.hedgeHi, hash(i) * 3);
+    }
+    // leaves spilling over the open edges
+    const edge = (x, y, c) => blob(g, x, y, 1.9 + hash(x * 3 + y) * 0.8, 1.5 + hash(x + y * 5) * 0.6, c, hash(x * y) * 3);
+    if (openL) for (let y = t + 2; y < b - 1; y += 3) edge(l + 0.3, y + hash(v + y) * 1.5, S.hedge);
+    if (openR) for (let y = t + 2; y < b - 1; y += 3) edge(r - 0.3, y + hash(v * 2 + y) * 1.5, S.hedgeMid);
+    if (openD) for (let x = l + 2; x < r - 1; x += 3) edge(x, b - 0.4, S.hedgeMid);
+    if (openU) {
+        for (let x = l + 1.5; x < r; x += 3) edge(x + hash(v + x) * 1.2, t + 0.3, S.hedge);
+        for (let x = l + 2.5; x < r - 1; x += 3.5) blob(g, x + hash(v * 7 + x), t - 0.2, 1.4, 0.9, S.hedgeHi);
+        for (let x = l + 3; x < r - 2; x += 5) blob(g, x + hash(v * 11 + x) * 2, t - 0.6, 0.8, 0.5, S.hedgeTip);
+    }
+    // a twig showing through, now and then
+    if (v === 3) {
+        g.strokeStyle = S.barkLo;
+        g.lineWidth = 0.7;
+        g.beginPath(); g.moveTo(5, 13); g.quadraticCurveTo(7, 9, 11, 8); g.stroke();
+    }
 }
 
 function paintHome(g, top, left, theme) {
@@ -2663,6 +3034,7 @@ function tileSprite(L, t, tx, ty, theme) {
             return cached(4e6 + ((openL * 2 + openR) * 2 + openU) * 8 + v, 22, 24, 3, 5, g => paintClod(g, v, openU ? 0 : 1, openL, openR));
         }
         case T.ONEWAY: {
+            if (DEF.pits === 'pond') return cached(5e6 + 100 + v, 22, 26, 3, 5, g => paintLily(g, v));
             const jl = UF.tileAt(L, tx - 1, ty) === T.ONEWAY, jr = UF.tileAt(L, tx + 1, ty) === T.ONEWAY;
             return cached(5e6 + (jl * 2 + jr) * 8 + v, 22, 26, 3, 5, g => paintTwig(g, v, jl, jr));
         }
@@ -2672,7 +3044,17 @@ function tileSprite(L, t, tx, ty, theme) {
             return cached(6e6 + (L.on * 2 + across) * 8 + v, 20, 20, 2, 2, g => paintBoards(g, v, L.on, across));
         }
         case T.ESC_ON:
+            if (DEF.item === 'marble') return cached(7e6 + 100 + L.on * 8 + v, 20, 20, 2, 2, g => paintSprinkler(g, v, L.on));
             return cached(7e6 + L.on * 8 + v, 20, 20, 2, 2, g => paintCrate(g, v, L.on));
+        case T.SHROOM: {
+            const half = UF.tileAt(L, tx - 1, ty) === T.SHROOM ? 1 : 0;
+            return cached(1.1e7 + half * 8 + v, 22, 32, 3, 10, g => paintShroom(g, v, half));
+        }
+        case T.HEDGE: {
+            const hh = (x, y) => UF.tileAt(L, x, y) === T.HEDGE;
+            const m = (hh(tx, ty - 1) ? 1 : 0) | (hh(tx + 1, ty) ? 2 : 0) | (hh(tx, ty + 1) ? 4 : 0) | (hh(tx - 1, ty) ? 8 : 0);
+            return cached(1.2e7 + m * 8 + v, 22, 22, 3, 3, g => paintHedge(g, v, m));
+        }
         case T.HOME: {
             const top = UF.tileAt(L, tx, ty - 1) !== T.HOME, left = UF.tileAt(L, tx - 1, ty) !== T.HOME || tx === 0;
             return cached(8e6 + (theme * 2 + top) * 2 + left, 18, 18, 1, 1, g => paintHome(g, top, left, theme));
@@ -2972,8 +3354,8 @@ function render(alpha) {
     const K = view.tile / 16 * dpr;                     // device pixels per game pixel
     spriteScale(K);
     const p = game.p, L = game.level;
-    const sh = shake > 0 ? shake * (((game.frame * 7) % 5) / 2 - 1) : 0;
-    const camX = lerp(prev.cx, game.cam.x, alpha) / FX + sh, camY = lerp(prev.cy, game.cam.y, alpha) / FX - sh * 0.5;
+    const shx = shake > 0 ? shake * Math.sin(game.frame * 1.7) * 0.7 : 0, shy = shake > 0 ? shake * Math.cos(game.frame * 2.3) * 0.4 : 0;
+    const camX = lerp(prev.cx, game.cam.x, alpha) / FX + shx, camY = lerp(prev.cy, game.cam.y, alpha) / FX + shy;
     const ox = vx0 - Math.round(camX * K), oy = vy0 - Math.round(camY * K);
     const X = gx => ox + Math.round(gx * K), Y = gy => oy + Math.round(gy * K);
     const esc = game.escape, kind = level.escape.kind, theme = TH[DEF.backdrop] || 0;
@@ -3000,7 +3382,22 @@ function render(alpha) {
     const layerFs = [0.12, 0.3, 0.55];
     for (let i = 0; i < 3; i++) drawLayer(bgLayer(theme, esc ? 1 : 0, i), layerFs[i], camX, gs, vx0, vy0, vw, vh, BG_FILL[i] && look[BG_FILL[i]]);
 
-    if (DEF.backdrop === 'garden') {
+    if (DEF.pits === 'pond') {
+        // a garden pond, wherever the lawn has a gap: still water, the sky in it
+        const wy = Y(groundY + 5);
+        if (wy < vy0 + vh) {
+            const rg = ctx.createLinearGradient(0, wy, 0, wy + 50 * K);
+            rg.addColorStop(0, esc ? '#7a6f98' : '#7fb8d6');
+            rg.addColorStop(1, esc ? '#2a2640' : '#24506e');
+            ctx.fillStyle = rg;
+            ctx.fillRect(vx0, wy, vw, vy0 + vh - wy);
+            ctx.fillStyle = 'rgba(255,255,255,.35)';
+            for (let i = 0; i < 10; i++) {
+                const x = ((hash(i) * 900 - camX * K + Math.sin(game.frame * 0.02 + i) * 6 * K) % (vw + 60 * K) + vw + 60 * K) % (vw + 60 * K) - 30 * K;
+                ctx.fillRect(vx0 + x, wy + (2 + hash(i * 3) * 14) * K, (4 + hash(i * 5) * 8) * K, 0.7 * K);
+            }
+        }
+    } else if (DEF.backdrop === 'garden') {
         // the dark of a hole in the ground, wherever the path has a gap
         const top = Y(groundY + 6);
         if (top < vy0 + vh) {
@@ -3036,6 +3433,31 @@ function render(alpha) {
                 for (let y = -by; y < vh + H; y += H) up === 1 ? ctx.drawImage(c, vx0 + Math.round(x), vy0 + Math.round(y)) : ctx.drawImage(c, vx0 + Math.round(x), vy0 + Math.round(y), Math.ceil(W), Math.ceil(H));
             ctx.restore();
         }
+    }
+    // inside a shed: its back wall of boards, light through the cracks
+    for (const [x0, y0, x1, y1] of DEF.inside || []) {
+        const l = Math.max(X(x0 * 16), vx0), r = Math.min(X((x1 + 1) * 16), vx0 + vw), t = Y(y0 * 16), b = Y((y1 + 1) * 16);
+        if (r <= l || b <= vy0 || t >= vy0 + vh) continue;
+        ctx.fillStyle = '#3a2718';
+        ctx.fillRect(l, t, r - l, b - t);
+        for (let tx = x0; tx <= x1; tx++) {
+            const bx = X(tx * 16), bw = X(tx * 16 + 16) - bx;
+            if (bx + bw < l || bx > r) continue;
+            ctx.fillStyle = tx % 3 === 0 ? '#5c3f28' : tx % 3 === 1 ? '#654630' : '#583b25';
+            ctx.fillRect(bx + K * 0.6, t, bw - K * 1.2, b - t);
+            ctx.fillStyle = 'rgba(255,220,160,.07)';
+            ctx.fillRect(bx + K * 0.6, t, K * 1.2, b - t);
+            if (hash(tx) < 0.25) {
+                ctx.fillStyle = esc ? 'rgba(255,170,120,.35)' : 'rgba(255,240,200,.4)';
+                ctx.fillRect(bx - K * 0.3, t + (b - t) * hash(tx * 7) * 0.6, K * 0.6, (b - t) * 0.25);
+            }
+        }
+        const sg = ctx.createLinearGradient(0, t, 0, b);
+        sg.addColorStop(0, 'rgba(20,12,6,.55)');
+        sg.addColorStop(0.5, 'rgba(20,12,6,.15)');
+        sg.addColorStop(1, 'rgba(20,12,6,.35)');
+        ctx.fillStyle = sg;
+        ctx.fillRect(l, t, r - l, b - t);
     }
     // morning light through the leaves
     if (!esc && (DEF.backdrop !== 'drain' || gs > vy0)) {
@@ -3091,6 +3513,13 @@ function render(alpha) {
         ctx.fillRect(X(tx * 16), Y(ty * 16), X(tx * 16 + 16) - X(tx * 16), Y(end * 16) - Y(ty * 16));
     }
 
+    // the mower, behind the tiles: going round a hedge or a bed, it is behind it
+    if (esc && kind === 'mower' && game.chase) {
+        const mx = game.chase.pos / FX, gy = (level.start.ty + 1) * 16;
+        if (mx > camX - 60 && mx < camX + view.tiles * 16 + 60)
+            drawMower(X(mx), Y(gy), level.escape.dir, K, Math.max(0, 1 - UF.danger(game) / 5));
+    }
+
     // the tiles: painted pictures, copied
     for (let ty = Math.max(0, ty0); ty < Math.min(level.h, ty1 + 1); ty++) {
         for (let tx = Math.max(0, tx0); tx < Math.min(level.w, tx1 + 1); tx++) {
@@ -3109,6 +3538,17 @@ function render(alpha) {
             if (t === T.ITEM) { drawItemTile(x, y, K); continue; }
             const s = tileSprite(L, t, tx, ty, theme);
             if (s) blit(s, x, y);
+            if (t === T.ESC_ON && L.on && DEF.item === 'marble') {
+                // the water: a fan of drops going round
+                ctx.fillStyle = 'rgba(200,230,255,.8)';
+                for (let k = 0; k < 7; k++) {
+                    const ph = ((game.frame * 0.9 + k * 9 + tx * 13) % 60) / 60, a = Math.sin(game.frame * 0.04 + tx) * 0.9 + (k - 3) * 0.12;
+                    const dx = Math.sin(a) * ph * 30, dy = -Math.cos(a) * ph * 26 + ph * ph * 30;
+                    ctx.globalAlpha = 1 - ph;
+                    ctx.fillRect(x + (8 + dx) * K, y + (-1 + dy) * K, 1.1 * K, 1.1 * K);
+                }
+                ctx.globalAlpha = 1;
+            }
         }
     }
 
@@ -3133,6 +3573,16 @@ function render(alpha) {
         if (ex < camX - 24 || ex > camX + view.tiles * 16 + 24) continue;
         drawEnt(e, ox + ex * K, oy + ey * K, K);
     }
+    // the cat: asleep by the collar you are to bell, then on your trail
+    if (DEF.item === 'bell' && level.item) {
+        const it = level.item;
+        if (!esc) drawCat(X(it.tx * 16 + 8), Y(it.ty * 16 + 16), K, level.escape.dir, 'sleep', 0, 0, false);
+        else if (game.chase && catView.x !== null) {
+            const c = game.chase, pose = c.wait > 0 ? 'wake' : catView.low ? 'squeeze' : 'run';
+            drawCat(X(catView.x / FX), Y(catView.y / FX), K, catView.f, pose, catView.ph, pose === 'run' ? catView.tilt : 0,
+                pose === 'wake' && c.wait > level.escape.delay - 30 ? 'new' : true);
+        }
+    }
 
     // the ghost of a recorded run
     if (ghost && ghost.s.p.mode === 'play') {
@@ -3152,7 +3602,11 @@ function render(alpha) {
     // the mouse: blinking while it cannot be hurt
     const px = lerp(prev.px, p.x, alpha) / FX, py = lerp(prev.py, p.y, alpha) / FX;
     if (p.inv > 0 && (game.frame >> 2) % 2 === 0) ctx.globalAlpha = 0.35;
+    // the scarf's ends fly behind a mouse that stands, and lie over the back of one that runs low
+    const over = p.duck || p.h < 20 * FX;
+    if (!over) drawScarf(ox, oy, K, px - p.x / FX, py - p.y / FX);
     drawMouse(p, ox + px * K, oy + py * K, K);
+    if (over) drawScarf(ox, oy, K, px - p.x / FX, py - p.y / FX);
     ctx.globalAlpha = 1;
     for (const e of game.ents) if (!e.gone && e.state === 'flip') { const [ex, ey] = entPos(e); drawEnt(e, ox + ex * K, oy + ey * K, K); }
 
@@ -3240,6 +3694,14 @@ function render(alpha) {
                 ctx.fillRect(-2 * K, -2.4 * K, 3 * K, K);
             }
             ctx.restore();
+        } else if (f.kind === 'clip') {
+            ctx.globalAlpha = Math.min(1, a * 2);
+            ctx.save();
+            ctx.translate(X(f.x), Y(f.y));
+            ctx.rotate(f.rot);
+            ctx.fillStyle = f.c;
+            ctx.fillRect(-1.6 * K, -0.4 * K, 3.2 * K, 0.8 * K);
+            ctx.restore();
         } else if (f.kind === 'streak') {
             ctx.globalAlpha = a;
             ctx.fillStyle = TIER_COLOR[f.tier];
@@ -3285,6 +3747,36 @@ function render(alpha) {
         const pulse = near > 0 ? (0.5 + 0.5 * Math.sin(game.frame * (0.12 + near * 0.2))) * near : 0;
         ctx.globalAlpha = 0.14 + pulse * 0.35;
         ctx.drawImage(vignette(kind === 'water' ? '30,80,200' : '200,40,30', vw, vh), vx0, vy0, vw, vh);
+        ctx.globalAlpha = 1;
+        // the mower or the cat, when it is out of sight: a badge on the edge nearest it, pointing
+        const cat = kind === 'cat' && catView.x !== null;
+        if (game.chase && p.mode === 'play' && (kind === 'mower' || cat)) {
+            // its front: the badge shows only once all of it is out of sight
+            const sx = kind === 'mower' ? X(game.chase.pos / FX) : X(catView.x / FX);
+            const sy = kind === 'mower' ? Y((level.start.ty + 1) * 16 - 9) : Y(catView.y / FX - 14), r = 17 * dpr, m = r + 12 * dpr;
+            if (sx < vx0 || sx > vx0 + vw || sy < vy0 || sy > vy0 + vh) {
+                const bx = Math.max(vx0 + m, Math.min(vx0 + vw - m, sx)), by = Math.max(vy0 + m, Math.min(vy0 + vh - m, sy));
+                const near = Math.max(0, 1 - UF.danger(game) / 8), a = Math.atan2(sy - by, sx - bx), red = `rgba(200,45,35,${0.75 + near * 0.25})`;
+                ctx.save();
+                ctx.translate(bx, by);
+                ctx.scale(1 + Math.sin(game.frame * (0.12 + near * 0.25)) * 0.07 * near, 1 + Math.sin(game.frame * (0.12 + near * 0.25)) * 0.07 * near);
+                ctx.fillStyle = red;
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(a) * (r + 10 * dpr), Math.sin(a) * (r + 10 * dpr));
+                ctx.lineTo(Math.cos(a + 0.55) * r, Math.sin(a + 0.55) * r);
+                ctx.lineTo(Math.cos(a - 0.55) * r, Math.sin(a - 0.55) * r);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255,247,236,.94)';
+                ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+                ctx.strokeStyle = red;
+                ctx.lineWidth = 2.5 * dpr;
+                ctx.stroke();
+                ctx.beginPath(); ctx.arc(0, 0, r - 1.5 * dpr, 0, TAU); ctx.clip();
+                if (kind === 'mower') { const u = r / 24; drawMower(level.escape.dir * 19 * u, 10 * u, level.escape.dir, u, near); }
+                else { const u = r / 40; drawCat(catView.f * 20 * u, 22 * u, u, catView.f, 'run', catView.ph, 0, true); }
+                ctx.restore();
+            }
+        }
     } else {
         // a soft vignette, always
         ctx.globalAlpha = 0.22;
@@ -3327,11 +3819,13 @@ function drawItemTile(x, y, K) {
     g.addColorStop(1, 'rgba(255,243,196,0)');
     ctx.fillStyle = g;
     ctx.fillRect(cx - 16 * K, by - 24 * K, 32 * K, 32 * K);
-    ctx.save();
-    ctx.translate(cx, by + bob);
-    ctx.scale(K, K);
-    drawItem(ctx, DEF.item);
-    ctx.restore();
+    if (DEF.item !== 'bell') {
+        ctx.save();
+        ctx.translate(cx, by + bob);
+        ctx.scale(K, K);
+        drawItem(ctx, DEF.item);
+        ctx.restore();
+    }
     if (game.frame % 50 < 25) {
         const r = (game.frame % 50) / 25;
         ctx.fillStyle = `rgba(255,255,240,${1 - r})`;
@@ -3400,6 +3894,44 @@ function drawItem(g, kind) {
         g.lineWidth = 0.55;
         g.beginPath(); g.moveTo(-1.5, -9); g.lineTo(1.5, -6); g.moveTo(1.5, -9); g.lineTo(-1.5, -6); g.stroke();
         blob(g, -3, -11, 1.8, 1, 'rgba(255,230,220,.8)', -0.6);
+    } else if (kind === 'marble') {
+        // a glass marble, a twist of colour caught inside
+        const mg = g.createRadialGradient(-2.2, -9, 0.5, 0, -6.5, 7);
+        mg.addColorStop(0, '#f2fbff');
+        mg.addColorStop(0.45, '#9fd3ea');
+        mg.addColorStop(1, '#3f86ad');
+        g.fillStyle = mg;
+        g.beginPath(); g.arc(0, -6.5, 6.5, 0, TAU); g.fill();
+        g.save();
+        g.beginPath(); g.arc(0, -6.5, 6.2, 0, TAU); g.clip();
+        g.fillStyle = '#e8563a';
+        g.beginPath(); g.moveTo(-5.5, -4); g.bezierCurveTo(-2, -12, 2, -1, 5.5, -9); g.bezierCurveTo(2.5, -3, -1.5, -12.5, -5.5, -4); g.fill();
+        g.fillStyle = '#ffc94a';
+        g.beginPath(); g.moveTo(-4.5, -3.5); g.bezierCurveTo(-1.5, -9, 1.5, -3, 4.5, -8.5); g.bezierCurveTo(1.5, -4.5, -1, -9.8, -4.5, -3.5); g.fill();
+        blob(g, 1.5, -2.5, 4, 1.8, 'rgba(20,60,90,.25)');
+        g.restore();
+        g.beginPath(); g.arc(0, -6.5, 6.5, 0, TAU); g.stroke();
+        blob(g, -2.4, -9.4, 1.7, 1.1, 'rgba(255,255,255,.9)', -0.6);
+        blob(g, 2.8, -3.6, 0.8, 0.5, 'rgba(255,255,255,.6)', -0.6);
+    } else if (kind === 'bell') {
+        // a little brass bell for a cat's collar, on a loop of red ribbon
+        g.strokeStyle = '#c2352d';
+        g.lineWidth = 1.4;
+        g.beginPath(); g.arc(0, -12.6, 1.7, 0, TAU); g.stroke();
+        g.strokeStyle = S.ink;
+        g.lineWidth = 0.9;
+        const bg = g.createRadialGradient(-2, -8.5, 0.5, 0, -6, 6.5);
+        bg.addColorStop(0, '#fff2b0');
+        bg.addColorStop(0.5, '#e9b73c');
+        bg.addColorStop(1, '#a8741a');
+        g.fillStyle = bg;
+        g.beginPath(); g.arc(0, -6, 5.6, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = '#5a3a10';
+        g.beginPath(); g.moveTo(-3.6, -3.6); g.quadraticCurveTo(0, -2.6, 3.6, -3.6); g.lineWidth = 0.9; g.strokeStyle = '#5a3a10'; g.stroke();
+        blob(g, -3.8, -3.7, 0.9, 0.9, '#5a3a10');
+        blob(g, 3.8, -3.7, 0.9, 0.9, '#5a3a10');
+        blob(g, -2, -8.4, 1.6, 1, 'rgba(255,255,255,.75)', -0.6);
+        g.strokeStyle = S.ink;
     } else {
         // the last strawberry of the summer
         g.save();
@@ -3448,7 +3980,7 @@ function drawItem(g, kind) {
 const FUR = {fur: '#f1e8dc', furShade: '#d9cabb', belly: '#fcf8f1', ear: '#f3b8b6', earIn: '#e48e92', nose: '#e0717a', tail: '#e7a9a4', foot: '#f2c9c3', scarf: '#d8453b', scarfLo: '#a7322a'};
 function drawMouse(p, x, y, u, tint) {
     const f = p.facing, h = p.h / FX;
-    const speed = Math.abs(p.vx) / FX, fast = speed >= 2.4;
+    const speed = Math.abs(p.vx) / FX;
     const low = p.duck || h < 20;
     const air = !p.onGround;
     const t = game.frame;
@@ -3462,7 +3994,7 @@ function drawMouse(p, x, y, u, tint) {
         // a soft shadow on the ground
         if (p.onGround) blob(ctx, 0, 0, low ? 8 : 6.5, 1.3, 'rgba(30,20,10,.22)');
     }
-    const lean = p.skid ? -f * 0.18 : p.touchWall ? -f * 0.1 : fast ? f * (0.12 + p.tier * 0.05) : speed > 1 ? f * 0.07 : 0;
+    const lean = leanOf(p);
     ctx.transform(1, 0, -lean, 1, 0, 0);
     if (!tint) ctx.scale(sq.x, sq.y);
     if (p.stun > 0 && !tint) ctx.rotate(Math.sin(t * 0.6) * 0.12);
@@ -3484,26 +4016,8 @@ function drawMouse(p, x, y, u, tint) {
     ctx.bezierCurveTo(-bodyRx - 6, bodyY + 8 - stream * 6 + wag, -bodyRx - 10 - stream * 4, bodyY + 2 - stream * 4, -bodyRx - 14 - stream * 6, bodyY - 3 + stream * 3 - wag);
     ctx.stroke();
 
-    // the scarf: a collar round the neck, knotted at the back, its two ends flying behind
-    const a0 = low ? 0.55 * Math.PI : 0.3 * Math.PI, a1 = low ? 1.25 * Math.PI : 1.02 * Math.PI;
-    const knotX = headX + Math.cos(a1) * (headR - 0.3), knotY = headY + Math.sin(a1) * (headR - 0.3);
-    {
-        const flap = Math.sin(t * (0.3 + stream * 0.4)) * (1.2 + stream * 1.5);
-        const len = 4.5 + stream * 9 + (air ? 3 : 0), droop = (1 - stream) * (low ? 1 : 4);
-        ctx.fillStyle = tint || FUR.scarf;
-        for (const k of [0, 1]) {
-            const end = knotY + droop + flap * (k ? 1 : -0.7) + k * 1.2;
-            ctx.beginPath();
-            ctx.moveTo(knotX, knotY - 0.8 + k * 0.6);
-            ctx.quadraticCurveTo(knotX - len * 0.5, knotY + droop * 0.5 + flap * (k ? -0.6 : 1), knotX - len, end);
-            ctx.lineTo(knotX - len + 0.6, end + 1.8);
-            ctx.quadraticCurveTo(knotX - len * 0.5, knotY + 1.6 + droop * 0.5 + flap * (k ? -0.6 : 1), knotX, knotY + 1 + k * 0.6);
-            ctx.fill();
-        }
-    }
-
     // ears, behind the head: the far one darker
-    const earY = headY - headR + (low ? 1.2 : 0.2), earBack = low ? -2.8 : 0;
+    const earY = headY - headR + (low ? 1.2 : 0.2), earBack = low ? -4.2 : 0;
     const ears = [[-3 + earBack, earY - 0.5, 3.6, 0.5], [2.4 + earBack, earY - 1, 4, 1]];
     ctx.strokeStyle = S.ink;
     for (const [ex, ey, er, near] of ears) {
@@ -3579,24 +4093,44 @@ function drawMouse(p, x, y, u, tint) {
         }
     }
 
-    // the collar of the scarf, and its knot
+    // the scarf, wrapped once round the neck and knotted at the back (its ends are drawn behind,
+    // from their own little simulation: see scarf)
+    ctx.save();
+    const nk = low ? NECK.low : NECK.up;
+    ctx.translate(nk.x, nk.y); ctx.rotate(nk.a); ctx.scale(nk.s, 1);
+    const band = () => {
+        ctx.beginPath();
+        ctx.moveTo(-5.3, -1.9);
+        ctx.quadraticCurveTo(0, -1.1, 5.3, -1.3);
+        ctx.quadraticCurveTo(6.4, 0, 5.4, 1.5);
+        ctx.quadraticCurveTo(0, 2.6, -5.1, 1);
+        ctx.quadraticCurveTo(-6.1, -0.4, -5.3, -1.9);
+        ctx.closePath();
+    };
+    band();
+    ctx.fillStyle = tint || FUR.scarf;
+    ctx.fill();
     if (!tint) {
+        ctx.lineWidth = 0.8;
         ctx.strokeStyle = S.ink;
-        ctx.lineWidth = 3.4;
-        ctx.beginPath(); ctx.arc(headX, headY, headR - 0.3, a0, a1); ctx.stroke();
-    }
-    ctx.strokeStyle = tint || FUR.scarf;
-    ctx.lineWidth = 2.2;
-    ctx.beginPath(); ctx.arc(headX, headY, headR - 0.3, a0, a1); ctx.stroke();
-    if (!tint) {
+        ctx.stroke();
+        // a fold along it, and light on its upper edge
         ctx.strokeStyle = FUR.scarfLo;
-        ctx.lineWidth = 0.6;
-        ctx.beginPath(); ctx.arc(headX, headY, headR + 0.3, a0 + 0.15, a1 - 0.1); ctx.stroke();
+        ctx.lineWidth = 0.55;
+        ctx.beginPath(); ctx.moveTo(-4.4, 0.3); ctx.quadraticCurveTo(0, 1, 4.6, 0.3); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,190,170,.7)';
+        ctx.beginPath(); ctx.moveTo(-3.8, -1.2); ctx.quadraticCurveTo(0, -0.6, 3.8, -0.8); ctx.stroke();
+        // the knot
+        ctx.fillStyle = FUR.scarfLo;
+        ctx.beginPath(); ctx.ellipse(-5.3, -0.2, 1.6, 1.9, 0.3, 0, TAU); ctx.fill();
+        ctx.lineWidth = 0.7;
+        ctx.strokeStyle = S.ink;
+        ctx.stroke();
     }
-    blob(ctx, knotX, knotY + 0.3, 1.5, 1.3, tint || FUR.scarfLo);
+    ctx.restore();
 
     // the item, carried on the back on the way home
-    if (!tint && p === game.p && game.escape) {
+    if (!tint && p === game.p && game.escape === (DEF.item !== 'bell')) {
         ctx.save();
         ctx.translate(-bodyRx + (low ? 1 : 0.5), bodyY + (low ? -2 : 1.5));
         ctx.scale(0.55, 0.55);
@@ -3617,8 +4151,349 @@ function drawMouse(p, x, y, u, tint) {
     ctx.restore();
 }
 
+/* ----- what chases you, as it looks and sounds ----- */
+// the cat on its trail: where it is, which way it faces, how far into its stride, how it leans
+let catView = {x: null, y: 0, f: -1, ph: 0, tilt: 0, low: false};
+function stepChaser() {
+    const c = game.chase, kind = level.escape.kind, live = game.escape && game.p.mode === 'play';
+    if (kind === 'cat') {
+        if (!live || !c) { catView.x = null; return; }
+        const a = UF.catAt(c), path = c.path;
+        const moved = catView.x === null ? 0 : Math.hypot(a.x - catView.x, a.y - catView.y) / FX;
+        const before = Math.floor(catView.ph / Math.PI);
+        catView.ph += moved * 0.13;
+        if (a.dir) catView.f = a.dir;
+        const b = path[1] || path[0], dx = b[0] - path[0][0], dy = b[1] - path[0][1];
+        const tilt = dx || dy ? Math.max(-1.1, Math.min(1.1, Math.atan2(dy, Math.abs(dx) + 1))) : 0;
+        catView.tilt += (tilt - catView.tilt) * 0.2;
+        catView.low = a.low;
+        catView.x = a.x;
+        catView.y = a.y;
+        // the bell rings with the stride, louder as the cat comes on
+        if (!c.wait && Math.floor(catView.ph / Math.PI) !== before)
+            sound.jingle(Math.max(0.25, Math.min(1, 1.4 - UF.danger(game) / 8)));
+    } else if (kind === 'mower' && live && c && c.wait === 0 && !c.round && game.frame % 2 === 0) {
+        // clippings, thrown up behind it
+        const d = level.escape.dir, x = c.pos / FX - d * (16 + Math.random() * 20), y = (level.start.ty + 1) * 16 - 2;
+        fx.push({kind: 'clip', x, y, vx: -d * (0.5 + Math.random() * 1.5), vy: -1 - Math.random() * 1.8, g: 0.1, drag: 0.97,
+            life: 36, max: 36, rot: Math.random() * 3, spin: (Math.random() - 0.5) * 0.5,
+            c: ['#72bd4e', '#a8e06f', '#4d9a3c'][Math.floor(Math.random() * 3)]});
+        const d0 = UF.danger(game);
+        if (d0 < 3) shake = Math.max(shake, (3 - d0) * 0.35);
+    }
+}
+
+/* ----- the scarf's ends ----- */
+// Two short ropes hanging from the knot, stepped with the game: they trail behind at speed, hang
+// when the mouse stands, swing when it turns. Positions in game px, in the world.
+const SCARF = {SEG: 1.9, N: 6, tails: null};
+// where the band sits on the mouse, facing right: round the neck when it stands, and when it runs
+// low, up the back of the head from throat to nape (shortened, as a ring seen from the side is)
+const NECK = {up: {x: 0, y: -15.2, a: 0, s: 1}, low: {x: 2.4, y: -8.2, a: 1.85, s: 0.8}};
+function leanOf(p) {
+    const f = p.facing, speed = Math.abs(p.vx) / FX;
+    return p.skid ? -f * 0.18 : p.touchWall ? -f * 0.1 : speed >= 2.4 ? f * (0.12 + p.tier * 0.05) : speed > 1 ? f * 0.07 : 0;
+}
+// the knot, through the same transforms drawMouse draws it with, so the ends leave from it
+function scarfKnot(p) {
+    const nk = (p.duck || p.h < 20 * FX) ? NECK.low : NECK.up, kx = -5.3 * nk.s, ky = -0.2;
+    const lx = nk.x + kx * Math.cos(nk.a) - ky * Math.sin(nk.a), ly = nk.y + kx * Math.sin(nk.a) + ky * Math.cos(nk.a);
+    return [p.x / FX + sq.x * p.facing * lx - leanOf(p) * sq.y * ly, p.y / FX + sq.y * ly];
+}
+function stepScarf() {
+    const p = game.p, [ax, ay] = scarfKnot(p);
+    if (!SCARF.tails || Math.hypot(SCARF.tails[0][0].x - ax, SCARF.tails[0][0].y - ay) > 24) {
+        // new or moved far: hanging down the back
+        SCARF.tails = [0, 1].map(k => Array.from({length: SCARF.N}, (_, i) => {
+            const x = ax - p.facing * i * SCARF.SEG * (0.45 - k * 0.15), y = ay + i * SCARF.SEG * 0.9 + k * 0.7;
+            return {x, y, px: x, py: y};
+        }));
+    }
+    const speed = Math.min(1, Math.abs(p.vx) / FX / 4);
+    SCARF.tails.forEach((pts, k) => {
+        pts[0].x = ax; pts[0].y = ay + k * 0.7;
+        for (let i = 1; i < pts.length; i++) {
+            // cloth is light for the air it pushes: most of its speed goes each frame
+            const q = pts[i], vx = (q.x - q.px) * 0.82, vy = (q.y - q.py) * 0.82;
+            q.px = q.x; q.py = q.y;
+            q.x += vx;
+            // a little weight, and at speed the flutter of cloth in the wind
+            q.y += vy + 0.09 + Math.sin(game.frame * (0.55 + k * 0.17) + i * 1.3 + k * 2) * 0.16 * speed * i;
+        }
+        // it does not stretch: each point follows the one before at arm's length, and the pull
+        // on a point is taken back out of the one before it, or the ends would whip
+        const cx = [], cy = [];
+        for (let i = 1; i < pts.length; i++) {
+            const a = pts[i - 1], b = pts[i], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+            cx[i] = a.x + dx / d * SCARF.SEG - b.x; cy[i] = a.y + dy / d * SCARF.SEG - b.y;
+            b.x += cx[i]; b.y += cy[i];
+        }
+        for (let i = 1; i < pts.length - 1; i++) { pts[i].px += cx[i + 1] * 0.9; pts[i].py += cy[i + 1] * 0.9; }
+    });
+}
+// the ends as ribbons, narrowing to a frayed tip; dx, dy move them to where the mouse is drawn
+function drawScarf(ox, oy, K, dx, dy) {
+    if (!SCARF.tails) return;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    SCARF.tails.slice().reverse().forEach((pts, r) => {
+        const k = 1 - r, left = [], right = [];
+        for (let i = 0; i < pts.length; i++) {
+            const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+            let nx = -(b.y - a.y), ny = b.x - a.x;
+            const n = Math.hypot(nx, ny) || 1, w = 1.35 - i * 0.1;
+            nx /= n; ny /= n;
+            const x = pts[i].x + dx, y = pts[i].y + dy;
+            left.push([ox + (x + nx * w) * K, oy + (y + ny * w) * K]);
+            right.push([ox + (x - nx * w) * K, oy + (y - ny * w) * K]);
+        }
+        ctx.beginPath();
+        left.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+        for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i][0], right[i][1]);
+        ctx.closePath();
+        ctx.fillStyle = k ? FUR.scarf : FUR.scarfLo;
+        ctx.fill();
+        ctx.strokeStyle = S.ink;
+        ctx.lineWidth = 0.7 * K;
+        ctx.stroke();
+        // a frayed end
+        const e = pts[pts.length - 1], e2 = pts[pts.length - 2];
+        ctx.lineWidth = 0.45 * K;
+        ctx.strokeStyle = k ? FUR.scarf : FUR.scarfLo;
+        for (const o of [-0.6, 0, 0.6]) {
+            ctx.beginPath();
+            ctx.moveTo(ox + (e.x + dx) * K, oy + (e.y + dy + o) * K);
+            ctx.lineTo(ox + (e.x + dx + (e.x - e2.x) * 0.6) * K, oy + (e.y + dy + o + (e.y - e2.y) * 0.6) * K);
+            ctx.stroke();
+        }
+    });
+}
+
 /* ----- creatures ----- */
 // drawn around their feet (x, y) in device px, u device px to a game px; each faces left unless
+/* ----- the mower and the cat ----- */
+// The robot mower, its front at (x, y) in device px, going d: an orange shell on a grey chassis, a
+// big back wheel, the red stop button on top, and a light that goes red and quick as it nears you.
+function drawMower(x, y, d, u, near) {
+    const t = game.frame;
+    ctx.save();
+    ctx.translate(x, y + Math.sin(t * 1.9) * 0.3 * u);
+    ctx.scale(d * u, u);
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.strokeStyle = S.ink;
+    blob(ctx, -19, 0, 21, 1.8, 'rgba(30,20,10,.25)');
+    ctx.fillStyle = '#3b4048';
+    rrect(ctx, -38, -9, 37.5, 7.2, 3);
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    if (t % 3) { ctx.fillStyle = 'rgba(230,235,240,.75)'; ctx.fillRect(-28, -2.4, 16, 0.7); }
+    const shell = () => {
+        ctx.beginPath();
+        ctx.moveTo(-37, -7);
+        ctx.bezierCurveTo(-37, -15.5, -31, -19.5, -22, -19.5);
+        ctx.lineTo(-11, -19.5);
+        ctx.bezierCurveTo(-4, -19.5, -1.2, -13.5, -1.2, -7);
+        ctx.closePath();
+    };
+    shell();
+    ctx.fillStyle = '#ee7a2f';
+    ctx.fill();
+    ctx.save();
+    shell();
+    ctx.clip();
+    blob(ctx, -19, -6, 22, 4.8, '#c95e1e');
+    blob(ctx, -26, -16.5, 9, 2.4, '#ffb070', -0.1);
+    ctx.restore();
+    shell();
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    // the panel: a light, and the stop button
+    ctx.fillStyle = '#2b2f36';
+    rrect(ctx, -24, -19, 11, 3.2, 1.4);
+    ctx.fill();
+    const lit = near > 0.5 ? t % 12 < 6 : t % 40 < 30;
+    blob(ctx, -15.5, -17.4, 1.05, 0.95, lit ? (near > 0.5 ? '#ff4a3a' : '#86ff6e') : '#40464f');
+    blob(ctx, -30.5, -19, 2.4, 1.4, '#d9302a');
+    ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.ellipse(-30.5, -19, 2.4, 1.4, 0, 0, TAU); ctx.stroke();
+    ctx.fillStyle = '#5a616b';
+    rrect(ctx, -2.6, -10.5, 3.6, 7.5, 1.5);
+    ctx.fill();
+    ctx.stroke();
+    for (const [wx, wr] of [[-31, 5.4], [-7, 3.1]]) {
+        blob(ctx, wx, -wr, wr, wr, '#25282e');
+        ctx.strokeStyle = S.ink;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath(); ctx.arc(wx, -wr, wr, 0, TAU); ctx.stroke();
+        blob(ctx, wx, -wr, wr * 0.42, wr * 0.42, '#9aa3ad');
+        ctx.strokeStyle = '#5d646e';
+        ctx.lineWidth = 0.6;
+        for (let k = 0; k < 3; k++) {
+            const a = t * 0.45 + k * TAU / 3;
+            ctx.beginPath(); ctx.moveTo(wx, -wr); ctx.lineTo(wx + Math.cos(a) * wr * 0.8, -wr + Math.sin(a) * wr * 0.8); ctx.stroke();
+        }
+    }
+    ctx.restore();
+}
+
+// The cat, a ginger tabby, drawn round its front feet at (x, y) in device px, facing f. `pose` is
+// sleep, wake, run or squeeze; `ph` is the stride; `tilt` leans it along a climb or a drop.
+const CATC = {fur: '#e58c3e', shade: '#c46d2a', stripe: '#a5521d', pale: '#f8dcb4', nose: '#e27a86', eye: '#b9e04a', earIn: '#f0a293'};
+function drawCat(x, y, u, f, pose, ph, tilt, bell) {
+    const t = game.frame;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(u * 1.3, u * 1.3);
+    if (pose !== 'sleep' && pose !== 'wake') blob(ctx, -18, 0, 20, 1.8, 'rgba(30,20,10,.22)');
+    ctx.scale(f, 1);
+    ctx.rotate(tilt);
+    ctx.lineJoin = ctx.lineCap = 'round';
+    const ink = S.ink;
+    const limb = (x0, y0, x1, y1, w, c) => {
+        for (const [ww, cc] of [[w + 1.8, ink], [w, c]]) {
+            ctx.strokeStyle = cc;
+            ctx.lineWidth = ww;
+            ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo((x0 + x1) / 2 + 1, (y0 + y1) / 2, x1, y1); ctx.stroke();
+        }
+    };
+    const tail = pts => {
+        for (const [ww, cc] of [[4.6, ink], [2.8, CATC.fur]]) {
+            ctx.strokeStyle = cc;
+            ctx.lineWidth = ww;
+            ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); ctx.bezierCurveTo(pts[2], pts[3], pts[4], pts[5], pts[6], pts[7]); ctx.stroke();
+        }
+        blob(ctx, pts[6], pts[7], 1.5, 1.5, CATC.stripe);
+    };
+    const ear = (ex, ey, a, s) => {
+        ctx.save();
+        ctx.translate(ex, ey);
+        ctx.rotate(a);
+        ctx.scale(1, s);
+        ctx.beginPath(); ctx.moveTo(-3.6, 0); ctx.lineTo(-0.6, -7.5); ctx.lineTo(3, 0); ctx.closePath();
+        ctx.fillStyle = CATC.fur; ctx.fill();
+        ctx.strokeStyle = ink; ctx.lineWidth = 1; ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-2, -0.5); ctx.lineTo(-0.7, -5.2); ctx.lineTo(1.4, -0.5); ctx.closePath();
+        ctx.fillStyle = CATC.earIn; ctx.fill();
+        ctx.restore();
+    };
+    // a head at (hx, hy): ears, the round face, muzzle, nose, whiskers; eyes open, wide or shut
+    const head = (hx, hy, r, eyes, earA, earS) => {
+        ear(hx - 3.5, hy - r * 0.62, earA - 0.25, earS);
+        ear(hx + 2.8, hy - r * 0.72, earA + 0.15, earS);
+        ctx.fillStyle = CATC.fur;
+        ctx.beginPath(); ctx.ellipse(hx, hy, r * 1.08, r, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = ink; ctx.lineWidth = 1.3; ctx.stroke();
+        ctx.save();
+        ctx.beginPath(); ctx.ellipse(hx, hy, r * 1.08, r, 0, 0, TAU); ctx.clip();
+        blob(ctx, hx - r * 0.7, hy + 1, r * 0.55, r, CATC.shade);
+        ctx.strokeStyle = CATC.stripe; ctx.lineWidth = 1.1;
+        for (const k of [-1, 0, 1]) { ctx.beginPath(); ctx.moveTo(hx + k * 2.2 - 1, hy - r); ctx.lineTo(hx + k * 1.6 - 0.5, hy - r * 0.55); ctx.stroke(); }
+        blob(ctx, hx + r * 0.55, hy + r * 0.35, r * 0.55, r * 0.42, CATC.pale);
+        ctx.restore();
+        blob(ctx, hx + r * 0.98, hy + 0.2, 1.3, 0.95, CATC.nose);
+        ctx.strokeStyle = 'rgba(255,250,240,.85)'; ctx.lineWidth = 0.35;
+        for (const dy of [-0.4, 0.8, 2]) { ctx.beginPath(); ctx.moveTo(hx + r * 0.75, hy + 1.2 + dy * 0.3); ctx.lineTo(hx + r + 5.5, hy + dy * 1.8); ctx.stroke(); }
+        const ex = hx + r * 0.42, ey = hy - r * 0.2;
+        ctx.strokeStyle = ink;
+        if (eyes === 'shut') {
+            ctx.lineWidth = 0.9;
+            ctx.beginPath(); ctx.moveTo(ex - 1.8, ey); ctx.quadraticCurveTo(ex, ey + 1.4, ex + 1.8, ey); ctx.stroke();
+        } else {
+            const w = eyes === 'wide' ? 2.2 : 2, h = eyes === 'wide' ? 2.2 : 1.5;
+            blob(ctx, ex, ey, w, h, CATC.eye);
+            ctx.lineWidth = 0.7;
+            ctx.beginPath(); ctx.ellipse(ex, ey, w, h, 0, 0, TAU); ctx.stroke();
+            blob(ctx, ex + 0.3, ey, eyes === 'wide' ? 1.2 : 0.45, h * 0.9, '#1c1718');
+            blob(ctx, ex - 0.5, ey - 0.6, 0.45, 0.45, '#fff');
+        }
+    };
+    const body = (bx, by, rx, ry) => {
+        ctx.fillStyle = CATC.fur;
+        ctx.beginPath(); ctx.ellipse(bx, by, rx, ry, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = ink; ctx.lineWidth = 1.4; ctx.stroke();
+        ctx.save();
+        ctx.beginPath(); ctx.ellipse(bx, by, rx, ry, 0, 0, TAU); ctx.clip();
+        blob(ctx, bx, by + ry * 0.75, rx, ry * 0.5, CATC.shade);
+        ctx.strokeStyle = CATC.stripe; ctx.lineWidth = 1.6;
+        for (let k = -2; k <= 2; k++) {
+            const sx = bx + k * rx * 0.3;
+            ctx.beginPath(); ctx.moveTo(sx - 1, by - ry); ctx.quadraticCurveTo(sx + 1.5, by - ry * 0.4, sx - 0.5, by + ry * 0.1); ctx.stroke();
+        }
+        ctx.restore();
+    };
+    const collar = (cx, cy, a) => {
+        ctx.strokeStyle = '#c2352d';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.ellipse(cx, cy, 2.2, 5.2, a, 0, TAU); ctx.stroke();
+        if (bell) {
+            ctx.save();
+            ctx.translate(cx + 1, cy + 5.4);
+            ctx.rotate(Math.sin(ph * 2) * 0.5);
+            ctx.scale(0.42, 0.42);
+            ctx.translate(0, 13);
+            drawItem(ctx, 'bell');
+            ctx.restore();
+        }
+    };
+    if (pose === 'sleep') {
+        // curled up in the sun, tail round its nose, breathing
+        const br = Math.sin(t * 0.045) * 0.6;
+        tail([-26, -4, -30, 3, -6, 3, 6, -1.5]);
+        body(-13, -9.5 - br * 0.5, 17, 9.5 + br);
+        blob(ctx, 3.5, -1.8, 3.4, 2, CATC.pale);
+        ctx.strokeStyle = ink; ctx.lineWidth = 0.9;
+        ctx.beginPath(); ctx.ellipse(3.5, -1.8, 3.4, 2, 0, 0, TAU); ctx.stroke();
+        head(-0.5, -9 - br * 0.3, 7.8, 'shut', 0.25, 0.85);
+        ctx.fillStyle = 'rgba(60,45,80,.55)';
+        ctx.font = '700 6px system-ui, sans-serif';
+        for (let k = 0; k < 2; k++) {
+            const a = ((t + k * 60) % 120) / 120;
+            ctx.globalAlpha = Math.sin(a * Math.PI);
+            ctx.fillText('z', 4 + a * 6 + k * 3, -20 - a * 14);
+        }
+        ctx.globalAlpha = 1;
+    } else if (pose === 'wake') {
+        // up at once, fur on end, the tail lashing
+        tail([-16, -3, -26, -2, -30, -18 + Math.sin(t * 0.35) * 6, -36, -24 + Math.sin(t * 0.35 + 1) * 7]);
+        limb(-14, -8, -14, -0.5, 3.4, CATC.shade);
+        body(-10, -14, 11.5, 12.5);
+        blob(ctx, -3, -13, 5, 8, CATC.pale);
+        limb(-3, -12, -2, -0.5, 3.4, CATC.fur);
+        limb(2, -12, 3, -0.5, 3.4, CATC.fur);
+        collar(1, -21, 0.2);
+        head(2, -29, 8.4, 'wide', -0.05, 1.1);
+        if (bell === 'new') {
+            ctx.fillStyle = '#d6324a';
+            ctx.font = '900 12px system-ui, sans-serif';
+            ctx.fillText('!', 0, -44);
+        }
+    } else if (pose === 'squeeze') {
+        // flat to the ground, legs out, ears back: through a gap too low for it
+        tail([-40, -5, -48, -6, -54, -4, -62, -5]);
+        limb(-34, -4, -40, 0, 3, CATC.shade);
+        limb(-2, -4, 5, 0, 3, CATC.shade);
+        body(-20, -5.5, 23, 5.2);
+        limb(-30, -4, -26, 0, 3, CATC.fur);
+        limb(-6, -4, 1, 0, 3, CATC.fur);
+        collar(0, -7, 1.2);
+        head(4, -7.5, 7, 'open', -0.9, 0.7);
+    } else {
+        // the gallop: front and back pairs swinging against each other, the back stretching
+        const sn = Math.sin(ph), bob = Math.abs(Math.cos(ph)) * 2;
+        tail([-37, -19 - bob, -46, -24, -50, -26 + Math.sin(ph * 0.5) * 5, -58, -30 + Math.sin(ph * 0.5 + 1) * 5]);
+        const fx0 = -6, hx0 = -30;
+        limb(fx0, -12 - bob, fx0 + Math.sin(ph + 0.6) * 9, -Math.max(0, Math.cos(ph + 0.6)) * 4, 3.4, CATC.shade);
+        limb(hx0, -13 - bob, hx0 - Math.sin(ph + 0.6) * 9, -Math.max(0, -Math.cos(ph + 0.6)) * 4, 3.6, CATC.shade);
+        body(-18, -17 - bob, 19 + sn * 2.5, 8.5 - sn * 0.8);
+        blob(ctx, -6, -13 - bob, 6, 4.5, CATC.pale);
+        limb(fx0 + 1, -12 - bob, fx0 + 1 + sn * 9, -Math.max(0, Math.cos(ph)) * 4, 3.4, CATC.fur);
+        limb(hx0 - 1, -13 - bob, hx0 - 1 - sn * 9, -Math.max(0, -Math.cos(ph)) * 4, 3.6, CATC.fur);
+        collar(-1, -21 - bob, 0.35);
+        head(3, -26 - bob * 0.6, 8.2, 'open', -0.45, 0.95);
+    }
+    ctx.restore();
+}
+
 // it walks right
 function drawEnt(e, x, y, u) {
     const t = game.frame + e.id * 7;
@@ -3805,8 +4680,9 @@ function drawHud(dpr) {
     // the tier: three chevrons, lit as speed steps up, and a bar filling towards the next
     const cw = fs * 0.62, tw = cw * 3 + pad * 1.6, tx = pill('', null, tw);
     const running = p.tier > 0 || Math.abs(p.vx) >= P.RUN_MAX * 0.98;
+    const waning = p.tier > 0 && p.hold < P.HOLD && (game.frame >> 2) % 2 === 0;
     for (let i = 0; i < 3; i++) {
-        ctx.fillStyle = i <= p.tier && running ? TIER_COLOR[i] : 'rgba(255,255,255,.18)';
+        ctx.fillStyle = i <= p.tier && running && !(waning && i === p.tier) ? TIER_COLOR[i] : 'rgba(255,255,255,.18)';
         const cx = tx + pad * 0.8 + i * cw, cy = y + bh / 2;
         ctx.beginPath();
         ctx.moveTo(cx, cy - fs * 0.38);
@@ -3851,7 +4727,7 @@ function drawHud(dpr) {
         if (kind !== 'clock') {
             ctx.font = `700 ${Math.round(big * 0.42)}px system-ui, sans-serif`;
             ctx.fillStyle = 'rgba(255,255,255,.8)';
-            ctx.fillText(kind === 'water' ? 'tiles above the water' : 'tiles ahead of the edge', cx, yy + big * 1.5 + big * 0.45);
+            ctx.fillText(AHEAD[kind], cx, yy + big * 1.5 + big * 0.45);
         }
         ctx.textAlign = 'left';
     }
@@ -4004,6 +4880,9 @@ function frame(now) {
     let n = 0;
     while (acc >= STEP && n < 5) { step(); acc -= STEP; n++; }
     if (n === 5) acc = 0;
+    // the mower's whirr: on while it is out and the game runs, louder as it nears
+    const mow = game.escape && level.escape.kind === 'mower' && game.chase && !game.chase.wait && game.p.mode === 'play' && !paused && !open;
+    sound.motor(mow ? Math.max(0.15, Math.min(1, 1.2 - UF.danger(game) / 12)) : 0);
     render(paused || open ? 1 : acc / STEP);
     requestAnimationFrame(frame);
 }
@@ -4016,7 +4895,7 @@ if (query.has('menu')) openMenu();
 requestAnimationFrame(frame);
 window.UNDERFOOT = {get game() { return game; }, get ghost() { return ghost; }, opt, view, step, restart, setOpt,
     script: fn => { scripted = fn; }, pause: v => { paused = v; }, loadLevel, LINES, get level() { return DEF.id; },
-    render: () => render(1), bgLayer, BG, SPR};
+    render: () => render(1), bgLayer, BG, SPR, SCARF};
 })();
 </script>
 </body>
