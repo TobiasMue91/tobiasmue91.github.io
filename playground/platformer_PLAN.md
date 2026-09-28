@@ -15,7 +15,9 @@ Gameplay besser, und darauf lasse sich langfristig besser aufbauen. Weitergebaut
 `playground/underfoot_tempo.html`. **T1 ist gebaut** (Abschnitt 17): Das Rutschen kostet kein Tempo
 mehr, und es gibt drei Level mit drei Arten von Flucht (Uhr, steigendes Wasser, wegbrechendes
 Ufer). Dem Nutzer gefällt das; beim Ufer hat er „den Druck richtig gespürt“. Danach kam **T3,
-die Grafik** (Abschnitt 18), vorgezogen auf seinen Wunsch: „mehr Details und mehr Ästhetik“. Die Abschnitte 1 bis 12 beschreiben noch den ursprünglichen SMB-Plan. Steuerung,
+die Grafik** (Abschnitt 18), vorgezogen auf seinen Wunsch: „mehr Details und mehr Ästhetik“.
+Mit T4 (Abschnitt 19) kamen Level 4 und 5, und mit Titelbildschirm und neuem Menü (Abschnitt 20)
+ist das Spiel als `games/underfoot.html` veröffentlicht. Die Abschnitte 1 bis 12 beschreiben noch den ursprünglichen SMB-Plan. Steuerung,
 Fairness-Schicht, Levelformat und Testweise gelten weiter.
 
 **Was der Nutzer nach M1 gesagt hat (gilt für alles Weitere):** Die Maus „rutscht ständig über den
@@ -1392,3 +1394,27 @@ Maus trägt die Glocke auf dem Rücken hin.
 - **Musik:** Es gibt noch keine.
 - **Rückmeldung:** Wie sich die neue Stufenregel und die ruhigere Kamera anfühlen, muss der Nutzer
   sagen.
+
+## 20. Titelbildschirm, Menü, Veröffentlichung (2026-09-28)
+
+Der Nutzer: „Sehr gut. Das macht allmählich richtig Spaß. Wollen wir noch kurz das Menü verbessern
+und ggf. einen Startscreen dazubasteln? Im Anschluss könnte man diese Version vielleicht schonmal
+releasen.“
+
+- **Titelbildschirm:**
+  - Das Logo „Underfoot“ mit rotem Band.
+  - Fünf Levelkarten mit dem Gegenstand als Bild, der Art der Flucht, Rang und Bestzeit (oder der
+    Zeit für S), dazu „Spielen“, „So wird gespielt“ und „Einstellungen“.
+  - Dahinter spielt der gewählte Level seine schnellste Linie stumm vor und fängt am Ende neu an.
+  - Pfeiltasten, Steuerkreuz und Antippen wählen den Level. Enter, A oder ein zweites Tippen auf die
+    Karte startet ihn.
+- **Pause-Menü:** Weiter, Neustart, Alle Level, So wird gespielt, darunter die Einstellungen. Über
+  dem Titel ist dasselbe Fenster nur „Einstellungen“.
+- **So wird gespielt:** Bewegungen und Steuerung in einem eigenen Fenster statt im Menü.
+- **Veröffentlicht:**
+  - Die Seite ist jetzt `games/underfoot.html`, mit Eintrag im Katalog, in der Seitenleiste, in
+    der Sitemap und mit Vorschaubild 346.
+  - Das Spiel ist „featured“. Dafür verliert Family Feud (2024) die Markierung.
+  - Der Test `test/underfoot_tempo.mjs` liest jetzt diese Seite (`npm run test:underfoot`).
+- **Für Tests und Bildschirmfotos:** Mit `?play` in der Adresse startet die Seite direkt im Spiel,
+  ohne Titel.

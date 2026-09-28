@@ -392,6 +392,23 @@ minify.html's JavaScript scanner, before template literals inside `${...}` were 
 than searched, printed a different tree for one inline script on the site
 (`tools/html_template_generator.html`).
 
+## Underfoot
+
+```sh
+npm run test:underfoot                          # or: node test/underfoot_tempo.mjs (moves, escape, lines)
+node test/underfoot_tempo.mjs route             # bots play every level: several minutes
+node test/underfoot_tempo.mjs route --level=cat --record
+```
+
+The game's claims are about speed: that it builds by running on, that each move keeps it or loses
+it the way the page says, that each way home is hard in its own way but fair, and that the ranks
+mean something. `moves` and `escape` check the rules in small rooms; `lines` replays each level's
+stored fastest line. `route` has a beam-search bot find the fastest line (S must be within reach),
+then the same search with the tiers switched off (A is what that gets, and S must need more), then
+that bot made to stand still on the ground every five moves on the way home, which must still get
+home. Its design notes are in `playground/platformer_PLAN.md`. (`test/underfoot.mjs` is the older
+suite for the first, Super Mario-style prototype in `playground/underfoot.html`.)
+
 ## Family Tree Builder
 
 ```sh

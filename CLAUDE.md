@@ -74,6 +74,7 @@ npm run test:firefly        # Firefly Jar suite (plain Node, no server or browse
 npm run test:normalizer     # Audio Normalizer suite (plain Node, no server or browser)
 npm run test:minifier       # Crusher and HTML Minify suite (Playwright's Chromium, no server)
 npm run test:familytree     # Family Tree Builder suite (plain Node, no server or browser)
+npm run test:underfoot      # Underfoot suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -81,7 +82,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Twelve exist so far. `test/everything_converter.mjs` drives
+Thirteen exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -138,6 +139,13 @@ model, its generation layout and the Link rules) against families generated the 
 them - descendants, in-laws with their own parents, a tree built up from one person - and against
 the contradictions old saves can hold: every parent one row above their child, every couple side
 by side, nobody overlapping. Run it after touching the core.
+`test/underfoot_tempo.mjs` runs the DOM-free core of `games/underfoot.html`, a platformer about
+speed: every move keeps the speed tiers or loses them the way the page says, each escape (clock,
+water, crumbling bank, mower, cat) behaves as its rules say in small rooms, and each level's stored
+fastest line still gets home inside rank S. The slow `route` suite has bots play every level - a
+search for the fastest line, the same without tiers, and that one made to stand still every few
+moves, which must still get home - and `route --record` prints new lines for the page. Run the
+default suites after touching the core, and `route` after touching a level or an escape.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Test suite for playground/underfoot_tempo.html, the "tempo" prototype.
+// Test suite for games/underfoot.html, Underfoot (built as the "tempo" prototype).
 //
-// The prototype's claims are about speed: that it builds by running on, that every move keeps it or
+// The game's claims are about speed: that it builds by running on, that every move keeps it or
 // loses it the way the page says, that each level's way home is hard in its own way but fair, and
 // that the ranks mean something. The first two are checked in small rooms with the real physics,
 // the third on the real levels and on small ones for the mower and the cat. The last are measured
@@ -27,7 +27,7 @@ import vm from 'vm';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const argOf = name => { const a = args.find(x => x.startsWith(`--${name}=`)); return a ? a.slice(name.length + 3) : null; };
-const PAGE = argOf('page') || join(HERE, '..', 'playground', 'underfoot_tempo.html');
+const PAGE = argOf('page') || join(HERE, '..', 'games', 'underfoot.html');
 const RECORD = args.includes('--record');
 const ONLY = argOf('level');
 const DEFAULT = ['moves', 'escape', 'lines'];
