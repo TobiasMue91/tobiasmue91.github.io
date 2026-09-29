@@ -1471,3 +1471,84 @@ um: **Wasser trägt, wer schnell genug ist.**
 Zuerst der Kern (Wasser, Blätter, Frösche) mit Tests, dann Teich-Grafik und Level 6. Dieser
 Zwischenstand geht zum Nutzer. Danach folgen die Level 7 bis 10 mit ihren Fluchten, jedes mit
 Bots, Rängen und Linie. Am Ende gruppiert der Titelbildschirm die Level nach Welten.
+
+## 22. Stand: Welt 2, der Teich (2026-09-29)
+
+Alle fünf Teich-Level sind gebaut, jedes mit eigener Flucht, Bots, Rängen und gespeicherter
+Ideallinie. Der Titelbildschirm nennt die beiden Orte, den Garten und den Teich, dort, wo sie
+beginnen. Die Tests (`node test/underfoot_tempo.mjs`) kommen auf 207 Prüfungen, die
+Routen-Suite läuft für jedes neue Level grün.
+
+| # | Level | Flucht | schnellste Linie | ohne Stufen | mit Pausen | S / A / B |
+|---|---|---|---|---|---|---|
+| 6 | Der Seerosenteich | Uhr, 26 s | 23,92 s | 41,17 s | 39,27 s | 30 / 42 / 58 |
+| 7 | Der Wasserläufer | Wettlauf | 19,52 s | 30,77 s | 30,68 s | 25 / 31 / 42 |
+| 8 | Das Sommergewitter | Hochwasser | 18,43 s | 27,80 s | 28,10 s | 23 / 29 / 40 |
+| 9 | Die Ringelnatter | Spur | 19,32 s | 28,63 s | 29,65 s | 24 / 30 / 40 |
+| 10 | Der Reiher | Reiher | 23,53 s | 33,25 s | 34,25 s | 29 / 35 / 48 |
+
+### Level 7: Der Wasserläufer
+
+Der Wasserläufer wartet eine Sekunde bei den Kirschen und läuft dann denselben Weg heim, auf
+Wasser mit 4,4 px/Bild (schneller als die höchste Stufe), an Land mit 1,4 (langsamer als
+Gehen). Wer nie in den Dash kommt, wird auf jedem Teich überholt und holt ihn an jedem Ufer
+wieder ein; wer sprintet, lässt ihn hinter sich. Der Bot mit Pausen gewinnt mit gut einer
+Sekunde Vorsprung.
+
+### Level 8: Das Sommergewitter
+
+- **Hochwasser:** Der Teich steigt Reihe um Reihe. Im Dash trägt seine Oberfläche, und eine
+  Reihe, die um einen herum voll läuft, hebt einen hinauf. Seerosen schwimmen mit auf und tragen,
+  wer darauf steht. Alles andere geht unter.
+- **Aufholen:** Das Wasser holt nur auf, wenn der letzte feste Stand weit darüber liegt. Beim
+  ersten Entwurf maß es an der Sprunghöhe, und wer über Seerosen hüpfte, trieb es selbst nach
+  oben.
+- **Der erste Entwurf** war ohne Stufen nicht zu schaffen: Das linke Ufer war überflutet, bevor
+  man es erreichte. Jetzt liegt die unterste Terrasse sechs Reihen über dem Teich. Die steigenden
+  Seerosen tragen einen hinauf.
+- **Rutschen und Wandsprung:** Eine Weide am Strand steht auf hohlen Wurzeln. Hin rutscht man
+  darunter durch, heim rutscht man hinein und springt zwischen Stamm und Ufer hoch. Stämme am
+  Wasser tragen jetzt überall eine Weidenkrone und stehen auf Wurzeln, auch in Level 6 und 7.
+- **Das Gewitter:** Vor dem Boot ist der Himmel schwül und gelb mit Gewittertürmen, danach dunkel
+  und grüngrau. Es regnet in zwei Schichten, Ringe erscheinen auf dem Wasser, Blitze kommen zu
+  festen Zeiten mit Donner danach, und das Regengeräusch hält an, solange es regnet. Die jüngste
+  Reihe quillt sichtbar hoch, statt aufzuploppen.
+- **Horizont:** Ein Level kann angeben, auf welcher Reihe die Kulisse steht. Sonst sah man am
+  Teich nur eine grüne Wand.
+
+### Level 9: Die Ringelnatter
+
+Die Natter hat die Regeln der Katze, aber sie quetscht sich ohne Bremsen durch Enges, schwimmt
+ungebremst und klettert mit 0,3 ihrer Geschwindigkeit. Der Heimweg führt durch einen
+Wühlmausgang: einen Schacht hinunter, wo sie mithält, durch den Tunnel, wo sie am schnellsten
+ist, und einen Schacht hinauf, den man per Wandsprung nimmt, wo sie zurückfällt. Oben über der
+Hecke gibt es einen zweiten Weg. Gezeichnet wird sie entlang ihrer eigenen Kopfspur, mit
+gelbem Halbmond und wandernden Buckeln. Über Wasser schwimmt sie auf der Oberfläche. Solange
+sie schläft und aufwacht, liegt sie eingerollt auf den Steinen. Baue haben eine Erdwand als
+Hintergrund.
+
+### Level 10: Der Reiher
+
+Eine neue Flucht, die keiner Spur folgt:
+
+- Er watet ein bis zwei Kacheln hinter einem her (3,2 px/Bild). Ab 3,5 Kacheln Abstand fliegt er
+  (6,5 px/Bild).
+- In Reichweite (8 Kacheln) folgt ein fester Takt: beobachten 50 Bilder, zielen 36 (der Fleck
+  folgt einem), einrasten 12 (er bleibt stehen, der Fleck steht fest, ein Klick und ein Ring am
+  Boden zeigen es), zustoßen 5, erholen 26.
+- Erwischt wird, wer beim Zustoßen noch auf dem Fleck steht, außer es liegt etwas Festes in drei
+  Kacheln über dem Kopf (der Steg, der hohle Stamm).
+- Die Zahl oben zählt die Sekunden bis zum Stoß.
+- Solange er jagt, schaut die Kamera nur eine Kachel voraus. Sonst fiel jeder Stoß aus dem Bild,
+  am Handy erst recht.
+- Beim ersten Entwurf verlor er das Ziel, sobald man aus der Reichweite lief. Dann stieß er nie
+  zu, und die Zahl blieb stehen. Jetzt folgt er auch beim Zielen und bleibt erst beim Einrasten
+  stehen. Die schnellste Linie weicht vier Stößen aus, die alle gut vier Kacheln hinter der Maus
+  landen.
+
+### Offen
+
+- Die neuen Geräusche (Donner, Regen, Rascheln, Reiherruf) sind nur im Code geprüft, nicht
+  gehört. Ob sie natürlich klingen, muss der Nutzer sagen.
+- Ob einem Menschen die 0,28 s zwischen Einrasten und Stoß reichen, der eben noch stand, lässt
+  sich nur am Handy klären. Für einen Menschen macht der Reiher mehr Druck als für die Bots.

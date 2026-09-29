@@ -403,11 +403,13 @@ node test/underfoot_tempo.mjs route --level=cat --record
 
 The game's claims are about speed: that it builds by running on, that each move keeps it or loses
 it the way the page says, that each way home is hard in its own way but fair, and that the ranks
-mean something. `moves` and `escape` check the rules in small rooms; `lines` replays each level's
-stored fastest line. `route` has a beam-search bot find the fastest line (S must be within reach),
+mean something. `moves` and `escape` check the rules in small rooms - the pond's water and lily
+pads, and each of the nine ways home, down to a heron that must miss a mouse that keeps moving and
+one under boards; `lines` replays each level's stored fastest line, which must use every move. `route` has a beam-search bot find the fastest line (S must be within reach),
 then the same search with the tiers switched off (A is what that gets, and S must need more), then
 that bot made to stand still on the ground every five moves on the way home, which must still get
-home. Its design notes are in `playground/platformer_PLAN.md`. (`test/underfoot.mjs` is the older
+home. For the heron, which never chases a trail, the bots report how many strikes they dodged.
+Its design notes are in `playground/platformer_PLAN.md`. (`test/underfoot.mjs` is the older
 suite for the first, Super Mario-style prototype in `playground/underfoot.html`.)
 
 ## Family Tree Builder

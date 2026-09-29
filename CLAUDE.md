@@ -148,7 +148,8 @@ has finished - must hold, and be labelled with, the frame that was on screen. Ru
 touching either page's frame stepping.
 `test/underfoot_tempo.mjs` runs the DOM-free core of `games/underfoot.html`, a platformer about
 speed: every move keeps the speed tiers or loses them the way the page says, each escape (clock,
-water, crumbling bank, mower, cat) behaves as its rules say in small rooms, and each level's stored
+water, crumbling bank, mower, cat, race, flood, grass snake, heron) behaves as its rules say in
+small rooms, and each level's stored
 fastest line still gets home inside rank S. The slow `route` suite has bots play every level - a
 search for the fastest line, the same without tiers, and that one made to stand still every few
 moves, which must still get home - and `route --record` prints new lines for the page. Run the
