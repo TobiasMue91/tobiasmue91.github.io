@@ -1418,3 +1418,56 @@ releasen.“
   - Der Test `test/underfoot_tempo.mjs` liest jetzt diese Seite (`npm run test:underfoot`).
 - **Für Tests und Bildschirmfotos:** Mit `?play` in der Adresse startet die Seite direkt im Spiel,
   ohne Titel.
+
+## 21. Plan: Welt 2, der Teich (2026-09-29)
+
+Der Nutzer: „Willst du an der nächsten Version des Spiels arbeiten? Weitere Level sind
+wahrscheinlich das, was wir aktuell am meisten brauchen.“
+
+Nach dem Fahrplan in 16.2 (T4: weitere Welten, jede mit ihrer Eigenheit) kommt als zweite Welt der
+Sommer am Teich, fünf Level. Die Eigenheit aus 16.1 hieß dort „Wasser, das bremst“. Bremsen passt
+aber nicht zu Tempo, und der Nutzer mag es nicht, ausgebremst zu werden. Deshalb dreht die Welt es
+um: **Wasser trägt, wer schnell genug ist.**
+
+### Die Eigenheit: übers Wasser laufen
+
+- **Wasser (`w`):** Ab Dash-Tempo (3,25 px/Bild) läuft die Maus über die Oberfläche, mit Gischt.
+  Langsamer, beim Anhalten oder Umdrehen sinkt sie ein. Nach einem kurzen Untergehen steht sie
+  wieder am letzten sicheren Ufer, und auf einer Uhr kostet das Zeit wie eine Grube.
+- **Die Schwelle ist fest:** Sie hängt nicht an den Stufen. Der Bot ohne Stufen kann also nie
+  übers Wasser, und jedes Level braucht einen langsamen Weg.
+- **Seerosenblätter (`l`):** Der langsame Weg. Sie tragen jeden, sinken aber, wenn man zu lange
+  darauf steht (etwa zwei Drittel einer Sekunde), und tauchen später wieder auf. Man hüpft also
+  von Blatt zu Blatt oder läuft mit Tempo darüber.
+- **Sichere Stellen:** Nie auf Wasser oder Seerosen, sonst stünde man nach dem Untergehen wieder
+  im Wasser.
+- **Frösche (`f`):** Eine neue Figur. Sie hüpfen im Bogen zwischen zwei Plätzen hin und her. Wer
+  auf einem landet, wird so hoch geworfen wie von einem Pilz, der Frosch plumpst ins Wasser. Von
+  der Seite stoßen sie einen zurück, ab Dash rennt man sie um.
+
+### Die fünf Level
+
+| # | Level | Flucht | Neu daran |
+|---|---|---|---|
+| 6 | Der Seerosenteich | Uhr | Die Wasserregel lernen: Anlauf nehmen, rüberlaufen; langsam über Blätter und Steine |
+| 7 | Der Wasserläufer | Wettlauf | Ein Rivale läuft heim, auf Wasser schnell, an Land langsam; wer zuerst am Mauseloch ist |
+| 8 | Das Sommergewitter | Hochwasser | Der Teich steigt und flutet Reihe um Reihe; geflutete Flächen kann man mit Tempo überlaufen |
+| 9 | Die Ringelnatter | Spurverfolgung | Wie die Katze, aber sie schwimmt ungebremst und klettert langsam: nach oben entkommt man ihr |
+| 10 | Der Reiher | Reiher | Er zielt, rastet ein und stößt zu. Wer weiterläuft, entkommt; unter Brettern ist man sicher |
+
+- **Wettlauf:** Er ist eine sichtbare Uhr, mit einem Gegner, den man überholt oder nicht. Seine
+  Geschwindigkeit hängt am Boden unter ihm, und zwar spaltenweise, also genau und
+  reproduzierbar.
+- **Hochwasser:** Es ist das steigende Wasser aus dem Abfluss, aber es flutet Kachelreihen. Damit
+  gilt auf dem Hochwasser dieselbe Regel wie auf dem Teich.
+- **Ringelnatter:** Sie ist die Spur-Flucht der Katze mit anderen Zahlen. Die Katze quetscht sich
+  langsam durch niedrige Stellen, die Natter klettert langsam. Ihr Körper wird entlang der Spur
+  selbst gezeichnet.
+- **Reiher:** Die einzige Flucht, bei der Stehenbleiben sofort bestraft wird. Zögern kostet
+  hier mehr als Langsamkeit.
+
+### Reihenfolge
+
+Zuerst der Kern (Wasser, Blätter, Frösche) mit Tests, dann Teich-Grafik und Level 6. Dieser
+Zwischenstand geht zum Nutzer. Danach folgen die Level 7 bis 10 mit ihren Fluchten, jedes mit
+Bots, Rängen und Linie. Am Ende gruppiert der Titelbildschirm die Level nach Welten.

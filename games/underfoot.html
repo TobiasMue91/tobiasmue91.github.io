@@ -462,6 +462,12 @@ const P = {
     COMBO_TIME: 180,               // frames a combo waits for the next hit
     FALL_COST: 180,                // frames a fall into a pit takes off an escape clock
     BOING: 6.5 * FX,               // a mushroom throws you up this fast: 8 tiles with jump held, 2 without
+    // the pond: fast enough, you run across the water; slower, you go under
+    SKIM: 3.25 * FX,               // a dash; fixed, not a tier, so running speed never skims
+    SINK: 30,                      // frames going under before you are back on the bank
+    SINK_VY: 0.5 * FX,
+    LILY_HOLD: 40,                 // frames a lily pad holds you before it goes under
+    LILY_UNDER: 150,               // and frames before it comes up again
 };
 
 // How speed follows the stick: fast enough to feel direct, on the ground and in the air.
@@ -485,7 +491,11 @@ const E = {
     GONE: 32 * TILE,               // and are dropped once this far away
     WAKE: 420,                     // frames an empty shell lies still before the snail comes out
     KICK_GRACE: 12,                // frames a just-kicked shell cannot hurt its kicker
-    SIZE: {beetle: [14, 12], snail: [14, 18], shell: [14, 13]},
+    SIZE: {beetle: [14, 12], snail: [14, 18], shell: [14, 13], frog: [14, 11]},
+    FROG_SIT: 90,                  // frames a frog sits between leaps
+    FROG_VX: Math.round(3 * TILE / 34),   // a leap is always the same: 34 frames, three tiles along,
+    FROG_VY: 4 * FX,                      // two up
+    FROG_G: 0.25 * FX,
 };
 
 // input bits
@@ -493,11 +503,12 @@ const IN = {L: 1, R: 2, U: 4, D: 8, J: 16, B: 32};
 
 // tiles
 const T = {EMPTY: 0, GROUND: 1, GRASS: 2, STONE: 3, BRICK: 4, ONEWAY: 5, SEED: 6, GOLD: 7, WALL: 8,
-    WOOD: 9, ESC_ON: 10, ESC_OFF: 11, ITEM: 12, HOME: 13, SHROOM: 14, HEDGE: 15};
+    WOOD: 9, ESC_ON: 10, ESC_OFF: 11, ITEM: 12, HOME: 13, SHROOM: 14, HEDGE: 15, WATER: 16, LILY: 17,
+    LILY_DOWN: 18};
 const CHAR = {'.': T.EMPTY, '#': T.GROUND, '=': T.GRASS, 'X': T.STONE, 'B': T.BRICK, '-': T.ONEWAY,
     'o': T.SEED, 'G': T.GOLD, 'W': T.WOOD, 'e': T.ESC_ON, 'n': T.ESC_OFF, 'Q': T.ITEM, 'H': T.HOME,
-    'M': T.SHROOM, 'h': T.HEDGE};
-const SPAWN = {b: {kind: 'beetle'}, s: {kind: 'snail', red: false}, r: {kind: 'snail', red: true}};
+    'M': T.SHROOM, 'h': T.HEDGE, 'w': T.WATER, 'l': T.LILY};
+const SPAWN = {b: {kind: 'beetle'}, s: {kind: 'snail', red: false}, r: {kind: 'snail', red: true}, f: {kind: 'frog'}};
 const SOLID = new Uint8Array(32);
 for (const t of [T.GROUND, T.GRASS, T.STONE, T.BRICK, T.WALL, T.WOOD, T.SHROOM, T.HEDGE]) SOLID[t] = 1;
 // what a crumbling bank takes with it: everything but stone and the way home
@@ -517,12 +528,18 @@ const approach = (v, target, rate) => v < target ? Math.min(target, v + rate) : 
 //   {kind: 'crumble', from, delay, speed, gap}   the ground falls away behind you, towards home
 //   {kind: 'mower', from, delay, speed, gap, round}   a mower comes along the lawn towards home; what
 //                                                stands on the lawn it goes round, at `round` of its speed
-//   {kind: 'cat', delay, speed, gap, squeeze}    the cat follows your trail, wherever it went: where
-//                                                you went low, it squeezes through at `squeeze` of its speed
+//   {kind: 'cat', delay, speed, gap, squeeze, climb}   the cat follows your trail, wherever it went:
+//                                                where you went low, it squeezes through at `squeeze`
+//                                                of its speed; `climb`, if set, is its speed going up
+//                                                (a grass snake, which squeezes through anything)
+//   {kind: 'race', delay, water, land}           a pond skater races you home from the item: `water`
+//                                                px/f over water, `land` over land; first home wins
+//   {kind: 'flood', from, delay, speed, gap}     the pond rises from `from` tiles below the item, and
+//                                                every row it reaches is water: run across, or climb
 function parseLevel(def) {
     const rows = def.rows, h = rows.length, w = rows[0].length;
     const tiles = new Uint8Array(w * h);
-    let start = null, item = null, home = null, golds = 0;
+    let start = null, item = null, home = null, golds = 0, hx0 = Infinity, hx1 = -1;
     const spawns = [];
     for (let y = 0; y < h; y++) {
         if (rows[y].length !== w) throw new Error(`row ${y} is ${rows[y].length} wide, not ${w}`);
@@ -534,15 +551,18 @@ function parseLevel(def) {
                 tiles[y * w + x] = CHAR[c];
                 if (c === 'G') golds++;
                 if (c === 'Q' && !item) item = {tx: x, ty: y};
-                if (c === 'H' && !home) home = {tx: x, ty: y};
+                if (c === 'H') { if (!home) home = {tx: x, ty: y}; hx0 = Math.min(hx0, x); hx1 = Math.max(hx1, x); }
             } else throw new Error(`unknown tile '${c}' at ${x},${y}`);
         }
     }
     if (!start) throw new Error('level has no start (@)');
-    const escape = Object.assign({kind: 'clock', time: 60, from: 4, delay: 0, speed: 0, gap: 8, round: 0.3, squeeze: 0.35}, def.escape);
+    const escape = Object.assign({kind: 'clock', time: 60, from: 4, delay: 0, speed: 0, gap: 8, round: 0.3, squeeze: 0.35,
+        climb: 0, water: 3, land: 1.5}, def.escape);
     // which way home lies from the item: the crumbling runs that way
     escape.dir = item && home ? sign(home.tx - item.tx) || -1 : -1;
-    return {id: def.id, name: def.name, w, h, tiles, orig: tiles.slice(), start, item, home, golds,
+    // the side of the mouse hole that faces the level: a racer is home when it gets there
+    const homeEdge = escape.dir < 0 ? (hx1 + 1) * TILE : hx0 * TILE;
+    return {id: def.id, name: def.name, w, h, tiles, orig: tiles.slice(), start, item, home, homeEdge, golds,
         spawns, labels: def.labels || [], idea: def.idea || '', escape, ranks: def.ranks || null,
         on: false};
 }
@@ -555,6 +575,14 @@ function tileAt(L, tx, ty) {
 // solid tiles, including the ones the escape adds ('e') and takes away ('n')
 const isSolid = (L, t) => SOLID[t] === 1 || (t === T.ESC_ON && L.on) || (t === T.ESC_OFF && !L.on);
 const solidAt = (L, tx, ty) => isSolid(L, tileAt(L, tx, ty));
+// water, and a lily pad gone under, which is water until it comes up
+const isWater = t => t === T.WATER || t === T.LILY_DOWN;
+// what holds a body landing from above, besides anything solid: a ledge, a lily pad, and the top
+// of the water under something running across it at SKIM or faster
+const holds = (L, p, tx, ty, t) => t === T.ONEWAY || t === T.LILY
+    || (isWater(t) && Math.abs(p.vx) >= P.SKIM && !isWater(tileAt(L, tx, ty - 1)) && tileAt(L, tx, ty - 1) !== T.LILY);
+// is (x, y) in the water, below its top
+const inWater = (L, x, y) => isWater(tileAt(L, fdiv(x, TILE), fdiv(y, TILE)));
 
 /* ---------------- state ---------------- */
 function newPlayer(x, y) {
@@ -563,15 +591,15 @@ function newPlayer(x, y) {
         gUp: 0, gDown: P.JUMP_ROWS[0][3], row: 0, jumpY: y, jumpX: x, buffer: 0, airMax: P.WALK_MAX,
         skid: false, mode: 'play', modeT: 0, peak: y, lastJump: null, lastVy: 0, inv: 0,
         chain: 0, tier: 0, charge: 0, hold: P.HOLD, wall: 0, wallT: 0, slide: 0, stun: 0,
-        combo: 0, comboT: 0, touchWall: false, kickT: 0};
+        combo: 0, comboT: 0, touchWall: false, kickT: 0, sink: 0};
 }
 
 function spawnAll(L) {
     return L.spawns.map((d, i) => {
         const [w, h] = E.SIZE[d.kind];
         return {id: i, kind: d.kind, red: !!d.red, x: d.tx * TILE + TILE / 2, y: (d.ty + 1) * TILE,
-            w: w * FX, h: h * FX, vx: 0, vy: 0, dir: -1, state: 'walk', t: 0, onGround: false,
-            active: false, gone: false, chain: 0, grace: 0};
+            w: w * FX, h: h * FX, vx: 0, vy: 0, dir: d.kind === 'frog' ? 1 : -1, state: d.kind === 'frog' ? 'sit' : 'walk',
+            t: 0, onGround: false, active: false, gone: false, chain: 0, grace: 0, hopped: false};
     });
 }
 
@@ -587,6 +615,7 @@ function newGame(def, opts = {}) {
         assist: Object.assign({coyote: true, buffer: true, corner: true}, opts.assist),
         p: newPlayer(sx, sy),
         ents: spawnAll(level), nextId: level.spawns.length, goldGot: [],
+        load: {}, sunk: [],                // lily pads: frames stood on, and the ones gone under
         viewW: opts.viewW || 16,
         cam: {x: 0, y: 0, look: 0, lookV: 0, dir: 1, commit: 0, sp: 0, ref: sy, yv: 0},
     };
@@ -634,7 +663,7 @@ function landOn(L, p, oldB) {
     for (let ty = fdiv(oldB - 1, TILE) + 1; ty * TILE < p.y; ty++) {
         for (let tx = tx0; tx <= tx1; tx++) {
             const t = tileAt(L, tx, ty);
-            if (isSolid(L, t) || (t === T.ONEWAY && oldB <= ty * TILE)) {
+            if (isSolid(L, t) || (oldB <= ty * TILE && holds(L, p, tx, ty, t))) {
                 p.y = ty * TILE;
                 p.vy = 0;
                 return true;
@@ -677,6 +706,17 @@ function moveY(s, p) {
 }
 
 function supported(L, p) {
+    if (p.y % TILE !== 0) return false;
+    const ty = p.y / TILE, b = box(p);
+    for (let tx = fdiv(b.l, TILE); tx <= fdiv(b.r - 1, TILE); tx++) {
+        const t = tileAt(L, tx, ty);
+        if (isSolid(L, t) || holds(L, p, tx, ty, t)) return true;
+    }
+    return false;
+}
+// standing on something that will still be there: not water, not a lily pad (a safe place to be
+// put back on after a fall)
+function firm(L, p) {
     if (p.y % TILE !== 0) return false;
     const ty = p.y / TILE, b = box(p);
     for (let tx = fdiv(b.l, TILE); tx <= fdiv(b.r - 1, TILE); tx++) {
@@ -823,6 +863,7 @@ function step(s, input = {h: 0, p: 0}) {
     if (p.kickT > 0) p.kickT--;
     if (p.comboT > 0 && --p.comboT === 0) { event(s, 'comboEnd', {n: p.combo}); p.combo = 0; }
     if (s.escape && stepEscape(s)) { updateCamera(s); return s; }
+    if (p.sink > 0) { sinking(s, p); updateCamera(s); return s; }
 
     const dir = (held & IN.R ? 1 : 0) - (held & IN.L ? 1 : 0);
 
@@ -933,14 +974,66 @@ function step(s, input = {h: 0, p: 0}) {
     }
     if (wasGround && !p.onGround && !p.jumped) event(s, 'ledge', {});
     if (p.onGround && p.stun === 0) boing(s, p);
+    lilies(s, p);
+    // into the water: under you go, and a moment later you are back on the bank (or, if it was a
+    // flood that rose over you, back at the start of the escape)
+    if ((!p.onGround && inWater(L, p.x, p.y - 2 * FX)) || inWater(L, p.x, p.y - p.h / 2)) {
+        p.sink = P.SINK;
+        p.vy = P.SINK_VY;
+        event(s, 'splash', {x: p.x, y: p.y, big: true});
+    }
 
     stepEnts(s);
     touchEnts(s, p, prevY, held);
     pickups(s, p);
-    if (s.p === p && p.mode === 'play' && p.onGround && supported(L, p)) s.safe = {x: p.x, y: p.y, facing: p.facing};
+    if (s.p === p && p.mode === 'play' && p.onGround && firm(L, p)) s.safe = {x: p.x, y: p.y, facing: p.facing};
     if (p.y - p.h > L.h * TILE + P.FALL_OUT) fell(s);
     updateCamera(s);
     return s;
+}
+
+// under the water: no say in it, a slow sink, then back where you last stood firm
+function sinking(s, p) {
+    p.x += p.vx;
+    p.vx = approach(p.vx, 0, MOVE.STOP / 4);
+    p.y += P.SINK_VY;
+    lilies(s, p);
+    stepEnts(s);
+    if (--p.sink > 0) return;
+    if (s.escape && s.level.escape.kind === 'flood') late(s, 'water');
+    else fell(s);
+}
+
+// Lily pads: stood on long enough, one goes under; left alone, it comes back up.
+function lilies(s, p) {
+    const L = s.level, on = {};
+    if (p.onGround && p.mode === 'play' && p.y % TILE === 0) {
+        const b = box(p), ty = p.y / TILE;
+        for (let tx = fdiv(b.l, TILE); tx <= fdiv(b.r - 1, TILE); tx++) if (tileAt(L, tx, ty) === T.LILY) on[ty * L.w + tx] = 1;
+    }
+    for (const k in on) {
+        const n = (s.load[k] || 0) + 1;
+        if (n < P.LILY_HOLD) { s.load[k] = n; continue; }
+        delete s.load[k];
+        L.tiles[k] = T.LILY_DOWN;
+        s.sunk.push([+k, P.LILY_UNDER]);
+        event(s, 'lily', {tx: k % L.w, ty: Math.floor(k / L.w), down: true});
+    }
+    for (const k in s.load) if (!on[k] && --s.load[k] <= 0) delete s.load[k];
+    for (let i = s.sunk.length - 1; i >= 0; i--) {
+        const q = s.sunk[i];
+        if (--q[1] > 0) continue;
+        L.tiles[q[0]] = T.LILY;
+        s.sunk.splice(i, 1);
+        event(s, 'lily', {tx: q[0] % L.w, ty: Math.floor(q[0] / L.w), down: false});
+    }
+}
+// every lily pad afloat and unburdened: a new game, or the escape started again
+function resetLilies(s) {
+    const L = s.level;
+    for (let i = 0; i < L.tiles.length; i++) if (L.tiles[i] === T.LILY_DOWN) L.tiles[i] = T.LILY;
+    s.load = {};
+    s.sunk = [];
 }
 
 function land(s, p) {
@@ -1030,6 +1123,20 @@ function resetEscape(s) {
     // the cat's trail: the points you passed, from where it is now to where you are; how far along
     // the first stretch it is; how long the trail is; and how much of it lies ahead of the cat
     if (X.kind === 'cat') s.chase = {path: [[s.item.x, s.item.y, 0]], along: 0, len: 0, pos: 0, wait: X.delay, rising: false};
+    // the race: where the pond skater is, and whether it is on the water
+    if (X.kind === 'race') s.chase = {pos: s.item.x, wait: X.delay, wet: false};
+    // the flood: its top, and the next row it will fill
+    if (X.kind === 'flood') s.chase = {pos: s.item.y + X.from * TILE, wait: X.delay, row: fdiv(s.item.y + X.from * TILE - 1, TILE)};
+}
+
+// is the first thing from the sky down in this column water (or a lily pad on it)?
+function wetColumn(L, tx) {
+    for (let ty = 0; ty < L.h; ty++) {
+        const t = tileAt(L, tx, ty);
+        if (isWater(t) || t === T.LILY) return true;
+        if (isSolid(L, t) || t === T.ONEWAY) return false;
+    }
+    return false;
 }
 
 // one frame of the escape; true if it ended the frame (caught, or out of time)
@@ -1044,6 +1151,25 @@ function stepEscape(s) {
     if (X.kind === 'cat') return stepCat(s);
     if (c.wait > 0) { c.wait--; return false; }
     const speed = Math.round(X.speed * FX), far = X.gap * TILE;
+    if (X.kind === 'race') {
+        // the pond skater: across the water it flies, over land it picks its way; first home wins
+        const d = X.dir;
+        c.wet = wetColumn(L, fdiv(c.pos, TILE));
+        c.pos += d * Math.round((c.wet ? X.water : X.land) * FX);
+        if ((c.pos - L.homeEdge) * d >= 0) { late(s, 'race'); return true; }
+        return false;
+    }
+    if (X.kind === 'flood') {
+        // the pond rises: its top comes up at its speed (faster if you are far above it), and each
+        // row it reaches fills with water that runs like the pond's: at a dash you cross it
+        c.pos -= p.y + far < c.pos ? 3 * speed : speed;
+        while (c.row >= 0 && c.pos <= c.row * TILE) {
+            for (let tx = 0; tx < L.w; tx++) { const i = c.row * L.w + tx; if (L.tiles[i] === T.EMPTY) L.tiles[i] = T.WATER; }
+            event(s, 'flood', {row: c.row});
+            c.row--;
+        }
+        return false;
+    }
     if (X.kind === 'mower') {
         // along the lawn towards home; whatever stands on the lawn, or a gap in it, it goes the
         // long way round
@@ -1102,6 +1228,11 @@ function stepCat(s) {
         const speed = Math.round(X.speed * FX);
         let v = c.len - c.along > X.gap * TILE ? 3 * speed : speed;
         if (path.length > 1 && path[1][2]) v = Math.round(v * X.squeeze);
+        // a snake is slow wherever the trail climbs: goes up at least half as much as it goes along
+        if (X.climb && path.length > 1) {
+            const up = path[0][1] - path[1][1];
+            if (up > 0 && up * 2 >= Math.abs(path[1][0] - path[0][0])) v = Math.round(v * X.climb);
+        }
         c.along += v;
         while (path.length > 1) {
             const seg = stretch(path[0], path[1]);
@@ -1113,7 +1244,7 @@ function stepCat(s) {
         if (path.length === 1) c.along = 0;
     }
     c.pos = c.len - c.along;
-    if (c.pos < TILE * 3 / 4 && !c.wait) { late(s, 'cat'); return true; }
+    if (c.pos < TILE * 3 / 4 && !c.wait) { late(s, X.animal || 'cat'); return true; }
     return false;
 }
 // where the cat is on its trail, and which way it is going
@@ -1128,7 +1259,8 @@ function danger(s) {
     const X = s.level.escape, p = s.p;
     if (X.kind === 'clock') return s.escapeT / 60;
     if (X.kind === 'cat') return (s.chase.pos + s.chase.wait * X.speed * FX) / TILE;
-    if (X.kind === 'water') return (s.chase.pos - (p.y - p.h / 2)) / TILE;
+    if (X.kind === 'race') return (p.x - s.chase.pos) * X.dir / TILE;
+    if (X.kind === 'water' || X.kind === 'flood') return (s.chase.pos - (p.y - p.h / 2)) / TILE;
     return (p.x - X.dir * p.w / 2 - s.chase.pos) * X.dir / TILE;
 }
 
@@ -1136,6 +1268,7 @@ function danger(s) {
 function late(s, why) {
     const L = s.level;
     L.tiles.set(s.snapEscape.tiles);
+    resetLilies(s);
     s.seeds = s.snapEscape.seeds;
     s.goldGot = s.snapEscape.goldGot.slice();
     s.ents = spawnAll(L);
@@ -1233,36 +1366,76 @@ function stepEnts(s) {
             if (e.t > 30) e.gone = true;
             continue;
         }
-        // walking, sliding or lying still: the same body under gravity
-        const speed = e.kind === 'shell' ? (e.state === 'slide' ? E.SHELL : 0) : E.WALK;
-        e.vx = e.dir * speed;
-        if (moveX(L, e)) {
-            e.dir = -e.dir;
-            if (e.kind === 'shell') event(s, 'thud', {id: e.id});
-        }
-        if (e.onGround && !supported(L, e)) e.onGround = false;
-        if (!e.onGround) {
-            const oldB = e.y;
-            e.y += e.vy;
-            if (e.vy > 0 && landOn(L, e, oldB)) e.onGround = true;
-            else if (e.vy < 0 && overlaps(L, e.x, e.y, e.w, e.h)) { e.y = oldB; e.vy = 0; }
-            else e.vy = Math.min(E.MAX_FALL, e.vy + E.GRAV);
-        }
-        // a red snail turns back at the edge of its ledge
-        if (e.red && e.kind === 'snail' && e.onGround) {
-            const ahead = fdiv(e.x + e.dir * (e.w / 2 + FX), TILE), ty = e.y / TILE;
-            if (!solidAt(L, ahead, ty) && tileAt(L, ahead, ty) !== T.ONEWAY) e.dir = -e.dir;
-        }
-        // an empty shell left alone long enough: the snail comes back out
-        if (e.kind === 'shell' && e.state === 'still' && e.t > E.WAKE) {
-            e.kind = 'snail';
-            e.state = 'walk';
-            setShape(e, 'snail');
-            e.dir = p.x < e.x ? -1 : 1;
-            e.t = 0;
+        if (e.kind === 'frog') frogStep(s, e);
+        else walkStep(s, e);
+        if (inWater(L, e.x, e.y - 2 * FX)) {
+            e.gone = true;
+            event(s, 'splash', {x: e.x, y: e.y, id: e.id});
         }
     }
-    // creatures meeting: a sliding shell knocks out whatever it hits; walkers turn round
+    meetEnts(s);
+}
+
+// beetles, snails and shells: walk (or slide), turn at walls, fall off ledges
+function walkStep(s, e) {
+    const L = s.level, p = s.p;
+    // walking, sliding or lying still: the same body under gravity
+    const speed = e.kind === 'shell' ? (e.state === 'slide' ? E.SHELL : 0) : E.WALK;
+    e.vx = e.dir * speed;
+    if (moveX(L, e)) {
+        e.dir = -e.dir;
+        if (e.kind === 'shell') event(s, 'thud', {id: e.id});
+    }
+    if (e.onGround && !supported(L, e)) e.onGround = false;
+    if (!e.onGround) {
+        const oldB = e.y;
+        e.y += e.vy;
+        if (e.vy > 0 && landOn(L, e, oldB)) e.onGround = true;
+        else if (e.vy < 0 && overlaps(L, e.x, e.y, e.w, e.h)) { e.y = oldB; e.vy = 0; }
+        else e.vy = Math.min(E.MAX_FALL, e.vy + E.GRAV);
+    }
+    // a red snail turns back at the edge of its ledge
+    if (e.red && e.kind === 'snail' && e.onGround) {
+        const ahead = fdiv(e.x + e.dir * (e.w / 2 + FX), TILE), ty = e.y / TILE;
+        if (!solidAt(L, ahead, ty) && !holds(L, e, ahead, ty, tileAt(L, ahead, ty))) e.dir = -e.dir;
+    }
+    // an empty shell left alone long enough: the snail comes back out
+    if (e.kind === 'shell' && e.state === 'still' && e.t > E.WAKE) {
+        e.kind = 'snail';
+        e.state = 'walk';
+        setShape(e, 'snail');
+        e.dir = p.x < e.x ? -1 : 1;
+        e.t = 0;
+    }
+}
+
+// a frog sits a while, then leaps: always the same arc, three tiles along, turning round each time
+function frogStep(s, e) {
+    const L = s.level;
+    if (e.onGround) {
+        e.vx = 0;
+        if (!supported(L, e)) e.onGround = false;              // its lily pad went under
+        else if ((e.t + e.id * 23) % E.FROG_SIT === 0) {
+            e.vx = e.dir * E.FROG_VX;
+            e.vy = -E.FROG_VY;
+            e.onGround = false;
+            e.hopped = true;
+            event(s, 'hop', {id: e.id});
+        }
+        return;
+    }
+    if (e.vx && moveX(L, e)) e.vx = 0;
+    const oldB = e.y;
+    e.y += e.vy;
+    if (e.vy > 0 && landOn(L, e, oldB)) {
+        e.onGround = true;
+        e.vx = 0;
+        if (e.hopped) { e.dir = -e.dir; e.hopped = false; }
+    } else e.vy = Math.min(E.MAX_FALL, e.vy + E.FROG_G);
+}
+
+// creatures meeting: a sliding shell knocks out whatever it hits; walkers turn round
+function meetEnts(s) {
     const act = s.ents.filter(e => e.active && !e.gone && e.state !== 'flip' && e.state !== 'flat');
     for (let i = 0; i < act.length; i++) for (let j = i + 1; j < act.length; j++) {
         const a = act[i], b = act[j];
@@ -1306,6 +1479,14 @@ function touchEnts(s, p, prevY, held) {
         // a stomp: coming down, with the feet above the creature's middle a frame ago
         if (p.y > prevY && prevY <= e.y - e.h / 2) {
             p.chain++;
+            if (e.kind === 'frog') {
+                // a frog is a spring: it throws you as high as a mushroom, and plops into the water
+                flip(s, e, p.x < e.x ? 1 : -1);
+                event(s, 'stomp', {id: e.id, kind: e.kind, chain: p.chain});
+                combo(s, p);
+                springOff(p, held);
+                continue;
+            }
             if (e.kind === 'beetle') { e.state = 'flat'; e.t = 0; }
             else if (e.kind === 'snail') { e.kind = 'shell'; e.state = 'still'; e.t = 0; setShape(e, 'shell'); }
             else if (e.state === 'slide') { e.state = 'still'; e.t = 0; }
@@ -1327,6 +1508,19 @@ function touchEnts(s, p, prevY, held) {
         if (e.grace > 0) continue;
         hurt(s, p);
     }
+}
+
+// off a frog's back: like a mushroom, as high as jump is held
+function springOff(p, held) {
+    p.vy = -P.BOING;
+    p.onGround = false;
+    p.jumped = true;
+    p.jumpY = p.y;
+    p.peak = p.y;
+    p.gUp = P.JUMP_ROWS[2][2];
+    p.gDown = P.JUMP_ROWS[2][3];
+    p.fall = !(held & IN.J);
+    p.airMax = airCap(p);
 }
 
 // off a creature's back: holding jump makes it a full jump, letting go a small hop
@@ -1421,6 +1615,7 @@ function clone(s) {
         ents: s.ents.map(e => Object.assign({}, e)), goldGot: s.goldGot.slice(),
         item: s.item && Object.assign({}, s.item), safe: s.safe && Object.assign({}, s.safe),
         chase: s.chase && Object.assign({}, s.chase, s.chase.path ? {path: s.chase.path.slice()} : null),
+        load: Object.assign({}, s.load), sunk: s.sunk.map(q => q.slice()),
     });
 }
 
@@ -1446,7 +1641,8 @@ function hash(s) {
 }
 
 return {FX, TILE, VIEW_H, P, E, MOVE, IN, T, SOLID, parseLevel, newGame, step, tileAt, solidAt,
-    overlaps, supported, box, jumpRow, predict, clone, setViewWidth, hash, snapCamera, danger, catAt};
+    overlaps, supported, box, jumpRow, predict, clone, setViewWidth, hash, snapCamera, danger, catAt,
+    isWater, inWater, firm};
 })();
 </script>
 <script id="levels">
@@ -1668,6 +1864,39 @@ const LEVELS = [
     labels: [[14, 12, "HANG THE BELL ON THE CAT"], [65, 12, "DOWN: SLIDE UNDER"], [96, 8, "JUMP AT A WALL, THEN AGAIN"]],
     route: {"out": [[105, 18], [108, 7], [133, 7]], "back": [[122, 12], [104, 18], [1, 18]]},
     inside: [[108, 8, 136, 17]],
+},
+{
+    id: "lilypond",
+    name: "The lily pond",
+    item: "float",
+    backdrop: "pond",
+    idea: "Across four ponds for a lost fishing float, running over the water, and home again against the clock.",
+    escape: {"kind": "clock", "time": 26},
+    ranks: [30, 42, 58],
+    rows: [
+        'XX...........................................................................................................................................................................XXXXXXX',
+        'XX...................................................................................................G.......................................................................XXXXXXX',
+        'XX...........................................................................................................................................................................XXXXXXX',
+        'XX.................................................................................................WW........................................................................XXXXXXX',
+        'XX.................................................................................................WW........................................................................XXXXXXX',
+        'XX.................................................................................................WW........................................................................XXXXXXX',
+        'XX.................................................................................................WW........................................................................XXXXXXX',
+        'XX.................................................................................................WW.......o..o..o..o..o..o..o..o..o..o.....................................XXXXXXX',
+        'XX.................................................................................................WW..............b........b................................................XXXXXXX',
+        'XX.................................................................................................WW...====================================.................................XXXXXXX',
+        'XX.................................................................................................WW...####################################.................................XXXXXXX',
+        'XX.....................................b...b.......................................................WW...####################################.................................XXXXXXX',
+        'XX....................................WWWWWWW....o..o..o..o..o.....................................WW...####################################.................................XXXXXXX',
+        'XX.................................................................................................WW...####################################.................................XXXXXXX',
+        'HH......o.o.o.o.o.o.o.o.........................................WWWWWWWW...........................WW...####################################.................................XXXXXXX',
+        'HH..@....................................X...........f...........o.o.o...nnnnnnnnnnnnnnnnnnnnnnnn.......####################################...............f..............Q..XXXXXXX',
+        '=========================wwlwwlwwlw=============wwlwwlwwlwwlwwl==========wwwlwwXwwlwwXwwlwwXwwlww===============================================MM=wwlwwlwwlwXlwwlwwlwwXXXXX=XXXXXXX',
+        '#########################wwwwwwwwww#############wwwwwwwwwwwwwww##########wwwwwwXwwwwwXwwwwwXwwwww##################################################wwwwwwwwwwXwwwwwwwwwXXXXX#XXXXXXX',
+        '#########################wwwwwwwwww#############wwwwwwwwwwwwwww##########wwwwwwXwwwwwXwwwwwXwwwww##################################################wwwwwwwwwwXwwwwwwwwwXXXXX#XXXXXXX',
+        '#########################wwwwwwwwww#############wwwwwwwwwwwwwww##########wwwwwwXwwwwwXwwwwwXwwwww##################################################wwwwwwwwwwXwwwwwwwwwXXXXX#XXXXXXX',
+    ],
+    labels: [[14, 10, "ACROSS THE POND FOR THE LOST FLOAT"], [29, 10, "FAST ENOUGH, AND THE WATER HOLDS YOU"], [55, 9, "LILY PADS SINK IF YOU STAND ON THEM"], [100, 1, "SLIDE IN, KICK UP"]],
+    route: {"out": [[102, 16], [106, 9], [169, 16]], "back": [[146.5, 16], [120, 9], [102, 16], [1, 16]]},
 }];
 
 // The fastest line the search bot in test/underfoot_tempo.mjs found, per level: [input, frames], ...
@@ -1676,6 +1905,7 @@ const LINES = {
     drain: {frames: 1979, log: [[34,156],[33,6],[34,6],[0,6],[33,6],[0,6],[33,6],[8,6],[34,6],[49,6],[33,12],[16,6],[33,18],[49,6],[33,78],[34,6],[33,6],[34,18],[8,6],[34,6],[50,6],[34,12],[50,6],[34,18],[50,8],[34,16],[50,8],[34,16],[50,6],[34,18],[33,6],[34,6],[0,6],[33,18],[8,6],[34,6],[50,2],[34,4],[50,2],[34,4],[33,24],[8,6],[34,18],[49,6],[33,18],[49,6],[33,18],[8,6],[34,6],[0,6],[33,6],[34,6],[0,6],[34,24],[50,6],[34,24],[50,8],[34,76],[9,6],[34,6],[33,6],[0,6],[33,12],[34,18],[50,2],[34,4],[50,2],[34,4],[33,30],[49,8],[33,22],[49,2],[33,16],[49,6],[33,18],[0,6],[34,24],[50,2],[34,94],[8,6],[34,12],[50,2],[34,4],[50,8],[34,4],[49,6],[50,2],[34,4],[50,6],[33,12],[49,6],[33,18],[49,6],[33,18],[49,6],[33,12],[49,12],[33,12],[8,6],[33,12],[34,18],[50,6],[33,6],[49,6],[50,2],[34,4],[50,2],[34,4],[49,6],[34,66],[8,6],[34,42],[8,6],[34,12],[50,2],[34,4],[50,8],[34,4],[49,6],[50,2],[34,4],[50,6],[33,18],[49,6],[33,18],[49,14],[33,22],[49,14],[33,22],[10,6],[34,12],[50,8],[34,4],[50,2],[34,4],[49,6],[50,12],[34,114],[8,6],[34,12],[50,2],[34,4],[50,6],[49,2],[33,4],[50,2],[34,4],[50,12],[33,137]]},
     bank: {frames: 1295, log: [[34,132],[16,6],[34,48],[50,12],[34,12],[0,6],[34,42],[8,6],[34,12],[49,6],[50,8],[34,4],[50,6],[49,2],[33,4],[49,6],[50,6],[49,6],[34,24],[50,6],[34,18],[50,8],[34,16],[50,6],[34,18],[50,2],[34,16],[50,6],[34,18],[50,2],[34,16],[33,6],[34,18],[0,6],[34,30],[50,6],[0,6],[34,132],[33,42],[49,14],[33,22],[49,2],[33,16],[49,6],[33,36],[49,6],[33,18],[49,2],[33,94],[8,6],[34,36],[49,2],[33,58],[8,6],[34,6],[49,14],[33,22],[49,2],[33,22],[49,8],[33,28],[49,6],[33,137]]},
     lawn: {frames: 1689, log: [[34,108],[50,2],[34,46],[50,6],[34,6],[50,6],[34,12],[50,2],[34,16],[50,30],[34,138],[8,6],[34,36],[50,14],[34,22],[50,8],[34,10],[50,8],[34,34],[50,2],[34,16],[50,6],[34,18],[50,2],[34,16],[50,6],[34,18],[50,6],[34,18],[50,12],[34,12],[50,6],[34,30],[50,14],[34,22],[50,6],[34,18],[50,6],[34,12],[0,6],[34,66],[8,6],[34,6],[50,2],[34,4],[50,8],[34,4],[49,2],[33,4],[50,2],[34,10],[33,6],[49,8],[33,46],[49,14],[33,22],[49,6],[33,18],[49,12],[33,18],[49,6],[33,18],[49,48],[33,30],[49,2],[33,16],[49,6],[33,18],[49,6],[33,18],[49,2],[33,22],[49,6],[33,12],[49,2],[33,34],[49,6],[33,24],[8,6],[34,30],[49,6],[33,18],[49,12],[33,18],[49,6],[33,18],[49,2],[33,16],[49,6],[33,18],[49,14],[33,28],[49,6],[33,18],[49,2],[33,10],[49,2],[33,4],[49,6],[33,24],[49,8],[33,109]]},
+    lilypond: {frames: 1435, log: [[34,114],[50,8],[34,22],[50,18],[34,12],[50,2],[34,16],[50,8],[34,34],[50,6],[34,18],[50,8],[34,10],[50,8],[34,22],[50,6],[34,18],[50,6],[34,18],[50,6],[34,18],[50,6],[34,24],[8,6],[34,6],[50,8],[34,4],[50,2],[34,4],[49,6],[50,6],[34,12],[50,20],[34,22],[50,6],[34,18],[50,6],[34,18],[50,6],[34,18],[50,6],[34,114],[50,2],[34,16],[0,6],[33,24],[49,8],[33,76],[16,6],[49,12],[16,6],[33,78],[49,6],[33,18],[49,6],[33,18],[49,2],[33,22],[34,12],[33,12],[8,6],[34,12],[50,2],[34,4],[50,2],[34,4],[33,96],[8,6],[34,30],[49,2],[33,46],[49,8],[33,22],[49,6],[33,6],[49,6],[33,150],[34,1]]},
     cat: {frames: 1141, log: [[34,66],[50,2],[34,16],[50,8],[34,28],[50,6],[34,54],[50,8],[34,34],[50,2],[34,22],[50,6],[34,36],[50,6],[34,24],[50,6],[34,12],[50,8],[34,22],[50,14],[34,22],[50,6],[34,18],[8,6],[34,12],[49,6],[50,8],[34,4],[50,2],[34,4],[49,6],[50,2],[34,4],[50,2],[34,4],[49,6],[34,30],[50,14],[34,64],[33,36],[8,6],[0,6],[33,18],[34,6],[49,2],[33,40],[9,6],[34,36],[33,12],[49,20],[33,22],[49,12],[33,42],[8,6],[34,36],[49,20],[33,22],[49,14],[33,22],[49,2],[33,10],[49,2],[33,4],[49,6],[33,12],[49,6],[33,6],[49,18],[33,90],[34,1]]},
 };
 
@@ -1798,24 +2028,35 @@ function layout() {
 
 /* ---------------- the game ---------------- */
 // what each level sends you for, and what the way home is up against
-const ITEM = {sack: 'the seed sack', button: 'the button', berry: 'the strawberry', marble: 'the marble', bell: 'the cat'};
+const ITEM = {sack: 'the seed sack', button: 'the button', berry: 'the strawberry', marble: 'the marble', bell: 'the cat',
+    float: 'the float', cherry: 'the cherries'};
 const GOAL = {sack: 'Fetch the seed sack from the far end of the garden →', button: 'Down the drain for the lost button ↓',
     berry: 'Along the bank for the last strawberry →', marble: 'All the way down the lawn for the lost marble →',
-    bell: 'Up on the shed roof, the cat is asleep. Bell it →'};
+    bell: 'Up on the shed roof, the cat is asleep. Bell it →', float: 'Across the pond for the lost float →',
+    cherry: 'Out to the reed island for the cherries: the pond skater wants a race →'};
 const FLEE = {clock: '← Home to the mouse hole, quick!', water: '↑ Back up, before the water catches you!',
     crumble: '← Home! The bank is giving way behind you', mower: '← Home! The mower is out',
-    cat: '← The cat is awake. Home!'};
+    cat: '← The cat is awake. Home!', race: '← Race the pond skater home!',
+    flood: '← A storm! Home, before the pond rises over you', snake: '← A grass snake is after you. Home!',
+    heron: '← Home past the heron: keep moving, or hide'};
 const LATE = {time: 'Too slow! Back to ITEM, and the clock starts again', water: 'The water caught you! Back to ITEM',
     crumble: 'The bank gave way under you! Back to ITEM', mower: 'The mower caught up! Back to ITEM',
-    cat: 'The cat caught you! Back to ITEM'};
-// what the way home is up against, as the level list and the escape counter put it
+    cat: 'The cat caught you! Back to ITEM', race: 'The pond skater was home first! Back to ITEM',
+    snake: 'The grass snake caught you! Back to ITEM', heron: 'The heron got you! Back to ITEM'};
+// what the way home is up against, as the level list and the escape counter put it; a chaser with
+// an animal of its own (the cat's rules, a snake's body) goes by the animal
+const escName = X => X.animal || X.kind;
 const KIND = {clock: 'against the clock', water: 'ahead of the rising water', crumble: 'before the bank gives way',
-    mower: 'ahead of the mower', cat: 'with the cat on your trail'};
-const AHEAD = {water: 'tiles above the water', crumble: 'tiles ahead of the edge', mower: 'tiles ahead of the mower', cat: 'tiles ahead of the cat'};
+    mower: 'ahead of the mower', cat: 'with the cat on your trail', race: 'in a race with the pond skater',
+    flood: 'ahead of the rising pond', snake: 'with a grass snake on your trail', heron: 'past the hunting heron'};
+const AHEAD = {water: 'tiles above the water', crumble: 'tiles ahead of the edge', mower: 'tiles ahead of the mower',
+    cat: 'tiles ahead of the cat', race: 'tiles ahead of the pond skater', flood: 'tiles above the water',
+    snake: 'tiles ahead of the snake'};
 let DEF = null, level = null, totalSeeds = 0, lateWhy = 'time';
 function loadLevel(id) {
     DEF = LEVELS.find(l => l.id === id) || LEVELS[0];
     level = UF.parseLevel(DEF);
+    level.water = level.orig.some(t => t === T.WATER || t === T.LILY);
     totalSeeds = 0;
     for (const t of level.orig) if (t === T.SEED) totalSeeds++;
     restart();
@@ -2091,6 +2332,13 @@ const sound = (() => {
         bubble: () => tone('sine', 300 + Math.random() * 300, 700 + Math.random() * 400, 0.06, 0.04),
         rumble: v => noise(0.4, 0.25 + 0.35 * v, 110, 0.7, 60, 'lowpass'),
         boing: () => { tone('sine', 150, 480, 0.2, 0.14); noise(0.07, 0.35, 260, 1); },
+        // the pond: a plunge, feet pattering on the water, a pad going under, a frog
+        splash: big => { noise(big ? 0.4 : 0.22, big ? 0.5 : 0.25, 2600, 0.7, 500); tone('sine', big ? 340 : 520, big ? 110 : 200, 0.14, big ? 0.1 : 0.05); },
+        skim: () => noise(0.05, 0.1, 3800, 1.4, 2200),
+        bloop: () => tone('sine', 560, 170, 0.2, 0.07),
+        plip: () => tone('sine', 900, 1350, 0.05, 0.02),
+        croak: () => { for (let i = 0; i < 2; i++) tone('sawtooth', 210 - i * 30, 150 - i * 20, 0.09, 0.025, i * 0.12); },
+        go: () => { tone('sine', 660, 660, 0.09, 0.05); tone('sine', 660, 660, 0.09, 0.05, 0.3); tone('sine', 1320, 1320, 0.25, 0.06, 0.6); },
         // a small brass bell: three partials that do not agree, dying away
         jingle: v => { for (const [f, a, dl] of [[2890, 1, 0], [4120, 0.6, 0.004], [5530, 0.35, 0.03]]) tone('sine', f * (0.99 + Math.random() * 0.02), f, 0.22, 0.03 * v * a, dl); },
         hiss: () => { noise(0.75, 0.35, 5200, 0.6, 3000, 'highpass'); noise(0.3, 0.12, 700, 1.2, 400, 'bandpass', 0.02); },
@@ -2141,6 +2389,7 @@ function step() {
     sq.x += (1 - sq.x) * 0.22;
     sq.y += (1 - sq.y) * 0.22;
     if (p.skid && game.frame % 4 === 0) dust(p.x / FX - p.facing * 3, p.y / FX, 1, -p.facing * 0.6);
+    if (level.water) pondFx(p);
     if (p.duck && p.onGround && Math.abs(p.vx) > FX && game.frame % 3 === 0) dust(p.x / FX - p.facing * 5, p.y / FX, 1, -p.facing * 0.4);
     if (p.touchWall && p.vy > 0 && game.frame % 5 === 0) dust(p.x / FX + p.facing * 6, p.y / FX - 10, 1, 0);
     // afterimages while the tier holds, or while a fast slide lasts
@@ -2266,6 +2515,22 @@ function onEvent(e) {
             if (e.n % 10 === 0) popup(`${e.n} in a row`, p.x / FX, p.y / FX - 40, TIER_COLOR[Math.max(1, p.tier)], 50);
             break;
         }
+        case 'splash': {
+            const x = e.x / FX, y = waterTop(e.x / FX, e.y / FX - 1);
+            splashAt(x, y, e.big ? 16 : 7, e.big ? 1.2 : 0.8);
+            sound.splash(!!e.big);
+            if (e.big) { shake = Math.max(shake, 1.5); buzz(25); }
+            break;
+        }
+        case 'lily':
+            fx.push({kind: 'ring', x: e.tx * 16 + 8, y: e.ty * 16 + 1, vx: 0, vy: 0, g: 0, drag: 1, life: 36, max: 36, r: 12, rot: 0});
+            if (e.down) sound.bloop();
+            break;
+        case 'hop': {
+            const f = game.ents[e.id];
+            if (f && Math.abs(f.x - p.x) < 12 * TILE) sound.plip();
+            break;
+        }
         case 'boing': {
             sound.boing();
             sq.x = 0.75; sq.y = 1.3;
@@ -2284,6 +2549,7 @@ function onEvent(e) {
             if (e.kind === 'water') sound.gush();
             else if (e.kind === 'mower') { sound.escape(); sound.mowerOn(); }
             else if (e.kind === 'cat') { sound.hiss(); catView.x = null; }
+            else if (e.kind === 'race') sound.go();
             else sound.escape();
             buzz(40);
             shake = 5;
@@ -2436,7 +2702,7 @@ function renderCards() {
         n.className = 'n';
         n.textContent = String(i + 1);
         name.textContent = def.name;
-        kind.textContent = `Home ${KIND[def.escape.kind]}`;
+        kind.textContent = `Home ${KIND[escName(def.escape)]}`;
         line.className = 'best';
         if (best) {
             const r = document.createElement('b');
@@ -2604,7 +2870,13 @@ const LOOK = {
             under: '#262028', underLo: '#1b171d', brick: '#3c3238', brickLo: '#2f282d', root: '#4a3a3c'},
     },
 };
-const TH = {garden: 0, river: 1, drain: 2};
+LOOK.pond = {
+    day: {skyTop: '#9fcbe6', skyLow: '#f4efd8', sun: 'rgba(255,240,196,', far: '#a8c8c0', farDark: '#8fb2a9', mid: '#7cae78', midDark: '#5c9157', near: '#4c8a48', nearDark: '#376d34', flower: ['#f4f1ea', '#f2c14e', '#8a6fd1', '#e8786a'], haze: 'rgba(244,239,216,.35)',
+        water: ['rgba(120,185,215,.5)', 'rgba(72,138,182,.72)', 'rgba(44,98,148,.86)'], line: 'rgba(240,252,255,.9)', farWater: '#bcd9e0'},
+    dusk: {skyTop: '#46386a', skyLow: '#ee8f5e', sun: 'rgba(255,150,90,', far: '#7f6a82', farDark: '#6d5c74', mid: '#625a69', midDark: '#4f4958', near: '#44414d', nearDark: '#34323d', flower: ['#d6b8ad', '#d69857', '#8f74b0', '#bd5f59'], haze: 'rgba(238,143,94,.22)',
+        water: ['rgba(150,130,178,.52)', 'rgba(96,84,140,.74)', 'rgba(58,50,98,.88)'], line: 'rgba(255,214,190,.85)', farWater: '#b58f9c'},
+};
+const TH = {garden: 0, river: 1, drain: 2, pond: 3};
 
 // the ground, the stone, the wood: shared by all places except where noted
 const S = {
@@ -3201,7 +3473,7 @@ function paintHedge(g, v, m) {
 
 function paintHome(g, top, left, theme) {
     // the mouse hole: an arch cut into the wall, a warm room beyond, a doormat
-    const wall = theme === TH.drain ? paintDrainStone : theme === TH.river ? paintRock : paintBricks;
+    const wall = theme === TH.drain ? paintDrainStone : theme === TH.river || theme === TH.pond ? paintRock : paintBricks;
     const cx = left ? 16 : 0, cy = top ? 22 : 6;           // the middle of the whole hole
     const warm = () => {
         const glow = g.createRadialGradient(cx, cy, 1, cx, cy, 22);
@@ -3263,7 +3535,7 @@ function tileSprite(L, t, tx, ty, theme) {
             const m = mask(L, tx, ty), par = ty & 1;
             return cached(2e6 + ((theme * 16 + m) * 8 + v) * 2 + par, 22, 26, 3, 5, g => {
                 if (theme === TH.drain) paintDrainStone(g, v, m, par);
-                else if (theme === TH.river) paintRock(g, v, m);
+                else if (theme === TH.river || theme === TH.pond) paintRock(g, v, m);
                 else paintBricks(g, v, m, par);
             });
         }
@@ -3377,7 +3649,7 @@ function bgLayer(theme, dusk, which) {
                     g.beginPath(); g.arc(x + dx * sc, y + dy * sc, rr * sc, 0, TAU); g.fill();
                 }
             }
-            if (theme === TH.river) {
+            if (theme === TH.river || theme === TH.pond) {
                 // willows along the far bank
                 for (let i = 0; i < 5; i++) {
                     const x = i * 150 + R(i, 3) * 80, h = 110 + R(i, 4) * 50;
@@ -3430,6 +3702,13 @@ function bgLayer(theme, dusk, which) {
             }
             g.fillStyle = look.far;
             g.fillRect(-10, BG_BASE - 8, BG_W + 20, BG_H);
+            if (theme === TH.pond) {
+                // the far side of the pond, pale, with the light on it
+                g.fillStyle = look.farWater;
+                g.fillRect(-10, BG_BASE - 10, BG_W + 20, 14);
+                g.fillStyle = dusk ? 'rgba(255,200,170,.5)' : 'rgba(255,255,255,.6)';
+                for (let i = 0; i < 14; i++) g.fillRect(R(i, 30) * BG_W, BG_BASE - 8 + R(i, 31) * 10, 8 + R(i, 32) * 22, 1);
+            }
         });
         g.globalCompositeOperation = 'source-atop';
         g.fillStyle = look.haze.replace(/[\d.]+\)$/, '.5)');
@@ -3456,7 +3735,25 @@ function bgLayer(theme, dusk, which) {
                 g.fillStyle = look.flower[1];
                 g.beginPath(); g.arc(x, BG_BASE - h, 4, 0, TAU); g.fill();
             }
-            if (theme === TH.river) {
+            if (theme === TH.pond) {
+                // yellow flag irises in the shallows
+                for (let i = 0; i < 6; i++) {
+                    const x = i * 120 + R(i, 9) * 70, h = 70 + R(i, 10) * 40;
+                    g.fillStyle = look.midDark;
+                    for (const [dx, lean] of [[-4, -10], [0, 3], [4, 12]]) {
+                        g.beginPath(); g.moveTo(x + dx - 2, BG_BASE + 6); g.quadraticCurveTo(x + dx + lean * 0.3, BG_BASE - h * 0.6, x + dx + lean, BG_BASE - h * 0.9); g.quadraticCurveTo(x + dx + lean * 0.2 + 2, BG_BASE - h * 0.5, x + dx + 2, BG_BASE + 6); g.fill();
+                    }
+                    g.strokeStyle = look.midDark;
+                    g.lineWidth = 1.6;
+                    g.beginPath(); g.moveTo(x, BG_BASE); g.lineTo(x + 1, BG_BASE - h); g.stroke();
+                    const col = i % 2 ? look.flower[1] : look.flower[2];
+                    g.fillStyle = col;
+                    for (const [a, l] of [[-2.2, 9], [-0.9, 8], [0.3, 9]]) { g.beginPath(); g.ellipse(x + 1 + Math.cos(a) * l * 0.5, BG_BASE - h + 2 + Math.sin(a) * l * 0.5, l * 0.55, 2.6, a, 0, TAU); g.fill(); }
+                    g.fillStyle = look.flower[1];
+                    g.beginPath(); g.ellipse(x + 1, BG_BASE - h - 3, 2.5, 4, 0, 0, TAU); g.fill();
+                }
+            }
+            if (theme === TH.river || theme === TH.pond) {
                 // bulrushes
                 for (let i = 0; i < 9; i++) {
                     const x = i * 80 + R(i, 7) * 40, h = 90 + R(i, 8) * 50;
@@ -3817,6 +4114,13 @@ function render(alpha) {
         if (ex < camX - 24 || ex > camX + view.tiles * 16 + 24) continue;
         drawEnt(e, ox + ex * K, oy + ey * K, K);
     }
+    // the pond skater: by the item, waiting, then racing you home
+    if (level.escape.kind === 'race' && level.item) {
+        const c = game.chase, gx = esc && c ? c.pos / FX : level.item.tx * 16 + 8 - level.escape.dir * 20;
+        const sf = surfaceY(gx);
+        if (gx > camX - 30 && gx < camX + view.tiles * 16 + 30)
+            drawSkater(X(gx), Y(sf.y), K, level.escape.dir, sf.wet, esc && c && !c.wait);
+    }
     // the cat: asleep by the collar you are to bell, then on your trail
     if (DEF.item === 'bell' && level.item) {
         const it = level.item;
@@ -3853,6 +4157,7 @@ function render(alpha) {
     if (over) drawScarf(ox, oy, K, px - p.x / FX, py - p.y / FX);
     ctx.globalAlpha = 1;
     for (const e of game.ents) if (!e.gone && e.state === 'flip') { const [ex, ey] = entPos(e); drawEnt(e, ox + ex * K, oy + ey * K, K); }
+    if (level.water) drawWater(X, Y, K, tx0, tx1, ty0, ty1, look);
 
     // the rising water: over everything below its surface
     if (esc && kind === 'water' && game.chase) {
@@ -3938,6 +4243,21 @@ function render(alpha) {
                 ctx.fillRect(-2 * K, -2.4 * K, 3 * K, K);
             }
             ctx.restore();
+        } else if (f.kind === 'drop') {
+            ctx.globalAlpha = Math.min(1, a * 2);
+            ctx.fillStyle = 'rgba(228,246,255,.95)';
+            ctx.beginPath(); ctx.arc(X(f.x), Y(f.y), f.r * K, 0, TAU); ctx.fill();
+        } else if (f.kind === 'ring') {
+            ctx.globalAlpha = a * 0.75;
+            ctx.strokeStyle = 'rgba(236,250,255,.9)';
+            ctx.lineWidth = 0.7 * K;
+            const r = (1 - a) * f.r + 2;
+            ctx.beginPath(); ctx.ellipse(X(f.x), Y(f.y), r * K, r * 0.28 * K, 0, 0, TAU); ctx.stroke();
+        } else if (f.kind === 'bubble') {
+            ctx.globalAlpha = a;
+            ctx.strokeStyle = 'rgba(232,248,255,.85)';
+            ctx.lineWidth = 0.5 * K;
+            ctx.beginPath(); ctx.arc(X(f.x), Y(f.y), (0.8 + (1 - a)) * K, 0, TAU); ctx.stroke();
         } else if (f.kind === 'clip') {
             ctx.globalAlpha = Math.min(1, a * 2);
             ctx.save();
@@ -3994,10 +4314,11 @@ function render(alpha) {
         ctx.globalAlpha = 1;
         // the mower or the cat, when it is out of sight: a badge on the edge nearest it, pointing
         const cat = kind === 'cat' && catView.x !== null;
-        if (game.chase && p.mode === 'play' && (kind === 'mower' || cat)) {
+        if (game.chase && p.mode === 'play' && (kind === 'mower' || kind === 'race' || cat)) {
             // its front: the badge shows only once all of it is out of sight
-            const sx = kind === 'mower' ? X(game.chase.pos / FX) : X(catView.x / FX);
-            const sy = kind === 'mower' ? Y((level.start.ty + 1) * 16 - 9) : Y(catView.y / FX - 14), r = 17 * dpr, m = r + 12 * dpr;
+            const sx = kind === 'cat' ? X(catView.x / FX) : X(game.chase.pos / FX);
+            const sy = kind === 'mower' ? Y((level.start.ty + 1) * 16 - 9) : kind === 'race' ? Y(surfaceY(game.chase.pos / FX).y - 6)
+                : Y(catView.y / FX - 14), r = 17 * dpr, m = r + 12 * dpr;
             if (sx < vx0 || sx > vx0 + vw || sy < vy0 || sy > vy0 + vh) {
                 const bx = Math.max(vx0 + m, Math.min(vx0 + vw - m, sx)), by = Math.max(vy0 + m, Math.min(vy0 + vh - m, sy));
                 const near = Math.max(0, 1 - UF.danger(game) / 8), a = Math.atan2(sy - by, sx - bx), red = `rgba(200,45,35,${0.75 + near * 0.25})`;
@@ -4017,6 +4338,7 @@ function render(alpha) {
                 ctx.stroke();
                 ctx.beginPath(); ctx.arc(0, 0, r - 1.5 * dpr, 0, TAU); ctx.clip();
                 if (kind === 'mower') { const u = r / 24; drawMower(level.escape.dir * 19 * u, 10 * u, level.escape.dir, u, near); }
+                else if (kind === 'race') { const u = r / 17; drawSkater(0, 5 * u, u, level.escape.dir, true, true); }
                 else { const u = r / 40; drawCat(catView.f * 20 * u, 22 * u, u, catView.f, 'run', catView.ph, 0, true); }
                 ctx.restore();
             }
@@ -4140,6 +4462,55 @@ function drawItem(g, kind) {
         g.lineWidth = 0.55;
         g.beginPath(); g.moveTo(-1.5, -9); g.lineTo(1.5, -6); g.moveTo(1.5, -9); g.lineTo(-1.5, -6); g.stroke();
         blob(g, -3, -11, 1.8, 1, 'rgba(255,230,220,.8)', -0.6);
+    } else if (kind === 'float') {
+        // an angler's float, red over white, lost in the reeds
+        g.strokeStyle = S.ink;
+        g.lineWidth = 0.9;
+        g.beginPath(); g.moveTo(0, -1); g.lineTo(0, -15.5); g.stroke();
+        g.strokeStyle = '#e8453a';
+        g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(0, -12.5); g.lineTo(0, -15.5); g.stroke();
+        const body = () => { g.beginPath(); g.moveTo(0, -0.5); g.bezierCurveTo(4.6, -3, 4.8, -8.5, 0, -11.5); g.bezierCurveTo(-4.8, -8.5, -4.6, -3, 0, -0.5); g.closePath(); };
+        body();
+        g.fillStyle = '#f6f2e8';
+        g.fill();
+        g.save();
+        body();
+        g.clip();
+        g.fillStyle = '#e03c31';
+        g.fillRect(-6, -12, 12, 5.8);
+        g.fillStyle = '#2a2a30';
+        g.fillRect(-6, -6.4, 12, 0.9);
+        blob(g, 2.2, -4, 1.8, 3.2, 'rgba(120,110,100,.25)');
+        blob(g, -1.8, -9.2, 1, 1.6, 'rgba(255,255,255,.7)');
+        g.restore();
+        body();
+        g.strokeStyle = S.ink;
+        g.lineWidth = 0.9;
+        g.stroke();
+    } else if (kind === 'cherry') {
+        // a pair of cherries on their stalks, with a leaf
+        g.strokeStyle = '#5b7a2e';
+        g.lineWidth = 0.9;
+        g.beginPath(); g.moveTo(-3.6, -5.5); g.quadraticCurveTo(-2.5, -12, 1.5, -15.5); g.stroke();
+        g.beginPath(); g.moveTo(3.8, -4.8); g.quadraticCurveTo(3.5, -11, 1.5, -15.5); g.stroke();
+        g.fillStyle = '#6aa33c';
+        g.beginPath(); g.ellipse(4.4, -15.2, 3.4, 1.4, -0.35, 0, TAU); g.fill();
+        g.strokeStyle = '#3f6b22';
+        g.lineWidth = 0.5;
+        g.stroke();
+        for (const [cx, cy, r] of [[-3.6, -3.6, 3.6], [3.8, -3, 3.4]]) {
+            const cg = g.createRadialGradient(cx - 1.2, cy - 1.4, 0.3, cx, cy, r);
+            cg.addColorStop(0, '#ff8a86');
+            cg.addColorStop(0.5, '#d42a36');
+            cg.addColorStop(1, '#8e1424');
+            g.fillStyle = cg;
+            g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill();
+            g.strokeStyle = S.ink;
+            g.lineWidth = 0.8;
+            g.stroke();
+            blob(g, cx - 1.2, cy - 1.5, 1, 0.6, 'rgba(255,255,255,.75)', -0.5);
+        }
     } else if (kind === 'marble') {
         // a glass marble, a twist of colour caught inside
         const mg = g.createRadialGradient(-2.2, -9, 0.5, 0, -6.5, 7);
@@ -4395,6 +4766,99 @@ function drawMouse(p, x, y, u, tint) {
         blob(ctx, pawX, pawY, 0.95, 0.85, FUR.foot);
     }
     ctx.restore();
+}
+
+/* ----- the pond ----- */
+// Water is drawn over whatever is in it: clear at the top, deeper further down, the top moving a
+// little, and the lily pads afloat on it, pressed down by whoever stands on them.
+function drawWater(X, Y, K, tx0, tx1, ty0, ty1, look) {
+    const L = game.level, t = game.frame, cols = look.water || LOOK.pond.day.water;
+    const wet = q => UF.isWater(q) || q === T.LILY, pads = [], grads = new Map();
+    // one soft fall from clear to deep for each height the water's top is at
+    const grad = top => {
+        let g = grads.get(top);
+        if (!g) {
+            g = ctx.createLinearGradient(0, top, 0, top + 56 * K);
+            g.addColorStop(0, cols[0]);
+            g.addColorStop(0.35, cols[1]);
+            g.addColorStop(1, cols[2]);
+            grads.set(top, g);
+        }
+        return g;
+    };
+    const lo = Math.max(0, ty0), hi = Math.min(L.h, ty1 + 1);
+    for (let tx = Math.max(0, tx0); tx < Math.min(L.w, tx1 + 1); tx++) {
+        const x = X(tx * 16), w = X(tx * 16 + 16) - x;
+        let ty = lo;
+        while (ty < hi) {
+            if (!wet(L.tiles[ty * L.w + tx])) { ty++; continue; }
+            // a run of water down this column: where its top is (maybe above the view), where it ends
+            let top = ty;
+            while (top > 0 && wet(UF.tileAt(L, tx, top - 1))) top--;
+            let end = ty;
+            while (end < hi && wet(L.tiles[end * L.w + tx])) end++;
+            const topY = Y(top * 16), y0 = Y(ty * 16), y1 = Y(end * 16);
+            for (let k = ty; k < end; k++) {
+                const q = L.tiles[k * L.w + tx];
+                if (q === T.LILY_DOWN) {
+                    ctx.globalAlpha = 0.45;
+                    blit(lilySprite(Math.floor(hash2(tx, k) * 8)), x, Y(k * 16) + 5 * K);
+                    ctx.globalAlpha = 1;
+                }
+            }
+            ctx.fillStyle = grad(topY);
+            const from = top === ty ? y0 + K : y0;
+            ctx.fillRect(x, from, w, y1 - from);
+            if (top === ty) {
+                // the top: a bright line that moves, and now and then a glint
+                const wave = i => y0 + K * (1 + 0.5 * Math.sin(t * 0.08 + (tx * 16 + i * 4) * 0.3));
+                ctx.fillStyle = look.line || LOOK.pond.day.line;
+                ctx.beginPath();
+                ctx.moveTo(x, wave(0));
+                for (let i = 1; i <= 4; i++) ctx.lineTo(x + w * i / 4, wave(i));
+                for (let i = 4; i >= 0; i--) ctx.lineTo(x + w * i / 4, wave(i) + 1.1 * K);
+                ctx.fill();
+                if (hash(tx * 3 + top) < 0.35) {
+                    const gx = (t * 0.25 + hash(tx) * 40) % 20 - 2;
+                    ctx.fillStyle = 'rgba(255,255,255,.55)';
+                    ctx.fillRect(x + gx * K, y0 + 4 * K, 3 * K, 0.7 * K);
+                }
+                if (L.tiles[ty * L.w + tx] === T.LILY) pads.push([tx, ty, x, y0, Math.floor(hash2(tx, ty) * 8)]);
+            }
+            ty = end;
+        }
+    }
+    for (const [tx, ty, x, y, v] of pads) {
+        const load = game.load[ty * L.w + tx] || 0;
+        blit(lilySprite(v), x, y + (Math.sin(t * 0.04 + tx) * 0.4 + load / P.LILY_HOLD * 2.5) * K);
+    }
+}
+const lilySprite = v => cached(5e6 + 100 + v, 22, 26, 3, 5, g => paintLily(g, v));
+// where the water's top is, above a point in it
+function waterTop(x, y) {
+    const L = game.level, tx = Math.floor(x / 16);
+    let ty = Math.floor(y / 16);
+    while (ty > 0 && (UF.isWater(UF.tileAt(L, tx, ty - 1)) || UF.tileAt(L, tx, ty - 1) === T.LILY)) ty--;
+    return ty * 16;
+}
+// running on the water: spray from the feet, rings behind; under it: bubbles; frogs, now and then
+function pondFx(p) {
+    const L = game.level, f = p.facing;
+    if (p.onGround && p.y % TILE === 0 && UF.isWater(UF.tileAt(L, Math.floor(p.x / TILE), p.y / TILE))) {
+        for (let k = 0; k < 2; k++) fx.push({kind: 'drop', x: p.x / FX - f * (3 + Math.random() * 4), y: p.y / FX - 1,
+            vx: -f * (0.3 + Math.random()) + p.vx / FX * 0.15, vy: -0.8 - Math.random() * 1.6, g: 0.16, drag: 0.97, life: 22, max: 22,
+            r: 0.5 + Math.random() * 0.6, rot: 0});
+        if (game.frame % 5 === 0) fx.push({kind: 'ring', x: p.x / FX, y: p.y / FX + 1, vx: 0, vy: 0, g: 0, drag: 1, life: 40, max: 40, r: 12, rot: 0});
+        if (game.frame % 7 === 0) sound.skim();
+    }
+    if (p.sink > 0 && game.frame % 3 === 0) fx.push({kind: 'bubble', x: p.x / FX + (Math.random() - 0.5) * 8, y: p.y / FX - 8,
+        vx: 0, vy: -0.7, g: -0.01, drag: 1, life: 30, max: 30, rot: 0});
+    if (game.frame % 240 === 120 && game.ents.some(e => e.kind === 'frog' && !e.gone && e.active && e.state === 'sit' && Math.abs(e.x - p.x) < 10 * TILE)) sound.croak();
+}
+function splashAt(x, y, n, power) {
+    for (let k = 0; k < n; k++) fx.push({kind: 'drop', x: x + (Math.random() - 0.5) * 8, y, vx: (Math.random() - 0.5) * 2.4 * power,
+        vy: -(1 + Math.random() * 2.2) * power, g: 0.18, drag: 0.98, life: 30, max: 30, r: 0.5 + Math.random() * 0.8, rot: 0});
+    for (let k = 0; k < 2; k++) fx.push({kind: 'ring', x, y: y + 1, vx: 0, vy: 0, g: 0, drag: 1, life: 40 + k * 14, max: 40 + k * 14, r: 10 + k * 8, rot: 0});
 }
 
 /* ----- what chases you, as it looks and sounds ----- */
@@ -4740,6 +5204,115 @@ function drawCat(x, y, u, f, pose, ph, tilt, bell) {
     ctx.restore();
 }
 
+// the pond skater, around its middle at (x, y) (where its feet touch), facing d: a slender dark
+// body held up on long legs; on the water each foot makes a dimple, on land it picks its way
+function drawSkater(x, y, u, d, wet, moving) {
+    const t = game.frame;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(u * d, u);
+    ctx.lineCap = ctx.lineJoin = 'round';
+    const row = moving ? Math.sin(t * (wet ? 0.45 : 0.3)) : 0;
+    // where each foot is: two short front legs, two long rowing middle legs, two hind legs
+    const feet = [[7 + row * 0.6, 0], [5 - row * 0.6, 0], [3 + 6 + row * 3, 0], [-1 + 3 + row * 3, 0], [-10 - row * 2, 0], [-13 + row * 2, 0]];
+    if (wet) for (const [fx2] of feet) {
+        blob(ctx, fx2, 0.6, 2.2, 0.55, 'rgba(20,50,80,.25)');
+        ctx.strokeStyle = 'rgba(240,252,255,.7)';
+        ctx.lineWidth = 0.4;
+        ctx.beginPath(); ctx.ellipse(fx2, 0.3, 2.4, 0.6, 0, 0, TAU); ctx.stroke();
+    }
+    const body = -5.5 + (moving && !wet ? Math.abs(row) * 0.6 : 0);
+    ctx.strokeStyle = '#2a2830';
+    ctx.lineWidth = 0.75;
+    const hips = [[3.5, body], [3.5, body], [0.5, body], [0.5, body], [-2.5, body], [-2.5, body]];
+    feet.forEach(([fx2, fy], i) => {
+        const [hx, hy] = hips[i], kx = (hx + fx2) / 2 + (i < 2 ? 1 : 0), ky = Math.min(hy, fy) - 3.5 - (i >= 2 && i < 4 ? 1.5 : 0);
+        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo(kx, ky, fx2, fy - 0.3); ctx.stroke();
+    });
+    // the body: long and narrow, a sheen along the back, a small head with feelers
+    ctx.fillStyle = '#34313a';
+    ctx.beginPath(); ctx.ellipse(0, body, 8.5, 1.9, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = S.ink;
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+    blob(ctx, -1, body - 0.8, 5, 0.5, 'rgba(210,220,240,.45)');
+    blob(ctx, 9.2, body - 0.4, 1.8, 1.4, '#2c2a31');
+    blob(ctx, 9.8, body - 0.9, 0.5, 0.5, '#e8d8a0');
+    ctx.strokeStyle = '#2a2830';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(10.5, body - 1); ctx.quadraticCurveTo(13, body - 3.5, 14.5, body - 3); ctx.stroke();
+    ctx.restore();
+}
+// the surface a racer on this column stands on: the first water or ground from the top
+function surfaceY(x) {
+    const L = game.level, tx = Math.floor(x / 16);
+    for (let ty = 0; ty < L.h; ty++) {
+        const q = UF.tileAt(L, tx, ty);
+        if (UF.isWater(q) || q === T.LILY || UF.SOLID[q] || q === T.ONEWAY || (q === T.ESC_ON && L.on) || (q === T.ESC_OFF && !L.on))
+            return {y: ty * 16, wet: UF.isWater(q) || q === T.LILY};
+    }
+    return {y: L.h * 16, wet: false};
+}
+
+// a green frog, facing the way it will leap: crouched when it sits, long in the air
+function drawFrog(e, t) {
+    if (e.dir > 0) ctx.scale(-1, 1);                    // drawn facing left, like the beetle
+    const air = !e.onGround && e.state !== 'flip', breathe = air ? 0 : Math.sin(t * 0.12) * 0.35;
+    const green = '#6fae4c', dark = '#4c8a38', belly = '#dcebb0';
+    ctx.lineWidth = 0.9;
+    ctx.strokeStyle = S.ink;
+    // the back leg: folded under it, or kicked out behind
+    const leg = () => {
+        ctx.beginPath();
+        if (air) { ctx.moveTo(4, -5); ctx.quadraticCurveTo(9, -4, 12, -1.5); ctx.lineTo(13.5, -0.8); ctx.lineTo(12.5, -2.8); ctx.quadraticCurveTo(9, -6.5, 4.5, -7.5); }
+        else { ctx.moveTo(1.5, -1); ctx.quadraticCurveTo(7.5, -1, 7.8, -4.5); ctx.quadraticCurveTo(7.5, -7.5, 3, -7); ctx.quadraticCurveTo(5.5, -4, 1.5, -3.5); }
+        ctx.closePath();
+    };
+    leg();
+    ctx.fillStyle = dark;
+    ctx.fill();
+    ctx.stroke();
+    // body and head in one: a rounded wedge, belly pale
+    const body = () => {
+        ctx.beginPath();
+        ctx.moveTo(-7.5, -3.2);
+        ctx.quadraticCurveTo(-8.3, -8.4 - breathe, -4, -8.6 - breathe);
+        ctx.quadraticCurveTo(1, -9.3 - breathe, 5.4, -6.8);
+        ctx.quadraticCurveTo(7.4, -4.6, 5.8, -2.2);
+        ctx.quadraticCurveTo(0, -0.4, -7.5, -3.2);
+        ctx.closePath();
+    };
+    body();
+    ctx.fillStyle = green;
+    ctx.fill();
+    ctx.save();
+    body();
+    ctx.clip();
+    blob(ctx, -1, -1.6, 7.5, 2.4, belly);
+    for (const [sx, sy, r] of [[1.5, -7.2, 1.2], [3.8, -5.6, 0.9], [-0.8, -6.6, 0.7]]) blob(ctx, sx, sy, r, r * 0.8, dark);
+    ctx.restore();
+    body();
+    ctx.stroke();
+    // a front leg, and the smile
+    ctx.strokeStyle = S.ink;
+    ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.moveTo(-6.8, -4.2); ctx.quadraticCurveTo(-3.8, -3, -2.2, -4.4); ctx.stroke();
+    ctx.fillStyle = green;
+    ctx.beginPath();
+    if (air) { ctx.moveTo(-5, -3); ctx.lineTo(-8.5, -1); ctx.lineTo(-7.8, -0.2); ctx.lineTo(-4, -2); }
+    else { ctx.moveTo(-4.8, -3); ctx.lineTo(-5.4, 0); ctx.lineTo(-3.4, 0); ctx.lineTo(-3.2, -3); }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // the eyes, up on top
+    for (const [ex, r] of [[-4.6, 1.9], [-1.4, 1.7]]) {
+        blob(ctx, ex, -8.8 - breathe, r + 0.5, r + 0.4, green);
+        ctx.beginPath(); ctx.ellipse(ex, -8.8 - breathe, r + 0.5, r + 0.4, 0, Math.PI * 1.05, TAU * 0.98); ctx.stroke();
+        blob(ctx, ex, -9 - breathe, r * 0.75, r * 0.75, '#f3e7b0');
+        blob(ctx, ex - 0.3, -9 - breathe, r * 0.35, r * 0.55, '#1b1a1c');
+    }
+}
+
 // it walks right
 function drawEnt(e, x, y, u) {
     const t = game.frame + e.id * 7;
@@ -4794,6 +5367,8 @@ function drawEnt(e, x, y, u) {
             ctx.beginPath(); ctx.moveTo(-7.5, -6.8); ctx.quadraticCurveTo(-10, -9.5 + stepA * 0.3, -11.8, -8.2); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(-6.6, -7); ctx.quadraticCurveTo(-8, -10.5, -10, -10.5 - stepA * 0.3); ctx.stroke();
         }
+    } else if (e.kind === 'frog') {
+        drawFrog(e, t);
     } else if (e.kind === 'snail' || e.kind === 'shell') {
         const [sh, shLo] = e.red ? ['#e0705c', '#9a3a2c'] : ['#f0bb55', '#a8741f'];
         if (e.kind === 'snail') {
@@ -4958,10 +5533,12 @@ function drawHud(dpr) {
     }
     // the escape, big and in the middle: the clock, or how far behind the water or the edge is
     if (game.escape && p.mode === 'play') {
-        const kind = level.escape.kind, d = Math.max(0, UF.danger(game)), close = kind === 'clock' ? d < 10 : d < 3;
+        const kind = level.escape.kind, raw = UF.danger(game), d = Math.max(0, raw), close = kind === 'clock' ? d < 10 : d < 3;
         const big = Math.round(22 * s * dpr * (close && game.frame % 60 > 50 ? 1.08 : 1));
         ctx.font = `800 ${big}px system-ui, sans-serif`;
-        const t = Math.min(99, d).toFixed(1);
+        // in a race you can be behind: the number is how far, and says so
+        const behind = kind === 'race' && raw < 0;
+        const t = Math.min(99, behind ? -raw : d).toFixed(1);
         const w = ctx.measureText('00.0').width + pad * 2.4, cx = (view.x + view.w / 2) * dpr;
         const yy = Math.round(view.y * dpr) + pad + (view.w < 520 ? bh + pad * 0.6 : 0);
         ctx.fillStyle = close ? 'rgba(170,20,20,.88)' : kind === 'water' ? 'rgba(20,60,110,.85)' : 'rgba(31,36,45,.85)';
@@ -4973,7 +5550,7 @@ function drawHud(dpr) {
         if (kind !== 'clock') {
             ctx.font = `700 ${Math.round(big * 0.42)}px system-ui, sans-serif`;
             ctx.fillStyle = 'rgba(255,255,255,.8)';
-            ctx.fillText(AHEAD[kind], cx, yy + big * 1.5 + big * 0.45);
+            ctx.fillText(behind ? 'tiles behind the pond skater' : AHEAD[escName(level.escape)] || '', cx, yy + big * 1.5 + big * 0.45);
         }
         ctx.textAlign = 'left';
     }
@@ -5009,7 +5586,7 @@ function drawHud(dpr) {
     const notes = [];
     if (lateFx > 0) notes.push([LATE[lateWhy].replace('ITEM', ITEM[DEF.item]), Math.min(1, lateFx / 30), 'rgba(150,20,20,.9)']);
     else if (goalFx > 0 && p.mode === 'play')
-        notes.push([game.escape ? FLEE[level.escape.kind] : GOAL[DEF.item], Math.min(1, goalFx / 40)]);
+        notes.push([game.escape ? FLEE[escName(level.escape)] : GOAL[DEF.item], Math.min(1, goalFx / 40)]);
     if (hint > 0 && !(view.pad && view.pad.h > 60)) {
         if (hint < 1) hint = Math.max(0, hint - 0.02);
         notes.push([touchUI ? 'Left thumb: slide it the way you want to go, pull down to slide  ·  Right thumb: jump'

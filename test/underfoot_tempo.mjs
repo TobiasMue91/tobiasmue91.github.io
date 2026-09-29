@@ -276,6 +276,64 @@ if (suites.includes('moves')) {
     check(fell.length === 1 && s.p.mode === 'play' && s.p.onGround && Math.abs(s.p.x - 30 * TILE) < TILE && s.deaths === 1,
         'running into a pit puts you back at its edge', `at x ${fmt(s.p.x / TILE)}`);
 
+    // the pond: at a dash the water carries you; slower, or stopping, or turning, it swallows you
+    const pond = (x, n = 12, extra = []) => flat(300, [[x, 9, 'w'.repeat(n)], [x, 10, 'w'.repeat(n)], ...extra]);
+    s = room(pond(6));
+    let splash = events(s, 150, RUN, 'splash', t => t.events.some(e => e.type === 'fell'));
+    check(splash.length === 1 && s.deaths === 1 && s.p.onGround && s.p.x < 7 * TILE && UF.firm(s.level, s.p),
+        'at running speed you go under, and are put back on the bank', `${splash.length} splashes, x ${fmt(s.p.x / TILE)}`);
+    s = room(pond(80));
+    run(s, 600, RUN, t => t.p.x > 70 * TILE);
+    splash = events(s, 200, RUN, 'splash', t => t.p.x > 95 * TILE);
+    check(splash.length === 0 && s.p.x > 95 * TILE, `at a dash or faster you run across (${fmt(P.SKIM / FX)} px/f and up)`);
+    const onPond = () => { const s = room(pond(80, 30)); run(s, 600, RUN, t => t.p.x > 85 * TILE); return s; };
+    s = onPond();
+    const was = s.p.onGround && UF.isWater(UF.tileAt(s.level, Math.floor(s.p.x / TILE), 9));
+    check(was && events(s, 60, 0, 'splash').length === 1, 'let go on the water and you go under');
+    s = onPond();
+    check(events(s, 60, RUN_L, 'splash').length === 1, 'turn round on it and you go under');
+    s = onPond();
+    UF.step(s, {h: RUN | IN.J, p: IN.J});
+    const leap = events(s, 120, RUN | IN.J, 'splash', t => t.p.onGround);
+    check(leap.length === 0 && s.p.onGround && s.p.y === 9 * TILE, 'a jump off the water lands back on it, running');
+    s = room(pond(6));
+    events(s, 150, RUN, 'fell', t => t.events.some(e => e.type === 'fell'));
+    check(s.safe === null || UF.firm(s.level, {x: s.safe.x, y: s.safe.y, w: P.W}), 'where you are put back is firm ground, never the water');
+    // lily pads: they hold anyone, for a moment
+    s = room(flat(60, [[20, 9, 'wwlww'], [20, 10, 'wwwww']]));
+    Object.assign(s.p, {x: 22 * TILE + TILE / 2, y: 9 * TILE, onGround: true});
+    let went = -1, wet = -1;
+    for (let i = 0; i < 90 && wet < 0; i++) {
+        UF.step(s, {h: 0});
+        if (s.events.some(e => e.type === 'lily' && e.down)) went = i + 1;
+        if (s.events.some(e => e.type === 'splash')) wet = i + 1;
+    }
+    check(went === P.LILY_HOLD && wet > went && wet - went < 10,
+        `a lily pad holds you ${P.LILY_HOLD} frames, then goes under with you`, `under at ${went}, splash at ${wet}`);
+    run(s, P.LILY_UNDER + 20);
+    check(UF.tileAt(s.level, 22, 9) === T.LILY, 'and comes up again');
+    // frogs: back and forth, three tiles each leap; land on one and it throws you high
+    s = room(flat(60, [[12, 8, 'f']]));
+    const xs = [];
+    for (let i = 0; i < 400; i++) { UF.step(s, {h: 0}); if (s.ents[0].onGround && (!xs.length || xs[xs.length - 1] !== s.ents[0].x)) xs.push(s.ents[0].x); }
+    check(xs.length >= 4 && xs.every((x, i) => Math.abs(x - (i % 2 ? 15 : 12) * TILE - TILE / 2) < 2 * FX), 'a frog leaps back and forth, three tiles',
+        xs.map(x => fmt(x / TILE)).join(' '));
+    s = room(flat(60, [[12, 8, 'f']]));
+    run(s, 5);
+    Object.assign(s.p, {x: s.ents[0].x, y: s.ents[0].y - 3 * TILE, onGround: false, vy: 2 * FX, fall: true, jumped: true});
+    let frogTop = Infinity, stomped = 0;
+    for (let i = 0; i < 120; i++) {
+        UF.step(s, {h: IN.J});
+        if (s.events.some(e => e.type === 'stomp')) stomped++;
+        if (stomped) frogTop = Math.min(frogTop, s.p.y);
+        if (stomped && s.p.onGround) break;
+    }
+    check(stomped === 1 && (9 * TILE - frogTop) / TILE > 7.5 && s.ents[0].state === 'flip', `land on a frog with jump held and it throws you ${fmt((9 * TILE - frogTop) / TILE)} tiles up`);
+    // anything else that walks into the water is gone
+    s = room(flat(60, [[8, 9, 'wwww'], [8, 10, 'wwww'], [13, 8, 'b']]));
+    const plop = events(s, 300, 0, 'splash');
+    check(plop.length === 1 && plop[0].id === 0 && s.ents[0].gone, 'a beetle that walks into the pond is gone with a splash');
+
     // mushrooms in the lawn: on one and you go up, as high as jump is held, speed and tier kept
     const lawn = (w, at) => {
         const rows = [];
@@ -508,6 +566,67 @@ if (suites.includes('escape')) {
     s.p.y = (s.level.h + 6) * TILE; s.p.onGround = false;
     UF.step(s, {h: 0});
     check(s.chase.path.every(q => q[1] <= s.level.h * TILE), 'into a pit and back: the cat is not sent down it');
+    // a snake is the cat's rules with other numbers: through any gap, but slow wherever the trail climbs
+    const SNAKE = {kind: 'cat', animal: 'snake', delay: 40, speed: 2, gap: 99, squeeze: 1, climb: 0.25};
+    s = take(yard(SNAKE));
+    const upRate = [], flatRate = [];
+    let prevAt = null;
+    hold(s, 900, i => {
+        const x = 68.5 - i * 0.2;
+        return x > 50 ? [x, 15] : x > 40 ? [x, 15 - (50 - x) * 0.6] : [Math.max(x, 12.5), 9];
+    }, t => {
+        const a = UF.catAt(t.chase);
+        if (prevAt && t.chase.path.length > 2) {
+            const d = Math.abs(a.x - prevAt.x) + Math.abs(a.y - prevAt.y);
+            if (a.y < prevAt.y) upRate.push(d); else if (a.y === prevAt.y) flatRate.push(d);
+        }
+        prevAt = a;
+        return t.events.some(e => e.type === 'late');
+    });
+    check(upRate.length > 10 && flatRate.length > 10 && mid(upRate) <= mid(flatRate) * 0.5,
+        'a grass snake follows the trail as the cat does, but slowly where it climbs', `up ${fmt(mid(upRate) / FX)}, flat ${fmt(mid(flatRate) / FX)} px/f`);
+
+    // the race: the pond skater makes for the mouse hole, fast on the water and slow on land
+    const RACE = {kind: 'race', delay: 10, water: 3, land: 1};
+    const racecourse = () => yard(RACE, [[20, 15, 'w'.repeat(30)], [20, 16, 'w'.repeat(30)]]);
+    s = take(racecourse());
+    const legs = {wet: [], dry: []};
+    let skaterWas = s.chase.pos, lost = null;
+    hold(s, 3000, () => [66.5, 15], t => {
+        const l = t.events.find(e => e.type === 'late');
+        if (l) { lost = l; return true; }
+        if (t.chase.wait === 0 && t.chase.pos !== skaterWas) (t.chase.wet ? legs.wet : legs.dry).push(skaterWas - t.chase.pos);
+        skaterWas = t.chase.pos;
+        return false;
+    });
+    check(legs.wet.length > 100 && legs.wet.every(d => d === 3 * FX) && legs.dry.length > 100 && legs.dry.every(d => d === FX),
+        'across the water the pond skater goes at its water speed, over land at its land speed');
+    check(lost && lost.why === 'race', 'stand still and it is home first: the race starts again');
+    s = take(racecourse());
+    const won = events(s, 800, RUN_L, 'clear', t => t.p.mode === 'clear');
+    check(won.length === 1 && !s.events.some(e => e.type === 'late') && UF.danger(s) > 0, 'run home first, over the water at a dash, and it is yours');
+
+    // the flood: the pond rises, and every row it reaches is water
+    const FLOOD = {kind: 'flood', from: 1, delay: 0, speed: 1, gap: 99};
+    s = take(yard(FLOOD, [[30, 13, 'X']]));
+    let rose = -1, sank = null;
+    for (let i = 0; i < 200 && !sank; i++) {
+        UF.step(s, {h: 0});
+        if (rose < 0 && s.events.some(e => e.type === 'flood' && e.row === 14)) rose = i;
+        sank = s.events.find(e => e.type === 'late') || null;
+        if (rose >= 0 && rose === i) {
+            let wet = 0;
+            for (let tx = 2; tx < 70; tx++) if (UF.isWater(UF.tileAt(s.level, tx, 14))) wet++;
+            check(wet === 68 && UF.tileAt(s.level, 30, 13) === T.STONE, 'the row it reaches fills with water, and nothing else changes', `${wet} tiles of 68`);
+        }
+    }
+    check(rose > 0 && sank && sank.why === 'water' && UF.tileAt(s.level, 20, 14) === T.EMPTY,
+        'stand in it and it closes over you: the escape starts again, dry', sank ? sank.why : 'not caught');
+    s = take(yard(Object.assign({}, FLOOD, {speed: 0.25})));
+    run(s, 400, 0, t => t.events.some(e => e.type === 'flood' && e.row === 14) || t.p.sink > 0);
+    Object.assign(s.p, {x: 60 * TILE, y: 14 * TILE, vx: -P.TIERS[2], onGround: true, tier: 2, sink: 0, mode: 'play'});
+    const dry = events(s, 40, RUN_L, 'splash');
+    check(dry.length === 0 && s.p.y === 14 * TILE && s.p.onGround, 'at a dash you run across the flood as across the pond');
 }
 
 /* ================= lines ================= */
