@@ -535,7 +535,8 @@ const approach = (v, target, rate) => v < target ? Math.min(target, v + rate) : 
 //   {kind: 'race', delay, water, land}           a pond skater races you home from the item: `water`
 //                                                px/f over water, `land` over land; first home wins
 //   {kind: 'flood', from, delay, speed, gap}     the pond rises from `from` tiles below the item, and
-//                                                every row it reaches is water: run across, or climb
+//                                                every row it reaches is water: run across it at a
+//                                                dash (it lifts you as it comes up), or climb
 function parseLevel(def) {
     const rows = def.rows, h = rows.length, w = rows[0].length;
     const tiles = new Uint8Array(w * h);
@@ -1126,7 +1127,47 @@ function resetEscape(s) {
     // the race: where the pond skater is, and whether it is on the water
     if (X.kind === 'race') s.chase = {pos: s.item.x, wait: X.delay, wet: false};
     // the flood: its top, and the next row it will fill
-    if (X.kind === 'flood') s.chase = {pos: s.item.y + X.from * TILE, wait: X.delay, row: fdiv(s.item.y + X.from * TILE - 1, TILE)};
+    if (X.kind === 'flood') s.chase = {pos: s.item.y + X.from * TILE, wait: X.delay, row: fdiv(s.item.y + X.from * TILE - 1, TILE), ref: s.item.y};
+}
+
+// The flood reaches a row: its air and its seeds (golden too) become water, and what floats comes up with it,
+// the lily pads and whatever sits on one. Returns the columns where a pad came up.
+function rise(s, r) {
+    const L = s.level, floated = new Set();
+    for (let tx = 0; tx < L.w; tx++) {
+        const i = r * L.w + tx, t = L.tiles[i];
+        if (t !== T.EMPTY && t !== T.SEED && t !== T.GOLD && t !== T.ESC_OFF) continue;
+        const j = i + L.w, u = r + 1 < L.h ? L.tiles[j] : T.EMPTY;
+        if (u !== T.LILY && u !== T.LILY_DOWN) { L.tiles[i] = T.WATER; continue; }
+        L.tiles[i] = u;
+        L.tiles[j] = T.WATER;
+        if (s.load[j]) { s.load[i] = s.load[j]; delete s.load[j]; }
+        for (const q of s.sunk) if (q[0] === j) q[0] = i;
+        floated.add(tx);
+    }
+    for (const e of s.ents) if (!e.gone && e.onGround && e.y === (r + 1) * TILE && floated.has(fdiv(e.x, TILE))) e.y -= TILE;
+    return floated;
+}
+
+// The flood coming up round you: at a dash, or on a lily pad, it lifts you onto its new top (if
+// nothing above is in the way) and you go on across it. Any other way, it closes over you.
+function surf(s, p, row, floated) {
+    const top = row * TILE;
+    if (p.mode !== 'play' || p.sink > 0 || p.y <= top || p.y > top + TILE) return;
+    let pad = false;
+    if (p.onGround && p.y === top + TILE) {
+        const b = box(p);
+        for (let tx = fdiv(b.l, TILE); tx <= fdiv(b.r - 1, TILE); tx++) if (floated.has(tx)) pad = true;
+    }
+    if (!pad && Math.abs(p.vx) < P.SKIM) return;
+    if (overlaps(s.level, p.x, top, p.w, p.h)) return;
+    const dy = p.y - top;
+    p.y = top;
+    if (p.vy >= 0) {
+        p.vy = 0;
+        if (!p.onGround) land(s, p);
+    }
+    event(s, 'surf', {dy});
 }
 
 // is the first thing from the sky down in this column water (or a lily pad on it)?
@@ -1160,12 +1201,15 @@ function stepEscape(s) {
         return false;
     }
     if (X.kind === 'flood') {
-        // the pond rises: its top comes up at its speed (faster if you are far above it), and each
-        // row it reaches fills with water that runs like the pond's: at a dash you cross it
-        c.pos -= p.y + far < c.pos ? 3 * speed : speed;
+        // the pond rises: its top comes up at its speed (faster if the last place you stood is far
+        // above it: a jump does not hurry it), and each row it reaches fills with water that runs
+        // like the pond's: at a dash you cross it, and as it comes up it lifts you
+        if (p.onGround) c.ref = p.y;
+        c.pos -= c.ref + far < c.pos ? 3 * speed : speed;
         while (c.row >= 0 && c.pos <= c.row * TILE) {
-            for (let tx = 0; tx < L.w; tx++) { const i = c.row * L.w + tx; if (L.tiles[i] === T.EMPTY) L.tiles[i] = T.WATER; }
+            const floated = rise(s, c.row);
             event(s, 'flood', {row: c.row});
+            surf(s, p, c.row, floated);
             c.row--;
         }
         return false;
@@ -1656,7 +1700,8 @@ return {FX, TILE, VIEW_H, P, E, MOVE, IN, T, SOLID, parseLevel, newGame, step, t
    escape: what the way home is up against (see parseLevel); ranks: seconds for S, A and B
    (see test/underfoot_tempo.mjs); route: how a bot is steered, out and back (tile x, feet row);
    inside: tile rectangles [x0, y0, x1, y1] with a back wall behind them, a shed's;
-   pits: 'pond' fills the gaps in the ground with water, and makes its ledges lily pads. */
+   pits: 'pond' fills the gaps in the ground with water, and makes its ledges lily pads;
+   horizon: the row the scenery behind stands on, where it is not the start's. */
 const LEVELS = [
 {
     id: "sack",
@@ -1930,6 +1975,52 @@ const LEVELS = [
     ],
     labels: [[12, 10, "OUT TO THE ISLAND FOR THE CHERRIES"], [45, 9, "ON THE WAY BACK, A RACE"], [88, 6, "DOWN: SLIDE THROUGH"], [131, 1, "KICK UP"]],
     route: {"out": [[131, 16], [134, 6]], "back": [[131, 16], [1, 16]]},
+},
+{
+    id: "storm",
+    name: "The summer storm",
+    item: "boat",
+    backdrop: "storm",
+    idea: "Down to the beach for a paper boat, then home up the garden as the storm floods the pond behind you.",
+    escape: {"kind": "flood", "from": 2, "delay": 60, "speed": 0.22, "gap": 3},
+    ranks: [23, 29, 40],
+    rows: [
+        'XX..........................................................................................................................................XXXX',
+        'XX..........................................................................................................................................XXXX',
+        'XX..........................................................................................................................................XXXX',
+        'XX..........................................................................................................................................XXXX',
+        'XX..............................................................................................................WW..........................XXXX',
+        'XX..............................................................................................................WW..........................XXXX',
+        'HH.....o.o.o.o.o.o..............................................................................................WW..........................XXXX',
+        'HH..@...........................................................................................................WW..........................XXXX',
+        '====================XX..........................................................................................WW..........................XXXX',
+        '####################XX...o..o...BB..o..o........................................................................WW..........................XXXX',
+        '####################XX..........BB..............................................................................WW..........................XXXX',
+        '####################XX.....b....BB....b.........................................................................WW..........................XXXX',
+        '####################XX====================XX....................................................................WW..........................XXXX',
+        '####################XX####################XX....................................................................WW..........................XXXX',
+        '####################XX####################XX......o..o..o.......................................................WW..........................XXXX',
+        '####################XX####################XX..........s.........................................................WW..........................XXXX',
+        '####################XX####################XX==M=============XX..................................................WW..........................XXXX',
+        '####################XX####################XX################XX..............G...........................b..b....WW..........................XXXX',
+        '####################XX####################XX################XX........................................======XX..WW..........................XXXX',
+        '####################XX####################XX################XX........................................######XX..WW..........................XXXX',
+        '####################XX####################XX################XX........................................######XX..WW..........................XXXX',
+        '####################XX####################XX################XX..................................XX====######XX..WW..........................XXXX',
+        '####################XX####################XX################XX...............................XXXXX##########XX..WW..o..o..o..o..o...........XXXX',
+        '####################XX####################XX################XX........f...........f..........XXXXX##########XX..................Q...........XXXX',
+        '####################XX####################XX################XXwwlwwwwwlwwwwwlwwXwwlwwwwwlwwwwXXXXX##########XX========================wwwwwwXXXX',
+        '####################XX####################XX################XXwwwwwwwwwwwwwwwwwXwwwwwwwwwwwwwXXXXX##########XX########################wwwwwwXXXX',
+        '####################XX####################XX################XXwwwwwwwwwwwwwwwwwXwwwwwwwwwwwwwXXXXX##########XX########################wwwwwwXXXX',
+        '####################XX####################XX################XXwwwwwwwwwwwwwwwwwXwwwwwwwwwwwwwXXXXX##########XX########################wwwwwwXXXX',
+        '####################XX####################XX################XXwwwwwwwwwwwwwwwwwXwwwwwwwwwwwwwXXXXX##########XX########################wwwwwwXXXX',
+        '####################XX####################XX################XXwwwwwwwwwwwwwwwwwXwwwwwwwwwwwwwXXXXX##########XX########################wwwwwwXXXX',
+        '####################XX####################XX################XXwwwwwwwwwwwwwwwwwXwwwwwwwwwwwwwXXXXX##########XX########################wwwwwwXXXX',
+        '####################XX####################XX################XXwwwwwwwwwwwwwwwwwXwwwwwwwwwwwwwXXXXX##########XX########################wwwwwwXXXX',
+    ],
+    labels: [[8, 4, "DOWN TO THE BEACH FOR THE PAPER BOAT"], [64, 18, "A DASH CARRIES YOU OVER THE WATER"], [98, 15, "LILY PADS FLOAT UP WITH THE WATER"], [115, 16, "SLIDE THROUGH THE ROOT"], [111, 10, "KICK UP"]],
+    route: {"out": [[111, 24], [128, 24]], "back": [[111, 24], [106, 18], [1, 8]]},
+    horizon: 24,
 }];
 
 // The fastest line the search bot in test/underfoot_tempo.mjs found, per level: [input, frames], ...
@@ -1941,6 +2032,7 @@ const LINES = {
     lilypond: {frames: 1435, log: [[34,114],[50,8],[34,22],[50,18],[34,12],[50,2],[34,16],[50,8],[34,34],[50,6],[34,18],[50,8],[34,10],[50,8],[34,22],[50,6],[34,18],[50,6],[34,18],[50,6],[34,18],[50,6],[34,24],[8,6],[34,6],[50,8],[34,4],[50,2],[34,4],[49,6],[50,6],[34,12],[50,20],[34,22],[50,6],[34,18],[50,6],[34,18],[50,6],[34,18],[50,6],[34,114],[50,2],[34,16],[0,6],[33,24],[49,8],[33,76],[16,6],[49,12],[16,6],[33,78],[49,6],[33,18],[49,6],[33,18],[49,2],[33,22],[34,12],[33,12],[8,6],[34,12],[50,2],[34,4],[50,2],[34,4],[33,96],[8,6],[34,30],[49,2],[33,46],[49,8],[33,22],[49,6],[33,6],[49,6],[33,150],[34,1]]},
     cat: {frames: 1141, log: [[34,66],[50,2],[34,16],[50,8],[34,28],[50,6],[34,54],[50,8],[34,34],[50,2],[34,22],[50,6],[34,36],[50,6],[34,24],[50,6],[34,12],[50,8],[34,22],[50,14],[34,22],[50,6],[34,18],[8,6],[34,12],[49,6],[50,8],[34,4],[50,2],[34,4],[49,6],[50,2],[34,4],[50,2],[34,4],[49,6],[34,30],[50,14],[34,64],[33,36],[8,6],[0,6],[33,18],[34,6],[49,2],[33,40],[9,6],[34,36],[33,12],[49,20],[33,22],[49,12],[33,42],[8,6],[34,36],[49,20],[33,22],[49,14],[33,22],[49,2],[33,10],[49,2],[33,4],[49,6],[33,12],[49,6],[33,6],[49,18],[33,90],[34,1]]},
     skater: {frames: 1171, log: [[34,186],[50,6],[34,6],[50,6],[34,144],[8,6],[34,168],[8,6],[34,12],[50,6],[49,8],[33,4],[49,6],[50,2],[34,4],[50,2],[34,4],[49,6],[50,6],[33,24],[34,18],[33,6],[0,6],[33,6],[8,6],[34,6],[49,6],[33,138],[8,6],[34,30],[49,2],[33,148],[49,6],[33,174],[34,1]]},
+    storm: {frames: 1106, log: [[34,144],[50,8],[34,22],[50,2],[34,70],[50,2],[34,106],[50,2],[34,16],[50,8],[34,10],[50,6],[34,12],[50,14],[34,40],[33,12],[34,12],[8,6],[34,12],[49,2],[33,4],[50,2],[34,10],[0,6],[34,6],[50,6],[34,18],[0,6],[33,60],[8,6],[34,12],[50,8],[34,4],[50,2],[34,4],[49,2],[33,4],[50,2],[34,4],[33,30],[49,26],[33,40],[49,14],[33,22],[49,14],[33,16],[49,18],[16,12],[49,6],[33,12],[49,2],[33,16],[49,30],[33,6],[49,26],[33,16],[49,6],[33,18],[49,20],[33,84]]},
 };
 
 </script>
@@ -2063,11 +2155,12 @@ function layout() {
 /* ---------------- the game ---------------- */
 // what each level sends you for, and what the way home is up against
 const ITEM = {sack: 'the seed sack', button: 'the button', berry: 'the strawberry', marble: 'the marble', bell: 'the cat',
-    float: 'the float', cherry: 'the cherries'};
+    float: 'the float', cherry: 'the cherries', boat: 'the paper boat'};
 const GOAL = {sack: 'Fetch the seed sack from the far end of the garden →', button: 'Down the drain for the lost button ↓',
     berry: 'Along the bank for the last strawberry →', marble: 'All the way down the lawn for the lost marble →',
     bell: 'Up on the shed roof, the cat is asleep. Bell it →', float: 'Across the pond for the lost float →',
-    cherry: 'Out to the reed island for the cherries: the pond skater wants a race →'};
+    cherry: 'Out to the reed island for the cherries: the pond skater wants a race →',
+    boat: 'Down to the beach for the paper boat, before the storm breaks →'};
 const FLEE = {clock: '← Home to the mouse hole, quick!', water: '↑ Back up, before the water catches you!',
     crumble: '← Home! The bank is giving way behind you', mower: '← Home! The mower is out',
     cat: '← The cat is awake. Home!', race: '← Race the pond skater home!',
@@ -2116,6 +2209,8 @@ function restart() {
     bumps.clear();
     shownClear = false;
     shake = comboPulse = tierFx = lateFx = beat = 0;
+    bolt = surge = null;
+    rainAmt = lift = 0;
     goalFx = 360;
     sq.x = sq.y = 1;
     rec = [];
@@ -2299,7 +2394,7 @@ function heldBits() {
 
 /* ---------------- sound: soft, mostly noise, nothing that plays a tune at you ---------------- */
 const sound = (() => {
-    let ac = null, out = null, hum = null;
+    let ac = null, out = null, hum = null, shower = null;
     function unlock() {
         if (!opt.sound) return;
         try {
@@ -2400,6 +2495,55 @@ const sound = (() => {
             hum.o.frequency.setTargetAtTime(112 + v * 14, ac.currentTime, 0.1);
         },
         clear: () => { noise(0.5, 0.25, 800, 0.8, 4000); tone('sine', 660, 660, 0.12, 0.05, 0.05); tone('sine', 990, 990, 0.25, 0.05, 0.14); },
+        // the storm: thunder near (a crack, then the roll at once) or far (only the roll, later and
+        // softer); a row of the garden going under; and the rain, held for as long as it falls
+        thunder: near => {
+            if (!ac || !opt.sound || quiet) return;
+            const dur = 3.4, t = ac.currentTime + (near ? 0.03 : 0.5 + Math.random() * 0.9);
+            const n = Math.ceil(ac.sampleRate * dur), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+            const rolls = [0, 0.18 + Math.random() * 0.2, 0.6 + Math.random() * 0.4, 1.3 + Math.random() * 0.6];
+            let v = 0;
+            for (let i = 0; i < n; i++) {
+                v = (v + (Math.random() * 2 - 1) * 0.06) * 0.996;            // brown noise: all rumble
+                const x = i / ac.sampleRate;
+                let env = 0;
+                for (const r of rolls) if (x >= r) env = Math.max(env, Math.exp(-(x - r) * 2.4) * (1 - r / 3));
+                d[i] = v * env * Math.min(1, x * 40);
+            }
+            const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+            src.buffer = buf;
+            f.type = 'lowpass';
+            f.frequency.value = near ? 700 : 260;
+            f.Q.value = 0.4;
+            g.gain.value = near ? 0.9 : 0.6;
+            src.connect(f).connect(g).connect(out);
+            src.start(t);
+            if (near) { noise(0.16, 0.45, 2600, 0.5, 600); noise(0.5, 0.3, 180, 0.6, 60, 'lowpass', 0.02); }
+        },
+        surge: () => noise(0.7, 0.14, 240, 0.7, 520, 'lowpass'),
+        rain: v => {
+            if (!ac) return;
+            if (!shower) {
+                if (!v || !opt.sound) return;
+                const n = ac.sampleRate * 3, buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+                for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * 0.5;
+                // drops among the hiss, near and far, so it patters rather than only hisses
+                for (let k = 0; k < 260; k++) {
+                    const at = Math.floor(Math.random() * (n - 800)), w = 0.12 + Math.random() * 0.25, a = 0.3 + Math.random() * 0.9;
+                    for (let i = 0; i < 700; i++) d[at + i] += Math.sin(i * w) * a * Math.exp(-i / (60 + w * 200));
+                }
+                const src = ac.createBufferSource(), hp = ac.createBiquadFilter(), lp = ac.createBiquadFilter(), g = ac.createGain();
+                src.buffer = buf;
+                src.loop = true;
+                hp.type = 'highpass'; hp.frequency.value = 400;
+                lp.type = 'lowpass'; lp.frequency.value = 6500;
+                g.gain.value = 0;
+                src.connect(hp).connect(lp).connect(g).connect(out);
+                src.start();
+                shower = {g};
+            }
+            shower.g.gain.setTargetAtTime(opt.sound ? v * 0.1 : 0, ac.currentTime, 0.5);
+        },
     };
 })();
 const buzz = ms => { if (!quiet && opt.vibe && touchUI && navigator.vibrate) try { navigator.vibrate(ms); } catch (e) { /* none */ } };
@@ -2417,6 +2561,7 @@ function step() {
     stepGhost();
     stepScarf();
     stepChaser();
+    stepStorm();
     const p = game.p;
     for (const e of game.events) onEvent(e);
     // presentation that should move at game speed lives here, not in render()
@@ -2559,6 +2704,16 @@ function onEvent(e) {
         case 'lily':
             fx.push({kind: 'ring', x: e.tx * 16 + 8, y: e.ty * 16 + 1, vx: 0, vy: 0, g: 0, drag: 1, life: 36, max: 36, r: 12, rot: 0});
             if (e.down) sound.bloop();
+            break;
+        case 'flood':
+            // a row of the garden goes under: a swell, heard if it is near
+            surge = {row: e.row, t: 0};
+            if (Math.abs(e.row * TILE - p.y) < 7 * TILE) sound.surge();
+            break;
+        case 'surf':
+            lift = e.dy / FX;
+            splashAt(p.x / FX, p.y / FX, 8, 0.9);
+            sound.splash(false);
             break;
         case 'hop': {
             const f = game.ents[e.id];
@@ -2749,7 +2904,7 @@ function renderCards() {
         list.append(b);
     });
     $('b-play').textContent = `Play · ${DEF.name}`;
-    $('tally').textContent = home ? `Home from ${home} of ${LEVELS.length} · ${top} at rank S` : 'Five levels, five ways home. Start with the first.';
+    $('tally').textContent = home ? `Home from ${home} of ${LEVELS.length} · ${top} at rank S` : `${LEVELS.length} levels, one mouse hole. Start with the first.`;
 }
 function selectLevel(id) {
     setOpt('level', id);
@@ -2764,6 +2919,8 @@ function showTitle() {
     layout();
     startAttract();
     renderCards();
+    const card = $('title-levels').querySelector('[aria-pressed=true]');
+    if (card) card.scrollIntoView({block: 'nearest', inline: 'center'});
     keys.clear();
 }
 function play(viaTouch) {
@@ -2910,7 +3067,15 @@ LOOK.pond = {
     dusk: {skyTop: '#46386a', skyLow: '#ee8f5e', sun: 'rgba(255,150,90,', far: '#7f6a82', farDark: '#6d5c74', mid: '#625a69', midDark: '#4f4958', near: '#44414d', nearDark: '#34323d', flower: ['#d6b8ad', '#d69857', '#8f74b0', '#bd5f59'], haze: 'rgba(238,143,94,.22)',
         water: ['rgba(150,130,178,.52)', 'rgba(96,84,140,.74)', 'rgba(58,50,98,.88)'], line: 'rgba(255,214,190,.85)', farWater: '#b58f9c'},
 };
-const TH = {garden: 0, river: 1, drain: 2, pond: 3};
+// the summer storm: close and yellow while it builds, then dark, the light gone green-grey
+LOOK.storm = {
+    day: {skyTop: '#7b8794', skyLow: '#efdfae', sun: 'rgba(255,226,150,', far: '#a3ae9a', farDark: '#8c9884', mid: '#7ea06a', midDark: '#5f8450', near: '#4f7f45', nearDark: '#3a6633', flower: ['#f4f1ea', '#f2c14e', '#8a6fd1', '#e8786a'], haze: 'rgba(239,223,174,.4)',
+        water: ['rgba(132,172,176,.52)', 'rgba(84,128,146,.74)', 'rgba(50,88,112,.86)'], line: 'rgba(250,246,226,.85)', farWater: '#b8c6b4', cloud: ['#f6f1e2', '#8e959f']},
+    dusk: {skyTop: '#232a34', skyLow: '#5f6b66', sun: 'rgba(170,190,190,', far: '#56625e', farDark: '#48534f', mid: '#435646', midDark: '#34463a', near: '#2f4334', nearDark: '#223428', flower: ['#b9bcb4', '#b89a48', '#6e5f98', '#9c5650'], haze: 'rgba(100,116,116,.35)',
+        water: ['rgba(96,118,124,.56)', 'rgba(62,84,94,.78)', 'rgba(36,52,62,.9)'], line: 'rgba(200,215,220,.8)', farWater: '#66766f', cloud: ['#59616d', '#2a2f38'], noSun: true},
+};
+const TH = {garden: 0, river: 1, drain: 2, pond: 3, storm: 4};
+const pondLike = th => th === TH.pond || th === TH.storm;
 
 // the ground, the stone, the wood: shared by all places except where noted
 const S = {
@@ -3507,7 +3672,7 @@ function paintHedge(g, v, m) {
 
 function paintHome(g, top, left, theme) {
     // the mouse hole: an arch cut into the wall, a warm room beyond, a doormat
-    const wall = theme === TH.drain ? paintDrainStone : theme === TH.river || theme === TH.pond ? paintRock : paintBricks;
+    const wall = theme === TH.drain ? paintDrainStone : theme === TH.river || pondLike(theme) ? paintRock : paintBricks;
     const cx = left ? 16 : 0, cy = top ? 22 : 6;           // the middle of the whole hole
     const warm = () => {
         const glow = g.createRadialGradient(cx, cy, 1, cx, cy, 22);
@@ -3569,7 +3734,7 @@ function tileSprite(L, t, tx, ty, theme) {
             const m = mask(L, tx, ty), par = ty & 1;
             return cached(2e6 + ((theme * 16 + m) * 8 + v) * 2 + par, 22, 26, 3, 5, g => {
                 if (theme === TH.drain) paintDrainStone(g, v, m, par);
-                else if (theme === TH.river || theme === TH.pond) paintRock(g, v, m);
+                else if (theme === TH.river || pondLike(theme)) paintRock(g, v, m);
                 else paintBricks(g, v, m, par);
             });
         }
@@ -3676,14 +3841,35 @@ function bgLayer(theme, dusk, which) {
     if (which === 0) {
         // far: soft clouds, and the garden's giants in the haze
         wrap(() => {
-            g.fillStyle = dusk ? 'rgba(255,190,160,.55)' : 'rgba(255,255,255,.8)';
-            for (let i = 0; i < 5; i++) {
-                const x = i * 150 + R(i) * 60, y = 30 + R(i, 1) * 50, sc = 0.8 + R(i, 2) * 0.7;
-                for (const [dx, dy, rr] of [[-18, 4, 11], [0, -2, 15], [18, 3, 12], [8, 7, 10], [-8, 8, 9]]) {
-                    g.beginPath(); g.arc(x + dx * sc, y + dy * sc, rr * sc, 0, TAU); g.fill();
+            if (theme === TH.storm) {
+                // thunderheads: piled high, flat underneath, lit from above; once the storm is on,
+                // low and dark, with rain hanging from them in shafts
+                for (let i = 0; i < 4; i++) {
+                    const x = i * 120 + R(i) * 50, y = (dusk ? 58 : 70) + R(i, 1) * 20, sc = (dusk ? 1.25 : 0.9) + R(i, 2) * 0.5;
+                    if (dusk) {
+                        g.fillStyle = 'rgba(150,165,175,.13)';
+                        g.beginPath(); g.moveTo(x - 36 * sc, y); g.lineTo(x + 30 * sc, y); g.lineTo(x + 8 * sc, BG_BASE); g.lineTo(x - 60 * sc, BG_BASE); g.fill();
+                    }
+                    const cg = g.createLinearGradient(0, y - 64 * sc, 0, y + 10 * sc);
+                    cg.addColorStop(0, look.cloud[0]);
+                    cg.addColorStop(1, look.cloud[1]);
+                    g.fillStyle = cg;
+                    for (let k = 0; k < 11; k++) {
+                        const a = k / 10, dx = (a - 0.5) * 92 * sc, up = Math.sin(a * Math.PI) * 46 * sc * (0.6 + R(i, k + 3) * 0.6);
+                        g.beginPath(); g.arc(x + dx, y - up * 0.7, (11 + R(i, k + 20) * 12) * sc, 0, TAU); g.fill();
+                    }
+                    g.beginPath(); g.ellipse(x, y + 2 * sc, 52 * sc, 9 * sc, 0, 0, TAU); g.fill();
+                }
+            } else {
+                g.fillStyle = dusk ? 'rgba(255,190,160,.55)' : 'rgba(255,255,255,.8)';
+                for (let i = 0; i < 5; i++) {
+                    const x = i * 150 + R(i) * 60, y = 30 + R(i, 1) * 50, sc = 0.8 + R(i, 2) * 0.7;
+                    for (const [dx, dy, rr] of [[-18, 4, 11], [0, -2, 15], [18, 3, 12], [8, 7, 10], [-8, 8, 9]]) {
+                        g.beginPath(); g.arc(x + dx * sc, y + dy * sc, rr * sc, 0, TAU); g.fill();
+                    }
                 }
             }
-            if (theme === TH.river || theme === TH.pond) {
+            if (theme === TH.river || pondLike(theme)) {
                 // willows along the far bank
                 for (let i = 0; i < 5; i++) {
                     const x = i * 150 + R(i, 3) * 80, h = 110 + R(i, 4) * 50;
@@ -3736,7 +3922,7 @@ function bgLayer(theme, dusk, which) {
             }
             g.fillStyle = look.far;
             g.fillRect(-10, BG_BASE - 8, BG_W + 20, BG_H);
-            if (theme === TH.pond) {
+            if (pondLike(theme)) {
                 // the far side of the pond, pale, with the light on it
                 g.fillStyle = look.farWater;
                 g.fillRect(-10, BG_BASE - 10, BG_W + 20, 14);
@@ -3769,7 +3955,7 @@ function bgLayer(theme, dusk, which) {
                 g.fillStyle = look.flower[1];
                 g.beginPath(); g.arc(x, BG_BASE - h, 4, 0, TAU); g.fill();
             }
-            if (theme === TH.pond) {
+            if (pondLike(theme)) {
                 // yellow flag irises in the shallows
                 for (let i = 0; i < 6; i++) {
                     const x = i * 120 + R(i, 9) * 70, h = 70 + R(i, 10) * 40;
@@ -3787,7 +3973,7 @@ function bgLayer(theme, dusk, which) {
                     g.beginPath(); g.ellipse(x + 1, BG_BASE - h - 3, 2.5, 4, 0, 0, TAU); g.fill();
                 }
             }
-            if (theme === TH.river || theme === TH.pond) {
+            if (theme === TH.river || pondLike(theme)) {
                 // bulrushes
                 for (let i = 0; i < 9; i++) {
                     const x = i * 80 + R(i, 7) * 40, h = 90 + R(i, 8) * 50;
@@ -3881,6 +4067,7 @@ const skyPic = (theme, dusk, vw, vh) => viewPic(`sky${theme}${dusk}`, vw, vh, g 
     sky.addColorStop(1, look.skyLow);
     g.fillStyle = sky;
     g.fillRect(0, 0, vw, vh);
+    if (look.noSun) return;
     const sunX = vw * (dusk ? 0.82 : 0.22), sunY = vh * (dusk ? 0.62 : 0.2);
     const sun = g.createRadialGradient(sunX, sunY, 0, sunX, sunY, vh * 0.8);
     sun.addColorStop(0, look.sun + '.9)');
@@ -3951,9 +4138,11 @@ function render(alpha) {
 
     // the sky, and the sun low in it
     ctx.drawImage(skyPic(theme, esc ? 1 : 0, vw, vh), vx0, vy0, vw, vh);
+    if (bolt) drawBolt(vx0, vy0, vw, vh, K);
 
     // the layers behind
-    const groundY = (level.start.ty + 1) * 16, gs = Y(groundY);
+    // the layers stand on the start's ground, or on the level's horizon where it has one lower down
+    const groundY = (DEF.horizon || level.start.ty + 1) * 16, gs = Y(groundY);
     const layerFs = [0.12, 0.3, 0.55];
     for (let i = 0; i < 3; i++) drawLayer(bgLayer(theme, esc ? 1 : 0, i), layerFs[i], camX, gs, vx0, vy0, vw, vh, BG_FILL[i] && look[BG_FILL[i]]);
 
@@ -4127,6 +4316,8 @@ function render(alpha) {
         }
     }
 
+    if (pondLike(theme)) drawCrowns(X, Y, K, tx0, tx1, esc && theme === TH.storm);
+
     // particles behind the mouse
     for (const f of fx) if (f.kind === 'dust') {
         const a = f.life / f.max;
@@ -4182,7 +4373,7 @@ function render(alpha) {
     }
     ctx.globalAlpha = 1;
     // the mouse: blinking while it cannot be hurt
-    const px = lerp(prev.px, p.x, alpha) / FX, py = lerp(prev.py, p.y, alpha) / FX;
+    const px = lerp(prev.px, p.x, alpha) / FX, py = lerp(prev.py, p.y, alpha) / FX + lift;
     if (p.inv > 0 && (game.frame >> 2) % 2 === 0) ctx.globalAlpha = 0.35;
     // the scarf's ends fly behind a mouse that stands, and lie over the back of one that runs low
     const over = p.duck || p.h < 20 * FX;
@@ -4323,8 +4514,8 @@ function render(alpha) {
     }
     ctx.globalAlpha = 1;
 
-    // drifting in the air: pollen by day, fireflies on the way home, dust in the drain
-    for (let i = 0; i < 18; i++) {
+    // drifting in the air: pollen by day, fireflies on the way home, dust in the drain; not in the rain
+    for (let i = 0; i < (esc && theme === TH.storm ? 0 : 18); i++) {
         const speed = 0.15 + hash(i * 3) * 0.25;
         const mx = ((hash(i) * 2000 - camX * K * (0.7 + hash(i * 5) * 0.3) + game.frame * speed * K) % (vw + 40) + vw + 40) % (vw + 40) - 20;
         const my = ((hash(i * 7) * vh + Math.sin(game.frame * 0.013 + i) * 14 * K - camY * K * 0.3) % vh + vh) % vh;
@@ -4337,6 +4528,7 @@ function render(alpha) {
         } else ctx.fillStyle = 'rgba(255,248,215,.55)';
         ctx.beginPath(); ctx.arc(vx0 + mx, vy0 + my, r, 0, TAU); ctx.fill();
     }
+    if (rainAmt > 0) drawRain(vx0, vy0, vw, vh, K, camX, camY, rainAmt);
 
     // the escape: the evening reddens, and the edges pulse as the danger nears
     if (esc) {
@@ -4344,7 +4536,7 @@ function render(alpha) {
         const near = kind === 'clock' ? Math.max(0, 1 - d / 10) : Math.max(0, 1 - d / 4);
         const pulse = near > 0 ? (0.5 + 0.5 * Math.sin(game.frame * (0.12 + near * 0.2))) * near : 0;
         ctx.globalAlpha = 0.14 + pulse * 0.35;
-        ctx.drawImage(vignette(kind === 'water' ? '30,80,200' : '200,40,30', vw, vh), vx0, vy0, vw, vh);
+        ctx.drawImage(vignette(kind === 'water' || kind === 'flood' ? '30,80,200' : '200,40,30', vw, vh), vx0, vy0, vw, vh);
         ctx.globalAlpha = 1;
         // the mower or the cat, when it is out of sight: a badge on the edge nearest it, pointing
         const cat = kind === 'cat' && catView.x !== null;
@@ -4383,6 +4575,16 @@ function render(alpha) {
         ctx.drawImage(vignette('30,20,10', vw, vh), vx0, vy0, vw, vh);
     }
     ctx.globalAlpha = 1;
+    // lightning: everything lit up at once, twice
+    if (bolt) {
+        const a = boltLight(bolt.t) * (bolt.near ? 0.45 : 0.22);
+        if (a > 0.01) {
+            ctx.globalCompositeOperation = 'screen';
+            ctx.fillStyle = `rgba(205,218,255,${a})`;
+            ctx.fillRect(vx0, vy0, vw, vh);
+            ctx.globalCompositeOperation = 'source-over';
+        }
+    }
     if (lateFx > 0) {
         ctx.fillStyle = `rgba(20,10,10,${Math.min(0.6, lateFx / 120)})`;
         ctx.fillRect(vx0, vy0, vw, vh);
@@ -4522,6 +4724,40 @@ function drawItem(g, kind) {
         g.strokeStyle = S.ink;
         g.lineWidth = 0.9;
         g.stroke();
+    } else if (kind === 'boat') {
+        // a paper boat folded from a newspaper, a little the worse for the water
+        const hull = () => { g.beginPath(); g.moveTo(-8.6, -5.6); g.lineTo(8.6, -5.6); g.lineTo(5.6, 0); g.lineTo(-5.6, 0); g.closePath(); };
+        const sail = () => { g.beginPath(); g.moveTo(-5.2, -5.6); g.lineTo(0.3, -14.8); g.lineTo(5.4, -5.6); g.closePath(); };
+        sail();
+        g.fillStyle = '#f7f3e8';
+        g.fill();
+        g.save();
+        sail();
+        g.clip();
+        g.fillStyle = 'rgba(70,70,80,.3)';
+        for (let y = -12.4; y < -6; y += 1.35) g.fillRect(-4.4, y, 3.8, 0.45);
+        g.fillStyle = 'rgba(120,108,88,.2)';
+        g.beginPath(); g.moveTo(0.3, -14.8); g.lineTo(5.4, -5.6); g.lineTo(0.3, -5.6); g.fill();
+        g.restore();
+        sail();
+        g.strokeStyle = S.ink;
+        g.stroke();
+        hull();
+        g.fillStyle = '#ebe4d2';
+        g.fill();
+        g.save();
+        hull();
+        g.clip();
+        g.fillStyle = 'rgba(70,70,80,.3)';
+        for (let y = -4.7; y < -1.5; y += 1.3) { g.fillRect(-7.4, y, 6, 0.45); g.fillRect(0.6, y, 6.4, 0.45); }
+        g.fillStyle = 'rgba(70,110,140,.28)';
+        g.fillRect(-9, -1.8, 18, 2);
+        g.restore();
+        hull();
+        g.stroke();
+        g.strokeStyle = 'rgba(60,55,50,.45)';
+        g.lineWidth = 0.5;
+        g.beginPath(); g.moveTo(0.3, -14.4); g.lineTo(0.3, -5.8); g.moveTo(-8.2, -5.6); g.lineTo(-3.6, -3.2); g.lineTo(3.8, -3.2); g.lineTo(8.2, -5.6); g.stroke();
     } else if (kind === 'cherry') {
         // a pair of cherries on their stalks, with a leaf
         g.strokeStyle = '#5b7a2e';
@@ -4831,7 +5067,9 @@ function drawWater(X, Y, K, tx0, tx1, ty0, ty1, look) {
             while (top > 0 && wet(UF.tileAt(L, tx, top - 1))) top--;
             let end = ty;
             while (end < hi && wet(L.tiles[end * L.w + tx])) end++;
-            const topY = Y(top * 16), y0 = Y(ty * 16), y1 = Y(end * 16);
+            // the flood's newest row swells up into place, rather than appearing
+            const up = surge && top === surge.row ? Math.round((1 - surge.t / 12) ** 2 * 16 * K) : 0;
+            const topY = Y(top * 16) + up, y0 = Y(ty * 16) + (top === ty ? up : 0), y1 = Y(end * 16);
             for (let k = ty; k < end; k++) {
                 const q = L.tiles[k * L.w + tx];
                 if (q === T.LILY_DOWN) {
@@ -4857,6 +5095,19 @@ function drawWater(X, Y, K, tx0, tx1, ty0, ty1, look) {
                     ctx.fillStyle = 'rgba(255,255,255,.55)';
                     ctx.fillRect(x + gx * K, y0 + 4 * K, 3 * K, 0.7 * K);
                 }
+                // rain on it: rings opening and fading, two to a tile
+                if (rainAmt > 0) {
+                    ctx.strokeStyle = 'rgba(225,235,245,.8)';
+                    ctx.lineWidth = 0.5 * K;
+                    for (let k = 0; k < 2; k++) {
+                        const ph = (t + hash(tx * 5 + k) * 30) % 30, n = Math.floor((t + hash(tx * 5 + k) * 30) / 30);
+                        if (hash(tx * 7 + k * 3 + n * 11) > rainAmt * 0.8) continue;
+                        const r = (0.8 + ph * 0.16) * K;
+                        ctx.globalAlpha = (1 - ph / 30) * 0.8;
+                        ctx.beginPath(); ctx.ellipse(x + hash(tx * 13 + n * 7 + k) * w, y0 + 1.6 * K, r, r * 0.3, 0, 0, TAU); ctx.stroke();
+                    }
+                    ctx.globalAlpha = 1;
+                }
                 if (L.tiles[ty * L.w + tx] === T.LILY) pads.push([tx, ty, x, y0, Math.floor(hash2(tx, ty) * 8)]);
             }
             ty = end;
@@ -4868,6 +5119,147 @@ function drawWater(X, Y, K, tx0, tx1, ty0, ty1, look) {
     }
 }
 const lilySprite = v => cached(5e6 + 100 + v, 22, 26, 3, 5, g => paintLily(g, v));
+
+// The storm. Its strikes come at set times after the item is taken, the first as it is taken, so
+// every run sees the same sky; the rain comes on over a second and a half and stays.
+const STRIKES = (() => {
+    const at = [1];
+    for (let i = 1; i < 60; i++) at.push(at[i - 1] + 170 + Math.floor(hash(i * 71) * 250));
+    return new Set(at);
+})();
+let bolt = null, rainAmt = 0, surge = null, lift = 0;
+// how bright a strike is, frames after it: a flash, a flicker, a second flash, a fade
+const boltLight = t => t < 3 ? 1 : t < 5 ? 0.15 : t < 8 ? 0.8 : Math.max(0, 0.8 * (1 - (t - 8) / 14));
+function stepStorm() {
+    const on = DEF.backdrop === 'storm' && game.escape;
+    rainAmt = on ? Math.min(1, rainAmt + 1 / 90) : Math.max(0, rainAmt - 1 / 60);
+    if (bolt && ++bolt.t > 40) bolt = null;
+    if (on && game.p.mode === 'play' && STRIKES.has(game.escapeT)) {
+        const i = game.escapeT, near = i === 1 || hash(i * 5) < 0.3;
+        bolt = {t: 0, x: 0.12 + hash(i * 3) * 0.76, seed: i, near};
+        if (!attract) { sound.thunder(near); if (near) buzz(30); }
+        if (near) shake = Math.max(shake, 2.5);
+    }
+    if (surge && ++surge.t > 12) surge = null;
+    lift = Math.max(0, lift - 1.6);
+}
+// By the water, a trunk of bark standing clear wears a willow's crown: a dome, and long strands
+// hanging from it that sway, and in a storm stream out with the wind. One that stops a row short
+// of the ground stands on roots, with the way through dark between them.
+function drawCrowns(X, Y, K, tx0, tx1, storm) {
+    const L = game.level, t = game.frame, wood = (x, y) => UF.tileAt(L, x, y) === T.WOOD;
+    for (let tx = Math.max(1, tx0 - 4); tx < Math.min(L.w - 1, tx1 + 4); tx++) {
+        let ty = 0;
+        while (ty < L.h && !wood(tx, ty)) ty++;
+        // a trunk's top: two wide, air over both, and tall (bark, not a deck)
+        if (ty >= L.h || !wood(tx + 1, ty) || wood(tx - 1, ty) || wood(tx + 2, ty) || !wood(tx, ty + 3) || UF.tileAt(L, tx + 1, ty - 1)) continue;
+        let bot = ty;
+        while (wood(tx, bot + 1)) bot++;
+        if (!UF.tileAt(L, tx, bot + 1) && !UF.tileAt(L, tx + 1, bot + 1) && UF.SOLID[UF.tileAt(L, tx, bot + 2)]) {
+            const x0 = X(tx * 16), x1 = X(tx * 16 + 32), yb = Y((bot + 1) * 16), yg = Y((bot + 2) * 16) + K;
+            const hg = ctx.createLinearGradient(0, yb, 0, yg);
+            hg.addColorStop(0, 'rgba(28,17,9,.9)');
+            hg.addColorStop(1, 'rgba(28,17,9,.4)');
+            ctx.fillStyle = hg;
+            ctx.beginPath();
+            ctx.moveTo(x0 + 4 * K, yg);
+            ctx.quadraticCurveTo(x0 + 4 * K, yb, x0 + 16 * K, yb);
+            ctx.quadraticCurveTo(x1 - 4 * K, yb, x1 - 4 * K, yg);
+            ctx.fill();
+            for (const [e, d] of [[x0, -1], [x1, 1]]) {
+                ctx.fillStyle = S.bark;
+                ctx.beginPath();
+                ctx.moveTo(e + d * 1 * K, yb - 5 * K);
+                ctx.quadraticCurveTo(e + d * 3 * K, yb + 7 * K, e + d * 10 * K, yg);
+                ctx.lineTo(e - d * 5 * K, yg);
+                ctx.quadraticCurveTo(e - d * 4 * K, yb + 5 * K, e - d * 7 * K, yb);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = S.barkLo;
+                ctx.lineWidth = 0.8 * K;
+                ctx.beginPath(); ctx.moveTo(e + d * 1 * K, yb - 4 * K); ctx.quadraticCurveTo(e + d * 3 * K, yb + 7 * K, e + d * 10 * K, yg); ctx.stroke();
+                ctx.strokeStyle = S.barkHi;
+                ctx.lineWidth = 0.9 * K;
+                ctx.beginPath(); ctx.moveTo(e - d * 3 * K, yb + 2 * K); ctx.quadraticCurveTo(e - d * 1 * K, yb + 9 * K, e + d * 3 * K, yg - K); ctx.stroke();
+                // and a thin one into the ground further out
+                ctx.strokeStyle = S.barkLo;
+                ctx.lineWidth = 1.4 * K;
+                ctx.beginPath(); ctx.moveTo(e + d * 2 * K, yb + 4 * K); ctx.quadraticCurveTo(e + d * 9 * K, yb + 9 * K, e + d * 15 * K, yg); ctx.stroke();
+            }
+        }
+        const cx = X(tx * 16 + 16), cy = Y(ty * 16) + 4 * K, gust = storm ? 0.7 + 0.3 * Math.sin(t * 0.05 + tx) : 0;
+        const dome = storm ? '#35503a' : '#4f7f45', strands = storm ? ['#46664a', '#2e4834'] : ['#6aa05a', '#4a7a42'];
+        ctx.lineCap = 'round';
+        for (let i = 0; i < 30; i++) {
+            const a = hash(tx * 31 + i), sx = cx + (a - 0.5) * 62 * K, sy = cy + (hash(tx * 17 + i) * 10 - 6) * K;
+            const len = (26 + hash(tx * 7 + i) * 26) * K, sway = (Math.sin(t * 0.03 + i * 0.7) * 2 + gust * 12) * K;
+            ctx.strokeStyle = strands[i % 2];
+            ctx.lineWidth = 2 * K;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.quadraticCurveTo(sx + (a - 0.5) * 10 * K + sway * 0.3, sy + len * 0.5, sx + (a - 0.5) * 16 * K + sway, sy + len);
+            ctx.stroke();
+        }
+        ctx.fillStyle = dome;
+        for (const [dx, dy, rx, ry] of [[-16, -2, 20, 11], [14, -4, 18, 11], [0, -12, 22, 12], [-26, 6, 11, 8], [26, 5, 11, 8]]) {
+            ctx.beginPath(); ctx.ellipse(cx + (dx + gust * 3) * K, cy + dy * K, rx * K, ry * K, 0, 0, TAU); ctx.fill();
+        }
+        ctx.fillStyle = storm ? 'rgba(120,150,120,.25)' : 'rgba(170,210,130,.35)';
+        for (const [dx, dy, rx, ry] of [[-10, -12, 10, 5], [10, -15, 9, 4]]) {
+            ctx.beginPath(); ctx.ellipse(cx + (dx + gust * 3) * K, cy + dy * K, rx * K, ry * K, 0, 0, TAU); ctx.fill();
+        }
+    }
+}
+// the bolt: from the clouds to the far bank, in the brightest frames of its flash
+function drawBolt(vx0, vy0, vw, vh, K) {
+    const a = boltLight(bolt.t);
+    if (a < 0.5) return;
+    let seed = bolt.seed * 97, x = vx0 + vw * bolt.x, y = vy0 - 4 * K;
+    const end = vy0 + vh * (0.5 + hash(seed) * 0.12), main = [[x, y]], forks = [];
+    while (y < end) {
+        y += (7 + hash(++seed) * 9) * K;
+        x += (hash(++seed) - 0.5) * 16 * K;
+        main.push([x, y]);
+        if (forks.length < 2 && main.length > 3 && hash(++seed) < 0.3) {
+            const f = [[x, y]];
+            let fx = x, fy = y, dir = hash(++seed) < 0.5 ? -1 : 1;
+            for (let k = 0; k < 4; k++) { fy += (5 + hash(++seed) * 6) * K; fx += dir * (4 + hash(++seed) * 7) * K; f.push([fx, fy]); }
+            forks.push(f);
+        }
+    }
+    ctx.save();
+    ctx.lineJoin = ctx.lineCap = 'round';
+    for (const [w, c] of [[8, `rgba(170,195,255,${0.22 * a})`], [2.6, `rgba(225,235,255,${0.85 * a})`], [1.1, `rgba(255,255,255,${a})`]]) {
+        ctx.strokeStyle = c;
+        for (const line of [main, ...forks]) {
+            ctx.lineWidth = w * K * (line === main ? 1 : 0.6);
+            ctx.beginPath();
+            line.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+            ctx.stroke();
+        }
+    }
+    ctx.restore();
+}
+// rain: two sheets, the far one finer and slower, both leaning with the wind
+function drawRain(vx0, vy0, vw, vh, K, camX, camY, amt) {
+    const t = game.frame, Wg = vw / K + 40, Hg = vh / K + 40, area = Wg * Hg / 1e4;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const [dens, len, sp, par, a, w] of [[7, 7, 5.5, 0.55, 0.2, 0.5], [3.5, 12, 9, 1, 0.3, 0.8]]) {
+        const n = Math.round(dens * area * amt);
+        ctx.strokeStyle = `rgba(214,224,236,${a})`;
+        ctx.lineWidth = Math.max(1, w * K);
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+            const x = (((hash(i * 7 + len) * Wg - camX * par + t * sp * 0.3) % Wg) + Wg) % Wg - 20;
+            const y = (((hash(i * 13 + len) * Hg - camY * par + t * sp) % Hg) + Hg) % Hg - 20;
+            ctx.moveTo(vx0 + x * K, vy0 + y * K);
+            ctx.lineTo(vx0 + (x - len * 0.3) * K, vy0 + (y - len) * K);
+        }
+        ctx.stroke();
+    }
+    ctx.restore();
+}
 // where the water's top is, above a point in it
 function waterTop(x, y) {
     const L = game.level, tx = Math.floor(x / 16);
@@ -5575,7 +5967,7 @@ function drawHud(dpr) {
         const t = Math.min(99, behind ? -raw : d).toFixed(1);
         const w = ctx.measureText('00.0').width + pad * 2.4, cx = (view.x + view.w / 2) * dpr;
         const yy = Math.round(view.y * dpr) + pad + (view.w < 520 ? bh + pad * 0.6 : 0);
-        ctx.fillStyle = close ? 'rgba(170,20,20,.88)' : kind === 'water' ? 'rgba(20,60,110,.85)' : 'rgba(31,36,45,.85)';
+        ctx.fillStyle = close ? 'rgba(170,20,20,.88)' : kind === 'water' || kind === 'flood' ? 'rgba(20,60,110,.85)' : 'rgba(31,36,45,.85)';
         roundRect(cx - w / 2, yy, w, big * 1.5, big * 0.5);
         ctx.fill();
         ctx.fillStyle = '#fff';
@@ -5740,6 +6132,7 @@ function frame(now) {
     // the mower's whirr: on while it is out and the game runs, louder as it nears
     const mow = !attract && game.escape && level.escape.kind === 'mower' && game.chase && !game.chase.wait && game.p.mode === 'play' && !paused && !open;
     sound.motor(mow ? Math.max(0.15, Math.min(1, 1.2 - UF.danger(game) / 12)) : 0);
+    sound.rain(attract || paused || open ? 0 : rainAmt * (game.p.mode === 'play' ? 1 : 0.5));
     render(paused || open ? 1 : acc / STEP);
     requestAnimationFrame(frame);
 }

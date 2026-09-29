@@ -627,6 +627,41 @@ if (suites.includes('escape')) {
     Object.assign(s.p, {x: 60 * TILE, y: 14 * TILE, vx: -P.TIERS[2], onGround: true, tier: 2, sink: 0, mode: 'play'});
     const dry = events(s, 40, RUN_L, 'splash');
     check(dry.length === 0 && s.p.y === 14 * TILE && s.p.onGround, 'at a dash you run across the flood as across the pond');
+    // and when it comes up round you: at a dash it lifts you and you run on; slower, it closes over you
+    const rising = (vx, tier, h) => {
+        const t = take(yard(Object.assign({}, FLOOD, {speed: 0.25})));
+        run(t, 40, 0);
+        Object.assign(t.p, {x: 62 * TILE, y: 15 * TILE, vx: -vx, vy: 0, onGround: true, tier, sink: 0, mode: 'play'});
+        const lifts = events(t, 120, h, 'surf', u => u.events.some(e => e.type === 'flood' && e.row === 14));
+        const sank = t.p.sink > 0;
+        const after = events(t, 30, h, 'splash');
+        return {t, lifts, after, sank};
+    };
+    let r = rising(P.TIERS[2], 2, RUN_L);
+    check(r.lifts.length === 1 && r.lifts[0].dy === TILE && r.after.length === 0 && r.t.p.y === 14 * TILE && r.t.p.onGround,
+        'the flood coming up round you at a dash lifts you a row, and you run on across it',
+        `${r.lifts.length} lifts, ${r.after.length} splashes, feet at row ${r.t.p.y / TILE}`);
+    r = rising(P.TIERS[0], 0, IN.L);
+    check(r.lifts.length === 0 && r.sank, 'at a walk it closes over you');
+    // a roof over you: no room to be lifted, and under you go
+    const roofed = take(yard(Object.assign({}, FLOOD, {speed: 0.25}), [[30, 12, 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX']]));
+    run(roofed, 40, 0);
+    Object.assign(roofed.p, {x: 58 * TILE, y: 15 * TILE, vx: -P.TIERS[2], vy: 0, onGround: true, tier: 2, sink: 0, mode: 'play'});
+    const under = events(roofed, 120, RUN_L, 'surf', u => u.events.some(e => e.type === 'flood' && e.row === 14));
+    check(under.length === 0 && roofed.p.sink > 0, 'under a roof it cannot lift you: at any speed it closes over you');
+    // lily pads float up with it, and carry whoever stands on one
+    const pool = take(yard(Object.assign({}, FLOOD, {speed: 1}), [[20, 15, 'wwwwwwwwwwlwwwwwwwwww'], [20, 16, 'wwwwwwwwwwwwwwwwwwwww']]));
+    Object.assign(pool.p, {x: 30 * TILE + TILE / 2, y: 15 * TILE, vx: 0, vy: 0, onGround: true, tier: 0, sink: 0, mode: 'play'});
+    const carried = events(pool, 60, 0, 'surf', u => u.events.some(e => e.type === 'flood' && e.row === 14));
+    run(pool, 5, 0);
+    check(UF.tileAt(pool.level, 30, 14) === T.LILY && UF.tileAt(pool.level, 30, 15) === T.WATER && carried.length === 1
+        && pool.p.y === 14 * TILE && pool.p.onGround && !pool.p.sink,
+        'a lily pad floats up with the flood, and carries the mouse standing on it',
+        `pad at 14: ${UF.tileAt(pool.level, 30, 14)}, feet row ${pool.p.y / TILE}, sink ${pool.p.sink}`);
+    // it takes the seeds with it
+    const wash = take(yard(Object.assign({}, FLOOD, {speed: 1}), [[20, 14, 'o']]));
+    run(wash, 60, 0, u => u.events.some(e => e.type === 'flood' && e.row === 14));
+    check(UF.tileAt(wash.level, 20, 14) === T.WATER, 'a seed the flood reaches is washed away');
 }
 
 /* ================= lines ================= */
