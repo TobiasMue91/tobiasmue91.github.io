@@ -75,6 +75,7 @@ npm run test:normalizer     # Audio Normalizer suite (plain Node, no server or b
 npm run test:minifier       # Crusher and HTML Minify suite (Playwright's Chromium, no server)
 npm run test:familytree     # Family Tree Builder suite (plain Node, no server or browser)
 npm run test:frames         # frame stepping in the two frame extractors (Playwright's Chromium and ffmpeg, no server)
+npm run test:2048           # 2048 suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -82,7 +83,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Thirteen exist so far. `test/everything_converter.mjs` drives
+Fourteen exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -145,6 +146,10 @@ buttons: at 24 to 120 fps, from a late start, and in recordings with uneven fram
 duration, each step must move exactly one frame, and each grab - even one clicked before the step
 has finished - must hold, and be labelled with, the frame that was on screen. Run it after
 touching either page's frame stepping.
+`test/2048.mjs` runs the DOM-free `<script id="core">` block of `games/2048.html`: every merge
+against a plainly written reference, the plan the page animates each move from against the board
+it came with, seeded games and saves that carry on identically, and bots that play whole games.
+Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
