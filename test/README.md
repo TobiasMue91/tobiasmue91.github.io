@@ -484,3 +484,27 @@ follows. A grab waits behind any step still seeking - without that, a grab click
 after a step through a recording took whatever frame the search was passing. The whole suite
 passes idle and with three CPU-bound processes running beside it, and 160 loads of ten clips
 measure right either way.
+
+## 2048
+
+```sh
+npm run test:2048                        # or: node test/2048.mjs
+node test/2048.mjs rules plan            # one or more named suites
+node test/2048.mjs bots --games=40       # more bot games (default 16)
+```
+
+`2048.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` block of
+`games/2048.html` in Node. The page draws every move from the plan the core returns - which
+cell each tile slid to, and which two met - so a plan that disagrees with the board draws tiles
+that are not there, and a merge rule that is almost right looks right on most moves: the page
+this replaced merged `2 2 4` into `8`, on about one move in seventy of ordinary play.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | hand cases (`2 2 2 2`, `2 2 4`, `4 2 2`, gaps) and every row of 0 to 32 in all four directions against a plainly written reference; `canMove` against trying all four moves; a move that changes nothing is not a move; a 4 spawns one time in ten, evenly over the empty cells; winning happens once; game over is set exactly when nothing can move |
+| `plan` | on 40,000 boards, replaying the plan on the old board gives the new one: every tile moves once, toward the edge, never past another, and a cell reached by two tiles is exactly a listed merge |
+| `seed` | a seed and a list of moves always give the same game; a game saved to JSON halfway goes on identically; broken saves are refused |
+| `bots` | a random player, a corner habit and a two-move look-ahead play whole games: random never reaches 512, the corner habit beats random, and the look-ahead makes 2048 in at least half its games |
+
+The balance is the original's (a 4 one time in ten) and is not tuned here. The bots show that
+the rules play like it. `bots` takes about 25 seconds, most of it the look-ahead.
