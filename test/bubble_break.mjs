@@ -364,6 +364,15 @@ if(suites.includes('rules')){
     const rs = boltRun({ static:1, storm:1 }, 80); rs.frenzy = 5; for(let k = 0; k < 90; k++) BB.step(rs, 1/30);
     const rq = boltRun({ static:1, storm:1 }, 80); for(let k = 0; k < 90; k++) BB.step(rq, 1/30);
     check(rs.bolts >= 2 && !rq.bolts, `in a sugar rush Thunderstorm strikes on its own (${rs.bolts} bolts in 3 s, none without the rush)`);
+    // with nothing left in reach a bolt does not go, and the charge waits for wrap
+    const re = boltRun({ static:1, storm:1 }, 81), she = re.sheet;
+    BB.popPolygon(re, [0, 0, she.W, 0, she.W, she.H, 0, she.H], 'chain'); re.pending = []; she.left = 1;   // one left somewhere, so no new sheet comes
+    re.charge = BB.boltNeed(re); re.frenzy = 5; for(let k = 0; k < 60; k++) BB.step(re, 1/30);
+    check(!re.bolts && re.charge >= BB.boltNeed(re) - 1e-9, 'on wrap with nothing left to pop no bolt goes, storm or not, and the charge is kept');
+    // fragile wrap: lightning would crack the print, so it stays quiet there
+    const [, rf] = runWith(Object.assign({}, LV, { static:2, storm:1 }), {}, { seed: 82, stage: 2 });
+    rf.P = BB.matP(rf.baseP, 'fragile');
+    check(rf.P.bolt === null, 'on fragile wrap there is no lightning');
     const SC = BB.newState(); SC.cl.coil = 1; SC.cycleEarned = BB.STAGES[0].gate; BB.quit(SC);
     const rc = BB.startRun(SC, { aspect: 1.5, seed: 3 });
     check(rc.P.bolt && BB.lv(SC, 'static') >= 1, 'with the Tesla coil a new job starts with Static charge');
@@ -646,7 +655,7 @@ if(suites.includes('idle')){
 /* ---------------- pacing ---------------- */
 if(suites.includes('pacing')){
   section('pacing');
-  // with the country the world came at 87 to 94 minutes over four seeds (66 to 76 before it); two seeds
+  // with the country the world came at 87 to 99 minutes (66 to 76 before it); two seeds
   // only ever show part of that spread, and a hair either way is not a pacing change
   const win = { firstQuit: [8, 25], ship: [14, 45], factory: [25, 70], city: [34, 110], country: [45, 140], world: [70, 180] };
   for(const seed of [1, 2]){

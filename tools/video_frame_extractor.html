@@ -266,7 +266,7 @@
                 <div class="progress-container" id="progressContainer">
                     <div class="progress-bar" id="progressBar"></div>
                 </div>
-                <div class="time-info"><span id="currentTime">0:00</span><span>/</span><span id="duration">0:00</span>
+                <div class="time-info"><span id="currentTime">0:00</span><span>/</span><span id="duration">0:00</span><span id="frameInfo"></span>
                 </div>
             </div>
             <div class="controls-row"><input type="range" id="frameSlider" min="0" step="1" style="flex:1">
@@ -295,7 +295,175 @@
     <div class="preview-grid" id="previewGrid"></div>
 </div>
 <canvas id="extractCanvas" style="display:none"></canvas>
-<script>class VideoFrameExtractor {
+<script>// Browsers report no frame rate, and a frame starts at a rounded timestamp (to the millisecond in
+// WebM), so adding 1/30 s to currentTime lands on the same frame or skips one. The clock reads the
+// start time of each frame the video presents (requestVideoFrameCallback), learns the frame
+// duration from those, and seeks to the middle of the frame it wants - or, where frames are not
+// on a regular grid, searches for the seek time where the picture changes.
+function frameClock(video, onFrame) {
+    const EPS = 0.0005, rvfc = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+    const c = {first: 0, dur: 1 / 30, count: 0, exact: false, measured: false, measuring: false, shown: 0};
+    let queue = Promise.resolve();
+    if (rvfc) video.requestVideoFrameCallback(function track(now, md) {
+        c.shown = md.mediaTime;
+        if (onFrame) onFrame();
+        video.requestVideoFrameCallback(track)
+    });
+    const end = () => isFinite(video.duration) ? video.duration : 0;
+    // Seek, and resolve with the start time of the frame then on screen, or null if the browser won't say.
+    const show = t => new Promise(resolve => {
+        const before = c.shown;
+        let id = 0, timer = 0, done = false, ended = false, got;
+        const finish = v => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            clearTimeout(limit);
+            video.removeEventListener('seeked', seeked);
+            video.removeEventListener('emptied', emptied);
+            if (id) video.cancelVideoFrameCallback(id);
+            if (v !== null) c.shown = v;
+            resolve(v)
+        };
+        // A frame presented after the seek has ended is the seek's frame, and so is a different
+        // one presented before it ends. The frame already on screen can be presented once more
+        // as the seek begins, so that one counts only if nothing newer follows.
+        const frame = (now, md) => {
+            id = 0;
+            got = md.mediaTime;
+            if (ended) return finish(got);
+            if (got === before) id = video.requestVideoFrameCallback(frame)
+        };
+        // a seek that presents no frame (a hidden tab) resolves unknown once it has plainly ended
+        const seeked = () => {
+            ended = true;
+            if (got !== undefined && got !== before) return finish(got);
+            timer = setTimeout(() => finish(got === undefined ? null : got), got === undefined ? 1000 : 200)
+        };
+        // a new video abandons the seek
+        const emptied = () => finish(null);
+        const limit = setTimeout(() => finish(got === undefined ? null : got), 5000);
+        if (Math.abs(video.currentTime - t) < 1e-6) t += t >= end() ? -1e-5 : 1e-5;
+        if (rvfc) id = video.requestVideoFrameCallback(frame);
+        video.addEventListener('seeked', seeked);
+        video.addEventListener('emptied', emptied);
+        video.currentTime = Math.max(0, t)
+    });
+    c.run = fn => {
+        const p = queue.then(fn);
+        queue = p.catch(() => {});
+        return p
+    };
+    c.index = t => Math.max(0, Math.min(c.count - 1, Math.round((t - c.first) / c.dur)));
+    c.middle = n => Math.min(c.first + (n + 0.5) * c.dur, end());
+    // start time of the frame on screen
+    c.now = () => rvfc && c.measured ? c.shown : video.currentTime;
+    // off a regular grid a frame's number cannot be told from its time, so it has none
+    c.label = t => c.measured && c.exact ? String(c.index(t) + 1) : '';
+    c.status = t => c.measuring ? 'counting frames…' : !c.measured ? '' :
+        c.exact ? `frame ${c.label(t)} of ${c.count}` : 'variable frame rate';
+    c.goto = n => c.run(() => show(c.middle(Math.max(0, Math.min(c.count - 1, n)))));
+    c.seek = t => c.run(() => show(t));
+    // Off a regular grid a frame does not always appear from its own start time when sought, so
+    // search seek times for where the picture changes: walk out from a time that shows the
+    // frame until another one shows, then halve the gap.
+    const search = async (dir, from, near) => {
+        let far = null, s = null;
+        for (let step = c.dur; ; step *= 2) {
+            const t = Math.max(0, Math.min(end(), near + dir * step));
+            if (t === near) return;
+            s = await show(t);
+            if (s === null) return;
+            if (s !== from) {
+                far = t;
+                break
+            }
+            near = t
+        }
+        while (Math.abs(far - near) > EPS) {
+            const t = (near + far) / 2, m = await show(t);
+            if (m === null) return;
+            if (m === from) near = t; else {
+                far = t;
+                s = m
+            }
+        }
+        if (c.shown !== s) await show(far)
+    };
+    c.step = dir => c.run(async () => {
+        if (!c.measured) return show(c.middle(Math.max(0, Math.floor((video.currentTime - c.first) / c.dur + 1e-6) + dir)));
+        const from = c.shown, at = video.currentTime;
+        if (c.exact) {
+            // on a regular grid, the middle of the neighbouring frame is one seek away
+            const n = c.index(from) + dir;
+            if (n < 0 || n >= c.count) return;
+            const s = await show(c.middle(n));
+            if (s === null || Math.abs(s - (c.first + n * c.dur)) < 0.0011) return;
+            await show(at)
+        }
+        await search(dir, from, at)
+    });
+    c.measure = () => c.run(async () => {
+        Object.assign(c, {first: 0, dur: 1 / 30, exact: false, measured: false, measuring: true});
+        c.count = Math.max(1, Math.round(end() / c.dur));
+        try {
+            if (!rvfc) return;
+            if (video.readyState < 2) await new Promise(r => {
+                video.addEventListener('loadeddata', r, {once: true});
+                setTimeout(r, 5000)
+            });
+            // recordings made with MediaRecorder carry no duration until the browser has read to the end
+            if (!isFinite(video.duration)) await new Promise(r => {
+                const t = setTimeout(r, 3000);
+                video.addEventListener('durationchange', () => {
+                    clearTimeout(t);
+                    r()
+                }, {once: true});
+                video.currentTime = 1e101
+            });
+            const last = end(), first = await show(0);
+            if (first === null) return;
+            // bracket the second frame, then halve the bracket down to its start time
+            let lo = first, hi = null;
+            for (let span = 0.25; hi === null; span *= 2) {
+                const t = Math.min(first + span, last), s = await show(t);
+                if (s === null) return;
+                if (s > first + EPS / 2) hi = s; else if (t >= last) break; else lo = t
+            }
+            if (hi === null) return Object.assign(c, {first, dur: last - first || 1 / 30, count: 1, exact: true, measured: true});
+            while (hi - lo > EPS) {
+                const t = (lo + hi) / 2, s = await show(t);
+                if (s === null) return;
+                if (s > first + EPS / 2) hi = s; else lo = t
+            }
+            // a browser that reports the time asked for, rather than the frame's own, gets no frame numbers
+            if (await show(hi - EPS) !== first) return;
+            // refine on frames 4, 16, 64, ... frames on and the last one, so rounding stops mattering
+            let dur = Math.max(hi - first, 0.001);
+            const seen = [[1, hi]];
+            for (let k = 4; ; k *= 4) {
+                const t = Math.min(first + (k + 0.5) * dur, last), s = await show(t);
+                if (s === null) return;
+                const n = Math.round((s - first) / dur);
+                if (n > 0) {
+                    dur = (s - first) / n;
+                    seen.push([n, s])
+                }
+                if (t >= last) break
+            }
+            Object.assign(c, {
+                first, dur, count: seen[seen.length - 1][0] + 1, measured: true,
+                exact: seen.every(([n, s]) => Math.abs(first + n * dur - s) < 0.0011)
+            });
+            await show(c.middle(0))
+        } finally {
+            c.measuring = false
+        }
+    });
+    return c
+}
+
+class VideoFrameExtractor {
     constructor() {
         this.video = document.getElementById('videoPlayer');
         this.canvas = document.getElementById('extractCanvas');
@@ -304,7 +472,8 @@
         this.videoContainer = document.getElementById('videoContainer');
         this.extractionPanel = document.getElementById('extractionPanel');
         this.previewGrid = document.getElementById('previewGrid');
-        this.frameCount = 0;
+        this.clock = frameClock(this.video, () => this.updateProgress());
+        this.wantedFrame = null;
         this.setupEventListeners()
     }
 
@@ -348,13 +517,15 @@
     }
 
     onVideoLoaded() {
-        const duration = this.video.duration;
-        const frameRate = 30;
-        this.totalFrames = Math.floor(duration * frameRate);
-        document.getElementById('frameSlider').max = this.totalFrames;
-        document.getElementById('duration').textContent = this.formatTime(duration);
+        document.getElementById('frameSlider').max = 0;
+        document.getElementById('duration').textContent = this.formatTime(this.video.duration);
         this.canvas.width = this.video.videoWidth;
-        this.canvas.height = this.video.videoHeight
+        this.canvas.height = this.video.videoHeight;
+        this.clock.measure().then(() => {
+            document.getElementById('frameSlider').max = this.clock.count - 1;
+            document.getElementById('duration').textContent = this.formatTime(this.video.duration);
+            this.updateProgress()
+        })
     }
 
     togglePlay() {
@@ -363,11 +534,13 @@
     }
 
     previousFrame() {
-        this.video.currentTime = Math.max(0, this.video.currentTime - 1 / 30)
+        this.video.pause();
+        this.clock.step(-1)
     }
 
     nextFrame() {
-        this.video.currentTime = Math.min(this.video.duration, this.video.currentTime + 1 / 30)
+        this.video.pause();
+        this.clock.step(1)
     }
 
     seekToPosition(e) {
@@ -376,61 +549,74 @@
         this.video.currentTime = percentage * this.video.duration
     }
 
+    // a drag fires faster than seeks finish, so only the latest frame asked for is visited
     seekToFrame(frame) {
-        const time = (frame / this.totalFrames) * this.video.duration;
-        this.video.currentTime = time
+        const busy = this.wantedFrame !== null;
+        this.wantedFrame = +frame;
+        if (busy) return;
+        const go = n => this.clock.goto(n).then(() => {
+            if (this.wantedFrame !== n) return go(this.wantedFrame);
+            this.wantedFrame = null;
+            this.updateProgress()
+        });
+        go(this.wantedFrame)
     }
 
     updateProgress() {
-        const progress = (this.video.currentTime / this.video.duration) * 100;
+        const t = this.clock.now();
+        const progress = (t / this.video.duration) * 100;
         document.getElementById('progressBar').style.width = progress + '%';
-        document.getElementById('currentTime').textContent = this.formatTime(this.video.currentTime);
-        const currentFrame = Math.floor((this.video.currentTime / this.video.duration) * this.totalFrames);
-        document.getElementById('frameSlider').value = currentFrame
+        document.getElementById('currentTime').textContent = this.formatTime(t, true);
+        document.getElementById('frameInfo').textContent = this.clock.status(t);
+        if (this.wantedFrame === null) document.getElementById('frameSlider').value = this.clock.index(t)
     }
 
+    // queued behind any step still seeking, so the grab is the frame the step lands on
     extractCurrentFrame() {
-        this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
-        const format = document.getElementById('formatSelect').value;
-        const quality = parseFloat(document.getElementById('qualitySlider').value);
-        const mimeType = format === 'png' ? 'image/png' : `image/jpeg`;
-        this.canvas.toBlob(blob => {
-            this.addFrameToPreview(blob, this.video.currentTime, format)
-        }, mimeType, quality)
+        return this.clock.run(() => {
+            this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+            const time = this.clock.now();
+            const format = document.getElementById('formatSelect').value;
+            const quality = parseFloat(document.getElementById('qualitySlider').value);
+            const mimeType = format === 'png' ? 'image/png' : `image/jpeg`;
+            this.canvas.toBlob(blob => {
+                this.addFrameToPreview(blob, time, format)
+            }, mimeType, quality)
+        })
     }
 
-    batchExtract() {
+    // the frame on screen at 0 s, interval, 2 × interval, ..., each frame once
+    async batchExtract() {
         const interval = parseFloat(document.getElementById('intervalInput').value);
-        const duration = this.video.duration;
-        const times = [];
-        for (let t = 0; t <= duration; t += interval) times.push(t);
-        this.extractFramesAtTimes(times, 0)
-    }
-
-    extractFramesAtTimes(times, index) {
-        if (index >= times.length) return;
-        this.video.currentTime = times[index];
-        this.video.addEventListener('seeked', () => {
+        if (!(interval > 0)) return;
+        await this.clock.run(() => {});
+        if (!isFinite(this.video.duration)) return;
+        let last = null;
+        for (let k = 0; k * interval <= this.video.duration; k++) {
+            const shown = await this.clock.seek(k * interval + 1e-6);
+            if (shown !== null && shown === last) continue;
+            last = shown;
             this.extractCurrentFrame();
-            setTimeout(() => this.extractFramesAtTimes(times, index + 1), 100)
-        }, {once: true})
+            await new Promise(r => setTimeout(r, 100))
+        }
     }
 
     addFrameToPreview(blob, time, format) {
-        this.frameCount++;
+        const frame = this.clock.label(time);
         const frameItem = document.createElement('div');
         frameItem.className = 'frame-item';
         const img = document.createElement('img');
         img.src = URL.createObjectURL(blob);
         const info = document.createElement('div');
         info.className = 'frame-info';
-        info.textContent = `Frame at ${this.formatTime(time)}`;
+        info.textContent = frame ? `Frame ${frame} at ${this.formatTime(time, true)}` : `Frame at ${this.formatTime(time, true)}`;
         const actions = document.createElement('div');
         actions.className = 'frame-actions';
         const downloadBtn = document.createElement('button');
         downloadBtn.className = 'download-btn';
         downloadBtn.textContent = '⬇️';
-        downloadBtn.onclick = () => this.downloadFrame(blob, `frame_${this.frameCount}_${this.formatTime(time).replace(':', 'm')}s.${format}`);
+        const name = frame ? `frame_${frame}_` : 'frame_';
+        downloadBtn.onclick = () => this.downloadFrame(blob, `${name}${this.formatTime(time, true).replace(':', 'm')}s.${format}`);
         actions.appendChild(downloadBtn);
         frameItem.appendChild(img);
         frameItem.appendChild(info);
@@ -447,10 +633,12 @@
         URL.revokeObjectURL(url)
     }
 
-    formatTime(seconds) {
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${mins}:${secs.toString().padStart(2, '0')}`
+    formatTime(seconds, withMs = false) {
+        if (!isFinite(seconds)) return '-:--';
+        const ms = Math.round(seconds * 1000);
+        const mins = Math.floor(ms / 60000);
+        const secs = Math.floor(ms / 1000) % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}` + (withMs ? '.' + String(ms % 1000).padStart(3, '0') : '')
     }
 }
 
