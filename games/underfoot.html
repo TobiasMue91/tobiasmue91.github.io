@@ -265,6 +265,24 @@
     }
 
     .card[aria-pressed=true] { transform: translateY(-4px); background: #262c37 }
+    /* where a new place begins: its name, up the side */
+    .cards .world {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 2px;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+        color: var(--dim);
+        border-left: 1px solid rgba(255, 255, 255, .18);
+        padding-left: 8px;
+    }
+    .cards .world:first-child { border-left: 0 }
     .card canvas { width: 56px; height: 56px; margin: -4px 0 2px -4px }
     .card .n { position: absolute; top: 10px; right: 12px; font-size: 12px; font-weight: 700; color: var(--dim) }
     .card strong { font-size: 15px; line-height: 1.2 }
@@ -534,6 +552,12 @@ const approach = (v, target, rate) => v < target ? Math.min(target, v + rate) : 
 //                                                (a grass snake, which squeezes through anything)
 //   {kind: 'race', delay, water, land}           a pond skater races you home from the item: `water`
 //                                                px/f over water, `land` over land; first home wins
+//   {kind: 'heron', delay, speed, fly, gap, near, reach, watch, aim, lock, strike, recover}
+//                                                a heron wades after you, `near` tiles behind (flies at
+//                                                `fly` px/f when more than `gap` tiles off) and, once in `reach`, hunts: it
+//                                                watches, aims (its eye on you), locks on (the spot is
+//                                                fixed) and strikes; whoever is still on the spot and
+//                                                not under cover is caught. Keep moving, or hide.
 //   {kind: 'flood', from, delay, speed, gap}     the pond rises from `from` tiles below the item, and
 //                                                every row it reaches is water: run across it at a
 //                                                dash (it lifts you as it comes up), or climb
@@ -558,7 +582,7 @@ function parseLevel(def) {
     }
     if (!start) throw new Error('level has no start (@)');
     const escape = Object.assign({kind: 'clock', time: 60, from: 4, delay: 0, speed: 0, gap: 8, round: 0.3, squeeze: 0.35,
-        climb: 0, water: 3, land: 1.5}, def.escape);
+        climb: 0, water: 3, land: 1.5, fly: 6, near: 2, reach: 8, watch: 70, aim: 45, lock: 20, strike: 6, recover: 30}, def.escape);
     // which way home lies from the item: the crumbling runs that way
     escape.dir = item && home ? sign(home.tx - item.tx) || -1 : -1;
     // the side of the mouse hole that faces the level: a racer is home when it gets there
@@ -1126,6 +1150,8 @@ function resetEscape(s) {
     if (X.kind === 'cat') s.chase = {path: [[s.item.x, s.item.y, 0]], along: 0, len: 0, pos: 0, wait: X.delay, rising: false};
     // the race: where the pond skater is, and whether it is on the water
     if (X.kind === 'race') s.chase = {pos: s.item.x, wait: X.delay, wet: false};
+    // the heron: where it stands, what it is doing and for how long yet, and the spot it aims at
+    if (X.kind === 'heron') s.chase = {pos: s.item.x - X.dir * X.near * TILE, wait: X.delay, phase: 'watch', t: X.watch, tx: s.item.x, ty: s.item.y, fly: false};
     // the flood: its top, and the next row it will fill
     if (X.kind === 'flood') s.chase = {pos: s.item.y + X.from * TILE, wait: X.delay, row: fdiv(s.item.y + X.from * TILE - 1, TILE), ref: s.item.y};
 }
@@ -1170,6 +1196,48 @@ function surf(s, p, row, floated) {
     event(s, 'surf', {dy});
 }
 
+// The heron. It keeps a tile or two behind you, wading, or flying when you are far off; in reach, it
+// watches you, aims (the spot follows you), locks on (it stands, and the spot stays) and strikes,
+// and the beak comes down on the spot: whoever is still there, and not under cover, is caught.
+const HERON_NEXT = {watch: 'aim', aim: 'lock', lock: 'strike', strike: 'recover', recover: 'watch'};
+function stepHeron(s, X, c, p) {
+    const d = X.dir, want = p.x - d * X.near * TILE, off = want - c.pos;
+    // it keeps after you while it watches and aims; once locked on, it stands and strikes
+    if (c.phase !== 'lock' && c.phase !== 'strike') {
+        c.fly = Math.abs(p.x - c.pos) > X.gap * TILE;
+        const v = Math.round((c.fly ? X.fly : X.speed) * FX);
+        c.pos += Math.max(-v, Math.min(v, off));
+    } else c.fly = false;
+    if (c.phase === 'aim') { c.tx = p.x; c.ty = p.y; }
+    if (--c.t > 0) return false;
+    // out of reach it will not start on you: it comes nearer, and looks again
+    if (c.phase === 'watch' && Math.abs(p.x - c.pos) > X.reach * TILE) { c.t = 10; return false; }
+    if (c.phase === 'strike') {
+        const hit = heronHits(s.level, p, c);
+        event(s, 'heron', {phase: 'struck', x: c.tx, y: c.ty, hit});
+        if (hit === 'hit') { late(s, 'heron'); return true; }
+    }
+    c.phase = HERON_NEXT[c.phase];
+    c.t = X[c.phase];
+    if (c.phase === 'aim') { c.tx = p.x; c.ty = p.y; }
+    event(s, 'heron', {phase: c.phase, x: c.tx, y: c.ty});
+    return false;
+}
+// where the beak comes down: a mouse-sized spot round where it locked on. A mouse still in it is
+// caught, unless there is something solid over it within three tiles; out of play, nothing happens.
+function heronHits(L, p, c) {
+    if (p.mode !== 'play' || p.sink > 0) return 'miss';
+    const b = box(p);
+    if (b.r <= c.tx - 9 * FX || b.l >= c.tx + 9 * FX || b.b <= c.ty - 26 * FX || b.t >= c.ty + 2 * FX) return 'miss';
+    return covered(L, p) ? 'cover' : 'hit';
+}
+function covered(L, p) {
+    const b = box(p), top = fdiv(b.t, TILE);
+    for (let tx = fdiv(b.l, TILE); tx <= fdiv(b.r - 1, TILE); tx++)
+        for (let ty = top - 3; ty <= top; ty++) if (solidAt(L, tx, ty)) return true;
+    return false;
+}
+
 // is the first thing from the sky down in this column water (or a lily pad on it)?
 function wetColumn(L, tx) {
     for (let ty = 0; ty < L.h; ty++) {
@@ -1192,6 +1260,7 @@ function stepEscape(s) {
     if (X.kind === 'cat') return stepCat(s);
     if (c.wait > 0) { c.wait--; return false; }
     const speed = Math.round(X.speed * FX), far = X.gap * TILE;
+    if (X.kind === 'heron') return stepHeron(s, X, c, p);
     if (X.kind === 'race') {
         // the pond skater: across the water it flies, over land it picks its way; first home wins
         const d = X.dir;
@@ -1304,6 +1373,12 @@ function danger(s) {
     if (X.kind === 'clock') return s.escapeT / 60;
     if (X.kind === 'cat') return (s.chase.pos + s.chase.wait * X.speed * FX) / TILE;
     if (X.kind === 'race') return (p.x - s.chase.pos) * X.dir / TILE;
+    // the heron: seconds until the beak comes down
+    if (X.kind === 'heron') {
+        const c = s.chase, rest = {watch: X.aim + X.lock + X.strike, aim: X.lock + X.strike, lock: X.strike, strike: 0,
+            recover: X.watch + X.aim + X.lock + X.strike}[c.phase];
+        return (c.wait + c.t + rest) / 60;
+    }
     if (X.kind === 'water' || X.kind === 'flood') return (s.chase.pos - (p.y - p.h / 2)) / TILE;
     return (p.x - X.dir * p.w / 2 - s.chase.pos) * X.dir / TILE;
 }
@@ -1593,8 +1668,10 @@ function camTargets(s) {
     const VW = Math.round(s.viewW * TILE), VH = VIEW_H * TILE;
     const t = Math.min(1, Math.max(0, (c.sp - FX) / (P.RUN_MAX - FX)));
     const t2 = Math.min(1, Math.max(0, (c.sp - P.RUN_MAX) / (P.TIERS[2] - P.RUN_MAX)));
-    // never so far ahead that the mouse is pushed to the edge of a narrow (upright phone) view
-    const lookTarget = c.dir * Math.round(Math.min(2 * TILE + 3 * TILE * t + 3 * TILE * t2, VW * 0.3));
+    // never so far ahead that the mouse is pushed to the edge of a narrow (upright phone) view; and
+    // with a heron hunting you, not so far that you cannot see it strike behind you
+    const most = s.escape && s.level.escape.kind === 'heron' ? Math.min(TILE, VW * 0.3) : VW * 0.3;
+    const lookTarget = c.dir * Math.round(Math.min(2 * TILE + 3 * TILE * t + 3 * TILE * t2, most));
     return {VW, VH, lookTarget};
 }
 
@@ -1686,7 +1763,7 @@ function hash(s) {
 
 return {FX, TILE, VIEW_H, P, E, MOVE, IN, T, SOLID, parseLevel, newGame, step, tileAt, solidAt,
     overlaps, supported, box, jumpRow, predict, clone, setViewWidth, hash, snapCamera, danger, catAt,
-    isWater, inWater, firm};
+    isWater, inWater, firm, covered};
 })();
 </script>
 <script id="levels">
@@ -2062,6 +2139,41 @@ const LEVELS = [
     labels: [[10, 8, "OUT TO THE WARM STONES FOR THE THIMBLE"], [28, 6, "DOWN THE VOLE RUN, OR OVER"], [100, 8, "A SNAKE CLIMBS SLOWLY"]],
     route: {"out": [[30.5, 20], [60.5, 20], [126, 6]], "back": [[60.5, 20], [30.5, 20], [1, 12]]},
     burrow: [[30, 12, 31, 19], [32, 18, 59, 19], [60, 12, 61, 19]],
+},
+{
+    id: "heron",
+    name: "The heron",
+    item: "feather",
+    backdrop: "pond",
+    idea: "Out to the heron's island for one of its feathers, then home with the heron hunting you: keep moving, or take cover.",
+    escape: {"kind": "heron", "delay": 45, "speed": 3.2, "fly": 6.5, "gap": 3.5, "near": 2, "reach": 8, "watch": 50, "aim": 36, "lock": 12, "strike": 5, "recover": 26},
+    ranks: [29, 35, 48],
+    rows: [
+        'XX......................................................................................................................................................................XXXXXXXX',
+        'XX......................................................................................................................................................................XXXXXXXX',
+        'XX......................................................................................................................................................................XXXXXXXX',
+        'XX......................................................................................................................................................................XXXXXXXX',
+        'XX......................................................................................................................................................................XXXXXXXX',
+        'XX......................................................................................................................................................................XXXXXXXX',
+        'XX......................................................................................................................................................................XXXXXXXX',
+        'XX......................................................................................................................................................................XXXXXXXX',
+        'XX...................................G..................................................................................................................................XXXXXXXX',
+        'XX............................XXXX..XXXX................................................................................................................................XXXXXXXX',
+        'XX............................XXXX..XXXX................................................................................................................................XXXXXXXX',
+        'XX............................XXXX..XXXX..............................b.......b.........................................................................................XXXXXXXX',
+        'XX..........................XXXXXX..XXXX........................WWWWWWWWWWWWWWWWWWWWWWWW......WWWWWWWWWWWWW.............................................................XXXXXXXX',
+        'XX..........................XXXXXX..XXXX......................................................WWWWWWWWWWWWW.............................................................XXXXXXXX',
+        'HH.....o.o.o.o.o.o.o.o....XXXXXXXX................................o..o..o..o..o..o..o.........WWWWWWWWWWWWW...............................................Q.............XXXXXXXX',
+        'HH..@..........b..........XXXXXXXX..................f.............................s............o.o.o.o.o.o...............f...............f........==============........XXXXXXXX',
+        '==========================================wwlwwwlwXwlwwwlwXww===================================================wwwlwwXwwlwlwwXwwlwlwwXwwlwlwwXwww##############wwwwwwwwXXXXXXXX',
+        '##########################################wwwwwwwwXwwwwwwwXww###################################################wwwwwwXwwwwwwwXwwwwwwwXwwwwwwwXwww##############wwwwwwwwXXXXXXXX',
+        '##########################################wwwwwwwwXwwwwwwwXww###################################################wwwwwwXwwwwwwwXwwwwwwwXwwwwwwwXwww##############wwwwwwwwXXXXXXXX',
+        '##########################################wwwwwwwwXwwwwwwwXww###################################################wwwwwwXwwwwwwwXwwwwwwwXwwwwwwwXwww##############wwwwwwwwXXXXXXXX',
+        '##########################################wwwwwwwwXwwwwwwwXww###################################################wwwwwwXwwwwwwwXwwwwwwwXwwwwwwwXwww##############wwwwwwwwXXXXXXXX',
+        '##########################################wwwwwwwwXwwwwwwwXww###################################################wwwwwwXwwwwwwwXwwwwwwwXwwwwwwwXwww##############wwwwwwwwXXXXXXXX',
+    ],
+    labels: [[10, 12, "OUT TO THE HERON'S ISLAND FOR A FEATHER"], [66, 9, "UNDER THE BOARDS IT CANNOT REACH YOU"], [34, 3, "KICK UP THE CLEFT"]],
+    route: {"out": [[154, 15]], "back": [[34.5, 16], [31, 9], [1, 16]]},
 }];
 
 // The fastest line the search bot in test/underfoot_tempo.mjs found, per level: [input, frames], ...
@@ -2075,6 +2187,7 @@ const LINES = {
     skater: {frames: 1171, log: [[34,186],[50,6],[34,6],[50,6],[34,144],[8,6],[34,168],[8,6],[34,12],[50,6],[49,8],[33,4],[49,6],[50,2],[34,4],[50,2],[34,4],[49,6],[50,6],[33,24],[34,18],[33,6],[0,6],[33,6],[8,6],[34,6],[49,6],[33,138],[8,6],[34,30],[49,2],[33,148],[49,6],[33,174],[34,1]]},
     storm: {frames: 1106, log: [[34,144],[50,8],[34,22],[50,2],[34,70],[50,2],[34,106],[50,2],[34,16],[50,8],[34,10],[50,6],[34,12],[50,14],[34,40],[33,12],[34,12],[8,6],[34,12],[49,2],[33,4],[50,2],[34,10],[0,6],[34,6],[50,6],[34,18],[0,6],[33,60],[8,6],[34,12],[50,8],[34,4],[50,2],[34,4],[49,2],[33,4],[50,2],[34,4],[33,30],[49,26],[33,40],[49,14],[33,22],[49,14],[33,16],[49,18],[16,12],[49,6],[33,12],[49,2],[33,16],[49,30],[33,6],[49,26],[33,16],[49,6],[33,18],[49,20],[33,84]]},
     snake: {frames: 1159, log: [[34,120],[50,2],[34,10],[0,6],[33,6],[0,12],[33,6],[34,36],[8,6],[34,12],[50,6],[34,24],[8,6],[34,30],[33,6],[50,2],[34,4],[50,2],[34,4],[49,2],[33,4],[50,2],[34,4],[49,6],[50,8],[34,10],[50,12],[34,30],[50,32],[34,22],[50,32],[34,22],[50,14],[34,16],[50,18],[34,48],[33,60],[49,6],[33,30],[49,8],[33,16],[49,6],[33,18],[49,2],[33,16],[49,6],[33,18],[49,2],[33,16],[49,6],[33,18],[49,2],[33,16],[49,6],[33,18],[34,12],[0,6],[33,18],[49,6],[33,12],[8,6],[34,30],[33,12],[8,6],[34,30],[33,12],[50,6],[49,2],[33,4],[49,2],[33,4],[50,6],[49,6],[50,2],[34,4],[50,6],[34,6],[33,108],[34,1]]},
+    heron: {frames: 1412, log: [[34,6],[50,8],[34,22],[50,8],[34,40],[50,2],[34,16],[50,6],[34,18],[50,18],[34,6],[50,20],[34,10],[50,6],[34,54],[50,2],[34,46],[50,2],[34,22],[50,36],[34,18],[50,18],[34,78],[50,14],[34,22],[50,6],[34,72],[8,6],[34,36],[50,2],[34,22],[50,2],[34,22],[50,2],[34,22],[50,2],[34,22],[50,2],[34,46],[33,198],[8,6],[34,48],[49,2],[33,100],[49,6],[33,6],[49,2],[33,118],[50,2],[34,4],[49,14],[33,4],[49,2],[33,4],[50,2],[34,4],[33,126],[34,2]]},
 };
 
 </script>
@@ -2197,18 +2310,19 @@ function layout() {
 /* ---------------- the game ---------------- */
 // what each level sends you for, and what the way home is up against
 const ITEM = {sack: 'the seed sack', button: 'the button', berry: 'the strawberry', marble: 'the marble', bell: 'the cat',
-    float: 'the float', cherry: 'the cherries', boat: 'the paper boat', thimble: 'the thimble'};
+    float: 'the float', cherry: 'the cherries', boat: 'the paper boat', thimble: 'the thimble', feather: "the heron's feather"};
 const GOAL = {sack: 'Fetch the seed sack from the far end of the garden →', button: 'Down the drain for the lost button ↓',
     berry: 'Along the bank for the last strawberry →', marble: 'All the way down the lawn for the lost marble →',
     bell: 'Up on the shed roof, the cat is asleep. Bell it →', float: 'Across the pond for the lost float →',
     cherry: 'Out to the reed island for the cherries: the pond skater wants a race →',
     boat: 'Down to the beach for the paper boat, before the storm breaks →',
-    thimble: 'Out to the warm stones for the thimble. A grass snake sleeps there →'};
+    thimble: 'Out to the warm stones for the thimble. A grass snake sleeps there →',
+    feather: "Out to the heron's island for a feather, while it dozes →"};
 const FLEE = {clock: '← Home to the mouse hole, quick!', water: '↑ Back up, before the water catches you!',
     crumble: '← Home! The bank is giving way behind you', mower: '← Home! The mower is out',
     cat: '← The cat is awake. Home!', race: '← Race the pond skater home!',
     flood: '← A storm! Home, before the pond rises over you', snake: '← A grass snake is after you. Home!',
-    heron: '← Home past the heron: keep moving, or hide'};
+    heron: '← The heron is awake! Keep moving, or take cover'};
 const LATE = {time: 'Too slow! Back to ITEM, and the clock starts again', water: 'The water caught you! Back to ITEM',
     crumble: 'The bank gave way under you! Back to ITEM', mower: 'The mower caught up! Back to ITEM',
     cat: 'The cat caught you! Back to ITEM', race: 'The pond skater was home first! Back to ITEM',
@@ -2218,10 +2332,10 @@ const LATE = {time: 'Too slow! Back to ITEM, and the clock starts again', water:
 const escName = X => X.animal || X.kind;
 const KIND = {clock: 'against the clock', water: 'ahead of the rising water', crumble: 'before the bank gives way',
     mower: 'ahead of the mower', cat: 'with the cat on your trail', race: 'in a race with the pond skater',
-    flood: 'ahead of the rising pond', snake: 'with a grass snake on your trail', heron: 'past the hunting heron'};
+    flood: 'ahead of the rising pond', snake: 'with a grass snake on your trail', heron: 'with the heron hunting you'};
 const AHEAD = {water: 'tiles above the water', crumble: 'tiles ahead of the edge', mower: 'tiles ahead of the mower',
     cat: 'tiles ahead of the cat', race: 'tiles ahead of the pond skater', flood: 'tiles above the water',
-    snake: 'tiles ahead of the snake'};
+    snake: 'tiles ahead of the snake', heron: 'seconds till the heron strikes'};
 let DEF = null, level = null, totalSeeds = 0, lateWhy = 'time';
 function loadLevel(id) {
     DEF = LEVELS.find(l => l.id === id) || LEVELS[0];
@@ -2254,6 +2368,7 @@ function restart() {
     shake = comboPulse = tierFx = lateFx = beat = 0;
     bolt = surge = null;
     rainAmt = lift = 0;
+    heronView.x = null;
     goalFx = 360;
     sq.x = sq.y = 1;
     rec = [];
@@ -2564,6 +2679,13 @@ const sound = (() => {
             if (near) { noise(0.16, 0.45, 2600, 0.5, 600); noise(0.5, 0.3, 180, 0.6, 60, 'lowpass', 0.02); }
         },
         surge: () => noise(0.7, 0.14, 240, 0.7, 520, 'lowpass'),
+        // the heron: its harsh call, the click as it locks on, the stab, and what the beak hits
+        heron: () => { tone('sawtooth', 520, 300, 0.42, 0.05); noise(0.4, 0.3, 900, 1.4, 500); tone('sawtooth', 430, 280, 0.3, 0.04, 0.5); },
+        lock: () => tone('sine', 1650, 1650, 0.035, 0.05),
+        stab: () => noise(0.14, 0.45, 700, 0.7, 3600),
+        knock: () => { noise(0.07, 0.6, 650, 1.8); tone('sine', 230, 170, 0.1, 0.12); },
+        thud: () => { tone('sine', 150, 55, 0.12, 0.13); noise(0.08, 0.35, 400, 1); },
+        wing: () => noise(0.22, 0.2, 260, 0.8, 110, 'lowpass'),
         // a snake through the grass: a dry rustle that comes and goes with its going, nearer louder
         slither: v => {
             if (!ac) return;
@@ -2622,6 +2744,7 @@ function step() {
     stepGhost();
     stepScarf();
     stepChaser();
+    stepHeronView();
     stepStorm();
     const p = game.p;
     for (const e of game.events) onEvent(e);
@@ -2652,7 +2775,8 @@ function step() {
     // the escape: a heartbeat that quickens as the clock runs down, and a tick for the last five
     if (game.escape && p.mode === 'play') {
         const kind = level.escape.kind, d = UF.danger(game);
-        const close = kind === 'clock' ? d < 10 : d < 3, gap = kind === 'clock' ? (close ? 18 + d * 1.2 : 34) : Math.max(16, Math.min(34, 12 + d * 3));
+        const close = kind === 'clock' ? d < 10 : kind === 'heron' ? d < 0.8 : d < 3;
+        const gap = kind === 'clock' ? (close ? 18 + d * 1.2 : 34) : Math.max(16, Math.min(34, 12 + d * (kind === 'heron' ? 12 : 3)));
         if (++beat >= gap) { beat = 0; sound.beat(close); }
         if (kind === 'clock' && d < 5.5 && game.escapeT % 60 === 0) sound.tick();
         if (kind === 'water' && d < 6 && game.frame % 9 === 0 && Math.random() < 0.5) sound.bubble();
@@ -2766,6 +2890,19 @@ function onEvent(e) {
             fx.push({kind: 'ring', x: e.tx * 16 + 8, y: e.ty * 16 + 1, vx: 0, vy: 0, g: 0, drag: 1, life: 36, max: 36, r: 12, rot: 0});
             if (e.down) sound.bloop();
             break;
+        case 'heron': {
+            if (e.phase === 'lock') sound.lock();
+            else if (e.phase === 'strike') sound.stab();
+            else if (e.phase === 'struck') {
+                if (e.hit === 'cover') { sound.knock(); shake = Math.max(shake, 2); dust(e.x / FX, e.y / FX - 30, 4, 0); }
+                else if (e.hit === 'miss') {
+                    const wet = UF.isWater(UF.tileAt(game.level, Math.floor(e.x / TILE), Math.floor(e.y / TILE)));
+                    if (wet) { splashAt(e.x / FX, waterTop(e.x / FX, e.y / FX - 1), 10, 1); sound.splash(false); }
+                    else { sound.thud(); dust(e.x / FX, e.y / FX, 5, 0); }
+                }
+            }
+            break;
+        }
         case 'flood':
             // a row of the garden goes under: a swell, heard if it is near
             surge = {row: e.row, t: 0};
@@ -2800,6 +2937,7 @@ function onEvent(e) {
             else if (e.kind === 'mower') { sound.escape(); sound.mowerOn(); }
             else if (e.kind === 'cat') { sound.hiss(); catView.x = null; }
             else if (e.kind === 'race') sound.go();
+            else if (e.kind === 'heron') sound.heron();
             else sound.escape();
             buzz(40);
             shake = 5;
@@ -2938,11 +3076,19 @@ function levelIcon(kind) {
     drawItem(g, kind);
     return c;
 }
+// the places the levels are in, named where each begins
+const WORLDS = {sack: 'The garden', lilypond: 'The pond'};
 function renderCards() {
     const list = $('title-levels');
     list.textContent = '';
     let home = 0, top = 0;
     LEVELS.forEach((def, i) => {
+        if (WORLDS[def.id]) {
+            const w = document.createElement('div');
+            w.className = 'world';
+            w.textContent = WORLDS[def.id];
+            list.append(w);
+        }
         const b = document.createElement('button'), best = bests[def.id], rank = best ? rankOf(def, best.frames) : null;
         if (best) home++;
         if (rank === 'S') top++;
@@ -2967,7 +3113,7 @@ function renderCards() {
         list.append(b);
     });
     $('b-play').textContent = `Play · ${DEF.name}`;
-    $('tally').textContent = home ? `Home from ${home} of ${LEVELS.length} · ${top} at rank S` : `${LEVELS.length} levels, one mouse hole. Start with the first.`;
+    $('tally').textContent = home ? `Home from ${home} of ${LEVELS.length} · ${top} at rank S` : `The garden, then the pond: ${LEVELS.length} levels, one mouse hole. Start with the first.`;
 }
 function selectLevel(id) {
     setOpt('level', id);
@@ -4442,6 +4588,21 @@ function render(alpha) {
         }
     }
 
+    // the heron: dozing on one leg by its feather; then after you, and the spot it has locked on to
+    if (level.escape.kind === 'heron' && level.item && heronView.x !== null) {
+        const c = game.chase, live = esc && c && p.mode === 'play';
+        if (live && (c.phase === 'lock' || c.phase === 'strike')) {
+            const a = 0.28 + 0.12 * Math.sin(game.frame * 0.6);
+            blob(ctx, X(c.tx / FX), Y(c.ty / FX) - K, 11 * K, 3 * K, `rgba(25,20,35,${a})`);
+            ctx.strokeStyle = `rgba(255,240,220,${a + 0.2})`;
+            ctx.lineWidth = K;
+            ctx.beginPath(); ctx.ellipse(X(c.tx / FX), Y(c.ty / FX) - K, 12 * K, 3.4 * K, 0, 0, TAU); ctx.stroke();
+        }
+        const pose = !esc ? 'doze' : !live ? 'stand' : c.wait > 0 ? 'wake' : heronView.air > 0.5 ? 'fly' : c.phase;
+        const f = live && game.p.x / FX > heronView.x ? 1 : live ? -1 : level.escape.dir;
+        drawHeron(X(heronView.x), Y(heronView.y), K, f, pose, live ? c : null);
+    }
+
     // the grass snake: coiled asleep on the warm stones, then after you along your trail
     if (level.escape.animal === 'snake' && level.item) {
         const it = level.item, d = level.escape.dir;
@@ -4625,18 +4786,18 @@ function render(alpha) {
     // the escape: the evening reddens, and the edges pulse as the danger nears
     if (esc) {
         const d = UF.danger(game);
-        const near = kind === 'clock' ? Math.max(0, 1 - d / 10) : Math.max(0, 1 - d / 4);
+        const near = kind === 'clock' ? Math.max(0, 1 - d / 10) : kind === 'heron' ? Math.max(0, 1 - d / 1.2) : Math.max(0, 1 - d / 4);
         const pulse = near > 0 ? (0.5 + 0.5 * Math.sin(game.frame * (0.12 + near * 0.2))) * near : 0;
         ctx.globalAlpha = 0.14 + pulse * 0.35;
         ctx.drawImage(vignette(kind === 'water' || kind === 'flood' ? '30,80,200' : '200,40,30', vw, vh), vx0, vy0, vw, vh);
         ctx.globalAlpha = 1;
         // the mower or the cat, when it is out of sight: a badge on the edge nearest it, pointing
         const cat = kind === 'cat' && catView.x !== null;
-        if (game.chase && p.mode === 'play' && (kind === 'mower' || kind === 'race' || cat)) {
+        if (game.chase && p.mode === 'play' && (kind === 'mower' || kind === 'race' || cat || (kind === 'heron' && heronView.x !== null))) {
             // its front: the badge shows only once all of it is out of sight
-            const sx = kind === 'cat' ? X(catView.x / FX) : X(game.chase.pos / FX);
+            const sx = kind === 'cat' ? X(catView.x / FX) : kind === 'heron' ? X(heronView.x) : X(game.chase.pos / FX);
             const sy = kind === 'mower' ? Y((level.start.ty + 1) * 16 - 9) : kind === 'race' ? Y(surfaceY(game.chase.pos / FX).y - 6)
-                : Y(catView.y / FX - 14), r = 17 * dpr, m = r + 12 * dpr;
+                : kind === 'heron' ? Y(heronView.y - 60) : Y(catView.y / FX - 14), r = 17 * dpr, m = r + 12 * dpr;
             if (sx < vx0 || sx > vx0 + vw || sy < vy0 || sy > vy0 + vh) {
                 const bx = Math.max(vx0 + m, Math.min(vx0 + vw - m, sx)), by = Math.max(vy0 + m, Math.min(vy0 + vh - m, sy));
                 const near = Math.max(0, 1 - UF.danger(game) / 8), a = Math.atan2(sy - by, sx - bx), red = `rgba(200,45,35,${0.75 + near * 0.25})`;
@@ -4658,6 +4819,7 @@ function render(alpha) {
                 if (kind === 'mower') { const u = r / 24; drawMower(level.escape.dir * 19 * u, 10 * u, level.escape.dir, u, near); }
                 else if (kind === 'race') { const u = r / 17; drawSkater(0, 5 * u, u, level.escape.dir, true, true); }
                 else if (level.escape.animal === 'snake') snakeHead(0, 2 * dpr, r / 12, catView.f, 0, true);
+                else if (kind === 'heron') { ctx.save(); ctx.scale(r / 22, r / 22); ctx.scale(sx < bx ? -1 : 1, 1); heronHead(-8, 0, 0, true); ctx.restore(); }
                 else { const u = r / 40; drawCat(catView.f * 20 * u, 22 * u, u, catView.f, 'run', catView.ph, 0, true); }
                 ctx.restore();
             }
@@ -4817,6 +4979,30 @@ function drawItem(g, kind) {
         g.strokeStyle = S.ink;
         g.lineWidth = 0.9;
         g.stroke();
+    } else if (kind === 'feather') {
+        // a heron's feather: a long grey vane on a pale quill, darker at the tip, stuck in the ground
+        g.save();
+        g.rotate(-0.25);
+        g.strokeStyle = '#e9e4d6';
+        g.lineWidth = 0.9;
+        g.beginPath(); g.moveTo(0, 1); g.quadraticCurveTo(1.2, -9, -0.5, -19); g.stroke();
+        const vane = side => { g.beginPath(); g.moveTo(0.4, -3); g.quadraticCurveTo(side * 5.2, -8, side * 2.6, -15); g.quadraticCurveTo(0.2, -19.5, -0.5, -19); g.quadraticCurveTo(0.6, -11, 0.4, -3); g.closePath(); };
+        for (const side of [1, -1]) {
+            const fg = g.createLinearGradient(0, -3, 0, -19);
+            fg.addColorStop(0, '#b9c0c6');
+            fg.addColorStop(0.6, '#8d959d');
+            fg.addColorStop(1, '#3a3f45');
+            vane(side);
+            g.fillStyle = fg;
+            g.fill();
+            g.strokeStyle = S.ink;
+            g.lineWidth = 0.7;
+            g.stroke();
+        }
+        g.strokeStyle = 'rgba(255,255,255,.35)';
+        g.lineWidth = 0.35;
+        for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(0.3, -5 - k * 2.6); g.lineTo(3.6, -7.5 - k * 2.4); g.stroke(); }
+        g.restore();
     } else if (kind === 'thimble') {
         // a silver thimble, dimpled, a little dented
         const body = () => { g.beginPath(); g.moveTo(-5.6, 0); g.lineTo(-4.6, -9.6); g.quadraticCurveTo(0, -13.4, 4.6, -9.6); g.lineTo(5.6, 0); g.closePath(); };
@@ -5466,6 +5652,27 @@ function stepChaser() {
     }
 }
 
+// The heron as it looks: where it stands or flies, how far into its stride or its wingbeat.
+const heronView = {x: null, y: 0, air: 0, ph: 0, wing: 0};
+function stepHeronView() {
+    const X = level.escape, c = game.chase;
+    if (X.kind !== 'heron' || !level.item) return;
+    const live = game.escape && c && game.p.mode === 'play';
+    const x = live ? c.pos / FX : level.item.tx * 16 + 8 - X.dir * 48;
+    const flying = !!(live && c.fly);
+    heronView.air += ((flying ? 1 : 0) - heronView.air) * 0.08;
+    const ground = surfaceY(x).y, over = Math.min(ground, game.p.y / FX) - 64;
+    const want = heronView.air > 0.05 ? ground + (over - ground) * heronView.air : ground;
+    heronView.y = heronView.x === null ? want : heronView.y + (want - heronView.y) * 0.2;
+    heronView.ph += heronView.x === null ? 0 : Math.abs(x - heronView.x) * 0.07;
+    if (flying) {
+        const before = Math.floor(heronView.wing / TAU);
+        heronView.wing += 0.2;
+        if (Math.floor(heronView.wing / TAU) !== before && !attract) sound.wing();
+    }
+    heronView.x = x;
+}
+
 /* ----- the scarf's ends ----- */
 // Two short ropes hanging from the knot, stepped with the game: they trail behind at speed, hang
 // when the mouse stands, swing when it turns. Positions in game px, in the world.
@@ -5622,6 +5829,153 @@ function drawMower(x, y, d, u, near) {
 // The cat, a ginger tabby, drawn round its front feet at (x, y) in device px, facing f. `pose` is
 // sleep, wake, run or squeeze; `ph` is the stride; `tilt` leans it along a climb or a drop.
 const CATC = {fur: '#e58c3e', shade: '#c46d2a', stripe: '#a5521d', pale: '#f8dcb4', nose: '#e27a86', eye: '#b9e04a', earIn: '#f0a293'};
+// The grey heron, taller than anything else in the garden: long legs, grey back, white neck with a
+// black streak, a black plume from the eye back and a yellow dagger of a beak. Drawn facing +x
+// with its feet on (0, 0), in game px. Poses: doze (one leg, head sunk), wake, stand or wade
+// (watch), aim and lock (neck drawn back, the beak on the spot), strike (neck out to the spot),
+// recover (drawing it back), fly.
+const HERON = {grey: '#9aa2a9', back: '#7d868e', dark: '#2b2f35', white: '#eef0ef', leg: '#bfa35d', beak: '#e0ad38', eye: '#f2d23c'};
+function drawHeron(x, y, u, f, pose, c) {
+    const t = game.frame;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(u, u);
+    const air = pose === 'fly';
+    if (!air) blob(ctx, 0, 0, 20, 2.2, 'rgba(20,20,25,.22)');
+    ctx.scale(f, 1);
+    ctx.lineJoin = ctx.lineCap = 'round';
+    const ink = HERON.dark, X = level.escape;
+    // where the beak points, in these coordinates
+    let tgt = null;
+    if (c && (pose === 'aim' || pose === 'lock' || pose === 'strike' || pose === 'recover')) tgt = [(c.tx / FX - heronView.x) * f, c.ty / FX - 10 - heronView.y];
+    if (air) {
+        // in flight: body level, neck drawn in, legs trailing, wings beating
+        const w = Math.sin(heronView.wing), by = -6;
+        for (const side of [-1, 1]) {
+            ctx.fillStyle = side < 0 ? HERON.back : HERON.grey;
+            ctx.beginPath();
+            ctx.moveTo(-6, by - 2);
+            ctx.quadraticCurveTo(-16, by - 30 * w * side - 10, -34, by - 46 * w * side);
+            ctx.lineTo(-44, by - 40 * w * side);
+            ctx.quadraticCurveTo(-24, by - 12 * w * side, 6, by + 2);
+            ctx.fill();
+            ctx.fillStyle = ink;
+            ctx.beginPath(); ctx.moveTo(-34, by - 46 * w * side); ctx.lineTo(-44, by - 40 * w * side); ctx.lineTo(-36, by - 34 * w * side); ctx.fill();
+        }
+        ctx.strokeStyle = HERON.leg;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-14, by + 2); ctx.lineTo(-46, by + 5); ctx.stroke();
+        ctx.fillStyle = HERON.grey;
+        ctx.beginPath(); ctx.ellipse(-4, by, 20, 7, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = HERON.white;
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(12, by - 2); ctx.quadraticCurveTo(20, by - 12, 16, by - 14); ctx.stroke();
+        heronHead(20, by - 15, 0.15, false);
+        ctx.restore();
+        return;
+    }
+    // legs: a stride as it wades, one drawn up while it dozes
+    const st = pose === 'stand' || pose === 'watch' || pose === 'recover' ? Math.sin(heronView.ph) * 7 : 0;
+    ctx.strokeStyle = HERON.leg;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(-4, -50); ctx.lineTo(-2 + st * 0.4, -26); ctx.lineTo(st, 0); ctx.stroke();
+    if (pose === 'doze') { ctx.beginPath(); ctx.moveTo(-4, -50); ctx.lineTo(4, -38); ctx.lineTo(-2, -34); ctx.stroke(); }
+    else { ctx.beginPath(); ctx.moveTo(-2, -50); ctx.lineTo(1 - st * 0.4, -26); ctx.lineTo(-6 - st, 0); ctx.stroke(); }
+    for (const fx0 of pose === 'doze' ? [st] : [st, -6 - st]) { ctx.beginPath(); ctx.moveTo(fx0 - 4, 0); ctx.lineTo(fx0 + 6, 0); ctx.stroke(); }
+    // body: a long grey teardrop, the folded wing darker, black flight feathers at the back
+    const lean = pose === 'aim' || pose === 'lock' ? 4 : pose === 'strike' ? 7 : 0;
+    ctx.save();
+    ctx.translate(0, -60);
+    ctx.rotate(lean * 0.02);
+    ctx.fillStyle = HERON.grey;
+    ctx.beginPath();
+    ctx.moveTo(16, -6);
+    ctx.quadraticCurveTo(8, -20, -8, -18);
+    ctx.quadraticCurveTo(-26, -16, -38, 4);
+    ctx.quadraticCurveTo(-18, 8, 0, 6);
+    ctx.quadraticCurveTo(14, 4, 16, -6);
+    ctx.fill();
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.fillStyle = HERON.back;
+    ctx.beginPath(); ctx.moveTo(10, -12); ctx.quadraticCurveTo(-6, -17, -30, -2); ctx.quadraticCurveTo(-12, 0, 8, -4); ctx.fill();
+    ctx.fillStyle = ink;
+    ctx.beginPath(); ctx.moveTo(-22, -6); ctx.quadraticCurveTo(-32, -2, -40, 5); ctx.quadraticCurveTo(-30, 2, -20, 0); ctx.fill();
+    // breast plumes
+    ctx.strokeStyle = HERON.white;
+    ctx.lineWidth = 1.2;
+    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(12 - k * 2, -4); ctx.quadraticCurveTo(14 - k * 2, 4, 10 - k * 2.5, 10 + k); ctx.stroke(); }
+    ctx.restore();
+    // the neck, from the breast to the head: where the head is depends on what it is doing
+    const base = [12, -68];
+    let head, c1, c2, ang = 0, open = pose !== 'doze';
+    const rest = {head: [16, -104], c1: [28, -78], c2: [0, -92]};
+    const coil = {head: [2, -86], c1: [26, -72], c2: [-12, -80]};
+    const lerp2 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+    if (pose === 'doze') { head = [14, -80]; c1 = [20, -74]; c2 = [8, -80]; ang = 0.35; }
+    else if (pose === 'aim' || pose === 'lock') {
+        const tremble = pose === 'lock' ? 0 : Math.sin(t * 0.3) * 0.6;
+        head = [coil.head[0] + tremble, coil.head[1]]; c1 = coil.c1; c2 = coil.c2;
+        if (tgt) ang = Math.atan2(tgt[1] - head[1], tgt[0] - head[0]);
+    } else if (pose === 'strike' || pose === 'recover') {
+        // out along a line to the spot, beak first; then back
+        const k = pose === 'strike' ? Math.min(1, 1 - c.t / X.strike + 0.35) : Math.max(0, c.t / X.recover);
+        const a = tgt ? Math.atan2(tgt[1] - coil.head[1], tgt[0] - coil.head[0]) : 0.6;
+        const tip = tgt ? [tgt[0] - Math.cos(a) * 26, tgt[1] - Math.sin(a) * 26] : [40, -60];
+        const from = pose === 'strike' ? coil : rest;
+        head = lerp2(from.head, tip, k);
+        c1 = lerp2(from.c1, lerp2(base, tip, 0.35), k);
+        c2 = lerp2(from.c2, lerp2(base, tip, 0.7), k);
+        ang = a * k + (pose === 'recover' ? 0 : 0);
+    } else if (pose === 'wake') { head = [18, -108 + Math.sin(t * 0.1) * 1.5]; c1 = rest.c1; c2 = rest.c2; ang = -0.1; }
+    else { head = [rest.head[0], rest.head[1] + Math.sin(heronView.ph * 0.5) * 1.5]; c1 = rest.c1; c2 = rest.c2; }
+    for (const [w, col] of [[7.4, ink], [6, HERON.white]]) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        ctx.beginPath(); ctx.moveTo(base[0], base[1]); ctx.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], head[0], head[1]); ctx.stroke();
+    }
+    // the black streak down the front of the neck
+    ctx.strokeStyle = 'rgba(40,44,50,.75)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath(); ctx.moveTo(base[0] + 2, base[1]); ctx.bezierCurveTo(c1[0] + 2, c1[1], c2[0] + 2, c2[1], head[0] + 1.5, head[1] + 2); ctx.stroke();
+    ctx.setLineDash([]);
+    heronHead(head[0], head[1], ang, open);
+    ctx.restore();
+}
+function heronHead(x, y, ang, open) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    // the beak: a long yellow dagger
+    ctx.fillStyle = HERON.beak;
+    ctx.beginPath(); ctx.moveTo(3, -1.8); ctx.lineTo(26, 0.2); ctx.lineTo(3, 2.2); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(90,60,20,.7)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(4, 0.3); ctx.lineTo(24, 0.3); ctx.stroke();
+    ctx.fillStyle = HERON.white;
+    ctx.beginPath(); ctx.ellipse(0, 0, 6, 4.4, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = HERON.dark;
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    // the black plume from the eye back
+    ctx.strokeStyle = HERON.dark;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(2, -1.6); ctx.lineTo(-5, -2.4); ctx.quadraticCurveTo(-12, -3, -17, 1); ctx.stroke();
+    if (open) {
+        ctx.fillStyle = HERON.eye;
+        ctx.beginPath(); ctx.arc(2.4, -0.6, 1.3, 0, TAU); ctx.fill();
+        ctx.fillStyle = HERON.dark;
+        ctx.beginPath(); ctx.arc(2.7, -0.6, 0.6, 0, TAU); ctx.fill();
+    } else {
+        ctx.strokeStyle = HERON.dark;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(1.2, -0.4); ctx.lineTo(3.6, -0.2); ctx.stroke();
+    }
+    ctx.restore();
+}
+
 // The grass snake, as it goes: olive, barred dark along its sides, its body in low humps along
 // where its head has been; the head blunt, with the yellow collar behind it, and a tongue that
 // flickers out now and then.
@@ -6225,7 +6579,7 @@ function drawHud(dpr) {
     }
     // the escape, big and in the middle: the clock, or how far behind the water or the edge is
     if (game.escape && p.mode === 'play') {
-        const kind = level.escape.kind, raw = UF.danger(game), d = Math.max(0, raw), close = kind === 'clock' ? d < 10 : d < 3;
+        const kind = level.escape.kind, raw = UF.danger(game), d = Math.max(0, raw), close = kind === 'clock' ? d < 10 : kind === 'heron' ? d < 0.8 : d < 3;
         const big = Math.round(22 * s * dpr * (close && game.frame % 60 > 50 ? 1.08 : 1));
         ctx.font = `800 ${big}px system-ui, sans-serif`;
         // in a race you can be behind: the number is how far, and says so

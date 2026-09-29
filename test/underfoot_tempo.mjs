@@ -649,6 +649,39 @@ if (suites.includes('escape')) {
     Object.assign(roofed.p, {x: 58 * TILE, y: 15 * TILE, vx: -P.TIERS[2], vy: 0, onGround: true, tier: 2, sink: 0, mode: 'play'});
     const under = events(roofed, 120, RUN_L, 'surf', u => u.events.some(e => e.type === 'flood' && e.row === 14));
     check(under.length === 0 && roofed.p.sink > 0, 'under a roof it cannot lift you: at any speed it closes over you');
+    // the heron: it takes aim, locks on and strikes; a mouse still on the spot is caught, one that
+    // keeps going gets away, one under cover is safe
+    const HERON = {kind: 'heron', delay: 0, speed: 2, fly: 6, gap: 6, reach: 8, watch: 30, aim: 20, lock: 12, strike: 5, recover: 15};
+    const cycle = HERON.watch + HERON.aim + HERON.lock + HERON.strike;
+    s = take(yard(HERON));
+    const phases = [];
+    let struck = null;
+    for (let i = 0; i < 200 && !struck; i++) {
+        UF.step(s, {h: 0});
+        for (const e of s.events) { if (e.type === 'heron') phases.push(e.phase); if (e.type === 'late') struck = {why: e.why, at: i}; }
+    }
+    check(phases.slice(0, 4).join() === 'aim,lock,strike,struck' && struck && struck.why === 'heron' && Math.abs(struck.at - cycle) <= 2,
+        'the heron watches, aims, locks on and strikes: stand still and it has you', `${phases.join()} caught ${struck && struck.at} (cycle ${cycle})`);
+    s = take(yard(HERON));
+    const walk = events(s, 300, IN.L, 'heron');
+    check(!s.events.some(e => e.type === 'late') && s.deaths === 0 && walk.filter(e => e.phase === 'struck' && e.hit === 'miss').length >= 2,
+        'walk on, even slowly, and every strike misses', `${walk.filter(e => e.phase === 'struck').map(e => e.hit).join()}`);
+    const hid = take(yard(HERON, [[60, 11, 'WWWWWWWW']]));
+    Object.assign(hid.p, {x: 64 * TILE, y: 15 * TILE, vx: 0});
+    const safe = events(hid, cycle + 20, 0, 'heron');
+    check(hid.deaths === 0 && safe.some(e => e.phase === 'struck' && e.hit === 'cover'), 'under boards it cannot reach you: the beak hits the wood');
+    // far off, it flies after you, and it will not take aim until you are in reach
+    const far = take(yard(HERON));
+    Object.assign(far.p, {x: 20 * TILE});
+    UF.step(far, {h: 0});
+    const flew = far.chase.fly;
+    let aimedFar = false, closing = 0;
+    while (closing++ < 300 && Math.abs(far.p.x - far.chase.pos) > HERON.reach * TILE) {
+        UF.step(far, {h: 0});
+        if (far.events.some(e => e.type === 'heron' && e.phase === 'aim')) aimedFar = true;
+    }
+    check(flew && !aimedFar && closing < 300, 'far off it flies after you, and takes aim only once you are in reach', `flew ${flew}, aimed from afar ${aimedFar}, ${closing} frames`);
+
     // lily pads float up with it, and carry whoever stands on one
     const pool = take(yard(Object.assign({}, FLOOD, {speed: 1}), [[20, 15, 'wwwwwwwwwwlwwwwwwwwww'], [20, 16, 'wwwwwwwwwwwwwwwwwwwww']]));
     Object.assign(pool.p, {x: 30 * TILE + TILE / 2, y: 15 * TILE, vx: 0, vy: 0, onGround: true, tier: 0, sink: 0, mode: 'play'});
@@ -713,7 +746,7 @@ function searchBot(ctx, def, {chunk = 6, beam = 60, coarse = false, pause = 0} =
         return coarse ? [Math.round(p.x / FX / 8), Math.round(p.y / FX / 8), Math.sign(p.vx), p.tier, s.escape ? 1 : 0].join()
             : [Math.round(p.x / FX / 3), Math.round(p.y / FX / 3), Math.round(p.vx / FX * 2), Math.round(p.vy / FX * 2), p.tier, p.onGround ? 1 : 0, s.escape ? 1 : 0].join();
     };
-    let nodes = [{s: U.newGame(def, {viewW: 20}), w: {o: 0, b: 0}, log: [], k: 0, lead: Infinity}], best = null;
+    let nodes = [{s: U.newGame(def, {viewW: 20}), w: {o: 0, b: 0}, log: [], k: 0, lead: Infinity, dodged: 0}], best = null;
     for (let c = 0; c < 2500 && !best && nodes.length; c++) {
         const next = new Map();
         for (const n of nodes) {
@@ -721,19 +754,20 @@ function searchBot(ctx, def, {chunk = 6, beam = 60, coarse = false, pause = 0} =
             const forced = pause && n.s.escape && n.k + 1 >= pause && n.s.p.onGround;
             for (const a of forced ? [0] : acts) {
                 const s = U.clone(n.s), w = Object.assign({}, n.w), log = n.log.slice();
-                let lead = n.lead, caught = false;
+                let lead = n.lead, caught = false, dodged = n.dodged;
                 for (let f = 0; f < chunk; f++) {
                     const h = a < 0 ? -a | (f < 2 ? IN.J : 0) : a;
                     U.step(s, {h});
                     log.push(h);
                     if (s.events.some(e => e.type === 'late')) { caught = true; break; }
+                    for (const e of s.events) if (e.type === 'heron' && e.phase === 'struck') dodged++;
                     if (s.escape) lead = Math.min(lead, U.danger(s));
                     if (s.p.mode === 'clear') break;
                 }
                 if (caught) continue;
-                if (s.p.mode === 'clear') { if (!best || s.time < best.s.time) best = {s, log, lead}; continue; }
+                if (s.p.mode === 'clear') { if (!best || s.time < best.s.time) best = {s, log, lead, dodged}; continue; }
                 const sc = score(s, w), kk = key(s), old = next.get(kk);
-                if (!old || old.sc < sc) next.set(kk, {s, w, log, sc, k: n.s.escape && !forced ? n.k + 1 : 0, lead});
+                if (!old || old.sc < sc) next.set(kk, {s, w, log, sc, k: n.s.escape && !forced ? n.k + 1 : 0, lead, dodged});
             }
         }
         nodes = [...next.values()].sort((a, b) => b.sc - a.sc).slice(0, beam);
@@ -753,7 +787,8 @@ if (suites.includes('route')) {
     for (const def of LEVELS) {
         if (ONLY && def.id !== ONLY) continue;
         const [S, A, B] = def.ranks, X = def.escape;
-        const lead = r => X.kind === 'clock' ? `${secs(X.time * 60 - (r.s.time - r.s.itemTime))} of the clock left` : `never nearer than ${fmt(r.lead)} tiles`;
+        const lead = r => X.kind === 'clock' ? `${secs(X.time * 60 - (r.s.time - r.s.itemTime))} of the clock left`
+            : X.kind === 'heron' ? `${r.dodged} strikes dodged` : `never nearer than ${fmt(r.lead)} tiles`;
         const t0 = Date.now();
         const fast = searchBot(CTX, def);
         check(!!fast, `${def.id}: the search bot gets out and home again`);
