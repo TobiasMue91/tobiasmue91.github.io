@@ -508,3 +508,31 @@ this replaced merged `2 2 4` into `8`, on about one move in seventy of ordinary 
 
 The balance is the original's (a 4 one time in ten) and is not tuned here. The bots show that
 the rules play like it. `bots` takes about 25 seconds, most of it the look-ahead.
+
+## Monkeytype Clone
+
+```sh
+npm run test:monkeytype                  # or: node test/monkeytype.mjs
+node test/monkeytype.mjs input bots      # one or more named suites
+```
+
+`monkeytype.mjs` runs the DOM-free `<script id="core">` block of `games/monkeytype.html` in Node.
+A typing test makes one promise nobody can check from the page: that the number it shows is
+true. The page this replaced counted Shift, Tab and Enter as letters, scored every space as a
+word whether the word was right or not, and printed "Typed Characters: 104 (Correct: 120)".
+
+The page feeds the core the whole value of a hidden text field after each edit, not keys - that
+is what a phone keyboard sends - so the suites do the same.
+
+| suite | what it checks |
+| --- | --- |
+| `words` | both word lists are clean and unique; a seed always gives the same words, also while typing; never one word twice in a row; punctuation makes sentences of sensible length that start with a capital; numbers are about one word in eight |
+| `input` | the clock starts on the first key; space ends a word and does nothing on an empty one; backspace steps back only into a wrong word; extra letters stop at 20; autocorrect replacing a word, two words in one event, newlines, and composed letters; a timed test ends exactly on time and ignores what comes after |
+| `scoring` | a steady 60 wpm typist scores 60 at 15, 30 and 60 seconds, with wpm equal to a hand count; a wrong word earns raw but no wpm; consistency orders even and ragged paces |
+| `bots` | six players (beginner to fast, a sloppy one who never fixes a slip, a phone) type 18 tests each: the reported wpm, accuracy and keystrokes equal each bot's own tally, faster bots score higher, and leaving slips in costs wpm; mashing keys and walking away do not count |
+| `store` | broken saves load clean; personal bests per test type; tests that do not count cannot set one; practice lists hold each missed word three times, never twice in a row |
+| `page` | in Chromium: modifier keys do not start a test, typing a whole test shows the result, keys typed just after the end do not skip it, Tab and Escape restart, config and best are saved, the caret stays in the three visible lines for 80 words; on a phone, a tap focuses the field and whole-value edits, autocorrect and backspace on an empty field behave. Skipped without Playwright |
+
+The bots print a table of pace against score. A typist at 90 wpm with 1.5% slips, all fixed,
+scores about 87; one at 80 who leaves 5% of letters wrong scores about 62.
+
