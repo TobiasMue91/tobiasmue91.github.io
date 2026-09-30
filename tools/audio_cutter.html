@@ -114,7 +114,7 @@
         }
 
         .waveform-container {
-            height: 150px;
+            min-height: 150px;
             border-radius: 8px;
             overflow: hidden;
             background-color: rgba(0, 0, 0, 0.05);
@@ -241,7 +241,7 @@
             gap: 12px;
         }
 
-        .selection-controls {
+        .playback-controls, .selection-controls {
             flex-wrap: wrap;
         }
 
@@ -352,6 +352,8 @@
             padding: 12px 15px;
             border-bottom: 1px solid var(--border);
             display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
             justify-content: space-between;
             align-items: center;
             background: var(--card);
@@ -401,6 +403,21 @@
         .region-time {
             font-family: monospace;
             font-size: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .region-time .time-input {
+            font: inherit;
+            width: calc(9ch + 16px);
+            padding: 4px 6px;
+            text-align: center;
+        }
+
+        .region-duration {
+            color: #7f8c8d;
         }
 
         .drag-handle {
@@ -463,9 +480,10 @@
         <p><strong>How to use:</strong></p>
         <ul>
             <li>Upload an audio file using drag & drop or the file selector</li>
-            <li>Click and drag on the waveform to select regions to cut</li>
+            <li>Click and drag on the waveform to select the parts to keep</li>
+            <li>Zoom in, or type a start and end time, to place a cut exactly (↑/↓ nudges by 10 ms)</li>
             <li>Create multiple selections and rearrange their order</li>
-            <li>Use the "Create Final Audio" button to combine all regions</li>
+            <li>Use the "Create Final Audio" button to combine all regions - the joins are crossfaded so they don't click</li>
             <li>Download the result as a new audio file</li>
         </ul>
     </div>
@@ -497,6 +515,11 @@
                 <i class="fas fa-volume-up"></i>
                 <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="1" title="Adjust volume">
                 <span class="tooltiptext">Adjust playback volume</span>
+            </div>
+            <div class="volume-control tooltip">
+                <i class="fas fa-magnifying-glass-plus"></i>
+                <input type="range" id="zoomSlider" min="0" max="100" step="1" value="0" aria-label="Zoom">
+                <span class="tooltiptext">Zoom in to place a cut exactly</span>
             </div>
         </div>
         <div class="selection-controls">
@@ -566,6 +589,7 @@
         const regionsList = document.getElementById('regionsList');
         const regionsContainer = document.getElementById('regionsContainer');
         const sortByTimeBtn = document.getElementById('sortByTimeBtn');
+        const zoomSlider = document.getElementById('zoomSlider');
 
         // Variables
         let wavesurfer;
@@ -626,6 +650,8 @@
 
                 const duration = wavesurfer.getDuration();
                 fileInfo.innerHTML += `<p>Duration: ${formatTime(duration)}</p>`;
+                zoomSlider.value = 0;
+                if (wavesurfer.params.scrollParent) wavesurfer.zoom(null);
 
                 // Enable controls
                 playBtn.disabled = false;
@@ -674,7 +700,10 @@
                 regionsOrder.push(region.id);
                 selectedRegion = region;
 
-                updateRegionsList();
+                // The plugin announces a region before adding it to its list, so
+                // redraw once it is there - a region from "Add Region" gets no drag
+                // updates afterwards to show it.
+                queueMicrotask(updateRegionsList);
             });
 
             wavesurfer.on('region-updated', function (region) {
@@ -702,30 +731,64 @@
 
         // Format time as MM:SS.mmm
         function formatTime(time) {
-            const minutes = Math.floor(time / 60);
-            const seconds = Math.floor(time % 60);
-            const milliseconds = Math.floor((time % 1) * 1000);
+            const totalMs = Math.round(time * 1000);
+            const minutes = Math.floor(totalMs / 60000);
+            const seconds = Math.floor(totalMs / 1000) % 60;
+            const milliseconds = totalMs % 1000;
             return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
         }
 
-        // Parse time from string (MM:SS.mmm)
+        // Parse "SS.s", "M:SS.mmm" or "H:MM:SS.mmm" into seconds; NaN if it is not a time.
         function parseTime(timeStr) {
-            try {
-                const parts = timeStr.split(':');
-                if (parts.length !== 2) return 0;
-                const minutesPart = parseInt(parts[0], 10) || 0;
-                const secondsParts = parts[1].split('.');
-                const secondsPart = parseInt(secondsParts[0], 10) || 0;
-                const millisecondsPart = secondsParts.length > 1 ? parseInt(secondsParts[1], 10) || 0 : 0;
-                return minutesPart * 60 + secondsPart + millisecondsPart / 1000;
-            } catch (e) {
-                console.error('Error parsing time:', e);
-                return 0;
+            const parts = String(timeStr).trim().replace(',', '.').split(':');
+            if (parts.length > 3 || !/^\d+(\.\d*)?$/.test(parts[parts.length - 1])) return NaN;
+            if (!parts.slice(0, -1).every(part => /^\d+$/.test(part))) return NaN;
+            return parts.reduce((total, part) => total * 60 + parseFloat(part), 0);
+        }
+
+        // Move one edge of a selection to an exact time. An edge typed past the other
+        // one moves the whole selection instead; something that is not a time puts the
+        // field back as it was.
+        function setRegionEdge(region, edge, time, input) {
+            const duration = wavesurfer.getDuration();
+            const minLength = 0.01;
+            if (!Number.isFinite(time)) {
+                showNotification('Times look like 1:05.250 or 65.25', true);
+            } else {
+                time = Math.round(Math.min(Math.max(0, time), duration) * 1000) / 1000;
+                const length = region.end - region.start;
+                if (edge === 'start' && time > region.end - minLength) {
+                    // A start past the end moves the whole selection there.
+                    const start = Math.min(time, duration - length);
+                    region.update({ start, end: start + length });
+                } else if (edge === 'end' && time < region.start + minLength) {
+                    const end = Math.max(time, length);
+                    region.update({ start: end - length, end });
+                } else {
+                    region.update({ [edge]: time });
+                }
+                return;
             }
+            input.value = formatTime(region[edge]);
         }
 
         // Update regions list
         function updateRegionsList() {
+            // The list is rebuilt on every change; keep the caret in the time field
+            // being nudged so the arrow keys can be held down.
+            const focused = document.activeElement && document.activeElement.closest('.region-item .time-input')
+                ? {
+                    id: document.activeElement.closest('.region-item').dataset.regionId,
+                    edge: document.activeElement.dataset.edge
+                }
+                : null;
+
+            // Any change to the selections makes a finished cut stale; don't offer it.
+            if (processedBlob) {
+                processedBlob = null;
+                downloadBtn.classList.add('hidden');
+            }
+
             // Clear the current list
             while (regionsContainer.firstChild) {
                 regionsContainer.removeChild(regionsContainer.firstChild);
@@ -760,15 +823,18 @@
                 regionItem.className = 'region-item';
                 regionItem.dataset.regionId = region.id;
 
-                const startFormatted = formatTime(region.start);
-                const endFormatted = formatTime(region.end);
-                const duration = (region.end - region.start).toFixed(2);
+                const duration = (region.end - region.start).toFixed(3);
 
                 regionItem.innerHTML = `
                         <div class="region-info">
                             <span class="region-color" style="background-color: ${region.color};"></span>
                             <span class="region-time">
-                                ${startFormatted} - ${endFormatted} (${duration}s)
+                                <input type="text" class="time-input" data-edge="start" value="${formatTime(region.start)}"
+                                       inputmode="decimal" aria-label="Start time" title="Type a time, or use ↑/↓ to nudge by 10 ms (Shift: 100 ms)">
+                                –
+                                <input type="text" class="time-input" data-edge="end" value="${formatTime(region.end)}"
+                                       inputmode="decimal" aria-label="End time" title="Type a time, or use ↑/↓ to nudge by 10 ms (Shift: 100 ms)">
+                                <span class="region-duration">${duration}s</span>
                             </span>
                         </div>
                         <div class="region-actions">
@@ -827,6 +893,20 @@
                     region.remove();
                 });
 
+                regionItem.querySelectorAll('.time-input').forEach(input => {
+                    const edge = input.dataset.edge;
+                    input.addEventListener('change', () => setRegionEdge(region, edge, parseTime(input.value), input));
+                    input.addEventListener('keydown', e => {
+                        if (e.key === 'Enter') {
+                            input.blur();
+                        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            const step = (e.shiftKey ? 0.1 : 0.01) * (e.key === 'ArrowUp' ? 1 : -1);
+                            setRegionEdge(region, edge, region[edge] + step, input);
+                        }
+                    });
+                });
+
                 // Click on the item to select it
                 regionItem.addEventListener('click', (e) => {
                     if (!e.target.closest('button')) {
@@ -845,6 +925,15 @@
                     }
                 });
             });
+
+            if (focused) {
+                const input = regionsContainer.querySelector(
+                    `.region-item[data-region-id="${CSS.escape(focused.id)}"] .time-input[data-edge="${focused.edge}"]`);
+                if (input) {
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                }
+            }
         }
 
         // Update progress bar
@@ -945,46 +1034,22 @@
                         return;
                     }
 
-                    // Calculate the total length of all regions
-                    let totalFrames = 0;
-                    const orderedRegions = regionIds.map(id => regions[id]);
-
-                    for (const region of orderedRegions) {
-                        const start = region.start;
-                        const end = region.end;
-                        const regionFrames = Math.floor((end - start) * audioBuffer.sampleRate);
-                        totalFrames += regionFrames;
-                    }
-
-                    // Create a new buffer for the combined audio
                     const sampleRate = audioBuffer.sampleRate;
+                    const spans = regionIds.map(id => regions[id]).map(region => ({
+                        start: Math.max(0, Math.round(region.start * sampleRate)),
+                        end: Math.min(audioBuffer.length, Math.round(region.end * sampleRate))
+                    })).filter(span => span.end > span.start);
+
                     const newBuffer = audioContext.createBuffer(
                         audioBuffer.numberOfChannels,
-                        totalFrames,
+                        spans.reduce((sum, span) => sum + span.end - span.start, 0),
                         sampleRate
                     );
-
-                    // Copy each region's data into the new buffer
-                    let frameOffset = 0;
-
-                    for (const region of orderedRegions) {
-                        const start = region.start;
-                        const end = region.end;
-                        const startOffset = Math.floor(start * sampleRate);
-                        const endOffset = Math.floor(end * sampleRate);
-                        const regionFrames = endOffset - startOffset;
-
-                        for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
-                            const originalData = audioBuffer.getChannelData(channel);
-                            const newData = newBuffer.getChannelData(channel);
-
-                            // Copy this region's data to the appropriate position in the new buffer
-                            for (let i = 0; i < regionFrames; i++) {
-                                newData[frameOffset + i] = originalData[startOffset + i];
-                            }
-                        }
-
-                        frameOffset += regionFrames;
+                    for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+                        newBuffer.copyToChannel(
+                            spliceChannel(audioBuffer.getChannelData(channel), spans, sampleRate, newBuffer.length),
+                            channel
+                        );
                     }
 
                     // Convert the buffer to WAV
@@ -996,6 +1061,69 @@
                     reject(error);
                 }
             });
+        }
+
+        // Butting two clips together sample-to-sample leaves a step in the waveform,
+        // and a step is a click. Each join is an equal-power crossfade across the cut:
+        // the outgoing clip plays on a few ms past its end and the incoming one starts
+        // a few ms before its start, so no selected audio is lost and the length is
+        // exactly the sum of the selections. Where one side has nothing to borrow (a
+        // selection that runs to the end of the file) the window slides to the side
+        // that has; where neither has, the two clips dip through silence instead.
+        // Selections that meet in the source are already continuous and are copied
+        // straight. The very first and last edges fade from and to silence unless they
+        // are the file's own beginning or end.
+        const CROSSFADE_SEC = 0.01;
+        const EDGE_FADE_SEC = 0.005;
+
+        function spliceChannel(source, spans, sampleRate, totalFrames) {
+            const out = new Float32Array(totalFrames);
+            const width = Math.round(CROSSFADE_SEC * sampleRate);
+            const edge = Math.round(EDGE_FADE_SEC * sampleRate);
+            const none = { lead: 0, lag: 0, dipOut: 0, dipIn: 0 };
+
+            // For each join: how many samples of the crossfade fall before the cut
+            // (lead) and after it (lag), limited by what can be borrowed beyond each
+            // clip's edge and by the clips themselves.
+            const joins = spans.slice(1).map((next, j) => {
+                const prev = spans[j];
+                if (prev.end === next.start) return none;
+                const prevHalf = Math.floor((prev.end - prev.start) / 2);
+                const nextHalf = Math.floor((next.end - next.start) / 2);
+                const maxLead = Math.min(next.start, prevHalf);
+                const maxLag = Math.min(source.length - prev.end, nextHalf);
+                let lead = Math.min(Math.floor(width / 2), maxLead);
+                const lag = Math.min(width - lead, maxLag);
+                lead = Math.min(width - lag, maxLead);
+                if (lead + lag >= Math.floor(width / 2)) return { lead, lag, dipOut: 0, dipIn: 0 };
+                return { lead: 0, lag: 0, dipOut: Math.min(edge, prevHalf), dipIn: Math.min(edge, nextHalf) };
+            });
+
+            let offset = 0;
+            spans.forEach((span, i) => {
+                const length = span.end - span.start;
+                const before = i > 0 ? joins[i - 1] : none;
+                const after = i < spans.length - 1 ? joins[i] : none;
+                const fadeIn = i === 0
+                    ? (span.start > 0 ? Math.min(edge, Math.floor(length / 2)) : 0)
+                    : before.dipIn;
+                const fadeOut = i === spans.length - 1
+                    ? (span.end < source.length ? Math.min(edge, Math.floor(length / 2)) : 0)
+                    : after.dipOut;
+                const inWidth = before.lead + before.lag;
+                const outWidth = after.lead + after.lag;
+
+                for (let p = -before.lead; p < length + after.lag; p++) {
+                    let gain = 1;
+                    if (inWidth && p < before.lag) gain *= Math.sin((p + before.lead + 0.5) / inWidth * Math.PI / 2);
+                    if (outWidth && p >= length - after.lead) gain *= Math.cos((p - (length - after.lead) + 0.5) / outWidth * Math.PI / 2);
+                    if (fadeIn && p < fadeIn) gain *= 0.5 - 0.5 * Math.cos((p + 0.5) / fadeIn * Math.PI);
+                    if (fadeOut && p >= length - fadeOut) gain *= 0.5 - 0.5 * Math.cos((length - p - 0.5) / fadeOut * Math.PI);
+                    out[offset + p] += source[span.start + p] * gain;
+                }
+                offset += length;
+            });
+            return out;
         }
 
         // Properly convert AudioBuffer to WAV
@@ -1152,13 +1280,15 @@
 
         addRegionBtn.addEventListener('click', function () {
             if (wavesurfer) {
+                // Start where the playhead is, so "play, pause, add" marks a spot
+                // without drawing on the waveform - the way in on a phone.
                 const duration = wavesurfer.getDuration();
-                const start = Math.random() * (duration * 0.7); // Random start time
-                const end = start + (duration * 0.1);  // 10% of the total duration
+                const length = duration * 0.1;
+                const start = Math.max(0, Math.min(wavesurfer.getCurrentTime(), duration - length));
 
                 wavesurfer.addRegion({
                     start: start,
-                    end: Math.min(end, duration),
+                    end: Math.min(start + length, duration),
                     color: regionColors[Object.keys(wavesurfer.regions.list).length % regionColors.length].background,
                     drag: true,
                     resize: true
@@ -1209,6 +1339,17 @@
             }
         });
 
+        // Fitted to the width, one pixel of a four-minute song is most of a second
+        // of audio. The slider runs from that up to a millisecond per pixel.
+        const MAX_PX_PER_SEC = 1000;
+        zoomSlider.addEventListener('input', function () {
+            const fit = waveformElement.clientWidth / wavesurfer.getDuration();
+            const level = Number(zoomSlider.value) / 100;
+            wavesurfer.zoom(level === 0 || fit >= MAX_PX_PER_SEC
+                ? null
+                : fit * Math.pow(MAX_PX_PER_SEC / fit, level));
+        });
+
         // Sort regions
         sortByTimeBtn.addEventListener('click', function() {
             const regions = wavesurfer.regions.list;
@@ -1225,6 +1366,8 @@
         // Keyboard shortcuts
         document.addEventListener('keydown', function (e) {
             if (!wavesurfer) return;
+            // Space and Backspace belong to whoever is typing a time.
+            if (e.target.matches('input[type="text"], textarea')) return;
 
             // Space - play/pause
             if (e.code === 'Space') {
