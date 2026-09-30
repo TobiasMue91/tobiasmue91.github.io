@@ -366,7 +366,7 @@ async function pageSuite(chromium) {
         await B.goto(link);
         await sleep(300);
         check(await screen(B) === 'join', 'the link offers the friend a seat');
-        check(!(await B.content()).includes('data-k="<svg class=&quot;hand op'), "the friend's page shows no hand of Mara's before throwing");
+        check(await B.evaluate(() => !document.querySelector('#fOp .hand, #fMe .hand:not(.ghost)')), "the friend's page shows no hand of Mara's before throwing");
         await B.fill('#joinName', 'Sam'); await B.click('#joinGo');
         await B.waitForFunction(() => document.querySelector('.screen.on')?.id === 'game');
         await B.click('.pick[data-t="rock"]');
