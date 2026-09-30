@@ -74,16 +74,16 @@ node test/pingu_throw.mjs gameplay       # one or more named suites
 ```
 
 `pingu_throw.mjs` needs no browser and no server. The page is almost all presentation — the
-yeti, the penguin, particles, sound, the result card — around a small fixed-step physics core,
-and the promise is that none of it touches the throw. So the test runs the page's own inline
-script in Node's `vm` against a stub DOM (a canvas context whose every call is a no-op), calls
-`requestAnimationFrame` by hand with exact timestamps and presses Space on chosen frames.
+camera, the yeti, the penguin, the tape and the level, particles, sound — around a small
+fixed-step physics core in `<script id="core">`, and the promise is that none of it touches the
+throw. So the test runs that block in Node's `vm`, feeds it frame times the way the page's
+`requestAnimationFrame` loop does, and presses on chosen frames.
 
 | suite | what it checks |
 | --- | --- |
-| `gameplay` | the stored distance for 21 swings at 60 Hz and 144 Hz, to the centimetre, against a table recorded from the version before the polish (a55e355) |
-| `share` | a challenge link, which carries only the height the penguin was struck at, flies the friend's ghost to the same distance; malformed links are ignored |
-| `result` | the result card: rank, new-best chip, timing in milliseconds, bounces, and the whiff and no-swing cards |
+| `gameplay` | the distance for 21 swings at 60 Hz and 144 Hz, to the centimetre, against a table recorded from the version before the remake (a55e355); no swing, a whiff and its timing, and that the page's slow motion after a hit moves nothing |
+| `ghost` | a ghost — your best, or a friend's challenge link — carries only the height the penguin was struck at, and flown from that alone lands on the same number |
+| `page` | the page's own script in a bare window: it saves a throw under the old keys, shows a best the old page saved, reads a friend's link and ignores malformed ones |
 
 If a change is meant to alter the physics, the `GOLDEN` table has to be re-recorded on
 purpose — that is the point of it.
