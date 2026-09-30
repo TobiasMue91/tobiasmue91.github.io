@@ -81,6 +81,7 @@ npm run test:2048           # 2048 suite (plain Node, no server or browser)
 npm run test:monkeytype     # Monkeytype Clone suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:emoji          # Peel & Seek suite (plain Node, no server or browser)
 npm run test:rps            # Hands Up suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:mystery        # Under the Lamp suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -89,7 +90,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventeen exist so far. `test/everything_converter.mjs` drives
+Eighteen exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -173,6 +174,12 @@ simulated phones play hundreds of matches through a network that reorders, delay
 writes, reload mid-round and lose their secrets; nothing but a seal may be in a round before both
 have thrown, both phones must agree, and every result must match the throws made. The `cheats`
 suite copies, swaps and forges seals. Run it after touching the core or how the page writes.
+`test/mystery_ai.mjs` runs the DOM-free `<script id="core">` block of `games/mystery_ai.html`
+(Under the Lamp), a detective game built from a seed: thousands of cases must each be fair - the
+trait left at the scene belongs to exactly the two liars, each lie breaks on the cards that contradict
+it and on nothing else, every card can be reached, and a player who has seen everything is left with
+one suspect, one weapon and one motive. It also checks that what the language model is told never
+holds a secret the player has not uncovered. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
