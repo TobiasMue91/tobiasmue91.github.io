@@ -93,8 +93,8 @@ to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, 
 network, `--mirror` serves the page's CDN libraries from `node_modules`; the README has the
 install line.
 
-`test/pingu_throw.mjs` runs `games/pingu_throw.html`'s script in Node against a stub DOM and
-checks every distance against a table recorded before the page was polished, so presentation
+`test/pingu_throw.mjs` runs the DOM-free `<script id="core">` block of `games/pingu_throw.html`
+and checks every distance against a table recorded before the page was remade, so presentation
 work there cannot quietly change the throw. Run it after any change to that page.
 `test/moorhuhn.mjs` does the same for `games/moorhuhn.html`: a deterministic bot plays whole
 seeded hunts and the second-by-second trace must match its table.
