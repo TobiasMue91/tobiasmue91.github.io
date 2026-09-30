@@ -559,3 +559,27 @@ or re-seal after seeing the other hand; a phone that lost its secret forfeits th
 | `protocol` | 150 sessions of three matches each between two phones behaving exactly as the page does, under a network that interleaves their writes, delivers snapshots late and loses in-flight writes on reload, with some phones losing their secrets: nothing but a seal is in a round until both are in, both phones agree with the server, and every round, match and head-to-head equals a reference computed from the throws made |
 | `cheats` | no reveal while the other has not thrown; the document holds no throw or nonce until then; copying the other seal, re-sealing after the reveal, a reveal that does not match, a phone that throws twice, forfeits and double forfeits; matches end at the target; rematches need both; 3000 malformed documents derive without throwing |
 | `page` | in Chromium, against an in-memory stand-in for Firebase: start, invite, join, a sealed throw that survives a reload, the result on both screens, a rematch, a third visitor turned away, an old `#id` link, the match listed on the start screen, and no console errors. Skipped without Playwright |
+
+## Peel & Seek
+
+```sh
+npm run test:emoji                          # or: node test/emoji_puzzle_mania.mjs
+node test/emoji_puzzle_mania.mjs boards     # one or more named suites
+```
+
+`emoji_puzzle_mania.mjs` runs the DOM-free `<script id="core">` block of
+`games/emoji_puzzle_mania.html` (Peel & Seek) in Node. The game is a visual search - one emoji on
+the stamp, its match somewhere on a sheet of lookalikes - and what can go wrong is invisible on
+the page: a decoy that is the target, two copies where the stamp promised one, a turned moon that
+now reads as another phase, a tape that grows past its end or runs while paused.
+
+| suite | what it checks |
+| --- | --- |
+| `boards` | 3,000 boards across twenty rounds: exactly the stated number of targets and no stray one; moons and clocks never turned; no tilting or spinning before its round; a 3×3 shows nine different things; the lookalike share is about a third in round 1 and nearly all by round 11; sheets only grow, 3×3 to 6×6; a target never repeats straight away |
+| `clock` | the starter sheet costs nothing and does not run the clock; the flip after a find is not taken from the tape and no tap counts during it; a miss tears off exactly its cost; the tape never passes its maximum; a minute paused changes neither tape nor score; the run ends exactly when the tape is empty |
+| `score` | a quick find pays more, at most double; the multiplier rises every third find in a row, to ×6; the score is the sum of the finds; five finds make a round; round 4 is a collector sheet whose copies leave empty spots, and its last copy starts round 5 |
+| `seed` | the same seed and taps give the same run; today's sheet differs from tomorrow's |
+| `runs` | three bots with a person's search speed (slower per sticker, and slower still on lookalikes and turned stickers, sometimes tapping a lookalike first) play 30 runs each: score and round follow skill, a slow player always reaches the collector sheet, runs last a minute or two, and tapping at random scores far less than looking |
+
+`runs` prints each bot's average round, run length and score, which is the place to look after
+changing a number in `SHEETS` or the clock.
