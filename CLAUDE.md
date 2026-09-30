@@ -79,6 +79,7 @@ npm run test:familytree     # Family Tree Builder suite (plain Node, no server o
 npm run test:frames         # frame stepping in the two frame extractors (Playwright's Chromium and ffmpeg, no server)
 npm run test:2048           # 2048 suite (plain Node, no server or browser)
 npm run test:monkeytype     # Monkeytype Clone suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:emoji          # Peel & Seek suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -86,7 +87,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifteen exist so far. `test/everything_converter.mjs` drives
+Sixteen exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -158,6 +159,11 @@ typing test whose one promise is that its numbers are true: bots type whole test
 with slips they fix and slips they leave, or a word at a time the way a phone's autocorrect sends
 them, and the wpm, accuracy and keystrokes the page reports must equal each bot's own count. The
 `page` suite presses real keys in Chromium, desktop and phone. Run it after touching the core or the input handling.
+`test/emoji_puzzle_mania.mjs` runs the DOM-free `<script id="core">` block of
+`games/emoji_puzzle_mania.html` (Peel & Seek), a visual search: every board holds exactly the
+targets the stamp promises, moons and clocks are never turned, the tape never runs while paused or
+passes its end, and bots with a person's search speed must reach the round their skill deserves.
+Run it after touching `SHEETS`, the families or the clock.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
