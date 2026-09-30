@@ -36,6 +36,10 @@ def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
 
 
 def fetch() -> None:
+    # A shallow clone cuts main's history off, and git then reports every older page as
+    # written whole at the cut - so fetch it all, or the queue cannot tell 2024 from last week.
+    if git("rev-parse", "--is-shallow-repository").stdout.strip() == "true":
+        git("fetch", "--quiet", "--unshallow", "origin", "main")
     git("fetch", "--quiet", "origin", "main")
     git("fetch", "--quiet", "--prune", "origin", "+refs/heads/claim/*:refs/remotes/origin/claim/*")
 
@@ -50,18 +54,25 @@ def last_commit(path: str) -> str:
 
 
 @lru_cache(maxsize=None)
-def last_big_change(path: str) -> str:
-    """The date of the newest commit on main that changed the page by BIG_CHANGE lines or more."""
-    log = git("log", "--no-merges", "--numstat", "--format=@%cI", MAIN, "--", path).stdout
-    when = None
+def last_big_change(path: str) -> int:
+    """When (Unix time) the newest commit on main changed the page by BIG_CHANGE lines or more.
+
+    A timestamp, not the ISO date: those carry each committer's UTC offset, and compared as
+    text a rework at 17:18+00:00 sorts before an older commit at 18:38+02:00."""
+    log = git("log", "--no-merges", "--numstat", "--format=@%ct", MAIN, "--", path).stdout
+    when = 0
     for line in log.splitlines():
         if line.startswith("@"):
-            when = line[1:]
+            when = int(line[1:])
         elif line.strip():
             added, removed, _ = line.split("\t", 2)
             if added != "-" and int(added) + int(removed) >= BIG_CHANGE:
                 return when
-    return "0000"
+    return 0
+
+
+def day(stamp: int) -> str:
+    return datetime.fromtimestamp(stamp, timezone.utc).strftime("%Y-%m-%d") if stamp else "never     "
 
 
 def claims() -> dict[str, list[tuple[str, datetime]]]:
@@ -111,7 +122,7 @@ def main() -> None:
         try:
             for path in sorted(games(), key=last_big_change):
                 state, name = status(path, taken)
-                print(f"{last_big_change(path)[:10]}  {state:9}  {path}", flush=True)
+                print(f"{day(last_big_change(path))}  {state:9}  {path}", flush=True)
         except BrokenPipeError:  # piped into head
             sys.stderr.close()
         return
