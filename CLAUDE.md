@@ -83,7 +83,8 @@ npm run test:emoji          # Peel & Seek suite (plain Node, no server or browse
 npm run test:rps            # Hands Up suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
-`util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
+`util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
+re-makes the hands Hands Up embeds, from Microsoft's MIT-licensed Fluent Emoji 3D set.
 Page tests live in `test/`, which has its own README; `cypress/` stays separate because
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
