@@ -327,6 +327,7 @@ function resize() {
     W = innerWidth; H = innerHeight; PORTRAIT = H > W * 1.1;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     flakes = Array.from({length: Math.round(Math.min(150, W * H / 8000))}, (_, i) => ({x: hash(i, 1) * W, y: hash(i, 2) * H, z: .3 + hash(i, 3) * .9, p: hash(i, 4) * 6.28}));
+    paintRanges();
     frameCamera(true);
 }
 
@@ -589,26 +590,51 @@ function drawSky() {
     ctx.fillStyle = 'rgba(150,172,212,.33)';
     [[-.3, -.2, .22], [.28, .12, .17], [-.02, .42, .12], [.35, -.38, .08]].forEach(([a, b, r]) => { ctx.beginPath(); ctx.arc(mx + a * mr, my + b * mr, r * mr, 0, 7); ctx.fill(); });
 }
-function drawRanges() {
-    const gy0 = sy(0), k = (H / 820) * Math.pow(Math.max(.6, Math.min(3, cam.s)), .25);
-    const L = [{f: .05, c: '#15264A', cap: '#2D4A7E', amp: 300, sc: 520, seed: 3, sharp: 1.6, lift: .92},
-        {f: .12, c: '#1C3460', cap: '#40619A', amp: 170, sc: 300, seed: 8, sharp: 1.3, lift: .8},
-        {f: .3, c: '#27467A', cap: null, amp: 60, sc: 170, seed: 13, sharp: 1, lift: .55}];
-    for (const l of L) {
-        const base = gy0 - (gy0 - groundY()) * l.lift;    // far ridges barely move when the camera climbs
-        const scroll = cam.x * PAR * l.f;
-        const h = x => { const n = noise((x + scroll) / l.sc, l.seed) * .7 + noise((x + scroll) / (l.sc * .33), l.seed + 1) * .3; return base - Math.pow(n, l.sharp) * l.amp * k - 4; };
-        ctx.fillStyle = l.c; ctx.beginPath(); ctx.moveTo(-10, H);
-        for (let x = -10; x <= W + 20; x += 12) ctx.lineTo(x, h(x));
-        ctx.lineTo(W + 20, H); ctx.fill();
-        if (l.cap) {
-            // moonlit snow on the upper slopes
-            ctx.fillStyle = l.cap; ctx.beginPath();
-            const cut = x => base - l.amp * k * (.46 + .06 * Math.sin((x + scroll) * .03));
-            for (let x = -10; x <= W + 20; x += 12) { const y = Math.min(h(x), cut(x)); x < 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
-            for (let x = W + 20; x >= -10; x -= 12) ctx.lineTo(x, Math.min(h(x) + 14 * k, cut(x) + (8 + 10 * noise((x + scroll) / 20, 4)) * k));
-            ctx.fill();
+// The mountain ranges are painted once per window size into bitmaps that repeat, and each
+// frame only slides them: a bitmap cannot change shape, so the ranges cannot morph.
+const RANGES = [{f: .05, c: '#15264A', cap: '#2D4A7E', amp: 300, sc: 520, n: 6, seed: 3, sharp: 1.6, lift: .95},
+    {f: .12, c: '#1C3460', cap: '#40619A', amp: 170, sc: 300, n: 8, seed: 8, sharp: 1.3, lift: .9},
+    {f: .3, c: '#27467A', cap: null, amp: 60, sc: 170, n: 10, seed: 13, sharp: 1, lift: .85}];
+function noiseP(x, seed, n) {                  // value noise that repeats every n lattice cells
+    const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f), w = j => hash(((j % n) + n) % n, seed);
+    return w(i) * (1 - u) + w(i + 1) * u;
+}
+function paintRanges() {
+    const k = H / 820, r = Math.min(2, DPR);
+    for (const l of RANGES) {
+        const P = l.n * l.sc, h = Math.ceil(l.amp * k + 24);
+        const c = l.canvas || (l.canvas = document.createElement('canvas'));
+        c.width = Math.ceil(P * r); c.height = Math.ceil(h * r);
+        const g = c.getContext('2d');
+        g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, P, h);
+        const pts = [];
+        for (let u = 0; u <= P; u += 3) {
+            const n = noiseP(u / l.sc, l.seed, l.n) * .7 + noiseP(u / (l.sc / 3), l.seed + 1, l.n * 3) * .3;
+            const y = h - Math.pow(n, l.sharp) * l.amp * k - 4;
+            const cut = h - l.amp * k * (.46 + .06 * Math.sin(u / P * Math.PI * 2 * Math.round(P * .03 / (Math.PI * 2))));
+            pts.push([u, y, cut, (8 + 10 * noiseP(u / 20, 4, Math.round(P / 20))) * k]);
         }
+        g.fillStyle = l.c; g.beginPath(); g.moveTo(0, h);
+        for (const p of pts) g.lineTo(p[0], p[1]);
+        g.lineTo(P, h); g.fill();
+        if (l.cap) {
+            g.fillStyle = l.cap; g.beginPath();
+            pts.forEach((p, i) => { const y = Math.min(p[1], p[2]); i ? g.lineTo(p[0], y) : g.moveTo(p[0], y); });
+            for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; g.lineTo(p[0], Math.min(p[1] + 14 * k, p[2] + p[3])); }
+            g.fill();
+        }
+        l.P = P; l.h = h;
+    }
+}
+function drawRanges() {
+    const gy0 = sy(0);
+    for (const l of RANGES) {
+        if (!l.canvas) continue;
+        const base = gy0 - (gy0 - groundY()) * l.lift;    // far ranges barely move when the camera climbs
+        const off = -(((cam.x * PAR * l.f) % l.P) + l.P) % l.P;
+        const top = base - l.h + 4;
+        ctx.fillStyle = l.c; ctx.fillRect(0, base, W, H - base + 2);
+        for (let x = off; x < W; x += l.P) ctx.drawImage(l.canvas, x, top, l.P, l.h);
     }
 }
 function drawGround() {

@@ -147,7 +147,7 @@ if (suites.includes('page')) {
             location: {search: search || '', origin: 'https://www.gptgames.dev', pathname: '/games/pingu_throw.html'},
             navigator: {}, setTimeout: noop, clearTimeout: noop, URLSearchParams, Path2D: function () { }, Math, JSON, Number,
             String, Object, Array, parseFloat, parseInt, isFinite, isNaN, console,
-            document: {getElementById: el, documentElement: {}, fonts: {load: () => Promise.resolve()}}
+            document: {getElementById: el, documentElement: {}, fonts: {load: () => Promise.resolve()}, createElement: () => ({getContext: () => ctx2d, style: {}})}
         };
         win.window = win;
         vm.createContext(win);
