@@ -310,13 +310,14 @@ const PK = .55;                                   // spectator scale, relative t
 const INK = '#0A1224', TAPE = '#F5C518';
 function hash(i, seed) { let n = (i * 374761393 + seed * 668265263) >>> 0; n = (n ^ (n >>> 13)) * 1274126177 >>> 0; return (n & 0xffff) / 0xffff; }
 function noise(x, seed) { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return hash(i, seed) * (1 - u) + hash(i + 1, seed) * u; }
+const PAR = 1.8;                // screen px per world unit the background layers scroll by
 const ease = u => 1 - Math.pow(1 - Math.max(0, Math.min(1, u)), 3);
 
 // ---------- state ----------
 let S = Core.create();
 const cam = {x: 0, y: 0, s: 1, tx: 0, ty: 0, ts: 1, k: 5, shake: 0, punch: 0, sx: 0, sy: 0};
 let mode = 'ready';           // ready | dive | flight | rest
-let snap = null, fadeSnap = 0, missedLast = false, modeT = 0, freeze = 0, slowT = -1, swingT = -1, restAt = 0, rings = [];
+let uiTop = 0, snap = null, fadeSnap = 0, missedLast = false, modeT = 0, freeze = 0, slowT = -1, swingT = -1, restAt = 0, rings = [];
 let flags = [], parts = [], flakes = [], craters = [], groove = null;
 let bubble = 0, bubbleV = 0, bubbleTarget = 0, countT = 0, lastTick = 0, clock = 0;
 let mood = 'idle', result = null, levelAt = -9, missAt = null, lastThrow = null;
@@ -528,6 +529,7 @@ function finish() {
         if (first) { b.textContent = 'FIRST MARK · NOW BEAT IT'; b.className = 'show'; }
         else if (nb) { b.textContent = 'NEW BEST'; b.className = 'show'; }
         else if (friend && d > friend.dist) { b.textContent = 'FRIEND BEATEN'; b.className = 'show'; }
+        else if (best - d < .05) { b.textContent = 'MATCHES YOUR BEST'; b.className = 'show'; }
         else { b.textContent = `${(best - d).toFixed(1)} M SHORT OF BEST`; b.className = 'show muted'; }
         setTimeout(() => sfx.rest(nb), 420);
         if (nb) setTimeout(() => burst(S.b.x * M + 20, -2.4 * M, 70, {v: 340, c: [TAPE, '#FFFFFF', '#CFE2FF', '#9FC3F0'], r: 4, g: 520, life: 1.7, sq: 1}), 500);
@@ -562,7 +564,7 @@ function drawSky() {
     // aurora
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (let b = 0; b < 2; b++) {
-        const base = H * (.24 + b * .09) + lift, off = cam.x * cam.s * .012;
+        const base = H * (.24 + b * .09) + lift, off = cam.x * PAR * .012;
         const gr = ctx.createLinearGradient(0, base - 110, 0, base + 60);
         gr.addColorStop(0, 'rgba(60,245,176,0)'); gr.addColorStop(.62, b ? 'rgba(120,110,255,.09)' : 'rgba(60,245,176,.12)'); gr.addColorStop(1, 'rgba(60,245,176,0)');
         ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(-20, base + 80);
@@ -571,7 +573,7 @@ function drawSky() {
         ctx.fill();
     }
     ctx.restore();
-    const off = cam.x * cam.s * .015;
+    const off = cam.x * PAR * .015;
     for (let i = 0; i < 110; i++) {
         const span = W + 400, x = ((hash(i, 11) * span - off) % span + span) % span - 200, y = hash(i, 12) * H * .75 + lift * .5;
         const tw = .5 + .5 * Math.sin(clock * (1 + hash(i, 13) * 2) + i), big = hash(i, 15) > .88;
@@ -594,7 +596,7 @@ function drawRanges() {
         {f: .3, c: '#27467A', cap: null, amp: 60, sc: 170, seed: 13, sharp: 1, lift: .55}];
     for (const l of L) {
         const base = gy0 - (gy0 - groundY()) * l.lift;    // far ridges barely move when the camera climbs
-        const scroll = cam.x * cam.s * l.f;
+        const scroll = cam.x * PAR * l.f;
         const h = x => { const n = noise((x + scroll) / l.sc, l.seed) * .7 + noise((x + scroll) / (l.sc * .33), l.seed + 1) * .3; return base - Math.pow(n, l.sharp) * l.amp * k - 4; };
         ctx.fillStyle = l.c; ctx.beginPath(); ctx.moveTo(-10, H);
         for (let x = -10; x <= W + 20; x += 12) ctx.lineTo(x, h(x));
@@ -697,7 +699,7 @@ function drawSpectators() {
 }
 function drawForeground() {
     // low drifts right in front of the lens, moving faster than the world behind them
-    const gy = groundY(), f = 1.5, scroll = cam.x * cam.s * f;
+    const gy = groundY(), f = 1.5, scroll = cam.x * PAR * f;
     ctx.fillStyle = '#9DB2D8';
     ctx.beginPath(); ctx.moveTo(-10, H);
     for (let x = -10; x <= W + 20; x += 16) {
@@ -736,12 +738,15 @@ function drawWall() {
     ctx.fillStyle = '#DCE8FA'; ctx.lineWidth = 2.5 * s;
     [[FACE + 8, 20], [FACE - 12, 14], [PX - 6, 12]].forEach(([x, l]) => { const X = sx(x), Y0 = top + 20 * s; ctx.beginPath(); ctx.moveTo(X - 4 * s, Y0); ctx.lineTo(X, Y0 + l * s); ctx.lineTo(X + 4 * s, Y0); ctx.fill(); ctx.stroke(); });
 }
-function drawFlag(m, gold, age) {
-    const X = sx(m * M), s = cam.s, gy = sy(0);
+// flags keep a readable size whatever the zoom, so they are laid out in screen pixels
+const flagScale = () => Math.max(.8, Math.min(cam.s, 1.35));
+function drawFlag(m, gold, age, row, part) {
+    const X = sx(m * M), s = flagScale(), gy = sy(0);
     if (X < -90 || X > W + 90) return;
-    const e = ease(age / .45), h = 80 * s * e;
+    const e = ease(age / .45), h = (50 + 28 * row) * s * e;
     if (h <= 0) return;
-    ctx.fillStyle = '#3A2A20'; ctx.fillRect(X - 2.5 * s, gy - h, 5 * s, h);
+    if (X > -60 && X < W) uiTop = Math.min(uiTop, gy - h);
+    if (part === 'pole') { ctx.fillStyle = '#3A2A20'; ctx.fillRect(X - 2.5 * s, gy - h, 5 * s, h); return; }
     const wave = Math.sin(clock * 4 + m) * 3 * s, top = gy - h;
     ctx.fillStyle = gold ? TAPE : '#E0443A'; ctx.strokeStyle = INK; ctx.lineWidth = 2.5 * s; ctx.lineJoin = 'round';
     ctx.beginPath(); ctx.moveTo(X + 2 * s, top); ctx.quadraticCurveTo(X + 30 * s, top - 5 * s + wave, X + 60 * s, top + 4 * s);
@@ -750,9 +755,10 @@ function drawFlag(m, gold, age) {
     ctx.fillText(m.toFixed(1), X + 28 * s, top + 12 * s);
 }
 function drawPost(m, c, label) {
-    const X = sx(m * M), s = cam.s, gy = sy(0);
+    const X = sx(m * M), s = flagScale(), gy = sy(0);
     if (X < -160 || X > W + 160) return;
-    const h = 150 * s, top = gy - h;
+    const h = 158 * s, top = gy - h;
+    if (X > -120 && X < W) uiTop = Math.min(uiTop, top);
     ctx.fillStyle = INK; ctx.fillRect(X - 3 * s, top, 6 * s, h);
     ctx.font = `900 ${Math.round(Math.max(13, 15 * s))}px "Big Shoulders Text"`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     const txt = `${label} ${m.toFixed(1)}`, w = ctx.measureText(txt).width + 18 * Math.max(1, s * .7), hh = Math.max(22, 26 * s * .8);
@@ -1401,7 +1407,7 @@ function frame(ts) {
     else { bubbleV += (tgt - bubble) * 160 * rdt; bubbleV *= Math.exp(-rdt * 10); bubble += bubbleV * rdt; }
     if (mode === 'flight' && levelAt > 0 && clock - levelAt > .9) { show('level', false); levelAt = -9; }
     if (mode === 'rest') {
-        const r = $('result'), top = result && result.hit ? sy(-84) : PORTRAIT ? H * .42 : H * .52;
+        const r = $('result'), top = result && result.hit ? Math.min(sy(-84), uiTop - 8) : PORTRAIT ? H * .42 : H * .52;
         r.style.top = Math.max(PORTRAIT ? 90 : 60, Math.min(H * .45, top - r.offsetHeight - 20)) + 'px';
     }
     const range = Math.max(40, $('level').offsetWidth * .5 - 32);
@@ -1416,11 +1422,22 @@ function frame(ts) {
     if (punch > .01) { cam.s = s0 * (1 + punch * .14); cam.x += (CLUB.x - cam.x) * punch * .25; cam.y += (CLUB.y * .3 - cam.y) * punch * .25; }
 
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    uiTop = H;
     drawSky(); drawRanges(); drawGround(); drawProps(); drawLanterns();
     if (best > 0 && !(mode === 'rest' && result && result.nb) ) drawPost(best, TAPE, 'BEST');
     if (friend) drawPost(friend.dist, '#6FB7FF', 'FRIEND');
-    const top = flags.reduce((a, f) => Math.max(a, f.m), 0);
-    flags.forEach(f => drawFlag(f.m, f.m === top && f.m >= best - .001, clock - f.t - .35));
+    // each pennant takes the lowest row where it covers no other; the best has its own post
+    const rows = [], laid = [], near = 64 * flagScale();
+    flags.filter(f => Math.abs(f.m - best) > .005).sort((a, b) => a.m - b.m).forEach(f => {
+        const x = sx(f.m * M);
+        let r = 0;
+        while (r < 3 && rows[r] !== undefined && x - rows[r] < near) r++;
+        if (r === 3) return;                                // a fourth in the same spot adds nothing
+        rows[r] = x;
+        laid.push([f, r]);
+    });
+    // every pole first, then the cloth, so a pole never cuts across a pennant below it
+    for (const part of ['pole', 'cloth']) for (const [f, r] of laid) drawFlag(f.m, false, clock - f.t - .35, r, part);
     drawGroundTape();
     drawSpectators();
     drawWall();
