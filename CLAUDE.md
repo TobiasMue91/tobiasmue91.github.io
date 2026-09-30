@@ -80,6 +80,7 @@ npm run test:frames         # frame stepping in the two frame extractors (Playwr
 npm run test:2048           # 2048 suite (plain Node, no server or browser)
 npm run test:monkeytype     # Monkeytype Clone suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:emoji          # Peel & Seek suite (plain Node, no server or browser)
+npm run test:rps            # Hands Up suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test.
@@ -87,7 +88,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixteen exist so far. `test/everything_converter.mjs` drives
+Seventeen exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -164,6 +165,13 @@ them, and the wpm, accuracy and keystrokes the page reports must equal each bot'
 targets the stamp promises, moons and clocks are never turned, the tape never runs while paused or
 passes its end, and bots with a person's search speed must reach the round their skill deserves.
 Run it after touching `SHEETS`, the families or the clock.
+`test/rock_paper_scissors_mp.mjs` runs the DOM-free `<script id="core">` block of
+`games/rock_paper_scissors_mp.html` (Hands Up), where two phones share one match in Firebase and each
+works out the score from it: a throw is sealed as a hash and opened only once both are in. Two
+simulated phones play hundreds of matches through a network that reorders, delays and drops
+writes, reload mid-round and lose their secrets; nothing but a seal may be in a round before both
+have thrown, both phones must agree, and every result must match the throws made. The `cheats`
+suite copies, swaps and forges seals. Run it after touching the core or how the page writes.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

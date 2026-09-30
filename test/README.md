@@ -536,6 +536,30 @@ is what a phone keyboard sends - so the suites do the same.
 The bots print a table of pace against score. A typist at 90 wpm with 1.5% slips, all fixed,
 scores about 87; one at 80 who leaves 5% of letters wrong scores about 62.
 
+## Hands Up
+
+```sh
+npm run test:rps                                   # or: node test/rock_paper_scissors_mp.mjs
+node test/rock_paper_scissors_mp.mjs protocol --runs=400
+```
+
+`rock_paper_scissors_mp.mjs` runs the DOM-free `<script id="core">` block of
+`games/rock_paper_scissors_mp.html` in Node. Two phones write to one shared match and each derives
+the score from it; nothing in the match is ever a verdict. The old page stored each choice in the
+clear, so either player could read the other's throw before choosing, and it kept score by having
+one phone add up rounds - which is how the two screens came to disagree.
+
+Each throw is written as sha256(match/round/seat|throw|nonce), set only if the seat has none yet,
+and opened after both are in. A player cannot read a throw early, copy the other seat's seal,
+or re-seal after seeing the other hand; a phone that lost its secret forfeits the round.
+
+| suite | what it checks |
+| --- | --- |
+| `core` | sha256 against `node:crypto` on 3009 strings (block edges, astral characters); the win table; a seal is bound to its seat and round |
+| `protocol` | 150 sessions of three matches each between two phones behaving exactly as the page does, under a network that interleaves their writes, delivers snapshots late and loses in-flight writes on reload, with some phones losing their secrets: nothing but a seal is in a round until both are in, both phones agree with the server, and every round, match and head-to-head equals a reference computed from the throws made |
+| `cheats` | no reveal while the other has not thrown; the document holds no throw or nonce until then; copying the other seal, re-sealing after the reveal, a reveal that does not match, a phone that throws twice, forfeits and double forfeits; matches end at the target; rematches need both; 3000 malformed documents derive without throwing |
+| `page` | in Chromium, against an in-memory stand-in for Firebase: start, invite, join, a sealed throw that survives a reload, the result on both screens, a rematch, a third visitor turned away, an old `#id` link, the match listed on the start screen, and no console errors. Skipped without Playwright |
+
 ## Peel & Seek
 
 ```sh
