@@ -629,3 +629,28 @@ with the wrong panes.
 
 `bots` prints each bot's night - windows, minutes, candles lost, longest window, longest dry
 rally - which is the place to look after changing a window, a speed or the stall assist.
+
+## Last Words (Hangman)
+
+```sh
+npm run test:hangman                     # or: node test/hangman.mjs
+node test/hangman.mjs words fair         # one or more named suites
+```
+
+`hangman.mjs` runs the DOM-free `<script id="core">` block of `games/hangman.html` (Last Words) in
+Node. The page is Hangman on an execution broadside: a woodcut, a word, a type case. The rules are
+small; what can go wrong quietly is in the 800 words and the order they come in: a word nobody can
+reach from its clue, a daily sheet that repeats or puts the same clue on two days running, a share
+line that gives the word away, a streak that miscounts.
+
+| suite | what it checks |
+| --- | --- |
+| `words` | every clue has thirty words or more and reads after "His last word -"; every word is 4-11 plain letters and belongs to one clue only |
+| `rules` | a hit names every slot it fills; a letter tried twice costs nothing; anything but one letter is refused; five marks stand, the sixth hangs; the last letter pardons even at five marks; nothing is taken after the end; the share line gives nothing of the word away |
+| `daily` | sheet numbers follow the local calendar day, through clock changes; a sheet is the same for everyone; every fair word comes round once before any repeats; no clue two days running; every sheet 5-10 letters and neither giveaway nor lottery |
+| `fair` | no word can be lost by a player who knows every word in its clue; players who know 80%, 50% and 20% of each clue win what they did when the list was made |
+| `docket` | the endless docket never gets easier, never repeats a word in forty cases, lets a player in and wears them down |
+| `saves` | a half-played sheet comes back exactly; damaged saves are dropped; the old page's games played and won carry over; streaks count consecutive sheets and each sheet once |
+
+`fair` and `docket` print what the simulated players won, which is the place to look after
+changing a list.
