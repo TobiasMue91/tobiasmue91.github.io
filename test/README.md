@@ -629,3 +629,27 @@ with the wrong panes.
 
 `bots` prints each bot's night - windows, minutes, candles lost, longest window, longest dry
 rally - which is the place to look after changing a window, a speed or the stall assist.
+
+## Highlight (Word Search)
+
+```sh
+npm run test:wordsearch                  # or: node test/word_search.mjs
+node test/word_search.mjs puzzles input  # one or more named suites
+```
+
+`word_search.mjs` runs the DOM-free `<script id="core">` block of `games/word_search.html`
+(Highlight) in Node. Every puzzle there is built from a seed - a numbered book that grows from
+8×8 across-and-down to 10×10 in every direction, and one daily grid that is the same for everyone -
+and each makes a promise nobody can check by looking: every listed word is in the grid exactly
+once and nowhere by accident, and the cells no word uses spell the theme's hidden message in
+reading order. A word list that gains a word hidden inside another, a message that happens to
+contain a listed word, or a change to the generator can break that for one seed in a thousand.
+
+| suite | what it checks |
+| --- | --- |
+| `themes` | every word list and message is plain capitals; no word sits inside another, forwards or backwards; no message holds a listed word; every theme fits some grid size |
+| `puzzles` | the first 300 book puzzles, a year of dailies and 25 seeds of every theme at every size it fits: each word straight, in an allowed direction, reading exactly once; the leftover cells are exactly the message; the message takes a fair share of the grid; no grid is mostly one direction; the same seed gives the same grid |
+| `book` | grids grow and directions arrive in order, backwards last; no theme returns within twelve puzzles and the book uses them all; neighbouring days never share a theme |
+| `input` | drags snap to the eight directions, clip at the edge and hold a direction through a wobble; every angle gives a straight run; tap-tap joins two cells; a word reads from either end, part of a word does not |
+| `play` | bots find every word through the calls the page makes: the message is dealt in order, never back, whole at the end; touching strokes never share a pen; a guess at the message reads only when it is exactly the part not yet dealt |
+| `save` | junk and old saves come back usable; the book never sits behind a solved puzzle; streaks count consecutive days, across the clock change |
