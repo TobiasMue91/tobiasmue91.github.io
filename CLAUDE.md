@@ -87,7 +87,8 @@ npm run test:tells          # Tells (Rock Paper Scissors) suite (plain Node, no 
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
-re-makes the hands Hands Up embeds, from Microsoft's MIT-licensed Fluent Emoji 3D set.
+re-makes the hands Hands Up embeds, from Microsoft's MIT-licensed Fluent Emoji 3D set. Tells
+(`games/rock_paper_scissors.html`) inlines the same set's Flat SVGs verbatim, coloured by CSS, so it needs no script.
 Page tests live in `test/`, which has its own README; `cypress/` stays separate because
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
