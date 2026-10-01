@@ -604,3 +604,28 @@ room, role or line can break that for a handful of seeds without anything lookin
 | `fair` | the trait left at the scene belongs to the two liars and nobody else; the honest two share a true alibi; only the murderer was at the scene; exactly one weapon fits the coroner; every card shown to every person breaks a lie only if it contradicts it, and a broken lie does not break twice |
 | `play` | a player who asks everything, searches everything and presents everything breaks both lies, finds every card and is left with exactly one suspect; the accusation offers every weapon and motive once found, and exactly one of the 48 combinations is right; the murderer never volunteers a motive; the rank falls with wrong accusations |
 | `text` | no broken or unfilled text in any line, card, room or reconstruction; claim marks come in pairs; typed questions find their topic without the model; what the model is told never names the hidden room, places the murderer at the scene, or gives away the motive before the player has uncovered it |
+
+## Vigil (Breakout)
+
+```sh
+npm run test:breakout                    # or: node test/breakout.mjs
+node test/breakout.mjs windows physics   # one or more named suites
+```
+
+`breakout.mjs` runs the DOM-free `<script id="core">` block of `games/breakout.html` (Vigil) in
+Node. The page is Breakout in the window of a ruined abbey: twelve windows of stained glass, a
+spark, a gilded bar, candles for lives. What can go wrong does not show on a first look: a pane
+tucked behind lead that no spark can reach, a spark that slips into a pane at a seam or out
+through the arch, a rally that rattles for minutes without touching glass, a save that comes back
+with the wrong panes.
+
+| suite | what it checks |
+| --- | --- |
+| `windows` | twelve named windows; every pane inside the pointed arch and well above the bar; every breakable pane reachable from open air without crossing lead; no pane lidded with lead above and below; every lantern holding a jewel |
+| `physics` | 1,500 seeded sparks in every window with a third of the glass knocked out: never inside a standing pane, never through the arch or a jamb, always at the speed the rules give, never flatter than the least climb |
+| `rules` | blows per kind of pane; the aim sways to both sides and no further; the bar sends the spark by where it lands; each pane in a rally counts once more, up to twenty; the bar ends a rally; lead never breaks; a lantern drops the jewel it shows and each jewel does what it says, then wears off; nine sparks at most; candles, the bonus and the extra candle for a window; the second night is faster |
+| `save` | a snapshot mid-window comes back pane for pane; missing, broken and empty saves give a whole window |
+| `bots` | bots that always reach the spark, reach it quickly, or reach it at a stroll play the whole night: every window cleared, no window over ten minutes, no rally over two and a half minutes without glass, and the steady bot never loses a candle |
+
+`bots` prints each bot's night - windows, minutes, candles lost, longest window, longest dry
+rally - which is the place to look after changing a window, a speed or the stall assist.

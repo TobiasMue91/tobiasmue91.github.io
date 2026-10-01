@@ -82,6 +82,7 @@ npm run test:monkeytype     # Monkeytype Clone suite (plain Node; its page suite
 npm run test:emoji          # Peel & Seek suite (plain Node, no server or browser)
 npm run test:rps            # Hands Up suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:mystery        # Under the Lamp suite (plain Node, no server or browser)
+npm run test:breakout       # Vigil (Breakout) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -90,7 +91,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Eighteen exist so far. `test/everything_converter.mjs` drives
+Nineteen exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -180,6 +181,12 @@ trait left at the scene belongs to exactly the two liars, each lie breaks on the
 it and on nothing else, every card can be reached, and a player who has seen everything is left with
 one suspect, one weapon and one motive. It also checks that what the language model is told never
 holds a secret the player has not uncovered. Run it after touching the core.
+`test/breakout.mjs` runs the DOM-free `<script id="core">` block of `games/breakout.html` (Vigil),
+Breakout in an abbey window: every pane of the twelve windows sits inside the arch and can be
+reached without passing lead, thousands of seeded sparks never slip into a pane, through the arch
+or off their speed, the combo, jewels and candles do what the page shows, a save comes back pane
+for pane, and bots of three skills keep the whole night without a rally going dry for long. Run it
+after touching `WINDOWS`, the physics or the stall assist.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
