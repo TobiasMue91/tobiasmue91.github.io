@@ -583,3 +583,28 @@ now reads as another phase, a tape that grows past its end or runs while paused.
 
 `runs` prints each bot's average round, run length and score, which is the place to look after
 changing a number in `SHEETS` or the clock.
+
+## Vigil (Breakout)
+
+```sh
+npm run test:breakout                    # or: node test/breakout.mjs
+node test/breakout.mjs windows physics   # one or more named suites
+```
+
+`breakout.mjs` runs the DOM-free `<script id="core">` block of `games/breakout.html` (Vigil) in
+Node. The page is Breakout in the window of a ruined abbey: twelve windows of stained glass, a
+spark, a gilded bar, candles for lives. What can go wrong does not show on a first look: a pane
+tucked behind lead that no spark can reach, a spark that slips into a pane at a seam or out
+through the arch, a rally that rattles for minutes without touching glass, a save that comes back
+with the wrong panes.
+
+| suite | what it checks |
+| --- | --- |
+| `windows` | twelve named windows; every pane inside the pointed arch and well above the bar; every breakable pane reachable from open air without crossing lead; no pane lidded with lead above and below; every lantern holding a jewel |
+| `physics` | 1,500 seeded sparks in every window with a third of the glass knocked out: never inside a standing pane, never through the arch or a jamb, always at the speed the rules give, never flatter than the least climb |
+| `rules` | blows per kind of pane; the aim sways to both sides and no further; the bar sends the spark by where it lands; each pane in a rally counts once more, up to twenty; the bar ends a rally; lead never breaks; a lantern drops the jewel it shows and each jewel does what it says, then wears off; nine sparks at most; candles, the bonus and the extra candle for a window; the second night is faster |
+| `save` | a snapshot mid-window comes back pane for pane; missing, broken and empty saves give a whole window |
+| `bots` | bots that always reach the spark, reach it quickly, or reach it at a stroll play the whole night: every window cleared, no window over ten minutes, no rally over two and a half minutes without glass, and the steady bot never loses a candle |
+
+`bots` prints each bot's night - windows, minutes, candles lost, longest window, longest dry
+rally - which is the place to look after changing a window, a speed or the stall assist.
