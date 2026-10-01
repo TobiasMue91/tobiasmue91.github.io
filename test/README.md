@@ -629,3 +629,32 @@ with the wrong panes.
 
 `bots` prints each bot's night - windows, minutes, candles lost, longest window, longest dry
 rally - which is the place to look after changing a window, a speed or the stall assist.
+
+## Tells (Rock Paper Scissors)
+
+```sh
+npm run test:tells                            # or: node test/rock_paper_scissors.mjs
+node test/rock_paper_scissors.mjs fair tells  # one or more named suites
+node test/rock_paper_scissors.mjs --matches=1000
+```
+
+`rock_paper_scissors.mjs` runs the DOM-free `<script id="core">` block of
+`games/rock_paper_scissors.html` (Tells) in Node. The page is rock paper scissors against six
+machines, each with one habit to find, and the last, the Oracle, reads the player. The promises a
+player cannot check from the table: the machine never sees the throw it is playing against, the
+tell card names the habit the machine really has, and what the Oracle says about you is true.
+Players here see only what a person at the table sees - the tape, the score and, against Bluff,
+the call.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | every pairing of throws; forty matches per machine end at exactly five and keep their books; nothing plays after the end; a throw that is not rock, paper or scissors is refused |
+| `fair` | three copies of a match that differ only in the player's throw this round get the same machine hand and the same call - the machine commits before it can see yours |
+| `tells` | knowing a machine's tell wins 88%+ of matches and shortens them; throwing at random wins 40-60%; each machine keeps its habit well above chance; the count on the tell card equals the count from the tape |
+| `ladder` | a player who reads the tape beats the first three machines easily, Bluff and Grudge less often, and loses to the Oracle more often than not |
+| `oracle` | a truly random player gets a fair coin; cycling, sticky, rock-heavy and human-like players are read; with saved memory it wins the opening rounds of a new match more often |
+| `lines` | every sentence the Oracle says ("After rock, you went paper 3 of 4.") is recounted from the tape and true, and only said on a round its read won; Echo, Spin and Grudge play back exactly the throw they acted on |
+| `memory` | junk in the saved Oracle memory is replaced, never trusted; the memory survives JSON; the same memory and seed play the same match |
+
+`ladder` prints how often a tape-reading bot beats each machine, which is the number to watch after
+changing how often a machine keeps its habit.
