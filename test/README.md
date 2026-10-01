@@ -584,6 +584,27 @@ now reads as another phase, a tape that grows past its end or runs while paused.
 `runs` prints each bot's average round, run length and score, which is the place to look after
 changing a number in `SHEETS` or the clock.
 
+## Under the Lamp
+
+```sh
+npm run test:mystery                  # or: node test/mystery_ai.mjs
+node test/mystery_ai.mjs fair play    # one or more named suites
+node test/mystery_ai.mjs --cases=5000 # more cases (default 1500)
+```
+
+`mystery_ai.mjs` runs the DOM-free `<script id="core">` block of `games/mystery_ai.html` (Under
+the Lamp) in Node. Every case is a truth sheet built from a seed - who was where at the stopped
+clock, who lies about it and why, what lies in which room - and a language model only voices it.
+The one promise the page cannot show is that each of the 9,000 cases is fair, and a change to one
+room, role or line can break that for a handful of seeds without anything looking wrong.
+
+| suite | what it checks |
+| --- | --- |
+| `build` | a seed always builds the same case; four people with distinct first names, motives, hair colours, coats and opening lines; six distinct rooms; the clock stops between 9:20 and 10:55; every object lies in exactly one room; daily case numbers never repeat within a year |
+| `fair` | the trait left at the scene belongs to the two liars and nobody else; the honest two share a true alibi; only the murderer was at the scene; exactly one weapon fits the coroner; every card shown to every person breaks a lie only if it contradicts it, and a broken lie does not break twice |
+| `play` | a player who asks everything, searches everything and presents everything breaks both lies, finds every card and is left with exactly one suspect; the accusation offers every weapon and motive once found, and exactly one of the 48 combinations is right; the murderer never volunteers a motive; the rank falls with wrong accusations |
+| `text` | no broken or unfilled text in any line, card, room or reconstruction; claim marks come in pairs; typed questions find their topic without the model; what the model is told never names the hidden room, places the murderer at the scene, or gives away the motive before the player has uncovered it |
+
 ## Vigil (Breakout)
 
 ```sh
