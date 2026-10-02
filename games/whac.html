@@ -908,84 +908,153 @@ const Scene = (() => {
     }
     return {layout, build, bind, roller, sky, ground, hole, telegraph, dud, ouch, pop, flyingApple, fireflies, hand, sunAt, beadAt, beads, pal};
 })();
-// Prickle Patch - sound, all from Web Audio. The streak is the tune: each boop is a wooden "pok" on
-// the next note of a pentatonic scale, so a good run climbs. A wasp is a buzz you can hear coming.
+// Prickle Patch - sound, all from Web Audio, played as one small garden band.
+// A boop is a soft wooden mallet note. The streak walks a little tune in G pentatonic that loops
+// inside one comfortable octave instead of climbing for ever, so a long run never gets shrill;
+// a higher multiplier is heard as a fuller band (a bass note on the phrase, then a harmony, then a
+// shaker), not as a higher pitch. Everything is panned to the burrow it came from, sits in a short
+// garden-wall reverb, and is ducked when boops come thick and fast.
 const Sound = (() => {
-    let ac = null, out = null, muted = false, buzz = null, crickets = null;
-    const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36];
-    const hz = semis => 392 * Math.pow(2, semis / 12); // from G4
+    let ac = null, out = null, wet = null, muted = false, buzz = null, night = null, bed = null, birdT = 0, birdsOn = false;
+    const LEVEL = 0.7;
+    const hz = semis => 392 * Math.pow(2, semis / 12);                 // semitones from G4
+    // the streak's tune: 16 steps, G4 to E5, a phrase that rises, turns and comes home
+    const TUNE = [0, 4, 7, 9, 7, 4, 7, 12, 9, 7, 4, 2, 4, 7, 2, 0];
+    const BASS = [-12, -17, -15, -10];                                    // G3 D3 E3 A3, one per phrase quarter
     function init() {
         if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
         const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
-        ac = new C(); out = ac.createGain(); out.gain.value = muted ? 0 : 0.8;
-        const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
-        out.connect(comp); comp.connect(ac.destination);
+        ac = new C();
+        out = ac.createGain(); out.gain.value = muted ? 0 : LEVEL;
+        const tone = ac.createBiquadFilter(); tone.type = 'highshelf'; tone.frequency.value = 5000; tone.gain.value = -6; // nothing glassy
+        const comp = ac.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 3; comp.attack.value = 0.004; comp.release.value = 0.2;
+        out.connect(tone); tone.connect(comp); comp.connect(ac.destination);
+        // a short, dark reverb: a garden with a brick wall, not a hall
+        const len = Math.floor(ac.sampleRate * 1.1), ir = ac.createBuffer(2, len, ac.sampleRate);
+        for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+        const conv = ac.createConvolver(); conv.buffer = ir;
+        const damp = ac.createBiquadFilter(); damp.type = 'lowpass'; damp.frequency.value = 2400;
+        wet = ac.createGain(); wet.gain.value = 0.22; wet.connect(damp); damp.connect(conv); conv.connect(out);
     }
-    function setMuted(m) { muted = m; if (out) out.gain.setTargetAtTime(m ? 0 : 0.8, ac.currentTime, 0.02); }
-    function env(g, t, a, peak, d) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
-    function tone(type, f0, f1, t, a, peak, d, dest = out) {
+    function setMuted(m) { muted = m; if (out) out.gain.setTargetAtTime(m ? 0 : LEVEL, ac.currentTime, 0.03); }
+    const now = () => ac.currentTime + 0.004;
+    const ok = () => ac && !muted;
+    // a channel panned to a place on the lawn (-1 left .. 1 right), with a little sent to the reverb
+    function bus(pan = 0, send = 1) {
+        const g = ac.createGain(), p = ac.createStereoPanner ? ac.createStereoPanner() : null;
+        if (p) { p.pan.value = Math.max(-1, Math.min(1, pan * 0.7)); g.connect(p); p.connect(out); if (send) p.connect(wet); }
+        else { g.connect(out); if (send) g.connect(wet); }
+        return g;
+    }
+    function env(g, t, a, peak, d) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
+    function osc(type, f0, f1, t, a, peak, d, dest) {
         const o = ac.createOscillator(), g = ac.createGain(); o.type = type;
         o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + a + d);
         env(g, t, a, peak, d); o.connect(g); g.connect(dest); o.start(t); o.stop(t + a + d + 0.05);
     }
     let noiseBuf = null;
-    function noise(t, dur, peak, type, freq, q = 1) {
-        if (!noiseBuf) { noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    function getNoise() { if (!noiseBuf) { noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; } return noiseBuf; }
+    function noise(t, dur, peak, type, freq, q, dest, a = 0.003) {
         const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
-        s.buffer = noiseBuf; f.type = type; f.frequency.value = freq; f.Q.value = q; env(g, t, 0.004, peak, dur);
-        s.connect(f); f.connect(g); g.connect(out); s.start(t); s.stop(t + dur + 0.05);
+        s.buffer = getNoise(); s.playbackRate.value = 0.9 + Math.random() * 0.2; f.type = type; f.frequency.value = freq; f.Q.value = q;
+        env(g, t, a, peak, dur); s.connect(f); f.connect(g); g.connect(dest); s.start(t, Math.random() * 0.5); s.stop(t + a + dur + 0.05);
     }
-    const now = () => ac.currentTime + 0.005;
-    const ok = () => ac && !muted;
+    // a mallet on a wooden bar: a round fundamental, a fourth partial that dies fast, a knock
+    function mallet(f, t, vel, dest, bright = 0) {
+        const d = 0.5 * Math.pow(440 / f, 0.35);
+        osc('sine', f * 1.004, f, t, 0.002, 0.34 * vel, d, dest);
+        osc('sine', f * 3.98, 0, t, 0.001, (0.05 + bright * 0.05) * vel, 0.05, dest);
+        osc('triangle', f * 2, 0, t, 0.002, 0.03 * vel, 0.09, dest);
+        noise(t, 0.012, 0.05 * vel, 'bandpass', Math.min(5000, f * 3), 2, dest);
+    }
+    let lastBoop = 0;
     return {
         init, setMuted, get muted() { return muted; },
-        // a boop: a hollow wooden pok on the streak's note, with a soft squeak on top
-        boop(step, quick) {
-            if (!ok()) return; const t = now(), f = hz(SCALE[Math.min(step, SCALE.length - 1)]);
-            tone('sine', f * 1.5, f, t, 0.003, 0.5, 0.16);
-            tone('triangle', f * 2, f * 2.02, t, 0.002, 0.12, 0.08);
-            noise(t, 0.03, 0.25, 'bandpass', 1800, 2);
-            if (quick) tone('sine', f * 3, f * 4, t + 0.03, 0.01, 0.06, 0.08);
-        },
-        mult(m) { if (!ok()) return; const t = now(); [0, 4, 7, 12].forEach((s, i) => tone('triangle', hz(12 + s + m), 0, t + i * 0.05, 0.005, 0.18, 0.18)); },
-        sting() {
+        // step: 0-based position in the streak; mult: the multiplier now; pan: where on the lawn
+        boop(step, quick, mult = 1, pan = 0) {
             if (!ok()) return; const t = now();
-            noise(t, 0.22, 0.6, 'highpass', 2500, 0.7);
-            tone('sawtooth', 220, 70, t, 0.004, 0.35, 0.3);
-            tone('square', 900, 600, t, 0.002, 0.08, 0.12);
+            const gap = t - lastBoop; lastBoop = t;
+            const vel = (0.85 + Math.random() * 0.15) * (gap < 0.09 ? 0.6 : gap < 0.2 ? 0.8 : 1);
+            const b = bus(pan), i = step % TUNE.length;
+            mallet(hz(TUNE[i]), t, vel, b, quick ? 1 : 0);
+            noise(t, 0.04, 0.05 * vel, 'lowpass', 900, 0.7, b);                      // the soft thump of a nose
+            if (mult >= 2 && i % 4 === 0) mallet(hz(BASS[(i / 4) | 0]), t, 0.55 * vel, bus(0));
+            if (mult >= 3 && i % 2 === 1) mallet(hz(TUNE[i] - (TUNE[i] % 12 >= 4 ? 3 : 5)), t + 0.012, 0.32 * vel, b);
+            if (mult >= 4) noise(t + 0.06, 0.05, 0.035, 'bandpass', 6500, 1.5, bus(-pan, 0));   // a shaker on the off-beat
         },
-        escape() { if (!ok()) return; const t = now(); tone('sine', 300, 180, t, 0.01, 0.12, 0.18); noise(t, 0.12, 0.08, 'lowpass', 500); },
-        rise(kind) { if (!ok()) return; noise(now(), 0.09, kind === 'wasp' ? 0.05 : 0.07, 'lowpass', 700); },
-        dud() { if (!ok()) return; const t = now(); tone('sine', 120, 70, t, 0.003, 0.25, 0.09); noise(t, 0.06, 0.12, 'lowpass', 400); },
-        apple() { if (!ok()) return; const t = now(); [7, 12, 16, 19, 24].forEach((s, i) => tone('sine', hz(s + 12), 0, t + i * 0.045, 0.004, 0.16, 0.25)); },
-        tick(last) { if (!ok()) return; const t = now(); tone('square', last ? 1000 : 1600, 0, t, 0.001, 0.07, 0.04); noise(t, 0.03, 0.1, 'bandpass', 3000, 3); },
+        // the multiplier goes up: a quick roll up the bars, ending on the home note an octave up
+        mult(m) { if (!ok()) return; const t = now(), b = bus(0); [0, 4, 7, 12].forEach((s, i) => mallet(hz(s), t + i * 0.06, i === 3 ? 0.7 : 0.45, b, 1)); },
+        sting(pan = 0) {
+            if (!ok()) return; const t = now(), b = bus(pan);
+            // a dry zip of wings, the smack, and a low sour pair
+            const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain(), am = ac.createOscillator(), ag = ac.createGain();
+            o.type = 'sawtooth'; o.frequency.setValueAtTime(260, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.2);
+            am.frequency.value = 38; ag.gain.value = 0.5; am.connect(ag); ag.connect(g.gain);
+            f.type = 'lowpass'; f.frequency.value = 1400; env(g, t, 0.005, 0.16, 0.2);
+            o.connect(f); f.connect(g); g.connect(b); o.start(t); am.start(t); o.stop(t + 0.3); am.stop(t + 0.3);
+            noise(t, 0.07, 0.3, 'lowpass', 1800, 0.8, b);
+            osc('sine', 150, 90, t, 0.003, 0.3, 0.16, b);
+            osc('triangle', hz(-11), 0, t + 0.05, 0.01, 0.09, 0.32, b); osc('triangle', hz(-10), 0, t + 0.05, 0.01, 0.07, 0.32, b);
+        },
+        // a hedgehog gets away: a soft huff and a falling two-note shrug
+        escape(pan = 0) { if (!ok()) return; const t = now(), b = bus(pan); noise(t, 0.16, 0.07, 'lowpass', 700, 0.6, b, 0.02); mallet(hz(-1), t + 0.02, 0.3, b); mallet(hz(-5), t + 0.13, 0.25, b); },
+        rise(kind, pan = 0) { if (!ok()) return; noise(now(), 0.12, 0.05, 'bandpass', 1100, 0.8, bus(pan, 0), 0.02); },
+        dud(pan = 0) { if (!ok()) return; const t = now(), b = bus(pan, 0); osc('sine', 110, 60, t, 0.003, 0.22, 0.1, b); noise(t, 0.06, 0.08, 'lowpass', 320, 0.7, b); },
+        // an apple: a crunch, then a little rising gift
+        apple(pan = 0) { if (!ok()) return; const t = now(), b = bus(pan); noise(t, 0.06, 0.18, 'bandpass', 2600, 1.2, b); noise(t + 0.03, 0.05, 0.12, 'bandpass', 1700, 1.2, b); [7, 12, 16].forEach((s, i) => mallet(hz(s), t + 0.14 + i * 0.07, 0.45, bus(0), 1)); },
+        // the last seconds: a woodblock, the final one lower
+        tick(last) { if (!ok()) return; const t = now(), b = bus(0, 0); osc('sine', last ? 640 : 900, 0, t, 0.001, 0.16, 0.05, b); noise(t, 0.018, 0.08, 'bandpass', last ? 1500 : 2100, 5, b); },
         nightfall() {
-            if (!ok()) return; const t = now();
-            [0, 7, 12, 16].forEach((s, i) => tone('sine', hz(s - 12), 0, t + i * 0.12, 0.02, 0.16, 1.4));
-            tone('triangle', hz(-5), 0, t, 0.05, 0.08, 1.8);
+            if (!ok()) return; const t = now(), b = bus(0);
+            [12, 7, 4, 0, -5].forEach((s, i) => mallet(hz(s), t + i * 0.14, 0.4, b));
+            [-12, -5, 4].forEach(s => { const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain(); o.type = 'triangle'; o.frequency.value = hz(s); f.type = 'lowpass'; f.frequency.value = 900;
+                g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.035, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + 3); o.connect(f); f.connect(g); g.connect(b); o.start(t); o.stop(t + 3.1); });
         },
-        // the buzz rises and falls with how many wasps are out
-        wasps(n) {
+        // the buzz: two wing-beats a hair apart, dark and low, following the wasps across the lawn
+        wasps(n, pan = 0) {
             if (!ac) return;
             if (!buzz) {
-                const o = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain(), f = ac.createBiquadFilter(), g = ac.createGain();
-                o.type = 'sawtooth'; o.frequency.value = 205; lfo.frequency.value = 23; lg.gain.value = 14;
-                lfo.connect(lg); lg.connect(o.frequency); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 1.2; g.gain.value = 0;
-                o.connect(f); f.connect(g); g.connect(out); o.start(); lfo.start(); buzz = g;
+                const g = ac.createGain(), p = ac.createStereoPanner ? ac.createStereoPanner() : null, f = ac.createBiquadFilter(), am = ac.createGain();
+                f.type = 'lowpass'; f.frequency.value = 1000; f.Q.value = 0.7;
+                const wob = ac.createOscillator(), wg = ac.createGain(); wob.frequency.value = 5.5; wg.gain.value = 6; wob.connect(wg);
+                for (const fr of [186, 191.5]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; wg.connect(o.frequency); o.connect(f); o.start(); }
+                const trem = ac.createOscillator(), tg = ac.createGain(); trem.frequency.value = 11; tg.gain.value = 0.25; trem.connect(tg); tg.connect(am.gain); am.gain.value = 0.75;
+                f.connect(am); am.connect(g); g.gain.value = 0;
+                if (p) { g.connect(p); p.connect(out); } else g.connect(out);
+                wob.start(); trem.start(); buzz = {g, p};
             }
-            buzz.gain.setTargetAtTime(n > 0 ? Math.min(0.09, 0.05 + n * 0.02) : 0, ac.currentTime, 0.04);
+            const t = ac.currentTime;
+            buzz.g.gain.setTargetAtTime(n > 0 ? Math.min(0.06, 0.035 + n * 0.012) : 0, t, n > 0 ? 0.05 : 0.08);
+            if (buzz.p) buzz.p.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan * 0.7)), t, 0.1);
         },
-        // crickets at night, over the results
-        crickets(on) {
+        // the evening: a hush of air, and now and then a blackbird somewhere along the hedge
+        ambience(on) {
             if (!ac) return;
-            if (!crickets) {
-                const o = ac.createOscillator(), am = ac.createOscillator(), amg = ac.createGain(), g = ac.createGain();
-                o.type = 'sine'; o.frequency.value = 4400; am.type = 'square'; am.frequency.value = 22; amg.gain.value = 0.5;
-                const pulse = ac.createGain(); pulse.gain.value = 0.5; am.connect(amg); amg.connect(pulse.gain);
-                o.connect(pulse); pulse.connect(g); g.gain.value = 0; g.connect(out); o.start(); am.start(); crickets = g;
+            if (!bed) {
+                const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+                s.buffer = getNoise(); s.loop = true; f.type = 'lowpass'; f.frequency.value = 380; g.gain.value = 0;
+                s.connect(f); f.connect(g); g.connect(out); s.start(); bed = g;
             }
-            crickets.gain.setTargetAtTime(on ? 0.012 : 0, ac.currentTime, 0.4);
-        }
+            bed.gain.setTargetAtTime(on && !muted ? 0.012 : 0, ac.currentTime, 0.6);
+            birdsOn = on; birdT = Math.min(birdT, ac.currentTime + 2);
+        },
+        // called every frame: sings the birds and the crickets when they are due
+        tick2() {
+            if (!ok()) return; const t = ac.currentTime;
+            if (birdsOn && t > birdT) {
+                birdT = t + 4 + Math.random() * 6;
+                const b = bus(Math.random() * 2 - 1), n = 3 + (Math.random() * 4 | 0), base = 1700 + Math.random() * 700;
+                for (let i = 0; i < n; i++) {
+                    const s = t + 0.05 + i * (0.09 + Math.random() * 0.07), f0 = base * (0.8 + Math.random() * 0.6), f1 = f0 * (Math.random() < 0.5 ? 1.25 : 0.8);
+                    osc('sine', f0, f1, s, 0.012, 0.022, 0.06 + Math.random() * 0.06, b);
+                }
+            }
+            if (night && t > night.at) { // crickets: little trains of chirps, not a steady whine
+                night.at = t + 0.5 + Math.random() * 0.9; const b = bus(Math.random() * 1.6 - 0.8, 0), f = 4200 + Math.random() * 500;
+                for (let i = 0; i < 3 + (Math.random() * 3 | 0); i++) osc('sine', f, 0, t + i * 0.045, 0.004, 0.012, 0.025, b);
+            }
+        },
+        crickets(on) { if (!ac) return; night = on ? (night || {at: ac.currentTime + 0.4}) : null; }
     };
 })();
 // Prickle Patch - the page: the loop, touch and keys, the tags, and the screens between rounds.
@@ -1062,6 +1131,7 @@ const Sound = (() => {
         pauseEl.hidden = m !== 'paused';
         if (m !== 'play' && m !== 'paused') Sound.wasps(0);
         Sound.crickets(m === 'results' || m === 'night');
+        Sound.ambience(m === 'play' || m === 'title');
     }
     function showTitle() {
         const best = $('titleBest');
@@ -1165,14 +1235,15 @@ const Sound = (() => {
     }
     // before: the streak as it stood before these events, so a break knows what it broke
     let lastHole = 4;
+    const panOf = h => h ? h.x / L.W * 2 - 1 : 0;
     function handle(ev, before = 0) {
         const lostStreak = before;
         for (const e of ev) {
             const h = e.hole != null ? L.holes[e.hole] : null; if (e.hole != null) lastHole = e.hole;
             switch (e.type) {
-                case 'rise': Sound.rise(e.kind); break;
+                case 'rise': Sound.rise(e.kind, panOf(h)); break;
                 case 'boop':
-                    Sound.boop(e.streak - 1, e.quick >= 40);
+                    Sound.boop(e.streak - 1, e.quick >= 40, core.mult, panOf(h));
                     fx.push({type: 'pop', hole: e.hole, t0: clock, text: '+' + e.pts, hot: e.quick >= 40});
                     scoreTo = core.score; showStreak(false);
                     if (core.mult < C.MAX_MULT || e.mult < C.MAX_MULT) fx.push({type: 'pip', hole: e.hole, t0: clock, to: core.pips === 0 ? C.PIPS - 1 : core.pips - 1});
@@ -1180,16 +1251,16 @@ const Sound = (() => {
                     break;
                 case 'mult': Sound.mult(e.mult); showStreak(true); fx.push({type: 'stamp', hole: lastHole, t0: clock, text: '×' + e.mult}); break;
                 case 'apple': {
-                    Sound.apple();
+                    Sound.apple(panOf(h));
                     const p0 = 1 - (core.left - e.gift) / C.ROUND, p1 = 1 - core.left / C.ROUND;
                     beadFlash(p0, p1, 'gift');
                     fx.push({type: 'apple', hole: e.hole, t0: clock, to: Scene.sunAt(L, Math.max(0, p1))});
                     fx.push({type: 'time', t0: clock + 0.45, text: '+' + Math.round(e.gift) + 's', hot: true});
                     break;
                 }
-                case 'escape': Sound.escape(); if (lostStreak >= 3) scatter(lostStreak, h); showStreak(false); emptyPips(); break;
+                case 'escape': Sound.escape(panOf(h)); if (lostStreak >= 3) scatter(lostStreak, h); showStreak(false); emptyPips(); break;
                 case 'sting': {
-                    Sound.sting();
+                    Sound.sting(panOf(h));
                     fx.push({type: 'ouch', hole: e.hole, t0: clock, cost: e.cost});
                     if (!RM.matches) { shakeAt = clock; shakeMag = 9; }
                     const p1 = 1 - core.left / C.ROUND; beadFlash(p1 - e.cost / C.ROUND, p1, 'burn');
@@ -1197,7 +1268,7 @@ const Sound = (() => {
                     if (navigator.vibrate) try { navigator.vibrate([40, 30, 40]); } catch (x) {}
                     break;
                 }
-                case 'dud': Sound.dud(); fx.push({type: 'dud', hole: e.hole, t0: clock}); if (e.lost > 0) { showStreak(false); emptyPips(); } break;
+                case 'dud': Sound.dud(panOf(h)); fx.push({type: 'dud', hole: e.hole, t0: clock}); if (e.lost > 0) { showStreak(false); emptyPips(); } break;
                 case 'end': Sound.nightfall(); setMode('night'); break;
             }
         }
@@ -1315,13 +1386,14 @@ const Sound = (() => {
             night = clamp((clock - modeAt - 0.3) / 0.75, 0, 1); night = night * night * (3 - 2 * night);
             if (clock - modeAt > 1.5) finish();
         }
-        if (mode === 'play') Sound.wasps(core.holes.filter(e => e && e.kind === 'wasp' && (e.phase === 'up' || e.phase === 'rise')).length);
+        if (mode === 'play') { const ws = core.holes.filter(e => e && e.kind === 'wasp' && (e.phase === 'up' || e.phase === 'rise')); Sound.wasps(ws.length, ws.length ? ws.reduce((a, e) => a + panOf(L.holes[e.hole]), 0) / ws.length : 0); }
         // the score tag counts up to what was earned
         if (scoreShown !== scoreTo) { scoreShown += (scoreTo - scoreShown) * Math.min(1, dt * 14); if (Math.abs(scoreTo - scoreShown) < 1) scoreShown = scoreTo; scoreEl.textContent = fmt(scoreShown); }
         if (core && mode === 'play') {
             // tick the last seconds on a woodblock
             const n = Math.ceil(core.left); if (n <= 5 && n !== frame.lastTick) { frame.lastTick = n; if (n > 0) Sound.tick(n === 1); }
         } else frame.lastTick = 99;
+        Sound.tick2();
         draw();
         requestAnimationFrame(frame);
     }
