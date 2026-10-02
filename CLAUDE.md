@@ -83,6 +83,7 @@ npm run test:emoji          # Peel & Seek suite (plain Node, no server or browse
 npm run test:rps            # Hands Up suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:mystery        # Under the Lamp suite (plain Node, no server or browser)
 npm run test:breakout       # Vigil (Breakout) suite (plain Node, no server or browser)
+npm run test:blackjack      # Blackjack suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -91,7 +92,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Nineteen exist so far. `test/everything_converter.mjs` drives
+Twenty exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -187,6 +188,12 @@ reached without passing lead, thousands of seeded sparks never slip into a pane,
 or off their speed, the combo, jewels and candles do what the page shows, a save comes back pane
 for pane, and bots of three skills keep the whole night without a rally going dry for long. Run it
 after touching `WINDOWS`, the physics or the stall assist.
+`test/blackjack.mjs` runs the DOM-free `<script id="core">` block of `games/blackjack.html`: stacked
+shoes check every rule hand by hand (peeks, insurance and even money, splits, split aces, doubles,
+surrender, the dealer standing on soft 17), random play over 200,000 rounds must account for every
+dollar against a settlement worked out separately, the book must match the published basic
+strategy chart cell by cell, and a bot playing it must lose the house edge these rules give. Run it
+after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

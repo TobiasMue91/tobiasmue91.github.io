@@ -629,3 +629,29 @@ with the wrong panes.
 
 `bots` prints each bot's night - windows, minutes, candles lost, longest window, longest dry
 rally - which is the place to look after changing a window, a speed or the stall assist.
+
+## Blackjack
+
+```sh
+npm run test:blackjack                   # or: node test/blackjack.mjs
+node test/blackjack.mjs rules money      # one or more named suites
+node test/blackjack.mjs bots --rounds=4e6
+```
+
+`blackjack.mjs` runs the DOM-free `<script id="core">` block of `games/blackjack.html` in Node:
+the shoe, hand values, the round as a state machine that answers every move with events for the
+page to animate, settlement, and the book (basic strategy). A table that pays 3:2 on split aces,
+lets the dealer hit a soft 17, never peeks under an ace, or loses fifty cents on an insured
+natural looks exactly like a correct one on the page.
+
+| suite | what it checks |
+| --- | --- |
+| `values` | hard and soft totals, several aces, naturals; every two-card total against a count written out by hand |
+| `shoe` | six full decks, the cut card between 72% and 80%, a seed always making the same shoe, and a new shoe only ever at the deal after the cut card came out |
+| `rules` | stacked shoes, hand by hand: a natural paid 3:2 at once; the dealer peeks under an ace or a ten and takes only the first bet; insurance pays 2:1 and even money pays one bet whatever the hole card; the dealer stands on soft 17 and draws on soft 16; no dealer draw when every hand is bust; double, surrender and their limits; split and resplit to four hands, double after split, split aces with one card each and 21 paid 1:1; nothing offered that the bank cannot pay for; illegal moves and bets refused |
+| `money` | 200,000 rounds of random legal moves and bets: every dollar staked is paid back or kept, every payout matches a settlement worked out separately from the final cards, the bank never goes negative, the dealer always stops at 17 and never before |
+| `book` | the strategy chart, every cell of hard, soft and pair hands against every upcard, compared with the published chart for these rules, and the fallbacks when a double or surrender is not allowed |
+| `bots` | the book plays 800,000 hands and must lose what these rules put the house edge at (about 0.36%); mimicking the dealer loses about 5.5%; standing on every 12 does clearly worse than the book |
+
+The `bots` suite prints each bot's edge with its standard error; it is the place to look after
+changing a rule. It takes about half a minute.
