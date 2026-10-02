@@ -86,6 +86,7 @@ npm run test:breakout       # Vigil (Breakout) suite (plain Node, no server or b
 npm run test:hangman        # Last Words (Hangman) suite (plain Node, no server or browser)
 npm run test:wordsearch     # Highlight (Word Search) suite (plain Node, no server or browser)
 npm run test:tells          # Tells (Rock Paper Scissors) suite (plain Node, no server or browser)
+npm run test:doodling       # Squiggle (Doodling) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -95,7 +96,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Twenty-two exist so far. `test/everything_converter.mjs` drives
+Twenty-three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -209,6 +210,12 @@ each: no machine sees your throw before it commits to its own, each tell card st
 machine really has (a player who knows it wins nearly every match, one who throws at random gets a
 fair coin), the count the card shows matches the tape, and every sentence the Oracle says about you
 is true of this match. Run it after touching a machine or the Oracle.
+`test/doodling.mjs` runs the DOM-free `<script id="core">` block of `games/doodling.html` (Squiggle),
+a doodle pad with a squiggle a day: every day's squiggle is the same on every device, stays on its
+sheet in both orientations and never knots into a blot, its dots are evenly spaced, the dots a pen
+takes in while drawing are the ones still taken after a reload, a sheet round-trips through storage
+exactly, and a new day files yesterday's drawing instead of losing it. Run it after touching the
+squiggle, the pens, the codec or the pad and sketchbook rules.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
