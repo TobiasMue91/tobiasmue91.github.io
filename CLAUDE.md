@@ -92,6 +92,7 @@ npm run test:blackjack      # Blackjack suite (plain Node, no server or browser)
 npm run test:blockdrop      # Boogie Woogie (Blockdrop) suite (plain Node, no server or browser)
 npm run test:lastsmile      # Last Smile (Emoji Horde Survival) suite (plain Node, no server or browser)
 npm run test:tumbler        # Tumbler (Guess the Number) suite (plain Node, no server or browser)
+npm run test:sixdigits      # Six Digits (Color Guessing Game) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -101,7 +102,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Twenty-eight exist so far. `test/everything_converter.mjs` drives
+Twenty-nine exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -254,6 +255,12 @@ combination, every pick spent and paid exactly, a guess already ruled out refuse
 carry on identically; the first four safes must always open for a player who halves, certain() must be
 true exactly when halving cannot fail, and careful, sloppy and novice bots must reach the stage their
 play deserves, in that order. Run it after touching the safe sizes or the picks they bring.
+`test/color_guessing_game.mjs` runs the DOM-free `<script id="core">` block of `games/color_guessing_game.html`
+(Six Digits), a daily game of mixing hex codes by eye: CIEDE2000 against Sharma's published pairs, every
+colour surviving hex to HSL and back, a score that only falls as the difference grows, a daily sheet the
+same on every device with five targets spread round the wheel and starts far from them, every word under
+every bar true of the mix and every tick where the target sits, stamps that land once and in order, and
+careful, sloppy and random bots that score in that order. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

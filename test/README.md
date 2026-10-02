@@ -843,3 +843,29 @@ between safes, or that the daily is the same on every phone, so those are checke
 
 The `bots` suite prints how many safes each player opened; it is the place to look after changing a
 safe's size or the picks it brings.
+
+## Six Digits (Color Guessing Game)
+
+```sh
+npm run test:sixdigits                   # or: node test/color_guessing_game.mjs
+node test/color_guessing_game.mjs colour notes   # one or more named suites
+```
+
+`color_guessing_game.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` of
+`games/color_guessing_game.html` in Node's `vm`. Six Digits gives five hex codes a day; the player mixes
+each one by eye on three bars (hue, vividness, lightness) and stamps it, and the page says how close
+they came and which way each bar was off. Nothing on the page can show that the colour difference is
+the real CIEDE2000, that a tick sits where the target is, or that "too dark" was said of a mix that
+really was too dark, so those are checked here.
+
+| suite | what it checks |
+| --- | --- |
+| `colour` | CIEDE2000 against 33 of Sharma, Wu & Dalal's published pairs and both ways round; Lab of white, black and sRGB red; 40,000 colours surviving hex -> HSL -> hex, so the bars can reach every target |
+| `score` | ten for an invisible difference, five at dE 10, never rising as the difference grows, one decimal place |
+| `sheet` | 1,500 days: the same sheet twice, five distinct hex targets at least 25 degrees of hue apart, a dark-to-light spread, starting mixes 90 degrees or more from their targets, near-greys now and then; day numbers and leap years |
+| `notes` | 50,000 mixes: every word under every bar matches the mix's real offset; knobs set on the ticks score 10; a violet mix for a blue target is "too violet" |
+| `record` | stamps only in order and only once, five to a day; streaks across days, half-played days and gaps; damaged saves; the habit named on the sheet is what the bars said; the share line gives away no colour |
+| `bots` | 600 days each by a perfect, careful, sloppy and random player: 50, about 43, about 25, about 5, in that order |
+
+The `bots` suite prints the median sheet for each player; it is the place to look after changing the
+score curve.
