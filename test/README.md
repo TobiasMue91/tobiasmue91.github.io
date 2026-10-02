@@ -805,3 +805,25 @@ rather than read from the page.
 | `bots` | a bot plays Marathon: every lock adds four cells and every cleared row takes ten, a save made at any moment plays on identically, and it reaches level 15 |
 | `auto` | `sink` and `clone`, and the band's own player from Watch (`<script id="auto">`): every key it plans is legal, each plan ends in its one drop and fits in a bar and a half, three 500-piece games never top out, and at least 35% of rows go four at a time (`--pieces=N` for longer games) |
 
+
+## Tumbler (Guess the Number)
+
+```sh
+npm run test:tumbler                     # or: node test/number_guess.mjs
+node test/number_guess.mjs rules bots    # one or more named suites
+```
+
+`number_guess.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` of
+`games/number_guess.html` in Node's `vm`. Tumbler is guess-the-number as a heist: each safe hides a
+number, every guess spends a lockpick, the safe answers higher or lower, and picks left over carry into
+the next, bigger safe. Nothing on the page can show that a safe told the truth, that a pick went missing
+between safes, or that the daily is the same on every phone, so those are checked here.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | 300 heists of random guesses: every answer against the combination, the window never losing it, one pick per wrong guess, the next safe's picks paid exactly, an empty roll ending the heist with the secret; guesses already ruled out refused for free; saves taken at any moment playing on identically; the share line holding a square per safe and no combination |
+| `safes` | every combination inside its safe, fixed by the seed, spread evenly; the first four safes always open for a player who halves, and later ones do not without a spare pick or luck; `certain()` true exactly when halving cannot fail |
+| `bots` | 3,000 heists each by a careful player who halves, a sloppy one and a novice: every heist ends, a careful one opens ten to sixteen safes at the median and always gets past the fourth, and better play goes further |
+
+The `bots` suite prints how many safes each player opened; it is the place to look after changing a
+safe's size or the picks it brings.
