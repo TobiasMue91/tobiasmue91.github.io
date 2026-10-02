@@ -236,7 +236,9 @@ round: every turn on thousands of random boards lands where true rotation plus t
 offset tables puts it, every T that locks is judged by a plain three-corner rule, and every point of
 thousands of games matches a scorer written in the test (spins, back-to-back, combos, all clears);
 bags hold each piece once, gravity and the lock delay's fifteen resets keep time, a save made at any
-moment resumes identically, and a careful bot reaches level 15. Run it after touching the core.
+moment resumes identically, and a careful bot reaches level 15. Its `auto` suite plays the page's own
+player (Watch, `<script id="auto">`): every key legal, a short plan per piece, no top-out over hundreds
+of pieces, and mostly quads. Run it after touching the core or the player.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

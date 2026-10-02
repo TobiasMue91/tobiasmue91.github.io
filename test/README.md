@@ -803,4 +803,5 @@ rather than read from the page.
 | `bag` | each bag of seven holds each piece once, seeds deal the same pieces, the daily seed is fixed by the date, shuffles are fair |
 | `timing` | gravity per level, the lock delay and its fifteen resets, a new lowest row restoring them, the clear delay and a turn buffered during it, the daily's two minutes, a block-out |
 | `bots` | a bot plays Marathon: every lock adds four cells and every cleared row takes ten, a save made at any moment plays on identically, and it reaches level 15 |
+| `auto` | `sink` and `clone`, and the band's own player from Watch (`<script id="auto">`): every key it plans is legal, each plan ends in its one drop and fits in a bar and a half, three 500-piece games never top out, and at least 35% of rows go four at a time (`--pieces=N` for longer games) |
 
