@@ -731,6 +731,7 @@ thrown away instead of filed.
 | `codec` | 200 random sheets, off-sheet points included, come back from storage exactly at a few bytes a point; damaged data is refused |
 | `sheets` | the first visit, the same day, a new day with and without ink, tearing, extra sheets, undo and redo, taking a sheet back out of the sketchbook, removing and restoring, and links to a squiggle |
 | `saves` | a packed sheet unpacks to the same sheet without what undo kept |
+
 ## Prickle Patch (Whac-a-Hedgehog)
 
 ```sh
