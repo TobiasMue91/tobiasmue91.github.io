@@ -90,6 +90,7 @@ npm run test:doodling       # Squiggle (Doodling) suite (plain Node, no server o
 npm run test:whac           # Prickle Patch (Whac-a-Hedgehog) suite (plain Node, no server or browser)
 npm run test:blackjack      # Blackjack suite (plain Node, no server or browser)
 npm run test:blockdrop      # Boogie Woogie (Blockdrop) suite (plain Node, no server or browser)
+npm run test:lastsmile      # Last Smile (Emoji Horde Survival) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -99,7 +100,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Twenty-six exist so far. `test/everything_converter.mjs` drives
+Twenty-seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -239,6 +240,13 @@ bags hold each piece once, gravity and the lock delay's fifteen resets keep time
 moment resumes identically, and a careful bot reaches level 15. Its `auto` suite plays the page's own
 player (Watch, `<script id="auto">`): every key legal, a short plan per piece, no top-out over hundreds
 of pieces, and mostly quads. Run it after touching the core or the player.
+`test/last_smile.mjs` runs the DOM-free `<script id="core">` block of `games/emoji_horde_survival.html`
+(Last Smile), a horde survival until sunrise: thousands of level-ups chosen at random never offer a
+duplicate, a maxed gift or a fifth slot, and offer an evolution exactly when its recipe is complete;
+every ring, stream and storm of the night arrives on time, lightning hurts inside its warning ring
+only, nothing moves while a card is up, and sunrise cheers every face left. Bots play whole nights:
+standing still loses, a careful kiter sees the sunrise, one who picks cards at random still outlasts
+the first storm. Run it after touching any number in the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
