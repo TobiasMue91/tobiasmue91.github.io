@@ -204,6 +204,13 @@ if (suites.includes('codec')) {
     check(lost === 0, 'a sheet comes back from storage exactly as it was drawn, off-sheet points too', lost + ' of 200 changed');
     check(size / pts < 9, 'a point costs a few bytes, so a sketchbook fits in browser storage', (size / pts).toFixed(2) + ' bytes a point');
     check(same(SQ.decode(SQ.encode([])), []), 'an empty sheet round-trips');
+    // any colour: a stroke carries its own, in the field the six inks have always used
+    let wrong = 0;
+    for (let i = 0; i < 500; i++) { const hex = '#' + Math.floor(rnd() * 0x1000000).toString(16).padStart(6, '0'); if (SQ.inkColor(SQ.inkOf(hex)) !== hex) wrong++; }
+    check(wrong === 0 && SQ.inkColor(SQ.inkOf('#000000')) === '#000000' && SQ.inkColor(SQ.inkOf('#ffffff')) === '#ffffff', 'a mixed colour comes back as itself', wrong + ' did not');
+    check(SQ.INKS.every((c, i) => SQ.inkColor(i) === c && SQ.validInk(i)) && !SQ.validInk(7) && !SQ.validInk(-1), 'the six inks keep their numbers, so old sheets keep their colours');
+    const mixed = [hand('brush', SQ.inkOf('#ff00aa'), [[10, 10], [500, 900]]), hand('marker', SQ.inkOf('#0a0b0c'), [[900, 100], [100, 1400]])];
+    check(same(SQ.decode(SQ.encode(mixed)), mixed) && SQ.inkColor(SQ.decode(SQ.encode(mixed))[0].ink) === '#ff00aa', 'strokes in mixed colours round-trip through storage');
     const enc = SQ.encode([hand('marker', 3, [[1, 1], [999, 1499]])]);
     let threw = 0;
     for (const bad of [enc.slice(0, enc.length - 8), 'AAAA', SQ.encode([]).replace(/^A/, 'B')]) { try { SQ.decode(bad); } catch (e) { threw++; } }
