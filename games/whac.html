@@ -23,16 +23,17 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
 .tag{position:relative;background:var(--paper);border:3px solid var(--ink);border-radius:4px 9px 9px 4px;
   clip-path:polygon(0 50%,14px 0,100% 0,100% 100%,14px 100%);padding:4px 14px 4px 22px;box-shadow:3px 3px 0 rgba(29,24,19,.35)}
 #hud{position:fixed;inset:0;pointer-events:none;transition:opacity .4s ease-out}
-.tags{position:absolute;left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px));bottom:calc(14px + var(--sab));display:flex;gap:8px;align-items:center;justify-content:space-between}
+.tags{position:absolute;left:max(calc(10px + env(safe-area-inset-left,0px)),var(--side,0px));right:max(calc(10px + env(safe-area-inset-right,0px)),var(--side,0px));bottom:calc(14px + var(--sab));display:flex;gap:8px;align-items:center;justify-content:space-between}
 #scoreTag{transform:rotate(-1.5deg);min-width:96px}
 #score{display:block;font-size:clamp(26px,3.6vw,40px);font-weight:900;line-height:1.05;font-variation-settings:'SOFT' 50,'WONK' 1,'opsz' 72}
 #streakTag{display:flex;align-items:center;gap:8px;transform:rotate(1.5deg);transition:transform .2s cubic-bezier(.3,1.6,.5,1)}
 #mult{font-size:clamp(22px,3vw,32px);font-weight:900;line-height:1.05;min-width:1.6em;font-variation-settings:'SOFT' 50,'WONK' 1,'opsz' 72}
 #pips{display:flex;gap:3px}
-#pips i{display:block;width:clamp(24px,2.6vw,32px);height:clamp(24px,2.6vw,32px);transition:transform .18s cubic-bezier(.3,1.8,.5,1)}
+#pips i{display:block;width:clamp(28px,2.6vw,32px);height:clamp(28px,2.6vw,32px);transition:transform .18s cubic-bezier(.3,1.8,.5,1)}
 #pips svg{display:block;width:100%;height:100%}
 #pips .petals{fill:var(--paper);transition:fill .12s}#pips .heart{fill:var(--paper);transition:fill .12s}
-#pips i.on{transform:scale(1.12) rotate(18deg)}#pips i.on .petals{fill:var(--mari)}#pips i.on .heart{fill:#8a3a22}
+#pips i.on{transform:scale(1.12) rotate(18deg)}#pips i.hop{animation:hop .32s cubic-bezier(.3,1.8,.5,1)}
+@keyframes hop{0%{transform:scale(.6) rotate(-40deg)}60%{transform:scale(1.45) rotate(30deg)}100%{transform:scale(1.12) rotate(18deg)}}#pips i.on .petals{fill:var(--mari)}#pips i.on .heart{fill:#8a3a22}
 #streakTag.bump{animation:bump .45s cubic-bezier(.3,1.6,.5,1)}
 #streakTag.lose #pips{animation:lose .4s ease-out}#streakTag.lose #pips i{animation:wilt .4s ease-out}
 @keyframes wilt{0%{transform:scale(1.12) rotate(18deg)}40%{transform:scale(.7) rotate(-30deg)}100%{transform:none}}
@@ -116,7 +117,7 @@ const PrickleCore = (() => {
     const STING_COST = 4;      // a sting burns this much sun
     const APPLE_GIFT = 2;      // an apple gives this much back
     const PIPS = 5, MAX_MULT = 5;
-    const RISE = 0.14, TUCK = 0.16, SINK = 0.2, DROP = 0.26, GRACE = 0.1;
+    const RISE = 0.14, TUCK = 0.16, SINK = 0.2, DROP = 0.26, FLEE = 0.42, GRACE = 0.1;
     const RANKS = [[0, 'Seedling'], [3000, 'Weeder'], [8000, 'Gardener'], [16000, 'Head Gardener'], [28000, 'Hedgehog Whisperer']];
     const lerp = (a, b, t) => a + (b - a) * t;
     const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -212,7 +213,7 @@ const PrickleCore = (() => {
                 else ev.push({type: 'leave', hole: i});
             }
             else if (e.phase === 'tuck' && age >= TUCK) { e.phase = 'sink'; e.t0 += TUCK; }
-            else if ((e.phase === 'sink' && age >= SINK) || (e.phase === 'drop' && age >= DROP) || (e.phase === 'flee' && age >= DROP)) s.holes[i] = null;
+            else if ((e.phase === 'sink' && age >= SINK) || (e.phase === 'drop' && age >= DROP) || (e.phase === 'flee' && age >= FLEE)) s.holes[i] = null;
         }
     }
     // a touch on burrow i. Returns the events it caused.
@@ -247,7 +248,7 @@ const PrickleCore = (() => {
     }
     function rank(score) { let r = RANKS[0]; for (const k of RANKS) if (score >= k[0]) r = k; return r[1]; }
     function nextRank(score) { for (const k of RANKS) if (score < k[0]) return k; return null; }
-    return {ROUND, STING_COST, APPLE_GIFT, PIPS, MAX_MULT, RISE, TUCK, SINK, DROP, GRACE, RANKS, tempo, dusk, create, step, tap, rank, nextRank, rng};
+    return {ROUND, STING_COST, APPLE_GIFT, PIPS, MAX_MULT, RISE, TUCK, SINK, DROP, FLEE, GRACE, RANKS, tempo, dusk, create, step, tap, rank, nextRank, rng};
 })();
 </script>
 <script>
@@ -641,6 +642,7 @@ const Scene = (() => {
 
     // ---- sprites and the still parts of the print, made once per layout and per ink run
     let S = null;
+    function bind(ctx) { if (S) S.ctx = ctx; }
     function build(L, dpr) {
         const runs = {};
         for (const run of ['dusk', 'night']) {
@@ -652,12 +654,26 @@ const Scene = (() => {
             runs[run] = {P, rows, heaps: L.holes.map(h => Art.heap(h, P, dpr)), fronts: L.holes.map(h => Art.front(h, P, dpr)),
                 sky: skyLayer(L, run, dpr), ground: Art.ground(L, P, dpr)};
         }
-        S = {L, runs};
+        S = {L, runs, ctx: S ? S.ctx : null};
         return S;
     }
     const put = (ctx, sp, x, y) => ctx.drawImage(sp.c, x - sp.ox, y - sp.oy, sp.c.w, sp.c.h);
     // night 0: the dusk print; 1: the night print; in between, the two laid over each other
-    function each(night, fn) { if (night < 1) fn(S.runs.dusk, 1); if (night > 0) fn(S.runs.night, night); }
+    // between the two the night ink is rolled down over the dusk print like a brayer across a block
+    function each(night, fn) {
+        if (night <= 0) return fn(S.runs.dusk, 1);
+        if (night >= 1) return fn(S.runs.night, 1);
+        fn(S.runs.dusk, 1);
+        const y = rollerY(night); ctx0save(); S.ctx.beginPath(); S.ctx.rect(-50, -50, S.L.W + 100, y + 50); S.ctx.clip(); fn(S.runs.night, 1); S.ctx.restore();
+    }
+    const rollerY = night => -20 + (S.L.H + 60) * night;
+    function ctx0save() { S.ctx.save(); }
+    function roller(ctx, night) { // the brayer's edge: a dark lip of ink
+        if (night <= 0 || night >= 1) return;
+        const y = rollerY(night);
+        ctx.fillStyle = Art.INKS.night.ink; ctx.fillRect(0, y - 3, S.L.W, 9);
+        ctx.fillStyle = 'rgba(13,15,25,0.35)'; ctx.fillRect(0, y + 6, S.L.W, 10);
+    }
     const inkOf = night => mix(Art.INKS.dusk.ink, Art.INKS.night.ink, night);
     const pal = (night, key) => mix(Art.INKS.dusk[key], Art.INKS.night[key], night);
 
@@ -694,25 +710,25 @@ const Scene = (() => {
     // the sun runs along above the hedge, sinking slowly, and drops into it at the very end
     function sunAt(L, p) {
         const r = L.skyH * (L.tall ? 0.16 : 0.2), x = lerp(L.W * 0.12, L.W * 0.88, p), y0 = L.tall ? Math.max(L.skyH * 0.38, 66 + r) : L.skyH * 0.4;
-        const sink = clamp((p - 0.9) / 0.1, 0, 1), y1 = L.skyH - 34 - r * 0.4;
-        return {x, y: lerp(y0, y1, Math.pow(Math.min(p, 0.9) / 0.9, 1.5)) + sink * sink * (r * 2.6 + 34), r};
+        const sink = clamp((p - 0.97) / 0.03, 0, 1), y1 = L.skyH - 34 - r * 0.4;
+        return {x, y: lerp(y0, y1, Math.pow(Math.min(p, 0.97) / 0.97, 1.5)) + sink * sink * (r * 2.6 + 34), r};
     }
     // beads on the road: one for every slice of the evening
     function beads(L) { return L.W < 600 ? 9 : 12; }
-    function beadAt(L, q) { return sunAt(L, q / beads(L) * 0.9); }
+    function beadAt(L, q) { return sunAt(L, q / beads(L) * 0.97); }
     // p: how far the sun has come; flash: beads re-inked by an apple or burnt by a sting (q -> {k, kind})
     // The road is a string of big beads: ahead of the sun they are inked marigold, behind it they are
     // empty sockets. Count the marigold ones and you know how much evening is left.
-    function sky(ctx, L, p, night, flash) {
-        each(night, (run, a) => { ctx.globalAlpha = a; ctx.drawImage(run.sky, 0, 0, L.W, L.skyH + 8); });
+    function sky(ctx, L, p, night, flash, count) {
+        each(night, (run, a) => { ctx.drawImage(run.sky, 0, 0, L.W, L.skyH + 8); });
         ctx.globalAlpha = 1;
         const s = sunAt(L, p), nb = beads(L), br = clamp(L.W / 70, 8, 15);
         if (night < 1) {
             ctx.globalAlpha = 1 - night;
-            const road = []; for (let q = 0; q <= 60; q++) { const a = sunAt(L, q / 60 * 0.9); road.push([a.x, a.y]); }
+            const road = []; for (let q = 0; q <= 60; q++) { const a = sunAt(L, q / 60 * 0.97); road.push([a.x, a.y]); }
             Art.ink(ctx, road, br * 0.5, Art.INKS.dusk.ink, 31, false);
             for (let q = 0; q <= nb; q++) {
-                const pp = q / nb * 0.9, f = flash && flash[q], a = sunAt(L, pp), end = q === nb;
+                const pp = q / nb * 0.97, f = flash && flash[q], a = sunAt(L, pp), end = q === nb;
                 const lit = pp >= p - 0.003, k = f ? f.k : 1;
                 let R = br * (end ? 1.35 : 1);
                 ctx.fillStyle = Art.INKS.dusk.ink; ctx.beginPath(); ctx.arc(a.x, a.y, R + 2.6, 0, TAU); ctx.fill();
@@ -722,19 +738,25 @@ const Scene = (() => {
                     continue;
                 }
                 if (f && f.kind === 'gift') R *= 1 + Math.sin(clamp(1 - k, 0, 1) * Math.PI) * 0.6;
-                ctx.fillStyle = lit ? (end ? Art.INKS.dusk.poppy : '#e07a3a') : Art.INKS.dusk.paper;
+                ctx.fillStyle = lit ? (end ? Art.INKS.dusk.paper : '#e07a3a') : Art.INKS.dusk.paper;
                 ctx.beginPath(); ctx.arc(a.x, a.y, R, 0, TAU); ctx.fill();
-                if (lit) { ctx.fillStyle = '#f6cf6a'; ctx.beginPath(); ctx.arc(a.x - R * 0.3, a.y - R * 0.3, R * 0.3, 0, TAU); ctx.fill(); }
+                if (lit && end) { ctx.fillStyle = '#e07a3a'; ctx.beginPath(); ctx.arc(a.x, a.y, R * 0.55, 0, TAU); ctx.fill(); }
+                else if (lit) { ctx.fillStyle = '#f6cf6a'; ctx.beginPath(); ctx.arc(a.x - R * 0.3, a.y - R * 0.3, R * 0.3, 0, TAU); ctx.fill(); }
                 else { ctx.fillStyle = Art.INKS.dusk.ink; ctx.beginPath(); ctx.arc(a.x, a.y, R * 0.32, 0, TAU); ctx.fill(); }
             }
             fill(ctx, ellipsePts(s.x, s.y, s.r * 1.6, s.r * 1.6, 36, 903, 0.03), '#f6cf6a');
             fill(ctx, ellipsePts(s.x, s.y, s.r * 1.3, s.r * 1.3, 36, 904, 0.03), '#e07a3a');
             const disc = ellipsePts(s.x, s.y, s.r, s.r, 36, 901, 0.022);
             fill(ctx, disc, Art.INKS.dusk.sun, Art.REG, 0); Art.ink(ctx, disc, Math.max(2, s.r * 0.08), Art.INKS.dusk.line, 902);
+            if (count > 0) { // the last seconds are printed on the sun's face, each one stamped in
+                const n = Math.ceil(count), k = n - count, sz = Math.max(26, s.r * 1.45) * (k < 0.12 ? lerp(1.5, 1, k / 0.12) : 1);
+                ctx.font = `900 ${Math.round(sz)}px Fraunces, Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillStyle = Art.INKS.dusk.poppy; ctx.fillText(n, s.x, s.y + sz * 0.05);
+            }
             ctx.globalAlpha = 1;
         }
     }
-    function ground(ctx, night) { each(night, (run, a) => { ctx.globalAlpha = a; ctx.drawImage(run.ground, 0, 0, S.L.W, S.L.H); }); ctx.globalAlpha = 1; }
+    function ground(ctx, night) { each(night, (run, a) => { ctx.drawImage(run.ground, 0, 0, S.L.W, S.L.H); }); ctx.globalAlpha = 1; }
 
     // ---- a burrow and what is in it
     // clip to everything above the hole's near edge, so whatever is in it comes out of the ground
@@ -747,7 +769,6 @@ const Scene = (() => {
     // lift: the heap heaving (the warning); shake: its sideways judder
     function hole(ctx, h, o, night, lift = 0, shake = 0) {
         each(night, (run, a) => {
-            ctx.globalAlpha = a;
             const hp = run.heaps[h.i];
             if (lift > 0) {
                 ctx.save(); ctx.translate(h.x + shake, h.y); ctx.scale(1 + lift * 0.05, 1 + lift * 0.45); ctx.translate(-h.x, -h.y - lift * h.ry * 0.25);
@@ -775,8 +796,8 @@ const Scene = (() => {
         if (o.kind === 'wasp') {
             // it hovers and judders; the wings whirr between two positions
             const fl = o.flee || 0, yOff = (1 - o.rise) * r * 2.6, t = o.t || 0, bz = Math.sin(t * 90) * r * 0.025;
-            if (fl > 0) { ctx.restore(); ctx.save(); ctx.globalAlpha = a * (1 - fl); }
-            const hx = x + bz + fl * fl * r * 2.2, hy = h.y + yOff - r * 1.6 + Math.sin(t * 7) * r * 0.05 - fl * r * 2.4, flap = Math.sin(t * 120) > 0 ? 1 : 0.55;
+            if (fl > 0) { ctx.restore(); ctx.save(); ctx.globalAlpha = a * (fl < 0.6 ? 1 : (1 - fl) / 0.4); }
+            const hx = x + bz + fl * fl * r * 4 + Math.sin(fl * 30) * r * 0.25 * fl, hy = h.y + yOff - r * 1.6 + Math.sin(t * 7) * r * 0.05 - fl * r * 3.2, flap = Math.sin(t * 120) > 0 ? 1 : 0.55;
             ctx.translate(hx, hy); ctx.scale(0.8, 0.8); ctx.rotate(fl * 0.6); ctx.translate(-hx, -hy);
             for (const sd of [-1, 1]) { ctx.save(); ctx.translate(hx + sd * r * 0.28, hy + r * 0.52); ctx.scale(sd * 0.9, flap * 0.9); put(ctx, row.wing, 0, 0); ctx.restore(); }
             put(ctx, row.wasp, hx, hy);
@@ -830,13 +851,14 @@ const Scene = (() => {
             ctx.globalAlpha = 1 - k; fill(ctx, pts, pal(night, 'soil')); Art.ink(ctx, pts, 1.6, inkOf(night), i); ctx.globalAlpha = 1;
         }
     }
-    function ouch(ctx, x, y, r, k, night) {
+    function ouch(ctx, x, y, r, k, night, cost) {
         const e = 1 - Math.pow(1 - Math.min(1, k * 2.4), 3), a = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
         ctx.save(); ctx.globalAlpha = a;
         const pts = spikePts(x, y, r * e, r * e * 0.78, 10, 0.55, 1.2, 9);
         fill(ctx, pts, Art.INKS.dusk.poppy, Art.REG, Art.REG); Art.ink(ctx, pts, 3, Art.INKS.dusk.ink, 3);
         ctx.font = `italic 900 ${Math.round(r * 0.5 * e)}px Fraunces, Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = Art.INKS.dusk.paper; ctx.fillText('ouch!', x, y + r * 0.04);
+        ctx.fillStyle = Art.INKS.dusk.paper; ctx.fillText('ouch!', x, y - (cost ? r * 0.12 : -r * 0.04));
+        if (cost) { ctx.font = `900 ${Math.round(r * 0.42 * e)}px Fraunces, Georgia, serif`; ctx.fillStyle = Art.INKS.dusk.ink; ctx.fillText(cost, x, y + r * 0.32); }
         ctx.restore();
     }
     // a score springs out on a little garden tag, beside the hedgehog that earned it
@@ -884,7 +906,7 @@ const Scene = (() => {
         ctx.restore();
         if (press > 0.7) { ctx.strokeStyle = Art.INKS.dusk.ink; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; for (const a of [-2.6, -1.9, -1.2]) { ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * 12 * s, y + Math.sin(a) * 12 * s); ctx.lineTo(x + Math.cos(a) * 20 * s, y + Math.sin(a) * 20 * s); ctx.stroke(); } }
     }
-    return {layout, build, sky, ground, hole, telegraph, dud, ouch, pop, flyingApple, fireflies, hand, sunAt, beadAt, beads, pal};
+    return {layout, build, bind, roller, sky, ground, hole, telegraph, dud, ouch, pop, flyingApple, fireflies, hand, sunAt, beadAt, beads, pal};
 })();
 // Prickle Patch - sound, all from Web Audio. The streak is the tune: each boop is a wooden "pok" on
 // the next note of a pentatonic scale, so a good run climbs. A wasp is a buzz you can hear coming.
@@ -997,8 +1019,9 @@ const Sound = (() => {
         const W = innerWidth, H = innerHeight;
         dpr = Math.min(2, devicePixelRatio || 1);
         cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-        L = Scene.layout(W, H); Scene.build(L, dpr);
+        L = Scene.layout(W, H); Scene.build(L, dpr); Scene.bind(ctx);
         document.documentElement.style.setProperty('--sky', L.skyH + 'px');
+        document.documentElement.style.setProperty('--side', Math.max(0, (W - L.bw) / 2 - 20) + 'px');
         document.body.classList.toggle('tall', L.tall);
     }
     let rT = 0; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(resize, 120); });
@@ -1016,16 +1039,17 @@ const Sound = (() => {
     function showStreak(bump) {
         const m = core ? core.mult : 1, p = core ? (core.mult >= C.MAX_MULT ? C.PIPS : core.pips) : 0;
         multEl.textContent = '×' + m;
-        pipEls.forEach((el, i) => el.classList.toggle('on', i < p));
+        pipEls.forEach((el, i) => { const was = el.classList.contains('on'); el.classList.toggle('on', i < p); if (!was && i < p) { el.classList.remove('hop'); void el.offsetWidth; el.classList.add('hop'); } });
         if (bump) { streakTag.classList.remove('bump'); void streakTag.offsetWidth; streakTag.classList.add('bump'); }
         streakTag.classList.toggle('max', m >= C.MAX_MULT);
     }
-    // a broken streak: the marigold's inked petals are flung off the tag and fall
-    function scatter(n) {
-        const r = streakTag.getBoundingClientRect();
-        for (let i = 0; i < Math.min(14, 3 + n * 2); i++) fx.push({type: 'petal', t0: clock, x: r.left + r.width * (0.35 + 0.6 * Math.random()), y: r.top + r.height * 0.5,
-            vx: (Math.random() - 0.5) * 260, vy: -330 - Math.random() * 220, spin: (Math.random() - 0.5) * 14, s: 0.8 + Math.random() * 0.6});
+    // the streak is lost where it was lost: wilted petals drop off the burrow and drift down
+    function scatter(n, h) {
+        const x0 = h ? h.x : innerWidth / 2, y0 = h ? h.y - h.r * 1.4 : innerHeight / 2;
+        for (let i = 0; i < Math.min(16, 4 + n * 2); i++) fx.push({type: 'petal', t0: clock, x: x0 + (Math.random() - 0.5) * 20, y: y0,
+            vx: (Math.random() - 0.5) * 160, vy: -40 - Math.random() * 60, spin: (Math.random() - 0.5) * 6, s: 0.9 + Math.random() * 0.7});
     }
+    function pipXY(i) { const r = pipEls[Math.max(0, Math.min(C.PIPS - 1, i))].getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }
     function emptyPips() { streakTag.classList.remove('lose'); void streakTag.offsetWidth; streakTag.classList.add('lose'); }
 
     // ------------------------------------------------------------------ screens
@@ -1082,11 +1106,16 @@ const Sound = (() => {
     addEventListener('blur', pause);
 
     // ------------------------------------------------------------------ input
+    // where rows overlap, a touch could mean two burrows: one with a hedgehog up beats an empty one,
+    // and anything beats a wasp, so a reach for a face never lands on the sting behind it
     function holeAt(x, y) {
-        let best = -1, bd = 1.15;
+        let best = -1, bs = -1e9;
         for (const h of L.holes) {
             const dx = (x - h.x) / (h.rx * 1.05), dy = (y - (h.y - h.r * 1.05)) / (h.r * 1.75), d = dx * dx + dy * dy;
-            if (d < bd) { bd = d; best = h.i; }
+            if (d >= 1.15) continue;
+            const e = core && core.holes[h.i], live = e && (e.phase === 'rise' || e.phase === 'up' || e.phase === 'tuck');
+            const score = -d + (live ? (e.kind === 'hog' ? 2 : -0.6) : 0);
+            if (score > bs) { bs = score; best = h.i; }
         }
         return best;
     }
@@ -1096,7 +1125,7 @@ const Sound = (() => {
                 Sound.init(); Sound.boop(0, true);
                 titleHog = {phase: 'drop', t0: clock};
                 fx.push({type: 'burst', hole: 4, t0: clock});
-                setTimeout(() => { if (mode === 'title') start(); }, 260);
+                setTimeout(() => { if (mode === 'title') start(); }, 200);
             } else if (i >= 0) fx.push({type: 'dud', hole: i, t0: clock});
             return;
         }
@@ -1132,22 +1161,24 @@ const Sound = (() => {
     // ------------------------------------------------------------------ what happened
     function beadFlash(p0, p1, kind) { // beads between two points of the evening light up or burn off
         const nb = Scene.beads(L), lo = Math.min(p0, p1), hi = Math.max(p0, p1);
-        for (let q = 1; q <= nb; q++) { const pp = q / nb * 0.9; if (pp > lo && pp <= hi + 1e-6) flashes[q] = {t0: clock + (kind === 'gift' ? 0.45 : 0), kind}; }
+        for (let q = 1; q <= nb; q++) { const pp = q / nb * 0.97; if (pp > lo && pp <= hi + 1e-6) flashes[q] = {t0: clock + (kind === 'gift' ? 0.45 : 0), kind}; }
     }
     // before: the streak as it stood before these events, so a break knows what it broke
+    let lastHole = 4;
     function handle(ev, before = 0) {
         const lostStreak = before;
         for (const e of ev) {
-            const h = e.hole != null ? L.holes[e.hole] : null;
+            const h = e.hole != null ? L.holes[e.hole] : null; if (e.hole != null) lastHole = e.hole;
             switch (e.type) {
                 case 'rise': Sound.rise(e.kind); break;
                 case 'boop':
                     Sound.boop(e.streak - 1, e.quick >= 40);
                     fx.push({type: 'pop', hole: e.hole, t0: clock, text: '+' + e.pts, hot: e.quick >= 40});
                     scoreTo = core.score; showStreak(false);
+                    if (core.mult < C.MAX_MULT || e.mult < C.MAX_MULT) fx.push({type: 'pip', hole: e.hole, t0: clock, to: core.pips === 0 ? C.PIPS - 1 : core.pips - 1});
                     if (navigator.vibrate) try { navigator.vibrate(8); } catch (x) {}
                     break;
-                case 'mult': Sound.mult(e.mult); showStreak(true); break;
+                case 'mult': Sound.mult(e.mult); showStreak(true); fx.push({type: 'stamp', hole: lastHole, t0: clock, text: '×' + e.mult}); break;
                 case 'apple': {
                     Sound.apple();
                     const p0 = 1 - (core.left - e.gift) / C.ROUND, p1 = 1 - core.left / C.ROUND;
@@ -1156,15 +1187,13 @@ const Sound = (() => {
                     fx.push({type: 'time', t0: clock + 0.45, text: '+' + Math.round(e.gift) + 's', hot: true});
                     break;
                 }
-                case 'escape': Sound.escape(); if (lostStreak >= 3) scatter(lostStreak); showStreak(false); emptyPips(); break;
+                case 'escape': Sound.escape(); if (lostStreak >= 3) scatter(lostStreak, h); showStreak(false); emptyPips(); break;
                 case 'sting': {
                     Sound.sting();
-                    fx.push({type: 'ouch', hole: e.hole, t0: clock});
+                    fx.push({type: 'ouch', hole: e.hole, t0: clock, cost: e.cost});
                     if (!RM.matches) { shakeAt = clock; shakeMag = 9; }
                     const p1 = 1 - core.left / C.ROUND; beadFlash(p1 - e.cost / C.ROUND, p1, 'burn');
-                    fx.push({type: 'time', t0: clock, text: '−' + e.cost + 's', hot: false});
-                    fx.push({type: 'pop', hole: e.hole, t0: clock + 0.05, text: '−' + e.cost + 's', hot: false});
-                    if (lostStreak >= 3) scatter(lostStreak); showStreak(false); emptyPips();
+                    if (lostStreak >= 3) scatter(lostStreak, h); showStreak(false); emptyPips();
                     if (navigator.vibrate) try { navigator.vibrate([40, 30, 40]); } catch (x) {}
                     break;
                 }
@@ -1192,7 +1221,7 @@ const Sound = (() => {
                 base.rise = 1 - easeIn(clamp((age - 0.07) / 0.19, 0, 1));
                 base.burst = age / 0.32; return base;
             }
-            case 'flee': base.rise = 1; base.flee = clamp(age / C.DROP, 0, 1); return base;
+            case 'flee': base.rise = 1; base.flee = clamp(age / C.FLEE, 0, 1); return base;
         }
         return null;
     }
@@ -1205,7 +1234,7 @@ const Sound = (() => {
         const pTrue = core ? 1 - core.left / C.ROUND : 0;
         pShown += (pTrue - pShown) * Math.min(1, (Math.abs(pTrue - pShown) > 0.01 ? 0.12 : 1));
         for (const q in flashes) { const f = flashes[q]; f.k = clamp(1 - (clock - f.t0) / 0.7, 0, 1); if (clock - f.t0 > 0.7) delete flashes[q]; else if (clock < f.t0) f.k = 1; }
-        Scene.sky(ctx, L, mode === 'title' ? 0 : pShown, night, flashes);
+        Scene.sky(ctx, L, mode === 'title' ? 0 : pShown, night, flashes, mode === 'play' && core.left <= 5 && core.left > 0 ? core.left : 0);
         Scene.ground(ctx, night);
         const t = core ? core.t : clock;
         for (const h of L.holes) {
@@ -1227,8 +1256,8 @@ const Sound = (() => {
         // effects
         for (let i = fx.length - 1; i >= 0; i--) {
             const f = fx[i], age = clock - f.t0, h = f.hole != null ? L.holes[f.hole] : null;
-            if (f.type === 'pop') { if (age < 0) continue; const k = age / 0.6; if (k >= 1) { fx.splice(i, 1); continue; } Scene.pop(ctx, h.x + h.r * 1.05 * (h.col === 2 ? -1 : 1), h.y - h.r * 2.05, f.text, k, Math.max(17, h.r * 0.4), f.hot); }
-            else if (f.type === 'ouch') { const k = age / 0.38; if (k >= 1) { fx.splice(i, 1); continue; } Scene.ouch(ctx, h.x, h.y - h.r * 1.5, h.r * 1.1, k, night); }
+            if (f.type === 'pop') { if (age < 0) continue; const k = age / 0.5; if (k >= 1) { fx.splice(i, 1); continue; } Scene.pop(ctx, h.x + h.r * 1.05 * (h.col === 2 ? -1 : 1), h.y - h.r * 2.05, f.text, k, Math.max(21, h.r * 0.52), f.hot); }
+            else if (f.type === 'ouch') { const k = age / 0.55; if (k >= 1) { fx.splice(i, 1); continue; } Scene.ouch(ctx, h.x, h.y - h.r * 1.5, h.r * 1.25, k, night, '−' + f.cost + 's'); }
             else if (f.type === 'dud') { const k = age / 0.3; if (k >= 1) { fx.splice(i, 1); continue; } Scene.dud(ctx, h, k, night); }
             else if (f.type === 'apple') {
                 const k = age / 0.5; if (k >= 1) { fx.splice(i, 1); continue; }
@@ -1236,11 +1265,31 @@ const Sound = (() => {
                 Scene.flyingApple(ctx, x, y, lerp(1, 0.6, k), k * 6);
             }
             else if (f.type === 'burst' && age > 0.4) fx.splice(i, 1);
+            else if (f.type === 'pip') { // a marigold flies from the boop to its pip on the tag
+                const k = age / 0.42; if (k >= 1) { fx.splice(i, 1); continue; }
+                const [tx, ty] = pipXY(f.to), e = easeIn(k), x0 = h.x, y0 = h.y - h.r * 1.4;
+                const x = lerp(x0, tx, e), y = lerp(y0, ty, e) - Math.sin(k * Math.PI) * h.r * 1.2;
+                ctx.save(); ctx.translate(x, y); ctx.rotate(k * 5); const sc = lerp(1.3, 0.8, k);
+                for (let q = 0; q < 8; q++) { const a = q / 8 * Math.PI * 2, pts = Art.ellipsePts(Math.cos(a) * 6 * sc, Math.sin(a) * 6 * sc, 4 * sc, 2.8 * sc, 8, q, 0); Art.fill(ctx, pts, '#e07a3a'); }
+                ctx.fillStyle = '#8a3a22'; ctx.beginPath(); ctx.arc(0, 0, 3.2 * sc, 0, 7); ctx.fill();
+                ctx.restore();
+            }
+            else if (f.type === 'stamp') { // the multiplier goes up: a big rubber stamp over the burrow that earned it
+                const k = age / 0.55; if (k >= 1) { fx.splice(i, 1); continue; }
+                const sz = Math.max(40, h.r * 1.1), s = k < 0.14 ? lerp(2.2, 0.92, easeOut(k / 0.14)) : k < 0.24 ? lerp(0.92, 1, (k - 0.14) / 0.1) : 1;
+                ctx.save(); ctx.globalAlpha = k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4; ctx.translate(clamp(h.x, sz * 1.3, W - sz * 1.3), h.y - h.r * 2.3 - (k > 0.5 ? (k - 0.5) * h.r * 1.4 : 0)); ctx.rotate(-0.14); ctx.scale(s, s);
+                ctx.font = `900 ${Math.round(sz)}px Fraunces, Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                const w = ctx.measureText(f.text).width + sz * 0.5;
+                ctx.lineWidth = 4; ctx.strokeStyle = Art.INKS.dusk.poppy; ctx.strokeRect(-w / 2, -sz * 0.62, w, sz * 1.18);
+                ctx.lineJoin = 'round'; ctx.lineWidth = sz * 0.16; ctx.strokeStyle = Art.INKS.dusk.paper; ctx.strokeText(f.text, 0, sz * 0.04);
+                ctx.fillStyle = Art.INKS.dusk.poppy; ctx.fillText(f.text, 0, sz * 0.04);
+                ctx.restore();
+            }
             else if (f.type === 'petal') {
-                const k = age / 0.9; if (k >= 1) { fx.splice(i, 1); continue; }
-                const x = f.x + f.vx * age, y = f.y + f.vy * age + 520 * age * age;
+                const k = age / 1.1; if (k >= 1) { fx.splice(i, 1); continue; }
+                const x = f.x + f.vx * age + Math.sin(age * 7 + i) * 8, y = f.y + f.vy * age + 180 * age * age;
                 ctx.save(); ctx.globalAlpha = 1 - k * k; ctx.translate(x, y); ctx.rotate(f.spin * age); ctx.scale(f.s, f.s);
-                const pts = Art.ellipsePts(0, 0, 7, 4.5, 12, i, 0.05); Art.fill(ctx, pts, '#e07a3a'); Art.ink(ctx, pts, 1.6, Art.INKS.dusk.ink, i);
+                const pts = Art.ellipsePts(0, 0, 7, 3.6, 12, i, 0.12); Art.fill(ctx, pts, Art.mix('#e07a3a', '#6b4a2a', Math.min(1, k * 2.5))); Art.ink(ctx, pts, 1.6, Art.INKS.dusk.ink, i);
                 ctx.restore();
             }
             else if (f.type === 'time') { // what a sting took or an apple gave, said at the sun
@@ -1248,19 +1297,10 @@ const Sound = (() => {
                 const s = Scene.sunAt(L, pShown); Scene.pop(ctx, clamp(s.x, 50, W - 50), s.y + s.r * 1.9, f.text, k, Math.max(18, L.skyH * 0.13), f.hot);
             }
         }
-        // the last few seconds count down on the hedge
-        if (mode === 'play' && core.left <= 5 && core.left > 0) {
-            const n = Math.ceil(core.left), k = n - core.left, s = Math.min(W * 0.3, L.skyH * 0.95) * (1 + (1 - Math.min(1, k * 5)) * 0.3);
-            ctx.save(); ctx.globalAlpha = (k > 0.7 ? (1 - k) / 0.3 : 1) * 0.92;
-            ctx.font = `900 ${Math.round(s)}px Fraunces, Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.lineJoin = 'round'; ctx.lineWidth = s * 0.14; ctx.strokeStyle = Art.INKS.dusk.ink;
-            const cx = W / 2, cy = L.skyH + (L.holes[3].y - L.skyH) * 0.42;
-            ctx.strokeText(n, cx, cy); ctx.fillStyle = Art.INKS.dusk.paper; ctx.fillText(n, cx, cy);
-            ctx.restore();
-        }
         if (mode === 'title' && titleHog && titleHog.phase !== 'drop' && clock - titleHog.t0 > 0.6) {
             const h = L.holes[4]; Scene.hand(ctx, h.x + h.r * 0.12, h.y - h.r * 0.2, Math.max(0.8, h.r / 50), ((clock - titleHog.t0 - 0.6) * 0.8) % 1);
         }
+        Scene.roller(ctx, night);
         Scene.fireflies(ctx, L, clock, night);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.globalAlpha = 1 - night * 0.6; Art.mottle(ctx, W, H); ctx.globalAlpha = 1;
@@ -1272,7 +1312,7 @@ const Sound = (() => {
         if (mode === 'play') { const before = core.streak; handle(C.step(core, dt), before); }
         else if (mode === 'night') {
             C.step(core, dt);
-            night = easeOut(clamp((clock - modeAt - 0.35) / 0.9, 0, 1));
+            night = clamp((clock - modeAt - 0.3) / 0.75, 0, 1); night = night * night * (3 - 2 * night);
             if (clock - modeAt > 1.5) finish();
         }
         if (mode === 'play') Sound.wasps(core.holes.filter(e => e && e.kind === 'wasp' && (e.phase === 'up' || e.phase === 'rise')).length);
