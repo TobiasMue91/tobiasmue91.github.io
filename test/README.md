@@ -654,3 +654,29 @@ line that gives the word away, a streak that miscounts.
 
 `fair` and `docket` print what the simulated players won, which is the place to look after
 changing a list.
+
+## Squiggle (Doodling)
+
+```sh
+npm run test:doodling                    # or: node test/doodling.mjs
+node test/doodling.mjs squiggle dots     # one or more named suites
+```
+
+`doodling.mjs` runs the DOM-free `<script id="core">` block of `games/doodling.html` (Squiggle) in
+Node. The page is a tear-off sketch pad: every day the same squiggle is printed on everyone's sheet
+as a dotted line, pens take in the dots they pass over, and torn-off sheets keep every stroke so
+they can draw themselves again. What can go wrong quietly is the promise behind all of that - two
+phones that print different squiggles on the same day, dots that come back after a reload, a
+drawing that does not survive storage, a link that opens someone else's squiggle, yesterday's sheet
+thrown away instead of filed.
+
+| suite | what it checks |
+| --- | --- |
+| `squiggle` | a seed is the same squiggle everywhere; 3000 squiggles stay inside their box on tall and wide sheets, cross themselves at most twice, turn enough, are big enough and evenly sampled; share codes come back as the same seed and malformed ones are refused |
+| `days` | day numbers follow the local calendar for two years, through clock changes, and agree with their dates; ten years of days never repeat a seed |
+| `dots` | dots are evenly spaced and never pile up where the line crosses itself; printing dot by dot ends on the dots shown afterwards; a traced squiggle is taken in, a far stroke takes nothing, the eraser rubs dots out; dots taken while drawing equal the dots taken after a reload |
+| `pen` | the brush pen thins with speed and widens with stylus pressure; every pen keeps a sensible width; the same hand gives the same stroke; a tap leaves a dot |
+| `codec` | 200 random sheets, off-sheet points included, come back from storage exactly at a few bytes a point; damaged data is refused |
+| `sheets` | the first visit, the same day, a new day with and without ink, tearing, extra sheets, undo and redo, taking a sheet back out of the sketchbook, removing and restoring, and links to a squiggle |
+| `saves` | a packed sheet unpacks to the same sheet without what undo kept |
+
