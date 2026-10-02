@@ -275,6 +275,24 @@ if (suites.includes('saves')) {
     check(back.redo.length === 0, 'what undo kept is not saved');
     const npts = sh.strokes.reduce((a, s) => a + s.pts.length, 0), len = JSON.stringify(SQ.pack(sh)).length;
     check(len < 300 + npts * 9, 'a packed sheet costs a few bytes a point', len + ' chars for ' + npts + ' points');
+    // paper and ruling travel with the sheet; old saves without them come back plain cream
+    const looked = SQ.unpack(JSON.parse(JSON.stringify(SQ.pack(Object.assign(SQ.sheet({id: 'b', kind: 'day', day: 4, seed: 9}), {paper: 3, rule: 2})))));
+    check(looked.paper === 3 && looked.rule === 2, 'a sheet keeps its paper and ruling through a save');
+    const old = SQ.pack(sh); delete old.paper; delete old.rule;
+    const oldBack = SQ.unpack(old), odd = SQ.sheet({id: 'c', kind: 'day', day: 1, seed: 1, paper: 99, rule: -1});
+    check(oldBack.paper === 0 && oldBack.rule === 0 && odd.paper === 0 && odd.rule === 0, 'a save from before paper choices, or a nonsense one, is plain cream');
+    const st3 = {pad: null, book: [], day: 0}; SQ.open(st3, 40, {wide: false, now: 1, id: () => 'p', seed: () => 7, paper: 4, rule: 3});
+    check(st3.pad.paper === 4 && st3.pad.rule === 3, 'a new sheet comes on the paper chosen last');
+}
+
+if (suites.includes('pen')) {
+    section('pen sizes');
+    for (const tool of SQ.TOOLS) {
+        const ws = SQ.SIZES.map(k => { const p = new SQ.Pen(tool, 100, 100, 0, -1, k); for (let i = 1; i < 30; i++) p.add(100 + i * 4, 100, i * 16, -1); p.end(220, 100, 500); return Math.max(...p.pts.map(q => q[2])); });
+        check(ws.every((w, i) => !i || w > ws[i - 1]), tool + ': each nib size draws wider than the one before', ws.join(' '));
+        const plain = new SQ.Pen(tool, 0, 0, 0, -1), mid = new SQ.Pen(tool, 0, 0, 0, -1, 1);
+        check(plain.pts[0][2] === mid.pts[0][2], tool + ': a pen without a size is the medium nib');
+    }
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);
