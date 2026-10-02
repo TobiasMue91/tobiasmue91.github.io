@@ -630,6 +630,107 @@ with the wrong panes.
 `bots` prints each bot's night - windows, minutes, candles lost, longest window, longest dry
 rally - which is the place to look after changing a window, a speed or the stall assist.
 
+## Last Words (Hangman)
+
+```sh
+npm run test:hangman                     # or: node test/hangman.mjs
+node test/hangman.mjs words fair         # one or more named suites
+```
+
+`hangman.mjs` runs the DOM-free `<script id="core">` block of `games/hangman.html` (Last Words) in
+Node. The page is Hangman on an execution broadside: a woodcut, a word, a type case. The rules are
+small; what can go wrong quietly is in the 800 words and the order they come in: a word nobody can
+reach from its clue, a daily sheet that repeats or puts the same clue on two days running, a share
+line that gives the word away, a streak that miscounts.
+
+| suite | what it checks |
+| --- | --- |
+| `words` | every clue has thirty words or more and reads after "His last word -"; every word is 4-11 plain letters and belongs to one clue only |
+| `rules` | a hit names every slot it fills; a letter tried twice costs nothing; anything but one letter is refused; five marks stand, the sixth hangs; the last letter pardons even at five marks; nothing is taken after the end; the share line gives nothing of the word away |
+| `daily` | sheet numbers follow the local calendar day, through clock changes; a sheet is the same for everyone; every fair word comes round once before any repeats; no clue two days running; every sheet 5-10 letters and neither giveaway nor lottery |
+| `fair` | no word can be lost by a player who knows every word in its clue; players who know 80%, 50% and 20% of each clue win what they did when the list was made |
+| `docket` | the endless docket never gets easier, never repeats a word in forty cases, lets a player in and wears them down |
+| `saves` | a half-played sheet comes back exactly; damaged saves are dropped; the old page's games played and won carry over; streaks count consecutive sheets and each sheet once |
+
+`fair` and `docket` print what the simulated players won, which is the place to look after
+changing a list.
+
+## Highlight (Word Search)
+
+```sh
+npm run test:wordsearch                  # or: node test/word_search.mjs
+node test/word_search.mjs puzzles input  # one or more named suites
+```
+
+`word_search.mjs` runs the DOM-free `<script id="core">` block of `games/word_search.html`
+(Highlight) in Node. Every puzzle there is built from a seed - a numbered book that grows from
+8×8 across-and-down to 10×10 in every direction, and one daily grid that is the same for everyone -
+and each makes a promise nobody can check by looking: every listed word is in the grid exactly
+once and nowhere by accident, and the cells no word uses spell the theme's hidden message in
+reading order. A word list that gains a word hidden inside another, a message that happens to
+contain a listed word, or a change to the generator can break that for one seed in a thousand.
+
+| suite | what it checks |
+| --- | --- |
+| `themes` | every word list and message is plain capitals; no word sits inside another, forwards or backwards; no message holds a listed word; every theme fits some grid size |
+| `puzzles` | the first 300 book puzzles, a year of dailies and 25 seeds of every theme at every size it fits: each word straight, in an allowed direction, reading exactly once; the leftover cells are exactly the message; the message takes a fair share of the grid; no grid is mostly one direction; the same seed gives the same grid |
+| `book` | grids grow and directions arrive in order, backwards last; no theme returns within twelve puzzles and the book uses them all; neighbouring days never share a theme |
+| `input` | drags snap to the eight directions, clip at the edge and hold a direction through a wobble; every angle gives a straight run; tap-tap joins two cells; a word reads from either end, part of a word does not |
+| `play` | bots find every word through the calls the page makes: the message is dealt in order, never back, whole at the end; touching strokes never share a pen; a guess at the message reads only when it is exactly the part not yet dealt |
+| `save` | junk and old saves come back usable; the book never sits behind a solved puzzle; streaks count consecutive days, across the clock change |
+## Tells (Rock Paper Scissors)
+
+```sh
+npm run test:tells                            # or: node test/rock_paper_scissors.mjs
+node test/rock_paper_scissors.mjs fair tells  # one or more named suites
+node test/rock_paper_scissors.mjs --matches=1000
+```
+
+`rock_paper_scissors.mjs` runs the DOM-free `<script id="core">` block of
+`games/rock_paper_scissors.html` (Tells) in Node. The page is rock paper scissors against six
+machines, each with one habit to find, and the last, the Oracle, reads the player. The promises a
+player cannot check from the table: the machine never sees the throw it is playing against, the
+tell card names the habit the machine really has, and what the Oracle says about you is true.
+Players here see only what a person at the table sees - the tape, the score and, against Bluff,
+the call.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | every pairing of throws; forty matches per machine end at exactly five and keep their books; nothing plays after the end; a throw that is not rock, paper or scissors is refused |
+| `fair` | three copies of a match that differ only in the player's throw this round get the same machine hand and the same call - the machine commits before it can see yours |
+| `tells` | knowing a machine's tell wins 88%+ of matches and shortens them; throwing at random wins 40-60%; each machine keeps its habit well above chance; the count on the tell card equals the count from the tape |
+| `ladder` | a player who reads the tape beats the first three machines easily, Bluff and Grudge less often, and loses to the Oracle more often than not |
+| `oracle` | a truly random player gets a fair coin; cycling, sticky, rock-heavy and human-like players are read; with saved memory it wins the opening rounds of a new match more often |
+| `lines` | every sentence the Oracle says ("After rock, you went paper 3 of 4.") is recounted from the tape and true, and only said on a round its read won; Echo, Spin and Grudge play back exactly the throw they acted on |
+| `memory` | junk in the saved Oracle memory is replaced, never trusted; the memory survives JSON; the same memory and seed play the same match |
+
+`ladder` prints how often a tape-reading bot beats each machine, which is the number to watch after
+changing how often a machine keeps its habit.
+
+## Squiggle (Doodling)
+
+```sh
+npm run test:doodling                    # or: node test/doodling.mjs
+node test/doodling.mjs squiggle dots     # one or more named suites
+```
+
+`doodling.mjs` runs the DOM-free `<script id="core">` block of `games/doodling.html` (Squiggle) in
+Node. The page is a tear-off sketch pad: every day the same squiggle is printed on everyone's sheet
+as a dotted line, pens take in the dots they pass over, and torn-off sheets keep every stroke so
+they can draw themselves again. What can go wrong quietly is the promise behind all of that - two
+phones that print different squiggles on the same day, dots that come back after a reload, a
+drawing that does not survive storage, a link that opens someone else's squiggle, yesterday's sheet
+thrown away instead of filed.
+
+| suite | what it checks |
+| --- | --- |
+| `squiggle` | a seed is the same squiggle everywhere; 3000 squiggles stay inside their box on tall and wide sheets, cross themselves at most twice, turn enough, are big enough and evenly sampled; share codes come back as the same seed and malformed ones are refused |
+| `days` | day numbers follow the local calendar for two years, through clock changes, and agree with their dates; ten years of days never repeat a seed |
+| `dots` | dots are evenly spaced and never pile up where the line crosses itself; printing dot by dot ends on the dots shown afterwards; a traced squiggle is taken in, a far stroke takes nothing, the eraser rubs dots out; dots taken while drawing equal the dots taken after a reload |
+| `pen` | the brush pen thins with speed and widens with stylus pressure; every pen keeps a sensible width; the same hand gives the same stroke; a tap leaves a dot |
+| `codec` | 200 random sheets, off-sheet points included, come back from storage exactly at a few bytes a point; damaged data is refused |
+| `sheets` | the first visit, the same day, a new day with and without ink, tearing, extra sheets, undo and redo, taking a sheet back out of the sketchbook, removing and restoring, and links to a squiggle |
+| `saves` | a packed sheet unpacks to the same sheet without what undo kept |
 ## Prickle Patch (Whac-a-Hedgehog)
 
 ```sh

@@ -83,16 +83,21 @@ npm run test:emoji          # Peel & Seek suite (plain Node, no server or browse
 npm run test:rps            # Hands Up suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:mystery        # Under the Lamp suite (plain Node, no server or browser)
 npm run test:breakout       # Vigil (Breakout) suite (plain Node, no server or browser)
+npm run test:hangman        # Last Words (Hangman) suite (plain Node, no server or browser)
+npm run test:wordsearch     # Highlight (Word Search) suite (plain Node, no server or browser)
+npm run test:tells          # Tells (Rock Paper Scissors) suite (plain Node, no server or browser)
+npm run test:doodling       # Squiggle (Doodling) suite (plain Node, no server or browser)
 npm run test:whac           # Prickle Patch (Whac-a-Hedgehog) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
-re-makes the hands Hands Up embeds, from Microsoft's MIT-licensed Fluent Emoji 3D set.
+re-makes the hands Hands Up embeds, from Microsoft's MIT-licensed Fluent Emoji 3D set. Tells
+(`games/rock_paper_scissors.html`) inlines the same set's Flat SVGs verbatim, coloured by CSS, so it needs no script.
 Page tests live in `test/`, which has its own README; `cypress/` stays separate because
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Twenty exist so far. `test/everything_converter.mjs` drives
+Twenty-four exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -188,6 +193,30 @@ reached without passing lead, thousands of seeded sparks never slip into a pane,
 or off their speed, the combo, jewels and candles do what the page shows, a save comes back pane
 for pane, and bots of three skills keep the whole night without a rally going dry for long. Run it
 after touching `WINDOWS`, the physics or the stall assist.
+`test/hangman.mjs` runs the DOM-free `<script id="core">` block of `games/hangman.html` (Last Words),
+Hangman on an execution broadside: every word of the 800 is reachable from its clue by a player who
+knows the clue's words, today's sheet is the same for everyone and runs through every fair word before
+one repeats or a clue comes round two days running, the share line never gives the word away, a
+streak counts the way the verdict says, and the endless docket lets a player in and then wears them
+down. Run it after touching the word lists, the daily order or the record.
+`test/word_search.mjs` runs the DOM-free `<script id="core">` block of `games/word_search.html`
+(Highlight), a word search whose leftover letters spell a hidden message: hundreds of book puzzles,
+a year of dailies and every theme at every size must hold each word exactly once and nowhere by
+accident, with the unused cells spelling the message in reading order; word lists may not hide one
+word inside another, and drags must snap straight at every angle. Run it after touching `THEMES`
+or the generator.
+`test/rock_paper_scissors.mjs` runs the DOM-free `<script id="core">` block of
+`games/rock_paper_scissors.html` (Tells), rock paper scissors against six machines with one habit
+each: no machine sees your throw before it commits to its own, each tell card states the habit the
+machine really has (a player who knows it wins nearly every match, one who throws at random gets a
+fair coin), the count the card shows matches the tape, and every sentence the Oracle says about you
+is true of this match. Run it after touching a machine or the Oracle.
+`test/doodling.mjs` runs the DOM-free `<script id="core">` block of `games/doodling.html` (Squiggle),
+a doodle pad with a squiggle a day: every day's squiggle is the same on every device, stays on its
+sheet in both orientations and never knots into a blot, its dots are evenly spaced, the dots a pen
+takes in while drawing are the ones still taken after a reload, a sheet round-trips through storage
+exactly, and a new day files yesterday's drawing instead of losing it. Run it after touching the
+squiggle, the pens, the codec or the pad and sketchbook rules.
 `test/whac.mjs` runs the DOM-free `<script id="core">` block of `games/whac.html` (Prickle Patch),
 whac-a-mole with hedgehogs: every boop, sting, apple and miss is worth what the rules say, no burrow
 ever holds two things or comes up unwarned, the first round meets a lone wasp before it gets busy,
