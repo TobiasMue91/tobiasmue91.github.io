@@ -16,6 +16,9 @@
 //   bots    a bot plays Marathon; the board stays consistent, a save made at any moment resumes
 //           identically, and a decent player reaches level 15
 //
+//   auto    sink and clone, and the band's own player (Watch): every key it plans is legal, it
+//           keeps time (a short plan per piece, one drop at its end), plays for quads, never tops out
+//
 //   node test/blockdrop.mjs                 # everything
 //   node test/blockdrop.mjs srs spin        # named suites only
 //   node test/blockdrop.mjs --page=x.html   # another copy of the page
@@ -29,7 +32,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const a = args.find(x => x.startsWith(`--${name}=`)); return a ? a.split('=')[1] : dflt; };
 const PAGE = opt('page', join(HERE, '..', 'games', 'blockdrop.html'));
-const ALL = ['srs', 'spin', 'score', 'bag', 'timing', 'bots'];
+const ALL = ['srs', 'spin', 'score', 'bag', 'timing', 'bots', 'auto'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -43,8 +46,9 @@ const HTML = readFileSync(PAGE, 'utf8');
 const core = HTML.match(/<script id="core">([\s\S]*?)<\/script>/);
 if (!core) { console.log('no <script id="core"> block in ' + PAGE); process.exit(1); }
 const ctx = vm.createContext({});
-vm.runInContext(core[1] + '\nthis.BW = BW;', ctx);
-const BW = ctx.BW;
+const auto = HTML.match(/<script id="auto">([\s\S]*?)<\/script>/);
+vm.runInContext(core[1] + '\n' + (auto ? auto[1] : '') + '\nthis.BW = BW; this.AUTO = typeof AUTO === "undefined" ? null : AUTO;', ctx);
+const BW = ctx.BW, AUTO = ctx.AUTO;
 const {W, H} = BW;
 
 function mulberry(a) {
@@ -498,6 +502,57 @@ if (suites.includes('bots')) {
     check(!badState, 'every lock adds four cells and every cleared row takes ten', badState);
     check(!badResume, 'a game saved at any moment resumes identically', badResume);
     check(reached >= GAMES - 1, `a careful bot reaches level 15 in Marathon (${reached}/${GAMES})`);
+}
+
+if (suites.includes('auto')) {
+    section('auto');
+    { // sink: to the floor, a point a row, still movable; a T sunk into its slot can still turn in
+        const g = fresh(21);
+        setRows(g, ['...X......', 'XXX...XXXX', 'XXXX.XXXXX']);
+        g.cur = {k: 'T', r: 1, x: 3, y: 26};
+        const s0 = g.score, d = BW.sink(g);
+        check(d === H - 3 - 26 && g.score - s0 === d && g.cur && g.pieces === 0, 'sink drops to the floor, a point a row, and does not lock', `${d} rows, +${g.score - s0}`);
+        BW.rotate(g, 1);
+        g.events.length = 0;
+        BW.hardDrop(g);
+        const c = g.events.find(e => e.t === 'clear');
+        check(c && c.spin === 'full' && c.n === 2, 'a T sunk beside its slot and turned in is a T-spin double', JSON.stringify(c && {n: c.n, spin: c.spin}));
+    }
+    { // clone: a copy plays on alone and the same keys give the same game
+        const g = fresh(22), h = BW.clone(g);
+        for (const x of [g, h]) { BW.move(x, -1); BW.rotate(x, 1); BW.hardDrop(x); BW.tick(x, 1); BW.hold(x); BW.hardDrop(x); }
+        const o = BW.clone(g);
+        BW.hardDrop(o);
+        check(JSON.stringify(BW.save(g)) === JSON.stringify(BW.save(h)) && o.pieces === g.pieces + 1, 'a clone plays exactly like the original, and apart from it');
+    }
+    if (!AUTO) fail('no <script id="auto"> block in the page');
+    else {
+        const DO = {hold: g => BW.hold(g), cw: g => BW.rotate(g, 1), ccw: g => BW.rotate(g, -1), L: g => BW.move(g, -1), R: g => BW.move(g, 1),
+            sink: g => BW.sink(g) >= 0, drop: g => BW.hardDrop(g)};
+        const PIECES = +opt('pieces', 500);
+        let bad = '', longest = 0, lines = 0, quadLines = 0, over = 0, plans = 0, maxH = 0;
+        for (const seed of [31, 32, 33]) {
+            const g = fresh(seed);
+            while (!g.over && g.pieces < PIECES && !bad) {
+                if (!g.cur) { BW.tick(g, BW.CLEAR_DELAY); continue; }
+                const keys = AUTO.plan(g);
+                plans++;
+                longest = Math.max(longest, keys.length);
+                if (keys.indexOf('drop') !== keys.length - 1) bad = `seed ${seed}: plan ${keys.join(' ')} does not end in its one drop`;
+                g.events.length = 0;
+                const before = g.pieces;
+                for (const k of keys) if (!DO[k](g)) { bad = bad || `seed ${seed}, piece ${g.pieces}: '${k}' refused in ${keys.join(' ')}`; break; }
+                if (g.pieces !== before + 1 && !bad) bad = `seed ${seed}: a plan placed ${g.pieces - before} pieces`;
+                for (const e of g.events) if (e.t === 'clear' && e.n) { lines += e.n; if (e.n === 4) quadLines += 4; }
+                maxH = Math.max(maxH, AUTO.shape(g.board).max);
+            }
+            if (g.over) over++;
+        }
+        check(!bad, `${plans} plans of the band's player are all legal, each ending in one drop`, bad);
+        check(longest <= 12, `a piece never takes more than twelve keys, so it lands within a bar and a half (longest ${longest})`);
+        check(over === 0, `three games of ${PIECES} pieces without topping out (highest stack ${maxH} rows)`);
+        check(quadLines >= .35 * lines, `it plays for quads: ${quadLines} of ${lines} rows go four at a time`);
+    }
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

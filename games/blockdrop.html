@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Boogie Woogie - falling blocks after Mondrian</title>
-<meta name="description" content="Boogie Woogie is a falling-block puzzle in Mondrian's Broadway Boogie Woogie: modern rules with hold, five previews, T-spins and combos, a boogie-woogie band that plays your moves, a two-minute daily, and a phone you play by dragging, tapping and flicking.">
+<meta name="description" content="Boogie Woogie is a falling-block puzzle in Mondrian's Broadway Boogie Woogie: modern rules with hold, five previews, T-spins and combos, a boogie-woogie band that plays your moves, a two-minute daily, a Watch mode where the band plays the game itself in time, and a phone you play by dragging, tapping and flicking.">
 <meta name="theme-color" content="#ECE8DE">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -379,6 +379,17 @@ const BW = (() => {
         lock(g, {hard: true, dist, from});
         return true;
     }
+    // Soft drop straight to the floor without locking - a point a row, as a held soft drop scores -
+    // so the piece can still be tucked or turned into a slot. Returns the rows it fell.
+    function sink(g) {
+        if (!playable(g)) return -1;
+        const from = g.cur.y;
+        while (canFall(g)) g.cur.y++;
+        const dist = g.cur.y - from;
+        if (dist) { g.lastRot = null; g.score += dist; g.events.push({t: 'sink', dist}); }
+        newLowest(g);
+        return dist;
+    }
     function hold(g) {
         if (g.started && !g.over && g.are > 0) { g.ihs = true; return false; }
         if (!playable(g) || g.holdUsed) { g.events.push({t: 'hold-fail'}); return false; }
@@ -525,9 +536,136 @@ const BW = (() => {
         return g;
     }
 
+    // A copy to try moves on: everything a game is, nothing shared with the original.
+    function clone(g) {
+        return {...g, board: g.board.slice(), queue: g.queue.slice(), cur: g.cur && {...g.cur},
+            lastRot: g.lastRot && {...g.lastRot}, stats: {...g.stats}, events: []};
+    }
+
     return {W, H, TOP, KINDS, SHAPES, MARK, LOCK_DELAY, MAX_RESETS, CLEAR_DELAY, LINES_PER_LEVEL,
-        gravity, rand, hashSeed, create, start, move, rotate, hardDrop, hold, setSoft, tick, ghostY,
-        fits, cellsOf, cellKind, cellMark, cellPiece, save, load, tspin};
+        gravity, rand, hashSeed, create, start, move, rotate, hardDrop, hold, setSoft, sink, tick, ghostY,
+        fits, cellsOf, cellKind, cellMark, cellPiece, save, load, clone, tspin};
+})();
+</script>
+<script id="auto">
+// The band's own player, for Watch: it decides where each piece goes and which keys take it there,
+// and the page presses those keys one to an eighth note. DOM-free like the rules it plays by;
+// test/blockdrop.mjs makes it play hundreds of rows. It plays the way a quad player does: a flat
+// stack with the right-hand column kept open as a well, an I saved in hold for it, T-spins taken
+// when a slot is there, and any clear at all once the stack climbs.
+const AUTO = (() => {
+    const W = BW.W, H = BW.H, WELL = W - 1;
+    function shape(b) {
+        const heights = [];
+        let holes = 0, covered = 0;
+        for (let x = 0; x < W; x++) {
+            let top = H;
+            for (let y = 0; y < H; y++) if (b[y * W + x]) { top = y; break; }
+            heights.push(H - top);
+            let above = 0;
+            for (let y = top; y < H; y++) {
+                if (b[y * W + x]) above++;
+                else { holes++; covered += above; }
+            }
+        }
+        let bump = 0;
+        for (let x = 0; x < WELL - 1; x++) bump += Math.abs(heights[x] - heights[x + 1]);
+        let ready = 0; // rows full but for the well: what the next I will take
+        for (let y = H - 1; y >= 0; y--) {
+            let n = 0;
+            for (let x = 0; x < WELL; x++) if (b[y * W + x]) n++;
+            if (n === WELL && !b[y * W + WELL]) ready++; else break;
+        }
+        const stack = heights.slice(0, WELL);
+        return {heights, holes, covered, bump, ready, max: Math.max(...heights), min: Math.min(...stack), sum: stack.reduce((a, v) => a + v, 0)};
+    }
+    // Dellacherie's features (the ones that keep a stack alive indefinitely), and on top of them a
+    // quad player's taste while the stack is low: keep the well open and save the rows for an I.
+    function transitions(b) {
+        let row = 0, col = 0, wells = 0;
+        for (let y = 0; y < H; y++) {
+            let prev = 1;
+            for (let x = 0; x < W; x++) { const f = b[y * W + x] ? 1 : 0; if (f !== prev) row++; prev = f; }
+            if (!prev) row++;
+        }
+        for (let x = 0; x < W; x++) {
+            let prev = 0;
+            for (let y = 0; y < H; y++) { const f = b[y * W + x] ? 1 : 0; if (f !== prev) col++; prev = f; }
+            if (!prev) col++;
+        }
+        for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) {
+            if (b[y * W + x]) break;
+            const l = x === 0 || b[y * W + x - 1], r = x === W - 1 || b[y * W + x + 1];
+            if (l && r) { let d = 0; for (let k = y; k < H && !b[k * W + x]; k++) d++; if (x !== WELL) wells += d * (d + 1) / 2; }
+        }
+        return {row, col, wells};
+    }
+    function value(g, before, lock, clear) {
+        const f = shape(g.board), t = transitions(g.board), n = clear ? clear.n : 0;
+        const landing = lock ? H - lock.cells.reduce((a, c) => a + c[1], 0) / 4 : 0;
+        const eroded = n && lock ? n * lock.cells.filter(([, y]) => clear.rows.includes(y)).length : 0;
+        let v = -4.5 * landing + 3.4 * eroded - 3.2 * t.row - 9.3 * t.col - 7.9 * f.holes - 3.4 * t.wells;
+        const calm = before.max < 12 && f.max < 14;
+        if (calm) { // play for quads
+            v += 4 * Math.min(f.ready, 4) - 12 * f.heights[WELL];
+            if (n === 4) v += 120; else if (n && !(clear && clear.spin)) v -= 50;
+        }
+        if (clear && clear.spin === 'full' && n) v += 40 * n;
+        if (clear && clear.allClear) v += 50;
+        if (g.hold === 'I' && calm) v += 4;
+        return v;
+    }
+    const DO = {hold: g => BW.hold(g), cw: g => BW.rotate(g, 1), ccw: g => BW.rotate(g, -1), L: g => BW.move(g, -1), R: g => BW.move(g, 1),
+        sink: g => BW.sink(g) >= 0, drop: g => BW.hardDrop(g)};
+    function play(g, keys) {
+        for (const k of keys) if (!DO[k](g)) return false;
+        return true;
+    }
+    // Every placement reachable by: hold or not, a turn, a slide, and then either a drop, or a
+    // sink to the floor followed by a tuck sideways or a last turn (which is how T-spins are made).
+    function options(g, allowHold) {
+        const out = [], before = shape(g.board);
+        const holds = allowHold && !g.holdUsed ? [false, true] : [false];
+        for (const h of holds) {
+            const start = BW.clone(g);
+            if (h && !BW.hold(start)) continue;
+            if (!start.cur) continue;
+            const turns = start.cur.k === 'O' ? [[]] : [[], ['cw'], ['cw', 'cw'], ['ccw']];
+            for (const turn of turns) for (let dx = -5; dx <= 5; dx++) {
+                const slide = Array(Math.abs(dx)).fill(dx < 0 ? 'L' : 'R');
+                const at = BW.clone(start);
+                if (!play(at, [...turn, ...slide])) continue;
+                const ends = [['drop'], ['sink', 'L', 'drop'], ['sink', 'R', 'drop']];
+                if (at.cur.k === 'T') ends.push(['sink', 'cw', 'drop'], ['sink', 'ccw', 'drop']);
+                for (const end of ends) {
+                    const t = BW.clone(at);
+                    if (!play(t, end) || t.over) continue;
+                    const clear = t.events.find(e => e.t === 'clear'), lock = t.events.find(e => e.t === 'lock');
+                    const v = value(t, before, lock, clear) - (end.length > 1 ? .3 : 0) - .02 * (turn.length + slide.length);
+                    out.push({v, keys: [...(h ? ['hold'] : []), ...turn, ...slide, ...end], after: t});
+                }
+            }
+        }
+        return out;
+    }
+    // Two pieces deep: the best few placements of this piece are judged by the best the next piece
+    // can do after them.
+    function plan(g) {
+        if (!g.cur) return null;
+        const first = options(g, true).sort((a, b) => b.v - a.v).slice(0, 6);
+        if (!first.length) return ['drop'];
+        let best = first[0], bestV = -Infinity;
+        for (const o of first) {
+            const next = BW.clone(o.after);
+            if (!next.cur && !next.over) { next.are = 1; BW.tick(next, 1); }
+            let v2 = -1e4;
+            if (next.cur && !next.over) for (const p of options(next, false)) v2 = Math.max(v2, p.v);
+            const v = o.v + v2;
+            if (v > bestV) { bestV = v; best = o; }
+        }
+        return best.keys;
+    }
+    return {plan, shape};
 })();
 </script>
 <script>
@@ -592,7 +730,7 @@ function persist() { try { localStorage.setItem(STORE, JSON.stringify(S)); } cat
 // that belongs to the chord of this beat, so nothing the player does can sound wrong.
 const Band = (() => {
     let ac = null, master, music, sfx, comp, noiseBuf;
-    let running = false, nextTime = 0, step = 0, bpm = 104, timer = 0, danger = false;
+    let lastStep = 0, running = false, nextTime = 0, step = 0, bpm = 104, timer = 0, danger = false;
     const beats = []; // visual beats waiting for their moment: {time}
     const BARS = [0, 0, 0, 0, 5, 5, 0, 0, 7, 5, 0, 7];
     const WALK = [0, 4, 7, 9, 10, 9, 7, 4];
@@ -666,7 +804,7 @@ const Band = (() => {
             const t = nextTime + swing - (i % 2 ? beat / 2 : 0);
             bass(danger ? root : root + WALK[i], Math.max(t, ac.currentTime), i % 2 ? .38 : .5);
             if (i % 2) hat(t, .05); else if (i % 4 === 2) hat(t, .08);
-            beats.push(t);
+            beats.push([t, step]);
             nextTime += beat / 2;
             step++;
         }
@@ -682,13 +820,14 @@ const Band = (() => {
         stop() { running = false; clearInterval(timer); beats.length = 0; },
         tempo(t) { bpm = t; },
         get bpm() { return bpm; },
+        get lastStep() { return lastStep; },
         setDanger(d) { danger = d; },
         // beats whose moment has come (the city steps on them)
         due() {
             if (!running) return 0;
             if (!ac) return 0;
             let n = 0;
-            while (beats.length && beats[0] <= ac.currentTime) { beats.shift(); n++; }
+            while (beats.length && beats[0][0] <= ac.currentTime) { lastStep = beats.shift()[1]; n++; }
             return n;
         },
         apply() {
@@ -1082,13 +1221,13 @@ function start(m, resumeData) {
     if (resumeData) G = BW.load(resumeData);
     if (!G || !resumeData) {
         G = m === 'daily' ? BW.create({seed: BW.hashSeed('boogie-woogie ' + today()), timeLimit: 120000}) : BW.create({});
-        S.saved = null;
+        if (m !== 'watch') S.saved = null;
     }
     G.events.length = 0;
     anim = null; fx = []; dotAlpha = 1; dangerOn = false;
     scoreShown = G.score; scoreFrom = G.score; scoreAt = 0;
     if (m === 'marathon') { S.games++; persist(); }
-    lessonFor = null;
+    lessonFor = null; autoKeys = null; watchStep = 0;
     state = 'countin'; countAt = performance.now(); countN = 0;
     Band.stop(); Band.setDanger(false); Band.tempo(tempoFor(G.level));
     setScreen(); refreshHUD(true); drawPreviews();
@@ -1198,8 +1337,10 @@ function onOver(ev, now) {
     fx.push({t: 'die', at: now, cells: G.cur ? BW.cellsOf(G.cur) : (lastLock || [])}); Band.stop(); Band.over();
     keys.clear();
     const best = mode === 'daily' ? (S.daily[today()] || 0) : S.best;
-    G.newBest = G.score > best && G.score > 0; G.oldBest = best;
-    if (mode === 'marathon') { if (G.score > S.best) S.best = G.score; S.saved = null; }
+    G.newBest = mode !== 'watch' && G.score > best && G.score > 0; G.oldBest = best;
+    if (mode === 'watch') { // the band's games keep no records; it starts a new one by itself
+        setTimeout(() => { if (state === 'over' && mode === 'watch') start('watch'); }, REDUCED.matches ? 6000 : 9000);
+    } else if (mode === 'marathon') { if (G.score > S.best) S.best = G.score; S.saved = null; }
     else {
         const d = today();
         S.daily[d] = Math.max(S.daily[d] || 0, G.score);
@@ -1227,7 +1368,7 @@ function refreshHUD(force) {
     hud.level.textContent = lv;
     const into = G ? lines % BW.LINES_PER_LEVEL : 0;
     hud.sq.forEach((q, i) => q.classList.toggle('on', i < into));
-    if (hud.best) hud.best.textContent = mode === 'daily' && state !== 'menu' ? fmt(S.daily[today()] || 0) : fmt(S.best);
+    if (hud.best) hud.best.textContent = mode === 'watch' && state !== 'menu' ? '—' : mode === 'daily' && state !== 'menu' ? fmt(S.daily[today()] || 0) : fmt(S.best);
     if (state === 'menu' || !G) hud.score.textContent = '0';
     updateTime();
 }
@@ -1480,7 +1621,7 @@ function lessonDone(k) {
     if (lessonFor === k) { lessonFor = null; hideLesson(); setTimeout(lessonCheck, 450); }
 }
 function lessonCheck() {
-    if (!G || state !== 'play') return;
+    if (!G || state !== 'play' || mode === 'watch') return;
     const next = LESSONS.find(k => !S.lessons[k]);
     if (!next) { hideLesson(); lessonFor = null; return; }
     if (next === 'hold' && G.pieces < 3) return; // hold waits until the player has a few pieces down
@@ -1596,8 +1737,9 @@ function showScreen() {
             ${saved ? `<button class="blk r" data-a="continue"><b>Continue</b><span>Level ${S.saved.level} · ${fmt(S.saved.score)}</span></button>` : ''}
             <button class="blk y" data-a="play"><b>Play</b><span>Marathon${S.best ? ' · best ' + fmt(S.best) : ''}</span></button>
             <button class="blk b" data-a="daily"><b>Daily</b><span>${daily != null ? 'Today ' + fmt(daily) : "Two minutes, today's pieces"}${streak > 1 ? ' · ' + streak + ' days running' : ''}</span></button>
+            <button class="blk g" data-a="watch" style="box-shadow:inset 0 0 0 2px var(--track)"><b>Watch</b><span>The band plays it, in time</span></button>
             <button class="textbtn" data-a="sound">Sound <span>${S.sound ? 'on' : 'off'}</span></button>
-            ${LY.menuPanel && !TOUCH ? `<div class="keys menukeys"><span><span class="kc">←</span><span class="kc">→</span></span><span>move</span><span><span class="kc">↑</span><span class="kc">Z</span></span><span>turn</span><span><span class="kc">Space</span></span><span>drop</span><span><span class="kc">C</span></span><span>hold</span><span><span class="kc">Enter</span></span><span>play</span></div>` : ''}
+            ${LY.menuPanel && !TOUCH ? `<div class="keys menukeys"><span><span class="kc">←</span><span class="kc">→</span></span><span>move</span><span><span class="kc">↑</span><span class="kc">Z</span></span><span>turn</span><span><span class="kc">Space</span></span><span>drop</span><span><span class="kc">C</span></span><span>hold</span><span><span class="kc">Enter</span></span><span>play</span><span><span class="kc">W</span></span><span>watch</span></div>` : ''}
             <a class="credit" href="https://www.gptgames.dev/">more games at gptgames.dev</a>`;
     } else if (state === 'paused') {
         card.style.top = Math.round(c * 2) + 'px';
@@ -1623,11 +1765,11 @@ function showScreen() {
             Object.assign(card.style, {left: left + 'px', right: 'auto', width: w + 'px', top: (LY.y0 + Math.round(c * 1.6)) + 'px', padding: '0'});
         }
         const d = new Date(), date = d.toLocaleDateString('en-GB', {day: 'numeric', month: 'long', year: 'numeric'});
-        const no = mode === 'daily' ? 'Daily, ' + date : 'Composition No. ' + S.games;
+        const no = mode === 'daily' ? 'Daily, ' + date : mode === 'watch' ? 'Composition for the band' : 'Composition No. ' + S.games;
         card.innerHTML = `<div class="labelcard">
-            <div class="lt"></div><div class="ls">${mode === 'daily' ? 'Two minutes, everyone\'s pieces' : 'Boogie Woogie, ' + d.getFullYear()}</div>
+            <div class="lt"></div><div class="ls">${mode === 'daily' ? 'Two minutes, everyone\'s pieces' : mode === 'watch' ? 'Played by the band, ' + d.getFullYear() : 'Boogie Woogie, ' + d.getFullYear()}</div>
             <dl><dt>Points</dt><dd>${fmt(G.score)}</dd><dt>Lines</dt><dd>${G.lines}</dd><dt>Level</dt><dd>${G.level}</dd><dt>Time</dt><dd>${clock(G.elapsed)}</dd></dl>
-            ${G.newBest ? `<div class="nb">New best</div>${G.oldBest ? `<div class="ls" style="font-style:normal">${fmt(G.score - G.oldBest)} past the old one</div>` : ''}` : `<div class="ls" style="font-style:normal">Best ${fmt(G.oldBest)}<br>${fmt(G.oldBest - G.score)} short of it</div>`}
+            ${mode === 'watch' ? '<div class="ls" style="font-style:normal">A new one begins in a moment</div>' : G.newBest ? `<div class="nb">New best</div>${G.oldBest ? `<div class="ls" style="font-style:normal">${fmt(G.score - G.oldBest)} past the old one</div>` : ''}` : `<div class="ls" style="font-style:normal">Best ${fmt(G.oldBest)}<br>${fmt(G.oldBest - G.score)} short of it</div>`}
             </div>
             <div class="btnrow wallbtns"><button class="blk y" data-a="again"><b>Again</b></button><button class="blk g" data-a="menu" style="box-shadow:inset 0 0 0 2px var(--track)"><b>Menu</b></button></div>
             ${mode === 'daily' ? '<button class="blk b small" data-a="share"><b>Share</b><span>today\'s result</span></button>' : ''}`;
@@ -1659,6 +1801,7 @@ function onButton(a, b) {
     case 'play': start('marathon'); break;
     case 'continue': start('marathon', S.saved); break;
     case 'daily': start('daily'); break;
+    case 'watch': start('watch'); break;
     case 'resume': resume(); break;
     case 'restart': S.saved = null; start(mode); break;
     case 'menu': toMenu(); break;
@@ -1761,6 +1904,7 @@ addEventListener('keydown', e => {
         if (e.code === 'Enter' && document.activeElement && document.activeElement.tagName === 'BUTTON') return;
         if (e.code === 'Enter' || e.code === 'Space') start('marathon');
         else if (e.code === 'KeyD') start('daily');
+        else if (e.code === 'KeyW') start('watch');
         return;
     }
     if (state === 'over') {
@@ -1774,6 +1918,7 @@ addEventListener('keydown', e => {
     if (!a || e.repeat) return;
     if (a === 'pause') { pause(); return; }
     if (state !== 'play' && state !== 'countin') return;
+    if (mode === 'watch') return;
     keys.add(a);
     if (a === 'left' || a === 'right') { dir = a === 'left' ? -1 : 1; dasT = 0; arrT = 0; if (state === 'play') doMove(dir); }
     else if (state !== 'play') { if (a === 'cw' || a === 'ccw' || a === 'hold') { /* buffered below at the start */ } }
@@ -1807,6 +1952,7 @@ function updateKeys(dt) {
 let touch = null;
 function onDown(e) {
     if (state !== 'play' || e.button > 0) return;
+    if (mode === 'watch') { pause(); return; } // a touch stops the band's game
     if (touch && touch.id !== e.pointerId) return;
     Band.unlock();
     touch = {id: e.pointerId, x0: e.clientX, y0: e.clientY, sx: e.clientX, t0: performance.now(), steps: 0, done: false, soft: false, hist: [[e.clientX, e.clientY, performance.now()]], maxD: 0};
@@ -1851,6 +1997,21 @@ addEventListener('pointermove', onMove);
 addEventListener('pointerup', onUp);
 addEventListener('pointercancel', e => { if (touch && touch.id === e.pointerId) { touch = null; if (G) BW.setSoft(G, false); } });
 
+// ------------------------------------------------------------------ Watch: the band plays
+// One key to an eighth note of the bass, and every drop on the beat, so the pieces land where the
+// band puts its weight. AUTO decides where each piece goes as it arrives.
+let autoKeys = null, watchStep = 0;
+function autoBeat(step) {
+    if (!G || !G.cur || G.over) return;
+    if (!autoKeys || !autoKeys.length) autoKeys = AUTO.plan(G);
+    const k = autoKeys[0];
+    if (k === 'drop' && step % 2) return; // a drop waits for the beat
+    autoKeys.shift();
+    const ok = k === 'hold' ? doHold() : k === 'cw' ? doRotate(1) : k === 'ccw' ? doRotate(-1) : k === 'L' ? doMove(-1) : k === 'R' ? doMove(1)
+        : k === 'sink' ? act(() => BW.sink(G) >= 0) : doDrop();
+    if (!ok || k === 'drop') autoKeys = null; // anything unplanned: think again on the next beat
+}
+
 // ------------------------------------------------------------------ the loop
 let last = performance.now();
 function frame(now) {
@@ -1867,9 +2028,10 @@ function frame(now) {
         }
         if (n >= 2) begin();
     } else if (state === 'play') {
-        updateKeys(dt);
+        if (mode !== 'watch') updateKeys(dt);
         lastBoard = G.board.slice();
-        BW.tick(G, dt);
+        if (mode === 'watch' && G.cur) G.elapsed += dt; // the band's player is never hurried: no gravity, no lock delay
+        else BW.tick(G, dt);
         handleEvents();
         // danger: the stack within four rows of the top
         let topRow = BW.H;
@@ -1885,6 +2047,7 @@ function frame(now) {
             if (now - lastCityBeat >= eighth) { n = 1; lastCityBeat = now; } else n = 0;
         }
         if (n && !REDUCED.matches) stepCity(now);
+        if (mode === 'watch') for (let i = 0; i < n && state === 'play'; i++) autoBeat(Band.ok && S.sound && S.music ? Band.lastStep : watchStep++);
     } else {
         Band.due();
         if (state === 'menu') {
