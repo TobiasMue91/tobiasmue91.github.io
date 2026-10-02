@@ -732,3 +732,24 @@ thrown away instead of filed.
 | `sheets` | the first visit, the same day, a new day with and without ink, tearing, extra sheets, undo and redo, taking a sheet back out of the sketchbook, removing and restoring, and links to a squiggle |
 | `saves` | a packed sheet unpacks to the same sheet without what undo kept |
 
+## Prickle Patch (Whac-a-Hedgehog)
+
+```sh
+npm run test:whac                  # or: node test/whac.mjs
+node test/whac.mjs rules bots      # one or more named suites
+```
+
+`whac.mjs` runs the DOM-free `<script id="core">` block of `games/whac.html` (Prickle Patch) in
+Node. Hedgehogs come up out of nine burrows over one sunset; a boop on the nose scores, a wasp
+touched burns four seconds of sun, an apple buys two back. What goes wrong here does not show on a
+first look: a burrow holding two things at once, a wasp that is safe to tap, a miss that leaves the
+streak counting, an evening tuned so that drumming every burrow beats playing.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | duds, boops (quick and slow), five pips to a step of multiplier and its cap, a miss and the grace at the end of a tuck, a sting's cost and its floor at zero, a wasp left alone costing nothing, an apple's gift and its ceiling, nothing tappable after nightfall, the ranks |
+| `evening` | 200 seeded rounds: one thing per burrow, every arrival warned, wasps one at a time before dusk, never more burrows busy than the cap, the garden never empty for long, every round exactly as long as the sun; the tempo quickening but never past what a person can see; the first round's three hedgehogs and lone wasp; a wasp within 8 s of every later round; a seed always the same evening |
+| `bots` | quick, average and slow bots with one finger and a person's reaction time: the quicker scores clearly more and misses less, the slow still boops a dozen, the ranks fall between them; a spammer drumming all nine burrows scores less than half an average player and is stung out of his evening |
+
+`bots` prints each bot's average round - score, boops, misses, stings, rank - which is the place to
+look after changing a number in `tempo`, a price or the ranks.
