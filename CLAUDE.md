@@ -89,6 +89,7 @@ npm run test:tells          # Tells (Rock Paper Scissors) suite (plain Node, no 
 npm run test:doodling       # Squiggle (Doodling) suite (plain Node, no server or browser)
 npm run test:whac           # Prickle Patch (Whac-a-Hedgehog) suite (plain Node, no server or browser)
 npm run test:blackjack      # Blackjack suite (plain Node, no server or browser)
+npm run test:blockdrop      # Boogie Woogie (Blockdrop) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -98,7 +99,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Twenty-five exist so far. `test/everything_converter.mjs` drives
+Twenty-six exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -229,6 +230,13 @@ surrender, the dealer standing on soft 17), random play over 200,000 rounds must
 dollar against a settlement worked out separately, the book must match the published basic
 strategy chart cell by cell, and a bot playing it must lose the house edge these rules give. Run it
 after touching the core.
+`test/blockdrop.mjs` runs the DOM-free `<script id="core">` block of `games/blockdrop.html` (Boogie
+Woogie), a falling-block game on modern guideline rules, against references written the other way
+round: every turn on thousands of random boards lands where true rotation plus the guideline's
+offset tables puts it, every T that locks is judged by a plain three-corner rule, and every point of
+thousands of games matches a scorer written in the test (spins, back-to-back, combos, all clears);
+bags hold each piece once, gravity and the lock delay's fifteen resets keep time, a save made at any
+moment resumes identically, and a careful bot reaches level 15. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

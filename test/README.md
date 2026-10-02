@@ -779,3 +779,28 @@ natural looks exactly like a correct one on the page.
 
 The `bots` suite prints each bot's edge with its standard error; it is the place to look after
 changing a rule. It takes about half a minute.
+
+## Boogie Woogie (Blockdrop)
+
+```sh
+npm run test:blockdrop                   # or: node test/blockdrop.mjs
+node test/blockdrop.mjs srs spin         # one or more named suites
+node test/blockdrop.mjs bots --games=8   # more Marathon games for the bot (default 4)
+```
+
+`blockdrop.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` of
+`games/blockdrop.html` in Node's `vm`: the rules of a modern falling-block game, around which the
+page only draws and plays music. Almost everything that can go wrong there still looks right on the
+screen - a kick with one sign flipped turns pieces correctly nearly everywhere, a T-spin that counts
+as a mini, a back-to-back that never ends - so each rule is checked against something written here
+rather than read from the page.
+
+| suite | what it checks |
+| --- | --- |
+| `srs` | spawn columns, and every turn on 6,000 random boards against a reference that rotates about a true centre and nudges by the guideline's offset tables (not the kick tables the page uses), kick for kick |
+| `spin` | the T-spin double and the mini every player learns, a slid-in T scoring as a plain double, and every T locked in random play judged by a plain three-corner rule |
+| `score` | every point of hundreds of random and bot games against a scorer written from the guideline table: lines, spins, back-to-back, combos, all clears, soft and hard drops |
+| `bag` | each bag of seven holds each piece once, seeds deal the same pieces, the daily seed is fixed by the date, shuffles are fair |
+| `timing` | gravity per level, the lock delay and its fifteen resets, a new lowest row restoring them, the clear delay and a turn buffered during it, the daily's two minutes, a block-out |
+| `bots` | a bot plays Marathon: every lock adds four cells and every cleared row takes ten, a save made at any moment plays on identically, and it reaches level 15 |
+
