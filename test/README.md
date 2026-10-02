@@ -805,6 +805,22 @@ rather than read from the page.
 | `bots` | a bot plays Marathon: every lock adds four cells and every cleared row takes ten, a save made at any moment plays on identically, and it reaches level 15 |
 | `auto` | `sink` and `clone`, and the band's own player from Watch (`<script id="auto">`): every key it plans is legal, each plan ends in its one drop and fits in a bar and a half, three 500-piece games never top out, and at least 35% of rows go four at a time (`--pieces=N` for longer games) |
 
+## Last Smile
+
+```sh
+npm run test:lastsmile                   # or: node test/last_smile.mjs
+node test/last_smile.mjs offers night    # the fast suites (about 15 s)
+```
+
+`last_smile.mjs` runs the DOM-free `<script id="core">` block of `games/emoji_horde_survival.html`
+in Node, with no browser or server. The page only draws what that block decides, so everything a
+player could lose without seeing why lives there.
+
+| suite | what it checks |
+| --- | --- |
+| `offers` | 18,000 level-ups chosen at random: no duplicate card, no gift past level 5, no fifth gift or charm, no evolved gift offered again; an evolution offered exactly when its gift is at 5 and its partner charm is owned; a finished build gets a cookie; two levels at once give two offers |
+| `night` | the same seed and inputs give the same night; every ring, stream and storm arrives when the schedule says, bosses carry names, the horde stays near its cap; lightning warns, then hurts inside its ring and not outside; nothing moves while a card is up; sunrise cheers every face left, nearest first |
+| `bots` | whole nights at 60 steps a second (about 90 s): standing still loses, though never inside 15 s, a careful kiter sees the sunrise and evolves a gift, reaches level 10 inside three minutes and its first level inside 20 s; a kiter who picks cards at random still lasts past the first storm |
 
 ## Tumbler (Guess the Number)
 
