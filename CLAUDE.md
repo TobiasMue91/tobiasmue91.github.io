@@ -88,6 +88,7 @@ npm run test:wordsearch     # Highlight (Word Search) suite (plain Node, no serv
 npm run test:tells          # Tells (Rock Paper Scissors) suite (plain Node, no server or browser)
 npm run test:doodling       # Squiggle (Doodling) suite (plain Node, no server or browser)
 npm run test:whac           # Prickle Patch (Whac-a-Hedgehog) suite (plain Node, no server or browser)
+npm run test:blackjack      # Blackjack suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -97,7 +98,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Twenty-four exist so far. `test/everything_converter.mjs` drives
+Twenty-five exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -222,6 +223,12 @@ whac-a-mole with hedgehogs: every boop, sting, apple and miss is worth what the 
 ever holds two things or comes up unwarned, the first round meets a lone wasp before it gets busy,
 and one-fingered bots with a person's reaction time must score in order of their speed while a
 spammer drumming every burrow loses to an average player. Run it after touching the tempo or a price.
+`test/blackjack.mjs` runs the DOM-free `<script id="core">` block of `games/blackjack.html`: stacked
+shoes check every rule hand by hand (peeks, insurance and even money, splits, split aces, doubles,
+surrender, the dealer standing on soft 17), random play over 200,000 rounds must account for every
+dollar against a settlement worked out separately, the book must match the published basic
+strategy chart cell by cell, and a bot playing it must lose the house edge these rules give. Run it
+after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
