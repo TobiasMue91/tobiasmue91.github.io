@@ -887,11 +887,25 @@ function street(x, y, w, h, still) {
     streets.push({x, y, w, h, still, sq: [], dir: streets.length % 2 ? 1 : -1});
 }
 // A stretch of the city: streets two to four cells apart, a small block standing in some corners.
+// The city is one grid of streets across the whole page, as in the painting, where every street
+// runs the length of the canvas. Each patch of city shows the part of it that falls inside the patch,
+// so a street that leaves one patch carries on in the next. Streets that would run alongside the
+// still frame are left out everywhere, not just in one patch.
+let grid = null;
+function cityGrid(c, L) {
+    if (grid) return grid;
+    const R = rng(97), xs = [], ys = [];
+    for (let p = c * (1 + R() * 1.6); p < innerWidth; p += c * (1.4 + R() * R() * 4.2)) xs.push(Math.round(p));
+    for (let p = c * (1 + R() * 1.6); p < innerHeight; p += c * (1.4 + R() * R() * 4.6)) ys.push(Math.round(p));
+    const still = streets.filter(q => q.still), clear = c * .7;
+    const nearV = p => still.some(q => q.h > q.w && Math.abs(p - q.x) < clear + L);
+    const nearH = p => still.some(q => q.w > q.h && Math.abs(p - q.y) < clear + L);
+    return grid = {xs: xs.filter(p => !nearV(p)), ys: ys.filter(p => !nearH(p))};
+}
 function city(x, y, w, h, c, L, seed, far) {
     if (w < c * 1.5 || h < c * 1.5) return;
-    const R = rng(seed), xs = [], ys = [];
-    for (let p = x + c * (1 + R() * 1.6); p < x + w - c * 1.2; p += c * (1.4 + R() * R() * 4.2)) xs.push(Math.round(p));
-    for (let p = y + c * (1 + R() * 1.6); p < y + h - c * 1.2; p += c * (1.4 + R() * R() * 4.6)) ys.push(Math.round(p));
+    const R = rng(seed), G = cityGrid(c, L);
+    const xs = G.xs.filter(p => p > x + L && p < x + w - 2 * L), ys = G.ys.filter(p => p > y + L && p < y + h - 2 * L);
     for (const p of xs) street(p, y, L, h);
     for (const p of ys) street(x, p, w, L);
     const cx = [x, ...xs.map(p => p + L)], cy = [y, ...ys.map(p => p + L)];
@@ -900,12 +914,15 @@ function city(x, y, w, h, c, L, seed, far) {
     for (let i = 0; i < cx.length; i++) for (let j = 0; j < cy.length; j++) {
         if (R() > .42) continue;
         const x0 = cx[i], y0 = cy[j], x1 = ex[i], y1 = ey[j];
+        if (x1 - x0 < c * .5 || y1 - y0 < c * .5) continue;
         const plane = far && R() < .3 && x1 - x0 > c * 1.8 && y1 - y0 > c * 1.8;
         const bw = plane ? (x1 - x0) * (.55 + R() * .3) : Math.min(x1 - x0, c * (.45 + R() * .45));
         const bh = plane ? (y1 - y0) * (.5 + R() * .35) : Math.min(y1 - y0, c * (.45 + R() * .45));
         const ax = R() < .5 ? x0 : x1 - bw, ay = R() < .5 ? y0 : y1 - bh, col = cols[Math.floor(R() * cols.length)];
+        // a small yellow block against a street reads as a broken street: yellow only comes big, with its red square
+        if (col === 'yellow' && Math.min(bw, bh) < c * .75) continue;
         blocks.push({x: Math.round(ax), y: Math.round(ay), w: Math.round(bw), h: Math.round(bh), col,
-            inner: R() < .6 ? (col === 'yellow' ? 'red' : 'yellow') : null});
+            inner: col === 'yellow' ? 'red' : R() < .6 ? 'yellow' : null});
     }
 }
 function seedTraffic(L) {
@@ -972,7 +989,7 @@ function layout() {
     readColours();
     dpr = Math.min(3, window.devicePixelRatio || 1);
     const W = innerWidth, H = innerHeight, safe = safeInsets();
-    UI.innerHTML = ''; streets = []; blocks = []; hud = {}; nextCvs = []; holdCv = null;
+    UI.innerHTML = ''; streets = []; blocks = []; grid = null; hud = {}; nextCvs = []; holdCv = null;
     const menu = state === 'menu';
     // two layouts; take whichever gives the bigger board
     const m = Math.max(16, Math.round(Math.min(W, H) * .035));
@@ -1784,7 +1801,7 @@ function showScreen() {
         return;
     } else return;
     if (card.classList.contains('overcard')) UI.appendChild(card);
-    else if (state === 'menu' && LY.menuPanel) { card.classList.add('menucard'); Object.assign(card.style, {top: Math.round(c * 1.4) + 'px', padding: `0 ${Math.round(c * .7)}px`}); LY.menuPanel.appendChild(card); }
+    else if (state === 'menu' && LY.menuPanel) { card.classList.add('menucard'); Object.assign(card.style, {top: Math.round(c * 1.4) + 'px', padding: `0 ${Math.round(c * .7)}px`}); LY.menuPanel.appendChild(card); const mk = card.querySelector('.menukeys'); if (mk && card.offsetTop + card.offsetHeight > LY.menuPanel.offsetHeight - 8) mk.remove(); }
     else wui.appendChild(card);
     if (state === 'menu' && !LY.menuPanel) requestAnimationFrame(() => { LY.demoTop = Math.ceil((card.offsetTop + card.offsetHeight) / c) + 1; });
     card.querySelectorAll('button').forEach(b => {
