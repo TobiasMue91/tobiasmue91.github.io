@@ -822,3 +822,24 @@ player could lose without seeing why lives there.
 | `night` | the same seed and inputs give the same night; every ring, stream and storm arrives when the schedule says, bosses carry names, the horde stays near its cap; lightning warns, then hurts inside its ring and not outside; nothing moves while a card is up; sunrise cheers every face left, nearest first |
 | `bots` | whole nights at 60 steps a second (about 90 s): standing still loses, though never inside 15 s, a careful kiter sees the sunrise and evolves a gift, reaches level 10 inside three minutes and its first level inside 20 s; a kiter who picks cards at random still lasts past the first storm |
 
+## Tumbler (Guess the Number)
+
+```sh
+npm run test:tumbler                     # or: node test/number_guess.mjs
+node test/number_guess.mjs rules bots    # one or more named suites
+```
+
+`number_guess.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` of
+`games/number_guess.html` in Node's `vm`. Tumbler is guess-the-number as a heist: each safe hides a
+number, every guess spends a lockpick, the safe answers higher or lower, and picks left over carry into
+the next, bigger safe. Nothing on the page can show that a safe told the truth, that a pick went missing
+between safes, or that the daily is the same on every phone, so those are checked here.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | 300 heists of random guesses: every answer against the combination, the window never losing it, one pick per wrong guess, the next safe's picks paid exactly, an empty roll ending the heist with the secret; guesses already ruled out refused for free; saves taken at any moment playing on identically; the share line holding a square per safe and no combination |
+| `safes` | every combination inside its safe, fixed by the seed, spread evenly; the first four safes always open for a player who halves, and later ones do not without a spare pick or luck; `certain()` true exactly when halving cannot fail |
+| `bots` | 3,000 heists each by a careful player who halves, a sloppy one and a novice: every heist ends, a careful one opens ten to sixteen safes at the median and always gets past the fourth, and better play goes further |
+
+The `bots` suite prints how many safes each player opened; it is the place to look after changing a
+safe's size or the picks it brings.

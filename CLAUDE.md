@@ -91,6 +91,7 @@ npm run test:whac           # Prickle Patch (Whac-a-Hedgehog) suite (plain Node,
 npm run test:blackjack      # Blackjack suite (plain Node, no server or browser)
 npm run test:blockdrop      # Boogie Woogie (Blockdrop) suite (plain Node, no server or browser)
 npm run test:lastsmile      # Last Smile (Emoji Horde Survival) suite (plain Node, no server or browser)
+npm run test:tumbler        # Tumbler (Guess the Number) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -100,7 +101,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Twenty-seven exist so far. `test/everything_converter.mjs` drives
+Twenty-eight exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -247,6 +248,12 @@ every ring, stream and storm of the night arrives on time, lightning hurts insid
 only, nothing moves while a card is up, and sunrise cheers every face left. Bots play whole nights:
 standing still loses, a careful kiter sees the sunrise, one who picks cards at random still outlasts
 the first storm. Run it after touching any number in the core.
+`test/number_guess.mjs` runs the DOM-free `<script id="core">` block of `games/number_guess.html`
+(Tumbler), guess-the-number as a run of safes paid for in lockpicks: every answer must be true of the
+combination, every pick spent and paid exactly, a guess already ruled out refused for free, and a save
+carry on identically; the first four safes must always open for a player who halves, certain() must be
+true exactly when halving cannot fail, and careful, sloppy and novice bots must reach the stage their
+play deserves, in that order. Run it after touching the safe sizes or the picks they bring.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
