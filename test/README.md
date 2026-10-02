@@ -655,6 +655,58 @@ line that gives the word away, a streak that miscounts.
 `fair` and `docket` print what the simulated players won, which is the place to look after
 changing a list.
 
+## Highlight (Word Search)
+
+```sh
+npm run test:wordsearch                  # or: node test/word_search.mjs
+node test/word_search.mjs puzzles input  # one or more named suites
+```
+
+`word_search.mjs` runs the DOM-free `<script id="core">` block of `games/word_search.html`
+(Highlight) in Node. Every puzzle there is built from a seed - a numbered book that grows from
+8×8 across-and-down to 10×10 in every direction, and one daily grid that is the same for everyone -
+and each makes a promise nobody can check by looking: every listed word is in the grid exactly
+once and nowhere by accident, and the cells no word uses spell the theme's hidden message in
+reading order. A word list that gains a word hidden inside another, a message that happens to
+contain a listed word, or a change to the generator can break that for one seed in a thousand.
+
+| suite | what it checks |
+| --- | --- |
+| `themes` | every word list and message is plain capitals; no word sits inside another, forwards or backwards; no message holds a listed word; every theme fits some grid size |
+| `puzzles` | the first 300 book puzzles, a year of dailies and 25 seeds of every theme at every size it fits: each word straight, in an allowed direction, reading exactly once; the leftover cells are exactly the message; the message takes a fair share of the grid; no grid is mostly one direction; the same seed gives the same grid |
+| `book` | grids grow and directions arrive in order, backwards last; no theme returns within twelve puzzles and the book uses them all; neighbouring days never share a theme |
+| `input` | drags snap to the eight directions, clip at the edge and hold a direction through a wobble; every angle gives a straight run; tap-tap joins two cells; a word reads from either end, part of a word does not |
+| `play` | bots find every word through the calls the page makes: the message is dealt in order, never back, whole at the end; touching strokes never share a pen; a guess at the message reads only when it is exactly the part not yet dealt |
+| `save` | junk and old saves come back usable; the book never sits behind a solved puzzle; streaks count consecutive days, across the clock change |
+## Tells (Rock Paper Scissors)
+
+```sh
+npm run test:tells                            # or: node test/rock_paper_scissors.mjs
+node test/rock_paper_scissors.mjs fair tells  # one or more named suites
+node test/rock_paper_scissors.mjs --matches=1000
+```
+
+`rock_paper_scissors.mjs` runs the DOM-free `<script id="core">` block of
+`games/rock_paper_scissors.html` (Tells) in Node. The page is rock paper scissors against six
+machines, each with one habit to find, and the last, the Oracle, reads the player. The promises a
+player cannot check from the table: the machine never sees the throw it is playing against, the
+tell card names the habit the machine really has, and what the Oracle says about you is true.
+Players here see only what a person at the table sees - the tape, the score and, against Bluff,
+the call.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | every pairing of throws; forty matches per machine end at exactly five and keep their books; nothing plays after the end; a throw that is not rock, paper or scissors is refused |
+| `fair` | three copies of a match that differ only in the player's throw this round get the same machine hand and the same call - the machine commits before it can see yours |
+| `tells` | knowing a machine's tell wins 88%+ of matches and shortens them; throwing at random wins 40-60%; each machine keeps its habit well above chance; the count on the tell card equals the count from the tape |
+| `ladder` | a player who reads the tape beats the first three machines easily, Bluff and Grudge less often, and loses to the Oracle more often than not |
+| `oracle` | a truly random player gets a fair coin; cycling, sticky, rock-heavy and human-like players are read; with saved memory it wins the opening rounds of a new match more often |
+| `lines` | every sentence the Oracle says ("After rock, you went paper 3 of 4.") is recounted from the tape and true, and only said on a round its read won; Echo, Spin and Grudge play back exactly the throw they acted on |
+| `memory` | junk in the saved Oracle memory is replaced, never trusted; the memory survives JSON; the same memory and seed play the same match |
+
+`ladder` prints how often a tape-reading bot beats each machine, which is the number to watch after
+changing how often a machine keeps its habit.
+
 ## Squiggle (Doodling)
 
 ```sh
