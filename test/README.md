@@ -966,3 +966,21 @@ the core did not, would show as a glitch nobody can reproduce.
 
 The `TABLE` in the core holds, per level, a variant, the moves and the bot's median score at the win; the star marks
 come from that score. After changing a rule or a price, re-measure it before trusting the levels.
+
+## Bedtime (Lights Out)
+
+```sh
+npm run test:bedtime                 # or: node test/lights_out.mjs
+node test/lights_out.mjs solver      # one or more named suites
+```
+
+`lights_out.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` of
+`games/lights_out.html` in Node's `vm`. The page's one promise is the par beside each block: a solver that is
+almost right gives a par one too high on a few boards, and nobody playing could tell.
+
+| suite | what it checks |
+| --- | --- |
+| `solver` | the GF(2) solver against brute force over every press subset, on every outline (rect, door, gable, tower, wings, stepped): fewest presses on every reachable board, `null` on every unreachable one; 5x5 solutions always clear the board |
+| `levels` | 120 levels: the same twice, clearable, par as designed and equal to the true minimum, no light in a wall, blocks never shrinking; level 1 is one press in the middle |
+| `tonight` | 400 nights: the same everywhere, clearable at par, at least four outlines; the next day across clock changes and leap days |
+| `record` | three moons at par, two within two, one beyond, a hint capping at two; a streak grows by one a night, counts a night once and restarts after a gap |

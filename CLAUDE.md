@@ -97,6 +97,7 @@ npm run test:pointline      # point & line (Dodge the Obstacles) suite (plain No
 npm run test:crazyeights    # Crazy Eights suite (plain Node, no server or browser)
 npm run test:departures     # Departures (Time Travel Agency) suite (plain Node, no server or browser)
 npm run test:moodswing      # Moodswing (Emoji Match 3) suite (plain Node, no server or browser)
+npm run test:bedtime        # Bedtime (Lights Out) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -106,7 +107,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Thirty-three exist so far. `test/everything_converter.mjs` drives
+Thirty-four exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -290,6 +291,11 @@ and what it makes, what each special and each pair of specials clears, and how c
 of random moves keep the board full, every piece in one place and a move always open; every move replayed from its
 events alone must end on the core's board, a save carries on move for move, and each level must be about as hard as
 the bot-measured `TABLE` in the core says. Run it after touching the core; `levels --full` re-measures every level.
+`test/lights_out.mjs` runs the DOM-free `<script id="core">` block of `games/lights_out.html` (Bedtime), Lights Out
+on apartment blocks whose one promise is the par it shows: the GF(2) solver must find the fewest presses on every
+board brute force can check, in every building outline, and say so when a board cannot be cleared; every level and
+a year of nightly blocks must be the same everywhere, clearable, and exactly as long as designed; moons and streaks
+count the way the card says. Run it after touching the solver, `spec` or the outlines.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
