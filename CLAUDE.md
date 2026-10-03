@@ -98,6 +98,7 @@ npm run test:crazyeights    # Crazy Eights suite (plain Node, no server or brows
 npm run test:departures     # Departures (Time Travel Agency) suite (plain Node, no server or browser)
 npm run test:moodswing      # Moodswing (Emoji Match 3) suite (plain Node, no server or browser)
 npm run test:bedtime        # Bedtime (Lights Out) suite (plain Node, no server or browser)
+npm run test:ludo           # Ludo suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -107,7 +108,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Thirty-four exist so far. `test/everything_converter.mjs` drives
+Thirty-five exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -296,6 +297,12 @@ on apartment blocks whose one promise is the par it shows: the GF(2) solver must
 board brute force can check, in every building outline, and say so when a board cannot be cleared; every level and
 a year of nightly blocks must be the same everywhere, clearable, and exactly as long as designed; moons and streaks
 count the way the card says. Run it after touching the solver, `spec` or the outlines.
+`test/ludo.mjs` runs the DOM-free `<script id="core">` block of `games/ludo.html`, whose page only animates the moves
+its core returns: the 52 track squares and four lanes against the drawn board, stacked positions for every rule (a six to
+leave the yard, the exact roll home, captures but never on a start or a star, bonus rolls for a six, a capture or a pawn
+home, three sixes losing the turn), a thousand whole games in which every pawn is always somewhere legal and two colours
+share only safe squares, a save that carries on roll for roll, and a computer player that beats a random mover. Run it
+after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

@@ -984,3 +984,21 @@ almost right gives a par one too high on a few boards, and nobody playing could 
 | `levels` | 120 levels: the same twice, clearable, par as designed and equal to the true minimum, no light in a wall, blocks never shrinking; level 1 is one press in the middle |
 | `tonight` | 400 nights: the same everywhere, clearable at par, at least four outlines; the next day across clock changes and leap days |
 | `record` | three moons at par, two within two, one beyond, a hint capping at two; a streak grows by one a night, counts a night once and restarts after a gap |
+## Ludo
+
+```sh
+npm run test:ludo                 # or: node test/ludo.mjs
+node test/ludo.mjs rules play     # named suites only
+node test/ludo.mjs --games=3000   # more simulated games
+```
+
+`ludo.mjs` runs the DOM-free `<script id="core">` block of `games/ludo.html` in Node. The page only animates the
+moves the core returns, so a wrong rule looks exactly like a right one on screen.
+
+| suite | what it checks |
+|---|---|
+| `board` | 52 distinct track squares a step apart, each lane off the track and entered from the square beside it, the same board seen from every seat |
+| `rules` | stacked positions: a six to leave, the exact roll home, captures (two at once too), none on starts or stars, bonus rolls, three sixes, empty seats skipped |
+| `play` | whole games with two, three and four seats: legal moves only, every pawn always somewhere, two colours only on safe squares, every game ends |
+| `save` | a game copied through JSON at any moment carries on identically |
+| `skill` | the computer player beats a player who moves any legal pawn at random |
