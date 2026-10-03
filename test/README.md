@@ -893,3 +893,26 @@ or a line whose gap the point cannot fit, would look like the player's fault - t
 
 The `bots` suite prints the median seconds for each player; it is the place to look after changing a
 spawn rate, a speed or a warning.
+
+## Crazy Eights
+
+```sh
+npm run test:crazyeights                 # or: node test/crazy_eights.mjs
+node test/crazy_eights.mjs rules voids   # one or more named suites
+node test/crazy_eights.mjs --matches=4000   # more simulated matches (default 1500)
+```
+
+`crazy_eights.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` of
+`games/crazy_eights.html` in Node's `vm`. The page lifts only the cards the rules allow, and marks an opponent
+"out of" a suit once they draw instead of following it; a rule that is slightly off, or a mark that outlives the card
+that broke it, would look exactly like a right one on the page.
+
+| suite | what it checks |
+| --- | --- |
+| `deal` | 400 deals: five each from the dealer's left, 52 cards, an eight never the starter, the same seed dealing the same hands, the deal moving round |
+| `rules` | stacked hands: suit, rank and eights; an eight's named suit counts, not its own; no drawing while a card fits; a drawn card that fits must be played; the pile reshuffled under its top card; passing when nothing is left |
+| `score` | card values, the hand that went out paying nothing, the match ending at 100 with the lowest total winning, ties shared |
+| `play` | whole matches by the computer players (and a random player in seat 0): every move legal, all 52 cards somewhere after every move, every match ending, blocked hands rare |
+| `voids` | every crossed-out suit on every seat at every moment is true of that seat's hand; the next card drawn clears it |
+| `save` | a match saved and loaded at any moment carries on move for move |
+| `skill` | the computer players pay less per hand than a random player and beat it at matches |
