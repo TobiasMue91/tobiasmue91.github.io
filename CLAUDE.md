@@ -93,6 +93,7 @@ npm run test:blockdrop      # Boogie Woogie (Blockdrop) suite (plain Node, no se
 npm run test:lastsmile      # Last Smile (Emoji Horde Survival) suite (plain Node, no server or browser)
 npm run test:tumbler        # Tumbler (Guess the Number) suite (plain Node, no server or browser)
 npm run test:sixdigits      # Six Digits (Color Guessing Game) suite (plain Node, no server or browser)
+npm run test:pointline      # point & line (Dodge the Obstacles) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -102,7 +103,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Twenty-nine exist so far. `test/everything_converter.mjs` drives
+Thirty exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -261,6 +262,13 @@ colour surviving hex to HSL and back, a score that only falls as the difference 
 same on every device with five targets spread round the wheel and starts far from them, every word under
 every bar true of the mix and every tick where the target sits, stamps that land once and in order, and
 careful, sloppy and random bots that score in that order. Run it after touching the core.
+`test/obstacle_dodge.mjs` runs the DOM-free `<script id="core">` block of `games/obstacle_dodge.html`
+(point & line), a dodge game whose one promise is that you were warned: every distance a hit or a near
+miss is judged by against brute force, every shape waiting in the bleed for its full warning without
+reaching into the trim, nothing hurting before it has waited, every line keeping a gap the point fits
+through, every triangle darting exactly where its line pointed when it locked, a seed being the same
+run whatever the player does, and planners with a person's reaction time far outlasting players who
+stand still or move without looking. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

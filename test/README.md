@@ -869,3 +869,27 @@ really was too dark, so those are checked here.
 
 The `bots` suite prints the median sheet for each player; it is the place to look after changing the
 score curve.
+
+## point & line (Dodge the Obstacles)
+
+```sh
+npm run test:pointline                   # or: node test/obstacle_dodge.mjs
+node test/obstacle_dodge.mjs geometry fair   # one or more named suites
+SEEDS=8 node test/obstacle_dodge.mjs bots    # more runs per sheet (default 3)
+```
+
+`obstacle_dodge.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` of
+`games/obstacle_dodge.html` in Node's `vm`. point & line is a dodge game on a printed sheet: shapes wait
+in the bleed outside the trim as a halftone, then cross it, and the player's pink mark must not touch
+them. The page draws exactly the geometry the core judges, so a shape that kills before it was shown,
+or a line whose gap the point cannot fit, would look like the player's fault - those are checked here.
+
+| suite | what it checks |
+| --- | --- |
+| `geometry` | 4,480 distances to rotated squares, triangles and circles against brute force on a half-unit grid; lines are two bars and a clear gap, upright or flat; a triangle's first corner is its tip |
+| `fair` | 48 seeded runs on a portrait and a landscape sheet, played through every hit: no waiting shape reaches into the trim, every one waits its full warning, nothing hits before that, every line's gap fits the point with room to spare, every triangle darts along the angle it locked on, circles bounce exactly as often as they were given and then leave, every stage starts on its second |
+| `rules` | the shapes that come, and when, are the seed's alone whatever the player does; a run replays exactly; a point flung across a square as fast as it moves is caught; passing close grazes a shape once and touching it ends the run, naming what did it |
+| `bots` | per sheet, runs by a player who stands still, one who moves without looking, and planners with a person's reaction time: the first two lose within two stages, both planners outlast them by far and reach the black lines |
+
+The `bots` suite prints the median seconds for each player; it is the place to look after changing a
+spawn rate, a speed or a warning.
