@@ -95,6 +95,7 @@ npm run test:tumbler        # Tumbler (Guess the Number) suite (plain Node, no s
 npm run test:sixdigits      # Six Digits (Color Guessing Game) suite (plain Node, no server or browser)
 npm run test:pointline      # point & line (Dodge the Obstacles) suite (plain Node, no server or browser)
 npm run test:crazyeights    # Crazy Eights suite (plain Node, no server or browser)
+npm run test:departures     # Departures (Time Travel Agency) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -104,7 +105,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Thirty-one exist so far. `test/everything_converter.mjs` drives
+Thirty-two exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -276,6 +277,12 @@ down, the pile reshuffled under its top card), the score (eights 50, courts 10, 
 of whole matches by the computer players - every move legal, all 52 cards always somewhere, every crossed-out suit on
 a portrait true of that hand, a match saved at any moment carrying on move for move, and a random player losing to
 them. Run it after touching the core or the players.
+`test/time_travel_agency.mjs` runs the DOM-free `<script id="core">` block of `games/time_travel_agency.html`
+(Departures), an idle game on a departures board whose every figure comes from that core: a bulk buy costs exactly the
+single cars it replaces and MAX never overspends, lines open in order and nothing is sold on credit, one long frame pays
+what sixty short ones do, time away pays exactly what the same time on the board would, a save carries on exactly, the
+old page's save opens the lines its player reached, and bots with a person's reaction time reach the Big Bang in about
+an hour and a quarter with every line arriving in order. Run it after touching any price, fare or trip time.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

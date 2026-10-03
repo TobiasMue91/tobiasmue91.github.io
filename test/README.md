@@ -916,3 +916,26 @@ that broke it, would look exactly like a right one on the page.
 | `voids` | every crossed-out suit on every seat at every moment is true of that seat's hand; the next card drawn clears it |
 | `save` | a match saved and loaded at any moment carries on move for move |
 | `skill` | the computer players pay less per hand than a random player and beat it at matches |
+
+## Departures (Time Travel Agency)
+
+```sh
+npm run test:departures                    # or: node test/time_travel_agency.mjs
+node test/time_travel_agency.mjs price away  # one or more named suites
+node test/time_travel_agency.mjs pace --report   # each bot's game, five minutes at a time
+```
+
+`time_travel_agency.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` of
+`games/time_travel_agency.html` in Node's `vm`. The board only draws what the core says - a coupon's price, a fare,
+the "a second" figure, what the away stub pays - so a core that is slightly wrong looks exactly like a right one.
+
+| suite | what it checks |
+| --- | --- |
+| `price` | a bulk buy costs the sum of the single cars it replaces; MAX buys the most that is affordable and not one more, even with exactly the price in the till |
+| `rules` | lines open in order, nothing on credit, guides only on open lines, a busy train cannot be sent twice, the three classes need a guide and each triples the fares, the Big Bang is sold once and arrives on time |
+| `tick` | one long frame pays what 60fps frames pay, a manual train pays once, every milestone halves the trip, a guided line earns its "a second" figure |
+| `away` | time away pays what the same time on the board pays, capped at a day; nothing is earned without a guide |
+| `save` | a game saved at any moment carries on exactly; broken and hostile saves are refused or cleaned |
+| `migrate` | the old page's `timeTravelAgency` save opens the lines its player had reached, never the Big Bang |
+| `pace` | attentive, steady and casual bots reach the Big Bang inside their windows, each line after the last, the first guide within minutes |
+| `fmt` | numbers read the way the flaps print them |
