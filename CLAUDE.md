@@ -96,6 +96,7 @@ npm run test:sixdigits      # Six Digits (Color Guessing Game) suite (plain Node
 npm run test:pointline      # point & line (Dodge the Obstacles) suite (plain Node, no server or browser)
 npm run test:crazyeights    # Crazy Eights suite (plain Node, no server or browser)
 npm run test:departures     # Departures (Time Travel Agency) suite (plain Node, no server or browser)
+npm run test:moodswing      # Moodswing (Emoji Match 3) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -105,7 +106,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Thirty-two exist so far. `test/everything_converter.mjs` drives
+Thirty-three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -283,6 +284,12 @@ single cars it replaces and MAX never overspends, lines open in order and nothin
 what sixty short ones do, time away pays exactly what the same time on the board would, a save carries on exactly, the
 old page's save opens the lines its player reached, and bots with a person's reaction time reach the Big Bang in about
 an hour and a quarter with every line arriving in order. Run it after touching any price, fare or trip time.
+`test/emoji_match_three.mjs` runs the DOM-free `<script id="core">` block of `games/emoji_match_three.html`
+(Moodswing), a match-3 whose page only animates the events its core returns: stacked boards check every match shape
+and what it makes, what each special and each pair of specials clears, and how clouds lose their layers; thousands
+of random moves keep the board full, every piece in one place and a move always open; every move replayed from its
+events alone must end on the core's board, a save carries on move for move, and each level must be about as hard as
+the bot-measured `TABLE` in the core says. Run it after touching the core; `levels --full` re-measures every level.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
