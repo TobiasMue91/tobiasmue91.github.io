@@ -916,3 +916,30 @@ that broke it, would look exactly like a right one on the page.
 | `voids` | every crossed-out suit on every seat at every moment is true of that seat's hand; the next card drawn clears it |
 | `save` | a match saved and loaded at any moment carries on move for move |
 | `skill` | the computer players pay less per hand than a random player and beat it at matches |
+
+## Moodswing
+
+```sh
+npm run test:moodswing                       # or: node test/emoji_match_three.mjs
+node test/emoji_match_three.mjs rules events # one or more named suites
+node test/emoji_match_three.mjs levels --full   # every level, 24 attempts each (slow)
+```
+
+`emoji_match_three.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` of
+`games/emoji_match_three.html` in Node's `vm`. The page draws nothing it decides itself: it plays back the swap,
+clear, fall, shuffle and payout events the core returns. A rule that is slightly off, or an event that moves a piece
+the core did not, would show as a glitch nobody can reproduce.
+
+| suite | what it checks |
+| --- | --- |
+| `deal` | every level's opening board for three attempts: no line already made, at least three moves open, holes empty, each cloud where a line can cross it both ways, the cloud goal counting every layer, star marks rising |
+| `rules` | stacked boards: three, four across and down, five, L and T and where each special is born; what a striped piece, a burst and a ring clear; every pairing of specials; refused swaps change nothing; goals count specials too |
+| `clouds` | one layer off per clear, a storm turning into a white cloud, the goal counting layers |
+| `events` | random games replayed from their events alone end on exactly the core's board, after every move and after the payout |
+| `play` | thousands of random moves: one move spent each, the board full, no piece in two places, no line left standing, a move always open, the score and goals only moving one way |
+| `save` | a game saved as JSON mid-level carries on move for move |
+| `finale` | every move left is paid out, and the board is left with no special and no line |
+| `levels` | a bot that plays the best move it sees 85% of the time wins each level about as often as the `TABLE` was measured for, and level 1 is won even by mostly random play |
+
+The `TABLE` in the core holds, per level, a variant, the moves and the bot's median score at the win; the star marks
+come from that score. After changing a rule or a price, re-measure it before trusting the levels.
