@@ -966,3 +966,22 @@ the core did not, would show as a glitch nobody can reproduce.
 
 The `TABLE` in the core holds, per level, a variant, the moves and the bot's median score at the win; the star marks
 come from that score. After changing a rule or a price, re-measure it before trusting the levels.
+
+## Ludo
+
+```sh
+npm run test:ludo                 # or: node test/ludo.mjs
+node test/ludo.mjs rules play     # named suites only
+node test/ludo.mjs --games=3000   # more simulated games
+```
+
+`ludo.mjs` runs the DOM-free `<script id="core">` block of `games/ludo.html` in Node. The page only animates the
+moves the core returns, so a wrong rule looks exactly like a right one on screen.
+
+| suite | what it checks |
+|---|---|
+| `board` | 52 distinct track squares a step apart, each lane off the track and entered from the square beside it, the same board seen from every seat |
+| `rules` | stacked positions: a six to leave, the exact roll home, captures (two at once too), none on starts or stars, bonus rolls, three sixes, empty seats skipped |
+| `play` | whole games with two, three and four seats: legal moves only, every pawn always somewhere, two colours only on safe squares, every game ends |
+| `save` | a game copied through JSON at any moment carries on identically |
+| `skill` | the computer player beats a player who moves any legal pawn at random |
