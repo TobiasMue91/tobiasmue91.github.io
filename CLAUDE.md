@@ -99,6 +99,7 @@ npm run test:departures     # Departures (Time Travel Agency) suite (plain Node,
 npm run test:moodswing      # Moodswing (Emoji Match 3) suite (plain Node, no server or browser)
 npm run test:bedtime        # Bedtime (Lights Out) suite (plain Node, no server or browser)
 npm run test:ludo           # Ludo suite (plain Node, no server or browser)
+npm run test:patience       # Patience (Solitaire) suite (plain Node, no server or browser)
 npm run test:yahtzee        # Yacht (Yahtzee) suite (plain Node, no server or browser)
 ```
 
@@ -109,7 +110,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Thirty-six exist so far. `test/everything_converter.mjs` drives
+Thirty-seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -304,6 +305,13 @@ leave the yard, the exact roll home, captures but never on a start or a star, bo
 home, three sixes losing the turn), a thousand whole games in which every pawn is always somewhere legal and two colours
 share only safe squares, a save that carries on roll for roll, and a computer player that beats a random mover. Run it
 after touching the core.
+`test/solitaire.mjs` runs the DOM-free `<script id="core">` block of `games/solitaire.html` (Patience), Klondike whose one
+promise is that every deal can be won: the page lists its deals as bit masks of seeds its own solver cleared, and the suite
+re-solves a sample and replays each way out move by move. Stacked positions check every rule (alternate colours, kings to
+empty columns, suits home from the ace, draw one and three, recycling), thousands of random games keep all 52 cards in
+place, a tap is refused only when the card truly has nowhere to go, a hint the page calls sure leads on to a win, and a
+table with nothing hidden always finishes itself. Changing the solver or the deal means re-listing the seeds; run it after
+touching the core.
 `test/yahtzee.mjs` runs the DOM-free `<script id="core">` block of `games/yahtzee.html` (Yacht), Yahtzee on a
 yacht's score pad: every box on all 7776 rolls against rules written the other way round, the joker rules for an
 extra Yacht, seeded dice that are fair and the same for everyone with kept dice never changing the rest, thousands

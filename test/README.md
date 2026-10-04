@@ -1003,6 +1003,29 @@ moves the core returns, so a wrong rule looks exactly like a right one on screen
 | `save` | a game copied through JSON at any moment carries on identically |
 | `skill` | the computer player beats a player who moves any legal pawn at random |
 
+## Patience (Solitaire)
+
+```sh
+npm run test:patience                 # or: node test/solitaire.mjs
+node test/solitaire.mjs rules seeds   # named suites only
+node test/solitaire.mjs --seeds=all   # re-solve every listed deal, not a sample (slow)
+node test/solitaire.mjs --relist=3000 # make the page's lists of winnable deals again
+```
+
+`solitaire.mjs` runs the DOM-free `<script id="core">` block of `games/solitaire.html` in Node. The page deals only
+seeds its own solver has cleared, stored as one bit mask per draw size; deal number n is the n-th set bit. A change to
+the deal or the solver silently breaks that promise, so re-list with `--relist` and paste the two lines into the page.
+
+| suite | what it checks |
+|---|---|
+| `deal` | columns of one to seven with only the last card up, 24 in the stock, 52 distinct cards, same seed same deal |
+| `rules` | stacked positions: alternate colours, kings to empty columns, suits home from the ace, nothing from under a face-down card, draw one and three, recycling |
+| `play` | thousands of random games: every offered move legal, apply never touches its input, every card always somewhere |
+| `tap` | a tapped card goes home first, else somewhere legal, and is refused only when there is nowhere at all |
+| `seeds` | the masks decode in order, and a sample of listed deals is solved and replayed move by move to a win |
+| `hint` | every hint legal; a hint marked sure leads on to a win |
+| `finish` | a table with nothing hidden always finishes by sending the lowest card home |
+
 ## Yacht (Yahtzee)
 
 ```sh
