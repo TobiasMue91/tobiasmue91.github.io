@@ -1025,3 +1025,22 @@ the deal or the solver silently breaks that promise, so re-list with `--relist` 
 | `seeds` | the masks decode in order, and a sample of listed deals is solved and replayed move by move to a win |
 | `hint` | every hint legal; a hint marked sure leads on to a win |
 | `finish` | a table with nothing hidden always finishes by sending the lowest card home |
+
+## Yacht (Yahtzee)
+
+```sh
+npm run test:yahtzee                  # or: node test/yahtzee.mjs
+node test/yahtzee.mjs scoring joker   # named suites only
+node test/yahtzee.mjs skipper --games=30
+```
+
+`yahtzee.mjs` runs the DOM-free `<script id="core">` block of `games/yahtzee.html` in Node. The card is the game:
+a box that pays wrong on one roll in a thousand, or an extra Yacht let into the wrong box, looks right on screen.
+
+| suite | what it checks |
+|---|---|
+| `scoring` | all 13 boxes on all 7776 rolls against rules written the other way round, the textbook pattern counts, the 63 bonus line, the 1575 ceiling |
+| `joker` | where an extra Yacht may go and what it pays, the +100 only after a 50, `score()` refusing a forbidden box |
+| `dice` | seeded faces equally likely, the same everywhere, and a kept die never changing what the others become |
+| `games` | 2000 random games fill thirteen boxes, score what the preview showed and add up |
+| `skipper` | the computer rival averages 215 or more and scores the same on the same dice, so a daily result is fair (slow, about 3s a game) |
