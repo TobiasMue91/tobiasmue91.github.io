@@ -1044,3 +1044,21 @@ a box that pays wrong on one roll in a thousand, or an extra Yacht let into the 
 | `dice` | seeded faces equally likely, the same everywhere, and a kept die never changing what the others become |
 | `games` | 2000 random games fill thirteen boxes, score what the preview showed and add up |
 | `skipper` | the computer rival averages 215 or more and scores the same on the same dice, so a daily result is fair (slow, about 3s a game) |
+
+## Lights On (Missile Command)
+
+```sh
+npm run test:missile                  # or: node test/missile_command.mjs
+node test/missile_command.mjs rules   # named suites only
+```
+
+`missile_command.mjs` runs the DOM-free `<script id="core">` block of `games/missile_command.html` in Node, on the
+geometry the page hands it for a desktop and for a phone. A burst that misses what it visibly touches, a chain that
+pays the wrong amount or a wave that never ends all look fine on a screenshot.
+
+| suite | what it checks |
+|---|---|
+| `rules` | a burst catches inside its radius only, chains count 1,2,3,4 and pay n times the n-th, no chain across empty sky, ten shells a bunker with the nearest answering, A/S/D picks a bunker, no burst in the streets, impacts take cities and bunkers, the last city ends the run, the count, a city relit per 10,000, the multiplier table |
+| `waves` | forty seeds of twelve waves on both skies: the right number of warheads, each aimed at something standing, no splitters before wave 3, every wave ends; fall time does not depend on angle; same seed and taps, same game |
+| `bots` | players with a person's reaction time: one who never fires is gone by wave 3, a careful one outlasts a sloppy one, gets past wave 6 and sees chains of three |
+

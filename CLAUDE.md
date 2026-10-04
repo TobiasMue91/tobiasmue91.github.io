@@ -101,6 +101,7 @@ npm run test:bedtime        # Bedtime (Lights Out) suite (plain Node, no server 
 npm run test:ludo           # Ludo suite (plain Node, no server or browser)
 npm run test:patience       # Patience (Solitaire) suite (plain Node, no server or browser)
 npm run test:yahtzee        # Yacht (Yahtzee) suite (plain Node, no server or browser)
+npm run test:missile        # Lights On (Missile Command) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -110,7 +111,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Thirty-seven exist so far. `test/everything_converter.mjs` drives
+Thirty-eight exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -317,6 +318,13 @@ yacht's score pad: every box on all 7776 rolls against rules written the other w
 extra Yacht, seeded dice that are fair and the same for everyone with kept dice never changing the rest, thousands
 of random games that add up, and a Skipper - the rival who plays the same daily dice - that averages over 215 and
 always scores the same on the same dice. Run it after touching the core.
+`test/missile_command.mjs` runs the DOM-free `<script id="core">` block of `games/missile_command.html` (Lights On),
+Missile Command over six harbour cities: a burst catches exactly what is inside its radius and nothing a hair beyond,
+a chain links only bursts that touch and pays its n-th catch n times, ten shells a bunker with the nearest answering,
+impacts take cities and bunkers, the count at a wave's end pays every shell and standing city and relights one per
+10,000; forty seeds of twelve waves send the right number of warheads, each at something still standing, and every
+wave ends; and bots with a person's reaction time play on a desktop and a phone sky - one who never fires is gone by
+wave 3, a careful one outlasts a sloppy one and gets past wave 6. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
