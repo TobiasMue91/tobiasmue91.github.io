@@ -103,6 +103,7 @@ npm run test:patience       # Patience (Solitaire) suite (plain Node, no server 
 npm run test:yahtzee        # Yacht (Yahtzee) suite (plain Node, no server or browser)
 npm run test:missile        # Lights On (Missile Command) suite (plain Node, no server or browser)
 npm run test:reversi        # Reversi suite (plain Node, no server or browser)
+npm run test:checkers       # Checkers suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -112,7 +113,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Thirty-nine exist so far. `test/everything_converter.mjs` drives
+Forty exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -332,6 +333,12 @@ its core returns: perft against the published Othello counts, every move and fli
 way round, passes and the end of a game, a record that replays move for move, alpha-beta against plain minimax and the endgame
 solver against brute force, and three computer opponents that must be ordered by playing strength and never move illegally.
 Run it after touching the core, the evaluation or a level.
+
+`test/checkers.mjs` runs the DOM-free `<script id="core">` block of `games/checkers.html`, whose page only animates the moves
+its core returns: perft against the published American-checkers counts, every position of hundreds of random games against a move
+generator written the other way round (compulsory jumps, whole chains, a man crowned mid-jump stopping, no piece jumped twice), a record
+that replays move for move, the 40-move and threefold-repetition draws, alpha-beta against plain minimax, and three computer opponents
+that must be ordered by playing strength and never move illegally. Run it after touching the core, the evaluation or a level.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
