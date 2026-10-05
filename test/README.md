@@ -1098,3 +1098,22 @@ only animates the moves its core returns, so a jump rule that is slightly off lo
 | `record` | a game is its list of moves: replaying gives the same board, turn and draw count; an illegal move is refused; the same position three times and forty moves without a jump or a man moving are draws |
 | `search` | alpha-beta returns what plain minimax does; every level takes a last piece; the strong level crowns a free man |
 | `skill` | every computer move is legal; hard beats easy, medium beats easy, hard does not lose to medium |
+
+## Tesserae (Nonogram)
+
+```sh
+npm run test:nonogram                  # or: node test/nonogram.mjs
+node test/nonogram.mjs lines pictures  # named suites only
+```
+
+`nonogram.mjs` runs the DOM-free `<script id="core">` block of `games/nonogram.html` in Node: the line solver, the pictures, the
+rules of laying and marking, hints and saves. A nonogram that needs a guess, or has two answers, looks exactly like a good one,
+so the pictures are held to the promise rather than the page. The whole suite takes about a second.
+
+| suite | what it checks |
+|---|---|
+| `lines` | the one-line solver against listing every way to lay the clue, on thousands of random lines of 1-9 cells with random cells shown, including lines that contradict themselves; and the brute-force counter used below sees two pictures where a 2x2 has two |
+| `pictures` | every picture: its own id and name, the size of its set, a glaze for every tile, no clue longer than five numbers (it must fit a phone), finished by line logic alone and on the picture itself, and up to 10x10 the only picture its numbers describe |
+| `play` | a wrong tile cracks and becomes a mark, a mark on a tile is refused, both cost a crack; finishing a line reports it once and marks its leftovers; stroke modes and spans; random play can never leave a wrong tile or a mark on a tile, and `solved` is reported exactly when the last tile lands |
+| `hints` | every hint is true, a `full` hint really is full, and following hints alone solves every picture with no crack |
+| `saves` | a save comes back cell for cell, a forged save keeps only what is true, the daily panel is the same everywhere and prefers unsolved ones, the clock and Roman numerals |
