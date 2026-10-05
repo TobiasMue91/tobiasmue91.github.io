@@ -104,6 +104,7 @@ npm run test:yahtzee        # Yacht (Yahtzee) suite (plain Node, no server or br
 npm run test:missile        # Lights On (Missile Command) suite (plain Node, no server or browser)
 npm run test:stack          # Stack Tower suite (plain Node, no server or browser)
 npm run test:reversi        # Reversi suite (plain Node, no server or browser)
+npm run test:nonogram       # Tesserae (Nonogram) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -339,6 +340,11 @@ its core returns: perft against the published Othello counts, every move and fli
 way round, passes and the end of a game, a record that replays move for move, alpha-beta against plain minimax and the endgame
 solver against brute force, and three computer opponents that must be ordered by playing strength and never move illegally.
 Run it after touching the core, the evaluation or a level.
+`test/nonogram.mjs` runs the DOM-free `<script id="core">` block of `games/nonogram.html` (Tesserae), a nonogram whose one promise is that
+every picture can be worked out by logic alone: the line solver against listing every way to lay a clue, every picture finished
+by line logic with no guess (and, up to 10x10, found to be the only picture those numbers describe by brute force), a tile where
+none belongs cracking while a mark on a tile is refused, strokes, saves that trust nothing, the daily panel, and hints that are
+always true and, followed alone, solve every picture with no crack. Run it after touching the core or adding a picture.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
