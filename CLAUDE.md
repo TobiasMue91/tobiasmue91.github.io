@@ -106,6 +106,7 @@ npm run test:stack          # Stack Tower suite (plain Node, no server or browse
 npm run test:reversi        # Reversi suite (plain Node, no server or browser)
 npm run test:checkers       # Checkers suite (plain Node, no server or browser)
 npm run test:nonogram       # Tesserae (Nonogram) suite (plain Node, no server or browser)
+npm run test:shatter        # Shatter Field (3D Asteroids) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -115,7 +116,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-one exist so far. `test/everything_converter.mjs` drives
+Forty-two exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -346,6 +347,12 @@ every picture can be worked out by logic alone: the line solver against listing 
 by line logic with no guess (and, up to 10x10, found to be the only picture those numbers describe by brute force), a tile where
 none belongs cracking while a mark on a tile is refused, strokes, saves that trust nothing, the daily panel, and hints that are
 always true and, followed alone, solve every picture with no crack. Run it after touching the core or adding a picture.
+
+`test/shatter_field.mjs` runs the DOM-free `<script id="core">` block of `games/asteroids_3d.html` (Shatter Field), a first-person asteroids game
+whose page only draws what the core returns: a bolt touches what its swept path crosses at any frame rate and nothing else, a split sends two pieces
+apart carrying the parent's momentum, the red warnings name exactly the rocks that would hit (against a brute-force run), the aim assist never bends a
+bolt past its cone, score, chain, hull and field rules, a seed deals the same night to everyone, and bots with a person's reflexes must reach deeper
+fields in order of skill while a player who never fires is gone by field 3. Run it after touching the core.
 
 `test/checkers.mjs` runs the DOM-free `<script id="core">` block of `games/checkers.html`, whose page only animates the moves
 its core returns: perft against the published American-checkers counts, every position of hundreds of random games against a move
