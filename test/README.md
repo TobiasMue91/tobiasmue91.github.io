@@ -984,6 +984,25 @@ almost right gives a par one too high on a few boards, and nobody playing could 
 | `levels` | 120 levels: the same twice, clearable, par as designed and equal to the true minimum, no light in a wall, blocks never shrinking; level 1 is one press in the middle |
 | `tonight` | 400 nights: the same everywhere, clearable at par, at least four outlines; the next day across clock changes and leap days |
 | `record` | three moons at par, two within two, one beyond, a hint capping at two; a streak grows by one a night, counts a night once and restarts after a gap |
+## Reversi
+
+```sh
+npm run test:reversi                 # or: node test/reversi.mjs
+node test/reversi.mjs rules search   # named suites only
+node test/reversi.mjs --games=60     # more simulated games
+```
+
+`reversi.mjs` runs the DOM-free `<script id="core">` block of `games/reversi.html` in Node: the rules, the record of a game
+and the three computer opponents. The page only animates what the core returns, so a flip rule that is slightly off looks
+right on screen and plays wrong. The `skill` suite plays whole games and takes about a minute; the others take a second.
+
+| suite | what it checks |
+|---|---|
+| `rules` | perft 1 to 7 against the published Othello counts (4, 12, 56, 244, 1396, 8200, 55092); 300 random games in which every legal move and every flipped cell matches a finder written the other way round, each animation line runs outward from the stone, a pass keeps the turn with the side that can move, a game ends only when neither can |
+| `record` | a game is its list of moves: replaying it, or any prefix of it, gives the board seen at that moment; an illegal move changes nothing |
+| `search` | alpha-beta returns exactly what plain minimax does on 40 positions; the endgame solver returns the true final margin (empty squares to the winner) |
+| `skill` | no opponent ever plays an illegal move; each beats a random mover; Regular beats Apprentice and Waterman beats Regular |
+
 ## Ludo
 
 ```sh
