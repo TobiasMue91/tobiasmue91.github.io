@@ -184,7 +184,7 @@ if (suites.includes('rules')) {
   const W = empty(9); rock(W, 3, [0, 0, 109.5], [0, 0, 8]); run(W, 0.5);
   check(W.rocks.length === 1 && len(W.rocks[0].p) < F.WRAP_R, 'a rock that flies out comes round again from the far side');
   let ok = true; for (let f = 1; f < 40; f++) { check(F.speedFor(f + 1) >= F.speedFor(f) && F.countFor(f + 1) >= F.countFor(f), 'difficulty never eases ' + f); }
-  check(F.speedFor(1) <= 6 && F.countFor(1) === 3, 'field 1 is slow and three rocks');
+  check(F.speedFor(1) <= 6 && F.countFor(1) === 4, 'field 1 is slow and four rocks');
 }
 
 if (suites.includes('seed')) {
