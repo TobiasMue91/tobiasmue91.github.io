@@ -1081,6 +1081,24 @@ pays the wrong amount or a wave that never ends all look fine on a screenshot.
 | `waves` | forty seeds of twelve waves on both skies: the right number of warheads, each aimed at something standing, no splitters before wave 3, every wave ends; fall time does not depend on angle; same seed and taps, same game |
 | `bots` | players with a person's reaction time: one who never fires is gone by wave 3, a careful one outlasts a sloppy one, gets past wave 6 and sees chains of three |
 
+## Checkers
+
+```sh
+npm run test:checkers                    # or: node test/checkers.mjs
+node test/checkers.mjs rules search      # named suites only
+node test/checkers.mjs --games=20        # more simulated games (default 10)
+```
+
+`checkers.mjs` runs the DOM-free `<script id="core">` block of `games/checkers.html` in Node (no server, no browser): the page
+only animates the moves its core returns, so a jump rule that is slightly off looks right on screen and plays wrong.
+
+| suite | what it checks |
+|---|---|
+| `rules` | perft 1-7 from the start (7, 49, 302, 1469, 7361, 36768, 179740); every position of 150 random games gives the same moves as a generator written the other way round; compulsory jumps, whole chains, crowning ends a chain, kings jump backwards and loop, no piece is jumped twice; a blocked side or one with no pieces loses |
+| `record` | a game is its list of moves: replaying gives the same board, turn and draw count; an illegal move is refused; the same position three times and forty moves without a jump or a man moving are draws |
+| `search` | alpha-beta returns what plain minimax does; every level takes a last piece; the strong level crowns a free man |
+| `skill` | every computer move is legal; hard beats easy, medium beats easy, hard does not lose to medium |
+
 ## Tesserae (Nonogram)
 
 ```sh

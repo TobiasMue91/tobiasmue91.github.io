@@ -104,6 +104,7 @@ npm run test:yahtzee        # Yacht (Yahtzee) suite (plain Node, no server or br
 npm run test:missile        # Lights On (Missile Command) suite (plain Node, no server or browser)
 npm run test:stack          # Stack Tower suite (plain Node, no server or browser)
 npm run test:reversi        # Reversi suite (plain Node, no server or browser)
+npm run test:checkers       # Checkers suite (plain Node, no server or browser)
 npm run test:nonogram       # Tesserae (Nonogram) suite (plain Node, no server or browser)
 ```
 
@@ -114,7 +115,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty exist so far. `test/everything_converter.mjs` drives
+Forty-one exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -345,6 +346,12 @@ every picture can be worked out by logic alone: the line solver against listing 
 by line logic with no guess (and, up to 10x10, found to be the only picture those numbers describe by brute force), a tile where
 none belongs cracking while a mark on a tile is refused, strokes, saves that trust nothing, the daily panel, and hints that are
 always true and, followed alone, solve every picture with no crack. Run it after touching the core or adding a picture.
+
+`test/checkers.mjs` runs the DOM-free `<script id="core">` block of `games/checkers.html`, whose page only animates the moves
+its core returns: perft against the published American-checkers counts, every position of hundreds of random games against a move
+generator written the other way round (compulsory jumps, whole chains, a man crowned mid-jump stopping, no piece jumped twice), a record
+that replays move for move, the 40-move and threefold-repetition draws, alpha-beta against plain minimax, and three computer opponents
+that must be ordered by playing strength and never move illegally. Run it after touching the core, the evaluation or a level.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
