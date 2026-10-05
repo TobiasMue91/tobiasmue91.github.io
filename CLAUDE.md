@@ -102,6 +102,7 @@ npm run test:ludo           # Ludo suite (plain Node, no server or browser)
 npm run test:patience       # Patience (Solitaire) suite (plain Node, no server or browser)
 npm run test:yahtzee        # Yacht (Yahtzee) suite (plain Node, no server or browser)
 npm run test:missile        # Lights On (Missile Command) suite (plain Node, no server or browser)
+npm run test:stack          # Stack Tower suite (plain Node, no server or browser)
 npm run test:reversi        # Reversi suite (plain Node, no server or browser)
 ```
 
@@ -112,7 +113,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Thirty-nine exist so far. `test/everything_converter.mjs` drives
+Forty exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -326,6 +327,12 @@ impacts take cities and bunkers, the count at a wave's end pays every shell and 
 10,000; forty seeds of twelve waves send the right number of warheads, each at something still standing, and every
 wave ends; and bots with a person's reaction time play on a desktop and a phone sky - one who never fires is gone by
 wave 3, a careful one outlasts a sloppy one and gets past wave 6. Run it after touching the core.
+`test/stack_tower.mjs` runs the DOM-free `<script id="core">` block of `games/stack_tower.html` (Stack Tower), where
+the one promise is that the cut is honest: every drop on thousands of random towers is checked against plain interval
+arithmetic (the layer is the overlap, the offcut is the rest of the slab and touches it, nothing spills into the other
+axis), a drop within the tolerance snaps exactly and one hair outside it cuts, a run of perfects gives width back and never
+past the starting size, a long frame moves the slab as far as sixty short ones, and bots with a person's timing error build
+higher in order of their skill. Run it after touching the core or the speed curve.
 
 `test/reversi.mjs` runs the DOM-free `<script id="core">` block of `games/reversi.html`, whose page only animates the events
 its core returns: perft against the published Othello counts, every move and flipped cell against a finder written the other
