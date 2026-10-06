@@ -67,7 +67,6 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;touch-
 .slot.open .inner{transform:rotateX(180deg)}
 .face{position:absolute;inset:0;display:flex;align-items:center;gap:10px;padding:0 10px 0 12px;border-radius:9px;backface-visibility:hidden;-webkit-backface-visibility:hidden;font-family:var(--head);font-weight:700;text-transform:uppercase}
 .front{background:linear-gradient(#2a3a8c 0,#16225f 8%,#0b1445 50%,#0a1236 100%);border:2px solid #07102e;box-shadow:inset 0 2px 0 #5d73d0,inset 0 -3px 6px #000c,0 2px 0 #3a4a9a;justify-content:center}
-.front::before{content:"";position:absolute;left:50%;top:6px;bottom:6px;width:2px;background:#050a22;box-shadow:1px 0 0 #2a3a8c;opacity:.7}
 .front i{backface-visibility:hidden;-webkit-backface-visibility:hidden;height:76%;aspect-ratio:1;display:grid;place-items:center;border-radius:50%;background:radial-gradient(#23358a,#0b1445);border:2px solid #5b73c9;color:#9db0ff;font:700 clamp(15px,3.6vh,24px)/1 var(--head);font-style:normal}
 .face *{backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .back{transform:rotateX(180deg);background:linear-gradient(#fffbe9,#ffe9a4);color:#14204a;border:2px solid #fff;box-shadow:0 0 0 2px #ffc83d,0 0 26px #ffc83daa}
@@ -120,6 +119,10 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;touch-
 .two button:hover{border-color:#7f95e8}
 .two button small{display:block;font:600 13px/1.2 var(--body);color:var(--dim);letter-spacing:0;margin-top:2px;white-space:normal}
 .two button:disabled{opacity:.55;cursor:default}
+.topic{display:grid;gap:4px;text-align:left}.topic span{font:700 12px/1 var(--head);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}.topic em{font-style:normal;opacity:.7;letter-spacing:.08em;margin-left:6px}
+.topic input{height:50px;border-radius:12px;border:2px solid #3a4a8f;background:#050a1f;color:#fff;font:600 19px var(--body);padding:0 14px;outline:0}.topic input:focus{border-color:var(--gold);box-shadow:0 0 18px #ffc83d44}.topic input::placeholder{color:#6f80c0}
+.terr{font:600 15px/1.3 var(--body);color:#ff9aa6;min-height:0;text-align:center}.terr:empty{display:none}
+.big.loading,.two button.loading{opacity:.75;pointer-events:none}
 .tfoot{display:flex;justify-content:center;gap:14px;align-items:center;font:600 14px var(--body);color:var(--dim);min-height:24px}
 .tfoot button{color:var(--dim);text-decoration:underline;font:inherit}
 .fresh{display:inline-flex;align-items:center;gap:6px;font:700 11px/1 var(--head);letter-spacing:.14em;color:var(--b);text-transform:uppercase}
@@ -198,6 +201,8 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;touch-
    <div class="slots" id="tslots"></div>
   </div>
   <div class="menu">
+   <label class="topic"><span>Topic <em>optional</em></span><input id="topic" type="text" maxlength="60" autocomplete="off" spellcheck="false" placeholder="90s cartoons, football, Mars, Paris…" enterkeyhint="go"></label>
+   <div class="terr" id="terr" aria-live="polite"></div>
    <button class="big" id="bShared" hidden>A FRIEND'S BOARD<small></small></button>
    <button class="big" id="bResume" hidden></button>
    <button class="big" id="bSolo">PLAY THE HENDERSONS<small id="soloSub"></small></button>
@@ -305,7 +310,7 @@ const FEUD = (() => {
         if (w.length > 3 && w.endsWith('s') && !/(ss|us|is)$/.test(w)) return w.slice(0, -1);
         return w;
     };
-    const tokens = t => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' and ').replace(/['’`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean).filter(w => !STOP.has(w)).map(stem);
+    const tokens = t => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' and ').replace(/['’`]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean).filter(w => !STOP.has(w)).map(stem);
     const lev = (a, b) => {
         if (a === b) return 0;
         const m = a.length, n = b.length; let prev = Array.from({length: n + 1}, (_, j) => j), prev2 = prev;
@@ -319,6 +324,7 @@ const FEUD = (() => {
         }
         return prev[n];
     };
+    const tooShort = tk => { const j = tk.join(''); return j.length < 2 && /^[\x00-\x7f]*$/.test(j); };
     const slack = len => len <= 4 ? 0 : len <= 11 ? 1 : 2;
     // how well a typed guess says this one phrase: 1 exact, .9 it contains the whole phrase, .8 a slip of the keys, 0 no
     function say(guessTok, phrase) {
@@ -335,7 +341,7 @@ const FEUD = (() => {
     // the answer on the board a guess means: {idx, score} or null. Ties go to the higher answer.
     function match(guess, answers) {
         const gt = tokens(guess);
-        if (gt.join('').length < 2) return null;
+        if (tooShort(gt)) return null;
         let best = null;
         answers.forEach((a, idx) => {
             let sc = 0; for (const n of names(a)) sc = Math.max(sc, say(gt, n));
@@ -354,7 +360,7 @@ const FEUD = (() => {
     function clean(s) {
         if (!s || typeof s.q !== 'string' || !Array.isArray(s.a)) return null;
         const q = s.q.replace(/\s+/g, ' ').trim();
-        if (q.length < 12 || q.length > 90 || !/[a-z]/i.test(q)) return null;
+        if (q.length < 12 || q.length > 90 || !/\p{L}/u.test(q)) return null;
         const out = [];
         for (const x of s.a) {
             if (!x || typeof x.name !== 'string') continue;
@@ -423,7 +429,7 @@ const FEUD = (() => {
             said = String(guess.text || '').trim();
             const mt = match(said, b);
             idx = mt ? mt.idx : -1;
-            if (!mt && tokens(said).join('').length < 2) return {s: state, ev: [{t: 'refused'}], said};
+            if (!mt && tooShort(tokens(said))) return {s: state, ev: [{t: 'refused'}], said};
         }
         if (idx >= 0 && s.rev.includes(idx)) return {s: state, ev: [{t: 'repeat', idx}], said};
         const reveal = i => { s.rev.push(i); const pts = b[i].pct * m; s.bank += pts; ev.push({t: 'reveal', idx: i, pts, team: s.turn}); };
@@ -545,20 +551,25 @@ function toggleSound() { D.sound = !D.sound; save(); drawSound(); if (D.sound) {
 /* ---------- fresh questions from the language model, fetched while you read the title ---------- */
 const THEMES = ['kitchens', 'school days', 'road trips', 'pets', 'weddings', 'supermarkets', 'winter', 'office life', 'parties', 'sports', 'bedrooms', 'summer', 'cinema', 'birthdays', 'airports', 'laundry', 'camping', 'phones', 'breakfast', 'neighbours'];
 let fresh = null, freshState = 'idle';
-async function fetchFresh() {
-    if (freshState !== 'idle') return;
-    freshState = 'loading';
+// four surveys written by the language model, on a topic the player chose or on four themes picked at random
+async function writeSurveys(topic) {
     const themes = [...THEMES].sort(() => Math.random() - .5).slice(0, 4);
-    const prompt = `Write 4 survey questions in the style of the TV show Family Feud, one for each theme: ${themes.join(', ')}. Each question starts with "Name" and has many possible answers (e.g. "Name something you find in a kitchen drawer"). For each, list the 6 or 7 most common answers that 100 people would give, with the percent who said it (integers, total at most 100, top answer between 25 and 45, falling away). Short answers (1 to 3 words). For each answer also give "also": 2 to 5 other ways a person might say or misspell it. Family friendly, no brands. Reply only with JSON: {"surveys":[{"q":"...","answers":[{"a":"...","pct":34,"also":["..."]}]}]}`;
-    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 20000);
+    const brief = topic ? `Write 4 different survey questions that all stay on the topic "${topic.replace(/["\n]/g, ' ')}", each from a different angle. If the topic is not in English, write the questions and answers in that language.` : `Write 4 survey questions, one for each theme: ${themes.join(', ')}.`;
+    const prompt = `You write survey boards for a game like the TV show Family Feud. ${brief} Each question asks for one thing people could name (e.g. "Name something you find in a kitchen drawer"). For each, list the 6 or 7 most common answers that 100 people would give, with the percent who said it (integers, total at most 100, top answer between 25 and 45, falling away). Short answers (1 to 3 words). For each answer also give "also": 2 to 5 other ways a person might say or misspell it. Family friendly. Reply only with JSON: {"surveys":[{"q":"...","answers":[{"a":"...","pct":34,"also":["..."]}]}]}`;
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 25000);
     try {
         const res = await fetch(AI_URL, {method: 'POST', headers: {'Content-Type': 'application/json'}, signal: ctl.signal, body: JSON.stringify({model: 'gpt-4o-mini', temperature: 1, max_tokens: 1800, messages: [{role: 'user', content: prompt}], response_format: {type: 'json_object'}})});
         if (!res.ok) throw 0;
         const j = await res.json();
-        const raw = (j.choices?.[0]?.message?.content || '').replace(/```json\s*|```/g, '').trim();
-        const list = JSON.parse(raw).surveys.map(s => F.clean({q: s.q, a: (s.answers || []).map(x => ({name: x.a, pct: x.pct, also: x.also}))})).filter(Boolean);
-        if (list.length) { fresh = list; freshState = 'ready'; drawTitle(); } else freshState = 'failed';
-    } catch (e) { freshState = 'failed'; } finally { clearTimeout(to); }
+        const raw = (j.choices?.[0]?.message?.content || '');
+        const json = raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
+        return JSON.parse(json).surveys.map(s => F.clean({q: s.q, a: (s.answers || []).map(x => ({name: x.a, pct: x.pct, also: x.also}))})).filter(Boolean);
+    } finally { clearTimeout(to); }
+}
+async function fetchFresh() {
+    if (freshState !== 'idle') return;
+    freshState = 'loading';
+    try { const list = await writeSurveys(null); if (list.length) { fresh = list; freshState = 'ready'; drawTitle(); } else freshState = 'failed'; } catch (e) { freshState = 'failed'; }
 }
 
 /* ---------- the title ---------- */
@@ -872,11 +883,11 @@ function pickBoard() {
     }
     return out;
 }
-function start(mode, daily, first) {
+function start(mode, daily, first, custom) {
     Snd.init();
     let surveys, seed;
     if (daily) { surveys = F.dailyBoard(F.bank, daily); seed = 'day:' + daily; }
-    else { surveys = pickBoard(); seed = String(Math.random()); if (first) surveys = [first, ...surveys.filter(s => s.q !== first.q)].slice(0, F.ROUNDS); }
+    else { surveys = custom && custom.length ? [...custom.slice(0, F.ROUNDS), ...pickBoard()].slice(0, F.ROUNDS) : pickBoard(); seed = String(Math.random()); if (first) surveys = [first, ...surveys.filter(s => s.q !== first.q)].slice(0, F.ROUNDS); }
     S = F.begin({mode, surveys, seed, daily: daily || null});
     D.game = S; save();
     showGame(); beginRound();
@@ -902,8 +913,22 @@ function resume() {
     nextTurn();
     if (!busy) focusInput();
 }
-$('#bSolo').onclick = () => start('solo');
-$('#bDuo').onclick = () => start('duo');
+async function begin(mode, btn) {
+    const topic = $('#topic').value.trim(), err = $('#terr');
+    err.textContent = '';
+    if (!topic) return start(mode);
+    Snd.init();
+    const label = btn.innerHTML; btn.classList.add('loading'); btn.firstChild.textContent = 'Asking 100 strangers…';
+    try {
+        const list = await writeSurveys(topic);
+        if (list.length < 2) throw 0;
+        start(mode, null, null, list);
+    } catch (e) { err.textContent = 'Could not write boards on that topic. Try different words, or clear the topic.'; }
+    btn.classList.remove('loading'); btn.innerHTML = label;
+}
+$('#bSolo').onclick = e => begin('solo', e.currentTarget);
+$('#bDuo').onclick = e => begin('duo', e.currentTarget);
+$('#topic').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); begin('solo', $('#bSolo')); } });
 $('#bDaily').onclick = () => start('solo', today());
 $('#bResume').onclick = resume;
 $('#bBack').onclick = showTitle;
