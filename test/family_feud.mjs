@@ -69,6 +69,11 @@ if (suites.includes('match')) {
     check(F.match('café', mk('Q', [['Cafe', 30], ['Bar', 20], ['Tea', 10], ['Pub', 5]]).a)?.idx === 0, 'accents do not matter');
     check(F.match('don\'t know', mk('Q', [['Dont know', 30], ['Bar', 20], ['Tea', 10], ['Pub', 5]]).a)?.idx === 0, 'apostrophes do not matter');
     check(F.match('😀😀', STACK.a) == null, 'emoji mean nothing');
+    // other languages: accents fold, other scripts are read as letters
+    const wide = mk('Q', [['Käse', 30], ['Собака', 20], ['犬', 10], ['Mädchen', 5]]).a;
+    check(F.match('kase', wide)?.idx === 0 && F.match('KÄSE', wide)?.idx === 0, 'an umlaut folds to its letter');
+    check(F.match('собака', wide)?.idx === 1, 'Cyrillic is read as letters');
+    check(F.match('犬', wide)?.idx === 2 && F.match('猫', wide) == null, 'CJK is read as letters, one character at a time');
     check(F.match('x'.repeat(5000), STACK.a) == null, 'a very long guess is not an answer and does not hang');
 }
 
