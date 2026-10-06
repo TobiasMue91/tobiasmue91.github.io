@@ -107,6 +107,7 @@ npm run test:reversi        # Reversi suite (plain Node, no server or browser)
 npm run test:checkers       # Checkers suite (plain Node, no server or browser)
 npm run test:nonogram       # Tesserae (Nonogram) suite (plain Node, no server or browser)
 npm run test:shatter        # Shatter Field (3D Asteroids) suite (plain Node, no server or browser)
+npm run test:feud           # We Asked 100 (Family Feud) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -116,7 +117,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-two exist so far. `test/everything_converter.mjs` drives
+Forty-three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -359,6 +360,14 @@ its core returns: perft against the published American-checkers counts, every po
 generator written the other way round (compulsory jumps, whole chains, a man crowned mid-jump stopping, no piece jumped twice), a record
 that replays move for move, the 40-move and threefold-repetition draws, alpha-beta against plain minimax, and three computer opponents
 that must be ordered by playing strength and never move illegally. Run it after touching the core, the evaluation or a level.
+
+`test/family_feud.mjs` runs the DOM-free `<script id="core">` block of `games/family_feud.html` (We Asked 100), a survey
+game whose promises are that a typed answer is read as a person means it and never as an answer it does not, and that every
+survey is fair: every answer and alias in the bank means itself, near-miss spellings and transpositions match while one word of
+a two-word answer does not, surveys from the language model are cleaned before they reach a board, the face-off, strikes,
+steal and multipliers follow the show's rules on stacked boards, every point of thousands of random matches is accounted for, a
+saved match carries on move for move, a day has one board for everyone, and the Hendersons are ordered by skill and beatable.
+Run it after touching the bank, the matcher or the rules.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
