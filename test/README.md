@@ -1117,3 +1117,15 @@ so the pictures are held to the promise rather than the page. The whole suite ta
 | `play` | a wrong tile cracks and becomes a mark, a mark on a tile is refused, both cost a crack; finishing a line reports it once and marks its leftovers; stroke modes and spans; random play can never leave a wrong tile or a mark on a tile, and `solved` is reported exactly when the last tile lands |
 | `hints` | every hint is true, a `full` hint really is full, and following hints alone solves every picture with no crack |
 | `saves` | a save comes back cell for cell, a forged save keeps only what is true, the daily panel is the same everywhere and prefers unsolved ones, the clock and Roman numerals |
+
+## Shatter Field
+
+```sh
+npm run test:shatter                     # or: node test/shatter_field.mjs
+node test/shatter_field.mjs hits warn    # named suites only
+```
+
+`shatter_field.mjs` runs the DOM-free `<script id="core">` block of `games/asteroids_3d.html` in Node (no server, no browser). Suites: `hits` (swept
+bolt against brute force, no tunnelling at 15-240 fps), `split` (two pieces, one size down, parent's momentum kept), `warn` (the threat list against a
+brute-force run), `assist` (the aim nudge stays inside its cone), `rules` (score, chain, hull, clearing, wrapping, difficulty), `seed` (same seed, same
+night) and `bots` (idle, poor, mid and sharp players are ordered by skill).
