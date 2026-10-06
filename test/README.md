@@ -1129,3 +1129,20 @@ node test/shatter_field.mjs hits warn    # named suites only
 bolt against brute force, no tunnelling at 15-240 fps), `split` (two pieces, one size down, parent's momentum kept), `warn` (the threat list against a
 brute-force run), `assist` (the aim nudge stays inside its cone), `rules` (score, chain, hull, clearing, wrapping, difficulty), `seed` (same seed, same
 night) and `bots` (idle, poor, mid and sharp players are ordered by skill).
+
+## Lanternfall
+
+`node test/lanternfall.mjs` (or `npm run test:lanternfall`) runs the DOM-free `<script id="core">` block of
+`games/webcraft.html` in Node. No browser, no server; about half a minute. Suites: `gen`, `mesh`, `ray`, `body`,
+`clock`, `mining`, `murk`, `save`.
+
+| suite | what it checks |
+| --- | --- |
+| `gen` | the same seed gives the same chunk, in any loading order; bedrock under every column; the sea is solid water to its surface; every trunk stands on grass; 15-60% of the world is sea; caves and ember crystals exist; spawn is grass with two cells of air above the sea; the heightmap matches the blocks; an edit comes back when its chunk is generated again |
+| `mesh` | the number of opaque and of water/glass faces against a plain reference, every vertex inside its chunk, shade and sky in range, every index valid, sampled faces wind outward from a block into open space, digging and refilling a hole restores the exact mesh, a roofed floor gets less sky than open ground |
+| `ray` | thousands of random rays hit the cell a 4 mm brute-force march hits, and the reported face opens into free space; ray against box |
+| `body` | thousands of random steps at 30-120 fps never leave a player inside a block or below the world; a 50 block fall at 10 fps lands on the ground; a one-block ledge is hopped and a two-block wall is not; a jump rises 1.15-1.5 blocks; water slows a fall and holding jump swims up |
+| `clock` | the day repeats exactly, noon is bright and midnight dark, 50-70% of the cycle is daylight, daylight only falls through the evening, the day number turns at sunrise, the sky glows at sunset only, a new world starts with a while until dusk |
+| `mining` | break times follow the table, drops (grass gives dirt, an ember crystal gives three torches), bedrock never breaks, placing refuses the player's own cell, a torch needs solid ground and becomes a light, a flower goes with its ground |
+| `murk` | they come on a dark night and never in daylight, appear 15-26 blocks out and never in or beside torchlight, one that keeps coming at a torch is soon gone, a night beside a torch costs no hit while a night in the dark costs the player, sunrise clears the field, two punches settle one, death and rising |
+| `save` | seed, hotbar, hearts and time come back; every edited block comes back and nothing else changes; 400 edits fit in a few KB; junk is refused; two loads of one save walk the same road |

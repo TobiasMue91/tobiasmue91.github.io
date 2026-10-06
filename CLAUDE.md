@@ -103,6 +103,7 @@ npm run test:patience       # Patience (Solitaire) suite (plain Node, no server 
 npm run test:yahtzee        # Yacht (Yahtzee) suite (plain Node, no server or browser)
 npm run test:missile        # Lights On (Missile Command) suite (plain Node, no server or browser)
 npm run test:stack          # Stack Tower suite (plain Node, no server or browser)
+npm run test:lanternfall    # Lanternfall (WebCraft) suite (plain Node, no server or browser)
 npm run test:reversi        # Reversi suite (plain Node, no server or browser)
 npm run test:checkers       # Checkers suite (plain Node, no server or browser)
 npm run test:nonogram       # Tesserae (Nonogram) suite (plain Node, no server or browser)
@@ -118,7 +119,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-four exist so far. `test/everything_converter.mjs` drives
+Forty-five exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -338,6 +339,13 @@ arithmetic (the layer is the overlap, the offcut is the rest of the slab and tou
 axis), a drop within the tolerance snaps exactly and one hair outside it cuts, a run of perfects gives width back and never
 past the starting size, a long frame moves the slab as far as sixty short ones, and bots with a person's timing error build
 higher in order of their skill. Run it after touching the core or the speed curve.
+
+`test/lanternfall.mjs` runs the DOM-free `<script id="core">` block of `games/webcraft.html` (Lanternfall), a voxel world
+whose page only draws what the core returns: a seed makes the same world whatever order chunks load in, the mesh holds
+exactly the faces a plain reference counts and every one winds outward from a block into open space, rays land on the
+cell a brute-force march finds, bodies never end inside a block at 30 to 120 fps, the day is a bit over half light, the
+Murk spawn only in the dark and out of torchlight, burn when they stay in it and never touch a player beside a torch
+all night while a player in the dark falls, and a save carries on identically. Run it after touching the core.
 
 `test/reversi.mjs` runs the DOM-free `<script id="core">` block of `games/reversi.html`, whose page only animates the events
 its core returns: perft against the published Othello counts, every move and flipped cell against a finder written the other
