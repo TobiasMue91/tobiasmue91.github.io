@@ -108,6 +108,7 @@ npm run test:checkers       # Checkers suite (plain Node, no server or browser)
 npm run test:nonogram       # Tesserae (Nonogram) suite (plain Node, no server or browser)
 npm run test:shatter        # Shatter Field (3D Asteroids) suite (plain Node, no server or browser)
 npm run test:feud           # We Asked 100 (Family Feud) suite (plain Node, no server or browser)
+npm run test:hanoi          # Tower of Hanoi suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -117,7 +118,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-three exist so far. `test/everything_converter.mjs` drives
+Forty-four exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -368,6 +369,11 @@ a two-word answer does not, surveys from the language model are cleaned before t
 steal and multipliers follow the show's rules on stacked boards, every point of thousands of random matches is accounted for, a
 saved match carries on move for move, a day has one board for everyone, and the Hendersons are ordered by skill and beatable.
 Run it after touching the bank, the matcher or the rules.
+
+`test/tower_of_hanoi.mjs` runs the DOM-free `<script id="core">` block of `games/tower_of_hanoi.html`, whose two promises nobody can see
+from the page: that par is the fewest possible moves (breadth-first search over every position, three to eight discs) and that
+Show me, from any position the player has reached, names the first move of a shortest way home. Saves, medals and the
+bell for each disc are checked too. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
