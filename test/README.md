@@ -1147,6 +1147,42 @@ night) and `bots` (idle, poor, mid and sharp players are ordered by skill).
 | `murk` | they come on a dark night and never in daylight, appear 15-26 blocks out and never in or beside torchlight, one that keeps coming at a torch is soon gone, a night beside a torch costs no hit while a night in the dark costs the player, sunrise clears the field, two punches settle one, death and rising |
 | `save` | seed, hotbar, hearts and time come back; every edited block comes back and nothing else changes; 400 edits fit in a few KB; junk is refused; two loads of one save walk the same road |
 
+## Backgammon
+
+`node test/backgammon.mjs` (or `npm run test:backgammon`) runs the DOM-free `<script id="core">` block of `games/backgammon.html` in Node. No browser, no
+server; about ten seconds. Suites: `setup`, `rules`, `ref`, `score`, `undo`, `save`, `ai`.
+
+| suite | what it checks |
+| --- | --- |
+| `setup` | fifteen checkers each and 167 pips on both sides; the opening roll is the higher die and ties roll again; dice are fair; a seed is the same dice; doubles give four moves |
+| `rules` | hits and made points, the bar before anything else and a closed entry, bearing off (only when all are home, a higher die only from the rearmost point), black as the mirror, the duty to play both dice and the larger die when only one fits |
+| `ref` | a second generator written the other way round (own-side coordinates, immutable positions, every dice order) agrees with the core on the whole set of final positions of every roll of sixty random games |
+| `score` | single, gammon (none borne off) and backgammon (on the bar or in the winner's home) are worth 1, 2 and 3, for both colours; the match is won at its target |
+| `undo` | undoing any run of moves, hits included, restores the position exactly; every destination `reach` offers is a legal run of moves, doubles reach four steps along |
+| `save` | a save comes back and plays on dice for dice; rubbish, wrong checker counts, impossible dice and unknown phases are refused |
+| `ai` | the computer only plays legal moves and uses every die it can; hard beats random almost always, easy still beats random, hard beats easy and is not weaker than medium; it hits and makes a point with 4-4 and enters from the bar first |
+
+## Two Truths & a Lie
+
+```sh
+npm run test:truths                      # or: node test/two_truths.mjs
+node test/two_truths.mjs bank deal       # named suites only
+```
+
+`two_truths.mjs` runs the DOM-free `<script id="core">` block of `games/two_truths_one_lie.html` in Node, no browser or
+server. The page's one promise is that a lie can only be found by knowing, so the suites check what would give it away:
+
+| suite | what it checks |
+| --- | --- |
+| `bank` | every case is two truths, one lie and a correction; statement lengths, no duplicates, six files of ten, enough cases at each difficulty |
+| `deal` | the lie lands on each place equally often, and is not the longest or shortest statement more often than chance allows |
+| `runs` | a seed is the same run, a mixed run climbs 1-1-1-2-2-2-2-3-3-3 across files, a file run is all ten cases, seen cases come last, guessers score a third |
+| `days` | a date is the same file for everyone, day keys across month and year ends, streak rules |
+| `save` | hostile saves are clamped, a run is recorded, a save round-trips, the share line |
+| `ai` | what a language model sends back is refused unless it is two truths, one lie and a correction |
+
+Run it after adding a case to `BANK`: every new lie must be about as long as its truths.
+
 ## Wick
 
 `node test/deep_miner.mjs` (or `npm run test:wick`) runs the DOM-free `<script id="core">` block of `games/deep_miner.html`
