@@ -111,6 +111,7 @@ npm run test:shatter        # Shatter Field (3D Asteroids) suite (plain Node, no
 npm run test:feud           # We Asked 100 (Family Feud) suite (plain Node, no server or browser)
 npm run test:hanoi          # Tower of Hanoi suite (plain Node, no server or browser)
 npm run test:glowtide       # Glowtide (Chain Reaction) suite (plain Node, no server or browser)
+npm run test:catchcircle    # Catch Circle suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -389,6 +390,11 @@ blooms: a bloom lights exactly what its radius covers (against a reference writt
 once and in order, every level it deals has a tap that clears the goal while a random tap mostly fails from level 8, a seed deals
 the same sea to everyone, lights and stars settle the way the card says, and saves trust nothing (the old page's high score is kept
 apart). Run it after touching the spec, the radii or the speeds; `levels` is the one that notices.
+
+`test/catch_circle.mjs` runs the DOM-free `<script id="core">` block of `games/catchcircle.html` (Catch Circle), a tap game whose
+promise is that a catch is judged honestly: the disc under the finger wins (against brute force), nothing leaves the field at any frame rate,
+an empty ring costs a life while a black disc costs one only if touched, points follow size and the chain multiplier, a seed is the same run,
+and bots with a person's pace rank careful above random above idle. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
