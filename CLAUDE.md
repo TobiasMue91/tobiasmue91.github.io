@@ -112,6 +112,7 @@ npm run test:feud           # We Asked 100 (Family Feud) suite (plain Node, no s
 npm run test:hanoi          # Tower of Hanoi suite (plain Node, no server or browser)
 npm run test:glowtide       # Glowtide (Chain Reaction) suite (plain Node, no server or browser)
 npm run test:catchcircle    # Catch Circle suite (plain Node, no server or browser)
+npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -121,7 +122,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-six exist so far. `test/everything_converter.mjs` drives
+Forty-seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -395,6 +396,13 @@ apart). Run it after touching the spec, the radii or the speeds; `levels` is the
 promise is that a catch is judged honestly: the disc under the finger wins (against brute force), nothing leaves the field at any frame rate,
 an empty ring costs a life while a black disc costs one only if touched, points follow size and the chain multiplier, a seed is the same run,
 and bots with a person's pace rank careful above random above idle. Run it after touching the core.
+
+`test/death_by_ai.mjs` runs the DOM-free `<script id="core">` block of `games/death_by_ai.html`, a theatre of seven deadly
+predicaments judged by a language model whose word the page never takes blindly: every scenario's example plan must
+survive the offline rules judge (the fallback when no model answers) and every trap word must kill, authored bad plans and a
+random-words bot must not get through, a player's text can never act as instructions or write its own ending (injections are
+dead whatever the model says), whatever a model returns is cleaned or refused, a day is one evening for everyone and a
+streak counts the way the card says. Run it after touching a scenario, the judge or the prompt.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
