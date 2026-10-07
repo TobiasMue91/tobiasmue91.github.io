@@ -1146,3 +1146,24 @@ night) and `bots` (idle, poor, mid and sharp players are ordered by skill).
 | `mining` | break times follow the table, drops (grass gives dirt, an ember crystal gives three torches), bedrock never breaks, placing refuses the player's own cell, a torch needs solid ground and becomes a light, a flower goes with its ground |
 | `murk` | they come on a dark night and never in daylight, appear 15-26 blocks out and never in or beside torchlight, one that keeps coming at a torch is soon gone, a night beside a torch costs no hit while a night in the dark costs the player, sunrise clears the field, two punches settle one, death and rising |
 | `save` | seed, hotbar, hearts and time come back; every edited block comes back and nothing else changes; 400 edits fit in a few KB; junk is refused; two loads of one save walk the same road |
+
+## Two Truths & a Lie
+
+```sh
+npm run test:truths                      # or: node test/two_truths.mjs
+node test/two_truths.mjs bank deal       # named suites only
+```
+
+`two_truths.mjs` runs the DOM-free `<script id="core">` block of `games/two_truths_one_lie.html` in Node, no browser or
+server. The page's one promise is that a lie can only be found by knowing, so the suites check what would give it away:
+
+| suite | what it checks |
+| --- | --- |
+| `bank` | every case is two truths, one lie and a correction; statement lengths, no duplicates, six files of ten, enough cases at each difficulty |
+| `deal` | the lie lands on each place equally often, and is not the longest or shortest statement more often than chance allows |
+| `runs` | a seed is the same run, a mixed run climbs 1-1-1-2-2-2-2-3-3-3 across files, a file run is all ten cases, seen cases come last, guessers score a third |
+| `days` | a date is the same file for everyone, day keys across month and year ends, streak rules |
+| `save` | hostile saves are clamped, a run is recorded, a save round-trips, the share line |
+| `ai` | what a language model sends back is refused unless it is two truths, one lie and a correction |
+
+Run it after adding a case to `BANK`: every new lie must be about as long as its truths.
