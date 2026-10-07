@@ -112,6 +112,7 @@ npm run test:feud           # We Asked 100 (Family Feud) suite (plain Node, no s
 npm run test:hanoi          # Tower of Hanoi suite (plain Node, no server or browser)
 npm run test:glowtide       # Glowtide (Chain Reaction) suite (plain Node, no server or browser)
 npm run test:catchcircle    # Catch Circle suite (plain Node, no server or browser)
+npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 ```
 
@@ -122,7 +123,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-seven exist so far. `test/everything_converter.mjs` drives
+Forty-eight exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -396,6 +397,13 @@ apart). Run it after touching the spec, the radii or the speeds; `levels` is the
 promise is that a catch is judged honestly: the disc under the finger wins (against brute force), nothing leaves the field at any frame rate,
 an empty ring costs a life while a black disc costs one only if touched, points follow size and the chain multiplier, a seed is the same run,
 and bots with a person's pace rank careful above random above idle. Run it after touching the core.
+
+`test/hot_seat.mjs` runs the DOM-free `<script id="core">` block of `games/who_wants_to_be_a_millionaire.html` (Hot Seat), a
+fifteen-rung quiz whose promises are money and fairness: a safe rung really is safe and a walk or a miss pays exactly what the ladder
+says at every rung, a run holds three questions a tier from easy to hard and repeats nothing while fresh ones remain, a seed is the
+same night for everyone, 50:50 never removes the right answer, the room and the friend are right as often as a tier deserves, a
+question written by the language model reaches a board only when it is clean and only in a slot not yet reached, and a saved night
+carries on move for move. Bots with a person's knowledge must be paid in order of it. Run it after touching the core or the bank.
 
 `test/death_by_ai.mjs` runs the DOM-free `<script id="core">` block of `games/death_by_ai.html`, a theatre of seven deadly
 predicaments judged by a language model whose word the page never takes blindly: every scenario's example plan must
