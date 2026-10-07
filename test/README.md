@@ -1161,3 +1161,24 @@ server; about ten seconds. Suites: `setup`, `rules`, `ref`, `score`, `undo`, `sa
 | `undo` | undoing any run of moves, hits included, restores the position exactly; every destination `reach` offers is a legal run of moves, doubles reach four steps along |
 | `save` | a save comes back and plays on dice for dice; rubbish, wrong checker counts, impossible dice and unknown phases are refused |
 | `ai` | the computer only plays legal moves and uses every die it can; hard beats random almost always, easy still beats random, hard beats easy and is not weaker than medium; it hits and makes a point with 4-4 and enters from the bar first |
+
+## Two Truths & a Lie
+
+```sh
+npm run test:truths                      # or: node test/two_truths.mjs
+node test/two_truths.mjs bank deal       # named suites only
+```
+
+`two_truths.mjs` runs the DOM-free `<script id="core">` block of `games/two_truths_one_lie.html` in Node, no browser or
+server. The page's one promise is that a lie can only be found by knowing, so the suites check what would give it away:
+
+| suite | what it checks |
+| --- | --- |
+| `bank` | every case is two truths, one lie and a correction; statement lengths, no duplicates, six files of ten, enough cases at each difficulty |
+| `deal` | the lie lands on each place equally often, and is not the longest or shortest statement more often than chance allows |
+| `runs` | a seed is the same run, a mixed run climbs 1-1-1-2-2-2-2-3-3-3 across files, a file run is all ten cases, seen cases come last, guessers score a third |
+| `days` | a date is the same file for everyone, day keys across month and year ends, streak rules |
+| `save` | hostile saves are clamped, a run is recorded, a save round-trips, the share line |
+| `ai` | what a language model sends back is refused unless it is two truths, one lie and a correction |
+
+Run it after adding a case to `BANK`: every new lie must be about as long as its truths.
