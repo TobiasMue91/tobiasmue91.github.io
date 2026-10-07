@@ -407,7 +407,10 @@ runner whose one promise is that you were given room: every spike, beam, gap and
 at the speed it arrives at by a player who acts anywhere inside the window the picture shows - bots acting as early as fair,
 as late as fair and at random must all pass 1,800 m on forty seeds - a seed deals the same run to everyone, a press moves the
 runner in the frame it is made at any frame rate, points are what the HUD says, and a quick bot outruns a slow one outruns a
-button-masher outruns one standing still. Run it after touching the physics, `minStart` or a hazard's size.
+button-masher outruns one standing still. Ledges (the high road) must be landable from below, droppable at the far end and never trap
+a spike, a full chain earns a shield that smashes exactly one hazard and never saves a fall, and sectors announce once and pay once.
+The fairness bots run with the shield off (`noShield`) so a mistake is never forgiven behind the test's back. Run it after touching the
+physics, `minStart`, a ledge or a hazard's size.
 
 `test/backgammon.mjs` runs the DOM-free `<script id="core">` block of `games/backgammon.html`, a board game whose rules have more corners than they look: a second move generator written the other way round (own-side coordinates, every dice order) must agree with the core on every roll of thousands of positions, so the duty to play as many dice as possible, the larger die when only one fits, the bar before anything else and bearing off with a higher die only from the rearmost point are all judged by something that does not share the core's code. Gammons and backgammons score 2 and 3, undo restores a position exactly, a save carries on dice for dice and refuses forged ones, and the computer only ever plays legal moves and is ordered hard, medium, easy, random by playing strength. Run it after touching the core or the evaluation.
 
