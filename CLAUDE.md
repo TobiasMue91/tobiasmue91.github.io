@@ -113,6 +113,10 @@ npm run test:hanoi          # Tower of Hanoi suite (plain Node, no server or bro
 npm run test:glowtide       # Glowtide (Chain Reaction) suite (plain Node, no server or browser)
 npm run test:catchcircle    # Catch Circle suite (plain Node, no server or browser)
 npm run test:voidrunner     # Void Runner suite (plain Node, no server or browser)
+npm run test:backgammon     # Backgammon suite (plain Node, no server or browser)
+npm run test:truths         # Two Truths & a Lie suite (plain Node, no server or browser)
+npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
+npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -122,7 +126,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-seven exist so far. `test/everything_converter.mjs` drives
+Fifty-one exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -403,6 +407,29 @@ at the speed it arrives at by a player who acts anywhere inside the window the p
 as late as fair and at random must all pass 1,800 m on forty seeds - a seed deals the same run to everyone, a press moves the
 runner in the frame it is made at any frame rate, points are what the HUD says, and a quick bot outruns a slow one outruns a
 button-masher outruns one standing still. Run it after touching the physics, `minStart` or a hazard's size.
+
+`test/backgammon.mjs` runs the DOM-free `<script id="core">` block of `games/backgammon.html`, a board game whose rules have more corners than they look: a second move generator written the other way round (own-side coordinates, every dice order) must agree with the core on every roll of thousands of positions, so the duty to play as many dice as possible, the larger die when only one fits, the bar before anything else and bearing off with a higher die only from the rearmost point are all judged by something that does not share the core's code. Gammons and backgammons score 2 and 3, undo restores a position exactly, a save carries on dice for dice and refuses forged ones, and the computer only ever plays legal moves and is ordered hard, medium, easy, random by playing strength. Run it after touching the core or the evaluation.
+
+`test/two_truths.mjs` runs the DOM-free `<script id="core">` block of `games/two_truths_one_lie.html`, whose one
+promise is that a lie can only be found by knowing: the bank of 60 cases is two truths, one lie and a correction each, the lie
+lands on each place equally often and is not the longest or shortest statement more often than chance allows, a run climbs
+1-1-1-2-2-2-2-3-3-3 and spreads across files, a seed (and a date) is the same run for everyone, cases already seen are dealt last,
+saves trust nothing, and what a language model sends back is refused unless it is two truths, one lie and a correction. Run it
+after touching `BANK` (every new lie must be about as long as its truths) or the dealing.
+
+`test/hot_seat.mjs` runs the DOM-free `<script id="core">` block of `games/who_wants_to_be_a_millionaire.html` (Hot Seat), a
+fifteen-rung quiz whose promises are money and fairness: a safe rung really is safe and a walk or a miss pays exactly what the ladder
+says at every rung, a run holds three questions a tier from easy to hard and repeats nothing while fresh ones remain, a seed is the
+same night for everyone, 50:50 never removes the right answer, the room and the friend are right as often as a tier deserves, a
+question written by the language model reaches a board only when it is clean and only in a slot not yet reached, and a saved night
+carries on move for move. Bots with a person's knowledge must be paid in order of it. Run it after touching the core or the bank.
+
+`test/death_by_ai.mjs` runs the DOM-free `<script id="core">` block of `games/death_by_ai.html`, a theatre of seven deadly
+predicaments judged by a language model whose word the page never takes blindly: every scenario's example plan must
+survive the offline rules judge (the fallback when no model answers) and every trap word must kill, authored bad plans and a
+random-words bot must not get through, a player's text can never act as instructions or write its own ending (injections are
+dead whatever the model says), whatever a model returns is cleaned or refused, a day is one evening for everyone and a
+streak counts the way the card says. Run it after touching a scenario, the judge or the prompt.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
