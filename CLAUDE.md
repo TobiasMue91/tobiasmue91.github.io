@@ -113,6 +113,7 @@ npm run test:hanoi          # Tower of Hanoi suite (plain Node, no server or bro
 npm run test:glowtide       # Glowtide (Chain Reaction) suite (plain Node, no server or browser)
 npm run test:catchcircle    # Catch Circle suite (plain Node, no server or browser)
 npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
+npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -122,7 +123,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-seven exist so far. `test/everything_converter.mjs` drives
+Forty-eight exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -403,6 +404,13 @@ says at every rung, a run holds three questions a tier from easy to hard and rep
 same night for everyone, 50:50 never removes the right answer, the room and the friend are right as often as a tier deserves, a
 question written by the language model reaches a board only when it is clean and only in a slot not yet reached, a topic the player types is cleaned before the model sees it and a full night about it fills every slot in tier order, and a saved night
 carries on move for move. Bots with a person's knowledge must be paid in order of it. Run it after touching the core or the bank.
+
+`test/death_by_ai.mjs` runs the DOM-free `<script id="core">` block of `games/death_by_ai.html`, a theatre of seven deadly
+predicaments judged by a language model whose word the page never takes blindly: every scenario's example plan must
+survive the offline rules judge (the fallback when no model answers) and every trap word must kill, authored bad plans and a
+random-words bot must not get through, a player's text can never act as instructions or write its own ending (injections are
+dead whatever the model says), whatever a model returns is cleaned or refused, a day is one evening for everyone and a
+streak counts the way the card says. Run it after touching a scenario, the judge or the prompt.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
