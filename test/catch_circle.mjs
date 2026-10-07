@@ -71,7 +71,7 @@ for (const dt of [1 / 30, 1 / 60, 1 / 144, 0.2]) for (let seed = 1; seed <= 15; 
 {
   const s = mk(5); let maxSeen = 0, black = false;
   for (let t = 0; t < 4 && !s.over; t += 1 / 60) { Core.step(s, 1 / 60); maxSeen = Math.max(maxSeen, s.discs.length); }
-  ok(maxSeen === 1, 'one disc to start with');
+  ok(maxSeen === 2, 'two discs to start with');
   for (let seed = 1; seed < 200; seed++) { const g = mk(seed); g.caught = 9; for (let i = 0; i < 600; i++) { Core.step(g, 1 / 60); if (g.discs.some(d => d.kind === 'k')) black = true; g.lives = 3; if (g.discs.length) Core.tap(g, g.discs[0].x, g.discs[0].y); if (g.caught >= 10) break; } }
   ok(!black, 'no black disc before the tenth catch');
   const g = mk(6); g.caught = 10; run(g, 8); ok(g.blackSeen || g.over, 'the first black disc arrives at ten');
