@@ -401,7 +401,7 @@ and bots with a person's pace rank careful above random above idle. Run it after
 fifteen-rung quiz whose promises are money and fairness: a safe rung really is safe and a walk or a miss pays exactly what the ladder
 says at every rung, a run holds three questions a tier from easy to hard and repeats nothing while fresh ones remain, a seed is the
 same night for everyone, 50:50 never removes the right answer, the room and the friend are right as often as a tier deserves, a
-question written by the language model reaches a board only when it is clean and only in a slot not yet reached, and a saved night
+question written by the language model reaches a board only when it is clean and only in a slot not yet reached, a topic the player types is cleaned before the model sees it and a full night about it fills every slot in tier order, and a saved night
 carries on move for move. Bots with a person's knowledge must be paid in order of it. Run it after touching the core or the bank.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
