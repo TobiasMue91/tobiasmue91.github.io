@@ -422,7 +422,7 @@ after touching `BANK` (every new lie must be about as long as its truths) or the
 fifteen-rung quiz whose promises are money and fairness: a safe rung really is safe and a walk or a miss pays exactly what the ladder
 says at every rung, a run holds three questions a tier from easy to hard and repeats nothing while fresh ones remain, a seed is the
 same night for everyone, 50:50 never removes the right answer, the room and the friend are right as often as a tier deserves, a
-question written by the language model reaches a board only when it is clean and only in a slot not yet reached, and a saved night
+question written by the language model reaches a board only when it is clean and only in a slot not yet reached, a topic the player types is cleaned before the model sees it and a full night about it fills every slot in tier order, and a saved night
 carries on move for move. Bots with a person's knowledge must be paid in order of it. Run it after touching the core or the bank.
 
 `test/death_by_ai.mjs` runs the DOM-free `<script id="core">` block of `games/death_by_ai.html`, a theatre of seven deadly
