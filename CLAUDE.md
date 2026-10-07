@@ -117,6 +117,7 @@ npm run test:backgammon     # Backgammon suite (plain Node, no server or browser
 npm run test:truths         # Two Truths & a Lie suite (plain Node, no server or browser)
 npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
+npm run test:qix            # QIX suite (plain Node, no server or browser)
 npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
 ```
 
@@ -127,7 +128,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-two exist so far. `test/everything_converter.mjs` drives
+Fifty-three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -434,6 +435,12 @@ survive the offline rules judge (the fallback when no model answers) and every t
 random-words bot must not get through, a player's text can never act as instructions or write its own ending (injections are
 dead whatever the model says), whatever a model returns is cleaned or refused, a day is one evening for everyone and a
 streak counts the way the card says. Run it after touching a scenario, the judge or the prompt.
+
+`test/qix.mjs` runs the DOM-free `<script id="core">` block of `games/qix.html` (QIX), where a claim must be honest: every
+closing of a stake is checked against a flood fill written separately in the test (what the Qix cannot reach is claimed, and
+nothing else), the stake, head, rim, Qix and Sparx stay consistent over thousands of random frames, the line is lost only to a
+Qix that really touches it or a fuse that really reaches the player, a stake can be walked back to leave the board exactly as it
+was, a seed is the same night for everyone at any frame rate, and bots must be ordered by skill. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
