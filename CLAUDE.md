@@ -402,7 +402,10 @@ runner whose one promise is that you were given room: every spike, beam, gap and
 at the speed it arrives at by a player who acts anywhere inside the window the picture shows - bots acting as early as fair,
 as late as fair and at random must all pass 1,800 m on forty seeds - a seed deals the same run to everyone, a press moves the
 runner in the frame it is made at any frame rate, points are what the HUD says, and a quick bot outruns a slow one outruns a
-button-masher outruns one standing still. Run it after touching the physics, `minStart` or a hazard's size.
+button-masher outruns one standing still. Ledges (the high road) must be landable from below, droppable at the far end and never trap
+a spike, a full chain earns a shield that smashes exactly one hazard and never saves a fall, and sectors announce once and pay once.
+The fairness bots run with the shield off (`noShield`) so a mistake is never forgiven behind the test's back. Run it after touching the
+physics, `minStart`, a ledge or a hazard's size.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

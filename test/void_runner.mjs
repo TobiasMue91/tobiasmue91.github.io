@@ -9,7 +9,7 @@
 //   node test/void_runner.mjs fair bots       # named suites only
 //   node test/void_runner.mjs --page=path.html
 //
-// Suites: physics, world, score, fair, bots.
+// Suites: physics, world, ledges, shield, score, fair, bots.
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -20,7 +20,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const a = args.find(x => x.startsWith(`--${name}=`)); return a ? a.split('=')[1] : dflt; };
 const PAGE = opt('page', join(HERE, '..', 'games', 'void_runner.html'));
-const ALL = ['physics', 'world', 'score', 'fair', 'bots'];
+const ALL = ['physics', 'world', 'ledges', 'shield', 'score', 'fair', 'bots'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -59,7 +59,7 @@ function player(when, rnd, lag = 0) {
   return (s) => {
     const v = VR.speed(s), x = s.x - v * lag;
     let h = null;
-    for (let i = s.hzIdx; i < s.hz.length; i++) { if (s.hz[i].b + C.HW > s.x) { h = s.hz[i]; break; } }
+    for (let i = s.hzIdx; i < s.hz.length; i++) { if (s.hz[i].k !== 'ledge' && s.hz[i].b + C.HW > s.x && !s.hz[i].broken) { h = s.hz[i]; break; } }
     if (!h || h.a - x > 40) return;
     if (!st.plan || st.plan.h !== h) {
       const w = when(rnd);
@@ -96,7 +96,7 @@ function withDive(drv) {
     if (!s.grounded && s.dive === false && s.y < 2.2) {
       for (let i = s.hzIdx; i < s.hz.length; i++) {
         const h = s.hz[i];
-        if (h.b + C.HW > s.x) { if (h.k === 'beam' && h.a - s.x < VR.speed(s) * 0.9) VR.press(s, 'slide'); break; }
+        if (h.k !== 'ledge' && h.b + C.HW > s.x) { if (h.k === 'beam' && h.a - s.x < VR.speed(s) * 0.9) VR.press(s, 'slide'); break; }
       }
     }
   };
@@ -172,7 +172,7 @@ if (suites.includes('world')) {
   let bad = 0, count = 0;
   for (let seed = 1; seed <= 60; seed++) {
     const q = VR.create(seed); VR.extend(q, 3000);
-    const hz = q.hz;
+    const hz = q.hz.filter(h => h.k !== 'ledge');
     for (let i = 1; i < hz.length; i++) { count++; if (hz[i].a < hz[i - 1].b + 1) bad++; }
     for (const h of hz) {
       if (h.k === 'gap') continue;
@@ -203,6 +203,88 @@ if (suites.includes('world')) {
   // speed rises, never falls, and stays under the cap
   let mono = true, prev = 0; for (let x = 0; x < 8000; x += 10) { const v = VR.speedAt(x); if (v < prev - 1e-9) mono = false; prev = v; }
   check(mono && VR.speedAt(1e6) < 18.01 && near(VR.speedAt(0), 9), 'speed rises smoothly from 9 and never passes 18');
+}
+
+// a bare world for stacked positions: flat ground, nothing generated, hazards placed by hand
+function bare(seed, opts) {
+  const s = VR.create(seed, Object.assign({empty: true}, opts || {}));
+  s.orbs.length = 0; s.gen.c = 1e12; s.segs = [{a: -1e4, b: 1e6}]; s.hz.length = 0; s.hzIdx = 0; s.orbIdx = 0;
+  s.t = 5; s.x = 100;
+  return s;
+}
+
+if (suites.includes('ledges')) {
+  section('ledges: a high road you can land on and fall off');
+  const ledge = (s, a, b) => { const l = {k: 'ledge', a, b, y: C.LEDGE_Y, min: 9}; s.ledges.push(l); s.hz.push(l); return l; };
+  // one-way from below: a jump passes up through a ledge and lands on top
+  let s = bare(1); ledge(s, 120, 140);
+  play(s, 0.3); while (s.x < 119 - 0.3) play(s, 1 / 60, null, 1 / 60);
+  VR.press(s, 'jump'); let ev = play(s, 0.9);
+  check(!s.dead, 'a jump from under a ledge does not hit it');
+  check(ev.some(e => e.t === 'land' && e.y === C.LEDGE_Y) || s.surf === C.LEDGE_Y, 'a jump that comes down on a ledge lands on top of it', 'surf ' + s.surf + ' y ' + s.y.toFixed(2));
+  // standing on it, the runner keeps running at ledge height and falls off the far end
+  s = bare(2); ledge(s, 110, 125); s.x = 112; s.y = C.LEDGE_Y; s.surf = C.LEDGE_Y; s.grounded = true;
+  play(s, 0.5); check(s.grounded && s.y === C.LEDGE_Y, 'on a ledge the runner stays at ledge height');
+  ev = play(s, 2);
+  check(!s.dead && s.grounded && s.y === 0 && ev.some(e => e.t === 'land' && e.y === 0), 'at the far end the runner drops back to the ground and carries on');
+  // a hazard on the ground under a ledge cannot touch a runner on top
+  s = bare(3); ledge(s, 110, 130); s.hz.push({k: 'block', a: 120, b: 121.2, h: 1, min: 9}); s.x = 112; s.y = C.LEDGE_Y; s.surf = C.LEDGE_Y; s.grounded = true;
+  play(s, 2); check(!s.dead && s.x > 125, 'a spike under the ledge is no danger on the high road');
+  // and one that is cleared from below still kills a runner who does nothing
+  s = bare(4); ledge(s, 110, 130); s.hz.push({k: 'block', a: 120, b: 121.2, h: 1, min: 9}); s.x = 108;
+  play(s, 3); check(s.dead === 'block', 'the low road still has its spike');
+  // a slide works on a ledge
+  s = bare(5); ledge(s, 110, 140); s.x = 112; s.y = C.LEDGE_Y; s.surf = C.LEDGE_Y; s.grounded = true;
+  VR.press(s, 'slide'); VR.step(s, 1 / 60); check(s.slide > 0 && s.y === C.LEDGE_Y, 'a slide starts on a ledge');
+  // every ledge the generator deals has a spike under it, orbs on it, and room after it
+  let n = 0, bad = 0, orbsOn = 0;
+  for (let seed = 1; seed <= 60; seed++) {
+    const q = VR.create(seed); VR.extend(q, 6000);
+    for (const l of q.ledges) {
+      n++;
+      const inside = q.hz.filter(h => h.k === 'block' && h.a > l.a && h.b < l.b);
+      if (inside.length !== 1) bad++;
+      const up = q.orbs.filter(o => o.x > l.a && o.x < l.b && Math.abs(o.y - (C.LEDGE_Y + 0.5)) < 1e-9).length;
+      if (up < 3) bad++; else orbsOn += up;
+      const next = q.hz.find(h => h.k !== 'ledge' && h.a >= l.b);
+      if (next && next.a - l.b < VR.speedAt(l.b) * 0.5) bad++;
+      if (l.a < 400) bad++;                      // the high road belongs to the second sector
+    }
+    check(q.orbs.every((o, i) => i === 0 || q.orbs[i - 1].x <= o.x), 'orbs are in order of x') || 0;
+  }
+  check(n > 100 && bad === 0, `${n} generated ledges each cover one spike, carry orbs and leave room after`, bad + ' bad');
+}
+
+if (suites.includes('shield')) {
+  section('shield: a long chain buys one mistake');
+  const hit = (s, k) => { const h = k === 'beam' ? {k: 'beam', a: s.x + 4, b: s.x + 7, min: 9} : {k: k, a: s.x + 4, b: s.x + 5, h: k === 'wall' ? C.WALL_H : 1, min: 9}; s.hz.push(h); return h; };
+  let s = bare(1);
+  s.chain = C.SHIELD_AT - 1; s.chainT = C.CHAIN_T; s.orbs.push({x: s.x + 1, y: 0.5, got: false});
+  const ev = play(s, 0.5);
+  check(s.shield && ev.some(e => e.t === 'shield'), 'the chain that reaches the line earns a shield, announced once');
+  check(ev.filter(e => e.t === 'shield').length === 1, 'and only once');
+  for (const k of ['block', 'beam', 'wall']) {
+    s = bare(2); s.shield = true; const h = hit(s, k);
+    const e2 = play(s, 1.5);
+    check(!s.dead && h.broken && e2.some(e => e.t === 'smash' && e.k === k) && !s.shield, `the shield smashes a ${k} instead of dying`);
+    check(s.smashes === 1 && s.pts >= C.SMASH_PTS, 'and pays for it');
+    // the next one is not forgiven
+    hit(s, k); play(s, 2);
+    check(s.dead === k, `a second ${k} ends the run`);
+  }
+  s = bare(3, {noShield: true}); s.chain = 40; s.orbs.push({x: s.x + 1, y: 0.5, got: false}); play(s, 0.5);
+  check(!s.shield, 'a bot test can run without the shield');
+  s = bare(4); s.shield = true; s.segs = [{a: -1e4, b: 103}, {a: 120, b: 1e6}]; s.hz.push({k: 'gap', a: 103, b: 120});
+  play(s, 3); check(s.dead === 'fall', 'the shield does not save a fall into the void');
+}
+
+if (suites.includes('score')) {
+  section('sectors: the run has places');
+  check(VR.SECTORS[0] === 0 && VR.SECTORS.every((x, i) => i === 0 || x > VR.SECTORS[i - 1]), 'sector boundaries rise');
+  check(VR.sectorAt(0) === 0 && VR.sectorAt(VR.SECTORS[1] - 1) === 0 && VR.sectorAt(VR.SECTORS[1]) === 1 && VR.sectorAt(1e9) === VR.SECTORS.length - 1, 'sectorAt follows the boundaries');
+  const q = bare(9, {noShield: true}); q.x = VR.SECTORS[1] - 3;
+  const e = play(q, 1.2);
+  check(e.filter(x => x.t === 'sector').length === 1 && q.sector === 1 && q.pts === C.SECTOR_BONUS, 'crossing into a sector is announced once and pays its bonus');
 }
 
 if (suites.includes('score')) {
@@ -242,7 +324,7 @@ if (suites.includes('fair')) {
   for (const [name, w] of [['as early as fair', () => 0], ['as late as fair', () => 1], ['anywhere inside the window', r => r()]]) {
     let died = 0, runs = 0, worst = null, cleared = 0;
     for (let seed = 1; seed <= SEEDS; seed++) {
-      const rnd = VR.mulberry(seed * 7 + 1), s = VR.create(seed * 31);
+      const rnd = VR.mulberry(seed * 7 + 1), s = VR.create(seed * 31, {noShield: true});
       play(s, 220, withDive(player(w, rnd)), 1 / 120);
       runs++;
       cleared += s.hz.filter(h => h.passed).length;
@@ -258,7 +340,7 @@ if (suites.includes('bots')) {
   const avg = (mk, n = 30, secs = 240, lag = 0) => {
     let sum = 0;
     for (let seed = 1; seed <= n; seed++) {
-      const s = VR.create(seed * 17), rnd = VR.mulberry(seed * 5);
+      const s = VR.create(seed * 17, {noShield: true}), rnd = VR.mulberry(seed * 5);
       const drv = mk(rnd);
       play(s, secs, drv, 1 / 60);
       sum += s.x;
