@@ -112,6 +112,7 @@ npm run test:feud           # We Asked 100 (Family Feud) suite (plain Node, no s
 npm run test:hanoi          # Tower of Hanoi suite (plain Node, no server or browser)
 npm run test:glowtide       # Glowtide (Chain Reaction) suite (plain Node, no server or browser)
 npm run test:catchcircle    # Catch Circle suite (plain Node, no server or browser)
+npm run test:voidrunner     # Void Runner suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -121,7 +122,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-six exist so far. `test/everything_converter.mjs` drives
+Forty-seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -395,6 +396,13 @@ apart). Run it after touching the spec, the radii or the speeds; `levels` is the
 promise is that a catch is judged honestly: the disc under the finger wins (against brute force), nothing leaves the field at any frame rate,
 an empty ring costs a life while a black disc costs one only if touched, points follow size and the chain multiplier, a seed is the same run,
 and bots with a person's pace rank careful above random above idle. Run it after touching the core.
+
+`test/void_runner.mjs` runs the DOM-free `<script id="core">` block of `games/void_runner.html` (Void Runner), an endless
+runner whose one promise is that you were given room: every spike, beam, gap and wall the generator deals must be clearable
+at the speed it arrives at by a player who acts anywhere inside the window the picture shows - bots acting as early as fair,
+as late as fair and at random must all pass 1,800 m on forty seeds - a seed deals the same run to everyone, a press moves the
+runner in the frame it is made at any frame rate, points are what the HUD says, and a quick bot outruns a slow one outruns a
+button-masher outruns one standing still. Run it after touching the physics, `minStart` or a hazard's size.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
