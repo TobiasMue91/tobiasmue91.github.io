@@ -1182,3 +1182,13 @@ server. The page's one promise is that a lie can only be found by knowing, so th
 | `ai` | what a language model sends back is refused unless it is two truths, one lie and a correction |
 
 Run it after adding a case to `BANK`: every new lie must be about as long as its truths.
+
+## Wick
+
+`node test/deep_miner.mjs` (or `npm run test:wick`) runs the DOM-free `<script id="core">` block of `games/deep_miner.html`
+in Node. No browser, no server; a few seconds. It checks that a seed is the same mine everywhere, that all sixteen relics
+exist once each and lie in their own zone, that digging takes exactly the time the pick and rock say, that a sale pays what
+the pack held, that the light only shrinks as the oil falls and that a dying lamp costs half the pack and nothing more, that
+hauling from deep with too little oil fails the same way, that saves come back cell for cell and carry on identically (damaged
+ones are healed), and that a bot with a person's pace buys the cheapest upgrade and reaches the Deep Heart on nearly every
+seed in about half an hour. `VERBOSE=1` prints its trips and the minute each zone is reached.

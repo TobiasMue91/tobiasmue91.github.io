@@ -118,6 +118,7 @@ npm run test:truths         # Two Truths & a Lie suite (plain Node, no server or
 npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 npm run test:qix            # QIX suite (plain Node, no server or browser)
+npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -127,7 +128,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-two exist so far. `test/everything_converter.mjs` drives
+Fifty-three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -407,7 +408,10 @@ runner whose one promise is that you were given room: every spike, beam, gap and
 at the speed it arrives at by a player who acts anywhere inside the window the picture shows - bots acting as early as fair,
 as late as fair and at random must all pass 1,800 m on forty seeds - a seed deals the same run to everyone, a press moves the
 runner in the frame it is made at any frame rate, points are what the HUD says, and a quick bot outruns a slow one outruns a
-button-masher outruns one standing still. Run it after touching the physics, `minStart` or a hazard's size.
+button-masher outruns one standing still. Ledges (the high road) must be landable from below, droppable at the far end and never trap
+a spike, a full chain earns a shield that smashes exactly one hazard and never saves a fall, and sectors announce once and pay once.
+The fairness bots run with the shield off (`noShield`) so a mistake is never forgiven behind the test's back. Run it after touching the
+physics, `minStart`, a ledge or a hazard's size.
 
 `test/backgammon.mjs` runs the DOM-free `<script id="core">` block of `games/backgammon.html`, a board game whose rules have more corners than they look: a second move generator written the other way round (own-side coordinates, every dice order) must agree with the core on every roll of thousands of positions, so the duty to play as many dice as possible, the larger die when only one fits, the bar before anything else and bearing off with a higher die only from the rearmost point are all judged by something that does not share the core's code. Gammons and backgammons score 2 and 3, undo restores a position exactly, a save carries on dice for dice and refuses forged ones, and the computer only ever plays legal moves and is ordered hard, medium, easy, random by playing strength. Run it after touching the core or the evaluation.
 
@@ -422,7 +426,7 @@ after touching `BANK` (every new lie must be about as long as its truths) or the
 fifteen-rung quiz whose promises are money and fairness: a safe rung really is safe and a walk or a miss pays exactly what the ladder
 says at every rung, a run holds three questions a tier from easy to hard and repeats nothing while fresh ones remain, a seed is the
 same night for everyone, 50:50 never removes the right answer, the room and the friend are right as often as a tier deserves, a
-question written by the language model reaches a board only when it is clean and only in a slot not yet reached, and a saved night
+question written by the language model reaches a board only when it is clean and only in a slot not yet reached, a topic the player types is cleaned before the model sees it and a full night about it fills every slot in tier order, and a saved night
 carries on move for move. Bots with a person's knowledge must be paid in order of it. Run it after touching the core or the bank.
 
 `test/death_by_ai.mjs` runs the DOM-free `<script id="core">` block of `games/death_by_ai.html`, a theatre of seven deadly
