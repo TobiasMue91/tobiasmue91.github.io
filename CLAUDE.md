@@ -112,6 +112,7 @@ npm run test:feud           # We Asked 100 (Family Feud) suite (plain Node, no s
 npm run test:hanoi          # Tower of Hanoi suite (plain Node, no server or browser)
 npm run test:glowtide       # Glowtide (Chain Reaction) suite (plain Node, no server or browser)
 npm run test:catchcircle    # Catch Circle suite (plain Node, no server or browser)
+npm run test:backgammon     # Backgammon suite (plain Node, no server or browser)
 npm run test:truths         # Two Truths & a Lie suite (plain Node, no server or browser)
 npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
@@ -124,7 +125,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Forty-nine exist so far. `test/everything_converter.mjs` drives
+Fifty exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -398,6 +399,8 @@ apart). Run it after touching the spec, the radii or the speeds; `levels` is the
 promise is that a catch is judged honestly: the disc under the finger wins (against brute force), nothing leaves the field at any frame rate,
 an empty ring costs a life while a black disc costs one only if touched, points follow size and the chain multiplier, a seed is the same run,
 and bots with a person's pace rank careful above random above idle. Run it after touching the core.
+
+`test/backgammon.mjs` runs the DOM-free `<script id="core">` block of `games/backgammon.html`, a board game whose rules have more corners than they look: a second move generator written the other way round (own-side coordinates, every dice order) must agree with the core on every roll of thousands of positions, so the duty to play as many dice as possible, the larger die when only one fits, the bar before anything else and bearing off with a higher die only from the rearmost point are all judged by something that does not share the core's code. Gammons and backgammons score 2 and 3, undo restores a position exactly, a save carries on dice for dice and refuses forged ones, and the computer only ever plays legal moves and is ordered hard, medium, easy, random by playing strength. Run it after touching the core or the evaluation.
 
 `test/two_truths.mjs` runs the DOM-free `<script id="core">` block of `games/two_truths_one_lie.html`, whose one
 promise is that a lie can only be found by knowing: the bank of 60 cases is two truths, one lie and a correction each, the lie
