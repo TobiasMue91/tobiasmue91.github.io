@@ -1146,3 +1146,13 @@ night) and `bots` (idle, poor, mid and sharp players are ordered by skill).
 | `mining` | break times follow the table, drops (grass gives dirt, an ember crystal gives three torches), bedrock never breaks, placing refuses the player's own cell, a torch needs solid ground and becomes a light, a flower goes with its ground |
 | `murk` | they come on a dark night and never in daylight, appear 15-26 blocks out and never in or beside torchlight, one that keeps coming at a torch is soon gone, a night beside a torch costs no hit while a night in the dark costs the player, sunrise clears the field, two punches settle one, death and rising |
 | `save` | seed, hotbar, hearts and time come back; every edited block comes back and nothing else changes; 400 edits fit in a few KB; junk is refused; two loads of one save walk the same road |
+
+## Wick
+
+`node test/deep_miner.mjs` (or `npm run test:wick`) runs the DOM-free `<script id="core">` block of `games/deep_miner.html`
+in Node. No browser, no server; a few seconds. It checks that a seed is the same mine everywhere, that all sixteen relics
+exist once each and lie in their own zone, that digging takes exactly the time the pick and rock say, that a sale pays what
+the pack held, that the light only shrinks as the oil falls and that a dying lamp costs half the pack and nothing more, that
+hauling from deep with too little oil fails the same way, that saves come back cell for cell and carry on identically (damaged
+ones are healed), and that a bot with a person's pace buys the cheapest upgrade and reaches the Deep Heart on nearly every
+seed in about half an hour. `VERBOSE=1` prints its trips and the minute each zone is reached.
