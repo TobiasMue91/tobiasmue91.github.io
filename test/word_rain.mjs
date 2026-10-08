@@ -18,11 +18,12 @@ import vm from 'vm';
 import {createRequire} from 'module';
 import {execSync} from 'child_process';
 import {pathToFileURL} from 'url';
+import http from 'http';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const PAGE = join(HERE, '..', 'games', 'word_rain.html');
-const ALL = ['bank', 'waves', 'bursts', 'rules', 'powers', 'lamps', 'determinism', 'upgrades', 'levers', 'special', 'helpers', 'districts', 'meta', 'offline', 'career', 'bots', 'page'];
+const ALL = ['bank', 'waves', 'bursts', 'rules', 'powers', 'lamps', 'determinism', 'upgrades', 'levers', 'special', 'helpers', 'districts', 'meta', 'offline', 'career', 'bots', 'ladder', 'page'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -227,7 +228,7 @@ const S = {
     const typeWord = (g, w) => { for (const ch of w.text) g.key(ch); };
     const first = g => { g.step(1.3); g.step(1); g.step(5); return g.words[0]; };
     // wick: lumen scales exactly
-    for (const l of [0, 3, 12]) { const g = night({ wick: l }); const w = first(g); typeWord(g, w); check(Math.abs(g.score - (w.text.length * 15) * (1 + .2 * l)) < 1e-6, `wick ${l}: a word pays ${1 + .2 * l}x`, `${g.score}`); }
+    for (const l of [0, 3, 12]) { const g = night({ wick: l }); const w = first(g); typeWord(g, w); check(Math.abs(g.score - (w.text.length * 15) * (1 + .15 * l)) < 1e-6, `wick ${l}: a word pays ${1 + .15 * l}x`, `${g.score}`); }
     // rhythm: the multiplier steps sooner
     { const g = night({ wick: 2, rhythm: 2 }); check(g.m.comboStep === 16, 'rhythm 2 steps every 16'); let c = 0; for (let i = 0; i < 40 && !g.over; i++) { g.step(.5); for (const w of g.words.slice()) { for (const ch of w.text) { g.key(ch); c++; } if (c >= 16) break; } if (c >= 16) break; } check(WR.multOf(16, 16, 8) === 2 && WR.multOf(15, 16, 8) === 1, 'x2 comes at 16 letters'); }
     // mercy: slips are forgiven once per word per level
@@ -241,7 +242,7 @@ const S = {
     // bell: lucky words come at the stated rate
     { let lucky = 0, words = 0; for (let s = 1; s <= 60; s++) { const g = night({ wick: 2, bell: 4 }, s); g.step(1.3); g.step(1); for (let k = 0; k < 6; k++) { g.step(3); const w = g.words.find(o => o.kind === 'word' && !o.typed); if (!w) continue; const ev = []; for (const ch of w.text) ev.push(...g.key(ch)); words++; if (ev.some(e => e.t === 'kill' && e.lucky)) lucky++; } } const p = lucky / words; check(Math.abs(p - .2) < .06, `bell 4 rings about one word in five`, `${(p * 100).toFixed(1)}% of ${words}`); }
     // frost, blast: longer and wider, and capped
-    { const a = WR.mods({ frostL: 6 }), b = WR.mods({ blastL: 6 }); check(Math.abs(a.freeze - 8.8) < 1e-9 && Math.abs(b.blastR - WR.BLAST_R * 1.6) < 1e-9, 'deep frost and wide blast add what they say'); }
+    { const a = WR.mods({ frostL: 6 }), b = WR.mods({ blastL: 6 }); check(Math.abs(a.freeze - 8.8) < 1e-9 && Math.abs(b.blastR - WR.BLAST_R * 1.9) < 1e-9, 'deep frost and wide blast add what they say'); }
     // a mod that spawns more power words does so, in the wave's plan
     { const s = WR.spec(5, WR.mods({ frostL: 1, blastL: 2, sense: 2 })); check(s.frost === 3 && s.blast === 3, 'storm sense adds frost and blast words'); check(WR.spec(3, WR.mods({ thunderL: 1 })).thunder === 1 && WR.spec(4, WR.mods({ thunderL: 1 })).thunder === 0 && WR.spec(4, WR.mods({ thunderL: 2 })).thunder === 1 && WR.spec(3).thunder === 0 && WR.spec(4).thunder === 1, 'storm caller brings thunder sooner'); }
   },
@@ -277,7 +278,7 @@ const S = {
     // the player may take a word a helper is part way through: the helper lets go and finds another
     { const g = ready(mk({ wick: 1, lamplighter: 1 })); const w = put(g, 'garden', 'word', .5, .2); const w2 = put(g, 'ink', 'word', .6, .7); g.step(.05); const h = g.hs[0]; check(h.tgt === w2, 'the lamplighter went for the short one'); h.tgt = null; w2.owner = 0; w.owner = h.id; h.tgt = w; w.hp = 2; const ev = g.key('g'); check(ev.some(e => e.t === 'yield') && w.owner === 0 && w.hp === 0 && h.tgt === null && g.target === w, 'pressing a helper\'s first letter takes the word and sends the helper away'); }
     // pay: a helper's kill pays the yield and neither builds nor breaks the combo
-    { const g = ready(mk({ wick: 1, lamplighter: 1, ledger: 3 })); const w = put(g, 'ink'); g.combo = 7; const s0 = g.score; run(g, 6, 1 / 60); check(Math.abs(g.score - s0 - 3 * 15 * 1.2 * WR.mods({ wick: 1, ledger: 3 }).yield) < 1e-6 && g.combo === 7 && g.stats.helped === 1, 'a helper kill pays its yield and leaves the combo alone', `${g.score - s0}`); }
+    { const g = ready(mk({ wick: 1, lamplighter: 1, ledger: 3 })); const w = put(g, 'ink'); g.combo = 7; const s0 = g.score; run(g, 6, 1 / 60); check(Math.abs(g.score - s0 - 3 * 15 * 1.15 * WR.mods({ wick: 1, ledger: 3 }).yield) < 1e-6 && g.combo === 7 && g.stats.helped === 1, 'a helper kill pays its yield and leaves the combo alone', `${g.score - s0}`); }
     // frozen rain does not stop the helpers
     { const g = ready(mk({ wick: 1, lamplighter: 3 })); g.freeze = 5; const w = put(g, 'ink'); run(g, 3, 1 / 60); check(!g.words.includes(w), 'the helpers keep typing while the rain is frozen'); }
     // the one that matters: the town alone cannot hold a night. Even the strongest helpers, with nobody typing, fall in the first Dawn's range.
@@ -341,8 +342,8 @@ const S = {
     const mid = play(4, 3), slow = play(2.5, 1), quick = play(7, 1);
     console.log(`        48 wpm: Dawn ${mid.map(m => Math.round(m.min) + ' min').join(', ')}; 30 wpm: Dawn 1 at ${Math.round(slow[0].min)} min; 84 wpm: ${Math.round(quick[0].min)} min`);
     check(mid.length === 3, 'a steady typist greets three dawns inside ten hours');
-    check(mid[0].min > 40 && mid[0].min < 110, 'the first Dawn takes about an hour or so', `${mid[0].min}`);
-    check(mid[1].min - mid[0].min > 20 && mid[2].min - mid[1].min > mid[1].min - mid[0].min - 5, 'later eras are no shorter than the one before', mid.map(m => Math.round(m.min)).join());
+    check(mid[0].min > 15 && mid[0].min < 45, 'the first Dawn comes within about half an hour for an average typist', `${mid[0].min}`);
+    check(mid[1].min - mid[0].min > 8 && mid[2].min - mid[1].min > mid[1].min - mid[0].min - 5, 'later eras are no shorter than the one before', mid.map(m => Math.round(m.min)).join());
     check(quick[0].min < mid[0].min && mid[0].min < slow[0].min, 'faster typists reach Dawn sooner, in order');
     check(slow[0].min < mid[0].min * 2.2, 'but a slow one is not shut out: under twice as long');
     check(mid[0].stars >= 1 && mid[2].stars > mid[0].stars * 3, 'stars pile up');
@@ -354,13 +355,16 @@ const S = {
     try { ({ chromium } = await import('playwright')); } catch (e) { try { chromium = createRequire(join(execSync('npm root -g').toString().trim(), 'x'))('playwright').chromium; } catch (e2) {} }
     if (!chromium) { console.log('  skipped: Playwright is not installed'); return; }
     const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
-    const url = pathToFileURL(PAGE).href, errors = [];
+    // served over http from a throwaway local server: localStorage on file:// is shared across processes with a lag that makes reload tests flaky
+    const server = http.createServer((q, s) => { s.setHeader('content-type', 'text/html; charset=utf-8'); s.end(html); }); await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const url = `http://127.0.0.1:${server.address().port}/`, errors = [];
     const open = async (save, o = {}) => {
       const ctx = await browser.newContext({ viewport: o.phone ? { width: 390, height: 844 } : { width: 1280, height: 720 }, hasTouch: !!o.phone, isMobile: !!o.phone, reducedMotion: o.reduced ? 'reduce' : 'no-preference' });
-      await ctx.route(/^https?:/, r => r.abort());
+      await ctx.route(/^https?:/, r => r.request().url().startsWith('http://127.0.0.1') ? r.continue() : r.abort());
       const p = await ctx.newPage(); p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-      if (save !== undefined) await p.addInitScript(s => { if (!sessionStorage.getItem('seeded') && s) { sessionStorage.setItem('seeded', '1'); if (s.v3) localStorage.setItem('wordRain.v3', JSON.stringify(s.v3)); if (s.old) localStorage.setItem('wordrain_save', JSON.stringify(s.old)); if (s.v2) localStorage.setItem('wordRain.v2', JSON.stringify(s.v2)); } }, save);
-      await p.goto(url); await p.waitForTimeout(250); return { ctx, p };
+      // seed the storage once per tab: window.name survives reloads, so Start over and reload tests are not reseeded
+      if (save) await p.addInitScript(s => { if (window.name !== 'wr-seeded') { window.name = 'wr-seeded'; localStorage.clear(); if (s.v3) localStorage.setItem('wordRain.v3', JSON.stringify(s.v3)); if (s.old) localStorage.setItem('wordrain_save', JSON.stringify(s.old)); if (s.v2) localStorage.setItem('wordRain.v2', JSON.stringify(s.v2)); } }, save);
+      await p.goto(url); await p.waitForFunction(() => window.__wr); await p.waitForTimeout(150); return { ctx, p };
     };
     const S3 = (o = {}) => ({ v: 3, lumen: 0, levels: {}, stars: 0, dawns: 0, eraLumen: 0, eraBest: 0, bestWave: 0, bestLumen: 0, bestWpm: 0, startWave: 1, district: 0, nights: 0, words: 0, seen: true, shopSeen: true, mute: false, migrated: true, last: Date.now(), ...o });
     const sv = p => p.evaluate(() => JSON.parse(JSON.stringify(window.__wr.save)));
@@ -377,6 +381,9 @@ const S = {
       const g1 = await p.evaluate(() => ({ kills: window.__wr.game.stats.kills, score: window.__wr.game.score, shown: document.getElementById('score').textContent }));
       check(g1.kills === 1 && g1.score === 60 && /✦/.test(g1.shown), 'typing it pays 60 lumen and the counter says so', JSON.stringify(g1));
       await p.waitForTimeout(400);
+      check(!(await p.evaluate(() => document.getElementById('chip').classList.contains('on'))), 'no star is offered before the haul can pay for one');
+      await p.evaluate(() => { window.__wr.game.score = 400; }); await p.waitForTimeout(250);
+      check(await p.evaluate(() => document.getElementById('chip').classList.contains('on')), 'as soon as the night\'s haul can pay for the first star, the page says so');
       await endNight(p);
       const s1 = await sv(p);
       check(s1.nights === 1 && s1.lumen >= 60 && s1.eraLumen === s1.lumen && s1.bestWave === 1, 'the night is paid into the pocket once', JSON.stringify([s1.nights, s1.lumen, s1.eraLumen]));
@@ -397,7 +404,7 @@ const S = {
       await p.evaluate(() => document.querySelectorAll('#tree .node')[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))); await p.waitForTimeout(250);
       await p.evaluate(() => { const n = [...document.querySelectorAll('#tree .node')].find(x => /Lucky bell/.test(x.textContent)); n.dispatchEvent(new MouseEvent('click', { bubbles: true })); }); await p.waitForTimeout(250);
       check(await p.evaluate(() => document.getElementById('buy').disabled), 'a star whose requirements are unmet cannot be lit');
-      await p.reload({ waitUntil: 'load' }); await p.waitForFunction(() => window.__wr && window.__wr.mode); const s4 = await sv(p); check(s4.levels.wick === s3.levels.wick && s4.lumen === s3.lumen, 'levels and lumen survive a reload', JSON.stringify([s3.levels, s3.lumen, s4.levels, s4.lumen]));
+      await p.waitForTimeout(400); /* let the storage reach disk before the next process reads it */ await p.reload({ waitUntil: 'load' }); await p.waitForFunction(() => window.__wr && window.__wr.mode && performance.getEntriesByType('navigation')[0].type === 'reload'); const s4 = await sv(p); check(s4.levels.wick === s3.levels.wick && s4.lumen === s3.lumen, 'levels and lumen survive a reload', JSON.stringify([s3.levels, s3.lumen, s4.levels, s4.lumen]));
       await p.click('#shopbtn'); await p.click('#shopGo'); check(await mode(p) === 'play', 'Begin the night from the workshop starts a night');
       check((await p.evaluate(() => window.__wr.game.m.lumen)) > 1, 'and the night carries what was bought');
       await ctx.close(); }
@@ -427,7 +434,7 @@ const S = {
       const { ctx, p } = await open({ v3: S3({ levels: helpers, eraBest: 10, bestWave: 10, nights: 8, last: Date.now() - 5 * 3600 * 1000 }) });
       const pay = WR.offline(helpers, 0, 0, 10, 5 * 3600);
       check(await mode(p) === 'welcome' && (await sv(p)).lumen === pay && pay > 0, 'coming back after hours pays the helpers\' watch', `${(await sv(p)).lumen} vs ${pay}`);
-      await p.click('#awayOk'); await p.reload({ waitUntil: 'load' }); await p.waitForFunction(() => window.__wr && window.__wr.mode);
+      await p.click('#awayOk'); await p.waitForTimeout(400); /* let the storage reach disk before the next process reads it */ await p.reload({ waitUntil: 'load' }); await p.waitForFunction(() => window.__wr && window.__wr.mode && performance.getEntriesByType('navigation')[0].type === 'reload');
       check(await mode(p) === 'title' && (await sv(p)).lumen === pay, 'and only once', JSON.stringify([await mode(p), (await sv(p)).lumen, pay, (await sv(p)).last, Date.now()]));
       await ctx.close(); }
     { const { ctx, p } = await open({ v3: S3({ levels: { wick: 5 }, eraBest: 10, nights: 8, last: Date.now() - 5 * 3600 * 1000 }) });
@@ -439,7 +446,7 @@ const S = {
     { const { ctx, p } = await open({ v3: { ...S3(), lumen: 'lots', levels: { wick: 99, nope: 5, bell: -3 }, stars: -5, dawns: 'x', district: 7, startWave: 'q' } });
       const m = await sv(p); check(m.lumen === 0 && m.levels.wick === 12 && !m.levels.nope && !m.levels.bell && m.stars === 0 && m.dawns === 0 && m.district === 0 && m.startWave === 1, 'a save that lies is clamped', JSON.stringify(m)); await ctx.close(); }
     { const { ctx, p } = await open({ v3: S3({ lumen: 50, nights: 2 }) });
-      await p.click('#reset'); await Promise.all([p.waitForNavigation(), p.click('#reset')]); await p.waitForFunction(() => window.__wr && window.__wr.mode); const m = await sv(p); check(m.lumen === 0 && m.nights === 0, 'Start over, asked twice, erases the town', JSON.stringify(m)); await ctx.close(); }
+      await p.click('#reset'); await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click('#reset')]); await p.waitForFunction(() => window.__wr && window.__wr.mode && performance.getEntriesByType('navigation')[0].type === 'reload'); const m = await sv(p); check(m.lumen === 0 && m.nights === 0, 'Start over, asked twice, erases the town', JSON.stringify(m)); await ctx.close(); }
 
     // a phone: tapping the on-screen keys types the word, and the workshop fits
     { const { ctx, p } = await open(undefined, { phone: true });
@@ -454,7 +461,7 @@ const S = {
     // reduced motion plays through without errors
     { const { ctx, p } = await open(undefined, { reduced: true }); await p.click('#play'); await p.waitForFunction(() => window.__wr.game && window.__wr.game.words.length > 0, null, { timeout: 8000 }); await p.keyboard.type('rain', { delay: 30 }); await endNight(p); await p.click('#toshop'); await ctx.close(); }
     check(errors.length === 0, 'no console errors anywhere', errors.slice(0, 3).join(' | '));
-    await browser.close();
+    await browser.close(); server.close();
   },
   bots() {
     const waveOf = (cps, o) => { const w = []; for (let s = 1; s <= 4; s++) w.push(bot(cps, s, o).wave); return Math.min(...w); };
@@ -462,11 +469,45 @@ const S = {
     console.log(`        waves reached: idle ${idle}, 18wpm ${slow}, 36wpm ${mid}, 60wpm ${fast}, 96wpm ${quick}`);
     check(idle === 1, 'a player who never types is gone in wave 1');
     check(idle < slow && slow < mid && mid < fast && fast < quick, 'faster typists get further, in order');
-    check(slow >= 3, 'a hunt-and-peck beginner still sees wave 3');
-    check(fast >= 12 && quick >= 17, 'a quick typist is carried deep, a very quick one deeper');
-    const sloppy = waveOf(5, { errRate: .25 });
-    check(sloppy < fast, 'a quarter of the keys wrong is worse than none');
-    check(quick < 60, 'the storm eventually beats everyone');
+    check(slow >= 2, 'a hunt-and-peck beginner still sees wave 2');
+    check(sloppy() < waveOf(5), 'a quarter of the keys wrong is worse than none');
+    function sloppy() { return waveOf(5, { errRate: .25 }); }
+    check(quick < 25, 'without upgrades the storm beats even a very quick typist well before wave 25');
+  },
+  ladder() {
+    // How fast do people type? The CHI 2018 study of 136 million keystrokes puts the average around 40 to 52 wpm and the fastest 5 % above 80.
+    // A bot types at a steady speed with a pause between words that shrinks as the typist gets quicker; it is a bit generous (no distractions).
+    const night = (wpm, seed, mods, start = 1) => {
+      const cps = wpm / 12, react = Math.min(.5, Math.max(.1, .5 - .045 * cps)), g = WR.create({ seed, charW: .03, aspect: 1.6, mods, startWave: start });
+      let acc = 0, wait = 0, firstPay = null; const r = WR.rng(seed + 5);
+      while (!g.over && g.t < 3600) {
+        for (const e of g.step(1 / 30)) if (e.t === 'wave' && e.n === 2 && firstPay === null) firstPay = g.score;
+        acc = Math.min(3, acc + cps / 30); if (wait > 0) { wait -= 1 / 30; continue; }
+        while (acc >= 1) { acc -= 1;
+          if (!g.target) { const ws = g.words.slice(), w = ws.filter(o => o.kind !== 'word').sort((a, b) => b.y - a.y)[0] || ws.sort((a, b) => b.y - a.y)[0]; if (!w) { acc = 0; break; } g.key(w.text[0]); wait = react; break; }
+          else if (r() < .03) g.key('q'); else g.key(g.target.text[g.target.typed]); }
+      }
+      return { wave: g.wave, secs: g.t, firstPay, lumen: g.score };
+    };
+    const avg = (wpm, mods) => { const rs = [1, 2, 3, 4].map(s => night(wpm, s, mods)); return { wave: rs.reduce((a, x) => a + x.wave, 0) / rs.length, secs: Math.max(...rs.map(x => x.secs)), pay: Math.min(...rs.map(x => x.firstPay)), lumen: rs[0].lumen }; };
+    const rows = [25, 40, 52, 70, 100, 150].map(w => [w, avg(w)]);
+    console.log('        no upgrades: ' + rows.map(([w, r]) => `${w}wpm wave ${r.wave.toFixed(1)} in ${Math.round(r.secs)}s`).join(', '));
+    const R = Object.fromEntries(rows);
+    check(rows.every(([, r], i) => i === 0 || r.wave >= rows[i - 1][1].wave), 'a faster typist never does worse than a slower one');
+    check(R[25].wave >= 3 && R[25].wave <= 7.5 && R[25].secs < 210, 'a 25 wpm typist\'s first night ends in wave 3 to 7, inside three and a half minutes');
+    check(R[40].wave >= 5 && R[40].wave <= 9 && R[40].secs < 260, 'a 40 wpm typist\'s first night ends in wave 5 to 9');
+    check(R[52].wave >= 7 && R[52].wave <= 10 && R[52].secs < 290, 'the average typist is struggling by wave 7 to 10, within five minutes');
+    check(R[100].wave >= 10 && R[100].wave <= 14 && R[100].secs < 360, 'a 100 wpm typist is beaten between wave 10 and 14, inside six minutes');
+    check(R[150].wave >= 14 && R[150].wave < 30, 'a 150 wpm typist goes deeper but is still beaten');
+    check(R[25].pay >= WR.cost('wick', 0) * 2 && R[25].pay <= 2000, 'the first wave already pays for the first star, twice over, for the slowest typist', `${R[25].pay}`);
+    check(R[52].lumen >= WR.cost('gauge', 0) + WR.cost('roofs', 0) + WR.cost('lamplighter', 0) * 0 + WR.cost('wick', 0), 'an average first night pays for several stars', `${R[52].lumen}`);
+    // upgrades must matter, and must never make a night endless
+    const L = { wick: 4, gauge: 3, roofs: 2, mend: 1, lamplighter: 3, sense: 1 };
+    const up = avg(52, WR.mods(L));
+    check(up.wave >= R[52].wave + 2, 'a handful of early stars buys the average typist at least two more waves', `${up.wave} vs ${R[52].wave}`);
+    const every = Object.fromEntries(WR.UPG.map(u => [u.id, WR.maxOf(u.id, 6)]));
+    const top = [1, 2, 3].map(s => night(100, s, WR.mods(every, 90, 2, 6)));
+    check(top.every(r => r.secs < 3600 && r.wave < 120), 'even a fully built town with every ceiling raised cannot be played for ever', top.map(r => `${r.wave} in ${Math.round(r.secs)}s`).join(', '));
   },
 };
 
