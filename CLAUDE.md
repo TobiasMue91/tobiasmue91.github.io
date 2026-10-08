@@ -119,8 +119,10 @@ npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (pl
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 npm run test:qix            # QIX suite (plain Node, no server or browser)
 npm run test:simon         # Simon Says suite (plain Node, no server or browser)
+npm run test:artillery   # Artillery suite (plain Node, no server or browser)
 npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
 npm run test:fling          # Fling suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:wordrain       # Word Rain suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -130,7 +132,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-five exist so far. `test/everything_converter.mjs` drives
+Fifty-seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -454,6 +456,28 @@ Qix that really touches it or a fuse that really reaches the player, a stake can
 was, a seed is the same night for everyone at any frame rate, and bots must be ordered by skill. Run it after touching the core.
 
 `test/simon_says.mjs` runs the DOM-free `<script id="core">` block of `games/simon_says.html` (Simon Says), whose promise is that the sequence is honest: a seed is the same sequence for everyone, a longer one only ever adds to the end of a shorter one, no pad comes up four times running, a press is judged against exactly the pad that was shown, the tempo tightens but never past what a person can follow, saves trust nothing and daily streaks count the way the card says, and bots with a longer memory score higher. Run it after touching the core.
+
+`test/word_rain.mjs` runs the DOM-free `<script id="core">` block of `games/word_rain.html` (Word Rain), a typing incremental: nights of
+falling words pay lumen, a constellation of 21 upgrades spends it, helpers type beside the player, and a Dawn lays the upgrades down
+for stars. Its promises are that a first letter always picks out one word, that every number on screen is what the rules say, and that
+the game cannot be solved by leaving it alone. Every wave on every seed spawns what its spec says and never two live words with the same
+first letter; scoring and the multiplier against a separate tally; every lever (wick, rhythm, mercy, bell, gutters, roofs, mend, frost,
+blast against brute force, thunder, gilded, charm) moves exactly the number it names; the upgrade tree has real prices, real
+requirements and no cycles, and a save that lies is clamped; helpers type at their stated speed, take only what their role says, never
+touch frost, blast, thunder, gilded or charm words or the player's own word, and a maxed town with nobody typing still falls before the
+first Dawn's depth while a typist beside it goes far beyond; districts, bursts, a seed that deals the same storm at 30 and 120 fps; time
+away pays only with helpers, never past the night shift's hours, and a small share of an hour of play; and `career` plays the whole game
+with a person-paced bot (it buys the cheapest star, starts three waves under its best, ends each night after ten minutes) and wants the
+first Dawn at about an hour, later eras no shorter, faster typists sooner but a slow one not shut out. `page` (Playwright's Chromium,
+skipped without it) plays a first night with real keys, buys stars, banks a paused night once, greets a Dawn, pays a night away, migrates
+the old page's gold and bests, clamps a lying save, erases on Start over, and taps a night out on a phone. Run it after touching the
+bank, a wave number, a price, a lever or the page.
+
+`test/artillery.mjs` runs the DOM-free `<script id="core">` block of `games/artillery.html` (Artillery), a tank duel whose page only
+draws what the core returns: a shell lands where plain ballistics put it at any wind, a blast only lowers ground and hurts by
+distance, every hill the generator deals can be shot across with a tank on level ground at either end, a match counts to three and
+alternates the shooter, and the computer starts wide, closes in as it walks a shot in and beats a player who aims blindly. Run it
+after touching the core or a constant.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
