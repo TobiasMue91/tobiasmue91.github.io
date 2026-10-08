@@ -31,6 +31,20 @@ A few older pages do ship images, under `games/img/`.
 `data/tools.json` at runtime and render the cards, filters, search and daily pick — so a new page
 appears on the site only once it is in that JSON.
 
+## Mistakes that have come back in more than one game
+
+Check these before calling a remade page done; each has now shipped broken in several games.
+
+- **Scenery that scrolls with the camera.** Backdrops (hills, sky, sun, the soil under the ground line, pebbles,
+  foreground rocks) stay fixed on screen unless the player asked for parallax; only things that exist in the world
+  (bodies, the ground's surface, props) move with the camera. Tie scenery to the camera and the whole world looks
+  like it slides under the player. Drive the camera across the whole level and look at a few frames before shipping.
+- **Round things that never stop.** A circle on flat ground only turns its slide into a roll, so without rolling
+  resistance it carries on to the edge of the level. Anything round that can roll needs damping while it touches
+  something, and a test that pushes it along the floor and wants it at rest.
+- **Animations that snap.** State changes (a thing jumping into place, being released, leaving) need an eased or
+  sprung path with a start and an end pose, never a position swap. Record frames at 20 to 60 ms around the moment.
+
 ## Adding a game or tool
 
 `util/new_entry.py` does this interactively (Selenium screenshot, LLM classification, JSON and sidebar
