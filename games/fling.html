@@ -893,7 +893,7 @@ const SND = (() => {
   let li = 0, w = null, phase = 'aim', phaseT = 0, acc = 0, time = 0, timeScale = 1, slowUntil = 0;
   let levelLeft = 12, levelRight = 20, home = -1.6, followX = 0, lastBird = null, watchT = 0;
   let aim = null, dragCam = null, ghost = null, lastPull = null, hintOn = false, idleT = 0, ticker = 0;
-  let loadT = 1, loadFrom = 0, flyHint = 0, shown = { score: -1, toads: -1, stars: -1, lvl: -1 };
+  let pendingHop = -1, vis = [], ps = { x: FL.SLING.x, y: FL.SLING.y, vx: 0, vy: 0 }, birdIn = true, hop = null, hintPull = null, hintAl = 0, flyHint = 0, shown = { score: -1, toads: -1, stars: -1, lvl: -1 };
   let tipKind = '', tips = (save.tips || {}), smallAcc = null, flashA = 0, flyers = [], hitStop = 0, parts = [], pops = [], bonusLeft = 0, bonusT = 0, bonusN = 0, resultAt = 0, launchedThisLevel = 0;
   const prev = new Map();
 
@@ -924,7 +924,7 @@ const SND = (() => {
     levelLeft = Math.min(...spec.items.filter(it => it[0] === 'toad').map(it => it[1]));
     resize();
     camX = home; camY = 0; shown = { score: -1, toads: -1, stars: -1, lvl: -1 };
-    loadT = 1; hintOn = li === 0 && !starsOf(0); idleT = 0;
+    vis = []; pendingHop = -1; birdIn = true; hop = null; ps = { x: SL.x, y: SL.y, vx: 0, vy: 0 }; hintPull = null; hintOn = li === 0 && !starsOf(0); idleT = 0;
     document.body.classList.remove('over'); $('res').classList.remove('on'); $('map').classList.remove('on');
     $('lvlName').textContent = li + 1;
     $('pips').innerHTML = '<i></i>'.repeat(w.toads);
@@ -979,6 +979,40 @@ const SND = (() => {
   function ring(x, y, r, col) { parts.push({ k: 'r', x, y, vx: 0, vy: 0, w: r, c: col, life: .45, t: 0 }); }
   function popup(x, y, text, big) { let n = 0; for (const p of pops) if (p.t < .5 && Math.hypot(p.x - x, p.y - y) < 1.6) n++; pops.push({ x: x + (n % 2 ? .5 : -.5) * Math.min(n, 3) * .5, y: y + n * .55, text, t: 0, big }); }
 
+  // ---------- the sling: a pouch on a spring, a bird that hops in and is flung out ----------
+  const HOP_T = .72, easeOut = k => 1 - Math.pow(1 - k, 3), easeInOut = k => k < .5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k);
+  function syncVis() {
+    const q = w.queue;
+    while (vis.length > q.length) vis.shift();
+    while (vis.length < q.length) { const i = vis.length, j = i - (birdIn || hop ? 1 : 0); vis.push({ x: SL.x - 2.5 - Math.max(0, j) * 1.2, ph: i * 1.9 }); }
+  }
+  function startHop() {
+    syncVis(); if (!w.queue.length) return;
+    hop = { t: 0, x0: vis[0].x, kind: w.queue[0], landed: false }; birdIn = false; SND.pick(w.queue.length);
+  }
+  function animateSling(dt) {
+    syncVis();
+    if (pendingHop >= 0) { pendingHop += dt; if (Math.abs(camX - home) < 1.1 || pendingHop > 1.6) { pendingHop = -1; startHop(); } }
+    const holds = birdIn || hop, first = holds ? 1 : 0;
+    for (let i = first; i < vis.length; i++) { const slot = SL.x - 2.5 - (i - first) * 1.2, v = vis[i]; v.rem = slot - v.x; v.x += v.rem * (1 - Math.exp(-dt * 7)); }
+    if (hop) {
+      hop.t += dt;
+      if (!hop.landed && hop.t >= .56) { hop.landed = true; ps.vy -= 8; ps.y -= .12; SND.hit('toad', 3); puff(SL.x, SL.y - .5, 3, 'rgba(255,246,227,.8)', .16); }
+      if (hop.t >= HOP_T) { hop = null; birdIn = w.queue.length > 0; }
+    }
+    // idle hint ghost
+    hintPull = null; hintAl = 0;
+    if (!aim && hintOn && phase === 'aim' && birdIn && idleT > 1.1 && canAim()) {
+      const k = ((time - 1) * .55) % 1.7, e = Math.min(1, k / 1.1), ease = 1 - Math.pow(1 - e, 3);
+      hintAl = k > 1.45 ? Math.max(0, 1 - (k - 1.45) * 4) : 1; hintPull = [-1.9 * ease, -1.0 * ease];
+    }
+    if (aim) { ps.x = SL.x + aim.px; ps.y = SL.y + aim.py; ps.vx = ps.vy = 0; }
+    else if (hintPull) { ps.x = SL.x + hintPull[0] * hintAl; ps.y = SL.y + hintPull[1] * hintAl; ps.vx = ps.vy = 0; }
+    else {
+      const k = 640, c = birdIn ? 24 : 18, n = 3, h = Math.min(dt, .05) / n;
+      for (let s = 0; s < n; s++) { ps.vx += (-k * (ps.x - SL.x) - c * ps.vx) * h; ps.vy += (-k * (ps.y - SL.y) - c * ps.vy) * h; ps.x += ps.vx * h; ps.y += ps.vy * h; }
+    }
+  }
   // ---------- events ----------
   function onEvents(evs) {
     for (const e of evs) {
@@ -1001,7 +1035,7 @@ const SND = (() => {
 
   // ---------- input ----------
   const restPos = () => ({ x: SL.x, y: SL.y });
-  function canAim() { return phase === 'aim' && FL.canLaunch(w) && loadT >= 1; }
+  function canAim() { return phase === 'aim' && birdIn && !hop && FL.canLaunch(w); }
   function down(ev) {
     SND.unlock(); ev.preventDefault();
     if ($('map').classList.contains('on') || $('res').classList.contains('on')) return;
@@ -1029,8 +1063,8 @@ const SND = (() => {
       const a = aim; aim = null;
       if (Math.hypot(a.px, a.py) >= FL.MINPULL + .15) {
         const b = FL.launch(w, a.px, a.py);
-        if (b) { lastPull = [a.px, a.py]; launchedThisLevel++; setPhase('flight'); try { navigator.vibrate && navigator.vibrate(12); } catch (e) {} }
-      } else { loadFrom = 0; }
+        if (b) { lastPull = [a.px, a.py]; launchedThisLevel++; birdIn = false; ps.vx = ps.vy = 0; setPhase('flight'); try { navigator.vibrate && navigator.vibrate(12); } catch (e) {} }
+      }
     }
     if (dragCam && ev.pointerId === dragCam.id) dragCam = null;
   }
@@ -1094,7 +1128,7 @@ const SND = (() => {
     time += dt; phaseT += dt; idleT += dt;
     if (slowUntil && performance.now() > slowUntil) { timeScale = Math.min(1, timeScale + dt * 2.2); if (timeScale >= 1) slowUntil = 0; }
     if (w.over && phase !== 'done' && phase !== 'bonus') {
-      if (w.over === 'won') { bonusLeft = w.bonusBirds; bonusN = 0; bonusT = 0; setPhase('bonus'); }
+      if (w.over === 'won') { bonusLeft = w.bonusBirds; bonusN = 0; bonusT = 0; birdIn = false; hop = null; setPhase('bonus'); }
       else { setPhase('done'); resultAt = time + 1.3; }
     }
     if (phase === 'bonus') {
@@ -1112,9 +1146,9 @@ const SND = (() => {
       if (!w.active.length) { setPhase('watch'); watchT = 0; }
     } else if (phase === 'watch') {
       watchT += dt;
-      if (!w.over && (w.quiet > .35 || watchT > 3.2) && w.queue.length) { loadFrom = 0; loadT = 0; setPhase('aim'); SND.pick(w.queue.length); }
+      if (!w.over && (w.quiet > .35 || watchT > 3.2) && w.queue.length) { setPhase('aim'); pendingHop = 0; }
     }
-    if (loadT < 1) loadT = Math.min(1, loadT + dt / .5);
+    animateSling(dt);
     // camera
     let target = camX;
     if (phase === 'intro') {
@@ -1174,10 +1208,10 @@ const SND = (() => {
     const r = b.r * 1.1, hurt = Math.min(1, b.dmg * 1.4), v = [0, 1, 2, 3][b.id % 4] * (b.r > .52 ? 1 : 1);
     body(x, y, 0, g => { g.save(); const sc = 1 + (b.flash > 0 ? .06 : 0); g.scale(sc, sc); ART.drawToad(g, r, { lx, ly, blink, hurt: d < 4 && !hurt ? .5 : hurt, flash: b.flash > 0, v: b.id % 5 === 0 ? 1 : b.id % 5 === 2 ? 2 : b.id % 11 === 3 ? 3 : 0 }); g.restore(); });
   }
-  function drawBird(kind, r, x, y, a, mood, stretch) {
+  function drawBird(kind, r, x, y, a, mood, stretch, sqx, sqy) {
     const st = { blink: ((time * 1.1 + r * 9) % 4.1) < .12, lx: 1, ly: -.15, mood, t: time };
     body(x + SH[0], y + SH[1], a, g => { g.fillStyle = 'rgba(43,29,56,.38)'; g.beginPath(); g.arc(0, 0, r * 1.2, 0, 7); g.fill(); });
-    body(x, y, a, g => { if (stretch) g.scale(1 + stretch * .3, 1 - stretch * .22); ART.drawBird(g, kind, r * 1.2, st); });
+    body(x, y, a, g => { if (sqx) g.scale(sqx, sqy); if (stretch) g.scale(1 + stretch * .3, 1 - stretch * .22); ART.drawBird(g, kind, r * 1.2, st); });
   }
   function slingFork(front) { ctx.save(); ctx.translate(sx(SL.x), sy(0)); ctx.scale(ppm, ppm); ART.slingFork(ctx, front); ctx.restore(); }
   const TB = [SL.x + .48, 2.62], TF = [SL.x - .42, 2.55];
@@ -1204,39 +1238,37 @@ const SND = (() => {
     ART.contactShadow(ctx, sx(SL.x), sy(0), ppm * 2.2);
     for (const b of w.bodies) { if (b.static || b.k === 'bird') continue; const [x, y, a] = lerpA(b, alpha); if (b.circle) body(x + SH[0], y + SH[1], 0, g => { g.fillStyle = 'rgba(43,29,56,.38)'; g.beginPath(); g.arc(0, 0, b.r * 1.1, 0, 7); g.fill(); }); else drawBlockShadow(b, x, y, a); }
     slingFork(false);
-    // waiting birds (the first of the queue is the one in the sling)
-    for (let i = 1; i < q.length; i++) {
-      const x = SL.x - 2.5 - (i - 1) * 1.2, r = FL.BIRDS[q[i]].r, hop = (loadT < 1 && i === 1) ? 0 : 0;
-      drawBird(q[i], r, x, r + .02 + Math.max(0, Math.sin(time * 2 + i * 2) * .0), 0, 0);
+    // waiting birds: the ones on the grass slide along to close the gap, bobbing as they go
+    syncVis();
+    const holds = birdIn || hop, first = holds ? 1 : 0;
+    for (let i = first; i < q.length; i++) {
+      const v = vis[i], r = FL.BIRDS[q[i]].r, rem = Math.abs(v.rem || 0), moving = Math.min(1, rem * 1.5);
+      const bob = Math.abs(Math.sin(time * 13 + v.ph)) * Math.min(.3, rem * .5), breathe = 1 + Math.sin(time * 2.2 + v.ph) * .025 * (1 - moving);
+      const sqy = breathe - moving * .0, y = r + .02 + bob - (1 - breathe) * r;
+      drawBird(q[i], r, v.x, y, 0, 0, 0, 1 / breathe, breathe);
     }
-    // sling bird + bands
+    // bird in (or arriving at) the sling, and the bands
     const cur = q[0];
-    let bp = [SL.x, SL.y];
-    let hintPull = null, hintAl = 0;
-    if (!aim && hintOn && phase === 'aim' && loadT >= 1 && idleT > 1.1 && canAim()) {
-      const k = ((time - 1) * .55) % 1.7, e = Math.min(1, k / 1.1), ease = 1 - Math.pow(1 - e, 3);
-      hintAl = k > 1.45 ? Math.max(0, 1 - (k - 1.45) * 4) : 1; hintPull = [-1.9 * ease, -1.0 * ease];
-    }
-    if (cur && phase !== 'flight') {
-      if (aim) bp = [SL.x + aim.px, SL.y + aim.py];
-      else if (hintPull) bp = [SL.x + hintPull[0] * hintAl, SL.y + hintPull[1] * hintAl];
-      else if (loadT < 1) { const k = loadT, from = [SL.x - 2.5, .45]; bp = [from[0] + (SL.x - from[0]) * k, from[1] + (SL.y - from[1]) * k + Math.sin(k * Math.PI) * 1.6]; }
-      else { // spring back
-        const kk = Math.min(1, phaseT * 6); bp = [SL.x, SL.y];
-      }
-    }
-    const showSling = cur && !(phase === 'flight' && !q.length && false);
+    const dxp = ps.x - SL.x, dyp = ps.y - SL.y, l = Math.hypot(dxp, dyp), ux = l > .01 ? dxp / l : -1, uy = l > .01 ? dyp / l : 0;
+    const tens = Math.min(1, l / FL.MAXPULL), bw = .17 - tens * .07, angPull = -Math.atan2(dyp, dxp) + Math.PI;
+    const posing = (aim || hintPull) && birdIn;
+    const hasBird = (birdIn || (hop && hop.landed)) && cur;
+    const pouch = hasBird ? [ps.x + ux * .3, ps.y + uy * .3] : [ps.x, ps.y];
     for (const f of flyers) { const k = Math.min(1, f.t / .55), r = FL.BIRDS[f.kind].r; drawBird(f.kind, r, SL.x - 2.5 + (4.3) * k, .45 + (SL.y + 1.6) * k + Math.sin(k * Math.PI) * 1.8 * (1 - k * .3), -k * 2, 2); }
-    if (cur && (phase === 'aim' || phase === 'intro' || phase === 'watch' || phase === 'bonus')) {
-      const r = FL.BIRDS[cur].r, dxp = bp[0] - SL.x, dyp = bp[1] - SL.y, l = Math.hypot(dxp, dyp), ux = l > .01 ? dxp / l : -1, uy = l > .01 ? dyp / l : 0;
-      const pouch = [bp[0] + ux * .3, bp[1] + uy * .3], tens = Math.min(1, l / FL.MAXPULL);
-      const bw = .17 - tens * .07;
-      band(TB, pouch, bw, '#5a2e2b');
-      ctx.save(); ctx.translate(sx(pouch[0]), sy(pouch[1])); ctx.rotate(-Math.atan2(uy, ux)); ctx.scale(ppm, ppm); ctx.fillStyle = '#4b2a20'; ART.rr(ctx, -.16, -.4, .32, .8, .14); ctx.fill(); ctx.restore();
-      const ang = aim ? Math.atan2(-dyp, -dxp) : 0;
-      drawBird(cur, r, bp[0], bp[1], aim || hintPull ? -Math.atan2(dyp, dxp) + Math.PI : 0, aim || hintPull ? 1 : 0);
-      band(TF, pouch, bw + .02, '#7a3b33');
+    band(TB, pouch, bw, '#5a2e2b');
+    ctx.save(); ctx.translate(sx(pouch[0]), sy(pouch[1])); ctx.rotate(-Math.atan2(l > .01 ? uy : 0, l > .01 ? ux : -1)); ctx.scale(ppm, ppm); ctx.fillStyle = '#4b2a20'; ART.rr(ctx, -.16, -.4, .32, .8, .14); ctx.fill(); ctx.restore();
+    if (hasBird) {
+      const r = FL.BIRDS[cur].r, snap = hop ? Math.max(0, 1 - (hop.t - .56) / .16) : 0;
+      const br = !posing && !snap ? 1 + Math.sin(time * 2.4) * .018 : 1;
+      drawBird(cur, r, ps.x, ps.y - snap * .1, posing ? angPull : 0, posing ? 1 : 0, posing ? tens * .6 : 0, (1 + snap * .2) / br, (1 - snap * .22) * br);
+    } else if (hop) { // in the air between the grass and the sling
+      const t = hop.t, r = FL.BIRDS[hop.kind].r, gy0 = r + .02;
+      let x = hop.x0, y = gy0, sqx = 1, sqy = 1;
+      if (t < .14) { const k = easeOut(t / .14); sqy = 1 - .3 * k; sqx = 1 + .2 * k; y = gy0 - (1 - sqy) * r * 1.1; }
+      else { const k = Math.min(1, (t - .14) / .42); x = hop.x0 + (SL.x - hop.x0) * easeInOut(k * .85 + k * k * .15); y = gy0 + (SL.y - gy0) * k + Math.sin(k * Math.PI) * 2.1; const st = Math.sin(k * Math.PI); sqy = 1 + .14 * st; sqx = 1 - .1 * st; }
+      drawBird(hop.kind, r, x, y, t > .14 ? -Math.PI * 2 * easeInOut(Math.min(1, (t - .14) / .42)) : 0, 2, 0, sqx, sqy);
     }
+    band(TF, pouch, bw + .02, '#7a3b33');
     slingFork(true);
     // bodies
     for (const b of w.bodies) {
@@ -1278,10 +1310,10 @@ const SND = (() => {
   }
 
   // ---------- loop ----------
-  let last = performance.now();
+  let last = performance.now(), frozen = false;
   function frame(now) {
     const dt = Math.min(.05, (now - last) / 1000); last = now;
-    if (w) { update(dt); render(acc / FIXED); }
+    if (w && !frozen) { update(dt); render(acc / FIXED); }
     requestAnimationFrame(frame);
   }
 
@@ -1294,7 +1326,7 @@ const SND = (() => {
   const qs = new URLSearchParams(location.search), qi = parseInt(qs.get('level'), 10);
   resize();
   startLevel(qi > 0 ? Math.min(LV.length, qi) - 1 : firstOpen());
-  window.FLING = { get cam() { return camX; }, get home() { return home; }, screenOf: (x, y) => [sx(x), sy(y)], startLevel, get w() { return w; }, get phase() { return phase; }, step: dt => { update(dt); render(0); }, shot: (px, py) => { aim = null; const b = FL.launch(w, px, py); if (b) { lastPull = [px, py]; setPhase('flight'); } }, tap: () => FL.tapBird(w), openMap, setCam: x => { camX = x; } };
+  window.FLING = { freeze: v => { frozen = v; }, get cam() { return camX; }, get home() { return home; }, screenOf: (x, y) => [sx(x), sy(y)], startLevel, get w() { return w; }, get phase() { return phase; }, step: dt => { update(dt); render(0); }, shot: (px, py) => { aim = null; const b = FL.launch(w, px, py); if (b) { lastPull = [px, py]; setPhase('flight'); } }, tap: () => FL.tapBird(w), openMap, setCam: x => { camX = x; } };
   requestAnimationFrame(frame);
 })();
 
