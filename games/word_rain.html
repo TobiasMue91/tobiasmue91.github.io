@@ -416,30 +416,182 @@ function resize() {
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   fs = clamp(16 + W * 0.014, 22, 36);
   groundH = clamp(H * 0.23, 90, 180);
-  roofY = H - groundH * 0.62;
+  roofY = H - groundH * 0.7;
   padTop = clamp(H * 0.17, 108, 132);
   lampX = W / 2; lampY = H - groundH * 1.02;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.font = '600 ' + fs + 'px ' + FONT;
   charW = ctx.measureText('abcdefghijklmnopqrstuvwxyz').width / 26 / W + 0.0045;
   if (game) { game.cfg.charW = charW; game.cfg.aspect = W / (roofY - padTop); }
+  if (!town) town = makeTown((Math.random() * 4294967296) >>> 0);
   buildSky();
   const n = REDUCED ? 45 : clamp(Math.round(W * H / 5500), 90, 260);
   while (rain.length < n) rain.push({ x: rnd(0, 1), y: rnd(0, 1), d: Math.random() });
   rain.length = n;
 }
+/* ---------- the town: seeded, so every run (and every daily) has its own street ---------- */
+let town = null;
+const streetH = () => clamp(groundH * .1, 11, 20);
+function makeTown(seed) {
+  const r = WR.rng((seed ^ 0x9e3779b9) >>> 0), pick = a => a[Math.floor(r() * a.length)];
+  const roofs = ['gable', 'steep', 'flat', 'mansard', 'tower', pick(['gable', 'steep', 'mansard'])];
+  for (let i = roofs.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [roofs[i], roofs[j]] = [roofs[j], roofs[i]]; }
+  const walls = [['#0d1631', '#070b19'], ['#101a36', '#080c1c'], ['#0f1830', '#060a16'], ['#14172f', '#080a1a'], ['#0b1a2e', '#050d1a']];
+  const roofCols = ['#1a2447', '#201c3d', '#14304a', '#2a1f3a', '#17283f'];
+  const glows = ['255,206,110', '255,184,92', '255,224,160', '255,196,120'];
+  const accents = ['#6e2c3a', '#2c5b63', '#6b5a2a', '#3d3a73'];
+  const hs = roofs.map((roof, i) => ({
+    roof, w: roof === 'tower' ? .8 : .86 + .14 * r(), h: roof === 'flat' ? .95 + .25 * r() : .82 + .3 * r(),
+    chim: roof === 'flat' || roof === 'tower' ? 0 : (r() < .75 ? (r() < .5 ? -1 : 1) : 0), door: r() < .85, doorSide: r() < .5 ? -1 : 1,
+    awning: r() < .4, shutters: r() < .5, planter: r() < .5, fence: r() < .45, sign: roof === 'flat' && r() < .6,
+    wall: pick(walls), roofCol: pick(roofCols), glow: pick(glows), accent: pick(accents), extra: r() < .6 ? 2 : 1, flowers: pick(['#c0556b', '#d9a441', '#7a7fe0']), phase: r() * 9, acc: 0,
+  }));
+  const cat = hs.findIndex(h => h.roof === 'gable' || h.roof === 'mansard');
+  const trees = [], tx = [.03, .17, .33, .46, .54, .67, .83, .97];
+  for (const x of tx) if (r() < .85) trees.push({ x: x + (r() - .5) * .03, kind: r() < .6 ? 'pine' : 'bare', s: .8 + .5 * r() });
+  const puddles = [];
+  for (let k = 0; k < 6; k++) puddles.push({ x: .06 + .88 * r(), w: .04 + .05 * r() });
+  return { hs, cat, trees, puddles, seed, far: [], smoke: [], ripples: [], ripT: 0 };
+}
 function buildSky() {
   const c = document.createElement('canvas'); c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
   const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#040712'); gr.addColorStop(.62, '#0f1a3b'); gr.addColorStop(1, '#1d2d5c');
+  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#040712'); gr.addColorStop(.55, '#0f1a3b'); gr.addColorStop(.86, '#25356b'); gr.addColorStop(1, '#2d2a55');
   g.fillStyle = gr; g.fillRect(0, 0, W, H);
-  let seed = 11; const r = () => (seed = seed * 16807 % 2147483647) / 2147483647;
-  let x = -10;
-  while (x < W) { const w = 36 + r() * 56, h = groundH * (0.45 + r() * 0.4); g.fillStyle = '#0c1530'; g.fillRect(x, H - h, w, h);
-    for (let k = 0; k < 3; k++) if (r() < .4) { g.fillStyle = r() < .5 ? '#22305f' : 'rgba(255,191,71,.35)'; g.fillRect(x + 6 + r() * (w - 14), H - h + 8 + r() * (h - 24), 4, 5); }
-    x += w + 2; }
-  skyCache = c;
+  // a few stars where the clouds allow
+  const r = WR.rng((town ? town.seed : 7) + 5);
+  for (let i = 0; i < 26; i++) { g.fillStyle = 'rgba(210,225,255,' + (.12 + r() * .3) + ')'; g.fillRect(r() * W, r() * H * .4, 1.4, 1.4); }
+  const base = H - streetH(), gh = groundH;
+  // hills, then two skylines: hazy far, darker near
+  g.fillStyle = '#16204a'; g.beginPath(); g.moveTo(0, base);
+  for (let x = 0; x <= W; x += 12) g.lineTo(x, base - gh * (.5 + .16 * Math.sin(x / W * 5.2 + r() * 0) + .1 * Math.sin(x / W * 13)));
+  g.lineTo(W, base); g.fill();
+  town.far = [];
+  const skyline = (col, minH, maxH, minW, maxW, lit) => {
+    let x = -8; g.fillStyle = col;
+    while (x < W) {
+      const w = minW + r() * (maxW - minW), h = gh * (minH + r() * (maxH - minH)), t = r(), y = base - h;
+      g.fillStyle = col; g.fillRect(x, y, w, h);
+      if (t < .2) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + w / 2, y - w * .45); g.lineTo(x + w, y); g.fill(); }
+      else if (t < .32) { g.fillRect(x + w * .45, y - gh * .16, 2, gh * .16); town.far.push({ x: x + w * .45 + 1, y: y - gh * .16, beacon: 1, ph: r() * 6 }); }
+      else if (t < .42) { g.fillRect(x + 3, y - 7, w * .3, 7); }
+      for (let k = 0, n = Math.floor(w * h / 520); k < n; k++) if (r() < lit) town.far.push({ x: x + 4 + r() * (w - 10), y: y + 6 + r() * (h - 14), ph: r() * 6, a: .25 + r() * .5 });
+      x += w + 1 + r() * 4;
+    }
+  };
+  skyline('#141e44', .45, .95, 26, 54, .35);
+  // the clock tower and the water tower stand out of the far skyline
+  const cx = W * (.2 + .6 * r()), th = gh * 1.18, tw = clamp(W * .045, 26, 44);
+  g.fillStyle = '#121b3f'; g.fillRect(cx - tw / 2, base - th, tw, th); g.beginPath(); g.moveTo(cx - tw / 2 - 3, base - th); g.lineTo(cx, base - th - tw * .9); g.lineTo(cx + tw / 2 + 3, base - th); g.fill();
+  town.clock = { x: cx, y: base - th + tw * .5, r: tw * .3 };
+  skyline('#0c1533', .3, .72, 22, 46, .3);
+  // mist where the street meets the sky
+  const mg = g.createLinearGradient(0, base - gh * .9, 0, base); mg.addColorStop(0, 'rgba(90,110,190,0)'); mg.addColorStop(1, 'rgba(90,110,190,.22)'); g.fillStyle = mg; g.fillRect(0, base - gh * .9, W, gh * .9);
+  // trees behind the houses
+  for (const t of town.trees) {
+    const x = t.x * W, h = gh * .66 * t.s; g.fillStyle = '#080e22';
+    if (t.kind === 'pine') { for (let k = 0; k < 4; k++) { const y = base - h * (.15 + k * .22), w = h * (.34 - k * .06); g.beginPath(); g.moveTo(x - w, y); g.lineTo(x, y - h * .34); g.lineTo(x + w, y); g.fill(); } g.fillRect(x - 2, base - h * .2, 4, h * .2); }
+    else { g.strokeStyle = '#080e22'; g.lineWidth = 3; g.lineCap = 'round'; const br = (x0, y0, a, l, d) => { if (d > 3) return; const x1 = x0 + Math.sin(a) * l, y1 = y0 - Math.cos(a) * l; g.lineWidth = Math.max(1, 4 - d); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); br(x1, y1, a - .5, l * .72, d + 1); br(x1, y1, a + .45, l * .7, d + 1); }; br(x, base, 0, h * .3, 0); }
+  }
+  skyCache = g.canvas;
 }
+function drawFar(t) {
+  if (!town) return;
+  for (const f of town.far) {
+    if (f.beacon) { const a = REDUCED ? .6 : (Math.sin(t * 2 + f.ph) > .6 ? 1 : .15); ctx.fillStyle = 'rgba(255,90,80,' + a + ')'; ctx.fillRect(f.x - 1.5, f.y - 3, 3, 3); continue; }
+    const a = f.a * (REDUCED ? 1 : .75 + .25 * Math.sin(t * .6 + f.ph)); ctx.fillStyle = 'rgba(255,205,120,' + a + ')'; ctx.fillRect(f.x, f.y, 3, 4);
+  }
+  if (town.clock) { const c = town.clock, g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r * 2.6); g.addColorStop(0, 'rgba(255,225,160,.5)'); g.addColorStop(1, 'rgba(255,225,160,0)'); ctx.fillStyle = g; ctx.fillRect(c.x - c.r * 3, c.y - c.r * 3, c.r * 6, c.r * 6);
+    ctx.fillStyle = '#ffe6a8'; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 7); ctx.fill(); ctx.strokeStyle = '#3a2a08'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x, c.y - c.r * .75); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x + c.r * .5, c.y + c.r * .15); ctx.stroke(); }
+}
+function roofGeom(T, hx, hw, bodyH, base) {
+  const topY = base - bodyH; let rh = 0, cut = hw / 2;
+  if (T.roof === 'gable') rh = hw * .42; else if (T.roof === 'steep') rh = hw * .62; else if (T.roof === 'mansard') rh = hw * .24; else if (T.roof === 'tower') rh = hw * .6; else rh = 0;
+  return { topY, rh, hw };
+}
+function drawHouse(i, dt, t) {
+  const T = town.hs[i], h = houses[i], hx = HOUSES[i] * W, st = streetH(), base = H - st;
+  const hw = clamp(W * .17, 56, 150) * T.w, bodyH = groundH * .4 * T.h * (T.roof === 'tower' ? 1.25 : 1);
+  const bw = T.roof === 'tower' ? hw * .82 : hw, topY = base - bodyH, left = hx - bw / 2, right = hx + bw / 2;
+  let on = h.lit ? 1 : 0;
+  if (h.flick > 0) { h.flick = Math.max(0, h.flick - dt * 1.6); on = h.lit ? 1 : (Math.sin(h.flick * 38) > 0 && h.flick > .25 ? 1 : 0); }
+  h.glow = Math.max(0, h.glow - dt * 1.2);
+  const rh = roofGeom(T, hx, hw, bodyH, base).rh, roofW = hw + (T.roof === 'flat' ? 0 : hw * .1);
+  const roofPath = () => {
+    ctx.beginPath();
+    if (T.roof === 'flat') { ctx.rect(left - 3, topY - 6, bw + 6, 6); }
+    else if (T.roof === 'mansard') { ctx.moveTo(hx - roofW / 2, topY); ctx.lineTo(hx - bw * .3, topY - rh); ctx.lineTo(hx + bw * .3, topY - rh); ctx.lineTo(hx + roofW / 2, topY); }
+    else if (T.roof === 'tower') { ctx.moveTo(hx - roofW / 2, topY); ctx.lineTo(hx, topY - rh); ctx.lineTo(hx + roofW / 2, topY); }
+    else { ctx.moveTo(hx - roofW / 2, topY + 2); ctx.lineTo(hx, topY - rh); ctx.lineTo(hx + roofW / 2, topY + 2); }
+    ctx.closePath();
+  };
+  const slopeY = x => { const d = Math.abs(x - hx) / (roofW / 2); return T.roof === 'mansard' ? topY - rh * Math.min(1, (1 - d) / .4) : topY - rh * (1 - d); };
+  // chimney, behind the roof, with smoke while the house is lit
+  if (T.chim) {
+    const cxx = hx + T.chim * bw * .26, cy = slopeY(cxx) - bw * .13, cw = bw * .12;
+    ctx.fillStyle = '#0a1024'; ctx.fillRect(cxx - cw / 2, cy, cw, bw * .2); ctx.fillStyle = '#18224a'; ctx.fillRect(cxx - cw / 2 - 1.5, cy - 3, cw + 3, 3.5);
+    if (on && !REDUCED && mode !== 'pause') { T.acc += dt; if (T.acc > .35) { T.acc = 0; town.smoke.push({ x: cxx, y: cy - 4, vx: -14 - 6 * WR.tierIndex(game ? game.wave : 1), vy: -26, r: 3, t: 0, life: 2.6 }); } }
+  }
+  // roof first for towers (spire), body, roof, details
+  ctx.fillStyle = T.wall[0]; ctx.strokeStyle = '#243464'; ctx.lineWidth = 1.4;
+  const wg = ctx.createLinearGradient(0, topY, 0, base); wg.addColorStop(0, T.wall[0]); wg.addColorStop(1, T.wall[1]); ctx.fillStyle = wg;
+  ctx.fillRect(left, topY, bw, bodyH); ctx.strokeRect(left, topY, bw, bodyH);
+  // siding lines and the lamp's warm light on the nearer wall
+  ctx.save(); ctx.beginPath(); ctx.rect(left, topY, bw, bodyH); ctx.clip(); ctx.strokeStyle = 'rgba(160,185,255,.07)'; ctx.lineWidth = 1;
+  for (let y = topY + 7; y < base; y += 7) { ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke(); }
+  const lamp = clamp(1 - Math.abs(hx - lampX) / (W * .3), 0, 1), lg = ctx.createLinearGradient(left, 0, right, 0), warm = .2 * lamp, side = hx < lampX;
+  lg.addColorStop(side ? 1 : 0, 'rgba(255,191,71,' + warm + ')'); lg.addColorStop(side ? .35 : .65, 'rgba(255,191,71,0)'); ctx.fillStyle = lg; ctx.fillRect(left, topY, bw, bodyH); ctx.restore();
+  ctx.fillStyle = T.roofCol; roofPath(); ctx.fill(); ctx.strokeStyle = 'rgba(140,165,255,.35)'; ctx.lineWidth = 1.4; ctx.stroke();
+  if (T.roof !== 'flat') { ctx.save(); roofPath(); ctx.clip(); ctx.strokeStyle = 'rgba(0,0,10,.28)'; ctx.lineWidth = 1; for (let y = topY - rh + 5; y < topY + 2; y += 5) { ctx.beginPath(); ctx.moveTo(hx - roofW, y); ctx.lineTo(hx + roofW, y); ctx.stroke(); } ctx.restore(); }
+  if (T.roof === 'flat') { ctx.strokeStyle = '#2a3a70'; ctx.lineWidth = 1.2; ctx.beginPath(); const ax = hx + bw * .25; ctx.moveTo(ax, topY - 6); ctx.lineTo(ax, topY - 24); ctx.moveTo(ax - 6, topY - 20); ctx.lineTo(ax + 6, topY - 20); ctx.moveTo(ax - 4, topY - 15); ctx.lineTo(ax + 4, topY - 15); ctx.stroke(); }
+  if (T.roof === 'tower' || T.roof === 'steep') { // weathervane
+    const px = hx, py = topY - rh, a = REDUCED ? .6 : Math.sin(t * .5 + T.phase) * .9 + .4; ctx.strokeStyle = '#3a4a85'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 12); ctx.moveTo(px - 7 * Math.cos(a), py - 8 - 2 * Math.sin(a)); ctx.lineTo(px + 7 * Math.cos(a), py - 8 + 2 * Math.sin(a)); ctx.stroke(); ctx.fillStyle = '#3a4a85'; ctx.beginPath(); ctx.arc(px + 7 * Math.cos(a), py - 8 + 2 * Math.sin(a), 1.8, 0, 7); ctx.fill(); }
+  const glow = 'rgba(' + T.glow + ',';
+  // windows. The big one is this house's life; the others are only furniture
+  const ww = Math.max(11, bw * .27), wh = Math.max(14, bodyH * .36), wx = hx - ww / 2, wy = topY + bodyH * .2 + (T.door ? 0 : bodyH * .1);
+  const litA = on ? 1 : 0;
+  const win = (x, y, w, hgt, a, life) => {
+    if (litA && a > 0) { ctx.fillStyle = 'rgba(' + T.glow + ',' + (life ? 1 : a) + ')'; rr(x, y, w, hgt, 2.5); ctx.fill(); ctx.strokeStyle = 'rgba(70,40,0,.65)'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + hgt); ctx.moveTo(x, y + hgt / 2); ctx.lineTo(x + w, y + hgt / 2); ctx.stroke(); }
+    else { ctx.fillStyle = '#0b1230'; ctx.strokeStyle = '#2b3a6b'; ctx.lineWidth = 1; rr(x, y, w, hgt, 2.5); ctx.fill(); ctx.stroke(); }
+  };
+  if (on || h.glow > 0) { const gx = hx, gy = wy + wh / 2, gg = ctx.createRadialGradient(gx, gy, 2, gx, gy, bw * .85); gg.addColorStop(0, glow + (.34 * litA + .5 * h.glow) + ')'); gg.addColorStop(1, glow + '0)'); ctx.fillStyle = gg; ctx.fillRect(gx - bw, gy - bw, bw * 2, bw * 2); }
+  if (T.shutters) { ctx.fillStyle = T.accent; ctx.fillRect(wx - ww * .38, wy, ww * .32, wh); ctx.fillRect(wx + ww * 1.06, wy, ww * .32, wh); }
+  win(wx, wy, ww, wh, 1, true);
+  if (on && T.extra === 2 && bw > 70) { const sw = ww * .6; win(left + bw * .08, wy + wh * .25, sw, wh * .6, .35); win(right - bw * .08 - sw, wy + wh * .25, sw, wh * .6, .35); }
+  if (T.roof === 'gable' || T.roof === 'steep') { const ay = topY - rh * .38, ar = Math.max(3.5, bw * .06); ctx.fillStyle = litA ? 'rgba(' + T.glow + ',.45)' : '#0b1230'; ctx.strokeStyle = '#2b3a6b'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(hx, ay, ar, 0, 7); ctx.fill(); ctx.stroke(); }
+  if (T.roof === 'mansard') { const dw = bw * .2; ctx.fillStyle = T.roofCol; ctx.fillRect(hx - dw / 2, topY - rh * .85, dw, rh * .8); ctx.fillStyle = litA ? 'rgba(' + T.glow + ',.4)' : '#0b1230'; ctx.fillRect(hx - dw * .3, topY - rh * .65, dw * .6, rh * .45); }
+  if (T.awning) { const ax = wx - 4, aw = ww + 8, ay = wy - 5; for (let k = 0; k < 4; k++) { ctx.fillStyle = k % 2 ? '#2a3260' : T.accent; ctx.beginPath(); ctx.moveTo(ax + k * aw / 4, ay); ctx.lineTo(ax + (k + 1) * aw / 4, ay); ctx.lineTo(ax + (k + 1) * aw / 4 + 1.5, ay + 7); ctx.lineTo(ax + k * aw / 4 - 1.5, ay + 7); ctx.fill(); } }
+  if (T.planter) { ctx.fillStyle = '#12182f'; ctx.fillRect(wx - 3, wy + wh, ww + 6, 5); ctx.fillStyle = T.flowers; for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(wx + 2 + k * (ww - 2) / 3, wy + wh - 1, 2, 0, 7); ctx.fill(); } }
+  if (T.door) { const dw = bw * .17, dx = hx + T.doorSide * bw * .28 - dw / 2, dh = bodyH * .42; ctx.fillStyle = '#0a0f22'; rr(dx, base - dh, dw, dh, 2); ctx.fill(); ctx.strokeStyle = '#2b3a6b'; ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = '#c9a24a'; ctx.fillRect(dx + dw * .75, base - dh * .45, 2, 2);
+    if (on) { const lg2 = ctx.createRadialGradient(dx + dw / 2, base - dh - 4, 0, dx + dw / 2, base - dh - 4, 16); lg2.addColorStop(0, glow + '.5)'); lg2.addColorStop(1, glow + '0)'); ctx.fillStyle = lg2; ctx.fillRect(dx - 14, base - dh - 20, dw + 28, 30); ctx.fillStyle = glow + '1)'; ctx.fillRect(dx + dw / 2 - 1.5, base - dh - 6, 3, 3); } }
+  if (T.sign) { ctx.fillStyle = '#10183a'; ctx.fillRect(left + 4, topY + 4, bw * .5, 8); ctx.fillStyle = on ? glow + '.8)' : '#26346a'; ctx.fillRect(left + 7, topY + 7, bw * .5 - 6, 2); }
+  if (T.fence) { ctx.fillStyle = '#060a18'; for (let x = left - 4; x < right + 4; x += 6) { ctx.fillRect(x, base - 10, 3, 10); ctx.beginPath(); ctx.moveTo(x, base - 10); ctx.lineTo(x + 1.5, base - 13); ctx.lineTo(x + 3, base - 10); ctx.fill(); } ctx.fillRect(left - 4, base - 6, bw + 8, 1.6); }
+  // the cat on its roof, sitting on the ridge
+  if (town.cat === i) { const sx = hx - bw * .12, sy = slopeY(sx) + 1; ctx.fillStyle = '#04070f'; ctx.beginPath(); ctx.ellipse(sx, sy - 5, 5, 6, 0, 0, 7); ctx.arc(sx, sy - 12, 3.6, 0, 7); ctx.moveTo(sx - 3.6, sy - 13); ctx.lineTo(sx - 3, sy - 17.5); ctx.lineTo(sx - 1, sy - 15); ctx.moveTo(sx + 3.6, sy - 13); ctx.lineTo(sx + 3, sy - 17.5); ctx.lineTo(sx + 1, sy - 15); ctx.fill();
+    const tail = REDUCED ? 0 : Math.sin(t * 1.8) * 3; ctx.strokeStyle = '#04070f'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx + 4, sy - 2); ctx.quadraticCurveTo(sx + 11, sy - 2, sx + 11 + tail, sy - 9); ctx.stroke();
+    if (REDUCED || (t % 5) < 4.7) { ctx.fillStyle = '#9dff9a'; ctx.fillRect(sx - 2, sy - 12.6, 1.6, 1.6); ctx.fillRect(sx + 1, sy - 12.6, 1.6, 1.6); } }
+  // a dead house stays dark all over
+  if (!on && !h.lit) { ctx.fillStyle = 'rgba(2,4,12,.28)'; ctx.fillRect(left, topY, bw, bodyH); }
+}
+function drawStreet(dt, t) {
+  const st = streetH(), y0 = H - st;
+  // chimney smoke, drifting with the wind
+  for (let i = town.smoke.length - 1; i >= 0; i--) {
+    const s = town.smoke[i]; s.t += dt; if (s.t > s.life) { town.smoke.splice(i, 1); continue; }
+    s.x += s.vx * dt; s.y += s.vy * dt; s.r += dt * 4.5; const k = s.t / s.life;
+    ctx.fillStyle = 'rgba(150,170,220,' + .14 * (1 - k) * Math.min(1, s.t * 3) + ')'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
+  }
+  // wet road: a dark band with a sheen and the lamp's long reflection
+  const rg = ctx.createLinearGradient(0, y0, 0, H); rg.addColorStop(0, '#0a1126'); rg.addColorStop(1, '#03060f'); ctx.fillStyle = rg; ctx.fillRect(0, y0, W, st);
+  ctx.fillStyle = 'rgba(120,150,255,.12)'; ctx.fillRect(0, y0, W, 1.4);
+  const lr = ctx.createLinearGradient(0, y0, 0, H); lr.addColorStop(0, 'rgba(255,191,71,.5)'); lr.addColorStop(1, 'rgba(255,191,71,.05)'); ctx.fillStyle = lr; ctx.beginPath(); ctx.ellipse(lampX, y0 + st * .55, 18 + lampPulse * 6, st * .5, 0, 0, 7); ctx.fill();
+  for (let i = 0; i < HOUSES.length; i++) if (houses[i].lit) { ctx.fillStyle = 'rgba(' + town.hs[i].glow + ',.16)'; ctx.beginPath(); ctx.ellipse(HOUSES[i] * W, y0 + st * .55, 22, st * .38, 0, 0, 7); ctx.fill(); }
+  // puddles that catch the sky, and the rain dimpling them
+  for (const p of town.puddles) { const px = p.x * W, pw = p.w * W; ctx.fillStyle = 'rgba(70,95,170,.35)'; ctx.beginPath(); ctx.ellipse(px, y0 + st * .62, pw, st * .22, 0, 0, 7); ctx.fill(); }
+  if (!REDUCED && mode !== 'pause' && !(game && game.freeze > 0)) { town.ripT -= dt; if (town.ripT <= 0) { town.ripT = rnd(.04, .12) / (.7 + .15 * (game ? WR.tierIndex(game.wave) : 1)); const p = town.puddles[Math.floor(Math.random() * town.puddles.length)]; town.ripples.push({ x: (p.x + rnd(-.9, .9) * p.w) * W, y: y0 + st * .62 + rnd(-1, 1) * st * .14, t: 0 }); } }
+  for (let i = town.ripples.length - 1; i >= 0; i--) { const r = town.ripples[i]; r.t += dt; if (r.t > .7) { town.ripples.splice(i, 1); continue; } const k = r.t / .7; ctx.strokeStyle = 'rgba(190,210,255,' + .5 * (1 - k) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(r.x, r.y, 2 + 9 * ease(k), 1 + 3 * ease(k), 0, 0, 7); ctx.stroke(); }
+}
+
 new ResizeObserver(resize).observe(stage);
 addEventListener('resize', resize);
 
@@ -481,6 +633,7 @@ function newRun(isDaily) {
   const seedParam = (location.search.match(/[?&]seed=([^&]+)/) || [])[1];
   const seed = isDaily ? WR.hashSeed('wr-' + today()) : seedParam ? WR.hashSeed(decodeURIComponent(seedParam)) : (Math.random() * 4294967296) >>> 0;
   game = WR.create({ seed, charW, aspect: W / (roofY - padTop), intro: !save.seen && !isDaily, lamps: HOUSES.length });
+  town = makeTown(seed); buildSky();
   fx.parts.length = fx.bolts.length = fx.rings.length = fx.pops.length = 0;
   houses.forEach(h => { h.lit = true; h.flick = 0; h.glow = 0; });
   dispScore = 0; shake = flash = redFlash = frostA = 0; lampPulse = 0; hintOn = !save.seen;
@@ -684,28 +837,12 @@ function drawWord(w, dt) {
     ctx.fillText(touch ? 'tap the letters' : 'type it', x, y + size * 1.1); ctx.restore();
   }
 }
-function drawHouse(i) {
-  const hx = HOUSES[i] * W, hw = clamp(W * .16, 54, 120), hh = groundH * .66, top = H - hh, h = houses[i];
-  ctx.fillStyle = '#070b19'; ctx.strokeStyle = '#243464'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(hx - hw / 2, H); ctx.lineTo(hx - hw / 2, top + hh * .35); ctx.lineTo(hx, top - hh * .28); ctx.lineTo(hx + hw / 2, top + hh * .35); ctx.lineTo(hx + hw / 2, H); ctx.closePath(); ctx.fill(); ctx.stroke();
-  const ww = hw * .3, wh = hh * .36, wxx = hx - ww / 2, wyy = top + hh * .42;
-  let on = h.lit ? 1 : 0;
-  if (h.flick > 0) { h.flick = Math.max(0, h.flick - 0.016 * 1.6); on = h.lit ? 1 : (Math.sin(h.flick * 38) > 0 && h.flick > .25 ? 1 : 0); }
-  h.glow = Math.max(0, h.glow - 0.016 * 1.2);
-  if (on || h.glow > 0) {
-    const a = on ? 1 : 0;
-    const gg = ctx.createRadialGradient(hx, wyy + wh / 2, 2, hx, wyy + wh / 2, hw * .75); gg.addColorStop(0, 'rgba(255,191,71,' + (.32 * a + .5 * h.glow) + ')'); gg.addColorStop(1, 'rgba(255,191,71,0)');
-    ctx.fillStyle = gg; ctx.fillRect(hx - hw, wyy - hw * .6, hw * 2, hw * 1.4);
-    ctx.fillStyle = '#ffd36e'; rr(wxx, wyy, ww, wh, 3); ctx.fill();
-    ctx.strokeStyle = '#8a5a08'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(hx, wyy); ctx.lineTo(hx, wyy + wh); ctx.moveTo(wxx, wyy + wh / 2); ctx.lineTo(wxx + ww, wyy + wh / 2); ctx.stroke();
-  } else { ctx.fillStyle = '#0d1430'; ctx.strokeStyle = '#2b3a6b'; ctx.lineWidth = 1; rr(wxx, wyy, ww, wh, 3); ctx.fill(); ctx.stroke(); }
-}
 function drawLamp(dt) {
   lampPulse = Math.max(0, lampPulse - dt * 3);
   const r = 62 + lampPulse * 42, a = .5 + lampPulse * .35;
   const g = ctx.createRadialGradient(lampX, lampY, 2, lampX, lampY, r); g.addColorStop(0, 'rgba(255,191,71,' + a + ')'); g.addColorStop(1, 'rgba(255,191,71,0)');
   ctx.fillStyle = g; ctx.fillRect(lampX - r, lampY - r, r * 2, r * 2);
-  ctx.fillStyle = '#03060f'; ctx.fillRect(lampX - 2, lampY, 4, H - lampY);
+  ctx.fillStyle = '#03060f'; ctx.fillRect(lampX - 2, lampY, 4, H - lampY); ctx.fillRect(lampX - 5, H - streetH() - 6, 10, 6);
   ctx.fillStyle = '#ffdc84'; ctx.beginPath(); ctx.arc(lampX, lampY, 10 + lampPulse * 2, 0, 7); ctx.fill();
 }
 function frame(ts) {
@@ -729,6 +866,7 @@ function frame(ts) {
 function draw(dt, frozen) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.drawImage(skyCache, 0, 0, W, H);
+  drawFar(performance.now() / 1000);
   shake = Math.max(0, shake - dt * 2.2);
   const sx = shake * 9 * (Math.random() - .5) * 2, sy = shake * 6 * (Math.random() - .5) * 2;
   ctx.save(); ctx.translate(sx, sy);
@@ -783,8 +921,9 @@ function draw(dt, frozen) {
     const sc = 1 + .45 * Math.max(0, 1 - p.t / .18); ctx.globalAlpha = 1 - ease(Math.max(0, p.t - .3) / .8) * .95; ctx.fillStyle = '#ffd27a'; ctx.font = '700 ' + Math.round(fs * 1.7 * sc) + 'px ' + FONT; ctx.shadowColor = '#050914'; ctx.shadowBlur = 6; ctx.fillText(p.text, p.x, p.y - ease(p.t / .9) * 40); ctx.shadowBlur = 0;
   }
   ctx.globalAlpha = 1;
-  for (let i = 0; i < HOUSES.length; i++) drawHouse(i);
-  ctx.fillStyle = '#03060f'; ctx.fillRect(0, H - 6, W, 6);
+  const tt = performance.now() / 1000;
+  for (let i = 0; i < HOUSES.length; i++) drawHouse(i, dt, tt);
+  drawStreet(dt, tt);
   drawLamp(dt);
   ctx.restore();
   // screen washes
