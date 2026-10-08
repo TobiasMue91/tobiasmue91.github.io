@@ -119,6 +119,7 @@ npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (pl
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 npm run test:qix            # QIX suite (plain Node, no server or browser)
 npm run test:simon         # Simon Says suite (plain Node, no server or browser)
+npm run test:artillery   # Artillery suite (plain Node, no server or browser)
 npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
 npm run test:wordrain       # Word Rain suite (plain Node, no server or browser)
 ```
@@ -130,7 +131,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-five exist so far. `test/everything_converter.mjs` drives
+Fifty-six exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -452,6 +453,12 @@ the storm rewards typing speed in order: every wave on every seed spawns what it
 same first letter, scoring and the multiplier against a separate tally, frost, blast (against brute force) and thunder, lamps
 lost and healed, a seed that deals the same storm at 30 and 120 fps, and typists of six speeds who must reach waves in order of
 their speed while an idle one is gone in wave 1. Run it after touching the bank, a wave number or a rule.
+
+`test/artillery.mjs` runs the DOM-free `<script id="core">` block of `games/artillery.html` (Artillery), a tank duel whose page only
+draws what the core returns: a shell lands where plain ballistics put it at any wind, a blast only lowers ground and hurts by
+distance, every hill the generator deals can be shot across with a tank on level ground at either end, a match counts to three and
+alternates the shooter, and the computer starts wide, closes in as it walks a shot in and beats a player who aims blindly. Run it
+after touching the core or a constant.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
