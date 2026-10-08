@@ -35,10 +35,14 @@ appears on the site only once it is in that JSON.
 
 Check these before calling a remade page done; each has now shipped broken in several games.
 
-- **Scenery that scrolls with the camera.** Backdrops (hills, sky, sun, the soil under the ground line, pebbles,
-  foreground rocks) stay fixed on screen unless the player asked for parallax; only things that exist in the world
-  (bodies, the ground's surface, props) move with the camera. Tie scenery to the camera and the whole world looks
-  like it slides under the player. Drive the camera across the whole level and look at a few frames before shipping.
+- **Backdrops that move wrong under the camera.** Every layer has a depth: the ground and what grows on it (soil,
+  pebbles, grass lip, rocks) move 1:1 with the camera, distant layers (hills, clouds) move by a small fraction of it, the
+  sky and sun not at all. Whatever moves must move *rigidly*: give each layer's shapes positions on a fixed grid in that
+  layer's own space (a hash of the cell index, never of the pixel index and never `Math.random()` per frame) and only
+  translate it; re-sampling a curve at fixed screen positions makes the outline morph, and a wrap-around or an
+  "avoid the sun" nudge that happens on screen makes things pop. Wrap only while fully off screen. Check it by gliding the
+  camera in a script and comparing frames: the ground band must equal itself shifted by the camera step, and the
+  frame-to-frame change of the sky must have no spikes.
 - **Round things that never stop.** A circle on flat ground only turns its slide into a roll, so without rolling
   resistance it carries on to the edge of the level. Anything round that can roll needs damping while it touches
   something, and a test that pushes it along the floor and wants it at rest.
