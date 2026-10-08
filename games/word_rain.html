@@ -109,9 +109,83 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
     frost: 'frost chill sleet icicle winter glacier blizzard',
     blast: 'spark flash blaze fuse burst cinder flare',
     thunder: 'thunder tempest cyclone tornado hurricane',
+    gild: 'gilt ducat nugget sovereign treasure bullion',
+    charm: 'charm mend mercy hearth blessing',
   };
   const TIERS = [[1, 'Drizzle'], [3, 'Shower'], [5, 'Downpour'], [7, 'Squall'], [10, 'Storm'], [13, 'Cloudburst'], [17, 'Monsoon']];
-  const MAX_LAMPS = 6, FREEZE = 4, BLAST_R = 0.42;
+  const BASE_HP = 1, FREEZE = 4, BLAST_R = 0.42;
+  const HOUSE_X = [.09, .25, .4, .6, .75, .91], MAX_LAMPS = HOUSE_X.length;
+
+  /* Where the town grows. Each night pays lumen; lumen buys these; Dawn resets them for stars. */
+  const UPG = [
+    // your hands
+    { id: 'wick', branch: 'lamp', max: 12, ext: 3, base: 250, grow: 1.5, req: [] },
+    { id: 'bell', branch: 'lamp', max: 6, ext: 2, base: 800, grow: 1.8, req: [['wick', 2]] },
+    { id: 'rhythm', branch: 'lamp', max: 5, ext: 0, base: 1200, grow: 1.9, req: [['wick', 2]] },
+    { id: 'steady', branch: 'lamp', max: 3, ext: 0, base: 1500, grow: 3, req: [['wick', 3]] },
+    { id: 'crescendo', branch: 'lamp', max: 5, ext: 2, base: 3000, grow: 2.1, req: [['rhythm', 1]] },
+    // the houses
+    { id: 'gauge', branch: 'houses', max: 8, ext: 2, base: 1000, grow: 1.7, req: [] },
+    { id: 'roofs', branch: 'houses', max: 4, ext: 1, base: 2000, grow: 2.4, req: [['gauge', 1]] },
+    { id: 'mend', branch: 'houses', max: 3, ext: 1, base: 2500, grow: 2.6, req: [['roofs', 1]] },
+    { id: 'gutters', branch: 'houses', max: 1, ext: 0, base: 6000, grow: 1, req: [['roofs', 2]] },
+    // the storm
+    { id: 'frostL', branch: 'storm', max: 6, ext: 2, base: 900, grow: 1.75, req: [] },
+    { id: 'blastL', branch: 'storm', max: 6, ext: 2, base: 900, grow: 1.75, req: [['frostL', 1]] },
+    { id: 'sense', branch: 'storm', max: 3, ext: 0, base: 2000, grow: 2.5, req: [['blastL', 2]] },
+    { id: 'thunderL', branch: 'storm', max: 2, ext: 0, base: 4000, grow: 3, req: [['sense', 1]] },
+    { id: 'gild', branch: 'storm', max: 5, ext: 1, base: 5000, grow: 2.2, req: [['blastL', 3]] },
+    { id: 'charm', branch: 'storm', max: 1, ext: 0, base: 8000, grow: 1, req: [['mend', 1], ['gild', 1]] },
+    // the town helps
+    { id: 'lamplighter', branch: 'town', max: 10, ext: 3, base: 1500, grow: 1.6, req: [['wick', 1]] },
+    { id: 'ledger', branch: 'town', max: 6, ext: 0, base: 4000, grow: 2, req: [['lamplighter', 1]] },
+    { id: 'watch', branch: 'town', max: 10, ext: 3, base: 6000, grow: 1.65, req: [['lamplighter', 2]] },
+    { id: 'nightshift', branch: 'town', max: 5, ext: 2, base: 15000, grow: 2.2, req: [['watch', 1]] },
+    { id: 'scholar', branch: 'town', max: 10, ext: 3, base: 20000, grow: 1.7, req: [['watch', 2]] },
+    { id: 'choir', branch: 'town', max: 8, ext: 2, base: 60000, grow: 1.8, req: [['scholar', 2]] },
+  ];
+  const UPG_BY = {}; for (const u of UPG) UPG_BY[u.id] = u;
+  const DISTRICTS = [
+    { id: 'lane', name: 'Lamplight Lane', need: 0, sway: 0, burst: 1, fall: 1, count: 1, lumen: 1 },
+    { id: 'harbour', name: 'Harbour Row', need: 1, sway: .035, burst: 1, fall: 1, count: 1, lumen: 1.4 },
+    { id: 'mill', name: 'Mill Hill', need: 3, sway: .02, burst: 2, fall: .95, count: 1.25, lumen: 1.9 },
+  ];
+  const COST_SCALE = 4;
+  const cost = (id, lvl) => Math.round(UPG_BY[id].base * COST_SCALE * Math.pow(UPG_BY[id].grow, lvl));
+  // every Dawn raises the ceiling of most levers a little, so a town that has built everything still has somewhere to go
+  const maxOf = (id, dawns = 0) => UPG_BY[id].max + UPG_BY[id].ext * Math.max(0, dawns | 0);
+  const levelOf = (L, id, dawns = 0) => Math.max(0, Math.min((L && L[id]) | 0, maxOf(id, dawns)));
+  const unlocked = (L, id, dawns = 0) => UPG_BY[id].req.every(([r, n]) => levelOf(L, r, dawns) >= n);
+  const canBuy = (L, lumen, id, dawns = 0) => !!UPG_BY[id] && levelOf(L, id, dawns) < maxOf(id, dawns) && unlocked(L, id, dawns) && lumen >= cost(id, levelOf(L, id, dawns));
+
+  const waveFactor = w => 1 + 0.12 * (w - 1);
+  const multOf = (combo, step = 20, cap = 8) => Math.min(cap, 1 + Math.floor(combo / step));
+  /* Dawn: when an era has earned enough lumen and the storm has been met deep enough, the town may greet the day.
+     It gives up the era's upgrades for stars, which make every later night pay and last longer. */
+  const dawnNeed = d => 2.5e7 * Math.pow(3, d);
+  const dawnWave = d => 11 + 2 * d;
+  const dawnReady = (eraLumen, eraBestWave, d) => eraLumen >= dawnNeed(d) && eraBestWave >= dawnWave(d);
+  const starsFor = eraLumen => Math.floor(Math.sqrt(Math.max(0, eraLumen) / 50000));
+
+  function mods(L = {}, stars = 0, district = 0, dawns = 0) {
+    const l = id => levelOf(L, id, dawns), D = DISTRICTS[district] || DISTRICTS[0];
+    const helpers = [];
+    if (l('lamplighter')) helpers.push({ kind: 'lamplighter', cps: .5 + .35 * l('lamplighter'), voices: 1, maxLen: 4 + Math.floor(l('lamplighter') / 3) });
+    if (l('watch')) helpers.push({ kind: 'watch', cps: .4 + .3 * l('watch'), voices: 1 });
+    if (l('scholar')) helpers.push({ kind: 'scholar', cps: .5 + .35 * l('scholar'), voices: 1, minLen: 6 });
+    if (l('choir')) helpers.push({ kind: 'choir', cps: .6, voices: l('choir') });
+    return {
+      lumen: (1 + .2 * l('wick')) * (1 + .25 * stars) * D.lumen,
+      bell: .05 * l('bell'), mercy: l('steady'), comboStep: 20 - 2 * l('rhythm'), comboCap: 8 + 3 * l('crescendo'),
+      roofHp: BASE_HP + l('roofs'), fall: (1 + .05 * l('gauge')) * Math.min(1.5, 1 + .01 * stars) * D.fall,
+      heal: 1 + l('mend'), gutters: l('gutters') > 0, charm: l('charm') > 0,
+      freeze: FREEZE + .8 * l('frostL'), blastR: BLAST_R * (1 + .1 * l('blastL')),
+      thunder: l('thunderL'), extra: l('sense'), gild: l('gild'),
+      yield: .5 + .08 * l('ledger'), helpers, offlineHours: 2 + l('nightshift'),
+      burst: D.burst, sway: D.sway, count: D.count, district,
+    };
+  }
+  const DEFAULT = mods();
 
   const bank = {};
   for (const w of new Set(WORDS.split(/\s+/).filter(Boolean))) (bank[w.length] = bank[w.length] || []).push(w);
@@ -124,37 +198,60 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
   }
   const hashSeed = s => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 
-  function spec(w) {
-    return {
+  // past wave 17 the storm keeps closing in: the plateau was where a strong town could sit forever
+  const late = (v, w, k, floor) => w <= 17 ? v : Math.max(floor, v * Math.pow(k, w - 17));
+  function spec(w, m = DEFAULT) {
+    const thunder = m.thunder >= 2 ? w >= 3 : m.thunder === 1 ? w >= 3 && w % 2 === 1 : w >= 4 && w % 3 === 1;
+    const count = Math.round(Math.min(40, 6 + 2 * w) * m.count);
+    const s = {
       wave: w,
-      count: Math.min(30, 6 + 2 * w),
-      gap: Math.max(0.7, 3.0 - 0.14 * (w - 1)),
-      fall: Math.max(5.5, 12.5 - 0.55 * (w - 1)),
+      count,
+      gap: late(Math.max(0.7, 3.0 - 0.14 * (w - 1)), w, 0.94, 0.2),
+      fall: late(Math.max(5.5, 12.5 - 0.55 * (w - 1)), w, 0.985, 3.2) * m.fall,
       lo: Math.min(5, 3 + Math.floor((w - 1) / 3)),
       hi: Math.min(9, 3 + Math.ceil((w + 1) / 2)),
-      frost: w >= 2, blast: w >= 3, thunder: w >= 4 && w % 3 === 1,
+      frost: w >= 2 ? 1 + m.extra : 0, blast: w >= 3 ? 1 + m.extra : 0, thunder: thunder ? 1 : 0,
+      gild: m.gild > 0 && w >= 2 ? Math.min(3, 1 + Math.floor((m.gild - 1) / 2)) : 0, charm: m.charm && w >= 4 ? 1 : 0,
     };
+    // never more than 40 % of a wave is special, so the plain words still carry it: the extra frost and blast go first
+    const cap = Math.floor(count * .4);
+    while (s.frost + s.blast + s.thunder + s.gild + s.charm > cap) { if (s.frost > 1 && s.frost >= s.blast) s.frost--; else if (s.blast > 1) s.blast--; else if (s.gild > 1) s.gild--; else break; }
+    return s;
   }
   const tierName = w => { let n = TIERS[0][1]; for (const [from, name] of TIERS) if (w >= from) n = name; return n; };
   const tierIndex = w => { let n = 0; TIERS.forEach(([from], i) => { if (w >= from) n = i; }); return n; };
-  const multOf = combo => Math.min(8, 1 + Math.floor(combo / 20));
 
   function create(opts = {}) {
-    const rand = rng(opts.seed == null ? 1 : opts.seed);
-    const cfg = { charW: opts.charW || 0.03, aspect: opts.aspect || 1.6, intro: !!opts.intro, lamps: opts.lamps || MAX_LAMPS };
+    const seed = opts.seed == null ? 1 : opts.seed, rand = rng(seed), luck = rng((seed ^ 0x51ed270b) >>> 0);
+    const m = opts.mods || DEFAULT;
+    const cfg = { charW: opts.charW || 0.03, aspect: opts.aspect || 1.6, intro: !!opts.intro };
     const g = {
-      cfg, t: 0, words: [], nextId: 1, target: null, score: 0, combo: 0, best: 0, lamps: cfg.lamps, over: false,
-      wave: 0, spec: null, spawned: 0, spawnIn: 0, burst: 0, debt: 0, rest: 1.2, freeze: 0, plan: [],
-      stats: { keys: 0, errors: 0, kills: 0, chars: 0, lost: 0, power: 0 },
+      cfg, m, t: 0, words: [], nextId: 1, target: null, score: 0, combo: 0, best: 0, over: false,
+      houses: HOUSE_X.map(x => ({ x, hp: m.roofHp, max: m.roofHp })), lamps: MAX_LAMPS,
+      wave: Math.max(1, opts.startWave || 1) - 1, spec: null, spawned: 0, spawnIn: 0, burst: 0, debt: 0, rest: 1.2, freeze: 0, plan: [],
+      stats: { keys: 0, errors: 0, kills: 0, chars: 0, lost: 0, power: 0, helped: 0, forgiven: 0 }, hs: [],
     };
+    let hid = 1;
+    for (const h of m.helpers) for (let i = 0; i < h.voices; i++) g.hs.push({ id: hid++, kind: h.kind, cps: h.cps, maxLen: h.maxLen || 99, minLen: h.minLen || 0, acc: 0, tgt: null, wait: 0 });
     const ev = [];
+    const unit = () => waveFactor(g.wave) * m.lumen;
+    const countLamps = () => { g.lamps = g.houses.filter(h => h.hp > 0).length; };
+
+    function heal(n) {
+      const done = [];
+      for (let k = 0; k < n; k++) {
+        const hurt = g.houses.map((h, i) => ({ h, i })).filter(o => o.h.hp < o.h.max).sort((a, b) => a.h.hp / a.h.max - b.h.hp / b.h.max)[0];
+        if (!hurt) break; hurt.h.hp++; done.push(hurt.i);
+      }
+      countLamps(); return done;
+    }
 
     function startWave(n) {
-      g.wave = n; g.spec = spec(n); g.spawned = 0; g.spawnIn = 0.9; g.burst = 0; g.debt = 0;
-      const c = g.spec.count, p = [];
-      if (g.spec.frost) p[Math.floor(c * 0.45)] = 'frost';
-      if (g.spec.blast) p[Math.floor(c * 0.7)] = 'blast';
-      if (g.spec.thunder) p[c - 2] = 'thunder';
+      g.wave = n; g.spec = spec(n, m); g.spawned = 0; g.spawnIn = 0.9; g.burst = 0; g.debt = 0;
+      const s = g.spec, c = s.count, kinds = [];
+      for (const k of ['frost', 'blast', 'thunder', 'gild', 'charm']) for (let i = 0; i < s[k]; i++) kinds.push(k);
+      for (let i = kinds.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
+      const p = []; kinds.forEach((k, i) => { let idx = Math.min(c - 2, Math.floor(c * (i + .6) / (kinds.length + .2))); while (p[idx]) idx = (idx + 1) % (c - 1); p[idx] = k; });
       g.plan = p;
       ev.push({ t: 'wave', n, name: tierName(n) });
     }
@@ -164,7 +261,7 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
       const used = new Set(live.map(w => w.text[0]));
       const have = new Set(live.map(w => w.text));
       let pool;
-      if (kind !== 'word') pool = power[kind].filter(w => w.length <= s.hi + 2);
+      if (kind !== 'word') pool = power[kind].filter(w => w.length <= s.hi + 3);
       else { const len = s.lo + Math.floor(rand() * (s.hi - s.lo + 1)); pool = bank[len] || []; }
       let ok = pool.filter(w => !used.has(w[0]) && !have.has(w));
       if (!ok.length) ok = Object.values(bank).flat().filter(w => w.length >= s.lo && w.length <= s.hi && !used.has(w[0]) && !have.has(w));
@@ -173,7 +270,7 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
     }
 
     function place(len, kind) {
-      const half = (len * cfg.charW) / 2 + 0.025 + (kind === 'word' ? 0 : 0.03);
+      const half = (len * cfg.charW) / 2 + 0.025 + (kind === 'word' ? 0 : 0.03) + m.sway;
       let best = 0.5, bestGap = -1;
       for (let i = 0; i < 10; i++) {
         const x = half + rand() * Math.max(0, 1 - 2 * half);
@@ -181,7 +278,7 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
         for (const w of g.words) {
           if (Math.abs(w.y - 0) > 0.16) continue;
           const wh = (w.text.length * cfg.charW) / 2 + 0.05;
-          gap = Math.min(gap, Math.abs(w.x - x) - wh - half);
+          gap = Math.min(gap, Math.abs(w.x0 - x) - wh - half);
         }
         if (gap > bestGap) { bestGap = gap; best = x; }
         if (gap > 0.02) break;
@@ -193,39 +290,46 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
       const s = g.spec, idx = g.spawned++;
       const kind = g.plan[idx] || 'word';
       let text = pickWord(kind, s);
+      if (!text) { g.spawned--; return false; } // every first letter is on the sky: wait for room
       if (cfg.intro && g.wave === 1 && idx === 0) text = 'rain';
-      const v = 1 / s.fall;
-      const w = { id: g.nextId++, text, kind, x: place(text.length, kind), y: -0.03 + v * overshoot, v, typed: 0 };
+      const v = 1 / s.fall, x0 = place(text.length, kind);
+      const w = { id: g.nextId++, text, kind, x: x0, x0, y: -0.03 + v * overshoot, v, typed: 0, hp: 0, owner: 0, slips: 0 };
       g.words.push(w);
       ev.push({ t: 'spawn', id: w.id });
     }
 
-    function award(pts) { g.score += pts; }
-
-    function kill(w, why) {
+    function drop(w) { // a word leaves the sky; whoever was typing it lets go
       g.words.splice(g.words.indexOf(w), 1);
       if (g.target === w) g.target = null;
-      g.stats.kills++;
+      for (const h of g.hs) if (h.tgt === w) { h.tgt = null; h.acc = 0; h.wait = .35; }
+    }
+
+    function kill(w, why) {
+      drop(w); g.stats.kills++;
       ev.push({ t: 'kill', id: w.id, x: w.x, y: w.y, text: w.text, kind: w.kind, why });
     }
 
     function finish(w) {
-      const mult = multOf(g.combo), pts = w.text.length * 5 * mult;
-      award(pts);
+      const mult = multOf(g.combo, m.comboStep, m.comboCap), u = unit();
+      let pts = w.text.length * 5 * mult * u, lucky = false;
+      if (w.kind === 'gild') pts += w.text.length * (30 + 10 * m.gild) * u;
+      if (w.kind === 'word' && m.bell && luck() < m.bell) { pts *= 2; lucky = true; }
+      g.score += pts;
       kill(w, 'typed');
-      ev[ev.length - 1].pts = pts;
-      if (w.kind === 'frost') { g.freeze = Math.min(g.freeze + FREEZE, 6); g.stats.power++; ev.push({ t: 'freeze', secs: g.freeze }); }
+      Object.assign(ev[ev.length - 1], { pts: Math.round(pts), lucky });
+      if (w.kind === 'frost') { g.freeze = Math.min(g.freeze + m.freeze, m.freeze + 2); g.stats.power++; ev.push({ t: 'freeze', secs: g.freeze }); }
       else if (w.kind === 'blast') {
         g.stats.power++;
-        const hit = g.words.filter(o => Math.hypot((o.x - w.x) * cfg.aspect, o.y - w.y) < BLAST_R);
-        for (const o of hit) { award(o.text.length * 10); kill(o, 'blast'); }
-        ev.push({ t: 'blast', x: w.x, y: w.y, ids: hit.map(o => o.id), r: BLAST_R });
+        const hit = g.words.filter(o => Math.hypot((o.x - w.x) * cfg.aspect, o.y - w.y) < m.blastR);
+        for (const o of hit) { g.score += o.text.length * 10 * u; kill(o, 'blast'); }
+        ev.push({ t: 'blast', x: w.x, y: w.y, ids: hit.map(o => o.id), r: m.blastR });
       } else if (w.kind === 'thunder') {
         g.stats.power++;
         const hit = g.words.slice();
-        for (const o of hit) { award(o.text.length * 10); kill(o, 'thunder'); }
+        for (const o of hit) { g.score += o.text.length * 10 * u; kill(o, 'thunder'); }
         ev.push({ t: 'thunder', ids: hit.map(o => o.id) });
-      }
+      } else if (w.kind === 'charm') { g.stats.power++; ev.push({ t: 'charm', houses: heal(1) }); }
+      else if (w.kind === 'gild') g.stats.power++;
     }
 
     g.key = (ch) => {
@@ -237,17 +341,21 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
       let w = g.target;
       if (!w) {
         w = g.words.filter(o => o.text[0] === ch).sort((a, b) => b.y - a.y)[0];
-        if (w) { g.target = w; ev.push({ t: 'lock', id: w.id }); }
+        if (w) {
+          g.target = w; ev.push({ t: 'lock', id: w.id });
+          if (w.owner) { const h = g.hs.find(o => o.id === w.owner); if (h) { h.tgt = null; h.acc = 0; h.wait = .35; } w.owner = 0; w.hp = 0; ev.push({ t: 'yield', id: w.id }); }
+        }
       }
       if (w && w.text[w.typed] === ch) {
         w.typed++; g.stats.chars++; g.combo++;
         if (g.combo > g.best) g.best = g.combo;
-        award(10 * multOf(g.combo));
-        ev.push({ t: 'type', id: w.id, i: w.typed, combo: g.combo, mult: multOf(g.combo) });
+        g.score += 10 * multOf(g.combo, m.comboStep, m.comboCap) * unit();
+        ev.push({ t: 'type', id: w.id, i: w.typed, combo: g.combo, mult: multOf(g.combo, m.comboStep, m.comboCap), step: m.comboStep });
         if (w.typed === w.text.length) finish(w);
       } else {
-        g.stats.errors++; g.combo = 0;
-        ev.push({ t: 'miss', id: w ? w.id : 0, key: ch });
+        g.stats.errors++;
+        if (w && w.slips < m.mercy) { w.slips++; g.stats.forgiven++; ev.push({ t: 'forgive', id: w.id, key: ch }); }
+        else { g.combo = 0; ev.push({ t: 'miss', id: w ? w.id : 0, key: ch }); }
       }
       return ev.slice();
     };
@@ -258,6 +366,30 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
       return ev.slice();
     };
 
+    function helpersStep(dt) {
+      for (const h of g.hs) {
+        if (h.tgt && (!g.words.includes(h.tgt) || g.target === h.tgt || h.tgt.owner !== h.id)) { h.tgt = null; h.acc = 0; }
+        if (!h.tgt) {
+          if (h.wait > 0) { h.wait -= dt; continue; }
+          const pool = g.words.filter(o => o.kind === 'word' && !o.owner && o !== g.target && o.typed === 0 && o.text.length <= h.maxLen && o.text.length >= h.minLen);
+          const w = pool.sort((a, b) => b.y - a.y)[0];
+          if (!w) continue;
+          h.tgt = w; w.owner = h.id; w.hp = 0; h.acc = 0;
+          ev.push({ t: 'hlock', v: h.id, kind: h.kind, id: w.id });
+        }
+        h.acc += h.cps * dt;
+        while (h.acc >= 1 && h.tgt) {
+          h.acc -= 1; const w = h.tgt; w.hp++;
+          ev.push({ t: 'htype', v: h.id, kind: h.kind, id: w.id, i: w.hp });
+          if (w.hp >= w.text.length) {
+            const pts = w.text.length * 15 * unit() * m.yield; g.score += pts; g.stats.helped++;
+            kill(w, 'helper'); Object.assign(ev[ev.length - 1], { pts: Math.round(pts), v: h.id, kind: h.kind });
+            h.tgt = null; h.acc = 0; h.wait = .35;
+          }
+        }
+      }
+    }
+
     g.step = (dt) => {
       ev.length = 0;
       if (g.over) return ev.slice();
@@ -267,37 +399,41 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
       const move = frozen ? 0 : dt;
       for (const w of g.words.slice()) {
         w.y += w.v * move;
+        if (m.sway) w.x = Math.min(.97, Math.max(.03, w.x0 + m.sway * Math.sin(g.t * .9 + w.id * 1.7)));
         if (w.y >= 1) {
-          g.words.splice(g.words.indexOf(w), 1);
-          if (g.target === w) g.target = null;
-          g.lamps--; g.combo = 0; g.stats.lost++;
-          ev.push({ t: 'lost', id: w.id, x: w.x, text: w.text, lamps: g.lamps });
+          drop(w);
+          const live = g.houses.map((h, i) => ({ h, i })).filter(o => o.h.hp > 0);
+          const hit = live.sort((a, b) => Math.abs(a.h.x - w.x) - Math.abs(b.h.x - w.x))[0];
+          hit.h.hp--; countLamps();
+          if (!m.gutters) g.combo = 0;
+          g.stats.lost++;
+          ev.push({ t: 'lost', id: w.id, x: w.x, text: w.text, house: hit.i, hp: hit.h.hp, lamps: g.lamps });
           if (g.lamps <= 0) { g.over = true; ev.push({ t: 'over' }); return ev.slice(); }
         }
       }
+      helpersStep(dt);
       if (!g.spec) {
         g.rest -= dt;
-        if (g.rest <= 0) startWave(1);
+        if (g.rest <= 0) startWave(g.wave + 1);
       } else if (g.spawned < g.spec.count) {
         if (!frozen) {
           g.spawnIn -= dt;
           while (g.spawnIn <= 0 && g.spawned < g.spec.count) {
-            spawn(-g.spawnIn);
+            if (spawn(-g.spawnIn) === false) { g.spawnIn = .15; break; }
             let gap = g.spec.gap * (0.8 + 0.4 * rand());
             // from wave 3 some words arrive in a burst of three, paid for by a longer lull: same rain, more weather
             if (g.burst > 0) { g.burst--; g.debt += gap * 0.72; gap *= 0.28; }
             else if (g.debt > 0) { gap += g.debt; g.debt = 0; }
-            else if (g.wave >= 3 && g.spawned < g.spec.count - 3 && rand() < Math.min(0.3, 0.04 * g.wave)) { g.burst = 2; g.debt = 0; gap *= 0.28; g.debt += gap * 2.5; }
+            else if (g.wave >= 3 && g.spawned < g.spec.count - 3 && rand() < Math.min(0.3, 0.04 * g.wave) * m.burst) { g.burst = 2; g.debt = 0; gap *= 0.28; g.debt += gap * 2.5; }
             g.spawnIn += gap;
           }
         }
       } else if (!g.words.length) {
-        if (g.rest === undefined || g.rest <= 0) g.rest = 2.4;
+        if (g.rest <= 0) g.rest = 2.4;
         else g.rest -= dt;
         if (g.rest <= 0) {
-          const heal = g.lamps < cfg.lamps;
-          if (heal) g.lamps++;
-          ev.push({ t: 'clear', n: g.wave, heal });
+          const healed = heal(m.heal);
+          ev.push({ t: 'clear', n: g.wave, heal: healed.length > 0, houses: healed });
           g.rest = 0;
           startWave(g.wave + 1);
         }
@@ -307,7 +443,18 @@ airplane blossoms cinnamon dewdrops eiderdown fireflies gardener horizon inkwell
     return g;
   }
 
-  return { create, spec, rng, hashSeed, tierName, tierIndex, multOf, bank, power, MAX_LAMPS, FREEZE, BLAST_R };
+  /* What the town earns while the player is away: the helpers keep watch at the wave they can hold,
+     at a quarter of what the same words pay in play, for no more than the night shift's hours. */
+  function offline(L, stars, district, bestWave, seconds, dawns = 0) {
+    const m = mods(L, stars, district, dawns), cps = m.helpers.reduce((a, h) => a + h.cps * h.voices, 0);
+    if (!cps || !(seconds > 0) || bestWave < 1) return 0;
+    const wps = cps / 6.5; let w = 1;
+    for (let k = 1; k <= bestWave; k++) if (spec(k, m).gap >= 1 / wps) w = k;
+    const rate = Math.min(wps, 1 / spec(w, m).gap) * 5.5 * 15 * waveFactor(w) * m.lumen * m.yield * 0.8;
+    return Math.floor(rate * Math.min(seconds, m.offlineHours * 3600));
+  }
+
+  return { create, spec, rng, hashSeed, tierName, tierIndex, multOf, bank, power, mods, UPG, UPG_BY, DISTRICTS, cost, maxOf, levelOf, unlocked, canBuy, waveFactor, dawnNeed, dawnWave, dawnReady, starsFor, offline, HOUSE_X, MAX_LAMPS, FREEZE, BLAST_R };
 })();
 </script>
 <script id="page">
