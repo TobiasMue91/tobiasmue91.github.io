@@ -397,7 +397,7 @@ const S = {
       await p.evaluate(() => document.querySelectorAll('#tree .node')[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))); await p.waitForTimeout(250);
       await p.evaluate(() => { const n = [...document.querySelectorAll('#tree .node')].find(x => /Lucky bell/.test(x.textContent)); n.dispatchEvent(new MouseEvent('click', { bubbles: true })); }); await p.waitForTimeout(250);
       check(await p.evaluate(() => document.getElementById('buy').disabled), 'a star whose requirements are unmet cannot be lit');
-      await p.reload(); await p.waitForTimeout(250); const s4 = await sv(p); check(s4.levels.wick === s3.levels.wick && s4.lumen === s3.lumen, 'levels and lumen survive a reload');
+      await p.reload({ waitUntil: 'load' }); await p.waitForFunction(() => window.__wr && window.__wr.mode); const s4 = await sv(p); check(s4.levels.wick === s3.levels.wick && s4.lumen === s3.lumen, 'levels and lumen survive a reload', JSON.stringify([s3.levels, s3.lumen, s4.levels, s4.lumen]));
       await p.click('#shopbtn'); await p.click('#shopGo'); check(await mode(p) === 'play', 'Begin the night from the workshop starts a night');
       check((await p.evaluate(() => window.__wr.game.m.lumen)) > 1, 'and the night carries what was bought');
       await ctx.close(); }
@@ -427,8 +427,8 @@ const S = {
       const { ctx, p } = await open({ v3: S3({ levels: helpers, eraBest: 10, bestWave: 10, nights: 8, last: Date.now() - 5 * 3600 * 1000 }) });
       const pay = WR.offline(helpers, 0, 0, 10, 5 * 3600);
       check(await mode(p) === 'welcome' && (await sv(p)).lumen === pay && pay > 0, 'coming back after hours pays the helpers\' watch', `${(await sv(p)).lumen} vs ${pay}`);
-      await p.click('#awayOk'); await p.reload(); await p.waitForTimeout(250);
-      check(await mode(p) === 'title' && (await sv(p)).lumen === pay, 'and only once');
+      await p.click('#awayOk'); await p.reload({ waitUntil: 'load' }); await p.waitForFunction(() => window.__wr && window.__wr.mode);
+      check(await mode(p) === 'title' && (await sv(p)).lumen === pay, 'and only once', JSON.stringify([await mode(p), (await sv(p)).lumen, pay, (await sv(p)).last, Date.now()]));
       await ctx.close(); }
     { const { ctx, p } = await open({ v3: S3({ levels: { wick: 5 }, eraBest: 10, nights: 8, last: Date.now() - 5 * 3600 * 1000 }) });
       check(await mode(p) === 'title' && (await sv(p)).lumen === 0, 'a town without helpers earns nothing while away'); await ctx.close(); }
@@ -439,7 +439,7 @@ const S = {
     { const { ctx, p } = await open({ v3: { ...S3(), lumen: 'lots', levels: { wick: 99, nope: 5, bell: -3 }, stars: -5, dawns: 'x', district: 7, startWave: 'q' } });
       const m = await sv(p); check(m.lumen === 0 && m.levels.wick === 12 && !m.levels.nope && !m.levels.bell && m.stars === 0 && m.dawns === 0 && m.district === 0 && m.startWave === 1, 'a save that lies is clamped', JSON.stringify(m)); await ctx.close(); }
     { const { ctx, p } = await open({ v3: S3({ lumen: 50, nights: 2 }) });
-      await p.click('#reset'); await p.click('#reset'); await p.waitForTimeout(400); const m = await sv(p); check(m.lumen === 0 && m.nights === 0, 'Start over, asked twice, erases the town', JSON.stringify(m)); await ctx.close(); }
+      await p.click('#reset'); await Promise.all([p.waitForNavigation(), p.click('#reset')]); await p.waitForFunction(() => window.__wr && window.__wr.mode); const m = await sv(p); check(m.lumen === 0 && m.nights === 0, 'Start over, asked twice, erases the town', JSON.stringify(m)); await ctx.close(); }
 
     // a phone: tapping the on-screen keys types the word, and the workshop fits
     { const { ctx, p } = await open(undefined, { phone: true });
