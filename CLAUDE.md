@@ -119,6 +119,7 @@ npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (pl
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 npm run test:qix            # QIX suite (plain Node, no server or browser)
 npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
+npm run test:wordrain       # Word Rain suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -128,7 +129,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-three exist so far. `test/everything_converter.mjs` drives
+Fifty-four exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -441,6 +442,13 @@ closing of a stake is checked against a flood fill written separately in the tes
 nothing else), the stake, head, rim, Qix and Sparx stay consistent over thousands of random frames, the line is lost only to a
 Qix that really touches it or a fuse that really reaches the player, a stake can be walked back to leave the board exactly as it
 was, a seed is the same night for everyone at any frame rate, and bots must be ordered by skill. Run it after touching the core.
+
+`test/word_rain.mjs` runs the DOM-free `<script id="core">` block of `games/word_rain.html` (Word Rain), a typing defence
+whose promises are that a first letter always picks out one word, that every number on screen is what the rules say, and that
+the storm rewards typing speed in order: every wave on every seed spawns what its spec says and never two live words with the
+same first letter, scoring and the multiplier against a separate tally, frost, blast (against brute force) and thunder, lamps
+lost and healed, a seed that deals the same storm at 30 and 120 fps, and typists of six speeds who must reach waves in order of
+their speed while an idle one is gone in wave 1. Run it after touching the bank, a wave number or a rule.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
