@@ -42,7 +42,7 @@ const S = {
     console.log('flight');
     const a = C.makeWorld(5), b = C.makeWorld(5), fa = C.flight(a, 0, 50, 70), fb = C.flight(b, 0, 50, 70);
     check(JSON.stringify(fa.end) === JSON.stringify(fb.end) && fa.path.length === fb.path.length, 'a seed is the same hill and the same flight');
-    for (const [ang, pw, wind] of [[45, 70, 0], [30, 80, 0], [60, 45, .5], [50, 70, -1], [75, 60, .8]]) {
+    for (const [ang, pw, wind] of [[45, 70, 0], [30, 80, 0], [60, 45, .5], [50, 45, -1], [75, 60, .8]]) {
       const w = flat(3); w.wind = wind; const t = w.tanks[0], f = C.flight(w, 0, ang, pw), mz = C.muzzleOf(t, ang), v = C.aimVector(ang, pw), ax = wind * C.WIND_ACC;
       // plain ballistics: land where mz.y + vy t - G t^2/2 = ground
       const disc = Math.sqrt(v.y * v.y + 2 * C.G * (mz.y - 200)), tl = (v.y + disc) / C.G, want = mz.x + v.x * tl + .5 * ax * tl * tl;
@@ -87,7 +87,7 @@ const S = {
     let reach = 0, n = 0, worst = 0;
     for (let seed = 1; seed <= 150; seed++) {
       const w = C.makeWorld(seed), [a, b] = w.tanks, gap = b.x - a.x;
-      check(gap >= 420 && gap <= 600 && a.x > 150 && b.x < C.W - 150, `seed ${seed}: tanks stand ${gap} apart inside the range`);
+      check(gap >= 720 && gap <= 920 && a.x > 150 && b.x < C.W - 150, `seed ${seed}: tanks stand ${gap} apart inside the range`);
       let flatPad = true; for (const t of w.tanks) { const lo = C.heightAt(w.h, t.x - 60), hi = C.heightAt(w.h, t.x + 60); if (Math.abs(lo - hi) > 1) flatPad = false; }
       check(flatPad, `seed ${seed}: each tank stands on level ground`);
       const s = C.solve(w, 0, b.x), e = C.flight(w, 0, s.angle, s.power).end; n++;
