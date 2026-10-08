@@ -118,6 +118,7 @@ npm run test:truths         # Two Truths & a Lie suite (plain Node, no server or
 npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 npm run test:qix            # QIX suite (plain Node, no server or browser)
+npm run test:simon         # Simon Says suite (plain Node, no server or browser)
 npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
 npm run test:wordrain       # Word Rain suite (plain Node, no server or browser)
 ```
@@ -129,7 +130,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-four exist so far. `test/everything_converter.mjs` drives
+Fifty-five exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -442,6 +443,8 @@ closing of a stake is checked against a flood fill written separately in the tes
 nothing else), the stake, head, rim, Qix and Sparx stay consistent over thousands of random frames, the line is lost only to a
 Qix that really touches it or a fuse that really reaches the player, a stake can be walked back to leave the board exactly as it
 was, a seed is the same night for everyone at any frame rate, and bots must be ordered by skill. Run it after touching the core.
+
+`test/simon_says.mjs` runs the DOM-free `<script id="core">` block of `games/simon_says.html` (Simon Says), whose promise is that the sequence is honest: a seed is the same sequence for everyone, a longer one only ever adds to the end of a shorter one, no pad comes up four times running, a press is judged against exactly the pad that was shown, the tempo tightens but never past what a person can follow, saves trust nothing and daily streaks count the way the card says, and bots with a longer memory score higher. Run it after touching the core.
 
 `test/word_rain.mjs` runs the DOM-free `<script id="core">` block of `games/word_rain.html` (Word Rain), a typing defence
 whose promises are that a first letter always picks out one word, that every number on screen is what the rules say, and that

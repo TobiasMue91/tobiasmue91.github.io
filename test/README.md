@@ -1192,3 +1192,16 @@ the pack held, that the light only shrinks as the oil falls and that a dying lam
 hauling from deep with too little oil fails the same way, that saves come back cell for cell and carry on identically (damaged
 ones are healed), and that a bot with a person's pace buys the cheapest upgrade and reaches the Deep Heart on nearly every
 seed in about half an hour. `VERBOSE=1` prints its trips and the minute each zone is reached.
+
+## Simon Says
+
+```sh
+npm run test:simon                  # or: node test/simon_says.mjs [sequence rules tempo saves bots]
+```
+
+`simon_says.mjs` runs the DOM-free `<script id="core">` block of `games/simon_says.html` in Node. The
+page only lights and sounds what the core says, so the core carries the promises: the sequence a seed
+deals is the same for everyone and is prefix-stable (a longer round only adds to the end), no pad comes up
+four times running, every press is judged against the pad that was shown, the tempo tightens but never
+below what a person can follow, damaged saves load clean, daily streaks cross month ends, and bots with a
+longer memory score higher.
