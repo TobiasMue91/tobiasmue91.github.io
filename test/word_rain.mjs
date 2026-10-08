@@ -9,7 +9,7 @@
 //   node test/word_rain.mjs               # everything
 //   node test/word_rain.mjs rules bots    # named suites only
 //
-// Suites: bank, waves, rules, powers, lamps, determinism, bots.
+// Suites: bank, waves, bursts, rules, powers, lamps, determinism, bots.
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -19,7 +19,7 @@ import vm from 'vm';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const PAGE = join(HERE, '..', 'games', 'word_rain.html');
-const ALL = ['bank', 'waves', 'rules', 'powers', 'lamps', 'determinism', 'bots'];
+const ALL = ['bank', 'waves', 'bursts', 'rules', 'powers', 'lamps', 'determinism', 'bots'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -98,6 +98,25 @@ const S = {
         check(n('frost') === (s.frost ? 1 : 0) && n('blast') === (s.blast ? 1 : 0) && n('thunder') === (s.thunder ? 1 : 0), `seed ${seed} wave ${w} power words match the plan`);
       }
     }
+  },
+  bursts() {
+    // from wave 3 words sometimes arrive three at a time, but the average pace stays the spec's
+    let burstWaves = 0, early = 0, ratios = [];
+    for (let seed = 1; seed <= 30; seed++) {
+      const g = WR.create({ seed, charW: .03, aspect: 1.6 }), act = typist(g, 9, { react: .1 }), at = {};
+      while (!g.over && g.wave <= 7 && g.t < 900) { for (const e of g.step(1 / 60)) if (e.t === 'spawn') (at[g.wave] = at[g.wave] || []).push(g.t); act(); }
+      for (const w in at) {
+        const s = WR.spec(+w), ts = at[w]; if (ts.length < s.count) continue;
+        const gaps = ts.slice(1).map((x, i) => x - ts[i]);
+        if (+w < 3 && gaps.some(x => x < s.gap * .5)) early++;
+        if (+w >= 3 && gaps.some(x => x < s.gap * .4)) burstWaves++;
+        ratios.push((ts[ts.length - 1] - ts[0]) / ((ts.length - 1) * s.gap));
+      }
+    }
+    check(early === 0, 'waves 1 and 2 never burst');
+    check(burstWaves >= 10, 'later waves do burst', `${burstWaves} waves`);
+    const mean = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+    check(mean > .85 && mean < 1.15, 'a burst is paid back, so the average pace is the spec\'s', mean.toFixed(2));
   },
   rules() {
     const g = WR.create({ seed: 3, intro: true, charW: .03, aspect: 1.6 });
