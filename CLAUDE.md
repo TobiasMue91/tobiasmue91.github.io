@@ -118,6 +118,7 @@ npm run test:truths         # Two Truths & a Lie suite (plain Node, no server or
 npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
 npm run test:qix            # QIX suite (plain Node, no server or browser)
+npm run test:artillery   # Artillery suite (plain Node, no server or browser)
 npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
 ```
 
@@ -128,7 +129,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-three exist so far. `test/everything_converter.mjs` drives
+Fifty-four exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -441,6 +442,12 @@ closing of a stake is checked against a flood fill written separately in the tes
 nothing else), the stake, head, rim, Qix and Sparx stay consistent over thousands of random frames, the line is lost only to a
 Qix that really touches it or a fuse that really reaches the player, a stake can be walked back to leave the board exactly as it
 was, a seed is the same night for everyone at any frame rate, and bots must be ordered by skill. Run it after touching the core.
+
+`test/artillery.mjs` runs the DOM-free `<script id="core">` block of `games/artillery.html` (Artillery), a tank duel whose page only
+draws what the core returns: a shell lands where plain ballistics put it at any wind, a blast only lowers ground and hurts by
+distance, every hill the generator deals can be shot across with a tank on level ground at either end, a match counts to three and
+alternates the shooter, and the computer starts wide, closes in as it walks a shot in and beats a player who aims blindly. Run it
+after touching the core or a constant.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
