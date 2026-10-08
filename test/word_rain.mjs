@@ -15,11 +15,14 @@ import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
 import {dirname, join} from 'path';
 import vm from 'vm';
+import {createRequire} from 'module';
+import {execSync} from 'child_process';
+import {pathToFileURL} from 'url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const PAGE = join(HERE, '..', 'games', 'word_rain.html');
-const ALL = ['bank', 'waves', 'bursts', 'rules', 'powers', 'lamps', 'determinism', 'upgrades', 'levers', 'special', 'helpers', 'districts', 'meta', 'offline', 'career', 'bots'];
+const ALL = ['bank', 'waves', 'bursts', 'rules', 'powers', 'lamps', 'determinism', 'upgrades', 'levers', 'special', 'helpers', 'districts', 'meta', 'offline', 'career', 'bots', 'page'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -344,6 +347,115 @@ const S = {
     check(slow[0].min < mid[0].min * 2.2, 'but a slow one is not shut out: under twice as long');
     check(mid[0].stars >= 1 && mid[2].stars > mid[0].stars * 3, 'stars pile up');
   },
+  async page() {
+    // The page around the core: the first night, the workshop, a dawn, time away and the old saves, in a real browser,
+    // on a laptop and on a phone. Needs Playwright; skipped without it.
+    let chromium = null;
+    try { ({ chromium } = await import('playwright')); } catch (e) { try { chromium = createRequire(join(execSync('npm root -g').toString().trim(), 'x'))('playwright').chromium; } catch (e2) {} }
+    if (!chromium) { console.log('  skipped: Playwright is not installed'); return; }
+    const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
+    const url = pathToFileURL(PAGE).href, errors = [];
+    const open = async (save, o = {}) => {
+      const ctx = await browser.newContext({ viewport: o.phone ? { width: 390, height: 844 } : { width: 1280, height: 720 }, hasTouch: !!o.phone, isMobile: !!o.phone, reducedMotion: o.reduced ? 'reduce' : 'no-preference' });
+      await ctx.route(/^https?:/, r => r.abort());
+      const p = await ctx.newPage(); p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+      if (save !== undefined) await p.addInitScript(s => { if (!sessionStorage.getItem('seeded') && s) { sessionStorage.setItem('seeded', '1'); if (s.v3) localStorage.setItem('wordRain.v3', JSON.stringify(s.v3)); if (s.old) localStorage.setItem('wordrain_save', JSON.stringify(s.old)); if (s.v2) localStorage.setItem('wordRain.v2', JSON.stringify(s.v2)); } }, save);
+      await p.goto(url); await p.waitForTimeout(250); return { ctx, p };
+    };
+    const S3 = (o = {}) => ({ v: 3, lumen: 0, levels: {}, stars: 0, dawns: 0, eraLumen: 0, eraBest: 0, bestWave: 0, bestLumen: 0, bestWpm: 0, startWave: 1, district: 0, nights: 0, words: 0, seen: true, shopSeen: true, mute: false, migrated: true, last: Date.now(), ...o });
+    const sv = p => p.evaluate(() => JSON.parse(JSON.stringify(window.__wr.save)));
+    const mode = p => p.evaluate(() => window.__wr.mode);
+    const endNight = async p => { await p.evaluate(() => { const g = window.__wr.game; for (let k = 0; k < 6; k++) g.words.push({ id: 9000 + k, text: 'ant', kind: 'word', x: g.houses[k].x, x0: g.houses[k].x, y: 1, v: 0, typed: 0, hp: 0, owner: 0, slips: 0 }); for (const h of g.houses) h.hp = 1; }); await p.waitForFunction(() => window.__wr.mode === 'over', null, { timeout: 8000 }); };
+
+    // a first night, played with real keys, on a laptop
+    { const { ctx, p } = await open(undefined);
+      check(await mode(p) === 'title' && await p.isHidden('#shopbtn') && await p.isHidden('#reset'), 'a new player sees only Begin');
+      await p.click('#play'); check(await mode(p) === 'play', 'Begin starts the night');
+      await p.waitForFunction(() => window.__wr.game && window.__wr.game.words.length > 0, null, { timeout: 8000 });
+      check(await p.evaluate(() => window.__wr.game.words[0].text) === 'rain', 'the first word of a first night is rain');
+      await p.keyboard.type('rain', { delay: 40 });
+      const g1 = await p.evaluate(() => ({ kills: window.__wr.game.stats.kills, score: window.__wr.game.score, shown: document.getElementById('score').textContent }));
+      check(g1.kills === 1 && g1.score === 60 && /✦/.test(g1.shown), 'typing it pays 60 lumen and the counter says so', JSON.stringify(g1));
+      await p.waitForTimeout(400);
+      await endNight(p);
+      const s1 = await sv(p);
+      check(s1.nights === 1 && s1.lumen >= 60 && s1.eraLumen === s1.lumen && s1.bestWave === 1, 'the night is paid into the pocket once', JSON.stringify([s1.nights, s1.lumen, s1.eraLumen]));
+      check(/^\+[\d,.]+[A-Za-z]* ✦$/.test(await p.textContent('#final')) && await p.isVisible('#toshop'), 'the summary shows the haul and a way to the workshop');
+      await p.click('#toshop'); check(await mode(p) === 'shop' && await p.locator('#tree .node').count() === 21, 'the workshop shows twenty-one stars');
+      await ctx.close(); }
+
+    // buying
+    { const { ctx, p } = await open({ v3: S3({ lumen: 5000, nights: 3, eraBest: 5, bestWave: 5 }) });
+      await p.click('#shopbtn'); await p.waitForTimeout(300);
+      check(await p.locator('#tree .node.can').count() >= 1 && await p.locator('#tree .node.locked').count() >= 10, 'only the first stars are open to begin with');
+      await p.evaluate(() => document.querySelector('#tree .node').dispatchEvent(new MouseEvent('click', { bubbles: true }))); await p.waitForTimeout(350);
+      check(await p.evaluate(() => document.getElementById('sheet').classList.contains('open')) && /Wick/.test(await p.textContent('#sheetName')), 'a star opens its sheet');
+      await p.click('#buy'); const s2 = await sv(p);
+      check(s2.levels.wick === 1 && s2.lumen === 5000 - 1000, 'lighting a star costs what it says', JSON.stringify([s2.levels, s2.lumen]));
+      await p.click('#buymax'); const s3 = await sv(p);
+      check(s3.levels.wick > 1 && s3.lumen < 5000 - 1000 && s3.lumen >= 0, 'Max buys every level it can afford', JSON.stringify([s3.levels, s3.lumen]));
+      await p.evaluate(() => document.querySelectorAll('#tree .node')[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))); await p.waitForTimeout(250);
+      await p.evaluate(() => { const n = [...document.querySelectorAll('#tree .node')].find(x => /Lucky bell/.test(x.textContent)); n.dispatchEvent(new MouseEvent('click', { bubbles: true })); }); await p.waitForTimeout(250);
+      check(await p.evaluate(() => document.getElementById('buy').disabled), 'a star whose requirements are unmet cannot be lit');
+      await p.reload(); await p.waitForTimeout(250); const s4 = await sv(p); check(s4.levels.wick === s3.levels.wick && s4.lumen === s3.lumen, 'levels and lumen survive a reload');
+      await p.click('#shopbtn'); await p.click('#shopGo'); check(await mode(p) === 'play', 'Begin the night from the workshop starts a night');
+      check((await p.evaluate(() => window.__wr.game.m.lumen)) > 1, 'and the night carries what was bought');
+      await ctx.close(); }
+
+    // leaving mid-night pays what was earned, once
+    { const { ctx, p } = await open({ v3: S3({ nights: 2, eraBest: 3 }) });
+      await p.click('#play'); await p.evaluate(() => { const g = window.__wr.game; g.score = 777; }); await p.evaluate(() => window.__wr.pause());
+      const a = await sv(p); check(a.lumen === 777 && await mode(p) === 'pause', 'pausing banks the night so far');
+      await p.click('#endnight'); await p.waitForTimeout(200); const b = await sv(p);
+      check(b.lumen === 777 && b.nights === 3 && await mode(p) === 'over', 'ending the night does not pay it twice', JSON.stringify([b.lumen, b.nights]));
+      await ctx.close(); }
+
+    // dawn
+    { const { ctx, p } = await open({ v3: S3({ lumen: 123, levels: { wick: 5, gauge: 2 }, eraLumen: WR.dawnNeed(0) + 1e6, eraBest: WR.dawnWave(0) + 1, nights: 12, bestWave: 14 }) });
+      await p.click('#shopbtn'); await p.waitForTimeout(250);
+      check(await p.isVisible('#sunGo'), 'when an era has earned enough, the dawn can be greeted');
+      const gain = WR.starsFor(WR.dawnNeed(0) + 1e6); await p.click('#sunGo'); check(await mode(p) === 'dawn' && /\+/.test(await p.textContent('#dawnstats')), 'the dawn screen says what it gives');
+      await p.click('#dawnno'); check(await mode(p) === 'shop' && (await sv(p)).dawns === 0, 'Not yet changes nothing');
+      await p.click('#sunGo'); await p.click('#dawnyes'); await p.waitForTimeout(200); const d = await sv(p);
+      check(d.dawns === 1 && d.stars === gain && d.lumen === 0 && d.eraLumen === 0 && Object.keys(d.levels).length === 0 && d.bestWave === 14, 'greeting it lays the upgrades down and keeps the stars and the records', JSON.stringify(d));
+      await p.click('#dawnyes'); check(await mode(p) === 'shop', 'then the workshop is open again');
+      check(await p.locator('#districts .chip:not(.lock)').count() === 2, 'and a district has opened');
+      await ctx.close(); }
+
+    // time away
+    { const helpers = { wick: 5, lamplighter: 4, ledger: 2, watch: 3, nightshift: 2 };
+      const { ctx, p } = await open({ v3: S3({ levels: helpers, eraBest: 10, bestWave: 10, nights: 8, last: Date.now() - 5 * 3600 * 1000 }) });
+      const pay = WR.offline(helpers, 0, 0, 10, 5 * 3600);
+      check(await mode(p) === 'welcome' && (await sv(p)).lumen === pay && pay > 0, 'coming back after hours pays the helpers\' watch', `${(await sv(p)).lumen} vs ${pay}`);
+      await p.click('#awayOk'); await p.reload(); await p.waitForTimeout(250);
+      check(await mode(p) === 'title' && (await sv(p)).lumen === pay, 'and only once');
+      await ctx.close(); }
+    { const { ctx, p } = await open({ v3: S3({ levels: { wick: 5 }, eraBest: 10, nights: 8, last: Date.now() - 5 * 3600 * 1000 }) });
+      check(await mode(p) === 'title' && (await sv(p)).lumen === 0, 'a town without helpers earns nothing while away'); await ctx.close(); }
+
+    // the older pages' saves
+    { const { ctx, p } = await open({ old: { gold: 900, bestWPM: 71, totalRounds: 4, upgrades: {} }, v2: { bestWpm: 55, bestWave: 9, seen: true } });
+      const m = await sv(p); check(m.lumen === 900 && m.bestWpm === 71 && m.bestWave === 9 && m.seen && m.nights >= 1, 'the old page\'s gold, wpm and bests carry over', JSON.stringify(m)); await ctx.close(); }
+    { const { ctx, p } = await open({ v3: { ...S3(), lumen: 'lots', levels: { wick: 99, nope: 5, bell: -3 }, stars: -5, dawns: 'x', district: 7, startWave: 'q' } });
+      const m = await sv(p); check(m.lumen === 0 && m.levels.wick === 12 && !m.levels.nope && !m.levels.bell && m.stars === 0 && m.dawns === 0 && m.district === 0 && m.startWave === 1, 'a save that lies is clamped', JSON.stringify(m)); await ctx.close(); }
+    { const { ctx, p } = await open({ v3: S3({ lumen: 50, nights: 2 }) });
+      await p.click('#reset'); await p.click('#reset'); await p.waitForTimeout(400); const m = await sv(p); check(m.lumen === 0 && m.nights === 0, 'Start over, asked twice, erases the town'); await ctx.close(); }
+
+    // a phone: tapping the on-screen keys types the word, and the workshop fits
+    { const { ctx, p } = await open(undefined, { phone: true });
+      check(await p.isVisible('#kb'), 'a phone gets the on-screen keyboard');
+      await p.tap('#play'); await p.waitForFunction(() => window.__wr.game && window.__wr.game.words.length > 0, null, { timeout: 8000 });
+      for (const ch of 'rain') await p.tap(`.k[data-k="${ch}"]`);
+      check(await p.evaluate(() => window.__wr.game.stats.kills) === 1, 'tapping r a i n kills the word');
+      const sw = await p.evaluate(() => document.documentElement.scrollWidth); check(sw <= 392, 'no sideways scroll on a phone', `${sw}`);
+      await p.evaluate(() => window.__wr.setMode('shop')); await p.waitForTimeout(300);
+      const fit = await p.evaluate(() => { const t = document.getElementById('tree').getBoundingClientRect(); return t.width <= 392 && t.left >= -1; }); check(fit, 'the workshop\'s constellation fits a phone\'s width');
+      await ctx.close(); }
+    // reduced motion plays through without errors
+    { const { ctx, p } = await open(undefined, { reduced: true }); await p.click('#play'); await p.waitForFunction(() => window.__wr.game && window.__wr.game.words.length > 0, null, { timeout: 8000 }); await p.keyboard.type('rain', { delay: 30 }); await endNight(p); await p.click('#toshop'); await ctx.close(); }
+    check(errors.length === 0, 'no console errors anywhere', errors.slice(0, 3).join(' | '));
+    await browser.close();
+  },
   bots() {
     const waveOf = (cps, o) => { const w = []; for (let s = 1; s <= 4; s++) w.push(bot(cps, s, o).wave); return Math.min(...w); };
     const idle = waveOf(0), slow = waveOf(1.5), mid = waveOf(3), fast = waveOf(5), quick = waveOf(8);
@@ -360,7 +472,7 @@ const S = {
 
 for (const name of suites) {
   if (!S[name]) { console.log(`unknown suite ${name}`); failures++; continue; }
-  console.log(`# ${name}`); S[name]();
+  console.log(`# ${name}`); await S[name]();
 }
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
