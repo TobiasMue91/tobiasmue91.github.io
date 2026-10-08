@@ -121,6 +121,7 @@ npm run test:qix            # QIX suite (plain Node, no server or browser)
 npm run test:simon         # Simon Says suite (plain Node, no server or browser)
 npm run test:artillery   # Artillery suite (plain Node, no server or browser)
 npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
+npm run test:fling          # Fling suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:wordrain       # Word Rain suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
@@ -131,7 +132,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-six exist so far. `test/everything_converter.mjs` drives
+Fifty-seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -424,6 +425,15 @@ lands on each place equally often and is not the longest or shortest statement m
 1-1-1-2-2-2-2-3-3-3 and spreads across files, a seed (and a date) is the same run for everyone, cases already seen are dealt last,
 saves trust nothing, and what a language model sends back is refused unless it is two truths, one lie and a correction. Run it
 after touching `BANK` (every new lie must be about as long as its truths) or the dealing.
+
+`test/fling.mjs` runs the DOM-free `<script id="core">` and `<script id="levels">` blocks of `games/fling.html` (Fling), a slingshot
+physics game whose promises are that a level stands until the first bird, that every level can be won, and that the dots show where
+the bird goes: stacks stand and sleep, every level is free of overlaps and holds still for six seconds, a throw is the same throw
+every time (and a clone carries on move for move), pull, power, abilities, kegs and the score are checked against what the events
+paid, the aim dots follow a real flight, and a bot that tries a grid of pulls on a copy of the world must win and earn two stars on
+five levels (`bots --all`: all twenty, about three minutes). The `page` suite loads the real page in Chromium on a desktop and a
+phone: no console errors through a pointer pull-and-release, and the old page's saved stars carry over. Run it after touching the
+physics, a level or a number in the core.
 
 `test/hot_seat.mjs` runs the DOM-free `<script id="core">` block of `games/who_wants_to_be_a_millionaire.html` (Hot Seat), a
 fifteen-rung quiz whose promises are money and fairness: a safe rung really is safe and a walk or a miss pays exactly what the ladder
