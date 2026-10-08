@@ -66,6 +66,14 @@ if (suites.includes('physics')) {
     const w = empty([], items); run(w, 8);
     check(Math.max(...dyn(w).map(b => Math.abs(b.x - 12))) < .02 && w.score === 0, 'a column of four stone posts stands', `score=${w.score}`);
   }
+  { // a toad that is sliding or rolling along the floor slows down and stops, it does not roll off the level
+    for (const v of [4, 10, 18]) {
+      const w = empty([], [['toad', 8, 0, .5]]); const b = dyn(w)[0]; run(w, 1); b.vx = v; b.awake = true; run(w, 8);
+      check(Math.abs(b.vx) < .2 && b.x - (8 - FL.LEAD) < v * .9 + .5, `a toad pushed along the floor at ${v} m/s comes to rest`, `vx=${b.vx.toFixed(2)} travelled ${(b.x - (8 - FL.LEAD)).toFixed(1)} m`);
+    }
+    const w = empty(['finch'], []); const bd = FL.launch(w, -1.5, -.2); run(w, 12);
+    check(!w.active.length, 'a finch that lands and rolls is gone within twelve seconds');
+  }
   { // determinism: same level, same pull, same everything
     const sig = () => { const w = FL.createWorld(FL.LEVELS[2]); run(w, 1); FL.launch(w, -1.7, -1); run(w, 6); return dyn(w).map(b => [b.id, b.x.toFixed(6), b.y.toFixed(6), b.a.toFixed(6)].join(':')).join('|') + '|' + w.score; };
     check(sig() === sig(), 'a throw is the same throw every time');
