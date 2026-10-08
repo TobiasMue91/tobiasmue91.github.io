@@ -391,9 +391,9 @@ const S = {
       await p.evaluate(() => document.querySelector('#tree .node').dispatchEvent(new MouseEvent('click', { bubbles: true }))); await p.waitForTimeout(350);
       check(await p.evaluate(() => document.getElementById('sheet').classList.contains('open')) && /Wick/.test(await p.textContent('#sheetName')), 'a star opens its sheet');
       await p.click('#buy'); const s2 = await sv(p);
-      check(s2.levels.wick === 1 && s2.lumen === 5000 - 1000, 'lighting a star costs what it says', JSON.stringify([s2.levels, s2.lumen]));
+      check(s2.levels.wick === 1 && s2.lumen === 5000 - WR.cost('wick', 0), 'lighting a star costs what it says', JSON.stringify([s2.levels, s2.lumen]));
       await p.click('#buymax'); const s3 = await sv(p);
-      check(s3.levels.wick > 1 && s3.lumen < 5000 - 1000 && s3.lumen >= 0, 'Max buys every level it can afford', JSON.stringify([s3.levels, s3.lumen]));
+      check(s3.levels.wick > 1 && s3.lumen < 5000 - WR.cost('wick', 0) && s3.lumen >= 0, 'Max buys every level it can afford', JSON.stringify([s3.levels, s3.lumen]));
       await p.evaluate(() => document.querySelectorAll('#tree .node')[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))); await p.waitForTimeout(250);
       await p.evaluate(() => { const n = [...document.querySelectorAll('#tree .node')].find(x => /Lucky bell/.test(x.textContent)); n.dispatchEvent(new MouseEvent('click', { bubbles: true })); }); await p.waitForTimeout(250);
       check(await p.evaluate(() => document.getElementById('buy').disabled), 'a star whose requirements are unmet cannot be lit');
@@ -439,7 +439,7 @@ const S = {
     { const { ctx, p } = await open({ v3: { ...S3(), lumen: 'lots', levels: { wick: 99, nope: 5, bell: -3 }, stars: -5, dawns: 'x', district: 7, startWave: 'q' } });
       const m = await sv(p); check(m.lumen === 0 && m.levels.wick === 12 && !m.levels.nope && !m.levels.bell && m.stars === 0 && m.dawns === 0 && m.district === 0 && m.startWave === 1, 'a save that lies is clamped', JSON.stringify(m)); await ctx.close(); }
     { const { ctx, p } = await open({ v3: S3({ lumen: 50, nights: 2 }) });
-      await p.click('#reset'); await p.click('#reset'); await p.waitForTimeout(400); const m = await sv(p); check(m.lumen === 0 && m.nights === 0, 'Start over, asked twice, erases the town'); await ctx.close(); }
+      await p.click('#reset'); await p.click('#reset'); await p.waitForTimeout(400); const m = await sv(p); check(m.lumen === 0 && m.nights === 0, 'Start over, asked twice, erases the town', JSON.stringify(m)); await ctx.close(); }
 
     // a phone: tapping the on-screen keys types the word, and the workshop fits
     { const { ctx, p } = await open(undefined, { phone: true });
