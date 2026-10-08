@@ -523,6 +523,8 @@ const ART = (() => {
     { name: 'Dusk', skyTop: '#5f4a8b', skyBot: '#ffb98f', sun: '#ffe3a6', sunRay: '#ffc98c', hills: ['#c0799c', '#8a4f80', '#55356a'], grass: '#9aa653', grassDark: '#7b8a40', soil: '#7a4f55', soil2: '#5c3a45', cloud: '#ffd9c2', snow: false },
     { name: 'Frost', skyTop: '#9cc4ec', skyBot: '#f3f8fc', sun: '#ffffff', sunRay: '#eaf3fb', hills: ['#d6e6f3', '#a9c6e0', '#7ea3cc'], grass: '#f6fcff', grassDark: '#d3e6f3', soil: '#8398b3', soil2: '#667c99', cloud: '#ffffff', snow: true }
   ];
+  // a stable pseudo-random number for an integer cell, so scenery is a function of where it is in the world, never of the screen
+  const hash = (k, s) => { const x = Math.sin(k * 127.1 + (s || 0) * 311.7 + 17.3) * 43758.5453; return x - Math.floor(x); };
   const SP = 80; // sprite pixels per metre
   const cache = new Map();
   function rnd(seed) { let s = seed >>> 0 || 1; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
@@ -713,16 +715,16 @@ const ART = (() => {
   }
 
   // ---------- background ----------
-  function ridge(ctx, W, groundY, camX, ppm, par, amp, base, seed, color, edge) {
-    const r = rnd(seed), ph = [r() * 6, r() * 6, r() * 6];
-    ctx.beginPath(); ctx.moveTo(0, groundY + 4);
-    const step = 14, off = camX * ppm * par;
-    for (let x = 0; x <= W + step; x += step) {
-      const u = (x + off) / ppm;
-      const y = base - amp * (.55 + .28 * Math.sin(u * .21 + ph[0]) + .17 * Math.sin(u * .53 + ph[1]) + .08 * Math.sin(u * 1.3 + ph[2]));
-      ctx.lineTo(x, y + (((x / step) | 0) % 2 ? 2.5 : -2.5));
+  // Every layer sits at a depth: par 0 stays on the screen, par 1 moves with the ground. Its vertices live on a fixed
+  // grid in the layer's own space, so the outline slides rigidly instead of being re-sampled under the camera.
+  function ridge(ctx, W, groundY, camX, ppm, par, amp, base, seed, color) {
+    const r = rnd(seed), ph = [r() * 6, r() * 6, r() * 6], step = .6, lx = camX * par, span = W / ppm;
+    ctx.beginPath(); ctx.moveTo(-20, groundY + 4);
+    for (let k = Math.floor(lx / step) - 1; k * step < lx + span + step * 2; k++) {
+      const u = k * step, y = base - amp * (.55 + .28 * Math.sin(u * .21 + ph[0]) + .17 * Math.sin(u * .53 + ph[1]) + .08 * Math.sin(u * 1.3 + ph[2]));
+      ctx.lineTo((u - lx) * ppm, y + (hash(k, seed) - .5) * 5);
     }
-    ctx.lineTo(W + step, groundY + 4); ctx.closePath();
+    ctx.lineTo(W + 20, groundY + 4); ctx.closePath();
     ctx.save(); ctx.translate(7, 6); ctx.fillStyle = 'rgba(43,29,56,.14)'; ctx.fill(); ctx.restore();
     ctx.fillStyle = color; ctx.fill();
     ctx.strokeStyle = '#fff6e3'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round'; ctx.stroke();
@@ -742,18 +744,17 @@ const ART = (() => {
       ctx.restore();
       ctx.fillStyle = pass ? P.sun : 'rgba(43,29,56,.14)'; ctx.beginPath(); ctx.arc(sx + (pass ? 0 : 5), sy + (pass ? 0 : 6), ppm * .9, 0, 7); ctx.fill();
     }
-    // clouds
-    const cr = rnd(5);
+    // clouds: far away, so they barely follow the camera; they drift on their own and wrap while fully off screen
     for (let i = 0; i < 4; i++) {
-      const cw = Math.min(ppm * (2.5 + cr() * 2.5), W * .26); let cx = ((cr() * 60 * ppm + t * ppm * .25 * (.5 + cr())) % (W + cw * 2) + (W + cw * 2)) % (W + cw * 2) - cw, cy = Math.max(100 + i * 12, gy - ppm * (13 + cr() * 7));
-      ctx.globalAlpha = .75;
-      if (Math.abs(cx + cw * .45 - sx) < cw * .6 + ppm * 2.6 && Math.abs(cy - sy) < ppm * 3.4) cx += W * .45;
-      cloud(ctx, cx, cy, cw, P.cloud); ctx.globalAlpha = 1;
+      const cw = Math.min(ppm * (2.5 + hash(i, 1) * 2.5), W * .26), span = W + cw * 2.6;
+      const s = hash(i, 2) * 60 * ppm + t * ppm * .25 * (.5 + hash(i, 3)) - v.camX * ppm * .05;
+      const cx = ((s % span) + span) % span - cw * 1.3, cy = Math.max(100 + i * 12, gy - ppm * (13 + hash(i, 4) * 7));
+      ctx.globalAlpha = .75; cloud(ctx, cx, cy, cw, P.cloud); ctx.globalAlpha = 1;
     }
     const hb = gy - ppm * .3;
-    ridge(ctx, W, gy, v.camX, ppm, 0, ppm * 8.5, hb, 11, P.hills[0], 'rgba(255,255,255,.35)');
-    ridge(ctx, W, gy, v.camX, ppm, 0, ppm * 5.2, hb, 23, P.hills[1], 'rgba(255,255,255,.3)');
-    ridge(ctx, W, gy, v.camX, ppm, 0, ppm * 2.6, hb, 37, P.hills[2], 'rgba(255,255,255,.25)');
+    ridge(ctx, W, gy, v.camX, ppm, .05, ppm * 8.5, hb, 11, P.hills[0]);
+    ridge(ctx, W, gy, v.camX, ppm, .1, ppm * 5.2, hb, 23, P.hills[1]);
+    ridge(ctx, W, gy, v.camX, ppm, .18, ppm * 2.6, hb, 37, P.hills[2]);
   }
   function cloud(ctx, x, y, w, col) {
     ctx.save(); ctx.translate(x, y);
@@ -766,19 +767,21 @@ const ART = (() => {
     }
     ctx.restore();
   }
-  function drawGround(ctx, v, wi, worldW) {
-    const P = WORLDS[wi], gy = v.groundY, ppm = v.ppm, W = v.W, H = v.H;
+  // The soil moves 1:1 with the world. Its pebbles and its torn grass lip are placed per world cell, so nothing is
+  // re-rolled as the camera slides.
+  function drawGround(ctx, v, wi) {
+    const P = WORLDS[wi], gy = v.groundY, ppm = v.ppm, W = v.W, H = v.H, cam = v.camX, span = W / ppm;
     ctx.fillStyle = P.soil; ctx.fillRect(0, gy, W, H - gy);
     ctx.fillStyle = P.soil2; ctx.fillRect(0, gy + ppm * 1.3, W, H);
-    // pebbles
-    const r = rnd(99); ctx.fillStyle = 'rgba(43,29,56,.12)';
-    const off = 0; // the backdrop and the soil stay put; only the things on them move
-    for (let i = 0; i < 70; i++) { const px = ((r() * 140 * ppm - off) % (W + 40) + W + 40) % (W + 40) - 20, py = gy + ppm * (.5 + r() * 6); ctx.beginPath(); ctx.ellipse(px, py, ppm * (.1 + r() * .18), ppm * (.07 + r() * .1), 0, 0, 7); ctx.fill(); }
-    // torn grass lip
-    ctx.fillStyle = P.grassDark; ctx.beginPath(); ctx.moveTo(0, gy + ppm * .42);
-    const r2 = rnd(7); for (let x = 0; x <= W + 20; x += 18) { const u = Math.floor((x + off) / 18); const rr2 = rnd(u * 131 + 7); ctx.lineTo(x, gy + ppm * (.42 + rr2() * .18)); }
-    ctx.lineTo(W + 20, gy - 2); ctx.lineTo(0, gy - 2); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(43,29,56,.22)'; ctx.fillRect(0, gy + 2, W, ppm * .5);
+    ctx.fillStyle = 'rgba(43,29,56,.12)';
+    for (let c = Math.floor(cam / 3) - 1; c * 3 < cam + span + 3; c++) for (let i = 0; i < 3; i++) {
+      const wx = (c + hash(c, i * 5 + 1)) * 3, px = (wx - cam) * ppm, py = gy + ppm * (.6 + hash(c, i * 5 + 2) * 6.4);
+      ctx.beginPath(); ctx.ellipse(px, py, ppm * (.1 + hash(c, i * 5 + 3) * .18), ppm * (.07 + hash(c, i * 5 + 4) * .1), 0, 0, 7); ctx.fill();
+    }
+    // the grass lip hangs from the ground line in torn tufts
+    const step = .5; ctx.fillStyle = P.grassDark; ctx.beginPath(); ctx.moveTo(-10, gy - 2);
+    for (let k = Math.floor(cam / step) - 1; k * step < cam + span + step * 2; k++) ctx.lineTo((k * step - cam) * ppm, gy + ppm * (.4 + hash(k, 9) * .16));
+    ctx.lineTo(W + 10, gy - 2); ctx.closePath(); ctx.fill();
     ctx.fillStyle = P.grass; ctx.fillRect(0, gy - 2, W, ppm * .3);
     ctx.fillStyle = '#fff6e3'; ctx.fillRect(0, gy - 5, W, 4);
   }
@@ -795,10 +798,9 @@ const ART = (() => {
     if (front) { g.strokeStyle = 'rgba(255,255,255,.3)'; g.lineWidth = .04; g.beginPath(); g.moveTo(-.09, -.2); g.lineTo(-.06, -1.5); g.stroke(); }
   }
   function drawForeground(ctx, v, wi) {
-    const P = WORLDS[wi], ppm = v.ppm, gy = v.groundY, W = v.W, H = v.H, off = 0;
-    const r = rnd(321);
-    for (let i = 0; i < 26; i++) { // rounded rocks and roots sunk into the soil, nearest layer, slightly out of focus in value
-      const wx = r() * 90 * ppm, x = ((wx - off) % (W + 160) + W + 160) % (W + 160) - 80, y = gy + ppm * (2.4 + r() * 2.2), rw = ppm * (.3 + r() * .5);
+    const ppm = v.ppm, gy = v.groundY, W = v.W, cam = v.camX, span = W / ppm;
+    for (let c = Math.floor(cam / 5) - 1; c * 5 < cam + span + 5; c++) for (let i = 0; i < 2; i++) { // rocks sunk into the soil
+      const x = ((c + hash(c, i + 40)) * 5 - cam) * ppm, y = gy + ppm * (2.4 + hash(c, i + 50) * 2.2), rw = ppm * (.3 + hash(c, i + 60) * .5);
       ctx.fillStyle = 'rgba(43,29,56,.2)'; ctx.beginPath(); ctx.ellipse(x, y, rw, rw * .62, 0, 0, 7); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.ellipse(x - rw * .2, y - rw * .22, rw * .55, rw * .22, 0, 0, 7); ctx.fill();
     }
