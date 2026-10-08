@@ -226,7 +226,7 @@ h1 em{font-style:italic;color:var(--lamp);text-shadow:0 0 28px rgba(255,191,71,.
   <div class="screen" id="shop">
    <div id="shophead"><div class="hb"><span class="big" id="shopLumen"></span><span class="sub" id="shopRate"></span></div><div class="hb end"><span class="big star" id="shopStars"></span><span class="sub" id="shopStarSub"></span></div></div>
    <div id="shopscroll"><button id="nextline" class="nextline"></button><div id="shopopts"><div id="districts"></div><div id="startrow"><button class="ib sm" id="swDown" aria-label="Start one wave earlier">‹</button><span id="swLabel">Begin at wave 1</span><button class="ib sm" id="swUp" aria-label="Start one wave later">›</button></div></div><p id="shophint">Tap a star to light it. Lumen is what the lamp earns you.</p><svg id="tree" viewBox="0 0 400 650" role="group" aria-label="Upgrades"></svg></div>
-   <div id="shopbar"><div id="sun"><div class="sunmain"><div id="suntext"></div><div class="bars"><div class="bar2"><span>Lumen <b id="sunLt"></b></span><div class="bb"><i id="sunLumen"></i></div></div><div class="bar2"><span>Depth <b id="sunWt"></b></span><div class="bb"><i id="sunWave"></i></div></div></div></div><button class="btn gold small" id="sunGo">Greet the dawn</button></div><div class="acts"><button class="link" id="shopBack">Title</button><button class="btn small ghost" id="cheap">Light the cheapest</button><button class="btn" id="shopGo">Begin the night</button></div></div>
+   <div id="shopbar"><div id="sun"><div class="sunmain"><div id="suntext"></div><div class="bars"><div class="bar2"><span>Lumen <b id="sunLt"></b></span><div class="bb"><i id="sunLumen"></i></div></div><div class="bar2"><span>Depth <b id="sunWt"></b></span><div class="bb"><i id="sunWave"></i></div></div></div></div><button class="btn gold small" id="sunGo">Greet the dawn</button></div><div class="acts"><button class="btn small ghost" id="shopBack">Title</button><button class="btn small ghost" id="cheap">Light the cheapest</button><button class="btn" id="shopGo">Begin the night</button></div></div>
    <div id="sheet"><button class="x" id="sheetX" aria-label="Close">×</button><div id="sheetBranch"></div><h3 id="sheetName"></h3><p id="sheetNow"></p><p id="sheetNext"></p><p id="sheetReq"></p><div class="row"><button class="btn small" id="buy">Light it</button><button class="btn small ghost" id="buymax">Max</button></div></div>
   </div>
   <div class="screen" id="dawn"><div id="dawnsky"></div><h2 id="dawnhead">Dawn breaks</h2><p class="tag" id="dawntext"></p><div id="dawnstats"></div><button class="btn gold" id="dawnyes">Greet the dawn</button><button class="btn ghost" id="dawnno">Keep upgrading</button></div>
@@ -647,9 +647,10 @@ function audioInit() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
-    master = AC.createGain(); master.gain.value = save.mute ? 0 : 0.9; master.connect(AC.destination);
-    const len = AC.sampleRate * 2, buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0);
-    let b = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b = 0.97 * b + 0.03 * w; d[i] = (w * 0.5 + b * 6) * 0.6; }
+    master = AC.createGain(); master.gain.setValueAtTime(0, AC.currentTime); master.gain.linearRampToValueAtTime(save.mute ? 0 : 0.9, AC.currentTime + 0.2); master.connect(AC.destination);
+    const len = AC.sampleRate * 3, fade = Math.floor(AC.sampleRate * .25), buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0), x = new Float32Array(len + fade);
+    let b = 0, pk = 0; for (let i = 0; i < len + fade + 4000; i++) { const w = Math.random() * 2 - 1; b = 0.97 * b + 0.03 * w; if (i >= 4000) { x[i - 4000] = w * 0.5 + b * 6; pk = Math.max(pk, Math.abs(x[i - 4000])); } }
+    for (let i = 0; i < len; i++) d[i] = (i < fade ? x[i] * (i / fade) + x[len + i] * (1 - i / fade) : x[i]) * (0.6 / Math.max(1, pk));
     const src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
     const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 0.5;
     rainLP = AC.createBiquadFilter(); rainLP.type = 'lowpass'; rainLP.frequency.value = 9000;
@@ -694,11 +695,12 @@ const sfx = {
 function setRain(level, muffled) {
   if (!AC) return;
   const t = AC.currentTime;
-  rainGain.gain.cancelScheduledValues(t); rainGain.gain.linearRampToValueAtTime(level, t + 0.4);
-  rainLP.frequency.cancelScheduledValues(t); rainLP.frequency.linearRampToValueAtTime(muffled ? 450 : 9000, t + 0.3);
+  const g = rainGain.gain, f = rainLP.frequency, gv = g.value, fv = f.value;
+  g.cancelScheduledValues(t); g.setValueAtTime(gv, t); g.linearRampToValueAtTime(level, t + 0.4);
+  f.cancelScheduledValues(t); f.setValueAtTime(fv, t); f.linearRampToValueAtTime(muffled ? 450 : 9000, t + 0.3);
 }
 function applyMute() {
-  if (master) master.gain.value = save.mute ? 0 : 0.9;
+  if (master) { const t = AC.currentTime; master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(master.gain.value, t); master.gain.linearRampToValueAtTime(save.mute ? 0 : 0.9, t + 0.1); }
   $('wv').style.display = save.mute ? 'none' : '';
   $('mute').setAttribute('aria-pressed', String(save.mute));
 }
