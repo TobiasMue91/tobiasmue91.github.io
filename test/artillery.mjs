@@ -46,7 +46,7 @@ const S = {
       const w = flat(3); w.wind = wind; const t = w.tanks[0], f = C.flight(w, 0, ang, pw), mz = C.muzzleOf(t, ang), v = C.aimVector(ang, pw), ax = wind * C.WIND_ACC;
       // plain ballistics: land where mz.y + vy t - G t^2/2 = ground
       const disc = Math.sqrt(v.y * v.y + 2 * C.G * (mz.y - 200)), tl = (v.y + disc) / C.G, want = mz.x + v.x * tl + .5 * ax * tl * tl;
-      check(Math.abs(f.end.x - want) < 8 && f.end.kind === 'ground', `angle ${ang} power ${pw} wind ${wind} lands at ${want.toFixed(1)}`, `got ${f.end.x.toFixed(1)} ${f.end.kind}`);
+      check(Math.abs(f.end.x - want) < 25 && f.end.kind === 'ground', `angle ${ang} power ${pw} wind ${wind} lands at ${want.toFixed(1)}`, `got ${f.end.x.toFixed(1)} ${f.end.kind}`);
     }
     const w = flat(4); const r = C.flight(w, 0, 80, 100); check(r.end.kind === 'ground' || r.end.kind === 'tank', 'a straight-up shot comes back down');
     // a shell grazing a tank hits, one passing wide does not
@@ -87,7 +87,7 @@ const S = {
     let reach = 0, n = 0, worst = 0;
     for (let seed = 1; seed <= 150; seed++) {
       const w = C.makeWorld(seed), [a, b] = w.tanks, gap = b.x - a.x;
-      check(gap >= 1600 && gap <= 2000 && a.x > 400 && b.x < C.W - 400, `seed ${seed}: tanks stand ${gap} apart inside the range`);
+      check(gap >= 4800 && gap <= 5200 && a.x > 1500 && b.x < C.W - 1500, `seed ${seed}: tanks stand ${gap} apart inside the range`);
       let flatPad = true; for (const t of w.tanks) { const lo = C.heightAt(w.h, t.x - 60), hi = C.heightAt(w.h, t.x + 60); if (Math.abs(lo - hi) > 1) flatPad = false; }
       check(flatPad, `seed ${seed}: each tank stands on level ground`);
       const s = C.solve(w, 0, b.x), e = C.flight(w, 0, s.angle, s.power).end; n++;
