@@ -465,8 +465,8 @@ first letter; scoring and the multiplier against a separate tally; every lever (
 blast against brute force, thunder, gilded, charm) moves exactly the number it names; the upgrade tree has real prices, real
 requirements and no cycles, and a save that lies is clamped; helpers type at their stated speed, take only what their role says, never
 touch frost, blast, thunder, gilded or charm words or the player's own word, and a maxed town with nobody typing still falls before the
-first Dawn's depth while a typist beside it goes far beyond; districts, bursts, a seed that deals the same storm at 30 and 120 fps; time
-away pays only with helpers, never past the night shift's hours, and a small share of an hour of play; and `career` plays the whole game
+first Dawn's depth while a typist beside it goes far beyond, and a fully built town with every ceiling raised still cannot be played for ever; districts, bursts, a seed that deals the same storm at 30 and 120 fps; time
+away pays only with helpers, never past the night shift's hours, and a small share of an hour of play; `ladder` plays bots at real typing speeds (the CHI 2018 study of 136 million keystrokes: average 40 to 52 wpm, the fastest 5 % above 80) and wants a 25 wpm night to end in under three and a half minutes in wave 3 to 7, an average typist beaten by wave 7 to 10 inside five minutes, a 100 wpm typist beaten by wave 14, the first wave paying for the first star, and a handful of early stars buying two more waves; and `career` plays the whole game
 with a person-paced bot (it buys the cheapest star, starts three waves under its best, ends each night after ten minutes) and wants the
 first Dawn at about an hour, later eras no shorter, faster typists sooner but a slow one not shut out. `page` (Playwright's Chromium,
 skipped without it) plays a first night with real keys, buys stars, banks a paused night once, greets a Dawn, pays a night away, migrates
