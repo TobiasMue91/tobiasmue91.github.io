@@ -10,7 +10,7 @@
 //   node test/alphabet.mjs rules daily      # named suites only
 //   node test/alphabet.mjs --page=path.html
 //
-// Suites: rules, keys, daily, ghost, ranks, share, save, bots, page (needs Playwright's Chromium; skipped without it).
+// Suites: rules, keys, daily, ghost, ranks, share, save, history, bots, page (needs Playwright's Chromium; skipped without it).
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -21,7 +21,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const a = args.find(x => x.startsWith(`--${name}=`)); return a ? a.split('=')[1] : dflt; };
 const PAGE = opt('page', join(HERE, '..', 'games', 'alphabet.html'));
-const ALL = ['rules', 'keys', 'daily', 'ghost', 'ranks', 'share', 'save', 'bots', 'page'];
+const ALL = ['rules', 'keys', 'daily', 'ghost', 'ranks', 'share', 'save', 'history', 'bots', 'page'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -205,6 +205,45 @@ if (suites.includes('save')) {
   const round = Z.clean(JSON.parse(JSON.stringify(s))); check(JSON.stringify(round) === JSON.stringify(s), 'a save survives a round trip through JSON unchanged');
 }
 
+if (suites.includes('history')) {
+  section('history');
+  const mk = (mode, time, key = null, slips = 0) => { const c = Array.from({length: 26}, (_, i) => i * time / 25); return {mode, key, time: c[25], cum: c, splits: [], slips, seq: ''}; };
+  let s = Z.blank();
+  check(s.hist.az.length === 0 && s.hist.za.length === 0 && s.hist.daily.length === 0, 'a new save has no history');
+  Z.record(s, mk('az', 9), '2026-10-01'); Z.record(s, mk('az', 8.5, null, 2), '2026-10-02'); Z.record(s, mk('za', 14), '2026-10-02'); Z.record(s, mk('daily', 20, '2026-10-02'), '2026-10-02');
+  check(s.hist.az.length === 2 && s.hist.az[0].t === 9 && s.hist.az[1].t === 8.5 && s.hist.az[1].s === 2 && s.hist.az[1].at === '2026-10-02', 'every finished run is kept, oldest first, with its day and slips');
+  check(s.hist.za.length === 1 && s.hist.daily.length === 1, 'each board keeps its own history');
+  Z.record(s, mk('az', 12), '2026-10-03');
+  check(s.hist.az.length === 3 && Z.bestFor(s, 'az').time === 8.5, 'a slower run is in the history but is not the best');
+  for (let i = 0; i < 300; i++) Z.record(s, mk('az', 7 + (i % 5) / 10), '2026-10-04');
+  check(s.hist.az.length === Z.MAX_HIST && s.hist.az[s.hist.az.length - 1].t === 7.4 && s.runs === 305, 'the history keeps the newest runs and drops the oldest, the run count keeps counting', String(s.runs));
+  const round = Z.clean(JSON.parse(JSON.stringify(s)));
+  check(round.hist.az.length === Z.MAX_HIST && round.hist.daily.length === 1 && JSON.stringify(round.hist) === JSON.stringify(s.hist), 'a history survives a round trip through storage unchanged');
+  const hostile = Z.clean({hist: {az: [null, 5, 'x', {t: 'a'}, {t: -3}, {t: 0.2}, {t: 1e999}, {t: 9, at: 'nonsense', s: -4}, {t: 8, at: '2026-10-01', s: 2.6}, {t: 7}], za: 'no', daily: {0: 1}}});
+  check(hostile.hist.az.length === 3 && hostile.hist.az[0].at === '' && hostile.hist.az[0].s === 0 && hostile.hist.az[1].s === 3 && hostile.hist.za.length === 0 && hostile.hist.daily.length === 0, 'a hostile history keeps only real runs and cleans each', JSON.stringify(hostile.hist));
+  check(Z.clean({hist: 5}).hist.az.length === 0 && Z.clean({hist: {az: new Array(500).fill({t: 9})}}).hist.az.length === Z.MAX_HIST, 'a history of the wrong shape is empty, an oversized one is trimmed');
+
+  const hist = t => t.map((v, i) => ({t: v, at: '', s: 0}));
+  let st = Z.stats([]);
+  check(st.runs === 0 && st.best === null && st.avg10 === null && st.change === null, 'no runs, no statistics');
+  st = Z.stats(hist([10, 8, 9]));
+  check(st.runs === 3 && st.best === 8 && Math.abs(st.avg10 - 9) < 1e-9 && st.change === null, 'a few runs have a best and an average but no trend yet');
+  const climb = Array.from({length: 20}, (_, i) => 12 - i * 0.2);
+  st = Z.stats(hist(climb));
+  const last10 = climb.slice(10), prev10 = climb.slice(0, 10), m = a => a.reduce((x, y) => x + y) / a.length;
+  check(Math.abs(st.avg10 - m(last10)) < 1e-9 && Math.abs(st.prev10 - m(prev10)) < 1e-9 && Math.abs(st.change - (m(last10) - m(prev10))) < 1e-9 && st.change < 0, 'the last ten against the ten before: a negative change is a faster player');
+  check(Z.stats(hist([9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9])).change === null && Z.stats(hist([9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9])).change === 0, 'with fewer than three runs before the last ten there is no trend to claim');
+  const sr = Z.series(hist([9, 10, 8, 8.5, 7, 12]), 3);
+  check(sr.best.join() === '9,9,8,8,7,7' && sr.best.every((v, i) => i === 0 || v <= sr.best[i - 1]), 'best-so-far only ever falls');
+  check(Math.abs(sr.avg[2] - 9) < 1e-9 && Math.abs(sr.avg[0] - 9) < 1e-9 && Math.abs(sr.avg[5] - (8.5 + 7 + 12) / 3) < 1e-9 && sr.avg.length === 6, 'the rolling average looks back over the window and no further');
+
+  // the old page's list of attempts (newest first, in milliseconds) becomes a Forward history, oldest first
+  const oldList = [{timestamp: Date.UTC(2026, 5, 3, 12), totalTime: 7100, attemptNumber: 3}, {timestamp: Date.UTC(2026, 5, 2, 12), totalTime: 8300}, {timestamp: Date.UTC(2026, 5, 1, 12), totalTime: 9900}, {totalTime: 'x'}, null, {timestamp: 1, totalTime: 400}];
+  const old = Z.fromOld(k => k === 'totalHistory' ? JSON.stringify(oldList) : null);
+  check(old && old.hist.az.map(e => e.t).join() === '9.9,8.3,7.1' && /^2026-06-0\d$/.test(old.hist.az[0].at) && old.hist.az[2].t === 7.1, 'the old attempts carry over as a history, oldest first, dropping what is not a time');
+  check(Z.fromOld(k => k === 'totalHistory' ? '{{' : null) === null && Z.fromOld(k => k === 'totalHistory' ? '[]' : null) === null, 'an unreadable or empty old list is nothing to carry over');
+}
+
 if (suites.includes('bots')) {
   section('bots');
   // A typist: time per key is thinking time plus travel, with noise and the odd slip. Thinking is short for the
@@ -272,8 +311,16 @@ if (suites.includes('page')) {
     check(await p.locator('.sheet').isVisible(), 'the results sheet is up');
     const best = await p.evaluate(() => JSON.parse(localStorage.getItem('gptgames.alphabet.v2')).best.az);
     check(best && best.time > 0 && best.cum.length === 26, 'the best is saved with its ghost');
+    const hist1 = await p.evaluate(() => JSON.parse(localStorage.getItem('gptgames.alphabet.v2')).hist.az);
+    check(hist1.length === 1 && hist1[0].t > 0, 'the finished run is in the history');
+    check(await p.locator('#hchart svg').count() === 1 && /Your first run/.test(await p.locator('#trend').textContent()), 'the results sheet draws the history and says it is the first run');
     await p.keyboard.press('Enter'); await p.waitForTimeout(300);
     check(await state(p) === 'ready', 'Enter plays again');
+    await p.click('#hist'); await p.waitForTimeout(500);
+    check(await p.locator('.sheet.history').isVisible() && (await p.locator('.stats').textContent()).includes('1'), 'the History button opens the history with the run count');
+    await p.keyboard.press('a'); check(await state(p) === 'ready', 'keys do nothing while the history is open');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+    check(!(await p.locator('.sheet.history').isVisible()), 'Escape closes the history');
     await p.keyboard.press('a'); await p.keyboard.press('Escape'); await p.waitForTimeout(100);
     check(await state(p) === 'ready', 'Escape abandons a run');
     await c.close();

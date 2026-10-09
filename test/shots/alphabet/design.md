@@ -27,14 +27,23 @@ the layout, so the page draws its own QWERTY, takes taps on `pointerdown`, and g
   stage dips 3 px, the sheet slides up and the rank is stamped on it (scale 1.5 to 1, a rubber stamp).
 - **Sound: an ascent.** The alphabet goes up, so pitch is progress: every right key is the next note of a rising major scale
   (G3 to D7, 26 notes) with a typebar tick; a miss is a dull thock that breaks the climb; Z resolves V to I in a chord.
-- **Results are a rhythm strip.** 25 bars, the time between each pair of keys, the slowest letter marked in red, an average
-  line, and tapping a bar names it. That is the whole teaching: you see that Q to R cost more than everything else.
+- **Results are about the overall time.** The clock stays up top with the gap to your best; under the rank stamp the main
+  picture is your history on this board: one dot per run, higher is faster, a blue step line for your best so far and a grey
+  line for the average of the last five, with one sentence under it ("Last 10 average 7.83 s, 2.30 s faster than the 10
+  before"). The old per-letter picture is demoted to a thin strip (tap a bar to read it) because the point is the time, not
+  the letter. The History button in the header shows the same chart for a board, bigger, with best, last-10 average and runs.
 
 ## The ladder
 Printer's Devil, Journeyman, Compositor, Foreman, Master Printer — print-shop ranks, so a rank is a stamp. Thresholds (A to Z:
 14, 9, 6, 4.2 s) were set against a typist model (thinking time plus finger travel on the same keyboard geometry) and the
 suite checks that novice, average, fast and elite bots land spread across them on every board. Reverse (x1.6) and Daily
 (x1.9) have longer ladders because every letter has to be found rather than recalled.
+
+## Added after the first review: history
+Feedback from the owner after the first PR: more focus on the overall time and less on the per-letter average, and a history
+so a player can see themselves improving. The `avg` line and the slowest-letter headline are gone from the results; the sheet
+now draws the history chart (`hist` in the save, newest 120 runs per board, oldest first), and a History button opens it any
+time between runs. The old page's list of attempts is carried over as the Forward history.
 
 ## How it was reviewed
 Static mockups went through six critic rounds (a fresh subagent each time, shown only screenshots, the one-line description and the

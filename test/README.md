@@ -1234,7 +1234,7 @@ generated again (the `levels` suite says so).
 ## Alphabet Typing Speed
 
 ```sh
-npm run test:alphabet            # or: node test/alphabet.mjs [rules keys daily ghost ranks share save bots page]
+npm run test:alphabet            # or: node test/alphabet.mjs [rules keys daily ghost ranks share save history bots page]
 ```
 
 `alphabet.mjs` runs the DOM-free `<script id="core">` block of `games/alphabet.html` in Node, and its `page` suite drives the real page in
@@ -1249,6 +1249,7 @@ Chromium (skipped without Playwright).
 | `ranks` | a faster time never ranks lower on any board, each rank starts exactly at its threshold, the gap to the next is what is left |
 | `share` | the strip has a bar per step, the slowest is the tallest, a Daily share gives nothing of the board away |
 | `save` | hostile stored values, ghosts that do not end at the time, bests only improve, daily bests belong to their day, streaks across month, leap-year and new-year, the old page's bests carry over |
+| `history` | every finished run is kept per board with its day and slips, trimmed to the newest 120, cleaned when hostile, the last ten against the ten before only claimed with enough runs, best-so-far only falls, the rolling average looks back no further than its window, the old page's attempts carry over |
 | `bots` | typists of four skills finish in order of skill on every board and spread across the ladder, mashing random keys does not finish |
 | `page` | desktop and phone: boot, wrong key, a whole run with real keys and with taps, Enter and Escape, no scroll, reduced motion with a lying save, no console errors |
 
