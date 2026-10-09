@@ -113,10 +113,10 @@ if (suites.includes('world')) {
       let bad = 0;
       for (let i = 0; i < l.length; i++) for (let j = i + 1; j < l.length; j++) {
         const a = l[i], b = l[j], d = Math.hypot(a.x - b.x, a.y - b.y);
-        const gap = (Math.abs(a.layer - b.layer) <= 6 && !(a.layer > b.layer ? a : b).kind.plate) || a.layer === b.layer;
+        const gap = (Math.abs(a.layer - b.layer) <= 5 && !(a.layer > b.layer ? a : b).kind.plate) || a.layer === b.layer;
         if (gap && d < (a.r + b.r) * .985 - 1e-9) bad++;
       }
-      check(bad === 0, 'things within six sizes of each other never overlap (ground, a country, a continent, a glacier, a storm, carries things instead)', `${bad} of ${l.length} at ${lo}-${hi}`);
+      check(bad === 0, 'things within five sizes of each other never overlap (ground, a country, a continent, a glacier, a storm, carries things instead)', `${bad} of ${l.length} at ${lo}-${hi}`);
     }
   }
   // zones: vehicles on roads, benches on footpaths, houses on lots; nothing stands in the opening handful

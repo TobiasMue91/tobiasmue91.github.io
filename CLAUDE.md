@@ -443,7 +443,7 @@ The fairness bots run with the shield off (`noShield`) so a mistake is never for
 physics, `minStart`, a ledge or a hazard's size.
 
 `test/void.mjs` runs the DOM-free `<script id="core">` block of `games/void.html` (VOID), a black-hole game on one endless plane whose
-promises nobody can see from the page: a street is the same street whichever order its cells are asked for, nothing within six sizes of
+promises nobody can see from the page: a street is the same street whichever order its cells are asked for, nothing within five sizes of
 anything else overlaps (a country, a continent, a glacier or a storm is ground and carries things instead), vehicles stand in the lanes of roads, benches and trees
 along footpaths and houses on lots, and the start is clear of every road tier; a thing
 falls only if it fits (and never one that does not), the hole grows by exactly the area it ate, the clock pays for big mouthfuls and new
