@@ -199,6 +199,12 @@ function tools() {
     w = fresh(); C.useTool(w, 'torch', comOf(w)[0], comOf(w)[1]); run(w, 1); const a = w.cash; C.useTool(w, 'torch', comOf(w)[0], comOf(w)[1]); ev = run(w, .3);
     check(count(ev, 'whiff') === 1, 'a second torch on a buddy already burning is a whiff, not a second payday');
 
+    // price order is power order: the torch costs more than the bomb, so one torch on him must pay more than one bomb on him and throw him clear
+    { const one = (id, dx) => { const w2 = fresh({width: 3.1}); w2.tools.torch = 1; const c2 = comOf(w2); C.useTool(w2, id, c2[0] + dx, id === 'bomb' ? .3 : c2[1]); let top2 = 0; for (let t = 0; t < 14; t += DT) { C.tick(w2); top2 = Math.max(top2, comOf(w2)[1]); w2.events.length = 0; } return {cash: w2.cash, top: top2}; };
+      const torchR = one('torch', -.1), bombR = one('bomb', -.1);
+      check(torchR.cash > bombR.cash * 1.2, 'the torch (the dearer toy) pays at least a fifth more than a bomb per use', `torch $${torchR.cash} vs bomb $${bombR.cash}`);
+      check(torchR.top > 2.5, 'and its whoosh throws him clear, not just alight', 'top ' + f2(torchR.top)); }
+
     // anvil: lands where tapped, and only hurts what is underneath
     w = fresh({width: 14}); C.useTool(w, 'anvil', 2, 1); ev = run(w, 2.5);
     check(count(ev, 'thump') === 1 && count(ev, 'hit') === 0, 'an anvil dropped on empty floor makes a thump and no money');
@@ -310,6 +316,8 @@ function saves() {
     const w = C.create({width: 3.5, seed: 1, save: {cash: 321, tools: {mallet: 1}, skin: 'dummy', best: 7.5}});
     const back = C.sanitize(JSON.parse(JSON.stringify(C.exportSave(w))));
     check(back.cash === 321 && back.tools.mallet === 1 && back.best === 7.5, 'a save written and read back is the same save');
+    check(C.sanitize({vol: 7}).vol === 1 && C.sanitize({vol: -1}).vol === 0 && C.sanitize({vol: 'loud'}).vol === .6 && C.sanitize({}).vol === .6, 'volume is clamped to 0..1 and a liar gets the default');
+    check(C.exportSave(C.create({width: 3.5, seed: 1, save: {vol: .25}})).vol === .25, 'a chosen volume is kept in the file');
     const w2 = C.create({width: 3.5, seed: 1}); w2.cash = 123.9; check(C.exportSave(w2).cash === 123, 'cash is whole dollars in the file');
 }
 
@@ -395,6 +403,25 @@ async function page() {
         check(s.skin === 'sack' && s.cash === 50, `${name}: a skin is bought and worn`, JSON.stringify([s.skin, s.cash]));
         check(errs.length === 0, `${name}: no console errors through a purchase and a skin`, errs.join(' | '));
         await ctx.close();
+    }
+    // the camera never loses him: whatever sends him up, the head stays on screen on every frame
+    for (const [name, opt] of [['phone', {viewport: {width: 390, height: 844}, hasTouch: true, isMobile: true}], ['desktop', {viewport: {width: 1280, height: 720}}]]) {
+        for (const tool of ['button', 'rocket', 'bomb', 'glove', 'lifted-then-button']) {
+            const all = Object.fromEntries(['glove', 'mallet', 'crackers', 'bomb', 'torch', 'anvil', 'rocket', 'pad', 'tesla', 'button'].map(i => [i, 1]));
+            const {ctx, p, errs} = await open(opt, `if (!localStorage.getItem('${KEY}')) localStorage.setItem('${KEY}', JSON.stringify({v:1,cash:0,tools:${JSON.stringify(all)},skins:{dummy:1},skin:'dummy',best:0,seen:{tap:1,drag:1},tool:'${tool === 'lifted-then-button' ? 'button' : tool}'}))`);
+            await p.evaluate(() => { window.__lost = 0; window.__minTop = 1e9; const f = () => { const B = window.__buddy, V = B.V; for (const q of B.world.P) { const sy = V.floorY - (q.y - V.cam) * V.S; window.__minTop = Math.min(window.__minTop, sy); if (sy < -4) window.__lost++; } requestAnimationFrame(f); }; f(); });
+            const c = await where(p); if (tool === 'pad') continue;
+            if (tool === 'lifted-then-button') {
+                // lift him and let go: that flight does not count as a throw, and the camera used to ignore it - then blow him up mid-fall
+                const h = await where(p, 0); await p.mouse.move(h.x, h.y); await p.mouse.down(); for (let i = 1; i <= 24; i++) { await p.mouse.move(h.x, h.y - i * 14); await p.waitForTimeout(16); }
+                await p.waitForTimeout(300); await p.mouse.up(); await p.mouse.click(c.x, c.y - 10);
+            } else if (tool === 'glove') { for (let i = 0; i < 3; i++) { await p.mouse.click(c.x - 25, c.y - 10); await p.waitForTimeout(400); } } else await p.mouse.click(c.x, c.y);
+            await p.waitForTimeout(tool === 'button' ? 7000 : 5000);
+            const lost = await p.evaluate(() => window.__lost), top = await p.evaluate(() => Math.round(window.__minTop));
+            check(lost === 0, `${name}: after ${tool} he is never out of the picture (highest point ${top}px from the top)`, 'frames with a part above the view: ' + lost);
+            check(errs.length === 0, `${name}: no console errors through ${tool}`, errs.join(' | '));
+            await ctx.close();
+        }
     }
     // the old page's progress carries over
     let r = await open({viewport: {width: 390, height: 844}}, `if (!localStorage.getItem('${KEY}')) localStorage.setItem('gptgames_interactive_buddy_v2', JSON.stringify({cash: 777, totalCash: 5000, unlocked: {grab:true, fist:true, baseball:true, icecream:true, bowling:true, bouncy:true, baby:true, knife:true, pistol:true, shotgun:true, grenade:true, mine:true, molotov:true, fireball:true, vortex:true, radio:true, orb:true}, ownedSkins: {default:true, classic:true, mint:true, pirate:true, goth:true, strawberry:true, sunny:true, robot:true}, stats: {punches: 42}}))`);
