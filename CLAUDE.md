@@ -141,6 +141,7 @@ npm run test:artillery   # Artillery suite (plain Node, no server or browser)
 npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
 npm run test:fling          # Fling suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:wordrain       # Word Rain suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:horde          # Emoji Horde suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:rubik          # Rubik's Cube suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
@@ -491,6 +492,17 @@ first Dawn at about an hour, later eras no shorter, faster typists sooner but a 
 skipped without it) plays a first night with real keys, buys stars, banks a paused night once, greets a Dawn, pays a night away, migrates
 the old page's gold and bests, clamps a lying save, erases on Start over, and taps a night out on a phone. Run it after touching the
 bank, a wave number, a price, a lever or the page.
+
+`test/emoji_horde.mjs` runs the DOM-free `<script id="core">` block of `games/emoji_horde.html` (Emoji Horde), an incremental in which a
+heart beats at the middle of the screen and crowds of bad moods close in. Its promises are that every number is what the rules say and
+that the pace is real: a ring hits each face once and in ring order, and a face just inside the reach is hit while one just outside is
+not; love gained equals love owed to the dead; a price is paid exactly and refused when short; cards appear at half price; a heartbreak
+drops two waves and keeps the love; a Mend (wave 25 and up) adds its seams and takes the rest; time away pays share x rate, capped at
+eight hours; saves trust nothing (hostile numbers, a forged cupid count, the old roguelike's progress); a wide screen starts the crowd
+further out but it arrives as fast; and bots with a person's habits show that watching goes nowhere, the first boss comes after several
+minutes and the first Mend after a quarter to forty minutes of play. The `page` suite loads the real page in Chromium on a phone and a
+desktop (title, Begin, a tap, a purchase, settings, a reload that says welcome back, reduced motion, a hostile save). Run it after
+touching a price, a wave number, a species or the page.
 
 `test/artillery.mjs` runs the DOM-free `<script id="core">` block of `games/artillery.html` (Artillery), a tank duel whose page only
 draws what the core returns: a shell lands where plain ballistics put it at any wind, a blast only lowers ground and hurts by
