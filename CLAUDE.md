@@ -148,6 +148,7 @@ npm run test:rubik          # Rubik's Cube suite (plain Node; its page suite use
 npm run test:buddy          # Interactive Buddy suite (plain Node, no server or browser)
 npm run test:colorflood     # Color Flood suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:alphabet       # Alphabet Typing Speed suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:tictactoe      # Margins (Tic-Tac-Toe) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -157,7 +158,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-one exist so far. `test/everything_converter.mjs` drives
+Sixty-two exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -568,6 +569,12 @@ starts exactly where it says on every board and typist bots of four skills land 
 that goes backwards or does not end at the time is dropped, a best is replaced only by a faster run, streaks count across month, leap-year and
 new-year ends), the history of every finished run (kept newest-last, trimmed, cleaned, with the last ten against the ten before and a best-so-far line that only falls) is what the History view and the results chart draw, and the old page's bests, ghosts, attempts and mute choice carry over. Its `page` suite plays Chromium on a desktop and a phone (real keys,
 real taps, Escape, Enter, no scroll, a lying save, no console errors). Run it after touching the core, a threshold or the input handling.
+
+`test/tic_tac_toe.mjs` runs the DOM-free `<script id="core">` block of `games/tic_tac_toe_mp.html` (Margins), where two phones replay one
+record string and must agree on the board and the score: the whole classic game tree against a win check written the other way round
+(255,168 games, the published counts), the Vanishing rule (three marks each, the oldest goes before the new one is judged), what
+`canAppend` lets either phone write on whose turn, and a computer that takes every win in one, blocks every loss in one, never loses a
+classic game at full strength and is beaten now and then by a careful player. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
