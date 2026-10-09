@@ -147,6 +147,7 @@ npm run test:horde          # Emoji Horde suite (plain Node; its page suite uses
 npm run test:rubik          # Rubik's Cube suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:buddy          # Interactive Buddy suite (plain Node, no server or browser)
 npm run test:colorflood     # Color Flood suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:alphabet       # Alphabet Typing Speed suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -156,7 +157,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty exist so far. `test/everything_converter.mjs` drives
+Sixty-one exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -555,6 +556,16 @@ bite, a random legal ink) that must be ordered by skill, a daily board that is o
 trust nothing, and share lines that give nothing of the board away. Its `page` suite plays levels on a desktop and a phone in Chromium
 (press, tap, undo, keys, reduced motion, a lying save, the old page's data, a shared board and the daily board solved in the worker).
 Changing the dealer (`CLUSTER`, `deal`) changes every board: re-generate `VARIANT`, `PAR` and `SOL` in the core. Run it after touching the core.
+
+`test/alphabet.mjs` runs the DOM-free `<script id="core">` block of `games/alphabet.html` (Alphabet Typing Speed), type A to Z against the clock,
+whose promises are that the clock is the keys' own and that a board is fair: a run starts on the first right key and stops on the last,
+a wrong key costs only the time spent finding the right one and is counted as a slip, splits add up to the time; a Daily board is the same
+for everyone on a date, a permutation, never runs on to the next letter of the alphabet and keeps its finger travel on the keyboard the page draws
+within a band of the mean (so no day is a lucky one) over three years of dates; the ghost glides at the pace of the best run; every rank
+starts exactly where it says on every board and typist bots of four skills land spread across the ladder in order; saves trust nothing (a ghost
+that goes backwards or does not end at the time is dropped, a best is replaced only by a faster run, streaks count across month, leap-year and
+new-year ends) and the old page's bests, ghosts and mute choice carry over. Its `page` suite plays Chromium on a desktop and a phone (real keys,
+real taps, Escape, Enter, no scroll, a lying save, no console errors). Run it after touching the core, a threshold or the input handling.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

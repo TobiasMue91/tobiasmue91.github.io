@@ -1230,3 +1230,26 @@ Chromium (skipped without Playwright).
 The levels' `VARIANT`, `PAR` and `SOL` tables in the core are generated: for each level the first board variant whose solved par lands on a
 target curve (3 at level 1, 25 at level 40), solved with the widest beam. If you change `deal`, `CLUSTER`, `TIERS` or the solver, they have to be
 generated again (the `levels` suite says so).
+
+## Alphabet Typing Speed
+
+```sh
+npm run test:alphabet            # or: node test/alphabet.mjs [rules keys daily ghost ranks share save bots page]
+```
+
+`alphabet.mjs` runs the DOM-free `<script id="core">` block of `games/alphabet.html` in Node, and its `page` suite drives the real page in
+Chromium (skipped without Playwright).
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | the clock runs from the first right key to the last, a wrong key is a slip that costs only its time, nothing before the first key counts, non-letters are ignored, splits add up |
+| `keys` | the drawn keyboard holds each letter once, distances are symmetric, `MEAN_TRAVEL` is what random shuffles really cost |
+| `daily` | 1,100 dates: one board per date, a permutation, no step runs on to the next letter, finger travel within 7 % of the mean, no repeats, every letter starts some days |
+| `ghost` | the best run's marker never goes back, stops on Z and glides without jumping |
+| `ranks` | a faster time never ranks lower on any board, each rank starts exactly at its threshold, the gap to the next is what is left |
+| `share` | the strip has a bar per step, the slowest is the tallest, a Daily share gives nothing of the board away |
+| `save` | hostile stored values, ghosts that do not end at the time, bests only improve, daily bests belong to their day, streaks across month, leap-year and new-year, the old page's bests carry over |
+| `bots` | typists of four skills finish in order of skill on every board and spread across the ladder, mashing random keys does not finish |
+| `page` | desktop and phone: boot, wrong key, a whole run with real keys and with taps, Enter and Escape, no scroll, reduced motion with a lying save, no console errors |
+
+`test/shots/alphabet/` holds the before and after screenshots, the filmstrips the critics saw, and the design notes.
