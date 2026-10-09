@@ -141,6 +141,7 @@ npm run test:artillery   # Artillery suite (plain Node, no server or browser)
 npm run test:wick           # Wick (Deep Miner) suite (plain Node, no server or browser)
 npm run test:fling          # Fling suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:wordrain       # Word Rain suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:rubik          # Rubik's Cube suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -150,7 +151,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-seven exist so far. `test/everything_converter.mjs` drives
+Fifty-eight exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -496,6 +497,14 @@ draws what the core returns: a shell lands where plain ballistics put it at any 
 distance, every hill the generator deals can be shot across with a tank on level ground at either end, a match counts to three and
 alternates the shooter, and the computer starts wide, closes in as it walks a shot in and beats a player who aims blindly. Run it
 after touching the core or a constant.
+
+`test/rubiks_cube.mjs` runs the DOM-free `<script id="core">` block of `games/rubiks_cube.html`, a cube whose promises are the ones
+nobody can see from the page: every turn of faces, slices and half turns against a second simulator that rotates sticker centres with real
+cosines (and the published orders, R U = 105 and R U2 D' B D' = 1260), a scramble that is the same for a seed everywhere, never already
+solved and, on Easy, never within three turns of solved, a way home (the hint) that really leads home, saves that refuse anything forged,
+and the drag geometry: whatever the view, the layer under the finger turns the way the finger moves (against a brute-force search for the
+axis). The `page` suite plays a real run in Chromium on a desktop and a phone, a reload mid-run, and the old page's saved bests. Run it after
+touching the core or the page's input.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
