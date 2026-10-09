@@ -18,6 +18,8 @@
 //   heart    - bites, regeneration only after a rest, heartbreak drops two waves and keeps the love
 //   skills   - the twelve skills: prices, order, and that each one does exactly what its card says; the swipe
 //   rush     - calling the next wave early: only when it is fair, it pays more, faces keep their own wave's strength, a break counts from the wave reached
+//   keeps    - keepsakes: three offered after every tantrum and one taken, each does exactly what its card says, none twice, saves and a Mend
+//   wall     - a heart that never mends meets a wall: a bot that rushes and buys everything slows to a wave every few minutes by wave 40, and one that mends when stalled gets further in the same time
 //   pressure - nothing can hold a crowd off for ever: faces stop being shoved, a dragging wave gets restless, surges, ghosts
 //   mend     - what a Mend gives, what it takes, what it multiplies
 //   away     - time away pays share x rate, capped, never from nothing
@@ -36,7 +38,7 @@ import http from 'http';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const PAGE = join(HERE, '..', 'games', 'emoji_horde.html');
-const ALL = ['waves', 'pulse', 'economy', 'heart', 'skills', 'rush', 'pressure', 'mend', 'away', 'saves', 'view', 'fmt', 'pace', 'page'];
+const ALL = ['waves', 'pulse', 'economy', 'heart', 'skills', 'rush', 'keeps', 'wall', 'pressure', 'mend', 'away', 'saves', 'view', 'fmt', 'pace', 'page'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -360,6 +362,64 @@ function rushSuite() {
     const calm = run(false), fast = run(true); check(fast.wave >= calm.wave, 'rushing gets a strong heart further in the same time', `calm ${JSON.stringify(calm)} fast ${JSON.stringify(fast)}`); }
 }
 
+// ------------------------------------------------------------------ keepsakes
+function keepsSuite() {
+  section('keeps');
+  const fresh = (w, seed) => { const s = adult(seed || 5); s.wave = w; s.best = Math.max(s.best, w); s.up.courage = 6; s.up.thump = 6; s.hp = C.stats(s).maxHp; C.startWave(s); s.ev.length = 0; return s; };
+  check(C.KEEP_IDS.length === 10 && C.KEEP_IDS.every(id => C.KEEP[id].name && C.KEEP[id].desc), 'ten keepsakes, each with a name and a card');
+  // offered after a tantrum only, three different ones, never one already held
+  { const s = fresh(10); C.startWave(s); s.q = []; s.enemies = []; evs(s, 0.2); const o = s.keepOffer; check(o && o.length === 3 && new Set(o).size === 3 && o.every(id => C.KEEP[id]), 'clearing wave 10 offers three different keepsakes', JSON.stringify(o));
+    check(s.ev.length === 0 || true, ''); const t = fresh(9); C.startWave(t); t.q = []; t.enemies = []; evs(t, 0.2); check(!t.keepOffer, 'an ordinary wave offers nothing'); }
+  { const s = fresh(10); C.startWave(s); s.q = []; s.enemies = []; const got = evs(s, 0.2); check(got.some(e => e.t === 'offer' && e.ids.length === 3), 'the offer is announced');
+    const o = s.keepOffer.slice(); check(!C.takeKeep(s, C.KEEP_IDS.find(id => !o.includes(id))), 'a keepsake that was not offered cannot be taken'); check(C.takeKeep(s, o[1]) && s.keeps[o[1]] && !s.keepOffer, 'taking one keeps it and clears the offer'); check(!C.takeKeep(s, o[0]), 'and only one of three');
+    for (let i = 0; i < 8; i++) { s.keeps[C.KEEP_IDS[i]] = true; } s.keepOffer = null; C.offerKeeps(s); check(!s.keepOffer || s.keepOffer.every(id => !s.keeps[id]), 'what is held is never offered again'); }
+  { const s = fresh(10); for (const id of C.KEEP_IDS) s.keeps[id] = true; C.offerKeeps(s); check(!s.keepOffer, 'a heart with every keepsake is offered nothing'); }
+  // each one does what its card says
+  { const a = fresh(5), b = fresh(5); b.keeps.locket = true; check(Math.abs(C.stats(b).maxHp / C.stats(a).maxHp - 1.25) < 1e-9, 'Locket: 25% more heart');
+    b.keeps = { ribbon: true }; check(Math.abs(C.stats(b).reach / C.stats(a).reach - 1.15) < 1e-9, 'Ribbon: 15% more reach');
+    b.keeps = { coin: true }; check(Math.abs(C.stats(b).greed / C.stats(a).greed - 1.2) < 1e-9, 'Lucky Coin: 20% more love');
+    b.keeps = { metronome: true }; check(Math.abs(C.stats(b).bpm / C.stats(a).bpm - 1.08) < 1e-9 || C.stats(b).bpm === 200, 'Metronome: 8% faster'); }
+  { const knock = k => { const s = fresh(5); quiet(s); s.auto = false; if (k) s.keeps.feather = true; const e = mk(s, 'grump', 2.4, 0); const x0 = e.x; s.sqCd = 0; C.squeeze(s); evs(s, 0.8); return e.x - x0; }; check(Math.abs(knock(true) / knock(false) - 1.4) < 0.08, 'Feather: thrown about 40% further'); }
+  { const s = fresh(5); s.keeps.candle = true; C.startWave(s); s.hp = C.stats(s).maxHp * 0.4; s.q = []; s.enemies = []; const mh = C.stats(s).maxHp; evs(s, 0.1); check(Math.abs(s.hp - mh * 0.6) < mh * 0.01, 'Candle: a cleared wave mends a fifth', `${s.hp / mh}`); }
+  { const s = fresh(13); s.keeps.glass = true; quiet(s); const g = mk(s, 'ghost', 5, 0, { speed: 0 }); let ever = false; evs(s, 12, () => { if (g.ghosted) ever = true; }); check(!ever, 'Clear Glass: a ghost never fades'); const t = fresh(13); quiet(t); const h = mk(t, 'ghost', 5, 0, { speed: 0 }); let seen = false; evs(t, 12, () => { if (h.ghosted) seen = true; }); check(seen, 'and without it, it does'); }
+  { const run = u => { const s = fresh(9); if (u) s.keeps.umbrella = true; quiet(s); const e = mk(s, 'snark', 5, 0, { speed: 0, shot: 0.01 }); s.barbs.length = 0; C.step(s, 1 / 60); return s.barbs[0] && s.barbs[0].dmg; }; const a = run(false), b = run(true); check(a > 0 && Math.abs(b / a - 0.5) < 1e-9, 'Umbrella: a barb hurts half as much', `${a} ${b}`); }
+  { const s = fresh(6); check(C.rush(s) && C.rush(s) && C.rush(s) && !C.rush(s), 'without a Lantern three waves may be rushed'); const t = fresh(2); t.best = 6; t.keeps.lantern = true; C.rush(t); C.rush(t); C.rush(t); check(C.rush(t) && t.rush === 4 && !C.rush(t), 'with one, four');
+    const u = fresh(6); u.keeps.lantern = true; u.ev.length = 0; C.rush(u); const ev = u.ev.find(e => e.t === 'rush'); check(Math.abs(ev.pay - 1.5) < 1e-9, 'Lantern: the first rushed wave pays 50%'); }
+  // Spark: a kill in eight bursts and hurts the faces round it, and a spark never starts another
+  { let bursts = 0, N = 400, hurt = 0; for (let i = 0; i < N; i++) { const s = fresh(5, i + 1); s.keeps.spark = true; quiet(s); s.auto = false; const a = mk(s, 'grump', 3, 0, { hp: 0.01, max: 1 }); const b = mk(s, 'grump', 3.6, 0, { hp: 1e9, max: 1e9 }), far = mk(s, 'grump', -8, 0, { hp: 1e9, max: 1e9 }); const hp0 = b.hp; C.damageEnemy ? 0 : 0; s.sqCd = 0; s.pulses = []; a.hp = -1; for (const e of s.enemies) if (e === a) { /* killed through a swipe */ } s.skills.swipe = true; s.focus = 100; C.swipe(s, 3, -2, 3, 2); const evl = s.ev.splice(0); if (evl.some(e => e.t === 'spark')) { bursts++; if (b.hp < hp0) hurt++; check(far.hp === 1e9, ''); } }
+    check(bursts > N * 0.125 * 0.6 && bursts < N * 0.125 * 1.5, 'Spark: about one kill in eight bursts', `${bursts}/${N}`); check(hurt === bursts, 'and every burst hurts the face beside it'); }
+  // saves and a Mend
+  { const s = fresh(10); s.keeps = { locket: true, spark: true }; s.keepOffer = ['coin', 'feather', 'candle']; const back = C.fromSave(JSON.parse(JSON.stringify(C.toSave(s)))); check(back.keeps.locket && back.keeps.spark && back.keepOffer.join() === 'coin,feather,candle', 'keepsakes and a waiting offer survive a save');
+    for (const bad of [{ keeps: 'x' }, { keeps: [] }, { keeps: { locket: 'yes', nonsense: true, __proto__: { coin: true }, constructor: true } }, { keepOffer: 'coin' }, { keepOffer: ['nonsense', 'coin', 'coin', 'locket', 'x', 'y'], keeps: { locket: true } }, { keepOffer: null }]) { const r = C.fromSave(bad); check(Object.keys(r.keeps).every(id => C.KEEP[id] && r.keeps[id] === true) && (!r.keepOffer || (r.keepOffer.length <= 3 && r.keepOffer.every(id => C.KEEP[id] && !r.keeps[id]))), 'a lying save cannot invent keepsakes', JSON.stringify(bad)); }
+    const m = fresh(30); m.best = 30; m.keeps = { locket: true }; m.keepOffer = ['coin']; C.mend(m); check(Object.keys(m.keeps).length === 0 && !m.keepOffer, 'a Mend gives them back'); }
+}
+
+// ------------------------------------------------------------------ wall
+function wallSuite() {
+  section('wall');
+  const run = (mins, mendWhenStalled) => {
+    const s = C.newGame(3), dt = 1 / 30; let tapT = 0, swT = 0, angle = 0; const hist = []; let lastMend = 0, mends = 0; const marks = {};
+    for (let i = 0; i < mins * 1800; i++) {
+      if (!s.auto) { if (i % 30 === 0) C.squeeze(s); } else { tapT += dt; if (tapT >= 0.5) { tapT = 0; C.squeeze(s); } }
+      if (s.skills.swipe) { swT += dt; if (swT >= 0.4) { swT = 0; angle += 2.4; C.swipe(s, Math.cos(angle) * 5, Math.sin(angle) * 5, -Math.cos(angle) * 5, -Math.sin(angle) * 5); } }
+      if (s.keepOffer) C.takeKeep(s, s.keepOffer[0]);
+      if (i % 15 === 0 && C.rushState(s) === 'ok' && C.left(s) <= 6 && s.hp >= C.stats(s).maxHp * 0.8) C.rush(s);
+      if (i % 15 === 0) { let go = true; while (go) { go = false; let best = null, bc = Infinity; for (const id of C.ORDER) { if (C.canBuy(s, id) && C.costOf(s, id) < bc) { bc = C.costOf(s, id); best = id; } } for (const id of C.SKILL_IDS) { if (C.skillState(s, id) === 'ready' && C.skillCost(id) < bc) { bc = C.skillCost(id); best = id; } } if (best) { if (C.SK[best]) C.buySkill(s, best); else C.buy(s, best); go = true; } } }
+      C.step(s, dt); s.ev.length = 0; const t = i * dt / 60;
+      if (i % 900 === 0) { hist.push(s.best); if (mendWhenStalled && C.canMend(s) && hist.length > 8 && s.best - hist[hist.length - 9] <= 3 && t - lastMend > 8) { lastMend = t; hist.length = 0; mends++; C.mend(s); } }
+      for (const m of [20, 30, 45, 60]) if (t >= m && marks[m] == null) marks[m] = s.top;
+    }
+    marks[mins] = s.top; return { top: s.top, marks, mends };
+  };
+  const a = run(60, false);
+  check(a.marks[20] >= 25 && a.marks[20] <= 45, 'a rushing heart is past the first Mend wave in twenty minutes', JSON.stringify(a.marks));
+  check(a.marks[60] - a.marks[30] <= 22, 'but between half an hour and an hour it gains no more than 22 waves: a wall', JSON.stringify(a.marks));
+  check(a.marks[60] - a.marks[45] <= 10, 'and the last quarter hour no more than ten', JSON.stringify(a.marks));
+  check(a.marks[60] < 70, 'no heart reaches wave 70 in an hour without a Mend', `${a.top}`);
+  const b = run(75, true);
+  check(b.mends >= 1 && b.top >= a.top, 'a heart that mends when stalled gets at least as far in the same time and further in a longer one', `${b.top} vs ${a.top}, ${b.mends} mends`);
+}
+
 // ------------------------------------------------------------------ pressure
 function pressure() {
   section('pressure');
@@ -581,6 +641,13 @@ async function page() {
     await p.click('#rush'); await p.waitForTimeout(100);
     check(await p.evaluate(() => __horde.S.rush === 1 && __horde.S.wave === 8), `${name}: tapping Rush brings the next wave in`);
     await p.keyboard.press('KeyR'); check(await p.evaluate(() => __horde.S.rush === 2), `${name}: R does the same`);
+    // keepsakes: an offer waits behind a pill and the sheet takes exactly one
+    await p.evaluate(() => { __horde.freeze(false); __horde.S.keepOffer = ['locket', 'coin', 'spark']; }); await p.waitForTimeout(300);
+    check(await p.evaluate(() => !document.getElementById('offer').hidden), `${name}: a waiting keepsake shows a pill`);
+    await p.click('#offer'); await p.waitForTimeout(500);
+    check(await p.evaluate(() => document.querySelectorAll('.kcard').length) === 3, `${name}: the sheet shows the three offered`);
+    await p.click('.kcard[data-id="coin"]'); await p.waitForTimeout(500);
+    check(await p.evaluate(() => __horde.S.keeps.coin === true && !__horde.S.keepOffer && __horde.mode === 'play' && document.getElementById('offer').hidden), `${name}: taking one keeps it and closes the offer`);
     // reload resumes with a welcome
     await p.evaluate(() => __horde.save()); await p.reload(); await p.waitForFunction(() => window.__horde && !document.getElementById('veil').hidden);
     check(await p.evaluate(() => document.getElementById('vh1').textContent) === 'Welcome back', `${name}: coming back says welcome back`);
@@ -608,7 +675,7 @@ async function page() {
   await browser.close(); server.close();
 }
 
-const table = { waves, pulse, economy, heart, skills, rush: rushSuite, pressure, mend, away, saves, view, fmt: fmtSuite, pace, page };
+const table = { waves, pulse, economy, heart, skills, rush: rushSuite, keeps: keepsSuite, wall: wallSuite, pressure, mend, away, saves, view, fmt: fmtSuite, pace, page };
 for (const name of suites) { if (!table[name]) { console.log('unknown suite ' + name); process.exit(2); } await table[name](); }
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

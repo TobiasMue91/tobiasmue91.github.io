@@ -53,3 +53,11 @@ was static, and there was no settings screen, skill tree, cursor attack or way t
 - **Rush**: from wave 6 a button (or R) brings the next wave in now, on top of the current one, up to three ahead. Each rushed wave counts
   at once, its faces keep their own wave's strength and pay 40% more love per wave rushed, and a break counts from the wave reached, so
   rushing is a bet on your heart. It needs a heart above half health and is not offered into or during a boss wave.
+- **Keepsakes**: after every tantrum (waves 10, 20, ...) the heart is offered one of three keepsakes out of ten (Locket, Ribbon, Lucky Coin,
+  Feather, Candle, Clear Glass, Umbrella, Metronome, Lantern, Spark) that last until a Mend, so two hearts at wave 30 are no longer the same
+  heart. An offer that is closed waits behind a pill until it is taken.
+- **Focus meter**: moved from a faint bar in the middle of the field to a labelled gauge at the bottom left, opposite Rush, that glows when full
+  and turns red when you reach for it empty. **Heartbeat trace**: now crosses the whole field at any width instead of fading out.
+- **A wall, so Mend means something**: from wave 22 enemy health grows 15% a wave on top of the base growth. Bots that rush and buy everything
+  reach wave 45 in half an hour and then crawl (about a wave every three minutes), while a bot that mends when stalled earns 4 to 9 seams a
+  time and gets further in the same time. A thick crowd now points at the Mend button in a toast.
