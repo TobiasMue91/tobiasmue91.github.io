@@ -340,7 +340,7 @@ async function page() {
     const t1 = await p.evaluate(() => { __void.tick(1 / 60, 30); return __void.S.run.t; }), t2 = await p.evaluate(() => { __void.tick(1 / 60, 30); return __void.S.run.t; });
     check(t1 === t2, o.name + ': nothing moves while paused'); await p.click('#resume'); check(await p.evaluate(() => __void.S.mode) === 'play', o.name + ': resume carries on');
     // the clock runs out: the iris closes and the card arrives, and the best is saved
-    await p.evaluate(() => { __void.S.run.timeLeft = .3; for (let i = 0; i < 60 * 3; i++) { __bot(1 / 60); __void.tick(1 / 60, 1); } });
+    await p.evaluate(() => { __void.S.run.timeLeft = .3; __void.S.input.drive = {x: 0, y: 0}; for (let i = 0; i < 60 * 3; i++) __void.tick(1 / 60, 1); });   // stand still: a bite would pay the clock more time
     check(await p.evaluate(() => __void.S.mode) === 'result' && await p.isVisible('#result') && await p.isVisible('#again'), o.name + ': time out closes the iris and shows the result');
     const sv = await p.evaluate(() => JSON.parse(localStorage.getItem('void.v2')));
     check(sv && sv.best > 0 && sv.runs === 1 && sv.eaten > 20, o.name + ': the best and the count are saved', JSON.stringify(sv));
