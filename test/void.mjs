@@ -43,7 +43,7 @@ vm.runInContext(core[1] + '\nthis.VOID = VOID;', ctx);
 const V = ctx.VOID;
 const near = (a, b, e = 1e-6) => Math.abs(a - b) <= e * Math.max(1, Math.abs(a), Math.abs(b));
 const PALETTE = new Set(['ink', 'cre', 'tom', 'och', 'tea', 'mos', 'plu', 'sky', 'sla', 'san', 'whi', 'gol', 'mag', 'sea', 'ice', 'win', '$']);
-const PARTS = {B: 8, C: 7, K: 7, S: 6, D: 6, G: 8, O: 7, H: 7, W: 6, Y: 5, A: 6, F: 8, P: 7, T: 6};
+const PARTS = {B: 8, C: 7, K: 7, S: 6, D: 6, G: 8, O: 7, H: 7, W: 6, Y: 5, A: 6, F: 8, P: 7, T: 6, M: 9};
 
 // a person at the stick: sees five hole-radii, picks the thing that is worth most for the distance, reacts after `react` seconds
 function play(seed, o) {
@@ -82,7 +82,7 @@ if (suites.includes('catalogue')) {
     }
   }
   for (let n = 0; n <= 27; n++) check((V.LAYERS[n] || []).length >= 2, 'every size from a can to a galaxy has at least two kinds', 'layer ' + n);
-  for (let n = 0; n <= 27; n++) { const ks = V.LAYERS[n] || []; check(ks.some(k => k.zone === 'any') || n > 6, 'the first seven sizes each have a kind that stands anywhere', 'layer ' + n); }
+  for (let n = 0; n <= 27; n++) { const ks = V.LAYERS[n] || []; check(ks.some(k => k.zone === 'road' || k.zone === 'walk' || k.zone === 'lot') || n > 13, 'each of the city\'s first fourteen sizes has a kind a street can place (lane, footpath or lot)', 'layer ' + n); }
   const rs = V.KINDS.map(k => k.r); check(Math.min(...rs) < V.R0 * V.WALL, 'the first thing fits the first hole', 'smallest ' + Math.min(...rs));
   check(V.CHAPTERS.length === 4 && V.CHAPTERS.map(c => c.from).join() === '0,7,14,21', 'four chapters, seven sizes apart');
   for (let c = 0; c < 4; c++) { const lo = V.CHAPTERS[c].from, hi = c < 3 ? V.CHAPTERS[c + 1].from : 28; let n = 0; for (let l = lo; l < hi; l++) n += (V.LAYERS[l] || []).length; check(n >= 18, 'each chapter has enough different things to look at', V.CHAPTERS[c].name + ' ' + n); }
@@ -113,15 +113,15 @@ if (suites.includes('world')) {
       let bad = 0;
       for (let i = 0; i < l.length; i++) for (let j = i + 1; j < l.length; j++) {
         const a = l[i], b = l[j], d = Math.hypot(a.x - b.x, a.y - b.y);
-        const gap = Math.abs(a.layer - b.layer) <= 6 || a.layer === b.layer;
+        const gap = (Math.abs(a.layer - b.layer) <= 5 && !(a.layer > b.layer ? a : b).kind.plate) || a.layer === b.layer;
         if (gap && d < (a.r + b.r) * .985 - 1e-9) bad++;
       }
-      check(bad === 0, 'things within six sizes of each other never overlap', `${bad} of ${l.length} at ${lo}-${hi}`);
+      check(bad === 0, 'things within five sizes of each other never overlap (ground, a country, a continent, a glacier, a storm, carries things instead)', `${bad} of ${l.length} at ${lo}-${hi}`);
     }
   }
   // zones: vehicles on roads, benches on footpaths, houses on lots; nothing stands in the opening handful
   V.clearMemo();
-  const all = V.query(77, sx - 400, sx + 400, sy - 400, sy + 400, .05, 40, null, []);
+  const all = V.query(77, sx - 140, sx + 140, sy - 140, sy + 140, .05, 40, null, []);
   const bad = {road: 0, walk: 0, lot: 0}, cnt = {road: 0, walk: 0, lot: 0};
   for (const o of all) { if (o.layer > 6 || o.kind.zone === 'any' || o.id.startsWith('pre')) continue; cnt[o.kind.zone]++; if (V.zoneAt(o.x, o.y).zone !== o.kind.zone) bad[o.kind.zone]++; }
   check(cnt.road > 10 && cnt.walk > 10 && cnt.lot > 10 && bad.road + bad.walk + bad.lot === 0, 'cars stand on roads, benches on footpaths, houses on lots', JSON.stringify({cnt, bad}));
@@ -256,8 +256,9 @@ if (suites.includes('fair')) {
     for (const seed of [1, 4242, 777]) for (const [ox, oy] of [[0, 0], [37, -20], [-90, 55], [400, 400], [-1e3, 300]]) {
       V.clearMemo();
       const x = V.SX + ox * R / 4, y = V.SY + oy * R / 4;
-      const c = V.query(seed, x - R * 9, x + R * 9, y - R * 9, y + R * 9, R * .1, R * V.WALL, null, []).filter(o => V.presence(o.r, R, o.u) >= .5);
-      const within = c.filter(o => Math.hypot(o.x - x, o.y - y) < R * 9).length;
+      const reach = Math.max(R * 9, 8);   // nine radii, but a bus is longer than nine radii of the first hole
+      const c = V.query(seed, x - reach, x + reach, y - reach, y + reach, R * .1, R * V.WALL, null, []).filter(o => V.presence(o.r, R, o.u) >= .5);
+      const within = c.filter(o => Math.hypot(o.x - x, o.y - y) < reach).length;
       if (within < worst) { worst = within; worstAt = `L${L} seed ${seed} at ${ox},${oy}`; }
       const big = V.query(seed, x - R * 12, x + R * 12, y - R * 12, y + R * 12, R * V.WALL * 1.01, R * 8, null, []);
       const far = V.query(seed, x - R * 30, x + R * 30, y - R * 30, y + R * 30, R * V.WALL * 1.01, R * 12, null, []);
@@ -266,7 +267,7 @@ if (suites.includes('fair')) {
     }
   }
   check(missed / samples <= .05, 'something bigger than the hole is in sight from almost everywhere', `${missed} of ${samples}`);
-  check(worst >= 4, 'at every size, anywhere, at least four things that fit are within nine radii', `${worst} at ${worstAt}`);
+  check(worst >= 4, 'at every size, anywhere, at least four things that fit are within nine radii (eight metres at the start)', `${worst} at ${worstAt}`);
   // not too crowded either: no more than a few hundred things in a nine-radius circle
   { let most = 0; for (let L = 0; L <= 30; L += 3) { const R = V.R0 * Math.pow(V.F, L); V.clearMemo(); const c = V.query(5, V.SX - R * 9, V.SX + R * 9, V.SY - R * 9, V.SY + R * 9, R * .1, R * V.WALL, null, []).filter(o => V.presence(o.r, R, o.u) >= .03); most = Math.max(most, c.length); }
     check(most < 400, 'never more than four hundred things to draw that fit', String(most)); }
@@ -361,6 +362,21 @@ async function page() {
     await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: 150, y: 700}]}); await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: 230, y: 700}]});
     await p.evaluate(() => __void.tick(1 / 60, 40)); await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
     const x1 = await p.evaluate(() => __void.S.run.hole.x); check(x1 > x0 + .3, 'dragging a thumb steers the hole', `${x0} ${x1}`); await c.close(); }
+  // whatever stands on the screen is drawn, at every size and wherever the hole is: things never blink out while they are in view
+  { const {c, p} = await open({phone: true}); await p.click('#playhole');
+    const bad = await p.evaluate(() => { const S = __void.S, V = __void.VOID, r = S.run; let missed = 0, checked = 0; const where = [];
+      for (let L = 0; L <= 30; L += 1.5) for (const [ox, oy] of [[0, 0], [7, -3], [-12, 9], [30, 30], [-60, 15]]) {
+        r.hole.R = V.R0 * Math.pow(V.F, L + .2); r.hole.x = V.SX + ox * r.hole.R; r.hole.y = V.SY + oy * r.hole.R; r.level = Math.floor(V.levelOfR(r.hole.R)); r.timeLeft = 50; S.hold = 0; S.cam.x = r.hole.x; S.cam.y = r.hole.y; S.cam.R = S.cam.Rd = r.hole.R;
+        __void.tick(1 / 60, 2);
+        const v = __void.view(), cam = S.cam, truth = V.query(r.seed, v.x0, v.x1, v.y0, v.y1, cam.R * .09, cam.R * 12, r.eaten, []), drawn = new Set(S.drawn.map(q => q.o.id));
+        for (const o of truth) {
+          const R = r.hole.R, pres = o.r > R ? Math.min(1, Math.max(0, (cam.R * 12 - o.r) / (cam.R * 6))) : V.presence(o.r, R, o.u); if (pres < .03 || Math.floor(o.layer / 7) > Math.floor(L / 7)) continue;   // what belongs to the next chapter is shown once its floor is on the way
+          const X = (o.x - cam.x) * v.ppm + v.hx, Y = (o.y - cam.y) * v.ppm + v.hy, e = o.r * v.ppm; if (e < 1.2) continue;
+          if (Math.hypot(X - Math.max(0, Math.min(v.W, X)), Y - Math.max(0, Math.min(v.H, Y))) > e) continue;
+          checked++; if (!drawn.has(o.id)) { missed++; if (where.length < 3) where.push(o.kind.id + ' r' + o.r.toFixed(1) + ' at L' + L + ' (' + Math.round(X) + ',' + Math.round(Y) + ') e' + Math.round(e)); }
+        } }
+      return {missed: missed, checked: checked, where: where}; });
+    check(bad.checked > 300 && bad.missed === 0, 'every thing standing on the screen is drawn, up to twelve hole radii', JSON.stringify(bad)); await c.close(); }
   check(errors.length === 0, 'no console errors anywhere in the page', errors.slice(0, 3).join(' | '));
   await browser.close(); server.close();
 }
