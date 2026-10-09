@@ -33,3 +33,23 @@ and the critique carried on with filmstrips of the real page (step 8).
 | 2 | 7 | 6 | 7.5 | 6 | 7 |
 | 3 | 7.5 | 6 | 7.5 | 6.5 | 6.5 |
 | 4 | 7 | 6 | **8** | 6 | 6 |
+
+
+## Second pass (after playing it)
+
+Player feedback: the heartbeat was unnerving, the game was safe from about wave 9 and went idle, the horde needed more depth, the background
+was static, and there was no settings screen, skill tree, cursor attack or way to hurry.
+
+- **Heartbeat**: the lub-dub is now a soft low sine with slow attack, quieter and lower than before; it has its own switch, and the music
+  (a slow generative pad that follows the chapter) another.
+- **Settings**: volume slider; switches for sound effects, heartbeat, music, damage numbers, screen shake, bright flashes, zoom-out and
+  vibration; best wave; hold-to-start-over.
+- **Depth**: a twelve-skill tree in four branches (Touch, Rhythm, Guard, Fortune) opens at wave 5 and is given back on a Mend. The first
+  skill, Swipe, brings the cursor attack back: drag across faces to cut them, paid in a focus meter that refills.
+- **Losing is possible**: faces that are hit repeatedly build up resistance to knock-back, a wave that drags on turns restless and sends more,
+  every fifth wave is a surge, ghosts fade in and out from wave 12, and enemy hp grows 1.235x a wave.
+- **Zoom**: the camera backs away as the crowd grows (switchable).
+- **Backgrounds**: a new chapter every ten waves with its own ground, weather and ambient motion, and an ECG trace along the shore of the field.
+- **Rush**: from wave 6 a button (or R) brings the next wave in now, on top of the current one, up to three ahead. Each rushed wave counts
+  at once, its faces keep their own wave's strength and pay 40% more love per wave rushed, and a break counts from the wave reached, so
+  rushing is a bet on your heart. It needs a heart above half health and is not offered into or during a boss wave.

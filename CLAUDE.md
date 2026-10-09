@@ -500,9 +500,14 @@ not; love gained equals love owed to the dead; a price is paid exactly and refus
 drops two waves and keeps the love; a Mend (wave 25 and up) adds its seams and takes the rest; time away pays share x rate, capped at
 eight hours; saves trust nothing (hostile numbers, a forged cupid count, the old roguelike's progress); a wide screen starts the crowd
 further out but it arrives as fast; and bots with a person's habits show that watching goes nowhere, the first boss comes after several
-minutes and the first Mend after a quarter to forty minutes of play. The `page` suite loads the real page in Chromium on a phone and a
-desktop (title, Begin, a tap, a purchase, settings, a reload that says welcome back, reduced motion, a hostile save). Run it after
-touching a price, a wave number, a species or the page.
+minutes and the first Mend after a quarter to forty minutes of play. The twelve-skill tree (`skills`) is checked for prices, order and
+that each skill does what its card says, and `pressure` for the promise that a heart can lose: faces that are hit again and again stop
+being shoved, a wave that drags on turns restless, surges, ghosts and a heart that only shoves still falls. `rush` covers calling the next
+wave in early: only from wave 6, only with a healthy heart in a live wave and never into or during a boss wave; each face keeps the
+strength of its own wave and pays 40% more per wave rushed; a break counts from the wave reached. The `page` suite loads the real page in
+Chromium on a phone and a desktop (title, Begin, a tap, a purchase, every settings switch and the volume slider remembered, the skill
+tree, a swipe through a face, Rush, a reload that says welcome back, reduced motion, a hostile save). Run it after touching a price, a
+wave number, a species, a skill or the page.
 
 `test/artillery.mjs` runs the DOM-free `<script id="core">` block of `games/artillery.html` (Artillery), a tank duel whose page only
 draws what the core returns: a shell lands where plain ballistics put it at any wind, a blast only lowers ground and hurts by
