@@ -93,7 +93,11 @@ if (suites.includes('world')) {
   const sx = V.SX, sy = V.SY;
   // the start: on a footpath at a junction of the finest streets and inside a lot at every larger road
   const z = V.zoneAt(sx, sy); check(z.zone === 'walk', 'the first night starts on a footpath', JSON.stringify(z));
-  for (let k = 1; k <= 6; k++) { const P = 48 * Math.pow(10, k), d = Math.min(sx % P, P - sx % P); check(d > P * .1875 / 2 + P * .05, 'the start is clear of the roads of tier ' + k, `${d} of ${P}`); }
+  for (let k = 1; k <= 6; k++) { const P = 48 * Math.pow(10, k), d = Math.min(sx % P, P - sx % P); check(d > V.roadW(k) / 2 + V.walkW(k), 'the start is clear of the roads of tier ' + k, `${d} of ${P}`); }
+  // streets grow slower than the blocks (an avenue, not a runway), and the plan is not a perfect grid
+  for (let k = 1; k <= 5; k++) check(V.roadW(k) / V.pitch(k) < V.roadW(k - 1) / V.pitch(k - 1), 'a street is a smaller share of its block at every tier up', 'tier ' + k);
+  { let on = 0, tot = 0; for (let i = 0; i < 60; i++) for (let j = 0; j < 60; j++) { tot += 2; on += (V.segOn(1, 0, i, j) ? 1 : 0) + (V.segOn(1, 1, i, j) ? 1 : 0); } check(on / tot > .7 && on / tot < .95, 'most stretches of street exist and some do not', String(on / tot)); }
+  { let ok = true; for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++) ok = ok && V.segOn(0, 0, Math.floor(V.SX / 48) + i, Math.floor(V.SY / 48) + j) && V.segOn(0, 1, Math.floor(V.SX / 48) + i, Math.floor(V.SY / 48) + j); check(ok, 'the streets round the start are all there'); }
   // the same street whichever order it is asked for
   for (const seed of [11, 4242, 987654]) {
     V.clearMemo();
