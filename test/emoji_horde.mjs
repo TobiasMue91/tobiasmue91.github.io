@@ -19,6 +19,7 @@
 //   skills   - the twelve skills: prices, order, and that each one does exactly what its card says; the swipe
 //   rush     - calling the next wave early: only when it is fair, it pays more, faces keep their own wave's strength, a break counts from the wave reached
 //   keeps    - keepsakes: three offered after every tantrum and one taken, each does exactly what its card says, none twice, saves and a Mend
+//   wall     - a heart that never mends meets a wall: a bot that rushes and buys everything slows to a wave every few minutes by wave 40, and one that mends when stalled gets further in the same time
 //   pressure - nothing can hold a crowd off for ever: faces stop being shoved, a dragging wave gets restless, surges, ghosts
 //   mend     - what a Mend gives, what it takes, what it multiplies
 //   away     - time away pays share x rate, capped, never from nothing
@@ -37,7 +38,7 @@ import http from 'http';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const PAGE = join(HERE, '..', 'games', 'emoji_horde.html');
-const ALL = ['waves', 'pulse', 'economy', 'heart', 'skills', 'rush', 'keeps', 'pressure', 'mend', 'away', 'saves', 'view', 'fmt', 'pace', 'page'];
+const ALL = ['waves', 'pulse', 'economy', 'heart', 'skills', 'rush', 'keeps', 'wall', 'pressure', 'mend', 'away', 'saves', 'view', 'fmt', 'pace', 'page'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -393,6 +394,32 @@ function keepsSuite() {
     const m = fresh(30); m.best = 30; m.keeps = { locket: true }; m.keepOffer = ['coin']; C.mend(m); check(Object.keys(m.keeps).length === 0 && !m.keepOffer, 'a Mend gives them back'); }
 }
 
+// ------------------------------------------------------------------ wall
+function wallSuite() {
+  section('wall');
+  const run = (mins, mendWhenStalled) => {
+    const s = C.newGame(3), dt = 1 / 30; let tapT = 0, swT = 0, angle = 0; const hist = []; let lastMend = 0, mends = 0; const marks = {};
+    for (let i = 0; i < mins * 1800; i++) {
+      if (!s.auto) { if (i % 30 === 0) C.squeeze(s); } else { tapT += dt; if (tapT >= 0.5) { tapT = 0; C.squeeze(s); } }
+      if (s.skills.swipe) { swT += dt; if (swT >= 0.4) { swT = 0; angle += 2.4; C.swipe(s, Math.cos(angle) * 5, Math.sin(angle) * 5, -Math.cos(angle) * 5, -Math.sin(angle) * 5); } }
+      if (s.keepOffer) C.takeKeep(s, s.keepOffer[0]);
+      if (i % 15 === 0 && C.rushState(s) === 'ok' && C.left(s) <= 6 && s.hp >= C.stats(s).maxHp * 0.8) C.rush(s);
+      if (i % 15 === 0) { let go = true; while (go) { go = false; let best = null, bc = Infinity; for (const id of C.ORDER) { if (C.canBuy(s, id) && C.costOf(s, id) < bc) { bc = C.costOf(s, id); best = id; } } for (const id of C.SKILL_IDS) { if (C.skillState(s, id) === 'ready' && C.skillCost(id) < bc) { bc = C.skillCost(id); best = id; } } if (best) { if (C.SK[best]) C.buySkill(s, best); else C.buy(s, best); go = true; } } }
+      C.step(s, dt); s.ev.length = 0; const t = i * dt / 60;
+      if (i % 900 === 0) { hist.push(s.best); if (mendWhenStalled && C.canMend(s) && hist.length > 8 && s.best - hist[hist.length - 9] <= 3 && t - lastMend > 8) { lastMend = t; hist.length = 0; mends++; C.mend(s); } }
+      for (const m of [20, 30, 45, 60]) if (t >= m && marks[m] == null) marks[m] = s.top;
+    }
+    marks[mins] = s.top; return { top: s.top, marks, mends };
+  };
+  const a = run(60, false);
+  check(a.marks[20] >= 25 && a.marks[20] <= 45, 'a rushing heart is past the first Mend wave in twenty minutes', JSON.stringify(a.marks));
+  check(a.marks[60] - a.marks[30] <= 22, 'but between half an hour and an hour it gains no more than 22 waves: a wall', JSON.stringify(a.marks));
+  check(a.marks[60] - a.marks[45] <= 10, 'and the last quarter hour no more than ten', JSON.stringify(a.marks));
+  check(a.marks[60] < 70, 'no heart reaches wave 70 in an hour without a Mend', `${a.top}`);
+  const b = run(75, true);
+  check(b.mends >= 1 && b.top >= a.top, 'a heart that mends when stalled gets at least as far in the same time and further in a longer one', `${b.top} vs ${a.top}, ${b.mends} mends`);
+}
+
 // ------------------------------------------------------------------ pressure
 function pressure() {
   section('pressure');
@@ -648,7 +675,7 @@ async function page() {
   await browser.close(); server.close();
 }
 
-const table = { waves, pulse, economy, heart, skills, rush: rushSuite, keeps: keepsSuite, pressure, mend, away, saves, view, fmt: fmtSuite, pace, page };
+const table = { waves, pulse, economy, heart, skills, rush: rushSuite, keeps: keepsSuite, wall: wallSuite, pressure, mend, away, saves, view, fmt: fmtSuite, pace, page };
 for (const name of suites) { if (!table[name]) { console.log('unknown suite ' + name); process.exit(2); } await table[name](); }
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
