@@ -1205,3 +1205,28 @@ deals is the same for everyone and is prefix-stable (a longer round only adds to
 four times running, every press is judged against the pad that was shown, the tempo tightens but never
 below what a person can follow, damaged saves load clean, daily streaks cross month ends, and bots with a
 longer memory score higher.
+
+## Color Flood
+
+```sh
+npm run test:colorflood          # or: node test/color_flood.mjs [rules deal solver levels hint bots daily save page]
+```
+
+`color_flood.mjs` runs the DOM-free `<script id="core">` block of `games/color_flood.html` in Node, and its `page` suite drives the real page in
+Chromium (skipped without Playwright).
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | every move on 600 random boards against a fixpoint reference written the slow way round (cells, territory, size, the rings a swallowed cell joins in), refusals cost nothing, undo restores everything |
+| `deal` | a seed is a board; every ink in play appears, none outside; no level starts solved; the corner territory never starts over a tenth of the board |
+| `solver` | the region-graph lower bound never exceeds the true optimum; exact search equals breadth-first search over every position; beam search is always a legal finishing sequence, optimal on 85% of small boards and never two over |
+| `levels` | forty levels, size and inks never fall; each stored solution replays to a solved board in exactly par moves; par climbs tier on tier from 3 to 25; the limit and the 3/2/1 star lines fall where the card says |
+| `hint` | a hint always captures something, following hints alone always finishes the board within par + 3 |
+| `bots` | the biggest-bite bot clears the ponds and earns far less later; a random legal ink mostly fails the late levels |
+| `daily` | one board per date, Monday smaller than Sunday, the day before across month, leap-year, year and clock changes, shared-board addresses clamped |
+| `save` | hostile stored values, stars and bests only improve, streaks, the old page's bests (an Easy best opens the Lakes, nothing becomes free stars), share lines |
+| `page` | desktop and phone: boot, the coach tip, press/tap/undo/keys, a whole level to three stars, reduced motion, a lying save, the old page's data, a shared board and the daily board |
+
+The levels' `VARIANT`, `PAR` and `SOL` tables in the core are generated: for each level the first board variant whose solved par lands on a
+target curve (3 at level 1, 25 at level 40), solved with the widest beam. If you change `deal`, `CLUSTER`, `TIERS` or the solver, they have to be
+generated again (the `levels` suite says so).
