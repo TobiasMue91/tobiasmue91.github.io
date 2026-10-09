@@ -131,6 +131,7 @@ npm run test:hanoi          # Tower of Hanoi suite (plain Node, no server or bro
 npm run test:glowtide       # Glowtide (Chain Reaction) suite (plain Node, no server or browser)
 npm run test:catchcircle    # Catch Circle suite (plain Node, no server or browser)
 npm run test:voidrunner     # Void Runner suite (plain Node, no server or browser)
+npm run test:void           # VOID (black hole) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:backgammon     # Backgammon suite (plain Node, no server or browser)
 npm run test:truths         # Two Truths & a Lie suite (plain Node, no server or browser)
 npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
@@ -437,6 +438,16 @@ button-masher outruns one standing still. Ledges (the high road) must be landabl
 a spike, a full chain earns a shield that smashes exactly one hazard and never saves a fall, and sectors announce once and pay once.
 The fairness bots run with the shield off (`noShield`) so a mistake is never forgiven behind the test's back. Run it after touching the
 physics, `minStart`, a ledge or a hazard's size.
+
+`test/void.mjs` runs the DOM-free `<script id="core">` block of `games/void.html` (VOID), a black-hole game on one endless plane whose
+promises nobody can see from the page: a street is the same street whichever order its cells are asked for, nothing within six sizes of
+anything else overlaps, vehicles stand on roads, benches on footpaths and houses on lots, and the start is clear of every road tier; a thing
+falls only if it fits (and never one that does not), the hole grows by exactly the area it ate, the clock pays for big mouthfuls and new
+sizes, a bite announces exactly what it has just made swallowable, saves trust nothing; at every size, anywhere, something fits within
+reach and something bigger is in sight, and bots with a person's reaction time must be paid in order of their skill (a sloppy one leaves
+the first chapter, a casual one reaches the city and the world in three to five minutes, a good one the cosmos, nobody is spared by the clock
+for ever). The `page` suite plays the real page in Chromium on a laptop, a phone and with reduced motion, with a real touch drag. Run it after
+touching a number in the core (`TUNE`), a kind in the catalogue or the page.
 
 `test/backgammon.mjs` runs the DOM-free `<script id="core">` block of `games/backgammon.html`, a board game whose rules have more corners than they look: a second move generator written the other way round (own-side coordinates, every dice order) must agree with the core on every roll of thousands of positions, so the duty to play as many dice as possible, the larger die when only one fits, the bar before anything else and bearing off with a higher die only from the rearmost point are all judged by something that does not share the core's code. Gammons and backgammons score 2 and 3, undo restores a position exactly, a save carries on dice for dice and refuses forged ones, and the computer only ever plays legal moves and is ordered hard, medium, easy, random by playing strength. Run it after touching the core or the evaluation.
 
