@@ -564,7 +564,7 @@ for everyone on a date, a permutation, never runs on to the next letter of the a
 within a band of the mean (so no day is a lucky one) over three years of dates; the ghost glides at the pace of the best run; every rank
 starts exactly where it says on every board and typist bots of four skills land spread across the ladder in order; saves trust nothing (a ghost
 that goes backwards or does not end at the time is dropped, a best is replaced only by a faster run, streaks count across month, leap-year and
-new-year ends) and the old page's bests, ghosts and mute choice carry over. Its `page` suite plays Chromium on a desktop and a phone (real keys,
+new-year ends), the history of every finished run (kept newest-last, trimmed, cleaned, with the last ten against the ten before and a best-so-far line that only falls) is what the History view and the results chart draw, and the old page's bests, ghosts, attempts and mute choice carry over. Its `page` suite plays Chromium on a desktop and a phone (real keys,
 real taps, Escape, Enter, no scroll, a lying save, no console errors). Run it after touching the core, a threshold or the input handling.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.

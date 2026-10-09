@@ -14,7 +14,7 @@ the page's own, in the thumb zone, with 10 keys across (every tap in a gap count
 - **Stall for 1.4 s:** the next key pulses.
 - **Z:** the clock freezes (to the hundredth, from the key timestamps rather than the frame clock), the clock thumps, a V-I chord
   rings; 240 ms later the result sheet slides up over the bar and the keyboard: the rank stamp, "0.87 s from Foreman · clean run",
-  the 25-bar rhythm strip with the slowest letter marked, and AGAIN (focused, Enter or Space works) next to SHARE. Taps that
+  your history on this board as a chart (higher is faster) with a one-line trend, a thin per-letter strip, and AGAIN (focused, Enter or Space works) next to SHARE. Taps that
   are still landing in the first half second do nothing, so a thumb still hammering cannot restart the game by accident.
 - **Again:** straight back to the first letter. Escape or the restart icon abandon a run at any time. Leaving the tab during
   a run cancels it (the clock would otherwise count time away).
