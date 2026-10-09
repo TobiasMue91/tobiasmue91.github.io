@@ -148,6 +148,7 @@ npm run test:rubik          # Rubik's Cube suite (plain Node; its page suite use
 npm run test:buddy          # Interactive Buddy suite (plain Node, no server or browser)
 npm run test:colorflood     # Color Flood suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:alphabet       # Alphabet Typing Speed suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:suika          # Suika suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -157,7 +158,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-one exist so far. `test/everything_converter.mjs` drives
+Sixty-two exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -568,6 +569,12 @@ starts exactly where it says on every board and typist bots of four skills land 
 that goes backwards or does not end at the time is dropped, a best is replaced only by a faster run, streaks count across month, leap-year and
 new-year ends), the history of every finished run (kept newest-last, trimmed, cleaned, with the last ten against the ten before and a best-so-far line that only falls) is what the History view and the results chart draw, and the old page's bests, ghosts, attempts and mute choice carry over. Its `page` suite plays Chromium on a desktop and a phone (real keys,
 real taps, Escape, Enter, no scroll, a lying save, no console errors). Run it after touching the core, a threshold or the input handling.
+
+`test/suika.mjs` runs the DOM-free `<script id="core">` block of `games/suika.html` (Suika), fruit in a glass jar: a seed drops the
+same fruit for everyone, no fruit leaves the jar or sinks into another, a jar left alone comes to rest and a fruit pushed along the
+floor stops, crowded drops never launch fruit, every merge makes exactly the next fruit (two watermelons leave) and every point is a
+merge, the jar overflows only once a landed fruit has sat over the line for the full countdown, saves trust nothing, the old page's
+best carries over, and a careful bot outscores a random one. Run it after touching the physics or a size.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
