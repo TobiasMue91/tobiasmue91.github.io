@@ -146,6 +146,18 @@ These are suggestions, not a queue, and an idea that is on none of these lists i
 - **A toy, not a game.** `interactive_buddy` and `doodling` have no win state and are among the
   most replayed pages here. There has been nothing like them in a long time.
   *Filled by `games/strata.html` (a falling-sand world whose materials you discover).*
+  *`interactive_buddy` was remade on 2026-10-09 as a crash-test lab (a standing dummy, ten tools, a wall that keeps the
+  highest launch) with its own tested core. Three things in it are worth reusing. **A verlet ragdoll's joint stops must be
+  distances, not rotations**: the first build limited elbows, knees and the neck by rotating the limb back to the stop, and
+  a head wedged between wall and floor made the two fight until the whole body left at 100 m/s (a glove punch measured 1 m
+  on most seeds and 28 m on one). Replacing every stop with "these two ends may come no closer than d", where
+  d = sqrt(a^2 + b^2 + 2ab cos(limit)), made 12 seeds of every tool land within a metre of each other. **A standing ragdoll
+  is only balanced on paper**: it buckles at the knees within three seconds whatever the iteration count, so the rest pose
+  is simply asleep (velocities zeroed, physics skipped) until a kick, a grab or a blast wakes it - a heap of black joint
+  balls was what four critic rounds kept calling "unreadable", and a dummy at attention under a lamp fixed it in one
+  frame. **Pay by what a hit did, then tune the whole economy with a person-paced bot, not by eye**: the first payout
+  table let a bot own every tool in 86 seconds; scaling payouts, the chain multiplier (x3 cap) and the height bonus until the
+  same bot needed 16 minutes took five runs of `node test/interactive_buddy.mjs bots`.*
 
 **Tools**
 

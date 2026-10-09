@@ -143,6 +143,7 @@ npm run test:fling          # Fling suite (plain Node; its page suite uses Playw
 npm run test:wordrain       # Word Rain suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:horde          # Emoji Horde suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:rubik          # Rubik's Cube suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:buddy          # Interactive Buddy suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -152,7 +153,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Fifty-eight exist so far. `test/everything_converter.mjs` drives
+Fifty-nine exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -517,6 +518,14 @@ solved and, on Easy, never within three turns of solved, a way home (the hint) t
 and the drag geometry: whatever the view, the layer under the finger turns the way the finger moves (against a brute-force search for the
 axis). The `page` suite plays a real run in Chromium on a desktop and a phone, a reload mid-run, and the old page's saved bests. Run it after
 touching the core or the page's input.
+
+`test/interactive_buddy.mjs` runs the DOM-free `<script id="core">` block of `games/interactive_buddy.html` (Interactive Buddy), a
+ragdoll toy with no win state whose promises are the ones nobody can see from the page: thirteen particles that never
+stretch, leave the room or hum at rest, a slide that stops, ten tools that do what their pictures say (a bomb pushes away
+from itself and not beyond its reach, a rocket burns out, an anvil only hurts what it lands on, the Tesla shakes and never
+launches), a best height that is the true peak and ignores a dropped-in buddy or one merely lifted and let go, saves that
+trust nothing, and an economy where variety pays, spamming one tool does not, and nothing pays for doing nothing. Bots with
+a person's pace buy their first toy inside a minute and all ten inside a sitting. Run it after touching any force, price or payout.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
