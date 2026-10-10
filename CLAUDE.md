@@ -149,6 +149,7 @@ npm run test:buddy          # Interactive Buddy suite (plain Node, no server or 
 npm run test:colorflood     # Color Flood suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:alphabet       # Alphabet Typing Speed suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:tictactoe      # Margins (Tic-Tac-Toe) suite (plain Node, no server or browser)
+npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -158,7 +159,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-two exist so far. `test/everything_converter.mjs` drives
+Sixty-three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -575,6 +576,14 @@ record string and must agree on the board and the score: the whole classic game 
 (255,168 games, the published counts), the Vanishing rule (three marks each, the oldest goes before the new one is judged), what
 `canAppend` lets either phone write on whose turn, and a computer that takes every win in one, blocks every loss in one, never loses a
 classic game at full strength and is beaten now and then by a careful player. Run it after touching the core.
+
+`test/fugue.mjs` runs the DOM-free `<script id="core">` block of `games/flappy_bird.html` (Fugue), a Flappy Bird whose one promise is that a death
+is the player's own: the same flight at 30, 60 and 120 fps, a hitbox checked against a reference that samples the drawn pipe geometry, and every
+course a seed deals flown by an exhaustive search over flap and no flap (so a way through exists on every seed, with slack for a fatter bird and
+slower decisions). The course is also a tune - heights are rows of a pentatonic scale, every eighth gap lands on the tonic, later voices repeat the
+melody a few pipes late - and the suite checks that the page plays exactly the notes the core names. Bots with human timing noise must be paid in
+order of their steadiness. The `page` suite plays the real page in Chromium on a desktop and a phone (tap, pause, the card, retry, shared and daily
+courses, a lying save, blocked storage, reduced motion). Run it after touching the core, a constant or the page's input.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
