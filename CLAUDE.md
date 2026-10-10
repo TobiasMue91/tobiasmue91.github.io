@@ -150,6 +150,7 @@ npm run test:colorflood     # Color Flood suite (plain Node; its page suite uses
 npm run test:alphabet       # Alphabet Typing Speed suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:tictactoe      # Margins (Tic-Tac-Toe) suite (plain Node, no server or browser)
 npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:suika          # Suika suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -159,7 +160,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-three exist so far. `test/everything_converter.mjs` drives
+Sixty-four exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -584,6 +585,12 @@ slower decisions). The course is also a tune - heights are rows of a pentatonic 
 melody a few pipes late - and the suite checks that the page plays exactly the notes the core names. Bots with human timing noise must be paid in
 order of their steadiness. The `page` suite plays the real page in Chromium on a desktop and a phone (tap, pause, the card, retry, shared and daily
 courses, a lying save, blocked storage, reduced motion). Run it after touching the core, a constant or the page's input.
+
+`test/suika.mjs` runs the DOM-free `<script id="core">` block of `games/suika.html` (Suika), fruit in a glass jar: a seed drops the
+same fruit for everyone, no fruit leaves the jar or sinks into another, a jar left alone comes to rest and a fruit pushed along the
+floor stops, crowded drops never launch fruit, every merge makes exactly the next fruit (two watermelons leave) and every point is a
+merge, the jar overflows only once a landed fruit has sat over the line for the full countdown, saves trust nothing, each of the old
+page's skin bests lands in the jar it became (the five labels share one core), and a careful bot outscores a random one. Run it after touching the physics or a size.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
