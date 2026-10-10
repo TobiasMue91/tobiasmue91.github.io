@@ -152,6 +152,7 @@ npm run test:tictactoe      # Margins (Tic-Tac-Toe) suite (plain Node, no server
 npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:suika          # Suika suite (plain Node, no server or browser)
 npm run test:regatta        # Regatta (Typing Game) suite (plain Node, no server or browser)
+npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -597,6 +598,12 @@ page's skin bests lands in the jar it became (the five labels share one core), a
 must be true: a wrong key never moves the boat, wpm, accuracy and place follow exactly from the keys and the clock, every rival rows
 at its stated pace and finishes when the result says, a typist at their rating places mid-pack in a close race, the ladder follows a
 rower up and down, every passage uses only keys every keyboard has, and saves trust nothing. Run it after touching the core.
+
+`test/fathom.mjs` runs the DOM-free `<script id="core">` block of `games/fathom.html` (Fathom), a typing dive on an engraved chart: live
+specimens never share a first letter, a letter goes only to the name it can belong to, every fathom is paid by a finished name at the
+chain's rate, hull and flares count the way the HUD shows, a seed is the same dive, every specimen takes the same time to reach the bell
+from any bearing on any screen (a desktop, a phone, a phone with its keyboard up), and typist bots from 20 to 95 wpm sink deeper in order
+of speed (an average typist reaches the midnight zone but not the hadal). Run it after touching the word list, `tempo`, `reach` or a kind.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
