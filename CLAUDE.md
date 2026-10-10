@@ -153,6 +153,7 @@ npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page su
 npm run test:suika          # Suika suite (plain Node, no server or browser)
 npm run test:regatta        # Regatta (Typing Game) suite (plain Node, no server or browser)
 npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server or browser)
+npm run test:animals        # Dusk (A Game for Cats) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -162,7 +163,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-five exist so far. `test/everything_converter.mjs` drives
+Sixty-six exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -606,6 +607,14 @@ specimens never share a first letter, a letter goes only to the name it can belo
 chain's rate, hull and flares count the way the HUD shows, a seed is the same dive, every specimen takes the same time to reach the bell
 from any bearing on any screen (a desktop, a phone, a phone with its keyboard up), and typist bots from 20 to 95 wpm sink deeper in order
 of speed (an average typist reaches the midnight zone but not the hadal). Run it after touching the word list, `tempo`, `reach` or a kind.
+
+`test/animals.mjs` runs the DOM-free `<script id="core">` block of `games/animals.html` (Dusk), a game for cats, who cannot report a bug:
+prey that are out on the field stay on it at 30 to 144 fps and on four screen shapes and never move faster than their kind can, a paw within
+reach (measured to the body, not a point) is a catch and one a pixel beyond is not, a prey in the grass cannot be caught but a paw on the grass
+flushes it, a near miss sends it further from the paw even in a corner, prey grow bold when nobody plays and shy again when a paw comes back,
+every hunt ends and ends on a catch for a cat still playing, cat bots catch in order of keenness (a lazy one still catches several in three
+minutes, random paws far fewer than aimed ones), all three never sends the same prey three times running, and the ledger of nights trusts
+nothing it reads. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
