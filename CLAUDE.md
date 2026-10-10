@@ -153,6 +153,7 @@ npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page su
 npm run test:suika          # Suika suite (plain Node, no server or browser)
 npm run test:regatta        # Regatta (Typing Game) suite (plain Node, no server or browser)
 npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server or browser)
+npm run test:pong           # Pong (table tennis) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -162,7 +163,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-five exist so far. `test/everything_converter.mjs` drives
+Sixty-six exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -604,6 +605,13 @@ specimens never share a first letter, a letter goes only to the name it can belo
 chain's rate, hull and flares count the way the HUD shows, a seed is the same dive, every specimen takes the same time to reach the bell
 from any bearing on any screen (a desktop, a phone, a phone with its keyboard up), and typist bots from 20 to 95 wpm sink deeper in order
 of speed (an average typist reaches the midnight zone but not the hadal). Run it after touching the word list, `tempo`, `reach` or a kind.
+
+`test/pong.mjs` runs the DOM-free `<script id="core">` block of `games/pong.html` (Pong), table tennis seen from above against a
+ladder of eight club players: a bat waiting where the ball arrives always hits it and one a blade away never does, at 30 to 144 fps
+and at full rally speed; where the ball meets the blade sets the angle, each hit speeds the rally up to a ceiling, and only a moving
+bat curves the ball; the CPU's prediction lands where the ball really crosses; serve order, two clear and every point of whole
+machine matches against references written the other way round; a seed is one match; and bots with a person's reaction time find
+the rungs harder in order while an expert can still beat the champion. Run it after touching the core or a rival's numbers.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
