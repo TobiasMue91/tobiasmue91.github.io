@@ -71,6 +71,15 @@ edits). By hand it means five edits:
 5. `screenshots/screenshot_<n>.webp` — next free number, captured at 800×800 with the floating logo
    hidden, then resized to 260×260 and saved as lossless WebP.
 
+## Changing an existing game or tool
+
+Any commit that changes a page in `games/` or `tools/` - a remake, a fix, a tweak - also sets that page's
+`updated` field in `data/games.json` / `data/tools.json` to today's date (`YYYY-MM-DD`), in the same commit.
+The catalogue sorts and badges by it, and nothing else updates it for you: `util/update.py` only runs when
+someone remembers to. Edit the one field by hand (do not run `update.py` over the whole file for it), leave
+`date` (the first release) alone, and check the diff of the JSON before committing. A remake that renames the
+page also updates `title` and `description` there and its line in `sidebar.html`.
+
 ## Commands
 
 ```sh
@@ -154,6 +163,8 @@ npm run test:suika          # Suika suite (plain Node, no server or browser)
 npm run test:regatta        # Regatta (Typing Game) suite (plain Node, no server or browser)
 npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server or browser)
 npm run test:fishing        # Saltline (Fishing Game) suite (plain Node, no server or browser)
+npm run test:pong           # Pong (table tennis) suite (plain Node, no server or browser)
+npm run test:animals        # Dusk (A Game for Cats) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -598,7 +609,9 @@ page's skin bests lands in the jar it became (the five labels share one core), a
 `test/regatta.mjs` runs the DOM-free `<script id="core">` block of `games/typing_game.html` (Regatta), a typing race whose numbers
 must be true: a wrong key never moves the boat, wpm, accuracy and place follow exactly from the keys and the clock, every rival rows
 at its stated pace and finishes when the result says, a typist at their rating places mid-pack in a close race, the ladder follows a
-rower up and down, every passage uses only keys every keyboard has, and saves trust nothing. Run it after touching the core.
+rower up and down, the log keeps its last 200 races in order with a best-so-far line that never falls and the last ten against the
+ten before, the old page's runs are carried in without counting as races, every passage uses only keys every keyboard has, and saves
+trust nothing. Run it after touching the core.
 
 `test/fathom.mjs` runs the DOM-free `<script id="core">` block of `games/fathom.html` (Fathom), a typing dive on an engraved chart: live
 specimens never share a first letter, a letter goes only to the name it can belong to, every fathom is paid by a finished name at the
@@ -613,6 +626,21 @@ a careful angler lands the biggest of every species inside a minute while one wh
 and one who never reels loses them to slack, a leaping fish held through its leap throws the hook, a person-paced bot gets its first
 bite inside half a minute, a seed and the same inputs replay exactly, saves trust nothing and the old page's (PLUMB) log carries
 over where its species live here too. Run it after touching `SPECIES`, `TUNE` or the fight.
+
+`test/pong.mjs` runs the DOM-free `<script id="core">` block of `games/pong.html` (Pong), table tennis seen from above against a
+ladder of eight club players: a bat waiting where the ball arrives always hits it and one a blade away never does, at 30 to 144 fps
+and at full rally speed; where the ball meets the blade sets the angle, each hit speeds the rally up to a ceiling, and only a moving
+bat curves the ball; the CPU's prediction lands where the ball really crosses; serve order, two clear and every point of whole
+machine matches against references written the other way round; a seed is one match; and bots with a person's reaction time find
+the rungs harder in order while an expert can still beat the champion. Run it after touching the core or a rival's numbers.
+
+`test/animals.mjs` runs the DOM-free `<script id="core">` block of `games/animals.html` (Dusk), a game for cats, who cannot report a bug:
+prey that are out on the field stay on it at 30 to 144 fps and on four screen shapes and never move faster than their kind can, a paw within
+reach (measured to the body, not a point) is a catch and one a pixel beyond is not, a prey in the grass cannot be caught but a paw on the grass
+flushes it, a near miss sends it further from the paw even in a corner, prey grow bold when nobody plays and shy again when a paw comes back,
+every hunt ends and ends on a catch for a cat still playing, cat bots catch in order of keenness (a lazy one still catches several in three
+minutes, random paws far fewer than aimed ones), all three never sends the same prey three times running, and the ledger of nights trusts
+nothing it reads. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
