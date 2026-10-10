@@ -597,7 +597,9 @@ page's skin bests lands in the jar it became (the five labels share one core), a
 `test/regatta.mjs` runs the DOM-free `<script id="core">` block of `games/typing_game.html` (Regatta), a typing race whose numbers
 must be true: a wrong key never moves the boat, wpm, accuracy and place follow exactly from the keys and the clock, every rival rows
 at its stated pace and finishes when the result says, a typist at their rating places mid-pack in a close race, the ladder follows a
-rower up and down, every passage uses only keys every keyboard has, and saves trust nothing. Run it after touching the core.
+rower up and down, the log keeps its last 200 races in order with a best-so-far line that never falls and the last ten against the
+ten before, the old page's runs are carried in without counting as races, every passage uses only keys every keyboard has, and saves
+trust nothing. Run it after touching the core.
 
 `test/fathom.mjs` runs the DOM-free `<script id="core">` block of `games/fathom.html` (Fathom), a typing dive on an engraved chart: live
 specimens never share a first letter, a letter goes only to the name it can belong to, every fathom is paid by a finished name at the
