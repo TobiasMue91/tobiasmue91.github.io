@@ -151,6 +151,7 @@ npm run test:alphabet       # Alphabet Typing Speed suite (plain Node; its page 
 npm run test:tictactoe      # Margins (Tic-Tac-Toe) suite (plain Node, no server or browser)
 npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:suika          # Suika suite (plain Node, no server or browser)
+npm run test:regatta        # Regatta (Typing Game) suite (plain Node, no server or browser)
 npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server or browser)
 ```
 
@@ -592,6 +593,11 @@ same fruit for everyone, no fruit leaves the jar or sinks into another, a jar le
 floor stops, crowded drops never launch fruit, every merge makes exactly the next fruit (two watermelons leave) and every point is a
 merge, the jar overflows only once a landed fruit has sat over the line for the full countdown, saves trust nothing, each of the old
 page's skin bests lands in the jar it became (the five labels share one core), and a careful bot outscores a random one. Run it after touching the physics or a size.
+
+`test/regatta.mjs` runs the DOM-free `<script id="core">` block of `games/typing_game.html` (Regatta), a typing race whose numbers
+must be true: a wrong key never moves the boat, wpm, accuracy and place follow exactly from the keys and the clock, every rival rows
+at its stated pace and finishes when the result says, a typist at their rating places mid-pack in a close race, the ladder follows a
+rower up and down, every passage uses only keys every keyboard has, and saves trust nothing. Run it after touching the core.
 
 `test/fathom.mjs` runs the DOM-free `<script id="core">` block of `games/fathom.html` (Fathom), a typing dive on an engraved chart: live
 specimens never share a first letter, a letter goes only to the name it can belong to, every fathom is paid by a finished name at the
