@@ -162,6 +162,7 @@ npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page su
 npm run test:suika          # Suika suite (plain Node, no server or browser)
 npm run test:regatta        # Regatta (Typing Game) suite (plain Node, no server or browser)
 npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server or browser)
+npm run test:fishing        # Saltline (Fishing Game) suite (plain Node, no server or browser)
 npm run test:pong           # Pong (table tennis) suite (plain Node, no server or browser)
 npm run test:animals        # Dusk (A Game for Cats) suite (plain Node, no server or browser)
 ```
@@ -617,6 +618,14 @@ specimens never share a first letter, a letter goes only to the name it can belo
 chain's rate, hull and flares count the way the HUD shows, a seed is the same dive, every specimen takes the same time to reach the bell
 from any bearing on any screen (a desktop, a phone, a phone with its keyboard up), and typist bots from 20 to 95 wpm sink deeper in order
 of speed (an average typist reaches the midnight zone but not the hadal). Run it after touching the word list, `tempo`, `reach` or a kind.
+
+`test/fishing.mjs` runs the DOM-free `<script id="core">` block of `games/fishing.html` (Saltline), float fishing in a bay
+from dawn to night: every species lives inside the water and turns up at each hour it claims, every hour stocks several depths,
+a strike on the plunge hooks while one on a nibble spooks and a late one misses, each bite stays open exactly its species' window,
+a careful angler lands the biggest of every species inside a minute while one who reels through every run snaps the strong ones
+and one who never reels loses them to slack, a leaping fish held through its leap throws the hook, a person-paced bot gets its first
+bite inside half a minute, a seed and the same inputs replay exactly, saves trust nothing and the old page's (PLUMB) log carries
+over where its species live here too. Run it after touching `SPECIES`, `TUNE` or the fight.
 
 `test/pong.mjs` runs the DOM-free `<script id="core">` block of `games/pong.html` (Pong), table tennis seen from above against a
 ladder of eight club players: a bat waiting where the ball arrives always hits it and one a blade away never does, at 30 to 144 fps
