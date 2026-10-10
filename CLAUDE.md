@@ -151,6 +151,7 @@ npm run test:alphabet       # Alphabet Typing Speed suite (plain Node; its page 
 npm run test:tictactoe      # Margins (Tic-Tac-Toe) suite (plain Node, no server or browser)
 npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:suika          # Suika suite (plain Node, no server or browser)
+npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -160,7 +161,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-four exist so far. `test/everything_converter.mjs` drives
+Sixty-five exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -591,6 +592,12 @@ same fruit for everyone, no fruit leaves the jar or sinks into another, a jar le
 floor stops, crowded drops never launch fruit, every merge makes exactly the next fruit (two watermelons leave) and every point is a
 merge, the jar overflows only once a landed fruit has sat over the line for the full countdown, saves trust nothing, each of the old
 page's skin bests lands in the jar it became (the five labels share one core), and a careful bot outscores a random one. Run it after touching the physics or a size.
+
+`test/fathom.mjs` runs the DOM-free `<script id="core">` block of `games/fathom.html` (Fathom), a typing dive on an engraved chart: live
+specimens never share a first letter, a letter goes only to the name it can belong to, every fathom is paid by a finished name at the
+chain's rate, hull and flares count the way the HUD shows, a seed is the same dive, every specimen takes the same time to reach the bell
+from any bearing on any screen (a desktop, a phone, a phone with its keyboard up), and typist bots from 20 to 95 wpm sink deeper in order
+of speed (an average typist reaches the midnight zone but not the hadal). Run it after touching the word list, `tempo`, `reach` or a kind.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
