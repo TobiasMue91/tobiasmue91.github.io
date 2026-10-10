@@ -573,8 +573,8 @@ real taps, Escape, Enter, no scroll, a lying save, no console errors). Run it af
 `test/suika.mjs` runs the DOM-free `<script id="core">` block of `games/suika.html` (Suika), fruit in a glass jar: a seed drops the
 same fruit for everyone, no fruit leaves the jar or sinks into another, a jar left alone comes to rest and a fruit pushed along the
 floor stops, crowded drops never launch fruit, every merge makes exactly the next fruit (two watermelons leave) and every point is a
-merge, the jar overflows only once a landed fruit has sat over the line for the full countdown, saves trust nothing, the old page's
-best carries over, and a careful bot outscores a random one. Run it after touching the physics or a size.
+merge, the jar overflows only once a landed fruit has sat over the line for the full countdown, saves trust nothing, each of the old
+page's skin bests lands in the jar it became (the five labels share one core), and a careful bot outscores a random one. Run it after touching the physics or a size.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

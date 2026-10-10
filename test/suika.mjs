@@ -119,9 +119,11 @@ const suites = {
     const out = S.load({...sv, bodies: [[3, -500, 9e9]]}); check(out && out.bodies[0].x === S.RADII[3] && out.bodies[0].y === S.H - S.RADII[3], 'a fruit saved outside the jar is put back inside');
   },
   migrate() {
-    check(S.fromOld(null) === 0 && S.fromOld('{{') === 0 && S.fromOld('[5]') === 0, 'nothing to carry over is nothing');
-    check(S.fromOld(JSON.stringify({Fruits: 812, Planets: 1300, Emoji: 'x'})) === 1300, 'the best of the old skins carries over');
-    check(S.fromOld(JSON.stringify({Fruits: 1e9, Planets: -4, X: 2.5})) === 0, 'impossible old scores are not carried');
+    const none = o => JSON.stringify(o) === '{}';
+    check(none(S.fromOld(null)) && none(S.fromOld('{{')) && none(S.fromOld('[5]')), 'nothing to carry over is nothing');
+    const m = S.fromOld(JSON.stringify({fruits: 812, underwater: 1300, dessert: 640, garden: 90, winter: 900, sports: 700, x: 'y'}));
+    check(m.fruit === 900 && m.sea === 1300 && m.sweets === 640 && m.garden === 90 && !m.space, 'each old skin\'s best goes to its jar, the rest to Fruit: ' + JSON.stringify(m));
+    check(none(S.fromOld(JSON.stringify({fruits: 1e9, underwater: -4, dessert: 2.5}))), 'impossible old scores are not carried');
   },
   bots() {
     const avg = pick => { let tot = 0, top = 0; for (let s = 1; s <= 6; s++) { const {st} = play(s * 13, pick(s)); tot += st.score; top += st.top; } return [tot / 6, top / 6]; };
