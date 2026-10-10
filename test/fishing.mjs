@@ -115,6 +115,8 @@ const suites = {
       return {st, f};
     };
     { const {st} = setup('bite', .1); check(S.tap(st) === 'hook' && st.line.phase === 'fight', 'a tap on the bite hooks'); }
+    { const {st} = setup('nibble', .1); S.tap(st); const ev = S.step(st).map(e => e.type); check(ev.includes('spook'), 'what a tap does between steps reaches the page with the next step (the "Too soon")'); }
+    { const {st} = setup('bite', .1); S.tap(st); check(S.step(st).some(e => e.type === 'hook'), 'the strike that hooks is heard'); }
     { const {st, f} = setup('nibble', .1); check(S.tap(st) === 'early' && f.state === 'flee' && st.line.phase === 'set', 'a tap on a nibble spooks the fish and leaves the float out'); }
     { const {st, f} = setup('bite', 0); let missed = false; for (let i = 0; i < 120 * 2 && !missed; i++) for (const e of S.step(st)) if (e.type === 'missed') missed = true;
       check(missed && f.state === 'flee' && S.tap(st) !== 'hook', 'a bite left unanswered past its window is lost'); }
