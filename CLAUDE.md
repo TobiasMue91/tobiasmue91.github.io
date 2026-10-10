@@ -593,10 +593,11 @@ floor stops, crowded drops never launch fruit, every merge makes exactly the nex
 merge, the jar overflows only once a landed fruit has sat over the line for the full countdown, saves trust nothing, each of the old
 page's skin bests lands in the jar it became (the five labels share one core), and a careful bot outscores a random one. Run it after touching the physics or a size.
 
-`test/fathom.mjs` runs the DOM-free `<script id="core">` block of `games/fathom.html` (Fathom), a typing dive: live creatures never share a
-first letter, a letter goes only to the word it can belong to, every metre is paid by a finished word at the chain's rate, hull and flares
-count the way the HUD shows, a seed is the same dive, and typist bots from 20 to 95 wpm sink deeper in order of speed (an average
-typist reaches the midnight zone but not the hadal). Run it after touching the word list, `tempo` or a kind.
+`test/fathom.mjs` runs the DOM-free `<script id="core">` block of `games/fathom.html` (Fathom), a typing dive on an engraved chart: live
+specimens never share a first letter, a letter goes only to the name it can belong to, every fathom is paid by a finished name at the
+chain's rate, hull and flares count the way the HUD shows, a seed is the same dive, every specimen takes the same time to reach the bell
+from any bearing on any screen (a desktop, a phone, a phone with its keyboard up), and typist bots from 20 to 95 wpm sink deeper in order
+of speed (an average typist reaches the midnight zone but not the hadal). Run it after touching the word list, `tempo`, `reach` or a kind.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
