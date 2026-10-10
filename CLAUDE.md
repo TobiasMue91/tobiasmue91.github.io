@@ -71,6 +71,15 @@ edits). By hand it means five edits:
 5. `screenshots/screenshot_<n>.webp` — next free number, captured at 800×800 with the floating logo
    hidden, then resized to 260×260 and saved as lossless WebP.
 
+## Changing an existing game or tool
+
+Any commit that changes a page in `games/` or `tools/` - a remake, a fix, a tweak - also sets that page's
+`updated` field in `data/games.json` / `data/tools.json` to today's date (`YYYY-MM-DD`), in the same commit.
+The catalogue sorts and badges by it, and nothing else updates it for you: `util/update.py` only runs when
+someone remembers to. Edit the one field by hand (do not run `update.py` over the whole file for it), leave
+`date` (the first release) alone, and check the diff of the JSON before committing. A remake that renames the
+page also updates `title` and `description` there and its line in `sidebar.html`.
+
 ## Commands
 
 ```sh
