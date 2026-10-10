@@ -1254,3 +1254,25 @@ Chromium (skipped without Playwright).
 | `page` | desktop and phone: boot, wrong key, a whole run with real keys and with taps, Enter and Escape, no scroll, reduced motion with a lying save, no console errors |
 
 `test/shots/alphabet/` holds the before and after screenshots, the filmstrips the critics saw, and the design notes.
+
+## Fugue (Flappy Bird)
+
+```sh
+npm run test:fugue               # or: node test/fugue.mjs [physics hits course fair bots tune score save page]
+```
+
+`fugue.mjs` runs the DOM-free `<script id="core">` block of `games/flappy_bird.html` in Node, and its `page` suite drives the real page in
+Chromium (skipped without Playwright). The core runs at a fixed 120 Hz whatever the display does; heights of the gaps are rows of a pentatonic scale
+so that a course is also a melody.
+
+| suite | what it checks |
+| --- | --- |
+| `physics` | the same presses at 120, 60 and 30 fps end in the same place; a flap sets the speed rather than adding to it and rises v²/2g; terminal speed, ceiling and floor; an idle bird and a flat-out flapper both die before the first gap; death is final (the world stops, the bird rests once, a flap is refused); no step is long enough to tunnel; `view` lies between two steps |
+| `hits` | 1,500 random bird positions around the pipes agree with a reference that samples the disc against the drawn rectangles (body and brass collar); gap centres are clear and pipes solid; the bird fits the gap down to its radius; the first pipe is pushed out on a wide screen |
+| `course` | a seed deals the same course asked for forwards or backwards; the first gap is where the bird starts; every eighth gap is the tonic; no step beyond three up or four down; all step sizes occur and most are one or two rows; the melody comes back to the middle; seeds and dates are cleaned; pipes get narrower as they rise |
+| `fair` | an exhaustive memoised depth-first search over flap / no flap every four steps finds a way through 40 pipes on 40 seeds, 100 pipes on 10 more, on a wide screen, and with a bird 8 units fatter deciding every 67 ms |
+| `bots` | bots with human timing noise are paid in order: steady > average > sloppy ≥ poor; a steady player reaches double figures, an average one a few gaps; perfect timing and a plain rule go a long way |
+| `tune` | a higher gap is a higher note; the rows are a pentatonic scale; one voice for eight gaps, then voices at 8, 16 and 24; every later voice repeats the melody late and only pipes already passed; every note is in the scale and in earshot; the page plays exactly what the core names |
+| `score` | a point is a pipe passed, reported at the pipes' centre, once and in order |
+| `save` | garbage and hostile saves clean up; a best has a ceiling; equalling a best is not beating it; the daily best is kept apart and resets with the day; a shared course keeps no record; a save survives a round trip |
+| `page` | in Chromium on a desktop and a phone: the ground band equals itself shifted by a camera step and a glide of the camera has no spikes in the hall behind it; opens ready with a one-line course switch and nothing scrolling; the first tap starts and flaps; the title leaves and does not return; taps hold the bird up; losing focus pauses and a tap resumes; the card shows the score and stays on screen; the run is filed; Enter retries; tapping through your own death does not skip the card; `?seed=` plays that course; Daily and Free; a lying save; blocked storage; reduced motion; no console errors |
