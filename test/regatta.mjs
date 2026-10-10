@@ -1,7 +1,7 @@
 // Regatta suite. Runs the DOM-free <script id="core"> block of games/typing_game.html in Node.
 // The page's promises: the numbers are true (wpm, accuracy and place follow from the keys and the clock), a typo never
 // moves the boat, the rivals are where their pace says and finish when the result says, every passage can be typed
-// on any keyboard, and saves trust nothing. Suites: text, race, rivals, ladder, save. `node test/regatta.mjs [suite...]`
+// on any keyboard, and saves trust nothing. Suites: text, race, rivals, ladder, save, log. `node test/regatta.mjs [suite...]`
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
 import {dirname, join} from 'path';
@@ -98,11 +98,29 @@ const suites = {
       const s = R.clean(bad);
       check(s.rating >= 8 && s.rating <= 220 && s.best >= 0 && s.best <= 250 && s.races >= 0 && s.wins <= s.races, 'a lying save is clamped: ' + JSON.stringify(bad));
       check(s.seen.every(i => Number.isInteger(i) && i >= 0 && i < R.PASSAGES.length) && new Set(s.seen).size === s.seen.length, 'seen passages are real');
-      check(s.history.every(h => h.acc <= 1 && h.place >= 1 && h.place <= 4), 'history is sane');
+      check(s.history.every(h => h.acc <= 1 && h.place >= 0 && h.place <= 4 && h.wpm <= 250 && h.t >= 0), 'history is sane');
     }
     const s = R.clean({rating: 55, best: 61, races: 4, wins: 2, seen: [1, 2], history: [{wpm: 50, acc: 0.97, place: 2}], mute: true});
     check(JSON.stringify(R.clean(JSON.parse(JSON.stringify(s)))) === JSON.stringify(s), 'a save round-trips');
   },
+};
+
+suites.log = () => {
+  // the log keeps every race up to its limit, in order, with the date it was rowed
+  let save = R.clean(null);
+  for (let k = 0; k < R.LOG + 25; k++) { const race = R.newRace(k, save.rating, save.seen), res = typeRace(race, 30 + k * 0.2, 0, Math.random); save = R.record(save, race, res, 1e12 + k).save; }
+  check(save.history.length === R.LOG, 'the log keeps the last ' + R.LOG + ' races');
+  check(save.history.every((h, i) => i === 0 || h.t > save.history[i - 1].t), 'oldest first, each with its date');
+  const p = R.progress(save.history);
+  check(p.rows.every((r, i) => r.best === Math.max(...save.history.slice(0, i + 1).map(h => h.wpm))), 'the best-so-far line is the running best and never falls');
+  const mean = a => a.reduce((x, h) => x + h.wpm, 0) / a.length;
+  check(near(p.last, mean(save.history.slice(-10)), 1e-9) && near(p.prev, mean(save.history.slice(-20, -10)), 1e-9), 'last ten against the ten before');
+  check(p.last > p.prev, 'a typist who is getting faster sees it');
+  check(R.progress([]).last === null && R.progress(save.history.slice(0, 7)).prev === null, 'no comparison until there is something to compare');
+  // the old page's runs (place 0) are drawn but are not races
+  const mixed = R.clean({history: [{wpm: 40, acc: 0.9, place: 0, t: 1}, {wpm: 45, acc: 0.95, place: 1, t: 2}, {wpm: 'x'}, {wpm: 50, acc: 1, place: 3}]});
+  const q = R.progress(mixed.history);
+  check(mixed.history.length === 3 && q.raced === 2 && q.wins === 1, 'carried-over runs are kept but not counted as races');
 };
 
 const want = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(suites);
