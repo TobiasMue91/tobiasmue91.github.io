@@ -148,6 +148,7 @@ npm run test:rubik          # Rubik's Cube suite (plain Node; its page suite use
 npm run test:buddy          # Interactive Buddy suite (plain Node, no server or browser)
 npm run test:colorflood     # Color Flood suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:alphabet       # Alphabet Typing Speed suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -157,7 +158,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-one exist so far. `test/everything_converter.mjs` drives
+Sixty-two exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -568,6 +569,14 @@ starts exactly where it says on every board and typist bots of four skills land 
 that goes backwards or does not end at the time is dropped, a best is replaced only by a faster run, streaks count across month, leap-year and
 new-year ends), the history of every finished run (kept newest-last, trimmed, cleaned, with the last ten against the ten before and a best-so-far line that only falls) is what the History view and the results chart draw, and the old page's bests, ghosts, attempts and mute choice carry over. Its `page` suite plays Chromium on a desktop and a phone (real keys,
 real taps, Escape, Enter, no scroll, a lying save, no console errors). Run it after touching the core, a threshold or the input handling.
+
+`test/fugue.mjs` runs the DOM-free `<script id="core">` block of `games/flappy_bird.html` (Fugue), a Flappy Bird whose one promise is that a death
+is the player's own: the same flight at 30, 60 and 120 fps, a hitbox checked against a reference that samples the drawn pipe geometry, and every
+course a seed deals flown by an exhaustive search over flap and no flap (so a way through exists on every seed, with slack for a fatter bird and
+slower decisions). The course is also a tune - heights are rows of a pentatonic scale, every eighth gap lands on the tonic, later voices repeat the
+melody a few pipes late - and the suite checks that the page plays exactly the notes the core names. Bots with human timing noise must be paid in
+order of their steadiness. The `page` suite plays the real page in Chromium on a desktop and a phone (tap, pause, the card, retry, shared and daily
+courses, a lying save, blocked storage, reduced motion). Run it after touching the core, a constant or the page's input.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 

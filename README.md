@@ -17,7 +17,7 @@ Some games contain assets (mainly background images). The images have been gener
 
 No cookies, tracking or server-sided data saving is done in this project. Almost all tools are client-sided, limited to JS, CSS and HTML.
 
-Some data is stored in firebase and firestore. (multiplayer functionality in Tic-Tac-Toe and Rock-Paper-Scissors, highscores in Flappy Bird, savegames in Family Feud and Who Wants to Be a Millionaire and plans from the Household Planner)
+Some data is stored in firebase and firestore. (multiplayer functionality in Tic-Tac-Toe and Rock-Paper-Scissors, savegames in Family Feud and Who Wants to Be a Millionaire and plans from the Household Planner)
 
 A few dozen tools call a language model through a Cloudflare Worker proxy, so no API key ever sits in a page.
 
