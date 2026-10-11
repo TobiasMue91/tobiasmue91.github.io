@@ -1276,3 +1276,25 @@ so that a course is also a melody.
 | `score` | a point is a pipe passed, reported at the pipes' centre, once and in order |
 | `save` | garbage and hostile saves clean up; a best has a ceiling; equalling a best is not beating it; the daily best is kept apart and resets with the day; a shared course keeps no record; a save survives a round trip |
 | `page` | in Chromium on a desktop and a phone: the ground band equals itself shifted by a camera step and a glide of the camera has no spikes in the hall behind it; opens ready with a one-line course switch and nothing scrolling; the first tap starts and flaps; the title leaves and does not return; taps hold the bird up; losing focus pauses and a tap resumes; the card shows the score and stays on screen; the run is filed; Enter retries; tapping through your own death does not skip the card; `?seed=` plays that course; Daily and Free; a lying save; blocked storage; reduced motion; no console errors |
+
+## AI Quote Generator (QuotoSaurus)
+
+```sh
+npm run test:quotes              # or: node test/quotosaurus.mjs [input request reply share store card page]
+```
+
+`quotosaurus.mjs` runs the DOM-free `<script id="core">` block of `tools/quotosaurus.html` in Node, and its `page` suite drives the real
+page in Chromium (skipped without Playwright) with the model replaced by canned replies, so nothing needs the network. A language model
+writes the quotes; the suite checks everything around it.
+
+| suite | what it checks |
+| --- | --- |
+| `input` | stray spaces, pasted newlines and control characters; "by Name", "— Name" and quoted names; one comma in a name is fine, a list is refused; 80 characters fit and 81 do not, counted as characters; non-ASCII and decomposed accents; a 100,000-character paste is cut at a word to 300 at once, never inside an emoji; creativity with a percent sign or either decimal separator, clamped; every one of the old page's 20 voices can be picked and Random never repeats the name in the field |
+| `request` | the body is only the model call; instructions are a system message, the person's words a user message holding exactly the topic and voice as JSON; text that looks like a message cannot add one or reach the system prompt |
+| `reply` | the asked-for shape, chatter and code fences, the old page's `{quote, author}`, bare arrays; quotation marks of every style removed, inner ones kept; a trailing attribution or list number removed; duplicates, refusals, empty strings and run-ons dropped; cut-off, two-object and prose replies fail instead of showing "undefined"; never more than three |
+| `share` | a link round-trips quotes and names with any characters, holds the quote and author only, refuses blanks, overlong values and broken escapes; copied text always says imagined |
+| `store` | hostile saves become a fresh start, the last result is cleaned like a reply, kept quotes are cleaned, de-duplicated and capped; keep and unkeep; the old page's saves move out of `savedQuotes` (oldest-first there, newest-first here, without the "— "), the Daily Quote Generator's strings stay, broken or foreign values are left alone, migrating twice changes nothing |
+| `card` | the square image's layout: the largest size that fits, no line wider than the box, every word in order, a 400-character word broken by characters; file names for accented, non-Latin and hostile names; the worked example passes the same cleaning as a reply |
+| `page` | desktop and phone: the example on arrival with the result on the first screen; Enter writes; Balanced by default, one tap on Funny asks for jokes and is remembered; nothing can be copied while writing and the card does not shrink; choose, Copy, Link, Image download, Keep; a reload keeps fields, last quotes, the chosen one and kept; a shared link; Remove and Undo; a list of names refused at the field with nothing sent; an empty voice filled in visibly; no connection, a refusal and Cancel; the old page's saves; broken saves; blocked storage in dark mode with reduced motion; no console errors |
+
+`test/shots/quotosaurus/` holds the before and after screenshots and an exported image.

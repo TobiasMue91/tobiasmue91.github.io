@@ -168,6 +168,7 @@ npm run test:animals        # Dusk (A Game for Cats) suite (plain Node, no serve
 npm run test:kemari         # Kemari (Ball Bouncing) suite (plain Node, no server or browser)
 npm run test:frogger        # Frog Crossing (Frogger) suite (plain Node, no server or browser)
 npm run test:describing     # Describing Words suite (plain Node, no server or browser)
+npm run test:quotes         # AI Quote Generator (QuotoSaurus) suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -177,7 +178,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-eight exist so far. `test/everything_converter.mjs` drives
+Sixty-nine exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -675,6 +676,17 @@ known adjectives their synonyms but never their opposites, filters only ever rem
 the old page's favourites come across while two other tools' entries under the same key do not, and saves and links cannot be
 forged. The list itself is built by `util/describing_words/` (fetch.sh, build.py, inline.mjs) from Google Books' syntactic
 n-grams, WordNet, Moby, VADER and wordfreq; run the suite after rebuilding it or touching the core.
+
+`test/quotosaurus.mjs` runs the DOM-free `<script id="core">` block of `tools/quotosaurus.html` (AI Quote Generator), where a
+language model writes the quotes and everything around it is promised: only the tidied topic and name are sent, as data the
+model is told not to obey; a reply is shown only when it holds real quotes (refusals, JSON debris, a trailing attribution,
+duplicates and run-ons are dropped); copied text, the image and a link all say the quote is imagined and a link never carries
+the topic; a list of names or an overlong one is refused at the field; saves trust nothing, and the old page's saves move out
+of `savedQuotes`, which it shared with the Daily Quote Generator, leaving that page's strings in place. The `page` suite plays
+the real page in Chromium on a desktop and a phone against canned replies (no network): example, write, tone, choose, copy, link,
+image, keep, undo, reload, a shared link, failure, cancel, migration and blocked storage. The site's proxy only answers pages
+served from www.gptgames.dev, so trying the page against the real model locally needs the requests relayed. Run it after
+touching the core, the prompt or the page.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
