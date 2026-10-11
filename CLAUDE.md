@@ -163,6 +163,7 @@ npm run test:suika          # Suika suite (plain Node, no server or browser)
 npm run test:regatta        # Regatta (Typing Game) suite (plain Node, no server or browser)
 npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server or browser)
 npm run test:animals        # Dusk (A Game for Cats) suite (plain Node, no server or browser)
+npm run test:kemari         # Kemari (Ball Bouncing) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -172,7 +173,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-six exist so far. `test/everything_converter.mjs` drives
+Sixty-seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -624,6 +625,15 @@ flushes it, a near miss sends it further from the paw even in a corner, prey gro
 every hunt ends and ends on a catch for a cat still playing, cat bots catch in order of keenness (a lazy one still catches several in three
 minutes, random paws far fewer than aimed ones), all three never sends the same prey three times running, and the ledger of nights trusts
 nothing it reads. Run it after touching the core.
+
+`test/ball_bouncing.mjs` runs the DOM-free `<script id="core">` block of `games/ball_bouncing.html` (Kemari), keepie-uppie
+whose promises are timing and fairness: a free flight is the same at any frame rate, no kick at any tempo on any screen shape sends the
+ball above the court or out of it and a low kick always leaves time to kick again, a tap touches the ball exactly within its reach (a
+thumb's reaching further, and from below), a ball is kicked only once it is falling and below its kicking height so drumming on it earns
+nothing, the side you touch sends it the other way and the middle sends it straight up, seasons turn every 25 kicks and years every 100,
+a dropped ball rolls to a stop, the wind of autumn and winter never stops a careful player getting through the year, and players with a
+person's reaction time and timing error are paid in order of their care. Saves trust nothing, and the replaced page's paddle score is
+kept but never made a best. Run it after touching `TUNE` or the kick.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
