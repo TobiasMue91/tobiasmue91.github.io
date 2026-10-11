@@ -12,6 +12,11 @@ Usage:
     python util/claim.py                    # claim the game whose last big change is oldest
     python util/claim.py games/2048.html    # claim this one, or fail if it is taken
     python util/claim.py --list             # show the queue and the claims, claim nothing
+    python util/claim.py --tools            # the same for tools: claim the oldest tool
+    python util/claim.py tools/qr.html      # claim this tool, or fail if it is taken
+    python util/claim.py --tools --list     # the tools' queue
+
+A tool's claim is claim/tools/<id>/<sha>, so a tool and a game can never share a claim name.
 
 Prints the claimed page's path on success; exits 1 if the named game is taken or nothing
 is left to claim.
@@ -44,8 +49,8 @@ def fetch() -> None:
     git("fetch", "--quiet", "--prune", "origin", "+refs/heads/claim/*:refs/remotes/origin/claim/*")
 
 
-def games() -> list[str]:
-    return [g["url"] for g in json.loads(git("show", f"{MAIN}:data/games.json").stdout)]
+def games(kind: str = "games") -> list[str]:
+    return [g["url"] for g in json.loads(git("show", f"{MAIN}:data/{kind}.json").stdout)]
 
 
 @lru_cache(maxsize=None)
@@ -89,7 +94,7 @@ def claims() -> dict[str, list[tuple[str, datetime]]]:
 
 
 def game_id(path: str) -> str:
-    return Path(path).stem
+    return path.removesuffix(".html") if path.startswith("tools/") else Path(path).stem
 
 
 def status(path: str, taken: dict) -> tuple[str, str]:
@@ -115,12 +120,16 @@ def claim(path: str, name: str) -> bool:
 
 def main() -> None:
     args = sys.argv[1:]
+    kind = "games"
+    if "--tools" in args or (args and args[0].startswith("tools/")):
+        kind = "tools"
+        args = [a for a in args if a != "--tools"]
     fetch()
     taken = claims()
 
     if args and args[0] == "--list":
         try:
-            for path in sorted(games(), key=last_big_change):
+            for path in sorted(games(kind), key=last_big_change):
                 state, name = status(path, taken)
                 print(f"{day(last_big_change(path))}  {state:9}  {path}", flush=True)
         except BrokenPipeError:  # piped into head
@@ -128,16 +137,16 @@ def main() -> None:
         return
 
     if args:
-        path = args[0] if args[0].startswith("games/") else f"games/{args[0].removesuffix('.html')}.html"
-        if path not in games():
-            sys.exit(f"{path} is not in data/games.json")
+        path = args[0] if args[0].startswith(f"{kind}/") else f"{kind}/{args[0].removesuffix('.html')}.html"
+        if path not in games(kind):
+            sys.exit(f"{path} is not in data/{kind}.json")
         state, name = status(path, taken)
         if state == "claimed" or not claim(path, name):
             sys.exit(f"{path} is already claimed by another session (claim/{name})")
         print(path)
         return
 
-    for path in sorted(games(), key=last_big_change):
+    for path in sorted(games(kind), key=last_big_change):
         state, name = status(path, taken)
         if state == "claimed":
             continue
@@ -147,7 +156,7 @@ def main() -> None:
         # Another session claimed it a moment ago; look again and move on.
         fetch()
         taken = claims()
-    sys.exit("every game is claimed")
+    sys.exit(f"every {kind[:-1]} is claimed")
 
 
 if __name__ == "__main__":
