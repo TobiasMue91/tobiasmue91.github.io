@@ -162,8 +162,11 @@ npm run test:fugue          # Fugue (Flappy Bird) suite (plain Node; its page su
 npm run test:suika          # Suika suite (plain Node, no server or browser)
 npm run test:regatta        # Regatta (Typing Game) suite (plain Node, no server or browser)
 npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server or browser)
+npm run test:fishing        # Saltline (Fishing Game) suite (plain Node, no server or browser)
+npm run test:pong           # Pong (table tennis) suite (plain Node, no server or browser)
 npm run test:animals        # Dusk (A Game for Cats) suite (plain Node, no server or browser)
 npm run test:kemari         # Kemari (Ball Bouncing) suite (plain Node, no server or browser)
+npm run test:frogger        # Frog Crossing (Frogger) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -618,6 +621,25 @@ chain's rate, hull and flares count the way the HUD shows, a seed is the same di
 from any bearing on any screen (a desktop, a phone, a phone with its keyboard up), and typist bots from 20 to 95 wpm sink deeper in order
 of speed (an average typist reaches the midnight zone but not the hadal). Run it after touching the word list, `tempo`, `reach` or a kind.
 
+`test/fishing.mjs` runs the DOM-free `<script id="core">` block of `games/fishing.html` (Saltline), float fishing in a bay
+from dawn to night: every species lives inside the water and turns up at each hour it claims, every hour stocks several depths,
+a strike on the plunge hooks while one on a nibble spooks and a late one misses, each bite stays open exactly its species' window,
+a careful angler lands the biggest of every species inside a minute while one who reels through every run snaps the strong ones
+and one who never reels loses them to slack, a leaping fish held through its leap throws the hook, a person-paced bot gets its first
+bite inside half a minute, a seed and the same inputs replay exactly, saves trust nothing and the old page's (PLUMB) log carries
+over where its species live here too. The `shop` and `hour` suites cover the quay: tackle bought in order and never on credit, the
+line deciding how deep a cast goes and deep fish rising little for a short one, the starter rod unable to hold a tuna, orders that pay
+exactly what they say, legends that come only to an angler with the tackle, the bait and some catches of their kin, and a
+person-paced bot that buys its first tackle inside four minutes, most of it inside 75 and never goes long without a new species or
+new tackle. Run it after touching `SPECIES`, `TUNE`, `GEAR`, `VAL` or the fight.
+
+`test/pong.mjs` runs the DOM-free `<script id="core">` block of `games/pong.html` (Pong), table tennis seen from above against a
+ladder of eight club players: a bat waiting where the ball arrives always hits it and one a blade away never does, at 30 to 144 fps
+and at full rally speed; where the ball meets the blade sets the angle, each hit speeds the rally up to a ceiling, and only a moving
+bat curves the ball; the CPU's prediction lands where the ball really crosses; serve order, two clear and every point of whole
+machine matches against references written the other way round; a seed is one match; and bots with a person's reaction time find
+the rungs harder in order while an expert can still beat the champion. Run it after touching the core or a rival's numbers.
+
 `test/animals.mjs` runs the DOM-free `<script id="core">` block of `games/animals.html` (Dusk), a game for cats, who cannot report a bug:
 prey that are out on the field stay on it at 30 to 144 fps and on four screen shapes and never move faster than their kind can, a paw within
 reach (measured to the body, not a point) is a catch and one a pixel beyond is not, a prey in the grass cannot be caught but a paw on the grass
@@ -634,6 +656,15 @@ nothing, the side you touch sends it the other way and the middle sends it strai
 a dropped ball rolls to a stop, the wind of autumn and winter never stops a careful player getting through the year, and players with a
 person's reaction time and timing error are paid in order of their care. Saves trust nothing, and the replaced page's paddle score is
 kept but never made a best. Run it after touching `TUNE` or the kick.
+
+`test/frogger.mjs` runs the DOM-free `<script id="core">` block of `games/frogger.html` (Frog Crossing), a Frogger whose page
+only draws what the core returns: every lane is a pure function of the clock (the same night for everyone, nothing wrapping on
+screen, no two things overlapping, every road gap wide enough to stand in), a hit is a real overlap against a check written
+separately, a log carries the frog to a millionth of a cell and the edge sweeps it away the moment its centre leaves, a rider
+drowns exactly while its copper turtle is under and the bubbles show first, an inlet saves and the bank or a taken pad kills,
+the score, clock, lives and nights follow the rules, the same presses give the same game at 30, 60 and 120 fps, and a
+breadth-first search over the real core reaches all five inlets on every night from 1 to 12 deciding only five times a second.
+Run it after touching a lane, a speed or a rule.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
