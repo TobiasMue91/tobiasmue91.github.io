@@ -88,7 +88,7 @@ python util/update.py       # refresh entry dates from git, re-shoot stale scree
 python util/new_entry.py    # register a newly added page
 python util/timeline.py     # rebuild timeline_data.json and timeline_pages.json: the days and page versions time travel offers
 node util/trailer/render.mjs # the site's trailer, filmed from its own history - four steps, see util/trailer/README.md
-python util/claim.py        # claim a game before reworking it, so two sessions never take the same one
+python util/claim.py        # claim a game (--tools: a tool) before reworking it, so two sessions never take the same one
 python util/seo_report.py exports/  # Search Console / Bing CSV exports -> title rewrites, near-page-one pages, unanswered queries
 npm run test:server         # http-server on :80
 npm run test:cypress        # Cypress e2e — its baseUrl is :8080, so point one at the other
@@ -167,6 +167,7 @@ npm run test:pong           # Pong (table tennis) suite (plain Node, no server o
 npm run test:animals        # Dusk (A Game for Cats) suite (plain Node, no server or browser)
 npm run test:kemari         # Kemari (Ball Bouncing) suite (plain Node, no server or browser)
 npm run test:frogger        # Frog Crossing (Frogger) suite (plain Node, no server or browser)
+npm run test:describing     # Describing Words suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -176,7 +177,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-seven exist so far. `test/everything_converter.mjs` drives
+Sixty-eight exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -665,6 +666,15 @@ drowns exactly while its copper turtle is under and the bubbles show first, an i
 the score, clock, lives and nights follow the rules, the same presses give the same game at 30, 60 and 120 fps, and a
 breadth-first search over the real core reaches all five inlets on every night from 1 to 12 deciding only five times a second.
 Run it after touching a lane, a speed or a rule.
+
+`test/describing_words.mjs` runs the DOM-free `<script id="core">` block of `tools/descriptocraft.html` (Describing Words)
+against the word list it loads, `data/describing_words.txt` and `_more.txt`: both files read the same through a second decoder
+written from the format notes, what is typed is understood the way a person means it (plurals, phrases whose head is the last noun,
+accents, stray punctuation, words that are both noun and adjective), known nouns list the words books really use with them and
+known adjectives their synonyms but never their opposites, filters only ever remove words, a typo suggests the word that was meant,
+the old page's favourites come across while two other tools' entries under the same key do not, and saves and links cannot be
+forged. The list itself is built by `util/describing_words/` (fetch.sh, build.py, inline.mjs) from Google Books' syntactic
+n-grams, WordNet, Moby, VADER and wordfreq; run the suite after rebuilding it or touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
