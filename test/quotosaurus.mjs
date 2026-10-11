@@ -300,7 +300,10 @@ if (suites.includes('page')) {
             await p.reload();
             check(await p.getByRole('radio', {name: 'Funny'}).isChecked(), `${name}: the tone is remembered`);
             await p.getByText('Balanced', {exact: true}).click();
-            await p.locator('.alt').first().click();
+            await p.getByRole('button', {name: 'Copy this quote'}).nth(1).click();
+            check((await p.evaluate(() => window.__copied))[0] === `“${REPLY.quotes[2]}” — William Shakespeare (imagined quote)`, `${name}: Copy on an alternate copies it in one tap`);
+            await p.evaluate(() => { window.__copied = []; });
+            await p.locator('.alt-q').first().click();
             eq(await p.locator('.alt').count(), 2, `${name}: two more to choose from`);
             eq(await txt(p, 'quoteText'), REPLY.quotes[1], `${name}: choosing one features it`);
             await p.click('#copy');
