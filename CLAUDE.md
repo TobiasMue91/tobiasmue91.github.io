@@ -165,6 +165,7 @@ npm run test:fathom         # Fathom (typing dive) suite (plain Node, no server 
 npm run test:fishing        # Saltline (Fishing Game) suite (plain Node, no server or browser)
 npm run test:pong           # Pong (table tennis) suite (plain Node, no server or browser)
 npm run test:animals        # Dusk (A Game for Cats) suite (plain Node, no server or browser)
+npm run test:frogger        # Frog Crossing (Frogger) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -174,7 +175,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-six exist so far. `test/everything_converter.mjs` drives
+Sixty-seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -641,6 +642,15 @@ flushes it, a near miss sends it further from the paw even in a corner, prey gro
 every hunt ends and ends on a catch for a cat still playing, cat bots catch in order of keenness (a lazy one still catches several in three
 minutes, random paws far fewer than aimed ones), all three never sends the same prey three times running, and the ledger of nights trusts
 nothing it reads. Run it after touching the core.
+
+`test/frogger.mjs` runs the DOM-free `<script id="core">` block of `games/frogger.html` (Frog Crossing), a Frogger whose page
+only draws what the core returns: every lane is a pure function of the clock (the same night for everyone, nothing wrapping on
+screen, no two things overlapping, every road gap wide enough to stand in), a hit is a real overlap against a check written
+separately, a log carries the frog to a millionth of a cell and the edge sweeps it away the moment its centre leaves, a rider
+drowns exactly while its copper turtle is under and the bubbles show first, an inlet saves and the bank or a taken pad kills,
+the score, clock, lives and nights follow the rules, the same presses give the same game at 30, 60 and 120 fps, and a
+breadth-first search over the real core reaches all five inlets on every night from 1 to 12 deciding only five times a second.
+Run it after touching a lane, a speed or a rule.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
