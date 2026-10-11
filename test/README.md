@@ -1298,3 +1298,24 @@ writes the quotes; the suite checks everything around it.
 | `page` | desktop and phone: the example on arrival with the result on the first screen; Enter writes; Balanced by default, one tap on Funny asks for jokes and is remembered; nothing can be copied while writing and the card does not shrink; choose, Copy, Link, Image download, Keep; a reload keeps fields, last quotes, the chosen one and kept; a shared link; Remove and Undo; a list of names refused at the field with nothing sent; an empty voice filled in visibly; no connection, a refusal and Cancel; the old page's saves; broken saves; blocked storage in dark mode with reduced motion; no console errors |
 
 `test/shots/quotosaurus/` holds the before and after screenshots and an exported image.
+## Quote of the Day (Daily Quote Generator)
+
+```sh
+npm run test:dailyquote                   # or: node test/daily_quote.mjs
+node test/daily_quote.mjs daily authors   # one or more named suites
+```
+
+`daily_quote.mjs` runs the DOM-free `<script id="core">` block of `tools/daily_quote_generator.html` in Node. The page's
+promise is that a quote shown as a quotation is one, and that promise is kept upstream: `util/quotes/verify.py` builds the
+bank from Project Gutenberg texts and writes a checksum next to it, which this suite recomputes.
+
+| suite | what it checks |
+| --- | --- |
+| `bank` | the checksum, unique ids and texts, every quote typeset, cited and in a real topic, a month of quotes per topic, no author above a tenth of the bank |
+| `daily` | a date is one quote for everyone, a topic runs through every quote before one repeats, no author two days running over three years (cycle seams included), real calendar dates only, local midnight in eight time zones |
+| `another` | random picks stay in the topic and use every quote before any comes back |
+| `authors` | full names, surnames, aliases (Lao Tzu, Samuel Clemens, Socrates), accents, typos offered as suggestions, "john" asking which, a writer who is not here never mistaken for one who is, huge and hostile input |
+| `params` | `?q=`, `?topic=`, `?d=` accepted only when real |
+| `copy` | copied text carries its source and translator; AI lines copy labelled and never credited |
+| `ai` | the request asks for an original line and holds nothing but the cleaned topic, style and creativity; answers are parsed as untrusted text (fences, markup, fake attributions, refusals, essays); a real quotation coming back is recognised |
+| `state` | saves trust nothing; the old page's `savedQuotes` and `quoteHistory` come across once, marked as written by AI unless the words are a checked quote |
