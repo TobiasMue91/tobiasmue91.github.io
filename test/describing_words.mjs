@@ -194,7 +194,8 @@ if (suites.includes('words')) {
     for (const [w, opp] of Object.entries(opposites)) lacks(w, opp, 'similar');
     // the words names a noun with are adjectives the file knows; capitals only for proper adjectives
     const caps = words('ocean').items.filter(x => /^[A-Z]/.test(x));
-    check(caps.includes('Atlantic') && caps.includes('Indian'), 'proper adjectives keep their capital', caps.join(' '));
+    eq(caps, [], 'names (Atlantic, Indian) are not describing words');
+    check(DW.similar(db, 'french').items.length === 0 || db.adj.includes('French'), 'proper adjectives keep their capital');
     check(words('forest').items.slice(0, 12).every(x => /^[a-z]/.test(x)), 'common adjectives stay lower case');
     // tone and rarity are what the lexicons say
     const info = w => { const i = db.aindex.get(w); return DW.describe(db, 'forest').items.find(x => x.word === w) || {tone: DW.TONES[db.aflag[i] % 3], rarity: DW.RARITIES[Math.floor(db.aflag[i] / 3)]}; };

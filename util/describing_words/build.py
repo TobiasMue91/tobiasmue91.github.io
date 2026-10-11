@@ -16,7 +16,8 @@ What it decides, so the page does not have to:
 - describing words for a noun are ranked by PMI x ln(count)^3 x Zipf/5: how much more often books put the
   adjective before the noun than chance would, weighted towards pairings that are not one-offs and
   towards adjectives people use every day (the rare, literary ones are a filter away); adjectives that
-  classify rather than describe (Atlantic, national, northern) count 0.4;
+  classify rather than describe (national, northern, coastal) count 0.4, and proper adjectives (Atlantic,
+  Norwegian) are left out of these lists altogether;
 - similar adjectives are the candidates WordNet or Moby lists, ranked by how alike the two words are
   used (cosine of their PPMI vectors over nouns); WordNet antonyms never count;
 - tone comes from the VADER lexicon (|valence| >= 0.5, otherwise neutral), rarity from wordfreq's
@@ -173,6 +174,13 @@ def main():
     # words want them after the ones that describe.
     COMPASS = set("northern southern eastern western central upper lower inner outer nearby".split())
     classify_cache = {}
+    proper_cache = {}
+
+    def proper(a):
+        if a not in proper_cache:
+            names = {l.name() for syn in wn.synsets(a, "a") + wn.synsets(a, "s") for l in syn.lemmas() if l.name().lower() == a}
+            proper_cache[a] = bool(names) and all(n[0].isupper() for n in names)
+        return proper_cache[a]
 
     def classifying(a):
         if a not in classify_cache:
@@ -192,8 +200,8 @@ def main():
         floor = max(20, Nn[n] * 2e-5)
         scored = []
         for a, c in lst:
-            if c < floor:
-                continue
+            if c < floor or proper(a):
+                continue  # Atlantic ocean, Norwegian sea: names, not descriptions
             pmi = math.log(c * T / (Nn[n] * Na[a]))
             if pmi > 0:
                 # weighted towards words people actually use: Zipf / 5 puts a word met once in
