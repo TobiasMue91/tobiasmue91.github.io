@@ -626,7 +626,11 @@ a strike on the plunge hooks while one on a nibble spooks and a late one misses,
 a careful angler lands the biggest of every species inside a minute while one who reels through every run snaps the strong ones
 and one who never reels loses them to slack, a leaping fish held through its leap throws the hook, a person-paced bot gets its first
 bite inside half a minute, a seed and the same inputs replay exactly, saves trust nothing and the old page's (PLUMB) log carries
-over where its species live here too. Run it after touching `SPECIES`, `TUNE` or the fight.
+over where its species live here too. The `shop` and `hour` suites cover the quay: tackle bought in order and never on credit, the
+line deciding how deep a cast goes and deep fish rising little for a short one, the starter rod unable to hold a tuna, orders that pay
+exactly what they say, legends that come only to an angler with the tackle, the bait and some catches of their kin, and a
+person-paced bot that buys its first tackle inside four minutes, most of it inside 75 and never goes long without a new species or
+new tackle. Run it after touching `SPECIES`, `TUNE`, `GEAR`, `VAL` or the fight.
 
 `test/pong.mjs` runs the DOM-free `<script id="core">` block of `games/pong.html` (Pong), table tennis seen from above against a
 ladder of eight club players: a bat waiting where the ball arrives always hits it and one a blade away never does, at 30 to 144 fps

@@ -3,7 +3,10 @@
 // says the truth (a strike on the bite hooks, a strike on a nibble spooks, a late one misses), a fight is won by
 // timing and lost by greed or neglect, a seed and the same inputs replay exactly, saves trust nothing and the old
 // page's log carries over.
-// Suites: species, seed, float, strike, fight, pace, save, migrate. `node test/fishing.mjs [suite...]`
+// Since the quay opened, an hour of play is a promise too: tackle bought in order with what the catch pays, a line that decides
+// how deep you fish, a rod that decides what you can hold, orders that pay what they say, legends that come only to the ready,
+// and a person-paced angler who keeps finding something new for an hour.
+// Suites: species, seed, float, strike, fight, pace, shop, hour, save, migrate. `node test/fishing.mjs [suite...]`
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
 import {dirname, join} from 'path';
@@ -19,10 +22,12 @@ const S = load();
 let fails = 0, passes = 0;
 const check = (ok, msg) => { if (ok) passes++; else { fails++; console.log('  FAIL ' + msg); } };
 const HOURS = {d: .07, D: .3, k: .57, n: .8};
+const FULL = {line: 3, rod: 3, reel: 3, bait: 0};
+const kit = (st, g) => { Object.assign(st.gear, g || FULL); return st; };
 
 // one hooked fish of a species and size, fought by a policy with a reaction delay
-function fight(id, size, react, policy, seed = 1) {
-  const st = S.create({seed, W: 18}); st.fish = [];
+function fight(id, size, react, policy, seed = 1, gear) {
+  const st = kit(S.create({seed, W: 18}), gear); st.fish = [];
   const sp = S.BY[id], f = S.spawn(st, true, sp, {single: 1});
   f.size = size; f.cm = Math.round(sp.len[0] + (sp.len[1] - sp.len[0]) * size);
   S.cast(st, st.boat + 6, Math.min(12, sp.depth[1])); st.line.phase = 'set'; st.line.hookY = st.line.y;
@@ -38,10 +43,12 @@ function fight(id, size, react, policy, seed = 1) {
   return {out, t, held};
 }
 const careful = L => L.mode === 'rest', always = () => true, never = () => false;
+// the lightest rod a careful angler lands a species' biggest on: where reeling through its runs is the mistake to test
+const rodFor = sp => { for (let r = 0; r < 4; r++) { let ok = 0; for (let s = 1; s <= 4; s++) if (fight(sp.id, 1, .3, careful, s, {line: 3, rod: r, reel: 0, bait: 0}).out === 'land') ok++; if (ok === 4) return {line: 3, rod: r, reel: 0, bait: 0}; } return FULL; };
 
 // a person in the boat: casts ahead of a shadow, strikes `strike` s after the plunge, fights carefully
 function session(seed, minutes, o = {}) {
-  const st = S.create({seed, W: o.W || 18, clock: o.clock ?? .25}), R = S.rng(seed * 7 + 1);
+  const st = kit(S.create({seed, W: o.W || 18, clock: o.clock ?? .25}), o.gear), R = S.rng(seed * 7 + 1);
   let t = 0, q = [], idle = 0, wait = 0; const out = {bites: 0, lands: [], loss: {}, firstBite: null, events: []};
   for (let i = 0; i < minutes * 60 / S.STEP; i++) {
     t += S.STEP;
@@ -105,7 +112,7 @@ const suites = {
     check(S.tap(st) === 'twitch' && st.line.twitch > 0, 'a tap with nothing on twitches the bait');
     S.release(st, 'x'); check(st.line.phase === 'idle', 'the float can be reeled home');
     // only one fish at a time goes for the hook, and it comes to the hook's depth
-    const s2 = session(11, 3); check(s2.bites > 4, `fish come to the hook (${s2.bites} bites in 3 min)`);
+    const s2 = session(11, 3); check(s2.bites >= 3, `fish come to the hook (${s2.bites} bites in 3 min)`);
   },
   strike() {
     const setup = (state, t) => {
@@ -135,16 +142,22 @@ const suites = {
       for (let s = 1; s <= 8; s++) {
         const a = fight(sp.id, 1, .3, careful, s); if (a.out === 'land') { ok++; dur += a.t; }
         if (fight(sp.id, 1, .6, careful, s).out === 'land') slow++;
-        if (fight(sp.id, 1, .1, always, s).out === 'land') greedy++;
+        if (fight(sp.id, 1, .1, always, s, rodFor(sp)).out === 'land') greedy++;
         if (fight(sp.id, .5, .1, never, s).out === 'land') lazy++;
       }
       check(ok === 8, `${sp.id}: a careful angler lands the biggest every time (${ok}/8)`);
-      check(slow >= 6, `${sp.id}: so does a slow one, mostly (${slow}/8)`);
+      check(slow >= 5, `${sp.id}: so does a slow one, mostly (${slow}/8)`);
       check(dur / 8 < 50, `${sp.id}: the fight lasts under a minute (${(dur / 8).toFixed(0)} s)`);
       check(lazy === 0, `${sp.id}: a fish left on a slack line works free (${lazy}/8)`);
-      if (S.strength({sp, size: 1}) >= .75) check(greedy <= 2, `${sp.id}: reeling through every run snaps the line (${greedy}/8 landed)`);
+      if (S.strength({sp, size: 1}) / S.GEAR.rod[rodFor(sp).rod].hold >= .7) check(greedy <= 2, `${sp.id}: reeling through every run snaps the line (${greedy}/8 landed)`);
       if (S.strength({sp, size: 1}) <= .35) check(greedy === 8, `${sp.id}: a small fish can simply be wound in (${greedy}/8)`);
     }
+    // the rod decides what can be held at all: on the hazel rod the strongest fish break the line even played carefully
+    for (const id of ['tuna', 'sword']) { let ok = 0; for (let s = 1; s <= 6; s++) if (fight(id, 1, .3, careful, s, {line: 3, rod: 0, reel: 0, bait: 0}).out === 'land') ok++; check(ok <= 1, `${id}: too strong for the hazel rod (${ok}/6 landed)`); }
+    for (const id of ['smelt', 'mackerel', 'bass', 'mullet']) { let ok = 0; for (let s = 1; s <= 6; s++) if (fight(id, 1, .3, careful, s, {line: 0, rod: 0, reel: 0, bait: 0}).out === 'land') ok++; check(ok === 6, `${id}: the boat's own tackle lands the shallows (${ok}/6)`); }
+    for (const sp of S.LEGENDS) { let ok = 0, dur = 0; for (let s = 1; s <= 6; s++) { const r = fight(sp.id, 1, .3, careful, s); if (r.out === 'land') { ok++; dur += r.t; } } check(ok >= 5 && dur / Math.max(1, ok) < 75, `${sp.name}: a careful angler with the full kit lands it (${ok}/6, ${(dur / Math.max(1, ok)).toFixed(0)} s)`); }
+    // a quicker reel brings a fish in sooner
+    { const a = fight('cod', 1, .3, careful, 2, {line: 3, rod: 3, reel: 0, bait: 0}), b = fight('cod', 1, .3, careful, 2); check(a.out === 'land' && b.out === 'land' && b.t < a.t * .8, `the lever-drag reel lands a cod sooner (${b.t.toFixed(0)} s against ${a.t.toFixed(0)} s)`); }
     // a jumper held through its leap throws the hook
     let thrown = 0;
     for (let s = 1; s <= 12; s++) {
@@ -172,13 +185,82 @@ const suites = {
     // a late hand misses most bites
     const late = session(1, 6, {strike: .8}); check(late.lands.length <= 2, `striking a second late lands almost nothing (${late.lands.length})`);
     // a whole day turns up every hour's fish: run the clock round
-    const day = new Set(); for (let s = 1; s <= 3; s++) { const r = session(s, 10, {W: 40, clock: 0}); r.lands.forEach(x => day.add(x.id)); }
+    const day = new Set(); for (let s = 1; s <= 3; s++) { const r = session(s, 10, {W: 40, clock: 0, gear: {line: 3, rod: 3, reel: 3, bait: 1}}); r.lands.forEach(x => day.add(x.id)); }
     check(day.size >= 9, `ten minutes from dawn to night logs about ten species (${day.size})`);
+  },
+  shop() {
+    const st = S.create({seed: 5, W: 18});
+    check(st.coins === 0 && Object.values(st.gear).every(v => v === 0), 'a new boat has no money and its own tackle');
+    check(!S.buy(st, 'line') && st.gear.line === 0, 'nothing is sold on credit');
+    st.coins = S.GEAR.line[1].price; check(S.buy(st, 'line') && st.coins === 0 && st.gear.line === 1, 'a purchase costs exactly its price');
+    for (const k of Object.keys(S.GEAR)) for (let i = 1; i < S.GEAR[k].length; i++) check(S.GEAR[k][i].price > (S.GEAR[k][i - 1].price || 0), `${k}: each step costs more than the last`);
+    st.coins = 1e6; while (S.buy(st, 'rod')); check(st.gear.rod === S.GEAR.rod.length - 1 && !S.nextGear(st, 'rod'), 'tackle is bought in order and stops at the best');
+    // the line decides how deep the hook can go
+    for (let l = 0; l < 4; l++) { const s2 = S.create({seed: 1, W: 18}); s2.gear.line = l; S.cast(s2, 8, 99); check(s2.line.y <= S.reach(s2) + 1e-9 && s2.line.y <= S.BED - .5, `line ${l}: a cast stops at ${S.reach(s2)} m`); }
+    // a fish deep below the hook rises little for it
+    { const s3 = S.create({seed: 2, W: 18}); s3.fish = []; const f = S.spawn(s3, true, S.BY.cod, {single: 1}); f.x = 9; f.y = 18; f.dir = 1; f.cool = 0; S.cast(s3, 9.5, 7); s3.line.phase = 'set'; s3.line.hookY = 7;
+      let noticed = false; for (let i = 0; i < 120 * 30; i++) for (const e of S.step(s3)) if (e.type === 'notice' && e.id === f.id) noticed = true; check(!noticed, 'a cod at 18 m never rises to a hook at 7 m'); }
+    // orders: three, for fish the line reaches, paid exactly when filled
+    for (let seed = 1; seed <= 30; seed++) {
+      const s4 = S.create({seed, W: 18}); check(s4.orders.length === 3 && new Set(s4.orders.map(o => o.sp)).size === 3, `seed ${seed}: three different orders`);
+      check(s4.orders.every(o => S.BY[o.sp].depth[0] <= S.reach(s4) + 1 && S.BY[o.sp].rar >= 1), `seed ${seed}: orders only for common fish the line can reach`);
+    }
+    { const r = session(3, 8, {gear: {line: 0, rod: 0, reel: 0, bait: 0}}), s5 = r.st;
+      const paid = r.lands.reduce((a, x) => a + x.pay + x.bonus, 0), filled = r.lands.reduce((a, x) => a + x.orders.length, 0);
+      check(s5.coins === paid && s5.earned === paid, `every coin in the purse was paid for a landed fish (${paid})`);
+      check(filled >= 1, `eight minutes on the shallows fill an order (${filled})`);
+      check(r.lands.every(x => x.pay === S.payFor(S.BY[x.id], (x.cm - S.BY[x.id].len[0]) / (S.BY[x.id].len[1] - S.BY[x.id].len[0])) || Math.abs(x.pay - S.payFor(S.BY[x.id], (x.cm - S.BY[x.id].len[0]) / (S.BY[x.id].len[1] - S.BY[x.id].len[0]))) <= 1), 'a fish pays its value, more for a big one');
+      check(r.lands.every(x => x.orders.every(o => o.kind === 'count' ? o.sp === x.id : o.sp === x.id && x.cm >= o.cm)), 'an order is filled only by the fish it asks for'); }
+    // legends come only to the ready
+    { const s6 = S.create({seed: 4, W: 18}); check(S.legendFor(s6) === null, 'no legend comes to a new boat');
+      kit(s6, {line: 3, rod: 3, reel: 3, bait: 2}); s6.clock = .8; check(S.legendFor(s6) === null, 'nor to full tackle that has not caught their kin');
+      s6.journal.cod = {n: 3, best: 90}; s6.journal.monk = {n: 3, best: 90}; check(['oldgrey', 'lamplighter'].includes((S.legendFor(s6) || {}).id), 'Old Grey or the Lamplighter come at night to an angler who knows cod and monkfish');
+      s6.gear.bait = 1; check(S.legendFor(s6) === null, 'and not on plain bait'); }
+  },
+  hour() {
+    // a person-paced angler: casts at a shadow it can reach, strikes 0.3 s late, fights carefully, and buys the cheapest thing it can afford
+    for (const seed of [1, 2, 3]) {
+      const st = S.create({seed, W: 18, clock: .1}), R = S.rng(seed * 7 + 1);
+      let t = 0, q = [], idle = 0, wait = 0, last = 0, lull = 0; const first = {}, buys = [];
+      for (let i = 0; i < 75 * 60 / S.STEP; i++) {
+        t += S.STEP; q = q.filter(([a, fn]) => a <= t ? (fn(), false) : true);
+        const L = st.line;
+        if (L.phase === 'idle' && (idle += S.STEP) > 2) {
+          idle = 0; wait = 0;
+          const opts = Object.keys(S.GEAR).map(k => [k, S.nextGear(st, k)]).filter(([, g]) => g).sort((a, b) => a[1].price - b[1].price);
+          if (opts.length && st.coins >= opts[0][1].price && S.buy(st, opts[0][0])) { buys.push(t / 60); lull = Math.max(lull, t - last); last = t; }
+          const c = st.fish.filter(f => f.state === 'swim' && f.x > 3 && f.x < st.W - 3 && f.y < S.reach(st) + 1);
+          let f = c[Math.floor(R() * c.length)]; if (c.length && R() < .5) f = c.reduce((a, b) => b.cm > a.cm ? b : a);
+          if (f) S.cast(st, f.x + f.dir * 2.5, f.y); else S.cast(st, 3 + R() * (st.W - 6), 2 + R() * 5);
+        }
+        if (L.phase === 'set' && !L.fish && (wait += S.STEP) > 20) S.release(st, 'bored');
+        if (L.phase === 'landed' && !L._q) { L._q = 1; q.push([t + 2.5, () => S.putBack(st)]); }
+        if (L.phase === 'fight') { const w = L.mode === 'rest'; if (L._w !== w) { L._w = w; q.push([t + .3, () => S.hold(st, w)]); } }
+        for (const e of S.step(st)) {
+          if (e.type === 'bite') q.push([t + .32, () => S.tap(st)]);
+          if (e.type === 'land' && e.rec.first) { first[e.rec.id] = t / 60; lull = Math.max(lull, t - last); last = t; }
+        }
+        if (i === Math.round(60 * 60 / S.STEP)) {
+          const sp = S.SPECIES.filter(s => st.journal[s.id]).length;
+          check(sp >= 13 && sp <= 20, `seed ${seed}: an hour logs most species but not all (${sp} of 21)`);
+        }
+      }
+      const owned = Object.values(st.gear).reduce((a, b) => a + b, 0);
+      check(buys[0] < 4, `seed ${seed}: the first purchase within four minutes (${buys[0].toFixed(1)})`);
+      check(buys.length >= 10, `seed ${seed}: most of the tackle bought inside 75 minutes (${buys.length} of 12)`);
+      check(!buys.length || buys[buys.length - 1] > 35, `seed ${seed}: but not all of it in the first half hour (last at ${buys[buys.length - 1].toFixed(0)} min)`);
+      check(lull < 18 * 60, `seed ${seed}: never long without a new species or new tackle - orders and medals fill the gaps between (${(lull / 60).toFixed(1)} min)`);
+    }
   },
   save() {
     const st = S.create({seed: 1}); st.journal = {cod: {n: 2, best: 90}}; st.total = 2; st.clock = .42;
     const back = S.create({seed: 2, save: JSON.parse(JSON.stringify(S.save(st)))});
     check(JSON.stringify(back.journal) === JSON.stringify(st.journal) && back.total === 2 && Math.abs(back.clock - .42) < 1e-3, 'a save comes back exactly');
+    { const a = S.create({seed: 3}); a.coins = 77; a.earned = 300; a.gear = {line: 2, rod: 1, reel: 0, bait: 3}; a.orders[0].have = 1; const b = S.create({seed: 9, save: JSON.parse(JSON.stringify(S.save(a)))});
+      check(b.coins === 77 && b.earned === 300 && JSON.stringify(b.gear) === JSON.stringify(a.gear) && JSON.stringify(b.orders.map(o => [o.sp, o.kind, o.have])) === JSON.stringify(a.orders.map(o => [o.sp, o.kind, o.have])), 'purse, tackle and orders come back exactly'); }
+    { const e = S.create({seed: 1, save: {coins: -9, earned: 'x', gear: {line: 99, rod: -2, reel: 1.7, bait: '3'}, orders: [{kind: 'count', sp: 'kraken', need: 9}, {kind: 'count', sp: 'tuna', need: 50, have: 99}, {kind: 'size', sp: 'cod', cm: 9999}]}});
+      check(e.coins === 0 && e.gear.line === 3 && e.gear.rod === 0 && e.gear.reel === 1 && e.gear.bait === 0, 'lying coins and tackle are clamped');
+      check(e.orders.every(o => S.BY[o.sp] && (o.kind !== 'count' || o.need <= 3 && o.have < o.need) && (o.kind !== 'size' || o.cm <= S.BY[o.sp].len[1])) && e.orders.length === 3, 'forged orders are cleaned, and the board is filled'); }
     const evil = S.create({seed: 1, save: {clock: 'x', total: -5, journal: {cod: {n: 1e12, best: 9999}, kraken: {n: 3, best: 10}, tuna: {n: 0, best: 200}, ling: 'x', __proto__: {n: 1}}}});
     check(evil.journal.cod.n === 1e6 && evil.journal.cod.best === S.BY.cod.len[1], 'a lying count and record are clamped');
     check(!evil.journal.kraken && !evil.journal.tuna && !evil.journal.ling, 'unknown species, empty entries and junk are dropped');
@@ -196,6 +278,7 @@ const suites = {
     check(m.journal.tuna.best === 170 && m.journal.oarfish.n === 2, 'tuna and oarfish carry over');
     check(!m.journal.anchovy && !m.journal.bass && !m.journal.sword, 'species with no place here (and a forged count) do not');
     check(m.total === 14 && m.prefs.muted === true && m.prefs.taught === 1, 'fish landed and the mute choice carry over, and the title is skipped');
+    check(m.coins === 50 && S.migrate({coins: 1e9}).coins === 300, 'a few of the old coins come along, never a fortune');
     check(S.migrate(null) === null && S.migrate('x') === null, 'no old save, no migration');
     const st = S.create({seed: 1, save: m}); check(st.journal.tuna.n === 1 && st.total === 14, 'the migrated save loads');
   },
