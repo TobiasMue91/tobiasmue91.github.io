@@ -105,6 +105,7 @@
     </style>
 </head>
 <body>
+<canvas id="bg" aria-hidden="true"></canvas>
 <canvas id="cv" aria-label="Frog Crossing game board"></canvas>
 <template id="frogsvg"><svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="M-6.5 3.5 Q-11 8 -6 10.5 M6.5 3.5 Q11 8 6 10.5" stroke="#0f220d" stroke-width="3.2" fill="none" stroke-linecap="round"/><path d="M-6.5 3.5 Q-11 8 -6 10.5 M6.5 3.5 Q11 8 6 10.5" stroke="#93d64e" stroke-width="1.6" fill="none" stroke-linecap="round"/><ellipse cx="0" cy="1" rx="6.5" ry="7.5" fill="#a6e35a" stroke="#0f220d" stroke-width="1.4"/><circle cx="-3.8" cy="-5.4" r="3" fill="#f2c24a" stroke="#0f220d" stroke-width="1.2"/><circle cx="3.8" cy="-5.4" r="3" fill="#f2c24a" stroke="#0f220d" stroke-width="1.2"/><circle cx="-3.8" cy="-5.5" r="1.4" fill="#121d0c"/><circle cx="3.8" cy="-5.5" r="1.4" fill="#121d0c"/></svg></template>
 
@@ -448,6 +449,18 @@ const C = {
 };
 const hash = (a, b = 0, c = 0) => { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
+// Pre-rendered pieces. Anything whose look does not change from frame to frame (a log, a car, a shell, a glow) is
+// drawn once into its own canvas at the screen's pixel density and stamped with drawImage after that; building
+// gradients and paths every frame was what made the page slow.
+const SPR = new Map(); let SPR_DPR = 1;
+function sprite(key, w, h, paint) {
+  let s = SPR.get(key); if (s) return s;
+  const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.ceil(w * SPR_DPR)); cv.height = Math.max(1, Math.ceil(h * SPR_DPR));
+  const x = cv.getContext('2d'); x.scale(SPR_DPR, SPR_DPR); paint(x);
+  s = {cv, w, h}; SPR.set(key, s); return s;
+}
+const stamp = (ctx, s, x, y) => ctx.drawImage(s.cv, x, y, s.w, s.h);
+
 function rr(ctx, x, y, w, h, r) {
   r = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
@@ -465,13 +478,16 @@ function makeView(W, H, dpr, hudTop, bottomPad) {
   const bw = 9 * c, bh = 13 * rh;
   const ox = Math.round((W - bw) / 2), oy = Math.round(hudTop + PONDS * rh);
   const card = W - bw > c * 2;
-  return {W, H, c, rh, ox, oy, bw, bh, dpr, card, hudTop, pondH: PONDS * rh, cardTop: hudTop, cardBottom: Math.min(H, Math.round(oy + bh + TAIL * rh))};
+  // the stretch of lane worth drawing: on a wide screen only the lit card (the dark beyond it is static)
+  const span0 = card ? -1.6 : -ox / c - 6, span1 = card ? 10.6 : (W - ox) / c + 1;
+  return {W, H, c, rh, ox, oy, bw, bh, dpr, card, span0, span1, hudTop, pondH: PONDS * rh, cardTop: hudTop, cardBottom: Math.min(H, Math.round(oy + bh + TAIL * rh))};
 }
 const RY = (v, row) => v.oy + (12 - row) * v.rh;   // top of a row on screen
 const RC = (v, row) => v.oy + (12.5 - row) * v.rh; // its middle
 
 // ---------- static background (pre-rendered once per size) ----------
 function paintStatic(v) {
+  SPR.clear(); SPR_DPR = v.dpr;
   const cv = document.createElement('canvas');
   cv.width = Math.ceil(v.W * v.dpr); cv.height = Math.ceil(v.H * v.dpr);
   const ctx = cv.getContext('2d'); ctx.scale(v.dpr, v.dpr);
@@ -544,7 +560,6 @@ function paintStatic(v) {
   }
   // verges: wet grass
   grassBand(ctx, v, RY(v, 6), rh, 6); grassBand(ctx, v, RY(v, 0), rh, 0);
-  drawSign(ctx, v.ox + c * 8.35, RY(v, 0) + rh * 0.75, c * 1.2);
   const my = RY(v, 0) + rh;
   if (my < H) { grassBand(ctx, v, my, H - my, 99); gr = ctx.createLinearGradient(0, my, 0, H); gr.addColorStop(0, 'rgba(4,8,12,0.2)'); gr.addColorStop(1, 'rgba(4,8,12,0.8)'); ctx.fillStyle = gr; ctx.fillRect(0, my, W, H - my); }
   ctx.fillStyle = '#251f15'; ctx.fillRect(0, RY(v, 6) - Math.max(2, c * 0.06), W, Math.max(2, c * 0.08));
@@ -570,6 +585,14 @@ function paintStatic(v) {
     for (let x = (v.ox % c) - c; x < W; x += c) { ctx.fillStyle = 'rgba(214,218,224,0.55)'; ctx.fillRect(x + c * 0.22, y, c * 0.5, Math.max(1.5, c * 0.045)); }
   }
 
+  // night: everything that never moves is lit once, here - moonlight, the two streetlamps, the inlets
+  bakeLight(ctx, v);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (const [x, , r1] of LAMPS) { const lx = v.ox + x * c, ly = v.oy + (12.5 - r1) * rh, pg = ctx.createRadialGradient(lx, ly, 0, lx, ly, c * 2.4); pg.addColorStop(0, 'rgba(255,190,110,0.2)'); pg.addColorStop(1, 'rgba(255,190,110,0)'); ctx.fillStyle = pg; ctx.beginPath(); ctx.ellipse(lx, ly, c * 2.4, c * 1.9, 0, 0, 7); ctx.fill(); }
+  ctx.restore();
+  // a frog-crossing sign on the start verge, drawn after the road and the light so neither can paint over it
+  drawSign(ctx, v.ox + c * 8.45, RY(v, 0) + rh * 0.9, Math.min(c, rh * 0.95));
+  ctx.drawImage(paintOverlay(v), 0, 0, W, H);
   return cv;
 }
 function grassBand(ctx, v, y, h, seed) {
@@ -628,9 +651,14 @@ function drawSign(ctx, x, y, c) {
   ctx.fillStyle = '#111'; rr(ctx, -s, -s, 2 * s, 2 * s, s * 0.18); ctx.fill();
   ctx.fillStyle = '#f5c400'; rr(ctx, -s * 0.88, -s * 0.88, 1.76 * s, 1.76 * s, s * 0.14); ctx.fill();
   ctx.restore();
-  // the pictogram: a frog in black
-  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(x, cy + c * 0.02, c * 0.07, c * 0.08, 0, 0, 7); ctx.fill();
-  for (const sg of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sg * c * 0.045, cy - c * 0.06, c * 0.028, 0, 7); ctx.fill(); ctx.beginPath(); ctx.ellipse(x + sg * c * 0.08, cy + c * 0.07, c * 0.045, c * 0.02, sg * 0.6, 0, 7); ctx.fill(); }
+  // the pictogram: a frog seen from above, in black
+  ctx.fillStyle = '#111'; ctx.strokeStyle = '#111'; ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1, c * 0.028);
+  ctx.beginPath(); ctx.ellipse(x, cy + c * 0.02, c * 0.055, c * 0.07, 0, 0, 7); ctx.fill();
+  for (const sg of [-1, 1]) {
+    ctx.beginPath(); ctx.arc(x + sg * c * 0.035, cy - c * 0.055, c * 0.022, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x + sg * c * 0.04, cy - c * 0.01); ctx.lineTo(x + sg * c * 0.09, cy - c * 0.05);
+    ctx.moveTo(x + sg * c * 0.04, cy + c * 0.06); ctx.lineTo(x + sg * c * 0.1, cy + c * 0.1); ctx.stroke();
+  }
 }
 function drawLily(ctx, x, y, r, a, alpha = 1) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.globalAlpha = alpha;
@@ -651,32 +679,38 @@ function drawWater(ctx, v, g, now, reduced) {
     const lane = g.lanes[row], y = RY(v, row);
     // current: streaks on the lane's own grid, translated rigidly with the flow
     const drift = reduced ? 0 : lane.v * 0.6 * g.t, cell = 0.8;
-    const first = Math.floor((-v.ox / c - drift) / cell) - 1, last = Math.ceil(((W - v.ox) / c - drift) / cell) + 1;
-    const dir = lane.v > 0 ? 1 : -1;
-    ctx.lineWidth = Math.max(1.2, c * 0.04);
+    const first = Math.floor((v.span0 - 1 - drift) / cell) - 1, last = Math.ceil((v.span1 - drift) / cell) + 1;
+    const dir = lane.v > 0 ? 1 : -1, lw = Math.max(1.2, c * 0.04);
+    // one tapered streak, bright at the head, stretched to each length
+    const st = sprite('streak' + dir, c, lw + 2, x => { const sg = x.createLinearGradient(0, 0, c, 0); sg.addColorStop(dir > 0 ? 0 : 1, 'rgba(170,225,236,0)'); sg.addColorStop(dir > 0 ? 1 : 0, 'rgba(170,225,236,0.3)'); x.fillStyle = sg; rr(x, 0, 1, c, lw, lw / 2); x.fill(); });
     for (let k = first; k <= last; k++) {
       if (hash(k, row, 51) > 0.65) continue;
       const x = v.ox + (k * cell + drift + hash(k, row, 52) * 0.4) * c, yy = y + rh * (0.12 + hash(k, row, 53) * 0.76), l = c * (0.35 + hash(k, row, 54) * 0.5);
-      const head = dir > 0 ? x + l : x, tail = dir > 0 ? x : x + l;
-      const sg = ctx.createLinearGradient(tail, 0, head, 0); sg.addColorStop(0, 'rgba(170,225,236,0)'); sg.addColorStop(1, 'rgba(170,225,236,0.38)');
-      ctx.strokeStyle = sg; ctx.beginPath(); ctx.moveTo(tail, yy); ctx.lineTo(head, yy); ctx.stroke();
+      ctx.drawImage(st.cv, x, yy - st.h / 2, l, st.h);
     }
     // a faint seam where two currents meet
-    ctx.fillStyle = 'rgba(0,20,30,0.18)'; ctx.fillRect(0, y - 1, W, 2);
+    ctx.fillStyle = 'rgba(0,20,30,0.18)'; ctx.fillRect(v.ox + v.span0 * c, y - 1, (v.span1 - v.span0) * c, 2);
   }
   if (reduced) return;
   // rain landing on the river and the pond: rings
-  const top = 0, bottom = RY(v, 6), n = Math.floor(W * (bottom - top) / (c * c) * 0.35);
+  // rings batched into four paths by age, instead of one stroke (and one style change) per ring
+  const x0 = Math.max(0, v.ox + v.span0 * c), x1 = Math.min(W, v.ox + v.span1 * c), top = 0, bottom = RY(v, 6);
+  const n = Math.floor((x1 - x0) * (bottom - top) / (c * c) * 0.35), B = 4;
   ctx.lineWidth = 1;
-  for (let i = 0; i < n; i++) {
-    const life = 0.9, ph = (now / life + hash(i, 71)) , k = Math.floor(ph), p = ph - k;
-    const x = hash(i, k, 72) * W, y = top + hash(i, k, 73) * (bottom - top);
-    ctx.strokeStyle = `rgba(190,230,240,${0.32 * (1 - p)})`;
-    ctx.beginPath(); ctx.ellipse(x, y, c * (0.04 + p * 0.22), c * (0.025 + p * 0.13), 0, 0, 7); ctx.stroke();
+  for (let b = 0; b < B; b++) {
+    ctx.strokeStyle = `rgba(190,230,240,${(0.26 * (1 - (b + 0.5) / B)).toFixed(3)})`; ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const ph = now / 0.9 + hash(i, 71), k = Math.floor(ph), p = ph - k;
+      if (Math.floor(p * B) !== b) continue;
+      const x = x0 + hash(i, k, 72) * (x1 - x0), y = top + hash(i, k, 73) * (bottom - top), rx = c * (0.04 + p * 0.22);
+      ctx.moveTo(x + rx, y); ctx.ellipse(x, y, rx, c * (0.025 + p * 0.13), 0, 0, 7);
+    }
+    ctx.stroke();
   }
 }
 
 function drawLog(ctx, x, cy, w, c, seed) {
+  ctx.fillStyle = 'rgba(2,18,26,0.45)'; rr(ctx, x - c * 0.05, cy - c * 0.4, w + c * 0.1, c * 0.8, c * 0.4); ctx.fill();
   const h = c * 0.72, top = cy - h / 2, tone = hash(seed, 1, 60);
   ctx.fillStyle = 'rgba(0,10,15,0.4)'; rr(ctx, x + c * 0.05, top + c * 0.1, w, h, h / 2); ctx.fill();
   const g = ctx.createLinearGradient(0, top, 0, top + h);
@@ -710,6 +744,19 @@ function drawLog(ctx, x, cy, w, c, seed) {
   }
 }
 
+function turtleShell(ctx, c, diver) {
+  ctx.fillStyle = diver ? '#8c7a5a' : '#9a9a5a';
+  ctx.beginPath(); ctx.ellipse(c * 0.36, 0, c * 0.1, c * 0.085, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#0d150a'; ctx.beginPath(); ctx.arc(c * 0.4, -c * 0.045, c * 0.018, 0, 7); ctx.arc(c * 0.4, c * 0.045, c * 0.018, 0, 7); ctx.fill();
+  const g = ctx.createRadialGradient(-c * 0.06, -c * 0.08, 0, 0, 0, c * 0.32);
+  g.addColorStop(0, diver ? '#ffb070' : '#a7b07a'); g.addColorStop(0.65, diver ? '#e0642a' : '#5f6d3e'); g.addColorStop(1, diver ? '#8a2f10' : '#3b4426');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, c * 0.31, c * 0.27, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = diver ? 'rgba(255,205,140,0.7)' : 'rgba(40,38,10,0.8)'; ctx.lineWidth = Math.max(0.8, c * (diver ? 0.032 : 0.025));
+  ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; const px = Math.cos(a) * c * 0.11, py = Math.sin(a) * c * 0.1; k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.stroke();
+  for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * c * 0.11, Math.sin(a) * c * 0.1); ctx.lineTo(Math.cos(a) * c * 0.29, Math.sin(a) * c * 0.25); ctx.stroke(); }
+  if (diver) { ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = Math.max(1.2, c * 0.035); ctx.beginPath(); ctx.ellipse(0, 0, c * 0.3, c * 0.26, 0, 0, 7); ctx.stroke(); }
+}
+
 // a turtle seen from above. divers carry painted (orange-lined) shells, so the rule can be learned by sight.
 function drawTurtle(ctx, cx, cy, c, dir, now, sink, seed, diver, warn = 0) {
   c *= 1.18; // a turtle fills its cell, so its shell reads against the water
@@ -724,20 +771,12 @@ function drawTurtle(ctx, cx, cy, c, dir, now, sink, seed, diver, warn = 0) {
   ctx.save(); ctx.translate(cx, cy + Math.sin(now * 2.2 + seed) * c * 0.015); ctx.rotate(Math.sin(now * 1.7 + seed * 1.9) * 0.06); ctx.scale(dir, 1);
   const s = 1 - sink * 0.18; ctx.scale(s, s);
   const paddle = Math.sin(now * 7 + seed * 2.1) * 0.35;
-  ctx.fillStyle = diver ? '#8c7a5a' : '#9a9a5a';
+  ctx.fillStyle = diver ? '#76664b' : '#7f8050';
   for (const [fx, fy, a] of [[0.2, -0.27, -0.6 + paddle], [0.2, 0.27, 0.6 - paddle], [-0.2, -0.24, -2.4 - paddle], [-0.2, 0.24, 2.4 + paddle]]) {
     ctx.save(); ctx.translate(fx * c, fy * c); ctx.rotate(a); ctx.beginPath(); ctx.ellipse(c * 0.1, 0, c * 0.12, c * 0.05, 0, 0, 7); ctx.fill(); ctx.restore();
   }
-  ctx.beginPath(); ctx.ellipse(c * 0.36, 0, c * 0.1, c * 0.085, 0, 0, 7); ctx.fill();
-  if (false) { ctx.strokeStyle = '#e88a3a'; ctx.lineWidth = c * 0.02; ctx.beginPath(); ctx.moveTo(c * 0.29, -c * 0.03); ctx.lineTo(c * 0.42, -c * 0.03); ctx.moveTo(c * 0.29, c * 0.03); ctx.lineTo(c * 0.42, c * 0.03); ctx.stroke(); }
-  ctx.fillStyle = '#0d150a'; ctx.beginPath(); ctx.arc(c * 0.4, -c * 0.045, c * 0.018, 0, 7); ctx.arc(c * 0.4, c * 0.045, c * 0.018, 0, 7); ctx.fill();
-  const g = ctx.createRadialGradient(-c * 0.06, -c * 0.08, 0, 0, 0, c * 0.32);
-  g.addColorStop(0, diver ? '#ffb070' : '#a7b07a'); g.addColorStop(0.65, diver ? '#e0642a' : '#5f6d3e'); g.addColorStop(1, diver ? '#8a2f10' : '#3b4426');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, c * 0.31, c * 0.27, 0, 0, 7); ctx.fill();
-  ctx.strokeStyle = diver ? 'rgba(255,205,140,0.7)' : 'rgba(40,38,10,0.8)'; ctx.lineWidth = Math.max(0.8, c * (diver ? 0.032 : 0.025));
-  ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; const px = Math.cos(a) * c * 0.11, py = Math.sin(a) * c * 0.1; k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.stroke();
-  for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * c * 0.11, Math.sin(a) * c * 0.1); ctx.lineTo(Math.cos(a) * c * 0.29, Math.sin(a) * c * 0.25); ctx.stroke(); }
-  if (diver) { ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = Math.max(1.2, c * 0.035); ctx.beginPath(); ctx.ellipse(0, 0, c * 0.3, c * 0.26, 0, 0, 7); ctx.stroke(); }
+  const sp = sprite('shell' + (diver ? 1 : 0) + ':' + c, c, c * 0.7, x => { x.translate(c * 0.5, c * 0.35); turtleShell(x, c, diver); x.setTransform(SPR_DPR, 0, 0, SPR_DPR, 0, 0); nightShade(x, c, c * 0.7, 0.2); });
+  stamp(ctx, sp, -c * 0.5, -c * 0.35);
   if (sink > 0) { ctx.fillStyle = `rgba(16,64,78,${Math.min(0.7, sink * 1.0)})`; ctx.beginPath(); ctx.ellipse(0, 0, c * 0.36, c * 0.32, 0, 0, 7); ctx.fill(); ctx.strokeStyle = 'rgba(210,240,250,0.55)'; ctx.lineWidth = Math.max(1, c * 0.025); for (const a0 of [0.3, 3.4]) { ctx.beginPath(); ctx.ellipse(0, 0, c * 0.33, c * 0.29, 0, a0, a0 + 1.1); ctx.stroke(); } }
   ctx.restore();
   if (sink > 0) { ctx.fillStyle = 'rgba(215,240,250,0.8)'; for (let k = 0; k < 5; k++) { const p = (now * 1.6 + k / 5) % 1; ctx.beginPath(); ctx.arc(cx + (hash(seed, k, 83) - 0.5) * c * 0.6, cy + (hash(seed, k, 84) - 0.5) * c * 0.5 - p * c * 0.1, c * (0.015 + p * 0.03), 0, 7); ctx.fill(); }
@@ -752,7 +791,7 @@ function drawVehicle(ctx, x, cy, len, c, type, v, paint, pass) {
     // a short soft pool of headlight on the wet road, and the lamps' reflections smeared in the water film
     const reach = c * 1.25;
     let g = ctx.createRadialGradient(L / 2, 0, 0, L / 2, 0, reach);
-    g.addColorStop(0, C.beam + '0.22)'); g.addColorStop(0.6, C.beam + '0.07)'); g.addColorStop(1, C.beam + '0)');
+    g.addColorStop(0, C.beam + '0.3)'); g.addColorStop(0.6, C.beam + '0.07)'); g.addColorStop(1, C.beam + '0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(L / 2, -H * 0.38); ctx.lineTo(L / 2 + reach, -H * 0.62); ctx.lineTo(L / 2 + reach, H * 0.62); ctx.lineTo(L / 2, H * 0.38); ctx.closePath(); ctx.fill();
     for (const s of [-1, 1]) {
       const yy = s * (H / 2 - c * 0.09);
@@ -831,6 +870,12 @@ function drawVehicle(ctx, x, cy, len, c, type, v, paint, pass) {
   ctx.beginPath(); ctx.ellipse(L / 2 - c * 0.03, -H / 2 + c * 0.09, c * 0.035, c * 0.06, 0, 0, 7); ctx.ellipse(L / 2 - c * 0.03, H / 2 - c * 0.09, c * 0.035, c * 0.06, 0, 0, 7); ctx.fill();
   ctx.fillStyle = C.tail; ctx.fillRect(-L / 2, -H / 2 + c * 0.05, c * 0.04, c * 0.1); ctx.fillRect(-L / 2, H / 2 - c * 0.15, c * 0.04, c * 0.1);
   ctx.restore();
+}
+function vehicleSprite(c, len, type, v, paint) {
+  return sprite(`car:${type}:${len}:${v > 0 ? 1 : 0}:${paint}`, len * c + c * 0.3, c * 1.2, x => { drawVehicle(x, c * 0.15, c * 0.6, len, c, type, v, paint, 'body'); nightShade(x, len * c + c * 0.3, c * 1.2, 0.12); });
+}
+function vehicleLightSprite(c, len, type, v) {
+  return sprite(`carlight:${type}:${len}:${v > 0 ? 1 : 0}`, len * c + c * 4, c * 1.9, x => drawVehicle(x, c * 2, c * 0.6, len, c, type, v, 0, 'light'));
 }
 function shade(hex, k) {
   const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
@@ -912,49 +957,33 @@ function drawLamps(ctx, v) {
 }
 // night lighting: the scene is multiplied by a light map - dim blue moonlight everywhere, real light only
 // where something gives it off (lamps, headlights, open bays, the firefly)
-let LIGHT = null;
-function applyLight(ctx, v, g, fx) {
-  const {c, rh, W, H} = v, s = 0.5;
-  if (!LIGHT || LIGHT.width !== Math.ceil(W * s) || LIGHT.height !== Math.ceil(H * s)) { LIGHT = document.createElement('canvas'); LIGHT.width = Math.ceil(W * s); LIGHT.height = Math.ceil(H * s); }
-  const L = LIGHT.getContext('2d');
-  L.setTransform(s, 0, 0, s, 0, 0); L.globalCompositeOperation = 'source-over';
+function bakeLight(ctx, v) {
+  const {c, rh, W, H} = v;
+  const LIGHT = document.createElement('canvas'); LIGHT.width = Math.ceil(W / 2); LIGHT.height = Math.ceil(H / 2);
+  const L = LIGHT.getContext('2d'); L.scale(0.5, 0.5);
   L.fillStyle = 'rgb(112,128,168)'; L.fillRect(0, 0, W, H);
   L.globalCompositeOperation = 'lighter';
   const glow = (x, y, r, col, a, sx = 1, sy = 1) => {
-    const gr = L.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${col},${a})`); gr.addColorStop(0.5, `rgba(${col},${a * 0.45})`); gr.addColorStop(1, `rgba(${col},0)`);
-    L.fillStyle = gr; L.save(); L.translate(x, y); L.scale(sx, sy); L.translate(-x, -y); L.beginPath(); L.arc(x, y, r, 0, 7); L.fill(); L.restore();
+    const gr = L.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, `rgba(${col},${a})`); gr.addColorStop(0.5, `rgba(${col},${a * 0.45})`); gr.addColorStop(1, `rgba(${col},0)`);
+    L.save(); L.translate(x, y); L.scale(sx, sy); L.fillStyle = gr; L.beginPath(); L.arc(0, 0, r, 0, 7); L.fill(); L.restore();
   };
-  // moonlight on the pond and the far river
-  let gr = L.createLinearGradient(0, 0, 0, RY(v, 6)); gr.addColorStop(0, 'rgba(80,85,85,1)'); gr.addColorStop(1, 'rgba(60,70,70,0.9)');
+  // moonlight on the pond and the river
+  const gr = L.createLinearGradient(0, 0, 0, RY(v, 6)); gr.addColorStop(0, 'rgba(80,85,85,1)'); gr.addColorStop(1, 'rgba(60,70,70,0.9)');
   L.fillStyle = gr; L.fillRect(0, 0, W, RY(v, 6));
   for (const [x, , r1] of LAMPS) glow(v.ox + x * c, v.oy + (12.5 - r1) * rh, c * 3.2, '255,200,130', 1, 1, 0.75);
-  const t = g.t, span0 = -v.ox / c - 6, span1 = (W - v.ox) / c + 1;
-  for (let row = 1; row <= 5; row++) {
-    const lane = g.lanes[row], cy = RC(v, row), dir = lane.v > 0 ? 1 : -1;
-    for (const it of lane.items) {
-      const Lx = FROG.left(lane, it, t);
-      for (let k = Math.floor((span0 - Lx) / lane.P); Lx + k * lane.P < span1; k++) {
-        const x0 = v.ox + (Lx + k * lane.P) * c, w = it.len * c, front = dir > 0 ? x0 + w : x0, back = dir > 0 ? x0 : x0 + w;
-        glow(x0 + w / 2, cy, c * (0.55 + it.len * 0.25), '200,205,215', 0.55, 1.4, 0.75);
-        glow(front + dir * c * 0.6, cy, c * 0.9, '255,228,170', 0.7, 1.3, 0.5);
-        glow(back - dir * c * 0.2, cy, c * 0.45, '255,60,40', 0.6, 1.2, 0.7);
-      }
-    }
-  }
-  for (let i = 0; i < 5; i++) {
-    const cx = v.ox + FROG.BAYS[i] * c, cy = RC(v, 12);
-    glow(cx, cy, c * 0.85, g.bays[i] ? '150,190,140' : '170,240,120', g.bays[i] ? 0.4 : 0.65);
-    if (g.fly.bay === i && g.t < g.fly.until) glow(cx, cy, c * (1.7 + 0.15 * Math.sin(fx.now * 5)), '255,225,120', 1);
-  }
-  if (g.frog && !g.frog.gone) { const p = FROG.pos(g); glow(v.ox + p.x * c, RC(v, p.y), c * 0.9, '170,200,150', 0.5); }
-  for (const p of fx.parts) if (p.light) p.light(glow, v, fx.now);
+  for (let i = 0; i < 5; i++) glow(v.ox + FROG.BAYS[i] * c, RC(v, 12), c * 0.85, '170,240,120', 0.55);
   ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(LIGHT, 0, 0, W, H); ctx.restore();
 }
+// what moves is shaded for the night once, when its sprite is made, instead of under a light map every frame
+function nightShade(ctx, w, h, a) { ctx.save(); ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = `rgba(14,24,52,${a})`; ctx.fillRect(0, 0, w, h); ctx.restore(); }
 
 // one whole frame. fx: page-side effects and the wall clock (now).
-function drawFrame(ctx, v, g, bg, ov, fx) {
+function drawFrame(ctx, v, g, fx) {
   const {c, rh, W, H} = v, t = g.t, now = fx.now, red = fx.reduced;
-  ctx.drawImage(bg, 0, 0, W, H);
+  // the background (and the dark beyond the card) is its own canvas underneath; this layer holds only what moves
+  ctx.clearRect(-W, -H, 3 * W, 3 * H);
+  ctx.save();
+  if (v.card) { rr(ctx, v.ox, v.cardTop - 1, v.bw, v.cardBottom - v.cardTop + 1, Math.round(c * 0.3)); ctx.clip(); }
   drawWater(ctx, v, g, now, red);
   // bays
   for (let i = 0; i < 5; i++) {
@@ -962,11 +991,11 @@ function drawFrame(ctx, v, g, bg, ov, fx) {
     const bob = red ? 0 : Math.sin(now * 1.6 + i) * c * 0.02;
     if (!g.bays[i]) {
       const pulse = red ? 0.5 : 0.5 + 0.5 * Math.sin(now * 2.4 + i * 0.7);
-      const gg = ctx.createRadialGradient(cx, cy, 0, cx, cy, c * 0.6);
-      gg.addColorStop(0, `rgba(180,240,110,${0.16 + 0.14 * pulse})`); gg.addColorStop(1, 'rgba(180,240,110,0)');
-      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(cx, cy, c * 0.6, 0, 7); ctx.fill();
+      const gs = sprite('bayglow', c * 1.2, c * 1.2, x => { const gg = x.createRadialGradient(c * 0.6, c * 0.6, 0, c * 0.6, c * 0.6, c * 0.6); gg.addColorStop(0, 'rgba(180,240,110,1)'); gg.addColorStop(1, 'rgba(180,240,110,0)'); x.fillStyle = gg; x.fillRect(0, 0, c * 1.2, c * 1.2); });
+      ctx.globalAlpha = 0.16 + 0.14 * pulse; stamp(ctx, gs, cx - c * 0.6, cy - c * 0.6); ctx.globalAlpha = 1;
     }
-    drawLily(ctx, cx, cy + bob, c * 0.35, 1.2 + i * 1.7, g.bays[i] ? 0.55 : 1);
+    const lily = sprite('lily' + i, c, c, x => drawLily(x, c / 2, c / 2, c * 0.35, 1.2 + i * 1.7, 1));
+    ctx.globalAlpha = g.bays[i] ? 0.55 : 1; stamp(ctx, lily, cx - c / 2, cy + bob - c / 2); ctx.globalAlpha = 1;
     if (g.bays[i]) {
       const since = fx.arrived[i] != null ? now - fx.arrived[i] : 9;
       const pop = since < 0.4 && !red ? 1 + 0.28 * Math.sin(since / 0.4 * Math.PI) : 1;
@@ -983,7 +1012,7 @@ function drawFrame(ctx, v, g, bg, ov, fx) {
     }
     if (g.fly.bay === i && g.t < g.fly.until) { drawFirefly(ctx, cx, cy - c * 0.1, c, now + i); }
   }
-  const span0 = -v.ox / c - 6, span1 = (W - v.ox) / c + 1;
+  const span0 = v.span0 - 4, span1 = v.span1;
   for (let row = 7; row <= 11; row++) {
     const lane = g.lanes[row], cy = RC(v, row);
     for (const it of lane.items) {
@@ -992,9 +1021,10 @@ function drawFrame(ctx, v, g, bg, ov, fx) {
         const x = v.ox + (L + k * lane.P) * c;
         if (it.type === 'log') {
           if (!red) { ctx.strokeStyle = 'rgba(190,230,240,0.18)'; ctx.lineWidth = Math.max(1, c * 0.03); const bx = lane.v > 0 ? x : x + it.len * c, s = lane.v > 0 ? -1 : 1; ctx.beginPath(); ctx.moveTo(bx, cy - c * 0.36); ctx.quadraticCurveTo(bx + s * c * 0.3, cy - c * 0.4, bx + s * c * 0.6, cy - c * 0.5); ctx.moveTo(bx, cy + c * 0.36); ctx.quadraticCurveTo(bx + s * c * 0.3, cy + c * 0.4, bx + s * c * 0.6, cy + c * 0.5); ctx.stroke(); }
-          ctx.fillStyle = 'rgba(2,18,26,0.45)'; rr(ctx, x - c * 0.05, cy - c * 0.4, it.len * c + c * 0.1, c * 0.8, c * 0.4); ctx.fill();
           if (!red) { const s2 = lane.v > 0 ? 1 : -1, fxp = lane.v > 0 ? x + it.len * c : x; ctx.strokeStyle = 'rgba(220,240,245,0.4)'; ctx.lineWidth = Math.max(1, c * 0.03); for (let q = 0; q < 3; q++) { const a0 = -0.9 + q * 0.7; ctx.beginPath(); ctx.arc(fxp - s2 * c * 0.12, cy, c * 0.32, s2 > 0 ? a0 : Math.PI - a0 - 0.4, (s2 > 0 ? a0 : Math.PI - a0 - 0.4) + 0.4); ctx.stroke(); } }
-          drawLog(ctx, x, cy, it.len * c, c, row * 1000 + it.i * 37 + (Math.floor((it.x + lane.v * t) / lane.P) + k) * 7);
+          const variant = Math.floor(hash(row * 1000 + it.i * 37 + (Math.floor((it.x + lane.v * t) / lane.P) + k) * 7, 3, 59) * 6);
+          const ls = sprite('log' + it.len + ':' + variant, it.len * c + c * 0.3, c * 1.1, x => { drawLog(x, c * 0.1, c * 0.55, it.len * c, c, variant * 131 + it.len); nightShade(x, it.len * c + c * 0.3, c * 1.1, 0.24); });
+          stamp(ctx, ls, x - c * 0.1, cy - c * 0.55);
         } else for (let j = 0; j < it.len; j++) drawTurtle(ctx, x + (j + 0.5) * c, cy, c, lane.v > 0 ? 1 : -1, red ? 0 : now, sink, j + it.i * 3 + row * 7, !!it.dive, FROG.warn(it, t));
       }
     }
@@ -1002,22 +1032,18 @@ function drawFrame(ctx, v, g, bg, ov, fx) {
   for (const p of fx.marks) p.draw(ctx, v, now);
   for (let row = 1; row <= 5; row++) {
     const lane = g.lanes[row], cy = RC(v, row);
-    for (const it of lane.items) { const L = FROG.left(lane, it, t); for (let k = Math.floor((span0 - L) / lane.P); L + k * lane.P < span1; k++) drawVehicle(ctx, v.ox + (L + k * lane.P) * c, cy, it.len, c, it.type, lane.v, it.paint, 'body'); }
+    for (const it of lane.items) { const L = FROG.left(lane, it, t); const body = vehicleSprite(c, it.len, it.type, lane.v, it.paint); for (let k = Math.floor((span0 - L) / lane.P); L + k * lane.P < span1; k++) stamp(ctx, body, v.ox + (L + k * lane.P) * c - c * 0.15, cy - c * 0.6); }
   }
-  if (!fx.flat) applyLight(ctx, v, g, fx);
   // road: light on the wet asphalt first, then the vehicles on top
   ctx.save(); ctx.beginPath(); ctx.rect(0, RY(v, 5), W, 5 * rh); ctx.clip(); ctx.globalCompositeOperation = 'lighter';
   for (let row = 1; row <= 5; row++) {
     const lane = g.lanes[row], cy = RC(v, row);
-    for (const it of lane.items) { const L = FROG.left(lane, it, t); for (let k = Math.floor((span0 - L) / lane.P); L + k * lane.P < span1; k++) drawVehicle(ctx, v.ox + (L + k * lane.P) * c, cy, it.len, c, it.type, lane.v, it.paint, 'light'); }
+    for (const it of lane.items) { const L = FROG.left(lane, it, t), vlight = vehicleLightSprite(c, it.len, it.type, lane.v); for (let k = Math.floor((span0 - L) / lane.P); L + k * lane.P < span1; k++) stamp(ctx, vlight, v.ox + (L + k * lane.P) * c - c * 2, cy - c * 0.6); }
   }
-  ctx.restore();
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  for (const [x, , r1] of LAMPS) { const lx = v.ox + x * c, ly = v.oy + (12.5 - r1) * rh, pg = ctx.createRadialGradient(lx, ly, 0, lx, ly, c * 2.4); pg.addColorStop(0, 'rgba(255,190,110,0.2)'); pg.addColorStop(1, 'rgba(255,190,110,0)'); ctx.fillStyle = pg; ctx.beginPath(); ctx.ellipse(lx, ly, c * 2.4, c * 1.9, 0, 0, 7); ctx.fill(); }
   ctx.restore();
   if (fx.drawFrog) fx.drawFrog(ctx, v, g);
   for (const p of fx.parts) p.draw(ctx, v, now);
-  ctx.drawImage(ov, 0, 0, W, H);
+  ctx.restore();
   if (fx.rain && !red) {
     ctx.strokeStyle = 'rgba(205,222,245,0.34)'; ctx.lineWidth = 1; ctx.beginPath();
     for (const d of fx.rain) { const y = (d.y + now * d.s) % (H + 40) - 20; let x = (d.x - now * d.s * 0.2) % (W + 40); if (x < -20) x += W + 40; ctx.moveTo(x, y); ctx.lineTo(x - d.l * 0.2, y + d.l); }
@@ -1029,7 +1055,7 @@ function drawFrame(ctx, v, g, bg, ov, fx) {
 // Frog Crossing: the page. Input, sound, HUD and screens around FROG (the rules) and the renderer.
 (() => {
   const $ = id => document.getElementById(id);
-  const cv = $('cv'), ctx = cv.getContext('2d');
+  const cv = $('cv'), ctx = cv.getContext('2d'), bgcv = $('bg');
   const hud = $('hud'), elScore = $('score'), elNight = $('night'), elLives = $('lives'), elTime = $('timebar'), elTimer = $('timer');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const KEY = 'frogCrossing.v1';
@@ -1120,14 +1146,14 @@ function drawFrame(ctx, v, g, bg, ov, fx) {
   })();
 
   // ---------- view ----------
-  let V, BG, OV, DPR;
+  let V, DPR;
   function layout() {
     const W = innerWidth, H = innerHeight;
     DPR = Math.min(2, window.devicePixelRatio || 1);
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     const hudH = W < 420 ? 76 : 80;
     V = makeView(W, H, DPR, hudH + 6, 6);
-    BG = paintStatic(V); OV = paintOverlay(V);
+    bgcv.width = cv.width; bgcv.height = cv.height; bgcv.getContext('2d').drawImage(paintStatic(V), 0, 0);
     const w = Math.min(W, V.bw);
     hud.style.width = w + 'px'; hud.style.height = hudH + 'px';
     hud.style.top = (V.card ? Math.max(0, V.cardTop - hudH - 2) : 0) + 'px';
@@ -1387,7 +1413,7 @@ function drawFrame(ctx, v, g, bg, ov, fx) {
   function draw() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     if (shakeUntil > FX.now) { const k = (shakeUntil - FX.now) / 0.25; ctx.translate((Math.random() - 0.5) * V.c * 0.12 * k, (Math.random() - 0.5) * V.c * 0.12 * k); }
-    drawFrame(ctx, V, G, BG, OV, FX);
+    drawFrame(ctx, V, G, FX);
   }
   function frame(t) {
     const dt = Math.min(0.1, (t - last) / 1000); last = t;
