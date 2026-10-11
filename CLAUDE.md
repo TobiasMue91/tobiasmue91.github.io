@@ -683,7 +683,7 @@ model is told not to obey; a reply is shown only when it holds real quotes (refu
 duplicates and run-ons are dropped); copied text, the image and a link all say the quote is imagined and a link never carries
 the topic; a list of names or an overlong one is refused at the field; saves trust nothing, and the old page's saves move out
 of `savedQuotes`, which it shared with the Daily Quote Generator, leaving that page's strings in place. The `page` suite plays
-the real page in Chromium on a desktop and a phone against canned replies (no network): example, write, choose, copy, link,
+the real page in Chromium on a desktop and a phone against canned replies (no network): example, write, tone, choose, copy, link,
 image, keep, undo, reload, a shared link, failure, cancel, migration and blocked storage. The site's proxy only answers pages
 served from www.gptgames.dev, so trying the page against the real model locally needs the requests relayed. Run it after
 touching the core, the prompt or the page.

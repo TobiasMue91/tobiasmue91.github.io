@@ -175,7 +175,8 @@ if (suites.includes('store')) {
     s = J(Q.sanitize({topic: '', voice: ''}));
     eq([s.topic, s.voice], ['', ''], 'fields the person emptied stay empty');
     s = J(Q.sanitize({last: {topic: 'cats', voice: 'Yoda', quotes: ['A.', '', 5, 'I\'m sorry, I can\'t.', 'B.', 'C.', 'D.'], at: 'x'}}));
-    eq(s.last, {topic: 'cats', voice: 'Yoda', quotes: ['A.', 'B.', 'C.'], at: 0}, 'the last result is cleaned like a reply');
+    eq(s.last, {topic: 'cats', voice: 'Yoda', quotes: ['A.', 'B.', 'C.'], pick: 0, at: 0}, 'the last result is cleaned like a reply');
+    eq([2, 1, 3, -1, 1.5, '1', null].map(pick => J(Q.sanitize({last: {voice: 'Y', quotes: ['A.', 'B.', 'C.'], pick}})).last.pick), [2, 1, 0, 0, 0, 0, 0], 'the featured choice is kept only when it points at a quote');
     s = J(Q.sanitize({kept: [{text: 'A.', author: 'X'}, {text: 'a.', author: 'x'}, {text: 'A.', author: 'Y'}, {text: '', author: 'Z'}, {author: 'Q'}, null, 'str']}));
     eq(s.kept.map(k => k.text + '/' + k.author), ['A./X', 'A./Y'], 'kept quotes are cleaned and de-duplicated');
     s = J(Q.sanitize({kept: Array.from({length: 900}, (_, i) => ({text: 'Q' + i + '.', author: 'A'}))}));
@@ -292,8 +293,15 @@ if (suites.includes('page')) {
             eq(await txt(p, 'quoteText'), REPLY.quotes[0], `${name}: the first quote is featured`);
             check(/William Shakespeare, imagined/.test(await txt(p, 'by')), `${name}: attributed as imagined`);
             eq(JSON.parse(JSON.parse(sent[0]).messages[1].content), {topic: 'the office coffee machine', voice: 'William Shakespeare'}, `${name}: only the tidied topic and voice were sent`);
-            eq(await p.locator('.alt').count(), 2, `${name}: two more to choose from`);
+            check(/Tone: balanced/.test(JSON.parse(sent[0]).messages[0].content) && JSON.parse(sent[0]).temperature === 0.75, `${name}: Balanced is the default tone`);
+            await p.getByText('Funny', {exact: true}).click();
+            await p.click('#go'); await idle(p);
+            check(/Tone: funny/.test(JSON.parse(sent[1]).messages[0].content) && JSON.parse(sent[1]).temperature === 0.93, `${name}: one tap on Funny asks for jokes`, JSON.parse(sent[1]).temperature);
+            await p.reload();
+            check(await p.getByRole('radio', {name: 'Funny'}).isChecked(), `${name}: the tone is remembered`);
+            await p.getByText('Balanced', {exact: true}).click();
             await p.locator('.alt').first().click();
+            eq(await p.locator('.alt').count(), 2, `${name}: two more to choose from`);
             eq(await txt(p, 'quoteText'), REPLY.quotes[1], `${name}: choosing one features it`);
             await p.click('#copy');
             await p.click('#link');
@@ -306,8 +314,8 @@ if (suites.includes('page')) {
             check(/Kept \(1\)/.test(await txt(p, 'keptTitle')), `${name}: Keep adds it to the kept list`);
             // reload: everything comes back
             await p.reload();
-            eq([await p.inputValue('#topic'), await p.inputValue('#voice'), await txt(p, 'quoteText')], ['  the office   coffee machine ', 'William Shakespeare', REPLY.quotes[0]], `${name}: a reload keeps the fields and the last quotes`);
-            check(/Kept \(1\)/.test(await txt(p, 'keptTitle')) && /★/.test(await txt(p, 'keep')) === false, `${name}: and the kept list`);
+            eq([await p.inputValue('#topic'), await p.inputValue('#voice'), await txt(p, 'quoteText')], ['  the office   coffee machine ', 'William Shakespeare', REPLY.quotes[1]], `${name}: a reload keeps the fields, the last quotes and the one chosen (a tester kept the wrong one when it did not)`);
+            check(/Kept \(1\)/.test(await txt(p, 'keptTitle')) && /★/.test(await txt(p, 'keep')), `${name}: and the kept list, with the featured quote shown as kept`);
             // the shared link opens the quote
             await p.goto(url + copied[1].slice(copied[1].indexOf('?')));
             eq([await txt(p, 'quoteText'), /Shared/.test(await txt(p, 'eyebrow'))], [REPLY.quotes[1], true], `${name}: a shared link opens its quote`);
