@@ -13,7 +13,7 @@ What it decides, so the page does not have to:
 - a noun is a WordNet noun, an adjective a WordNet adjective (or a hyphenated pair of real words);
   plurals are folded into their singular (WordNet's morphy), and spelling variants into the commoner
   form (primaeval -> primeval);
-- describing words for a noun are ranked by PMI x ln(count)^2: how much more often books put the
+- describing words for a noun are ranked by PMI x ln(count)^3: how much more often books put the
   adjective before the noun than chance would, weighted towards pairings that are not one-offs;
 - similar adjectives are the candidates WordNet or Moby lists, ranked by how alike the two words are
   used (cosine of their PPMI vectors over nouns); WordNet antonyms never count;
@@ -171,7 +171,7 @@ def main():
                 continue
             pmi = math.log(c * T / (Nn[n] * Na[a]))
             if pmi > 0:
-                scored.append((pmi * math.log(c) ** 2, a, c))
+                scored.append((pmi * math.log(c) ** 3, a, c))
         if len(scored) < 5:
             continue
         scored.sort(key=lambda t: (-t[0], t[1]))
@@ -265,7 +265,7 @@ def main():
         "occurrences": T,
         "nouns": len(nouns),
         "adjectives": len(order),
-        "ranking": "PMI x ln(count)^2",
+        "ranking": "PMI x ln(count)^3",
     }
     CORE, SIM_CORE = 24, 24
     lines = ["#describing-words " + json.dumps(header, separators=(",", ":"))]

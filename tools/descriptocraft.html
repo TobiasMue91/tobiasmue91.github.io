@@ -92,8 +92,12 @@
         .words button { border: 0; background: none; border-radius: 7px; padding: 6px 9px; font: 400 19px/1.25 var(--serif);
             color: var(--ink); background-image: linear-gradient(var(--acc), var(--acc)); background-repeat: no-repeat;
             background-position: 9px calc(100% - 4px); background-size: 0 2px; }
-        .words button:hover { background-color: var(--hi); }
+        @media (hover: hover) { .words button:hover { background-color: var(--hi); } }
+        .words li.brk { flex-basis: 100%; height: 6px; }
         .words button.copied { background-color: var(--hi); background-size: calc(100% - 18px) 2px; transition: background-size .28s ease-out; }
+        .words li { display: inline-flex; align-items: baseline; }
+        .words button.saved::after { content: "★"; font: 12px var(--sans); color: var(--acc); margin-left: 3px; vertical-align: super; }
+        .words .savebtn { font: 500 13px var(--sans); color: var(--acc); border: 1px solid var(--rule); background: var(--field) none; padding: 4px 9px; margin: 0 6px 0 2px; border-radius: 999px; }
         .words.fresh li { animation: in .22s ease-out both; }
         @keyframes in { from { opacity: 0; transform: translateY(3px); } }
         .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
@@ -147,14 +151,14 @@
 <body>
 <div class="wrap">
     <header>
-        <h1>Describing Words<small>Adjectives for any noun, as books really use them</small></h1>
+        <h1>Describing Words<small>Adjectives for any noun, as books really use them, and synonyms for any adjective</small></h1>
         <button class="textbtn" id="savedBtn" hidden aria-haspopup="dialog">☆ Saved</button>
     </header>
 
     <label class="field">
         <span class="sr">A noun to describe, or an adjective</span>
         <input id="q" type="text" maxlength="200" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
-               enterkeyhint="search" placeholder="Type a noun, e.g. ocean" aria-describedby="how">
+               enterkeyhint="search" placeholder="A noun or an adjective, e.g. ocean" aria-describedby="how">
         <button class="clear" id="clear" type="button" aria-label="Clear the word">×</button>
     </label>
 
@@ -207,10 +211,11 @@
 <script type="text/plain" id="example">
 /*EXAMPLE*/
 #describing-words {"example":true}
+A	dark	A		0
 A	thick	A		0
 A	bright	B		0
 A	mixed	A		0
-A	happy	B	VYhCNSPahEFhGThJhKLJBMEeXQfGd	54
+A	happy	B	WZhEOTQbhGGhIUhLhMMKCNFfYRhAHe	54
 A	golden	A		0
 A	pleasant	B		0
 A	gay	A		0
@@ -241,6 +246,7 @@ A	jolly	E		0
 A	auspicious	D		0
 A	impenetrable	D		0
 A	riparian	G		0
+A	enchanted	E		0
 A	blissful	E		0
 A	subtropical	G		0
 A	contented	H		0
@@ -252,11 +258,9 @@ A	halcyon	G		0
 A	euphoric	H		0
 A	subalpine	G		0
 A	montane	G		0
-A	pathless	G		0
 A	mesic	G		0
 A	mesophytic	G		0
-A	lowland	G		0
-N	forest	A	H1hFrUuIyRucshHohMlOqhLihIihAlblAuhPdhOeZlhDjhBkKoWlhNehQbCs	110
+N	forest	A	I1JyVuhHrSudshJohOlPqBuhNihBlclDsLohKialhCkXlhFjAthPehQdhDi	110
 /*/EXAMPLE*/
 </script>
 
@@ -415,7 +419,7 @@ const DW = (() => {
     function analyze(db, raw, want) {
         const norm = normalize(raw);
         const toks = tokens(norm).filter(t => !STOP.has(t));
-        const res = {query: norm, mode: 'none', word: null, used: [], unknown: [], also: [], auto: !want,
+        const res = {query: norm, mode: 'none', word: null, used: [], unknown: [], also: [], mood: [], auto: !want,
             nounOnly: false, adjOnly: false};
         if (!toks.length) {
             const typed = String(raw == null ? '' : raw).trim();
@@ -442,7 +446,9 @@ const DW = (() => {
             const x = pickNoun();
             if (x) {
                 res.mode = 'describe'; res.word = x.n; res.used = [x.t];
-                res.also = [...new Set(nouns.filter(y => y.n !== x.n).map(y => y.n))];
+                res.also = [...new Set(nouns.filter(y => y.n !== x.n && !(y.a && nounPrefersAdj(db, y.n))).map(y => y.n))];
+                // The adjectives around it set a mood: "gloomy sea" puts the sea's gloomy words first.
+                res.mood = [...new Set(adjs.filter(y => y.t !== x.t).map(y => y.a))];
             } else if (lastAdj) { res.mode = 'none'; res.adjOnly = true; res.word = lastAdj.a; }
         } else if (mode === 'similar') {
             if (lastAdj) {
@@ -474,6 +480,19 @@ const DW = (() => {
         if (i === undefined) return {items: [], total: 0, complete: true};
         const items = varints(db.asim[i]).map(j => item(db, j));
         return {items, total: Math.max(db.atotal[i], items.length), complete: items.length >= db.atotal[i]};
+    }
+
+    // Words like the mood adjectives (or the moods themselves) first, the rest after, each part
+    // keeping its order.
+    function steer(db, items, moods) {
+        if (!moods || !moods.length) return {items, ahead: 0};
+        const like = new Set();
+        for (const m of moods) {
+            like.add(m.toLowerCase());
+            for (const x of similar(db, m).items) like.add(x.word.toLowerCase());
+        }
+        const first = items.filter(x => like.has(x.word.toLowerCase()));
+        return {items: first.concat(items.filter(x => !like.has(x.word.toLowerCase()))), ahead: first.length};
     }
 
     // Filtering only ever removes words; it never reorders what is left.
@@ -630,7 +649,7 @@ const DW = (() => {
     }
 
     return {ALPHA, TONES, RARITIES, MAX_INPUT, parse, addMore, varints, pairs, countOf, fmtCount, normalize, tokens,
-        forms, findNoun, findAdj, analyze, describe, similar, filter, distance, suggest, migrateFavorites,
+        forms, findNoun, findAdj, analyze, describe, similar, steer, filter, distance, suggest, migrateFavorites,
         readPrefs, writePrefs, readParams, link, joinWords, subset, PREFS_KEY};
 })();
 </script>
@@ -639,7 +658,7 @@ const DW = (() => {
 (() => {
     const DATA = '../data/describing_words.txt';
     const MORE = '../data/describing_words_more.txt';
-    const DATA_BYTES = 2784514; /*DATA_BYTES*/
+    const DATA_BYTES = 2739242; /*DATA_BYTES*/
     const PAGE = 24;
     const $ = id => document.getElementById(id);
     const q = $('q'), res = $('res'), live = $('live');
@@ -821,27 +840,35 @@ const DW = (() => {
 
     function resultView(a, base) {
         const r = a.mode === 'describe' ? DW.describe(base, a.word) : DW.similar(base, a.word);
-        const filtered = DW.filter(r.items, state);
+        const mood = a.mode === 'describe' ? a.mood : [];
         const complete = r.complete;
-        // A filter, or "show all", needs the rest of the list.
-        if (!complete && db && (filterOn() || state.all) && moreState === 'none') loadMore();
-        const waitingMore = !complete && (filterOn() || state.all) && (moreState === 'loading' || !db);
+        // A filter, "show all" or a mood needs the rest of the list.
+        const wantsMore = filterOn() || state.all || mood.length > 0;
+        if (!(complete && !mood.length) && db && wantsMore && moreState === 'none') loadMore();
+        const waitingMore = !complete && wantsMore && (moreState === 'loading' || !db);
+        const steered = DW.steer(base, DW.filter(r.items, state), mood);
+        const filtered = steered.items;
         const shownItems = state.all ? filtered : filtered.slice(0, PAGE);
-        const totalShown = filterOn() ? (complete ? filtered.length : null) : r.total;
         const W = esc(a.word);
-        const count = totalShown === null ? '' : totalShown + ' ';
-        const head = a.mode === 'describe'
-            ? `${count}${totalShown === 1 ? 'word' : 'words'} to describe <em>${W}</em>`
-            : `${count}${totalShown === 1 ? 'adjective' : 'adjectives'} like <em>${W}</em>`;
+        const head = a.mode === 'describe' ? `Words to describe <em>${W}</em>` : `Adjectives like <em>${W}</em>`;
+        const fl = [state.tone, state.rarity].filter(Boolean).join(', ');
+        const n = r.total;
+        const size = filterOn() ? (complete ? `${filtered.length} ${fl} of the top ${n}` : `Top ${n}, filtering…`)
+            : a.mode === 'describe' ? `Top ${n} in books` : `${n} synonyms`;
         const how = a.mode === 'describe'
-            ? `Most typical first: how much more often books put each word before “${W}” than chance would.`
-            : `Synonyms from WordNet and the Moby thesaurus, the ones books use most alike first.`;
-        const lead = a.mode === 'describe' ? (a.word !== DW.normalize(a.used[0] || '') ? `Showing ${W} for “${esc(a.used[0])}”. ` : '') : '';
-        const also = a.also.length ? `<p class="phrase">${lead}Also in what you typed: ${a.also.slice(0, 5).map(w => `<button type="button" data-go="${esc(w)}">${esc(w)}</button>`).join('')}</p>`
-            : lead ? `<p class="phrase">${lead}</p>` : '';
-        const key = a.mode + ':' + a.word;
+            ? `${size}, ranked by how much more often than chance books pair them with “${W}” · tap to copy`
+            : `${size} from WordNet and the Moby thesaurus, ranked by how alike books use them · tap to copy`;
+        const lead = a.mode === 'describe' && a.word !== DW.normalize(a.used[0] || '') ? `Showing ${W} for “${esc(a.used[0])}”. ` : '';
+        const moodLine = mood.length ? (steered.ahead
+            ? `${steered.ahead} ${steered.ahead === 1 ? 'word' : 'words'} like “${mood.map(esc).join('”, “')}” first. `
+            : waitingMore ? '' : `Nothing like “${mood.map(esc).join('”, “')}” among these. `) : '';
+        const alsoLine = a.also.length ? `Also in what you typed: ${a.also.slice(0, 5).map(w => `<button type="button" data-go="${esc(w)}">${esc(w)}</button>`).join('')}` : '';
+        const tip = a.mode === 'describe' && !lead && !moodLine && !alsoLine && a.used.length && DW.tokens(a.query).length === 1
+            ? `Add a mood to steer it: <button type="button" data-go="gloomy ${W}">gloomy ${W}</button> <button type="button" data-go="cheerful ${W}">cheerful ${W}</button>` : '';
+        const phrase = lead + moodLine + alsoLine + tip;
+        const key = a.mode + ':' + a.word + ':' + mood.join(',');
         const fresh = key !== lastKey;
-        if (fresh && lastKey) { copiedWord = null; $('toast').hidden = true; }
+        if (fresh) { copiedWord = null; $('toast').hidden = true; }
         lastKey = key; lastWord = a;
 
         let list;
@@ -853,13 +880,18 @@ const DW = (() => {
             list = `<ul class="words${fresh ? ' fresh' : ''}" aria-label="${a.mode === 'describe' ? 'Describing words' : 'Similar adjectives'}, tap to copy">`
                 + shownItems.map((x, i) => {
                     const t = x.count ? `“${x.word} ${a.word}”: about ${DW.fmtCount(x.count)} times in books` : `like ${a.word}`;
-                    return `<li style="animation-delay:${Math.min(i, 30) * 8}ms"><button type="button" data-copy="${esc(x.word)}" title="${esc(t)}" class="${x.word === copiedWord ? 'copied' : ''}">${esc(x.word)}</button></li>`;
+                    const saved = state.saved.includes(x.word.toLowerCase());
+                    const sel = x.word === copiedWord;
+                    return `<li style="animation-delay:${Math.min(i, 30) * 8}ms"><button type="button" data-copy="${esc(x.word)}" title="${esc(t)}"`
+                        + ` class="${sel ? 'copied' : ''}${saved ? ' saved' : ''}"${saved ? ` aria-label="${esc(x.word)}, saved"` : ''}>${esc(x.word)}</button>`
+                        + (sel ? `<button type="button" class="savebtn" data-save="${esc(x.word)}" aria-pressed="${saved}">${saved ? '★ Saved' : '☆ Save'}</button>` : '')
+                        + '</li>' + (steered.ahead && i === steered.ahead - 1 && i < shownItems.length - 1 ? '<li class="brk" aria-hidden="true"></li>' : '');
                 }).join('') + '</ul>';
         }
         const more = (!state.all && (filtered.length > PAGE || !complete && !filterOn()))
-            ? `<button class="btn" type="button" id="showAll">${moreState === 'loading' ? 'Loading…' : `Show all${totalShown ? ' ' + totalShown : ''}`}</button>` : '';
+            ? `<button class="btn" type="button" id="showAll">${moreState === 'loading' ? 'Loading…' : `Show all ${filterOn() ? filtered.length : n}`}</button>` : '';
         const moreFailed = moreState === 'failed' && !complete ? `<p class="muted">The rest of the list couldn’t be loaded. <button class="inline" type="button" id="retryMore">Try again</button></p>` : '';
-        res.innerHTML = `<h2>${head}</h2><p class="how" id="how">${how}</p>${also}${list}
+        res.innerHTML = `<h2>${head}</h2><p class="how" id="how">${how}</p>${phrase ? `<p class="phrase">${phrase}</p>` : ''}${list}
             <div class="actions">${more}${shownItems.length ? `<button class="btn" type="button" id="copyAll">Copy ${state.all || shownItems.length === filtered.length ? 'all' : 'these ' + shownItems.length}</button>` : ''}
             <button class="btn" type="button" id="copyLink">Copy link</button></div>${moreFailed}`;
         if (fresh) announce(res.querySelector('h2').textContent + '. ' + shownItems.slice(0, 5).map(x => x.word).join(', '));
@@ -969,18 +1001,21 @@ const DW = (() => {
         if (go) { state.want = null; return setWord(go.dataset.go); }
         const mg = e.target.closest('[data-mode-go]');
         if (mg) { state.want = mg.dataset.modeGo; render(); persist(); return; }
+        const sv = e.target.closest('[data-save]');
+        if (sv) { const on = toggleSave(sv.dataset.save.toLowerCase()); toast(on ? `Saved “${sv.dataset.save}”` : `Removed “${sv.dataset.save}”`, on ? 'Find it under Saved, top right' : ''); render(); return; }
         const c = e.target.closest('[data-copy]');
         if (!c) return;
         const w = c.dataset.copy;
         copiedWord = w;
-        for (const x of res.querySelectorAll('.words button.copied')) x.classList.remove('copied');
-        c.classList.add('copied');
         const pair = c.title.startsWith('“') ? c.title : '';
-        copy(w, `Copied “${w}”`, pair, w);
+        render();
+        const again = [...res.querySelectorAll('[data-copy]')].find(x => x.dataset.copy === w);
+        if (again) again.focus({preventScroll: true});
+        copy(w, `Copied “${w}”`, pair);
     });
     res.addEventListener('keydown', e => {
         const c = e.target.closest('[data-copy]');
-        if (c && (e.key === 's' || e.key === 'S')) { const on = toggleSave(c.dataset.copy); toast(on ? `Saved “${c.dataset.copy}”` : `Removed “${c.dataset.copy}”`); }
+        if (c && (e.key === 's' || e.key === 'S')) { const on = toggleSave(c.dataset.copy.toLowerCase()); render(); toast(on ? `Saved “${c.dataset.copy}”` : `Removed “${c.dataset.copy}”`); }
     });
     $('toastSave').onclick = () => {
         if (!toastWord) return;

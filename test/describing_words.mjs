@@ -11,7 +11,7 @@
 //   node test/describing_words.mjs               # everything
 //   node test/describing_words.mjs input words   # named suites only
 //
-// Suites: data, input, analyze, words, filter, suggest, keep, example.
+// Suites: data, input, analyze, words, steer, filter, suggest, keep, example.
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -21,7 +21,7 @@ import vm from 'vm';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const args = process.argv.slice(2);
-const ALL = ['data', 'input', 'analyze', 'words', 'filter', 'suggest', 'keep', 'example'];
+const ALL = ['data', 'input', 'analyze', 'words', 'steer', 'filter', 'suggest', 'keep', 'example'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -205,6 +205,28 @@ if (suites.includes('words')) {
     for (const n of ['forest', 'smile', 'tree', 'love']) check(DW.describe(db, n).items.every(x => x.count >= 15), `${n}: every pairing was seen often enough to count`);
     eq(DW.describe(db, 'nonexistentnoun').items.length, 0, 'an unknown noun has an empty list');
     eq(DW.similar(db, 'nonexistentadj').items.length, 0, 'an unknown adjective has an empty list');
+}
+
+if (suites.includes('steer')) {
+    section('steer');
+    // a mood adjective in the phrase brings the noun's words like it to the front, and only reorders
+    for (const [phrase, noun, mood, expect] of [['gloomy sea', 'sea', 'gloomy', ['dark', 'desolate']], ['a cold night', 'night', 'cold', ['frosty', 'chilly']],
+        ['soft voice', 'voice', 'soft', ['quiet', 'gentle']], ['cheerful room', 'room', 'cheerful', []]]) {
+        const a = DW.analyze(db, phrase);
+        eq([a.mode, a.word, J(a.mood)], ['describe', noun, [mood]], `"${phrase}" describes ${noun} in the mood of ${mood}`);
+        const base = DW.describe(db, noun).items;
+        const st = DW.steer(db, base, a.mood);
+        eq(st.items.length, base.length, `${phrase}: steering keeps every word`);
+        eq(new Set(st.items).size, base.length, `${phrase}: steering repeats nothing`);
+        const like = new Set([mood, ...DW.similar(db, mood).items.map(x => x.word.toLowerCase())]);
+        check(st.items.slice(0, st.ahead).every(x => like.has(x.word.toLowerCase())) && st.items.slice(st.ahead).every(x => !like.has(x.word.toLowerCase())), `${phrase}: the words in front are exactly the ones like ${mood}`);
+        const order = xs => xs.map(x => base.indexOf(x));
+        const inc = xs => order(xs).every((p, i, o) => i === 0 || p > o[i - 1]);
+        check(inc(st.items.slice(0, st.ahead)) && inc(st.items.slice(st.ahead)), `${phrase}: each part keeps the books' order`);
+        for (const w of expect) check(st.items.slice(0, st.ahead).some(x => x.word === w), `${phrase}: ${w} comes first`, st.items.slice(0, 10).map(x => x.word).join(' '));
+    }
+    eq(DW.steer(db, DW.describe(db, 'forest').items, []).ahead, 0, 'no mood, no steering');
+    eq(J(DW.analyze(db, 'forest').mood), [], 'a bare noun has no mood');
 }
 
 if (suites.includes('filter')) {
