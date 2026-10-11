@@ -169,13 +169,15 @@ if (suites.includes('words')) {
     const top = (w, n, list, mode) => { const r = words(w, mode).items.slice(0, n).map(x => x.toLowerCase()); for (const x of list) check(r.includes(x), `${w}: ${x} in the first ${n}`, r.join(' ')); };
     const lacks = (w, list, mode) => { const r = words(w, mode).items.map(x => x.toLowerCase()); for (const x of list) check(!r.includes(x), `${w} does not list ${x}`); };
     top('forest', 12, ['dense', 'tropical', 'primeval', 'virgin']);
-    top('smile', 12, ['wry', 'faint', 'rueful']);
+    top('smile', 12, ['wry', 'faint', 'wan']);
     top('ocean', 12, ['vast', 'boundless', 'deep']);
     top('voice', 12, ['hoarse', 'husky', 'loud', 'gruff']);
     top('coffee', 12, ['hot', 'black', 'strong', 'instant']);
-    top('night', 12, ['sleepless', 'moonless', 'starry']);
+    top('night', 12, ['sleepless', 'moonlit', 'stormy']);
     top('sky', 12, ['cloudless', 'blue', 'starry', 'overcast']);
     top('rain', 12, ['torrential', 'heavy']);
+    // everyday words lead for people, not the clinical vocabulary of the books that mention them most
+    top('child', 6, ['young']); top('child', 16, ['dear', 'healthy']);
     has('book', ['good', 'new']); has('house', ['haunted', 'empty']); has('cat', ['black']); has('dog', ['faithful']);
     // the determiners and slurs build.py drops never reach a list
     for (const n of ['man', 'woman', 'child', 'house', 'city', 'people', 'day'])

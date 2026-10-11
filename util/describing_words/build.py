@@ -13,8 +13,10 @@ What it decides, so the page does not have to:
 - a noun is a WordNet noun, an adjective a WordNet adjective (or a hyphenated pair of real words);
   plurals are folded into their singular (WordNet's morphy), and spelling variants into the commoner
   form (primaeval -> primeval);
-- describing words for a noun are ranked by PMI x ln(count)^3: how much more often books put the
-  adjective before the noun than chance would, weighted towards pairings that are not one-offs;
+- describing words for a noun are ranked by PMI x ln(count)^3 x Zipf/5: how much more often books put the
+  adjective before the noun than chance would, weighted towards pairings that are not one-offs and
+  towards adjectives people use every day (the rare, literary ones are a filter away); adjectives that
+  classify rather than describe (Atlantic, national, northern) count 0.4;
 - similar adjectives are the candidates WordNet or Moby lists, ranked by how alike the two words are
   used (cosine of their PPMI vectors over nouns); WordNet antonyms never count;
 - tone comes from the VADER lexicon (|valence| >= 0.5, otherwise neutral), rarity from wordfreq's
@@ -158,6 +160,29 @@ def main():
         by[n].append((a, k))
     print(f"{len(G)} pairs, {len(Nn)} nouns, {len(Na)} adjectives, {T} occurrences", file=sys.stderr)
 
+    zipf_cache = {}
+
+    def zipf(a):
+        if a not in zipf_cache:
+            zipf_cache[a] = zipf_frequency(a, "en") or zipf_frequency(a.replace("-", " "), "en")
+        return zipf_cache[a]
+
+    # Adjectives that sort a noun into a kind rather than describe it: proper adjectives (Atlantic),
+    # relational ones whose first WordNet sense pertains to a noun (national, territorial, coastal) and
+    # the points of the compass. Books pair them with nouns constantly; people looking for describing
+    # words want them after the ones that describe.
+    COMPASS = set("northern southern eastern western central upper lower inner outer nearby".split())
+    classify_cache = {}
+
+    def classifying(a):
+        if a not in classify_cache:
+            ss = wn.synsets(a, "a") + wn.synsets(a, "s")
+            names = {l.name() for syn in ss for l in syn.lemmas() if l.name().lower() == a}
+            proper = bool(names) and all(n[0].isupper() for n in names)
+            relational = bool(ss) and any(l.pertainyms() for l in ss[0].lemmas() if l.name().lower() == a)
+            classify_cache[a] = proper or relational or a in COMPASS
+        return classify_cache[a]
+
     # --- describing words per noun --------------------------------------------------------------
     NMIN = 1000
     nouns = {}
@@ -171,7 +196,9 @@ def main():
                 continue
             pmi = math.log(c * T / (Nn[n] * Na[a]))
             if pmi > 0:
-                scored.append((pmi * math.log(c) ** 3, a, c))
+                # weighted towards words people actually use: Zipf / 5 puts a word met once in
+                # a million (Zipf 3.5) at 70% of an everyday one, so "young child" leads "autistic child"
+                scored.append((pmi * math.log(c) ** 3 * max(zipf(a), 1) / 5 * (0.4 if classifying(a) else 1), a, c))
         if len(scored) < 5:
             continue
         scored.sort(key=lambda t: (-t[0], t[1]))
@@ -265,7 +292,7 @@ def main():
         "occurrences": T,
         "nouns": len(nouns),
         "adjectives": len(order),
-        "ranking": "PMI x ln(count)^3",
+        "ranking": "PMI x ln(count)^3 x Zipf/5 x 0.4 if classifying",
     }
     CORE, SIM_CORE = 24, 24
     lines = ["#describing-words " + json.dumps(header, separators=(",", ":"))]
