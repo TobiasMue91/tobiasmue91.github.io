@@ -169,6 +169,7 @@ npm run test:kemari         # Kemari (Ball Bouncing) suite (plain Node, no serve
 npm run test:frogger        # Frog Crossing (Frogger) suite (plain Node, no server or browser)
 npm run test:describing     # Describing Words suite (plain Node, no server or browser)
 npm run test:quotes         # AI Quote Generator (QuotoSaurus) suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:dailyquote     # Quote of the Day (Daily Quote Generator) suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -178,7 +179,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Sixty-nine exist so far. `test/everything_converter.mjs` drives
+Seventy exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -687,6 +688,16 @@ the real page in Chromium on a desktop and a phone against canned replies (no ne
 image, keep, undo, reload, a shared link, failure, cancel, migration and blocked storage. The site's proxy only answers pages
 served from www.gptgames.dev, so trying the page against the real model locally needs the requests relayed. Run it after
 touching the core, the prompt or the page.
+`test/daily_quote.mjs` runs the DOM-free `<script id="core">` block of `tools/daily_quote_generator.html` (Quote of the Day),
+whose one promise is that a quote it shows as a quotation is one. The bank is written by `util/quotes/verify.py`, which downloads
+each source from Project Gutenberg and keeps a remembered quote only when its words are a run of the book's words, replacing memory's
+wording with the book's (it dropped "My life has been full of terrible misfortunes" from Montaigne and "I prayed for twenty years" from
+Douglass, among others); the suite checks the bank against the checksum the script writes, so a quote edited by hand in the page fails.
+It also checks that the quote of the day is the same for everyone on a date, runs through a topic's every quote before one repeats,
+never shows one author two days running and turns at local midnight in every time zone; that a typed name finds the author meant
+(aliases, accents, typos) and never a different one; that the AI writer is asked for original lines only and what it returns is
+cleaned, labelled and never credited to a person; and that saved quotes, including the old page's `savedQuotes` and `quoteHistory`,
+cannot be forged. To add quotes, edit `util/quotes/candidates.txt` and run `python util/quotes/verify.py`, then the suite.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
