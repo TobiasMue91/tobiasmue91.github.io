@@ -59,13 +59,26 @@ if (suites.includes('input')) {
     eq(v(' \n\t ').empty, true, 'whitespace only is empty (the old page sent it to the model)');
     check(/no words/.test(v('12345 !!! 42').error), 'numbers and punctuation alone are refused in plain words');
     eq(v('Hi').ok, true, 'one word is fine');
-    eq(v('a'.repeat(N.LIMIT)).ok, true, 'exactly the limit is accepted');
-    const big = v('a'.repeat(N.LIMIT + 1));
-    check(!big.ok && /6,000/.test(big.error) && /6,001/.test(big.error), 'one over the limit says the limit and the length', big.error);
+    eq(v('a'.repeat(N.LIMIT)).parts, 1, 'up to the limit is one part');
+    eq(v('a '.repeat(N.LIMIT)).parts, 2, 'past it, the text goes in parts');
+    eq(v('a'.repeat(N.MAX)).ok, true, 'exactly the most at once is accepted');
+    const big = v('a'.repeat(N.MAX + 1));
+    check(!big.ok && /60,000/.test(big.error) && /60,001/.test(big.error), 'one over says the limit and the length', big.error);
     const huge = v('word '.repeat(1e6));
     check(!huge.ok && /4,999,999/.test(huge.error), 'a thousand times larger is refused with its size, quickly', huge.error);
-    eq(v('😀'.repeat(N.LIMIT) + 'a').ok, false, 'the limit counts characters, so emoji are not double-counted');
-    eq(v('😀'.repeat(N.LIMIT - 1) + 'a').ok, true, '... and 6,000 emoji-and-letter characters pass');
+    // parts
+    const join = ps => ps.map(p => p.text + p.sep).join('');
+    const para = 'Moreover, our robust platform leverages data seamlessly. ';
+    for (const [name, t] of [['paragraphs', (para.repeat(20).trim() + '\n\n').repeat(30).trim()], ['one long paragraph', para.repeat(400).trim()],
+        ['no sentence ends', 'word '.repeat(5000).trim()], ['no spaces at all', 'x'.repeat(20000)], ['emoji', '😀 '.repeat(9000).trim()], ['short', 'Hi there.']]) {
+        const ps = N.chunk(t);
+        eq(join(ps), t, `parts join back to the text exactly (${name})`);
+        check(ps.every(p => N.chars(p.text) <= N.LIMIT), `every part fits (${name})`, ps.map(p => N.chars(p.text)));
+        check(ps.length === Math.max(1, ps.length) && (N.chars(t) <= N.LIMIT ? ps.length === 1 : ps.length >= 2), `${ps.length} parts (${name})`);
+    }
+    const ps = N.chunk((para.repeat(20).trim() + '\n\n').repeat(30).trim());
+    check(ps.slice(0, -1).every(p => p.sep === '\n\n'), 'paragraph text is split between paragraphs');
+    check(N.chunk(para.repeat(400).trim()).slice(0, -1).every(p => /\.$/.test(p.text)), 'a long paragraph is split between sentences');
 }
 
 if (suites.includes('tells')) {
@@ -272,14 +285,23 @@ async function pageSuite() {
         check((await page.locator('#out').innerText()).includes('It holds up well.'), `${w}: ... and the last rewrite`);
         check(await page.locator('#retry').isVisible(), `${w}: and offers to try again`);
         // too long
-        await page.fill('#text', 'a '.repeat(3001));
+        await page.fill('#text', 'a '.repeat(30001)); await page.waitForTimeout(400);
         check(await page.locator('#err').isVisible() && await page.locator('#go').isDisabled(), `${w}: too long says so next to the field and blocks the button`);
+        // a long text goes in parts
+        page.__reply = r => { const t = JSON.parse(JSON.parse(r.request().postData()).messages[1].content).text; return r.fulfill({json: {choices: [{message: {content: JSON.stringify({text: t.replace(/Moreover, /g, 'Also, ')})}, finish_reason: 'stop'}]}}); };
+        const n0 = reqs.length;
+        await page.fill('#text', 'Moreover, it is fine and it works today. '.repeat(400).trim());
+        check(/2 parts|3 parts/.test(await page.locator('#counts').innerText()), `${w}: a long text says it goes in parts`, await page.locator('#counts').innerText());
+        await page.click('#go');
+        await page.waitForFunction(() => !document.querySelector('#go.busy') && document.querySelector('#out').innerText.includes('Also,'));
+        check(reqs.length - n0 >= 3, `${w}: one request per part`, reqs.length - n0);
+        check(!(await page.locator('#out').innerText()).includes('Moreover'), `${w}: every part is rewritten and joined`);
         // reload
         await page.fill('#text', 'Kept across a reload.');
         await page.waitForTimeout(400);
         await page.reload();
         eq(await page.inputValue('#text'), 'Kept across a reload.', `${w}: the text survives a reload`);
-        check((await page.locator('#out').innerText()).includes('It holds up well.'), `${w}: and so does the rewrite`);
+        check((await page.locator('#out').innerText()).includes('Also,'), `${w}: and so does the rewrite`);
         // a stale rewrite is dimmed, an empty field shows none
         await page.fill('#text', 'Something new entirely.');
         check(await page.locator('#out.stale').count() === 1 && /earlier text/.test(await page.locator('#status').innerText()), `${w}: a rewrite of earlier text is dimmed and says so`);

@@ -82,7 +82,7 @@ details.more .in { display: grid; gap: 8px; padding-top: 8px; }
 .result .out { min-height: clamp(190px, 38vh, 430px); padding: 14px 18px; white-space: pre-wrap; overflow-wrap: break-word; position: relative; }
 .out .a { text-decoration: underline; text-decoration-color: var(--add); text-decoration-thickness: 2px; text-underline-offset: 4px; text-decoration-skip-ink: none; border-radius: 2px; }
 .out .d { color: var(--del); text-decoration: line-through; opacity: .75; }
-.out.plain .a { background: none; box-shadow: none; }
+.out.plain .a { text-decoration: none; }
 .out.plain .d { display: none; }
 .out.fresh .a { animation: settle 1.1s ease-out; }
 @keyframes settle { from { background: var(--add-flash); } to { background: transparent; } }
@@ -114,7 +114,7 @@ p.note { margin: 0; padding: 0 14px 12px; }
     .grid { grid-template-columns: 1fr; grid-template-areas: "in" "out" "ctl"; gap: 12px; }
     .note { font-size: 12px; }
     header { flex-wrap: wrap; padding-right: 0; } header p { flex-basis: 100%; order: 3; font-size: 13.5px; }
-    .ed { height: 30vh; min-height: 150px; }
+    .ed { height: 24vh; min-height: 140px; }
     .primary { min-width: 0; flex: 1 1 100%; }
     .pick { flex: 1; } .pick select { width: 100%; }
     .result .out { min-height: 120px; }
@@ -165,7 +165,7 @@ p.note { margin: 0; padding: 0 14px 12px; }
                 </div>
             </div>
         </details>
-        <p class="note">Made by gptgames.dev. Rewriting sends the text to an AI model (OpenAI) through gptgames.dev’s server. The phrase check runs only in your browser.</p>
+        <p class="note">Rewrite sends your text to OpenAI via gptgames.dev. The phrase check stays in your browser.</p>
     </section>
 
     <section class="panel result" aria-labelledby="h-out">
@@ -188,7 +188,8 @@ p.note { margin: 0; padding: 0 14px 12px; }
 <script id="core">
 // DOM-free core: the phrase check, what is sent to the model, what is accepted back, the word diff and saved state.
 const Natural = (() => {
-    const LIMIT = 6000; // characters one rewrite takes
+    const LIMIT = 6000; // characters one request takes; longer text goes in parts
+    const MAX = 60000;  // characters one press of Rewrite takes
     const MODEL = 'gpt-4o-mini';
     const STRENGTH = {light: 2, balanced: 5, heavy: 9};
     const TONE = {casual: 2, keep: 5, formal: 9};
@@ -293,8 +294,34 @@ const Natural = (() => {
         if (!t) return {ok: false, empty: true, error: ''};
         if (!/[\p{L}]/u.test(t)) return {ok: false, error: 'There are no words to rewrite here — paste some sentences.'};
         const n = chars(t);
-        if (n > LIMIT) return {ok: false, error: `One rewrite takes up to ${LIMIT.toLocaleString('en')} characters; this is ${n.toLocaleString('en')}. Split it and rewrite one part at a time.`};
-        return {ok: true, text: t};
+        if (n > MAX) return {ok: false, error: `This takes up to ${MAX.toLocaleString('en')} characters at once; yours has ${n.toLocaleString('en')}. Rewrite the first part, then the rest.`};
+        return {ok: true, text: t, parts: chunk(t).length};
+    }
+
+    // Split text into parts of at most `limit` characters: at paragraphs, then sentences, then spaces.
+    // Returns [{text, sep}], and parts.map(p => p.text + p.sep).join('') is the text again.
+    function chunk(text, limit = LIMIT) {
+        const pieces = [];
+        const split = (t, rx) => { const out = []; let at = 0, m; rx.lastIndex = 0; while ((m = rx.exec(t))) { out.push({text: t.slice(at, m.index), sep: m[0]}); at = m.index + m[0].length; } out.push({text: t.slice(at), sep: ''}); return out; };
+        const fits = t => chars(t) <= limit;
+        const down = (p, level) => {
+            if (fits(p.text) || level > 2) {
+                if (!fits(p.text)) { const cs = [...p.text]; for (let i = 0; i < cs.length; i += limit) pieces.push({text: cs.slice(i, i + limit).join(''), sep: i + limit >= cs.length ? p.sep : ''}); }
+                else pieces.push(p);
+                return;
+            }
+            const rx = [/\n\s*\n/g, /(?<=[.!?…]["'”’)]*)\s+/g, / +/g][level];
+            const sub = split(p.text, rx); sub[sub.length - 1].sep = p.sep;
+            sub.forEach(x => down(x, level + 1));
+        };
+        down({text, sep: ''}, 0);
+        // pack neighbours back together while they fit
+        const out = [];
+        for (const p of pieces) {
+            const last = out[out.length - 1];
+            if (last && fits(last.text + last.sep + p.text)) { last.text += last.sep + p.text; last.sep = p.sep; } else out.push({...p});
+        }
+        return out.filter(p => p.text || p.sep);
     }
 
     const RULES = {
@@ -424,7 +451,7 @@ const Natural = (() => {
         const text = typeof o.text === 'string' ? o.text.slice(0, 200000) : null;
         let out = null;
         if (o.out && typeof o.out === 'object' && typeof o.out.text === 'string' && o.out.text.trim() && typeof o.out.from === 'string')
-            out = {text: o.out.text.slice(0, 50000), from: o.out.from.slice(0, 50000)};
+            out = {text: o.out.text.slice(0, 150000), from: o.out.from.slice(0, 150000)};
         return {text, out, ...s, presets, example: o.example === true && !!out, marks: o.marks === true, theme: o.theme === 'dark' || o.theme === 'light' ? o.theme : null};
     }
     // The old page kept inputText, outputText, darkMode and one preset_<name> per preset.
@@ -442,7 +469,7 @@ const Natural = (() => {
         return sanitize(st);
     }
 
-    return {LIMIT, MODEL, KEY, tidy, words, chars, findTells, sentences, rhythm, check, settings, avoidList, validate,
+    return {LIMIT, MAX, chunk, MODEL, KEY, tidy, words, chars, findTells, sentences, rhythm, check, settings, avoidList, validate,
         systemPrompt, buildRequest, parseReply, tokens, diff, changed, sanitize, migrate};
 })();
 </script>
@@ -451,7 +478,7 @@ const Natural = (() => {
 (() => {
 const N = Natural;
 const AI_URL = 'https://chatgpt.tobiasmue91.workers.dev/';
-const TIMEOUT = 45000;
+const TIMEOUT = 45000; // per part
 const $ = id => document.getElementById(id);
 const el = {text: $('text'), mirror: $('mirror'), counts: $('counts'), err: $('err'), list: $('tellList'), go: $('go'), out: $('out'),
     status: $('status'), score: $('score'), copy: $('copy'), marks: $('marks'), tag: $('tag'), progress: $('progress'),
@@ -513,7 +540,7 @@ function renderInput() {
     el.err.classList.toggle('on', !v.ok && !v.empty);
     el.text.setAttribute('aria-invalid', String(!v.ok && !v.empty));
     el.go.disabled = !busy && !v.ok;
-    const parts = [`<span>${plural(c.words, 'word', 'words')}${shown > N.LIMIT * 0.75 ? ` · ${shown.toLocaleString('en')} / ${N.LIMIT.toLocaleString('en')} characters` : ''}</span>`];
+    const parts = [`<span>${plural(c.words, 'word', 'words')}${shown > N.LIMIT && shown <= N.MAX ? ` · ${shown.toLocaleString('en')} characters, rewritten in ${N.chunk(N.tidy(text)).length} parts` : ''}</span>`];
     if (c.words) parts.push(c.count ? `<button class="small tells" id="showTells" type="button" aria-expanded="${el.list.classList.contains('on')}">${plural(c.count, 'AI tell', 'AI tells')} · ${el.list.classList.contains('on') ? 'hide' : 'show'}</button>` : '<span>No stock phrases from the list found</span>');
     el.counts.innerHTML = parts.join('');
     const b = $('showTells');
@@ -533,7 +560,7 @@ el.text.addEventListener('input', () => {
     S.text = el.text.value; save();
     if (failure) { failure = null; setStatus('', false); }
     if (S.example) { S.example = false; S.out = null; renderResult(false); }
-    if (el.text.value.length > 20000) checkTimer = setTimeout(renderInput, 250); else renderInput();
+    if (el.text.value.length > 200000) { el.mirror.textContent = ''; checkTimer = setTimeout(renderInput, 250); } else renderInput();
 });
 el.text.addEventListener('scroll', () => { el.mirror.scrollTop = el.text.scrollTop; });
 new ResizeObserver(() => { el.mirror.scrollTop = el.text.scrollTop; }).observe(el.text);
@@ -616,6 +643,7 @@ function renderStale() {
     if (empty !== shownEmpty) { renderResult(false); return; }
     const stale = !!S.out && !S.example && N.tidy(el.text.value) !== N.tidy(S.out.from) && N.tidy(el.text.value) !== N.tidy(S.out.text);
     el.out.classList.toggle('stale', stale);
+    el.copy.disabled = !S.out || stale;
     el.score.style.visibility = stale ? 'hidden' : '';
     setStatus(stale ? 'This rewrite is of your earlier text. Press Rewrite for the new one.' : '', false);
 }
@@ -651,17 +679,24 @@ async function rewrite() {
     el.out.classList.add('dim'); setStatus('Rewriting…', false);
     if (matchMedia('(max-width: 820px)').matches) $('h-out').scrollIntoView({behavior: 'auto', block: 'start'});
     el.progress.classList.add('on');
-    const bar = el.progress.firstElementChild, t0 = Date.now(), expect = 3000 + N.chars(v.text) * 2.5;
+    const bar = el.progress.firstElementChild, t0 = Date.now(), expect = 3000 * N.chunk(v.text).length + N.chars(v.text) * 2.5;
     const tick = setInterval(() => { bar.style.width = Math.min(92, (Date.now() - t0) / expect * 92) + '%'; }, 200);
-    const timer = setTimeout(() => ctrl.abort('timeout'), TIMEOUT);
+    const timer = setTimeout(() => ctrl.abort('timeout'), TIMEOUT * N.chunk(v.text).length);
     let result = null;
     try {
-        const res = await fetch(AI_URL, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(N.buildRequest(v.text, readSettings())), signal: ctrl.signal});
-        if (!res.ok) throw new Error(res.status === 429 ? 'The rewriter is busy right now.' : 'The rewriting service sent an error.');
-        let data; try { data = await res.json(); } catch (e) { throw new Error('The rewriting service sent an error.'); }
-        const ch = data && data.choices && data.choices[0];
-        result = N.parseReply(ch && ch.message && ch.message.content, v.text, ch && ch.finish_reason);
-        if (!result.ok) throw new Error(result.error);
+        const parts = N.chunk(v.text), done = [];
+        for (let k = 0; k < parts.length; k++) {
+            if (parts.length > 1) setStatus(`Rewriting part ${k + 1} of ${parts.length}…`, false);
+            const res = await fetch(AI_URL, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(N.buildRequest(parts[k].text, readSettings())), signal: ctrl.signal});
+            if (!res.ok) throw new Error(res.status === 429 ? 'The rewriter is busy right now.' : 'The rewriting service sent an error.');
+            let data; try { data = await res.json(); } catch (e) { throw new Error('The rewriting service sent an error.'); }
+            const ch = data && data.choices && data.choices[0];
+            const r = N.parseReply(ch && ch.message && ch.message.content, parts.length > 1 ? null : parts[k].text, ch && ch.finish_reason);
+            if (!r.ok) throw new Error(parts.length > 1 ? `Part ${k + 1} of ${parts.length}: ${r.error}` : r.error);
+            if (parts.length === 1 && r.text === N.tidy(parts[k].text)) throw new Error('The model sent the text back unchanged.');
+            done.push(r.text + parts[k].sep);
+        }
+        result = {ok: true, text: N.tidy(done.join(''))};
     } catch (err) {
         const why = ctrl.signal.aborted ? ctrl.signal.reason : null;
         failure = why === 'cancel' ? null : why === 'timeout' ? 'That took too long.' : (err && err.name === 'TypeError') ? 'No connection to the rewriter.' : (err && err.message) || 'Something went wrong.';
@@ -673,7 +708,7 @@ async function rewrite() {
     }
     if (result) {
         S.out = {text: result.text, from: v.text}; S.example = false; save(true);
-        setStatus('', false); renderResult(true);
+        setStatus('', false); renderResult(true); el.text.scrollTop = 0;
         const a = N.check(result.text);
         announce(`Rewritten. ${plural(a.count, 'AI tell', 'AI tells')} left. ${result.text.slice(0, 200)}`);
     } else {
