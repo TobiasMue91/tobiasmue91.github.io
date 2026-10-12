@@ -170,6 +170,7 @@ npm run test:frogger        # Frog Crossing (Frogger) suite (plain Node, no serv
 npm run test:describing     # Describing Words suite (plain Node, no server or browser)
 npm run test:quotes         # AI Quote Generator (QuotoSaurus) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:dailyquote     # Quote of the Day (Daily Quote Generator) suite (plain Node, no server or browser)
+npm run test:humanizer      # AI Text Humanizer (Naturalizer) suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -179,7 +180,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy exist so far. `test/everything_converter.mjs` drives
+Seventy-one exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -698,6 +699,14 @@ never shows one author two days running and turns at local midnight in every tim
 (aliases, accents, typos) and never a different one; that the AI writer is asked for original lines only and what it returns is
 cleaned, labelled and never credited to a person; and that saved quotes, including the old page's `savedQuotes` and `quoteHistory`,
 cannot be forged. To add quotes, edit `util/quotes/candidates.txt` and run `python util/quotes/verify.py`, then the suite.
+
+`test/ai_text_naturalizer.mjs` runs the DOM-free `<script id="core">` block of `tools/ai_text_naturalizer.html` (AI Text
+Humanizer), where a language model rewrites the text and everything around it is promised: the stock-phrase check marks what
+its list names and never part of another word, only the text and the settings are sent, as data the model is told not to obey,
+a reply is shown only when it is a rewrite (refusals, an unchanged text, a cut-off reply are refused), the marked changes
+rebuild the rewrite exactly, and saves - including the old page's `inputText`, `outputText`, `darkMode` and `preset_<name>`
+keys - trust nothing. The `page` suite plays the page in Chromium on a desktop and a phone against canned replies. Run it
+after touching the core, the prompt or the page.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
