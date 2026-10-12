@@ -105,6 +105,16 @@ if (suites.includes('lints')) {
     eq(ex("Don't loose it."), [['loose', 'lose']], '"don\'t loose" -> "lose"');
     eq(ex('The screw is loose.'), [], '"is loose" is left alone');
     eq(ex('Bitter then sweet.'), [], 'only real comparatives before "then"');
+    eq(ex('the information\nprovided was useful'), [['\n', ' ']], 'a line break inside a sentence (a PDF paste) is marked, fixed with a space');
+    eq(ex('First line.\nSecond line'), [], 'a line break after a sentence is left alone');
+    eq(ex('Dear Sam,\n\nthanks'), [], 'a blank line is a paragraph, left alone');
+    eq(G.fromLints("I don't know, its fine", [])[0].fixes, ["it's"], "fixes use straight apostrophes in a text that uses them");
+    eq(G.fromLints("I don’t know, its fine", [])[0].fixes, ['it’s'], 'and curly ones in a text that uses those');
+    eq(G.fromLints("I don’t, dont", [lint(8, 12, 'Spelling', ["don't"])])[0].fixes, ['don’t'], "Harper's straight apostrophe follows a curly text too");
+    eq(G.fromLints('Their going.', [lint(0, 5, 'Grammar', ["They're", "They're "])])[0].fixes, ["They're"], 'a suggestion that differs only by a trailing space is the same suggestion');
+    eq(G.fromLints('but its a holiday', [lint(4, 7, 'Punctuation', ["it's", 'it has'])])[0].fixes, ["it's"], '"it has" is not offered before a noun');
+    eq(G.fromLints('its been long', [lint(0, 3, 'Punctuation', ["it's", 'it has'])])[0].fixes, ["it's", 'it has'], '... but is before "been"');
+    eq(G.fromLints('He go.', [lint(3, 5, 'Agreement', ['goes'], 'The form of the verb must agree in grammatical number with the pronoun.')])[0].message, 'The verb does not match its subject.', 'jargon is said plainly');
     // sentence starts and abbreviations
     eq(['Dear Ms. Okafor', 'Hi Dr. Okafor', 'e.g. Okafor', 'Hi. Okafor', 'Hi!\nOkafor', 'Okafor'].map(t => G.sentenceStart(t, t.length - 6)), [false, false, false, true, true, true], 'a sentence starts after . ! ? or a line, but not after Ms. Dr. e.g.');
     eq(G.fromLints('Dear Ms. Okafor,', [lint(9, 15, 'Spelling', ['Orator'])]).length, 0, 'a name after "Ms." is not a misspelling');

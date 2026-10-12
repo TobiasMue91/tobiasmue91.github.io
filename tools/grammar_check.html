@@ -99,7 +99,7 @@ textarea.txt:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 .card.on { box-shadow: 0 0 0 2px var(--c); }
 .card .what { font-size: 12.5px; color: var(--soft); font-weight: 600; display: flex; gap: 8px; align-items: center; }
 .card .what::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
-.card .what .ign { margin-left: auto; font-weight: 400; color: var(--soft); background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12.5px; min-height: 28px; }
+.card .what .ign { margin-left: auto; font-weight: 400; color: var(--soft); background: none; border: 1px solid var(--rule); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12.5px; min-height: 28px; }
 .card .what .ign:hover { border-color: var(--rule); background: var(--wash); }
 .card .msg { margin: 4px 0 8px; }
 .card code, .sheetcard code { font: inherit; font-weight: 650; }
@@ -124,9 +124,14 @@ textarea.txt:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 /* phone: the issue under the caret, pinned above the keyboard */
 .sheetcard { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 20; display: none; }
 .sheetcard .card { box-shadow: 0 6px 30px rgba(0,0,0,.18); cursor: default; }
-@media (max-width: 820px) { .sheetcard.show { display: block; } }
-.toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 8px 14px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 30; }
-.toast.show { opacity: 1; }
+@media (max-width: 820px) { .sheetcard.show { display: block; } body.has-sheet .wrap { padding-bottom: 190px; } body.has-sheet .list .card { display: none; } }
+.sheetcard .nav { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--soft); font-variant-numeric: tabular-nums; margin: -26px 0 0 auto; width: max-content; position: relative; }
+.sheetcard .nav button { background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 7px; font-size: 18px; line-height: 1; min-width: 36px; min-height: 32px; border-color: var(--rule); }
+.sheetcard .what .ign { margin-left: 0; }
+.sheetcard .what { padding-right: 120px; }
+.toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 6px 8px 6px 14px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 30; display: flex; gap: 10px; align-items: center; max-width: calc(100vw - 32px); }
+.toast.show { opacity: 1; pointer-events: auto; }
+.toast button { background: none; border: 0; color: var(--paper); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; padding: 6px; min-height: 32px; cursor: pointer; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } .mirror .fixed, .toast { transition: none; } }
 </style>
@@ -159,7 +164,7 @@ textarea.txt:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
                     <textarea class="txt" id="text" spellcheck="false" autocapitalize="sentences" autocomplete="off" aria-label="Your text" aria-describedby="counts"></textarea>
                 </div>
                 <div class="foot">
-                    <span id="exampleTag" class="example-tag" hidden>Example – type or paste over it</span>
+                    <span id="exampleTag" class="example-tag" hidden>Example – type over it</span>
                     <span id="counts">0 words · 0 characters</span>
                     <span class="sp"></span>
                     <button class="btn" id="clear">Clear</button>
@@ -186,12 +191,11 @@ textarea.txt:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
                 </div>
                 <div class="note" id="aiNote" aria-live="polite"></div>
             </section>
-            <p class="method">Checked by <a href="https://writewithharper.com/" target="_blank" rel="noopener">Harper</a>, an open-source English checker that runs in your browser, plus a few rules of this page. A mark is a suggestion – you decide. Part of <a href="https://www.gptgames.dev/">gptgames.dev</a>.</p>
         </aside>
     </div>
 </div>
-<div class="sheetcard" id="sheetcard" role="region" aria-label="Issue at the cursor"></div>
-<div class="toast" id="toast" role="status"></div>
+<div class="sheetcard" id="sheetcard" role="region" aria-label="Current issue"></div>
+<div class="toast" id="toast" role="status"><span id="toastMsg"></span><button type="button" id="undo" hidden>Undo</button></div>
 
 <script id="core">
 // DOM-free core of the grammar checker. The page asks Harper (a rule-based checker compiled to WebAssembly) for lints
@@ -225,6 +229,9 @@ const GC = (() => {
     // raw: [{start, end, kind, message, fixes: [{kind: 0 replace | 1 remove | 2 insert after, text}]}], spans in UTF-16 units
     function fromLints(text, raw, words) {
         const known = new Set((words || []).map(w => w.toLowerCase()));
+        // fixes follow the apostrophes the text already uses, so a copied text never mixes ' and ’
+        const nS = (text.match(/'/g) || []).length, nC = (text.match(/’/g) || []).length;
+        const straight = nS > 0 && nS >= nC, curly = nC > nS;
         const out = [];
         for (const r of (raw || []).concat(extra(text))) {
             let start = r.start | 0, end = r.end | 0;
@@ -237,15 +244,19 @@ const GC = (() => {
             if (kind === 'spell' && known.has(was.toLowerCase())) continue;
             // a capitalised word inside a sentence is almost always a name ("Okafor", not "Orator")
             if (kind === 'spell' && /^\p{Lu}\p{Ll}/u.test(was) && !sentenceStart(text, start)) continue;
-            const fixes = [], seen = new Set([norm(was)]);
+            const fixes = [], seen = new Set([was.trim() ? norm(was).trim() : was]);
             for (const f of r.fixes || []) {
                 const t = f.kind === 1 ? '' : f.kind === 2 ? was + f.text : String(f.text);
-                if (seen.has(norm(t)) && t !== '') continue;
-                if (t === '' && seen.has('')) continue;
-                seen.add(norm(t)); fixes.push(t);
+                const key = t.trim() ? norm(t).trim() : t;
+                if (seen.has(key)) continue;
+                // "its" -> "it has" only fits before a past participle; "it has a public holiday" is not English
+                if (/^it has$/i.test(t) && !/^\s+(been|got|gone|had|done|become|taken|made|seen)\b/i.test(text.slice(end, end + 12))) continue;
+                seen.add(key); fixes.push(t);
             }
             // Harper splits unknown words into two real ones ("informations" -> "in formations"); that is not help
             if (kind === 'spell' && fixes.length === 1 && fixes[0].replace(/\s+/g, '') === was && /\s/.test(fixes[0])) continue;
+            if (straight) for (let k = 0; k < fixes.length; k++) fixes[k] = fixes[k].replace(/’/g, "'");
+            else if (curly) for (let k = 0; k < fixes.length; k++) fixes[k] = fixes[k].replace(/'/g, '’');
             out.push({start, end, was, kind, label: LABEL[kind], message: say(kind, was, tidy(r.message)), fixes: fixes.slice(0, kind === 'spell' ? 2 : 3), src: 'rules'});
         }
         return dedupe(out);
@@ -271,6 +282,14 @@ const GC = (() => {
     function keepCase(was, word) { return /^\p{Lu}/u.test(was) ? word[0].toUpperCase() + word.slice(1) : word; }
     function extra(text) {
         const out = [];
+        // a line break inside a sentence, as text copied out of a PDF has: the line ends on a letter or comma and
+        // the next begins in lower case
+        const br = /([\p{Ll},;])([^\S\n]*\n[^\S\n]*)(?=\p{Ll})/gu;
+        let b;
+        while ((b = br.exec(text))) {
+            const start = b.index + b[1].length;
+            out.push({start, end: start + b[2].length, kind: 'Formatting', message: 'Line break in the middle of a sentence (common in text copied from a PDF).', fixes: [{kind: 0, text: ' '}]});
+        }
         for (const [re, group, fix, message] of EXTRA) {
             re.lastIndex = 0;
             let m;
@@ -288,6 +307,9 @@ const GC = (() => {
     // Harper's wording, where it reads backwards to a stranger
     function say(kind, was, m) {
         if (kind === 'spell' && /^Did you mean to spell/.test(m)) return `\`${was}\` is not in the dictionary.`;
+        if (/must agree in grammatical number|Make the verb agree with its subject/.test(m)) return 'The verb does not match its subject.';
+        if (/first-person singular subject pronoun must be capitalized/.test(m)) return '“I” is always written as a capital.';
+        if (/^Incorrect indefinite article/.test(m)) return 'Use “an” before a vowel sound and “a” before a consonant sound.';
         let sp = /^There are (\d+) spaces where there should be only one/.exec(m);
         if (sp) return `${sp[1]} spaces in a row – one is enough.`;
         return m;
@@ -506,7 +528,7 @@ const settings = GC.loadSettings(store.get(GC.SET_KEY));
 if (!store.get(GC.SET_KEY)) settings.dialect = GC.guessDialect(navigator.languages);
 const saveSettings = () => store.set(GC.SET_KEY, JSON.stringify(settings));
 
-let rules = [], ai = [], issues = [], active = null, example = false, linter = null, Dialect = null;
+let aiDone = null, rules = [], ai = [], issues = [], active = null, example = false, linter = null, Dialect = null;
 let state = 'loading', lintSeq = 0, lintTimer = 0, saveTimer = 0, aiRun = null, flash = null;
 
 // ---- text in, text kept ----
@@ -519,6 +541,14 @@ function setExample(on) { example = on; $('exampleTag').hidden = !on; }
 setExample(example);
 
 ta.addEventListener('focus', () => { if (example) requestAnimationFrame(() => { if (example && ta.value === GC.EXAMPLE) ta.select(); }); });
+ta.addEventListener('beforeinput', e => {
+    if (!example || !/^insert/.test(e.inputType)) return;
+    const data = e.data != null ? e.data : e.dataTransfer ? e.dataTransfer.getData('text/plain') : null;
+    if (data == null) return;
+    e.preventDefault();
+    setExample(false);
+    replaceRange(0, ta.value.length, data);
+});
 ta.addEventListener('input', () => {
     if (example) setExample(false);
     // the AI's marks belong to the text it read; moving them through edits is done in onEdit
@@ -620,13 +650,13 @@ function drawVerdict() {
     const v = $('verdict'), n = issues.length, empty = !ta.value.trim();
     const sure = issues.filter(GC.sure).length;
     $('fixAll').hidden = sure < 2 || state === 'loading';
-    $('fixAll').textContent = `Fix ${sure}`;
+    $('fixAll').textContent = sure === n ? `Fix all ${sure}` : `Fix ${sure} of ${n}`;
     $('fixAll').title = 'Apply the first suggestion of every mark (spelling marks with a choice are left to you)';
     if (state === 'loading') { v.innerHTML = '<span class="spin"></span><span>Loading the checker…</span>'; return; }
-    if (state === 'failed' && !linter) { v.innerHTML = '<span>The checker could not load.</span> <button class="btn" id="retry">Retry</button>'; $('retry').onclick = () => { state = 'loading'; draw(); boot(); }; return; }
+    if (state === 'failed' && !linter) { v.innerHTML = '<span style="color:var(--spell);font-size:14.5px">Not checked: the checker did not load.</span> <button class="btn" id="retry">Retry</button><button class="btn" id="useAi">Use AI</button>'; $('retry').onclick = () => { state = 'loading'; draw(); boot(); }; $('useAi').onclick = () => { $('aiGo').scrollIntoView({block: 'center'}); $('aiGo').focus(); }; return; }
     if (empty) { v.innerHTML = '<span style="color:var(--soft);font-weight:400">Type or paste English text below.</span>'; return; }
     if (state === 'checking' && !n) { v.innerHTML = '<span class="spin"></span><span>Checking…</span>'; return; }
-    if (!n) { v.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--ok)"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4"/></svg><span>No issues found</span>`; return; }
+    if (!n) { v.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--ok)"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4"/></svg><span>No rule broken</span>${ai.length || aiDone === ta.value ? '' : '<button class="btn" id="askAi" style="font-weight:400">Ask AI too</button>'}`; const a = $('askAi'); if (a) a.onclick = () => { $('aiGo').scrollIntoView({block: 'center'}); $('aiGo').focus(); }; return; }
     v.innerHTML = `<span class="n">${n}</span><span>issue${n === 1 ? '' : 's'}</span>${state === 'checking' ? '<span class="spin" title="Checking"></span>' : ''}`;
 }
 function drawList() {
@@ -636,7 +666,7 @@ function drawList() {
     const list = $('list');
     list.innerHTML = '';
     if (!issues.length && state === 'ready' && ta.value.trim()) {
-        list.innerHTML = `<div class="allclear"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="flex:none"><circle cx="12" cy="12" r="11" fill="var(--ok)"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4"/></svg><div><b>Nothing marked.</b>Rules check spelling, grammar and punctuation. For word choice and tone, try the AI proofread.</div></div>`;
+        list.innerHTML = `<div class="allclear"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="flex:none"><circle cx="12" cy="12" r="11" fill="var(--ok)"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4"/></svg><div>Rules can miss errors such as “the results was”. The AI proofread below reads for those.</div></div>`;
         return;
     }
     const max = 200;
@@ -659,13 +689,15 @@ function card(i, inSheet) {
     const fx = document.createElement('div'); fx.className = 'fixes';
     if (i.fixes.length) {
         const blank = !i.was.trim();
-        const was = document.createElement('span'); was.className = 'was'; was.textContent = blank ? spaces(i.was) : i.was;
+        // spaces cannot be seen, so show them between the words around them
+        const t = ta.value, L = (t.slice(0, i.start).match(/\S+$/) || [''])[0], Rr = (t.slice(i.end).match(/^\S+/) || [''])[0];
+        const was = document.createElement('span'); was.className = 'was'; was.textContent = blank ? `${L}${i.was.replace(/\n/g, '↵').replace(/ /g, '·')}${Rr}` : i.was;
         const ar = document.createElement('span'); ar.className = 'arrow'; ar.textContent = '→'; ar.setAttribute('aria-hidden', 'true');
         fx.append(was, ar);
         for (const f of i.fixes) {
             const b = document.createElement('button'); b.type = 'button';
             b.className = 'fix' + (f.trim() === '' ? ' del' : '');
-            b.textContent = f === '' ? 'Remove' : f.trim() === '' ? spaces(f) : f;
+            b.textContent = f === '' ? (blank ? `${L}${Rr}` : 'Remove') : f.trim() === '' && blank ? `${L}${f}${Rr}` : f.trim() === '' ? spaces(f) : f;
             b.setAttribute('aria-label', f === '' ? `Remove “${i.was}”` : `Replace “${i.was}” with “${f}”`);
             b.onclick = () => fix(i, f);
             fx.append(b);
@@ -675,12 +707,34 @@ function card(i, inSheet) {
     return c;
 }
 const spaces = w => /\n/.test(w) ? 'line break' : w.length === 1 ? 'one space' : `${w.length} spaces`;
+// On a phone the list is below the text, so one issue at a time sits pinned at the bottom of the screen: the one
+// under the caret, or the first; arrows step through the rest.
+let sheetAt = 0;
 function drawSheet() {
     const sh = $('sheetcard');
-    const show = active && document.activeElement === ta && matchMedia('(max-width: 820px)').matches;
-    sh.classList.toggle('show', !!show);
+    const phone = matchMedia('(max-width: 820px)').matches;
+    const show = phone && issues.length > 0 && state !== 'loading';
+    sh.classList.toggle('show', show);
+    document.body.classList.toggle('has-sheet', show);
     sh.innerHTML = '';
-    if (show) sh.appendChild(card(active, true));
+    if (!show) return;
+    let k = active ? issues.findIndex(i => i.start === active.start && i.end === active.end) : -1;
+    if (k < 0) k = Math.min(sheetAt, issues.length - 1);
+    sheetAt = k;
+    const c = card(issues[k], true);
+    const nav = document.createElement('div'); nav.className = 'nav';
+    const mk = (label, d, txt) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ign'; b.setAttribute('aria-label', label); b.textContent = txt; b.disabled = issues.length < 2; b.onclick = () => step(d); return b; };
+    const pos = document.createElement('span'); pos.textContent = `${k + 1} of ${issues.length}`;
+    nav.append(mk('Previous issue', -1, '‹'), pos, mk('Next issue', 1, '›'));
+    c.querySelector('.what').after(nav);
+    sh.appendChild(c);
+}
+function step(d) {
+    sheetAt = (sheetAt + d + issues.length) % issues.length;
+    active = issues[sheetAt];
+    draw();
+    const m = mirror.querySelector('mark.on');
+    if (m) m.scrollIntoView({block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
 }
 let lastSaid = '';
 function announce() {
@@ -700,11 +754,11 @@ function replaceRange(start, end, text) {
 }
 function fix(i, f) {
     if (example) setExample(false);
-    const start = i.start;
+    const start = i.start, before = ta.value;
     active = null;
     replaceRange(i.start, i.end, f);
     showFlash(start, start + f.length);
-    toast(f === '' ? `Removed “${i.was}” – Ctrl+Z undoes` : `“${i.was.trim() || '␣'}” → “${f}”`);
+    toast(f === '' ? `Removed “${i.was.trim() ? i.was : spaces(i.was)}”` : `“${i.was.trim() ? i.was : spaces(i.was)}” → “${f.trim() ? f : spaces(f)}”`, before);
 }
 function showFlash(start, end) {
     flash = {start, end};
@@ -714,13 +768,13 @@ function showFlash(start, end) {
     showFlash.t = setTimeout(() => { flash = null; draw(); }, 1500);
 }
 $('fixAll').onclick = () => {
-    const r = GC.fixAll(ta.value, issues);
+    const before = ta.value, r = GC.fixAll(ta.value, issues);
     if (example) setExample(false);
     active = null;
     // one edit for the whole text keeps it a single undo step
     replaceRange(0, ta.value.length, r.text);
     ta.setSelectionRange(0, 0);
-    toast(`Fixed ${r.count} – Ctrl+Z undoes`);
+    toast(`Fixed ${r.count}`, before);
 };
 async function ignore(i) {
     if (i.kind === 'spell' && /^[\p{L}’'-]+$/u.test(i.was)) {
@@ -769,9 +823,10 @@ $('copy').onclick = async () => {
 };
 $('clear').onclick = () => {
     if (example) setExample(false);
+    const before = ta.value;
     ai = []; active = null;
     replaceRange(0, ta.value.length, '');
-    toast('Cleared – Ctrl+Z brings it back');
+    toast('Cleared', before);
 };
 
 // ---- AI proofread ----
@@ -806,20 +861,32 @@ async function proofread() {
     aiRun = null;
     go.textContent = failed && !found.length && failed !== 'Stopped.' ? 'Try again' : 'Proofread with AI';
     if (ta.value !== text) { note.className = 'note'; note.textContent = 'The text changed while the AI was reading. Run it again.'; return; }
-    ai = found;
+    ai = found; aiDone = text;
     combine(); draw();
     const shown = issues.filter(i => i.src === 'ai').length;
     note.className = 'note' + (failed && !found.length ? ' bad' : '');
     note.textContent = (failed && !found.length ? failed + ' Your text is unchanged; the marks above still stand.' :
         (shown ? `${shown} AI suggestion${shown === 1 ? '' : 's'} added, in purple.` : found.length ? 'The AI agrees with the marks already shown.' : 'The AI found nothing to change.') + (failed ? ` Some parts failed: ${failed}` : ''))
         + (cut ? ` Only the first ${GC.AI_MAX.toLocaleString('en-US')} characters were read.` : '');
+    toast(note.textContent.length > 90 ? note.textContent.slice(0, note.textContent.indexOf('.') + 1) : note.textContent);
 }
 
 // ---- small things ----
-function toast(msg) {
-    const t = $('toast'); t.textContent = msg; t.classList.add('show');
-    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2200);
+// the text before the last fix, so the toast can offer Undo on a phone, where there is no Ctrl+Z
+let undoText = null;
+function toast(msg, before) {
+    const t = $('toast'); $('toastMsg').textContent = msg; t.classList.add('show');
+    undoText = before === undefined ? null : before;
+    $('undo').hidden = undoText === null;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.classList.remove('show'); undoText = null; }, undoText === null ? 2200 : 6000);
 }
+$('undo').onclick = () => {
+    if (undoText === null) return;
+    const back = undoText; undoText = null;
+    // through the editing commands too, so Ctrl+Y still redoes it
+    replaceRange(0, ta.value.length, back);
+    toast('Undone');
+};
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && active) { active = null; draw(); } });
 window.addEventListener('resize', () => drawSheet());
 
