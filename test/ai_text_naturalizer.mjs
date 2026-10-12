@@ -49,6 +49,8 @@ if (suites.includes('input')) {
     eq(N.tidy('a b c'), 'a b c', 'non-breaking spaces become spaces');
     eq(N.tidy('one\n\n\n\n\ntwo   \nthree'), 'one\n\ntwo\nthree', 'paragraph breaks stay, runs of blank lines shrink to one');
     eq(N.tidy(null), '', 'not a string is empty');
+    eq(N.tidy('   Indented.    Two  spaces.\n   Next line.'), 'Indented. Two spaces.\nNext line.', 'runs of spaces and stray indents from a chat window go');
+    eq(N.tidy('List:\n  - one\n  2. two'), 'List:\n  - one\n  2. two', '... but list indents stay');
     eq(N.words('Grüße 😀 日本'), 2, 'an emoji is not a word, accented and CJK runs are');
     eq(N.words("don't re-use it"), 3, 'contractions and hyphenated words are one word');
     eq(N.chars('😀é'), 2, 'characters are counted as people see them, not UTF-16 units');
@@ -81,6 +83,7 @@ if (suites.includes('tells')) {
     eq(tellsOf('Wait -- what?'), ['--'], 'a double hyphen standing in for a dash');
     eq(tellsOf("In today's fast-paced digital world, robust tools."), ["In today's fast-paced digital world", 'robust'], 'a long stock phrase is one tell, not three');
     eq(tellsOf('In order to win, utilize the realm.'), ['In order to', 'utilize', 'realm'], 'wordy phrases');
+    eq(tellsOf("Certainly! Here's a summary:"), ['Certainly!', "Here's a summary:"], 'chatbot framing');
     eq(tellsOf('Plain words about a dog that runs.'), [], 'plain prose has none');
     eq(tellsOf(''), [], 'empty has none');
     const s = 'Moreover, we delve.';
