@@ -82,7 +82,7 @@ details.more .in { display: grid; gap: 8px; padding-top: 8px; }
 .result .out { min-height: clamp(190px, 38vh, 430px); padding: 14px 18px; white-space: pre-wrap; overflow-wrap: break-word; position: relative; }
 .out .a { text-decoration: underline; text-decoration-color: var(--add); text-decoration-thickness: 2px; text-underline-offset: 4px; text-decoration-skip-ink: none; border-radius: 2px; }
 .out .d { color: var(--del); text-decoration: line-through; opacity: .75; }
-.out.plain .a { text-decoration: none; }
+.out.plain .a { text-decoration: none; animation: none !important; }
 .out.plain .d { display: none; }
 .out.fresh .a { animation: settle 1.1s ease-out; }
 @keyframes settle { from { background: var(--add-flash); } to { background: transparent; } }
@@ -294,7 +294,7 @@ const Natural = (() => {
         if (!t) return {ok: false, empty: true, error: ''};
         if (!/[\p{L}]/u.test(t)) return {ok: false, error: 'There are no words to rewrite here — paste some sentences.'};
         const n = chars(t);
-        if (n > MAX) return {ok: false, error: `This takes up to ${MAX.toLocaleString('en')} characters at once; yours has ${n.toLocaleString('en')}. Rewrite the first part, then the rest.`};
+        if (n > MAX) return {ok: false, error: `This takes up to ${MAX.toLocaleString('en')} characters at once; yours has ${n.toLocaleString('en')}. Rewrite it in two goes.`};
         return {ok: true, text: t, parts: chunk(t).length};
     }
 
@@ -537,6 +537,12 @@ function renderInput() {
     renderMirror(text, c.tells);
     const v = N.validate(text);
     el.err.textContent = v.ok || v.empty ? '' : v.error;
+    if (!v.ok && N.chars(N.tidy(text)) > N.MAX) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'small'; b.style.marginLeft = '8px';
+        b.textContent = `Keep the first ${N.MAX.toLocaleString('en')}`;
+        b.addEventListener('click', () => { const t = N.tidy(el.text.value), cut = N.chunk(t, N.MAX)[0].text; setText(cut); el.text.blur(); announce('Shortened. Undo brings the rest back.'); });
+        el.err.appendChild(b);
+    }
     el.err.classList.toggle('on', !v.ok && !v.empty);
     el.text.setAttribute('aria-invalid', String(!v.ok && !v.empty));
     el.go.disabled = !busy && !v.ok;
@@ -618,14 +624,14 @@ $('delPreset').addEventListener('click', () => {
 });
 
 /* ---------- result ---------- */
-let shownEmpty = null;
+let shownEmpty = null, doneMsg = '';
 function renderResult(fresh) {
     shownEmpty = !N.tidy(el.text.value);
     const out = shownEmpty ? null : S.out;
     el.out.classList.remove('fresh', 'dim');
     el.tag.hidden = !S.example;
     if (!out) {
-        el.out.innerHTML = '<span class="empty">The rewrite appears here, with every changed word marked.</span>';
+        el.out.innerHTML = '<span class="empty">The rewrite appears here. Tick Mark changes to see what was reworded.</span>';
         el.score.innerHTML = ''; el.copy.disabled = true; el.out.classList.remove('stale'); if (!busy && !failure) setStatus('', false); return;
     }
     const ops = N.diff(out.from, out.text);
@@ -645,7 +651,8 @@ function renderStale() {
     el.out.classList.toggle('stale', stale);
     el.copy.disabled = !S.out || stale;
     el.score.style.visibility = stale ? 'hidden' : '';
-    setStatus(stale ? 'This rewrite is of your earlier text. Press Rewrite for the new one.' : '', false);
+    if (stale) doneMsg = '';
+    setStatus(stale ? 'This rewrite is of your earlier text. Press Rewrite for the new one.' : doneMsg, false);
 }
 function setStatus(msg, fail, retry) {
     el.status.className = 'status' + (msg ? ' on' : '') + (fail ? ' fail' : '');
@@ -688,8 +695,8 @@ async function rewrite() {
         for (let k = 0; k < parts.length; k++) {
             if (parts.length > 1) setStatus(`Rewriting part ${k + 1} of ${parts.length}…`, false);
             const res = await fetch(AI_URL, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(N.buildRequest(parts[k].text, readSettings())), signal: ctrl.signal});
-            if (!res.ok) throw new Error(res.status === 429 ? 'The rewriter is busy right now.' : 'The rewriting service sent an error.');
-            let data; try { data = await res.json(); } catch (e) { throw new Error('The rewriting service sent an error.'); }
+            if (!res.ok) throw new Error(res.status === 429 ? 'The rewriter is busy right now.' : 'The rewriting service failed. Wait a moment and try again.');
+            let data; try { data = await res.json(); } catch (e) { throw new Error('The rewriting service failed. Wait a moment and try again.'); }
             const ch = data && data.choices && data.choices[0];
             const r = N.parseReply(ch && ch.message && ch.message.content, parts.length > 1 ? null : parts[k].text, ch && ch.finish_reason);
             if (!r.ok) throw new Error(parts.length > 1 ? `Part ${k + 1} of ${parts.length}: ${r.error}` : r.error);
@@ -708,8 +715,9 @@ async function rewrite() {
     }
     if (result) {
         S.out = {text: result.text, from: v.text}; S.example = false; save(true);
-        setStatus('', false); renderResult(true); el.text.scrollTop = 0;
+        renderResult(true); el.text.scrollTop = 0;
         const a = N.check(result.text);
+        doneMsg = "Done. Read it through before you use it."; setStatus(doneMsg, false);
         announce(`Rewritten. ${plural(a.count, 'AI tell', 'AI tells')} left. ${result.text.slice(0, 200)}`);
     } else {
         el.out.classList.remove('dim');
