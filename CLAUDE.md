@@ -172,6 +172,7 @@ npm run test:quotes         # AI Quote Generator (QuotoSaurus) suite (plain Node
 npm run test:dailyquote     # Quote of the Day (Daily Quote Generator) suite (plain Node, no server or browser)
 npm run test:grammar        # Grammar Checker suite (plain Node; its harper suite needs harper.js installed)
 npm run test:humanizer      # AI Text Humanizer (Naturalizer) suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:casing         # Case Converter suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -181,7 +182,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-one exist so far. `test/everything_converter.mjs` drives
+Seventy-two exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -716,6 +717,14 @@ a reply is shown only when it is a rewrite (refusals, an unchanged text, a cut-o
 rebuild the rewrite exactly, and saves - including the old page's `inputText`, `outputText`, `darkMode` and `preset_<name>`
 keys - trust nothing. The `page` suite plays the page in Chromium on a desktop and a phone against canned replies. Run it
 after touching the core, the prompt or the page.
+
+`test/code_case_converter.mjs` runs the DOM-free `<script id="core">` block of `tools/code_case_converter.html` (Case
+Converter), whose promise is that it finds the words a person sees: XMLHttpRequest is xml, http, request, IDs and URLs stay
+one word, user's is user, accents and decomposed letters survive, and each identifier style joins them its own way and is
+stable when converted back; Title Case follows Chicago (small words lower except first, last and after a colon; NASA,
+iPhone and user_id kept), Sentence case capitalises after . ! ? and at each line, text styles change letter case and nothing
+else, a megabyte converts in well under a second, and the old page's `conversionHistory` is cleaned before it is shown.
+Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
