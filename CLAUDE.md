@@ -170,6 +170,7 @@ npm run test:frogger        # Frog Crossing (Frogger) suite (plain Node, no serv
 npm run test:describing     # Describing Words suite (plain Node, no server or browser)
 npm run test:quotes         # AI Quote Generator (QuotoSaurus) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:dailyquote     # Quote of the Day (Daily Quote Generator) suite (plain Node, no server or browser)
+npm run test:grammar        # Grammar Checker suite (plain Node; its harper suite needs harper.js installed)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -698,6 +699,14 @@ never shows one author two days running and turns at local midnight in every tim
 (aliases, accents, typos) and never a different one; that the AI writer is asked for original lines only and what it returns is
 cleaned, labelled and never credited to a person; and that saved quotes, including the old page's `savedQuotes` and `quoteHistory`,
 cannot be forged. To add quotes, edit `util/quotes/candidates.txt` and run `python util/quotes/verify.py`, then the suite.
+`test/grammar_check.mjs` runs the DOM-free `<script id="core">` block of `tools/grammar_check.html` (Grammar Checker). The page
+checks text in the browser with Harper (an open-source rule checker, WebAssembly from jsDelivr) and sends text out only when the
+person asks for the AI proofread. The suite checks what the page adds around Harper: which marks are shown (names and words with
+non-English letters are not misspellings, a few confusions Harper misses are caught), that a fix changes exactly its words and every
+other mark stays on its own word in any order, that the AI request carries the text only as JSON data, that an AI reply is shown only
+as small located fixes (a rewrite, an answer or an obeyed injection is refused) whose sum is exactly the model's text, and that the
+old page's `grammarProText` survives. Its `harper` suite runs the real checker (`npm i --no-save harper.js@2.10.0`). Run it after
+touching the core or bumping Harper.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
