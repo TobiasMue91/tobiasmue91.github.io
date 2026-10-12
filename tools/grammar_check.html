@@ -78,7 +78,7 @@ textarea.txt:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 .mirror mark { background: none; color: transparent; text-decoration: underline wavy var(--c); text-decoration-thickness: 1.5px; text-underline-offset: 4px; text-decoration-skip-ink: none; border-radius: 3px; }
 .mirror mark.k-style, .mirror mark.k-ai { text-decoration-style: dashed; text-decoration-thickness: 2px; }
 .mirror mark.on { background: var(--w); }
-.mirror mark.blank { text-decoration: none; background: var(--w); }
+.mirror mark.blank { text-decoration-style: solid; text-decoration-thickness: 3px; }
 .mirror .fixed { background: var(--okwash); border-radius: 3px; transition: background-color 1.4s ease-out; }
 .mirror .fixed.fade { background: transparent; }
 .k-spell { --c: var(--spell); --w: var(--spell-w); }
@@ -131,6 +131,7 @@ textarea.txt:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 .sheetcard .what { padding-right: 120px; }
 .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 6px 8px 6px 14px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 30; display: flex; gap: 10px; align-items: center; max-width: calc(100vw - 32px); }
 .toast.show { opacity: 1; pointer-events: auto; }
+body.has-sheet .toast { bottom: auto; top: 12px; }
 .toast button { background: none; border: 0; color: var(--paper); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; padding: 6px; min-height: 32px; cursor: pointer; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } .mirror .fixed, .toast { transition: none; } }
@@ -284,6 +285,10 @@ const GC = (() => {
         const out = [];
         // a line break inside a sentence, as text copied out of a PDF has: the line ends on a letter or comma and
         // the next begins in lower case
+        // spaces left at the end of a line or of the text
+        const tr = /[^\S\n]+(?=\n|$)/g;
+        let q;
+        while ((q = tr.exec(text))) { if (q.index > 0 && text[q.index - 1] !== '\n') out.push({start: q.index, end: q.index + q[0].length, kind: 'Formatting', message: 'Spaces at the end of a line.', fixes: [{kind: 1, text: ''}]}); if (!q[0].length) tr.lastIndex++; }
         const br = /([\p{Ll},;])([^\S\n]*\n[^\S\n]*)(?=\p{Ll})/gu;
         let b;
         while ((b = br.exec(text))) {
@@ -650,13 +655,15 @@ function drawVerdict() {
     const v = $('verdict'), n = issues.length, empty = !ta.value.trim();
     const sure = issues.filter(GC.sure).length;
     $('fixAll').hidden = sure < 2 || state === 'loading';
-    $('fixAll').textContent = sure === n ? `Fix all ${sure}` : `Fix ${sure} of ${n}`;
-    $('fixAll').title = 'Apply the first suggestion of every mark (spelling marks with a choice are left to you)';
+    $('fixAll').textContent = sure === n ? `Fix all ${sure}` : `Fix ${sure} sure`;
+    $('fixAll').title = sure === n ? 'Apply the suggestion of every mark' : `Apply the ${sure} marks with one clear fix; ${n - sure} spelling mark${n - sure === 1 ? '' : 's'} with a choice ${n - sure === 1 ? 'is' : 'are'} left to you`;
+    $('fixAll').setAttribute('aria-label', $('fixAll').title);
     if (state === 'loading') { v.innerHTML = '<span class="spin"></span><span>Loading the checker…</span>'; return; }
     if (state === 'failed' && !linter) { v.innerHTML = '<span style="color:var(--spell);font-size:14.5px">Not checked: the checker did not load.</span> <button class="btn" id="retry">Retry</button><button class="btn" id="useAi">Use AI</button>'; $('retry').onclick = () => { state = 'loading'; draw(); boot(); }; $('useAi').onclick = () => { $('aiGo').scrollIntoView({block: 'center'}); $('aiGo').focus(); }; return; }
     if (empty) { v.innerHTML = '<span style="color:var(--soft);font-weight:400">Type or paste English text below.</span>'; return; }
+    if (aiRun) { v.innerHTML = '<span class="spin"></span><span>AI is reading…</span><button class="btn" id="aiStop" style="font-weight:400">Stop</button>'; $('aiStop').onclick = () => aiRun && aiRun.abort(); return; }
     if (state === 'checking' && !n) { v.innerHTML = '<span class="spin"></span><span>Checking…</span>'; return; }
-    if (!n) { v.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--ok)"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4"/></svg><span>No rule broken</span>${ai.length || aiDone === ta.value ? '' : '<button class="btn" id="askAi" style="font-weight:400">Ask AI too</button>'}`; const a = $('askAi'); if (a) a.onclick = () => { $('aiGo').scrollIntoView({block: 'center'}); $('aiGo').focus(); }; return; }
+    if (!n) { v.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--ok)"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4"/></svg><span>No rule broken</span>${ai.length || aiDone === ta.value ? '' : '<button class="btn" id="askAi" style="font-weight:400" title="Sends this text to OpenAI">Ask AI too</button>'}`; const a = $('askAi'); if (a) a.onclick = () => proofread(); return; }
     v.innerHTML = `<span class="n">${n}</span><span>issue${n === 1 ? '' : 's'}</span>${state === 'checking' ? '<span class="spin" title="Checking"></span>' : ''}`;
 }
 function drawList() {
@@ -696,9 +703,9 @@ function card(i, inSheet) {
         fx.append(was, ar);
         for (const f of i.fixes) {
             const b = document.createElement('button'); b.type = 'button';
-            b.className = 'fix' + (f.trim() === '' ? ' del' : '');
+            b.className = 'fix' + (f === '' && !blank ? ' del' : '');
             b.textContent = f === '' ? (blank ? `${L}${Rr}` : 'Remove') : f.trim() === '' && blank ? `${L}${f}${Rr}` : f.trim() === '' ? spaces(f) : f;
-            b.setAttribute('aria-label', f === '' ? `Remove “${i.was}”` : `Replace “${i.was}” with “${f}”`);
+            b.setAttribute('aria-label', `${b.textContent} (replaces “${i.was.trim() ? i.was : spaces(i.was)}”)`);
             b.onclick = () => fix(i, f);
             fx.append(b);
         }
@@ -838,6 +845,7 @@ async function proofread() {
     const ctrl = new AbortController();
     aiRun = ctrl;
     go.textContent = 'Stop';
+    drawVerdict();
     note.className = 'note';
     const found = [];
     let failed = '';
@@ -868,7 +876,7 @@ async function proofread() {
     note.textContent = (failed && !found.length ? failed + ' Your text is unchanged; the marks above still stand.' :
         (shown ? `${shown} AI suggestion${shown === 1 ? '' : 's'} added, in purple.` : found.length ? 'The AI agrees with the marks already shown.' : 'The AI found nothing to change.') + (failed ? ` Some parts failed: ${failed}` : ''))
         + (cut ? ` Only the first ${GC.AI_MAX.toLocaleString('en-US')} characters were read.` : '');
-    toast(note.textContent.length > 90 ? note.textContent.slice(0, note.textContent.indexOf('.') + 1) : note.textContent);
+    drawVerdict();
 }
 
 // ---- small things ----
