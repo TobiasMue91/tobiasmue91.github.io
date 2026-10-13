@@ -8,7 +8,7 @@ satellite adjectives clustered around such a head ("&"), and the also-see links 
 Every lemma that reaches one of them is indexed with its synsets in WordNet's sense order and the
 tagged-corpus count of that sense, so the page can rank senses the way the dictionary does.
 """
-import json, os, sys
+import json, os, re, sys
 
 src = sys.argv[1]
 out = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'opposites.json')
@@ -144,3 +144,79 @@ data = dict(v='WordNet 3.0', s=S, w=W, f={w: c for w, c in F.items() if c}, x=X,
 with open(out, 'w', encoding='utf-8') as fh:
     json.dump(data, fh, ensure_ascii=False, separators=(',', ':'))
 print(len(S), 'synsets', len(W), 'words', len(X), 'exceptions', os.path.getsize(out), 'bytes')
+
+# ---- other languages: the Open Multilingual Wordnet (1.4) ties each language's words to the same
+# WordNet 3.0 synsets, so opposites carry over: a French word -> its synsets -> their antonym synsets -> the
+# French words for those. One file per language, data/opposites/<code>.json, loaded only when needed.
+#   curl -LO https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/omw-1.4.zip
+#   unzip omw-1.4.zip && python util/opposites/build.py wordnet omw-1.4
+LANGS = {  # code: (file in omw-1.4, name, source, licence)
+    'fr': ('fra/wn-data-fra.tab', 'Français', 'WOLF', 'CeCILL-C'),
+    'es': ('mcr/wn-data-spa.tab', 'Español', 'Multilingual Central Repository', 'CC BY 3.0'),
+    'it': ('ita/wn-data-ita.tab', 'Italiano', 'MultiWordNet', 'CC BY 3.0'),
+    'pt': ('por/wn-data-por.tab', 'Português', 'OpenWN-PT', 'CC BY-SA'),
+    'pl': ('pol/wn-data-pol.tab', 'Polski', 'plWordNet', 'WordNet licence'),
+    'fi': ('fin/wn-data-fin.tab', 'Suomi', 'FinnWordNet', 'CC BY 3.0'),
+    'ca': ('mcr/wn-data-cat.tab', 'Català', 'Multilingual Central Repository', 'CC BY 3.0'),
+    'ro': ('ron/wn-data-ron.tab', 'Română', 'Romanian Wordnet', 'CC BY-SA'),
+    'ja': ('jpn/wn-data-jpn.tab', '日本語', 'Japanese Wordnet', 'WordNet licence'),
+}
+if len(sys.argv) > 2:
+    omw = sys.argv[2]
+    langdir = os.path.join(os.path.dirname(out), 'opposites')
+    os.makedirs(langdir, exist_ok=True)
+    # sense weight: how often the English words of a synset are used in it, to order senses where no
+    # tagged corpus exists for the language
+    weight = [0] * len(order)
+    for k in order:
+        for raw in syn[k]['lemmas']:
+            weight[idx[k]] += cnt.get((raw.split('(')[0].lower(), k), (0, 0))[1]
+    meta = {}
+    for code, (path, name, source, lic) in LANGS.items():
+        L, poly = {}, {}
+        for line in open(os.path.join(omw, path), encoding='utf-8'):
+            f = line.rstrip('\n').split('\t')
+            if len(f) < 3 or not (f[1] == 'lemma' or f[1].endswith(':lemma')):
+                continue
+            off, p = f[0].split('-')
+            k = ('a' if p in 'as' else p) + off
+            w0 = f[2].replace('_', ' ').strip().lower()
+            poly[w0] = poly.get(w0, 0) + 1
+            if k in idx:
+                w = f[2].replace('_', ' ').strip()
+                if w and 'GAP!' not in w and not re.fullmatch(r'[A-Z]{2,}', w):
+                    L.setdefault(idx[k], [])
+                    if w not in L[idx[k]]:
+                        L[idx[k]].append(w)
+        # some wordnets keep untranslated English entries ("cool" in French): a word spelled like one of the
+        # synset's English words and used nowhere else is dropped
+        for si, ws in list(L.items()):
+            en = {x.lower() for x in S[si][2]}
+            ws[:] = [w for w in ws if not (w.lower() in en and poly.get(w.lower(), 0) <= 1)]
+            if not ws:
+                del L[si]
+        # no tagged corpus here: a word with many meanings is a common word, and one word beats a phrase
+        for ws in L.values():
+            ws.sort(key=lambda w: (' ' in w, -poly.get(w.lower(), 0), len(w)))
+        Wl = {}
+        for si, ws in L.items():
+            for w in ws:
+                Wl.setdefault(w.lower(), []).append(si)
+        for v in Wl.values():
+            v.sort(key=lambda si: -weight[si])
+        # how many words get an opposite in this language (a word whose synset, or its head, has an antonym
+        # synset with a word in this language)
+        def has_opp(si):
+            s = S[si]
+            h = s[4] if s[4] >= 0 else si
+            return any(t in L for t, _, _ in S[h][3])
+        covered = sum(1 for w, sis in Wl.items() if any(has_opp(si) for si in sis))
+        data_l = dict(code=code, name=name, source=source, licence=lic,
+                      s={str(si): ws for si, ws in L.items()}, w=Wl, n={str(si): weight[si] for si in L})
+        p = os.path.join(langdir, code + '.json')
+        with open(p, 'w', encoding='utf-8') as fh:
+            json.dump(data_l, fh, ensure_ascii=False, separators=(',', ':'))
+        meta[code] = dict(name=name, source=source, licence=lic, words=covered)
+        print(code, len(Wl), 'words,', covered, 'with an opposite,', os.path.getsize(p), 'bytes')
+    with open(os.path.join(langdir, 'index.json'), 'w', encoding='utf-8') as fh:
+        json.dump(meta, fh, ensure_ascii=False, separators=(',', ':'))

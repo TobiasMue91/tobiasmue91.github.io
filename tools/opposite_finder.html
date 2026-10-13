@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Opposite Word Finder – Antonyms for Any Word</title>
-<meta name="description" content="Find the opposite of a word instantly: antonyms and near antonyms for every meaning, from the WordNet dictionary, looked up in your browser. Handles plurals and -er, -ing, -ed forms; an optional AI does sentences and other languages.">
+<meta name="description" content="Find the opposite of a word instantly: antonyms and near antonyms for every meaning, from the WordNet dictionary, looked up in your browser, in English, French, Spanish, Italian, Portuguese, Polish, Finnish, Catalan, Romanian and Japanese. Handles plurals and -er, -ing, -ed forms; an optional AI does sentences and other languages.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
@@ -40,6 +40,8 @@ h1 span { color: var(--faint); font-weight: 400; }
 
 /* the field */
 .field { position: relative; }
+.lblrow { display: flex; justify-content: space-between; align-items: end; gap: 8px; }
+.langpick select { font: 500 .85rem var(--sans); color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; height: 34px; padding: 0 8px; margin-bottom: 4px; }
 label.lbl { display: block; font-size: .8rem; color: var(--soft); margin: 0 0 6px 2px; }
 #q { width: 100%; font: 500 1.6rem/1.2 var(--serif); color: var(--ink); background: var(--card); border: 1.5px solid var(--rule); border-radius: 12px; padding: 12px 48px 12px 14px; min-height: 58px; -webkit-appearance: none; appearance: none; }
 #q::-webkit-search-cancel-button { display: none; }
@@ -55,6 +57,8 @@ label.lbl { display: block; font-size: .8rem; color: var(--soft); margin: 0 0 6p
 /* the result */
 #result { margin-top: 10px; min-height: 120px; }
 .gl { margin: 2px 0 0; color: var(--soft); font-size: .92rem; }
+.tryin { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tryin .k { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-right: 4px; }
 .lnk { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .fixnote { display: block; font-size: .85rem; color: var(--soft); background: var(--chip); border-radius: 8px; padding: 6px 10px; margin: 0 0 10px; }
 .kk { text-transform: none; letter-spacing: 0; }
@@ -158,7 +162,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
   </header>
 
   <form class="field" id="form" role="search" autocomplete="off">
-    <label class="lbl" for="q">Word or phrase</label>
+    <div class="lblrow"><label class="lbl" for="q">Word or phrase</label>
+      <label class="langpick"><span class="sr">Language</span><select id="lang"></select></label></div>
     <input id="q" type="search" inputmode="text" enterkeyhint="search" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="500" aria-describedby="note">
     <button id="clear" type="button" aria-label="Clear the word" hidden>×</button>
   </form>
@@ -363,7 +368,46 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
       return {kind: 'none', query: q, english, known: isWord, phrase: tokens.length > 1, suggestions: sugg};
     }
 
-    return {lookup, bases: w => bases(normalize(w)), suggest};
+    // Another language (data/opposites/<code>.json from the Open Multilingual Wordnet): the word's synsets in
+    // that language, their antonym synsets in English WordNet, and that language's words for them. No
+    // inflection rules here: the word is looked up as typed (lowercased), which is its dictionary form.
+    function lookupIn(lang, text) {
+      const q = normalize(text);
+      if (!q) return {kind: 'empty', query: ''};
+      if (q.length > MAX_INPUT) return {kind: 'long', query: q.slice(0, MAX_INPUT)};
+      const sis = lang.w[q] || lang.w[q.replace(/-/g, ' ')];
+      if (!sis) return {kind: 'none', query: q, lang: lang.code, known: false, suggestions: []};
+      const words = si => lang.s[si] || [];
+      // the English usage of a meaning, discounted when this word is only a minor translation of it
+      const score = si => { const r = words(si).findIndex(w => w.toLowerCase() === q); return (lang.n[si] || 0) / (r <= 0 ? 1 : r === 1 ? 2 : 5); };
+      const order = [...sis].sort((a, b) => score(b) - score(a));
+      const top = score(order[0]), senses = [], keys = new Set();
+      for (const si of order) {
+        const s = S[si], head = s[4] >= 0 ? s[4] : si, H = S[head];
+        const opp = [], near = [], en = [];
+        for (const [t, , b] of H[3]) {
+          en.push(lem(t, b));
+          for (const w of words(t)) if (w.toLowerCase() !== q && !opp.includes(w)) opp.push(w);
+          for (const sat of S[t][5]) for (const w of words(sat)) if (w.toLowerCase() !== q && !opp.includes(w) && !near.includes(w)) near.push(w);
+        }
+        if (!opp.length) continue;
+        const key = s[0] + '|' + opp.join('|');
+        if (keys.has(key)) continue;
+        keys.add(key);
+        const tc = score(si);
+        senses.push({pos: POS[s[0]], gloss: s[1], english: en, synonyms: words(si).filter(w => w.toLowerCase() !== q),
+          opposites: opp.slice(0, 6), near: near.slice(0, 5), via: head !== si ? (words(head)[0] || null) : null,
+          tc, common: top === 0 || tc >= Math.max(1, top / 20)});
+      }
+      if (!senses.length) return {kind: 'none', query: q, lang: lang.code, known: true, suggestions: []};
+      const best = [];
+      // wordnets other than English are thinner and noisier: the headline is the first common meaning's top word
+      const first = senses.find(g => g.common);
+      if (first) best.push(first.opposites[0]);
+      return {kind: best.length ? 'found' : 'rare', query: q, word: q, from: null, lang: lang.code, senses, best};
+    }
+
+    return {lookup, lookupIn, bases: w => bases(normalize(w)), suggest};
   }
 
   // ---- the optional AI request (only on an explicit press) ----
@@ -496,6 +540,35 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
     if (h.opposites.length && (!r || r.kind !== 'found')) showAi(h.query, h.opposites, true);
   });
 
+  // ---- languages: English is built in; the others load on demand from data/opposites/<code>.json ----
+  const LANGS = {en: ['English', 'happy'], fr: ['Français', 'heureux'], es: ['Español', 'feliz'], it: ['Italiano', 'felice'], pt: ['Português', 'feliz'],
+    pl: ['Polski', 'duży'], fi: ['Suomi', 'iso'], ca: ['Català', 'feliç'], ro: ['Română', 'fericit'], ja: ['日本語', '大きい']};
+  const SOURCES = {fr: 'WOLF (CeCILL-C)', es: 'the Multilingual Central Repository (CC BY 3.0)', it: 'MultiWordNet (CC BY 3.0)', pt: 'OpenWN-PT (CC BY-SA)',
+    pl: 'plWordNet', fi: 'FinnWordNet (CC BY 3.0)', ca: 'the Multilingual Central Repository (CC BY 3.0)', ro: 'the Romanian Wordnet (CC BY-SA)', ja: 'the Japanese Wordnet'};
+  const langSel = $('lang'), langData = {};
+  langSel.innerHTML = Object.entries(LANGS).map(([c, [n]]) => `<option value="${c}">${n}</option>`).join('');
+  let curLang = (() => {
+    let l = ''; try { l = new URLSearchParams(location.search).get('l') || ''; } catch (e) {}
+    if (LANGS[l]) return l;
+    const saved = store.get('oppositeFinder_lang'); if (LANGS[saved]) return saved;
+    for (const n of navigator.languages || [navigator.language || 'en']) { const c = String(n).slice(0, 2).toLowerCase(); if (LANGS[c]) return c; }
+    return 'en';
+  })();
+  langSel.value = curLang;
+  function loadLang(c) {
+    if (c === 'en' || langData[c]) return;
+    langData[c] = 'loading';
+    fetch('../data/opposites/' + c + '.json').then(r => { if (!r.ok) throw 0; return r.json(); })
+      .then(d => { langData[c] = d; if (c === curLang) render(); })
+      .catch(() => { langData[c] = 'failed'; if (c === curLang) render(); });
+  }
+  function setLang(c) {
+    if (!LANGS[c]) return;
+    if (example) { q.value = LANGS[c][1]; }
+    curLang = c; langSel.value = c; store.set('oppositeFinder_lang', c); loadLang(c); render();
+  }
+  langSel.onchange = () => setLang(langSel.value);
+
   // ---- input ----
   let lookup = null, example = false, last = null, commitT;
   function setInput(v) {
@@ -506,7 +579,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
   }
   function update() {
     clearBtn.hidden = !q.value;
-    if (example && q.value !== 'happy') example = false;
+    if (example && q.value !== LANGS[curLang][1]) example = false;
     store.set('oppositeFinder_draft', q.value, true);
     render();
     clearTimeout(commitT);
@@ -543,13 +616,20 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
 
   function render() {
     if (!lookup) return;
-    const r = lookup.lookup(q.value);
+    let r, fellBack = false;
+    if (curLang !== 'en') {
+      const L = langData[curLang];
+      if (!L || L === 'loading') { loadLang(curLang); setNote(`Opening the ${LANGS[curLang][0]} dictionary…`); result.innerHTML = '<div class="skel" aria-hidden="true"></div>'; return; }
+      if (L === 'failed') { setNote(''); result.innerHTML = `<div class="msg" role="alert"><h2>The ${LANGS[curLang][0]} dictionary did not load.</h2><p>Check your connection. <button type="button" class="tbtn" data-retry-lang>Try again</button></p></div>`; return; }
+      r = lookup.lookupIn(L, q.value);
+      if (r.kind === 'none' || r.kind === 'rare') { const en = lookup.lookup(q.value); if (en.kind === 'found') { r = en; fellBack = true; } }
+    } else r = lookup.lookup(q.value);
     setCase();
     const changed = !last || last.query !== r.query || JSON.stringify(last.best) !== JSON.stringify(r.best);
     last = r;
     result.classList.remove('stale');
     setTimeout(() => { $('aiBox').hidden = !!result.querySelector('[data-ask-ai]'); }, 0);
-    setNote(example ? '<span class="ex">Example</span>Type any English word.' : '');
+    setNote(example ? `<span class="ex">Example</span>Type any ${curLang === 'en' ? 'English' : LANGS[curLang][0]} word.` : fellBack ? `Not in the ${LANGS[curLang][0]} dictionary: showing the English word.` : '');
     if (r.kind === 'empty') {
       result.innerHTML = `<div class="msg"><h2>Type a word to see its opposite.</h2><p>${['happy', 'early', 'buy', 'increase', 'generous'].map(w => `<button type="button" class="chip" data-fix="${w}">${w}</button>`).join(' ')}</p><p>Plurals and forms like <em>happier</em> or <em>running</em> work too.</p></div>`;
       return;
@@ -568,7 +648,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
   }
 
   function senseBlock(s) {
-    const via = s.via ? ` <span class="via">(as in ${esc(s.via)} → ${esc(s.opposites[0])})</span>` : '';
+    const via = s.english ? ` <span class="via">(in English: ${esc(s.english.join(', '))})</span>` : s.via ? ` <span class="via">(as in ${esc(s.via)} → ${esc(s.opposites[0])})</span>` : '';
     return `<li><h3>${POS_LABEL(s.pos)}when it means “${esc(s.gloss)}”</h3>
       <div class="near">${s.opposites.map(o => chip(o, 'op')).join('')}${via}</div>
       ${s.near.length ? `<div class="near"><span class="k">Near opposites</span>${s.near.slice(0, 5).map(n => chip(n, 'nr')).join('')}</div>` : ''}</li>`;
@@ -580,13 +660,13 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
     const common = others.filter(s => s.common && !s.via), rare = others.filter(s => !s.common || s.via);
     if (r.typo) setNote(`Showing <b>${esc(r.word)}</b>: “${esc(r.typo)}” isn’t in the dictionary.` + (r.others && r.others.length ? ' Or: ' + r.others.map(s => `<button type="button" class="lnk" data-fix="${esc(s)}">${esc(s)}</button>`).join(', ') : ''));
     else if (r.from) setNote(`Showing <b>${esc(r.word)}</b>, the dictionary form of “${esc(r.from)}”.`);
-    const via = first.via ? ` <span class="via">(as in ${esc(first.via)} → ${esc(r.best[0])})</span>` : '';
+    const via = r.lang ? ` <span class="via">(in English: ${esc(first.english.join(', '))})</span>` : first.via ? ` <span class="via">(as in ${esc(first.via)} → ${esc(r.best[0])})</span>` : '';
     const alts = r.best.slice(1).map(w => `<span class="w alt">${esc(w)}</span>`).join(' ');
     result.innerHTML = `
       <article class="pair" aria-label="Opposite of ${esc(r.word)}">
         <div class="pair-top">
           <div>
-            <p class="of"><b>${esc(r.word)}</b> <i>${first.pos}</i></p><p class="gl">“${esc(first.gloss)}”</p>
+            <p class="of"><b>${esc(r.word)}</b> <i>${first.pos}</i></p><p class="gl">“${esc(first.gloss)}”${r.lang ? ' <span class="via">(meaning in English)</span>' : ''}</p>
             <p class="lab">Opposite${via}</p>
             <p class="big${changed ? ' flip' : ''}"><span class="w">${esc(caseOf(r.best[0]))}</span> ${alts}</p>
           </div>
@@ -600,13 +680,13 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
         <button type="button" class="tbtn" id="copyAll">Copy all</button>
         <button type="button" class="tbtn" id="share">Share</button>
       </div>
-      <p class="source">From <a href="https://wordnet.princeton.edu/" rel="noopener">Princeton WordNet 3.0</a>, looked up on your device. Meanings in order of how common they are.</p>`;
+      <p class="source">${r.lang ? `From ${SOURCES[r.lang]}, matched to <a href="https://wordnet.princeton.edu/" rel="noopener">Princeton WordNet 3.0</a> by the <a href="https://omwn.org/" rel="noopener">Open Multilingual Wordnet</a>, looked up on your device. Thinner than the English dictionary: check the English meaning.` : `From <a href="https://wordnet.princeton.edu/" rel="noopener">Princeton WordNet 3.0</a>, looked up on your device. Meanings in order of how common they are.`}</p>`;
     $('copyTop').onclick = async e => { if (await copy(caseOf(r.best[0]))) { e.target.textContent = 'Copied'; e.target.classList.add('done'); setTimeout(() => { e.target.textContent = 'Copy word'; e.target.classList.remove('done'); }, 1500); } };
     const allOps = () => { const a = []; for (const s of r.senses) for (const o of s.opposites) if (!a.includes(o)) a.push(o); return a; };
     $('copyAll').onclick = () => { const a = allOps(); copy(a.join('\n'), `Copied ${a.length} opposite${a.length > 1 ? 's' : ''}`); };
     $('share').onclick = () => {
       const also = [...r.best.slice(1), ...first.near].slice(0, 3);
-      share(`Opposite of “${r.word}”: ${caseOf(r.best[0])}${also.length ? ' (also: ' + also.join(', ') + ')' : ''}`, linkFor(r.word));
+      share(`Opposite of “${r.word}”: ${caseOf(r.best[0])}${also.length ? ' (also: ' + also.join(', ') + ')' : ''}`, linkFor(r.word, r.lang));
     };
   }
 
@@ -623,13 +703,22 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
   }
   function renderNone(r) {
     let h, p;
+    const others = Object.entries(LANGS).filter(([c]) => c !== curLang).map(([c, [n]]) => `<button type="button" class="chip" data-lang="${c}">${n}</button>`).join(' ');
+    const tryIn = `<p class="tryin"><span class="k">Try it in</span> ${others}</p>`;
+    if (r.lang && !r.number) {
+      const name = LANGS[r.lang][0];
+      h = r.known ? `No opposite on record for “${esc(r.query)}” in ${name}.` : `“${esc(r.query)}” isn’t in the ${name} dictionary.`;
+      p = r.known ? 'This dictionary is thinner than the English one.' : 'Type the dictionary form (singular, infinitive), or pick another language.';
+      result.innerHTML = `<div class="msg"><h2>${h}</h2><p>${p}</p>${tryIn}${aiNudge()}</div>`; return;
+    }
     if (r.number) { h = 'Numbers have no opposite here.'; p = 'Type a word, such as <em>positive</em> or <em>increase</em>.'; }
     else if (r.phrase) { h = `“${esc(r.query.length > 60 ? r.query.slice(0, 57) + '…' : r.query)}” isn’t in the dictionary.`; p = 'It looks up single words and set phrases. For a sentence, or a language other than English, ask the AI.'; }
-    else if (!r.english) { h = 'This dictionary is English only.'; p = `For “${esc(r.query)}” in another language, ask the AI.`; }
+    else if (!r.english) { h = `“${esc(r.query)}” isn’t an English word.`; p = 'Pick its language, or ask the AI.'; }
     else if (r.known) { h = `No opposite on record for “${esc(r.query)}”.`; p = 'The dictionary lists opposites only for words that have one; most names of things (dog, water, table) don’t.'; }
     else if (r.suggestions.length) { h = `“${esc(r.query)}” isn’t in the dictionary.`; p = 'Did you mean ' + r.suggestions.map(s => `<button type="button" class="chip op" data-fix="${esc(s)}">${esc(s)}</button>`).join(' ') + '?'; }
-    else { h = `“${esc(r.query)}” isn’t in the dictionary.`; p = 'Check the spelling, or ask the AI.'; }
-    result.innerHTML = `<div class="msg"><h2>${h}</h2><p>${p}</p>${aiNudge()}</div>`;
+    else { h = `“${esc(r.query)}” isn’t in the dictionary.`; p = 'Check the spelling, pick another language, or ask the AI.'; }
+    const offer = !r.number && !r.known && !r.phrase;
+    result.innerHTML = `<div class="msg"><h2>${h}</h2><p>${p}</p>${offer ? tryIn : ''}${aiNudge()}</div>`;
   }
   const aiNudge = () => `<p><button type="button" class="btn" data-ask-ai>Ask the AI about “${esc((q.value.trim().length > 30 ? q.value.trim().slice(0, 28) + '…' : q.value.trim()))}”</button></p><p class="privacy">Sends what you typed to OpenAI. Nothing is sent unless you press it.</p>`;
 
@@ -637,13 +726,15 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
     const c = e.target.closest('[data-copy]');
     if (c) { copy(c.dataset.copy); c.classList.add('copied'); setTimeout(() => c.classList.remove('copied'), 900); return; }
     const f = e.target.closest('[data-fix]'); if (f) { setInput(f.dataset.fix); return; }
+    const lg = e.target.closest('[data-lang]'); if (lg) { setLang(lg.dataset.lang); return; }
+    if (e.target.closest('[data-retry-lang]')) { delete langData[curLang]; loadLang(curLang); render(); return; }
     if (e.target.closest('[data-open-ai]')) { openAi(); return; }
     if (e.target.closest('[data-ask-ai]')) { $('aiBox').hidden = false; openAi(); $('aiBtn').click(); return; }
   });
   note.addEventListener('click', e => { const f = e.target.closest('[data-fix]'); if (f) setInput(f.dataset.fix); });
   function openAi() { { const d = $('ai'); d.open = true; d.scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'}); $('aiBtn').focus({preventScroll: true}); } }
 
-  function linkFor(word) { const u = new URL(location.href); u.search = '?w=' + encodeURIComponent(word); u.hash = ''; return u.href; }
+  function linkFor(word, lang) { const u = new URL(location.href); u.search = '?w=' + encodeURIComponent(word) + (lang ? '&l=' + lang : ''); u.hash = ''; return u.href; }
   async function share(text, url) {
     if (navigator.share) { try { await navigator.share({title: 'Opposite Word Finder', text, url}); return; } catch (e) { if (e.name === 'AbortError') return; } }
     copy(text + '\n' + url, 'Copied with a link: paste it anywhere');
@@ -690,7 +781,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
   const draft = store.get('oppositeFinder_draft', true);
   if (fromLink) q.value = fromLink;
   else if (draft !== null && draft !== '') q.value = draft;
-  else { q.value = 'happy'; example = true; }
+  else { q.value = LANGS[curLang][1]; example = true; }
   clearBtn.hidden = !q.value;
   renderRecent();
   setNote('');
@@ -699,7 +790,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
     result.innerHTML = '<div class="skel" aria-hidden="true"></div>';
     setNote('Opening the dictionary…');
     fetch('../data/opposites.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(d => { lookup = C.create(d); render(); })
+      .then(d => { lookup = C.create(d); loadLang(curLang); render(); })
       .catch(() => {
         setNote('');
         result.innerHTML = '<div class="msg" role="alert"><h2>The dictionary did not load.</h2><p>Check your connection, then try again. Your word is kept.</p><p><button type="button" class="btn" id="retry">Try again</button></p></div>';

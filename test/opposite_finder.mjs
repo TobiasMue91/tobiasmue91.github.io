@@ -11,7 +11,10 @@
 //   node test/opposite_finder.mjs              # everything
 //   node test/opposite_finder.mjs pairs forms  # named suites only
 //
-// Suites: data, pairs, forms, input, misses, ai, storage.
+// Suites: data, pairs, forms, input, misses, languages, ai, storage.
+//
+// languages: the other dictionaries (data/opposites/<code>.json, from the Open Multilingual Wordnet) answer
+// textbook pairs in each language, never return the word itself, and only name synsets the English data has.
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -19,7 +22,7 @@ import {dirname, join} from 'path';
 import vm from 'vm';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ALL = ['data', 'pairs', 'forms', 'input', 'misses', 'ai', 'storage'];
+const ALL = ['data', 'pairs', 'forms', 'input', 'misses', 'languages', 'ai', 'storage'];
 const picked = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -132,6 +135,52 @@ if (suites.includes('misses')) {
   const z = look('zxqvbn');
   check(z.kind === 'none' && !z.known && z.suggestions.length === 0, 'zxqvbn: unknown, nothing to suggest');
   eq(look('<script>alert(1)</script>').kind, 'none', 'markup is just text with no opposite');
+}
+
+if (suites.includes('languages')) {
+  section('languages');
+  const lang = c => JSON.parse(readFileSync(join(HERE, '..', 'data', 'opposites', c + '.json'), 'utf8'));
+  // textbook pairs, from bilingual dictionaries: the first is the word, the second must be on the headline.
+  // These wordnets have no frequency counts, so words within a meaning are ranked by how many meanings they
+  // have; where that picks a near-synonym first (jour: sombre before nuit), the pair is checked in SOFT instead.
+  const PAIRS = {
+    fr: [['heureux', 'triste'], ['chaud', 'froid'], ['grand', 'petit'], ['rapide', 'lent'], ['acheter', 'vendre'], ['bon', 'mal']],
+    es: [['feliz', 'triste'], ['grande', 'pequeño'], ['comprar', 'vender'], ['bueno', 'malo']],
+    it: [['felice', 'triste'], ['caldo', 'freddo']],
+    pt: [['grande', 'pequeno'], ['bom', 'ruim'], ['quente', 'frio']],
+    pl: [['duży', 'mały'], ['gorący', 'zimny']],
+    fi: [['iso', 'pieni']],
+    ro: [['mare', 'mic'], ['fericit', 'nefericit']],
+    ja: [['熱い', '冷たい'], ['大きい', '小さい'], ['幸せ', '不幸']],
+  };
+  const SOFT = {fr: [['jour', 'nuit']], it: [['grande', 'piccolo'], ['felice', 'infelice']]};
+  for (const [c, pairs] of Object.entries(SOFT)) {
+    const L = lang(c), LX = C.create(DATA);
+    for (const [w, o] of pairs) { const res = LX.lookupIn(L, w); check(res.kind === 'found' && res.senses[0].opposites.includes(o), `${c}: ${w} -> ${o} among the first meaning's opposites`, JSON.stringify(res.senses && res.senses[0].opposites)); }
+  }
+  const index = JSON.parse(readFileSync(join(HERE, '..', 'data', 'opposites', 'index.json'), 'utf8'));
+  for (const [c, pairs] of Object.entries(PAIRS)) {
+    const L = lang(c);
+    const LX = C.create(DATA);
+    for (const [w, o] of pairs) { const res = LX.lookupIn(L, w);
+      check(res.kind === 'found' && res.best[0] === o, `${c}: ${w} -> ${o}`, `${res.kind} ${JSON.stringify(res.best)}`); }
+  }
+  const LL = C.create(DATA);
+  for (const c of Object.keys(index)) {
+    const L = lang(c);
+    let bad = 0, self = 0, n = 0;
+    for (const si of Object.keys(L.s)) if (!DATA.s[+si]) bad++;
+    for (const w of Object.keys(L.w).slice(0, 3000)) { const r = LL.lookupIn(L, w); if (r.kind === 'found') { n++; if (r.best.some(o => o.toLowerCase() === w)) self++; } }
+    eq(bad, 0, `${c}: every synset exists in the English data`);
+    eq(self, 0, `${c}: no word is its own opposite (${n} of the first 3000 words answered)`);
+    check(index[c].words > 2000, `${c}: over 2000 words have an opposite`, index[c].words);
+  }
+  const fr = lang('fr');
+  eq(LL.lookupIn(fr, '  Chaud ! ').best, ['froid'], 'fr: stray spaces, capitals and punctuation are cleaned');
+  eq(LL.lookupIn(fr, 'chien').kind, 'none', 'fr: chien has no opposite');
+  eq(LL.lookupIn(fr, '').kind, 'empty', 'fr: empty');
+  eq(LL.lookupIn(fr, 'x'.repeat(300)).kind, 'long', 'fr: too long');
+  check(LL.lookupIn(fr, 'chaud').senses[0].english.includes('cold'), 'fr: each meaning carries the English opposite, so it can be checked');
 }
 
 if (suites.includes('ai')) {

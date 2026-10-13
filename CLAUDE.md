@@ -734,7 +734,10 @@ filter of every WordNet word). Its promises: textbook pairs come out on the head
 the verb means to vomit), plurals, -er, -ing and irregular forms find their base, a word with no opposite (dog) is told
 apart from a typo (hapy, shown as happy), numbers get none, every pair in the data is recorded both ways, the optional AI
 request carries the text only as JSON data and its reply is cleaned, and the old page's history survives while markup in
-it stays text. Run it after rebuilding the data or touching the core.
+it stays text. Its `languages` suite covers the nine other languages in `data/opposites/<code>.json`, which the same
+script makes from the Open Multilingual Wordnet 1.4 (French, Spanish, Italian, Portuguese, Polish, Finnish, Catalan,
+Romanian, Japanese; each tied to WordNet 3.0 synsets, loaded only when chosen): textbook pairs in each, no word its own
+opposite, and every synset one the English data has. Run it after rebuilding the data or touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
