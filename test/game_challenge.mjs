@@ -204,7 +204,7 @@ if (suites.includes('page')) {
             });
             const tag = vp.width < 500 ? 'phone' : 'desktop';
             await page.goto(pathToFileURL(PAGE).href);
-            eq(await page.textContent('#name'), 'The Nail and Nothing Else', `${tag}: arrives on the example`);
+            eq(await page.textContent('#name'), 'Old Nail Sprint', `${tag}: arrives on the example`);
             await page.fill('#game', 'Elden Ring');
             check((await page.textContent('#badge')) === 'Quick draft' && (await page.textContent('#forgame')).includes('Elden Ring'), `${tag}: typing shows a draft at once`);
             eq(sent.length, 0, `${tag}: nothing is sent while typing`);
