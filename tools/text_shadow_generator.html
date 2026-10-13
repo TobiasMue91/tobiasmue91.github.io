@@ -65,6 +65,7 @@ header .sub{color:var(--muted);font-size:13px;flex:1;min-width:0;white-space:now
 .code textarea:focus{border-color:var(--accent)}
 .code textarea[aria-invalid="true"]{border-color:var(--bad)}
 .err{min-height:20px;font-size:13px;line-height:1.45;color:var(--bad);margin:8px 2px 6px}
+#dropBad{height:32px;font-size:13px;margin:0 0 8px}
 .err .note{color:var(--muted)}
 .err code{font-family:var(--mono);background:var(--bad-soft);padding:0 4px;border-radius:4px}
 .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
@@ -149,6 +150,7 @@ footer a{color:inherit}
           <textarea id="css" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="cssErr" rows="2"></textarea>
         </div>
         <p class="err" id="cssErr" role="alert" aria-live="assertive"></p>
+        <button class="btn" id="dropBad" type="button" hidden>Remove the shadows that need fixing</button>
         <div class="actions">
           <button class="btn primary" id="copyBtn" type="button">Copy CSS</button>
           <button class="btn" id="linkBtn" type="button" title="A link to this shadow and background (not your text)">Copy link</button>
@@ -164,11 +166,11 @@ footer a{color:inherit}
       <h2>Shadows</h2>
       <div class="tabs" role="tablist" aria-label="Shadows" id="tabs"></div>
       <div id="editor" role="tabpanel">
-        <div class="row"><label for="x">Across</label><input type="range" id="xR" min="-50" max="50" step="1" aria-label="Across, slider" tabindex="-1"><div class="num"><input id="x" inputmode="decimal" autocomplete="off" aria-describedby="xErr"><span>px</span></div></div>
+        <div class="row"><label for="x">Across</label><input type="range" id="xR" min="-50" max="50" step="1" aria-label="Across, slider" tabindex="-1"><div class="num"><input id="x" inputmode="decimal" autocomplete="off" aria-describedby="xErr"><span id="xU">px</span></div></div>
         <p class="fielderr" id="xErr"></p>
-        <div class="row"><label for="y">Down</label><input type="range" id="yR" min="-50" max="50" step="1" aria-label="Down, slider" tabindex="-1"><div class="num"><input id="y" inputmode="decimal" autocomplete="off" aria-describedby="yErr"><span>px</span></div></div>
+        <div class="row"><label for="y">Down</label><input type="range" id="yR" min="-50" max="50" step="1" aria-label="Down, slider" tabindex="-1"><div class="num"><input id="y" inputmode="decimal" autocomplete="off" aria-describedby="yErr"><span id="yU">px</span></div></div>
         <p class="fielderr" id="yErr"></p>
-        <div class="row"><label for="blur">Blur</label><input type="range" id="blurR" min="0" max="50" step="1" aria-label="Blur, slider" tabindex="-1"><div class="num"><input id="blur" inputmode="decimal" autocomplete="off" aria-describedby="blurErr"><span>px</span></div></div>
+        <div class="row"><label for="blur">Blur</label><input type="range" id="blurR" min="0" max="50" step="1" aria-label="Blur, slider" tabindex="-1"><div class="num"><input id="blur" inputmode="decimal" autocomplete="off" aria-describedby="blurErr"><span id="blurU">px</span></div></div>
         <p class="fielderr" id="blurErr"></p>
         <div class="row colorrow"><label for="col">Color</label><span class="sw" id="colSw"><input type="color" id="colPick" aria-label="Pick shadow color"></span><div class="num"><input id="col" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="colErr"></div></div>
         <p class="fielderr" id="colErr"></p>
@@ -212,7 +214,7 @@ var TS = (function () {
   function readNumber(s) {
     if (typeof s === 'number') return isFinite(s) ? s : null;
     s = String(s == null ? '' : s).trim().replace(/[−‒–—]/g, '-').replace(/\s+/g, '');
-    s = s.replace(/px$/i, '');
+    s = s.replace(/(px|r?em)$/i, '');
     if (/^[-+]?\d+,\d+$/.test(s)) s = s.replace(',', '.');
     if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s)) return null;
     var v = parseFloat(s);
@@ -283,8 +285,11 @@ var TS = (function () {
   function colorHex(c) { return '#' + hex2(c.r) + hex2(c.g) + hex2(c.b); }
   function fmtNum(n) { return String(round(n, 2)); }
   function fmtColor(c) { return 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + fmtNum(c.a) + ')'; }
-  function fmtLen(n) { return fmtNum(n) + 'px'; }
-  function fmtLayer(l) { return fmtLen(l.x) + ' ' + fmtLen(l.y) + ' ' + fmtLen(l.blur) + ' ' + fmtColor(l.color); }
+  // Lengths keep the unit they were written in when it is px, em or rem; em and rem scale with the font,
+  // so turning them into px would only be right at one size.
+  function unitOf(l, k) { return (l.u && (l.u[k] === 'em' || l.u[k] === 'rem')) ? l.u[k] : 'px'; }
+  function fmtLen(n, u) { return (u && u !== 'px' ? String(round(n, 3)) : fmtNum(n)) + (u || 'px'); }
+  function fmtLayer(l) { return fmtLen(l.x, unitOf(l, 'x')) + ' ' + fmtLen(l.y, unitOf(l, 'y')) + ' ' + fmtLen(l.blur, unitOf(l, 'blur')) + ' ' + fmtColor(l.color); }
   function fmtList(layers) { return layers.length ? layers.map(fmtLayer).join(', ') : 'none'; }
   // One shadow stays on one line; several go one per line, so no rgba() is ever broken across lines.
   function declaration(layers) {
@@ -323,7 +328,7 @@ var TS = (function () {
     var v = parseFloat(m[1]), u = m[2].toLowerCase();
     if (!u) return v === 0 ? { px: 0 } : { error: t + ' needs a unit, such as ' + t + 'px' };
     if (UNIT_PX[u]) return { px: round(v * UNIT_PX[u], 2), note: u !== 'px' ? t + ' became ' + fmtNum(v * UNIT_PX[u]) + 'px' : '' };
-    if (u === 'em' || u === 'rem') return { px: round(v * 16, 2), note: t + ' became ' + fmtNum(v * 16) + 'px (1' + u + ' = 16px)' };
+    if (u === 'em' || u === 'rem') return { px: round(v, 3), unit: u };
     return { error: t + ': use px' };
   }
 
@@ -331,7 +336,7 @@ var TS = (function () {
   function parseLayer(text, defaultColor) {
     var t = tokens(text.trim());
     if (!t.length) return { error: 'empty shadow (two commas in a row?)' };
-    var lens = [], color = null, colorMid = false, notes = [];
+    var lens = [], units = [], color = null, colorMid = false, notes = [];
     for (var i = 0; i < t.length; i++) {
       if (/^inset$/i.test(t[i])) return { error: 'inset only exists on box-shadow, not text-shadow' };
       var L = readLength(t[i]);
@@ -339,7 +344,7 @@ var TS = (function () {
       if (!L.none) {
         if (color && colorMid) return { error: 'the colour must come before or after all the lengths' };
         if (L.note) notes.push(L.note);
-        lens.push(L.px); continue;
+        lens.push(L.px); units.push(L.unit || 'px'); continue;
       }
       var c = parseColor(t[i]);
       if (c) { if (color) return { error: 'two colours in one shadow; separate shadows with a comma' }; color = c; colorMid = lens.length > 0; continue; }
@@ -350,7 +355,9 @@ var TS = (function () {
     if (lens.length > 3) return { error: 'text-shadow takes at most three lengths (spread is only for box-shadow)' };
     var blur = lens.length === 3 ? lens[2] : 0;
     if (blur < 0) return { error: 'blur cannot be negative' };
-    return { layer: { x: lens[0], y: lens[1], blur: blur, color: color || { r: 0, g: 0, b: 0, a: 1 } }, notes: notes };
+    var layer = { x: lens[0], y: lens[1], blur: blur, color: color || { r: 0, g: 0, b: 0, a: 1 } };
+    if (units.some(function (u) { return u !== 'px'; })) layer.u = { x: units[0], y: units[1], blur: units[2] || 'px' };
+    return { layer: layer, notes: notes };
   }
 
   // A whole value as people paste it: with or without "text-shadow:", a trailing semicolon, line breaks,
@@ -387,8 +394,10 @@ var TS = (function () {
     var ch = [c.r, c.g, c.b].map(function (v) { v = +v; return isFinite(v) ? Math.round(clamp(v, 0, 255)) : null; });
     if (ch.indexOf(null) >= 0) return null;
     var a = +c.a; if (!isFinite(a)) a = 1;
-    return { x: round(clamp(x, -1000, 1000), 2), y: round(clamp(y, -1000, 1000), 2), blur: round(clamp(b, 0, 1000), 2),
+    var out = { x: round(clamp(x, -1000, 1000), 3), y: round(clamp(y, -1000, 1000), 3), blur: round(clamp(b, 0, 1000), 3),
       color: { r: ch[0], g: ch[1], b: ch[2], a: round(clamp(a, 0, 1), 3) } };
+    if (l.u && typeof l.u === 'object') { var u = { x: unitOf(l, 'x'), y: unitOf(l, 'y'), blur: unitOf(l, 'blur') }; if (u.x !== 'px' || u.y !== 'px' || u.blur !== 'px') out.u = u; }
+    return out;
   }
 
   var PRESETS = [
@@ -476,7 +485,7 @@ var TS = (function () {
   }
   function contrast(a, b) { var x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
 
-  return { parseColor: parseColor, parseList: parseList, parseLayer: parseLayer, readNumber: readNumber,
+  return { unitOf: unitOf, parseColor: parseColor, parseList: parseList, parseLayer: parseLayer, readNumber: readNumber,
     fmtLayer: fmtLayer, fmtList: fmtList, fmtColor: fmtColor, declaration: declaration, colorHex: colorHex,
     sanitizeLayer: sanitizeLayer, PRESETS: PRESETS, FONTS: FONTS, load: load, save: save, toHash: toHash,
     fromHash: fromHash, contrast: contrast, MAX_LAYERS: MAX_LAYERS };
@@ -629,6 +638,11 @@ var TS = (function () {
         if (document.activeElement !== inp) inp.value = String(vals[f]);
         inp.setAttribute('aria-invalid', 'false'); $(f + 'Err').textContent = '';
       }
+      if (f !== 'op') {
+        var u = TS.unitOf(l, f), r = $(f + 'R');
+        $(f + 'U').textContent = u;
+        if (u === 'px') { r.min = f === 'blur' ? 0 : -50; r.max = 50; r.step = 1; } else { r.min = f === 'blur' ? 0 : -2; r.max = 2; r.step = 0.01; }
+      }
       $(f + 'R').value = vals[f];
     });
     var hex = TS.colorHex(l.color);
@@ -660,13 +674,17 @@ var TS = (function () {
     if (err) return;
     remember();
     if (f === 'op') l.color = Object.assign({}, l.color, { a: Math.round(v * 10) / 1000 });
-    else l[f] = Math.round(v * 100) / 100;
+    else {
+      var um = /(px|r?em)\s*$/i.exec(String(raw));
+      if (um && !fromSlider) { l.u = Object.assign({ x: TS.unitOf(l, 'x'), y: TS.unitOf(l, 'y'), blur: TS.unitOf(l, 'blur') }, {}); l.u[f] = um[1].toLowerCase(); $(f + 'U').textContent = l.u[f]; }
+      l[f] = Math.round(v * 1000) / 1000;
+    }
     if (fromSlider) $(f).value = String(f === 'op' ? v : l[f]);
     else $(f + 'R').value = v;
     afterEdit();
   }
   function afterEdit() {
-    cssEditing = false; cssErrors = [];
+    cssEditing = false; cssErrors = []; $('dropBad').hidden = true;
     var l = S.layers[S.sel]; if (l) { $('colSw').style.background = TS.colorHex(l.color); $('colPick').value = TS.colorHex(l.color); }
     render({ tabs: true, flash: S.sel });
     say(summary());
@@ -718,7 +736,7 @@ var TS = (function () {
     afterEditAll(); say('Added shadow ' + S.layers.length + '. ' + summary());
     $('x').focus({ preventScroll: true });
   }
-  function afterEditAll() { cssEditing = false; cssErrors = []; render({ all: true, flash: S.sel }); }
+  function afterEditAll() { cssEditing = false; cssErrors = []; $('dropBad').hidden = true; render({ all: true, flash: S.sel }); }
   $('dupBtn').addEventListener('click', function () {
     var l = S.layers[S.sel]; if (!l) return; remember(true);
     S.layers.splice(S.sel + 1, 0, JSON.parse(JSON.stringify(l))); S.sel++; afterEditAll(); say('Duplicated. ' + summary());
@@ -748,6 +766,11 @@ var TS = (function () {
   });
 
   // ---- the CSS box: output and input at once ----------------------------------------------------------------
+  var lastParse = null;
+  $('dropBad').addEventListener('click', function () {
+    cssEditing = false; cssErrors = []; this.hidden = true; $('cssErr').textContent = '';
+    render({ all: true }); say('Removed. ' + summary()); $('css').focus();
+  });
   $('css').addEventListener('focus', function () { remember(true); });
   $('css').addEventListener('input', function () {
     var r = TS.parseList(this.value, TS.parseColor(S.stage.fg));
@@ -760,11 +783,14 @@ var TS = (function () {
     if (r.errors.length > 3) msg += '<br>…and ' + (r.errors.length - 3) + ' more.';
     if (!r.errors.length && r.notes && r.notes.length) msg = '<span class="note">' + esc(r.notes.slice(0, 3).join('; ')) + '.</span>';
     $('cssErr').innerHTML = msg; growCss();
+    $('dropBad').hidden = !r.errors.some(function (e) { return e.index >= 0; }) || !r.layers.length;
+    lastParse = r;
     this.setAttribute('aria-invalid', String(!!r.errors.length));
     render({ tabs: true, editor: true });
   });
   $('css').addEventListener('blur', function () {
     if (!cssErrors.length) { cssEditing = false; render({ all: true }); }
+    else setTimeout(function () { if (document.activeElement !== $('dropBad') && !cssErrors.length) $('dropBad').hidden = true; }, 0);
   });
 
   // ---- stage -------------------------------------------------------------------------------------------------

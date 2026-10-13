@@ -102,7 +102,11 @@ if (suites.includes('parse')) {
   eq(list('1.5px -0.5px .25px navy').layers, [L(1.5, -0.5, 0.25, C(0, 0, 128))], 'decimals');
   eq(list('text-shadow:\n  1px 1px 0 #000,\n  2px 2px 0 #000;').layers, [L(1, 1, 0, C(0, 0, 0)), L(2, 2, 0, C(0, 0, 0))], 'multi-line, as this page writes it');
   eq(list('3px 3px 6pt hsl(0 0% 0% / 40%)').layers, [L(3, 3, 8, C(0, 0, 0, 0.4))], 'pt converted, hsl with slash');
-  const em = list('0.125em 0.125em 0 black'); eq(em.layers, [L(2, 2, 0, C(0, 0, 0))], 'em read at 16px'); check(em.notes.length === 2 && /0\.125em became 2px/.test(em.notes[0]), 'and says so', JSON.stringify(em.notes));
+  const em = list('0.1em 0.125rem 3PX #00000099');
+  eq(em.layers, [{x: 0.1, y: 0.125, blur: 3, color: C(0, 0, 0, 0.6), u: {x: 'em', y: 'rem', blur: 'px'}}], 'em and rem kept, not turned into px');
+  eq(TS.fmtList(em.layers), '0.1em 0.125rem 3px rgba(0, 0, 0, 0.6)', 'and printed in their own units');
+  eq(plain(TS.sanitizeLayer(em.layers[0])), em.layers[0], 'units survive a save');
+  eq(plain(TS.sanitizeLayer({x: 1, y: 1, blur: 1, color: C(0, 0, 0), u: {x: 'vw', y: 'px', blur: 'px'}})), L(1, 1, 1, C(0, 0, 0)), 'unknown units fall back to px');
   eq(list('1px 1px 0 currentColor').layers, [L(1, 1, 0, C(0, 0, 0))], 'currentColor without a text colour is black');
   eq(plain(TS.parseList('1px 1px 0 currentcolor', C(10, 20, 30))).layers, [L(1, 1, 0, C(10, 20, 30))], 'currentColor is the text colour');
   for (const n of ['none', 'NONE;', 'text-shadow: none;', 'inherit', 'initial']) { const r = list(n); eq([r.layers.length, r.errors.length, r.none], [0, 0, true], `"${n}" is no shadow`); }
