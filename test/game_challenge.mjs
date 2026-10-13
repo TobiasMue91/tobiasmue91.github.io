@@ -76,6 +76,8 @@ if (suites.includes('draft')) {
     const a = C.draft({game: 'Minecraft', type: 'survival'}), b = C.draft({game: 'minecraft', type: 'survival'});
     eq(J(a), J(Object.assign(b, {game: a.game, overview: a.overview})), 'the same settings give the same draft (case of the name aside)');
     check(JSON.stringify(C.draft({game: 'Minecraft'}, 1)) !== JSON.stringify(C.draft({game: 'Minecraft'}, 0)), 'New draft gives another draft');
+    for (const t of C.TYPES.slice(0, 8)) { const n = [0, 1, 2].map(k => C.draft({game: 'Minecraft', type: t.value}, k).name); check(n[0] !== n[1] && n[1] !== n[2], `${t.value}: drafts in a row have different names`, n); }
+    check(C.draft({game: 'x', difficulty: 'easy'}).overview.startsWith('An easy'), '"An easy", not "A easy"');
     let bad = 0, braces = 0, n = 0;
     for (const t of C.TYPES.map(x => x.value).concat(['custom']))
         for (const d of C.DIFFS) for (const du of C.DURS.map(x => x.value)) for (const cz of [0, 50, 100]) for (const cr of [0, 30, 60, 100]) {
@@ -149,7 +151,7 @@ if (suites.includes('share')) {
     eq(C.unpackShare('not json'), null, 'a damaged link opens nothing');
     eq(C.unpackShare('null'), null, 'null opens nothing (the old page threw)');
     eq(C.unpackShare(JSON.stringify({gameTitle: '  '})), null, 'a link without a game opens nothing');
-    const txt = C.toText(ch); check(txt.startsWith('Ashen Pauper — a challenge for Hades') && txt.includes('1. Start as the Wretch class.') && txt.includes('You win when: Defeat Elden Beast.'), 'plain text has name, numbered rules and win');
+    const txt = C.toText(ch, i); check(txt.split('\n')[1].includes('Survival · Hard'), 'copied text carries the settings', txt.split('\n')[1]); check(txt.startsWith('Ashen Pauper — a challenge for Hades') && txt.includes('1. Start as the Wretch class.') && txt.includes('You win when: Defeat Elden Beast.'), 'plain text has name, numbered rules and win');
     const md = C.toMarkdown(Object.assign({}, ch, {rules: ['Use *only* the #1 weapon']}));
     check(md.includes('## Rules') && md.includes('1. Use \\*only\\* the \\#1 weapon'), 'Markdown keeps the old headings and escapes the text', md);
     eq(C.fromMarkdown(C.toMarkdown(ch), 'Hades').rules.length, ch.rules.length, 'Markdown reads back');

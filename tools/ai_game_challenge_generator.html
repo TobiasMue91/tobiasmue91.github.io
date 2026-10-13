@@ -197,6 +197,7 @@ dialog .links a, dialog button { min-height: 44px; display: flex; align-items: c
         </div>
         <div class="actions" id="actions">
             <button type="button" class="primary" id="copy">Copy</button>
+            <button type="button" id="prev" hidden>Previous</button>
             <button type="button" id="reroll">New draft</button>
             <button type="button" id="share">Share link</button>
             <button type="button" id="copyMd">Copy Markdown</button>
@@ -357,10 +358,11 @@ const Challenge = (() => {
         if (i.craziness >= 40) pool.push(fill(pick(r, CRAZY.slice(0, Math.min(CRAZY.length, 2 + Math.floor(i.craziness / 20))))));
         if (i.cruelty >= 25) pool.push(fill(CRUEL[Math.min(CRUEL.length - 1, Math.floor((i.cruelty - 25) / 20))]));
         const b0 = banks[0];
-        const name = parts && parts.length > 1 ? pick(r, b0.names) + ': ' + pick(r, banks[1].names) : pick(r, b0.names);
+        const nm = (b, k) => b.names[(hash(i.game.toLowerCase() + k) + (reroll | 0)) % b.names.length];
+        const name = parts && parts.length > 1 ? nm(b0, 0) + ': ' + nm(banks[1], 1) : nm(b0, 0);
         const win = fill([b0.win, b0.winD]);
         const timeRule = 'Your session lasts ' + DUR[i.duration].span + '; when the time is up, stop where you are.';
-        return {name, game, overview: `A ${i.difficulty}, ${crazyWord(i.craziness)} and ${cruelWord(i.cruelty)} ${typeLabel(i).toLowerCase()} challenge for ${game} that lasts ${DUR[i.duration].span}.`,
+        return {name, game, overview: `${i.difficulty === 'easy' ? 'An' : 'A'} ${i.difficulty}, ${crazyWord(i.craziness)} and ${cruelWord(i.cruelty)} ${typeLabel(i).toLowerCase()} challenge for ${game} that lasts ${DUR[i.duration].span}.`,
             rules: [...pool, timeRule], win, scoring: null, tips: shuffle(r, banks.flatMap(b => b.tips)).slice(0, 2), source: 'draft', unknown: false};
     }
 
@@ -433,8 +435,10 @@ const Challenge = (() => {
     // ---------- taking it away ----------
     function settingsLine(i) { return [typeLabel(i), cap(i.difficulty), DUR[i.duration].span, 'craziness ' + i.craziness, 'cruelty ' + i.cruelty]; }
     const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-    function toText(ch) {
-        const out = [ch.name + ' — a challenge for ' + ch.game, ''];
+    function toText(ch, i) {
+        const out = [ch.name + ' — a challenge for ' + ch.game];
+        if (i) out.push(settingsLine(i).join(' · '));
+        out.push('');
         if (ch.overview) out.push(ch.overview, '');
         out.push('Rules:'); ch.rules.forEach((r, k) => out.push(`${k + 1}. ${r}`));
         out.push('', 'You win when: ' + ch.win);
@@ -546,8 +550,9 @@ const RM = matchMedia('(prefers-reduced-motion: reduce)');
 const f = {game: $('game'), type: $('type'), custom: $('custom'), duration: $('duration'), craziness: $('craziness'), cruelty: $('cruelty')};
 
 // fill the selects
-C.TYPES.forEach(t => f.type.add(new Option(t.label, t.value)));
+C.TYPES.slice(0, 8).forEach(t => f.type.add(new Option(t.label, t.value)));
 f.type.add(new Option('Your own kind…', 'custom'));
+{ const g = document.createElement('optgroup'); g.label = 'Two at once'; C.TYPES.slice(8).forEach(t => g.append(new Option(t.label, t.value))); f.type.append(g); }
 C.DURS.forEach(d => f.duration.add(new Option(d.label, d.value)));
 
 let S;
@@ -558,10 +563,12 @@ let S;
     // the old page's history is copied in, and its key removed only once the copy is safely stored
     if (m.migrated && save()) try { localStorage.removeItem(OLD); } catch (e) {}
 }
+addEventListener('pagehide', () => save());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); return true; } catch (e) { return false; } }
 
 // view: what the card shows
-let view = null, reroll = 0, busy = null, lastFail = null;
+let view = null, reroll = 0, busy = null, drafts = [];
 
 function setForm(i) {
     f.game.value = i.game; f.type.value = i.type; f.custom.value = i.custom || '';
@@ -604,6 +611,7 @@ function render(changed) {
     note.textContent = ch.unknown ? `The writer didn’t recognise “${ch.game}”, so these rules only use things every game of this kind has.`
         : ch.source === 'draft' ? `This draft uses rules any ${C.typeLabel(i).toLowerCase()} game has. Press “Write it for this game” for rules about ${ch.game}’s own bosses, items and places.` : '';
     $('reroll').hidden = ch.source !== 'draft' && ch.source !== 'example';
+    $('prev').hidden = $('reroll').hidden || !drafts.length;
     $('trust').textContent = ch.source === 'ai' || ch.source === 'shared'
         ? 'Written by an AI language model (gpt-4o-mini). It can get a game’s details wrong; if a rule names something your game doesn’t have, swap it for the nearest thing.'
         : ch.source === 'example' ? 'An example. Type your game to start.' : 'Made on this page from a fixed set of rules; nothing was sent anywhere.';
@@ -621,7 +629,7 @@ function onInput() {
     if (busy) return;
     if (!i.game) { if (view.challenge.source !== 'example') { view = {input: C.EXAMPLE.input, challenge: C.EXAMPLE.challenge}; render(false); } return; }
     if (i.type === 'custom' && !i.custom) return;
-    reroll = 0;
+    reroll = 0; drafts = [];
     view = {input: i, challenge: C.draft(i, reroll)}; hideFail(); render(true);
     if (location.search) history.replaceState(null, '', location.pathname);
 }
@@ -637,9 +645,10 @@ $('dice').addEventListener('click', () => {
     const cur = f.game.value; let g; do g = C.GAMES[Math.floor(Math.random() * C.GAMES.length)]; while (g === cur);
     f.game.value = g; onInput(); f.game.focus();
 });
+$('prev').addEventListener('click', () => { if (!drafts.length) return; reroll = Math.max(0, reroll - 1); view = drafts.pop(); render(true); announce('Previous draft: ' + view.challenge.name); });
 $('reroll').addEventListener('click', () => {
     const i = view.challenge.source === 'example' ? C.readInput(Object.assign({}, C.EXAMPLE.input)) : view.input;
-    reroll++; view = {input: i, challenge: C.draft(i, reroll)}; render(true); announce('New draft: ' + view.challenge.name);
+    drafts.push(view); reroll++; view = {input: i, challenge: C.draft(i, reroll)}; render(true); announce('New draft: ' + view.challenge.name);
 });
 
 // writing it with the AI
@@ -689,7 +698,7 @@ async function copy(text, done) {
         toast(ok ? done : 'Couldn’t copy. Select the text and copy it yourself.');
     }
 }
-$('copy').addEventListener('click', () => (keepInHistory(), copy(C.toText(view.challenge), 'Copied the challenge.')));
+$('copy').addEventListener('click', () => (keepInHistory(), copy(C.toText(view.challenge, view.input), 'Copied the challenge.')));
 $('copyMd').addEventListener('click', () => (keepInHistory(), copy(C.toMarkdown(view.challenge), 'Copied as Markdown.')));
 $('print').addEventListener('click', () => { keepInHistory(); window.print(); });
 function shareUrl() { return location.origin + location.pathname + '?challenge=' + LZString.compressToEncodedURIComponent(C.packShare(view.input, view.challenge)); }
@@ -700,7 +709,7 @@ $('share').addEventListener('click', () => {
     $('rdLink').href = 'https://www.reddit.com/submit?url=' + e(url) + '&title=' + e(`“${ch.name}” – a challenge run for ${ch.game}`);
     $('fbLink').href = 'https://www.facebook.com/sharer/sharer.php?u=' + e(url);
     $('mailLink').href = 'mailto:?subject=' + e(`${ch.name} – a challenge for ${ch.game}`) + '&body=' + e(C.toText(ch) + '\n\n' + url);
-    $('copyLink').onclick = () => copy(url, 'Link copied.');
+    $('copyLink').onclick = () => { $('shareDlg').close(); copy(url, 'Link copied.'); };
     if (typeof $('shareDlg').showModal === 'function') $('shareDlg').showModal(); else copy(url, 'Link copied.');
 });
 
@@ -747,7 +756,7 @@ if (!start && S.current && S.settings.game && S.current.game === S.settings.game
 }
 if (!start && S.settings.game) { const i = C.readInput(S.settings); start = {input: i, challenge: C.draft(i, 0)}; }
 if (start) { setForm(start.input); view = start; }
-else { setForm(Object.assign(C.readInput(C.EXAMPLE.input), {game: ''})); view = {input: C.readInput(C.EXAMPLE.input), challenge: C.EXAMPLE.challenge}; }
+else { setForm(C.readInput(S.settings)); view = {input: C.readInput(C.EXAMPLE.input), challenge: C.EXAMPLE.challenge}; }
 render(false); renderHist();
 })();
 </script>
