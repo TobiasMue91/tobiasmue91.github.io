@@ -173,6 +173,7 @@ npm run test:dailyquote     # Quote of the Day (Daily Quote Generator) suite (pl
 npm run test:grammar        # Grammar Checker suite (plain Node; its harper suite needs harper.js installed)
 npm run test:humanizer      # AI Text Humanizer (Naturalizer) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:casing         # Case Converter suite (plain Node, no server or browser)
+npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -182,7 +183,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-two exist so far. `test/everything_converter.mjs` drives
+Seventy-three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -725,6 +726,14 @@ stable when converted back; Title Case follows Chicago (small words lower except
 iPhone and user_id kept), Sentence case capitalises after . ! ? and at each line, text styles change letter case and nothing
 else, a megabyte converts in well under a second, and the old page's `conversionHistory` is cleaned before it is shown.
 Run it after touching the core.
+
+`test/text_shadow.mjs` runs the DOM-free `<script id="core">` block of `tools/text_shadow_generator.html` (CSS Text
+Shadow Generator), whose CSS box is both its output and an input for any text-shadow a person pastes: colours against
+CSS Color 4 (hex, rgb/hsl in both syntaxes, named), what people paste (a whole rule, comments, !important, pt and em,
+colour first or last, none) read and every mistake named by shadow number, everything it prints read back unchanged,
+the old page's `textShadowApp*` keys loaded and corrupt ones survived, links that never carry the text, and a `browser`
+suite in which Chromium's own computed style must agree with the core on printed and pasted values. Run it after
+touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
