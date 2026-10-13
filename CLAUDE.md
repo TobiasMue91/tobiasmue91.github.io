@@ -173,6 +173,7 @@ npm run test:dailyquote     # Quote of the Day (Daily Quote Generator) suite (pl
 npm run test:grammar        # Grammar Checker suite (plain Node; its harper suite needs harper.js installed)
 npm run test:humanizer      # AI Text Humanizer (Naturalizer) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:casing         # Case Converter suite (plain Node, no server or browser)
+npm run test:opposites      # Opposite Word Finder suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -182,7 +183,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-two exist so far. `test/everything_converter.mjs` drives
+Seventy-three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -725,6 +726,15 @@ stable when converted back; Title Case follows Chicago (small words lower except
 iPhone and user_id kept), Sentence case capitalises after . ! ? and at each line, text styles change letter case and nothing
 else, a megabyte converts in well under a second, and the old page's `conversionHistory` is cleaned before it is shown.
 Run it after touching the core.
+
+`test/opposite_finder.mjs` runs the DOM-free `<script id="core">` block of `tools/opposite_finder.html` (Opposite Word
+Finder) against the data it loads, `data/opposites.json`, which `util/opposites/build.py` makes from Princeton WordNet 3.0
+(every synset with an antonym, the satellite adjectives around it, tagged sense counts, the irregular forms, and a Bloom
+filter of every WordNet word). Its promises: textbook pairs come out on the headline, a word's rare sense never does (cat
+the verb means to vomit), plurals, -er, -ing and irregular forms find their base, a word with no opposite (dog) is told
+apart from a typo (hapy, shown as happy), numbers get none, every pair in the data is recorded both ways, the optional AI
+request carries the text only as JSON data and its reply is cleaned, and the old page's history survives while markup in
+it stays text. Run it after rebuilding the data or touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
