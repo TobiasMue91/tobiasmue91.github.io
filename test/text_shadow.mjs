@@ -129,9 +129,9 @@ if (suites.includes('errors')) {
   err('2px 2px -4px red', /blur cannot be negative/, 'negative blur');
   err('2 2 4 red', /needs a unit, such as 2px/, 'unitless non-zero');
   err('2px red', /at least two lengths/, 'one length');
-  err('2px 2px red blue', /two colours/, 'two colours');
-  err('2px red 2px', /before or after all the lengths/, 'colour in the middle');
-  err('2px 2px 4px reddish', /"reddish" is not a length or a colour/, 'unknown word');
+  err('2px 2px red blue', /two colors/, 'two colours');
+  err('2px red 2px', /before or after all the lengths/, 'color in the middle');
+  err('2px 2px 4px reddish', /"reddish" is not a length or a color/, 'unknown word');
   err('2px 2px 4px 50%', /use px/, 'percent');
   err('2px 2px 2vw red', /use px/, 'viewport units');
   err('1px 1px red,, 2px 2px blue', /empty shadow/, 'double comma');
