@@ -174,6 +174,8 @@ npm run test:grammar        # Grammar Checker suite (plain Node; its harper suit
 npm run test:humanizer      # AI Text Humanizer (Naturalizer) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:casing         # Case Converter suite (plain Node, no server or browser)
 npm run test:challenge      # AI Game Challenge Generator suite (plain Node; its page suite uses Playwright's Chromium)
+npm run test:opposites      # Opposite Word Finder suite (plain Node, no server or browser)
+npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -692,6 +694,7 @@ the real page in Chromium on a desktop and a phone against canned replies (no ne
 image, keep, undo, reload, a shared link, failure, cancel, migration and blocked storage. The site's proxy only answers pages
 served from www.gptgames.dev, so trying the page against the real model locally needs the requests relayed. Run it after
 touching the core, the prompt or the page.
+
 `test/daily_quote.mjs` runs the DOM-free `<script id="core">` block of `tools/daily_quote_generator.html` (Quote of the Day),
 whose one promise is that a quote it shows as a quotation is one. The bank is written by `util/quotes/verify.py`, which downloads
 each source from Project Gutenberg and keeps a remembered quote only when its words are a run of the book's words, replacing memory's
@@ -702,6 +705,7 @@ never shows one author two days running and turns at local midnight in every tim
 (aliases, accents, typos) and never a different one; that the AI writer is asked for original lines only and what it returns is
 cleaned, labelled and never credited to a person; and that saved quotes, including the old page's `savedQuotes` and `quoteHistory`,
 cannot be forged. To add quotes, edit `util/quotes/candidates.txt` and run `python util/quotes/verify.py`, then the suite.
+
 `test/grammar_check.mjs` runs the DOM-free `<script id="core">` block of `tools/grammar_check.html` (Grammar Checker). The page
 checks text in the browser with Harper (an open-source rule checker, WebAssembly from jsDelivr) and sends text out only when the
 person asks for the AI proofread. The suite checks what the page adds around Harper: which marks are shown (names and words with
@@ -734,6 +738,26 @@ left, only the game name and the settings are sent and as JSON data the model is
 challenge (refusals, HTML, debris and a cut-off reply are refused) and always as text, old `?challenge=` links still open with their
 HTML gone, and the old page's `challengeHistory` is carried over without its stored HTML. The `page` suite plays the page in Chromium on a
 desktop and a phone against canned replies. Run it after touching the core, the prompt or the page.
+
+`test/opposite_finder.mjs` runs the DOM-free `<script id="core">` block of `tools/opposite_finder.html` (Opposite Word
+Finder) against the data it loads, `data/opposites.json`, which `util/opposites/build.py` makes from Princeton WordNet 3.0
+(every synset with an antonym, the satellite adjectives around it, tagged sense counts, the irregular forms, and a Bloom
+filter of every WordNet word). Its promises: textbook pairs come out on the headline, a word's rare sense never does (cat
+the verb means to vomit), plurals, -er, -ing and irregular forms find their base, a word with no opposite (dog) is told
+apart from a typo (hapy, shown as happy), numbers get none, every pair in the data is recorded both ways, the optional AI
+request carries the text only as JSON data and its reply is cleaned, and the old page's history survives while markup in
+it stays text. Its `languages` suite covers the nine other languages in `data/opposites/<code>.json`, which the same
+script makes from the Open Multilingual Wordnet 1.4 (French, Spanish, Italian, Portuguese, Polish, Finnish, Catalan,
+Romanian, Japanese; each tied to WordNet 3.0 synsets, loaded only when chosen): textbook pairs in each, no word its own
+opposite, and every synset one the English data has. Run it after rebuilding the data or touching the core.
+
+`test/text_shadow.mjs` runs the DOM-free `<script id="core">` block of `tools/text_shadow_generator.html` (CSS Text
+Shadow Generator), whose CSS box is both its output and an input for any text-shadow a person pastes: colours against
+CSS Color 4 (hex, rgb/hsl in both syntaxes, named), what people paste (a whole rule, comments, !important, pt and em,
+colour first or last, none) read and every mistake named by shadow number, everything it prints read back unchanged,
+the old page's `textShadowApp*` keys loaded and corrupt ones survived, links that never carry the text, and a `browser`
+suite in which Chromium's own computed style must agree with the core on printed and pasted values. Run it after
+touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
