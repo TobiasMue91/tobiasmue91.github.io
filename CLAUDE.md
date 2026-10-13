@@ -174,6 +174,7 @@ npm run test:grammar        # Grammar Checker suite (plain Node; its harper suit
 npm run test:humanizer      # AI Text Humanizer (Naturalizer) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:casing         # Case Converter suite (plain Node, no server or browser)
 npm run test:opposites      # Opposite Word Finder suite (plain Node, no server or browser)
+npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -738,6 +739,14 @@ it stays text. Its `languages` suite covers the nine other languages in `data/op
 script makes from the Open Multilingual Wordnet 1.4 (French, Spanish, Italian, Portuguese, Polish, Finnish, Catalan,
 Romanian, Japanese; each tied to WordNet 3.0 synsets, loaded only when chosen): textbook pairs in each, no word its own
 opposite, and every synset one the English data has. Run it after rebuilding the data or touching the core.
+
+`test/text_shadow.mjs` runs the DOM-free `<script id="core">` block of `tools/text_shadow_generator.html` (CSS Text
+Shadow Generator), whose CSS box is both its output and an input for any text-shadow a person pastes: colours against
+CSS Color 4 (hex, rgb/hsl in both syntaxes, named), what people paste (a whole rule, comments, !important, pt and em,
+colour first or last, none) read and every mistake named by shadow number, everything it prints read back unchanged,
+the old page's `textShadowApp*` keys loaded and corrupt ones survived, links that never carry the text, and a `browser`
+suite in which Chromium's own computed style must agree with the core on printed and pasted values. Run it after
+touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
