@@ -173,6 +173,7 @@ npm run test:dailyquote     # Quote of the Day (Daily Quote Generator) suite (pl
 npm run test:grammar        # Grammar Checker suite (plain Node; its harper suite needs harper.js installed)
 npm run test:humanizer      # AI Text Humanizer (Naturalizer) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:casing         # Case Converter suite (plain Node, no server or browser)
+npm run test:challenge      # AI Game Challenge Generator suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:opposites      # Opposite Word Finder suite (plain Node, no server or browser)
 npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 ```
@@ -693,6 +694,7 @@ the real page in Chromium on a desktop and a phone against canned replies (no ne
 image, keep, undo, reload, a shared link, failure, cancel, migration and blocked storage. The site's proxy only answers pages
 served from www.gptgames.dev, so trying the page against the real model locally needs the requests relayed. Run it after
 touching the core, the prompt or the page.
+
 `test/daily_quote.mjs` runs the DOM-free `<script id="core">` block of `tools/daily_quote_generator.html` (Quote of the Day),
 whose one promise is that a quote it shows as a quotation is one. The bank is written by `util/quotes/verify.py`, which downloads
 each source from Project Gutenberg and keeps a remembered quote only when its words are a run of the book's words, replacing memory's
@@ -703,6 +705,7 @@ never shows one author two days running and turns at local midnight in every tim
 (aliases, accents, typos) and never a different one; that the AI writer is asked for original lines only and what it returns is
 cleaned, labelled and never credited to a person; and that saved quotes, including the old page's `savedQuotes` and `quoteHistory`,
 cannot be forged. To add quotes, edit `util/quotes/candidates.txt` and run `python util/quotes/verify.py`, then the suite.
+
 `test/grammar_check.mjs` runs the DOM-free `<script id="core">` block of `tools/grammar_check.html` (Grammar Checker). The page
 checks text in the browser with Harper (an open-source rule checker, WebAssembly from jsDelivr) and sends text out only when the
 person asks for the AI proofread. The suite checks what the page adds around Harper: which marks are shown (names and words with
@@ -727,6 +730,14 @@ stable when converted back; Title Case follows Chicago (small words lower except
 iPhone and user_id kept), Sentence case capitalises after . ! ? and at each line, text styles change letter case and nothing
 else, a megabyte converts in well under a second, and the old page's `conversionHistory` is cleaned before it is shown.
 Run it after touching the core.
+
+`test/game_challenge.mjs` runs the DOM-free `<script id="core">` block of `tools/ai_game_challenge_generator.html`, where a language
+model writes the challenge and everything around it is promised: input is read the way people type it (stray spaces, quotes, a decimal
+comma, 0 to 100 clamped), the instant offline draft is the same for the same settings and always a whole challenge with no placeholder
+left, only the game name and the settings are sent and as JSON data the model is told not to obey, a reply is shown only when it is a
+challenge (refusals, HTML, debris and a cut-off reply are refused) and always as text, old `?challenge=` links still open with their
+HTML gone, and the old page's `challengeHistory` is carried over without its stored HTML. The `page` suite plays the page in Chromium on a
+desktop and a phone against canned replies. Run it after touching the core, the prompt or the page.
 
 `test/opposite_finder.mjs` runs the DOM-free `<script id="core">` block of `tools/opposite_finder.html` (Opposite Word
 Finder) against the data it loads, `data/opposites.json`, which `util/opposites/build.py` makes from Princeton WordNet 3.0
