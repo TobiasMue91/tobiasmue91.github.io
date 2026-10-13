@@ -173,6 +173,7 @@ npm run test:dailyquote     # Quote of the Day (Daily Quote Generator) suite (pl
 npm run test:grammar        # Grammar Checker suite (plain Node; its harper suite needs harper.js installed)
 npm run test:humanizer      # AI Text Humanizer (Naturalizer) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:casing         # Case Converter suite (plain Node, no server or browser)
+npm run test:challenge      # AI Game Challenge Generator suite (plain Node; its page suite uses Playwright's Chromium)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -182,7 +183,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-two exist so far. `test/everything_converter.mjs` drives
+Seventy-three exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -725,6 +726,14 @@ stable when converted back; Title Case follows Chicago (small words lower except
 iPhone and user_id kept), Sentence case capitalises after . ! ? and at each line, text styles change letter case and nothing
 else, a megabyte converts in well under a second, and the old page's `conversionHistory` is cleaned before it is shown.
 Run it after touching the core.
+
+`test/game_challenge.mjs` runs the DOM-free `<script id="core">` block of `tools/ai_game_challenge_generator.html`, where a language
+model writes the challenge and everything around it is promised: input is read the way people type it (stray spaces, quotes, a decimal
+comma, 0 to 100 clamped), the instant offline draft is the same for the same settings and always a whole challenge with no placeholder
+left, only the game name and the settings are sent and as JSON data the model is told not to obey, a reply is shown only when it is a
+challenge (refusals, HTML, debris and a cut-off reply are refused) and always as text, old `?challenge=` links still open with their
+HTML gone, and the old page's `challengeHistory` is carried over without its stored HTML. The `page` suite plays the page in Chromium on a
+desktop and a phone against canned replies. Run it after touching the core, the prompt or the page.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
