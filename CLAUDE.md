@@ -177,6 +177,7 @@ npm run test:challenge      # AI Game Challenge Generator suite (plain Node; its
 npm run test:opposites      # Opposite Word Finder suite (plain Node, no server or browser)
 npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
+npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -186,7 +187,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-four exist so far. `test/everything_converter.mjs` drives
+Seventy-five exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -765,6 +766,13 @@ WHO's adult cut-offs (and the lower ones WHO 2004 and NICE give for Asian, Black
 boundary, a shown BMI and its category that always agree, a healthy range whose every weight is healthy and is not 0.1 kg too
 narrow, and for ages 2 to 19 the percentile curves CDC publishes beside its LMS table reproduced from L, M and S alone. It also
 reads what people type (decimal commas, units, feet and inches, stone) and the old page's `bmiData`. Run it after touching the core.
+
+`test/word_scrambler.mjs` runs the DOM-free `<script id="core">` block of `tools/online_word_scrambler.html` (Word Scrambler),
+whose promises nobody can check by eye on a long text: every word comes out a rearrangement of its own letters with every
+space, mark, number and capital position where it was (no emoji or accent torn apart, ß never SS), a word that can change
+does, the shuffle is fair (chi-square over every arrangement), a seed is stable while typing so editing one word moves no other,
+the old page's four switches still mean what they meant, the worksheet never gives a first letter away, and saves - including
+the old `darkMode` key - trust nothing. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
