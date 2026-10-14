@@ -181,6 +181,7 @@ npm run test:colorpicker    # Color Picker suite (plain Node, no server or brows
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
 npm run test:life           # Conway's Game of Life suite (plain Node, no server or browser)
 npm run test:numberbase     # Number Base Converter suite (plain Node, no server or browser)
+npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -190,7 +191,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-seven exist so far. `test/everything_converter.mjs` drives
+Seventy-eight exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -791,6 +792,13 @@ to 36, fractions as exact rationals (every repeating block expanded back must eq
 complement at 8 to 64 bits round-tripped, what people paste (0x, #, 0b, 0o, a trailing h or b, spaces, _, ' and : as grouping, a
 decimal comma, fullwidth digits, a Unicode minus), errors that name the wrong character and what the base accepts, the old page's
 outputs, and the working shown for homework. Run it after touching the core.
+
+`test/pdf_merger.mjs` runs the DOM-free `<script id="core">` block of `tools/pdf_merger.html` (PDF Merger), whose promise is
+that the file it hands back holds exactly the pages shown, in that order and turned that way: page ranges read the way people
+type them in a print dialog (1-3, 5, 8-, 5-1, en dashes, "last", fullwidth digits) with every bad part named, files are sniffed by
+their %PDF- header rather than their type, a password-locked file is refused instead of merged as garbled pages, and merges of
+source files whose every page has its own size are read back page by page with pdf-lib (`npm i --no-save pdf-lib@1.17.1`).
+Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
