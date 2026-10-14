@@ -172,6 +172,7 @@ if (suites.includes('edges')) {
   const parts = []; const seen = Object.create(null); let i = 0;
   const chunked = ['alpha beta ', 'gamma beta ', 'beta'].map(c => C.scrambleParts(c, {}, 7, seen).map(p => p.to).join('')).join('');
   eq(chunked, C.scramble('alpha beta gamma beta beta', {}, 7), 'chunked with a shared count equals one pass (the worker path)');
+  { const o = C.scramble("O'Brien's", {}, 4); check(o.startsWith("O'") && /[A-Z]/.test(o[2]) && o !== "O'Brien's" && !/[A-Z]/.test(o.slice(3)), "O'Brien: a capital after an apostrophe starts its own word, none lands mid-word", o); }
   eq(C.scramble('7pm 2nd 1984 mp3 3D', {}, 3), '7pm 2nd 1984 mp3 3D', 'numbers and the letters written against them stay: 7pm never becomes p7m');
   for (let s = 0; s < 50; s++) { const o = C.scramble("doesn't", {}, s); check(o[5] === "'" && o.replace("'", '') !== 'doesnt' && sorted([...o.replace("'", '')]) === sorted([...'doesnt']), "doesn't mixes across its apostrophe, which keeps its place", o); }
   const long = 'x'.repeat(5000) + 'y';
