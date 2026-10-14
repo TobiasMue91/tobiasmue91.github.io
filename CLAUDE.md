@@ -179,6 +179,7 @@ npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its b
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
 npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
+npm run test:life           # Conway's Game of Life suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -188,7 +189,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-five exist so far. `test/everything_converter.mjs` drives
+Seventy-six exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -774,6 +775,14 @@ space, mark, number and capital position where it was (no emoji or accent torn a
 does, the shuffle is fair (chi-square over every arrangement), a seed is stable while typing so editing one word moves no other,
 the old page's four switches still mean what they meant, the worksheet never gives a first letter away, and saves - including
 the old `darkMode` key - trust nothing. Run it after touching the core.
+
+`test/game_of_life.mjs` runs the DOM-free `<script id="core">` block of `tools/game_of_life.html` (Conway's Game of Life),
+whose promise is that the board shows what the rule says: every generation of soups under ten Life-like rules, on the endless plane
+and on a torus, against a dense-grid stepper written in the test; what LifeWiki records (the R-pentomino has 116 cells at 1103, the
+acorn 633 at 5206, diehard is gone at 130, the Gosper gun adds a glider every 30); still life, oscillator and spaceship readouts
+checked against brute force with the smallest period; rules as LifeWiki and Golly write them (B3/S23, 23/3, names, :T torus); and
+RLE, plaintext, Life 1.05 and 1.06 read as those programs read them, written back in 70 columns and round-tripped. Run it after
+touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
