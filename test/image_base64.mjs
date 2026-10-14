@@ -84,6 +84,9 @@ if (suites.includes('decode')) {
     ['data URI with params', 'data:image/png;name=x.png;charset=binary;base64,' + P],
     ['double quotes', '"data:image/png;base64,' + P + '"'], ['single quotes', "'" + P + "'"],
     ['css url()', 'url(data:image/png;base64,' + P + ')'], ['css url("") with ;', 'url("data:image/png;base64,' + P + '");'],
+    ['inside a CSS rule over lines', '.badge { background: url("data:image/png;base64,' + P.slice(0, 6) + '\n  ' + P.slice(6) + '") no-repeat; }'],
+    ['inside an <img> tag', '<img src="data:image/png;base64,' + P + '" alt="x">'],
+    ['inside JSON', '{"icon": "data:image/png;base64,' + P + '"}'],
     ['shell \\ continuations', P.slice(0, 5) + '\\\n' + P.slice(5)],
   ];
   for (const [what, t] of cases) { const r = C.decode(t); eq(r.ok ? hex(r.bytes) : 'ERR ' + (r.error && r.error.msg), want, what); }
@@ -173,10 +176,11 @@ if (suites.includes('svg')) {
     check(uri.startsWith('data:image/svg+xml,'), 'starts with the plain svg prefix');
     check(!/["#<>%\r\n\t\u0080-\uffff]/.test(body.replace(/%[0-9A-F]{2}/g, '')), 'nothing left that breaks a URI or a double-quoted attribute (spaces are fine inside quotes)', body.slice(0, 120));
     const back = decodeURIComponent(body);
-    const norm = x => x.replace(/^﻿/, '').replace(/"/g, "'").replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
+    const norm = x => x.replace(/^\uFEFF/, '').replace(/^<\?xml[^>]*\?>/, '').replace(/"/g, "'").replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
     eq(back, norm(s), 'decodes back to the same SVG (quotes made single, whitespace between tags dropped)');
     check(uri.length < C.dataUri(C.encode(C.utf8(s)), 'image/svg+xml').length, 'smaller than base64');
   }
+  eq(C.svgUri('<?xml version="1.0"?>\n<!-- Generator: x -->\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://x">\n<svg/>'), 'data:image/svg+xml,%3Csvg/%3E', 'XML header, comments and doctype are dropped');
   const r = C.decode(C.svgUri(svgs[0])); eq(r.ok && C.sniff(r.bytes).mime, 'image/svg+xml', 'the decoder reads it back as SVG');
 }
 

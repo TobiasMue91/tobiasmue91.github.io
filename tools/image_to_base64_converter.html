@@ -74,6 +74,7 @@ textarea.code{display:block;width:100%;height:200px;resize:vertical;border:1px s
 .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--soft);border-radius:3px;width:75%}
 .bar i+i{background:var(--acc);width:0;transition:width .5s cubic-bezier(.2,.8,.2,1)}
 .bar i:first-child{z-index:1}
+.opts:not(:has(label:not([hidden]))){display:none}
 .opts{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:14px;color:var(--soft);align-items:center}
 .opts label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
 .opts input[type=text]{border:1px solid var(--line);background:var(--code);border-radius:7px;padding:5px 8px;width:180px;font-size:14px}
@@ -156,6 +157,11 @@ footer a{color:inherit}
       <label for="out" class="visually-hidden">Result</label>
       <textarea id="out" class="code" readonly spellcheck="false" autocomplete="off"></textarea>
     </div>
+    <div class="opts">
+      <label id="altRow"><span>alt text</span><input type="text" id="alt" autocomplete="off" spellcheck="false" placeholder="describe the image"></label>
+      <label id="wrapRow"><input type="checkbox" id="wrap"> Wrap lines at 76 characters (for MIME email bodies)</label>
+      <label id="svgRow" hidden><input type="checkbox" id="svgPlain"> <span id="svgLbl">SVG as plain text (smaller)</span></label>
+    </div>
     <div class="busy" id="busy"><progress id="prog" max="1" value="0"></progress><button type="button" class="btn" id="cancel">Cancel</button></div>
     <div class="actions">
       <button type="button" class="btn primary" id="copy">Copy</button>
@@ -164,12 +170,7 @@ footer a{color:inherit}
     </div>
     <div class="size" id="size"><span id="sizeTxt">&nbsp;</span> <span class="warn" id="warn"></span></div>
     <div class="visually-hidden" id="sr" aria-live="polite"></div>
-    <div class="opts">
-      <label id="altRow"><span>alt text</span><input type="text" id="alt" autocomplete="off" spellcheck="false" placeholder="describe the image"></label>
-      <label><input type="checkbox" id="wrap"> Wrap at 76 characters (email/MIME)</label>
-      <label id="svgRow" hidden><input type="checkbox" id="svgPlain"> SVG as plain text (smaller)</label>
-    </div>
-    <p class="trust">Encoded in your browser, nothing is uploaded. Standard Base64 (RFC 4648); the type comes from the file's own bytes. The preview is drawn from this exact string.</p>
+    <p class="trust" id="trust">Encoded in your browser, nothing is uploaded. Standard Base64 (RFC 4648); the type comes from the file's own bytes. The preview is drawn from this exact string.</p>
   </div>
 </section>
 
@@ -231,7 +232,10 @@ footer a{color:inherit}
     var t = String(text == null ? '' : text), mime = null, off = 0, m;
     var trimmed = t.replace(/^\s+/, ''); off = t.length - trimmed.length; t = trimmed;
     m = t.match(/^(?:url\(\s*)?["']?/i); if (m[0]) { off += m[0].length; t = t.slice(m[0].length); }
-    t = t.replace(/["']?\s*\)?\s*;?\s*$/, '');
+    // A data: URI inside a CSS rule, an <img> tag or JSON: take just the URI.
+    var inner = /^data:/i.test(t) ? null : t.match(/data:[a-z0-9.+\/-]*(;[^,"'()\s]*)*,/i);
+    if (inner){ off += inner.index; t = t.slice(inner.index); var end = t.search(/["')]/); if (end > 0) t = t.slice(0, end); }
+    else t = t.replace(/["']?\s*\)?\s*;?\s*$/, '');
     m = t.match(/^data:([^,]*),/i);
     if (m) {
       var params = m[1].split(';').map(function (p) { return p.trim(); });
@@ -356,7 +360,7 @@ footer a{color:inherit}
   // SVG as a percent-encoded data URI: smaller than base64 and still readable. Encodes only what a
   // URI or a CSS/HTML attribute in double quotes cannot carry (the approach of yoksel's url-encoder).
   function svgUri(svg) {
-    var s = String(svg).replace(/^\uFEFF/, '').replace(/>\s{1,}</g, '><').replace(/\s{2,}/g, ' ').trim();
+    var s = String(svg).replace(/^\uFEFF/, '').replace(/^\s*<\?xml[^>]*\?>/i, '').replace(/<!--[\s\S]*?-->/g, '').replace(/^\s*<!DOCTYPE[^>[]*(\[[\s\S]*?\])?\s*>/i, '').replace(/>\s{1,}</g, '><').replace(/\s{2,}/g, ' ').trim();
     s = s.replace(/"/g, "'");
     s = s.replace(/[\r\n%#()<>?\[\\\]^`{|}]/g, encodeURIComponent);
     s = s.replace(/[\u0000-\u001F\u007F-\uFFFF]/g, function (c) { return encodeURIComponent(c); });
@@ -475,9 +479,9 @@ function uriOf(c){
   return C.dataUri(c.b64, c.mime);
 }
 function textOf(c, fmt){
-  var b64 = S.wrap ? C.encode(c.bytes, 76) : c.b64;
+  var b64 = S.wrap && fmt === 'b64' ? C.encode(c.bytes, 76) : c.b64;
   if (fmt === 'b64') return b64;
-  var uri = fmt === 'uri' && S.wrap && !(c.svgText != null && S.svgPlain) ? C.dataUri(b64, c.mime) : uriOf(c);
+  var uri = uriOf(c);
   return C.format(fmt, {uri: uri, b64: b64, alt: $('alt').value, w: c.dims && c.kind && c.kind.ext !== 'svg' ? c.dims.w : 0, h: c.dims && c.kind && c.kind.ext !== 'svg' ? c.dims.h : 0});
 }
 
@@ -488,6 +492,7 @@ function render(fresh, changed){
   $('wrap').checked = S.wrap; $('svgPlain').checked = S.svgPlain;
   var c = cur, out = $('out'), img = $('prev'), stage = $('stage');
   $('altRow').hidden = !(S.fmt === 'html' || S.fmt === 'md');
+  $('wrapRow').hidden = S.fmt !== 'b64';
   $('svgRow').hidden = !(c && c.svgText != null) || S.fmt === 'b64';
   var note = stage.querySelector('.note'); if (note) note.remove();
   $('chip').hidden = $('chip2').hidden = !(c && c.example);
@@ -515,6 +520,9 @@ function render(fresh, changed){
     if (img.getAttribute('src') !== uri) img.src = uri;
     img.onerror = function(){ img.hidden = true; addNote('This browser cannot show ' + c.kind.name + ', but the encoding is still correct.'); };
   } else { img.hidden = true; addNote('No preview: not an image'); }
+  if (c.svgText != null){ var pl = C.svgUri(c.svgText).length, bl = C.dataUri(c.b64, c.mime).length;
+    $('svgLbl').textContent = 'SVG as plain text, not Base64 (' + pl.toLocaleString('en') + ' instead of ' + bl.toLocaleString('en') + ' characters)'; }
+  $('trust').textContent = 'Encoded in your browser, nothing is uploaded. ' + (c.svgText != null && S.svgPlain && S.fmt !== 'b64' ? 'Percent-encoded SVG (RFC 3986), comments and XML header dropped' : 'Standard Base64 (RFC 4648)') + '; the type comes from the file\'s own bytes. The preview is drawn from this exact string.';
   var raw = c.bytes.length, n = text.length, pct = Math.round((n / raw - 1) * 100);
   if (raw > 48 * 1024 && S.fmt !== 'b64') $('warn').textContent = 'That is large to inline: past ~10 KB a separate file usually loads faster.';
   $('sizeTxt').textContent = (c.example ? 'Example: ' : '') + C.bytesLabel(raw) + ' file → ' + n.toLocaleString('en') + ' characters of ' + C.FORMATS.find(function(f){ return f.id === S.fmt; }).label + ' (' + (pct >= 0 ? '+' : '') + pct + '%)';
