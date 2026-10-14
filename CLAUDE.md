@@ -180,6 +180,7 @@ npm run test:bmi            # BMI Calculator suite (plain Node, no server or bro
 npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
 npm run test:life           # Conway's Game of Life suite (plain Node, no server or browser)
+npm run test:numberbase     # Number Base Converter suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -189,7 +190,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-six exist so far. `test/everything_converter.mjs` drives
+Seventy-seven exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -783,6 +784,13 @@ acorn 633 at 5206, diehard is gone at 130, the Gosper gun adds a glider every 30
 checked against brute force with the smallest period; rules as LifeWiki and Golly write them (B3/S23, 23/3, names, :T torus); and
 RLE, plaintext, Life 1.05 and 1.06 read as those programs read them, written back in 70 columns and round-tripped. Run it after
 touching the core.
+
+`test/number_converter.mjs` runs the DOM-free `<script id="core">` block of `tools/number_converter.html` (Number Base Converter),
+whose promise is that every row is the same number: whole numbers of any size against BigInt's own parsing and printing in bases 2
+to 36, fractions as exact rationals (every repeating block expanded back must equal the input, 0.1 is 0.0(0011) in binary), two's
+complement at 8 to 64 bits round-tripped, what people paste (0x, #, 0b, 0o, a trailing h or b, spaces, _, ' and : as grouping, a
+decimal comma, fullwidth digits, a Unicode minus), errors that name the wrong character and what the base accepts, the old page's
+outputs, and the working shown for homework. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
