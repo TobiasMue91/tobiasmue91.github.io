@@ -177,6 +177,7 @@ npm run test:challenge      # AI Game Challenge Generator suite (plain Node; its
 npm run test:opposites      # Opposite Word Finder suite (plain Node, no server or browser)
 npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
+npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
 ```
 
