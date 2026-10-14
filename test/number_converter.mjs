@@ -70,6 +70,16 @@ if (suites.includes('parse')) {
   eq(val('zz', 36), '1295@36', 'base 36');
   eq(val('Zz', 36), '1295@36', 'base 36 any case');
   eq(val('0012', 8), '10@8', 'leading zeros');
+  eq(val('  1010 0001 1111b ', 'auto'), '2591@2', 'trailing b is binary in auto');
+  eq(val('1Fh', 'auto'), '31@16', 'trailing h is hex');
+  eq(val('0101b', 2), '5@2', 'trailing b in base 2');
+  eq(val('1b', 16), '27@16', 'in hex a trailing b is the digit B');
+  eq(val('FFb', 'auto'), 'ERR', 'b after non-binary digits is not a suffix');
+  eq(C.minBase('12G4'), 17, 'G needs base 17');
+  eq(C.minBase('777'), 8, '7 needs base 8');
+  eq(C.typedWidth(C.parse('0xFFFFFFD6', 'auto'), '0xFFFFFFD6'), 32, '8 hex digits are 32 bits');
+  eq(C.typedWidth(C.parse('0xFFF', 'auto'), '0xFFF'), 0, '3 hex digits are no word');
+  eq(String(C.signedValue(C.parse('0xFFFFFFD6', 'auto'), 32)), '-42', '0xFFFFFFD6 signed is -42');
   check(C.parse('', 'auto').empty && C.parse('   ', 10).empty, 'empty and whitespace are empty, not errors');
 }
 
