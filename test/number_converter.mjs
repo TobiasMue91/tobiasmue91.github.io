@@ -176,6 +176,7 @@ if (suites.includes('errors')) {
   check(/“2” is not a binary digit/.test(err('1012', 2)) && /0 and 1/.test(err('1012', 2)), 'binary digit named', err('1012', 2));
   check(/“G”/.test(err('1G', 16)) && /A–F/.test(err('1G', 16)), 'hex digit named with the range', err('1G', 16));
   check(/“g”/.test(err('0x1g', 'auto')), 'case kept in the message');
+  check(/decimal or hex/.test(err('12G4', 'auto')), 'auto names both bases when neither fits');
   check(/“é”/.test(err('é', 16)), 'non-ASCII named');
   check(/pick the base/.test(err('FF', 'auto')), 'a decimal error suggests another base');
   check(/one point/.test(err('1.2.3', 10)), 'two points');
