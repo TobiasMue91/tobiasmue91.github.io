@@ -91,6 +91,8 @@ if (suites.includes('decode')) {
   ];
   for (const [what, t] of cases) { const r = C.decode(t); eq(r.ok ? hex(r.bytes) : 'ERR ' + (r.error && r.error.msg), want, what); }
   eq(C.decode('data:image/png;base64,' + P).mime, 'image/png', 'mime from the prefix');
+  eq(C.decode('.a{background:url(data:image/png;base64,' + P + ')}').found, true, 'says it found a URI inside other text');
+  eq(C.decode('data:image/png;base64,' + P).found, false, 'a bare URI is not "found"');
   eq(C.decode('data:IMAGE/PNG;base64,' + P).mime, 'image/png', 'mime lower-cased');
   eq(C.decode(P).mime, null, 'no prefix, no mime');
   const pct = C.decode("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E");
