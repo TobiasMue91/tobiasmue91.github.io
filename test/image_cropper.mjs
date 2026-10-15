@@ -213,6 +213,24 @@ if (suites.includes('matrix')) {
   near(tx, 50, 1e-9, 'clockwise: the right edge goes to the bottom (x)'); near(ty, 100, 1e-9, 'clockwise: the right edge goes to the bottom (y)');
 }
 
+if (suites.includes('snap')) {
+  section('edges a released handle lands on');
+  eq(C.findEdge([30, 30, 30, 30, 250, 250, 250]), 4, 'dark desk to white receipt: the boundary before the first white column');
+  eq(C.findEdge([250, 249, 251, 30, 31, 30]), 3, 'white to dark');
+  eq(C.findEdge([30, 32, 34, 36, 38, 40]), -1, 'a gradient is not an edge');
+  eq(C.findEdge([100, 110, 100, 110, 100]), -1, 'texture is not an edge');
+  eq(C.findEdge([0, 10, 20, 30, 60, 70]), -1, 'a step not four times the usual one is not an edge');
+  eq(C.findEdge([5, 200]), -1, 'too short to judge');
+  let wrong = 0;
+  for (let i = 0; i < 2000; i++) {
+    const n = ri(6, 60), at = ri(1, n - 1), a = ri(0, 255), b = (a + ri(40, 215)) % 256;
+    if (Math.abs(a - b) < 40) continue;
+    const prof = Array.from({length: n}, (_, k) => (k < at ? a : b) + (rnd() - .5) * 4);
+    if (C.findEdge(prof) !== at) wrong++;
+  }
+  eq(wrong, 0, '2000 noisy steps are found at the exact column');
+}
+
 if (suites.includes('output')) {
   section('output size');
   const r = {x: 10.4, y: 0, w: 99.2, h: 50};
