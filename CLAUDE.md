@@ -183,6 +183,7 @@ npm run test:life           # Conway's Game of Life suite (plain Node, no server
 npm run test:numberbase     # Number Base Converter suite (plain Node, no server or browser)
 npm run test:base64         # Image to Base64 Converter suite (plain Node, no server or browser)
 npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
+npm run test:wordexplainer  # Word Explainer suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -192,7 +193,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-eight exist so far. `test/everything_converter.mjs` drives
+Seventy-nine exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -807,6 +808,16 @@ type them in a print dialog (1-3, 5, 8-, 5-1, en dashes, "last", fullwidth digit
 their %PDF- header rather than their type, a password-locked file is refused instead of merged as garbled pages, and merges of
 source files whose every page has its own size are read back page by page with pdf-lib (`npm i --no-save pdf-lib@1.17.1`).
 Run it after touching the core.
+
+`test/word_explainer.mjs` runs the DOM-free `<script id="core">` block of `tools/word_explainer.html` (Word Explainer)
+against the dictionary it loads, `data/word_explainer/<two letters>.json`, which `util/word_explainer/build.py` makes from
+Princeton WordNet 3.0 (every synset, with its examples, synonyms, opposites and the word it is a kind of, sharded by the
+first two letters so a look-up loads one small file). Its promises: all 117,659 synsets and 206,941 word-sense pairs of
+WordNet 3.0 are there, the everyday meaning comes first, plurals, -ing, -ed, -er, possessives and irregular forms (went,
+mice) find their base for the part of speech they inflect, pasted quotes, footnote marks and odd spaces are cleaned, a typo
+suggests the word meant, a sentence is offered as its words, the optional AI request carries the word only as JSON data
+and its reply is cleaned, and the old WordSage page's `wordSageHistory` and `wordSageFavorites` survive. Run it after
+rebuilding the data or touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
