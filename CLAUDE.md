@@ -176,14 +176,17 @@ npm run test:casing         # Case Converter suite (plain Node, no server or bro
 npm run test:challenge      # AI Game Challenge Generator suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:opposites      # Opposite Word Finder suite (plain Node, no server or browser)
 npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
+npm run test:gradient       # CSS Gradient Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
 npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
 npm run test:life           # Conway's Game of Life suite (plain Node, no server or browser)
 npm run test:numberbase     # Number Base Converter suite (plain Node, no server or browser)
 npm run test:base64         # Image to Base64 Converter suite (plain Node, no server or browser)
+npm run test:colorextractor # Image Color Extractor suite (plain Node, no server or browser)
 npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
 npm run test:cropper        # Image Cropper suite (plain Node, no server or browser)
+npm run test:wordexplainer  # Word Explainer suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -767,6 +770,14 @@ the old page's `textShadowApp*` keys loaded and corrupt ones survived, links tha
 suite in which Chromium's own computed style must agree with the core on printed and pasted values. Run it after
 touching the core.
 
+`test/css_gradient.mjs` runs the DOM-free `<script id="core">` block of `tools/css_gradient_generator.html`, whose promise is
+that the CSS it prints draws the gradient on screen and that a pasted gradient is read the way a browser reads it: colours against
+CSS Color 4 (hex, rgb/hsl in both syntaxes, hwb, names), Oklab against the spec's values, interpolation premultiplied with missing
+hues and the shorter way round, stop positions fixed up as CSS Images 3 says, directions, prefixed `-webkit-` gradients, radial
+and conic preludes, errors that name the bad part, the old page's printed CSS read back unchanged in meaning, and an sRGB
+fallback that stays within a just-noticeable difference of the real Oklab or OKLCH blend. Its `browser` suite has Chromium draw
+what was pasted and what the page prints and wants the same pixels. Run it after touching the core.
+
 `test/bmi_calculator.mjs` runs the DOM-free `<script id="core">` block of `tools/bmi_calculator.html` against its sources:
 WHO's adult cut-offs (and the lower ones WHO 2004 and NICE give for Asian, Black and Middle Eastern backgrounds) at every
 boundary, a shown BMI and its category that always agree, a healthy range whose every weight is healthy and is not 0.1 kg too
@@ -815,6 +826,24 @@ plain way on numbered pixel grids, thousands of drags, moves, ratio changes and 
 corners), keep a locked ratio and keep the opposite corner still, the largest frame for a ratio against a 0.1 % larger one,
 whole-number ratios giving files of exactly that ratio, brightness and contrast by the Filter Effects formulas, the numbers
 people type (1 080 px, 12,5, 1,080, 16:9, 4x5), file names and saved settings that trust nothing. Run it after touching the core.
+
+`test/image_color_extractor.mjs` runs the DOM-free `<script id="core">` block of `tools/image_color_extractor.html`,
+whose promise is that each swatch is a colour really in the image, its % is the share of the visible image it covers, and its
+codes say exactly that colour: OKLab against Ottosson's and CSS Color 4's published values with every 8-bit colour round-tripping,
+HSL against CSS Color 4's hslToRgb, WCAG contrast; images whose answer is known (one colour gives one swatch, two at 70/30, three
+asked for twelve give three, a noisy four-colour photo gives its four at 25% each, transparency left out, 1x1), every swatch a real
+pixel of its image with its marker on a pixel of that colour, shares that add to 100, exports byte for byte and saved settings that
+trust nothing. Run it after touching the core.
+
+`test/word_explainer.mjs` runs the DOM-free `<script id="core">` block of `tools/word_explainer.html` (Word Explainer)
+against the dictionary it loads, `data/word_explainer/<two letters>.json`, which `util/word_explainer/build.py` makes from
+Princeton WordNet 3.0 (every synset, with its examples, synonyms, opposites and the word it is a kind of, sharded by the
+first two letters so a look-up loads one small file). Its promises: all 117,659 synsets and 206,941 word-sense pairs of
+WordNet 3.0 are there, the everyday meaning comes first, plurals, -ing, -ed, -er, possessives and irregular forms (went,
+mice) find their base for the part of speech they inflect, pasted quotes, footnote marks and odd spaces are cleaned, a typo
+suggests the word meant, a sentence is offered as its words, the optional AI request carries the word only as JSON data
+and its reply is cleaned, and the old WordSage page's `wordSageHistory` and `wordSageFavorites` survive. Run it after
+rebuilding the data or touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
