@@ -176,6 +176,7 @@ npm run test:casing         # Case Converter suite (plain Node, no server or bro
 npm run test:challenge      # AI Game Challenge Generator suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:opposites      # Opposite Word Finder suite (plain Node, no server or browser)
 npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
+npm run test:gradient       # CSS Gradient Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
 npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
@@ -767,6 +768,14 @@ colour first or last, none) read and every mistake named by shadow number, every
 the old page's `textShadowApp*` keys loaded and corrupt ones survived, links that never carry the text, and a `browser`
 suite in which Chromium's own computed style must agree with the core on printed and pasted values. Run it after
 touching the core.
+
+`test/css_gradient.mjs` runs the DOM-free `<script id="core">` block of `tools/css_gradient_generator.html`, whose promise is
+that the CSS it prints draws the gradient on screen and that a pasted gradient is read the way a browser reads it: colours against
+CSS Color 4 (hex, rgb/hsl in both syntaxes, hwb, names), Oklab against the spec's values, interpolation premultiplied with missing
+hues and the shorter way round, stop positions fixed up as CSS Images 3 says, directions, prefixed `-webkit-` gradients, radial
+and conic preludes, errors that name the bad part, the old page's printed CSS read back unchanged in meaning, and an sRGB
+fallback that stays within a just-noticeable difference of the real Oklab or OKLCH blend. Its `browser` suite has Chromium draw
+what was pasted and what the page prints and wants the same pixels. Run it after touching the core.
 
 `test/bmi_calculator.mjs` runs the DOM-free `<script id="core">` block of `tools/bmi_calculator.html` against its sources:
 WHO's adult cut-offs (and the lower ones WHO 2004 and NICE give for Asian, Black and Middle Eastern backgrounds) at every
