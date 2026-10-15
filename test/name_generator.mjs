@@ -165,6 +165,10 @@ if (suites.includes('links')) {
   eq(back.seed, 77, 'the seed comes back');
   eq(gen({...raw, parents: ''}, 77).names.map(x => x.e.name), gen({...back.raw}, back.seed).names.map(x => x.e.name), 'a link draws the same list');
   eq(C.fromQuery('?seed=abc&sex=<script>').seed, null, 'a bad seed is ignored');
+  eq(C.fromQuery('?' + C.namesQuery(['Zarya', 'Elara', 'Anne Marie', 'Zoë'])).names, ['Zarya', 'Elara', 'Anne Marie', 'Zoë'], 'a shortlist link carries exactly its names');
+  eq(C.fromQuery('?names=<img>,Luna,luna,' + 'x'.repeat(100)).names, ['img', 'Luna', 'x'.repeat(60)], 'shared names are cleaned like a save');
+  eq(C.readSettings('{"seed":77}').seed, 77, 'the remembered seed comes back, so a reload keeps the list');
+  eq(C.readSettings('{"seed":-1}').seed, undefined, 'a forged seed is dropped');
   eq(C.readOptions(C.fromQuery('?sex=<script>').raw).o.sex, 'a', 'a bad sex falls back');
 }
 
