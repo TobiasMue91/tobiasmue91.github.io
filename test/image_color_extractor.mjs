@@ -130,6 +130,14 @@ if (suites.includes('palette')) {
     near(q.colors.reduce((a, c) => a + c.share, 0), 1, 1e-9, 'random image ' + t + ': shares sum to 1');
     check(q.colors.every((c, i) => i === 0 || q.colors[i - 1].share >= c.share), 'sorted largest first');
   }
+  // anti-aliased edges: a one-pixel blend between two flat colours is not a colour of the image
+  r = C.extract(img(100, 100, x => x < 50 ? [79, 70, 229] : x === 50 ? [160, 158, 240] : [246, 246, 248]), 100, 100, 6);
+  eq(hexes(r), ['#4f46e5', '#f6f6f8'], 'edge blend dropped'); near(r.colors.reduce((a, c) => a + c.share, 0), 1, 1e-12, 'its share goes to a real colour');
+  // a small colour that is not between two others is kept, however small
+  r = C.extract(img(100, 100, (x, y) => x < 50 ? [0, 0, 0] : (x === 99 && y < 5) ? [255, 0, 0] : [255, 255, 255]), 100, 100, 6);
+  check(hexes(r).includes('#ff0000'), 'a 0.05% red accent is kept (it is not a blend of black and white)', hexes(r).join(' '));
+  r = C.extract(img(100, 100, (x, y) => x < 50 ? [0, 0, 0] : (x === 99 && y < 5) ? [128, 128, 128] : [255, 255, 255]), 100, 100, 6);
+  check(!hexes(r).includes('#808080'), 'a 0.05% grey between black and white is a blend and goes', hexes(r).join(' '));
   // determinism
   eq(hexes(C.extract(noisy, 200, 200, 7)), hexes(C.extract(noisy, 200, 200, 7)), 'same image, same palette');
   // speed at the largest analysis size
@@ -170,6 +178,7 @@ if (suites.includes('exports')) {
   eq(j[0], {id: 1, name: 'red', hex: '#ff0000', rgb: 'rgb(255, 0, 0)', hsl: 'hsl(0, 100%, 50%)', oklch: 'oklch(62.8% 0.258 29.2)', percentage: 70}, 'json keeps the old fields (id, rgb, hex, hsl, percentage)');
   eq(C.exportAs(c, 'gpl'), 'GIMP Palette\nName: Image palette\nColumns: 2\n#\n255   0   0\t#ff0000 red\n  0   0 255\t#0000ff blue\n', 'gimp palette');
   eq(C.exportAs([{r: 255, g: 0, b: 0, share: .5}, {r: 254, g: 0, b: 0, share: .5}], 'tailwind').match(/'red(-2)?'/g), ["'red'", "'red-2'"], 'duplicate names made unique');
+  eq(C.exportAs([{r: 0, g: 0, b: 0, share: .998}, {r: 255, g: 255, b: 255, share: .002}], 'text'), '#000000 (100%)\n#ffffff (<1%)\n', 'a sliver exports as <1%, as the list shows it');
   eq(C.exportAs([], 'css'), ':root {\n\n}\n', 'empty palette does not throw');
 }
 
