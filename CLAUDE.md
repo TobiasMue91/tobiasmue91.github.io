@@ -184,6 +184,7 @@ npm run test:numberbase     # Number Base Converter suite (plain Node, no server
 npm run test:base64         # Image to Base64 Converter suite (plain Node, no server or browser)
 npm run test:colorextractor # Image Color Extractor suite (plain Node, no server or browser)
 npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
+npm run test:wordexplainer  # Word Explainer suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -816,6 +817,16 @@ HSL against CSS Color 4's hslToRgb, WCAG contrast; images whose answer is known 
 asked for twelve give three, a noisy four-colour photo gives its four at 25% each, transparency left out, 1x1), every swatch a real
 pixel of its image with its marker on a pixel of that colour, shares that add to 100, exports byte for byte and saved settings that
 trust nothing. Run it after touching the core.
+
+`test/word_explainer.mjs` runs the DOM-free `<script id="core">` block of `tools/word_explainer.html` (Word Explainer)
+against the dictionary it loads, `data/word_explainer/<two letters>.json`, which `util/word_explainer/build.py` makes from
+Princeton WordNet 3.0 (every synset, with its examples, synonyms, opposites and the word it is a kind of, sharded by the
+first two letters so a look-up loads one small file). Its promises: all 117,659 synsets and 206,941 word-sense pairs of
+WordNet 3.0 are there, the everyday meaning comes first, plurals, -ing, -ed, -er, possessives and irregular forms (went,
+mice) find their base for the part of speech they inflect, pasted quotes, footnote marks and odd spaces are cleaned, a typo
+suggests the word meant, a sentence is offered as its words, the optional AI request carries the word only as JSON data
+and its reply is cleaned, and the old WordSage page's `wordSageHistory` and `wordSageFavorites` survive. Run it after
+rebuilding the data or touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
