@@ -187,6 +187,7 @@ npm run test:colorextractor # Image Color Extractor suite (plain Node, no server
 npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
 npm run test:cropper        # Image Cropper suite (plain Node, no server or browser)
 npm run test:wordexplainer  # Word Explainer suite (plain Node, no server or browser)
+npm run test:names          # Baby Name Generator suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -196,7 +197,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-nine exist so far. `test/everything_converter.mjs` drives
+Eighty exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -844,6 +845,15 @@ mice) find their base for the part of speech they inflect, pasted quotes, footno
 suggests the word meant, a sentence is offered as its words, the optional AI request carries the word only as JSON data
 and its reply is cleaned, and the old WordSage page's `wordSageHistory` and `wordSageFavorites` survive. Run it after
 rebuilding the data or touching the core.
+
+`test/name_generator.mjs` runs the DOM-free `<script id="core">` block of `tools/name_generator.html` (Baby Name
+Generator) against the records it loads, `data/names.txt`, which `util/name_generator/build.py` makes from the US Social
+Security baby-name files 1880-2017 (every name given to 300+ babies). Its promises: every name shown is in the records with
+the count the records give, every filter holds for every name drawn (against a brute-force reading of the same rules), every
+theme name is a real name, a seed draws the same list and a link never carries the parents' names, what people type (decimal
+commas, accents, reversed lengths, a 200k-character paste) is read or refused next to its field, the old page's
+`nameGeneratorFavorites` survives while forged ones do not, and Ask AI sends only the theme and filters, as JSON data, and
+shows only cleaned names checked against the records. Run it after rebuilding the data or touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
