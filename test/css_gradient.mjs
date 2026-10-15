@@ -47,7 +47,7 @@ if (suites.includes('color')) {
     ['rgb(100%, 50%, 0%)', '#ff8000'], ['rgb(300, -20, 0)', '#ff0000'], ['rgb(12.6 0 0)', '#0d0000'],
     // CSS Color 4 hsl() examples and the named colours they equal
     ['hsl(120, 100%, 25%)', '#008000'], ['hsl(120 100% 25%)', '#008000'], ['hsl(0.5turn 100% 50%)', '#00ffff'], ['hsl(-120 100% 50%)', '#0000ff'],
-    ['hsla(240, 100%, 50%, 0.5)', '#0000ff80'], ['hsl(120deg 75% 25%)', '#107010'],
+    ['hsla(240, 100%, 50%, 0.5)', '#0000ff80'], ['hsl(120deg 75% 25%)', '#107010'], ['hsl(200,80%,50%)', '#1aa2e6'], // Chromium: rgb(26 162 230); 25.5 rounds up
     ['hwb(0 0% 0%)', '#ff0000'], ['hwb(120 0% 50%)', '#008000'], ['hwb(0 60% 60%)', '#808080'],
     ['#ff00zz', null], ['#12345', null], ['rgb(1,2)', null], ['rgb(1 2 3 4)', null], ['hwb(0, 0%, 0%)', null], ['banana', null], ['', null], ['   ', null]
   ];
@@ -156,7 +156,7 @@ if (suites.includes('errors')) {
   const bad = [
     ['', /Paste a gradient/], ['   ', /Paste a gradient/],
     ['linear-gradient(45deg, #ff00zz 0%, blue 100%)', /“#ff00zz” is not a colour/],
-    ['linear-gradient(red)', /at least two colours/], ['red', /at least two colours/],
+    ['linear-gradient(red)', /at least two colours/], ['rgb(255 , 99, 71) , #FFD70 0 ,  hsl(200,80%,50%)', /Did you mean “#ffd700”/], ['red', /at least two colours/],
     ['linear-gradient(red 10px, blue)', /depends on the size of the box/],
     ['linear-gradient(red, 30%, blue)', /colour hint/],
     ['linear-gradient(to middle, red, blue)', /not a direction/], ['linear-gradient(to top bottom, red, blue)', /not a direction/],
