@@ -182,6 +182,7 @@ npm run test:scrambler      # Word Scrambler suite (plain Node, no server or bro
 npm run test:life           # Conway's Game of Life suite (plain Node, no server or browser)
 npm run test:numberbase     # Number Base Converter suite (plain Node, no server or browser)
 npm run test:base64         # Image to Base64 Converter suite (plain Node, no server or browser)
+npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -799,6 +800,13 @@ is that the string is the file byte for byte and that what it reads back is the 
 (data: URIs, quotes, url(), line breaks, base64url, missing padding, %3D) with errors that name the wrong character, the type read
 from the bytes rather than the name, pixel sizes read from real headers, percent-encoded SVG URIs that decode back to the SVG, and
 the exact strings of every copy format. Run it after touching the core.
+
+`test/pdf_merger.mjs` runs the DOM-free `<script id="core">` block of `tools/pdf_merger.html` (PDF Merger), whose promise is
+that the file it hands back holds exactly the pages shown, in that order and turned that way: page ranges read the way people
+type them in a print dialog (1-3, 5, 8-, 5-1, en dashes, "last", fullwidth digits) with every bad part named, files are sniffed by
+their %PDF- header rather than their type, a password-locked file is refused instead of merged as garbled pages, and merges of
+source files whose every page has its own size are read back page by page with pdf-lib (`npm i --no-save pdf-lib@1.17.1`).
+Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
