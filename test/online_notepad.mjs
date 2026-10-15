@@ -232,6 +232,11 @@ if (suites.includes('import')) {
   const exp = C.exportJSON(r.notes);
   eq(C.importJSON([], exp, now).added, 3, 'an export imports back whole');
   check(JSON.parse(exp).every(n => n.title), 'export gives every note a title the old page will import');
+  const untitled = C.load(JSON.stringify([{id: 'p', title: '', body: 'Pancakes<div>200g flour</div>'}]), now).notes;
+  const back = C.importJSON(untitled, C.exportJSON(untitled), now);
+  eq(back.added, 0, 'an untitled note restored over itself is not added twice');
+  const fresh = C.importJSON([], C.exportJSON(untitled), now);
+  eq([fresh.notes[0].title, C.toText(fresh.notes[0].body)], ['', 'Pancakes\n200g flour'], 'and comes back untitled, its first line not doubled');
   eq(C.importJSON([], C.exportJSON(r.notes), now).notes.map(n => C.toText(n.body)).sort(), r.notes.map(n => C.toText(n.body)).sort(), 'export and import keep the text');
   const n = C.noteFromFile('Meeting notes.txt', '\ufeffline 1\r\nline <2>\r\n', now);
   eq([n.title, C.toText(n.body)], ['Meeting notes', 'line 1\nline <2>'], '.txt file becomes a note');
