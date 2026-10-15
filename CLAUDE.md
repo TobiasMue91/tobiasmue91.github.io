@@ -178,6 +178,7 @@ npm run test:opposites      # Opposite Word Finder suite (plain Node, no server 
 npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:gradient       # CSS Gradient Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
+npm run test:palette        # Color Palette Generator suite (plain Node, no server or browser)
 npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
 npm run test:life           # Conway's Game of Life suite (plain Node, no server or browser)
@@ -197,7 +198,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Eighty exist so far. `test/everything_converter.mjs` drives
+Eighty-one exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -854,6 +855,13 @@ theme name is a real name, a seed draws the same list and a link never carries t
 commas, accents, reversed lengths, a 200k-character paste) is read or refused next to its field, the old page's
 `nameGeneratorFavorites` survives while forged ones do not, and Ask AI sends only the theme and filters, as JSON data, and
 shows only cleaned names checked against the records. Run it after rebuilding the data or touching the core.
+
+`test/color_palette.mjs` runs the DOM-free `<script id="core">` block of `tools/online_color_palette_generator.html`
+(Color Palette Generator): OKLab against CSS Color 4's values with every sRGB colour round-tripping through OKLCH and HSL,
+WCAG contrast against known ratios and never rounded up into a pass, the Machado 2009 simulations keeping white, black
+and grey, what people paste (rgb(), hsl(), names, CSS declarations, short and alpha hex) and errors that name the bad
+part, every palette type at every size holding the person's colour exactly, an Accessible palette that really passes,
+locks, the old page's CSS export, `?colors=` links and `savedPalettes`. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
