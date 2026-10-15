@@ -863,6 +863,14 @@ and grey, what people paste (rgb(), hsl(), names, CSS declarations, short and al
 part, every palette type at every size holding the person's colour exactly, an Accessible palette that really passes,
 locks, the old page's CSS export, `?colors=` links and `savedPalettes`. Run it after touching the core.
 
+`test/online_notepad.mjs` runs the DOM-free `<script id="core">` block of `tools/online_notepad.html` (Online Notepad), whose
+promise is that what is typed is what comes back: pasted or stored markup is cleaned to bold, italic, underline, strike, lists
+and lines and never to a script or an attribute (thousands of random fragments, stable when cleaned twice), the text that is
+copied and downloaded is the text on the sheet (Chrome's `<div>` lines, line breaks, nested lists, entities) and survives text to
+note and back, Markdown escapes what would change its meaning, words and characters are counted as a person counts them
+(graphemes, no line breaks), the old page's `notes` (a blank title stored as "Untitled", a missing title, a script in a title)
+load without loss or crash, and a backup imports back whole while adding nothing twice. Run it after touching the core.
+
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
 ## Shared services
