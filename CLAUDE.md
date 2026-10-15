@@ -181,6 +181,7 @@ npm run test:colorpicker    # Color Picker suite (plain Node, no server or brows
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
 npm run test:life           # Conway's Game of Life suite (plain Node, no server or browser)
 npm run test:numberbase     # Number Base Converter suite (plain Node, no server or browser)
+npm run test:base64         # Image to Base64 Converter suite (plain Node, no server or browser)
 npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
 ```
 
@@ -792,6 +793,13 @@ to 36, fractions as exact rationals (every repeating block expanded back must eq
 complement at 8 to 64 bits round-tripped, what people paste (0x, #, 0b, 0o, a trailing h or b, spaces, _, ' and : as grouping, a
 decimal comma, fullwidth digits, a Unicode minus), errors that name the wrong character and what the base accepts, the old page's
 outputs, and the working shown for homework. Run it after touching the core.
+
+`test/image_base64.mjs` runs the DOM-free `<script id="core">` block of `tools/image_to_base64_converter.html`, whose one promise
+is that the string is the file byte for byte and that what it reads back is the file again: the RFC 4648 vectors, every length to
+300 and thousands of random buffers against Node's own Buffer, 76-column MIME wrapping, the messy text people paste into the decoder
+(data: URIs, quotes, url(), line breaks, base64url, missing padding, %3D) with errors that name the wrong character, the type read
+from the bytes rather than the name, pixel sizes read from real headers, percent-encoded SVG URIs that decode back to the SVG, and
+the exact strings of every copy format. Run it after touching the core.
 
 `test/pdf_merger.mjs` runs the DOM-free `<script id="core">` block of `tools/pdf_merger.html` (PDF Merger), whose promise is
 that the file it hands back holds exactly the pages shown, in that order and turned that way: page ranges read the way people
