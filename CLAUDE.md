@@ -183,6 +183,7 @@ npm run test:life           # Conway's Game of Life suite (plain Node, no server
 npm run test:numberbase     # Number Base Converter suite (plain Node, no server or browser)
 npm run test:base64         # Image to Base64 Converter suite (plain Node, no server or browser)
 npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
+npm run test:cropper        # Image Cropper suite (plain Node, no server or browser)
 ```
 
 `util/` is the site-maintenance toolkit — mostly Python, and nothing in it is a test. `util/hands_up/hands.py`
@@ -192,7 +193,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-eight exist so far. `test/everything_converter.mjs` drives
+Seventy-nine exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -807,6 +808,13 @@ type them in a print dialog (1-3, 5, 8-, 5-1, en dashes, "last", fullwidth digit
 their %PDF- header rather than their type, a password-locked file is refused instead of merged as garbled pages, and merges of
 source files whose every page has its own size are read back page by page with pdf-lib (`npm i --no-save pdf-lib@1.17.1`).
 Run it after touching the core.
+
+`test/image_cropper.mjs` runs the DOM-free `<script id="core">` block of `tools/image_cropper.html` (Image Cropper), whose
+promise is that the file holds exactly what the frame shows: the draw matrix against crops, quarter turns and flips done the
+plain way on numbered pixel grids, thousands of drags, moves, ratio changes and straightens that never leave the photo (no empty
+corners), keep a locked ratio and keep the opposite corner still, the largest frame for a ratio against a 0.1 % larger one,
+whole-number ratios giving files of exactly that ratio, brightness and contrast by the Filter Effects formulas, the numbers
+people type (1 080 px, 12,5, 1,080, 16:9, 4x5), file names and saved settings that trust nothing. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
