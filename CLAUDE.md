@@ -185,6 +185,7 @@ npm run test:numberbase     # Number Base Converter suite (plain Node, no server
 npm run test:base64         # Image to Base64 Converter suite (plain Node, no server or browser)
 npm run test:colorextractor # Image Color Extractor suite (plain Node, no server or browser)
 npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
+npm run test:cropper        # Image Cropper suite (plain Node, no server or browser)
 npm run test:wordexplainer  # Word Explainer suite (plain Node, no server or browser)
 ```
 
@@ -818,6 +819,13 @@ type them in a print dialog (1-3, 5, 8-, 5-1, en dashes, "last", fullwidth digit
 their %PDF- header rather than their type, a password-locked file is refused instead of merged as garbled pages, and merges of
 source files whose every page has its own size are read back page by page with pdf-lib (`npm i --no-save pdf-lib@1.17.1`).
 Run it after touching the core.
+
+`test/image_cropper.mjs` runs the DOM-free `<script id="core">` block of `tools/image_cropper.html` (Image Cropper), whose
+promise is that the file holds exactly what the frame shows: the draw matrix against crops, quarter turns and flips done the
+plain way on numbered pixel grids, thousands of drags, moves, ratio changes and straightens that never leave the photo (no empty
+corners), keep a locked ratio and keep the opposite corner still, the largest frame for a ratio against a 0.1 % larger one,
+whole-number ratios giving files of exactly that ratio, brightness and contrast by the Filter Effects formulas, the numbers
+people type (1 080 px, 12,5, 1,080, 16:9, 4x5), file names and saved settings that trust nothing. Run it after touching the core.
 
 `test/image_color_extractor.mjs` runs the DOM-free `<script id="core">` block of `tools/image_color_extractor.html`,
 whose promise is that each swatch is a colour really in the image, its % is the share of the visible image it covers, and its
