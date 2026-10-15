@@ -85,7 +85,7 @@ if (suites.includes('parse')) {
     'background-color:#4361ee !important;': '#4361ee', 'rgb(67, 97, 238)': '#4361ee', 'rgb(67 97 238)': '#4361ee',
     'rgba(67,97,238,0.5)': '#4361ee', 'rgb(67 97 238 / 50%)': '#4361ee', 'RGB(67,97,238)': '#4361ee', '67, 97, 238': '#4361ee',
     'rgb(100%, 0%, 0%)': '#ff0000', 'hsl(229, 84%, 60%)': '#4363ef', 'hsl(229deg 84% 60%)': '#4363ef', 'hsl(0.5turn 100% 50%)': '#00ffff',
-    'hsla(120, 100%, 25%, .3)': '#008000', 'teal': '#008080', 'Rebecca Purple': '#663399', 'TEAL': '#008080', 'light-blue': '#add8e6'
+    'hsla(120, 100%, 25%, .3)': '#008000', 'RGB 34, 139, 87': '#228b57', 'rgb 34 139 87': '#228b57', 'HSL 120° 100% 25%': '#008000', 'teal': '#008080', 'Rebecca Purple': '#663399', 'TEAL': '#008080', 'light-blue': '#add8e6'
   };
   for (const [k, v] of Object.entries(ok)) { const r = P.parseColor(k); eq(r.ok ? r.hex : r.error, v, 'reads ' + JSON.stringify(k)); }
   eq(Object.keys(P.NAMES).length, 148, 'all 148 CSS named colours');
