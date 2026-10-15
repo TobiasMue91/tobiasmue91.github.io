@@ -197,7 +197,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Eighty exist so far. `test/everything_converter.mjs` drives
+Eighty-one exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -854,6 +854,14 @@ theme name is a real name, a seed draws the same list and a link never carries t
 commas, accents, reversed lengths, a 200k-character paste) is read or refused next to its field, the old page's
 `nameGeneratorFavorites` survives while forged ones do not, and Ask AI sends only the theme and filters, as JSON data, and
 shows only cleaned names checked against the records. Run it after rebuilding the data or touching the core.
+
+`test/online_notepad.mjs` runs the DOM-free `<script id="core">` block of `tools/online_notepad.html` (Online Notepad), whose
+promise is that what is typed is what comes back: pasted or stored markup is cleaned to bold, italic, underline, strike, lists
+and lines and never to a script or an attribute (thousands of random fragments, stable when cleaned twice), the text that is
+copied and downloaded is the text on the sheet (Chrome's `<div>` lines, line breaks, nested lists, entities) and survives text to
+note and back, Markdown escapes what would change its meaning, words and characters are counted as a person counts them
+(graphemes, no line breaks), the old page's `notes` (a blank title stored as "Untitled", a missing title, a script in a title)
+load without loss or crash, and a backup imports back whole while adding nothing twice. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
