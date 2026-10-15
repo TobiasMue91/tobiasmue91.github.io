@@ -182,6 +182,7 @@ npm run test:scrambler      # Word Scrambler suite (plain Node, no server or bro
 npm run test:life           # Conway's Game of Life suite (plain Node, no server or browser)
 npm run test:numberbase     # Number Base Converter suite (plain Node, no server or browser)
 npm run test:base64         # Image to Base64 Converter suite (plain Node, no server or browser)
+npm run test:colorextractor # Image Color Extractor suite (plain Node, no server or browser)
 npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merge suites need pdf-lib installed)
 ```
 
@@ -192,7 +193,7 @@ Page tests live in `test/`, which has its own README; `cypress/` stays separate 
 Cypress dictates its layout. Most pages have no tests and do not need them. A page earns a
 suite once a change to one corner can quietly break another.
 
-Seventy-eight exist so far. `test/everything_converter.mjs` drives
+Seventy-nine exist so far. `test/everything_converter.mjs` drives
 `tools/everything_converter.html` in headless Chromium and is worth running after any change
 to it. Eight suites — `graph`, `detect`, `edges`, `roundtrip`, `adversarial`, `codecs`, `media`,
 `ui` — run together or by name (`node test/everything_converter.mjs graph edges`). Without
@@ -807,6 +808,14 @@ type them in a print dialog (1-3, 5, 8-, 5-1, en dashes, "last", fullwidth digit
 their %PDF- header rather than their type, a password-locked file is refused instead of merged as garbled pages, and merges of
 source files whose every page has its own size are read back page by page with pdf-lib (`npm i --no-save pdf-lib@1.17.1`).
 Run it after touching the core.
+
+`test/image_color_extractor.mjs` runs the DOM-free `<script id="core">` block of `tools/image_color_extractor.html`,
+whose promise is that each swatch is a colour really in the image, its % is the share of the visible image it covers, and its
+codes say exactly that colour: OKLab against Ottosson's and CSS Color 4's published values with every 8-bit colour round-tripping,
+HSL against CSS Color 4's hslToRgb, WCAG contrast; images whose answer is known (one colour gives one swatch, two at 70/30, three
+asked for twelve give three, a noisy four-colour photo gives its four at 25% each, transparency left out, 1x1), every swatch a real
+pixel of its image with its marker on a pixel of that colour, shares that add to 100, exports byte for byte and saved settings that
+trust nothing. Run it after touching the core.
 
 The `util/` scripts need `pillow`, `selenium`, `beautifulsoup4` and `requests`.
 
