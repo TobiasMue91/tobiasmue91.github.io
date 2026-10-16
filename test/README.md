@@ -1414,6 +1414,7 @@ npm run test:opposites      # Opposite Word Finder suite (plain Node, no server 
 npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:gradient       # CSS Gradient Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
+npm run test:pomodoro       # Pomodoro Timer suite (plain Node, no server or browser)
 npm run test:palette        # Color Palette Generator suite (plain Node, no server or browser)
 npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
@@ -2159,3 +2160,12 @@ the forgiving decoder (whitespace, URL-safe alphabet, missing or extra padding, 
 %-escapes, a copied `"key": "…",` JSON line), errors with their positions, the text encodings
 (UTF-8, ISO-8859-1, UTF-16LE), file-type sniffing, the hex dump and the paste-direction guess.
 Suites: rfc, roundtrip, lenient, errors, text, sniff, detect.
+
+## Pomodoro Timer
+
+`test/pomodoro_timer.mjs` runs the DOM-free `<script id="core">` block of `tools/pomodoro_timer.html`. Time is never
+ticked: every call gets an explicit `now`, so the suite checks the countdown, pause/resume, skip and the auto-started
+chain a locked phone sleeps through against plain timestamp arithmetic, and the cycle against Cirillo's method (a long
+break after every N sessions; only a session that runs out counts). It also covers what people type into a length
+field (decimal commas, units, m:ss, hours), links with lengths in them, and the old page's `pomodoroSettings` and
+`tasks`. Suites: `parse`, `format`, `cycle`, `clock`, `links`, `saves`. Run it after touching the core.
