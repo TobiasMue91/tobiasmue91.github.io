@@ -2100,3 +2100,12 @@ note and back, Markdown escapes what would change its meaning, words and charact
 (graphemes, no line breaks), the old page's `notes` (a blank title stored as "Untitled", a missing title, a script in a title)
 load without loss or crash, and a backup imports back whole while adding nothing twice. Run it after touching the core.
 
+
+`test/paste_to_markdown.mjs` runs the DOM-free `<script id="core">` block of `tools/paste_to_markdown.html` (Paste to
+Markdown) on HTML parsed by linkedom (`npm i --no-save linkedom@0.18.5 marked@15.0.4`). Its promise is that the Markdown shows
+what was pasted: the output is rendered again with marked and must give back the same text, links, list items and table cells;
+literal `*`, `_`, `#`, `1.`, `<tag>`, `&amp;` and friends stay literal without needless escapes; Google Docs (the bold-off
+wrapper, styled spans, `aria-level` lists, `google.com/url` links, code-font paragraphs), Word (`mso-list` paragraphs),
+GitHub and VS Code code blocks and web pages convert to golden strings; every style option; plain text kept as written; the
+HTML shown in the page carries no script, handler or remote load and converts like the paste; and a paste a thousand times
+the usual size stays fast. Run it after touching the core.
