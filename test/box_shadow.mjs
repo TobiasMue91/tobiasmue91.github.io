@@ -147,6 +147,13 @@ if (suites.includes('smooth')) {
   check(BS.smooth(BS.layer(0, 4, 8, 0, 'currentcolor'), 3).every(l => l.c.a > 0), 'currentColor smooths as black');
 }
 
+if (suites.includes('smooth')) {
+  const st = BS.parse('0 1px 2px rgba(0,0,0,.5), 0 2px 4px rgba(0,0,0,.9), 0 1px red').layers;
+  eq(BS.value(BS.scaleAlpha(st, 1.25), 'rgba'), '0 1px 2px rgba(0, 0, 0, 0.625), 0 2px 4px rgb(0, 0, 0), 0 1px 0 rgb(255, 0, 0)', 'darker clamps at 1');
+  eq(BS.value(BS.scaleAlpha(st, 0.8), 'rgba'), '0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.72), 0 1px 0 rgba(255, 0, 0, 0.8)', 'lighter');
+  eq(BS.value(st, 'rgba').includes('0.5'), true, 'input untouched');
+}
+
 if (suites.includes('presets')) {
   section('presets');
   BS.PRESETS.forEach(([n, v]) => { const r = BS.parse(v); check(r.ok && r.layers.length > 0, 'preset parses: ' + n, r.error); });
@@ -168,7 +175,7 @@ if (suites.includes('storage')) {
   eq(BS.loadState({layers: [{x: 'a', y: 0, blur: 0, spread: 0, c: {r: 0, g: 0, b: 0, a: 1}}]}), null, 'bad number');
   eq(BS.loadState({layers: [{x: 0, y: 0, blur: -1, spread: 0, c: {r: 0, g: 0, b: 0, a: 1}}]}), null, 'negative blur');
   eq(BS.loadState({layers: [{x: 0, y: 0, blur: 0, spread: 0}]}), null, 'no colour');
-  eq(BS.loadState({layers: [], bg: 'url(evil)', shape: '<b>'}).bg, '#e6e6e3', 'bad bg ignored');
+  eq(BS.loadState({layers: [], bg: 'url(evil)', shape: '<b>'}).bg, '#e2e2de', 'bad bg ignored');
 }
 
 if (suites.includes('hash')) {
