@@ -1417,6 +1417,7 @@ npm run test:bmi            # BMI Calculator suite (plain Node, no server or bro
 npm run test:palette        # Color Palette Generator suite (plain Node, no server or browser)
 npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
 npm run test:scrambler      # Word Scrambler suite (plain Node, no server or browser)
+npm run test:hash           # Hash Generator suite (plain Node, no server or browser)
 npm run test:life           # Conway's Game of Life suite (plain Node, no server or browser)
 npm run test:numberbase     # Number Base Converter suite (plain Node, no server or browser)
 npm run test:base64         # Image to Base64 Converter suite (plain Node, no server or browser)
@@ -2114,3 +2115,11 @@ parsing, lenient number entry (decimal comma, units, unicode minus), how layers 
 presets, stored state, the share hash, and size limits. Expected strings are worked out from CSS Backgrounds 3 and
 CSS Color 4 by hand. The `browser` suite needs Chromium via Playwright (a global install is found too) and wants
 Chromium's computed style of every pasted input to equal that of what the page prints; it is skipped without it.
+
+`test/hash_generator.mjs` runs the DOM-free `<script id="core">` block of `tools/hash_generator.html` (the same source the page
+hands its file workers) against the standards rather than the page: FIPS 180-4 and FIPS 202 example vectors, the RFC 1321 MD5
+suite, RFC 4231 / RFC 2202 HMAC cases, the CRC-32 check value and Keccak-256 of "" - then Node's crypto over random data at every
+block-boundary length, fed in random chunk splits as a file is. It also pins what people paste: text hashed exactly as typed (no
+trim; UTF-8, lone surrogates as U+FFFD, line-ending conversion), hex and Base64 input, and every form of expected checksum the
+compare box takes (sha256sum and BSD lines, uppercase, groups, 0x, Base64/SRI). The `contract` suite holds the old page's sample
+outputs. Run it after touching the core.
