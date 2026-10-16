@@ -2131,3 +2131,16 @@ block-boundary length, fed in random chunk splits as a file is. It also pins wha
 trim; UTF-8, lone surrogates as U+FFFD, line-ending conversion), hex and Base64 input, and every form of expected checksum the
 compare box takes (sha256sum and BSD lines, uppercase, groups, 0x, Base64/SRI). The `contract` suite holds the old page's sample
 outputs. Run it after touching the core.
+
+## Movie Script Generator
+
+```sh
+npm run test:moviescript                       # or: node test/movie_script_generator.mjs
+node test/movie_script_generator.mjs fountain  # named suites only
+```
+
+`movie_script_generator.mjs` runs the DOM-free `<script id="core">` of `tools/movie_script_generator.html` in Node; no
+browser, no server, and the model is never called. The parser is checked against the Fountain syntax reference
+(fountain.io/syntax) and the plain-text export against standard screenplay indents; then what gpt-4o-mini really sends
+back (blank lines inside dialogue, code fences, markdown bold, END SCENE markers), Fountain export read back unchanged,
+the request built from the form, the plain-words errors, and the old page's `saved_settings` and `scriptHistory`.
