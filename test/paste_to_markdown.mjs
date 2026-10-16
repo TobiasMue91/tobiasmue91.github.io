@@ -103,6 +103,9 @@ if (suites.includes('sources')) {
   // Word: MsoListParagraph with mso-list levels and an ignored bullet span
   const word = `<p class=MsoNormal><b><span style='font-family:Calibri'>Word bold</span></b><o:p></o:p></p><p class=MsoListParagraphCxSpFirst style='text-indent:-18.0pt;mso-list:l0 level1 lfo1'><![if !supportLists]><span style='mso-list:Ignore'>1.<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp; </span></span><![endif]>First<o:p></o:p></p><p class=MsoListParagraphCxSpMiddle style='mso-list:l0 level2 lfo1'><span style='mso-list:Ignore'>o<span>&nbsp; </span></span>Sub<o:p></o:p></p><p class=MsoListParagraphCxSpLast style='mso-list:l0 level1 lfo1'><span style='mso-list:Ignore'>2.<span>&nbsp; </span></span>Second<o:p></o:p></p><p class=MsoNormal>After</p>`;
   eq(md(word), '**Word bold**\n\n1. First\n   - Sub\n2. Second\n\nAfter', 'Word');
+  // the same email through a sanitising clipboard (Chrome's async API): no mso styles, only Word's glyphs
+  const bare = `<p>Recap:</p><p>·&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Started</p><p>o&nbsp;&nbsp; Failover took 4 min</p><p>·&nbsp;&nbsp; Resolved</p><p>1.&nbsp;&nbsp; Step one</p><p>2.&nbsp;&nbsp; Step two</p><p>o is a letter, not a bullet</p>`;
+  eq(md(bare), 'Recap:\n\n- Started\n  - Failover took 4 min\n- Resolved\n\n1. Step one\n2. Step two\n\no is a letter, not a bullet', 'Word lists without their styles');
   // GitHub-rendered code block and VS Code's copy (divs per line, pre white-space, code font)
   eq(md('<div class="highlight highlight-source-python"><pre><span class="pl-k">def</span> f():\n    <span>return</span> 1</pre></div>'), '```python\ndef f():\n    return 1\n```', 'GitHub code block language');
   eq(md('<div style="color:#ccc;font-family:Consolas, \'Courier New\', monospace;white-space:pre;"><div><span>if</span> (a) {</div><div>  b();</div><div>}</div></div>'), '```\nif (a) {\n  b();\n}\n```', 'VS Code copy');
@@ -202,6 +205,9 @@ if (suites.includes('safety')) {
   // the pane's own HTML converts the same as the original paste
   const a = md(evil), b = md(s);
   eq(b, a, 'shown HTML converts like the paste');
+  // the editor may drop styles it does not know; the classes safeHTML adds carry them
+  const shown = P.safeHTML(tree(`<p style='mso-list:l0 level2 lfo1'><span style='mso-list:Ignore'>o&nbsp; </span>Sub</p><p>run <span style='font-family:Consolas'>ls</span></p>`)).replace(/ style="[^"]*"/g, '');
+  eq(md(shown), '- Sub\n\nrun `ls`', 'pane HTML without styles converts the same');
   eq(md('<span data-dropped="video" class="dropped">video</span>x'), 'x', 'dropped placeholder is not text');
   eq(JSON.stringify(conv('<span data-dropped="video">video</span>').dropped), '{"video":1}', 'dropped placeholder still counted');
 }
