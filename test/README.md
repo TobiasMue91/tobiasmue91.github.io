@@ -2100,3 +2100,17 @@ note and back, Markdown escapes what would change its meaning, words and charact
 (graphemes, no line breaks), the old page's `notes` (a blank title stored as "Untitled", a missing title, a script in a title)
 load without loss or crash, and a backup imports back whole while adding nothing twice. Run it after touching the core.
 
+
+## Box Shadow Generator
+
+```sh
+npm run test:boxshadow                   # or: node test/box_shadow.mjs
+node test/box_shadow.mjs parse errors    # named suites only
+```
+
+`box_shadow.mjs` runs the DOM-free `<script id="core">` of `tools/box_shadow_generator.html` in Node: colour
+parsing, lenient number entry (decimal comma, units, unicode minus), how layers print, the box-shadow grammar
+(lengths together, colour and `inset` in any order, no negative blur, rem/em read at 16px), the smoothing split,
+presets, stored state, the share hash, and size limits. Expected strings are worked out from CSS Backgrounds 3 and
+CSS Color 4 by hand. The `browser` suite needs Chromium via Playwright (a global install is found too) and wants
+Chromium's computed style of every pasted input to equal that of what the page prints; it is skipped without it.
