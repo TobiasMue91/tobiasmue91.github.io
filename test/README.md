@@ -2144,3 +2144,18 @@ browser, no server, and the model is never called. The parser is checked against
 (fountain.io/syntax) and the plain-text export against standard screenplay indents; then what gpt-4o-mini really sends
 back (blank lines inside dialogue, code fences, markdown bold, END SCENE markers), Fountain export read back unchanged,
 the request built from the form, the plain-words errors, and the old page's `saved_settings` and `scriptHistory`.
+
+## Base64 Decode and Encode
+
+```sh
+npm run test:base64text                  # or: node test/base64_encoder_decoder.mjs
+node test/base64_encoder_decoder.mjs rfc lenient   # named suites only
+```
+
+`base64_encoder_decoder.mjs` runs the DOM-free `<script id="core">` of
+`tools/base64_encoder_decoder.html` in Node; no browser, no server. It checks the RFC 4648 §10
+vectors, round-trips 300 random byte strings against Node's own `Buffer` (standard and base64url),
+the forgiving decoder (whitespace, URL-safe alphabet, missing or extra padding, data: URIs,
+%-escapes, a copied `"key": "…",` JSON line), errors with their positions, the text encodings
+(UTF-8, ISO-8859-1, UTF-16LE), file-type sniffing, the hex dump and the paste-direction guess.
+Suites: rfc, roundtrip, lenient, errors, text, sniff, detect.
