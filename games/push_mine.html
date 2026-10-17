@@ -111,6 +111,13 @@ body.tap #coach{bottom:auto;top:30px;background:none;padding-top:8px}
 .btn.ghost{background:rgba(255,236,210,.06);color:var(--ink);box-shadow:none;border:1.5px solid #5a4430;height:52px;font-size:20px}
 .btn.ghost:active{transform:scale(.97)}
 .row{display:flex;gap:10px;margin-top:10px}
+[hidden]{display:none!important}
+#bCount{width:100%;min-height:44px;margin:-4px 0 12px;border-radius:12px;border:1.5px solid var(--line);color:var(--dim);font-size:17px;display:flex;align-items:center;justify-content:center;gap:8px}
+#bCount[aria-pressed="true"]{border-color:var(--amber);color:var(--ink)}
+#rest{display:flex;align-items:center;justify-content:center;gap:12px;margin:0 0 12px;color:var(--dim);font-size:19px}
+#rest b{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:28px;color:var(--ink);min-width:3.2ch;font-variant-numeric:tabular-nums}
+#rest.ready b{color:var(--amber)}
+#rest svg{flex:none}
 #tWeek{display:block;color:var(--dim);font-size:16px;margin-top:2px}
 #tWeek b{color:var(--ink);font-weight:700}
 #sStats{background:linear-gradient(rgba(14,9,6,.9),rgba(14,9,6,.96))}
@@ -263,6 +270,7 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
           <button data-form="incline" aria-pressed="false">Incline<small>×0.85 dig</small></button>
           <button data-form="wall" aria-pressed="false">Wall<small>×0.75 dig</small></button>
         </div>
+        <button id="bCount" aria-pressed="false">Count my reps out loud</button>
         <div class="choice">
           <button class="opt" data-mode="front"><canvas width="256" height="176" data-ill="front"></canvas><div><b>In front</b><span>Propped up on the floor, about a body length ahead, facing you.</span><div class="tagline">Full body tracking</div></div></button>
           <button class="opt" data-mode="below"><canvas width="256" height="176" data-ill="below"></canvas><div><b id="belowT">Below you</b><span id="belowS">Flat on the floor under your face, screen up.</span><div class="tagline" id="belowG">Face tracking · tight spaces</div></div></button>
@@ -280,6 +288,7 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
         <div class="lines" id="sumLines"></div>
         <div class="haul" id="sumHaul"></div>
         <div class="grow" style="min-height:8px"></div>
+        <div id="rest" aria-live="off"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="none" stroke="#3d2c1f" stroke-width="4"/><circle id="restArc" cx="17" cy="17" r="14" fill="none" stroke="#ffb547" stroke-width="4" stroke-linecap="round" stroke-dasharray="88" stroke-dashoffset="88" transform="rotate(-90 17 17)"/></svg><span>Rest</span><b id="restT">0:00</b><span id="restS"></span></div>
         <button class="btn ghost" id="bUseGoal" hidden style="margin-bottom:10px"></button>
         <button class="btn bungee" id="bAgain">Another set</button>
         <div class="row"><button class="btn ghost" id="bSumShop">Picks</button><button class="btn ghost" data-go="title">Done</button></div>
@@ -437,7 +446,7 @@ var Core = (function () {
         return {
             v: 2, seed: seed >>> 0 || 1, depth: 0, dmg: 0, coins: 0, pick: 0, reps: 0, perfect: 0,
             bestSet: 0, sets: 0, ores: {}, mode: null, form: 'full', goal: 20, guards: 0, drill: 'off', log: [], passes: 0, bestStreak: 0, badges: {},
-            day: {key: '', reps: 0, goalDay: '', streak: 0}, muted: false
+            day: {key: '', reps: 0, goalDay: '', streak: 0}, muted: false, count: false
         };
     }
     function fix(s) {
@@ -573,6 +582,7 @@ var Core = (function () {
         var e = {at: meta.at, day: meta.day, m: s.mode || 'tap', f: s.form, r: set.reps, p: set.perfect, sh: set.shallow, b: set.best,
             q: Math.round(set.qsum / set.reps * 100) / 100, pace: set.reps > 1 ? Math.round((set.last - set.first) / (set.reps - 1) * 10) / 10 : 0,
             g: set.guards, mt: set.meters, x: set.test ? 1 : 0};
+        if (meta.rest > 0) e.rest = Math.round(meta.rest);   // seconds since the set before, when it was the same session
         s.log.push(e);
         if (s.log.length > LOG_MAX) s.log.splice(0, s.log.length - LOG_MAX);
         return e;
@@ -598,6 +608,14 @@ var Core = (function () {
         });
         out.forEach(function (o) { o.perfectPct = o.reps ? Math.round(o.perfect / o.reps * 100) : null; o.depth = o.reps ? o.qsum / o.reps : null; o.pace = o.paceN ? o.paceSum / o.paceN : null; });
         return out;
+    }
+    // an easier push-up has done its job once it is easy: 20 good reps in a set, twice in the last two weeks
+    var HARDER = {wall: 'incline', incline: 'knee', knee: 'full'};
+    function levelUp(log, form, key) {
+        if (!HARDER[form]) return null;
+        var since = dayNum(key) - 14, n = 0;
+        log.forEach(function (e) { if (e.f === form && dayNum(e.day) >= since && e.r >= 20 && e.p >= e.r * 0.7) n++; });
+        return n >= 2 ? HARDER[form] : null;
     }
     // this week so far against last week up to the same weekday: a fair race on a Wednesday
     function weekToDate(log, key) {
@@ -667,13 +685,14 @@ var Core = (function () {
 
     var MODES = {
         front: {minRange: 0.045, still: 0.014},
-        below: {minRange: 0.16, still: 0.035, holdTau: 0.3},
+        below: {minRange: 0.16, still: 0.035, holdWin: 1.0, holdN: 18, holdK: 3.5},
         tap: {minRange: 0.5, still: 0.05}
     };
 
+    function median(a) { var b = a.slice().sort(function (x, y) { return x - y; }), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; }
     function detector(mode) {
         var d = {mode: mode, cal: 'hold', top: null, bottom: null, v: null, anchor: null, holdStart: 0, holdP: 0,
-            hv: null, ext: 0, phase: 'ready', maxD: 0, tDown: 0, last: -1, lost: false, depth: 0, cross: 0, nag: false};
+            win: null, ext: 0, phase: 'ready', maxD: 0, tDown: 0, last: -1, lost: false, depth: 0, cross: 0, nag: false};
         if (mode === 'tap') { d.cal = 'done'; d.top = 0; d.bottom = 1; }
         return d;
     }
@@ -693,11 +712,28 @@ var Core = (function () {
         var v = d.v, M = MODES[d.mode];
 
         if (d.cal === 'hold') {
-            // judge stillness on a slower copy: a face box jitters by more than `still` from frame to frame on its own
-            if (M.holdTau) { d.hv = d.hv === null ? raw : d.hv + (raw - d.hv) * (1 - Math.exp(-dt / M.holdTau)); v = d.hv; }
+            d.depth = 0;
+            if (M.holdWin) {
+                // the face detector's box wobbles ~9% on a still face, so judge the trend, not the frame: the window's
+                // first, middle and last thirds must agree in their medians; noise cancels in a median, a sway does not
+                var w = d.win || (d.win = []); w.push([t, raw]);
+                while (w.length > M.holdN && t - w[0][0] > M.holdWin) w.shift();   // a second, and enough readings on a slow phone
+                var span = t - w[0][0], thirds = [[], [], []];
+                w.forEach(function (q) { thirds[Math.min(2, Math.floor((q[0] - w[0][0]) / (span || 1) * 3))].push(q[1]); });
+                // noise from frame-to-frame steps (a slow lean barely moves those); a median of n readings wobbles ~1.25 sd / sqrt(n)
+                var steps = []; for (var qi = 1; qi < w.length; qi++) steps.push(Math.abs(w[qi][1] - w[qi - 1][1]));
+                var sd = steps.length >= 3 ? median(steps) * 1.05 : 0, nThird = Math.max(1, w.length / 3);
+                var tol = Math.min(0.18, Math.max(M.still, M.holdK * 1.25 * sd / Math.sqrt(nThird)));
+                var meds = thirds.filter(function (a) { return a.length; }).map(median), steady = Math.max.apply(null, meds) - Math.min.apply(null, meds) <= tol;
+                // not steady: drop the oldest third. A real lean keeps failing, a noisy moment does not
+                if (w.length >= 12 && !steady) { var cut = w[0][0] + span / 3; while (w.length > 1 && w[0][0] < cut) w.shift(); span = t - w[0][0]; }
+                d.anchor = median(w.map(function (q) { return q[1]; }));
+                d.holdP = Math.min(1, span / (M.holdWin * 0.92), w.length / M.holdN);
+                if (d.holdP >= 1) { d.top = d.anchor; d.ext = d.top; d.v = d.top; d.cal = 'down'; d.win = null; ev.push({t: 'calTop'}); }
+                return;
+            }
             if (d.anchor === null || Math.abs(v - d.anchor) > M.still) { d.anchor = v; d.holdStart = t; }
             d.holdP = Math.min(1, (t - d.holdStart) / 1.0);
-            d.depth = 0;
             if (d.holdP >= 1) { d.top = d.anchor; d.ext = d.top; d.cal = 'down'; ev.push({t: 'calTop'}); }
             return;
         }
@@ -751,7 +787,7 @@ var Core = (function () {
         hash: hash, ORES: ORES, LAYERS: LAYERS, PICKS: PICKS, layerAt: layerAt, layerIndex: layerIndex,
         blockHp: blockHp, blockOres: blockOres, GUARDS: GUARDS, guardAt: guardAt, grade: grade, qmult: qmult, heat: heat, TEMPO: TEMPO, FORMS: FORMS,
         PERFECT: PERFECT, GOOD: GOOD, newSave: newSave, fix: fix, migrate: migrate, yesterday: yesterday, touchDay: touchDay,
-        streakNow: streakNow, newSet: newSet, GOALS: GOALS, MAX_PASSES: MAX_PASSES, LOG_MAX: LOG_MAX, daily: daily, weekly: weekly, weekToDate: weekToDate, records: records,
+        streakNow: streakNow, newSet: newSet, GOALS: GOALS, MAX_PASSES: MAX_PASSES, LOG_MAX: LOG_MAX, daily: daily, weekly: weekly, weekToDate: weekToDate, levelUp: levelUp, records: records,
         suggestGoal: suggestGoal, BADGES: BADGES, checkBadges: checkBadges, dayNum: dayNum, dayKeyOf: dayKeyOf, rep: rep, finishSet: finishSet, buy: buy,
         frontSignal: frontSignal, belowSignal: belowSignal, MODES: MODES, detector: detector, feed: feed
     };
@@ -1659,7 +1695,8 @@ function startSet(mode) {
 function endSet() {
     if (game.state !== 'play') return;
     var s = game.set, rec0 = Core.records(save.log), prevBest = rec0.bestSet ? rec0.bestSet.r : 0, prevTest = rec0.bestTest ? rec0.bestTest.r : 0;
-    Core.finishSet(save, s, {at: Date.now(), day: dayKey()});
+    var gap = game.lastSetEnd ? (Date.now() - game.lastSetEnd) / 1000 - (now() - s.start) : 0;
+    Core.finishSet(save, s, {at: Date.now(), day: dayKey(), rest: gap > 0 && gap < 1200 ? gap : 0});
     var newBadges = Core.checkBadges(save, dayKey()); persist(); wake(false);
     try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {}
     countUp($('sumReps'), s.reps);
@@ -1683,7 +1720,9 @@ function endSet() {
     var haul = $('sumHaul'); haul.innerHTML = '';
     Object.keys(Core.ORES).forEach(function (k) { if (s.ores[k]) haul.insertAdjacentHTML('beforeend', '<span class="gem"><i style="background:' + Core.ORES[k].c + '"></i>' + Core.ORES[k].name + ' ×' + s.ores[k] + '</span>'); });
     view.raise = 0;
-    go('summary');
+    restFrom = Date.now(); game.restRang = false; game.lastSetEnd = Date.now();
+    $('rest').hidden = !s.reps; go('summary');
+    if (!restTimer) restTimer = setInterval(restTick, 250); restTick();
 }
 
 function countUp(el, n) {
@@ -1725,7 +1764,7 @@ function strike(q, t) {
     var grade = Core.rep(save, s, q, t, dayKey(), ev);
     if (game.tapIntro && grade !== 'shallow') { game.tapIntro = false; coach('', ''); }
     game.idleFrom = t;
-    if (grade !== 'shallow') drillRep(t);
+    if (grade !== 'shallow') { drillRep(t); countAloud(Core.guardAt(depthBefore) ? s.run : s.reps); }
     view.strikeT = 0; view.from = view.raise; view.grade = grade;
     var g = geo(), B = g.B, hitX = g.cx + B * 0.12, hitY = depthBefore * B + 4;
     var L = Core.layerAt(depthBefore);
@@ -1921,12 +1960,14 @@ function heatmap(log, key, goal) {
     svg.addEventListener('pointerleave', tipOff);
     return el;
 }
-var statsRange = 30, statsAll = false;
+var statsRange = 30, statsAll = false, statsForm = 'all';
 function renderStats() {
-    var key = dayKey(), log = save.log, R = Core.records(log), W = Core.weekToDate(log, key);
+    var key = dayKey(), forms = {}; save.log.forEach(function (e) { forms[e.f] = 1; });
+    if (statsForm !== 'all' && !forms[statsForm]) statsForm = 'all';
+    var log = statsForm === 'all' ? save.log : save.log.filter(function (e) { return e.f === statsForm; }), R = Core.records(log), W = Core.weekToDate(log, key);
     var st = Core.streakNow(save, key), wd = W.now - W.before;
     $('stTiles').innerHTML = [
-        [fmt(save.reps), 'push-ups in total'],
+        statsForm === 'all' ? [fmt(save.reps), 'push-ups in total'] : [fmt(R.total), Core.FORMS[statsForm].name.toLowerCase() + ' push-ups'],
         [R.bestSet ? R.bestSet.r : 0, 'best set' + (R.bestRun ? ' · ' + R.bestRun.b + ' in a row' : '')],
         [st, 'day streak · best ' + save.bestStreak + (save.passes ? ' · ' + save.passes + ' pass' + (save.passes > 1 ? 'es' : '') : '')],
         [W.now, 'this week' + (W.before ? ' <i class="' + (wd < 0 ? 'dn' : '') + '">' + (wd >= 0 ? '▲ ' : '▼ ') + Math.abs(wd) + '</i> vs last' : '')]
@@ -1935,6 +1976,14 @@ function renderStats() {
     $('testNote').textContent = lastTest ? 'Last max: ' + lastTest.r + ' on ' + shortDay(lastTest.day) + (Core.dayNum(key) - Core.dayNum(lastTest.day) >= 14 ? '. Two weeks on — time for a retest.' : '. Retest in about two weeks.')
         : 'One all-out set tells you where you stand, and sets a daily goal of about one and a half times your max.';
     var box = $('stCharts'); box.innerHTML = '';
+    var up = Core.levelUp(save.log, save.form, key);
+    if (up) box.insertAdjacentHTML('beforeend', '<div class="chart" style="border-color:#6b4a24"><h3>Ready to level up?</h3><p style="margin:2px 0 4px">Two sets of 20 good ' + Core.FORMS[save.form].name.toLowerCase() + ' push-ups in two weeks: ' + Core.FORMS[up].name.toLowerCase() + ' push-ups dig harder. Try one set of them, keep the rest as they are.</p></div>');
+    if (Object.keys(forms).length > 1) {
+        var fs = document.createElement('div'); fs.className = 'seg'; fs.setAttribute('role', 'group'); fs.setAttribute('aria-label', 'Push-up type');
+        ['all'].concat(Object.keys(Core.FORMS).filter(function (k) { return forms[k]; })).forEach(function (k) { fs.insertAdjacentHTML('beforeend', '<button data-sf="' + k + '" aria-pressed="' + (statsForm === k) + '">' + (k === 'all' ? 'All' : Core.FORMS[k].name) + '</button>'); });
+        fs.onclick = function (e) { var b = e.target.closest('[data-sf]'); if (b) { statsForm = b.dataset.sf; renderStats(); } };
+        box.appendChild(fs);
+    }
     if (!log.length) { box.innerHTML = '<div class="empty">Finish a set and your history starts here.</div>'; }
     else {
         var seg = document.createElement('div'); seg.className = 'seg'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Range');
@@ -1978,8 +2027,8 @@ $('bStats').onclick = function () { sfx.ui(); go('stats'); };
 $('bTest').onclick = function () { sfx.ui(); game.pendingTest = true; $('placeNote').textContent = 'Max test: one set, as many good reps as you can.'; renderForm(); go('place'); };
 $('bUseGoal').onclick = function () { save.goal = game.suggest; persist(); sfx.ui(); $('bUseGoal').hidden = true; };
 $('bCsv').onclick = function () {
-    var head = 'date,time,reps,in_a_row,deep,shallow,avg_depth,pace_s,type,camera,max_test,guardians,meters';
-    var lines = save.log.map(function (e) { var d = new Date(e.at || Date.parse(e.day)); return [e.day, isFinite(d) ? d.toTimeString().slice(0, 5) : '', e.r, e.b, e.p, e.sh, e.q, e.pace, e.f, e.m, e.x, e.g || 0, e.mt || 0].join(','); });
+    var head = 'date,time,reps,in_a_row,deep,shallow,avg_depth,pace_s,type,camera,max_test,guardians,meters,rest_s';
+    var lines = save.log.map(function (e) { var d = new Date(e.at || Date.parse(e.day)); return [e.day, isFinite(d) ? d.toTimeString().slice(0, 5) : '', e.r, e.b, e.p, e.sh, e.q, e.pace, e.f, e.m, e.x, e.g || 0, e.mt || 0, e.rest || ''].join(','); });
     download('push-mine-history.csv', head + '\n' + lines.join('\n') + '\n', 'text/csv');
 };
 $('bBackup').onclick = function () { download('push-mine-backup-' + dayKey() + '.json', JSON.stringify(save), 'application/json'); };
@@ -2015,6 +2064,22 @@ var DRILL = {
     }
 };
 var drill = {talkUntil: 0, last: -1e9, n: 0, nag: 0, gapFrom: -1, times: []};
+function countAloud(n) {
+    if (!save.count || save.muted || !window.speechSynthesis || !(n > 0)) return;
+    try { var u = new SpeechSynthesisUtterance(String(n)); u.rate = 1.3; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
+}
+$('bCount').onclick = function () { save.count = !save.count; persist(); renderForm(); sfx.ui(); if (save.count) { var m = save.muted; save.muted = false; countAloud(1); save.muted = m; } };
+/* ---- rest between sets: how long since the last one ended, with a nudge at a minute and a half ---- */
+var restFrom = 0, restTimer = 0, REST_GOOD = 90;
+function restTick() {
+    if (game.state !== 'summary') { clearInterval(restTimer); restTimer = 0; return; }
+    var t = Math.floor((Date.now() - restFrom) / 1000), k = Math.min(1, t / REST_GOOD);
+    $('restT').textContent = Math.floor(t / 60) + ':' + ('0' + t % 60).slice(-2);
+    $('restArc').setAttribute('stroke-dashoffset', (88 * (1 - k)).toFixed(1));
+    var ready = t >= REST_GOOD; $('rest').classList.toggle('ready', ready);
+    $('restS').textContent = ready ? 'ready for the next' : '';
+    if (ready && !game.restRang) { game.restRang = true; sfx.tick(2); if (navigator.vibrate) try { navigator.vibrate([40, 80, 40]); } catch (e) {} }
+}
 function drillSay(kind, force) {
     if (save.drill === 'off' || game.state !== 'play') return;
     var t = now(); if (!force && t - drill.last < 4) return;
@@ -2180,7 +2245,7 @@ document.addEventListener('click', function (e) {
     sfx.ui();
     if (t.dataset.go) go(t.dataset.go); else startSet(t.dataset.mode);
 });
-$('bStart').onclick = function () { ac(); sfx.ui(); $('placeNote').textContent = ''; renderForm(); go('place'); };
+$('bStart').onclick = function () { ac(); sfx.ui(); game.pendingTest = false; $('placeNote').textContent = ''; renderForm(); go('place'); };
 var FORM_NOTE = {
     full: '',
     knee: 'Knees down, body straight from knee to shoulder. Both phone spots work.',
@@ -2195,6 +2260,8 @@ function renderForm() {
     $('belowS').textContent = wall ? 'Standing on a shelf or chair by the wall at face height, facing you.' : f === 'incline' ? 'Flat on the bench between your hands, screen up.' : 'Flat on the floor under your face, screen up.';
     $('belowG').textContent = wall ? 'Face tracking' : 'Face tracking · tight spaces';
     $('formNote').textContent = FORM_NOTE[f];
+    $('bCount').setAttribute('aria-pressed', save.count ? 'true' : 'false');
+    $('bCount').textContent = save.count ? '🔊 Counting reps out loud' : 'Count my reps out loud';
 }
 document.querySelectorAll('[data-form]').forEach(function (b) {
     b.onclick = function () { save.form = b.dataset.form; if (save.form === 'wall' && save.mode === 'front') save.mode = 'below'; persist(); renderForm(); sfx.ui(); };

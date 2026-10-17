@@ -276,18 +276,26 @@ for (const [mode, top, bottom, noise] of [['front', 0.35, 0.52, 0.003], ['front'
     ok(kn.counted.length === 8, 'knee/incline push-ups count in front view');
 }
 
-// below the face, the detector's box jitters frame to frame: a still plank must still calibrate quickly
+// below the face, the real detector's box wobbles ~9% (sd of log width 0.086, measured with the MediaPipe face detector
+// on a still photo): a still plank must calibrate quickly and every time, at a phone's 30 fps and a slow phone's 10 fps
 {
-    const d = Core.detector('below'), ev = [];
-    let at = null;
-    for (let t = 0; t < 6 && at === null; t += 1 / 30) {
-        const e = []; Core.feed(d, Math.log(0.3) + gauss() * 0.05, t, e);   // ~5% box jitter, no motion
-        if (e.some(x => x.t === 'calTop')) at = t;
+    for (const fps of [30, 10]) {
+        const times = [];
+        for (let trial = 0; trial < 20; trial++) {
+            const d = Core.detector('below'); let at = null;
+            for (let t = 0; t < 8 && at === null; t += 1 / fps) { const e = []; Core.feed(d, Math.log(0.3) + gauss() * 0.22, t, e); if (e.some(x => x.t === 'calTop')) at = t; }
+            times.push(at === null ? 99 : at);
+        }
+        times.sort((a, b) => a - b);
+        ok(times[times.length - 1] < (fps === 30 ? 3 : 5) && times[10] < (fps === 30 ? 1.5 : 2.5), `a wobbly still face calibrates fast every time at ${fps} fps: worst ${times[times.length - 1].toFixed(2)} s, median ${times[10].toFixed(2)} s`);
     }
-    ok(at !== null && at < 2.5, 'a jittery face box still calibrates the hold in under 2.5 s: ' + (at && at.toFixed(2)));
-    const d2 = Core.detector('below'), e2 = [];
-    for (let t = 0; t < 6; t += 1 / 30) Core.feed(d2, Math.log(0.3) + Math.sin(t * 2) * 0.12, t, e2);   // swaying in and out
-    ok(!e2.some(x => x.t === 'calTop'), 'a face that keeps moving is not a held plank');
+    const d = Core.detector('below'), e2 = [];
+    for (let t = 0; t < 8; t += 1 / 30) Core.feed(d, Math.log(0.3) + Math.sin(t * 3) * 0.3 + gauss() * 0.1, t, e2);
+    ok(!e2.some(x => x.t === 'calTop'), 'a face moving in and out is not a held plank');
+    const d3 = Core.detector('below'), e3 = []; let at3 = null;
+    for (let t = 0; t < 8 && at3 === null; t += 1 / 30) { const e = []; Core.feed(d3, Math.log(0.3) + Math.min(t, 1.5) * 0.4 + gauss() * 0.2, t, e); if (e.some(x => x.t === 'calTop')) at3 = t; }
+    ok(at3 !== null && at3 > 1.5 && at3 < 4, 'getting into position is not a hold; settling is: ' + (at3 && at3.toFixed(2)) + ' s');
+    ok(Math.abs(d3.top - (Math.log(0.3) + 0.6)) < 0.05, 'and the top is where the face settled: ' + (d3.top - Math.log(0.3)).toFixed(3));
 }
 
 // guardians: the last block of a stratum takes reps in a row, not pick damage
@@ -346,6 +354,14 @@ for (const [mode, top, bottom, noise] of [['front', 0.35, 0.52, 0.003], ['front'
     const R = Core.records(L);
     ok(R.bestSet.r === 20 && R.bestDay.reps === 20 && R.bestTest.r === 20 && R.total === 42 && R.days === 3, 'records find the best set, day and max test');
     ok(Core.suggestGoal(20) === 30 && Core.suggestGoal(4) === 10 && Core.suggestGoal(100) === 150, 'a max test suggests about one and a half times the max as the daily goal');
+}
+// an easier push-up that has become easy suggests the next harder one
+{
+    const e = (day, r, f) => ({day, r, p: r, f});
+    ok(Core.levelUp([e('2026-10-10', 22, 'knee'), e('2026-10-15', 20, 'knee')], 'knee', '2026-10-17') === 'full', 'two sets of 20 knee push-ups in two weeks: time for full ones');
+    ok(Core.levelUp([e('2026-09-10', 22, 'knee'), e('2026-10-15', 20, 'knee')], 'knee', '2026-10-17') === null, 'an old set does not count');
+    ok(Core.levelUp([e('2026-10-10', 25, 'wall'), e('2026-10-15', 25, 'wall')], 'wall', '2026-10-17') === 'incline', 'wall leads to incline');
+    ok(Core.levelUp([e('2026-10-10', 40, 'full'), e('2026-10-15', 40, 'full')], 'full', '2026-10-17') === null, 'full push-ups are the top');
 }
 // rest passes: a 7-day streak earns one, a missed day spends it
 {
