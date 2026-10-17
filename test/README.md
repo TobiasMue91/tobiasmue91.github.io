@@ -2125,6 +2125,22 @@ presets, stored state, the share hash, and size limits. Expected strings are wor
 CSS Color 4 by hand. The `browser` suite needs Chromium via Playwright (a global install is found too) and wants
 Chromium's computed style of every pasted input to equal that of what the page prints; it is skipped without it.
 
+## CSS Filter Generator
+
+```sh
+npm run test:cssfilter                   # or: node test/css_filter.mjs
+node test/css_filter.mjs read errors     # named suites only
+```
+
+`css_filter.mjs` runs the DOM-free `<script id="core">` of `tools/css_filter_playground.html` in Node: how a filter prints
+(neutral values left out, `none` when nothing is set, two decimals, no `-0`), the filter grammar from Filter Effects 1
+(omitted argument = 1, number = ratio, negative invalid, grayscale/invert/opacity/sepia clamp at 100%, deg/rad/grad/turn),
+what people paste (`filter:` / `-webkit-filter:`, `!important`, comments, decimal comma, stray commas, open brackets),
+drop-shadow() and url() kept verbatim in place, plain-word errors, the number boxes, the presets carried over from the old
+page, randomize ranges, stored state, the `#f=` link and huge pastes. The `browser` suite needs Chromium via Playwright
+(a global install is found too): Chromium's `CSS.supports` must agree with the core on what is valid, and what the page
+prints must render pixel-identical to what was pasted; it is skipped without it.
+
 `test/hash_generator.mjs` runs the DOM-free `<script id="core">` block of `tools/hash_generator.html` (the same source the page
 hands its file workers) against the standards rather than the page: FIPS 180-4 and FIPS 202 example vectors, the RFC 1321 MD5
 suite, RFC 4231 / RFC 2202 HMAC cases, the CRC-32 check value and Keccak-256 of "" - then Node's crypto over random data at every
