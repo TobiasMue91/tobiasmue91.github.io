@@ -2227,3 +2227,16 @@ skipped when `python3` is missing). It pins the typing rule (a column becomes JS
 in it is one; a number has no leading zero and at most 15 significant digits; decimal comma with semicolon files), delimiter
 detection, readable JSON errors with line and column, JSON numbers carried to CSV exactly as written, and in `contract` the old
 page's sample outputs, with the intended differences named. Run it after touching the core.
+
+## AI Code Explainer
+
+```sh
+npm run test:codeexplainer               # or: node test/ai_code_explainer.mjs [detect|input|prompt|parse|text|history]
+```
+
+`test/ai_code_explainer.mjs` runs the DOM-free `<script id="core">` block of `tools/ai_code_explainer.html` in Node. The
+explanation comes from a language model and is not tested; everything around it is. It pins that the code reaches the model
+with the line numbers its answer refers to (and no code fence the snippet could break), that any reply - clean, fenced,
+braces inside strings, trailing commas, prose, truncated, wrong types - becomes steps whose line ranges exist in the code,
+the input limits and their messages, language detection, stripping line numbers pasted along with the code, and that history
+in the old `savedExplanations` shape still loads, searches, imports and exports without throwing. No browser, no server.
