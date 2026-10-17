@@ -1193,6 +1193,17 @@ hauling from deep with too little oil fails the same way, that saves come back c
 ones are healed), and that a bot with a person's pace buys the cheapest upgrade and reaches the Deep Heart on nearly every
 seed in about half an hour. `VERBOSE=1` prints its trips and the minute each zone is reached.
 
+## Push Mine
+
+`node test/push_mine.mjs` (or `npm run test:pushmine`) runs the DOM-free `<script id="core">` block of `games/push_mine.html`
+in Node. No browser, no server; under a second. It feeds the rep detector synthetic push-ups - camera noise, dropped frames,
+fast and slow reps, both camera positions and tap mode - and checks that a held plank plus one rep calibrates it and that rep
+counts, that every full rep counts exactly once, that half reps are called shallow and never counted, that bouncing at the
+bottom without locking out farms nothing, and that the range grows with a player who goes deeper. Around it: rock takes the
+hits it says, a seed is the same mine, rhythm heats and a pause cools, a break pays exactly its ore, the daily streak crosses
+month ends and breaks on a missed day, damaged saves heal, the first Push Mine's `pushmine2` save carries over, and a player
+doing three sets a few days a week reaches a new stratum every week or two. `VERBOSE=1` prints the pacing.
+
 ## Simon Says
 
 ```sh
