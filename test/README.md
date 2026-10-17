@@ -1202,7 +1202,9 @@ counts, that every full rep counts exactly once, that half reps are called shall
 bottom without locking out farms nothing, and that the range grows with a player who goes deeper. Around it: rock takes the
 hits it says, a seed is the same mine, rhythm heats and a pause cools, a break pays exactly its ore, the daily streak crosses
 month ends and breaks on a missed day, damaged saves heal, the first Push Mine's `pushmine2` save carries over, and a player
-doing three sets a few days a week reaches a new stratum every week or two. `VERBOSE=1` prints the pacing.
+doing three sets a few days a week reaches a new stratum every week or two. Knee, incline and wall push-ups dig a gently
+discounted share but count in full towards the goal; each stratum's guardian falls only to its run of reps in a row and
+heals on a pause or a shallow rep; a jittery face box still calibrates a held plank quickly. `VERBOSE=1` prints the pacing.
 
 ## Simon Says
 
