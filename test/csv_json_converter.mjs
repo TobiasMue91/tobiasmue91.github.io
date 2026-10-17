@@ -138,6 +138,9 @@ if (suites.includes('json')) {
   err('[1] x', 1, 5, /after the end/);
   err('[01]', 1, 3, /Expected , or \]/);
   err('["a\nb"]', 1, 4, /line break/);
+  eq(C.convert('[1,2,]', 'csv').removeAt, 4, 'a trailing comma comes with the position to remove');
+  eq(C.convert('{"a":1 ,\n}', 'csv').removeAt, 7, 'trailing comma before a line break');
+  eq(C.convert('[1,2', 'csv').removeAt, undefined, 'other errors offer no fix');
   eq(C.convert('[]', 'csv').ok, false, '[] is not converted');
   check(/no rows/.test(C.convert('[]', 'csv').error), '[] says there are no rows');
 }
