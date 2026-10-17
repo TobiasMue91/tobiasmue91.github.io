@@ -12,7 +12,8 @@
 // count on the same cameras and dig a gently discounted share, never less towards the goal and streak. A guardian
 // at the foot of each stratum takes reps in a row instead of pick damage, and heals on a pause or a shallow rep;
 // a still plank calibrates quickly even through a jittery face box. Every set is logged for the Progress screen; daily and
-// weekly totals, records and the suggested goal come from that log; rest passes save a streak from a missed day.
+// weekly totals, records and the suggested goal come from that log; rest passes save a streak from a missed day. Relics, chests, TNT
+// and daily contracts are placed and paid as the page says.
 // No browser, no server.
 //
 //   node test/push_mine.mjs        (npm run test:pushmine)
@@ -391,6 +392,91 @@ for (const [mode, top, bottom, noise] of [['front', 0.35, 0.52, 0.003], ['front'
     ok(got === 'g1,r100,s10', 'badges are earned once their mark is reached: ' + got);
     ok(Core.checkBadges(s, '2026-10-20').length === 0 && s.badges.r100 === '2026-10-19', 'and only once, dated');
     ok(new Set(Core.BADGES.map(b => b.id)).size === Core.BADGES.length, 'badge ids are unique');
+}
+
+// relics: two per stratum, hidden where the seed says, each one a rule you can carry
+{
+    for (const seed of [1, 7, 12345]) {
+        const at = [];
+        for (let d = 0; d < 300; d++) { const R = Core.relicAt(seed, d); if (R) at.push([d, R]); }
+        ok(at.length === Core.RELICS.length && new Set(at.map(a => a[1].id)).size === Core.RELICS.length, `seed ${seed}: every relic is hidden once`);
+        ok(at.every(([d, R]) => !Core.guardAt(d) && Core.layerIndex(d) === Core.RELICS.indexOf(R) >> 1), `seed ${seed}: two per stratum, never on a guardian`);
+        ok(at.every(([d]) => !Core.specialAt(seed, d)), `seed ${seed}: a relic block is never a chest or TNT`);
+    }
+    const s = Core.newSave(7); s.pick = Core.PICKS.length - 1;
+    const set = Core.newSet(0), ev = [];
+    for (let k = 0; k < 40 && s.depth < 11; k++) Core.rep(s, set, 0.9, k * 2, '2026-10-20', ev);
+    const found = ev.filter(e => e.t === 'relic');
+    ok(found.length === 2 && s.equip.length === 2 && found.every(e => e.equipped), 'digging through topsoil finds its two relics and carries them: ' + found.map(e => e.relic.name).join(', '));
+    ok(Core.slots(s) === 2 && Core.slots(Object.assign({}, s, {guards: 3})) === 3, 'two slots, three after three guardians');
+    s.relics.whetstone = 1; s.equip = ['penny', 'metronome', 'whetstone'];
+    ok(Core.fix(s).equip.length === 2, 'a save never carries more relics than slots');
+    s.equip = ['ghost', 'penny', 'penny']; ok(Core.fix(s).equip.join() === 'penny', 'unknown or duplicate relics are dropped');
+}
+{
+    const hit = equip => { const s = Core.newSave(9); s.depth = 5; s.relics = {}; equip.forEach(id => s.relics[id] = 1); s.equip = equip; const set = Core.newSet(0), ev = []; Core.rep(s, set, 0.7, 0, '2026-10-20', ev); return ev.find(e => e.t === 'hit').dmg; };
+    ok(Math.abs(hit(['whetstone']) / hit([]) - 1.2) < 1e-9 && Math.abs(hit(['whetstone', 'heart']) / hit([]) - 1.7) < 1e-9, 'Whetstone +20%, with the Heart +70%');
+    const s = Core.newSave(9); s.relics = {metronome: 1, stone: 1, drum: 1, ember: 1}; s.equip = ['metronome', 'stone'];
+    ok(Core.tempoOf(s) === 9 && Core.needOf(s, Core.guardAt(11)) === 6, 'the Metronome stretches heat to 9 s, the Patient Stone takes 2 off a guardian');
+    s.equip = ['drum', 'ember'];
+    ok(Core.heatOf(s, 8) === 2 && Core.heatOf(s, 40) === 4 && Core.heatOf(Core.newSave(1), 40) === 3, 'the War Drum heats every 4 reps, the Ember Heart lets it reach ×4');
+    // Second Wind on a guardian: one pause forgiven, the second is not
+    const w = Core.newSave(3); w.depth = 11; w.relics = {wind: 1}; w.equip = ['wind'];
+    const set = Core.newSet(0), ev = [];
+    for (let k = 0; k < 4; k++) Core.rep(w, set, 0.9, k * 2, '2026-10-20', ev);
+    Core.rep(w, set, 0.9, 20, '2026-10-20', ev);
+    ok(set.run === 5 && ev.some(e => e.t === 'ward'), 'Second Wind forgives a pause: run ' + set.run);
+    Core.rep(w, set, 0.9, 40, '2026-10-20', ev);
+    ok(set.run === 1, 'but only one a set: run ' + set.run);
+}
+// chests and TNT
+{
+    let S = 0, dC = -1, dT = -1;
+    for (let seed = 1; seed < 2000 && S === 0; seed++) {
+        let c = -1, x = -1;
+        for (let d = 4; d < 9; d++) { const sp = Core.specialAt(seed, d); if (sp === 'chest' && c < 0) c = d; if (sp === 'tnt' && x < 0) x = d; }
+        if (c >= 0 && x >= 0) { S = seed; dC = c; dT = x; }
+    }
+    let n = 0; for (let d = 4; d < 300; d++) if (Core.specialAt(S, d)) n++;
+    ok(n > 10 && n < 40, 'special rock is rare: ' + n + ' in 300 m');
+    const s = Core.newSave(S); s.depth = dC; s.pick = Core.PICKS.length - 1; const ev = [];
+    Core.rep(s, Core.newSet(0), 0.7, 0, '2026-10-20', ev);
+    const ch = ev.find(e => e.t === 'chest');
+    ok(ch && ch.coins === Core.blockHp(dC) * 5 && s.chests === 1, 'a chest pays five times its rock in coins');
+    const s2 = Core.newSave(S); s2.depth = dT; s2.dmg = Core.blockHp(dT) - 0.01; const ev2 = [];
+    Core.rep(s2, Core.newSet(0), 0.7, 0, '2026-10-20', ev2);
+    ok(ev2.some(e => e.t === 'boom') && s2.depth === Math.min(dT + 3, 11), 'TNT takes the two blocks under it: ' + dT + ' -> ' + s2.depth);
+    let g = -1; for (let sd = 1; sd < 3000 && g < 0; sd++) if (Core.specialAt(sd, 10) === 'tnt') g = sd;
+    const s3 = Core.newSave(g); s3.depth = 10; s3.dmg = Core.blockHp(10) - 0.01; const ev3 = [];
+    Core.rep(s3, Core.newSet(0), 0.7, 0, '2026-10-20', ev3);
+    ok(s3.depth === 11 && ev3.some(e => e.t === 'guard'), 'TNT stops at a guardian');
+}
+// contracts: three a day, the same for the same day, sized to the player, paid once
+{
+    const s = Core.newSave(5); s.bestSet = 20;
+    Core.touchDay(s, '2026-10-20');
+    const J = s.jobs;
+    ok(J && J.day === '2026-10-20' && J.list.length === 3 && new Set(J.list.map(j => j.k)).size === 3, 'three different jobs a day');
+    const again = Core.newSave(5); again.bestSet = 20; Core.touchDay(again, '2026-10-20');
+    ok(JSON.stringify(again.jobs.list) === JSON.stringify(J.list), 'the same jobs for the same seed and day');
+    Core.touchDay(s, '2026-10-21'); ok(s.jobs.day === '2026-10-21', 'a new day, new jobs');
+    const deep = Core.JOBS.deep.size({bestSet: 20}), weak = Core.JOBS.deep.size({bestSet: 3});
+    ok(deep > weak && weak >= 6, 'jobs grow with the player: ' + weak + ' -> ' + deep);
+    const t = Core.newSave(5); t.jobs = {day: '2026-10-22', list: [{k: 'deep', n: 3, p: 0, done: false}, {k: 'sets', n: 1, p: 0, done: false}, {k: 'run', n: 3, p: 0, done: false}], prize: 20, all: false};
+    t.day.key = '2026-10-22';
+    const set = Core.newSet(0), ev = [];
+    for (let k = 0; k < 4; k++) Core.rep(t, set, 0.9, k * 2, '2026-10-22', ev);
+    ok(ev.filter(e => e.t === 'job').length === 2 && t.jobs.list[0].done && t.jobs.list[2].done, 'deep reps and a run finish their jobs');
+    const fe = []; Core.finishSet(t, set, {at: 1, day: '2026-10-22'}, fe);
+    ok(fe.some(e => e.t === 'job') && fe.some(e => e.t === 'jobsAll') && t.jobs.all, 'a finished set ticks the sets job, and all three pay a bonus');
+    const ev2 = []; for (let k = 0; k < 4; k++) Core.rep(t, set, 0.9, 20 + k * 2, '2026-10-22', ev2);
+    ok(!ev2.some(e => e.t === 'job' || e.t === 'jobsAll'), 'a done job pays only once');
+}
+// the race against yourself
+{
+    const s = Core.newSave(2); s.bestSet = 6; const set = Core.newSet(0), ev = [];
+    for (let k = 0; k < 8; k++) Core.rep(s, set, 0.9, k * 2, '2026-10-20', ev);
+    ok(ev.filter(e => e.t === 'pb').length === 1 && ev.find(e => e.t === 'pb').best === 6, 'passing your best set is called once, at rep 7');
 }
 
 console.log(fails ? `${fails} of ${n} failed` : `all ${n} passed`);

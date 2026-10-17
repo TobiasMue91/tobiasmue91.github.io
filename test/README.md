@@ -1206,7 +1206,9 @@ doing three sets a few days a week reaches a new stratum every week or two. Knee
 discounted share but count in full towards the goal; each stratum's guardian falls only to its run of reps in a row and
 heals on a pause or a shallow rep; a jittery face box still calibrates a held plank quickly. The history logs every set (reps, best run, depth,
 pace, type) and caps its length, daily and Monday-start weekly totals line up, a max test suggests a goal, a 7-day streak
-earns a rest pass that a missed day spends, and milestones are earned once.
+earns a rest pass that a missed day spends, and milestones are earned once. Every relic is hidden exactly once, two per stratum and never
+on a guardian, and each one changes the rule it names; chests pay and TNT chains but stops at a guardian; the day's three
+contracts are the same for a seed and day, grow with the player and pay once; passing your best set is called once.
 
 `node test/push_mine_camera.mjs` (`npm run test:pushmine-camera`) runs the page with the real MediaPipe models on a fake
 camera: a canvas showing MediaPipe's own photos (`pose.jpg` for in front, `portrait.jpg` for below you), moved or scaled
