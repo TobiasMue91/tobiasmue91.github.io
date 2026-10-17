@@ -2185,3 +2185,18 @@ chain a locked phone sleeps through against plain timestamp arithmetic, and the 
 break after every N sessions; only a session that runs out counts). It also covers what people type into a length
 field (decimal commas, units, m:ss, hours), links with lengths in them, and the old page's `pomodoroSettings` and
 `tasks`. Suites: `parse`, `format`, `cycle`, `clock`, `links`, `saves`. Run it after touching the core.
+
+## CSV to JSON Converter
+
+```sh
+npm run test:csvjson                        # or: node test/csv_json_converter.mjs
+node test/csv_json_converter.mjs rfc json   # named suites only
+```
+
+`test/csv_json_converter.mjs` runs the DOM-free `<script id="core">` block of `tools/csv_json_converter.html` (the same source
+the page hands its worker for large inputs). Expected values come from RFC 4180 and RFC 8259, and the `oracle` suite cross-checks
+the CSV reader and writer against Python's `csv` module on random grids full of delimiters, quotes, line breaks and emoji (it is
+skipped when `python3` is missing). It pins the typing rule (a column becomes JSON numbers or booleans only if every filled value
+in it is one; a number has no leading zero and at most 15 significant digits; decimal comma with semicolon files), delimiter
+detection, readable JSON errors with line and column, JSON numbers carried to CSV exactly as written, and in `contract` the old
+page's sample outputs, with the intended differences named. Run it after touching the core.
