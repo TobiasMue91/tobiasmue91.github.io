@@ -13,7 +13,8 @@
 // at the foot of each stratum takes reps in a row instead of pick damage, and heals on a pause or a shallow rep;
 // a still plank calibrates quickly even through a jittery face box. Every set is logged for the Progress screen; daily and
 // weekly totals, records and the suggested goal come from that log; rest passes save a streak from a missed day. Relics, chests, TNT
-// and daily contracts are placed and paid as the page says.
+// and daily contracts are placed and paid as the page says. Magma, crystal, the journal and the Deep Heart too; and
+// (with ESLint installed) every name both scripts use is defined.
 // No browser, no server.
 //
 //   node test/push_mine.mjs        (npm run test:pushmine)
@@ -477,6 +478,55 @@ for (const [mode, top, bottom, noise] of [['front', 0.35, 0.52, 0.003], ['front'
     const s = Core.newSave(2); s.bestSet = 6; const set = Core.newSet(0), ev = [];
     for (let k = 0; k < 8; k++) Core.rep(s, set, 0.9, k * 2, '2026-10-20', ev);
     ok(ev.filter(e => e.t === 'pb').length === 1 && ev.find(e => e.t === 'pb').best === 6, 'passing your best set is called once, at rep 7');
+}
+
+// two strata with a rule of their own
+{
+    ok(Core.twistAt(160).id === 'magma' && Core.twistAt(240).id === 'crystal' && Core.twistAt(40) === null, 'magma and crystal bend the rules, the rest do not');
+    const m = Core.newSave(1); m.depth = 160; m.dmg = 10; const set = Core.newSet(0), ev = [];
+    Core.rep(m, set, 0.7, 0, '2026-10-20', ev); const d1 = m.dmg;
+    Core.rep(m, set, 0.7, 2, '2026-10-20', ev);
+    ok(!ev.some(e => e.t === 'regrow') && m.dmg > d1, 'magma: keep the rhythm and the cracks stay');
+    Core.rep(m, set, 0.7, 20, '2026-10-20', ev);
+    ok(ev.some(e => e.t === 'regrow'), 'magma: pause and they close');
+    const before = m.dmg, fe = []; Core.finishSet(m, set, null, fe);
+    ok(fe.some(e => e.t === 'regrow') && Math.abs(m.dmg - before * 0.4) < 1e-9, 'and a set left on a cracked block cools back');
+    const hit = q => { const c = Core.newSave(1); c.depth = 240; const ev = []; Core.rep(c, Core.newSet(0), q, 0, '2026-10-20', ev); return ev.find(e => e.t === 'hit').dmg; };
+    const plain = q => { const c = Core.newSave(1); c.depth = 210; const ev = []; Core.rep(c, Core.newSet(0), q, 0, '2026-10-20', ev); return ev.find(e => e.t === 'hit').dmg; };
+    ok(Math.abs(hit(0.7) / plain(0.7) - 0.3) < 1e-9 && hit(0.95) === plain(0.95), 'crystal: a good rep cuts 30%, a deep rep cuts in full');
+}
+// the miner's notes and the bottom of the mine
+{
+    ok(Core.NOTES.every(([d]) => !Core.guardAt(d)) && Core.NOTES.every(([d], i, a) => !i || d > a[i - 1][0]), 'twelve pages in order, none on a guardian');
+    const s = Core.newSave(2); s.depth = 5; s.pick = Core.PICKS.length - 1; const ev = [];
+    Core.rep(s, Core.newSet(0), 0.9, 0, '2026-10-20', ev);
+    ok(ev.some(e => e.t === 'note' && e.note.i === 0) && s.notes[0] === 1, 'the first page lies at 5 m');
+    const H = Core.guardAt(Core.FINAL - 1);
+    ok(H && H.final && H.need === 30, 'the Deep Heart waits at the bottom: 30 in a row');
+    const f = Core.newSave(2); f.depth = Core.FINAL - 1; const set = Core.newSet(0), fev = [];
+    for (let k = 0; k < 30; k++) Core.rep(f, set, 0.9, k * 2, '2026-10-20', fev);
+    ok(fev.some(e => e.t === 'finale') && f.depth === Core.FINAL, 'thirty in a row and the mountain is yours');
+    const coins = f.coins, relics = JSON.stringify(f.relics), pick = f.pick;
+    ok(Core.descend(f) && f.depth === 0 && f.runs === 1 && f.coins === coins && f.pick === pick && JSON.stringify(f.relics) === relics, 'descend again: back to the top with everything you carry');
+    ok(!Core.descend(f), 'only from the bottom');
+    ok(Math.abs(Core.mods(f).ore - 0.25) < 1e-9, 'each descent makes ore 25% richer');
+}
+
+// every name the page uses is defined: a find-and-replace once turned TG.need into TCore.needOf(save, G), which threw
+// only when you stood on a guardian. ESLint's no-undef over both scripts catches that kind; skipped without ESLint
+{
+    let ESLint = null;
+    try { ({ESLint} = await import('eslint')); } catch (e) {
+        try { const {execSync} = await import('child_process'); ({ESLint} = await import(join(execSync('npm root -g').toString().trim(), 'eslint', 'lib', 'api.js'))); } catch (e2) {}
+    }
+    if (!ESLint) console.log('  skip  (no ESLint for the undefined-name check)');
+    else {
+        const code = [...html.matchAll(/<script(?: id="core")?>([\s\S]*?)<\/script>/g)].map(m => m[1]).join('\n');
+        const browser = 'window document navigator localStorage performance requestAnimationFrame setTimeout setInterval clearInterval console location URLSearchParams Blob URL alert confirm innerWidth innerHeight speechSynthesis SpeechSynthesisUtterance Image DOMPoint KeyboardEvent devicePixelRatio matchMedia addEventListener getComputedStyle screen'.split(' ');
+        const lint = new ESLint({overrideConfigFile: true, overrideConfig: {languageOptions: {ecmaVersion: 2022, sourceType: 'script', globals: Object.fromEntries(browser.map(k => [k, 'readonly']))}, rules: {'no-undef': 'error'}}});
+        const [res] = await lint.lintText(code);
+        ok(res.messages.length === 0, 'every name the page uses is defined' + res.messages.slice(0, 5).map(m => ' | ' + m.message + ' (line ' + m.line + ')').join(''));
+    }
 }
 
 console.log(fails ? `${fails} of ${n} failed` : `all ${n} passed`);

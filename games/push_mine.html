@@ -228,6 +228,10 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
 .relic svg{flex:none} .relic div{flex:1;line-height:1.1} .relic b{font-size:19px} .relic small{display:block;color:var(--dim);font-size:15.5px}
 .relic.on{border-color:#e9d9b0;box-shadow:inset 0 0 0 1px #e9d9b0}
 .relic.lock{opacity:.5}
+.journal p{margin:0 0 8px;padding:10px 12px;border-radius:12px;background:#e9dcc0;color:#2a1a0e;font-size:17px;line-height:1.25;font-style:italic;box-shadow:0 2px 0 rgba(0,0,0,.3)}
+.journal p b{display:block;font-style:normal;font-size:13px;letter-spacing:.1em;color:#7a5a3a;text-transform:uppercase;margin-bottom:2px}
+.journal p.torn{background:rgba(27,19,13,.94);color:var(--mute);border:1px dashed var(--line);box-shadow:none}
+.journal p.torn b{color:var(--mute)}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;margin-top:4px}
 .rgrid div{display:flex;flex-direction:column;align-items:center;gap:2px;opacity:.6}
 .rgrid small{font-size:12.5px;color:var(--mute);text-align:center;line-height:1.05}
@@ -307,6 +311,7 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
         <div class="haul" id="sumHaul"></div>
         <div class="grow" style="min-height:8px"></div>
         <div id="rest" aria-live="off"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="none" stroke="#3d2c1f" stroke-width="4"/><circle id="restArc" cx="17" cy="17" r="14" fill="none" stroke="#ffb547" stroke-width="4" stroke-linecap="round" stroke-dasharray="88" stroke-dashoffset="88" transform="rotate(-90 17 17)"/></svg><span>Rest</span><b id="restT">0:00</b><span id="restS"></span></div>
+        <button class="btn" id="bDescend" hidden style="margin-bottom:10px;background:#c070ff;box-shadow:0 5px 0 #6d3a99;color:#1b0f26">Descend again · ore +25%</button>
         <button class="btn ghost" id="bUseGoal" hidden style="margin-bottom:10px"></button>
         <button class="btn bungee" id="bAgain">Another set</button>
         <div class="row"><button class="btn ghost" id="bSumShop">Gear</button><button class="btn ghost" data-go="title">Done</button></div>
@@ -344,6 +349,9 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
         <div class="sec" id="relicHead">Relics</div>
         <p class="sub" id="relicSub" style="font-size:16px;text-align:left;margin:0 0 8px"></p>
         <div class="shop" id="relicList"></div>
+        <button class="btn" id="bDescend2" hidden style="margin-top:14px;background:#c070ff;box-shadow:0 5px 0 #6d3a99;color:#1b0f26">Descend again · ore +25%</button>
+        <div class="sec" id="noteHead">Journal</div>
+        <div id="noteList" class="journal"></div>
         <div style="height:24px"></div>
       </div>
     </section>
@@ -402,9 +410,36 @@ var Core = (function () {
         {name: 'Magma Wyrm', need: 22, c: '#ff6a2a'},
         {name: 'Crystal Queen', need: 26, c: '#7fd8ff'}
     ];
+    // the bottom of the mine: the last block of the Abyss holds the Deep Heart. Beat it and the mountain is yours
+    var FINAL = 400, HEART = {i: 7, name: 'The Deep Heart', need: 30, c: '#c070ff', prize: 6000, final: true};
     function guardAt(d) {
         for (var i = 0; i < GUARDS.length; i++) if (LAYERS[i + 1].from - 1 === d) return {i: i, name: GUARDS[i].name, need: GUARDS[i].need, c: GUARDS[i].c, prize: 25 * GUARDS[i].need * (i + 1)};
-        return null;
+        return d === FINAL - 1 ? HEART : null;
+    }
+    // two strata bend a rule of their own: magma closes its cracks while you rest, crystal only gives to deep reps
+    var TWIST = {5: {id: 'magma', text: 'Rest and the cracks close'}, 6: {id: 'crystal', text: 'Only deep reps cut crystal'}};
+    function twistAt(d) { return TWIST[layerIndex(d)] || null; }
+    // the miner who came before: twelve pages on the way down, in order
+    var NOTES = [
+        [5, 'Day one. They say the mountain gives back what you put into it. Twenty swings before breakfast. — E.'],
+        [18, 'Clay sticks to everything. My arms burn, but the pick swings truer every morning.'],
+        [40, 'Granite. The old hands count their swings out loud. I see why now.'],
+        [70, 'Found a lamp down here that isn\'t mine. Someone came this way before me.'],
+        [95, 'Slate splits clean if you hit it deep. Shallow swings just bounce off.'],
+        [120, 'Basalt columns, like organ pipes. I rest less and dig more. Strange, that.'],
+        [160, 'The magma closes the cracks if I stop. So I don\'t stop.'],
+        [200, 'Heat on my face, rhythm in my arms. I haven\'t missed a day in weeks.'],
+        [240, 'Crystal sings when you hit it right. Only the deep strikes count down here.'],
+        [270, 'I hear something below. A heartbeat in the stone.'],
+        [330, 'The Abyss swallows the lamp light. I count my breaths to stay steady.'],
+        [390, 'It\'s close now. Whoever reads this: keep the rhythm. Don\'t stop at the last block. — E.']
+    ];
+    function noteAt(d) { for (var i = 0; i < NOTES.length; i++) if (NOTES[i][0] === d) return {i: i, text: NOTES[i][1]}; return null; }
+    // after the Deep Heart: start again from the top with what you carry, and every descent makes ore richer
+    function descend(s) {
+        if (s.depth < FINAL) return false;
+        s.depth = 0; s.dmg = 0; s.runs++;
+        return true;
     }
     // relics: two hidden in every stratum above the abyss, at a depth the seed picks. Each changes a rule; you carry two
     // (three once three guardians have fallen), so which ones is a choice, not a list of buffs
@@ -437,6 +472,7 @@ var Core = (function () {
     function slots(s) { return s.guards >= 3 ? 3 : 2; }
     function mods(s) {
         var m = {coin: 0, tempo: 0, dmg: 0, shallow: 0, ore: 0, step: 0, fuse: 0, need: 0, deep: 0, chest: 0, cap: 0, ward: 0, prize: 0};
+        m.ore += 0.25 * (s.runs || 0);
         (s.equip || []).forEach(function (id) { RELICS.forEach(function (R) { if (R.id === id) Object.keys(R.fx).forEach(function (k) { m[k] += R.fx[k]; }); }); });
         return m;
     }
@@ -510,7 +546,7 @@ var Core = (function () {
     function newSave(seed) {
         return {
             v: 2, seed: seed >>> 0 || 1, depth: 0, dmg: 0, coins: 0, pick: 0, reps: 0, perfect: 0,
-            bestSet: 0, sets: 0, ores: {}, mode: null, form: 'full', goal: 20, guards: 0, drill: 'off', log: [], passes: 0, bestStreak: 0, badges: {}, relics: {}, equip: [], jobs: null, chests: 0,
+            bestSet: 0, sets: 0, ores: {}, mode: null, form: 'full', goal: 20, guards: 0, drill: 'off', log: [], passes: 0, bestStreak: 0, badges: {}, relics: {}, equip: [], jobs: null, chests: 0, notes: {}, runs: 0,
             day: {key: '', reps: 0, goalDay: '', streak: 0}, muted: false, count: false, music: true
         };
     }
@@ -543,6 +579,8 @@ var Core = (function () {
         s.equip = s.equip.filter(function (id, i, a) { return s.relics[id] && a.indexOf(id) === i; }).slice(0, slots(s));
         if (s.jobs && (typeof s.jobs !== 'object' || typeof s.jobs.day !== 'string' || !Array.isArray(s.jobs.list))) s.jobs = null;
         s.chests = Math.max(0, Math.floor(s.chests));
+        s.runs = Math.max(0, Math.floor(s.runs));
+        if (!s.notes || typeof s.notes !== 'object' || Array.isArray(s.notes)) s.notes = {};
         if (s.form === 'wall' && s.mode === 'front') s.mode = 'below';   // standing at a wall, only the facing camera sees it
         return s;
     }
@@ -582,7 +620,7 @@ var Core = (function () {
         return (s.day.goalDay === key || s.day.goalDay === yesterday(key)) ? s.day.streak : 0;
     }
 
-    function newSet(t) { return {start: t, last: -1e9, reps: 0, perfect: 0, shallow: 0, streak: 0, best: 0, coins: 0, meters: 0, ores: {}, depth0: 0, run: 0, guards: 0, qsum: 0, first: null, test: false, warded: 0, wardNext: false}; }
+    function newSet(t) { return {start: t, last: -1e9, reps: 0, perfect: 0, shallow: 0, streak: 0, best: 0, coins: 0, meters: 0, ores: {}, depth0: 0, run: 0, guards: 0, qsum: 0, first: null, test: false, warded: 0, wardNext: false, lastAny: -1e9}; }
 
     // a counted (or shallow) rep lands: returns events for the view
     function rep(s, set, q, t, dayKey, ev) {
@@ -610,6 +648,7 @@ var Core = (function () {
         var h = g === 'shallow' ? 1 : heatOf(s, set.streak);
         var G = guardAt(s.depth);
         if (G) {
+            set.lastAny = t;
             // only the run counts here: the streak already restarts after a pause, so the run follows it
             // a slip is a shallow rep or a pause past the heat window (the streak restarting). Second Wind forgives some
             var was = set.run, need = needOf(s, G), slip = g === 'shallow' || (set.streak === 1 && was > 0 && !set.wardNext);
@@ -627,9 +666,16 @@ var Core = (function () {
             s.coins += prize; set.coins += prize;
             ev.push({t: 'guardDown', guard: G, coins: prize});
             breakBlock(s, set, ev, M);   // the guardian's block crumbles with it
+            if (G.final) ev.push({t: 'finale', runs: s.runs});
             return g;
         }
+        var T = twistAt(s.depth);
+        if (T && T.id === 'magma' && s.dmg > 0 && set.lastAny > -1e8 && t - set.lastAny > TEMPO + M.tempo) {
+            var healed = s.dmg * 0.6; s.dmg -= healed; ev.push({t: 'regrow', healed: healed, frac: healed / blockHp(s.depth)});
+        }
+        set.lastAny = t;
         var dmg = PICKS[s.pick].p * (g === 'perfect' ? 1.5 + M.deep : g === 'good' ? 1 : 0.25 + M.shallow) * h * FORMS[s.form].k * (1 + M.dmg);
+        if (T && T.id === 'crystal' && g !== 'perfect') { dmg *= 0.3; ev.push({t: 'soft'}); }
         ev.push({t: 'hit', q: q, grade: g, dmg: dmg, heat: h, streak: set.streak});
         var left = dmg, broke = 0, chain = 0;
         while ((left > 0 || chain > 0) && broke < 3 + chain && !guardAt(s.depth)) {
@@ -654,6 +700,7 @@ var Core = (function () {
             var auto = s.equip.length < slots(s); if (auto) s.equip.push(R.id);
             ev.push({t: 'relic', relic: R, equipped: auto});
         }
+        var N = noteAt(d); if (N && !s.notes[N.i]) { s.notes[N.i] = 1; ev.push({t: 'note', note: N}); }
         jobTick(s, 'blocks', 1, ev); jobTick(s, 'ore', ores.length, ev);
         s.depth++; s.dmg = 0;
         var NG = guardAt(s.depth); if (NG) { set.run = 0; ev.push({t: 'guard', guard: NG}); }
@@ -692,6 +739,8 @@ var Core = (function () {
     // every set worth keeping goes in the log: what a player trying to get better wants to look back on
     function finishSet(s, set, meta, ev) {
         if (set.reps > 0) { s.sets++; jobTick(s, 'sets', 1, ev || []); }
+        var T = twistAt(s.depth);   // magma cools while you are away: a block left half-broken closes up
+        if (T && T.id === 'magma' && s.dmg > 0) { var hl = s.dmg * 0.6; s.dmg -= hl; (ev || []).push({t: 'regrow', healed: hl, frac: hl / blockHp(s.depth)}); }
         s.bestSet = Math.max(s.bestSet, set.reps);
         if (!(set.reps > 0) || !meta) return null;
         var e = {at: meta.at, day: meta.day, m: s.mode || 'tap', f: s.form, r: set.reps, p: set.perfect, sh: set.shallow, b: set.best,
@@ -900,7 +949,7 @@ var Core = (function () {
 
     return {
         hash: hash, ORES: ORES, LAYERS: LAYERS, PICKS: PICKS, layerAt: layerAt, layerIndex: layerIndex,
-        blockHp: blockHp, blockOres: blockOres, GUARDS: GUARDS, guardAt: guardAt, RELICS: RELICS, relicAt: relicAt, specialAt: specialAt, slots: slots, mods: mods, tempoOf: tempoOf, heatOf: heatOf, needOf: needOf,
+        blockHp: blockHp, blockOres: blockOres, GUARDS: GUARDS, guardAt: guardAt, RELICS: RELICS, relicAt: relicAt, FINAL: FINAL, twistAt: twistAt, NOTES: NOTES, noteAt: noteAt, descend: descend, specialAt: specialAt, slots: slots, mods: mods, tempoOf: tempoOf, heatOf: heatOf, needOf: needOf,
         JOBS: JOBS, jobsFor: jobsFor, jobText: jobText, grade: grade, qmult: qmult, heat: heat, TEMPO: TEMPO, FORMS: FORMS,
         PERFECT: PERFECT, GOOD: GOOD, newSave: newSave, fix: fix, migrate: migrate, yesterday: yesterday, touchDay: touchDay,
         streakNow: streakNow, newSet: newSet, GOALS: GOALS, MAX_PASSES: MAX_PASSES, LOG_MAX: LOG_MAX, daily: daily, weekly: weekly, weekToDate: weekToDate, levelUp: levelUp, records: records,
@@ -1265,6 +1314,14 @@ function drawBlock(x, y, B, d, lit, dmgFrac, current) {
     var sp = Core.specialAt(save.seed, d, save);
     if (sp === 'chest') drawChest(x + B * 0.5, y + B * 0.62, B * 0.42, lit);
     else if (sp === 'tnt') drawTnt(x + B * 0.5, y + B * 0.6, B * 0.4, lit, d);
+    var N = Core.noteAt(d);
+    if (N && !save.notes[N.i] && lit > 0.2) {   // a folded page wedged in the rock
+        var px = x + B * 0.62, py = y + B * 0.3, pw = B * 0.2, ph = B * 0.15;
+        ctx.save(); ctx.translate(px, py); ctx.rotate(-0.25);
+        ctx.fillStyle = shade('#e9dcc0', lit); ctx.beginPath(); ctx.moveTo(-pw / 2, -ph / 2); ctx.lineTo(pw / 2 - pw * 0.25, -ph / 2); ctx.lineTo(pw / 2, -ph / 2 + pw * 0.25); ctx.lineTo(pw / 2, ph / 2); ctx.lineTo(-pw / 2, ph / 2); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(80,55,35,' + 0.6 * lit + ')'; ctx.lineWidth = 1.2; for (var li = 0; li < 3; li++) { ctx.beginPath(); ctx.moveTo(-pw * 0.35, -ph * 0.2 + li * ph * 0.22); ctx.lineTo(pw * 0.3, -ph * 0.2 + li * ph * 0.22); ctx.stroke(); }
+        ctx.restore();
+    }
     var R = Core.relicAt(save.seed, d);
     if (R && !save.relics[R.id] && lit > 0.3) {   // something old in the rock: a slow glint you can see coming from a few blocks away
         var pu = reduce ? 0.6 : 0.5 + 0.5 * Math.sin(performance.now() / 600 + d), gx = x + B * (0.3 + H(d, 950) * 0.4), gy = y + B * (0.45 + H(d, 951) * 0.3);
@@ -1848,8 +1905,10 @@ function renderTitle() {
     var W = Core.weekToDate(save.log, key);
     $('tWeek').innerHTML = save.log.length ? 'This week <b>' + W.now + '</b>' + (W.before ? ' · ' + W.before + ' by this day last week' + (W.now >= W.before ? ' <span style="color:var(--good)">▲</span>' : '') : '') + (save.passes ? ' · ' + save.passes + ' rest pass' + (save.passes > 1 ? 'es' : '') : '') : '';
     if (save.day.frozen) $('tWeek').innerHTML += '<br><span style="color:var(--good)">A rest pass kept your streak alive.</span>';
+    if (save.runs) $('tStreak').innerHTML += ' · <span style="color:#c070ff">descent ' + (save.runs + 1) + ', ore +' + 25 * save.runs + '%</span>';
+    if (save.depth >= Core.FINAL) $('tStreak').innerHTML += ' · <span style="color:#c070ff">The bottom! Descend again from Gear.</span>';
     var TG = Core.guardAt(save.depth);
-    if (TG) $('tStreak').innerHTML += ' · <span style="color:var(--heat)">' + TG.name + ' waits: ' + TCore.needOf(save, G) + ' in a row</span>';
+    if (TG) $('tStreak').innerHTML += ' · <span style="color:var(--heat)">' + TG.name + ' waits: ' + Core.needOf(save, TG) + ' in a row</span>';
     renderDrill();
     var JS = Core.jobsFor(save, key);
     $('tJobs').innerHTML = '<div class="jh"><span>Today\'s contracts</span><span>+' + fmt(JS.prize) + ' each</span></div>' + JS.list.map(function (J) {
@@ -1886,8 +1945,16 @@ function renderRelics() {
     });
     if (grid.children.length) list.appendChild(grid);
 }
+function renderJournal() {
+    var n = Object.keys(save.notes).length;
+    $('noteHead').textContent = 'Journal · ' + n + ' / ' + Core.NOTES.length;
+    $('noteList').innerHTML = n ? Core.NOTES.map(function (N, i) {
+        return save.notes[i] ? '<p><b>' + N[0] + ' m</b>' + esc(N[1]) + '</p>' : '<p class="torn"><b>' + N[0] + ' m</b>a page not found yet</p>';
+    }).join('') : '<p class="torn">Someone dug here before you. Their pages are somewhere below.</p>';
+    $('bDescend2').hidden = save.depth < Core.FINAL;
+}
 function renderShop() {
-    renderRelics();
+    renderRelics(); renderJournal();
     $('shopCoins').textContent = fmt(save.coins);
     var list = $('shopList'); list.innerHTML = '';
     Core.PICKS.forEach(function (P, i) {
@@ -1909,7 +1976,7 @@ function renderShop() {
 /* ---- set flow ---- */
 function startSet(mode) {
     save.mode = mode; persist();
-    game.relicsFound = [];
+    game.relicsFound = []; game.notesFound = []; game.softSeen = false;
     musicStart();
     game.set = Core.newSet(now()); game.set.depth0 = save.depth; game.set.test = !!game.pendingTest; game.pendingTest = false;
     game.det = Core.detector(mode);
@@ -1945,6 +2012,9 @@ function endSet() {
         lines.push(['Suggested goal', game.suggest + ' a day' + (game.suggest === save.goal ? ' ✓' : '')]);
     }
     (game.relicsFound || []).forEach(function (R) { lines.push(['Relic', '◆ ' + R.name]); });
+    (game.notesFound || []).forEach(function (N) { lines.push(['Journal', 'Page ' + (N.i + 1) + ' of ' + Core.NOTES.length]); });
+    if (fe.some(function (x) { return x.t === 'regrow'; })) lines.push(['Magma', 'the open block cooled back']);
+    $('bDescend').hidden = save.depth < Core.FINAL;
     if (save.jobs) { var jd = save.jobs.list.filter(function (J) { return J.done; }).length; lines.push(['Contracts', jd + ' / 3' + (jd === 3 ? '  ✓' : '')]); }
     if (s.reps > 1) lines.push(['Pace', (Math.round((s.last - s.first) / (s.reps - 1) * 10) / 10) + ' s per rep']);
     if (newBadges.length) lines.push([newBadges.length > 1 ? 'Milestones' : 'Milestone', '★ ' + newBadges.map(function (b) { return b.name; }).join(', ')]);
@@ -1974,7 +2044,7 @@ function hint(big, small, cls, secs) { coach(big, small, cls); game.coachUntil =
 function pill(t, cls) { var p = $('pill'); p.textContent = t; p.className = 'pill ' + (cls || ''); }
 function updateHud() {
     if (game.set) { var bs = save.bestSet, n = game.set.reps; $('hRepsL').textContent = bs >= 5 && !game.set.test ? (n > bs ? 'RECORD' : 'REPS · BEST ' + bs) : 'REPS'; $('hRepsL').style.color = bs >= 5 && n > bs ? 'var(--amber)' : ''; }
-    $('hDepth').textContent = save.depth; $('hLayer').textContent = Core.layerAt(save.depth).name;
+    $('hDepth').textContent = save.depth; $('hLayer').textContent = Core.layerAt(save.depth).name + (save.runs ? ' · descent ' + (save.runs + 1) : '');
     var h = game.set ? Core.heatOf(save, game.set.streak) : 1;
     var st0 = game.set ? game.set.streak : 0; $('hRhythm').firstChild.style.width = (st0 >= 20 ? 100 : (st0 % 5) / 5 * 100) + '%';
     $('hHeat').firstChild.nodeValue = '×' + h + ' heat'; $('hHeat').classList.toggle('on', h > 1);
@@ -1987,7 +2057,7 @@ function onEvents(ev) {
         else if (e.t === 'found') { pill('Tracking', 'ok'); }
         else if (e.t === 'calTop') { sfx.tick(1); coach('Now one slow rep', 'All the way down, then back up. This sets your range.', 'go'); }
         else if (e.t === 'calShallow') { sfx.chip(); coach('A bit lower', 'Chest towards the floor, then back up.', 'warn'); }
-        else if (e.t === 'calDone') { document.body.classList.add('cal'); setTimeout(function () { drillSay('start', true); }, 1200); var CG = Core.guardAt(save.depth); if (game.set.test) hint('Max test — go!', 'As many good reps as you can, in one set. Stop when your form breaks.', 'go', 3.5); else if (CG) hint('Range set — ' + CCore.needOf(save, G) + ' in a row!', 'The ' + CG.name + ' blocks the way. Keep the rhythm.', 'go', 3); else hint('Range set — dig!', 'Every push-up swings the pick.', 'go', 2.2); flash(); }
+        else if (e.t === 'calDone') { document.body.classList.add('cal'); setTimeout(function () { drillSay('start', true); }, 1200); var CG = Core.guardAt(save.depth); if (game.set.test) hint('Max test — go!', 'As many good reps as you can, in one set. Stop when your form breaks.', 'go', 3.5); else if (CG) hint('Range set — ' + Core.needOf(save, CG) + ' in a row!', 'The ' + CG.name + ' blocks the way. Keep the rhythm.', 'go', 3); else hint('Range set — dig!', 'Every push-up swings the pick.', 'go', 2.2); flash(); }
         else if (e.t === 'deep') { sfx.tick(e.level); if (e.level === 2) flash(); }
         else if (e.t === 'lockout') { hint('All the way up', 'Straighten your arms to finish the rep.', 'warn', 2); sfx.chip(); }
         else if (e.t === 'rep') strike(e.q, t);
@@ -2060,6 +2130,8 @@ function strike(q, t) {
                 floatText('+' + e.coins + ' ' + Core.ORES[best].name.toUpperCase(), Core.ORES[best].c, 22, Math.min(SW - 80, g.cx + B * 0.55), by - B * 0.75, 0.25); }
             if (!e.ores.length) chimeN = Math.max(0, chimeN - 1);
             hpShown = 1;
+            var TW = e.layer >= 0 ? Core.twistAt(Core.LAYERS[e.layer].from) : null;
+            if (TW) setTimeout(function () { hint(Core.LAYERS[e.layer].name, TW.text + '.', 'warn', 4); }, 2600);
             if (e.layer >= 0 && guardFell) { var NL0 = Core.LAYERS[e.layer]; banner.s += ' · into ' + NL0.name; }
             else if (e.layer >= 0) { var NL = Core.LAYERS[e.layer]; banner = {t: NL.name.toUpperCase(), s: NL.from + ' m · new ore: ' + NL.ores.map(function (o) { return Core.ORES[o[0]].name; }).join(', '), c: '#ffb547', age: 0}; sfx.goal(); }
         } else if (e.t === 'chest') {
@@ -2081,6 +2153,18 @@ function strike(q, t) {
             setTimeout(function () { sfx.goal(); hint('Contract done +' + fmt(e.coins), Core.jobText(e.job) + ' ✓', 'go', 2.6); }, 500);
         } else if (e.t === 'jobsAll') {
             setTimeout(function () { banner = {t: 'ALL CONTRACTS', s: 'Three of three today · +' + fmt(e.coins) + ' bonus', c: '#ffb547', age: 0}; sfx.goal(); }, 1500);
+        } else if (e.t === 'regrow') {
+            floatText('COOLED', '#ff8a4a', 26, g.cx, hitY - B * 1.2, 0.05); sfx.chip();
+            hint('The magma cooled', 'You paused, and ' + Math.round(e.frac * 100) + '% of the cracks closed. Keep the rhythm down here.', 'warn', 2.8);
+        } else if (e.t === 'soft') {
+            if (!game.softSeen) { game.softSeen = true; hint('Crystal wants depth', 'Only deep reps cut it properly. Reach the amber line.', 'warn', 3); }
+            floatText('DEEPER', '#7fd8ff', 22, g.cx + B * 0.4, hitY - B * 0.9, 0.1);
+        } else if (e.t === 'note') {
+            game.notesFound = (game.notesFound || []).concat([e.note]);
+            setTimeout(function () { sfx.relic(); hint('Page ' + (e.note.i + 1) + ' of ' + Core.NOTES.length, '“' + e.note.text + '”', 'go', 7); }, 700);
+        } else if (e.t === 'finale') {
+            setTimeout(function () { banner = {t: 'THE MOUNTAIN IS YOURS', s: 'The Deep Heart is still. Finish the set, then descend again.', c: '#c070ff', age: 0}; sfx.goal(); flash(); }, 2200);
+            burst(g.cx, hitY, reduce ? 10 : 80, '#c070ff', 1300, 3, 'spark');
         } else if (e.t === 'pb') {
             banner = {t: 'NEW BEST SET', s: 'Past your ' + e.best + '. Every rep now is a record.', c: '#ffb547', age: 0}; sfx.goal(); flash();
             drillSay('praise', true);
@@ -2286,6 +2370,11 @@ function download(name, text, type) {
 }
 $('bStats').onclick = function () { sfx.ui(); go('stats'); };
 $('bTest').onclick = function () { sfx.ui(); game.pendingTest = true; $('placeNote').textContent = 'Max test: one set, as many good reps as you can.'; renderForm(); go('place'); };
+function doDescend() {
+    if (!Core.descend(save)) return; persist(); sfx.goal(); view.y = 0; view.vy = 0;
+    go('title');
+}
+$('bDescend').onclick = $('bDescend2').onclick = doDescend;
 $('bUseGoal').onclick = function () { save.goal = game.suggest; persist(); sfx.ui(); $('bUseGoal').hidden = true; };
 $('bCsv').onclick = function () {
     var head = 'date,time,reps,in_a_row,deep,shallow,avg_depth,pace_s,type,camera,max_test,guardians,meters,rest_s';
@@ -2440,7 +2529,7 @@ function frame(ts) {
         drillTick(t, D);
         var LG = Core.guardAt(save.depth);
         if (LG && game.set && game.set.run > 0 && t - game.set.last > Core.tempoOf(save) && game.healSeen !== game.set.last) {
-            game.healSeen = game.set.last; drillSay('heal', true); hint('It healed', 'Too long a pause. ' + LCore.needOf(save, G) + ' in a row, start again.', 'warn', 2.6); sfx.chip();
+            game.healSeen = game.set.last; drillSay('heal', true); hint('It healed', 'Too long a pause. ' + Core.needOf(save, LG) + ' in a row, start again.', 'warn', 2.6); sfx.chip();
         }
         if (game.set && game.set.streak) { var left = Math.max(0, 1 - (t - game.set.last) / Core.tempoOf(save)); $('hHeatBar').style.transform = 'scaleX(' + left.toFixed(3) + ')'; }
         // idle: end the set after a long pause, with a visible countdown
