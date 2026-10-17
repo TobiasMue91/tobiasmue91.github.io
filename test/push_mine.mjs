@@ -11,7 +11,8 @@
 // a player doing a few sets a week reaches a new stratum about every week or two. Knee, incline and wall push-ups
 // count on the same cameras and dig a gently discounted share, never less towards the goal and streak. A guardian
 // at the foot of each stratum takes reps in a row instead of pick damage, and heals on a pause or a shallow rep;
-// a still plank calibrates quickly even through a jittery face box.
+// a still plank calibrates quickly even through a jittery face box. Every set is logged for the Progress screen; daily and
+// weekly totals, records and the suggested goal come from that log; rest passes save a streak from a missed day.
 // No browser, no server.
 //
 //   node test/push_mine.mjs        (npm run test:pushmine)
@@ -275,18 +276,26 @@ for (const [mode, top, bottom, noise] of [['front', 0.35, 0.52, 0.003], ['front'
     ok(kn.counted.length === 8, 'knee/incline push-ups count in front view');
 }
 
-// below the face, the detector's box jitters frame to frame: a still plank must still calibrate quickly
+// below the face, the real detector's box wobbles ~9% (sd of log width 0.086, measured with the MediaPipe face detector
+// on a still photo): a still plank must calibrate quickly and every time, at a phone's 30 fps and a slow phone's 10 fps
 {
-    const d = Core.detector('below'), ev = [];
-    let at = null;
-    for (let t = 0; t < 6 && at === null; t += 1 / 30) {
-        const e = []; Core.feed(d, Math.log(0.3) + gauss() * 0.05, t, e);   // ~5% box jitter, no motion
-        if (e.some(x => x.t === 'calTop')) at = t;
+    for (const fps of [30, 10]) {
+        const times = [];
+        for (let trial = 0; trial < 20; trial++) {
+            const d = Core.detector('below'); let at = null;
+            for (let t = 0; t < 8 && at === null; t += 1 / fps) { const e = []; Core.feed(d, Math.log(0.3) + gauss() * 0.22, t, e); if (e.some(x => x.t === 'calTop')) at = t; }
+            times.push(at === null ? 99 : at);
+        }
+        times.sort((a, b) => a - b);
+        ok(times[times.length - 1] < (fps === 30 ? 3 : 5) && times[10] < (fps === 30 ? 1.5 : 2.5), `a wobbly still face calibrates fast every time at ${fps} fps: worst ${times[times.length - 1].toFixed(2)} s, median ${times[10].toFixed(2)} s`);
     }
-    ok(at !== null && at < 2.5, 'a jittery face box still calibrates the hold in under 2.5 s: ' + (at && at.toFixed(2)));
-    const d2 = Core.detector('below'), e2 = [];
-    for (let t = 0; t < 6; t += 1 / 30) Core.feed(d2, Math.log(0.3) + Math.sin(t * 2) * 0.12, t, e2);   // swaying in and out
-    ok(!e2.some(x => x.t === 'calTop'), 'a face that keeps moving is not a held plank');
+    const d = Core.detector('below'), e2 = [];
+    for (let t = 0; t < 8; t += 1 / 30) Core.feed(d, Math.log(0.3) + Math.sin(t * 3) * 0.3 + gauss() * 0.1, t, e2);
+    ok(!e2.some(x => x.t === 'calTop'), 'a face moving in and out is not a held plank');
+    const d3 = Core.detector('below'), e3 = []; let at3 = null;
+    for (let t = 0; t < 8 && at3 === null; t += 1 / 30) { const e = []; Core.feed(d3, Math.log(0.3) + Math.min(t, 1.5) * 0.4 + gauss() * 0.2, t, e); if (e.some(x => x.t === 'calTop')) at3 = t; }
+    ok(at3 !== null && at3 > 1.5 && at3 < 4, 'getting into position is not a hold; settling is: ' + (at3 && at3.toFixed(2)) + ' s');
+    ok(Math.abs(d3.top - (Math.log(0.3) + 0.6)) < 0.05, 'and the top is where the face settled: ' + (d3.top - Math.log(0.3)).toFixed(3));
 }
 
 // guardians: the last block of a stratum takes reps in a row, not pick damage
@@ -311,6 +320,77 @@ for (const [mode, top, bottom, noise] of [['front', 0.35, 0.52, 0.003], ['front'
     ok(s2.depth === 11 && s2.dmg === 0 && ev2.some(e => e.t === 'guard'), 'a huge hit stops at the guardian');
     ok(Core.fix(Object.assign(Core.newSave(1), {depth: 11, dmg: 3})).dmg === 0, 'a guardian never carries pick damage');
     ok(Core.fix({seed: 1, drill: 'shouty'}).drill === 'off', 'the drill sergeant setting heals');
+}
+
+// the history: every set is logged with what a player trying to improve wants to see
+{
+    const s = Core.newSave(4); s.mode = 'front'; s.form = 'knee';
+    const set = Core.newSet(0), ev = [];
+    [0.9, 0.9, 0.7, 0.3, 0.9, 0.9].forEach((q, k) => Core.rep(s, set, q, k * 2.5, '2026-10-19', ev));
+    const e = Core.finishSet(s, set, {at: 1, day: '2026-10-19'});
+    ok(e && e.r === 5 && e.p === 4 && e.sh === 1 && e.f === 'knee' && e.m === 'front', 'a set is logged with reps, perfect, shallow, form and camera');
+    ok(e.b === 3 && Math.abs(e.pace - 3.1) < 0.01, 'its best run and its pace: ' + e.b + ', ' + e.pace + ' s/rep');
+    ok(Math.abs(e.q - (0.9 * 4 + 0.7) / 5) < 0.01, 'and how deep the reps were on average');
+    ok(Core.finishSet(s, Core.newSet(0), {at: 2, day: '2026-10-19'}) === null && s.log.length === 1, 'an empty set is not logged');
+    for (let i = 0; i < Core.LOG_MAX + 5; i++) s.log.push({at: i, day: '2026-01-01', r: 1, p: 0, sh: 0, b: 1, q: 1, pace: 0, f: 'full', m: 'tap'});
+    const set2 = Core.newSet(0); Core.rep(s, set2, 0.9, 0, '2026-10-19', []); Core.finishSet(s, set2, {at: 3, day: '2026-10-19'});
+    ok(s.log.length === Core.LOG_MAX && s.log[s.log.length - 1].at === 3, 'the log keeps the newest ' + Core.LOG_MAX + ' sets');
+    ok(Core.fix(Object.assign(Core.newSave(1), {log: [null, 5, {day: '2026-01-01', r: 3}, {r: 2}]})).log.length === 1, 'a damaged log heals to its good entries');
+}
+{
+    const L = [
+        {day: '2026-10-12', r: 10, p: 5, b: 8, q: 0.9, pace: 2, x: 0, f: 'full'},   // a Monday
+        {day: '2026-10-18', r: 20, p: 20, b: 20, q: 1, pace: 3, x: 1, f: 'full'},   // that Sunday
+        {day: '2026-10-19', r: 12, p: 6, b: 12, q: 0.8, pace: 2.5, x: 0, f: 'full'}  // the next Monday
+    ];
+    const D = Core.daily(L, '2026-10-19', 8);
+    ok(D.length === 8 && D[7].day === '2026-10-19' && D[7].reps === 12 && D[6].reps === 20 && D[0].day === '2026-10-12' && D[0].reps === 10, 'daily totals line up with their days');
+    const W = Core.weekly(L, '2026-10-19', 3);
+    ok(W[1].from === '2026-10-12' && W[1].reps === 30 && W[1].sets === 2 && W[1].best === 20 && W[1].test === 20, 'weeks run Monday to Sunday');
+    ok(W[2].from === '2026-10-19' && W[2].reps === 12 && W[0].reps === 0 && W[0].perfectPct === null, 'an empty week is empty, not zero form');
+    ok(W[1].perfectPct === 83 && Math.abs(W[1].pace - (2 * 9 + 3 * 19) / 28) < 1e-9, 'form and pace are weighted by reps');
+    const T = Core.weekToDate(L.concat([{day: '2026-10-13', r: 7}, {day: '2026-10-20', r: 5}]), '2026-10-20');
+    ok(T.now === 17 && T.before === 17, 'this week so far races last week up to the same weekday: ' + T.now + ' vs ' + T.before);
+    const R = Core.records(L);
+    ok(R.bestSet.r === 20 && R.bestDay.reps === 20 && R.bestTest.r === 20 && R.total === 42 && R.days === 3, 'records find the best set, day and max test');
+    ok(Core.suggestGoal(20) === 30 && Core.suggestGoal(4) === 10 && Core.suggestGoal(100) === 150, 'a max test suggests about one and a half times the max as the daily goal');
+}
+// an easier push-up that has become easy suggests the next harder one
+{
+    const e = (day, r, f) => ({day, r, p: r, f});
+    ok(Core.levelUp([e('2026-10-10', 22, 'knee'), e('2026-10-15', 20, 'knee')], 'knee', '2026-10-17') === 'full', 'two sets of 20 knee push-ups in two weeks: time for full ones');
+    ok(Core.levelUp([e('2026-09-10', 22, 'knee'), e('2026-10-15', 20, 'knee')], 'knee', '2026-10-17') === null, 'an old set does not count');
+    ok(Core.levelUp([e('2026-10-10', 25, 'wall'), e('2026-10-15', 25, 'wall')], 'wall', '2026-10-17') === 'incline', 'wall leads to incline');
+    ok(Core.levelUp([e('2026-10-10', 40, 'full'), e('2026-10-15', 40, 'full')], 'full', '2026-10-17') === null, 'full push-ups are the top');
+}
+// rest passes: a 7-day streak earns one, a missed day spends it
+{
+    const s = Core.newSave(2); s.goal = 10;
+    const day = n => Core.dayKeyOf(Core.dayNum('2026-10-01') + n);
+    const doDay = n => { const set = Core.newSet(0), ev = []; for (let k = 0; k < 10; k++) Core.rep(s, set, 0.9, k * 2, day(n), ev); return ev; };
+    let passEv = false;
+    for (let n = 0; n < 7; n++) passEv = doDay(n).some(e => e.t === 'pass') || passEv;
+    ok(s.day.streak === 7 && s.passes === 1 && passEv, 'a 7-day streak earns a rest pass');
+    Core.touchDay(s, day(8));   // day 7 missed
+    ok(s.passes === 0 && s.day.frozen === 1 && Core.streakNow(s, day(8)) === 7, 'one missed day spends it and the streak lives');
+    doDay(8);
+    ok(s.day.streak === 8 && s.bestStreak === 8, 'and carries on the next day');
+    Core.touchDay(s, day(10));
+    ok(Core.streakNow(s, day(10)) === 0, 'without a pass a missed day still breaks it');
+    for (let n = 11; n < 11 + 21; n++) doDay(n);
+    ok(s.passes === Core.MAX_PASSES, 'passes stop at ' + Core.MAX_PASSES);
+    Core.touchDay(s, day(11 + 21 + 3));   // three missed, two passes
+    ok(Core.streakNow(s, day(11 + 21 + 3)) === 0 && s.passes === Core.MAX_PASSES, 'a gap longer than the passes breaks it and spends none');
+}
+// milestones
+{
+    const s = Core.newSave(1);
+    ok(Core.checkBadges(s, '2026-10-19').length === 0, 'a new player has no badges');
+    s.reps = 120; s.bestSet = 12; s.guards = 1;
+    const got = Core.checkBadges(s, '2026-10-19').map(b => b.id).sort().join(',');
+    ok(got === 'g1,r100,s10', 'badges are earned once their mark is reached: ' + got);
+    ok(Core.checkBadges(s, '2026-10-20').length === 0 && s.badges.r100 === '2026-10-19', 'and only once, dated');
+    ok(new Set(Core.BADGES.map(b => b.id)).size === Core.BADGES.length, 'badge ids are unique');
 }
 
 console.log(fails ? `${fails} of ${n} failed` : `all ${n} passed`);
