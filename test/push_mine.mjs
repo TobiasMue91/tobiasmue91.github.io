@@ -8,7 +8,8 @@
 // the range follows a player who goes deeper. Around it: rock takes the hits it says, the same seed
 // is the same mine, a deep rep hits harder and rhythm builds heat, the daily streak survives month
 // ends and breaks on a missed day, damaged saves heal, the first Push Mine's save carries over, and
-// a player doing a few sets a week reaches a new stratum about every week or two.
+// a player doing a few sets a week reaches a new stratum about every week or two. Knee, incline and wall push-ups
+// count on the same cameras and dig a gently discounted share, never less towards the goal and streak.
 // No browser, no server.
 //
 //   node test/push_mine.mjs        (npm run test:pushmine)
@@ -244,6 +245,32 @@ for (const [mode, top, bottom, noise] of [['front', 0.35, 0.52, 0.003], ['front'
     ok(reached[1] !== undefined && reached[1] <= 7, 'red clay within the first week: day ' + reached[1]);
     ok(reached[3] !== undefined && reached[3] <= 50, 'slate within seven weeks: day ' + reached[3]);
     ok(reached[6] === undefined || reached[6] > 60, 'the crystal hollow is not a two-month walk: ' + reached[6]);
+}
+
+// easier push-ups: a little less rock per rep, the same reps, coins, goal and streak
+{
+    const run = form => { const s = Core.newSave(5); s.form = form; s.goal = 10; const set = Core.newSet(0), ev = [];
+        for (let k = 0; k < 10; k++) Core.rep(s, set, 0.9, k * 2, '2026-10-17', ev);
+        return {s, dmg: ev.filter(e => e.t === 'hit').reduce((a, e) => a + e.dmg, 0), goal: ev.some(e => e.t === 'goal')}; };
+    const full = run('full');
+    for (const f of ['knee', 'incline', 'wall']) {
+        const r = run(f), k = Core.FORMS[f].k;
+        ok(Math.abs(r.dmg - full.dmg * k) < 1e-9, f + ' digs x' + k + ' of a full push-up');
+        ok(k >= 0.7 && k < 1, f + ' is discounted, gently: ' + k);
+        ok(r.s.reps === 10 && r.s.day.reps === 10 && r.goal && r.s.day.streak === 1, f + ' reps count fully towards the goal and streak');
+    }
+    ok(Core.FORMS.full.k > Core.FORMS.knee.k && Core.FORMS.knee.k > Core.FORMS.incline.k && Core.FORMS.incline.k > Core.FORMS.wall.k, 'harder forms dig more');
+    ok(Core.fix({seed: 1}).form === 'full', 'an old save does full push-ups');
+    ok(Core.fix({seed: 1, form: 'handstand'}).form === 'full', 'an unknown form heals to full');
+    const w = Core.fix({seed: 1, form: 'wall', mode: 'front'});
+    ok(w.form === 'wall' && w.mode === 'below', 'wall push-ups keep the knee-high front camera out: facing camera instead');
+    // a wall push-up seen by a phone at face height: the face grows from ~60 cm to ~25 cm away
+    ok(Core.fix({seed: 1, mode: 'tap'}).mode === 'tap', 'the camera spot survives a reload');
+    const wl = session({mode: 'below', top: Math.log(0.18), bottom: Math.log(0.18 * 60 / 25), reps: 8, noise: 0.02});
+    ok(wl.counted.length === 8, 'wall push-ups count on the facing camera');
+    // knees and incline move the shoulders less in front view: still counted at ~70% of a full push-up's travel
+    const kn = session({mode: 'front', top: 0.38, bottom: 0.38 + 0.17 * 0.7, reps: 8});
+    ok(kn.counted.length === 8, 'knee/incline push-ups count in front view');
 }
 
 console.log(fails ? `${fails} of ${n} failed` : `all ${n} passed`);
