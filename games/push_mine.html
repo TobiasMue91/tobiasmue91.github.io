@@ -124,6 +124,12 @@ body.tap #coach{bottom:auto;top:30px;background:none;padding-top:8px}
 h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8vmin,42px);margin:4vh 0 6px;text-align:center;line-height:1}
 .sub{text-align:center;color:var(--dim);font-size:19px;margin:0 0 18px}
 .choice{display:grid;gap:12px}
+.forms{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 14px}
+.forms button{min-height:52px;border-radius:12px;border:1.5px solid var(--line);background:rgba(27,19,13,.94);color:var(--dim);font-size:17px;line-height:1.05;padding:6px 2px}
+.forms button small{display:block;font-size:13px;color:var(--mute);margin-top:2px}
+.forms button[aria-pressed="true"]{border-color:var(--amber);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--amber)}
+.forms button[aria-pressed="true"] small{color:var(--amber2)}
+.formlbl{font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin:2px 0 6px}
 .opt{display:flex;align-items:center;gap:14px;text-align:left;padding:12px;border-radius:var(--r);background:rgba(27,19,13,.94);border:1.5px solid var(--line);
   transition:border-color .2s,transform .12s ease}
 .opt:active{transform:scale(.98)} .opt:hover{border-color:var(--amber)}
@@ -134,6 +140,7 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
 .link{display:block;margin:16px auto 0;color:var(--dim);font-size:18px;text-decoration:underline;text-underline-offset:4px}
 .back{position:absolute;left:12px;top:calc(12px + var(--safeT))}
 .note{color:var(--heat);text-align:center;font-size:17px;min-height:1.2em;margin-top:10px}
+#formNote{color:var(--dim);min-height:0}
 
 .big{font-size:clamp(84px,26vmin,140px);text-align:center;line-height:.9;margin-top:2vh}
 .big small{display:block;font-family:'Barlow Condensed';font-weight:600;font-size:18px;letter-spacing:.3em;color:var(--dim);margin-top:6px}
@@ -201,10 +208,18 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
       <div class="wrap">
         <h2>Where's your phone?</h2>
         <p class="sub">The camera counts your reps. Pick the spot that fits your floor.</p>
+        <div class="formlbl" id="formLbl">Your push-up</div>
+        <div class="forms" role="group" aria-labelledby="formLbl">
+          <button data-form="full" aria-pressed="true">Full<small>×1 dig</small></button>
+          <button data-form="knee" aria-pressed="false">Knees<small>×0.9 dig</small></button>
+          <button data-form="incline" aria-pressed="false">Incline<small>×0.85 dig</small></button>
+          <button data-form="wall" aria-pressed="false">Wall<small>×0.75 dig</small></button>
+        </div>
         <div class="choice">
           <button class="opt" data-mode="front"><canvas width="256" height="176" data-ill="front"></canvas><div><b>In front</b><span>Propped up on the floor, about a body length ahead, facing you.</span><div class="tagline">Full body tracking</div></div></button>
-          <button class="opt" data-mode="below"><canvas width="256" height="176" data-ill="below"></canvas><div><b>Below you</b><span>Flat on the floor under your face, screen up.</span><div class="tagline">Face tracking · tight spaces</div></div></button>
+          <button class="opt" data-mode="below"><canvas width="256" height="176" data-ill="below"></canvas><div><b id="belowT">Below you</b><span id="belowS">Flat on the floor under your face, screen up.</span><div class="tagline" id="belowG">Face tracking · tight spaces</div></div></button>
         </div>
+        <div class="note" id="formNote"></div>
         <div class="note" id="placeNote"></div>
         <button class="link" data-mode="tap">No camera? Hold &amp; release to dig</button>
       </div>
@@ -321,11 +336,21 @@ var Core = (function () {
     function heat(streak) { return 1 + 0.5 * Math.min(4, Math.floor(streak / 5)); }
     var TEMPO = 6; // seconds between reps before the heat cools
 
+    // easier push-ups dig a little less per rep, never less per day: a rep is a rep for coins, the goal and the streak.
+    // Force-plate data (Ebben et al. 2011) puts a full push-up at 64% of bodyweight, knees at 49%, hands on a 30 cm box
+    // at 55% and on a 61 cm box at 41%; a wall lean works out to roughly 20-30%. k closes only about a third of that gap.
+    var FORMS = {
+        full: {name: 'Full', k: 1},
+        knee: {name: 'Knees', k: 0.9},
+        incline: {name: 'Incline', k: 0.85},
+        wall: {name: 'Wall', k: 0.75}
+    };
+
     // ---------- save ----------
     function newSave(seed) {
         return {
             v: 2, seed: seed >>> 0 || 1, depth: 0, dmg: 0, coins: 0, pick: 0, reps: 0, perfect: 0,
-            bestSet: 0, sets: 0, ores: {}, mode: null, goal: 20,
+            bestSet: 0, sets: 0, ores: {}, mode: null, form: 'full', goal: 20,
             day: {key: '', reps: 0, goalDay: '', streak: 0}, muted: false
         };
     }
@@ -333,7 +358,7 @@ var Core = (function () {
         var d = newSave(s && s.seed);
         if (!s || typeof s !== 'object') return d;
         Object.keys(d).forEach(function (k) {
-            if (s[k] === undefined || typeof s[k] !== typeof d[k] || (typeof d[k] === 'number' && !isFinite(s[k]))) s[k] = d[k];
+            if (s[k] === undefined || (d[k] !== null && typeof s[k] !== typeof d[k]) || (typeof d[k] === 'number' && !isFinite(s[k]))) s[k] = d[k];
         });
         s.depth = Math.max(0, Math.floor(s.depth));
         s.pick = Math.max(0, Math.min(PICKS.length - 1, Math.floor(s.pick)));
@@ -344,6 +369,8 @@ var Core = (function () {
         ['key', 'goalDay'].forEach(function (k) { if (typeof s.day[k] !== 'string') s.day[k] = ''; });
         ['reps', 'streak'].forEach(function (k) { if (!(s.day[k] >= 0)) s.day[k] = 0; });
         if (['front', 'below', 'tap'].indexOf(s.mode) < 0) s.mode = null;
+        if (!FORMS.hasOwnProperty(s.form)) s.form = 'full';
+        if (s.form === 'wall' && s.mode === 'front') s.mode = 'below';   // standing at a wall, only the facing camera sees it
         return s;
     }
 
@@ -395,7 +422,7 @@ var Core = (function () {
             }
         }
         var h = g === 'shallow' ? 1 : heat(set.streak);
-        var dmg = PICKS[s.pick].p * qmult(q) * h;
+        var dmg = PICKS[s.pick].p * qmult(q) * h * FORMS[s.form].k;
         ev.push({t: 'hit', q: q, grade: g, dmg: dmg, heat: h, streak: set.streak});
         var left = dmg, broke = 0;
         while (left > 0 && broke < 3) {
@@ -522,7 +549,7 @@ var Core = (function () {
 
     return {
         hash: hash, ORES: ORES, LAYERS: LAYERS, PICKS: PICKS, layerAt: layerAt, layerIndex: layerIndex,
-        blockHp: blockHp, blockOres: blockOres, grade: grade, qmult: qmult, heat: heat, TEMPO: TEMPO,
+        blockHp: blockHp, blockOres: blockOres, grade: grade, qmult: qmult, heat: heat, TEMPO: TEMPO, FORMS: FORMS,
         PERFECT: PERFECT, GOOD: GOOD, newSave: newSave, fix: fix, migrate: migrate, yesterday: yesterday, touchDay: touchDay,
         streakNow: streakNow, newSet: newSet, rep: rep, finishSet: finishSet, buy: buy,
         frontSignal: frontSignal, belowSignal: belowSignal, MODES: MODES, detector: detector, feed: feed
@@ -607,8 +634,30 @@ function ease(t) { return t < 0 ? 0 : t > 1 ? 1 : 1 - Math.pow(1 - t, 3); }
 function easeIn(t) { return t < 0 ? 0 : t > 1 ? 1 : t * t * t; }
 function H(a, b) { return Core.hash(a, b); }
 
-// a side-view push-up figure; feet at (x,y), body length L, p = 0 (top) .. 1 (bottom)
-function drawPushup(c, x, y, L, p, col, w) {
+// a side-view push-up figure; feet at (x,y), body length L, p = 0 (top) .. 1 (bottom).
+// form 'knee' kneels (the body pivots at the knee), 'incline' puts the hands on a bench, 'wall' leans into a wall
+function drawPushup(c, x, y, L, p, col, w, form) {
+    if (form === 'knee') {
+        var kx = x + L * 0.27;
+        c.lineCap = 'round'; c.strokeStyle = col === 'miner' ? '#3b2f28' : col; c.lineWidth = w;
+        c.beginPath(); c.moveTo(kx, y - w * 0.4); c.lineTo(x + L * 0.06, y - L * 0.12); c.stroke();   // shins, feet up
+        var rk = drawPushup(c, kx, y - w * 0.4, L * 0.73, p, col, w);
+        return rk;
+    }
+    if (form === 'incline' || form === 'wall') {
+        // the same figure, tipped up about the feet until the hands meet the bench or the wall
+        var tilt = form === 'wall' ? 0.78 : 0.24;
+        c.save(); c.translate(x, y); c.rotate(-tilt);
+        var ri = drawPushup(c, 0, 0, L, p, col, w), co = Math.cos(tilt), si = Math.sin(tilt);
+        c.restore();
+        var T = function (q) { return [x + q[0] * co + q[1] * si, y - q[0] * si + q[1] * co]; };
+        var hd = T(ri.head), hp = T([L * 0.93, 0]);
+        if (form === 'incline') {   // the bench under the hands
+            c.fillStyle = '#4a3220'; c.fillRect(hp[0] - L * 0.12, hp[1] + w * 0.4, L * 0.24, w * 0.7);
+            c.fillStyle = '#3a2a1d'; c.fillRect(hp[0] - L * 0.1, hp[1] + w, w * 0.6, y - hp[1] - w); c.fillRect(hp[0] + L * 0.1 - w * 0.6, hp[1] + w, w * 0.6, y - hp[1] - w);
+        }
+        return {S: T(ri.S), head: hd, hand: hp};
+    }
     var h = L * (0.44 - 0.31 * Math.min(1.1, Math.max(0, p)));
     var bx = Math.sqrt(L * L - h * h), S = [x + bx, y - h], hand = [x + L * 0.93, y];
     var a = L * 0.25, b = L * 0.24, dx = hand[0] - S[0], dy = hand[1] - S[1], dd = Math.min(a + b - 0.01, Math.hypot(dx, dy));
@@ -1266,13 +1315,23 @@ function drawIllustration(cv, kind, t) {
     var fy = Hh * 0.8;
     c.fillStyle = '#2a1e15'; c.fillRect(0, fy, W, 3);
     var cyc = (t % 2.4) / 2.4, p = cyc < 0.45 ? ease(cyc / 0.45) : cyc < 0.55 ? 1 : cyc < 0.8 ? 1 - ease((cyc - 0.55) / 0.25) : 0;
-    if (kind === 'front') {
-        var r = drawPushup(c, W * 0.06, fy, W * 0.62, p, 'miner', 10);
+    var form = save.form;
+    if (form === 'wall') {   // standing, leaning into a wall; the phone stands on a shelf at face height
+        var wx = W * 0.8;
+        c.fillStyle = '#2a1e15'; c.fillRect(wx, 8, 8, fy - 5);
+        var rw = drawPushup(c, wx - W * 0.42 * 0.93 * Math.cos(0.78), fy, W * 0.42, p, 'miner', 9, 'wall');
+        var py = fy - W * 0.42 * 0.93 * Math.sin(0.78) - 38;   // face height, a fixed spot on the wall
+        c.fillStyle = '#3a2a1d'; c.fillRect(wx - 16, py + 14, 16, 4);
+        drawPhone(c, wx - 5, py, 8, 24, 0, '#5fe3ff');
+        c.strokeStyle = 'rgba(95,227,255,.35)'; c.lineWidth = 2; c.setLineDash([5, 5]);
+        c.beginPath(); c.moveTo(wx - 10, py); c.lineTo(rw.head[0] + 10, rw.head[1]); c.stroke(); c.setLineDash([]);
+    } else if (kind === 'front') {
+        var r = drawPushup(c, W * 0.06, fy, W * (form === 'incline' ? 0.56 : 0.62), p, 'miner', 10, form);
         drawPhone(c, W * 0.9, fy - 22, 18, 36, -0.22, '#5fe3ff');
         c.strokeStyle = 'rgba(95,227,255,.35)'; c.lineWidth = 2; c.setLineDash([5, 5]);
         c.beginPath(); c.moveTo(W * 0.88, fy - 30); c.lineTo(r.head[0] + 8, r.head[1]); c.stroke(); c.setLineDash([]);
     } else {
-        var r2 = drawPushup(c, W * 0.06, fy, W * 0.78, p, 'miner', 10);
+        var r2 = drawPushup(c, W * 0.06, fy, W * (form === 'incline' ? 0.7 : 0.78), p, 'miner', 10, form);
         drawPhone(c, r2.head[0] - 6, fy - 4, 40, 9, 0, '#5fe3ff');
         c.strokeStyle = 'rgba(95,227,255,.35)'; c.lineWidth = 2; c.setLineDash([5, 5]);
         c.beginPath(); c.moveTo(r2.head[0] - 6, fy - 10); c.lineTo(r2.head[0], r2.head[1] + 14); c.stroke(); c.setLineDash([]);
@@ -1348,6 +1407,7 @@ function endSet() {
     countUp($('sumReps'), s.reps);
     $('sumHead').textContent = s.reps === 0 ? 'No reps yet' : s.reps >= save.bestSet && save.sets > 1 ? 'New best set' : 'Set complete';
     var lines = [['Depth', '+' + s.meters + ' m  →  ' + save.depth + ' m'], ['Perfect reps', s.perfect + ' / ' + s.reps], ['Best rhythm', s.best + ' in a row'], ['Earned', '+' + fmt(s.coins)], ['Today', save.day.reps + ' / ' + save.goal + (save.day.reps >= save.goal ? '  ✓' : '')]];
+    if (save.form !== 'full') lines.splice(1, 0, ['Push-ups', Core.FORMS[save.form].name + ' · ×' + Core.FORMS[save.form].k + ' dig']);
     if (s.shallow) lines.splice(2, 0, ['Too shallow', s.shallow + ' (not counted)']);
     var box = $('sumLines'); box.innerHTML = '';
     lines.forEach(function (l, i) { var el = document.createElement('div'); el.className = 'line'; el.innerHTML = '<span>' + l[0] + '</span><b>' + l[1] + '</b>'; box.appendChild(el); setTimeout(function () { el.classList.add('in'); }, 120 + i * 90); });
@@ -1379,7 +1439,7 @@ function updateHud() {
 function onEvents(ev) {
     ev.forEach(function (e) {
         var t = now();
-        if (e.t === 'lost') { pill("Can't see you", 'bad'); if (game.det && game.det.phase !== 'ready') return; hint(save.mode === 'front' ? 'Back in view' : 'Face the phone', save.mode === 'front' ? 'Head and shoulders inside the frame.' : 'Keep your face over the screen.', 'warn', 3); }
+        if (e.t === 'lost') { pill("Can't see you", 'bad'); if (game.det && game.det.phase !== 'ready') return; hint(save.mode === 'front' ? 'Back in view' : 'Face the phone', save.mode === 'front' ? 'Head and shoulders inside the frame.' : save.form === 'wall' ? 'Keep your face in front of the screen.' : 'Keep your face over the screen.', 'warn', 3); }
         else if (e.t === 'found') { pill('Tracking', 'ok'); }
         else if (e.t === 'calTop') { sfx.tick(1); coach('Now one slow rep', 'All the way down, then back up. This sets your range.', 'go'); }
         else if (e.t === 'calShallow') { sfx.chip(); coach('A bit lower', 'Chest towards the floor, then back up.', 'warn'); }
@@ -1591,7 +1651,25 @@ document.addEventListener('click', function (e) {
     sfx.ui();
     if (t.dataset.go) go(t.dataset.go); else startSet(t.dataset.mode);
 });
-$('bStart').onclick = function () { ac(); sfx.ui(); $('placeNote').textContent = ''; go('place'); };
+$('bStart').onclick = function () { ac(); sfx.ui(); $('placeNote').textContent = ''; renderForm(); go('place'); };
+var FORM_NOTE = {
+    full: '',
+    knee: 'Knees down, body straight from knee to shoulder. Both phone spots work.',
+    incline: 'Hands on a sturdy bench, sofa edge or table that will not slide. The higher, the easier.',
+    wall: 'Stand an arm\'s length from the wall. Stand the phone on a shelf or chair by the wall at face height, facing you: it counts as your face comes closer.'
+};
+function renderForm() {
+    var f = save.form, wall = f === 'wall';
+    document.querySelectorAll('[data-form]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.form === f ? 'true' : 'false'); });
+    document.querySelector('[data-mode="front"]').style.display = wall ? 'none' : '';
+    $('belowT').textContent = wall ? 'On the wall' : 'Below you';
+    $('belowS').textContent = wall ? 'Standing on a shelf or chair by the wall at face height, facing you.' : f === 'incline' ? 'Flat on the bench between your hands, screen up.' : 'Flat on the floor under your face, screen up.';
+    $('belowG').textContent = wall ? 'Face tracking' : 'Face tracking · tight spaces';
+    $('formNote').textContent = FORM_NOTE[f];
+}
+document.querySelectorAll('[data-form]').forEach(function (b) {
+    b.onclick = function () { save.form = b.dataset.form; if (save.form === 'wall' && save.mode === 'front') save.mode = 'below'; persist(); renderForm(); sfx.ui(); };
+});
 $('bShop').onclick = $('bSumShop').onclick = function () { sfx.ui(); go('shop'); };
 $('bAgain').onclick = function () { sfx.ui(); startSet(save.mode || 'front'); };
 $('bFinish').onclick = function () { endSet(); };
@@ -1611,6 +1689,7 @@ window.PM = {feed: function (raw) { if (game.det) feedRaw(raw); }, game: game, s
 resize(); renderTitle();
 if (urlQ.get('mock')) {   // a frozen frame for screenshots: front camera, mid-set
     var mk = urlQ.get('mock');
+    if (Core.FORMS.hasOwnProperty(urlQ.get('form'))) save.form = urlQ.get('form');
     save.depth = +(urlQ.get('d') || 37); save.dmg = 4; save.pick = 3; save.coins = 1284; save.mode = mk === 'tap' ? 'tap' : mk === 'below' ? 'below' : 'front';
     game.set = Core.newSet(now()); game.set.reps = 14; game.set.streak = 11; game.det = Core.detector(save.mode);
     go('play'); coinShown = save.coins; $('hCoins').textContent = fmt(save.coins); $('hReps').textContent = 14; updateHud(); coach('', ''); pill('Tracking', 'ok');
