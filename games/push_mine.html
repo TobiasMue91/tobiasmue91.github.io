@@ -111,6 +111,15 @@ body.tap #coach{bottom:auto;top:30px;background:none;padding-top:8px}
 .btn.ghost{background:rgba(255,236,210,.06);color:var(--ink);box-shadow:none;border:1.5px solid #5a4430;height:52px;font-size:20px}
 .btn.ghost:active{transform:scale(.97)}
 .row{display:flex;gap:10px;margin-top:10px}
+#bDrill{font-size:18px;height:46px;margin-top:10px}
+#drill{position:absolute;left:8px;top:calc(118px + var(--safeT));z-index:5;display:flex;align-items:flex-start;gap:6px;pointer-events:none;
+  opacity:0;transform:translateY(-8px) scale(.9);transform-origin:top left;transition:opacity .25s,transform .35s cubic-bezier(.3,1.5,.5,1)}
+#drill.on{opacity:1;transform:none}
+#drill canvas{width:64px;height:64px;flex:none}
+#drill p{margin:6px 0 0;max-width:min(52vw,250px);background:#f7ecdc;color:#1b120b;font-weight:700;font-size:18px;line-height:1.1;padding:8px 11px;border-radius:4px 14px 14px 14px;box-shadow:0 6px 18px rgba(0,0,0,.5);
+  opacity:0;transform:scale(.85);transform-origin:top left;transition:opacity .2s,transform .3s cubic-bezier(.3,1.5,.5,1)}
+#drill p.say{opacity:1;transform:none}
+#drill.strict p{background:#ffe0d2;border:2px solid var(--heat)}
 .goalring{--p:0;width:54px;height:54px;border-radius:50%;flex:none;display:grid;place-items:center;
   background:conic-gradient(var(--amber) calc(var(--p)*1turn),#3a2a1d 0);position:relative}
 .goalring::after{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--panel)}
@@ -187,6 +196,7 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
       <div class="hud-r"><div class="coins bungee"><i></i><span id="hCoins">0</span></div><button class="btn-sm" id="bFinish">Finish</button></div>
     </div>
 
+    <div id="drill" aria-live="assertive"><canvas id="drillC" width="128" height="128" aria-hidden="true"></canvas><p id="drillSay"></p></div>
     <section class="screen on" id="sTitle">
       <div class="wrap">
         <div class="logo bungee"><span class="a">PUSH</span><span class="b">MINE</span></div>
@@ -198,6 +208,7 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
             <div><b id="tGoalT">Today's goal</b><small id="tStreak">Hit it to start a streak</small></div>
             <button id="bGoal" aria-label="Change daily goal">Change</button></div>
           <button class="btn bungee" id="bStart">Start a set</button>
+          <button class="btn ghost" id="bDrill" aria-label="Drill sergeant: off. Tap to change">Drill sergeant: Off</button>
           <div class="row"><button class="btn ghost" id="bShop">Upgrade pick</button><button class="btn ghost" id="bSound" aria-label="Toggle sound" style="flex:0 0 52px"></button></div>
         </div>
       </div>
@@ -221,7 +232,7 @@ h2{font-family:'Bungee',Impact,sans-serif;font-weight:400;font-size:clamp(30px,8
         </div>
         <div class="note" id="formNote"></div>
         <div class="note" id="placeNote"></div>
-        <button class="link" data-mode="tap">No camera? Hold &amp; release to dig</button>
+        <button class="btn ghost" id="bTap" data-mode="tap" style="margin-top:14px">No camera, one arm, or just trying? Tap mode</button>
       </div>
     </section>
 
@@ -289,6 +300,21 @@ var Core = (function () {
         {name: 'Crystal Hollow', style: 'crystal', speck: '#7fd8ff', from: 220, hp: 115, rock: '#2d3756', ores: [['emerald', 3], ['sapphire', 2], ['diamond', 1]]},
         {name: 'The Abyss', speck: '#a070ff', from: 300, hp: 180, rock: '#1f1729', ores: [['sapphire', 2], ['diamond', 2], ['voidstone', 1]]}
     ];
+    // a guardian holds the last block of every stratum: no pick breaks it, only `need` counted reps in a row,
+    // each within the heat window. A pause, a shallow rep or the end of the set and it heals.
+    var GUARDS = [
+        {name: 'Root Mole', need: 8, c: '#9c7a52'},
+        {name: 'Clay Golem', need: 10, c: '#c47a4e'},
+        {name: 'Granite Warden', need: 12, c: '#d9a3a0'},
+        {name: 'Slate Serpent', need: 15, c: '#7d8aa3'},
+        {name: 'Basalt Titan', need: 18, c: '#b0a296'},
+        {name: 'Magma Wyrm', need: 22, c: '#ff6a2a'},
+        {name: 'Crystal Queen', need: 26, c: '#7fd8ff'}
+    ];
+    function guardAt(d) {
+        for (var i = 0; i < GUARDS.length; i++) if (LAYERS[i + 1].from - 1 === d) return {i: i, name: GUARDS[i].name, need: GUARDS[i].need, c: GUARDS[i].c, prize: 25 * GUARDS[i].need * (i + 1)};
+        return null;
+    }
     var PICKS = [
         {name: 'Wooden Pick', p: 1, cost: 0, c: '#b0844f'},
         {name: 'Stone Pick', p: 1.6, cost: 40, c: '#9a948e'},
@@ -350,7 +376,7 @@ var Core = (function () {
     function newSave(seed) {
         return {
             v: 2, seed: seed >>> 0 || 1, depth: 0, dmg: 0, coins: 0, pick: 0, reps: 0, perfect: 0,
-            bestSet: 0, sets: 0, ores: {}, mode: null, form: 'full', goal: 20,
+            bestSet: 0, sets: 0, ores: {}, mode: null, form: 'full', goal: 20, guards: 0, drill: 'off',
             day: {key: '', reps: 0, goalDay: '', streak: 0}, muted: false
         };
     }
@@ -370,6 +396,9 @@ var Core = (function () {
         ['reps', 'streak'].forEach(function (k) { if (!(s.day[k] >= 0)) s.day[k] = 0; });
         if (['front', 'below', 'tap'].indexOf(s.mode) < 0) s.mode = null;
         if (!FORMS.hasOwnProperty(s.form)) s.form = 'full';
+        if (['off', 'strict', 'friendly'].indexOf(s.drill) < 0) s.drill = 'off';
+        if (guardAt(s.depth)) s.dmg = 0;
+        s.guards = Math.max(0, Math.floor(s.guards));
         if (s.form === 'wall' && s.mode === 'front') s.mode = 'below';   // standing at a wall, only the facing camera sees it
         return s;
     }
@@ -401,7 +430,7 @@ var Core = (function () {
         return (s.day.goalDay === key || s.day.goalDay === yesterday(key)) ? s.day.streak : 0;
     }
 
-    function newSet(t) { return {start: t, last: -1e9, reps: 0, perfect: 0, shallow: 0, streak: 0, best: 0, coins: 0, meters: 0, ores: {}, depth0: 0}; }
+    function newSet(t) { return {start: t, last: -1e9, reps: 0, perfect: 0, shallow: 0, streak: 0, best: 0, coins: 0, meters: 0, ores: {}, depth0: 0, run: 0, guards: 0}; }
 
     // a counted (or shallow) rep lands: returns events for the view
     function rep(s, set, q, t, dayKey, ev) {
@@ -422,10 +451,29 @@ var Core = (function () {
             }
         }
         var h = g === 'shallow' ? 1 : heat(set.streak);
+        var G = guardAt(s.depth);
+        if (G) {
+            // only the run counts here: the streak already restarts after a pause, so the run follows it
+            var was = set.run;
+            set.run = g === 'shallow' ? 0 : Math.min(set.run + 1, set.streak);
+            ev.push({t: 'hit', q: q, grade: g, dmg: 0, heat: h, streak: set.streak, guard: G, run: set.run});
+            if (set.run < was && was > 0) ev.push({t: 'guardHeal', guard: G, was: was});
+            if (set.run < G.need) return g;
+            set.run = 0; s.guards++; set.guards++;
+            s.coins += G.prize; set.coins += G.prize;
+            ev.push({t: 'guardDown', guard: G, coins: G.prize});
+            // the guardian's block crumbles with it
+            var go = blockOres(s.seed, s.depth), gc = 0;
+            go.forEach(function (o) { gc += ORES[o].v; s.ores[o] = (s.ores[o] || 0) + 1; set.ores[o] = (set.ores[o] || 0) + 1; });
+            s.coins += gc; set.coins += gc; set.meters++;
+            ev.push({t: 'break', depth: s.depth, ores: go, coins: gc, layer: layerIndex(s.depth + 1) !== layerIndex(s.depth) ? layerIndex(s.depth + 1) : -1});
+            s.depth++; s.dmg = 0;
+            return g;
+        }
         var dmg = PICKS[s.pick].p * qmult(q) * h * FORMS[s.form].k;
         ev.push({t: 'hit', q: q, grade: g, dmg: dmg, heat: h, streak: set.streak});
         var left = dmg, broke = 0;
-        while (left > 0 && broke < 3) {
+        while (left > 0 && broke < 3 && !guardAt(s.depth)) {
             var hp = blockHp(s.depth), need = hp - s.dmg;
             if (left >= need - 1e-9) {
                 left -= need;
@@ -436,6 +484,7 @@ var Core = (function () {
                 s.coins += coins; set.coins += coins; set.meters++;
                 ev.push({t: 'break', depth: s.depth, ores: ores, coins: coins, layer: layerIndex(s.depth + 1) !== layerIndex(s.depth) ? layerIndex(s.depth + 1) : -1});
                 s.depth++; s.dmg = 0; broke++;
+                var NG = guardAt(s.depth); if (NG) { set.run = 0; ev.push({t: 'guard', guard: NG}); }
             } else { s.dmg += left; left = 0; }
         }
         return g;
@@ -469,13 +518,13 @@ var Core = (function () {
 
     var MODES = {
         front: {minRange: 0.045, still: 0.014},
-        below: {minRange: 0.16, still: 0.035},
+        below: {minRange: 0.16, still: 0.035, holdTau: 0.3},
         tap: {minRange: 0.5, still: 0.05}
     };
 
     function detector(mode) {
         var d = {mode: mode, cal: 'hold', top: null, bottom: null, v: null, anchor: null, holdStart: 0, holdP: 0,
-            ext: 0, phase: 'ready', maxD: 0, tDown: 0, last: -1, lost: false, depth: 0, cross: 0, nag: false};
+            hv: null, ext: 0, phase: 'ready', maxD: 0, tDown: 0, last: -1, lost: false, depth: 0, cross: 0, nag: false};
         if (mode === 'tap') { d.cal = 'done'; d.top = 0; d.bottom = 1; }
         return d;
     }
@@ -495,6 +544,8 @@ var Core = (function () {
         var v = d.v, M = MODES[d.mode];
 
         if (d.cal === 'hold') {
+            // judge stillness on a slower copy: a face box jitters by more than `still` from frame to frame on its own
+            if (M.holdTau) { d.hv = d.hv === null ? raw : d.hv + (raw - d.hv) * (1 - Math.exp(-dt / M.holdTau)); v = d.hv; }
             if (d.anchor === null || Math.abs(v - d.anchor) > M.still) { d.anchor = v; d.holdStart = t; }
             d.holdP = Math.min(1, (t - d.holdStart) / 1.0);
             d.depth = 0;
@@ -549,7 +600,7 @@ var Core = (function () {
 
     return {
         hash: hash, ORES: ORES, LAYERS: LAYERS, PICKS: PICKS, layerAt: layerAt, layerIndex: layerIndex,
-        blockHp: blockHp, blockOres: blockOres, grade: grade, qmult: qmult, heat: heat, TEMPO: TEMPO, FORMS: FORMS,
+        blockHp: blockHp, blockOres: blockOres, GUARDS: GUARDS, guardAt: guardAt, grade: grade, qmult: qmult, heat: heat, TEMPO: TEMPO, FORMS: FORMS,
         PERFECT: PERFECT, GOOD: GOOD, newSave: newSave, fix: fix, migrate: migrate, yesterday: yesterday, touchDay: touchDay,
         streakNow: streakNow, newSet: newSet, rep: rep, finishSet: finishSet, buy: buy,
         frontSignal: frontSignal, belowSignal: belowSignal, MODES: MODES, detector: detector, feed: feed
@@ -857,12 +908,45 @@ function drawBlock(x, y, B, d, lit, dmgFrac, current) {
     ctx.fillStyle = 'rgba(255,226,170,' + 0.35 * lit + ')'; ctx.fillRect(x + 2, y + 2, B - 4, 2);
     ctx.fillStyle = 'rgba(0,0,0,' + 0.35 * lit + ')'; ctx.fillRect(x + 2, y + 2 + lip, B - 4, 2);
     // ore
-    var ores = Core.blockOres(save.seed, d);
+    var ores = Core.guardAt(d) ? [] : Core.blockOres(save.seed, d);   // a guardian's ore stays hidden behind its face
     ores.forEach(function (o, k) {
         var O = Core.ORES[o], gx = x + B * (0.25 + H(d, 200 + k) * 0.5), gy = y + B * (0.35 + H(d, 210 + k) * 0.45), r = B * (0.12 + H(d, 220 + k) * 0.04);
         drawGem(gx, gy, r, O.c, lit, H(d, 230 + k) * 6);
     });
     if (dmgFrac > 0) drawCracks(x, y, B, d, dmgFrac);
+    var G = Core.guardAt(d);
+    if (G) drawGuard(x, y, B, G, lit, current);
+}
+// a guardian: the rock itself wakes up - a brow ridge, two ember eyes and a cracked grin, and its run of reps as pips
+function drawGuard(x, y, B, G, lit, current) {
+    var t = performance.now() / 1000, run = current && game.set && game.state === 'play' && now() - game.set.last <= Core.TEMPO ? game.set.run : 0;
+    var hurt = run / G.need, blink = reduce ? 1 : (Math.sin(t * 0.9 + G.i) > 0.97 ? 0.15 : 1);
+    var flinch = current ? view.impact : 0, ex = B * 0.2, ey = y + B * (0.42 + flinch * 0.03), er = B * 0.075;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,' + 0.45 * lit + ')';   // sockets
+    [-1, 1].forEach(function (sd) { ctx.beginPath(); ctx.ellipse(x + B / 2 + sd * ex, ey, er * 1.6, er * 1.25, 0, 0, 7); ctx.fill(); });
+    var glow = 0.55 + 0.45 * (reduce ? 1 : Math.sin(t * 3 + G.i) * 0.5 + 0.5);
+    ctx.shadowColor = 'rgba(255,90,42,' + 0.9 * lit + ')'; ctx.shadowBlur = B * 0.12 * glow;
+    ctx.fillStyle = shade('#ff5a2a', (0.8 + 0.4 * glow) * Math.max(0.4, lit));
+    [-1, 1].forEach(function (sd) { ctx.beginPath(); ctx.ellipse(x + B / 2 + sd * ex, ey, er * (1 - hurt * 0.35), er * blink * (1 - flinch * 0.6), 0, 0, 7); ctx.fill(); });
+    ctx.shadowBlur = 0;
+    // brows: a heavy ridge that drops into a scowl
+    ctx.strokeStyle = shade(G.c, 0.5 * lit); ctx.lineWidth = B * 0.06; ctx.lineCap = 'round';
+    [-1, 1].forEach(function (sd) { ctx.beginPath(); ctx.moveTo(x + B / 2 + sd * ex * 1.9, ey - er * 2.0); ctx.lineTo(x + B / 2 + sd * ex * 0.35, ey - er * (1.1 - hurt * 0.8)); ctx.stroke(); });
+    // grin: a jagged crack
+    ctx.strokeStyle = 'rgba(10,6,3,.92)'; ctx.lineWidth = B * 0.035; ctx.lineJoin = 'miter';
+    ctx.beginPath(); var my = y + B * 0.7;
+    for (var k = 0; k <= 6; k++) { var mx = x + B * (0.28 + k * 0.073); ctx[k ? 'lineTo' : 'moveTo'](mx, my + (k % 2 ? B * 0.05 : 0) - Math.sin(k / 6 * Math.PI) * B * 0.03 * (1 - hurt)); }
+    ctx.stroke();
+    if (current && game.state === 'play') {   // the run: one pip per rep it needs, filled in amber as you land them
+        var n = G.need, pw = Math.min(B * 0.07, (B - 16) / n), gap = pw * 0.35, row = Math.ceil(n / Math.floor((B - 12) / (pw + gap)));
+        var per = Math.ceil(n / row), py = y + B * 0.86;
+        for (var i = 0; i < n; i++) {
+            var rr = Math.floor(i / per), cc = i % per, cnt = Math.min(per, n - rr * per), px = x + B / 2 - (cnt * (pw + gap) - gap) / 2 + cc * (pw + gap);
+            ctx.fillStyle = i < run ? '#ffb547' : 'rgba(10,6,3,.7)'; ctx.fillRect(px, py + rr * (pw + gap) - pw, pw, pw);
+        }
+    }
+    ctx.restore();
 }
 function drawGem(x, y, r, col, lit, rot) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0);
@@ -912,6 +996,7 @@ function drawCracks(x, y, B, d, f) {
     ctx.restore();
 }
 
+var SWING_UP = -2.0;   // the pick's angle at the top of the swing: up over the helmet, the head pointing back
 function drawMiner(x, y, B, raise, lean, tier, glow, land) {
     var u = B / 100, breath = reduce ? 0 : Math.sin(performance.now() / 700) * 1.4 * u * (1 - raise), squat = raise * 6 * u + land * 10 * u + breath;
     ctx.save(); ctx.translate(x, y);
@@ -923,6 +1008,17 @@ function drawMiner(x, y, B, raise, lean, tier, glow, land) {
     ctx.beginPath(); ctx.moveTo(-12 * u, -4 * u); ctx.lineTo(-8 * u + squat * 0.3, hipY + 18 * u - squat * 0.3); ctx.lineTo(-4 * u, hipY); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(14 * u, -4 * u); ctx.lineTo(12 * u + squat * 0.5, hipY + 18 * u - squat * 0.3); ctx.lineTo(6 * u, hipY); ctx.stroke();
     ctx.fillStyle = '#1b130e'; ctx.beginPath(); ctx.roundRect(-20 * u, -8 * u, 16 * u, 8 * u, 3 * u); ctx.roundRect(6 * u, -8 * u, 18 * u, 8 * u, 3 * u); ctx.fill();
+    // arms + pick: shoulder pivot. The far arm goes behind the body and the head, the near arm in front of both
+    var hx = torsoX + 2 * u, hy = shY - 14 * u, lx = hx + 12 * u, ly = hy - 9 * u;
+    var sx = torsoX + 6 * u, sy = shY + 4 * u;
+    var a = SWING_UP * raise + 0.95 * (1 - raise); // radians: raised up over the head .. down into the rock
+    var hand = 30 * u, handX = sx + Math.cos(a) * hand, handY = sy + Math.sin(a) * hand;
+    // both hands on the shaft: the back hand at the butt, the front hand a third of the way up
+    var hand2X = handX + Math.cos(a) * 13 * u, hand2Y = handY + Math.sin(a) * 13 * u;
+    var fsx = torsoX - 7 * u, fsy = shY + 3 * u;   // far shoulder
+    ctx.strokeStyle = '#1b2f48'; ctx.lineWidth = 8 * u;
+    ctx.beginPath(); ctx.moveTo(fsx, fsy); ctx.quadraticCurveTo((fsx + handX) / 2 - 6 * u, (fsy + handY) / 2 + 6 * u, handX, handY); ctx.stroke();
+    ctx.fillStyle = '#a8704a'; ctx.beginPath(); ctx.arc(handX, handY, 4.5 * u, 0, 7); ctx.fill();
     // torso
     var tg = ctx.createLinearGradient(-14 * u, 0, 16 * u, 0);
     tg.addColorStop(0, '#1d3350'); tg.addColorStop(0.6, '#2c4a6e'); tg.addColorStop(1, '#4a6f98');   // the lamp side catches light
@@ -931,25 +1027,12 @@ function drawMiner(x, y, B, raise, lean, tier, glow, land) {
     ctx.strokeStyle = 'rgba(255,214,150,.35)'; ctx.lineWidth = 1.6 * u; ctx.beginPath(); ctx.moveTo(torsoX + 14 * u, shY + 1 * u); ctx.lineTo(11 * u, hipY); ctx.stroke();
     ctx.fillStyle = '#ffb547'; ctx.fillRect(-12 * u, hipY - 2 * u, 24 * u, 5 * u); // belt
     ctx.strokeStyle = 'rgba(255,181,71,.8)'; ctx.lineWidth = 2.5 * u; ctx.beginPath(); ctx.moveTo(torsoX - 8 * u, shY + 4 * u); ctx.lineTo(-6 * u, hipY - 2 * u); ctx.stroke();
-    // arms + pick: shoulder pivot
-    var hx = torsoX + 2 * u, hy = shY - 14 * u, lx = hx + 12 * u, ly = hy - 9 * u;
-    var sx = torsoX + 6 * u, sy = shY + 4 * u;
-    var a = -2.35 * raise + 0.95 * (1 - raise); // radians: raised back over the head .. down into the rock
-    var hand = 30 * u, handX = sx + Math.cos(a) * hand, handY = sy + Math.sin(a) * hand;
-    // both hands on the shaft: the back hand at the butt, the front hand a third of the way up
-    var hand2X = handX + Math.cos(a) * 13 * u, hand2Y = handY + Math.sin(a) * 13 * u;
-    ctx.strokeStyle = '#223b59'; ctx.lineWidth = 8 * u;
-    ctx.beginPath(); ctx.moveTo(sx - 6 * u, sy + 2 * u); ctx.quadraticCurveTo((sx + handX) / 2 - 8 * u, (sy + handY) / 2 + 6 * u, handX, handY); ctx.stroke();
     if (view.strikeT >= 0 && !reduce) {   // a motion smear along the arc the pick just swept
-        var a0 = -2.35 * view.from + 0.95 * (1 - view.from);
+        var a0 = SWING_UP * view.from + 0.95 * (1 - view.from);
         ctx.save(); ctx.globalAlpha = 0.28; ctx.fillStyle = 'rgba(255,230,190,.9)';
         ctx.beginPath(); ctx.moveTo(sx, sy); ctx.arc(sx, sy, 30 * u + 46 * u, a0, a, false); ctx.closePath(); ctx.fill(); ctx.restore();
     }
     drawPick(ctx, handX, handY, a, 46 * u, tier, glow);
-    ctx.strokeStyle = '#2c4a6e'; ctx.lineWidth = 9 * u;
-    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo((sx + hand2X) / 2 + 6 * u, (sy + hand2Y) / 2 + 8 * u, hand2X, hand2Y); ctx.stroke();
-    ctx.fillStyle = '#c98a5e'; ctx.beginPath(); ctx.arc(handX, handY, 4.5 * u, 0, 7); ctx.fill();
-    ctx.fillStyle = '#d99a6c'; ctx.beginPath(); ctx.arc(hand2X, hand2Y, 5 * u, 0, 7); ctx.fill();
     // head
     
     var fg = ctx.createRadialGradient(hx + 4 * u, hy - 2 * u, 2 * u, hx, hy, 12 * u);
@@ -957,7 +1040,10 @@ function drawMiner(x, y, B, raise, lean, tier, glow, land) {
     ctx.fillStyle = fg; ctx.strokeStyle = 'rgba(8,5,3,.5)'; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.arc(hx, hy, 11 * u, 0, 7); ctx.stroke(); ctx.fill();
     ctx.fillStyle = '#2a1a10'; ctx.beginPath(); ctx.arc(hx + 6 * u, hy + 0.5 * u, 1.8 * u, 0, 7); ctx.fill();
     ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 1.8 * u; ctx.beginPath(); ctx.moveTo(hx + 3 * u, hy - 3.5 * u + raise * 1.2 * u); ctx.lineTo(hx + 9 * u, hy - 2.5 * u); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(hx + 5 * u, hy + 6 * u); ctx.lineTo(hx + 9 * u, hy + 5.5 * u - raise * 1 * u); ctx.stroke();
+    ctx.lineWidth = 2.2 * u; ctx.beginPath();   // mouth: a small grin that sets into a grimace as the pick goes up
+    if (raise > 0.5) { ctx.moveTo(hx + 3.5 * u, hy + 6 * u); ctx.lineTo(hx + 9.5 * u, hy + 5.5 * u); }
+    else ctx.arc(hx + 6.5 * u, hy + 3.2 * u, 3.6 * u, Math.PI * 0.18, Math.PI * 0.72);
+    ctx.stroke();
     // helmet + lamp
     var hg = ctx.createLinearGradient(0, hy - 16 * u, 0, hy - 3 * u);
     hg.addColorStop(0, '#ffd27f'); hg.addColorStop(1, '#e8952a');
@@ -968,6 +1054,9 @@ function drawMiner(x, y, B, raise, lean, tier, glow, land) {
     var lg2 = ctx.createRadialGradient(lx, ly, 0, lx, ly, 14 * u); lg2.addColorStop(0, 'rgba(255,240,200,.85)'); lg2.addColorStop(1, 'rgba(255,200,120,0)');
     ctx.fillStyle = lg2; ctx.beginPath(); ctx.arc(lx, ly, 14 * u, 0, 7); ctx.fill();
     ctx.fillStyle = '#fff6d8'; ctx.beginPath(); ctx.arc(lx, ly, 4 * u, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#2c4a6e'; ctx.lineWidth = 9 * u;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo((sx + hand2X) / 2 + 6 * u, (sy + hand2Y) / 2 + 8 * u, hand2X, hand2Y); ctx.stroke();
+    ctx.fillStyle = '#d99a6c'; ctx.beginPath(); ctx.arc(hand2X, hand2Y, 5 * u, 0, 7); ctx.fill();
     ctx.restore();
     return {lamp: [x + lx, y + ly], tip: [x + handX + Math.cos(a) * 46 * u, y + handY + Math.sin(a) * 46 * u]};
 }
@@ -1255,6 +1344,9 @@ function drawFrontGuides(now) {
 }
 function drawBelowGuides(now) {
     var D = game.det, b = track.box;
+    // the detector's box jitters frame to frame: draw an eased copy so the ring sits still while you do
+    if (b) { var S0 = track.sb, kk = S0 ? 0.3 : 1; track.sb = S0 = S0 || {x: b.x, y: b.y, w: b.w, h: b.h}; ['x', 'y', 'w', 'h'].forEach(function (k) { S0[k] += (b[k] - S0[k]) * kk; }); b = S0; }
+    else track.sb = null;
     var cx = OW * 0.42, cy = OH * 0.45;
     if (b) { var c = vmap((b.x + b.w / 2), (b.y + b.h / 2)); cx = c[0]; cy = c[1]; }
     var s = Math.max(OW / track.vw, OH / track.vh) * track.vw;
@@ -1271,8 +1363,8 @@ function drawBelowGuides(now) {
         var r = (b.w * s) / 2, hit = D && D.cal === 'done' && D.depth >= Core.PERFECT;
         octx.save(); octx.strokeStyle = hit ? '#ffb547' : '#5fe3ff'; octx.lineWidth = 5; octx.shadowColor = octx.strokeStyle; octx.shadowBlur = 12;
         octx.beginPath(); octx.arc(cx, cy, r, 0, 7); octx.stroke(); if (hit) { octx.shadowBlur = 0; octx.fillStyle = 'rgba(255,181,71,.28)'; octx.fill(); } octx.restore();
-        chip(cx - 16, cy + 2, 'YOU', hit ? '#ffb547' : '#5fe3ff');
-        if (D && D.cal === 'done' && !hit && D.depth > 0.1) chip(cx - 34, cy + 26, '↓ CLOSER', '#f7ecdc');
+        chip(cx - 16, cy + 2, hit ? 'YOU ✓' : 'YOU', hit ? '#ffb547' : '#5fe3ff');   // the tick says it without the colour
+        if (D && D.cal === 'done' && !hit && D.depth > 0.1) chip(cx - 34, cy + 26, save.form === 'wall' ? 'LEAN IN' : '↓ CLOSER', '#f7ecdc');
     }
 }
 var tap = {down: false, v: 0};
@@ -1319,10 +1411,10 @@ function drawIllustration(cv, kind, t) {
     if (form === 'wall') {   // standing, leaning into a wall; the phone stands on a shelf at face height
         var wx = W * 0.8;
         c.fillStyle = '#2a1e15'; c.fillRect(wx, 8, 8, fy - 5);
-        var rw = drawPushup(c, wx - W * 0.42 * 0.93 * Math.cos(0.78), fy, W * 0.42, p, 'miner', 9, 'wall');
-        var py = fy - W * 0.42 * 0.93 * Math.sin(0.78) - 38;   // face height, a fixed spot on the wall
-        c.fillStyle = '#3a2a1d'; c.fillRect(wx - 16, py + 14, 16, 4);
-        drawPhone(c, wx - 5, py, 8, 24, 0, '#5fe3ff');
+        var rw = drawPushup(c, wx - W * 0.34 * 0.93 * Math.cos(0.78), fy, W * 0.34, p * 0.5, 'miner', 9, 'wall');
+        var py = 18;   // on a shelf just above the face: the face comes closer under it and never touches it
+        c.fillStyle = '#3a2a1d'; c.fillRect(wx - 16, py + 13, 16, 4);
+        drawPhone(c, wx - 6, py, 8, 22, -0.25, '#5fe3ff');
         c.strokeStyle = 'rgba(95,227,255,.35)'; c.lineWidth = 2; c.setLineDash([5, 5]);
         c.beginPath(); c.moveTo(wx - 10, py); c.lineTo(rw.head[0] + 10, rw.head[1]); c.stroke(); c.setLineDash([]);
     } else if (kind === 'front') {
@@ -1332,11 +1424,15 @@ function drawIllustration(cv, kind, t) {
         c.beginPath(); c.moveTo(W * 0.88, fy - 30); c.lineTo(r.head[0] + 8, r.head[1]); c.stroke(); c.setLineDash([]);
     } else {
         var r2 = drawPushup(c, W * 0.06, fy, W * (form === 'incline' ? 0.7 : 0.78), p, 'miner', 10, form);
-        drawPhone(c, r2.head[0] - 6, fy - 4, 40, 9, 0, '#5fe3ff');
+        var top2 = drawPushup(scratch2d(), W * 0.06, fy, W * (form === 'incline' ? 0.7 : 0.78), 0.5, 'miner', 10, form);   // the phone stays put under the face
+        var phy = form === 'incline' ? r2.hand[1] - 4 : fy - 4;
+        drawPhone(c, top2.head[0] - 6, phy, 40, 9, 0, '#5fe3ff');
         c.strokeStyle = 'rgba(95,227,255,.35)'; c.lineWidth = 2; c.setLineDash([5, 5]);
-        c.beginPath(); c.moveTo(r2.head[0] - 6, fy - 10); c.lineTo(r2.head[0], r2.head[1] + 14); c.stroke(); c.setLineDash([]);
+        c.beginPath(); c.moveTo(top2.head[0] - 6, phy - 6); c.lineTo(r2.head[0], r2.head[1] + 14); c.stroke(); c.setLineDash([]);
     }
 }
+var scratchC = null;
+function scratch2d() { if (!scratchC) scratchC = document.createElement('canvas').getContext('2d'); return scratchC; }
 function drawShopIcon(cv, tier) {
     var c = cv.getContext('2d'); c.clearRect(0, 0, cv.width, cv.height);
     drawPick(c, cv.width * 0.18, cv.height * 0.82, -0.78, cv.width * 0.62, tier, 0);
@@ -1353,7 +1449,7 @@ function go(state) {
     show({title: 'sTitle', place: 'sPlace', summary: 'sSummary', shop: 'sShop'}[state] || null);
     if (state === 'title') renderTitle();
     if (state === 'shop') renderShop();
-    if (state !== 'play') stopCamera();
+    if (state !== 'play') { stopCamera(); $('drill').classList.remove('on'); }
     requestAnimationFrame(resize);
     setTimeout(resize, 500);
 }
@@ -1364,6 +1460,9 @@ function renderTitle() {
     $('tGoalT').textContent = n >= g ? 'Goal done — ' + n + ' reps today' : (g - n) + ' to go today';
     $('tStreak').innerHTML = st > 0 ? '<span class="flame">▲ ' + st + '-day streak</span> · ' + save.depth + ' m deep' : (save.depth ? save.depth + ' m deep · hit the goal to start a streak' : 'Hit your goal to start a streak');
     $('bSound').innerHTML = save.muted ? '<svg width=24 height=24 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>' : '<svg width=24 height=24 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 8a5 5 0 010 8M19.5 5.5a9 9 0 010 13"/></svg>';
+    var TG = Core.guardAt(save.depth);
+    if (TG) $('tStreak').innerHTML += ' · <span style="color:var(--heat)">' + TG.name + ' waits: ' + TG.need + ' in a row</span>';
+    renderDrill();
     $('bStart').textContent = save.sets ? 'Start a set' : 'Start digging';
     $('bShop').style.visibility = save.pick > 0 || save.coins >= Core.PICKS[1].cost ? '' : 'hidden';
     $('bShop').textContent = save.pick + 1 < Core.PICKS.length && save.coins >= Core.PICKS[save.pick + 1].cost ? 'New pick ready!' : 'Picks';
@@ -1393,6 +1492,7 @@ function startSet(mode) {
     game.set = Core.newSet(now()); game.set.depth0 = save.depth;
     game.det = Core.detector(mode);
     game.idleFrom = now(); game.lastHint = 0;
+    drill = {talkUntil: 0, last: -1e9, n: drill.n, nag: 0, gapFrom: -1, times: []}; $('drillSay').classList.remove('say');
     coinShown = save.coins; $('hCoins').textContent = fmt(save.coins);
     $('hReps').textContent = '0'; updateHud();
     go('play'); document.body.classList.toggle('tap', mode === 'tap'); document.body.classList.remove('cal');
@@ -1404,10 +1504,13 @@ function startSet(mode) {
 function endSet() {
     if (game.state !== 'play') return;
     var s = game.set; Core.finishSet(save, s); persist(); wake(false);
+    try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {}
     countUp($('sumReps'), s.reps);
     $('sumHead').textContent = s.reps === 0 ? 'No reps yet' : s.reps >= save.bestSet && save.sets > 1 ? 'New best set' : 'Set complete';
     var lines = [['Depth', '+' + s.meters + ' m  →  ' + save.depth + ' m'], ['Perfect reps', s.perfect + ' / ' + s.reps], ['Best rhythm', s.best + ' in a row'], ['Earned', '+' + fmt(s.coins)], ['Today', save.day.reps + ' / ' + save.goal + (save.day.reps >= save.goal ? '  ✓' : '')]];
     if (save.form !== 'full') lines.splice(1, 0, ['Push-ups', Core.FORMS[save.form].name + ' · ×' + Core.FORMS[save.form].k + ' dig']);
+    if (s.guards) lines.splice(1, 0, ['Guardians', s.guards + ' beaten']);
+    else if (Core.guardAt(save.depth) && s.reps) lines.splice(1, 0, ['Guardian', Core.guardAt(save.depth).name + ' · ' + Core.guardAt(save.depth).need + ' in a row']);
     if (s.shallow) lines.splice(2, 0, ['Too shallow', s.shallow + ' (not counted)']);
     var box = $('sumLines'); box.innerHTML = '';
     lines.forEach(function (l, i) { var el = document.createElement('div'); el.className = 'line'; el.innerHTML = '<span>' + l[0] + '</span><b>' + l[1] + '</b>'; box.appendChild(el); setTimeout(function () { el.classList.add('in'); }, 120 + i * 90); });
@@ -1443,7 +1546,7 @@ function onEvents(ev) {
         else if (e.t === 'found') { pill('Tracking', 'ok'); }
         else if (e.t === 'calTop') { sfx.tick(1); coach('Now one slow rep', 'All the way down, then back up. This sets your range.', 'go'); }
         else if (e.t === 'calShallow') { sfx.chip(); coach('A bit lower', 'Chest towards the floor, then back up.', 'warn'); }
-        else if (e.t === 'calDone') { document.body.classList.add('cal'); hint('Range set — dig!', 'Every push-up swings the pick.', 'go', 2.2); flash(); }
+        else if (e.t === 'calDone') { document.body.classList.add('cal'); setTimeout(function () { drillSay('start', true); }, 1200); var CG = Core.guardAt(save.depth); if (CG) hint('Range set — ' + CG.need + ' in a row!', 'The ' + CG.name + ' blocks the way. Keep the rhythm.', 'go', 3); else hint('Range set — dig!', 'Every push-up swings the pick.', 'go', 2.2); flash(); }
         else if (e.t === 'deep') { sfx.tick(e.level); if (e.level === 2) flash(); }
         else if (e.t === 'lockout') { hint('All the way up', 'Straighten your arms to finish the rep.', 'warn', 2); sfx.chip(); }
         else if (e.t === 'rep') strike(e.q, t);
@@ -1452,15 +1555,39 @@ function onEvents(ev) {
 function flash() { var f = $('flash'); f.style.transition = 'none'; f.style.boxShadow = 'inset 0 0 0 4px #ffb547'; requestAnimationFrame(function () { f.style.transition = 'box-shadow .5s ease'; f.style.boxShadow = 'inset 0 0 0 0 #ffb547'; }); }
 
 function strike(q, t) {
-    var s = game.set, ev = [], depthBefore = save.depth;
+    var s = game.set, ev = [], depthBefore = save.depth, guardFell = false;
     var grade = Core.rep(save, s, q, t, dayKey(), ev);
     if (game.tapIntro && grade !== 'shallow') { game.tapIntro = false; coach('', ''); }
     game.idleFrom = t;
+    if (grade !== 'shallow') drillRep(t);
     view.strikeT = 0; view.from = view.raise; view.grade = grade;
     var g = geo(), B = g.B, hitX = g.cx + B * 0.12, hitY = depthBefore * B + 4;
     var L = Core.layerAt(depthBefore);
     ev.forEach(function (e) {
-        if (e.t === 'hit') {
+        if (e.t === 'guard') {
+            setTimeout(function () { drillSay('guard', true); }, 900);
+            banner = {t: e.guard.name.toUpperCase(), s: 'A guardian! ' + e.guard.need + ' reps in a row, no pausing', c: '#ff5a2a', age: 0};
+            setTimeout(function () { sfx.thud(); }, 120);
+            hint(e.guard.need + ' in a row', 'No pick breaks a guardian. Keep the rhythm, every rep within the heat bar.', 'warn', 3.5);
+        } else if (e.t === 'guardHeal') {
+            drillSay('heal', true);
+            floatText('IT HEALED', '#ff5a2a', 26, g.cx, hitY - B * 1.2, 0.2);
+            hint('It healed', e.was + ' of ' + e.guard.need + '. Start the run again, keep moving.', 'warn', 2.4);
+        } else if (e.t === 'guardDown') {
+            guardFell = true; flash(); sfx.goal(); drillSay('win', true);
+            setTimeout(function () { coinShown = save.coins; $('hCoins').textContent = fmt(save.coins); pulseCoins(); }, 500);
+            burst(g.cx, hitY + B * 0.4, reduce ? 8 : 40, '#ff5a2a', 900, 2.5, 'spark');
+            view.shake = reduce ? 0 : 22;
+            banner = {t: e.guard.name.toUpperCase() + ' FALLS', s: '+' + fmt(e.coins) + ' · ' + e.guard.need + ' in a row', c: '#ffb547', age: 0};
+        } else if (e.t === 'hit' && e.guard && e.grade !== 'shallow') {
+            sfx.clang(Core.layerIndex(depthBefore) * 2 + 2, grade);
+            view.shake = reduce ? 0 : 6; view.hitstop = 0.04; view.impact = 0.8; view.ring = 0; view.ringD = depthBefore;
+            burst(hitX, hitY, 10, shade(L.rock, 1.1), 440, B * 0.05);
+            burst(hitX, hitY, 6, '#ff8a4a', 600, 2, 'ember');
+            floatText(e.run + ' / ' + e.guard.need, e.run >= e.guard.need - 2 ? '#ffb547' : '#f7ecdc', 30, g.cx, hitY - B * 1.55);
+            $('hReps').textContent = s.reps; coinShown += 1; $('hCoins').textContent = fmt(coinShown); pulseCoins();
+            if (navigator.vibrate) try { navigator.vibrate(14); } catch (x) {}
+        } else if (e.t === 'hit') {
             var big = grade === 'perfect';
             sfx.clang(Core.layerIndex(depthBefore) * 2 + 2, grade);
             if (grade === 'shallow') { sfx.chip(); }
@@ -1492,7 +1619,8 @@ function strike(q, t) {
                 floatText('+' + e.coins + ' ' + Core.ORES[best].name.toUpperCase(), Core.ORES[best].c, 22, Math.min(SW - 80, g.cx + B * 0.55), by - B * 0.75, 0.25); }
             if (!e.ores.length) chimeN = Math.max(0, chimeN - 1);
             hpShown = 1;
-            if (e.layer >= 0) { var NL = Core.LAYERS[e.layer]; banner = {t: NL.name.toUpperCase(), s: NL.from + ' m · new ore: ' + NL.ores.map(function (o) { return Core.ORES[o[0]].name; }).join(', '), c: '#ffb547', age: 0}; sfx.goal(); }
+            if (e.layer >= 0 && guardFell) { var NL0 = Core.LAYERS[e.layer]; banner.s += ' · into ' + NL0.name; }
+            else if (e.layer >= 0) { var NL = Core.LAYERS[e.layer]; banner = {t: NL.name.toUpperCase(), s: NL.from + ' m · new ore: ' + NL.ores.map(function (o) { return Core.ORES[o[0]].name; }).join(', '), c: '#ffb547', age: 0}; sfx.goal(); }
         } else if (e.t === 'goal') {
             setTimeout(function () { sfx.goal(); }, 250);
             hint('Daily goal done', e.streak > 1 ? e.streak + '-day streak! Keep going if you like.' : 'Streak started. Come back tomorrow.', 'go', 3);
@@ -1564,6 +1692,99 @@ function feedRaw(raw, ev) {
     onEvents(ev);
 }
 
+/* ---- the drill sergeant: a talking drill that notices when the reps slow down ---- */
+var DRILL = {
+    strict: {
+        slow: ['Did I say stop? Push!', 'Move it, recruit!', "That rock won't break itself!", 'Down and up! NOW!'],
+        slower: ["You're slowing down. Unacceptable!", 'Pick up the pace!', 'Is that all you have?'],
+        idle: ['On your hands! Break time is over!', 'I did not hear the bell, recruit!'],
+        praise: ['Ten more. Do not quit on me.', 'Better. Not good. Better.', 'Keep that rhythm, soldier!'],
+        guard: ['A guardian! No pausing, no excuses!'], heal: ['You let it heal! Again, from the top!'],
+        win: ["That's how we dig!", 'Guardian down! Next!'], start: ['Plank position! Show me what you got!']
+    },
+    friendly: {
+        slow: ["You've got this, one more!", 'Nice and steady, keep going!', 'Take a breath, then another rep?'],
+        slower: ['Slowing down is okay, just keep moving!', "Find your rhythm, you're doing great!"],
+        idle: ["Whenever you're ready, I'm right here!", "Shake it out, then let's go again!"],
+        praise: ['Ten more, wonderful work!', 'Look at you go!', 'That rhythm is lovely!'],
+        guard: ["A guardian! Let's beat it together, nice and steady!"], heal: ['It healed, no worries. We try again!'],
+        win: ['Yes! You did it!', 'Amazing, the guardian is down!'], start: ["Hi! Let's dig some rock together!"]
+    }
+};
+var drill = {talkUntil: 0, last: -1e9, n: 0, nag: 0, gapFrom: -1, times: []};
+function drillSay(kind, force) {
+    if (save.drill === 'off' || game.state !== 'play') return;
+    var t = now(); if (!force && t - drill.last < 4) return;
+    var L = DRILL[save.drill][kind], line = L[(drill.n++ + Math.floor(t)) % L.length];
+    drill.last = t; drill.talkUntil = t + Math.max(1.8, line.length * 0.075);
+    var p = $('drillSay'); p.textContent = line; p.classList.add('say');
+    if (!save.muted && window.speechSynthesis) try {
+        speechSynthesis.cancel();
+        var u = new SpeechSynthesisUtterance(line), strict = save.drill === 'strict';
+        u.rate = strict ? 1.15 : 1; u.pitch = strict ? 0.55 : 1.3; u.volume = 1; speechSynthesis.speak(u);
+    } catch (e) {}
+}
+function drillRep(t) {   // called on each counted rep: remember the rhythm, call out a slowdown
+    drill.times.push(t); if (drill.times.length > 6) drill.times.shift();
+    drill.nag = 0;
+    var T = drill.times, n = T.length;
+    if (n >= 5) {
+        var avg = (T[n - 2] - T[0]) / (n - 2), lastGap = T[n - 1] - T[n - 2];
+        if (lastGap > avg * 1.6 && lastGap > 2.5) drillSay('slower');
+    }
+    if (game.set.reps > 0 && game.set.reps % 10 === 0) drillSay('praise', true);
+}
+function drillTick(t, D) {
+    var el = $('drill'), on = save.drill !== 'off' && game.state === 'play';
+    el.classList.toggle('on', on); el.classList.toggle('strict', save.drill === 'strict');
+    if (!on) return;
+    if (t > drill.talkUntil) $('drillSay').classList.remove('say');
+    if (D && D.cal === 'done' && game.set && game.set.reps > 0 && D.phase === 'ready') {
+        var T = drill.times, n = T.length, avg = n >= 3 ? (T[n - 1] - T[0]) / (n - 1) : 2.5, gap = t - game.set.last;
+        if (drill.nag === 0 && gap > Math.max(4, avg * 1.9)) { drill.nag = 1; drillSay('slow', true); }
+        else if (drill.nag === 1 && gap > 11) { drill.nag = 2; drillSay('idle', true); }
+    }
+    drawDrill(t);
+}
+function drawDrill(t) {
+    var c = $('drillC').getContext('2d'), S = 128, talk = t < drill.talkUntil, strict = save.drill === 'strict';
+    c.clearRect(0, 0, S, S);
+    c.save(); c.translate(S, 0); c.scale(-1, 1);   // drawn bit-left, shown bit-right: it points at the rock
+    var bob = talk && !reduce ? Math.sin(t * 18) * 3 : 0, spin = talk && !reduce ? t * 14 : 0;
+    c.save(); c.translate(0, bob);
+    // the bit, pointing left: a steel cone with a spiral that turns while it talks
+    c.fillStyle = '#9aa3ad'; c.beginPath(); c.moveTo(8, 50); c.lineTo(44, 38); c.lineTo(44, 62); c.closePath(); c.fill();
+    c.strokeStyle = '#5d656e'; c.lineWidth = 3;
+    for (var k = 0; k < 4; k++) { var x = 14 + ((k * 9 + spin * 4) % 36); if (x < 44) { var hw = (x - 8) / 36 * 12; c.beginPath(); c.moveTo(x, 50 - hw); c.lineTo(x + 5, 50 + hw); c.stroke(); } }
+    c.fillStyle = '#3a3f46'; c.fillRect(42, 40, 10, 20);   // chuck
+    // the body: a chunky drill, heat red when strict, a softer teal when friendly
+    var body = strict ? '#d9482a' : '#3fb7a4', dark = strict ? '#8c2a17' : '#24786b';
+    c.fillStyle = dark; c.beginPath(); c.roundRect(68, 62, 26, 54, 8); c.fill();   // grip
+    c.fillStyle = '#2a2420'; c.beginPath(); c.roundRect(64, 108, 34, 14, 5); c.fill();   // battery
+    c.fillStyle = body; c.beginPath(); c.roundRect(50, 22, 72, 50, 16); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.22)'; c.beginPath(); c.roundRect(56, 26, 58, 9, 5); c.fill();
+    // face
+    var ey = 44, blink = Math.sin(t * 1.3) > 0.985 ? 0.15 : 1;
+    c.fillStyle = '#fff'; [74, 100].forEach(function (x) { c.beginPath(); c.ellipse(x, ey, 8, 8 * blink, 0, 0, 7); c.fill(); });
+    c.fillStyle = '#1b120b'; [76, 102].forEach(function (x) { c.beginPath(); c.arc(x - 3, ey + 1, 3.6 * blink, 0, 7); c.fill(); });
+    c.strokeStyle = '#1b120b'; c.lineWidth = 4; c.lineCap = 'round';
+    if (strict) { c.beginPath(); c.moveTo(64, 30); c.lineTo(82, 37); c.moveTo(110, 30); c.lineTo(92, 37); c.stroke(); }
+    else { c.beginPath(); c.arc(74, 37, 8, Math.PI * 1.15, Math.PI * 1.85); c.moveTo(94, 33); c.arc(100, 37, 8, Math.PI * 1.15, Math.PI * 1.85); c.stroke(); }
+    c.fillStyle = '#1b120b';
+    if (talk) { var o = 3 + Math.abs(Math.sin(t * 16)) * (strict ? 7 : 4); c.beginPath(); c.ellipse(87, 61, strict ? 9 : 7, o, 0, 0, 7); c.fill(); }
+    else if (strict) { c.fillRect(79, 59, 16, 3.5); }
+    else { c.beginPath(); c.lineWidth = 3.5; c.arc(87, 55, 8, Math.PI * 0.2, Math.PI * 0.8); c.stroke(); }
+    c.restore(); c.restore();
+}
+function renderDrill() {
+    var name = {off: 'Off', strict: 'Strict', friendly: 'Friendly'}[save.drill];
+    $('bDrill').textContent = 'Drill sergeant: ' + name;
+    $('bDrill').setAttribute('aria-label', 'Drill sergeant: ' + name + '. Tap to change');
+}
+$('bDrill').onclick = function () {
+    var O = ['off', 'strict', 'friendly']; save.drill = O[(O.indexOf(save.drill) + 1) % 3]; persist(); renderDrill(); sfx.ui();
+};
+
 /* ---- wake lock ---- */
 var lock = null;
 function wake(on) {
@@ -1586,6 +1807,11 @@ function frame(ts) {
         // pick follows the body: down raises it, it stays cocked on the way up until the rep lands
         var target = !D || D.cal !== 'done' ? Math.max(0, Math.min(1, D ? D.depth : 0)) : D.phase === 'down' ? Math.max(0, Math.min(1.05, D.maxD)) : Math.max(0, Math.min(1, D.depth));
         game.target = target;
+        drillTick(t, D);
+        var LG = Core.guardAt(save.depth);
+        if (LG && game.set && game.set.run > 0 && t - game.set.last > Core.TEMPO && game.healSeen !== game.set.last) {
+            game.healSeen = game.set.last; drillSay('heal', true); hint('It healed', 'Too long a pause. ' + LG.need + ' in a row, start again.', 'warn', 2.6); sfx.chip();
+        }
         if (game.set && game.set.streak) { var left = Math.max(0, 1 - (t - game.set.last) / Core.TEMPO); $('hHeatBar').style.transform = 'scaleX(' + left.toFixed(3) + ')'; }
         // idle: end the set after a long pause, with a visible countdown
         if (D && D.cal === 'done' && game.set.reps > 0 && D.phase === 'ready') {

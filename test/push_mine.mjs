@@ -9,7 +9,9 @@
 // is the same mine, a deep rep hits harder and rhythm builds heat, the daily streak survives month
 // ends and breaks on a missed day, damaged saves heal, the first Push Mine's save carries over, and
 // a player doing a few sets a week reaches a new stratum about every week or two. Knee, incline and wall push-ups
-// count on the same cameras and dig a gently discounted share, never less towards the goal and streak.
+// count on the same cameras and dig a gently discounted share, never less towards the goal and streak. A guardian
+// at the foot of each stratum takes reps in a row instead of pick damage, and heals on a pause or a shallow rep;
+// a still plank calibrates quickly even through a jittery face box.
 // No browser, no server.
 //
 //   node test/push_mine.mjs        (npm run test:pushmine)
@@ -271,6 +273,44 @@ for (const [mode, top, bottom, noise] of [['front', 0.35, 0.52, 0.003], ['front'
     // knees and incline move the shoulders less in front view: still counted at ~70% of a full push-up's travel
     const kn = session({mode: 'front', top: 0.38, bottom: 0.38 + 0.17 * 0.7, reps: 8});
     ok(kn.counted.length === 8, 'knee/incline push-ups count in front view');
+}
+
+// below the face, the detector's box jitters frame to frame: a still plank must still calibrate quickly
+{
+    const d = Core.detector('below'), ev = [];
+    let at = null;
+    for (let t = 0; t < 6 && at === null; t += 1 / 30) {
+        const e = []; Core.feed(d, Math.log(0.3) + gauss() * 0.05, t, e);   // ~5% box jitter, no motion
+        if (e.some(x => x.t === 'calTop')) at = t;
+    }
+    ok(at !== null && at < 2.5, 'a jittery face box still calibrates the hold in under 2.5 s: ' + (at && at.toFixed(2)));
+    const d2 = Core.detector('below'), e2 = [];
+    for (let t = 0; t < 6; t += 1 / 30) Core.feed(d2, Math.log(0.3) + Math.sin(t * 2) * 0.12, t, e2);   // swaying in and out
+    ok(!e2.some(x => x.t === 'calTop'), 'a face that keeps moving is not a held plank');
+}
+
+// guardians: the last block of a stratum takes reps in a row, not pick damage
+{
+    const G0 = Core.guardAt(11);
+    ok(G0 && G0.need === 8 && Core.guardAt(12) === null && Core.guardAt(29).need === 10, 'a guardian waits at the bottom of each stratum');
+    const s = Core.newSave(3); s.depth = 11; s.pick = 9 >= Core.PICKS.length ? Core.PICKS.length - 1 : 9;
+    let set = Core.newSet(0), ev = [];
+    for (let k = 0; k < 7; k++) Core.rep(s, set, 0.9, k * 2, '2026-10-17', ev);
+    ok(s.depth === 11 && s.dmg === 0, 'the best pick does not break it: 7 of 8');
+    Core.rep(s, set, 0.9, 7 * 2 + 10, '2026-10-17', ev);   // a long pause
+    ok(set.run === 1 && ev.some(e => e.t === 'guardHeal'), 'a pause heals it: run back to ' + set.run);
+    ev = []; for (let k = 0; k < 4; k++) Core.rep(s, set, 0.9, 30 + k * 2, '2026-10-17', ev);
+    Core.rep(s, set, 0.3, 39, '2026-10-17', ev);
+    ok(set.run === 0 && ev.some(e => e.t === 'guardHeal'), 'so does a shallow rep');
+    const c0 = s.coins; ev = [];
+    for (let k = 0; k < 8; k++) Core.rep(s, set, 0.9, 50 + k * 2, '2026-10-17', ev);
+    ok(s.depth === 12 && ev.some(e => e.t === 'guardDown') && s.guards === 1 && s.coins - c0 >= 8 + Core.guardAt(11).prize, 'eight in a row beat it and pay its prize');
+    // digging into a guardian stops there, extra damage is not carried through it
+    const s2 = Core.newSave(3); s2.depth = 10; s2.pick = Core.PICKS.length - 1; const ev2 = [];
+    Core.rep(s2, Core.newSet(0), 1, 0, '2026-10-17', ev2);
+    ok(s2.depth === 11 && s2.dmg === 0 && ev2.some(e => e.t === 'guard'), 'a huge hit stops at the guardian');
+    ok(Core.fix(Object.assign(Core.newSave(1), {depth: 11, dmg: 3})).dmg === 0, 'a guardian never carries pick damage');
+    ok(Core.fix({seed: 1, drill: 'shouty'}).drill === 'off', 'the drill sergeant setting heals');
 }
 
 console.log(fails ? `${fails} of ${n} failed` : `all ${n} passed`);
