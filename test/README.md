@@ -1208,7 +1208,10 @@ heals on a pause or a shallow rep; a jittery face box still calibrates a held pl
 pace, type) and caps its length, daily and Monday-start weekly totals line up, a max test suggests a goal, a 7-day streak
 earns a rest pass that a missed day spends, and milestones are earned once. Every relic is hidden exactly once, two per stratum and never
 on a guardian, and each one changes the rule it names; chests pay and TNT chains but stops at a guardian; the day's three
-contracts are the same for a seed and day, grow with the player and pay once; passing your best set is called once.
+contracts are the same for a seed and day, grow with the player and pay once; passing your best set is called once. Magma closes its cracks over a pause and crystal
+only gives to deep reps; the twelve journal pages lie in order off the guardians; the Deep Heart at 400 m takes 30 in a
+row and descending again keeps what you carry and makes ore 25% richer. And ESLint's `no-undef` over both scripts, when
+ESLint is installed, so a stray rename cannot throw only on the screen that uses it.
 
 `node test/push_mine_camera.mjs` (`npm run test:pushmine-camera`) runs the page with the real MediaPipe models on a fake
 camera: a canvas showing MediaPipe's own photos (`pose.jpg` for in front, `portrait.jpg` for below you), moved or scaled
