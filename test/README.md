@@ -1204,7 +1204,9 @@ hits it says, a seed is the same mine, rhythm heats and a pause cools, a break p
 month ends and breaks on a missed day, damaged saves heal, the first Push Mine's `pushmine2` save carries over, and a player
 doing three sets a few days a week reaches a new stratum every week or two. Knee, incline and wall push-ups dig a gently
 discounted share but count in full towards the goal; each stratum's guardian falls only to its run of reps in a row and
-heals on a pause or a shallow rep; a jittery face box still calibrates a held plank quickly. `VERBOSE=1` prints the pacing.
+heals on a pause or a shallow rep; a jittery face box still calibrates a held plank quickly. The history logs every set (reps, best run, depth,
+pace, type) and caps its length, daily and Monday-start weekly totals line up, a max test suggests a goal, a 7-day streak
+earns a rest pass that a missed day spends, and milestones are earned once. `VERBOSE=1` prints the pacing.
 
 ## Simon Says
 
