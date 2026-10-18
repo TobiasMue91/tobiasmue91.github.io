@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wordle Helper - Best Next Guess, Explained (Optimal Wordle Solver)</title>
+<meta name="description" content="Type your Wordle guesses, tap the tiles to match the colours, and get the best next guess with the reason: words left, expected guesses and the biggest group. Follows the proven optimal SALET strategy (3.421 guesses on average), works in Hard Mode, never spoils the answer.">
+<style>
+  :root {
+    --bg: #f6f6f3; --panel: #ffffff; --line: #d7d8d3; --text: #1b1c1a; --dim: #66685f; --accent: #3e7d3a;
+    --tile: #ffffff; --tile-line: #c3c5bd; --grey: #787c7e; --yellow: #c9b458; --green: #6aaa64; --on: #ffffff;
+    --key: #dfe1db; --key-text: #1b1c1a; --chip: #eef0ea; --warn: #a3401f;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121213; --panel: #1b1b1d; --line: #2f3033; --text: #ececea; --dim: #9a9c96; --accent: #79c26f;
+      --tile: #121213; --tile-line: #3a3a3c; --grey: #3a3a3c; --yellow: #b59f3b; --green: #538d4e; --on: #ffffff;
+      --key: #818384; --key-text: #ffffff; --chip: #26272a; --warn: #f08a5d;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121213; --panel: #1b1b1d; --line: #2f3033; --text: #ececea; --dim: #9a9c96; --accent: #79c26f;
+    --tile: #121213; --tile-line: #3a3a3c; --grey: #3a3a3c; --yellow: #b59f3b; --green: #538d4e; --on: #ffffff;
+    --key: #818384; --key-text: #ffffff; --chip: #26272a; --warn: #f08a5d;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+  main { max-width: 1040px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 18px 28px;
+         grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 860px) { main { grid-template-columns: 400px minmax(0, 1fr); align-items: start; } header { grid-column: 1 / -1; } }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  header h1 { margin: 0; font-size: 24px; letter-spacing: -0.5px; flex: 1 1 auto; }
+  header h1 a { color: var(--dim); font-size: 13px; font-weight: 500; text-decoration: none; margin-left: 6px; letter-spacing: 0; }
+  header h1 a:hover { text-decoration: underline; }
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .seg button, .btn { font: inherit; font-size: 13px; padding: 6px 12px; border: 0; background: var(--panel); color: var(--text); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+  .btn { border: 1px solid var(--line); border-radius: 999px; }
+  .btn[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .btn:focus-visible, .seg button:focus-visible, .tile:focus-visible, .key:focus-visible, .sugg:focus-visible, .cand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .intro { grid-column: 1 / -1; margin: -6px 0 0; color: var(--dim); max-width: 760px; }
+
+  /* board */
+  #board { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  #grid { display: grid; grid-template-rows: repeat(6, 1fr); gap: 6px; width: min(100%, 330px); }
+  @media (max-width: 859px) { #grid { width: min(100%, 270px); gap: 5px; } .row { gap: 5px; } .tile { font-size: 24px; } }
+  #quick { min-height: 34px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--dim); }
+  #quick button { font: 700 15px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; background: var(--chip);
+                  color: var(--text); border: 1px solid var(--green); border-radius: 999px; padding: 7px 12px; cursor: pointer; }
+  #quick button span { font: 400 12px system-ui, sans-serif; letter-spacing: 0; text-transform: none; color: var(--dim); margin-left: 6px; }
+  .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .tile { position: relative; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font: 700 clamp(22px, 7vw, 30px)/1 system-ui, sans-serif;
+          text-transform: uppercase; border: 2px solid var(--tile-line); background: var(--tile); color: var(--text); border-radius: 4px; padding: 0; cursor: default;
+          user-select: none; touch-action: manipulation; transition: background-color .15s ease, border-color .15s ease, transform .12s ease; }
+  .tile.f { cursor: pointer; border-color: var(--dim); }
+  .tile.x, .tile.y, .tile.g { color: var(--on); border-color: transparent; }
+  .tile.x { background: var(--grey); }
+  .tile.y { background: var(--yellow); }
+  .tile.g { background: var(--green); }
+  .row.active .tile.x { background: color-mix(in srgb, var(--grey) 82%, var(--tile)); }
+  .row.active .tile:not(.f) { border-color: var(--tile-line); }
+  /* a mark as well as a colour: a dot for "in the word", a tick for "in place" */
+  .tile.y::after, .tile.g::after { position: absolute; top: 2px; right: 4px; font-size: 12px; line-height: 1; font-weight: 700; }
+  .tile.y::after { content: "\2022"; font-size: 16px; }
+  .tile.g::after { content: "\2713"; }
+  .tile.pop { animation: pop .14s ease-out; }
+  @keyframes pop { 0% { transform: scale(1); } 45% { transform: scale(1.09); } 100% { transform: scale(1); } }
+  .row.shake { animation: shake .32s ease-in-out; }
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+  @media (prefers-reduced-motion: reduce) { .tile, .row { animation: none !important; transition: none !important; } }
+  #status { min-height: 22px; font-size: 14px; color: var(--dim); text-align: center; max-width: 330px; }
+  #status.warn { color: var(--warn); font-weight: 600; }
+  #keyboard { width: min(100%, 500px); display: flex; flex-direction: column; gap: 7px; user-select: none; }
+  .krow { display: flex; gap: 5px; justify-content: center; }
+  .key { flex: 1 1 0; min-width: 0; height: 52px; border: 0; border-radius: 5px; background: var(--key); color: var(--key-text); font: 600 15px/1 system-ui, sans-serif;
+         text-transform: uppercase; cursor: pointer; padding: 0; touch-action: manipulation; }
+  .key.wide { flex: 1.5 1 0; font-size: 12px; }
+  .key.x { background: var(--grey); color: var(--on); }
+  .key.y { background: var(--yellow); color: var(--on); }
+  .key.g { background: var(--green); color: var(--on); }
+  .krow .spacer { flex: 0.5 1 0; }
+  .legend { font-size: 13px; color: var(--dim); text-align: center; }
+  .legend b { display: inline-block; width: 18px; height: 18px; border-radius: 3px; vertical-align: -4px; margin: 0 3px 0 8px; color: var(--on); font-size: 11px; line-height: 18px; text-align: center; }
+
+  /* analysis */
+  #side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  #explain { font-size: 17px; line-height: 1.5; margin: 0; }
+  .card h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); display: flex; justify-content: space-between; gap: 8px; }
+  .card h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  #suggestions { display: flex; flex-direction: column; gap: 6px; }
+  body.busy #suggestions, body.busy #explain { opacity: .55; }
+  .sugg { display: grid; grid-template-columns: 7.2em repeat(3, minmax(0, 1fr)); align-items: center; gap: 6px; width: 100%; text-align: left; font: inherit; color: inherit;
+          background: var(--chip); border: 1px solid transparent; border-radius: 9px; padding: 8px 10px; cursor: pointer; }
+  .sugg:hover { border-color: var(--line); }
+  .sugg:first-child { border-color: var(--green); }
+  .sugg .word { font: 700 18px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+  .sugg .word small { display: block; font: 600 10px/1.4 system-ui, sans-serif; letter-spacing: .04em; color: var(--accent); margin-top: 3px; text-transform: none; }
+  .sugg .stat { font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .sugg .stat span { display: block; font-size: 11px; font-weight: 400; color: var(--dim); }
+  #source { font-size: 12px; color: var(--dim); margin: 8px 0 0; }
+  #human { display: none; }
+  body.human #human { display: block; }
+  #human p { margin: 0; }
+  #human .chips { margin-top: 8px; }
+  #cands { display: flex; flex-wrap: wrap; gap: 5px; max-height: 260px; overflow: auto; }
+  .cand { font: 600 13px/1 ui-monospace, Menlo, Consolas, monospace; text-transform: uppercase; letter-spacing: .05em; background: var(--chip); color: inherit; border: 0;
+          border-radius: 6px; padding: 6px 7px; cursor: pointer; }
+  .cand.extra { opacity: .75; font-style: italic; }
+  #more { margin-top: 8px; }
+  details { color: var(--dim); font-size: 14px; }
+  details summary { cursor: pointer; color: var(--text); font-weight: 600; }
+  details p { margin: 8px 0 0; }
+  details a, footer a { color: var(--accent); }
+  footer { grid-column: 1 / -1; color: var(--dim); font-size: 13px; text-align: center; }
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Wordle Helper<a href="../index.html">gptgames.dev</a></h1>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Game mode">
+        <button id="modeNormal" aria-pressed="true">Normal</button><button id="modeHard" aria-pressed="false">Hard Mode</button>
+      </div>
+      <button class="btn" id="humanBtn" aria-pressed="false" title="Compare with the simple SLANT / PRICE strategy">Human strategy</button>
+      <button class="btn" id="themeBtn" title="Switch between light and dark">Theme</button>
+      <button class="btn" id="newGame">New game</button>
+    </div>
+  </header>
+  <p class="intro">Type the word you played, tap each tile until it shows Wordle's colour, then press Enter. You get the best next guess and why. It only knows what you type: it never looks up today's answer.</p>
+
+  <section id="board" aria-label="Your guesses">
+    <div id="grid"></div>
+    <div id="status" role="status" aria-live="polite"></div>
+    <div id="quick"></div>
+    <div id="keyboard" aria-label="Keyboard"></div>
+    <div class="legend"><b style="background:var(--grey)"></b>not in it <b style="background:var(--yellow)">&#8226;</b>elsewhere <b style="background:var(--green)">&#10003;</b>in place</div>
+  </section>
+
+  <section id="side">
+    <div class="card"><p id="explain" aria-live="polite">Loading the word lists&hellip;</p></div>
+    <div class="card">
+      <h2>Best next guesses <small id="busyNote"></small></h2>
+      <div id="suggestions"></div>
+      <p id="source"></p>
+    </div>
+    <div class="card" id="human">
+      <h2>Human strategy</h2>
+      <p id="humanText"></p>
+      <div class="chips" id="humanChips"></div>
+    </div>
+    <div class="card">
+      <h2><span id="count">&nbsp;</span></h2>
+      <div id="cands"></div>
+      <button class="btn hide" id="more">Show all</button>
+    </div>
+    <details class="card">
+      <summary>How it works</summary>
+      <p>Every word on Wordle's original answer list (2,315 words) that still fits all your colours is a candidate, and each is taken as equally likely. A guess splits the candidates into groups by the colours it would show; the best guess is the one that leaves the fewest guesses to finish on average.</p>
+      <p>After SALET in normal mode the helper follows a precomputed decision tree that is provably optimal: an exhaustive search over all 12,972 accepted guesses at every step. It solves every answer in at most five guesses, 3.421 on average, matching Bertsimas and Paskov, <i>An Exact Solution to Wordle</i> (Operations Research, 2025).</p>
+      <p>Anywhere else (another first word, Hard Mode, a different second guess) it works live in the background: with up to 100 candidates it searches exactly; with more it scores every accepted guess by the groups it makes and estimates the rest. Numbers marked &asymp; are estimates, &ge; are lower bounds.</p>
+      <p>If no word on the original list fits, the answer may be one the New York Times added later, and every accepted guess that fits is counted instead (shown in italics).</p>
+      <p>The human strategy is the one from the well-known video: SLANT, then PRICE if SLANT was mostly grey, then any word that fits. It is scored as a random pick among the words that fit.</p>
+    </details>
+  </section>
+  <footer>Word lists from the original Wordle by Josh Wardle. Not affiliated with the New York Times. A tool on <a href="../index.html">gptgames.dev</a>.</footer>
+</main>
+
+<script id="core">
+// Everything the helper knows about Wordle, with no DOM. The page runs it, the worker runs the same text
+// (handed over as a Blob), and test/wordle_helper.mjs runs it in Node's vm.
+(function (root) {
+  'use strict';
+  var WIN = 242, ORD = ['1st', '2nd', '3rd', '4th', '5th'];
+
+  // ---------- feedback ----------
+  // A pattern is sum of colour * 3^position (grey 0, yellow 1, green 2, first letter lowest), so 0..242.
+  function pattern(c) { return c[0] + 3 * c[1] + 9 * c[2] + 27 * c[3] + 81 * c[4]; }
+  function colors(p) { var c = []; for (var i = 0; i < 5; i++) { c.push(p % 3); p = (p - p % 3) / 3; } return c; }
+
+  // Wordle's rule: greens first; then the other letters of the guess, left to right, turn yellow only while
+  // the answer still has a copy of that letter not already matched by a green or an earlier yellow.
+  function feedback(guess, answer) {
+    var res = [0, 0, 0, 0, 0], left = {}, i;
+    for (i = 0; i < 5; i++) {
+      if (guess[i] === answer[i]) res[i] = 2;
+      else left[answer[i]] = (left[answer[i]] || 0) + 1;
+    }
+    for (i = 0; i < 5; i++) if (res[i] !== 2 && left[guess[i]] > 0) { left[guess[i]]--; res[i] = 1; }
+    return pattern(res);
+  }
+
+  function fits(word, rows) {
+    for (var i = 0; i < rows.length; i++) if (feedback(rows[i].guess, word) !== rows[i].pattern) return false;
+    return true;
+  }
+  function filter(words, rows) { return words.filter(function (w) { return fits(w, rows); }); }
+
+  // NYT Hard Mode: every green stays in its place and every revealed letter (green or yellow) is used again,
+  // as many times as it was revealed. Grey letters may be reused. Returns '' or the game's own message.
+  function hardCheck(guess, rows) {
+    for (var r = 0; r < rows.length; r++) {
+      var c = colors(rows[r].pattern), g = rows[r].guess, need = {}, i;
+      for (i = 0; i < 5; i++) if (c[i] === 2 && guess[i] !== g[i]) return ORD[i] + ' letter must be ' + g[i].toUpperCase();
+      for (i = 0; i < 5; i++) if (c[i]) need[g[i]] = (need[g[i]] || 0) + 1;
+      for (var L in need) {
+        var have = 0;
+        for (i = 0; i < 5; i++) if (guess[i] === L) have++;
+        if (have < need[L]) return 'Guess must contain ' + L.toUpperCase() + (need[L] > 1 ? ' ' + need[L] + ' times' : '');
+      }
+    }
+    return '';
+  }
+
+  // ---------- the precomputed tree ----------
+  // A node is a word (the one candidate left) or [guess, {pattern: node}].
+  function nodeGuess(n) { return typeof n === 'string' ? n : n[0]; }
+  // The node the rows lead to, or null once a row leaves the tree (another guess, or impossible feedback).
+  function treeWalk(tree, rows) {
+    var node = tree;
+    for (var i = 0; i < rows.length; i++) {
+      if (!node || rows[i].guess !== nodeGuess(node) || rows[i].pattern === WIN || typeof node === 'string') return null;
+      node = node[1][rows[i].pattern] || null;
+    }
+    return node;
+  }
+  // Total guesses and the most guesses for every candidate, counted from this node's guess.
+  function treeStats(node, cands) {
+    var g = nodeGuess(node), groups = {}, total = cands.length, max = cands.length ? 1 : 0;
+    cands.forEach(function (c) { var p = feedback(g, c); if (p !== WIN) (groups[p] = groups[p] || []).push(c); });
+    for (var p in groups) {
+      var child = typeof node === 'string' ? null : node[1][p];
+      if (!child) return {total: Infinity, max: Infinity};
+      var s = treeStats(child, groups[p]);
+      total += s.total; max = Math.max(max, s.max + 1);
+    }
+    return {total: total, max: max};
+  }
+
+  // ---------- the engine ----------
+  // Words are indices into the guess list. Feedback is cached per candidate: column(c)[g] is guess g's
+  // pattern on candidate c, worked out the first time c is a candidate (12,972 bytes each). That is the
+  // whole guess x answer table, built only where it is needed - the first board after one guess needs a
+  // few hundred columns, not 2,315.
+  function Engine(answers, guesses, fit) {
+    var self = this;
+    this.words = guesses; this.G = guesses.length;
+    this.index = {};
+    guesses.forEach(function (w, i) { self.index[w] = i; });
+    this.answers = answers.map(function (w) { return self.index[w]; });
+    this.codes = new Uint8Array(this.G * 5);
+    for (var i = 0; i < this.G; i++) for (var j = 0; j < 5; j++) this.codes[i * 5 + j] = guesses[i].charCodeAt(j) - 97;
+    this.fit = fit || [1.49, 0.25];
+    this.cols = new Map();
+    this.cnt = new Int32Array(26);
+  }
+  var PW = [1, 3, 9, 27, 81];
+  Engine.prototype.code = function (g, c) {
+    var C = this.codes, cnt = this.cnt, gi = g * 5, ci = c * 5, p = 0, i, x;
+    for (i = 0; i < 5; i++) { if (C[gi + i] === C[ci + i]) p += 2 * PW[i]; else cnt[C[ci + i]]++; }
+    for (i = 0; i < 5; i++) { x = C[gi + i]; if (x !== C[ci + i] && cnt[x] > 0) { cnt[x]--; p += PW[i]; } }
+    for (i = 0; i < 5; i++) cnt[C[ci + i]] = 0;
+    return p;
+  };
+  Engine.prototype.column = function (c) {
+    var col = this.cols.get(c);
+    if (!col) { col = new Uint8Array(this.G); for (var g = 0; g < this.G; g++) col[g] = this.code(g, c); this.cols.set(c, col); }
+    return col;
+  };
+  Engine.prototype.pat = function (g, c) { return this.column(c)[g]; };
+  // the same without building a column, for code that only ever looks at a few guesses per candidate
+  Engine.prototype.fb = function (g, c) { var col = this.cols.get(c); return col ? col[g] : this.code(g, c); };
+  Engine.prototype.prep = function (S) { var self = this; return S.map(function (c) { return self.column(c); }); };
+  Engine.prototype.counts = function (g, P, cnt) { for (var i = 0; i < P.length; i++) cnt[P[i][g]]++; };
+  // Estimated optimal total for k candidates: exact for 1 and 2, otherwise the curve build.py fits to
+  // every set its exact search solved.
+  Engine.prototype.est = function (k) {
+    return k <= 2 ? (k === 2 ? 3 : k) : Math.max(2 * k - 1, k * (this.fit[0] + this.fit[1] * Math.log(k)));
+  };
+
+  // Scores every allowed guess on candidate set S by its groups (the feedback it can give). `est` is the
+  // estimated total guesses to finish when playing it; ties go to a word that can be the answer.
+  Engine.prototype.score = function (S, allowed) {
+    var P = this.prep(S), n = S.length, cnt = new Int32Array(243), out = [], touched = new Int32Array(243);
+    for (var a = 0; a < allowed.length; a++) {
+      var g = allowed[a], t = 0, i;
+      this.counts(g, P, cnt);
+      var groups = 0, largest = 0, sq = 0, ent = 0, est = n, inS = cnt[WIN];
+      for (i = 0; i < 243; i++) {
+        var k = cnt[i];
+        if (!k) continue;
+        touched[t++] = i; groups++; if (k > largest) largest = k; sq += k * k;
+        ent -= k / n * Math.log2(k / n);
+        if (i !== WIN) est += this.est(k);
+      }
+      for (i = 0; i < t; i++) cnt[touched[i]] = 0;
+      out.push({g: g, groups: groups, largest: largest, left: sq / n, bits: ent, inS: inS, total: est});
+    }
+    out.sort(function (x, y) { return x.total - y.total || y.inS - x.inS || y.bits - x.bits || x.g - y.g; });
+    return out;
+  };
+
+  // Hard Mode, for search: may candidate guess x still be played after guess g gave pattern p?
+  Engine.prototype.hardOk = function (x, g, p) {
+    var C = this.codes, need = new Int8Array(26), i, q = p, c;
+    for (i = 0; i < 5; i++) {
+      c = q % 3; q = (q - c) / 3;
+      if (c === 2 && C[x * 5 + i] !== C[g * 5 + i]) return false;
+      if (c) need[C[g * 5 + i]]++;
+    }
+    for (i = 0; i < 5; i++) need[C[x * 5 + i]]--;
+    for (i = 0; i < 26; i++) if (need[i] > 0) return false;
+    return true;
+  };
+
+  // Exact search, the same branch and bound as util/wordle_helper/solve.c: f(S) = |S| + min over guesses of
+  // the f of its groups, lower bound 2k - 1 per group of k, groups solved largest first within the budget
+  // left. Plies beyond `depth` are estimated (and the result marked inexact); more than `budget` searched
+  // sets throws, and the caller falls back to the estimate.
+  function Search(engine, opts) {
+    this.e = engine; this.memo = new Map(); this.nodes = 0;
+    // Hard Mode games run longer (every guess must reuse what is known), so they get more plies
+    this.budget = opts.budget || 20000; this.depth = opts.depth || (opts.hard ? 6 : 3); this.hard = !!opts.hard; this.inexact = false;
+  }
+  Search.prototype.key = function (S, allowed) { return S.join(',') + (this.hard ? '|' + allowed.key : ''); };
+  Search.prototype.children = function (allowed, g, p) {
+    var e = this.e, out = [], h = 0;
+    for (var i = 0; i < allowed.length; i++) if (e.hardOk(allowed[i], g, p)) { out.push(allowed[i]); h = (h * 31 + allowed[i]) % 1000000007; }
+    out.key = out.length + ':' + h;
+    return out;
+  };
+  // Candidate guesses for S with their lower bounds, best first. Skips guesses that tell nothing apart.
+  Search.prototype.moves = function (S, allowed, beta) {
+    var e = this.e, P = e.prep(S), n = S.length, cnt = new Int32Array(243), list = [];
+    for (var a = 0; a < allowed.length; a++) {
+      var g = allowed[a], parts = 0, big = 0, sq = 0, i;
+      e.counts(g, P, cnt);
+      var inS = cnt[WIN] ? 1 : 0;
+      for (i = 0; i < 243; i++) if (cnt[i]) { parts++; if (cnt[i] > big) big = cnt[i]; sq += cnt[i] * cnt[i]; cnt[i] = 0; }
+      if (big === n) continue;
+      var lb = 3 * n - 2 * inS - (parts - inS);
+      if (lb < beta) list.push({g: g, lb: lb, inS: inS, sq: sq});
+    }
+    list.sort(function (x, y) { return x.lb - y.lb || y.inS - x.inS || x.sq - y.sq || x.g - y.g; });
+    return list;
+  };
+  Search.prototype.groups = function (S, g) {
+    var by = {}, out = [];
+    for (var i = 0; i < S.length; i++) { var p = this.e.pat(g, S[i]); if (p !== WIN) (by[p] = by[p] || []).push(S[i]); }
+    for (var k in by) out.push({p: +k, S: by[k]});
+    out.sort(function (x, y) { return y.S.length - x.S.length; });
+    return out;
+  };
+  // Total for guess g on S if it is below beta, else some value >= beta.
+  Search.prototype.evalMove = function (S, allowed, m, beta, ply) {
+    var running = m.lb, gs = this.groups(S, m.g);
+    for (var i = 0; i < gs.length && running < beta; i++) {
+      var k = gs[i].S.length;
+      if (k <= 2) break;
+      var lbk = 2 * k - 1, sub;
+      if (ply >= this.depth) { this.inexact = true; sub = Math.round(this.e.est(k)); }
+      else sub = this.solve(gs[i].S, this.hard ? this.children(allowed, m.g, gs[i].p) : allowed, beta - running + lbk, ply + 1);
+      running += sub - lbk;
+    }
+    return running;
+  };
+  Search.prototype.solve = function (S, allowed, beta, ply) {
+    var n = S.length;
+    if (n === 1) return 1;
+    if (n === 2) return 3;
+    var key = this.key(S, allowed), m = this.memo.get(key);
+    if (m && (m.exact || m.val >= beta)) return m.val;
+    if (2 * n - 1 >= beta) return 2 * n - 1;
+    if (++this.nodes > this.budget) throw new Error('budget');
+    // a candidate that tells all the others apart meets the bound 2n - 1 (candidates are always playable)
+    for (var i = 0; i < n; i++) {
+      var seen = {}, ok = true;
+      for (var j = 0; j < n && ok; j++) { var p = this.e.pat(S[i], S[j]); if (seen[p]) ok = false; seen[p] = 1; }
+      if (ok) { this.memo.set(key, {val: 2 * n - 1, exact: true, g: S[i]}); return 2 * n - 1; }
+    }
+    var moves = this.moves(S, allowed, beta), best = beta, bestG = -1;
+    for (var c = 0; c < moves.length && moves[c].lb < best; c++) {
+      var v = this.evalMove(S, allowed, moves[c], best, ply);
+      if (v < best) { best = v; bestG = moves[c].g; }
+    }
+    this.memo.set(key, bestG >= 0 ? {val: best, exact: true, g: bestG} : {val: beta, exact: false});
+    return best;
+  };
+  // The k best guesses for S with their exact totals.
+  Search.prototype.top = function (S, allowed, k) {
+    var moves = this.moves(S, allowed, Infinity), top = [];
+    for (var c = 0; c < moves.length; c++) {
+      var cut = top.length < k ? Infinity : top[k - 1].total;
+      if (moves[c].lb >= cut) break;
+      var v = this.evalMove(S, allowed, moves[c], cut, 1);
+      if (v < cut) {
+        top.push({g: moves[c].g, total: v});
+        top.sort(function (x, y) { return x.total - y.total || x.g - y.g; });
+        if (top.length > k) top.pop();
+      }
+    }
+    return top;
+  };
+
+  // ---------- the human strategy ----------
+  // The video strategy: open SLANT; if it comes back mostly grey (three or more grey tiles), play PRICE;
+  // otherwise, and from then on, play any word that could still be the answer. A person picks among those
+  // words without computing anything, so the strategy is scored as a uniformly random pick among them -
+  // exactly, as an expectation over every pick, not by sampling.
+  function greys(p) { return colors(p).filter(function (c) { return c === 0; }).length; }
+  // 'slant', 'price', or null for "any word that fits"
+  function humanGuess(rows, n) {
+    if (!rows.length) return 'slant';
+    if (rows.length === 1 && rows[0].guess === 'slant' && greys(rows[0].pattern) >= 3 && n > 1) return 'price';
+    return null;
+  }
+  function split(engine, S, g) {
+    var by = {}, out = [];
+    for (var i = 0; i < S.length; i++) { var p = engine.fb(g, S[i]); if (p !== WIN) (by[p] = by[p] || []).push(S[i]); }
+    for (var k in by) out.push({p: +k, S: by[k]});
+    return out;
+  }
+  // Expected total guesses over the words of S (guess indices) when every guess is a random one of them.
+  function randomTotal(engine, S, memo) {
+    if (S.length === 1) return 1;
+    var key = S.join(','), v = memo.get(key);
+    if (v !== undefined) return v;
+    var t = 0;
+    for (var i = 0; i < S.length; i++) {
+      t += S.length;
+      split(engine, S, S[i]).forEach(function (q) { t += randomTotal(engine, q.S, memo); });
+    }
+    memo.set(key, t / S.length);
+    return t / S.length;
+  }
+  // Expected guesses per game for the human strategy from this position on (counting from the next guess).
+  function humanExpected(engine, rows, cands, memo) {
+    memo = memo || engine.humanMemo || (engine.humanMemo = new Map());
+    var S = cands.map(function (w) { return engine.index[w]; }), n = S.length, g = humanGuess(rows, n);
+    if (!g) return randomTotal(engine, S, memo) / n;
+    var t = n, gi = engine.index[g];
+    split(engine, S, gi).forEach(function (q) {
+      var next = rows.concat([{guess: g, pattern: q.p}]);
+      t += humanExpected(engine, next, q.S.map(function (i) { return engine.words[i]; }), memo) * q.S.length;
+    });
+    return t / n;
+  }
+
+  // ---------- analysis: what the page shows ----------
+  // rows: [{guess, pattern}]. Returns candidates, up to five suggestions and a plain-language explanation.
+  // opts: {hard, human, budget}. tree/meta: the data file (normal mode only).
+  function analyse(engine, meta, rows, opts) {
+    opts = opts || {};
+    var answers = engine.answers.map(function (i) { return engine.words[i]; });
+    var res = {rows: rows.length, solved: rows.length > 0 && rows[rows.length - 1].pattern === WIN};
+    if (res.solved) { res.candidates = [rows[rows.length - 1].guess]; res.suggestions = []; res.explanation = 'Solved in ' + rows.length + '.'; return res; }
+    var cands = filter(answers, rows);
+    res.outside = false;
+    if (!cands.length) {
+      cands = filter(engine.words, rows);
+      res.outside = cands.length > 0;
+    }
+    res.candidates = cands;
+    if (!cands.length) { res.suggestions = []; res.explanation = 'No word fits all of this feedback. Check the colours: tap a tile to change it.'; return res; }
+
+    var hard = !!opts.hard, n = cands.length;
+    var allowed = [];
+    for (var i = 0; i < engine.G; i++) if (!hard || !hardCheck(engine.words[i], rows)) allowed.push(i);
+    allowed.key = 'root';
+    var S = cands.map(function (w) { return engine.index[w]; });
+    if (!rows.length && meta && meta.openers) return opening(engine, meta, res, hard, opts);
+    var scored = engine.score(S, allowed), byG = {};
+    scored.forEach(function (s) { byG[s.g] = s; });
+    var sugg = [], source = 'estimate';
+
+    var node = !hard && meta && meta.tree && !res.outside ? treeWalk(meta.tree, rows) : null;
+    {
+      if (n <= (opts.exactLimit || 100)) {
+        try {
+          var search = new Search(engine, {hard: hard, budget: opts.budget, depth: opts.depth});
+          var top = search.top(S, allowed, 5);
+          source = search.inexact ? 'estimate' : 'exact';
+          sugg = top.map(function (t) { return {g: t.g, total: t.total, exact: !search.inexact}; });
+        } catch (err) { if (err.message !== 'budget') throw err; }
+      }
+      if (!sugg.length) sugg = scored.slice(0, 5).map(function (s) { return {g: s.g, total: s.total, exact: false}; });
+      if (node) {
+        var st = treeStats(node, cands), tg = engine.index[nodeGuess(node)];
+        sugg = [{g: tg, total: st.total, exact: true, max: st.max}].concat(sugg.filter(function (s) { return s.g !== tg; })).slice(0, 5);
+        source = 'tree';
+      }
+    }
+    res.source = source;
+    res.suggestions = sugg.map(function (s) {
+      var sc = byG[s.g] || engine.score(S, [s.g])[0];
+      return {word: engine.words[s.g], expected: s.total / n, exact: s.exact, chance: sc.inS / n,
+              largest: sc.largest, groups: sc.groups, left: sc.left, inS: !!sc.inS};
+    });
+    // the best word that could itself be the answer, to say when an information word beats it
+    var bestCand = null;
+    for (i = 0; i < res.suggestions.length; i++) if (res.suggestions[i].inS) { bestCand = res.suggestions[i]; break; }
+    if (!bestCand) {
+      var c = scored.filter(function (s) { return s.inS; })[0];
+      if (c) bestCand = {word: engine.words[c.g], expected: c.total / n, exact: false, groups: c.groups, left: c.left};
+      if (c && n <= 2) bestCand.expected = n === 1 ? 1 : 1.5;
+    }
+    res.bestCandidate = bestCand;
+    if (opts.human && !res.outside) res.human = {word: humanGuess(rows, n), expected: humanExpected(engine, rows, cands)};
+    res.explanation = explain(res, rows, hard);
+    return res;
+  }
+
+  // Groups a single word makes, straight from feedback() - no table needed.
+  function stats(word, cands) {
+    var cnt = {}, groups = 0, largest = 0, sq = 0, n = cands.length;
+    cands.forEach(function (c) { var p = feedback(word, c); cnt[p] = (cnt[p] || 0) + 1; });
+    for (var p in cnt) { groups++; largest = Math.max(largest, cnt[p]); sq += cnt[p] * cnt[p]; }
+    return {groups: groups, largest: largest, left: sq / n, inS: !!cnt[WIN]};
+  }
+
+  // The empty board: the exact totals build.py computed for popular openers, best first.
+  function opening(engine, meta, res, hard, opts) {
+    var n = res.candidates.length;
+    // in Hard Mode the normal-mode optimum is a lower bound, not the answer
+    res.source = hard ? 'bound' : 'tree';
+    res.suggestions = meta.openers.slice(0, 5).map(function (o) {
+      var st = stats(o[0], res.candidates);
+      return {word: o[0], expected: o[1] / n, exact: !hard, bound: hard, chance: st.inS ? 1 / n : 0, largest: st.largest, groups: st.groups, left: st.left, inS: st.inS};
+    });
+    var s = res.suggestions[0];
+    res.explanation = up(s.word) + ' is the best first word: played perfectly from there it solves every one of the ' +
+      n.toLocaleString('en-US') + ' answers in at most ' + meta.max + ' guesses, ' + s.expected.toFixed(3) + ' on average. It splits them into ' +
+      s.groups + ' groups, ' + s.largest + ' words at worst.' +
+      (hard ? ' In Hard Mode these figures are the best case: being made to reuse letters can only make a game longer.' : '');
+    if (opts.human) res.human = {word: 'slant', expected: humanExpected(engine, [], res.candidates)};
+    return res;
+  }
+
+  function up(w) { return w.toUpperCase(); }
+  function num(x) { return x < 10 && Math.round(x) !== x ? x.toFixed(1).replace(/\.0$/, '') : String(Math.round(x)); }
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+
+  var WORDS = ['no', 'one', 'two', 'three', 'four', 'five'];
+  function explain(res, rows, hard) {
+    var n = res.candidates.length, s = res.suggestions[0], out = [];
+    if (!s) return res.explanation || '';
+    var lead = res.outside ? 'No word on the original answer list fits, so this counts every accepted guess - the answer may be one the NYT added since. ' : '';
+    if (n === 1) return lead + 'Only ' + up(res.candidates[0]) + ' fits. Play it.';
+    if (n === 2) return lead + 'Two words left, ' + up(res.candidates[0]) + ' and ' + up(res.candidates[1]) +
+      '. Guess either: half the time it is right, otherwise the other one is - 1.5 guesses on average.';
+    var tried = {}, fresh = [], common = 0, i;
+    rows.forEach(function (r) { for (var k = 0; k < 5; k++) tried[r.guess[k]] = 1; });
+    for (i = 0; i < 5; i++) if (!tried[s.word[i]] && fresh.indexOf(s.word[i]) < 0) fresh.push(s.word[i]);
+    // a letter is common here when at least a fifth of the words left contain it
+    fresh.forEach(function (L) { if (res.candidates.filter(function (w) { return w.indexOf(L) >= 0; }).length * 5 >= n) common++; });
+    var nf = fresh.length, letters;
+    if (!nf) letters = ' tests no new letters but sorts out the known ones';
+    else if (common === nf) letters = ' tests ' + WORDS[nf] + ' new common letter' + (nf > 1 ? 's' : '');
+    else if (common) letters = ' tests ' + WORDS[nf] + ' new letter' + (nf > 1 ? 's' : '') + ' (' + WORDS[common] + ' of them common here)';
+    else letters = ' tests ' + WORDS[nf] + ' new letter' + (nf > 1 ? 's' : '');
+    out.push(n.toLocaleString('en-US') + ' words left.');
+    out.push(up(s.word) + letters + ' and splits them into ' + plural(s.groups, 'group') + ' - about ' + num(s.left) + ' word' +
+      (num(s.left) === '1' ? '' : 's') + ' left on average' + (s.largest > 1 ? ', ' + s.largest + ' at worst' : '') + '.');
+    var c = res.bestCandidate, about = function (x) { return (x.exact ? '' : 'about ') + x.expected.toFixed(2); };
+    if (!s.inS && c && c.word !== s.word && c.expected.toFixed(2) > s.expected.toFixed(2)) {
+      out.push('It cannot be the answer, but it beats going for one: the best word that could be, ' + up(c.word) + ', needs ' + about(c) +
+        ' guesses on average, ' + up(s.word) + ' ' + about(s) + '.');
+    } else if (!s.inS) {
+      out.push('It cannot be the answer itself, and no word that could be does better.');
+    } else {
+      out.push('It could also be the answer (1 in ' + n.toLocaleString('en-US') + ').');
+    }
+    if (hard) out.push('Hard Mode: only guesses that reuse every revealed letter count.');
+    return lead + out.join(' ');
+  }
+
+  var api = {WIN: WIN, feedback: feedback, pattern: pattern, colors: colors, fits: fits, filter: filter,
+    hardCheck: hardCheck, treeWalk: treeWalk, treeStats: treeStats, nodeGuess: nodeGuess, Engine: Engine,
+    Search: Search, humanGuess: humanGuess, humanExpected: humanExpected, analyse: analyse, explain: explain};
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.WordleCore = api;
+})(typeof self !== 'undefined' ? self : this);
+</script>
+<script>
+(function () {
+  'use strict';
+  var C = window.WordleCore, $ = function (id) { return document.getElementById(id); };
+  var KEY = 'wordleHelper.v1', ROWS = 6;
+  var state = {rows: [], hard: false, human: false, theme: ''};
+  var data = null, guessSet = null, worker = null, pending = false, busy = false, lastId = 0, result = null, showAll = false, humanGame = null;
+
+  // ---------- saved state (never trusted: anything malformed is dropped) ----------
+  function load() {
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (!s || typeof s !== 'object') return;
+      if (Array.isArray(s.rows)) state.rows = s.rows.slice(0, ROWS).filter(function (r) {
+        return r && typeof r.w === 'string' && /^[a-z]{0,5}$/.test(r.w) && Array.isArray(r.c) && r.c.length === 5 && r.c.every(function (x) { return x === 0 || x === 1 || x === 2; });
+      }).map(function (r) { return {w: r.w, c: r.c.slice(), done: !!r.done && r.w.length === 5}; });
+      // only a run of finished rows, then at most one row being typed
+      var cut = state.rows.findIndex(function (r) { return !r.done; });
+      if (cut >= 0) state.rows = state.rows.slice(0, cut + 1);
+      state.hard = s.hard === true; state.human = s.human === true;
+      state.theme = s.theme === 'light' || s.theme === 'dark' ? s.theme : '';
+    } catch (e) { /* private mode, blocked storage or junk: start fresh */ }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify({rows: state.rows, hard: state.hard, human: state.human, theme: state.theme})); } catch (e) {}
+  }
+
+  // ---------- board ----------
+  function activeIndex() { var i = state.rows.findIndex(function (r) { return !r.done; }); return i < 0 ? state.rows.length : i; }
+  function doneRows() { return state.rows.filter(function (r) { return r.done; }); }
+  function solved() { var d = doneRows(); return d.length > 0 && d[d.length - 1].c.every(function (x) { return x === 2; }); }
+  function feedbackRows() { return doneRows().map(function (r) { return {guess: r.w, pattern: C.pattern(r.c)}; }); }
+  function active() {
+    var i = activeIndex();
+    if (i >= ROWS || solved()) return null;
+    if (!state.rows[i]) state.rows[i] = {w: '', c: [0, 0, 0, 0, 0], done: false};
+    return state.rows[i];
+  }
+
+  var grid = $('grid'), tiles = [];
+  for (var r = 0; r < ROWS; r++) {
+    var row = document.createElement('div'); row.className = 'row'; row.setAttribute('role', 'group');
+    tiles.push([]);
+    for (var k = 0; k < 5; k++) {
+      var t = document.createElement('button'); t.className = 'tile'; t.type = 'button'; t.dataset.r = r; t.dataset.k = k;
+      t.addEventListener('click', onTile);
+      row.appendChild(t); tiles[r].push(t);
+    }
+    grid.appendChild(row);
+  }
+  var NAMES = ['grey', 'yellow', 'green'];
+  function drawGrid() {
+    var ai = activeIndex();
+    for (var r = 0; r < ROWS; r++) {
+      var row = state.rows[r], el = grid.children[r];
+      el.classList.toggle('active', r === ai && !solved());
+      el.setAttribute('aria-label', 'Guess ' + (r + 1));
+      for (var k = 0; k < 5; k++) {
+        var t = tiles[r][k], ch = row && row.w[k] ? row.w[k] : '', c = row ? row.c[k] : 0;
+        t.textContent = ch.toUpperCase();
+        t.className = 'tile' + (ch ? ' f ' + 'xyg'[c] : '');
+        t.disabled = !ch;
+        t.setAttribute('aria-label', ch ? ch.toUpperCase() + ', ' + NAMES[c] + ' - tap to change' : 'empty');
+      }
+    }
+  }
+  function onTile(e) {
+    var t = e.currentTarget, row = state.rows[+t.dataset.r], k = +t.dataset.k;
+    if (!row || !row.w[k]) return;
+    row.c[k] = (row.c[k] + 1) % 3;
+    t.classList.remove('pop'); void t.offsetWidth; t.classList.add('pop');
+    changed(row.done);
+  }
+
+  // ---------- keyboard ----------
+  var LAYOUT = ['qwertyuiop', 'asdfghjkl', 'enter zxcvbnm back'];
+  var kb = $('keyboard'), keys = {};
+  LAYOUT.forEach(function (line, i) {
+    var div = document.createElement('div'); div.className = 'krow';
+    if (i === 1) div.appendChild(Object.assign(document.createElement('span'), {className: 'spacer'}));
+    var parts = line.indexOf(' ') >= 0 ? line.split(' ') : [line];
+    parts.forEach(function (p) {
+      (p === 'enter' || p === 'back' ? [p] : p.split('')).forEach(function (ch) {
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'key' + (ch.length > 1 ? ' wide' : ''); b.dataset.key = ch;
+        b.textContent = ch === 'enter' ? 'Enter' : ch === 'back' ? '⌫' : ch;
+        if (ch === 'back') b.setAttribute('aria-label', 'Delete letter');
+        b.addEventListener('click', function () { press(ch); });
+        div.appendChild(b); keys[ch] = b;
+      });
+    });
+    if (i === 1) div.appendChild(Object.assign(document.createElement('span'), {className: 'spacer'}));
+    kb.appendChild(div);
+  });
+  function drawKeys() {
+    var best = {};
+    doneRows().forEach(function (r) { for (var k = 0; k < 5; k++) { var L = r.w[k]; best[L] = Math.max(best[L] === undefined ? -1 : best[L], r.c[k]); } });
+    'abcdefghijklmnopqrstuvwxyz'.split('').forEach(function (L) { keys[L].className = 'key' + (best[L] !== undefined ? ' ' + 'xyg'[best[L]] : ''); });
+  }
+  // A button clicked with a mouse or finger lets go of the focus, so the next Enter on the keyboard submits
+  // the row instead of pressing that button again (New game, a suggestion, a mode). Buttons reached with Tab
+  // keep it, so they still work from the keyboard.
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('button');
+    if (b && e.detail > 0) b.blur();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    var k = e.key.toLowerCase();
+    if (k === 'enter') { if (e.target.tagName === 'BUTTON' && e.target.closest('.sugg, .cand, .controls, #more')) return; e.preventDefault(); press('enter'); }
+    else if (k === 'backspace') { e.preventDefault(); press('back'); }
+    else if (/^[a-z]$/.test(k)) press(k);
+  });
+
+  var statusTimer = 0;
+  function say(msg, warn) {
+    var s = $('status'); s.textContent = msg || ''; s.className = warn ? 'warn' : '';
+    clearTimeout(statusTimer);
+    if (warn) statusTimer = setTimeout(function () { hint(); }, 2600);
+  }
+  function hint() {
+    var a = active();
+    if (solved()) say('Solved in ' + doneRows().length + '. Press New game to start again.');
+    else if (!a) say('That is all six rows.');
+    else if (!a.w) say(doneRows().length ? 'Type your next guess, or tap a suggestion.' : 'Type your first guess, or tap a suggestion.');
+    else if (a.w.length < 5) say('');
+    else say('Tap the tiles to match Wordle’s colours, then press Enter.');
+  }
+  function shake() { var el = grid.children[activeIndex()]; if (!el) return; el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+
+  function press(ch) {
+    var a = active();
+    if (ch === 'back') {
+      if (a && a.w) { a.w = a.w.slice(0, -1); a.c[a.w.length] = 0; drawGrid(); hint(); save(); renderQuick(); return; }
+      // an empty row: reopen the one before it, letters and colours kept
+      var d = doneRows();
+      if (!d.length) return;
+      if (a && !a.w) state.rows.splice(state.rows.indexOf(a), 1);
+      d[d.length - 1].done = false;
+      changed(true);
+      return;
+    }
+    if (!a) return;
+    if (ch === 'enter') {
+      if (a.w.length < 5) { say('Not enough letters', true); shake(); return; }
+      if (guessSet && !guessSet.has(a.w)) { say('Not in word list', true); shake(); return; }
+      if (state.hard) { var why = C.hardCheck(a.w, feedbackRows()); if (why) { say(why, true); shake(); return; } }
+      a.done = true;
+      changed(true);
+      return;
+    }
+    if (a.w.length >= 5) return;
+    a.w += ch;
+    drawGrid();
+    var t = tiles[activeIndex()][a.w.length - 1]; t.classList.add('pop');
+    hint(); save(); renderQuick();
+  }
+  function fill(word) {
+    var a = active();
+    if (!a) return;
+    a.w = word; a.c = [0, 0, 0, 0, 0];
+    drawGrid();
+    say('Now tap the tiles to show the colours Wordle gave ' + word.toUpperCase() + ', then press Enter.');
+    save(); renderQuick();
+    if (matchMedia('(max-width: 859px)').matches) grid.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+  }
+
+  // ---------- the worker ----------
+  function startWorker() {
+    var shim = '\nvar engine, meta, C = self.WordleCore;\nself.onmessage = function (e) {\n  var m = e.data;\n' +
+      '  if (m.type === "init") { engine = new C.Engine(m.answers, m.guesses, m.meta.fit); meta = m.meta;\n' +
+      '    var avg = C.humanExpected(engine, [], m.answers); postMessage({type: "ready", humanGame: avg}); return; }\n' +
+      '  try { postMessage({type: "result", id: m.id, res: C.analyse(engine, meta, m.rows, m.opts)}); }\n' +
+      '  catch (err) { postMessage({type: "error", id: m.id, message: String(err && err.message || err)}); }\n};\n';
+    try {
+      var url = URL.createObjectURL(new Blob([$('core').textContent, shim], {type: 'text/javascript'}));
+      var w = new Worker(url);
+      w.onmessage = onWorker;
+      w.onerror = function () { worker = null; schedule(); };
+      w.postMessage({type: 'init', answers: data.answers, guesses: data.guesses, meta: data.meta});
+      return w;
+    } catch (e) { return null; }
+  }
+  var local = null;
+  function onWorker(e) {
+    var m = e.data;
+    if (m.type === 'ready') { humanGame = m.humanGame; schedule(); return; }
+    busy = false;
+    if (m.type === 'error') { setBusy(false); $('explain').textContent = 'Something went wrong while thinking: ' + m.message; }
+    else if (m.id === lastId) { result = m.res; render(); }
+    if (pending) { pending = false; run(); } else setBusy(false);
+  }
+  function setBusy(on) { document.body.classList.toggle('busy', on); $('busyNote').textContent = on ? 'thinking…' : ''; }
+  var timer = 0;
+  function schedule() { clearTimeout(timer); timer = setTimeout(run, 60); }
+  function run() {
+    if (!data) return;
+    var msg = {type: 'analyse', id: ++lastId, rows: feedbackRows(), opts: {hard: state.hard, human: state.human}};
+    if (!worker) {
+      // no worker (very old browser): think on the page itself
+      if (!local) { local = new C.Engine(data.answers, data.guesses, data.meta.fit); humanGame = C.humanExpected(local, [], data.answers); }
+      setBusy(true);
+      setTimeout(function () { result = C.analyse(local, data.meta, msg.rows, msg.opts); setBusy(false); render(); }, 20);
+      return;
+    }
+    if (busy) { pending = true; return; }
+    busy = true; setBusy(true);
+    worker.postMessage(msg);
+  }
+  function changed(reanalyse) { drawGrid(); drawKeys(); hint(); save(); renderQuick(); if (reanalyse) schedule(); }
+
+  // ---------- rendering the analysis ----------
+  function fmt(x) { return x.toFixed(x >= 10 ? 1 : 2); }
+  function render() {
+    var res = result;
+    if (!res) return;
+    $('explain').textContent = res.explanation;
+    var box = $('suggestions'); box.textContent = '';
+    var n = res.candidates.length;
+    res.suggestions.forEach(function (s, i) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'sugg';
+      var tag = i === 0 ? (res.source === 'tree' ? 'optimal' : res.source === 'exact' ? 'best (exact)' : res.source === 'bound' ? 'best known' : 'best estimate') : '';
+      var exp = (s.bound ? '≥' : s.exact ? '' : '≈') + fmt(s.expected);
+      var chance = s.inS ? (n <= 20 ? '1 in ' + n : (100 / n).toFixed(n > 200 ? 2 : 1) + '%') : 'never';
+      b.innerHTML = '<span class="word"></span><span class="stat"></span><span class="stat"></span><span class="stat"></span>';
+      b.children[0].textContent = s.word; if (tag) b.children[0].appendChild(Object.assign(document.createElement('small'), {textContent: tag}));
+      [[exp, 'guesses to finish'], [chance, 'is the answer'], [s.largest.toLocaleString('en-US'), 'largest group']].forEach(function (pair, j) {
+        var el = b.children[j + 1]; el.textContent = pair[0]; el.appendChild(Object.assign(document.createElement('span'), {textContent: pair[1]}));
+      });
+      b.setAttribute('aria-label', s.word.toUpperCase() + ': ' + exp + ' guesses to finish, ' + chance + ' the answer, largest group ' + s.largest + '. Tap to play it.');
+      b.addEventListener('click', function () { fill(s.word); });
+      box.appendChild(b);
+    });
+    if (!res.suggestions.length) box.textContent = res.solved ? 'Solved - well played.' : 'Nothing to suggest.';
+    $('source').textContent = {
+      tree: res.rows ? 'Top pick from the precomputed optimal SALET tree; the others searched live.' : 'Exact totals over all 2,315 answers with perfect play after each first word.',
+      exact: 'Exact: every accepted guess searched, with perfect play after it.',
+      estimate: 'Estimated from the groups each guess makes - too many words left for an exact search.',
+      bound: 'Normal-mode optimum; Hard Mode can only be the same or slower.'
+    }[res.source] || '';
+    // candidates
+    $('count').textContent = res.solved ? 'Solved' : n === 1 ? '1 word fits' : n.toLocaleString('en-US') + ' words fit';
+    var list = $('cands'); list.textContent = '';
+    var shown = showAll ? res.candidates : res.candidates.slice(0, 120);
+    var frag = document.createDocumentFragment();
+    shown.forEach(function (w) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'cand' + (res.outside ? ' extra' : ''); b.textContent = w;
+      b.addEventListener('click', function () { fill(w); });
+      frag.appendChild(b);
+    });
+    list.appendChild(frag);
+    $('more').classList.toggle('hide', shown.length >= n);
+    $('more').textContent = 'Show all ' + n.toLocaleString('en-US');
+    renderHuman();
+    renderQuick();
+  }
+  function renderQuick() {
+    var q = $('quick'), s = result && result.suggestions[0];
+    q.textContent = '';
+    if (!s || !active() || active().w) return;
+    q.appendChild(document.createTextNode('Best next:'));
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = s.word;
+    b.appendChild(Object.assign(document.createElement('span'), {textContent: (s.bound ? '\u2265' : s.exact ? '' : '\u2248') + fmt(s.expected) + ' to finish'}));
+    b.setAttribute('aria-label', 'Play ' + s.word.toUpperCase());
+    b.addEventListener('click', function () { fill(s.word); });
+    q.appendChild(b);
+  }
+  function renderHuman() {
+    var res = result, h = res && res.human, p = $('humanText'), chips = $('humanChips');
+    chips.textContent = '';
+    if (!state.human || !res) return;
+    if (res.solved) { p.textContent = 'Solved.'; return; }
+    if (!h) { p.textContent = 'The human strategy only knows the original answer list.'; return; }
+    var best = res.suggestions[0], n = res.candidates.length;
+    var move = h.word ? 'play ' + h.word.toUpperCase() : 'play any of the ' + (n === 1 ? 'one word' : n + ' words') + ' that fit';
+    var txt = 'SLANT, then PRICE if SLANT was mostly grey, then any word that fits. Here: ' + move + '. From here that takes ' + h.expected.toFixed(2) +
+      ' guesses on average' + (best ? ', against ' + (best.exact ? '' : 'about ') + best.expected.toFixed(2) + ' with the best play' : '') + '.';
+    if (humanGame) txt += ' Over a whole game it averages ' + humanGame.toFixed(2) + ' guesses, ' + (humanGame - data.meta.total / data.meta.answers).toFixed(2) +
+      ' more than the optimal ' + (data.meta.total / data.meta.answers).toFixed(3) + '.';
+    p.textContent = txt;
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'btn';
+    b.textContent = h.word ? 'Play ' + h.word.toUpperCase() : 'Pick a word that fits';
+    b.addEventListener('click', function () { fill(h.word || res.candidates[Math.floor(Math.random() * n)]); });
+    chips.appendChild(b);
+  }
+
+  // ---------- controls ----------
+  function drawControls() {
+    $('modeNormal').setAttribute('aria-pressed', String(!state.hard));
+    $('modeHard').setAttribute('aria-pressed', String(state.hard));
+    $('humanBtn').setAttribute('aria-pressed', String(state.human));
+    document.body.classList.toggle('human', state.human);
+    if (state.theme) document.documentElement.setAttribute('data-theme', state.theme); else document.documentElement.removeAttribute('data-theme');
+  }
+  $('modeNormal').addEventListener('click', function () { if (state.hard) { state.hard = false; drawControls(); changed(true); } });
+  $('modeHard').addEventListener('click', function () { if (!state.hard) { state.hard = true; drawControls(); changed(true); } });
+  $('humanBtn').addEventListener('click', function () { state.human = !state.human; drawControls(); changed(true); });
+  $('themeBtn').addEventListener('click', function () {
+    var dark = state.theme ? state.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    state.theme = dark ? 'light' : 'dark'; drawControls(); save();
+  });
+  $('newGame').addEventListener('click', function () { state.rows = []; showAll = false; changed(true); say('New game. Type your first guess, or tap a suggestion.'); });
+  $('more').addEventListener('click', function () { showAll = true; render(); });
+
+  load(); drawControls(); drawGrid(); drawKeys(); hint();
+  Promise.all(['answers', 'guesses', 'tree_salet'].map(function (f) {
+    return fetch('../data/wordle_helper/' + f + '.json').then(function (r) { if (!r.ok) throw new Error(f + ': ' + r.status); return r.json(); });
+  })).then(function (d) {
+    data = {answers: d[0], guesses: d[1], meta: d[2]};
+    guessSet = new Set(data.guesses);
+    worker = startWorker();
+    if (!worker) schedule();
+  }).catch(function (e) { $('explain').textContent = 'Could not load the word lists (' + e.message + '). Check your connection and reload.'; });
+})();
+</script>
+</body>
+</html>

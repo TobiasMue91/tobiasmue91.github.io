@@ -2121,6 +2121,18 @@ commas, accents, reversed lengths, a 200k-character paste) is read or refused ne
 `nameGeneratorFavorites` survives while forged ones do not, and Ask AI sends only the theme and filters, as JSON data, and
 shows only cleaned names checked against the records. Run it after rebuilding the data or touching the core.
 
+`test/wordle_helper.mjs` runs the DOM-free `<script id="core">` block of `tools/wordle_helper.html` (Wordle Helper) - the same
+text the page hands its Web Worker - against the data it loads, `data/wordle_helper/` (answers.json, guesses.json,
+tree_salet.json), which `util/wordle_helper/build.py` makes from the original Wordle word lists (pinned by SHA-256) by compiling
+and running `util/wordle_helper/solve.c`, an exact branch and bound over all 12,972 accepted guesses (needs a C compiler; about
+ten minutes on four cores). Its promises: feedback exactly as Wordle colours it, repeated letters included (SPEED on ABIDE, ERASE
+on SPEED, three Es); the candidates left are exactly the words that would have given every row; Hard Mode refuses what the NYT
+refuses and nothing else; the SALET tree wins all 2,315 games in 7,920 guesses (3.421 on average, at most five, Bertsimas and
+Paskov 2025); the SLANT / PRICE / any-fitting-word strategy averages 3.669; the page's live exact search equals the optimal tree on
+every SALET group it can solve; SALET, LEMON, FIELD leaves BUGLE and CYCLE; and the explanation only says an information word
+beats going for the answer when it does. Its `page` suite drives the real page on a phone in Chromium (needs
+`npx http-server -p 8099`) and is skipped without one. Run it after rebuilding the data or touching the core.
+
 `test/color_palette.mjs` runs the DOM-free `<script id="core">` block of `tools/online_color_palette_generator.html`
 (Color Palette Generator): OKLab against CSS Color 4's values with every sRGB colour round-tripping through OKLCH and HSL,
 WCAG contrast against known ratios and never rounded up into a pass, the Machado 2009 simulations keeping white, black
@@ -2321,3 +2333,17 @@ where the grid slides half a beat in places. Tuning further only traded one song
 there. If you change the analysis, run `beats` and `shots` before and after; the thresholds are the bar it
 cleared, not aspirations.
 
+## Leetspeak Converter
+
+```sh
+npm run test:leet                # or: node test/leetspeak.mjs [contract intensity style decode settings edges]
+```
+
+`leetspeak.mjs` runs the DOM-free `<script id="core">` of `tools/1337.html` in Node; no browser or
+server. It holds the basic and advanced alphabets to the outputs the earlier page gave at full
+intensity (`contract`), checks that an intensity below 100% swaps exactly that share and the same
+letters every time, that decoding reads common leetspeak back to English words while numbers,
+decimals, times and emoticons stay as they are, that settings saved by the earlier page migrate, and
+that empty, non-ASCII and megabyte input survive. The decoder's word list and letter-pair table are
+built by `util/1337/bigrams.py` (needs `pip install wordfreq`); paste its two lines over `LEXICON` and
+`BIGRAM` in the core, never edit them by hand.
