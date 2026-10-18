@@ -2292,3 +2292,18 @@ with empty items) become clean values or a plain error that leaves the tag out, 
 text or attributes, the exact tag output, the Google-style pixel truncation (never splitting a character), huge-input
 speed, and that settings the old page stored under `seoMetaFormData` still load. Expected values come from the HTML
 spec, the Open Graph protocol, X card docs and BCP 47, written by hand.
+
+## Leetspeak Converter
+
+```sh
+npm run test:leet                # or: node test/leetspeak.mjs [contract intensity style decode settings edges]
+```
+
+`leetspeak.mjs` runs the DOM-free `<script id="core">` of `tools/1337.html` in Node; no browser or
+server. It holds the basic and advanced alphabets to the outputs the earlier page gave at full
+intensity (`contract`), checks that an intensity below 100% swaps exactly that share and the same
+letters every time, that decoding reads common leetspeak back to English words while numbers,
+decimals, times and emoticons stay as they are, that settings saved by the earlier page migrate, and
+that empty, non-ASCII and megabyte input survive. The decoder's word list and letter-pair table are
+built by `util/1337/bigrams.py` (needs `pip install wordfreq`); paste its two lines over `LEXICON` and
+`BIGRAM` in the core, never edit them by hand.
