@@ -228,9 +228,9 @@ async function analyse(buffer, progress) {
     }
     const n = percentile(kickOn, .98); for (let f = 0; f < frames; f++) kickOn[f] = Math.min(1.5, kickOn[f] / n);
   }
-  const KW = window.__kw ?? 0, BW = window.__bw ?? 2;
+  // weights picked by a grid search over ten songs with known beats (see test/README.md, Afterglow)
   const fn = percentile(flux[0], .98), mn = percentile(flux[1], .98);
-  for (let f = 0; f < frames; f++) onset[f] = KW ? KW * kickOn[f] + BW * flux[0][f] / fn + flux[1][f] / mn + .05 * flux[2][f] / mn : 2 * flux[0][f] + flux[1][f] + .05 * flux[2][f];
+  for (let f = 0; f < frames; f++) onset[f] = kickOn[f] + 2 * flux[0][f] / fn + flux[1][f] / mn + .05 * flux[2][f] / mn;
   // remove the local mean so steady noise does not read as onsets
   const os = new Float32Array(frames);
   { let acc = 0; const w = 30, q = [];
@@ -238,7 +238,7 @@ async function analyse(buffer, progress) {
   const osn = percentile(os, .98); for (let f = 0; f < frames; f++) os[f] = Math.min(1.5, os[f] / osn);
 
   // tempo: autocorrelation of onset strength, weighted toward ~120 BPM
-  let bestLag = 30, bestScore = -1, bestPhase = 0;
+  let bestLag = 30, bestScore = -1;
   const minLag = FPS * 60 / 180, maxLag = FPS * 60 / 72;
   const ac = lag => { let s = 0; const L = Math.floor(lag), fr = lag - L; for (let i = 0; i + L + 1 < frames; i++) s += os[i] * (os[i + L] * (1 - fr) + os[i + L + 1] * fr); return s; };
   {
@@ -254,16 +254,16 @@ async function analyse(buffer, progress) {
     for (const [, c] of cands.slice(0, 4)) {
       for (let lag = c - .3; lag <= c + .3; lag += .01) {
         const bpm = 60 * FPS / lag, w = Math.exp(-.5 * Math.pow(Math.log2(bpm / 120) / .9, 2));
-        let best = 0, bph = 0; for (let ph = 0; ph < lag; ph += .5) { const g = grid(lag, ph); if (g > best) { best = g; bph = ph; } }
+        let best = 0; for (let ph = 0; ph < lag; ph += .5) best = Math.max(best, grid(lag, ph));
         const sc = best / (frames / lag) * w;
-        if (sc > bestScore) { bestScore = sc; bestLag = lag; bestPhase = bph; }
+        if (sc > bestScore) { bestScore = sc; bestLag = lag; }
       }
     }
   }
 
   // beats: dynamic programming (Ellis 2007). Held close to the comb's tempo: measured on test songs with
   // known beats, 200 keeps quiet passages on the grid and still follows a live band drifting by 4 %.
-  const TIGHT = window.__tight ?? 200;
+  const TIGHT = 200;
   const track = P => {
     const score = new Float32Array(frames), back = new Int32Array(frames).fill(-1);
     for (let t = 0; t < frames; t++) {
@@ -293,52 +293,7 @@ async function analyse(buffer, progress) {
     // only the big ones: a syncopated kick after a gap is a step too, but a small one
     for (const f of order) { if (steps.length >= 8 || nov[f] < .5 * nov[order[0]]) break; if (steps.every(g => Math.abs(g - f) > FPS * 4)) steps.push(f); }
   }
-  const stepFit = (ph, lag) => steps.reduce((s, f) => { const d = ((f - ph) % lag + lag) % lag, e = Math.min(d, lag - d); return s + Math.exp(-.5 * Math.pow(e / (lag / 12), 2)); }, 0);
-  let beats;
-  const followed = () => {
-    // Anchored on the biggest section step - a drop lands on a one - and followed outwards both ways in
-    // overlapping windows of 32 beats. Each window may bend the tempo by 2 % and move the phase by a sixteenth
-    // of a beat: enough for a band that drifts, never enough to slide a quarter beat onto a bass line that
-    // leads the kick. A section step inside a window pulls the grid onto itself.
-    const at = x => { if (x < 0 || x >= frames - 1) return 0; const i = Math.floor(x), fr = x - i; return os[i] * (1 - fr) + os[i + 1] * fr; };
-    const near = (x, lag) => steps.reduce((s, f) => s + Math.exp(-.5 * Math.pow((f - x) / (lag / 6), 2)), 0);
-    const follow = (a0, dir) => {
-      const out = []; let a = a0, lag = P;
-      const W = 32, H = 16;
-      while (dir > 0 ? a < frames + lag : a > -lag) {
-        let bl = lag, ba = a, bs = -1e9;
-        for (let dl = -.02; dl <= .0201; dl += .004) for (let dp = -lag / 16; dp <= lag / 16 + 1e-6; dp += lag / 64) {
-          const l2 = lag * (1 + dl), a2 = a + dp;
-          let sc = -Math.abs(dl) * 2 - Math.abs(dp) / lag * .5;
-          for (let j = 0; j < W; j++) { const x = a2 + dir * j * l2; sc += at(x) + 3 * near(x, l2); }
-          if (sc > bs) { bs = sc; bl = l2; ba = a2; }
-        }
-        lag = bl; a = ba;
-        for (let j = 0; j < H; j++) out.push(Math.round(a + dir * j * lag));
-        a += dir * H * lag;
-      }
-      return out;
-    };
-    let anchor = bestPhase % P;
-    if (steps.length) anchor = steps[0];
-    else { // no clear section change: the comb's phase, or a quarter of a beat off it, whichever carries more onset
-      let bo = 0, bs = -1; for (let q = 0; q < 4; q++) { let sc = 0; for (let x = anchor + q * P / 4; x < frames; x += P) sc += at(x); if (sc > bs) { bs = sc; bo = q * P / 4; } }
-      anchor += bo;
-    }
-    const fwd = follow(anchor, 1), bwd = follow(anchor - P, -1);
-    return bwd.reverse().concat(fwd).filter(b => b >= 0 && b < frames + P);
-  };
-  // Two trackers, because each fails where the other holds: the DP slides onto a bass line that masks a soft
-  // kick, the window follower loses a band that drifts hard. Whichever puts the song's section steps on its
-  // beats wins - a grid a quarter beat off misses every drop - and the onsets it collects break a tie.
-  const fit = bt => {
-    let st = 0; for (const f of steps) { let m = 1e9; for (const b of bt) m = Math.min(m, Math.abs(b - f)); if (m < P / 8) st++; }
-    let on = 0; for (const b of bt) on += os[b] || 0;
-    return st * 1e6 + on;
-  };
-  const cands = [track(P), followed()];
-  window.__fits = cands.map(c => { let st = 0; for (const f of steps) { let m = 1e9; for (const b of c) m = Math.min(m, Math.abs(b - f)); if (m < P / 8) st++; } let on = 0; for (const b of c) on += os[b] || 0; return [st, steps.length, +on.toFixed(1)]; });
-  beats = window.__pick === 0 ? cands[0] : window.__pick === 1 ? cands[1] : fit(cands[1]) > fit(cands[0]) ? cands[1] : cands[0];
+  const beats = track(P);
   // extend the grid over intro/outro silence so every frame has a beat phase
   while (beats[0] - P > 0) beats.unshift(Math.round(beats[0] - P));
   while (beats[beats.length - 1] + P < frames + P) beats.push(Math.round(beats[beats.length - 1] + P));
@@ -401,7 +356,6 @@ async function analyse(buffer, progress) {
     function out(f) { bassHit[f] = v; } }
 
   progress(1);
-  window.__dbg = { steps, P, bestPhase };
   return { frames, duration: frames / FPS, bpm: 60 * FPS / P, beats, bars, level, tier, drops, band, bassHit, os };
 }
 

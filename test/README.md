@@ -2292,3 +2292,32 @@ with empty items) become clean values or a plain error that leaves the tag out, 
 text or attributes, the exact tag output, the Google-style pixel truncation (never splitting a character), huge-input
 speed, and that settings the old page stored under `seoMetaFormData` still load. Expected values come from the HTML
 spec, the Open Graph protocol, X card docs and BCP 47, written by hand.
+
+## Afterglow (music video maker)
+
+```sh
+npm run test:afterglow                       # or: node test/music_video_maker.mjs
+node test/music_video_maker.mjs beats shots  # one or more named suites
+VERBOSE=1 node test/music_video_maker.mjs    # print the measurements
+```
+
+`music_video_maker.mjs` drives the real `tools/music_video_maker.html` in headless Chromium (file://, no
+server; needs Playwright). The page promises a video cut to the music, which no single frame can show, so it
+synthesises songs in the page with WebAudio whose beats, downbeats and drops are known exactly - human timing
+jitter, tempo drift, swing, syncopated kicks, intros and breaks with only off-beat hi-hats, sections of 3, 5 and
+7 bars, a live band drifting by 4.5 % - and measures what the analysis and the cut plan make of them.
+
+| suite | what it checks |
+| --- | --- |
+| `beats` | tempo (half tempo counts for drum & bass), beats within 50 ms, downbeats within 70 ms, a cut within 60 ms of every drop, the share of cuts on a true beat |
+| `shots` | dissolves run 0 -> 1 into the scene the next shot shows, none ends on a drop; every drop is a hard cut; every cut is on the beat grid; chops between bars do not knock the long shots off the bar |
+| `scenes` | each of the twelve scenes compiles and draws a picture, calm and at a drop, that is neither black nor blown out |
+| `loop` | seeking while playing leaves one render loop, not one per seek |
+
+The onset weights and the beat tracker's tightness in the page were chosen by a grid search over these five
+songs and five more made differently (numpy, other kick and bass sounds). Measured on all ten at the time: 0.91 or
+better on nine (beats, downbeats and drops averaged), and 0.56 on one with odd section lengths and a late pickup,
+where the grid slides half a beat in places. Tuning further only traded one song for another, so it stopped
+there. If you change the analysis, run `beats` and `shots` before and after; the thresholds are the bar it
+cleared, not aspirations.
+
