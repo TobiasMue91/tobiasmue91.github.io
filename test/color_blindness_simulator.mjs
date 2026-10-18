@@ -180,7 +180,7 @@ const T = {
   names() {
     eq(C.label('deuteranopia', 100), 'Deuteranopia', 'full = -opia');
     eq(C.label('deuteranopia', 60), 'Deuteranomaly', 'partial = -anomaly');
-    eq(C.label('achromatopsia', 40), 'Partial achromatopsia', 'partial achromatopsia');
+    eq(C.label('achromatopsia', 40), 'Achromatopsia', 'partial achromatopsia keeps its name; the % is shown beside it');
     eq(C.fileName('My chart.final.PNG', 'protanopia', 100), 'My-chart-final-protanopia.png', 'file name');
     eq(C.fileName('', 'deuteranopia', 60), 'image-deuteranomaly-60.png', 'file name with severity');
     eq(C.fileName('a.png', 'normal', 100), 'a-original.png', 'normal = original (as before)');
