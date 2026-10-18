@@ -46,7 +46,7 @@ if (suites.includes('parse')) {
     ['1h', 3600], ['2 hours', 7200], ['1.5h', 5400], ['1,5 h', 5400], ['1 Stunde', 3600],
     ['1h 20m', 4800], ['1h20m', 4800], ['1h 20', 4800], ['5m30', 330], ['5m 30s', 330], ['1 hour and 30 minutes', 5400],
     ['1h, 30m', 5400], ['2 h 3 m 4 s', 7384], ['99:59:59', 359999],
-    ['timer 5 minutes', 300], ['set a timer for 10 minutes', 600], ['for 3 min', 180], ['countdown 1:00', 60], ['bake for 1 hr, 15 mins', 4500], ['Simmer 20 minutes', 1200],
+    ['timer 5 minutes', 300], ['set a timer for 10 minutes', 600], ['for 3 min', 180], ['countdown 1:00', 60], ['bake for 1 hr, 15 mins', 4500], ['Simmer 20 minutes', 1200], ['Let the dough rest 1½ hours (90 min)', 5400], ['½ h', 1800], ['2¼ hours', 8100], ['¾', 45], ['(5 min)', 300],
     ['5 min', 300], ['5 min', 300],
   ];
   for (const [s, n] of ok) eq(secs(s), n, `"${s}" -> ${n} s`);
