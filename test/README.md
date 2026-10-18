@@ -2259,3 +2259,17 @@ it offers (a suggested colour must really pass; a mistyped `<label for>` is name
 200 000-element page. The `browser` suite opens the real page and checks that `<style>` contrast is measured in the
 rendered copy, that checking makes no request outside the page, that input survives a reload and that nothing is logged
 as an error. Run it after touching the core.
+
+## Color Blindness Simulator
+
+```sh
+npm run test:colorblind                       # or: node test/color_blindness_simulator.mjs [suite ...]
+```
+
+Runs the page's DOM-free `<script id="core">` in Node; no browser or server needed. Simulation is checked
+against `color_blindness_simulator.vectors.json`, produced by colorspacious 1.1.2
+(`cspace_convert(rgb, {"name": "sRGB1+CVD", "cvd_type": "deuteranomaly", "severity": 60}, "sRGB1")`), which carries
+Machado, Oliveira & Fernandes' (2009) published matrices; the page must agree within one 8-bit level. CIEDE2000 is
+checked against Sharma, Wu & Dalal's (2005) test pairs. Also: what people paste as colours, links, saved settings,
+the pixel path against the single-colour path, and that suggested replacements really stop clashing.
+To re-record the vectors, re-run that colorspacious call for the inputs listed in the JSON.
