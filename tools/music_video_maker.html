@@ -270,6 +270,16 @@ async function analyse(buffer, progress) {
     return bt;
   };
   const P = bestLag;
+  // section changes: where the song gets suddenly louder (a drop, drums coming in). They land on a
+  // downbeat in nearly all music, so they decide which of the grid's phases is the beat and which beat is one.
+  const steps = [];
+  { const nov = new Float32Array(frames), A = 12, B = 30;
+    const cs = new Float64Array(frames + 1); for (let f = 0; f < frames; f++) cs[f + 1] = cs[f] + rms[f];
+    for (let f = B; f < frames - A; f++) { const after = (cs[f + A] - cs[f]) / A, before = (cs[f] - cs[f - B]) / B; nov[f] = Math.max(0, after - before) / (after + before + 1e-9); }
+    const order = Array.from(nov.keys()).filter(f => nov[f] > .25 && nov[f] >= nov[f - 1] && nov[f] >= nov[f + 1]).sort((x, y) => nov[y] - nov[x]);
+    for (const f of order) { if (steps.length >= 8) break; if (steps.every(g => Math.abs(g - f) > FPS * 4)) steps.push(f); }
+  }
+  const stepFit = (ph, lag) => steps.reduce((s, f) => { const d = ((f - ph) % lag + lag) % lag, e = Math.min(d, lag - d); return s + Math.exp(-.5 * Math.pow(e / (lag / 12), 2)); }, 0);
   let beats;
   if (window.__win ?? false) {
     // follow the comb's grid through the song in overlapping windows of 32 beats. Each window may bend
@@ -277,6 +287,14 @@ async function analyse(buffer, progress) {
     // for a band that drifts, never enough to slide a quarter beat onto a bass line that leads the kick.
     const sum = (lag, ph, k0, k1) => { let s = 0; for (let k = k0; k < k1; k++) { const x = ph + k * lag; if (x < 0 || x >= frames - 1) continue; const i = Math.floor(x), fr = x - i; s += os[i] * (1 - fr) + os[i + 1] * fr; } return s; };
     let lag = P, ph = bestPhase % P;
+    if (steps.length) {
+      // the comb may have locked onto a bass line that leads the kick or onto off-beat hats: try the quarter phases
+      const on = o => sum(P, ph + o, 0, Math.ceil(frames / P));
+      const top = Math.max(...[0, 1, 2, 3].map(q => on(q * P / 4)));
+      let bo = 0, bsc = -1;
+      for (let q = 0; q < 4; q++) { const sc = on(q * P / 4) / top + stepFit(ph + q * P / 4, P) / steps.length * 2; if (sc > bsc) { bsc = sc; bo = q * P / 4; } }
+      ph += bo;
+    }
     const W = 32, H = 16, out = [];
     let k = 0;   // index of the next beat to emit, counted on the current window's grid
     while (ph + k * lag < frames + lag) {
@@ -298,7 +316,14 @@ async function analyse(buffer, progress) {
 
   // downbeat: the beat-of-four whose beats carry the most bass onset
   let down = 0, dBest = -1;
-  for (let o = 0; o < 4; o++) { let s = 0; for (let i = o; i < beats.length; i += 4) s += flux[0][Math.min(frames - 1, beats[i])] || 0; if (s > dBest) { dBest = s; down = o; } }
+  const bassTot = [0, 1, 2, 3].map(o => { let s = 0; for (let i = o; i < beats.length; i += 4) s += flux[0][Math.min(frames - 1, beats[i])] || 0; return s; });
+  const bassMax = Math.max(...bassTot) || 1;
+  for (let o = 0; o < 4; o++) {
+    // a section change on this beat-of-four counts for far more than the bass on it
+    let st = 0; for (const f of steps) { let bi = 0; for (let i = 0; i < beats.length; i++) if (Math.abs(beats[i] - f) < Math.abs(beats[bi] - f)) bi = i; if (((bi - o) % 4 + 4) % 4 === 0 && Math.abs(beats[bi] - f) < P / 4) st++; }
+    const s = bassTot[o] / bassMax + (window.__win ? 2 * st : 0);
+    if (s > dBest) { dBest = s; down = o; }
+  }
   const bars = [];
   for (let i = down; i < beats.length; i += 4) bars.push(beats[i]);
   if (bars[0] > 0) bars.unshift(Math.max(0, bars[0] - Math.round(4 * P)));
