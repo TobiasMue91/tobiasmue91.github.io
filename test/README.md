@@ -1441,6 +1441,7 @@ npm run test:opposites      # Opposite Word Finder suite (plain Node, no server 
 npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:gradient       # CSS Gradient Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
+npm run test:timer          # Online Timer suite (plain Node, no server or browser)
 npm run test:pomodoro       # Pomodoro Timer suite (plain Node, no server or browser)
 npm run test:palette        # Color Palette Generator suite (plain Node, no server or browser)
 npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
@@ -2043,6 +2044,12 @@ WHO's adult cut-offs (and the lower ones WHO 2004 and NICE give for Asian, Black
 boundary, a shown BMI and its category that always agree, a healthy range whose every weight is healthy and is not 0.1 kg too
 narrow, and for ages 2 to 19 the percentile curves CDC publishes beside its LMS table reproduced from L, M and S alone. It also
 reads what people type (decimal commas, units, feet and inches, stone) and the old page's `bmiData`. Run it after touching the core.
+
+`test/timer.mjs` runs the DOM-free `<script id="core">` block of `tools/timer.html` (Online Timer): what people type or paste
+(`5`, `1,5`, `1:30`, `1h 20m`, `5m30`, `set a timer for 10 minutes`, units in German) becomes the length they meant and
+everything else is an error that names the problem; a countdown that shows the full length at the start and 0:00 only at the end;
+the "ends" clock across midnight, new year, leap day and both DST changes; links with `?t=`; and the old page's `timerSettings`
+read back and written in a shape the old fields still fit. Run it after touching the core.
 
 `test/word_scrambler.mjs` runs the DOM-free `<script id="core">` block of `tools/online_word_scrambler.html` (Word Scrambler),
 whose promises nobody can check by eye on a long text: every word comes out a rearrangement of its own letters with every
