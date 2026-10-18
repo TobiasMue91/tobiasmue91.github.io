@@ -4,7 +4,8 @@
 // The page promises the best next guess and says why. Its promises, and what checks each:
 //   feedback  colours exactly as Wordle gives them, repeated letters included (greens first, then yellows left
 //             to right only while the answer has an unmatched copy), against hand-worked cases
-//   filter    the candidates left are exactly the words that would have given every row's colours
+//   filter    the candidates left are exactly the words that would have given every row's colours, and the
+//             site's Wordle game accepts every guess the helper accepts
 //   hard      Hard Mode refuses what the NYT refuses (greens moved, revealed letters dropped) and nothing else
 //   tree      data/wordle_helper/tree_salet.json, played on all 2,315 answers, wins every game in 7,920
 //             guesses (3.421 on average) and never needs more than five - Bertsimas and Paskov's optimum
@@ -99,6 +100,11 @@ if (suites.includes('filter')) {
   check(ANSWERS.every(w => GUESSES.includes(w)), 'every answer is an accepted guess');
   const rows = [row('salet', '..yy.'), row('lemon', 'yy...'), row('field', '..yg.')];
   eq(W.filter(ANSWERS, rows), ['bugle', 'cycle'], 'SALET (L, E yellow), LEMON (L, E yellow), FIELD (L green, E yellow) leaves BUGLE and CYCLE');
+  // the Wordle game on the site accepts every word the helper does (it once lacked 889 answers, ALOFT and BLOAT among them)
+  const game = readFileSync(join(ROOT, 'games', 'wordle.html'), 'utf8');
+  const gameWords = new Set([...game.match(/const VALID_WORDS = new Set\("([A-Z,]+)"/)[1].split(','), ...game.match(/const ANSWERS = "([A-Z,]+)"/)[1].split(',')]);
+  const lacking = GUESSES.filter(w => !gameWords.has(w.toUpperCase()));
+  eq(lacking.slice(0, 10), [], `games/wordle.html accepts all ${GUESSES.length.toLocaleString('en-US')} accepted guesses (${lacking.length} missing)`);
   // brute force: a word survives iff it would have produced every row
   const r2 = [row('crane', '..y.g')];
   const want = ANSWERS.filter(a => W.feedback('crane', a) === read('..y.g'));
@@ -339,6 +345,15 @@ if (suites.includes('page')) {
     const quick = (await pg.$eval('#quick button', b => b.firstChild.textContent)).toLowerCase();
     await pg.tap('#quick button');
     eq((await pg.$$eval('#grid .row:nth-child(2) .tile', els => els.map(e => e.textContent).join(''))).toLowerCase(), quick, `the Best next chip under the grid fills the row (${quick.toUpperCase()})`);
+    // Enter after clicking a button submits the row instead of pressing the button again
+    for (const sel of ['#newGame', '#suggestions .sugg', '#modeNormal']) {
+      await pg.tap('#newGame'); await pg.tap(sel);
+      for (let i = 0; i < 5; i++) await pg.keyboard.press('Backspace');
+      for (const ch of 'slate') await pg.keyboard.press(ch);
+      await pg.keyboard.press('Enter');
+      const done = await pg.evaluate(() => JSON.parse(localStorage.getItem('wordleHelper.v1')).rows.map(r => r.w + (r.done ? '+' : '')).join(' ').trim());
+      eq(done, 'slate+', `all-grey SLATE goes in with Enter after clicking ${sel}`);
+    }
     const scroll = await pg.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
     check(scroll, 'no sideways scrolling on a phone');
     eq(errors, [], 'no page errors');
