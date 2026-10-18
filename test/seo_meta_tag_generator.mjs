@@ -85,8 +85,6 @@ if (suites.includes('build')) {
   section('build');
   const min = C.build({title: 'My Page', description: 'Hello world'}, 'head').code;
   eq(min, [
-    '<meta charset="UTF-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
     '<title>My Page</title>',
     '<meta name="description" content="Hello world">',
     '',
@@ -99,6 +97,10 @@ if (suites.includes('build')) {
     '<meta name="twitter:card" content="summary_large_image">',
     '<meta name="twitter:title" content="My Page">',
     '<meta name="twitter:description" content="Hello world">',
+    '',
+    '<!-- Most pages already have these; keep one of each -->',
+    '<meta charset="UTF-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
     ''].join('\n'), 'minimal head output, exact');
   not(min, '    \n', 'no whitespace-only lines');
   not(min, 'robots', 'index,follow is the default: no robots tag');
@@ -126,10 +128,13 @@ if (suites.includes('build')) {
   has(full, '<meta name="twitter:url" content="https://x.com/a?b=1&amp;c=2">', 'twitter:url');
   has(full, '<meta name="twitter:card" content="summary_large_image">', 'card');
   has(full, '<meta name="twitter:site" content="@ann">', 'site');
-  check(full.startsWith('<!DOCTYPE html>\n'), 'document starts with doctype');
+  check(full.startsWith('<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n'), 'document starts with doctype, html, head, charset');
   check(full.endsWith('</html>\n'), 'document ends with </html> and newline');
   has(C.build({title: 'T', index: true, follow: false}, 'head').code, 'content="index, nofollow"', 'index, nofollow');
   has(C.build({title: 'T', index: false, follow: true}, 'head').code, 'content="noindex, follow"', 'noindex, follow');
+  has(C.build({title: 'T', language: 'en_gb'}, 'head').code, '<meta property="og:locale" content="en_GB">', 'og:locale from language with region');
+  not(C.build({title: 'T', language: 'en'}, 'head').code, 'og:locale', 'no og:locale without region');
+  has(C.build({title: 'T', language: 'zh-Hant-TW'}, 'head').code, 'content="zh_TW"', 'og:locale skips script');
   has(C.build({title: 'T', language: 'de-AT'}, 'head').code, '<!-- Also set lang="de-AT" on your <html> tag -->', 'head mode names lang');
 
   const fb = C.build({title: 'Main', description: 'Desc', 'og-title': 'Social'}, 'head').code;
