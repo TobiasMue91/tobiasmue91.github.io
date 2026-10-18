@@ -2273,3 +2273,15 @@ Machado, Oliveira & Fernandes' (2009) published matrices; the page must agree wi
 checked against Sharma, Wu & Dalal's (2005) test pairs. Also: what people paste as colours, links, saved settings,
 the pixel path against the single-colour path, and that suggested replacements really stop clashing.
 To re-record the vectors, re-run that colorspacious call for the inputs listed in the JSON.
+## SEO Meta Tag Generator
+
+```sh
+npm run test:metatags                    # or: node test/seo_meta_tag_generator.mjs [parse build fit migrate edges]
+```
+
+Runs the DOM-free `<script id="core">` of `tools/seo_meta_tag_generator.html` in Node; no browser, no server.
+It checks that pasted values (URLs without a scheme or with spaces, `en_US`, `x.com/handle`, `7 days`, keyword lists
+with empty items) become clean values or a plain error that leaves the tag out, that every value is escaped for HTML
+text or attributes, the exact tag output, the Google-style pixel truncation (never splitting a character), huge-input
+speed, and that settings the old page stored under `seoMetaFormData` still load. Expected values come from the HTML
+spec, the Open Graph protocol, X card docs and BCP 47, written by hand.
