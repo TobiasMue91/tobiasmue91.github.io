@@ -52,6 +52,8 @@ if (suites.includes('parse')) {
   for (const [s, n] of ok) eq(secs(s), n, `"${s}" -> ${n} s`);
   const bad = ['abc', '5x', '5 minutes ago', '1:2:3:4', '30m 1h', '5 5', 'm', '1h1h', '٥', '五分', 'NaN', 'Infinity', '1e3', '5..5', '#5'];
   for (const s of bad) eq(T.parse(s).state, 'error', `"${s}" is an error`);
+  eq(T.parse('Preheat, then roast for 45 min – 1 hr.').msg, 'That is a range. Enter one length, like 45 min.', 'range names its first end');
+  eq(T.parse('10 to 12 minutes').state, 'error', 'range with to');
   eq(T.parse('').state, 'empty', 'empty');
   eq(T.parse('   ').state, 'empty', 'whitespace');
   eq(T.parse(null).state, 'empty', 'null');
