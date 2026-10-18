@@ -216,7 +216,21 @@ async function analyse(buffer, progress) {
 
   // onset strength: bass counts double, it is what people nod to
   const onset = new Float32Array(frames);
-  for (let f = 0; f < frames; f++) onset[f] = 2 * flux[0][f] + flux[1][f] + .5 * flux[2][f];
+  // hi-hats barely count: alone, on the off-beats of an intro or a break, they would pull the grid half a beat over
+  // the kick, measured on the waveform: low-passed, enveloped per frame, no log. A kick that lands on a bass note
+  // still sounding barely moves a log spectrum, but its amplitude adds to the note's and the envelope jumps.
+  const kickOn = new Float32Array(frames);
+  { const a1 = Math.exp(-2 * Math.PI * 150 / sr); let y1 = 0, y2 = 0, prev = 0;
+    for (let f = 0; f < frames; f++) {
+      let e = 0; const s0 = Math.floor(f * hop), s1 = Math.floor((f + 1) * hop);
+      for (let i = s0; i < s1; i++) { y1 = (1 - a1) * mono[i] + a1 * y1; y2 = (1 - a1) * y1 + a1 * y2; e = Math.max(e, Math.abs(y2)); }
+      kickOn[f] = Math.max(0, e - prev); prev = e;
+    }
+    const n = percentile(kickOn, .98); for (let f = 0; f < frames; f++) kickOn[f] = Math.min(1.5, kickOn[f] / n);
+  }
+  // weights picked by a grid search over ten songs with known beats (see test/README.md, Afterglow)
+  const fn = percentile(flux[0], .98), mn = percentile(flux[1], .98);
+  for (let f = 0; f < frames; f++) onset[f] = kickOn[f] + 2 * flux[0][f] / fn + flux[1][f] / mn + .05 * flux[2][f] / mn;
   // remove the local mean so steady noise does not read as onsets
   const os = new Float32Array(frames);
   { let acc = 0; const w = 30, q = [];
@@ -226,36 +240,74 @@ async function analyse(buffer, progress) {
   // tempo: autocorrelation of onset strength, weighted toward ~120 BPM
   let bestLag = 30, bestScore = -1;
   const minLag = FPS * 60 / 180, maxLag = FPS * 60 / 72;
-  const ac = lag => { let s = 0; const L = Math.floor(lag), fr = lag - L; for (let i = 0; i + L + 1 < frames; i += 2) s += os[i] * (os[i + L] * (1 - fr) + os[i + L + 1] * fr); return s; };
-  for (let lag = minLag; lag <= maxLag; lag += .1) {
-    const bpm = 60 * FPS / lag, w = Math.exp(-.5 * Math.pow(Math.log2(bpm / 120) / .9, 2));
-    const sc = ac(lag) * w;
-    if (sc > bestScore) { bestScore = sc; bestLag = lag; }
-  }
-  const P = bestLag;
-
-  // beats: dynamic programming (Ellis 2007) - follows the onsets but keeps the tempo
-  const score = new Float32Array(frames), back = new Int32Array(frames).fill(-1);
-  for (let t = 0; t < frames; t++) {
-    let best = 0, arg = -1;
-    for (let p = Math.max(0, Math.floor(t - 2 * P)); p <= t - Math.round(P / 2); p++) {
-      const v = score[p] - 6 * Math.pow(Math.log((t - p) / P), 2);
-      if (v > best || arg < 0) { best = v; arg = p; }
+  const ac = lag => { let s = 0; const L = Math.floor(lag), fr = lag - L; for (let i = 0; i + L + 1 < frames; i++) s += os[i] * (os[i + L] * (1 - fr) + os[i + L + 1] * fr); return s; };
+  {
+    // comb: for each tempo, the phase whose grid collects the most onset over the whole song.
+    // Coarse pass on the autocorrelation, then a fine pass where the grid has to line up end to end.
+    const cands = [];
+    for (let lag = minLag; lag <= maxLag; lag += .25) {
+      const bpm = 60 * FPS / lag, w = Math.exp(-.5 * Math.pow(Math.log2(bpm / 120) / .9, 2));
+      cands.push([ac(lag) * w, lag]);
     }
-    score[t] = os[t] + (arg >= 0 ? Math.max(0, best) : 0);
-    back[t] = arg >= 0 && best > 0 ? arg : -1;
+    cands.sort((x, y) => y[0] - x[0]);
+    const grid = (lag, ph) => { let s = 0; for (let x = ph; x < frames - 1; x += lag) { const i = Math.floor(x), fr = x - i; s += os[i] * (1 - fr) + os[i + 1] * fr; } return s; };
+    for (const [, c] of cands.slice(0, 4)) {
+      for (let lag = c - .3; lag <= c + .3; lag += .01) {
+        const bpm = 60 * FPS / lag, w = Math.exp(-.5 * Math.pow(Math.log2(bpm / 120) / .9, 2));
+        let best = 0; for (let ph = 0; ph < lag; ph += .5) best = Math.max(best, grid(lag, ph));
+        const sc = best / (frames / lag) * w;
+        if (sc > bestScore) { bestScore = sc; bestLag = lag; }
+      }
+    }
   }
-  let t = frames - 1, bestEnd = 0;
-  for (let i = Math.max(0, frames - Math.ceil(P)); i < frames; i++) if (score[i] > bestEnd) { bestEnd = score[i]; t = i; }
-  const beats = [];
-  while (t >= 0) { beats.unshift(t); t = back[t]; }
+
+  // beats: dynamic programming (Ellis 2007). Held close to the comb's tempo: measured on test songs with
+  // known beats, 200 keeps quiet passages on the grid and still follows a live band drifting by 4 %.
+  const TIGHT = 200;
+  const track = P => {
+    const score = new Float32Array(frames), back = new Int32Array(frames).fill(-1);
+    for (let t = 0; t < frames; t++) {
+      let best = 0, arg = -1;
+      for (let p = Math.max(0, Math.floor(t - 2 * P)); p <= t - Math.round(P / 2); p++) {
+        const v = score[p] - TIGHT * Math.pow(Math.log((t - p) / P), 2);
+        if (v > best || arg < 0) { best = v; arg = p; }
+      }
+      score[t] = os[t] + (arg >= 0 ? Math.max(0, best) : 0);
+      back[t] = arg >= 0 && best > 0 ? arg : -1;
+    }
+    let t = frames - 1, bestEnd = 0;
+    for (let i = Math.max(0, frames - Math.ceil(P)); i < frames; i++) if (score[i] > bestEnd) { bestEnd = score[i]; t = i; }
+    const bt = [];
+    while (t >= 0) { bt.unshift(t); t = back[t]; }
+    return bt;
+  };
+  const P = bestLag;
+  // section changes: where the song gets suddenly louder (a drop, drums coming in). They land on a
+  // downbeat in nearly all music, so they decide which of the grid's phases is the beat and which beat is one.
+  const steps = [];
+  { // measured on the bass: before a drop the build-up is often as loud as the drop, but the bass is what arrives
+    const nov = new Float32Array(frames), A = 12, B = 30, lo = percentile(E[0], .05), hi = percentile(E[0], .98);
+    const cs = new Float64Array(frames + 1); for (let f = 0; f < frames; f++) cs[f + 1] = cs[f] + Math.min(1, Math.max(0, (E[0][f] - lo) / (hi - lo + 1e-9)));
+    for (let f = B; f < frames - A; f++) nov[f] = Math.max(0, (cs[f + A] - cs[f]) / A - (cs[f] - cs[f - B]) / B);
+    const order = Array.from(nov.keys()).filter(f => nov[f] > .2 && nov[f] >= nov[f - 1] && nov[f] >= nov[f + 1]).sort((x, y) => nov[y] - nov[x]);
+    // only the big ones: a syncopated kick after a gap is a step too, but a small one
+    for (const f of order) { if (steps.length >= 8 || nov[f] < .5 * nov[order[0]]) break; if (steps.every(g => Math.abs(g - f) > FPS * 4)) steps.push(f); }
+  }
+  const beats = track(P);
   // extend the grid over intro/outro silence so every frame has a beat phase
   while (beats[0] - P > 0) beats.unshift(Math.round(beats[0] - P));
   while (beats[beats.length - 1] + P < frames + P) beats.push(Math.round(beats[beats.length - 1] + P));
 
   // downbeat: the beat-of-four whose beats carry the most bass onset
   let down = 0, dBest = -1;
-  for (let o = 0; o < 4; o++) { let s = 0; for (let i = o; i < beats.length; i += 4) s += flux[0][Math.min(frames - 1, beats[i])] || 0; if (s > dBest) { dBest = s; down = o; } }
+  const bassTot = [0, 1, 2, 3].map(o => { let s = 0; for (let i = o; i < beats.length; i += 4) s += flux[0][Math.min(frames - 1, beats[i])] || 0; return s; });
+  const bassMax = Math.max(...bassTot) || 1;
+  for (let o = 0; o < 4; o++) {
+    // a section change on this beat-of-four counts for far more than the bass on it
+    let st = 0; for (const f of steps) { let bi = 0; for (let i = 0; i < beats.length; i++) if (Math.abs(beats[i] - f) < Math.abs(beats[bi] - f)) bi = i; if (((bi - o) % 4 + 4) % 4 === 0 && Math.abs(beats[bi] - f) < P / 4) st++; }
+    const s = bassTot[o] / bassMax + 2 * st;
+    if (s > dBest) { dBest = s; down = o; }
+  }
   const bars = [];
   for (let i = down; i < beats.length; i += 4) bars.push(beats[i]);
   if (bars[0] > 0) bars.unshift(Math.max(0, bars[0] - Math.round(4 * P)));
@@ -337,6 +389,8 @@ function buildTrack(A, seed) {
     if (t > 0 && inPhrase === 0 && R() < .6) len = Math.min(len, R() < .5 ? 1 : 2);
     // never run over a tier change or a drop: those get their own cut on the downbeat
     let end = k + len;
+    // a shot that starts inside a bar ends on the next downbeat, so the long shots after a chop sit on the bar again
+    if (barBeat[b] !== k && barBeat[b + 1] !== undefined) end = Math.min(end, barBeat[b + 1]);
     for (let bb = b + 1; bb < nb && barBeat[bb] < end; bb++) if (tier[bb] !== tier[b] || drops.includes(bb)) { end = barBeat[bb]; break; }
     if (end <= k) end = k + 1;
     // the scene of this pool that has been off screen longest, so a video shows as many as it can
@@ -514,24 +568,26 @@ vec3 opart(vec2 p, float v){
 }
 // ---- 5 Gyroid: flight through an endless glassy lattice
 float gyr(vec3 p, float v){
-  float sc = 1.6 + v*1.4;
+  float sc = 2.5 + v*1.5;
   vec3 q = p*sc;
-  return (abs(dot(sin(q), cos(q.yzx))) - .12 - .25*BASS*TRIP)/sc*.7;
+  return (abs(dot(sin(q), cos(q.yzx))) - .02 - .1*BASS*TRIP)/sc*.7;
 }
 vec3 gyroid(vec2 p, float v){
-  vec3 ro = vec3(.3*sin(TRAV*.2), .3*cos(TRAV*.17), TRAV*1.1), rd = normalize(vec3(p, 1.1));
+  // see-through: the ray never stops, it gathers light from every thin shell it crosses
+  vec3 ro = vec3(.3*sin(TRAV*.2), .3*cos(TRAV*.17), TRAV*.6), rd = normalize(vec3(p, 1.));
   rd.xy *= rot(TRAV*.08 + v*6.);
-  float t = 0., d, glow = 0.;
-  for (int i=0; i<70; i++){ d = gyr(ro + rd*t, v); glow += .006/(.01 + abs(d)); if (abs(d) < .002 || t > 10.) break; t += d; }
-  vec3 pos = ro + rd*t;
-  vec2 e = vec2(.003, 0.);
-  vec3 n = normalize(vec3(gyr(pos+e.xyy,v)-gyr(pos-e.xyy,v), gyr(pos+e.yxy,v)-gyr(pos-e.yxy,v), gyr(pos+e.yyx,v)-gyr(pos-e.yyx,v)));
-  float fog = exp(-t*.28);
-  float rim = pow(1. - abs(dot(n, rd)), 2.);
-  vec3 c = pal(pos.z*.05 + dot(n, vec3(.3)) + v)*(.25 + .75*max(0., dot(n, normalize(vec3(.4,.7,-.5)))))*fog;
-  c += pal(v + .5 + t*.05)*rim*fog*(.6 + 1.2*HIGH);
-  c += pal(t*.04 + v + .25)*glow*.02*(.4 + KICK);
-  return c;
+  vec3 c = vec3(0.);
+  float t = .05;
+  for (int i=0; i<64; i++){
+    vec3 q = ro + rd*t;
+    float d = abs(gyr(q, v));
+    float w = .0025 + .004*KICK;
+    // shells right in front of the lens fade out instead of flashing across the frame as the camera passes them
+    c += pal(q.z*.15 + t*.12 + v)*w/(d + w)*exp(-t*.45)*smoothstep(.15, .9, t)*(.08 + .06*MID);
+    t += max(d*.8, .02);
+    if (t > 7.) break;
+  }
+  return c*(.75 + .35*EN) + pal(v + .5)*.03;
 }
 // ---- 6 Sphere grid: a field of chrome balls bouncing to the bass
 float sgMap(vec3 p, float v, out vec2 id){
@@ -655,7 +711,7 @@ float morphMap(vec3 p, float v){
   return d + .03*sin(p.x*9. + T*3.)*sin(p.y*9.)*sin(p.z*9.)*(.2 + HIGH*TRIP);
 }
 vec3 morph(vec2 p, float v){
-  vec3 ro = vec3(0., 0., 3.2 - .3*KICK), rd = normalize(vec3(p, -1.4));
+  vec3 ro = vec3(0., 0., 2.6 - .3*KICK), rd = normalize(vec3(p, -1.3));
   float t = 0., d, glow = 0.;
   for (int i=0; i<72; i++){ d = morphMap(ro + rd*t, v); glow += .02/(.05 + d*d*8.); if (d < .002 || t > 7.) break; t += d*.8; }
   vec3 bg = pal(p.y*.4 + v + .5)*(.05 + .12*fbm(p*2. - TRAV*.1)) + pal(v + .3)*glow*.02*(1. + 2.*BASS);
