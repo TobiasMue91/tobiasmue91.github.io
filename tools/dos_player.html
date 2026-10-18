@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DOS Player - Run Your Own DOS Games, CD Images and ZIPs in the Browser</title>
+<meta name="description" content="Drop a DOS game's ISO, CUE/BIN, ZIP or EXE and play it in the browser with DOSBox. Your files never leave your computer - nothing is uploaded.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/js-dos@8.5.3/dist/js-dos.css">
+<style>
+  :root { --bg:#0b0f14; --panel:#141b24; --line:#26313f; --text:#d7e0ea; --dim:#8494a7; --accent:#ffb000; --ok:#4ade80; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 "Segoe UI",system-ui,sans-serif; }
+  main { max-width:1000px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font:700 28px/1.2 "Courier New",monospace; color:var(--accent); margin:0 0 4px; letter-spacing:1px; }
+  h1 span { color:var(--text); }
+  .sub { color:var(--dim); margin:0 0 20px; }
+  #drop { border:2px dashed var(--line); border-radius:12px; padding:28px 16px; text-align:center; background:var(--panel); cursor:pointer; transition:border-color .15s, background .15s; }
+  #drop.over { border-color:var(--accent); background:#1b2430; }
+  #drop strong { color:var(--accent); }
+  #drop small { display:block; color:var(--dim); margin-top:6px; }
+  #files { list-style:none; padding:0; margin:14px 0 0; }
+  #files li { display:flex; gap:10px; align-items:center; padding:6px 10px; border-bottom:1px solid var(--line); font-family:"Courier New",monospace; font-size:14px; }
+  #files li .kind { color:var(--accent); width:52px; flex:none; }
+  #files li .size { color:var(--dim); margin-left:auto; flex:none; }
+  #files li button { background:none; border:0; color:var(--dim); cursor:pointer; font-size:16px; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
+  label { color:var(--dim); font-size:14px; }
+  input[type=text], select { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:7px 9px; font:14px "Courier New",monospace; }
+  input[type=text] { flex:1; min-width:180px; }
+  button.go { background:var(--accent); color:#111; border:0; border-radius:6px; padding:9px 20px; font-weight:700; cursor:pointer; }
+  button.go:disabled { opacity:.4; cursor:default; }
+  button.ghost { background:none; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px 14px; cursor:pointer; }
+  #status { color:var(--dim); font-size:14px; min-height:21px; margin-top:8px; }
+  #status.err { color:#f87171; }
+  #screen { display:none; margin-top:18px; width:100%; aspect-ratio:4/3; max-height:80vh; background:#000; border-radius:8px; overflow:hidden; }
+  details { margin-top:22px; color:var(--dim); font-size:14px; }
+  details summary { cursor:pointer; color:var(--text); }
+  code { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>C:\&gt; <span>DOS Player</span></h1>
+  <p class="sub">Play the DOS games you own, from your own disk. Everything runs locally in DOSBox - your files are never uploaded.</p>
+
+  <div id="drop" tabindex="0">
+    <strong>Drop files here</strong> or click to choose
+    <small>CD images (.iso, .cue + .bin), a game folder as .zip, or a single .exe / .com</small>
+    <input id="pick" type="file" multiple hidden>
+  </div>
+  <ul id="files"></ul>
+
+  <div class="row">
+    <label for="cmd">Start with</label>
+    <select id="cmd"></select>
+    <input id="custom" type="text" placeholder="or type a command, e.g. D:\INSTALL.EXE">
+  </div>
+  <div class="row">
+    <label for="cycles">CPU speed</label>
+    <select id="cycles">
+      <option value="auto">auto</option>
+      <option value="max">max</option>
+      <option value="3000">286-ish (3000)</option>
+      <option value="10000">386-ish (10000)</option>
+      <option value="30000">486-ish (30000)</option>
+    </select>
+    <button class="go" id="start" disabled>Start</button>
+    <button class="ghost" id="stop" hidden>Stop</button>
+  </div>
+  <div id="status"></div>
+  <div id="screen"></div>
+
+  <details>
+    <summary>How the drives are set up</summary>
+    <p>A ZIP is unpacked onto <code>C:</code>, together with any loose EXE/COM files. CD images become drive <code>D:</code>
+    (more than one: <code>D:</code>, <code>E:</code>, ...). For a CUE sheet, add the .bin/.wav tracks it lists too - then CD audio works.
+    Games that want to install themselves can install from <code>D:</code> to <code>C:</code>.</p>
+    <p>The emulated disk lives in memory, so installs and save games are gone when the page is closed - use the js-dos menu to save
+    state if you need to. Large CD images need as much free RAM as they are big. Emulation by
+    <a href="https://js-dos.com/" style="color:var(--accent)">js-dos</a> (DOSBox, GPL).</p>
+  </details>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-dos@8.5.3/dist/js-dos.js"></script>
+<script>
+// js-dos leaks minified globals ($, el, ...), so this page keeps its own names in a closure.
+(() => {
+const el = id => document.getElementById(id);
+const files = [];   // { name, file, kind }
+let dos = null;
+
+const kindOf = name => {
+  const ext = name.toLowerCase().split('.').pop();
+  if (ext === 'iso' || ext === 'cue') return 'cd';
+  if (ext === 'bin' || ext === 'wav' || ext === 'ogg' || ext === 'mp3' || ext === 'img') return 'track';
+  if (ext === 'zip') return 'zip';
+  return 'file';
+};
+const fmtSize = b => b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.ceil(b / 1024) + ' KB';
+const status = (msg, err) => { el('status').textContent = msg; el('status').className = err ? 'err' : ''; };
+
+// DOS wants 8.3-friendly names; keep what fits, uppercase the rest so it is predictable.
+const dosName = n => n.replace(/[^A-Za-z0-9._\-~!]/g, '_').toUpperCase();
+
+function addFiles(list) {
+  for (const f of list) {
+    if (files.some(x => x.name === f.name && x.file.size === f.size)) continue;
+    files.push({ name: f.name, file: f, kind: kindOf(f.name) });
+  }
+  render();
+  refreshCommands();
+}
+
+function render() {
+  el('files').innerHTML = '';
+  files.forEach((f, i) => {
+    const li = document.createElement('li');
+    const label = { cd: 'CD', track: 'TRACK', zip: 'ZIP', file: 'FILE' }[f.kind];
+    li.innerHTML = `<span class="kind">${label}</span><span></span><span class="size">${fmtSize(f.file.size)}</span><button title="Remove">✕</button>`;
+    li.children[1].textContent = f.name;
+    li.querySelector('button').onclick = () => { files.splice(i, 1); render(); refreshCommands(); };
+    el('files').appendChild(li);
+  });
+  el('start').disabled = !files.length;
+}
+
+const cdImages = () => files.filter(f => f.kind === 'cd');
+
+// Executables we can offer without reading CD contents: loose files and the ZIP's index.
+async function refreshCommands() {
+  const opts = [];
+  const cds = cdImages();
+  for (const f of files) {
+    if (f.kind === 'file' && /\.(exe|com|bat)$/i.test(f.name)) opts.push('C:\\' + dosName(f.name));
+    if (f.kind === 'zip') {
+      try {
+        const entries = fflate.unzipSync(new Uint8Array(await f.file.arrayBuffer()), { filter: e => /\.(exe|com|bat)$/i.test(e.name) && e.name.split('/').length <= 3 });
+        for (const p of Object.keys(entries)) opts.push('C:\\' + p.split('/').filter(Boolean).map(dosName).join('\\'));
+      } catch (e) { status('Could not read ' + f.name + ': ' + e.message, true); }
+    }
+  }
+  const sel = el('cmd');
+  sel.innerHTML = '';
+  const add = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t || v; sel.appendChild(o); };
+  if (cds.length) add('D:', 'DOS prompt on D: (CD)');
+  add('C:', 'DOS prompt on C:');
+  opts.sort((a, b) => score(b) - score(a)).forEach(o => add(o));
+  if (opts.length) sel.selectedIndex = cds.length ? 2 : 1;
+}
+const score = p => (/(GAME|PLAY|START|RUN)\.(EXE|COM|BAT)$/.test(p) ? 3 : 0) + (/(SETUP|INSTALL|CONFIG|SETSOUND)/.test(p) ? -2 : 0) - p.split('\\').length;
+
+async function buildFs() {
+  const fs = [{ path: 'hdd/README.TXT', contents: new TextEncoder().encode('Drive C: of DOS Player\r\n') }];
+  const mounts = [];
+  let letter = 'D'.charCodeAt(0);
+  for (const f of files) {
+    status('Reading ' + f.name + ' ...');
+    const data = new Uint8Array(await f.file.arrayBuffer());
+    if (f.kind === 'zip') {
+      for (const [p, bytes] of Object.entries(fflate.unzipSync(data))) {
+        if (p.endsWith('/')) continue;
+        fs.push({ path: 'hdd/' + p.split('/').map(dosName).join('/'), contents: bytes });
+      }
+    } else if (f.kind === 'file') {
+      fs.push({ path: 'hdd/' + dosName(f.name), contents: data });
+    } else {
+      // CD images and their tracks keep their names, because a CUE sheet refers to tracks by name.
+      fs.push({ path: 'cd/' + f.name, contents: data });
+    }
+  }
+  const cues = files.filter(f => /\.cue$/i.test(f.name));
+  const isos = files.filter(f => /\.iso$/i.test(f.name));
+  for (const f of [...cues, ...isos]) {
+    mounts.push(`imgmount ${String.fromCharCode(letter++)} "cd/${f.name}" -t iso`);
+  }
+  return { fs, mounts };
+}
+
+function dosboxConf(mounts, cmd) {
+  const run = [];
+  if (/^[A-Z]:$/i.test(cmd)) run.push(cmd);
+  else if (cmd) {
+    const m = cmd.match(/^([A-Z]:)(.*)\\([^\\]+)$/i);
+    if (m) { run.push(m[1]); if (m[2]) run.push('cd ' + m[2]); run.push(m[3]); }
+    else run.push(cmd);
+  }
+  return `[sdl]
+autolock=false
+
+[cpu]
+core=auto
+cputype=auto
+cycles=${el('cycles').value}
+
+[mixer]
+rate=44100
+
+[sblaster]
+sbtype=sb16
+
+[autoexec]
+echo off
+mount c hdd
+${mounts.join('\n')}
+${run.join('\n')}
+`;
+}
+
+async function start() {
+  if (dos) stop();
+  el('start').disabled = true;
+  try {
+    const { fs, mounts } = await buildFs();
+    const cmd = el('custom').value.trim() || el('cmd').value;
+    status('Starting DOSBox ...');
+    el('screen').style.display = 'block';
+    dos = Dos(el('screen'), {
+      dosboxConf: dosboxConf(mounts, cmd),
+      initFs: fs,
+      pathPrefix: 'https://cdn.jsdelivr.net/npm/js-dos@8.5.3/dist/emulators/',
+      autoStart: true,
+      kiosk: false,
+      theme: 'dark',
+    });
+    el('stop').hidden = false;
+    status('Running. Click the screen to give it the keyboard.');
+    el('screen').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    status('Could not start: ' + e.message, true);
+  }
+  el('start').disabled = !files.length;
+}
+
+function stop() {
+  if (dos) { try { dos.stop(); } catch (e) {} dos = null; }
+  el('screen').innerHTML = '';
+  el('screen').style.display = 'none';
+  el('stop').hidden = true;
+  status('');
+}
+
+const drop = el('drop');
+drop.onclick = () => el('pick').click();
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el('pick').click(); } };
+el('pick').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); };
+el('start').onclick = start;
+el('stop').onclick = stop;
+refreshCommands();
+})();
+</script>
+<script src="../logo.js"></script>
+</body>
+</html>
