@@ -28,7 +28,7 @@ button,input{font:inherit}
 .dial .ar{fill:none;stroke:var(--run);stroke-width:5;stroke-linecap:round}
 .dial[data-s="paused"] .ar{stroke:var(--pause)}
 .dial[data-s="done"] .ar{stroke:var(--done)}
-.dial[data-s="idle"] .ar{stroke-width:3}
+.dial[data-s="idle"] .ar{opacity:0!important}
 .dial[data-s="invalid"] .ar{stroke-width:3;stroke:var(--track)}
 .face{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
 #time{font-weight:600;letter-spacing:-.02em;line-height:1;font-size:clamp(52px,17vw,88px)}
@@ -128,7 +128,7 @@ summary b{color:var(--ink);font-weight:600}
     <div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="small" id="test">Test alarm</button><button type="button" class="small" id="theme">Dark / light</button></div>
   </div>
 </details>
-<p class="trust">Keeps time by your device clock, so it stays right in background tabs and after sleep. Nothing leaves your browser.</p>
+<p class="trust">Keeps time by your device clock, so it stays right after sleep, and rings from a background tab as long as this page stays open. Nothing leaves your browser.</p>
 <p class="keys">Space start / pause · Esc reset · Enter starts from the box</p>
 <div class="sr" aria-live="polite" id="say"></div>
 <audio id="alarm" src="alarm.mp3" preload="auto"></audio>
@@ -321,20 +321,19 @@ if (typeof module !== 'undefined') module.exports = T;
   function paint() {
     var running = !!run;
     $('idleRow').hidden = running; $('runRow').hidden = !running;
-    if (!run) { msg.hidden = false; $('chipl').hidden = $('chips').hidden = false; document.title = baseTitle; dial.classList.remove('ring'); preview(); return; }
+    if (!run) { document.title = baseTitle; dial.classList.remove('ring'); preview(); return; }
     dial.dataset.s = run.done ? 'done' : run.rest != null ? 'paused' : 'running';
     stateEl.textContent = run.done ? 'Time’s up' : run.rest != null ? 'Paused' : 'Running';
     $('pause').textContent = run.done ? (ringing ? 'Stop alarm' : 'Done') : run.rest != null ? 'Resume' : 'Pause';
     $('plus').hidden = !!run.done;
-    $('reset').textContent = run.done ? 'Restart ' + T.format(run.total) : 'Reset';
-    $('chipl').hidden = $('chips').hidden = true;
-    msg.className = ''; len.removeAttribute('aria-invalid'); msg.textContent = ''; msg.hidden = true;
+    $('reset').textContent = run.done ? 'Restart timer' : 'Reset';
+    msg.className = ''; len.removeAttribute('aria-invalid'); msg.textContent = '';
     ends.textContent = endsText();
     frame();
   }
   function startTicking() { clearInterval(iv); iv = setInterval(function () { if (run && run.rest == null) { if (document.hidden) frame(); else if (!raf) frame(); ends.textContent = endsText(); } }, 250); }
   function unlockAudio() {
-    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {}
+    try { ctx().resume(); loadBuf(); } catch (e) {}
     try { audio.muted = true; var p = audio.play(); if (p) p.then(function () { if (!ringing && !testing) { audio.pause(); audio.currentTime = 0; } audio.muted = false; }, function () { audio.muted = false; }); } catch (e) {}
   }
   function begin(secs, quiet) {
@@ -345,7 +344,7 @@ if (typeof module !== 'undefined') module.exports = T;
     S.last = len.value;
     save(secs); saveRun(); dial.classList.remove('sweep');
     setArc(1); void arc.getBoundingClientRect(); dial.classList.add('sweep');
-    startTicking(); paint(); keepAwake();
+    startTicking(); paint(); keepAwake(); arm();
     if (!quiet) say('Timer started, ' + T.words(secs) + '. Ends ' + T.clock(run.end, now()) + '.');
     $('pause').focus({ preventScroll: true });
   }
@@ -353,8 +352,8 @@ if (typeof module !== 'undefined') module.exports = T;
   function pause() {
     if (!run) return;
     if (run.done) { reset(); return; }
-    if (run.rest == null) { run.rest = Math.max(0, run.end - now()); delete run.end; clearInterval(iv); say('Paused, ' + T.words(Math.ceil(run.rest / 1000)) + ' left.'); release(); }
-    else { run.end = now() + run.rest; delete run.rest; startTicking(); say('Resumed. Ends ' + T.clock(run.end, now()) + '.'); keepAwake(); }
+    if (run.rest == null) { run.rest = Math.max(0, run.end - now()); delete run.end; clearInterval(iv); disarm(); say('Paused, ' + T.words(Math.ceil(run.rest / 1000)) + ' left.'); release(); }
+    else { run.end = now() + run.rest; delete run.rest; startTicking(); arm(); say('Resumed. Ends ' + T.clock(run.end, now()) + '.'); keepAwake(); }
     saveRun(); paint();
   }
   function plus() {
@@ -363,7 +362,7 @@ if (typeof module !== 'undefined') module.exports = T;
     run.total += 60;
     if (run.total > T.MAX) run.total = T.MAX;
     if (run.rest != null) run.rest = Math.min(run.rest + 60000, run.total * 1000); else run.end = Math.min(run.end + 60000, now() + run.total * 1000);
-    saveRun(); paint(); say('One minute added. Ends ' + T.clock(run.end || now() + run.rest, now()) + '.');
+    saveRun(); paint(); arm(); say('One minute added. Ends ' + T.clock(run.end || now() + run.rest, now()) + '.');
   }
   function reset() {
     stopAlarm(); clearInterval(iv); release();
@@ -387,24 +386,54 @@ if (typeof module !== 'undefined') module.exports = T;
   }
 
   // ---- alarm
+  // The alarm is put on the audio clock when the timer starts, so it sounds on time even where a hidden
+  // tab's timers are held back for a minute; the <audio> element is the fallback if decoding fails.
+  var buf = null, voice = null;
+  function ctx() { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} return actx; }
+  function loadBuf() {
+    if (buf || !ctx() || loadBuf.busy) return; loadBuf.busy = true;
+    fetch(audio.currentSrc || audio.src).then(function (r) { return r.arrayBuffer(); })
+      .then(function (a) { return new Promise(function (ok, no) { actx.decodeAudioData(a, ok, no); }); })
+      .then(function (b) { buf = b; arm(); }, function () {});
+  }
+  function play(atMs) {
+    var g = actx.createGain(), src = actx.createBufferSource(), t0 = actx.currentTime + Math.max(0, (atMs - Date.now()) / 1000);
+    g.gain.value = S.alarmVolume / 100; src.buffer = buf; src.loop = true; src.connect(g); g.connect(actx.destination);
+    src.start(t0); if (!S.loopAlarm) src.stop(t0 + S.alarmDuration);
+    var v = { src: src, gain: g, at: atMs };
+    src.onended = function () { if (voice === v) { voice = null; if (ringing) stopAlarm(); } };
+    return v;
+  }
+  function disarm() { if (voice) { try { voice.src.onended = null; voice.src.stop(); } catch (e) {} voice = null; } }
+  function arm() {
+    if (ringing || !run || run.done || run.rest != null) return;
+    disarm();
+    if (S.sound && buf && actx) voice = play(run.end);
+  }
   function beep() {
     try {
-      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-      var t = actx.currentTime;
+      var t = ctx().currentTime;
       for (var i = 0; i < 4; i++) { var o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = 880; o.connect(g); g.connect(actx.destination); g.gain.setValueAtTime(0, t + i * .25); g.gain.linearRampToValueAtTime(S.alarmVolume / 100 * .4, t + i * .25 + .01); g.gain.linearRampToValueAtTime(0, t + i * .25 + .18); o.start(t + i * .25); o.stop(t + i * .25 + .2); }
     } catch (e) {}
   }
   function ring(test) {
     if (!S.sound && !test) return;
-    stopAlarm();
-    testing = test; ringing = 1; audio.volume = S.alarmVolume / 100; audio.loop = true; audio.currentTime = 0;
-    var p = audio.play(); if (p && p.catch) p.catch(function () { beep(); ringing = setInterval(beep, 1000); });
-    if (!S.loopAlarm) ringStop = setTimeout(stopAlarm, S.alarmDuration * 1000);
+    var armed = !test && voice && voice.at <= Date.now() + 1000;
+    if (!armed) stopAlarm();
+    testing = test; ringing = 1;
+    if (armed) { /* already sounding from the audio clock */ }
+    else if (buf && actx) voice = play(Date.now());
+    else {
+      audio.volume = S.alarmVolume / 100; audio.loop = true; audio.currentTime = 0;
+      var p = audio.play(); if (p && p.catch) p.catch(function () { beep(); ringing = setInterval(beep, 1000); });
+      if (!S.loopAlarm) ringStop = setTimeout(stopAlarm, S.alarmDuration * 1000);
+    }
     $('test').textContent = 'Stop alarm';
     if (run && run.done && !test) $('pause').textContent = 'Stop alarm';
   }
   function stopAlarm() {
     clearTimeout(ringStop); if (typeof ringing === 'number' && ringing > 1) clearInterval(ringing);
+    disarm();
     ringing = 0; testing = false; try { audio.pause(); audio.currentTime = 0; } catch (e) {}
     $('test').textContent = 'Test alarm';
     if (run && run.done) $('pause').textContent = 'Done';
@@ -424,11 +453,11 @@ if (typeof module !== 'undefined') module.exports = T;
     if (!('wakeLock' in navigator)) $('wake').closest('label').hidden = true;
     if (!('Notification' in window)) $('notif').closest('label').hidden = true;
   }
-  $('sound').onchange = function () { S.sound = this.checked; save(); sumText(); if (!S.sound) stopAlarm(); };
-  $('loop').onchange = function () { S.loopAlarm = this.checked; showDur(); save(); sumText(); };
+  $('sound').onchange = function () { S.sound = this.checked; save(); sumText(); if (!S.sound) stopAlarm(); else arm(); };
+  $('loop').onchange = function () { S.loopAlarm = this.checked; showDur(); save(); sumText(); arm(); };
   $('wake').onchange = function () { S.wake = this.checked; save(); if (S.wake && run && !run.done && run.rest == null) keepAwake(); else release(); };
-  $('vol').oninput = function () { S.alarmVolume = +this.value; audio.volume = S.alarmVolume / 100; $('volv').textContent = S.alarmVolume + '%'; save(); sumText(); };
-  $('dur').oninput = function () { S.alarmDuration = +this.value; $('durv').textContent = S.alarmDuration + ' s'; save(); sumText(); };
+  $('vol').oninput = function () { S.alarmVolume = +this.value; audio.volume = S.alarmVolume / 100; if (voice) voice.gain.gain.value = S.alarmVolume / 100; $('volv').textContent = S.alarmVolume + '%'; save(); sumText(); };
+  $('dur').oninput = function () { S.alarmDuration = +this.value; $('durv').textContent = S.alarmDuration + ' s'; save(); sumText(); arm(); };
   $('notif').onchange = function () {
     var box = this;
     if (box.checked && Notification.permission !== 'granted') {
