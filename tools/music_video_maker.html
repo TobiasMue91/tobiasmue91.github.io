@@ -273,11 +273,13 @@ async function analyse(buffer, progress) {
   // section changes: where the song gets suddenly louder (a drop, drums coming in). They land on a
   // downbeat in nearly all music, so they decide which of the grid's phases is the beat and which beat is one.
   const steps = [];
-  { const nov = new Float32Array(frames), A = 12, B = 30;
-    const cs = new Float64Array(frames + 1); for (let f = 0; f < frames; f++) cs[f + 1] = cs[f] + rms[f];
-    for (let f = B; f < frames - A; f++) { const after = (cs[f + A] - cs[f]) / A, before = (cs[f] - cs[f - B]) / B; nov[f] = Math.max(0, after - before) / (after + before + 1e-9); }
-    const order = Array.from(nov.keys()).filter(f => nov[f] > .25 && nov[f] >= nov[f - 1] && nov[f] >= nov[f + 1]).sort((x, y) => nov[y] - nov[x]);
-    for (const f of order) { if (steps.length >= 8) break; if (steps.every(g => Math.abs(g - f) > FPS * 4)) steps.push(f); }
+  { // measured on the bass: before a drop the build-up is often as loud as the drop, but the bass is what arrives
+    const nov = new Float32Array(frames), A = 12, B = 30, lo = percentile(E[0], .05), hi = percentile(E[0], .98);
+    const cs = new Float64Array(frames + 1); for (let f = 0; f < frames; f++) cs[f + 1] = cs[f] + Math.min(1, Math.max(0, (E[0][f] - lo) / (hi - lo + 1e-9)));
+    for (let f = B; f < frames - A; f++) nov[f] = Math.max(0, (cs[f + A] - cs[f]) / A - (cs[f] - cs[f - B]) / B);
+    const order = Array.from(nov.keys()).filter(f => nov[f] > .2 && nov[f] >= nov[f - 1] && nov[f] >= nov[f + 1]).sort((x, y) => nov[y] - nov[x]);
+    // only the big ones: a syncopated kick after a gap is a step too, but a small one
+    for (const f of order) { if (steps.length >= 8 || nov[f] < .5 * nov[order[0]]) break; if (steps.every(g => Math.abs(g - f) > FPS * 4)) steps.push(f); }
   }
   const stepFit = (ph, lag) => steps.reduce((s, f) => { const d = ((f - ph) % lag + lag) % lag, e = Math.min(d, lag - d); return s + Math.exp(-.5 * Math.pow(e / (lag / 12), 2)); }, 0);
   let beats;
@@ -372,6 +374,7 @@ async function analyse(buffer, progress) {
     function out(f) { bassHit[f] = v; } }
 
   progress(1);
+  window.__dbg = { steps, P, bestPhase };
   return { frames, duration: frames / FPS, bpm: 60 * FPS / P, beats, bars, level, tier, drops, band, bassHit, os };
 }
 
