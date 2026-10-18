@@ -217,8 +217,20 @@ async function analyse(buffer, progress) {
   // onset strength: bass counts double, it is what people nod to
   const onset = new Float32Array(frames);
   // hi-hats barely count: alone, on the off-beats of an intro or a break, they would pull the grid half a beat over
-  const BW = window.__bw ?? 2, MW = window.__mw ?? 1;
-  for (let f = 0; f < frames; f++) onset[f] = BW * flux[0][f] + MW * flux[1][f] + .05 * flux[2][f];
+  // the kick, measured on the waveform: low-passed, enveloped per frame, no log. A kick that lands on a bass note
+  // still sounding barely moves a log spectrum, but its amplitude adds to the note's and the envelope jumps.
+  const kickOn = new Float32Array(frames);
+  { const a1 = Math.exp(-2 * Math.PI * 150 / sr); let y1 = 0, y2 = 0, prev = 0;
+    for (let f = 0; f < frames; f++) {
+      let e = 0; const s0 = Math.floor(f * hop), s1 = Math.floor((f + 1) * hop);
+      for (let i = s0; i < s1; i++) { y1 = (1 - a1) * mono[i] + a1 * y1; y2 = (1 - a1) * y1 + a1 * y2; e = Math.max(e, Math.abs(y2)); }
+      kickOn[f] = Math.max(0, e - prev); prev = e;
+    }
+    const n = percentile(kickOn, .98); for (let f = 0; f < frames; f++) kickOn[f] = Math.min(1.5, kickOn[f] / n);
+  }
+  const KW = window.__kw ?? 0, BW = window.__bw ?? 2;
+  const fn = percentile(flux[0], .98), mn = percentile(flux[1], .98);
+  for (let f = 0; f < frames; f++) onset[f] = KW ? KW * kickOn[f] + BW * flux[0][f] / fn + flux[1][f] / mn + .05 * flux[2][f] / mn : 2 * flux[0][f] + flux[1][f] + .05 * flux[2][f];
   // remove the local mean so steady noise does not read as onsets
   const os = new Float32Array(frames);
   { let acc = 0; const w = 30, q = [];
