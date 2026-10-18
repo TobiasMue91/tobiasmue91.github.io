@@ -307,58 +307,84 @@ async function analyse(buffer, progress) {
   return { frames, duration: frames / FPS, bpm: 60 * FPS / P, beats, bars, level, tier, drops, band, bassHit, os };
 }
 
-/* ---------- timeline: per-frame uniforms, from the analysis + seed ---------- */
-const SCENES = ['Aura', 'Tunnel', 'Chrome', 'Fractal', 'Op-Art'];
-const POOLS = [[0, 4, 0], [1, 4, 0, 3], [3, 2, 1, 3, 2]];
-const NF = 14; // floats per frame
+/* ---------- timeline: per-frame uniforms, from the analysis + seed ----------
+   The song is cut into shots, the way an editor would: long takes while it is quiet,
+   a cut every bar or two when it grooves, every beat or two at the peak, and a hard cut
+   on every drop. Each shot has its own scene, framing and colour, so a cut back to the
+   same scene still reads as a new shot. */
+const SCENES = ['Aura', 'Tunnel', 'Chrome', 'Fractal', 'Op-Art', 'Gyroid', 'Sphere Grid', 'Synthwave', 'Warp', 'Crystal', 'Spiral', 'Morph'];
+// which scenes suit which intensity; the chrome blobs belong everywhere
+const POOLS = [[0, 2, 10, 9, 11, 7, 5], [1, 2, 4, 5, 6, 7, 11, 0, 9], [3, 2, 8, 6, 1, 5, 11, 9, 4]];
+const SHOT_BEATS = [[16, 8, 8], [8, 4, 4, 8], [4, 2, 2, 4, 1]];
+const NF = 16; // floats per frame
 function buildTrack(A, seed) {
   const R = rng(seed * 7919 + 13);
   const { frames, beats, bars, level, tier, drops, band, bassHit } = A;
   const nb = bars.length - 1;
-  // scene per bar: new scene on a tier change or every 8 bars of the same tier
-  const sceneOf = new Int32Array(nb + 1);
-  let scene = POOLS[tier[0] || 0][(R() * 3) | 0], since = 0;
-  const cuts = new Map();     // bar -> 'cut' | 'fade'
-  for (let b = 0; b < nb; b++) {
-    const changeTier = b > 0 && tier[b] !== tier[b - 1];
-    if (b > 0 && (changeTier || since >= 8)) {
-      const pool = POOLS[tier[b]];
-      let next = scene, tries = 0;
-      while (next === scene && tries++ < 10) next = pool[(R() * pool.length) | 0];
-      scene = next; since = 0;
-      cuts.set(b, drops.includes(b) ? 'cut' : 'fade');
-    }
-    sceneOf[b] = scene; since++;
+  // beat index of each bar start, and the bar each beat is in
+  const barBeat = bars.map(f => { let k = 0; while (k < beats.length - 1 && beats[k] < f - 2) k++; return k; });
+  const barOfBeat = new Int32Array(beats.length);
+  for (let b = 0, k = 0; k < beats.length; k++) { while (b < nb - 1 && barBeat[b + 1] <= k) b++; barOfBeat[k] = b; }
+  const tierAt = k => tier[barOfBeat[k]] || 0;
+  // shots
+  const shots = [], lastUsed = {};
+  let k = 0, prev = -1;
+  while (k < beats.length - 1) {
+    const t = tierAt(k), b = barOfBeat[k];
+    let len = SHOT_BEATS[t][(R() * SHOT_BEATS[t].length) | 0];
+    // the bar before a new phrase: chop it up
+    const inPhrase = (b + 1) % 8;
+    if (t > 0 && inPhrase === 0 && R() < .6) len = Math.min(len, R() < .5 ? 1 : 2);
+    // never run over a tier change or a drop: those get their own cut on the downbeat
+    let end = k + len;
+    for (let bb = b + 1; bb < nb && barBeat[bb] < end; bb++) if (tier[bb] !== tier[b] || drops.includes(bb)) { end = barBeat[bb]; break; }
+    if (end <= k) end = k + 1;
+    // the scene of this pool that has been off screen longest, so a video shows as many as it can
+    const pool = POOLS[t].filter(x => x !== prev);
+    let sc = pool[0], oldest = Infinity;
+    for (const x of pool) { const at = (lastUsed[x] ?? -1e9) + R() * 3; if (at < oldest) { oldest = at; sc = x; } }
+    lastUsed[sc] = shots.length;
+    const startBar = barBeat[b] === k ? b : -1;
+    shots.push({ k0: k, k1: end, f0: beats[k], f1: beats[Math.min(beats.length - 1, end)], scene: sc, v: R(), hue: R(), tier: t,
+                 // quiet shots dissolve into the next one, the rest cut hard
+                 fade: t === 0 && len >= 8, drop: startBar >= 0 && drops.includes(startBar) });
+    prev = sc; k = end;
   }
-  sceneOf[nb] = scene;
-  const variant = SCENES.map(() => R());
+  // a drop or a change of intensity is always a hard cut, never the end of a dissolve
+  shots.forEach((sh, i) => { const nx = shots[i + 1]; if (sh.fade && nx && (nx.drop || nx.tier !== sh.tier)) sh.fade = false; });
   const T = new Float32Array(frames * NF);
-  let travel = 0, impact = 0, bi = 0, bar = 0;
+  let travel = 0, impact = 0, cut = 0, bi = 0, bar = 0, si = 0;
   for (let f = 0; f < frames; f++) {
     while (bi < beats.length - 2 && beats[bi + 1] <= f) bi++;
     while (bar < nb - 1 && bars[bar + 1] <= f) bar++;
+    const prevSi = si;
+    while (si < shots.length - 1 && shots[si + 1].f0 <= f) si++;
+    const sh = shots[si], nx = shots[si + 1];
     const b0 = beats[bi], b1 = beats[bi + 1] || b0 + 30;
     const beatPh = Math.min(1, Math.max(0, (f - b0) / (b1 - b0)));
     const bar0 = bars[bar], bar1 = bars[bar + 1] || bar0 + 120;
     const barPh = Math.min(1, Math.max(0, (f - bar0) / (bar1 - bar0)));
-    // energy glides between bar levels
     const lv = (level[bar] || 0) * (1 - barPh) + (level[Math.min(nb - 1, bar + 1)] || 0) * barPh;
     const en = Math.min(1, .55 * lv + .45 * (band[0][f] * .6 + band[1][f] * .4));
-    // the grid pulse keeps the picture pumping even when the kick is soft
     const grid = Math.pow(1 - beatPh, 4) * (.25 + .5 * lv);
     const kick = Math.min(1, Math.max(bassHit[f], grid));
-    if (f === bar0 && drops.includes(bar)) impact = 1;
+    if (si !== prevSi || f === 0) { if (sh.drop) impact = 1; if (!shots[si - 1] || !shots[si - 1].fade) cut = 1; }
     impact *= Math.exp(-1 / (FPS * .5));
+    cut *= Math.exp(-1 / (FPS * .07));
     travel += (.35 + 1.4 * en + 1.6 * kick + 2 * impact) / FPS;
-    // transition: fades start one bar before the change and finish on its downbeat
-    let sa = sceneOf[bar], sb = sa, mix = 0;
-    const nxt = cuts.get(bar + 1);
-    if (nxt === 'fade') { sb = sceneOf[bar + 1]; mix = barPh * barPh * (3 - 2 * barPh); }
+    // a fading shot dissolves over its last two beats into the next one; mix runs 0 -> 1
+    let sb = sh.scene, vb = sh.v, mix = 0;
+    if (sh.fade && nx) {
+      const fs = beats[Math.max(sh.k0, sh.k1 - 2)], fe = sh.f1;
+      if (f >= fs && fe > fs) { const x = (f - fs) / (fe - fs); mix = x * x * (3 - 2 * x); sb = nx.scene; vb = nx.v; }
+    }
+    // at the peak the colours step on every other beat
+    const hue = sh.hue + (sh.tier === 2 ? .17 * (((bi - sh.k0) >> 1) % 3) : 0);
     const o = f * NF;
     T[o] = band[0][f]; T[o + 1] = band[1][f]; T[o + 2] = band[2][f];
     T[o + 3] = kick; T[o + 4] = en; T[o + 5] = impact; T[o + 6] = beatPh; T[o + 7] = barPh;
-    T[o + 8] = travel; T[o + 9] = sa; T[o + 10] = sb; T[o + 11] = mix;
-    T[o + 12] = variant[sa]; T[o + 13] = variant[sb];
+    T[o + 8] = travel; T[o + 9] = sh.scene; T[o + 10] = sb; T[o + 11] = mix;
+    T[o + 12] = sh.v; T[o + 13] = vb; T[o + 14] = hue; T[o + 15] = cut;
   }
   return T;
 }
@@ -372,12 +398,12 @@ in vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
 const COMMON = `#version 300 es
 precision highp float;
 uniform vec2 R;
-uniform float T, BASS, MID, HIGH, KICK, EN, IMP, BEAT, BAR, TRAV, MIXV, VA, VB, TRIP, FRAME;
+uniform float T, BASS, MID, HIGH, KICK, EN, IMP, BEAT, BAR, TRAV, MIXV, VA, VB, TRIP, FRAME, HUE, CUT;
 uniform int SA, SB;
 uniform vec3 PA, PB, PC, PD;
 out vec4 o;
 #define PI 3.14159265
-vec3 pal(float t){ return PA + PB*cos(6.28318*(PC*t + PD)); }
+vec3 pal(float t){ return PA + PB*cos(6.28318*(PC*(t + HUE) + PD)); }
 mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
 float h21(vec2 p){ vec3 q = fract(vec3(p.xyx)*.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y)*q.z); }
 float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -424,12 +450,24 @@ float smin(float a, float b, float k){ float h = clamp(.5 + .5*(b-a)/k, 0., 1.);
 float chromeMap(vec3 p, float v){
   float t = TRAV*.45;
   float d = 1e9;
-  for (int i=0; i<5; i++){
+  int count = 3 + int(v*3.99);
+  for (int i=0; i<6; i++){
+    if (i >= count) break;
     float fi = float(i);
     vec3 c = vec3(sin(t*.7 + fi*2.1 + v*6.), cos(t*.6 + fi*1.7), sin(t*.5 + fi*2.9)) * (R.x < R.y ? vec3(.75,1.4,.6) : vec3(1.3,.85,.6)) * (.6 + .5*EN);
     d = smin(d, length(p - c) - (.55 + (i==0 ? .4*BASS : .15*MID)), .7);
   }
   return d + .05*sin(p.x*7. + T*2.)*sin(p.y*7. - T)*sin(p.z*7.)*(.3 + 1.4*HIGH*TRIP);
+}
+vec3 chromeShade(vec3 rd, vec3 n, float v){
+  vec3 rf = reflect(rd, n);
+  float fres = pow(1. - max(0., dot(-rd, n)), 3.);
+  // studio: soft light strips + a coloured horizon reads as chrome
+  float strips = smoothstep(.75, .95, sin(rf.y*6. + rf.x*2. + TRAV*.3)) + smoothstep(.9, .99, sin(rf.x*9. - 1.));
+  vec3 env = pal(rf.y*.5 + rf.x*.2 + v + T*.02)*(.15 + .8*smoothstep(-.3, .7, rf.y)) + strips*vec3(.9);
+  // thin-film shimmer across the whole surface, strongest at grazing angles
+  vec3 iri = pal(dot(n, vec3(.6,.8,.3))*1.2 + fres + v + TRAV*.05);
+  return env*(.3 + .3*fres) + iri*(.15 + .8*fres)*.7 + .2*KICK*pal(v);
 }
 vec3 chrome(vec2 p, float v){
   vec3 ro = vec3(0., 0., 3. - .35*KICK), rd = normalize(vec3(p, -1.3));
@@ -441,14 +479,7 @@ vec3 chrome(vec2 p, float v){
   vec3 pos = ro + rd*t;
   vec2 e = vec2(.002, 0.);
   vec3 n = normalize(vec3(chromeMap(pos+e.xyy,v)-chromeMap(pos-e.xyy,v), chromeMap(pos+e.yxy,v)-chromeMap(pos-e.yxy,v), chromeMap(pos+e.yyx,v)-chromeMap(pos-e.yyx,v)));
-  vec3 rf = reflect(rd, n);
-  float fres = pow(1. - max(0., dot(-rd, n)), 3.);
-  // studio: soft light strips + a coloured horizon reads as chrome
-  float strips = smoothstep(.75, .95, sin(rf.y*6. + rf.x*2. + TRAV*.3)) + smoothstep(.9, .99, sin(rf.x*9. - 1.));
-  vec3 env = pal(rf.y*.5 + rf.x*.2 + v + T*.02)*(.15 + .8*smoothstep(-.3, .7, rf.y)) + strips*vec3(.9);
-  // thin-film shimmer across the whole surface, strongest at grazing angles
-  vec3 iri = pal(dot(n, vec3(.6,.8,.3))*1.2 + fres + v + TRAV*.05);
-  return env*(.3 + .3*fres) + iri*(.15 + .8*fres)*.7 + .2*KICK*pal(v);
+  return chromeShade(rd, n, v);
 }
 // ---- 3 Fractal: kaleidoscope over a Kali-set fold
 vec3 fractal(vec2 p, float v){
@@ -481,12 +512,174 @@ vec3 opart(vec2 p, float v){
   c += pal(v + .6)*pow(1. - abs(m), 18.)*(.6 + 1.2*HIGH);
   return c*(.75 + .5*KICK);
 }
+// ---- 5 Gyroid: flight through an endless glassy lattice
+float gyr(vec3 p, float v){
+  float sc = 1.6 + v*1.4;
+  vec3 q = p*sc;
+  return (abs(dot(sin(q), cos(q.yzx))) - .12 - .25*BASS*TRIP)/sc*.7;
+}
+vec3 gyroid(vec2 p, float v){
+  vec3 ro = vec3(.3*sin(TRAV*.2), .3*cos(TRAV*.17), TRAV*1.1), rd = normalize(vec3(p, 1.1));
+  rd.xy *= rot(TRAV*.08 + v*6.);
+  float t = 0., d, glow = 0.;
+  for (int i=0; i<70; i++){ d = gyr(ro + rd*t, v); glow += .006/(.01 + abs(d)); if (abs(d) < .002 || t > 10.) break; t += d; }
+  vec3 pos = ro + rd*t;
+  vec2 e = vec2(.003, 0.);
+  vec3 n = normalize(vec3(gyr(pos+e.xyy,v)-gyr(pos-e.xyy,v), gyr(pos+e.yxy,v)-gyr(pos-e.yxy,v), gyr(pos+e.yyx,v)-gyr(pos-e.yyx,v)));
+  float fog = exp(-t*.28);
+  float rim = pow(1. - abs(dot(n, rd)), 2.);
+  vec3 c = pal(pos.z*.05 + dot(n, vec3(.3)) + v)*(.25 + .75*max(0., dot(n, normalize(vec3(.4,.7,-.5)))))*fog;
+  c += pal(v + .5 + t*.05)*rim*fog*(.6 + 1.2*HIGH);
+  c += pal(t*.04 + v + .25)*glow*.02*(.4 + KICK);
+  return c;
+}
+// ---- 6 Sphere grid: a field of chrome balls bouncing to the bass
+float sgMap(vec3 p, float v, out vec2 id){
+  id = floor(p.xz);
+  vec3 q = p; q.xz = fract(p.xz) - .5;
+  float h = noise(id*.37 + TRAV*.25);
+  q.y -= -.3 + h*h*(.4 + 1.6*EN) + .5*BASS*step(.5, fract(h*7.));
+  return min(length(q) - (.18 + .14*h + .08*KICK), p.y + .55);
+}
+vec3 spheregrid(vec2 p, float v){
+  vec3 ro = vec3(TRAV*.4, 1.4 + .3*sin(TRAV*.1), TRAV*.9), rd = normalize(vec3(p, 1.3));
+  rd.yz *= rot(.45); rd.xz *= rot(.3*sin(TRAV*.07) + v);
+  float t = 0., d; vec2 id;
+  for (int i=0; i<80; i++){ d = sgMap(ro + rd*t, v, id); if (d < .002 || t > 16.) break; t += d*.7; }
+  vec3 bg = pal(rd.y*.6 + v + .6)*.12;
+  if (t > 16.) return bg;
+  vec3 pos = ro + rd*t;
+  vec2 e = vec2(.002, 0.), dummy;
+  vec3 n = normalize(vec3(sgMap(pos+e.xyy,v,dummy)-sgMap(pos-e.xyy,v,dummy), sgMap(pos+e.yxy,v,dummy)-sgMap(pos-e.yxy,v,dummy), sgMap(pos+e.yyx,v,dummy)-sgMap(pos-e.yyx,v,dummy)));
+  float fog = exp(-t*.16);
+  if (pos.y < -.54){
+    // floor: a dark mirror with a neon grid
+    vec2 g = abs(fract(pos.xz) - .5);
+    float line = smoothstep(.48, .5, max(g.x, g.y));
+    return mix(bg, pal(v + pos.z*.02)*line*(.4 + KICK) + .03, fog);
+  }
+  vec3 c = chromeShade(rd, n, v + h21(id)*.4);
+  return mix(bg, c, fog);
+}
+// ---- 7 Synthwave: grid floor, striped sun, mountains
+vec3 synthwave(vec2 p, float v){
+  float hz = -.05 + .1*(v - .5);
+  vec3 c;
+  if (p.y > hz){
+    c = mix(pal(v + .55)*.35, pal(v + .85)*.06, smoothstep(hz, 1.2, p.y));
+    vec2 sp = p - vec2(0., hz + .42);
+    float sr = .48 + .04*BASS;
+    float sun = smoothstep(sr, sr - .01, length(sp));
+    float band = step(.0, sin((sp.y + TRAV*.05)*60.)) + step(.12, sp.y);
+    sun *= min(1., band);
+    c = mix(c, mix(pal(v + .1), pal(v + .3), smoothstep(-.4, .4, sp.y))*1.4, sun);
+    c += pal(v + .2)*.12/(length(sp)*3. + .3)*(1. + BASS);
+    float m = hz + .05 + .22*fbm(vec2(p.x*2.2 + v*9., 1.))*(1. - .4*abs(p.x));
+    c = mix(c, pal(v + .7)*.04, smoothstep(m + .004, m - .004, p.y));
+    c += pal(v + .4)*smoothstep(.006, .0, abs(p.y - m))*.6;
+  } else {
+    float z = .35/(hz - p.y + .001);
+    vec2 g = vec2(p.x*z, z + TRAV*2.2);
+    vec2 gl = abs(fract(g) - .5);
+    float w = .03*z;
+    float line = smoothstep(.5 - w - .02, .5, max(gl.x, gl.y));
+    c = pal(v + .9)*.03 + pal(v + .35 + g.y*.01)*line*(.6 + 1.4*KICK)*exp(-z*.06);
+  }
+  return c;
+}
+// ---- 8 Warp: hyperspace streaks
+vec3 warp(vec2 p, float v){
+  float a = atan(p.y, p.x), r = length(p);
+  vec3 c = pal(v + .6)*.03/(r + .05);
+  for (int l=0; l<3; l++){
+    float fl = float(l);
+    float n = 60. + fl*40.;
+    float cell = floor((a/(2.*PI) + .5)*n + fl*.37);
+    float rnd = h21(vec2(cell, fl + floor(v*10.)));
+    float ca = abs(fract((a/(2.*PI) + .5)*n + fl*.37) - .5);
+    float z = fract(rnd*7. - TRAV*(.5 + rnd) *(.6 + .3*fl));
+    float head = z*1.6, len = (.08 + .5*EN + .6*KICK)*z;
+    float s = smoothstep(head, head - .02, r)*smoothstep(head - len - .01, head - len + .03, r);
+    s *= smoothstep(.5, .1, ca)*step(.45, rnd);
+    c += pal(rnd + v + fl*.2)*s*(1.2 + HIGH);
+  }
+  return c + pal(v)*.08*KICK/(r*r*30. + .2);
+}
+// ---- 9 Crystal: stained-glass shards that burst on the kick
+vec3 crystal(vec2 p, float v){
+  p *= 2.2 + v*1.5;
+  p += vec2(TRAV*.15, TRAV*.05);
+  vec2 ip = floor(p), fp = fract(p);
+  float d1 = 9., d2 = 9.; vec2 cid = vec2(0.);
+  for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++){
+    vec2 g = vec2(x, y), o = vec2(h21(ip + g), h21(ip + g + 17.));
+    o = .5 + .4*sin(TRAV*.4 + 6.28*o);
+    float d = length(g + o - fp);
+    if (d < d1){ d2 = d1; d1 = d; cid = ip + g; } else if (d < d2) d2 = d;
+  }
+  float edge = d2 - d1;
+  float r = h21(cid);
+  vec3 c = pal(r*.6 + v + T*.02)*(.25 + .9*pow(r, 2.)*(.5 + MID));
+  c *= .7 + .6*smoothstep(.0, .5, d1);
+  float lead = smoothstep(.03 + .06*KICK, .0, edge);
+  c = mix(c, pal(v + .5)*1.6*(.4 + KICK), lead);
+  return c;
+}
+// ---- 10 Spiral: hypnotic logarithmic spiral
+vec3 spiral(vec2 p, float v){
+  float a = atan(p.y, p.x), r = length(p) + 1e-3;
+  float arms = 2. + floor(v*4.);
+  float s = a*arms/(2.*PI)*1. + log(r)*(2. + 2.*v) - TRAV*1.4;
+  float band = sin(s*6.2832);
+  float w = .2 + .3*(1. - EN);
+  vec3 c = mix(pal(v + s*.05)*.08, pal(v + .3 + r*.3 + s*.03), smoothstep(-w, w, band));
+  c *= smoothstep(.0, .25, r);
+  c += pal(v + .6)*smoothstep(.06, .0, abs(band))*(.4 + HIGH);
+  return c*(.8 + .5*KICK);
+}
+// ---- 11 Morph: one chrome shape melting from form to form
+float sdBox(vec3 p, vec3 b){ vec3 q = abs(p) - b; return length(max(q, 0.)) + min(max(q.x, max(q.y, q.z)), 0.); }
+float shapeOf(int k, vec3 p){
+  if (k == 0) return length(p) - .95;
+  if (k == 1) return sdBox(p, vec3(.7)) - .08;
+  if (k == 2) return length(vec2(length(p.xz) - .75, p.y)) - .3;
+  return (abs(p.x) + abs(p.y) + abs(p.z) - 1.15)*.57;
+}
+float morphMap(vec3 p, float v){
+  p.xz *= rot(TRAV*.3); p.xy *= rot(TRAV*.21 + v*3.);
+  p.xz *= rot(p.y*(.6*BASS + .3*sin(TRAV*.2))*TRIP);
+  float m = TRAV*.12 + v*4.;
+  int k = int(floor(m)) % 4;
+  float x = smoothstep(.55, 1., fract(m));
+  float d = mix(shapeOf(k, p), shapeOf((k + 1) % 4, p), x);
+  return d + .03*sin(p.x*9. + T*3.)*sin(p.y*9.)*sin(p.z*9.)*(.2 + HIGH*TRIP);
+}
+vec3 morph(vec2 p, float v){
+  vec3 ro = vec3(0., 0., 3.2 - .3*KICK), rd = normalize(vec3(p, -1.4));
+  float t = 0., d, glow = 0.;
+  for (int i=0; i<72; i++){ d = morphMap(ro + rd*t, v); glow += .02/(.05 + d*d*8.); if (d < .002 || t > 7.) break; t += d*.8; }
+  vec3 bg = pal(p.y*.4 + v + .5)*(.05 + .12*fbm(p*2. - TRAV*.1)) + pal(v + .3)*glow*.02*(1. + 2.*BASS);
+  if (t > 7.) return bg;
+  vec3 pos = ro + rd*t;
+  vec2 e = vec2(.002, 0.);
+  vec3 n = normalize(vec3(morphMap(pos+e.xyy,v)-morphMap(pos-e.xyy,v), morphMap(pos+e.yxy,v)-morphMap(pos-e.yxy,v), morphMap(pos+e.yyx,v)-morphMap(pos-e.yyx,v)));
+  return chromeShade(rd, n, v);
+}
 vec3 scene(int s, vec2 p, float v){
+  // every shot frames its scene differently: closer or wider, and turned
+  p = rot((fract(v*3.7) - .5)*1.6)*p*mix(.7, 1.35, fract(v*7.3));
   if (s == 0) return aura(p, v);
   if (s == 1) return tunnel(p, v);
   if (s == 2) return chrome(p, v);
   if (s == 3) return fractal(p, v);
-  return opart(p, v);
+  if (s == 4) return opart(p, v);
+  if (s == 5) return gyroid(p, v);
+  if (s == 6) return spheregrid(p, v);
+  if (s == 7) return synthwave(p, v);
+  if (s == 8) return warp(p, v);
+  if (s == 9) return crystal(p, v);
+  if (s == 10) return spiral(p, v);
+  return morph(p, v);
 }
 void main(){
   vec2 p = (gl_FragCoord.xy - .5*R)/min(R.x, R.y)*2.;
@@ -494,9 +687,11 @@ void main(){
   if (MIXV > 0.001 && SB != SA){
     vec3 d = scene(SB, p, VB);
     // noise dissolve with a hot edge
-    float n = fbm(p*2.2 + 7.) * .8 + .1 + .1*length(p);
-    float m = smoothstep(MIXV - .06, MIXV + .06, 1. - n);
-    float edge = smoothstep(.08, 0., abs(MIXV - (1. - n)));
+    // each pixel switches when MIXV passes its own threshold n, so MIXV 0 is all A and 1 is all B
+    float n = clamp(fbm(p*2.2 + 7.)*1.1 - .05 + .08*length(p), 0., 1.);
+    float x = MIXV*1.2 - .1;
+    float m = smoothstep(n - .06, n + .06, x);
+    float edge = smoothstep(.07, 0., abs(x - n))*step(.001, MIXV)*step(MIXV, .999);
     c = mix(c, d, m) + edge*pal(n + T*.1)*1.5;
   }
   // bright palettes would blow out the additive scenes; even them out
@@ -516,7 +711,7 @@ void main(){
   vec3 cur = texture(SCN, uv).rgb;
   // trails only where the new frame is darker, and they fade fast: a max() that held longer
   // dilated every bright speck over the dark gaps until the picture washed out
-  float keep = (.45 + .3*TRIP)*(1. - .6*IMP);
+  float keep = (.45 + .3*TRIP)*(1. - .6*IMP)*(1. - .85*CUT);
   prev = max(prev*keep - .01, 0.);
   o = vec4(cur + max(prev*vec3(1., .96, 1.04) - cur, 0.)*.85, 1.);
 }`;
@@ -526,8 +721,11 @@ uniform sampler2D SRC;
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14), 0., 1.); }
 void main(){
   vec2 uv = gl_FragCoord.xy/R;
+  // a hard cut tears for a few frames: horizontal slices jump sideways
+  float sl = floor(uv.y*28.);
+  uv.x += CUT*step(.55, h21(vec2(sl, FRAME + 1.)))*(h21(vec2(sl, FRAME)) - .5)*.12*(.3 + TRIP);
   vec2 d = uv - .5;
-  float ca = (.0015 + .006*KICK + .02*IMP + .004*HIGH)*(.4 + TRIP);
+  float ca = (.0015 + .006*KICK + .02*IMP + .004*HIGH + .03*CUT)*(.4 + TRIP);
   vec3 col;
   col.r = texture(SRC, uv + d*ca*2.).r;
   col.g = texture(SRC, uv).g;
@@ -633,7 +831,7 @@ function uniformsAt(f) {
   const o = f * NF, P = LOOKS[S.look].p;
   return {
     T: f / FPS, FRAME: f % 1000, BASS: T[o], MID: T[o + 1], HIGH: T[o + 2], KICK: T[o + 3], EN: T[o + 4], IMP: T[o + 5],
-    BEAT: T[o + 6], BAR: T[o + 7], TRAV: T[o + 8], SA: T[o + 9], SB: T[o + 10], MIXV: T[o + 11], VA: T[o + 12], VB: T[o + 13],
+    BEAT: T[o + 6], BAR: T[o + 7], TRAV: T[o + 8], SA: T[o + 9], SB: T[o + 10], MIXV: T[o + 11], VA: T[o + 12], VB: T[o + 13], HUE: T[o + 14], CUT: T[o + 15],
     TRIP: S.trip, PA: P[0], PB: P[1], PC: P[2], PD: P[3],
   };
 }
@@ -708,7 +906,9 @@ function renderPreview() {
   el('seek').value = Math.round(1000 * t / S.song.duration);
   el('time').textContent = fmtTime(t) + ' / ' + fmtTime(S.song.duration);
 }
-function loop() { if (S.playing) { renderPreview(); requestAnimationFrame(loop); } }
+// one loop at a time: every play() used to start another, so each seek doubled the work per frame
+let loopId = 0;
+function loop(id) { if (S.playing && id === loopId) { renderPreview(); requestAnimationFrame(() => loop(id)); } }
 const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 
 function currentTime() { return S.playing ? S.off + (S.ctx.currentTime - S.t0) : S.off; }
@@ -725,7 +925,8 @@ function play() {
   S.playing = true;
   S.src.onended = () => { if (S.playing && currentTime() >= S.song.duration - .05) { pause(); S.off = 0; } };
   el('play').textContent = '❚❚ Pause';
-  requestAnimationFrame(loop);
+  const id = ++loopId;
+  requestAnimationFrame(() => loop(id));
 }
 function pause() {
   if (!S.playing) return;
