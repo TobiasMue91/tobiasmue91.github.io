@@ -78,7 +78,7 @@ if (suites.includes('format')) {
   for (const [n, s] of f) eq(T.format(n), s, `format ${n}`);
   eq(T.words(300), '5 minutes', 'words 5 min'); eq(T.words(61), '1 minute 1 second', 'words singular');
   eq(T.words(3600), '1 hour', 'words hour'); eq(T.words(0), '0 seconds', 'words zero'); eq(T.words(7384), '2 hours 3 minutes 4 seconds', 'words all');
-  eq(T.short(300), '5', 'short 5'); eq(T.short(90), '1:30', 'short 1:30'); eq(T.short(3600), '1:00:00', 'short hour'); eq(T.short(5400), '1:30:00', 'short 90 min');
+  eq(T.short(300), '5', 'short 5'); eq(T.short(45), '45s', 'short 45s'); eq(T.short(90), '1:30', 'short 1:30'); eq(T.short(3600), '1:00:00', 'short hour'); eq(T.short(5400), '1:30:00', 'short 90 min');
   for (const n of [1, 59, 60, 90, 300, 3599, 3600, 5415, 359999]) eq(secs(T.short(n)), n, `short ${n} reads back`);
   // the countdown: full length at the start, 0 only at the end, never below
   const end = 1e12 + 300000;
