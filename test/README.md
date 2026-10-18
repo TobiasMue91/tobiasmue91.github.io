@@ -2259,3 +2259,16 @@ it offers (a suggested colour must really pass; a mistyped `<label for>` is name
 200 000-element page. The `browser` suite opens the real page and checks that `<style>` contrast is measured in the
 rendered copy, that checking makes no request outside the page, that input survives a reload and that nothing is logged
 as an error. Run it after touching the core.
+
+## SEO Meta Tag Generator
+
+```sh
+npm run test:metatags                    # or: node test/seo_meta_tag_generator.mjs [parse build fit migrate edges]
+```
+
+Runs the DOM-free `<script id="core">` of `tools/seo_meta_tag_generator.html` in Node; no browser, no server.
+It checks that pasted values (URLs without a scheme or with spaces, `en_US`, `x.com/handle`, `7 days`, keyword lists
+with empty items) become clean values or a plain error that leaves the tag out, that every value is escaped for HTML
+text or attributes, the exact tag output, the Google-style pixel truncation (never splitting a character), huge-input
+speed, and that settings the old page stored under `seoMetaFormData` still load. Expected values come from the HTML
+spec, the Open Graph protocol, X card docs and BCP 47, written by hand.
