@@ -96,7 +96,7 @@ if (suites.includes('build')) {
     '<meta property="og:description" content="Hello world">',
     '',
     '<!-- X (Twitter) -->',
-    '<meta name="twitter:card" content="summary">',
+    '<meta name="twitter:card" content="summary_large_image">',
     '<meta name="twitter:title" content="My Page">',
     '<meta name="twitter:description" content="Hello world">',
     ''].join('\n'), 'minimal head output, exact');
