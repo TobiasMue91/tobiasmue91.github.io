@@ -284,33 +284,37 @@ async function analyse(buffer, progress) {
   const stepFit = (ph, lag) => steps.reduce((s, f) => { const d = ((f - ph) % lag + lag) % lag, e = Math.min(d, lag - d); return s + Math.exp(-.5 * Math.pow(e / (lag / 12), 2)); }, 0);
   let beats;
   if (window.__win ?? false) {
-    // follow the comb's grid through the song in overlapping windows of 32 beats. Each window may bend
-    // the tempo by 2 % and move the phase by an eighth of a beat from where the last one pointed - enough
-    // for a band that drifts, never enough to slide a quarter beat onto a bass line that leads the kick.
-    const sum = (lag, ph, k0, k1) => { let s = 0; for (let k = k0; k < k1; k++) { const x = ph + k * lag; if (x < 0 || x >= frames - 1) continue; const i = Math.floor(x), fr = x - i; s += os[i] * (1 - fr) + os[i + 1] * fr; } return s; };
-    let lag = P, ph = bestPhase % P;
-    if (steps.length) {
-      // the comb may have locked onto a bass line that leads the kick or onto off-beat hats: try the quarter phases
-      const on = o => sum(P, ph + o, 0, Math.ceil(frames / P));
-      const top = Math.max(...[0, 1, 2, 3].map(q => on(q * P / 4)));
-      let bo = 0, bsc = -1;
-      for (let q = 0; q < 4; q++) { const sc = on(q * P / 4) / top + stepFit(ph + q * P / 4, P) / steps.length * 2; if (sc > bsc) { bsc = sc; bo = q * P / 4; } }
-      ph += bo;
-    }
-    const W = 32, H = 16, out = [];
-    let k = 0;   // index of the next beat to emit, counted on the current window's grid
-    while (ph + k * lag < frames + lag) {
-      let bl = lag, bp = ph, bs = sum(lag, ph, k, k + W);
-      for (let dl = -.02; dl <= .0201; dl += .004) for (let dp = -lag / 8; dp <= lag / 8 + 1e-6; dp += lag / 32) {
-        // pivot the candidate grid on the window's first beat, so a tempo change does not move it
-        const l2 = lag * (1 + dl), p2 = ph + k * lag + dp - k * l2, sc = sum(l2, p2, k, k + W) - Math.abs(dl) * 2 - Math.abs(dp) / lag * .5;
-        if (sc > bs) { bs = sc; bl = l2; bp = p2; }
+    // Anchored on the biggest section step - a drop lands on a one - and followed outwards both ways in
+    // overlapping windows of 32 beats. Each window may bend the tempo by 2 % and move the phase by an eighth
+    // of a beat: enough for a band that drifts, never enough to slide a quarter beat onto a bass line that
+    // leads the kick. A section step inside a window pulls the grid onto itself.
+    const at = x => { if (x < 0 || x >= frames - 1) return 0; const i = Math.floor(x), fr = x - i; return os[i] * (1 - fr) + os[i + 1] * fr; };
+    const near = (x, lag) => steps.reduce((s, f) => s + Math.exp(-.5 * Math.pow((f - x) / (lag / 16), 2)), 0);
+    const follow = (a0, dir) => {
+      const out = []; let a = a0, lag = P;
+      const W = 32, H = 16;
+      while (dir > 0 ? a < frames + lag : a > -lag) {
+        let bl = lag, ba = a, bs = -1e9;
+        for (let dl = -.02; dl <= .0201; dl += .004) for (let dp = -lag / 8; dp <= lag / 8 + 1e-6; dp += lag / 32) {
+          const l2 = lag * (1 + dl), a2 = a + dp;
+          let sc = -Math.abs(dl) * 2 - Math.abs(dp) / lag * .5;
+          for (let j = 0; j < W; j++) { const x = a2 + dir * j * l2; sc += at(x) + 3 * near(x, l2); }
+          if (sc > bs) { bs = sc; bl = l2; ba = a2; }
+        }
+        lag = bl; a = ba;
+        for (let j = 0; j < H; j++) out.push(Math.round(a + dir * j * lag));
+        a += dir * H * lag;
       }
-      lag = bl; ph = bp;
-      for (let j = k; j < k + H; j++) out.push(Math.round(ph + j * lag));
-      k += H;
+      return out;
+    };
+    let anchor = bestPhase % P;
+    if (steps.length) anchor = steps[0];
+    else { // no clear section change: the comb's phase, or a quarter of a beat off it, whichever carries more onset
+      let bo = 0, bs = -1; for (let q = 0; q < 4; q++) { let sc = 0; for (let x = anchor + q * P / 4; x < frames; x += P) sc += at(x); if (sc > bs) { bs = sc; bo = q * P / 4; } }
+      anchor += bo;
     }
-    beats = out.filter(b => b >= 0 && b < frames + P);
+    const fwd = follow(anchor, 1), bwd = follow(anchor - P, -1);
+    beats = bwd.reverse().concat(fwd).filter(b => b >= 0 && b < frames + P);
   } else beats = track(P);
   // extend the grid over intro/outro silence so every frame has a beat phase
   while (beats[0] - P > 0) beats.unshift(Math.round(beats[0] - P));
