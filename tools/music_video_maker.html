@@ -226,7 +226,7 @@ async function analyse(buffer, progress) {
   const osn = percentile(os, .98); for (let f = 0; f < frames; f++) os[f] = Math.min(1.5, os[f] / osn);
 
   // tempo: autocorrelation of onset strength, weighted toward ~120 BPM
-  let bestLag = 30, bestScore = -1;
+  let bestLag = 30, bestScore = -1, bestPhase = 0;
   const minLag = FPS * 60 / 180, maxLag = FPS * 60 / 72;
   const ac = lag => { let s = 0; const L = Math.floor(lag), fr = lag - L; for (let i = 0; i + L + 1 < frames; i++) s += os[i] * (os[i + L] * (1 - fr) + os[i + L + 1] * fr); return s; };
   {
@@ -242,9 +242,9 @@ async function analyse(buffer, progress) {
     for (const [, c] of cands.slice(0, 4)) {
       for (let lag = c - .3; lag <= c + .3; lag += .01) {
         const bpm = 60 * FPS / lag, w = Math.exp(-.5 * Math.pow(Math.log2(bpm / 120) / .9, 2));
-        let best = 0; for (let ph = 0; ph < lag; ph += .5) best = Math.max(best, grid(lag, ph));
+        let best = 0, bph = 0; for (let ph = 0; ph < lag; ph += .5) { const g = grid(lag, ph); if (g > best) { best = g; bph = ph; } }
         const sc = best / (frames / lag) * w;
-        if (sc > bestScore) { bestScore = sc; bestLag = lag; }
+        if (sc > bestScore) { bestScore = sc; bestLag = lag; bestPhase = bph; }
       }
     }
   }
@@ -269,7 +269,29 @@ async function analyse(buffer, progress) {
     while (t >= 0) { bt.unshift(t); t = back[t]; }
     return bt;
   };
-  const P = bestLag, beats = track(P);
+  const P = bestLag;
+  let beats;
+  if (window.__win ?? false) {
+    // follow the comb's grid through the song in overlapping windows of 32 beats. Each window may bend
+    // the tempo by 2 % and move the phase by an eighth of a beat from where the last one pointed - enough
+    // for a band that drifts, never enough to slide a quarter beat onto a bass line that leads the kick.
+    const sum = (lag, ph, k0, k1) => { let s = 0; for (let k = k0; k < k1; k++) { const x = ph + k * lag; if (x < 0 || x >= frames - 1) continue; const i = Math.floor(x), fr = x - i; s += os[i] * (1 - fr) + os[i + 1] * fr; } return s; };
+    let lag = P, ph = bestPhase % P;
+    const W = 32, H = 16, out = [];
+    let k = 0;   // index of the next beat to emit, counted on the current window's grid
+    while (ph + k * lag < frames + lag) {
+      let bl = lag, bp = ph, bs = sum(lag, ph, k, k + W);
+      for (let dl = -.02; dl <= .0201; dl += .004) for (let dp = -lag / 8; dp <= lag / 8 + 1e-6; dp += lag / 32) {
+        // pivot the candidate grid on the window's first beat, so a tempo change does not move it
+        const l2 = lag * (1 + dl), p2 = ph + k * lag + dp - k * l2, sc = sum(l2, p2, k, k + W) - Math.abs(dl) * 2 - Math.abs(dp) / lag * .5;
+        if (sc > bs) { bs = sc; bl = l2; bp = p2; }
+      }
+      lag = bl; ph = bp;
+      for (let j = k; j < k + H; j++) out.push(Math.round(ph + j * lag));
+      k += H;
+    }
+    beats = out.filter(b => b >= 0 && b < frames + P);
+  } else beats = track(P);
   // extend the grid over intro/outro silence so every frame has a beat phase
   while (beats[0] - P > 0) beats.unshift(Math.round(beats[0] - P));
   while (beats[beats.length - 1] + P < frames + P) beats.push(Math.round(beats[beats.length - 1] + P));
