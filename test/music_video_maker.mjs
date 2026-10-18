@@ -158,7 +158,9 @@ if (suites.includes('beats')) {
     const tb = r.truth.beats, lo = tb[0] - .2, hi = tb[tb.length - 1] + .2;
     const det = r.beats.filter(t => t > lo && t < hi);
     // half tempo is a fair reading of drum & bass: every detected beat must still be a true one
-    const half = Math.abs(r.bpm * 2 - r.truth.bpm) / r.truth.bpm < .04;
+    // a drifting song has no single tempo; compare with its average
+    const meanBpm = 60 * (tb.length - 1) / (tb[tb.length - 1] - tb[0]);
+    const half = Math.abs(r.bpm * 2 - meanBpm) / meanBpm < .04;
     const P = det.filter(t => near(tb, t) < .05).length / det.length;
     const R = tb.filter(t => near(det, t) < .05).length / tb.length;
     const F = half ? P : 2 * P * R / (P + R);
@@ -166,9 +168,9 @@ if (suites.includes('beats')) {
     const down = bars.filter(t => near(r.truth.down, t) < .07).length / bars.length;
     const dropErr = r.truth.drops.map(d => near(r.imps, d));
     const onBeat = r.cuts.filter(c => near(tb, c.t) < .05).length / r.cuts.length;
-    log(`${name.padEnd(10)} ${r.bpm.toFixed(1)} BPM (${r.truth.bpm}${half ? ', half' : ''})  beats ${F.toFixed(2)}  downbeats ${down.toFixed(2)}  drops ${dropErr.map(e => Math.round(e * 1000) + ' ms').join(', ')}  cuts on beat ${onBeat.toFixed(2)}`);
-    const tempoOk = half || Math.abs(r.bpm - r.truth.bpm) / r.truth.bpm < .03;
-    check(tempoOk, `${name}: tempo`, `${r.bpm.toFixed(1)} BPM, true ${r.truth.bpm}`);
+    log(`${name.padEnd(10)} ${r.bpm.toFixed(1)} BPM (${meanBpm.toFixed(1)}${half ? ', half' : ''})  beats ${F.toFixed(2)}  downbeats ${down.toFixed(2)}  drops ${dropErr.map(e => Math.round(e * 1000) + ' ms').join(', ')}  cuts on beat ${onBeat.toFixed(2)}`);
+    const tempoOk = half || Math.abs(r.bpm - meanBpm) / meanBpm < .03;
+    check(tempoOk, `${name}: tempo`, `${r.bpm.toFixed(1)} BPM, true ${meanBpm.toFixed(1)} on average`);
     check(F >= .9, `${name}: beats hit within 50 ms`, `F = ${F.toFixed(2)}`);
     check(down >= .9, `${name}: downbeats within 70 ms`, `${down.toFixed(2)}`);
     check(dropErr.every(e => e < .06), `${name}: every drop gets its cut within 60 ms`, dropErr.map(e => Math.round(e * 1000) + ' ms').join(', '));
