@@ -2240,3 +2240,22 @@ with the line numbers its answer refers to (and no code fence the snippet could 
 braces inside strings, trailing commas, prose, truncated, wrong types - becomes steps whose line ranges exist in the code,
 the input limits and their messages, language detection, stripping line numbers pasted along with the code, and that history
 in the old `savedExplanations` shape still loads, searches, imports and exports without throwing. No browser, no server.
+
+## Web Accessibility Checker
+
+```sh
+npm i --no-save linkedom@0.18.13                       # every suite
+npm i --no-save playwright-core@1.64.1                 # browser suite; Chromium at /opt/pw-browsers/chromium
+npx http-server -p 8099                                # browser suite
+npm run test:a11y                                      # or: node test/web_accessibility_checker.mjs [contrast|names|rules|document|locate|edges|output|browser]
+```
+
+`test/web_accessibility_checker.mjs` runs the DOM-free `<script id="core">` block of `tools/web_accessibility_checker.html`
+in Node, on documents parsed by linkedom. Expected values come from the specifications, not from the page: the WCAG 2.2
+contrast formula and thresholds (ratios cross-checked with an independent calculation), large text as 18pt / 14pt bold,
+the WAI-ARIA 1.2 roles and required states, the accname 1.2 / HTML-AAM naming steps, and BCP 47 language tags. It also
+pins line numbers that ignore tag-like text in comments and scripts, fragments being spared page-level checks, the fixes
+it offers (a suggested colour must really pass; a mistyped `<label for>` is named), CSV that cannot smuggle formulas, and a
+200 000-element page. The `browser` suite opens the real page and checks that `<style>` contrast is measured in the
+rendered copy, that checking makes no request outside the page, that input survives a reload and that nothing is logged
+as an error. Run it after touching the core.
