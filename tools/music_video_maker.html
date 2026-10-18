@@ -216,7 +216,8 @@ async function analyse(buffer, progress) {
 
   // onset strength: bass counts double, it is what people nod to
   const onset = new Float32Array(frames);
-  for (let f = 0; f < frames; f++) onset[f] = 2 * flux[0][f] + flux[1][f] + .5 * flux[2][f];
+  // hi-hats barely count: alone, on the off-beats of an intro or a break, they would pull the grid half a beat over
+  for (let f = 0; f < frames; f++) onset[f] = 2 * flux[0][f] + flux[1][f] + .05 * flux[2][f];
   // remove the local mean so steady noise does not read as onsets
   const os = new Float32Array(frames);
   { let acc = 0; const w = 30, q = [];
@@ -226,29 +227,48 @@ async function analyse(buffer, progress) {
   // tempo: autocorrelation of onset strength, weighted toward ~120 BPM
   let bestLag = 30, bestScore = -1;
   const minLag = FPS * 60 / 180, maxLag = FPS * 60 / 72;
-  const ac = lag => { let s = 0; const L = Math.floor(lag), fr = lag - L; for (let i = 0; i + L + 1 < frames; i += 2) s += os[i] * (os[i + L] * (1 - fr) + os[i + L + 1] * fr); return s; };
-  for (let lag = minLag; lag <= maxLag; lag += .1) {
-    const bpm = 60 * FPS / lag, w = Math.exp(-.5 * Math.pow(Math.log2(bpm / 120) / .9, 2));
-    const sc = ac(lag) * w;
-    if (sc > bestScore) { bestScore = sc; bestLag = lag; }
-  }
-  const P = bestLag;
-
-  // beats: dynamic programming (Ellis 2007) - follows the onsets but keeps the tempo
-  const score = new Float32Array(frames), back = new Int32Array(frames).fill(-1);
-  for (let t = 0; t < frames; t++) {
-    let best = 0, arg = -1;
-    for (let p = Math.max(0, Math.floor(t - 2 * P)); p <= t - Math.round(P / 2); p++) {
-      const v = score[p] - 6 * Math.pow(Math.log((t - p) / P), 2);
-      if (v > best || arg < 0) { best = v; arg = p; }
+  const ac = lag => { let s = 0; const L = Math.floor(lag), fr = lag - L; for (let i = 0; i + L + 1 < frames; i++) s += os[i] * (os[i + L] * (1 - fr) + os[i + L + 1] * fr); return s; };
+  {
+    // comb: for each tempo, the phase whose grid collects the most onset over the whole song.
+    // Coarse pass on the autocorrelation, then a fine pass where the grid has to line up end to end.
+    const cands = [];
+    for (let lag = minLag; lag <= maxLag; lag += .25) {
+      const bpm = 60 * FPS / lag, w = Math.exp(-.5 * Math.pow(Math.log2(bpm / 120) / .9, 2));
+      cands.push([ac(lag) * w, lag]);
     }
-    score[t] = os[t] + (arg >= 0 ? Math.max(0, best) : 0);
-    back[t] = arg >= 0 && best > 0 ? arg : -1;
+    cands.sort((x, y) => y[0] - x[0]);
+    const grid = (lag, ph) => { let s = 0; for (let x = ph; x < frames - 1; x += lag) { const i = Math.floor(x), fr = x - i; s += os[i] * (1 - fr) + os[i + 1] * fr; } return s; };
+    for (const [, c] of cands.slice(0, 4)) {
+      for (let lag = c - .3; lag <= c + .3; lag += .01) {
+        const bpm = 60 * FPS / lag, w = Math.exp(-.5 * Math.pow(Math.log2(bpm / 120) / .9, 2));
+        let best = 0; for (let ph = 0; ph < lag; ph += .5) best = Math.max(best, grid(lag, ph));
+        const sc = best / (frames / lag) * w;
+        if (sc > bestScore) { bestScore = sc; bestLag = lag; }
+      }
+    }
   }
-  let t = frames - 1, bestEnd = 0;
-  for (let i = Math.max(0, frames - Math.ceil(P)); i < frames; i++) if (score[i] > bestEnd) { bestEnd = score[i]; t = i; }
-  const beats = [];
-  while (t >= 0) { beats.unshift(t); t = back[t]; }
+
+  // beats: dynamic programming (Ellis 2007). Held close to the comb's tempo: measured on test songs with
+  // known beats, 200 keeps quiet passages on the grid and still follows a live band drifting by 4 %.
+  const TIGHT = 200;
+  const track = P => {
+    const score = new Float32Array(frames), back = new Int32Array(frames).fill(-1);
+    for (let t = 0; t < frames; t++) {
+      let best = 0, arg = -1;
+      for (let p = Math.max(0, Math.floor(t - 2 * P)); p <= t - Math.round(P / 2); p++) {
+        const v = score[p] - TIGHT * Math.pow(Math.log((t - p) / P), 2);
+        if (v > best || arg < 0) { best = v; arg = p; }
+      }
+      score[t] = os[t] + (arg >= 0 ? Math.max(0, best) : 0);
+      back[t] = arg >= 0 && best > 0 ? arg : -1;
+    }
+    let t = frames - 1, bestEnd = 0;
+    for (let i = Math.max(0, frames - Math.ceil(P)); i < frames; i++) if (score[i] > bestEnd) { bestEnd = score[i]; t = i; }
+    const bt = [];
+    while (t >= 0) { bt.unshift(t); t = back[t]; }
+    return bt;
+  };
+  const P = bestLag, beats = track(P);
   // extend the grid over intro/outro silence so every frame has a beat phase
   while (beats[0] - P > 0) beats.unshift(Math.round(beats[0] - P));
   while (beats[beats.length - 1] + P < frames + P) beats.push(Math.round(beats[beats.length - 1] + P));
@@ -337,6 +357,8 @@ function buildTrack(A, seed) {
     if (t > 0 && inPhrase === 0 && R() < .6) len = Math.min(len, R() < .5 ? 1 : 2);
     // never run over a tier change or a drop: those get their own cut on the downbeat
     let end = k + len;
+    // a shot that starts inside a bar ends on the next downbeat, so the long shots after a chop sit on the bar again
+    if (barBeat[b] !== k && barBeat[b + 1] !== undefined) end = Math.min(end, barBeat[b + 1]);
     for (let bb = b + 1; bb < nb && barBeat[bb] < end; bb++) if (tier[bb] !== tier[b] || drops.includes(bb)) { end = barBeat[bb]; break; }
     if (end <= k) end = k + 1;
     // the scene of this pool that has been off screen longest, so a video shows as many as it can
@@ -528,7 +550,8 @@ vec3 gyroid(vec2 p, float v){
     vec3 q = ro + rd*t;
     float d = abs(gyr(q, v));
     float w = .0025 + .004*KICK;
-    c += pal(q.z*.15 + t*.12 + v)*w/(d + w)*exp(-t*.45)*(.08 + .06*MID);
+    // shells right in front of the lens fade out instead of flashing across the frame as the camera passes them
+    c += pal(q.z*.15 + t*.12 + v)*w/(d + w)*exp(-t*.45)*smoothstep(.15, .9, t)*(.08 + .06*MID);
     t += max(d*.8, .02);
     if (t > 7.) break;
   }
