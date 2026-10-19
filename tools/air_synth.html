@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Air Synth - Play Music With Your Hands in the Air</title>
+<meta name="description" content="A webcam instrument: hold your hand up and play a synth in time and in key. Height picks the note from the current chord, left to right opens the filter, every note lands on the beat. Works with mouse or touch too; the camera never leaves your device.">
+<style>
+:root{--bg:#07070c;--ink:#f1eefc;--dim:#9c97b8;--acc:#7cf7d4;--acc2:#ff7ab8;--panel:rgba(14,12,26,.82)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+#stage{position:fixed;inset:0;display:block;width:100%;height:100%}
+#intro{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at 50% 40%,rgba(124,247,212,.12),transparent 60%),rgba(7,7,12,.9);transition:opacity .35s ease;z-index:5}
+#intro.gone{opacity:0;pointer-events:none}
+.card{max-width:440px;width:100%;background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:24px 22px;text-align:center}
+h1{margin:0 0 6px;font-size:30px;letter-spacing:.5px}
+h1 span{color:var(--acc)}
+.card p{margin:8px 0;color:var(--dim)}
+.btns{display:flex;flex-direction:column;gap:10px;margin:18px 0 10px}
+button{font:inherit;font-weight:600;border:0;border-radius:12px;padding:13px 16px;cursor:pointer;color:#07070c;background:var(--acc)}
+button.alt{background:rgba(255,255,255,.1);color:var(--ink)}
+.small{font-size:12.5px}
+#hud{position:fixed;left:12px;top:12px;z-index:3;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100% - 24px)}
+.pill{background:var(--panel);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--dim);white-space:nowrap}
+.pill b{color:var(--ink);font-weight:600}
+#stats{position:fixed;right:12px;top:12px;z-index:3;background:var(--panel);border-radius:10px;padding:8px 10px;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--dim);display:none;white-space:pre}
+#hint{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:3;background:var(--panel);border-radius:999px;padding:8px 16px;font-size:14px;transition:opacity .6s ease;max-width:calc(100% - 32px);text-align:center}
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="hud">
+  <div class="pill" id="chordPill">chord <b id="chordName">-</b></div>
+  <div class="pill" id="modePill"><b id="modeName">mouse</b></div>
+  <div class="pill"><b id="bpmName">96</b> bpm</div>
+</div>
+<div id="stats"></div>
+<div id="hint" style="opacity:0"></div>
+<div id="intro">
+  <div class="card">
+    <h1>Air <span>Synth</span></h1>
+    <p>Hold a hand up to the camera and play. Higher is a higher note, always one from the chord that is playing, and every note lands on the beat. Move to the right to open the filter.</p>
+    <div class="btns">
+      <button id="goCam">Play with the camera</button>
+      <button id="goMouse" class="alt">Play with mouse or touch</button>
+    </div>
+    <p class="small">The camera picture is analysed on this device and never uploaded. The hand model (about 8&nbsp;MB) loads once; you can play with the mouse while it does.</p>
+  </div>
+</div>
+
+<script id="core">
+// DOM-free: hand landmarks plus time in, musical events and continuous parameters out.
+// test/air_synth.mjs runs this block in Node.
+var Core = (function () {
+    'use strict';
+    var NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+    // chords as semitones above the key's tonic; vi-IV-I-V is the default
+    var CHORDS = {I: [0, 4, 7], ii: [2, 5, 9], iii: [4, 7, 11], IV: [5, 9, 12], V: [7, 11, 14], vi: [9, 12, 16]};
+    var PROGRESSIONS = {pop: ['vi', 'IV', 'I', 'V'], lift: ['I', 'V', 'vi', 'IV'], dream: ['IV', 'I', 'V', 'vi'], soul: ['ii', 'V', 'I', 'vi']};
+
+    // One-Euro filter (Casiez et al. 2012) on a scalar; dt in seconds.
+    function oneEuro(minCutoff, beta, dCutoff) {
+        var x = null, dx = 0, last = 0;
+        var alpha = function (c, dt) { var tau = 1 / (2 * Math.PI * c); return 1 / (1 + tau / dt); };
+        return {
+            reset: function () { x = null; dx = 0; },
+            get value() { return x; },
+            get speed() { return dx; },
+            step: function (v, tMs) {
+                if (x === null) { x = v; dx = 0; last = tMs; return x; }
+                var dt = Math.max(1e-3, (tMs - last) / 1000); last = tMs;
+                var d = (v - x) / dt, a = alpha(dCutoff, dt);
+                dx = dx + a * (d - dx);
+                var c = minCutoff + beta * Math.abs(dx);
+                x = x + alpha(c, dt) * (v - x);
+                return x;
+            }
+        };
+    }
+
+    function chordName(key, roman) {
+        var iv = CHORDS[roman], root = NAMES[(key + iv[0]) % 12];
+        return root + (iv[1] - iv[0] === 3 ? 'm' : '');
+    }
+
+    // the chord's pitch classes laid out over [lo, hi] in MIDI notes
+    function ladder(key, roman, lo, hi) {
+        var pcs = CHORDS[roman].map(function (s) { return (key + s) % 12; }), out = [];
+        for (var m = lo; m <= hi; m++) if (pcs.indexOf(m % 12) >= 0) out.push(m);
+        return out;
+    }
+
+    // palm centre: wrist and the four knuckles are the steadiest points MediaPipe returns
+    function palm(lm) {
+        var ids = [0, 5, 9, 13, 17], x = 0, y = 0;
+        for (var i = 0; i < 5; i++) { x += lm[ids[i]].x; y += lm[ids[i]].y; }
+        return {x: x / 5, y: y / 5};
+    }
+
+    function mapper(opt) {
+        opt = opt || {};
+        var o = {
+            bpm: opt.bpm || 96, key: opt.key == null ? 0 : opt.key, prog: opt.prog || PROGRESSIONS.pop,
+            lo: opt.lo || 55, hi: opt.hi || 79,          // G3..G5
+            t0: opt.t0 || 0,
+            holdMs: opt.holdMs == null ? 220 : opt.holdMs,  // a hand that vanishes for less than this keeps playing
+            hyst: opt.hyst == null ? 0.7 : opt.hyst,        // semitones the hand must pass a boundary by
+            predictMs: opt.predictMs == null ? 40 : opt.predictMs,
+            minLead: opt.minLead == null ? 12 : opt.minLead, // ms an event must lie ahead of "now" to be scheduled
+            mirror: opt.mirror !== false
+        };
+        var stepMs = 60000 / o.bpm / 4, barMs = stepMs * 16;
+        var fx = oneEuro(1.2, 4, 1), fy = oneEuro(1.2, 4, 1);
+        var tracked = null;        // {x, y} of the lead hand, unfiltered, for identity matching
+        var lastSeen = -1e9, lastT = null, frameMs = 33;
+        var note = null;           // MIDI note now sounding (or scheduled), null when silent
+        var pending = null;        // {midi, vel} waiting for the next grid point
+        var lastEventT = -1e9;
+        var sounding = false;
+
+        function chordAt(t) { var bar = Math.floor((t - o.t0) / barMs); var n = o.prog.length; return o.prog[((bar % n) + n) % n]; }
+        function nextGrid(t) { return o.t0 + Math.ceil((t - o.t0 + 1e-6) / stepMs) * stepMs; }
+        function tonesAt(t) { return ladder(o.key, chordAt(t), o.lo, o.hi); }
+        // continuous pitch for a height: top of the frame is hi, bottom lo, with a margin so the edges are reachable
+        function pitchOf(y) { var u = (0.92 - y) / 0.84; u = u < 0 ? 0 : u > 1 ? 1 : u; return o.lo + u * (o.hi - o.lo); }
+        function nearest(tones, p) { var b = tones[0]; for (var i = 1; i < tones.length; i++) if (Math.abs(tones[i] - p) < Math.abs(b - p)) b = tones[i]; return b; }
+
+        // pick which detected hand is the lead: the one closest to where the lead hand was.
+        // Handedness labels are ignored on purpose - MediaPipe swaps them.
+        function pick(hands) {
+            if (!hands || !hands.length) return null;
+            var best = null, bd = 1e9;
+            for (var i = 0; i < hands.length; i++) {
+                var p = hands[i].palm || palm(hands[i].landmarks), x = o.mirror ? 1 - p.x : p.x;
+                var d = tracked ? Math.hypot(x - tracked.x, p.y - tracked.y) : -x; // first sight: the right-most hand
+                if (d < bd) { bd = d; best = {x: x, y: p.y, hand: hands[i]}; }
+            }
+            return best;
+        }
+
+        var state = {
+            present: false, x: 0.5, y: 0.5, px: 0.5, py: 0.5, pitch: 60, cutoff: 0.5, speed: 0, vel: 0.6,
+            note: null, chord: 'vi', held: false
+        };
+
+        function step(hands, t) {
+            var ev = [];
+            if (lastT !== null) frameMs = frameMs * 0.8 + Math.min(200, t - lastT) * 0.2;
+            lastT = t;
+            var h = pick(hands);
+            if (h) {
+                if (tracked && t - lastSeen > o.holdMs) { fx.reset(); fy.reset(); }
+                tracked = {x: h.x, y: h.y}; lastSeen = t;
+                var x = fx.step(h.x, t), y = fy.step(h.y, t);
+                var vx = fx.speed, vy = fy.speed;
+                state.x = x; state.y = y;
+                // extrapolate to undo part of the camera-plus-detector delay
+                state.px = x + vx * o.predictMs / 1000; state.py = y + vy * o.predictMs / 1000;
+                state.speed = Math.hypot(vx, vy);
+                state.present = true; state.held = false;
+            } else if (state.present && t - lastSeen <= o.holdMs) {
+                state.held = true;   // keep the last pose: a short dropout must not cut the note
+            } else {
+                state.present = false; state.held = false; tracked = null;
+            }
+            state.chord = chordAt(t);
+
+            // continuous parameters: straight from the hand, never quantised
+            if (state.present && !state.held) {
+                var cx = state.px < 0 ? 0 : state.px > 1 ? 1 : state.px;
+                state.cutoff = cx;
+                state.pitch = pitchOf(state.py);
+            }
+
+            // discrete: what note the hand asks for, with hysteresis
+            // the chord that will be playing when a note asked for now can start
+            var g = nextGrid(Math.max(t + o.minLead, lastEventT)), commitNow = g - t <= Math.max(45, frameMs * 1.5);
+            var tones = tonesAt(g), want = null;
+            if (state.present) {
+                var p = state.pitch, cur = pending ? pending.midi : note;
+                var cand = nearest(tones, p);
+                if (cur === null || tones.indexOf(cur) < 0) want = cand;
+                else if (cand !== cur && Math.abs(p - cur) - Math.abs(p - cand) > o.hyst) want = cand;
+                else want = cur;
+            }
+            // velocity from how fast the hand is moving: a sweep plays harder than a drift
+            var vel = 0.45 + Math.min(1, state.speed / 1.6) * 0.55;
+
+            var target = want;
+            var sound = sounding ? note : null;
+            if (target === sound) pending = null;
+            else if (!pending || pending.midi !== target) pending = {midi: target, vel: vel};
+            else pending.vel = Math.max(pending.vel, vel);
+
+            // commit the pending change on the next grid point if the next frame may come too late for it
+            if (pending) {
+                if (commitNow) {
+                    var midi = pending.midi;
+                    if (midi !== null) {
+                        ev.push({type: 'on', t: g, midi: midi, vel: pending.vel, legato: sounding});
+                        note = midi; sounding = true;
+                    } else if (sounding) {
+                        ev.push({type: 'off', t: g});
+                        note = null; sounding = false;
+                    }
+                    pending = null; lastEventT = g;
+                }
+            }
+            // chord change under a held note: move to the new chord on its downbeat
+            // (a held note whose chord changes is covered above: want is chosen from the chord at g)
+            state.note = note;
+            state.vel = vel;
+            return {events: ev, state: state};
+        }
+
+        return {
+            step: step, state: state, chordAt: chordAt, tonesAt: tonesAt, nextGrid: nextGrid, pitchOf: pitchOf,
+            get stepMs() { return stepMs; }, get barMs() { return barMs; }, opt: o,
+            chordName: function (t) { return chordName(o.key, chordAt(t)); }
+        };
+    }
+
+    function midiName(m) { return NAMES[m % 12] + (Math.floor(m / 12) - 1); }
+    function freq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+    return {oneEuro: oneEuro, mapper: mapper, ladder: ladder, palm: palm, CHORDS: CHORDS, PROGRESSIONS: PROGRESSIONS,
+        chordName: chordName, midiName: midiName, freq: freq};
+})();
+</script>
+
+<script>
+'use strict';
+var $ = function (id) { return document.getElementById(id); };
+var params = new URLSearchParams(location.search);
+var BPM = 96;
+
+// ---------- sound ----------
+// Built for any BaseAudioContext so the test suite can render it offline.
+function Engine(ctx, opt) {
+    opt = opt || {};
+    var wave = opt.wave || 'sawtooth';
+    var out = ctx.createDynamicsCompressor();           // limiter
+    out.threshold.value = -3; out.knee.value = 0; out.ratio.value = 20; out.attack.value = 0.002; out.release.value = 0.12;
+    var ceiling = ctx.createGain(); ceiling.gain.value = 0.89;     // about -1 dBFS after the limiter
+    out.connect(ceiling); ceiling.connect(ctx.destination);
+    var bus = ctx.createGain(); bus.gain.value = 0.7; bus.connect(out);
+
+    // reverb from a generated impulse: decaying stereo noise, darker as it fades
+    var verb = ctx.createConvolver();
+    (function () {
+        var len = Math.floor(ctx.sampleRate * 2.6), ir = ctx.createBuffer(2, len, ctx.sampleRate), s = 12345;
+        for (var c = 0; c < 2; c++) {
+            var d = ir.getChannelData(c), lp = 0;
+            for (var i = 0; i < len; i++) {
+                s = (s * 1103515245 + 12345) & 0x7fffffff;
+                var n = s / 0x3fffffff - 1, k = i / len;
+                lp += (n - lp) * (0.9 - 0.75 * k);
+                d[i] = lp * Math.pow(1 - k, 3.2) * (i < ctx.sampleRate * 0.012 ? i / (ctx.sampleRate * 0.012) : 1);
+            }
+        }
+        verb.buffer = ir;
+    })();
+    var verbIn = ctx.createGain(); verbIn.gain.value = 0.32; verbIn.connect(verb); verb.connect(bus);
+    // tempo delay, dotted eighth
+    var dly = ctx.createDelay(2), fb = ctx.createGain(), dlp = ctx.createBiquadFilter(), dIn = ctx.createGain();
+    dly.delayTime.value = 60 / BPM * 0.75; fb.gain.value = 0.32; dlp.type = 'lowpass'; dlp.frequency.value = 2600; dIn.gain.value = 0.22;
+    dIn.connect(dly); dly.connect(dlp); dlp.connect(fb); fb.connect(dly); dlp.connect(bus); dlp.connect(verbIn);
+    // sidechain: the kick ducks pad and lead slightly
+    var duck = ctx.createGain(); duck.gain.value = 1; duck.connect(bus); duck.connect(verbIn);
+
+    // ---- lead voice: three detuned saws, resonant low-pass, one envelope ----
+    var lead = ctx.createGain(); lead.gain.value = 0;
+    var filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.Q.value = 7; filt.frequency.value = 900;
+    var mix = ctx.createGain(); mix.gain.value = 0.16;
+    var oscs = [-11, 0, 11].map(function (dt) {
+        var o = ctx.createOscillator(); o.type = wave; o.frequency.value = 220; o.detune.value = wave === 'sine' ? 0 : dt; o.connect(mix); o.start(); return o;
+    });
+    var sub = ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = 110; var subG = ctx.createGain(); subG.gain.value = 0.18;
+    sub.connect(subG); subG.connect(filt); sub.start();
+    mix.connect(filt); filt.connect(lead); lead.connect(duck); lead.connect(dIn); lead.connect(verbIn);
+
+    function noteOn(t, midi, vel, legato) {
+        var f = Core.freq(midi);
+        oscs.forEach(function (o) { o.frequency.cancelScheduledValues(t); o.frequency.setTargetAtTime(f, t, legato ? 0.028 : 0.004); });
+        sub.frequency.cancelScheduledValues(t); sub.frequency.setTargetAtTime(f / 2, t, legato ? 0.028 : 0.004);
+        var g = lead.gain, peak = 0.22 + 0.5 * vel;
+        g.cancelScheduledValues(t);
+        if (opt.clicky) g.setValueAtTime(peak, t);   // the test suite's control: what a click looks like
+        g.setTargetAtTime(peak, t, 0.005);
+        g.setTargetAtTime(peak * 0.62, t + 0.04, 0.18);
+        // a filter blip per note, as detune so the hand keeps owning frequency
+        filt.detune.cancelScheduledValues(t);
+        filt.detune.setTargetAtTime(1200 * vel, t, 0.003);
+        filt.detune.setTargetAtTime(0, t + 0.02, 0.12);
+    }
+    function noteOff(t) {
+        lead.gain.cancelScheduledValues(t); lead.gain.setTargetAtTime(0, t, 0.09);
+    }
+    // continuous control: follows immediately, smoothed over ~12 ms so steps in the tracking cannot zip
+    function setCutoff(u, t) {
+        var hz = 180 * Math.pow(2, u * 5.6);  // 180 Hz .. ~8.7 kHz
+        filt.frequency.setTargetAtTime(hz, t == null ? ctx.currentTime : t, 0.012);
+    }
+
+    // ---- quiet backing so the grid and the chord are audible ----
+    var padBus = ctx.createGain(); padBus.gain.value = 0.11; padBus.connect(duck);
+    var padLp = ctx.createBiquadFilter(); padLp.type = 'lowpass'; padLp.frequency.value = 1400; padLp.connect(padBus);
+    function pad(t, dur, midis) {
+        midis.forEach(function (m, i) {
+            [-6, 6].forEach(function (dt) {
+                var o = ctx.createOscillator(), g = ctx.createGain();
+                o.type = wave === 'sine' ? 'sine' : 'triangle'; o.frequency.value = Core.freq(m); o.detune.value = wave === 'sine' ? 0 : dt;
+                g.gain.setValueAtTime(0, t); g.gain.setTargetAtTime(0.5 / midis.length, t, 0.25); g.gain.setTargetAtTime(0, t + dur - 0.1, 0.18);
+                o.connect(g); g.connect(padLp); o.start(t); o.stop(t + dur + 1.2);
+            });
+        });
+    }
+    var noiseBuf = (function () { var b = ctx.createBuffer(1, ctx.sampleRate / 4, ctx.sampleRate), d = b.getChannelData(0), s = 99; for (var i = 0; i < d.length; i++) { s = (s * 1103515245 + 12345) & 0x7fffffff; d[i] = s / 0x3fffffff - 1; } return b; })();
+    function hat(t, v) {
+        if (wave === 'sine') return;
+        var n = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), g = ctx.createGain();
+        n.buffer = noiseBuf; hp.type = 'highpass'; hp.frequency.value = 7000;
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05 * v, t + 0.001); g.gain.setTargetAtTime(0, t + 0.002, 0.018);
+        n.connect(hp); hp.connect(g); g.connect(bus); n.start(t); n.stop(t + 0.15);
+    }
+    function kick(t, v) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.55 * v, t + 0.003); g.gain.setTargetAtTime(0, t + 0.01, 0.07);
+        o.connect(g); g.connect(bus); o.start(t); o.stop(t + 0.5);
+        duck.gain.cancelScheduledValues(t); duck.gain.setTargetAtTime(0.62, t, 0.004); duck.gain.setTargetAtTime(1, t + 0.03, 0.09);
+    }
+    function bass(t, dur, midi) {
+        var o = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+        o.type = wave === 'sine' ? 'sine' : 'sawtooth'; o.frequency.value = Core.freq(midi); lp.type = 'lowpass'; lp.frequency.value = 320; lp.Q.value = 2;
+        g.gain.setValueAtTime(0, t); g.gain.setTargetAtTime(0.16, t, 0.006); g.gain.setTargetAtTime(0, t + dur - 0.04, 0.03);
+        o.connect(lp); lp.connect(g); g.connect(duck); o.start(t); o.stop(t + dur + 0.3);
+    }
+    return {noteOn: noteOn, noteOff: noteOff, setCutoff: setCutoff, pad: pad, hat: hat, kick: kick, bass: bass, out: out};
+}
+
+// schedule the backing for one step of the grid (step index from the mapper's t0)
+function backingStep(eng, m, i, at, key) {
+    var stepS = m.stepMs / 1000, inBar = ((i % 16) + 16) % 16;
+    var roman = m.opt.prog[Math.floor(i / 16) % m.opt.prog.length], iv = Core.CHORDS[roman];
+    if (inBar === 0) {
+        eng.pad(at, stepS * 16, iv.map(function (s) { return 60 + key + s; }));
+    }
+    if (inBar % 4 === 0) eng.kick(at, inBar === 0 ? 1 : 0.7);
+    if (inBar % 2 === 0) eng.hat(at, inBar % 4 === 2 ? 1 : 0.5);
+    if (inBar % 4 === 2 || inBar === 0) eng.bass(at, stepS * 1.6, 36 + key + iv[0] + (iv[0] > 7 ? -12 : 0) + 12);
+}
+
+// Render a scripted performance offline: used by test/air_synth_browser.mjs.
+// script: [{t: ms, hands: [...] | null}] at frame rate; returns the rendered buffer and the events.
+window.renderOffline = async function (script, seconds, opt) {
+    var sr = 44100, ctx = new OfflineAudioContext(2, Math.ceil(sr * seconds), sr), eng = Engine(ctx, opt);
+    var m = Core.mapper({bpm: BPM, t0: 0}), evs = [];
+    for (var i = 0; i * m.stepMs < seconds * 1000; i++) backingStep(eng, m, i, i * m.stepMs / 1000, 0);
+    script.forEach(function (f) {
+        var r = m.step(f.hands, f.t);
+        eng.setCutoff(r.state.cutoff, f.t / 1000);
+        r.events.forEach(function (e) {
+            evs.push(e);
+            if (e.type === 'on') eng.noteOn(e.t / 1000, e.midi, e.vel, e.legato); else eng.noteOff(e.t / 1000);
+        });
+    });
+    var buf = await ctx.startRendering();
+    return {buf: buf, events: evs};
+};
+
+// ---------- live instrument ----------
+var cv = $('stage'), g2 = cv.getContext('2d'), DPR = Math.min(2, window.devicePixelRatio || 1);
+var W = 0, H = 0;
+function resize() { W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; g2.setTransform(DPR, 0, 0, DPR, 0, 0); }
+addEventListener('resize', resize); resize();
+
+var ac = null, eng = null, mp = null, clockOff = 0;   // perf ms = audio s * 1000 + clockOff
+var mode = 'mouse', video = null, landmarker = null;
+var pointer = null;          // {x, y} in 0..1 screen space while pressed
+var camHands = null, camT = 0;
+var stats = {frames: 0, withHand: 0, detMs: [], interval: [], lastFrameT: 0, onsets: 0, waitMs: []};
+var log = [];                // last events, for the screen and for tests
+window.__air = {stats: stats, log: log, get mapper() { return mp; }, get mode() { return mode; }, get ctx() { return ac; }};
+
+function perfToAudio(t) { return (t - clockOff) / 1000; }
+
+function startAudio() {
+    if (ac) return;
+    ac = new (window.AudioContext || window.webkitAudioContext)({latencyHint: 'interactive'});
+    eng = Engine(ac);
+    var now = performance.now();
+    clockOff = now - ac.currentTime * 1000;
+    mp = Core.mapper({bpm: BPM, t0: now + 120, mirror: true});
+    // backing scheduler: lookahead on a timer, never in requestAnimationFrame
+    var nextStep = 0;
+    setInterval(function () {
+        var horizon = performance.now() + 160;
+        while (mp.opt.t0 + nextStep * mp.stepMs < horizon) {
+            backingStep(eng, mp, nextStep, perfToAudio(mp.opt.t0 + nextStep * mp.stepMs), 0);
+            nextStep++;
+        }
+    }, 25);
+    setInterval(feedPointer, 16);
+}
+
+// one place where hands - from the camera or a stand-in from the pointer - go into the mapper
+function feed(hands, t) {
+    var r = mp.step(hands, t);
+    if (r.state.present && !r.state.held) eng.setCutoff(r.state.cutoff, Math.max(ac.currentTime, perfToAudio(t)));
+    r.events.forEach(function (e) {
+        var at = perfToAudio(e.t);
+        if (e.type === 'on') { eng.noteOn(at, e.midi, e.vel, e.legato); stats.onsets++; stats.waitMs.push(e.t - t); }
+        else eng.noteOff(at);
+        log.push(e); if (log.length > 64) log.shift();
+        if (e.type === 'on') spawn(e.midi, e.vel);
+    });
+}
+
+function pointerHand(p) {
+    // a mouse is a perfect hand: the same palm the camera would give, already in mirrored screen space
+    var x = 1 - p.x, y = p.y, lm = [];
+    for (var i = 0; i < 21; i++) lm.push({x: x, y: y, z: 0});
+    return [{landmarks: lm, palm: {x: x, y: y}, pointer: true}];
+}
+function feedPointer() {
+    if (!mp || mode === 'camera' && camHands && camHands.length) return;
+    if (mode === 'camera' && performance.now() - camT < 300 && !pointer) return;  // the camera loop feeds
+    feed(pointer ? pointerHand(pointer) : null, performance.now());
+}
+function setPointer(e) { pointer = {x: e.clientX / W, y: e.clientY / H}; }
+cv.addEventListener('pointerdown', function (e) { if (!ac) return; cv.setPointerCapture(e.pointerId); setPointer(e); hint(''); });
+cv.addEventListener('pointermove', function (e) { if (pointer) setPointer(e); });
+['pointerup', 'pointercancel'].forEach(function (n) { cv.addEventListener(n, function () { pointer = null; }); });
+
+// ---------- camera ----------
+var MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+var make = null;
+var MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+async function startCamera() {
+    mode = 'camera'; $('modeName').textContent = 'starting camera…';
+    try {
+        var stream = await navigator.mediaDevices.getUserMedia({video: {width: {ideal: 640}, height: {ideal: 480}, facingMode: 'user', frameRate: {ideal: 30}}, audio: false});
+        video = document.createElement('video'); video.muted = true; video.playsInline = true; video.srcObject = stream; await video.play();
+    } catch (e) {
+        mode = 'mouse'; $('modeName').textContent = 'mouse'; hint('No camera - drag on the screen to play'); return;
+    }
+    hint('Loading the hand model - drag on the screen to play meanwhile');
+    $('modeName').textContent = 'loading model…';
+    try {
+        var lib = await import(MP + '/vision_bundle.mjs');
+        var files = await lib.FilesetResolver.forVisionTasks(MP + '/wasm');
+        make = function (delegate) { return lib.HandLandmarker.createFromOptions(files, {baseOptions: {modelAssetPath: MODEL, delegate: delegate}, runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5}); };
+        var delegate = params.get('delegate') || 'GPU';
+        try { landmarker = await make(delegate); } catch (e) { delegate = 'CPU'; landmarker = await make('CPU'); }
+        stats.delegate = delegate;
+    } catch (e) {
+        $('modeName').textContent = 'mouse'; mode = 'mouse'; hint('The hand model did not load - drag on the screen to play'); return;
+    }
+    $('modeName').textContent = 'camera';
+    hint('Hold a hand up - higher plays higher');
+    var lastVT = -1, switching = false;
+    var tick = function () {
+        if (video.readyState >= 2 && video.currentTime !== lastVT) {
+            lastVT = video.currentTime;
+            var t = performance.now(), res = landmarker.detectForVideo(video, t), done = performance.now();
+            stats.frames++; stats.detMs.push(done - t); if (stats.detMs.length > 120) stats.detMs.shift();
+            if (stats.lastFrameT) { stats.interval.push(t - stats.lastFrameT); if (stats.interval.length > 120) stats.interval.shift(); }
+            stats.lastFrameT = t;
+            // a GPU delegate on a machine without a real GPU (software WebGL) can be ten times slower than the CPU one:
+            // time the first frames and switch once if it is
+            if (stats.delegate === 'GPU' && !params.get('delegate') && !switching && stats.detMs.length === 5 && med(stats.detMs.slice(1)) > 45) {
+                switching = true;
+                make('CPU').then(function (l) { landmarker = l; stats.delegate = 'CPU'; stats.detMs.length = 0; }, function () {});
+            }
+            var hands = (res.landmarks || []).map(function (lm, i) { return {landmarks: lm, handed: res.handedness && res.handedness[i] && res.handedness[i][0] && res.handedness[i][0].categoryName}; });
+            if (hands.length) stats.withHand++;
+            camHands = hands; camT = done;
+            if (!pointer) feed(hands, done);
+        }
+        if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(tick); else requestAnimationFrame(tick);
+    };
+    tick();
+}
+
+// ---------- picture ----------
+var parts = [];
+function spawn(midi, vel) {
+    if (!mp) return;
+    var s = mp.state, x = s.px * W, y = s.py * H;
+    for (var i = 0; i < 10 + vel * 16; i++) {
+        var a = Math.random() * Math.PI * 2, sp = 30 + Math.random() * 140 * vel;
+        parts.push({x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30, life: 1, hue: 160 + (midi % 12) * 14, r: 1.5 + Math.random() * 2.5});
+    }
+    if (parts.length > 500) parts.splice(0, parts.length - 500);
+}
+var zoneDisp = {};           // midi -> {y, a}: eased so a chord change slides, never jumps
+var cursor = {x: 0.5, y: 0.5, a: 0};
+var lastDraw = performance.now();
+function draw() {
+    var now = performance.now(), dt = Math.min(0.05, (now - lastDraw) / 1000); lastDraw = now;
+    g2.fillStyle = '#07070c'; g2.fillRect(0, 0, W, H);
+    if (video && video.readyState >= 2) {
+        var vw = video.videoWidth, vh = video.videoHeight, sc = Math.max(W / vw, H / vh);
+        g2.save(); g2.globalAlpha = 0.55; g2.translate(W, 0); g2.scale(-1, 1);
+        g2.drawImage(video, (W - vw * sc) / 2, (H - vh * sc) / 2, vw * sc, vh * sc); g2.restore();
+        g2.fillStyle = 'rgba(7,7,12,.25)'; g2.fillRect(0, 0, W, H);
+    }
+    if (mp) {
+        var s = mp.state, tones = mp.tonesAt(now), k = 1 - Math.exp(-dt * 12);
+        // zones: each chord tone owns the band of heights that snaps to it
+        var yOf = function (m) { return (0.92 - (m - mp.opt.lo) / (mp.opt.hi - mp.opt.lo) * 0.84) * H; };
+        Object.keys(zoneDisp).forEach(function (m) { var z = zoneDisp[m]; z.ta = tones.indexOf(+m) >= 0 ? 1 : 0; });
+        tones.forEach(function (m) { if (!zoneDisp[m]) zoneDisp[m] = {y: yOf(m), a: 0, ta: 1, hl: 0}; });
+        g2.font = '600 12px system-ui,sans-serif'; g2.textBaseline = 'middle';
+        Object.keys(zoneDisp).forEach(function (key) {
+            var m = +key, z = zoneDisp[key];
+            z.a += (z.ta - z.a) * k; z.y += (yOf(m) - z.y) * k;
+            z.hl += ((s.note === m && s.present ? 1 : 0) - z.hl) * (1 - Math.exp(-dt * 18));
+            if (z.a < 0.01 && z.ta === 0) { delete zoneDisp[key]; return; }
+            // the chord's root is pink, its other tones green; a new chord fades the colours over, never flips them
+            var isRoot = Core.CHORDS[mp.chordAt(now)][0] % 12 === (m - mp.opt.key + 120) % 12 ? 1 : 0;
+            if (z.root == null) z.root = isRoot;
+            z.root += (isRoot - z.root) * k;
+            var col = 'rgb(' + Math.round(124 + 131 * z.root) + ',' + Math.round(247 - 125 * z.root) + ',' + Math.round(212 - 28 * z.root) + ')';
+            g2.globalAlpha = z.a * (0.25 + 0.55 * z.hl);
+            g2.strokeStyle = col; g2.lineWidth = 1 + 3 * z.hl;
+            g2.beginPath(); g2.moveTo(64, z.y); g2.lineTo(W - 12, z.y); g2.stroke();
+            g2.globalAlpha = z.a * (0.55 + 0.45 * z.hl); g2.fillStyle = col;
+            g2.fillText(Core.midiName(m), 14, z.y);
+        });
+        g2.globalAlpha = 1;
+        // beat grid
+        var stepI = Math.floor((now - mp.opt.t0) / mp.stepMs), inBar = ((stepI % 16) + 16) % 16;
+        var gw = Math.min(W - 32, 420), gx = (W - gw) / 2, gy = H - 26;
+        for (var i = 0; i < 16; i++) {
+            var on = i === inBar, frac = on ? 1 - ((now - mp.opt.t0) % mp.stepMs) / mp.stepMs : 0;
+            g2.fillStyle = on ? 'rgba(124,247,212,' + (0.5 + 0.5 * frac) + ')' : i % 4 === 0 ? 'rgba(255,255,255,.32)' : 'rgba(255,255,255,.14)';
+            g2.beginPath(); g2.arc(gx + (i + 0.5) * gw / 16, gy, i % 4 === 0 ? 4 : 3, 0, 7); g2.fill();
+        }
+        // filter meter along the bottom: shows that left-right is doing something
+        g2.fillStyle = 'rgba(255,122,184,.6)'; g2.fillRect(gx, gy + 12, gw * s.cutoff, 3);
+        $('chordName').textContent = mp.chordName(now);
+        // the hand
+        cursor.a += ((s.present ? 1 : 0) - cursor.a) * (1 - Math.exp(-dt * 10));
+        if (s.present) { cursor.x += (s.px - cursor.x) * (1 - Math.exp(-dt * 40)); cursor.y += (s.py - cursor.y) * (1 - Math.exp(-dt * 40)); }
+        if (cursor.a > 0.01) {
+            var cx = cursor.x * W, cy = cursor.y * H, sn = s.note != null ? yOf(s.note) : cy;
+            g2.globalAlpha = cursor.a * 0.5; g2.strokeStyle = '#fff'; g2.lineWidth = 1.5;
+            g2.beginPath(); g2.moveTo(cx, cy); g2.lineTo(cx, sn); g2.stroke();
+            g2.globalAlpha = cursor.a; g2.fillStyle = s.held ? '#9c97b8' : '#fff';
+            g2.beginPath(); g2.arc(cx, cy, 9 + 5 * s.vel, 0, 7); g2.fill();
+            g2.globalAlpha = 1;
+        }
+    }
+    // landmarks
+    if (camHands && performance.now() - camT < 200) {
+        g2.fillStyle = 'rgba(255,255,255,.6)';
+        camHands.forEach(function (h) { h.landmarks.forEach(function (p) { var vw = video.videoWidth, vh = video.videoHeight, sc = Math.max(W / vw, H / vh), ox = (W - vw * sc) / 2, oy = (H - vh * sc) / 2; g2.beginPath(); g2.arc(W - (ox + p.x * vw * sc), oy + p.y * vh * sc, 2.2, 0, 7); g2.fill(); }); });
+    }
+    for (var j = parts.length - 1; j >= 0; j--) {
+        var p = parts[j]; p.life -= dt * 1.4; if (p.life <= 0) { parts.splice(j, 1); continue; }
+        p.vx *= 1 - dt * 2; p.vy = p.vy * (1 - dt * 2) + 60 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+        g2.globalAlpha = p.life; g2.fillStyle = 'hsl(' + p.hue + ',90%,70%)';
+        g2.beginPath(); g2.arc(p.x, p.y, p.r * p.life, 0, 7); g2.fill();
+    }
+    g2.globalAlpha = 1;
+    if (statsOn && ac) showStats();
+    requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+var statsOn = params.has('stats');
+addEventListener('keydown', function (e) { if (e.key === 's') { statsOn = !statsOn; $('stats').style.display = statsOn ? 'block' : 'none'; } });
+var med = function (a) { if (!a.length) return 0; var b = a.slice().sort(function (x, y) { return x - y; }); return b[b.length >> 1]; };
+function showStats() {
+    var out = ((ac.baseLatency || 0) + (ac.outputLatency || 0)) * 1000;
+    $('stats').style.display = 'block';
+    $('stats').textContent = 'camera fps  ' + (stats.interval.length ? (1000 / med(stats.interval)).toFixed(1) : '-') +
+        '\ndetect ms   ' + med(stats.detMs).toFixed(1) +
+        '\nhand found  ' + (stats.frames ? (100 * stats.withHand / stats.frames).toFixed(0) + '%' : '-') +
+        '\ngrid wait   ' + med(stats.waitMs.slice(-64)).toFixed(0) + ' ms' +
+        '\naudio out   ' + out.toFixed(0) + ' ms' +
+        '\ndelegate    ' + (stats.delegate || '-');
+}
+
+var hintTimer = 0;
+function hint(t) { var h = $('hint'); clearTimeout(hintTimer); if (!t) { h.style.opacity = 0; return; } h.textContent = t; h.style.opacity = 1; hintTimer = setTimeout(function () { h.style.opacity = 0; }, 6000); }
+
+function go(withCam) {
+    $('intro').classList.add('gone');
+    startAudio();
+    if (ac.state === 'suspended') ac.resume();
+    if (withCam) startCamera(); else hint('Drag up and down to play - right is brighter');
+}
+$('goCam').onclick = function () { go(true); };
+$('goMouse').onclick = function () { go(false); };
+</script>
+<script src="../logo.js"></script>
+</body>
+</html>
