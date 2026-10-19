@@ -190,15 +190,17 @@ var Core = (function () {
     function gestures(opt) {
         opt = opt || {};
         var on = opt.on || 1.22, off = opt.off || 1.06, minMs = opt.minMs == null ? 90 : opt.minMs, holdMs = opt.holdMs || 220;
-        var pOn = 0.28, pOff = 0.45;
-        var ext = [false, false, false, false], r = null, raw = null, rawSince = 0, pose = null, lastSeen = -1e9;
+        // pinch thresholds in palm lengths (wrist to middle knuckle). Thumb and index tips touching measure about 0.15-0.3
+        // on MediaPipe's points; a relaxed hand is 0.6 or more.
+        var pOn = 0.36, pOff = 0.52;
+        var ext = [false, false, false, false], curl = [false, false, false, false], r = null, raw = null, rawSince = 0, pose = null, lastSeen = -1e9;
         var pinRaw = false, pinSince = 0, pin = false, lastPinch = -1e9;
         var out = {pose: null, pinch: false, pinchOn: false};
         function step(lm, t, forced) {
             out.pinchOn = false;
             if (forced) { pose = forced; lastSeen = t; out.pose = pose; out.pinch = false; return out; }
             if (!lm) {
-                if (t - lastSeen > holdMs) { pose = null; raw = null; r = null; pin = pinRaw = false; ext = [false, false, false, false]; }
+                if (t - lastSeen > holdMs) { pose = null; raw = null; r = null; pin = pinRaw = false; ext = [false, false, false, false]; curl = [false, false, false, false]; }
                 out.pose = pose; out.pinch = pin; return out;
             }
             lastSeen = t;
@@ -206,20 +208,32 @@ var Core = (function () {
             var r0 = reach(lm), n = 0;
             r = r ? r.map(function (v, i) { return v + 0.45 * (r0[i] - v); }) : r0;
             for (var i = 0; i < 4; i++) { ext[i] = ext[i] ? r[i] > off : r[i] > on; if (ext[i]) n++; }
-            var rp = n === 0 ? 'fist' : n === 1 ? 'one' : n === 2 ? 'two' : 'open';
+            // a finger is curled only if its tip is tucked in near the wrist; a relaxed or half-bent finger is neither
+            // out nor curled, and a hand of those keeps the pose it had (a hand on its way into a pinch is not a fist)
+            var pl = Math.max(1e-6, dist(lm[0], lm[9])), curled = 0;
+            for (var c = 0; c < 4; c++) { var tip = dist(lm[FINGERS[c][0]], lm[0]) / pl; curl[c] = curl[c] ? tip < 1.25 : tip < 1.1; if (curl[c]) curled++; }
+            var rp = n >= 3 ? 'open'
+                : ext[0] && ext[1] && !ext[2] && !ext[3] ? 'two'
+                : ext[0] && n === 1 ? 'one'
+                : !ext[0] && curled >= 3 ? 'fist'
+                : pose || 'open';
             if (pose === null) { pose = raw = rp; rawSince = t; }
+            else if (pinRaw) { raw = pose; rawSince = t; }   // a pinch curls the index: it must not switch the pose
             else {
                 if (rp !== raw) { raw = rp; rawSince = t; }
                 if (raw !== pose && t - rawSince >= minMs) pose = raw;
             }
-            // pinch: thumb meets index while another finger stays out (so a fist is never a pinch)
-            var pr = pinchRatio(lm), pnow = pinRaw ? pr < pOff : pr < pOn && (ext[1] || ext[2] || ext[3]);
+            // pinch: thumb meets index out in front of the palm. In a fist the index tip is curled in next to the
+            // wrist (under one palm length from it); in a pinch it is out at the thumb, whatever the other fingers do.
+            var out8 = dist(lm[8], lm[0]) / pl;
+            // and never from a fist: there the thumb lies across the index, 0.2 palm lengths from its tip
+            var pr = pinchRatio(lm), pnow = pose !== 'fist' && (pinRaw ? pr < pOff && out8 > 0.9 : pr < pOn && out8 > 1.05);
             if (pnow !== pinRaw) { pinRaw = pnow; pinSince = t; }
             if (pinRaw !== pin && t - pinSince >= 60) {
                 pin = pinRaw;
                 if (pin && t - lastPinch > 400) { out.pinchOn = true; lastPinch = t; }
             }
-            out.pose = pose; out.pinch = pin; out.reach = r; out.pinchRatio = pr;
+            out.pose = pose; out.pinch = pin; out.reach = r; out.pinchRatio = pr; out.indexOut = out8;
             return out;
         }
         return {step: step, get pose() { return pose; }};
@@ -310,7 +324,7 @@ var Core = (function () {
 
         var state = {
             present: false, held: false, x: 0.5, y: 0.5, px: 0.5, py: 0.5, pitch: 60, cutoff: 0.5, speed: 0, vel: 0.6,
-            note: null, chord: 'vi', mode: 'off', pose: null, energy: 0, space: 0.3, chordSkip: null,
+            note: null, chord: 'vi', mode: 'off', pose: null, energy: 0, space: 0.3, chordSkip: null, pinch: false, pinchRatio: null, indexOut: null,
             b: {present: false, x: 0.5, y: 0.5, pose: null}
         };
 
@@ -326,6 +340,7 @@ var Core = (function () {
             state.b.present = B.present; state.b.x = B.px; state.b.y = B.py; state.b.pose = B.pose;
             state.chord = chordAt(t);
             if (gA.pinchOn || gB.pinchOn) nextChord(t);
+            state.pinch = gA.pinch || gB.pinch; state.pinchRatio = gA.pinchRatio; state.indexOut = gA.indexOut;
 
             var mode = !A.present ? 'off' : A.pose === 'fist' ? 'rest' : (A.pose === 'two') !== latch ? 'arp' : 'melody';
             state.mode = mode;
@@ -409,7 +424,7 @@ var Core = (function () {
     // Levels change only on a bar line and by one at a time; a fist stops the drums with a fill and a hit,
     // opening it again brings them back on the next bar line with a roll and a crash.
     function arranger(m) {
-        var level = 0, mode = 'normal', stopAt = -1, dropAt = -1, nextLevel = null, holdUntil = -1, prevChord = null, voicing = null;
+        var level = 0, mode = 'normal', stopAt = -1, dropAt = -1, nextLevel = null, holdUntil = -1, away = 0, prevChord = null, voicing = null;
         var UP = [0.12, 0.34, 0.6], DN = [0.05, 0.24, 0.48];
         var BASS3 = [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1];
         function target(e, cur) { if (cur < 3 && e > UP[cur]) return cur + 1; if (cur > 0 && e < DN[cur - 1]) return cur - 1; return cur; }
@@ -421,16 +436,25 @@ var Core = (function () {
             if (mode === 'normal' && s.rest && inBeat === 0) { mode = 'stopping'; stopAt = i + 4; nextLevel = null; }
             if (mode === 'stopping' && i === stopAt) { mode = 'break'; hits.push({kind: 'crash', v: 0.6}, {kind: 'kick', v: 1}, {kind: 'bed', open: false}); }
             else if (mode === 'break' && !s.rest) {
-                if (!s.present) { mode = 'normal'; level = 0; hits.push({kind: 'bed', open: true}); }
-                else { dropAt = i - inBar + 16; if (dropAt - i < 4) dropAt += 16; mode = 'rising'; hits.push({kind: 'riser', steps: dropAt - i}); }
+                // a fist the tracker loses for a moment is still a fist: only two bars without any hand end the break
+                if (!s.present) { if (++away > 32) { mode = 'normal'; level = 0; hits.push({kind: 'bed', open: true}); } }
+                else {
+                    // the hand opened: build from now to the next bar line (at least a beat away), then drop
+                    dropAt = i - inBar + 16; if (dropAt - i < 4) dropAt += 16; mode = 'rising';
+                    hits.push({kind: 'riser', steps: dropAt - i}, {kind: 'bed', sweep: dropAt - i});
+                }
+            } else if (mode === 'rising' && s.rest && i < dropAt - 4) { mode = 'break'; hits.push({kind: 'bed', open: false}); }  // a fist again before the last beat: back to the break
+            if (mode === 'break' && (s.rest || s.present)) away = 0;
+            if (mode === 'rising' && i === dropAt) {
+                mode = 'normal'; level = 3; nextLevel = null; holdUntil = i + 32;
+                hits.push({kind: 'crash', v: 1}, {kind: 'boom'}, {kind: 'bed', open: true});
             }
-            if (mode === 'rising' && i === dropAt) { mode = 'normal'; level = Math.max(level, 2); nextLevel = null; holdUntil = i + 32; hits.push({kind: 'crash', v: 1}, {kind: 'bed', open: true}); }
             if (mode === 'normal') {
                 if (inBar === 12) { nextLevel = target(s.energy, level); if (nextLevel < level && i < holdUntil) nextLevel = level; }   // a drop holds for two bars
                 if (inBar === 0 && nextLevel !== null) { if (nextLevel === 3 && level < 3) hits.push({kind: 'crash', v: 0.5}); level = nextLevel; nextLevel = null; }
             }
             var fill = mode === 'normal' && inBar >= 12 && nextLevel !== null && nextLevel > level ? inBar - 12
-                : mode === 'stopping' ? i - (stopAt - 4) : mode === 'rising' && dropAt - i <= 4 ? 4 - (dropAt - i) : -1;
+                : mode === 'stopping' ? i - (stopAt - 4) : -1;
 
             var L = level, drums = mode === 'normal' || mode === 'stopping';
             if (drums) {
@@ -443,8 +467,13 @@ var Core = (function () {
                 if (L === 1 && (inBar === 0 || inBar === 8)) hits.push({kind: 'bass', pc: root, steps: 7, v: 0.8});
                 if (L === 2 && i % 2 === 0) hits.push({kind: 'bass', pc: root, oct: inBar === 6 || inBar === 14 ? 1 : 0, steps: 1.5, v: inBeat === 0 ? 1 : 0.75});
                 if (L >= 3 && BASS3[inBar]) hits.push({kind: 'bass', pc: root, oct: inBar % 4 === 2 ? 1 : 0, steps: 0.8, v: inBeat === 0 ? 1 : 0.7});
-            } else if (inBar === 0) hits.push({kind: 'bass', pc: root, steps: 15, v: 0.6});
+            } else if (inBar === 0) hits.push({kind: 'bass', pc: root, steps: 15, v: 0.32});   // the break keeps a soft held root under the pad
             if (fill >= 0) hits.push({kind: 'snare', v: 0.3 + 0.17 * fill, roll: true});
+            // the build: snare on the beats, then eighths for the last two beats, sixteenths for the last one, ever louder
+            if (mode === 'rising') {
+                var left = dropAt - i, every = left <= 4 ? 1 : left <= 8 ? 2 : 4;
+                if (left % every === 0) hits.push({kind: 'snare', v: Math.min(1, 0.35 + 0.65 * (1 - left / 20)), roll: true});
+            }
             return {hits: hits, level: level, mode: mode};
         }
         return {step: step, get level() { return level; }, get mode() { return mode; }};
@@ -601,8 +630,10 @@ function Engine(ctx, opt) {
     // the bed (pad and bass) has its own low-pass, closed in a break and thrown open on the drop
     var bed = ctx.createBiquadFilter(); bed.type = 'lowpass'; bed.frequency.value = 18000; bed.Q.value = 1.2; bed.connect(duck);
     var drums = ctx.createGain(); drums.gain.value = 1; drums.connect(bus);
+    // the loop plays through the bed's filter, so a break muffles it with the band
+    var loopOut = ctx.createGain(); loopOut.gain.value = 0.8; loopOut.connect(bed);
     var leadOut = ctx.createGain(); leadOut.connect(duck); leadOut.connect(dIn); leadOut.connect(verbIn);
-    var loopOut = ctx.createGain(); loopOut.gain.value = 0.8; loopOut.connect(duck); loopOut.connect(dIn); loopOut.connect(verbIn);
+    
 
     var soundI = 0, lead = Voice(ctx, [leadOut], SOUNDS[0], force);
     function setSound(i, t) {
@@ -675,10 +706,23 @@ function Engine(ctx, opt) {
         else if (h.kind === 'riser') {
             if (force) return;
             var dur = h.steps * stepS, r = noise(t, dur + 0.1, 'bandpass', 400, 2, 0.001, 10);
-            r.g.gain.cancelScheduledValues(t); r.g.gain.setValueAtTime(0.0001, t); r.g.gain.exponentialRampToValueAtTime(0.09, t + dur); r.g.gain.setTargetAtTime(0, t + dur, 0.03);
+            r.g.gain.cancelScheduledValues(t); r.g.gain.setValueAtTime(0.0001, t); r.g.gain.exponentialRampToValueAtTime(0.2, t + dur); r.g.gain.setTargetAtTime(0, t + dur, 0.03);
             r.f.frequency.setValueAtTime(400, t); r.f.frequency.exponentialRampToValueAtTime(7000, t + dur);
         }
-        else if (h.kind === 'bed') { bed.frequency.cancelScheduledValues(t); bed.frequency.setTargetAtTime(h.open ? 18000 : 600, t, h.open ? 0.06 : 0.5); }
+        else if (h.kind === 'bed') {
+            bed.frequency.cancelScheduledValues(t);
+            if (h.sweep) { bed.frequency.setValueAtTime(600, t); bed.frequency.exponentialRampToValueAtTime(5000, t + h.sweep * stepS); }
+            else bed.frequency.setTargetAtTime(h.open ? 18000 : 600, t, h.open ? 0.03 : 0.5);
+            // a soft sound has little left for a low-pass to take: the break also turns the loop down
+            if (!h.sweep) { loopOut.gain.cancelScheduledValues(t); loopOut.gain.setTargetAtTime(h.open ? 0.8 : 0.3, t, h.open ? 0.03 : 0.4); }
+        }
+        else if (h.kind === 'boom') {
+            // the drop's sub: a deep sine that dives
+            var bo = ctx.createOscillator(), bg = ctx.createGain();
+            bo.frequency.setValueAtTime(force ? 50 : 70, t); if (!force) bo.frequency.exponentialRampToValueAtTime(32, t + 0.7);
+            bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(0.5, t + 0.006); bg.gain.setTargetAtTime(0, t + 0.05, 0.35);
+            bo.connect(bg); bg.connect(drums); bo.start(t); bo.stop(t + 2);
+        }
         else if (h.kind === 'pad') pad(t, h.midis);
         else if (h.kind === 'bass') {
             var midi = 36 + h.pc + 12 * (h.oct || 0), o = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain(), dur = h.steps * stepS;
@@ -911,7 +955,7 @@ function spawnAt(t, midi, vel, fromLoop) {
 }
 var zoneDisp = {};           // midi -> {y, a}: eased so a chord change fades, never jumps
 var cursor = {x: 0.5, y: 0.5, a: 0}, glow = {e: 0, b: 0}, bHand = {x: 0.2, y: 0.5, a: 0};
-var lastDraw = performance.now();
+var lastDraw = performance.now(), dtLast = 0.016, pinchGlow = 0, skipSeen = null, skipFx = {a: 0, text: '', x: 0, y: 0};
 function yOf(m) { var o = ses.mp.opt; return (0.92 - (m - o.lo) / (o.hi - o.lo) * 0.84) * PH; }
 function vidToScreen(p) {
     var vw = video.videoWidth, vh = video.videoHeight, sc = Math.max(W / vw, PH / vh), ox = (W - vw * sc) / 2, oy = (PH - vh * sc) / 2;
@@ -920,13 +964,14 @@ function vidToScreen(p) {
 var POSE_ICON = {open: '✋', one: '☝', two: '✌', fist: '✊'};
 var HUES = [168, 190, 320, 45, 265];
 function draw() {
-    var now = performance.now(), dt = Math.min(0.05, (now - lastDraw) / 1000); lastDraw = now;
+    var now = performance.now(), dt = Math.min(0.05, (now - lastDraw) / 1000); lastDraw = now; dtLast = dt;
     var k = 1 - Math.exp(-dt * 12);
     g2.fillStyle = '#07070c'; g2.fillRect(0, 0, W, H);
     if (ses) {
         // a glow that breathes with the band: brighter with energy, pulsing with the kick (eased attack, never a flash)
         var band = ses.band, hue = HUES[sceneI];
-        glow.e += ((band.level + (band.mode === 'normal' ? 0 : -0.5)) / 3 - glow.e) * (1 - Math.exp(-dt * 2));
+        // the build swells the glow towards the drop; the break dims it
+        glow.e += ((band.mode === 'rising' ? 1.25 : (band.level + (band.mode === 'normal' ? 0 : -0.5)) / 3) - glow.e) * (1 - Math.exp(-dt * 2));
         var kp = 0;
         kicks.forEach(function (q) { var a = (now - q.t) / 1000; if (a >= 0) kp = Math.max(kp, q.v * (a < 0.03 ? a / 0.03 : Math.exp(-(a - 0.03) / 0.22))); });
         glow.b += (kp - glow.b) * (1 - Math.exp(-dt * 40));
@@ -997,6 +1042,16 @@ function draw() {
             g2.globalAlpha = bHand.a * 0.7; g2.strokeStyle = 'rgb(124,180,255)'; g2.lineWidth = 2;
             g2.beginPath(); g2.arc(bHand.x * W, bHand.y * PH, 12 + 26 * s.space, 0, 7); g2.stroke(); g2.globalAlpha = 1;
         }
+        // a chord asked for (pinch, Space, the button): say which one comes, by the hand, and let it fade
+        if (s.chordSkip !== skipSeen) {
+            skipSeen = s.chordSkip;
+            if (skipSeen !== null) { skipFx = {a: 1, text: '→ ' + mp.chordName(skipSeen + 1), x: cursor.a > 0.5 ? cursor.x * W : W / 2, y: cursor.a > 0.5 ? cursor.y * PH - 46 : PH / 2}; $('chordName').parentNode.style.background = 'rgba(255,122,184,.45)'; setTimeout(function () { $('chordName').parentNode.style.background = ''; }, 350); }
+        }
+        if (skipFx.a > 0.01) {
+            skipFx.a *= Math.exp(-dt * 1.6); skipFx.y -= dt * 18;
+            g2.globalAlpha = Math.min(1, skipFx.a * 1.4); g2.fillStyle = '#ff7ab8'; g2.font = '700 22px system-ui,sans-serif'; g2.textAlign = 'center';
+            g2.fillText(skipFx.text, skipFx.x, skipFx.y); g2.textAlign = 'left'; g2.globalAlpha = 1;
+        }
         // HUD
         $('chordName').textContent = mp.chordName(now);
         var lv = band.mode === 'normal' ? Core.LEVELS[band.level] : band.mode === 'rising' ? 'drop…' : 'break';
@@ -1012,6 +1067,18 @@ function draw() {
     if (camHands && video && performance.now() - camT < 200) {
         g2.fillStyle = 'rgba(255,255,255,.55)';
         camHands.forEach(function (h) { h.landmarks.forEach(function (p) { var q = vidToScreen(p); g2.beginPath(); g2.arc(q.x, q.y, 2.2, 0, 7); g2.fill(); }); });
+        // thumb to index: the pinch's own gauge, brightening as the tips close and lit when it counts
+        if (ses) {
+            var ps = ses.mp.state;
+            pinchGlow += ((ps.pinch ? 1 : 0) - pinchGlow) * (1 - Math.exp(-dtLast * 20));
+            camHands.forEach(function (h) {
+                var a = vidToScreen(h.landmarks[4]), b = vidToScreen(h.landmarks[8]), r = Core.pinchRatio(h.landmarks);
+                var close = Math.max(0, Math.min(1, (0.9 - r) / 0.55));
+                g2.globalAlpha = 0.25 + 0.5 * close + 0.25 * pinchGlow; g2.strokeStyle = 'rgb(255,' + Math.round(220 - 100 * pinchGlow) + ',' + Math.round(120 + 64 * pinchGlow) + ')';
+                g2.lineWidth = 1.5 + 3 * pinchGlow; g2.beginPath(); g2.moveTo(a.x, a.y); g2.lineTo(b.x, b.y); g2.stroke();
+            });
+            g2.globalAlpha = 1;
+        }
     }
     for (var j = parts.length - 1; j >= 0; j--) {
         var p = parts[j]; p.life -= dt * 1.4; if (p.life <= 0) { parts.splice(j, 1); continue; }
@@ -1041,7 +1108,9 @@ function showStats() {
         '\ngrid wait   ' + med(stats.waitMs.slice(-64)).toFixed(0) + ' ms' +
         '\naudio out   ' + out.toFixed(0) + ' ms' +
         '\ndelegate    ' + (stats.delegate || '-') +
-        '\nenergy      ' + (ses ? ses.mp.state.energy.toFixed(2) : '-');
+        '\nenergy      ' + (ses ? ses.mp.state.energy.toFixed(2) : '-') +
+        '\npinch       ' + (ses && ses.mp.state.pinchRatio != null ? ses.mp.state.pinchRatio.toFixed(2) + (ses.mp.state.pinch ? ' ON' : '') + '  (on < 0.36)' : '-') +
+        '\nindex out   ' + (ses && ses.mp.state.indexOut != null ? ses.mp.state.indexOut.toFixed(2) + '  (pinch > 1.05)' : '-');
 }
 
 var hintTimer = 0;

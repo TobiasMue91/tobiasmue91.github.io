@@ -43,7 +43,13 @@ function hand(x, y, label = 'Right', {fingers = [1, 1, 1, 1], reach = null, pinc
         lm[b + 2] = {x: x + dx, y: (lm[b + 1].y + lm[b + 3].y) / 2};
     });
     lm[1] = {x: x + 0.04, y: y + 0.05}; lm[2] = {x: x + 0.06, y: y + 0.02}; lm[3] = {x: x + 0.07, y: y};
-    lm[4] = pinch ? {x: lm[8].x + 0.01, y: lm[8].y + 0.005} : {x: x + 0.08, y: y - 0.01};
+    if (pinch) {
+        // a real pinch: the index bends forward to meet the thumb (its tip out in front, its own reach only ~1.05),
+        // the thumb tip sits `gap` palm lengths away; the other fingers do whatever `others` says
+        const gap = typeof pinch === 'number' ? pinch : 0.2;
+        lm[6] = {x: x - 0.01, y: y - 0.07}; lm[8] = {x: x + 0.045, y: y - 0.075}; lm[7] = {x: x + 0.02, y: y - 0.09};
+        lm[4] = {x: lm[8].x + gap * 0.1 * 0.8, y: lm[8].y + gap * 0.1 * 0.6};
+    } else lm[4] = {x: x + 0.08, y: y - 0.01};
     lm.forEach((p, i) => { lm[i] = {x: p.x + j(), y: p.y + j(), z: 0}; });
     // the five palm points average exactly to (x, y) before jitter
     return {landmarks: lm, handed: label};
@@ -231,16 +237,59 @@ for (const gap of [40, 100, 140]) {
     const g2 = Core.gestures();
     g2.step(hand(0.5, 0.5, 'Right', {fingers: [1, 1, 0, 0]}).landmarks, 0);
     ok(g2.step(null, 150).pose === 'two' && g2.step(null, 400).pose === null, 'a dropout keeps the pose for the hold, not longer');
-    // pinch: one event per pinch, none while it is held, and a fist is never a pinch
-    const g3 = Core.gestures(); let pinches = 0;
-    for (let t = 0; t < 4000; t += 33) {
-        const pin = (t > 500 && t < 1500) || (t > 2500 && t < 3000);
-        if (g3.step(hand(0.5, 0.5, 'Right', {pinch: pin, fingers: [0, 1, 1, 1], jitter: 0.003}).landmarks, t).pinchOn) pinches++;
+    // pinch: one event per pinch, none while it is held - however the other fingers are held, at any realistic gap
+    const pinchCount = (others, gap, jitter = 0.004) => {
+        const g = Core.gestures(); let n = 0, poses = new Set();
+        seed = 9;
+        for (let t = 0; t < 4000; t += 33) {
+            const pin = (t > 500 && t < 1500) || (t > 2500 && t < 3000);
+            const r = g.step(hand(0.5, 0.5, 'Right', {pinch: pin ? gap : false, reach: pin ? others : null, jitter}).landmarks, t);
+            if (r.pinchOn) n++;
+            if (t > 300) poses.add(r.pose);
+        }
+        return {n, poses: [...poses]};
+    };
+    for (const [label, others] of [['relaxed', 1.0], ['stretched (an OK sign)', 1.43], ['curled', 0.6]])
+        for (const gap of [0.1, 0.2, 0.3]) {
+            const r = pinchCount(others, gap);
+            ok(r.n === 2, 'two pinches with the other fingers ' + label + ', tips ' + gap + ' palm lengths apart, are two chord changes (' + r.n + ')');
+            if (gap === 0.2) ok(r.poses.length === 1 && r.poses[0] === 'open', 'and pinching with them ' + label + ' does not change the pose (' + r.poses + ')');
+        }
+    // a slow, real pinch: the other fingers relax first, then the tips close over 300 ms, hold, open again
+    {
+        const g = Core.gestures(); let n = 0; const poses = new Set(); seed = 12;
+        for (let t = 0; t < 2600; t += 33) {
+            let o;
+            if (t < 500) o = {};
+            else if (t < 800) o = {reach: 1.43 - (t - 500) / 300 * 0.43, pinch: 0.8};
+            else if (t < 1100) o = {reach: 1.0, pinch: 0.8 - (t - 800) / 300 * 0.65};
+            else if (t < 1500) o = {reach: 1.0, pinch: 0.15};
+            else if (t < 1800) o = {reach: 1.0, pinch: 0.15 + (t - 1500) / 300 * 0.65};
+            else o = {};
+            const r = g.step(hand(0.5, 0.5, 'Right', {...o, jitter: 0.004}).landmarks, t);
+            if (r.pinchOn) n++;
+            poses.add(r.pose);
+        }
+        ok(n === 1, 'a slow pinch - fingers relax, then the tips close - is one chord change (' + n + ')');
+        ok(!poses.has('fist'), 'and is never taken for a fist on the way (' + [...poses] + ')');
     }
-    ok(pinches === 2, 'two pinches are two chord changes (' + pinches + ')');
-    const g4 = Core.gestures(); let fp = 0;
-    for (let t = 0; t < 2000; t += 33) if (g4.step(hand(0.5, 0.5, 'Right', {pinch: true, fingers: [0, 0, 0, 0]}).landmarks, t).pinchOn) fp++;
-    ok(fp === 0, 'a fist with the thumb on the index is not a pinch');
+    // never a pinch: a fist with the thumb on the index, a relaxed open hand, two fingers, the tips 0.6 apart
+    const never = (opts, name) => { const g = Core.gestures(); let n = 0; seed = 10;
+        for (let t = 0; t < 3000; t += 33) if (g.step(hand(0.5, 0.5, 'Right', {...opts, jitter: 0.004}).landmarks, t).pinchOn) n++;
+        ok(n === 0, name + ' is never a pinch (' + n + ')'); };
+    {
+        // a fist whose thumb lies right on the curled index
+        const g = Core.gestures(); let n = 0; seed = 11;
+        for (let t = 0; t < 3000; t += 33) {
+            const h = hand(0.5, 0.5, 'Right', {fingers: [0, 0, 0, 0], jitter: 0.004});
+            h.landmarks[4] = {x: h.landmarks[8].x + 0.01, y: h.landmarks[8].y - 0.01, z: 0};
+            if (g.step(h.landmarks, t).pinchOn) n++;
+        }
+        ok(n === 0, 'a fist with the thumb on the curled index is never a pinch (' + n + ')');
+    }
+    never({}, 'an open hand');
+    never({fingers: [1, 1, 0, 0]}, 'two fingers');
+    never({pinch: 0.6, reach: 1.0}, 'thumb and index 0.6 palm lengths apart');
 }
 
 // ===== what the poses do =====
@@ -339,6 +388,31 @@ function band(path, seconds = 40, fps = 30) {
     const drop = b.steps.find(s => s.t > 24000 && s.mode === 'normal');
     ok(drop && drop.i % 16 === 0 && drop.hits.some(h => h.kind === 'crash') && drop.level >= 2, 'opening the hand drops the band back in on a bar line, at least at groove');
     ok(b.steps.some(s => s.mode === 'rising' && s.hits.some(h => h.kind === 'riser')), 'with a riser into it');
+}
+
+// ===== the drop, as a player meets it =====
+{
+    const busy = t => ({x: 0.5 + 0.35 * Math.sin(t / 230), y: 0.5 + 0.4 * Math.sin(t / 170)});
+    const fist = [0, 0, 0, 0];
+    // a fist from 10 s; the tracker loses it twice for half a second (fists are hard to track); open at 18 s, then hold still
+    const path = t => t > 12000 && t < 12500 || t > 15000 && t < 15600 ? null
+        : t > 10000 && t < 18000 ? {...busy(t), fingers: fist} : t >= 18000 ? {x: 0.5, y: 0.5} : busy(t);
+    const b = band(path, 30);
+    const brk = b.steps.filter(s => s.t > 10500 && s.t < 18000);
+    ok(brk.length && brk.slice(8).every(s => s.mode === 'break'), 'a fist the tracker loses for 500-600 ms stays a break');
+    const rise = b.steps.find(s => s.mode === 'rising'), drop = b.steps.find(s => s.t > 18000 && s.mode === 'normal');
+    ok(rise && rise.t - 18000 < 90 + 2 * b.m.stepMs + 200, 'opening the hand starts the build at once (' + (rise && (rise.t - 18000).toFixed(0)) + ' ms)');
+    ok(drop && drop.t - 18000 <= 20 * b.m.stepMs + 300 && drop.i % 16 === 0, 'and the drop lands on the next bar line, at most a bar and a beat later (' + (drop && (drop.t - 18000).toFixed(0)) + ' ms)');
+    const build = b.steps.filter(s => s.mode === 'rising');
+    const sn = build.map(s => s.hits.filter(h => h.kind === 'snare').length);
+    ok(build.length >= 4 && sn.slice(-4).every(c => c === 1), 'the build ends in a sixteenth snare roll');
+    ok(build.filter(s => s.i % 4 === 0).every(s => s.hits.some(h => h.kind === 'snare')), 'and is audible from its first beat, not only its last');
+    ok(drop && drop.level === 3 && drop.hits.some(h => h.kind === 'boom') && drop.hits.some(h => h.kind === 'crash'), 'the drop hits at the top level, with crash and boom');
+    ok(b.steps.filter(s => s.i >= drop.i && s.i < drop.i + 32).every(s => s.level === 3), 'and holds it for two bars even under a still hand');
+    // closing the fist again during the build goes back to the break
+    const b2 = band(t => t > 10000 && t < 18000 || t > 18300 && t < 26000 ? {...busy(t), fingers: fist} : busy(t), 28);
+    const back = b2.steps.filter(s => s.t > 19500 && s.t < 26000);
+    ok(back.length && back.every(s => s.mode === 'break' || s.mode === 'rising') && back.at(-1).mode === 'break', 'a fist again during the build returns to the break');
 }
 
 // ===== the loop =====
