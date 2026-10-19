@@ -190,9 +190,9 @@ var Core = (function () {
     function gestures(opt) {
         opt = opt || {};
         var on = opt.on || 1.22, off = opt.off || 1.06, minMs = opt.minMs == null ? 90 : opt.minMs, holdMs = opt.holdMs || 220;
-        // pinch thresholds in palm lengths (wrist to middle knuckle). Thumb and index tips touching measure about 0.15-0.3
-        // on MediaPipe's points; a relaxed hand is 0.6 or more.
-        var pOn = 0.36, pOff = 0.52;
+        // pinch thresholds in palm lengths (wrist to middle knuckle). Measured with the real model on HaGRID's gesture sheet:
+        // thumb and index tips touching are 0.05-0.16 apart; every hand that is not a pinch and not a fist is 0.69 or more.
+        var pOn = 0.42, pOff = 0.6;
         var ext = [false, false, false, false], curl = [false, false, false, false], r = null, raw = null, rawSince = 0, pose = null, lastSeen = -1e9;
         var pinRaw = false, pinSince = 0, pin = false, lastPinch = -1e9;
         var out = {pose: null, pinch: false, pinchOn: false};
@@ -218,16 +218,16 @@ var Core = (function () {
                 : !ext[0] && curled >= 3 ? 'fist'
                 : pose || 'open';
             if (pose === null) { pose = raw = rp; rawSince = t; }
-            else if (pinRaw) { raw = pose; rawSince = t; }   // a pinch curls the index: it must not switch the pose
+            else if (pinRaw && rp !== 'fist') { raw = pose; rawSince = t; }   // a pinch curls the index: it must not switch the pose - but a fist always wins
             else {
                 if (rp !== raw) { raw = rp; rawSince = t; }
                 if (raw !== pose && t - rawSince >= minMs) pose = raw;
             }
-            // pinch: thumb meets index out in front of the palm. In a fist the index tip is curled in next to the
-            // wrist (under one palm length from it); in a pinch it is out at the thumb, whatever the other fingers do.
-            var out8 = dist(lm[8], lm[0]) / pl;
-            // and never from a fist: there the thumb lies across the index, 0.2 palm lengths from its tip
-            var pr = pinchRatio(lm), pnow = pose !== 'fist' && (pinRaw ? pr < pOff && out8 > 0.9 : pr < pOn && out8 > 1.05);
+            // pinch: the thumb tip meets the index *tip*. In a fist it lies against the index's middle joint instead
+            // (measured: 0.32 to the tip, 0.15 to the joint; an OK sign is 0.09 and 0.55), and a fist never pinches.
+            // How far the index reaches out is no test: pinching towards the camera foreshortens it to under a palm length.
+            var out8 = dist(lm[8], lm[0]) / pl, toJoint = dist(lm[4], lm[6]) / pl;
+            var pr = pinchRatio(lm), pnow = pose !== 'fist' && rp !== 'fist' && pr < 0.75 * toJoint + (pinRaw ? 0.15 : 0) && pr < (pinRaw ? pOff : pOn);
             if (pnow !== pinRaw) { pinRaw = pnow; pinSince = t; }
             if (pinRaw !== pin && t - pinSince >= 60) {
                 pin = pinRaw;
@@ -1109,8 +1109,9 @@ function showStats() {
         '\naudio out   ' + out.toFixed(0) + ' ms' +
         '\ndelegate    ' + (stats.delegate || '-') +
         '\nenergy      ' + (ses ? ses.mp.state.energy.toFixed(2) : '-') +
-        '\npinch       ' + (ses && ses.mp.state.pinchRatio != null ? ses.mp.state.pinchRatio.toFixed(2) + (ses.mp.state.pinch ? ' ON' : '') + '  (on < 0.36)' : '-') +
-        '\nindex out   ' + (ses && ses.mp.state.indexOut != null ? ses.mp.state.indexOut.toFixed(2) + '  (pinch > 1.05)' : '-');
+        '\npinch       ' + (ses && ses.mp.state.pinchRatio != null ? ses.mp.state.pinchRatio.toFixed(2) + (ses.mp.state.pinch ? ' ON' : '') + '  (on < 0.42)' : '-') +
+        '\nindex out   ' + (ses && ses.mp.state.indexOut != null ? ses.mp.state.indexOut.toFixed(2) : '-') +
+        '\npose        ' + (ses && ses.mp.state.pose || '-');
 }
 
 var hintTimer = 0;

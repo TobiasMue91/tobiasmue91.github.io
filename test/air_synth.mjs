@@ -249,7 +249,9 @@ for (const gap of [40, 100, 140]) {
         }
         return {n, poses: [...poses]};
     };
-    for (const [label, others] of [['relaxed', 1.0], ['stretched (an OK sign)', 1.43], ['curled', 0.6]])
+    // (fingers tucked right into the palm with the thumb on the index are a fist - the fist wins; a real grip curls them
+    // without tucking them, its tips 1.34 palm lengths from the wrist on HaGRID's sheet, so 'half curled' is that grip)
+    for (const [label, others] of [['relaxed', 1.0], ['stretched (an OK sign)', 1.43], ['half curled', 0.85]])
         for (const gap of [0.1, 0.2, 0.3]) {
             const r = pinchCount(others, gap);
             ok(r.n === 2, 'two pinches with the other fingers ' + label + ', tips ' + gap + ' palm lengths apart, are two chord changes (' + r.n + ')');
@@ -272,6 +274,32 @@ for (const gap of [40, 100, 140]) {
         }
         ok(n === 1, 'a slow pinch - fingers relax, then the tips close - is one chord change (' + n + ')');
         ok(!poses.has('fist'), 'and is never taken for a fist on the way (' + [...poses] + ')');
+    }
+    // pinching towards the camera: the index points at the lens and looks short - its tip under a palm length out
+    {
+        const g = Core.gestures(); let n = 0; seed = 13;
+        for (let t = 0; t < 3000; t += 33) {
+            const h = hand(0.5, 0.5, 'Right', {jitter: 0.003});
+            if (t > 800 && t < 1800) {
+                const L = h.landmarks;
+                // index tip 0.8 palm lengths from the wrist, its middle joint 0.86 - seen end on
+                L[6] = {x: 0.5 - 0.035, y: 0.5 - 0.003, z: 0}; L[7] = {x: 0.5 - 0.01, y: 0.5 - 0.01, z: 0}; L[8] = {x: 0.5 + 0.02, y: 0.5 + 0.004, z: 0};
+                L[4] = {x: 0.5 + 0.03, y: 0.5 + 0.01, z: 0};
+            }
+            if (g.step(h.landmarks, t).pinchOn) n++;
+        }
+        ok(n === 1, 'a pinch towards the camera, index foreshortened to under a palm length, is one chord change (' + n + ')');
+    }
+    // closing into a fist passes a moment where the thumb is at the index tip and the hand still counts as open:
+    // that moment must not pinch, and must not freeze the hand open
+    {
+        const g = Core.gestures(); let n = 0, last; seed = 14;
+        for (let t = 0; t < 2500; t += 33) {
+            const h = hand(0.5, 0.5, 'Right', {fingers: t < 800 ? [1, 1, 1, 1] : [0, 0, 0, 0], jitter: 0.003});
+            if (t >= 800) h.landmarks[4] = {x: h.landmarks[8].x + 0.012, y: h.landmarks[8].y - 0.004, z: 0};
+            const r = g.step(h.landmarks, t); if (r.pinchOn) n++; last = r.pose;
+        }
+        ok(n === 0 && last === 'fist', 'closing a hand into a fist is a fist, not a pinch (' + n + ' pinches, ' + last + ')');
     }
     // never a pinch: a fist with the thumb on the index, a relaxed open hand, two fingers, the tips 0.6 apart
     const never = (opts, name) => { const g = Core.gestures(); let n = 0; seed = 10;

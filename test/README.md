@@ -1211,8 +1211,9 @@ second. Synthetic hands are built with real finger geometry (open, two fingers, 
   makes them - the index bent forward to the thumb, the tips 0.1 to 0.3 palm lengths apart, the other fingers relaxed,
   stretched or curled - and each is exactly one chord change without changing the pose; a slow pinch (fingers relax first,
   then the tips close) is one chord change and is never read as a fist on the way. A fist with the thumb on the curled
-  index, an open hand, two fingers and tips 0.6 apart are never a pinch. (The first pinch detector failed most of these:
-  it wanted another finger stretched out, and it read a relaxed hand as a fist.)
+  index, an open hand, two fingers and tips 0.6 apart are never a pinch, and a pinch towards the camera - the index seen end
+  on, its tip under a palm length from the wrist - still is. (The first detector wanted another finger stretched out and
+  read a relaxed hand as a fist; the second wanted the index tip a palm length out, which a pinch at the camera is not.)
 - *What they do.* A fist rests the melody on the grid; two fingers play an arpeggio in sixteenths (eighths while calm) that
   keeps its rhythm at 10 camera frames a second; the Arp latch turns an open hand (or a mouse) into the arpeggio; a pinch
   moves the chord on at the next beat.
@@ -1231,7 +1232,7 @@ second. Synthetic hands are built with real finger geometry (open, two fingers, 
 It also prints what the One-Euro filter and the 40 ms prediction buy against a camera that is 70 ms late, and checks that the
 filter cuts a still hand's jitter by at least 40% and that the prediction brings a moving hand closer than the filter alone.
 
-`node test/air_synth_browser.mjs [sound] [camera] [export]` (`npm run test:airsynth-browser`) needs Playwright's Chromium.
+`node test/air_synth_browser.mjs [sound] [camera] [hagrid] [export]` (`npm run test:airsynth-browser`) needs Playwright's Chromium.
 `sound` renders a scripted 30 s performance (sweeps, jumps, dropouts, a pinch, a loop, an arpeggio, a break and the drop)
 through the page's own engine with `OfflineAudioContext`, once per sound in its own scene, and checks that each plays, that
 the peak stays under the limiter's -1 dBFS ceiling, that RMS loudness is between -30 and -10 dBFS, that the band went up,
@@ -1244,7 +1245,10 @@ WebGL) is swapped for the CPU one, that `right_hands.jpg` (its open hand), `fist
 read as open, fist, two and one and play melody, rest, arpeggio and melody - and none as a pinch, though in the fist photo
 thumb and index tip are only 0.2 palm lengths apart - and that a fist held up breaks the band and
 opening it drops it back in. It prints camera frame rate, detection time, picture-to-mapper delay and the grid wait - a
-headless machine's numbers, not a laptop's. `export` records a few seconds with Rec and checks that a video file comes out
+headless machine's numbers, not a laptop's. `hagrid` cuts the 24 hands out of HaGRID's gesture sheet (fetched at test time
+from raw.githubusercontent.com, CC BY-SA 4.0, never committed) and shows each to the real model: the OK sign and the grip,
+at several sizes and mirrored, must be pinches; none of the other 22 hands - fist, middle finger and pinkie included, whose
+thumb lies within 0.3-0.4 palm lengths of the index tip - may be; and twelve of them must read as the pose they show. `export` records a few seconds with Rec and checks that a video file comes out
 and that its sound track decodes to more than silence. The camera part needs network access to storage.googleapis.com and
 `npm i --no-save @mediapipe/tasks-vision@0.10.14` (or `MEDIAPIPE=<folder of that package>`), served in place of jsDelivr;
 it skips without them. `DELEGATE=GPU` or `DELEGATE=CPU` pins the delegate. Two minutes or so.

@@ -18,7 +18,9 @@
 //   npm i --no-save @mediapipe/tasks-vision@0.10.14      (or MEDIAPIPE=<folder of that package>)
 // It skips what it cannot run.
 //   export  - Rec in mouse mode for a few seconds saves a video, and its sound track decodes to more than silence.
-//   node test/air_synth_browser.mjs [sound] [camera] [export]      (npm run test:airsynth-browser)
+//   hagrid  - 24 real hands from HaGRID's gesture sheet (fetched at test time from raw.githubusercontent.com, CC BY-SA 4.0):
+//             the OK sign and the grip at several sizes and mirrored are pinches, no other hand is, and the poses read right.
+//   node test/air_synth_browser.mjs [sound] [camera] [hagrid] [export]      (npm run test:airsynth-browser)
 
 import {createServer} from 'http';
 import {readFileSync, existsSync} from 'fs';
@@ -197,7 +199,7 @@ if (run('camera')) {
                     return {pose: s.pose, mode: s.mode, present: s.present, pinch: s.pinchRatio, pinched: s.pinch,
                         tips: h ? [8, 12, 16, 20].map(i => +(d(h.landmarks[i], h.landmarks[0]) / pl).toFixed(2)) : null};
                 });
-                info(`${img}.jpg: pose ${got.pose}, mode ${got.mode}; fingertips from the wrist ${got.tips} palm lengths (curled < 1.1); thumb to index ${got.pinch && got.pinch.toFixed(2)} (pinch < 0.36)`);
+                info(`${img}.jpg: pose ${got.pose}, mode ${got.mode}; fingertips from the wrist ${got.tips} palm lengths (curled < 1.1); thumb to index ${got.pinch && got.pinch.toFixed(2)} (pinch < 0.42)`);
                 ok(!got.pinched, img + '.jpg is not taken for a pinch');
                 ok(got.present && got.pose === pose && got.mode === md, img + '.jpg reads as ' + pose + ' and plays ' + md);
             }
@@ -211,6 +213,59 @@ if (run('camera')) {
             ok(notes.slice(1).every((m, i) => i % 2 === 0 ? m < notes[0] : m > notes[1]), 'low is lower than high, every time');
             if (!process.env.DELEGATE) ok(st.delegate === 'CPU' || st.det < 45, 'a slow GPU delegate is swapped for the CPU one (' + st.delegate + ', ' + st.det.toFixed(0) + ' ms)');
         }
+        await ctx.close();
+    }
+}
+
+if (run('hagrid')) {
+    // HaGRID's gesture sheet (CC BY-SA 4.0, github.com/hukenovs/hagrid): 24 real hands, cut out and shown to the real model.
+    // Fetched at test time, never committed.
+    let sheet = null;
+    if (!existsSync(join(MP, 'vision_bundle.mjs'))) console.log('skip  hagrid (run: npm i --no-save @mediapipe/tasks-vision@0.10.14)');
+    else {
+        try { const r = await fetch('https://raw.githubusercontent.com/hukenovs/hagrid/master/images/gestures.png'); if (r.ok) sheet = Buffer.from(await r.arrayBuffer()).toString('base64'); } catch (e) {}
+        if (!sheet) console.log('skip  hagrid (no network for raw.githubusercontent.com)');
+    }
+    if (sheet) {
+        const ctx = await browser.newContext();
+        await ctx.route(/\/__mp\/(.*)/, route => { const f = route.request().url().split('/__mp/')[1]; route.fulfill({body: readFileSync(join(MP, f)), contentType: f.endsWith('.wasm') ? 'application/wasm' : 'text/javascript'}); });
+        const page = await ctx.newPage();
+        await page.goto(URL_);
+        const res = await page.evaluate(async sheet => {
+            const lib = await import('/__mp/vision_bundle.mjs'), files = await lib.FilesetResolver.forVisionTasks('/__mp/wasm');
+            const hl = await lib.HandLandmarker.createFromOptions(files, {baseOptions: {modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', delegate: 'CPU'}, runningMode: 'IMAGE', numHands: 1});
+            const im = new Image(); im.src = 'data:image/png;base64,' + sheet; await im.decode();
+            const S = im.width / 2000;   // the sheet's grid, in the 2000 px wide layout
+            const rows = [[70, ['call', 'dislike', 'fist', 'four', 'like', 'mute', 'grabbing', 'grip']], [340, ['ok', 'one', 'palm', 'peace', 'peace_inv', 'rock', 'point', 'pinkie']], [610, ['stop', 'stop_inv', 'three', 'three2', 'two_up', 'two_up_inv', 'mid_finger', 'three3']]];
+            const xs = [127, 347, 567, 787, 1007, 1227, 1447, 1667], out = {};
+            const shot = (x0, y0, size, mirror) => {
+                const c = document.createElement('canvas'); c.width = 720; c.height = 640; const g = c.getContext('2d');
+                g.fillStyle = '#aaa'; g.fillRect(0, 0, 720, 640);
+                if (mirror) { g.translate(720, 0); g.scale(-1, 1); }
+                g.drawImage(im, (x0 + 1) * S, (y0 + 1) * S, 204 * S, 203 * S, (720 - size) / 2, (640 - size) / 2, size, size);
+                return c;
+            };
+            const judge = c => {
+                const lm = hl.detect(c).landmarks[0]; if (!lm) return null;
+                const g = Core.gestures(); let st, fired = 0;
+                for (let t = 0; t < 900; t += 33) { st = g.step(lm, t); if (st.pinchOn) fired++; }
+                return {pose: st.pose, pinch: fired > 0, ratio: Core.pinchRatio(lm)};
+            };
+            for (const [y0, names] of rows) names.forEach((n, k) => {
+                out[n] = judge(shot(xs[k], y0, 480, false));
+                if (n === 'ok' || n === 'grip') [300, 400].forEach(sz => [false, true].forEach(m => { out[n + '@' + sz + (m ? 'm' : '')] = judge(shot(xs[k], y0, sz, m)); }));
+            });
+            return out;
+        }, sheet);
+        const pinches = Object.entries(res).filter(([k]) => /^(ok|grip)/.test(k)), others = Object.entries(res).filter(([k]) => !/^(ok|grip)/.test(k));
+        info('pinches: ' + pinches.map(([k, v]) => k + (v ? ' ' + v.ratio.toFixed(2) + (v.pinch ? ' yes' : ' NO') : ' no hand')).join(', '));
+        info('the rest: ' + others.map(([k, v]) => k + (v ? ' ' + v.pose + (v.pinch ? ' PINCH' : '') : ' no hand')).join(', '));
+        const found = pinches.filter(([, v]) => v), hit = found.filter(([, v]) => v.pinch);
+        ok(found.length >= 8 && hit.length >= found.length - 1, 'real pinches (OK sign, grip; sizes, mirrored) are pinches: ' + hit.length + ' of ' + found.length);
+        ok(others.every(([, v]) => !v || !v.pinch), 'none of the ' + others.length + ' other real hands is taken for a pinch');
+        const want = {fist: 'fist', dislike: 'fist', like: 'fist', palm: 'open', four: 'open', stop: 'open', stop_inv: 'open', one: 'one', peace: 'two', peace_inv: 'two', two_up: 'two', three2: 'two'};
+        const wrong = Object.entries(want).filter(([k, p]) => !res[k] || res[k].pose !== p);
+        ok(!wrong.length, 'and their poses read as they look (' + (wrong.map(([k]) => k + ' ' + (res[k] && res[k].pose)).join(', ') || 'all ' + Object.keys(want).length) + ')');
         await ctx.close();
     }
 }
