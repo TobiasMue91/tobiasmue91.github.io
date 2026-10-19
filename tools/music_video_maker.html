@@ -465,7 +465,22 @@ float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
 float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<5;i++){ v+=a*noise(p); p=rot(.5)*p*2.03+3.1; a*=.5; } return v; }
 `;
 
-const SCENE_FS = COMMON + `
+// One program per scene, each compiled on its own and in the background: a single shader holding all
+// twelve took Direct3D's compiler (Windows, through ANGLE) 10-20 s on the main thread when the page opened.
+const SCENE_LIB = `
+#if SCENE == 2 || SCENE == 6 || SCENE == 11
+vec3 chromeShade(vec3 rd, vec3 n, float v){
+  vec3 rf = reflect(rd, n);
+  float fres = pow(1. - max(0., dot(-rd, n)), 3.);
+  // studio: soft light strips + a coloured horizon reads as chrome
+  float strips = smoothstep(.75, .95, sin(rf.y*6. + rf.x*2. + TRAV*.3)) + smoothstep(.9, .99, sin(rf.x*9. - 1.));
+  vec3 env = pal(rf.y*.5 + rf.x*.2 + v + T*.02)*(.15 + .8*smoothstep(-.3, .7, rf.y)) + strips*vec3(.9);
+  // thin-film shimmer across the whole surface, strongest at grazing angles
+  vec3 iri = pal(dot(n, vec3(.6,.8,.3))*1.2 + fres + v + TRAV*.05);
+  return env*(.3 + .3*fres) + iri*(.15 + .8*fres)*.7 + .2*KICK*pal(v);
+}
+#endif
+#if SCENE == 0
 // ---- 0 Aura: domain-warped liquid gradient, glossy
 vec3 aura(vec2 p, float v){
   float t = TRAV*.08 + v*20.;
@@ -481,6 +496,8 @@ vec3 aura(vec2 p, float v){
   c += spec*smoothstep(.4, .7, f)*(.25 + .6*HIGH)*vec3(1.,.95,.9);
   return c;
 }
+#endif
+#if SCENE == 1
 // ---- 1 Tunnel: kaleidoscopic neon tunnel
 vec3 tunnel(vec2 p, float v){
   p *= rot(T*.15*(v-.5) + .3*sin(TRAV*.2));
@@ -499,6 +516,8 @@ vec3 tunnel(vec2 p, float v){
   c += pal(T*.03 + v) * .08 / (r*r*20. + .1) * (1. + 2.*BASS);
   return c;
 }
+#endif
+#if SCENE == 2
 // ---- 2 Chrome: raymarched liquid chrome metaballs
 float smin(float a, float b, float k){ float h = clamp(.5 + .5*(b-a)/k, 0., 1.); return mix(b,a,h) - k*h*(1.-h); }
 float chromeMap(vec3 p, float v){
@@ -513,16 +532,6 @@ float chromeMap(vec3 p, float v){
   }
   return d + .05*sin(p.x*7. + T*2.)*sin(p.y*7. - T)*sin(p.z*7.)*(.3 + 1.4*HIGH*TRIP);
 }
-vec3 chromeShade(vec3 rd, vec3 n, float v){
-  vec3 rf = reflect(rd, n);
-  float fres = pow(1. - max(0., dot(-rd, n)), 3.);
-  // studio: soft light strips + a coloured horizon reads as chrome
-  float strips = smoothstep(.75, .95, sin(rf.y*6. + rf.x*2. + TRAV*.3)) + smoothstep(.9, .99, sin(rf.x*9. - 1.));
-  vec3 env = pal(rf.y*.5 + rf.x*.2 + v + T*.02)*(.15 + .8*smoothstep(-.3, .7, rf.y)) + strips*vec3(.9);
-  // thin-film shimmer across the whole surface, strongest at grazing angles
-  vec3 iri = pal(dot(n, vec3(.6,.8,.3))*1.2 + fres + v + TRAV*.05);
-  return env*(.3 + .3*fres) + iri*(.15 + .8*fres)*.7 + .2*KICK*pal(v);
-}
 vec3 chrome(vec2 p, float v){
   vec3 ro = vec3(0., 0., 3. - .35*KICK), rd = normalize(vec3(p, -1.3));
   rd.xz *= rot(.2*sin(TRAV*.1)); ro.xz *= rot(.2*sin(TRAV*.1));
@@ -535,6 +544,8 @@ vec3 chrome(vec2 p, float v){
   vec3 n = normalize(vec3(chromeMap(pos+e.xyy,v)-chromeMap(pos-e.xyy,v), chromeMap(pos+e.yxy,v)-chromeMap(pos-e.yxy,v), chromeMap(pos+e.yyx,v)-chromeMap(pos-e.yyx,v)));
   return chromeShade(rd, n, v);
 }
+#endif
+#if SCENE == 3
 // ---- 3 Fractal: kaleidoscope over a Kali-set fold
 vec3 fractal(vec2 p, float v){
   p *= rot(TRAV*.08 + v*6.);
@@ -554,6 +565,8 @@ vec3 fractal(vec2 p, float v){
   vec3 c = acc*.1*(1. + .5*EN) + pal(m*2. + v + .5)*smoothstep(.05, 0., m)*(.6 + 1.5*HIGH);
   return pow(c, vec3(1.35))*1.3;
 }
+#endif
+#if SCENE == 4
 // ---- 4 Op-Art: warped moire rings
 vec3 opart(vec2 p, float v){
   vec2 q = p*rot(TRAV*.1);
@@ -566,6 +579,8 @@ vec3 opart(vec2 p, float v){
   c += pal(v + .6)*pow(1. - abs(m), 18.)*(.6 + 1.2*HIGH);
   return c*(.75 + .5*KICK);
 }
+#endif
+#if SCENE == 5
 // ---- 5 Gyroid: flight through an endless glassy lattice
 float gyr(vec3 p, float v){
   float sc = 2.5 + v*1.5;
@@ -589,6 +604,8 @@ vec3 gyroid(vec2 p, float v){
   }
   return c*(.75 + .35*EN) + pal(v + .5)*.03;
 }
+#endif
+#if SCENE == 6
 // ---- 6 Sphere grid: a field of chrome balls bouncing to the bass
 float sgMap(vec3 p, float v, out vec2 id){
   id = floor(p.xz);
@@ -617,6 +634,8 @@ vec3 spheregrid(vec2 p, float v){
   vec3 c = chromeShade(rd, n, v + h21(id)*.4);
   return mix(bg, c, fog);
 }
+#endif
+#if SCENE == 7
 // ---- 7 Synthwave: grid floor, striped sun, mountains
 vec3 synthwave(vec2 p, float v){
   float hz = -.05 + .1*(v - .5);
@@ -643,6 +662,8 @@ vec3 synthwave(vec2 p, float v){
   }
   return c;
 }
+#endif
+#if SCENE == 8
 // ---- 8 Warp: hyperspace streaks
 vec3 warp(vec2 p, float v){
   float a = atan(p.y, p.x), r = length(p);
@@ -661,6 +682,8 @@ vec3 warp(vec2 p, float v){
   }
   return c + pal(v)*.08*KICK/(r*r*30. + .2);
 }
+#endif
+#if SCENE == 9
 // ---- 9 Crystal: stained-glass shards that burst on the kick
 vec3 crystal(vec2 p, float v){
   p *= 2.2 + v*1.5;
@@ -681,6 +704,8 @@ vec3 crystal(vec2 p, float v){
   c = mix(c, pal(v + .5)*1.6*(.4 + KICK), lead);
   return c;
 }
+#endif
+#if SCENE == 10
 // ---- 10 Spiral: hypnotic logarithmic spiral
 vec3 spiral(vec2 p, float v){
   float a = atan(p.y, p.x), r = length(p) + 1e-3;
@@ -693,6 +718,8 @@ vec3 spiral(vec2 p, float v){
   c += pal(v + .6)*smoothstep(.06, .0, abs(band))*(.4 + HIGH);
   return c*(.8 + .5*KICK);
 }
+#endif
+#if SCENE == 11
 // ---- 11 Morph: one chrome shape melting from form to form
 float sdBox(vec3 p, vec3 b){ vec3 q = abs(p) - b; return length(max(q, 0.)) + min(max(q.x, max(q.y, q.z)), 0.); }
 float shapeOf(int k, vec3 p){
@@ -721,50 +748,62 @@ vec3 morph(vec2 p, float v){
   vec3 n = normalize(vec3(morphMap(pos+e.xyy,v)-morphMap(pos-e.xyy,v), morphMap(pos+e.yxy,v)-morphMap(pos-e.yxy,v), morphMap(pos+e.yyx,v)-morphMap(pos-e.yyx,v)));
   return chromeShade(rd, n, v);
 }
-vec3 scene(int s, vec2 p, float v){
-  // every shot frames its scene differently: closer or wider, and turned
-  p = rot((fract(v*3.7) - .5)*1.6)*p*mix(.7, 1.35, fract(v*7.3));
-  if (s == 0) return aura(p, v);
-  if (s == 1) return tunnel(p, v);
-  if (s == 2) return chrome(p, v);
-  if (s == 3) return fractal(p, v);
-  if (s == 4) return opart(p, v);
-  if (s == 5) return gyroid(p, v);
-  if (s == 6) return spheregrid(p, v);
-  if (s == 7) return synthwave(p, v);
-  if (s == 8) return warp(p, v);
-  if (s == 9) return crystal(p, v);
-  if (s == 10) return spiral(p, v);
-  return morph(p, v);
-}
+#endif
 void main(){
   vec2 p = (gl_FragCoord.xy - .5*R)/min(R.x, R.y)*2.;
-  vec3 c = scene(SA, p, VA);
+  // every shot frames its scene differently: closer or wider, and turned
+  p = rot((fract(VA*3.7) - .5)*1.6)*p*mix(.7, 1.35, fract(VA*7.3));
+#if SCENE == 0
+  vec3 c = aura(p, VA);
+#elif SCENE == 1
+  vec3 c = tunnel(p, VA);
+#elif SCENE == 2
+  vec3 c = chrome(p, VA);
+#elif SCENE == 3
+  vec3 c = fractal(p, VA);
+#elif SCENE == 4
+  vec3 c = opart(p, VA);
+#elif SCENE == 5
+  vec3 c = gyroid(p, VA);
+#elif SCENE == 6
+  vec3 c = spheregrid(p, VA);
+#elif SCENE == 7
+  vec3 c = synthwave(p, VA);
+#elif SCENE == 8
+  vec3 c = warp(p, VA);
+#elif SCENE == 9
+  vec3 c = crystal(p, VA);
+#elif SCENE == 10
+  vec3 c = spiral(p, VA);
+#elif SCENE == 11
+  vec3 c = morph(p, VA);
+#endif
+  // bright palettes would blow out the additive scenes; even them out
+  o = vec4(c*.5/max(dot(PA, vec3(1./3.)), .3), 1.);
+}`;
+const sceneFS = k => COMMON.replace('#version 300 es\n', '#version 300 es\n#define SCENE ' + k + '\n') + SCENE_LIB;
+
+const FEED_FS = COMMON + `
+uniform sampler2D SCN, SCNB, FB;
+void main(){
+  vec2 uv = gl_FragCoord.xy/R;
+  vec3 cur = texture(SCN, uv).rgb;
   if (MIXV > 0.001 && SB != SA){
-    vec3 d = scene(SB, p, VB);
-    // noise dissolve with a hot edge
-    // each pixel switches when MIXV passes its own threshold n, so MIXV 0 is all A and 1 is all B
+    // noise dissolve with a hot edge: each pixel switches when MIXV passes its own threshold n,
+    // so MIXV 0 is all A and 1 is all B
+    vec2 p = (gl_FragCoord.xy - .5*R)/min(R.x, R.y)*2.;
     float n = clamp(fbm(p*2.2 + 7.)*1.1 - .05 + .08*length(p), 0., 1.);
     float x = MIXV*1.2 - .1;
     float m = smoothstep(n - .06, n + .06, x);
     float edge = smoothstep(.07, 0., abs(x - n))*step(.001, MIXV)*step(MIXV, .999);
-    c = mix(c, d, m) + edge*pal(n + T*.1)*1.5;
+    cur = mix(cur, texture(SCNB, uv).rgb, m) + edge*pal(n + T*.1)*1.5;
   }
-  // bright palettes would blow out the additive scenes; even them out
-  o = vec4(c*.5/max(dot(PA, vec3(1./3.)), .3), 1.);
-}`;
-
-const FEED_FS = COMMON + `
-uniform sampler2D SCN, FB;
-void main(){
-  vec2 uv = gl_FragCoord.xy/R;
   vec2 c = uv - .5;
   // previous frame, pulled inward and twisted: the trails breathe with the music
   float zoom = 1. - (.004 + .012*EN + .02*KICK)*TRIP;
   c = rot((.002 + .006*MID)*TRIP*sign(VA - .5))*c*zoom;
   c += .003*TRIP*vec2(fbm(uv*3. + T*.2) - .5, fbm(uv*3. - T*.2 + 4.) - .5);
   vec3 prev = texture(FB, c + .5).rgb;
-  vec3 cur = texture(SCN, uv).rgb;
   // trails only where the new frame is darker, and they fade fast: a max() that held longer
   // dilated every bright speck over the dark gaps until the picture washed out
   float keep = (.45 + .3*TRIP)*(1. - .6*IMP)*(1. - .85*CUT);
@@ -809,24 +848,45 @@ class Renderer {
     if (!gl) throw new Error('This browser has no WebGL2.');
     this.half = !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
     gl.getExtension('OES_texture_float_linear');
-    this.progs = { scene: this.prog(SCENE_FS), feed: this.prog(FEED_FS), fin: this.prog(FINAL_FS) };
+    this.par = gl.getExtension('KHR_parallel_shader_compile');
+    this.progs = { feed: this.prog(FEED_FS), fin: this.prog(FINAL_FS) };
+    this.scenes = [];
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
     this.w = this.h = 0;
   }
-  prog(fs) {
-    const gl = this.gl, p = gl.createProgram();
+  // start compiling and linking; nothing here waits on the driver
+  start(fs) {
+    const gl = this.gl, p = gl.createProgram(), sh = [];
     for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, fs]]) {
-      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-      gl.attachShader(p, s);
+      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); gl.attachShader(p, s); sh.push(s);
     }
     gl.bindAttribLocation(p, 0, 'p'); gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    return { p, sh, u: null };
+  }
+  // the first status query blocks until the driver is done, so it is asked only once the program is ready
+  done(pr) { return !this.par || this.gl.getProgramParameter(pr.p, this.par.COMPLETION_STATUS_KHR); }
+  finish(pr) {
+    if (pr.u) return pr;
+    const gl = this.gl, p = pr.p;
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      const log = pr.sh.map(s => gl.getShaderInfoLog(s)).join('') || gl.getProgramInfoLog(p);
+      throw new Error(log);
+    }
     const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
     for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
-    return { p, u };
+    pr.u = u;
+    return pr;
+  }
+  prog(fs) { return this.finish(this.start(fs)); }
+  // compile every scene in the background, e.g. while a song is being analysed
+  warm() { for (let k = 0; k < 12; k++) if (!this.scenes[k]) this.scenes[k] = this.start(sceneFS(k)); }
+  // a scene program to draw with now: ready, or - when the driver cannot report progress - finished on the spot
+  scene(k, wait) {
+    if (!this.scenes[k]) this.scenes[k] = this.start(sceneFS(k));
+    const pr = this.scenes[k];
+    return pr.u || wait || this.done(pr) ? this.finish(pr) : null;
   }
   target(w, h) {
     const gl = this.gl, t = gl.createTexture();
@@ -847,6 +907,7 @@ class Renderer {
     this.w = this.c.width = w; this.h = this.c.height = h; this.ss = sceneScale;
     this.sw = Math.round(w * sceneScale); this.sh = Math.round(h * sceneScale);
     this.scn = this.target(this.sw, this.sh);
+    this.scnB = this.target(this.sw, this.sh);
     this.fb = [this.target(w, h), this.target(w, h)];
     this.reset();
   }
@@ -857,20 +918,29 @@ class Renderer {
     gl.uniform2f(u.R, w, h);
     for (const k in U) if (u[k] !== undefined) (Array.isArray(U[k]) ? gl.uniform3fv(u[k], U[k]) : (k === 'SA' || k === 'SB') ? gl.uniform1i(u[k], U[k]) : gl.uniform1f(u[k], U[k]));
   }
-  draw(U) {
+  // wait: true when every frame has to be exact (export); the preview keeps the last picture of a scene
+  // whose program is still compiling rather than stall
+  draw(U, wait) {
     const gl = this.gl;
     gl.bindVertexArray(null);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    // 1 scene
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.scn.fb); gl.viewport(0, 0, this.sw, this.sh);
-    this.uniforms(this.progs.scene, U, this.sw, this.sh);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    // 1 the scene, and while a dissolve runs the next one too
+    const pass = (k, v, tgt) => {
+      const pr = this.scene(k, wait);
+      if (!pr) return;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, tgt.fb); gl.viewport(0, 0, this.sw, this.sh);
+      this.uniforms(pr, Object.assign({}, U, { VA: v }), this.sw, this.sh);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+    pass(U.SA, U.VA, this.scn);
+    if (U.MIXV > .001 && U.SB !== U.SA) pass(U.SB, U.VB, this.scnB);
     // 2 feedback
     const src = this.fb[this.ping], dst = this.fb[1 - this.ping];
     gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb); gl.viewport(0, 0, this.w, this.h);
     this.uniforms(this.progs.feed, U, this.w, this.h);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.scn.t); gl.uniform1i(this.progs.feed.u.SCN, 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, src.t); gl.uniform1i(this.progs.feed.u.FB, 1);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.scnB.t); gl.uniform1i(this.progs.feed.u.SCNB, 2);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     this.ping = 1 - this.ping;
     // 3 finish to screen
@@ -928,8 +998,8 @@ function drawTitle(ctx, w, h, tClip) {
   ctx.restore();
 }
 
-function frameTo(ctx, w, h, f, tClip) {
-  R.draw(uniformsAt(f));
+function frameTo(ctx, w, h, f, tClip, wait) {
+  R.draw(uniformsAt(f), wait);
   ctx.globalCompositeOperation = 'source-over';
   ctx.drawImage(glCanvas, 0, 0, w, h);
   drawTitle(ctx, w, h, tClip);
@@ -1043,6 +1113,7 @@ function readId3(buf) {
 function busy(msg) { el('busy').style.display = msg ? 'block' : 'none'; el('busy').textContent = msg || ''; }
 
 async function loadBuffer(buffer, meta) {
+  R.warm();   // the scenes compile in the background while the song is analysed
   pause();
   busy('Listening to the song ... 0%');
   const an = await analyse(buffer, p => busy('Listening to the song ... ' + Math.round(p * 100) + '%'));
@@ -1196,11 +1267,11 @@ async function exportVideo() {
     R.resize(w, h, .75); R.reset();
     const f0 = Math.round(start * FPS), total = Math.round((end - start) * FPS);
     // warm the feedback trails with the second before the clip
-    for (let f = Math.max(0, f0 - 30); f < f0; f++) R.draw(uniformsAt(f));
+    for (let f = Math.max(0, f0 - 30); f < f0; f++) R.draw(uniformsAt(f), true);
     const t0 = performance.now();
     for (let i = 0; i < total; i++) {
       if (err) throw err;
-      frameTo(octx, w, h, f0 + i, i / FPS);
+      frameTo(octx, w, h, f0 + i, i / FPS, true);
       const vf = new VideoFrame(out, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
       venc.encode(vf, { keyFrame: i % (FPS * 2) === 0 });
       vf.close();
