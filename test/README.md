@@ -1207,15 +1207,22 @@ second. Synthetic hands are built with real finger geometry (open, two fingers, 
 - *Hands.* Swapped left/right labels or hand order keep the lead hand; when the lead hand leaves, the other one leads; the
   second hand's height is the space and never steals the melody. The filter reaches 90% of a jump within two frames.
 - *Poses.* Each pose reads as itself through jitter and only as itself; a hand half open right on the threshold changes pose
-  at most once in 5 s; a pose must hold ~90 ms; a dropout keeps it for the hold only; two pinches are two chord changes,
-  holding one is not more, and a fist with the thumb on the index is never a pinch.
+  at most once in 5 s; a pose must hold ~90 ms; a dropout keeps it for the hold only. Pinches are built the way a real hand
+  makes them - the index bent forward to the thumb, the tips 0.1 to 0.3 palm lengths apart, the other fingers relaxed,
+  stretched or curled - and each is exactly one chord change without changing the pose; a slow pinch (fingers relax first,
+  then the tips close) is one chord change and is never read as a fist on the way. A fist with the thumb on the curled
+  index, an open hand, two fingers and tips 0.6 apart are never a pinch. (The first pinch detector failed most of these:
+  it wanted another finger stretched out, and it read a relaxed hand as a fist.)
 - *What they do.* A fist rests the melody on the grid; two fingers play an arpeggio in sixteenths (eighths while calm) that
   keeps its rhythm at 10 camera frames a second; the Arp latch turns an open hand (or a mouse) into the arpeggio; a pinch
   moves the chord on at the next beat.
 - *The band.* It changes level only on a bar line, one level at a time, and every rise is announced by a fill; a busy
   player takes it to the top within 20 s, a still hand settles it to a pulse, no hand to air. Bass is always the chord's
   root, every pad chord is the chord and no pad voice jumps more than a fourth. A fist starts a one-beat snare fill on the
-  next beat, then a crash and no drums; opening the hand brings a riser and the drop on the next bar line, at least at groove.
+  next beat, then a crash and no drums. A fist the tracker loses for half a second at a time stays a break. Opening the hand
+  starts the build at once - snare on the beats, eighths, then a sixteenth roll - and the drop lands on the next bar line, at
+  most a bar and a beat later, at the top level with crash and boom, and holds it for two bars under a still hand; a fist
+  again during the build returns to the break.
 - *The loop.* It records from the next bar line, plays every note back once per pass at its step and in its sound, a held
   note lasts until the next thing played, pressing again layers a new pass, notes snap to the chord playing now, clear empties it.
 - *Different playing, different music.* A drifting hand, a dancing one and a held arpeggio give measurably different pieces
@@ -1227,13 +1234,15 @@ filter cuts a still hand's jitter by at least 40% and that the prediction brings
 `node test/air_synth_browser.mjs [sound] [camera] [export]` (`npm run test:airsynth-browser`) needs Playwright's Chromium.
 `sound` renders a scripted 30 s performance (sweeps, jumps, dropouts, a pinch, a loop, an arpeggio, a break and the drop)
 through the page's own engine with `OfflineAudioContext`, once per sound in its own scene, and checks that each plays, that
-the peak stays under the limiter's -1 dBFS ceiling, that RMS loudness is between -30 and -10 dBFS and that the band went up,
-broke and came back; rendered again with sine waves, the largest second difference anywhere stays under 0.03 (no clicks at
+the peak stays under the limiter's -1 dBFS ceiling, that RMS loudness is between -30 and -10 dBFS, that the band went up,
+broke and came back, and - measured in the audio, not the rules - that the last beat of the build is at least 3 dB and the
+first second of the drop at least 6 dB louder than the break; rendered again with sine waves, the largest second difference anywhere stays under 0.03 (no clicks at
 note changes), while a control engine that jumps its envelope on each note is caught by the same measure. `camera` replaces
 the webcam with a canvas showing MediaPipe's own photos and checks that the hand model loads, finds the hand on more than 90%
 of frames, that the note goes up and down with the hand, that a slow GPU delegate (headless Chromium has only software
 WebGL) is swapped for the CPU one, that `right_hands.jpg` (its open hand), `fist.jpg`, `victory.jpg` and `pointing_up.jpg`
-read as open, fist, two and one and play melody, rest, arpeggio and melody, and that a fist held up breaks the band and
+read as open, fist, two and one and play melody, rest, arpeggio and melody - and none as a pinch, though in the fist photo
+thumb and index tip are only 0.2 palm lengths apart - and that a fist held up breaks the band and
 opening it drops it back in. It prints camera frame rate, detection time, picture-to-mapper delay and the grid wait - a
 headless machine's numbers, not a laptop's. `export` records a few seconds with Rec and checks that a video file comes out
 and that its sound track decodes to more than silence. The camera part needs network access to storage.googleapis.com and

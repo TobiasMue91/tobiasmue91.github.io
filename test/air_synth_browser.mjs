@@ -79,7 +79,11 @@ if (run('sound')) {
             }
         }
         const rms = Math.sqrt(sum / (b.length * b.numberOfChannels));
-        return {peak, rmsDb: 20 * Math.log10(rms), d2max, d2at, notes: r.events.filter(e => e.type === 'on').length, bands: [...new Set(r.bands)].join(' ')};
+        // loudness around the break and the drop: the hand opens at 21 s
+        const win = (a, z) => { const d = b.getChannelData(0); let q = 0; const i0 = Math.floor(a * sr), i1 = Math.floor(z * sr); for (let i = i0; i < i1; i++) q += d[i] * d[i]; return 10 * Math.log10(q / (i1 - i0)); };
+        const k = r.bands.findIndex((x, j) => j && x === '3' && r.bands[j - 1].endsWith('r')), dropS = k >= 0 ? script[k].t / 1000 : null;
+        const drop = dropS ? {at: dropS, breakDb: win(19.5, 20.9), buildDb: win(dropS - 0.6, dropS), dropDb: win(dropS, dropS + 1.2)} : null;
+        return {peak, rmsDb: 20 * Math.log10(rms), d2max, d2at, notes: r.events.filter(e => e.type === 'on').length, bands: [...new Set(r.bands)].join(' '), drop};
     }, opt);
     const names = await page.evaluate(() => SOUNDS.map(s => s.name));
     for (let k = 0; k < names.length; k++) {
@@ -89,6 +93,10 @@ if (run('sound')) {
         ok(r.peak < 0.96, names[k] + ': the limiter holds the peak near its ceiling (-1 dBFS), nothing reaches full scale');
         ok(r.rmsDb > -30 && r.rmsDb < -10, names[k] + ': loudness between -30 and -10 dBFS RMS');
         if (k === 0) ok(/b/.test(r.bands) && /3|2/.test(r.bands), 'the band went up, broke on the fist and came back');
+        const d = r.drop;
+        if (d) info(`${names[k]}: hand opens at 21.0 s, drop at ${d.at.toFixed(2)} s; break ${d.breakDb.toFixed(1)} dB, last beat of the build ${d.buildDb.toFixed(1)} dB, first second of the drop ${d.dropDb.toFixed(1)} dB`);
+        ok(d && d.buildDb > d.breakDb + 3, names[k] + ': the build is clearly louder than the break');
+        ok(d && d.dropDb > d.breakDb + 6, names[k] + ': the drop is at least 6 dB above the break');
     }
     const sine = await measure({wave: 'sine'}), clicky = await measure({wave: 'sine', clicky: true});
     info(`largest second difference: sine engine ${sine.d2max.toFixed(4)} at ${sine.d2at.toFixed(2)} s, clicking control ${clicky.d2max.toFixed(4)} at ${clicky.d2at.toFixed(2)} s`);
@@ -185,9 +193,12 @@ if (run('camera')) {
                 await page.waitForTimeout(2500);
                 const got = await page.evaluate(() => {
                     const s = __air.mapper.state, h = __air.hands && __air.hands[0];
-                    return {pose: s.pose, mode: s.mode, present: s.present};
+                    const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y), pl = h ? d(h.landmarks[0], h.landmarks[9]) : 1;
+                    return {pose: s.pose, mode: s.mode, present: s.present, pinch: s.pinchRatio, pinched: s.pinch,
+                        tips: h ? [8, 12, 16, 20].map(i => +(d(h.landmarks[i], h.landmarks[0]) / pl).toFixed(2)) : null};
                 });
-                info(`${img}.jpg: pose ${got.pose}, mode ${got.mode}`);
+                info(`${img}.jpg: pose ${got.pose}, mode ${got.mode}; fingertips from the wrist ${got.tips} palm lengths (curled < 1.1); thumb to index ${got.pinch && got.pinch.toFixed(2)} (pinch < 0.36)`);
+                ok(!got.pinched, img + '.jpg is not taken for a pinch');
                 ok(got.present && got.pose === pose && got.mode === md, img + '.jpg reads as ' + pose + ' and plays ' + md);
             }
             await page.evaluate(() => { window.__img = 'fist'; });
