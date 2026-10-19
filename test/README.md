@@ -1196,29 +1196,49 @@ seed in about half an hour. `VERBOSE=1` prints its trips and the minute each zon
 ## Air Synth
 
 `node test/air_synth.mjs` (or `npm run test:airsynth`) runs the DOM-free `<script id="core">` block of `tools/air_synth.html`
-in Node: the function that turns hand landmarks plus time into notes and filter settings. No browser, no server; well under
-a second. It plays it synthetic hands - slow drifts, fast sweeps, 15 fps with jitter and dropped frames, irregular frame
-timing, a hand held still across chord changes - and checks that every note is a tone of the chord playing when it starts,
-that every event starts on a sixteenth and is scheduled ahead of time, and that no sixteenth gets two events. Dropouts of 40,
-100 and 140 ms never cut a note (also mid-sweep, where nothing new may start from the missing hand); a hand gone for 600 ms is
-released and plays again when it returns. A still hand right on the boundary between two notes does not flutter under three
-levels of jitter, and a control with the hysteresis off shows that it would. Left/right labels swapping every frame, or the
-hands listed in either order, keep the lead hand. The filter reaches 90% of a jump in the hand within two frames - it is never
-held back to the grid. A hand on any drawn note line plays that note. It also prints what the One-Euro filter and the 40 ms
-prediction buy against a camera that is 70 ms late, and checks that the filter cuts a still hand's jitter by at least 40%
-and that the prediction brings a moving hand closer to the truth than the filter alone.
+in Node: the functions that turn hand landmarks plus time into notes, the band and the loop. No browser, no server; under a
+second. Synthetic hands are built with real finger geometry (open, two fingers, one, fist, pinch), with per-landmark jitter.
 
-`node test/air_synth_browser.mjs [sound] [camera]` (`npm run test:airsynth-browser`) needs Playwright's Chromium.
-`sound` renders a scripted 20 s performance through the page's own engine with `OfflineAudioContext` and checks that no
-sample reaches full scale, the limiter holds the peak near -1 dBFS, and RMS loudness is between -30 and -10 dBFS; rendered
-again with sine waves, the largest second difference anywhere stays under 0.03 (no clicks at note changes), while a control
-engine that jumps its envelope on each note is caught by the same measure. `camera` replaces the webcam with a canvas
-showing MediaPipe's own `pointing_up.jpg`, moved between two heights, and checks that the hand model loads, finds the hand
-on more than 90% of frames, that the note goes up and down with the hand, and that a slow GPU delegate (headless Chromium has
-only software WebGL) is swapped for the CPU one. It prints camera frame rate, detection time, picture-to-mapper delay and the
-grid wait - a headless machine's numbers, not a laptop's. The camera part needs network access to storage.googleapis.com and
+- *Time and harmony.* Under slow drifts, fast sweeps, 15 fps with jitter and dropped frames, irregular frame timing, the
+  arpeggio and chords changed by pinches, every note is a tone of the chord playing when it starts, every event lies on a
+  sixteenth and is scheduled ahead, and no sixteenth gets two. A still hand re-pitches only on a chord change.
+- *Dropouts and flutter.* 40, 100 and 140 ms dropouts never cut a note (mid-sweep too); 600 ms releases it. A still hand on a
+  note boundary does not flutter under three levels of jitter, and a control with the hysteresis off shows it would.
+- *Hands.* Swapped left/right labels or hand order keep the lead hand; when the lead hand leaves, the other one leads; the
+  second hand's height is the space and never steals the melody. The filter reaches 90% of a jump within two frames.
+- *Poses.* Each pose reads as itself through jitter and only as itself; a hand half open right on the threshold changes pose
+  at most once in 5 s; a pose must hold ~90 ms; a dropout keeps it for the hold only; two pinches are two chord changes,
+  holding one is not more, and a fist with the thumb on the index is never a pinch.
+- *What they do.* A fist rests the melody on the grid; two fingers play an arpeggio in sixteenths (eighths while calm) that
+  keeps its rhythm at 10 camera frames a second; the Arp latch turns an open hand (or a mouse) into the arpeggio; a pinch
+  moves the chord on at the next beat.
+- *The band.* It changes level only on a bar line, one level at a time, and every rise is announced by a fill; a busy
+  player takes it to the top within 20 s, a still hand settles it to a pulse, no hand to air. Bass is always the chord's
+  root, every pad chord is the chord and no pad voice jumps more than a fourth. A fist starts a one-beat snare fill on the
+  next beat, then a crash and no drums; opening the hand brings a riser and the drop on the next bar line, at least at groove.
+- *The loop.* It records from the next bar line, plays every note back once per pass at its step and in its sound, a held
+  note lasts until the next thing played, pressing again layers a new pass, notes snap to the chord playing now, clear empties it.
+- *Different playing, different music.* A drifting hand, a dancing one and a held arpeggio give measurably different pieces
+  (notes per second, pitch, band level, filter) - printed, and checked in the direction each should go.
+
+It also prints what the One-Euro filter and the 40 ms prediction buy against a camera that is 70 ms late, and checks that the
+filter cuts a still hand's jitter by at least 40% and that the prediction brings a moving hand closer than the filter alone.
+
+`node test/air_synth_browser.mjs [sound] [camera] [export]` (`npm run test:airsynth-browser`) needs Playwright's Chromium.
+`sound` renders a scripted 30 s performance (sweeps, jumps, dropouts, a pinch, a loop, an arpeggio, a break and the drop)
+through the page's own engine with `OfflineAudioContext`, once per sound in its own scene, and checks that each plays, that
+the peak stays under the limiter's -1 dBFS ceiling, that RMS loudness is between -30 and -10 dBFS and that the band went up,
+broke and came back; rendered again with sine waves, the largest second difference anywhere stays under 0.03 (no clicks at
+note changes), while a control engine that jumps its envelope on each note is caught by the same measure. `camera` replaces
+the webcam with a canvas showing MediaPipe's own photos and checks that the hand model loads, finds the hand on more than 90%
+of frames, that the note goes up and down with the hand, that a slow GPU delegate (headless Chromium has only software
+WebGL) is swapped for the CPU one, that `right_hands.jpg` (its open hand), `fist.jpg`, `victory.jpg` and `pointing_up.jpg`
+read as open, fist, two and one and play melody, rest, arpeggio and melody, and that a fist held up breaks the band and
+opening it drops it back in. It prints camera frame rate, detection time, picture-to-mapper delay and the grid wait - a
+headless machine's numbers, not a laptop's. `export` records a few seconds with Rec and checks that a video file comes out
+and that its sound track decodes to more than silence. The camera part needs network access to storage.googleapis.com and
 `npm i --no-save @mediapipe/tasks-vision@0.10.14` (or `MEDIAPIPE=<folder of that package>`), served in place of jsDelivr;
-it skips without them. `DELEGATE=GPU` or `DELEGATE=CPU` pins the delegate. About a minute.
+it skips without them. `DELEGATE=GPU` or `DELEGATE=CPU` pins the delegate. Two minutes or so.
 
 ## Push Mine
 
