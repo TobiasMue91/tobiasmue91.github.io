@@ -221,7 +221,7 @@ if (suites.includes('scenes')) {
     for (let s = 0; s < 12; s++) for (const [t, label] of [[5, 'calm'], [40, 'drop']]) {
       R.reset();
       const f0 = t * 60;
-      for (let f = f0 - 20; f <= f0; f++) { const U = a.uniformsAt(f); U.SA = U.SB = s; U.MIXV = 0; R.draw(U); }
+      for (let f = f0 - 20; f <= f0; f++) { const U = a.uniformsAt(f); U.SA = U.SB = s; U.MIXV = 0; R.draw(U, true); }
       x.drawImage(R.c, 0, 0, 160, 90);
       const d = x.getImageData(0, 0, 160, 90).data; let sum = 0, white = 0;
       for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 765; sum += l; if (l > .97) white++; }
