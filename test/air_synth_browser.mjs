@@ -17,7 +17,8 @@
 // and the MediaPipe package the page loads from jsDelivr, installed locally and served in its place:
 //   npm i --no-save @mediapipe/tasks-vision@0.10.14      (or MEDIAPIPE=<folder of that package>)
 // It skips what it cannot run.
-//   node test/air_synth_browser.mjs [sound] [camera]      (npm run test:airsynth-browser)
+//   export  - Rec in mouse mode for a few seconds saves a video, and its sound track decodes to more than silence.
+//   node test/air_synth_browser.mjs [sound] [camera] [export]      (npm run test:airsynth-browser)
 
 import {createServer} from 'http';
 import {readFileSync, existsSync} from 'fs';
@@ -52,19 +53,23 @@ if (run('sound')) {
     const page = await browser.newPage();
     await page.goto(URL_);
     const measure = async opt => page.evaluate(async opt => {
-        // a hand as the mapper takes it: palm at (x, y), camera space
-        const hand = (x, y) => { const lm = []; for (let i = 0; i < 21; i++) lm.push({x: 1 - x, y, z: 0}); return [{landmarks: lm}]; };
+        // a hand as the mapper takes it: palm at (x, y), pose given (as the pointer gives it)
+        const hand = (x, y, pose = 'open') => { const lm = []; for (let i = 0; i < 21; i++) lm.push({x: 1 - x, y, z: 0}); return [{landmarks: lm, palm: {x: 1 - x, y}, pose}]; };
         const script = [];
-        for (let t = 0; t < 20000; t += 33.3) {
-            let h;
+        for (let t = 0; t < 30000; t += 33.3) {
+            let h, f = {t};
             if (t < 4000) h = hand(0.5, 0.5 + 0.35 * Math.sin(t / 500));                 // sweep
             else if (t < 8000) h = hand((t % 1000) / 1000, (Math.floor(t / 400) % 2) ? 0.15 : 0.85);  // jumps, filter ramps
             else if (t < 9000) h = (t % 300 < 100) ? null : hand(0.7, 0.4);             // stutter dropouts
-            else if (t < 11000) h = null;                                               // hand gone
-            else h = hand(0.3 + 0.6 * Math.sin(t / 900) ** 2, 0.5 + 0.4 * Math.sin(t / 130));  // fast and wild
-            script.push({t, hands: h});
+            else if (t < 10500) h = null;                                               // hand gone
+            else if (t < 16000) h = hand(0.3 + 0.6 * Math.sin(t / 900) ** 2, 0.5 + 0.4 * Math.sin(t / 130), t > 13000 ? 'two' : 'open');  // wild, then arpeggio
+            else if (t < 21000) h = hand(0.5, 0.5, 'fist');                             // break
+            else h = hand(0.6 + 0.3 * Math.sin(t / 300), 0.5 + 0.4 * Math.sin(t / 210)); // the drop
+            if (Math.abs(t - 11000) < 17 || Math.abs(t - 23000) < 17) f.chord = true;
+            if (Math.abs(t - 2000) < 17) f.loop = true;
+            f.hands = h; script.push(f);
         }
-        const r = await window.renderOffline(script, 20.5, opt), b = r.buf, sr = b.sampleRate;
+        const r = await window.renderOffline(script, 30.5, opt), b = r.buf, sr = b.sampleRate;
         let peak = 0, sum = 0, d2max = 0, d2at = 0;
         for (let c = 0; c < b.numberOfChannels; c++) {
             const d = b.getChannelData(c);
@@ -74,14 +79,17 @@ if (run('sound')) {
             }
         }
         const rms = Math.sqrt(sum / (b.length * b.numberOfChannels));
-        return {peak, rmsDb: 20 * Math.log10(rms), d2max, d2at, notes: r.events.filter(e => e.type === 'on').length};
+        return {peak, rmsDb: 20 * Math.log10(rms), d2max, d2at, notes: r.events.filter(e => e.type === 'on').length, bands: [...new Set(r.bands)].join(' ')};
     }, opt);
-    const saw = await measure({});
-    info(`saw render: ${saw.notes} notes, peak ${saw.peak.toFixed(3)} (${(20 * Math.log10(saw.peak)).toFixed(1)} dBFS), RMS ${saw.rmsDb.toFixed(1)} dBFS`);
-    ok(saw.notes > 40, 'the scripted performance plays notes');
-    ok(saw.peak < 1, 'no sample reaches full scale');
-    ok(saw.peak < 0.96, 'the limiter holds the peak near its ceiling (-1 dBFS), with < 0.7 dB overshoot');
-    ok(saw.rmsDb > -30 && saw.rmsDb < -10, 'loudness between -30 and -10 dBFS RMS');
+    const names = await page.evaluate(() => SOUNDS.map(s => s.name));
+    for (let k = 0; k < names.length; k++) {
+        const r = await measure({sound: k, scene: k});
+        info(`${names[k]}: ${r.notes} notes, peak ${r.peak.toFixed(3)} (${(20 * Math.log10(r.peak)).toFixed(1)} dBFS), RMS ${r.rmsDb.toFixed(1)} dBFS; band went ${r.bands}`);
+        ok(r.notes > 60, names[k] + ': the scripted performance plays');
+        ok(r.peak < 0.96, names[k] + ': the limiter holds the peak near its ceiling (-1 dBFS), nothing reaches full scale');
+        ok(r.rmsDb > -30 && r.rmsDb < -10, names[k] + ': loudness between -30 and -10 dBFS RMS');
+        if (k === 0) ok(/b/.test(r.bands) && /3|2/.test(r.bands), 'the band went up, broke on the fist and came back');
+    }
     const sine = await measure({wave: 'sine'}), clicky = await measure({wave: 'sine', clicky: true});
     info(`largest second difference: sine engine ${sine.d2max.toFixed(4)} at ${sine.d2at.toFixed(2)} s, clicking control ${clicky.d2max.toFixed(4)} at ${clicky.d2at.toFixed(2)} s`);
     ok(sine.d2max < 0.03, 'no clicks: with sine waves no sample bends harder than the tones themselves do');
@@ -93,7 +101,15 @@ if (run('camera')) {
     let photo = null;
     if (!existsSync(join(MP, 'vision_bundle.mjs'))) console.log('skip  camera (run: npm i --no-save @mediapipe/tasks-vision@0.10.14)');
     else {
-        try { const r = await fetch('https://storage.googleapis.com/mediapipe-assets/pointing_up.jpg'); if (r.ok) photo = Buffer.from(await r.arrayBuffer()).toString('base64'); } catch (e) {}
+        // MediaPipe's own photos: an open hand (the right one of right_hands.jpg), a fist, two fingers, one finger
+        try {
+            photo = {};
+            for (const f of ['pointing_up', 'fist', 'victory', 'right_hands']) {
+                const r = await fetch('https://storage.googleapis.com/mediapipe-assets/' + f + '.jpg');
+                if (!r.ok) throw new Error(r.status);
+                photo[f] = Buffer.from(await r.arrayBuffer()).toString('base64');
+            }
+        } catch (e) { photo = null; }
         if (!photo) console.log('skip  camera (no network for the MediaPipe photo)');
     }
     if (photo) {
@@ -102,14 +118,20 @@ if (run('camera')) {
             const f = route.request().url().split(/tasks-vision@[^/]+\//)[1].split('?')[0];
             route.fulfill({body: readFileSync(join(MP, f)), contentType: f.endsWith('.wasm') ? 'application/wasm' : 'text/javascript', headers: {'access-control-allow-origin': '*'}});
         });
-        await ctx.addInitScript(img => {
+        await ctx.addInitScript(imgs => {
             window.__pos = 0.3;      // where the hand's centre is drawn, 0 top .. 1 bottom
-            window.__moved = [];     // times the picture moved
+            window.__img = 'pointing_up';
             const c = document.createElement('canvas'); c.width = 640; c.height = 480;
-            const g = c.getContext('2d'), im = new Image(); im.src = 'data:image/jpeg;base64,' + img;
+            const g = c.getContext('2d'), ims = {};
+            for (const k in imgs) { ims[k] = new Image(); ims[k].src = 'data:image/jpeg;base64,' + imgs[k]; }
             const paint = () => {
-                g.fillStyle = '#d9d6d2'; g.fillRect(0, 0, 640, 480);
-                if (im.complete) { const h = 260, w = h * im.width / im.height; g.drawImage(im, 320 - w / 2, window.__pos * 480 - h / 2, w, h); }
+                const im = ims[window.__img];
+                g.fillStyle = window.__img === 'right_hands' ? '#fff' : '#d9d6d2'; g.fillRect(0, 0, 640, 480);
+                if (im.complete) {
+                    // right_hands.jpg holds two hands: show only the open one on the right
+                    const sx = window.__img === 'right_hands' ? im.width * 0.52 : 0, sw = im.width - sx;
+                    const h = 260, w = h * sw / im.height; g.drawImage(im, sx, 0, sw, im.height, 320 - w / 2, window.__pos * 480 - h / 2, w, h);
+                }
                 requestAnimationFrame(paint);
             };
             paint();
@@ -156,12 +178,50 @@ if (run('camera')) {
             info(`picture moved -> mapper half way: ${lags.map(l => l.toFixed(0)).join(', ')} ms; grid wait median ${st.wait.toFixed(0)} ms; audio output ${st.out.toFixed(0)} ms`);
             info(`notes at the two heights: ${notes.join(' ')}`);
             ok(lags.every(l => l > 0), 'the mapper follows every move of the hand');
+            // poses, read by the real model off real photos
+            const want = {right_hands: ['open', 'melody'], fist: ['fist', 'rest'], victory: ['two', 'arp'], pointing_up: ['one', 'melody']};
+            for (const [img, [pose, md]] of Object.entries(want)) {
+                await page.evaluate(img => { window.__img = img; window.__pos = 0.5; }, img);
+                await page.waitForTimeout(2500);
+                const got = await page.evaluate(() => {
+                    const s = __air.mapper.state, h = __air.hands && __air.hands[0];
+                    return {pose: s.pose, mode: s.mode, present: s.present};
+                });
+                info(`${img}.jpg: pose ${got.pose}, mode ${got.mode}`);
+                ok(got.present && got.pose === pose && got.mode === md, img + '.jpg reads as ' + pose + ' and plays ' + md);
+            }
+            await page.evaluate(() => { window.__img = 'fist'; });
+            await page.waitForTimeout(5000);
+            ok(await page.evaluate(() => __air.session.band.mode === 'break'), 'a fist held in front of the camera breaks the band');
+            await page.evaluate(() => { window.__img = 'right_hands'; });
+            await page.waitForTimeout(4500);
+            ok(await page.evaluate(() => __air.session.band.mode === 'normal' && __air.session.band.level >= 2), 'and opening it drops it back in');
             ok(notes.slice(1).every((m, i) => m !== null && m !== notes[i]), 'and the note changes with each move between high and low');
             ok(notes.slice(1).every((m, i) => i % 2 === 0 ? m < notes[0] : m > notes[1]), 'low is lower than high, every time');
             if (!process.env.DELEGATE) ok(st.delegate === 'CPU' || st.det < 45, 'a slow GPU delegate is swapped for the CPU one (' + st.delegate + ', ' + st.det.toFixed(0) + ' ms)');
         }
         await ctx.close();
     }
+}
+
+if (run('export')) {
+    const page = await browser.newPage({viewport: {width: 640, height: 480}});
+    await page.goto(URL_);
+    await page.click('#goMouse');
+    await page.click('#recBtn');
+    await page.mouse.move(320, 240); await page.mouse.down();
+    for (let k = 0; k < 60; k++) { await page.mouse.move(200 + 4 * k, 240 + 150 * Math.sin(k / 5)); await page.waitForTimeout(40); }
+    await page.mouse.up();
+    await page.click('#recBtn');
+    const r = await page.waitForFunction(() => window.__lastRecording, null, {timeout: 10000}).then(() => page.evaluate(async () => {
+        const b = window.__lastRecording, ctx = new AudioContext();
+        let audio = null;
+        try { const buf = await ctx.decodeAudioData(await b.arrayBuffer()); const d = buf.getChannelData(0); let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i]; audio = {sec: buf.duration, rms: Math.sqrt(s / d.length)}; } catch (e) { audio = {err: String(e)}; }
+        return {size: b.size, type: b.type, audio};
+    }), () => null);
+    ok(r && r.size > 20000, 'Rec saves a video file (' + (r ? (r.size / 1024).toFixed(0) + ' KB, ' + r.type : 'none') + ')');
+    ok(r && r.audio && r.audio.rms > 0.005, 'with the sound in it (' + (r && JSON.stringify(r.audio)) + ')');
+    await page.close();
 }
 
 await browser.close(); server.close();
