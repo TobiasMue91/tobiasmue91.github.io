@@ -71,6 +71,8 @@ if (suites.includes('track')) {
   check(/negative/.test(CG.parseTrack('-1fr').error), 'negative fr says so');
   check(/first value in minmax/.test(CG.parseTrack('minmax(1fr, 1fr)').error), 'fr minimum says so');
   check(/One size per box/.test(CG.parseTrack('repeat(3, 1fr)').error), 'repeat in a box points to +');
+  check(/One size per box/.test(CG.parseTrack('1fr 2fr').error), 'two good sizes in one box point to +');
+  check(/isn’t a track size/.test(CG.parseTrack('30o px').error), 'a typo with a space is called a typo, not a list');
   check(/Try 1fr, 200px/.test(CG.parseTrack('abc').error), 'garbage lists what is accepted');
 }
 
@@ -123,7 +125,7 @@ if (suites.includes('edit')) {
   eq(r.name, 'main', 'the free suggestion is reused');
   r = CG.addArea(s, 2, 1, 0, 1);
   eq(plain(r.removed), ['header', 'main', 'footer'], 'a column through three areas removes all three');
-  eq(plain(CG.matrix(r.state)).map(x => x[1]), ['header', 'header', 'header'], 'corner order does not matter; the first free suggestion (header, just freed) names it');
+  eq(plain(CG.matrix(r.state)).map(x => x[1]), ['header', 'header', 'header'], 'corner order does not matter; a strip down a 2-column grid takes the first free name');
   r = CG.addArea(s, 0, 0, 0, 1, 'top bar');
   eq(r.name, 'top-bar', 'a given name is normalised');
   r = CG.addArea(s, 1, 0, 1, 0, 'main');
@@ -144,7 +146,16 @@ if (suites.includes('edit')) {
   t = CG.deleteTrack(s, 'rows', 1);
   eq(plain(CG.matrix(t)), [['header', 'header'], ['footer', 'footer']], 'deleting the middle row drops sidebar and main');
   check(CG.deleteTrack(CG.setCount(s, 'cols', 1), 'cols', 0).cols.length === 1, 'the last column cannot be deleted');
-  eq(CG.setCount(s, 'cols', 4).cols, ['220px', '1fr', '1fr', '1fr'], 'grow adds 1fr tracks at the end');
+  eq(CG.setCount(s, 'cols', 4).cols, ['220px', '1fr', '1fr', '1fr'], 'grow adds 1fr columns at the end');
+  eq(CG.setCount(s, 'rows', 4).rows, ['auto', '1fr', 'auto', 'auto'], 'grow adds auto rows (sized by content, as a footer wants)');
+  // a new area is named for where it sits
+  const three = CG.setCount(CG.setCount(Object.assign(CG.clone(s), {areas: []}), 'cols', 3), 'rows', 4);
+  eq(CG.addArea(three, 0, 0, 0, 2).name, 'header', 'full width at the top: header');
+  eq(CG.addArea(three, 3, 2, 3, 0).name, 'footer', 'full width at the bottom: footer');
+  eq(CG.addArea(three, 1, 0, 2, 0).name, 'sidebar', 'down the left edge: sidebar');
+  eq(CG.addArea(three, 1, 2, 2, 2).name, 'aside', 'down the right edge of three columns: aside');
+  eq(CG.addArea(three, 1, 1, 2, 1).name, 'main', 'in the middle: main');
+  eq(CG.addArea(s, 1, 1, 1, 1).name, 'main', 'right half of two columns: main, not aside');
   eq(CG.setCount(s, 'rows', 0).rows.length, 1, 'count below 1 clamps to 1');
   eq(CG.setCount(s, 'rows', 99).rows.length, CG.MAX_TRACKS, 'count clamps to the maximum');
   eq(CG.setCount(s, 'rows', 2.7).rows.length, 2, 'fractional count floors');
@@ -265,6 +276,11 @@ if (suites.includes('parse')) {
   eq([r.state.fit, r.state.fitMin, r.state.fitMax, r.state.autoRows], ['auto-fill', '180px', '1fr', '200px'], 'auto-fill card grid');
   r = P('.g { grid-template-columns: [full-start] 1fr [content-start] 2fr; }');
   eq(r.ok && plain(r.state.cols), ['1fr', '2fr'], 'line names dropped');
+  const spaced = P('.d{grid-template-columns: 240 px 1,5fr 1fr ; gap: 1,5rem}');
+  eq(spaced.ok && plain(spaced.state.cols), ['240px', '1.5fr', '1fr'], '"240 px" with a space and decimal commas in a pasted list');
+  check(spaced.warnings.some(w => /Decimal commas/.test(w)), 'decimal commas are reported, not silent');
+  check(!P('.d{grid-template-columns: minmax(100,1fr) 1fr}').warnings.some(w => /Decimal/.test(w)), 'a comma inside minmax() is not a decimal comma');
+  eq(P('.d{grid-template-columns: 2 em 1fr}').state.cols[0], '2em', 'any unit with a space');
   check(r.warnings.length === 1, 'and the drop is reported');
   r = P('.g{grid-template-areas:"a b" "b a"}');
   eq(r.ok, false, 'non-rectangular area refused');

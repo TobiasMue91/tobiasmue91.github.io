@@ -79,8 +79,7 @@ select.btn { padding-right: 28px; }
 .ed .corner { font-size: 11px; color: var(--muted); align-self: end; line-height: 1.2; padding-bottom: 4px; }
 .trk { width: 100%; min-width: 0; border: 1px solid var(--rule); border-radius: 6px; background: var(--card); text-align: center; font: 13px var(--mono); padding: 6px 2px; height: 32px; color: var(--ink); }
 .trk.long { font-size: 11px; letter-spacing: -0.02em; }
-.trk:focus { position: relative; z-index: 4; min-width: 170px; text-align: left; padding-left: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.14); }
-.trk.endcol:focus { justify-self: end; }
+.trk:focus-visible, .trk:focus { outline: 2px solid var(--accent); outline-offset: -2px; text-align: left; padding-left: 6px; }
 .trk:hover { border-color: var(--rule-strong); }
 .trk[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
 .cell { border: 1px dashed var(--rule-strong); border-radius: 6px; background: var(--cell); min-height: 48px; padding: 0; cursor: crosshair; position: relative; }
@@ -144,7 +143,8 @@ pre.code .an { color: var(--c); font-weight: 500; }
 .prev-stage { padding: 10px; background: repeating-conic-gradient(var(--paper) 0 25%, var(--card) 0 50%) 0 0 / 16px 16px; }
 .prev-box { position: relative; height: 260px; overflow: hidden; margin: 0 auto; }
 .prev-box iframe { position: absolute; top: 0; left: 0; border: 1px solid var(--rule-strong); background: #fff; transform-origin: 0 0; border-radius: 4px; }
-.prev-cap.warn { color: var(--bad); }
+.prev-cap.warn { color: var(--bad); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.prev-cap .btn { min-height: 30px; padding: 3px 10px; font-size: 13px; color: var(--ink); }
 .prev-cap { font-size: 12.5px; color: var(--muted); padding: 8px 12px; border-top: 1px solid var(--rule); margin: 0; }
 
 dialog { border: 1px solid var(--rule-strong); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); background: var(--card); color: var(--ink); }
@@ -229,13 +229,13 @@ dialog::backdrop { background: rgba(10, 12, 18, .45); }
       <div id="fitPane" hidden>
         <div class="fitbox">
           <label>Repeat mode
-            <select id="fitMode" class="btn"><option value="auto-fit">auto-fit (cards stretch)</option><option value="auto-fill">auto-fill (keep empty slots)</option></select></label>
+            <select id="fitMode" class="btn"><option value="auto-fit">auto-fit</option><option value="auto-fill">auto-fill</option></select></label>
           <label>Narrowest card <input id="fitMin" class="txt" type="text" autocomplete="off" spellcheck="false"></label>
-          <label>Widest card <input id="fitMax" class="txt" type="text" autocomplete="off" spellcheck="false"></label>
+          <label>Widest card (1fr = share the row) <input id="fitMax" class="txt" type="text" autocomplete="off" spellcheck="false"></label>
           <label>Row height <input id="autoRows" class="txt" type="text" autocomplete="off" spellcheck="false"></label>
           <label>Cards in preview <input id="items" class="txt" type="number" inputmode="numeric" min="1" max="200"></label>
         </div>
-        <p class="fitnote">Cards wrap onto as many columns as fit, no media queries needed. Narrow the preview to see it.</p>
+        <p class="fitnote">Cards wrap onto as many columns as fit, no media queries. With fewer cards than fit in a row, auto-fit stretches them across it; auto-fill keeps the empty columns.</p>
       </div>
 
       <details class="more" id="more">
@@ -451,7 +451,11 @@ var CG = (function () {
     }
     if (/^repeat\b/i.test(s)) return {ok: false, error: 'One size per box. Use + to add more tracks.'};
     if (/^(minmax|fit-content)\b/i.test(s)) return {ok: false, error: 'Check the brackets, like minmax(100px, 1fr).'};
-    if (splitTop(s, ' ') && splitTop(s, ' ').length > 1) return {ok: false, error: 'One size per box. ' + TRACK_HINT};
+    var many = splitTop(s, ' ');
+    if (many && many.length > 1) {
+      var allSizes = many.every(function (t) { return parseTrack(t).ok; });
+      return {ok: false, error: allSizes ? 'One size per box. Use + to add more tracks.' : '“' + s + '” isn’t a track size. ' + TRACK_HINT};
+    }
     var d = readDim(s);
     if (d && d.unit === '' && d.n > 0) return {ok: true, value: fmtNum(d.n) + (d.n <= 12 ? 'fr' : 'px'), guessed: true};
     var b = breadth(s, true);
@@ -489,9 +493,19 @@ var CG = (function () {
   }
 
   var SUGGEST = ['header', 'sidebar', 'main', 'footer', 'aside', 'nav', 'hero', 'content', 'banner', 'extra'];
-  function nextName(areas) {
+  // what a block in this position is usually called: full width at the top or bottom, a strip down an edge
+  function placeHint(r, R, C) {
+    var full = r.c0 === 0 && r.c1 === C && C > 1;
+    if (full && r.r0 === 0 && R > 1) return 'header';
+    if (full && r.r1 === R && R > 1) return 'footer';
+    if (r.c0 === 0 && r.c1 < C && C > 1) return 'sidebar';
+    if (r.c1 === C && r.c0 > 0 && C > 2) return 'aside';
+    return r.r0 > 0 && r.r1 < R ? 'main' : null;
+  }
+  function nextName(areas, hint) {
     var taken = {};
     areas.forEach(function (a) { taken[a.name] = 1; });
+    if (hint && !taken[hint]) return hint;
     for (var i = 0; i < SUGGEST.length; i++) if (!taken[SUGGEST[i]]) return SUGGEST[i];
     for (var k = 1; ; k++) if (!taken['area-' + k]) return 'area-' + k;
   }
@@ -527,7 +541,7 @@ var CG = (function () {
     var removed = s.areas.filter(function (a) { return overlaps(a, rect); }).map(function (a) { return a.name; });
     s.areas = s.areas.filter(function (a) { return !overlaps(a, rect); });
     var nm = name ? normName(name) : null;
-    rect.name = nm && nm.ok && !s.areas.some(function (a) { return a.name === nm.value; }) ? nm.value : nextName(s.areas);
+    rect.name = nm && nm.ok && !s.areas.some(function (a) { return a.name === nm.value; }) ? nm.value : nextName(s.areas, placeHint(rect, s.rows.length, s.cols.length));
     s.areas.push(rect);
     return {state: s, name: rect.name, removed: removed};
   }
@@ -564,7 +578,8 @@ var CG = (function () {
   function setCount(st, axis, n) {
     n = Math.max(1, Math.min(MAX_TRACKS, Math.floor(n) || 1));
     var s = st, list = axis === 'rows' ? st.rows : st.cols;
-    while (list.length < n) { s = insertTrack(s, axis, list.length, '1fr'); list = axis === 'rows' ? s.rows : s.cols; }
+    // a new row is sized by its content (auto); a new column takes a share (1fr)
+    while (list.length < n) { s = insertTrack(s, axis, list.length, axis === 'rows' ? 'auto' : '1fr'); list = axis === 'rows' ? s.rows : s.cols; }
     while (list.length > n) { s = deleteTrack(s, axis, list.length - 1); list = axis === 'rows' ? s.rows : s.cols; }
     return s;
   }
@@ -658,7 +673,10 @@ var CG = (function () {
 
   // ---- reading CSS someone pasted ----------------------------------------------------------------------
   function expandTracks(value, warnings) {
-    var parts = splitTop(decComma(clean(value)), ' ');
+    // "240 px" -> "240px": people paste lengths with a space before the unit
+    var parts = splitTop(decComma(clean(value)).replace(/(\d)\s+(fr|%|[a-z]{1,5})(?=\s|$|\))/gi, function (m, d, u) {
+      return LEN_UNITS.indexOf(u.toLowerCase()) >= 0 || /^(fr|%)$/i.test(u) ? d + u : m;
+    }), ' ');
     if (!parts) return {error: 'The brackets in that track list don’t match.'};
     var out = [];
     for (var i = 0; i < parts.length; i++) {
@@ -759,6 +777,7 @@ var CG = (function () {
         st.areas = a.areas;
       }
     }
+    if (/(^|[\s:])\d+,\d+(fr|px|r?em|%|[a-z]{1,4})?\b/i.test(body.replace(/\([^()]*\)/g, ''))) warnings.push('Decimal commas were read as points (1,5 → 1.5).');
     if (warnings.lineNames) warnings.push('Line names (' + warnings.lineNames.join(' ') + ') were dropped; areas are named here instead.');
     if ('display' in seen && /grid/i.test(seen.display)) any = true;
     if ('grid-template' in seen || 'grid' in seen) warnings.push('The grid-template / grid shorthand isn’t read; use the longhand properties.');
@@ -1119,7 +1138,8 @@ var CG = (function () {
     if (badKey && st.fit === 'none') {
       var m = /^(cols|rows)(\d+)$/.exec(badKey);
       f.classList.add('err');
-      f.textContent = (m[1] === 'cols' ? 'Column ' : 'Row ') + (+m[2] + 1) + ': ' + CG.parseTrack(drafts[badKey]).error;
+      var raw = String(drafts[badKey]).trim(), msg = CG.parseTrack(raw).error;
+      f.textContent = (m[1] === 'cols' ? 'Column ' : 'Row ') + (+m[2] + 1) + (raw && msg.indexOf(raw) < 0 ? ' (“' + raw + '”)' : '') + ': ' + msg;
       return;
     }
     if (a) {
@@ -1189,12 +1209,12 @@ var CG = (function () {
   function renderPreview() {
     var areas = CG.usesAreas(st);
     var extra = ['html,body{margin:0;background:#fff;color:#1c2029;font:500 13px/1.3 "IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}',
-      'body{padding:12px}', '.' + st.cls + '{min-height:calc(100vh - 24px)}',
+      'body{padding:12px}', st.fit === 'none' ? '.' + st.cls + '{min-height:calc(100vh - 24px)}' : '',
       '.' + st.cls + '>*{min-height:3.4em;padding:.6em;border-radius:6px;overflow:hidden;overflow-wrap:anywhere}'];
     var lightHex = ['#3d63d6', '#c2541d', '#2b8a5a', '#9a3fb8', '#b8860b', '#c23b6e', '#1f8a99', '#6b6f1d'];
     if (areas) st.areas.forEach(function (a) { color(a.name); var h = lightHex[colorOf[a.name]]; extra.push('.' + st.cls + '>.' + a.name + '{background:' + h + '22;border:1.5px solid ' + h + 'aa;color:' + h + '}'); });
     else extra.push('.' + st.cls + '>.grid-item{background:#3d63d61c;border:1.5px solid #3d63d688;color:#2a4699;display:grid;place-items:center}');
-    if (st.fit !== 'none' && st.autoRows === 'auto') extra.push('.' + st.cls + '>.grid-item{min-height:90px}');
+    if (st.fit !== 'none' && st.autoRows === 'auto') extra.push('.' + st.cls + '>.grid-item{aspect-ratio:4/3}');
     var doc = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + extra.join('\n') + '</style><style>' + CG.css(st) + '</style></head><body>' + CG.html(st) + '</body></html>';
     var f = $('prev');
     if (f.srcdoc !== doc) f.srcdoc = doc;
@@ -1211,16 +1231,33 @@ var CG = (function () {
   // say so when the grid is wider than the preview, so an overflow reads as the CSS's doing, not a glitch
   function checkFit() {
     var cap = $('prevCap'), f = $('prev'), sc = +f.dataset.scale || 1;
-    var base = prevW + 'px wide' + (sc < 1 ? ', scaled to fit' : '') + ' · your CSS exactly, plus colours and a height';
+    var base = prevW + 'px wide' + (sc < 1 ? ', scaled to fit' : '') + ' · your CSS exactly, with colours added';
     var d = null; try { d = f.contentDocument; } catch (e) {}
     // labels stay readable however far the frame is scaled down
     if (d && d.body) d.body.style.fontSize = (13 / sc).toFixed(1) + 'px';
     var g = d && st && d.querySelector('.' + CSS.escape(st.cls));
     cap.classList.remove('warn');
-    if (g && g.scrollWidth > g.clientWidth + 1) {
-      cap.classList.add('warn');
-      cap.textContent = 'At ' + prevW + 'px these columns need ' + Math.ceil(g.scrollWidth + 24) + 'px, so the grid overflows. Use fr or minmax(0, 1fr) for flexible columns, or stack on small screens (options).';
-    } else cap.textContent = base;
+    cap.textContent = '';
+    if (!g) { cap.textContent = base; return; }
+    // a column crushed to a sliver is correct CSS that looks like a bug: name it, and offer the usual cure
+    var thin = null;
+    if (CG.usesAreas(st) && !(st.stack >= prevW)) st.areas.forEach(function (a) {
+      var el = g.querySelector(':scope > .' + CSS.escape(a.name)), w = el ? el.getBoundingClientRect().width : 99;
+      if (w < 60 && (!thin || w < thin.w)) thin = {name: a.name, w: Math.round(w)};
+    });
+    var over = g.scrollWidth > g.clientWidth + 1;
+    if (!over && !thin) { cap.textContent = base; return; }
+    cap.classList.add('warn');
+    cap.appendChild(document.createTextNode(over
+      ? 'At ' + prevW + 'px these columns need ' + Math.ceil(g.scrollWidth + 24) + 'px, so the grid overflows. '
+      : 'At ' + prevW + 'px, ' + thin.name + ' is only ' + thin.w + 'px wide. '));
+    if (CG.usesAreas(st) && prevW <= 1000 && !(st.stack >= prevW)) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'btn';
+      var w = prevW <= 640 ? 640 : prevW;
+      b.textContent = 'Stack below ' + w + 'px';
+      b.addEventListener('click', function () { var n = CG.clone(st); n.stack = w; stackWidth = w; commit(n); announce('Areas now stack in one column up to ' + w + 'px'); });
+      cap.appendChild(b);
+    } else if (over) cap.appendChild(document.createTextNode('Use fr or minmax(0, 1fr) for flexible columns.'));
   }
   $('prev').addEventListener('load', checkFit);
   document.querySelectorAll('.prev-head [data-w]').forEach(function (x) { x.setAttribute('aria-pressed', +x.dataset.w === prevW ? 'true' : 'false'); });
@@ -1366,8 +1403,8 @@ var CG = (function () {
   var wide = window.matchMedia('(min-width: 980px)');
   function onWide() {
     var card = $('prevCard');
-    if (wide.matches) { $('left').appendChild(card); if (tab === 'preview') setTab('css'); }
-    else document.querySelector('.result').appendChild(card);
+    document.querySelector('.result').appendChild(card);
+    if (wide.matches && tab === 'preview') setTab('css');
     if (st) sizePreview();
   }
   onWide();
