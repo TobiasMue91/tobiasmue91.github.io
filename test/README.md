@@ -2403,3 +2403,17 @@ decimals, times and emoticons stay as they are, that settings saved by the earli
 that empty, non-ASCII and megabyte input survive. The decoder's word list and letter-pair table are
 built by `util/1337/bigrams.py` (needs `pip install wordfreq`); paste its two lines over `LEXICON` and
 `BIGRAM` in the core, never edit them by hand.
+
+## Favicon Generator
+
+```sh
+npm run test:favicon                      # or: node test/favicon_generator.mjs
+node test/favicon_generator.mjs ico zip   # named suites only
+```
+
+`favicon_generator.mjs` runs the page's DOM-free `<script id="core">` in Node. The files it writes are
+checked with independent readers: the `.ico` (BMP entries, flipped rows, AND mask) is decoded by
+Pillow and the `.zip` by Python's `zipfile`, so both suites need `python3` with Pillow. It also holds
+the HTML snippet to the files the package actually ships, and covers colour parsing (pasted
+`rgb()`, short hex, stray spaces), crop placement, the old Favicon Studio's saved designs and SVGs
+without a size. Suites: `crc`, `zip`, `ico`, `color`, `fit`, `text`, `migrate`, `svg`.
