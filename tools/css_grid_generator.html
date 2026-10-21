@@ -107,7 +107,7 @@ select.btn { padding-right: 28px; }
 .bubble::before { content: ''; position: absolute; top: -5px; left: var(--tip, 20px); border: 5px solid transparent; border-top: 0; border-bottom-color: var(--bad); }
 .fitbox { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .fitbox label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
-.fitbox .txt { width: 100%; }
+.fitbox .txt, .fitbox select { width: 100%; min-width: 0; }
 .fitnote { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
 
 details.more { margin-top: 12px; border-top: 1px solid var(--rule); padding-top: 10px; }
@@ -229,7 +229,7 @@ dialog::backdrop { background: rgba(10, 12, 18, .45); }
       <div id="fitPane" hidden>
         <div class="fitbox">
           <label>Repeat mode
-            <select id="fitMode" class="btn"><option value="auto-fit">auto-fit — stretch to fill the row</option><option value="auto-fill">auto-fill — keep empty slots</option></select></label>
+            <select id="fitMode" class="btn"><option value="auto-fit">auto-fit (cards stretch)</option><option value="auto-fill">auto-fill (keep empty slots)</option></select></label>
           <label>Narrowest card <input id="fitMin" class="txt" type="text" autocomplete="off" spellcheck="false"></label>
           <label>Widest card <input id="fitMax" class="txt" type="text" autocomplete="off" spellcheck="false"></label>
           <label>Row height <input id="autoRows" class="txt" type="text" autocomplete="off" spellcheck="false"></label>
@@ -239,8 +239,17 @@ dialog::backdrop { background: rgba(10, 12, 18, .45); }
       </div>
 
       <details class="more" id="more">
-        <summary>Alignment, breakpoints and naming</summary>
+        <summary>Phone layout, alignment and naming</summary>
         <div class="opts">
+          <div class="wide areas-only" id="stackBox">
+            <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" id="stackOn"> On phones, stack the areas in one column up to
+              <input id="stackW" class="txt" type="text" inputmode="numeric" style="width:70px" aria-label="Stack width in px"> px</label>
+          </div>
+          <div class="wide plain-only" id="bpBox">
+            <p class="hint" style="margin-bottom:6px">Breakpoints: from a screen width up, use N equal columns.</p>
+            <div class="bps" id="bps"></div>
+            <button class="btn" type="button" id="addBp" style="margin-top:6px">+ Breakpoint</button>
+          </div>
           <label>align-items <select id="alignItems" class="btn"></select></label>
           <label>justify-items <select id="justifyItems" class="btn"></select></label>
           <label>justify-content <select id="justifyContent" class="btn"></select></label>
@@ -249,15 +258,6 @@ dialog::backdrop { background: rgba(10, 12, 18, .45); }
           <label>Container class <input id="cls" class="txt" type="text" autocomplete="off" spellcheck="false" aria-describedby="clsErr"></label>
           <label class="areas-only">Place areas by
             <select id="place" class="btn"><option value="names">names (grid-template-areas)</option><option value="lines">line numbers</option></select></label>
-          <div class="wide areas-only" id="stackBox">
-            <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" id="stackOn"> Stack areas in one column on small screens, up to
-              <input id="stackW" class="txt" type="text" inputmode="numeric" style="width:70px" aria-label="Stack width in px"> px</label>
-          </div>
-          <div class="wide plain-only" id="bpBox">
-            <p class="hint" style="margin-bottom:6px">Breakpoints: from a screen width up, use N equal columns.</p>
-            <div class="bps" id="bps"></div>
-            <button class="btn" type="button" id="addBp" style="margin-top:6px">+ Breakpoint</button>
-          </div>
         </div>
       </details>
     </section>
@@ -918,7 +918,8 @@ var CG = (function () {
   // ---- history ----
   var pendingKey = null, pendingTimer = 0;
   function commit(next, key) {
-    if (!next || JSON.stringify(next) === JSON.stringify(st)) return;
+    // nothing changed, but a field may have just become valid again: clear its warning
+    if (!next || JSON.stringify(next) === JSON.stringify(st)) { renderCode(); renderFoot(); save(); return; }
     // typing in one box groups into one undo step
     if (!(key && key === pendingKey)) { past.push(JSON.stringify(st)); if (past.length > 200) past.shift(); }
     pendingKey = key || null; clearTimeout(pendingTimer); pendingTimer = setTimeout(function () { pendingKey = null; }, 1200);
@@ -1021,6 +1022,8 @@ var CG = (function () {
     var ed = $('ed'), R = st.rows.length, C = st.cols.length;
     var focusKey = document.activeElement && document.activeElement.dataset ? (document.activeElement.dataset.key || (document.activeElement.classList.contains('cell') ? 'cell' + document.activeElement.dataset.r + '-' + document.activeElement.dataset.c : null)) : null;
     var caret = focusKey && document.activeElement.selectionStart != null ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
+    // the box being typed in keeps exactly what was typed; the resolved value ("3" -> "3fr") only shows on leaving it
+    var typed = caret ? document.activeElement.value : null;
     ed.textContent = '';
     ed.style.gridTemplateColumns = 'var(--rowhdr) repeat(' + C + ', minmax(' + (C > 6 ? 58 : 48) + 'px, 1fr))';
     ed.style.gridTemplateRows = '32px repeat(' + R + ', minmax(' + (R > 6 ? 40 : 48) + 'px, auto))';
@@ -1051,7 +1054,7 @@ var CG = (function () {
       var el = focusKey.indexOf('cell') === 0
         ? ed.querySelector('.cell[data-r="' + focusKey.slice(4).split('-')[0] + '"][data-c="' + focusKey.split('-')[1] + '"]')
         : ed.querySelector('[data-key="' + focusKey + '"]');
-      if (el) { if (el.classList.contains('cell')) { ed.querySelectorAll('.cell').forEach(function (x) { x.tabIndex = -1; }); el.tabIndex = 0; } el.focus({preventScroll: true}); if (caret && el.setSelectionRange) try { el.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
+      if (el) { if (el.classList.contains('cell')) { ed.querySelectorAll('.cell').forEach(function (x) { x.tabIndex = -1; }); el.tabIndex = 0; } if (typed != null && el.tagName === 'INPUT') { el.value = typed; el.classList.toggle('long', typed.length > 9); } el.focus({preventScroll: true}); if (caret && el.setSelectionRange) try { el.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
     }
   }
 
