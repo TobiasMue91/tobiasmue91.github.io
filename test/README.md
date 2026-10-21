@@ -2227,6 +2227,24 @@ presets, stored state, the share hash, and size limits. Expected strings are wor
 CSS Color 4 by hand. The `browser` suite needs Chromium via Playwright (a global install is found too) and wants
 Chromium's computed style of every pasted input to equal that of what the page prints; it is skipped without it.
 
+## CSS Grid Generator
+
+```sh
+npm run test:cssgrid                          # or: node test/css_grid_generator.mjs
+node test/css_grid_generator.mjs track parse  # named suites only
+```
+
+`css_grid_generator.mjs` runs the DOM-free `<script id="core">` of `tools/css_grid_generator.html` in Node: one
+`<track-size>` per box read as CSS Grid Layout 1 §7.2 reads it (no negative lengths, fr only as a flexible maximum,
+minmax()/fit-content()/calc(), decimal comma, "200 px", a bare number up to 12 as fr and above as px), gaps, area names as
+valid `<custom-ident>`s (not auto/span/CSS-wide keywords), drawing, renaming and deleting areas and tracks, the exact CSS and
+HTML printed (template rows lined up, line-number placement, stacking below a width, breakpoints, card grids), pasted CSS
+read back (repeat(), line names, legacy grid-gap, non-rectangular areas refused) with every preset round-tripping, stored
+and linked state sanitised, the old page's sample outputs, and a 24×24 grid. Expected strings are worked out from the spec
+by hand. The `browser` suite needs Chromium via Playwright (a global install is found too): every declaration the page
+prints must pass `CSS.supports`, placing areas by name and by line number must give identical boxes, and stacking must
+give one column below its width and not above; it is skipped without it.
+
 ## CSS Filter Generator
 
 ```sh
