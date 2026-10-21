@@ -22,7 +22,7 @@ import vm from 'vm';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PAGE = join(HERE, '..', 'tools', 'favicon_generator.html');
-const ALL = ['crc', 'zip', 'ico', 'color', 'fit', 'text', 'migrate', 'svg'];
+const ALL = ['crc', 'zip', 'ico', 'color', 'fit', 'mark', 'text', 'migrate', 'svg'];
 const picked = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -118,6 +118,23 @@ if (suites.includes('fit')) {
   eq(C.steps(1024, 16), [512, 256, 128, 64, 32, 16], 'halving steps to 16');
   eq(C.steps(1024, 512), [512], 'one step to 512');
   eq(C.steps(1024, 180), [512, 180], 'steps to 180 (under 3x is one step)');
+}
+
+if (suites.includes('mark')) {
+  section('mark');
+  const mask = (w, h, rects) => { const m = new Uint8Array(w * h); for (const [x0, y0, x1, y1] of rects) for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) m[y * w + x] = 1; return m; };
+  eq(C.findMark(mask(300, 100, [[10, 10, 90, 90]]), 300, 100), {x: 10, y: 10, w: 80, h: 80}, 'banner: lone square on the left');
+  eq(C.findMark(mask(200, 80, [[4, 4, 76, 76], [88, 30, 190, 56]]), 200, 80), {x: 4, y: 4, w: 72, h: 72}, 'symbol + wordmark: the symbol');
+  eq(C.findMark(mask(200, 80, [[10, 30, 60, 50], [70, 30, 190, 50]]), 200, 80), {x: 10, y: 30, w: 180, h: 20}, 'two flat words: no symbol, whole text');
+  eq(C.findMark(mask(100, 300, [[20, 10, 80, 70], [10, 120, 90, 290]]), 100, 300), {x: 20, y: 10, w: 60, h: 60}, 'tall: symbol on top');
+  eq(C.findMark(mask(100, 100, [[30, 30, 60, 50]]), 100, 100), {x: 30, y: 30, w: 30, h: 20}, 'square image: content box');
+  eq(C.findMark(new Uint8Array(400), 20, 20), null, 'blank image: nothing found');
+  eq(C.findMark(mask(300, 100, [[0, 0, 2, 2], [40, 0, 300, 100]]), 300, 100), {x: 0, y: 0, w: 300, h: 100}, 'speck before the content is not a symbol');
+  let f = C.frame(3000, 1000, {x: 100, y: 100, w: 800, h: 800}, 0);
+  near(f.zoom, 1.25, 'banner square: zoom'); near(f.fx, 100 / 2200, 'banner square: position');
+  const r = C.fitRect(3000, 1000, 300, 0, 'cover', f.fx, f.fy, f.zoom); near(r.x + 100 * r.w / 3000, 0, 'square starts at the left edge'); near(r.y + 100 * r.h / 1000, 0, 'and at the top');
+  f = C.frame(3000, 1000, {x: 1400, y: 0, w: 200, h: 1000}, 0); eq([f.zoom, f.fx], [1, 0.5], 'tall subject: no zoom, centred');
+  f = C.frame(1000, 1000, {x: 0, y: 0, w: 2, h: 2}, 0); eq(f.zoom, 5, 'zoom capped at 5x');
 }
 
 if (suites.includes('text')) {
