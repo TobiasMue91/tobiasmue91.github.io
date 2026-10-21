@@ -281,6 +281,7 @@ if (suites.includes('parse')) {
   check(spaced.warnings.some(w => /Decimal commas/.test(w)), 'decimal commas are reported, not silent');
   check(!P('.d{grid-template-columns: minmax(100,1fr) 1fr}').warnings.some(w => /Decimal/.test(w)), 'a comma inside minmax() is not a decimal comma');
   eq(P('.d{grid-template-columns: 2 em 1fr}').state.cols[0], '2em', 'any unit with a space');
+  check(spaced.warnings.some(w => w.includes('“240 px”')), 'the joined value is quoted in full', JSON.stringify(spaced.warnings));
   check(r.warnings.length === 1, 'and the drop is reported');
   r = P('.g{grid-template-areas:"a b" "b a"}');
   eq(r.ok, false, 'non-rectangular area refused');
