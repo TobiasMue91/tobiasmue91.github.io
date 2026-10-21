@@ -2435,3 +2435,14 @@ Pillow and the `.zip` by Python's `zipfile`, so both suites need `python3` with 
 the HTML snippet to the files the package actually ships, and covers colour parsing (pasted
 `rgb()`, short hex, stray spaces), crop placement, the old Favicon Studio's saved designs and SVGs
 without a size. Suites: `crc`, `zip`, `ico`, `color`, `fit`, `text`, `migrate`, `svg`.
+
+## Living RPS
+
+```sh
+npm run test:livingrps           # or: node test/living_rps.mjs
+```
+
+`living_rps.mjs` runs the DOM-free `<script id="core">` block of `games/living_rps.html` in Node: conversions
+only ever follow the rock > scissors > paper > rock cycle, the army total and the walls hold, every board
+finishes on phone, square and wide layouts (the late-game heat-up), a seed replays the same board, and the
+underdog never pays less than the favourite. No browser, no server.
