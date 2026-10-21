@@ -167,7 +167,8 @@ if (suites.includes('edit')) {
 if (suites.includes('print')) {
   section('print');
   const s = CG.defaultState();
-  eq(CG.css(s), `.grid-container {
+  check(CG.css(s).includes('@media (max-width: 640px)'), 'the example stacks on phones by default');
+  eq(CG.css(Object.assign(CG.clone(s), {stack: 0})), `.grid-container {
   display: grid;
   grid-template-columns: 220px 1fr;
   grid-template-rows: auto 1fr auto;
@@ -269,6 +270,10 @@ if (suites.includes('parse')) {
     const st = CG.preset(id), back = P(CG.css(st));
     eq(back.ok && CG.css(back.state), CG.css(st), `round trip: ${id}`);
   }
+  eq(P('.g{grid-template-areas:"a b"}').state.stack, 0, 'pasted CSS without a stacking block gains none');
+  eq(P(CG.css(CG.defaultState())).state.stack, 640, 'the stacking block this page prints is read back');
+  eq(P('.g{grid-template-areas:"a b"} @media (max-width: 500px){.g{grid-template-columns:1fr;}}').state.stack, 500, 'its width too');
+  eq(P('@media (min-width: 900px){ .g { gap: 4px } } .g{grid-template-columns:1fr 1fr}').state.cols.length, 2, 'another @media does not confuse the reader');
   r = P('grid-template-columns: 1fr 2fr; gap: 10px');
   eq(r.ok && plain(r.state.cols), ['1fr', '2fr'], 'bare declarations, no selector');
   eq(r.state.cls, 'grid-container', 'no selector keeps the default class');
