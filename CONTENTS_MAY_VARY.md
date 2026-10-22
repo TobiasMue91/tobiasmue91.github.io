@@ -146,7 +146,23 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | 2 | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 34–35 / 53–55,
-Unwelcome Guests 40–47 / 56–61.
+Unwelcome Guests 39–41 / 54–57.
+
+### Open work on the shipped boxes
+
+Neither box has yet met rule 4's bar of 8 out of 10. The last critiques that ran (first impression,
+clarity, art direction, phone, feel) scored Starter 6/5/6/4/5 and Unwelcome Guests 6/4/5/6/4, both before
+the fixes listed in their commits; the next round was cut short. What those critiques asked for and is
+still undone, most valuable first:
+
+- **Starter**: a recipe tin on the counter instead of the side column of cards; in act 3, either push the
+  camera into the room that needs a hand or let the jars and bench run themselves, because the targets
+  are small there; bulges that push the house out of shape rather than sitting on it like stickers; a
+  phone layout composed for 390 px in every act; teach with the world rather than with words
+  (an early tap could bake a flat loaf instead of refusing).
+- **Unwelcome Guests**: more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
+  the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
+  haunt, which nobody but its author has seen yet.
 
 ## Ideas, considered and not chosen
 
@@ -196,5 +212,12 @@ box uses it.
   move to the ellipse's start point first (the same goes for an arc after a rectangle, as in an iris).
 - **Clip decoration to its shape.** Roof tiles and cellar bricks drawn on a grid spill into the sky
   and the soil unless they are clipped.
+- **A hit lands when it arrives.** Unwelcome Guests' first version showed the fright the moment the
+  object moved and felt limp; delaying the victim's jump, the scream and the money until the ghost
+  reaches them (with a short hold there) made the same numbers feel like a blow.
+- **The first action should be the best one.** A person's first fright counts four times, so a
+  stranger's first tap gets a real scream instead of "hm? +3".
+- **When a panel leaves, the film takes its room.** A finale that keeps a side panel's width leaves
+  a black slab where the panel was; lay the scene out again for the full width.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
