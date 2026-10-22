@@ -153,16 +153,19 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | № | id | title · handling | verb | loop | medium | palette | era · genre | sound | interface | ends with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
+| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows → a crop circle | real-time voxel miniature: hand-written WebGL 2, instanced boxes, a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
+Keep Off the Grass 32–33 / 46–49,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
-game in a new costume. It waits below the marker as a draft for slot 3 or 4. **Box 2 is still open**,
-and it must contrast with Starter in rhythm and in how it is drawn, not only on the ledger's axes: think
-aim-and-release, sweep-and-clear, pull-a-lever-and-watch, real-time 3D, voxels or pixels.
+game in a new costume. It waits below the marker as a draft for slot 3 or 4. Box 2 became Keep Off
+the Grass instead: continuous steering rather than waiting and tapping, real 3D rather than flat print.
+Box 3 must in turn leave both behind: no steering a vehicle, no timing taps, and neither print nor
+voxels (Unwelcome Guests' silent film qualifies on looks, but check its rhythm against this rule first).
 
 ### Open work on the shipped boxes
 
@@ -214,8 +217,22 @@ box uses it.
   Thermal receipt print and VHS fuzz.
 - **Brains** — a lawn in a 1950s B-movie: the zombies are the crop. Lurid poster painting; a theremin
   and a drive-in organ.
+- **Pachinko Parlour** — aim and release, then watch a thousand balls fall; pins and tulips as
+  upgrades. 1980s Tokyo neon, pixel art, a deafening hall. (Runner-up for box 2: strong, but its
+  rhythm is pull-and-watch, which is close to waiting.)
+- **Scratch** — a lottery kiosk's scratch cards, scratched with the finger; odds and card designs as
+  upgrades, a kiosk that grows into a casino. Foil, halftone, 1990s corner-shop colours.
+- **Fletcher** — archery: draw, hold your breath, release; arrows, bows and targets that move. Painted
+  medieval tapestry, flat perspective.
+- **Shelf Life** — a supermarket at night: sort the stock onto shelves by colour, date and price before
+  opening. Isometric pixels, fluorescent hum.
 - **Bathysphere** — sink a Victorian diving bell, sound with sonar, lure what lives down there.
   Steel engraving in the style of Jules Verne's illustrators.
+
+- **Keep Off the Grass** has had no outside critique yet, only its author's filmstrips. Known gaps: no
+  sound check on a real phone; the show lawn is larger than a phone screen, so the camera follows and
+  the stripes are never seen whole while mowing; the act-two neighbours only speak when paid; trees
+  are a few stacked cubes; the box at the end is grey under moonlight rather than cardboard-coloured.
 
 ### Genres and looks to draw from
 
@@ -229,6 +246,18 @@ From the anthology's owner, as a well for new pairs; none of these is a box yet:
   photo-real, and anything else that a canvas, WebGL or CSS can carry inside the budget.
 
 ## Lessons from the boxes so far
+
+- **Real 3D fits the budget.** Keep Off the Grass draws everything as instanced boxes with one
+  shader, one shadow map and no library: about 25 KB of renderer and scene. The rules stay a grid; the
+  view never decides anything.
+- **Headless screenshots lie about `backdrop-filter`.** In headless Chromium a blurred band over a
+  WebGL canvas came out transparent, and well beyond the band. Check the canvas itself
+  (`toDataURL` straight after a render) before chasing a camera bug.
+- **Regrowth that never pauses hides progress.** Grass that grew back while the lawn was being mowed
+  made "finished" invisible and the bots chased it forever. A lawn now stays cut until it is finished,
+  then grows back in a time-lapse week.
+- **Bots need a way round things.** A person walks round a hedge without thinking; the bot needed a
+  grid path and a "no nearer for a second and a half, give up" rule before act 2 stopped stalling.
 
 - **Pacing is tuned with bots, not by feel.** Give the bots a person's limits (reaction time, taps a
   second, reading time, breaks) and tune until both land in the window on several seeds. When the

@@ -14,7 +14,7 @@
 //   node test/contents_may_vary.mjs browser                 # needs Playwright's Chromium
 //   node test/contents_may_vary.mjs --page=old.html
 //
-// Suites: registry, budget, contract, saves, pacing, starter, browser.
+// Suites: registry, budget, contract, saves, pacing, starter, lawn, browser.
 
 import {readFileSync, existsSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -28,13 +28,13 @@ const opt = k => { const a = args.find(x => x.startsWith('--' + k + '=')); retur
 const PAGE = opt('page') || join(ROOT, 'games', 'contents_may_vary.html');
 const ONLY = opt('world');
 const REPORT = args.includes('--report');
-const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter'];
+const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter', 'lawn'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
 /* Boxes that have shipped, in play order. Saves refer to boxes by id and the page plays them in
    file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
-const SHIPPED = ['starter'];
+const SHIPPED = ['starter', 'lawn'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 120 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 72 * 1024;
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
@@ -237,6 +237,58 @@ if (suites.includes('starter') && starter) {
     S.bench.push({ v: 1, age: CORE.bakerAt(S) + 1, pat: 0 }); S.lv.baker = 1; CORE.act(S, 'hold', 0); CORE.step(S, .1);
     check(S.bench.length === 1, 'the baker leaves alone a loaf you are scoring');
     check(!CORE.act(S, 'name', 0, 'Bob') && S.jars[0].name === 'Mother', 'Mother keeps her name');
+  }
+}
+
+/* ---------------- lawn ---------------- */
+const lawn = worlds.find(w => w.id === 'lawn');
+if (suites.includes('lawn') && lawn) {
+  section('lawn');
+  const { CORE } = load(lawn);
+  const drive = (S, x, y, sec) => { CORE.act(S, 'go', x, y); for (let t = 0; t < sec; t += .1) CORE.step(S, .1); };
+  {
+    // a full grass box stops the cutting; tipping it in the bin pays
+    const S = CORE.init(3); S.lv.deck = 3;
+    drive(S, 15.5, 14, 6); drive(S, 16.5, 5, 6); drive(S, 17.5, 14, 6); drive(S, 18.5, 5, 6);
+    check(S.bag >= CORE.cap(S) - 1 && S.$ === 0, `mowing fills the grass box and pays nothing yet (${S.bag.toFixed(1)} of ${CORE.cap(S)})`);
+    S.bag = CORE.cap(S); const before = S.h.slice(); drive(S, 13.2, 14, 6);
+    check(S.h.every((h, i) => h === before[i] || h > before[i]), 'with the box full the mower cuts nothing');
+    drive(S, 20.5, 12.5, 8); drive(S, 20.6, 13.4, 2);
+    check(S.$ > 0 && S.bag === 0, `the compost bin empties the box and pays (${S.$.toFixed(2)})`);
+  }
+  {
+    // a lawn stays cut until it is finished, then grows back, and the owner pays once
+    const S = CORE.init(4); S.lv.mulch = 1; const L = CORE.layout('street', 0), cells = L.reg[1];
+    for (const i of cells.slice(0, cells.length >> 1)) S.h[i] = CORE.P.cutTo;
+    CORE.step(S, 30);
+    check(cells.slice(0, cells.length >> 1).every(i => S.h[i] === CORE.P.cutTo), 'half a lawn stays cut while the rest waits');
+    for (const i of cells) S.h[i] = CORE.P.cutTo; S.ev.length = 0; CORE.step(S, 1);
+    const jobs = S.ev.filter(e => e.k === 'job' && e.g === 1).length; CORE.step(S, 3);
+    check(jobs === 1 && S.ev.filter(e => e.k === 'job').length === 1, 'a finished lawn pays its owner once');
+    CORE.step(S, CORE.growT(S) + 1);
+    check(cells.every(i => S.h[i] >= CORE.top(S) * .95), 'and then it grows back in full');
+  }
+  {
+    // the judges: nothing for an unmown show lawn, more for straight stripes than for a ragged mow
+    const S = CORE.init(5); S.act = 3; S.lv.show1 = 1; S.lv.ride = 1; S.lv.mulch = 1;
+    CORE.act(S, 'buy', 'show1'); // already owned: refused
+    const mk = straight => { const T = JSON.parse(JSON.stringify(S)); T.site = 'green'; T.tier = 1; const L = CORE.layout('green', 1); T.h = new Array(L.W * L.H).fill(0); T.d = new Array(L.W * L.H).fill(0); T.gw = [0, 0, 0, 0];
+      for (let i = 0; i < L.K.length; i++) if (L.K[i] === 1) { const x = i % L.W, y = (i / L.W) | 0; T.h[i] = CORE.P.cutTo; T.d[i] = straight ? (x >> 1) % 2 + 1 : (x + y) % 4 + 1; } T.m = { x: 20, y: 2, a: 0, go: 0 }; return T; };
+    const A = mk(true), B = mk(false), C = mk(true); for (let i = 0; i < C.h.length; i++) if (C.h[i] === CORE.P.cutTo) C.h[i] = 1000;
+    check(!CORE.canJudge(C), 'the judges will not come out to a lawn nobody has mown');
+    CORE.act(A, 'judge'); CORE.act(B, 'judge');
+    check(A.gold === 1 && A.$ > B.$ * 2, `straight stripes win gold and pay well over a ragged mow (${A.$.toFixed(0)} against ${B.$.toFixed(0)})`);
+    check(!CORE.act(A, 'judge'), 'the judges do not come straight back');
+  }
+  {
+    // midnight: the end needs the string mown, and nothing else will do
+    const S = CORE.init(6); S.act = 3; S.gold = 3; S.$ = 1; CORE.act(S, 'buy', 'night');
+    const L = CORE.layout('field', 0), on = new Set(L.stencil);
+    for (let i = 0; i < S.h.length; i++) if (!on.has(i)) S.h[i] = CORE.P.cutTo;
+    CORE.step(S, 2);
+    check(S.act === 4 && S.finale === 0, 'mowing the whole field but the string opens nothing');
+    for (const i of L.stencil) S.h[i] = CORE.P.cutTo; CORE.step(S, .2);
+    check(S.finale === 1 && !CORE.done(S) && !CORE.act(S, 'finale', 3) && CORE.act(S, 'finale', 2) && CORE.act(S, 'finale', 3) && CORE.done(S), 'the string mown, the box folds up and opens, one step at a time');
   }
 }
 
