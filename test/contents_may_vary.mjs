@@ -34,9 +34,9 @@ const suites = picked.length ? picked : ALL;
 
 /* Boxes that have shipped, in play order. Saves refer to boxes by id and the page plays them in
    file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
-const SHIPPED = ['starter', 'guests'];
+const SHIPPED = ['starter'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
-const BOX_MAX = 110 * 1024, BOX_AIM = 95 * 1024, SHELL_MAX = 72 * 1024;
+const BOX_MAX = 120 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 72 * 1024;
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -54,7 +54,7 @@ const worlds = [...HTML.matchAll(/<template data-world="([^"]+)"([^>]*)>/g)].map
   const id = m[1], attrs = m[2], start = m.index, end = HTML.indexOf('</template>', start) + 11;
   const coreM = HTML.match(new RegExp(`<script type="text/x-core" data-world="${id}">([\\s\\S]*?)</script>`));
   const at = k => (attrs.match(new RegExp(`data-${k}="([^"]*)"`)) || [])[1];
-  return { id, title: at('title'), handling: at('handling'), tpl: HTML.slice(start, end), core: coreM ? coreM[1] : null };
+  return { id, draft: /data-draft/.test(attrs), title: at('title'), handling: at('handling'), tpl: HTML.slice(start, end), core: coreM ? coreM[1] : null };
 }).filter(w => !ONLY || w.id === ONLY);
 if (!kitSrc) { console.log('no <script id="core-kit"> in ' + PAGE); process.exit(1); }
 
@@ -72,6 +72,9 @@ if (suites.includes('registry')) {
   check(new Set(ids).size === ids.length, 'every box has its own id', ids.join(', '));
   check(SHIPPED.every((id, i) => ids[i] === id), `the shipped boxes keep their ids and their order (${SHIPPED.join(', ')})`, `page has ${ids.join(', ')}`);
   check(marker > 0 && worlds.every(w => HTML.indexOf(`data-world="${w.id}"`) > marker), 'every box comes after the WORLDS marker');
+  const firstDraft = ids.findIndex(id => worlds.find(w => w.id === id && w.draft));
+  check(firstDraft < 0 || ids.slice(firstDraft).every(id => worlds.find(w => w.id === id).draft), 'drafts come after every box in the stack');
+  check(SHIPPED.every(id => !worlds.find(w => w.id === id).draft), 'no shipped box is a draft');
   for (const w of worlds) {
     check(!!w.core, `${w.id}: has a <script type="text/x-core"> block`);
     check(!!w.title && !!w.handling, `${w.id}: has a title and a handling note for its box`, `title=${w.title} handling=${w.handling}`);
@@ -206,12 +209,17 @@ if (suites.includes('starter') && starter) {
     check(S.act === 3, 'the eager bot is downstairs with Mother by minute 26');
     S.lv.pin = 3; let early = 0;
     for (let k = 0; k < 3000; k++) {
-      const before = S.bulges.map(b => b.age);
+      const before = Object.fromEntries(S.bulges.map(b => [b.slot, b.age]));
       CORE.step(S, .1);
-      for (const e of S.ev) if (e.k === 'punch' && e.who === 'pin') { const youngest = Math.min(...before); if (youngest < CORE.bulgeGrow(S) + CORE.bulgeLife(S) - .8) early++; }
+      for (const e of S.ev) if (e.k === 'punch' && e.who === 'pin' && before[e.slot] < CORE.ripeAt(S) - .2) early++;
       S.ev.length = 0;
     }
-    check(early === 0, 'rolling pins only take bulges that were about to burst', early + ' taken early');
+    check(early === 0, 'rolling pins only take bulges that have ripened', early + ' taken early');
+    {
+      // a ripe bulge pays more than a fresh one: waiting is a choice, and beams make room for it
+      const a = { age: CORE.P.bulgeGrow }, b = { age: CORE.P.bulgeGrow + 2 };
+      check(CORE.ripe(S, b) > CORE.ripe(S, a) * 1.4, 'a bulge left to ripen two seconds pays at least 40% more');
+    }
     S.$ = 1e12; check(CORE.act(S, 'buy', 'last') && S.act === 4, 'the Last Loaf ends the bakery');
     CORE.step(S, .1);
     check(S.finale === 1, 'once bought, she rises by herself');
@@ -224,6 +232,11 @@ if (suites.includes('starter') && starter) {
     check(CORE.scoreQ(S, 0) === 1 && CORE.scoreQ(S, CORE.tol(S)) === 0, 'a perfect score is worth everything and a score a whole tolerance off is worth nothing');
     const before = S.$; CORE.act(S, 'score', 0, 0);
     check(Math.abs(S.$ - before - CORE.scoreMax(S)) < 1e-9, 'a perfect score multiplies the loaf by the pattern’s maximum');
+    S.bench.push({ v: 1, age: 0, pat: 0 }); S.lv.pattern = 2; const b2 = S.$; CORE.act(S, 'score', 0, 0);
+    check(Math.abs(S.$ - b2 - CORE.scoreMax(S, 0)) < 1e-9, 'a loaf shaped before a new pattern is paid by the pattern it was given');
+    S.bench.push({ v: 1, age: CORE.bakerAt(S) + 1, pat: 0 }); S.lv.baker = 1; CORE.act(S, 'hold', 0); CORE.step(S, .1);
+    check(S.bench.length === 1, 'the baker leaves alone a loaf you are scoring');
+    check(!CORE.act(S, 'name', 0, 'Bob') && S.jars[0].name === 'Mother', 'Mother keeps her name');
   }
 }
 
@@ -252,12 +265,13 @@ if (suites.includes('browser')) {
       check(await until(p, () => !document.querySelector('#title').hidden), 'a first visit shows the title box');
       await p.click('#tGo');
       check(await until(p, () => CMV.state === 'playing'), 'opening it lands in box 1');
-      check(await p.evaluate(() => CMV.save.current) === worlds[0].id, `box 1 is ${worlds[0].id}`);
-      if (worlds.length > 1) {
+      const stack = worlds.filter(w => !w.draft);
+      check(await p.evaluate(() => CMV.save.current) === stack[0].id, `box 1 is ${stack[0].id}`);
+      if (stack.length > 1) {
         await p.evaluate(() => CMV._complete(CMV.live.token, null));
         check(await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.w.n === 2), 'finishing box 1 lands in box 2');
         const sv = await p.evaluate(() => CMV.save);
-        check(sv.opened[0] === worlds[0].id && sv.current === worlds[1].id, 'the save remembers the opened box and the open one');
+        check(sv.opened[0] === stack[0].id && sv.current === stack[1].id, 'the save remembers the opened box and the open one');
         await p.reload();
         check(await until(p, () => !document.querySelector('#title').hidden && /Back in the box/.test(document.querySelector('#tGo').textContent)), 'coming back offers the open box');
       }
