@@ -229,10 +229,11 @@ box uses it.
 - **Bathysphere** — sink a Victorian diving bell, sound with sonar, lure what lives down there.
   Steel engraving in the style of Jules Verne's illustrators.
 
-- **Keep Off the Grass** has had no outside critique yet, only its author's filmstrips. Known gaps: no
-  sound check on a real phone; the show lawn is larger than a phone screen, so the camera follows and
-  the stripes are never seen whole while mowing; the act-two neighbours only speak when paid; trees
-  are a few stacked cubes; the box at the end is grey under moonlight rather than cardboard-coloured.
+- **Keep Off the Grass** has had no outside critique yet, only its author's filmstrips, and no sound
+  check on a real phone. Polished since: on a phone the show lawn is followed while you drive and seen
+  whole when you let go; the neighbours say their rates when the street opens; the box at the end is
+  cardboard in a breaking dawn. Still open: the act-one phone frame leaves the lower third empty; the
+  street's neighbours never react to robot mowers; a second look at the music after a full playthrough.
 
 ### Genres and looks to draw from
 

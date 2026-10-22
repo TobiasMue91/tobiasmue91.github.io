@@ -2254,6 +2254,8 @@ const CORE = (() => {
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;font-family:var(--f);color:var(--ink);-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;background:linear-gradient(#7ec8ff,#dff3ff 60%);transition:background 1.5s}
 body.night{background:linear-gradient(#060b26,#1b2660 70%)}
+body.dawn{background:linear-gradient(#3b4a8c,#e9a07e 55%,#f6d29a)}
+body.dawn #stars{opacity:.15}
 #gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
 /* a miniature: haze on the far edge, a shade on the near one */
 #tilt::before,#tilt::after{content:"";position:fixed;left:0;right:0;pointer-events:none}
@@ -2443,7 +2445,7 @@ const M4 = {
 const I4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
 /* ---- shadows ---- */
-const SHN = Math.min(2048, gl.getParameter(gl.MAX_TEXTURE_SIZE)), shTex = gl.createTexture(), shFB = gl.createFramebuffer();
+const SHN = Math.min(Math.min(innerWidth, innerHeight) < 700 ? 1024 : 2048, gl.getParameter(gl.MAX_TEXTURE_SIZE)), shTex = gl.createTexture(), shFB = gl.createFramebuffer();
 gl.bindTexture(gl.TEXTURE_2D, shTex);
 gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, SHN, SHN);
 for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE], [gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE], [gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
@@ -2453,7 +2455,9 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 /* ---- light, by the time of day ---- */
 const DAY = { sun: [.42, .84, .34], sunC: [.7, .64, .54], sky: [.47, .53, .63], gnd: [.3, .27, .22], fog: hex('#dff3ff'), fogD: 140, lamp: 0 };
 const NIGHT = { sun: [-.3, .8, .52], sunC: [.55, .6, .85], sky: [.24, .27, .45], gnd: [.05, .05, .1], fog: hex('#1b2660'), fogD: 70, lamp: 1.4 };
-let LT = DAY, nightT = 0;
+const DAWN = { sun: [.7, .3, .45], sunC: [1, .72, .5], sky: [.52, .44, .55], gnd: [.26, .2, .2], fog: hex('#f2b48c'), fogD: 110, lamp: 0 };
+const blend = (a, b, t) => { const o = {}; for (const k in a) o[k] = Array.isArray(a[k]) ? a[k].map((v, i) => lerp(v, b[k][i], t)) : lerp(a[k], b[k], t); return o; };
+let LT = DAY;
 
 /* ---- the camera: a lens over a miniature ---- */
 const cam = { x: 16, y: 9, d: 30, gx: 16, gy: 9, gd: 30, yaw: .32, pitch: .98, gpitch: .98, fov: .52, VP: null, inv: null, eye: [0, 0, 0] };
@@ -2517,8 +2521,10 @@ function person(B, x, y, a, o = {}) {
   if (o.board) at(.2, .12, hip + .15, .04, .2, .26, C.white);
 }
 function tree(B, x, y, s = 1, seed = 0) {
-  bx(B, x, y, 0, .32 * s, .32 * s, 1.3 * s, C.trunk);
-  for (let k = 0; k < 5; k++) { const h = hash(k, seed, 7), r = (1.3 + h * .6) * s; bx(B, x + (hash(k, seed, 1) - .5) * 1.1 * s, y + (hash(k, seed, 2) - .5) * 1.1 * s, (1.1 + hash(k, seed, 3) * 1.2) * s, r, r, r * .85, k & 1 ? C.leaf : C.leaf2); }
+  bx(B, x, y, 0, .3 * s, .3 * s, 1.4 * s, C.trunk); bx(B, x + .25 * s, y, .9 * s, .5 * s, .14 * s, .14 * s, C.trunk);
+  // a canopy in tiers, narrowing upward, with clumps hanging off it
+  for (let t = 0; t < 3; t++) { const r = (2.1 - t * .55) * s; bx(B, x, y, (1.2 + t * .62) * s, r, r, .66 * s, mix3(C.leaf, C.leaf2, t * .4 + hash(t, seed) * .2)); }
+  for (let k = 0; k < 6; k++) { const a = hash(k, seed, 1) * TAU, d = (.8 + hash(k, seed, 2) * .35) * s, r = (.55 + hash(k, seed, 3) * .4) * s; bx(B, x + Math.cos(a) * d, y + Math.sin(a) * d, (1.05 + hash(k, seed, 4) * 1.1) * s, r, r, r * .9, k % 3 ? C.leaf2 : mix3(C.leaf2, C.lemon, .25)); }
 }
 function house(B, x0, y0, w, wall, roof, door, dx) {
   bx(B, x0 + w / 2, y0 + 3.2, 0, w, 6, 3.4, wall);
@@ -2890,7 +2896,10 @@ function events() {
     }
     if (e.k === 'buy') {
       const u = CORE.byId[e.id];
-      if (e.gate === 2) { card('Elm Street', 'Four lawns. Four rates.'); aim(); }
+      if (e.gate === 2) {
+        card('Elm Street', 'Four lawns. Four rates.'); aim();
+        [[0, 'Half again what your dad pays.'], [2, 'A third more. Mind the gnomes.'], [3, 'Double, if you keep off the pond.']].forEach(([g, t], k) => setTimeout(() => visit(g, t), 3600 + k * 2300));
+      }
       if (e.gate === 3 || e.tier) { swap(() => { build(); card(CORE.SHOWS[S.tier - 1].name, 'Short, straight stripes. Then call the judges.', 3.6); aim(true); }); }
       if (e.gate === 4) swap(() => { build(); document.body.classList.add('night'); LT = NIGHT; card('Midnight', 'Mow along the string.', 3.6); aim(true); }, '#000');
       if (u.id === 'mulch') say(S.m.x, S.m.y, 1.5, 'No more trips to the bin.', 2.5);
@@ -2925,14 +2934,14 @@ let follow = false;
 function aim(snap) {
   if (!S) return;
   let r;
-  if (S.site === 'street') r = S.act === 1 ? [11.5, 3, 22.5, 17, 0, 2] : [0, 0, 45, 18, 0, 2];
+  if (S.site === 'street') r = S.act === 1 ? [11.5, 1, 22.5, 17, 0, 2] : [0, 0, 45, 18, 0, 2];
   else if (S.site === 'green') { const s = L.show; r = [s.x0 - 2, s.y0 - 2, s.x1 + 3, 27, 0, 2]; }
   else r = fin.low ? [13, 13, 27, 25, 0, 8.5] : S.finale ? [8, 6, 32, 34, 0, 1] : [6, 4, 34, 36, 0, 1];
   const f = fit(r);
   // too small to steer: follow the mower instead, close enough to see each cell
   const ppu = H / (2 * f.d * Math.tan(cam.fov / 2)), need = S.finale ? 0 : W < 600 ? 26 : 19;
   follow = ppu < need;
-  cam.gd = follow ? f.d * ppu / need : f.d; cam.gx = f.x; cam.gy = f.y; cam.r = r;
+  cam.wd = f.d; cam.gd = follow ? f.d * ppu / need : f.d; cam.gx = f.x; cam.gy = f.y; cam.r = r;
   if (snap) { cam.x = cam.gx; cam.y = cam.gy; cam.d = cam.gd * 1.6; cam.pitch = cam.gpitch; }
 }
 function moveCam(dt) {
@@ -2942,8 +2951,12 @@ function moveCam(dt) {
     tx = clamp(S.m.x, Math.min(r[0] + hw, (r[0] + r[2]) / 2), Math.max(r[2] - hw, (r[0] + r[2]) / 2));
     ty = clamp(S.m.y - 1, Math.min(r[1] + hh * .6, (r[1] + r[3]) / 2), Math.max(r[3] - hh, (r[1] + r[3]) / 2));
   }
+  // on the show lawn, let go and the camera stands back so the stripes can be seen whole
+  cam.idle = S.m.go ? 0 : (cam.idle || 0) + dt;
+  let td = cam.gd;
+  if (follow && S.site === 'green' && (cam.idle > .9 || jd.t >= 0)) { tx = cam.gx; ty = cam.gy; td = cam.wd; }
   const k = 1 - Math.exp(-dt * (follow ? 3 : 1.6));
-  cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k; cam.d += (cam.gd - cam.d) * k; cam.pitch += (cam.gpitch - cam.pitch) * k;
+  cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k; cam.d += (td - cam.d) * k; cam.pitch += (cam.gpitch - cam.pitch) * k;
 }
 
 /* ================= the end: a crop circle, a box ================= */
@@ -2972,7 +2985,8 @@ function stepFinale(dt) {
   fin.t += dt;
   const t = fin.t - 2.8;
   FLAP.forEach((F, f) => { const p = clamp((t - f * .55) / 1.1, 0, 1); const was = fin.ang[f]; fin.ang[f] = ease.back(p); if (was === 0 && p > 0) sfx.flap(); });
-  if (t > 3.2 && !fin.low) { fin.low = 1; cam.gpitch = .7; aim(); }
+  if (t > 3.2 && !fin.low) { fin.low = 1; cam.gpitch = .7; aim(); document.body.classList.add('dawn'); }
+  if (t > 3.2) LT = blend(NIGHT, DAWN, clamp((t - 3.2) / 5, 0, 1));
   if (S.finale === 1 && t > 4) { CORE.act(S, 'finale', 2); K.save(); say(20, 20, 9.5, 'Open it.', 99); }
   // the box's screen rectangle, for the trip inside
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
@@ -3072,7 +3086,7 @@ K.world({
     if (S.site === 'field') { document.body.classList.add('night'); LT = NIGHT; }
     if (K.reduced) document.body.classList.add('lowfx');
     aim(true); vis.a = S.m.a; vis.px = S.m.x; vis.py = S.m.y; shown = S.$;
-    if (S.finale >= 1) { fin.t = 2.8 + 6; fin.low = 1; fin.ang = [1, 1, 1, 1]; buildFlaps(); flapOn = true; cam.gpitch = .7; aim(true); }
+    if (S.finale >= 1) { document.body.classList.add('dawn'); LT = DAWN; fin.t = 2.8 + 6; fin.low = 1; fin.ang = [1, 1, 1, 1]; buildFlaps(); flapOn = true; cam.gpitch = .7; aim(true); }
     if (S.finale >= 3) setTimeout(() => { const r = fin.box; K.complete(r ? { x: r.x + r.w * .2, y: r.y, w: r.w * .6, h: r.h * .6 } : null); }, 1200);
     else if (S.finale === 2) say(20, 20, 9.5, 'Open it.', 99);
     if (!saved && K.firstVisit !== false) setTimeout(() => say(15, 14.75, 2.6, 'Mow the lawn for me? There’s money in it.', 4.5), 1200);
