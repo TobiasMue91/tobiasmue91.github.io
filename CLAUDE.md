@@ -118,3 +118,5 @@ re-makes the hands Hands Up embeds, from Microsoft's MIT-licensed Fluent Emoji 3
 starting with **Read this first**, which measures how the last year of entries narrowed and names what in
 the file caused it, then **Axes, not categories**, the gap lists, and the **Tried and rejected** list so an
 idea that was already turned down does not come back; `PROMPTS.md` and `TIPS.md` are the prompting notes.
+`CONTENTS_MAY_VARY.md` is the rulebook of the incremental anthology in `games/contents_may_vary.html`; read it before
+touching that page.
