@@ -1511,6 +1511,7 @@ npm run test:pdfmerger      # PDF Merger suite (plain Node; its inspect and merg
 npm run test:cropper        # Image Cropper suite (plain Node, no server or browser)
 npm run test:wordexplainer  # Word Explainer suite (plain Node, no server or browser)
 npm run test:names          # Baby Name Generator suite (plain Node, no server or browser)
+npm run test:cmv            # Contents May Vary suite (plain Node; its browser suite needs Playwright's Chromium)
 ```
 
 `test/everything_converter.mjs` drives
@@ -2446,3 +2447,30 @@ npm run test:livingrps           # or: node test/living_rps.mjs
 only ever follow the rock > scissors > paper > rock cycle, the army total and the walls hold, every board
 finishes on phone, square and wide layouts (the late-game heat-up), a seed replays the same board, and the
 underdog never pays less than the favourite. No browser, no server.
+
+## Contents May Vary
+
+```sh
+npm run test:cmv                                   # or: node test/contents_may_vary.mjs
+node test/contents_may_vary.mjs registry budget    # named suites only
+node test/contents_may_vary.mjs pacing --world=guests --report
+node test/contents_may_vary.mjs browser            # needs Playwright's Chromium; serves the repo itself
+```
+
+`contents_may_vary.mjs` holds `games/contents_may_vary.html`, an anthology of incremental games, to the
+promises in `CONTENTS_MAY_VARY.md`. Every box's rules sit in a DOM-free `<script type="text/x-core">` block,
+which the suite runs in Node with the page's own kit.
+
+| suite | what it checks |
+| --- | --- |
+| `registry` | box ids are unique, the shipped boxes keep their ids and their order (saves depend on both), every box has a core, a title, a handling note, a souvenir, registers with `K.world` and ends with `K.complete`, keeps no storage of its own, and its core never calls `Math.random` |
+| `budget` | the shell and kit, and each box (template plus core), against the weights the rulebook allows |
+| `contract` | every core runs in Node and has the functions and both bots the shell relies on; a fresh state is not done; a seed gives the same start; an unknown action does nothing |
+| `saves` | after 3, 15 and 40 minutes of play the state is plain data under 100 KB, a saved and loaded state carries on identically, and ten minutes away handed over in one step leave a valid state |
+| `pacing` | on three seeds the eager bot takes at least 30 minutes and the casual one at most 90 (or the box's own tighter targets), neither waits too long for something new, something can be bought in the first minute, and progress never goes backwards |
+| `starter` | box 1's rules: a perfect tap pays and streaks, the apprentice never bakes at the peak, a kitchen left alone earns well under a played one, rolling pins only take bulges about to burst, and the end cannot be skipped |
+| `browser` | in Chromium: a first visit shows the title box, opening it lands in box 1, finishing a box lands in the next, the save remembers both, and every box starts and runs without errors on a phone and a desktop |
+
+When a box ships, append its id to `SHIPPED` at the top of the suite. A box whose rules can break quietly
+gets a suite of its own here, named after its id.
+
