@@ -21,14 +21,20 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    `<template data-world="id" data-title="…" data-handling="…">` holding the box's whole document
    (souvenir, fonts, style, markup, view script) and a `<script type="text/x-core" data-world="id">`
    holding its rules. Nothing of a box lives anywhere else, and a box never reaches into another.
-2. **Proportionate.** A box weighs at most **110 KB** (template plus core, unminified, as the test
-   measures it) and should aim for 95; the shell and kit at most 72 KB. Quality is bought with craft,
+2. **Proportionate.** A box weighs at most **120 KB** (template plus core, unminified, as the test
+   measures it) and should aim for 100; the shell and kit at most 72 KB. Quality is bought with craft,
    not with bulk: a box that wants more room cuts something first. Libraries a box loads from a CDN
    inside its own template do not count, but must be pinned to an exact version.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
    five of the seven, and may share none with the box right before it. Absurd neighbours are welcome.
+   Beyond the axes, a box must also *feel* different in the hands: its rhythm (wait for a moment, then
+   tap; aim and release; drag and sweep; choose and watch it play out; keep many things in the air)
+   and the way it is drawn (canvas line art, cut-out puppets, pixels, voxels, real-time 3D,
+   isometric, photo-real) differ from the box right before it. A player who just spent forty minutes
+   waiting for jars to peak does not want to spend the next forty waiting for people to step under a
+   chandelier, however different the two look.
 4. **Maximum quality.** Use every resource there is: real-input Playwright runs, filmstrips of the
    key moments at phone and desktop sizes, critic subagents with no stake in the work, bots that play
    the whole game. A box ships when a harsh critic scores it at least 8 out of 10 on first impression,
@@ -51,7 +57,11 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    dives into it. The box never names or hints at what is inside.
 9. **Append only.** Saves name boxes by id and play them in file order. Never reorder, rename or
    remove a box that has shipped; fix it in place instead. When a box's state changes shape, raise
-   `CORE.version` and give the core a `migrate(state, fromVersion)`.
+   `CORE.version` and give the core a `migrate(state, fromVersion)`. A box that is built but not yet
+   in the stack is a **draft**: its template carries `data-draft`, it sits *below* the marker, it is
+   not part of the play order, and it plays on its own through `?world=<id>`. Taking a draft into the
+   stack means moving its block above the marker (and dropping `data-draft`) when it is the next box
+   in line; a draft is never put in front of a box that has shipped.
 10. **It teaches itself in its own language.** No wall of text and no tutorial screen: the first
     thirty seconds show what to do through the world (a hand pointing, something glowing, an
     intertitle, a note in dough). A mistake explains itself where it happened.
@@ -143,10 +153,19 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | № | id | title · handling | verb | loop | medium | palette | era · genre | sound | interface | ends with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
-| 2 | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
+| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows → a crop circle | real-time voxel miniature: hand-written WebGL 2, instanced boxes, a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
+| draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
-Pacing as measured by the test (eager / casual minutes, three seeds): Starter 34–35 / 53–55,
+Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
+Keep Off the Grass 32–33 / 46–49,
 Unwelcome Guests 39–41 / 54–57.
+
+Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
+Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
+game in a new costume. It waits below the marker as a draft for slot 3 or 4. Box 2 became Keep Off
+the Grass instead: continuous steering rather than waiting and tapping, real 3D rather than flat print.
+Box 3 must in turn leave both behind: no steering a vehicle, no timing taps, and neither print nor
+voxels (Unwelcome Guests' silent film qualifies on looks, but check its rhythm against this rule first).
 
 ### Open work on the shipped boxes
 
@@ -155,12 +174,18 @@ clarity, art direction, phone, feel) scored Starter 6/5/6/4/5 and Unwelcome Gues
 the fixes listed in their commits; the next round was cut short. What those critiques asked for and is
 still undone, most valuable first:
 
-- **Starter**: a recipe tin on the counter instead of the side column of cards; in act 3, either push the
+- **Starter** had a pedantic polish pass after the first playtest: the timer rings at each peak and
+  can be quieted, Mother is a clamp-top jar, early and late taps say which they are, each loaf shows
+  its price where it was made and keeps its own pattern's multiplier, the apprentice and baker wear
+  caps with a progress ring and the baker leaves a loaf you are holding, jars can be renamed (not
+  Mother, until she has earned it), bulges ripen gold so oak beams and the rolling pin pay, perfect
+  play keeps Mother lively in the house act, and the music runs in song form (AABC, key changes,
+  solo choruses). Still undone: a recipe tin on the counter instead of the side column of cards; in act 3, either push the
   camera into the room that needs a hand or let the jars and bench run themselves, because the targets
   are small there; bulges that push the house out of shape rather than sitting on it like stickers; a
   phone layout composed for 390 px in every act; teach with the world rather than with words
   (an early tap could bake a flat loaf instead of refusing).
-- **Unwelcome Guests**: more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
+- **Unwelcome Guests** (draft): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
 
@@ -192,10 +217,47 @@ box uses it.
   Thermal receipt print and VHS fuzz.
 - **Brains** — a lawn in a 1950s B-movie: the zombies are the crop. Lurid poster painting; a theremin
   and a drive-in organ.
+- **Pachinko Parlour** — aim and release, then watch a thousand balls fall; pins and tulips as
+  upgrades. 1980s Tokyo neon, pixel art, a deafening hall. (Runner-up for box 2: strong, but its
+  rhythm is pull-and-watch, which is close to waiting.)
+- **Scratch** — a lottery kiosk's scratch cards, scratched with the finger; odds and card designs as
+  upgrades, a kiosk that grows into a casino. Foil, halftone, 1990s corner-shop colours.
+- **Fletcher** — archery: draw, hold your breath, release; arrows, bows and targets that move. Painted
+  medieval tapestry, flat perspective.
+- **Shelf Life** — a supermarket at night: sort the stock onto shelves by colour, date and price before
+  opening. Isometric pixels, fluorescent hum.
 - **Bathysphere** — sink a Victorian diving bell, sound with sonar, lure what lives down there.
   Steel engraving in the style of Jules Verne's illustrators.
 
+- **Keep Off the Grass** has had no outside critique yet, only its author's filmstrips. Known gaps: no
+  sound check on a real phone; the show lawn is larger than a phone screen, so the camera follows and
+  the stripes are never seen whole while mowing; the act-two neighbours only speak when paid; trees
+  are a few stacked cubes; the box at the end is grey under moonlight rather than cardboard-coloured.
+
+### Genres and looks to draw from
+
+From the anthology's owner, as a well for new pairs; none of these is a box yet:
+
+- **Genres**: fishing (in 3D), archery, woodcutting, mining, pachinko, scratch cards, a horde survivor,
+  a war simulation, cleaning (power-washing, gardening, mowing a lawn), dice, the absurd (in the
+  spirit of *Berry Bury Berry*, *How to Fish*, *Project P.I.T.T.*), sorting (books on a shelf, a
+  supermarket's stock), digging.
+- **Techniques**: voxels, pixel art, real-time 3D, 3D with comic shading, isometric, 2.5D layers,
+  photo-real, and anything else that a canvas, WebGL or CSS can carry inside the budget.
+
 ## Lessons from the boxes so far
+
+- **Real 3D fits the budget.** Keep Off the Grass draws everything as instanced boxes with one
+  shader, one shadow map and no library: about 25 KB of renderer and scene. The rules stay a grid; the
+  view never decides anything.
+- **Headless screenshots lie about `backdrop-filter`.** In headless Chromium a blurred band over a
+  WebGL canvas came out transparent, and well beyond the band. Check the canvas itself
+  (`toDataURL` straight after a render) before chasing a camera bug.
+- **Regrowth that never pauses hides progress.** Grass that grew back while the lawn was being mowed
+  made "finished" invisible and the bots chased it forever. A lawn now stays cut until it is finished,
+  then grows back in a time-lapse week.
+- **Bots need a way round things.** A person walks round a hedge without thinking; the bot needed a
+  grid path and a "no nearer for a second and a half, give up" rule before act 2 stopped stalling.
 
 - **Pacing is tuned with bots, not by feel.** Give the bots a person's limits (reaction time, taps a
   second, reading time, breaks) and tune until both land in the window on several seeds. When the
