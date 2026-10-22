@@ -34,7 +34,7 @@ const suites = picked.length ? picked : ALL;
 
 /* Boxes that have shipped, in play order. Saves refer to boxes by id and the page plays them in
    file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
-const SHIPPED = ['starter'];
+const SHIPPED = ['starter', 'guests'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 100 * 1024, BOX_AIM = 85 * 1024, SHELL_MAX = 64 * 1024;
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
