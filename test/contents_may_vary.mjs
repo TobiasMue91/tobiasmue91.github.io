@@ -337,6 +337,25 @@ if (suites.includes('browser')) {
       check(p.errs.length === 0, `${w.id}: ${q} runs without errors`, p.errs.join(' | '));
       await p.close();
     }
+    if (worlds.find(w => w.id === 'lawn')) {
+      // Keep Off the Grass learns how many blades a device can draw: fed frames that the blades make slow, it
+      // thins the lawn until they are quick; fed frames that are slow for some other reason, it puts back what
+      // it took and leaves it there
+      const p = await page('?world=lawn');
+      check(await until(p, () => CMV.state === 'playing'), 'lawn: starts for the blade count');
+      const f = p.frames()[1], r = await f.evaluate(() => {
+        const D = K.debug, n0 = D.blades().drawn; let t = 1e7;
+        const run = (ms, frames = 121) => { for (let i = 0; i < frames; i++) { t += ms(D.blades().drawn); D.watch(t); } return D.blades(); };
+        let b; for (let k = 0; k < 10; k++) b = run(n => 12 + n / 2000);
+        const thinned = b.drawn, quick = b.med;
+        for (let k = 0; k < 4; k++) b = run(() => 40);
+        return { n0, thinned, quick, after: b.drawn, lock: b.lock };
+      });
+      check(r.thinned < r.n0 && r.quick < 24, `lawn: a device slowed by the blades gets fewer (${r.n0} → ${r.thinned}, median ${r.quick.toFixed(0)} ms)`);
+      check(r.after === r.thinned && r.lock, 'lawn: frames slow for another reason do not thin it further', JSON.stringify(r));
+      check(p.errs.length === 0, 'lawn: no errors while counting blades', p.errs.join(' | '));
+      await p.close();
+    }
     await b.close(); srv.close();
   }
 }

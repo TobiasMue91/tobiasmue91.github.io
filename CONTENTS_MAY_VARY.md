@@ -232,9 +232,12 @@ box uses it.
 - **Keep Off the Grass** (box 2) has been played through once by the owner, who liked it best of the
   three; everything since came from that playtest. No outside critique has run yet. Open, most
   valuable first:
-  - **Performance is unmeasured on real devices.** Grass is up to 220,000 blades on a desktop and
-    110,000 on a phone (`BN` and `BUDGET` in the view). The cup final's stadium is the heaviest place.
-    If a phone stutters, scale the blade count by measured frame time rather than by screen size.
+  - **Performance is still unmeasured on real devices**, but the view now looks after itself: grass
+    starts at up to 220,000 blades on a desktop and 110,000 on a phone (`BN` and `BUDGET`), and when the
+    median frame over two seconds is slower than 24 ms it draws 30% fewer (`gauge` and `watch` in the
+    view). A cut that does not make frames quicker is taken back and the count is frozen, so a phone
+    capped at 30 frames a second, or a stadium slow for its crowd rather than its turf, keeps its lawn.
+    `K.debug.blades()` shows what it decided; the browser suite feeds it made-up frame times.
   - **The mower's sound** has been rebuilt three times without anyone hearing it on this side: too
     loud, then inaudible on phone speakers (all below 240 Hz), then "a helicopter" (pulses too slow).
     It now fires at 52–66 Hz with a band of noise around 650 Hz. Ask the owner before changing it again.

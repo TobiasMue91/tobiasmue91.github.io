@@ -2465,8 +2465,28 @@ const blade = (() => {
 const small = () => Math.min(innerWidth, innerHeight) < 700, BN = () => Math.round((small() ? 110 : 200) * (K.reduced ? .5 : 1));
 // and no more than so many in all: big places (the wheat, the stadium) get thinner turf
 const BUDGET = () => (small() ? 110000 : 220000) * (K.reduced ? .5 : 1);
+/* What this device can draw, learnt by watching it: when the median frame over two seconds takes longer
+   than 24 ms, the lawn gets 30% fewer blades. If that did not make frames any quicker, the blades were not
+   the trouble: they come back and the count stays put from then on. */
+const gauge = { cap: 0, ms: [], last: 0, med: 0, prev: null, lock: false, cuts: 0 };
+const perCell = total => Math.max(16, Math.min(BN(), Math.floor(Math.min(BUDGET(), gauge.cap || 1e9) / Math.max(1, total))));
+function thin() {
+  const total = blades ? blades.n : 0;
+  for (const b of [blades, ...flapBlades]) if (b) { b.bn = perCell(total); gl.bindVertexArray(b.vao); gl.vertexAttribDivisor(1, b.bn); }
+  gl.bindVertexArray(null);
+}
+function watch(t) {
+  const d = gauge.last ? t - gauge.last : 0; gauge.last = t;
+  if (!(d > 0) || d > 250 || document.hidden || !blades) return;   // a hidden tab, a stall or a new place says nothing about blades
+  gauge.ms.push(d); if (gauge.ms.length < 120) return;
+  const med = gauge.ms.sort((a, b) => a - b)[60]; gauge.ms.length = 0; gauge.med = med;
+  const drawn = blades.n * blades.bn;
+  if (gauge.prev) { const p = gauge.prev; gauge.prev = null; if (med > p.med * .92) { gauge.cap = p.cap; gauge.lock = true; thin(); } return; }
+  if (gauge.lock || med < 24 || blades.bn <= 16) return;
+  gauge.prev = { med, cap: gauge.cap }; gauge.cap = Math.round(drawn * .7); gauge.cuts++; thin();
+}
 function bladeSet(cells, total) {
-  const vao = gl.createVertexArray(), cb = gl.createBuffer(), d = new Float32Array(cells.length * 2), bn = Math.max(16, Math.min(BN(), Math.floor(BUDGET() / Math.max(1, total || cells.length))));
+  const vao = gl.createVertexArray(), cb = gl.createBuffer(), d = new Float32Array(cells.length * 2), bn = perCell(total || cells.length);
   cells.forEach((i, k) => { d[k * 2] = i % L.W; d[k * 2 + 1] = (i / L.W) | 0; });
   gl.bindVertexArray(vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, blade.p); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -2627,7 +2647,7 @@ function house(B, x0, y0, w, wall, roof, door, dx) {
 function build() {
   L = CORE.layout(S.site, S.tier); stat.n = 0; vh.length = 0;
   const cells = []; for (let i = 0; i < L.K.length; i++) if (L.K[i] === 1 || (S.site === 'green' && L.K[i] === 2)) cells.push(i);
-  blades = bladeSet(cells); flapBlades = [];
+  blades = bladeSet(cells); flapBlades = []; gauge.ms.length = 0; gauge.prev = null; gauge.last = 0;
   hdat = new Uint8Array(L.W * L.H * 4);
   for (const i of cells) { if (L.K[i] === 2) { hdat[i * 4] = 70 + hash(i, 3) * 40; hdat[i * 4 + 3] = 85; } else hdat[i * 4 + 3] = S.site === 'field' ? 170 : 0; }
   if (L.pitch) { // the markings: touchlines, halfway line, centre circle, penalty boxes
@@ -3197,7 +3217,7 @@ function hand() {
 }
 K.loop((dt, t) => {
   if (!S) return;
-  now = t / 1000;
+  now = t / 1000; watch(t);
   if (innerWidth !== lastW || innerHeight !== lastH) { lastW = innerWidth; lastH = innerHeight; resize(); aim(); }
   if (dt > 0) {
     steer();
@@ -3234,7 +3254,8 @@ K.world({
 });
 K.debug = {
   state: () => S, toScreen, toGround, cam: () => cam,
-  mower: () => toScreen(S.m.x, S.m.y), box: () => fin.box, snap: () => { render(); return cv.toDataURL(); },
+  mower: () => toScreen(S.m.x, S.m.y), box: () => fin.box,
+  blades: () => ({ drawn: blades ? blades.n * blades.bn : 0, perCell: blades && blades.bn, cap: gauge.cap, med: gauge.med, lock: gauge.lock, cuts: gauge.cuts }), watch, snap: () => { render(); return cv.toDataURL(); },
   card: id => { const b = cards[id]; return b && b.getBoundingClientRect(); }
 };
 })();
