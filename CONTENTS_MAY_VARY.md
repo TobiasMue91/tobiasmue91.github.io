@@ -244,8 +244,9 @@ box uses it.
   - The phone frame in act one used to leave the lower third empty: the camera now comes closer to
     Dad's lawn on an upright phone, and across the road (toward the lens) there is a kerb, a pavement
     with a postbox, low brick walls with flower beds and the front gardens opposite, a shade darker than
-    the lawns in play so they read as backdrop. Still open: neighbours never react to the robot
-    mowers; a check that every place change (each show, midnight) runs without errors belongs in the
+    the lawns in play so they read as backdrop. The neighbours now notice the robot mowers: the owner
+    comes out to meet each new one, thanks it (not you) when it has finished their lawn, and now and
+    then stands at the door watching it, turned toward it (`ROBO` in the view). Still open: a check that every place change (each show, midnight) runs without errors belongs in the
     browser suite: buying a show once crashed the view for 0.7 s.
 
 ### Working on a box that has shipped

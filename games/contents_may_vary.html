@@ -2795,7 +2795,7 @@ function drawDyn(dt) {
     if (p.t > .9) { parts.splice(i, 1); continue; }
     bx(B, p.x, p.y, p.z, .12, .12, .12, p.c, p.t * 9);
   }
-  for (const v of visitors) person(B, v.x, v.y, -Math.PI / 2, v.o);
+  for (const v of visitors) { const r = v.look && S.rb.find(r => r.g === v.g); v.a = lerp(v.a == null ? -Math.PI / 2 : v.a, r ? Math.atan2(r.y - v.y, r.x - v.x) : -Math.PI / 2, Math.min(1, dt * 4)); person(B, v.x, v.y, v.a, v.o); }
   if (S.site === 'street' && S.act === 1 && !visitors.some(v => v.g === 1)) person(B, 15, 14.75, -Math.PI / 2, { shirt: C.cobalt, pants: C.grey, hair: C.trunk, s: 1.15 });
   if (S.site === 'green') judges(B, dt);
   if (hint.bin > 0 && L.bin) { const b = Math.abs(Math.sin(now * 5)) * .4, [x, y] = BIN; bx(B, x, y, 2.2 + b, .2, .2, .7, C.orange); bx(B, x, y, 1.95 + b, .5, .5, .25, C.orange); bx(B, x, y, 1.8 + b, .2, .2, .2, C.orange); }
@@ -2837,10 +2837,10 @@ function robot(B, x, y, a, k) {
 
 /* ---- people who come out: the owner paying, the judges ---- */
 const visitors = [];
-function visit(g, line) {
+function visit(g, line, look) {
   const gd = L.gardens[g], dx = gd.x0 + (g % 2 ? 2 : 7) + .5;
   const o = [{ shirt: C.pink, pants: C.ink, hair: C.dark, skin: C.skin2 }, { shirt: C.cobalt, pants: C.grey, hair: C.trunk, s: 1.15 }, { shirt: C.leaf2, pants: C.trunk, hat: C.lemon }, { shirt: C.white, pants: C.ink, hair: C.silver, s: 1.1 }][g];
-  const v = { g, x: dx, y: 14.75, o: Object.assign({ wave: 1 }, o), t: 0 };
+  const v = { g, x: dx, y: 14.75, o: Object.assign({ wave: !look }, o), t: 0, look };
   visitors.splice(0, visitors.length, ...visitors.filter(w => w.g !== g)); visitors.push(v);
   say(dx, 14.6, 2.5, line, 3.2);
   setTimeout(() => { const i = visitors.indexOf(v); if (i >= 0) visitors.splice(i, 1); }, 3400);
@@ -3036,15 +3036,21 @@ $('jg').onclick = () => { K.unlock(); if (CORE.act(S, 'judge')) K.save(); };
 const hint = { bin: 0, hand: 1, t: 0 };
 const DAD = ['Lovely job.', 'Ooh, stripes.', 'That will do nicely.', 'Same again next Saturday?', 'You missed a bit. Joking.'];
 const LINES = [['Very tidy, dear.', 'You are a treasure.'], DAD, ['Gnomes approve.', 'The gnomes say thank you.'], ['Fine work.', 'My flamingo is impressed.']];
-let shown = 0, rate = 0, lastJob = -9;
+// the neighbours and the robots: when one moves in, when it has done the lawn, and now and then just watching it
+const ROBO = [['Oh! Does it bite?', 'Your little robot did a lovely job.', 'I made it a cup of tea.'],
+  ['Your mother will not like this.', 'The robot did it. I am paying you anyway.', 'Is it meant to go round in circles?'],
+  ['Mind the gnomes, little fellow.', 'The gnomes like the robot better.', 'It said hello to the gnomes.'],
+  ['Keep it away from the pond.', 'Clever thing. It went round the pond twice.', 'My flamingo is not sure about it.']];
+let shown = 0, rate = 0, lastJob = -9, lastPeek = 0;
+const robotIn = g => S.rb.some(r => r.g === g) && !(L.gardens[g].x0 <= S.m.x && S.m.x <= L.gardens[g].x1 + 1 && S.m.y >= L.gardens[g].y0 - .5);
 function events() {
   const list = S.ev.splice(0);
   for (const e of list) {
     if (e.k === 'dump') { pop(BIN[0], BIN[1], 1.6, '+' + money(e.v)); sfx.dump(); rate += e.v; hint.bin = 0; }
     if (e.k === 'full') { sfx.full(); hint.bin = 1; if (!hint.binSaid) { hint.binSaid = 1; say(BIN[0], BIN[1], 2.4, 'Full! Tip it in the <b>compost bin</b>.', 4); } }
     if (e.k === 'job' && L.gardens) {
-      sfx.cash(); rate += e.v; const lines = LINES[e.g];
-      if (now - lastJob > 1.2 || e.g === 1) visit(e.g, (S.act === 1 ? lines[Math.min(S.jobs - 1, lines.length - 1) % lines.length] : lines[S.jobs % lines.length]) + ' <b>' + money(e.v) + '</b>');
+      sfx.cash(); rate += e.v; const lines = LINES[e.g], rb = S.act > 1 && robotIn(e.g);
+      if (now - lastJob > 1.2 || e.g === 1) visit(e.g, (rb ? ROBO[e.g][1] : S.act === 1 ? lines[Math.min(S.jobs - 1, lines.length - 1) % lines.length] : lines[S.jobs % lines.length]) + ' <b>' + money(e.v) + '</b>', rb);
       lastJob = now;
       if (S.act === 1) setTimeout(() => card('A week later…', '', 2), 1600);
     }
@@ -3057,9 +3063,11 @@ function events() {
       if (e.gate === 3 || e.tier) { swap(() => { build(); card(CORE.SHOWS[S.tier - 1].name, 'Short, straight stripes. Then call the judges.', 3.6); aim(true); }); }
       if (e.gate === 4) swap(() => { build(); document.body.classList.add('night'); LT = NIGHT; card('Midnight', 'Mow along the string.', 3.6); aim(true); }, '#000');
       if (u.id === 'mulch') say(S.m.x, S.m.y, 1.5, 'No more trips to the bin.', 2.5);
+      if (u.id === 'robot' && S.site === 'street') { const g = S.rb.length ? S.rb[S.rb.length - 1].g : [0, 2, 3, 1][S.lv.robot - 1]; lastPeek = now; setTimeout(() => visit(g, ROBO[g][0], 1), 900); }
     }
     if (e.k === 'judge') judged(e);
     if (e.k === 'bump' && Math.random() < .3) sfx.bip();
+    if (e.k === 'bump' && S.site === 'street' && now - lastPeek > 40 && !visitors.length && Math.random() < .2) { const g = S.rb[e.i] && S.rb[e.i].g; if (g != null && robotIn(g)) { lastPeek = now; visit(g, ROBO[g][2], 1); } }
     if (e.k === 'finale' && e.n === 1) reveal();
   }
 }
