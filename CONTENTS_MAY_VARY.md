@@ -21,10 +21,11 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    `<template data-world="id" data-title="…" data-handling="…">` holding the box's whole document
    (souvenir, fonts, style, markup, view script) and a `<script type="text/x-core" data-world="id">`
    holding its rules. Nothing of a box lives anywhere else, and a box never reaches into another.
-2. **Proportionate.** A box weighs at most **120 KB** (template plus core, unminified, as the test
+2. **Proportionate.** A box weighs at most **130 KB** (template plus core, unminified, as the test
    measures it) and should aim for 100; the shell and kit at most 72 KB. Quality is bought with craft,
    not with bulk: a box that wants more room cuts something first. Libraries a box loads from a CDN
-   inside its own template do not count, but must be pinned to an exact version.
+   inside its own template do not count, but must be pinned to an exact version. (The cap was 120 KB until
+   the owner raised it, when the shows in Keep Off the Grass gained intruders, upgrades and a match day.)
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -153,12 +154,12 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | № | id | title · handling | verb | loop | medium | palette | era · genre | sound | interface | ends with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
-| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows and a cup final on a football pitch → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
+| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 3 | `clew` | Minos Wants a Map · "Do not unwind." | choose a way at each junction and watch the walk play out; later point at the map and send others | chart a ring of the Labyrinth → the thread reaches the next of seven, each twice the size → the fourteen Athenians, the Minotaur's bellow, Icarus overhead → twenty thousand paces, then home along the thread | first-person raycaster painted as an Attic red-figure vase: lamp light is the clay, the dark is the glaze, a fresco per ring; the map pressed into a clay tablet | terracotta clay, black glaze, dilute brown, added white and purple-red | Bronze Age Crete, myth played as dry comedy | a Karplus-Strong lyre in the Phrygian mode over a reed drone, stone reverb, footsteps, a bull's bellow | a Linear B clay tablet, painted sherds | the Minotaur waits at the foot of the stairs with a painted chest; its side carries the next box's number |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
-Keep Off the Grass 40–42 / 55–59, Minos Wants a Map 40–41 / 56–58,
+Keep Off the Grass 32–34 / 53–57, Minos Wants a Map 40–41 / 56–58,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -248,8 +249,19 @@ box uses it.
 - **Ewe Knit**, **Pachinko Parlour**, **hi.exe**, **Scratch** and **Fletcher** were weighed again for
   box 3 and lost to the labyrinth on surprise and on distance from the ledger.
 
-- **Keep Off the Grass** (box 2) has been played through once by the owner, who liked it best of the
-  three; everything since came from that playtest. No outside critique has run yet. Open, most
+- **Keep Off the Grass** (box 2) has been played through by the owner twice. The second playtest asked
+  for: judges behind their table rather than inside it; a way to turn a huge gang mower without
+  shaving the lawn; trees that look like trees; a gang mower that hangs together; a bigger cup final
+  pitch; and above all less sameness at the shows, where the judges came round about twenty times a
+  show. All of it is done: the cutters lift off a show lawn (turn on the headland); new trees; gangs
+  on arms from a beam; an 84 by 54 pitch; something gets onto every show lawn about once a minute
+  (`PESTS` in the core) and is seen off by driving at it; the judges' pause is 15 s, not 30, and their
+  ceremony is brisk after the first visit at each show, with a comment on what was missing; three
+  new upgrades (sprinklers, a bigger engine, a sheepdog); the cup final is a match day; and entry
+  fees are lower, so fewer judgings are needed only for money. The judges still come round 13 to 19
+  times a show for the eager bot: that is what keeps the eager game over 30 minutes. If it still
+  drags, the next lever is a show that asks for something new each visit, not more of the same.
+  Everything before the second playtest came from the first. No outside critique has run yet. Open, most
   valuable first:
   - **Performance is still unmeasured on real devices**, but the view now looks after itself: grass
     starts at up to 220,000 blades on a desktop and 110,000 on a phone (`BN` and `BUDGET`), and when the
@@ -347,6 +359,10 @@ From the anthology's owner, as a well for new pairs; none of these is a box yet:
 - **Regrowth that never pauses hides progress.** Grass that grew back while the lawn was being mowed
   made "finished" invisible and the bots chased it forever. A lawn now stays cut until it is finished,
   then grows back in a time-lapse week.
+- **A gate only money opens turns a level into a grind.** Gold at each show came at the first judging;
+  the next eighteen were rent for the next show's entry fee, and the owner was bored by the second
+  show. Measure what actually gates progress (here: a bot's log of each judging and medal) before
+  tuning thresholds, and put variety into each repetition rather than only fewer of them.
 - **Bots need a way round things.** A person walks round a hedge without thinking; the bot needed a
   grid path and a "no nearer for a second and a half, give up" rule before act 2 stopped stalling.
 
