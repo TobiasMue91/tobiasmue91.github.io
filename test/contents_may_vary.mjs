@@ -310,7 +310,7 @@ if (suites.includes('browser')) {
     const launch = process.env.HTTPS_PROXY ? { args: [`--proxy-server=${process.env.HTTPS_PROXY}`, '--proxy-bypass-list=localhost;127.0.0.1'] } : {};
     const b = await chromium.launch(launch);
     const page = async (q, w = 390, h = 844) => { const p = await b.newPage({ viewport: { width: w, height: h } }); p.errs = []; p.on('pageerror', e => p.errs.push(e.message)); p.on('console', m => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && p.errs.push(m.text())); await p.goto(base + (q || '')); return p; };
-    const until = async (p, fn, ms = 15000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await p.evaluate(fn).catch(() => false)) return true; await p.waitForTimeout(100); } return false; };
+    const until = async (p, fn, ms = 15000, arg) => { const t = Date.now(); while (Date.now() - t < ms) { if (await p.evaluate(fn, arg).catch(() => false)) return true; await new Promise(r => setTimeout(r, 100)); } return false; };
     {
       const p = await page('');
       await p.evaluate(() => localStorage.clear()); await p.reload();
@@ -354,6 +354,22 @@ if (suites.includes('browser')) {
       check(r.thinned < r.n0 && r.quick < 24, `lawn: a device slowed by the blades gets fewer (${r.n0} → ${r.thinned}, median ${r.quick.toFixed(0)} ms)`);
       check(r.after === r.thinned && r.lock, 'lawn: frames slow for another reason do not thin it further', JSON.stringify(r));
       check(p.errs.length === 0, 'lawn: no errors while counting blades', p.errs.join(' | '));
+      await p.close();
+    }
+    if (worlds.find(w => w.id === 'lawn')) {
+      // every place Keep Off the Grass moves to is built and drawn without an error: buying a show once
+      // crashed the view for a moment, between the rules moving on and the veil hiding the old place
+      const p = await page('?world=lawn');
+      check(await until(p, () => CMV.state === 'playing'), 'lawn: starts for the trip through its places');
+      const f = p.frames()[1];
+      await f.evaluate(() => { window.__frames = 0; K.loop(() => window.__frames++); });
+      for (const [id, gold, site] of [['street', 0, 'street'], ['show1', 0, 'green'], ['show2', 1, 'green'], ['show3', 2, 'green'], ['show4', 3, 'green'], ['night', 4, 'field']]) {
+        const ok = await f.evaluate(([id, gold]) => { const S = K.debug.state(); S.$ = 1e15; S.lv.blade = Math.max(S.lv.blade, 3); S.gold = gold; return CORE.act(S, 'buy', id); }, [id, gold]);
+        const n0 = await f.evaluate(() => window.__frames);
+        const moved = ok && await until(f, ([site, n0]) => K.debug.state().site === site && getComputedStyle(document.getElementById('veil')).opacity === '0' && window.__frames > n0 + 4, 120000, [site, n0]);
+        check(moved, `lawn: buying ${id} moves to the ${site} and draws it`);
+        check(p.errs.length === 0, `lawn: no errors on the way to ${id}`, p.errs.join(' | '));
+      }
       await p.close();
     }
     await b.close(); srv.close();
