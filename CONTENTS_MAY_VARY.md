@@ -169,7 +169,7 @@ voxels (Unwelcome Guests' silent film qualifies on looks, but check its rhythm a
 
 ### Open work on the shipped boxes
 
-Neither box has yet met rule 4's bar of 8 out of 10. The last critiques that ran (first impression,
+Neither box has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
 clarity, art direction, phone, feel) scored Starter 6/5/6/4/5 and Unwelcome Guests 6/4/5/6/4, both before
 the fixes listed in their commits; the next round was cut short. What those critiques asked for and is
 still undone, most valuable first:
@@ -250,9 +250,22 @@ box uses it.
     bubbles stay whole on screen and below the dashboard. The browser suite now buys its way through
     every place (the street, the three shows, the cup final, midnight) and wants no error on the way;
     on its first run it caught a neighbour's visit, timed for Elm Street, landing on the show ground.
-  - Next, most valuable first: an outside critique (rule 4 has never been scored for this box); a
-    frame-time reading on a real phone, above all in the stadium (`K.debug.blades()`); the mower's
-    sound, once the owner has heard it.
+  - **Critique (rule 4).** Three rounds, each one fresh critic subagent given 28 stills (the first minute,
+    a full grass box, the street, a show with its judges, the National, the stadium, midnight, the
+    reveal and the box, at 390×844 and 1280×800; the script films with real pointer input). Scores for
+    first impression, clarity, art direction, phone and feel went 7/4/7/5/5, then 7/5/8/5/6, then
+    8/7/8/7/7. Fixed on the way: stripes lit by the way they were mown; a judging sequence that says
+    one thing at a time (looking, then the medal under the score cards, then what was won); the camera
+    leaning toward the bin when the grass box is full; a pegboard strip as tall as its cards that
+    fades while it can scroll; show lawns seen more steeply on an upright phone; a thicker string and
+    a soft moon at midnight; cut wheat leaving pale straw so the net shows before the fold.
+  - Next, most valuable first, from the last critique: the medal is a flat disc pasted on a 3D world
+    (a moulded rosette that drops onto the lawn would fit); clarity (7) and phone (7) are still under
+    8 - the judges' sheet covers the show tent on a phone, and "6% short" beside "81% stripes" reads
+    like a bug to a stranger; the stadium's crowd reads as confetti. The critic also asked why
+    midnight turns to amber daylight; that is dawn breaking as the box folds, and stays. Then a
+    frame-time reading on a real phone, above all in the stadium (`K.debug.blades()`), and the mower's
+    sound once the owner has heard it.
 
 ### Working on a box that has shipped
 
