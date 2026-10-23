@@ -320,62 +320,68 @@ const clew = worlds.find(w => w.id === 'clew');
 if (suites.includes('clew') && clew) {
   section('clew');
   const { CORE } = load(clew);
-  const chart = (S, ring) => { const M = CORE.M(S); for (let i = 0; i < M.F.length; i++) if (M.F[i] && M.RG[i] === ring && !CORE.has(S, i)) { S.mp[(i / 30) | 0] |= 1 << (i % 30); S.nm++; S.nr[ring]++; } };
+  const N = CORE.N;
   {
-    // the labyrinth: every block of every ring can be reached from the stairs, and only through the rings inside it
+    // the labyrinth: each ring's corridors hang together, and each ring is sealed from the next by its gate
     const S = CORE.init(4), M = CORE.M(S);
-    let all = true, inward = true;
-    for (let i = 0; i < M.F.length; i++) if (M.F[i]) { if (M.D[i] < 0) all = false; else if (M.PAR[i] >= 0 && M.RG[M.PAR[i]] > M.RG[i]) inward = false; }
-    check(all, 'every pace of the labyrinth can be reached from the stairs');
-    check(inward, 'the way back to the stairs never leaves a ring for one further out');
-    check(M.finds.length === CORE.FINDS.length && M.finds.every(i => M.deg[i] === 1), `all ${CORE.FINDS.length} finds lie at the end of dead ends`);
+    let leaks = 0, sealed = true;
+    for (let i = 0; i < M.F.length; i++) if (M.F[i]) for (const d of [0, 1, 2, 3]) { const j = CORE.nb(i, d); if (j >= 0 && M.F[j] && M.RG[j] !== M.RG[i]) leaks++; }
+    for (let i = 0; i < M.F.length; i++) if (M.GATE[i] && M.F[i]) sealed = false;
+    check(leaks === 0 && sealed, 'no corridor crosses from one ring to the next: only a broken gate will do');
+    const seen = new Set([M.E]), q = [M.E];
+    for (let h = 0; h < q.length; h++) for (const d of [0, 1, 2, 3]) { const j = CORE.nb(q[h], d); if (j >= 0 && M.F[j] && !seen.has(j)) { seen.add(j); q.push(j); } }
+    check(seen.size === M.cells[1], `every corridor of the first ring can be reached from your old room (${seen.size} of ${M.cells[1]})`);
+    check(M.finds.length === CORE.FINDS.length && M.finds.every(i => !M.F[i] && !M.GATE[i]), `all ${CORE.FINDS.length} treasures are walled up in ordinary walls`);
   }
   {
-    // a ring the thread does not reach stays out of reach, for you and for the Athenians
-    const S = CORE.init(5), M = CORE.M(S); chart(S, 1); S.ev.length = 0;
-    const out = M.F.findIndex((f, i) => f && M.RG[i] === 2);
-    check(!CORE.open(S, out), 'a block of the second ring is shut before the thread reaches it');
-    const S2 = CORE.init(5); S2.$ = 1e6; for (let k = 0; k < 3; k++) CORE.act(S2, 'buy', 'youth');
-    for (let k = 0; k < 6000; k++) CORE.step(S2, .1);
-    check(S2.nr[2] === 0 || S2.ring >= 2, 'the Athenians never chart past the end of the thread');
+    // a blow: a wall holds until it has taken its strength, and every crack stays
+    const S = CORE.init(5), M = CORE.M(S);
+    S.p.d = [0, 1, 2, 3].find(d => { const j = CORE.nb(S.p.i, d); return j >= 0 && !CORE.open(S, j); });
+    const j = CORE.ahead(S), hp = CORE.hpOf(S, j);
+    let blows = 0; while (!CORE.open(S, j) && blows < 100) { CORE.act(S, 'ram'); CORE.step(S, CORE.beat(S) + .01); blows++; }
+    check(blows === Math.ceil(hp / CORE.power(S) - 1e-9), `a wall of strength ${hp} takes ${Math.ceil(hp)} blows of strength 1 (took ${blows})`);
+    check(S.$ > 0 && S.nb === 1, 'and pays its rubble when it falls');
+    check(!CORE.act(S, 'ram') || S.p.cd > 0, 'you cannot ram faster than your temper allows');
   }
   {
-    // spending everything never strands you: a finished ring always brings the next thread
-    const S = CORE.init(6); S.$ = 0; chart(S, 1); CORE.step(S, .1);
-    check(S.ring === 2 && S.ev.some(e => e.k === 'ring' && e.gift), 'a ring charted to the last pace brings the thread to the next one, free');
-    const S2 = CORE.init(6); S2.$ = CORE.price(S2, CORE.byId.thread);
-    check(CORE.act(S2, 'buy', 'thread') && S2.ring === 2 && S2.$ === 0, 'the thread can also be bought before the ring is finished');
+    // the plough: a blow much stronger than the walls carries you through several, and charge carries it further
+    const run = charge => Math.max(...[0, 1, 2, 3].map(d => {
+      const S = CORE.init(6), M = CORE.M(S); S.lv.horn = 2; S.lv.charge = charge; S.p.d = d;
+      if (!CORE.act(S, 'ram')) return 0; for (let k = 0; k < 300; k++) CORE.step(S, .05);
+      return S.nb;
+    }));
+    const a = run(0), b = run(7);
+    check(a >= 2, `one strong blow breaks more than one wall in a row (${a})`);
+    check(b > a, `and a run-up carries it through more (${a} → ${b})`);
   }
   {
-    // walking: a way chosen is followed round its bends to the next junction; the clew is needed to walk by the tablet
-    const S = CORE.init(7), M = CORE.M(S);
-    const w = CORE.ways(S, S.p.i).find(x => x.open);
-    CORE.act(S, 'go', w.d); const q = S.p.q.slice(), end = q[q.length - 1];
-    check(q.length > 0 && (M.deg[end] !== 2 || end === M.E), `a chosen way runs on to a junction or an end (${q.length} paces)`);
-    for (let k = 0; k < 200 && S.p.q.length; k++) CORE.step(S, .1);
-    check(S.p.i === end && S.nm > 5, 'and you arrive there, having charted what the lamp lit');
-    const back = S.p.i, target = q[0];
-    check(!CORE.act(S, 'goto', M.E), 'without the clew, tapping the tablet does nothing');
-    S.lv.clew = 1; check(CORE.act(S, 'goto', M.E) && S.p.q[S.p.q.length - 1] === M.E, 'with it, you walk to any charted pace');
+    // nothing beyond a gate can be touched before the gate falls: not by you, the Athenians, a stamp or an earthquake
+    const S = CORE.init(7), M = CORE.M(S); S.$ = 1e12; S.lv.horn = 30; S.lv.stomp = 5; S.lv.quake = 4;
+    for (let k = 0; k < 4; k++) CORE.act(S, 'buy', 'youth');
+    S.ring = 1; CORE.act(S, 'stomp'); for (let k = 0; k < 3000; k++) CORE.step(S, .1);
+    let beyond = 0; for (let i = 0; i < M.F.length; i++) if (CORE.broke(S, i) && M.RG[i] > S.ring) beyond++;
+    check(beyond === 0, 'no wall beyond the gate breaks while the gate stands', beyond + ' did');
   }
   {
-    // the bellow charts every open pace within its reach, and then needs its breath back
-    const S = CORE.init(8); S.lv.bellow = 1; const n0 = S.nm;
-    check(CORE.act(S, 'bellow') && S.nm > n0 + 10 && !CORE.act(S, 'bellow'), `a bellow charts the corridors near you (${S.nm - n0} paces) and cannot come straight back`);
-    CORE.step(S, CORE.P.bellowCd + .1); check(CORE.act(S, 'bellow'), 'it can, once he has his breath back');
+    // a gate cannot be outspent: blows of strength 1 still crack it, and enough of them bring it down and open the next ring
+    const S = CORE.init(8), M = CORE.M(S); const g = M.F.findIndex((f, i) => M.GATE[i] && M.RG[i] === 1);
+    const hp = CORE.hpOf(S, g); let left = hp, n = 0;
+    while (!CORE.open(S, g) && n < 1e5) { S.p.cd = 0; S.p.i = g + (CORE.open(S, g - 1) ? -1 : CORE.open(S, g + 1) ? 1 : CORE.open(S, g - N) ? -N : N); S.p.d = [-N, 1, N, -1].indexOf(g - S.p.i); if (S.p.d < 0) break; S.p.q = []; CORE.act(S, 'ram'); n++; }
+    check(CORE.open(S, g) && S.ring === 2, `the first gate falls to ${n} blows of strength 1 and opens the second ring`);
   }
   {
-    // the end: nothing until every ring is charted; then home along the thread, and the chest opens one step at a time
-    const S = CORE.init(9); S.ring = 7; S.lv.thread = 6; S.lv.sandal = 8;
-    for (let r = 1; r <= 7; r++) chart(S, r);
-    const M = CORE.M(S), last = M.F.findIndex((f, i) => f && M.RG[i] === 7);
-    S.mp[(last / 30) | 0] &= ~(1 << (last % 30)); S.nm--; S.nr[7]--; CORE.step(S, .1);
-    check(S.fin === 0 && !CORE.act(S, 'home'), 'one pace uncharted and the map is not whole');
-    S.p.i = last; S.p.q = []; CORE.act(S, 'stop'); S.mp[(last / 30) | 0] |= 1 << (last % 30); S.nm++; S.nr[7]++; CORE.step(S, .1);
-    check(S.fin === 1 && !CORE.act(S, 'open'), 'the last pace charted, the map is whole, and the chest is not yet there');
-    CORE.act(S, 'home'); for (let k = 0; k < 3000 && S.fin === 1; k++) CORE.step(S, .1);
-    check(S.fin === 2 && S.p.i === M.E, 'following the thread leads back to the stairs');
-    check(CORE.act(S, 'open') && CORE.done(S) && CORE.progress(S) >= .99, 'where the chest opens, and the box is done');
+    // the end: the outer wall down, you run out into the daylight, and the box opens one step at a time
+    const S = CORE.init(9), M = CORE.M(S); S.ring = 7; S.lv.horn = 40;
+    const g = M.F.findIndex((f, i) => M.GATE[i] && M.RG[i] === 7 && i % N === 0 && M.F[i + 1]);
+    S.p.i = g + 1; S.p.d = 3; S.p.q = [];
+    check(CORE.act(S, 'ram') && S.fin === 1 && !CORE.act(S, 'open'), 'breaking the outer wall gets you out, and nothing is open yet');
+    for (let k = 0; k < 100 && S.fin === 1; k++) CORE.step(S, .1);
+    check(S.fin === 2 && CORE.act(S, 'open') && CORE.done(S) && CORE.progress(S) >= .99, 'outside, the box opens, and this one is done');
+  }
+  {
+    // the box was a survey before it was a jailbreak: an old save starts again
+    const S = CORE.migrate({ ms: 3, mp: [1, 2, 3], nm: 40 }, 1);
+    check(S.br && S.ring === 1 && S.nb === 0 && JSON.stringify(S) === JSON.stringify(CORE.init(3)), 'a save from the first version starts the new box fresh');
   }
 }
 
