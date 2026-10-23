@@ -179,7 +179,7 @@ Unwelcome Guests waits below the marker as the draft for slot 4.
 
 ### Open work on the shipped boxes
 
-Neither box has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
+Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
 clarity, art direction, phone, feel) scored Starter 6/5/6/4/5 and Unwelcome Guests 6/4/5/6/4, both before
 the fixes listed in their commits; the next round was cut short. What those critiques asked for and is
 still undone, most valuable first:
@@ -285,6 +285,24 @@ box uses it.
     midnight turns to amber daylight; that is dawn breaking as the box folds, and stays. Then a
     frame-time reading on a real phone, above all in the stadium (`K.debug.blades()`), and the mower's
     sound once the owner has heard it.
+
+- **Minos Wants a Map** (box 3) was critiqued in two rounds on stills (the look) and four on
+  filmstrips (first minute, the next ring and the first Athenian, walking by the tablet, the bellow and
+  a find, the ending; phone and desktop, real pointer input), each by a fresh critic. Scores for first
+  impression, clarity, art direction, phone and feel went 6/5/7/5/4, 7/5/8/6/5, 7/5/8/6/6, 7/6/8/7/6.
+  Fixed on the way: bulls that read as beetles, close-up walls at every junction (camera set back and
+  kept off the walls, a wider view on a phone), a shop that hid the thread off screen, an echo and a
+  stairwell lost to an undefined `smoothstep`, way discs left on screen at the end, a tablet that
+  followed nothing, a chest that was a sunrise. Still under 8, from the last critic, most valuable first:
+  - **Feel (6) and clarity (6).** The second-tier moments still land mostly as text: show a hired
+    Athenian walking off down your own corridor, run the bellow's echo through the corridors in order
+    of distance and ink the tablet in the same sweep, give a ring unlock a full-width band with the new
+    ring's fresco sliding in.
+  - **Junctions.** A T-junction still often means a wall filling the screen: stop the walk short of the
+    junction, or turn in place before walking on; put each way's disc in the opening it leads into.
+  - **The finale.** The Minotaur keeps one pose; give him three (waiting, stepping aside, watching the
+    lid), and make the chest itself the tap target instead of a button over the floor.
+  - Nobody on this side has heard it: the lyre, the drone, the footsteps and the bellow are untested by ear.
 
 ### Working on a box that has shipped
 
