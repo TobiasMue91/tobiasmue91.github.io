@@ -2841,24 +2841,31 @@ const sfx = {
   chime() { [523, 659, 784, 1046, 1318].forEach((f, k) => tone(f, f, 1.6, 'sine', .07, k * .16)); }
 };
 // the engine runs all the time, silent when the mower stands still
+// a small four-stroke, heard from across the garden: muffled thumps at the firing rate, the whir of
+// the blade, a dry hiss while it is in grass. Quiet: it sits under the music, not on top of it.
 const eng = (() => {
   if (!A) return { set() {}, stop() {} };
-  const x = A.ctx, o1 = x.createOscillator(), o2 = x.createOscillator(), am = x.createOscillator(), amg = x.createGain(), lp = x.createBiquadFilter(), g = x.createGain();
-  const gs = x.createBufferSource(), bp = x.createBiquadFilter(), gg = x.createGain();
-  o1.type = 'sawtooth'; o2.type = 'square'; am.type = 'square'; lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 3; amg.gain.value = .5; g.gain.value = 0;
-  o1.connect(lp); o2.connect(lp); lp.connect(g); am.connect(amg); amg.connect(g.gain); g.connect(A.sfx);
-  bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = .8; gg.gain.value = 0; gs.loop = true; gs.connect(bp); bp.connect(gg); gg.connect(A.sfx);
+  const x = A.ctx, src = x.createBufferSource(), lp = x.createBiquadFilter(), am = x.createGain(), lfo = x.createOscillator(), lfg = x.createGain();
+  const tone = x.createOscillator(), tlp = x.createBiquadFilter(), tg = x.createGain(), g = x.createGain();
+  const ws = x.createBufferSource(), wbp = x.createBiquadFilter(), wg = x.createGain(), cs = x.createBufferSource(), chp = x.createBiquadFilter(), cg = x.createGain();
+  lp.type = 'lowpass'; lp.frequency.value = 240; lp.Q.value = .9; am.gain.value = .5; lfo.type = 'sawtooth'; lfg.gain.value = .5;
+  src.connect(lp); lp.connect(am); lfo.connect(lfg); lfg.connect(am.gain); am.connect(g);
+  tone.type = 'triangle'; tlp.type = 'lowpass'; tlp.frequency.value = 180; tg.gain.value = .25; tone.connect(tlp); tlp.connect(tg); tg.connect(am);
+  wbp.type = 'bandpass'; wbp.frequency.value = 700; wbp.Q.value = 3; wg.gain.value = 0; ws.connect(wbp); wbp.connect(wg); wg.connect(A.sfx);
+  chp.type = 'highpass'; chp.frequency.value = 2600; cg.gain.value = 0; cs.connect(chp); chp.connect(cg); cg.connect(A.sfx);
+  g.gain.value = 0; g.connect(A.sfx);
   let on = false, lvl = 0, cut = 0;
   return {
     set(speed, cutting, ride, dt) {
       if (x.state !== 'running') return;
-      if (!on) { gs.buffer = noise(); for (const o of [o1, o2, am, gs]) o.start(); on = true; }
-      lvl += ((speed > .2 ? 1 : .25) - lvl) * Math.min(1, dt * 4); cut += (cutting - cut) * Math.min(1, dt * 8);
-      const f = (ride ? 38 : 52) + lvl * (ride ? 22 : 34), t = x.currentTime;
-      o1.frequency.setTargetAtTime(f, t, .05); o2.frequency.setTargetAtTime(f * 2.01, t, .05); am.frequency.setTargetAtTime(f / 2, t, .05);
-      g.gain.setTargetAtTime(S.site === 'field' && S.finale ? 0 : .035 + lvl * .045, t, .08); gg.gain.setTargetAtTime(Math.min(.12, cut * .05), t, .05);
+      if (!on) { for (const b of [src, ws, cs]) { b.buffer = noise(); b.loop = true; } for (const o of [src, ws, cs, lfo, tone]) o.start(); on = true; }
+      lvl += ((speed > .2 ? 1 : 0) - lvl) * Math.min(1, dt * 3); cut += (Math.min(cutting, 6) / 6 - cut) * Math.min(1, dt * 6);
+      const fire = (ride ? 17 : 23) + lvl * (ride ? 6 : 9), t = x.currentTime, off = S.site === 'field' && S.finale;
+      lfo.frequency.setTargetAtTime(fire, t, .1); tone.frequency.setTargetAtTime(fire * 2, t, .1); wbp.frequency.setTargetAtTime(500 + lvl * 350, t, .1);
+      g.gain.setTargetAtTime(off ? 0 : (.05 + lvl * .05) * (ride ? 1.2 : 1), t, .15);
+      wg.gain.setTargetAtTime(off ? 0 : .004 + lvl * .006, t, .15); cg.gain.setTargetAtTime(off ? 0 : cut * .012, t, .08);
     },
-    stop() { if (on) { g.gain.setTargetAtTime(0, x.currentTime, .05); gg.gain.setTargetAtTime(0, x.currentTime, .05); } }
+    stop() { if (on) for (const n of [g, wg, cg]) n.gain.setTargetAtTime(0, x.currentTime, .05); }
   };
 })();
 // a cheap keyboard's demo song: bass, skanking chords, a whistled tune; brass for the show, a music box at midnight
