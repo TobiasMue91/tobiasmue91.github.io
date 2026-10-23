@@ -229,11 +229,34 @@ box uses it.
 - **Bathysphere** — sink a Victorian diving bell, sound with sonar, lure what lives down there.
   Steel engraving in the style of Jules Verne's illustrators.
 
-- **Keep Off the Grass** has had no outside critique yet, only its author's filmstrips, and no sound
-  check on a real phone. Polished since: on a phone the show lawn is followed while you drive and seen
-  whole when you let go; the neighbours say their rates when the street opens; the box at the end is
-  cardboard in a breaking dawn. Still open: the act-one phone frame leaves the lower third empty; the
-  street's neighbours never react to robot mowers; a second look at the music after a full playthrough.
+- **Keep Off the Grass** (box 2) has been played through once by the owner, who liked it best of the
+  three; everything since came from that playtest. No outside critique has run yet. Open, most
+  valuable first:
+  - **Performance is unmeasured on real devices.** Grass is up to 220,000 blades on a desktop and
+    110,000 on a phone (`BN` and `BUDGET` in the view). The cup final's stadium is the heaviest place.
+    If a phone stutters, scale the blade count by measured frame time rather than by screen size.
+  - **The mower's sound** has been rebuilt three times without anyone hearing it on this side: too
+    loud, then inaudible on phone speakers (all below 240 Hz), then "a helicopter" (pulses too slow).
+    It now fires at 52–66 Hz with a band of noise around 650 Hz. Ask the owner before changing it again.
+  - The phone frame in act one leaves the lower third empty; neighbours never react to the robot
+    mowers; a check that every place change (each show, midnight) runs without errors belongs in the
+    browser suite: buying a show once crashed the view for 0.7 s.
+
+### Working on a box that has shipped
+
+The boxes live in `games/contents_may_vary.html` and are edited there, in place. The fast loop:
+
+- `npx http-server -p 8099 -s -c-1` from the repo root, then
+  `games/contents_may_vary.html?world=lawn&at=20` (minutes of the eager bot's game) on a phone-sized and
+  a desktop-sized Playwright page. The game runs in an iframe: `page.frames()[1]` reaches `K.debug`
+  (`state()`, `toScreen(x, y)`, `cam()`, `snap()`, `box()`). To get to a place quickly, set money and
+  buy through the rules: `S = K.debug.state(); S.$ = 1e9; CORE.act(S, 'buy', 'show4')`.
+- Headless Chromium renders WebGL in software: a few frames a second at most, and the stadium takes
+  seconds per frame, so give screenshots a long timeout. Do not trust a screenshot over a WebGL
+  canvas with CSS `backdrop-filter` above it; `K.debug.snap()` returns the canvas itself.
+- Pacing changes go through `node test/contents_may_vary.mjs pacing --world=lawn`; anything else
+  through `npm run test:cmv` and the `browser` suite. Each commit that changes the page sets its
+  `updated` date in `data/games.json`.
 
 ### Genres and looks to draw from
 
