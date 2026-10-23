@@ -241,7 +241,10 @@ box uses it.
   - **The mower's sound** has been rebuilt three times without anyone hearing it on this side: too
     loud, then inaudible on phone speakers (all below 240 Hz), then "a helicopter" (pulses too slow).
     It now fires at 52–66 Hz with a band of noise around 650 Hz. Ask the owner before changing it again.
-  - The phone frame in act one leaves the lower third empty; neighbours never react to the robot
+  - The phone frame in act one used to leave the lower third empty: the camera now comes closer to
+    Dad's lawn on an upright phone, and across the road (toward the lens) there is a kerb, a pavement
+    with a postbox, low brick walls with flower beds and the front gardens opposite, a shade darker than
+    the lawns in play so they read as backdrop. Still open: neighbours never react to the robot
     mowers; a check that every place change (each show, midnight) runs without errors belongs in the
     browser suite: buying a show once crashed the view for 0.7 s.
 
