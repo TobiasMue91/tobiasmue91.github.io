@@ -282,7 +282,7 @@ if (suites.includes('lawn') && lawn) {
   }
   {
     // midnight: the end needs the string mown, and nothing else will do
-    const S = CORE.init(6); S.act = 3; S.gold = 3; S.$ = 1; CORE.act(S, 'buy', 'night');
+    const S = CORE.init(6); S.act = 3; S.gold = CORE.SHOWS.length; S.$ = 1; CORE.act(S, 'buy', 'night');
     const L = CORE.layout('field', 0), on = new Set(L.stencil);
     for (let i = 0; i < S.h.length; i++) if (!on.has(i)) S.h[i] = CORE.P.cutTo;
     CORE.step(S, 2);

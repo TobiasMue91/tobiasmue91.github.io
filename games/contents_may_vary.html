@@ -2430,6 +2430,7 @@ void main() {
   vec3 lo = wheat > .5 ? vec3(.34, .25, .09) : vec3(.06, .17, .04), hi = wheat > .5 ? vec3(.95, .8, .42) : vec3(.4, .64, .19);
   hi = mix(hi, vec3(.6, .7, .3), (1. - clamp(hv * 1.6, 0., 1.)) * (1. - wheat) * .55);
   vC = mix(lo, hi, t * .85 + .15) * (.8 + .4 * j) * (kind == 1. ? vec3(.9, .92, .75) : vec3(1.));
+  if (kind == 3.) vC = mix(vC, vec3(.95), .75);
   gl_Position = uVP * wp;
 }`;
 const FSB = `#version 300 es
@@ -2461,17 +2462,19 @@ const blade = (() => {
 })();
 // blades to a cell: fewer on small screens and when asked for less motion
 // (the wheat field is the biggest place by far, so it gets fewer, thicker stalks)
-const BN = () => Math.round((Math.min(innerWidth, innerHeight) < 700 ? 110 : 200) * (K.reduced ? .5 : 1) * (S && S.site === 'field' ? .55 : 1));
-function bladeSet(cells) {
-  const vao = gl.createVertexArray(), cb = gl.createBuffer(), d = new Float32Array(cells.length * 2);
+const small = () => Math.min(innerWidth, innerHeight) < 700, BN = () => Math.round((small() ? 110 : 200) * (K.reduced ? .5 : 1));
+// and no more than so many in all: big places (the wheat, the stadium) get thinner turf
+const BUDGET = () => (small() ? 110000 : 220000) * (K.reduced ? .5 : 1);
+function bladeSet(cells, total) {
+  const vao = gl.createVertexArray(), cb = gl.createBuffer(), d = new Float32Array(cells.length * 2), bn = Math.max(16, Math.min(BN(), Math.floor(BUDGET() / Math.max(1, total || cells.length))));
   cells.forEach((i, k) => { d[k * 2] = i % L.W; d[k * 2 + 1] = (i / L.W) | 0; });
   gl.bindVertexArray(vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, blade.p); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, blade.i);
   gl.bindBuffer(gl.ARRAY_BUFFER, cb); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(1, BN());
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(1, bn);
   gl.bindVertexArray(null);
-  return { vao, n: cells.length, bn: BN() };
+  return { vao, n: cells.length, bn };
 }
 let blades = null, flapBlades = [], htex = null, hdat = null;
 // one cube, base on the ground: x and z from -.5 to .5, y from 0 to 1
@@ -2582,7 +2585,7 @@ function fit(r, pitch = cam.gpitch) {
 }
 
 /* ================= the world, built for each place ================= */
-const vh = [];          // heights as drawn: they follow the rules' heights, smoothly
+const vh = [], BIN = [21.5, 14.5];   // the compost bin's own cell, centred          // heights as drawn: they follow the rules' heights, smoothly
 let flapOn = false;
 const CARD = hex('#c49a62'), FLAP = [[16, 8, 'x', -1], [16, 24, 'x', 1], [24, 16, 'z', 1], [8, 16, 'z', -1]];   // south, north, east, west: corner, axis, sense
 const inFlap = (x, y) => { for (let k = 0; k < 4; k++) { const [a, b] = FLAP[k]; if (x >= a && x < a + 8 && y >= b && y < b + 8) return k; } return -1; };
@@ -2612,7 +2615,13 @@ function house(B, x0, y0, w, wall, roof, door, dx) {
   bx(B, x0 + w / 2, y0 + 3.2, 0, w, 6, 3.4, wall);
   for (let k = 0; k < 5; k++) bx(B, x0 + w / 2, y0 + 3.2, 3.4 + k * .55, w + .4 - 0, 6.6 - k * 1.45, .55, roof);
   bx(B, x0 + w - 2, y0 + 4.5, 3.4, .9, .9, 3.3, C.red);
-  for (const [wx, wz] of [[x0 + 2, .9], [x0 + w - 2.2, .9], [x0 + 2, 2.2], [x0 + w / 2, 2.2], [x0 + w - 2.2, 2.2]]) { if (Math.abs(wx - dx) < 1.3 && wz < 1.5) continue; bx(B, wx, y0 + .17, wz - .08, 1.5, .1, 1.05, C.white); bx(B, wx, y0 + .12, wz, 1.25, .1, .85, C.glass); bx(B, wx, y0 + .1, wz + .38, 1.25, .1, .08, C.white); }
+  // sash windows on a grid: three bays, upstairs over downstairs, none where the door is
+  const f = y0 + .2, win = (wx, wz, ww, wh) => {
+    bx(B, wx, f - .04, wz - .1, ww + .24, .1, wh + .2, C.white); bx(B, wx, f - .07, wz, ww, .08, wh, hex('#8fbcd9'));
+    bx(B, wx, f - .1, wz, .07, .06, wh, C.white); bx(B, wx, f - .1, wz + wh / 2 - .035, ww, .06, .07, C.white);
+    bx(B, wx, f - .17, wz - .16, ww + .44, .22, .08, C.white);
+  };
+  for (const wx of [x0 + w * .2, x0 + w * .5, x0 + w * .8]) { if (Math.abs(wx - dx) > 1.5) win(wx, .75, 1.3, 1.15); win(wx, 2.2, 1.3, .95); }
   bx(B, dx, y0 + .12, 0, 1, .16, 2, door); bx(B, dx + .3, y0 + .05, 1, .08, .08, .08, C.lemon); bx(B, dx, y0 - .3, 0, 1.4, .6, .12, C.paving);
 }
 function build() {
@@ -2621,6 +2630,15 @@ function build() {
   blades = bladeSet(cells); flapBlades = [];
   hdat = new Uint8Array(L.W * L.H * 4);
   for (const i of cells) { if (L.K[i] === 2) { hdat[i * 4] = 70 + hash(i, 3) * 40; hdat[i * 4 + 3] = 85; } else hdat[i * 4 + 3] = S.site === 'field' ? 170 : 0; }
+  if (L.pitch) { // the markings: touchlines, halfway line, centre circle, penalty boxes
+    const s = L.show, w = s.x1 - s.x0 + 1, h = s.y1 - s.y0 + 1, cx = s.x0 + w / 2, cy = s.y0 + h / 2;
+    for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) {
+      const X = x + .5, Y = y + .5, r = Math.hypot(X - cx, Y - cy), bw = 7, bh = 16;
+      const on = x === s.x0 || x === s.x1 || y === s.y0 || y === s.y1 || Math.abs(X - cx) < .5 || Math.abs(r - 5) < .5
+        || ((x === s.x0 + bw || x === s.x1 - bw) && Math.abs(Y - cy) < bh / 2) || (Math.abs(Math.abs(Y - cy) - bh / 2) <= .5 && (x < s.x0 + bw || x > s.x1 - bw));
+      if (on) hdat[(y * L.W + x) * 4 + 3] = 255;
+    }
+  }
   if (htex) gl.deleteTexture(htex); htex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, htex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, L.W, L.H, 0, gl.RGBA, gl.UNSIGNED_BYTE, hdat);
   for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
@@ -2656,20 +2674,27 @@ function build() {
     bx(B, 11.5, 3.5, 0, .14, .14, 2.6, C.dark); bx(B, 11.8, 3.5, 2.5, .7, .3, .18, C.dark); bx(B, 11.9, 3.5, 2.38, .3, .26, .12, C.lemon);
     bx(B, 31, 1.2, .25, 3.2, 1.4, .7, C.pink); bx(B, 31.1, 1.2, .95, 1.8, 1.3, .55, C.glass); for (const [a, b] of [[30, .55], [32, .55], [30, 1.85], [32, 1.85]]) bx(B, a, b, 0, .6, .25, .5, C.dark);
   } else {
-    // the show ground: a white picket fence, a marquee, bunting, the judges' table
-    const s = L.show;
-    for (let x = s.x0 - 1; x <= s.x1 + 1; x++) for (const y of [s.y0 - 1.5, s.y1 + 1.5]) if (!(y < s.y0 && Math.abs(x - 20) < 2)) { bx(B, x + .5, y + .5, 0, .12, .12, .7, C.white); bx(B, x + .5, y + .5, .45, 1, .06, .08, C.white); }
-    for (let y = s.y0 - 1; y <= s.y1 + 1; y++) for (const x of [s.x0 - 1.5, s.x1 + 1.5]) { bx(B, x + .5, y + .5, 0, .12, .12, .7, C.white); bx(B, x + .5, y + .5, .45, .06, 1, .08, C.white); }
-    for (let k = 0; k < 14; k++) { const x = 13.5 + k; bx(B, x, 25.5, 0, 1, 3, 2.2, k & 1 ? C.red : C.tent); bx(B, x, 25.5, 2.2, 1, 2.2, .5, k & 1 ? C.red : C.tent); bx(B, x, 25.5, 2.7, 1, 1.2, .4, k & 1 ? C.red : C.tent); }
-    bx(B, 20, 23.6, 0, 4, 1, .8, C.white); bx(B, 20, 23.6, .8, 4.2, 1.2, .08, C.cobalt);
-    const bc = [C.red, C.lemon, C.cobalt, C.pink, C.leaf2];
-    for (const [ax, ay, bx2, by] of [[s.x0 - 1, s.y1 + 2, s.x1 + 2, s.y1 + 2], [s.x0 - 1, s.y0 - 1, s.x0 - 1, s.y1 + 2], [s.x1 + 2, s.y0 - 1, s.x1 + 2, s.y1 + 2]]) {
-      const n = Math.round(Math.hypot(bx2 - ax, by - ay) / .7);
-      for (let k = 0; k <= n; k++) { const t = k / n, sag = Math.sin(t * Math.PI * Math.ceil(n / 12)) ; bx(B, lerp(ax, bx2, t), lerp(ay, by, t), 1.9 - Math.abs(sag) * .35, .3, .3, .28, bc[k % 5]); }
-      bx(B, ax, ay, 0, .14, .14, 2.2, C.white); bx(B, bx2, by, 0, .14, .14, 2.2, C.white);
+    const s = L.show, cx = L.cx, T = L.top, bc = [C.red, C.lemon, C.cobalt, C.pink, C.leaf2];
+    if (L.pitch) {
+      // a stadium: stands stepping up on all four sides, a crowd, floodlights, a tunnel for the judges
+      const ring = (d, fn) => { for (let x = s.x0 - d; x <= s.x1 + d; x++) { fn(x, s.y0 - d); fn(x, s.y1 + d); } for (let y = s.y0 - d + 1; y < s.y1 + d; y++) { fn(s.x0 - d, y); fn(s.x1 + d, y); } };
+      for (let r = 0; r < 6; r++) ring(4 + r, (x, y) => { if (Math.abs(x + .5 - cx) < 2 && y > s.y1) return; bx(B, x + .5, y + .5, 0, 1, 1, .5 + r * .5, r % 2 ? C.cobalt : C.white); const h = hash(x, y, r); if (h > .25) bx(B, x + .5, y + .5, .5 + r * .5, .45, .45, .35 + h * .15, bc[Math.floor(h * 5)]); });
+      bx(B, cx, s.y1 + 6.5, 0, 3.2, 6, 2.2, C.dark);
+      for (const [x, y] of [[s.x0 - 7, s.y0 - 7], [s.x1 + 8, s.y0 - 7], [s.x0 - 7, s.y1 + 8], [s.x1 + 8, s.y1 + 8]]) { bx(B, x, y, 0, .5, .5, 9, C.grey); bx(B, x, y, 9, 2.4, .5, 1.4, C.white); }
+      for (const [x, y] of [[s.x0 - .5, (s.y0 + s.y1 + 1) / 2], [s.x1 + 1.5, (s.y0 + s.y1 + 1) / 2]]) { bx(B, x, y - 1.8, 0, .14, .14, 1.4, C.white); bx(B, x, y + 1.8, 0, .14, .14, 1.4, C.white); bx(B, x, y, 1.3, .14, 3.7, .14, C.white); }
+    } else {
+      for (let x = s.x0 - 1; x <= s.x1 + 1; x++) for (const y of [s.y0 - 1.5, s.y1 + 1.5]) if (!(y < s.y0 && Math.abs(x - cx) < 2)) { bx(B, x + .5, y + .5, 0, .12, .12, .7, C.white); bx(B, x + .5, y + .5, .45, 1, .06, .08, C.white); }
+      for (let y = s.y0 - 1; y <= s.y1 + 1; y++) for (const x of [s.x0 - 1.5, s.x1 + 1.5]) { bx(B, x + .5, y + .5, 0, .12, .12, .7, C.white); bx(B, x + .5, y + .5, .45, .06, 1, .08, C.white); }
+      for (let k = 0; k < 14; k++) { const x = cx - 6.5 + k; bx(B, x, T + 1.5, 0, 1, 3, 2.2, k & 1 ? C.red : C.tent); bx(B, x, T + 1.5, 2.2, 1, 2.2, .5, k & 1 ? C.red : C.tent); bx(B, x, T + 1.5, 2.7, 1, 1.2, .4, k & 1 ? C.red : C.tent); }
+      for (const [ax, ay, bx2, by] of [[s.x0 - 1, s.y1 + 2, s.x1 + 2, s.y1 + 2], [s.x0 - 1, s.y0 - 1, s.x0 - 1, s.y1 + 2], [s.x1 + 2, s.y0 - 1, s.x1 + 2, s.y1 + 2]]) {
+        const n = Math.round(Math.hypot(bx2 - ax, by - ay) / .7);
+        for (let k = 0; k <= n; k++) { const t = k / n, sag = Math.sin(t * Math.PI * Math.ceil(n / 12)); bx(B, lerp(ax, bx2, t), lerp(ay, by, t), 1.9 - Math.abs(sag) * .35, .3, .3, .28, bc[k % 5]); }
+        bx(B, ax, ay, 0, .14, .14, 2.2, C.white); bx(B, bx2, by, 0, .14, .14, 2.2, C.white);
+      }
+      for (let k = 0; k < 10; k++) tree(B, k < 5 ? -2.5 - (k & 1) * 1.5 : L.W + 2.5 + (k & 1) * 1.5, 1 + (k % 5) * (L.H / 5), 1.3, k);
+      for (let k = 0; k < 6; k++) { const x = 5 + k * (L.W - 10) / 5; bx(B, x, 1.2, 0, 3, .8, .45, C.trunk); bx(B, x, 1.55, .45, 3, .15, .5, C.trunk); }
     }
-    for (let k = 0; k < 10; k++) tree(B, k < 5 ? -2.5 - (k & 1) * 1.5 : 42.5 + (k & 1) * 1.5, 1 + (k % 5) * 6, 1.3, k);
-    for (let k = 0; k < 6; k++) { const x = 5 + k * 6; bx(B, x, 1.2, 0, 3, .8, .45, C.trunk); bx(B, x, 1.55, .45, 3, .15, .5, C.trunk); }
+    bx(B, cx, T - .4, 0, 4, 1, .8, C.white); bx(B, cx, T - .4, .8, 4.2, 1.2, .08, C.cobalt);
   }
   upload(B);
 }
@@ -2736,7 +2761,7 @@ function drawDyn(dt) {
   for (const v of visitors) person(B, v.x, v.y, -Math.PI / 2, v.o);
   if (S.site === 'street' && S.act === 1 && !visitors.some(v => v.g === 1)) person(B, 15, 14.75, -Math.PI / 2, { shirt: C.cobalt, pants: C.grey, hair: C.trunk, s: 1.15 });
   if (S.site === 'green') judges(B, dt);
-  if (hint.bin > 0 && L.bin) { const b = Math.abs(Math.sin(now * 5)) * .4; bx(B, L.bin[0] + .5, L.bin[1] + .5, 2.2 + b, .2, .2, .7, C.orange); bx(B, L.bin[0] + .5, L.bin[1] + .5, 1.95 + b, .5, .5, .25, C.orange); bx(B, L.bin[0] + .5, L.bin[1] + .5, 1.8 + b, .2, .2, .2, C.orange); }
+  if (hint.bin > 0 && L.bin) { const b = Math.abs(Math.sin(now * 5)) * .4, [x, y] = BIN; bx(B, x, y, 2.2 + b, .2, .2, .7, C.orange); bx(B, x, y, 1.95 + b, .5, .5, .25, C.orange); bx(B, x, y, 1.8 + b, .2, .2, .2, C.orange); }
   if (S.lv.assist && S.site === 'green' && S.m.go) { // the string line, ahead of the mower when it runs straight
     const a = vis.a, sx = Math.abs(Math.cos(a)) > .97, sy = Math.abs(Math.sin(a)) > .97;
     if (sx || sy) for (let k = 1; k < 9; k++) bx(B, m.x + Math.cos(a) * k * .9, m.y + Math.sin(a) * k * .9, .02, sx ? .45 : .05, sy ? .45 : .05, .02, C.white);
@@ -2790,7 +2815,7 @@ function judges(B, dt) {
   const go = jd.t < 0 ? 0 : jd.t < 2.6 ? ease.inOut(jd.t / 2.6) : jd.t < 7.5 ? 1 : 1 - ease.inOut(Math.min(1, (jd.t - 7.5) / 2.6));
   if (jd.t > 10.2) jd.t = -1;
   [-2.4, 0, 2.4].forEach((o, k) => {
-    const x = lerp(20 + o * .6, cx + o, go), y = lerp(23.3, cy, go), walking = jd.t >= 0 && (jd.t < 2.6 || jd.t > 7.5);
+    const x = lerp(L.cx + o * .6, cx + o, go), y = lerp(L.top - .7, cy, go), walking = jd.t >= 0 && (jd.t < 2.6 || jd.t > 7.5);
     person(B, x, y, -Math.PI / 2, { shirt: [C.ink, C.cobalt, C.leaf2][k], pants: C.grey, hat: [C.dark, C.trunk, C.dark][k], walk: walking ? now * 9 + k : null, board: 1, s: 1.15 });
   });
 }
@@ -2978,8 +3003,8 @@ let shown = 0, rate = 0, lastJob = -9;
 function events() {
   const list = S.ev.splice(0);
   for (const e of list) {
-    if (e.k === 'dump') { pop(L.bin[0] + .5, L.bin[1] + .5, 1.6, '+' + money(e.v)); sfx.dump(); rate += e.v; hint.bin = 0; }
-    if (e.k === 'full') { sfx.full(); hint.bin = 1; if (!hint.binSaid) { hint.binSaid = 1; say(L.bin[0] + .5, L.bin[1] + .5, 2.4, 'Full! Tip it in the <b>compost bin</b>.', 4); } }
+    if (e.k === 'dump') { pop(BIN[0], BIN[1], 1.6, '+' + money(e.v)); sfx.dump(); rate += e.v; hint.bin = 0; }
+    if (e.k === 'full') { sfx.full(); hint.bin = 1; if (!hint.binSaid) { hint.binSaid = 1; say(BIN[0], BIN[1], 2.4, 'Full! Tip it in the <b>compost bin</b>.', 4); } }
     if (e.k === 'job' && L.gardens) {
       sfx.cash(); rate += e.v; const lines = LINES[e.g];
       if (now - lastJob > 1.2 || e.g === 1) visit(e.g, (S.act === 1 ? lines[Math.min(S.jobs - 1, lines.length - 1) % lines.length] : lines[S.jobs % lines.length]) + ' <b>' + money(e.v) + '</b>');
@@ -3013,7 +3038,7 @@ function judged(e) {
     el.style.background = e.medal ? ['', '#c98a4a', '#9aa3b5', '#e0a91c'][e.medal] : '#8a8f9c';
     el.innerHTML = (e.medal ? ['', 'Bronze', 'Silver', 'Gold'][e.medal] : 'Commended') + '<small>' + (e.prize ? '+' + money(e.prize) : 'better luck next time') + '</small>' + (e.trophy ? '<small>a trophy: everything pays double</small>' : '');
     anchor(el, cx, cy, 5, 3.4); if (e.medal) sfx.medal(e.medal);
-    if (e.trophy && S.gold >= 3) setTimeout(() => card('A note in the cup', 'Look on the pegboard.', 3.4), 2500);
+    if (e.trophy && S.gold >= CORE.SHOWS.length) setTimeout(() => card('A note in the cup', 'Look on the pegboard.', 3.4), 2500);
   }, 4300);
 }
 function swap(fn, col = '#fff') {
@@ -3027,7 +3052,7 @@ function aim(snap) {
   if (!S) return;
   let r;
   if (S.site === 'street') r = S.act === 1 ? [11.5, 1, 22.5, 17, 0, 2] : [0, 0, 45, 18, 0, 2];
-  else if (S.site === 'green') { const s = L.show; r = [s.x0 - 2, s.y0 - 2, s.x1 + 3, 27, 0, 2]; }
+  else if (S.site === 'green') { const s = L.show; r = [s.x0 - 2, s.y0 - 2, s.x1 + 3, L.top + 1, 0, 2]; }
   else r = fin.low ? [13, 13, 27, 25, 0, 8.5] : S.finale ? [8, 6, 32, 34, 0, 1] : [6, 4, 34, 36, 0, 1];
   const f = fit(r);
   // too small to steer: follow the mower instead, close enough to see each cell
@@ -3066,7 +3091,7 @@ function buildFlaps() {
     const B = flaps[f]; B.n = 0;
     bx(B, a + 4, b + 4, -.3, 8, 8, .3, CARD); bx(B, a + 4, b + 4, -.32, 7.6, 7.6, .02, mix3(CARD, C.ink, .12));
     const fc = []; for (let y = b; y < b + 8; y++) for (let x = a; x < a + 8; x++) { ground(B, x, y, Math.max(S.h[y * L.W + x], 100), 0, true); fc.push(y * L.W + x); }
-    flapBlades[f] = bladeSet(fc);
+    flapBlades[f] = bladeSet(fc, blades.n);
     // underneath, where it will face outward once folded: the field was a box all along, and the box has a number
     if (f === 0) for (const k of digit) { const [c, r] = k.split(',').map(Number); bx(B, 20 - w * px / 2 + (c + .5) * px, 15 - 1.4 - (r + .5) * px, -.36, px * .95, px * .95, .06, C.ink); }
     B.axis = ax; B.sg = sg; B.line = ax === 'x' ? (sg < 0 ? b + 8 : b) : (sg > 0 ? a : a + 8);
@@ -3229,14 +3254,14 @@ const CORE = (() => {
     cap: 28, capK: 1.8, dumpR: 1.9,
     job: 1,            // a finished lawn pays this many units a cell on top
     robotSpeed: 1.25, robotDeck: .8, robotRate: .55,
-    medals: [[.45, .65, .8], [.5, .7, .85], [.55, .75, .88]], judgeGap: 30, prize: 2.5, wheat: .35,
-    gang: [1, 1.8, 2.6, 3.4]
+    medals: [[.45, .65, .8], [.5, .7, .85], [.55, .75, .88], [.55, .75, .86]], judgeGap: 30, prize: 2.5, wheat: .35,
+    gang: [1, 1.8, 2.6, 3.4, 4.3]
   };
   const GARDENS = [
     { name: 'Mrs Okafor', pay: 1.5 }, { name: 'Dad', pay: 1 }, { name: 'The Petersens', pay: 1.3 }, { name: 'Mr Lindqvist', pay: 2 }
   ];
   const SHOWS = [
-    { name: 'The Village Show', w: 22, h: 12 }, { name: 'The County Show', w: 28, h: 16 }, { name: 'The National', w: 34, h: 20 }
+    { name: 'The Village Show', w: 22, h: 12 }, { name: 'The County Show', w: 28, h: 16 }, { name: 'The National', w: 34, h: 20 }, { name: 'The Cup Final', w: 48, h: 30, pitch: true }
   ];
 
   /* ---------- the three places: built from rules, never stored ---------- */
@@ -3265,12 +3290,15 @@ const CORE = (() => {
       prop('pond', 38, 9, 2, 2); prop('flamingo', 41, 6, 1, 1);        // Mr Lindqvist: a pond and a flamingo
       L.spawn = [15.5, 5.5]; L.bin = [20.5, 13.5]; L.bounds1 = [12, 3, 22, 15];
     } else if (site === 'green') {
-      W = 40; H = 28; fill(0, 0, W - 1, H - 1, 2);
+      const s = SHOWS[tier - 1]; W = Math.max(40, s.w + 12); H = Math.max(28, s.h + 14);
+      fill(0, 0, W - 1, H - 1, 2);
       fill(0, 0, W - 1, 0, 0); fill(0, H - 1, W - 1, H - 1, 0); fill(0, 0, 0, H - 1, 0); fill(W - 1, 0, W - 1, H - 1, 0);
-      const s = SHOWS[tier - 1], x0 = 20 - (s.w >> 1), y0 = 13 - (s.h >> 1);
+      const cx = W >> 1, x0 = cx - (s.w >> 1), y0 = Math.round((H - 2 - s.h) / 2);
+      if (s.pitch) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x < x0 - 3 || x > x0 + s.w + 2 || y < y0 - 3 || y > y0 + s.h + 2) set(x, y, 0);   // the stands
       fill(x0, y0, x0 + s.w - 1, y0 + s.h - 1, 1, 0);
-      L.show = { x0, y0, x1: x0 + s.w - 1, y1: y0 + s.h - 1 };
-      prop('tent', 13, 24, 14, 3); L.spawn = [20.5, 2];
+      L.show = { x0, y0, x1: x0 + s.w - 1, y1: y0 + s.h - 1 }; L.cx = cx; L.top = s.pitch ? y0 + s.h + 2 : H - 4; L.pitch = !!s.pitch;
+      if (!s.pitch) prop('tent', cx - 7, H - 4, 14, 3);
+      L.spawn = [cx + .5, s.pitch ? y0 - 2 : 2];
     } else {
       W = 40; H = 40; fill(0, 0, W - 1, H - 1, 1, 0);
       // the net of a box, pegged out with string: a cross of five squares, and the fold lines
@@ -3304,11 +3332,12 @@ const CORE = (() => {
     { id: 'show1', act: 2, gate: 3, tier: 1, name: ['Enter the Village Show'], desc: 'Best Kept Lawn. The judges want it short, and they want stripes.', base: 50000, k: 1, max: 1 },
     { id: 'roller', act: 3, name: ['A striping roller', 'A heavier roller', 'A steel roller'], desc: 'Stripes show better, and the judges forgive a wobble.', base: 4000, k: 5, max: 3 },
     { id: 'assist', act: 3, name: ['A string line'], desc: 'The mower keeps a straight line when you are close to one.', base: 6000, k: 1, max: 1 },
-    { id: 'gang', act: 3, name: ['A triple gang mower', 'A five-gang mower', 'A seven-gang mower'], desc: 'Reel mowers towed side by side behind you: a far wider cut.', base: 15000, k: 7, max: 3 },
-    { id: 'lush', act: 3, name: ['Show feed', 'Iron tonic', 'Bone meal', 'A secret recipe'], desc: 'A greener lawn: every prize is half again as much.', base: 3e4, k: 4.5, max: 4 },
+    { id: 'gang', act: 3, name: ['A triple gang mower', 'A five-gang mower', 'A seven-gang mower', 'A nine-gang mower'], desc: 'Reel mowers towed side by side behind you: a far wider cut.', base: 15000, k: 7, max: 4, need: S => S.lv.gang < 3 || S.tier >= 3 },
+    { id: 'lush', act: 3, name: ['Show feed', 'Iron tonic', 'Bone meal', 'A secret recipe', 'Seaweed from the Hebrides', 'Whatever the Palace uses'], desc: 'A greener lawn: every prize is half again as much.', base: 3e4, k: 4.5, max: 6 },
     { id: 'show2', act: 3, tier: 2, name: ['Enter the County Show'], desc: 'A bigger lawn and sterner judges.', base: 2e5, k: 1, max: 1, need: S => S.gold >= 1 },
     { id: 'show3', act: 3, tier: 3, name: ['Enter the National'], desc: 'The best lawn in the land. Nobody from Elm Street has ever entered.', base: 3e6, k: 1, max: 1, need: S => S.gold >= 2 },
-    { id: 'night', act: 3, gate: 4, name: ['A note in the cup'], desc: '“Pratt’s wheat. Midnight. Bring the mower.”', base: 0, k: 1, max: 1, need: S => S.gold >= 3 }
+    { id: 'show4', act: 3, tier: 4, name: ['Groundsman for the Cup Final'], desc: 'A whole football pitch, a full stadium, and stripes the cameras can see from the blimp.', base: 2e7, k: 1, max: 1, need: S => S.gold >= 3 },
+    { id: 'night', act: 3, gate: 4, name: ['A note in the cup'], desc: '“Pratt’s wheat. Midnight. Bring the mower.”', base: 0, k: 1, max: 1, need: S => S.gold >= SHOWS.length }
   ];
   const byId = Object.fromEntries(UP.map(u => [u.id, u]));
   const price = (S, u) => Math.round(u.base * Math.pow(u.k, S.lv[u.id]) * 100) / 100;
@@ -3328,7 +3357,7 @@ const CORE = (() => {
 
   function init(seed) {
     const lv = {}; for (const u of UP) lv[u.id] = 0;
-    const S = { v: 1, seed: seed >>> 0, t: 0, act: 1, site: 'street', tier: 0, $: 0, earned: 0, lv, bag: 0, bagV: 0, gold: 0, best: [0, 0, 0],
+    const S = { v: 1, seed: seed >>> 0, t: 0, act: 1, site: 'street', tier: 0, $: 0, earned: 0, lv, bag: 0, bagV: 0, gold: 0, best: [0, 0, 0, 0],
       jobs: 0, rb: [], judgeCd: 0, judged: 0, finale: 0, gacc: 0, gw: [0, 0, 0, 0], dumpCd: 0, full: 0, ev: [] };
     enter(S, 'street', 0);
     return S;
@@ -3474,7 +3503,7 @@ const CORE = (() => {
       const prize = md ? cells * .9 * P.prize * Math.pow(1.5, S.lv.lush) * value(S) * r.score * r.score * [0, .5, .8, 1][md] : 0;
       earn(S, prize); S.judged++;
       const was = S.gold; if (md === 3 && S.gold < S.tier) S.gold = S.tier;
-      S.best[S.tier - 1] = Math.max(S.best[S.tier - 1], r.score);
+      S.best[S.tier - 1] = Math.max(S.best[S.tier - 1] || 0, r.score);
       ev(S, { k: 'judge', cov: r.cov, stripes: r.stripes, score: r.score, medal: md, prize, trophy: S.gold > was });
       regrow(S, 0); S.judgeCd = P.judgeGap; S.tries = md === 3 ? 0 : (S.tries || 0) + 1;
       return true;
@@ -3523,7 +3552,7 @@ const CORE = (() => {
     const L = x => Math.log10(1 + x), f = (a, b) => clamp((L(S.earned) - L(a)) / (L(b) - L(a)), 0, 1);
     if (S.act === 1) return .25 * f(0, byId.street.base * 1.3);
     if (S.act === 2) return .25 + .3 * f(byId.street.base, byId.show1.base * 1.2);
-    if (S.act === 3) return .55 + .35 * clamp((S.gold + (S.gold < S.tier ? .9 * Math.min(1, (S.best[S.tier - 1] || 0) / P.medals[S.tier - 1][2]) : 0)) / 3, 0, 1);
+    if (S.act === 3) return .55 + .35 * clamp((S.gold + (S.gold < S.tier ? .9 * Math.min(1, (S.best[S.tier - 1] || 0) / P.medals[S.tier - 1][2]) : 0)) / SHOWS.length, 0, 1);
     return .9 + .07 * stencilDone(S) + .01 * S.finale;
   }
 
