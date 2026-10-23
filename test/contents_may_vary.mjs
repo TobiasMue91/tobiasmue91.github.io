@@ -281,6 +281,16 @@ if (suites.includes('lawn') && lawn) {
     check(!CORE.act(A, 'judge'), 'the judges do not come straight back');
   }
   {
+    // on a show ground the cutters lift off the lawn: a turn on the headland cuts nothing, even with
+    // gangs wide enough to reach well into the lawn
+    const S = CORE.init(8); S.act = 2; S.$ = 1e9; check(CORE.act(S, 'buy', 'show1'), 'lift test: at the Village Show'); S.lv.ride = 1; S.lv.gang = 4; S.lv.deck = 8;
+    const L = CORE.layout('green', 1), s = L.show, onLawn = () => L.K.reduce((n, k, i) => n + (k === 1 && S.h[i] <= CORE.P.cutAt ? 1 : 0), 0);
+    S.m.x = s.x0 + 3; S.m.y = s.y0 - 1.5; drive(S, s.x1 - 2, s.y0 - 1.5, 6);
+    check(CORE.cutW(S) / 2 > 2 && onLawn() === 0 && S.m.up === 1, `driving along the headland with ${CORE.cutW(S).toFixed(1)} cells of gangs cuts nothing on the lawn`);
+    drive(S, s.x1 - 2, s.y0 + 4, 3);
+    check(onLawn() > 0 && S.m.up === 0, 'on the lawn they come down and cut');
+  }
+  {
     // midnight: the end needs the string mown, and nothing else will do
     const S = CORE.init(6); S.act = 3; S.gold = CORE.SHOWS.length; S.$ = 1; CORE.act(S, 'buy', 'night');
     const L = CORE.layout('field', 0), on = new Set(L.stencil);
