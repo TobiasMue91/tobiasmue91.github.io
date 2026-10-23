@@ -159,7 +159,7 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
-Keep Off the Grass 32–34 / 53–57, The Minotaur Moves Out 31–39 / 44–49,
+Keep Off the Grass 32–34 / 53–57, The Minotaur Moves Out 37–45 / 50–54,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -306,23 +306,21 @@ box uses it.
     frame-time reading on a real phone, above all in the stadium (`K.debug.blades()`), and the mower's
     sound once the owner has heard it.
 
-- **Minos Wants a Map** (box 3) was critiqued in two rounds on stills (the look) and four on
-  filmstrips (first minute, the next ring and the first Athenian, walking by the tablet, the bellow and
-  a find, the ending; phone and desktop, real pointer input), each by a fresh critic. Scores for first
-  impression, clarity, art direction, phone and feel went 6/5/7/5/4, 7/5/8/6/5, 7/5/8/6/6, 7/6/8/7/6.
-  Fixed on the way: bulls that read as beetles, close-up walls at every junction (camera set back and
-  kept off the walls, a wider view on a phone), a shop that hid the thread off screen, an echo and a
-  stairwell lost to an undefined `smoothstep`, way discs left on screen at the end, a tablet that
-  followed nothing, a chest that was a sunrise. Still under 8, from the last critic, most valuable first:
-  - **Feel (6) and clarity (6).** The second-tier moments still land mostly as text: show a hired
-    Athenian walking off down your own corridor, run the bellow's echo through the corridors in order
-    of distance and ink the tablet in the same sweep, give a ring unlock a full-width band with the new
-    ring's fresco sliding in.
-  - **Junctions.** A T-junction still often means a wall filling the screen: stop the walk short of the
-    junction, or turn in place before walking on; put each way's disc in the opening it leads into.
-  - **The finale.** The Minotaur keeps one pose; give him three (waiting, stepping aside, watching the
-    lid), and make the chest itself the tap target instead of a button over the floor.
-  - Nobody on this side has heard it: the lyre, the drone, the footsteps and the bellow are untested by ear.
+- **The Minotaur Moves Out** (box 3, remade from Minos Wants a Map, whose own critiques ended at
+  7/6/8/7/6) had four critic rounds on filmstrips (first minute, a gate, a plough at minute 24, a stamp,
+  the ending; phone and desktop, real pointer input). Scores for first impression, clarity, art
+  direction, phone and feel went 6/5/7/6/5, 6/5/7/5/6, 6/5/7/6/6, 7/5/7/6/6: none reached 8. Fixed on the
+  way: a plough that never broke more than one wall (gates and walls now harden at different rates), a
+  first gate of 200 blows in the first minute (now 20), daylight that was black, a camera pushed into the
+  wall by its own lunge, a counter that stacked one popup per wall, a charge through a gate straight into
+  the next one. Open, most valuable first:
+  - **Feel (6).** Show the plough as walls, not as a counter: keep each wall of the row drawn until you
+    reach it, then burst it into sherds with a moment's hit-stop and a kick that grows along the row.
+  - **Clarity (5).** The horns still read as ceiling trim to a stranger; the late tablet is a texture of
+    tiny corridors (show a window round the player by default, the whole ring behind the enlarge button).
+  - **The stamp** needs a shockwave you can see on the floor and walls dropping near to far.
+  - **Cracks** read as tape on desktop; thinner, branching lines from the point of the blow.
+  - Nobody has heard it yet: the thuds, the crumbling, the gate and the earthquake are untested by ear.
 
 ### Working on a box that has shipped
 
