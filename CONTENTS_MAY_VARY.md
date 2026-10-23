@@ -153,7 +153,7 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | № | id | title · handling | verb | loop | medium | palette | era · genre | sound | interface | ends with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
-| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows → a crop circle | real-time voxel miniature: hand-written WebGL 2, instanced boxes, a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
+| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
@@ -229,10 +229,11 @@ box uses it.
 - **Bathysphere** — sink a Victorian diving bell, sound with sonar, lure what lives down there.
   Steel engraving in the style of Jules Verne's illustrators.
 
-- **Keep Off the Grass** has had no outside critique yet, only its author's filmstrips. Known gaps: no
-  sound check on a real phone; the show lawn is larger than a phone screen, so the camera follows and
-  the stripes are never seen whole while mowing; the act-two neighbours only speak when paid; trees
-  are a few stacked cubes; the box at the end is grey under moonlight rather than cardboard-coloured.
+- **Keep Off the Grass** has had no outside critique yet, only its author's filmstrips, and no sound
+  check on a real phone. Polished since: on a phone the show lawn is followed while you drive and seen
+  whole when you let go; the neighbours say their rates when the street opens; the box at the end is
+  cardboard in a breaking dawn. Still open: the act-one phone frame leaves the lower third empty; the
+  street's neighbours never react to robot mowers; a second look at the music after a full playthrough.
 
 ### Genres and looks to draw from
 
@@ -247,6 +248,11 @@ From the anthology's owner, as a well for new pairs; none of these is a box yet:
 
 ## Lessons from the boxes so far
 
+- **Real grass is a vertex shader, not a model.** Every blade is the same nine-vertex ribbon, drawn up
+  to a hundred thousand times; its place, height, lean, wind and colour come from a hash of its number
+  and a lawn-sized texture updated each frame (height, the last pass's direction, hidden, kind). Cut
+  blades lean the way the mower went, so stripes appear for the same reason they do on a real lawn.
+  The technique is the one Ghost of Tsushima's GDC talk made famous; it cost about 6 KB.
 - **Real 3D fits the budget.** Keep Off the Grass draws everything as instanced boxes with one
   shader, one shadow map and no library: about 25 KB of renderer and scene. The rules stay a grid; the
   view never decides anything.

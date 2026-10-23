@@ -2254,6 +2254,8 @@ const CORE = (() => {
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;font-family:var(--f);color:var(--ink);-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;background:linear-gradient(#7ec8ff,#dff3ff 60%);transition:background 1.5s}
 body.night{background:linear-gradient(#060b26,#1b2660 70%)}
+body.dawn{background:linear-gradient(#3b4a8c,#e9a07e 55%,#f6d29a)}
+body.dawn #stars{opacity:.15}
 #gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
 /* a miniature: haze on the far edge, a shade on the near one */
 #tilt::before,#tilt::after{content:"";position:fixed;left:0;right:0;pointer-events:none}
@@ -2390,6 +2392,87 @@ function prog(vs, fs) {
   return { p, u };
 }
 const PM = prog(VS, FS), PD = prog(VS, '#version 300 es\nprecision mediump float; void main() {}');
+/* Grass, blade by blade, the way Ghost of Tsushima does it: one tapered ribbon drawn tens of thousands of
+   times, every blade placed, shaped, bent and blown in the vertex shader from a hash of its number and a
+   small texture of the lawn (height, the way the last pass went, hidden or not, kind). Cut grass leans the
+   way the mower went, which is where real stripes come from. */
+const VSB = `#version 300 es
+layout(location=0) in vec2 aB; layout(location=1) in vec2 aCell;
+uniform mat4 uVP, uM, uL; uniform sampler2D uHt; uniform float uN, uTime, uAll; uniform vec3 uPush, uEye;
+out vec3 vN, vC, vW; out vec4 vL; out float vT;
+float h1(float n) { return fract(sin(n) * 43758.5453); }
+void main() {
+  float s = float(gl_InstanceID % int(uN)) * 7.13 + aCell.x * 131.7 + aCell.y * 911.3;
+  vec4 hd = texelFetch(uHt, ivec2(aCell), 0);
+  if (hd.b > .5 && uAll < .5) { gl_Position = vec4(2., 2., 2., 1.); return; }
+  float kind = floor(hd.a * 3. + .5), wheat = kind == 2. ? 1. : 0.;
+  vec2 p = aCell + vec2(h1(s), h1(s + 1.7));
+  float j = h1(s + 3.1), hv = hd.r * 2.6;
+  float H = (wheat > .5 ? .2 + hv * .9 : .03 + hv * .5) * (.65 + .7 * j);
+  float dir = floor(hd.g * 255. + .5);
+  vec2 lean = (vec2(h1(s + 7.), h1(s + 8.)) - .5) * .8;
+  float st = mix(1.15, .3, clamp(hv, 0., 1.)) * (wheat > .5 ? .3 : 1.);
+  if (dir == 1.) lean.y += st; else if (dir == 2.) lean.y -= st; else if (dir == 3.) lean.x += st; else if (dir == 4.) lean.x -= st;
+  float w = sin(uTime * 1.5 + p.x * .45 + p.y * .3) * .6 + sin(uTime * 2.6 + p.x * 1.1 - p.y * .8) * .3;
+  lean += vec2(.8, .4) * w * clamp(hv, 0., 1.) * (wheat > .5 ? .55 : .4);
+  vec2 dp = p - uPush.xy; float pd = length(dp);
+  if (pd < uPush.z && pd > .001) lean += dp / pd * (1. - pd / uPush.z) * 2.5;
+  float t = aB.y, yaw = h1(s + 5.3) * 6.2832, dist = length(vec3(p.x, 0., -p.y) - uEye);
+  vec2 side = vec2(cos(yaw), sin(yaw));
+  float wd = (wheat > .5 ? .04 : .05) * (1. - t * .85) * max(1., dist / 24.);
+  if (wheat > .5 && t > .6) wd *= 3. * (1.15 - t);
+  float bend = min(dot(lean, lean), 2.);
+  vec2 off = lean * t * t * H * .9;
+  vec3 loc = vec3(p.x + side.x * aB.x * wd + off.x, H * t * (1. - .3 * bend * t), -(p.y + side.y * aB.x * wd + off.y));
+  vec3 tg = normalize(vec3(2. * lean.x * t * H * .9, H, -2. * lean.y * t * H * .9)), sd = vec3(side.x, 0., -side.y);
+  vec3 n = normalize(normalize(cross(sd, tg)) + sd * aB.x * .6);
+  vec4 wp = uM * vec4(loc, 1.); vW = wp.xyz; vN = mat3(uM) * n; vL = uL * wp; vT = t;
+  vec3 lo = wheat > .5 ? vec3(.34, .25, .09) : vec3(.06, .17, .04), hi = wheat > .5 ? vec3(.95, .8, .42) : vec3(.4, .64, .19);
+  hi = mix(hi, vec3(.6, .7, .3), (1. - clamp(hv * 1.6, 0., 1.)) * (1. - wheat) * .55);
+  vC = mix(lo, hi, t * .85 + .15) * (.8 + .4 * j) * (kind == 1. ? vec3(.9, .92, .75) : vec3(1.));
+  gl_Position = uVP * wp;
+}`;
+const FSB = `#version 300 es
+precision highp float; precision highp sampler2DShadow;
+in vec3 vN, vC, vW; in vec4 vL; in float vT;
+uniform vec3 uSun, uSunC, uSky, uGnd, uFog, uEye, uLamp; uniform float uFogD, uLampI, uTex;
+uniform sampler2DShadow uSh; out vec4 o;
+void main() {
+  vec3 n = normalize(vN), v = normalize(uEye - vW); if (dot(n, v) < 0.) n = -n;
+  vec3 l = vL.xyz / vL.w * .5 + .5; float sh = 0.;
+  for (int i = 0; i < 4; i++) sh += texture(uSh, vec3(l.xy + (vec2(i & 1, i >> 1) - .5) * uTex * 1.5, l.z - .002));
+  sh = mix(.3, 1., sh * .25);
+  float d = max(dot(n, uSun), 0.) * .7 + .3, tr = pow(max(dot(-v, uSun), 0.), 3.) * .7 * vT;
+  float sp = pow(max(dot(reflect(-uSun, n), v), 0.), 20.) * .3 * vT;
+  vec3 col = vC * (mix(uGnd, uSky, .5 + .5 * n.y) * mix(.3, 1., vT) + uSunC * (d + tr) * sh) + uSunC * sp * sh;
+  vec3 lv = uLamp - vW; float ld = length(lv);
+  col += vC * uLampI * max(0., 1. - ld / 7.) * (.4 + .6 * max(dot(n, lv / ld), 0.));
+  float f = 1. - exp(-pow(length(vW - uEye) / uFogD, 2.));
+  o = vec4(mix(col, uFog, clamp(f, 0., .85)), 1.);
+}`;
+const PB = prog(VSB, FSB);
+const blade = (() => {
+  const P = [], I = [], rows = [0, .3, .56, .8];
+  rows.forEach(t => P.push(-1, t, 1, t)); P.push(0, 1);
+  for (let r = 0; r < 3; r++) { const a = r * 2; I.push(a, a + 1, a + 3, a, a + 3, a + 2); } I.push(6, 7, 8);
+  const p = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, p); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(P), gl.STATIC_DRAW);
+  const i = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(I), gl.STATIC_DRAW);
+  return { p, i, n: I.length };
+})();
+// blades to a cell: fewer on small screens and when asked for less motion
+const BN = () => Math.round((Math.min(innerWidth, innerHeight) < 700 ? 40 : 72) * (K.reduced ? .5 : 1));
+function bladeSet(cells) {
+  const vao = gl.createVertexArray(), cb = gl.createBuffer(), d = new Float32Array(cells.length * 2);
+  cells.forEach((i, k) => { d[k * 2] = i % L.W; d[k * 2 + 1] = (i / L.W) | 0; });
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, blade.p); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, blade.i);
+  gl.bindBuffer(gl.ARRAY_BUFFER, cb); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(1, BN());
+  gl.bindVertexArray(null);
+  return { vao, n: cells.length, bn: BN() };
+}
+let blades = null, flapBlades = [], htex = null, hdat = null;
 // one cube, base on the ground: x and z from -.5 to .5, y from 0 to 1
 const cube = (() => {
   const P = [], N = [], I = [];
@@ -2443,7 +2526,7 @@ const M4 = {
 const I4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
 /* ---- shadows ---- */
-const SHN = Math.min(2048, gl.getParameter(gl.MAX_TEXTURE_SIZE)), shTex = gl.createTexture(), shFB = gl.createFramebuffer();
+const SHN = Math.min(Math.min(innerWidth, innerHeight) < 700 ? 1024 : 2048, gl.getParameter(gl.MAX_TEXTURE_SIZE)), shTex = gl.createTexture(), shFB = gl.createFramebuffer();
 gl.bindTexture(gl.TEXTURE_2D, shTex);
 gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, SHN, SHN);
 for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE], [gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE], [gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
@@ -2453,7 +2536,9 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 /* ---- light, by the time of day ---- */
 const DAY = { sun: [.42, .84, .34], sunC: [.7, .64, .54], sky: [.47, .53, .63], gnd: [.3, .27, .22], fog: hex('#dff3ff'), fogD: 140, lamp: 0 };
 const NIGHT = { sun: [-.3, .8, .52], sunC: [.55, .6, .85], sky: [.24, .27, .45], gnd: [.05, .05, .1], fog: hex('#1b2660'), fogD: 70, lamp: 1.4 };
-let LT = DAY, nightT = 0;
+const DAWN = { sun: [.7, .3, .45], sunC: [1, .72, .5], sky: [.52, .44, .55], gnd: [.26, .2, .2], fog: hex('#f2b48c'), fogD: 110, lamp: 0 };
+const blend = (a, b, t) => { const o = {}; for (const k in a) o[k] = Array.isArray(a[k]) ? a[k].map((v, i) => lerp(v, b[k][i], t)) : lerp(a[k], b[k], t); return o; };
+let LT = DAY;
 
 /* ---- the camera: a lens over a miniature ---- */
 const cam = { x: 16, y: 9, d: 30, gx: 16, gy: 9, gd: 30, yaw: .32, pitch: .98, gpitch: .98, fov: .52, VP: null, inv: null, eye: [0, 0, 0] };
@@ -2517,8 +2602,10 @@ function person(B, x, y, a, o = {}) {
   if (o.board) at(.2, .12, hip + .15, .04, .2, .26, C.white);
 }
 function tree(B, x, y, s = 1, seed = 0) {
-  bx(B, x, y, 0, .32 * s, .32 * s, 1.3 * s, C.trunk);
-  for (let k = 0; k < 5; k++) { const h = hash(k, seed, 7), r = (1.3 + h * .6) * s; bx(B, x + (hash(k, seed, 1) - .5) * 1.1 * s, y + (hash(k, seed, 2) - .5) * 1.1 * s, (1.1 + hash(k, seed, 3) * 1.2) * s, r, r, r * .85, k & 1 ? C.leaf : C.leaf2); }
+  bx(B, x, y, 0, .3 * s, .3 * s, 1.4 * s, C.trunk); bx(B, x + .25 * s, y, .9 * s, .5 * s, .14 * s, .14 * s, C.trunk);
+  // a canopy in tiers, narrowing upward, with clumps hanging off it
+  for (let t = 0; t < 3; t++) { const r = (2.1 - t * .55) * s; bx(B, x, y, (1.2 + t * .62) * s, r, r, .66 * s, mix3(C.leaf, C.leaf2, t * .4 + hash(t, seed) * .2)); }
+  for (let k = 0; k < 6; k++) { const a = hash(k, seed, 1) * TAU, d = (.8 + hash(k, seed, 2) * .35) * s, r = (.55 + hash(k, seed, 3) * .4) * s; bx(B, x + Math.cos(a) * d, y + Math.sin(a) * d, (1.05 + hash(k, seed, 4) * 1.1) * s, r, r, r * .9, k % 3 ? C.leaf2 : mix3(C.leaf2, C.lemon, .25)); }
 }
 function house(B, x0, y0, w, wall, roof, door, dx) {
   bx(B, x0 + w / 2, y0 + 3.2, 0, w, 6, 3.4, wall);
@@ -2529,6 +2616,13 @@ function house(B, x0, y0, w, wall, roof, door, dx) {
 }
 function build() {
   L = CORE.layout(S.site, S.tier); stat.n = 0; vh.length = 0;
+  const cells = []; for (let i = 0; i < L.K.length; i++) if (L.K[i] === 1 || (S.site === 'green' && L.K[i] === 2)) cells.push(i);
+  blades = bladeSet(cells); flapBlades = [];
+  hdat = new Uint8Array(L.W * L.H * 4);
+  for (const i of cells) { if (L.K[i] === 2) { hdat[i * 4] = 70 + hash(i, 3) * 40; hdat[i * 4 + 3] = 85; } else hdat[i * 4 + 3] = S.site === 'field' ? 170 : 0; }
+  if (htex) gl.deleteTexture(htex); htex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, htex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, L.W, L.H, 0, gl.RGBA, gl.UNSIGNED_BYTE, hdat);
+  for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
   const B = stat, K = L.K;
   if (S.site === 'field') { buildField(); upload(B); return; }
   // ground: what is not lawn is road, pavement, path or rough grass
@@ -2539,7 +2633,7 @@ function build() {
       if (y <= 2) { bx(B, x + .5, y + .5, -.1, 1, 1, .1, C.road); if (y === 1 && x % 3 === 0) bx(B, x + .5, y + .5, 0, 1.4, .14, .01, C.white); }
       else if (k === 2) bx(B, x + .5, y + .5, -.1, .98, .98, y === 3 ? .2 : .14, y === 3 ? C.kerb : C.paving);
       else bx(B, x + .5, y + .5, -.1, 1, 1, .1, C.soil);
-    } else bx(B, x + .5, y + .5, -.1, 1, 1, .14 + hash(x, y, 3) * .06, mix3(C.rough, C.gravel, k === 0 ? .3 : 0));
+    } else bx(B, x + .5, y + .5, -.1, 1, 1, .1 + hash(x, y, 3) * .02, k === 0 ? mix3(C.rough, C.gravel, .3) : hex('#33521f'));
   }
   bx(B, L.W / 2, L.H / 2, -1.1, 600, 600, 1, S.site === 'street' ? C.moss : C.rough);
   if (S.site === 'street') {
@@ -2601,25 +2695,20 @@ function drawGrass(dt) {
   for (let i = 0; i < K.length; i++) {
     if (K[i] !== 1) continue;
     const x = i % L.W, y = (i / L.W) | 0, h = Math.max(S.h[i], 100);
-    if (flapOn && inFlap(x, y) >= 0) continue;
     if (vh[i] == null) vh[i] = h;
+    if (flapOn && inFlap(x, y) >= 0) { hdat[i * 4 + 2] = 255; continue; }
     if (h < vh[i] - 60) { if (vh[i] > 250) spray(x + .5, y + .5, field); vh[i] = h; } else vh[i] += (h - vh[i]) * k;
-    tufts(B, x, y, vh[i], S.d[i] & 7, field, tp);
+    ground(B, x, y, vh[i], S.d[i] & 7, field);
+    const o = i * 4; hdat[o] = Math.min(255, vh[i] / 2600 * 255); hdat[o + 1] = S.d[i] & 7; hdat[o + 2] = flapOn && inFlap(x, y) >= 0 ? 255 : 0;
   }
   upload(B);
+  gl.bindTexture(gl.TEXTURE_2D, htex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, L.W, L.H, gl.RGBA, gl.UNSIGNED_BYTE, hdat);
 }
-function tufts(B, x, y, v, d, field, tp, z = 0) {
-  const r = hash(x, y, 5);
-  if (v < 160) {
-    const c = field ? C.stub : d === 1 ? C.cut1 : d === 2 ? C.cut2 : d ? C.cut0 : mix3(C.cut0, C.cut2, .4);
-    bx(B, x + .5, y + .5, z, .98, .98, .07 + r * .02, mix3(c, C.white, (r - .5) * .06));
-    return;
-  }
-  const t = clamp((v - 100) / 900, 0, 1.6), base = field ? C.wheat : mix3(d === 1 ? C.cut1 : C.cut0, C.tall, Math.min(1, t * 1.2));
-  for (let q = 0; q < 4; q++) {
-    const j = hash(x * 2 + (q & 1), y * 2 + (q >> 1), 9), hh = (field ? .15 + t * .85 : .07 + t * .5) * (.8 + j * .4);
-    bx(B, x + .27 + (q & 1) * .46, y + .27 + (q >> 1) * .46, z, .47, .47, hh, mix3(base, field ? C.wheat2 : C.tall2, j * .5));
-  }
+// the earth between the blades: dark under long grass, the mower's colour where it is short
+function ground(B, x, y, v, d, field, z = 0) {
+  const r = hash(x, y, 5), t = clamp((v - 100) / 500, 0, 1);
+  const c = field ? mix3(C.stub, C.soil, .5) : mix3(d === 1 ? C.cut1 : d === 2 ? C.cut2 : C.cut0, hex('#2a4219'), .45 + t * .45);
+  bx(B, x + .5, y + .5, z - .02, 1, 1, .03, mix3(c, C.ink, r * .08));
 }
 
 /* ---- things that move ---- */
@@ -2890,7 +2979,10 @@ function events() {
     }
     if (e.k === 'buy') {
       const u = CORE.byId[e.id];
-      if (e.gate === 2) { card('Elm Street', 'Four lawns. Four rates.'); aim(); }
+      if (e.gate === 2) {
+        card('Elm Street', 'Four lawns. Four rates.'); aim();
+        [[0, 'Half again what your dad pays.'], [2, 'A third more. Mind the gnomes.'], [3, 'Double, if you keep off the pond.']].forEach(([g, t], k) => setTimeout(() => visit(g, t), 3600 + k * 2300));
+      }
       if (e.gate === 3 || e.tier) { swap(() => { build(); card(CORE.SHOWS[S.tier - 1].name, 'Short, straight stripes. Then call the judges.', 3.6); aim(true); }); }
       if (e.gate === 4) swap(() => { build(); document.body.classList.add('night'); LT = NIGHT; card('Midnight', 'Mow along the string.', 3.6); aim(true); }, '#000');
       if (u.id === 'mulch') say(S.m.x, S.m.y, 1.5, 'No more trips to the bin.', 2.5);
@@ -2925,14 +3017,14 @@ let follow = false;
 function aim(snap) {
   if (!S) return;
   let r;
-  if (S.site === 'street') r = S.act === 1 ? [11.5, 3, 22.5, 17, 0, 2] : [0, 0, 45, 18, 0, 2];
+  if (S.site === 'street') r = S.act === 1 ? [11.5, 1, 22.5, 17, 0, 2] : [0, 0, 45, 18, 0, 2];
   else if (S.site === 'green') { const s = L.show; r = [s.x0 - 2, s.y0 - 2, s.x1 + 3, 27, 0, 2]; }
   else r = fin.low ? [13, 13, 27, 25, 0, 8.5] : S.finale ? [8, 6, 32, 34, 0, 1] : [6, 4, 34, 36, 0, 1];
   const f = fit(r);
   // too small to steer: follow the mower instead, close enough to see each cell
   const ppu = H / (2 * f.d * Math.tan(cam.fov / 2)), need = S.finale ? 0 : W < 600 ? 26 : 19;
   follow = ppu < need;
-  cam.gd = follow ? f.d * ppu / need : f.d; cam.gx = f.x; cam.gy = f.y; cam.r = r;
+  cam.wd = f.d; cam.gd = follow ? f.d * ppu / need : f.d; cam.gx = f.x; cam.gy = f.y; cam.r = r;
   if (snap) { cam.x = cam.gx; cam.y = cam.gy; cam.d = cam.gd * 1.6; cam.pitch = cam.gpitch; }
 }
 function moveCam(dt) {
@@ -2942,8 +3034,12 @@ function moveCam(dt) {
     tx = clamp(S.m.x, Math.min(r[0] + hw, (r[0] + r[2]) / 2), Math.max(r[2] - hw, (r[0] + r[2]) / 2));
     ty = clamp(S.m.y - 1, Math.min(r[1] + hh * .6, (r[1] + r[3]) / 2), Math.max(r[3] - hh, (r[1] + r[3]) / 2));
   }
+  // on the show lawn, let go and the camera stands back so the stripes can be seen whole
+  cam.idle = S.m.go ? 0 : (cam.idle || 0) + dt;
+  let td = cam.gd;
+  if (follow && S.site === 'green' && (cam.idle > .9 || jd.t >= 0)) { tx = cam.gx; ty = cam.gy; td = cam.wd; }
   const k = 1 - Math.exp(-dt * (follow ? 3 : 1.6));
-  cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k; cam.d += (cam.gd - cam.d) * k; cam.pitch += (cam.gpitch - cam.pitch) * k;
+  cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k; cam.d += (td - cam.d) * k; cam.pitch += (cam.gpitch - cam.pitch) * k;
 }
 
 /* ================= the end: a crop circle, a box ================= */
@@ -2960,7 +3056,8 @@ function buildFlaps() {
   FLAP.forEach(([a, b, ax, sg], f) => {
     const B = flaps[f]; B.n = 0;
     bx(B, a + 4, b + 4, -.3, 8, 8, .3, CARD); bx(B, a + 4, b + 4, -.32, 7.6, 7.6, .02, mix3(CARD, C.ink, .12));
-    for (let y = b; y < b + 8; y++) for (let x = a; x < a + 8; x++) tufts(B, x, y, Math.max(S.h[y * L.W + x], 100), 0, true, 1000);
+    const fc = []; for (let y = b; y < b + 8; y++) for (let x = a; x < a + 8; x++) { ground(B, x, y, Math.max(S.h[y * L.W + x], 100), 0, true); fc.push(y * L.W + x); }
+    flapBlades[f] = bladeSet(fc);
     // underneath, where it will face outward once folded: the field was a box all along, and the box has a number
     if (f === 0) for (const k of digit) { const [c, r] = k.split(',').map(Number); bx(B, 20 - w * px / 2 + (c + .5) * px, 15 - 1.4 - (r + .5) * px, -.36, px * .95, px * .95, .06, C.ink); }
     B.axis = ax; B.sg = sg; B.line = ax === 'x' ? (sg < 0 ? b + 8 : b) : (sg > 0 ? a : a + 8);
@@ -2972,7 +3069,8 @@ function stepFinale(dt) {
   fin.t += dt;
   const t = fin.t - 2.8;
   FLAP.forEach((F, f) => { const p = clamp((t - f * .55) / 1.1, 0, 1); const was = fin.ang[f]; fin.ang[f] = ease.back(p); if (was === 0 && p > 0) sfx.flap(); });
-  if (t > 3.2 && !fin.low) { fin.low = 1; cam.gpitch = .7; aim(); }
+  if (t > 3.2 && !fin.low) { fin.low = 1; cam.gpitch = .7; aim(); document.body.classList.add('dawn'); }
+  if (t > 3.2) LT = blend(NIGHT, DAWN, clamp((t - 3.2) / 5, 0, 1));
   if (S.finale === 1 && t > 4) { CORE.act(S, 'finale', 2); K.save(); say(20, 20, 9.5, 'Open it.', 99); }
   // the box's screen rectangle, for the trip inside
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
@@ -3014,6 +3112,22 @@ function render() {
   gl.uniform3f(u.uLamp, S.m.x + Math.cos(vis.a) * 1.5, 1.6, -(S.m.y + Math.sin(vis.a) * 1.5)); gl.uniform1f(u.uLampI, LT.lamp * (S.finale ? .3 : 1));
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, shTex); gl.uniform1i(u.uSh, 0);
   for (const B of list) draw(B, PM);
+  // and the grass
+  const v = PB.u; gl.useProgram(PB.p); gl.disable(gl.CULL_FACE);
+  gl.uniformMatrix4fv(v.uVP, false, m.VP); gl.uniformMatrix4fv(v.uL, false, LV);
+  gl.uniform3f(v.uSun, s[0] / nl, s[1] / nl, s[2] / nl); gl.uniform3fv(v.uSunC, LT.sunC); gl.uniform3fv(v.uSky, LT.sky); gl.uniform3fv(v.uGnd, LT.gnd); gl.uniform3fv(v.uFog, LT.fog); gl.uniform1f(v.uFogD, LT.fogD * (1 + cam.d / 80));
+  gl.uniform3fv(v.uEye, m.eye); gl.uniform1f(v.uTex, 1 / SHN); gl.uniform1f(v.uTime, now);
+  gl.uniform3f(v.uLamp, S.m.x + Math.cos(vis.a) * 1.5, 1.6, -(S.m.y + Math.sin(vis.a) * 1.5)); gl.uniform1f(v.uLampI, LT.lamp * (S.finale ? .3 : 1));
+  gl.uniform3f(v.uPush, S.m.x, S.m.y, flapOn ? 0 : CORE.cutW(S) / 2 + .5);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, shTex); gl.uniform1i(v.uSh, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, htex); gl.uniform1i(v.uHt, 1); gl.activeTexture(gl.TEXTURE0);
+  const sets = [[blades, I4, 0]]; if (flapOn) flapBlades.forEach((b, f) => sets.push([b, flapM(f), 1]));
+  for (const [b, M, all] of sets) {
+    if (!b || !b.n) continue;
+    gl.uniformMatrix4fv(v.uM, false, M); gl.uniform1f(v.uAll, all); gl.uniform1f(v.uN, b.bn);
+    gl.bindVertexArray(b.vao); gl.drawElementsInstanced(gl.TRIANGLES, blade.n, gl.UNSIGNED_SHORT, 0, b.n * b.bn);
+  }
+  gl.enable(gl.CULL_FACE);
 }
 function draw(B, P) {
   if (!B.n) return;
@@ -3043,7 +3157,7 @@ function hud(dt) {
 }
 function hand() {
   const h = $('hand');
-  if (S.act > 1 || ptr.moved || hint.hand === 0 || S.finale) { h.setAttribute('hidden', ''); hint.hand = 0; return; }
+  if (S.act > 1 || S.earned > 0 || ptr.moved || hint.hand === 0 || S.finale) { h.setAttribute('hidden', ''); hint.hand = 0; return; }
   const [x, y] = toScreen(S.m.x, S.m.y, .3), [x2, y2] = toScreen(S.m.x - 3, S.m.y + 5, 0);
   h.removeAttribute('hidden'); h.style.left = x + 'px'; h.style.top = y + 'px'; h.style.setProperty('--dx', x2 - x + 'px'); h.style.setProperty('--dy', y2 - y + 'px');
 }
@@ -3072,7 +3186,7 @@ K.world({
     if (S.site === 'field') { document.body.classList.add('night'); LT = NIGHT; }
     if (K.reduced) document.body.classList.add('lowfx');
     aim(true); vis.a = S.m.a; vis.px = S.m.x; vis.py = S.m.y; shown = S.$;
-    if (S.finale >= 1) { fin.t = 2.8 + 6; fin.low = 1; fin.ang = [1, 1, 1, 1]; buildFlaps(); flapOn = true; cam.gpitch = .7; aim(true); }
+    if (S.finale >= 1) { document.body.classList.add('dawn'); LT = DAWN; fin.t = 2.8 + 6; fin.low = 1; fin.ang = [1, 1, 1, 1]; buildFlaps(); flapOn = true; cam.gpitch = .7; aim(true); }
     if (S.finale >= 3) setTimeout(() => { const r = fin.box; K.complete(r ? { x: r.x + r.w * .2, y: r.y, w: r.w * .6, h: r.h * .6 } : null); }, 1200);
     else if (S.finale === 2) say(20, 20, 9.5, 'Open it.', 99);
     if (!saved && K.firstVisit !== false) setTimeout(() => say(15, 14.75, 2.6, 'Mow the lawn for me? There’s money in it.', 4.5), 1200);
