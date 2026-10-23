@@ -154,18 +154,28 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
 | 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows and a cup final on a football pitch → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
+| 3 | `clew` | Minos Wants a Map · "Do not unwind." | choose a way at each junction and watch the walk play out; later point at the map and send others | chart a ring of the Labyrinth → the thread reaches the next of seven, each twice the size → the fourteen Athenians, the Minotaur's bellow, Icarus overhead → twenty thousand paces, then home along the thread | first-person raycaster painted as an Attic red-figure vase: lamp light is the clay, the dark is the glaze, a fresco per ring; the map pressed into a clay tablet | terracotta clay, black glaze, dilute brown, added white and purple-red | Bronze Age Crete, myth played as dry comedy | a Karplus-Strong lyre in the Phrygian mode over a reed drone, stone reverb, footsteps, a bull's bellow | a Linear B clay tablet, painted sherds | the Minotaur waits at the foot of the stairs with a painted chest; its side carries the next box's number |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
-Keep Off the Grass 40–42 / 55–59,
+Keep Off the Grass 40–42 / 55–59, Minos Wants a Map 40–41 / 56–58,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
 game in a new costume. It waits below the marker as a draft for slot 3 or 4. Box 2 became Keep Off
 the Grass instead: continuous steering rather than waiting and tapping, real 3D rather than flat print.
-Box 3 must in turn leave both behind: no steering a vehicle, no timing taps, and neither print nor
-voxels (Unwelcome Guests' silent film qualifies on looks, but check its rhythm against this rule first).
+Box 3 had to leave both behind: no steering a vehicle, no timing taps, neither print nor voxels.
+
+Box 3 is Minos Wants a Map. The owner asked for a first-person 3D game in that slot, so that
+boxes 1 and 3 would stop resembling each other, and named a labyrinth to chart, or a raft grown from
+flotsam, as starting points. The raft was set aside for this slot: it is steering a vehicle again.
+That makes box 3 real-time 3D right after box 2, the one place where it bends rule 3's line on the
+way a box is drawn. What differs is the rest: a Wolfenstein raycaster with flat, posterised two-tone
+paint, no lighting model and no shadows, seen from inside, against box 2's lit miniature seen from
+above; and choose-a-way-and-watch against continuous steering. Box 4 should go back to something
+flat (Unwelcome Guests' silent film is the obvious candidate), and must not be a walk.
+Unwelcome Guests waits below the marker as the draft for slot 4.
 
 ### Open work on the shipped boxes
 
@@ -228,6 +238,15 @@ box uses it.
   opening. Isometric pixels, fluorescent hum.
 - **Bathysphere** — sink a Victorian diving bell, sound with sonar, lure what lives down there.
   Steel engraving in the style of Jules Verne's illustrators.
+- **Flotsam** — the owner's idea for box 3: start on a raft, haul in driftwood and plastic, grow it
+  into a ship and cross the seven seas. Its whole case is the water, so it wants a real ocean shader
+  (Gerstner waves, foam on the crests, a toon or painterly look). Set aside for slot 3 because it is
+  steering a vehicle right after Keep Off the Grass; fine after any box that is not.
+- **Babel** — Borges's library: endless hexagonal galleries, search them for one sentence that means
+  something, librarians as automation. Candlelit oil painting in the first person. Close to Minos
+  Wants a Map now: wait for several boxes.
+- **Ewe Knit**, **Pachinko Parlour**, **hi.exe**, **Scratch** and **Fletcher** were weighed again for
+  box 3 and lost to the labyrinth on surprise and on distance from the ledger.
 
 - **Keep Off the Grass** (box 2) has been played through once by the owner, who liked it best of the
   three; everything since came from that playtest. No outside critique has run yet. Open, most
@@ -335,5 +354,24 @@ From the anthology's owner, as a well for new pairs; none of these is a box yet:
   stranger's first tap gets a real scream instead of "hm? +3".
 - **When a panel leaves, the film takes its room.** A finale that keeps a side panel's width leaves
   a black slab where the panel was; lay the scene out again for the full width.
+- **A raycaster is cheap and reads as 3D anywhere.** Minos Wants a Map casts one ray per screen column
+  on the CPU (Wolfenstein's DDA), uploads the hits as a one-pixel-high float texture, and paints every
+  pixel in one fragment shader: wall, floor or ceiling, the frescoes from a canvas atlas, the light
+  posterised into four tones. About 12 KB, and fast on a phone. Two things it needs: stand a third of a
+  pace back from the middle of a block and keep the camera at least .3 from any wall, or junctions
+  become close-ups of a wall; and a wider field of view on an upright phone (80° against 66°).
+- **`smoothstep` with its edges reversed is undefined in GLSL.** SwiftShader returns 0, so the bellow's
+  echo and the stairwell's light were simply missing in every headless frame. Write `1. - smoothstep(a, b, x)`.
+- **An `<svg>` has no `hidden` property.** Setting `el.hidden = false` on one does nothing; wrap it in a
+  `<div>` when it has to come and go.
+- **A cache key reset to the same value as "nothing to show" never clears.** The way discs stayed on screen
+  through the ending because `waysKey = ''` was also the key for "no ways". Reset to `null`.
+- **Helpers need more than one door.** With one door per ring, every Athenian walked four hundred paces to
+  the same opening and crowded one corridor. Four doors, targets spread at least nine paces apart, and
+  jogging along corridors already charted made them useful.
+- **A gate you can buy must also be one you can earn.** A player who spends everything on sandals must
+  not be stranded: a finished ring brings the next thread free, and buying it early is the shortcut.
+- **On a phone, sort the shop.** The thread was the third sherd in a strip that shows two and a half; the
+  most important purchase sat off screen. It now comes first, then by price.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.

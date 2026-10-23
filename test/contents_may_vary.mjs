@@ -14,7 +14,7 @@
 //   node test/contents_may_vary.mjs browser                 # needs Playwright's Chromium
 //   node test/contents_may_vary.mjs --page=old.html
 //
-// Suites: registry, budget, contract, saves, pacing, starter, lawn, browser.
+// Suites: registry, budget, contract, saves, pacing, starter, lawn, clew, browser.
 
 import {readFileSync, existsSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -28,13 +28,13 @@ const opt = k => { const a = args.find(x => x.startsWith('--' + k + '=')); retur
 const PAGE = opt('page') || join(ROOT, 'games', 'contents_may_vary.html');
 const ONLY = opt('world');
 const REPORT = args.includes('--report');
-const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter', 'lawn'];
+const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter', 'lawn', 'clew'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
 /* Boxes that have shipped, in play order. Saves refer to boxes by id and the page plays them in
    file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
-const SHIPPED = ['starter', 'lawn'];
+const SHIPPED = ['starter', 'lawn', 'clew'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 120 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 72 * 1024;
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
@@ -289,6 +289,70 @@ if (suites.includes('lawn') && lawn) {
     check(S.act === 4 && S.finale === 0, 'mowing the whole field but the string opens nothing');
     for (const i of L.stencil) S.h[i] = CORE.P.cutTo; CORE.step(S, .2);
     check(S.finale === 1 && !CORE.done(S) && !CORE.act(S, 'finale', 3) && CORE.act(S, 'finale', 2) && CORE.act(S, 'finale', 3) && CORE.done(S), 'the string mown, the box folds up and opens, one step at a time');
+  }
+}
+
+/* ---------------- clew ---------------- */
+const clew = worlds.find(w => w.id === 'clew');
+if (suites.includes('clew') && clew) {
+  section('clew');
+  const { CORE } = load(clew);
+  const chart = (S, ring) => { const M = CORE.M(S); for (let i = 0; i < M.F.length; i++) if (M.F[i] && M.RG[i] === ring && !CORE.has(S, i)) { S.mp[(i / 30) | 0] |= 1 << (i % 30); S.nm++; S.nr[ring]++; } };
+  {
+    // the labyrinth: every block of every ring can be reached from the stairs, and only through the rings inside it
+    const S = CORE.init(4), M = CORE.M(S);
+    let all = true, inward = true;
+    for (let i = 0; i < M.F.length; i++) if (M.F[i]) { if (M.D[i] < 0) all = false; else if (M.PAR[i] >= 0 && M.RG[M.PAR[i]] > M.RG[i]) inward = false; }
+    check(all, 'every pace of the labyrinth can be reached from the stairs');
+    check(inward, 'the way back to the stairs never leaves a ring for one further out');
+    check(M.finds.length === CORE.FINDS.length && M.finds.every(i => M.deg[i] === 1), `all ${CORE.FINDS.length} finds lie at the end of dead ends`);
+  }
+  {
+    // a ring the thread does not reach stays out of reach, for you and for the Athenians
+    const S = CORE.init(5), M = CORE.M(S); chart(S, 1); S.ev.length = 0;
+    const out = M.F.findIndex((f, i) => f && M.RG[i] === 2);
+    check(!CORE.open(S, out), 'a block of the second ring is shut before the thread reaches it');
+    const S2 = CORE.init(5); S2.$ = 1e6; for (let k = 0; k < 3; k++) CORE.act(S2, 'buy', 'youth');
+    for (let k = 0; k < 6000; k++) CORE.step(S2, .1);
+    check(S2.nr[2] === 0 || S2.ring >= 2, 'the Athenians never chart past the end of the thread');
+  }
+  {
+    // spending everything never strands you: a finished ring always brings the next thread
+    const S = CORE.init(6); S.$ = 0; chart(S, 1); CORE.step(S, .1);
+    check(S.ring === 2 && S.ev.some(e => e.k === 'ring' && e.gift), 'a ring charted to the last pace brings the thread to the next one, free');
+    const S2 = CORE.init(6); S2.$ = CORE.price(S2, CORE.byId.thread);
+    check(CORE.act(S2, 'buy', 'thread') && S2.ring === 2 && S2.$ === 0, 'the thread can also be bought before the ring is finished');
+  }
+  {
+    // walking: a way chosen is followed round its bends to the next junction; the clew is needed to walk by the tablet
+    const S = CORE.init(7), M = CORE.M(S);
+    const w = CORE.ways(S, S.p.i).find(x => x.open);
+    CORE.act(S, 'go', w.d); const q = S.p.q.slice(), end = q[q.length - 1];
+    check(q.length > 0 && (M.deg[end] !== 2 || end === M.E), `a chosen way runs on to a junction or an end (${q.length} paces)`);
+    for (let k = 0; k < 200 && S.p.q.length; k++) CORE.step(S, .1);
+    check(S.p.i === end && S.nm > 5, 'and you arrive there, having charted what the lamp lit');
+    const back = S.p.i, target = q[0];
+    check(!CORE.act(S, 'goto', M.E), 'without the clew, tapping the tablet does nothing');
+    S.lv.clew = 1; check(CORE.act(S, 'goto', M.E) && S.p.q[S.p.q.length - 1] === M.E, 'with it, you walk to any charted pace');
+  }
+  {
+    // the bellow charts every open pace within its reach, and then needs its breath back
+    const S = CORE.init(8); S.lv.bellow = 1; const n0 = S.nm;
+    check(CORE.act(S, 'bellow') && S.nm > n0 + 10 && !CORE.act(S, 'bellow'), `a bellow charts the corridors near you (${S.nm - n0} paces) and cannot come straight back`);
+    CORE.step(S, CORE.P.bellowCd + .1); check(CORE.act(S, 'bellow'), 'it can, once he has his breath back');
+  }
+  {
+    // the end: nothing until every ring is charted; then home along the thread, and the chest opens one step at a time
+    const S = CORE.init(9); S.ring = 7; S.lv.thread = 6; S.lv.sandal = 8;
+    for (let r = 1; r <= 7; r++) chart(S, r);
+    const M = CORE.M(S), last = M.F.findIndex((f, i) => f && M.RG[i] === 7);
+    S.mp[(last / 30) | 0] &= ~(1 << (last % 30)); S.nm--; S.nr[7]--; CORE.step(S, .1);
+    check(S.fin === 0 && !CORE.act(S, 'home'), 'one pace uncharted and the map is not whole');
+    S.p.i = last; S.p.q = []; CORE.act(S, 'stop'); S.mp[(last / 30) | 0] |= 1 << (last % 30); S.nm++; S.nr[7]++; CORE.step(S, .1);
+    check(S.fin === 1 && !CORE.act(S, 'open'), 'the last pace charted, the map is whole, and the chest is not yet there');
+    CORE.act(S, 'home'); for (let k = 0; k < 3000 && S.fin === 1; k++) CORE.step(S, .1);
+    check(S.fin === 2 && S.p.i === M.E, 'following the thread leads back to the stairs');
+    check(CORE.act(S, 'open') && CORE.done(S) && CORE.progress(S) >= .99, 'where the chest opens, and the box is done');
   }
 }
 
