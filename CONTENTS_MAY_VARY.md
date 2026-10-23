@@ -21,10 +21,11 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    `<template data-world="id" data-title="…" data-handling="…">` holding the box's whole document
    (souvenir, fonts, style, markup, view script) and a `<script type="text/x-core" data-world="id">`
    holding its rules. Nothing of a box lives anywhere else, and a box never reaches into another.
-2. **Proportionate.** A box weighs at most **120 KB** (template plus core, unminified, as the test
+2. **Proportionate.** A box weighs at most **130 KB** (template plus core, unminified, as the test
    measures it) and should aim for 100; the shell and kit at most 72 KB. Quality is bought with craft,
    not with bulk: a box that wants more room cuts something first. Libraries a box loads from a CDN
-   inside its own template do not count, but must be pinned to an exact version.
+   inside its own template do not count, but must be pinned to an exact version. (The cap was 120 KB until
+   the owner raised it, when the shows in Keep Off the Grass gained intruders, upgrades and a match day.)
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least

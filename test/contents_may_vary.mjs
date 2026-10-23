@@ -36,7 +36,7 @@ const suites = picked.length ? picked : ALL;
    file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
 const SHIPPED = ['starter', 'lawn'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
-const BOX_MAX = 120 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 72 * 1024;
+const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 72 * 1024;
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -289,6 +289,19 @@ if (suites.includes('lawn') && lawn) {
     check(CORE.cutW(S) / 2 > 2 && onLawn() === 0 && S.m.up === 1, `driving along the headland with ${CORE.cutW(S).toFixed(1)} cells of gangs cuts nothing on the lawn`);
     drive(S, s.x1 - 2, s.y0 + 4, 3);
     check(onLawn() > 0 && S.m.up === 0, 'on the lawn they come down and cut');
+  }
+  {
+    // something gets onto a mown show lawn; the judges will not come while it is there; driving at it
+    // twice sees it off for a bonus, and one left alone wanders off with nothing paid
+    const mk = () => { const S = CORE.init(9); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.$ = 0; const L = CORE.layout('green', 1), s = L.show;
+      for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = (x >> 1) % 2 + 1; } S.pestT = 0; S.m.x = 2; S.m.y = 2; CORE.step(S, .1); return S; };
+    const S = mk();
+    check(S.pest && S.pest.k === 0 && !CORE.canJudge(S) && S.ev.some(e => e.k === 'pest' && e.kind === 'dog'), 'a dog gets onto the Village Show lawn and the judges will not come out');
+    let shoo = null; for (let t = 0; t < 30 && !shoo; t += .1) { if (S.pest && !S.pest.flee) { S.m.x = S.pest.x; S.m.y = S.pest.y; } CORE.step(S, .1); shoo = S.ev.find(e => e.k === 'shoo'); }
+    check(shoo && shoo.by === 1 && shoo.v > 0 && S.$ > 0 && !S.pest && S.ev.some(e => e.k === 'dodge'), `it dodges once, then runs, and seeing it off pays (${shoo && shoo.v.toFixed(0)})`);
+    const T = mk(); let left = null; for (let t = 0; t < 60 && !left; t += .1) { CORE.step(T, .1); left = T.ev.find(e => e.k === 'shoo'); }
+    const L = CORE.layout('green', 1), sc = L.show; let scuffed = 0; for (let y = sc.y0; y <= sc.y1; y++) for (let x = sc.x0; x <= sc.x1; x++) if (!(T.d[y * L.W + x] & 7)) scuffed++;
+    check(left && left.by === 2 && left.v === 0 && scuffed > 5, `left alone it scuffs the stripes (${scuffed} cells) and wanders off, paying nothing`);
   }
   {
     // midnight: the end needs the string mown, and nothing else will do
