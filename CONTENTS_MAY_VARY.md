@@ -169,7 +169,7 @@ voxels (Unwelcome Guests' silent film qualifies on looks, but check its rhythm a
 
 ### Open work on the shipped boxes
 
-Neither box has yet met rule 4's bar of 8 out of 10. The last critiques that ran (first impression,
+Neither box has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
 clarity, art direction, phone, feel) scored Starter 6/5/6/4/5 and Unwelcome Guests 6/4/5/6/4, both before
 the fixes listed in their commits; the next round was cut short. What those critiques asked for and is
 still undone, most valuable first:
@@ -232,15 +232,40 @@ box uses it.
 - **Keep Off the Grass** (box 2) has been played through once by the owner, who liked it best of the
   three; everything since came from that playtest. No outside critique has run yet. Open, most
   valuable first:
-  - **Performance is unmeasured on real devices.** Grass is up to 220,000 blades on a desktop and
-    110,000 on a phone (`BN` and `BUDGET` in the view). The cup final's stadium is the heaviest place.
-    If a phone stutters, scale the blade count by measured frame time rather than by screen size.
+  - **Performance is still unmeasured on real devices**, but the view now looks after itself: grass
+    starts at up to 220,000 blades on a desktop and 110,000 on a phone (`BN` and `BUDGET`), and when the
+    median frame over two seconds is slower than 24 ms it draws 30% fewer (`gauge` and `watch` in the
+    view). A cut that does not make frames quicker is taken back and the count is frozen, so a phone
+    capped at 30 frames a second, or a stadium slow for its crowd rather than its turf, keeps its lawn.
+    `K.debug.blades()` shows what it decided; the browser suite feeds it made-up frame times.
   - **The mower's sound** has been rebuilt three times without anyone hearing it on this side: too
     loud, then inaudible on phone speakers (all below 240 Hz), then "a helicopter" (pulses too slow).
     It now fires at 52–66 Hz with a band of noise around 650 Hz. Ask the owner before changing it again.
-  - The phone frame in act one leaves the lower third empty; neighbours never react to the robot
-    mowers; a check that every place change (each show, midnight) runs without errors belongs in the
-    browser suite: buying a show once crashed the view for 0.7 s.
+  - Done since the playtest's notes: the phone frame in act one no longer leaves its lower third
+    empty (the camera comes closer to Dad's lawn on an upright phone, and across the road, toward the
+    lens, there is a kerb, a pavement with a postbox, low brick walls with flower beds and the front
+    gardens opposite, a shade darker than the lawns in play so they read as backdrop). The neighbours
+    notice the robot mowers: the owner comes out to meet each new one, thanks it (not you) when it has
+    finished their lawn, and now and then stands at the door watching it (`ROBO` in the view). Speech
+    bubbles stay whole on screen and below the dashboard. The browser suite now buys its way through
+    every place (the street, the three shows, the cup final, midnight) and wants no error on the way;
+    on its first run it caught a neighbour's visit, timed for Elm Street, landing on the show ground.
+  - **Critique (rule 4).** Three rounds, each one fresh critic subagent given 28 stills (the first minute,
+    a full grass box, the street, a show with its judges, the National, the stadium, midnight, the
+    reveal and the box, at 390×844 and 1280×800; the script films with real pointer input). Scores for
+    first impression, clarity, art direction, phone and feel went 7/4/7/5/5, then 7/5/8/5/6, then
+    8/7/8/7/7. Fixed on the way: stripes lit by the way they were mown; a judging sequence that says
+    one thing at a time (looking, then the medal under the score cards, then what was won); the camera
+    leaning toward the bin when the grass box is full; a pegboard strip as tall as its cards that
+    fades while it can scroll; show lawns seen more steeply on an upright phone; a thicker string and
+    a soft moon at midnight; cut wheat leaving pale straw so the net shows before the fold.
+  - Next, most valuable first, from the last critique: the medal is a flat disc pasted on a 3D world
+    (a moulded rosette that drops onto the lawn would fit); clarity (7) and phone (7) are still under
+    8 - the judges' sheet covers the show tent on a phone, and "6% short" beside "81% stripes" reads
+    like a bug to a stranger; the stadium's crowd reads as confetti. The critic also asked why
+    midnight turns to amber daylight; that is dawn breaking as the box folds, and stays. Then a
+    frame-time reading on a real phone, above all in the stadium (`K.debug.blades()`), and the mower's
+    sound once the owner has heard it.
 
 ### Working on a box that has shipped
 
