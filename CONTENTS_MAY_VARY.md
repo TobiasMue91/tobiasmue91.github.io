@@ -161,11 +161,11 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
 | 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
-| 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
+| 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
-Keep Off the Grass 32–34 / 53–57, Tilt 41–44 / 63–66,
+Keep Off the Grass 32–34 / 53–57, Tilt 41–46 / 66–69,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -196,8 +196,9 @@ and the plan for the fourth attempt that follows. Stand Well Back had already be
 (PR #391), so Tilt replaces it in place.
 
 **Tilt** (`CORE.version` 4) is the fourth attempt, built from the plan below; what changed on the way is
-noted under it. The owner's first look asked for a faster frame and a better sign on a desktop; both are
-done (see the lessons and the as-built notes).
+noted under it. The owner played it and liked it; their notes (frame rate, the sign on a desktop and as
+a figure, feedback for every payout, tulips that pay a prize, a launcher set by hand, a bonus to catch,
+the Big One's last stretch in view, damage you can see) are recorded below and in the lessons.
 
 ### Box 3, fourth attempt: Tilt (the plan)
 
@@ -276,11 +277,20 @@ layout and the tree), then follows `.claude/skills/next-box` from step 3.
 **As built** (what moved away from the plan, and why):
 - *The Big One on board 1 counts down from 1,500, not 500.* At 500 the eager bot broke it in about two
   and a half minutes; at 1,500 it takes about three, and the first game still chips it visibly.
-- *Tulips close.* With pockets paying a ball each and no limit, a well-upgraded game fed itself forever
-  (a run of six minutes in the first tuning). Each tulip now takes a few balls (three, more with "Open
-  tulips") and then closes its petals for the rest of the game; the start pocket takes four or more. So
-  every game ends, and the upgrades that make it longer are visible on the board. After 75 seconds it is
-  *last call*: the pockets stop paying and the tray pours three times as fast.
+- *Tulips pay a prize and then close.* With pockets paying a ball each and no limit, a well-upgraded game
+  fed itself for minutes. Then a tulip took a few balls and paid one back for each, and the owner found a
+  catch felt like a punishment: one ball back only drags the game out. Now a tulip takes two balls a game
+  and pays five for each (or 2% of the full tray, once that is more; "Rich tulips" adds a quarter per
+  bulb, "Double tulips" doubles it), then closes into a dome that balls roll off. The start pocket takes
+  four once the reels are bought. After 60 seconds it is *last call*: the pockets stop paying and the
+  tray pours three times as fast. So every game ends, whatever is bought.
+- *The auto-launcher is set by hand, every game.* It first poured on its own wherever the thumb had been,
+  and the owner said that from then on the player had nothing to do. Now a short tap on the board sets it
+  (a gold AUTO marker on the rail); it pours there beside the thumb for the rest of that game, and the
+  next game starts without it.
+- *Lanterns.* From the third game a paper lantern drifts down the glass every 20 to 35 seconds; a tap on
+  it is four seconds of fever, and it is gone after eight. It asks for a hand in every game, also after
+  the launcher is bought (the owner prefers busy incrementals to idle ones).
 - *The sign is a figure: the parlour's lucky wheel.* It was built first as a tall tower of 45 bulbs with
   level pips; the owner found it awkward on a desktop and asked to follow the popular incrementals. What
   those trees have in common (guides and reviews, October 2026): 200 to 700 small nodes in five or six
@@ -299,7 +309,7 @@ layout and the tree), then follows `.claude/skills/next-box` from step 3.
   "?". A mouse reads a bulb by hovering and buys it with a click; a finger taps to read and again to buy;
   drag pans, the wheel and a pinch zoom. The first bulbs cost 3 to 5 coins. To make the quarters equal the
   upgrades were regrouped (six new ones: hard steel, break the bank, hairline cracks, neon glow, downpour,
-  a crate of balls) and the Big Ones retuned (1,500 · 400K · 40M · 900M · 6B).
+  a crate of balls) and the Big Ones retuned (now 1,500 · 900K · 160M · 5B · 40B).
 - *The march is original.* No transcription of the Warship March could be checked from here, and a
   misremembered one would be worse than none, so the parlour plays a march of its own in the same 2/4
   manner: square lead, oom-pah bass, snare from board 2, chords from board 3, a doubled lead from board
@@ -646,5 +656,45 @@ is not saved by its art direction: the owner played both and stopped.
   `performance.now()` around the draw calls. Reading back one pixel (`getImageData(0, 0, 1, 1)`) after each
   part forces the flush and shows the real split (`K.debug.parts`); painting what does not change into
   its own canvas once cut the frame from 12.6 to 4.4 ms.
+- **Every payout says so, where it lands.** The owner's first real playtest of Tilt was mostly about
+  feedback: it was not clear when balls came back, what the golden START pocket did before the reels were
+  bought, where a FEVER came from, or that the Big One was about to break. Now every coin shows a "+x"
+  where it lands (pins and Big One hits gathered by place for a quarter second, so it reads and does not
+  flood), a tulip's catch shows "+5 BALLS" and the balls fly into the tray, a full tulip says FULL,
+  locked reels say LOCKED and what to buy, a ball into START draws a beam to the reels and SPIN!, the reels
+  move to the top of the glass when they spin out of view, a miss says NO WIN, and the fever banner says
+  what caused it. Under a fifth of its count the Big One glows, says NEARLY! and the camera keeps it in
+  view. Rule of thumb: if the rules did something, the screen says what, and where.
+- **A tall board's camera serves the hands.** When the board is empty and balls wait in the tray, the
+  camera goes back up to the rail, where the thumb has to act; it follows the flood only while there is
+  one, and holds the Big One in view when it is nearly broken.
+- **Automation that removes the verb removes the game.** The auto-launcher poured by itself and the owner
+  stopped having anything to do. Make automation something the player sets or aims each run, and keep a
+  reason to touch the screen (a lantern to catch) after every upgrade.
+- **A prize that drags the game out is a punishment.** One ball back from a tulip made a catch feel like
+  a delay; five or more feels like winning. Check that every reward is worth more than the time it costs.
+- **A skill tree is a picture.** Grown layouts (a tower, then a hex-grid web) read as random to the owner;
+  the trees in the games they play end as a figure. Design the shape first (Tilt: four equal quarters and
+  four rings, a lucky wheel), show its outline as faint dots from the start, and make what can be bought
+  shout: a spreading ring round each such bulb, a count at the top, arrows at the edge to the ones out of
+  view. On a desktop, read on hover and buy on click, with the coins in sight.
+- **An upgrade has to show what it did.** The owner never felt that damage mattered and hardly noticed the
+  bombs: their effect was a number nobody saw. Now each hit shows its damage in red ("−x" on blocks and
+  under the Big One, gathered like the coins), the tray shows the damage per ball (HIT n), bombs trail
+  sparks, and an explosion is a shockwave the size of its reach with a flash and BOOM!.
+- **Give the player the camera, and a way to give it back.** On a board taller than the glass the owner
+  wanted to look around by hand. The strip on the rim that maps the board is a scroll bar to drag (the
+  wheel scrolls too on a desktop); while the camera is held, an AUTO CAMERA button hands it back, and
+  every new game starts with the camera on its own.
+- **The owner plays on a desktop.** Rule 11 puts the phone first, and every critic round looked at phone
+  frames first, but the owner's own playtests are on a desktop with a mouse: most of their notes on Tilt
+  (the buy button far from the bulb, coins in a far corner, hover, the wheel, the camera) were desktop
+  notes. Film and polish the desktop as carefully as the phone, at a large monitor size too.
+- **The end of a run is a moment, not a caption.** A small "tray empty" note was easy to miss. The game
+  over card is large, counts its coins up, says how this game compares with the last one (▲ +23% or
+  ▼ −12%), marks a best game, and tells what the tulips gave back.
+- **Hit points do not scale like damage.** Tilt's damage grows by multipliers, so doubling a Big One's
+  count only adds a run or two; when a change makes the game shorter, scale the later Big Ones by three
+  to five and measure again.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.

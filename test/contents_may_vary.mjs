@@ -355,8 +355,9 @@ if (suites.includes('clew') && clew) {
     const drop = () => { S.balls.push({ x: p.cx, y: p.y - 6, vx: 0, vy: 0, k: 0, s: 0, h: 0, w: 0, ax: p.cx, ay: p.y - 6 }); run(S, 1.5); };
     const cap = S.cap[p.i]; let paid = 0;
     for (let i = 0; i < cap; i++) { S.tray = 0; drop(); paid += S.tray; }
-    check(S.cap[p.i] === 0 && paid === cap, `a tulip pays a ball each for the ${cap} it holds`);
+    check(S.cap[p.i] === 0 && paid === cap * CORE.tulipPay(S) && CORE.tulipPay(S) >= 5, `a tulip pays ${CORE.tulipPay(S)} balls for each of the ${cap} it holds`);
     S.tray = 0; drop(); check(S.tray === 0, 'then it closes and pays nothing more this game');
+    check(S.balls.every(q => q.y > p.y + 4 || Math.abs(q.x - p.cx) > p.w), 'and a ball that lands on the closed tulip rolls off it');
   }
   {
     // coins land when a block breaks, the Big One keeps its damage between games, and the game ends with the tray
@@ -372,6 +373,23 @@ if (suites.includes('clew') && clew) {
     const lv = Object.fromEntries(CORE.UP.map(u => [u.id, u.max])), S = onBoard(4, lv); S.big = 1e30; let t = 0;
     while (S.phase === 'run' && t < 400) { if (S.tray > 0) CORE.act(S, 'hold', 20 + (t * 7) % 60); CORE.step(S, .1); t += .1; }
     check(S.phase === 'tree' && t < 300, `with every bulb lit, a game on the mountain still ends (${t.toFixed(0)} s)`);
+  }
+  {
+    // the auto-launcher pours only once it has been set this game, and a new game forgets it
+    const S = CORE.init(12); S.lv.auto = 1; S.bought++; const n0 = S.tray; run(S, 1);
+    check(S.tray === n0 && !S.balls.length, 'a bought auto-launcher pours nothing until it is set');
+    check(CORE.act(S, 'launch', 70), 'a tap sets it'); run(S, 2);
+    check(S.tray < n0 && S.balls.some(q => Math.abs(q.x - 70) < 25), `then it pours at its column (${n0 - S.tray} balls)`);
+    const T = CORE.init(12); check(!CORE.act(T, 'launch', 70), 'without the bulb a tap sets nothing');
+  }
+  {
+    // a lantern drifts down now and then from the third game; caught, it is fever, missed, it is gone
+    const S = CORE.init(13); S.runs = 2; S.tray = 400; S.lanT = .5; CORE.act(S, 'hold', 50); run(S, 3);
+    check(!!S.lan, 'a lantern comes down the glass');
+    const L = S.lan; check(!CORE.act(S, 'tap', L.x + 30, L.y) && S.fever <= 0, 'a tap beside it misses');
+    check(CORE.act(S, 'tap', L.x, L.y) && S.fever > 0 && !S.lan, 'a tap on it catches it and starts a fever');
+    const T = CORE.init(13); T.runs = 2; T.tray = 400; T.lanT = .5; CORE.act(T, 'hold', 50); run(T, 1); run(T, CORE.P.lanLife + 1);
+    check(T.ev.some(e => e.k === 'lanlost') || !T.lan || T.lan.id > 1, 'one left alone drifts away');
   }
   {
     // three of a kind is fever: balls rain from the whole top edge, and pay double
