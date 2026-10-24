@@ -76,6 +76,12 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
     the first touch and owns the volume settings.
 14. **Kind to bodies.** Honour `K.reduced` (fewer particles, no shake, no grain) and never flash
     more than three times a second.
+15. **Shaped like the incrementals the owner plays.** The owner's favourites are short, paid Steam
+    incrementals, not the browser idlers of the 2010s: the game starts in its fun verb at once, the
+    challenge is visible on the first screen, a first run lasts 10 to 30 seconds and pays for the first
+    node of a skill tree straight away. Read **What the owner plays** below and check a new box against
+    its checklist before writing a line of the core. Three boxes in a row (Minos Wants a Map, The
+    Minotaur Moves Out, Stand Well Back) failed with the owner because they skipped this.
 
 ## How the file is built
 
@@ -183,6 +189,90 @@ ball, pachinko with a twist, digging): **Stand Well Back** (`CORE.version` 3, an
 any old save afresh). It gives up the first-person 3D the slot was asked for: a destruction verb you
 understand at a glance mattered more to the owner than the camera. It is flat 2D, seen from the side,
 so it differs from box 2's lit 3D miniature and from box 1's print. Pachinko stays in the ideas.
+The owner played Stand Well Back and found it boring too: pull the ball up, let it drop, again. Three
+attempts at box 3 failed the same way, so the owner stopped and had the session research what the
+incrementals they actually enjoy have in common (**What the owner plays**, below). That gave rule 15,
+and the plan for the fourth attempt that follows. Stand Well Back is on the branch of PR #391 and was
+never merged; it is replaced, not shipped.
+
+### Box 3, fourth attempt: Tilt (the plan)
+
+Written for the session that builds it. It replaces Stand Well Back under the same id `clew` (on
+`main`, box 3 is still Minos Wants a Map): `CORE.version` 4, and a `migrate` that starts old saves fresh.
+
+**One line.** Pachinko as a modern Steam incremental: hold your thumb on the board and a stream of
+steel balls pours in where it points; they rattle down through the pins, smash prize blocks into
+coins, and drop into pockets that pay out more balls. When the tray is empty the run is over, and the
+coins light up bulbs on the parlour's big neon sign, which is the skill tree.
+
+**Why it fits the owner.** It answers the checklist; the owner kept coming back to pachinko; there is
+nothing to place and nothing to aim precisely (the old pitch's "set your own pins" was too much work);
+the board is portrait, so it fills a phone, where the wrecking ball fought the phone's shape.
+
+**The checklist, answered.**
+1. *Second one:* hold anywhere on the board and balls stream in at that column, four a second, with a
+   roar of clicks; let go to stop. Chaos physics is fun with nothing bought.
+2. *The limit:* the tray. Run 1 has 15 balls, gone in about 4 seconds, settled in about 12. Pockets pay
+   balls back into the tray (the real pachinko tension: a good run feeds itself). Later runs last a
+   minute or two.
+3. *The challenge on screen:* every board has **the Big One**, a huge gold prize block with a counter
+   (500 on board 1) sitting over the board's exit. Break it and the board opens to the next one.
+   Run 1 chips it to 470 and the player sees where this is going.
+4. *The first buy:* run 1 earns about 20 coins. The centre of the sign has three bulbs at 8 to 15:
+   +5 balls, pins pay 1 coin when hit, heavier balls (+1 damage). After run 1 the player buys one or two.
+5. *Nodes that change the game* (about one every 5 minutes):
+   - golden pins that split a ball in two (min 4);
+   - the start pocket: a ball in it spins a three-reel slot in the middle of the board, and three of a
+     kind is **FEVER**, ten seconds of balls raining from the whole top edge (min 8);
+   - bomb balls, every Nth ball explodes on its first block (min 13);
+   - the auto-launcher, which holds for you between your own bursts (min 18);
+   - magnet pockets that pull passing balls in (min 24);
+   - the mega ball, where every 50 balls in a pocket fuse into one giant ball that ploughs through
+     everything (min 30). It also caps the ball count for the frame rate.
+6. *Minute 40 against minute 1:* fifteen balls on a small machine at the start; at the end hundreds of
+   balls and fever rain on a board taller than the screen (the camera follows the flood down), mega
+   balls rolling through, the reels spinning non-stop.
+7. *Automation:* the auto-launcher and a ball boy who tops up the tray between runs. The player keeps
+   choosing where the stream goes (at the start pocket, at the Big One, at a cluster of blocks) and
+   when to hold back for fever.
+
+**Boards, escalating to the absurd** (each Big One opens the next; each has its own pins, blocks and
+look):
+1. a pachinko machine in a parlour;
+2. the same machine, now as tall as the parlour (the camera scrolls);
+3. the parlour itself turned on its side, with stools and ashtrays as pins and other machines as
+   prize blocks;
+4. the street outside, with lamp posts, vending machines and a bus;
+5. the mountain behind the town, where the last Big One is a box with the next number on it (rule 8).
+
+**Tree.** About 70 bulbs on the neon sign, opening outwards; wires are the edges; a bought bulb lights
+up with a buzz. Costs grow about ×1.5 per ring. Boards 2 to 5 are gated by the Big One, not by the
+tree, and each opens a new arm of the sign.
+
+**Look and sound.** A 1980s Japanese pachinko parlour: chrome balls with a hard highlight, neon tube
+signs with glow (additive blending on a 2D canvas), deep navy, hot pink, cyan and gold, a cigarette-haze
+gradient. English signage in a period display face (no fake Japanese). Sound: thousands of tiny
+clicks, pocket chimes, the reel's tick and a fever fanfare, and a chiptune *Warship March* (Gunkan
+March, 1897, public domain), which real parlours played for decades. Teaching: a glowing thumb on
+the board and a sign over the Big One reading BREAK ME.
+
+**Ledger check.** Against boxes 1 and 2: verb (hold and point a stream), loop (runs and a tree), medium
+(neon on canvas), palette, era (1980s Japan), sound and interface (a neon sign as the tree) are all new.
+
+**Engineering notes.** Physics in the pure core: balls are circles against circle pins and box blocks,
+a fixed step of 1/120 s, a spatial grid, the PRNG in the state. The pacing test plays six whole games,
+so keep a frame of 300 balls cheap; the mega ball is the cap. Between runs the core sits in a `tree`
+phase until `act('run')`; the bots press it. Pacing target: the eager bot finishes in 40 to 50 minutes,
+the first purchase comes after run 1, and nothing new is more than 3 minutes apart. Budget: aim for
+100 KB.
+
+**Before building**, the session confirms the plan with the owner (a one-frame mock-up of the phone
+layout and the tree), then follows `.claude/skills/next-box` from step 3.
+
+**Runners-up** (kept for later boxes): a vacuum cleaner that grows from a room to a planet (too close
+to box 2's mowing, by rule 3); scratch tickets with quirks (Scritchy Scratchy already does it well);
+a coin-flip table.
+
 Unwelcome Guests waits below the marker as the draft for slot 4.
 
 ### Open work on the shipped boxes
@@ -348,6 +438,74 @@ From the anthology's owner, as a well for new pairs; none of these is a box yet:
   supermarket's stock), digging.
 - **Techniques**: voxels, pixel art, real-time 3D, 3D with comic shading, isometric, 2.5D layers,
   photo-real, and anything else that a canvas, WebGL or CSS can carry inside the budget.
+
+## What the owner plays
+
+The owner's favourite incrementals, in no order. The first fifteen are short, paid (1 to 8 €) Steam
+games of 2025 and 2026 that the owner enjoyed and that are about as complex as a box should be; the
+last three were named earlier for their absurdity. What each one is, from store pages and reviews
+(October 2026):
+
+| Game | What the hands do | What makes it work |
+| --- | --- | --- |
+| Garbage Growth | people throw trash at you; you pick it up for money | add more people to throw more; hire rats to collect; a skill tree; you make the problem bigger on purpose |
+| Bills Must Be Paid | smash piggy banks with a hammer that follows the mouse | a run ends when your stamina is gone; bills arrive during the run and take a cut until paid; piggies that run away or carry more; hammers with different radius, crit and speed; abilities (rock rain, an electrified hammer) in a branching skill tree |
+| Scritchy Scratchy | scratch lottery tickets | a growing set of cards, each with a quirk or a penalty; a scratch bot to automate; luck and payout upgrades; prestige for permanent points |
+| Gamblers Table | flip coins | buy better coins; failed flips drop skull tokens that buy items; helpers automate the flipping; a reset for bigger rewards |
+| Chef Knight | fight monsters in a dungeon, cook what drops, sell the dishes | two short loops feeding each other (fight, then cook); a skill tree for faster fighting and cooking |
+| Artillery Miner | shell huge blocks of ore with artillery | ores smelted into materials, 400+ upgrades in a tree that opens new worlds, ores and 33 guns; prestige once a world is obliterated |
+| Fishing Inc | click fast to reel a fish in before it escapes | many places to fish out completely; skill per species; gear between trips |
+| Growing My Manhole | be a manhole that swallows what is smaller than it | grow from a manhole to a black hole; a run-based Donut County |
+| We Need More Humans! | (not found under this name; ask the owner) | |
+| Crack the Pack | open booster packs | cards in seven rarities; sell duplicates; a magnet, workers and a fusion lab for automation |
+| Fortune Mill | darts, scratch-offs, dice, pachinko, sushi, one room each | earn 1,000,000 to escape; every room boosts all the others; full automation; 120+ upgrades |
+| Keep on Mining! | hover the cursor over rocks and the pickaxes go to work | ores become bars for a permanent skill tree; talent cards on level-up; an idle mine; reviewers love the feel and the huge tree, dislike a weak late game and an abrupt ending |
+| Chop Chains | hover over trees to chop them | wood buys a deep skill tree and prestige; complaints: trials that block progress, grind plateaus |
+| Timber Rush | chop one big tree; every swing showers logs, gold and power-ups | an incremental roguelite of short runs; a massive skill tree of automation, special logs (lightning, freeze time, magnet the screen) and synergies |
+| Sip Fisher | drain a lake through a straw and sell the fish | an absurd premise played straight; gear upgrades; very positive reviews, an IGF student nomination |
+| Berry Bury Berry | first person: grow berries and drop them into a hole for money | Berry Buddies grow higher tiers; puzzles, cassette tapes and a creeping horror; several endings |
+| How to Fish | (named for its absurdity) | |
+| Project P.I.T.T. | build a chaotic physics production line of rubber ducks and feed them to a bottomless pit | combos for dumping many at once; corporate targets; scripted events that break your machines |
+
+### The shape they share
+
+Almost all of them are one game: a **short run** with a **verb that is fun on its own**, then a **skill
+tree** between runs.
+
+- **The verb is fun before any upgrade.** Smashing, scratching, chopping, flipping, fishing: a
+  physical action with an instant, juicy answer (particles, numbers, sound, shake). The mouse or finger
+  usually *is* the tool, often an area under the cursor rather than a precise aim, so the hands never
+  work hard and the screen does a lot.
+- **A run is short and has a clear limit.** Stamina, a timer, a tray of balls, a hand that gets
+  tired. The first run is over in 10 to 30 seconds; later runs grow to a minute or two. The limit is
+  the challenge you can see from the first screen, and every upgrade visibly pushes against it.
+- **The skill tree is the menu.** A big map of nodes that opens outwards from a cheap centre; the first
+  nodes cost about one run's earnings, so something is bought after the very first run. Most nodes are
+  small numbers (+1 ball, +10 % value), a few change the game (a new helper, chain lightning, a new
+  object tier, a new area), and those are spaced so a new one arrives every few minutes.
+- **Escalation is seen, not read.** More objects, bigger numbers on screen, rarer tiers with their own
+  look, a helper that joins in, a screen that fills with chaos. By the end the first run looks absurdly
+  small.
+- **Automation joins the verb, it does not replace it.** Rats, a scratch bot, workers: they take the
+  tedious part, and the player keeps the fun part.
+- **Randomness with rarities.** Tickets, packs, coins, ores and fish come in tiers and odds; the next
+  run might be the lucky one.
+- **It is short and it ends.** One to five hours on Steam; a box is the same shape in 30 to 90 minutes.
+
+### Checklist for a new box
+
+Before the core is written, answer each with one sentence:
+
+1. What do the hands do in second one, and why is it fun with nothing bought?
+2. What limits a run, and how long is the first one (10 to 30 seconds)?
+3. What is the visible challenge on the first screen?
+4. What does the first run buy, and where does it sit in the tree?
+5. Which five or six nodes change the game rather than a number, and when does each arrive?
+6. What does the screen look like at minute 40 next to minute 1?
+7. What does the player automate, and what do they keep doing by hand?
+
+A box that answers these in a dull way (pull a ball back and let it go; tap an arrow at a junction)
+is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
 
