@@ -159,7 +159,7 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
-Keep Off the Grass 32–34 / 53–57, Stand Well Back 34–40 / 39–42,
+Keep Off the Grass 32–34 / 53–57, Stand Well Back 44–49 / 45–49,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -305,14 +305,22 @@ box uses it.
     frame-time reading on a real phone, above all in the stadium (`K.debug.blades()`), and the mower's
     sound once the owner has heard it.
 
-- **Stand Well Back** (box 3, third version; the Minotaur's critiques ended at 7/5/7/6/6) had CRITIC_ROUNDS
+- **Stand Well Back** (box 3, third version; the Minotaur's critiques ended at 7/5/7/6/6) had four
   critic rounds on filmstrips (first minute, minute 12, minute 30 with dynamite, the ending; phone and
-  desktop, real pointer input). CRITIC_SCORES
+  desktop, real pointer input). Scores for first impression, clarity, art direction, phone and feel went
+  5/6/4/4/5, 6/6/5/5/5, 6/6/5/5/5, 7/6/5/6/7: none of art direction, clarity or phone reached 8.
   Fixed on the way: walls that hung from the roof when their base was knocked out (nothing hangs now),
   windows and ceilings that would have fallen on the first hit (every building is checked to stand), a
   crane upgrade that lengthened the chain until the camera zoomed out to tiny buildings (it is a winch
   motor now: harder swings, same chain), a hint hand that never showed. Open, most valuable first:
-  CRITIC_OPEN
+  - **Art direction (5).** Every critic read the blocks as pixel art rather than gouache: draw a building as
+    one painted shape with its blocks as cracks in it, thicker ink, a paper grain; the 1970s town behind
+    should be gabled houses and spires, not glass towers. People in the rooms who run when the ball comes.
+  - **Clarity (6).** The next lots stand in the frame as if they were targets: dim them, or put a sign on
+    them. Steel frames read as an unrendered grid; draw orange I-beams with rivets.
+  - **Phone (6).** The sky above a short building is still empty; a jib that rides just over the roof and a
+    camera that lets the sky shrink would give the building the middle of the screen.
+  - The Moon should be drawn bigger than everything before it, so the joke lands.
 
 ### Working on a box that has shipped
 
