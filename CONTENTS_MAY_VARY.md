@@ -417,6 +417,138 @@ than the game: an automated player tapping once a second in a software renderer 
 person's coins, and frames a second apart cannot show a walk that takes two. Nobody has played it on a
 device yet.
 
+### Box 5: Here Be Rabbits (the plan)
+
+Written for the session that builds it, after the owner asked for a box that feels big and escalating
+from its first second, in the manner of *Sir, We Have an Orc Problem* and the horde-survivor
+incrementals, with levels larger than the earlier boxes' so that the player does not feel hemmed in.
+Five pitches were put to the owner (October 2026); this one was recommended and the other four are in
+the ideas below. Unwelcome Guests stays a draft below the marker.
+
+**One line.** Tower defense as a medieval manuscript: the killer rabbits of the margins pour onto the
+page by the thousand, flowing round everything like a liquid, and you hold the castle in the
+illuminated initial with archer monks, snails and a dragon. Every run pays, the book grows a page at a
+time, and by the end the battlefield is the whole world on a mappa mundi with a hundred thousand
+rabbits coming from its rim.
+
+**Id, title, handling.** `warren` · *Here Be Rabbits* · "Contents may multiply." (Change them if the
+comparison in step 2 finds better; the handling note must not say rabbit.)
+
+**What the research found** (store pages, reviews, guides; October 2026):
+- *Sir, We Have an Orc Problem* (Mumpitz Games, July 2026, about 86% positive): the first stage is
+  400 orcs, the last about 160,000, up to 40,000 on screen without stutter; they flow along routes like
+  a fluid and fly off hits "like pinballs". You place a limited number of turrets (12 at first, one more
+  is a big purchase) and turn their firing arcs; abilities (strafing run, orbital laser, cryo beam,
+  nuke) save a front that is about to break; a rare silver orc pays extra; a run pays even when it is
+  lost; turret positions are kept per level, so re-arranging them is a small puzzle. Players love
+  "filling the map with turrets" and the sight of the horde shredded. They complain that after the
+  first few levels it becomes farming the same maps for currency, that most nodes are stat-only and the
+  tree bloated, and that the demo felt better than the full game. Its model, *Outhold*, starts slow and
+  opens up with its tree; players asked for a faster-wave button.
+- The rabbits are real: the Smithfield Decretals (London, 1340s, BL Royal MS 10 E IV) tell in strips
+  across several pages how rabbits shoot, try and behead a hunter; the Breviary of Renaud de Bar (Metz,
+  1302–03) has a rabbit riding a snail with a lance; the Gorleston Psalter (1310–24) has a knight
+  swinging at a rearing rabbit and an axe-wielding rabbit before a king. Knights kneeling before
+  snails are a standing joke of the margins from about 1290. Scholars read both as *the world turned
+  upside down*. The pointing hand in the margin, the manicule, is the period's own way of saying
+  "look here" (rule 10).
+
+**Why it fits the owner.** It is the game they asked for, with the two fixes its reviews ask for:
+every run advances the book, so there is nothing to farm, and the nodes that matter change what is on
+the page. The verb (place and aim, then fire abilities across a wide map) is new to the anthology, and
+it follows Snow Day's reaction taps with a different rhythm: choose, watch it play out, and keep
+several fronts in the air.
+
+**The checklist, answered.**
+1. *Second one:* 400 rabbits are already pouring in at the bottom margin. A manicule points at a gold
+   roundel by the castle; drag an archer monk onto it and swing his fan of fire, and the stream breaks
+   into tumbling rabbits and flakes of gold leaf that fly to the counter. The first run also has one
+   free dragon: swipe a line across the horde and it strafes it.
+2. *The limit:* the castle wall. Every rabbit that reaches it takes a bite; at zero the run is over.
+   The first run lasts about 20 seconds and holds back maybe a third of the horde. Later runs last one
+   to three minutes. A run that beats the whole horde clears the folio.
+3. *The challenge on screen:* the horde itself, a counter in red rubric ("CCCC rabbits", Arabic
+   figures beside it), the wall's bar, and the folio's number.
+4. *The first buy:* the first run pays about 15 to 25 leaf. The root of the tree has three medallions
+   at 5 to 12: a second monk, sharper arrows, the dragon kept for good (one strafe a run).
+5. *Nodes that change the game* (eager bot, roughly): snails, which the horde has to flow round and
+   which slow it (min 3); golden hares, a rare rabbit worth fifty (min 4); the trebuchet, splash at
+   range (min 8); the bell tower, whose peal chains through a crowd (min 12); hounds, the Smithfield
+   hounds turned round, which push the stream back up its route (min 16); the inkpot, tipped over a
+   front to make a slow, dark pool (min 20); the flood, the box's nuke, washing a whole page clean once a
+   run (min 26); the rabbit knights on snails, armoured, and the rabbit king who comes last.
+6. *Minute 40 against minute 1:* one page, one stream, two monks; against the world disc of a mappa
+   mundi, rabbits from every edge where the monsters live, a hundred roundels manned, the bells going,
+   the dragon and the flood in the same minute, a front you scroll to.
+7. *Automation:* towers fire by themselves; the abilities are the hands' work all game (each a drag:
+   the dragon's line, the inkpot's pour, the bell's ring); a golden hare to grab before it leaves the
+   page; and between runs the placing and turning of towers, which the player keeps by hand. A late
+   node can fire the dragon on its own at the thickest front, but only along a line the player drew.
+
+**The book, growing** (the levels; units 100 wide, as in Tilt, the screen shows about 100 × 180 on a
+phone). The map never zooms out to fit; it grows under a camera that travels (*An upgrade must not
+shrink the picture*):
+1. **A page**, folios 1–3: a Psalter page about two screens tall, the castle in the initial at the top,
+   the horde from the bottom margin; each folio adds a route. 400 · 900 · 2,000 rabbits.
+2. **The bifolium**, folios 4–6: the facing page opens, the gutter is a river with bridges; a second
+   front. 3,000 to 12,000.
+3. **The open codex**, folios 7–9: the book lies open with its quires fanned out, rabbits climb in
+   through bookworm holes and over the page edges; three or four fronts, about six screens' worth.
+   15,000 to 50,000.
+4. **The mappa mundi**, folios 10–12: the world as a disc with Jerusalem at its centre and east at
+   the top, the castle there; rabbits pour in from the rim where the Blemmyes and Sciapods live
+   ("hic sunt lepores"), about twenty screens' worth. 60,000 to 150,000.
+5. **The way out:** a book shrine (a *cumdach*, the metal box a medieval gospel book was kept in),
+   jewelled, with the next number on its lid, carried in by the defeated rabbit king. Open it and the
+   light comes out (rule 8).
+
+Towers stay where they were placed when the map grows, so the player's own work fills the world. A
+strip along the rim shows the whole map with the fronts marked red, and is a scroll bar (Tilt's lesson);
+drag pans, wheel and pinch zoom within limits, and AUTO CAMERA follows the front that is about to break.
+
+**Tree: a Tree of Jesse.** The period's own picture of a tree: a vine growing from a sleeping figure
+at the root, medallions on its branches. Designed as a figure, symmetric, with four main boughs (monks
+and arrows; snails and hounds; trebuchet, bells and the inkpot; the dragon, the flood and the leaf), and
+a bough per chapter that stays dark until that chapter opens. About 150 medallions, first ones at
+5 leaf, faint outlines from the start (*A skill tree is a picture*). Give stat nodes a visible face
+(the monk's tonsure gets a gold ring, arrows grow red fletching) so that a small number still shows.
+
+**Look and sound.** An English Gothic manuscript of about 1320: vellum with its grain and a ruled
+grid, iron-gall ink outlines, flat body colour (vermilion, lapis ultramarine, verdigris, lead white)
+and raised gold leaf that glints as the camera moves. Rabbits are drawn as the margins draw them,
+upright, muscular, with weapons; a few drawn sizes and poses suffice because the crowd is the picture.
+Hit rabbits tumble off the vellum with an ink splash; nobody bleeds. Headings in a textura from Google
+Fonts, numbers in red. Sound: quill scratches, the thwip of arrows, squeaks, a bell; the music an
+original estampie (shawm, tabor, hurdy-gurdy drone) that gains a voice per chapter.
+
+**Ledger check.** Against Snow Day, the box before it: verb (place and aim, abilities by drag against
+tap to throw), medium (2D manuscript against felt 3D), palette, era (14th century against the 1960s),
+sound and interface (a Tree of Jesse against a felt Christmas tree) all differ; the loop shares only
+rule 15's run-and-tree shape, and both have a crowd that grows, so make the horde a flood and not a
+gang of people. Against the ledger as a whole it is new on six of the seven; the loop is rule 15's shape, as in every box since Tilt. It takes the look of
+**Scriptorium** from the ideas; strike that one through if it ships.
+
+**Engineering notes.**
+- *The core counts, the view draws.* The horde lives in the core as a count per grid cell (2 units a
+  cell) flowing along a flow field toward the castle (Dijkstra from the wall over a cost field;
+  recomputed only when a snail, a pool or a new page changes the costs), with a cap per cell so a crowd
+  backs up and spreads round obstacles. Towers take rabbits from the cells in their arc. Only special
+  rabbits (golden hares, knights, the king) are agents. Integer counts and the PRNG in the state keep
+  it pure (rule 12) and fast enough for the pacing test's six whole games.
+- *The view draws individuals from the counts:* a rabbit's place inside its cell comes from a hash of
+  the cell and its index, it moves with the cell's flow, so the crowd never shimmers and the camera's
+  rule from CLAUDE.md holds. WebGL 2, one instanced draw, a budget that drops when frames are slow
+  (Keep Off the Grass's `gauge`); past the budget the densest cells become a tide of packed rabbit
+  fur drawn as one texture.
+- *Pacing:* the eager bot 35 to 50 minutes, the casual under 90, a new thing at least every three
+  minutes; a folio must never need more than three or four lost runs (measure it: *A gate only money
+  opens turns a level into a grind*). Budget: aim for 100 KB, cap 130.
+- *Phone first, desktop as carefully:* roundels 44 px or more, the arc turned by dragging the
+  monk's fan, abilities from a strip at the thumb; on a desktop hover reads, click buys, the wheel zooms.
+
+**Before building**, the session shows the owner one still frame at phone and desktop size (the first
+page with the horde and the tree) and then follows `.claude/skills/next-box` from step 3.
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
@@ -497,6 +629,24 @@ box uses it.
   paperback-cover cockpit (Chris Foss). Too close to Tilt's Big One for box 4.
 - **Tin Gallery** — a fairground shooting gallery in 3D, tin ducks on rails, cork guns, a fair that grows
   into a carnival. Painted tin and a band organ. Not right after a pachinko parlour.
+
+- **Kaiju on the Tōkaidō** — a horde survivor turned round: you are huge from the first second, a
+  woodblock monster in Edo Bay, and the shogun's armies are the horde; swipe for the tail, tap to stamp,
+  hold and drag for the fire breath, a run as long as your rage. The world is a handscroll that unrolls
+  along Hiroshige's 53 stations to Mount Fuji. Ukiyo-e, Prussian blue and vermilion; taiko and shamisen.
+  Pitched for box 5 as the biggest surprise.
+- **The Colony** — you are the horde: paint scent trails with a finger and five hundred, then a million
+  ants follow them through a garden fifty screens wide under a fog, carrying crumbs, then a car. Copper
+  engravings after Maria Sibylla Merian; baroque chamber music. Pitched for box 5; closest to
+  Physarum.
+- **General Staff** — a war simulation on the nursery floor: two thousand green and two thousand tan
+  plastic soldiers, a flag you drag for the charge, the cat as an air strike, the vacuum cleaner as the
+  enemy's superweapon; carpet, house, garden, street. 1970s Airfix box-art painting and a map table with
+  pins. Pitched for box 5; two sides throwing at each other, so not right after Snow Day.
+- **Kraken Brood** — a standing survivor with a light for a weapon: at night thousands of small squid
+  crawl out of the sea, and you hold and sweep a lighthouse beam (the hover verb of Keep on Mining) to
+  drive them back; a Fresnel lens that turns by itself, the foghorn as a shockwave, a lighthouse per
+  island along a whole coast, the kraken mother last. Woodcut, as in The Keeper. Pitched for box 5.
 
 - **Keep Off the Grass** (box 2) has been played through by the owner twice. The second playtest asked
   for: judges behind their table rather than inside it; a way to turn a huge gang mower without
@@ -618,6 +768,7 @@ last three were named earlier for their absurdity. What each one is, from store 
 | Berry Bury Berry | first person: grow berries and drop them into a hole for money | Berry Buddies grow higher tiers; puzzles, cassette tapes and a creeping horror; several endings |
 | How to Fish | physics fishing after a drunken boat crash on an island: catch, kill and sell fish, with trick shots | gear and weapons from nothing, quests, bosses that open new islands, rare variants of every fish, gambling with fish; cartoon violence, very positive reviews |
 | Project P.I.T.T. | build a chaotic physics production line of rubber ducks and feed them to a bottomless pit | combos for dumping many at once; corporate targets; scripted events that break your machines |
+| Sir, We Have an Orc Problem | place a few turrets, turn their firing arcs, fire a nuke or a strafing run where a front is breaking | 400 to 160,000 orcs flowing like a liquid; every run pays, won or lost; turrets stay where they were put; named by the owner as the feel a box still lacks (big and escalating from the start); its reviews complain about farming the same maps and stat-only nodes |
 
 ### The shape they share
 
