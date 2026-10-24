@@ -192,13 +192,13 @@ so it differs from box 2's lit 3D miniature and from box 1's print. Pachinko sta
 The owner played Stand Well Back and found it boring too: pull the ball up, let it drop, again. Three
 attempts at box 3 failed the same way, so the owner stopped and had the session research what the
 incrementals they actually enjoy have in common (**What the owner plays**, below). That gave rule 15,
-and the plan for the fourth attempt that follows. Stand Well Back is on the branch of PR #391 and was
-never merged; it is replaced, not shipped.
+and the plan for the fourth attempt that follows. Stand Well Back had already been merged to `main`
+(PR #391), so Tilt replaces it in place.
 
 ### Box 3, fourth attempt: Tilt (the plan)
 
-Written for the session that builds it. It replaces Stand Well Back under the same id `clew` (on
-`main`, box 3 is still Minos Wants a Map): `CORE.version` 4, and a `migrate` that starts old saves fresh.
+Written for the session that builds it. It replaces Stand Well Back under the same id `clew` (rule 9):
+`CORE.version` 4, and a `migrate` that starts old saves fresh.
 
 **One line.** Pachinko as a modern Steam incremental: hold your thumb on the board and a stream of
 steel balls pours in where it points; they rattle down through the pins, smash prize blocks into
@@ -456,7 +456,7 @@ last three were named earlier for their absurdity. What each one is, from store 
 | Artillery Miner | shell huge blocks of ore with artillery | ores smelted into materials, 400+ upgrades in a tree that opens new worlds, ores and 33 guns; prestige once a world is obliterated |
 | Fishing Inc | click fast to reel a fish in before it escapes | many places to fish out completely; skill per species; gear between trips |
 | Growing My Manhole | be a manhole that swallows what is smaller than it | grow from a manhole to a black hole; a run-based Donut County |
-| We Need More Humans! | (not found under this name; ask the owner) | |
+| We Need More Humans! | fly a UFO round the world and abduct people | abduct everyone on Earth; the humans evolve as you go; isometric 2.5D, an absurd premise played as a cosy idler |
 | Crack the Pack | open booster packs | cards in seven rarities; sell duplicates; a magnet, workers and a fusion lab for automation |
 | Fortune Mill | darts, scratch-offs, dice, pachinko, sushi, one room each | earn 1,000,000 to escape; every room boosts all the others; full automation; 120+ upgrades |
 | Keep on Mining! | hover the cursor over rocks and the pickaxes go to work | ores become bars for a permanent skill tree; talent cards on level-up; an idle mine; reviewers love the feel and the huge tree, dislike a weak late game and an abrupt ending |
@@ -464,7 +464,7 @@ last three were named earlier for their absurdity. What each one is, from store 
 | Timber Rush | chop one big tree; every swing showers logs, gold and power-ups | an incremental roguelite of short runs; a massive skill tree of automation, special logs (lightning, freeze time, magnet the screen) and synergies |
 | Sip Fisher | drain a lake through a straw and sell the fish | an absurd premise played straight; gear upgrades; very positive reviews, an IGF student nomination |
 | Berry Bury Berry | first person: grow berries and drop them into a hole for money | Berry Buddies grow higher tiers; puzzles, cassette tapes and a creeping horror; several endings |
-| How to Fish | (named for its absurdity) | |
+| How to Fish | physics fishing after a drunken boat crash on an island: catch, kill and sell fish, with trick shots | gear and weapons from nothing, quests, bosses that open new islands, rare variants of every fish, gambling with fish; cartoon violence, very positive reviews |
 | Project P.I.T.T. | build a chaotic physics production line of rubber ducks and feed them to a bottomless pit | combos for dumping many at once; corporate targets; scripted events that break your machines |
 
 ### The shape they share
