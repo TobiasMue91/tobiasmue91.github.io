@@ -320,89 +320,87 @@ const clew = worlds.find(w => w.id === 'clew');
 if (suites.includes('clew') && clew) {
   section('clew');
   const { CORE } = load(clew);
-  const { W } = CORE;
-  const swingAt = (S, ang) => { const L = Math.min(CORE.chain(S), S.py - CORE.radius(S) - .15); CORE.act(S, 'aim', S.px - Math.sin(ang) * L, S.py - Math.cos(ang) * L); return CORE.act(S, 'drop'); };
+  const run = (S, sec, f) => { for (let t = 0; t < sec; t += .1) { if (f) f(S, t); CORE.step(S, .1); } };
+  const onBoard = (b, lv) => { const S = CORE.init(3); S.lv = Object.assign({}, lv || {}); S.bought = 99; S.board = b; S.big = CORE.BIG[b]; S.phase = 'tree'; CORE.act(S, 'run'); return S; };
   {
-    // every job stands up on its own: nothing on a fresh lot is left hanging in the air
-    let floating = [];
-    for (let n = 0; n < CORE.JOBS.length; n++) for (const lot of [1, 2, 3]) {
-      const S = CORE.init(3), b = CORE.build(n, S.ms, lot); S.cells = b.cells; S.tiers = b.tiers; S.job = n;
-      if (CORE.settle(S)) floating.push(CORE.JOBS[n]);
+    // every board lets a ball through: no ball dropped anywhere is still on the board a minute later
+    let stuck = [];
+    for (let b = 0; b < 5; b++) for (const tul of [0, 3]) {
+      const S = onBoard(b, { t_tulip: tul }); S.big = 1e30; S.tray = 0;
+      for (let x = 3; x <= 97; x += 2) S.balls.push({ x, y: 1.5, vx: 0, vy: 12, k: 0, s: 0, h: 0, w: 0, ax: x, ay: 1.5 });
+      run(S, 60);
+      if (S.balls.length) stuck.push(`board ${b + 1}${tul ? ' with tulips' : ''}: ${S.balls.map(q => q.x.toFixed(0) + ',' + q.y.toFixed(0)).join(' ')}`);
     }
-    check(!floating.length, 'every job is built so that it stands up', floating.join(', '));
-    const S = CORE.init(4);
-    check(S.job === 0 && S.left === S.total && S.total > 0, `the first job is a garden shed of ${S.total} blocks`);
+    check(!stuck.length, 'on every board, every ball dropped from the rail has left within a minute', stuck.join('; '));
   }
   {
-    // a block breaks when a blow meets its strength, and holds and cracks when it does not
-    const S = CORE.init(5), i = S.cells.indexOf('w'), hp = CORE.hpOf(S, 'w', i);
-    check(hp > 0 && CORE.hpOf(S, 'm', i) > CORE.hpOf(S, 'c', i) && CORE.hpOf(S, 'c', i) > CORE.hpOf(S, 'b', i), 'steel is stronger than concrete, and concrete than brick');
-    const S2 = CORE.init(5);   // a shed made six times as tough as it is
-    for (let k = 0; k < S2.cells.length; k++) if (S2.cells[k] !== '.') S2.dm[k] = -5 * CORE.hpOf(S2, S2.cells[k], k);
-    const knock = () => { let hits = 0, broke = 0; swingAt(S2, .25); for (let t = 0; t < 240; t++) { CORE.step(S2, 1 / 120); for (const e of S2.ev) { if (e.k === 'hit') hits++; if (e.k === 'smash') broke++; } S2.ev.length = 0; } return [hits, broke]; };
-    const [h1, b1] = knock();
-    check(b1 === 0 && h1 > 0 && Object.keys(S2.dm).length > 0, `a blow weaker than a block cracks it and does not break it (${h1} knocks)`);
-    let b2 = 0; for (let k = 0; k < 12 && !b2; k++) b2 = knock()[1];
-    check(b2 > 0, 'and the cracks add up until it gives');
+    // the first game: short, and it pays for a bulb
+    const S = CORE.init(1), m = { seed: 5 }; let t = 0;
+    while (S.phase === 'run' && t < 60) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1; }
+    check(S.phase === 'tree' && t >= 8 && t <= 30, `the first game is over in 8 to 30 seconds (${t.toFixed(1)} s)`);
+    check(CORE.UP.some(u => CORE.can(S, u)), `and its ${S.$.toFixed(0)} coins buy a bulb straight away`);
+    check(S.big < CORE.BIG[0] && S.big > CORE.BIG[0] * .9, `it chips the Big One (${Math.ceil(S.big)} of ${CORE.BIG[0]})`);
   }
   {
-    // a full swing at the shed knocks blocks out and pays for them
-    const S = CORE.init(6); swingAt(S, 1.35); let broke = 0;
-    for (let t = 0; t < 360; t++) { CORE.step(S, 1 / 120); for (const e of S.ev) if (e.k === 'smash' || e.k === 'fall') broke++; S.ev.length = 0; }
-    check(broke > 0 && S.$ > 0 && S.left < S.total, `the first full swing breaks something and pays (${S.$.toFixed(1)} marks)`);
+    // the thumb pours out of the tray at its rate, and letting go stops it
+    const S = CORE.init(2), n0 = S.tray; CORE.act(S, 'hold', 50); run(S, 1);
+    const poured = n0 - S.tray + 0; check(poured >= 3 && poured <= 5, `holding for a second pours about four balls (${poured})`);
+    CORE.act(S, 'let'); const n1 = S.tray; run(S, 1);
+    check(S.tray >= n1, 'letting go stops the pour');
+    check(!CORE.act(S, 'hold', NaN) && !CORE.act(S, 'run'), 'nonsense and a second game in the middle of one are refused');
   }
   {
-    // the ball always reaches the ground: the jib never rises so high that the stubs left over cannot be hit
-    let bad = [];
-    for (const jib of [0, 8]) {
-      const S = CORE.init(7); S.$ = 1e16; S.lv.jib = jib;
-      for (let n = 0; n < CORE.JOBS.length; n++) {
-        const reach = S.py - Math.min(CORE.chain(S), S.py - CORE.radius(S) - .15);
-        if (reach > CORE.radius(S) + .5) bad.push(CORE.JOBS[n] + ' with jib ' + jib);
-        CORE.act(S, 'buy', 'contract');
-      }
-    }
-    check(!bad.length, 'the ball can always be swung down to the ground', bad.join(' '));
+    // a tulip takes what it holds and then closes: a closed one catches nothing and pays nothing
+    const S = CORE.init(4), B = CORE.board(0, 0), p = B.pockets[0];
+    const drop = () => { S.balls.push({ x: p.cx, y: p.y - 6, vx: 0, vy: 0, k: 0, s: 0, h: 0, w: 0, ax: p.cx, ay: p.y - 6 }); run(S, 1.5); };
+    const cap = S.cap[p.i]; let paid = 0;
+    for (let i = 0; i < cap; i++) { S.tray = 0; drop(); paid += S.tray; }
+    check(S.cap[p.i] === 0 && paid === cap, `a tulip pays a ball each for the ${cap} it holds`);
+    S.tray = 0; drop(); check(S.tray === 0, 'then it closes and pays nothing more this game');
   }
   {
-    // what loses its support comes down: knock out the bottom of the shed and the roof falls with it
-    const S = CORE.init(8); let falls = 0;
-    for (let x = 0; x < W; x++) for (let y = 0; y < 2; y++) if (CORE.at(S, x, y) !== '.') { S.dm[y * W + x] = 1e9; }
-    S.lv.crew = 8; for (let t = 0; t < 600 && !S.clearT; t++) { CORE.step(S, .05); for (const e of S.ev) if (e.k === 'fall') falls += e.list.length / 2; S.ev.length = 0; }
-    check(falls > 0, `taking the ground floor away brings ${falls} blocks down with it`);
-    check(S.clearT > 0 || S.left === 0, 'and a lot that is as good as empty is swept and counted as cleared');
+    // coins land when a block breaks, the Big One keeps its damage between games, and the game ends with the tray
+    const S = CORE.init(6), r = CORE.board(0, 0).blocks[0]; S.hp[r.i] = .1; const c0 = S.$;
+    S.balls.push({ x: r.x + 3, y: r.y - 8, vx: 0, vy: 30, k: 0, s: 0, h: 0, w: 0, ax: 0, ay: 0 }); run(S, .5);
+    const brk = S.ev.find(e => e.k === 'brk'); check(brk && S.$ - c0 >= brk.v - 1e-9 && S.hp[r.i] === 0, 'a broken block pays when it breaks');
+    S.big = 700; S.tray = 0; S.balls = []; run(S, .2);
+    check(S.phase === 'tree' && S.runs === 1, 'with the tray empty and the last ball gone, the game is over');
+    CORE.act(S, 'run'); check(S.big === 700 && S.tray === CORE.stats(S).balls && S.hp.every((h, i) => h === CORE.board(0, 0).blocks[i].hp), 'the next game refills the tray and the blocks, and the Big One stays as broken as it was');
   }
   {
-    // a cleared lot is followed by another of the same job; a contract brings the next job, bigger and stronger
-    const S = CORE.init(9), s0 = S.cells; S.left = 0; S.$ = 0;
-    S.cells = S.cells.replace(/[^.]/g, (m, i) => i === s0.search(/[^.]/) ? m : '.'); S.left = 1; S.dm = {};
-    const i = S.cells.search(/[^.]/); S.dm[i] = 1e9; S.lv.crew = 1; for (let t = 0; t < 200; t++) CORE.step(S, .05);
-    check(S.streets === 1 && S.job === 0 && S.left > 0 && S.cells !== s0, 'a cleared lot pays a bonus and the crane rolls on to another shed');
-    S.$ = CORE.price(S, CORE.byId.contract);
-    const hp0 = CORE.hpOf(S, 'b');
-    check(CORE.act(S, 'buy', 'contract') && S.job === 1 && S.$ === 0 && CORE.hpOf(S, 'b') > hp0, 'a contract brings the next job, and its bricks are stronger');
-    check(!CORE.act(S, 'buy', 'contract'), 'a contract you cannot afford is refused');
+    // a run with everything bought still ends: tulips close, last call empties the tray
+    const lv = Object.fromEntries(CORE.UP.map(u => [u.id, u.max])), S = onBoard(4, lv); S.big = 1e30; let t = 0;
+    while (S.phase === 'run' && t < 400) { if (S.tray > 0) CORE.act(S, 'hold', 20 + (t * 7) % 60); CORE.step(S, .1); t += .1; }
+    check(S.phase === 'tree' && t < 300, `with every bulb lit, a game on the mountain still ends (${t.toFixed(0)} s)`);
   }
   {
-    // dynamite: one charge, then a wait
-    const S = CORE.init(10); S.lv.blast = 1; S.lv.ball = 6; const n0 = S.left;
-    let tx = 0; while (CORE.at(S, tx, 0) === '.') tx++;
-    check(CORE.act(S, 'blast', tx + 1.5, 1.5) && S.left < n0, `a stick of dynamite at the base takes out ${n0 - S.left} blocks`);
-    check(!CORE.act(S, 'blast', tx + 1.5, 1.5), 'and the next has to wait for the fuse');
+    // three of a kind is fever: balls rain from the whole top edge, and pay double
+    const S = CORE.init(7); S.lv.start = 1; S.bought++; S.tray = 0; S.fever = 5; const xs = new Set();
+    run(S, 1, () => S.balls.forEach(b => b.y < 3 && xs.add(b.x / 10 | 0)));
+    check(xs.size >= 7, `fever rains across the board (${xs.size} of 10 columns in a second)`);
   }
   {
-    // the end: the last job is a box; clearing it leaves the box whole, and it opens one step at a time
-    const S = CORE.init(11); S.$ = 1e16; while (S.job < 12) if (!CORE.act(S, 'buy', 'contract')) break;
-    check(S.job === 12 && /x/.test(S.cells), 'the last job is a cardboard box');
-    S.dm = {}; for (let i = 0; i < S.cells.length; i++) if (S.cells[i] !== '.') S.dm[i] = 1e18;
-    S.lv.crew = 8; for (let t = 0; t < 2000 && !S.fin; t++) CORE.step(S, .05);
-    check(S.fin === 1 && !CORE.done(S), 'clearing it finds the box inside, and nothing is open yet');
-    check(CORE.act(S, 'open') && CORE.done(S) && CORE.progress(S) >= .99, 'opening it finishes the box');
+    // a bomb takes out the blocks round it; at the cap, pouring fuses into mega balls
+    const S = CORE.init(8), B = CORE.board(0, 0), r = B.blocks[0]; S.lv.bomb = 1; S.bought++;
+    S.balls.push({ x: r.x + 3, y: r.y - 6, vx: 0, vy: 30, k: 1, s: 0, h: 0, w: 0, ax: 0, ay: 0 }); S.hp = S.hp.map(() => 5); run(S, .5);
+    check(S.ev.some(e => e.k === 'boom') && S.hp.filter(h => h === 0).length >= 3, `a bomb ball breaks the blocks round it (${S.hp.filter(h => h === 0).length})`);
+    const T = onBoard(1, { mega: 1, rate: 5, t_rate: 3, m_rate: 3, s_fev: 3 }); T.tray = 2000; T.big = 1e30; T.fever = 40; CORE.act(T, 'hold', 50); let megas = 0;
+    run(T, 40, () => { megas += T.ev.filter(e => e.k === 'mega').length; T.ev.length = 0; });
+    check(T.balls.length <= CORE.CAP + 4 && megas > 0, `the board never holds more than ${CORE.CAP} balls, and the overflow becomes mega balls (${megas})`);
   }
   {
-    // the box was a survey, then a jailbreak, before it was a demolition firm: old saves start again
-    const a = CORE.migrate({ ms: 3, mp: [1, 2, 3], nm: 40 }, 1), b = CORE.migrate({ ms: 3, br: [1], ring: 4 }, 2);
-    check(JSON.stringify(a) === JSON.stringify(CORE.init(3)) && JSON.stringify(b) === JSON.stringify(CORE.init(3)), 'saves from the survey and the Minotaur start the demolition fresh');
+    // the Big One opens the next board and a new panel of the sign; the last one is a box
+    const S = CORE.init(9); S.$ = 1e30; check(!CORE.act(S, 'buy', 't_coin'), 'the tall machine’s panel stays dark until its board is reached');
+    S.big = 1; S.balls = [{ x: 50, y: CORE.board(0, 0).big.y - 5, vx: 0, vy: 40, k: 0, s: 0, h: 0, w: 0, ax: 0, ay: 0 }]; S.tray = 0; run(S, .5);
+    check(S.board === 1 && S.phase === 'tree' && S.big === CORE.BIG[1] && CORE.act(S, 'buy', 't_coin'), 'breaking the Big One opens board 2 and its panel');
+    const T = onBoard(4); T.big = 1; T.balls = [{ x: 50, y: CORE.board(4, 0).big.y - 5, vx: 0, vy: 40, k: 0, s: 0, h: 0, w: 0, ax: 0, ay: 0 }]; T.tray = 0; run(T, .5);
+    check(T.fin === 1 && !CORE.done(T) && !CORE.act(T, 'run'), 'the last Big One is a box: breaking it ends the games, and nothing is open yet');
+    check(CORE.act(T, 'open') && CORE.done(T) && CORE.progress(T) >= .99, 'opening it finishes the box');
+  }
+  {
+    // the box was a survey, a jailbreak and a demolition firm before it was a parlour: old saves start again
+    const a = CORE.migrate({ ms: 3, mp: [1, 2, 3] }, 1), b = CORE.migrate({ ms: 3, cells: '...' }, 3);
+    check(JSON.stringify(a) === JSON.stringify(CORE.init(3)) && JSON.stringify(b) === JSON.stringify(CORE.init(3)), 'saves from the three earlier versions start the parlour fresh');
   }
 }
 

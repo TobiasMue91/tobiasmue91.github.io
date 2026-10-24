@@ -161,11 +161,11 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
 | 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
-| 3 | `clew` | Stand Well Back · "Fragile." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out) | pull a wrecking ball back on its chain and let go; what a blow does not break it cracks, and what loses its footing comes down | rubble pays → a heavier ball, a bigger winch motor, a crew with jackhammers, salvage, dynamite → endless streets of the same job, and a contract for the next, bigger and tougher: a shed, a pub, a church, a castle, a skyscraper, the pyramid → a cardboard box the size of a house marked FRAGILE | flat 2D canvas: a building as a grid of blocks in cutaway, drawn as a 1970s Wimmelbuch (Mitgutsch, Scarry): flat gouache colour, ink outlines, a crowd behind the site fence, a plane towing a banner | ochre crane, brick red, slate, sky blue, cream paper | 1970s town, a demolition firm; slapstick that escalates to the absurd (the ball becomes the Moon) | an oompah band that grows a part per job, thuds, crashes, glass, rumbles, a cheering crowd, a site whistle | the foreman's clipboard: a work order, order forms stamped APPROVED | inside the swept FRAGILE box, alone on the ground: a small one with the next number |
+| 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's tall neon sign, a bulb per upgrade, a panel per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
-Keep Off the Grass 32–34 / 53–57, Stand Well Back 44–49 / 45–49,
+Keep Off the Grass 32–34 / 53–57, Tilt 49–50 / 69–71,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -174,7 +174,7 @@ game in a new costume. It waits below the marker as a draft for slot 3 or 4. Box
 the Grass instead: continuous steering rather than waiting and tapping, real 3D rather than flat print.
 Box 3 had to leave both behind: no steering a vehicle, no timing taps, neither print nor voxels.
 
-Box 3 is Stand Well Back, its third version. The owner asked for a first-person 3D game in that slot,
+Box 3 is now Tilt, its fourth version; the story of the first three follows. The owner asked for a first-person 3D game in that slot,
 so that boxes 1 and 3 would stop resembling each other, and named a labyrinth to chart, or a raft grown
 from flotsam, as starting points; they also like absurdity and escalation.
 
@@ -194,6 +194,9 @@ attempts at box 3 failed the same way, so the owner stopped and had the session 
 incrementals they actually enjoy have in common (**What the owner plays**, below). That gave rule 15,
 and the plan for the fourth attempt that follows. Stand Well Back had already been merged to `main`
 (PR #391), so Tilt replaces it in place.
+
+**Tilt** (`CORE.version` 4) is the fourth attempt, built from the plan below; what changed on the way is
+noted under it. It waits for the owner's playtest.
 
 ### Box 3, fourth attempt: Tilt (the plan)
 
@@ -268,6 +271,31 @@ the first purchase comes after run 1, and nothing new is more than 3 minutes apa
 
 **Before building**, the session confirms the plan with the owner (a one-frame mock-up of the phone
 layout and the tree), then follows `.claude/skills/next-box` from step 3.
+
+**As built** (what moved away from the plan, and why):
+- *The Big One on board 1 counts down from 1,200, not 500.* At 500 the eager bot broke it in about two
+  and a half minutes; at 1,200 it takes three to four, and the first game still chips it visibly.
+- *Tulips close.* With pockets paying a ball each and no limit, a well-upgraded game fed itself forever
+  (a run of six minutes in the first tuning). Each tulip now takes a few balls (three, more with "Open
+  tulips") and then closes its petals for the rest of the game; the start pocket takes four or more. So
+  every game ends, and the upgrades that make it longer are visible on the board. After 75 seconds it is
+  *last call*: the pockets stop paying and the tray pours three times as fast.
+- *The sign is a tall tower, not a radial web.* Arm 0 is four columns (balls and launching; tulips,
+  magnets and the mega ball; pins, golden pins, the reels and fever; damage, prizes and bombs), five bulbs
+  deep, and every board adds a panel of six below it, dark until its Big One breaks. It reads on a phone
+  as one scrolling column and literally grows as the boards do. Bulbs in later panels hang from their own
+  panel; a few also need a bulb from the centre (Jackpot needs the reels).
+- *The march is original.* No transcription of the Warship March could be checked from here, and a
+  misremembered one would be worse than none, so the parlour plays a march of its own in the same 2/4
+  manner: square lead, oom-pah bass, snare from board 2, chords from board 3, a doubled lead from board
+  4, faster and an octave up during fever. Swap in the real tune when someone has the notes.
+- *The game-changers arrive* (eager bot, seed 1) at minute 3 (golden pins), 6 (the reels), 7 (more
+  tulips), 9 (bombs), 13 (the auto-launcher), 17 (jackpot), 21 (magnets), 26 (mega balls and the twin
+  stream) and about 36 (rockfall). Up to 260 balls are on the board at once; beyond that, pouring with the
+  mega ball bought fuses the overflow into mega balls.
+- Boards, in units 100 wide: 180, 360, 460, 560 and 660 tall; the camera follows the flood on the tall
+  ones and a strip on the rim shows where the view is.
+
 
 **Runners-up** (kept for later boxes): a vacuum cleaner that grows from a room to a planet (too close
 to box 2's mowing, by rule 3); scratch tickets with quirks (Scritchy Scratchy already does it well);
@@ -395,22 +423,18 @@ box uses it.
     frame-time reading on a real phone, above all in the stadium (`K.debug.blades()`), and the mower's
     sound once the owner has heard it.
 
-- **Stand Well Back** (box 3, third version; the Minotaur's critiques ended at 7/5/7/6/6) had four
-  critic rounds on filmstrips (first minute, minute 12, minute 30 with dynamite, the ending; phone and
-  desktop, real pointer input). Scores for first impression, clarity, art direction, phone and feel went
-  5/6/4/4/5, 6/6/5/5/5, 6/6/5/5/5, 7/6/5/6/7: none of art direction, clarity or phone reached 8.
-  Fixed on the way: walls that hung from the roof when their base was knocked out (nothing hangs now),
-  windows and ceilings that would have fallen on the first hit (every building is checked to stand), a
-  crane upgrade that lengthened the chain until the camera zoomed out to tiny buildings (it is a winch
-  motor now: harder swings, same chain), a hint hand that never showed. Open, most valuable first:
-  - **Art direction (5).** Every critic read the blocks as pixel art rather than gouache: draw a building as
-    one painted shape with its blocks as cracks in it, thicker ink, a paper grain; the 1970s town behind
-    should be gabled houses and spires, not glass towers. People in the rooms who run when the ball comes.
-  - **Clarity (6).** The next lots stand in the frame as if they were targets: dim them, or put a sign on
-    them. Steel frames read as an unrendered grid; draw orange I-beams with rivets.
-  - **Phone (6).** The sky above a short building is still empty; a jib that rides just over the roof and a
-    camera that lets the sky shrink would give the building the middle of the screen.
-  - The Moon should be drawn bigger than everything before it, so the joke lands.
+- **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
+  10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
+  held pointer. Scores for first impression, clarity, art direction, phone and feel: 6/5/7/5/5. Fixed
+  after it: the Big One's counter and a bar sit in the tray on every board, so the goal stays in sight
+  on the tall boards; balls are drawn larger than they are and the pins are dimmer; a broken Big One gets
+  its own moment (a flash, gold shards, BIG ONE BROKEN) before the floor gives way; big headings fit a
+  phone; coin popups are larger and gold; OPEN IT clears the tray; the mountain lost its grey fog. No
+  second round has run: the owner wanted to play it first. Open, from that critique: the first game
+  drains in a few seconds for about fifteen coins (the critic asked for forty balls and a sure tulip
+  catch, which would change rule 15's short first run, so it waits for the owner); the coin count leaps
+  between boards with little felt in between; the sign's short tags (U, XL, BIG) mean nothing until a
+  bulb is tapped. Stand Well Back's own critique notes went with it.
 
 ### Working on a box that has shipped
 
@@ -589,5 +613,18 @@ is not saved by its art direction: the owner played both and stopped.
   not be stranded: a finished ring brings the next thread free, and buying it early is the shortcut.
 - **On a phone, sort the shop.** The thread was the third sherd in a strip that shows two and a half; the
   most important purchase sat off screen. It now comes first, then by price.
+- **`Math` is slow inside a `vm` context.** The test suite runs every core in `vm.createContext`, where a
+  global like `Math` is looked up through the context's interceptor on every call: Tilt's physics ran eight
+  times slower in the suite than it would on a page (1.6 µs a ball a step against 0.2). Destructure what a
+  hot loop needs at the top of the core (`const { sqrt, abs, floor } = Math`) and the cost is gone.
+- **A run that pays its own fuel has to run dry by design.** Pockets that paid a ball back with no limit
+  let an upgraded game feed itself for minutes, and no tuning of the odds held across every upgrade. A
+  hard, visible bound (tulips that close after a few balls, last call after 75 seconds) makes every game
+  end, whatever is bought.
+- **Leave room for the ball everywhere.** A pin closer to a wall, a ledge or another block than one
+  ball's width wedges balls for ever, and two blocks two units apart make a notch that holds one. Pins
+  keep a ball's width plus a margin from everything, clusters of blocks touch, and a ball that has not
+  moved a unit and a half in one and a half seconds is dropped (the suite drops a ball from every column
+  of every board and wants them all gone within a minute).
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
