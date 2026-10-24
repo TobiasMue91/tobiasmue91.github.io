@@ -18,7 +18,8 @@ who has opened every box before it.
    lessons. Run `npm run test:cmv` and keep it green from here on. Claim the page with
    `python util/claim.py games/contents_may_vary.html`, so no other session works on it at the
    same time; stop if the claim fails.
-2. CHOOSE. Even with an idea requested, write down at least eight pairs of mechanic and art
+2. CHOOSE. First read **What the owner plays** in CONTENTS_MAY_VARY.md and answer its checklist for
+   every candidate; a candidate with a dull answer is out. Even with an idea requested, write down at least eight pairs of mechanic and art
    direction and score each for surprise, depth, fit to 30 to 90 minutes, and distance from the
    ledger's seven axes (rule 3). Pick one; name it (id, title, handling note). Two lines in the PR
    on why this box, and why after the last one.
