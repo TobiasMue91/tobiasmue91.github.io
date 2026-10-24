@@ -163,11 +163,12 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
+| 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers onto gold roundels and turn a monk's fan; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares | runs that end when the rabbits have eaten the wall; what was killed or ran off with a bite stays gone, so every run turns the folio further; the Tree of Jesse between runs; a page, the bifolium, the open codex, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: vellum, iron-gall textura, rubrics, bar borders, an illuminated initial with the castle in its bowl, miniatures, a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
 Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
-Unwelcome Guests 39–41 / 54–57.
+Here Be Rabbits 34–35 / 48–51, Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -549,6 +550,62 @@ gang of people. Against the ledger as a whole it is new on six of the seven; the
 **Before building**, the session shows the owner one still frame at phone and desktop size (the first
 page with the horde and the tree) and then follows `.claude/skills/next-box` from step 3.
 
+The owner saw the still (the first page with the horde, and the tree, at phone and desktop size) and the
+box was built from the plan. What moved away from it, and why:
+
+**The eight that were weighed** (surprise / depth / fit / distance, out of 10), to sharpen the chosen
+idea rather than replace it: tower defence in a Gothic manuscript's margins 9/8/8/8 (chosen); the same
+horde stitched into a Bayeux-style embroidered strip 7/8/8/5 (textile right after Snow Day's felt, but it
+gave the camera that travels instead of zooming out); the horde behind stained glass, the lead lines as
+walls 8/7/7/8 (a window cannot grow page by page, but it gave the idea that the page's own furniture is
+the maze); a reverse tower defence where you are the rabbits 8/6/6/7 (it loses the defending verb the
+owner asked for, but gave the golden hares that run their own way); Kaiju on the Tōkaidō 9/7/7/8; The
+Colony 8/7/7/7; General Staff 7/7/8/5; Kraken Brood 7/6/8/7 (the last four as pitched for this slot). The
+name and the handling note stayed: "Breeds in the margins." was weighed and says too much.
+
+**The checklist, as built.** (1) In second one four hundred rabbits pour out of the warren at the foot
+of the page; a manicule walks a ghost monk from the tray to a roundel by the castle, and once he shoots,
+the hand points at the dragon: the first run has one flight free. (2) The wall: every rabbit that reaches
+the castle takes a bite and runs off with it; the first run lasts about 20 seconds. (3) The horde's count
+and bar, the wall, and the stream itself. (4) Run 1 pays 60 to 90 leaf; the trunk's three medallions cost
+22 to 45 (Brother Anselm, Sharper arrows, Keep the dragon). (5) Snails (min 2), golden hares (3), the
+trebuchet (5), the hounds and the inkpot (8 to 10, with the bifolium), the great bell and the dragon's
+second wind (10 to 12), the flood (14), the dragon that flies your line by itself (about 25), the king
+(29). (6) Four hundred rabbits up one column of one page against seventy thousand on a world map at
+once. (7) Towers fire and the hounds run by themselves; the hands place and turn, draw the abilities, chase
+the hares and move monks to the front that breaks.
+
+**As built** (what moved away from the plan, and why):
+- *Every run turns the folio further, by design.* A rabbit that reaches the wall takes a bite and runs
+  off with it, out of the folio's count, so a lost run removes the wall's worth (15% of the folio at the
+  start) plus whatever was killed. With the last 4% scattering by themselves, the bots need at most three
+  lost runs on any folio (the suite checks four); that is the plan's "no farming", measured.
+- *Canvas 2D, not WebGL.* The vellum, the minims of the script and the gold need crisp vector strokes at
+  any zoom, so the page is painted into 64-unit tiles at the camera's scale and only moved; the rabbits
+  are one sprite atlas (two directions, four coats, run and hop, a spear), each placed by a hash of its
+  cell and index and sliding along its cell's flow, so the crowd never shimmers. A gauge drops the
+  number drawn when frames are slow; the densest cells lie on a fur texture underneath.
+- *The page itself is the maze.* Lanes (margins, the intercolumn) are fast, the script is slow (a crowd
+  that spills over it wades), bars, miniatures and initials are walls. Each folio adds a way: the
+  intercolumn, then the outer margin, then the inner one.
+- *Snails slow, they do not block.* Blocking snails rerouted the whole horde away from the monks' fans,
+  and overlapping slow rings stacked to 1% speed and jammed runs for minutes. Now the way is found by
+  the page alone and a snail only slows the crowd round it (to at least 18%).
+- *No rabbit knights, no bell tower.* Both were built and cut for the budget; the great bell stayed as
+  the ability, and the trebuchet's bough gained counterweights, mangonels and Greek fire for the ink.
+- *The view keeps the castle in mind.* AUTO follows the front nearest to breaking and keeps the castle in
+  frame when both fit; when it does not, a badge at the screen's edge points to the castle with the wall
+  round it. The overview strip in the bar is a scroll bar; the wheel and a pinch zoom, never out beyond a
+  quarter less than the start.
+- *The Tree of Jesse is a figure, ~100 medallions.* Jesse asleep at the root, the trunk with the first
+  buys, four scrolls that curl inwards (monks; snails, hounds and the wall; engines and ink; the dragon,
+  the hares, the flood and the leaf), each medallion a gilded initial; a chapter's medallions wait as
+  faint roundels with its numeral. Fewer than the plan's 150, for the budget.
+- *Sizes:* the horde grows from 400 to 180,000 a folio and then the king's household; up to about
+  70,000 rabbits stand on the mappa mundi at once (eager bot, seed 1).
+
+<!--CRIT-->
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
@@ -588,7 +645,7 @@ box uses it.
   itself. A microscope's round view, stains and agar.
 - **Grand Tour** — a 1970s space probe: slingshots past planets, every command arriving hours late.
   Technical drawings and vector CRT; telemetry beeps.
-- **Scriptorium** — illuminate a manuscript letter by letter; monks and gold leaf as upgrades.
+- ~~**Scriptorium**~~ (its look went into Here Be Rabbits) — illuminate a manuscript letter by letter; monks and gold leaf as upgrades.
   Vellum, oak-gall ink, lapis; plainchant.
 - **Pirate Radio** — a 1960s station on a rusting ship: playlists, listeners, the coastguard.
   Pop-art record sleeves; jingles.
@@ -647,6 +704,13 @@ box uses it.
   crawl out of the sea, and you hold and sweep a lighthouse beam (the hover verb of Keep on Mining) to
   drive them back; a Fresnel lens that turns by itself, the foghorn as a shockwave, a lighthouse per
   island along a whole coast, the kraken mother last. Woodcut, as in The Keeper. Pitched for box 5.
+
+- **Bayeux** — the same kind of horde stitched into an embroidered strip that unrolls sideways, wool on
+  linen. Weighed for box 5; textile right after Snow Day's felt.
+- **Stained Glass** — a horde of light poured into a cathedral window, the lead lines as walls, panes to
+  tint and shatter. Weighed for box 5; a window cannot grow, so the map could not.
+- **The Warren** — the same manuscript turned round: you are the rabbits, finding a way past the monks to
+  the castle. Weighed for box 5; it loses the defending verb.
 
 - **Keep Off the Grass** (box 2) has been played through by the owner twice. The second playtest asked
   for: judges behind their table rather than inside it; a way to turn a huge gang mower without
@@ -993,5 +1057,22 @@ is not saved by its art direction: the owner played both and stopped.
 - **Measure a shader change in the slow renderer too.** Snow Day's cotton-wool snow (three noise lookups
   bending the normal) doubled a desktop frame in SwiftShader, 0.75 s to 1.3 s, and halved the frames a capture
   script could take. A real GPU does not notice, but captures need longer runs after such a change.
+- **A flow field is liquid only if the crowd spreads sideways.** A count per cell with a capacity made
+  single-file columns down the shortest line; a second pass that moves a sixth of the difference to any
+  neighbour no further from the goal turned them into a flood that fills its lane and spills over the text.
+- **Compare floats of one width in Dijkstra.** Distances stored in a `Float32Array` and compared with the
+  popped float64 key skipped every cell whose rounding went down: half the page was unreachable.
+- **An obstacle that reroutes the horde defeats the towers aimed at it.** Blocking snails sent the whole
+  stream down another margin, away from every monk's fan. Find the way without the obstacles and let them
+  only slow the crowd; and clamp slowdowns that overlap (min, not product), or a crowd waits at 1% speed
+  and a run lasts eight minutes.
+- **The kit's `hash` is slow inside the suite's `vm`.** It is fine on a page, but it reads `Math.imul`
+  through the context's interceptor on every call; a core that dithers every cell every tick spent 80% of
+  its time there. A local hash with `imul` destructured made the pacing suite five times faster.
+- **A dense crowd of outlined sprites turns to brown noise.** Ten thousand rabbits with dark outlines read
+  as grey lint to every critic. Sepia outlines, cream coats, a fur carpet under dense cells with three
+  runners on top, and one rabbit in each crowd drawn half as large again made the mass read as rabbits.
+- **Weigh the box while building it, not after.** Here Be Rabbits reached 157 KB before anyone measured;
+  getting under 130 cost the rabbit knights and the bell tower. Give each part a budget before writing it.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
