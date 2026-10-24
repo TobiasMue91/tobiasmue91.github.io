@@ -418,7 +418,7 @@ than the game: an automated player tapping once a second in a software renderer 
 person's coins, and frames a second apart cannot show a walk that takes two. Nobody has played it on a
 device yet.
 
-### Box 5: Here Be Rabbits (the plan)
+### Box 5: Here Be Rabbits (the plan, and as built)
 
 Written for the session that builds it, after the owner asked for a box that feels big and escalating
 from its first second, in the manner of *Sir, We Have an Orc Problem* and the horde-survivor
@@ -568,10 +568,11 @@ of the page; a manicule walks a ghost monk from the tray to a roundel by the cas
 the hand points at the dragon: the first run has one flight free. (2) The wall: every rabbit that reaches
 the castle takes a bite and runs off with it; the first run lasts about 20 seconds. (3) The horde's count
 and bar, the wall, and the stream itself. (4) Run 1 pays 60 to 90 leaf; the trunk's three medallions cost
-22 to 45 (Brother Anselm, Sharper arrows, Keep the dragon). (5) Snails (min 2), golden hares (3), the
-trebuchet (5), the hounds and the inkpot (8 to 10, with the bifolium), the great bell and the dragon's
-second wind (10 to 12), the flood (14), the dragon that flies your line by itself (about 25), the king
-(29). (6) Four hundred rabbits up one column of one page against seventy thousand on a world map at
+22 to 45 (Brother Anselm, Sharper arrows, Keep the dragon). (5) For the eager bot (seed 1): snails at
+minute 1, golden hares 1.6, the trebuchet 2.4, the hounds and the dragon's second wind 4.5, the great
+bell 5, the inkpot 6, the flood 11, the dragon that flies your line by itself 25, the king 30. The new
+pages carry the stretch from 11 to 25 (the open codex at 11, the mappa mundi at 20); a game-changer there
+is the first thing to add if the middle drags. (6) Four hundred rabbits up one column of one page against seventy thousand on a world map at
 once. (7) Towers fire and the hounds run by themselves; the hands place and turn, draw the abilities, chase
 the hares and move monks to the front that breaks.
 
@@ -604,7 +605,26 @@ the hares and move monks to the front that breaks.
 - *Sizes:* the horde grows from 400 to 180,000 a folio and then the king's household; up to about
   70,000 rabbits stand on the mappa mundi at once (eager bot, seed 1).
 
-<!--CRIT-->
+**Critique (rule 4).** A critic scored the still before the view was built (first impression, clarity,
+art direction, phone: 5/4/6/5); its notes gave the parchment control bar under the page, the manicule and
+the ghost monk, the rubrics and line fillers in the script, the art on the waiting verso and the
+medallions on the tree's empty scrolls. Then four rounds, each a fresh critic with phone and desktop
+filmstrips (the first minute with real drags, the bifolium, the open codex, the mappa mundi, the king's
+household and the ending): first impression, clarity, art direction, phone, feel 7/5/7/5/5, then
+7/5/7/5/5, then 7/5/8/5/6, then 7/5/7/5/5. Fixed on the way: a dragon flight that drew nothing (an event
+field overwrote its kind), monks shooting into nothing after snails rerouted the horde, a crowd that read
+as brown noise (sepia outlines, cream coats, a fur carpet with three runners, a large rabbit in every
+crowd), slain counts for the abilities, a badge for the castle when it is out of sight, empty roundels
+with a cross, coloured bases and a parchment halo under the towers, which now stand over the horde,
+chapter cards, prices on the tree, a red flash and shake when the wall falls, a card that leads with how
+many rabbits are gone for good, captions moved up away from where the horde comes in. Every score stays
+under 8 after the four rounds. Still open, from the last critic, most valuable first: the horde should
+be a lit liquid with individual rabbits only at its front and where it dies, so ten thousand of them
+never cover the art; on a phone the later chapters want their own framing (a pull-back to the whole
+spread or the world before the dive); kill counts larger and fewer; the Tree of Jesse larger on a phone,
+with cost and effect on the medallion; the book shrine drawn as a real reliquary with tracery, and the
+king given a phase or two; on a desktop the dead verso could carry a run log or a bestiary. Nobody has
+played it on a device yet; the frame-rate gauge is untested on a real phone.
 
 ### Open work on the shipped boxes
 
