@@ -320,68 +320,89 @@ const clew = worlds.find(w => w.id === 'clew');
 if (suites.includes('clew') && clew) {
   section('clew');
   const { CORE } = load(clew);
-  const N = CORE.N;
+  const { W } = CORE;
+  const swingAt = (S, ang) => { const L = Math.min(CORE.chain(S), S.py - CORE.radius(S) - .15); CORE.act(S, 'aim', S.px - Math.sin(ang) * L, S.py - Math.cos(ang) * L); return CORE.act(S, 'drop'); };
   {
-    // the labyrinth: each ring's corridors hang together, and each ring is sealed from the next by its gate
-    const S = CORE.init(4), M = CORE.M(S);
-    let leaks = 0, sealed = true;
-    for (let i = 0; i < M.F.length; i++) if (M.F[i]) for (const d of [0, 1, 2, 3]) { const j = CORE.nb(i, d); if (j >= 0 && M.F[j] && M.RG[j] !== M.RG[i]) leaks++; }
-    for (let i = 0; i < M.F.length; i++) if (M.GATE[i] && M.F[i]) sealed = false;
-    check(leaks === 0 && sealed, 'no corridor crosses from one ring to the next: only a broken gate will do');
-    const seen = new Set([M.E]), q = [M.E];
-    for (let h = 0; h < q.length; h++) for (const d of [0, 1, 2, 3]) { const j = CORE.nb(q[h], d); if (j >= 0 && M.F[j] && !seen.has(j)) { seen.add(j); q.push(j); } }
-    check(seen.size === M.cells[1], `every corridor of the first ring can be reached from your old room (${seen.size} of ${M.cells[1]})`);
-    check(M.finds.length === CORE.FINDS.length && M.finds.every(i => !M.F[i] && !M.GATE[i]), `all ${CORE.FINDS.length} treasures are walled up in ordinary walls`);
+    // every job stands up on its own: nothing on a fresh lot is left hanging in the air
+    let floating = [];
+    for (let n = 0; n < CORE.JOBS.length; n++) for (const lot of [1, 2, 3]) {
+      const S = CORE.init(3), b = CORE.build(n, S.ms, lot); S.cells = b.cells; S.tiers = b.tiers; S.job = n;
+      if (CORE.settle(S)) floating.push(CORE.JOBS[n]);
+    }
+    check(!floating.length, 'every job is built so that it stands up', floating.join(', '));
+    const S = CORE.init(4);
+    check(S.job === 0 && S.left === S.total && S.total > 0, `the first job is a garden shed of ${S.total} blocks`);
   }
   {
-    // a blow: a wall holds until it has taken its strength, and every crack stays
-    const S = CORE.init(5), M = CORE.M(S);
-    S.p.d = [0, 1, 2, 3].find(d => { const j = CORE.nb(S.p.i, d); return j >= 0 && !CORE.open(S, j); });
-    const j = CORE.ahead(S), hp = CORE.hpOf(S, j);
-    let blows = 0; while (!CORE.open(S, j) && blows < 100) { CORE.act(S, 'ram'); CORE.step(S, CORE.beat(S) + .01); blows++; }
-    check(blows === Math.ceil(hp / CORE.power(S) - 1e-9), `a wall of strength ${hp} takes ${Math.ceil(hp)} blows of strength 1 (took ${blows})`);
-    check(S.$ > 0 && S.nb === 1, 'and pays its rubble when it falls');
-    check(!CORE.act(S, 'ram') || S.p.cd > 0, 'you cannot ram faster than your temper allows');
+    // a block breaks when a blow meets its strength, and holds and cracks when it does not
+    const S = CORE.init(5), i = S.cells.indexOf('w'), hp = CORE.hpOf(S, 'w', i);
+    check(hp > 0 && CORE.hpOf(S, 'm', i) > CORE.hpOf(S, 'c', i) && CORE.hpOf(S, 'c', i) > CORE.hpOf(S, 'b', i), 'steel is stronger than concrete, and concrete than brick');
+    const S2 = CORE.init(5);   // a shed made six times as tough as it is
+    for (let k = 0; k < S2.cells.length; k++) if (S2.cells[k] !== '.') S2.dm[k] = -5 * CORE.hpOf(S2, S2.cells[k], k);
+    const knock = () => { let hits = 0, broke = 0; swingAt(S2, .25); for (let t = 0; t < 240; t++) { CORE.step(S2, 1 / 120); for (const e of S2.ev) { if (e.k === 'hit') hits++; if (e.k === 'smash') broke++; } S2.ev.length = 0; } return [hits, broke]; };
+    const [h1, b1] = knock();
+    check(b1 === 0 && h1 > 0 && Object.keys(S2.dm).length > 0, `a blow weaker than a block cracks it and does not break it (${h1} knocks)`);
+    let b2 = 0; for (let k = 0; k < 12 && !b2; k++) b2 = knock()[1];
+    check(b2 > 0, 'and the cracks add up until it gives');
   }
   {
-    // the plough: a blow much stronger than the walls carries you through several, and charge carries it further
-    const run = charge => Math.max(...[0, 1, 2, 3].map(d => {
-      const S = CORE.init(6), M = CORE.M(S); S.lv.horn = 2; S.lv.charge = charge; S.p.d = d;
-      if (!CORE.act(S, 'ram')) return 0; for (let k = 0; k < 300; k++) CORE.step(S, .05);
-      return S.nb;
-    }));
-    const a = run(0), b = run(7);
-    check(a >= 2, `one strong blow breaks more than one wall in a row (${a})`);
-    check(b > a, `and a run-up carries it through more (${a} → ${b})`);
+    // a full swing at the shed knocks blocks out and pays for them
+    const S = CORE.init(6); swingAt(S, 1.35); let broke = 0;
+    for (let t = 0; t < 360; t++) { CORE.step(S, 1 / 120); for (const e of S.ev) if (e.k === 'smash' || e.k === 'fall') broke++; S.ev.length = 0; }
+    check(broke > 0 && S.$ > 0 && S.left < S.total, `the first full swing breaks something and pays (${S.$.toFixed(1)} marks)`);
   }
   {
-    // nothing beyond a gate can be touched before the gate falls: not by you, the Athenians, a stamp or an earthquake
-    const S = CORE.init(7), M = CORE.M(S); S.$ = 1e12; S.lv.horn = 30; S.lv.stomp = 5; S.lv.quake = 4;
-    for (let k = 0; k < 4; k++) CORE.act(S, 'buy', 'youth');
-    S.ring = 1; CORE.act(S, 'stomp'); for (let k = 0; k < 3000; k++) CORE.step(S, .1);
-    let beyond = 0; for (let i = 0; i < M.F.length; i++) if (CORE.broke(S, i) && M.RG[i] > S.ring) beyond++;
-    check(beyond === 0, 'no wall beyond the gate breaks while the gate stands', beyond + ' did');
+    // the ball always reaches the ground: the jib never rises so high that the stubs left over cannot be hit
+    let bad = [];
+    for (const jib of [0, 8]) {
+      const S = CORE.init(7); S.$ = 1e16; S.lv.jib = jib;
+      for (let n = 0; n < CORE.JOBS.length; n++) {
+        const reach = S.py - Math.min(CORE.chain(S), S.py - CORE.radius(S) - .15);
+        if (reach > CORE.radius(S) + .5) bad.push(CORE.JOBS[n] + ' with jib ' + jib);
+        CORE.act(S, 'buy', 'contract');
+      }
+    }
+    check(!bad.length, 'the ball can always be swung down to the ground', bad.join(' '));
   }
   {
-    // a gate cannot be outspent: blows of strength 1 still crack it, and enough of them bring it down and open the next ring
-    const S = CORE.init(8), M = CORE.M(S); const g = M.F.findIndex((f, i) => M.GATE[i] && M.RG[i] === 1);
-    const hp = CORE.hpOf(S, g); let left = hp, n = 0;
-    while (!CORE.open(S, g) && n < 1e5) { S.p.cd = 0; S.p.i = g + (CORE.open(S, g - 1) ? -1 : CORE.open(S, g + 1) ? 1 : CORE.open(S, g - N) ? -N : N); S.p.d = [-N, 1, N, -1].indexOf(g - S.p.i); if (S.p.d < 0) break; S.p.q = []; CORE.act(S, 'ram'); n++; }
-    check(CORE.open(S, g) && S.ring === 2, `the first gate falls to ${n} blows of strength 1 and opens the second ring`);
+    // what loses its support comes down: knock out the bottom of the shed and the roof falls with it
+    const S = CORE.init(8); let falls = 0;
+    for (let x = 0; x < W; x++) for (let y = 0; y < 2; y++) if (CORE.at(S, x, y) !== '.') { S.dm[y * W + x] = 1e9; }
+    S.lv.crew = 8; for (let t = 0; t < 600 && !S.clearT; t++) { CORE.step(S, .05); for (const e of S.ev) if (e.k === 'fall') falls += e.list.length / 2; S.ev.length = 0; }
+    check(falls > 0, `taking the ground floor away brings ${falls} blocks down with it`);
+    check(S.clearT > 0 || S.left === 0, 'and a lot that is as good as empty is swept and counted as cleared');
   }
   {
-    // the end: the outer wall down, you run out into the daylight, and the box opens one step at a time
-    const S = CORE.init(9), M = CORE.M(S); S.ring = 7; S.lv.horn = 40;
-    const g = M.F.findIndex((f, i) => M.GATE[i] && M.RG[i] === 7 && i % N === 0 && M.F[i + 1]);
-    S.p.i = g + 1; S.p.d = 3; S.p.q = [];
-    check(CORE.act(S, 'ram') && S.fin === 1 && !CORE.act(S, 'open'), 'breaking the outer wall gets you out, and nothing is open yet');
-    for (let k = 0; k < 100 && S.fin === 1; k++) CORE.step(S, .1);
-    check(S.fin === 2 && CORE.act(S, 'open') && CORE.done(S) && CORE.progress(S) >= .99, 'outside, the box opens, and this one is done');
+    // a cleared lot is followed by another of the same job; a contract brings the next job, bigger and stronger
+    const S = CORE.init(9), s0 = S.cells; S.left = 0; S.$ = 0;
+    S.cells = S.cells.replace(/[^.]/g, (m, i) => i === s0.search(/[^.]/) ? m : '.'); S.left = 1; S.dm = {};
+    const i = S.cells.search(/[^.]/); S.dm[i] = 1e9; S.lv.crew = 1; for (let t = 0; t < 200; t++) CORE.step(S, .05);
+    check(S.streets === 1 && S.job === 0 && S.left > 0 && S.cells !== s0, 'a cleared lot pays a bonus and the crane rolls on to another shed');
+    S.$ = CORE.price(S, CORE.byId.contract);
+    const hp0 = CORE.hpOf(S, 'b');
+    check(CORE.act(S, 'buy', 'contract') && S.job === 1 && S.$ === 0 && CORE.hpOf(S, 'b') > hp0, 'a contract brings the next job, and its bricks are stronger');
+    check(!CORE.act(S, 'buy', 'contract'), 'a contract you cannot afford is refused');
   }
   {
-    // the box was a survey before it was a jailbreak: an old save starts again
-    const S = CORE.migrate({ ms: 3, mp: [1, 2, 3], nm: 40 }, 1);
-    check(S.br && S.ring === 1 && S.nb === 0 && JSON.stringify(S) === JSON.stringify(CORE.init(3)), 'a save from the first version starts the new box fresh');
+    // dynamite: one charge, then a wait
+    const S = CORE.init(10); S.lv.blast = 1; S.lv.ball = 6; const n0 = S.left;
+    let tx = 0; while (CORE.at(S, tx, 0) === '.') tx++;
+    check(CORE.act(S, 'blast', tx + 1.5, 1.5) && S.left < n0, `a stick of dynamite at the base takes out ${n0 - S.left} blocks`);
+    check(!CORE.act(S, 'blast', tx + 1.5, 1.5), 'and the next has to wait for the fuse');
+  }
+  {
+    // the end: the last job is a box; clearing it leaves the box whole, and it opens one step at a time
+    const S = CORE.init(11); S.$ = 1e16; while (S.job < 12) if (!CORE.act(S, 'buy', 'contract')) break;
+    check(S.job === 12 && /x/.test(S.cells), 'the last job is a cardboard box');
+    S.dm = {}; for (let i = 0; i < S.cells.length; i++) if (S.cells[i] !== '.') S.dm[i] = 1e18;
+    S.lv.crew = 8; for (let t = 0; t < 2000 && !S.fin; t++) CORE.step(S, .05);
+    check(S.fin === 1 && !CORE.done(S), 'clearing it finds the box inside, and nothing is open yet');
+    check(CORE.act(S, 'open') && CORE.done(S) && CORE.progress(S) >= .99, 'opening it finishes the box');
+  }
+  {
+    // the box was a survey, then a jailbreak, before it was a demolition firm: old saves start again
+    const a = CORE.migrate({ ms: 3, mp: [1, 2, 3], nm: 40 }, 1), b = CORE.migrate({ ms: 3, br: [1], ring: 4 }, 2);
+    check(JSON.stringify(a) === JSON.stringify(CORE.init(3)) && JSON.stringify(b) === JSON.stringify(CORE.init(3)), 'saves from the survey and the Minotaur start the demolition fresh');
   }
 }
 
