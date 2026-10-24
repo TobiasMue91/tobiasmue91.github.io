@@ -165,7 +165,7 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
-Keep Off the Grass 32–34 / 53–57, Tilt 41–46 / 66–69,
+Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -277,13 +277,21 @@ layout and the tree), then follows `.claude/skills/next-box` from step 3.
 **As built** (what moved away from the plan, and why):
 - *The Big One on board 1 counts down from 1,500, not 500.* At 500 the eager bot broke it in about two
   and a half minutes; at 1,500 it takes about three, and the first game still chips it visibly.
-- *Tulips pay a prize and then close.* With pockets paying a ball each and no limit, a well-upgraded game
-  fed itself for minutes. Then a tulip took a few balls and paid one back for each, and the owner found a
-  catch felt like a punishment: one ball back only drags the game out. Now a tulip takes two balls a game
-  and pays five for each (or 2% of the full tray, once that is more; "Rich tulips" adds a quarter per
-  bulb, "Double tulips" doubles it), then closes into a dome that balls roll off. The start pocket takes
-  four once the reels are bought. After 60 seconds it is *last call*: the pockets stop paying and the
-  tray pours three times as fast. So every game ends, whatever is bought.
+- *A tulip pays coins and shoots the ball back up.* With pockets paying a ball each and no limit, a
+  well-upgraded game fed itself for minutes. Then a tulip took a few balls and paid one back for each, and
+  the owner found a catch felt like a punishment: one ball back only drags the game out. Paying five balls
+  (and 2% of the tray) instead swamped the balance: 385 balls became 1,350 in seconds. What fits: a tulip
+  takes two balls a game; for each it pays a prize in coins (four times the board's value; "Rich tulips"
+  adds half per bulb) and fires the ball straight back up the rail ("Double tulips": as two), so a catch
+  is a win and another lap, the tray does not grow, and the game does not drag. A full tulip closes into a
+  dome over its posts that balls roll off; the start pocket takes four once the reels are bought. After 60
+  seconds it is *last call*: the pockets stop paying and the tray pours three times as fast.
+- *The Big One takes the square root of a blow.* Damage grows by multipliers, so a Big One big enough to
+  last ten games barely moved for the first eight (0.3% a game) while showing "−127,590" under it; the
+  owner asked why so many hits did so little. Now it takes the square root of each ball's damage (its own
+  multipliers, Break the bank, Hairline cracks and Open sesame, in full), and its counts are small enough
+  (1,500 · 150K · 1.2M · 5.5M · 75M) that every game takes 2.5 to 5% off at the start of a board and 15 to
+  25% at the end. It cracks a little more at every fifth.
 - *The auto-launcher is set by hand, every game.* It first poured on its own wherever the thumb had been,
   and the owner said that from then on the player had nothing to do. Now a short tap on the board sets it
   (a gold AUTO marker on the rail); it pours there beside the thumb for the rest of that game, and the
@@ -309,7 +317,7 @@ layout and the tree), then follows `.claude/skills/next-box` from step 3.
   "?". A mouse reads a bulb by hovering and buys it with a click; a finger taps to read and again to buy;
   drag pans, the wheel and a pinch zoom. The first bulbs cost 3 to 5 coins. To make the quarters equal the
   upgrades were regrouped (six new ones: hard steel, break the bank, hairline cracks, neon glow, downpour,
-  a crate of balls) and the Big Ones retuned (now 1,500 · 900K · 160M · 5B · 40B).
+  a crate of balls).
 - *The march is original.* No transcription of the Warship March could be checked from here, and a
   misremembered one would be worse than none, so the parlour plays a march of its own in the same 2/4
   manner: square lead, oom-pah bass, snare from board 2, chords from board 3, a doubled lead from board
@@ -671,8 +679,10 @@ is not saved by its art direction: the owner played both and stopped.
 - **Automation that removes the verb removes the game.** The auto-launcher poured by itself and the owner
   stopped having anything to do. Make automation something the player sets or aims each run, and keep a
   reason to touch the screen (a lantern to catch) after every upgrade.
-- **A prize that drags the game out is a punishment.** One ball back from a tulip made a catch feel like
-  a delay; five or more feels like winning. Check that every reward is worth more than the time it costs.
+- **A prize that drags the game out is a punishment, and one that floods it breaks it.** One ball back from
+  a tulip made a catch feel like a delay; five balls back made the tray triple in seconds. Pay the reward in
+  the currency that does not feed the run (coins), and keep the run's fuel bounded (the ball goes back up
+  once, not into the tray). Check every reward against both the time it costs and the balance it shifts.
 - **A skill tree is a picture.** Grown layouts (a tower, then a hex-grid web) read as random to the owner;
   the trees in the games they play end as a figure. Design the shape first (Tilt: four equal quarters and
   four rings, a lucky wheel), show its outline as faint dots from the start, and make what can be bought
@@ -693,8 +703,14 @@ is not saved by its art direction: the owner played both and stopped.
 - **The end of a run is a moment, not a caption.** A small "tray empty" note was easy to miss. The game
   over card is large, counts its coins up, says how this game compares with the last one (▲ +23% or
   ▼ −12%), marks a best game, and tells what the tulips gave back.
-- **Hit points do not scale like damage.** Tilt's damage grows by multipliers, so doubling a Big One's
-  count only adds a run or two; when a change makes the game shorter, scale the later Big Ones by three
-  to five and measure again.
+- **Hit points do not scale like damage, and the player sees the bar.** Tilt's damage grows by multipliers,
+  so the Big One's count had to be huge to last, and then most games barely scratched it. A goal that
+  takes many sessions has to move visibly in each one: feed it a damped damage (the square root), keep its
+  count close to what a game deals, and tune the counts with a script that measures how much damage the
+  eager bot deals in the minutes a board should last (`autobig` in the session's scratchpad did this).
+- **Leave a ball's width round a dome too.** Closed tulips first wedged balls against their own posts, then
+  against a pin or a boulder next to them; a closed tulip now ignores its posts, its grid cells cover its
+  dome, the pin field keeps clear of it, extra tulips look for a free spot, and the suite drops balls over
+  every closed tulip on every board and wants them gone in a second and a half.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
