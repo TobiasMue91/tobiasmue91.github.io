@@ -163,12 +163,12 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
-| 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers onto gold roundels and turn a monk's fan; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares | runs that end when the rabbits have eaten the wall; what was killed or ran off with a bite stays gone, so every run turns the folio further; the Tree of Jesse between runs; a page, the bifolium, the open codex, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: vellum, iron-gall textura, rubrics, bar borders, an illuminated initial with the castle in its bowl, miniatures, a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
+| 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
 Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
-Here Be Rabbits 34–35 / 48–51, Unwelcome Guests 39–41 / 54–57.
+Here Be Rabbits 41–42 / 79–83, Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -563,7 +563,7 @@ owner asked for, but gave the golden hares that run their own way); Kaiju on the
 Colony 8/7/7/7; General Staff 7/7/8/5; Kraken Brood 7/6/8/7 (the last four as pitched for this slot). The
 name and the handling note stayed: "Breeds in the margins." was weighed and says too much.
 
-**The checklist, as built.** (1) In second one four hundred rabbits pour out of the warren at the foot
+**The checklist, as first built** (the remake below changed the levels, towers and waves). (1) In second one four hundred rabbits pour out of the warren at the foot
 of the page; a manicule walks a ghost monk from the tray to a roundel by the castle, and once he shoots,
 the hand points at the dragon: the first run has one flight free. (2) The wall: every rabbit that reaches
 the castle takes a bite and runs off with it; the first run lasts about 20 seconds. (3) The horde's count
@@ -577,7 +577,7 @@ once. (7) Towers fire and the hounds run by themselves; the hands place and turn
 the hares and move monks to the front that breaks.
 
 **As built** (what moved away from the plan, and why):
-- *Every run turns the folio further, by design.* A rabbit that reaches the wall takes a bite and runs
+- *(First build, replaced by waves in the remake below.) Every run turns the folio further, by design.* A rabbit that reaches the wall takes a bite and runs
   off with it, out of the folio's count, so a lost run removes the wall's worth (15% of the folio at the
   start) plus whatever was killed. With the last 4% scattering by themselves, the bots need at most three
   lost runs on any folio (the suite checks four); that is the plan's "no farming", measured.
@@ -586,7 +586,7 @@ the hares and move monks to the front that breaks.
   are one sprite atlas (two directions, four coats, run and hop, a spear), each placed by a hash of its
   cell and index and sliding along its cell's flow, so the crowd never shimmers. A gauge drops the
   number drawn when frames are slow; the densest cells lie on a fur texture underneath.
-- *The page itself is the maze.* Lanes (margins, the intercolumn) are fast, the script is slow (a crowd
+- *(First build, replaced by the land in the remake below.) The page itself is the maze.* Lanes (margins, the intercolumn) are fast, the script is slow (a crowd
   that spills over it wades), bars, miniatures and initials are walls. Each folio adds a way: the
   intercolumn, then the outer margin, then the inner one.
 - *Snails slow, they do not block.* Blocking snails rerouted the whole horde away from the monks' fans,
@@ -599,7 +599,7 @@ the hares and move monks to the front that breaks.
   round it. The overview strip in the bar is a scroll bar; the wheel and a pinch zoom, never out beyond a
   quarter less than the start.
 - *The Tree of Jesse is a figure, ~100 medallions.* Jesse asleep at the root, the trunk with the first
-  buys, four scrolls that curl inwards (monks; snails, hounds and the wall; engines and ink; the dragon,
+  buys, four scrolls that curl inwards (monks; snails and the wall, once with the hounds; engines and ink; the dragon,
   the hares, the flood and the leaf), each medallion a gilded initial; a chapter's medallions wait as
   faint roundels with its numeral. Fewer than the plan's 150, for the budget.
 - *Sizes:* the horde grows from 400 to 180,000 a folio and then the king's household; up to about
@@ -625,6 +625,39 @@ spread or the world before the dive); kill counts larger and fewer; the Tree of 
 with cost and effect on the medallion; the book shrine drawn as a real reliquary with tracery, and the
 king given a phase or two; on a desktop the dead verso could carry a run log or a bestiary. Nobody has
 played it on a device yet; the frame-rate gauge is untested on a real phone.
+
+**The owner's playtest, and the remake.** The owner played the first folio on a phone and found the
+auto camera shaking, no time to prepare before the rabbits came, the gold roundels arbitrary (why not
+place towers freely?), the levels straight lines, and the foot of the Tree of Jesse unreadable; they
+wanted realistic terrain and nature for a horde tower defence rather than the page's columns. Then, after
+a second look: the defenders at the top left had nowhere to stand, the box could look much better, the
+dragon vanished while its fire was still burning, and some of it felt borrowed from the pachinko box
+without fitting a tower defence. The box was rethought on its own terms rather than patched:
+- *Waves, not runs that wear the level down.* "Every run turns the folio further" was Tilt's Big One,
+  which keeps its damage between games, carried over to a genre where it reads as a cheat: losing moved
+  you on. Now a folio is a tower defence level of three to six waves with one wall for all of them; the
+  first wave waits for the horn, each later one comes by itself nine seconds after the last is all in,
+  and calling it early pays leaf. A lost folio starts again from the first wave; the leaf won is kept,
+  and the Tree opens between waves too, so a level can be turned round in its pauses. The stragglers that
+  scattered by themselves and the leaf counter that popped over every kill went with it.
+- *The land, not the page's columns.* Every folio is a page painted with more of the country round the
+  castle, which now stands on its mound in the land itself: roads (fast), meadow (slower), bracken (slow),
+  woods, rocks, ponds and a river (walls, with bridges where the roads cross), a village. The four
+  chapters are the castle's valley, the river to the west, the forest and village to the east and north,
+  and the mappa mundi. What is not painted yet is bare vellum with a faint sepia underdrawing of the woods
+  to come. The meadow, woods, roads and rivers are drawn as smooth shapes from the folio's own list, then
+  tufts, flowers, bracken, boulders and trees cell by cell; the horde's ways are worn into the grass.
+- *Towers stand anywhere on open ground*, at least 20 units from the castle and 7 from each other; a
+  dragged tower floats above the finger, green where it may stand and red where not, with a gold ring at
+  the best spot. The bots set every tower again by the new ways when a folio opens.
+- *Abilities rest, not run out.* Each has charges that come back after a rest (dragon a minute, ink 30 s,
+  bell 35 s, flood 90 s). The dragon flies its line in 2.6 s and then climbs away over its dying embers.
+- *Golden hares run for the castle* along the horde's way and take 8% of the wall if they get there; a tap,
+  the dragon or the flood catches them. The hounds were cut for the budget the landscape needed.
+- *The camera* eases toward the front nearest the castle and only moves once that leaves a dead zone in
+  the middle of the screen. Jesse is drawn asleep in a bed with a caption under him.
+Measured with the bots: the eager bot never loses a folio more than once, the casual bot at most three
+times; the casual bot's 80 minutes are mostly the pauses it waits out between waves.
 
 ### Open work on the shipped boxes
 
@@ -1092,6 +1125,15 @@ is not saved by its art direction: the owner played both and stopped.
 - **A dense crowd of outlined sprites turns to brown noise.** Ten thousand rabbits with dark outlines read
   as grey lint to every critic. Sepia outlines, cream coats, a fur carpet under dense cells with three
   runners on top, and one rabbit in each crowd drawn half as large again made the mass read as rabbits.
+- **A mechanic from the box before does not travel by itself.** Tilt's Big One keeps its damage between
+  games, and in pachinko that is the fun; carried into a tower defence it meant a lost run moved you on,
+  which the owner read as a borrowed part that did not fit. Ask what losing means in the genre at hand.
+- **Fixed build spots read as arbitrary.** Gold roundels put where the code liked them looked scattered,
+  and left fronts with nowhere to stand. Let a tower stand on any legal ground, show legal and illegal as
+  it is dragged, and mark the best spot instead of the only ones.
+- **Paint terrain as shapes, not cells.** A circle per 4-unit cell turned meadow edges into clouds, a road
+  into beads and a pond into bubble wrap. Draw the map's own discs and polylines smoothly and use the cells
+  only for what grows on them; and check a union of discs for bare pockets with a script.
 - **Weigh the box while building it, not after.** Here Be Rabbits reached 157 KB before anyone measured;
   getting under 130 cost the rabbit knights and the bell tower. Give each part a budget before writing it.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting

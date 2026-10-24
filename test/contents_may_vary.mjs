@@ -503,28 +503,37 @@ if (suites.includes('warren') && warren) {
   section('warren');
   const { CORE, KIT } = load(warren);
   {
-    // every folio's horde has a way to the castle, and every folio has roundels by its ways
+    // every folio's horde has a way to the castle
     const bad = [];
     for (let f = 0; f < CORE.FOLIOS.length; f++) { const S = CORE.init(1); S.folio = f; const F = CORE.flow(S); const cut = F.src.filter((c, k) => !(k & 1) && F.dist[c] >= 1e9).length; if (cut || !F.src.length) bad.push(`folio ${f}: ${cut} of ${F.src.length / 2} entrances cut off`); }
     check(!bad.length, 'every folio’s horde can reach the castle from every entrance', bad.join('; '));
   }
   {
-    // no rabbit is lost or made: what is left of a folio is always on the page plus what has not come in yet
-    const S = CORE.init(4); S.lv = { snail: 3, hound: 1, kennel: 2, treb: 1 }; S.folio = 4; S.ch = 1; S.left = CORE.FOLIOS[4].H; S.ab.dragon.n = 1;
+    // no rabbit is lost or made: every rabbit that came in is slain, gone home from the wall, or still on the land
+    const S = CORE.init(4); S.lv = { snail: 3, treb: 1, keep: 1 }; S.folio = 4; S.ch = 1;
     CORE.act(S, 'run'); for (const t of S.tw) { const at = t.t === 'snail' ? -1 : CORE.bestSpot(S, t); if (at >= 0) CORE.act(S, 'place', t.id, at); }
     let worst = 0, k = 0;
-    for (; k < 900 && S.phase === 'run'; k++) { CORE.step(S, .1); if (k === 200) { const th = CORE.thick(S, 0); if (th) CORE.act(S, 'dragon', [th.x - 40, th.y], [th.x + 40, th.y]); } if (S.phase !== 'run') break; const carried = S.packs.reduce((a, p) => a + p.carry, 0); worst = Math.max(worst, Math.abs(S.left - (S.onMap + S.pool + carried))); }
-    check(worst === 0, `the horde is conserved through a run with hounds, engines and the dragon (off by at most ${worst})`);
+    for (; k < 1500 && S.phase === 'run'; k++) { if (S.prep) CORE.act(S, 'go'); CORE.step(S, .1); if (k === 200) { const th = CORE.thick(S, 0); if (th) CORE.act(S, 'dragon', [th.x - 40, th.y], [th.x + 40, th.y]); } if (S.phase !== 'run') break; worst = Math.max(worst, Math.abs(S.came - (S.runKills + S.runFed + S.onMap))); }
+    check(worst === 0, `the horde is conserved through waves with engines and the dragon (off by at most ${worst})`);
   }
   {
-    // a run always ends, even with nobody defending and the strongest wall
-    const S = CORE.init(2); S.lv = { wall: 3, wall2: 2, wall3: 2 }; S.folio = 11; S.ch = 3; S.left = CORE.FOLIOS[11].H; CORE.act(S, 'run'); for (const t of S.tw) t.at = -1;
-    let t = 0; while (S.phase === 'run' && t < 900) { CORE.step(S, .5); t += .5; }
-    check(S.phase === 'tree' && S.left < CORE.FOLIOS[11].H, `an undefended run still ends, and still turns the folio further (${t.toFixed(0)} s)`);
+    // a folio always ends, even with nobody defending and the strongest wall, and a lost one starts over
+    const S = CORE.init(2); S.lv = { wall: 3, wall2: 2, wall3: 2 }; S.folio = 11; S.ch = 3; CORE.act(S, 'run'); for (const t of S.tw) t.at = -1;
+    let t = 0; while (S.phase === 'run' && t < 900) { if (S.prep) CORE.act(S, 'go'); CORE.step(S, .5); t += .5; }
+    check(S.phase === 'tree' && S.folio === 11 && S.lostHere === 1, `an undefended folio is lost in ${t.toFixed(0)} s and waits to be played again`);
+    CORE.act(S, 'run'); check(S.wave === 0 && S.prep === 1 && S.wall === S.wallMax, 'it starts again at the first wave with a whole wall');
+  }
+  {
+    // the pause between waves: the next wave comes by itself, and calling it early pays
+    const S = CORE.init(3); S.lv = { monk1: 1, arrow: 3, wall: 3 }; CORE.act(S, 'run'); for (const t of S.tw) CORE.act(S, 'place', t.id, CORE.bestSpot(S, t));
+    CORE.act(S, 'go'); let k = 0; while (!S.prep && k++ < 600) CORE.step(S, .1);
+    const leaf = S.leaf; check(S.prep && S.called === 1 && CORE.act(S, 'go') && S.leaf > leaf && S.wave === 1, 'once a wave is all in, the next can be called early, for leaf');
+    while (!S.prep && k++ < 1200) CORE.step(S, .1); k = 0; while (S.prep && k++ < 200) CORE.step(S, .1);
+    check(S.wave === 2 && k * .1 <= CORE.P.prep + .2, `left alone, the next wave comes by itself after ${(k * .1).toFixed(1)} s`);
   }
   {
     // no farming: the bots never need more than four lost runs on one folio
-    for (const bot of ['eager', 'casual']) { const r = KIT.simulate(CORE, bot, { seed: 2, minutes: 150 }); check(r.done && r.S.maxLost <= 4, `the ${bot} bot never loses more than four runs on one folio (worst ${r.S.maxLost})`); }
+    for (const bot of ['eager', 'casual']) { const r = KIT.simulate(CORE, bot, { seed: 2, minutes: 150 }); check(r.done && r.S.maxLost <= 4, `the ${bot} bot never loses a folio more than four times (worst ${r.S.maxLost})`); }
   }
 }
 
