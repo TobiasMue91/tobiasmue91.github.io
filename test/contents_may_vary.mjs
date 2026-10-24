@@ -525,6 +525,48 @@ if (suites.includes('browser')) {
       check(p.errs.length === 0, 'no errors on the way', p.errs.join(' | '));
       await p.close();
     }
+    {
+      // a box is left and taken up again: its state goes into the save, survives a reload, and the box comes back
+      // to it as it was, at any point of the game; a box opened at the very end goes on into the next one
+      const p = await page('');
+      const KEY = 'cmv.save', stack = worlds.filter(w => !w.draft).map(w => w.id);
+      const enterWith = async (id, state, v) => {
+        // (the page saves on its way out, so the hand-made save goes in from an empty page of the same origin)
+        await p.goto(base.replace(/[^/]*$/, '__blank')); await p.evaluate(([KEY, id, state, v, before]) => localStorage.setItem(KEY, JSON.stringify({ v: 1, started: Date.now(), last: Date.now(), current: id, opened: before, worlds: { [id]: { state, v, time: 60, done: false, progress: .3 } }, replay: null, settings: { sound: 0, music: 0, motion: 'full' } })), [KEY, id, state, v, stack.slice(0, Math.max(0, stack.indexOf(id)))]);
+        await p.goto(base);
+        if (!await until(p, () => !document.querySelector('#title').hidden && /Back in the box/.test(document.querySelector('#tGo').textContent))) return false;
+        await p.click('#tGo'); return until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.ready, 30000);
+      };
+      const inner = () => p.frames().find(f => f !== p.mainFrame() && f.url() === 'about:srcdoc');
+      for (const w of worlds) {
+        const { CORE, KIT } = load(w);
+        // early, in the middle, and seconds before the box is opened (Starter's finale, the crop circle, the last game)
+        const whole = KIT.simulate(CORE, 'eager', { minutes: 150, seed: 2 }).minutes;
+        for (const at of [4, 16, whole - 8 / 60]) {
+          const S = JSON.parse(JSON.stringify(KIT.simulate(CORE, 'eager', { minutes: at, seed: 2 }).S));
+          if (CORE.done(S)) { fail(`${w.id}: minute ${at.toFixed(1)} is still before the end`); continue; }
+          if (!await enterWith(w.id, S, CORE.version)) { fail(`${w.id}: a save from minute ${at.toFixed(1)} is offered and opens`); continue; }
+          const got = await inner().evaluate(() => { const S = K.debug.state(); return { lv: S.lv, earned: S.earned, end: document.body.classList.contains('end'), hold: S.hold }; });
+          check(JSON.stringify(got.lv) === JSON.stringify(S.lv) && got.earned >= S.earned - 1e-6, `${w.id}: minute ${at.toFixed(1)} comes back with everything bought and earned`, JSON.stringify(got).slice(0, 200));
+          if (w.id === 'starter') check(got.end === (S.act >= 4), `${w.id}: minute ${at.toFixed(1)}: the recipe box is ${S.act >= 4 ? 'put away' : 'out'}`);
+          if (w.id === 'clew') check(got.hold == null, `${w.id}: minute ${at.toFixed(1)}: nobody's thumb is on the board after a reload`);
+          // and once more through the shell's own save and a reload
+          await p.evaluate(() => CMV.writeSave()); await p.reload();
+          await until(p, () => !document.querySelector('#title').hidden); await p.click('#tGo');
+          const ok = await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.ready, 30000);
+          const again = ok && await inner().evaluate(() => { const S = K.debug.state(); return { lv: S.lv, earned: S.earned }; });
+          check(again && JSON.stringify(again.lv) === JSON.stringify(S.lv) && again.earned >= got.earned - 1e-6, `${w.id}: minute ${at.toFixed(1)} survives the page's own save and a reload`, JSON.stringify({ ok, again, was: got.earned }).slice(0, 300));
+        }
+        // the box was opened, but the page closed before the trip inside: it goes on by itself
+        const end = KIT.simulate(CORE, 'eager', { minutes: 150, seed: 2 }).S;
+        if (!CORE.done(end)) { fail(`${w.id}: the bot reaches the end for the resume test`); continue; }
+        if (!await enterWith(w.id, JSON.parse(JSON.stringify(end)), CORE.version)) { fail(`${w.id}: an opened box is offered`); continue; }
+        const n = stack.indexOf(w.id) + 1;
+        check(await until(p, n => CMV.save.opened.length >= n && (CMV.state === 'empty' || (CMV.live && CMV.live.w.n === n + 1)), 30000, n), `${w.id}: a box opened just before the page closed goes on into the next one`);
+      }
+      check(p.errs.length === 0, 'no errors while leaving and taking up boxes', p.errs.join(' | '));
+      await p.close();
+    }
     for (const w of worlds) for (const [q, wd, ht] of [[`?world=${w.id}`, 390, 844], [`?world=${w.id}&at=12`, 1280, 800]]) {
       const p = await page(q, wd, ht);
       check(await until(p, () => CMV.state === 'playing'), `${w.id}: ${q} starts (${wd}×${ht})`);
