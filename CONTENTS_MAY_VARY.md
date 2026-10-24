@@ -351,7 +351,7 @@ still undone, most valuable first:
   play keeps Mother lively in the house act, and the music runs in song form (AABC, key changes,
   solo choruses). Still undone: a recipe tin on the counter instead of the side column of cards; in act 3, either push the
   camera into the room that needs a hand or let the jars and bench run themselves, because the targets
-  are small there; bulges that push the house out of shape rather than sitting on it like stickers; a
+  are small there (a tap near a jar now reaches it, which helps but does not solve it); bulges that push the house out of shape rather than sitting on it like stickers; a
   phone layout composed for 390 px in every act; teach with the world rather than with words
   (an early tap could bake a flat loaf instead of refusing).
 - **Unwelcome Guests** (draft): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
@@ -448,8 +448,9 @@ box uses it.
     leaning toward the bin when the grass box is full; a pegboard strip as tall as its cards that
     fades while it can scroll; show lawns seen more steeply on an upright phone; a thicker string and
     a soft moon at midnight; cut wheat leaving pale straw so the net shows before the fold.
-  - Next, most valuable first, from the last critique: the medal is a flat disc pasted on a 3D world
-    (a moulded rosette that drops onto the lawn would fit); clarity (7) and phone (7) are still under
+  - Since: the medal is a rosette (pleats and two tails, in CSS), and the cup final lies along an upright phone
+    (the camera turns a quarter round there) with the whole stadium in view.
+  - Next, most valuable first, from the last critique: clarity (7) and phone (7) are still under
     8 - the judges' sheet covers the show tent on a phone, and "6% short" beside "81% stripes" reads
     like a bug to a stranger; the stadium's crowd reads as confetti. The critic also asked why
     midnight turns to amber daylight; that is dawn breaking as the box folds, and stays. Then a
@@ -468,6 +469,9 @@ box uses it.
   catch, which would change rule 15's short first run, so it waits for the owner); the coin count leaps
   between boards with little felt in between; the sign's short tags (U, XL, BIG) mean nothing until a
   bulb is tapped. Stand Well Back's own critique notes went with it.
+  Since: what the Big One pays shows as one sum over its sign rather than a heap across its face, the star's four
+  quarters burn in four colours (balls cyan, pins and reels gold, damage pink, fever orange), the game-over card
+  fades in by game time rather than by frames, and OPEN IT stands under the box on a desktop.
 
 ### Working on a box that has shipped
 
@@ -712,5 +716,19 @@ is not saved by its art direction: the owner played both and stopped.
   against a pin or a boulder next to them; a closed tulip now ignores its posts, its grid cells cover its
   dome, the pin field keeps clear of it, extra tulips look for a free spot, and the suite drops balls over
   every closed tulip on every board and wants them gone in a second and a half.
+- **A page that saves on its way out writes over what was just put in storage.** Loading a pasted save code and
+  "Throw everything away" both reloaded the page, and the shell's own `pagehide` save put the old game straight
+  back: neither had ever worked while a box was open. The shell now sets `leaving` before it replaces itself on
+  purpose, and nothing writes after that. A test that hands the page a save has to do the same, from an empty page
+  of the same origin.
+- **`start(saved)` has to rebuild what the events built.** A view that only reacts to events forgets, after a reload,
+  everything an event did once: Starter's recipe box stayed out over the Last Loaf, Tilt loaded with a thumb still
+  pouring, a crop circle saying "Open it." crashed because it was placed before the camera existed, and an opened
+  box whose trip never happened was stuck in Tilt. The browser suite now saves every box early, in the middle and
+  seconds before its end, reloads, and wants it back as it was; and every box must go on by itself from "opened".
+- **A search needs a bound past the largest case.** Keep Off the Grass fits each place to the screen by bisection
+  up to a distance of 300; the cup final on an upright phone needs about 400, so it never fitted and sat cut off and
+  off-centre. Beyond the sun's shadow map, everything read as shadow, a dark wedge in the corner once the camera
+  stood back that far.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
