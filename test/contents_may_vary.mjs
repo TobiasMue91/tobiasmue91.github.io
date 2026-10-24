@@ -334,6 +334,17 @@ if (suites.includes('clew') && clew) {
     check(!stuck.length, 'on every board, every ball dropped from the rail has left within a minute', stuck.join('; '));
   }
   {
+    // nothing rests on a closed tulip: a ball dropped anywhere over one, on every board with every tulip, is gone in a second and a half
+    let worst = 0, where = '';
+    for (let b = 0; b < 5; b++) for (const p of CORE.board(b, 3).pockets) for (let k = 0; k < 12; k++) {
+      const S = onBoard(b, { t_tulip: 3 }); S.big = 1e30; S.tray = 0; S.cap = S.cap.map(() => 0);
+      const x = p.cx + (k / 11 - .5) * (p.w + 6); S.balls = [{ x, y: p.y - 8, vx: (k % 3 - 1) * 4, vy: 10, k: 0, s: 0, h: 0, w: 0, ax: x, ay: p.y - 8 }];
+      let near = 0; for (let t2 = 0; t2 < 3; t2 += .05) { CORE.step(S, .05); const q = S.balls[0]; if (!q) break; if (Math.abs(q.x - p.cx) < p.w / 2 + 3 && Math.abs(q.y - p.y) < 5) near += .05; }
+      if (near > worst) { worst = near; where = `board ${b + 1}, tulip at ${p.cx},${p.y}`; }
+    }
+    check(worst < 1.5, `no ball rests on a closed tulip (longest ${worst.toFixed(2)} s, ${where})`);
+  }
+  {
     // the first game: short, and it pays for a bulb
     const S = CORE.init(1), m = { seed: 5 }; let t = 0;
     while (S.phase === 'run' && t < 60) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1; }
@@ -350,14 +361,15 @@ if (suites.includes('clew') && clew) {
     check(!CORE.act(S, 'hold', NaN) && !CORE.act(S, 'run'), 'nonsense and a second game in the middle of one are refused');
   }
   {
-    // a tulip takes what it holds and then closes: a closed one catches nothing and pays nothing
+    // a tulip pays a prize in coins and fires the ball back up for the balls it holds, then closes into a dome
     const S = CORE.init(4), B = CORE.board(0, 0), p = B.pockets[0];
-    const drop = () => { S.balls.push({ x: p.cx, y: p.y - 6, vx: 0, vy: 0, k: 0, s: 0, h: 0, w: 0, ax: p.cx, ay: p.y - 6 }); run(S, 1.5); };
-    const cap = S.cap[p.i]; let paid = 0;
-    for (let i = 0; i < cap; i++) { S.tray = 0; drop(); paid += S.tray; }
-    check(S.cap[p.i] === 0 && paid === cap * CORE.tulipPay(S) && CORE.tulipPay(S) >= 5, `a tulip pays ${CORE.tulipPay(S)} balls for each of the ${cap} it holds`);
-    S.tray = 0; drop(); check(S.tray === 0, 'then it closes and pays nothing more this game');
-    check(S.balls.every(q => q.y > p.y + 4 || Math.abs(q.x - p.cx) > p.w), 'and a ball that lands on the closed tulip rolls off it');
+    const drop = () => { S.balls = [{ x: p.cx, y: p.y - 6, vx: 0, vy: 0, k: 0, s: 0, h: 0, w: 0, ax: p.cx, ay: p.y - 6 }]; S.ev.length = 0; run(S, .6); };
+    const cap = S.cap[p.i], t0 = S.tray; let paid = 0, fired = 0;
+    for (let i = 0; i < cap; i++) { const c0 = S.$; drop(); paid += S.$ - c0; fired += S.ev.filter(e => e.k === 'catch').reduce((a, e) => a + e.n, 0); }
+    check(S.cap[p.i] === 0 && paid >= cap * CORE.tulipPay(S) * .99 && fired === cap && S.tray === t0, `a tulip pays a prize of coins and shoots each of the ${cap} balls it holds back up (tray unchanged)`);
+    const c1 = S.$; S.ev.length = 0; drop(); run(S, 1);
+    check(!S.ev.some(e => e.k === 'catch') && S.$ - c1 < CORE.tulipPay(S) * .5, 'then it is closed and pays nothing more this game');
+    check(S.balls.every(q => q.y > p.y + 4 || Math.abs(q.x - p.cx) > p.w), 'and a ball that lands on its dome rolls off');
   }
   {
     // coins land when a block breaks, the Big One keeps its damage between games, and the game ends with the tray
