@@ -398,11 +398,16 @@ still steers a vehicle.
 
 **Critique (rule 4).** Four rounds, each a fresh critic with phone and desktop filmstrips (the first
 minute, minute 12, a kid crossing over, the run's end and the tree, the ending). First impression,
-clarity, art direction, phone, feel: 5/4/6/4/4, then 6/4/6/5/5, then 6/5/6/5/5, then 7/5/6.5/5/6. Fixed on the way: the end card that drew over the
+clarity, art direction, phone, feel: 5/4/6/4/4, then 6/4/6/5/5, then 6/5/6/5/5, then 7/5/6.5/5/6. The owner then asked for one more round of polish (cotton-wool snow from a
+lumped normal, walls of snow lumps, your side's coins added up in one tally under the counter, only the nearest
+of your side on a phone with a tag for the rest, cards that arrive, a yeti who nudges his present); a fifth
+critic scored 6/5/7/5/6, and its cheap notes were done after it (names on felt pills, the news line under the
+yard's name, the catapult explained when it first appears, rings only once a ball has left the thrower, no BUY
+button without a bauble, felt fibre and stitching on the tree). Fixed on the way: the end card that drew over the
 tree on a reload (stale events), a first run that paid one coin, a phone camera that showed the yard in
 its top third, bars across faces, minus numbers that read as your loss, a yard that changed before the
 last kid had crossed, a giant incoming snowball that whited out the screen, the present that cut to the
-next box without opening, a tree whose locked tiers filled the screen. Every score is still under 8 after the four rounds the procedure allows. What the last critic asked for,
+next box without opening, a tree whose locked tiers filled the screen. Every score is still under 8 after the four rounds the procedure allows, and after the fifth. What the last critic asked for,
 most valuable first: the call-outs still stack on the mountain, where coins arrive by the million (the
 threat rings were made thicker and darker and the big payouts summed after that round); kids at the back
 of a crowded yard are still small on a phone, and your own side becomes a wall of hats by the mountain;
@@ -827,5 +832,8 @@ is not saved by its art direction: the owner played both and stopped.
   game time keeps the order whatever the frame rate.
 - **A number that subtracts reads as your loss.** "−50,277" over a kid looked like a penalty. The damage
   now shows on the kid's bar (a white chunk that drains away), and only coins get numbers.
+- **Measure a shader change in the slow renderer too.** Snow Day's cotton-wool snow (three noise lookups
+  bending the normal) doubled a desktop frame in SwiftShader, 0.75 s to 1.3 s, and halved the frames a capture
+  script could take. A real GPU does not notice, but captures need longer runs after such a change.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
