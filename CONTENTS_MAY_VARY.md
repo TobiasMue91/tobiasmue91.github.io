@@ -162,10 +162,11 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
 | 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
+| 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
-Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64,
+Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -334,7 +335,82 @@ layout and the tree), then follows `.claude/skills/next-box` from step 3.
 to box 2's mowing, by rule 3); scratch tickets with quirks (Scritchy Scratchy already does it well);
 a coin-flip table.
 
-Unwelcome Guests waits below the marker as the draft for slot 4.
+Unwelcome Guests waits below the marker as the draft for slot 5.
+
+### Box 4: Snow Day
+
+The owner asked for a 3D game where you either farm things or shoot them, as something unlike the other
+boxes, and left the choice open. Snow Day takes the shooting half and makes it a snowball war, which keeps
+the anthology's tone (nobody is hurt, the losers change sides) and gives the shooter a reason to be
+incremental: the gang you fight is the army you end up with.
+
+**Why after Tilt.** Tilt's hands hold still and watch a stream fall; here they pick a target and tap it
+the moment it stands up, and swat what comes back, so the rhythm is reaction rather than pour-and-watch.
+Tilt is 2D neon on a canvas; this is lit 3D, but felt and cotton wool rather than Keep Off the Grass's
+voxel miniature, and seen from behind a wall rather than from a drone. Against the ledger it is new on
+verb, medium, palette, era, sound and interface; its loop shares only rule 15's run-and-tree shape.
+
+**The eight that were weighed** (surprise / depth / fit / distance, out of 10): a snowball war in felt
+stop-motion 9/8/8/9 (chosen); an asteroid laser in a 1970s paperback cockpit 6/7/8/6 (a Big One again,
+and generic); a pumpkin patch to defend, farming and shooting, in claymation 7/7/7/5 (a garden right
+after box 2's lawns); harpoons from a sky trawler, Ghibli-painterly 8/6/7/8 (leading a shot is fiddly on
+a phone); a 3D fairground shooting gallery in painted tin 6/6/8/5 (gambling again after Tilt); a tiny
+planet to harvest, toon 6/6/7/4 (tap-when-ripe is Starter's verb); a top-down horde survivor in a toy box
+5/7/8/7 (too familiar); hi.exe 8/6/6/9 (neither 3D nor shooting). Flotsam's raft was weighed again and
+still steers a vehicle.
+
+**The checklist, answered.**
+1. *Second one:* a kid stands up behind a snow wall with a snowball; tap them and yours lands with a splat,
+   they fall over in the snow and coins fly to the counter. The first hit on each kid in a run pays three
+   times.
+2. *The limit:* warmth, 24 seconds at the start, draining faster as a run goes on and four seconds for
+   every snowball that gets through. The first run lasts 15 to 25 seconds.
+3. *The challenge on screen:* the gang behind their cover, each with a bar under their feet, Big Rosa
+   named; "0 of 4 won over" under the yard's name.
+4. *The first buy:* two baubles at the foot of the tree cost 2: Packed hard (+1 damage) and Woolly scarf
+   (+4 seconds of warmth).
+5. *Nodes that change the game* (eager bot): Two-handed, a second snowball at another kid (min 3);
+   Good swat (min 2); the snowman on the wall (min 6); ice balls through cover (min 7); Biscuit the dog,
+   who catches what comes at you (min 15); the catapult (min 21); Volley! (min 23). The kids who cross
+   over arrive from minute 2 and keep arriving: 34 by the end.
+6. *Minute 40 against minute 1:* four kids in a garden and you alone with three snowballs on the wall,
+   against the yeti on a violet mountain with thirty kids, two snowmen, a dog and a catapult on your side
+   and the air full of snowballs.
+7. *Automation:* your side throws by itself, the snowmen and the dog too; you keep choosing the target
+   (finish a kid off to win them over, or spread hits for coins), swatting, catching the sledge, and
+   firing the catapult.
+
+**As built.**
+- *The yard is narrow and deep because of the phone.* The rules' yard is 7 wide and 15 deep; an upright
+  phone looks down from the top of the fort (the camera is fitted to the yard's width), its wall is drawn
+  nearer the gang, and the puppets are drawn half as large again as life. The desktop stands lower and
+  closer. Only the view does this; the rules are the same.
+- *A kid's bar lives in the state and never refills.* That is the cumulative goal, as Tilt's Big One
+  was, but spread over a gang: a run that wins nobody over still visibly moves several bars.
+- *The rules lead a running target* and resolve every snowball where it lands, so a kid who ducks in
+  time is behind cover and the ball says BEHIND COVER!. Ice goes through.
+- *Pacing* is set by each yard's resolve (6, 75, 2,600, 40,000, 600,000 a point) against the tree's tiers
+  (1, 40, 1,500, 60,000, 2.5M a bauble): the eager bot takes about 7 minutes a yard, the casual 11.
+- *A yard won stays on screen* until the next run: the last kid crosses over, your side cheers, and only
+  then the card.
+- *The music* is an original waltz for celesta, pizzicato bass and sleigh bells, faster and fuller with
+  each yard and muffled behind glass in the front room.
+
+**Critique (rule 4).** Four rounds, each a fresh critic with phone and desktop filmstrips (the first
+minute, minute 12, a kid crossing over, the run's end and the tree, the ending). First impression,
+clarity, art direction, phone, feel: 5/4/6/4/4, then 6/4/6/5/5, then 6/5/6/5/5, then 7/5/6.5/5/6. Fixed on the way: the end card that drew over the
+tree on a reload (stale events), a first run that paid one coin, a phone camera that showed the yard in
+its top third, bars across faces, minus numbers that read as your loss, a yard that changed before the
+last kid had crossed, a giant incoming snowball that whited out the screen, the present that cut to the
+next box without opening, a tree whose locked tiers filled the screen. Every score is still under 8 after the four rounds the procedure allows. What the last critic asked for,
+most valuable first: the call-outs still stack on the mountain, where coins arrive by the million (the
+threat rings were made thicker and darker and the big payouts summed after that round); kids at the back
+of a crowded yard are still small on a phone, and your own side becomes a wall of hats by the mountain;
+the snow walls, snowballs and ground are smooth where the puppets are felt; the yard-won card and the
+yeti's present wait without an idle animation. Two notes from every round came from the capture rather
+than the game: an automated player tapping once a second in a software renderer earns a third of a
+person's coins, and frames a second apart cannot show a walk that takes two. Nobody has played it on a
+device yet.
 
 ### Open work on the shipped boxes
 
@@ -406,6 +482,16 @@ box uses it.
   Wants a Map now: wait for several boxes.
 - **Ewe Knit**, **Pachinko Parlour**, **hi.exe**, **Scratch** and **Fletcher** were weighed again for
   box 3 and lost to the labyrinth on surprise and on distance from the ledger.
+- **Sky Trawler** — harpoon drifting jellyfish from a skyship's turret; they pop into resources, a sky whale
+  per zone. Ghibli-style painterly 3D. Runner-up for box 4: lovely, but leading a moving target is fiddly
+  on a phone.
+- **Pumpkin Patch** — the farming half of the owner's box-4 request: grow a giant pumpkin for the fair and
+  keep crows and moles off it with a slingshot at night. Claymation. Wait until a box or two after Keep Off
+  the Grass.
+- **Cockpit** — a mining laser swept across asteroids that crack into ore of rarer tiers, from a 1970s
+  paperback-cover cockpit (Chris Foss). Too close to Tilt's Big One for box 4.
+- **Tin Gallery** — a fairground shooting gallery in 3D, tin ducks on rails, cork guns, a fair that grows
+  into a carnival. Painted tin and a band organ. Not right after a pachinko parlour.
 
 - **Keep Off the Grass** (box 2) has been played through by the owner twice. The second playtest asked
   for: judges behind their table rather than inside it; a way to turn a huge gang mower without
@@ -730,5 +816,16 @@ is not saved by its art direction: the owner played both and stopped.
   up to a distance of 300; the cup final on an upright phone needs about 400, so it never fitted and sat cut off and
   off-centre. Beyond the sun's shadow map, everything read as shadow, a dark wedge in the corner once the camera
   stood back that far.
+- **An upright phone is narrow, so the yard is narrow.** A 3D scene fitted to a portrait screen's width
+  shows its targets at a third of the size it shows them on a desktop. Snow Day narrowed the rules' yard
+  (7 wide, 15 deep), stood the phone's camera on top of the fort looking down so depth fills the height, and
+  drew the puppets half as large again; kids went from 20 px to about 60.
+- **Events left in a saved state come back.** The state saved in the front room still held the run's
+  'end' event, so a reload drew the run's end card over the tree. A view clears `S.ev` when it starts.
+- **Delay by game time, not by the clock.** A card timed with `setTimeout` came up before the last kid
+  had crossed in a slow renderer, where the game runs at a few frames a second; waiting for the walkers in
+  game time keeps the order whatever the frame rate.
+- **A number that subtracts reads as your loss.** "−50,277" over a kid looked like a penalty. The damage
+  now shows on the kid's bar (a white chunk that drains away), and only coins get numbers.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
