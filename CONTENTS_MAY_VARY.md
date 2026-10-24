@@ -832,6 +832,13 @@ is not saved by its art direction: the owner played both and stopped.
   game time keeps the order whatever the frame rate.
 - **A number that subtracts reads as your loss.** "−50,277" over a kid looked like a penalty. The damage
   now shows on the kid's bar (a white chunk that drains away), and only coins get numbers.
+- **A puppet drawn larger than life has to crouch deeper.** Snow Day draws its kids half as large again on a
+  phone, and a crouch that sank them a fixed .42 left heads and bobbles above a metre of cover while the rules
+  counted them as hidden; the owner saw snowballs pass through kids in plain sight. A crouch now sinks the whole
+  kid below the cover's top at any scale, the low covers (a snowman's mound, a bench, a drift) are a metre tall,
+  and a kid ducks in a fraction of a second.
+- **A face goes under the hat, not in it.** The kids' eyes sat at the height of the hat's brim, so they peered
+  out of the knit. Features in the lower half of the head, a hat that starts above them.
 - **Measure a shader change in the slow renderer too.** Snow Day's cotton-wool snow (three noise lookups
   bending the normal) doubled a desktop frame in SwiftShader, 0.75 s to 1.3 s, and halved the frames a capture
   script could take. A real GPU does not notice, but captures need longer runs after such a change.
