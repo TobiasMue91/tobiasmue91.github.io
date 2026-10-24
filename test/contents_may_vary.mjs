@@ -475,6 +475,16 @@ if (suites.includes('flurry') && flurry) {
     check(T.phase === 'shop' && t < 200, `with every warmth upgrade and nobody throwing, a run still ends (${t.toFixed(0)} s)`);
   }
   {
+    // the sledge rides in front of the nearest cover on every yard, never through it
+    let bad = [];
+    for (let y = 0; y < CORE.YARDS.length; y++) {
+      const S = CORE.init(7); S.yard = y; S.tier = y; S.kids = CORE.makeKids(y); CORE.act(S, 'run'); S.warm = S.warmMax = 1e9; S.sledgeT = 0; CORE.step(S, .1);
+      const front = Math.min(...CORE.YARDS[y].cover.map(c => c[1] - .3));
+      if (!S.sledge || S.sledge.z + .35 > front - .1) bad.push(`${CORE.YARDS[y].name}: ${S.sledge && S.sledge.z.toFixed(2)} against ${front.toFixed(2)}`);
+    }
+    check(!bad.length, 'the sledge passes in front of every cover', bad.join('; '));
+  }
+  {
     // the last yard: the yeti comes over, he brings a present, and opening it is the end
     const T = CORE.init(5); T.yard = 3; T.tier = 3; T.kids = CORE.makeKids(3); CORE.act(T, 'run');
     for (const k of T.kids) { k.r = 1e-9; k.st = 'up'; k.t = 99; } T.ammo = 99; T.lv.pile = 4; T.warm = T.warmMax = 1e12;
