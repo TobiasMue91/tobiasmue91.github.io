@@ -3999,9 +3999,13 @@ function sprites() {
 
 /* ================= the camera over a tall board ================= */
 let cam = 0, camT = 0;
+let manualCam = false, camDrag = null;
+const camStrip = () => { const B = CORE.board(S.board, CORE.stats(S).tulip); return B.H * Lo.sc > Lo.vh + 2 ? { x: Lo.ox + Lo.bw + 1, y: Lo.oy, h: Lo.vh, f: Lo.vh / B.H, H: B.H } : null; };
+function camTo(y) { const st2 = camStrip(); if (!st2) return; manualCam = true; cam = clamp((y - st2.y) / st2.f - Lo.vh / Lo.sc / 2, 0, st2.H - Lo.vh / Lo.sc); }
 function camTick(dt) {
   const B = CORE.board(S.board, CORE.stats(S).tulip), vu = Lo.vh / Lo.sc, maxC = Math.max(0, B.H - vu);
-  if (!maxC) { cam = 0; return; }
+  if (!maxC) { cam = 0; manualCam = false; return; }
+  if (manualCam) { cam = clamp(cam, 0, maxC); return; }
   if (S.phase === 'run' && S.balls.length) {
     const ys = S.balls.map(b => b.y).sort((a, b) => a - b), y = ys[Math.floor(ys.length * .6)];
     camT = y - vu * .42;
@@ -4042,6 +4046,7 @@ function drawMachine(alpha) {
   tm = mark('m.blocks', tm); bigOne(B); tm = mark('m.big', tm);
   // balls
   const rB = CORE.R * sc * 1.35 + 4, rM = CORE.P.megaR * sc * 1.1 + 4, gb = S.fever > 0;
+  if (!K.reduced) for (const b of S.balls) if (b.k === 1 && Math.random() < .5 && parts.length < 300) parts.push({ x: b.x + (Math.random() - .5), y: b.y - 1, vx: (Math.random() - .5) * 8, vy: -6, t: 0, life: .35, col: Math.random() < .5 ? '#ffb05a' : '#fff3c8', r: 1 });
   for (const b of S.balls) { if (!vis(b.y)) continue; const s = b.k === 2 ? spr.mega : b.k === 1 ? spr.bomb : gb ? spr.gold : spr.ball, r = b.k === 2 ? rM : rB; c.drawImage(s, X(b.x) - r, Y(b.y) - r, r * 2, r * 2); }
   tm = mark('m.balls', tm); fxDraw(); reels(B, true); tm = mark('m.fx', tm);
   // glass glare
@@ -4049,8 +4054,11 @@ function drawMachine(alpha) {
   if (feverT > 0 && !K.reduced) { c.fillStyle = `hsla(${(now * 90) % 360},100%,60%,${.06 + .04 * Math.sin(now * 6)})`; c.fillRect(ox, oy, bw, vh); }
   c.restore(); tm = mark('m.glare', tm);
   // a map of a board taller than the glass, on the rim
-  if (B.H * sc > vh + 2) { const mx = ox + bw + 2, mh = vh, f = mh / B.H; c.fillStyle = 'rgba(10,12,30,.8)'; c.fillRect(mx, oy, 5, mh); c.fillStyle = 'rgba(56,242,255,.35)'; c.fillRect(mx, oy + cam * f, 5, vh / sc * f);
-    c.fillStyle = GOLD; c.fillRect(mx, oy + B.big.y * f, 5, Math.max(3, B.big.h * f)); c.fillStyle = '#fff'; for (let i = 0; i < S.balls.length; i += 3) c.fillRect(mx + 1.5, oy + S.balls[i].y * f, 2, 1.5); }
+  if (B.H * sc > vh + 2) { const mx = ox + bw + 1, mh = vh, f = mh / B.H; c.fillStyle = 'rgba(10,12,30,.85)'; c.fillRect(mx, oy, 8, mh); c.fillStyle = manualCam ? 'rgba(255,233,166,.7)' : 'rgba(56,242,255,.45)'; rr(mx, oy + cam * f, 8, vh / sc * f, 3); c.fill();
+    c.fillStyle = GOLD; c.fillRect(mx, oy + B.big.y * f, 8, Math.max(3, B.big.h * f)); c.fillStyle = '#fff'; for (let i = 0; i < S.balls.length; i += 3) c.fillRect(mx + 2.5, oy + S.balls[i].y * f, 3, 1.5);
+    // taken by hand: a button gives the camera back
+    if (manualCam) { const t = 'AUTO CAMERA', bx = ox + bw - 112, by = oy + 10; c.fillStyle = 'rgba(8,6,16,.85)'; rr(bx, by, 104, 30, 15); c.fill(); c.strokeStyle = CYAN; c.lineWidth = 2; c.stroke(); c.font = '400 11px Bungee'; c.textAlign = 'center'; c.fillStyle = '#d8fdff'; c.fillText(t, bx + 52, by + 19); autoBtn = { x: bx, y: by, w: 104, h: 30 }; } else autoBtn = null; }
+  else autoBtn = null;
   return vh;
 }
 let glassArt = null;
@@ -4185,13 +4193,15 @@ function bigPaint(x, y, w, h, n, q, sc) {
 
 /* ================= effects ================= */
 // coins from pins and the Big One land in many small amounts: gather them by place for a quarter second
-const coinAcc = new Map(), flyers = [], tip = { t: 9, done: false };
+const coinAcc = new Map(), dmgAcc = new Map(), flyers = [], tip = { t: 9, done: false }, waves = [];
 let trayBump = 0;
 let fx = [], parts = [], flash = {}, feverT = 0, gold = null, banner = null, shake = 0;
 function pop(x, y, txt, col, size) { fx.push({ x, y, txt, col: col || '#ffe9a6', t: 0, s: size || 1 }); if (fx.length > 40) fx.shift(); }
 function burst(x, y, n, col, sp) { if (K.reduced) n = Math.ceil(n / 4); for (let i = 0; i < n && parts.length < 320; i++) { const a = Math.random() * 6.28, v = (sp || 30) * (.3 + Math.random()); parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 15, t: 0, life: .6 + Math.random() * .6, col: col || GOLD, r: 1 + Math.random() * 1.5 }); } }
 function fxTick(dt) {
   for (const [k, a] of coinAcc) if (now - a.t > .25) { pop(a.x, a.y, '+' + fmt(a.v), '#ffe9a6', a.n > 3 ? .85 : .65); coinAcc.delete(k); if (a.n > 2) bump = Math.max(bump, .15); }
+  for (const [k, a] of dmgAcc) if (now - a.t > (a.big ? .35 : .2)) { pop(a.x, a.y + (a.big ? 4 : -1), '−' + fmt(a.v), '#ff6a5f', a.big ? 1.15 : .7); dmgAcc.delete(k); }
+  for (const w of waves) w.t += dt; while (waves.length && waves[0].t > .45) waves.shift();
   for (const f of flyers) f.t += dt; while (flyers.length && flyers[0].t > .55) { flyers.shift(); trayBump = 1; }
   trayBump = Math.max(0, trayBump - dt * 3); tip.t += dt;
   for (const f of fx) f.t += dt; fx = fx.filter(f => f.t < 1.1);
@@ -4203,6 +4213,8 @@ function fxTick(dt) {
 }
 function fxDraw() {
   const sc = Lo.sc;
+  for (const w of waves) { const k = w.t / .45; c.globalAlpha = 1 - k; c.fillStyle = 'rgba(255,170,80,.35)'; c.beginPath(); c.arc(X(w.x), Y(w.y), w.r * sc * ease.out(k), 0, 7); c.fill();
+    c.strokeStyle = '#ffd08a'; c.lineWidth = 4 * (1 - k) + 1; c.stroke(); c.globalAlpha = 1; }
   for (const p of parts) { c.globalAlpha = 1 - p.t / p.life; c.fillStyle = p.col; c.fillRect(X(p.x) - p.r, Y(p.y) - p.r, p.r * 2, p.r * 2); } c.globalAlpha = 1;
   c.textAlign = 'center';
   for (const f of fx) { const k = f.t / 1.1; c.globalAlpha = k < .15 ? k / .15 : 1 - Math.max(0, (k - .6) / .4); c.font = '400 ' + Math.round(15 * f.s) + 'px Bungee'; c.lineWidth = 4; c.strokeStyle = 'rgba(7,10,28,.85)'; const y = Y(f.y) - k * 26; c.strokeText(f.txt, X(f.x), y); c.fillStyle = f.col; c.fillText(f.txt, X(f.x), y); }
@@ -4214,7 +4226,8 @@ let lastClk = 0, endT = 0, summary = null, trans = null, firstPour = false, coin
 function drain() {
   for (const e of S.ev) switch (e.k) {
     case 'brk': pop(e.x, e.y, '+' + fmt(e.v), GOLD, 1.35); burst(e.x, e.y, 10, GOLD, 32); snd.ching(); bump = .3; break;
-    case 'hit': flash['b' + e.i] = .6; break;
+    case 'hit': flash['b' + e.i] = .6; { const k = 'h' + e.i, a = dmgAcc.get(k); if (a) a.v += e.d; else dmgAcc.set(k, { v: e.d, x: e.x, y: e.y, t: now }); } break;
+    case 'bd': { const a = dmgAcc.get('big'); if (a) { a.v += e.d; a.x = e.x; } else dmgAcc.set('big', { v: e.d, x: e.x, y: e.y, t: now, big: 1 }); } break;
     case 'catch': flash['p' + e.i] = 1; snd.chime(e.i);
       if (e.n) { pop(e.x, e.y - 2, '+' + e.n + (e.n === 1 ? ' BALL' : ' BALLS'), '#ffd6ec', .9); for (let j = 0; j < Math.min(e.n, 3); j++) flyers.push({ x: X(e.x), y: Y(e.y), t: -j * .08 }); if (S.runs < 2 && !tip.done) { tip.t = 0; tip.done = true; } }
       if (!e.left) pop(e.x, e.y + 8, 'FULL', '#ff9ad0', .7);
@@ -4223,7 +4236,7 @@ function drain() {
     case '$': { const k = (e.x / 12 | 0) + ':' + (e.y / 12 | 0), a = coinAcc.get(k); if (a) { a.v += e.v; a.n++; } else coinAcc.set(k, { v: e.v, x: e.x, y: e.y, t: now, n: 1 }); break; }
     case 'big': bigShake = Math.min(1, bigShake + .4); burst(e.x, e.y, 3, '#fff1a8', 20); snd.thunk(); break;
     case 'split': burst(e.x, e.y, 4, GOLD, 14); break;
-    case 'boom': burst(e.x, e.y, 26, '#ff7a3a', 60); pop(e.x, e.y, 'BOOM', '#ff9a5a', 1.2); snd.boom(); shake = Math.min(1, shake + .35); break;
+    case 'boom': burst(e.x, e.y, 40, '#ff7a3a', 80); burst(e.x, e.y, 14, '#fff3c8', 40); pop(e.x, e.y - 3, 'BOOM!', '#ffb05a', 1.5); snd.boom(); shake = Math.min(1, shake + .5); waves.push({ x: e.x, y: e.y, r: e.r, t: 0 }); break;
     case 'spin': reel.spin = CORE.P.spin; reel.win = 0; snd.spin(); break;
     case 'lantern': snd.chime(2); break;
     case 'lancatch': feverT = 1; burst(e.x, e.y, 30, '#ff9a3a', 60); banner = { txt: 'LANTERN!', sub: 'you caught it: a few seconds of fever', t: 0, d: 2.2, col: '#ff9a3a' }; snd.fanfare(); music.fever(1); break;
@@ -4236,7 +4249,7 @@ function drain() {
     case 'end': summary = { c: e.c, big: e.big, t: 0 }; endT = 0; letGo(); snd.bell(); break;
     case 'board': trans = { t: -.9, from: e.b - 1, shards: Array.from({ length: K.reduced ? 10 : 40 }, (_, i) => ({ a: Math.random() * 6.28, v: 120 + Math.random() * 380, r: Math.random() * 6, s: 4 + Math.random() * 10 })) }; summary = null; letGo(); art = null; signArt = null; music.part(e.b); break;
     case 'fin': fin.t = 0; letGo(); music.part(5); break;
-    case 'run': fx = []; parts = []; summary = null; break;
+    case 'run': fx = []; parts = []; summary = null; manualCam = false; break;
     case 'buy': lightAt[e.id + ':' + e.lv] = now; snd.buzz(); break;
   }
   S.ev.length = 0;
@@ -4424,7 +4437,7 @@ function tray(y) {
   for (let i = 0; i < show; i++) c.drawImage(spr.ball, x0 + 22 + i * 13 - 7, y + 22 - 7, 14, 14);
   const st = CORE.stats(S), last = S.phase === 'run' && S.rt > CORE.P.lastCall;
   c.font = '400 12px Bungee'; c.textAlign = 'center'; c.fillStyle = last ? '#c21d38' : '#10121c';
-  c.textAlign = 'left'; c.fillText(last ? 'LAST CALL!' : fmt(n) + (n === 1 ? ' BALL' : ' BALLS') + (S.fever > 0 ? ' · FEVER ' + Math.ceil(S.fever) : ''), x0 + 14, y + 52);
+  c.textAlign = 'left'; c.fillText(last ? 'LAST CALL!' : fmt(n) + (n === 1 ? ' BALL' : ' BALLS') + ' · HIT ' + fmt(st.dmg, 1) + (S.fever > 0 ? ' · FEVER ' + Math.ceil(S.fever) : ''), x0 + 14, y + 52);
   // the goal stays in sight on every board: the Big One's counter and how much of it is left
   if (!S.fin) { const f = S.big / CORE.BIG[S.board], bw = Math.min(150, w * .42), bx = x0 + w - 12 - bw; c.fillStyle = '#1a0606'; rr(bx, y + 40, bw, 15, 4); c.fill(); c.fillStyle = 'rgba(255,59,47,.45)'; rr(bx + 2, y + 42, (bw - 4) * f, 11, 3); c.fill();
     c.textAlign = 'center'; c.font = '400 11px Bungee'; c.fillStyle = '#ff8a80'; c.fillText('BIG ONE ' + fmt(Math.ceil(S.big)), bx + bw / 2, y + 52); }
@@ -4461,6 +4474,8 @@ const touches = new Map();
 cv.addEventListener('pointerdown', e => {
   K.unlock(); const x = e.clientX, y = e.clientY;
   if (S.fin === 1 && fin.rect && x > fin.rect.x - 20 && x < fin.rect.x + fin.rect.w + 20 && y > fin.rect.y - 20 && y < fin.rect.y + fin.rect.h + 20) return openBox();
+  if (autoBtn && x > autoBtn.x - 6 && x < autoBtn.x + autoBtn.w + 6 && y > autoBtn.y - 6 && y < autoBtn.y + autoBtn.h + 6) { manualCam = false; snd.tick(); return; }
+  { const st2 = camStrip(); if (st2 && (Lo.desk || show === 'board') && x > st2.x - 16 && x < st2.x + 30 && y > st2.y && y < st2.y + st2.h) { camDrag = e.pointerId; cv.setPointerCapture(e.pointerId); camTo(y); return; } }
   if (S.phase === 'run' && !trans && inMachine(x, y)) {
     if (S.lan) { const L = S.lan, lx = X(L.x), ly = Y(L.y); if (Math.hypot(x - lx, y - ly) < Math.max(34, 7 * Lo.sc)) { CORE.act(S, 'tap', L.x, L.y); drain(); return; } }
     holding = e.pointerId; press = { t: now, x, y }; cv.setPointerCapture(e.pointerId); pourAt(x); return; }
@@ -4469,6 +4484,7 @@ cv.addEventListener('pointerdown', e => {
     if (touches.size === 2) { const [p1, p2] = [...touches.values()]; drag = { pinch: Math.hypot(p1.x - p2.x, p1.y - p2.y), z: cam2.z, moved: 99 }; } }
 });
 cv.addEventListener('pointermove', e => {
+  if (camDrag === e.pointerId) { camTo(e.clientY); return; }
   if (holding === e.pointerId) { pourAt(e.clientX); return; }
   if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (drag && drag.pinch && touches.size === 2) { const [p1, p2] = [...touches.values()]; cam2.z = clamp(drag.z * Math.hypot(p1.x - p2.x, p1.y - p2.y) / drag.pinch, .35, 1.8); userMoved = true; return; }
@@ -4476,8 +4492,9 @@ cv.addEventListener('pointermove', e => {
   // a mouse over a bulb reads it out at once
   if (e.pointerType === 'mouse' && onSign(e.clientX) && S.phase === 'tree' && !trans) { const h = bulbHit(e.clientX, e.clientY); if (h !== hov) { hov = h; if (h) sel = h; card(); cv.style.cursor = h ? 'pointer' : 'grab'; } }
 });
-let press = null;
+let press = null, autoBtn = null;
 function up(e) {
+  if (camDrag === e.pointerId) camDrag = null;
   if (holding === e.pointerId) {
     // a short tap sets the auto-launcher where it landed
     if (press && now - press.t < .25 && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 12 && CORE.stats(S).auto && S.phase === 'run') { CORE.act(S, 'launch', clamp((e.clientX - Lo.ox) / Lo.sc, 0, 100)); drain(); }
@@ -4488,7 +4505,7 @@ function up(e) {
   if (drag && drag.pinch && touches.size < 2) drag = null;
 }
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-cv.addEventListener('wheel', e => { if (!onSign(e.clientX)) return; e.preventDefault(); camGoal = null; userMoved = true;
+cv.addEventListener('wheel', e => { if (!onSign(e.clientX)) { if (camStrip() && (Lo.desk ? e.clientX < Lo.mw : show === 'board')) { e.preventDefault(); manualCam = true; cam += e.deltaY / Lo.sc; } return; } e.preventDefault(); camGoal = null; userMoved = true;
   const s0 = SPX() * cam2.z, wx = cam2.x + (e.clientX - sigCx()) / s0, wy = cam2.y + (e.clientY - sigCy()) / s0;
   cam2.z = clamp(cam2.z * Math.exp(-e.deltaY * .0015), .35, 1.8); const s1 = SPX() * cam2.z; cam2.x = wx - (e.clientX - sigCx()) / s1; cam2.y = wy - (e.clientY - sigCy()) / s1; }, { passive: false });
 addEventListener('keydown', e => { if (e.code === 'Space' && S.phase === 'tree' && !trans) { e.preventDefault(); nextGame(); } });
@@ -4745,7 +4762,7 @@ const CORE = (() => {
     { id: 'luck', arm: 0, p: 'start', name: 'Lucky sevens', d: 'three of a kind comes up more often', base: 2000, k: 2.2, max: 3, add: { luck: 1 } },
     { id: 'fuse', arm: 0, p: 'mega', name: 'Quick fusion', d: 'mega balls come a quarter sooner and hit twice as hard', base: 1e7, k: 2.4, max: 3, mul: { megaN: .75, megaX: 2 } },
     // damage
-    { id: 'heavy', arm: 0, p: null, name: 'Heavy steel', d: '+1 damage per ball', base: 5, k: 2.05, max: 6, add: { dmg: 1 } },
+    { id: 'heavy', arm: 0, p: null, name: 'Heavy steel', d: 'every ball hits 1 harder: blocks and the Big One break sooner', base: 5, k: 2.05, max: 6, add: { dmg: 1 } },
     { id: 'prize', arm: 0, p: 'heavy', name: 'Prize money', d: 'prize blocks and pins pay ×1.5', base: 45, k: 1.9, max: 4, mul: { coin: 1.5 } },
     { id: 'hard', arm: 0, p: 'heavy', name: 'Hard steel', d: 'damage ×1.3', base: 200, k: 2.3, max: 4, mul: { dmg: 1.3 } },
     { id: 'bomb', arm: 0, p: 'prize', name: 'Bomb balls', d: 'every 12th ball explodes on the first block it meets', base: 6000, k: 1, max: 1, add: { bomb: 1 }, big: 1 },
@@ -4914,7 +4931,7 @@ const CORE = (() => {
     if (r.t === 'B') {
       if (S.big <= 0) return;
       d *= st.big; S.big = max(0, S.big - d); S.runBig += d;
-      ev(S, { k: '$', v: pay(S, .3 * VALm[S.board] * st.coin), x, y: r.y });
+      ev(S, { k: '$', v: pay(S, .3 * VALm[S.board] * st.coin), x, y: r.y }); ev(S, { k: 'bd', d, x, y: r.y + r.h });
       if (S.big <= 0) { ev(S, { k: 'bigbreak', b: S.board, x, y }); S.broke = 1; }
       else if (rand(S) < .2) ev(S, { k: 'big', d, x, y });
       return;
@@ -4925,7 +4942,7 @@ const CORE = (() => {
       S.hp[r.i] = 0; const v = pay(S, r.val * st.coin);
       ev(S, { k: 'brk', i: r.i, v, x: r.x + r.w / 2 + (r.mv ? mvx(S, r) : 0), y: r.y + r.h / 2 });
       for (let n = 0; n < st.rock && S.balls.length < CAP; n++) spawn(S, r.x + r.w * (n + .5) / st.rock + (r.mv ? mvx(S, r) : 0), r.y - 1.5, 0);
-    } else ev(S, { k: 'hit', i: r.i });
+    } else ev(S, { k: 'hit', i: r.i, d, x: r.x + r.w / 2 + (r.mv ? mvx(S, r) : 0), y: r.y });
   }
   const mvx = (S, r) => r.mv.a * sin(S.rt * r.mv.w + r.mv.ph);
   function boom(S, B, x, y) {

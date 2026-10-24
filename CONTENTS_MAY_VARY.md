@@ -678,6 +678,14 @@ is not saved by its art direction: the owner played both and stopped.
   four rings, a lucky wheel), show its outline as faint dots from the start, and make what can be bought
   shout: a spreading ring round each such bulb, a count at the top, arrows at the edge to the ones out of
   view. On a desktop, read on hover and buy on click, with the coins in sight.
+- **An upgrade has to show what it did.** The owner never felt that damage mattered and hardly noticed the
+  bombs: their effect was a number nobody saw. Now each hit shows its damage in red ("−x" on blocks and
+  under the Big One, gathered like the coins), the tray shows the damage per ball (HIT n), bombs trail
+  sparks, and an explosion is a shockwave the size of its reach with a flash and BOOM!.
+- **Give the player the camera, and a way to give it back.** On a board taller than the glass the owner
+  wanted to look around by hand. The strip on the rim that maps the board is a scroll bar to drag (the
+  wheel scrolls too on a desktop); while the camera is held, an AUTO CAMERA button hands it back, and
+  every new game starts with the camera on its own.
 - **Hit points do not scale like damage.** Tilt's damage grows by multipliers, so doubling a Big One's
   count only adds a run or two; when a change makes the game shorter, scale the later Big Ones by three
   to five and measure again.
