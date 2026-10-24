@@ -390,9 +390,9 @@ if (suites.includes('clew') && clew) {
   }
   {
     // the Big One opens the next board and a new panel of the sign; the last one is a box
-    const S = CORE.init(9); S.$ = 1e30; check(!CORE.act(S, 'buy', 't_coin'), 'the tall machine’s panel stays dark until its board is reached');
+    const S = CORE.init(9); S.$ = 1e30; S.lv.heavy = S.lv.prize = 1; S.bought += 2; check(!CORE.act(S, 'buy', 't_coin'), 'the tall machine’s ring stays dark until its board is reached');
     S.big = 1; S.balls = [{ x: 50, y: CORE.board(0, 0).big.y - 5, vx: 0, vy: 40, k: 0, s: 0, h: 0, w: 0, ax: 0, ay: 0 }]; S.tray = 0; run(S, .5);
-    check(S.board === 1 && S.phase === 'tree' && S.big === CORE.BIG[1] && CORE.act(S, 'buy', 't_coin'), 'breaking the Big One opens board 2 and its panel');
+    check(S.board === 1 && S.phase === 'tree' && S.big === CORE.BIG[1] && CORE.act(S, 'buy', 't_coin'), 'breaking the Big One opens board 2 and its ring of the sign');
     const T = onBoard(4); T.big = 1; T.balls = [{ x: 50, y: CORE.board(4, 0).big.y - 5, vx: 0, vy: 40, k: 0, s: 0, h: 0, w: 0, ax: 0, ay: 0 }]; T.tray = 0; run(T, .5);
     check(T.fin === 1 && !CORE.done(T) && !CORE.act(T, 'run'), 'the last Big One is a box: breaking it ends the games, and nothing is open yet');
     check(CORE.act(T, 'open') && CORE.done(T) && CORE.progress(T) >= .99, 'opening it finishes the box');
