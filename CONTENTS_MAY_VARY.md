@@ -161,11 +161,11 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
 | 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
-| 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a web of about 150 bulbs on four rays round TILT, a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
+| 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
-Keep Off the Grass 32–34 / 53–57, Tilt 48–51 / 69–70,
+Keep Off the Grass 32–34 / 53–57, Tilt 41–44 / 63–66,
 Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -274,29 +274,32 @@ the first purchase comes after run 1, and nothing new is more than 3 minutes apa
 layout and the tree), then follows `.claude/skills/next-box` from step 3.
 
 **As built** (what moved away from the plan, and why):
-- *The Big One on board 1 counts down from 1,200, not 500.* At 500 the eager bot broke it in about two
-  and a half minutes; at 1,200 it takes three to four, and the first game still chips it visibly.
+- *The Big One on board 1 counts down from 1,500, not 500.* At 500 the eager bot broke it in about two
+  and a half minutes; at 1,500 it takes about three, and the first game still chips it visibly.
 - *Tulips close.* With pockets paying a ball each and no limit, a well-upgraded game fed itself forever
   (a run of six minutes in the first tuning). Each tulip now takes a few balls (three, more with "Open
   tulips") and then closes its petals for the rest of the game; the start pocket takes four or more. So
   every game ends, and the upgrades that make it longer are visible on the board. After 75 seconds it is
   *last call*: the pockets stop paying and the tray pours three times as fast.
-- *The sign is a radial web of single bulbs, like the trees in the owner's list.* It was built first as a
-  tall tower of 45 bulbs with level pips; the owner found it awkward on a desktop (buy button far from
-  the bulb, coins far from both) and asked to follow the popular incrementals more closely. What those
-  trees have in common (from guides and reviews, October 2026): 200 to 700 small nodes in five or six
+- *The sign is a figure: the parlour's lucky wheel.* It was built first as a tall tower of 45 bulbs with
+  level pips; the owner found it awkward on a desktop and asked to follow the popular incrementals. What
+  those trees have in common (guides and reviews, October 2026): 200 to 700 small nodes in five or six
   themed branches (Bills Must Be Paid: about 211 single-purchase nodes from $1 to $100M; Keep on Mining –
   Worlds: 200+ in six stat branches; Chop Chains: 700+ in five), a first node that costs next to nothing,
-  a tree that spreads from the centre in every direction (Nodebuster), and complaints when the tree's UI
-  gets in the way (Chop Chains, Artillery Miner). So every level of an upgrade is now a bulb of its own,
-  about 150 in all; an upgrade's levels are a chain that runs outwards on a hex grid, and a chain hangs
-  from the first bulb of the one it needs. Four rays leave the TILT sign (balls and launching, tulips and
-  mega balls, pins, reels and fever, damage, prizes and bombs); each board's upgrades sit on a ring
-  further out, dark and dashed until its Big One breaks. Only lit bulbs, the ones that can be lit next
-  and the one after those (as "?") are shown. A mouse reads a bulb by hovering and buys it with a click;
-  a finger taps to read and taps again to buy; drag pans, the wheel and a pinch zoom, and the view frames
-  what can be bought each time the sign comes up. The first three bulbs cost 3, 4 and 5 coins, so the
-  first game buys about five.
+  a tree that spreads from the centre (Nodebuster), and complaints when the tree's UI gets in the way.
+  A second version grew a web on a hex grid by algorithm; the owner said it looked thrown together, and
+  that a finished tree should make a pattern or a figure. So the layout is designed, not grown: every
+  level is a bulb (162), and the centre is a star of four quarters of the same shape, one per theme
+  (balls and launching; pins, reels and the mega ball; damage and the Big One; fever and coins). Each
+  quarter is a spine of six, two branches of four, a big bulb at the end of each and three more that curl
+  back, so a finished quarter closes into a diamond. Round the star run four full rings, one per board,
+  dark until its Big One breaks; lit up completely the sign is a compass rose inside a wheel. A chain
+  opens when the chain it hangs from is full (as in Nodebuster), bulbs not found yet show as faint dots so
+  the figure is there from the start, and the next bulbs and the one after them show as lit outlines and
+  "?". A mouse reads a bulb by hovering and buys it with a click; a finger taps to read and again to buy;
+  drag pans, the wheel and a pinch zoom. The first bulbs cost 3 to 5 coins. To make the quarters equal the
+  upgrades were regrouped (six new ones: hard steel, break the bank, hairline cracks, neon glow, downpour,
+  a crate of balls) and the Big Ones retuned (1,500 · 400K · 40M · 900M · 6B).
 - *The march is original.* No transcription of the Warship March could be checked from here, and a
   misremembered one would be worse than none, so the parlour plays a march of its own in the same 2/4
   manner: square lead, oom-pah bass, snare from board 2, chords from board 3, a doubled lead from board
