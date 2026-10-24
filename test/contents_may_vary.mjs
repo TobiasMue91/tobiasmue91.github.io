@@ -14,7 +14,7 @@
 //   node test/contents_may_vary.mjs browser                 # needs Playwright's Chromium
 //   node test/contents_may_vary.mjs --page=old.html
 //
-// Suites: registry, budget, contract, saves, pacing, starter, lawn, clew, flurry, browser.
+// Suites: registry, budget, contract, saves, pacing, starter, lawn, clew, flurry, warren, browser.
 
 import {readFileSync, existsSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -28,13 +28,13 @@ const opt = k => { const a = args.find(x => x.startsWith('--' + k + '=')); retur
 const PAGE = opt('page') || join(ROOT, 'games', 'contents_may_vary.html');
 const ONLY = opt('world');
 const REPORT = args.includes('--report');
-const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter', 'lawn', 'clew', 'flurry'];
+const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter', 'lawn', 'clew', 'flurry', 'warren'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
 /* Boxes that have shipped, in play order. Saves refer to boxes by id and the page plays them in
    file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
-const SHIPPED = ['starter', 'lawn', 'clew', 'flurry'];
+const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 72 * 1024;
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
@@ -494,6 +494,37 @@ if (suites.includes('flurry') && flurry) {
     for (let j = 0; j < T.kids.length && !T.fin; j++) { T.ammo = 9; CORE.act(T, 'throw', j); CORE.step(T, 1); }
     check(T.fin === 1 && !CORE.done(T) && CORE.progress(T) < 1, 'the yeti comes over and the box is not open yet');
     check(CORE.act(T, 'open') && CORE.done(T) && CORE.progress(T) === 1, 'opening his present is the end');
+  }
+}
+
+/* ---------------- warren ---------------- */
+const warren = worlds.find(w => w.id === 'warren');
+if (suites.includes('warren') && warren) {
+  section('warren');
+  const { CORE, KIT } = load(warren);
+  {
+    // every folio's horde has a way to the castle, and every folio has roundels by its ways
+    const bad = [];
+    for (let f = 0; f < CORE.FOLIOS.length; f++) { const S = CORE.init(1); S.folio = f; const F = CORE.flow(S); const cut = F.src.filter((c, k) => !(k & 1) && F.dist[c] >= 1e9).length; if (cut || !F.src.length) bad.push(`folio ${f}: ${cut} of ${F.src.length / 2} entrances cut off`); }
+    check(!bad.length, 'every folio’s horde can reach the castle from every entrance', bad.join('; '));
+  }
+  {
+    // no rabbit is lost or made: what is left of a folio is always on the page plus what has not come in yet
+    const S = CORE.init(4); S.lv = { snail: 3, hound: 1, kennel: 2, treb: 1 }; S.folio = 4; S.ch = 1; S.left = CORE.FOLIOS[4].H; S.ab.dragon.n = 1;
+    CORE.act(S, 'run'); for (const t of S.tw) { const at = t.t === 'snail' ? -1 : CORE.bestSpot(S, t); if (at >= 0) CORE.act(S, 'place', t.id, at); }
+    let worst = 0, k = 0;
+    for (; k < 900 && S.phase === 'run'; k++) { CORE.step(S, .1); if (k === 200) { const th = CORE.thick(S, 0); if (th) CORE.act(S, 'dragon', [th.x - 40, th.y], [th.x + 40, th.y]); } if (S.phase !== 'run') break; const carried = S.packs.reduce((a, p) => a + p.carry, 0); worst = Math.max(worst, Math.abs(S.left - (S.onMap + S.pool + carried))); }
+    check(worst === 0, `the horde is conserved through a run with hounds, engines and the dragon (off by at most ${worst})`);
+  }
+  {
+    // a run always ends, even with nobody defending and the strongest wall
+    const S = CORE.init(2); S.lv = { wall: 3, wall2: 2, wall3: 2 }; S.folio = 11; S.ch = 3; S.left = CORE.FOLIOS[11].H; CORE.act(S, 'run'); for (const t of S.tw) t.at = -1;
+    let t = 0; while (S.phase === 'run' && t < 900) { CORE.step(S, .5); t += .5; }
+    check(S.phase === 'tree' && S.left < CORE.FOLIOS[11].H, `an undefended run still ends, and still turns the folio further (${t.toFixed(0)} s)`);
+  }
+  {
+    // no farming: the bots never need more than four lost runs on one folio
+    for (const bot of ['eager', 'casual']) { const r = KIT.simulate(CORE, bot, { seed: 2, minutes: 150 }); check(r.done && r.S.maxLost <= 4, `the ${bot} bot never loses more than four runs on one folio (worst ${r.S.maxLost})`); }
   }
 }
 
