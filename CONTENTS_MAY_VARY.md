@@ -686,6 +686,13 @@ is not saved by its art direction: the owner played both and stopped.
   wanted to look around by hand. The strip on the rim that maps the board is a scroll bar to drag (the
   wheel scrolls too on a desktop); while the camera is held, an AUTO CAMERA button hands it back, and
   every new game starts with the camera on its own.
+- **The owner plays on a desktop.** Rule 11 puts the phone first, and every critic round looked at phone
+  frames first, but the owner's own playtests are on a desktop with a mouse: most of their notes on Tilt
+  (the buy button far from the bulb, coins in a far corner, hover, the wheel, the camera) were desktop
+  notes. Film and polish the desktop as carefully as the phone, at a large monitor size too.
+- **The end of a run is a moment, not a caption.** A small "tray empty" note was easy to miss. The game
+  over card is large, counts its coins up, says how this game compares with the last one (▲ +23% or
+  ▼ −12%), marks a best game, and tells what the tulips gave back.
 - **Hit points do not scale like damage.** Tilt's damage grows by multipliers, so doubling a Big One's
   count only adds a run or two; when a change makes the game shorter, scale the later Big Ones by three
   to five and measure again.
