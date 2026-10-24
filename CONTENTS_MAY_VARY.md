@@ -351,7 +351,7 @@ still undone, most valuable first:
   play keeps Mother lively in the house act, and the music runs in song form (AABC, key changes,
   solo choruses). Still undone: a recipe tin on the counter instead of the side column of cards; in act 3, either push the
   camera into the room that needs a hand or let the jars and bench run themselves, because the targets
-  are small there; bulges that push the house out of shape rather than sitting on it like stickers; a
+  are small there (a tap near a jar now reaches it, which helps but does not solve it); bulges that push the house out of shape rather than sitting on it like stickers; a
   phone layout composed for 390 px in every act; teach with the world rather than with words
   (an early tap could bake a flat loaf instead of refusing).
 - **Unwelcome Guests** (draft): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
@@ -469,6 +469,9 @@ box uses it.
   catch, which would change rule 15's short first run, so it waits for the owner); the coin count leaps
   between boards with little felt in between; the sign's short tags (U, XL, BIG) mean nothing until a
   bulb is tapped. Stand Well Back's own critique notes went with it.
+  Since: what the Big One pays shows as one sum over its sign rather than a heap across its face, the star's four
+  quarters burn in four colours (balls cyan, pins and reels gold, damage pink, fever orange), the game-over card
+  fades in by game time rather than by frames, and OPEN IT stands under the box on a desktop.
 
 ### Working on a box that has shipped
 
