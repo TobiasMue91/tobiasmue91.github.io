@@ -14,7 +14,7 @@
 //   node test/contents_may_vary.mjs browser                 # needs Playwright's Chromium
 //   node test/contents_may_vary.mjs --page=old.html
 //
-// Suites: registry, budget, contract, saves, pacing, starter, lawn, clew, browser.
+// Suites: registry, budget, contract, saves, pacing, starter, lawn, clew, flurry, browser.
 
 import {readFileSync, existsSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -28,13 +28,13 @@ const opt = k => { const a = args.find(x => x.startsWith('--' + k + '=')); retur
 const PAGE = opt('page') || join(ROOT, 'games', 'contents_may_vary.html');
 const ONLY = opt('world');
 const REPORT = args.includes('--report');
-const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter', 'lawn', 'clew'];
+const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter', 'lawn', 'clew', 'flurry'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
 /* Boxes that have shipped, in play order. Saves refer to boxes by id and the page plays them in
    file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
-const SHIPPED = ['starter', 'lawn', 'clew'];
+const SHIPPED = ['starter', 'lawn', 'clew', 'flurry'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 72 * 1024;
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
@@ -431,6 +431,59 @@ if (suites.includes('clew') && clew) {
     // the box was a survey, a jailbreak and a demolition firm before it was a parlour: old saves start again
     const a = CORE.migrate({ ms: 3, mp: [1, 2, 3] }, 1), b = CORE.migrate({ ms: 3, cells: '...' }, 3);
     check(JSON.stringify(a) === JSON.stringify(CORE.init(3)) && JSON.stringify(b) === JSON.stringify(CORE.init(3)), 'saves from the three earlier versions start the parlour fresh');
+  }
+}
+
+/* ---------------- flurry ---------------- */
+const flurry = worlds.find(w => w.id === 'flurry');
+if (suites.includes('flurry') && flurry) {
+  section('flurry');
+  const { CORE } = load(flurry);
+  const fresh = (seed = 3) => { const S = CORE.init(seed); CORE.act(S, 'run'); S.ev.length = 0; return S; };
+  const run = (S, sec, f) => { for (let t = 0; t < sec && S.phase === 'run'; t += .1) { if (f) f(S, t); CORE.step(S, .1); } };
+  {
+    // a snowball lands where the kid will be: a running kid is hit, one behind cover is not, ice goes through cover
+    const S = fresh(); S.lv.ice = 1; S.lv.pile = 4; S.ammo = 9; S.warm = S.warmMax = 1e9;
+    const k = S.kids[0]; k.st = 'run'; k.tx = k.x + 4; k.tz = k.z + 2; k.t = 0;
+    const r0 = k.r; CORE.act(S, 'throw', 0); run(S, 1);
+    check(k.r < r0, `a snowball thrown at a running kid lands on them (${r0} → ${k.r})`);
+    const q = S.kids[1]; q.st = 'hide'; q.t = 99; const q0 = q.r; S.throws = 0; CORE.act(S, 'throw', 1); run(S, 1.2);
+    check(q.r === q0 && S.kids.filter(x => x !== q).every(x => x.st !== 'down' || x === k), 'a kid crouched behind cover is not hit by a plain snowball');
+    S.throws = 4; S.ammo = 9; CORE.act(S, 'throw', 1); run(S, 1.2);
+    check(q.r < q0, 'an ice ball goes straight through cover');
+  }
+  {
+    // resolve is kept between runs, and a kid with none left comes over and throws for you
+    const S = fresh(); const k = S.kids[0]; k.r = 1; S.warm = 0; run(S, .2);
+    check(S.phase === 'shop', 'a run ends when you are too cold');
+    CORE.act(S, 'run'); check(S.kids[0].r === 1, 'a kid’s resolve stays down between runs');
+    k.st = 'up'; k.t = 9; S.ammo = 3; S.warm = S.warmMax = 1e9; CORE.act(S, 'throw', 0); run(S, 1);
+    check(k.ally && S.allies.length === 1, 'a kid with no resolve left comes over to your side');
+    let thrown = 0; run(S, 12, X => { thrown += X.balls.filter(b => b.by === 1 && b.t === 0).length; });
+    check(S.balls.some(b => b.by === 1) || S.kids.some(x => x.r < x.R), 'kids on your side throw by themselves');
+  }
+  {
+    // a swatted snowball costs no warmth; one that gets through does; every run ends, even with nobody throwing
+    const S = fresh(); const k = S.kids[0]; k.st = 'wind'; k.t = .01;
+    let b = null; run(S, .3, X => { b = b || X.inc.find(q => !q.miss); });
+    if (!b) { S.inc.push({ id: 999, who: 0, x: 0, z: 8, t: 0, T: 1.3, miss: 0, ex: 0, big: 0 }); b = S.inc[S.inc.length - 1]; }
+    CORE.step(S, .2); const w = S.warm; check(CORE.act(S, 'swat', b.id) && S.inc.every(q => q.id !== b.id), 'a snowball in the air can be swatted');
+    S.inc.push({ id: 1000, who: 0, x: 0, z: 8, t: 1.29, T: 1.3, miss: 0, ex: 0, big: 0 }); const w2 = S.warm; CORE.step(S, .05);
+    check(S.warm < w2 - 2, 'one that gets through costs warmth');
+    const T = fresh(); T.lv.scarf = 6; T.lv.coat = 4; T.lv.hat = 3; T.lv.boot = 3; CORE.act(T, 'no'); T.phase = 'shop'; CORE.act(T, 'run');
+    for (const q of T.kids) q.t = 1e9; let t = 0; while (T.phase === 'run' && t < 600) { CORE.step(T, .5); t += .5; }
+    check(T.phase === 'shop' && t < 200, `with every warmth upgrade and nobody throwing, a run still ends (${t.toFixed(0)} s)`);
+  }
+  {
+    // the last yard: the yeti comes over, he brings a present, and opening it is the end
+    const T = CORE.init(5); T.yard = 3; T.tier = 3; T.kids = CORE.makeKids(3); CORE.act(T, 'run');
+    for (const k of T.kids) { k.r = 1e-9; k.st = 'up'; k.t = 99; } T.ammo = 99; T.lv.pile = 4; T.warm = T.warmMax = 1e12;
+    for (let j = 0; j < T.kids.length; j++) { if (T.phase !== 'run') break; T.ammo = 9; CORE.act(T, 'throw', j); CORE.step(T, 1); }
+    check(T.yard === 4 && T.phase === 'shop' && T.allies.length >= 9, 'winning a yard moves the war on and keeps your side');
+    CORE.act(T, 'run'); for (const k of T.kids) { k.r = 1e-9; k.st = 'up'; k.t = 99; } T.warm = T.warmMax = 1e12;
+    for (let j = 0; j < T.kids.length && !T.fin; j++) { T.ammo = 9; CORE.act(T, 'throw', j); CORE.step(T, 1); }
+    check(T.fin === 1 && !CORE.done(T) && CORE.progress(T) < 1, 'the yeti comes over and the box is not open yet');
+    check(CORE.act(T, 'open') && CORE.done(T) && CORE.progress(T) === 1, 'opening his present is the end');
   }
 }
 
