@@ -574,6 +574,11 @@ if (suites.includes('browser')) {
         check(sv.opened[0] === stack[0].id && sv.current === stack[1].id, 'the save remembers the opened box and the open one');
         await p.reload();
         check(await until(p, () => !document.querySelector('#title').hidden && /Back in the box/.test(document.querySelector('#tGo').textContent)), 'coming back offers the open box');
+        check(await p.evaluate(() => !document.querySelector('#tShelf').hidden), 'the title offers the shelf once a box is opened');
+        await p.click('#tShelf');
+        check(await until(p, () => !document.querySelector('#shelf').hidden && document.querySelector('#title').hidden), 'the shelf button on the title opens the shelf');
+        await p.click('#shClose');
+        check(await until(p, () => !document.querySelector('#title').hidden && document.querySelector('#shelf').hidden), 'closing the shelf goes back to the title');
       }
       check(p.errs.length === 0, 'no errors on the way', p.errs.join(' | '));
       await p.close();
