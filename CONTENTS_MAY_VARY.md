@@ -699,6 +699,18 @@ counterweight tilted with the arm and stood on a white disc; tree medallions cro
 their prices. The mappa mundi gained ploughed, wheat and green fields, villages, mountain ranges, and
 cogs and sea serpents on the ocean round the world; bracken has a soft edge and ferns.
 
+**A second polish round**, from the owner's play: the wall shows its points (`92 / 100`) and every bite
+floats its loss over the castle, which flushes red, sheds stone chips and throbs on the off-screen marker;
+roads are drawn all at once, layer by layer, so junctions merge, with rounded bends, ruts, a grassy crown
+and pebbles, and never over water; rivers run out over the land's rim instead of stopping in a notch or
+mid-meadow; fields line the roads, clear of woods, banks and holes; the minimap marks the horde's holes
+with arrows to the castle; a *Recall all* button takes every defender back to the tray, and a monk set
+down anew faces the way the last one was turned on that folio; the abbot's nimbus is a gold disc behind
+the head, not a ring round it. The crowd was smeared because the view's rabbit budget was measured on the
+whole frame (so a slow page thinned the horde to near nothing) and rabbits came and went see-through:
+now the budget follows only the horde's own cost, a cell shows at most nine rabbits, they grow out of and
+sink into the ground opaque, and only a few dozen slain tumble at once.
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
