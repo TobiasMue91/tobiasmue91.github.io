@@ -721,6 +721,14 @@ page. Each answers a question the archer cannot: the falconer what slips through
 where the horde is born. The view's event log is capped, and at the late folios kills overflowed it and
 pushed out stoops (and could push out bites): the oldest kills now go first.
 
+**Weighed again** (budget round 1). The box weighed 218.9 KB. Fixed shapes are now SVG-like path data
+(`P(c, 'M… L… Q… C… Z')`, which replays the same canvas calls, so nothing is redrawn differently), with small
+helpers for polylines, one-colour fills and strokes, and a dressed-stone `block` for the castle; the Fluent paths
+are kept to 0.01 of their 32 grid; `rabbitPath` (dead since the field rabbits) is gone; the comments say what a
+thing is in fewer words. That is 203 KB, every sprite and every scene pixel for pixel the same as before except
+sub-pixel edges of the hand and Jesse, and the core untouched, so both bots play exactly as before. Still over
+the 130 KB cap: the rest cannot come out without losing art or play, and is the owner's decision.
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
@@ -1210,5 +1218,12 @@ is not saved by its art direction: the owner played both and stopped.
   gallery (a debug call returning data URLs) and shoot each scene close up before calling art done.
 - **Weigh the box while building it, not after.** Here Be Rabbits reached 157 KB before anyone measured;
   getting under 130 cost the rabbit knights and the bell tower. Give each part a budget before writing it.
+- **Prove a refactor with frozen frames.** To shrink a box without changing it, freeze the box's clock: an
+  init script in Playwright replaces `performance.now`, `requestAnimationFrame` and `Math.random` inside the
+  box's iframe, so `?world=<id>&at=<min>&seed=1` plus a fixed number of frames draws the same picture every
+  time. Shoot every scene and the sprite gallery before, again after each change, and compare the canvases
+  pixel for pixel. It caught two helpers that overwrote their own definitions and a local `st` shadowing a new
+  one, which a glance at the screen would have missed. A comparison must count missing images as failures: a
+  crashed box simply has fewer canvases.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
