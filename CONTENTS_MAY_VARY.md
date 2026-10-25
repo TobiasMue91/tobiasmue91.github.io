@@ -699,6 +699,28 @@ counterweight tilted with the arm and stood on a white disc; tree medallions cro
 their prices. The mappa mundi gained ploughed, wheat and green fields, villages, mountain ranges, and
 cogs and sea serpents on the ocean round the world; bracken has a soft edge and ferns.
 
+**A second polish round**, from the owner's play: the wall shows its points (`92 / 100`) and every bite
+floats its loss over the castle, which flushes red, sheds stone chips and throbs on the off-screen marker;
+roads are drawn all at once, layer by layer, so junctions merge, with rounded bends, ruts, a grassy crown
+and pebbles, and never over water; rivers run out over the land's rim instead of stopping in a notch or
+mid-meadow; fields line the roads, clear of woods, banks and holes; the minimap marks the horde's holes
+with arrows to the castle; a *Recall all* button takes every defender back to the tray, and a monk set
+down anew faces the way the last one was turned on that folio; the abbot's nimbus is a gold disc behind
+the head, not a ring round it. The crowd was smeared because the view's rabbit budget was measured on the
+whole frame (so a slow page thinned the horde to near nothing) and rabbits came and went see-through:
+now the budget follows only the horde's own cost, a cell shows at most nine rabbits, they grow out of and
+sink into the ground opaque, and only a few dozen slain tumble at once.
+
+**Two more kinds of defender**, because the owner found one archer a thin war: the **falconer** (on the
+engines' bough from chapter II) sets his falcon on the rabbits nearest the wall within a wide ring, and on
+golden hares and the king first, and is drawn with his falcon hooded on his fist and stooping out and back
+from it; the **ferret** (on the snails' bough from chapter III) may only be set beside a rabbit hole, and
+bolts what comes out of it. They are drawn in the monk's manner (a hooded falcon with a barred breast and
+jesses, a sable ferret sitting up with its mask), since the Fluent set's flat animals did not match the
+page. Each answers a question the archer cannot: the falconer what slips through to the wall, the ferret
+where the horde is born. The view's event log is capped, and at the late folios kills overflowed it and
+pushed out stoops (and could push out bites): the oldest kills now go first.
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
@@ -1181,7 +1203,8 @@ is not saved by its art direction: the owner played both and stopped.
 - **For a hand, start from a drawn hand.** Three manicules drawn from primitives (lobes, rounded boxes,
   then curves) all failed the owner's eye. The one that passed takes the outline and creases of the
   backhand pointing finger from Microsoft's Fluent Emoji (MIT, as Hands Up and Tells already do) and
-  only colours, inks and cuffs it. Anatomy is the one thing not to improvise.
+  only colours, inks and cuffs it. Anatomy is the one thing not to improvise. Jesse's face went the same
+  way: a pink disc with a smile was not a face; Fluent's "old man" with shut lids and a beard is.
 - **Look at every sprite on its own, large.** Faults hide at play size and in motion: a hand that is not
   a hand, a stick rabbit for a king, a counterweight tilting with its arm. Dump all sprites into one
   gallery (a debug call returning data URLs) and shoot each scene close up before calling art done.
