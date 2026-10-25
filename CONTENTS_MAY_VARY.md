@@ -711,6 +711,16 @@ whole frame (so a slow page thinned the horde to near nothing) and rabbits came 
 now the budget follows only the horde's own cost, a cell shows at most nine rabbits, they grow out of and
 sink into the ground opaque, and only a few dozen slain tumble at once.
 
+**Two more kinds of defender**, because the owner found one archer a thin war: the **falconer** (on the
+engines' bough from chapter II) sets his falcon on the rabbits nearest the wall within a wide ring, and on
+golden hares and the king first, and is drawn with his falcon hooded on his fist and stooping out and back
+from it; the **ferret** (on the snails' bough from chapter III) may only be set beside a rabbit hole, and
+bolts what comes out of it. They are drawn in the monk's manner (a hooded falcon with a barred breast and
+jesses, a sable ferret sitting up with its mask), since the Fluent set's flat animals did not match the
+page. Each answers a question the archer cannot: the falconer what slips through to the wall, the ferret
+where the horde is born. The view's event log is capped, and at the late folios kills overflowed it and
+pushed out stoops (and could push out bites): the oldest kills now go first.
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
