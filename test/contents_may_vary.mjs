@@ -235,7 +235,23 @@ if (suites.includes('starter') && starter) {
       const a = { age: CORE.P.bulgeGrow }, b = { age: CORE.P.bulgeGrow + 2 };
       check(CORE.ripe(S, b) > CORE.ripe(S, a) * 1.4, 'a bulge left to ripen two seconds pays at least 40% more');
     }
-    S.$ = 1e12; check(CORE.act(S, 'buy', 'last') && S.act === 4, 'the Last Loaf ends the bakery');
+    {
+      // the end of the cellar is played, not waited for: money alone never opens the Last Loaf, and a
+      // kitchen left to its rolling pins proves far slower than one whose cook punches her down
+      const T = JSON.parse(JSON.stringify(S)); T.$ = 1e12;
+      check(!CORE.act(T, 'buy', 'last') && T.act === 3, 'a trillion dollars does not buy the Last Loaf before she has risen');
+      const idle = JSON.parse(JSON.stringify(r.S)), busy = JSON.parse(JSON.stringify(r.S)), m = { seed: 4 };
+      for (const X of [idle, busy]) Object.assign(X.lv, { pin: 3, heave: 3, beams: 3 });
+      for (let k = 0; k < 1800; k++) { CORE.step(idle, .1); const $ = busy.$; busy.$ = 0; CORE.bots.eager(busy, m, .1); busy.$ += $; CORE.step(busy, .1); idle.ev.length = busy.ev.length = 0; }
+      const gain = X => X.proof - r.S.proof;
+      check(gain(idle) < gain(busy) * .35, `left to its pins she proves ${(100 * gain(idle) / gain(busy)).toFixed(0)}% as far as when she is punched (under 35%)`);
+      const G = JSON.parse(JSON.stringify(r.S)); G.bulges = []; G.heave = 99; G.proof = .25; G.great = 0; CORE.step(G, .1);
+      check(G.bulges.length === CORE.SLOTS && G.great === 1, 'a quarter risen, she heaves through every place at once');
+      const old = JSON.parse(JSON.stringify(r.S)); delete old.proof; delete old.great; old.earned = 2e6; old.note = 8;
+      const M = CORE.migrate(old, 1);
+      check(M.proof > .3 && M.proof < .95 && M.note === 9 && CORE.NOTES[M.note - 1][0] === 'ALL OF IT', `a save from when the Last Loaf cost ten million keeps its place (${(100 * M.proof).toFixed(0)}% risen)`);
+    }
+    S.$ = 1e12; S.proof = 1; check(CORE.act(S, 'buy', 'last') && S.act === 4, 'the Last Loaf ends the bakery');
     CORE.step(S, .1);
     check(S.finale === 1, 'once bought, she rises by herself');
     check(!CORE.act(S, 'finale', 3) && S.finale === 1, 'the end cannot be skipped ahead');
