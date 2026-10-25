@@ -168,7 +168,7 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
 | draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
 
-Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
+Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
 Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 39–41 / 54–57.
 
@@ -749,6 +749,18 @@ still undone, most valuable first:
   are small there (a tap near a jar now reaches it, which helps but does not solve it); bulges that push the house out of shape rather than sitting on it like stickers; a
   phone layout composed for 390 px in every act; teach with the world rather than with words
   (an early tap could bake a flat loaf instead of refusing).
+  **The cellar's end is played, not waited for** (October 2026, `CORE.version` 2). The owner found the
+  last stretch to the Last Loaf's $10M a grind that turned the box into an idle game: by then every card
+  was bought, income compounded slowly, the jars and the bench were worth nothing next to a punch, and
+  the rolling pins did the punching. Now Mother *proves*: every punch knocks her back and makes her
+  stronger (a ripe one counts double), a perfect tap or a clean score counts a little, a rolling pin's
+  punch a tenth; money counts not at all. The Last Loaf opens when she has fully risen (and costs $1M).
+  As she rises she lifts the house off its street (the neighbours and the street sink, she squeezes
+  out round its foot), she heaves more often the closer she gets, and at a quarter, a half and three
+  quarters she heaves through all twelve places at once and writes HIGHER, ALL OF IT and NEARLY on
+  the wall. The recipe card says how far she has risen. A player who punches at half the bots' pace
+  now finishes the cellar in about 19 minutes instead of 27, and one who leaves her to the pins
+  barely moves. `migrate` turns a version 1 save's earnings into how far she has risen.
   **Graphics round 1** (October 2026), every prop shot close up on a desktop (`K.debug.look(cx, cy, s)`) and
   every act on both sizes. Glitches fixed: the starburst clock's ink was set inside a comment, so its rays
   took whatever stroke came before; the box's stencil face was never fetched (only the canvas used it), so
@@ -1028,6 +1040,12 @@ is not saved by its art direction: the owner played both and stopped.
 - **Regrowth that never pauses hides progress.** Grass that grew back while the lawn was being mowed
   made "finished" invisible and the bots chased it forever. A lawn now stays cut until it is finished,
   then grows back in a time-lapse week.
+- **The last gate should be the verb, not the bank.** Starter's cellar ended at $10M; once the cards were
+  bought, that was minutes of waiting for compounding income while the hands did nothing that mattered.
+  A goal fed by the verb itself (Mother proves with each punch) moves with every action, keeps a slow
+  player and a quick one close, and leaves nothing to idle for. Measure it: list each box's novelties
+  (a first purchase, a new stage) and look at the longest gap before the end; Starter's cellar had eight
+  minutes and more of it with nothing new.
 - **A gate only money opens turns a level into a grind.** Gold at each show came at the first judging;
   the next eighteen were rent for the next show's entry fee, and the owner was bored by the second
   show. Measure what actually gates progress (here: a bot's log of each judging and medal) before
