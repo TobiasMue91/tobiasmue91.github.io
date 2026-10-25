@@ -168,7 +168,7 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
 Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
-Here Be Rabbits 41–42 / 79–83, Unwelcome Guests 39–41 / 54–57.
+Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -659,6 +659,46 @@ without fitting a tower defence. The box was rethought on its own terms rather t
 Measured with the bots: the eager bot never loses a folio more than once, the casual bot at most three
 times; the casual bot's 80 minutes are mostly the pauses it waits out between waves.
 
+**The second playtest, on a desktop.** The owner liked how it plays and asked for much more detail in
+the art, with the budget set aside until the box looks right (the budget suite fails for warren until
+then, on purpose). Their notes and what changed:
+- *Rabbits that flickered and jumped.* The view drew up to three sprites per cell from the rules' counts,
+  so a rabbit vanished from one cell and reappeared in the next. Now the view keeps rabbits of its own
+  that run the flow field at the rules' pace, each choosing its next cell where the rules have rabbits it
+  lacks, and every frame brings their number back towards the rules' count block by block (three cells
+  a side): a surplus runs over to the nearest shortfall, and only what is left fades out or in. That cut
+  the fades from about 250 a second to about 10 in the first wave.
+- *Art with detail*, painted once at load into sprites and patterns: field rabbits in five coats (one
+  gold, for the hares) gathered and stretched, side on, with shadow, belly, fur, ear and scut; oaks,
+  firs, birches and bushes with lit leaf clumps; a castle of dressed stone with round towers, roofs,
+  banners and a portcullis; cottages in thatch and tile; burrows; boulders; grass, earth, water and
+  bracken textures laid in the land's own units so that no tile seams; monks with habit, tonsure,
+  quiver and a longbow; a timber trebuchet; a shaded snail; a dragon seen from above with ribbed bat
+  wings. Cloud shadows drift over the land and a vignette closes the edges.
+- *The archer tray cut in half at the bottom left*: the bar keeps a height of its own on a desktop.
+- *Burrows on top of each other*: they are spaced along each entrance.
+- *Woods and meadows over the edge of the land*: woods and bracken now grow only on painted ground,
+  and everything but the trees is clipped to the meadow.
+- *Jesse still broken*: drawn again as a figure on a carved bed under a lapis coverlet, the vine from his
+  breast, and the tree is framed on a desktop with Jesse at its foot.
+- *Text and controls too small on a large screen*: they grow with the screen, and A− / A+ (or the + and
+  − keys) set the size, kept in the save.
+
+**A polish round** after the owner pointed at the manicule ("that is not a hand") and asked for more of
+the same kind of fault to be found. Every sprite was dumped into one gallery and every scene shot close
+up, which found: the manicule (now a hand in a red cuff with a pointing finger, three curled ones and a
+thumb, painted once at three times the size); the rabbit king (a crude stick rabbit on an outsize snail,
+now a seated king in an ermine-trimmed robe with crown and sceptre on a smaller snail); the ending (a flat
+yellow box with dots and stick rabbits, now a gilt cumdach with an engraved arcade, pearls, cabochons and
+a crystal on its cross, before a court of field rabbits and the king kneeling towards it, in a gold frame
+with quatrefoils, and the HUD and captions cleared away); the ink (a black sausage, now a spilt pool
+with a sheen and splashes); ponds (perfect circles with stitched rims that read as globes, now uneven
+flattened shores with rushes); woods (round balls of trees, now ragged at the edge, in the rules too);
+the dragon (twice too big on a phone) and its icon; a flood icon that was a blue box; a trebuchet whose
+counterweight tilted with the arm and stood on a white disc; tree medallions crowding the trunk and
+their prices. The mappa mundi gained ploughed, wheat and green fields, villages, mountain ranges, and
+cogs and sea serpents on the ocean round the world; bracken has a soft edge and ferns.
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
@@ -1134,6 +1174,17 @@ is not saved by its art direction: the owner played both and stopped.
 - **Paint terrain as shapes, not cells.** A circle per 4-unit cell turned meadow edges into clouds, a road
   into beads and a pond into bubble wrap. Draw the map's own discs and polylines smoothly and use the cells
   only for what grows on them; and check a union of discs for bare pockets with a script.
+- **A count per cell is not a crowd.** Drawing the rules' counts cell by cell made rabbits blink and
+  hop, because the rules move a rabbit by chance and spread a jam sideways. Keep the view's own walkers
+  on the same field and correct them in blocks, moving a surplus to a shortfall before fading anything;
+  measure the fades per second with a debug counter.
+- **For a hand, start from a drawn hand.** Three manicules drawn from primitives (lobes, rounded boxes,
+  then curves) all failed the owner's eye. The one that passed takes the outline and creases of the
+  backhand pointing finger from Microsoft's Fluent Emoji (MIT, as Hands Up and Tells already do) and
+  only colours, inks and cuffs it. Anatomy is the one thing not to improvise.
+- **Look at every sprite on its own, large.** Faults hide at play size and in motion: a hand that is not
+  a hand, a stick rabbit for a king, a counterweight tilting with its arm. Dump all sprites into one
+  gallery (a debug call returning data URLs) and shoot each scene close up before calling art done.
 - **Weigh the box while building it, not after.** Here Be Rabbits reached 157 KB before anyone measured;
   getting under 130 cost the rabbit knights and the bell tower. Give each part a budget before writing it.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
