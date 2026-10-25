@@ -37,6 +37,8 @@ const suites = picked.length ? picked : ALL;
 const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 72 * 1024;
+// boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
+const BOX_CAP = { warren: 210 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -93,7 +95,8 @@ if (suites.includes('budget')) {
   check(shell <= SHELL_MAX, `the shell and kit weigh ${kb(shell)} (at most ${kb(SHELL_MAX)})`);
   for (const w of worlds) {
     const n = Buffer.byteLength(w.tpl) + Buffer.byteLength(w.core || '');
-    check(n <= BOX_MAX, `${w.id}: weighs ${kb(n)} (at most ${kb(BOX_MAX)})`);
+    const cap = BOX_CAP[w.id] || BOX_MAX;
+    check(n <= cap, `${w.id}: weighs ${kb(n)} (at most ${kb(cap)})`);
     if (n > BOX_AIM) console.log(`  note  ${w.id} is over the ${kb(BOX_AIM)} a box should aim for`);
   }
 }
