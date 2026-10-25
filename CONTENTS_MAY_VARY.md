@@ -198,11 +198,11 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 | 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
-| draft | `guests` | Unwelcome Guests · "Do not open after dark." | choose where and when to haunt, against people's timetables | fear builds and drains, nerves wear down; five families as five reels | silent film: Reiniger paper cut-outs, tinted stock, grain, intertitles, iris | sepia, rose, night blue, ectoplasm green-white | 1920s, gothic comedy | an upright piano in the pit, a projector | intertitle plates, a cast list, the repertoire | a crate delivered after dark; the iris closes on it |
+| 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft) | hold a finger on the house and drag: the ghost glides after it and its cold drives people away; tap a doorway, the telephone, the chandelier | short nights against ectoplasm and the dawn, the organ between them; every exit costs a pip of resolve for good; five casts, from a family of three to a film company and thirty extras | silent film: Reiniger cut-outs, black people before grey furniture, frost round a cream card ghost, tinted stock, grain, intertitles, iris | night blue, cream, black; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought, a telephone, a crash | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
-Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 39–41 / 54–57.
+Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 36–37 / 59–75.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -849,6 +849,22 @@ casual under 80, no gap over five minutes. Budget: the draft weighs 105.5 KB (th
 stay under 120.
 
 **Before building**, the owner confirms this plan and the mock-ups (night and organ, phone and desktop).
+(The owner asked for it to be built straight away, to try it rather than judge a plan; it shipped as box 6.)
+
+**As built** (October 2026; what moved away from the plan, and why):
+- *Thirty-two pipes, not sixty.* The bots never reached the outer half of a longer organ; with 32 in four
+  registers (9, 8, 8, 7) both buy the whole organ near the end. Each register's pipes cost its base times
+  1.47 per step out, the first one 18 screams, so night 1 pays for it.
+- *Nerve wears down; tricks scale with you.* See the lessons: an exit needs enough fright, every fright wears
+  nerve down for good, and the chandelier, the imps and Mrs Mudge's shriek frighten by the player's own power.
+- *A house that grows* (a wing, a tower) was cut: the crowds carry the escalation, and the budget is spent on
+  the organ. The secret passages went too: the ghost already crosses floors freely, and the lift-and-set-down
+  (which costs a little ectoplasm) is the way round.
+- *Teaching:* a dashed route (along the floor, down the stair, out of the door) and THE DOOR in the first reel;
+  a hand that shows where to hold; NOT FRIGHTENED ENOUGH — CLOSER over someone stopped on the step, and
+  CORNERED — COME ROUND THE OTHER SIDE over someone pinned at the far wall.
+- *The night's clock is the moon,* going down the sky towards the hills, the sky paling as the dawn comes.
+- Pacing (three seeds): eager 35.8–36.4 min, casual 59–75, never more than four minutes without something new.
 
 **The mock-ups, four critic rounds** (October 2026). One frame of a night and one of the organ, at phone and
 desktop size, drawn into the draft's own view (its house, people and film), each round scored by a fresh
@@ -925,7 +941,7 @@ still undone, most valuable first:
   balls on its rays and hours on its dial; glass jars with a thick foot and light through the far edge; tiled
   roofs, brick chimneys and shutters on the neighbours. World paths go through `mv/ln/qc/bz`, which paid for
   most of it: 118.6 KB before, 122.8 KB after.
-- **Unwelcome Guests** (draft): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
+- **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
 
@@ -1191,6 +1207,16 @@ is not saved by its art direction: the owner played both and stopped.
 - **Regrowth that never pauses hides progress.** Grass that grew back while the lawn was being mowed
   made "finished" invisible and the bots chased it forever. A lawn now stays cut until it is finished,
   then grows back in a time-lapse week.
+- **Running away is not leaving.** The remade Unwelcome Guests first let anyone who fled from the cold out of the
+  door, however calm; nerve then meant nothing, and a cast of thirty went out in one night. Now only someone
+  frightened past a share of their nerve (or in a panic) goes through a door; a calm one stops on the step and
+  says so. Herding wants resistance at the gate, not only on the way.
+- **Scale a trick by your power, not by its target.** The chandelier and the imps first frightened people by a
+  share of their own nerve, so every cast fell to them alike and the late reels took a minute each. Frights
+  that grow with the player's fear upgrades keep a bigger cast bigger.
+- **Wear turns a wall into a slope.** A casual bot spent twenty minutes on the medium's circle with no one going
+  out and almost no screams. Every fright now wears a person's nerve down for good (to a third, at most), so a
+  hard cast gives way night after night even to a weak hand, and the economy never starves.
 - **The last gate should be the verb, not the bank.** Starter's cellar ended at $10M; once the cards were
   bought, that was minutes of waiting for compounding income while the hands did nothing that mattered.
   A goal fed by the verb itself (Mother proves with each punch) moves with every action, keeps a slow
