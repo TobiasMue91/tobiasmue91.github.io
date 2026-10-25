@@ -763,6 +763,93 @@ thing is in fewer words. That is 203 KB, every sprite and every scene pixel for 
 sub-pixel edges of the hand and Jesse, and the core untouched, so both bots play exactly as before. The rest could not
 come out without losing art or play, so the owner raised this box's cap to 210 KB.
 
+### Box 6: Unwelcome Guests, remade (the plan)
+
+Written for the session that builds it, after the owner asked whether the draft could become box 6. An
+assessment against rule 15 (October 2026) found that it passes rule 3 against Here Be Rabbits but fails
+the owner's checklist: there are no runs (one continuous game whose only limit is ectoplasm that refills
+by itself), the eager bot spends 31 of its 39 minutes in pauses of more than three seconds between frights
+(wait until something is ready, then tap: Starter's rhythm, the reason it left the stack), minute 30
+looks like minute 0 (the same six rooms, one family fewer), and the Newlyweds reel runs ten and a half
+minutes without anyone leaving. The shell is worth keeping: Hollowmere House as a Reiniger cut-out, the
+tint of the hour, intertitles, the piano in the pit, a family per reel, the crate after dark. The loop
+is remade under the same id (`CORE.version` 2, and a `migrate` that starts any old save afresh).
+
+**Compared** (mechanic and look; the look stays the shell's silhouette film, so the mechanic decides):
+
+| # | pair | surprise | depth | 30 to 90 min | rule 3 and the checklist |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **Boo them out**: the ghost is under the finger; a cold spot rattles what it passes and people run from it; herd them out of the doors before the ghost fades | 8 | 8 | 8 | an area under the cursor, as in the owner's favourites; chases with resistance; drag and sweep, last used two boxes back |
+| 2 | Possession catapult: grab a thing and fling it at people | 6 | 6 | 6 | aim and release, the rhythm Stand Well Back failed with |
+| 3 | Haunted dominoes: one tap a night sets off a chain through the house, the tree adds links | 7 | 6 | 7 | choose and watch; the hands are idle |
+| 4 | The pit pianist: frights on the beat of the accompaniment | 7 | 5 | 6 | timing taps, Starter's verb |
+| 5 | Hide and pounce: wait inside a thing, jump out when someone passes | 6 | 5 | 6 | wait, then tap: the rhythm that took Guests out of the stack |
+| 6 | Ectoplasm trails: draw slime on floors and stairs, people slip and slide | 7 | 6 | 7 | drawing lines across the field is Here Be Rabbits' power, the box right before |
+| 7 | Ghost train: the house as a dark ride, trigger frights as the cart passes | 6 | 5 | 6 | timing and waiting |
+| 8 | The ouija board: spell words under the sitters' fingers | 7 | 4 | 5 | no physical answer, a word puzzle |
+| 9 | Possess a family member and walk them into the others | 7 | 6 | 6 | fiddly; the screen does little |
+
+**One line.** You are the ghost of Hollowmere House: hold a finger on the house and the ghost glides
+after it, a cold spot rattles everything it passes and terrifies whoever is in it, and people bolt from
+it, along the floors, down the spiral stair and out of the doors. A night ends when the ghost has faded
+(its ectoplasm drains while it is out) or dawn comes; each person driven out pays screams and leaves
+with less nerve for good. Between nights the screams buy pipes on the organ in the cellar.
+
+**The checklist, answered.**
+1. *Second one:* put a finger on the house; the ghost swoops there, the chandelier swings, the clock
+   chimes, and Edith shrieks and runs. Chasing squealing silhouettes is fun with nothing bought.
+2. *The limit:* the ghost's ectoplasm, which drains while it haunts and does not come back during the
+   night (a pale ghost frightens less, so the end of a night winds down rather than stops dead). Night 1
+   lasts about 20 seconds; dawn caps a night at about 90.
+3. *The challenge on screen:* the family's cards with their nerve, and OUT TONIGHT 0 OF 3 under the
+   title. Night 1 gets Harold halfway to the door.
+4. *The first buy:* night 1 pays about 15 screams; the organ's centre pipes cost 8 to 15 (more
+   ectoplasm, a wider cold spot, louder rattling).
+5. *Nodes that change the game* (about one every five minutes): doors that slam (tap a door to shut it
+   and steer the stampede, min 4); the chandelier falls (stuns a room, min 8); the telephone rings
+   (everyone near goes to answer it, min 12); imps keep rooms you are not in rattling (min 16); the grey
+   lady, a second ghost who replays your last sweep (min 22); secret passages (sweep through a wall to come
+   out on another floor, min 27); the hearse at the gate, which takes whoever reaches the garden for double
+   (min 32).
+6. *Minute 40 against minute 1:* three Pembertons in a quiet house at the start; at the end a film crew
+   and its extras, a coach party and a ghost-hunting society, forty and more silhouettes stampeding
+   through a house that has grown a wing and a tower, doors slamming, imps in every room, two ghosts.
+7. *Automation:* imps keep up the fright where you are not, the grey lady repeats your last sweep;
+   the herding stays in your hand.
+
+**Nerve, not a gate.** Everyone driven out comes back next evening with less nerve (wear that never
+heals, as in the old core); a person with none left does not come back, and a reel ends when its last
+member has gone. So every night moves the reel on, there is no all-in-one-night trial, and the goal is
+fed by the verb (lesson: the last gate should be the verb, not the bank). The casts grow: the Pembertons
+(3), a man of science and his housekeeper with lodgers (6), a medium's seance circle (10), newlyweds with
+their wedding party (18), the picture people with a coach party of extras (40).
+
+**Rhythm against Here Be Rabbits** (rule 3): there nothing follows the finger; towers are placed, waves
+called and a line drawn across a horde that comes at you. Here the hand never lets go during a night and
+pushes people away from it. The crowds of the last reels must stay people (separate silhouettes with
+their own panic) and never become a flowing mass, or the last reel will look like the box before.
+
+**Tree.** The organ in the cellar: ranks of pipes rising to a tall centre, in a Gothic case cut out of
+black card; about 60 pipes in four themes (the ghost; the house; the fright; the family's fears), opening
+from the centre outwards, faint until found. A bought pipe sounds its note; the full organ plays the
+box's theme. On a phone the pipes are too narrow to tap: a finger slides along the keyboard under them
+and the nearest pipe is chosen and described, then bought with the card's button.
+
+**Look and sound.** As the draft: Reiniger cut-outs, tinted stock by the hour, grain and weave, the
+iris, the upright piano in the pit and the projector. New: the cold spot as a ring of frost round a
+cream ghost, a frosted trail through the walls, doors that fly open, hats in the air, and OUT! as an
+intertitle over whoever leaves.
+
+**Engineering notes.** The core keeps the house as rooms on three floors joined by the spiral stair and
+doors; people are agents with a position, a room and a panic that steers them away from the cold spot
+towards the nearest way out (a stair, a door, a window later). The finger's position is an action
+(`act('ghost', x, y)` while held, `act('lift')`). Bots hold the finger near whoever is closest to a
+door and sweep them towards it, with a person's reaction time. Pacing target: eager 32 to 45 min,
+casual under 80, no gap over five minutes. Budget: the draft weighs 105.5 KB (the core 21.9); aim to
+stay under 120.
+
+**Before building**, the owner confirms this plan and the mock-ups (night and organ, phone and desktop).
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
