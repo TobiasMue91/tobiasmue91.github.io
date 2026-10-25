@@ -26,6 +26,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    not with bulk: a box that wants more room cuts something first. Libraries a box loads from a CDN
    inside its own template do not count, but must be pinned to an exact version. (The cap was 120 KB until
    the owner raised it, when the shows in Keep Off the Grass gained intruders, upgrades and a match day.)
+   Here Be Rabbits alone may weigh **210 KB**: the owner raised its cap after the art was redone and a
+   budget round that changed no pixel brought it only to 203 KB (`BOX_CAP` in the suite).
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -726,8 +728,8 @@ pushed out stoops (and could push out bites): the oldest kills now go first.
 helpers for polylines, one-colour fills and strokes, and a dressed-stone `block` for the castle; the Fluent paths
 are kept to 0.01 of their 32 grid; `rabbitPath` (dead since the field rabbits) is gone; the comments say what a
 thing is in fewer words. That is 203 KB, every sprite and every scene pixel for pixel the same as before except
-sub-pixel edges of the hand and Jesse, and the core untouched, so both bots play exactly as before. Still over
-the 130 KB cap: the rest cannot come out without losing art or play, and is the owner's decision.
+sub-pixel edges of the hand and Jesse, and the core untouched, so both bots play exactly as before. The rest could not
+come out without losing art or play, so the owner raised this box's cap to 210 KB.
 
 ### Open work on the shipped boxes
 
