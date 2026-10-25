@@ -612,6 +612,28 @@ if (suites.includes('browser')) {
       await p.close();
     }
     {
+      // a save from before a box was put into the stack between two opened ones (Unwelcome Guests was box 2, then
+      // Keep Off the Grass took its place): the shelf offers the box never opened, and playing box 1 again goes into it
+      const p = await page(''), stack = worlds.filter(w => !w.draft).map(w => w.id), draft = worlds.find(w => w.draft);
+      p.on('dialog', d => d.accept());
+      await p.goto(base.replace(/[^/]*$/, '__blank'));
+      await p.evaluate(([a, d]) => localStorage.setItem('cmv.save', JSON.stringify({ v: 1, started: Date.now(), last: Date.now(), current: null, opened: [a, d].filter(Boolean), worlds: { [a]: { state: null, v: 0, time: 900, done: true, progress: 1 } }, replay: null })), [stack[0], draft && draft.id]);
+      await p.goto(base);
+      await until(p, () => !document.querySelector('#title').hidden);
+      await p.click('#tShelf');
+      const shelf = await p.evaluate(() => [...document.querySelectorAll('#shPlanks .kept')].map(b => b.textContent));
+      check(shelf.some(t => /№ 2/.test(t) && /not opened yet/.test(t)), 'an old save whose box 2 was never opened finds it on the shelf', shelf.join(' | '));
+      check(!draft || !shelf.some(t => t.includes(draft.title)), 'a draft opened in an old save is not on the shelf');
+      await p.click('#shPlanks .kept:not(.closed)');
+      if (await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.slot === 'replay')) {
+        await p.evaluate(() => CMV._complete(CMV.live.token, null));
+        check(await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.slot === 'main' && CMV.live.w.n === 2), 'playing box 1 again goes on into box 2 when box 2 was never opened');
+        check(await p.evaluate(() => CMV.save.current) === stack[1], 'and the save holds box 2 as the open one');
+      } else fail('box 1 can be played again from the shelf');
+      check(p.errs.length === 0, 'no errors with an old save', p.errs.join(' | '));
+      await p.close();
+    }
+    {
       // a box is left and taken up again: its state goes into the save, survives a reload, and the box comes back
       // to it as it was, at any point of the game; a box opened at the very end goes on into the next one
       const p = await page('');
