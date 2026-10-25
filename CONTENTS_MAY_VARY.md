@@ -22,7 +22,7 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    (souvenir, fonts, style, markup, view script) and a `<script type="text/x-core" data-world="id">`
    holding its rules. Nothing of a box lives anywhere else, and a box never reaches into another.
 2. **Proportionate.** A box weighs at most **130 KB** (template plus core, unminified, as the test
-   measures it) and should aim for 100; the shell and kit at most 72 KB. Quality is bought with craft,
+   measures it) and should aim for 100; the shell and kit at most 96 KB (72 until the stickers, the return and the post office). Quality is bought with craft,
    not with bulk: a box that wants more room cuts something first. Libraries a box loads from a CDN
    inside its own template do not count, but must be pinned to an exact version. (The cap was 120 KB until
    the owner raised it, when the shows in Keep Off the Grass gained intruders, upgrades and a match day.)
@@ -109,9 +109,18 @@ const CORE = {
   milestones(S),        // a number that changes whenever something new happens (the pacing test reads it)
   bots: { eager, casual },   // (S, mem, dt) => acts through act(), with a person's limits built in
   pace: { eager, casual, gap },   // optional: tighter targets than the defaults for this box
+  feats: [[id, name, what, S => bool], ...],   // five stickers (see below)
   migrate(S, from)      // optional, once version > 1
 };
 ```
+
+**Stickers.** Every shipped box has five, `[id, name, what earns it, a pure test on the state]`. The shell
+runs the core itself (`new Function('KIT', core)`), reads the live state every two seconds through `K.peek()`
+and a saved state at boot, so a sticker needs nothing from the view: if it wants a count the state lacks, the
+core keeps one (`S.ears = (S.ears | 0) + 1`, never a call to the PRNG, so the bots play exactly as before).
+A whole game by either bot earns one to four of them (the suite checks this): about two come with playing
+through, the rest want a purpose (a skill, a hidden feature, playing a part of the box harder). A box's
+stickers appear only once it has been opened (rule 7).
 
 Events the view should show go into `S.ev` (capped), and the view drains them every frame.
 
@@ -141,6 +150,28 @@ games/contents_may_vary.html?world=<id>&at=20        start from 20 minutes of th
 `K.debug` is a convention, not part of the contract: give each view one with `state()` and whatever
 a Playwright script needs to find (screen rectangles of the things to tap, the way out).
 
+## The anthology's own round: stickers, returns, printings
+
+- **Stickers.** Five per box (above) and ten for the anthology (`GLOBAL` in the shell): the first box, the
+  whole stack with nothing returned, the whole stack in under four hours inside (the eager bots take about
+  three; "Next-day delivery"), returning a box, replaying one, copying the save, playing between midnight and
+  four, repacking, opening a box at the fastest post, thirty box stickers. Three are secret and show a hint
+  until earned. A toast shows each new one; the packing slip lists the open box's, the shelf has the book.
+- **Return to sender.** "Return this box unopened…" in the packing slip, for a box the player does not want.
+  The hurdle is a taping game in the shell: hold at the arrow and drag along three seams of the box while it
+  shifts on the table, more with each seam; straying off, running ahead or letting go tears the tape and the
+  seam starts again; then a tap stamps it. A script that does it perfectly needs ten to fifteen seconds; a
+  person about half a minute. The box counts as opened for the stack (the next one comes), stands on the shelf
+  shut and "returned unopened", earns no postage, and spoils "Handle with care" until it is played through
+  from the shelf, which counts as opening it after all.
+- **The post office and later printings.** Every box opened in a printing earns postage: one stamp, two if
+  it took under half an hour inside. Postage buys two perks of three levels each (3, 6, 10 stamps): *Express
+  post* runs a box's time ×1.25, ×1.5, ×2 (`K` multiplies `dt`, as `?speed` does); *A head start* begins a
+  fresh box as if its own eager bot had played it for 2, 4 or 6 minutes (as `?at` does). Once every box of a
+  printing is open, *Repack the stack* starts the next printing: every box from nothing, the shelf, stickers,
+  perks and postage kept, best times remembered. Nothing in a box changes for it, so a new box needs no work
+  for it; a box that wants a printing of its own could read one through `K` later.
+
 ## Adding a box
 
 1. Read this file, the ledger and the ideas. Run `npm run test:cmv` and keep it green throughout.
@@ -148,7 +179,8 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
    ledger, and choose. Name the box (an id that is a plain word, a title, a handling note that hints
    at the danger but not the content).
 3. Build the core first, in a scratch file, with its two bots; tune it with `KIT.simulate` until the
-   pacing is right for both bots across several seeds, with no cliffs and no dead stretches.
+   pacing is right for both bots across several seeds, with no cliffs and no dead stretches. Give it its
+   five stickers and check with the bots that a whole game earns one to four of them.
 4. Mock up the look as one still frame and have a critic look at it before building the whole view.
 5. Build the view as a template, splice it above the marker, add the id to `SHIPPED` in
    `test/contents_may_vary.mjs`, and add the box's own suite there if a rule can break quietly.
