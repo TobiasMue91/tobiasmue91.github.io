@@ -168,7 +168,7 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–33 / 47–49,
 Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
-Here Be Rabbits 42–43 / 77–80, Unwelcome Guests 39–41 / 54–57.
+Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 39–41 / 54–57.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -684,6 +684,21 @@ then, on purpose). Their notes and what changed:
 - *Text and controls too small on a large screen*: they grow with the screen, and A− / A+ (or the + and
   − keys) set the size, kept in the save.
 
+**A polish round** after the owner pointed at the manicule ("that is not a hand") and asked for more of
+the same kind of fault to be found. Every sprite was dumped into one gallery and every scene shot close
+up, which found: the manicule (now a hand in a red cuff with a pointing finger, three curled ones and a
+thumb, painted once at three times the size); the rabbit king (a crude stick rabbit on an outsize snail,
+now a seated king in an ermine-trimmed robe with crown and sceptre on a smaller snail); the ending (a flat
+yellow box with dots and stick rabbits, now a gilt cumdach with an engraved arcade, pearls, cabochons and
+a crystal on its cross, before a court of field rabbits and the king kneeling towards it, in a gold frame
+with quatrefoils, and the HUD and captions cleared away); the ink (a black sausage, now a spilt pool
+with a sheen and splashes); ponds (perfect circles with stitched rims that read as globes, now uneven
+flattened shores with rushes); woods (round balls of trees, now ragged at the edge, in the rules too);
+the dragon (twice too big on a phone) and its icon; a flood icon that was a blue box; a trebuchet whose
+counterweight tilted with the arm and stood on a white disc; tree medallions crowding the trunk and
+their prices. The mappa mundi gained ploughed, wheat and green fields, villages, mountain ranges, and
+cogs and sea serpents on the ocean round the world; bracken has a soft edge and ferns.
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
@@ -1163,6 +1178,9 @@ is not saved by its art direction: the owner played both and stopped.
   hop, because the rules move a rabbit by chance and spread a jam sideways. Keep the view's own walkers
   on the same field and correct them in blocks, moving a surplus to a shortfall before fading anything;
   measure the fades per second with a debug counter.
+- **Look at every sprite on its own, large.** Faults hide at play size and in motion: a hand that is not
+  a hand, a stick rabbit for a king, a counterweight tilting with its arm. Dump all sprites into one
+  gallery (a debug call returning data URLs) and shoot each scene close up before calling art done.
 - **Weigh the box while building it, not after.** Here Be Rabbits reached 157 KB before anyone measured;
   getting under 130 cost the rabbit knights and the bell tower. Give each part a budget before writing it.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
