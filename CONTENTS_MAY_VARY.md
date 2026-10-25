@@ -202,7 +202,7 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
-Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 36–37 / 59–75.
+Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–38 / 71–78.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -864,7 +864,14 @@ stay under 120.
   a hand that shows where to hold; NOT FRIGHTENED ENOUGH — CLOSER over someone stopped on the step, and
   CORNERED — COME ROUND THE OTHER SIDE over someone pinned at the far wall.
 - *The night's clock is the moon,* going down the sky towards the hills, the sky paling as the dawn comes.
-- Pacing (three seeds): eager 35.8–36.4 min, casual 59–75, never more than four minutes without something new.
+- *The ghost spends a third while its cold touches nobody,* so looking for someone is not punished on the
+  first nights (a critic's note: the first night ran out before anything was learnt).
+- Pacing (three seeds): eager 34.7–37.7 min, casual 71–78, never more than six and a half minutes without
+  something new.
+- *Critic rounds on the built box* (first impression, clarity, art direction, phone, feel): 8/4/8/6/6, then
+  7/5/8/6/6. What stayed below 8, for the next pass: clarity (crowds on one floor still merge; the cards of
+  people gone for good read as dead rather than done), the phone layout (the HUD and the cards are small),
+  and feel (the ghost covered whoever it frightened: now smaller on a phone and lifted off the finger).
 
 **The mock-ups, four critic rounds** (October 2026). One frame of a night and one of the organ, at phone and
 desktop size, drawn into the draft's own view (its house, people and film), each round scored by a fresh
