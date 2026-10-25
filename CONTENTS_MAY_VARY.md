@@ -850,6 +850,38 @@ stay under 120.
 
 **Before building**, the owner confirms this plan and the mock-ups (night and organ, phone and desktop).
 
+**The mock-ups, four critic rounds** (October 2026). One frame of a night and one of the organ, at phone and
+desktop size, drawn into the draft's own view (its house, people and film), each round scored by a fresh
+critic with no stake in it (first impression, clarity, art direction, phone):
+
+| round | night | organ |
+| --- | --- | --- |
+| 1 | 6 / 4 / 6 / 4 | 7 / 3 / 6 / 3 |
+| 2 | 7 / 5 / 6 / 6 | 6 / 4 / 5 / 6 |
+| 3 | 7 / 5 / 6 / 6 | 6 / 4 / 6 / 6 |
+| 4 | 7 / 5 / 6 / 6 | 6 / 5 / 6 / 6 |
+
+What the rounds settled: a blue night tint and a moon (a sun in the sky had said afternoon), the front
+door as a lit open doorway with THE DOOR over it and a printer's hand on the first nights, the ghost as
+hard cut paper (no glow) with punched almond eyes, lace holes and a scalloped hem, one HUD row on a phone
+and the cast cards in the ground band, a dawn bar under the title; on the organ, the pipe's own crown
+outlined when it can be bought, a horizontal price tag under it, the chosen pipe raised and glowing, an
+emblem cut into every pipe, four draw-knobs of 48 px (on a phone one register on show, on a desktop four
+ranks with gaps), the card as an intertitle with BUY on it, the film's grain and tint over the cellar.
+
+What stayed below 8, and why: every critic said it does not yet look like Reiniger. The mock-ups were
+painted over the draft's view, whose furniture is mid-grey and whose rooms are a flat wash, so the
+family (thin black figures) gets lost among the furniture; a contrast filter on the backdrop was not
+enough. The view has to be redrawn rather than overlaid: flat tinted paper per room lit from its middle,
+every piece of furniture solid black with fretwork cut into it pushed one plane back (smaller, behind a
+haze), people the only solid black in front, larger and with a pale rim while frightened. The rest of
+the last critic's list, for the build: one scream plaque at a time, above the screamer and off the
+ghost, about 30% smaller on a phone; ectoplasm and dawn as two different shapes (a vial, a moon that sets
+along an arc) with units; three clearly different pipe states (cream bought, black with a cream outline
+buyable, nearly invisible locked) and a bold thread from the parent pipe's foot; one emblem per skill
+everywhere; no rosettes over the pipes and flat pipe feet; price tags and glyphs at 14 px or more on a
+phone; nerve bars of 6 px or more; the desktop HUD next to the title.
+
 ### Open work on the shipped boxes
 
 Neither of the first two boxes has yet met rule 4's bar of 8 out of 10 on every count (Keep Off the Grass is closest: see below). The last critiques that ran (first impression,
