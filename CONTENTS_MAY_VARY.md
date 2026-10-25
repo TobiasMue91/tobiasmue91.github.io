@@ -747,6 +747,19 @@ still undone, most valuable first:
   are small there (a tap near a jar now reaches it, which helps but does not solve it); bulges that push the house out of shape rather than sitting on it like stickers; a
   phone layout composed for 390 px in every act; teach with the world rather than with words
   (an early tap could bake a flat loaf instead of refusing).
+  **Graphics round 1** (October 2026), every prop shot close up on a desktop (`K.debug.look(cx, cy, s)`) and
+  every act on both sizes. Glitches fixed: the starburst clock's ink was set inside a comment, so its rays
+  took whatever stroke came before; the box's stencil face was never fetched (only the canvas used it), so
+  the box said CONTENTS MAY VARY in Times; OPEN IT stood half off the top of a desktop and the number ran
+  over the box's edge; the big loaf's crust was cratered with crumb holes like a moon; the cellar dough's top
+  was a polyline with corners; the oven's bricks were square outlines like windows; a grey halftone sheet
+  hid the cupboards behind the bench; the timer's bell floated above it and stood still while it rang. Detail
+  added, lit from the upper left as the rest: an oven in running bond with an arch of bricks on end, embers
+  and a flue; a crust with blisters, speckles, cracks and flour, and a crumb whose holes are shaded inside;
+  cupboard doors with raised panels; a fridge with enamel shine, hinges, a gasket and a grille; a clock with
+  balls on its rays and hours on its dial; glass jars with a thick foot and light through the far edge; tiled
+  roofs, brick chimneys and shutters on the neighbours. World paths go through `mv/ln/qc/bz`, which paid for
+  most of it: 118.6 KB before, 122.8 KB after.
 - **Unwelcome Guests** (draft): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
@@ -1224,6 +1237,8 @@ is not saved by its art direction: the owner played both and stopped.
   time. Shoot every scene and the sprite gallery before, again after each change, and compare the canvases
   pixel for pixel. It caught two helpers that overwrote their own definitions and a local `st` shadowing a new
   one, which a glance at the screen would have missed. A comparison must count missing images as failures: a
-  crashed box simply has fewer canvases.
+  crashed box simply has fewer canvases. And compare the colour channels, not only alpha: PIL's `getbbox()` on an RGBA
+  difference looks at alpha alone, so every opaque change passes unseen. Page screenshots also catch DOM captions
+  whose CSS transitions run on the real clock; judge the canvases.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
