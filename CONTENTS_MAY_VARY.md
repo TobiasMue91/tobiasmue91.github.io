@@ -1178,6 +1178,10 @@ is not saved by its art direction: the owner played both and stopped.
   hop, because the rules move a rabbit by chance and spread a jam sideways. Keep the view's own walkers
   on the same field and correct them in blocks, moving a surplus to a shortfall before fading anything;
   measure the fades per second with a debug counter.
+- **For a hand, start from a drawn hand.** Three manicules drawn from primitives (lobes, rounded boxes,
+  then curves) all failed the owner's eye. The one that passed takes the outline and creases of the
+  backhand pointing finger from Microsoft's Fluent Emoji (MIT, as Hands Up and Tells already do) and
+  only colours, inks and cuffs it. Anatomy is the one thing not to improvise.
 - **Look at every sprite on its own, large.** Faults hide at play size and in motion: a hand that is not
   a hand, a stick rabbit for a king, a counterweight tilting with its arm. Dump all sprites into one
   gallery (a debug call returning data URLs) and shoot each scene close up before calling art done.
