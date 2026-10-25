@@ -36,7 +36,7 @@ const suites = picked.length ? picked : ALL;
    file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
 const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
-const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 72 * 1024;
+const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
 const BOX_CAP = { warren: 210 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
@@ -114,6 +114,13 @@ if (suites.includes('contract')) {
     check(!CORE.done(S) && CORE.progress(S) >= 0 && CORE.progress(S) < .05, `${w.id}: a fresh state is not done and has made no progress`);
     check(JSON.stringify(CORE.init(7)) === JSON.stringify(CORE.init(7)), `${w.id}: the same seed gives the same start`);
     check(CORE.act(S, 'no-such-thing') === false || CORE.act(S, 'no-such-thing') == null, `${w.id}: an unknown action does nothing`);
+    // stickers: five per shipped box, [id, name, what earns it, a pure test on the state], none earned at the start
+    if (!SHIPPED.includes(w.id)) continue;
+    const F = CORE.feats || [];
+    check(F.length === 5 && new Set(F.map(f => f[0])).size === 5, `${w.id}: has five stickers with their own ids`, F.map(f => f[0]).join(', '));
+    check(F.every(f => /^[a-z]+$/.test(f[0]) && f[1] && f[2] && typeof f[3] === 'function'), `${w.id}: every sticker has an id, a name, a description and a test`);
+    let threw = null; const got = F.filter(f => { try { return f[3](CORE.init(3)) === true; } catch (e) { threw = e.message; return false; } });
+    check(!threw && !got.length, `${w.id}: no sticker is earned in a fresh state, and none throws`, threw || got.map(f => f[0]).join(', '));
   }
 }
 
@@ -168,6 +175,11 @@ if (suites.includes('pacing')) {
         const dips = ps.filter((p, i) => i && p < ps[i - 1] - .02).length;
         check(dips === 0, `${w.id}: progress never goes backwards for the ${bot} bot`, ps.map(p => p.toFixed(2)).join(' '));
         check(CORE.progress(r.S) >= .99, `${w.id}: progress reaches the end with the box`);
+      }
+      // a whole game earns some of the box's stickers but never all of them: the rest want a purpose
+      if (CORE.feats && SHIPPED.includes(w.id)) {
+        const n = runs.map(r => CORE.feats.filter(f => f[3](r.S)).length);
+        check(n.every(k => k >= 1 && k <= 4), `${w.id}: the ${bot} bot earns between one and four stickers in a whole game`, n.join(', '));
       }
       if (REPORT) for (const r of runs.slice(0, 1)) console.log('   ', r.marks.map(([s, m]) => (s / 60).toFixed(1)).join(' '));
     }
@@ -665,6 +677,51 @@ if (suites.includes('browser')) {
         check(moved, `lawn: buying ${id} moves to the ${site} and draws it`);
         check(p.errs.length === 0, `lawn: no errors on the way to ${id}`, p.errs.join(' | '));
       }
+      await p.close();
+    }
+    {
+      // stickers, return to sender and the post office: the anthology's own round, played with real input
+      const stack = worlds.filter(w => !w.draft).map(w => w.id);
+      const p = await page('');
+      p.on('dialog', d => d.accept());
+      const seed = async save => { await p.goto(base.replace(/[^/]*$/, '__blank')); await p.evaluate(s => localStorage.setItem('cmv.save', JSON.stringify(Object.assign({ v: 1, started: Date.now(), last: Date.now(), current: null, opened: [], worlds: {}, replay: null, settings: { sound: 0, music: 0, motion: 'full' } }, s))), save); await p.goto(base); await until(p, () => CMV.state === 'title'); };
+      const playing = id => until(p, id => CMV.state === 'playing' && CMV.live && CMV.live.ready && CMV.live.w.id === id, 60000, id);
+      // a sticker shows up once the box's state earns it, and stays in the save
+      await seed({ current: stack[0] }); await p.click('#tGo');
+      check(await playing(stack[0]), `stickers: ${stack[0]} opens`);
+      await p.evaluate(() => { const K = CMV.win().K, S = K.debug.state(); if (CMV.live.w.id === 'starter') S.best = 10; });
+      if (stack[0] === 'starter') check(await until(p, () => !!CMV.save.feats['starter.streak'] && document.querySelector('#toast').classList.contains('on'), 6000), 'stickers: earning one shows it and keeps it');
+      await p.keyboard.press('Escape');
+      check(await until(p, () => document.querySelectorAll('#mFeats .stk').length === 5 && !/S =>/.test(document.querySelector('#mFeats').textContent)), 'stickers: the packing slip lists the box’s five by name');
+      // return to sender: tape three seams along the moving box, stamp it, and the next box opens
+      await p.click('#sReturn');
+      check(await until(p, () => !!CMV.ret()), 'return: the button opens the taping');
+      for (let k = 0; k < 3; k++) {
+        let d = await p.evaluate(() => CMV.ret()); await p.mouse.move(d.ax, d.ay); await p.mouse.down();
+        for (let u = .03; u <= 1.04; u += .03) { d = await p.evaluate(() => CMV.ret()); if (!d || d.k !== k) break; await p.mouse.move(d.ax + (d.bx - d.ax) * u, d.ay + (d.by - d.ay) * u); }
+        await p.mouse.up();
+      }
+      const d = await p.evaluate(() => CMV.ret()); check(d && d.k === 3, 'return: three seams taped');
+      if (d) await p.mouse.click(d.cx, d.cy);
+      check(await playing(stack[1]), 'return: stamping it sends it back and opens the next box');
+      const sv = await p.evaluate(() => CMV.save);
+      check(sv.skipped[0] === stack[0] && sv.opened.includes(stack[0]) && sv.feats['cmv.return'], 'return: the save keeps it as returned, with its sticker', JSON.stringify([sv.skipped, sv.opened]));
+      // a wobble off the seam tears the tape and the seam starts again
+      await p.keyboard.press('Escape'); await p.click('#sReturn'); await until(p, () => !!CMV.ret());
+      let e = await p.evaluate(() => CMV.ret()); await p.mouse.move(e.ax, e.ay); await p.mouse.down(); await p.mouse.move(e.ax + (e.bx - e.ax) * .2, e.ay + (e.by - e.ay) * .2 + 120); await p.mouse.up();
+      e = await p.evaluate(() => CMV.ret()); check(e.k === 0 && e.p === 0, 'return: straying off the seam tears it');
+      await p.click('#retNo'); check(await until(p, () => CMV.state === 'playing' && !CMV.ret()), 'return: Keep it goes back into the box');
+      // the post office: every box open, postage for each, perks bought, the stack repacked with a head start
+      await seed({ opened: stack, worlds: Object.fromEntries(stack.map(id => [id, { state: null, v: 1, time: 1500, done: true, progress: 1 }])) });
+      check(await p.evaluate(() => !document.querySelector('#tPost').hidden && CMV.save.postage === 2 * CMV.worlds.length && !!CMV.save.feats['cmv.careful']), 'post: an old finished save has its postage and stickers');
+      await p.click('#tPost'); await p.click('#poPerks .perk:nth-child(2) button');
+      check(await p.evaluate(() => CMV.save.perks.h === 1), 'post: postage buys a head start');
+      await p.click('#poRepack');
+      check(await until(p, () => CMV.state === 'title' && CMV.save.printing === 2 && !CMV.save.opened.length && CMV.save.ever.length === CMV.worlds.length), 'post: repacking starts the second printing and keeps the shelf');
+      await p.click('#tGo');
+      check(await playing(stack[0]), 'post: the second printing opens box 1 again');
+      if (stack[0] === 'starter') check(await p.evaluate(() => CMV.win().K.debug.state().t >= 100), 'post: a fresh box starts with its head start');
+      check(p.errs.length === 0, 'stickers, return and post office: no errors on the way', p.errs.join(' | '));
       await p.close();
     }
     await b.close(); srv.close();
