@@ -34,6 +34,11 @@ who has opened every box before it.
 5. BUILD the view as a `<template data-world>` and splice it, with the core, above the marker in
    `games/contents_may_vary.html`. Add the id to `SHIPPED` in `test/contents_may_vary.mjs`, and a
    suite for the box if one of its rules could break quietly. Keep within the budget (rule 2).
+5b. CLOSE UP. List every prop in `K.debug.props` and run `node util/cmv_props.mjs <id>`; look at every tile at
+   full size against **Drawing without glitches** in CONTENTS_MAY_VARY.md (one outline per thing, back to
+   front, everything held, light that fades) and give the tiles to a critic with that checklist. Record each
+   transition (the ending, the box opening, a level change) as video and check it frame by frame at 80 ms.
+   Give the box a `revisit(S)` if carrying on after its end means anything.
 6. PLAY AND CRITIQUE. With `?world=<id>` and `&at=<minutes>`, drive the box with real input in
    headless Chromium on a phone and a desktop. Record filmstrips (8 to 12 frames) of the first
    minute, a typical action, each big moment and the ending, and give them to a fresh critic, now

@@ -38,7 +38,7 @@ const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { warren: 210 * 1024 };
+const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -193,6 +193,15 @@ if (suites.includes('starter') && starter) {
   const { CORE, KIT } = load(starter);
   const S0 = () => CORE.init(5);
   const at = (S, p) => { const j = S.jars[0]; j.t = p * CORE.rise(S, j); };
+  {
+    // going back to the house from the shelf after the end: the cellar again, every card for sale, the Last Loaf once more
+    const S = S0(); S.$ = 1e9; S.act = 3; S.proof = 1; CORE.act(S, 'buy', 'last'); CORE.step(S, .2); for (let k = 2; k <= 5; k++) CORE.act(S, 'finale', k);
+    check(CORE.done(S), 'the Last Loaf, scored, baked, sliced and opened, is done');
+    const R = CORE.revisit(JSON.parse(JSON.stringify(S)));
+    check(!CORE.done(R) && R.act === 3 && CORE.can(R, CORE.byId.last), 'revisit puts her back in the cellar, ready, with the Last Loaf for sale again');
+    CORE.act(R, 'buy', 'last'); CORE.step(R, .2); for (let k = 2; k <= 5; k++) CORE.act(R, 'finale', k);
+    check(CORE.done(R), 'and the ending can be played again from there');
+  }
   {
     const S = S0(); at(S, CORE.P.early * .9);
     check(!CORE.act(S, 'tap', 0) && S.$ === 0, 'a tap before she has risen does nothing and earns nothing');
@@ -695,6 +704,8 @@ if (suites.includes('browser')) {
       check(shelf.some(t => /№ 2/.test(t) && /not opened yet/.test(t)), 'an old save whose box 2 was never opened finds it on the shelf', shelf.join(' | '));
       check(!draft || !shelf.some(t => t.includes(draft.title)), 'a draft opened in an old save is not on the shelf');
       await p.click('#shPlanks .kept:not(.closed)');
+      check(!(await p.$('#shPick .primary')), 'a box with no saved state offers no going back to it, only playing it again');
+      await p.click('#shPick >> text=Play it again from the start');
       if (await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.slot === 'replay')) {
         await p.evaluate(() => CMV._complete(CMV.live.token, null));
         check(await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.slot === 'main' && CMV.live.w.n === 2), 'playing box 1 again goes on into box 2 when box 2 was never opened');

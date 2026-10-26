@@ -174,6 +174,9 @@ details.more summary{cursor:pointer;font-weight:700;font-size:13px;letter-spacin
 .kept.closed .bx::before,.kept.closed .bx::after{display:none}
 .kept.closed .bx{border-top:10px solid var(--kraft-l)}
 #shelf .close{margin:16px 0 30px}
+#shPick{margin:6px 12px 18px;padding:14px 16px;max-width:30em;background:var(--paper);color:var(--ink);border-radius:3px;box-shadow:0 8px 24px rgba(0,0,0,.45);text-align:center;transform:rotate(-.6deg)}
+#shPick p{margin:0 0 10px;font-weight:700}
+#shPick .btns{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
 
 /* ---------- inside a box: the trip from one world to the next ---------- */
 #transit{position:fixed;z-index:12;inset:0;pointer-events:none}
@@ -211,8 +214,8 @@ details.more summary{cursor:pointer;font-weight:700;font-size:13px;letter-spacin
 .stk.got i{opacity:1;border:3px solid var(--paper);background:var(--red);color:var(--paper);box-shadow:0 0 0 2px var(--red),0 2px 4px rgba(0,0,0,.35);transform:rotate(-8deg)}
 .stk b{display:block;font-size:14px}
 .stk span{opacity:.75}
-#toast{position:fixed;z-index:40;left:50%;top:max(12px,env(safe-area-inset-top));transform:translate(-50%,-140%);background:var(--paper);color:var(--ink);padding:9px 16px 9px 10px;box-shadow:0 8px 24px rgba(0,0,0,.45);border-radius:3px;transition:transform .45s cubic-bezier(.3,1.4,.5,1);pointer-events:none;width:max-content;min-width:min(300px,calc(100vw - 24px));max-width:calc(100vw - 24px)}
-#toast.on{transform:translate(-50%,0) rotate(-1deg)}
+#toast{position:fixed;z-index:40;left:50%;top:max(12px,env(safe-area-inset-top));transform:translate(-50%,calc(-100% - 60px));visibility:hidden;background:var(--paper);color:var(--ink);padding:9px 16px 9px 10px;box-shadow:0 8px 24px rgba(0,0,0,.45);border-radius:3px;transition:transform .45s cubic-bezier(.3,1.4,.5,1),visibility .45s;pointer-events:none;width:max-content;min-width:min(300px,calc(100vw - 24px));max-width:calc(100vw - 24px)}
+#toast.on{transform:translate(-50%,0) rotate(-1deg);visibility:visible}
 #toast small{display:block;font:700 11px var(--stencil);letter-spacing:.2em;color:var(--red)}
 .book{width:min(760px,100%);margin:8px 0 6px}
 .book h3{font-family:var(--stencil);font-weight:700;letter-spacing:.12em;color:var(--kraft-l);font-size:22px;margin:22px 0 4px;text-align:center}
@@ -301,7 +304,7 @@ details.more summary{cursor:pointer;font-weight:700;font-size:13px;letter-spacin
 
 <section id="shelf" class="screen" hidden>
   <h2>THE SHELF</h2>
-  <p class="fine" id="shNote">Every box you have opened. Take one down to play it again from the start; your progress in it stays where it is.</p>
+  <p class="fine" id="shNote">Every box you have opened. Take one down to go back to it, or to play it again from the start.</p>
   <div class="planks" id="shPlanks"></div>
   <div class="book" id="shBook"></div>
   <button class="btn close" id="shClose">Close</button>
@@ -698,7 +701,21 @@ const CMV = window.CMV = (() => {
     // 1. dive into the opened box
     menuBtn(false);
     if (quick) await anim(inside, [{ opacity: 0 }, { opacity: 1 }], { duration: 250 });
-    else await anim(inside, [{ transform: fromRect(rect), opacity: .6 }, { transform: 'none', opacity: 1 }], { duration: 750, easing: 'cubic-bezier(.6,0,.3,1)' });
+    else if (live && live.frame && rect && rect.w > 4) {
+      // out of a world: its camera falls into the box it opened (the world grows round the box until the box fills
+      // the screen), and the inside of the box comes up only as the fall ends, so nothing is squashed or see-through
+      const W = innerWidth, H = innerHeight, k = Math.max(W / rect.w, H / rect.h), cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2, f = live.frame;
+      f.style.transformOrigin = '0 0';
+      await Promise.all([
+        anim(f, [{ transform: 'none', filter: 'brightness(1)' }, { filter: 'brightness(1.15)', offset: .6 }, { transform: `translate(${W / 2 - cx * k}px,${H / 2 - cy * k}px) scale(${k})`, filter: 'brightness(3)' }], { duration: 1000, easing: 'cubic-bezier(.55,0,.7,.35)' }),
+        anim(inside, [{ opacity: 0, transform: 'scale(.9)', filter: 'brightness(2.2)' }, { opacity: 0, transform: 'scale(.9)', filter: 'brightness(2.2)', offset: .78 }, { opacity: 1, transform: 'none', filter: 'brightness(1)' }], { duration: 1250, easing: 'cubic-bezier(.3,0,.3,1)' })]);
+    }
+    else {
+      // from the title: the box grows from where it stands while the room around it goes dark
+      const scr = document.querySelector('.screen:not([hidden])'), dim = scr && scr.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, fill: 'forwards' });
+      await anim(inside, [{ transform: fromRect(rect), opacity: 0 }, { opacity: 1, offset: .25 }, { transform: 'none', opacity: 1 }], { duration: 850, easing: 'cubic-bezier(.6,0,.3,1)' });
+      show(null); if (dim) dim.cancel();
+    }
     show(null);
     const old = live; live = m; if (old && old !== m) unmount(old);
     sound('thump');
@@ -738,6 +755,8 @@ const CMV = window.CMV = (() => {
   function complete(token, rect) {
     if (!live || live.token !== token || !live.ready || state !== 'playing') return;
     const w = live.w, slot = live.slot;
+    // a box gone back to after it was done: its ending leads back to the shelf, and pays nothing twice
+    if (slot === 'main' && live.visit) { pull(); writeSave(); unmountLive(); return shelfScreen(); }
     if (slot === 'main') {
       pull(); const r = rec(w.id); r.done = true; r.doneAt = Date.now(); r.progress = 1;
       if (!SAVE.opened.includes(w.id)) SAVE.opened.push(w.id);
@@ -817,7 +836,7 @@ const CMV = window.CMV = (() => {
       b.querySelector('.cap span').textContent = w.title;
       b.querySelector('.cap small').textContent = r.skipped ? 'returned unopened' : r.done ? 'opened in ' + KIT.time(r.time || 0) : r.best ? 'best ' + KIT.time(r.best) : 'opened before';
       if (r.skipped) b.querySelector('.souv').remove();
-      b.onclick = () => { if (confirm('Play box № ' + w.n + ', ' + w.title + ', again from the start? Your progress elsewhere stays as it is.')) { SAVE.replay = { id: w.id, state: null, v: 0, time: 0, progress: 0 }; writeSave(); enter(w, 'replay', null); } };
+      b.onclick = () => pick(w, r);
       plank.appendChild(b);
     });
     // the box open now, or else the next one still taped up (it opens on the title, as a new box does)
@@ -838,6 +857,25 @@ const CMV = window.CMV = (() => {
       p.querySelector('button').onclick = () => enter(w, 'replay', null);
       P.appendChild(p);
     }
+  }
+  // a box taken down from the shelf: back to where it was left (a done box carries on after its end, if its
+  // core says how: CORE.revisit), or again from the start in the replay slot
+  function pick(w, r) {
+    const core = coreOf(w), back = !r.skipped && r.state != null && (!(core && core.done(r.state)) || (core && core.revisit));
+    const again = () => { SAVE.replay = { id: w.id, state: null, v: 0, time: 0, progress: 0 }; writeSave(); enter(w, 'replay', null); };
+    let el = $('#shPick'); if (el) el.remove();
+    el = document.createElement('div'); el.id = 'shPick';
+    el.innerHTML = '<p></p><div class="btns"></div>'; el.querySelector('p').textContent = 'Box № ' + w.n + ', ' + w.title + (back ? '. Go back to it as you left it, or play it again from nothing; neither changes the box you are in now.' : '.');
+    const add = (label, fn, cls) => { const b = document.createElement('button'); b.className = 'btn' + (cls ? ' ' + cls : ''); b.textContent = label; b.onclick = () => { el.remove(); fn && fn(); }; el.querySelector('.btns').appendChild(b); };
+    if (back) add('Back to it', () => {
+      if (core && core.done(r.state)) { try { r.state = core.revisit(JSON.parse(JSON.stringify(r.state))); } catch (e) { console.warn('[cmv] revisit', e); } }
+      writeSave(); if (live && live.w === w && live.slot === 'main') return resumeFromShelf();
+      enter(w, 'main', null); live.visit = !!r.done;
+    }, 'primary');
+    add('Play it again from the start', () => { if (!SAVE.replay || confirm('That puts aside the box you were playing again. Go on?')) again(); });
+    add('Not now', null);
+    $('#shelf').insertBefore(el, $('#shBook'));
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
   function resumeFromShelf() { show(null); state = 'playing'; setPaused(false); menuBtn(true); live.frame.focus(); }
 
@@ -1144,48 +1182,82 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--mint);font-famil
 @media (max-width:899px){#tag{padding:6px 12px 6px 26px}#money{font-size:28px}#rate{font-size:12.5px}#streak{font-size:18px}}
 @keyframes bump{40%{transform:scale(1.06) rotate(-1deg)}}
 @keyframes swing{0%{transform:rotate(-2.5deg)}25%{transform:rotate(3.5deg)}55%{transform:rotate(-5deg)}80%{transform:rotate(-1.5deg)}100%{transform:rotate(-2.5deg)}}
-/* the recipe box */
-#box{position:fixed;left:0;right:0;bottom:0;height:40%;background:var(--wood);border-top:10px solid var(--wood2);box-shadow:inset 0 10px 18px rgba(0,0,0,.35);display:flex;flex-direction:column}
-#box::before{content:"";position:absolute;left:0;right:0;top:-10px;height:10px;background:repeating-linear-gradient(90deg,rgba(255,220,170,.08) 0 3px,transparent 3px 17px)}
-#lid{display:none}
-#cards{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:12px 12px max(12px,env(safe-area-inset-bottom));scrollbar-width:thin;scrollbar-color:#a2693b transparent}
-.card{position:relative;display:block;width:100%;text-align:left;border:0;margin:0 0 10px;padding:10px 92px 10px 14px;min-height:68px;font:inherit;color:inherit;background:var(--paper);border-radius:3px 3px 4px 4px;box-shadow:0 3px 0 rgba(0,0,0,.28);cursor:pointer;transition:transform .12s,opacity .2s,filter .2s;
-  background-image:linear-gradient(var(--tomato),var(--tomato)),repeating-linear-gradient(transparent 0 23px,rgba(79,143,136,.25) 23px 24px);background-size:calc(100% - 92px) 2px,calc(100% - 92px) 100%;background-repeat:no-repeat;background-position:0 36px,0 13px}
-.card .t{display:block;font-weight:700;font-size:17px;line-height:24px;font-variation-settings:"SOFT" 100,"opsz" 30}
-.card .d{display:block;font-style:italic;font-size:14.5px;line-height:24px;margin-top:3px;font-variation-settings:"SOFT" 100;text-wrap:pretty}
-.card .p{position:absolute;right:0;top:8px;bottom:8px;width:82px;border-left:2px dashed rgba(59,36,22,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--hand);font-weight:700;font-size:25px;line-height:1}
-.card .p small{display:flex;gap:3px;margin-top:7px}
-.card .p small i{width:7px;height:7px;border-radius:50%;border:1.5px solid currentColor;opacity:.8}
-.card .p small i.on{background:currentColor}
-.card.no{opacity:.55;cursor:default}
-.card.can .p{color:var(--ink)}
-.card.can{box-shadow:0 3px 0 rgba(0,0,0,.28)}
-.card.can .p::before{content:"";position:absolute;left:5px;right:3px;top:50%;height:52px;margin-top:-30px;border:2.5px solid var(--tomato);border-radius:50%;transform:rotate(-7deg);opacity:.9}
-@media (hover:hover){.card.can:hover{transform:translateY(-2px) rotate(-.4deg)}}
-.card:active{transform:translateY(2px)}
-.card.sold{animation:sold .45s}
+/* the recipe tin: enamelled red with cream daisies, index cards standing in it */
+#box{position:fixed;left:0;right:0;bottom:0;height:calc(152px + env(safe-area-inset-bottom));background:#a8321f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cg fill='%23f3dcc0' fill-opacity='.2'%3E%3Cg id='d'%3E%3Cellipse cx='18' cy='12' rx='3' ry='6'/%3E%3Cellipse cx='18' cy='24' rx='3' ry='6'/%3E%3Cellipse cx='12' cy='18' rx='6' ry='3'/%3E%3Cellipse cx='24' cy='18' rx='6' ry='3'/%3E%3C/g%3E%3Cuse href='%23d' x='36' y='36'/%3E%3C/g%3E%3Cg fill='%23ffcf33' fill-opacity='.3'%3E%3Ccircle cx='18' cy='18' r='2.6'/%3E%3Ccircle cx='54' cy='54' r='2.6'/%3E%3C/g%3E%3C/svg%3E");border-top:6px solid #7d2114;box-shadow:inset 0 14px 18px -8px rgba(40,10,4,.6),0 -2px 0 #e9c39a;display:flex;flex-direction:column}
+#box::before{content:"";position:absolute;left:0;right:0;top:-6px;height:6px;background:linear-gradient(#e7c08f,#b87c45 60%,#7d2114)}
+#lid,#plate,#backs{display:none}
+#cards{flex:1;display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;scroll-snap-type:x proximity;padding:12px 12px max(10px,env(safe-area-inset-bottom));scrollbar-width:none}
+#cards::-webkit-scrollbar{display:none}
+@media (max-width:899px){#cards{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent)}}
+.card.goal.no{filter:none}
+.card{--r:0deg;position:relative;flex:0 0 160px;display:grid;grid-template-columns:40px 1fr;grid-template-rows:auto 1fr auto;column-gap:8px;text-align:left;border:0;margin:0;padding:9px 10px 8px;font:inherit;color:inherit;border-radius:2px 2px 4px 4px;cursor:pointer;scroll-snap-align:start;transform:rotate(var(--r));transition:transform .15s,filter .2s;
+  background:linear-gradient(var(--tomato),var(--tomato)) 0 38px/100% 2px no-repeat,repeating-linear-gradient(transparent 0 17px,rgba(79,143,136,.28) 17px 18px) 0 40px/100% 100% no-repeat,linear-gradient(170deg,#fbf4e3,#f1e3c4);
+  box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 2px 0 rgba(60,20,8,.35),0 8px 14px -6px rgba(40,10,4,.55)}
+.card .ic{grid-row:1;width:40px;height:40px;align-self:start;margin-top:-2px}
+.card .t{grid-row:1;align-self:center;font-weight:700;font-size:14px;line-height:16px;font-variation-settings:"SOFT" 100,"opsz" 30;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .d{grid-column:1/3;grid-row:2;font-style:italic;font-size:12.5px;line-height:18px;margin-top:5px;font-variation-settings:"SOFT" 100;text-wrap:pretty;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .p{grid-column:1/3;grid-row:3;display:flex;align-items:center;justify-content:space-between;font-family:var(--hand);font-weight:700;font-size:23px;line-height:1;margin-top:2px}
+.card .p span{position:relative;order:2;padding:0 4px}
+.card .p small{display:flex;gap:3px;order:1}
+.card .p small i{width:9px;height:9px;border:1.5px solid rgba(59,36,22,.6);border-radius:1px;transform:rotate(-4deg)}
+.card .p small i.on{background:var(--tomato) linear-gradient(135deg,transparent 40%,var(--paper) 40% 55%,transparent 55%);border-color:var(--ink)}
+.card.no{filter:saturate(.55) brightness(.86);cursor:default}
+/* how near the money is to the price: a pencil line along the foot of the card that fills as it comes */
+.card .pg{position:absolute;left:10px;right:10px;bottom:4px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--tomato) calc(var(--pg,0)*100%),rgba(59,36,22,.15) 0);opacity:.85}
+.card.can .pg{display:none}
+.card.no .p span{opacity:.6}
+.card.can .p span::before{content:"";position:absolute;inset:-7px -8px;border:2.5px solid var(--tomato);border-radius:50%;transform:rotate(-7deg)}
+.card.can{animation:ready .5s cubic-bezier(.3,1.6,.5,1)}
+@keyframes ready{40%{transform:translateY(-6px) rotate(var(--r))}}
+@media (hover:hover){.card.can:hover{transform:translateY(-3px) rotate(calc(var(--r) - .6deg))}}
+.card:active{transform:translateY(2px) rotate(var(--r))}
+.card.sold{animation:sold .5s}
+.card.sold::after{content:"TRIED";position:absolute;right:10px;top:34%;padding:1px 6px;border:3px solid rgba(217,71,43,.85);border-radius:3px;color:rgba(217,71,43,.85);font:700 18px/1 "Stardos Stencil",var(--display);letter-spacing:.12em;transform:rotate(-14deg);animation:stamp .5s cubic-bezier(.2,1.6,.4,1) both;pointer-events:none}
+@keyframes stamp{0%{opacity:0;transform:rotate(-14deg) scale(2.2)}30%{opacity:1;transform:rotate(-14deg) scale(.95)}80%{opacity:1}100%{opacity:0;transform:rotate(-14deg) scale(1)}}
 .card.dealt{animation:deal .5s cubic-bezier(.2,1.4,.4,1)}
 @keyframes deal{from{transform:translateY(-14px) rotate(-2deg);opacity:0}}
 @keyframes sold{30%{transform:translateY(-10px) rotate(-1.5deg)}}
 .card.nope{animation:nope .3s}
 @keyframes nope{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-.card.goal{background-image:none;background:#efe3c8;border:2px dashed rgba(59,36,22,.55);box-shadow:none}
-.card.goal .seal{position:absolute;right:22px;top:50%;width:46px;height:46px;margin-top:-23px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#e05a3d,#a8291a 70%);box-shadow:0 2px 0 rgba(0,0,0,.3);display:grid;place-items:center;color:#f7d6c8;font-family:var(--display);font-size:20px}
-.card.goal.can{background:var(--paper);border-style:solid}
-.card.goal .pp{position:absolute;right:76px;top:50%;transform:translateY(-50%);font-family:var(--hand);font-weight:700;font-size:22px;white-space:nowrap}
-.card.goal:has(.pp:not(:empty)) .d{display:block;padding-right:76px}
-.divider{font-family:var(--hand);font-weight:700;font-size:22px;color:#f3d9b0;margin:6px 4px 8px;display:flex;align-items:center;gap:8px}
-.divider::after{content:"";flex:1;height:2px;background:rgba(243,217,176,.3)}
-@media (max-width:899px){
-  #box{transition:height .35s cubic-bezier(.3,0,.2,1)}
-  #lid{display:flex;position:absolute;right:10px;top:8px;z-index:2;height:34px;padding:0 14px;border:0;border-radius:17px;background:var(--wood2);color:#f3d9b0;font-family:var(--hand);font-weight:700;font-size:20px;align-items:center;gap:8px;box-shadow:0 2px 0 rgba(0,0,0,.3)}
-  #lid b{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:11px;background:var(--gold);color:var(--ink);font-family:var(--body);font-size:13px;padding:0 6px}
-  #lid i{font-style:normal;transition:transform .3s}
-  body.shut #box{height:64px}
-  body.shut #lid i{transform:rotate(180deg)}
-  body.shut #cards{overflow:hidden;opacity:.35}
+/* the Last Loaf: a recipe in an envelope, sealed in red wax on the flap */
+.card.goal{order:-1;flex-basis:118px;display:flex;flex-direction:column;align-items:center;text-align:center;padding:6px 8px 8px;background:linear-gradient(160deg,#efe1c2,#e2cfa8);box-shadow:0 2px 0 rgba(60,20,8,.35),0 8px 14px -6px rgba(40,10,4,.55)}
+/* the flap: a V from the top corners down to the seal */
+.card.goal::before{content:"";position:absolute;left:0;right:0;top:0;height:41px;background:linear-gradient(to top right,transparent 48.5%,rgba(59,36,22,.35) 49.5% 51%,transparent 52%) left/50% 100% no-repeat,linear-gradient(to top left,transparent 48.5%,rgba(59,36,22,.35) 49.5% 51%,transparent 52%) right/50% 100% no-repeat;pointer-events:none}
+.card.goal .seal{position:relative;flex:0 0 auto;width:38px;height:38px;border-radius:50% 46% 52% 48%;background:radial-gradient(circle at 38% 32%,#ef6d4f,#a8291a 62%,#7d1a10);box-shadow:0 2px 0 rgba(0,0,0,.3),inset 0 0 0 4px rgba(125,26,16,.5);display:grid;place-items:center;color:#f7d6c8;font-family:var(--display);font-size:16px;order:-1;margin-top:16px;width:34px;height:34px;z-index:1}
+.card.goal .t{font-family:var(--display);font-weight:400;font-size:14px;line-height:17px;color:#7d2114;margin-top:5px;display:block;white-space:nowrap}
+.card.goal .d{font-size:11.5px;line-height:14px;margin-top:3px;-webkit-line-clamp:2}
+.card.goal.can{background:linear-gradient(160deg,#fbf4e3,#f1e3c4);animation:glowy 1.6s ease-in-out infinite alternate}
+@keyframes glowy{to{box-shadow:0 2px 0 rgba(60,20,8,.35),0 0 0 4px var(--gold),0 0 22px 4px rgba(255,207,51,.7)}}
+.card.goal .pp{font-family:var(--hand);font-weight:700;font-size:21px;white-space:nowrap}
+.divider{display:none;flex:0 0 26px;writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--hand);font-weight:700;font-size:18px;color:#fbe3c4;text-align:center;align-self:stretch;border-left:2px dashed rgba(251,227,196,.35);padding-left:4px;text-shadow:0 1px 0 #7d2114}
+@media (min-width:900px){
+  #box{left:auto;top:0;width:370px;height:auto;border-top:0;border-left:8px solid #7d2114}
+  #box::before{left:-8px;right:auto;top:0;bottom:0;width:8px;height:auto;background:linear-gradient(90deg,#7d2114,#e7c08f 40%,#b87c45)}
+  #plate{display:block;position:absolute;left:18px;top:14px;padding:7px 20px 6px;border-radius:40px/24px;background:linear-gradient(#fbf4e3,#ead9b4);border:3px solid #7d2114;box-shadow:inset 0 0 0 2px #fbf4e3,inset 0 0 0 4px rgba(217,71,43,.6),0 3px 0 rgba(40,10,4,.45);font:400 21px/1 var(--display);color:#7d2114;transform:rotate(-1.5deg);z-index:1}
+  #plate b{font:italic 700 16px var(--body);color:var(--ink);margin-right:2px}
+  /* the rest of the tin: cards not dealt yet, face down, so the column is never bare enamel */
+  #backs{display:block;position:relative;height:150px;margin:0 16px 18px 18px;flex:0 0 auto}
+  #backs i{position:absolute;left:0;right:0;height:86px;border-radius:3px;background:repeating-linear-gradient(45deg,#efe3c6 0 6px,#e7d7b4 6px 12px);box-shadow:0 2px 0 rgba(60,20,8,.35),0 8px 14px -6px rgba(40,10,4,.55);border:2px solid rgba(59,36,22,.25)}
+  #backs i:nth-child(1){top:0;transform:rotate(-1.6deg)}#backs i:nth-child(2){top:16px;transform:rotate(1.2deg)}#backs i:nth-child(3){top:32px;transform:rotate(-.4deg)}
+  #backs span{position:absolute;left:0;right:0;top:60px;text-align:center;font:700 21px var(--hand);color:#7d2114}
+  #box{display:flex;flex-direction:column}
+  #cards{display:flex;flex:0 1 auto;flex-direction:column;overflow-x:hidden;overflow-y:auto;padding:max(70px,env(safe-area-inset-top)) 16px 20px 18px;scrollbar-width:thin;scrollbar-color:#e7c08f transparent}
+  .card{flex:0 0 auto;display:grid;width:100%;grid-template-columns:52px 1fr 84px;grid-template-rows:auto auto;margin:0 0 12px;padding:10px 0 10px 12px;min-height:76px;
+    background:linear-gradient(var(--tomato),var(--tomato)) 76px 37px/calc(100% - 172px) 2px no-repeat,repeating-linear-gradient(transparent 0 23px,rgba(79,143,136,.25) 23px 24px) 0 14px/calc(100% - 96px) 100% no-repeat,linear-gradient(170deg,#fbf4e3,#f1e3c4)}
+  .card .ic{grid-row:1/3;width:52px;height:52px;align-self:center}
+  .card .t{grid-column:2;grid-row:1;font-size:17px;line-height:24px;-webkit-line-clamp:1}
+  .card .d{grid-column:2;grid-row:2;font-size:14px;line-height:24px;margin-top:2px;-webkit-line-clamp:3}
+  .card .p{grid-column:3;grid-row:1/3;flex-direction:column;justify-content:center;gap:8px;border-left:2px dashed rgba(59,36,22,.3);margin:0 0 0 8px;font-size:25px}
+  .card .p span{order:1}.card .p small{order:2;flex-wrap:wrap;justify-content:center;max-width:70px;gap:2px}.card .p small i{width:7px;height:7px}
+  .card.goal{flex:0 0 auto;display:flex;padding:10px 16px 14px;margin-bottom:18px;min-height:0}
+  .card.goal::before{height:44px}
+  .card.goal .seal{margin-top:24px;width:46px;height:46px;font-size:20px}
+  .card.goal .t{font-size:21px;line-height:26px;margin-top:6px}
+  .card.goal .d{font-size:15px;line-height:21px}
+  .card.goal .pp{font-size:24px}
+  .divider{display:flex;align-items:center;gap:8px;writing-mode:horizontal-tb;transform:none;border:0;padding:0;margin:8px 2px 10px;font-size:22px}
+  .divider::after{content:"";flex:1;height:2px;background:rgba(251,227,196,.35)}
 }
-@media (min-width:900px){#box{left:auto;top:0;width:370px;height:auto;border-top:0;border-left:12px solid var(--wood2);box-shadow:inset 10px 0 18px rgba(0,0,0,.35)}#box::before{display:none}#cards{padding-top:max(64px,env(safe-area-inset-top))}}
 body.end #box{transform:translateY(105%);transition:transform .8s cubic-bezier(.5,0,.8,.5)}
 body.end #tag{opacity:0;transition:opacity .6s}
 @media (min-width:900px){body.end #box{transform:translateX(105%)}}
@@ -1194,7 +1266,7 @@ body.end #tag{opacity:0;transition:opacity .6s}
 <canvas id="cv"></canvas>
 <div id="grain"></div>
 <div id="tag"><b id="money">0¢</b><span id="rate"></span><span id="streak" hidden></span></div>
-<aside id="box" aria-label="Recipe box"><button id="lid" aria-expanded="true"><span>recipes</span><b id="ready" hidden></b><i>▾</i></button><div id="cards"></div></aside>
+<aside id="box" aria-label="Recipe box"><div id="plate"><b>Mother’s</b> Recipes</div><button id="lid" aria-expanded="true"><span>recipes</span><b id="ready" hidden></b><i>▾</i></button><div id="cards"></div><div id="backs" aria-hidden="true"><i></i><i></i><i></i><span>more recipes inside</span></div></aside>
 <script>
 (() => {
 'use strict';
@@ -1217,12 +1289,12 @@ const shelfUsed = () => S && (S.jars.length > 3 || (S.jars.length === 3 && ringS
 const ringShown = () => S.act < 4 && S.jars.length < SLOT.length && CORE.visible(S, CORE.byId.jar) && (S.jars.length > 1 || S.$ >= CORE.price(S, CORE.byId.jar) * .5);
 function frameFor(act) {
   if (act <= 1 && S && !shelfUsed()) {
-    if (S.jars.length === 1 && !ringShown()) return wide ? { x: -440, y: 200, w: 1840, h: 820 } : { x: 150, y: COUNTER - 540, w: 700, h: 640, bottom: 1 };
-    return wide ? { x: -440, y: 120, w: 1840, h: 900 } : { x: 0, y: COUNTER - 560, w: 1000, h: 660, bottom: 1 };
+    if (S.jars.length === 1 && !ringShown()) return wide ? { x: -440, y: 200, w: 1840, h: 820 } : { x: 10, y: COUNTER - 600, w: 580, h: 720, bottom: 1 };
+    return wide ? { x: -440, y: 120, w: 1840, h: 900 } : { x: 60, y: 260, w: 880, h: 730, bottom: 1 };
   }
-  if (act <= 1) return wide ? { x: -440, y: -90, w: 1840, h: 1100 } : { x: 0, y: 20, w: 1000, h: 940, bottom: 1 };
-  if (act === 2) return wide ? { x: -620, y: 40, w: 2260, h: 1300 } : { x: 0, y: -70, w: 1000, h: 1470, bottom: 1 };
-  if (act === 3) return wide ? { x: -1400, y: -1450, w: 3800, h: 3450 } : { x: -700, y: -1420, w: 2400, h: 3400 };
+  if (act <= 1) return wide ? { x: -440, y: -90, w: 1840, h: 1100 } : { x: 110, y: -230, w: 780, h: 1230, bottom: 1 };
+  if (act === 2) return wide ? { x: -470, y: 60, w: 1900, h: 1380 } : { x: -10, y: -300, w: 1020, h: FLOOR + 340, bottom: 1 };
+  if (act === 3) return wide ? { x: -400, y: -760, w: 1800, h: FLOOR + 1240 } : { x: -270, y: -900, w: 1540, h: FLOOR + 1440, bottom: 1 };
   // the cut loaf, close up, with the box in it
   if (act >= 5) return wide ? { x: -700, y: -2200, w: 2400, h: 1560 } : { x: -150, y: -2200, w: 1300, h: 1560 };
   return wide ? { x: -1700, y: -3300, w: 4400, h: 4300 } : { x: -1250, y: -3100, w: 3500, h: 4300 };
@@ -1241,9 +1313,9 @@ const X = x => ox + (x - view.cx) * view.s, Y = y => oy + (y - view.cy) * view.s
 const toWorld = (px, py) => ({ x: (px - ox) / view.s + view.cx, y: (py - oy) / view.s + view.cy });
 
 function resize(keep) {
-  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; wide = W >= 900;
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; wide = W >= 900; SLOT = wide ? WIDE_SLOT : TALL_SLOT; BULGE = TALL_BULGE;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
-  area = S && S.act >= 4 ? { x: 0, y: 0, w: W, h: H } : wide ? { x: 0, y: 0, w: W - 370, h: H } : { x: 0, y: 0, w: W, h: document.body.classList.contains('shut') ? H - 64 : H * .6 };
+  area = S && S.act >= 4 ? { x: 0, y: 0, w: W, h: H } : wide ? { x: 0, y: 0, w: W - 370, h: H } : { x: 0, y: 0, w: W, h: H - $('box').offsetHeight + 6 };
   ox = area.x + area.w / 2; oy = area.y + area.h / 2;
   bg.width = cv.width; bg.height = cv.height; bgDirty = true;
   if (S && !keep) aim(S.act >= 4 && S.finale >= 4 ? 5 : Math.min(S.act, 4), true);
@@ -1251,10 +1323,13 @@ function resize(keep) {
 
 /* ---------------- print: colour plates a hair off the key line, halftone for shade ---------------- */
 let c = g;
-const MIS = [1.4, 1];
+let MIS = [2.2, 1.6];   // how far the colour plates sit off the key line, in screen pixels
 function plate(col, fn) { c.save(); c.translate(MIS[0], MIS[1]); c.fillStyle = col; c.beginPath(); fn(); c.fill(); c.restore(); }
 function key(fn, w = 3) { c.lineWidth = Math.max(1, w * view.s); c.strokeStyle = C.ink; c.lineJoin = c.lineCap = 'round'; c.beginPath(); fn(); c.stroke(); }
 function shape(col, fn, w) { plate(col, fn); key(fn, w); }
+// several parts that make one thing (a spoon's bowl and handle): the ink goes round the whole silhouette once,
+// under the colour, so no line shows where the parts were joined
+function solid(col, fn, w = 3) { c.save(); c.lineWidth = Math.max(2, 2 * w * view.s); c.strokeStyle = C.ink; c.lineJoin = c.lineCap = 'round'; c.beginPath(); fn(); c.stroke(); c.fillStyle = C.ink; c.fill(); c.restore(); plate(col, fn); }
 // a path in world units
 const mv = (x, y) => c.moveTo(X(x), Y(y)), ln = (x, y) => c.lineTo(X(x), Y(y)), qc = (a, b, x, y) => c.quadraticCurveTo(X(a), Y(b), X(x), Y(y)), bz = (a, b, d, e, x, y) => c.bezierCurveTo(X(a), Y(b), X(d), Y(e), X(x), Y(y));
 function rr(x, y, w, h, r) { c.roundRect(X(x), Y(y), Sc(w), Sc(h), Sc(r)); }
@@ -1266,10 +1341,19 @@ function text(t, x, y, size, font, col, align = 'center', rot = 0) { c.save(); c
 
 /* ---------------- the set ---------------- */
 const SHELF = 480, COUNTER = 870, BENCH = 1190, FLOOR = 1330, CEIL = -140, ROOF = -760;
-const SLOT = [{ x: 500, y: COUNTER }, { x: 190, y: COUNTER }, { x: 810, y: COUNTER }, { x: 500, y: SHELF }, { x: 190, y: SHELF }, { x: 810, y: SHELF }];
+// where the jars stand: across the counter and one shelf on a wide screen; on an upright phone in two
+// columns on the counter and two shelves above it, so the kitchen fills a tall screen instead of a strip
+const WIDE_SLOT = [{ x: 500, y: COUNTER }, { x: 190, y: COUNTER }, { x: 810, y: COUNTER }, { x: 500, y: SHELF }, { x: 190, y: SHELF }, { x: 810, y: SHELF }];
+const TALL_SHELF = [468, 165], TALL_SLOT = [{ x: 290, y: COUNTER }, { x: 710, y: COUNTER }, { x: 290, y: 468 }, { x: 710, y: 468 }, { x: 290, y: 165 }, { x: 710, y: 165 }];
+let SLOT = WIDE_SLOT;
 const LOAF = [125, 375, 625, 875];
 // where Mother comes through, in act 3: position and the way she pushes (0,0 = straight at you)
-const BULGE = [[60, FLOOR, 0, -1], [980, FLOOR, 0, -1], [-420, FLOOR, 0, -1], [1250, 980, -1, 0], [-250, 1040, 0, 0], [-585, 760, -1, 0], [-585, 1190, -1, 0], [220, CEIL, 0, -1], [880, CEIL, 0, -1], [1500, -460, 0, 0], [60, -1000, -.6, -.8], [1255, -1330, 0, -1]];
+const WIDE_BULGE = [[60, FLOOR, 0, -1], [980, FLOOR, 0, -1], [-420, FLOOR, 0, -1], [1250, 980, -1, 0], [-250, 1040, 0, 0], [-585, 760, -1, 0], [-585, 1190, -1, 0], [220, CEIL, 0, -1], [880, CEIL, 0, -1], [1500, -460, 0, 0], [60, -1000, -.6, -.8], [1255, -1330, 0, -1]];
+// on an upright phone the camera stays on the kitchen and the cellar, so she comes through what is in that frame:
+// the floor, the fridge, the window, the oven's bricks, the ceiling, the room upstairs
+const TALL_BULGE = [[100, FLOOR, 0, -1], [900, FLOOR, 0, -1], [-160, FLOOR, 0, -1], [1150, 1010, 0, 0], [-130, 1060, 0, 0], [-210, 560, 0, 0], [1170, 280, 0, 0], [240, CEIL, 0, -1], [860, CEIL, 0, -1], [1170, -480, 0, 0], [-120, -520, 0, 0], [560, -560, 0, 0]];
+const TALL_SURF = ['boards', 'boards', 'boards', 'brick', 'door', 'door', 'glass', 'boards', 'boards', 'glass', 'boards', 'boards'];
+let BULGE = WIDE_BULGE;
 const bg = document.createElement('canvas'), bgc = bg.getContext('2d');
 let bgDirty = true, lift = 0, liftDrawn = 0;
 const LIFT = 560;   // how far she has lifted the house when she is ready
@@ -1301,9 +1385,11 @@ function courses(x0, y0, x1, y1, bw, bh) {
 // rows of round tiles over whatever is clipped, from y0 upwards
 function tiles(x0, x1, y0, rows, sx, sy) { c.strokeStyle = 'rgba(40,20,10,.35)'; c.lineWidth = Sc(4); for (let r = 0; r < rows; r++) for (let tx = x0 + (r & 1) * sx / 2; tx < x1; tx += sx) { c.beginPath(); c.arc(X(tx), Y(y0 - r * sy), Sc(sx * .35), .2, 2.9); c.stroke(); } }
 function sky() {
-  const gr = c.createLinearGradient(0, Y(-3200), 0, Y(1330)); gr.addColorStop(0, '#f2c9a0'); gr.addColorStop(.6, C.sky); gr.addColorStop(1, '#f9eedc');
-  c.fillStyle = gr; c.fillRect(0, 0, W, H);
-  for (let k = 0; k < 9; k++) { const x = -2600 + k * 760 + hash(k, 1) * 300, y = -2800 + hash(k, 2) * 2000; plate('#fbf3e6', () => { el(x, y, 260, 60); el(x + 90, y - 40, 150, 70); el(x - 110, y - 20, 120, 50); }); }
+  // a printed sky: one flat ink, a halftone deepening towards the top, flat-bottomed clouds with a key line
+  c.fillStyle = C.sky; c.fillRect(0, 0, W, H);
+  // halftone that thins out towards the horizon, in steps too fine to see
+  for (let k = 0; k < 14; k++) shade(() => c.rect(0, k ? Y(-4200 + k * 240) : 0, W, k ? Sc(240) : Math.max(0, Y(-3960))), .2 * (1 - k / 14));
+  for (let k = 0; k < 9; k++) { const x = -2600 + k * 760 + hash(k, 1) * 300, y = -2800 + hash(k, 2) * 2000, cl = () => { mv(x - 250, y + 30); qc(x - 260, y - 40, x - 150, y - 40); qc(x - 110, y - 110, x - 10, y - 80); qc(x + 60, y - 140, x + 140, y - 70); qc(x + 260, y - 70, x + 250, y + 30); c.closePath(); }; shape('#fbf3e6', cl, 3); shade(() => { mv(x - 250, y + 30); ln(x + 250, y + 30); ln(x + 240, y); ln(x - 240, y); c.closePath(); }, .25); }
   // the neighbours: clapboard houses with a chimney, framed windows and a front door; in the cellar act
   // the street sinks as far as Mother has lifted the house off it
   c.save(); c.translate(0, Sc(lift));
@@ -1343,24 +1429,62 @@ function building() {
   shape(C.brick, () => rr(1180, -1330, 150, 520, 2), 4);
   c.save(); c.beginPath(); rr(1180, -1330, 150, 520, 2); c.clip(); courses(1180, -1310, 1330, -810, 75, 34); shade(() => c.rect(X(1290), Y(-1330), Sc(40), Sc(520)), .35); c.restore();
   shape('#5a4636', () => rr(1160, -1350, 190, 40, 4), 4);
-  // upstairs: a bed and a window, to be slept in by nobody
+  // upstairs: a window with plain curtains and a milk bottle of flowers on the sill
   shape(C.cream, () => rr(1110, -660, 320, 360, 6), 4); shape('#cfe3df', () => rr(1134, -636, 272, 312, 3), 3);
+  plate('#e7f1ee', () => { mv(1134, -380); qc(1220, -420, 1300, -390); qc(1360, -370, 1406, -400); ln(1406, -324); ln(1134, -324); c.closePath(); });
   plate('rgba(255,255,255,.6)', () => { mv(1160, -610); ln(1220, -610); ln(1160, -540); c.closePath(); });
   key(() => { mv(1270, -636); ln(1270, -324); mv(1134, -480); ln(1406, -480); }, 5);
-  shape(C.cream, () => rr(1092, -312, 356, 26, 4), 3);
-  shape(C.wood, () => rr(-452, -560, 46, 420, 20), 3); shape(C.wood, () => rr(180, -390, 40, 250, 16), 3);
-  shape(C.wood2, () => rr(-420, -250, 620, 34, 6), 3);
-  shape('#f7f1e4', () => rr(-410, -318, 600, 72, 16), 3);
-  const quilt = () => { mv(-270, -326); ln(170, -326); qc(196, -322, 196, -296); ln(196, -206); for (let k = 0; k < 6; k++) qc(186 - k * 20 - 10, -196 + (k & 1) * 10, 176 - k * 20, -206); ln(76, -246); ln(-270, -246); c.closePath(); };
-  plate(C.tomato, quilt); c.save(); c.beginPath(); quilt(); c.clip(); c.fillStyle = 'rgba(253,243,208,.45)'; for (let k = 0; k < 14; k++) c.fillRect(X(-270 + k * 34), Y(-330), Sc(12), Sc(140)); c.restore(); key(quilt, 3);
-  shape('#fdfaf2', () => el(-345, -334, 62, 24), 3);
+  shade(() => rr(1134, -636, 272, 14, 0), .3);
+  for (const sd of [-1, 1]) { const x0 = sd < 0 ? 1090 : 1450, cur = () => { mv(x0, -690); ln(x0 - sd * 70, -690); qc(x0 - sd * 40, -520, x0 - sd * 66, -330); ln(x0, -330); c.closePath(); };
+    plate('#f6efdc', cur); c.save(); c.beginPath(); cur(); c.clip(); for (let k = 0; k < 4; k++) { c.fillStyle = k & 1 ? 'rgba(255,255,255,.4)' : 'rgba(120,80,40,.13)'; c.fillRect(X(Math.min(x0, x0 - sd * 70) + k * 18), Y(-690), Sc(9), Sc(360)); } c.restore(); key(cur, 3);
+    shape(C.cobalt, () => rr(x0 - sd * 40 - 18, -528, 36, 12, 5), 2); }
+  shape('#c9a54a', () => rr(1070, -700, 400, 10, 5), 2.5); for (const fx of [1066, 1474]) shape('#c9a54a', () => el(fx, -695, 10, 10), 2.5); for (const bx of [1100, 1440]) shape('#c9a54a', () => rr(bx - 4, -700, 8, 22, 2), 2);
+  shape(C.cream, () => rr(1092, -312, 356, 26, 4), 3); shade(() => rr(1092, -286, 356, 14, 0), .35);
+  shape('#eef4f2', () => { mv(1300, -312); ln(1300, -372); qc(1300, -392, 1310, -398); ln(1310, -412); ln(1334, -412); ln(1334, -398); qc(1344, -392, 1344, -372); ln(1344, -312); c.closePath(); }, 2.5);
+  for (const [dx, dy, col] of [[-14, -450, C.gold], [16, -470, C.tomato], [4, -440, C.paper]]) { key(() => { mv(1322, -410); qc(1322 + dx * .5, -430, 1322 + dx, dy); }, 2.2); shape(col, () => { for (let k = 0; k < 6; k++) { const a = k / 6 * 6.2832; c.moveTo(X(1322 + dx + Math.cos(a) * 16), Y(dy + Math.sin(a) * 16)); c.arc(X(1322 + dx + Math.cos(a) * 9), Y(dy + Math.sin(a) * 9), Sc(8), 0, 6.2832); } }, 1.6); plate(C.mustard, () => el(1322 + dx, dy, 5, 5)); }
+  // a rag rug on the boards
+  shade(() => el(-90, CEIL - 6, 400, 16), .3); shape(C.cobalt, () => el(-90, CEIL - 10, 390, 14), 2.5); plate(C.mustard, () => el(-90, CEIL - 11, 330, 9)); plate(C.tomato, () => el(-90, CEIL - 12, 260, 6));
+  // the bed: a headboard and a footboard with turned posts and ball finials, a ticking mattress, a plump pillow,
+  // and a patchwork quilt that drapes over the side in folds
+  const post = (x, top, h) => { shape(C.wood, () => { rr(x - 14, top, 28, h, 6); c.moveTo(X(x + 22), Y(top - 6)); c.ellipse(X(x), Y(top - 6), Sc(22), Sc(20), 0, 0, 6.2832); }, 3); shade(() => rr(x + 2, top, 12, h, 4), .3); key(() => { for (const yy of [top + 30, top + 44, top + h - 50]) { mv(x - 14, yy); ln(x + 14, yy); } }, 1.6); };
+  shape(C.wood, () => { mv(-440, -260); ln(-440, -440); qc(-400, -500, -330, -470); ln(-330, -260); c.closePath(); }, 3); shade(() => { mv(-370, -260); ln(-370, -480); qc(-345, -480, -330, -470); ln(-330, -260); c.closePath(); }, .3);
+  key(() => { mv(-425, -420); qc(-395, -465, -345, -445); }, 1.6);
+  post(-452, -520, 380);
+  shape(C.wood, () => { mv(150, -250); ln(150, -360); qc(185, -390, 220, -360); ln(220, -250); c.closePath(); }, 3);
+  post(228, -380, 240);
+  shape(C.wood2, () => rr(-440, -250, 660, 34, 6), 3);
+  shape('#f7f1e4', () => rr(-318, -318, 470, 72, 16), 3);
+  c.save(); c.beginPath(); rr(-318, -318, 470, 72, 16); c.clip(); c.fillStyle = 'rgba(53,80,160,.28)'; for (let k = 0; k < 30; k++) c.fillRect(X(-318 + k * 18), Y(-318), Sc(5), Sc(72)); c.restore();
+  const quilt = () => { mv(-200, -332); qc(-30, -342, 150, -330); qc(178, -326, 178, -300); ln(186, -192); for (let k = 0; k < 6; k++) qc(176 - k * 22, -180 + (k & 1) * 12, 164 - k * 22, -190); qc(80, -200, 60, -246); ln(-200, -246); qc(-212, -290, -200, -332); c.closePath(); };
+  plate(C.paper, quilt); c.save(); c.beginPath(); quilt(); c.clip();
+  for (let r = 0; r < 8; r++) for (let q = 0; q < 14; q++) { const h = hash(q, r, 47); c.fillStyle = h < .33 ? 'rgba(217,71,43,.75)' : h < .6 ? 'rgba(227,161,47,.7)' : h < .8 ? 'rgba(127,179,164,.8)' : 'rgba(253,243,208,.2)'; c.fillRect(X(-210 + q * 30), Y(-346 + r * 22), Sc(30), Sc(22)); }
+  c.strokeStyle = 'rgba(253,243,208,.8)'; c.lineWidth = Sc(1.6); c.setLineDash([Sc(4), Sc(4)]); c.beginPath(); for (let q = 0; q < 15; q++) { mv(-210 + q * 30, -350); ln(-210 + q * 30, -160); } for (let r = 0; r < 9; r++) { mv(-220, -346 + r * 22); ln(200, -346 + r * 22); } c.stroke(); c.setLineDash([]);
+  shade(() => { mv(60, -250); qc(120, -280, 150, -330); ln(200, -330); ln(200, -160); ln(100, -160); c.closePath(); }, .35); shade(() => rr(-220, -270, 300, 24, 0), .25);
+  c.restore(); key(quilt, 3); key(() => { mv(120, -310); qc(140, -260, 130, -200); mv(150, -300); qc(165, -250, 160, -196); }, 1.6);
+  const pillow = () => { mv(-318, -326); qc(-330, -366, -300, -372); qc(-250, -380, -200, -372); qc(-176, -366, -186, -326); qc(-250, -318, -318, -326); c.closePath(); };
+  shape('#fdfaf2', pillow, 3); shade(() => { mv(-250, -322); qc(-200, -330, -186, -326); qc(-180, -350, -200, -372); qc(-220, -360, -250, -322); c.closePath(); }, .3); c.strokeStyle = 'rgba(59,36,22,.35)'; c.lineWidth = Sc(1.6); c.beginPath(); mv(-296, -366); qc(-272, -352, -262, -330); c.stroke();
+  // a bedside table with a lamp
+  shape(C.wood, () => rr(300, -300, 130, 160, 6), 3); shade(() => rr(380, -300, 50, 160, 4), .3); shape(C.wood2, () => rr(292, -310, 146, 18, 4), 3); key(() => { mv(300, -240); ln(430, -240); }, 2); shape(C.chrome, () => el(365, -270, 8, 8), 2);
+  shape(C.mustard, () => { mv(342, -400); ln(388, -400); qc(394, -386, 386, -360); qc(408, -340, 402, -330); ln(328, -330); qc(322, -340, 344, -360); qc(336, -386, 342, -400); c.closePath(); }, 3);
+  shape('#f3ead6', () => { mv(330, -430); ln(400, -430); ln(424, -390); ln(306, -390); c.closePath(); }, 3); shade(() => { mv(370, -430); ln(400, -430); ln(424, -390); ln(380, -390); c.closePath(); }, .25);
   shape(C.wood2, () => rr(-600, CEIL, 2220, 50, 0), 4);
   shape('#d6c1a0', () => rr(-620, ROOF, 60, FLOOR - ROOF + 660, 0), 4); shape('#d6c1a0', () => rr(1560, ROOF, 60, FLOOR - ROOF + 660, 0), 4);
   shape(C.wood2, () => rr(-620, FLOOR, 2240, 44, 0), 4);
   for (let i = 0; i < 22; i++) key(() => { mv(-600 + i * 100, FLOOR + 6); ln(-600 + i * 100, FLOOR + 38); }, 2);
 }
 function kitchen(act, close) {
-  paper(-560, close ? -3000 : CEIL + 50, 1560, FLOOR, C.wall, C.wall2, 140, 1);
+  paper(close ? -3000 : -560, close ? -3000 : CEIL + 50, close ? 4000 : 1560, FLOOR, C.wall, C.wall2, 140, 1);
+  // close up, the ceiling: plaster, a moulded cornice, and a pendant lamp over the jars
+  if (close) { const cy = wide ? CEIL : -260; c.fillStyle = '#f3ead6'; c.fillRect(X(-3000), Y(-3000), Sc(7000), Sc(3000 + cy)); shade(() => c.rect(X(-3000), Y(cy - 40), Sc(7000), Sc(40)), .18); shape(C.cream, () => rr(-3000, cy, 7000, 34, 0), 3); shape('#e6d6b4', () => rr(-3000, cy + 34, 7000, 16, 0), 2.5); }
+  { const lx = 500, ly = wide ? 10 : close ? -60 : -10;
+    // its light: a cone that fades with distance and softens at its sides, and a warm pool where it lands
+    { const y1 = (wide ? SHELF : 330) + 20, gr = c.createLinearGradient(0, Y(ly + 20), 0, Y(y1)); gr.addColorStop(0, 'rgba(255,236,170,.34)'); gr.addColorStop(.7, 'rgba(255,236,170,.12)'); gr.addColorStop(1, 'rgba(255,236,170,0)'); c.fillStyle = gr;
+      for (const k of [1, .85, .7]) { c.beginPath(); mv(lx - 60 * k, ly + 20); ln(lx + 60 * k, ly + 20); ln(lx + 250 * k, y1); ln(lx - 250 * k, y1); c.closePath(); c.fill(); }
+      const pool = c.createRadialGradient(X(lx), Y(y1 - 40), 0, X(lx), Y(y1 - 40), Sc(240)); pool.addColorStop(0, 'rgba(255,240,190,.28)'); pool.addColorStop(1, 'rgba(255,240,190,0)'); c.fillStyle = pool; c.fillRect(X(lx - 260), Y(y1 - 200), Sc(520), Sc(260)); }
+    key(() => { mv(lx, wide || !close ? CEIL + 50 : -210); ln(lx, ly - 70); }, 3); shape(C.chrome, () => rr(lx - 12, ly - 74, 24, 18, 4), 2.5);
+    shape(C.mustard, () => { mv(lx - 14, ly - 58); ln(lx + 14, ly - 58); ln(lx + 78, ly + 18); qc(lx, ly + 30, lx - 78, ly + 18); c.closePath(); }, 4);
+    shade(() => { mv(lx + 4, ly - 58); ln(lx + 14, ly - 58); ln(lx + 78, ly + 18); ln(lx + 30, ly + 24); c.closePath(); }, .35);
+    shape('#fff4cf', () => el(lx, ly + 20, 70, 11), 3); shape(C.gold2, () => el(lx, ly + 26, 18, 14), 2.5); }
   // window
   const wx = 1040, wy = 130, ww = 260, wh = 280;
   shape('#f7d9a8', () => rr(wx, wy, ww, wh, 6), 4);
@@ -1370,21 +1494,41 @@ function kitchen(act, close) {
   c.restore();
   key(() => { mv(wx + ww / 2, wy); ln(wx + ww / 2, wy + wh); mv(wx, wy + wh / 2); ln(wx + ww, wy + wh / 2); }, 6);
   shape(C.cream, () => rr(wx - 24, wy + wh, ww + 48, 24, 4));
-  // café curtains in gingham on a rod, tied back at either side
-  key(() => { mv(wx - 56, wy - 22); ln(wx + ww + 56, wy - 22); }, 6);
+  // café curtains in gingham, gathered on a brass rod with ball ends, tied back at either side with a bow;
+  // a scalloped valance over the top. Folds run down each panel as soft shade, the checks fall in with them
   for (const s of [-1, 1]) {
     const m = x => s > 0 ? x : 2 * wx + ww - x, ox = wx + ww + 44, ix = wx + ww - 70, tie = wy + 150, bot = wy + wh + 16;
     const panel = () => { mv(m(ix), wy - 22); ln(m(ox), wy - 22); ln(m(ox), bot); ln(m(ox - 64), bot); qc(m(ox - 34), tie + 50, m(ox - 14), tie); qc(m(ix - 10), tie - 70, m(ix), wy - 22); c.closePath(); };
+    shade(() => { c.save(); c.translate(Sc(s * 8), Sc(8)); panel(); c.restore(); }, .25);
     plate(C.paper, panel);
     c.save(); c.beginPath(); panel(); c.clip(); c.fillStyle = 'rgba(217,71,43,.32)';
-    for (let k = 0; k < 20; k++) { c.fillRect(X(wx - 80 + k * 24), Y(wy - 22), Sc(12), Sc(wh + 40)); c.fillRect(X(wx - 80), Y(wy - 22 + k * 24), Sc(ww + 160), Sc(12)); }
+    for (let k = 0; k < 20; k++) { const x0 = wx - 80 + k * 24; c.beginPath(); mv(x0, wy - 22); qc(x0 + (s > 0 ? -1 : 1) * (k - 10) * 3, tie, x0 + (s > 0 ? -1 : 1) * (k - 10) * 1.5, bot + 10); ln(x0 + 12 + (s > 0 ? -1 : 1) * (k - 10) * 1.5, bot + 10); qc(x0 + 12 + (s > 0 ? -1 : 1) * (k - 10) * 3, tie, x0 + 12, wy - 22); c.fill(); c.fillRect(X(wx - 80), Y(wy - 22 + k * 24), Sc(ww + 160), Sc(12)); }
+    // the folds: a darker hollow and a lit ridge, again and again across the panel
+    for (let k = 0; k < 4; k++) { const fx = m(ix + 14 + k * 28); c.fillStyle = k & 1 ? 'rgba(255,255,255,.22)' : 'rgba(80,30,20,.16)'; c.beginPath(); mv(fx, wy - 22); qc(fx + s * 6, tie - 40, m(ox - 26 + k * 6), tie); qc(m(ox - 40 + k * 8), tie + 60, m(ox - 60 + k * 14), bot); ln(m(ox - 48 + k * 14), bot); qc(m(ox - 30 + k * 8), tie + 60, m(ox - 16 + k * 6), tie); qc(fx + s * 18, tie - 40, fx + 12, wy - 22); c.closePath(); c.fill(); }
     c.restore(); key(panel, 3);
-    shape(C.tomato, () => rr(m(ox - 30) - 14, tie - 8, 28, 16, 6), 2.4);
+    key(() => { for (let k = 0; k < 5; k++) { const hx = m(ix + 8 + k * 26); mv(hx, wy - 22); qc(hx + 13, wy - 8, hx + 26, wy - 22); } }, 2);
+    // the tie-back: a band round the gathered panel, a bow on it
+    const tx = m(ox - 22); shape(C.tomato, () => rr(tx - 26, tie - 8, 52, 16, 6), 2.4);
+    shape(C.tomato, () => { mv(tx, tie); qc(tx - 26, tie - 22, tx - 30, tie); qc(tx - 26, tie + 18, tx, tie); qc(tx + 26, tie - 22, tx + 30, tie); qc(tx + 26, tie + 18, tx, tie); c.closePath(); }, 2.4);
+    shape(C.tomato, () => { mv(tx - 4, tie + 4); ln(tx - 14, tie + 36); ln(tx - 4, tie + 32); ln(tx + 2, tie + 6); c.closePath(); mv(tx + 4, tie + 4); ln(tx + 16, tie + 34); ln(tx + 6, tie + 32); c.closePath(); }, 2);
   }
+  // the rod and its rings, and the valance in front of it
+  shape('#c9a54a', () => rr(wx - 70, wy - 28, ww + 140, 10, 5), 2.5); for (const s of [-1, 1]) shape('#c9a54a', () => el(s < 0 ? wx - 74 : wx + ww + 74, wy - 23, 11, 11), 2.5);
+  const val = () => { mv(wx - 62, wy - 40); ln(wx + ww + 62, wy - 40); ln(wx + ww + 62, wy + 6); for (let k = 0; k < 8; k++) { const x1 = wx + ww + 62 - (k + 1) * (ww + 124) / 8; qc(x1 + (ww + 124) / 16, wy + 30, x1, wy + 6); } c.closePath(); };
+  plate(C.paper, val); c.save(); c.beginPath(); val(); c.clip(); c.fillStyle = 'rgba(217,71,43,.32)'; for (let k = 0; k < 22; k++) { c.fillRect(X(wx - 70 + k * 24), Y(wy - 40), Sc(12), Sc(80)); c.fillRect(X(wx - 70), Y(wy - 40 + k * 24), Sc(ww + 150), Sc(12)); } shade(() => c.rect(X(wx - 70), Y(wy - 40), Sc(ww + 150), Sc(14)), .3); c.restore(); key(val, 3);
+  key(() => { mv(wx - 62, wy - 28); ln(wx + ww + 62, wy - 28); }, 1.4);
+  // close up, a floor of chequered linoleum under a skirting board, the rows closing up towards the back
+  if (close) { const vy = FLOOR - 1100, U = 150, f = y => (y - vy) / (FLOOR - vy);
+    for (let y0 = FLOOR, r = 0; y0 < FLOOR + 2400; r++) { const y1 = y0 + U * f(y0) * .42, f0 = f(y0), f1 = f(y1);
+      for (let k = -60; k < 60; k++) { c.fillStyle = (k + r) & 1 ? '#f1e6cc' : '#c8574a'; c.beginPath(); mv(500 + k * U * f0, y0); ln(500 + (k + 1) * U * f0, y0); ln(500 + (k + 1) * U * f1, y1 + 1); ln(500 + k * U * f1, y1 + 1); c.fill(); }
+      y0 = y1; }
+    shade(() => c.rect(X(-3000), Y(FLOOR), Sc(7000), Sc(80)), .35);
+    shape(C.cream, () => rr(-3000, FLOOR - 34, 7000, 34, 0), 3); }
   // the fridge and its radio, standing on the floor
   const fx = -400; c.save(); c.translate(0, Sc(FLOOR - COUNTER - 280));
   const fb = COUNTER + 280;
   shade(() => el(fx + 190, fb, 190, 18), .45);
+  for (const lx of [fx + 40, fx + 250]) shape('#5a4636', () => rr(lx, fb - 8, 30, 14, 3), 2);
   shape('#e9efe9', () => rr(fx, 150, 320, fb - 150, 48));
   plate('rgba(255,255,255,.75)', () => { rr(fx + 22, 196, 16, 200, 8); rr(fx + 22, 448, 16, fb - 560, 8); });
   key(() => { mv(fx + 8, 420); ln(fx + 312, 420); }, 3); c.strokeStyle = 'rgba(59,36,22,.3)'; c.lineWidth = Sc(3); c.beginPath(); mv(fx + 14, 428); ln(fx + 306, 428); c.stroke();
@@ -1398,25 +1542,28 @@ function kitchen(act, close) {
   // a calendar with today ringed, and a drawing of Mother held up by two magnets
   shape(C.paper, () => rr(fx + 40, 470, 170, 210, 3), 3); shape(C.tomato, () => rr(fx + 40, 470, 170, 48, 3), 3);
   text('OCT', fx + 125, 495, 30, '# Shrikhand', C.paper);
-  for (let r = 0; r < 4; r++) for (let q = 0; q < 5; q++) { c.fillStyle = 'rgba(59,36,22,.55)'; c.fillRect(X(fx + 56 + q * 30), Y(540 + r * 34), Sc(16), Sc(5)); }
+  for (let r = 0; r < 4; r++) for (let q = 0; q < 5; q++) text(String(r * 5 + q + 6), fx + 64 + q * 30, 542 + r * 34, 17, '700 # Fraunces', 'rgba(59,36,22,.75)');
+  shade(() => rr(fx + 210, 478, 8, 210, 0), .35); shape(C.tomato, () => el(fx + 125, 470, 13, 13), 2.5); plate('rgba(255,255,255,.6)', () => el(fx + 121, 466, 4, 3));
   c.strokeStyle = C.tomato; c.lineWidth = Sc(4); c.beginPath(); c.ellipse(X(fx + 124), Y(576), Sc(22), Sc(16), -.2, 0, 7); c.stroke();
   shape('#fdf8ec', () => { c.save(); c.translate(X(fx + 150), Y(760)); c.rotate(.06); c.rect(Sc(-70), Sc(-60), Sc(140), Sc(120)); c.restore(); }, 2.5);
   c.save(); c.translate(X(fx + 150), Y(760)); c.rotate(.06); c.strokeStyle = '#4b6fb0'; c.lineWidth = Sc(4); c.beginPath(); c.roundRect(Sc(-30), Sc(-30), Sc(60), Sc(70), Sc(12)); c.stroke(); c.strokeStyle = C.tomato; c.beginPath(); c.moveTo(Sc(-26), Sc(-34)); c.quadraticCurveTo(0, Sc(-60), Sc(26), Sc(-34)); c.stroke(); c.fillStyle = '#4b6fb0'; c.beginPath(); c.arc(Sc(-10), Sc(0), Sc(4), 0, 7); c.arc(Sc(10), Sc(0), Sc(4), 0, 7); c.fill(); c.restore();
   for (const [mx, my, col] of [[fx + 92, 700, C.mustard], [fx + 210, 712, C.olive]]) shape(col, () => el(mx, my, 13, 13), 2.5);
   c.restore();
   // a starburst wall clock, stopped at nine
-  { const kx = wide ? 860 : 680, ky = wide ? 20 : 170;   // lower on a phone, where the first frame starts just above the shelf
+  { const kx = wide ? 860 : 500, ky = wide ? 20 : 300;   // on a phone between the columns of jars, and smaller
+    c.save(); if (!wide) { c.translate(X(kx), Y(ky)); c.scale(.8, .8); c.translate(-X(kx), -Y(ky)); }
     for (let q = 0; q < 12; q++) { const a = q / 12 * 6.283, r = q % 3 ? 100 : 118, b = q % 3 ? 7 : 10; key(() => { mv(kx + Math.cos(a) * 70, ky + Math.sin(a) * 70); ln(kx + Math.cos(a) * r, ky + Math.sin(a) * r); }, 5); shape(q % 3 ? C.mustard : C.tomato, () => el(kx + Math.cos(a) * (r + b), ky + Math.sin(a) * (r + b), b, b), 2.5); }
     shape(C.mustard, () => el(kx, ky, 66, 66), 4); shape(C.paper, () => el(kx, ky, 50, 50), 3);
     plate('rgba(255,255,255,.6)', () => { c.arc(X(kx), Y(ky), Sc(61), 3.4, 4.7); c.arc(X(kx), Y(ky), Sc(55), 4.7, 3.4, true); });
     key(() => { for (let q = 0; q < 12; q++) { const a = q / 12 * 6.283, r = q % 3 ? 42 : 36; mv(kx + Math.cos(a) * 46, ky + Math.sin(a) * 46); ln(kx + Math.cos(a) * r, ky + Math.sin(a) * r); } }, 2.5);
-    key(() => { mv(kx, ky); ln(kx - 30, ky); mv(kx, ky); ln(kx, ky - 40); }, 5); shape(C.tomato, () => el(kx, ky, 6, 6), 2); }
+    key(() => { mv(kx, ky); ln(kx - 30, ky); mv(kx, ky); ln(kx, ky - 40); }, 5); shape(C.tomato, () => el(kx, ky, 6, 6), 2); c.restore(); }
   // the oven, from act 2
   if (act >= 2) oven(1110, 560);
   // shelf and counter
-  shape(C.wood, () => rr(30, SHELF, 940, 26, 3));
-  shade(() => c.rect(X(30), Y(SHELF + 26), Sc(940), Sc(20)), .3);
-  for (const bx of [80, 920]) shape(C.wood, () => { mv(bx - 14, SHELF + 26); ln(bx + 14, SHELF + 26); ln(bx + 14, SHELF + 40); qc(bx + 14, SHELF + 96, bx - 14, SHELF + 110); c.closePath(); }, 2.5);
+  for (const sy of wide ? [SHELF] : TALL_SHELF) { const x0 = wide ? 30 : 130, sw = wide ? 940 : 740;
+    shape(C.wood, () => rr(x0, sy, sw, 26, 3));
+    shade(() => c.rect(X(x0), Y(sy + 26), Sc(sw), Sc(20)), .3);
+    for (const bx of [x0 + 50, x0 + sw - 50]) shape(C.wood, () => { mv(bx - 14, sy + 26); ln(bx + 14, sy + 26); ln(bx + 14, sy + 40); qc(bx + 14, sy + 96, bx - 14, sy + 110); c.closePath(); }, 2.5); }
   const cx0 = -20, cx1 = act >= 2 ? 1090 : 1560;
   shape(C.formica, () => rr(cx0, COUNTER, cx1 - cx0, 36, 4));
   c.save(); c.beginPath(); rr(cx0, COUNTER, cx1 - cx0, 36, 4); c.clip(); c.strokeStyle = C.formica2; c.lineWidth = Sc(3);
@@ -1424,6 +1571,8 @@ function kitchen(act, close) {
   c.restore();
   shape(C.chrome, () => rr(cx0, COUNTER + 36, cx1 - cx0, 16, 3));
   c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(X(cx0), Y(COUNTER + 40), Sc(cx1 - cx0), Sc(3));
+  // the cabinets' carcass behind the doors (a dark reveal between them) and a recessed kick at the floor
+  shape('#d8c7a2', () => rr(cx0, COUNTER + 52, cx1 - cx0, FLOOR - COUNTER - 52, 0), 2.5); plate('#5a4636', () => rr(cx0 + 6, FLOOR - 40, cx1 - cx0 - 12, 40, 0));
   for (let i = 0; i * 250 + cx0 < cx1 - 60; i++) {
     const x = cx0 + 10 + i * 250, w = Math.min(230, cx1 - 10 - x);
     const t0 = COUNTER + 92, t1 = FLOOR - 38, kx = x + (i & 1 ? 34 : w - 34);
@@ -1436,6 +1585,65 @@ function kitchen(act, close) {
   }
   shade(() => c.rect(X(cx0), Y(COUNTER + 52), Sc(cx1 - cx0), Sc(14)), .4);
   c.fillStyle = '#c4a57c'; c.fillRect(X(-560), Y(FLOOR - 10), Sc(2120), Sc(10));
+  // things that live here: a set of canisters by the window, a tea towel over the shelf, a crock of spoons
+  const tin = (x, w, h, col, word) => { shade(() => el(x + w / 2 + 10, COUNTER, w / 2 + 6, 9), .4); shape(col, () => rr(x, COUNTER - h, w, h, 10), 3.5); shade(() => rr(x + w * .7, COUNTER - h, w * .3, h, 8), .3); shape(C.paper, () => rr(x + 10, COUNTER - h * .62, w - 20, h * .3, 3), 2.5); text(word, x + w / 2, COUNTER - h * .47, Math.min(30, w * .2), '700 # "Stardos Stencil", Impact, sans-serif', C.ink); shape(C.chrome, () => rr(x - 5, COUNTER - h - 16, w + 10, 22, 6), 3); shape(C.ink, () => el(x + w / 2, COUNTER - h - 22, 12, 7), 2); plate('rgba(255,255,255,.6)', () => rr(x + 12, COUNTER - h + 12, 9, h * .3, 4)); };
+  // what stands where the next jars will go, until they come: a cake tin, cookbooks, a geranium, mixing bowls
+  if (S && act < 3) for (let i = S.jars.length + 1; i < SLOT.length; i++) { const { x, y } = SLOT[i], k = i % 4;
+    // a cake tin: a pressed lid with a rolled rim, a ring stamped in it, a little shine
+    if (k === 2) { shade(() => el(x + 14, y, 92, 8), .45); shape(C.tomato, () => rr(x - 80, y - 72, 160, 72, 6), 3); shade(() => rr(x + 34, y - 72, 46, 72, 4), .32);
+      plate('rgba(255,255,255,.35)', () => rr(x - 70, y - 64, 12, 52, 5)); key(() => { mv(x - 80, y - 14); ln(x + 80, y - 14); }, 2);
+      shape('#e9e2d2', () => { mv(x - 90, y - 70); qc(x - 92, y - 96, x - 70, y - 98); ln(x + 70, y - 98); qc(x + 92, y - 96, x + 90, y - 70); c.closePath(); }, 3);
+      key(() => el(x, y - 84, 48, 7), 2); shade(() => { mv(x + 40, y - 98); ln(x + 70, y - 98); qc(x + 92, y - 96, x + 90, y - 70); ln(x + 40, y - 70); c.closePath(); }, .25); }
+    // cookbooks lying on their sides, spines out: cloth bindings, bands, titles in gold, the top one askew
+    if (k === 3) { shade(() => el(x + 14, y, 96, 7), .45); [[C.cobalt, 150, 36, 0], [C.mustard, 132, 30, 6], [C.tomato, 158, 38, -4]].reduce((yy, [col, w, h, dx], q) => {
+        const x0 = x - w / 2 + dx, rot = q === 2 ? -.03 : 0; c.save(); c.translate(X(x), Y(yy)); c.rotate(rot); c.translate(-X(x), -Y(yy));
+        shape('#f3ead6', () => rr(x0 + 6, yy - h + 3, w - 4, h - 6, 2), 2); c.strokeStyle = 'rgba(59,36,22,.25)'; c.lineWidth = Sc(1.2); c.beginPath(); for (let k = 1; k < 5; k++) { mv(x0 + w - 12, yy - h + 3 + k * (h - 6) / 5); ln(x0 + w + 1, yy - h + 3 + k * (h - 6) / 5); } c.stroke();
+        shape(col, () => rr(x0, yy - h, w - 10, h, 4), 2.5); shade(() => rr(x0, yy - h * .35, w - 10, h * .35, 3), .3);
+        for (const bx of [x0 + 12, x0 + w - 34]) plate('rgba(255,236,170,.75)', () => rr(bx, yy - h, 6, h, 0));
+        plate('rgba(255,236,170,.9)', () => rr(x0 + 28, yy - h * .62, w - 74, h * .24, 1)); c.restore(); return yy - h; }, y); }
+    // a geranium in a clay pot: stems from the soil, round scalloped leaves with their dark ring, two heads of flowers
+    if (k === 0) { shade(() => el(x + 12, y, 70, 7), .45);
+      shape('#5a3b26', () => el(x, y - 108, 70, 12), 2.5);
+      const stems = [[-58, -150], [-30, -190], [34, -176], [64, -140], [6, -150]], heads = [[-26, -268, 34], [30, -244, 30]];
+      for (const [hx, hy] of heads) { c.lineCap = 'round'; c.strokeStyle = C.ink; c.lineWidth = Sc(9); c.beginPath(); mv(x + hx * .3, y - 110); qc(x + hx * .2, y + hy * .7, x + hx, y + hy); c.stroke(); c.strokeStyle = '#6f8a3a'; c.lineWidth = Sc(4.5); c.stroke(); }
+      for (const [lx, ly] of stems) { c.strokeStyle = C.ink; c.lineWidth = Sc(8); c.beginPath(); mv(x + lx * .25, y - 110); qc(x + lx * .6, y - 120, x + lx, y + ly); c.stroke(); c.strokeStyle = '#6f8a3a'; c.lineWidth = Sc(4); c.stroke(); }
+      for (const [q, [lx, ly]] of stems.entries()) { const r = 30 + (q & 1) * 6, leaf = () => { for (let k = 0; k <= 16; k++) { const a = k / 16 * 6.2832, rr2 = r * (k & 1 ? .86 : 1); (k ? ln : mv)(x + lx + Math.cos(a) * rr2, y + ly + Math.sin(a) * rr2 * .82); } c.closePath(); };
+        shape(q & 1 ? '#7f8f3a' : '#8a9a44', leaf, 2.5); c.strokeStyle = 'rgba(70,60,20,.3)'; c.lineWidth = Sc(7); c.beginPath(); c.ellipse(X(x + lx), Y(y + ly), Sc(r * .55), Sc(r * .45), 0, 0, 6.2832); c.stroke();
+        c.strokeStyle = 'rgba(230,240,190,.45)'; c.lineWidth = Sc(1.6); c.beginPath(); for (let v = 0; v < 5; v++) { const a = -2.6 + v * .55; mv(x + lx, y + ly + r * .35); qc(x + lx + Math.cos(a) * r * .4, y + ly + r * .35 + Math.sin(a) * r * .3, x + lx + Math.cos(a) * r * .78, y + ly + r * .35 + Math.sin(a) * r * .65); } c.stroke(); }
+      for (const [hx, hy, hr] of heads) for (let f = 0; f < 9; f++) { const a = f * 2.4, d = f ? hr * (.45 + .2 * hash(f, hx | 0)) : 0, fx = x + hx + Math.cos(a) * d, fy = y + hy + Math.sin(a) * d * .8;
+        const flor = () => { for (let k = 0; k < 5; k++) { const pa = k / 5 * 6.2832 + f; c.moveTo(X(fx + Math.cos(pa) * 13), Y(fy + Math.sin(pa) * 13)); c.arc(X(fx + Math.cos(pa) * 8), Y(fy + Math.sin(pa) * 8), Sc(7), 0, 6.2832); } };
+        solid(f & 1 ? '#e05a40' : C.tomato, flor, 1.4); plate('#f6c0a8', () => el(fx, fy, 3, 3)); }
+      // the pot in front: a rim, a tapered body, light from the left
+      shape('#b9583c', () => { mv(x - 60, y); ln(x - 70, y - 90); ln(x + 70, y - 90); ln(x + 60, y); c.closePath(); }, 3); shade(() => { mv(x + 20, y); ln(x + 26, y - 90); ln(x + 70, y - 90); ln(x + 60, y); c.closePath(); }, .32);
+      plate('rgba(255,220,190,.35)', () => { mv(x - 52, y - 8); ln(x - 60, y - 84); ln(x - 46, y - 84); ln(x - 40, y - 8); c.closePath(); });
+      shape('#a14a30', () => rr(x - 80, y - 112, 160, 24, 5), 3); shade(() => rr(x + 30, y - 112, 50, 24, 4), .3); }
+    // mixing bowls, the small one nested in the big one: its back rim behind, the small bowl, the big bowl's front over it
+    if (k === 1) { shade(() => el(x + 14, y, 80, 7), .45);
+      shape('#e8dcc0', () => el(x, y - 72, 92, 16), 3);
+      shape('#7fb3a4', () => { mv(x - 72, y - 108); qc(x - 66, y - 52, x, y - 48); qc(x + 66, y - 52, x + 72, y - 108); c.closePath(); }, 3); shade(() => { mv(x + 20, y - 60); qc(x + 66, y - 60, x + 72, y - 108); ln(x + 30, y - 108); c.closePath(); }, .3);
+      shape('#4f7f72', () => el(x, y - 108, 72, 12), 2.5); plate('#6f9f92', () => el(x, y - 104, 60, 7));
+      shape(C.cream, () => { mv(x - 92, y - 72); qc(x - 88, y + 2, x, y); qc(x + 88, y + 2, x + 92, y - 72); qc(x, y - 56, x - 92, y - 72); c.closePath(); }, 3);
+      plate(C.tomato, () => { mv(x - 88, y - 50); qc(x, y - 30, x + 88, y - 50); ln(x + 84, y - 38); qc(x, y - 18, x - 84, y - 38); c.closePath(); });
+      shade(() => { mv(x + 30, y - 2); qc(x + 88, y + 2, x + 92, y - 72); ln(x + 40, y - 62); c.closePath(); }, .28); } }
+  if (wide && act < 2) { tin(1110, 150, 190, C.tomato, 'FLOUR'); tin(1278, 124, 150, '#7fb3a4', 'SUGAR'); tin(1420, 100, 116, C.mustard, 'TEA'); }
+  if (!wide) tin(450, 110, 120, C.tomato, 'SUGAR');
+  else { c.save(); c.translate(Sc(880), Sc(COUNTER + 40 - SHELF)); const sy = SHELF, tow = () => { mv(116, sy + 4); qc(116, sy - 9, 132, sy - 10); ln(206, sy - 10); qc(222, sy - 9, 220, sy + 4); qc(226, sy + 90, 220, sy + 180); qc(194, sy + 192, 170, sy + 178); qc(146, sy + 190, 122, sy + 176); qc(116, sy + 90, 116, sy + 4); c.closePath(); };
+    // a tea towel thrown over the counter's edge, clear of the jars: one cloth, rounded over the edge, creased where it hangs,
+    // with its shadow on the wall
+    shade(() => { mv(222, sy + 30); qc(232, sy + 100, 230, sy + 186); ln(240, sy + 186); qc(242, sy + 100, 232, sy + 30); c.closePath(); }, .4);
+    plate(C.paper, tow); c.save(); c.beginPath(); tow(); c.clip(); c.fillStyle = 'rgba(217,71,43,.75)'; for (const yy of [40, 58, 150]) { c.beginPath(); mv(100, sy + yy); qc(170, sy + yy + 6, 240, sy + yy); ln(240, sy + yy + (yy === 58 ? 6 : 12)); qc(170, sy + yy + (yy === 58 ? 12 : 18), 100, sy + yy + (yy === 58 ? 6 : 12)); c.fill(); }
+    c.fillStyle = 'rgba(217,71,43,.75)'; c.fillRect(X(146), Y(sy - 12), Sc(10), Sc(200));
+    c.fillStyle = 'rgba(255,255,255,.4)'; c.fillRect(X(100), Y(sy - 12), Sc(140), Sc(10)); shade(() => { mv(100, sy + 4); qc(170, sy + 14, 240, sy + 4); ln(240, sy + 16); qc(170, sy + 26, 100, sy + 16); c.closePath(); }, .3);
+    shade(() => { mv(190, sy); qc(200, sy + 100, 220, sy + 190); ln(240, sy + 190); ln(240, sy); c.closePath(); }, .25); c.restore(); key(tow, 3);
+    c.strokeStyle = 'rgba(59,36,22,.3)'; c.lineWidth = Sc(2); c.beginPath(); mv(152, sy + 60); qc(149, sy + 110, 154, sy + 150); mv(188, sy + 80); qc(191, sy + 120, 188, sy + 160); c.stroke(); c.restore();
+    if (act < 2) { const cx = 33, ty = COUNTER - 100; shade(() => el(cx + 10, COUNTER, 50, 6), .45);
+      shape('#5a4636', () => el(cx, ty, 44, 10), 2.5);
+      for (const [dx, a, len] of [[-16, -.28, 150], [2, .04, 172], [18, .3, 140]]) { c.save(); c.translate(X(cx + dx), Y(ty + 30)); c.rotate(a);
+        solid(dx ? '#c08a52' : C.wood, () => { c.moveTo(Sc(-5), 0); c.lineTo(Sc(-5), Sc(-len)); c.lineTo(Sc(5), Sc(-len)); c.lineTo(Sc(5), 0); c.closePath(); c.moveTo(Sc(15), Sc(-len - 16)); c.ellipse(0, Sc(-len - 16), Sc(15), Sc(22), 0, 0, 6.2832); }, 2.4);
+        c.fillStyle = 'rgba(90,40,10,.25)'; c.beginPath(); c.ellipse(Sc(3), Sc(-len - 14), Sc(8), Sc(14), 0, 0, 6.2832); c.fill(); c.restore(); }
+      shape('#c9b48c', () => { mv(cx - 44, ty); qc(cx - 50, COUNTER - 30, cx - 38, COUNTER); ln(cx + 38, COUNTER); qc(cx + 50, COUNTER - 30, cx + 44, ty); qc(cx, ty + 12, cx - 44, ty); c.closePath(); }, 3);
+      shade(() => { mv(cx + 10, ty + 8); qc(cx + 44, ty + 4, cx + 44, ty); qc(cx + 50, COUNTER - 30, cx + 38, COUNTER); ln(cx + 12, COUNTER); c.closePath(); }, .32);
+      plate(C.cobalt, () => { mv(cx - 46, ty + 30); qc(cx, ty + 42, cx + 46, ty + 30); ln(cx + 46, ty + 40); qc(cx, ty + 52, cx - 46, ty + 40); c.closePath(); }); } }
 }
 function radio(cx, by) {
   shape(C.mustard, () => rr(cx - 95, by - 120, 190, 120, 26));
@@ -1463,7 +1671,11 @@ function oven(x, y) {
   const gl = c.createRadialGradient(X(ax), Y(1060), 0, X(ax), Y(1060), Sc(150)); gl.addColorStop(0, 'rgba(255,170,60,.85)'); gl.addColorStop(.5, 'rgba(217,71,43,.45)'); gl.addColorStop(1, 'rgba(217,71,43,0)'); c.fillStyle = gl; c.fillRect(X(ax - 120), Y(820), Sc(240), Sc(240));
   for (const [lx, a] of [[ax - 30, -.12], [ax + 34, .16]]) { c.save(); c.translate(X(lx), Y(1040)); c.rotate(a); c.fillStyle = '#4a2a16'; c.fillRect(Sc(-56), Sc(-11), Sc(112), Sc(22)); c.fillStyle = C.gold; c.fillRect(Sc(-56), Sc(-11), Sc(10), Sc(22)); c.fillRect(Sc(46), Sc(-11), Sc(10), Sc(22)); c.restore(); }
   for (let k = 0; k < 16; k++) { c.fillStyle = k & 1 ? C.gold : '#f08a2a'; c.beginPath(); el(ax + (hash(k, 3) - .5) * 200, 1052 + hash(k, 4) * 6, 5 + hash(k, 5) * 5, 3); c.fill(); }
-  c.restore(); key(() => arch(120, 80), 4);
+  // flames licking up off the logs, in two inks, the tongues swaying (the oven is part of the still backdrop, so they hold a pose)
+  for (const [fx, fh, col] of [[ax - 50, 70, C.tomato], [ax + 6, 96, C.tomato], [ax + 56, 62, C.tomato], [ax - 24, 50, C.gold], [ax + 26, 60, C.gold]]) plate(col, () => { mv(fx - 24, 1036); qc(fx - 30, 1036 - fh * .5, fx - 4, 1036 - fh * .7); qc(fx - 10, 1036 - fh * .85, fx + 4, 1036 - fh); qc(fx + 22, 1036 - fh * .6, fx + 24, 1036); c.closePath(); });
+  // the brick of the arch's inside lit warm by the fire
+  c.restore(); c.save(); c.beginPath(); arch(156, 116, 1); c.clip(); const lip = c.createRadialGradient(X(ax), Y(1040), Sc(90), X(ax), Y(1040), Sc(220)); lip.addColorStop(0, 'rgba(255,170,60,.35)'); lip.addColorStop(1, 'rgba(255,170,60,0)'); c.fillStyle = lip; c.fillRect(X(ax - 200), Y(820), Sc(400), Sc(260)); c.restore();
+  key(() => arch(120, 80), 4);
   // the hearth: a stone sill
   shape(C.stone, () => rr(x - 10, 1060, 380, 30, 4), 3);
   shade(() => c.rect(X(x - 10), Y(1078), Sc(380), Sc(12)), .4);
@@ -1482,8 +1694,8 @@ function doughWord(word) {
   let px = 40; const place = [];
   letters.forEach((l, i) => { place.push({ l, x: px + ws[i] / 2, y: fs * 1.25 + (hash(i, word.length, 3) - .5) * 18, r: (hash(i, word.length, 5) - .5) * .28, s: .92 + hash(i, 7) * .16 }); px += ws[i]; });
   const draw = (col, dx, dy) => { x.fillStyle = col; for (const p of place) { x.save(); x.translate(p.x + dx, p.y + dy); x.rotate(p.r); x.scale(p.s, p.s); x.textAlign = 'center'; x.fillText(p.l, 0, 0); x.restore(); } };
-  draw('rgba(59,36,22,.55)', 4, 7);
-  x.strokeStyle = C.ink; x.lineWidth = 9; x.lineJoin = 'round'; for (const p of place) { x.save(); x.translate(p.x, p.y); x.rotate(p.r); x.scale(p.s, p.s); x.textAlign = 'center'; x.strokeText(p.l, 0, 0); x.restore(); }
+  draw('rgba(59,36,22,.75)', 5, 9);
+  x.strokeStyle = C.ink; x.lineWidth = 12; x.lineJoin = 'round'; for (const p of place) { x.save(); x.translate(p.x, p.y); x.rotate(p.r); x.scale(p.s, p.s); x.textAlign = 'center'; x.strokeText(p.l, 0, 0); x.restore(); }
   draw('#e8cf98', 0, 3);
   draw(C.dough, 0, 0);
   // strands sagging off the bottom, holes in the dough, a dusting of flour
@@ -1509,12 +1721,12 @@ function vessel(i) {
   const j = S.jars[i], sl = SLOT[i], mom = i === 0 && S.act < 3, [a, b] = CORE.win(S);
   const p = CORE.phase(S, j), ripe = p >= a && p <= b, late = p > b, hungry = p >= CORE.P.hooch;
   const f = jarFx[i] || (jarFx[i] = { sq: 0, sqv: 0, sh: 0 });
-  const w = mom ? 290 : 220, h = mom ? 300 : 270, cx = sl.x, by = sl.y;
+  const w = mom ? 290 : wide ? 220 : 205, h = mom ? 300 : wide ? 270 : 245, cx = sl.x, by = sl.y;   // a little smaller on a phone, so three rows fit under the ceiling
   const sq = 1 + f.sq, shx = Math.sin(now * 60) * f.sh * 14;
   c.save(); c.translate(X(cx + shx), Y(by)); c.scale(1 / sq, sq); c.translate(-X(cx + shx), -Y(by));
   const x = cx - w / 2 + shx, y = by - h;
   // the peak: a gold glow nobody else is allowed to use
-  if (ripe) { const pu = .55 + .45 * Math.sin(now * 6 + i); c.save(); const gr = c.createRadialGradient(X(cx), Y(by - h * .65), 0, X(cx), Y(by - h * .65), Sc(w * .95)); gr.addColorStop(0, `rgba(255,207,51,${.55 * pu})`); gr.addColorStop(1, 'rgba(255,207,51,0)'); c.fillStyle = gr; c.fillRect(X(cx - w), Y(by - h * 1.7), Sc(w * 2), Sc(h * 2)); c.restore(); }
+  if (ripe) { const pu = .55 + .45 * Math.sin(now * 6 + i); c.save(); const gr = c.createRadialGradient(X(cx), Y(by - h * .65), 0, X(cx), Y(by - h * .65), Sc(w * .95)); gr.addColorStop(0, `rgba(255,207,51,${.38 * pu})`); gr.addColorStop(1, 'rgba(255,207,51,0)'); c.fillStyle = gr; c.fillRect(X(cx - w), Y(by - h * 1.7), Sc(w * 2), Sc(h * 2)); c.restore(); }
   shade(() => el(cx + 16, by + 1, w / 2 + 8, 13), .4);
   const { lv, dome: d0 } = looks(p, a, b), breathe = Math.sin(now * 2.1 + i * 1.7) * .008 + (ripe ? Math.sin(now * 9 + i) * .012 : 0);
   const dome = d0 + breathe, ix = x + 12, iw = w - 24, floor = by - 10, room = h - 50, top = floor - room * lv;
@@ -1553,8 +1765,10 @@ function vessel(i) {
   // the red band: rise past it
   const band = floor - room * BAND;
   shape(C.tomato, () => rr(x - 2, band - 7, w + 4, 14, 6), 2.4);
+  // a printed tab on the band says what it is, so it is never taken for the lid's rubber seal
+  if (S.act < 3 && (i === 0 || S.perfects < 30)) { shape(C.tomato, () => { mv(x + w - 4, band - 7); ln(x + w + 56, band - 16); ln(x + w + 56, band + 16); ln(x + w - 4, band + 7); c.closePath(); }, 2.4); text('PEAK', x + w + 30, band + 1, 17, '700 # "Stardos Stencil", Impact, sans-serif', C.paper); }
   // the lid lifts and tips at the peak
-  const lift = ripe ? 18 + Math.sin(now * 9 + i) * 3 : 0, tilt = ripe ? (i & 1 ? .1 : -.1) : 0;
+  const lift = ripe ? Math.max(0, Math.sin(now * 7 + i)) * 5 : 0, tilt = ripe ? (i & 1 ? .025 : -.025) * Math.max(0, Math.sin(now * 7 + i)) : 0;
   c.save(); c.translate(X(cx), Y(y)); c.rotate(tilt); c.translate(-X(cx), -Y(y));
   if (mom) {
     const lw = w - 84, ly = y - 4 - lift, hx = w / 2 - 30, hy = y + 22;
@@ -1571,7 +1785,6 @@ function vessel(i) {
     c.strokeStyle = 'rgba(59,36,22,.45)'; c.lineWidth = Sc(2.2);
     for (let k = 1; k < 12; k++) { const lx = x + 24 + k * (w - 48) / 12; c.beginPath(); mv(lx, y - 25 - lift); ln(lx, y - 2 - lift); c.stroke(); }
   }
-  if (ripe) plate(col, () => el(cx, y + 2, iw * .33, 14));
   c.restore();
   // the label
   c.save(); c.translate(X(cx), Y(by - (mom ? 76 : 58))); c.rotate(hungry ? .12 : -.035);
@@ -1585,14 +1798,15 @@ function vessel(i) {
     c.fillStyle = C.ink; c.font = `700 ${Sc(36)}px Caveat`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(j.name, Sc(1), Sc(3));
   }
   c.restore();
-  if (S.lv.appr && late && S.act < 4) helper(x + w - 18, y + 46, clamp((p - b) / (CORE.apprAt(S) - b), 0, 1));
-  // gold rays round the lid
+  if (S.lv.appr && late && S.act < 4) helper(x + w + 6, y + 86, clamp((p - b) / (CORE.apprAt(S) - b), 0, 1), x + w - 40, y - 12);
+  // at the peak she smells ready: three curls of aroma rise off her, the cookbook's way of saying so
   if (ripe) {
     c.lineCap = 'round';
-    for (let k = 0; k < 9; k++) {
-      const an = -Math.PI / 2 + (k - 4) * .34, r0 = w * .62 + (k & 1) * 10 + Math.sin(now * 8 + k) * 4, r1 = r0 + 40, oyy = y + 10 - lift;
-      c.strokeStyle = C.ink; c.lineWidth = Sc(10); c.beginPath(); mv(cx + Math.cos(an) * r0, oyy + Math.sin(an) * r0 * .6); ln(cx + Math.cos(an) * r1, oyy + Math.sin(an) * r1 * .6); c.stroke();
-      c.strokeStyle = C.gold; c.lineWidth = Sc(6); c.stroke();
+    for (let k = 0; k < 3; k++) {
+      const ph = K.reduced ? .45 : (now * .7 + k / 3 + i * .29) % 1, ax = cx + (k - 1) * w * .26, ay = y - 34 - lift - ph * 34, al = Math.sin(ph * Math.PI);
+      const curl = () => { mv(ax, ay + 36); bz(ax - 20, ay + 24, ax + 20, ay + 12, ax, ay); bz(ax - 16, ay - 10, ax + 14, ay - 18, ax + 3, ay - 30); };
+      c.globalAlpha = al; c.strokeStyle = C.paper; c.lineWidth = Sc(13); c.beginPath(); curl(); c.stroke();
+      c.strokeStyle = C.mustard; c.lineWidth = Sc(6); c.beginPath(); curl(); c.stroke(); c.globalAlpha = 1;
     }
   }
   c.restore();
@@ -1601,7 +1815,7 @@ function vessel(i) {
 // the kitchen timer on the counter: it shakes and rings at a peak; tapped, it goes quiet (a bell struck through)
 let rang = -9;
 function kitchenTimer() {
-  const x = 655, y = SHELF, ring = now - rang < .7 && !S.quiet ? Math.sin(now * 70) * .12 * (1 - (now - rang) / .7) : 0;
+  const x = wide ? 655 : 500, y = wide ? SHELF : TALL_SHELF[0], ring = now - rang < .7 && !S.quiet ? Math.sin(now * 70) * .12 * (1 - (now - rang) / .7) : 0;
   c.save(); c.translate(X(x), Y(y)); c.rotate(ring); c.translate(-X(x), -Y(y));
   shape(C.paper, () => { mv(x - 40, y); bz(x - 44, y - 70, x + 44, y - 70, x + 40, y); c.closePath(); }, 3);
   shape(C.tomato, () => rr(x - 41, y - 26, 82, 12, 4), 2.4);
@@ -1617,14 +1831,22 @@ function kitchenTimer() {
 }
 // a pencil beside a name card the mouse is over: the name can be changed
 function pencil(x, y) {
-  c.save(); c.translate(X(x), Y(y)); c.rotate(-.7); const s = Math.max(.6, view.s * 2.2);
-  c.fillStyle = C.mustard; c.strokeStyle = C.ink; c.lineWidth = 1.5; c.beginPath(); c.rect(-6 * s, -24 * s, 12 * s, 34 * s); c.fill(); c.stroke();
-  c.fillStyle = '#f2c9a0'; c.beginPath(); c.moveTo(-6 * s, 10 * s); c.lineTo(6 * s, 10 * s); c.lineTo(0, 22 * s); c.closePath(); c.fill(); c.stroke();
-  c.fillStyle = C.tomato; c.beginPath(); c.rect(-6 * s, -30 * s, 12 * s, 6 * s); c.fill(); c.stroke();
+  // a yellow hexagonal pencil: three facets, a brass ferrule with ridges, a pink eraser, a planed wood cone and a lead
+  c.save(); c.translate(X(x), Y(y)); c.rotate(-.7); const s = Math.max(.6, view.s * 2.2), R = (a, b, w, h) => c.rect(a * s, b * s, w * s, h * s);
+  c.fillStyle = 'rgba(59,36,22,.25)'; c.beginPath(); c.ellipse(5 * s, 26 * s, 7 * s, 3 * s, 0, 0, 7); c.fill();
+  c.lineWidth = 1.5; c.strokeStyle = C.ink; c.lineJoin = 'round';
+  c.fillStyle = '#f2b632'; c.beginPath(); R(-6, -24, 12, 32); c.fill(); c.fillStyle = '#ffd765'; c.beginPath(); R(-6, -24, 4, 32); c.fill(); c.fillStyle = '#d99a1f'; c.beginPath(); R(2, -24, 4, 32); c.fill();
+  c.beginPath(); R(-6, -24, 12, 32); c.stroke();
+  c.fillStyle = '#e9c79a'; c.beginPath(); c.moveTo(-6 * s, 8 * s); c.quadraticCurveTo(-3 * s, 11 * s, -6 * s, 8 * s); c.lineTo(0, 21 * s); c.lineTo(6 * s, 8 * s); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#3a3a3a'; c.beginPath(); c.moveTo(-2.2 * s, 16.5 * s); c.lineTo(0, 21 * s); c.lineTo(2.2 * s, 16.5 * s); c.closePath(); c.fill();
+  c.fillStyle = '#c9b06a'; c.beginPath(); R(-6.5, -31, 13, 8); c.fill(); c.stroke(); c.beginPath(); for (const yy of [-29, -27, -25]) { c.moveTo(-6.5 * s, yy * s); c.lineTo(6.5 * s, yy * s); } c.strokeStyle = 'rgba(90,70,20,.7)'; c.lineWidth = 1; c.stroke();
+  c.strokeStyle = C.ink; c.lineWidth = 1.5; c.fillStyle = '#ee9a9a'; c.beginPath(); c.roundRect(-6 * s, -38 * s, 12 * s, 8 * s, [3 * s, 3 * s, 0, 0]); c.fill(); c.stroke();
   c.restore();
 }
 // a helper's white cap with a ring round it: how soon the apprentice (or the baker) will take this one
-function helper(x, y, u) {
+function helper(x, y, u, ax, ay) {
+  // tied to what it marks: a toothpick in a loaf, a string from a jar's lid
+  if (ax != null) { c.strokeStyle = ay > y ? '#c9a46a' : C.ink; c.lineWidth = Math.max(1.2, Sc(ay > y ? 5 : 2)); c.beginPath(); mv(ax, ay); ln(x, y); c.stroke(); }
   c.fillStyle = C.paper; c.strokeStyle = C.ink; c.lineWidth = Math.max(1.2, Sc(3.5));
   c.beginPath(); el(x, y, 34, 34); c.fill(); c.stroke();
   c.lineWidth = Math.max(2, Sc(7)); c.strokeStyle = C.cobalt; c.beginPath(); c.arc(X(x), Y(y), Sc(34), -1.5708, -1.5708 + 6.2832 * u); c.stroke();
@@ -1694,11 +1916,11 @@ function benchLoaf(L, i) {
   // the line to score along: bold enough to see past a thumb
   const gd = GUIDE[L.pat], line = () => gd.forEach(([gx, gy], k) => (k ? c.lineTo : c.moveTo).call(c, X(lx + gx * spread), Y(y + gy / spread)));
   c.lineCap = c.lineJoin = 'round';
-  c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = Math.max(4, Sc(13)); c.beginPath(); line(); c.stroke();
-  c.save(); c.setLineDash([Math.max(5, Sc(16)), Math.max(4, Sc(12))]); c.lineDashOffset = -now * 40;
-  c.strokeStyle = C.ink; c.lineWidth = Math.max(2.5, Sc(7)); c.beginPath(); line(); c.stroke(); c.restore();
+  c.strokeStyle = 'rgba(255,252,240,.92)'; c.lineWidth = Math.max(8, Sc(22)); c.beginPath(); line(); c.stroke();
+  c.save(); c.setLineDash([Math.max(7, Sc(18)), Math.max(5, Sc(12))]); c.lineDashOffset = -now * 40;
+  c.strokeStyle = C.tomato; c.lineWidth = Math.max(4, Sc(10)); c.beginPath(); line(); c.stroke(); c.restore();
   // the time it has left on the bench, as an arc over the dome
-  if (S.lv.baker) helper(lx + rx * .9, BENCH - ry * 2.05, L.hold > 0 ? 0 : clamp(L.age / CORE.bakerAt(S), 0, 1));
+  if (S.lv.baker) helper(lx + rx * .72, BENCH - ry * 2.6, L.hold > 0 ? 0 : clamp(L.age / CORE.bakerAt(S), 0, 1), lx + rx * .42, BENCH - ry * 1.6);
   else if (wait > .02) { const px = X(lx + rx * .95), py = Y(BENCH - ry * 2.1), pr = Math.max(7, Sc(24)); c.fillStyle = C.paper; c.strokeStyle = C.ink; c.lineWidth = 1.5; c.beginPath(); c.arc(px, py, pr, 0, 6.2832); c.fill(); c.stroke(); c.fillStyle = wait > .75 ? C.tomato : 'rgba(59,36,22,.55)'; c.beginPath(); c.moveTo(px, py); c.arc(px, py, pr - 2, -1.5708, -1.5708 + 6.2832 * wait); c.closePath(); c.fill(); }
   c.restore();
   return { x: lx - rx, y: BENCH - ry * 2 - 30, w: rx * 2, h: ry * 2 + 30 };
@@ -1745,6 +1967,34 @@ function boule(x, y, sc, pat, q) {
   c.save(); c.translate(0, -Math.max(1, Sc(7 * open * sc))); c.strokeStyle = '#7a3f17'; c.lineWidth = Math.max(1, Sc(6 * sc)); c.beginPath(); line(); c.stroke(); c.restore();
 }
 const bakedLoaf = boule;
+/* ---------------- the recipe cards' pictures ----------------
+   Each card has a little cut in the cookbook's own style, drawn by the same helpers in a 100-unit box. */
+const ICON = {
+  flour() { shape(C.paper, () => { mv(22, 30); qc(50, 20, 78, 30); ln(84, 88); qc(50, 96, 16, 88); c.closePath(); }, 5); shade(() => { mv(60, 34); ln(80, 34); ln(84, 88); ln(62, 90); c.closePath(); }, .35); shape(C.tomato, () => rr(26, 48, 48, 22, 2), 4); key(() => { mv(28, 30); qc(50, 14, 72, 30); }, 5); ear(50, 12, C.mustard); },
+  jar(n) { shape(C.glass, () => rr(24, 26, 52, 66, 12), 5); plate(C.dough, () => { mv(27, 56); qc(50, 40 - (n || 0), 73, 56); ln(73, 84); qc(73, 89, 66, 89); ln(34, 89); qc(27, 89, 27, 84); c.closePath(); }); shade(() => rr(58, 30, 14, 58, 6), .25); shape(C.tin, () => rr(20, 14, 60, 14, 3), 5); shape(C.tomato, () => rr(24, 44, 52, 7, 1), 3); plate('rgba(255,255,255,.7)', () => rr(30, 32, 6, 24, 3)); },
+  warm() { shape(C.tomato, () => { mv(36, 20); ln(64, 20); ln(64, 28); qc(84, 34, 84, 56); qc(84, 92, 50, 92); qc(16, 92, 16, 56); qc(16, 34, 36, 28); c.closePath(); }, 5); shape(C.tin, () => rr(40, 8, 20, 14, 3), 4); key(() => { for (let k = 0; k < 4; k++) { mv(28, 46 + k * 10); ln(72, 46 + k * 10); } }, 2.5); plate('rgba(255,255,255,.55)', () => el(32, 50, 5, 12)); },
+  timer() { shape(C.mustard, () => el(50, 58, 34, 34), 5); shape(C.paper, () => el(50, 58, 24, 24), 4); key(() => { mv(50, 58); ln(50, 40); mv(50, 58); ln(62, 64); }, 4); shape(C.tomato, () => { mv(36, 22); qc(50, 4, 64, 22); c.closePath(); }, 4); shape(C.chrome, () => el(50, 12, 5, 5), 3); },
+  size() { shape('#c9b48c', () => { mv(22, 26); ln(78, 26); qc(90, 60, 76, 92); ln(24, 92); qc(10, 60, 22, 26); c.closePath(); }, 5); shape('#e9dcc0', () => el(50, 26, 28, 7), 4); shade(() => { mv(60, 30); ln(78, 30); qc(88, 60, 76, 90); ln(62, 90); c.closePath(); }, .35); shape(C.cobalt, () => rr(18, 52, 64, 8, 2), 3); },
+  appr() { shape(C.paper, () => { mv(20, 66); ln(28, 32); qc(50, 12, 72, 32); ln(80, 66); c.closePath(); }, 5); shape(C.paper, () => rr(16, 62, 68, 18, 4), 5); shade(() => { mv(56, 24); qc(70, 30, 74, 66); ln(56, 66); c.closePath(); }, .3); key(() => { mv(50, 22); ln(50, 62); }, 3); shape(C.cobalt, () => el(78, 30, 7, 7), 3); },
+  bakery() { shape(C.paper, () => rr(18, 46, 64, 46, 2), 5); shape(C.wood, () => rr(42, 62, 18, 30, 2), 4); shape('#cfe3df', () => rr(22, 56, 16, 18, 2), 3); shape('#cfe3df', () => rr(64, 56, 14, 18, 2), 3); const aw = () => { mv(12, 30); ln(88, 30); ln(90, 46); for (let k = 0; k < 5; k++) qc(82 - k * 16, 54, 74 - k * 16, 46); c.closePath(); }; plate(C.paper, aw); c.save(); c.beginPath(); aw(); c.clip(); c.fillStyle = C.tomato; for (let k = 0; k < 5; k++) c.fillRect(X(12 + k * 16), Y(28), Sc(8), Sc(30)); c.restore(); key(aw, 5); shape(C.tomato, () => rr(32, 14, 36, 14, 3), 4); },
+  lame() { c.save(); c.translate(X(50), Y(50)); c.rotate(-.7); c.translate(-X(50), -Y(50)); shape(C.wood, () => rr(14, 44, 46, 12, 5), 5); shape(C.chrome, () => { mv(58, 40); ln(88, 40); ln(92, 50); ln(88, 60); ln(58, 60); c.closePath(); }, 4); key(() => { mv(64, 50); ln(82, 50); }, 3); c.restore(); },
+  basket() { shape('#c98d52', () => el(50, 56, 38, 30), 5); shape('#e8c68f', () => el(50, 52, 28, 21), 4); key(() => { el(50, 52, 19, 13); el(50, 52, 10, 6); }, 2.5); shade(() => { mv(50, 26); qc(92, 30, 88, 60); qc(80, 84, 50, 86); c.closePath(); }, .3); },
+  pattern() { boule(50, 84, .38, Math.min(2, S ? S.lv.pattern : 0) + (S && S.lv.pattern < 3 ? 1 : 0), 1); },
+  oven() { shape(C.brick, () => { mv(14, 92); ln(14, 50); qc(14, 12, 50, 12); qc(86, 12, 86, 50); ln(86, 92); c.closePath(); }, 5); shape('#3a1d10', () => { mv(30, 92); ln(30, 58); qc(30, 34, 50, 34); qc(70, 34, 70, 58); ln(70, 92); c.closePath(); }, 4); plate(C.gold, () => { mv(36, 88); qc(42, 66, 46, 76); qc(50, 56, 56, 74); qc(62, 66, 64, 88); c.closePath(); }); plate(C.tomato, () => { mv(42, 88); qc(48, 74, 52, 80); qc(56, 74, 58, 88); c.closePath(); }); },
+  baker() { const top = () => { el(32, 34, 18, 18); el(50, 24, 20, 20); el(68, 34, 18, 18); }; plate(C.paper, top); key(top, 5); shape(C.paper, () => rr(28, 38, 44, 40, 3), 5); key(() => { mv(42, 46); ln(42, 76); mv(58, 46); ln(58, 76); }, 2.5); shape(C.paper, () => rr(24, 74, 52, 14, 3), 5); },
+  cellar() { shape('#7c5133', () => { mv(14, 86); ln(14, 40); ln(86, 40); ln(86, 86); c.closePath(); }, 5); shape('#3a2416', () => rr(24, 48, 52, 38, 2), 4); key(() => { for (let k = 0; k < 4; k++) { mv(24 + k * 6, 56 + k * 9); ln(76 - k * 6, 56 + k * 9); } }, 3); shape(C.wood, () => { mv(14, 40); ln(50, 14); ln(86, 40); c.closePath(); }, 5); plate(C.dough, () => el(50, 82, 16, 7)); },
+  diet() { shape(C.mustard, () => { mv(26, 34); ln(74, 34); qc(88, 60, 74, 90); ln(26, 90); qc(12, 60, 26, 34); c.closePath(); }, 5); shape(C.tomato, () => rr(22, 22, 56, 14, 3), 4); shape(C.paper, () => rr(34, 52, 32, 20, 2), 3); plate('rgba(255,255,255,.5)', () => el(28, 56, 4, 12)); key(() => { mv(60, 22); ln(78, 6); }, 4); shape(C.wood, () => el(80, 6, 6, 6), 3); },
+  beams() { shape('#8a8f95', () => { mv(10, 30); ln(90, 30); ln(90, 40); ln(56, 40); ln(56, 64); ln(90, 64); ln(90, 74); ln(10, 74); ln(10, 64); ln(44, 64); ln(44, 40); ln(10, 40); c.closePath(); }, 5); shade(() => rr(10, 66, 80, 8, 0), .4); for (const x of [22, 78]) for (const y of [35, 69]) shape(C.chrome, () => el(x, y, 3, 3), 2); },
+  pin() { c.save(); c.translate(X(50), Y(50)); c.rotate(-.5); c.translate(-X(50), -Y(50)); shape('#e3b77d', () => rr(24, 36, 52, 28, 8), 5); shade(() => rr(24, 52, 52, 12, 6), .3); for (const s of [-1, 1]) { shape(C.wood, () => rr(50 + s * 38 - 9, 44, 18, 12, 6), 4); } plate('rgba(255,255,255,.5)', () => rr(30, 40, 40, 5, 2)); c.restore(); },
+  heave() { shape(C.dough, () => { mv(10, 86); qc(14, 30, 50, 28); qc(86, 30, 90, 86); c.closePath(); }, 5); shade(() => { mv(60, 34); qc(84, 40, 88, 86); ln(60, 86); c.closePath(); }, .3); key(() => { mv(36, 56); qc(40, 52, 44, 56); mv(56, 56); qc(60, 52, 64, 56); mv(42, 68); qc(50, 74, 58, 68); }, 3); key(() => { mv(80, 12); ln(80, 26); mv(70, 8); ln(70, 22); }, 3); shape(C.ink, () => { el(77, 27, 4, 3); el(67, 23, 4, 3); }, 1); }
+};
+// paint a card's picture, at the size it is shown and the screen's sharpness
+function icon(cvs, id, n) {
+  const sz = cvs.clientWidth || 40, d = Math.min(2, devicePixelRatio || 1); if (cvs._k === id + n + sz) return; cvs._k = id + n + sz;
+  cvs.width = cvs.height = Math.round(sz * d); const x = cvs.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0);
+  const keep = [c, ox, oy, view.cx, view.cy, view.s, MIS]; c = x; ox = oy = sz / 2; MIS = [1.1, .8]; Object.assign(view, { cx: 50, cy: 50, s: sz / 100 });
+  try { ICON[id](n); } finally { [c, ox, oy, view.cx, view.cy, view.s, MIS] = keep; }
+}
 
 /* ---------------- Mother downstairs (act 3) ---------------- */
 function cellarMother() {
@@ -1776,39 +2026,43 @@ const SURF = ['boards', 'boards', 'boards', 'brick', 'door', 'glass', 'door', 'b
 const dents = [];
 function breakage(slot, k, R, life) {
   // a jagged hole where she comes through, cracks running out of it, bits of the house lifted off
-  const [bx, by, nx, ny] = BULGE[slot], face = !nx && !ny, ang = face ? 0 : Math.atan2(ny, nx) + Math.PI / 2, kind = SURF[slot];
+  const [bx, by, nx, ny] = BULGE[slot], face = !nx && !ny, ang = face ? 0 : Math.atan2(ny, nx) + Math.PI / 2, kind = TALL_SURF[slot];
   c.save(); c.translate(X(bx), Y(by)); c.rotate(ang);
   const w = R * 1.05 * k, n = 9;
   c.fillStyle = 'rgba(30,18,10,.85)'; c.beginPath();
   for (let q = 0; q <= n; q++) { const t = q / n, jx = (t - .5) * 2 * w, jy = face ? Math.sin(t * Math.PI) * w * .8 * (q & 1 ? 1 : .8) : (q & 1 ? 1 : -1) * Sc(0) + (hash(q, slot, 101) - .5) * 30 * k; c.lineTo(Sc(jx), Sc(face ? -jy * .9 : jy)); }
   if (face) for (let q = n; q >= 0; q--) { const t = q / n; c.lineTo(Sc((t - .5) * 2 * w), Sc(Math.sin(t * Math.PI) * w * .7)); }
   else c.lineTo(Sc(w), Sc(18 * k)), c.lineTo(Sc(-w), Sc(18 * k));
-  c.closePath(); c.globalAlpha = life; c.fill();
-  c.strokeStyle = C.ink; c.lineWidth = Math.max(1, Sc(3.5)); c.lineCap = 'round';
+  // the hole is full of her: dough behind splintered edges, a shadow under the lip
+  c.closePath(); c.globalAlpha = life; c.fillStyle = C.dough; c.fill(); c.save(); c.clip(); c.fillStyle = 'rgba(120,80,40,.35)'; c.fillRect(Sc(-w * 1.2), Sc(face ? -w : -40 * k), Sc(w * 2.4), Sc(face ? w * .5 : 34 * k)); c.globalAlpha = life * .4; c.fillStyle = dots; c.fillRect(Sc(-w * 1.2), Sc(-w), Sc(w * 2.4), Sc(w * 2)); c.restore();
+  c.strokeStyle = C.ink; c.lineWidth = Math.max(1.4, Sc(6)); c.lineJoin = 'miter'; c.stroke();
+  c.lineWidth = Math.max(1, Sc(3.5)); c.lineCap = 'round';
   for (let q = 0; q < 6; q++) { const sd = q & 1 ? 1 : -1, l = (60 + hash(q, slot, 103) * 120) * k, x0 = sd * w * (.7 + hash(q, slot, 104) * .3); c.beginPath(); c.moveTo(Sc(x0), Sc(face ? (hash(q, slot) - .5) * w : 0)); c.lineTo(Sc(x0 + sd * l * .5), Sc((hash(q, slot, 105) - .5) * l * .6)); c.lineTo(Sc(x0 + sd * l), Sc((hash(q, slot, 106) - .5) * l)); c.stroke(); }
   if (!face && k > .3) {
     // two pieces of whatever she pushed through, lifted on her shoulders
     const col = { boards: '#8e5426', brick: C.brick, tiles: '#7c5133', door: '#9a6232', glass: 'rgba(230,245,240,.9)' }[kind] || '#8e5426';
-    for (const sd of [-1, 1]) { c.save(); c.translate(Sc(sd * w * .55), Sc(-R * .55 * k)); c.rotate(sd * (.5 + .3 * k)); c.fillStyle = col; c.fillRect(Sc(-48), Sc(-12), Sc(96), Sc(24)); c.strokeRect(Sc(-48), Sc(-12), Sc(96), Sc(24)); c.restore(); }
+    for (const sd of [-1, 1]) { c.save(); c.translate(Sc(sd * w * .55), Sc(-R * .55 * k)); c.rotate(sd * (.5 + .3 * k)); c.fillStyle = col; c.beginPath(); c.moveTo(Sc(-48), Sc(-12)); c.lineTo(Sc(40), Sc(-12)); c.lineTo(Sc(48), Sc(-2)); c.lineTo(Sc(36), Sc(4)); c.lineTo(Sc(44), Sc(12)); c.lineTo(Sc(-48), Sc(12)); c.closePath(); c.fill(); c.lineWidth = Math.max(1, Sc(3.5)); c.stroke(); c.restore(); }
   }
   c.restore();
 }
+// on an upright phone the whole house is small, so she comes through bigger
+const BR = () => wide ? 200 : 230;
 function bulge(b) {
   const [bx, by, nx, ny] = BULGE[b.slot], grow = CORE.bulgeGrow(S), life = CORE.bulgeLife(S);
   const t = b.age, k = t < grow ? ease.back(clamp(t / grow, 0, 1)) : 1, danger = clamp((t - grow - life + 1.4) / 1.4, 0, 1);
-  const thr = danger * Math.sin(now * 34) * 9, R = 190 * k + thr, swell = 1 + danger * .16;
+  const thr = danger * Math.sin(now * 34) * 9, R = BR() * k + thr, swell = 1 + danger * .16;
   const face = !nx && !ny, ang = Math.atan2(ny, nx), cx = bx + nx * R * .55, cy = by + ny * R * .55;
-  breakage(b.slot, k, 190, 1);
+  breakage(b.slot, k, BR(), 1);
   const rp = clamp((CORE.ripe(S, b) - 1) / 1.2, 0, 1), col = danger > .4 ? '#fbe2a6' : lerpCol([244, 226, 181], [236, 186, 104], rp);
   c.save(); c.translate(X(bx), Y(by)); if (!face) c.rotate(ang + Math.PI / 2);
   const blob = () => face ? c.ellipse(0, Sc(-R * .1), Sc(R * swell), Sc(R * .9 * swell), 0, 0, 7) : (c.moveTo(Sc(-R * .95), Sc(10)), c.bezierCurveTo(Sc(-R * 1.1 * swell), Sc(-R * 1.5 * swell), Sc(R * 1.1 * swell), Sc(-R * 1.5 * swell), Sc(R * .95), Sc(10)), c.closePath());
   c.translate(MIS[0], MIS[1]); c.fillStyle = col; c.beginPath(); blob(); c.fill(); c.translate(-MIS[0], -MIS[1]);
   c.save(); c.beginPath(); blob(); c.clip();
   for (let q = 0; q < 9; q++) { const hx = (hash(q, b.slot, 81) - .5) * R * 1.4, hy = -hash(q, b.slot, 82) * R * 1.1, r = (6 + hash(q, b.slot, 83) * 18) * k * (1 + danger * .5); c.fillStyle = C.hole; c.beginPath(); c.ellipse(Sc(hx), Sc(hy), Sc(r), Sc(r * .8), 0, 0, 7); c.fill(); }
-  shade(() => c.rect(Sc(R * .25), Sc(-R * 1.6), Sc(R), Sc(R * 1.8)), .25);
+  shade(() => c.rect(Sc(R * .25), Sc(-R * 1.6), Sc(R), Sc(R * 1.8)), .42); shade(() => c.rect(Sc(-R * 1.2), Sc(-R * .25), Sc(R * 2.4), Sc(R)), .3);
   if (danger > 0) { c.strokeStyle = `rgba(59,36,22,${danger})`; c.lineWidth = Sc(4); c.beginPath(); c.moveTo(Sc(-R * .2), Sc(-R * .95)); c.lineTo(Sc(-R * .05), Sc(-R * .6)); c.lineTo(Sc(-R * .25), Sc(-R * .3)); c.moveTo(Sc(R * .3), Sc(-R * .8)); c.lineTo(Sc(R * .12), Sc(-R * .45)); c.stroke(); }
   c.restore();
-  c.lineWidth = Math.max(1.2, Sc(4.5)); c.strokeStyle = C.ink; c.beginPath(); blob(); c.stroke();
+  c.lineWidth = Math.max(2.2, Sc(8)); c.strokeStyle = C.ink; c.beginPath(); blob(); c.stroke();
   c.fillStyle = 'rgba(255,255,255,.8)'; c.beginPath(); c.ellipse(Sc(-R * .38), Sc(face ? -R * .55 : -R * .85), Sc(R * .16), Sc(R * .09), -.5, 0, 7); c.fill();
   c.restore();
   return { x: cx - R * 1.25, y: cy - R * 1.25, w: R * 2.5, h: R * 2.5, cx, cy };
@@ -1816,9 +2070,9 @@ function bulge(b) {
 // after a punch: she squashes back into her hole, and the hole stays a while
 function dent(d) {
   const [bx, by, nx, ny] = BULGE[d.slot], face = !nx && !ny;
-  breakage(d.slot, 1, 190, clamp(1 - (d.t - 2) / 2, 0, 1));
+  breakage(d.slot, 1, BR(), clamp(1 - (d.t - 2) / 2, 0, 1));
   if (d.t < .24) {
-    const u = ease.out(d.t / .24), R = 190;
+    const u = ease.out(d.t / .24), R = BR();
     c.save(); c.translate(X(bx), Y(by)); if (!face) c.rotate(Math.atan2(ny, nx) + Math.PI / 2); c.scale(1 + u * .35, 1 - u * .85);
     c.fillStyle = C.dough; c.strokeStyle = C.ink; c.lineWidth = Math.max(1.2, Sc(4.5)); c.beginPath();
     if (face) c.ellipse(0, 0, Sc(R), Sc(R * .9), 0, 0, 7); else { c.moveTo(Sc(-R), Sc(10)); c.bezierCurveTo(Sc(-R * 1.1), Sc(-R * 1.5), Sc(R * 1.1), Sc(-R * 1.5), Sc(R), Sc(10)); c.closePath(); }
@@ -1836,18 +2090,26 @@ function finale(dt) {
   if (S.finale !== fin.step) { fin.step = S.finale; fin.t = 0; if (fin.step === 1) sfx.heave(); if (fin.step === 3) sfx.oven(); if (fin.step === 4) { sfx.split(); aim(5); } }
   fin.t += dt;
   if (S.finale === 2 && fin.t > 1.6) CORE.act(S, 'finale', 3);
+  if (S.finale === 4 && fin.t - dt < .35 && fin.t >= .35) { puff(500, -1000, 24, '#f4dfae', 900); sfx.thud(); }
 }
 function bigLoaf() {
   if (S.act < 4) return;
   const st = S.finale, t = fin.t, cx = 500, base = -980, rx = 1250, H0 = 900;
   const rise = st === 1 ? ease.elastic(clamp(t / 3.4, 0, 1)) : 1, h = H0 * rise, top = base - h;
-  const baked = st >= 3 ? (st > 3 ? 1 : clamp(t / 2.4, 0, 1)) : 0, split = st >= 4 ? ease.out(clamp(t / 1.1, 0, 1)) : 0;
+  // the knife goes down through her first (a third of a second), then the halves part, slowly at first; once the box
+  // is being opened they stay apart (the opening has a clock of its own, so nothing may count from its start)
+  const baked = st >= 3 ? (st > 3 ? 1 : clamp(t / 2.4, 0, 1)) : 0, knife = st > 4 ? 1 : st === 4 ? clamp(t / .35, 0, 1) : 0, split = st > 4 ? 1 : st === 4 ? ease.inOut(clamp((t - .4) / 1.5, 0, 1)) : 0;
   // the sun comes down to bake her
   // (smaller and further out on a phone, so it never sits on the words in the sky)
   if (st >= 3) { const sr = wide ? 400 : 290, sy = lerp(-4600, -2700, ease.out(clamp(st > 3 ? 1 : t / 1.6, 0, 1))), sx = cx + (wide ? 1350 : 1330);
-    for (let k = 0; k < 16; k++) { const a = k / 16 * 6.283 + now * .15; c.strokeStyle = C.mustard; c.lineWidth = Sc(34); c.lineCap = 'round'; c.beginPath(); mv(sx + Math.cos(a) * sr * 1.18, sy + Math.sin(a) * sr * 1.18); ln(sx + Math.cos(a) * sr * 1.6, sy + Math.sin(a) * sr * 1.6); c.stroke(); }
-    shape('#ffcf5a', () => el(sx, sy, sr, sr), 6); }
+    // a starburst sun, as on a cereal box: long and short points in two inks, a halftone shadow, a paler heart
+    const rays = (r0, r1, n, off) => { for (let k = 0; k < n; k++) { const a = (k + off) / n * 6.2832 + now * .06, b = .5 / n * 6.2832; mv(sx + Math.cos(a - b) * r0, sy + Math.sin(a - b) * r0); ln(sx + Math.cos(a) * r1, sy + Math.sin(a) * r1); ln(sx + Math.cos(a + b) * r0, sy + Math.sin(a + b) * r0); c.closePath(); } };
+    shape(C.mustard, () => rays(sr * .9, sr * 1.75, 12, 0), 5); shape(C.gold, () => rays(sr * .9, sr * 1.4, 12, .5), 5);
+    shape('#ffd65c', () => el(sx, sy, sr, sr), 6); shade(() => { c.arc(X(sx), Y(sy), Sc(sr), -.6, 2.2); c.arc(X(sx - sr * .25), Y(sy - sr * .2), Sc(sr * .95), 2.2, -.6, true); }, .35);
+    shape('#ffe591', () => el(sx, sy, sr * .62, sr * .62), 3); }
   const col = baked ? lerpCol([244, 226, 181], [199, 119, 47], baked) : C.dough;
+  // the whole house bakes with her: walls and roof go golden and brown as the sun comes down
+  if (baked > 0) { c.save(); c.globalCompositeOperation = 'multiply'; c.fillStyle = `rgba(232,160,90,${.55 * baked})`; c.beginPath(); c.rect(X(-640), Y(ROOF), Sc(2280), Sc(FLOOR - ROOF + 50)); mv(-780, ROOF); ln(500, -1410); ln(1780, ROOF); c.closePath(); c.fill(); c.restore(); }
   const dome = (x0, x1) => { mv(x0, base); bz(x0 - (x0 < cx ? 60 : -60), top - h * .05, x0 < cx ? x0 + rx * .35 : x1 - rx * .35, top - h * .22, cx, top - h * .22); };
   const loafPath = () => { mv(cx - rx, base); bz(cx - rx - 70, top + h * .1, cx - rx * .6, top - h * .25, cx, top - h * .25); bz(cx + rx * .6, top - h * .25, cx + rx + 70, top + h * .1, cx + rx, base); c.closePath(); };
   if (!split) {
@@ -1858,8 +2120,18 @@ function bigLoaf() {
     shade(() => { mv(cx + rx * .25, base); bz(cx + rx * .6, top, cx + rx, top + h * .3, cx + rx, base); c.closePath(); }, .3);
     c.restore();
     c.fillStyle = 'rgba(255,255,255,.6)'; c.beginPath(); el(cx - rx * .45, top + h * .2, rx * .16, h * .06, -.35); c.fill();
+    // steam off her as she bakes, in the same curls as a ready jar
+    if (baked > 0 && !K.reduced) for (let k = 0; k < 5; k++) { const ph = (now * .5 + k / 5) % 1, ax = cx + (k - 2) * rx * .32, ay = top - h * .2 - ph * 520; c.globalAlpha = Math.sin(ph * Math.PI) * baked; c.lineCap = 'round'; const curl = () => { mv(ax, ay + 220); bz(ax - 90, ay + 150, ax + 90, ay + 80, ax, ay); bz(ax - 80, ay - 60, ax + 60, ay - 100, ax + 14, ay - 170); }; c.strokeStyle = C.paper; c.lineWidth = Sc(46); c.beginPath(); curl(); c.stroke(); c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = Sc(24); c.beginPath(); curl(); c.stroke(); c.globalAlpha = 1; }
+    // the knife's cut, on its way down through her
+    if (knife > 0) { const y0 = top - h * .25, y1 = lerp(y0, base, ease.out(knife)); c.strokeStyle = '#f4dfae'; c.lineWidth = Sc(26); c.lineCap = 'round'; c.beginPath(); mv(cx, y0); ln(cx, y1); c.stroke(); key(() => { mv(cx - 6, y0); ln(cx - 6, y1); mv(cx + 6, y0); ln(cx + 6, y1); }, 4);
+      if (knife < 1) { c.save(); c.translate(X(cx), Y(y1)); c.rotate(-.1); shape(C.chrome, () => { c.moveTo(Sc(-10), Sc(-260)); c.lineTo(Sc(14), Sc(-260)); c.lineTo(Sc(10), Sc(10)); c.lineTo(Sc(-10), Sc(-40)); c.closePath(); }, 3); shape(C.wood, () => c.roundRect(Sc(-16), Sc(-380), Sc(32), Sc(126), Sc(10)), 3); c.restore(); } }
     // her score, once you have made it: it opens into an ear as she bakes
-    if (st >= 2) { c.strokeStyle = baked ? '#f6e2b0' : C.ink; c.lineWidth = Sc(18 + baked * 60); c.lineCap = 'round'; c.beginPath(); mv(cx - rx * .62, top + h * .32); qc(cx, top - h * .12, cx + rx * .62, top + h * .32); c.stroke(); }
+    if (st >= 2) {
+      const cut = (dy, k) => { mv(cx - rx * .62, top + h * .32); qc(cx, top - h * .12 + dy, cx + rx * .62, top + h * .32); }, gap = baked * 90;
+      // the cut springs open in the oven: pale crumb in a lens, a dark lip of crust standing over it, its shadow under
+      if (baked > .05) { plate('#f4dfae', () => { cut(0); qc(cx, top - h * .12 - gap * 2, cx - rx * .62, top + h * .32); }); shade(() => { cut(0); qc(cx, top - h * .12 - gap * .9, cx - rx * .62, top + h * .32); }, .3); }
+      key(() => cut(0), 7); if (baked > .05) { c.save(); c.translate(0, -Sc(gap)); c.strokeStyle = '#6e3412'; c.lineWidth = Sc(22); c.lineCap = 'round'; c.beginPath(); cut(-gap * .2); c.stroke(); c.restore(); }
+    }
   } else {
     // two halves slide apart; the crumb shows, and in it the box
     for (const side of [-1, 1]) {
@@ -1872,7 +2144,16 @@ function bigLoaf() {
       plate('#f3e2bb', face);
       c.save(); c.beginPath(); face(); c.clip();
       // open crumb, lit from above: every hole's upper wall in shadow, a few big ones near the top
-      for (let q = 0; q < 70; q++) { const u = hash(q, side + 9), r = 6 + Math.pow(hash(q, 3), 2) * 40 * (1.3 - u), x = cx + side * (12 + hash(q, side + 5) * 340), y = base - 50 - u * h * .95, ry = r * (.6 + .3 * hash(q, 4)), a = (hash(q, 6) - .5) * .8; c.fillStyle = '#ddb97e'; c.beginPath(); el(x, y, r, ry, a); c.fill(); c.fillStyle = 'rgba(120,78,32,.6)'; c.beginPath(); el(x, y - ry * .28, r * .86, ry * .62, a); c.fill(); }
+      // an open crumb: alveoli of every size (a few big, many small), stretched upward the way she rose, each an
+      // irregular blob whose upper wall is in shadow; a fine pore texture between them, a denser rim under the crust
+      c.fillStyle = 'rgba(190,150,90,.35)'; for (let q = 0; q < 260; q++) { const x = cx + side * (6 + hash(q, side, 61) * 400), y = base - 30 - hash(q, side, 62) * h * 1.05; c.beginPath(); el(x, y, 2 + hash(q, 63) * 3, 2 + hash(q, 64) * 2); c.fill(); }
+      for (let q = 0; q < 90; q++) {
+        const u = hash(q, side + 9), big = Math.pow(hash(q, 3), 3), r = 5 + big * 70 * (1.2 - u * .6), x = cx + side * (16 + hash(q, side + 5) * 330), y = base - 70 - u * h * .85, ry = r * (1.15 + .5 * hash(q, 4)), a = (hash(q, 6) - .5) * .5;
+        const blob = dy => { const n = 7; for (let k = 0; k <= n; k++) { const t = k / n * 6.2832, w = 1 + (hash(q, k % n, 7) - .5) * .5, px = x + Math.cos(t + a) * r * w, py = y + dy + Math.sin(t + a) * ry * w; k ? qc(x + Math.cos(t + a - .45) * r * w * 1.12, y + dy + Math.sin(t + a - .45) * ry * w * 1.12, px, py) : mv(px, py); } c.closePath(); };
+        c.fillStyle = '#d9b47a'; c.beginPath(); blob(0); c.fill(); c.fillStyle = 'rgba(110,70,28,.62)'; c.beginPath(); blob(-ry * .3); c.fill();
+        if (big > .25) { c.strokeStyle = 'rgba(80,50,20,.5)'; c.lineWidth = Math.max(1, Sc(3)); c.beginPath(); blob(0); c.stroke(); }
+      }
+      c.strokeStyle = 'rgba(150,100,50,.5)'; c.lineWidth = Sc(26); c.beginPath(); mv(cx, top - h * .17); qc(cx + side * 420, top + h * .25, cx + side * 330, base - 30); c.stroke();
       key(face, 3);
       c.restore();
       c.restore();
@@ -1883,12 +2164,23 @@ function bigLoaf() {
     fin.box = { x: bx, y: by2 - 120, w: bw, h: bh + 120 };
     c.save(); c.translate(X(cx), Y(base)); c.scale(pop, pop); c.translate(-X(cx), -Y(base));
     if (st >= 5) { c.save(); const gr = c.createRadialGradient(X(cx), Y(by2), 0, X(cx), Y(by2), Sc(900)); gr.addColorStop(0, `rgba(255,236,190,${.9 * lid})`); gr.addColorStop(1, 'rgba(255,236,190,0)'); c.fillStyle = gr; c.fillRect(X(cx - 900), Y(by2 - 900), Sc(1800), Sc(1800)); c.restore(); }
-    shape('#c99a5f', () => rr(bx, by2, bw, bh, 10), 7);
-    shape('rgba(150,98,40,.65)', () => rr(cx - 40, by2, 80, bh * .5, 0), 3);
-    shape('#f7eedb', () => rr(bx + 60, by2 + bh * .48, bw * .5, bh * .34, 4), 4);
-    text('CONTENTS MAY VARY', bx + 60 + bw * .25, by2 + bh * .6, 34, '700 # "Stardos Stencil", Impact, sans-serif', C.ink);
-    text('№ ' + (K.n + 1), bx + bw - 130, by2 + bh * .66, 110, '700 # "Stardos Stencil", Impact, sans-serif', 'rgba(30,20,10,.75)');
-    for (const side of [-1, 1]) shape('#d9b07a', () => { const hx = cx + side * bw / 2, a = side * (.15 + lid * 1.9); mv(cx, by2); ln(hx, by2); ln(hx + Math.sin(a) * 30, by2 - Math.cos(a) * 150); ln(cx + Math.sin(a) * 20, by2 - Math.cos(a) * 150); c.closePath(); }, 6);
+    // a bakery box: white card printed in tomato, a scalloped label with the number, red-and-white string tied in a bow
+    shade(() => el(cx + 40, by2 + bh + 6, bw * .55, 30), .45);
+    shape('#fbf6ea', () => rr(bx, by2, bw, bh, 10), 7);
+    c.save(); c.beginPath(); rr(bx, by2, bw, bh, 10); c.clip(); c.fillStyle = 'rgba(217,71,43,.85)'; for (let q = 0; q < 2; q++) c.fillRect(X(bx), Y(by2 + 26 + q * 26), Sc(bw), Sc(10)); shade(() => c.rect(X(bx + bw * .78), Y(by2), Sc(bw * .22), Sc(bh)), .3); c.restore();
+    const lx = bx + bw * .3, ly = by2 + bh * .58, lr = 150;
+    shape(C.tomato, () => { for (let q = 0; q <= 28; q++) { const a = q / 28 * 6.2832, r = lr * (q & 1 ? .92 : 1); (q ? ln : mv)(lx + Math.cos(a) * r, ly + Math.sin(a) * r * .86); } c.closePath(); }, 5);
+    shape(C.paper, () => el(lx, ly, lr * .74, lr * .64), 3);
+    text('CONTENTS', lx, ly - 56, 30, '700 # "Stardos Stencil", Impact, sans-serif', C.tomato); text('MAY VARY', lx, ly + 62, 30, '700 # "Stardos Stencil", Impact, sans-serif', C.tomato);
+    text('№ ' + (K.n + 1), lx, ly + 6, 82, '# Shrikhand', C.ink);
+    if (st < 5) {
+      const twine = () => { mv(cx + 90, by2 - 8); ln(cx + 90, by2 + bh); mv(bx, by2 + bh * .3); ln(bx + bw, by2 + bh * .3); };
+      c.lineCap = 'round'; c.strokeStyle = C.ink; c.lineWidth = Sc(16); c.beginPath(); twine(); c.stroke(); c.strokeStyle = C.paper; c.lineWidth = Sc(9); c.beginPath(); twine(); c.stroke();
+      c.save(); c.setLineDash([Sc(14), Sc(14)]); c.strokeStyle = C.tomato; c.beginPath(); twine(); c.stroke(); c.restore();
+      for (const sd of [-1, 1]) shape(C.tomato, () => { mv(cx + 90, by2 - 8); bz(cx + 90 + sd * 50, by2 - 90, cx + 90 + sd * 120, by2 - 40, cx + 90, by2 - 8); }, 4);
+      key(() => { mv(cx + 90, by2 - 6); qc(cx + 70, by2 + 60, cx + 40, by2 + 90); mv(cx + 90, by2 - 6); qc(cx + 120, by2 + 50, cx + 150, by2 + 84); }, 6);
+    }
+    for (const side of [-1, 1]) shape('#f3ead6', () => { const hx = cx + side * bw / 2, a = side * (.15 + lid * 1.9); mv(cx, by2); ln(hx, by2); ln(hx + Math.sin(a) * 30, by2 - Math.cos(a) * 150); ln(cx + Math.sin(a) * 20, by2 - Math.cos(a) * 150); c.closePath(); }, 6);
     c.restore();
   }
   // what to do next, written in the sky
@@ -1968,7 +2260,7 @@ function draw() {
   for (const sp of splats) { c.save(); c.globalAlpha = clamp(sp.t, 0, 1); plate(C.dough, () => { for (let q = 0; q < 7; q++) el(sp.x + (hash(q, sp.s) - .5) * 360, sp.y + (hash(q, sp.s, 2) - .5) * 300, 40 + hash(q, sp.s, 3) * 50, 30 + hash(q, sp.s, 4) * 30); }); c.restore(); }
   if (S.act >= 4) bigLoaf();
   // first-time cookbook figures
-  if (S.act === 1 && S.perfects === 0 && S.jars.length) { const j = S.jars[0], [a] = CORE.win(S), p = CORE.phase(S, j); hand(p >= a ? 'now! tap her ↓' : 'tap her when she rises past the red band ↓', SLOT[0].x, COUNTER - 450, 40, C.ink, 'center'); }
+  if (S.act === 1 && S.perfects === 0 && S.jars.length) { const j = S.jars[0], [a] = CORE.win(S), p = CORE.phase(S, j); if (p >= a) hand(wide ? '← now! tap her' : 'now! tap her ↓', wide ? 680 : 60, wide ? COUNTER - 250 : 262, 52, C.tomato, wide ? 'left' : 'left'); else if (wide) { hand('← tap her when she rises', 680, COUNTER - 250, 44, C.ink); hand('past the red band', 718, COUNTER - 196, 44, C.ink); } else { hand('tap her when', 60, 210, 46, C.ink); hand('she rises past', 60, 262, 46, C.ink); hand('the red band ↓', 60, 314, 46, C.ink); } }
   if (S.act === 2 && S.scored === 0 && S.bench.length) { const { x, y } = loafAt(0); hand('swipe along the line ↓', x - 90, y - 150, 44); }
   if (S.act === 3 && S.punched < 3 && S.bulges.length) { const r = hits.find(h => h.k === 'bulge'); if (r) hand('punch her down!', r.r.cx + 160, r.r.cy - 160, 120); }
   if (note.word && S.act < 4 && note.t < 9.5) drawNote();
@@ -1980,7 +2272,14 @@ function draw() {
 /* ---------------- effects ---------------- */
 const splats = [];
 function puff(x, y, n = 10, col = '#fffaf0', spd = 260) { if (K.reduced) n = Math.ceil(n / 3); for (let k = 0; k < n; k++) { const a = Math.random() * 6.283, v = spd * (.3 + Math.random() * .7); fx.push({ k: 'dust', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, r: 5 + Math.random() * 9, t: 0, life: .6 + Math.random() * .4, col }); } }
-function popText(txt, x, y, opt = {}) { fx.push(Object.assign({ k: 'txt', txt, x, y, t: 0, life: 1.3, size: 40, col: C.ink }, opt)); }
+// a word or a sum where it happened; one still rising nearby steps up out of the way instead of being written over
+function popText(txt, x, y, opt = {}) {
+  const f = Object.assign({ k: 'txt', txt, x, y, t: 0, life: 1.3, size: 40, col: C.ink }, opt), h = f.size * (f.sub ? 1.75 : 1.1);
+  for (const o of fx) if (o.k === 'txt' && o.t < o.life * .7 && Math.abs(o.x - x) < (f.slip ? 700 : 300) && Math.abs(o.y - f.y) < h) o.y = f.y - h;
+  // two slips at most: a third sends the oldest away
+  if (f.slip) { const old = fx.filter(o => o.slip && o.t < o.life * .8); if (old.length >= 2) old[0].t = old[0].life * .8; }
+  fx.push(f);
+}
 // where flying money lands: the middle of the price on the tag
 const tagAt = () => { const r = $('money').getBoundingClientRect(); return { tx: r.left + r.width / 2, ty: r.top + r.height / 2 }; };
 function flyLoaf(x, y, v, pat, q) { inflight += v; fx.push(Object.assign({ k: 'loaf', x, y, t: 0, life: .75, v, pat, q, carry: v }, tagAt())); }
@@ -1990,7 +2289,14 @@ function drawFx() {
     const u = f.t / f.life;
     if (f.k === 'dust') { c.globalAlpha = (1 - u * u) * .9; c.fillStyle = f.col; c.beginPath(); el(f.x, f.y, f.r * (1 + u), f.r * (1 + u)); c.fill(); c.globalAlpha = 1; }
     if (f.k === 'stamp') { const sc = u < .2 ? ease.back(u / .2) : 1, a = u > .75 ? (1 - u) / .25 : 1; c.save(); c.globalAlpha = a; c.translate(X(f.x), Y(f.y)); c.rotate(-.12); c.scale(sc, sc); const R = Sc(f.r); c.beginPath(); for (let q = 0; q < 24; q++) { const an = q / 24 * 6.2832, rr2 = q & 1 ? R * .78 : R; c.lineTo(Math.cos(an) * rr2 * 1.25, Math.sin(an) * rr2 * .8); } c.closePath(); c.fillStyle = C.gold; c.fill(); c.lineWidth = Math.max(1.5, Sc(4)); c.strokeStyle = C.ink; c.stroke(); c.font = `${Math.max(14, Sc(f.r * .52))}px Shrikhand`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = C.ink; c.fillText(f.txt, 0, Sc(2)); c.restore(); }
-    if (f.k === 'txt') { const sc = u < .15 ? ease.back(u / .15) : 1; c.save(); c.globalAlpha = u > .7 ? (1 - u) / .3 : 1; c.translate(X(f.x), Y(f.y - u * 90)); c.scale(sc, sc); c.font = `700 ${Math.max(16, Sc(f.size))}px ${f.font || 'Caveat'}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = Math.max(4, Sc(f.size * .16)); c.strokeStyle = 'rgba(247,238,219,.95)'; c.lineJoin = 'round'; c.strokeText(f.txt, 0, 0); c.fillStyle = f.col; c.fillText(f.txt, 0, 0); c.restore(); }
+    if (f.k === 'txt') { const sc = u < .15 ? ease.back(u / .15) : 1; c.save(); c.globalAlpha = u > .7 ? (1 - u) / .3 : 1; const fs = Math.max(16, Sc(f.size)); c.font = `700 ${fs}px ${f.font || 'Caveat'}`; const tw = Math.max(c.measureText(f.txt).width, f.sub ? c.measureText(f.sub).width * .62 : 0) / 2 + 8;
+      // kept whole on screen, clear of the edges
+      c.translate(clamp(X(f.x), tw + 4, area.x + area.w - tw - 4), Math.max(fs, Y(f.y - u * 90))); c.scale(sc, sc); c.textAlign = 'center'; c.textBaseline = 'middle';
+      // a sum or a verdict is printed on a slip of paper, pinned on at a slant, so it never reads as a stray overlay
+      if (f.slip) { const sh = f.sub ? fs * 1.75 : fs * 1.15; c.save(); c.rotate(f.slip); c.fillStyle = 'rgba(59,36,22,.28)'; c.fillRect(-tw + 3, -fs * .62 + 4, tw * 2, sh); c.fillStyle = C.paper; c.fillRect(-tw, -fs * .62, tw * 2, sh); c.strokeStyle = C.ink; c.lineWidth = Math.max(1.5, fs * .05); c.strokeRect(-tw, -fs * .62, tw * 2, sh); c.fillStyle = C.tomato; c.fillRect(-tw, -fs * .62, tw * 2, Math.max(2, fs * .08)); c.restore(); }
+      c.lineWidth = Math.max(4, fs * .16); c.strokeStyle = 'rgba(247,238,219,.95)'; c.lineJoin = 'round'; if (!f.slip) c.strokeText(f.txt, 0, 0); c.fillStyle = f.col; c.fillText(f.txt, 0, 0);
+      if (f.sub) { c.font = `${fs * .62}px Shrikhand`; c.lineWidth = Math.max(3, fs * .11); if (!f.slip) c.strokeText(f.sub, 0, fs * .95); c.fillStyle = C.ink; c.fillText(f.sub, 0, fs * .95); }
+      c.restore(); }
     if (f.k === 'loaf') { const e = ease.inOut(u), tx = (f.tx - ox) / view.s + view.cx, ty = (f.ty - oy) / view.s + view.cy, x = lerp(f.x, tx, e), y = lerp(f.y, ty, e) - Math.sin(u * Math.PI) * 110; bakedLoaf(x, y, (1 - u * .55) * (S.act >= 3 ? 1.5 : 1), f.pat, f.q || .6); }
     if (f.k === 'coin') { const e = ease.in(u), sx = lerp(X(f.x), f.tx, e), sy = lerp(Y(f.y), f.ty, e) - Math.sin(u * Math.PI) * 60, r = Math.max(4, Sc(26)) * (1 - u * .4); c.fillStyle = C.gold; c.strokeStyle = C.ink; c.lineWidth = 1.5; c.beginPath(); c.ellipse(sx, sy, r, r * Math.abs(Math.cos(f.t * 12)) + 1, 0, 0, 7); c.fill(); c.stroke(); }
     if (f.k === 'ray') { c.strokeStyle = C.gold; c.globalAlpha = 1 - u; c.lineWidth = Sc(12); for (let k = 0; k < 12; k++) { const a = k / 12 * 6.283, r0 = 120 + u * 120, r1 = r0 + 60 + u * 40; c.beginPath(); mv(f.x + Math.cos(a) * r0, f.y + Math.sin(a) * r0); ln(f.x + Math.cos(a) * r1, f.y + Math.sin(a) * r1); c.stroke(); } c.globalAlpha = 1; }
@@ -2003,16 +2309,21 @@ function stepFx(dt) {
   for (let k = dents.length - 1; k >= 0; k--) { dents[k].t += dt; if (dents[k].t > 4) dents.splice(k, 1); }
   for (const f of jarFx) if (f) { const a = -260 * f.sq - 16 * f.sqv; f.sqv += a * dt; f.sq += f.sqv * dt; f.sh = Math.max(0, f.sh - dt * 2.5); }
 }
-// what happened in the rules this frame, made visible and audible
-let apprSeen = 0;
+// what happened in the rules this frame, made visible and audible (and, where a phone can, felt)
+const buzz = ms => { try { if (!K.reduced && navigator.vibrate) navigator.vibrate(ms); } catch (e) {} };
+let apprSeen = 0, bakerSeen = 0;
 function events() {
   for (const e of S.ev) {
     if (e.k === 'bake' || e.k === 'shape') {
       const sl = SLOT[e.i], f = jarFx[e.i] || (jarFx[e.i] = { sq: 0, sqv: 0, sh: 0 }); f.sqv -= 3.2;
       puff(sl.x, sl.y - 260, e.who === 'you' ? 12 : 5);
-      if (e.who === 'you') { sfx.tap(e.q); if (e.perfect) { fx.push({ k: 'stamp', txt: 'perfect!', x: sl.x, y: sl.y - 330, r: 84, t: 0, life: .7 }); fx.push({ k: 'ray', x: sl.x, y: sl.y - 330, t: 0, life: .45 }); } else popText(e.early ? (e.q < .7 ? 'too early' : 'a bit early') : e.q < .7 ? 'too late' : 'a bit late', sl.x, sl.y - 200, { size: 46 });
-        popText(e.k === 'bake' ? '+' + money(e.v) : 'a ' + money(e.v) + ' loaf', sl.x, sl.y - 120, { size: 44, font: 'Shrikhand', life: 1.2, col: C.ink }); }
+      if (e.who === 'you') { sfx.tap(e.q); buzz(e.perfect ? 18 : 8); if (e.perfect) { fx.push({ k: 'stamp', txt: 'perfect!', x: sl.x, y: sl.y - 330, r: 66, t: 0, life: .7 }); }
+        // a loaf for the bench says nothing more: the loaf itself is the news
+        const made = e.k === 'bake' ? '+' + money(e.v) : null, how = e.early ? (e.q < .7 ? 'too early' : 'a bit early') : e.q < .7 ? 'too late' : 'a bit late';
+        if (e.perfect) { if (made) popText(made, sl.x, sl.y - 150, { size: 40, font: 'Shrikhand', life: 1 }); }
+        else popText(how, sl.x, sl.y - 210, { size: 48, col: '#8a4b12', sub: made, slip: made ? .04 : 0 }); }
       else if (e.who === 'appr' && ++apprSeen <= 3) popText('the apprentice', sl.x, sl.y - 150, { size: 30, life: .9, col: C.cobalt });
+
       if (e.k === 'bake') { const fly = e.who === 'you' || S.act === 1; if (fly) flyLoaf(sl.x, sl.y - 200, e.v, null, e.q); earned(e.v, fly); }
     }
     if (e.k === 'early') { const f = jarFx[e.i] || (jarFx[e.i] = { sq: 0, sqv: 0, sh: 0 }); f.sh = .45; sfx.early(); popText('not yet', SLOT[e.i].x, SLOT[e.i].y - 330, { size: 38, col: '#6b5a48' }); }
@@ -2021,14 +2332,15 @@ function events() {
       const cut = e.who === 'you' && lastCut ? lastCut : e.who === 'baker' ? GUIDE[e.pat].map(([gx, gy]) => [x + gx * .95 + (hash(e.id, gx | 0) - .5) * 30, y + gy + (hash(e.id, gy | 0, 2) - .5) * 30]) : null;
       leaving.push({ id: e.id, x, cut, q: e.q, t: 0 }); lastCut = null;
       setTimeout(() => sfx.oven(), 550);
-      if (e.who === 'you') { sfx.score(e.q); popText((e.q > .85 ? 'what an ear!  ×' + e.m.toFixed(1) : e.q > .55 ? 'nice  ×' + e.m.toFixed(1) : e.q > .2 ? 'wobbly  ×' + e.m.toFixed(1) : 'oops') + '  +' + money(e.v), clamp(x, 240, 760), y - 120, { size: 76, font: 'Shrikhand', col: e.q > .85 ? '#8a4b12' : C.ink, life: 1.5 }); }
+      if (e.who === 'baker' && ++bakerSeen <= 3) popText('the baker', x, y - 170, { size: 34, life: 1, col: C.cobalt });
+      if (e.who === 'you') { sfx.score(e.q); buzz(e.q > .85 ? [10, 40, 16] : 10); popText(e.q > .85 ? 'what an ear!' : e.q > .55 ? 'nice' : e.q > .2 ? 'wobbly' : 'oops', x, y - 150, { size: 58, font: 'Shrikhand', col: e.q > .85 ? C.tomato : C.ink, life: 1.2, slip: -.05, sub: '×' + e.m.toFixed(1) + '  +' + price(e.v) }); }
       const fly = e.who === 'you' || S.act === 2; if (fly) { inflight += e.v; fx.push(Object.assign({ k: 'loaf', x: 1260, y: 1000, t: -.9, life: .8, v: e.v, pat: e.who === 'oven' ? null : e.pat, q: e.q, carry: e.v }, tagAt())); }
       earned(e.v, fly);
     }
     if (e.k === 'punch') {
       const [bx, by] = BULGE[e.slot]; puff(bx, by - 120, 14, '#fffaf0', 600);
       dents.push({ slot: e.slot, t: 0 }); coins(bx, by - 100, e.who === 'you' ? 6 : 2, e.v);
-      if (e.who === 'you') { sfx.punch(e.combo); for (let q = fx.length - 1; q >= 0; q--) if (fx[q].punch) fx.splice(q, 1); popText(money(e.v) + (e.combo ? '  ×' + CORE.comboMul(S).toFixed(2).replace(/\.?0+$/, '') : ''), bx, by - 280, { size: 92, font: 'Shrikhand', col: e.combo > 3 ? '#8a4b12' : C.ink, life: .7, punch: 1 }); } else sfx.thud();
+      if (e.who === 'you') { sfx.punch(e.combo); buzz(22); for (let q = fx.length - 1; q >= 0; q--) if (fx[q].punch) fx.splice(q, 1); popText(money(e.v) + (e.combo ? '  ×' + CORE.comboMul(S).toFixed(2).replace(/\.?0+$/, '') : ''), bx, by - 280, { size: 92, font: 'Shrikhand', col: e.combo > 3 ? '#8a4b12' : C.ink, life: .7, punch: 1 }); } else sfx.thud();
       earned(e.v, 1);
     }
     if (e.k === 'burst') { const [bx, by] = BULGE[e.slot]; splats.push({ x: bx, y: by - 100, s: (Math.random() * 1e6) | 0, t: 2.5 }); puff(bx, by - 100, 16, C.dough, 700); sfx.burst(); }
@@ -2036,7 +2348,7 @@ function events() {
     if (e.k === 'note') { note.word = e.text; note.t = 0; sfx.note(); }
     if (e.k === 'buy') {
       sfx.buy(); shopDirty = true;
-      if (e.id === 'jar') { const sl = SLOT[S.jars.length - 1]; puff(sl.x, sl.y - 20, 16); jarFx[S.jars.length - 1] = { sq: .5, sqv: 0, sh: 0 }; }
+      if (e.id === 'jar') { const sl = SLOT[S.jars.length - 1]; puff(sl.x, sl.y - 20, 16); bgDirty = true; jarFx[S.jars.length - 1] = { sq: .5, sqv: 0, sh: 0 }; }
       if (e.gate) { if (e.gate >= 4) { document.body.classList.add('end'); resize(true); } aim(e.gate); bgDirty = true; music.act(e.gate); }
     }
   }
@@ -2117,7 +2429,7 @@ function swipe(pts) {
   if (S.act === 4) {
     if (S.finale === 1 && fin.t > 3.2) { CORE.act(S, 'finale', 2); sfx.score(1); }
     else if (S.finale === 3 && fin.t > 1.6) CORE.act(S, 'finale', 4);
-    else if (S.finale === 3) popText('she is still baking', 500, -2300, { size: 160 });
+    else if (S.finale === 3) popText('she is still baking', 500, -2300, { size: Math.max(160, 44 / view.s) });
     return;
   }
   if (S.act < 2) return;
@@ -2141,7 +2453,8 @@ const cardsEl = $('cards'), cardEls = {};
 function card(id, cls) {
   if (cardEls[id]) return cardEls[id];
   const b = document.createElement('button'); b.className = cls + (S.t > 1 ? ' dealt' : ''); b.dataset.id = id;
-  b.innerHTML = id === 'last' ? '<span class="t">The Last Loaf</span><span class="d"></span><span class="seal">M</span><span class="pp"></span>' : '<span class="t"></span><span class="d"></span><span class="p"><span></span><small></small></span>';
+  b.innerHTML = id === 'last' ? '<span class="t">The Last Loaf</span><span class="d"></span><span class="seal">M</span><span class="pp"></span>' : '<canvas class="ic"></canvas><span class="t"></span><span class="d"></span><span class="p"><span></span><small></small></span><b class="pg"></b>';
+  b.style.setProperty('--r', ((hash(id.length, id.charCodeAt(0)) - .5) * 2.4).toFixed(2) + 'deg');
   b.onclick = () => buyCard(id, b);
   return (cardEls[id] = b);
 }
@@ -2160,11 +2473,12 @@ function shop() {
       const n = u.max - (u.from || 0), have = lv - (u.from || 0);
       b.querySelector('.p small').innerHTML = n > 1 ? '<i class="on"></i>'.repeat(have) + '<i></i>'.repeat(n - have) : '';
     }
+    if (b.isConnected) icon(b.querySelector('.ic'), u.id, lv);
     want.push(b);
   }
   if (S.act < 4) {
     const b = card('last', 'card goal'), ready = goal.need(S);
-    if (b._ready !== ready || (S.act === 3 && b._pc !== Math.floor(S.proof * 100))) { b._ready = ready; b._pc = Math.floor(S.proof * 100); b.querySelector('.d').textContent = ready ? 'Mother’s own recipe. She is ready.' : S.act === 3 ? `Mother’s own recipe, sealed. Punch her down and she rises: ${Math.floor(S.proof * 100)}% so far.` : 'Mother’s own recipe, sealed. She will say when.'; b.querySelector('.pp').textContent = ready ? price(CORE.price(S, goal)) : ''; }
+    if (b._ready !== ready || (S.act === 3 && b._pc !== Math.floor(S.proof * 100))) { b._ready = ready; b._pc = Math.floor(S.proof * 100); b.querySelector('.d').textContent = ready ? 'She is ready.' : S.act === 3 ? `Risen ${Math.floor(S.proof * 100)}%.` : 'She will say when.'; b.querySelector('.pp').textContent = ready ? price(CORE.price(S, goal)) : ''; }
     want.push(b);
   }
   // keep the order, add what is new, take away what is sold out
@@ -2176,8 +2490,10 @@ function shop() {
     if (!el.dataset.id) continue;
     const u = CORE.byId[el.dataset.id], can = CORE.can(S, u); ready += can;
     el.classList.toggle('can', can); el.classList.toggle('no', !can);
-    const pr = el.querySelector('.p span'); if (pr) { const t = price(CORE.price(S, u)); if (pr.textContent !== t) pr.textContent = t; }
+    const pr = el.querySelector('.p span'); if (pr) { const t = price(CORE.price(S, u)); if (pr.textContent !== t) pr.textContent = t; el.style.setProperty('--pg', Math.min(1, S.$ / CORE.price(S, u)).toFixed(3)); }
   }
+  // the face-down cards fill the tin only while the dealt ones leave room for them
+  const bk = $('backs'); if (bk) bk.style.display = cardsEl.scrollHeight + 170 > $('box').clientHeight ? 'none' : '';
   const rd = $('ready'); rd.hidden = !ready; if (rd.textContent !== String(ready)) rd.textContent = ready;
 }
 $('lid').onclick = () => { const shut = document.body.classList.toggle('shut'); $('lid').setAttribute('aria-expanded', !shut); resize(true); aim(Math.min(S.act, 4)); };
@@ -2232,9 +2548,26 @@ const music = (() => {
   const TUNE = { A: [[[0, 2, 1], [1.5, 3, 1], [2, 2, 1]], [[0, 1, 1], [2, 0, 1], [3, 1, 1]], [[0, 3, 1], [1, 2, 1], [2.5, 1, 1]], [[0, 0, 1], [2, 3, 0]]],
     B: [[[0, 0, 2], [1, 3, 1], [2, 2, 1]], [[.5, 1, 1], [1.5, 2, 1], [3, 3, 1]], [[0, 2, 1], [2, 1, 1]], [[0, 3, 0], [1, 0, 1], [2, 1, 1], [3, 2, 1]]],
     C: [[[0, 1, 1], [1, 2, 1], [2, 3, 1]], [[0, 0, 2], [2, 3, 1]], [[0, 2, 1], [1.5, 1, 1], [3, 0, 1]], [[0, 0, 1]]] };
-  function vib(f, at, vol) { if (!A) return; const x = A.ctx, o = x.createOscillator(), o2 = x.createOscillator(), gn = x.createGain(); o.frequency.value = f; o2.frequency.value = f * 4; o2.type = 'sine'; gn.gain.setValueAtTime(0, at); gn.gain.linearRampToValueAtTime(vol, at + .006); gn.gain.exponentialRampToValueAtTime(.0005, at + 1.6); const g2 = x.createGain(); g2.gain.value = .12; o.connect(gn); o2.connect(g2); g2.connect(gn); gn.connect(A.music); o.start(at); o2.start(at); o.stop(at + 1.7); o2.stop(at + 1.7); }
-  function bass(f, at) { const x = A.ctx, o = x.createOscillator(), gn = x.createGain(), fl = x.createBiquadFilter(); o.type = 'triangle'; o.frequency.value = f; fl.type = 'lowpass'; fl.frequency.value = 600; gn.gain.setValueAtTime(0, at); gn.gain.linearRampToValueAtTime(.32, at + .01); gn.gain.exponentialRampToValueAtTime(.001, at + .55); o.connect(fl); fl.connect(gn); gn.connect(A.music); o.start(at); o.stop(at + .6); }
-  function theremin(f, at, dur) { const x = A.ctx, o = x.createOscillator(), lfo = x.createOscillator(), lg = x.createGain(), gn = x.createGain(); o.frequency.setValueAtTime(f * .97, at); o.frequency.exponentialRampToValueAtTime(f, at + .25); lfo.frequency.value = 5.5; lg.gain.value = f * .012; lfo.connect(lg); lg.connect(o.frequency); gn.gain.setValueAtTime(0, at); gn.gain.linearRampToValueAtTime(.08, at + .2); gn.gain.setValueAtTime(.08, at + dur - .2); gn.gain.linearRampToValueAtTime(0, at + dur); o.connect(gn); gn.connect(A.music); o.start(at); lfo.start(at); o.stop(at + dur + .05); lfo.stop(at + dur + .05); }
+  // the radio's room: everything goes through a warm top cut and a small hall (an impulse of decaying noise),
+  // and the vibes through their motor, a tremolo of about five beats a second
+  let bus = null, vbus = null;
+  function out() {
+    if (bus) return bus; const x = A.ctx; bus = x.createGain(); const lp = x.createBiquadFilter(), cv = x.createConvolver(), wet = x.createGain();
+    lp.type = 'lowpass'; lp.frequency.value = 6500; bus.connect(lp); lp.connect(A.music);
+    const n = Math.floor(x.sampleRate * 2.2), ir = x.createBuffer(2, n, x.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let k = 0; k < n; k++) d[k] = (Math.random() * 2 - 1) * Math.pow(1 - k / n, 3.2); }
+    cv.buffer = ir; wet.gain.value = .3; lp.connect(cv); cv.connect(wet); wet.connect(A.music);
+    vbus = x.createGain(); const mot = x.createOscillator(), dep = x.createGain(); mot.frequency.value = 5.2; dep.gain.value = .22; vbus.gain.value = .78; mot.connect(dep); dep.connect(vbus.gain); mot.start(); vbus.connect(bus);
+    return bus;
+  }
+  function vib(f, at, vol) {
+    if (!A) return; out(); const x = A.ctx, gn = x.createGain();
+    // a struck bar: the fundamental rings, the fourth and tenth partials die fast, the mallet clicks
+    for (const [m, a, d] of [[1, 1, 1.9], [4, .14, .45], [10, .035, .12]]) { const o = x.createOscillator(), g2 = x.createGain(); o.frequency.value = f * m; g2.gain.setValueAtTime(0, at); g2.gain.linearRampToValueAtTime(vol * a, at + .004); g2.gain.exponentialRampToValueAtTime(.0003, at + d); o.connect(g2); g2.connect(gn); o.start(at); o.stop(at + d + .05); }
+    gn.connect(vbus); hiss(.03, 'bandpass', 3200, 2, vol * .5, 0, at - x.currentTime, bus);
+  }
+  function bass(f, at) { out(); const x = A.ctx, o = x.createOscillator(), o2 = x.createOscillator(), gn = x.createGain(), fl = x.createBiquadFilter(); o.type = 'triangle'; o.frequency.setValueAtTime(f * 1.012, at); o.frequency.exponentialRampToValueAtTime(f, at + .06); o2.frequency.value = f; fl.type = 'lowpass'; fl.frequency.setValueAtTime(1100, at); fl.frequency.exponentialRampToValueAtTime(380, at + .25); gn.gain.setValueAtTime(0, at); gn.gain.linearRampToValueAtTime(.34, at + .008); gn.gain.exponentialRampToValueAtTime(.12, at + .12); gn.gain.exponentialRampToValueAtTime(.001, at + .6); o.connect(fl); o2.connect(fl); fl.connect(gn); gn.connect(bus); o.start(at); o2.start(at); o.stop(at + .65); o2.stop(at + .65); }
+  function theremin(f, at, dur) { const x = A.ctx, o = x.createOscillator(), lfo = x.createOscillator(), lg = x.createGain(), gn = x.createGain(); o.frequency.setValueAtTime(f * .97, at); o.frequency.exponentialRampToValueAtTime(f, at + .25); lfo.frequency.value = 5.5; lg.gain.value = f * .012; lfo.connect(lg); lg.connect(o.frequency); gn.gain.setValueAtTime(0, at); gn.gain.linearRampToValueAtTime(.08, at + .2); gn.gain.setValueAtTime(.08, at + dur - .2); gn.gain.linearRampToValueAtTime(0, at + dur); o.connect(gn); gn.connect(out()); o.start(at); lfo.start(at); o.stop(at + dur + .05); lfo.stop(at + dur + .05); }
   function sched() {
     if (!A || A.ctx.state !== 'running' || !on) return;
     const x = A.ctx, spb = 60 / BPM;
@@ -2249,8 +2582,8 @@ const music = (() => {
       // the tune, or an improvisation on the chord, or a run down to the next chorus
       const notes = stop ? [[1, 3, 1], [1.5, 2, 1], [2, 1, 1], [2.5, 0, 1]] : solo ? [0, 1, 2, 3].filter(k => hash(barN, k) > .45).map(k => [k + (hash(barN, k, 2) > .6 ? .5 : 0), Math.floor(hash(barN, k, 3) * 4), 1 + (hash(barN, k, 4) > .7 ? 1 : 0)]) : TUNE[sec][bar];
       for (const [nb, tone, oct] of notes) if (Math.floor(nb) === b) { const f = mf(ch[tone] + 12 * oct), at = next + (nb - b) * spb; if (part >= 3 && sec === 'B' && !solo) theremin(f, at, spb * 1.6); else vib(f, at, .07); }
-      if ((part >= 2 || chorus >= 1) && (b === 1 || b === 3) && !stop) hiss(.22, 'bandpass', 5000, .7, part >= 2 ? .06 : .035, 0, next - x.currentTime, A.music);
-      if (part >= 2 && !stop) hiss(.05, 'highpass', 7000, 1, .02, 0, next - x.currentTime + spb / 2, A.music);
+      if ((part >= 2 || chorus >= 1) && (b === 1 || b === 3) && !stop) hiss(.22, 'bandpass', 5000, .7, part >= 2 ? .06 : .035, 0, next - x.currentTime, out());
+      if (part >= 2 && !stop) hiss(.05, 'highpass', 7000, 1, .02, 0, next - x.currentTime + spb / 2, out());
       beat++; next += spb;
     }
   }
@@ -2265,7 +2598,15 @@ K.debug = {
   guide: i => { const L = S.bench[i]; if (!L) return null; const x = loafView[L.id] ? loafView[L.id].x : LOAF[i], y = BENCH - 70, sp = 1 + clamp(L.age / CORE.benchWait(S), 0, 1) * .16; return GUIDE[L.pat].map(([gx, gy]) => [X(x + gx * sp), Y(y + gy / sp)]); },
   box: () => fin.box && { x: X(fin.box.x), y: Y(fin.box.y), w: Sc(fin.box.w), h: Sc(fin.box.h) },
   toScreen: (x, y) => [X(x), Y(y)],
-  look: (cx, cy, s) => { Object.assign(view, { cx, cy, s }); glide.t = 1; bgDirty = true; }
+  look: (cx, cy, s) => { Object.assign(view, { cx, cy, s }); glide.t = 1; bgDirty = true; },
+  hover: i => { hoverLabel = i; },
+  // every prop worth a close look, for util/cmv_props.mjs: [name, minutes into the eager game, x, y, scale] on a wide screen
+  props: [['Mother', 0, 500, 700, 1.4], ['geranium', 0, 190, 370, 2.2], ['cookbooks', 0, 500, 420, 2.4], ['bowls', 0, 810, 400, 2.4], ['cake tin', 0, 810, 800, 2.4],
+    ['spoons in a crock', 0, 33, 790, 2.6], ['tea towel', 0, 1050, 990, 2], ['lamp and its light', 0, 500, 220, .9], ['clock', 0, 860, 20, 1.8], ['window and curtains', 0, 1170, 270, 1.4],
+    ['canisters', 0, 1270, 770, 1.4], ['fridge', 0, -240, 1000, .9], ['radio', 0, -250, 340, 2.4], ['calendar and drawing', 0, -275, 860, 1.8], ['cabinets and floor', 0, 300, 1200, 1],
+    ['jars on the shelf', 6, 500, 330, 1], ['kitchen timer', 6, 655, 420, 3], ['flour ring and tag', 3, 190, 760, 1.6],
+    ['oven', 13, 1200, 760, 1], ['bench and loaves', 13, 380, 1110, 1.3], ['apprentice and baker rings', 13, 640, 1050, 2],
+    ['Mother in the cellar', 24, 500, 1560, .7], ['bed upstairs', 24, -100, -280, 1.2], ['window upstairs', 24, 1270, -480, 1.4], ['roof and chimney', 24, 900, -1100, .7]]
 };
 
 /* ---------------- the loop ---------------- */
@@ -2304,7 +2645,7 @@ K.loop((dt, t) => {
     note.t += dt;
     rate = rate * Math.exp(-dt / 30);
     // the rate, read off every three seconds rather than chased
-    rateT -= dt; if (rateT <= 0) { rateT = 3; $('rate').textContent = rate > .01 ? 'about ' + money(round2(rate * 2)) + ' a minute' : ''; }
+    rateT -= dt; if (rateT <= 0) { rateT = 3; $('rate').textContent = rate * 2 >= .01 ? 'about ' + money(round2(rate * 2)) + ' a minute' : ''; }
   }
   if (S.lv.timer && S.act < 4) { const [a] = CORE.win(S); S.jars.forEach((j, i) => { const p = CORE.phase(S, j); if (p >= a && !(pk[i] >= a) && !S.quiet && dt > 0) { sfx.ding(); rang = now; } pk[i] = p; }); }
   events(); stepFx(dt); if (S.act >= 2) stepLoaves(dt || 1 / 60);
@@ -2544,6 +2885,9 @@ const CORE = (() => {
     if (S.act === 2) return .3 + .3 * clamp((L(S.earned) - L(byId.bakery.base)) / (L(byId.cellar.base * 1.6) - L(byId.bakery.base)), 0, 1);
     return .6 + .35 * S.proof;
   }
+  // back to the house after the end, from the shelf: Mother in the cellar again, risen and ready, every card
+  // still for sale, and the Last Loaf hers to bake once more
+  function revisit(S) { Object.assign(S, { act: 3, finale: 0, proof: 1, ev: [], bulges: [] }); S.lv.last = 0; S.great = P.great.length; return S; }
   // version 1 asked ten million dollars for the Last Loaf; a save from then has proved as far as it had earned
   function migrate(S, from) {
     if (from < 2) {
@@ -2612,7 +2956,7 @@ const CORE = (() => {
     ['combo', 'Knock her back', 'Punch twelve bulges in one combo.', S => (S.bestCombo | 0) >= 12],
     ['lively', 'Full of life', 'Keep Mother lively at ×2.9 or more.', S => S.vigor >= 2.9]
   ];
-  return { version: 2, P, UP, byId, NOTES, SLOTS, init, step, act, done, milestones, progress, bots, feats, migrate,
+  return { version: 2, P, UP, byId, NOTES, SLOTS, init, step, act, done, milestones, progress, bots, feats, migrate, revisit,
     phase, rise, win, quality, loafBase, ripe, ripeAt, apprAt, bakerAt, streakMul, scoreQ, scoreMul, scoreMax, tol, benchWait, bulgeGrow, bulgeLife, bulgeVal, comboMul, price, visible, can, vigor };
 })();
 </script>
