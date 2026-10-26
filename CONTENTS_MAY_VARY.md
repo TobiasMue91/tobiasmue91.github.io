@@ -28,6 +28,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    the owner raised it, when the shows in Keep Off the Grass gained intruders, upgrades and a match day.)
    Here Be Rabbits alone may weigh **210 KB**: the owner raised its cap after the art was redone and a
    budget round that changed no pixel brought it only to 203 KB (`BOX_CAP` in the suite).
+   Starter may weigh **200 KB**: for its refinement session (rule 16) the owner lifted every limit the
+   anthology had set itself where it stood in the way of the result.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -84,6 +86,17 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
     node of a skill tree straight away. Read **What the owner plays** below and check a new box against
     its checklist before writing a line of the core. Three boxes in a row (Minos Wants a Map, The
     Minotaur Moves Out, Stand Well Back) failed with the owner because they skipped this.
+16. **Finished, not finished enough.** (October 2026, the owner.) The internet meets AI-made games with
+    suspicion and accepts only what looks and plays like a game that was years in development. That is
+    the bar for every box, in every respect: art, interface, the hand's feel, sound and music, balance,
+    progress, and everything else a player notices. No other rule is broken to reach it, but the limits
+    the anthology set itself (the byte budget above all) give way when they stand in its path; the owner
+    decides, and says so in the rulebook. More critic rounds alone do not get there: alternate them
+    with **research rounds** (how do the paid games the box resembles solve this? what gives AI-made
+    work away?), and work round what a language model cannot do well (draw a hand, a face, a convincing
+    instrument) with outside resources whose licence allows it: free type, MIT-licensed vector sets,
+    the box's own props drawn small, rather than improvising them. Starter was the first box taken
+    through this; its notes are under **Open work on the shipped boxes**.
 
 ## How the file is built
 
@@ -193,7 +206,7 @@ a Playwright script needs to find (screen rectangles of the things to tap, the w
 
 | № | id | title · handling | verb | loop | medium | palette | era · genre | sound | interface | ends with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, recipe cards in a box | the whole house bakes into a loaf; slicing it shows the box in the crumb |
+| 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, index cards in a red enamel recipe tin, each with a cut of its own | the whole house bakes into a loaf; slicing it shows a bakery box tied with string in the crumb |
 | 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
@@ -948,6 +961,61 @@ still undone, most valuable first:
   balls on its rays and hours on its dial; glass jars with a thick foot and light through the far edge; tiled
   roofs, brick chimneys and shutters on the neighbours. World paths go through `mv/ln/qc/bz`, which paid for
   most of it: 118.6 KB before, 122.8 KB after.
+  **The refinement session** (October 2026, rule 16). The owner asked for Starter to be taken to the bar
+  of a finished commercial game, with research rounds between the critic rounds instead of more critics.
+  Four critics with no stake in it scored phone and desktop filmstrips played with real input (first
+  impression, clarity, art direction, phone, feel, and "would pass as a commercial game"): before the
+  session 5/5/6/4/5 and 3, then 6/5/6.5/4/5.5 and 3.5, 6/5/7/5/5 and 4, 6/5/7/4.5/5 and 4, and
+  5/5/6/4/5 and 3. The last, the strictest of the five, scored below the one before it on frames that
+  only gained; that spread between critics is the reason for the lesson *Stills plateau*. What the research rounds found and what it changed:
+  - *What gives AI-made art away* (artists' checklists, October 2026): perfect symmetry and even spacing,
+    repeated motifs copied exactly, a style that shifts within one picture, background that competes with
+    the subject. So the kitchen got things that live in it, placed unevenly: canisters (FLOUR, SUGAR,
+    TEA), a crock of wooden spoons, a tea towel over the shelf, a pendant lamp with its cone of light, a
+    chequered lino floor in perspective; and the places where later jars will stand hold a geranium,
+    cookbooks, a cake tin and mixing bowls until a jar takes them, so the kitchen fills up as the player
+    buys rather than starting as a bare stage.
+  - *What makes an incremental's shop feel finished* (clicker UI guides, players' requests on itch.io):
+    affordability visible at a glance, never only in a tooltip, and how near the next purchase is. The
+    recipe cards became index cards standing in a red enamel tin, each with a picture drawn by the box's
+    own print helpers (`ICON`, painted into a canvas per card at its size), a pencil line along the foot
+    that fills towards the price, a red ring round a price that can be paid, a rubber stamp (TRIED) on
+    a purchase, the cards not dealt yet face down below the dealt ones on a desktop, and a plate on the
+    tin. On a phone the tin is a rail of cards at the thumb, 152 px high, so the kitchen gets the rest of
+    the screen; the sealed recipe (the goal) leads the rail as an envelope with a wax seal.
+  - *Juice without clutter* (game-feel guides): one channel per event, matched to its weight. Sums and
+    verdicts are printed on paper slips, kept whole on screen, step aside for a newer one, and at most
+    two are up at once; a loaf for the bench says nothing (the loaf is the news); a perfect tap no longer
+    sends straight yellow rays, which every critic called clip art; a ready jar gives off three curls of
+    aroma, the cookbook's way of saying "ready", and its lid lifts less. A phone buzzes on a perfect tap,
+    a clean score and a punch (`navigator.vibrate`, off with `K.reduced`).
+  - *Samples instead of synthesis* (the music is the box's weakest part that no still shows): sampled
+    vibraphone and upright bass would beat any oscillator, but the sets found carry CC BY 3.0
+    (FluidR3_GM, needs a credit) or an unclear origin (`soundfont-for-samplers`), and the CDN was out of
+    reach from the session, so nothing could be tested. It stays synthesised and the decision is the
+    owner's. What changed: the radio's combo now plays through a warm top cut and a small hall (a
+    generated impulse), the vibes through a motor tremolo, each bar struck with its fourth and tenth
+    partials and a mallet click, the bass plucked with a falling filter.
+  The rest, from the critics: on an upright phone the jars stand in two columns on the counter and two
+  shelves (a little smaller there, so three rows fit under the ceiling), with the clock and the timer
+  between the columns; the cellar act keeps the kitchen and the cellar in frame on every screen, and
+  Mother comes through twelve places that are all inside it (the floor, the fridge, the window, the
+  oven's bricks, the ceiling, the room upstairs), so jars and bulges are half as large again on a phone
+  and a third on a desktop; a hole she leaves is full of dough behind splintered edges, not a black blob;
+  the dashed scoring line is red on a cream backing and thicker; the sky is one ink with a halftone that
+  thins towards the horizon and keyed, flat-bottomed clouds; the sun is a starburst in two inks; the
+  house goes golden as it bakes and steam rises off her; the cut springs open into a dark-lipped ear;
+  the crumb is irregular alveoli of every size, stretched upward; the box is a bakery box printed in
+  tomato with a scalloped label and red-and-white string. The shell's hidden sticker toast no longer
+  shows its shadow along the top of every box.
+  Still open, from the last critic (the band now carries a PEAK tab, so it is not taken for the lid's
+  seal): Mother's bulges still lie over the props they come through rather than behind them, and want torn
+  plaster round them; the crumb could be paler, with depth on the cut faces; scored loaves on the bench
+  read as a zigzag until they bake; every jar is the same jar (vary Kilner, mason, crock, squat); the
+  phone bench crops its outer loaves; the baker's ring over a loaf reads as a debug marker; the dough
+  lettering of the ending (SCORE ME, SLICE ME, OPEN IT) reads to some critics as WordArt, though it is
+  Mother writing; the print could go further (line weights that vary, a coarser halftone). The music has
+  not been heard by anyone since its rework; the owner's own play on a device is the next judge.
 - **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
@@ -1446,3 +1514,18 @@ is not saved by its art direction: the owner played both and stopped.
   whose CSS transitions run on the real clock; judge the canvases.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
+- **An upright phone wants its own layout, not a smaller one.** Starter's kitchen is a wide stage; fitted
+  to a phone's width it left jars at a third of their size under half a screen of bare wallpaper. Two
+  columns of jars on three shelves, a camera that stays on the kitchen and the cellar in the last act,
+  and the shop as a rail at the thumb gave the scene twice the room. Positions that only the view uses
+  (where a jar stands, where Mother breaks through) can differ by screen; the rules never see them.
+- **Let what a purchase replaces fill the stage until then.** An empty shelf waiting for jars reads as
+  unfinished. Props that stand where the next jars will go (a geranium, cookbooks, a cake tin) make the
+  first screen a lived-in kitchen and turn each new jar into a visible change.
+- **Draw the shop's pictures with the world's own pen.** Card icons painted by the same print helpers as
+  the scene (key line, plates off register, halftone) match it at no cost in assets; a borrowed icon set
+  would have looked pasted on.
+- **Stills plateau.** Four critics scoring filmstrips moved Starter's "commercial" score from 3 to 4 while
+  the kitchen's art direction reached 7; every round also re-found the popups that only pile up because
+  the capture script taps ten times faster than a person. Past that point a person playing it on a device
+  is the only judge left; treat further still-frame rounds as a check for regressions.
