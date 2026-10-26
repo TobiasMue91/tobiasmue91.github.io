@@ -1057,6 +1057,15 @@ still undone, most valuable first:
   lettering of the ending (SCORE ME, SLICE ME, OPEN IT) reads to some critics as WordArt, though it is
   Mother writing; the print could go further (line weights that vary, a coarser halftone). The music has
   not been heard by anyone since its rework; the owner's own play on a device is the next judge.
+  **The second pass** (the owner's look, October 2026) fixed what they saw and what a close-up critic then found
+  with the checklist under **Drawing without glitches**: lids that floated over their jars at the peak, aroma
+  that rose into the jar above, cabinets you could see the wall through (now a carcass, a reveal and a kick),
+  a towel that seemed to hang inside a jar (it now hangs over the counter's edge), a calendar held by nothing
+  (a magnet, and dates instead of dashes), a fridge without feet, wallpaper that stopped at the house's edge, two
+  posts at each end of the bed, a bowl's foot in front of the bowl it sat in, a fire without flames. Still open
+  from that review: halftone that stops in a hard edge on many props (the print convention allows it, the critic
+  did not), the radio and the roof without detail, the cake tin's seam, the bench's scoring guide read as a red
+  zigzag sticker on the dough, Mother's cellar floor cutting through her bubbles.
 - **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
