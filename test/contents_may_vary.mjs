@@ -753,7 +753,7 @@ if (suites.includes('browser')) {
         const n = stack.indexOf(w.id) + 1;
         check(await until(p, n => CMV.save.opened.length >= n && (CMV.state === 'empty' || (CMV.live && CMV.live.w.n === n + 1)), 30000, n), `${w.id}: a box opened just before the page closed goes on into the next one`);
       }
-      check(p.errs.length === 0, 'no errors while leaving and taking up boxes', p.errs.join(' | '));
+      check(p.errs.length === 0, 'no errors while leaving and taking up boxes', p.errs.join(' | ')); if (p.errs.length) console.log('ERRS', JSON.stringify(p.errs));
       await p.close();
     }
     for (const w of worlds) for (const [q, wd, ht] of [[`?world=${w.id}`, 390, 844], [`?world=${w.id}&at=12`, 1280, 800]]) {
