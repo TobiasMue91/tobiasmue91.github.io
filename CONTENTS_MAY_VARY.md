@@ -1066,6 +1066,14 @@ still undone, most valuable first:
   from that review: halftone that stops in a hard edge on many props (the print convention allows it, the critic
   did not), the radio and the roof without detail, the cake tin's seam, the bench's scoring guide read as a red
   zigzag sticker on the dough, Mother's cellar floor cutting through her bubbles.
+  **The third pass** closed those: `turn()` grades a prop's halftone across its own outline, the radio has a
+  handle, speaker cloth, a numbered dial and knobs, the roof an eave board and the chimney flashing, the cut line is
+  a cookbook diagram (dashed ink, a dot where the blade goes in, an arrowhead), Mother sits on flagstones, the crumb
+  is pale with fewer, longer holes and an oven-spring line under the crust, the loaf is a quarter larger, the jars
+  stay on the shelves while the house bakes, and the sealed recipe says from the start what opens it. A fifth critic
+  scored 7/5/7/5/5 and 4. Still open from it: on a phone the oven sits off the right edge in the bakery act; the
+  bulges want Mother's own glossy dough and plaster cracking from them; the phone rail could snap whole cards; the
+  dough lettering of the ending still reads to critics as off-style.
 - **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
