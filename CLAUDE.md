@@ -47,7 +47,14 @@ Check these before calling a remade page done; each has now shipped broken in se
   resistance it carries on to the edge of the level. Anything round that can roll needs damping while it touches
   something, and a test that pushes it along the floor and wants it at rest.
 - **Animations that snap.** State changes (a thing jumping into place, being released, leaving) need an eased or
-  sprung path with a start and an end pose, never a position swap. Record frames at 20 to 60 ms around the moment.
+  sprung path with a start and an end pose, never a position swap. Record frames at 20 to 60 ms around the moment
+  (Playwright's `recordVideo`, then `ffmpeg -vf fps=12`), and never time an end pose from a clock that restarts
+  with the next step: it snaps back.
+- **Props drawn as primitives.** Parts that float free (leaves without stems), lines left where two shapes were
+  joined, a solid drawn over what should be in front of it, light that stops in a hard edge. Fill a many-part
+  thing as one silhouette and outline it once, draw back to front (a crock's mouth, the spoons, the crock's front),
+  give everything something that holds it and a shadow, fade light with gradients. Then look at each prop alone at
+  two or three times its size (`util/cmv_props.mjs` does this for Contents May Vary from `K.debug.props`).
 
 ## Adding a game or tool
 
@@ -90,6 +97,7 @@ python util/timeline.py     # rebuild timeline_data.json and timeline_pages.json
 node util/trailer/render.mjs # the site's trailer, filmed from its own history - four steps, see util/trailer/README.md
 python util/claim.py        # claim a game (--tools: a tool) before reworking it, so two sessions never take the same one
 python util/seo_report.py exports/  # Search Console / Bing CSV exports -> title rewrites, near-page-one pages, unanswered queries
+node util/cmv_props.mjs starter out/ # Contents May Vary: every prop of a box shot large, to find drawing faults
 ```
 
 Page tests live in `test/`; `cypress/` (homepage e2e) stays separate because Cypress dictates its layout.

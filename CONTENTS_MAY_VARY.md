@@ -124,6 +124,7 @@ const CORE = {
   pace: { eager, casual, gap },   // optional: tighter targets than the defaults for this box
   feats: [[id, name, what, S => bool], ...],   // five stickers (see below)
   migrate(S, from)      // optional, once version > 1
+  revisit(S)            // optional: a done state turned back into one to carry on in (see below)
 };
 ```
 
@@ -161,7 +162,47 @@ games/contents_may_vary.html?world=<id>&at=20        start from 20 minutes of th
 ```
 
 `K.debug` is a convention, not part of the contract: give each view one with `state()` and whatever
-a Playwright script needs to find (screen rectangles of the things to tap, the way out).
+a Playwright script needs to find (screen rectangles of the things to tap, the way out), `look(x, y, scale)`
+to point the camera anywhere, and `props`: every object worth a close look as `[name, minutes, x, y, scale]`.
+`node util/cmv_props.mjs <id> <outdir>` shoots each of them large, one tile each (see **Drawing without
+glitches** below).
+
+**Going back to a box.** The shelf offers every opened box twice: *Back to it* carries on in the box's own save,
+*Play it again from the start* plays it afresh in the replay slot. A box that is done can be gone back to only
+if its core has `revisit(S)`, which turns the finished state into one to carry on in (Starter: Mother back in
+the cellar, risen, every card for sale, the Last Loaf hers to bake again). Its ending then leads back to the
+shelf and pays nothing twice; the box the player is in stays where it was. A box without `revisit` offers only
+the replay. Give every new box one where carrying on means something (upgrades still to buy, a last level to
+play), and test it in the box's suite.
+
+### Drawing without glitches
+
+The owner found, in one look at Starter, a flower whose leaves floated free, a bowl both see-through and solid,
+spoons that stood beside their crock with the lines of how they were built still showing, a lamp's light that
+stopped dead, a tea towel stuck to a shelf. Every box before it has had faults of the same kind. They come from
+drawing with primitives in code, where nothing forces the parts to touch, overlap in the right order or fade.
+The long-term answer is a habit and a tool:
+
+- **One thing, one outline.** A thing built from parts (a spoon is a handle and a bowl, a flower is five petals)
+  is filled as one shape and outlined once round its silhouette: `solid(col, fn)` in Starter strokes all the
+  parts in ink under the colour, so no line shows where they meet. Inner lines are drawn on purpose (a crease, a
+  seam), never left over from construction.
+- **Back to front, and things are inside things.** Anything in or behind something else is drawn in three passes:
+  the back (a crock's dark mouth, a bowl's far rim), what stands in it, then the front over it. A nested bowl
+  shows only above the outer rim; a spoon disappears into its crock.
+- **Everything is held.** Leaves hang on stems that come out of the soil; a towel folds over the board's edge;
+  a pot stands on the shelf with a shadow under it; a picture hangs from a pin. If nothing holds a part, it floats.
+- **Light and shadow fade.** A cone of light is a gradient that dies away, softened at its sides, with a pool
+  where it lands; a shadow is halftone or a soft ellipse. A hard-edged polygon of light reads as a cut-out.
+- **Look at every prop alone, large, before calling art done.** List it in `K.debug.props`, run
+  `util/cmv_props.mjs`, and look at every tile at full size, with a critic given this list as a checklist
+  (floating parts, construction lines, wrong overlap, see-through solids, hard light, missing contact shadows,
+  props that are a primitive and nothing more). Play-size filmstrips do not show these; the owner does.
+- **Animations are checked as video.** Record the moment with Playwright's `recordVideo`, cut it into frames at
+  80 ms with `ffmpeg`, and look at each frame: Starter's slice snapped shut and open again when the box was
+  tapped, because the halves counted their time from the start of the current step, and opening the box began
+  a new step. An animation that must hold its end pose in later steps gets it from the step it belongs to
+  (`st > 4 ? 1 : ...`), never from a clock that restarts.
 
 ## The anthology's own round: stickers, returns, printings
 
@@ -1512,6 +1553,11 @@ is not saved by its art direction: the owner played both and stopped.
   crashed box simply has fewer canvases. And compare the colour channels, not only alpha: PIL's `getbbox()` on an RGBA
   difference looks at alpha alone, so every opaque change passes unseen. Page screenshots also catch DOM captions
   whose CSS transitions run on the real clock; judge the canvases.
+- **Draw objects, not shapes.** Starter's second polish pass (October 2026) redrew a geranium with stems,
+  scalloped leaves and flower heads; nested bowls; spoons in a crock; a towel over a shelf; a pencil with facets,
+  ferrule and eraser; gingham curtains with folds, a valance and bows; a bed with turned posts and a patchwork
+  quilt; a nightstand and lamp; plain curtains and a milk bottle of flowers upstairs. Each took a few lines more
+  than the primitive it replaced, and each was a fault the owner had seen. See **Drawing without glitches**.
 - **Filmstrips find what still frames hide**: a hand pointing at the wrong thing, a man waiting
   on-screen before his cue, a crash that only happens after a run ends.
 - **An upright phone wants its own layout, not a smaller one.** Starter's kitchen is a wide stage; fitted
