@@ -1690,6 +1690,10 @@ is not saved by its art direction: the owner played both and stopped.
   the kitchen's art direction reached 7; every round also re-found the popups that only pile up because
   the capture script taps ten times faster than a person. Past that point a person playing it on a device
   is the only judge left; treat further still-frame rounds as a check for regressions.
+- **Headless frames do not finish CSS transitions over a busy WebGL canvas.** The moon at dawn stayed bright in
+  every film of Keep Off the Grass, before and after its rule was fixed: with `transition: none` the computed opacity
+  was 0, with the 2 s transition it never left 1 while the software renderer was drawing. Check a CSS state with
+  `getComputedStyle` and the transition switched off before calling it a bug.
 - **A lens makes a miniature.** Keep Off the Grass drew its voxels straight to the screen and looked like an engine's
   test scene; drawn into a texture and shown through one more shader (sharp in a band, soft above and below, a
   contact shade from the depth, a little more colour) the same scene reads as a photographed model. Two traps: take
