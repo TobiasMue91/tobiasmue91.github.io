@@ -1309,6 +1309,22 @@ box uses it.
   average −28 to −29 dB with peaks at −13 to −15, nothing clips; the music averages −42 to −44 dB with peaks at −12
   to −22, some 13 dB under the engine, which on a phone's speaker is close to silent. That balance is the owner's
   call, with the mower's sound.
+  **Round 3.** A second fresh critic scored filmstrips of the box after rounds 1 and 2, phone only: 7/5/6/5/5 and 3
+  (first impression up one; the rest held). Its sharpest point was one round 1 had made: a lawn striped the wrong way
+  scored "stripes 0.0" with nothing to say why, which reads as a bug. Now the stripes card says "wrong way" or "no
+  edge lap" in red when that is the reason, and every new wish is chalked on the lawn for a few seconds (double
+  arrows the way the stripes should run, a dashed lemon ring for a lap). The rosette comes up at the judges' table,
+  not over the lawn being judged, and the score cards float higher, over the judges' heads. Prices are rounded as a
+  shop prints them (cents under $10, whole dollars under $100, then three figures), and every tier after the first
+  has a line of its own ("Whetted on the back step with Dad's stone.", "It has its own postcode."), with the numbers
+  under it. "Open it." waits until the last flap is up, the dashboard says dawn once it is, the hollows the flaps
+  leave are soil and stubble, the rope's gates have posts, and the desktop pegboard leaves the shell's box chip room.
+  Also from it, not yet done: the stadium reads as rings of seat texture (raked stands, a roof and pylons would help);
+  the light jumps from moonlight to dawn as the box folds (the owner's call, kept); the push mower can run into the
+  road on Elm Street; the robots read as tiles at play size.
+  Found on the way: three times a line comment written into the middle of a line swallowed the code after it, once
+  shipping the ride-on mower without its body. The box's suite now refuses a line comment in the view that holds a
+  call.
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
@@ -1694,6 +1710,10 @@ is not saved by its art direction: the owner played both and stopped.
   every film of Keep Off the Grass, before and after its rule was fixed: with `transition: none` the computed opacity
   was 0, with the 2 s transition it never left 1 while the software renderer was drawing. Check a CSS state with
   `getComputedStyle` and the transition switched off before calling it a bug.
+- **Never write a line comment into the middle of a line.** An edit that puts `// why` after a statement on a line that
+  goes on swallows the rest of the line; when what is left still parses, nothing fails and a part simply stops being
+  drawn (Keep Off the Grass lost its ride-on's body that way). Put such a note in `/* */`, or on its own line, and let a
+  test look for calls inside line comments.
 - **A lens makes a miniature.** Keep Off the Grass drew its voxels straight to the screen and looked like an engine's
   test scene; drawn into a texture and shown through one more shader (sharp in a band, soft above and below, a
   contact shade from the depth, a little more colour) the same scene reads as a photographed model. Two traps: take

@@ -379,6 +379,12 @@ if (suites.includes('lawn') && lawn) {
     check(CORE.done(R), 'and the crop circle can be mown and folded again from there');
   }
   {
+    // a line comment put in the middle of a line silently swallows the code after it (it happened three times in the
+    // refinement session, once shipping a ride-on mower without its body): no comment in the view may hold a call
+    const bad = lawn.tpl.split('\n').filter(l => /\/\/[^'"`]*\b(at|bx|say|later|tone|hiss|person|tree|card|visit)\(/.test(l));
+    check(!bad.length, 'no line comment in the view swallows a drawing or a call', bad.map(l => l.trim().slice(0, 90)).join(' | '));
+  }
+  {
     // midnight: the end needs the string mown, and nothing else will do
     const S = CORE.init(6); S.act = 3; S.gold = CORE.SHOWS.length; S.$ = 1; CORE.act(S, 'buy', 'night');
     const L = CORE.layout('field', 0), on = new Set(L.stencil);
