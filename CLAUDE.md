@@ -50,6 +50,10 @@ Check these before calling a remade page done; each has now shipped broken in se
   sprung path with a start and an end pose, never a position swap. Record frames at 20 to 60 ms around the moment
   (Playwright's `recordVideo`, then `ffmpeg -vf fps=12`), and never time an end pose from a clock that restarts
   with the next step: it snaps back.
+- **Sequences timed by the wall clock.** A ceremony whose actors move in game time but whose cards, sounds or next
+  steps come from `setTimeout` falls apart on a slow device, under a speed-up, or paused: cards before the judges
+  arrive, a fold that starts before its parts exist. Anything that follows the game's own motion waits on game time
+  (a small queue drained by the frame's `dt`); keep `setTimeout` for things that are truly about real time.
 - **Props drawn as primitives.** Parts that float free (leaves without stems), lines left where two shapes were
   joined, a solid drawn over what should be in front of it, light that stops in a hard edge. Fill a many-part
   thing as one silhouette and outline it once, draw back to front (a crock's mouth, the spoons, the crock's front),

@@ -30,6 +30,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    budget round that changed no pixel brought it only to 203 KB (`BOX_CAP` in the suite).
    Starter may weigh **200 KB**: for its refinement session (rule 16) the owner lifted every limit the
    anthology had set itself where it stood in the way of the result.
+   Keep Off the Grass may weigh **200 KB** for the same reason: its refinement session (October 2026) began at
+   133 KB, over the old cap, once the box had its close-up camera and props list.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -248,14 +250,14 @@ The long-term answer is a habit and a tool:
 | № | id | title · handling | verb | loop | medium | palette | era · genre | sound | interface | ends with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, index cards in a red enamel recipe tin, each with a cut of its own | the whole house bakes into a loaf; slicing it shows a bakery box tied with string in the crumb |
-| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
+| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, the judges asking for something else each visit (towards their table, along it, edged with a lap), with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map, shown through a miniature photographer's lens (tilt-shift, contact shade) | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
 | 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft) | hold a finger on the house and drag: the ghost glides after it and its cold drives people away; tap a doorway, the telephone, the chandelier | short nights against ectoplasm and the dawn, the organ between them; every exit costs a pip of resolve for good; five casts, from a family of three to a film company and thirty extras | silent film: Reiniger cut-outs, black people before grey furniture, frost round a cream card ghost, tinted stock, grain, intertitles, iris | night blue, cream, black; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought, a telephone, a crash | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
-Keep Off the Grass 32–34 / 53–57, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
+Keep Off the Grass 30–34 / 58–64, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
 Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–38 / 71–78.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -1230,6 +1232,108 @@ box uses it.
     frame-time reading on a real phone, above all in the stadium (`K.debug.blades()`), and the mower's
     sound once the owner has heard it.
 
+  **The refinement session** (October 2026, rule 16), first round. Before anything else the box got the tools
+  Starter's session had: `K.debug.look(x, y, d, { pitch, yaw, setup })` holds the 3D camera anywhere (on a point,
+  or on something that moves: `mower`, `robot`, `pest`, `judges`, `box`; a setup lets an intruder in, stops the
+  judges on the lawn or folds the field), `K.debug.props` lists 33 things worth a close look, and
+  `util/cmv_props.mjs` saves `K.debug.snap()` for a WebGL box, the canvas itself, instead of a page screenshot.
+  Its minutes come from the eager bot as the page runs it (seed 1, after round 2: Elm Street 6.75, the Village
+  Show 17.25, the County 22.25, the National 25.75, the Cup Final 30.75, midnight 34); they move whenever the
+  pacing does. `revisit(S)` takes a finished game
+  back to the Cup Final with every show won, the rest of the pegboard for sale and the note in the cup there
+  again (a test in the box's suite). What the research found and what it changed:
+  - *How the paid games do it.* PowerWash Simulator counts a part as clean at 95 to 98% and then cleans the
+    last specks itself, with a flash and a ding: a finished lawn here now takes its last tufts with it and
+    glints. Miniature photography and the voxel games read as models because of a shallow focus, soft
+    contact shadow and saturated paint: the frame is now drawn into a texture and shown through one more
+    shader (`develop`: sharp in a band round the mower or the middle, soft above and below; ambient occlusion
+    from the depth of the solids alone, compared in pairs so a slanted ground does not shade itself; colour
+    ×1.12; a vignette), with the canvas's antialiasing kept by a multisampled framebuffer. A device that had
+    to lose blades twice loses the contact shade too.
+  - *What gives AI-made work away* (players' threads, studios' notes, October 2026): generic interface
+    defaults, identical cards with line icons, props that are primitives. Every blister pack now holds the
+    upgrade itself, built from the world's own boxes and lit by its sun (`MODEL`, rendered once into a canvas
+    per card); the close-ups found a hedge that was a row of tiles, a tree with two level stubs for boughs,
+    ornaments on bare squares of soil, flowers that were coloured sticks, a car of two boxes, bunting of
+    cubes, a flat green beyond the show ground, benches of two planks, people without faces. Now hedges are
+    one mass with clumps, boughs climb into the crown, ornaments stand in the lawn's earth, flowers have a
+    stem, a leaf and a head, the car a glasshouse, pillars, lamps and bumpers, bunting is a cord with
+    pennants, the show ground sits in a patchwork of fields, benches have slats and frames, everyone has eyes.
+  - *Resources.* jsDelivr is reachable from the session now (it was not for Starter), so samples could be
+    tested; the Versilian Community Sample Library (VCSL, CC0, github.com/sgossner/VCSL) is the candidate for
+    the keyboard demo song, the brass and the music box, untried. Kenney's kits (CC0) are low-poly, not voxel,
+    and were not used.
+  - *The shows, the owner's call.* Both bots won gold at nearly every show's first judging and then called
+    the judges 13 to 17 times more for the next entry fee. The owner chose "every visit wants something else":
+    the head judge asks for stripes towards the judges' table first, along it second, then any of four
+    (those two, each finished with a lap round the edge) but the last one. The wish is named by the table so
+    it holds however the camera stands; the sheet shows it as a little lawn with the table on it, turned with
+    the camera, and an Edge bar for an edged wish; the judge says what was asked if it was missed, and what
+    they want next time as they leave. The ring round an edged lawn is as wide as a lap leaves it. On a show
+    lawn the mower lays short grass its own way, as a striping roller does, so a lawn mown the wrong way can
+    be put right. Gold came easier, so the prize per judging went from 2.5 to 1.8 to keep the eager bot over
+    thirty minutes; the visits per show went up to 18 to 24 for both bots, each now asking something
+    different. If that still reads as too many, the next lever is a bigger lawn per visit, not a longer wait.
+  - *Fixed on the way.* The judges' walk ran on game time while their cards, rosette and comments came by
+    `setTimeout`, and the field's flaps were built 2.6 s after the reveal by the clock while they began to fold
+    at 2.8 s of game time: on a slow device or under express post they drifted apart, and paused they did not
+    wait. Everything sequenced now goes through `later(sec, fn)`, drained by `dt`. The sheet's first bar says
+    Mown, not Short, and shows no stripes until there is enough lawn mown to judge. On an upright phone every
+    show lawn lies along the screen (the camera turns a quarter, as it did for the Cup Final), so the lawn
+    fills the height instead of leaving its lower third as meadow; the judges are drawn larger.
+  The box now weighs 155 KB; its cap is 200 KB (rule 2).
+  **Round 2.** A fresh critic scored filmstrips of the box as it was before the session (phone first, real
+  pointer input, every place): 6/5/6/5/5 and 3 for "would pass as a commercial game". What it found that round 1
+  had not fixed, and what changed: the mower drove over the show's rope (the rope is now cells the rules keep it
+  out of, two cells round the lawn, with a gate toward the way in and one toward the judges' table, and the bots
+  turn closer, .8 of a cell past the lawn); the gang mower's reels were flat slabs (now a reel of blades under a
+  hood, side plates and a land roller) and the ride-on's deck stood out like wings (a housing with a skirt and a
+  chute); every tier of an upgrade said the same sentence (every card with levels now says what the next one
+  does: "clippings ×2.3 → ×3.4", "holds 50 → 91 litres"); the three shows looked alike (the Village Show has a
+  church behind its tent, the County a grandstand with flags, the National a manor with a portico and topiary);
+  the show ground's rough was as tall as the lawn on show and the two could not be told apart (it is kept shorter);
+  "Gold won here. On to the next show." read as a dead end (now "Gold won. Prizes still pay; the next show is on
+  the pegboard."); the desktop pegboard stood half empty (it shows everything that can be bought ahead, greyed);
+  the phone strip faded its last card into the lawn behind (an arrow tab now); intruders were small and could be
+  off screen (larger, and a badge at the screen's edge points to one out of view); the moon stayed in the dawn sky
+  (a rule for `.night` came later in the sheet than the one for `.dawn`); the haze over the far edge washed the
+  roofs out (halved, as the lens blurs that band now); the lamp post had no foot, the postbox no plinth, the string
+  at midnight read as a debug wireframe (a thin cord on wooden pegs). The sticker for seeing off intruders asks for
+  sixty, since the longer shows brought the casual bot to forty. The prize per judging is 1.7.
+  The fold, filmed at a quarter speed so each frame of the software renderer is about 60 ms of game time and cut
+  into its distinct frames with `ffmpeg -vf mpdecimate`, rises flap by flap with no jump, and the camera's
+  distance and pitch ease without a step. The dive into box 3 shows as a cut in that film: the shell's dive is a
+  Web Animation of the frame, and while box 3 mounts the software renderer draws nothing; on a device it runs on
+  the compositor, but nobody has seen it there yet.
+  The sound was measured, not changed (MediaRecorder on the box's two buses, `ffmpeg -af volumedetect`): effects
+  average −28 to −29 dB with peaks at −13 to −15, nothing clips; the music averages −42 to −44 dB with peaks at −12
+  to −22, some 13 dB under the engine, which on a phone's speaker is close to silent. The owner chose to raise it
+  about 8 dB: the box's music now goes through its own gain (×2.5) and a limiter (threshold −10 dB, ratio 20) into the
+  shell's music bus, and measures −32 to −35 dB on average with peaks at −6 to −9; the mower's sound is untouched.
+  **Round 3.** A second fresh critic scored filmstrips of the box after rounds 1 and 2, phone only: 7/5/6/5/5 and 3
+  (first impression up one; the rest held). Its sharpest point was one round 1 had made: a lawn striped the wrong way
+  scored "stripes 0.0" with nothing to say why, which reads as a bug. Now the stripes card says "wrong way" or "no
+  edge lap" in red when that is the reason, and every new wish is chalked on the lawn for a few seconds (double
+  arrows the way the stripes should run, a dashed lemon ring for a lap). The rosette comes up at the judges' table,
+  not over the lawn being judged, and the score cards float higher, over the judges' heads. Prices are rounded as a
+  shop prints them (cents under $10, whole dollars under $100, then three figures), and every tier after the first
+  has a line of its own ("Whetted on the back step with Dad's stone.", "It has its own postcode."), with the numbers
+  under it. "Open it." waits until the last flap is up, the dashboard says dawn once it is, the hollows the flaps
+  leave are soil and stubble, the rope's gates have posts, and the desktop pegboard leaves the shell's box chip room.
+  Also from it, not yet done: the stadium reads as rings of seat texture (raked stands, a roof and pylons would help);
+  the light jumps from moonlight to dawn as the box folds (the owner's call, kept); the push mower can run into the
+  road on Elm Street; the robots read as tiles at play size.
+  **Round 4**, from the same critique: the stadium has a pale roof over its back rows on columns, with a cobalt
+  fascia, and advertising boards round the pitch; the fields round the shows have a hedgerow now and then and a tree
+  in it (a hedge on every other edge read as a maze); robots are drawn a third larger; the road on Elm Street is no
+  longer for mowing (the gardens are joined through the gaps in their hedges). Money lands: coins fly from the lawn,
+  the bin or the judges' table to the dashboard and the sum counts up only as they arrive (`held` keeps it back, and
+  lets it go after six seconds if a change of place swallowed the coins); a full grass box says "full: to the bin!";
+  chaff drifts in the first light round the folded box.
+  Found on the way: three times a line comment written into the middle of a line swallowed the code after it, once
+  shipping the ride-on mower without its body. The box's suite now refuses a line comment in the view that holds a
+  call.
+
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
   held pointer. Scores for first impression, clarity, art direction, phone and feel: 6/5/7/5/5. Fixed
@@ -1610,6 +1714,26 @@ is not saved by its art direction: the owner played both and stopped.
   the kitchen's art direction reached 7; every round also re-found the popups that only pile up because
   the capture script taps ten times faster than a person. Past that point a person playing it on a device
   is the only judge left; treat further still-frame rounds as a check for regressions.
+- **Headless frames do not finish CSS transitions over a busy WebGL canvas.** The moon at dawn stayed bright in
+  every film of Keep Off the Grass, before and after its rule was fixed: with `transition: none` the computed opacity
+  was 0, with the 2 s transition it never left 1 while the software renderer was drawing. Check a CSS state with
+  `getComputedStyle` and the transition switched off before calling it a bug.
+- **Never write a line comment into the middle of a line.** An edit that puts `// why` after a statement on a line that
+  goes on swallows the rest of the line; when what is left still parses, nothing fails and a part simply stops being
+  drawn (Keep Off the Grass lost its ride-on's body that way). Put such a note in `/* */`, or on its own line, and let a
+  test look for calls inside line comments.
+- **A lens makes a miniature.** Keep Off the Grass drew its voxels straight to the screen and looked like an engine's
+  test scene; drawn into a texture and shown through one more shader (sharp in a band, soft above and below, a
+  contact shade from the depth, a little more colour) the same scene reads as a photographed model. Two traps: take
+  the depth for the shade before drawing the grass, or every blade shades the ground; and compare the depth in pairs
+  either side of the pixel, or a ground seen at a slant shades itself all over.
+- **Timers in a sequence run on game time, in every box.** Snow Day learnt it with a card; Keep Off the Grass had it
+  again with its judges and its folding field. A view that sequences anything keeps a small queue of its own
+  (`later(sec, fn)`) drained by `dt`, so it waits while paused and keeps step under express post and on a slow device.
+- **A props list needs the page's own seed.** The minutes in `K.debug.props` are minutes of the eager bot as the page
+  runs it (`KIT.simulate`, seed 1); minutes measured with another seed point the camera at the wrong place.
+- **A wish only works if it can be put right.** Asking for stripes one way is a punishment if a lawn mown the other way
+  must wait to grow back; letting the mower lay short grass its own way made a missed wish a second pass, not a wait.
 - **A browser intervention is a console error.** `navigator.vibrate` before the player has touched the frame does
   nothing and logs a console error, which the browser suite counts; it failed two runs in five, whenever events
   from a scripted state reached the view before a tap. Guard such calls with `navigator.userActivation.hasBeenActive`.
