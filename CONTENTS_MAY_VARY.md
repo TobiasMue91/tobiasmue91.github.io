@@ -1307,8 +1307,9 @@ box uses it.
   the compositor, but nobody has seen it there yet.
   The sound was measured, not changed (MediaRecorder on the box's two buses, `ffmpeg -af volumedetect`): effects
   average −28 to −29 dB with peaks at −13 to −15, nothing clips; the music averages −42 to −44 dB with peaks at −12
-  to −22, some 13 dB under the engine, which on a phone's speaker is close to silent. That balance is the owner's
-  call, with the mower's sound.
+  to −22, some 13 dB under the engine, which on a phone's speaker is close to silent. The owner chose to raise it
+  about 8 dB: the box's music now goes through its own gain (×2.5) and a limiter (threshold −10 dB, ratio 20) into the
+  shell's music bus, and measures −32 to −35 dB on average with peaks at −6 to −9; the mower's sound is untouched.
   **Round 3.** A second fresh critic scored filmstrips of the box after rounds 1 and 2, phone only: 7/5/6/5/5 and 3
   (first impression up one; the rest held). Its sharpest point was one round 1 had made: a lawn striped the wrong way
   scored "stripes 0.0" with nothing to say why, which reads as a bug. Now the stripes card says "wrong way" or "no
