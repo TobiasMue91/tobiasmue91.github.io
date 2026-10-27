@@ -1084,7 +1084,9 @@ still undone, most valuable first:
   (twelve places, all on screen at once in the great heaves). Its other notes, for the next pass: the "what an ear!"
   slips still stack over the jar labels when a fast hand scores loaf after loaf; the coins from a punch are flat yellow
   dots; the ending's loaf sits on the roof like a hat rather than lifting it; the desktop cellar has bare margins
-  beside the house.
+  beside the house. Done since: one slip at a time (a new verdict sends the last away at once); coins struck with a
+  milled edge, a rim, a star and a glint; past the house's walls Mother spills over the eaves and hangs down the
+  outside in lobes that stretch as she rises. Left: the desktop cellar's margins.
 - **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
