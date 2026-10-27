@@ -1086,7 +1086,10 @@ still undone, most valuable first:
   dots; the ending's loaf sits on the roof like a hat rather than lifting it; the desktop cellar has bare margins
   beside the house. Done since: one slip at a time (a new verdict sends the last away at once); coins struck with a
   milled edge, a rim, a star and a glint; past the house's walls Mother spills over the eaves and hangs down the
-  outside in lobes that stretch as she rises. Left: the desktop cellar's margins.
+  outside in lobes that stretch as she rises. Then: no two neighbouring jars alike (a mason jar with a screw band, a
+  tall apothecary jar with a cork, a squat jar under a gingham cloth tied with string, as a baker covers a starter;
+  the shapes are the view's, the rules never see them), the aroma drawn as printed steam (a cream ribbon with an ink
+  edge), and the neighbours moved in so the desktop cellar has no bare margins. Ready for the owner's playtest.
 - **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
