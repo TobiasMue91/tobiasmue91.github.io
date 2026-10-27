@@ -1090,6 +1090,8 @@ still undone, most valuable first:
   tall apothecary jar with a cork, a squat jar under a gingham cloth tied with string, as a baker covers a starter;
   the shapes are the view's, the rules never see them), the aroma drawn as printed steam (a cream ribbon with an ink
   edge), and the neighbours moved in so the desktop cellar has no bare margins. Ready for the owner's playtest.
+  **The owner's playtest** (October 2026): the box "looks much more mature"; the bulges were too large and are 10%
+  smaller (`BR`: 180 on a wide screen, 194 on a phone).
 - **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
