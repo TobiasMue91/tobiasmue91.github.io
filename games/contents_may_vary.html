@@ -3128,6 +3128,7 @@ body.night #stars{opacity:1}
 .sp b{color:#1d7a3a}
 .sp.out{transition:opacity .4s,transform .4s;opacity:0;transform:translate(-50%,-130%)}
 @keyframes pop{from{transform:translate(-50%,-60%) scale(.4);opacity:0}}
+.coin{position:absolute;width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff6c2,#ffd23f 45%,#d99a12);border:2px solid var(--ink);box-shadow:inset 0 0 0 2px rgba(255,255,255,.35);pointer-events:none}
 .pt{position:absolute;font-weight:700;font-size:22px;color:#fff;-webkit-text-stroke:5px var(--ink);paint-order:stroke;transform:translate(-50%,-50%);white-space:nowrap;animation:rise 1.3s ease-out forwards}
 @keyframes rise{0%{transform:translate(-50%,-30%) scale(.6);opacity:0}15%{transform:translate(-50%,-60%) scale(1.1);opacity:1}100%{transform:translate(-50%,-160%) scale(1);opacity:0}}
 .sc{position:absolute;width:64px;padding:6px 0;text-align:center;background:#fff;border:2.5px solid var(--ink);border-radius:8px;font-weight:700;font-size:22px;transform:translate(-50%,-100%);animation:flip .5s cubic-bezier(.2,1.5,.4,1) backwards}
@@ -3156,7 +3157,7 @@ body.night #stars{opacity:1}
 </style>
 <canvas id="gl" tabindex="0"></canvas>
 <div id="stars"></div><div id="tilt"></div>
-<div id="dash" class="pl"><div id="money">$0.00</div><div id="rate"></div><div id="bag" hidden>grass box <i><b></b></i></div></div>
+<div id="dash" class="pl"><div id="money">$0.00</div><div id="rate"></div><div id="bag" hidden><span>grass box</span> <i><b></b></i></div></div>
 <div id="jp" class="pl" hidden><div class="ws"><i id="jwi"></i><span><small>The judges want</small><b id="jw"></b></span></div><div class="m"><span>Mown</span><i><b id="jc"></b></i><em id="jcv"></em></div><div class="m"><span>Stripes</span><i><b id="js"></b></i><em id="jsv"></em></div><div class="m" id="jer"><span>Edge</span><i><b id="je"></b></i><em id="jev"></em></div><div class="md" id="jm"></div><button id="jg">Call the judges</button></div>
 <div id="peg" hidden></div>
 <div id="fx"></div>
@@ -3716,9 +3717,9 @@ function drawDyn(dt) {
   S.rb.forEach((r, k) => { const v = robots[k] || (robots[k] = { a: r.a }); let d = ((r.a - v.a) % TAU + TAU * 1.5) % TAU - Math.PI; v.a += d * Math.min(1, dt * 6); robot(B, r.x, r.y, v.a, k); });
   for (let i = parts.length - 1; i >= 0; i--) {
     const p = parts[i]; p.t += dt; if (p.t < 0) continue;
-    p.vz -= (p.s ? 3 : 14) * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z = Math.max(.05, p.z + p.vz * dt);
-    if (p.t > .9) { parts.splice(i, 1); continue; }
-    const q = p.s ? p.s * (1 - p.t / .9) : .12; bx(B, p.x, p.y, p.z, q, q, q, p.c, p.t * 9);   // a glint shrinks as it rises
+    p.vz -= (p.float ? 0 : p.s ? 3 : 14) * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z = Math.max(.05, p.z + p.vz * dt);
+    const life = p.life || .9; if (p.t > life) { parts.splice(i, 1); continue; }
+    const q = p.s ? p.s * Math.min(1, 4 * (1 - p.t / life)) : .12; bx(B, p.x, p.y, p.z, q, q, q, p.c, p.t * 9);   // a glint shrinks as it rises
   }
   for (const v of visitors) { const r = v.look && S.rb.find(r => r.g === v.g); v.a = lerp(v.a == null ? -Math.PI / 2 : v.a, r ? Math.atan2(r.y - v.y, r.x - v.x) : -Math.PI / 2, Math.min(1, dt * 4)); person(B, v.x, v.y, v.a, v.o); }
   if (S.site === 'street' && S.act === 1 && !visitors.some(v => v.g === 1)) person(B, 15, 14.75, -Math.PI / 2, { shirt: C.cobalt, pants: C.grey, hair: C.trunk, s: 1.15 });
@@ -3858,6 +3859,20 @@ function place(f) {
   if (f.w == null) { f.w = f.el.offsetWidth + 2 * Math.abs(parseFloat(f.el.style.marginLeft) || 0); f.h = f.el.classList.contains('sp') ? f.el.offsetHeight : 0; }
   const t0 = f.h ? ($('jp').hidden ? $('dash') : $('jp')).getBoundingClientRect().bottom + f.h + 14 : 60;   // a speech bubble hangs below the dashboard and the judges' sheet
   f.el.style.left = clamp(sx, f.w / 2 + 6, Math.max(f.w / 2 + 6, area.x1 - f.w / 2 - 6)) + 'px'; f.el.style.top = clamp(sy, t0, Math.max(t0, area.y1 - 12)) + 'px';
+}
+/* money lands: coins fly from where it was earned to the dashboard, and the sum there counts up as they arrive */
+let held = 0, flying = 0, heldT = 0;
+function coins(x, y, z, v, n = 6, pre) {   /* pre: the sum was held back already, when it was earned */
+  if (!(v > 0)) return; n = K.reduced ? 2 : n;
+  const [sx, sy] = toScreen(x, y, z), m = $('money').getBoundingClientRect(), tx = m.left + 26, ty = m.top + m.height / 2, per = v / n;
+  if (!pre) held += v;
+  for (let k = 0; k < n; k++) {
+    flying++; const c = document.createElement('i'); c.className = 'coin'; c.style.left = sx + 'px'; c.style.top = sy + 'px'; fx.appendChild(c);
+    const jx = (k - (n - 1) / 2) * 16 + (Math.random() - .5) * 10, up = 40 + Math.random() * 30;
+    c.animate([{ transform: 'translate(-50%,-50%) scale(.4)', opacity: 0 }, { transform: `translate(calc(-50% + ${jx}px),calc(-50% - ${up}px)) scale(1.1)`, opacity: 1, offset: .3 },
+      { transform: `translate(calc(-50% + ${tx - sx}px),calc(-50% + ${ty - sy}px)) scale(.6)`, opacity: 1 }], { duration: 650 + k * 60, easing: 'cubic-bezier(.45,0,.7,1)' })
+      .onfinish = () => { c.remove(); flying--; held = Math.max(0, held - per); const mo = $('money'); mo.classList.remove('bump'); void mo.offsetWidth; mo.classList.add('bump'); tone(2600 + k * 90, 2600 + k * 90, .05, 'triangle', .035); };
+  }
 }
 function say(x, y, z, html, life = 3) { const e = document.createElement('div'); e.className = 'sp'; e.innerHTML = html; anchor(e, x, y, z, life); return e; }
 function pop(x, y, z, txt) { const e = document.createElement('div'); e.className = 'pt'; e.textContent = txt; anchor(e, x, y, z, 1.3); }
@@ -4142,11 +4157,12 @@ const robotIn = g => S.rb.some(r => r.g === g) && !(L.gardens[g].x0 <= S.m.x && 
 function events() {
   const list = S.ev.splice(0);
   for (const e of list) {
-    if (e.k === 'dump') { pop(BIN[0], BIN[1], 1.6, '+' + money(e.v)); sfx.dump(); rate += e.v; hint.bin = 0; }
+    if (e.k === 'dump') { pop(BIN[0], BIN[1], 1.6, '+' + money(e.v)); coins(BIN[0], BIN[1], 1.4, e.v, 5); sfx.dump(); rate += e.v; hint.bin = 0; }
     if (e.k === 'full') { sfx.full(); hint.bin = 1; if (!hint.binSaid) { hint.binSaid = 1; say(BIN[0], BIN[1], 3.6, 'Full! Tip it in the <b>compost bin</b>.', 4); } }
     if (e.k === 'job' && L.gardens) {
       const gd = L.gardens[e.g]; if (gd) for (let k = 0, n = K.reduced ? 8 : 36; k < n; k++) parts.push({ x: lerp(gd.x0, gd.x1 + 1, Math.random()), y: lerp(gd.y0, gd.y1 + 1, Math.random()), z: .1, vx: 0, vy: 0, vz: 2.5 + Math.random() * 2.5, t: Math.random() * -.4, c: Math.random() < .5 ? C.white : C.lemon, s: .09 });
       sfx.cash(); rate += e.v; const lines = LINES[e.g], rb = S.act > 1 && robotIn(e.g);
+      if (gd) coins((gd.x0 + gd.x1 + 1) / 2, (gd.y0 + gd.y1 + 1) / 2, .5, e.v, 7);
       if (now - lastJob > 1.2 || e.g === 1) visit(e.g, (rb ? ROBO[e.g][1] : S.act === 1 ? lines[Math.min(S.jobs - 1, lines.length - 1) % lines.length] : lines[S.jobs % lines.length]) + ' <b>' + money(e.v) + '</b>', rb);
       lastJob = now;
       if (S.act === 1) later(1.6, () => card('A week later…', '', 2));
@@ -4165,13 +4181,14 @@ function events() {
     if (e.k === 'judge') judged(e);
     if (e.k === 'pest' && S.pest) { sfx[e.kind](); say(S.pest.x, S.pest.y, 3.6, PEST_SAY[S.pest.k], 3.5); floaters[floaters.length - 1].follow = () => vis.pest && [vis.pest.x, vis.pest.y]; }
     if (e.k === 'dodge' && S.pest) sfx[CORE.PESTS[S.pest.k].k]();
-    if (e.k === 'shoo') { if (e.by === 3) say(e.x, e.y, 1.5, 'Good dog!', 2); if (e.v) { pop(clamp(e.x, L.show.x0, L.show.x1 + 1), clamp(e.y, L.show.y0, L.show.y1 + 1), 1.5, '+' + money(e.v)); sfx.cheer(); } }
+    if (e.k === 'shoo') { if (e.by === 3) say(e.x, e.y, 1.5, 'Good dog!', 2); if (e.v) { pop(clamp(e.x, L.show.x0, L.show.x1 + 1), clamp(e.y, L.show.y0, L.show.y1 + 1), 1.5, '+' + money(e.v)); coins(clamp(e.x, L.show.x0, L.show.x1 + 1), clamp(e.y, L.show.y0, L.show.y1 + 1), 1.2, e.v, 4); sfx.cheer(); } }
     if (e.k === 'bump' && Math.random() < .3) sfx.bip();
     if (e.k === 'bump' && S.site === 'street' && now - lastPeek > 40 && !visitors.length && Math.random() < .2) { const g = S.rb[e.i] && S.rb[e.i].g; if (g != null && robotIn(g)) { lastPeek = now; visit(g, ROBO[g][2], 1); } }
     if (e.k === 'finale' && e.n === 1) reveal();
   }
 }
 function judged(e) {
+  held += e.prize || 0;   /* the prize shows on the dashboard as its coins arrive, after the rosette */
   jd.t = 0; jd.r = e; jd.k = jd.n++ ? 2.2 : 1; sfx.roll();
   const s = L.show, cx = (s.x0 + s.x1 + 1) / 2, cy = (s.y0 + s.y1 + 1) / 2, k = jd.k;
   later(2.7 / k, () => {
@@ -4184,7 +4201,8 @@ function judged(e) {
     const el = document.createElement('div'); el.className = 'ro';
     el.style.background = e.medal ? ['', '#c98a4a', '#9aa3b5', '#e0a91c'][e.medal] : '#8a8f9c'; el.style.setProperty('--rc', el.style.background);
     el.innerHTML = (e.medal ? ['', 'Bronze', 'Silver', 'Gold'][e.medal] : 'Commended') + '<small>' + (e.prize ? '+' + money(e.prize) : 'better luck next time') + '</small>' + (e.trophy ? '<small>Trophy: all pay ×2</small>' : '');
-    el.style.marginTop = '20px'; anchor(el, L.cx, L.top - 1.5, 2, 3.4); /* at the judges' table, off the lawn being judged */ if (e.medal) sfx.medal(e.medal);   // under the score cards, not over them
+    el.style.marginTop = '20px'; anchor(el, L.cx, L.top - 1.5, 2, 3.4); /* at the judges' table, off the lawn being judged */ if (e.medal) sfx.medal(e.medal);
+    if (e.prize) later(.6, () => coins(L.cx, L.top - 1.5, 2, e.prize, 8, true));   // under the score cards, not over them
     if (e.trophy && S.gold >= CORE.SHOWS.length) later(2.5, () => card('A note in the cup', 'Look on the pegboard.', 3.4));
     // the head judge says what it lacked, or that it lacked nothing
     const wd = CORE.WISH[e.wish] || CORE.WISH[0], asked = 'We asked for ' + WISH_SAY[e.wish].toLowerCase() + '.';
@@ -4270,6 +4288,8 @@ function stepFinale(dt) {
   FLAP.forEach((F, f) => { const p = clamp((t - f * .55) / 1.1, 0, 1); const was = fin.ang[f]; fin.ang[f] = ease.back(p); if (was === 0 && p > 0) sfx.flap(); });
   if (t > 3.2 && !fin.low) { fin.low = 1; cam.gpitch = .7; aim(); document.body.classList.add('dawn'); }
   if (t > 3.2) LT = blend(NIGHT, DAWN, clamp((t - 3.2) / 5, 0, 1));
+  /* chaff in the first light, drifting round the box once it stands */
+  if (t > 5.5 && !K.reduced && parts.length < 80 && Math.random() < dt * 5) { const a = Math.random() * TAU, r = 4 + Math.random() * 5; parts.push({ x: 20 + Math.cos(a) * r, y: 20 + Math.sin(a) * r, z: 1 + Math.random() * 6, vx: .25 + Math.random() * .2, vy: (Math.random() - .5) * .2, vz: .12, t: 0, c: mix3(C.wheat, C.white, .3), s: .07, life: 5, float: 1 }); }
   if (S.finale === 1 && t > 5.8) { /* once the last flap is up */ CORE.act(S, 'finale', 2); K.save(); say(20, 20, 9.5, 'Open it.', 99); }
   // the box's screen rectangle, for the trip inside
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
@@ -4400,12 +4420,13 @@ function draw(B, P) {
 /* ================= the frame loop ================= */
 let progT = 0, shopT = 0, hudT = 0, lastW = 0, lastH = 0;
 function hud(dt) {
-  const target = S.$; if (shown > target || target - shown > target * .5 + 50) shown = target; else shown += (target - shown) * Math.min(1, dt * 6);
+  if (held > 0 && !flying) { heldT += dt; if (heldT > 6) held = 0; } else heldT = 0;   /* coins lost to a change of place */
+  const target = Math.max(0, S.$ - held); if (shown > target || target - shown > target * .5 + 50) shown = target; else shown += (target - shown) * Math.min(1, dt * 6);
   const mt = money(shown); if ($('money').textContent !== mt) $('money').textContent = mt;
   hudT -= dt; if (hudT > 0) return; hudT = .2;
   rate *= Math.exp(-.2 / 40);
   const bag = $('bag'), bg = CORE.bagged(S); bag.hidden = !bg;
-  if (bg) { const f = clamp(S.bag / CORE.cap(S), 0, 1); bag.querySelector('b').style.width = f * 100 + '%'; bag.classList.toggle('full', f >= .999); }
+  if (bg) { const f = clamp(S.bag / CORE.cap(S), 0, 1); bag.querySelector('b').style.width = f * 100 + '%'; bag.classList.toggle('full', f >= .999); const lb = f >= .999 ? 'full: to the bin!' : 'grass box'; if (bag.firstChild.textContent !== lb) bag.firstChild.textContent = lb; }
   const jp = $('jp'); jp.hidden = S.site !== 'green';
   if (!jp.hidden) {
     const judging = jd.t >= 0 && jd.r, r = judging ? jd.r : CORE.showScore(S), md = CORE.medal(S, r.score);

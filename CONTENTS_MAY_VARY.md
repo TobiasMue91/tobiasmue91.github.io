@@ -1323,6 +1323,13 @@ box uses it.
   Also from it, not yet done: the stadium reads as rings of seat texture (raked stands, a roof and pylons would help);
   the light jumps from moonlight to dawn as the box folds (the owner's call, kept); the push mower can run into the
   road on Elm Street; the robots read as tiles at play size.
+  **Round 4**, from the same critique: the stadium has a pale roof over its back rows on columns, with a cobalt
+  fascia, and advertising boards round the pitch; the fields round the shows have a hedgerow now and then and a tree
+  in it (a hedge on every other edge read as a maze); robots are drawn a third larger; the road on Elm Street is no
+  longer for mowing (the gardens are joined through the gaps in their hedges). Money lands: coins fly from the lawn,
+  the bin or the judges' table to the dashboard and the sum counts up only as they arrive (`held` keeps it back, and
+  lets it go after six seconds if a change of place swallowed the coins); a full grass box says "full: to the bin!";
+  chaff drifts in the first light round the folded box.
   Found on the way: three times a line comment written into the middle of a line swallowed the code after it, once
   shipping the ride-on mower without its body. The box's suite now refuses a line comment in the view that holds a
   call.
