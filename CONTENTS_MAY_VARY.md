@@ -1074,6 +1074,22 @@ still undone, most valuable first:
   scored 7/5/7/5/5 and 4. Still open from it: on a phone the oven sits off the right edge in the bakery act; the
   bulges want Mother's own glossy dough and plaster cracking from them; the phone rail could snap whole cards; the
   dough lettering of the ending still reads to critics as off-style.
+  **The fourth pass** closed the first three: on an upright phone the oven moves in beside the counter (`OVEN`) and
+  the loaves move right with it (`LOAF`), so the bakery act shows where they go; the bulges are glossy stretched
+  dough with bubbles, shade that turns and a long highlight, cracks that run out from the rim, fork and thin, and
+  flakes of plaster lifted round the hole, and two of them no longer come through behind the bench; on a phone the
+  cards snap whole into the tin, whose rolled edge stands at the right with a › to turn on. The dough lettering stays
+  until the owner decides: it is Mother writing, not a typeface.
+  A sixth critic scored 6/5/6.5/4.5/5 and 4, on frames taken before the bulges were moved inside a phone's frame
+  (twelve places, all on screen at once in the great heaves). Its other notes, for the next pass: the "what an ear!"
+  slips still stack over the jar labels when a fast hand scores loaf after loaf; the coins from a punch are flat yellow
+  dots; the ending's loaf sits on the roof like a hat rather than lifting it; the desktop cellar has bare margins
+  beside the house. Done since: one slip at a time (a new verdict sends the last away at once); coins struck with a
+  milled edge, a rim, a star and a glint; past the house's walls Mother spills over the eaves and hangs down the
+  outside in lobes that stretch as she rises. Then: no two neighbouring jars alike (a mason jar with a screw band, a
+  tall apothecary jar with a cork, a squat jar under a gingham cloth tied with string, as a baker covers a starter;
+  the shapes are the view's, the rules never see them), the aroma drawn as printed steam (a cream ribbon with an ink
+  edge), and the neighbours moved in so the desktop cellar has no bare margins. Ready for the owner's playtest.
 - **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
@@ -1592,3 +1608,6 @@ is not saved by its art direction: the owner played both and stopped.
   the kitchen's art direction reached 7; every round also re-found the popups that only pile up because
   the capture script taps ten times faster than a person. Past that point a person playing it on a device
   is the only judge left; treat further still-frame rounds as a check for regressions.
+- **A browser intervention is a console error.** `navigator.vibrate` before the player has touched the frame does
+  nothing and logs a console error, which the browser suite counts; it failed two runs in five, whenever events
+  from a scripted state reached the view before a tap. Guard such calls with `navigator.userActivation.hasBeenActive`.
