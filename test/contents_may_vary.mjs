@@ -38,7 +38,7 @@ const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024 };
+const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024, lawn: 200 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -321,11 +321,31 @@ if (suites.includes('lawn') && lawn) {
     check(!CORE.act(A, 'judge'), 'the judges do not come straight back');
   }
   {
+    // every visit the judges want something else: stripes up and down first, then across, then any but the last; a
+    // lawn striped the wrong way wins nothing, and driving over short grass lays it the other way, so it can be put right
+    const S = CORE.init(12); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.lv.ride = 1; S.$ = 0;
+    const L = CORE.layout('green', 1), s = L.show, mow = (dir, edge) => { for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { const i = y * L.W + x, ring = edge && (x === s.x0 || x === s.x1 || y === s.y0 || y === s.y1);
+      S.h[i] = CORE.P.cutTo; S.d[i] = ring ? (y === s.y0 || y === s.y1 ? 3 : 1) : dir === 'along' ? (x >> 1) % 2 + 1 : (y >> 1) % 2 + 3; } S.gw[0] = 0; S.judgeCd = 0; S.pest = null; S.pestT = 999; };
+    check(S.wish === 0 && CORE.WISH[0].k === 'along', 'the first visit at a show wants stripes up and down');
+    mow('across'); const wrong = CORE.showScore(S);
+    check(CORE.medal(S, wrong.score) === 0, `stripes across, when up and down was asked for, win nothing (${wrong.score.toFixed(2)})`);
+    S.m.x = s.x0 + 3.5; S.m.y = s.y0 + .5; CORE.act(S, 'go', s.x0 + 3.5, s.y1 + .5); for (let t = 0; t < 8; t += .1) CORE.step(S, .1);
+    const col = [...Array(s.y1 - s.y0 + 1)].map((_, k) => S.d[(s.y0 + k) * L.W + s.x0 + 3] & 7);
+    check(col.every(d => d === 1), 'driving up a short lawn lays its grass the way the mower goes', col.join(''));
+    mow('along'); const ok = CORE.showScore(S); CORE.act(S, 'judge');
+    check(CORE.medal(S, ok.score) === 3 && S.wish === 1 && S.ev.some(e => e.k === 'judge' && e.next === 1), 'stripes up and down win gold, and next time they want them across');
+    mow('across'); S.judgeCd = 0; check(CORE.medal(S, CORE.showScore(S).score) === 3, 'and across is then right');
+    S.wish = 2; mow('along'); const bare = CORE.showScore(S); mow('along', true); const edged = CORE.showScore(S);
+    check(bare.edge < .6 && CORE.medal(S, bare.score) < 3 && edged.edge > .95 && CORE.medal(S, edged.score) === 3, `asked for a lap round the edge, the stripes alone are not enough (edge ${bare.edge.toFixed(2)} → ${edged.edge.toFixed(2)})`);
+    const seen = new Set(); let last = S.wish, same = 0; for (let k = 0; k < 40; k++) { S.judgeCd = 0; S.gw[0] = 0; mow('along'); CORE.act(S, 'judge'); seen.add(S.wish); if (S.wish === last) same++; last = S.wish; }
+    check(seen.size === CORE.WISH.length && same === 0, 'over many visits every wish comes up, never the same twice running');
+  }
+  {
     // on a show ground the cutters lift off the lawn: a turn on the headland cuts nothing, even with
     // gangs wide enough to reach well into the lawn
     const S = CORE.init(8); S.act = 2; S.$ = 1e9; check(CORE.act(S, 'buy', 'show1'), 'lift test: at the Village Show'); S.lv.ride = 1; S.lv.gang = 4; S.lv.deck = 8;
     const L = CORE.layout('green', 1), s = L.show, onLawn = () => L.K.reduce((n, k, i) => n + (k === 1 && S.h[i] <= CORE.P.cutAt ? 1 : 0), 0);
-    S.m.x = s.x0 + 3; S.m.y = s.y0 - 1.5; drive(S, s.x1 - 2, s.y0 - 1.5, 6);
+    S.m.x = s.x0 + 3; S.m.y = s.y0 - .6; drive(S, s.x1 - 2, s.y0 - .6, 6);
     check(CORE.cutW(S) / 2 > 2 && onLawn() === 0 && S.m.up === 1, `driving along the headland with ${CORE.cutW(S).toFixed(1)} cells of gangs cuts nothing on the lawn`);
     drive(S, s.x1 - 2, s.y0 + 4, 3);
     check(onLawn() > 0 && S.m.up === 0, 'on the lawn they come down and cut');
@@ -342,6 +362,21 @@ if (suites.includes('lawn') && lawn) {
     const T = mk(); let left = null; for (let t = 0; t < 60 && !left; t += .1) { CORE.step(T, .1); left = T.ev.find(e => e.k === 'shoo'); }
     const L = CORE.layout('green', 1), sc = L.show; let scuffed = 0; for (let y = sc.y0; y <= sc.y1; y++) for (let x = sc.x0; x <= sc.x1; x++) if (!(T.d[y * L.W + x] & 7)) scuffed++;
     check(left && left.by === 2 && left.v === 0 && scuffed > 5, `left alone it scuffs the stripes (${scuffed} cells) and wanders off, paying nothing`);
+  }
+  {
+    // going back from the shelf after the end: the Cup Final again, every show won, the pegboard open, and the
+    // note in the cup to take to the wheat field once more
+    const S = CORE.init(6); S.act = 3; S.gold = CORE.SHOWS.length; S.$ = 1; for (const k of ['show1', 'show2', 'show3', 'show4']) S.lv[k] = 1;
+    CORE.act(S, 'buy', 'night'); const L = CORE.layout('field', 0); for (const i of L.stencil) S.h[i] = CORE.P.cutTo; CORE.step(S, .2);
+    CORE.act(S, 'finale', 2); CORE.act(S, 'finale', 3);
+    const R = CORE.revisit(JSON.parse(JSON.stringify(S)));
+    check(CORE.done(S) && !CORE.done(R) && R.act === 3 && R.site === 'green' && R.tier === CORE.SHOWS.length && R.gold === CORE.SHOWS.length, 'revisit puts the groundsman back at the Cup Final, every show won');
+    R.$ = 1e9; const left = CORE.UP.filter(u => CORE.can(R, u)).map(u => u.id);
+    check(left.includes('night') && left.includes('roller') && left.includes('lush') && !left.includes('show4') && !left.includes('street'), 'with the rest of the pegboard for sale and the note in the cup again', left.join(' '));
+    const C = CORE.layout('green', CORE.SHOWS.length).show; for (let y = C.y0; y <= C.y1; y++) for (let x = C.x0; x <= C.x1; x++) { R.h[y * CORE.layout('green', 4).W + x] = CORE.P.cutTo; R.d[y * CORE.layout('green', 4).W + x] = (x >> 1) % 2 + 1; }
+    const g0 = R.$; check(CORE.act(R, 'judge') && R.$ > g0 && R.gold === CORE.SHOWS.length, 'the judges still come out and pay, and nothing is won twice');
+    CORE.act(R, 'buy', 'night'); for (const i of L.stencil) R.h[i] = CORE.P.cutTo; CORE.step(R, .2); CORE.act(R, 'finale', 2); CORE.act(R, 'finale', 3);
+    check(CORE.done(R), 'and the crop circle can be mown and folded again from there');
   }
   {
     // midnight: the end needs the string mown, and nothing else will do
