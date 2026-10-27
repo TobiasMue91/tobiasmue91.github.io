@@ -257,7 +257,7 @@ The long-term answer is a habit and a tool:
 | 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft) | hold a finger on the house and drag: the ghost glides after it and its cold drives people away; tap a doorway, the telephone, the chandelier | short nights against ectoplasm and the dawn, the organ between them; every exit costs a pip of resolve for good; five casts, from a family of three to a film company and thirty extras | silent film: Reiniger cut-outs, black people before grey furniture, frost round a cream card ghost, tinted stock, grain, intertitles, iris | night blue, cream, black; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought, a telephone, a crash | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
-Keep Off the Grass 31–33 / 57–61, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
+Keep Off the Grass 30–34 / 58–64, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
 Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–38 / 71–78.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -1237,8 +1237,9 @@ box uses it.
   or on something that moves: `mower`, `robot`, `pest`, `judges`, `box`; a setup lets an intruder in, stops the
   judges on the lawn or folds the field), `K.debug.props` lists 33 things worth a close look, and
   `util/cmv_props.mjs` saves `K.debug.snap()` for a WebGL box, the canvas itself, instead of a page screenshot.
-  Its minutes come from the eager bot as the page runs it (seed 1: Elm Street 6.75, the Village Show 17.25,
-  the County 21.5, the National 24.5, the Cup Final 28.5, midnight 32.5). `revisit(S)` takes a finished game
+  Its minutes come from the eager bot as the page runs it (seed 1, after round 2: Elm Street 6.75, the Village
+  Show 17.25, the County 22.25, the National 25.75, the Cup Final 30.75, midnight 34); they move whenever the
+  pacing does. `revisit(S)` takes a finished game
   back to the Cup Final with every show won, the rest of the pegboard for sale and the note in the cup there
   again (a test in the box's suite). What the research found and what it changed:
   - *How the paid games do it.* PowerWash Simulator counts a part as clean at 95 to 98% and then cleans the
@@ -1281,6 +1282,33 @@ box uses it.
     show lawn lies along the screen (the camera turns a quarter, as it did for the Cup Final), so the lawn
     fills the height instead of leaving its lower third as meadow; the judges are drawn larger.
   The box now weighs 155 KB; its cap is 200 KB (rule 2).
+  **Round 2.** A fresh critic scored filmstrips of the box as it was before the session (phone first, real
+  pointer input, every place): 6/5/6/5/5 and 3 for "would pass as a commercial game". What it found that round 1
+  had not fixed, and what changed: the mower drove over the show's rope (the rope is now cells the rules keep it
+  out of, two cells round the lawn, with a gate toward the way in and one toward the judges' table, and the bots
+  turn closer, .8 of a cell past the lawn); the gang mower's reels were flat slabs (now a reel of blades under a
+  hood, side plates and a land roller) and the ride-on's deck stood out like wings (a housing with a skirt and a
+  chute); every tier of an upgrade said the same sentence (every card with levels now says what the next one
+  does: "clippings ×2.3 → ×3.4", "holds 50 → 91 litres"); the three shows looked alike (the Village Show has a
+  church behind its tent, the County a grandstand with flags, the National a manor with a portico and topiary);
+  the show ground's rough was as tall as the lawn on show and the two could not be told apart (it is kept shorter);
+  "Gold won here. On to the next show." read as a dead end (now "Gold won. Prizes still pay; the next show is on
+  the pegboard."); the desktop pegboard stood half empty (it shows everything that can be bought ahead, greyed);
+  the phone strip faded its last card into the lawn behind (an arrow tab now); intruders were small and could be
+  off screen (larger, and a badge at the screen's edge points to one out of view); the moon stayed in the dawn sky
+  (a rule for `.night` came later in the sheet than the one for `.dawn`); the haze over the far edge washed the
+  roofs out (halved, as the lens blurs that band now); the lamp post had no foot, the postbox no plinth, the string
+  at midnight read as a debug wireframe (a thin cord on wooden pegs). The sticker for seeing off intruders asks for
+  sixty, since the longer shows brought the casual bot to forty. The prize per judging is 1.7.
+  The fold, filmed at a quarter speed so each frame of the software renderer is about 60 ms of game time and cut
+  into its distinct frames with `ffmpeg -vf mpdecimate`, rises flap by flap with no jump, and the camera's
+  distance and pitch ease without a step. The dive into box 3 shows as a cut in that film: the shell's dive is a
+  Web Animation of the frame, and while box 3 mounts the software renderer draws nothing; on a device it runs on
+  the compositor, but nobody has seen it there yet.
+  The sound was measured, not changed (MediaRecorder on the box's two buses, `ffmpeg -af volumedetect`): effects
+  average −28 to −29 dB with peaks at −13 to −15, nothing clips; the music averages −42 to −44 dB with peaks at −12
+  to −22, some 13 dB under the engine, which on a phone's speaker is close to silent. That balance is the owner's
+  call, with the mower's sound.
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
