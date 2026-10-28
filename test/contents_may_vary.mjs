@@ -845,6 +845,17 @@ if (suites.includes('browser')) {
         const moved = ok && await until(f, ([site, n0]) => K.debug.state().site === site && getComputedStyle(document.getElementById('veil')).opacity === '0' && window.__frames > n0 + 4, 120000, [site, n0]);
         check(moved, `lawn: buying ${id} moves to the ${site} and draws it`);
         check(p.errs.length === 0, `lawn: no errors on the way to ${id}`, p.errs.join(' | '));
+        if (id === 'show4') {
+          // the cup won: the rosette, then the teams walk out, then the whistle; the note in the cup waits for the kick-off
+          await f.evaluate(() => { const S = K.debug.state(), L = CORE.layout(S.site, S.tier), s = L.show; S.pest = null; S.pestT = 999; S.gw[0] = 0;
+            for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = (x >> 1) % 2 + 1; } CORE.act(S, 'judge'); });   /* what the judges' button does */
+          const early = await until(f, () => K.debug.state().gold === 5 && K.debug.ko().t < 0, 60000) && await f.evaluate(() => !K.debug.card('night'));
+          check(early, 'lawn: the cup won, the note in it is not on the pegboard before the rosette');
+          const out = await until(f, () => K.debug.ko().t > 1.5, 120000) && await f.evaluate(() => K.debug.ko().cue === 1 && !K.debug.card('night'));
+          check(out, 'lawn: the teams walk out before the whistle, and the note still waits');
+          const on = await until(f, () => K.debug.ko().t > 6.6 && !!K.debug.card('night'), 120000);
+          check(on, 'lawn: after the kick-off the note in the cup is on the pegboard');
+        }
       }
       await p.close();
     }

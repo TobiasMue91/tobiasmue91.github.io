@@ -1373,6 +1373,17 @@ box uses it.
   Found on the way: three times a line comment written into the middle of a line swallowed the code after it, once
   shipping the ride-on mower without its body. The box's suite now refuses a line comment in the view that holds a
   call.
+  **Round 6, after the remake** (October 2026): every show was won by hand in a script (the lawn laid right, the
+  judges' button and the next card pressed for real) and filmed at 390×844 and 1280×800. Found: on a phone the free
+  card for the next show was inserted at the end of the sideways strip, two screens out of sight, while the HUD said
+  "the next show is on the pegboard"; a new place's card now scrolls the strip to itself. At the cup the view gave the
+  rules' verdict away: the note in the cup came onto the pegboard while the judges were still looking, the
+  "Kick-off!" card came before the score cards, and 22 players stood on the pitch the instant gold was decided. Now
+  the rosette comes first, the teams walk out of the tunnel to their halves with the camera close, the whistle goes,
+  the ball starts from the centre spot, and only then the note (a card for a new place waits for the medal, at the
+  cup for the kick-off). The whistle and the note follow the match's own clock, not a timer, so a slow frame cannot
+  put the whistle before the teams. The County card's "four times the size" became five. The browser suite plays
+  the cup's ceremony through and checks the order.
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
@@ -1488,6 +1499,12 @@ is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
 
+- **The rules decide at once; the view must not tell before its ceremony.** A verdict the core reaches in one step
+  (gold, a new place opened) reaches every part of the view in that frame: the pegboard, the HUD line, what is drawn
+  on the ground. Keep Off the Grass showed the note in the cup and the players on the pitch while its judges were
+  still looking. Anything a verdict opens waits for the moment the view announces it, on that moment's own clock.
+- **A card that matters must be on screen.** A phone's sideways strip inserts by order, so a new key card can land
+  two screens away while the HUD points at it. Scroll to it when it appears.
 - **Real grass is a vertex shader, not a model.** Every blade is the same nine-vertex ribbon, drawn up
   to a hundred thousand times; its place, height, lean, wind and colour come from a hash of its number
   and a lawn-sized texture updated each frame (height, the last pass's direction, hidden, kind). Cut
