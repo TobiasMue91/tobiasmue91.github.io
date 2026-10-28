@@ -1330,6 +1330,18 @@ box uses it.
   the bin or the judges' table to the dashboard and the sum counts up only as they arrive (`held` keeps it back, and
   lets it go after six seconds if a change of place swallowed the coins); a full grass box says "full: to the bin!";
   chaff drifts in the first light round the folded box.
+  **Round 5.** A third fresh critic, on phone filmstrips after round 4 and two desktop frames, scored 6/5/6/4/5 and 3:
+  no higher than the second, on frames that had only gained, the spread *Stills plateau* describes. Several of its
+  points came from the capture script (it mows a lawn perfectly in one step, so the cards read 10.0 at once; it
+  compares money between separate games). One was right and large: on an upright phone the judges' sheet covered the
+  top-left third of the lawn, and with the camera turned a quarter the table, the tent and often the intruder lay
+  under it (which is also why the edge badge stayed hidden: the dog was "on screen", under the sheet). On a phone the
+  sheet is now a bar at the thumb over the pegboard (the wish across the top, Mown and Stripes side by side, the
+  verdict beside the button), the camera frames only what is above it, the edge badge counts the dashboard as off
+  screen, the camera stands back further on an upright phone when it keeps the mower and an intruder in view, and the
+  rosette is three quarters of its size. Also still open from it: the box's open top is flush with wheat (it reads as
+  a planter), the crop circle is the net of a box rather than a ring (by design: the field was a box), the phone strip
+  shows one card and a third.
   Found on the way: three times a line comment written into the middle of a line swallowed the code after it, once
   shipping the ride-on mower without its body. The box's suite now refuses a line comment in the view that holds a
   call.
