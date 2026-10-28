@@ -1350,6 +1350,10 @@ box uses it.
   while the veil still hid the move to a show (the rules were already there, the view had not built it): the bar
   now follows the place as built. Still open from it: the crop circle is the net of a box rather than a ring (by design: the field was a box), the phone strip
   shows one card and a third.
+  **The owner's playtest** (October 2026): they like the box a great deal, all of it (art, play, music, progress).
+  They found hedgerows and trees of the country growing through the village church (the meadow placed them without
+  knowing where the landmark stands; it now leaves the landmark's ground clear), and roofs that flickered where two
+  houses met (z-fighting, see **Drawing without glitches**).
   Found on the way: three times a line comment written into the middle of a line swallowed the code after it, once
   shipping the ride-on mower without its body. The box's suite now refuses a line comment in the view that holds a
   call.
