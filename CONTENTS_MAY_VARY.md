@@ -1339,8 +1339,11 @@ box uses it.
   sheet is now a bar at the thumb over the pegboard (the wish across the top, Mown and Stripes side by side, the
   verdict beside the button), the camera frames only what is above it, the edge badge counts the dashboard as off
   screen, the camera stands back further on an upright phone when it keeps the mower and an intruder in view, and the
-  rosette is three quarters of its size. Also still open from it: the box's open top is flush with wheat (it reads as
-  a planter), the crop circle is the net of a box rather than a ring (by design: the field was a box), the phone strip
+  rosette is three quarters of its size. The folded box read as a planter, full of the field's standing wheat with
+  wheat on its inner walls: once its last flap is up the box is hollow, a dark card floor with a few stalks and
+  walls lined with card, the flaps' own wheat no longer drawn. The browser suite caught the sheet's bar being laid out
+  while the veil still hid the move to a show (the rules were already there, the view had not built it): the bar
+  now follows the place as built. Still open from it: the crop circle is the net of a box rather than a ring (by design: the field was a box), the phone strip
   shows one card and a third.
   Found on the way: three times a line comment written into the middle of a line swallowed the code after it, once
   shipping the ride-on mower without its body. The box's suite now refuses a line comment in the view that holds a
