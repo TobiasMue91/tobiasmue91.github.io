@@ -200,6 +200,11 @@ The long-term answer is a habit and a tool:
   `util/cmv_props.mjs`, and look at every tile at full size, with a critic given this list as a checklist
   (floating parts, construction lines, wrong overlap, see-through solids, hard light, missing contact shadows,
   props that are a primitive and nothing more). Play-size filmstrips do not show these; the owner does.
+- **Two faces in one plane flicker.** In 3D, two solids whose faces overlap at the same height or depth fight over
+  which is in front, and the seam frays as the camera moves (z-fighting). Keep Off the Grass's terraced roofs each
+  overhung their house by .2 on both sides, so neighbouring roofs overlapped at one height; the owner saw the jagged
+  seam. Things that meet should meet edge to edge, or one should be clearly higher; an overhang belongs only where
+  nothing else is. Look for it close up from above, with the lens's blur off (`K.debug.lens.blur = 0`).
 - **Animations are checked as video.** Record the moment with Playwright's `recordVideo`, cut it into frames at
   80 ms with `ffmpeg`, and look at each frame: Starter's slice snapped shut and open again when the box was
   tapped, because the halves counted their time from the start of the current step, and opening the box began
