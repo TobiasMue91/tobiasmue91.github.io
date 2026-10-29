@@ -1384,6 +1384,23 @@ box uses it.
   cup for the kick-off). The whistle and the note follow the match's own clock, not a timer, so a slow frame cannot
   put the whistle before the teams. The County card's "four times the size" became five. The browser suite plays
   the cup's ceremony through and checks the order.
+  Close-ups of all 37 props again: the stadium's were aimed where the old, smaller pitch had been and were moved; the
+  farmhouse beyond the wheat was a box with a lid (now walls with a plinth, a stepped roof, a chimney, a door, two lit
+  windows); the tunnel was a black block and is now a mouth between white walls under a canopy, tall enough for a
+  player (they first walked out with their heads through its roof), and the teams come straight out, round the
+  ends of the judges' table and on to their places. On a phone held upright the camera that keeps the mower and an
+  intruder in view stood too close by half (the sheep ran along under the money); it now stands back 1.5 times.
+  A fresh critic on sixteen frames of the shows (phone and desktop, every ground, an intruder, the walk-out):
+  6/6/5/5/5, and 3 for "would pass as a finished commercial game". Fixed from it: mowing took the pitch markings off
+  (they were only a tint on the blades, and a mown blade is nearly flat), so the cup's match was played on a pitch
+  with no lines; the paint is now on the ground as well. The halfway line had never been drawn at all (an even
+  pitch has no cell whose centre is within half a cell of the middle). The rosette at the cup hung over the tunnel
+  as the teams came out; it now hangs over the near third of the pitch. The countryside round the grounds was hedge
+  fragments that read as a maze (the critic's strongest "procedural" tell); hedges now close round fields: long ones
+  run the whole way across, and between each two of them hedges at heights of their own meet them in T-junctions,
+  with a gate here and there and the trees grown up in the hedges. Open from that critique: unmown
+  grass far off shimmers like static on a phone; the venues differ by size more than by silhouette; the HUD card
+  is plain next to the pegboard.
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real

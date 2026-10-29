@@ -3256,7 +3256,7 @@ void main() {
   if (kind == 3.) vC = mix(vC, vec3(.95), .75);
   // stripes: short grass laid away from the lens catches the light, laid toward it looks dark
   float cut = (1. - clamp(hv * 1.6, 0., 1.)) * (1. - wheat);
-  if (dir > .5) vC *= 1. + cut * (mod(dir, 2.) > .5 ? .42 : -.36);
+  if (dir > .5 && kind != 3.) vC *= 1. + cut * (mod(dir, 2.) > .5 ? .42 : -.36);
   gl_Position = uVP * wp;
 }`;
 const FSB = `#version 300 es
@@ -3515,9 +3515,9 @@ function build() {
     const s = L.show, w = s.x1 - s.x0 + 1, h = s.y1 - s.y0 + 1, cx = s.x0 + w / 2, cy = s.y0 + h / 2;
     for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) {
       const X = x + .5, Y = y + .5, r = Math.hypot(X - cx, Y - cy), bw = Math.round(w * .157), bh = Math.round(h * .59);   // a real pitch's proportions
-      const on = x === s.x0 || x === s.x1 || y === s.y0 || y === s.y1 || Math.abs(X - cx) < .5 || Math.abs(r - w * .087) < .5
+      const on = x === s.x0 || x === s.x1 || y === s.y0 || y === s.y1 || x === Math.round(cx - .5) || Math.abs(r - w * .087) < .5
         || ((x === s.x0 + bw || x === s.x1 - bw) && Math.abs(Y - cy) < bh / 2) || (Math.abs(Math.abs(Y - cy) - bh / 2) <= .5 && (x < s.x0 + bw || x > s.x1 - bw));
-      if (on) hdat[(y * L.W + x) * 4 + 3] = 255;
+      if (on) { hdat[(y * L.W + x) * 4 + 3] = 255; bx(stat, X, Y, .004, 1, 1, .02, C.white); }   /* the paint is on the ground too: mowing cannot take it off */
     }
   }
   if (htex) gl.deleteTexture(htex); htex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, htex);
@@ -3588,7 +3588,10 @@ function build() {
       for (let r = 0; r < 6; r++) ring(4 + r, (x, y) => { if (Math.abs(x + .5 - cx) < 2 && y > s.y1) return; bx(B, x + .5, y + .5, 0, 1, 1, .5 + r * .5, r % 2 ? C.cobalt : C.white); const h = hash(x, y, r); if (h > .2) {
         const z = .5 + r * .5, side = x < cx ? 0 : 1, sh = x < s.x0 || x > s.x1 ? ends[side][Math.floor(h * 30) % 3] : (h > .6 ? ends[1] : ends[0])[Math.floor(h * 17) % 3];
         bx(B, x + .5, y + .5, z, .5, .4, .34, sh); bx(B, x + .5, y + .5, z + .34, .24, .24, .22, skins[Math.floor(h * 13) % 3]); if (h > .9) bx(B, x + .5 + (h - .95) * 4, y + .5, z + .5, .08, .08, .3, sh); } });
-      bx(B, cx, s.y1 + 6.5, 0, 3.2, 6, 2.2, C.dark);
+      /* the players' tunnel: a dark mouth between white walls under a canopy, getting darker inside */
+      { const y = s.y1 + 6.5; bx(B, cx, y + .4, 0, 2.6, 5.2, 3.3, mix3(C.dark, C.ink, .5)); bx(B, cx, y - 1.4, 0, 2.6, 1.6, 3.3, C.dark);   /* tall enough for a player */
+        for (const sx of [-1.5, 1.5]) bx(B, cx + sx, y, 0, .4, 6, 3.5, C.white);
+        bx(B, cx, y - .3, 3.5, 3.6, 6.6, .25, C.white); bx(B, cx, s.y1 + 3.2, 3.35, 3.6, .12, .45, C.cobalt); }
       /* a roof over the back rows on all four sides, on columns, with a white fascia; boards round the pitch */
       const pw = s.x1 - s.x0 + 1, ph = s.y1 - s.y0 + 1, mx = (s.x0 + s.x1 + 1) / 2, my = (s.y0 + s.y1 + 1) / 2, rf = hex('#e4e6ea');
       for (const [x, y, w, d] of [[mx, s.y0 - 9.2, pw + 18, 2.4], [mx, s.y1 + 10.2, pw + 18, 2.4], [s.x0 - 9.2, my, 2.4, ph + 10], [s.x1 + 10.2, my, 2.4, ph + 10]]) {
@@ -3665,10 +3668,16 @@ function meadow(B, X0, Y0, X1, Y1, skip, keep) {   /* keep: a rectangle where th
   const g = [hex('#4f8c37'), hex('#56933b'), hex('#4b8735'), hex('#5a973e')];
   for (let y = Y0; y < Y1; y += 8) for (let x = X0; x < X1; x += 8) { if (skip(x, y)) continue; const h = hash(x, y, 21); bx(B, x + 4, y + 4, -.12, 8, 8, .1, g[Math.floor(h * 4)]);
     if (keep && x + 8 > keep[0] && x < keep[2] && y + 8 > keep[1] && y < keep[3]) continue;   // edge to edge: overlapping at one height they would flicker
-    /* hedgerows along some field edges, and now and then a tree in them, so the fields read as country, not tiles */
-    if (h > .7) for (let t = .4; t < 8; t += .8) bx(B, x + t, y + hash(x + t, y, 22) * .2, 0, .9, .7, .5 + hash(x + t, y, 23) * .35, mix3(C.hedge, C.hedge2, hash(x, t, 24)));
-    if (h < .15) for (let t = .4; t < 8; t += .8) bx(B, x + hash(x, y + t, 25) * .2, y + t, 0, .7, .9, .5 + hash(x, y + t, 26) * .35, mix3(C.hedge, C.hedge2, hash(t, y, 27)));
-    if (h > .82) tree(B, x + 1 + hash(y, x, 28) * 6, y + .5, .9 + hash(x, y, 29) * .3, x * 7 + y);
+    /* hedgerows that close round fields, as English country is laid out: long hedges running the whole way north to
+       south, and between each two of them hedges across at heights of their own, so they meet in T-junctions; a gate
+       here and there, and now and then a tree grown up in a hedge */
+    const col = xx => hash(xx, 0, 31) < .45, band = (() => { let b = x; while (b > X0 && !col(b)) b -= 8; return b; })();
+    const gate = (k) => hash(x, y, 33 + k) < .22, hedge = (vert, k) => { for (let t = .4; t < 8; t += .8) { if (gate(k) && t > 3 && t < 5.2) continue;
+      if (vert) bx(B, x + hash(x, y + t, 25) * .2, y + t, 0, .7, .9, .5 + hash(x, y + t, 26) * .35, mix3(C.hedge, C.hedge2, hash(t, y, 27)));
+      else bx(B, x + t, y + hash(x + t, y, 22) * .2, 0, .9, .7, .5 + hash(x + t, y, 23) * .35, mix3(C.hedge, C.hedge2, hash(x, t, 24))); } };
+    const west = col(x), south = hash(band, y, 32) < .4;
+    if (west) hedge(true, 0); if (south) hedge(false, 1);
+    if (h > .8 && (west || south)) tree(B, west ? x + .2 : x + 1 + hash(y, x, 28) * 6, west ? y + 1 + hash(x, y, 28) * 6 : y + .2, .9 + hash(x, y, 29) * .3, x * 7 + y);
     for (let k = 0; k < 5; k++) { const tx = x + hash(x, y, k) * 8, ty = y + hash(y, x, k + 9) * 8, t = hash(tx, ty, 3); bx(B, tx, ty, -.02, .3 + t * .4, .3 + t * .3, .1 + t * .12, mix3(g[(k + 1) % 4], C.ink, .12)); } }
 }
 function buildField() {
@@ -3677,7 +3686,14 @@ function buildField() {
     else { bx(B, x + .5, y + .5, -.62, 1, 1, .1, mix3(C.soil, C.stub, .25 + hash(x, y, 8) * .2)); for (let k = 0; k < 3; k++) { const h = hash(x, y, k + 30); bx(B, x + h, y + hash(y, x, k), -.52, .06, .06, .06 + h * .08, C.stub); } }   // under a flap: soil and stubble, for when it folds up
   bx(B, 20, 20, -.9, 120, 120, .6, hex('#4a3420'));
   for (let k = 0; k < 18; k++) { const a = k / 18 * TAU; tree(B, 20 + Math.cos(a) * 30, 20 + Math.sin(a) * 30, 1.6, k); }
-  bx(B, 52, 46, 0, 8, 5, 4, hex('#d8cfc0')); bx(B, 52, 46, 4, 8.6, 5.6, 1, hex('#5a3a2a')); bx(B, 50, 43.4, 1.4, 1.2, .1, 1.1, C.lemon);
+  /* Pratt's farmhouse beyond the field: whitewashed walls, a stepped roof up to its ridge, a chimney, the kitchen light on */
+  { const fw = hex('#d8cfc0'), rf = hex('#5a3a2a'), fr = mix3(fw, C.ink, .5);
+    bx(B, 52, 46, 0, 8, 5, 3.4, fw); bx(B, 52, 46, 0, 8.1, 5.1, .35, mix3(fw, C.ink, .2));
+    for (let k = 0; k < 4; k++) bx(B, 52, 46, 3.4 + k * .5, 8.6, 5.6 - k * 1.45, .5, k === 3 ? mix3(rf, C.ink, .25) : rf);
+    bx(B, 54.8, 46.6, 4.4, .9, .9, 2.4, mix3(fw, C.ink, .3)); bx(B, 54.8, 46.6, 6.8, 1.05, 1.05, .2, fr);
+    bx(B, 52.2, 43.46, 0, 1.1, .1, 2, C.trunk);
+    for (const x of [49.6, 54.6]) { bx(B, x, 43.47, 1.25, 1.35, .08, 1.25, fr); bx(B, x, 43.44, 1.35, 1.1, .08, 1.05, C.lemon); }
+    bx(B, 47.97, 46, 1.25, .08, 1.35, 1.25, fr); bx(B, 47.94, 46, 1.35, .08, 1.1, 1.05, C.lemon); }
   // the pegs and the string, a cell in from the cut
   const loop = [[17, 9], [23, 9], [23, 17], [31, 17], [31, 23], [23, 23], [23, 31], [17, 31], [17, 23], [9, 23], [9, 17], [17, 17]];
   const T = strings; T.n = 0;
@@ -3832,16 +3848,21 @@ function match(B, dt) {
   const s = L.show, w = s.x1 - s.x0 + 1, h = s.y1 - s.y0 + 1, cx = s.x0 + w / 2, cy = s.y0 + h / 2, pt = Math.max(0, ko.t - 3.2), ramp = ease.inOut(Math.min(1, pt / 2.5));
   const ballX = cx + (Math.sin(pt * .7) * w * .34 + Math.sin(pt * 1.9) * w * .07) * ramp, ballY = cy + Math.sin(pt * .53) * h * .3 * ramp;
   bx(B, ballX, ballY, .05 + (pt > 0 ? Math.abs(Math.sin(pt * 6)) * .7 * ramp : 0), .5, .5, .5, C.white);
-  const tun = s.y1 + 3.5, out = (x, y, delay, k) => {   /* where someone is: on the way out of the tunnel, or at play */
-    const u = ease.inOut(clamp((ko.t - delay) / 2.4, 0, 1));
-    return u < 1 ? { x: lerp(cx + (k % 2 ? 1 : -1) * .7, x, u), y: lerp(tun, y, u), on: ko.t >= delay, moving: u > 0 } : { x, y, on: true, moving: pt > 0 };
+  const out = (x, y, delay, k) => {   /* where someone is: out of the tunnel, round the judges' table, to their place; or at play */
+    const u = ease.inOut(clamp((ko.t - delay) / 2.4, 0, 1)), sx = k % 2 ? 1 : -1;
+    if (u >= 1) return { x, y, on: true, moving: pt > 0 };
+    /* straight out of the mouth, then round the end of the table, then to their place */
+    const way = [[cx + sx * .7, s.y1 + 5.5, 0], [cx + sx * .7, s.y1 + 3, .14], [cx + sx * 3.6, s.y1 + .6, .32], [x, y, 1]];
+    let j = 0; while (u > way[j + 1][2]) j++;
+    const [x0, y0, u0] = way[j], [x1, y1, u1] = way[j + 1], v = (u - u0) / (u1 - u0);
+    return { x: lerp(x0, x1, v), y: lerp(y0, y1, v), on: ko.t >= delay, moving: u > 0, a: Math.atan2(y1 - y0, x1 - x0) };
   };
   for (let k = 0; k < 22; k++) {
     const side = k % 2 ? 1 : -1, i = k >> 1, pull = i ? .25 + hash(k, 5) * .35 : .05;
     const hx = cx + side * (i ? (1 - (i % 4) / 4) * w * .4 : w * .47), hy = cy + (i ? (hash(k, 7) - .5) * h * .8 : 0);
     const px = lerp(hx, ballX, pull) + Math.sin(pt * 1.3 + k) * 1.1 * ramp, py = lerp(hy, ballY, pull) + Math.cos(pt * 1.1 + k) * 1.1 * ramp;
     const p = out(px, py, i * .07 + (side > 0 ? .035 : 0), k); if (!p.on) continue;
-    const a = ko.t < 3.2 + i * .07 ? Math.atan2(py - p.y || .01, px - p.x) : Math.atan2(ballY - p.y, ballX - p.x);
+    const a = p.a != null && p.moving ? p.a : Math.atan2(ballY - p.y, ballX - p.x);   /* the way they walk, then the ball */
     person(B, p.x, p.y, a, { shirt: i ? (side > 0 ? C.cobalt : C.red) : C.lemon, pants: C.white, walk: p.moving ? ko.t * 11 + k : 0, s: 1.8 });
   }
   const r = out(ballX - 3, ballY - 4, .9, 0); if (r.on) person(B, r.x, r.y, Math.atan2(ballY - r.y, ballX - r.x), { shirt: C.ink, pants: C.ink, walk: r.moving ? ko.t * 10 : 0, s: 1.8 });
@@ -4245,8 +4266,10 @@ function judged(e) {
     const el = document.createElement('div'); el.className = 'ro';
     el.style.background = e.medal ? ['', '#c98a4a', '#9aa3b5', '#e0a91c'][e.medal] : '#8a8f9c'; el.style.setProperty('--rc', el.style.background);
     el.innerHTML = (e.medal ? ['', 'Bronze', 'Silver', 'Gold'][e.medal] : 'Commended') + '<small>' + (e.prize ? '+' + money(e.prize) : 'better luck next time') + '</small>' + (e.trophy ? '<small>Trophy: all pay ×2</small>' : '');
-    el.style.marginTop = '20px'; anchor(el, L.cx, L.top - 1.5, 2, 3.4); /* at the judges' table, off the lawn being judged */ if (e.medal) sfx.medal(e.medal);
-    if (e.prize) later(.6, () => coins(L.cx, L.top - 1.5, 2, e.prize, 8, true));   // under the score cards, not over them
+    /* at the judges' table, off the lawn being judged; at the cup the table is at the tunnel, so the near third of the pitch */
+    const ry = L.pitch ? s.y0 + (s.y1 - s.y0) * .22 : L.top - 1.5;
+    el.style.marginTop = '20px'; anchor(el, L.cx, ry, 2, 3.4); if (e.medal) sfx.medal(e.medal);
+    if (e.prize) later(.6, () => coins(L.cx, ry, 2, e.prize, 8, true));   // under the score cards, not over them
     if (e.trophy && S.gold >= CORE.SHOWS.length && e.stage !== 1) later(2.5, () => card('A note in the cup', 'Look on the pegboard.', 3.4));   /* at the cup it follows the kick-off */
     // the head judge says what it lacked, or that it lacked nothing
     const wd = CORE.WISH[e.wish] || CORE.WISH[0], asked = 'We asked for ' + WISH_SAY[e.wish].toLowerCase() + '.';
@@ -4294,7 +4317,7 @@ function moveCam(dt) {
   let td = cam.gd;
   if (follow && S.site === 'green' && (cam.idle > .9 || jd.t >= 0)) { tx = cam.gx; ty = cam.gy; td = cam.wd; }
   // something on the lawn: stay close, and keep both it and the mower in view
-  if (follow && S.pest && !S.pest.flee && vis.pest && jd.t < 0) { tx = (S.m.x + vis.pest.x) / 2; ty = (S.m.y + vis.pest.y) / 2 - 1; td = Math.max(cam.gd, Math.min(cam.wd, Math.hypot(S.m.x - vis.pest.x, S.m.y - vis.pest.y) * 1.6 * Math.max(1, H / W * .85))); }   /* an upright phone is narrow: stand back further */
+  if (follow && S.pest && !S.pest.flee && vis.pest && jd.t < 0) { tx = (S.m.x + vis.pest.x) / 2; ty = (S.m.y + vis.pest.y) / 2 - 1; td = Math.max(cam.gd, Math.min(cam.wd, Math.hypot(S.m.x - vis.pest.x, S.m.y - vis.pest.y) * 1.6 * Math.max(1, H / W * .85) * (H > W * 1.3 ? 1.5 : 1))); }   /* an upright phone is narrow: stand back further */
   if (L && L.pitch && S.site === 'green' && ko.t != null && ko.t > -1.5 && ko.t < 7.5) { const s = L.show; tx = (s.x0 + s.x1 + 1) / 2; ty = lerp((s.y0 + s.y1 + 1) / 2, s.y1 + 3.5, .42); td = cam.wd * .38; }   /* the walk-out, close */
   const k = 1 - Math.exp(-dt * (follow ? 3 : 1.6));
   cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k; cam.d += (td - cam.d) * k; cam.pitch += (cam.gpitch - cam.pitch) * k;
@@ -4576,11 +4599,11 @@ K.debug = {
     ['the whole street', 6, 22, 9, 40, { pitch: .8 }], ['a robot mower', 12, 'robot', 0, 5], ['the ride-on mower', 14, 'mower', 0, 7],
     ['the judges’ table and the tent', 17.3, 20, 23, 14, { pitch: .45 }], ['the judges on the lawn', 17.3, 'judges', 0, 9, { setup: 'judges' }], ['rope, posts and bunting', 17.3, 9, 19.5, 8, { pitch: .4 }],
     ['the village church', 17.3, 20, 34, 30, { pitch: .3 }], ['the county grandstand', 19, 30, 49, 30, { pitch: .3 }], ['the manor', 20.8, 44, 67, 34, { pitch: .3 }],
-    ['the racecourse stand and the winning post', 27, 58, 85, 30, { pitch: .3 }], ['the horse', 27, 'pest', 0, 7, { setup: 'pest' }],
+    ['the racecourse stand and the winning post', 27, 58, 85, 30, { pitch: .3 }], ['the horse', 27, 'pest', 0, 11, { setup: 'pest', pitch: .45 }],
     ['the dog', 17.3, 'pest', 0, 6, { setup: 'pest' }], ['the sheep', 19, 'pest', 0, 6, { setup: 'pest' }], ['the gang mower', 22, 'mower', 0, 12], ['the geese', 20.8, 'pest', 0, 6, { setup: 'pest' }],
-    ['the stands and the crowd', 31.2, 68, 1, 20, { pitch: .4 }], ['a floodlight', 31.2, -1, 0, 16, { pitch: .25 }], ['a goal', 31.2, 7, 46, 10, { pitch: .35, yaw: 1.2 }], ['the tunnel', 31.2, 68, 90, 14, { pitch: .4, yaw: 3.4 }],
+    ['the stands and the crowd', 31.2, 68, 84, 22, { pitch: .4 }], ['a floodlight', 31.2, -1, -1, 24, { pitch: .2 }], ['a goal', 31.2, 7, 46, 10, { pitch: .35, yaw: 1.2 }], ['the tunnel', 31.2, 68, 88, 14, { pitch: .4 }],
     ['the pitch invader', 31.2, 'pest', 0, 7, { setup: 'pest' }],
-    ['the wheat and the string', 33.6, 20, 12, 10], ['the farmhouse', 33.6, 52, 46, 14, { pitch: .4 }], ['the field’s trees', 33.6, 20, -10, 14, { pitch: .4 }],
+    ['the wheat and the string', 33.6, 20, 12, 10], ['the farmhouse', 33.6, 52, 44, 18, { pitch: .4 }], ['the field’s trees', 33.6, 20, -10, 14, { pitch: .4 }],
     ['the folded box', 33.6, 'box', 0, 24, { setup: 'folded', pitch: .5 }]]
 };
 })();
