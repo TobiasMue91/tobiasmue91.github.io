@@ -853,7 +853,7 @@ if (suites.includes('browser')) {
           check(early, 'lawn: the cup won, the note in it is not on the pegboard before the rosette');
           const out = await until(f, () => K.debug.ko().t > 1.5, 120000) && await f.evaluate(() => K.debug.ko().cue === 1 && !K.debug.card('night'));
           check(out, 'lawn: the teams walk out before the whistle, and the note still waits');
-          const on = await until(f, () => K.debug.ko().t > 6.6 && !!K.debug.card('night'), 120000);
+          const on = await until(f, () => K.debug.ko().t > 9.6 && !!K.debug.card('night'), 120000);
           check(on, 'lawn: after the kick-off the note in the cup is on the pegboard');
         }
       }

@@ -1409,6 +1409,23 @@ box uses it.
   is first seen whole: the camera arrives at 1.7 times the overview, holds it 1.8 seconds, then comes in. The
   judges' sheet is a score sheet on a clipboard (ruled paper, hardboard, a steel clip), its button red, and a ground
   won shows a gold plaque instead of a greyed button.
+  The walk-out is staged: the teams come out in two files, stand side by side in front of the tunnel facing the main
+  stand with the referee between them, then go to their places, and the whistle goes (`KO`, 6.2 s on the match's
+  clock). The "Kick-off!" card was checked by holding its CSS animation mid-way (`getAnimations`, paused when it
+  appears), since a headless page does not run CSS animations at speed. `K.debug.boxes()` counts what each place
+  draws: the street about 3 300 boxes, the Village Show 6 900, the Racecourse 12 900, the Cup Final 28 100 (most of
+  it the crowd; the car park and the town add about 6 500), against about 220 000 blades of grass, which the gauge
+  thins on a slow device.
+  A second critic on 21 new frames: 6/6/5/5/5 and 3 again. Two of its points came from frames set up by script (a
+  kick-off over a lawn the script had not mown, stripes two cells wide that no gang lays); the rest were fixed: the
+  pitch has its full markings (goal areas, penalty spots and arcs, a centre spot), the circles are painted round on
+  the ground rather than in cells, the goals stand at a real goal's height with a net strung back from them, two
+  reds stand over the ball on the centre spot at the kick-off, the fields round the grounds are larger (fewer, longer
+  hedges), and the sheep has lumps of fleece, so from above it is not a white box. Still open from it: the largest
+  grounds seen whole make the mower a speck on a phone (the camera comes in once you drive); the stadium's stands are
+  low; the tilt-shift is strong round the match. Gold at the cup now has its beat: at the whistle the stands throw
+  confetti in the teams' colours, most of it from the stand by the tunnel where the camera is (420 cards, none with
+  reduced motion).
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
