@@ -1423,7 +1423,9 @@ box uses it.
   reds stand over the ball on the centre spot at the kick-off, the fields round the grounds are larger (fewer, longer
   hedges), and the sheep has lumps of fleece, so from above it is not a white box. Still open from it: the largest
   grounds seen whole make the mower a speck on a phone (the camera comes in once you drive); the stadium's stands are
-  low and the crowd does not react to gold; the tilt-shift is strong round the match.
+  low; the tilt-shift is strong round the match. Gold at the cup now has its beat: at the whistle the stands throw
+  confetti in the teams' colours, most of it from the stand by the tunnel where the camera is (420 cards, none with
+  reduced motion).
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
