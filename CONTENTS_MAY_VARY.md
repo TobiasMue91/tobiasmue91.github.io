@@ -1400,8 +1400,15 @@ box uses it.
   run the whole way across, and between each two of them hedges at heights of their own meet them in T-junctions,
   with a gate here and there and the trees grown up in the hedges. Unmown grass far off shimmered like static on a
   phone (a blade smaller than a pixel, dark at the foot and bright at the tip); past 35 units a blade's colour now
-  settles toward its mean, so the near lawn keeps its depth. Open from that critique: the venues differ by size more than by silhouette; the HUD card
-  is plain next to the pegboard.
+  settles toward its mean, so the near lawn keeps its depth.
+  Then the venues, which differed by size more than by silhouette: the Racecourse got a whole course round its
+  infield (a home straight past the stand, a back straight beyond the near rough, a bend at each end, short turf
+  striped across, white running rails either side; the fields keep their hedges off it), the Cup Final a full car
+  park on the near side and two terraces of the town beyond the far stand (the street's car is now `car()`, and
+  `turnQ` turns what was just drawn a quarter round, so the car park's cars stand nose to the ground). A new ground
+  is first seen whole: the camera arrives at 1.7 times the overview, holds it 1.8 seconds, then comes in. The
+  judges' sheet is a score sheet on a clipboard (ruled paper, hardboard, a steel clip), its button red, and a ground
+  won shows a gold plaque instead of a greyed button.
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
