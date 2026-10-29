@@ -1541,6 +1541,9 @@ is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
 
+- **A depth buffer is coarser on a phone than in a test browser.** The owner's phone showed dark bands across a flat
+  lawn: the contact shade read each step of the far depth as an edge. Differences below the step (growing with the
+  square of the distance) now count as flat. Headless SwiftShader never showed it.
 - **The rules decide at once; the view must not tell before its ceremony.** A verdict the core reaches in one step
   (gold, a new place opened) reaches every part of the view in that frame: the pegboard, the HUD line, what is drawn
   on the ground. Keep Off the Grass showed the note in the cup and the players on the pitch while its judges were
