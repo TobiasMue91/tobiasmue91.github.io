@@ -1416,6 +1416,14 @@ box uses it.
   draws: the street about 3 300 boxes, the Village Show 6 900, the Racecourse 12 900, the Cup Final 28 100 (most of
   it the crowd; the car park and the town add about 6 500), against about 220 000 blades of grass, which the gauge
   thins on a slow device.
+  A second critic on 21 new frames: 6/6/5/5/5 and 3 again. Two of its points came from frames set up by script (a
+  kick-off over a lawn the script had not mown, stripes two cells wide that no gang lays); the rest were fixed: the
+  pitch has its full markings (goal areas, penalty spots and arcs, a centre spot), the circles are painted round on
+  the ground rather than in cells, the goals stand at a real goal's height with a net strung back from them, two
+  reds stand over the ball on the centre spot at the kick-off, the fields round the grounds are larger (fewer, longer
+  hedges), and the sheep has lumps of fleece, so from above it is not a white box. Still open from it: the largest
+  grounds seen whole make the mower a speck on a phone (the camera comes in once you drive); the stadium's stands are
+  low and the crowd does not react to gold; the tilt-shift is strong round the match.
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
