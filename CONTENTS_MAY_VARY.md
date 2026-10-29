@@ -255,14 +255,14 @@ The long-term answer is a habit and a tool:
 | № | id | title · handling | verb | loop | medium | palette | era · genre | sound | interface | ends with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, index cards in a red enamel recipe tin, each with a cut of its own | the whole house bakes into a loaf; slicing it shows a bakery box tied with string in the crumb |
-| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → stripes judged at three shows, the judges asking for something else each visit (towards their table, along it, edged with a lap), with a dog, a sheep, geese and a pitch invader to chase off, and a cup final judged before kick-off, at half-time and at full time → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map, shown through a miniature photographer's lens (tilt-shift, contact shade) | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
+| 2 | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → five shows, each judged once and each a good deal larger than the last (a village green, a county showground, the National, the racecourse infield, a cup final pitch), each with a wish of its own (stripes towards the judges' table or along it, edged with a lap) and something to chase off it (a dog, a sheep, geese, a loose horse, a pitch invader) → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map, shown through a miniature photographer's lens (tilt-shift, contact shade) | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
 | 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft) | hold a finger on the house and drag: the ghost glides after it and its cold drives people away; tap a doorway, the telephone, the chandelier | short nights against ectoplasm and the dawn, the organ between them; every exit costs a pip of resolve for good; five casts, from a family of three to a film company and thirty extras | silent film: Reiniger cut-outs, black people before grey furniture, frost round a cream card ghost, tinted stock, grain, intertitles, iris | night blue, cream, black; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought, a telephone, a crash | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
-Keep Off the Grass 30–34 / 58–64, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
+Keep Off the Grass 30–34 / 59–61, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
 Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–38 / 71–78.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -1350,9 +1350,65 @@ box uses it.
   while the veil still hid the move to a show (the rules were already there, the view had not built it): the bar
   now follows the place as built. Still open from it: the crop circle is the net of a box rather than a ring (by design: the field was a box), the phone strip
   shows one card and a third.
+  **The owner's playtest** (October 2026): they like the box a great deal, all of it (art, play, music, progress).
+  They found hedgerows and trees of the country growing through the village church (the meadow placed them without
+  knowing where the landmark stands; it now leaves the landmark's ground clear), and roofs that flickered where two
+  houses met (z-fighting, see **Drawing without glitches**).
+  **The shows, remade** (October 2026, the owner's call after their playtest): "mowing large amounts of lawn is more
+  fun than the judges; having to do it more than once holds the fun back; after the first show I would rather have
+  escalation in the size of the ground." Each show is now judged once: gold wins it, the judges do not come back, and
+  the next show is on the pegboard at once and free (prizes buy machines; a lawn that misses grows back for another
+  go at the same wish). There are five, each a good deal larger: the Village Show 22×12, the County Show 48×30, the
+  National 76×46, the Racecourse 104×64 (new: the infield, with the home straight between white rails, the winning
+  post and a stand with a clock behind it, and a loose racehorse for an intruder) and the Cup Final 124×80, judged once
+  before kick-off, after which the match is played on your stripes. Each has one wish (towards the table, along it,
+  towards with a lap, along with a lap, towards). A show lawn is mown at .62 of the speed, the engine adds ×1.1 a
+  level and the widest gang ×3.4, so the large grounds take mowing, not waiting: the eager bot spends about 2, 6,
+  4 and 3 minutes on the last four, the casual one 4, 8 to 13, 5 and 3.5. The bots now wait for a gold estimate
+  before calling the judges and for an edged lawn's lap, their patience counts from a lawn nearly mown rather than
+  from the show before, and they drive over stripes an intruder scuffed (a scuffed stripe can now be laid again).
+  Gold is a little easier on the two largest grounds (.85 and .87). `CORE.version` 3; `migrate` moves a version 2
+  save at the cup final to the new fifth show with the racecourse counted as won, and lays every show lawn out again
+  at its new size. Round the two largest lawns the rough is drawn as ground, not blades, for phones.
   Found on the way: three times a line comment written into the middle of a line swallowed the code after it, once
   shipping the ride-on mower without its body. The box's suite now refuses a line comment in the view that holds a
   call.
+  **Round 6, after the remake** (October 2026): every show was won by hand in a script (the lawn laid right, the
+  judges' button and the next card pressed for real) and filmed at 390×844 and 1280×800. Found: on a phone the free
+  card for the next show was inserted at the end of the sideways strip, two screens out of sight, while the HUD said
+  "the next show is on the pegboard"; a new place's card now scrolls the strip to itself. At the cup the view gave the
+  rules' verdict away: the note in the cup came onto the pegboard while the judges were still looking, the
+  "Kick-off!" card came before the score cards, and 22 players stood on the pitch the instant gold was decided. Now
+  the rosette comes first, the teams walk out of the tunnel to their halves with the camera close, the whistle goes,
+  the ball starts from the centre spot, and only then the note (a card for a new place waits for the medal, at the
+  cup for the kick-off). The whistle and the note follow the match's own clock, not a timer, so a slow frame cannot
+  put the whistle before the teams. The County card's "four times the size" became five. The browser suite plays
+  the cup's ceremony through and checks the order.
+  Close-ups of all 37 props again: the stadium's were aimed where the old, smaller pitch had been and were moved; the
+  farmhouse beyond the wheat was a box with a lid (now walls with a plinth, a stepped roof, a chimney, a door, two lit
+  windows); the tunnel was a black block and is now a mouth between white walls under a canopy, tall enough for a
+  player (they first walked out with their heads through its roof), and the teams come straight out, round the
+  ends of the judges' table and on to their places. On a phone held upright the camera that keeps the mower and an
+  intruder in view stood too close by half (the sheep ran along under the money); it now stands back 1.5 times.
+  A fresh critic on sixteen frames of the shows (phone and desktop, every ground, an intruder, the walk-out):
+  6/6/5/5/5, and 3 for "would pass as a finished commercial game". Fixed from it: mowing took the pitch markings off
+  (they were only a tint on the blades, and a mown blade is nearly flat), so the cup's match was played on a pitch
+  with no lines; the paint is now on the ground as well. The halfway line had never been drawn at all (an even
+  pitch has no cell whose centre is within half a cell of the middle). The rosette at the cup hung over the tunnel
+  as the teams came out; it now hangs over the near third of the pitch. The countryside round the grounds was hedge
+  fragments that read as a maze (the critic's strongest "procedural" tell); hedges now close round fields: long ones
+  run the whole way across, and between each two of them hedges at heights of their own meet them in T-junctions,
+  with a gate here and there and the trees grown up in the hedges. Unmown grass far off shimmered like static on a
+  phone (a blade smaller than a pixel, dark at the foot and bright at the tip); past 35 units a blade's colour now
+  settles toward its mean, so the near lawn keeps its depth.
+  Then the venues, which differed by size more than by silhouette: the Racecourse got a whole course round its
+  infield (a home straight past the stand, a back straight beyond the near rough, a bend at each end, short turf
+  striped across, white running rails either side; the fields keep their hedges off it), the Cup Final a full car
+  park on the near side and two terraces of the town beyond the far stand (the street's car is now `car()`, and
+  `turnQ` turns what was just drawn a quarter round, so the car park's cars stand nose to the ground). A new ground
+  is first seen whole: the camera arrives at 1.7 times the overview, holds it 1.8 seconds, then comes in. The
+  judges' sheet is a score sheet on a clipboard (ruled paper, hardboard, a steel clip), its button red, and a ground
+  won shows a gold plaque instead of a greyed button.
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
@@ -1468,6 +1524,12 @@ is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
 
+- **The rules decide at once; the view must not tell before its ceremony.** A verdict the core reaches in one step
+  (gold, a new place opened) reaches every part of the view in that frame: the pegboard, the HUD line, what is drawn
+  on the ground. Keep Off the Grass showed the note in the cup and the players on the pitch while its judges were
+  still looking. Anything a verdict opens waits for the moment the view announces it, on that moment's own clock.
+- **A card that matters must be on screen.** A phone's sideways strip inserts by order, so a new key card can land
+  two screens away while the HUD points at it. Scroll to it when it appears.
 - **Real grass is a vertex shader, not a model.** Every blade is the same nine-vertex ribbon, drawn up
   to a hundred thousand times; its place, height, lean, wind and colour come from a hash of its number
   and a lawn-sized texture updated each frame (height, the last pass's direction, hidden, kind). Cut

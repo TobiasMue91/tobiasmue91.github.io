@@ -321,24 +321,34 @@ if (suites.includes('lawn') && lawn) {
     check(!CORE.act(A, 'judge'), 'the judges do not come straight back');
   }
   {
-    // every visit the judges want something else: stripes up and down first, then across, then any but the last; a
-    // lawn striped the wrong way wins nothing, and driving over short grass lays it the other way, so it can be put right
+    // each show is judged once and wants one thing of its own (towards the table at the Village Show); a lawn striped
+    // the wrong way wins nothing, driving over short grass lays it the other way, gold opens the next show at once
+    // and the judges do not come back; each show is a good deal bigger than the one before
     const S = CORE.init(12); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.lv.ride = 1; S.$ = 0;
     const L = CORE.layout('green', 1), s = L.show, mow = (dir, edge) => { for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { const i = y * L.W + x, ring = edge && (x === s.x0 || x === s.x1 || y === s.y0 || y === s.y1);
       S.h[i] = CORE.P.cutTo; S.d[i] = ring ? (y === s.y0 || y === s.y1 ? 3 : 1) : dir === 'along' ? (x >> 1) % 2 + 1 : (y >> 1) % 2 + 3; } S.gw[0] = 0; S.judgeCd = 0; S.pest = null; S.pestT = 999; };
-    check(S.wish === 0 && CORE.WISH[0].k === 'along', 'the first visit at a show wants stripes up and down');
+    check(S.wish === CORE.SHOWS[0].wish && CORE.WISH[S.wish].k === 'along', 'the Village Show wants stripes towards the judges’ table');
     mow('across'); const wrong = CORE.showScore(S);
-    check(CORE.medal(S, wrong.score) === 0, `stripes across, when up and down was asked for, win nothing (${wrong.score.toFixed(2)})`);
+    check(CORE.medal(S, wrong.score) === 0, `stripes the other way win nothing (${wrong.score.toFixed(2)})`);
     S.m.x = s.x0 + 3.5; S.m.y = s.y0 + .5; CORE.act(S, 'go', s.x0 + 3.5, s.y1 + .5); for (let t = 0; t < 8; t += .1) CORE.step(S, .1);
     const col = [...Array(s.y1 - s.y0 + 1)].map((_, k) => S.d[(s.y0 + k) * L.W + s.x0 + 3] & 7);
     check(col.every(d => d === 1), 'driving up a short lawn lays its grass the way the mower goes', col.join(''));
-    mow('along'); const ok = CORE.showScore(S); CORE.act(S, 'judge');
-    check(CORE.medal(S, ok.score) === 3 && S.wish === 1 && S.ev.some(e => e.k === 'judge' && e.next === 1), 'stripes up and down win gold, and next time they want them across');
-    mow('across'); S.judgeCd = 0; check(CORE.medal(S, CORE.showScore(S).score) === 3, 'and across is then right');
+    mow('across'); CORE.act(S, 'judge');
+    check(S.gold === 0 && S.wish === CORE.SHOWS[0].wish && S.gw[0] > 0, 'a lawn that missed grows back for another go at the same wish');
+    S.judgeCd = 0; mow('along'); CORE.act(S, 'judge');
+    check(S.gold === 1 && !CORE.canJudge(S) && CORE.can(S, CORE.byId.show2) && CORE.price(S, CORE.byId.show2) === 0, 'gold wins the show, the judges do not come back, and the County Show is open, free');
+    const areas = CORE.SHOWS.map(q => q.w * q.h);
+    check(areas.every((a, k) => !k || a > areas[k - 1] * 1.3), 'each show is a good deal bigger than the one before', areas.join(' < '));
+    S.$ = 1e12; CORE.act(S, 'buy', 'show2'); check(S.tier === 2 && S.wish === CORE.SHOWS[1].wish && CORE.WISH[S.wish].across, 'the County Show wants its own wish: along the table');
+    S.tier = 1; { const T0 = CORE.init(12); T0.act = 2; T0.$ = 1e9; CORE.act(T0, 'buy', 'show1'); S.h = T0.h; S.d = T0.d; }   /* back on the village lawn for the edge */
     S.wish = 2; mow('along'); const bare = CORE.showScore(S); mow('along', true); const edged = CORE.showScore(S);
-    check(bare.edge < .6 && CORE.medal(S, bare.score) < 3 && edged.edge > .95 && CORE.medal(S, edged.score) === 3, `asked for a lap round the edge, the stripes alone are not enough (edge ${bare.edge.toFixed(2)} → ${edged.edge.toFixed(2)})`);
-    const seen = new Set(); let last = S.wish, same = 0; for (let k = 0; k < 40; k++) { S.judgeCd = 0; S.gw[0] = 0; mow('along'); CORE.act(S, 'judge'); seen.add(S.wish); if (S.wish === last) same++; last = S.wish; }
-    check(seen.size === CORE.WISH.length && same === 0, 'over many visits every wish comes up, never the same twice running');
+    check(bare.edge < .6 && edged.edge > bare.edge + .3, `asked for a lap round the edge, the stripes alone are not enough (edge ${bare.edge.toFixed(2)} → ${edged.edge.toFixed(2)})`);
+  }
+  {
+    // a save from before the shows were five (version 2: the cup final was the fourth) carries on at the cup final
+    const S = CORE.init(14); S.act = 3; S.gold = 3; S.tier = 4; S.site = 'green'; S.lv.show4 = 1; delete S.lv.race;
+    const M = CORE.migrate(JSON.parse(JSON.stringify(S)), 2), L = CORE.layout('green', M.tier);
+    check(M.tier === 5 && M.gold === 4 && M.lv.race === 1 && M.h.length === L.W * L.H && CORE.SHOWS[M.tier - 1].pitch, 'a version 2 save at the cup final carries on at the cup final, the racecourse counted as won');
   }
   {
     // on a show ground the cutters lift off the lawn: a turn on the headland cuts nothing, even with
@@ -366,15 +376,14 @@ if (suites.includes('lawn') && lawn) {
   {
     // going back from the shelf after the end: the Cup Final again, every show won, the pegboard open, and the
     // note in the cup to take to the wheat field once more
-    const S = CORE.init(6); S.act = 3; S.gold = CORE.SHOWS.length; S.$ = 1; for (const k of ['show1', 'show2', 'show3', 'show4']) S.lv[k] = 1;
+    const S = CORE.init(6); S.act = 3; S.gold = CORE.SHOWS.length; S.$ = 1; for (const k of ['show1', 'show2', 'show3', 'race', 'show4']) S.lv[k] = 1;
     CORE.act(S, 'buy', 'night'); const L = CORE.layout('field', 0); for (const i of L.stencil) S.h[i] = CORE.P.cutTo; CORE.step(S, .2);
     CORE.act(S, 'finale', 2); CORE.act(S, 'finale', 3);
     const R = CORE.revisit(JSON.parse(JSON.stringify(S)));
     check(CORE.done(S) && !CORE.done(R) && R.act === 3 && R.site === 'green' && R.tier === CORE.SHOWS.length && R.gold === CORE.SHOWS.length, 'revisit puts the groundsman back at the Cup Final, every show won');
     R.$ = 1e9; const left = CORE.UP.filter(u => CORE.can(R, u)).map(u => u.id);
     check(left.includes('night') && left.includes('roller') && left.includes('lush') && !left.includes('show4') && !left.includes('street'), 'with the rest of the pegboard for sale and the note in the cup again', left.join(' '));
-    const C = CORE.layout('green', CORE.SHOWS.length).show; for (let y = C.y0; y <= C.y1; y++) for (let x = C.x0; x <= C.x1; x++) { R.h[y * CORE.layout('green', 4).W + x] = CORE.P.cutTo; R.d[y * CORE.layout('green', 4).W + x] = (x >> 1) % 2 + 1; }
-    const g0 = R.$; check(CORE.act(R, 'judge') && R.$ > g0 && R.gold === CORE.SHOWS.length, 'the judges still come out and pay, and nothing is won twice');
+    check(!CORE.canJudge(R) && R.gold === CORE.SHOWS.length, 'and the cup, won once, is not judged again');
     CORE.act(R, 'buy', 'night'); for (const i of L.stencil) R.h[i] = CORE.P.cutTo; CORE.step(R, .2); CORE.act(R, 'finale', 2); CORE.act(R, 'finale', 3);
     check(CORE.done(R), 'and the crop circle can be mown and folded again from there');
   }
@@ -830,12 +839,23 @@ if (suites.includes('browser')) {
       check(await until(p, () => CMV.state === 'playing'), 'lawn: starts for the trip through its places');
       const f = p.frames()[1];
       await f.evaluate(() => { window.__frames = 0; K.loop(() => window.__frames++); });
-      for (const [id, gold, site] of [['street', 0, 'street'], ['show1', 0, 'green'], ['show2', 1, 'green'], ['show3', 2, 'green'], ['show4', 3, 'green'], ['night', 4, 'field']]) {
+      for (const [id, gold, site] of [['street', 0, 'street'], ['show1', 0, 'green'], ['show2', 1, 'green'], ['show3', 2, 'green'], ['race', 3, 'green'], ['show4', 4, 'green'], ['night', 5, 'field']]) {
         const ok = await f.evaluate(([id, gold]) => { const S = K.debug.state(); S.$ = 1e15; S.lv.blade = Math.max(S.lv.blade, 3); S.gold = gold; return CORE.act(S, 'buy', id); }, [id, gold]);
         const n0 = await f.evaluate(() => window.__frames);
         const moved = ok && await until(f, ([site, n0]) => K.debug.state().site === site && getComputedStyle(document.getElementById('veil')).opacity === '0' && window.__frames > n0 + 4, 120000, [site, n0]);
         check(moved, `lawn: buying ${id} moves to the ${site} and draws it`);
         check(p.errs.length === 0, `lawn: no errors on the way to ${id}`, p.errs.join(' | '));
+        if (id === 'show4') {
+          // the cup won: the rosette, then the teams walk out, then the whistle; the note in the cup waits for the kick-off
+          await f.evaluate(() => { const S = K.debug.state(), L = CORE.layout(S.site, S.tier), s = L.show; S.pest = null; S.pestT = 999; S.gw[0] = 0;
+            for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = (x >> 1) % 2 + 1; } CORE.act(S, 'judge'); });   /* what the judges' button does */
+          const early = await until(f, () => K.debug.state().gold === 5 && K.debug.ko().t < 0, 60000) && await f.evaluate(() => !K.debug.card('night'));
+          check(early, 'lawn: the cup won, the note in it is not on the pegboard before the rosette');
+          const out = await until(f, () => K.debug.ko().t > 1.5, 120000) && await f.evaluate(() => K.debug.ko().cue === 1 && !K.debug.card('night'));
+          check(out, 'lawn: the teams walk out before the whistle, and the note still waits');
+          const on = await until(f, () => K.debug.ko().t > 6.6 && !!K.debug.card('night'), 120000);
+          check(on, 'lawn: after the kick-off the note in the cup is on the pegboard');
+        }
       }
       await p.close();
     }
