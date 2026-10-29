@@ -1398,8 +1398,9 @@ box uses it.
   as the teams came out; it now hangs over the near third of the pitch. The countryside round the grounds was hedge
   fragments that read as a maze (the critic's strongest "procedural" tell); hedges now close round fields: long ones
   run the whole way across, and between each two of them hedges at heights of their own meet them in T-junctions,
-  with a gate here and there and the trees grown up in the hedges. Open from that critique: unmown
-  grass far off shimmers like static on a phone; the venues differ by size more than by silhouette; the HUD card
+  with a gate here and there and the trees grown up in the hedges. Unmown grass far off shimmered like static on a
+  phone (a blade smaller than a pixel, dark at the foot and bright at the tip); past 35 units a blade's colour now
+  settles toward its mean, so the near lawn keeps its depth. Open from that critique: the venues differ by size more than by silhouette; the HUD card
   is plain next to the pegboard.
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
