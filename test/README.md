@@ -1512,6 +1512,7 @@ npm run test:cropper        # Image Cropper suite (plain Node, no server or brow
 npm run test:wordexplainer  # Word Explainer suite (plain Node, no server or browser)
 npm run test:names          # Baby Name Generator suite (plain Node, no server or browser)
 npm run test:cmv            # Contents May Vary suite (plain Node; its browser suite needs Playwright's Chromium)
+npm run test:aspect         # Aspect Ratio Calculator suite (plain Node; its page suite needs Playwright's Chromium and a server on :8099)
 ```
 
 `test/everything_converter.mjs` drives
@@ -2478,4 +2479,34 @@ which the suite runs in Node with the page's own kit.
 
 When a box ships, append its id to `SHIPPED` at the top of the suite. A box whose rules can break quietly
 gets a suite of its own here, named after its id.
+
+## Aspect Ratio Calculator
+
+```sh
+npm run test:aspect                                  # or: node test/aspect_ratio_calculator.mjs
+node test/aspect_ratio_calculator.mjs ratio solve    # named suites only
+npx http-server -p 8099                              # the page suite needs it, and is skipped without it
+```
+
+`aspect_ratio_calculator.mjs` runs the DOM-free `<script id="core">` block of `tools/aspect_ratio_calculator.html` in
+Node's `vm`, the same text the page hands its Web Worker for pasted lists. The page promises a correct ratio with its
+common name, a correct other side, and an honest word whenever a number is rounded or a name is only close. Expected
+reductions and resizes come from Python's `fractions` module, an implementation independent of the page's.
+
+| suite | what it checks |
+| --- | --- |
+| `arith` | exact fractions: reduction agrees with an independent Euclid on 20,000 random sizes; floor, ceil and round on halves and negatives; floats from numbers far beyond 2^53 |
+| `parse` | one box as people fill it: units, stray spaces, either decimal separator, thousands in five styles, digits of other scripts, full-width forms, an O for a zero, negative, zero, empty, junk, too long, and that every refusal is a short line saying what would be accepted |
+| `pairs` | one string holding a size: `1920x1080` to `3.840 x 2.160 Pixel` (a German shop's 4K) and `1920,1080` from a CSV, labels, named sizes (4K, 1080p, A4, Letter), and how an ambiguous separator is read against the other side |
+| `ratio` | reduction of 45 published resolutions; names exact, within 0.5 % (1366 × 768 is ≈ 16 : 9, 0.05 % wider) and never approximately one of the exact-only shapes (2048 × 858 is scope, not an ultrawide monitor); portrait flips; every table entry and every size it lists names itself; decimals in film style |
+| `solve` | the other side for 16 resizes; width to height and back on 5,000 random ratios; the exact sizes nearby; rounding to the nearest whole number with the drift it costs |
+| `frame` | fit, fill and crop against hand-worked cases, and on 2,000 random frames: fit fits and touches, fill covers and touches, crop keeps the target shape, everything centred |
+| `format` | whole numbers, short decimals, small fractions (3413 1⁄3), ≈ and two places for the rest, small values keeping their digits, a decimal comma, plain digits for the clipboard |
+| `list` | a pasted column or spreadsheet (tabs, CSV, semicolons, junk lines); a million lines read to the cap in well under a second |
+| `page` | in Chromium at phone size: the worked example on arrival, results while typing, the clipboard getting just the number, a pair pasted into one box split across both, errors by their box that clear what depended on them without moving anything, presets and swap undone by Ctrl+Z, a reload bringing the last values back, a list paste becoming a table (200,000 lines to the cap), dark mode, no console errors and no request leaving the site |
+
+Each core check was seen failing on purpose: a Euclid that stops at 1, a 1 % tolerance, exact-only shapes matched
+approximately, ambiguous separators always read as decimals, rounding half down, fit scaled by the larger factor, the
+ratio's terms swapped, typos refused, the CSV pair rule removed, fractions shown as decimals, the wrong nearby step, the
+list cap ignored and other scripts' digits left unread.
 
