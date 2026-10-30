@@ -5283,6 +5283,12 @@ button{font:inherit;color:inherit;cursor:pointer}
 (() => {
 const $ = id => document.getElementById(id);
 const { clamp, lerp, ease, fmt, hash } = KIT;
+/* Switches in the page's URL, to narrow down a fault on a real device: ?glow=0 draws no glow (shadowBlur), ?dpr=1
+   draws one pixel per CSS pixel, ?fx=0 has no particles, flashes or shake, ?cache=0 repaints the still parts every
+   frame instead of keeping them in canvases, ?fps shows what a frame costs. */
+const QS = (() => { try { return new URLSearchParams(parent.location.search); } catch (e) { return new URLSearchParams(); } })();
+const DIAG = { glow: QS.get('glow') !== '0', fx: QS.get('fx') !== '0', dpr: +QS.get('dpr') || 0, cache: QS.get('cache') !== '0', fps: QS.has('fps') };
+if (!DIAG.glow) Object.defineProperty(CanvasRenderingContext2D.prototype, 'shadowBlur', { set() {}, get() { return 0; }, configurable: true });
 const cv = $('cv'), C2 = cv.getContext('2d'); let c = C2;
 const PINK = '#ff3fa4', CYAN = '#38f2ff', GOLD = '#ffc93c', VIOLET = '#9b6cff', ARMCOL = [PINK, CYAN, GOLD, '#7dff6a', '#c49bff'];
 const PANEL = ['', 'THE TALL MACHINE', 'THE PARLOUR', 'THE STREET', 'THE MOUNTAIN'];
@@ -5295,7 +5301,7 @@ const can2 = (w, h) => { const k = document.createElement('canvas'); k.width = M
 
 /* ================= layout: a phone shows the machine or the sign, a desktop both ================= */
 function resize() {
-  DPR = Math.min(devicePixelRatio || 1, 2); VW = innerWidth; VH = innerHeight;
+  DPR = Math.min(DIAG.dpr || devicePixelRatio || 1, 2); VW = innerWidth; VH = innerHeight;
   cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
   const desk = VW >= 900 && VW / VH > 1.1, pw = desk ? clamp(Math.round(VW * .42), 400, 640) : VW;
   document.body.classList.toggle('desk', desk); document.body.style.setProperty('--pw', pw + 'px');
@@ -5306,7 +5312,7 @@ function resize() {
   const gap = 90, gx = desk ? Math.max(0, (VW - (bw + gap * 2 + pw)) / 2) : 0, ox = desk ? gx + gap : (mw - bw) / 2, sx = desk ? ox + bw + gap : 0;
   Lo = { desk, pw, mw: desk ? sx : VW, sc, ox, oy: top + 10, vh: Math.round(vh), bw, sx };
   document.body.style.setProperty('--sx', sx + 'px');
-  art = null; signArt = null;
+  art = null; signArt = null; zoomLo();
 }
 
 /* ================= the board's still parts, painted once per board and scale ================= */
@@ -5578,6 +5584,7 @@ function fxTick(dt) {
   for (const k in flash) { flash[k] -= dt * 3; if (flash[k] <= 0) delete flash[k]; }
   if (reel.spin > 0) reel.spin -= dt; if (reel.win > 0) reel.win -= dt * .4;
   bigShake = Math.max(0, bigShake - dt * 4); shake = Math.max(0, shake - dt * 2);
+  if (!DIAG.fx) { parts.length = 0; waves.length = 0; shake = bigShake = 0; for (const k in flash) delete flash[k]; }
   if (banner) { banner.t += dt; if (banner.t > banner.d) banner = null; }
 }
 function fxDraw() {
@@ -5920,7 +5927,8 @@ let show = 'board', showT = 1;
 const signVisible = () => Lo.desk || show === 'sign';
 function screens(dt) {
   if (S.phase !== 'tree' && show === 'sign') { show = 'board'; showT = 1; }
-  if (S.phase === 'tree' && !trans && show === 'board' && !Lo.desk) { endT += dt; if (endT > (summary ? 3.2 : .2)) { show = 'sign'; showT = 0; } }
+  if (zoom && !Lo.desk) { show = zoom.on === 'sign' ? 'sign' : 'board'; showT = 1; }
+  else if (S.phase === 'tree' && !trans && show === 'board' && !Lo.desk) { endT += dt; if (endT > (summary ? 3.2 : .2)) { show = 'sign'; showT = 0; } }
   showT = Math.min(1, showT + dt * 3);
   const tree = S.phase === 'tree' && !trans && signVisible();
   $('goB').hidden = !tree; $('goS').hidden = !tree;
@@ -5979,7 +5987,9 @@ const PT = {}; let SYNC = false, fdt = .016;
 const mark = (k, t) => { if (!SYNC) return t; c.getImageData(0, 0, 1, 1); const n = performance.now(); PT[k] = (PT[k] || 0) + n - t; return n; };
 function frame(dt) {
   let tm = SYNC ? (c.getImageData(0, 0, 1, 1), performance.now()) : 0;
+  if (!DIAG.cache) { art = bgArt = bigArt = glassArt = null; for (const k in tulSpr) delete tulSpr[k]; for (const k in bSpr) delete bSpr[k]; spr.key = null; }
   c.save(); c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (zoom && zoom.on === 'screen') { c.fillStyle = '#000'; c.fillRect(0, 0, VW, VH); c.translate(VW / 2, VH / 2); c.scale(zoom.s, zoom.s); c.translate(-zoomAt()[0], -zoomAt()[1]); }
   const sh = K.reduced ? 0 : shake * 8; if (sh) c.translate((Math.random() - .5) * sh, (Math.random() - .5) * sh);
   const sign = !Lo.desk && show === 'sign';
   if (!sign || showT < 1) {
@@ -5993,9 +6003,10 @@ function frame(dt) {
     teach(); hud(Lo.desk ? Lo.ox - 14 : 0, Lo.desk ? Lo.bw + 28 : VW); overlays(); tm = mark('hud', tm);
     c.globalAlpha = 1;
   }
-  if (Lo.desk) { drawSign(S.phase !== 'tree' || !!trans); signCoins(); tm = mark('sign', tm); }
+  if (Lo.desk && !(zoom && zoom.on === 'board')) { drawSign(S.phase !== 'tree' || !!trans); signCoins(); tm = mark('sign', tm); }
   else if (sign) { c.globalAlpha = showT; drawSign(false); hud(0, VW); c.globalAlpha = 1; }
   c.restore();
+  if (DIAG.fps) fpsMeter();
 }
 const prof = { step: 0, draw: 0, n: 0 };
 K.loop((dt, t) => {
@@ -6004,6 +6015,7 @@ K.loop((dt, t) => {
   if (innerWidth !== VW || innerHeight !== VH) resize();
   const t0 = performance.now();
   if (dt > 0 && !trans) { CORE.step(S, dt); }
+  if (dbgQ.length) for (const q of dbgQ.slice()) if ((q.t -= dt || .016) <= 0) { dbgQ.splice(dbgQ.indexOf(q), 1); q.fn(); }
   if (!firstPour && S.hold != null && S.nb > 4) firstPour = true;
   prof.step += performance.now() - t0;
   drain();
@@ -6081,6 +6093,7 @@ const music = (() => {
 /* ================= start, save, debug ================= */
 function start(saved) {
   S = saved && saved.lv && saved.balls ? saved : CORE.init(K.n * 1000 + 7);
+  if (K.slot === 'dev' && QS.get('scene')) S = scene(QS.get('scene')) || S;
   S.ev.length = 0; S.hold = null; lastClk = S.clk; coinsShown = S.$; resize();   // nobody's thumb is on a board that was just loaded
   // opened, but the trip into the next box never happened: go now
   if (S.fin === 2) { fin.open = -9; setTimeout(() => { const r = fin.rect; K.complete(r ? { x: r.x, y: r.y, w: r.w, h: r.h } : null); }, 1200); }
@@ -6095,13 +6108,79 @@ K.world({
   pause() { music.stop(); letGo(); }, resume() { music.start(); },
   away(sec) { if (S && S.phase === 'run' && sec > 30 && CORE.stats(S).auto) { CORE.step(S, Math.min(sec, 600)); S.ev = S.ev.filter(e => e.k === 'end' || e.k === 'board' || e.k === 'fin'); } }
 });
+
+/* ================= for a session at work on the box: scenes, close-ups ================= */
+/* ?world=clew&scene=<name> plays the eager bot (?bot=casual, ?seed=n) until the scene comes up and starts there, so
+   every board and moment can be reached in a real state of play, not a staged one: first, tree1 (after the first
+   game), reels, fever, lantern, auto, nearly1..5 (that board's Big One under a tenth), board2..5 (just opened), end. */
+const SCENES = {
+  first: () => true, tree1: S => S.phase === 'tree' && S.runs >= 1,
+  reels: S => S.phase === 'run' && CORE.stats(S).start && S.rt > 3 && S.balls.length > 8,
+  fever: S => S.phase === 'run' && S.fever > 3, lantern: S => S.phase === 'run' && S.lan && S.lan.t > 1,
+  auto: S => S.phase === 'run' && S.launch != null && S.rt > 4,
+  nearly: (S, n) => S.board === n - 1 && !S.fin && S.big / CORE.BIG[n - 1] < .1 && (S.phase === 'tree' || S.big / CORE.BIG[n - 1] < .03),
+  board: (S, n) => S.board === n - 1 && S.phase === 'tree', end: S => S.fin === 1
+};
+function scene(name) {
+  const m = /^([a-z]+?)(\d?)$/.exec(name), f = m && SCENES[m[1]]; if (!f) { console.warn('[clew] no scene ' + name); return null; }
+  const seed = +QS.get('seed') || 1, T = CORE.init(seed), bot = CORE.bots[QS.get('bot') || 'eager'], mem = { seed: (seed * 7919 + 17) >>> 0 }, n = +m[2] || 1;
+  let t = 0; while (!f(T, n) && t < 150 * 60 && !CORE.done(T)) { bot(T, mem, .1); CORE.step(T, .1); t += .1; }
+  console.log('[clew] scene ' + name + ' after ' + (t / 60).toFixed(1) + ' min of the bot');
+  T.ev = []; T.hold = null; return T;
+}
+// K.debug.look(x, y, scale, { on }): a close-up. on 'board' (board units; the layout itself is scaled, so everything is
+// redrawn sharp), 'sign' (the sign's units, through its own camera) or 'screen' (pixels; 'tray' and 'box' stand for
+// those). { pour: x, t } first starts a game if need be and holds a thumb at x for t game seconds, as a player would.
+let zoom = null; const dbgQ = [];
+function zoomLo() {
+  if (!zoom || zoom.on !== 'board') return;
+  const s = Lo.sc * zoom.s; Lo.sc = s; Lo.bw = 100 * s; Lo.ox = VW / 2 - zoom.x * s; Lo.oy = 10; Lo.vh = VH - 20; Lo.mw = VW;
+  const B = CORE.board(S.board, CORE.stats(S).tulip); manualCam = true; cam = clamp(zoom.y - Lo.vh / s / 2, 0, Math.max(0, B.H - Lo.vh / s));
+}
+function zoomAt() { const z = zoom; if (z.x === 'tray') return [Lo.ox + Lo.bw / 2, Lo.oy + Lo.vh + 44]; if (z.x === 'box') { const r = fin.rect; return r ? [r.x + r.w / 2, r.y + r.h / 2] : [VW / 2, VH / 2]; } return [z.x, z.y]; }
+function look(x, y, s = 2, o = {}) {
+  if (x == null) { zoom = null; resize(); return; }
+  if (o.pour != null) { if (S.phase === 'tree') { CORE.act(S, 'run'); drain(); } CORE.act(S, 'hold', o.pour); dbgQ.push({ t: o.t || 1.5, fn: () => CORE.act(S, 'let') }); }
+  zoom = { x, y, s, on: o.on || 'board' }; resize();
+  if (zoom.on === 'sign') { camGoal = null; cam2.x = x; cam2.y = y; cam2.z = s; }
+}
+function fpsMeter() {
+  const t = performance.now(), m = fpsMeter; m.n = (m.n || 0) + 1; if (!m.t0) m.t0 = t;
+  if (t - m.t0 > 1000) { const p = K.debug.prof(true); m.txt = (m.n * 1000 / (t - m.t0)).toFixed(0) + ' fps · step ' + p.step.toFixed(1) + ' · draw ' + p.draw.toFixed(1) + ' ms · dpr ' + DPR + ' · ' + cv.width + '×' + cv.height + ' · balls ' + S.balls.length; m.n = 0; m.t0 = t; }
+  c.save(); c.setTransform(DPR, 0, 0, DPR, 0, 0); c.font = '400 11px monospace'; c.textAlign = 'left'; c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(0, VH - 18, VW, 18); c.fillStyle = '#7dff6a'; c.fillText(m.txt || '…', 6, VH - 5); c.restore();
+}
+// every object worth a close look, as [name, minutes, x, y, scale, options] for util/cmv_props.mjs (options.scene picks
+// the moment instead of minutes)
+const PROPS = (() => {
+  const L = [], B0 = CORE.board(0, 0), at = (b, sc) => ({ on: 'board', scene: sc });
+  const big = b => { const B = CORE.board(b, 0), r = B.big; return [r.x + r.w / 2, r.y + r.h / 2]; };
+  L.push(['pins and balls, the machine', 0, 50, 34, 3, { on: 'board', scene: 'first', pour: 50, t: 1 }]);
+  L.push(['tulip, open', 0, B0.pockets[0].cx, B0.pockets[0].y, 4, at(0, 'first')]);
+  L.push(['tulips after a game (closed ones)', 0, B0.pockets[1].cx, B0.pockets[1].y, 4, at(0, 'tree1')]);
+  L.push(['start pocket and the reels, locked', 0, 50, 90, 3, at(0, 'first')]);
+  L.push(['the reels, spinning', 0, 50, 84, 3.5, { on: 'board', scene: 'reels' }]);
+  L.push(['golden pins in play', 0, 50, 60, 2.5, { on: 'board', scene: 'reels' }]);
+  L.push(['prize blocks, the machine', 0, 15, 46, 4, at(0, 'first')]);
+  L.push(['lantern', 0, 50, 60, 2, { on: 'board', scene: 'lantern' }]);
+  L.push(['fever rain', 0, 50, 60, 1.6, { on: 'board', scene: 'fever' }]);
+  for (let b = 0; b < 5; b++) { const [x, y] = big(b); L.push(['Big One ' + (b + 1), 0, x, y, 2.2, at(b, b ? 'board' + (b + 1) : 'first')]); }
+  for (let b = 1; b < 5; b++) { const B = CORE.board(b, 0), r = B.blocks[B.blocks.length - 1], p = B.pins.find(q => q.k !== 9 && q.y > 40); L.push(['blocks and pins, board ' + (b + 1), 0, r.x + r.w / 2, r.y + r.h / 2, 2.5, at(b, 'board' + (b + 1))]); L.push(['pins, board ' + (b + 1), 0, p.x, p.y, 4, at(b, 'board' + (b + 1))]); }
+  L.push(['the sign, whole (board 5)', 0, 0, 0, .55, { on: 'sign', scene: 'board5' }]);
+  L.push(['the sign, a quarter close', 0, 0, -5, 1.6, { on: 'sign', scene: 'board5' }]);
+  L.push(['TILT in neon tube', 0, 0, 0, 3, { on: 'sign', scene: 'board5' }]);
+  L.push(['the sign, first visit', 0, 0, 0, 1.2, { on: 'sign', scene: 'tree1' }]);
+  L.push(['the tray', 0, 'tray', 0, 2, { on: 'screen', scene: 'first' }]);
+  L.push(['the box under the mountain', 0, 'box', 0, 2.2, { on: 'screen', scene: 'end' }]);
+  return L;
+})();
 K.debug = {
   state: () => S, cam: () => cam, layout: () => Lo, show: () => show,
   parts: (on) => { SYNC = on; const r = Object.assign({}, PT); for (const k in PT) delete PT[k]; return r; },
   prof: reset => { const r = { step: prof.step / Math.max(1, prof.n), draw: prof.draw / Math.max(1, prof.n), n: prof.n }; if (reset) prof.step = prof.draw = prof.n = 0; return r; },
   toScreen: (x, y) => ({ x: X(x), y: Y(y) }),
   bulb: id => { const [x, y] = bulbAt(id); return { x, y }; }, web: () => ({ cam: cam2, R: WEB.R, n: bulbs.length }),
-  go: () => $('goB').getBoundingClientRect(), buy: () => $('cB').getBoundingClientRect(), box: () => fin.rect
+  go: () => $('goB').getBoundingClientRect(), buy: () => $('cB').getBoundingClientRect(), box: () => fin.rect,
+  look, props: PROPS, scenes: Object.keys(SCENES), snap: () => cv.toDataURL('image/png')
 };
 })();
 </script>
@@ -6594,6 +6673,12 @@ const CORE = (() => {
 
   // box 3 was a survey, a jailbreak and a demolition firm before it was a pachinko parlour: old saves start afresh
   function migrate(S) { return init((S && S.ms) || 1); }
+  // back to the parlour from the shelf after the end: on the mountain again, every bulb kept, the bulbs not yet lit
+  // for sale, and a fresh box under the mountain to break open once more
+  function revisit(S) {
+    Object.assign(S, { fin: 0, board: BOARDS.length - 1, big: BIG[BOARDS.length - 1], phase: 'tree', balls: [], hold: null, fever: 0, spins: 0, reel: null, launch: null, lan: null, broke: 0, ev: [] });
+    return S;
+  }
 
   const BULBS = UP.reduce((a, u) => a + u.max, 0), feats = [
     ['fever', 'Fever pitch', 'Go into fever a hundred times.', S => S.fevers >= 100],
@@ -6602,7 +6687,7 @@ const CORE = (() => {
     ['roller', 'High roller', 'Win ten billion coins in a single game.', S => (S.bestC || 0) >= 1e10],
     ['wheel', 'Lit up like the Ginza', 'Light every bulb on the sign.', S => S.bought >= BULBS]
   ];
-  return { version: 4, migrate, P, W, DT, R, CAP, BOARDS, BH, BIG, UP, byId, board, stats, price, open, can, goldOf, mvx,
+  return { version: 4, migrate, revisit, P, W, DT, R, CAP, BOARDS, BH, BIG, UP, byId, board, stats, price, open, can, goldOf, mvx,
     init, step, act, done, progress, milestones, crack, tulipPay, bots, pace, feats };
 })();
 </script>

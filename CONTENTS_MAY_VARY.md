@@ -32,6 +32,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    anthology had set itself where it stood in the way of the result.
    Keep Off the Grass may weigh **200 KB** for the same reason: its refinement session (October 2026) began at
    133 KB, over the old cap, once the box had its close-up camera and props list.
+   Tilt may weigh **200 KB** too: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
+   scenes, close-ups and diagnostic switches, before a pixel of the art had changed; the owner lifted the cap in advance.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
