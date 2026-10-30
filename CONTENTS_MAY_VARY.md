@@ -32,6 +32,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    anthology had set itself where it stood in the way of the result.
    Keep Off the Grass may weigh **200 KB** for the same reason: its refinement session (October 2026) began at
    133 KB, over the old cap, once the box had its close-up camera and props list.
+   Tilt may weigh **200 KB** too: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
+   scenes, close-ups and diagnostic switches, before a pixel of the art had changed; the owner lifted the cap in advance.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -1442,6 +1444,57 @@ box uses it.
   Since: what the Big One pays shows as one sum over its sign rather than a heap across its face, the star's four
   quarters burn in four colours (balls cyan, pins and reels gold, damage pink, fever orange), the game-over card
   fades in by game time rather than by frames, and OPEN IT stands under the box on a desktop.
+  **The refinement session** (October 2026, rule 16). The owner asked for Tilt to be taken to the bar of a finished
+  commercial game, with research rounds between the critic rounds, and lifted the byte cap (rule 2: 200 KB; it is at
+  182 KB). Tools first: `CORE.revisit` (back on the mountain from the shelf, every bulb kept, a whole box to break
+  again; tested); `?world=clew&scene=<name>` plays the eager bot (`&bot=`, `&seed=`) until a moment comes up and starts
+  there, so every board and moment is reached in a real state of play (first, tree1, reels, fever, lantern, auto,
+  nearly1..5, board2..5, end); `K.debug.look/props/snap` give `util/cmv_props.mjs` 28 close-ups (it learnt
+  `options.scene`); diagnostic switches for a real phone: `?glow=0` (no shadowBlur at all), `?dpr=1`, `?fx=0` (no
+  particles, flashes, shake), `?cache=0` (repaint every still part every frame), `?fps` (frame cost, DPR, canvas size).
+  Fresh critics on filmstrips of every station played with real input, phone (390×844) and desktop (1280×800), scored
+  first impression, clarity, art, phone, feel and "would pass as commercial": before 6/5/4/6/6 and **3** (desktop
+  first impression 4), after round 1 6/4/5/6/6 and 4, after round 2 6/5/5/6/6 and **4** (desktop 5). A close-up critic
+  with the checklist under **Drawing without glitches** went through all 28 props after round 2.
+  - *Research: the paid games it resembles* (real CR pachinko machines, Peggle, Peglin, Ballionaire, BALL x PIT, Demon's
+    Tilt, Pinball FX; October 2026). A machine reads as layers, each shadowing the one below: printed board, brass
+    nails, moulded plastic fittings (*yakumono*), chrome rails, glass with streaks. A tulip is a plastic cup with two
+    hinged petals that widen the catch; the start pocket sits under the centre display in a fitting of its own. Score
+    popups belong to the object that scored and must not drown the board (BALL x PIT is criticised for exactly that).
+  - *Research: what gives AI-made games away*: flat primitives with one `shadowBlur` and no material, everything
+    glowing equally, unicode or emoji as icons, generic fonts or a serif fallback, text-heavy UI and spreadsheet tags
+    ("+5", "×1.2"), identical particles and popups, styles from different games side by side, nothing that moves when
+    the player does nothing.
+  - *What changed.* Brass nails with a highlight and a shadow (drawn a little larger than they collide, so they read at
+    phone size); tulips moulded in each board's plastic under a chrome rim with two screws, petals that swing open and
+    shut into a bud, the balls they still take as lamps in the rim; a Big One per board as an object (a riveted gold
+    slab with chasing lamps, a safe, a bank, a carton) with a seven-segment counter; prize blocks as objects (acrylic
+    prize lamps, pachinko cabinets, vending machines, a night bus, log cabins, ore); the tall machine an art-deco print,
+    the parlour a carpet, the street an upright wall of buildings with neon shop signs, the mountain two ranges of
+    peaks over snow; reels in a chrome housing under a plate of drawn sevens, drawn symbols, drums that curve and blur;
+    every lit word a neon tube (`neon()`: a shadow off the wall, a halo, the coloured glass, a white core); bulbs with
+    drawn pictures instead of tags (the open point "U, XL, BIG mean nothing" is closed), named quarters, edges that glow
+    towards bulbs out of view, on a phone a card docked above NEXT GAME; a carton at the end whose flaps open and let a
+    soft column of light out. A broken Big One is staged on the old board: the last frame stays on the glass, the slab
+    is cut out and bursts into pieces that fall and bounce, BIG ONE BROKEN, then the floor gives way and the camera drops
+    while the new board comes up, and only then do its name, its tray line and its ring on the sign appear (the rules
+    moved on in the step it broke). The end's trip and every such sequence wait in game time (`later`), never
+    `setTimeout`. On a desktop the machine plays alone in the middle of a parlour aisle of other machines and the sign
+    slides in between games. Popups gather over wider cells, skip what is small against the recent largest, add to a
+    live one nearby and stay inside the glass; the Big One's damage is one running sum beside it.
+  - *Free resources.* The two faces are Google Fonts under the SIL Open Font License 1.1 (Bungee, Tilt Neon; no
+    credit needed on screen). Considered and not used yet: DSEG7 (OFL, a seven-segment face; the box draws its own
+    segments instead), Kenney's Casino and Impact sound sets (CC0, "attribution is not required"; the sound was not to
+    change character without the owner), Lucide (ISC), Tabler and Phosphor (MIT) icons (line icons look generic beside
+    neon; the box draws its own pictures), game-icons.net (CC BY 3.0, needs a credit).
+  - *Sound.* Levels measured through an analyser on the box's two gains with real play: peaks 0.34 in fever and 0.20 in
+    the tree, nothing near clipping; nothing changed.
+  - *Still open*, from the last critics: the "would pass as commercial" score stays at 4 on stills (the critics' spread
+    is wide, and the latest named things that were fixed after their frames were shot: the tube lettering, the LED
+    ghosts, the board 5 stakes, the lantern); the sign's chains of six identical bulbs still read as a generated node
+    graph to a critic (a bulb could change shape along its chain); desktop shows the machine at phone width (the board is
+    portrait); the first game still ends after about 15 balls for 25 to 45 coins (rule 15, the owner's call); the coin
+    count still leaps between boards; the right-edge camera strip is unexplained; the sound has had no ears on it.
 
 ### Working on a box that has shipped
 
@@ -1540,6 +1593,21 @@ A box that answers these in a dull way (pull a ball back and let it go; tap an a
 is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
+
+- **A canvas font needs a fallback family.** `ctx.font = '400 12px Bungee'` before the face has loaded draws in the
+  browser's default, which is a serif; a critic took Tilt's "START POCKET" in Times for the plainest giveaway of an
+  amateur game. Write every canvas font with a generic family (`'400 12px Bungee, sans-serif'`) and repaint cached
+  sprites and backdrops once `document.fonts.ready` resolves.
+- **Keep the old picture while the rules have moved on.** Tilt's core is on the next board in the very step the Big One
+  breaks. The view copies the last frame into a canvas when the break event arrives, cuts the Big One out of it with the
+  old board's cached print, and plays the break and the drop over that copy; everything that names the new board waits
+  until the copy has left the glass. This is cheaper and more honest than teaching the view to draw two boards.
+- **A shadow follows its object.** A rounded-rectangle shadow under every block sprite left a dark square tile behind
+  an irregular rock and a dark plate under a bank's pediment; a close-up critic found both at once. Draw each shadow
+  from the object's own outline.
+- **Stills plateau, close-ups do not.** Three critics on play-size filmstrips scored Tilt's "commercial" 3, 4, 4 while
+  the art changed a great deal; one critic on 28 close-ups returned forty concrete faults, every one fixable. Alternate
+  the two, and send the close-ups first when the scores stop moving.
 
 - **A depth buffer is coarser on a phone than in a test browser.** The owner's phone showed dark bands across a flat
   lawn: the contact shade read each step of the far depth as an edge. Differences below the step (growing with the

@@ -54,6 +54,10 @@ Check these before calling a remade page done; each has now shipped broken in se
   steps come from `setTimeout` falls apart on a slow device, under a speed-up, or paused: cards before the judges
   arrive, a fold that starts before its parts exist. Anything that follows the game's own motion waits on game time
   (a small queue drained by the frame's `dt`); keep `setTimeout` for things that are truly about real time.
+- **Canvas text in the wrong face.** `ctx.font = '700 20px Caveat'` draws in the browser's default serif until the web
+  font has loaded, and a sprite or backdrop cached in that moment keeps the serif for good. Give every canvas font a
+  generic fallback (`'700 20px Caveat, cursive'`, `'400 12px Bungee, sans-serif'`) and clear cached drawings when
+  `document.fonts.ready` resolves.
 - **Props drawn as primitives.** Parts that float free (leaves without stems), lines left where two shapes were
   joined, a solid drawn over what should be in front of it, light that stops in a hard edge. Fill a many-part
   thing as one silhouette and outline it once, draw back to front (a crock's mouth, the spoons, the crock's front),

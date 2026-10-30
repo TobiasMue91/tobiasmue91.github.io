@@ -38,7 +38,7 @@ const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024, lawn: 200 * 1024 };
+const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 200 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -475,6 +475,17 @@ if (suites.includes('clew') && clew) {
     const lv = Object.fromEntries(CORE.UP.map(u => [u.id, u.max])), S = onBoard(4, lv); S.big = 1e30; let t = 0;
     while (S.phase === 'run' && t < 400) { if (S.tray > 0) CORE.act(S, 'hold', 20 + (t * 7) % 60); CORE.step(S, .1); t += .1; }
     check(S.phase === 'tree' && t < 300, `with every bulb lit, a game on the mountain still ends (${t.toFixed(0)} s)`);
+  }
+  {
+    // going back from the shelf after the end: the mountain again, bulbs kept, a fresh Big One, and the end once more
+    const lv = Object.fromEntries(CORE.UP.map(u => [u.id, u.max])), S = onBoard(4, lv); S.big = 1; S.$ = 5;
+    let t = 0; while (!S.fin && t < 120) { if (S.tray > 0) CORE.act(S, 'hold', 50); CORE.step(S, .1); t += .1; }
+    CORE.act(S, 'open'); check(CORE.done(S), 'the last Big One, broken and opened, is done');
+    const R = CORE.revisit(JSON.parse(JSON.stringify(S)));
+    check(!CORE.done(R) && R.board === 4 && R.phase === 'tree' && R.big === CORE.BIG[4] && R.bought === S.bought && R.$ === S.$, 'revisit puts the player back on the mountain, every bulb and coin kept, the box whole again');
+    check(CORE.act(R, 'run') && R.phase === 'run', 'and a game can be played from there');
+    R.big = 1; t = 0; while (!R.fin && t < 120) { if (R.tray > 0) CORE.act(R, 'hold', 50); CORE.step(R, .1); t += .1; }
+    check(R.fin === 1 && CORE.act(R, 'open') && CORE.done(R), 'and the box under the mountain can be broken open again');
   }
   {
     // the auto-launcher pours only once it has been set this game, and a new game forgets it
