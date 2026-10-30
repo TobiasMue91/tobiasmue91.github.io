@@ -556,7 +556,7 @@ async function pageSuite(chromium) {
   await type('#h2', '1440');
   eq(await val('#w2'), '3413', 'a new height of 1440: the width is 3413');
   eq(await page.$eval('#bw2 b', e => e.textContent), 'W ≈', '  marked as rounded');
-  check(/3413 1⁄3/.test(await txt('#eq')) && /0\.01 %/.test(await txt('#eq')), '  the exact 3413 1⁄3 and the drift are shown', await txt('#eq'));
+  check(/3413 1⁄3/.test(await txt('#eq')) && /0\.01%/.test(await txt('#eq')), '  the exact 3413 1⁄3 and the drift are shown', await txt('#eq'));
   eq([await txt('#copy'), await txt('#copy2')], ['Copy 3413', 'Copy 3414 · even'], '  copy the nearest whole number, or the nearest even one');
   await page.click('#copy');
   await page.waitForTimeout(100);
@@ -592,11 +592,11 @@ async function pageSuite(chromium) {
   const before = {in2: await top('.in2'), chips: await top('#chips')};
   await type('#h1', 'auto');
   check(await has('#bh1', 'bad') && await has('#msg1', 'err'), 'typing "auto" as the height: that box is marked');
-  check(/use New size below/.test(await txt('#msg1')), '  and the message points to where a height is worked out', await txt('#msg1'));
-  check(await has('#res', 'none') && await has('#ans', 'none'), '  the ratio and the answer are cleared, not left stale');
+  check(/To work one out, use New size\./.test(await txt('#msg1')), '  and the message points to where a height is worked out', await txt('#msg1'));
+  check(await txt('#big') === '1920 : ?' && await has('#ans', 'none'), '  the ratio shows what is known, 1920 : ?, and the stale answer is cleared', await txt('#big'));
   check(await page.$eval('#copy', e => e.disabled), '  copy is off');
   eq(await val('#h2'), '', '  no stale worked-out height');
-  eq([await top('.in2'), await top('#chips')], [before.in2, before.chips], '  nothing moved when the error appeared');
+  eq(await top('#chips'), before.chips, '  nothing above the answer moved when the error appeared');
   await type('#h1', '-1080');
   check(/negative/.test(await txt('#msg1')), 'a negative height is refused in words', await txt('#msg1'));
   await page.click('#msg1 button[data-fix]');
@@ -604,7 +604,7 @@ async function pageSuite(chromium) {
   await type('#h1', '0');
   check(/above 0/.test(await txt('#msg1')), 'zero is refused', await txt('#msg1'));
   await type('#h1', '1O80');
-  check(!(await has('#bh1', 'bad')) && /Read “1O80” as 1080/.test(await txt('#msg1')), 'a letter O for a zero is read as 1080, and said so', await txt('#msg1'));
+  check(!(await has('#bh1', 'bad')) && /letter O in “1O80” as a zero: 1080/.test(await txt('#msg1')), 'a letter O for a zero is read as 1080, and said so', await txt('#msg1'));
   eq(await txt('#big'), '16 : 9', '  and the ratio is back');
   await type('#h1', '1,080');
   eq(await txt('#big'), '16 : 9', '"1,080" is a thousand and eighty');

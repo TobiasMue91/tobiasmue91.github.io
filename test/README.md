@@ -2503,7 +2503,7 @@ reductions and resizes come from Python's `fractions` module, an implementation 
 | `frame` | fit, fill and crop against hand-worked cases, and on 2,000 random frames: fit fits and touches, fill covers and touches, crop keeps the target shape, everything centred |
 | `format` | whole numbers, short decimals, small fractions (3413 1⁄3), ≈ and two places for the rest, small values keeping their digits, a decimal comma, plain digits for the clipboard |
 | `list` | a pasted column or spreadsheet (tabs, CSV, semicolons, junk lines); a million lines read to the cap in well under a second |
-| `page` | in Chromium at phone size: the worked example on arrival, results while typing, the clipboard getting just the number, a pair pasted into one box split across both, errors by their box that clear what depended on them without moving anything, presets and swap undone by Ctrl+Z, a reload bringing the last values back, a list paste becoming a table (200,000 lines to the cap), dark mode, no console errors and no request leaving the site |
+| `page` | in Chromium at phone size: the worked example on arrival, results while typing, the clipboard getting just the number, a pair pasted into one box split across both, errors by their box that clear what depended on them, leaving "1920 : ?" rather than a blank, without moving anything above, presets and swap undone by Ctrl+Z, a reload bringing the last values back, a list paste becoming a table (200,000 lines to the cap), dark mode, no console errors and no request leaving the site |
 
 Each core check was seen failing on purpose: a Euclid that stops at 1, a 1 % tolerance, exact-only shapes matched
 approximately, ambiguous separators always read as decimals, rounding half down, fit scaled by the larger factor, the
