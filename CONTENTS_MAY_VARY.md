@@ -32,8 +32,9 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    anthology had set itself where it stood in the way of the result.
    Keep Off the Grass may weigh **200 KB** for the same reason: its refinement session (October 2026) began at
    133 KB, over the old cap, once the box had its close-up camera and props list.
-   Tilt may weigh **200 KB** too: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
-   scenes, close-ups and diagnostic switches, before a pixel of the art had changed; the owner lifted the cap in advance.
+   Tilt may weigh **230 KB**: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
+   scenes, close-ups and diagnostic switches before a pixel of the art had changed, then 200 KB when the street and the
+   mountain were redrawn at the owner's request; the owner lifted the cap in advance.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -1445,8 +1446,8 @@ box uses it.
   quarters burn in four colours (balls cyan, pins and reels gold, damage pink, fever orange), the game-over card
   fades in by game time rather than by frames, and OPEN IT stands under the box on a desktop.
   **The refinement session** (October 2026, rule 16). The owner asked for Tilt to be taken to the bar of a finished
-  commercial game, with research rounds between the critic rounds, and lifted the byte cap (rule 2: 200 KB; it is at
-  182 KB). Tools first: `CORE.revisit` (back on the mountain from the shelf, every bulb kept, a whole box to break
+  commercial game, with research rounds between the critic rounds, and lifted the byte cap (rule 2: now 230 KB; it is at
+  200 KB). Tools first: `CORE.revisit` (back on the mountain from the shelf, every bulb kept, a whole box to break
   again; tested); `?world=clew&scene=<name>` plays the eager bot (`&bot=`, `&seed=`) until a moment comes up and starts
   there, so every board and moment is reached in a real state of play (first, tree1, reels, fever, lantern, auto,
   nearly1..5, board2..5, end); `K.debug.look/props/snap` give `util/cmv_props.mjs` 28 close-ups (it learnt
@@ -1513,6 +1514,15 @@ box uses it.
   - *The street* is a stack of night streets seen from the side, as the board is upright: in each, flats over
     shopfronts with striped awnings and neon names, a pavement the lamp posts and vending machines stand on, a wet road
     with the neon mirrored in it on which the bus drives, a kerb and the dark under it; a moon over the top one.
+  - *A critic on the two boards alone* (4/10 each) found pins that read as washers and truffles, balls lost on the snow,
+    striped flanks, streets cut off with a ruler and a lift drawn as one line. Since: the street's pins are squat
+    bollards with a red band, the mountain's dark stakes tapering under a cap of snow, each with its own shadow; a steel
+    ball has a dark rim, so it reads on snow; each street strip has a sliver of sky with stars over roofs of their own
+    heights (parapets, tanks, aerials), shops with goods in a lit window, a door, a scalloped awning and a lit sign on a
+    board, pools of lamp light on the pavement, the signs smeared soft in the wet road; the ranges are faceted peaks, lit
+    left and shaded right, the far one hazed; the snow has a lip over the rock, drifts, ski tracks and darkens towards
+    the foot; pines stand in clumps; the lift has pylons with crossbars, a sagging cable and chairs; the bus's headlight
+    is a fading beam; a ball a tulip shoots up leaves a short fading streak, not a rod.
   - *The mountain* is a mountain face from top to bottom: a band of sky with stars and a moon, two ranges of rock with
     snow on every summit and shade on their right flanks, then snow down to the foot with pines in clumps, a chair lift
     on pylons and a village with lit windows; cabins and ore stand in drifts of their own (drifts in the backdrop were
