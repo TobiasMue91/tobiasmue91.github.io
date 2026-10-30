@@ -435,6 +435,16 @@ if (suites.includes('clew') && clew) {
     check(worst < 1.5, `no ball rests on a closed tulip (longest ${worst.toFixed(2)} s, ${where})`);
   }
   {
+    // a mega ball ploughs through: dropped anywhere on any board it reaches the bottom and is never shaken loose as stuck
+    const stuck = [];
+    for (let b = 0; b < 5; b++) for (let x = 6; x <= 94; x += 4) {
+      const S = onBoard(b, { mega: 1 }); S.big = 1e30; S.tray = 0; S.caught = 0; S.balls = [{ x, y: 1.5, vx: 0, vy: 12, k: 2, s: 0, h: 0, w: 0, ax: x, ay: 1.5 }];
+      let t = 0, lost = false; while (S.balls.length && t < 40) { CORE.step(S, .05); t += .05; if (S.ev.some(e => e.k === 'lost')) { lost = true; break; } S.ev.length = 0; }
+      if (lost || S.balls.length) stuck.push(`board ${b + 1} at ${x}`);
+    }
+    check(!stuck.length, 'a mega ball dropped anywhere on any board ploughs through to the bottom without sticking', stuck.join(', '));
+  }
+  {
     // the first game: short, and it pays for a bulb
     const S = CORE.init(1), m = { seed: 5 }; let t = 0;
     while (S.phase === 'run' && t < 60) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1; }
