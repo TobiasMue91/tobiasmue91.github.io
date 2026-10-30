@@ -636,6 +636,10 @@ async function pageSuite(chromium) {
   // Same state after a reload.
   await type('#w2', '1000');
   await page.waitForTimeout(400);
+  check(/halfway/.test(await txt('#eq')), 'a tie says it is halfway, not a silent rounding', await txt('#eq'));
+  eq([await txt('#copy'), await txt('#copy2')], ['Copy 562', 'Copy 563'], '  and offers both whole numbers');
+  const chipRatios = await page.$$eval('#chips .chip', b => b.map(x => x.dataset.w + ':' + x.dataset.h));
+  check(chipRatios.includes('64:27') && !chipRatios.includes('21:9'), '  the ultrawide chip is the exact 64:27, not the 21:9 it is sold as', chipRatios.join(' '));
   await page.reload();
   await page.waitForTimeout(150);
   eq([await val('#w1'), await val('#h1'), await val('#w2'), await val('#h2')], ['16', '9', '1000', '562'], 'a reload brings back the last values, not the example (562.5 rounds to the even 562)');
