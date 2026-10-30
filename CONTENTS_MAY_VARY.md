@@ -32,8 +32,9 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    anthology had set itself where it stood in the way of the result.
    Keep Off the Grass may weigh **200 KB** for the same reason: its refinement session (October 2026) began at
    133 KB, over the old cap, once the box had its close-up camera and props list.
-   Tilt may weigh **200 KB** too: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
-   scenes, close-ups and diagnostic switches, before a pixel of the art had changed; the owner lifted the cap in advance.
+   Tilt may weigh **230 KB**: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
+   scenes, close-ups and diagnostic switches before a pixel of the art had changed, then 200 KB when the street and the
+   mountain were redrawn at the owner's request; the owner lifted the cap in advance.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -264,7 +265,7 @@ The long-term answer is a habit and a tool:
 | 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft) | hold a finger on the house and drag: the ghost glides after it and its cold drives people away; tap a doorway, the telephone, the chandelier | short nights against ectoplasm and the dawn, the organ between them; every exit costs a pip of resolve for good; five casts, from a family of three to a film company and thirty extras | silent film: Reiniger cut-outs, black people before grey furniture, frost round a cream card ghost, tinted stock, grain, intertitles, iris | night blue, cream, black; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought, a telephone, a crash | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
-Keep Off the Grass 30–34 / 59–61, Tilt 42–46 / 58–64, Snow Day 35–38 / 54–58,
+Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 35–38 / 54–58,
 Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–38 / 71–78.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -389,8 +390,8 @@ layout and the tree), then follows `.claude/skills/next-box` from step 3.
   last ten games barely moved for the first eight (0.3% a game) while showing "−127,590" under it; the
   owner asked why so many hits did so little. Now it takes the square root of each ball's damage (its own
   multipliers, Break the bank, Hairline cracks and Open sesame, in full), and its counts are small enough
-  (1,500 · 150K · 1.2M · 5.5M · 75M) that every game takes 2.5 to 5% off at the start of a board and 15 to
-  25% at the end. It cracks a little more at every fifth.
+  (1,500 · 150K · 1.4M · 18M · 600M since the mega balls were mended; first 1,500 · 150K · 1.2M · 5.5M · 75M) that
+  every game takes 2.5 to 5% off at the start of a board and 15 to 25% at the end. It cracks a little more at every fifth.
 - *The auto-launcher is set by hand, every game.* It first poured on its own wherever the thumb had been,
   and the owner said that from then on the player had nothing to do. Now a short tap on the board sets it
   (a gold AUTO marker on the rail); it pours there beside the thumb for the rest of that game, and the
@@ -1445,8 +1446,8 @@ box uses it.
   quarters burn in four colours (balls cyan, pins and reels gold, damage pink, fever orange), the game-over card
   fades in by game time rather than by frames, and OPEN IT stands under the box on a desktop.
   **The refinement session** (October 2026, rule 16). The owner asked for Tilt to be taken to the bar of a finished
-  commercial game, with research rounds between the critic rounds, and lifted the byte cap (rule 2: 200 KB; it is at
-  182 KB). Tools first: `CORE.revisit` (back on the mountain from the shelf, every bulb kept, a whole box to break
+  commercial game, with research rounds between the critic rounds, and lifted the byte cap (rule 2: now 230 KB; it is at
+  200 KB). Tools first: `CORE.revisit` (back on the mountain from the shelf, every bulb kept, a whole box to break
   again; tested); `?world=clew&scene=<name>` plays the eager bot (`&bot=`, `&seed=`) until a moment comes up and starts
   there, so every board and moment is reached in a real state of play (first, tree1, reels, fever, lantern, auto,
   nearly1..5, board2..5, end); `K.debug.look/props/snap` give `util/cmv_props.mjs` 28 close-ups (it learnt
@@ -1495,6 +1496,37 @@ box uses it.
     graph to a critic (a bulb could change shape along its chain); desktop shows the machine at phone width (the board is
     portrait); the first game still ends after about 15 balls for 25 to 45 coins (rule 15, the owner's call); the coin
     count still leaps between boards; the right-edge camera strip is unexplained; the sound has had no ears on it.
+  **The owner's look after it** (October 2026): the first game is fine as it is (kept); a pitch that climbs with every
+  pin hit, as in Peggle, would run away when balls strike pins many times a second (not done); mega balls now and then
+  hung; opening the next box looked bad and wrong; the street and the mountain could be much nicer.
+  - *Mega balls hung, and that had hidden a balance.* A mega ball (6.8 wide) did not fit through the field's gaps (6.8
+    on the machines, 6.4 on the mountain): 105 of 115 mega balls dropped over the five boards were shaken loose as
+    stuck. Now it ploughs through every pin, bumper, boulder and tulip post (lighting and paying for each pin, losing
+    a little speed), grinds through blocks, but only strikes the Big One with a real impact (lying on it, it struck
+    twelve times a second). Mended, the eager bot finished in 24 to 27 minutes instead of 42 to 46, every minute of
+    it lost after the mega ball is bought; the Big Ones of boards 3 to 5 grew to match (1.4M, 18M, 600M). The suite
+    drops a mega ball every four units on every board and wants none stuck.
+  - *The way out falls into the box, not into its label.* The shell dives into whatever rectangle `K.complete` is given;
+    Tilt gave the whole carton, so the camera flew into its printed front. Now the flaps open, the board darkens, the
+    camera rises over the box until one looks straight down into it (four inner walls of card, a floor of light), and
+    the dive goes into that floor, which is what the next box's inside looks like too. The rule for any box: hand the
+    shell the opening, seen as the dive will see it.
+  - *The street* is a stack of night streets seen from the side, as the board is upright: in each, flats over
+    shopfronts with striped awnings and neon names, a pavement the lamp posts and vending machines stand on, a wet road
+    with the neon mirrored in it on which the bus drives, a kerb and the dark under it; a moon over the top one.
+  - *A critic on the two boards alone* (4/10 each) found pins that read as washers and truffles, balls lost on the snow,
+    striped flanks, streets cut off with a ruler and a lift drawn as one line. Since: the street's pins are squat
+    bollards with a red band, the mountain's dark stakes tapering under a cap of snow, each with its own shadow; a steel
+    ball has a dark rim, so it reads on snow; each street strip has a sliver of sky with stars over roofs of their own
+    heights (parapets, tanks, aerials), shops with goods in a lit window, a door, a scalloped awning and a lit sign on a
+    board, pools of lamp light on the pavement, the signs smeared soft in the wet road; the ranges are faceted peaks, lit
+    left and shaded right, the far one hazed; the snow has a lip over the rock, drifts, ski tracks and darkens towards
+    the foot; pines stand in clumps; the lift has pylons with crossbars, a sagging cable and chairs; the bus's headlight
+    is a fading beam; a ball a tulip shoots up leaves a short fading streak, not a rod.
+  - *The mountain* is a mountain face from top to bottom: a band of sky with stars and a moon, two ranges of rock with
+    snow on every summit and shade on their right flanks, then snow down to the foot with pines in clumps, a chair lift
+    on pylons and a village with lit windows; cabins and ore stand in drifts of their own (drifts in the backdrop were
+    left in the air when a cabin broke).
 
 ### Working on a box that has shipped
 
@@ -1593,6 +1625,12 @@ A box that answers these in a dull way (pull a ball back and let it go; tap an a
 is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
+
+- **A bug can be holding up the balance.** Tilt's mega balls stuck and were cleared within a second and a half, so
+  the late game was tuned without them; mending them took fifteen minutes off the eager bot's game. After any fix to
+  something a bot uses, run the pacing suite before calling it a fix, and compare when each board opens.
+- **Hand the shell the opening.** `K.complete(rect)` is where the camera dives; a rectangle round a whole box dives into
+  its printed side. Stage the box so its opening faces the camera, then hand over that opening.
 
 - **A canvas font needs a fallback family.** `ctx.font = '400 12px Bungee'` before the face has loaded draws in the
   browser's default, which is a serif; a critic took Tilt's "START POCKET" in Times for the plainest giveaway of an

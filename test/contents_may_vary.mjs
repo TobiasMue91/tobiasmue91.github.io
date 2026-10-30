@@ -38,7 +38,7 @@ const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 200 * 1024 };
+const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -433,6 +433,16 @@ if (suites.includes('clew') && clew) {
       if (near > worst) { worst = near; where = `board ${b + 1}, tulip at ${p.cx},${p.y}`; }
     }
     check(worst < 1.5, `no ball rests on a closed tulip (longest ${worst.toFixed(2)} s, ${where})`);
+  }
+  {
+    // a mega ball ploughs through: dropped anywhere on any board it reaches the bottom and is never shaken loose as stuck
+    const stuck = [];
+    for (let b = 0; b < 5; b++) for (let x = 6; x <= 94; x += 4) {
+      const S = onBoard(b, { mega: 1 }); S.big = 1e30; S.tray = 0; S.caught = 0; S.balls = [{ x, y: 1.5, vx: 0, vy: 12, k: 2, s: 0, h: 0, w: 0, ax: x, ay: 1.5 }];
+      let t = 0, lost = false; while (S.balls.length && t < 40) { CORE.step(S, .05); t += .05; if (S.ev.some(e => e.k === 'lost')) { lost = true; break; } S.ev.length = 0; }
+      if (lost || S.balls.length) stuck.push(`board ${b + 1} at ${x}`);
+    }
+    check(!stuck.length, 'a mega ball dropped anywhere on any board ploughs through to the bottom without sticking', stuck.join(', '));
   }
   {
     // the first game: short, and it pays for a bulb
