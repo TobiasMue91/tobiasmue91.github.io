@@ -67,6 +67,14 @@ Check these before calling a remade page done; each has now shipped broken in se
   thing as one silhouette and outline it once, draw back to front (a crock's mouth, the spoons, the crock's front),
   give everything something that holds it and a shadow, fade light with gradients. Then look at each prop alone at
   two or three times its size (`util/cmv_props.mjs` does this for Contents May Vary from `K.debug.props`).
+- **Layers ignored.** Whatever stands up off the ground (trees, houses, walls, defenders, enemies) must be drawn in one pass
+  sorted by the line it stands on; baking trees into the ground tiles and drawing every unit over them put an archer in
+  front of a trebuchet that stood before him, and rabbits on top of the woods they ran behind (Here Be Rabbits). Someone the
+  player needs who ends up hidden is shown as a silhouette over what hides them, not by making the tree see-through.
+- **A count drawn as walkers that pop.** A view that keeps its own sprites for a crowd the rules only count must never fade
+  them in or out where it can be seen: a liquid count spreads along a road while sprites keep together, and the correction
+  then deletes them at the back and adds them at the front. Make and drop sprites only off screen, at a spawn point or deep
+  in a crowd, let a surplus walk to a shortfall, and count the fades that remain in view with a debug counter.
 
 ## Adding a game or tool
 
