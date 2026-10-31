@@ -7200,9 +7200,14 @@ const $ = id => document.getElementById(id);
 const { clamp, lerp, ease, fmt, hash } = KIT;
 const { sin, cos, PI, min, max, abs, sqrt, floor, hypot, atan2, pow } = Math;
 let S = null, VW = 0, VH = 0, DPR = 1, now = 0, gt = 0, desk = false;
+/* switches for finding a drawing fault on a real phone: ?fps (frame cost, DPR, canvas size, draw calls), ?dpr=1 (or 2),
+   ?fx=0 (no particles, falling snow, splats or shake), ?film=0 (no grade, vignette or grain over the 3D), ?aa=0 (no
+   antialiasing), ?boil=0 (the felt's fibres hold still) */
+const QS = (() => { try { return new URLSearchParams(parent.location.search); } catch (e) { return new URLSearchParams(); } })();
+const DIAG = { fps: QS.has('fps'), dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', film: QS.get('film') !== '0', aa: QS.get('aa') !== '0', boil: QS.get('boil') !== '0' };
 
 /* ======================= a felt-and-snow renderer in WebGL 2 ======================= */
-const cv = $('gl'), gl = cv.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: false });
+const cv = $('gl'), gl = cv.getContext('webgl2', { antialias: DIAG.aa, alpha: true, premultipliedAlpha: false });
 const VS = `#version 300 es
 in vec3 aP; in vec3 aN; uniform mat4 uVP, uM; uniform mat3 uNm; out vec3 vW, vN, vO;
 void main(){ vec4 w = uM * vec4(aP, 1.); vW = w.xyz; vN = uNm * aN; vO = aP; gl_Position = uVP * w; }`;
@@ -7660,7 +7665,7 @@ function popSum(kind, x, y, z, v, pre, colr, size) {
   if (q) { q.v += v; q.text = pre + fmt(q.v, q.v < 10 ? 1 : 0); q.t = min(q.t, .1); return; }
   pop2(x, y, z, pre + fmt(v, v < 10 ? 1 : 0), colr, size); pops[pops.length - 1].kind = kind; pops[pops.length - 1].v = v;
 }
-function puff(x, y, z, n = 10, s = 1) { if (K.reduced) n = floor(n / 3); for (let i = 0; i < n; i++) { const a = Math.random() * 2 * PI, sp = (.6 + Math.random() * 1.6) * s; puffs.push({ x, y, z, vx: cos(a) * sp, vy: 1 + Math.random() * 2 * s, vz: sin(a) * sp * .6, t: 0, life: .5 + Math.random() * .4, r: (.08 + Math.random() * .12) * s }); } }
+function puff(x, y, z, n = 10, s = 1) { if (!DIAG.fx) return; if (K.reduced) n = floor(n / 3); for (let i = 0; i < n; i++) { const a = Math.random() * 2 * PI, sp = (.6 + Math.random() * 1.6) * s; puffs.push({ x, y, z, vx: cos(a) * sp, vy: 1 + Math.random() * 2 * s, vz: sin(a) * sp * .6, t: 0, life: .5 + Math.random() * .4, r: (.08 + Math.random() * .12) * s }); } }
 const flyers = [], news = [], tally = { v: 0, t: 9, shown: 0 };
 function coinFly(x, y, z, n) {
   const s = scr(x, y, z), r = $('coins').getBoundingClientRect(); if (!s) return;
@@ -7670,7 +7675,7 @@ function drawFx() {
   c2.setTransform(DPR, 0, 0, DPR, 0, 0); c2.clearRect(0, 0, VW, VH);
   const Lk = LOOK[yardShown];
   // falling snow, in three depths
-  const nF = K.reduced ? 40 : floor(110 * Lk.flake);
+  const nF = !DIAG.fx ? 0 : K.reduced ? 40 : floor(110 * Lk.flake);
   while (flakes.length < nF) flakes.push({ x: Math.random(), y: Math.random(), d: .3 + Math.random() * .7, s: Math.random() * 6 });
   c2.fillStyle = '#fff';
   for (const f of flakes) {
@@ -7761,7 +7766,7 @@ function mitten(x, y, text) {
 let W0 = 3, KS = 1;
 let shake = 0, handT = 9, dogJ = 0, cataShot = null, yardShown = -1, joinT = {}, presentAt = null, finT = 0;
 function layout() {
-  DPR = min(devicePixelRatio || 1, 2); VW = innerWidth; VH = innerHeight;
+  DPR = DIAG.dpr || min(devicePixelRatio || 1, 2); VW = innerWidth; VH = innerHeight;
   desk = VW >= 900 && VW / VH > 1.1; document.body.classList.toggle('desk', desk);
   cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR); fx.width = cv.width; fx.height = cv.height;
   gl.viewport(0, 0, cv.width, cv.height);
@@ -7778,12 +7783,13 @@ function layout() {
 }
 function render(t) {
   gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  const sh = shake > 0 && !K.reduced ? shake : 0; shake = max(0, shake - dtv * 2);
+  const sh = shake > 0 && !K.reduced && DIAG.fx ? shake : 0; shake = max(0, shake - dtv * 2);
   const sv = Object.assign({}, CAM); CAM.x += (Math.random() - .5) * sh * .25; CAM.y += (Math.random() - .5) * sh * .25;
   if (S.fin) { const k = ease.inOut(clamp((finT - 2.5) / 3, 0, 1)); CAM.y = lerp(CAM.y, 2.6 + W0 * .1, k); CAM.z = lerp(CAM.z, W0 - (VW / VH < .8 ? 5.6 : 6.4), k); CAM.ty = lerp(CAM.ty, 1.5, k); CAM.tz = lerp(CAM.tz, W0 + 4, k); }
+  if (zoom && zoom.on !== 'tree') zoomCam();
   lookAt(); Object.assign(CAM, sv);
   gl.useProgram(prog); gl.uniformMatrix4fv(U.uVP, false, VP); gl.uniform3fv(U.uCam, camBasis.e);
-  gl.uniform1f(U.uBoil, K.reduced ? 0 : floor(gt * 12) % 7);
+  gl.uniform1f(U.uBoil, K.reduced || !DIAG.boil ? 0 : floor(gt * 12) % 7);
   gl.uniform1f(U.uFn, 20); gl.uniform1f(U.uFf, yardShown === 4 ? 100 : 60);
   stack = [I4()]; curMesh = null; drawn = 0;
   const y = yardShown, won = S.yard !== yardShown;   // a yard just won stays on screen until the next run
@@ -7885,7 +7891,7 @@ function drain() {
       }
       case 'miss': puff(e.x, .8, e.z, 8, .8); sfx('thud'); if (e.cover && e.by === 0) pop2(e.x, 1.4, e.z, 'behind cover', '#fff', 14, .9); break;
       case 'swat': { const b = lastInc[e.id]; if (b) puff(b.x, b.y, b.z, 14, .7); sfx('swat'); if (b) pop2(b.x, b.y + .3, b.z, 'SWAT!', '#fff', 24); if (hint && hint.kind === 'swat') { hint = null; } tutor.swat = 1; break; }
-      case 'ouch': splats.push({ x: VW * (.5 + e.x * .15), y: VH * (.4 + Math.random() * .15), r: min(VW, VH) * .3, t: 0, seed: floor(Math.random() * 99) }); shake = .6; sfx('ouch'); break;
+      case 'ouch': if (DIAG.fx) splats.push({ x: VW * (.5 + e.x * .15), y: VH * (.4 + Math.random() * .15), r: min(VW, VH) * .3, t: 0, seed: floor(Math.random() * 99) }); shake = .6; sfx('ouch'); break;
       case 'wall': puff(e.x, .9, W0 + .3, 10, .8); sfx('thud'); break;
       case 'dog': { const b = lastInc[e.id]; dogJ = 1; sfx('bark'); if (b) { puff(b.x, b.y, b.z, 12, .6); pop2(b.x, b.y + .3, b.z, 'CAUGHT!', '#ffe0b0', 20); } break; }
       case 'throw': break;
@@ -7972,6 +7978,7 @@ function drawTree() {
   treeT += dtv;
   const g = t2; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, TR.w, TR.h);
   const G = geo(), X = G.X, Y = G.Y, tiers = TIERS.slice(0, G.shown + 1);
+  if (zoom && zoom.on === 'tree') { g.translate(TR.w / 2, TR.h / 2); g.scale(zoom.s, zoom.s); g.translate(-X(zoom.x), -Y(zoom.z)); }
   // a felt wall hanging on a wooden rod, the tree stitched on it
   { const bx = X(-.98), bw = X(.98) - bx, by = Y(G.top), bh = Y(-.03) - by;
     g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.roundRect(bx + 5, by + 7, bw, bh, 10); g.fill();
@@ -8106,7 +8113,7 @@ function openPresent() {
 /* ======================= the loop ======================= */
 let lastP = -1, grainQ = -1;
 function grain() {
-  const g = $('grain'); if (K.reduced) { g.hidden = true; return; }
+  const g = $('grain'); if (K.reduced || !DIAG.film) { g.hidden = true; $('film').hidden = !DIAG.film; return; }
   const q = floor(gt * 12); if (q === grainQ) return; grainQ = q;
   if (!g.done) { const x = g.getContext('2d'), im = x.createImageData(128, 128); for (let i = 0; i < im.data.length; i += 4) { const n = Math.random() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = n; im.data[i + 3] = 255; } x.putImageData(im, 0, 0); g.style.width = 'calc(100% + 100px)'; g.style.height = 'calc(100% + 100px)'; g.done = 1; }
   g.style.transform = `translate(${(hash(q, 1) - .5) * 60}px,${(hash(q, 2) - .5) * 60}px) scale(${1.2 + hash(q, 3) * .4})`;
@@ -8115,7 +8122,7 @@ function frame(dt) {
   if (!S) return;
   dtv = dt; gt += dt;
   const wasRun = S.phase === 'run';
-  if (dt > 0) CORE.step(S, dt);
+  if (dt > 0 && !(zoom && zoom.freeze)) CORE.step(S, dt);
   for (const b of S.inc) lastInc[b.id] = incPos(b);
   // which allies just threw: a ball from their slot that is very young
   for (const b of S.balls) if (b.by === 1 && b.t < .05) thrAt[b.fx] = gt;
@@ -8134,12 +8141,98 @@ function frame(dt) {
   if (cardAt && gt >= cardAt.at) { endCard(cardAt.e); cardAt = null; }
   if (capT > 0 && (capT -= dt) <= 0) $('cap').classList.add('off');
   const p = CORE.progress(S); if (abs(p - lastP) > .002) { lastP = p; K.progress(p); }
+  if (DIAG.fps) fpsMeter();
 }
 
+/* ======================= for a session at work on the box: scenes, close-ups, a frame meter ======================= */
+/* ?world=flurry&scene=<name> plays the eager bot (?bot=casual, ?seed=n) until the moment comes and starts there, so every
+   yard and moment is reached in a real state of play, never a staged one: first, tree1 (after the first run), join (a kid
+   has just given up), yard2..5 (a run in that yard under way), won1..4 (that yard's last kid has just given up), sledge,
+   dog, cata (the catapult wound), crowd (late on the mountain, your side large), yeti (the yeti nearly won over), end
+   (the yeti has just given up). A moment's events are kept, so the view stages it as it would in play. */
+const SCENES = {
+  first: () => true, tree1: S => S.phase === 'shop' && S.runs >= 1,
+  join: (S, n, ev) => ev.some(e => e.k === 'join') && !ev.some(e => e.k === 'yard') && S.runs > 1,
+  yard: (S, n) => S.yard === n - 1 && S.phase === 'run' && S.runT > 4,
+  won: (S, n, ev) => ev.some(e => e.k === 'yard' && e.y === n - 1),
+  sledge: S => S.phase === 'run' && S.sledge && S.sledge.t > 1.2,
+  dog: S => S.phase === 'run' && CORE.stats(S).dog && S.inc.length > 0 && S.runT > 4,
+  cata: S => S.phase === 'run' && S.cata >= 1,
+  crowd: S => S.phase === 'run' && S.yard === 4 && S.runT > 15,
+  yeti: S => S.phase === 'run' && S.yard === 4 && S.kids.filter(k => !k.ally).length === 1 && S.runT > 3,
+  end: (S, n, ev) => S.fin === 1 && ev.some(e => e.k === 'yard')
+};
+function scene(name) {
+  const m = /^([a-z]+?)(\d?)$/.exec(name), f = m && SCENES[m[1]]; if (!f) { console.warn('[flurry] no scene ' + name); return null; }
+  const seed = +QS.get('seed') || 1, T = CORE.init(seed), bot = CORE.bots[QS.get('bot') || 'eager'], mem = { seed: (seed * 7919 + 17) >>> 0 }, n = +m[2] || 1;
+  let t = 0, ev = [];
+  while (!f(T, n, ev) && t < 150 * 60 && !CORE.done(T)) { T.ev.length = 0; bot(T, mem, .1); CORE.step(T, .1); ev = T.ev.slice(); t += .1; }
+  console.log('[flurry] scene ' + name + ' after ' + (t / 60).toFixed(1) + ' min of the bot');
+  T.ev = ev.filter(e => e.k !== 'buy' && e.k !== 'run'); return T;
+}
+// K.debug.look(x, z, scale, { y, yaw, pitch, on, freeze }): hold the camera on a point of the yard (x across, z away from
+// the rules' zero line, y up), 6/scale away, turned by yaw and looking down by pitch; x may name a thing instead: 'wall',
+// 'dog', 'cata', 'sentry', 'sledge', 'present', 'yeti', 'kid<i>', 'ally<i>'. { on: 'tree' } zooms the felt tree in the
+// front room instead (x from -1 to 1, z from the foot 0 to the star 1). freeze holds the game still. look() lets go.
+let zoom = null;
+function zoomWhere() {
+  const z = zoom; if (typeof z.x !== 'string') return [z.x, z.o.y == null ? .8 : z.o.y, z.z];
+  const k = z.x, m = /^(kid|ally)(\d+)$/.exec(k);
+  if (k === 'wall') return [0, .9, W0]; if (k === 'dog') return [-1.6, 1.2, W0 - .15]; if (k === 'cata') return [3.4, .8, W0 - 1.4];
+  if (k === 'sentry') return [2.5, 1.6, W0 + .2]; if (k === 'present') return presentAt ? [presentAt.x, presentAt.y + .5, presentAt.z] : [0, 1.4, W0 + .3];
+  if (k === 'sledge') return S.sledge ? [CORE.sledgeX(S.sledge), .6, S.sledge.z] : [0, .6, 6];
+  if (k === 'yeti') { const y = S.kids.find(q => q.cap === 2 && !q.ally); if (y) return [y.x, 2, y.z]; const w = walkers.find(q => q.cap === 2); return w ? [w.to.x, 2, w.to.z] : [0, 2, 12]; }
+  if (m && m[1] === 'kid') { const q = S.kids[+m[2]]; return q ? [q.x, .9, q.z] : [0, .9, 8]; }
+  if (m) { const p = allyPos(+m[2]); return [p.x, .8, p.z + W0]; }
+  return [0, .8, 8];
+}
+function zoomCam() {
+  const [x, y, z] = zoomWhere(), o = zoom.o, d = 6 / zoom.s, yaw = o.yaw || 0, pitch = o.pitch == null ? .32 : o.pitch;
+  Object.assign(CAM, { x: x - Math.sin(yaw) * Math.cos(pitch) * d, y: y + Math.sin(pitch) * d, z: z - Math.cos(yaw) * Math.cos(pitch) * d, tx: x, ty: y, tz: z, fov: 40 });
+}
+function look(x, z, s = 2, o = {}) {
+  if (x == null) { zoom = null; layout(); return; }
+  zoom = { x, z, s, o, on: o.on || 'yard', freeze: !!o.freeze };
+  if (zoom.on === 'tree' && $('shop').hidden) openShop();
+}
+function fpsMeter() {
+  const t = performance.now(), m = fpsMeter; m.n = (m.n || 0) + 1; if (!m.t0) m.t0 = t;
+  if (t - m.t0 > 1000) { m.txt = (m.n * 1000 / (t - m.t0)).toFixed(0) + ' fps · ' + drawn + ' draws · dpr ' + DPR + ' · ' + cv.width + '×' + cv.height + (gl.getContextAttributes().antialias ? ' · aa' : ''); m.n = 0; m.t0 = t; }
+  c2.save(); c2.setTransform(DPR, 0, 0, DPR, 0, 0); c2.font = '400 11px monospace'; c2.textAlign = 'left'; c2.fillStyle = 'rgba(0,0,0,.7)'; c2.fillRect(0, VH - 18, VW, 18); c2.fillStyle = '#7dff6a'; c2.fillText(m.txt || '…', 6, VH - 5); c2.restore();
+}
+// every object worth a close look, as [name, minutes, x, z, scale, options] for util/cmv_props.mjs (options.scene picks
+// the moment instead of minutes)
+const PROPS = (() => {
+  const L = [], Y = CORE.YARDS, cv0 = (y, i) => Y[y].cover[i], fr = o => Object.assign({ freeze: 1 }, o);
+  L.push(['a kid hiding, the garden', 0, 'kid0', 0, 2.6, fr({ scene: 'first' })]);
+  L.push(['Big Rosa', 0, 'kid3', 0, 2.2, fr({ scene: 'first', pitch: .15 })]);
+  L.push(['a kid face on', 0, 'kid1', 0, 3.2, fr({ scene: 'join', pitch: .05 })]);
+  L.push(['your wall and the pile', 0, 'wall', 0, 1.6, fr({ scene: 'first', pitch: .5, yaw: Math.PI })]);
+  L.push(['your side at the wall', 0, 'ally0', 0, 2.2, fr({ scene: 'yard2', yaw: Math.PI, pitch: .25 })]);
+  L.push(['snow and ground, close', 0, 0, 4, 2.5, fr({ scene: 'first', y: 0, pitch: .6 })]);
+  ['wall', 'man', 'hedge'].forEach((t, i) => L.push(['cover: ' + t + ' (garden)', 0, cv0(0, i)[0], cv0(0, i)[1], 2.4, fr({ scene: 'first', y: .6 })]));
+  [0, 3].forEach(i => L.push(['cover: ' + ['car', 'wall', 'car', 'bin'][i] + ' (street)', 0, cv0(1, i)[0], cv0(1, i)[1], 2.4, fr({ scene: 'yard2', y: .6 })]));
+  L.push(['cover: fort (schoolyard)', 0, cv0(2, 0)[0], cv0(2, 0)[1], 2.4, fr({ scene: 'yard3', y: .6 })]);
+  [3, 4].forEach(i => L.push(['cover: ' + ['hedge', 'man', 'hedge', 'rock', 'bench'][i] + ' (park)', 0, cv0(3, i)[0], cv0(3, i)[1], 2.4, fr({ scene: 'yard4', y: .6 })]));
+  [0, 3].forEach(i => L.push(['cover: ' + ['rock', 'rock', 'rock', 'ice'][i] + ' (mountain)', 0, cv0(4, i)[0], cv0(4, i)[1], 2.4, fr({ scene: 'yard5', y: .6 })]));
+  for (let y = 0; y < 5; y++) L.push(['the far end, ' + Y[y].name.toLowerCase(), 0, 0, 18, .55, fr({ scene: y ? 'yard' + (y + 1) : 'first', pitch: .12, y: 2 })]);
+  L.push(['snowballs in the air', 0, 0, 6, 1.4, fr({ scene: 'yard3', pitch: .2 })]);
+  L.push(['the sledge', 0, 'sledge', 0, 2.4, fr({ scene: 'sledge' })]);
+  L.push(['Biscuit the dog', 0, 'dog', 0, 3, fr({ scene: 'dog', yaw: Math.PI * .85 })]);
+  L.push(['snowmen on the wall', 0, 'sentry', 0, 2.4, fr({ scene: 'yard3', yaw: Math.PI * .9 })]);
+  L.push(['the catapult', 0, 'cata', 0, 2.6, fr({ scene: 'cata', yaw: Math.PI * .8 })]);
+  L.push(['the yeti', 0, 'yeti', 0, 1.1, fr({ scene: 'yeti', pitch: .15 })]);
+  L.push(['the yeti and his present', 0, 'present', 0, 1.6, { scene: 'end', pitch: .2 }]);
+  L.push(['the felt tree, whole', 0, 0, .5, 1, { on: 'tree', scene: 'yard5' }]);
+  L.push(['baubles, close', 0, 0, .15, 2.5, { on: 'tree', scene: 'yard3' }]);
+  return L;
+})();
 K.world({
   start(saved) {
     setupGL(); buildMeshes();
     S = saved || CORE.init(1);
+    let keep = null;
+    if (K.slot === 'dev' && QS.get('scene')) { const T = scene(QS.get('scene')); if (T) { S = T; keep = T.ev; } }
     S.ev = [];
     layout(); setLook(S.yard); yardShown = S.yard;
     if (S.fin) finT = 9;
@@ -8149,6 +8242,7 @@ K.world({
     else if (!S.runs) { CORE.act(S, 'run'); S.ev.length = 0; say('Snow day!', 'No school. Big Rosa’s gang has taken the garden. Win them over, one snowball at a time.', 6); }
     else if (S.phase === 'shop') openShop();
     addEventListener('resize', layout);
+    if (keep) { S.ev = keep; const w = keep.find(e => e.k === 'yard'); if (w) { yardShown = w.y; setLook(w.y); } }   // a scene stopped on a moment: the view stages what happened in it
     K.loop(frame);
   },
   save() { return S; },
@@ -8162,7 +8256,10 @@ K.debug = {
   sledge: () => S.sledge ? scr(CORE.sledgeX(S.sledge), .6, S.sledge.z) : null,
   present: () => presentAt ? presentRect() : null,
   node: id => { const n = nodeXY(id); return { x: n.x + TR.x0, y: n.y + TR.y0 }; },
-  snap: () => { render(gt); return cv.toDataURL(); }
+  look, props: PROPS, scenes: Object.keys(SCENES), gt: () => gt, cam: () => Object.assign({}, CAM), layout: () => ({ VW, VH, DPR, W0, KS, desk }),
+  out: () => $('out').getBoundingClientRect(), buy: () => $('buy').getBoundingClientRect(), cata: () => $('cata').getBoundingClientRect(),
+  card: () => { const c = $('card'); return c.hidden ? null : c.querySelector('button').getBoundingClientRect(); },
+  snap: () => { if (!$('shop').hidden) { drawTree(); return tc.toDataURL(); } render(gt); return cv.toDataURL(); }
 };
 })();
 </script>
@@ -8183,22 +8280,22 @@ K.debug = {
 const CORE = (() => {
   const { rand, clamp } = KIT, { sqrt, abs, floor, min, max, pow, hypot, ceil } = Math;
   const P = { reach: .75, run: 2, wind: .85, upAfter: .45, down: 1.1, fly: 1.25, hitWarm: 4, drain: 1,
-    sledgeEvery: 26, sledgeLife: 5, cataNeed: 30, yardPause: 0 };
+    sledgeEvery: 26, sledgeLife: 5, cataNeed: 180, yardPause: 0, grace: .3 };
   /* the yards: cover is [x, z, width]; kids are [name, resolve, colour index, captain]; on each yard the
      gang throws faster, their snowballs fly quicker and everything pays more */
   const YARDS = [
     { name: 'The back garden', cover: [[-2.6, 6.3, 1.6], [0, 8.4, 1.7], [2.7, 7, 1.5], [-1.2, 11.2, 1.7], [1.7, 11.9, 1.6]],
-      kids: [['Ned', 7, 0], ['Pip', 9, 1], ['Tess', 11, 2], ['Big Rosa', 30, 3, 1]], R: 6, V: 1, busy: 2, aim: .4, fly: 1.4, rest: [1.4, 3.2] },
+      kids: [['Ned', 7, 0], ['Pip', 9, 1], ['Tess', 11, 2], ['Big Rosa', 30, 3, 1]], R: 24, V: 1, busy: 2, aim: .4, fly: 1.4, rest: [1.4, 3.2] },
     { name: 'The street', cover: [[-2.9, 6.3, 1.6], [-0.9, 7.8, 1.5], [1.4, 6.7, 1.6], [3.2, 9.2, 1.5], [-2.3, 10.6, 1.7], [0.6, 11.9, 2], [2.6, 13.3, 1.6]],
-      kids: [['Otto', 7, 4], ['June', 8, 5], ['Kit', 9, 6], ['Ferris', 10, 0], ['Moll', 11, 1], ['The Sledge Twins', 32, 2, 1]], R: 75, V: 5, busy: 3, aim: .52, fly: 1.25, rest: [1.2, 3] },
+      kids: [['Otto', 7, 4], ['June', 8, 5], ['Kit', 9, 6], ['Ferris', 10, 0], ['Moll', 11, 1], ['The Sledge Twins', 32, 2, 1]], R: 600, V: 5, busy: 3, aim: .52, fly: 1.25, rest: [1.2, 3] },
     { name: 'The schoolyard', cover: [[-3.2, 6, 1.5], [-1.2, 7, 1.6], [1.2, 7, 1.6], [3.2, 6, 1.5], [-2.3, 9.8, 1.7], [0, 10.6, 1.8], [2.3, 9.8, 1.7], [-1.2, 13.3, 2], [1.7, 14.1, 2]],
-      kids: [['Abe', 7, 3], ['Bea', 8, 4], ['Cal', 8, 5], ['Dot', 9, 6], ['Eli', 10, 0], ['Fay', 10, 1], ['Gus', 11, 2], ['Head Boy Hector', 34, 3, 1]], R: 2600, V: 30, busy: 4, aim: .55, fly: 1.15, rest: [1, 2.8] },
+      kids: [['Abe', 7, 3], ['Bea', 8, 4], ['Cal', 8, 5], ['Dot', 9, 6], ['Eli', 10, 0], ['Fay', 10, 1], ['Gus', 11, 2], ['Head Boy Hector', 34, 3, 1]], R: 31200, V: 30, busy: 4, aim: .55, fly: 1.15, rest: [1, 2.8] },
     { name: 'The park', cover: [[-3.2, 6.3, 1.6], [-0.6, 6.7, 1.5], [2.3, 6.3, 1.6], [-2, 9.2, 1.7], [0.9, 9.5, 1.7], [3.2, 9.8, 1.5], [-2.9, 12.7, 1.6], [-0.3, 13, 2], [2.3, 13.7, 1.7]],
-      kids: [['Hal', 7, 4], ['Ivy', 8, 5], ['Jem', 8, 6], ['Lou', 9, 0], ['Max', 9, 1], ['Nan', 10, 2], ['Oz', 10, 3], ['Pat', 11, 4], ['The Big Kids', 36, 5, 1]], R: 4e4, V: 200, busy: 5, aim: .58, fly: 1.05, rest: [.9, 2.6] },
+      kids: [['Hal', 7, 4], ['Ivy', 8, 5], ['Jem', 8, 6], ['Lou', 9, 0], ['Max', 9, 1], ['Nan', 10, 2], ['Oz', 10, 3], ['Pat', 11, 4], ['The Big Kids', 36, 5, 1]], R: 4.8e5, V: 200, busy: 5, aim: .58, fly: 1.05, rest: [.9, 2.6] },
     { name: 'The mountain', cover: [[-2.9, 6.3, 1.7], [0, 7, 1.7], [2.9, 6.3, 1.7], [-1.7, 9.8, 2], [1.7, 9.8, 2], [-3.2, 13.3, 1.7], [0, 14.1, 2.1], [3.2, 13.3, 1.7]],
-      kids: [['Quin', 8, 6], ['Ros', 9, 0], ['Sid', 10, 1], ['Tam', 11, 2], ['Uma', 12, 3], ['Vic', 13, 4], ['The Yeti', 70, 7, 2]], R: 6e5, V: 1500, busy: 5, aim: .6, fly: .98, rest: [.9, 2.4] }
+      kids: [['Quin', 8, 6], ['Ros', 9, 0], ['Sid', 10, 1], ['Tam', 11, 2], ['Uma', 12, 3], ['Vic', 13, 4], ['The Yeti', 70, 7, 2]], R: 1.32e7, V: 1500, busy: 5, aim: .6, fly: .98, rest: [.9, 2.4] }
   ];
-  const TIERC = [1, 40, 1500, 6e4, 2.5e6];   // what a decoration on each tier of the tree costs
+  const TIERC = [1, 160, 12000, 6e5, 2.5e7];   // what a decoration on each tier of the tree costs
 
   /* the tree: a fir in the front room, decorated from the bottom up. Each tier opens with a yard.
      p: the decoration it hangs from (bought once at least). */
@@ -8307,13 +8404,13 @@ const CORE = (() => {
     let crit = 0;
     if (b.by === 0 && st.crit && rand(S) < st.crit) { d *= 4; crit = 1; }
     const was = k.st;
-    k.r = max(0, k.r - d); S.hits++; if (st.cata) S.cata = min(1, S.cata + 1 / (P.cataNeed * st.cataN));
+    k.r = max(0, k.r - d); S.hits++; if (!b.by) S.mh = (S.mh | 0) + 1; if (st.cata) S.cata = min(1, S.cata + 1 / (P.cataNeed * st.cataN));
     // the first time you hit each kid in a run pays three times: a stranger's first tap is worth something
     const first = b.by === 0 && k.fh; k.fh = 0;
     pay(S, val(S) * (b.by ? .5 : 1) * (crit ? 2 : 1) * (k.cap ? 1.5 : 1) * (first ? 3 : 1), k.x, k.z, first ? 'first' : 'hit', b.by);
     ev(S, { k: 'hit', i: k.i, d, crit, by: b.by, kind: b.kind, x: k.x, z: k.z, was });
     if (k.r <= 0) { join(S, k); return; }
-    k.st = 'down'; k.t = P.down;
+    if (was !== 'down') { k.st = 'down'; k.t = P.down; }   // landing on a kid already down does not keep them there
   }
   function join(S, k) {
     const st = stats(S);
@@ -8345,7 +8442,9 @@ const CORE = (() => {
       if (k.ally) continue;
       const dd = hypot(k.x - b.x, k.z - b.z);
       if (dd > R + (k.tgt === b.id ? .15 : 0)) continue;
-      const open = hittable(k) || (b.kind === 1 && k.st === 'hide') || b.kind === 3;
+      // a kid who ducks as your snowball comes is still caught on the way down: a crouch takes a moment
+      // and one already knocked over is still there to land on: a snowball in the air does not vanish because another got there first
+      const open = hittable(k) || k.st === 'down' || (b.kind === 1 && k.st === 'hide') || b.kind === 3 || (k.tgt === b.id || b.tgt === k.i) && k.st === 'hide' && S.runT - (k.dk || -9) < P.grace;
       if (!open) continue;
       const main = dd <= P.reach + .15 || b.kind >= 2;
       hitKid(S, k, b.d * (main ? 1 : .5), b); any = 1;
@@ -8354,7 +8453,7 @@ const CORE = (() => {
     if (!any) {
       // what it hit instead: cover, or snow
       const cv = YARDS[S.yard].cover.find(c => abs(c[0] - b.x) < c[2] / 2 + .3 && b.z > c[1] - .9 && b.z < c[1] + 1.2);
-      ev(S, { k: 'miss', x: b.x, z: b.z, cover: cv ? 1 : 0, by: b.by });
+      ev(S, { k: 'miss', x: b.x, z: b.z, cover: cv ? 1 : 0, by: b.by, tgt: b.tgt });
     }
   }
   // a kid picks something to do next
@@ -8398,7 +8497,7 @@ const CORE = (() => {
       if (k.t > 0) continue;
       if (k.st === 'hide') decide(S, k);
       else if (k.st === 'wind') { throwAt(S, k); k.st = 'up'; k.t = P.upAfter; }
-      else if (k.st === 'up' || k.st === 'down') { k.st = 'hide'; k.t = Y.rest[0] + rand(S) * (Y.rest[1] - Y.rest[0]); }
+      else if (k.st === 'up' || k.st === 'down') { k.st = 'hide'; k.dk = S.runT; k.t = Y.rest[0] + rand(S) * (Y.rest[1] - Y.rest[0]); }
     }
     // their snowballs
     for (const b of S.inc) {
@@ -8562,14 +8661,22 @@ const CORE = (() => {
     casual: person({ read: 7, buy: 2, maxBuys: 4, react: .8, gap: .55, swat: .45, sledge: .5, miss: .25, focus: 0, picky: 1, breakEvery: 400, breakLen: 50 })
   };
 
+  // back to the snow from the shelf after the end: on the mountain again with every decoration and coin kept and the
+  // rest of the tree still to buy; the mountain's gang (the yeti too) has dug in again and has to be won over once more
+  function revisit(S) {
+    const Y = YARDS.length - 1;
+    S.allies = S.allies.filter(a => a.y !== Y); S.allies.forEach((a, j) => { a.slot = j; });
+    Object.assign(S, { fin: 0, yard: Y, tier: Y, phase: 'shop', kids: makeKids(Y), balls: [], inc: [], sledge: null, hold: null, cata: 0, yt: 0, ev: [] });
+    return S;
+  }
   const feats = [
     ['swat', 'Good swat', 'Swat 150 snowballs out of the air.', S => S.swats >= 150],
     ['sledge', 'Sledge chaser', 'Hit sixty passing sledges.', S => (S.sledges | 0) >= 60],
-    ['hits', 'Snowball season', 'Land 1,900 snowballs.', S => S.hits >= 1900],
+    ['hits', 'Snowball season', 'Land 4,000 snowballs with your own hands.', S => (S.mh | 0) >= 4000],
     ['army', 'Everybody’s friend', 'Win thirty kids over to your side.', S => S.allies.length >= 30],
-    ['cata', 'Siege engineer', 'Fire the catapult a hundred times.', S => (S.catas | 0) >= 100]
+    ['cata', 'Siege engineer', 'Fire the catapult a hundred and fifty times.', S => (S.catas | 0) >= 150]
   ];
-  return { version: 1, P, YARDS, UP, byId, TIERC, makeKids, stats, price, open, can, val, lead, flyT, hittable, sledgeX, yardLeft,
+  return { version: 1, revisit, P, YARDS, UP, byId, TIERC, makeKids, stats, price, open, can, val, lead, flyT, hittable, sledgeX, yardLeft,
     init, step, act, done, progress, milestones, bots, feats };
 })();
 </script>
