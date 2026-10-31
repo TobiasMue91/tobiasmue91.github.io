@@ -1107,6 +1107,80 @@ still undone, most valuable first:
   edge), and the neighbours moved in so the desktop cellar has no bare margins. Ready for the owner's playtest.
   **The owner's playtest** (October 2026): the box "looks much more mature"; the bulges were too large and are 10%
   smaller (`BR`: 180 on a wide screen, 194 on a phone).
+- **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
+  the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
+  from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
+  chosen archer's dashed ring ran over his head, and rabbits seemed to vanish and reappear at random; then, mid-session, that
+  layers must be respected everywhere (an archer stood behind a trebuchet that was drawn over him).
+  - *Tools first.* `CORE.revisit` (back before the king's folio from the shelf, the tree and the leaf kept; tested);
+    `?world=warren&scene=<name>` plays the eager bot (`&bot=`, `&seed=`) to the moment and starts there: first, tree1, prep,
+    folio1..13, crowd, hare, falc, ferret, treb, dragon, ink, bell, flood, won, lost, chapter2..4, king, kneel, end (a name is
+    looked up whole before a digit is split off; only moments keep their events). `K.debug.look(x, y, scale, { freeze, on:
+    'tree', sel })` takes things by name (`monk`, `snail`, `treb`, `falc`, `ferret`, `tower<i>`, `king`, `hare`, `crowd`), 25
+    close-ups in `K.debug.props`, `snap()` the canvas (or the tree). Switches for a real phone: `?fps` (frame rate, draw calls,
+    rabbits drawn and the budget, DPR, canvas size, and milliseconds per part, each part flushed with a one-pixel read),
+    `?dpr=1`, `?fx=0` (no particles, cloud shadows, vignette or shake), `?glow=0`, `?horde=<n>` (rabbits drawn at most). The
+    suite refuses a line comment in the view with a statement after it, as for Snow Day.
+  - *A bot that never rang the bell.* Counted by cause over the eager bot's game: monks 62%, dragon 13%, trebuchets 9%, ferrets
+    6%, flood 5%, ink 3%, falcons 3%, and the great bell **never**. The bots weighed a single cell against thresholds of 20 to
+    30 rabbits, and a cell holds at most 24 (`P.cap`): the bell could not fire and the ink rarely did, so the pacing had been
+    tuned without them. `thick()` now weighs a cell with its four neighbours; the bell takes 2% and the ink 16%, and the eager
+    bot takes 43 minutes (41.5 before), the casual one 75 to 82 (79 to 86 before), the longest wait 3.8 minutes.
+  - *Rabbits that popped.* Counted with `K.debug.ch()`: the view faded 25 to 50 rabbits a second in and out mid-route, because
+    the rules' count spreads like a liquid along the road while the view's walkers keep together, so the correction removed
+    them at the back and added them at the front. Now a rabbit may only be made or dropped where nobody can see it happen (off
+    the screen, at a hole, deep in a crowd of nine and more); anywhere else a surplus runs to the nearest shortfall within 52
+    units, and a slain rabbit falls over where it stood into an ink blot (charred, if fire took it) instead of vanishing; at the
+    wall they gnaw and run off home, fading. Measured again: no fade left in sight on a phone.
+  - *Layers.* Rabbits, defenders, golden hares, the king, every tree, every cottage and the castle's walls (its sprite cut where
+    they meet the mound) are drawn in one pass sorted by the line each stands on; a defender, hare or king hidden by a tree, a
+    cottage or the crowd is drawn over it as a pale silhouette, as strategy games do (see-through trees read as a drawing
+    fault). The chosen defender's ring lies on the ground under him.
+  - *The owner's other notes.* The dragon hint holds its line on the land and moves on only when the crowd has left it,
+    gliding; a rabbit near a snail takes a green glaze as strong as the snail slows it (the slime map is the flow field's speed
+    against the same land without snails), so its reach and effect show.
+  - *A critic's round* (fresh, phone filmstrips with real touch): 7/5/7/6/5 and **5** for "would pass as commercial". What it
+    asked for and what changed: the horde read as gravel (rabbits a fifth larger on a phone, red eyes with a glint: they are the
+    margins' killer rabbits); grey ability buttons that could not be told apart while resting (they keep their colours under a
+    dark wedge that sweeps away, with the seconds left on a tag); the ending's frame let silhouettes of the land through and the
+    bottom bar stayed over it (both gone); every monk's fan showed all the time (only while the land waits for the horn, for
+    the chosen monk and while dragging); the HUD covered the castle (the auto camera eases it out from under); the wall bar read
+    full after a lost run (it shows how the run ended until the next begins); AUTO was never explained (said the first time the
+    player takes the camera); a pink castle while gnawed (a flush at a third of the strength); place names on the world map
+    shouted over the play (smaller, quieter). Not done, the owner's call: the leaf runs into millions by the world map (the
+    critic finds idle-game numbers off-tone for a manuscript).
+  - *Also new.* The book shrine is a reliquary, a chasse of gilt and blue enamel on four paws with an arcade of trefoil niches
+    (a gold rabbit saint in each), a lid diapered with quatrefoils, the next number on a label, a pierced cresting and crystal
+    knops; opened, the lid tips back, light pours out, and the opening grows out of the shrine until the view looks down into
+    it, a floor of light between gilt walls, which is the rectangle handed to the shell. The rabbit king has two phases: at
+    three fifths he calls his court out of the holes, at a quarter once more, and spurs his snail on. A folio held is kept on the
+    desk (the rules have already moved on: the HUD and the land no longer give the next page away behind the card) and turned
+    over, right to left, when the player goes back to the land, with a fold, the back of the page and its shadow. Medallions on
+    the Tree of Jesse show what they give, drawn with the box's own pen (monk, arrow, dragon, snail, castle, trebuchet, inkpot,
+    falcon, ferret, hare, leaf, bell, wave), with the price on a tag and the effect in a word or two ("×1.3 kills", "+2
+    monks"); on a phone the tree frames only what is bought and can be bought, larger. On a desktop the empty left page keeps a
+    chronicle: who slew how many on this folio (with the medallion pictures) and the last events in the scribe's hand. Kill
+    counts of the gifts are larger, in the textura, and one per use. Sequences run on game time (`later`), never `setTimeout`.
+  - *A desktop critic* (fresh, same capture at 1280×800): 7/5/7/**4**/5 and **4**: the wide screen added nothing a phone did
+    not show. Changed: every message after the first run goes to the chronicle on the left page, never over the battlefield;
+    the land is framed as a page, a bar border of lapis and vermilion between gold rules round what is painted so far, with
+    ivy sprays curling out of it (hairline stems, leaves in gold, lapis and verdigris) and gilt bosses at the corners, a rabbit
+    with a spear facing a snail in the lower margin and a golden hare leaping over the top; the unpainted vellum's underdrawing
+    is a scribe's sepia sketch of little trees and its stains are uneven, darker at the rim (the critic took the old discs for
+    placeholder wallpaper); the tray holds every kind of defender the player owns, greyed when all are on the land, and a click
+    on a greyed one finds the next of its kind; the gifts carry their hotkeys; the ending's frame is half as large again. The
+    close-ups (`util/cmv_props.mjs warren`, 25 tiles) found a red square over the castle when the wall fell (a leftover
+    `fillRect`; now the castle's own red-tinted sprite), a zigzag sheen on the ink (a polyline through jittered blobs; now a
+    curve through their midpoints), charred rabbits and their blots that made a brown mud where the dragon burnt (lighter),
+    and the tree's snapshot without its parchment. Every first-run loss now reads "A first taste": what the run paid, and what
+    to do with it, instead of "The wall is eaten!" after a tutorial. A monk who has just shot holds an empty string and rocks
+    back before he nocks the next arrow. On a phone the Tree of Jesse opens on Jesse and the trunk, large, and gold arrows at
+    the edge point to medallions out of view (a tap on one brings it in).
+  - *Sound*, rendered offline (`OfflineAudioContext`, the box's own sound functions in a page of their own): the music peaks
+    at −19 dB with an average of −37; a dense moment of effects (kills, bites, stones, the dragon, the bell, the flood, a hare)
+    peaks at −10 dB, average −32. Nothing clips; nothing changed.
+  - *Cost of a frame* (`?fps`, the world map's largest horde, phone, headless software rendering): about 2,000 rabbits drawn,
+    1,800 draw calls, horde 29 ms, land 7 to 14 ms. Nobody has measured it on a real phone yet.
 - **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
   the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
   haunt, which nobody but its author has seen yet.
@@ -1775,6 +1849,15 @@ A box that answers these in a dull way (pull a ball back and let it go; tap an a
 is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
+
+- **A bot's threshold above what the rules can hold means it never acts.** Here Be Rabbits' bots waited for 25 rabbits in one
+  cell to ring the bell, and a cell holds 24: in the whole of the eager bot's game the bell never rang, and the pacing had been
+  tuned without it. Count every ability's uses by cause before trusting the pacing, and weigh a crowd, not a cell.
+- **The rules turn the page in the step that wins it; the view keeps the old one on the desk.** The folio held and the next
+  one painted happened in the same step, so the next page showed behind the card that said this one was held. The view copies
+  the canvas at the win and draws that copy until it turns the page itself.
+- **A see-through tree reads as a drawing fault.** To keep a defender visible behind a tree, draw the defender's silhouette
+  over the tree; fading the tree shows trunks and crowns through each other.
 
 - **A bug can hold up the balance, twice now.** Snow Day was tuned while a kid knocked down by one snowball could not be
   hit by the next one in the air, so 85% of the player's own throws were wasted; mending it took the eager bot from 35
