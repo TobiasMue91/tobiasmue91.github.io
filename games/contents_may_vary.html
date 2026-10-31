@@ -7239,11 +7239,11 @@ const DIAG = { fps: QS.has('fps'), dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !=
 /* ======================= a felt-and-snow renderer in WebGL 2 ======================= */
 const cv = $('gl'), gl = cv.getContext('webgl2', { antialias: DIAG.aa, alpha: true, premultipliedAlpha: false });
 const VS = `#version 300 es
-in vec3 aP; in vec3 aN; uniform mat4 uVP, uM; uniform mat3 uNm; out vec3 vW, vN, vO;
-void main(){ vec4 w = uM * vec4(aP, 1.); vW = w.xyz; vN = uNm * aN; vO = aP; gl_Position = uVP * w; }`;
+in vec3 aP; in vec3 aN; in vec3 aO; in vec3 aC; in vec4 aX; uniform mat4 uVP, uM; uniform mat3 uNm; uniform float uBake; out vec3 vW, vN, vO, vC; flat out vec4 vX;
+void main(){ vec4 w = uM * vec4(aP, 1.); vW = w.xyz; vN = uNm * aN; vO = uBake > .5 ? aO : aP; vC = aC; vX = aX; gl_Position = uVP * w; }`;
 const FS = `#version 300 es
 precision highp float;
-in vec3 vW, vN, vO; uniform vec3 uC, uL, uCam, uFog, uCool; uniform float uMat, uA, uFn, uFf, uBoil, uGnd, uJit, uHem; uniform vec3 uTint; out vec4 o;
+in vec3 vW, vN, vO, vC; flat in vec4 vX; uniform vec3 uC, uL, uCam, uFog, uCool; uniform float uMat, uA, uFn, uFf, uBoil, uGnd, uJit, uHem, uBake; uniform vec3 uTint; out vec4 o;
 float h3(vec3 p){ p = fract(p * .3183099 + .1); p *= 17.; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float vn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
   return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
@@ -7252,30 +7252,32 @@ float vn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
 float fib(vec3 p, float sc){ vec3 d = normalize(vec3(vn(p * 1.3) - .5, vn(p * 1.3 + 9.) - .5, vn(p * 1.3 + 19.) - .5) + .001);
   vec3 q = p * sc; float a = dot(q, d); vec3 r = q - d * a; return vn(r * 1. + vec3(a * .12)); }
 void main(){
-  if (uMat > 3.5 && uMat < 4.5) { float r = length(vO.xz) * 2.; o = vec4(uC, uA * pow(1. - smoothstep(.0, 1., r), 1.6)); return; }
+  // scenery that never moves is baked into one buffer: its colour and material come with each vertex
+  vec3 C0 = uBake > .5 ? vC : uC; float MAT = uBake > .5 ? vX.x : uMat, JT = uBake > .5 ? vX.y : uJit, HEM = uBake > .5 ? vX.z : uHem;
+  if (MAT > 3.5 && MAT < 4.5) { float r = length(vO.xz) * 2.; o = vec4(C0, uA * pow(1. - smoothstep(.0, 1., r), 1.6)); return; }
   vec3 N = normalize(vN), V = normalize(uCam - vW); if (dot(N, V) < 0.) N = -N;
   float d = dot(N, uL), w = clamp(d * .5 + .5, 0., 1.); w = w * w * (3. - 2. * w);
   float rim = 1. - max(dot(N, V), 0.);
   // what stands on the snow is darker where it meets it, and lit from below by the snow it stands on
   float ao = uGnd > .5 ? 1. : smoothstep(0., .35, vW.y);
   vec3 c;
-  if (uMat < .5) {          // felt: soft light, fibres, pilling, a fuzzy rim
+  if (MAT < .5) {          // felt: soft light, fibres, pilling, a fuzzy rim
     vec3 q = vW + uBoil * vec3(.137, .071, .113);
     float f = vn(q * 38.) * .45 + vn(q * 110.) * .35 + vn(vW * 6.) * .2;
     float st = fib(q * 6., 48.);
-    vec3 base = uC * (1. + (uJit - .5) * .12);
+    vec3 base = C0 * (1. + (JT - .5) * .12);
     c = base * (.5 + .62 * w) * (.76 + .4 * f) * (.96 + .08 * smoothstep(.4, .8, st));
     { vec3 cp = q * 55., cf = fract(cp) - .5; float pl = step(.9, h3(floor(cp))) * (1. - smoothstep(.18, .3, length(cf))); c *= 1. + .12 * pl; }   // round bobbles of pilled wool
     c += base * pow(rim, 1.8) * .6 + vec3(.06) * pow(rim, 3.);            // the fuzz catches light at the edge
     c = mix(c, uCool * dot(base, vec3(.33)), .16 * (1. - w));
     c += base * .22 * max(-N.y, 0.);                                       // light thrown up off the snow
-    if (uHem > .5) {   // a blanket stitch in cream thread round the hem: a running line and a comb of bars down to the edge
+    if (HEM > .5) {   // a blanket stitch in cream thread round the hem: a running line and a comb of bars down to the edge
       float a = atan(vO.x, vO.z) / 6.2832 * 30., y = vO.y;
       float bar = step(abs(fract(a) - .5), .07) * step(.012, y) * step(y, .075), run = step(abs(y - .075), .009);
       c = mix(c, vec3(.96, .92, .82) * (.6 + .5 * w), clamp(bar + run, 0., 1.) * .9);
     }
     c *= mix(.68, 1., ao);
-  } else if (uMat < 1.5) {  // cotton wool: lumps, then a mat of fibres, soft and nearly shadowless
+  } else if (MAT < 1.5) {  // cotton wool: lumps, then a mat of fibres, soft and nearly shadowless
     vec3 q = vW + uBoil * vec3(.05, .03, .04);
     N = normalize(N + (vec3(vn(vW * 4.3), vn(vW * 4.3 + 17.), vn(vW * 4.3 + 31.)) - .5) * .55); d = dot(N, uL);
     float lump = vn(vW * 1.6) * .25 + vn(vW * 5.) * .35 + vn(vW * 14.) * .4;
@@ -7288,23 +7290,23 @@ void main(){
     c = mix(c, vec3(1., .99, .97), pow(rim, 2.4) * .32 * (.6 + .8 * s1) * side);           // fuzz catching the light on the lit edge only
     c = mix(c, uCool * .86, pow(rim, 1.6) * .3 * (1. - side));                             // and turning away into cool shade, so a ball is round, not a bubble
     c = mix(c, uCool * .92, (1. - ao) * .35);   // a little blue where it sits in the snow
-    c *= uC;
-  } else if (uMat > 4.5) {  // ice: a cold crystal, dark in its heart, bright at its edges and where it catches the light
+    c *= C0;
+  } else if (MAT > 4.5) {  // ice: a cold crystal, dark in its heart, bright at its edges and where it catches the light
     float fr = pow(rim, 2.);
     float core = 1. - fr;
-    c = mix(uC * (.72 + .3 * core), vec3(.92, .98, 1.), fr * .85) * (.82 + .25 * w) + vec3(1.) * pow(max(dot(reflect(-uL, N), V), 0.), 30.) * .45;
+    c = mix(C0 * (.72 + .3 * core), vec3(.92, .98, 1.), fr * .85) * (.82 + .25 * w) + vec3(1.) * pow(max(dot(reflect(-uL, N), V), 0.), 30.) * .45;
     c += vec3(.55, .8, .95) * .18 * vn(vO * 6.);   // light caught inside the ice
-  } else if (uMat > 2.5) {  // painted wood: grain along the piece, a satin sheen
+  } else if (MAT > 2.5) {  // painted wood: grain along the piece, a satin sheen
     float g = sin((vO.x * 1.7 + vO.z) * 38. + vn(vO * vec3(5., 26., 5.)) * 7.) * .5 + .5;
-    vec3 base = uC * (1. + (uJit - .5) * .16);
+    vec3 base = C0 * (1. + (JT - .5) * .16);
     c = base * (.5 + .6 * w) * (.84 + .16 * g) + vec3(1., .95, .85) * pow(max(dot(reflect(-uL, N), V), 0.), 16.) * .14;
     c = mix(c, uCool * dot(base, vec3(.33)), .14 * (1. - w)) + base * .18 * max(-N.y, 0.);
     c *= mix(.7, 1., ao);
   } else {                  // glowing: windows, lamps, the yeti's eyes; drawn see-through it is a halo that fades to its edge
-    if (uA < .99) { o = vec4(uC, uA * pow(max(dot(N, V), 0.), 2.5)); return; }
-    c = uC;
+    if (uA < .99) { o = vec4(C0, uA * pow(max(dot(N, V), 0.), 2.5)); return; }
+    c = C0;
   }
-  if (uMat < 1.5 || uMat > 2.5) c *= uTint;   // each yard's light: warm at sunset, cold on the mountain
+  if (MAT < 1.5 || MAT > 2.5) c *= uTint;   // each yard's light: warm at sunset, cold on the mountain
   c = mix(c, uFog, smoothstep(uFn, uFf, length(vW - uCam)));
   o = vec4(c, uA);
 }`;
@@ -7314,8 +7316,8 @@ function setupGL() {
   prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   gl.useProgram(prog);
-  for (const u of ['uVP', 'uM', 'uNm', 'uC', 'uL', 'uCam', 'uFog', 'uCool', 'uMat', 'uA', 'uFn', 'uFf', 'uBoil', 'uGnd', 'uJit', 'uHem', 'uTint']) U[u] = gl.getUniformLocation(prog, u);
-  A.p = gl.getAttribLocation(prog, 'aP'); A.n = gl.getAttribLocation(prog, 'aN');
+  for (const u of ['uVP', 'uM', 'uNm', 'uC', 'uL', 'uCam', 'uFog', 'uCool', 'uMat', 'uA', 'uFn', 'uFf', 'uBoil', 'uGnd', 'uJit', 'uHem', 'uTint', 'uBake']) U[u] = gl.getUniformLocation(prog, u);
+  A.p = gl.getAttribLocation(prog, 'aP'); A.n = gl.getAttribLocation(prog, 'aN'); A.o = gl.getAttribLocation(prog, 'aO'); A.c = gl.getAttribLocation(prog, 'aC'); A.x = gl.getAttribLocation(prog, 'aX');
   gl.enable(gl.DEPTH_TEST);
 }
 // meshes: plain triangle lists of position and normal
@@ -7324,7 +7326,7 @@ function mesh(v) {
   const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(A.p); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 24, 0);
   gl.enableVertexAttribArray(A.n); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, 24, 12);
-  gl.bindVertexArray(null); return { vao, n: v.length / 6 };
+  gl.bindVertexArray(null); return { vao, n: v.length / 6, v };
 }
 function lathe(prof, seg) {   // prof: [r, y] from bottom to top; normals from the profile
   const v = [];
@@ -7374,42 +7376,72 @@ function groundV() { // the yard's snow, from groundH
 }
 let M_ = {};
 function buildMeshes() {
-  M_ = { sph: mesh(sphereV()), cyl: mesh(cylV()), cone: mesh(cylV(16, 0)), coat: mesh(cylV(14, .62)), box: mesh(boxV()), roof: mesh(prismV()), tor: mesh(torusV()), ice: mesh(crystalV()), ground: mesh(groundV()),
+  M_ = { sph: mesh(sphereV()), sphM: mesh(sphereV(16, 10)), sphL: mesh(sphereV(10, 6)), cyl: mesh(cylV()), cone: mesh(cylV(16, 0)), coat: mesh(cylV(14, .62)), box: mesh(boxV()), roof: mesh(prismV()), tor: mesh(torusV()), ice: mesh(crystalV()), ground: mesh(groundV()),
     disc: mesh(cylV(48, 1)) };
 }
 
 /* ---------- matrices: column-major 4×4; a stack for the puppets' joints ---------- */
 const I4 = () => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-function mul(a, b) { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3]; return o; }
+function mul(a, b, o = new Float32Array(16)) { for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3]; return o; }
+const TRS = Array.from({ length: 16 }, () => new Float32Array(16)); let trsI = 0;
 function trs(x, y, z, ry = 0, rx = 0, rz = 0, sx = 1, sy = sx, sz = sx) {
   const cy = cos(ry), sy_ = sin(ry), cx = cos(rx), sx_ = sin(rx), cz = cos(rz), sz_ = sin(rz);
   // R = Ry * Rx * Rz
   const r00 = cy * cz + sy_ * sx_ * sz_, r01 = -cy * sz_ + sy_ * sx_ * cz, r02 = sy_ * cx;
   const r10 = cx * sz_, r11 = cx * cz, r12 = -sx_;
   const r20 = -sy_ * cz + cy * sx_ * sz_, r21 = sy_ * sz_ + cy * sx_ * cz, r22 = cy * cx;
-  return new Float32Array([r00 * sx, r10 * sx, r20 * sx, 0, r01 * sy, r11 * sy, r21 * sy, 0, r02 * sz, r12 * sz, r22 * sz, 0, x, y, z, 1]);
+  // written into a small ring of scratch matrices: a local transform is used at once (by draw or push) and never kept
+  const o = TRS[trsI = (trsI + 1) & 15];
+  o[0] = r00 * sx; o[1] = r10 * sx; o[2] = r20 * sx; o[3] = 0; o[4] = r01 * sy; o[5] = r11 * sy; o[6] = r21 * sy; o[7] = 0; o[8] = r02 * sz; o[9] = r12 * sz; o[10] = r22 * sz; o[11] = 0; o[12] = x; o[13] = y; o[14] = z; o[15] = 1; return o;
 }
+const NM = new Float32Array(9);
 function nrm(m) { // inverse transpose of the upper 3×3
   const a = m[0], b = m[1], c = m[2], d = m[4], e = m[5], f = m[6], g = m[8], h = m[9], i = m[10];
   const A0 = e * i - f * h, A1 = -(d * i - f * g), A2 = d * h - e * g, det = a * A0 + b * A1 + c * A2 || 1e-9;
-  return new Float32Array([A0 / det, A1 / det, A2 / det, -(b * i - c * h) / det, (a * i - c * g) / det, -(a * h - b * g) / det, (b * f - c * e) / det, -(a * f - c * d) / det, (a * e - b * d) / det]);
+  NM[0] = A0 / det; NM[1] = A1 / det; NM[2] = A2 / det; NM[3] = -(b * i - c * h) / det; NM[4] = (a * i - c * g) / det; NM[5] = -(a * h - b * g) / det; NM[6] = (b * f - c * e) / det; NM[7] = -(a * f - c * d) / det; NM[8] = (a * e - b * d) / det; return NM;
 }
+// the joint stack keeps its matrices and reuses them: no allocation per joint, so throwing fast does not feed the collector
+const POOL = Array.from({ length: 48 }, () => new Float32Array(16)); let depth = 0;
 let stack = [I4()];
 const top_ = () => stack[stack.length - 1];
-const push = m => stack.push(mul(top_(), m)), pop = () => stack.pop();
+const push = m => stack.push(mul(top_(), m, POOL[depth++])), pop = () => { stack.pop(); depth--; };
 const hex = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
 const CC = {}; const col = h => CC[h] || (CC[h] = hex(h));
-let curMesh = null, drawn = 0, JIT = .5;   // JIT: a small shift of shade per object, so a row of things is not one thing copied
+let curMesh = null, drawn = 0, JIT = .5, verts = 0; const PARTS = {}; let part = 'other';
+const mark = n => { part = n; };   // JIT: a small shift of shade per object, so a row of things is not one thing copied
 // soft shadows, gathered while things are drawn (where they stand in the world) and laid on the snow last
 const SH = [], LIGHTS = []; function shade(rx, rz, a = .3, dx = 0, dz = 0) { const M = top_(); SH.push(M[12] + dx, M[14] + dz, rx, rz, a); }
 const WOOD = new Set(['#6b4a32', '#8a5a36', '#a77a52', '#7a4b2a', '#8a6040', '#6b4226', '#7a3b2a']);
+const MD = new Float32Array(16), UC = {};
+// baking: while BAKE is set, draw() writes the transformed vertices of what it is given (with their colour and material) into
+// one array instead of drawing; bakeEnd() turns that into a single buffer drawn with one call
+let BAKE = null;
+function bakeAdd(m, M, c, mat) {
+  const v = m.v, N = nrm(M), d = BAKE.d, hem = m === M_.coat ? 1 : 0;
+  for (let i = 0; i < v.length; i += 6) { const x = v[i], y = v[i + 1], z = v[i + 2], a = v[i + 3], b = v[i + 4], e = v[i + 5];
+    let nx = N[0] * a + N[3] * b + N[6] * e, ny = N[1] * a + N[4] * b + N[7] * e, nz = N[2] * a + N[5] * b + N[8] * e; const l = hypot(nx, ny, nz) || 1;
+    d.push(M[0] * x + M[4] * y + M[8] * z + M[12], M[1] * x + M[5] * y + M[9] * z + M[13], M[2] * x + M[6] * y + M[10] * z + M[14], nx / l, ny / l, nz / l, x, y, z, c[0], c[1], c[2], mat, JIT, hem, 0); }
+}
+function bakeEnd() {
+  const f = new Float32Array(BAKE.d), vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, f, gl.STATIC_DRAW);
+  const at = (loc, n, off) => { if (loc < 0) return; gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 64, off * 4); };
+  at(A.p, 3, 0); at(A.n, 3, 3); at(A.o, 3, 6); at(A.c, 3, 9); at(A.x, 4, 12);
+  gl.bindVertexArray(null); BAKE = null; return { vao, buf: b, n: f.length / 16 };
+}
+const u1 = (k, v) => { if (UC[k] !== v) { UC[k] = v; gl.uniform1f(U[k], v); } };
 function draw(m, local, c, mat = 0, a = 1) {
   if (mat === 0 && WOOD.has(c)) mat = 3;
-  const M = mul(top_(), local);
+  const M = mul(top_(), local, MD);
+  // a sphere is drawn as finely as it shows: by its size over its distance from the eye
+  if (m === M_.sph) { const sc = sqrt(max(M[0] * M[0] + M[1] * M[1] + M[2] * M[2], M[4] * M[4] + M[5] * M[5] + M[6] * M[6], M[8] * M[8] + M[9] * M[9] + M[10] * M[10])), e = camBasis.e, d = hypot(M[12] - e[0], M[13] - e[1], M[14] - e[2]) || 1, an = sc / d;
+    m = an > .09 ? M_.sph : an > .025 ? M_.sphM : M_.sphL; }
+  if (BAKE) { bakeAdd(m, M, typeof c === 'string' ? col(c) : c, mat); return; }
   gl.uniformMatrix4fv(U.uM, false, M); gl.uniformMatrix3fv(U.uNm, false, nrm(M));
-  gl.uniform3fv(U.uC, typeof c === 'string' ? col(c) : c); gl.uniform1f(U.uMat, mat); gl.uniform1f(U.uA, a); gl.uniform1f(U.uJit, JIT); gl.uniform1f(U.uHem, m === M_.coat ? 1 : 0);
+  const cc = typeof c === 'string' ? col(c) : c; if (UC.uC !== cc) { UC.uC = cc; gl.uniform3fv(U.uC, cc); }
+  u1('uMat', mat); u1('uA', a); u1('uJit', JIT); u1('uHem', m === M_.coat ? 1 : 0);
   if (curMesh !== m) { gl.bindVertexArray(m.vao); curMesh = m; }
-  gl.drawArrays(gl.TRIANGLES, 0, m.n); drawn++;
+  gl.drawArrays(gl.TRIANGLES, 0, m.n); drawn++; verts += m.n; const pp = PARTS[part] || (PARTS[part] = { d: 0, v: 0 }); pp.d++; pp.v += m.n;
 }
 // camera
 let VP = I4(), CAM = { x: 0, y: 3, z: -8, tx: 0, ty: 1, tz: 8, fov: 50 }, camBasis = null;
@@ -7496,9 +7528,9 @@ function snowman(x, z, s, hat = '#2a2a2e', scarf = '#b3243a') {
   pop();
 }
 // a wall built of snow: rows of lumps that overlap so no seam shows, bigger at the foot, a rounded top, sizes from a hash
-function snowWall(x, z, w, h, seed, d = .62) {
+function snowWall(x, z, w, h, seed, d = .62, L = .5) {
   for (let row = 0; row < 3; row++) {
-    const n = max(3, round(w / (.5 - row * .06))), rh = h * (row === 2 ? .42 : .45), y = row * h * .32 + rh * .45;
+    const n = max(3, round(w / (L - row * .06 * L / .5))), rh = h * (row === 2 ? .42 : .45), y = row * h * .32 + rh * .45;
     draw(M_.sph, P(0, x, y, z, 0, 0, 0, w * .97, rh * 1.05, d * .82), '#ffffff', 1);   // packed snow between the lumps, so the joins are filled
     for (let j = 0; j < n; j++) { const q = hash(seed + j, row, 5), q2 = hash(seed + j, row, 6), bx = x - w / 2 + (j + .5 + (row & 1) * .25 - .12) * w / n;
       draw(M_.sph, P(0, bx + (q - .5) * .08, y + (q2 - .5) * .06, z + (q - .5) * .06, q * 3, (q2 - .5) * .3, 0, w / n * (1.35 + q * .25), rh * (1.1 + q2 * .3), d * (.9 + q * .2)), '#ffffff', 1); }
@@ -7514,9 +7546,10 @@ function cover(type, x, z, w, i) {
     if (type === 'fort' && i % 2 === 0) { draw(M_.cyl, P(0, x + w / 2 - .15, h, z, 0, 0, 0, .04, 1, .04), '#6b4a32'); draw(M_.box, P(0, x + w / 2 + .05, h + .82, z, 0, 0, 0, .4, .26, .02), COAT[(i + yardShown) % 7]); }
   } else if (type === 'man') {
     // a snowman standing whole on the snow, and beside it (touching, not around it) the drift the snow for him was rolled from
-    snowman(x - w * .25, z - .05, .78, HAT[(i + 2) % 8], SCARF[i % 8]);
-    draw(M_.sph, P(0, x + w * .25, .02, z + .08, k * 2, 0, 0, w * .56, 1.8, .9), '#ffffff', 1);
-    draw(M_.sph, P(0, x + w * .02, .02, z + .1, k, 0, 0, w * .3, .55, .7), '#ffffff', 1);
+    // the drift is where the kids crouch, the middle of the cover; the snowman stands at its end, clear of anyone behind it
+    draw(M_.sph, P(0, x, .02, z + .06, k * 2, 0, 0, w * 1.02, 1.8, .92), '#ffffff', 1);
+    draw(M_.sph, P(0, x + w * .3, .02, z + .1, k, 0, 0, w * .42, 1.2, .75), '#ffffff', 1);
+    snowman(x - w / 2 - .32, z - .02, .74, HAT[(i + 2) % 8], SCARF[i % 8]);
   } else if (type === 'hedge') {
     // a clipped box hedge: one dark mass, its faces covered in small leaf clumps in three greens, snow settled on the top and
     // hanging a little over the front edge, holly berries in twos and threes among the leaves
@@ -7602,7 +7635,7 @@ function backdrop(y) {
     for (const [x, z, s] of [[-7, 19, 1.4], [-10, 14, 1.2], [9.5, 13, 1.1], [-4, 23, 1.6], [1, 24, 1.3], [10, 8, 1]]) tree(x, z, s);
     lamp(-1.5, 15.5, 1); lamp(3, 8, 1);
     // the sun going down behind the far trees, with a wide warm glow round it
-    draw(M_.sph, P(0, 16, 3.2, 44, 0, 0, 0, 5.5), '#ffd98a', 2); LIGHTS.push(P(0, 16, 3.2, 40, 0, 0, 0, 15, 11, 1), .5);
+    draw(M_.sph, P(0, 16, 3.2, 44, 0, 0, 0, 5.5), '#ffd98a', 2); LIGHTS.push(Float32Array.from(P(0, 16, 3.2, 40, 0, 0, 0, 15, 11, 1)), .5);
   } else {
     for (const [x, z, s] of [[-14, 40, 22], [3, 46, 30], [18, 40, 20], [-30, 50, 26]]) { draw(M_.cone, P(0, x, -1, z, 0, 0, 0, s * 1.2, s * .9, s), '#5d6aa8'); draw(M_.cone, P(0, x, s * .5 - 1, z, 0, 0, 0, s * .55, s * .4, s * .45), '#e8ecff', 1); }
     for (const [x, z, s] of [[-8, 17, 1.3], [-10, 11, 1.1], [9, 16, 1.4], [10, 9, 1], [-5, 22, 1.6], [6, 22, 1.5]]) tree(x, z, s);
@@ -7624,28 +7657,33 @@ function kid(x, z, L, o) {
   const bw = L.cap ? 1 : L.wide || 1, bt = L.cap ? 1 : L.tall || 1;
   push(trs(x, o.lift || 0, z, yaw, -(o.tumble || 0) * 1.45 + (o.lean || 0), o.roll || 0, s * bw * (1 + (o.sq || 0) * .12), s * bt * (1 - (o.sq || 0) * .18), s * bw));
   shade(.42 * s * (1 + (o.tumble || 0) * .5), .34 * s, .34 / (1 + (o.lift || 0) * 2));
-  const cr = o.crouch || 0, bob = o.bob || 0;
-  // crouched, the whole kid (bobble and all) sinks below the top of a metre of cover, however large the puppet is drawn
-  push(trs(0, -cr * max(.42, (1.5 * s - .95) / s) + bob, 0));
-  for (const sx of [-.12, .12]) draw(M_.sph, P(0, sx, .07, .04, 0, 0, 0, .19, .14, .26), '#3b2a26');
+  const cr = o.crouch || 0, bob = o.bob || 0, sy = 1 - .42 * cr;
+  // small parts are left off a kid who is small on the screen (far off, or a phone's back row): nobody sees them, the phone pays
+  const Mk = top_(), ce = camBasis.e, fine = s / (hypot(Mk[12] - ce[0], Mk[13] - ce[1], Mk[14] - ce[2]) || 1) > .16;
+  // crouched, a kid squats down behind the cover and leans into it, feet on the snow: knees bent, never sunk into the ground
+  push(trs(0, bob, 0, 0, cr * .3, 0));
+  push(trs(0, 0, 0, 0, 0, 0, 1, sy, 1));
+  if (o.sit) { for (const sx of [-.12, .12]) { draw(M_.cyl, P(0, sx, .14, .02, 0, PI / 2, 0, .15, .34, .15), L.coat); draw(M_.sph, P(0, sx, .12, .4, 0, 0, 0, .19, .16, .24), '#3b2a26'); } }   // legs out in front, boots up
+  else for (const sx of [-.12, .12]) draw(M_.sph, P(0, sx, .07, .04, 0, 0, 0, .19, .14, .26), '#3b2a26');
   draw(M_.coat, P(0, 0, .1, 0, 0, 0, 0, .66, .64, .6), L.coat);
-  draw(M_.box, P(0, 0, .42, .29, 0, 0, 0, .05, .44, .02), '#2a1d1f');
-  for (const by of [.3, .46, .6]) draw(M_.sph, P(0, 0, by, .3, 0, 0, 0, .05), '#f2e8d0');
+  // the zip and the buttons lie on the coat, which narrows towards the collar (its front is .3 out at the hem, .19 at the top)
+  if (fine) { const cz = y => .3 - .114 * (y - .1) / .64 + .008; draw(M_.box, P(0, 0, .42, cz(.42), 0, -.175, 0, .05, .44, .02), '#2a1d1f');
+    for (const by of [.3, .46, .6]) draw(M_.sph, P(0, 0, by, cz(by), 0, 0, 0, .05, .05, .03), '#f2e8d0'); }
   draw(M_.tor, P(0, 0, .74, 0, 0, 0, 0, .44, .55, .44), L.scarf);
-  draw(M_.cyl, P(0, 0, .66, 0, 0, 0, 0, .44, .06, .42), L.coat);   // the coat's collar under the scarf
+  if (fine) draw(M_.cyl, P(0, 0, .66, 0, 0, 0, 0, .44, .06, .42), L.coat);   // the coat's collar under the scarf
   // where snowballs have landed this run, the snow stays stuck to the wool
   for (let j = 0; j < (o.marks || 0); j++) { const a = (hash(j, L.cap, 5) - .5) * 1.6, my = .22 + hash(j, 7, 5) * .38; draw(M_.sph, P(0, sin(a) * .29 * (1.05 - my * .4), my, cos(a) * .29 * (1.05 - my * .4), a, 0, 0, .17, .13, .07), '#ffffff', 1); }
   draw(M_.box, P(0, .1, .58, .2, 0, .1, .1, .1, .3, .05), L.scarf);
+  pop();
   // head
   const hx = o.look || 0;
-  push(trs(0, .98, 0, hx * .5, o.nod || 0, 0));
+  push(trs(0, .98 * sy, 0, hx * .5, o.nod || 0, 0));
   draw(M_.sph, P(0, 0, 0, 0, 0, 0, 0, .5, .48, .48), L.skin);
   // the face sits below the hat's brim: eyes, cheeks, nose and mouth all in the lower half of the head
   for (const sx of [-.1, .1]) { draw(M_.sph, P(0, sx, -.08, .195, 0, 0, 0, .1, .07, .05), o.cheek || '#ef8a8a'); draw(M_.sph, P(0, sx * .85, 0, .232, 0, 0, 0, .045), '#1d1416'); draw(M_.sph, P(0, sx * .85 - .008, .01, .252, 0, 0, 0, .015), '#ffffff', 2); }
   draw(M_.sph, P(0, 0, -.05, .245, 0, 0, 0, .07), o.cheek || '#e98080');
   // hair showing under the hat, a fringe or side tufts, and felt brows that lift when they are hit
-  { const hc = HAIR[L.hair], hk = L.hair % 3; if (hk !== 1) for (let j = -2; j <= 2; j++) draw(M_.sph, P(0, j * .065, .085 - abs(j) * .012, .2 - abs(j) * .03, 0, 0, j * .2, .1, .07, .06), hc);
-    if (hk !== 0) for (const sd of [-1, 1]) draw(M_.sph, P(0, sd * .2, .02, .08, 0, 0, sd * .4, .07, .14, .1), hc);
+  if (fine) { const hc = HAIR[L.hair], hk = L.hair % 3; if (hk !== 1) for (let j = -2; j <= 2; j++) draw(M_.sph, P(0, j * .065, .085 - abs(j) * .012, .2 - abs(j) * .03, 0, 0, j * .2, .1, .07, .06), hc);
     for (const sd of [-1, 1]) draw(M_.box, P(0, sd * .088, .065 + (o.ouch ? .02 : 0), .23, 0, 0, sd * (o.ouch ? -.35 : .12), .07, .016, .015), hc); }
   if (o.ouch) draw(M_.box, P(0, 0, -.15, .2, 0, 0, 0, .1, .04, .02), '#5a1f22');
   else draw(M_.tor, P(0, 0, -.14, .18, 0, PI / 2 - .3, 0, .11, .1, .08), '#5a1f22');
@@ -7663,11 +7701,10 @@ function kid(x, z, L, o) {
   // arms: shoulders at ±.27; aR > 0 raises the right arm back over the head
   for (const side of [-1, 1]) {
     const a = side > 0 ? (o.aR || 0) : (o.aL || 0);
-    push(trs(side * .27, .64, 0, 0, a, side * (.35 + (o.flap || 0))));
+    push(trs(side * .27, .64 * sy, 0, 0, a, side * (.35 + (o.flap || 0))));
     draw(M_.sph, P(0, 0, 0, 0, 0, 0, 0, .16), L.coat); draw(M_.cyl, P(0, 0, -.42, 0, 0, 0, 0, .15, .42, .15), L.coat);   // a rounded shoulder, then the sleeve
     draw(M_.sph, P(0, 0, -.46, 0, 0, 0, 0, .17), o.white && side < 0 ? '#fbf5e9' : L.hat);
-    draw(M_.sph, P(0, side * -.02, -.42, .08, 0, 0, 0, .07, .09, .07), o.white && side < 0 ? '#fbf5e9' : L.hat);   // the mitten's thumb
-    draw(M_.cyl, P(0, 0, -.36, 0, 0, 0, 0, .165, .05, .165), '#fbf5e9');   // and its cuff
+    if (fine) { draw(M_.sph, P(0, side * -.02, -.42, .08, 0, 0, 0, .07, .09, .07), o.white && side < 0 ? '#fbf5e9' : L.hat); draw(M_.cyl, P(0, 0, -.36, 0, 0, 0, 0, .165, .05, .165), '#fbf5e9'); }   // the mitten's thumb and cuff
     if (side > 0 && o.ball) draw(M_.sph, P(0, 0, -.58, 0, 0, 0, 0, .2), '#ffffff', 1);
     if (side < 0 && o.flag) { draw(M_.cyl, P(0, 0, -.95, 0, 0, 0, 0, .04, .5, .04), '#8a5a36'); draw(M_.box, P(0, -.17, -.98 + sin(gt * 12) * .02, 0, 0, 0, .1 * sin(gt * 9), .32, .24, .02), '#fbf5e9'); }
     pop();
@@ -7715,7 +7752,8 @@ function present(x, y, z, s, op = 0, hop = 0) {
     draw(M_.box, P(0, 0, .29, 0, 0, 0, 0, .14, .585, .705), G); draw(M_.box, P(0, 0, .29, 0, 0, 0, 0, .905, .585, .14), G); }
   if (op > 0) { LIGHTS.push(mul(top_(), P(0, 0, .62 + op * .7, 0, 0, 0, 0, .55 + op * .3, .2 + op * 1.6, .45 + op * .2)), .5 * (1 - op * .3)); }
   const e = ease.out(op);
-  push(trs(0, .58 + hop * .1, .36, 0, -e * 1.9 - hop * .12, 0)); push(trs(0, 0, -.36));   // the lid's hinge is its far edge
+  // the lid's hinge is its far edge; turning positive about x lifts its near edge up and back over the hinge
+  push(trs(0, .58 + hop * .1, .36, 0, e * 1.9 + hop * .12, 0)); push(trs(0, 0, -.36));
   draw(M_.box, P(0, 0, .07, 0, 0, 0, 0, .96, .14, .76), '#c62e44');
   draw(M_.box, P(0, 0, .07, 0, 0, 0, 0, .145, .145, .765), G); draw(M_.box, P(0, 0, .07, 0, 0, 0, 0, .965, .145, .145), G);
   // the bow: two loops, a knot and two tails, in the same gold felt
@@ -7857,7 +7895,7 @@ function splatSprite(seed, r) {
 }
 let flakes = [];
 // a word that pops up where something happened is a felt patch in the colour of what it means; at most three words at once
-const WORDBG = { 'SPLAT!': '#b3243a', 'ICE!': '#2f5fa8', 'CAUGHT!': '#7a4b2b', 'SWAT!': '#2f6b4a', 'FIRST HIT ×3': '#d9a42b', 'behind cover': '#5b6f8f' };
+const WORDBG = { 'GOT IT!': '#d8692e', 'SPLAT!': '#b3243a', 'ICE!': '#2f5fa8', 'CAUGHT!': '#7a4b2b', 'SWAT!': '#2f6b4a', 'FIRST HIT ×3': '#d9a42b', 'behind cover': '#5b6f8f' };
 function pop2(x, y, z, text, colr, size = 20, life = 1.1) {
   const bg = WORDBG[text] || (/WARMTH/.test(text) ? '#d8692e' : null);
   if (bg) { const words = pops.filter(p => p.bg); if (words.length >= 3) pops.splice(pops.indexOf(words[0]), 1); }
@@ -7987,7 +8025,7 @@ function mitten(x, y, text) {
 
 /* ======================= the frame ======================= */
 let W0 = 3, KS = 1;
-let titleHold = 0, SENX = 4.7;   // where the snowmen stand on your wall: beyond your side on a wide screen, inside the frame on a phone
+let titleHold = 0, sledgeHit = null, scenery = null, SENX = 4.7;   // where the snowmen stand on your wall: beyond your side on a wide screen, inside the frame on a phone
 let hitStop = 0, shake = 0, handT = 9, dogJ = 0, cataShot = null, yardShown = -1, joinT = {}, presentAt = null, finT = 0;
 function layout() {
   DPR = DIAG.dpr || min(devicePixelRatio || 1, 2); VW = innerWidth; VH = innerHeight;
@@ -8018,15 +8056,24 @@ function render(t) {
   gl.useProgram(prog); gl.uniformMatrix4fv(U.uVP, false, VP); gl.uniform3fv(U.uCam, camBasis.e);
   gl.uniform1f(U.uBoil, K.reduced || !DIAG.boil ? 0 : floor(gt * 12) % 7);
   gl.uniform1f(U.uFn, 20); gl.uniform1f(U.uFf, yardShown === 4 ? 100 : 60);
-  stack = [I4()]; curMesh = null; drawn = 0; SH.length = 0; LIGHTS.length = 0;
+  stack = [I4()]; depth = 0; for (const k in UC) delete UC[k]; curMesh = null; drawn = 0; verts = 0; for (const k in PARTS) delete PARTS[k]; SH.length = 0; LIGHTS.length = 0; mark('ground+backdrop');
   const y = yardShown, won = S.yard !== yardShown;   // a yard just won stays on screen until the next run
   gl.uniform1f(U.uGnd, 1); draw(M_.ground, I4(), '#ffffff', 1); gl.uniform1f(U.uGnd, 0);
-  backdrop(y);
-  // covers and the gang
+  // the yard's scenery (backdrop and covers) never moves: baked once per yard and screen, then one draw a frame
+  const bk = y + ':' + VW + 'x' + VH + ':' + (zoom ? JSON.stringify([zoom.x, zoom.z, zoom.s, zoom.o.yaw, zoom.o.pitch]) : '') + (S.fin && opened ? ':o' : '');
+  if (!scenery || scenery.key !== bk) {
+    if (scenery) { gl.deleteBuffer(scenery.buf); gl.deleteVertexArray(scenery.vao); }
+    const sh0 = SH.length, li0 = LIGHTS.length; BAKE = { d: [] };
+    backdrop(y); const Y = CORE.YARDS[y];
+  mark('covers'); Y.cover.forEach((c, i) => cover(COVER[y][i % COVER[y].length], c[0], c[1], c[2], i)); JIT = .5;
+    scenery = bakeEnd(); scenery.key = bk; scenery.sh = SH.slice(sh0); scenery.li = LIGHTS.slice(li0); SH.length = sh0; LIGHTS.length = li0;
+  }
+  gl.uniform1f(U.uBake, 1); gl.uniformMatrix4fv(U.uM, false, I4()); gl.uniformMatrix3fv(U.uNm, false, new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1])); gl.bindVertexArray(scenery.vao); curMesh = null;
+  gl.drawArrays(gl.TRIANGLES, 0, scenery.n); drawn++; verts += scenery.n; gl.uniform1f(U.uBake, 0); for (const k in UC) delete UC[k];
+  SH.push(...scenery.sh); LIGHTS.push(...scenery.li);
   const Y = CORE.YARDS[y];
-  Y.cover.forEach((c, i) => cover(COVER[y][i % COVER[y].length], c[0], c[1], c[2], i)); JIT = .5;
   const tt = gt;
-  for (const k of S.kids) {
+  mark('gang'); for (const k of S.kids) {
     if (k.ally || won) continue;
     const { o, L } = poseOf(k, k.i, tt + k.i * .37);
     if (k.cap === 2) yeti(k.x, k.z + .9, o); else kid(k.x, k.z, L, o);   // the yeti is wide: he stands well back from his crystals
@@ -8039,15 +8086,16 @@ function render(t) {
     if (w.cap === 2) { const set = !!presentAt; yeti(x, z, Object.assign(o, set ? { aL: 2.6 + sin(q * 9) * .4, aR: opened ? .4 : 1.2 + max(0, sin(q * 2.2)) * .9, bob: abs(sin(q * 5)) * .1 } : { aL: .9, aR: .9 }, { present: set ? 0 : 1, yaw: p < 1 ? o.yaw : PI })); } else kid(x, z, w.L, o);
     if (p >= 1 && w.cap !== 2) walkers.splice(i, 1);
   }
-  // your wall, your pile, your side: they stand W0 in front of the rules' zero line
+  mark('your side'); // your wall, your pile, your side: they stand W0 in front of the rules' zero line
   push(trs(0, 0, W0));
   { const fx = -SENX - .5; draw(M_.cyl, P(0, fx, .8, .1, 0, 0, 0, .05, 1.3, .05), '#6b4a32'); push(trs(fx + .03, 2.02, .1, PI / 2, 0, -PI / 2 + .06 * sin(gt * 3))); draw(M_.roof, P(0, 0, 0, 0, 0, 0, 0, .26, .5, .02), '#b3243a'); pop(); }   // a felt pennant on a stick at the end of your wall
-  snowWall(0, .25, 13.6, .95, 900, .7);
+  snowWall(0, .25, 13.6, .95, 900, .7, .9);   // your own wall is near the eye: fewer, bigger lumps
   const st = CORE.stats(S), pile = st.pile, am = S.phase === 'run' ? S.ammo : pile, pk = S.phase === 'run' && S.ammo < pile ? S.packT / st.pack : 0;
   if (!S.fin) for (let j = 0; j < pile; j++) { const x = (j - (pile - 1) / 2) * .34, full = j < floor(am), grow = j === floor(am) ? pk : 0; if (full || grow) draw(M_.sph, P(0, x, 1.05, -.05, 0, 0, 0, .3 * (full ? 1 : .35 + .65 * grow)), '#ffffff', 1); }
   const showA = KS > 1.2 ? 10 : 30;
   for (let j = 0; j < S.allies.length && j < showA; j++) {
     const a = S.allies[j]; if (joinT[a.slot] > gt) continue;
+    { const p0 = allyPos(a.slot), q = toScreen(p0.x, .9, p0.z + W0); if (q.w <= .05 || q.x < -160 || q.x > VW + 160 || q.y > VH + 260) continue; }   // off the screen: not drawn
     const p = allyPos(a.slot), q = floor((tt + j) / STEP) * STEP, th = thrAt[a.slot], thr = th && gt - th < .5 ? 1 - (gt - th) / .5 : 0;
     const L = kidLook(a.i, a.y, a.cap ? 1 : 0);
     if (a.cap === 2) yeti(p.x * 1.6, p.z - 2.4, { yaw: 0, aR: 1 + thr * 2, bob: sin(q * 2) * .03 });
@@ -8069,11 +8117,13 @@ function render(t) {
     pop(); }
   pop();
   // the sledge
-  if (S.sledge) { const sx = CORE.sledgeX(S.sledge), z = S.sledge.z, q = floor(tt / STEP) * STEP; push(trs(sx, .05, z, S.sledge.dir > 0 ? PI / 2 : -PI / 2)); draw(M_.box, P(0, 0, .25, 0, 0, 0, 0, .7, .12, 1.4), '#b3243a'); for (const x of [-.32, .32]) { draw(M_.box, P(0, x, .05, -.05, 0, 0, 0, .06, .05, 1.5), '#c9a227'); for (const sz of [-.5, 0, .45]) draw(M_.box, P(0, x, .13, sz, 0, 0, 0, .04, .14, .05), '#c9a227'); draw(M_.tor, P(0, x, .2, .7, 0, 0, PI / 2, .34, .2, .34), '#c9a227'); } draw(M_.sph, P(0, 0, .55, -.35, 0, 0, 0, .55, .5, .5), '#8a5a37'); draw(M_.sph, P(0, 0, .95, -.32, 0, 0, 0, .28), '#f2c14e', 2); pop(); kid(sx - S.sledge.dir * .3, z, kidLook(9, 1, 0), { lift: .36, crouch: .5, aL: 2.6 + sin(q * 12) * .2, yaw: S.sledge.dir > 0 ? PI / 2 : -PI / 2, s: .85 }); }
+  if (S.sledge) sledgeDraw(CORE.sledgeX(S.sledge), S.sledge.z, S.sledge.dir, 0);
+  // a sledge that was hit slides on and slows, its rider tumbling off into the snow
+  if (sledgeHit) { const H = sledgeHit; H.t += dtv; const k = clamp(H.t / 1.1, 0, 1); sledgeDraw(H.x + H.dir * (1 - (1 - k) * (1 - k)) * 1.6, H.z, H.dir, k); if (H.t > 1.6) sledgeHit = null; }
   // the present, once the yeti has brought it
   if (presentAt) { const ph = gt % 2.4, hop = !opened && ph < .5 ? sin(ph / .5 * PI) : 0;   // now and then it jumps on its own: something inside wants out
     push(trs(0, 0, 0, 0, 0, hop * .06 * sin(ph * 30))); present(presentAt.x, presentAt.y + hop * .08, presentAt.z, 1.1 + .03 * sin(gt * 3), opened ? clamp((gt - opened) / 1.1, 0, 1) : 0, hop); pop(); }
-  // snowballs in the air
+  mark('snowballs'); // snowballs in the air
   for (const b of S.balls) {
     const p = ballPos(b); draw(M_.sph, P(0, p.x, p.y, p.z, 0, 0, 0, b.kind === 3 ? 1.2 : b.kind === 2 ? .42 : .3), b.kind === 1 ? '#bfe3f5' : '#ffffff', b.kind === 1 ? 0 : 1);
   }
@@ -8081,7 +8131,7 @@ function render(t) {
   if (cataShot) { cataShot.t += dtv; const p = clamp(cataShot.t / 1.1, 0, 1); draw(M_.sph, P(0, 0, 1.8 + sin(p * PI) * 7 - p * 1, lerp(W0 - 1.05, 11, p), 0, 0, 0, .5 + .7 * min(1, p * 4)), '#ffffff', 1); if (p >= 1) { cataShot = null; sfx('boom'); shake = 1.2; for (const k of S.kids) if (!k.ally) puff(k.x, 1, k.z, 8, 1); } }
   // blob shadows, last, on the snow
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
-  // light that pours out of something: added to what is behind it, never covering it
+  mark('shadows+light'); // light that pours out of something: added to what is behind it, never covering it
   if (LIGHTS.length) { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); for (let j = 0; j < LIGHTS.length; j += 2) { stack = [I4()]; draw(M_.sph, LIGHTS[j], '#fff2b0', 2, LIGHTS[j + 1]); } gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
   const lx = -L3[0], lz = -L3[2], ll = hypot(lx, lz) || 1, sa = atan2(lx, lz), sLen = clamp(1 + .55 * (1 / max(.25, L3[1]) - 1.2), 1, 2.2);
   for (let j = 0; j < SH.length; j += 5) { const off = SH[j + 3] * (sLen - 1); draw(M_.disc, P(0, SH[j] + lx / ll * off, groundH(SH[j], SH[j + 1]) + .035, SH[j + 1] + lz / ll * off, sa, 0, 0, SH[j + 2] * 2, .01, SH[j + 3] * 2 * sLen), '#3a4a7a', 4, SH[j + 4] / (1 + (sLen - 1) * .4)); }
@@ -8091,6 +8141,13 @@ function render(t) {
   // your arm, throwing
   handT += dtv; { const p = clamp(handT / .4, 0, 1), sw = p < 1 ? sin(p * PI) : 0, B = camBasis, k = (a, b, c) => B.e[c] + B.f[c] * (1.9 + sw * .5) + B.r[c] * a - B.u[c] * b; const dn = .75 + (1 - sw) * 1.1, cx = k(.7, dn, 0), cy = k(.7, dn, 1), cz = k(.7, dn, 2);
     if (sw > 0 && KS < 1.2) { gl.clear(gl.DEPTH_BUFFER_BIT); push(trs(cx, cy, cz, -.25, -.9 - sw * 1.4, .2)); draw(M_.cyl, P(0, 0, -.9, 0, 0, 0, 0, .34, 1, .34), COAT[0]); draw(M_.tor, P(0, 0, .08, 0, 0, 0, 0, .36, .6, .36), '#fbf5e9'); draw(M_.sph, P(0, 0, .2, 0, 0, 0, 0, .34, .38, .3), '#2f6b4a'); draw(M_.sph, P(0, -.13, .14, .07, 0, 0, 0, .14, .2, .12), '#2f6b4a'); pop(); } }
+}
+function sledgeDraw(sx, z, dir, fall) {
+  const q = floor(gt / STEP) * STEP, yaw = dir > 0 ? PI / 2 : -PI / 2;
+  push(trs(sx, .05, z, yaw)); shade(.45, .8, .3); draw(M_.box, P(0, 0, .25, 0, 0, 0, 0, .7, .12, 1.4), '#b3243a'); for (const x of [-.32, .32]) { draw(M_.box, P(0, x, .05, -.05, 0, 0, 0, .06, .05, 1.5), '#c9a227'); for (const sz of [-.5, 0, .45]) draw(M_.box, P(0, x, .13, sz, 0, 0, 0, .04, .14, .05), '#c9a227'); draw(M_.tor, P(0, x, .2, .7, 0, 0, PI / 2, .34, .2, .34), '#c9a227'); } draw(M_.sph, P(0, 0, .55, -.35, 0, 0, 0, .55, .5, .5), '#8a5a37'); draw(M_.sph, P(0, 0, .95, -.32, 0, 0, 0, .28), '#f2c14e', 2); pop();
+  // the rider sits with their legs out in front; hit, they go up, over and down into the snow behind
+  const f = ease.out(fall);
+  kid(sx - dir * (.3 + f * 1.1), z + f * .4, kidLook(9, 1, 0), { lift: .3 + sin(f * PI) * .9 - f * .3, sit: 1, tumble: f * 1.1, aL: 2.6 + sin(q * 12) * .2 + f, aR: f * 2.5, yaw, s: .85, ouch: fall > 0 ? 1 : 0 });
 }
 function ballPos(b) {
   const p = clamp(b.t / b.T, 0, 1), f = fromOf(b), h = .9 + hypot(b.x - f.x, b.z - f.z) * .07 + (b.kind === 3 ? 6 : 0);
@@ -8154,7 +8211,7 @@ function drain() {
         break;
       case 'end': if (e.why === 'yard') cardAt = { e, at: gt + 1 + walkers.reduce((m, w) => max(m, w.T - w.t), 2) }; else if (walkers.length) cardAt = { e, at: gt + .3 + walkers.reduce((m, w) => max(m, w.T - w.t), 0) }; else endCard(e); break;
       case 'sledge': sfx('sledge'); if (!tutor.sledge) { tutor.sledge = 1; hint = { kind: 'sledge', text: 'Catch it!', at: () => S.sledge ? scr(CORE.sledgeX(S.sledge), 1, S.sledge.z) : (hint = null, null) }; } break;
-      case 'sledgeHit': { sfx('coin'); sfx('join'); if (hint && hint.kind === 'sledge') hint = null; break; }
+      case 'sledgeHit': { sfx('coin'); sfx('join'); if (sledgeHit) { puff(sledgeHit.x, .8, sledgeHit.z, 14, 1); pop2(sledgeHit.x, 2.2, sledgeHit.z, 'GOT IT!', '#fff', 22, 1.1); } if (hint && hint.kind === 'sledge') hint = null; break; }
       case 'volley': break;
       case 'cata': cataShot = { t: 0 }; sfx('cata'); if (capT > 0 && /catapult/.test($('cap').textContent)) capT = .01; break;
       case 'empty': sfx('empty'); emptyT = .5; break;
@@ -8188,6 +8245,7 @@ function hud() {
   $('gang').hidden = S.phase !== 'run'; $('gang').classList.toggle('chip', gt - (hud.kt || 0) > 4);   // the yard's name steps back once read, and comes forward when something changes
   $('hud').style.opacity = S.phase === 'run' || cardAt || !$('card').hidden ? 1 : 0;
   const cb = $('cata'); cb.hidden = !(st.cata && S.phase === 'run');
+  if (st.rapid && S.phase === 'run' && !tutor.rapid) { tutor.rapid = 1; say('Hold to throw', 'Keep your finger on a kid: the snowballs keep coming, as fast as the pile allows.', 5); }
   if (!cb.hidden && !tutor.cata) { tutor.cata = 1; say('The catapult', 'Every hit winds it up. When the dial glows, tap FIRE! and a boulder of snow hits every kid in the yard.', 6); } if (!cb.hidden) { $('cRing').style.strokeDashoffset = 264 * (1 - S.cata); cb.classList.toggle('ready', S.cata >= 1); $('cT').textContent = S.cata >= 1 ? 'FIRE!' : 'WINDING'; }
 }
 function endCard(e) {
@@ -8210,12 +8268,12 @@ let prevCoins = 0, cardCount = null;
 
 /* ======================= the tree in the front room ======================= */
 // where each decoration hangs on the felt fir: x from -1 to 1, y from 0 (the foot) to 1 (the star)
-const POS = { hard: [-.14, .05], scarf: [.14, .05], pile: [-.46, .09], pack: [.46, .09], pocket: [-.27, .155], mitt: [.27, .155], twin: [-.13, .215], swat: [.13, .215],
+const POS = { arm: [0, .125], rapid: [0, .515], hard: [-.14, .05], scarf: [.14, .05], pile: [-.46, .09], pack: [.46, .09], pocket: [-.27, .155], mitt: [.27, .155], twin: [-.13, .215], swat: [.13, .215],
   sentry: [-.12, .28], team: [.12, .28], hard2: [-.38, .3], coat: [.38, .3], ice: [-.26, .36], thermos: [.26, .36], crit: [-.1, .41], coin2: [.1, .41],
   powder: [-.12, .47], dog: [.12, .47], coach: [-.32, .49], treats: [.32, .49], hard3: [-.2, .555], pile2: [.2, .555], sentry2: [0, .61],
   hard4: [-.12, .66], cata: [.12, .66], coin4: [-.22, .695], wind: [.22, .695], volley: [-.1, .76], hat: [.1, .76],
   hard5: [-.1, .82], boot: [.1, .82], boulder: [-.07, .88], all: [.07, .88] };
-const KIND = { hard: 'ball', hard2: 'ball', hard3: 'ball', hard4: 'ball', hard5: 'ball', pile: 'ball', pile2: 'ball', pack: 'ball', crit: 'ball', powder: 'ball', ice: 'big', twin: 'big',
+const KIND = { arm: 'ball', rapid: 'big', hard: 'ball', hard2: 'ball', hard3: 'ball', hard4: 'ball', hard5: 'ball', pile: 'ball', pile2: 'ball', pack: 'ball', crit: 'ball', powder: 'ball', ice: 'big', twin: 'big',
   scarf: 'warm', coat: 'warm', hat: 'warm', boot: 'warm', mitt: 'warm', thermos: 'big', swat: 'big',
   pocket: 'coin', coin2: 'coin', coin4: 'coin', team: 'team', coach: 'team', all: 'team', volley: 'big', sentry: 'big', sentry2: 'team', dog: 'big', treats: 'team', cata: 'big', wind: 'team', boulder: 'team' };
 const KCOL = { ball: '#2f5fa8', warm: '#d8692e', coin: '#d9a42b', team: '#2f6b4a', big: '#b3243a' };
@@ -8351,14 +8409,17 @@ function titleCard(then) {
 cv.addEventListener('pointerdown', e => {
   K.unlock();
   if (!S) return;
+  if (S.phase === 'run') hold = { id: e.pointerId, x: e.clientX, y: e.clientY, at: gt, last: gt };
   if (S.fin === 1 && presentAt) { const r = presentRect(); if (e.clientX > r.x - 30 && e.clientX < r.x + r.w + 30 && e.clientY > r.y - 30 && e.clientY < r.y + r.h + 30) openPresent(); return; }
   if (S.phase !== 'run') return;
   const px = e.clientX, py = e.clientY;
-  // their snowballs first: a swat beats a throw
+  // the sledge first: a tap anywhere on it or its rider (with a margin) catches it
+  if (S.sledge) { const r = sledgeRect(); if (r && px > r.x0 - 28 && px < r.x1 + 28 && py > r.y0 - 28 && py < r.y1 + 28) { const sx = CORE.sledgeX(S.sledge), sz = S.sledge.z, dir = S.sledge.dir; if (CORE.act(S, 'sledge')) { sledgeHit = { x: sx, z: sz, dir, t: 0 }; handT = 0; sfx('toss'); drain(); return; } } }
+  // then their snowballs: a swat beats a throw
   let best = null, bd = 1e9;
   for (const b of S.inc) { const p = incPos(b), s = scr(p.x, p.y, p.z); if (!s) continue; const rr = max(46, (b.big ? .7 : .32) * VH / (s.w * camBasis.t * 2) * 1.6), d = hypot(px - s.x, py - s.y); if (d < rr && d < bd) { bd = d; best = b; } }
   if (best) { lastInc[best.id] = incPos(best); if (CORE.act(S, 'swat', best.id)) { drain(); return; } }
-  if (S.sledge) { const s = scr(CORE.sledgeX(S.sledge), .6, S.sledge.z); if (s && hypot(px - s.x, py - s.y) < 64) { if (CORE.act(S, 'sledge')) { drain(); return; } } }
+
   // then the kids: the nearest one to the finger, standing ones first
   let kb = null, kd = 1e9;
   for (const k of S.kids) {
@@ -8371,6 +8432,17 @@ cv.addEventListener('pointerdown', e => {
   const g = toGround(px, py, .6); if (g && CORE.act(S, 'at', g.x, g.z)) drain(); else drain();
 });
 $('cata').onclick = () => { if (CORE.act(S, 'cata')) drain(); };
+// Hold to throw: with it hung on the tree, a finger kept down goes on throwing at the standing kid nearest to it, as fast as the
+// pile allows; the rules count every throw as a throw, the view only repeats the tap
+let hold = null;
+cv.addEventListener('pointermove', e => { if (hold && e.pointerId === hold.id) { hold.x = e.clientX; hold.y = e.clientY; } });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) cv.addEventListener(ev, e => { if (hold && e.pointerId === hold.id) hold = null; });
+function holdThrow() {
+  if (!hold || S.phase !== 'run' || !CORE.stats(S).rapid || gt - hold.at < .3 || gt - hold.last < .2 || S.ammo < 1) return;
+  let kb = null, kd = 1e9;
+  for (const k of S.kids) { if (!CORE.hittable(k)) continue; const s = scr(k.x, k.cap === 2 ? 2.2 : .75, vz(k)); if (!s) continue; const d = hypot(hold.x - s.x, hold.y - s.y); if (d < max(90, VW * .22) && d < kd) { kd = d; kb = k; } }
+  if (kb && CORE.act(S, 'throw', kb.i)) { hold.last = gt; drain(); }
+}
 
 /* ======================= the end: the yeti's present ======================= */
 // the open box seen from above: its mouth, which is what the shell flies into
@@ -8378,6 +8450,12 @@ function mouthRect() {
   const P0 = presentAt, s = 1.1, c = cos(.2), sn = sin(.2); let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const [a, b] of [[-.43, -.33], [.43, -.33], [.43, .33], [-.43, .33]]) { const q = scr(P0.x + (a * c + b * sn) * s, P0.y + .58 * s, P0.z + (-a * sn + b * c) * s); if (!q) continue; x0 = min(x0, q.x); y0 = min(y0, q.y); x1 = max(x1, q.x); y1 = max(y1, q.y); }
   return x1 > x0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : presentRect();
+}
+// the sledge and its rider on the screen, as a box round the points that bound them
+function sledgeRect() {
+  const sx = CORE.sledgeX(S.sledge), z = S.sledge.z; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const [dx, y, dz] of [[-.9, 0, -.4], [.9, 0, -.4], [-.9, 0, .4], [.9, 0, .4], [-.6, 1.5, 0], [.6, 1.5, 0]]) { const q = scr(sx + dx, y, z + dz); if (!q) continue; x0 = min(x0, q.x); y0 = min(y0, q.y); x1 = max(x1, q.x); y1 = max(y1, q.y); }
+  return x1 > x0 ? { x0, y0, x1, y1 } : null;
 }
 function presentRect() { const a = scr(presentAt.x - .6, presentAt.y + 1.2, presentAt.z), b = scr(presentAt.x + .6, presentAt.y, presentAt.z); return a && b ? { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y } : { x: VW / 2 - 40, y: VH / 2 - 40, w: 80, h: 80 }; }
 function finale(dt) {
@@ -8431,6 +8509,7 @@ function frame(dt) {
   if (cardAt && gt >= cardAt.at) { endCard(cardAt.e); cardAt = null; }
   if (capT > 0 && (capT -= dt) <= 0) $('cap').classList.add('off');
   const p = CORE.progress(S); if (abs(p - lastP) > .002) { lastP = p; K.progress(p); }
+  holdThrow();
   for (let i = LATER.length - 1; i >= 0; i--) if ((LATER[i].t -= dt) <= 0) LATER.splice(i, 1)[0].fn();
   if (cardCount) { const C = cardCount; C.t += dt; const k = clamp(C.t / .9, 0, 1); C.el.textContent = '+' + fmt(C.v * ease.out(k), C.v < 10 ? 0 : 0);
     if (C.t > 0 && k < 1 && C.t > C.tick * .075) { C.tick++; if (AU && AU.ctx.state === 'running') bell(880 * pow(2, min(C.tick, 14) / 12), AU.ctx.currentTime, .03); }
@@ -8552,10 +8631,10 @@ K.debug = {
   state: () => S, walkers: () => walkers.map(w => ({ t: w.t, T: w.T, x: w.x, z: w.z, to: w.to })), toScreen: (x, y, z) => toScreen(x, y, z), drawn: () => drawn,
   kids: () => S.kids.filter(k => !k.ally).map(k => { const v = vk[k.i] || { up: 0 }; const s = scr(k.x, (k.cap === 2 ? 2.2 : .75) - (1 - v.up) * .3, vz(k)); return { i: k.i, st: k.st, hit: CORE.hittable(k), x: s && s.x, y: s && s.y }; }),
   inc: () => S.inc.map(b => { const p = incPos(b), s = scr(p.x, p.y, p.z); return { id: b.id, miss: b.miss, x: s && s.x, y: s && s.y }; }),
-  sledge: () => S.sledge ? scr(CORE.sledgeX(S.sledge), .6, S.sledge.z) : null,
+  sledge: () => S.sledge ? (r => r && { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 })(sledgeRect()) : null,
   present: () => presentAt ? presentRect() : null,
   node: id => { const n = nodeXY(id); return { x: n.x + TR.x0, y: n.y + TR.y0 }; },
-  mouth: () => presentAt ? mouthRect() : null, look, props: PROPS, scenes: Object.keys(SCENES), gt: () => gt, openPresent: () => presentAt && openPresent(), cam: () => Object.assign({}, CAM), layout: () => ({ VW, VH, DPR, W0, KS, desk }),
+  parts: () => JSON.parse(JSON.stringify(PARTS)), mouth: () => presentAt ? mouthRect() : null, look, props: PROPS, scenes: Object.keys(SCENES), gt: () => gt, openPresent: () => presentAt && openPresent(), cam: () => Object.assign({}, CAM), layout: () => ({ VW, VH, DPR, W0, KS, desk }),
   out: () => $('out').getBoundingClientRect(), buy: () => $('buy').getBoundingClientRect(), cata: () => $('cata').getBoundingClientRect(),
   card: () => { const c = $('card'); return c.hidden ? null : c.querySelector('button').getBoundingClientRect(); },
   snap: () => {
@@ -8609,6 +8688,7 @@ const CORE = (() => {
     // tier 1: the garden
     { id: 'hard', t: 0, p: null, name: 'Packed hard', d: 'snowballs hit 1 harder', base: 2, k: 1.7, max: 6, add: { dmg: 1 } },
     { id: 'scarf', t: 0, p: null, name: 'Woolly scarf', d: '+4 seconds of warmth', base: 2, k: 1.7, max: 6, add: { warm: 4 } },
+    { id: 'arm', t: 0, p: 'hard', name: 'Strong arm', d: 'your snowballs fly 15% faster', base: 4, k: 2, max: 4, mul: { fly: .85 } },
     { id: 'pile', t: 0, p: 'hard', name: 'Bigger pile', d: 'one more snowball ready on the wall', base: 6, k: 1.9, max: 4, add: { pile: 1 } },
     { id: 'pack', t: 0, p: 'scarf', name: 'Quick hands', d: 'pack snowballs 15% faster', base: 6, k: 1.9, max: 5, mul: { pack: .85 } },
     { id: 'pocket', t: 0, p: 'pile', name: 'Pocket money', d: 'everything pays ×1.3', base: 10, k: 2, max: 5, mul: { coin: 1.3 } },
@@ -8631,6 +8711,7 @@ const CORE = (() => {
     { id: 'treats', t: 2, p: 'dog', name: 'Dog treats', d: 'Biscuit catches 40% more often', base: 3, k: 2.2, max: 3, mul: { dogT: .7 } },
     { id: 'hard3', t: 2, p: 'coach', name: 'Snow from the shady side', d: 'damage ×1.6', base: 4, k: 2.2, max: 4, mul: { dmg: 1.6 } },
     { id: 'pile2', t: 2, p: 'treats', name: 'A wheelbarrow of snow', d: 'two more snowballs ready and packing ×1.3 faster', base: 5, k: 2.3, max: 3, add: { pile: 2 }, mul: { pack: .77 } },
+    { id: 'rapid', t: 2, p: 'pile2', name: 'Hold to throw', d: 'keep your finger on a kid and the snowballs keep coming', base: 4, k: 1, max: 1, add: { rapid: 1 }, big: 1 },
     { id: 'sentry2', t: 2, p: 'hard3', name: 'Snowman family', d: 'one more snowman on the wall', base: 10, k: 2.5, max: 2, add: { sentry: 1 } },
     // tier 4: the park
     { id: 'cata', t: 3, p: null, name: 'The catapult', d: 'every hit winds it up; when it is wound, tap it: a boulder of snow hits every kid in the yard', base: 1, k: 1, max: 1, add: { cata: 1 }, big: 1 },
@@ -8646,7 +8727,7 @@ const CORE = (() => {
     { id: 'all', t: 4, p: 'boot', name: 'Everyone together', d: 'kids on your side hit ×2.5', base: 3, k: 2.4, max: 3, mul: { allyD: 2.5 } }
   ];
   const byId = Object.fromEntries(UP.map(u => [u.id, u]));
-  const BASE = { dmg: 1, warm: 24, pile: 3, pack: .8, coin: 1, hurt: 1, twin: 0, swat: 0, sentry: 0, allyT: 3.4, allyD: .5, ice: 0, thermos: 0, crit: 0,
+  const BASE = { fly: 1, rapid: 0, dmg: 1, warm: 24, pile: 3, pack: .8, coin: 1, hurt: 1, twin: 0, swat: 0, sentry: 0, allyT: 3.4, allyD: .5, ice: 0, thermos: 0, crit: 0,
     dog: 0, dogT: 6, splash: 0, cata: 0, cataN: 1, cataX: 1, volley: 0 };
 
   function stats(S) {
@@ -8697,7 +8778,7 @@ const CORE = (() => {
   }
   // one of your snowballs (or an ally's) sets off; it is resolved where and when it lands
   function launch(S, from, x, z, o) {
-    const T = flyT(z) * (o.slow || 1);
+    const T = flyT(z) * (o.slow || 1) * (o.fly || 1);
     S.balls.push({ id: ++S.nb, fx: from, x, z, t: 0, T, d: o.d, kind: o.kind || 0, tgt: o.tgt == null ? -1 : o.tgt, by: o.by || 0, r: o.r || 0 });
   }
   function dmgOf(S, st, kind) {
@@ -8864,7 +8945,7 @@ const CORE = (() => {
   const sledgeX = s => s.dir * (-5 + 10 * s.t / P.sledgeLife);
 
   function throwOne(S, k, x, z, st, kind) {
-    launch(S, 0, x, z, { d: dmgOf(S, st, kind), tgt: k ? k.i : -1, by: 0, kind });
+    launch(S, 0, x, z, { d: dmgOf(S, st, kind), tgt: k ? k.i : -1, by: 0, kind, fly: st.fly });
   }
   function act(S, what, a, b) {
     if (what === 'run') { if (S.phase !== 'shop' || S.fin) return false; begin(S); S.first = 0; ev(S, { k: 'run', n: S.runs }); return true; }
@@ -8880,14 +8961,14 @@ const CORE = (() => {
     if (what === 'throw' || what === 'at') {
       if (S.ammo < 1) { ev(S, { k: 'empty' }); return false; }
       let k = null, x, z;
-      if (what === 'throw') { k = S.kids[a]; if (!k || k.ally) return false; const p = lead(S, k, flyT(k.z)); x = p.x; z = p.z; }
+      if (what === 'throw') { k = S.kids[a]; if (!k || k.ally) return false; const p = lead(S, k, flyT(k.z) * st.fly); x = p.x; z = p.z; }
       else { if (!(a === a) || !(b === b)) return false; x = clamp(+a, -5, 5); z = clamp(+b, 2, 18); }
       S.ammo--; S.throws++;
       const kind = st.ice && S.throws % 5 === 0 ? 1 : 0;
       throwOne(S, k, x, z, st, kind);
       if (st.twin) {
         const ts = S.kids.filter(q => hittable(q) && q !== k); const q = ts.length ? ts[floor(rand(S) * ts.length)] : k;
-        if (q) { const p = lead(S, q, flyT(q.z)); throwOne(S, q, p.x, p.z, st, 0); } else throwOne(S, null, x + .6, z + .4, st, 0);
+        if (q) { const p = lead(S, q, flyT(q.z) * st.fly); throwOne(S, q, p.x, p.z, st, 0); } else throwOne(S, null, x + .6, z + .4, st, 0);
       }
       if (st.volley && S.volT <= S.runT) {
         S.volT = S.runT + 3; const ts = S.kids.filter(hittable);

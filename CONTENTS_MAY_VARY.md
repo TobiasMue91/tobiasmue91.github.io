@@ -1639,6 +1639,25 @@ box uses it.
     checked by holding its CSS animation along its length (`getAnimations`): it drops, sways, settles and fades.
     A desktop critic on frames taken before round 4: 6/4/7/5/5 and **5** for "would pass as commercial", the first score
     over 4 in this session (the tree screen "the most finished screen"; the battle "a good prototype").
+  - *The owner's look after it* (October 2026, on the merged state's predecessor and then the branch). Music is fine as it
+    is. Found and fixed: a crouching kid was sunk into the ground (the old way to hide behind a metre of cover), which
+    from a phone's high camera read as a kid sitting in the snow; now a kid squats and leans into the cover, feet on the
+    snow, head and arms coming down with the body. Brown spots at the kids' temples were side tufts of hair (gone). A kid
+    stood right behind the snowman of a snowman cover: the drift now fills the middle where kids crouch and the snowman
+    stands at its end. The sledge felt random to hit: a tap had to fall near one point and a nearby snowball took it first;
+    now a tap anywhere on the sledge and its rider (with a margin) catches it before anything else, a snowball flies, the
+    rider tumbles off over the back and GOT IT! pops up; the rider sits with legs and boots out in front (they had been
+    sunk too). The lid of the present opened downward into the box (the sign of its turn at the hinge). The schoolyard
+    was slower and the mountain lagged when throwing fast: the session's detail had taken a frame to about 1,200 draws
+    and 2.5 million vertices (a sphere was 3,024 vertices, eyes and buttons included). Now spheres are drawn as finely as
+    they show (three levels by size over distance), a far kid leaves off its small parts, the backdrop and covers are baked
+    once per yard into one buffer (colour and material per vertex, their shadows and lights kept with them), your side
+    off the screen is not drawn, and the joint stack and local transforms reuse their matrices, so drawing allocates
+    nothing a frame: phone about 600 draws and 0.5 million vertices, desktop on the mountain 570 draws. Asked for: two
+    nodes, **Strong arm** (tier 1, your snowballs fly 15% faster a level, four levels) and **Hold to throw** (tier 3: a
+    finger kept down goes on throwing at the standing kid nearest it, as fast as the pile allows; the view repeats the
+    tap, the rules count each throw). Both bots buy both; pacing 36–37 eager, 63–65 casual. Also: the zip and buttons lay
+    off the narrowing coat at the top (now on its surface).
   - *Still open.* The "commercial" score stays at 4 on phone stills (5 on desktop), through four critics with frames that only gained; the
     critics now name staging rather than drawing (one puppet model recoloured across five yards, your side half off a
     phone's foot, the modal cards over a yard's big moments). Also from the last critics, not yet done: snowballs without a
