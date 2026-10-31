@@ -1568,8 +1568,12 @@ box uses it.
     its height); the present was built with its "lid" as a slab at the bottom, so the ribbon and bow flew off with it.
   - *Critics.* Fresh critics on phone filmstrips played with real touch input (first impression, clarity, art, phone,
     feel, and "would pass as commercial"): before 5/4/6/4/5 and **4**; after rounds 1 and 1b 6/4/6/4/4 and **4** (the
-    plateau *Stills plateau* describes). A close-up critic with the checklist under **Drawing without glitches** went
-    through 30 props after round 1 and found the faults the next round fixed.
+    plateau *Stills plateau* describes); desktop after round 1b 5/3/6/4/4 and **4**. Two close-up critics with the
+    checklist under **Drawing without glitches** went through 30 and 31 props, after round 1 and after round 2, and
+    found the faults the rounds after them fixed. Several of the filmstrip critics' points came from the capture: a
+    scene that kept a run's end event (the tree came up behind a "Too cold!" card) and a scene name the parser split
+    (`tree1` started a fresh game), both fixed; a software renderer at two frames a second that plays worse than a
+    person; stations started from separate saves, so the coins jump between them.
   - *Research: the look* (Rankin/Bass, Kirby's Epic Yarn, Yoshi's Woolly World, Tearaway, Harold Halibut, Animal Logic's
     LEGO Movie). The look comes from flaws in surfaces and mixed real materials (wood, cloth, hair, felt over hard forms),
     not from the frame rate; poses on twos while the camera and projectiles move every frame; a fibrous halo, not a glow.
@@ -1601,11 +1605,27 @@ box uses it.
     tips back on its far edge, light pours out (added to what is behind, fading to its edge), the camera rises until it
     looks down into the box, and only then does the shell get the box's mouth as the dive will see it (`mouthRect`). Seen
     frame by frame on game time (`gtshots`): the dive lands in box 5's own box. Sequences wait on game time (`later`).
-  - *Sound.* Not measured: in this container's headless Chromium an analyser on the box's gains reads silence even for a
-    test oscillator, with the context running. The waltz and the effects are unchanged; nobody has heard them yet.
+  - *Sound.* In this container's headless Chromium an analyser on the box's gains reads silence, even for a test oscillator
+    with the context running; an `OfflineAudioContext` renders without a device, so the box's sound functions were loaded
+    into a page of their own and rendered there (`.work/sndtest.html`, not kept). Before the shell's volume: the music
+    peaks at −20 dB with an average of −40; a busy moment of effects (a throw, splats, a swat, a hit to you, a kid coming
+    over, a boulder) peaked at −2.4 dB, close to clipping. The effects now pass through a limiter of their own (a
+    compressor at −9 dB, 12:1, fast, then ×.62 to take back its make-up gain): the same moment peaks at −5.5, twice as
+    many sounds at once at −4.2, the average 1 to 2 dB lower. Nothing else changed; the music sits some 14 dB under the
+    effects (Keep Off the Grass's owner raised its music 8 dB for the same reason; for Snow Day the owner decides).
   - *Free resources.* Mountains of Christmas is under the **Apache 2.0** licence (not the OFL), Nunito under the OFL; no
     credit needed on screen. Considered and not used: VCSL (CC0; no celesta, but a glockenspiel and sleigh bells), VSCO 2
     CE (CC0), Kenney's impact sounds (CC0); the Sonatina orchestra's celesta is CC Sampling Plus 1.0 (avoid).
+  - *Rounds 2 and 3* (from the critics above and a second research round on phone HUDs and a produced feel): bars only on
+    leaders and on a kid recently hit, smaller; words that pop up are felt patches in their meaning's colour, three at
+    most; leaders' names over their heads, only when they stand; snow caked on a kid's coat by how worn down they are;
+    puffs of snow are tufts of wool, not see-through discs, and a snowball darkens where it turns from the light (a
+    bright rim made every ball a soap bubble); a yard won is cheered with felt scraps in three volleys on the game's
+    clock, with the HUD kept; the yard's name sits on felt and steps back once read; long shadows away from a low sun
+    in the park, which has a sun and white snow (its cool shade made it lilac); the phone frames the whole yard (the
+    covers stand a tenth nearer the middle in the rules, the puppets a size larger in the view); the desktop tree has a
+    card of what can be hung next; the tree is a felt fir with drooping hems on a cord; the run's coins are counted onto
+    its card. The browser suite caught a word patch with a negative radius in its first frame.
   - *Still open.* The "commercial" score stays at 4 on stills. From the last critic: the phone yard is crowded where kids
     gather behind one cover and their bars and labels pile up; kids at the edges of the park and the mountain are cut by
     the screen; your side shows only as hats at the foot of a phone; the win of a yard stays a card in an empty yard; the
@@ -1715,6 +1735,8 @@ is not saved by its art direction: the owner played both and stopped.
 - **When the rules stop, nothing may hang in the air.** Snow Day's rules stop stepping at the end, and the snowballs in
   flight stayed where they were, round the yeti's head, for good. Whatever stops the rules clears or lands what is
   moving.
+- **Measure sound offline when the test browser is deaf.** Headless Chromium may run an AudioContext whose analysers read
+  nothing; an `OfflineAudioContext` renders the box's own sound functions to a buffer whose peak and average are exact.
 - **A shadow lies on the ground, not on a plane.** A ground that rises and falls needs its shadows at its own height
   (or a ground flat where things stand); shadows at one height float over every hollow.
 - **A bug can be holding up the balance.** Tilt's mega balls stuck and were cleared within a second and a half, so
