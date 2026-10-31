@@ -1190,6 +1190,15 @@ still undone, most valuable first:
   - *Cost again*, after this round: the horde's lit body was enlarging three world-sized sheets every frame (33 ms in the
     software renderer); it now enlarges only the cells in view (13 ms). The sorted pass of rabbits, trees and defenders costs
     20 to 50 ms there with 2,000 to 3,000 rabbits; `?fps` shows each part (`h:blots`, `h:body`, `h:sorted`, `h:silo`).
+  - *The owner's phone* (October 2026): the frame rate was very poor. What it paid for, and what changed: trees and cottages
+    had been taken out of the painted tiles and drawn one by one every frame for the sorted pass; they are back in the tiles,
+    and one is drawn again in the sorted pass only when a rabbit, a defender, a hare or the king stands behind it within its
+    outline (the castle's walls likewise), so the depth stays right for a handful of draws instead of hundreds. The cloud
+    shadows and the vignette were screen-sized gradients made anew every frame; they are painted once into small canvases and
+    stretched. A touch screen draws at most 1.5 pixels a point (`?dpr=` overrides). The rabbit budget follows the real time
+    from one frame to the next as well as the horde's own cost, down to 500 rabbits drawn when a device cannot keep up. The
+    main canvas is opaque. In the software renderer the sorted pass fell from 30–80 ms to 11–15 ms. Still to be measured on
+    the device.
   - *Sound*, rendered offline (`OfflineAudioContext`, the box's own sound functions in a page of their own): the music peaks
     at −19 dB with an average of −37; a dense moment of effects (kills, bites, stones, the dragon, the bell, the flood, a hare)
     peaks at −10 dB, average −32. Nothing clips; nothing changed.

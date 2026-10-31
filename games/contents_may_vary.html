@@ -9219,7 +9219,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;paddin
 const $ = id => document.getElementById(id);
 const { clamp, lerp, ease, fmt, hash } = KIT;
 const { sin, cos, PI, min, max, abs, sqrt, floor, round, hypot, atan2, pow, ceil } = Math;
-const cv = $('cv'), g = cv.getContext('2d');
+const cv = $('cv'), g = cv.getContext('2d', { alpha: false });   // the land covers it all: an opaque canvas is cheaper to compose
 const { cX, cY, cellAt, CS, GW, NC, FOLIOS, UP, byId } = CORE;
 let S = null, VW = 0, VH = 0, DPR = 1, desk = false, gt = 0, F = null;
 const cam = { x: 20, y: 70, s: 3.6, auto: 1, fit: 3.6 };
@@ -9849,10 +9849,11 @@ function paintTile(c, tx, ty) {
  c.restore();
  // what stands on the land, back to front
  layer(t => t === T_.ROCK, (x, y, i, h) => { if (h < .35) c.drawImage(ROCKS[i % 3], x - 4, y - 3.8, 8, 6); });
- layer(t => t === T_.SCRUB, (x, y, i, h, h2) => { if (h < .5) c.drawImage(FERN, x - 4 + h2 * 2, y - 5.5, 8, 6.5); });
+ layer(t => t === T_.SCRUB, (x, y, i, h, h2) => { if (h < .5) c.drawImage(FERN, x - 4 + h2 * 2, y - 5.5, 8, 6.5); else if (h > .97) tree(c, x, y, 2.6, i, [11]); });
  for (const o of ops) if (o[0] === 'd' && o[1] === T_.ROCK && o[4] >= 12) { const w = o[4] * 2.2; c.drawImage(MOUNT, o[2] - w / 2, o[3] + o[4] * .3 - w * .62, w, w * .68); }
- // trees and cottages stand up off the page: they are drawn with the rabbits and the defenders, back to front (standing())
- for (const o of ops) if (o[0] === 'r' && o[1] === T_.KEEP) castle(c, (o[2] + o[4]) / 2, (o[3] + o[5]) / 2);
+ // trees and cottages are painted into the page; one with someone standing behind it is drawn again over them (standing())
+ layer(t => t === T_.TREE, (x, y, i, h, h2) => { if (h < .6) tree(c, x + (h2 - .5) * 3, y, 4 + h2 * 2.4, i); });
+ for (const o of ops) if (o[0] === 'r') { if (o[1] === T_.HOUSE) cottage(c, o[2], o[3], o[4] - o[2], o[5] - o[3], o[2] | 0); else if (o[1] === T_.KEEP) castle(c, (o[2] + o[4]) / 2, (o[3] + o[5]) / 2); }
  if (FOLIOS[f].ch >= 3) { c.font = '800 9px ' + GOT; c.fillStyle = 'rgba(184,50,31,.55)'; c.textAlign = 'center'; for (const [t, x, y] of [['ASIA', -32, -150], ['EVROPA', -220, 300], ['AFFRICA', 160, 300], ['hic sunt lepores', -300, 170], ['hic sunt lepores', 240, 0]]) c.fillText(t, x, y); }
  // burrows spaced along each entrance
  for (const s of FOLIOS[f].src) {
@@ -9938,7 +9939,12 @@ function drawBorder() {
 const VIS = 9; let budget = 2600, drawn = 0, PT = [], byCell = new Map(), churn = 0, CH = [], hshare = 1;
 const dens = new Float32Array(NC), densOn = new Set(), ft = [];
 // the budget follows only what the horde costs, so a slow page does not thin the crowd
-function gauge(ms) { if (DIAG.horde) { budget = DIAG.horde; return; } ft.push(ms); if (ft.length < 40) return; const m = ft.slice().sort((a, b) => a - b)[20]; ft.length = 0; if (m > 9) budget = max(900, budget * .85); else if (m < 5) budget = min(desk ? 9000 : 5000, budget * 1.05); }
+// the frame's real length (from one frame to the next) counts too: when the device cannot keep up, fewer rabbits are drawn
+const fl = []; let flT = 0, slowF = 0;
+function gauge(ms) { if (DIAG.horde) { budget = DIAG.horde; return; }
+ const t = performance.now(); if (flT) fl.push(t - flT); flT = t;
+ if (fl.length >= 30) { const m = fl.slice().sort((a, b) => a - b)[15]; fl.length = 0; slowF = m > 22; if (m > 24) budget = max(500, budget * .8); else if (m < 18 && ms < 5) budget = min(desk ? 9000 : 4000, budget * 1.04); }
+ ft.push(ms); if (ft.length < 40) return; const m = ft.slice().sort((a, b) => a - b)[20]; ft.length = 0; if (m > 9) budget = max(900, budget * .85); else if (m < 5 && !slowF) budget = min(desk ? 9000 : 4000, budget * 1.05); }
 // how much a snail slows each cell (0 none, 1 standing still), against the same land without snails
 let SL = null, slF = null;
 function slimeMap() {
@@ -10067,8 +10073,16 @@ function drawHorde(st) {
  for (const t of S.tw) { const p = drag && drag.t === t && drag.moved ? null : towerXY(t); if (!p) continue; const x = sx(p.x), y = sy(p.y); if (x < -60 || x > VW + 60 || y < -60 || y > VH + 80) continue; FG.push([p.y + (t.t === 'snail' ? 2.9 : 0), 0, t, x, y]); }
  for (const h of S.hares) FG.push([h.y, 1, h]);
  if (S.king) FG.push([S.king.y + 1.5, 2, S.king]);
- { const x0 = wx(-40), x1 = wx(VW + 40), y0 = wy(-10), y1 = wy(VH + 140); for (const o of standing()) if (o[0] > y0 && o[0] < y1 && o[2] > x0 - 30 && o[2] < x1 + 10) FG.push([o[0], 3, o]); }
+ // a tree or cottage joins the sorted pass only when a rabbit, a defender, a hare or the king stands behind it within its outline
+ { const x0 = wx(-40), x1 = wx(VW + 40), y0 = wy(-10), y1 = wy(VH + 140), tw = S.tw.filter(t => t.at >= 0).map(towerXY).filter(Boolean);
+  if (S.king) tw.push(S.king); for (const h of S.hares) tw.push(h);
+  const behind = o => { const r = o[1] === 2 ? 22 : o[1] ? o[4] * .7 : o[4] * 1.45, top = o[1] === 2 ? -30 : o[1] ? o[3] - o[5] - 4 : o[3] - o[4] * 2.4 - 4, xa = o[1] === 2 ? 0 : o[2] + (o[1] ? o[4] / 2 : 0);
+   for (const p of tw) if (p.y < o[0] && p.y > top && abs(p.x - xa) < r + 3) return true;
+   for (let y = top; y < o[0]; y += CS) for (let x = xa - r; x <= xa + r; x += CS) { const l = byCell.get(cellAt(x, y)); if (l) for (const p of l) if (p.y < o[0] && !(p.out && p.die == null)) return true; }
+   return false; };
+  for (const o of standing()) if (o[0] > y0 && o[0] < y1 && o[2] > x0 - 30 && o[2] < x1 + 10 && behind(o)) FG.push([o[0], 3, o]); }
  FG.sort((a, b) => a[0] - b[0]);
+ if (hurtT > 0 && S.phase === 'run' && !FG.some(f => f[1] === 3 && f[2][1] === 2)) castleHit();
  let fi = 0;
  const upTo = Y => { while (fi < FG.length && FG[fi][0] <= Y) { const f = FG[fi++];
   if (f[1] === 0) { const t = f[2]; g.globalAlpha = t.set > 0 ? .5 : 1; fig(g, t.t, f[3], f[4], s * 1.25, t.a, st, t.id); g.globalAlpha = 1; }
@@ -10390,14 +10404,19 @@ function wyvern(c, w, t) {
  disc(c, C.ink, 14, -.35, .15); dot(c, 14, .35, .15); c.fill();
 }
 // cloud shadows drifting rigidly over the land, and a vignette
+// a cloud's shadow and the vignette are painted once into small canvases and only stretched each frame: a gradient as large
+// as the screen, made anew every frame, is what a phone's GPU pays most for
+let CLOUD = null, VIG = null;
 function sky() {
  if (!DIAG.fx) return;
+ if (!CLOUD) { const [c, q] = mk(128, 80); q.fillStyle = rad(q, 64, 40, 0, 64, 40, 64, 'rgba(20,30,40,.13)', 'rgba(20,30,40,.08)', 'rgba(20,30,40,0)'); q.save(); q.translate(64, 40); q.scale(1, .62); dot(q, 0, 0, 64); q.restore(); q.fill(); CLOUD = c; }
  if (!K.reduced) for (let k = 0; k < 6; k++) {
   const span = 1400, x = ((hash(k, 1, 90) * span + gt * (5 + k)) % span) - span / 2, y = hash(k, 2, 90) * 700 - 220, r = (70 + hash(k, 3, 90) * 70) * cam.s, X = sx(x), Y = sy(y);
   if (X < -r || X > VW + r || Y < -r || Y > VH + r) continue;
-  g.fillStyle = rad(g, X, Y, 0, X, Y, r, 'rgba(20,30,40,.13)', 'rgba(20,30,40,.08)', 'rgba(20,30,40,0)'); g.beginPath(); g.ellipse(X, Y, r, r * .62, 0, 0, TAU); g.fill();
+  g.drawImage(CLOUD, X - r, Y - r * .62, r * 2, r * 1.24);
  }
- g.fillStyle = rad(g, VW / 2, VH * .45, min(VW, VH) * .45, VW / 2, VH * .45, hypot(VW, VH) * .62, 'rgba(40,25,10,0)', 'rgba(40,25,10,.28)'); g.fillRect(0, 0, VW, VH);
+ if (!VIG || VIG.w !== VW || VIG.h !== VH) { const [c, q] = mk(160, round(160 * VH / VW)); q.scale(160 / VW, 160 / VW); q.fillStyle = rad(q, VW / 2, VH * .45, min(VW, VH) * .45, VW / 2, VH * .45, hypot(VW, VH) * .62, 'rgba(40,25,10,0)', 'rgba(40,25,10,.28)'); q.fillRect(0, 0, VW, VH); VIG = c; VIG.w = VW; VIG.h = VH; }
+ g.drawImage(VIG, 0, 0, VW, VH);
 }
 /* —— the HUD —— */
 let hurtT = 0, endAt = null, sayT = 0, shake = 0;
@@ -10998,7 +11017,7 @@ function setUI(d) { if (!S) return; S.ui = clamp(round(((S.ui || 1) + d * .1) * 
 $('uiz').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setUI(+b.dataset.z); });
 addEventListener('keydown', e => { if (e.key === '+' || e.key === '=') setUI(1); else if (e.key === '-') setUI(-1); });
 function layout() {
- DPR = DIAG.dpr || min(2, devicePixelRatio || 1); VW = innerWidth; VH = innerHeight; desk = VW >= 820 && VH >= 560;
+ DPR = DIAG.dpr || min(matchMedia('(pointer: coarse)').matches ? 1.5 : 2, devicePixelRatio || 1); VW = innerWidth; VH = innerHeight; desk = VW >= 820 && VH >= 560;
  document.body.classList.toggle('desk', desk);
  cv.width = round(VW * DPR); cv.height = round(VH * DPR);
  // the text and controls grow with a large screen, and by the viewer's own setting
