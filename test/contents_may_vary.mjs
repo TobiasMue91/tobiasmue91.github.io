@@ -617,6 +617,13 @@ if (suites.includes('flurry') && flurry) {
     for (let j = 0; j < R.kids.length && !R.fin; j++) { R.ammo = 9; CORE.act(R, 'throw', j); CORE.step(R, 1); }
     check(R.fin === 1 && CORE.act(R, 'open') && CORE.done(R), 'and the yeti brings his present once more');
   }
+  {
+    // a line comment written into the middle of a line swallows the code after it; twice in Snow Day's refinement session
+    // it took a statement with it (a kid's marks, a limiter's gain): no comment in the view may be followed by a statement
+    const view = flurry.tpl.slice(flurry.tpl.indexOf('<script>'));
+    const bad = view.split('\n').filter(l => { const k = l.indexOf('// '); return k > 0 && /;\s*[A-Za-z_$][\w.$\[\]]*\s*(=[^=]|\()/.test(l.slice(k)); });
+    check(!bad.length, 'no line comment in the view swallows a statement after it', bad.map(l => l.trim().slice(0, 90)).join(' | '));
+  }
 }
 
 /* ---------------- warren ---------------- */

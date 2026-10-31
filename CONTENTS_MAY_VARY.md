@@ -1626,7 +1626,17 @@ box uses it.
     covers stand a tenth nearer the middle in the rules, the puppets a size larger in the view); the desktop tree has a
     card of what can be hung next; the tree is a felt fir with drooping hems on a cord; the run's coins are counted onto
     its card. The browser suite caught a word patch with a negative radius in its first frame.
-  - *Still open.* The "commercial" score stays at 4 on stills. From the last critic: the phone yard is crowded where kids
+  - *Round 4* (a third phone critic: 6/4/6/4/5 and **4**). The catapult is a cart behind the middle of your wall, its arm
+    drawn back as it winds and swinging up as it fires; a kid coming over shrinks to your side's size on the way rather
+    than popping; a run that ends while someone is still walking over waits for them before its card; the coin counter has
+    a fixed width so the warmth bar never shrinks; bars stay inside the screen and come up only for your own hits (your
+    side's kept every bar up); each yard has a tint of its own light (warm at sunset, cold on the mountain); the yard's
+    name is an opaque felt chip that shrinks once read; scarves are thinner (from above they read as beards); the open
+    present has walls of felt round a floor of light; the very first run opens on the title card. The suite now refuses
+    a line comment in the view that is followed by a statement on the same line: it happened twice in this session.
+  - *Still open.* The "commercial" score stays at 4 on stills, through four critics with frames that only gained; the
+    critics now name staging rather than drawing (one puppet model recoloured across five yards, your side half off a
+    phone's foot, the modal cards over a yard's big moments). From the last critic: the phone yard is crowded where kids
     gather behind one cover and their bars and labels pile up; kids at the edges of the park and the mountain are cut by
     the screen; your side shows only as hats at the foot of a phone; the win of a yard stays a card in an empty yard; the
     numbers run into the hundreds of millions on the mountain.
