@@ -1176,6 +1176,20 @@ still undone, most valuable first:
     to do with it, instead of "The wall is eaten!" after a tutorial. A monk who has just shot holds an empty string and rocks
     back before he nocks the next arrow. On a phone the Tree of Jesse opens on Jesse and the trunk, large, and gold arrows at
     the edge point to medallions out of view (a tap on one brings it in).
+  - *A third critic* (fresh, phone, after the two rounds above): 7/4/6/6/5 and **4**, the plateau *Stills plateau* names; some
+    of its points were wrong about the frames (it saw no burn trail behind the dragon). What it found and what changed: hidden
+    defenders filled pale read as disabled (now a crisp gold outline with a faint fill, all of them in one layer a frame); the
+    ↺ of *Recall all* on a phone read as "restart" (it carries the word now); the numbers under resting gifts read as costs
+    (they say "22s"); "Wave IV ▸ 7" read as a price ("Wave IV in 7 ▸"); "A first taste" over an eaten wall read as a
+    contradiction (the card says the wall is eaten and then what the first taste paid); the ending had no summary (a colophon
+    under "Explicit.": rabbits slain, folios held, battles; the rules keep `S.slain`, no call to the PRNG, so the bots play as
+    before). A herald's scroll drops for the great moments (the king rides out, he kneels, a new chapter), on game time.
+    Its two largest points are the owner's to decide and are not done: the playfield is a cartoon meadow rather than a page
+    (the remake made the land "realistic terrain and nature" at the owner's request; the border, the underdrawing and the
+    chronicle now carry the manuscript round it), and the leaf runs into millions.
+  - *Cost again*, after this round: the horde's lit body was enlarging three world-sized sheets every frame (33 ms in the
+    software renderer); it now enlarges only the cells in view (13 ms). The sorted pass of rabbits, trees and defenders costs
+    20 to 50 ms there with 2,000 to 3,000 rabbits; `?fps` shows each part (`h:blots`, `h:body`, `h:sorted`, `h:silo`).
   - *Sound*, rendered offline (`OfflineAudioContext`, the box's own sound functions in a page of their own): the music peaks
     at −19 dB with an average of −37; a dense moment of effects (kills, bites, stones, the dragon, the bell, the flood, a hare)
     peaks at −10 dB, average −32. Nothing clips; nothing changed.
