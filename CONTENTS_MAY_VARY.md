@@ -268,7 +268,7 @@ The long-term answer is a habit and a tool:
 | 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft) | hold a finger on the house and drag: the ghost glides after it and its cold drives people away; tap a doorway, the telephone, the chandelier | short nights against ectoplasm and the dawn, the organ between them; every exit costs a pip of resolve for good; five casts, from a family of three to a film company and thirty extras | silent film: Reiniger cut-outs, black people before grey furniture, frost round a cream card ghost, tinted stock, grain, intertitles, iris | night blue, cream, black; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought, a telephone, a crash | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
-Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 35–38 / 54–58,
+Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 35–36 / 62–64 (after its refinement session),
 Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–38 / 71–78.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -1634,9 +1634,19 @@ box uses it.
     name is an opaque felt chip that shrinks once read; scarves are thinner (from above they read as beards); the open
     present has walls of felt round a floor of light; the very first run opens on the title card. The suite now refuses
     a line comment in the view that is followed by a statement on the same line: it happened twice in this session.
-  - *Still open.* The "commercial" score stays at 4 on stills, through four critics with frames that only gained; the
+    Since: kids are built differently (taller, shorter, stockier, slighter by a hash); words never land on the yard's
+    name; the warmth bar flashes red and jolts when a snowball gets through, so the loss has a cause. The title card was
+    checked by holding its CSS animation along its length (`getAnimations`): it drops, sways, settles and fades.
+    A desktop critic on frames taken before round 4: 6/4/7/5/5 and **5** for "would pass as commercial", the first score
+    over 4 in this session (the tree screen "the most finished screen"; the battle "a good prototype").
+  - *Still open.* The "commercial" score stays at 4 on phone stills (5 on desktop), through four critics with frames that only gained; the
     critics now name staging rather than drawing (one puppet model recoloured across five yards, your side half off a
-    phone's foot, the modal cards over a yard's big moments). From the last critic: the phone yard is crowded where kids
+    phone's foot, the modal cards over a yard's big moments). Also from the last critics, not yet done: snowballs without a
+    streak; the WINDING/FIRE button unlabelled in the felt HUD; the snow bursts large over the middle of the screen; the
+    violet mountain's range is out of a phone's frame during play. The browser suite's two failures at the cup final are
+    Keep Off the Grass's and fail without this session's changes. Nobody has played Snow Day on a device yet: for a test,
+    `?world=flurry&scene=<name>` reaches any moment, and `?fps`, `?dpr=1`, `?fx=0`, `?film=0`, `?aa=0`, `?boil=0`
+    narrow down a fault seen only there. From the last critic: the phone yard is crowded where kids
     gather behind one cover and their bars and labels pile up; kids at the edges of the park and the mountain are cut by
     the screen; your side shows only as hats at the foot of a phone; the win of a yard stays a card in an empty yard; the
     numbers run into the hundreds of millions on the mountain.
