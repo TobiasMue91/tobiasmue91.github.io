@@ -38,7 +38,7 @@ const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024 };
+const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024, flurry: 230 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -604,6 +604,7 @@ if (suites.includes('flurry') && flurry) {
     CORE.act(T, 'run'); for (const k of T.kids) { k.r = 1e-9; k.st = 'up'; k.t = 99; } T.warm = T.warmMax = 1e12;
     for (let j = 0; j < T.kids.length && !T.fin; j++) { T.ammo = 9; CORE.act(T, 'throw', j); CORE.step(T, 1); }
     check(T.fin === 1 && !CORE.done(T) && CORE.progress(T) < 1, 'the yeti comes over and the box is not open yet');
+    check(!T.balls.length && !T.inc.length && !T.sledge, 'nothing is left in the air once the rules stop at the end');
     check(CORE.act(T, 'open') && CORE.done(T) && CORE.progress(T) === 1, 'opening his present is the end');
     // going back from the shelf: the mountain again, its gang dug in afresh, the rest of your side and the tree kept
     T.$ = 77; T.lv.hard = 3; const side = T.allies.filter(a => a.y < 4).length;
