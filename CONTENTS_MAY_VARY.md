@@ -1658,6 +1658,12 @@ box uses it.
     finger kept down goes on throwing at the standing kid nearest it, as fast as the pile allows; the view repeats the
     tap, the rules count each throw). Both bots buy both; pacing 36–37 eager, 63–65 casual. Also: the zip and buttons lay
     off the narrowing coat at the top (now on its surface).
+    Then: the hit-stop is gone. Holding the whole picture 55–100 ms on every hit (and longer when a kid came over) was
+    meant as juice and read as stutter as soon as snowballs came fast: the bursting snow stood still in the air (the
+    owner took it for a frame-rate drop). A hit now kicks the camera a little and the kid squashes, and nothing else
+    stops. The two balls on the sledge (brown and glowing gold) meant nothing to the owner: it is a hessian sack tied
+    with red string, chocolate coins at its mouth and spilt on the deck, at the back, with the rider at the front. The
+    dog's red collar ran through his chest and back; it now goes round his neck, tilted with it, the bell at its front.
   - *Still open.* The "commercial" score stays at 4 on phone stills (5 on desktop), through four critics with frames that only gained; the
     critics now name staging rather than drawing (one puppet model recoloured across five yards, your side half off a
     phone's foot, the modal cards over a yard's big moments). Also from the last critics, not yet done: snowballs without a
@@ -1774,6 +1780,9 @@ is not saved by its art direction: the owner played both and stopped.
 - **When the rules stop, nothing may hang in the air.** Snow Day's rules stop stepping at the end, and the snowballs in
   flight stayed where they were, round the yeti's head, for good. Whatever stops the rules clears or lands what is
   moving.
+- **A hit-stop that stops the whole picture reads as lag.** Freezing every animation for a moment on each hit works for a
+  heavy blow now and then; with a hit every few hundred milliseconds the picture stutters and the player blames the frame
+  rate. Hold only the one hit (its target, its squash), never the particles and the rest of the scene.
 - **Measure sound offline when the test browser is deaf.** Headless Chromium may run an AudioContext whose analysers read
   nothing; an `OfflineAudioContext` renders the box's own sound functions to a buffer whose peak and average are exact.
 - **A shadow lies on the ground, not on a plane.** A ground that rises and falls needs its shadows at its own height
