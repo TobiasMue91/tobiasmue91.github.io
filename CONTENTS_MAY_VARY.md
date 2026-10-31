@@ -1527,6 +1527,17 @@ box uses it.
     snow on every summit and shade on their right flanks, then snow down to the foot with pines in clumps, a chair lift
     on pylons and a village with lit windows; cabins and ore stand in drifts of their own (drifts in the backdrop were
     left in the air when a cabin broke).
+  - *Last round of the session.* Each bulb of a chain now grows a little along it and shows its step as pips, so six
+    in a row read as a progression; a new board says why the coins leap ("EVERYTHING HERE PAYS ×2.5"); the strip that
+    maps a tall board has grips and, for its first games, DRAG TO LOOK, never at once with the launcher's pill; the
+    tray's line is light on a dark slot and a fever drains a gold bar there; the tulip tip is a pill, not body text.
+    A last fresh critic scored 7/6/6/7/6 and **4** (desktop first impression 5). Still open from it, most valuable
+    first: the sign from board 2 on is a crowd of small bulbs (collapse lit chains into a tube with a level number and
+    show only the next bulb large); a desktop is a phone column in an aisle (a two-panel cabinet, or neighbouring
+    machines worth looking at); FEVER is a banner and gold balls (a tinted board, the reels turning behind); popups
+    still land on the reels; the boards share no material language beyond pins and tulips (the parlour shows nothing
+    on its side); the bottom drain tulips are half under the rim on board 1; coins run to billions against a Big One
+    of millions. Nobody has heard the sound yet.
 
 ### Working on a box that has shipped
 
