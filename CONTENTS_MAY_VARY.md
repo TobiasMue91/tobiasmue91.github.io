@@ -26,8 +26,10 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    not with bulk: a box that wants more room cuts something first. Libraries a box loads from a CDN
    inside its own template do not count, but must be pinned to an exact version. (The cap was 120 KB until
    the owner raised it, when the shows in Keep Off the Grass gained intruders, upgrades and a match day.)
-   Here Be Rabbits alone may weigh **210 KB**: the owner raised its cap after the art was redone and a
-   budget round that changed no pixel brought it only to 203 KB (`BOX_CAP` in the suite).
+   Here Be Rabbits may weigh **300 KB**: the owner raised its cap to 210 KB after the art was redone and a
+   budget round that changed no pixel brought it only to 203 KB, then lifted every limit for its refinement session
+   (October 2026, rule 16), which began at 204 KB and passed 210 KB with its scenes, close-ups and diagnostic switches
+   (`BOX_CAP` in the suite).
    Starter may weigh **200 KB**: for its refinement session (rule 16) the owner lifted every limit the
    anthology had set itself where it stood in the way of the result.
    Keep Off the Grass may weigh **200 KB** for the same reason: its refinement session (October 2026) began at

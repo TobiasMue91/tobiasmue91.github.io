@@ -38,7 +38,7 @@ const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { warren: 210 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024, flurry: 230 * 1024 };
+const BOX_CAP = { warren: 300 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024, flurry: 230 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -659,6 +659,22 @@ if (suites.includes('warren') && warren) {
     const leaf = S.leaf; check(S.prep && S.called === 1 && CORE.act(S, 'go') && S.leaf > leaf && S.wave === 1, 'once a wave is all in, the next can be called early, for leaf');
     while (!S.prep && k++ < 1200) CORE.step(S, .1); k = 0; while (S.prep && k++ < 200) CORE.step(S, .1);
     check(S.wave === 2 && k * .1 <= CORE.P.prep + .2, `left alone, the next wave comes by itself after ${(k * .1).toFixed(1)} s`);
+  }
+  {
+    // the king's folio: held, the shrine opened, then back from the shelf with the tree and the leaf kept
+    const S = CORE.init(5); S.lv = { monk1: 1, arrow: 3 }; S.folio = CORE.FOLIOS.length - 1; S.ch = 3; S.leaf = 77;
+    CORE.act(S, 'run'); for (const t of S.tw) t.at = -1; S.wave = S.called = CORE.FOLIOS[S.folio].W - 1; S.pool = 0; S.prep = 0; S.kingDone = 1; S.wallMax = S.wall = 1e9;
+    let k = 0; while (S.phase === 'run' && k++ < 600) CORE.step(S, .1);
+    check(S.fin === 1 && S.phase === 'fin' && CORE.act(S, 'open') && CORE.done(S), 'the king’s folio held, the shrine is opened and the box is done');
+    const R = CORE.revisit(JSON.parse(JSON.stringify(S)));
+    check(!CORE.done(R) && R.phase === 'tree' && R.folio === CORE.FOLIOS.length - 1 && R.lv.arrow === 3 && R.leaf === S.leaf && !R.fin, 'revisit puts you before the king’s folio with the tree and the leaf kept');
+    check(CORE.act(R, 'run') && R.phase === 'run' && R.prep === 1, 'and the king’s folio can be played again from there');
+  }
+  {
+    // a line comment written into the middle of a line swallows the code after it (Snow Day's lesson)
+    const view = warren.tpl.slice(warren.tpl.indexOf('<script>'));
+    const bad = view.split('\n').filter(l => { const k = l.indexOf('// '); return k > 0 && /;\s*[A-Za-z_$][\w.$\[\]]*\s*(=[^=]|\()/.test(l.slice(k)); });
+    check(!bad.length, 'no line comment in the view swallows a statement after it', bad.map(l => l.trim().slice(0, 90)).join(' | '));
   }
   {
     // no farming: the bots never need more than four lost runs on one folio
