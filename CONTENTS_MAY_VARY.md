@@ -35,6 +35,9 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    Tilt may weigh **230 KB**: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
    scenes, close-ups and diagnostic switches before a pixel of the art had changed, then 200 KB when the street and the
    mountain were redrawn at the owner's request; the owner lifted the cap in advance.
+   Snow Day may weigh **230 KB**: its refinement session (October 2026) began at 116 KB and passed 130 KB with its scenes,
+   close-ups and diagnostic switches and the first round of art (cotton-wool snow, wood, the leaders, the present); the owner
+   lifted the cap in advance.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -265,7 +268,7 @@ The long-term answer is a habit and a tool:
 | 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft) | hold a finger on the house and drag: the ghost glides after it and its cold drives people away; tap a doorway, the telephone, the chandelier | short nights against ectoplasm and the dawn, the organ between them; every exit costs a pip of resolve for good; five casts, from a family of three to a film company and thirty extras | silent film: Reiniger cut-outs, black people before grey furniture, frost round a cream card ghost, tinted stock, grain, intertitles, iris | night blue, cream, black; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought, a telephone, a crash | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
-Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 35–38 / 54–58,
+Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 35–36 / 62–64 (after its refinement session),
 Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–38 / 71–78.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -1539,6 +1542,115 @@ box uses it.
     on its side); the bottom drain tulips are half under the rim on board 1; coins run to billions against a Big One
     of millions. Nobody has heard the sound yet.
 
+- **Snow Day** (box 4). **The refinement session** (October 2026, rule 16). The owner asked for Snow Day to be taken to the
+  bar of a finished commercial game, with research rounds between the critic rounds, and lifted the byte cap in advance
+  (rule 2: now 230 KB). Tools first: `CORE.revisit` (back on the mountain from the shelf with the tree, the coins and your
+  side kept, the mountain's gang and the yeti dug in again; tested); `?world=flurry&scene=<name>` plays the eager bot
+  (`&bot=`, `&seed=`) until a moment comes and starts there, keeping that moment's events so the view stages it (first,
+  tree1, join, yard2..5, won1..4, sledge, dog, cata, crowd, yeti, end; a name with a digit of its own is looked up whole
+  first, which Tilt's copy of the parser does not do, so its `tree1` starts a fresh game); `K.debug.look(x, z, s, { y,
+  yaw, pitch, freeze, stand, clear, on: 'tree' })` with things to name (`kid3`, `ally0`, `wall`, `dog`, `cata`, `sentry`,
+  `sledge`, `yeti`, `present`), 31 close-ups in `K.debug.props`, and `snap()` composites the CSS sky under the canvas;
+  switches for a real phone: `?fps` (frame rate, draw calls, DPR, canvas size, antialiasing), `?dpr=1`, `?fx=0` (no
+  particles, falling snow, splats or shake), `?film=0` (no grade, vignette or grain), `?aa=0`, `?boil=0`.
+  - *A bug was holding up the balance.* A kid knocked down by one snowball could not be hit by the next one already in the
+    air: in the eager bot's game 85% of its own throws said "behind cover" or fell in the snow (345 hits in 2,300), and
+    most of your side's balls were wasted too. Now a ball lands on a kid who is down (without keeping them down longer)
+    and the kid you aimed at is still caught for .3 s after ducking. Both bots then finished in 11 and 29 minutes, so
+    the yards' resolve went ×4, ×8, ×12, ×12, ×22 and the tree's tiers ×1, ×4, ×8, ×10, ×10; the catapult winds on 180
+    hits instead of 30; "Snowball season" counts your own hits (4,000) and the catapult sticker wants 150 shots. The bots
+    now take 35–37 (eager) and 63–66 (casual) minutes, longest wait 3.5 min. In the very first run the gang hits only
+    one throw in five, so a stranger has time to find out what a tap does; a run without a coin says how to throw
+    instead of "+0".
+  - *Fixed on the way:* snowballs in flight when the yeti gave up hung in the air for good (the rules stop at the end;
+    they now clear what is in the air, tested); the view's shadows lay flat at one height under a ground that rose and
+    fell by half a unit, so they floated over hollows (the yard is now nearly flat where the war is and shadows lie on
+    its height); the present was built with its "lid" as a slab at the bottom, so the ribbon and bow flew off with it.
+  - *Critics.* Fresh critics on phone filmstrips played with real touch input (first impression, clarity, art, phone,
+    feel, and "would pass as commercial"): before 5/4/6/4/5 and **4**; after rounds 1 and 1b 6/4/6/4/4 and **4** (the
+    plateau *Stills plateau* describes); desktop after round 1b 5/3/6/4/4 and **4**. Two close-up critics with the
+    checklist under **Drawing without glitches** went through 30 and 31 props, after round 1 and after round 2, and
+    found the faults the rounds after them fixed. Several of the filmstrip critics' points came from the capture: a
+    scene that kept a run's end event (the tree came up behind a "Too cold!" card) and a scene name the parser split
+    (`tree1` started a fresh game), both fixed; a software renderer at two frames a second that plays worse than a
+    person; stations started from separate saves, so the coins jump between them.
+  - *Research: the look* (Rankin/Bass, Kirby's Epic Yarn, Yoshi's Woolly World, Tearaway, Harold Halibut, Animal Logic's
+    LEGO Movie). The look comes from flaws in surfaces and mixed real materials (wood, cloth, hair, felt over hard forms),
+    not from the frame rate; poses on twos while the camera and projectiles move every frame; a fibrous halo, not a glow.
+    *Research: juice and the turn-over* (Juice it or lose it, Time Crisis's crisis flash, Peggle's Extreme Fever, Dragon
+    Quest's recruitment): hit-stop on both, squash, a mark left on the target, only shots that will hit marked; a beat when
+    an enemy changes sides. *Research: a phone HUD* (RTS and tower-defence practice, Brawl Stars, Vampire Survivors'
+    number floods): bars only on what was hit, sums at the target, information at the top and actions at the bottom.
+  - *What changed.* Snow is cotton wool (lumps, fluff, a broken-up fuzzy edge; no square glints); felt has fine fibre,
+    round pilling and per-object shade; wood has grain and a sheen; ice is faceted crystal with its own material; light
+    from below off the snow, contact darkening at the foot, soft shadows cast away from the sun (long in the park's
+    sunset, which now has a sun). Spheres are finer. Walls are rolled lumps with no lid and no seam; a snowman cover
+    stands whole beside its drift (the owner saw them buried); the hedge is a leafy mass with snow over its edge; the car
+    a toy saloon with flush windows and lumps of snow on its roof; the bin ribbed with a lid; boulders are lumps with snow
+    in their hollows; the bench has iron ends and slats; houses framed sash windows, a door in a frame, a step; lamps
+    glow with a halo. Kids have hair, brows that lift when hit, thumbs and cuffs, a collar and a blanket stitch round the
+    hem; snow sticks to their coats as they are worn down; the four leaders have outlines of their own (Rosa's plaits,
+    the twins' goggles, Hector's school cap and specs, the Big Kids' earmuffs and height). Biscuit sits with legs, paws
+    and felt ears; the sledge's runners curl on struts; the yeti has a brow of fur over a felt face, a nose, a mouth that
+    opens and fists. A hit holds the picture 55 ms (100 on a splat) and kicks the camera; a kid who gives up throws felt
+    scraps and holds the picture a quarter second. A clump of cotton wool sticks to the lens and slides off. A new yard
+    opens on a felt title card while the yard holds still. Words that pop up are felt patches in their meaning's colour,
+    three at most; bars show on leaders and for a while after a hit; leaders' names sit over their heads; the gang's
+    line carries a strip for how worn down the whole gang is; tutorials are kept in the save (`S.vt`, the view's notes)
+    and sit under the yard's name, clear of your side. The run's coins are counted onto its card a tick at a time. The
+    tree's baubles are stuffed felt on a thread, smaller on a phone so they no longer overlap, and the hanging hangs on a
+    cord from a brass nail on a papered wall. The cards breathe; the present jumps now and then as if something wanted
+    out. A wide screen comes in a little.
+  - *The way out.* The present is a box with a lid a little wider than it, a ribbon round both and a bow; opened, the lid
+    tips back on its far edge, light pours out (added to what is behind, fading to its edge), the camera rises until it
+    looks down into the box, and only then does the shell get the box's mouth as the dive will see it (`mouthRect`). Seen
+    frame by frame on game time (`gtshots`): the dive lands in box 5's own box. Sequences wait on game time (`later`).
+  - *Sound.* In this container's headless Chromium an analyser on the box's gains reads silence, even for a test oscillator
+    with the context running; an `OfflineAudioContext` renders without a device, so the box's sound functions were loaded
+    into a page of their own and rendered there (`.work/sndtest.html`, not kept). Before the shell's volume: the music
+    peaks at −20 dB with an average of −40; a busy moment of effects (a throw, splats, a swat, a hit to you, a kid coming
+    over, a boulder) peaked at −2.4 dB, close to clipping. The effects now pass through a limiter of their own (a
+    compressor at −9 dB, 12:1, fast, then ×.62 to take back its make-up gain): the same moment peaks at −5.5, twice as
+    many sounds at once at −4.2, the average 1 to 2 dB lower. Nothing else changed; the music sits some 14 dB under the
+    effects (Keep Off the Grass's owner raised its music 8 dB for the same reason; for Snow Day the owner decides).
+  - *Free resources.* Mountains of Christmas is under the **Apache 2.0** licence (not the OFL), Nunito under the OFL; no
+    credit needed on screen. Considered and not used: VCSL (CC0; no celesta, but a glockenspiel and sleigh bells), VSCO 2
+    CE (CC0), Kenney's impact sounds (CC0); the Sonatina orchestra's celesta is CC Sampling Plus 1.0 (avoid).
+  - *Rounds 2 and 3* (from the critics above and a second research round on phone HUDs and a produced feel): bars only on
+    leaders and on a kid recently hit, smaller; words that pop up are felt patches in their meaning's colour, three at
+    most; leaders' names over their heads, only when they stand; snow caked on a kid's coat by how worn down they are;
+    puffs of snow are tufts of wool, not see-through discs, and a snowball darkens where it turns from the light (a
+    bright rim made every ball a soap bubble); a yard won is cheered with felt scraps in three volleys on the game's
+    clock, with the HUD kept; the yard's name sits on felt and steps back once read; long shadows away from a low sun
+    in the park, which has a sun and white snow (its cool shade made it lilac); the phone frames the whole yard (the
+    covers stand a tenth nearer the middle in the rules, the puppets a size larger in the view); the desktop tree has a
+    card of what can be hung next; the tree is a felt fir with drooping hems on a cord; the run's coins are counted onto
+    its card. The browser suite caught a word patch with a negative radius in its first frame.
+  - *Round 4* (a third phone critic: 6/4/6/4/5 and **4**). The catapult is a cart behind the middle of your wall, its arm
+    drawn back as it winds and swinging up as it fires; a kid coming over shrinks to your side's size on the way rather
+    than popping; a run that ends while someone is still walking over waits for them before its card; the coin counter has
+    a fixed width so the warmth bar never shrinks; bars stay inside the screen and come up only for your own hits (your
+    side's kept every bar up); each yard has a tint of its own light (warm at sunset, cold on the mountain); the yard's
+    name is an opaque felt chip that shrinks once read; scarves are thinner (from above they read as beards); the open
+    present has walls of felt round a floor of light; the very first run opens on the title card. The suite now refuses
+    a line comment in the view that is followed by a statement on the same line: it happened twice in this session.
+    Since: kids are built differently (taller, shorter, stockier, slighter by a hash); words never land on the yard's
+    name; the warmth bar flashes red and jolts when a snowball gets through, so the loss has a cause. The title card was
+    checked by holding its CSS animation along its length (`getAnimations`): it drops, sways, settles and fades.
+    A desktop critic on frames taken before round 4: 6/4/7/5/5 and **5** for "would pass as commercial", the first score
+    over 4 in this session (the tree screen "the most finished screen"; the battle "a good prototype").
+  - *Still open.* The "commercial" score stays at 4 on phone stills (5 on desktop), through four critics with frames that only gained; the
+    critics now name staging rather than drawing (one puppet model recoloured across five yards, your side half off a
+    phone's foot, the modal cards over a yard's big moments). Also from the last critics, not yet done: snowballs without a
+    streak; the WINDING/FIRE button unlabelled in the felt HUD; the snow bursts large over the middle of the screen; the
+    violet mountain's range is out of a phone's frame during play. The browser suite's two failures at the cup final are
+    Keep Off the Grass's and fail without this session's changes. Nobody has played Snow Day on a device yet: for a test,
+    `?world=flurry&scene=<name>` reaches any moment, and `?fps`, `?dpr=1`, `?fx=0`, `?film=0`, `?aa=0`, `?boil=0`
+    narrow down a fault seen only there. From the last critic: the phone yard is crowded where kids
+    gather behind one cover and their bars and labels pile up; kids at the edges of the park and the mountain are cut by
+    the screen; your side shows only as hats at the foot of a phone; the win of a yard stays a card in an empty yard; the
+    numbers run into the hundreds of millions on the mountain.
+
 ### Working on a box that has shipped
 
 The boxes live in `games/contents_may_vary.html` and are edited there, in place. The fast loop:
@@ -1637,6 +1749,16 @@ is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
 
+- **A bug can hold up the balance, twice now.** Snow Day was tuned while a kid knocked down by one snowball could not be
+  hit by the next one in the air, so 85% of the player's own throws were wasted; mending it took the eager bot from 35
+  to 11 minutes. Before any tuning, count what the verb actually does (hits against throws, by cause) with a bot.
+- **When the rules stop, nothing may hang in the air.** Snow Day's rules stop stepping at the end, and the snowballs in
+  flight stayed where they were, round the yeti's head, for good. Whatever stops the rules clears or lands what is
+  moving.
+- **Measure sound offline when the test browser is deaf.** Headless Chromium may run an AudioContext whose analysers read
+  nothing; an `OfflineAudioContext` renders the box's own sound functions to a buffer whose peak and average are exact.
+- **A shadow lies on the ground, not on a plane.** A ground that rises and falls needs its shadows at its own height
+  (or a ground flat where things stand); shadows at one height float over every hollow.
 - **A bug can be holding up the balance.** Tilt's mega balls stuck and were cleared within a second and a half, so
   the late game was tuned without them; mending them took fifteen minutes off the eager bot's game. After any fix to
   something a bot uses, run the pacing suite before calling it a fix, and compare when each board opens.
