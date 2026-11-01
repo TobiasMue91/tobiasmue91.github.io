@@ -1340,6 +1340,16 @@ still undone, most valuable first:
     frame and flung wide when someone bolts through it, then swings back; a lesson sits in a slot measured under the bill;
     plates fly to the counter sooner; a heavy hit holds only its victim for a moment; the ring spreads heavy things further
     out; the organ's copy is plainer. Pacing after it: eager 34.3–36.5, casual 70.1–70.8 (two seeds).
+  - *The people, traced from period silhouettes* (the owner's go-ahead for the large lever, rule 16). Every figure now comes
+    from a cut-paper silhouette of the 1830s and 1840s in the Metropolitan Museum of Art's Open Access collection (CC0,
+    public domain; most by Auguste Edouart, d. 1861, one by J. D. Croome): Harold is James Tooley with his top hat and cane,
+    the professor Aaron Willard with spectacles in his hand, Teddy George Wright holding a cup, Kessler J. Schwartz Massett
+    reading, Sparks the Reverend Gorham Abbott with both hands out; the ladies are Kate Lucas (without her dog) and a young
+    girl with long braids; Cyril is Harry Lucas; extras draw from eight gentlemen and the two ladies.
+    `util/guests/silhouettes.py` fetches them through the museum's API, finds the figure, traces it with potrace into a path
+    1000 high with its feet on y = 0, and measures the trouser legs; the table `SIL` in the view is its output (about 23 KB).
+    A gentleman walking is cut at the knee and his shins swing below it; a lady's skirt hides her feet, so she bobs like a
+    puppet on its stick. Wikimedia Commons, where most of these are also kept, refuses requests from this environment.
   - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
     for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
     "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one
