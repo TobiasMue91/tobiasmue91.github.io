@@ -12170,7 +12170,11 @@ const cv = document.getElementById('cv'), g = cv.getContext('2d');
 const $ = id => document.getElementById(id);
 const { clamp, lerp, ease, hash, fmt } = K;
 const pick = a => a[Math.floor(Math.random() * a.length)];
-let S, W = 0, H = 0, DPR = 1, wide = false, now = 0, filmW = 1, plate = null;
+const QS = (() => { try { return new URLSearchParams(parent.location.search); } catch (e) { return new URLSearchParams(); } })();
+// switches for a session at work on the box (and for the owner's phone): ?fps (=flush in the test browser), ?dpr=1, ?fx=0, ?film=0, ?people=0, ?things=0, ?whirl=0
+const DIAG = { fps: QS.has('fps'), flush: QS.get('fps') === 'flush', dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', film: QS.get('film') !== '0', people: QS.get('people') !== '0', things: QS.get('things') !== '0', whirl: QS.get('whirl') !== '0' };
+const FX = () => DIAG.fx && !K.reduced;
+let S, W = 0, H = 0, DPR = 1, wide = false, now = 0, filmW = 1, plate = null, touch = matchMedia('(pointer: coarse)').matches;
 /* the world: a house 1000 wide with three floors of 420; the ground floor's floor is y = 0 and up is negative */
 const FH = 420, HW = 1000, floorY = f => -f * FH;
 const view = { cx: 500, cy: -800, s: .3 }, home = { cx: 500, cy: -800, s: .3 }, inner = { w: 1, h: 1 };
@@ -12180,24 +12184,28 @@ const X = x => ox + (x - view.cx) * view.s, Y = y => oy + (y - view.cy) * view.s
 const toWorld = (px, py) => ({ x: (px - ox) / view.s + view.cx, y: (py - oy) / view.s + view.cy });
 const fit = fr => ({ s: Math.min(inner.w / fr.w, inner.h / fr.h), cx: fr.x + fr.w / 2, cy: fr.y + fr.h / 2 });
 function resize() {
-  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; wide = W >= 900; filmW = W;
+  DPR = DIAG.dpr || Math.min(touch ? 1.75 : 2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; wide = W >= 900; filmW = W;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
-  const top = wide ? 96 : 168, bottom = wide ? 112 : 116;
-  inner.w = W - 16; inner.h = H - top - bottom; ox = W / 2; oy = top + inner.h / 2;
-  Object.assign(home, fit(wide ? { x: HOUSE.x - 260, y: HOUSE.y + 60, w: HOUSE.w + 320, h: HOUSE.h - 60 } : { x: HOUSE.x - 150, y: HOUSE.y, w: HOUSE.w + 160, h: HOUSE.h }));
+  const top = wide ? 74 : 150, bottom = wide ? 118 : 112;
+  inner.w = W - (wide ? 40 : 8); inner.h = H - top - bottom; ox = W / 2; oy = top + inner.h / 2;
+  Object.assign(home, fit(wide ? { x: HOUSE.x - 30, y: HOUSE.y + 60, w: HOUSE.w + 60, h: HOUSE.h - 60 } : { x: HOUSE.x - 40, y: HOUSE.y + 40, w: HOUSE.w + 50, h: HOUSE.h - 40 }));
   camera();
-  bg.width = cv.width; bg.height = cv.height; bgDirty = true;
+  bg.width = cv.width; bg.height = cv.height; bgDirty = true; sprites = {};
   plate = $('screams').getBoundingClientRect();
 }
-// the camera holds the whole house, and at the very end walks out to the garden gate
+// the camera holds the whole house, and at the very end walks out to the garden gate; K.debug.look holds it anywhere
 function camera() {
+  if (zoom) { view.s = zoom.s; view.cx = zoom.x; view.cy = zoom.y; return; }
   if (!S || !S.finale) return Object.assign(view, home);
   const u = ease.inOut(clamp(fin.t / 2.6, 0, 1)), t = fit(GARDEN);
   view.s = lerp(home.s, t.s, u); view.cx = lerp(home.cx, t.cx, u); view.cy = lerp(home.cy, t.cy, u);
 }
 
-/* ---------------- paper cut-outs: black for what matters, grey for what stands behind ---------------- */
-const INK = '#0e0c0b', GREY = '#8a8378', RIM = 'rgba(250,246,236,.6)', LACE = 'rgba(250,244,230,.92)';
+/* ---------------- cut paper against lit rooms ----------------
+   Each room is a sheet of tinted paper lit from behind by its own lamp (Michel Ocelot's silhouette films rather than
+   Reiniger's grey); what is built in stands one plane back in a deeper shade of that room's colour; everything the
+   ghost can tear loose, and every person, is black card in front, with a pale rim. */
+const INK = '#0e0c0b', RIM = 'rgba(250,246,236,.6)', LACE = 'rgba(250,244,230,.92)';
 let c = g;
 const fill = (col, fn) => { c.fillStyle = col; c.beginPath(); fn(); c.fill(); };
 const line = (col, w, fn) => { c.strokeStyle = col; c.lineWidth = Math.max(.8, Sc(w)); c.lineCap = c.lineJoin = 'round'; c.beginPath(); fn(); c.stroke(); };
@@ -12209,28 +12217,35 @@ const poly = pts => pts.forEach(([x, y], k) => k ? c.lineTo(X(x), Y(y)) : c.move
 const rot = (px, py, a, fn) => { c.save(); c.translate(X(px), Y(py)); c.rotate(a); c.translate(-X(px), -Y(py)); fn(); c.restore(); };
 const bg = document.createElement('canvas'), bgc = bg.getContext('2d');
 let bgDirty = true;
-
-// the sky does not move when the camera does, so it is drawn in screen space
 const lerpC = (a, b, u) => `rgb(${a.map((v, i) => Math.round(lerp(v, b[i], u))).join(',')})`;
+const rgba = (a, al) => `rgba(${a.map(Math.round).join(',')},${al})`;
+const mix = (a, b, u) => a.map((v, i) => lerp(v, b[i], u));
+
+// the sky is drawn in screen space: deep blue night, the moon going down towards the hills, paling at dawn
 function backdrop() {
-  // the night's clock: the moon goes down the sky towards the hills, and the sky pales as the dawn comes
-  const night = true, eve = false, u = S && S.phase === 'night' ? moonU : 0, d = clamp((u - .7) / .3, 0, 1);
-  const gr = c.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, lerpC([142, 136, 125], [214, 200, 178], d)); gr.addColorStop(.7, '#d3ccba'); gr.addColorStop(1, '#e4dece');
+  const u = S && S.phase === 'night' ? moonU : 0, d = clamp((u - .72) / .28, 0, 1);
+  const gr = c.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, lerpC([16, 22, 48], [70, 74, 112], d)); gr.addColorStop(.55, lerpC([34, 46, 86], [150, 120, 140], d)); gr.addColorStop(1, lerpC([58, 72, 112], [222, 168, 140], d));
   c.fillStyle = gr; c.fillRect(0, 0, filmW, H);
-  const mx = filmW * lerp(wide ? .62 : .5, wide ? .92 : .9, u), my = (wide ? 120 : 200) + Math.pow(u, 1.6) * H * (wide ? .3 : .16), mr = (wide ? 30 : 19) * (eve ? 1.3 : 1), hg = c.createRadialGradient(mx, my, mr * .8, mx, my, mr * 5);
-  hg.addColorStop(0, 'rgba(255,253,244,.55)'); hg.addColorStop(1, 'rgba(255,253,244,0)'); c.fillStyle = hg; c.fillRect(mx - mr * 5, my - mr * 5, mr * 10, mr * 10);
-  c.fillStyle = '#fbf8ee'; c.beginPath(); c.arc(mx, my, mr, 0, 7); c.fill();
-  if (night) { c.fillStyle = 'rgba(150,142,128,.32)'; for (const [a, b, r] of [[-.3, -.2, .28], [.28, .12, .2], [-.05, .4, .15]]) { c.beginPath(); c.arc(mx + a * mr, my + b * mr, r * mr, 0, 7); c.fill(); } }
-  else { c.fillStyle = '#fbf8ee'; for (let k = 0; k < 12; k++) { const a = k / 12 * 6.2832; c.beginPath(); c.moveTo(mx + Math.cos(a - .1) * mr * 1.25, my + Math.sin(a - .1) * mr * 1.25); c.lineTo(mx + Math.cos(a) * mr * 1.75, my + Math.sin(a) * mr * 1.75); c.lineTo(mx + Math.cos(a + .1) * mr * 1.25, my + Math.sin(a + .1) * mr * 1.25); c.fill(); } }
-  // two bands of cloud, cut from grey paper
-  // (each a long strip whose lobes shrink towards both ends, with a curved underside, so no band stops at a hard edge)
-  for (const [y, a, x0, x1, r] of [[H * .3, .5, -.1, .58, 26], [H * .36, .38, .36, 1.12, 20]]) {
+  // stars, on a fixed grid of the screen
+  c.fillStyle = `rgba(240,236,220,${.75 * (1 - d)})`; c.beginPath();
+  for (let k = 0; k < 70; k++) { const x = hash(k, 1) * filmW, y = hash(k, 2) * H * .5, r = .6 + hash(k, 3) * 1.2; c.moveTo(x + r, y); c.arc(x, y, r, 0, 6.2832); }
+  c.fill();
+  const mx = filmW * lerp(wide ? .7 : .5, wide ? .93 : .9, u), my = (wide ? 110 : 190) + Math.pow(u, 1.6) * H * (wide ? .3 : .16), mr = wide ? 34 : 22, hg = c.createRadialGradient(mx, my, mr * .8, mx, my, mr * 6);
+  hg.addColorStop(0, 'rgba(255,246,214,.4)'); hg.addColorStop(1, 'rgba(255,246,214,0)'); c.fillStyle = hg; c.fillRect(mx - mr * 6, my - mr * 6, mr * 12, mr * 12);
+  c.fillStyle = '#fbf3da'; c.beginPath(); c.arc(mx, my, mr, 0, 7); c.fill();
+  c.fillStyle = 'rgba(200,186,150,.35)'; c.beginPath(); for (const [a, b, r] of [[-.3, -.2, .28], [.28, .12, .2], [-.05, .4, .15]]) { c.moveTo(mx + a * mr + r * mr, my + b * mr); c.arc(mx + a * mr, my + b * mr, r * mr, 0, 7); } c.fill();
+  // two bands of cloud, cut from dark blue paper: lobes that shrink to both ends, a curved underside
+  for (const [y, a, x0, x1, r] of [[H * .3, .8, -.1, .58, 26], [H * .36, .65, .36, 1.12, 20]]) {
     const A = filmW * x0, L = filmW * (x1 - x0); let x = A;
-    c.fillStyle = `rgba(118,110,98,${a})`; c.beginPath(); c.moveTo(A, y);
+    c.fillStyle = `rgba(22,28,58,${a})`; c.beginPath(); c.moveTo(A, y);
     for (let k = 0; x < A + L; k++) { const e = Math.sin(Math.PI * clamp((x - A) / L, 0, 1)), rr = Math.max(2, r * (.6 + .6 * hash(k, Math.round(r))) * (.25 + .75 * e)); c.arc(x + rr, y, rr, Math.PI, 0); x += rr * 2; }
     c.quadraticCurveTo((A + x) / 2, y + r * 1.1, A, y); c.fill(); }
+  // far hills, a shade lighter than the ground
+  c.fillStyle = lerpC([20, 26, 46], [60, 50, 70], d); c.beginPath(); c.moveTo(0, H);
+  for (let k = 0; k <= 24; k++) { const x = k / 24 * filmW, y = Y(0) - Sc(240) - Math.sin(k * .7 + 1) * Sc(70) - hash(k, 9) * Sc(40); c.lineTo(x, y); }
+  c.lineTo(filmW, H); c.fill();
 }
-// a bare tree, grown from a fixed seed so it is the same tree every time: curling strokes with round joints
+// a bare tree, grown from a fixed seed so it is the same tree every time
 function tree(x, y, a, l, w, d, k) {
   const x2 = x + Math.cos(a) * l, y2 = y + Math.sin(a) * l, bend = (hash(k, d, 2) - .5) * l * .5;
   line(INK, w, () => { c.moveTo(X(x), Y(y)); c.quadraticCurveTo(X((x + x2) / 2 - Math.sin(a) * bend), Y((y + y2) / 2 + Math.cos(a) * bend), X(x2), Y(y2)); });
@@ -12240,211 +12255,224 @@ function tree(x, y, a, l, w, d, k) {
 }
 function garden() {
   fill(INK, () => rect(-4000, 0, 9000, 3000));
-  // grass along the edge, on a fixed grid so it never shifts
   c.fillStyle = INK; c.beginPath();
   for (let k = -180; k < 260; k++) { const x = k * 14, h = 12 + 24 * hash(k, 5); c.moveTo(X(x - 7), Y(2)); c.lineTo(X(x + (hash(k, 6) - .5) * 12), Y(-h)); c.lineTo(X(x + 7), Y(2)); }
   c.fill();
-  if (W >= 500) tree(-470, 0, -Math.PI / 2 - .05, 300, 40, 7, 3);
-  // railings with spear tips, a gap for the path, three stones
-  for (let k = 0; k < 64; k++) { const x = k < 30 ? -1560 + k * 30 : 1110 + (k - 30) * 30; if (x > -700 && x < -580) continue; fill(INK, () => { rect(x - 3, -150, 6, 150); poly([[x - 8, -150], [x, -176], [x + 8, -150]]); }); }
-  fill(INK, () => { rect(-1560, -128, 860, 6); rect(-1560, -40, 860, 6); rect(1110, -128, 1020, 6); rect(1110, -40, 1020, 6); });
-  // the hearse waits at the gate once it has been sent for: a black carriage with plumes, and its horse
+  tree(-470, 0, -Math.PI / 2 - .05, 300, 40, 7, 3);
+  tree(1640, 0, -Math.PI / 2 + .08, 260, 34, 7, 11);
+  c.fillStyle = INK; c.beginPath();
+  for (let k = 0; k < 64; k++) { const x = k < 30 ? -1560 + k * 30 : 1110 + (k - 30) * 30; if (x > -700 && x < -580) continue; rect(x - 3, -150, 6, 150); c.moveTo(X(x - 8), Y(-150)); c.lineTo(X(x), Y(-176)); c.lineTo(X(x + 8), Y(-150)); c.closePath(); }
+  rect(-1560, -128, 860, 6); rect(-1560, -40, 860, 6); rect(1110, -128, 1020, 6); rect(1110, -40, 1020, 6); c.fill();
+  // the hearse waits at the gate once it has been sent for
   if (S && CORE.has(S, 'hearse')) {
     const hx = -1240;
     fill(INK, () => { rect(hx, -170, 300, 130); rect(hx - 14, -186, 328, 18); for (let k = 0; k < 4; k++) { rect(hx + 10 + k * 96, -232, 8, 46); ell(hx + 14 + k * 96, -244, 16, 18); } });
-    fill('#d9d1be', () => { rect(hx + 40, -150, 90, 70); rect(hx + 170, -150, 90, 70); });
-    for (const wx of [hx + 50, hx + 250]) { fill(INK, () => ell(wx, -40, 40, 40)); line('#d9d1be', 3, () => { for (let k = 0; k < 4; k++) { c.moveTo(X(wx), Y(-40)); c.lineTo(X(wx + Math.cos(k * .8) * 34), Y(-40 + Math.sin(k * .8) * 34)); } }); }
+    fill('#c9b98e', () => { rect(hx + 40, -150, 90, 70); rect(hx + 170, -150, 90, 70); });
+    for (const wx of [hx + 50, hx + 250]) { fill(INK, () => ell(wx, -40, 40, 40)); line('#c9b98e', 3, () => { for (let k = 0; k < 4; k++) { c.moveTo(X(wx), Y(-40)); c.lineTo(X(wx + Math.cos(k * .8) * 34), Y(-40 + Math.sin(k * .8) * 34)); } }); }
     fill(INK, () => { ell(hx + 400, -120, 70, 40); rect(hx + 350, -100, 12, 100); rect(hx + 440, -100, 12, 100); poly([[hx + 450, -140], [hx + 500, -200], [hx + 530, -180], [hx + 470, -110]]); ell(hx + 520, -196, 24, 16); });
   }
-  for (const [sx, sh, cross] of [[1590, 120, 0], [1720, 92, 0], [1860, 150, 1]]) fill(INK, () => { if (cross) { rect(sx - 8, -sh - 40, 16, 70); rect(sx - 30, -sh - 14, 60, 14); } else { c.moveTo(X(sx - 36), Y(0)); c.lineTo(X(sx - 36), Y(-sh + 36)); c.arc(X(sx), Y(-sh + 36), Sc(36), Math.PI, 0); c.lineTo(X(sx + 36), Y(0)); c.closePath(); } });
+  for (const [sx, sh, cross] of [[1290, 120, 0], [1420, 92, 0], [1560, 150, 1]]) fill(INK, () => { if (cross) { rect(sx - 8, -sh - 40, 16, 70); rect(sx - 30, -sh - 14, 60, 14); } else { c.moveTo(X(sx - 36), Y(0)); c.lineTo(X(sx - 36), Y(-sh + 36)); c.arc(X(sx), Y(-sh + 36), Sc(36), Math.PI, 0); c.lineTo(X(sx + 36), Y(0)); c.closePath(); } });
 }
-// rooms: lit paper walls, each with its own lamp
-const WALLS = [[244, 238, 224], [240, 233, 218], [236, 229, 214], [242, 236, 222], [238, 231, 216], [245, 239, 226]];
+// the rooms: [lamp light, the paper's own colour at the walls], and where the lamp hangs
+const ROOMC = [
+  [[240, 200, 132], [30, 76, 88]], [[246, 214, 146], [104, 58, 30]], [[238, 168, 138], [96, 26, 42]],
+  [[214, 226, 166], [26, 70, 56]], [[214, 188, 238], [52, 36, 92]], [[248, 206, 196], [108, 52, 84]]
+];
+const LAMP = [[250, 260], [190, 250], [240, 300], [330, 250], [260, 250], [250, 250]];
+const shade = (r, u) => rgba(mix(ROOMC[r][1], [8, 6, 6], u), 1);
 function room(r) {
-  const f = r >> 1, x0 = (r & 1) * 500, y0 = floorY(f) - FH, w = WALLS[r];
-  const gr = c.createRadialGradient(X(x0 + 250), Y(y0 + 180), Sc(30), X(x0 + 250), Y(y0 + 180), Sc(440));
-  gr.addColorStop(0, `rgb(${w})`); gr.addColorStop(1, `rgb(${w.map(v => v - 40)})`); c.fillStyle = gr; c.fillRect(X(x0), Y(y0), Sc(500), Sc(FH));
-  c.save(); c.beginPath(); rect(x0, y0, 500, FH); c.clip(); c.fillStyle = 'rgba(70,60,45,.08)';
-  for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) { const px = x0 + 20 + i * 80 + (j & 1) * 40, py = y0 + 40 + j * 62; c.beginPath(); c.moveTo(X(px), Y(py - 16)); c.quadraticCurveTo(X(px + 14), Y(py), X(px), Y(py + 16)); c.quadraticCurveTo(X(px - 14), Y(py), X(px), Y(py - 16)); c.fill(); }
+  const f = r >> 1, x0 = (r & 1) * 500, y0 = floorY(f) - FH, [li, wa] = ROOMC[r], [lx, ly] = LAMP[r];
+  const gr = c.createRadialGradient(X(x0 + lx), Y(floorY(f) - ly), Sc(20), X(x0 + lx), Y(floorY(f) - ly), Sc(420));
+  gr.addColorStop(0, rgba(li, 1)); gr.addColorStop(.45, rgba(mix(li, wa, .45), 1)); gr.addColorStop(1, rgba(wa, 1)); c.fillStyle = gr; c.fillRect(X(x0), Y(y0), Sc(500), Sc(FH));
+  // wallpaper: a lace of quatrefoils cut into a darker sheet, on a grid of the room
+  c.save(); c.beginPath(); rect(x0, y0, 500, FH); c.clip(); c.fillStyle = rgba(wa, .22); c.beginPath();
+  for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) { const px = x0 + 20 + i * 80 + (j & 1) * 40, py = y0 + 40 + j * 62; for (const [qx, qy] of [[-8, 0], [8, 0], [0, -8], [0, 8]]) E(X(px + qx), Y(py + qy), Sc(7), Sc(7)); }
+  c.fill();
+  // a dado rail and the skirting
+  c.fillStyle = rgba(wa, .55); c.fillRect(X(x0), Y(floorY(f) - 130), Sc(500), Sc(6)); c.fillRect(X(x0), Y(floorY(f) - 26), Sc(500), Sc(26));
   c.restore();
-  fill('rgba(30,25,20,.28)', () => rect(x0, floorY(f) - 30, 500, 30));
-  fill('rgba(30,25,20,.13)', () => rect(x0, y0 + 70, 500, 7));
   furniture(r, x0, floorY(f));
 }
-// what stands in each room and cannot be moved: grey, behind everything
+// what is built in and never moves: one plane back, the room's own colour, deeper
 function furniture(r, x0, fy) {
-  const b = fn => fill(GREY, fn), dark = fn => fill('#2c2723', fn);
-  if (r === 0 || r === 2) { // a spiral stair at the left, up to the next floor
+  const b = fn => fill(shade(r, .45), fn), dark = fn => fill(shade(r, .75), fn), lit = (fn, a = .8) => fill(`rgba(255,226,160,${a})`, fn);
+  if (r === 0 || r === 2) { // a spiral stair at the left, up to the next floor: a newel post, steps that turn
     dark(() => rect(46, fy - FH, 8, FH));
-    for (let k = 0; k < 10; k++) { const y = fy - 26 - k * 40; dark(() => poly(k & 1 ? [[50, y], [98, y - 8], [98, y + 4], [50, y + 11]] : [[50, y], [2, y - 8], [2, y + 4], [50, y + 11]])); }
+    dark(() => { for (let k = 0; k < 10; k++) { const y = fy - 26 - k * 40; poly(k & 1 ? [[50, y], [98, y - 8], [98, y + 4], [50, y + 11]] : [[50, y], [2, y - 8], [2, y + 4], [50, y + 11]]); c.closePath(); } });
   }
   if (r === 4) b(() => { rect(4, fy - 112, 100, 9); rect(8, fy - 104, 7, 104); rect(94, fy - 104, 7, 104); for (let k = 1; k < 6; k++) rect(10 + k * 14, fy - 102, 4, 98); });
-  if (r === 0) { // a fireplace under the portrait, a side table for the telephone
-    b(() => { rect(x0 + 192, fy - 168, 136, 168); rect(x0 + 178, fy - 182, 164, 15); });
-    dark(() => { c.moveTo(X(x0 + 222), Y(fy)); c.lineTo(X(x0 + 222), Y(fy - 92)); c.quadraticCurveTo(X(x0 + 260), Y(fy - 132), X(x0 + 298), Y(fy - 92)); c.lineTo(X(x0 + 298), Y(fy)); c.closePath(); });
-    fill('#d9c9a8', () => { for (let q = 0; q < 3; q++) { c.moveTo(X(x0 + 236 + q * 16), Y(fy - 8)); c.quadraticCurveTo(X(x0 + 240 + q * 16), Y(fy - 46 - q % 2 * 14), X(x0 + 250 + q * 16), Y(fy - 8)); } });
-    b(() => { rect(x0 + 94, fy - 84, 74, 10); rect(x0 + 104, fy - 74, 8, 74); rect(x0 + 150, fy - 74, 8, 74); });
+  if (r === 0) { // the fireplace: a mantel for the candles and the clock, a fire behind a guard
+    b(() => { rect(x0 + 140, fy - 176, 160, 176); rect(x0 + 128, fy - 190, 184, 14); });
+    dark(() => { c.moveTo(X(x0 + 172), Y(fy)); c.lineTo(X(x0 + 172), Y(fy - 96)); c.quadraticCurveTo(X(x0 + 220), Y(fy - 140), X(x0 + 268), Y(fy - 96)); c.lineTo(X(x0 + 268), Y(fy)); c.closePath(); });
+    lit(() => { for (let q = 0; q < 4; q++) { const fx = x0 + 186 + q * 20, fh = 40 + 26 * hash(q, 4); c.moveTo(X(fx - 10), Y(fy - 8)); c.quadraticCurveTo(X(fx - 8), Y(fy - fh * .6), X(fx + 2), Y(fy - fh)); c.quadraticCurveTo(X(fx + 4), Y(fy - fh * .5), X(fx + 10), Y(fy - 8)); c.closePath(); } }, .85);
+    dark(() => { for (let q = 0; q < 6; q++) rect(x0 + 178 + q * 16, fy - 46, 4, 46); rect(x0 + 174, fy - 50, 92, 5); });
+    dark(() => rect(x0 + 219, fy - 268, 6, 10));
   }
-  if (r === 1) { // the range and its flue, a table, a shelf of jars
-    b(() => { rect(x0 + 40, fy - 132, 180, 132); rect(x0 + 30, fy - 142, 200, 12); rect(x0 + 198, fy - FH, 22, FH - 142); });
-    dark(() => { rect(x0 + 60, fy - 112, 56, 54); rect(x0 + 136, fy - 112, 56, 54); });
-    b(() => { rect(x0 + 232, fy - 104, 108, 12); rect(x0 + 242, fy - 92, 8, 92); rect(x0 + 322, fy - 92, 8, 92); });
-    b(() => { rect(x0 + 234, fy - 286, 110, 8); for (let k = 0; k < 4; k++) rect(x0 + 242 + k * 26, fy - 318 + (k & 1) * 8, 18, 32 - (k & 1) * 8); });
+  if (r === 1) { // the kitchen: the range, a table, a shelf of jars on brackets
+    b(() => { rect(x0 + 300, fy - 132, 170, 132); rect(x0 + 292, fy - 142, 186, 12); rect(x0 + 440, fy - FH, 22, FH - 142); });
+    dark(() => { rect(x0 + 316, fy - 112, 60, 54); rect(x0 + 392, fy - 112, 60, 54); });
+    lit(() => rect(x0 + 324, fy - 72, 44, 8), .7);
+    b(() => { rect(x0 + 106, fy - 104, 170, 12); rect(x0 + 116, fy - 92, 9, 92); rect(x0 + 258, fy - 92, 9, 92); });
+    b(() => { rect(x0 + 296, fy - 286, 124, 8); poly([[x0 + 304, fy - 278], [x0 + 330, fy - 278], [x0 + 304, fy - 250]]); poly([[x0 + 412, fy - 278], [x0 + 386, fy - 278], [x0 + 412, fy - 250]]); });
   }
-  if (r === 2) { // the dining table between two chairs
-    b(() => { rect(x0 + 140, fy - 118, 200, 14); rect(x0 + 152, fy - 104, 10, 104); rect(x0 + 318, fy - 104, 10, 104); });
-    for (const s of [1, -1]) { const cx = s > 0 ? x0 + 118 : x0 + 362; b(() => poly([[cx, fy], [cx, fy - 200], [cx + s * 12, fy - 200], [cx + s * 12, fy - 80], [cx + s * 34, fy - 80], [cx + s * 34, fy]])); }
-    b(() => { rect(x0 + 200, fy - 150, 6, 32); rect(x0 + 274, fy - 150, 6, 32); });
+  if (r === 2) { // the dining table, and the hook the chandelier hangs from
+    b(() => { rect(x0 + 146, fy - 118, 188, 14); rect(x0 + 158, fy - 104, 10, 104); rect(x0 + 312, fy - 104, 10, 104); });
+    dark(() => { ell(x0 + 240, fy - FH + 28, 22, 8); });
   }
-  if (r === 3) { // a desk under the window, a lamp
-    b(() => { rect(x0 + 270, fy - 118, 190, 14); rect(x0 + 280, fy - 104, 44, 104); rect(x0 + 420, fy - 104, 30, 104); });
-    b(() => { rect(x0 + 298, fy - 166, 6, 48); poly([[x0 + 280, fy - 162], [x0 + 322, fy - 162], [x0 + 312, fy - 190], [x0 + 290, fy - 190]]); });
+  if (r === 3) { // the study: a bookcase full of books the ghost leaves alone, a desk under the window
+    b(() => { rect(x0 + 18, fy - 330, 174, 330); rect(x0 + 12, fy - 342, 186, 14); });
+    dark(() => { rect(x0 + 28, fy - 320, 154, 66); rect(x0 + 28, fy - 248, 154, 76); rect(x0 + 28, fy - 164, 154, 76); rect(x0 + 28, fy - 80, 154, 70); });
+    b(() => { for (const [sy, sh] of [[-320, 62], [-80, 66]]) for (let q = 0; q < 8; q++) { const bh = sh - 10 - 14 * hash(q, sy); rect(x0 + 32 + q * 19, fy + sy + sh - bh, 14 + 3 * hash(q, sy, 2), bh); } });
+    fill(rgba(ROOMC[3][0], .5), () => rect(x0 + 300, fy - 352, 150, 210));
+    dark(() => { rect(x0 + 370, fy - 352, 8, 210); rect(x0 + 300, fy - 252, 150, 8); rect(x0 + 292, fy - 146, 166, 10); });
+    b(() => { rect(x0 + 276, fy - 118, 190, 14); rect(x0 + 286, fy - 104, 44, 104); rect(x0 + 430, fy - 104, 28, 104); });
   }
-  if (r === 4) b(() => { rect(x0 + 228, fy - 262, 6, 30); rect(x0 + 220, fy - 236, 22, 6); });
-  if (r === 5) { // a little table for the music box, a cot, a shelf of dolls
-    b(() => { rect(x0 + 60, fy - 106, 120, 12); rect(x0 + 70, fy - 94, 8, 94); rect(x0 + 162, fy - 94, 8, 94); });
-    b(() => { rect(x0 + 190, fy - 112, 92, 10); rect(x0 + 190, fy - 112, 8, 112); rect(x0 + 274, fy - 112, 8, 112); for (let k = 1; k < 6; k++) rect(x0 + 192 + k * 15, fy - 104, 4, 92); rect(x0 + 190, fy - 18, 92, 8); });
-    b(() => { rect(x0 + 186, fy - 290, 112, 8); for (let k = 0; k < 3; k++) { ell(x0 + 206 + k * 34, fy - 316, 9, 10); rect(x0 + 198 + k * 34, fy - 307, 16, 18); } });
+  if (r === 4) { // the bedroom: a bed with a carved head
+    b(() => { rect(x0 + 318, fy - 210, 16, 210); c.moveTo(X(x0 + 318), Y(fy - 210)); c.quadraticCurveTo(X(x0 + 326), Y(fy - 250), X(x0 + 334), Y(fy - 210)); rect(x0 + 466, fy - 140, 16, 140); rect(x0 + 324, fy - 72, 150, 30); });
+    fill(rgba(mix(ROOMC[4][0], [255, 255, 255], .3), .9), () => { c.moveTo(X(x0 + 334), Y(fy - 72)); c.quadraticCurveTo(X(x0 + 420), Y(fy - 96), X(x0 + 470), Y(fy - 72)); c.lineTo(X(x0 + 474), Y(fy - 40)); c.lineTo(X(x0 + 334), Y(fy - 40)); c.closePath(); });
+  }
+  if (r === 5) { // the nursery: a little table, a cot, a shelf
+    b(() => { rect(x0 + 50, fy - 106, 124, 12); rect(x0 + 60, fy - 94, 8, 94); rect(x0 + 156, fy - 94, 8, 94); });
+    b(() => { rect(x0 + 200, fy - 112, 92, 10); rect(x0 + 200, fy - 112, 8, 112); rect(x0 + 284, fy - 112, 8, 112); for (let k = 1; k < 6; k++) rect(x0 + 202 + k * 15, fy - 104, 4, 92); rect(x0 + 200, fy - 18, 92, 8); });
+    b(() => { rect(x0 + 192, fy - 290, 116, 8); poly([[x0 + 198, fy - 282], [x0 + 220, fy - 282], [x0 + 198, fy - 258]]); poly([[x0 + 302, fy - 282], [x0 + 280, fy - 282], [x0 + 302, fy - 258]]); });
   }
 }
-// the bones of the house: roof, walls, floors, the front door standing open
+// the bones of the house: roof, walls, floors, the doorways between rooms, the front door standing open
 function bones() {
   const top = -3 * FH;
   fill(INK, () => poly([[-112, top + 6], [500, top - 330], [1112, top + 6]]));
   fill(INK, () => { rect(770, top - 330, 76, 236); rect(758, top - 344, 100, 18); });
-  for (let k = 0; k <= 30; k++) fill(INK, () => { c.arc(X(-90 + k * 40), Y(top + 6), Sc(14), 0, Math.PI); });
-  fill('#d8d0bc', () => ell(500, top - 120, 44, 44)); line(INK, 8, () => { c.moveTo(X(456), Y(top - 120)); c.lineTo(X(544), Y(top - 120)); c.moveTo(X(500), Y(top - 164)); c.lineTo(X(500), Y(top - 76)); });
-  fill(INK, () => { rect(-40, top, 40, 3 * FH + 40); rect(HW, top, 40, 3 * FH + 40); });
-  for (let f = 0; f <= 3; f++) fill(INK, () => rect(-40, floorY(f), HW + 80, f === 3 ? 10 : 26));
-  for (let f = 0; f < 3; f++) fill(INK, () => rect(492, floorY(f) - FH + 8, 16, FH - 236));
-  fill('#d9d1be', () => rect(-40, -224, 40, 224));
+  c.fillStyle = INK; c.beginPath(); for (let k = 0; k <= 30; k++) { c.moveTo(X(-90 + k * 40 + 14), Y(top + 6)); c.arc(X(-90 + k * 40), Y(top + 6), Sc(14), 0, Math.PI); } c.fill();
+  fill('#f2d79a', () => ell(500, top - 120, 44, 44)); line(INK, 8, () => { c.moveTo(X(456), Y(top - 120)); c.lineTo(X(544), Y(top - 120)); c.moveTo(X(500), Y(top - 164)); c.lineTo(X(500), Y(top - 76)); });
+  fill(INK, () => { rect(-40, top, 40, 3 * FH + 40); rect(HW, top, 40, 3 * FH + 40); for (let f = 0; f <= 3; f++) rect(-40, floorY(f), HW + 80, f === 3 ? 10 : 26); for (let f = 0; f < 3; f++) rect(492, floorY(f) - FH + 8, 16, FH - 236); });
+  // the front door stands open on the night, its light spilling on the path
+  fill('#f2d79a', () => rect(-40, -224, 40, 224));
   fill(INK, () => poly([[-40, -226], [-104, -212], [-104, -14], [-40, -2]]));
   fill(INK, () => { rect(-62, -300, 8, 44); ell(-58, -310, 13, 15); });
-  fill('#f4ecd4', () => ell(-58, -292, 6, 9));
-  // what the organ has opened: the kitchen door at the far end, and the windows upstairs
-  if (S && CORE.has(S, 'back')) { fill('#d9d1be', () => rect(HW, -224, 40, 224)); fill(INK, () => poly([[HW + 40, -226], [HW + 104, -212], [HW + 104, -14], [HW + 40, -2]])); }
-  if (S && CORE.has(S, 'window')) for (let f = 1; f < 3; f++) { const y = floorY(f); fill('#d9d1be', () => rect(HW, y - 300, 40, 170)); fill(INK, () => poly([[HW + 40, y - 302], [HW + 96, y - 290], [HW + 96, y - 142], [HW + 40, y - 128]])); }
+  fill('#ffe6a8', () => ell(-58, -292, 6, 9));
+  if (S && CORE.has(S, 'back')) { fill('#f2d79a', () => rect(HW, -224, 40, 224)); fill(INK, () => poly([[HW + 40, -226], [HW + 104, -212], [HW + 104, -14], [HW + 40, -2]])); }
+  if (S && CORE.has(S, 'window')) for (let f = 1; f < 3; f++) { const y = floorY(f); fill('#f2d79a', () => rect(HW, y - 300, 40, 170)); fill(INK, () => poly([[HW + 40, y - 302], [HW + 96, y - 290], [HW + 96, y - 142], [HW + 40, y - 128]])); }
 }
 
-/* ---------------- the furniture: it rattles when the cold goes by ---------------- */
-const TH = [['portrait', 0, .52], ['piano', 0, .82], ['pots', 1, .24], ['larder', 1, .84], ['chandelier', 2, .5], ['clock', 2, .88], ['books', 3, .24], ['window', 3, .7],
-  ['wardrobe', 4, .3], ['bed', 4, .72], ['musicbox', 5, .24], ['horse', 5, .76], ['phone', 0, .26]].map(([id, room, x]) => ({ id, room, x })), tfx = TH.map(() => ({ t: 9 }));
-const PHONE = 12, CHAND = 4;
-const anchor = i => ({ x: (TH[i].room & 1) * 500 + TH[i].x * 500, y: floorY(TH[i].room >> 1) });
-const BOX = { portrait: [-70, -382, 140, 200], piano: [-92, -232, 184, 232], pots: [-82, -FH + 20, 164, 214], larder: [-68, -314, 136, 314], chandelier: [-96, -FH + 24, 192, 186], clock: [-48, -348, 96, 348], books: [-96, -350, 192, 350], window: [-98, -380, 196, 252], wardrobe: [-78, -376, 156, 376], bed: [-130, -222, 260, 222], musicbox: [-80, -282, 160, 186], horse: [-98, -208, 196, 208], phone: [-46, -196, 92, 120] };
-const hitRect = i => { const a = anchor(i), b = BOX[TH[i].id]; return { x: a.x + b[0], y: a.y + b[1], w: b[2], h: b[3] }; };
-// the telephone and the chandelier are black once they are yours, and glow while they are ready to be tapped
-const TRICK = { phone: 'phone', chandelier: 'chand' };
-const trickReady = k => CORE.has(S, k) && S.phase === 'night' && !S.end && !(S.cd[k] > 0);
-function glow(fn, a) { c.save(); c.translate(10000, 0); c.shadowOffsetX = -10000 * DPR; c.shadowColor = `rgba(255,252,238,${a})`; c.shadowBlur = (wide ? 16 : 11) * DPR; fn(); c.restore(); }
-function thing(i) {
-  const k = TRICK[TH[i].id], mine = k && CORE.has(S, k);
-  if (mine && trickReady(k)) glow(() => drawThing(i, INK), .55 + .45 * Math.sin(now * 4.5 + i));
-  drawThing(i, mine ? INK : GREY);
+/* ---------------- what the ghost tears loose ----------------
+   Every kind is drawn once, at the camera's scale, into a sprite of its own (black card with a pale rim, lace cut
+   out of it), and an heirloom once more in gilt; a frame then places each thing with one drawImage, turned as it
+   spins. A thing too heavy for the whirl yet is drawn as part of the room behind it, in the room's own shade. */
+const ITEM = {
+  // kind: [width, height] in house units; the sprite's origin is its middle, its foot at +h/2
+  cup: [30, 22], plate: [34, 34], teapot: [48, 40], jar: [28, 46], candle: [22, 62], mclock: [40, 50], book: [16, 52], ink: [26, 22], pillow: [56, 30],
+  doll: [24, 50], musicbox: [42, 34], chair: [70, 150], lamp: [46, 84], portrait: [76, 96], horse: [130, 120], clock: [72, 340], armour: [90, 300],
+  wardrobe: [150, 340], piano: [176, 200], chandelier: [170, 92]
+};
+function itemPath(k, w, h) {
+  // drawn about (0, 0), y down, in house units
+  const L = -w / 2, T = -h / 2, B = h / 2;
+  const el = (x, y, rx, ry) => E(x, y, rx, ry), R = (x, y, ww, hh) => c.rect(x, y, ww, hh);
+  if (k === 'cup') { c.moveTo(L, T + 4); c.lineTo(L + 22, T + 4); c.quadraticCurveTo(L + 22, B - 2, L + 11, B - 2); c.quadraticCurveTo(L, B - 2, L, T + 4); el(L + 25, T + 11, 5, 6); el(L + 11, B - 1, 13, 2); }
+  else if (k === 'plate') { el(0, 0, w / 2, h / 2); }
+  else if (k === 'teapot') { el(-2, 4, 18, 14); R(-12, -12, 20, 6); el(-2, -14, 5, 4); c.moveTo(14, 2); c.quadraticCurveTo(26, -2, 24, -12); c.lineTo(20, -10); c.quadraticCurveTo(20, 0, 12, 6); el(-20, 2, 7, 9); R(-14, B - 4, 24, 4); }
+  else if (k === 'jar') { R(L + 2, T + 10, w - 4, h - 10); R(L, T + 4, w, 7); el(0, T + 10, w / 2 - 2, 4); }
+  else if (k === 'candle') { R(-4, T + 16, 8, 22); el(0, T + 38, 6, 2); R(-2, T + 38, 4, 14); el(0, B - 3, 11, 3); }
+  else if (k === 'mclock') { c.moveTo(L, B); c.lineTo(L + 4, T + 18); c.quadraticCurveTo(0, T - 6, w / 2 - 4, T + 18); c.lineTo(w / 2, B); c.closePath(); }
+  else if (k === 'book') { R(L, T, w, h); }
+  else if (k === 'ink') { c.moveTo(L + 2, B); c.lineTo(L + 6, T + 8); c.lineTo(w / 2 - 6, T + 8); c.lineTo(w / 2 - 2, B); c.closePath(); R(-5, T + 2, 10, 7); c.moveTo(4, T + 2); c.lineTo(16, T - 12); c.lineTo(10, T + 4); }
+  else if (k === 'pillow') { c.moveTo(L + 4, B - 4); c.quadraticCurveTo(0, B + 2, w / 2 - 4, B - 4); c.quadraticCurveTo(w / 2 + 4, 0, w / 2 - 4, T + 4); c.quadraticCurveTo(0, T - 2, L + 4, T + 4); c.quadraticCurveTo(L - 4, 0, L + 4, B - 4); }
+  else if (k === 'doll') { el(0, T + 8, 8, 9); c.moveTo(-6, T + 16); c.lineTo(6, T + 16); c.lineTo(12, B); c.lineTo(-12, B); c.closePath(); R(-10, T + 20, 4, 14); R(6, T + 20, 4, 14); }
+  else if (k === 'musicbox') { R(L, T + 8, w, h - 8); R(L - 2, T + 4, w + 4, 6); R(w / 2, T + 16, 6, 4); }
+  else if (k === 'chair') { R(L + 4, T, 10, h); R(L + 4, -8, w - 8, 10); R(w / 2 - 12, -4, 8, B + 4); R(L + 4, T + 10, 10, 6); c.moveTo(L + 4, T); c.quadraticCurveTo(L + 9, T - 8, L + 14, T); }
+  else if (k === 'lamp') { c.moveTo(-22, T + 30); c.lineTo(22, T + 30); c.lineTo(14, T); c.lineTo(-14, T); c.closePath(); R(-3, T + 30, 6, h - 40); el(0, B - 5, 16, 5); }
+  else if (k === 'portrait') { el(0, 0, w / 2, h / 2); }
+  else if (k === 'horse') { c.moveTo(L, B - 6); c.quadraticCurveTo(0, B + 14, w / 2, B - 6); c.lineTo(w / 2 - 6, B - 2); c.quadraticCurveTo(0, B + 6, L + 6, B - 2); c.closePath(); for (const lx of [-40, -26, 22, 36]) R(lx, -10, 8, B - 6); el(-4, -14, 50, 18); c.moveTo(30, -24); c.lineTo(46, T + 16); c.lineTo(64, T + 22); c.lineTo(64, T + 34); c.lineTo(50, T + 40); c.lineTo(44, -18); c.closePath(); c.moveTo(-50, -20); c.quadraticCurveTo(-70, -10, -64, 20); c.lineTo(-58, 18); c.quadraticCurveTo(-60, -4, -46, -10); c.closePath(); }
+  else if (k === 'clock') { c.moveTo(L + 8, B); c.lineTo(L + 8, T + 90); c.quadraticCurveTo(0, T - 6, w / 2 - 8, T + 90); c.lineTo(w / 2 - 8, B); c.closePath(); R(L, B - 12, w, 12); R(L + 2, T + 100, w - 4, 8); }
+  else if (k === 'armour') { el(0, T + 26, 20, 26); R(-6, T + 50, 12, 10); c.moveTo(-34, T + 62); c.lineTo(34, T + 62); c.lineTo(26, T + 150); c.lineTo(-26, T + 150); c.closePath(); R(-38, T + 62, 12, 90); R(26, T + 62, 12, 90); R(-24, T + 150, 18, B - T - 160); R(6, T + 150, 18, B - T - 160); R(-28, B - 10, 24, 10); R(4, B - 10, 24, 10); R(40, T + 10, 6, h - 10); c.moveTo(43, T - 10); c.lineTo(52, T + 14); c.lineTo(34, T + 14); c.closePath(); }
+  else if (k === 'wardrobe') { R(L + 4, T + 26, w - 8, h - 36); R(L, T + 16, w, 14); c.moveTo(L + 30, T + 18); c.quadraticCurveTo(0, T - 16, w / 2 - 30, T + 18); R(L + 8, B - 10, 12, 10); R(w / 2 - 20, B - 10, 12, 10); }
+  else if (k === 'piano') { R(L + 6, T + 22, w - 12, 150); R(L, T + 14, w, 10); R(L - 6, T + 94, w + 12, 12); R(L + 10, B - 28, 14, 28); R(w / 2 - 24, B - 28, 14, 28); R(-30, T, 6, 16); R(24, T, 6, 16); }
+  else if (k === 'chandelier') { R(-3, T, 6, 30); el(0, T + 30, 12, 8); c.moveTo(-80, T + 58); c.quadraticCurveTo(0, B + 16, 80, T + 58); c.lineTo(66, T + 52); c.lineTo(-66, T + 52); c.closePath(); for (let q = -2; q <= 2; q++) R(q * 32 - 3, T + 32, 6, 24); }
 }
-function drawThing(i, K0) {
-  const id = TH[i].id, { x, y } = anchor(i), t = tfx[i].t, d = clamp(1 - t / 1.2, 0, 1), on = 1;
-  const swing = (dur, f, amp) => t < dur ? Math.sin(t * f) * amp * clamp(1 - t / dur, 0, 1) : 0;
-  if (id === 'portrait') rot(x, y - 372, swing(2, 11, .3), () => {
-    line(K0, 3, () => { c.moveTo(X(x - 34), Y(y - 336)); c.lineTo(X(x), Y(y - 372)); c.lineTo(X(x + 34), Y(y - 336)); });
-    fill(K0, () => ell(x, y - 270, 62, 78)); fill('#d4ccb8', () => ell(x, y - 270, 49, 64));
-    fill(K0, () => { c.moveTo(X(x - 42), Y(y - 220)); c.quadraticCurveTo(X(x - 36), Y(y - 258), X(x - 6), Y(y - 262)); c.lineTo(X(x + 12), Y(y - 262)); c.quadraticCurveTo(X(x + 38), Y(y - 256), X(x + 42), Y(y - 220)); c.quadraticCurveTo(X(x), Y(y - 206), X(x - 42), Y(y - 220)); });
-    fill(K0, () => { rect(x - 6, y - 278, 13, 20); ell(x - 1, y - 294, 18, 22); poly([[x + 14, y - 302], [x + 27, y - 290], [x + 15, y - 284]]); ell(x - 6, y - 309, 17, 9); });
-    if (on && t < 2.4) fill('#fff', () => ell(x + 8 + Math.sin(t * 5) * 3, y - 297, 4.5, 3));
-  });
-  if (id === 'piano') {
-    const lid = t < 1.6 ? Math.sin(Math.min(1, t / 1.2) * Math.PI) * .5 : 0;
-    fill(K0, () => { rect(x - 80, y - 178, 160, 150); rect(x - 74, y - 30, 12, 30); rect(x + 62, y - 30, 12, 30); rect(x - 88, y - 108, 176, 12); });
-    rot(x - 84, y - 178, -lid, () => fill(K0, () => rect(x - 84, y - 187, 168, 10)));
-    fill('#e9e3d3', () => rect(x - 78, y - 118, 156, 10));
-    for (let q = 0; q < 13; q++) if ([1, 2, 4, 5, 6].includes(q % 7)) { const dip = t < 1.3 && hash(q, Math.floor(t * 14)) > .6 ? 3 : 0; fill(K0, () => rect(x - 74 + q * 11.6, y - 118 + dip, 6, 6)); }
-    fill('#d4ccb8', () => rect(x - 32, y - 172, 64, 40));
-    for (let q = 0; q < 4; q++) line(K0, 1.5, () => { c.moveTo(X(x - 26), Y(y - 164 + q * 7)); c.lineTo(X(x + 26), Y(y - 164 + q * 7)); });
-    for (const s of [-1, 1]) { fill(K0, () => rect(x + s * 58 - 2, y - 214, 4, 28)); fill('#fff6dc', () => ell(x + s * 58, y - 220, 4, 7)); }
-  }
-  if (id === 'pots') {
-    const top = y - FH + 26;
-    line(K0, 4, () => { c.moveTo(X(x - 64), Y(top)); c.lineTo(X(x - 64), Y(y - 330)); c.moveTo(X(x + 64), Y(top)); c.lineTo(X(x + 64), Y(y - 330)); });
-    fill(K0, () => rect(x - 78, y - 334, 156, 8));
-    for (let q = 0; q < 3; q++) { const hx = x - 52 + q * 52, r = [22, 28, 18][q]; rot(hx, y - 326, t < 2 ? Math.sin(t * 14 + q * 2.1) * .55 * clamp(1 - t / 2, 0, 1) : 0, () => fill(K0, () => { rect(hx - 3, y - 326, 6, 46); c.moveTo(X(hx + r), Y(y - 280 + r)); c.arc(X(hx), Y(y - 280 + r), Sc(r), 0, 6.2832); })); }
-  }
-  if (id === 'larder') {
-    const o = t < 2.2 ? Math.sin(Math.min(1, t / 1.7) * Math.PI) : 0;
-    fill(K0, () => { rect(x - 60, y - 300, 120, 300); rect(x - 66, y - 312, 132, 13); });
-    if (o > .02) {
-      fill('#2a2521', () => rect(x - 52, y - 290, 104, 282)); fill('#6b645a', () => { rect(x - 52, y - 210, 104, 5); rect(x - 52, y - 130, 104, 5); });
-      fill(`rgba(255,255,255,${o})`, () => { ell(x - 14, y - 244, 6, 4); ell(x + 12, y - 244, 6, 4); });
-      fill(K0, () => poly([[x - 52, y - 292], [x - 52 - 70 * o, y - 280], [x - 52 - 70 * o, y - 16], [x - 52, y - 6]]));
-    } else line('rgba(242,237,224,.35)', 3, () => { c.moveTo(X(x + 34), Y(y - 168)); c.lineTo(X(x + 34), Y(y - 140)); });
-  }
-  if (id === 'chandelier') { const top = y - FH + 28; rot(x, top, swing(2.4, 6.5, .32), () => {
-    line(K0, 4, () => { c.moveTo(X(x), Y(top)); c.lineTo(X(x), Y(top + 80)); });
-    fill(K0, () => { c.moveTo(X(x - 86), Y(top + 112)); c.quadraticCurveTo(X(x), Y(top + 190), X(x + 86), Y(top + 112)); c.lineTo(X(x + 70), Y(top + 104)); c.lineTo(X(x - 70), Y(top + 104)); c.closePath(); ell(x, top + 84, 12, 8); });
-    for (let q = -2; q <= 2; q++) { fill(K0, () => rect(x + q * 34 - 4, top + 84, 8, 26)); fill('#fff6dc', () => ell(x + q * 34, top + 76, 4.5, 8 + (t < 2 ? hash(q, Math.floor(t * 20)) * 5 : 0))); }
-    fill(K0, () => { for (let q = -3; q <= 3; q++) poly([[x + q * 22 - 4, top + 150 - Math.abs(q) * 10], [x + q * 22, top + 170 - Math.abs(q) * 10], [x + q * 22 + 4, top + 150 - Math.abs(q) * 10]]); });
-  }); }
-  if (id === 'clock') rot(x, y, swing(1.6, 24, .045), () => {
-    fill(K0, () => { c.moveTo(X(x - 36), Y(y)); c.lineTo(X(x - 36), Y(y - 250)); c.quadraticCurveTo(X(x), Y(y - 350), X(x + 36), Y(y - 250)); c.lineTo(X(x + 36), Y(y)); c.closePath(); rect(x - 42, y - 12, 84, 12); });
-    fill('#e7e0cf', () => ell(x, y - 262, 26, 26)); fill('#cfc7b4', () => rect(x - 18, y - 202, 36, 122));
-    const sp = t < 2 ? t * 30 * d + t * 4 : 0;
-    line(K0, 3.5, () => { c.moveTo(X(x), Y(y - 262)); c.lineTo(X(x + Math.sin(sp) * 20), Y(y - 262 - Math.cos(sp) * 20)); c.moveTo(X(x), Y(y - 262)); c.lineTo(X(x + Math.sin(sp * .25 + 2) * 13), Y(y - 262 - Math.cos(sp * .25 + 2) * 13)); });
-    rot(x, y - 198, Math.sin(now * 3) * .22 + swing(2, 17, .5), () => { line(K0, 2.5, () => { c.moveTo(X(x), Y(y - 198)); c.lineTo(X(x), Y(y - 112)); }); fill(K0, () => ell(x, y - 106, 10, 10)); });
-  });
-  if (id === 'books') {
-    fill(K0, () => { rect(x - 90, y - 340, 180, 340); rect(x - 96, y - 350, 192, 12); });
-    for (let s = 0; s < 4; s++) {
-      const sy = y - 328 + s * 80; fill('#3b352f', () => rect(x - 80, sy, 160, 64));
-      for (let q = 0; q < 8; q++) {
-        const bh = 44 + 18 * hash(q, s), bw = 15 + 4 * hash(s, q), bx = x - 78 + q * 20, col = hash(q, s, 1) > .5 ? '#9a9283' : '#777064';
-        // a book flies out and back again, the way a boomerang does
-        const fl = on && t < 1.6 && hash(q, s, 3) > .55 ? Math.sin(Math.min(1, t / 1.5) * Math.PI) : 0, dir = hash(q, s, 4) > .5 ? 1 : -1;
-        if (!fl) { fill(col, () => rect(bx, sy + 64 - bh, bw, bh)); continue; }
-        c.save(); c.translate(X(bx + bw / 2 + dir * 150 * fl), Y(sy + 64 - bh / 2 - 120 * fl)); c.rotate(fl * 5 * dir); c.fillStyle = col; c.fillRect(-Sc(bw / 2), -Sc(bh / 2), Sc(bw), Sc(bh)); c.restore();
-      }
-    }
-  }
-  if (id === 'window') {
-    const top = y - 352, bot = y - 140, fr = t < 4 ? clamp(t / .5, 0, 1) * clamp((4 - t) / 1.5, 0, 1) : 0, blow = swing(2.4, 4, 50) + (t < 2.4 ? 30 * Math.sin(Math.min(1, t / 2.4) * Math.PI) : 0);
-    fill('#e4ddcc', () => rect(x - 66, top, 132, bot - top));
-    if (fr > 0) { c.save(); c.globalAlpha = fr; fill('rgba(255,255,255,.5)', () => rect(x - 66, top, 132, bot - top)); for (let q = 0; q < 16; q++) { const a = hash(q, 1) * 6.28, l = 20 + hash(q, 2) * 46, cx = x + (hash(q, 3) > .5 ? 60 : -60), cy = hash(q, 4) > .5 ? top + 6 : bot - 6; line('#fff', 2, () => { c.moveTo(X(cx), Y(cy)); c.lineTo(X(cx + Math.cos(a) * l), Y(cy + Math.sin(a) * l)); }); } c.restore(); }
-    line(K0, 7, () => { c.moveTo(X(x), Y(top)); c.lineTo(X(x), Y(bot)); c.moveTo(X(x - 66), Y((top + bot) / 2)); c.lineTo(X(x + 66), Y((top + bot) / 2)); });
-    line(K0, 10, () => c.rect(X(x - 66), Y(top), Sc(132), Sc(bot - top)));
-    fill(K0, () => { rect(x - 80, bot, 160, 12); rect(x - 98, top - 28, 196, 8); });
-    for (const s of [-1, 1]) fill(K0, () => { const ex = x + s * 72; c.moveTo(X(ex + s * 22), Y(top - 22)); c.lineTo(X(ex - s * 6), Y(top - 22)); c.quadraticCurveTo(X(ex - s * (10 + blow)), Y(top + 110), X(ex - s * blow * .6), Y(bot + 12)); c.lineTo(X(ex + s * 22), Y(bot + 12)); c.closePath(); });
-  }
-  if (id === 'wardrobe') {
-    const o = t < 2.6 ? Math.sin(Math.min(1, t / 2) * Math.PI) : 0;
-    fill(K0, () => { rect(x - 70, y - 306, 140, 296); rect(x - 76, y - 318, 152, 14); rect(x - 66, y - 12, 10, 12); rect(x + 56, y - 12, 10, 12); c.moveTo(X(x - 44), Y(y - 316)); c.quadraticCurveTo(X(x), Y(y - 376), X(x + 44), Y(y - 316)); });
-    line('rgba(242,237,224,.22)', 2, () => { c.moveTo(X(x), Y(y - 298)); c.lineTo(X(x), Y(y - 18)); });
-    if (o > .02) { fill('#2a2521', () => rect(x, y - 298, 64, 284)); fill(`rgba(255,255,255,${o})`, () => { ell(x + 22, y - 232, 6, 4); ell(x + 44, y - 232, 6, 4); }); fill(K0, () => poly([[x + 64, y - 300], [x + 64 + 58 * o, y - 288], [x + 64 + 58 * o, y - 26], [x + 64, y - 14]])); }
-  }
-  if (id === 'bed') {
-    const l = t < 2.2 ? Math.sin(Math.min(1, t / 1.6) * Math.PI) : 0;
-    fill(K0, () => { rect(x - 124, y - 204, 18, 204); rect(x + 106, y - 144, 18, 144); ell(x - 115, y - 210, 13, 13); ell(x + 115, y - 150, 13, 13); rect(x - 110, y - 72, 220, 28); });
-    fill('#e8e1d0', () => ell(x - 80, y - 88, 26, 14));
-    fill('#dbd3c0', () => { c.moveTo(X(x - 62), Y(y - 72)); c.quadraticCurveTo(X(x - 10 + 30 * l), Y(y - 104 - 150 * l), X(x + 104), Y(y - 84 - 30 * l)); c.lineTo(X(x + 104), Y(y - 40)); c.lineTo(X(x - 62), Y(y - 40)); c.closePath(); });
-    if (l > .35) fill(K0, () => { ell(x - 2 + 30 * l, y - 150 * l - 44, 7, 9); ell(x + 22 + 30 * l, y - 150 * l - 44, 7, 9); });
-  }
-  if (id === 'musicbox') { c.save(); c.translate(X(x), Y(y - 106)); c.scale(1.5, 1.5); c.translate(-X(x), -Y(y - 106));
-    const o = t < 2.6 ? Math.min(1, t / .4) * clamp((2.6 - t) / .5, 0, 1) : 0;
-    fill(K0, () => { rect(x - 34, y - 146, 68, 40); rect(x + 34, y - 130, 12, 5); });
-    rot(x - 34, y - 146, -1.3 * o, () => fill(K0, () => rect(x - 34, y - 154, 68, 8)));
-    if (o > .05) { c.save(); c.translate(X(x), Y(y - 146)); c.scale(Math.cos(t * 7), 1); c.fillStyle = K0; c.beginPath(); c.ellipse(0, -Sc(56 * o), Sc(5), Sc(6), 0, 0, 7); c.moveTo(-Sc(14), -Sc(26 * o)); c.lineTo(Sc(14), -Sc(26 * o)); c.lineTo(Sc(2), -Sc(48 * o)); c.lineTo(-Sc(2), -Sc(48 * o)); c.closePath(); c.rect(-Sc(1.5), -Sc(26 * o), Sc(3), Sc(22 * o)); c.fill(); c.strokeStyle = K0; c.lineWidth = Sc(3); c.beginPath(); c.moveTo(-Sc(16), -Sc(42 * o)); c.lineTo(0, -Sc(48 * o)); c.lineTo(Sc(16), -Sc(42 * o)); c.stroke(); c.restore(); }
-    c.restore();
-  }
-  if (id === 'horse') rot(x, y, swing(3, 5.5, .24), () => {
-    fill(K0, () => { c.moveTo(X(x - 92), Y(y - 26)); c.quadraticCurveTo(X(x), Y(y + 22), X(x + 92), Y(y - 26)); c.lineTo(X(x + 86), Y(y - 18)); c.quadraticCurveTo(X(x), Y(y + 10), X(x - 86), Y(y - 18)); c.closePath(); });
-    fill(K0, () => { rect(x - 52, y - 112, 10, 98); rect(x - 32, y - 112, 10, 94); rect(x + 24, y - 112, 10, 94); rect(x + 44, y - 112, 10, 98); ell(x, y - 120, 66, 26); });
-    fill(K0, () => { c.moveTo(X(x + 38), Y(y - 130)); c.lineTo(X(x + 60), Y(y - 196)); c.lineTo(X(x + 96), Y(y - 186)); c.lineTo(X(x + 98), Y(y - 168)); c.lineTo(X(x + 70), Y(y - 160)); c.lineTo(X(x + 62), Y(y - 118)); c.closePath(); for (let q = 0; q < 5; q++) ell(x + 50 + q * 4, y - 140 - q * 12, 9, 6, -.6); });
-    fill(K0, () => { c.moveTo(X(x - 62), Y(y - 128)); c.quadraticCurveTo(X(x - 98), Y(y - 120), X(x - 90), Y(y - 78)); c.lineTo(X(x - 80), Y(y - 82)); c.quadraticCurveTo(X(x - 84), Y(y - 110), X(x - 60), Y(y - 114)); c.closePath(); });
-    if (on && t < 3) fill('#fff', () => ell(x + 80, y - 184, 4, 3));
-  });
-  if (id === 'phone') {
-    const px = x + (t < 2.5 ? Math.sin(t * 70) * 4 * (1 - t / 2.5) : 0);
-    fill(K0, () => { ell(px, y - 88, 26, 8); rect(px - 5, y - 150, 10, 62); poly([[px - 16, y - 170], [px + 16, y - 170], [px + 6, y - 150], [px - 6, y - 150]]); rect(px + 14, y - 142, 6, 30); ell(px + 17, y - 108, 8, 12); });
-    line(K0, 2, () => { c.moveTo(X(px + 17), Y(y - 98)); c.quadraticCurveTo(X(px + 34), Y(y - 70), X(px + 4), Y(y - 84)); });
+// the lace and highlights cut out of a sprite, so a black thing still reads as a teacup and not a blot
+function itemLace(k, w, h) {
+  const L = -w / 2, T = -h / 2, B = h / 2, el = (x, y, rx, ry) => E(x, y, rx, ry);
+  if (k === 'cup') { for (let q = 0; q < 3; q++) el(L + 5 + q * 6, T + 10, 1.6, 1.6); el(L + 25, T + 11, 2.4, 3.2); }
+  else if (k === 'plate') { el(0, 0, w / 2 - 6, h / 2 - 6); el(0, 0, w / 2 - 9, h / 2 - 9); }
+  else if (k === 'teapot') { for (let q = -2; q <= 2; q++) el(-2 + q * 6, 4, 1.8, 1.8); el(-20, 2, 3, 5); }
+  else if (k === 'jar') { c.rect(L + 6, T + 18, w - 12, 12); }
+  else if (k === 'mclock') { el(0, T + 22, 11, 11); }
+  else if (k === 'book') { c.rect(L + 3, T + 6, w - 6, 2); c.rect(L + 3, B - 10, w - 6, 2); }
+  else if (k === 'musicbox') { for (let q = 0; q < 4; q++) el(L + 7 + q * 9.5, 4, 2, 2); }
+  else if (k === 'portrait') { el(0, 0, w / 2 - 7, h / 2 - 7); }
+  else if (k === 'clock') { el(0, T + 60, 22, 22); c.rect(-12, T + 130, 24, 120); }
+  else if (k === 'armour') { c.rect(-12, T + 18, 24, 3); c.rect(-12, T + 26, 24, 3); for (let q = 0; q < 4; q++) el(-14 + q * 9.3, T + 90, 2, 2); }
+  else if (k === 'wardrobe') { c.rect(-1.5, T + 36, 3, h - 56); el(-10, 0, 3, 3); el(10, 0, 3, 3); for (let q = 0; q < 5; q++) el(L + 20 + q * 27, T + 46, 4, 4); }
+  else if (k === 'piano') { c.rect(L + 10, T + 84, w - 20, 8); c.rect(-28, T + 34, 56, 34); for (let q = 0; q < 9; q++) el(L + 22 + q * 16.5, T + 130, 3, 3); }
+  else if (k === 'chandelier') { for (let q = -3; q <= 3; q++) el(q * 20, T + 66 - Math.abs(q) * 3, 2.4, 2.4); }
+  else if (k === 'horse') { el(54, T + 26, 2.5, 2.5); }
+  else if (k === 'lamp') { for (let q = -1; q <= 1; q++) el(q * 9, T + 16, 2, 2); }
+  else if (k === 'doll') { el(3, T + 7, 1.5, 1.5); }
+}
+let sprites = {};
+// the small things are drawn larger than life, so a teacup reads at a phone's size
+const BIG = k => CORE.KIND[k][1] ? 1 : 1.45;
+// one sprite per kind and look: 0 the house's own shade (too heavy yet), 1 black card, 2 gilt
+function sprite(k, look, r) {
+  const key = k + look + (look ? '' : r), s0 = sprites[key]; if (s0) return s0;
+  const [w, h] = ITEM[k], s = Math.max(.12, view.s) * DPR * BIG(k), pad = 8, cw = Math.ceil((w + pad * 2) * s), ch = Math.ceil((h + pad * 2) * s);
+  const cnv = document.createElement('canvas'); cnv.width = cw; cnv.height = ch; const x = cnv.getContext('2d'), keep = c; c = x;
+  x.translate(cw / 2, ch / 2); x.scale(s, s); x.lineJoin = 'round';
+  const body = look === 2 ? '#c99a3e' : look === 1 ? INK : shade(r, .45);
+  if (look) { x.strokeStyle = look === 2 ? 'rgba(255,236,170,.95)' : RIM; x.lineWidth = 3.2; x.beginPath(); itemPath(k, w, h); x.stroke(); }
+  x.fillStyle = body; x.beginPath(); itemPath(k, w, h); x.fill();
+  if (look === 2) { const gr = x.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2); gr.addColorStop(0, 'rgba(255,244,190,.85)'); gr.addColorStop(.5, 'rgba(255,244,190,0)'); gr.addColorStop(1, 'rgba(90,50,10,.4)'); x.fillStyle = gr; x.beginPath(); itemPath(k, w, h); x.fill(); }
+  x.fillStyle = look === 2 ? 'rgba(70,40,8,.75)' : look === 1 ? LACE : shade(r, .7); x.beginPath(); itemLace(k, w, h); x.fill('evenodd');
+  if (k === 'candle' && look) { x.fillStyle = '#ffd98a'; x.beginPath(); E(0, -h / 2 + 8, 4, 8); x.fill(); }
+  c = keep; return (sprites[key] = cnv);
+}
+// a thing at x, y (its middle, house units), turned by a
+function drawItem(t, x, y, a, look, r) {
+  const sp = sprite(t.k, look, r), w = sp.width / DPR, h = sp.height / DPR;
+  if (!a) { c.drawImage(sp, X(x) - w / 2, Y(y) - h / 2, w, h); return; }
+  c.save(); c.translate(X(x), Y(y)); c.rotate(a); c.drawImage(sp, -w / 2, -h / 2, w, h); c.restore();
+}
+// the view's own memory of each thing: where its middle is drawn, how it is turned, how it spins
+const tv = [];
+function stepThings(dt) {
+  for (let i = 0; i < S.th.length; i++) {
+    const t = S.th[i], v = tv[i] || (tv[i] = { x: t.x, y: t.y, a: 0, va: 0, up: 1, st: t.st });
+    const h = ITEM[t.k][1] * BIG(t.k);
+    // resting, a thing stands on its foot (the rules' y); in the air its middle is where the rules say
+    const rest = t.st === 0 || t.st === 3, up = rest ? 1 : 0; v.up += (up - v.up) * Math.min(1, dt * 10);
+    const ty = t.y - h / 2 * v.up;
+    if (t.st === 1) { v.va = lerp(v.va, CORE.spinOf(S) * 2.2, Math.min(1, dt * 4)); }
+    else if (t.st === 2) { v.va = lerp(v.va, (t.vx || 0) / 60, Math.min(1, dt * 3)); }
+    else { v.va = 0; const tgt = Math.round(v.a / 6.2832) * 6.2832; v.a += (tgt - v.a) * Math.min(1, dt * 12); }
+    v.a += v.va * dt; v.x = t.x; v.y = ty; v.st = t.st;
   }
 }
+const roomOf = i => CORE.SLOTS[i][0];
+// the things that stand (behind the people) or lie broken
+function thingsAtRest() {
+  const grip = CORE.gripOf(S);
+  for (let i = 0; i < S.th.length; i++) {
+    const t = S.th[i], v = tv[i]; if (!v || t.st !== 0) continue;
+    // the chandelier hangs on a chain from its hook while it is still up there
+    if (t.k === 'chandelier' && t.y < floorY(1) - 200) line(INK, 4, () => { c.moveTo(X(t.x), Y(floorY(2) + 26)); c.lineTo(X(t.x), Y(v.y - ITEM.chandelier[1] / 2 + 4)); });
+    if (t.k === 'portrait' && t.y < floorY(Math.floor(-t.y / FH)) - 100) line(CORE.tierOf(t) > grip ? shade(roomOf(i), .6) : INK, 2.5, () => { c.moveTo(X(t.x - 26), Y(v.y - 40)); c.lineTo(X(t.x), Y(v.y - 74)); c.lineTo(X(t.x + 26), Y(v.y - 40)); });
+    drawItem(t, v.x, v.y, v.a, CORE.tierOf(t) > grip ? 0 : t.gold ? 2 : 1, roomOf(i));
+    if (t.gold && FX()) { const p = .5 + .5 * Math.sin(now * 5 + i); c.fillStyle = `rgba(255,240,190,${p})`; c.beginPath(); const sx = X(v.x + 8), sy = Y(v.y - 8), r = 5 + 3 * p; c.moveTo(sx, sy - r); c.lineTo(sx + 1.5, sy - 1.5); c.lineTo(sx + r, sy); c.lineTo(sx + 1.5, sy + 1.5); c.lineTo(sx, sy + r); c.lineTo(sx - 1.5, sy + 1.5); c.lineTo(sx - r, sy); c.lineTo(sx - 1.5, sy - 1.5); c.fill(); }
+  }
+  // shards of what broke tonight, swept up by morning: one path for them all
+  c.fillStyle = INK; c.beginPath();
+  for (const s of shards) { if (s.t < s.life) continue; const x = X(s.x), y = Y(s.y), r = Sc(s.r); c.moveTo(x - r, y); c.lineTo(x + r * .3, y - r * .8); c.lineTo(x + r, y + .5); c.closePath(); }
+  c.fill();
+}
+// what spins and flies: in front of everyone; the half of the ring that goes behind the ghost is drawn before it
+function thingsInAir(front) {
+  for (let i = 0; i < S.th.length; i++) {
+    const t = S.th[i], v = tv[i]; if (!v || (t.st !== 1 && t.st !== 2)) continue;
+    if ((t.st === 2 || Math.sin(t.a) > 0) !== front) continue;
+    drawItem(t, v.x, v.y, v.a, t.gold ? 2 : 1, roomOf(i));
+  }
+}
+
 
 /* ---------------- the people: paper cut-outs on sticks, twelve drawings a second ---------------- */
 const HGT = { girl: 190, boy: 196, prof: 300, director: 296 }, hOf = l => HGT[l] || 282;
@@ -12522,7 +12550,7 @@ function person(p) {
   const e = clamp(p.fear / CORE.nerveOf(p), 0, 1), fr = Math.floor(now * (v.run ? 24 : 12)), walk = v.run || v.vx ? fr % 4 : 0;
   const shake = K.reduced || v.run ? 0 : (e > .3 ? (hash(fr, v.k) - .5) * 18 * (e - .3) : 0) + v.flinch * (hash(fr, 3) - .5) * 22;
   const hop = v.jt < .22 ? Math.sin(v.jt / .22 * Math.PI) * 32 : 0, lean = v.run || v.hot ? .14 : -.15 * clamp((e - .5) / .5, 0, 1);
-  const o = { walk, arms: !!v.run || v.hot || e > .6 || v.flinch > .4, hat: Math.max(Math.min(1.4, v.hat), p.panic && !K.reduced ? .1 + .04 * Math.sin(now * 30) : 0), hair: e > .45 ? e : 0, lw: (v.hot ? 9 : 3) / view.s };
+  const o = { walk, arms: !!v.run || v.hot || e > .6 || v.flinch > .4, hat: Math.max(Math.min(1.4, v.hat), p.panic && !K.reduced ? .1 + .04 * Math.sin(now * 30) : 0), hair: e > .45 ? e : 0, lw: (p.panic ? 6 : 3) / view.s };
   c.save(); c.translate(X(v.x + shake), Y(v.y - hop)); const sz = SZ * (.9 + .2 * v.k); c.scale(view.s * v.dir * sz, view.s * sz); c.rotate(lean);
   o.rim = 1; figure(v.look, o); o.rim = 0; figure(v.look, o);
   c.restore();
@@ -12534,7 +12562,7 @@ function stepPeople(dt) {
     v.flinch = Math.max(0, v.flinch - dt * 2); v.jt += dt; v.hat = v.run ? Math.min(1.4, v.hat + dt) : Math.max(0, v.hat - dt * 1.2);
     if (v.run) { if (!v.out) runOff(v, dt); continue; }
     if (p.st !== 'in') { v.out = 1; continue; }
-    v.out = 0; v.hot = p.scared > 0;
+    v.out = 0; v.hot = p.quiet < .8 || !!p.panic;
     if (p.climb > 0) { const u = clamp(1 - p.climb / CORE.P.climb, 0, 1); v.x = 50 + Math.sin(u * 10) * 28; v.y = lerp(floorY(p.f), floorY(p.to), u); v.vx = 1; continue; }
     const ty = floorY(p.f), dx = p.x - v.x;
     if (Math.abs(dx) > 300 || Math.abs(ty - v.y) > 4) { v.x = p.x; v.y = ty; } else v.x += clamp(dx, -900 * dt, 900 * dt);
@@ -12548,9 +12576,10 @@ function runOff(v, dt) {
   if (Math.abs(dx) > 1) v.dir = Math.sign(dx);
 }
 
+
 /* ---------------- what the rules say happened ---------------- */
 const LINES = {
-  harold: ['Good heavens!', 'Who goes there?', 'Edith, did you hear that?'], edith: ['Harold!', 'Oh my word!', 'Not again!'], violet: ['MOTHER!', 'There is someone here!', 'Eek!'],
+  harold: ['Good heavens!', 'Who goes there?', 'Edith, did you hear that?'], edith: ['Harold!', 'Oh my word!', 'Not the good china!'], violet: ['MOTHER!', 'There is someone here!', 'Eek!'],
   prof: ['Most irregular.', 'There must be a rational—', 'Now see here!'], mudge: ['SAINTS PRESERVE US!', 'I knew it!', 'Lord have mercy!'],
   zostra: ['I sense a presence…', 'Show yourself, spirit!', 'The veil is thin tonight.'], cyril: ['Auntie!', 'Very funny, Auntie.', 'AAAH!'],
   ada: ['Teddy!', 'Hold me, darling!', 'What was that?'], teddy: ['There, there.', 'Ada!', 'Steady on!'],
@@ -12559,29 +12588,54 @@ const LINES = {
 const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
 const roman = n => { let r = ''; for (const [v, l] of [[50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]) while (n >= v) { r += l; n -= v; } return r; };
 const CROWD = { 'a lodger': 'Lodgers', 'a sitter': 'The circle', 'a wedding guest': 'Guests', 'an extra': 'Extras' };
-let taught = 0, idle = 0, saidScoff = -99, saidCorner = 0, seanceWas = 0;
+const lesson = { grab: 0, hit: 0, panic: 0, let: 0, scoff: 0, out: 0 };
+let saidScoff = -99;
 const cardQ = [];
 const byP = id => S.people.find(p => p.id === id);
 function events() {
   for (const e of S.ev) {
     if (e.k === 'scream') onScream(e);
+    else if (e.k === 'hit') onHit(e);
+    else if (e.k === 'grab') { lesson.grab++; const v = tv[e.ti]; if (v) v.va = 0; sfx.grab(CORE.massOf(S.th[e.ti])); }
+    else if (e.k === 'land') onLand(e);
+    else if (e.k === 'let') { lesson.let++; sfx.whoosh(e.n); }
     else if (e.k === 'out') onOut(e);
     else if (e.k === 'gone') { const p = byP(e.id); if (p) say(nameOf(p).toUpperCase(), CORE.CAST[e.id] ? 'has left the house. For good.' : 'will not be back.', e.id); }
-    else if (e.k === 'panic') { const v = people[e.id]; if (v) { v.hat = 1; v.jt = 0; } if (CORE.CAST[e.id] && Math.random() < .6) say(SHORT[e.id].toUpperCase(), pick(LINES[e.id]), e.id); sfx.sting(1); }
+    else if (e.k === 'panic') { lesson.panic++; const v = people[e.id]; if (v) { v.hat = 1; v.jt = 0; } if (CORE.CAST[e.id] && Math.random() < .6) say(SHORT[e.id].toUpperCase(), pick(LINES[e.id]), e.id); sfx.sting(1); }
     else if (e.k === 'night') onNight(e);
     else if (e.k === 'dawn') onDawn(e);
     else if (e.k === 'reel') onReel(e.reel);
-    else if (e.k === 'buy') { sfx.pipe(CORE.byId[e.id]); bgDirty = true; pipeBurst = { id: e.id, t: 0 }; }
-    else if (e.k === 'slam') { slams[e.f] = 0; sfx.slam(); }
-    else if (e.k === 'phone') { tfx[PHONE].t = 0; sfx.ring(); say('', e.n ? 'The telephone rings. Somebody had better answer it.' : 'The telephone rings for nobody.'); }
-    else if (e.k === 'chand') { tfx[CHAND].t = 0; sfx.crash(); for (const p of S.people) { const v = people[p.id]; if (v && p.f === 1 && p.x < 500) { v.flinch = 1; v.jt = 0; v.hat = 1; } } }
-    else if (e.k === 'imp') { imps.push({ room: e.room, t: 0, s: Math.random() * 1e3 }); sfx.imp(); }
+    else if (e.k === 'buy') { sfx.pipe(CORE.byId[e.id], 1 - 1); bgDirty = true; sprites = {}; pipeBurst = { id: e.id, t: 0 }; }
+    else if (e.k === 'slam') { slams[e.f] = 0; sfx.slam(); shake = Math.max(shake, .5); for (const p of S.people) { const v = people[p.id]; if (v && p.f === e.f) { v.jt = 0; v.flinch = 1; } } }
+    else if (e.k === 'imp') { imps.push({ ti: e.ti, t: 0, s: Math.random() * 1e3 }); sfx.imp(); }
     else if (e.k === 'bound') { sfx.bound(); say('ZOSTRA', 'I SEE you, spirit! You are bound!', 'zostra'); }
-    else if (e.k === 'scoff' && now - saidScoff > 7) { saidScoff = now; say('THE PROFESSOR', pick(['Draughts.', 'Merely the pipes.', 'Settling timbers. Nothing more.', 'Come closer, if you are real.']), 'prof'); }
+    else if (e.k === 'scoff') { lesson.scoff++; if (now - saidScoff > 6) { saidScoff = now; say('THE PROFESSOR', pick(['Draughts.', 'A teacup. How frightening.', 'Settling timbers. Nothing more.', 'Bring something bigger, if you are real.']), 'prof'); } }
     else if (e.k === 'spent') sfx.fade();
     else if (e.k === 'finale' && e.step === 1) { fin.t = 0; document.body.classList.add('end'); resize(); queueCard('', 'The End?', 'The last of them had gone, and Hollowmere House was quiet at last.', 'Then, after dark, a delivery came. It was addressed to nobody.', 6); }
   }
   S.ev.length = 0;
+}
+// a hit: the thing bounces, a paper star bursts where it struck, the person reels
+function onHit(e) {
+  lesson.hit++;
+  const t = S.th[e.ti], v = tv[e.ti], pv0 = people[e.id];
+  if (pv0) { pv0.flinch = Math.min(1, pv0.flinch + .5); pv0.jt = Math.min(pv0.jt, .05); pv0.hit = 0; if (e.m >= 3) pv0.hat = Math.max(pv0.hat, 1); }
+  if (v) v.va += (Math.random() < .5 ? -1 : 1) * 6;
+  if (t && fxs.length < 60) fxs.push({ k: 'star', x: t.x, y: t.y, t: 0, s: .8 + Math.min(2.4, Math.sqrt(e.m) * .6), gold: e.gold, r: Math.random() * 6 });
+  if (e.m >= 8) shake = Math.max(shake, Math.min(1, e.m / 20));
+  sfx.hit(e.m, t && CORE.fragile(t), e.gold);
+}
+// a landing: crockery bursts into shards that skitter and stay till morning; heavy things thud and raise dust
+function onLand(e) {
+  const t = S.th[e.ti], fy = floorY(e.f);
+  if (e.broke) {
+    sfx.smash(e.m);
+    if (FX() || shards.length < 40) for (let k = 0; k < (FX() ? 9 : 4); k++) shards.push({ x: e.x, y: fy - 6, vx: (Math.random() - .5) * 520, vy: -200 - Math.random() * 260, r: 4 + Math.random() * 6, t: 0, life: .5 + Math.random() * .3, fy });
+  } else {
+    sfx.thud(e.m);
+    if (e.m >= 3) { shake = Math.max(shake, Math.min(1, e.m / 14)); if (FX()) fxs.push({ k: 'dust', x: e.x, y: fy, t: 0, s: Math.sqrt(e.m) }); }
+  }
+  if (t && e.n && FX()) fxs.push({ k: 'ring', x: e.x, y: fy - 40, t: 0, s: e.broke ? 2 : 1 + Math.sqrt(e.m) * .4 });
 }
 // a scream is a small intertitle over whoever screamed: one at a time each, adding up while it lasts
 function onScream(e) {
@@ -12589,14 +12643,13 @@ function onScream(e) {
   const f = flyers.find(q => !q.big && (q.id === e.id || (people[q.id] && Math.abs(people[q.id].y - v.y) < 5 && Math.abs(people[q.id].x - v.x) < 260)) && q.t < .5);
   inflight += e.v;
   if (f) { if (f.id !== e.id && !(f.ids || (f.ids = [f.id])).includes(e.id)) f.ids.push(e.id); f.v += e.v; f.t = Math.min(f.t, .2); f.e = Math.max(f.e, e.e); f.w = word(f.e) + (f.ids && f.ids.length > 1 ? ' ×' + f.ids.length : ''); return; }
-  if (flyers.length > 14) { flyers[flyers.length - 1].v += e.v; return; }
+  if (flyers.length > 10) { flyers[flyers.length - 1].v += e.v; return; }
   flyers.push({ id: e.id, v: e.v, e: e.e, w: word(e.e), t: 0, r: (Math.random() - .5) * .16 });
-  v.flinch = Math.min(1, v.flinch + .3);
-  if (Math.random() < .5) sfx.yelp(e.e);
+  if (Math.random() < .6) sfx.yelp(e.e);
 }
-const word = e => e > .8 ? 'AAAAAH!' : e > .55 ? pick(['AAAH!', 'HELP!']) : e > .3 ? pick(['EEK!', 'GASP!']) : pick(['OH!', 'EH?', 'HM?']);
+const word = e => e > .8 ? 'AAAAAH!' : e > .55 ? pick(['AAAH!', 'HELP!']) : e > .3 ? pick(['EEK!', 'GASP!']) : pick(['OH!', 'OOF!', 'OW!']);
 function onOut(e) {
-  const v = people[e.id]; sfx.flee(e.chain);
+  lesson.out++; const v = people[e.id]; sfx.flee(e.chain);
   inflight += e.v;
   if (v) {
     const pts = e.via === 'door' ? [[-20, 0], [-60, 0], [-1900, 0]] : e.via === 'back' ? [[HW + 20, 0], [HW + 400, 0], [3200, 0]] : [[HW + 60, v.y - 40], [HW + 180, 0], [3200, 0]];
@@ -12606,7 +12659,7 @@ function onOut(e) {
 }
 function onNight(e) {
   for (const id in people) { const v = people[id]; v.run = null; v.out = 0; v.x = -9999; }
-  flyers.length = 0; imps.length = 0; inflight = 0; shown = S.$;
+  flyers.length = 0; imps.length = 0; shards.length = 0; fxs.length = 0; tv.length = 0; inflight = 0; shown = S.$;
   irisTo(0, 1, .9, W / 2, H / 2); sfx.night();
 }
 // the night's tally, as an intertitle; then the organ
@@ -12615,19 +12668,21 @@ function onDawn(e) {
   const left = S.people.filter(p => p.st !== 'gone').length, gone = e.gone ? ' ' + e.gone + (e.gone > 1 ? ' have' : ' has') + ' gone for good.' : '';
   const title = e.why === 'empty' ? 'The house is empty' : e.why === 'dawn' ? 'Dawn' : 'The ghost fades';
   const text = (e.out ? `${e.out} driven out` : 'Nobody driven out') + `, ${fmt(e.v)} screams.` + gone;
-  const hint = e.night === 1 ? 'They will be back tonight, a little less sure of themselves. Between nights, the screams buy pipes on the organ in the cellar.' : left && e.out === 0 && S.outs === 0 ? 'Push from the far side: they run away from the cold, down the stair and out of the door.' : '';
+  const hint = e.night === 1 ? 'They will be back tonight, a little less sure of themselves. Between nights, the screams buy pipes on the organ in the cellar.'
+    : e.night === 2 && !lesson.let ? 'Let go, and everything in the whirl comes crashing down on whoever is under it.'
+    : left && e.out === 0 && S.outs < 3 ? 'Keep sweeping the whirl through the same one: frightened enough, they panic and run for the door.' : '';
   queueCard('NIGHT ' + roman(e.rn || e.night), title, text, hint, 3.2, 0, 'TAP FOR THE ORGAN IN THE CELLAR ▸');
 }
 function onReel(r) {
   const R = CORE.REELS[r];
   for (const id in people) delete people[id];
-  queueCard('REEL ' + ROMAN[r], R.title, R.card, r ? '' : 'You are the ghost. Hold your finger on the house and the ghost follows it; whoever feels its cold runs from it. Drive them all out of the front door.', r ? 6 : 9, 1);
+  queueCard('REEL ' + ROMAN[r], R.title, R.card, r ? (r === 1 ? 'The professor will not be frightened by a teacup.' : '') : 'You are the ghost. Hold your finger on the house: a whirl follows it and tears loose whatever it passes. Sweep what it carries into them until they panic and run.', r ? 6 : 9, 1);
 }
 function queueCard(...a) { if (cardUp) cardQ.push(a); else showCard(...a); }
 
-/* ---------------- the ghost's own layer: not on the film stock, so the tint never reaches it ---------------- */
-const flyers = [], imps = [], slams = [9, 9, 9];
-let shown = 0, inflight = 0, plinks = 0, lastPlink = -9, pipeBurst = null;
+/* ---------------- the ghost's own layer ---------------- */
+const flyers = [], imps = [], slams = [9, 9, 9], shards = [], fxs = [];
+let shown = 0, inflight = 0, plinks = 0, lastPlink = -9, pipeBurst = null, shake = 0;
 const GHOST = 'rgba(250,243,226,';
 function land(f) {
   shown = Math.min(S.$, shown + f.v); inflight = Math.max(0, inflight - f.v);
@@ -12638,7 +12693,7 @@ function land(f) {
 function ghostShape(x, y, sz, a, flip, grey) {
   c.save(); c.translate(x, y); c.scale(sz * flip, sz); c.globalAlpha = a;
   const wob = K.reduced ? 0 : Math.sin(now * 3) * .02;
-  c.fillStyle = grey ? '#7d7a8a' : '#efe6cf'; c.beginPath();
+  c.fillStyle = grey ? '#8d8aa0' : '#f3ead3'; c.beginPath();
   c.moveTo(-.16, -.3); c.bezierCurveTo(-.18, -.58, .18, -.58, .16, -.3);
   c.lineTo(.26, -.24); c.lineTo(.44, -.12 + wob); c.lineTo(.42, -.06 + wob); c.lineTo(.25, -.13); c.lineTo(.2, -.05); c.lineTo(.22, .44);
   for (let k = 0; k < 7; k++) { const x0 = .22 - k * .0629, x1 = x0 - .0629; c.quadraticCurveTo((x0 + x1) / 2, .54 + (k & 1) * .04 + wob, x1, .44); }
@@ -12651,17 +12706,23 @@ function ghostShape(x, y, sz, a, flip, grey) {
   c.fill('evenodd'); c.strokeStyle = INK; c.lineWidth = 1.6 / sz; c.stroke();
   c.restore();
 }
-// the cold: a frost over the width of the floor it reaches, a ring of crystals at its edge
-function cold(x, f, r, a, grey) {
-  const y0 = floorY(f) - FH + 26, cx = X(x), cy = Y(floorY(f) - FH * .45), rx = Sc(r), ry = Sc(FH * .5);
-  c.save(); c.beginPath(); c.rect(X(-6), Y(y0), Sc(HW + 12), Sc(FH - 26)); c.clip(); if (!grey) { c.fillStyle = `rgba(225,236,252,${.12 * a})`; c.fillRect(X(-6), Y(y0), Sc(HW + 12), Sc(FH - 26)); }
-  c.globalAlpha = a; c.translate(cx, cy); c.scale(1, ry / rx);
-  const gr = c.createRadialGradient(0, 0, 0, 0, 0, rx); const cc = grey ? '200,196,224' : '230,240,255'; gr.addColorStop(0, `rgba(${cc},.5)`); gr.addColorStop(.7, `rgba(${cc},.22)`); gr.addColorStop(1, `rgba(${cc},0)`);
-  c.fillStyle = gr; c.beginPath(); c.arc(0, 0, rx, 0, 6.2832); c.fill();
-  c.strokeStyle = 'rgba(244,250,255,.85)'; c.lineWidth = 2 * rx / ry; c.setLineDash([3, 8]); c.beginPath(); c.arc(0, 0, rx * .96, 0, 6.2832); c.stroke(); c.setLineDash([]);
-  c.restore();
-  c.save(); c.globalAlpha = a; c.strokeStyle = 'rgba(245,250,255,.9)'; c.lineWidth = 1.5;
-  for (let k = 0; k < 12; k++) { const t = k / 12 * 6.2832 + now * .2, px = cx + Math.cos(t) * rx * .96, py = cy + Math.sin(t) * ry * .96, s = 4 + 3 * (k % 3); if (py < Y(y0) || py > Y(floorY(f))) continue; c.beginPath(); for (let q = 0; q < 3; q++) { const b = q / 3 * Math.PI; c.moveTo(px - Math.cos(b) * s, py - Math.sin(b) * s); c.lineTo(px + Math.cos(b) * s, py + Math.sin(b) * s); } c.stroke(); }
+// the whirl: ribbons of cut cream paper turning round the ghost, more of them and faster the more it carries
+function whirlDraw(x, y, r, load, a, grey) {
+  if (!DIAG.whirl) return;
+  const cx = X(x), cy = Y(y), rx = Sc(r), ry = rx * .55, sp = CORE.spinOf(S), n = 3 + Math.min(4, Math.floor(load / 4)), ph = now * sp * 1.1;
+  c.save(); c.globalAlpha = a; c.translate(cx, cy);
+  c.fillStyle = grey ? 'rgba(190,186,214,.42)' : 'rgba(248,240,220,.5)'; c.beginPath();
+  for (let k = 0; k < n; k++) {
+    const a0 = ph + k / n * 6.2832, len = 1.3 + .3 * hash(k, 3), rr = .62 + .3 * hash(k, 7), w = .1 + .05 * hash(k, 9);
+    for (let q = 0; q <= 12; q++) { const u = a0 + q / 12 * len, ri = rr + w * Math.sin(q / 12 * Math.PI); const px = Math.cos(u) * rx * ri, py = Math.sin(u) * ry * ri; q ? c.lineTo(px, py) : c.moveTo(px, py); }
+    for (let q = 12; q >= 0; q--) { const u = a0 + q / 12 * len, ri = rr - w * .4 * Math.sin(q / 12 * Math.PI); c.lineTo(Math.cos(u) * rx * ri, Math.sin(u) * ry * ri); }
+    c.closePath();
+  }
+  c.fill();
+  // a ring of frost crystals at the whirl's reach: what it can tear loose
+  c.strokeStyle = 'rgba(240,248,255,.7)'; c.lineWidth = 1.4; c.beginPath();
+  for (let k = 0; k < 10; k++) { const t = k / 10 * 6.2832 - now * .4, px = Math.cos(t) * rx, py = Math.sin(t) * ry * 1.2, s = 3 + 2 * (k % 3); for (let q = 0; q < 3; q++) { const b = q / 3 * Math.PI; c.moveTo(px - Math.cos(b) * s, py - Math.sin(b) * s); c.lineTo(px + Math.cos(b) * s, py + Math.sin(b) * s); } }
+  c.stroke();
   c.restore();
 }
 // the pointing hand of an old printer's sign; a negative s points it the other way
@@ -12675,111 +12736,154 @@ function manicule(x, y, s) {
 // a little intertitle: black card, a cream rule inside, small capitals
 function tag(t, x, y, s, size = 13) {
   c.save(); c.font = `${size}px "IM Fell English SC", Georgia, serif`; const w = c.measureText(t).width + 18, h = size + 11;
+  x = clamp(x, w * s / 2 + 6, W - w * s / 2 - 6);
   c.translate(x, y); c.scale(s, s); c.fillStyle = INK; c.fillRect(-w / 2, -h / 2, w, h); c.strokeStyle = 'rgba(244,234,210,.85)'; c.lineWidth = 1; c.strokeRect(-w / 2 + 3, -h / 2 + 3, w - 6, h - 6);
   c.fillStyle = '#f4ead2'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t, 0, 1); c.restore();
 }
+function loadOf(o) { let l = 0; for (const t of S.th) if (t.st === 1 && t.o === o) l += CORE.massOf(t); return l; }
 function ghostLayer(dt) {
   const G = S.g;
   if (S.phase === 'night' && !S.finale) {
-    const lit = G.on ? 1 : G.fade > 0 ? clamp(G.fade / CORE.P.linger, 0, 1) * .6 : 0;
-    // the grey lady, three seconds behind on the same path
-    if (CORE.has(S, 'grey') && S.path.length && S.path[0][1] != null && S.nt > 3) { const [, gx, gy] = S.path[0]; cold(gx, CORE.floorAt(gy), CORE.reachOf(S) * .8, .7, 1); ghostShape(X(gx), Y(floorY(CORE.floorAt(gy)) - FH * .55), Sc(290), .85, 1, 1); }
-    if (lit > 0) { cold(G.x, CORE.floorAt(G.y), CORE.reachOf(S), lit); ghostShape(X(G.x + 30), Y(lerp(G.y, floorY(CORE.floorAt(G.y)) - FH * .55, .6)) - (wide ? 0 : 26), Sc(wide ? 330 : 230), .92 * lit, G.tx < G.x ? 1 : -1); }
+    const lit = G.on ? 1 : G.fade > 0 ? clamp(G.fade / CORE.P.linger, 0, 1) * .6 : 0, R = CORE.reachOf(S);
+    if (S.grey) { whirlDraw(S.grey.x, S.grey.y, R * .8, loadOf(1), .8, 1); ghostShape(X(S.grey.x), Y(S.grey.y), Sc(wide ? 150 : 130), .8, 1, 1); }
+    if (lit > 0) { whirlDraw(G.x, G.y, R, loadOf(0), lit); ghostShape(X(G.x), Y(G.y), Sc(wide ? 170 : 150), .95 * lit, G.tx < G.x ? 1 : -1); }
     // Madame Zostra's third eye: shut, then wide open now and then
     const z = S.people.find(p => p.id === 'zostra' && p.st === 'in'), zv = z && people.zostra;
     if (zv && !zv.out) {
-      const open = (S.nt % 11) > 7.5, ex = X(zv.x), ey = Y(zv.y - hOf('turban') * SZ) - 46, w = 22;
+      const open = (S.nt % 11) > 7.5, ex = X(zv.x), ey = Y(zv.y - hOf('turban') * SZ) - 30, w = 16;
       c.strokeStyle = GHOST + '.95)'; c.fillStyle = GHOST + '.95)'; c.lineWidth = 2.5;
-      if (open) { c.beginPath(); c.moveTo(ex - w, ey); c.quadraticCurveTo(ex, ey - 16, ex + w, ey); c.quadraticCurveTo(ex, ey + 16, ex - w, ey); c.fill(); c.fillStyle = INK; c.beginPath(); c.arc(ex, ey, 6, 0, 6.2832); c.fill(); if (S.bound) { c.strokeStyle = GHOST + '.6)'; c.setLineDash([4, 6]); c.beginPath(); c.moveTo(ex, ey); c.lineTo(X(G.x), Y(G.y)); c.stroke(); c.setLineDash([]); } }
-      else { c.beginPath(); c.moveTo(ex - w, ey); c.quadraticCurveTo(ex, ey + 9, ex + w, ey); c.stroke(); }
+      if (open) { c.beginPath(); c.moveTo(ex - w, ey); c.quadraticCurveTo(ex, ey - 12, ex + w, ey); c.quadraticCurveTo(ex, ey + 12, ex - w, ey); c.fill(); c.fillStyle = INK; c.beginPath(); c.arc(ex, ey, 4.5, 0, 6.2832); c.fill(); if (S.bound) { c.strokeStyle = GHOST + '.6)'; c.setLineDash([4, 6]); c.beginPath(); c.moveTo(ex, ey); c.lineTo(X(G.x), Y(G.y)); c.stroke(); c.setLineDash([]); } }
+      else { c.beginPath(); c.moveTo(ex - w, ey); c.quadraticCurveTo(ex, ey + 7, ex + w, ey); c.stroke(); }
     }
-    // how to play, in the house's own hand, until it has been done
-    const sc = wide ? 1 : .8, bob = Math.sin(now * 5) * 6;
-    if (S.night === 1 && !taught) {
-      const p = S.people.find(q => q.st === 'in' && people[q.id] && !people[q.id].out);
-      if (p) { const v = people[p.id], hx = X(v.x + 230), hy = Y(v.y - 150); manicule(hx + bob + 40 * sc, hy, -sc); tag('HOLD HERE, ON THEIR FAR SIDE', hx + 40 * sc, hy - 40 * sc, sc); }
-    }
-    if (S.outs < 2) { const near = (G.on || G.fade > 0) && CORE.floorAt(G.y) === 0 && G.x < 420; tag('THE DOOR', X(-20), Y(-250) - 30 * sc, sc, 14); if (!near && S.night < 3) manicule(X(170) + bob, Y(-130), -sc); }
-    // the way out, in the first reel: along the floor, down the stair, out of the door
-    if (S.reel === 0 && S.night < 4) { c.save(); c.strokeStyle = 'rgba(250,246,232,.55)'; c.lineWidth = 3; c.setLineDash([6, 9]); c.beginPath(); for (let f = 2; f >= 0; f--) { c.moveTo(X(420), Y(floorY(f) - 60)); c.lineTo(X(90), Y(floorY(f) - 60)); if (f) c.lineTo(X(90), Y(floorY(f - 1) - 60)); } c.lineTo(X(-60), Y(-60)); c.stroke(); c.setLineDash([]); c.fillStyle = 'rgba(250,246,232,.7)'; c.beginPath(); c.moveTo(X(-60) - 12, Y(-60)); c.lineTo(X(-60) + 6, Y(-60) - 9); c.lineTo(X(-60) + 6, Y(-60) + 9); c.fill(); c.restore(); }
-    // why someone will not go: too little fright at the door, or cornered at the far wall with the cold on the wrong side
-    if (S.outs < 12) for (const p of S.people) { const v = people[p.id]; if (p.st !== 'in' || !p.cower || !v || v.out) continue; const hy = Y(v.y - hOf(v.look) * SZ) - (p.x < 30 ? 120 : 58) * sc; if (p.x < 30) tag('NOT FRIGHTENED ENOUGH — CLOSER', clamp(X(v.x), 120, W - 120), hy, sc); else if (p.x > CORE.HW - 30) tag('CORNERED — COME ROUND THE OTHER SIDE', clamp(X(v.x), 150, W - 150), hy, sc); break; }
+    teach();
   }
-  // the screams: small intertitles over whoever screamed, held a moment, then up to the count
+  // paper stars where things struck, dust where heavy things landed, a ring where everyone near jumped
+  for (let k = fxs.length - 1; k >= 0; k--) {
+    const f = fxs[k]; f.t += dt; const L = f.k === 'star' ? .28 : .6; if (f.t > L) { fxs.splice(k, 1); continue; }
+    const u = f.t / L, x = X(f.x), y = Y(f.y);
+    if (f.k === 'star') { const r = Sc(26) * f.s * ease.out(u) + 4; c.fillStyle = f.gold ? `rgba(255,224,140,${1 - u})` : `rgba(250,244,226,${1 - u})`; c.beginPath(); for (let q = 0; q < 16; q++) { const a = f.r + q / 16 * 6.2832, rr = q & 1 ? r * .38 : r; q ? c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : c.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } c.fill(); }
+    else if (f.k === 'dust') { c.fillStyle = `rgba(30,24,20,${.45 * (1 - u)})`; c.beginPath(); for (let q = -3; q <= 3; q++) E(x + q * Sc(22) * f.s * (.5 + u), y - Sc(10) * u * (4 - Math.abs(q)), Sc(16) * f.s * (.4 + u), Sc(10) * f.s * (.4 + u)); c.fill(); }
+    else { c.strokeStyle = `rgba(250,244,226,${.6 * (1 - u)})`; c.lineWidth = 2; c.beginPath(); E(x, y, Sc(90) * f.s * (.3 + u), Sc(40) * f.s * (.3 + u)); c.stroke(); }
+  }
+}
+function flyLayer(dt) {
   for (let k = flyers.length - 1; k >= 0; k--) {
     const f = flyers[k]; f.t += dt;
-    const v = people[f.id], POP = .3, HOLD = f.big ? 1.1 : .8, FLY = .45;
+    const v = people[f.id], POP = .3, HOLD = f.big ? 1.1 : .7, FLY = .45;
     if (f.t >= HOLD + FLY) { land(f); flyers.splice(k, 1); continue; }
     const bx = v ? (f.big ? f.x0 : v.x) : 0, by = v ? (f.big ? f.y0 : v.y) : 0;
-    let x = clamp(X(bx), 60, W - 60), y = Y(by - hOf(v ? v.look : 'tophat') * SZ) - 26, s = (wide ? 1 : .9) * (f.big ? 1.5 : .95 + .3 * Math.min(1, f.e)), r = f.r;
+    let x = clamp(X(bx), 50, W - 50), y = Y(by - hOf(v ? v.look : 'tophat') * SZ) - 22, s = (wide ? 1 : .8) * (f.big ? 1.45 : .9 + .3 * Math.min(1, f.e)), r = f.r;
     if (f.t < POP) s *= ease.back(f.t / POP); else if (f.t > HOLD) { const u = ease.in(clamp((f.t - HOLD) / FLY, 0, 1)); x = lerp(x, plate.left + plate.width / 2, u); y = lerp(y, plate.top + plate.height / 2, u) - Math.sin(u * Math.PI) * 60; s = lerp(s, .35, u); r *= 1 - u; }
     c.save(); c.translate(x, y); c.rotate(r); c.scale(s, s);
     c.font = '17px Limelight, Georgia, serif'; const pw = c.measureText(f.w).width + 20, ph = 28;
     c.fillStyle = INK; c.fillRect(-pw / 2, -ph / 2, pw, ph); c.strokeStyle = 'rgba(244,234,210,.9)'; c.lineWidth = 1.2; c.strokeRect(-pw / 2 + 3, -ph / 2 + 3, pw - 6, ph - 6);
     c.fillStyle = '#f4ead2'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(f.w, 0, 1.5);
-    if (f.t < HOLD) { const tx = '+' + fmt(f.v); c.font = '12px "IM Fell English SC", Georgia, serif'; const tw = c.measureText(tx).width + 12; c.fillStyle = INK; c.fillRect(-tw / 2, ph / 2, tw, 16); c.fillStyle = '#f4ead2'; c.fillText(tx, 0, ph / 2 + 8.5); }
+    if (f.t < HOLD && f.v >= .5) { const tx = '+' + fmt(f.v); c.font = '12px "IM Fell English SC", Georgia, serif'; const tw = c.measureText(tx).width + 12; c.fillStyle = INK; c.fillRect(-tw / 2, ph / 2, tw, 16); c.fillStyle = '#f4ead2'; c.fillText(tx, 0, ph / 2 + 8.5); }
     c.restore();
   }
 }
-// the house's own tricks: a slammed door across the middle of a floor, the doorways you can slam, the imps
+// how to play, in the house's own hand, until it has been done: tear something loose, sweep it into someone, they run
+function teach() {
+  const sc = wide ? 1 : .82, bob = Math.sin(now * 5) * 6, G = S.g;
+  if (S.reel === 0 && S.night <= 2 && !lesson.grab && !G.on) {
+    const t = S.th[1], v = tv[1]; if (v) { manicule(X(v.x) - 40 * sc + bob, Y(v.y), sc); tag('HOLD YOUR FINGER HERE', X(v.x), Y(v.y) - 54 * sc, sc); }
+  } else if (S.reel === 0 && S.night <= 3 && lesson.grab && !lesson.hit && G.on) {
+    const p = S.people.find(q => q.st === 'in' && people[q.id] && !people[q.id].out); if (p) { const v = people[p.id]; tag('NOW SWEEP IT INTO ' + SHORT[p.id].toUpperCase(), X(v.x), Y(v.y - hOf(v.look) * SZ) - 40 * sc, sc); manicule(X(v.x) - 30 * sc + bob, Y(v.y - 150), sc); }
+  } else if (S.reel === 0 && S.night <= 3 && lesson.hit && !lesson.panic) {
+    const p = S.people.filter(q => q.st === 'in').sort((a, b) => b.fear / CORE.nerveOf(b) - a.fear / CORE.nerveOf(a))[0];
+    if (p && p.fear > 0 && people[p.id]) { const v = people[p.id]; tag('AGAIN — TILL THEY PANIC', X(v.x), Y(v.y - hOf(v.look) * SZ) - 40 * sc, sc); }
+  }
+  if (S.outs < 3 && S.reel === 0) {
+    tag('THE DOOR', X(-20), Y(-250) - 30 * sc, sc, 14);
+    const r = S.people.find(q => q.panic && q.st === 'in'); if (r && people[r.id] && !lesson.out) { const v = people[r.id]; tag('PANIC! THEY RUN FOR THE DOOR', X(v.x), Y(v.y - hOf(v.look) * SZ) - 40 * sc, sc); }
+  }
+  // the professor is not afraid of small things: say so over him, until the whirl can lift a chair
+  if (S.reel === 1 && CORE.gripOf(S) < 1 && lesson.scoff) { const v = people.prof, p = byP('prof'); if (v && p && p.st === 'in') tag('TOO SMALL TO FRIGHTEN HIM', X(v.x), Y(v.y - hOf('prof') * SZ) - 36 * sc, sc); }
+}
+// the doorway in the middle of each floor slams shut when the whirl goes by, and swings open again
 function doors() {
   for (let f = 0; f < 3; f++) {
-    slams[f] += 1 / 60;
-    if (S.slam[f] > 0) { const sh = slams[f] < .12 && !K.reduced ? (Math.random() - .5) * 10 : 0; fill(INK, () => rect(492 + sh, floorY(f) - 236, 16, 236)); }
-    else if (S.phase === 'night' && CORE.has(S, 'slam') && !(S.cd.slam[f] > 0) && !S.end) { c.save(); c.setLineDash([Sc(12), Sc(10)]); line(`rgba(250,246,232,${.45 + .35 * Math.sin(now * 4 + f)})`, 5, () => c.rect(X(486), Y(floorY(f) - 236), Sc(28), Sc(236))); c.restore(); }
+    const t = slams[f]; if (t > 1.6) continue;
+    const shut = t < .12 ? ease.in(t / .12) : t < 1 ? 1 : 1 - ease.inOut((t - 1) / .6), w = lerp(120, 14, shut), jig = t < .3 && FX() ? Math.sin(t * 90) * 3 * (1 - t / .3) : 0;
+    fill(INK, () => { rect(500 + jig, floorY(f) - 236, w * (t < 1 ? 1 : 1), 228); });
+    if (w > 30) fill(LACE, () => { ell(500 + w * .8 + jig, floorY(f) - 116, 4, 4); });
   }
 }
+// an imp: a little black devil that hops out of the wallpaper beside what it throws
 function impsDraw(dt) {
   for (let k = imps.length - 1; k >= 0; k--) {
-    const m = imps[k]; m.t += dt; if (m.t > 1.4) { imps.splice(k, 1); continue; }
-    const f = m.room >> 1, x0 = (m.room & 1) * 500;
-    for (let q = 0; q < 3; q++) {
-      const u = (m.t * 1.6 + q * .3) % 1, x = x0 + 60 + hash(q, m.s) * 380 + Math.sin(m.t * 9 + q) * 30, y = floorY(f) - 40 - Math.abs(Math.sin(u * Math.PI)) * 120;
-      fill(INK, () => { ell(x, y, 20, 24); poly([[x - 14, y - 18], [x - 20, y - 46], [x - 4, y - 22]]); poly([[x + 14, y - 18], [x + 20, y - 46], [x + 4, y - 22]]); });
-      line(INK, 4, () => { c.moveTo(X(x + 16), Y(y + 8)); c.quadraticCurveTo(X(x + 50), Y(y + 20), X(x + 44), Y(y - 14)); });
-      fill('#f4ead2', () => { ell(x - 7, y - 4, 3.5, 4.5); ell(x + 7, y - 4, 3.5, 4.5); });
-    }
+    const m = imps[k]; m.t += dt; if (m.t > .9) { imps.splice(k, 1); continue; }
+    const t = S.th[m.ti]; if (!t) continue;
+    const u = Math.sin(clamp(m.t / .9, 0, 1) * Math.PI), sl = CORE.slotXY(m.ti), x = sl.x - 30, y = sl.y - 30 - u * 40;
+    c.save(); c.globalAlpha = Math.min(1, u * 2);
+    fill(INK, () => { ell(x, y, 18, 22); poly([[x - 12, y - 16], [x - 18, y - 44], [x - 2, y - 20]]); poly([[x + 12, y - 16], [x + 18, y - 44], [x + 2, y - 20]]); });
+    line(INK, 4, () => { c.moveTo(X(x + 14), Y(y + 8)); c.quadraticCurveTo(X(x + 46), Y(y + 20), X(x + 40), Y(y - 12)); });
+    fill('#ffd98a', () => { ell(x - 6, y - 4, 3.5, 4.5); ell(x + 6, y - 4, 3.5, 4.5); });
+    c.restore();
   }
 }
 
+
 /* ---------------- draw ---------------- */
+// what a frame costs, by part, when ?fps is on: script time, and with ?fps=flush the raster too (a one-pixel read
+// that makes the GPU finish: only in the test browser, never on a phone, where it stalls everything)
+let CALLS = 0, C0 = 0, PT0 = 0;
+const PARTS = {}, PCALLS = {};
+function part(name) { if (!DIAG.fps) return; if (DIAG.flush) g.getImageData(0, 0, 1, 1); const t = performance.now(); if (name) { PARTS[name] = (PARTS[name] || 0) * .9 + (t - PT0) * .1; PCALLS[name] = CALLS - C0; } PT0 = t; C0 = CALLS; }
+if (DIAG.fps) for (const m of ['drawImage', 'fill', 'stroke', 'fillRect', 'strokeRect', 'fillText', 'strokeText']) { const f = g[m]; g[m] = function () { CALLS++; return f.apply(this, arguments); }; }
+function fpsMeter() {
+  const t = performance.now(), m = fpsMeter; m.n = (m.n || 0) + 1; if (!m.t0) m.t0 = t;
+  if (t - m.t0 > 1000) { const js = Object.values(PARTS).reduce((a, b) => a + b, 0); m.txt = (m.n * 1000 / (t - m.t0)).toFixed(0) + ' fps · frame ' + ((t - m.t0) / m.n).toFixed(0) + ' ms, script ' + js.toFixed(0) + ' ms · ' + CALLS + ' calls · dpr ' + DPR + ' · ' + cv.width + '×' + cv.height + ' · ' + Object.keys(PARTS).map(k => k + ' ' + PARTS[k].toFixed(1) + '/' + PCALLS[k]).join(' '); m.n = 0; m.t0 = t; }
+  let el = $('fpsM'); if (!el) { el = document.createElement('div'); el.id = 'fpsM'; el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:50;pointer-events:none;background:rgba(0,0,0,.8);color:#7dff6a;font:600 12px/1.3 monospace;padding:3px 6px;white-space:normal'; document.body.appendChild(el); }
+  if (m.txt && el.textContent !== m.txt) el.textContent = m.txt;
+}
+function stepShards(dt) {
+  for (const s of shards) if (s.t < s.life) { s.t += dt; s.vy += 2200 * dt; s.x += s.vx * dt; s.y = Math.min(s.fy - 3, s.y + s.vy * dt); s.x = clamp(s.x, 6, HW - 6); if (s.y >= s.fy - 3) { s.vx *= .6; s.vy *= -.25; } }
+}
 function draw(dt) {
-  if (S.phase === 'organ' && !S.finale) { g.setTransform(DPR, 0, 0, DPR, 0, 0); c = g; organ(dt); film(); return; }
+  CALLS = 0; part();
+  if (S.phase === 'organ' && !S.finale) { g.setTransform(DPR, 0, 0, DPR, 0, 0); c = g; organ(dt); film(); part('organ'); if (DIAG.fps) fpsMeter(); return; }
   if (bgDirty) { c = bgc; bgc.setTransform(DPR, 0, 0, DPR, 0, 0); backdrop(); garden(); for (let r = 0; r < 6; r++) room(r); bones(); c = g; bgDirty = false; }
-  const wv = K.reduced ? 0 : (hash(Math.floor(now * 18), 21) - .5) * 1.4 * DPR;
-  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(bg, 0, wv);
-  g.setTransform(DPR, 0, 0, DPR, 0, wv); c = g;
-  for (let i = 0; i < TH.length; i++) thing(i);
+  const wv = FX() && DIAG.film ? (hash(Math.floor(now * 18), 21) - .5) * 1.2 * DPR : 0, sk = FX() && shake > .02 ? shake * 7 * DPR : 0, sx = sk ? (Math.random() - .5) * sk : 0, sy = sk ? (Math.random() - .5) * sk : 0;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(bg, sx, wv + sy);
+  g.setTransform(DPR, 0, 0, DPR, sx / DPR, (wv + sy) / DPR); c = g; part('house');
+  if (DIAG.things) thingsAtRest(); part('rest');
   doors(); impsDraw(dt);
-  for (const p of S.people) person(p);
+  if (DIAG.people) for (const p of S.people) person(p);
+  part('people');
+  if (DIAG.things) { thingsInAir(false); c.fillStyle = INK; c.beginPath(); for (const s of shards) if (s.t < s.life) { const x = X(s.x), y = Y(s.y), r = Sc(s.r); c.moveTo(x - r, y); c.lineTo(x + r * .3, y - r * .8); c.lineTo(x + r, y + .5); c.closePath(); } c.fill(); }
+  part('air');
   if (S.finale) delivery();
-  film();
-  g.setTransform(DPR, 0, 0, DPR, 0, 0);
-  ghostLayer(dt);
+  ghostLayer(dt); if (DIAG.things) thingsInAir(true); flyLayer(dt); part('ghost');
+  g.setTransform(DPR, 0, 0, DPR, 0, 0); c = g;
+  film(); part('film');
   if (S.finale) finaleGlow();
   drawIris();
+  if (DIAG.fps) fpsMeter();
 }
 
-/* ---------------- the film itself: the tint of the hour, grain, scratches, a weave in the gate ---------------- */
-// the tint of the stock: blue for the nights in the house, warm sepia for the cellar between them
-function tint() { return S.phase === 'organ' && !S.finale ? [242, 214, 168] : [134, 162, 214]; }
-let grain = null;
+/* ---------------- the film itself: a grade for the hour, grain, scratches, a weave in the gate ---------------- */
+// the cellar's sepia between nights; at night only a cool breath over the coloured rooms, so their colour survives
+function tint() { return S.phase === 'organ' && !S.finale ? [242, 214, 168] : [222, 228, 246]; }
+let grain = null, vign = null;
 function film() {
+  if (!DIAG.film) return;
   const [r, gg, b] = tint(), w = cv.width, h = cv.height;
   g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
   g.globalCompositeOperation = 'multiply'; g.fillStyle = `rgb(${r},${gg},${b})`; g.fillRect(0, 0, w, h); g.globalCompositeOperation = 'source-over';
-  if (!grain) { grain = document.createElement('canvas'); grain.width = grain.height = 256; const x = grain.getContext('2d'), id = x.createImageData(256, 256); for (let k = 0; k < id.data.length; k += 4) { id.data[k] = id.data[k + 1] = id.data[k + 2] = Math.random() * 255; id.data[k + 3] = 24; } x.putImageData(id, 0, 0); }
-  if (!K.reduced) {
+  if (!grain) { grain = document.createElement('canvas'); grain.width = grain.height = 256; const x = grain.getContext('2d'), id = x.createImageData(256, 256); for (let k = 0; k < id.data.length; k += 4) { id.data[k] = id.data[k + 1] = id.data[k + 2] = Math.random() * 255; id.data[k + 3] = 22; } x.putImageData(id, 0, 0); }
+  if (FX()) {
     const fr = Math.floor(now * 18);
     g.translate((fr * 97) % 256, (fr * 61) % 256); g.fillStyle = g.createPattern(grain, 'repeat'); g.fillRect(-256, -256, w + 512, h + 512); g.setTransform(1, 0, 0, 1, 0, 0);
-    const sc = fr >> 2; if (hash(sc, 7) > .62) { const sy = hash(sc, 10) * .6 * h; g.fillStyle = `rgba(255,255,255,${.08 + hash(sc, 8) * .12})`; g.fillRect(hash(sc, 9) * w, sy, DPR, (.2 + .4 * hash(sc, 11)) * h); }
-    if (hash(fr, 11) > .72) { g.fillStyle = 'rgba(20,16,12,.55)'; g.beginPath(); g.arc(hash(fr, 12) * w, hash(fr, 13) * h, (1.5 + hash(fr, 14) * 3.5) * DPR, 0, 7); g.fill(); }
-    g.fillStyle = `rgba(0,0,0,${.02 + hash(fr, 15) * .05})`; g.fillRect(0, 0, w, h);
+    const sc = fr >> 2; if (hash(sc, 7) > .66) { g.fillStyle = `rgba(255,255,255,${.06 + hash(sc, 8) * .1})`; g.fillRect(hash(sc, 9) * w, hash(sc, 10) * .6 * h, DPR, (.2 + .4 * hash(sc, 11)) * h); }
+    if (hash(fr, 11) > .76) { g.fillStyle = 'rgba(20,16,12,.5)'; g.beginPath(); g.arc(hash(fr, 12) * w, hash(fr, 13) * h, (1.5 + hash(fr, 14) * 3) * DPR, 0, 7); g.fill(); }
   }
-  const fw = filmW * DPR, vg = g.createRadialGradient(fw / 2, h * .45, Math.min(fw, h) * .4, fw / 2, h * .45, Math.max(fw, h) * .78);
-  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.5)'); g.fillStyle = vg; g.fillRect(0, 0, w, h);
+  // the vignette is painted once, small, and stretched
+  if (!vign) { vign = document.createElement('canvas'); vign.width = vign.height = 64; const x = vign.getContext('2d'), vg = x.createRadialGradient(32, 29, 18, 32, 29, 46); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)'); x.fillStyle = vg; x.fillRect(0, 0, 64, 64); }
+  g.drawImage(vign, 0, 0, w, h);
   g.restore();
 }
+
 // the iris: the round black mask old films open and close their scenes with
 const iris = { t: 9, from: 1, to: 1, dur: 1, x: 0, y: 0, r: 0 };
 const irisTo = (from, to, dur, x, y, r) => Object.assign(iris, { t: 0, from, to, dur, x, y, r: r || 0 });
@@ -12830,7 +12934,7 @@ function finaleGlow() {
 function openCrate() {
   if (fin.open >= 0) return;
   CORE.act(S, 'finale', 2); fin.open = 0; sfx.open();
-  const r = crateRect(); setTimeout(() => K.complete({ x: r.x, y: r.y, w: r.w, h: r.h }), 1500);
+  const r = crateRect(); later(1.5, () => K.complete({ x: r.x, y: r.y, w: r.w, h: r.h }));
 }
 
 /* ---------------- intertitles, lines, the cast list ---------------- */
@@ -12867,7 +12971,7 @@ function castList() {
   }
   for (const el of box.children) {
     const grp = el.dataset.id === '*' ? xs : [byP(el.dataset.id)].filter(Boolean); if (!grp.length) continue;
-    const ins = grp.filter(p => p.st === 'in'), e = ins.length ? Math.max(...ins.map(p => clamp(p.fear / CORE.nerveOf(p), 0, 1))) : 0;
+    const ins = grp.filter(p => p.st === 'in'), e = ins.length ? Math.max(...ins.map(p => clamp(p.fear / (CORE.nerveOf(p) * CORE.panicOf(S)), 0, 1))) : 0;
     const left = grp.reduce((a, p) => a + p.res, 0), all = grp.every(p => p.st === 'gone');
     el.querySelector('i').style.width = (e * 100) + '%';
     el.classList.toggle('near', e > .5); el.classList.toggle('edge', !!ins.some(p => p.panic)); el.classList.toggle('gone', all); el.classList.toggle('out', !all && !ins.length && S.phase === 'night');
@@ -12890,7 +12994,7 @@ function cameo(cnv, look) {
    rest are dark. Tap a pipe to read it, BUY to buy it, the button below to haunt the next night. */
 let selPipe = null, selReg = 0, hoverPipe = null;
 const organHits = [];
-const EMB = { reach: 'frost', ecto: 'ghost', glide: 'ghost', grey: 'ghost', drain: 'ghost', slam: 'door', phone: 'phone', chand: 'chand', dawn: 'moon', back: 'door', hearse: 'hearse', window: 'win', fear: 'frost', worth: 'mouth', first: 'frost', chain: 'chain', panic: 'eye', calm: 'eye', imps: 'imp', dread: 'eye' };
+const EMB = { cap: 'cup', reach: 'whirl', ecto: 'ghost', spin: 'whirl', grey: 'ghost', drain: 'ghost', grip: 'chand', slam: 'door', dawn: 'moon', back: 'door', window: 'win', hearse: 'hearse', fear: 'frost', worth: 'mouth', fling: 'cup', heir: 'chand', china: 'cup', panic: 'eye', calm: 'eye', imps: 'imp', stamp: 'chain', dread: 'eye' };
 function emblem(k, x, y, r) {
   c.beginPath(); const e = EMB[k] || 'eye';
   if (e === 'door') { c.moveTo(x - r * .5, y + r); c.lineTo(x - r * .5, y - r * .3); c.quadraticCurveTo(x, y - r, x + r * .5, y - r * .3); c.lineTo(x + r * .5, y + r); c.closePath(); }
@@ -12901,6 +13005,8 @@ function emblem(k, x, y, r) {
   else if (e === 'moon') { c.arc(x, y, r * .8, .6, 5.7); c.quadraticCurveTo(x + r * .1, y, x + r * .66, y + r * .45); }
   else if (e === 'hearse') { c.rect(x - r, y - r * .4, r * 2, r * .9); c.moveTo(x - r * .5 + r * .3, y + r * .6); c.arc(x - r * .5, y + r * .6, r * .3, 0, 6.2832); c.moveTo(x + r * .5 + r * .3, y + r * .6); c.arc(x + r * .5, y + r * .6, r * .3, 0, 6.2832); }
   else if (e === 'win') { c.rect(x - r * .7, y - r, r * 1.4, r * 2); c.fill(); c.fillStyle = '#d9cdb0'; c.fillRect(x - r * .55, y - r * .85, r * .45, r * .75); c.fillRect(x + r * .1, y - r * .85, r * .45, r * .75); c.fillRect(x - r * .55, y + r * .05, r * .45, r * .75); c.fillRect(x + r * .1, y + r * .05, r * .45, r * .75); return; }
+  else if (e === 'cup') { c.moveTo(x - r * .8, y - r * .5); c.lineTo(x + r * .5, y - r * .5); c.quadraticCurveTo(x + r * .5, y + r * .6, x - r * .15, y + r * .6); c.quadraticCurveTo(x - r * .8, y + r * .6, x - r * .8, y - r * .5); c.moveTo(x + r * .95, y - r * .05); c.ellipse(x + r * .62, y - r * .05, r * .33, r * .3, 0, 0, 6.2832); c.moveTo(x + r * .45, y - r * .05); c.ellipse(x + r * .62, y - r * .05, r * .17, r * .14, 0, 0, 6.2832, true); c.moveTo(x + r, y + r * .78); c.ellipse(x - r * .15, y + r * .78, r * 1.15, r * .16, 0, 0, 6.2832); }
+  else if (e === 'whirl') { c.moveTo(x, y); for (let q = 0; q <= 30; q++) { const a = q / 30 * 12, rr = r * q / 30; c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr * .7); } c.lineWidth = Math.max(2, r * .2); c.stroke(); return; }
   else if (e === 'mouth') { c.ellipse(x, y, r * .55, r * .8, 0, 0, 6.2832); }
   else if (e === 'chain') { c.ellipse(x - r * .35, y, r * .45, r * .3, 0, 0, 6.2832); c.moveTo(x + r * .8, y); c.ellipse(x + r * .35, y, r * .45, r * .3, 0, 0, 6.2832); c.lineWidth = Math.max(2, r * .22); c.stroke(); return; }
   else if (e === 'imp') { c.ellipse(x, y + r * .1, r * .6, r * .7, 0, 0, 6.2832); c.moveTo(x - r * .4, y - r * .4); c.lineTo(x - r * .6, y - r); c.lineTo(x - r * .1, y - r * .55); c.moveTo(x + r * .4, y - r * .4); c.lineTo(x + r * .6, y - r); c.lineTo(x + r * .1, y - r * .55); }
@@ -12988,42 +13094,35 @@ function organTap(px, py) {
   if (h.k === 'night') { if (CORE.act(S, 'night')) { selPipe = null; } }
 }
 
+
 /* ---------------- hands ----------------
-   Press on the house and the ghost is there; drag and it glides after the finger; let go and it fades. A short tap on
-   something the house can do (a doorway to slam, the telephone, the chandelier) does that instead. */
+   Press on the house and the ghost is there; drag and the whirl glides after the finger; let go and what it carries
+   falls. On a touch screen the ghost floats a little above the fingertip, so the finger never covers what it does. */
 let press = null, swipe = null;
-function trickAt(px, py) {
-  const w = toWorld(px, py), pad = 26 / view.s, inR = (x, y, ww, hh) => w.x > x - pad && w.x < x + ww + pad && w.y > y - pad && w.y < y + hh + pad;
-  if (trickReady('phone')) { const a = anchor(PHONE); if (inR(a.x - 50, a.y - 200, 100, 200)) return ['phone']; }
-  if (trickReady('chand')) { const a = anchor(CHAND); if (inR(a.x - 96, a.y - FH + 24, 192, 186)) return ['chand']; }
-  if (CORE.has(S, 'slam') && S.phase === 'night') for (let f = 0; f < 3; f++) if (!(S.cd.slam[f] > 0) && inR(486, floorY(f) - 236, 28, 236)) return ['slam', f];
-  return null;
-}
-function ghostTo(px, py) { const w = toWorld(px, py); if (CORE.act(S, 'ghost', w.x, w.y)) { if (!taught) taught = 1; idle = 0; } }
+const LIFT = () => touch ? 58 : 0;
+function ghostTo(px, py) { const w = toWorld(px, py - LIFT()); CORE.act(S, 'ghost', w.x, w.y); }
 cv.addEventListener('pointerdown', e => {
   K.unlock(); if (cardUp || !S) return;
+  touch = e.pointerType === 'touch';
   if (S.finale) { const r = crateRect(), pad = 24; if (S.finale === 1 && fin.t > 6.2 && e.clientX > r.x - pad && e.clientX < r.x + r.w + pad && e.clientY > r.y - pad && e.clientY < r.y + r.h + pad) openCrate(); return; }
   if (S.phase === 'organ') { swipe = { x: e.clientX, id: e.pointerId }; return organTap(e.clientX, e.clientY); }
-  const trick = trickAt(e.clientX, e.clientY);
-  press = { id: e.pointerId, x: e.clientX, y: e.clientY, t: now, trick, held: !trick };
+  if (S.phase !== 'night' || zoom && zoom.freeze) return;
+  press = { id: e.pointerId };
   try { cv.setPointerCapture(e.pointerId); } catch (er) {}
-  if (!trick) { if (S.ecto <= 0) sfx.nope(); ghostTo(e.clientX, e.clientY); }
+  if (S.ecto <= 0) sfx.nope(); ghostTo(e.clientX, e.clientY);
 });
 cv.addEventListener('pointermove', e => {
   if (!press || press.id !== e.pointerId || !S || S.phase !== 'night') return;
-  press.x2 = e.clientX; press.y2 = e.clientY;
-  if (!press.held && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 12) press.held = true;
-  if (press.held) ghostTo(e.clientX, e.clientY);
+  ghostTo(e.clientX, e.clientY);
 });
 const release = e => {
   if (swipe && swipe.id === e.pointerId) { const dx = e.clientX - swipe.x; swipe = null; if (!wide && Math.abs(dx) > 60 && S.phase === 'organ') { selReg = (selReg + (dx < 0 ? 1 : 3)) % 4; const list = CORE.PIPES.filter(p => p.reg === selReg); selPipe = (list.find(p => CORE.open(S, p)) || list[list.length - 1]).id; } }
   if (!press || press.id !== e.pointerId) return;
-  if (!press.held && press.trick && S.phase === 'night' && !CORE.act(S, 'tap', ...press.trick)) sfx.nope();
   CORE.act(S, 'lift'); press = null;
 };
 cv.addEventListener('pointerup', release); cv.addEventListener('pointercancel', release);
 
-/* ---------------- sound: an upright piano in the pit, and the projector ---------------- */
+/* ---------------- sound: an upright piano in the pit, the projector, and the house coming apart ---------------- */
 const A = K.audio;
 let nbuf = null;
 function note(m, at, vol = .12, dur = 1.6, dest) {
@@ -13037,28 +13136,58 @@ function hiss(dur, type, f, q, vol, f2, at = 0) {
   if (!nbuf) { nbuf = x.createBuffer(1, x.sampleRate, x.sampleRate); const d = nbuf.getChannelData(0); for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1; }
   const t = x.currentTime + at, s = x.createBufferSource(), fl = x.createBiquadFilter(), gn = x.createGain();
   s.buffer = nbuf; fl.type = type; fl.frequency.setValueAtTime(f, t); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t + dur); fl.Q.value = q;
-  gn.gain.setValueAtTime(0, t); gn.gain.linearRampToValueAtTime(vol, t + .01); gn.gain.exponentialRampToValueAtTime(.0008, t + dur);
+  gn.gain.setValueAtTime(0, t); gn.gain.linearRampToValueAtTime(vol, t + .006); gn.gain.exponentialRampToValueAtTime(.0008, t + dur);
   s.connect(fl); fl.connect(gn); gn.connect(A.sfx); s.start(t, Math.random() * .5); s.stop(t + dur + .02);
 }
+// a struck thing: a short ring at a pitch of its own, falling as the things get heavier
+function ping(f, at, vol, dur) {
+  if (!A || A.ctx.state !== 'running') return; const x = A.ctx, o = x.createOscillator(), gn = x.createGain();
+  o.type = 'triangle'; o.frequency.setValueAtTime(f, at); o.frequency.exponentialRampToValueAtTime(f * .97, at + dur);
+  gn.gain.setValueAtTime(0, at); gn.gain.linearRampToValueAtTime(vol, at + .002); gn.gain.exponentialRampToValueAtTime(.0005, at + dur); o.connect(gn); gn.connect(A.sfx); o.start(at); o.stop(at + dur + .02);
+}
 const T0 = () => A && A.ctx.state === 'running' ? A.ctx.currentTime : null;
+let hitT = 0, hitN = 0;
 const sfx = {
   // a little stab on the keys for a scream: higher and louder the nearer they are to running
-  yelp(e) { const t = T0(); if (t == null) return; const b = 60 + Math.round(e * 12); [0, 3, 7].forEach((d, k) => note(b + d, t + k * .012, .045, .5, A.sfx)); },
-  sting(n) { const t = T0(); if (t != null) [72, 75, 79, 84].slice(0, 2 + Math.min(n, 2)).forEach((m, k) => note(m, t + k * .012, .07, .8, A.sfx)); },
-  plink(n) { const t = T0(); if (t != null) note(84 + [0, 2, 4, 7, 9, 12][Math.min(n, 5)], t, .035, .5, A.sfx); },
+  yelp(e) { const t = T0(); if (t == null) return; const b = 60 + Math.round(e * 12); [0, 3, 7].forEach((d, k) => note(b + d, t + k * .012, .04, .5, A.sfx)); },
+  sting(n) { const t = T0(); if (t != null) [72, 75, 79, 84].slice(0, 2 + Math.min(n, 2)).forEach((m, k) => note(m, t + k * .012, .06, .8, A.sfx)); },
+  plink(n) { const t = T0(); if (t != null) note(84 + [0, 2, 4, 7, 9, 12][Math.min(n, 5)], t, .03, .5, A.sfx); },
   nope() { const t = T0(); if (t != null) note(40, t, .06, .3, A.sfx); },
   bound() { const t = T0(); if (t != null) [52, 55, 58].forEach((m, k) => note(m, t + k * .1, .08, .8, A.sfx)); },
-  flee(chain) { const t = T0(); if (t == null) return; for (let k = 0; k < 10; k++) note(84 - k * 2 + Math.min(chain || 0, 6), t + k * .04, .05, .2, A.sfx); hiss(.6, 'bandpass', 1500, 2, .2, 400); },
+  flee(chain) { const t = T0(); if (t == null) return; for (let k = 0; k < 10; k++) note(84 - k * 2 + Math.min(chain || 0, 6), t + k * .04, .045, .2, A.sfx); hiss(.6, 'bandpass', 1500, 2, .16, 400); },
   // the organ: every pipe its own note, higher the further out it stands
-  pipe(p, soft) { const t = T0(); if (t == null || !p) return; const m = 43 + [0, 7, 12, 4][p.reg] + [0, 2, 4, 5, 7, 9, 11, 12, 14][p.n % 9]; [0, 12, 19].forEach((d, k) => note(m + d, t, soft ? .025 : .06 / (k + 1), soft ? .6 : 2.4, A.sfx)); },
-  slam() { hiss(.25, 'lowpass', 300, .8, .6); const t = T0(); if (t != null) note(31, t, .12, .5, A.sfx); },
-  ring() { const t = T0(); if (t != null) for (let k = 0; k < 16; k++) note(k % 2 ? 91 : 88, t + k * .05 + (k >= 8 ? .35 : 0), .03, .08, A.sfx); },
-  crash() { hiss(1.2, 'highpass', 3000, .7, .35, 900); const t = T0(); if (t != null) for (let k = 0; k < 9; k++) note(96 - k * 3, t + k * .05, .03, .4, A.sfx); },
-  imp() { const t = T0(); if (t != null) [79, 83].forEach((m, k) => note(m, t + k * .07, .025, .2, A.sfx)); },
+  pipe(p, soft) { const t = T0(); if (t == null || !p) return; const m = 43 + [0, 7, 12, 4][p.reg] + [0, 2, 4, 5, 7, 9, 11, 12, 14, 16][p.n % 10]; [0, 12, 19].forEach((d, k) => note(m + d, t, soft ? .025 : .06 / (k + 1), soft ? .6 : 2.4, A.sfx)); },
+  slam() { hiss(.3, 'lowpass', 260, .8, .7); const t = T0(); if (t != null) note(31, t, .12, .5, A.sfx); },
+  imp() { const t = T0(); if (t != null) [79, 83].forEach((m, k) => note(m, t + k * .07, .022, .2, A.sfx)); },
   fade() { const t = T0(); if (t != null) [64, 60, 57, 52].forEach((m, k) => note(m, t + k * .14, .05, 1, A.sfx)); },
   night() { const t = T0(); if (t != null) [45, 52, 57, 60].forEach((m, k) => note(m, t + k * .09, .05, 1.6, A.sfx)); },
-  open() { const t = T0(); if (t != null) [57, 60, 64, 69, 72, 76].forEach((m, k) => note(m, t + k * .14, .08, 2, A.sfx)); }
+  open() { const t = T0(); if (t != null) [57, 60, 64, 69, 72, 76].forEach((m, k) => note(m, t + k * .14, .08, 2, A.sfx)); },
+  // torn loose: a rising breath of air, and a tick for something light
+  grab(m) { hiss(.22, 'bandpass', 600, 1.2, .07, 2400); const t = T0(); if (t != null && m < 2) ping(1800 + Math.random() * 600, t + .05, .025, .08); },
+  // let go: the whirl breaks up with a rush
+  whoosh(n) { hiss(.5, 'bandpass', 2600, .8, .1 + Math.min(.12, n * .015), 400); },
+  // a hit: a thump in the body, porcelain rings, gilt rings brighter; many hits at once are thinned out
+  hit(m, fragile, gold) {
+    const t = T0(); if (t == null) return; if (t - hitT < .05) { if (++hitN > 3) return; } else { hitT = t; hitN = 0; }
+    hiss(.08 + Math.min(.25, m * .02), 'lowpass', 900 / Math.sqrt(m) + 150, 1, Math.min(.5, .14 + m * .03));
+    if (fragile) ping(2200 + Math.random() * 900, t, .04, .18); else if (m < 3) ping(700 + Math.random() * 300, t, .03, .1);
+    if (gold) [88, 92, 95].forEach((d, k) => note(d, t + k * .03, .025, .5, A.sfx));
+    if (m >= 8) note(28 + Math.round(Math.random() * 4), t, .14, .9, A.sfx);
+  },
+  // china breaking: a bright crack and a scatter of tinkles
+  smash(m) { const t = T0(); if (t == null) return; hiss(.35, 'highpass', 2800, .7, .3, 1400); for (let k = 0; k < 6; k++) ping(2400 + Math.random() * 2600, t + .02 + Math.random() * .25, .02, .12); if (m > 8) hiss(1.2, 'highpass', 4000, .5, .25, 900); },
+  // a heavy landing: a low thud, more of the floor in it the heavier it was
+  thud(m) { const t = T0(); if (t == null) return; hiss(.2 + Math.min(.5, m * .03), 'lowpass', 220, 1, Math.min(.7, .2 + m * .04)); if (m >= 3) note(26 + Math.round(8 / Math.sqrt(m)), t, Math.min(.16, .05 + m * .006), .7, A.sfx); }
 };
+// the whirl's own wind: a band of noise that swells with what it carries
+const wind = (() => {
+  let src = null, gn = null, bp = null;
+  return { set(v) {
+    if (!A || A.ctx.state !== 'running') return; const x = A.ctx;
+    if (!src) { const b = x.createBuffer(1, x.sampleRate * 2, x.sampleRate), d = b.getChannelData(0); for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1; src = x.createBufferSource(); src.buffer = b; src.loop = true; bp = x.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4; gn = x.createGain(); gn.gain.value = 0; src.connect(bp); bp.connect(gn); gn.connect(A.sfx); src.start(); }
+    gn.gain.setTargetAtTime(v ? .03 + Math.min(.09, v * .004) : 0, x.currentTime, .12); bp.frequency.setTargetAtTime(500 + Math.min(1600, v * 60) + 200 * Math.sin(now * 3), x.currentTime, .1);
+  } };
+})();
 // the accompanist: a slow minor waltz, and agitato when someone is near the edge
 const music = (() => {
   let on = false, beat = 0, next = 0, timer = 0, rattle = null;
@@ -13085,11 +13214,6 @@ const music = (() => {
 
 /* ---------------- the loop ---------------- */
 let uiT = 0, progT = 0, moonU = 0;
-function rattle() {
-  const G = S.g; if (S.phase !== 'night' || !(G.on || G.fade > 0)) return;
-  const f = CORE.floorAt(G.y), r = CORE.reachOf(S);
-  for (let i = 0; i < TH.length; i++) { const a = anchor(i); if ((TH[i].room >> 1) === f && Math.abs(a.x - G.x) < r && tfx[i].t > 1.4) tfx[i].t = 0; }
-}
 function bill() {
   const R = CORE.REELS[S.reel], night = S.phase === 'night';
   $('billT').textContent = (night ? 'NIGHT ' + roman(S.rn || S.night) + ' · ' : '') + R.title.toUpperCase();
@@ -13100,42 +13224,113 @@ function bill() {
   const em = CORE.ectoMax(S); $('ecto').firstChild.style.width = (100 * S.ecto / em) + '%';
   $('ectoT').textContent = 'ectoplasm · ' + Math.ceil(S.ecto) + ' s'; $('ectoP').classList.toggle('low', night && S.ecto < em * .25);
 }
+let keep = null;
 K.world({
   start(saved) {
-    S = saved && saved.v === 2 && saved.people ? saved : CORE.init(K.n * 1000 + 13);
+    S = saved && saved.v === 3 && saved.people && saved.th ? saved : CORE.init(K.n * 1000 + 13);
+    if (K.slot === 'dev' && QS.get('scene')) { const T = scene(QS.get('scene')); if (T) { S = T; keep = T.ev; } }
     resize(); addEventListener('resize', resize);
-    document.fonts && document.fonts.ready.then(() => { bgDirty = true; plate = $('screams').getBoundingClientRect(); });
+    document.fonts && document.fonts.ready.then(() => { bgDirty = true; sprites = {}; plate = $('screams').getBoundingClientRect(); });
     shown = S.$;
-    if (!saved) { onReel(0); S.ev.length = 0; } else S.ev.length = 0;
+    if (!saved && !keep) { onReel(0); S.ev.length = 0; } else { S.ev = keep || []; keep = null; }
     if (S.finale) { fin.t = 9; document.body.classList.add('end'); camera(); }
     // opened, but the trip into the next box never happened: open it again and go
-    if (S.finale >= 2) { fin.open = 0; setTimeout(() => { const r = crateRect(); K.complete({ x: r.x, y: r.y, w: r.w, h: r.h }); }, 1500); }
+    if (S.finale >= 2) { fin.open = 0; later(1.5, () => { const r = crateRect(); K.complete({ x: r.x, y: r.y, w: r.w, h: r.h }); }); }
     music.start();
   },
   save() { return S; },
-  pause() { music.stop(); if (S && press) { CORE.act(S, 'lift'); press = null; } }, resume() { music.start(); }
+  pause() { music.stop(); wind.set(0); if (S && press) { CORE.act(S, 'lift'); press = null; } }, resume() { music.start(); }
 });
+// things that wait in the game's own time, not the wall clock's
+const waits = [];
+function later(s, fn) { waits.push({ t: s, fn }); }
+
+/* ================= for a session at work on the box: scenes, close-ups, a frame meter =================
+   ?world=guests&scene=<name> plays the eager bot (?bot=casual, ?seed=n) until the moment comes and starts there:
+   first, night<n>, organ<n>, reel<n>, grip<n>, fling, grey, imps, slam, piano, crash, panic, crowd, finale, end.
+   A name is looked up whole before a digit is split off; only moments keep their events. */
+const SCENES = {
+  night: (S, n) => S.phase === 'night' && S.night === n && S.nt > 2, organ: (S, n) => S.phase === 'organ' && S.night === n,
+  reel: (S, n) => S.reel === n - 1 && S.phase === 'night' && S.nt > 3, grip: (S, n) => CORE.gripOf(S) >= n && S.phase === 'night' && S.nt > 4,
+  fling: (S, n, ev) => CORE.has(S, 'fling') && ev.some(e => e.k === 'let' && e.n >= 4), grey: S => S.grey && S.nt > 5, imps: (S, n, ev) => ev.some(e => e.k === 'imp'),
+  slam: (S, n, ev) => ev.some(e => e.k === 'slam'), piano: (S, n, ev) => ev.some(e => e.k === 'hit' && S.th[e.ti].k === 'piano'),
+  crash: (S, n, ev) => ev.some(e => e.k === 'land' && e.m >= 8), panic: (S, n, ev) => ev.some(e => e.k === 'panic'),
+  crowd: S => S.reel === 4 && S.phase === 'night' && S.nt > 6 && S.people.filter(p => p.st === 'in').length > 18,
+  finale: S => S.finale === 1, end: (S, n, ev) => S.finale === 1 && ev.some(e => e.k === 'finale')
+};
+const MOMENT = /^(fling|imps|slam|piano|crash|panic|end)$/;
+function scene(name) {
+  const m = /^([a-z]+?)(\d*)$/.exec(name), whole = SCENES[name], f = whole || (m && SCENES[m[1]]); if (!f) { console.warn('[guests] no scene ' + name); return null; }
+  const seed = +QS.get('seed') || 1, T = CORE.init(seed), bot = CORE.bots[QS.get('bot') || 'eager'], mem = { seed: (seed * 7919 + 17) >>> 0 }, n = whole ? 1 : +m[2] || 1, k = whole ? name : m[1];
+  if (k === 'first') return null;
+  let t = 0, ev = [];
+  while (!f(T, n, ev) && t < 150 * 60 && !CORE.done(T)) { T.ev.length = 0; bot(T, mem, .1); CORE.step(T, .1); ev = T.ev.slice(); t += .1; }
+  console.log('[guests] scene ' + name + ' after ' + (t / 60).toFixed(1) + ' min of the bot');
+  T.ev = MOMENT.test(k) ? ev.filter(e => e.k !== 'buy' && e.k !== 'night' && e.k !== 'dawn' && e.k !== 'reel') : []; return T;
+}
+// K.debug.look(x, y, scale, { freeze }): hold the camera on a point of the house (x, y in house units, scale pixels a
+// unit); x may name a thing: 'ghost', 'item:<kind>' (the first of that kind), 'person:<id>', 'door', 'crate'. freeze
+// holds the rules still. look() lets go.
+let zoom = null;
+function lookAt(x, y) {
+  if (typeof x !== 'string') return [x, y];
+  if (x === 'ghost') return [S.g.x, S.g.y];
+  if (x.startsWith('item:')) { const i = S.th.findIndex(t => t.k === x.slice(5)); if (i >= 0) { const v = tv[i] || S.th[i]; return [v.x, v.y]; } }
+  if (x.startsWith('person:')) { const v = people[x.slice(7)]; if (v) return [v.x, v.y - 160]; }
+  if (x === 'door') return [-40, -150];
+  if (x === 'crate') return [CR.x + CR.w / 2, -CR.h / 2];
+  return [500, -630];
+}
+function look(x, y, s = 1, o = {}) {
+  if (x == null) { zoom = null; camera(); bgDirty = true; return; }
+  const [lx, ly] = lookAt(x, y); zoom = { x: lx, y: ly, s, freeze: !!o.freeze }; camera(); bgDirty = true; sprites = {};
+}
+// every object worth a close look, as [name, minutes, x, y, scale, options] for util/cmv_props.mjs
+const PROPS = (() => {
+  const L = [], fr = o => Object.assign({ freeze: 1 }, o);
+  L.push(['the house, first night', 0, 500, -700, .5, fr({ scene: 'night1' })]);
+  L.push(['the parlour: stair, fireplace, piano', 0, 250, -200, 1.5, fr({ scene: 'night1' })]);
+  L.push(['the kitchen: range, table, jars', 0, 750, -200, 1.5, fr({ scene: 'night1' })]);
+  L.push(['the dining room and its chandelier', 0, 250, -620, 1.5, fr({ scene: 'night1' })]);
+  L.push(['the study: bookcase, armour, desk', 0, 750, -620, 1.5, fr({ scene: 'night1' })]);
+  L.push(['the bedroom: wardrobe, bed', 0, 250, -1040, 1.5, fr({ scene: 'night1' })]);
+  L.push(['the nursery: cot, dolls, horse', 0, 750, -1040, 1.5, fr({ scene: 'night1' })]);
+  L.push(['the whirl, carrying crockery', 0, 'ghost', 0, 2, fr({ scene: 'night3' })]);
+  L.push(['the whirl, carrying chairs', 0, 'ghost', 0, 1.6, fr({ scene: 'grip1' })]);
+  L.push(['the whirl, a clock and armour in it', 0, 'ghost', 0, 1.2, fr({ scene: 'grip2' })]);
+  L.push(['the piano in the whirl', 0, 'ghost', 0, 1, fr({ scene: 'piano' })]);
+  L.push(['a hit, the paper star', 0, 'ghost', 0, 2, fr({ scene: 'panic' })]);
+  L.push(['china smashed on the floor', 0, 'ghost', 0, 2, fr({ scene: 'crash' })]);
+  L.push(['the grey lady', 0, 'ghost', 0, 1.2, fr({ scene: 'grey' })]);
+  L.push(['an imp throwing', 0, 'ghost', 0, 1.2, fr({ scene: 'imps' })]);
+  L.push(['a door slamming', 0, 'ghost', 0, 1.4, fr({ scene: 'slam' })]);
+  L.push(['the front door, a panic', 0, 'door', 0, 2, fr({ scene: 'panic' })]);
+  L.push(['the crowd of the last reel', 0, 500, -630, .55, fr({ scene: 'crowd' })]);
+  L.push(['the crate after dark', 0, 'crate', 0, 1.6, { scene: 'finale' }]);
+  return L;
+})();
 K.debug = {
   state: () => S,
   give: v => { S.$ += v; S.earned += v; },
   // screen position of a point in the house: x across, f the floor, up how far above its floor
   toScreen: (x, f, up = 160) => [X(x), Y(floorY(f) - up)],
   people: () => S.people.map(p => { const v = people[p.id]; return v && { id: p.id, x: X(v.x), y: Y(v.y), out: v.out }; }),
+  things: () => S.th.map((t, i) => { const v = tv[i] || t; return { k: t.k, st: t.st, x: X(v.x), y: Y(v.y) }; }),
   organ: () => organHits.map(h => Object.assign({}, h)),
   box: () => S.finale ? crateRect() : null,
-  card: () => cardUp
+  card: () => cardUp,
+  look, props: PROPS, scenes: Object.keys(SCENES), snap: () => cv.toDataURL('image/png'),
+  parts: () => Object.assign({ calls: CALLS }, PARTS), pcalls: () => Object.assign({}, PCALLS)
 };
 K.loop((dt, t) => {
   now = t / 1000;
   if (cardUp) { cardT -= dt; $('cardGo').style.opacity = cardT < cardMin ? 1 : 0; if (cardT <= 0) hideCard(); }
-  else if (dt > 0 && (S.phase === 'night' || S.finale)) {
-    // a press on a trick that turns into a hold becomes the ghost after all
-    if (press && !press.held && now - press.t > .3) { press.held = true; ghostTo(press.x2 || press.x, press.y2 || press.y); }
-    CORE.step(S, dt); if (S.finale) fin.t += dt;
-  }
-  for (const f of tfx) f.t += dt;
-  iris.t += dt; idle += dt; if (fin.open >= 0) fin.open += dt;
-  events(); stepPeople(dt); rattle();
+  else if (dt > 0 && (S.phase === 'night' || S.finale) && !(zoom && zoom.freeze)) { CORE.step(S, dt); if (S.finale) fin.t += dt; }
+  for (let k = waits.length - 1; k >= 0; k--) { waits[k].t -= dt; if (waits[k].t <= 0) { const w = waits.splice(k, 1)[0]; w.fn(); } }
+  iris.t += dt; if (fin.open >= 0) fin.open += dt; shake = Math.max(0, shake - dt * 3);
+  for (let f = 0; f < 3; f++) slams[f] += dt;
+  events(); stepPeople(dt); stepThings(dt); stepShards(dt);
+  wind.set(S.phase === 'night' && S.g.on && !cardUp ? loadOf(0) + 2 : 0);
   document.body.classList.toggle('organ', S.phase === 'organ' && !S.finale);
   if (S.finale) { camera(); if (fin.t < 2.8) bgDirty = true; if (fin.t > 4.9) { const r = crateRect(); if (iris.to !== 0) irisTo(1, 0, 1.2); Object.assign(iris, { x: r.x + r.w / 2, y: r.y + r.h / 2, r: Math.hypot(r.w, r.h) * .78 }); } }
   draw(dt);
@@ -13152,274 +13347,366 @@ K.loop((dt, t) => {
 </template>
 <script type="text/x-core" data-world="guests">
 /* UNWELCOME GUESTS — the rules. No DOM, no clock, no randomness but the PRNG in the state.
-   A house of three floors, a spiral stair at the left and the front door at the foot of it. You are the
-   ghost: in a night you hold a finger on the house and the ghost glides after it; whoever is on its floor
-   and inside its cold spot takes fright and runs from it. Push them down the stair and out of the door
-   before your ectoplasm is gone or the dawn comes. Each time someone is driven out they lose some of
-   their resolve for good; with none left they do not come back, and once a whole cast has gone a bigger
-   one moves in. Between nights the screams buy pipes on the organ in the cellar. */
+   A house of three floors, a spiral stair at the left and the front door at the foot of it. You are a poltergeist:
+   in a night you hold a finger on the house and a whirl follows it, tearing loose whatever it passes (teacups,
+   books, candles; later chairs, clocks, the piano) into a ring that spins round the finger. Whatever spins hits
+   whoever it passes: they shriek, stagger away from the whirl, and once frightened past their nerve they panic and
+   run for the nearest way out. Let go and everything in the ring falls (or, later, flies) and crashes. A night ends
+   when the ectoplasm is spent or the dawn comes; each person driven out loses a pip of resolve for good, and a cast
+   with none left makes way for a bigger one. Between nights the screams buy pipes on the organ in the cellar. */
 const CORE = (() => {
-  const { rand, clamp } = KIT, { abs, min, max, sign, floor, pow } = Math;
+  const { rand, clamp } = KIT, { abs, min, max, sign, floor, pow, sqrt, cos, sin, atan2, hypot, round } = Math;
   const HW = 1000, FH = 420, STAIR = 60;
   const P = {
-    ecto: 12, drain: 1, appear: .8, idle: .3,   // seconds of haunting a night; per second held; to appear where the finger lands
-    speed: 330, reach: 175,            // the ghost's glide, and the half-width of its cold spot
-    fear: 70, worth: 8, outPay: 5,    // fright a second at the heart of the cold; screams for a whole nerve's worth of fright; an exit pays this much
-    run: 230, walk: 105, climb: .9,    // people: units a second fleeing, walking; seconds a floor on the stair
-    calm: .14, panic: 1, leave: .45, startle: 1.4, wear: 7, wearMax: .65, wearOut: .12,               // share of their nerve they calm by a second; panic at this share of it
-    dawn: 42, dawnStep: 14, linger: 1.6,
-    imp: [0, 3, 1.6], impF: 1.2,
-    phoneCd: 24, phoneT: 8, chandCd: 18, slamCd: 10, slamT: 7
+    ecto: 12, drain: 1, idle: .3, appear: .6, linger: 1,           // seconds of haunting; drain a second held; while held over nobody; to appear
+    speed: 520, reach: 120, cap: 3.2, spin: 3.4,                     // the whirl's glide, its pull, how much mass it carries, its turn (rad/s)
+    fear: 28, worth: 4, outPay: 6,                                    // fright of a 1-mass hit; screams for a whole nerve's worth of fright; an exit pays this much
+    run: 250, walk: 95, climb: .8, shove: 34, stagger: .35,           // people: units a second fleeing and walking; seconds a floor on the stair; a hit's push
+    calm: .12, calmAfter: 2, panic: .8, wear: 6, wearMax: .65, wearOut: .12,
+    dawn: 40, dawnStep: 14, grav: 2200, crash: .45, slam: 1.6,
+    imp: [0, 3.2, 1.7], impF: 1.1,
+    ns: [4, 15, 21, 28, 36], pm: 4                                      // nerve by reel, and the organ's prices, as tuned with the bots
   };
-  // the cast: nerve, resolve (how many exits before they leave for good), worth, the room they keep, a look
+  /* what can be torn loose, by kind: mass, tier (the grip that lifts it), and whether it breaks when it lands */
+  const KIND = {
+    cup: [.8, 0, 1], plate: [.8, 0, 1], teapot: [1.2, 0, 1], jar: [1, 0, 1], candle: [.8, 0, 0], mclock: [1.5, 0, 1], book: [1, 0, 0],
+    ink: [.8, 0, 1], pillow: [.6, 0, 0], doll: [1, 0, 0], musicbox: [1.2, 0, 1],
+    chair: [3, 1, 0], lamp: [2.5, 1, 1], portrait: [3, 1, 0], horse: [4, 1, 0],
+    clock: [8, 2, 0], armour: [10, 2, 0], wardrobe: [12, 2, 0],
+    piano: [22, 3, 0], chandelier: [16, 3, 1]
+  };
+  /* where everything stands when the night begins: room (floor * 2 + right half), kind, x across the room, h above its floor */
+  const SLOTS = [
+    [0, 'candle', 172, 182], [0, 'mclock', 222, 182], [0, 'candle', 272, 182], [0, 'portrait', 222, 270], [0, 'piano', 398, 0],
+    [1, 'cup', 140, 104], [1, 'teapot', 190, 104], [1, 'plate', 240, 104], [1, 'jar', 318, 286], [1, 'jar', 356, 286], [1, 'jar', 394, 286], [1, 'chair', 64, 0],
+    [2, 'plate', 172, 118], [2, 'cup', 212, 118], [2, 'candle', 250, 118], [2, 'plate', 300, 118], [2, 'chair', 116, 0], [2, 'chair', 364, 0], [2, 'chandelier', 240, 290], [2, 'clock', 446, 0],
+    [3, 'book', 52, 252], [3, 'book', 102, 252], [3, 'book', 152, 252], [3, 'book', 76, 168], [3, 'book', 132, 168], [3, 'armour', 236, 0], [3, 'lamp', 318, 118], [3, 'ink', 430, 118],
+    [4, 'wardrobe', 214, 0], [4, 'pillow', 352, 72], [4, 'pillow', 404, 72], [4, 'portrait', 392, 270],
+    [5, 'musicbox', 88, 106], [5, 'doll', 146, 106], [5, 'doll', 214, 290], [5, 'doll', 250, 290], [5, 'doll', 286, 290], [5, 'horse', 404, 0]
+  ];
+  // the cast: nerve, resolve (exits before they leave for good), worth, the rooms they keep, a look, a height
   const CAST = {
-    harold: { name: 'Harold Pemberton', look: 'tophat', nerve: 100, res: 3, worth: 1, home: [3, 0] },
-    edith: { name: 'Edith Pemberton', look: 'bonnet', nerve: 85, res: 3, worth: 1, home: [1, 2] },
-    violet: { name: 'Violet Pemberton', look: 'girl', nerve: 60, res: 3, worth: .8, home: [5, 4] },
-    prof: { name: 'Professor Hargreave', look: 'prof', nerve: 884, res: 5, worth: 1.8, home: [3, 3], skeptic: 52 },
-    mudge: { name: 'Mrs Mudge', look: 'maid', nerve: 544, res: 5, worth: 1.6, home: [1, 1], shriek: .3 },
-    zostra: { name: 'Madame Zostra', look: 'turban', nerve: 2550, res: 6, worth: 2.6, home: [2, 0], medium: 1 },
-    cyril: { name: 'Cyril', look: 'boy', nerve: 1615, res: 5, worth: 2.4, home: [5, 2] },
-    ada: { name: 'Ada Fairweather', look: 'bride', nerve: 6120, res: 6, worth: 4, home: [4, 2], pair: 1 },
-    teddy: { name: 'Teddy Fairweather', look: 'groom', nerve: 7140, res: 6, worth: 4, home: [4, 0], pair: 1 },
-    kessler: { name: 'Mr Kessler, director', look: 'director', nerve: 16150, res: 7, worth: 6, home: [2, 3] },
-    lulu: { name: 'Miss Lulu Lamont', look: 'star', nerve: 12240, res: 6, worth: 6, home: [4, 5] },
-    sparks: { name: '“Sparks”, camera', look: 'cameraman', nerve: 14280, res: 6, worth: 6, home: [3, 1] }
+    harold: { name: 'Harold Pemberton', look: 'tophat', nerve: 150, res: 4, worth: 1, home: [3, 0] },
+    edith: { name: 'Edith Pemberton', look: 'bonnet', nerve: 120, res: 4, worth: 1, home: [1, 2] },
+    violet: { name: 'Violet Pemberton', look: 'girl', nerve: 90, res: 4, worth: .8, home: [5, 4] },
+    prof: { name: 'Professor Hargreave', look: 'prof', nerve: 300, res: 5, worth: 1.8, home: [3, 3], skeptic: 2 },
+    mudge: { name: 'Mrs Mudge', look: 'maid', nerve: 200, res: 5, worth: 1.6, home: [1, 1], shriek: .3 },
+    zostra: { name: 'Madame Zostra', look: 'turban', nerve: 650, res: 6, worth: 2.6, home: [2, 0], medium: 1 },
+    cyril: { name: 'Cyril', look: 'boy', nerve: 420, res: 5, worth: 2.4, home: [5, 2] },
+    ada: { name: 'Ada Fairweather', look: 'bride', nerve: 1100, res: 6, worth: 4, home: [4, 2], pair: 1 },
+    teddy: { name: 'Teddy Fairweather', look: 'groom', nerve: 1300, res: 6, worth: 4, home: [4, 0], pair: 1 },
+    kessler: { name: 'Mr Kessler, director', look: 'director', nerve: 2600, res: 7, worth: 6, home: [2, 3] },
+    lulu: { name: 'Miss Lulu Lamont', look: 'star', nerve: 2000, res: 6, worth: 6, home: [4, 5] },
+    sparks: { name: '“Sparks”, camera', look: 'cameraman', nerve: 2300, res: 6, worth: 6, home: [3, 1] }
   };
   const LOOKS = ['tophat', 'bonnet', 'maid', 'boy', 'girl', 'groom', 'bride', 'cameraman'];
-  // who moves in; extras are walk-on parts (one resolve, a share of a principal's nerve)
+  const TALL = { girl: 210, boy: 216, prof: 330, director: 330 }, tallOf = l => TALL[l] || 315;
+  // who moves in; extras are walk-on parts (a share of a principal's nerve)
   const REELS = [
     { cast: ['harold', 'edith', 'violet'], extras: 0, title: 'The Pembertons', card: 'For a hundred years Hollowmere House was perfectly quiet. Then the Pembertons moved in.' },
-    { cast: ['prof', 'mudge'], extras: 3, xn: 442, xw: 1.2, xr: 4, xname: 'a lodger', title: 'A Man of Science', card: 'Professor Hargreave does not believe in ghosts. He believes in draughts. He has taken lodgers.' },
-    { cast: ['zostra', 'cyril'], extras: 6, xn: 1275, xw: 1.8, xr: 4, xname: 'a sitter', title: 'The Medium', card: 'Madame Zostra has come to speak with the dead, and brought a seance circle. She may not like the answer.' },
-    { cast: ['ada', 'teddy'], extras: 10, xn: 3230, xw: 2.4, xr: 4, xname: 'a wedding guest', title: 'Newlyweds', card: 'Nothing frightens Ada and Teddy Fairweather — as long as they are together. Nor their wedding party.' },
-    { cast: ['kessler', 'lulu', 'sparks'], extras: 26, xn: 7140, xw: 3, xr: 4, xname: 'an extra', title: 'The Picture People', card: 'A motion-picture company has rented the house to film a ghost story, with a coach-load of extras. Without a ghost.' }
+    { cast: ['prof', 'mudge'], extras: 3, xn: 160, xw: 1.2, xr: 4, xname: 'a lodger', title: 'A Man of Science', card: 'Professor Hargreave does not believe in ghosts. He believes in draughts. He has taken lodgers.' },
+    { cast: ['zostra', 'cyril'], extras: 6, xn: 350, xw: 1.8, xr: 4, xname: 'a sitter', title: 'The Medium', card: 'Madame Zostra has come to speak with the dead, and brought a seance circle. She may not like the answer.' },
+    { cast: ['ada', 'teddy'], extras: 10, xn: 700, xw: 2.4, xr: 4, xname: 'a wedding guest', title: 'Newlyweds', card: 'Nothing frightens Ada and Teddy Fairweather — as long as they are together. Nor their wedding party.' },
+    { cast: ['kessler', 'lulu', 'sparks'], extras: 26, xn: 1300, xw: 3, xr: 4, xname: 'an extra', title: 'The Picture People', card: 'A motion-picture company has rented the house to film a ghost story, with a coach-load of extras. Without a ghost.' }
   ];
   /* the organ: four registers, each a chain of pipes from the centre outwards. k: what a pipe adds to */
-  const REG = ['The ghost', 'The house', 'The fright', 'Their fears'];
+  const REG = ['The whirl', 'The house', 'The fright', 'Their fears'];
   const PIPES = [];
-  // each register's pipes cost more the further from the centre they stand
-  const BASE = [66, 96, 80, 170], GROW = 1.47;
-  const pipe = (reg, k, name, desc, em) => { const n = PIPES.filter(p => p.reg === reg).length; PIPES.push({ id: k + (PIPES.filter(p => p.k === k).length + 1), reg, k, name, desc, c: reg === 0 && n === 0 ? 18 : Math.round(BASE[reg] * pow(GROW, n)), em, n }); };
-  [['reach', 'A wider chill', 'The cold spot reaches further.'], ['ecto', 'More ectoplasm', 'Haunt for longer each night.'], ['glide', 'A swifter glide', 'The ghost follows your finger faster.'],
-   ['ecto', 'A deeper well', 'Haunt for longer each night.'], ['grey', 'The grey lady', 'A second ghost follows your path three seconds behind.'], ['reach', 'A wider chill', 'The cold spot reaches further.'],
-   ['drain', 'Thrift', 'Ectoplasm lasts longer while you haunt.'], ['ecto', 'An endless well', 'Haunt for longer each night.'], ['glide', 'Like the wind', 'The ghost follows your finger faster.']].forEach(([k, n, d]) => pipe(0, k, n, d, 'ghost'));
-  [['slam', 'Doors that slam', 'Tap a doorway in the night to slam it shut for a while.'], ['phone', 'The telephone rings', 'Tap the telephone: whoever hears it comes down to answer.'], ['chand', 'The chandelier falls', 'Tap the chandelier: the dining room freezes in terror.'],
-   ['dawn', 'Longer nights', 'The dawn comes later.'], ['back', 'The back door', 'The kitchen door at the far end lets them out too.'], ['dawn', 'Winter nights', 'The dawn comes later.'],
-   ['hearse', 'The hearse at the gate', 'Everyone driven out pays twice.'], ['window', 'Open windows', 'Upstairs, they will jump from the windows at the far end.']]
-    .forEach(([k, n, d]) => pipe(1, k, n, d, k === 'dawn' ? 'moon' : k));
-  [['fear', 'Colder breath', 'Everything frightens more.'], ['worth', 'Louder screams', 'Every scream is worth more.'], ['fear', 'Frost on the inside', 'Everything frightens more.'],
-   ['worth', 'A story in the paper', 'Every scream is worth more.'], ['first', 'The first fright', 'The first touch of the cold each night is a jolt.'], ['fear', 'A grave’s own chill', 'Everything frightens more.'],
-   ['worth', 'A chapter in a book', 'Every scream is worth more.'], ['chain', 'One after another', 'People driven out close together pay more, the more of them.']].forEach(([k, n, d]) => pipe(2, k, n, d, k === 'worth' ? 'mouth' : k === 'fear' ? 'frost' : k));
-  [['panic', 'Shaken', 'They panic sooner, and a panic runs for the door by itself.'], ['calm', 'Restless', 'They calm down more slowly.'], ['imps', 'An imp', 'Imps rattle the rooms you are not in.'],
-   ['dread', 'Dread', 'Sometimes one exit costs them two of their resolve.'], ['panic', 'Unnerved', 'They panic sooner.'], ['imps', 'A nest of imps', 'Imps rattle the rooms more often.'],
-   ['dread', 'Terror', 'More often, one exit costs two.']].forEach(([k, n, d]) => pipe(3, k, n, d, k));
+  const BASE = [40, 70, 60, 120], GROW = 1.8;
+  const pipe = (reg, k, name, desc) => { const n = PIPES.filter(p => p.reg === reg).length; PIPES.push({ id: k + (PIPES.filter(p => p.k === k).length + 1), reg, k, name, desc, c: reg === 0 && n === 0 ? 14 : round(BASE[reg] * pow(GROW, n) * P.pm), n }); };
+  [['cap', 'More hands', 'The whirl carries more.'], ['reach', 'A wider pull', 'The whirl tears things loose from further off.'], ['ecto', 'More ectoplasm', 'Haunt for longer each night.'],
+   ['cap', 'Many hands', 'The whirl carries more.'], ['spin', 'A faster spin', 'Everything in the whirl goes round faster, and hits more often.'], ['grey', 'The grey lady', 'A second whirl follows your path, three seconds behind.'],
+   ['ecto', 'A deeper well', 'Haunt for longer each night.'], ['cap', 'A hundred hands', 'The whirl carries more.'], ['drain', 'Thrift', 'Ectoplasm lasts longer while you haunt.'], ['spin', 'A maelstrom', 'Everything in the whirl goes round faster.']]
+    .forEach(([k, n, d]) => pipe(0, k, n, d));
+  [['grip', 'Chairs and lamps', 'The whirl can lift chairs, lamps, portraits and the rocking horse.'], ['slam', 'Doors that slam', 'Every doorway the whirl passes slams, and the whole floor jumps.'], ['dawn', 'Longer nights', 'The dawn comes later.'],
+   ['grip', 'Clocks and armour', 'The whirl can lift the long-case clock, the suit of armour and the wardrobe.'], ['back', 'The back door', 'The kitchen door at the far end lets them out too.'], ['window', 'Open windows', 'Upstairs, they will jump from the windows at the far end.'],
+   ['grip', 'The piano', 'The whirl can lift the piano and the chandelier.'], ['dawn', 'Winter nights', 'The dawn comes later.'], ['hearse', 'The hearse at the gate', 'Everyone driven out pays twice.']]
+    .forEach(([k, n, d]) => pipe(1, k, n, d));
+  [['fear', 'Colder breath', 'Every hit frightens more.'], ['worth', 'Louder screams', 'Every scream is worth more.'], ['fling', 'Fling', 'Let go and the whirl throws everything it carries, and a thing in flight hits twice as hard.'],
+   ['fear', 'Frost on the inside', 'Every hit frightens more.'], ['heir', 'Family silver', 'Each night a few heirlooms glint in the house: a hit with one is worth five.'], ['worth', 'A story in the paper', 'Every scream is worth more.'],
+   ['china', 'Bone china', 'Crockery that breaks frightens everyone near it three times as much.'], ['fear', 'A grave’s own chill', 'Every hit frightens more.'], ['worth', 'A chapter in a book', 'Every scream is worth more.']]
+    .forEach(([k, n, d]) => pipe(2, k, n, d));
+  [['panic', 'Shaken', 'They panic sooner.'], ['calm', 'Restless', 'They calm down more slowly.'], ['imps', 'An imp', 'An imp throws things in the rooms you are not in.'],
+   ['stamp', 'Stampede', 'Whoever panics frightens everyone they run past.'], ['panic', 'Unnerved', 'They panic sooner.'], ['imps', 'A nest of imps', 'The imps throw more often.'],
+   ['dread', 'Dread', 'Sometimes one exit costs them two of their resolve.'], ['dread', 'Terror', 'More often, one exit costs two.']]
+    .forEach(([k, n, d]) => pipe(3, k, n, d));
   const byId = Object.fromEntries(PIPES.map(p => [p.id, p]));
   const lvOf = (S, k) => S.lv[k] || 0;
 
   /* ---------- numbers the view and the bots share ---------- */
-  const ectoMax = S => P.ecto * pow(1.45, lvOf(S, 'ecto'));
-  const drainOf = S => P.drain * pow(.82, lvOf(S, 'drain'));
-  const speedOf = S => P.speed * pow(1.2, lvOf(S, 'glide'));
-  const reachOf = S => P.reach * pow(1.16, lvOf(S, 'reach'));
-  const fearOf = S => P.fear * pow(1.32, lvOf(S, 'fear'));
-  const worthOf = S => P.worth * pow(1.45, lvOf(S, 'worth'));
+  const ectoMax = S => P.ecto * pow(1.4, lvOf(S, 'ecto'));
+  const drainOf = S => P.drain * pow(.8, lvOf(S, 'drain'));
+  const speedOf = S => P.speed;
+  const reachOf = S => P.reach * pow(1.25, lvOf(S, 'reach'));
+  const capOf = S => P.cap * pow(2, lvOf(S, 'cap')) * (1 + lvOf(S, 'grip') * .6);
+  const spinOf = S => P.spin * pow(1.3, lvOf(S, 'spin'));
+  const gripOf = S => lvOf(S, 'grip');
+  const fearOf = S => P.fear * pow(1.4, lvOf(S, 'fear'));
+  const worthOf = S => P.worth * pow(1.5, lvOf(S, 'worth'));
   const dawnOf = S => P.dawn + P.dawnStep * lvOf(S, 'dawn');
   const panicOf = S => P.panic * pow(.85, lvOf(S, 'panic'));
-  const calmOf = S => P.calm * pow(.75, lvOf(S, 'calm'));
+  const calmOf = S => P.calm * pow(.7, lvOf(S, 'calm'));
   const floorAt = y => clamp(floor(-y / FH), 0, 2);
   const has = (S, k) => lvOf(S, k) > 0;
   const price = p => p.c;
   const open = (S, p) => !S.own[p.id] && (p.n === 0 || PIPES.some(q => q.reg === p.reg && q.n === p.n - 1 && S.own[q.id]));
   const can = (S, p) => open(S, p) && S.$ >= p.c && S.phase === 'organ' && !S.finale;
   const live = S => S.people.filter(p => p.st !== 'gone');
-  // every fright they take wears their nerve down for good, nights after nights, to a fraction of it
   const nerveOf = p => p.nerve * (1 - P.wearMax * min(1, p.wear || 0));
-  // the exits on a floor, as x positions, nearest first from x
+  const massOf = t => KIND[t.k][0], tierOf = t => KIND[t.k][1], fragile = t => !!KIND[t.k][2];
+  // where a slot stands, in house units
+  const slotXY = i => { const s = SLOTS[i]; return { x: (s[0] & 1) * 500 + s[2], y: -(s[0] >> 1) * FH - s[3], f: s[0] >> 1 }; };
+  // the exits on a floor, as x positions
   function exits(S, f) { const e = []; if (f === 0) { e.push(-30); if (has(S, 'back')) e.push(HW + 30); } else if (has(S, 'window')) e.push(HW + 30); return e; }
+  // which way a panicking person runs: towards the nearer way out, counting the stair down at the left
+  function fleeDir(S, p) { const E = exits(S, p.f); const left = p.f === 0 ? p.x : p.x + 260 * p.f; return E.some(e => e > HW) && HW - p.x < left ? 1 : -1; }
 
-  function newPerson(S, id, k, R) {
-    const c = CAST[id] || null, home = c ? c.home : [floor(rand(S) * 6), floor(rand(S) * 6)];
-    return { id, look: c ? c.look : LOOKS[floor(rand(S) * LOOKS.length)], name: c ? c.name : R.xname, x: 0, f: 0, fear: 0, res: c ? c.res : R.xr, res0: c ? c.res : R.xr,
-      nerve: c ? c.nerve : round(R.xn * (.7 + .6 * rand(S))), worth: c ? c.worth : R.xw, home, st: 'in', climb: 0, to: 0, dir: 0, panic: 0, stun: 0, lure: 0, cower: 0, scared: 0, first: 1, acc: 0, tx: -1 };
+  function newPerson(S, id, R) {
+    const c = CAST[id] || null, home = c ? c.home : [floor(rand(S) * 6), floor(rand(S) * 6)], look = c ? c.look : LOOKS[floor(rand(S) * LOOKS.length)];
+    return { id, look, h: tallOf(look), name: c ? c.name : R.xname, x: 0, f: 0, fear: 0, res: c ? c.res : R.xr, res0: c ? c.res : R.xr,
+      nerve: round((c ? c.nerve : R.xn * (.7 + .6 * rand(S))) * P.ns[REELS.indexOf(R)]), worth: c ? c.worth : R.xw, home, st: 'in', climb: 0, to: 0, dir: 0, panic: 0, stag: 0, quiet: 9, acc: 0, tx: -1, wear: 0 };
   }
-  const round = Math.round;
   function moveIn(S, r) {
-    const R = REELS[r]; S.reel = r; S.rn = 0; S.people = R.cast.map((id, k) => newPerson(S, id, k, R));
-    for (let k = 0; k < R.extras; k++) S.people.push(newPerson(S, 'x' + k, k, R));
+    const R = REELS[r]; S.reel = r; S.rn = 0; S.people = R.cast.map(id => newPerson(S, id, R));
+    for (let k = 0; k < R.extras; k++) S.people.push(newPerson(S, 'x' + k, R));
     ev(S, { k: 'reel', reel: r });
   }
+  function freshThings() { return SLOTS.map((s, i) => { const q = slotXY(i); return { k: s[1], st: 0, x: q.x, y: q.y, vx: 0, vy: 0, a: 0, r: 0, o: 0, cd: 0, gold: 0 }; }); }
   function init(seed) {
-    const S = { v: 2, seed: seed >>> 0 || 1, t: 0, $: 0, earned: 0, reel: 0, lv: {}, own: {}, bought: 0, phase: 'organ', night: 0, nt: 0, ecto: 0, people: [],
-      g: { x: 500, y: -FH * 1.5, on: 0, tx: 500, ty: -FH * 1.5, fade: 0 }, path: [], slam: [0, 0, 0], cd: { phone: 0, chand: 0, slam: [0, 0, 0] }, imp: 0, outs: 0, chain: 0, chainT: -9,
-      tally: null, finale: 0, ev: [], gone: 0, end: 0 };
+    const S = { v: 3, seed: seed >>> 0 || 1, t: 0, $: 0, earned: 0, reel: 0, lv: {}, own: {}, bought: 0, phase: 'organ', night: 0, nt: 0, ecto: 0, people: [], th: freshThings(),
+      g: { x: 500, y: -FH * 1.5, on: 0, tx: 500, ty: -FH * 1.5, vx: 0, vy: 0, fade: 0 }, grey: null, path: [], slam: [0, 0, 0], imp: 0, outs: 0, chain: 0, chainT: -9,
+      tally: null, finale: 0, ev: [], gone: 0, end: 0, hits: 0, broke: 0, heirs: 0, piano: 0 };
     moveIn(S, 0);
     return S;
   }
-  const ev = (S, e) => { S.ev.push(e); if (S.ev.length > 60) S.ev.shift(); };
+  const ev = (S, e) => { S.ev.push(e); if (S.ev.length > 80) S.ev.shift(); };
   function earn(S, v) { S.$ += v; S.earned += v; if (S.tally) S.tally.v += v; return v; }
 
   /* ---------- the night ---------- */
   function startNight(S) {
     if (S.phase !== 'organ' || S.finale) return false;
-    S.phase = 'night'; S.night++; S.rn = (S.rn | 0) + 1; S.nt = 0; S.ecto = ectoMax(S); S.end = 0; S.path = []; S.slam = [0, 0, 0]; S.cd = { phone: 0, chand: 0, slam: [0, 0, 0] };
-    S.g.on = 0; S.g.fade = 0; S.chain = 0; S.tally = { out: 0, v: 0, gone: 0, start: S.people.filter(p => p.st !== 'gone').length };
+    S.phase = 'night'; S.night++; S.rn = (S.rn | 0) + 1; S.nt = 0; S.ecto = ectoMax(S); S.end = 0; S.path = []; S.slam = [0, 0, 0];
+    S.g.on = 0; S.g.fade = 0; S.grey = null; S.chain = 0; S.tally = { out: 0, v: 0, gone: 0, hits: 0, start: S.people.filter(p => p.st !== 'gone').length };
+    // the house is tidied in the day, and a few heirlooms are out where they glint
+    S.th = freshThings();
+    if (has(S, 'heir')) for (let k = 0; k < 3; k++) { const c = S.th.filter(t => tierOf(t) <= 1 && !t.gold); const t = c[floor(rand(S) * c.length)]; if (t) t.gold = 1; }
     // everyone is where they keep themselves in the evening, a little spread
     for (const p of S.people) if (p.st !== 'gone') {
-      const r = p.home[S.night % 2]; p.st = 'in'; p.f = r >> 1; p.x = (r & 1) * 500 + 80 + rand(S) * 340; p.fear = 0; p.panic = 0; p.stun = 0; p.lure = 0; p.climb = 0; p.cower = 0; p.first = 1; p.tx = -1;
+      const r = p.home[S.night % 2]; p.st = 'in'; p.f = r >> 1; p.x = (r & 1) * 500 + 110 + rand(S) * 320; p.fear = 0; p.panic = 0; p.stag = 0; p.climb = 0; p.quiet = 9; p.tx = -1;
     }
     ev(S, { k: 'night', n: S.night });
     return true;
   }
   function endNight(S, why) {
-    S.phase = 'organ'; S.g.on = 0; const T = S.tally; T.why = why; T.night = S.night; T.rn = S.rn; T.len = S.nt; if (why === 'empty' && T.out >= 3) S.sweeps = (S.sweeps | 0) + 1; S.tally = null;
+    S.phase = 'organ'; S.g.on = 0; const T = S.tally; T.why = why; T.night = S.night; T.rn = S.rn; T.len = S.nt; if (why === 'empty' && T.out >= 3) S.sweeps = (S.sweeps | 0) + 1; S.bestNight = max(S.bestNight | 0, T.out); if (T.out >= 3 && !T.broke) S.tidy = 1; S.tally = null;
     ev(S, Object.assign({ k: 'dawn' }, T));
-    // a cast with no resolve left has gone for good: the next one moves in, or the house is empty at last
-    if (S.people.every(p => p.st === 'gone')) { if (S.reel + 1 < REELS.length) moveIn(S, S.reel + 1); else { S.finale = 1; ev(S, { k: 'finale', step: 1 }); } }
+    if (S.people.every(p => p.st === 'gone')) { if (S.reel + 1 < REELS.length) moveIn(S, S.reel + 1); else { S.finale = 1; S.won = 1; ev(S, { k: 'finale', step: 1 }); } }
   }
   // the finger: down (or moved) at x, y in house units; lifted
   function ghost(S, x, y) {
     if (S.phase !== 'night' || S.end) return false;
-    x = clamp(x, -40, HW + 40); y = clamp(y, -3 * FH + 20, -20);
+    x = clamp(x, 0, HW); y = clamp(y, -3 * FH + 30, -30);
     const G = S.g;
     if (!G.on) {
       if (S.ecto <= 0) return false;
-      // appearing costs a little; gliding on from where it faded is free while it still lingers
-      if (G.fade <= 0 || abs(G.x - x) + abs(G.y - y) > 60) { S.ecto = max(0, S.ecto - P.appear * drainOf(S)); G.x = x; G.y = y; }
+      if (G.fade <= 0 || abs(G.x - x) + abs(G.y - y) > 80) { S.ecto = max(0, S.ecto - P.appear * drainOf(S)); G.x = x; G.y = y; G.vx = G.vy = 0; }
       G.on = 1;
     }
     G.tx = x; G.ty = y; return true;
   }
-  function lift(S) { if (!S.g.on) return false; S.g.on = 0; S.g.fade = P.linger; return true; }
-  function tap(S, what, a) {
-    if (S.phase !== 'night' || S.end) return false;
-    if (what === 'slam') {
-      if (!has(S, 'slam') || S.cd.slam[a] > 0) return false;
-      S.slam[a] = P.slamT; S.cd.slam[a] = P.slamCd; S.slams = (S.slams | 0) + 1; ev(S, { k: 'slam', f: a }); return true;
+  // let go: what spins falls, or with Fling flies on the way it was going
+  function release(S, o) {
+    const G = o ? S.grey : S.g; let n = 0;
+    for (const t of S.th) if (t.st === 1 && t.o === o) {
+      const w = spinOf(S), tvx = -sin(t.a) * t.r * w, tvy = cos(t.a) * t.r * .55 * w, f = has(S, 'fling') ? 1 : .2;
+      t.st = 2; t.f = floorAt(t.y - .5); t.vx = tvx * f + (G ? G.vx : 0) * (f * .8 + .1); t.vy = tvy * f + (G ? G.vy : 0) * f * .5 - 160; t.cd = 0; t.fl = has(S, 'fling') ? 1 : 0; n++;
     }
-    if (what === 'phone') {
-      if (!has(S, 'phone') || S.cd.phone > 0) return false;
-      S.cd.phone = P.phoneCd; let n = 0;
-      for (const p of S.people) if (p.st === 'in' && !p.panic && p.f <= 1) { p.lure = P.phoneT; n++; }
-      ev(S, { k: 'phone', n }); return true;
-    }
-    if (what === 'chand') {
-      if (!has(S, 'chand') || S.cd.chand > 0) return false;
-      S.cd.chand = P.chandCd; let n = 0;
-      for (const p of S.people) if (p.st === 'in' && !(p.climb > 0) && p.f === 1 && p.x < 500) { fright(S, p, fearOf(S) * 4); p.stun = 1.6; n++; }
-      ev(S, { k: 'chand', n }); return true;
-    }
-    return false;
+    if (n && !o) ev(S, { k: 'let', n });
   }
+  function lift(S) { if (!S.g.on) return false; S.g.on = 0; S.g.fade = P.linger; release(S, 0); return true; }
+
   // fright f lands on p: fear, screams, and maybe panic
   function fright(S, p, f, mul) {
-    p.fear += f;
+    p.fear += f; p.quiet = 0;
     p.wear = (p.wear || 0) + f / (p.nerve * P.wear);
-    p.acc += earn(S, f / p.nerve * worthOf(S) * p.worth * (mul || 1));
+    p.acc += earn(S, f / P.fear * worthOf(S) * .25 * p.worth * (mul || 1) / pow(1.4, lvOf(S, 'fear')));
     if (!p.panic && p.fear >= nerveOf(p) * panicOf(S)) {
       p.panic = 1; ev(S, { k: 'panic', id: p.id });
-      const c = CAST[p.id]; if (c && c.shriek) for (const q of S.people) if (q !== p && q.st === 'in' && q.f === p.f) q.fear += fearOf(S) * 3;
+      const c = CAST[p.id]; if (c && c.shriek) for (const q of S.people) if (q !== p && q.st === 'in' && q.f === p.f) { q.fear += fearOf(S) * 4; q.quiet = 0; }
     }
+  }
+  // a thing in the whirl or in the air meets a person
+  function hit(S, t, p, gx) {
+    const c = CAST[p.id], m = massOf(t);
+    if (c && c.skeptic && tierOf(t) < 1) { t.cd = .5; if (rand(S) < .25) ev(S, { k: 'scoff', id: p.id }); return; }
+    let f = fearOf(S) * pow(m, .85) * (t.st === 2 && t.fl ? 2 : 1);
+    if (c && c.pair && S.people.some(q => q !== p && q.st === 'in' && CAST[q.id] && CAST[q.id].pair && q.f === p.f && abs(q.x - p.x) < 200)) f *= .55;
+    const mul = t.gold ? 5 : 1;
+    fright(S, p, f, mul); S.hits++; if (S.tally) S.tally.hits++; if (t.gold) S.heirs++; if (t.k === 'piano') S.piano++;
+    // knocked away from the whirl; against the far wall they duck past it; in a panic a hit only speeds them on
+    let d = sign(p.x - gx) || (p.x < 500 ? -1 : 1);
+    if (p.panic) d = fleeDir(S, p); else if (d > 0 && p.x > HW - 60) d = -1;
+    p.fear = min(p.fear, nerveOf(p) * 1.6);
+    p.x = clamp(p.x + d * P.shove * min(3, sqrt(m)), 8, HW - 8); p.stag = p.panic ? 0 : P.stagger; p.dir = d;
+    t.cd = .3; ev(S, { k: 'hit', id: p.id, ti: S.th.indexOf(t), m, gold: t.gold });
   }
   function out(S, p, via) {
     p.st = 'out'; S.outs++; p.wear = (p.wear || 0) + P.wearOut;
     if (S.nt - S.chainT < 4) S.chain++; else S.chain = 0; S.chainT = S.nt; S.bestChain = max(S.bestChain | 0, S.chain);
-    if (S.g.on && S.ecto < 1.5) S.thin = (S.thin | 0) + 1;
     const dread = [0, .25, .5][lvOf(S, 'dread')], loss = rand(S) < dread ? 2 : 1;
     p.res = max(0, p.res - loss);
-    const v = earn(S, P.outPay * worthOf(S) / P.worth * p.worth * (has(S, 'hearse') ? 2 : 1) * (1 + (has(S, 'chain') ? .25 * min(8, S.chain) : 0)));
+    const v = earn(S, P.outPay * worthOf(S) / P.worth * p.worth * (has(S, 'hearse') ? 2 : 1) * (1 + .2 * min(8, S.chain)));
     S.tally.out++;
     ev(S, { k: 'out', id: p.id, v, via, loss, chain: S.chain });
     if (p.res <= 0) { p.st = 'gone'; S.gone++; S.tally.gone++; ev(S, { k: 'gone', id: p.id }); }
   }
 
   /* ---------- time ---------- */
-  function step(S, dt) { while (dt > 0) { const h = min(dt, .1); tick(S, h); dt -= h; } }
+  function step(S, dt) { while (dt > 0) { const h = min(dt, .05); tick(S, h); dt -= h; } }
+  // a whirl at G with owner o: pull in what it passes, carry it round
+  function whirl(S, G, o, dt, capMul) {
+    const R = reachOf(S) * (o ? .8 : 1), f = floorAt(G.y), cap = capOf(S) * capMul, w = spinOf(S), grip = gripOf(S);
+    let load = 0, n = 0; for (const t of S.th) if (t.st === 1 && t.o === o) { load += massOf(t); n++; }
+    for (const t of S.th) {
+      if (t.st !== 0 || tierOf(t) > grip) continue;
+      const dx = t.x - G.x, dy = t.y - G.y; if (dx * dx + dy * dy > R * R * 1.4 || floorAt(t.y - .5) !== f) continue;
+      if (load + massOf(t) > cap + .01) continue;
+      t.st = 1; t.o = o; t.a = atan2(dy / .55, dx); t.r = R * (.55 + .4 * ((n * .618) % 1)); load += massOf(t); n++;
+      ev(S, { k: 'grab', ti: S.th.indexOf(t), o });
+    }
+    // round and round: the ring is squashed to fit the room, and stays inside the ghost's floor
+    const top = -f * FH - FH + 34, bot = -f * FH - 6;
+    for (const t of S.th) if (t.st === 1 && t.o === o) {
+      t.a += w * dt * (1.1 - .1 * min(4, sqrt(massOf(t))) * .25);
+      const tx = G.x + cos(t.a) * t.r, ty = clamp(G.y + sin(t.a) * t.r * .55, top, bot), k = min(1, dt * 9);
+      t.x += (tx - t.x) * k; t.y += (ty - t.y) * k; t.cd = max(0, t.cd - dt);
+    }
+    return load;
+  }
   function tick(S, dt) {
     S.t += dt;
     if (S.phase !== 'night') return;
     S.nt += dt;
-    const G = S.g;
-    // the ghost glides after the finger and drains while it is out; when it is spent it fades
+    const G = S.g, F = fearOf(S);
+    // the whirl glides after the finger and drains while it is out; when it is spent it lets go
+    let load = 0;
     if (G.on) {
-      const dx = G.tx - G.x, dy = G.ty - G.y, d = Math.hypot(dx, dy), s = speedOf(S) * dt;
+      const dx = G.tx - G.x, dy = G.ty - G.y, d = hypot(dx, dy), s = speedOf(S) * dt, ox = G.x, oy = G.y;
       if (d > s) { G.x += dx / d * s; G.y += dy / d * s; } else { G.x = G.tx; G.y = G.ty; }
-      // it spends little while its cold touches nobody, so finding them is not wasted
-      const idle = !S.people.some(p => p.st === 'in' && !(p.climb > 0) && p.f === floorAt(G.y) && abs(p.x - G.x) < reachOf(S));
-      S.ecto -= drainOf(S) * dt * (S.bound ? 2.5 : 1) * (idle ? P.idle : 1);
-      if (S.ecto <= 0) { S.ecto = 0; G.on = 0; G.fade = P.linger; ev(S, { k: 'spent' }); }
-    } else if (G.fade > 0) G.fade -= dt;
-    // the grey lady walks the ghost's path three seconds behind
-    S.path.push([S.nt, G.on || G.fade > 0 ? G.x : null, G.y]); while (S.path.length && S.path[0][0] < S.nt - 3) S.path.shift();
-    for (let k = 0; k < 3; k++) { S.slam[k] = max(0, S.slam[k] - dt); S.cd.slam[k] = max(0, S.cd.slam[k] - dt); }
-    S.cd.phone = max(0, S.cd.phone - dt); S.cd.chand = max(0, S.cd.chand - dt);
-    const cold = [];
-    if (G.on || G.fade > 0) cold.push({ x: G.x, f: floorAt(G.y), r: reachOf(S), s: G.on ? 1 : clamp(G.fade / P.linger, 0, 1) * .6 });
-    if (has(S, 'grey') && S.path.length && S.path[0][1] != null && S.nt > 3) cold.push({ x: S.path[0][1], f: floorAt(S.path[0][2]), r: reachOf(S) * .8, s: .5, grey: 1 });
+      G.vx = G.vx * .7 + (G.x - ox) / dt * .3; G.vy = G.vy * .7 + (G.y - oy) / dt * .3;
+      load = whirl(S, G, 0, dt, 1);
+      const gf = floorAt(G.y), busy = load > 0 || S.people.some(p => p.st === 'in' && !(p.climb > 0) && p.f === gf && abs(p.x - G.x) < reachOf(S) * 1.5);
+      S.ecto -= drainOf(S) * dt * (S.bound ? 2.5 : 1) * (busy ? 1 : P.idle);
+      if (S.ecto <= 0) { S.ecto = 0; G.on = 0; G.fade = P.linger; release(S, 0); ev(S, { k: 'spent' }); }
+    } else { if (G.fade > 0) G.fade -= dt; G.vx *= .8; G.vy *= .8; }
+    // the grey lady walks the ghost's path three seconds behind, with a whirl of her own
+    S.path.push([S.nt, G.on ? G.x : null, G.y]); while (S.path.length && S.path[0][0] < S.nt - 3) S.path.shift();
+    if (has(S, 'grey')) {
+      const q = S.path[0], on = q && q[1] != null && S.nt > 3;
+      if (on) { const ox = S.grey ? S.grey.x : q[1], oy = S.grey ? S.grey.y : q[2]; S.grey = { x: q[1], y: q[2], vx: (q[1] - ox) / dt, vy: (q[2] - oy) / dt }; whirl(S, S.grey, 1, dt, .5); }
+      else if (S.grey) { release(S, 1); S.grey = null; }
+    }
+    // doors that slam: the whirl passing a doorway (the middle of a floor) slams it, and the whole floor jumps
+    if (has(S, 'slam')) for (let f = 0; f < 3; f++) {
+      S.slam[f] = max(0, S.slam[f] - dt);
+      if (G.on && floorAt(G.y) === f && abs(G.x - 500) < 40 && S.slam[f] <= 0) {
+        S.slam[f] = 4; S.slams = (S.slams | 0) + 1; ev(S, { k: 'slam', f });
+        for (const p of S.people) if (p.st === 'in' && !(p.climb > 0) && p.f === f) fright(S, p, F * P.slam);
+      }
+    }
     // Madame Zostra opens her third eye now and then; the ghost caught in it on her floor bleeds ectoplasm
     const z = S.people.find(p => p.id === 'zostra' && p.st === 'in');
-    const was = S.bound; S.bound = z && (S.nt % 11) > 7.5 && cold.length && cold[0].f === z.f && abs(cold[0].x - z.x) < 380 && G.on ? 1 : 0;
+    const was = S.bound; S.bound = z && (S.nt % 11) > 7.5 && G.on && floorAt(G.y) === z.f && abs(G.x - z.x) < 380 ? 1 : 0;
     if (S.bound && !was) ev(S, { k: 'bound' });
-    const F = fearOf(S), cal = calmOf(S);
+    // things in flight: they fall, bounce off the walls, and land; crockery breaks
+    for (const t of S.th) if (t.st === 2) {
+      const f = t.f, fy = -f * FH;
+      t.vy += P.grav * dt; t.x += t.vx * dt; t.y += t.vy * dt; t.cd = max(0, t.cd - dt);
+      if (t.x < 12 || t.x > HW - 12) { t.x = clamp(t.x, 12, HW - 12); t.vx *= -.4; }
+      if (t.y < fy - FH + 30) { t.y = fy - FH + 30; t.vy = abs(t.vy) * .3; }
+      if (t.y >= fy) { t.y = fy; land(S, t, f); }
+    }
+    // hits: whatever spins or flies and meets someone
+    for (const t of S.th) {
+      if ((t.st !== 1 && t.st !== 2) || t.cd > 0) continue;
+      const gx = t.st === 1 ? (t.o ? S.grey.x : G.x) : t.x - t.vx * .1, sz = 18 + 6 * sqrt(massOf(t));
+      for (const p of S.people) {
+        if (p.st !== 'in' || p.climb > 0) continue;
+        const py = -p.f * FH; if (t.y > py + 4 || t.y < py - p.h) continue;
+        if (abs(t.x - p.x) > sz + p.h * .09) continue;
+        hit(S, t, p, gx); if (t.st === 2) t.vx *= .5; break;
+      }
+    }
+    // the imps: in rooms the ghost is not in, one throws something at someone now and then
+    const il = lvOf(S, 'imps');
+    if (il) {
+      S.imp -= dt;
+      if (S.imp <= 0) {
+        S.imp = P.imp[il];
+        const gr = G.on ? floorAt(G.y) * 2 + (G.x >= 500 ? 1 : 0) : -1;
+        const tg = S.people.filter(p => p.st === 'in' && !(p.climb > 0) && p.f * 2 + (p.x >= 500 ? 1 : 0) !== gr);
+        if (tg.length) {
+          const p = tg[floor(rand(S) * tg.length)], room = p.f * 2 + (p.x >= 500 ? 1 : 0);
+          const ts = S.th.filter((t, i) => t.st === 0 && tierOf(t) <= min(1, gripOf(S)) && SLOTS[i][0] === room);
+          const t = ts[floor(rand(S) * ts.length)];
+          if (t) { const d = p.x - t.x, ty = 1.1 + rand(S) * .5, fy = -p.f * FH - p.h * .6; t.st = 2; t.f = p.f; t.fl = 0; t.vx = d / .5; t.vy = (fy - t.y) / .5 - P.grav * .25; t.imp = 1; ev(S, { k: 'imp', room, ti: S.th.indexOf(t), id: p.id }); }
+        }
+      }
+    }
+    // people
+    const cal = calmOf(S), stamp = has(S, 'stamp');
     for (const p of S.people) {
       if (p.st !== 'in') continue;
-      p.stun = max(0, p.stun - dt); p.scared = max(0, p.scared - dt);
+      p.stag = max(0, p.stag - dt); p.quiet += dt;
       if (p.climb > 0) { p.climb -= dt; if (p.climb <= 0) { p.climb = 0; p.f = p.to; p.x = STAIR + 10; } continue; }
-      // the cold: the nearest spot on their floor decides which way they run
-      let push = 0, hot = 0;
-      for (const C of cold) if (C.f === p.f) {
-        const d = p.x - C.x, k = 1 - abs(d) / C.r; if (k <= 0) continue;
-        let f = F * C.s * k * dt * (p.cower ? 1.5 : 1);
-        const c = CAST[p.id];
-        if (c && c.skeptic && F * C.s * k < c.skeptic) { if (rand(S) < dt * .3) ev(S, { k: 'scoff', id: p.id }); continue; }
-        if (c && c.pair && S.people.some(q => q !== p && q.st === 'in' && CAST[q.id] && CAST[q.id].pair && q.f === p.f && abs(q.x - p.x) < 200)) f *= .55;
-        if (p.first) { p.first = 0; if (has(S, 'first')) f += F * 3; }
-        fright(S, p, f); hot = max(hot, k); push += (d === 0 ? (p.x < 500 ? -1 : 1) : sign(d)) * k; p.scared = P.startle;
-      }
       const N = nerveOf(p);
-      if (!hot) p.fear = max(0, p.fear - max(2, cal * N) * dt);
-      if (p.panic && p.fear < N * panicOf(S) * .55) p.panic = 0;
-      if (p.acc > 0 && (p.acc > worthOf(S) * p.worth * .15 || !hot)) { ev(S, { k: 'scream', id: p.id, v: p.acc, e: clamp(p.fear / N, 0, 1.2) }); p.acc = 0; }
-      if (p.stun > 0) continue;
-      // where to: away from the cold; in a panic to the nearest way out; called to the telephone; else home
+      if (p.quiet > P.calmAfter) p.fear = max(0, p.fear - max(1, cal * N) * dt * (p.panic ? .5 : 1));
+      if (p.panic && p.fear < N * .25) p.panic = 0;
+      if (p.acc > 0 && (p.acc > worthOf(S) * p.worth * .12 || p.quiet > .25)) { ev(S, { k: 'scream', id: p.id, v: p.acc, e: clamp(p.fear / N, 0, 1.2) }); p.acc = 0; }
+      if (p.stag > 0) continue;
+      // where to: in a panic to the nearest way out; near the whirl, away from it; else home
       let dir = 0, sp = P.walk;
-      const E = exits(S, p.f);
-      if (!hot && p.scared > 0 && p.dir) { dir = p.dir; sp = P.run * .8; }
-      else if (hot) { dir = sign(push) || 1; sp = P.walk + (P.run - P.walk) * clamp(p.fear / (N * panicOf(S) * .6), 0, 1); }
-      else if (p.panic) { sp = P.run; dir = E.some(e => e > HW) && HW - p.x < (p.f ? p.x + 400 : p.x) ? 1 : -1; }
-      else if (p.lure > 0) { p.lure -= dt; if (p.f > 0) dir = -1; else { const d = 300 - p.x; dir = abs(d) < 20 ? 0 : sign(d); } }
+      const near = G.on && floorAt(G.y) === p.f && abs(p.x - G.x) < reachOf(S) * 1.4;
+      if (p.panic) { sp = P.run; dir = fleeDir(S, p); }
+      else if (near) { dir = sign(p.x - G.x) || 1; if (dir > 0 && p.x > HW - 60) dir = -1; sp = P.walk + (P.run - P.walk) * clamp(p.fear / (N * panicOf(S)), 0, 1); }
+      else if (p.quiet < 1.2 && p.dir) { dir = p.dir; sp = P.walk * 1.4; }
       else {
         const r = p.home[S.night % 2], hf = r >> 1;
         if (hf !== p.f) dir = -1;
-        else { if (p.tx < 0 || abs(p.tx - p.x) < 8) { p.tx = (r & 1) * 500 + 70 + rand(S) * 360; if (rand(S) < .5) p.tx = p.x; } dir = abs(p.tx - p.x) < 8 ? 0 : sign(p.tx - p.x); }
-        sp = P.walk;
+        else { if (p.tx < 0 || abs(p.tx - p.x) < 8) { p.tx = (r & 1) * 500 + 90 + rand(S) * 320; if (rand(S) < .5) p.tx = p.x; } dir = abs(p.tx - p.x) < 8 ? 0 : sign(p.tx - p.x); }
       }
-      p.dir = dir; p.cower = 0;
+      p.dir = dir;
       if (!dir) continue;
       let nx = p.x + dir * sp * dt;
-      // a slammed door in the middle of the floor stops them
-      if (S.slam[p.f] > 0 && (p.x - 500) * (nx - 500) <= 0 && abs(nx - p.x) > 0) { nx = p.x < 500 ? 488 : 512; if (hot) p.cower = 1; }
-      // the stair at the left: down when running away or out, up or down when going home
+      if (p.panic && stamp) for (const q of S.people) if (q !== p && q.st === 'in' && !q.panic && q.f === p.f && !(q.climb > 0) && abs(q.x - nx) < 40) fright(S, q, F * 1.2 * dt);
+      // the stair at the left: down when running for the door, up or down when going home
       if (nx <= STAIR && dir < 0) {
-        const r = p.home[S.night % 2], hf = r >> 1, wantUp = !hot && !(p.scared > 0) && !p.panic && !(p.lure > 0) && hf > p.f;
+        const r = p.home[S.night % 2], hf = r >> 1, wantUp = !p.panic && !near && hf > p.f;
         if (p.f > 0 && !wantUp) { p.to = p.f - 1; p.climb = P.climb; p.x = STAIR; continue; }
         if (wantUp) { p.to = p.f + 1; p.climb = P.climb; p.x = STAIR; continue; }
-        if (p.f === 0 && (hot || p.panic || p.scared > 0) && nx <= 4) { if (p.panic || p.fear >= N * panicOf(S) * P.leave) { out(S, p, 'door'); continue; } nx = 6; p.cower = 1; }
-        if (p.f === 0 && !(hot || p.panic || p.scared > 0)) nx = max(nx, STAIR + 4);
+        if (p.f === 0 && p.panic && nx <= 4) { out(S, p, 'door'); continue; }
+        if (p.f === 0) nx = max(nx, p.panic ? 0 : STAIR + 4);
       }
-      if (!hot && !p.panic && !(p.scared > 0) && !(p.lure > 0) && dir < 0 && p.f === 0) nx = max(nx, STAIR + 4);
       if (nx >= HW - 4) {
-        if ((hot || p.panic) && E.some(e => e > HW) && (p.panic || p.fear >= N * panicOf(S) * P.leave)) { out(S, p, p.f ? 'window' : 'back'); continue; }
-        nx = HW - 12; if (hot) p.cower = 1;
+        if (p.panic && exits(S, p.f).some(e => e > HW)) { out(S, p, p.f ? 'window' : 'back'); continue; }
+        nx = HW - 12;
       }
       p.x = clamp(nx, -10, HW - 8);
     }
-    // the imps keep up the fright in rooms the ghost is not in, short of panic
-    const il = lvOf(S, 'imps');
-    if (il) { S.imp -= dt; if (S.imp <= 0) { S.imp = P.imp[il]; const rs = S.people.filter(p => p.st === 'in' && !(p.climb > 0)); if (rs.length) { const q = rs[floor(rand(S) * rs.length)], room = q.f * 2 + (q.x < 500 ? 0 : 1); for (const p of rs) if (p.f * 2 + (p.x < 500 ? 0 : 1) === room && p.fear < p.nerve * panicOf(S) * .8) fright(S, p, fearOf(S) * P.impF); ev(S, { k: 'imp', room }); } } }
-    // the night is over when the ghost is spent and faded, at dawn, or when the house is empty
-    if (!S.end && ((S.ecto <= 0 && !G.on && G.fade <= 0) || S.nt >= dawnOf(S) || S.people.every(p => p.st !== 'in'))) S.end = 1.6;
-    if (S.end) { S.end -= dt; if (S.end <= 0) endNight(S, S.people.every(p => p.st !== 'in') ? 'empty' : S.nt >= dawnOf(S) ? 'dawn' : 'spent'); }
+    // the night is over when the ghost is spent and its last things have landed, at dawn, or when the house is empty
+    if (!S.end && ((S.ecto <= 0 && !G.on && G.fade <= 0 && !S.th.some(t => t.st === 2)) || S.nt >= dawnOf(S) || S.people.every(p => p.st !== 'in'))) {
+      S.end = 1.6; if (G.on) { G.on = 0; release(S, 0); } if (S.grey) { release(S, 1); S.grey = null; }
+    }
+    if (S.end) { S.end -= dt; if (S.end <= 0) { for (const t of S.th) if (t.st === 2) { t.st = 0; t.y = -t.f * FH; } endNight(S, S.people.every(p => p.st !== 'in') ? 'empty' : S.nt >= dawnOf(S) ? 'dawn' : 'spent'); } }
+  }
+  // a thing comes down: crockery breaks, the rest lands with a thud; either way everyone near it jumps
+  function land(S, t, f) {
+    const m = massOf(t), broke = fragile(t), F = fearOf(S), ti = S.th.indexOf(t);
+    const r = broke ? 170 : 90 + 22 * m, k = (broke ? (has(S, 'china') ? 3 : 1) : .5) * P.crash * pow(m, .85);
+    let n = 0;
+    for (const p of S.people) if (p.st === 'in' && !(p.climb > 0) && p.f === f && abs(p.x - t.x) < r) { fright(S, p, F * k * (1 - abs(p.x - t.x) / r * .5)); n++; }
+    t.st = broke ? 3 : 0; t.vx = t.vy = 0; t.imp = 0; if (broke) { S.broke++; if (S.tally) S.tally.broke = (S.tally.broke | 0) + 1; }
+    ev(S, { k: 'land', ti, broke, n, x: t.x, f, m });
   }
 
   function buy(S, id) {
@@ -13431,7 +13718,6 @@ const CORE = (() => {
   function act(S, what, a, b) {
     if (what === 'ghost') return ghost(S, a, b);
     if (what === 'lift') return lift(S);
-    if (what === 'tap') return tap(S, a, b);
     if (what === 'night') return startNight(S);
     if (what === 'buy') return buy(S, a);
     if (what === 'finale') return finale(S, a);
@@ -13440,27 +13726,33 @@ const CORE = (() => {
 
   /* ---------- for the shell and the tests ---------- */
   const done = S => S.finale >= 2;
-  // a pip of someone's resolve gone is something new: the cast cards show it
-  const milestones = S => S.reel * 1e4 + S.bought * 1e3 + S.people.reduce((a, p) => a + p.res0 - p.res, 0) + S.finale * 1e6;
+  const milestones = S => S.reel * 1e4 + S.bought * 1e3 + S.people.reduce((a, p) => a + p.res0 - p.res, 0) + S.finale * 1e6 + (S.won | 0) * 1e7;
   function progress(S) {
-    if (S.finale) return .97 + .015 * S.finale;
+    if (S.won) return S.finale ? .97 + .015 * S.finale : 1;
     const tot = S.people.reduce((a, p) => a + p.res0, 0), left = S.people.reduce((a, p) => a + p.res, 0);
     return clamp((S.reel + .97 * (1 - left / max(1, tot))) / REELS.length, 0, .97);
   }
-  // version 1 was a different game in the same house: an old save starts afresh
-  function migrate(S, from) { return from < 2 ? init(S && S.seed || 1) : S; }
+  // version 1 and 2 were other games in the same house: an old save starts afresh
+  function migrate(S, from) { return from < 3 ? init(S && S.seed || 1) : S; }
+  // back from the shelf: the picture people come back for a second take, every pipe still to buy can be bought
+  function revisit(S) {
+    if (!S.finale) return S;
+    S.finale = 0; S.phase = 'organ'; S.end = 0; S.g.on = 0; S.ev = []; S.encore = (S.encore | 0) + 1;
+    moveIn(S, REELS.length - 1); S.ev = [];
+    return S;
+  }
 
   /* ---------- people, for the pacing tests ----------
-     One hand. Between nights they read the summary and buy what they can afford, cheapest first. In a night
-     they pick whoever is nearest a way out, put the ghost just beyond them (on the far side from the door)
-     and push, with a person's reaction time and aim; they lift the finger to cross a floor when they must. */
+     One hand. Between nights they buy what they can afford, cheapest first. In a night they gather an armful of
+     things, then sweep the whirl through whoever is most nearly frightened out, from the side away from the way out,
+     with a person's reaction time and aim; they let go when the ectoplasm is nearly gone, over a crowd if they can. */
   function person(o) {
     return (S, m, dt) => {
       m.t = (m.t || 0) + dt; m.busy = (m.busy || 0) - dt;
       const r = () => rand(m);
-      if (S.ev.length > 30) S.ev.length = 0;
+      if (S.ev.length > 40) S.ev.length = 0;
       if (o.breakEvery && m.nextBreak == null) m.nextBreak = o.breakEvery * (.6 + .8 * r());
-      if (o.breakEvery && m.t > m.nextBreak && S.phase === 'organ') { m.busy = Math.max(m.busy, o.breakLen * (.5 + r())); m.nextBreak = m.t + o.breakEvery * (.6 + .8 * r()); }
+      if (o.breakEvery && m.t > m.nextBreak && S.phase === 'organ') { m.busy = max(m.busy, o.breakLen * (.5 + r())); m.nextBreak = m.t + o.breakEvery * (.6 + .8 * r()); }
       if (m.busy > 0) return;
       if (S.finale) { if (!m.fin) m.fin = m.t; if (m.t - m.fin > 6) act(S, 'finale', S.finale + 1); return; }
       if (S.phase === 'organ') {
@@ -13470,42 +13762,47 @@ const CORE = (() => {
         act(S, 'night'); m.busy = o.react * 3; m.aim = null; return;
       }
       if (S.end) return;
-      // the house's own tricks, when they help
-      if (has(S, 'phone') && !S.cd.phone && S.nt > 1 && S.people.filter(p => p.st === 'in' && p.f > 0).length >= 2 && r() < o.tricks) { act(S, 'tap', 'phone'); m.busy = o.tap; return; }
-      if (has(S, 'chand') && !S.cd.chand && S.people.filter(p => p.st === 'in' && p.f === 1 && p.x < 500).length >= 2 && r() < o.tricks) { act(S, 'tap', 'chand'); m.busy = o.tap; return; }
-      // the target: whoever is nearest a way out, by the stair and the door
-      const ins = S.people.filter(p => p.st === 'in');
-      if (!ins.length) { if (S.g.on) act(S, 'lift'); m.busy = o.react; return; }
-      const cost = p => { const E = exits(S, p.f); let c = p.f * (HW * .6) + (p.f ? p.x : p.x); if (E.some(e => e > HW)) c = min(c, HW - p.x); return c; };
-      if (!m.aim || !ins.includes(m.aim) || r() < dt / o.retarget) m.aim = ins.reduce((a, b) => cost(b) < cost(a) ? b : a);
-      const p = m.aim, pf = p.climb > 0 ? p.to : p.f, px = p.climb > 0 ? STAIR : p.x, E = exits(S, pf), right = E.some(e => e > HW) && HW - px < (pf ? 1e9 : px);
-      const side = right ? -1 : 1, gx = px + side * reachOf(S) * (CAST[p.id] && CAST[p.id].skeptic ? .25 : o.lead) + (r() - .5) * o.wobble, gy = -pf * FH - FH * .45;
-      const G = S.g, gf = floorAt(G.y);
-      // never sweep across them from the wrong side: go round by another floor, or lift and set down again
-      const wrong = G.on && gf === pf && (G.x - px) * side < 0 && abs(G.x - px) < reachOf(S) * 1.6;
-      if (wrong) {
-        if (o.lift && S.ecto > P.appear * 2) { act(S, 'lift'); m.busy = o.react; m.drop = 1; return; }
-        const of = pf < 2 ? pf + 1 : pf - 1; act(S, 'ghost', gx, -of * FH - FH * .5); m.busy = o.react * .5; return;
+      const G = S.g, ins = S.people.filter(p => p.st === 'in' && !p.panic);
+      if (!ins.length) { if (G.on && !S.people.some(p => p.st === 'in')) act(S, 'lift'); m.busy = o.react; return; }
+      // nearly spent: let go over whoever is nearest
+      if (G.on && S.ecto < o.letGo) { act(S, 'lift'); m.busy = o.react * 2; return; }
+      let load = 0; for (const t of S.th) if (t.st === 1 && !t.o) load += massOf(t);
+      const cap = capOf(S), grip = gripOf(S);
+      // an armful first: the nearest things the whirl can lift
+      if (load < cap * o.armful && S.nt < dawnOf(S) * .8) {
+        const free = S.th.filter(t => t.st === 0 && tierOf(t) <= grip && massOf(t) + load <= cap + .01);
+        if (free.length) {
+          const best = free.reduce((a, b) => (abs(b.x - G.x) + abs(b.y - G.y) * 2 - massOf(b) * 20) < (abs(a.x - G.x) + abs(a.y - G.y) * 2 - massOf(a) * 20) ? b : a);
+          act(S, 'ghost', best.x + (r() - .5) * o.wobble, best.y - 40); m.busy = o.react * (.6 + .8 * r()); return;
+        }
       }
+      // the target: whoever is nearest to panic, by share of their nerve, and near to hand
+      const immune = q => CAST[q.id] && CAST[q.id].skeptic && !S.th.some(t => t.st === 1 && !t.o && tierOf(t) >= 1);
+      const score = q => immune(q) ? -9 : q.fear / nerveOf(q) - abs(q.f - floorAt(G.y)) * .15 - abs(q.x - G.x) / 3000;
+      if (!m.aim || !ins.includes(m.aim) || immune(m.aim) || r() < dt / o.retarget) m.aim = ins.reduce((a, b) => score(b) > score(a) ? b : a);
+      const p = m.aim, pf = p.climb > 0 ? p.to : p.f, px = p.climb > 0 ? STAIR + 40 : p.x, side = -fleeDir(S, p), R = reachOf(S);
+      // circle through them from their far side, so every hit pushes them towards the way out
+      const sweep = sin(m.t * 2.2) * R * .35;
+      const gx = clamp(px + side * R * o.lead + sweep + (r() - .5) * o.wobble, 20, HW - 20), gy = -pf * FH - p.h * .5;
       act(S, 'ghost', gx, gy); m.busy = o.react * (.6 + .8 * r());
     };
   }
   const bots = {
-    eager: person({ react: .28, tap: .4, buy: 1.1, read: 6, lead: .55, wobble: 50, retarget: 3, lift: 1, tricks: .5 }),
-    casual: person({ react: .6, tap: .8, buy: 2.4, read: 14, lead: .7, wobble: 120, retarget: 1.5, lift: 1, tricks: .15, breakEvery: 160, breakLen: 25 })
+    eager: person({ react: .28, buy: 1.1, read: 6, lead: .55, wobble: 50, retarget: 3, armful: .6, letGo: .8 }),
+    casual: person({ react: .6, buy: 2.4, read: 14, lead: .7, wobble: 120, retarget: 1.5, armful: .4, letGo: .4, breakEvery: 160, breakLen: 25 })
   };
   const pace = { eager: 32, casual: 85, gap: 5 };
   // stickers the shell hands out: [id, name, what earns it, a test on the state]
   const feats = [
-    ['sweep', 'A clean sweep', 'Empty the house of three or more in one night, eight times.', S => (S.sweeps | 0) >= 8],
-    ['chain', 'Stampede', 'Drive five out of the house one straight after another.', S => (S.bestChain | 0) >= 4],
-    ['slam', 'Mind the door', 'Slam forty doors.', S => (S.slams | 0) >= 40],
-    ['thin', 'On the last breath', 'Drive five people out with under a second and a half of ectoplasm left.', S => (S.thin | 0) >= 5],
+    ['piano', 'Grand finale', 'Hit someone with the piano.', S => (S.piano | 0) >= 1],
+    ['chain', 'Stampede', 'Drive eight out of the house one straight after another.', S => (S.bestChain | 0) >= 7],
+    ['ten', 'Standing room only', 'Drive ten people out in a single night.', S => (S.bestNight | 0) >= 10],
+    ['tidy', 'Not a cup out of place', 'Drive three out in a night in which nothing breaks.', S => (S.tidy | 0) >= 1],
     ['organ', 'Full organ', 'Buy every pipe on the organ in the cellar.', S => S.bought >= PIPES.length]
   ];
 
-  return { version: 2, P, HW, FH, STAIR, CAST, LOOKS, REELS, REG, PIPES, byId, init, step, act, done, milestones, progress, bots, pace, migrate, feats,
-    ectoMax, drainOf, speedOf, reachOf, fearOf, worthOf, dawnOf, panicOf, floorAt, has, open, can, price, exits, live, nerveOf, lvOf };
+  return { version: 3, moveIn, P, HW, FH, STAIR, CAST, LOOKS, REELS, REG, PIPES, KIND, SLOTS, byId, init, step, act, done, milestones, progress, bots, pace, migrate, revisit, feats,
+    ectoMax, drainOf, speedOf, reachOf, capOf, spinOf, gripOf, fearOf, worthOf, dawnOf, panicOf, floorAt, has, open, can, price, exits, live, nerveOf, lvOf, massOf, tierOf, fragile, slotXY, tallOf };
 })();
 </script>
 

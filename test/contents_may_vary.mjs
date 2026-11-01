@@ -38,7 +38,7 @@ const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { warren: 300 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024, flurry: 230 * 1024 };
+const BOX_CAP = { guests: 260 * 1024, warren: 300 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024, flurry: 230 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -682,49 +682,79 @@ if (suites.includes('warren') && warren) {
   }
 }
 
-/* ---------------- guests ---------------- */
+/* ---------------- guests ----------------
+   Unwelcome Guests, third version (November 2026): a poltergeist whose whirl follows the finger, tears loose what it
+   passes and carries it round; what it carries hits people, who panic past their nerve and run out of the house. */
 const guests = worlds.find(w => w.id === 'guests');
 if (suites.includes('guests') && guests) {
   section('guests');
-  const { CORE, KIT } = load(guests);
+  const { CORE } = load(guests);
   const FH = CORE.FH;
-  // a night with one Pemberton alone on a floor at x, and the ghost held at gx on the same floor
-  const alone = (f, x, gx, fear = 0) => {
-    const S = CORE.init(4); CORE.act(S, 'night');
-    S.people.forEach((p, k) => { if (k) { p.st = 'out'; } else { p.f = f; p.x = x; p.fear = fear; p.home = [f * 2 + 1, f * 2 + 1]; } });
-    CORE.act(S, 'ghost', gx, -f * FH - FH / 2); S.g.x = gx; S.g.y = -f * FH - FH / 2; return S;
+  // a night with one Pemberton alone on a floor at x
+  const alone = (f, x, seed = 4) => {
+    const S = CORE.init(seed); CORE.act(S, 'night');
+    S.people.forEach((p, k) => { if (k) p.st = 'out'; else { p.f = f; p.x = x; p.fear = 0; p.home = [f * 2 + 1, f * 2 + 1]; } });
+    return S;
   };
+  const run = (S, secs, fn) => { const ev = []; for (let k = 0; k < secs * 10; k++) { if (fn) fn(S, k); CORE.step(S, .1); ev.push(...S.ev); S.ev.length = 0; } return ev; };
   {
-    // the verb: from the far side the cold drives them along the floor, down the stair and out of the door
-    const S = alone(1, 420, 560); let out = null;
-    for (let k = 0; k < 300 && !out; k++) { const p = S.people[0]; CORE.act(S, 'ghost', p.climb > 0 ? 160 : p.x + 110, -(p.climb > 0 ? p.to : p.f) * FH - FH / 2); CORE.step(S, .1); for (const e of S.ev) if (e.k === 'out') out = e; S.ev.length = 0; }
-    check(out && out.via === 'door', 'held on their far side, the ghost drives someone down the stair and out of the front door', JSON.stringify(S.people[0]).slice(0, 120));
-    check(S.people[0].res === S.people[0].res0 - out.loss && S.people[0].st !== 'in', 'an exit costs them resolve and they are gone for the night');
+    // the whirl tears loose what it passes, and only what its grip can lift
+    const S = alone(0, 900); const cand = S.th.findIndex(t => t.k === 'candle'), piano = S.th.findIndex(t => t.k === 'piano');
+    const c = CORE.slotXY(cand); run(S, 1, T => CORE.act(T, 'ghost', c.x, c.y - 30));
+    check(S.th[cand].st === 1, 'held over the mantel, the whirl tears the candle loose');
+    run(S, 1, T => CORE.act(T, 'ghost', CORE.slotXY(piano).x, -120));
+    check(S.th[piano].st === 0, 'the piano stays where it is until the organ gives the whirl the grip for it');
   }
   {
-    // from the wrong side they run away from the door, and are cornered at the far wall rather than let out
-    const S = alone(0, 300, 180, 30); for (let k = 0; k < 60; k++) { CORE.act(S, 'ghost', S.people[0].x - 120, -FH / 2); CORE.step(S, .1); }
-    check(S.people[0].x > 900 && S.people[0].st === 'in', `pushed from the door side they run the other way and stay in (x ${S.people[0].x.toFixed(0)})`);
+    // what spins hits whoever it passes: fright, screams, and a shove away from the whirl
+    const S = alone(0, 300); const cup = S.th.findIndex(t => t.k === 'cup'), c = CORE.slotXY(cup);
+    run(S, 1, T => CORE.act(T, 'ghost', c.x, c.y - 30));
+    const x0 = S.people[0].x, ev = run(S, 3, T => CORE.act(T, 'ghost', T.people[0].x + 90, -150));
+    const hits = ev.filter(e => e.k === 'hit').length;
+    check(hits > 0 && S.people[0].fear > 0 && S.$ > 0, `swept through someone, what the whirl carries hits them (${hits} hits) and they scream`);
+    check(S.people[0].x < x0, `a hit knocks them away from the whirl (${x0.toFixed(0)} → ${S.people[0].x.toFixed(0)})`);
   }
   {
-    // nobody leaves with too little fright: a calm person at the door is not out
-    const S = alone(0, 40, 140); S.people[0].nerve = 1e6; for (let k = 0; k < 30; k++) { CORE.act(S, 'ghost', S.people[0].x + 100, -FH / 2); CORE.step(S, .1); }
-    check(S.people[0].st === 'in', 'someone with nerve to spare is not frightened out of the house by a whisper');
+    // frightened past their nerve they panic, run down the stair and out of the front door
+    const S = alone(1, 600); S.people[0].fear = S.people[0].nerve * 2; S.people[0].panic = 1;
+    const ev = run(S, 20); const out = ev.find(e => e.k === 'out');
+    check(out && out.via === 'door' && S.people[0].res === S.people[0].res0 - out.loss, 'in a panic they go down the stair and out of the door, a pip of resolve the poorer');
+    const T = alone(0, 40); run(T, 6);
+    check(T.people[0].st === 'in', 'someone who is not in a panic does not leave by the door they stand at');
   }
   {
-    // a slammed door across the middle of the floor holds them on their side
-    const S = alone(0, 700, 860, 40); S.own.slam1 = 1; S.lv.slam = 1;
-    check(CORE.act(S, 'tap', 'slam', 0), 'a doorway can be slammed once the organ has the pipe');
-    for (let k = 0; k < 40; k++) { CORE.act(S, 'ghost', S.people[0].x + 110, -FH / 2); CORE.step(S, .1); }
-    check(S.people[0].x >= 500, `a slammed door stops whoever runs at it (x ${S.people[0].x.toFixed(0)})`);
+    // the professor scoffs at a teacup, not at a chair
+    const S = CORE.init(5); CORE.moveIn(S, 1); S.ev = []; CORE.act(S, 'night');
+    const prof = S.people.find(p => p.id === 'prof'); S.people.forEach(p => { if (p !== prof) p.st = 'out'; }); prof.f = 0; prof.x = 600;
+    const cup = S.th.find(t => t.k === 'cup'); cup.st = 1; cup.o = 0; cup.x = 600; cup.y = -150; cup.cd = 0; S.g.on = 1; S.g.x = 700; S.g.y = -150; S.g.tx = 700; S.g.ty = -150;
+    CORE.step(S, .05); const f0 = prof.fear;
+    const chair = S.th.find(t => t.k === 'chair'); chair.st = 1; chair.o = 0; chair.x = prof.x; chair.y = -150; chair.cd = 0; cup.st = 0;
+    CORE.step(S, .05);
+    check(f0 === 0 && prof.fear > 0, `the professor ignores a teacup and not a chair (${f0}, ${prof.fear.toFixed(1)})`);
+  }
+  {
+    // let go: what was carried falls, crockery breaks on the floor, and everyone near it jumps
+    const S = alone(0, 330); const ids = S.th.map((t, i) => i).filter(i => CORE.SLOTS[i][0] === 1 && CORE.tierOf(S.th[i]) === 0);
+    run(S, 2, T => CORE.act(T, 'ghost', 690, -140)); const carried = S.th.filter(t => t.st === 1).length;
+    S.people[0].x = 600; const f0 = S.people[0].fear; CORE.act(S, 'lift'); const ev = run(S, 2);
+    const lands = ev.filter(e => e.k === 'land'), broke = lands.filter(e => e.broke).length;
+    check(carried > 0 && lands.length === carried && broke > 0, `let go, the ${carried} things carried come down (${broke} broken)`);
+    check(S.people[0].fear > f0, 'a crash beside someone frightens them');
+    check(S.th.every(t => t.y <= 0 && t.st !== 2), 'nothing lands below the ground floor, and nothing stays in the air');
+  }
+  {
+    // the whirl's ring keeps to its floor: nothing it carries goes through the ceiling or the floor
+    const S = alone(2, 900); S.lv.grip = 3; S.lv.cap = 3;
+    let worst = 0; run(S, 6, (T, k) => { CORE.act(T, 'ghost', 200 + 600 * Math.abs(Math.sin(k / 9)), -FH - 60 - (k % 30)); for (const t of T.th) if (t.st === 1) { const f = CORE.floorAt(T.g.y), lo = -f * FH, hi = lo - FH; worst = Math.max(worst, t.y - lo, hi - t.y); } });
+    check(worst <= 0, `what spins stays inside the ghost's floor (worst ${worst.toFixed(1)})`);
   }
   {
     // the night ends: when the ghost is spent, or at dawn with ectoplasm left
-    const S = alone(2, 900, 100); S.people[0].nerve = 1e6; CORE.act(S, 'lift'); S.ecto = 1e9; let why = null;
+    const S = alone(2, 900); S.people[0].nerve = 1e9; S.ecto = 1e9; let why = null;
     for (let k = 0; k < 2000 && !why; k++) { CORE.step(S, .1); for (const e of S.ev) if (e.k === 'dawn') why = e.why; S.ev.length = 0; }
     check(why === 'dawn' && S.phase === 'organ', 'the dawn ends a night whatever is left');
-    const T = alone(2, 900, 100); T.people[0].nerve = 1e6; let w2 = null;
-    for (let k = 0; k < 600 && !w2; k++) { CORE.act(T, 'ghost', 500, -2 * FH - FH / 2); CORE.step(T, .1); for (const e of T.ev) if (e.k === 'dawn') w2 = e.why; T.ev.length = 0; }
+    const T = alone(2, 900); T.people[0].nerve = 1e9; let w2 = null;
+    for (let k = 0; k < 900 && !w2; k++) { CORE.act(T, 'ghost', 500, -2 * FH - FH / 2); CORE.step(T, .1); for (const e of T.ev) if (e.k === 'dawn') w2 = e.why; T.ev.length = 0; }
     check(w2 === 'spent', 'a ghost held out until its ectoplasm is gone ends the night');
   }
   {
@@ -732,23 +762,20 @@ if (suites.includes('guests') && guests) {
     const S = CORE.init(2); S.$ = 1e9; const second = CORE.PIPES.find(p => p.reg === 0 && p.n === 1), first = CORE.PIPES.find(p => p.reg === 0 && p.n === 0);
     check(!CORE.act(S, 'buy', second.id), 'a pipe cannot be bought before the one it grows from');
     check(CORE.act(S, 'buy', first.id) && CORE.act(S, 'buy', second.id) && S.$ === 1e9 - first.c - second.c, 'bought in order, each pipe costs its price');
+    check(first.c <= 20, `the first pipe costs about one first night (${first.c})`);
     CORE.act(S, 'night'); check(!CORE.act(S, 'buy', CORE.PIPES.find(p => p.reg === 1 && p.n === 0).id), 'nothing is bought in the middle of a night');
   }
   {
-    // the professor scoffs at the edge of the cold and is frightened in the middle of it; fright wears nerve down for good
-    const S = CORE.init(5); S.reel = 1; S.people = []; S.ev = [];
-    const R = CORE.REELS[1]; CORE.act(S, 'night');
-    S.people = [{ id: 'prof', look: 'prof', name: 'x', x: 500, f: 1, fear: 0, res: 4, res0: 4, nerve: 900, worth: 1, home: [3, 3], st: 'in', climb: 0, to: 0, dir: 0, panic: 0, stun: 0, lure: 0, cower: 0, scared: 0, first: 0, acc: 0, tx: -1, wear: 0 }];
-    S.g = { x: 500 + CORE.reachOf(S) * .9, y: -FH * 1.5, on: 1, tx: 500 + CORE.reachOf(S) * .9, ty: -FH * 1.5, fade: 0 }; S.ecto = 99;
-    CORE.step(S, .1); const edge = S.people[0].fear;
-    S.g.x = S.g.tx = S.people[0].x + 5; CORE.step(S, .5);
-    check(edge === 0 && S.people[0].fear > 0, `the professor ignores the edge of the cold and not its heart (${edge}, ${S.people[0].fear.toFixed(1)})`);
-    check(CORE.nerveOf(S.people[0]) < 900, 'a fright wears nerve down for good');
-  }
-  {
-    const old = { v: 1, seed: 3, reel: 2, people: [], lv: { ecto: 3 } };
-    const M = CORE.migrate(old, 1);
-    check(M.v === 2 && M.reel === 0 && M.phase === 'organ' && M.people.length === 3, 'a save from the tap-the-furniture version starts afresh');
+    // older saves were other games in the same house; a finished game can be gone back to from the shelf
+    for (const v of [1, 2]) { const M = CORE.migrate({ v, seed: 3, reel: 2, people: [], lv: { ecto: 3 } }, v); check(M.v === 3 && M.reel === 0 && M.phase === 'organ' && M.people.length === 3 && M.th.length === CORE.SLOTS.length, `a save of version ${v} starts afresh`); }
+    const S = CORE.init(7), bot = CORE.bots.eager, m = { seed: 99 }; let t = 0;
+    while (!CORE.done(S) && t < 120 * 60) { bot(S, m, .1); CORE.step(S, .1); S.ev.length = 0; t += .1; }
+    check(CORE.done(S), `the eager bot plays the box through (${min(t)})`);
+    const p0 = CORE.progress(S), R = CORE.revisit(JSON.parse(JSON.stringify(S)));
+    check(!CORE.done(R) && R.phase === 'organ' && R.reel === CORE.REELS.length - 1 && R.people.every(p => p.st !== 'gone') && R.bought === S.bought, 'revisit: the picture people come back for another take, the organ kept');
+    check(CORE.progress(R) >= p0 - .03, 'revisit does not take the shelf\'s progress back');
+    let t2 = 0; while (!CORE.done(R) && t2 < 60 * 60) { bot(R, m, .1); CORE.step(R, .1); R.ev.length = 0; t2 += .1; }
+    check(CORE.done(R), `the revisited box can be finished again (${min(t2)})`);
   }
 }
 

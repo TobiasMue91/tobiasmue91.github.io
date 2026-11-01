@@ -40,6 +40,9 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    Snow Day may weigh **230 KB**: its refinement session (October 2026) began at 116 KB and passed 130 KB with its scenes,
    close-ups and diagnostic switches and the first round of art (cotton-wool snow, wood, the leaders, the present); the owner
    lifted the cap in advance.
+   Unwelcome Guests may weigh **260 KB**: for its refinement session (November 2026, rule 16) the owner let it be remade
+   from the verb up (a poltergeist's whirl in place of the cold that herded people) and lifted the cap; the remade box
+   began at 145 KB with its scenes, close-ups and diagnostic switches.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
