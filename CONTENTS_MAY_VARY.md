@@ -1230,8 +1230,9 @@ still undone, most valuable first:
     top of the coverlet (it is drawn first and comes out from under it); price tags overlapped when the whole tree was in view
     (they show once the medallions have room); the trebuchet's counterweight was a grey square (a timber box of stones with an
     iron band and rivets); a lone dark ball sat in the bracken (gone); every cottage was the same cottage (every other one
-    mirrored). Not done, from the same list: straight worn tracks across the world map's meadow, rivers that end in a blunt cap
-    mid-meadow, fields whose dark plots read as a grate, tufts drawn over the fields, the ink running past the painted land.
+    mirrored); a river that ended in a blunt cap in the meadow rises from a spring in a ring of stones with rushes; the young
+    green field's dark plot with hard lines read as a grate (rows of green with soil between). Not done, from the same list:
+    straight worn tracks across the world map's meadow, tufts drawn over the fields, the ink running past the painted land.
   - *Two calls the owner left to the session* (November 2026). The leaf keeps running into millions: the genre the box follows
     (Sir, We Have an Orc Problem, the paid incrementals) counts up that way, the tree's prices are built on it, and rescaling it
     would retune every folio for a complaint about tone; the colophon and the chronicle count in plain figures. The playfield
