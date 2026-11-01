@@ -1356,6 +1356,11 @@ still undone, most valuable first:
     Next, by the critic's list: the props are still drawn from primitives beside traced people (the same lever again: cut-paper
     furniture of the period, Edouart's own chairs, tables and harp, traced the same way), every reel in the same staging, the
     boxed small-caps panels everywhere.
+  - *The owner's first play* (November 2026): four nights from the start bought one pipe. The tuning had raised every price by
+    one factor to fit the bots' pace, so after the first pipe (14) the cheapest cost 240, eight first nights for a person (the
+    bots earn more a night than a person does, so their pacing never showed it). Each register now starts cheap (14, 35, 50,
+    90) and grows steeply to the same top; the later casts have more nerve to keep the pace (eager 36.8–38.2, casual
+    80.3–83.8, the longest wait 3.4 min). The suite wants four pipes under two first nights.
   - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
     for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
     "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one
@@ -2041,6 +2046,10 @@ is not saved by its art direction: the owner played both and stopped.
 - **A score paid by the share of someone's nerve starves a bigger cast.** Unwelcome Guests paid screams as fright over nerve,
   so the reel after the Pembertons paid a third as much per hit and the bot stalled for two hours. Pay by what the hand did
   (the mass that struck) and let the cast's nerve set how long it takes.
+
+- **The bots earn faster than a person, so they hide a steep start.** Unwelcome Guests' eager bot bought its second pipe in a
+  minute; the owner bought one in four nights. Read the first prices against what a person's first night pays, not the bot's,
+  and keep the first few nodes of every branch within a night or two of it.
 
 - **Firefox on Android pays for every canvas call.** The same page ran at 59 fps in Chrome and 6 in Firefox on one phone, and
   the box before it fared no better there. Count draw calls per part and keep them down: paint what does not change into

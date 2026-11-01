@@ -763,6 +763,10 @@ if (suites.includes('guests') && guests) {
     check(!CORE.act(S, 'buy', second.id), 'a pipe cannot be bought before the one it grows from');
     check(CORE.act(S, 'buy', first.id) && CORE.act(S, 'buy', second.id) && S.$ === 1e9 - first.c - second.c, 'bought in order, each pipe costs its price');
     check(first.c <= 20, `the first pipe costs about one first night (${first.c})`);
+    // a person earns less a night than the bots: the next few pipes must be cheap too, or the first nights buy nothing (the owner
+    // played four nights and could afford one pipe when the second cost 240)
+    const cheap = CORE.PIPES.filter(p => p.c <= 60).length;
+    check(cheap >= 4, `at least four pipes cost under two first nights (${cheap})`);
     CORE.act(S, 'night'); check(!CORE.act(S, 'buy', CORE.PIPES.find(p => p.reg === 1 && p.n === 0).id), 'nothing is bought in the middle of a night');
   }
   {
