@@ -1326,8 +1326,19 @@ still undone, most valuable first:
     floated over its rocker; candles in the whirl burnt upside down (blown out in the air); the range had no hob; the lamp
     by the front door hung on the sky (a bracket); the door was a slab (panels and a knob). Six tiles aimed at nothing, the
     props list's fault: they aim at the last hit, slam, imp or landing now, and the curtains stay off in a close-up.
-  - *Still open:* the night card's scale; aprons that read as holes; the bed's frame; the frame rate on a phone in Firefox,
-    which the owner found fine in a first look.
+  - *Third critic round* (fresh, filmstrips): 7/5/7/6/6 and **5** again, the plateau. Done after it: what the whirl carries
+    keeps a pale paper edge of a fixed width on screen, so a piano in a heap of chairs still reads; the whirl draws torn
+    paper scraps spiralling in instead of frost crystals (critics read the crystals as snow); OUT! and the scream plates stay
+    inside the house; half the extras are a breath lighter than black, so a crowd has depth (lighter still read as
+    see-through); the HUD fades out faster when the organ comes; the bed has a frame, the maid's apron is a bib in half-tone
+    (a white bar read as a hole); the intertitle card fills more of the screen; on a phone the house sits higher.
+    The owner looked at the frame rate on their phone and found it fine.
+  - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
+    for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
+    "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one
+    wallpaper motif in six tints, the same small-caps plate on every surface, copy that sounds like labels. These are the next
+    session's: give the paper an edge (a deckled stroke on rooms and props drawn once into the tiles), a motif per room, and a
+    pass over every line of copy.
 
 ## Ideas, considered and not chosen
 
