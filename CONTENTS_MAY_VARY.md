@@ -1215,7 +1215,14 @@ still undone, most valuable first:
     1,700 calls to about 450 at 300 rabbits; the rabbit budget falls to 250 when frames stay slow.
     Measured by the owner in Firefox afterwards: the largest horde 25 fps (3 to 7 before), the stripped scene 32 (6), an early
     folio 62. The next cost was the minimap (18 ms in the largest horde: a rectangle a cell); it is three paths by strength now,
-    redrawn ten times a second.
+    redrawn ten times a second. A heavier moment then measured 8 fps in Firefox (script 116 ms: figures 51, HUD 17, body 16,
+    clouds and vignette 6); the HUD writes to the page only 15 times a second and only what changed, the body's three washes are
+    laid on a small sheet and enlarged in one draw, the vignette is a CSS layer over the canvas, cloud shadows only with a mouse.
+  - *Two calls the owner left to the session* (November 2026). The leaf keeps running into millions: the genre the box follows
+    (Sir, We Have an Orc Problem, the paid incrementals) counts up that way, the tree's prices are built on it, and rescaling it
+    would retune every folio for a complaint about tone; the colophon and the chronicle count in plain figures. The playfield
+    stays the painted land the owner asked for in the remake; the manuscript is carried by the page border, the underdrawing of
+    what is not painted yet, the chronicle, the Tree of Jesse and the shrine.
   - *Sound*, rendered offline (`OfflineAudioContext`, the box's own sound functions in a page of their own): the music peaks
     at −19 dB with an average of −37; a dense moment of effects (kills, bites, stones, the dragon, the bell, the flood, a hare)
     peaks at −10 dB, average −32. Nothing clips; nothing changed.
