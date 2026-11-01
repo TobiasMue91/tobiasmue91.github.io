@@ -1313,9 +1313,21 @@ still undone, most valuable first:
     one place, in the sky over the roof, and THE DOOR is named only once someone panics; the bar says reel and night; a night
     that got someone out is not called a fade; on a desktop the cast column, the counter and the bill are larger.
     Pacing after it: eager 33.0–37.0, casual 73.7–76.1, the longest wait 2.3 min.
-  - *Still open:* the people are one parametric template with a different hat each (the critics' plainest giveaway); the
-    organ's locked pipes say nothing; the desktop's empty sides (a cinema's proscenium and curtains round the film?); the
-    night card's scale; a close-up critic with the checklist; the frame rate on the owner's phone in Firefox.
+  - *Third pass.* The people are no longer one template with a hat each: a build and a nose of their own, a bustle, a train,
+    a fringed dress, an apron, a shawl, a stooping professor with a cane, a camera on Sparks's shoulder, girls with legs under
+    a knee-length frock (`K.debug.lineup()` draws every look side by side). Locked pipes show their emblem, dimmed. On a wide
+    screen the film is shown in a picture house: red velvet curtains held back with gold ropes, a valance with a fringe,
+    painted once and laid over the film in one draw. Sound measured offline: the densest moment (four heavy hits, the piano
+    landing, china smashing, a door slamming, at once) peaked at −1 dB and now at −4 dB; nothing clips.
+  - *The close-up critic* (19 tiles, the checklist): Edith climbing the stair stood through the ceiling (each floor now has a
+    hole for the stair, with a rail round it); a figure knocked over rotated through floors and walls (clipped to its room);
+    doorways between rooms were wall stubs ending in the air (a lintel and posts); the armour was boxes (one silhouette with
+    pauldrons, a gauntlet round the spear); the piano read as a sideboard (pale keys in every look); the rocking horse
+    floated over its rocker; candles in the whirl burnt upside down (blown out in the air); the range had no hob; the lamp
+    by the front door hung on the sky (a bracket); the door was a slab (panels and a knob). Six tiles aimed at nothing, the
+    props list's fault: they aim at the last hit, slam, imp or landing now, and the curtains stay off in a close-up.
+  - *Still open:* the night card's scale; aprons that read as holes; the bed's frame; the frame rate on a phone in Firefox,
+    which the owner found fine in a first look.
 
 ## Ideas, considered and not chosen
 
@@ -1986,6 +1998,14 @@ is not saved by its art direction: the owner played both and stopped.
   looked like two lids and a box on a box. A few projected points (a box, a roof turning on its hinge, a camera that pitches)
   with culled faces and the paintings laid on them read as an object at once, and match the still picture exactly when the
   projection starts from the picture's own view.
+- **A close-up script waits on the box's clock; a frozen camera stops that clock.** `util/cmv_props.mjs` waits until the
+  state's `t` has moved on, and `look(..., { freeze })` stops the rules, so every tile waited a minute and the run timed out.
+  A frozen view keeps its clock running without stepping the rules.
+- **A staircase needs a hole in the floor above it.** The stair was drawn, the floor over it was whole, and every climber
+  stood through the ceiling for a second. Whatever passes between floors needs the opening drawn.
+- **A score paid by the share of someone's nerve starves a bigger cast.** Unwelcome Guests paid screams as fright over nerve,
+  so the reel after the Pembertons paid a third as much per hit and the bot stalled for two hours. Pay by what the hand did
+  (the mass that struck) and let the cast's nerve set how long it takes.
 
 - **Firefox on Android pays for every canvas call.** The same page ran at 59 fps in Chrome and 6 in Firefox on one phone, and
   the box before it fared no better there. Count draw calls per part and keep them down: paint what does not change into
