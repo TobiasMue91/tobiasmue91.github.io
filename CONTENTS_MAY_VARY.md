@@ -1333,6 +1333,13 @@ still undone, most valuable first:
     see-through); the HUD fades out faster when the organ comes; the bed has a frame, the maid's apron is a bib in half-tone
     (a white bar read as a hole); the intertitle card fills more of the screen; on a phone the house sits higher.
     The owner looked at the frame rate on their phone and found it fine.
+  - *Fourth round* (fresh critic, after paper layers, wallpapers and copy): 7/5/6/6/5 and **4**, the plateau again, now with
+    one critic's spread. Done after it: the cellar opens with the iris from black after the night's card (the card, the
+    organ and the cast cards had shown through each other for a frame); the film's scratch lines are gone (two critics took
+    them for a rendering fault; the dust specks stay); screams stay under the roof; the front door's leaf is drawn in the
+    frame and flung wide when someone bolts through it, then swings back; a lesson sits in a slot measured under the bill;
+    plates fly to the counter sooner; a heavy hit holds only its victim for a moment; the ring spreads heavy things further
+    out; the organ's copy is plainer. Pacing after it: eager 34.3–36.5, casual 70.1–70.8 (two seeds).
   - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
     for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
     "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one
