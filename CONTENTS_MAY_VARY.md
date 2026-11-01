@@ -1213,6 +1213,9 @@ still undone, most valuable first:
     once at 12 px a unit, a monk once per 32 turns of his bow, drawn or just loosed, and per what the tree gave his arrows,
     then placed with one draw), the page border's ivy every frame (now painted into the tiles). The scene went from about
     1,700 calls to about 450 at 300 rabbits; the rabbit budget falls to 250 when frames stay slow.
+    Measured by the owner in Firefox afterwards: the largest horde 25 fps (3 to 7 before), the stripped scene 32 (6), an early
+    folio 62. The next cost was the minimap (18 ms in the largest horde: a rectangle a cell); it is three paths by strength now,
+    redrawn ten times a second.
   - *Sound*, rendered offline (`OfflineAudioContext`, the box's own sound functions in a page of their own): the music peaks
     at −19 dB with an average of −37; a dense moment of effects (kills, bites, stones, the dragon, the bell, the flood, a hare)
     peaks at −10 dB, average −32. Nothing clips; nothing changed.
