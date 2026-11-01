@@ -1218,6 +1218,20 @@ still undone, most valuable first:
     redrawn ten times a second. A heavier moment then measured 8 fps in Firefox (script 116 ms: figures 51, HUD 17, body 16,
     clouds and vignette 6); the HUD writes to the page only 15 times a second and only what changed, the body's three washes are
     laid on a small sheet and enlarged in one draw, the vignette is a CSS layer over the canvas, cloud shadows only with a mouse.
+  - *A last round, close-ups first* (November 2026, the owner at 20 fps on the phone and asking for one more round). A fresh
+    close-up critic with the checklist went through the 25 props and found twenty faults; three were the props list's own
+    aim (the dragon and the flood had left the frame; it now points at the gift itself, `look('gift')`). Fixed: the king's
+    silhouette was cut by a sprite too small for him and lay over the crowd as a pale slab (the king and the golden hares are
+    now drawn over the crowd, opaque, the king with a contact shadow: a boss and a prize are never lost in it); the ink pool
+    was drawn over the defenders standing in it (it lies on the ground now, under everything that stands); new rabbits grew
+    from a third of their size and read as a second, smaller breed (they climb out of the ground at full size, ears first);
+    the Tree of Jesse's boughs showed a rounded cap where they met the trunk (trunk and boughs are one silhouette now: every
+    dark stroke, then every light one), its leaves floated beside the vine (each on a stalk), and the trunk rose from the
+    top of the coverlet (it is drawn first and comes out from under it); price tags overlapped when the whole tree was in view
+    (they show once the medallions have room); the trebuchet's counterweight was a grey square (a timber box of stones with an
+    iron band and rivets); a lone dark ball sat in the bracken (gone); every cottage was the same cottage (every other one
+    mirrored). Not done, from the same list: straight worn tracks across the world map's meadow, rivers that end in a blunt cap
+    mid-meadow, fields whose dark plots read as a grate, tufts drawn over the fields, the ink running past the painted land.
   - *Two calls the owner left to the session* (November 2026). The leaf keeps running into millions: the genre the box follows
     (Sir, We Have an Orc Problem, the paid incrementals) counts up that way, the tree's prices are built on it, and rescaling it
     would retune every folio for a complaint about tone; the colophon and the chronicle count in plain figures. The playfield
