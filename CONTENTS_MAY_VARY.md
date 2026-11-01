@@ -1190,6 +1190,54 @@ still undone, most valuable first:
   - *Cost again*, after this round: the horde's lit body was enlarging three world-sized sheets every frame (33 ms in the
     software renderer); it now enlarges only the cells in view (13 ms). The sorted pass of rabbits, trees and defenders costs
     20 to 50 ms there with 2,000 to 3,000 rabbits; `?fps` shows each part (`h:blots`, `h:body`, `h:sorted`, `h:silo`).
+  - *The owner's phone* (October 2026): the frame rate was very poor. What it paid for, and what changed: trees and cottages
+    had been taken out of the painted tiles and drawn one by one every frame for the sorted pass; they are back in the tiles,
+    and one is drawn again in the sorted pass only when a rabbit, a defender, a hare or the king stands behind it within its
+    outline (the castle's walls likewise), so the depth stays right for a handful of draws instead of hundreds. The cloud
+    shadows and the vignette were screen-sized gradients made anew every frame; they are painted once into small canvases and
+    stretched. A touch screen draws at most 1.5 pixels a point (`?dpr=` overrides). The rabbit budget follows the real time
+    from one frame to the next as well as the horde's own cost, down to 500 rabbits drawn when a device cannot keep up. The
+    main canvas is opaque. In the software renderer the sorted pass fell from 30–80 ms to 11–15 ms. Still to be measured on
+    the device.
+  - *The frame meter itself was the brake.* On the owner's phone every variant ran at about one frame a second, all of them
+    with `?fps`: the meter read one pixel back after each part of the frame (Tilt's way of timing the raster), and on a real
+    phone each read makes the GPU stop and wait, after which Chrome moves the canvas to the CPU for good. The read now happens
+    only with `?fps=flush` (for the test browser); `?fps` is a strip over everything at the top of the page. Then the
+    silhouettes: composited over the screen (or round each hidden figure) they cost 13 to 60 ms in the software renderer; now
+    each kind of figure has its outline made once, and a hidden one is a single draw (0.1 ms). Lesson below.
+  - *Firefox on a phone.* On the owner's Redmi Note 13 Pro the stripped-down scene (`?land=0&horde=300&body=0&border=0&fx=0&
+    hud=0&dpr=1`) ran at 59 fps in Chrome and 6 in Firefox (frame 168 ms, script 24 ms), and Tilt ran at 9 in Firefox too:
+    Firefox there pays for every draw call, whatever is drawn. So the count of calls came down (`K.debug.pcalls()` counts them
+    by part): the crowd's shadow under thinned stretches was an ellipse a cell (714 calls; now four paths by strength), arrows
+    in flight two strokes each (now two strokes in all), every defender and its footing drawn stroke by stroke (now painted
+    once at 12 px a unit, a monk once per 32 turns of his bow, drawn or just loosed, and per what the tree gave his arrows,
+    then placed with one draw), the page border's ivy every frame (now painted into the tiles). The scene went from about
+    1,700 calls to about 450 at 300 rabbits; the rabbit budget falls to 250 when frames stay slow.
+    Measured by the owner in Firefox afterwards: the largest horde 25 fps (3 to 7 before), the stripped scene 32 (6), an early
+    folio 62. The next cost was the minimap (18 ms in the largest horde: a rectangle a cell); it is three paths by strength now,
+    redrawn ten times a second. A heavier moment then measured 8 fps in Firefox (script 116 ms: figures 51, HUD 17, body 16,
+    clouds and vignette 6); the HUD writes to the page only 15 times a second and only what changed, the body's three washes are
+    laid on a small sheet and enlarged in one draw, the vignette is a CSS layer over the canvas, cloud shadows only with a mouse.
+  - *A last round, close-ups first* (November 2026, the owner at 20 fps on the phone and asking for one more round). A fresh
+    close-up critic with the checklist went through the 25 props and found twenty faults; three were the props list's own
+    aim (the dragon and the flood had left the frame; it now points at the gift itself, `look('gift')`). Fixed: the king's
+    silhouette was cut by a sprite too small for him and lay over the crowd as a pale slab (the king and the golden hares are
+    now drawn over the crowd, opaque, the king with a contact shadow: a boss and a prize are never lost in it); the ink pool
+    was drawn over the defenders standing in it (it lies on the ground now, under everything that stands); new rabbits grew
+    from a third of their size and read as a second, smaller breed (they climb out of the ground at full size, ears first);
+    the Tree of Jesse's boughs showed a rounded cap where they met the trunk (trunk and boughs are one silhouette now: every
+    dark stroke, then every light one), its leaves floated beside the vine (each on a stalk), and the trunk rose from the
+    top of the coverlet (it is drawn first and comes out from under it); price tags overlapped when the whole tree was in view
+    (they show once the medallions have room); the trebuchet's counterweight was a grey square (a timber box of stones with an
+    iron band and rivets); a lone dark ball sat in the bracken (gone); every cottage was the same cottage (every other one
+    mirrored); a river that ended in a blunt cap in the meadow rises from a spring in a ring of stones with rushes; the young
+    green field's dark plot with hard lines read as a grate (rows of green with soil between). Not done, from the same list:
+    straight worn tracks across the world map's meadow, tufts drawn over the fields, the ink running past the painted land.
+  - *Two calls the owner left to the session* (November 2026). The leaf keeps running into millions: the genre the box follows
+    (Sir, We Have an Orc Problem, the paid incrementals) counts up that way, the tree's prices are built on it, and rescaling it
+    would retune every folio for a complaint about tone; the colophon and the chronicle count in plain figures. The playfield
+    stays the painted land the owner asked for in the remake; the manuscript is carried by the page border, the underdrawing of
+    what is not painted yet, the chronicle, the Tree of Jesse and the shrine.
   - *Sound*, rendered offline (`OfflineAudioContext`, the box's own sound functions in a page of their own): the music peaks
     at −19 dB with an average of −37; a dense moment of effects (kills, bites, stones, the dragon, the bell, the flood, a hare)
     peaks at −10 dB, average −32. Nothing clips; nothing changed.
@@ -1863,6 +1911,17 @@ A box that answers these in a dull way (pull a ball back and let it go; tap an a
 is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
+
+- **Firefox on Android pays for every canvas call.** The same page ran at 59 fps in Chrome and 6 in Firefox on one phone, and
+  the box before it fared no better there. Count draw calls per part and keep them down: paint what does not change into
+  tiles, paint each figure once into a sprite and place it, gather many small shapes into one path.
+
+- **Never read a canvas back on a phone, not even to measure it.** Reading one pixel after each part of a frame shows the
+  raster's real cost in a software renderer, but on a phone each read stalls the GPU and Chrome then moves the canvas to the
+  CPU: Here Be Rabbits' frame meter turned every test link into a slide show. Keep the read behind a switch of its own.
+- **Effects that composite a whole screen are made once, not every frame.** Silhouettes, vignettes and cloud shadows built as
+  screen-sized layers per frame were the largest costs after the sprites; a silhouette sprite per kind of figure, and small
+  canvases stretched to the screen, cost almost nothing.
 
 - **A bot's threshold above what the rules can hold means it never acts.** Here Be Rabbits' bots waited for 25 rabbits in one
   cell to ring the bell, and a cell holds 24: in the whole of the eager bot's game the bell never rang, and the pacing had been

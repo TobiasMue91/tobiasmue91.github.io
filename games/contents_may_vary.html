@@ -9090,6 +9090,7 @@ const CORE = (() => {
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;background:#2a1b11;color:var(--ink);font-family:var(--b);-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 #cv{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#vig{position:fixed;inset:0;pointer-events:none;z-index:1;background:radial-gradient(ellipse 75% 70% at 50% 45%,rgba(40,25,10,0) 55%,rgba(40,25,10,.28))}
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
 [hidden]{display:none!important}
 .vel,.desk #mini{background:radial-gradient(ellipse at 30% 20%,rgba(255,250,235,.55),transparent 60%),linear-gradient(160deg,#f3e7c9,#e6d3a8);box-shadow:0 2px 0 rgba(0,0,0,.35),0 6px 18px rgba(0,0,0,.35),inset 0 0 0 1.5px rgba(80,50,20,.35);border-radius:4px}
@@ -9204,7 +9205,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;paddin
 @media (max-width:520px){#recall{width:48px;height:48px;padding:0 0 9px;border-radius:50%;font-size:20px;line-height:1;position:relative}#recall span{display:none}#recall em{display:block!important;position:absolute;left:0;right:0;bottom:6px;font:italic 700 10px/1 var(--b)}#bar{gap:6px}.ab{width:50px;height:50px}.ab canvas{width:40px}#abil{gap:6px}#mc{width:54px}}
 @media (prefers-reduced-motion:reduce){.ab.ready,#leaf.bump b,#card:not([hidden]){animation:none}}
 </style>
-<canvas id="cv"></canvas>
+<canvas id="cv"></canvas><div id="vig"></div>
 <div id="hud"><div id="fol" class="vel"><b id="fT" class="r"></b><div id="hrd"><em id="hR" class="r"></em><span id="hN"></span><div id="hbar"><div id="hfill"></div></div></div><div id="wall"><span>Wall</span><div id="wbar"><div id="wfill"></div></div><b id="wN"></b></div></div><div id="leaf" class="vel"><i class="lf"></i><b id="lN">0</b></div><div id="uiz" class="vel"><button data-z="-1" title="Smaller text and controls">A−</button><button data-z="1" title="Larger text and controls">A+</button></div></div>
 <div id="bar"><div id="trayW"><div id="tray" hidden></div><button id="recall" hidden title="Take every defender back to the tray">&#8634;<span> Recall all</span><em>recall</em></button></div><div id="abil"></div><div id="mini"><canvas id="mc"></canvas><button id="auto" class="on">AUTO</button></div></div>
 <div id="call"><button id="tb" class="vel" hidden><i class="lf"></i>Tree</button><button id="horn" class="go" hidden>Let them come ▸</button></div>
@@ -9219,14 +9220,15 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;paddin
 const $ = id => document.getElementById(id);
 const { clamp, lerp, ease, fmt, hash } = KIT;
 const { sin, cos, PI, min, max, abs, sqrt, floor, round, hypot, atan2, pow, ceil } = Math;
-const cv = $('cv'), g = cv.getContext('2d');
+const cv = $('cv'), g = cv.getContext('2d', { alpha: false });   // the land covers it all: an opaque canvas is cheaper to compose
 const { cX, cY, cellAt, CS, GW, NC, FOLIOS, UP, byId } = CORE;
 let S = null, VW = 0, VH = 0, DPR = 1, desk = false, gt = 0, F = null;
 const cam = { x: 20, y: 70, s: 3.6, auto: 1, fit: 3.6 };
 // switches in the address, to narrow down on a real phone what only a phone shows: ?fps (frame cost, draw calls, rabbits),
 // ?dpr=1, ?fx=0 (no particles, cloud shadows, vignette or shake), ?glow=0 (no shadowBlur), ?horde=<n> (rabbits drawn at most)
 const QS = (() => { try { return new URLSearchParams(parent.location.search); } catch (e) { return new URLSearchParams(); } })();
-const DIAG = { fps: QS.has('fps'), dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', glow: QS.get('glow') !== '0', horde: +QS.get('horde') || 0 };
+const DIAG = { fps: QS.has('fps'), flush: QS.get('fps') === 'flush', dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', glow: QS.get('glow') !== '0', horde: +QS.get('horde') || 0,
+ border: QS.get('border') !== '0', body: QS.get('body') !== '0', land: QS.get('land') !== '0', hud: QS.get('hud') !== '0' };
 // a sequence waits in game time, never on the clock: paused, it waits; under express post it keeps step
 const LATER = []; function later(sec, fn) { LATER.push({ t: sec, fn }); }
 const C = { vel: '#efe2c2', vel2: '#e3cfa3', ink: '#2b1d14', red: '#b8321f', lapis: '#2c4f9e', lap2: '#5b80cf', verd: '#3e8a68', gold: '#d6a838', gold2: '#f3d77a', desk: '#2a1b11' };
@@ -9526,8 +9528,10 @@ function field(c, x, y, w, h, an, k) {
  const n = 2 + (k & 1), sw = w / n;
  for (let j = 0; j < n; j++) {
   const kind = (k + j * 2 + 9) % 3, x0 = -w / 2 + j * sw;
-  c.fillStyle = ['#a8875a', '#d9b45a', '#86a24a'][kind]; c.fillRect(x0, -h / 2, sw, h);
-  pen(c, 0, ['rgba(90,60,30,.45)', 'rgba(150,110,30,.5)', 'rgba(60,90,30,.45)'][kind], .6); for (let u = x0 + .8; u < x0 + sw; u += 1.6) { ln(c, u, -h / 2, u, h / 2); }
+  // ploughed, wheat, or young green in rows with the soil showing between them (a dark green with hard lines read as a grate)
+  c.fillStyle = ['#a8875a', '#d9b45a', '#9a8a5a'][kind]; c.fillRect(x0, -h / 2, sw, h);
+  if (kind === 2) { pen(c, 0, '#8fb04e', .9); c.lineCap = 'round'; for (let u = x0 + .8; u < x0 + sw; u += 1.6) { ln(c, u, -h / 2 + .6, u, h / 2 - .6); } c.lineCap = 'butt'; }
+  else { pen(c, 0, ['rgba(90,60,30,.45)', 'rgba(150,110,30,.5)'][kind], .6); for (let u = x0 + .8; u < x0 + sw; u += 1.6) { ln(c, u, -h / 2, u, h / 2); } }
   if (kind === 1) { c.fillStyle = '#f3d77a'; for (let q = 0; q < sw * h / 12; q++) { dot(c, x0 + hash(k, j * 99 + q, 1) * sw, (hash(k, j * 99 + q, 2) - .5) * h, .35); c.fill(); } }
   pen(c, 0, 'rgba(40,70,25,.5)', .5); ln(c, x0, -h / 2, x0, h / 2);
  }
@@ -9722,7 +9726,7 @@ function snailShape(c, x, y, r, t) {
 function castle(c, x, y) { c.drawImage(CASTLE, x - 25, y - 30, 50, 47.5); }
 // while the horde gnaws at it the castle flushes red and trembles
 function castleHit() { const j = K.reduced ? 0 : (hash(gt * 60 | 0, 3, 80) - .5) * .9; g.save(); g.globalAlpha = min(.24, hurtT * .7) * (.6 + .4 * sin(gt * 28)); g.drawImage(CASTLE_HIT, 0, 0, 400, 312, sx(-25 + j), sy(-30), 50 * cam.s, 39 * cam.s); g.restore(); }
-function cottage(c, x, y, w, h, k) { const cx = x + w / 2, s = w / 10; c.drawImage(HOUSES[(k % 3 + 3) % 3], cx - 6 * s, y + h - 10.9 * s, 12 * s, 12 * s); }
+function cottage(c, x, y, w, h, k) { const cx = x + w / 2, s = w / 10, fl = hash(k, 5, 31) > .5; if (fl) { c.save(); c.translate(cx * 2, 0); c.scale(-1, 1); } c.drawImage(HOUSES[(k % 3 + 3) % 3], cx - 6 * s, y + h - 10.9 * s, 12 * s, 12 * s); if (fl) c.restore(); }
 function ivy(c, x, y, r, col) { pen(c, col, C.ink, .25); c.beginPath(); c.moveTo(x, y - r); c.quadraticCurveTo(x + r, y - r, x + r * .8, y); c.quadraticCurveTo(x + r * .6, y + r, x, y + r * 1.2); c.quadraticCurveTo(x - r * .6, y + r, x - r * .8, y); c.quadraticCurveTo(x - r, y - r, x, y - r); fs(c); }
 // a tree from the sprites, its crown about r across the middle, standing on (x, y + .7 r)
 function tree(c, x, y, r, k, kinds) { const v = kinds ? kinds[floor(hash(k, 9, 2) * kinds.length)] : floor(hash(k, 9, 2) * 11), s = r / 44; c.drawImage(TREES[v], x - 64 * s, y + .7 * r - 136 * s, 128 * s, 144 * s); }
@@ -9813,7 +9817,13 @@ function paintTile(c, tx, ty) {
    }
   } else if (k === 'p') {
    c.lineCap = c.lineJoin = 'round';
-   if (t === T_.WATER) { if (o === rivers[0]) onLand(() => { const all = f => { for (const r of rivers) f(r); }; all(r => sk(r, 'rgba(201,179,124,.9)', r[2] + 3.4)); all(r => sk(r, '#3f62a8', r[2])); all(r => { trace(c, r); strk(c, PAT.water, r[2] - 1); }); all(r => sk(r, 'rgba(20,40,100,.3)', r[2] * .35)); all(r => sk(r, 'rgba(255,255,255,.4)', .3, [2, 5])); }); }
+   if (t === T_.WATER) { if (o === rivers[0]) onLand(() => { const all = f => { for (const r of rivers) f(r); }; all(r => sk(r, 'rgba(201,179,124,.9)', r[2] + 3.4)); all(r => sk(r, '#3f62a8', r[2])); all(r => { trace(c, r); strk(c, PAT.water, r[2] - 1); }); all(r => sk(r, 'rgba(20,40,100,.3)', r[2] * .35)); all(r => sk(r, 'rgba(255,255,255,.4)', .3, [2, 5]));
+     // a river that ends on dry land rises there: a spring in a ring of stones with rushes, not a blunt cap in the meadow
+     all(r => { for (const [x, y, px, py] of [[r[3], r[4], r[5], r[6]], [r[r.length - 2], r[r.length - 1], r[r.length - 4], r[r.length - 3]]]) {
+      const l = hypot(x - px, y - py) || 1, dx = (x - px) / l, dy = (y - py) / l, ahead = cellAt(x + dx * (r[2] / 2 + 4), y + dy * (r[2] / 2 + 4)); if (ahead < 0 || !T[ahead] || T[ahead] === T_.WATER || T[ahead] === T_.BRIDGE) continue;
+      const R = r[2] / 2 + 1.2; for (let j = 0; j < 11; j++) { const a = atan2(dy, dx) - 1.9 + j / 10 * 3.8, sx0 = x + cos(a) * R, sy0 = y + sin(a) * R * .9, rr = .9 + hash(j, x | 0, 7) * .6; pen(c, '#b9b2a2', 'rgba(43,29,20,.6)', .2); dot(c, sx0, sy0, rr); fs(c); disc(c, 'rgba(255,255,255,.35)', sx0 - .3, sy0 - .3, rr * .4); }
+      pen(c, 0, '#4f7a2c', .3); for (let j = 0; j < 7; j++) { const a = atan2(dy, dx) + (hash(j, y | 0, 8) - .5) * 3, ux = x + cos(a) * (R + 1.6), uy = y + sin(a) * (R + 1.4); ln(c, ux, uy, ux + (hash(j, 3, 9) - .5), uy - 2.4 - hash(j, 4, 9)); }
+     } }); }); }
    else if (t === T_.TREE) sk(o, 'rgba(25,55,20,.45)', o[2] + 3);
   }
  }
@@ -9851,8 +9861,9 @@ function paintTile(c, tx, ty) {
  layer(t => t === T_.ROCK, (x, y, i, h) => { if (h < .35) c.drawImage(ROCKS[i % 3], x - 4, y - 3.8, 8, 6); });
  layer(t => t === T_.SCRUB, (x, y, i, h, h2) => { if (h < .5) c.drawImage(FERN, x - 4 + h2 * 2, y - 5.5, 8, 6.5); });
  for (const o of ops) if (o[0] === 'd' && o[1] === T_.ROCK && o[4] >= 12) { const w = o[4] * 2.2; c.drawImage(MOUNT, o[2] - w / 2, o[3] + o[4] * .3 - w * .62, w, w * .68); }
- // trees and cottages stand up off the page: they are drawn with the rabbits and the defenders, back to front (standing())
- for (const o of ops) if (o[0] === 'r' && o[1] === T_.KEEP) castle(c, (o[2] + o[4]) / 2, (o[3] + o[5]) / 2);
+ // trees and cottages are painted into the page; one with someone standing behind it is drawn again over them (standing())
+ layer(t => t === T_.TREE, (x, y, i, h, h2) => { if (h < .6) tree(c, x + (h2 - .5) * 3, y, 4 + h2 * 2.4, i); });
+ for (const o of ops) if (o[0] === 'r') { if (o[1] === T_.HOUSE) cottage(c, o[2], o[3], o[4] - o[2], o[5] - o[3], o[2] | 0); else if (o[1] === T_.KEEP) castle(c, (o[2] + o[4]) / 2, (o[3] + o[5]) / 2); }
  if (FOLIOS[f].ch >= 3) { c.font = '800 9px ' + GOT; c.fillStyle = 'rgba(184,50,31,.55)'; c.textAlign = 'center'; for (const [t, x, y] of [['ASIA', -32, -150], ['EVROPA', -220, 300], ['AFFRICA', 160, 300], ['hic sunt lepores', -300, 170], ['hic sunt lepores', 240, 0]]) c.fillText(t, x, y); }
  // burrows spaced along each entrance
  for (const s of FOLIOS[f].src) {
@@ -9870,7 +9881,6 @@ function standing() {
   const t = T[i]; if (t !== CORE.TREE && t !== CORE.SCRUB) continue;
   const h = hash(i, 1, 40), h2 = hash(i, 2, 41), x = cX(i), y = cY(i);
   if (t === CORE.TREE && h < .6) { const r = 4 + h2 * 2.4; STAND.push([y + .7 * r, 0, x + (h2 - .5) * 3, y, r, i, null]); }
-  else if (t === CORE.SCRUB && h > .97) STAND.push([y + 1.8, 0, x, y, 2.6, i, [11]]);
  }
  for (let f = 0; f <= S.folio; f++) for (const o of FOLIOS[f].add) if (o[0] === 'r' && o[1] === CORE.HOUSE) STAND.push([o[5] - .5, 1, o[2], o[3], o[4] - o[2], o[5] - o[3], o[2] | 0]);
  STAND.push([9, 2, 0, 0]);
@@ -9892,6 +9902,7 @@ function tileFor(tx, ty, q) {
  if (tiles.size > 90) tiles.delete(tiles.keys().next().value);
  t = document.createElement('canvas'); t.width = t.height = ceil(TU * q);
  const c = t.getContext('2d'); c.scale(q, q); c.translate(-tx * TU, -ty * TU); paintTile(c, tx, ty);
+ if (DIAG.border) { c.save(); c.beginPath(); c.rect(tx * TU, ty * TU, TU, TU); c.clip(); drawBorder(c, tx * TU, ty * TU, tx * TU + TU, ty * TU + TU); c.restore(); }
  tiles.set(k, t); return t;
 }
 function drawPage() {
@@ -9909,10 +9920,11 @@ function drawPage() {
 // the page's border: a bar of lapis and vermilion between gold rules round the land painted so far, ivy sprouting from
 // it in gold and blue, bosses at the corners, and in the margins the drolleries of the period (a rabbit with a spear
 // facing a snail, a hare leaping, a monk with his bow), drawn with the box's own sprites
-function drawBorder() {
- const b = bounds, m = 16, x0 = b.x0 - m, y0 = b.y0 - m, x1 = b.x1 + m, y1 = b.y1 + m, s = cam.s;
- if (sx(x1) < -60 || sx(x0) > VW + 60 || sy(y1) < -60 || sy(y0) > VH + 60) return;
- g.save(); g.translate(sx(0), sy(0)); g.scale(s, s); g.lineJoin = 'miter';
+// (painted into the tiles, in the land's own units, so it costs nothing a frame; g is the tile's context here)
+function drawBorder(g, rx0, ry0, rx1, ry1) {
+ const b = bounds, m = 16, x0 = b.x0 - m, y0 = b.y0 - m, x1 = b.x1 + m, y1 = b.y1 + m;
+ if (x1 < rx0 - 30 || x0 > rx1 + 30 || y1 < ry0 - 30 || y0 > ry1 + 30) return;
+ g.save(); g.lineJoin = 'miter';
  const bar = (ax, ay, bx, by) => { const L = hypot(bx - ax, by - ay), n = max(2, round(L / 26)); for (let k = 0; k < n; k++) { const u0 = k / n, u1 = (k + 1) / n; pen(g, 0, k & 1 ? C.red : C.lapis, 2.4); g.lineCap = 'butt'; ln(g, lerp(ax, bx, u0), lerp(ay, by, u0), lerp(ax, bx, u1), lerp(ay, by, u1)); } pen(g, 0, C.gold, .5); for (const o of [-1.45, 1.45]) { const nx = (by - ay) / L * o, ny = -(bx - ax) / L * o; ln(g, ax + nx, ay + ny, bx + nx, by + ny); } pen(g, 0, 'rgba(43,29,20,.7)', .18); for (const o of [-1.75, 1.75]) { const nx = (by - ay) / L * o, ny = -(bx - ax) / L * o; ln(g, ax + nx, ay + ny, bx + nx, by + ny); } };
  bar(x0, y0, x1, y0); bar(x1, y0, x1, y1); bar(x1, y1, x0, y1); bar(x0, y1, x0, y0);
  // ivy sprays: a hairline stem out of the bar, curling, with leaves in gold and lapis
@@ -9924,21 +9936,29 @@ function drawBorder() {
   for (const [j, r, col] of [[5, 1.15, k & 2 ? C.verd : C.gold], [9, 1.3, k & 1 ? C.lap2 : C.red], [13, 1.05, C.gold], [16, 1.5, k & 1 ? C.gold : C.lap2]]) { const p = pts[j], q = pts[j - 1], a = atan2(p[1] - q[1], p[0] - q[0]) + (j & 1 ? 1.2 : -1.2), lx = p[0] + cos(a) * 1.6, ly = p[1] + sin(a) * 1.6; pen(g, 0, 'rgba(43,29,20,.7)', .15); ln(g, p[0], p[1], lx, ly); ivy(g, lx, ly, r, col); }
   disc(g, C.gold, pts[16][0] + tx * .8, pts[16][1] + ty * .8, .5);
  };
- for (const [ax, ay, bx2, by2, nx, ny] of [[x0, y0, x1, y0, 0, -1], [x1, y0, x1, y1, 1, 0], [x1, y1, x0, y1, 0, 1], [x0, y1, x0, y0, -1, 0]]) { const L = hypot(bx2 - ax, by2 - ay); for (let d = 13; d < L - 10; d += 19) { const u = d / L; spray(lerp(ax, bx2, u), lerp(ay, by2, u), nx, ny, (ax * 7 + ay * 13 + d) | 0); } }
+ const vx0 = rx0 - 30, vx1 = rx1 + 30, vy0 = ry0 - 30, vy1 = ry1 + 30;
+ for (const [ax, ay, bx2, by2, nx, ny] of [[x0, y0, x1, y0, 0, -1], [x1, y0, x1, y1, 1, 0], [x1, y1, x0, y1, 0, 1], [x0, y1, x0, y0, -1, 0]]) { const L = hypot(bx2 - ax, by2 - ay); for (let d = 13; d < L - 10; d += 19) { const u = d / L, px = lerp(ax, bx2, u), py = lerp(ay, by2, u); if (px < vx0 || px > vx1 || py < vy0 || py > vy1) continue; spray(px, py, nx, ny, (ax * 7 + ay * 13 + d) | 0); } }
  for (const [x, y] of [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]) { pen(g, rad(g, x - 1, y - 1, .2, x, y, 4, '#fff3b8', '#e2b545', '#a97a1c'), C.ink, .3); g.fillRect(x - 3.4, y - 3.4, 6.8, 6.8); g.strokeRect(x - 3.4, y - 3.4, 6.8, 6.8); for (let j = 0; j < 4; j++) disc(g, j & 1 ? C.red : C.lapis, x + cos(j * PI / 2) * 1.4, y + sin(j * PI / 2) * 1.4, 1.05); disc(g, C.gold2, x, y, .6); }
  // the drolleries: in the margin below, a rabbit levels his spear at a snail; above, a hare leaps over the bar
- const dw = 15; g.drawImage(AT, cellOf(0, 0, 1) * AC, 0, AC, AC, x0 + 14, y1 + 4 - dw * .875, dw, dw); snailShape(g, x0 + 34, y1 + 1.2, 3.4, gt * .2);
- g.drawImage(AT, cellOf(4, 1, 0) * AC, AC, AC, AC, x1 - 30, y0 - 3 - dw * .875 - abs(sin(gt * 1.3)) * 3, dw, dw);
+ const dw = 15; g.drawImage(AT, cellOf(0, 0, 1) * AC, 0, AC, AC, x0 + 14, y1 + 4 - dw * .875, dw, dw); snailShape(g, x0 + 34, y1 + 1.2, 3.4, 0);
+ g.drawImage(AT, cellOf(4, 1, 0) * AC, AC, AC, AC, x1 - 30, y0 - 5 - dw * .875, dw, dw);
  g.restore();
 }
 /* —— the horde ——
  The rules know only how many rabbits stand in each cell. The view keeps rabbits of its own that run
  the same flow field at the same pace, and every frame brings their number in each cell back towards
  the rules' count: a missing one fades in a step behind, a spare one fades out. So no rabbit jumps. */
-const VIS = 9; let budget = 2600, drawn = 0, PT = [], byCell = new Map(), churn = 0, CH = [], hshare = 1;
+const VIS = 9; let budget = matchMedia('(pointer: coarse)').matches ? 1200 : 2600, drawn = 0, PT = [], byCell = new Map(), churn = 0, CH = [], hshare = 1;
 const dens = new Float32Array(NC), densOn = new Set(), ft = [];
 // the budget follows only what the horde costs, so a slow page does not thin the crowd
-function gauge(ms) { if (DIAG.horde) { budget = DIAG.horde; return; } ft.push(ms); if (ft.length < 40) return; const m = ft.slice().sort((a, b) => a - b)[20]; ft.length = 0; if (m > 9) budget = max(900, budget * .85); else if (m < 5) budget = min(desk ? 9000 : 5000, budget * 1.05); }
+// the frame's real length (from one frame to the next) counts too: when the device cannot keep up, fewer rabbits are drawn
+const fl = []; let flT = 0, slowF = 0, lowRes = 0;
+function gauge(ms) { if (DIAG.horde) { budget = DIAG.horde; return; }
+ const t = performance.now(); if (flT) fl.push(t - flT); flT = t;
+ if (fl.length >= 8 && fl.reduce((a, b) => a + b, 0) > 1000) { const m = fl.slice().sort((a, b) => a - b)[fl.length >> 1]; fl.length = 0; slowF = m > 22; if (m > 24) budget = max(250, budget * .75);
+  // still slow with few rabbits: draw fewer pixels, once (a phone's screen at 1 pixel a point still looks sharp at play size)
+  if (m > 40 && budget <= 450 && !lowRes && !DIAG.dpr && DPR > 1) { lowRes = 1; layout(); } else if (m < 18 && ms < 5) budget = min(desk ? 9000 : 4000, budget * 1.04); }
+ ft.push(ms); if (ft.length < 40) return; const m = ft.slice().sort((a, b) => a - b)[20]; ft.length = 0; if (m > 9) budget = max(900, budget * .85); else if (m < 5 && !slowF) budget = min(desk ? 9000 : 4000, budget * 1.05); }
 // how much a snail slows each cell (0 none, 1 standing still), against the same land without snails
 let SL = null, slF = null;
 function slimeMap() {
@@ -10013,6 +10033,7 @@ function horde(dt) {
 // the horde's body: the density of every cell, one pixel a cell, in three washes (shadow, light, fur), drawn smoothly enlarged
 // under the rabbits, so a thick crowd reads as a lit flood of fur and the rabbits in it wade, only ears and backs showing
 const BODY = [0, 1, 2].map(() => { const c = document.createElement('canvas'); c.width = c.height = GW; return c; }), BID = BODY.map(c => c.getContext('2d').createImageData(GW, GW)), bodyOn = new Set();
+const BODYC = document.createElement('canvas');
 const body = i => clamp((dens[i] - .32) / .42, 0, 1);
 function paintBody() {
  const [sh, li, fu] = BID.map(d => d.data);
@@ -10026,52 +10047,69 @@ function paintBody() {
  BODY.forEach((c, j) => c.getContext('2d').putImageData(BID[j], 0, 0));
 }
 function drawBody() {
+ if (!DIAG.body) return;
  if (!bodyOn.size && !densOn.size) return; paintBody(); if (!bodyOn.size) return;
  // only the cells in view are enlarged, never the whole world's sheet
  const s = cam.s, X0 = cX(0) - CS / 2, Y0 = cY(0) - CS / 2, c0 = max(0, floor((wx(0) - X0) / CS) - 2), r0 = max(0, floor((wy(0) - Y0) / CS) - 2), c1 = min(GW, ceil((wx(VW) - X0) / CS) + 2), r1 = min(GW, ceil((wy(VH) - Y0) / CS) + 2);
  if (c1 <= c0 || r1 <= r0) return; const dx = sx(X0 + c0 * CS), dy = sy(Y0 + r0 * CS), dw = (c1 - c0) * CS * s, dh = (r1 - r0) * CS * s;
- g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'low';
- g.drawImage(BODY[0], c0, r0, c1 - c0, r1 - r0, dx + .7 * s, dy + 1.4 * s, dw, dh);
- g.drawImage(BODY[1], c0, r0, c1 - c0, r1 - r0, dx - .3 * s, dy - 1.1 * s, dw, dh);
- g.drawImage(BODY[2], c0, r0, c1 - c0, r1 - r0, dx, dy, dw, dh);
+ // the three washes are laid over each other on a small sheet (four pixels a cell, offsets in the land's units), and only that
+ // sheet is enlarged onto the screen: one large draw instead of three
+ const k = 4, w = (c1 - c0) * k + 8, h = (r1 - r0) * k + 8; if (BODYC.width < w || BODYC.height < h) { BODYC.width = max(BODYC.width, w); BODYC.height = max(BODYC.height, h); }
+ const q = BODYC.getContext('2d'); q.clearRect(0, 0, w, h); q.imageSmoothingEnabled = true;
+ q.drawImage(BODY[0], c0, r0, c1 - c0, r1 - r0, 4 + .7, 4 + 1.4, w - 8, h - 8); q.drawImage(BODY[1], c0, r0, c1 - c0, r1 - r0, 4 - .3, 4 - 1.1, w - 8, h - 8); q.drawImage(BODY[2], c0, r0, c1 - c0, r1 - r0, 4, 4, w - 8, h - 8);
+ g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'low'; const f = dw / (w - 8);
+ g.drawImage(BODYC, 0, 0, w, h, dx - 4 * f, dy - 4 * f, w * f, h * f);
 }
 // the rules slew rabbits in a cell: the view's rabbits there go at once, and tumble
 function slay(c, n, by) { for (const d of [0, -1, 1, -GW, GW, -GW - 1, -GW + 1, GW - 1, GW + 1]) { const l = byCell.get(c + d); if (l) for (const p of l) if (n > 0 && !p.out) { p.out = 1; p.die = 0; p.burn = by === 'dragon' || by === 'fire' ? 1 : 0; n--; } } }
 const SILO = document.createElement('canvas'), SG = SILO.getContext('2d'), SILO2 = document.createElement('canvas'), SG2 = SILO2.getContext('2d');
 // every hidden figure of the frame goes into one layer, which is then filled pale and laid over the picture once
-function silo(list) {
- if (!list.length) return;
- if (SILO.width !== cv.width || SILO.height !== cv.height) { SILO.width = cv.width; SILO.height = cv.height; }
- SG.setTransform(DPR, 0, 0, DPR, 0, 0); SG.clearRect(0, 0, VW, VH); SG.globalCompositeOperation = 'source-over'; for (const draw of list) draw(SG);
- SG.globalCompositeOperation = 'source-in'; SG.fillStyle = '#f6dc84'; SG.fillRect(0, 0, VW, VH);
- if (SILO2.width !== SILO.width || SILO2.height !== SILO.height) { SILO2.width = SILO.width; SILO2.height = SILO.height; }
- const o = SG2, d = 1.6 * DPR; o.setTransform(1, 0, 0, 1, 0, 0); o.globalCompositeOperation = 'source-over'; o.clearRect(0, 0, SILO2.width, SILO2.height);
- for (const [ax, ay] of [[d, 0], [-d, 0], [0, d], [0, -d]]) o.drawImage(SILO, ax, ay); o.globalCompositeOperation = 'destination-out'; o.drawImage(SILO, 0, 0);
- g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = .22; g.drawImage(SILO, 0, 0); g.globalAlpha = .95; g.drawImage(SILO2, 0, 0); g.restore();
+// a hidden figure's silhouette (a gold outline round a faint fill) is made once per kind of figure, at 10 px a unit, and then
+// only placed: one draw a hidden figure, never a pass over the screen
+const SILK = {};
+function siloSprite(k) {
+ if (SILK[k]) return SILK[k];
+ const s0 = 10, W = 220, Hh = 260, ox = 110, oy = 200, [a, qa] = mk(W, Hh), [b, qb] = mk(W, Hh);
+ if (k === 'king') kingFig(qa, ox, oy, s0 * 2.8, 0); else if (k === 'hare') qa.drawImage(AT, cellOf(4, 0, 0) * AC, 0, AC, AC, ox - 4.5 * s0, oy - 7.9 * s0, 9 * s0, 9 * s0); else fig(qa, k, ox, oy, s0 * 1.25, -PI / 2, null);
+ qa.globalCompositeOperation = 'source-in'; qa.fillStyle = '#f6dc84'; qa.fillRect(0, 0, W, Hh);
+ for (const [dx, dy] of [[2, 0], [-2, 0], [0, 2], [0, -2], [1.4, 1.4], [-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4]]) qb.drawImage(a, dx, dy);
+ qb.globalCompositeOperation = 'destination-out'; qb.drawImage(a, 0, 0); qb.globalCompositeOperation = 'source-over'; qb.globalAlpha = .24; qb.drawImage(a, 0, 0);
+ return (SILK[k] = { c: b, s0, ox, oy });
 }
+function siloAt(k, x, y, s) { const q = siloSprite(k), f = s / q.s0; g.drawImage(q.c, x - q.ox * f, y - q.oy * f, q.c.width * f, q.c.height * f); }
 function drawHorde(st) {
  const s = cam.s, sw = (desk ? 6.6 : 7.8) * s;
  // before the horn they peer out of their holes
  if (S.prep && !S.called) for (let k = 0; k < F.src.length; k += 6) { const i = F.src[k], b = max(0, sin(gt * 2 + k)) * 2.5 * s; g.drawImage(AT, cellOf(k & 3, 0, 0) * AC, (k >> 1 & 1) * AC, AC, AC, sx(cX(i)) - sw / 2, sy(cY(i)) - sw * .8 + b, sw, sw); }
  // where the view must draw fewer rabbits than there are, the crowd's shadow on the ground says how many
- if (hshare < .9) { g.save(); g.translate(sx(0), sy(0)); g.scale(s, s); g.fillStyle = 'rgba(45,32,15,.22)';
-  for (const i of densOn) { const d = dens[i]; if (d < .2) continue; g.globalAlpha = min(1, (d - .2) * 2) * (1 - hshare); g.beginPath(); g.ellipse(cX(i), cY(i), 2.6 + d * 1.4, 2 + d, 0, 0, TAU); g.fill(); }
+ // (gathered into four paths by strength: one fill each, not one a cell)
+ if (hshare < .9) { g.save(); g.translate(sx(0), sy(0)); g.scale(s, s); g.fillStyle = 'rgba(45,32,15,.22)'; const vx0 = wx(-20), vx1 = wx(VW + 20), vy0 = wy(-20), vy1 = wy(VH + 20);
+  for (let b = 0; b < 4; b++) { g.beginPath(); let any = 0;
+   for (const i of densOn) { const d = dens[i]; if (d < .2 || min(3, (min(1, (d - .2) * 2) * 4) | 0) !== b) continue; const x = cX(i), y = cY(i); if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue; const rx = 2.6 + d * 1.4; g.moveTo(x + rx, y); g.ellipse(x, y, rx, 2 + d, 0, 0, TAU); any = 1; }
+   if (any) { g.globalAlpha = (b + 1) / 4 * (1 - hshare); g.fill(); } }
   g.restore(); g.globalAlpha = 1; }
  // where they fell: an ink blot that spreads and dries into the vellum
  for (const p of PT) if (p.die != null) { const u = p.die / .8, x = sx(p.x), y = sy(p.y); if (x < -sw || x > VW + sw || y < -sw || y > VH + sw) continue; g.globalAlpha = .3 * min(1, p.die * 6) * (1 - u * u); g.fillStyle = p.burn ? '#3a1a08' : '#1d1612'; g.beginPath(); g.ellipse(x, y, (1.2 + 1.6 * ease.out(min(1, p.die * 3))) * s, (.6 + .7 * ease.out(min(1, p.die * 3))) * s, 0, 0, TAU); g.fill(); }
- g.globalAlpha = 1; part('h:blots');
+ g.globalAlpha = 1; drawInk(); part('h:blots');
  drawBody(); part('h:body');
  PT.sort((a, b) => a.y - b.y);
  // the figures that stand on the land, sorted with the rabbits so that whoever stands in front is drawn in front
  const FG = [];
  for (const t of S.tw) { const p = drag && drag.t === t && drag.moved ? null : towerXY(t); if (!p) continue; const x = sx(p.x), y = sy(p.y); if (x < -60 || x > VW + 60 || y < -60 || y > VH + 80) continue; FG.push([p.y + (t.t === 'snail' ? 2.9 : 0), 0, t, x, y]); }
- for (const h of S.hares) FG.push([h.y, 1, h]);
- if (S.king) FG.push([S.king.y + 1.5, 2, S.king]);
- { const x0 = wx(-40), x1 = wx(VW + 40), y0 = wy(-10), y1 = wy(VH + 140); for (const o of standing()) if (o[0] > y0 && o[0] < y1 && o[2] > x0 - 30 && o[2] < x1 + 10) FG.push([o[0], 3, o]); }
+
+ // a tree or cottage joins the sorted pass only when a rabbit, a defender, a hare or the king stands behind it within its outline
+ { const x0 = wx(-40), x1 = wx(VW + 40), y0 = wy(-10), y1 = wy(VH + 140), tw = S.tw.filter(t => t.at >= 0).map(towerXY).filter(Boolean);
+  if (S.king) tw.push(S.king); for (const h of S.hares) tw.push(h);
+  const behind = o => { const r = o[1] === 2 ? 22 : o[1] ? o[4] * .7 : o[4] * 1.45, top = o[1] === 2 ? -30 : o[1] ? o[3] - o[5] - 4 : o[3] - o[4] * 2.4 - 4, xa = o[1] === 2 ? 0 : o[2] + (o[1] ? o[4] / 2 : 0);
+   for (const p of tw) if (p.y < o[0] && p.y > top && abs(p.x - xa) < r + 3) return true;
+   for (let y = top; y < o[0]; y += CS) for (let x = xa - r; x <= xa + r; x += CS) { const l = byCell.get(cellAt(x, y)); if (l) for (const p of l) if (p.y < o[0] && !(p.out && p.die == null)) return true; }
+   return false; };
+  for (const o of standing()) if (o[0] > y0 && o[0] < y1 && o[2] > x0 - 30 && o[2] < x1 + 10 && behind(o)) FG.push([o[0], 3, o]); }
  FG.sort((a, b) => a[0] - b[0]);
+ if (hurtT > 0 && S.phase === 'run' && !FG.some(f => f[1] === 3 && f[2][1] === 2)) castleHit();
  let fi = 0;
  const upTo = Y => { while (fi < FG.length && FG[fi][0] <= Y) { const f = FG[fi++];
-  if (f[1] === 0) { const t = f[2]; g.globalAlpha = t.set > 0 ? .5 : 1; fig(g, t.t, f[3], f[4], s * 1.25, t.a, st, t.id); g.globalAlpha = 1; }
+  if (f[1] === 0) { const t = f[2]; g.globalAlpha = t.set > 0 ? .5 : 1; figAt(t.t, f[3], f[4], s * 1.25, t.a, st, t.id); g.globalAlpha = 1; }
   else if (f[1] === 1) { const h = f[2], x = sx(h.x), y = sy(h.y), j = F.nxt[h.c], fl = j >= 0 && cX(j) < h.x ? 1 : 0, w = 9 * s;
    g.save(); if (DIAG.glow) { g.shadowColor = C.gold2; g.shadowBlur = K.reduced ? 0 : 18; } g.drawImage(AT, cellOf(4, (gt * 6 | 0) & 1, 0) * AC, fl * AC, AC, AC, x - w / 2, y - w * .875, w, w); g.restore();
    pen(g, 0, C.gold2, 2); ell(g, x, y + .4 * s, 6 * s + 2 * sin(gt * 9), 2.6 * s + sin(gt * 9)); g.stroke(); }
@@ -10091,20 +10129,24 @@ function drawHorde(st) {
   }
   const pose = p.v ? (p.ph | 0) & 1 : 0, hop = pose ? sin((p.ph % 1) * PI) * 1.4 * s : 0;
   if (p.hm != null) g.globalAlpha = max(0, p.a);
-  const w = p.a < 1 && p.hm == null ? sw * (.35 + .65 * ease.out(max(0, p.a))) : sw, sx0 = cellOf(p.coat, pose, p.arm) * AC, sy0 = p.f * AC;
+  const w = sw, rise = p.a < 1 && p.hm == null ? ease.out(max(0, p.a)) : 1, sx0 = cellOf(p.coat, pose, p.arm) * AC, sy0 = p.f * AC;
   // in the body of the crowd a rabbit wades: only its top shows, more of it as the crowd thins round it
-  const c = cellAt(p.x, p.y), wd = c >= 0 ? (p.wd = (p.wd || 0) + (body(c) - (p.wd || 0)) * .15) : 0, sh = AC * (.875 - .42 * wd);
-  g.drawImage(AT, sx0, sy0, AC, sh, x - w / 2, y - w * .875 - hop, w, w * sh / AC);
-  if (p.sl > .06) { g.globalAlpha = min(1, p.sl) * .9 * (p.hm != null ? max(0, p.a) : 1); g.drawImage(ATS, sx0, sy0, AC, sh, x - w / 2, y - w * .875 - hop, w, w * sh / AC); }
+  // in the body of the crowd a rabbit wades and only its top shows; one just come up climbs out of the ground from the ears down
+  const c = cellAt(p.x, p.y), wd = c >= 0 ? (p.wd = (p.wd || 0) + (body(c) - (p.wd || 0)) * .15) : 0, sh = AC * min(.875 - .42 * wd, .875 * rise), dy0 = y - w * .875 * rise - hop;
+  if (sh > 1) { g.drawImage(AT, sx0, sy0, AC, sh, x - w / 2, dy0, w, w * sh / AC);
+  if (p.sl > .06) { g.globalAlpha = min(1, p.sl) * .9 * (p.hm != null ? max(0, p.a) : 1); g.drawImage(ATS, sx0, sy0, AC, sh, x - w / 2, dy0, w, w * sh / AC); } }
   g.globalAlpha = 1;
  }
  upTo(1e9); part('h:sorted');
+ // the golden hares and the king ride over the crowd: a prize to catch and a boss to bring down are never lost in it
+ for (const h of S.hares) { const x = sx(h.x), y = sy(h.y), j = F.nxt[h.c], fl = j >= 0 && cX(j) < h.x ? 1 : 0, w = 9 * s;
+  oval(g, 'rgba(30,25,10,.3)', x, y + .3 * s, 3.4 * s, 1.2 * s); g.save(); if (DIAG.glow) { g.shadowColor = C.gold2; g.shadowBlur = K.reduced ? 0 : 18; } g.drawImage(AT, cellOf(4, (gt * 6 | 0) & 1, 0) * AC, fl * AC, AC, AC, x - w / 2, y - w * .875, w, w); g.restore();
+  pen(g, 0, C.gold2, 2); ell(g, x, y + .4 * s, 6 * s + 2 * sin(gt * 9), 2.6 * s + sin(gt * 9)); g.stroke(); }
+ if (S.king) { const x = sx(S.king.x), y = sy(S.king.y); oval(g, 'rgba(30,25,10,.35)', x, y + 1.6 * s, 9 * s, 2.6 * s); kingFig(g, x, y, s * 2.8, 0); }
  // a defender, a hare or the king the crowd stands in front of shows through it as a ghost, so nobody the player needs is lost
  const crowded = (x, y) => { let n = 0; for (let dy = 0; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++) { const l = byCell.get(cellAt(x + dx * CS, y + dy * CS)); if (l) for (const p of l) if (p.y > y && !p.out) n++; } return n > 2; };
  // whoever a tree, a cottage or the crowd stands in front of is drawn over it as a pale silhouette, as strategy games do
- const hid = [];
- if (S.phase !== 'fin') for (const f of FG) { if (f[1] === 0) { const p = towerXY(f[2]); if (p && (f[5][5] || crowded(p.x, p.y))) hid.push(c => fig(c, f[2].t, f[3], f[4], s * 1.25, f[2].a, st, f[2].id)); } else if (f[1] === 2 && (f[5][5] || crowded(f[2].x, f[2].y))) hid.push(c => kingFig(c, sx(f[2].x), sy(f[2].y), s * 2.8, 0)); else if (f[1] === 1 && f[5][5]) hid.push(c => c.drawImage(AT, cellOf(4, 0, 0) * AC, 0, AC, AC, sx(f[2].x) - 4.5 * s, sy(f[2].y) - 7.9 * s, 9 * s, 9 * s)); }
- silo(hid); part('h:silo');
+ if (S.phase !== 'fin') for (const f of FG) { if (f[1] === 0) { const p = towerXY(f[2]); if (p && (f[5][5] || crowded(p.x, p.y))) siloAt(f[2].t, f[3], f[4], s); } } part('h:silo');
  if (S.king) { const q = S.king; hpBar(sx(q.x), sy(q.y) - 28 * s, q.hp / CORE.kingMax(), 20 * s); }
  drawn = PT.length;
  const fz = new Set(); for (const z of S.frz) for (const i of z.c) fz.add(i);
@@ -10144,7 +10186,10 @@ function trebFig(c, x, y, s, t) {
  c.restore();
  // the counterweight hangs straight down from the short end
  const ex = cos(a) * 3, ey = -4 + sin(a) * 3; pen(c, 0, C.ink, .15); ln(c, ex, ey, ex, ey + .8);
- pen(c, lin(c, ex - 1, 0, ex + 1, 0, '#8d8d86', '#55554f'), C.ink, .2); c.fillRect(ex - 1, ey + .8, 2, 1.8); c.strokeRect(ex - 1, ey + .8, 2, 1.8);
+ // the counterweight: a timber box full of stones, bound with an iron band, hung on a rope
+ const bx = ex - 1.15, by = ey + .8; P(c, `M${bx} ${by} L${bx + 2.3} ${by} ${bx + 2.1} ${by + 2} ${bx + .2} ${by + 2} Z`); pen(c, lin(c, bx, 0, bx + 2.3, 0, '#9a6a3a', '#6a4422'), C.ink, .2); fs(c);
+ c.fillStyle = '#8d8a80'; for (const [dx, r] of [[.5, .32], [1.1, .38], [1.7, .3]]) { dot(c, bx + dx, by - .05, r); c.fill(); } pen(c, 0, C.ink, .1); for (const [dx, r] of [[.5, .32], [1.1, .38], [1.7, .3]]) { c.beginPath(); c.arc(bx + dx, by - .05, r, PI, 0); c.stroke(); }
+ pen(c, '#3b3b40', 0); c.fillRect(bx + .08, by + .85, 2.14, .32); disc(c, '#c9c9c9', bx + .4, by + 1.01, .07); disc(c, '#c9c9c9', bx + 1.9, by + 1.01, .07);
  disc(c, C.ink, 0, -4, .3);
  c.restore();
 }
@@ -10154,6 +10199,26 @@ const fig = (c, k, x, y, s, a, st, id = 0) => k === 'monk' ? monkFig(c, x, y, s,
 function falcFig(c, x, y, s, id) { const out = id && fx.some(p => p.k === 'stoop' && p.by === id); c.drawImage(out ? FALC0 : FALC, x - 4 * s, y - 10.67 * s, 8 * s, 11.67 * s); }
 // the ferret sits up and looks about, now one way, now the other
 function ferretFig(c, x, y, s, id) { const f = id && sin(gt * .7 + id * 1.7) < -.3 ? -1 : 1, d = gt - (pounce[id] || -9), dip = d < .4 ? sin(d / .4 * PI) : 0; c.save(); c.translate(x + f * dip * 1.2 * s, y); c.scale(f * (1 + dip * .1), 1 - dip * .35); c.drawImage(FERRET, -2.5 * s, -6.67 * s, 5.33 * s, 7.33 * s); c.restore(); }
+// a defender and its footing are painted once at 12 px a unit (a monk once per turn of his bow, drawn or just loosed, with
+// what the tree has given his arrows) and only placed after: a firefox on a phone pays for every stroke of every frame
+function footArt(c, k, x, y, s) {
+  if (k === 'treb') { pen(c, 0, TC.treb, max(1.5, .45 * s)); ell(c, x, y + 2.2 * s, 4.6 * s, 1.5 * s); c.stroke(); }
+  else if (k === 'ferret') { oval(c, rad(c, x - s, y - .5 * s, 0, x, y, 3.4 * s, '#a07a4e', '#7a5634', 'rgba(90,60,30,.6)'), x, y + .2 * s, 3.2 * s, 1.3 * s); c.fillStyle = 'rgba(60,40,20,.5)'; for (let k = 0; k < 5; k++) { dot(c, x + (hash(0, k, 3) - .5) * 5 * s, y + (hash(0, k, 4) - .3) * 1.6 * s, .3 * s); c.fill(); } }
+  else if (k !== 'snail') { oval(c, 'rgba(30,25,10,.3)', x + .8 * s, y + .9 * s, 4.6 * s, 2 * s); oval(c, rad(c, x - s, y - s, 0, x, y, 4.6 * s, '#efe8d6', '#b9ad94'), x, y + .4 * s, 4.2 * s, 2 * s); strk(c, C.ink, max(1, .16 * s)); pen(c, 0, TC[k], max(1.5, .45 * s)); ell(c, x, y + .2 * s, 3.5 * s, 1.5 * s); c.stroke(); }
+}
+const FIGC = {};
+function figSprite(key, paint) { let q = FIGC[key]; if (q) return q; const R = 12, [c, x] = mk(R * 18, R * 20); paint(x, R * 9, R * 15, R); q = FIGC[key] = { c, ox: R * 9, oy: R * 15, R }; return q; }
+function placeSprite(q, x, y, s) { const f = s / q.R; g.drawImage(q.c, x - q.ox * f, y - q.oy * f, q.c.width * f, q.c.height * f); }
+function footAt(k, x, y, s) { placeSprite(figSprite('foot' + k, (c, ox, oy, R) => footArt(c, k, ox, oy, R)), x, y, s); }
+function figAt(k, x, y, s, a, st, id) {
+ if (k === 'falc' || k === 'ferret') return fig(g, k, x, y, s, a, st, id);
+ if (k === 'monk') {
+  const sh = id ? gt - (shotAt[id] || -9) : 9, loose = sh < .16 ? 1 : 0, rock = sh < .3 ? sin(sh / .3 * PI) * .35 : 0, n = 32, b = ((round(a / TAU * n) % n) + n) % n, ab = b / n * TAU, lv = st ? (S.lv.abbot ? 1 : 0) + (S.lv.fire ? 2 : 0) + (S.lv.goose ? 4 : 0) : 0;
+  const q = figSprite('monk' + b + ':' + loose + ':' + lv, (c, ox, oy, R) => { shotAt._c = loose ? gt : -9; monkFig(c, ox, oy, R, ab, st, loose ? '_c' : 0); });
+  return placeSprite(q, x - cos(a) * rock * s, y - sin(a) * rock * s * .5, s);
+ }
+ placeSprite(figSprite(k, (c, ox, oy, R) => fig(c, k, ox, oy, R, -PI / 2, null, 0)), x, y, s);
+}
 function drawTowers(st, over) {
  const s = cam.s;
  // fans under the horde, the figures over it
@@ -10180,10 +10245,8 @@ function drawTowers(st, over) {
   const x = sx(p.x), y = sy(p.y); if (x < -40 || x > VW + 40 || y < -40 || y > VH + 40) continue;
   if (sel === t) { pen(g, 0, C.gold2, 2.5); g.setLineDash([6, 4]); ell(g, x, y + (t.t === 'snail' ? 2.6 : .4) * s, 7.5 * s, 3.4 * s); g.lineDashOffset = -gt * 8; g.stroke(); g.setLineDash([]); g.lineDashOffset = 0; }
   const setting = t.set > 0 ? .5 : 1; g.globalAlpha = setting;
-  // a stone footing ringed in the tower's colour
-  if (t.t === 'treb') { pen(g, 0, TC.treb, max(1.5, .45 * s)); ell(g, x, y + 2.2 * s, 4.6 * s, 1.5 * s); g.stroke(); }
-  else if (t.t === 'ferret') { oval(g, rad(g, x - s, y - .5 * s, 0, x, y, 3.4 * s, '#a07a4e', '#7a5634', 'rgba(90,60,30,.6)'), x, y + .2 * s, 3.2 * s, 1.3 * s); g.fillStyle = 'rgba(60,40,20,.5)'; for (let k = 0; k < 5; k++) { dot(g, x + (hash(t.id, k, 3) - .5) * 5 * s, y + (hash(t.id, k, 4) - .3) * 1.6 * s, .3 * s); g.fill(); } }
-  else if (t.t !== 'snail') { oval(g, 'rgba(30,25,10,.3)', x + .8 * s, y + .9 * s, 4.6 * s, 2 * s); oval(g, rad(g, x - s, y - s, 0, x, y, 4.6 * s, '#efe8d6', '#b9ad94'), x, y + .4 * s, 4.2 * s, 2 * s); strk(g, C.ink, max(1, .16 * s)); pen(g, 0, TC[t.t], max(1.5, .45 * s)); ell(g, x, y + .2 * s, 3.5 * s, 1.5 * s); g.stroke(); }
+  // a stone footing ringed in the tower's colour, made once per kind (footArt) and placed
+  if (t.t !== 'snail') footAt(t.t, x, y, s);
   g.globalAlpha = 1;
  }
 }
@@ -10293,7 +10356,8 @@ function onEvents() {
  if ((biteT -= 1 / 60) <= 0) { biteT = .5; if (bitten >= .5) addFx({ k: 'num', x: 0, y: -16, v: -bitten, red: 2, t: 0, T: 1.4, big: 1 }); bitten = 0; }
  for (const k in tally) { const q = tally[k]; if ((q.t -= 1 / 60) <= 0) { addFx({ k: 'num', x: q.x, y: q.y - 8, v: q.n, red: 1, t: 0, T: 2, big: 1 }); delete tally[k]; } }
 }
-function drawFx(dt) {
+// the ink lies on the ground: drawn before anything that stands, so a defender in a pool stands in it
+function drawInk() {
  const s = cam.s;
  // ink: a spilt pool along the line, glossy, with splashes round it
  for (const p of S.ink) {
@@ -10312,11 +10376,17 @@ function drawFx(dt) {
   if (S.lv.fire2) { g.fillStyle = `rgba(255,140,40,${.25 + .15 * sin(gt * 9)})`; for (const [x, y, r] of blobs) { dot(g, sx(x), sy(y), r * .5 * s); g.fill(); } }
   g.restore();
  }
+}
+function drawFx(dt) {
+ const s = cam.s;
  for (const z of S.frz) { pen(g, 0, `rgba(243,215,122,${.25 + .2 * sin(gt * 8)})`, 2); g.setLineDash([6, 6]); dot(g, sx(z.x), sy(z.y), z.r * s); g.stroke(); g.setLineDash([]); }
  fx = fx.filter(p => (p.t += dt) < p.T); tumbling = 0; for (const p of fx) if (p.k === 'tumble') tumbling++;
+ // every arrow in flight in two strokes, shafts and then fletchings, not two a arrow
+ { const A = fx.filter(p => p.k === 'arrow'); if (A.length) { const seg = (k0, k1) => { g.beginPath(); for (const p of A) { const u = p.t / p.T, x = sx(lerp(p.x0, p.x1, u)), y = sy(lerp(p.y0, p.y1, u)), a = atan2(p.y1 - p.y0, p.x1 - p.x0); g.moveTo(x - cos(a) * k0 * s, y - sin(a) * k0 * s); g.lineTo(x - cos(a) * k1 * s, y - sin(a) * k1 * s); } g.stroke(); };
+  pen(g, 0, C.ink, max(1, .3 * s)); seg(3, 0); pen(g, 0, S.lv.goose ? C.red : '#d8d0c0', max(1.5, .5 * s)); seg(3, 2.2); } }
  for (const p of fx) {
   const u = p.t / p.T;
-  if (p.k === 'arrow') { const x = sx(lerp(p.x0, p.x1, u)), y = sy(lerp(p.y0, p.y1, u)), a = atan2(p.y1 - p.y0, p.x1 - p.x0); pen(g, 0, C.ink, max(1, .3 * s)); ln(g, x - cos(a) * 3 * s, y - sin(a) * 3 * s, x, y); pen(g, 0, S.lv.goose ? C.red : '#d8d0c0', max(1.5, .5 * s)); ln(g, x - cos(a) * 3 * s, y - sin(a) * 3 * s, x - cos(a) * 2.2 * s, y - sin(a) * 2.2 * s); }
+  if (p.k === 'arrow') continue;
   else if (p.k === 'tumble') { p.vy += 60 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt; const sw = 6 * s; g.save(); g.globalAlpha = u < .6 ? 1 : (1 - u) / .4; g.translate(sx(p.x), sy(p.y)); g.rotate(p.r); g.drawImage(AT, p.cell * AC, 0, AC, AC, -sw / 2, -sw / 2, sw, sw); g.restore(); }
   else if (p.k === 'num') { const big = p.big ? 1.6 : 1; g.font = p.red === 1 ? `800 ${round(30 * UI)}px ${GOT}` : `700 ${round((p.big ? 22 : 15) * UI)}px "EB Garamond",serif`; g.textAlign = 'center'; pen(g, 0, 'rgba(43,29,20,.85)', 3); g.fillStyle = p.red ? '#ff5a3c' : C.gold2; const y = sy(p.y) - u * 24 * big, t = p.red === 2 ? '−' + fmt(-p.v, 1) + ' wall' : p.red ? fmt(p.v) + ' slain' : '+' + fmt(p.v); g.globalAlpha = 1 - max(0, u - .6) / .4; g.strokeText(t, sx(p.x), y); g.fillText(t, sx(p.x), y); g.globalAlpha = 1; }
   else if (p.k === 'stone') { const x = lerp(p.x0, p.x1, u), y = lerp(p.y0, p.y1, u) - sin(u * PI) * 30; pen(g, '#777', C.ink, 1); dot(g, sx(x), sy(y), 1.4 * s); fs(g); if (u > .92) { g.strokeStyle = 'rgba(43,29,20,.6)'; dot(g, sx(p.x1), sy(p.y1), 7 * s * (u - .9) * 10); g.stroke(); } }
@@ -10390,14 +10460,18 @@ function wyvern(c, w, t) {
  disc(c, C.ink, 14, -.35, .15); dot(c, 14, .35, .15); c.fill();
 }
 // cloud shadows drifting rigidly over the land, and a vignette
+// a cloud's shadow and the vignette are painted once into small canvases and only stretched each frame: a gradient as large
+// as the screen, made anew every frame, is what a phone's GPU pays most for
+let CLOUD = null, VIG = null;
 function sky() {
  if (!DIAG.fx) return;
- if (!K.reduced) for (let k = 0; k < 6; k++) {
+ if (!CLOUD) { const [c, q] = mk(128, 80); q.fillStyle = rad(q, 64, 40, 0, 64, 40, 64, 'rgba(20,30,40,.13)', 'rgba(20,30,40,.08)', 'rgba(20,30,40,0)'); q.save(); q.translate(64, 40); q.scale(1, .62); dot(q, 0, 0, 64); q.restore(); q.fill(); CLOUD = c; }
+ if (!K.reduced && !matchMedia('(pointer: coarse)').matches) for (let k = 0; k < 6; k++) {
   const span = 1400, x = ((hash(k, 1, 90) * span + gt * (5 + k)) % span) - span / 2, y = hash(k, 2, 90) * 700 - 220, r = (70 + hash(k, 3, 90) * 70) * cam.s, X = sx(x), Y = sy(y);
   if (X < -r || X > VW + r || Y < -r || Y > VH + r) continue;
-  g.fillStyle = rad(g, X, Y, 0, X, Y, r, 'rgba(20,30,40,.13)', 'rgba(20,30,40,.08)', 'rgba(20,30,40,0)'); g.beginPath(); g.ellipse(X, Y, r, r * .62, 0, 0, TAU); g.fill();
+  g.drawImage(CLOUD, X - r, Y - r * .62, r * 2, r * 1.24);
  }
- g.fillStyle = rad(g, VW / 2, VH * .45, min(VW, VH) * .45, VW / 2, VH * .45, hypot(VW, VH) * .62, 'rgba(40,25,10,0)', 'rgba(40,25,10,.28)'); g.fillRect(0, 0, VW, VH);
+ // (the vignette is #vig, a CSS layer over the canvas: the browser lays it on for nothing)
 }
 /* —— the HUD —— */
 let hurtT = 0, endAt = null, sayT = 0, shake = 0;
@@ -10440,10 +10514,10 @@ function hud(st) {
  // the wave, and what is still to come of the folio's horde
  let rest = run ? S.pool + S.onMap : fo.H; if (run) for (let k = S.called; k < fo.W; k++) rest += CORE.waveN(fo, k);
  set('hR', S.king ? 'Rex' : 'Wave ' + ROM(max(1, run ? S.wave + 1 : 1))); set('hN', S.king ? '' : 'of ' + ROM(fo.W));
- $('hfill').style.transform = `scaleX(${S.king ? clamp(S.king.hp / CORE.kingMax(), 0, 1) : clamp(rest / fo.H, 0, 1)})`;
- $('wfill').style.transform = `scaleX(${run || endAt || !$('card').hidden ? clamp(S.wall / S.wallMax, 0, 1) : 1})`;
+ const hf = `scaleX(${(S.king ? clamp(S.king.hp / CORE.kingMax(), 0, 1) : clamp(rest / fo.H, 0, 1)).toFixed(3)})`, wf = `scaleX(${(run || endAt || !$('card').hidden ? clamp(S.wall / S.wallMax, 0, 1) : 1).toFixed(3)})`;
+ if (shown.hf !== hf) { shown.hf = hf; $('hfill').style.transform = hf; } if (shown.wf !== wf) { shown.wf = wf; $('wfill').style.transform = wf; }
  set('wN', run || endAt || !$('card').hidden ? max(0, min(ceil(S.wall), round(S.wallMax))) + ' / ' + round(S.wallMax) : round(CORE.P.wall * st.wall) + '');
- if ((hurtT -= 1 / 60) <= 0) $('wall').classList.remove('hurt');
+ if (hurtT <= 1 / 15 && shown.hurt !== 0) { shown.hurt = 0; $('wall').classList.remove('hurt'); } else if (hurtT > 1 / 15) shown.hurt = 1; hurtT -= 1 / 15;
  set('lN', fmt(S.leaf)); set('tN', fmt(S.leaf));
  for (const [k] of AB) {
   const b = abBtn[k], a = S.ab[k], has = k === 'dragon' ? st.dN || S.runs <= 1 : k === 'ink' ? st.iN : k === 'bell' ? st.gN : st.fN;
@@ -10451,7 +10525,7 @@ function hud(st) {
   const T = CORE.REST[k] * (k === 'dragon' ? st.dCdT : 1), recharges = st[{ dragon: 'dN', ink: 'iN', bell: 'gN', flood: 'fN' }[k]] > 0, rest = run && a.n < 1 && recharges;
   b.hidden = !has || (S.prep && !S.called); b.classList.toggle('off', !run || a.n < 1 && !recharges); b.classList.toggle('rest', rest);
   b.querySelector('.n').textContent = a.n > 0 ? a.n : ''; b.querySelector('.n').hidden = !(a.n > 0);
-  b.querySelector('.cd').style.setProperty('--c', (rest ? a.cd / T * 100 : 100) + '%'); b.querySelector('.t').textContent = rest ? ceil(T - a.cd) + 's' : '';
+  const cv2 = (rest ? round(a.cd / T * 100) : 100) + '%', tx = rest ? ceil(T - a.cd) + 's' : ''; if (b.dataset.c !== cv2) { b.dataset.c = cv2; b.querySelector('.cd').style.setProperty('--c', cv2); } if (b.dataset.tx !== tx) { b.dataset.tx = tx; b.querySelector('.t').textContent = tx; }
  }
  // the tray holds every kind of defender the player owns: those still to set with their number, the rest greyed (on a
  // desktop, where there is room; a tap on a greyed one finds the next of its kind on the land)
@@ -10530,7 +10604,10 @@ function drawMini() {
   for (let i = 0; i < NC; i++) if (T[i]) { c.fillStyle = col[T[i]]; c.fillRect(ox + (cX(i) - 2 - b.x0) * sc, oy + (cY(i) - 2 - b.y0) * sc, CS * sc + .6, CS * sc + .6); }
  }
  mg.drawImage(miniImg, 0, 0);
- mg.fillStyle = C.red; for (let k = 0; k < S.hi.length; k++) { const i = S.hi[k]; mg.globalAlpha = min(1, .3 + S.hn[k] / 20); mg.fillRect(ox + (cX(i) - 2 - b.x0) * sc, oy + (cY(i) - 2 - b.y0) * sc, max(1.5, CS * sc), max(1.5, CS * sc)); } mg.globalAlpha = 1;
+ // the horde in three paths by strength, not a rectangle a cell (thousands on the world map)
+ mg.fillStyle = C.red; const cw = max(1.5, CS * sc);
+ for (let bk = 0; bk < 3; bk++) { mg.beginPath(); let any = 0; for (let k = 0; k < S.hi.length; k++) { const n = S.hn[k]; if ((n < 4 ? 0 : n < 12 ? 1 : 2) !== bk) continue; const i = S.hi[k]; mg.rect(ox + (cX(i) - 2 - b.x0) * sc, oy + (cY(i) - 2 - b.y0) * sc, cw, cw); any = 1; } if (any) { mg.globalAlpha = [.45, .75, 1][bk]; mg.fill(); } }
+ mg.globalAlpha = 1;
  // the holes the horde comes out of, throbbing, each with an arrow towards the castle
  const pul = .5 + .5 * sin(gt * 4);
  for (const s of FOLIOS[S.folio].src) {
@@ -10703,11 +10780,13 @@ function drawTree() {
   tcam.fit = fit; tcam.fitW = w + 'x' + h; tcam.s = clamp(min(w / (x1 - x0), h / (y1 - y0)) * .92, fit * .9, fit * (desk ? 1.6 : 2.6)); tcam.x = (x0 + x1) / 2; tcam.y = min((y0 + y1) / 2, y1 + 24 / tcam.s - h / 2 / tcam.s); }
  tg.setTransform(DPR, 0, 0, DPR, 0, 0); tg.clearRect(0, 0, w, h);
  tg.save(); tg.translate(w / 2, h / 2); tg.scale(tcam.s, tcam.s); tg.translate(-tcam.x, -tcam.y);
- // Jesse asleep in his bed, the vine from his breast
+ // the vine from Jesse's breast: drawn first, so his coverlet lies over its foot; trunk and boughs are one silhouette (all the
+ // dark strokes, then all the light ones, so no cap shows where a bough meets the trunk); every leaf hangs on a stalk
+ const trunk = [{ x: 436, y: 1186 }, { x: 452, y: 1146 }, { x: 470, y: 1060 }, { x: 494, y: 880 }, { x: 508, y: 470 }, { x: 500, y: 150 }], all = [[trunk, 18], ...TR.vines.map(v => [v, 9])];
+ const path = pts => { tg.beginPath(); pts.forEach((p, k) => k ? tg.lineTo(p.x, p.y) : tg.moveTo(p.x, p.y)); };
+ tg.lineCap = 'round'; tg.lineJoin = 'round'; for (const [p, wd] of all) { pen(tg, 0, '#2f4a1c', wd + 4); path(p); tg.stroke(); } for (const [p, wd] of all) { pen(tg, 0, '#5f8a34', wd); path(p); tg.stroke(); }
+ TR.vines.forEach(v => { for (let k = 6; k < v.length - 4; k += 7) { const p = v[k], q = v[k + 1], a = atan2(q.y - p.y, q.x - p.x) + (k & 1 ? 1 : -1) * 1.2, lx = p.x + cos(a) * 22, ly = p.y + sin(a) * 22; pen(tg, 0, '#2f4a1c', 2.5); tg.beginPath(); tg.moveTo(p.x + cos(a) * 4, p.y + sin(a) * 4); tg.quadraticCurveTo(p.x + cos(a + .4) * 14, p.y + sin(a + .4) * 14, lx - cos(a) * 9, ly - sin(a) * 9); tg.stroke(); ivy(tg, lx, ly, 10, k % 3 ? C.verd : C.gold); } });
  jesse(tg);
- const vine = (pts, wd) => { pen(tg, 0, '#2f4a1c', wd + 4); tg.lineCap = 'round'; tg.lineJoin = 'round'; tg.beginPath(); pts.forEach((p, k) => k ? tg.lineTo(p.x, p.y) : tg.moveTo(p.x, p.y)); tg.stroke(); strk(tg, '#5f8a34', wd); };
- vine([{ x: 452, y: 1146 }, { x: 470, y: 1060 }, { x: 494, y: 880 }, { x: 508, y: 470 }, { x: 500, y: 150 }], 18);
- TR.vines.forEach((v, b) => { vine(v, 9); for (let k = 6; k < v.length - 4; k += 7) { const p = v[k], q = v[k + 1], a = atan2(q.y - p.y, q.x - p.x) + (k & 1 ? 1 : -1) * 1.2; ivy(tg, p.x + cos(a) * 22, p.y + sin(a) * 22, 10, k % 3 ? C.verd : C.gold); } });
  pen(tg, C.gold, C.ink, 3); dot(tg, 500, 110, 52); fs(tg);
  disc(tg, C.lapis, 500, 110, 42);
  tg.fillStyle = C.gold2; tg.font = '800 44px ' + GOT; tg.textAlign = 'center'; tg.textBaseline = 'middle'; tg.fillText('?', 500, 114);
@@ -10724,11 +10803,12 @@ function drawTree() {
   tg.textAlign = 'center'; tg.textBaseline = 'middle';
   if (st === 'later') { tg.fillStyle = '#fff8e0'; tg.font = '800 30px ' + GOT; tg.fillText('?', 0, 2); }
   else { const r = R * .78 + (n.u.big ? 4 : 0); tg.save(); dot(tg, 0, 0, r); tg.clip(); tg.globalAlpha = st === 'next' ? .55 : 1; tg.drawImage(medIcon(medKind(n.id)), -r * 1.05, -r * 1.05, r * 2.1, r * 2.1); tg.restore(); }
-  if ((st === 'buy' || st === 'next') && tcam.s > .45) {
+  // (tags only once the medallions have room for them: zoomed out, neighbours' tags would overlap)
+  if ((st === 'buy' || st === 'next') && tcam.s > .72) {
    const y = R + (n.u.big ? 23 : 18), t = fmt(CORE.price(S, n.u)), e = effTag(n.u); tg.font = '700 18px "EB Garamond",serif'; const w = max(tg.measureText(t).width + 22, 0);
    tg.fillStyle = st === 'buy' ? 'rgba(251,246,230,.92)' : 'rgba(240,230,205,.75)'; tg.beginPath(); tg.roundRect(-w / 2, y - 11, w, 22, 11); tg.fill(); pen(tg, 0, st === 'buy' ? C.ink : 'rgba(43,29,20,.35)', 1.2); tg.stroke();
    tg.fillStyle = st === 'buy' ? C.ink : 'rgba(43,29,20,.6)'; tg.fillText(t, 4, y + 1); tg.save(); tg.translate(-w / 2 + 9, y); tg.fillStyle = C.gold; P(tg, 'M0 -6 L5 -2 3 5 -3 5 -5 -2 Z'); tg.fill(); tg.restore();
-   if (tcam.s > .7) { tg.font = 'italic 600 15px "EB Garamond",serif'; tg.fillStyle = st === 'buy' ? C.red : 'rgba(120,40,20,.55)'; tg.fillText(e, 0, y + 20); }
+   if (tcam.s > .9) { tg.font = 'italic 600 15px "EB Garamond",serif'; tg.fillStyle = st === 'buy' ? C.red : 'rgba(120,40,20,.55)'; tg.fillText(e, 0, y + 20); }
   }
   if (n === tsel || n === thov) { pen(tg, 0, C.ink, 3); tg.setLineDash([6, 5]); dot(tg, 0, 0, R + 11); tg.stroke(); tg.setLineDash([]); }
   tg.restore();
@@ -10998,8 +11078,8 @@ function setUI(d) { if (!S) return; S.ui = clamp(round(((S.ui || 1) + d * .1) * 
 $('uiz').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setUI(+b.dataset.z); });
 addEventListener('keydown', e => { if (e.key === '+' || e.key === '=') setUI(1); else if (e.key === '-') setUI(-1); });
 function layout() {
- DPR = DIAG.dpr || min(2, devicePixelRatio || 1); VW = innerWidth; VH = innerHeight; desk = VW >= 820 && VH >= 560;
- document.body.classList.toggle('desk', desk);
+ DPR = DIAG.dpr || (lowRes ? 1 : min(matchMedia('(pointer: coarse)').matches ? 1.5 : 2, devicePixelRatio || 1)); VW = innerWidth; VH = innerHeight; desk = VW >= 820 && VH >= 560;
+ document.body.classList.toggle('desk', desk); document.body.classList.toggle('nofx', !DIAG.fx);
  cv.width = round(VW * DPR); cv.height = round(VH * DPR);
  // the text and controls grow with a large screen, and by the viewer's own setting
  UI = (desk ? clamp(min(VW / 1280, VH / 760), 1, 2) : 1) * (S && S.ui || 1); document.body.style.setProperty('--u', UI);
@@ -11011,16 +11091,16 @@ let lastP = -1;
 function frame(dt) {
  gt += dt;
  for (let k = LATER.length - 1; k >= 0; k--) if ((LATER[k].t -= dt) <= 0) { const f = LATER[k].fn; LATER.splice(k, 1); f(); }
- if (S.phase === 'run' && $('tree').hidden && !(zoom && zoom.freeze)) CORE.step(S, dt);
- F = CORE.flow(S);
+ part(); if (S.phase === 'run' && $('tree').hidden && !(zoom && zoom.freeze)) CORE.step(S, dt);
+ F = CORE.flow(S); part('rules');
  const st = CORE.stats(S);
- onEvents();
+ onEvents(); part('events');
  if (!$('tree').hidden) { drawTree(); hud(st); musicTick(); return; }
  camera(dt);
  shake = DIAG.fx ? max(0, shake - dt * 1.3) : 0; const jx = shake ? (hash(gt * 60 | 0, 1, 80) - .5) * 8 * shake : 0, jy = shake ? (hash(gt * 60 | 0, 2, 80) - .5) * 8 * shake : 0;
  g.setTransform(DPR, 0, 0, DPR, jx * DPR, jy * DPR);
- CALLS = 0; part(); let hT = performance.now(); horde(zoom && zoom.freeze ? 0 : dt); hT = performance.now() - hT; part('walk');
- drawPage(); drawBorder(); part('land'); drawTowers(st); part('fans');
+ CALLS = 0; part('camera'); let hT = performance.now(); horde(zoom && zoom.freeze ? 0 : dt); hT = performance.now() - hT; part('walk');
+ if (DIAG.land) drawPage(); else { g.fillStyle = '#8fae5a'; g.fillRect(0, 0, VW, VH); } part('land'); drawTowers(st); part('fans');
  { const t = performance.now(); drawHorde(st); hT += performance.now() - t; } part('horde'); gauge(hT); drawFx(dt); part('fx'); sky(); part('sky');
  if (hurtT > 0 && S.phase !== 'run' && !turn.img) { g.save(); g.globalAlpha = min(.5, hurtT * .6); g.drawImage(CASTLE_HIT, 0, 0, 400, 312, sx(-25), sy(-30), 50 * cam.s, 39 * cam.s); g.restore(); }
  if (drag && drag.moved && drag.t) {
@@ -11037,7 +11117,7 @@ function frame(dt) {
  if (S.phase === 'run') { const X = sx(0), Y = sy(0), m = 34; if (X < 0 || X > VW || Y < 100 || Y > VH - 90) { const x = clamp(X, m, VW - m), y = clamp(Y, 100 + m, VH - 90 - m), a = atan2(Y - y, X - x); if (hurtT > 0) { disc(g, `rgba(255,60,30,${min(.5, hurtT) * (.6 + .4 * sin(gt * 18))})`, x, y, 38 + 4 * sin(gt * 18)); } pen(g, C.gold, C.ink, 2); dot(g, x, y, 22); fs(g); pen(g, 0, hurtT > 0 ? '#ff5a3c' : C.red, 5); g.beginPath(); g.arc(x, y, 27, -PI / 2, -PI / 2 + TAU * S.wall / S.wallMax); g.stroke(); g.save(); g.translate(x, y); g.scale(.75, .75); castle(g, 0, 6); g.rotate(a); g.fillStyle = C.red; P(g, 'M46 0 L36 -7 36 7'); g.fill(); g.restore(); } }
  drawTurn(dt); drawHerald(dt);
  teach();
- drawMini(); hud(st); musicTick(); if ((gt * 2 | 0) !== (chronTick.t | 0)) { chronTick.t = gt * 2 | 0; chronTick(); } part('hud');
+ part('hud:pre'); if (DIAG.hud) { if ((gt * 10 | 0) !== drawMini.t) { drawMini.t = gt * 10 | 0; drawMini(); } part('hud:mini'); if ((gt * 15 | 0) !== hud.t) { hud.t = gt * 15 | 0; hud(st); } } part('hud:dom'); musicTick(); part('hud:music'); if ((gt * 2 | 0) !== (chronTick.t | 0)) { chronTick.t = gt * 2 | 0; chronTick(); } part('hud');
  if (DIAG.fps) fpsMeter();
  if (S.phase === 'fin') finale(dt);
  if (endAt && gt >= endAt.at) { const e = endAt.e; endAt = null; if (S.fin) { finT = 0; } else endCard(e); }
@@ -11122,12 +11202,16 @@ function teach() {
 /* ======================= for a session at work on the box: scenes, close-ups, a frame meter ======================= */
 // ?fps: what a frame costs by part (each part flushed with a one-pixel read, so the raster is counted, not only the script)
 let CALLS = 0, PT0 = 0; const PARTS = {};
-function part(name) { if (!DIAG.fps) return; g.getImageData(0, 0, 1, 1); const t = performance.now(); if (name) PARTS[name] = (PARTS[name] || 0) * .9 + (t - PT0) * .1; PT0 = t; }
+// (the one-pixel read forces the GPU to finish, which a real phone pays for dearly: only with ?fps=flush, for the test browser)
+let C0 = 0; const PCALLS = {};
+function part(name) { if (!DIAG.fps) return; if (DIAG.flush) g.getImageData(0, 0, 1, 1); const t = performance.now(); if (name) { PARTS[name] = (PARTS[name] || 0) * .9 + (t - PT0) * .1; PCALLS[name] = CALLS - C0; } PT0 = t; C0 = CALLS; }
 if (DIAG.fps) for (const m of ['drawImage', 'fill', 'stroke', 'fillRect', 'strokeRect', 'fillText', 'strokeText']) { const f = g[m]; g[m] = function () { CALLS++; return f.apply(this, arguments); }; }
 function fpsMeter() {
  const t = performance.now(), m = fpsMeter; m.n = (m.n || 0) + 1; if (!m.t0) m.t0 = t;
- if (t - m.t0 > 1000) { m.txt = (m.n * 1000 / (t - m.t0)).toFixed(0) + ' fps · ' + CALLS + ' calls · ' + PT.length + ' rabbits (budget ' + round(budget) + ') · dpr ' + DPR + ' · ' + cv.width + '×' + cv.height; m.txt2 = Object.entries(PARTS).map(([k, v]) => k + ' ' + v.toFixed(1)).join(' · ') + ' ms'; m.n = 0; m.t0 = t; }
- g.save(); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.font = '400 11px monospace'; g.textAlign = 'left'; g.fillStyle = 'rgba(0,0,0,.75)'; g.fillRect(0, 0, VW, 32); g.fillStyle = '#7dff6a'; g.fillText(m.txt || '…', 6, 13); g.fillText(m.txt2 || '', 6, 27); g.restore();
+ if (t - m.t0 > 1000) { const js = Object.values(PARTS).reduce((a, b) => a + b, 0); m.txt = (m.n * 1000 / (t - m.t0)).toFixed(0) + ' fps · frame ' + ((t - m.t0) / m.n).toFixed(0) + ' ms, script ' + js.toFixed(0) + ' ms · ' + CALLS + ' calls · ' + PT.length + ' rabbits (budget ' + round(budget) + ') · dpr ' + DPR + ' · ' + cv.width + '×' + cv.height; m.txt2 = Object.entries(PARTS).map(([k, v]) => k + ' ' + v.toFixed(1)).join(' · ') + ' ms'; m.n = 0; m.t0 = t; }
+ // a strip of its own over everything, so no panel or button covers it
+ let el = $('fpsM'); if (!el) { el = document.createElement('div'); el.id = 'fpsM'; el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:50;pointer-events:none;background:rgba(0,0,0,.8);color:#7dff6a;font:600 12px/1.3 monospace;padding:3px 6px;white-space:normal'; document.body.appendChild(el); }
+ const txt = (m.txt || '…') + ' · ' + (m.txt2 || ''); if (el.textContent !== txt) el.textContent = txt;
 }
 /* ?world=warren&scene=<name> plays the eager bot (?bot=casual, ?seed=n) until the moment comes and starts there, so every folio
    and moment is reached in a real state of play, never a staged one: first, tree1 (after the first folio's first try), prep
@@ -11167,6 +11251,8 @@ function lookAt(x, y) {
  const t = m ? placed[+m[1]] : placed.find(q => q.t === x); if (t) { const p = towerXY(t); return [p.x, p.y - 3]; }
  if (x === 'king' && S.king) return [S.king.x, S.king.y - 8]; if (x === 'hare' && S.hares[0]) return [S.hares[0].x, S.hares[0].y];
  if (x === 'crowd') { const th = CORE.thick(S, 0); if (th) return [th.x, th.y]; }
+ // the gift just loosed: the dragon where it flies, the ring, the flood, the ink's middle
+ if (x === 'gift') { const d = fx.find(p => p.k === 'dragonPath'); if (d) { const k = clamp(d.t / CORE.P.dragonT, 0, 1); return [lerp(d.x1, d.x2, k), lerp(d.y1, d.y2, k) - 10]; } const r = fx.find(p => p.k === 'ring' || p.k === 'flood'); if (r) return [r.x, r.y]; const i = S.ink[S.ink.length - 1]; if (i) return [(i.x1 + i.x2) / 2, (i.y1 + i.y2) / 2]; }
  return [0, 0];
 }
 function look(x, y, s = 8, o = {}) {
@@ -11180,7 +11266,7 @@ function look(x, y, s = 8, o = {}) {
 const PROPS = (() => {
  const L = [], fr = o => Object.assign({ freeze: 1 }, o);
  L.push(['the castle on its mound, first page', 0, 0, 0, 10, fr({ scene: 'prep' })]);
- L.push(['rabbits peering out of their hole', 0, 21, 150, 12, fr({ scene: 'prep' })]);
+ L.push(['rabbits peering out of their hole', 0, 0, 296, 12, fr({ scene: 'prep' })]);
  L.push(['an archer monk, chosen, his fan', 0, 'monk', 0, 12, fr({ scene: 'folio2', sel: 'monk' })]);
  L.push(['the first wave on the road', 0, 'crowd', 0, 9, fr({ scene: 'folio1' })]);
  L.push(['a crowd round a snail, slimed', 0, 'snail', 0, 11, fr({ scene: 'folio4' })]);
@@ -11192,10 +11278,10 @@ const PROPS = (() => {
  L.push(['the falconer, a stoop', 0, 'falc', 0, 11, fr({ scene: 'falc' })]);
  L.push(['a ferret by its hole', 0, 'ferret', 0, 13, fr({ scene: 'ferret' })]);
  L.push(['the village', 0, 190, 64, 7, fr({ scene: 'folio7' })]);
- L.push(['the dragon on the wing', 0, 'crowd', 0, 6, { scene: 'dragon' }]);
- L.push(['the inkpot poured', 0, 'crowd', 0, 7, { scene: 'ink' }]);
- L.push(['the great bell rung', 0, 'crowd', 0, 6, { scene: 'bell' }]);
- L.push(['the flood', 0, 'crowd', 0, 4, { scene: 'flood' }]);
+ L.push(['the dragon on the wing', 0, 'gift', 0, 6, { freeze: 1, scene: 'dragon' }]);
+ L.push(['the inkpot poured', 0, 'gift', 0, 7, { freeze: 1, scene: 'ink' }]);
+ L.push(['the great bell rung', 0, 'gift', 0, 6, { freeze: 1, scene: 'bell' }]);
+ L.push(['the flood', 0, 'gift', 0, 4, { freeze: 1, scene: 'flood' }]);
  L.push(['a golden hare', 0, 'hare', 0, 12, fr({ scene: 'hare' })]);
  L.push(['the horde on the world map', 0, 'crowd', 0, 4, fr({ scene: 'crowd' })]);
  L.push(['the world map: its rim and sea', 0, -300, 300, 3, fr({ scene: 'folio12' })]);
@@ -11242,7 +11328,7 @@ K.debug = {
  thick: () => { const t = CORE.thick(S, 0); return t ? { x: sx(t.x), y: sy(t.y), dx: t.dx, dy: t.dy } : null; },
  node: id => { if (!TR) treeLayout(); const n = TR.nodes.find(q => q.id === id && q.l === (S.lv[id] | 0)) || TR.nodes.find(q => q.id === id); const r = tc.getBoundingClientRect(), p = tScr(n); return { x: p.x + r.left, y: p.y + r.top }; },
  tree: () => openTree(),
- look, props: PROPS, scenes: Object.keys(SCENES), gt: () => gt, parts: () => Object.assign({ calls: CALLS, rabbits: PT.length }, PARTS),
+ look, props: PROPS, pcalls: () => Object.assign({}, PCALLS), scenes: Object.keys(SCENES), gt: () => gt, parts: () => Object.assign({ calls: CALLS, rabbits: PT.length }, PARTS),
  // the canvas itself (the land and everything on it, no interface), or the tree when it is open
  snap: () => { if (!$('tree').hidden) { drawTree(); const o = document.createElement('canvas'); o.width = tc.width; o.height = tc.height; const x = o.getContext('2d'); x.fillStyle = x.createRadialGradient(o.width / 2, o.height * .4, 0, o.width / 2, o.height * .4, o.width); x.fillStyle.addColorStop(0, '#f4e9cd'); x.fillStyle.addColorStop(1, '#dcc697'); x.fillRect(0, 0, o.width, o.height); x.drawImage(tc, 0, 0); return o.toDataURL(); } const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height; const x = o.getContext('2d'); x.fillStyle = C.desk; x.fillRect(0, 0, o.width, o.height); x.drawImage(cv, 0, 0); return o.toDataURL(); },
  stoops: () => fx.filter(p => p.k === 'stoop').map(p => ({ x: p.x0, y: p.y0, x1: p.x1, y1: p.y1, u: p.t / p.T }))
