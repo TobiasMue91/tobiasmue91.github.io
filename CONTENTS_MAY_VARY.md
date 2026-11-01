@@ -1350,6 +1350,12 @@ still undone, most valuable first:
     1000 high with its feet on y = 0, and measures the trouser legs; the table `SIL` in the view is its output (about 23 KB).
     A gentleman walking is cut at the knee and his shins swing below it; a lady's skirt hides her feet, so she bobs like a
     puppet on its stick. Wikimedia Commons, where most of these are also kept, refuses requests from this environment.
+  - *Fifth round* (fresh critic, with the traced people): 7/**6**/7/6/6 and **5**; the traced silhouettes are "the best thing
+    here". Done after it: what the whirl carries goes round behind the people, so whoever it hits is seen; extras are all
+    black again (a shade lighter read as see-through); the upstairs windows are frames with an open casement, not cream tabs.
+    Next, by the critic's list: the props are still drawn from primitives beside traced people (the same lever again: cut-paper
+    furniture of the period, Edouart's own chairs, tables and harp, traced the same way), every reel in the same staging, the
+    boxed small-caps panels everywhere.
   - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
     for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
     "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one
