@@ -270,11 +270,11 @@ The long-term answer is a habit and a tool:
 | 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
-| 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft) | hold a finger on the house and drag: the ghost glides after it and its cold drives people away; tap a doorway, the telephone, the chandelier | short nights against ectoplasm and the dawn, the organ between them; every exit costs a pip of resolve for good; five casts, from a family of three to a film company and thirty extras | silent film: Reiniger cut-outs, black people before grey furniture, frost round a cream card ghost, tinted stock, grain, intertitles, iris | night blue, cream, black; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought, a telephone, a crash | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
+| 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft, shipped as a cold that herded people, remade in November 2026 as a poltergeist) | hold a finger on the house: a whirl follows it, tears loose whatever it passes (teacups and candles first, chairs, then the long-case clock and the armour, last the piano and the chandelier) and carries it round; what it carries hits people; let go and it all crashes down, or with Fling flies on | short nights against ectoplasm and the dawn, the organ between them; a hit frightens and shoves, past their nerve they panic and run out of the door, and every exit costs a pip of resolve for good; five casts, from a family of three to a film company and twenty-six extras | silent film in coloured cut paper: black silhouettes before rooms of lit, tinted paper (teal, ochre, wine, green, violet, rose), what is built in one plane back in the room's own shade, a cream card ghost, grain, intertitles, iris | indigo night, six room colours, black, cream; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought; porcelain, thuds, smashes and the whirl's wind | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 35–36 / 62–64 (after its refinement session),
-Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–38 / 71–78.
+Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–37 / 66–71 (remade, November 2026).
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -1274,9 +1274,39 @@ still undone, most valuable first:
     peaks at −10 dB, average −32. Nothing clips; nothing changed.
   - *Cost of a frame* (`?fps`, the world map's largest horde, phone, headless software rendering): about 2,000 rabbits drawn,
     1,800 draw calls, horde 29 ms, land 7 to 14 ms. Nobody has measured it on a real phone yet.
-- **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
-  the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
-  haunt, which nobody but its author has seen yet.
+- **Unwelcome Guests** (box 6). **The refinement session** (November 2026, rule 16). The owner found it the least fun of the
+  boxes (though its music among the best), lifted the cap (rule 2: 260 KB) and let everything be remade.
+  - *Why it was not fun, counted by the bots.* A hundred nights of 24 seconds; 80% ended because the ectoplasm ran out; one in
+    five nights nobody left; a panic (the state that sends someone to the door by themselves) came two or three times in the
+    whole game, so the pipes that act on it did nothing; the bots never slammed a door; the organ took 1.4 of 40 minutes; minute
+    25 looked like minute 1. A fresh critic scored 6/4/6/5/4 and 3: the verb is a leash, the night ends on a timer, feedback is
+    text, crowds are a black mass, the finger covers the ghost.
+  - *Chosen* (rule 5, nine pairs; the owner picked the first, liking the second's theme more): **the poltergeist's whirl**, over a
+    night parade of tsukumogami in an Edo inn (woodblock print), and shaking a dollhouse. The look keeps the silhouette film and
+    the music, and moves from Reiniger's grey to Michel Ocelot's lit colour.
+  - *The core, `CORE.version` 3* (`migrate` starts versions 1 and 2 afresh; `revisit` brings the picture people back for another
+    take, the organ kept). Thirty-eight things in six rooms in four tiers (the grip pipes open each); each has a mass, crockery
+    breaks. A hit frightens by the power of the mass and shoves away from the whirl; a panicking person runs for the nearest way
+    out and a hit only speeds them on; nobody is pinned against the far wall (they duck past). Screams are paid by the hit, not
+    by the share of someone's nerve, so a bigger cast pays more. Pipes that change the game: the grip (chairs, clocks and
+    armour, the piano), doors that slam as the whirl passes, Fling, the grey lady's whirl, imps that throw things in other
+    rooms, a stampede, heirlooms worth five. Stickers: the piano, eight in a row, ten in a night, three out with nothing broken,
+    the full organ (a whole game by a bot earns two or three).
+  - *Two bugs that held up the first tuning.* A thing standing on a floor (`y = -f * FH`) was counted to the floor below, so the
+    whirl never picked up a chair and the bot hovered over it all night; a panicking person hit from the door's side was shoved
+    against the far wall and pinned there by the whirl for the rest of the night.
+  - *Pacing* (three seeds): eager 35.0–36.6 min, casual 66.4–71.2, the longest wait 1.5 min; the first night lasts 15 seconds,
+    gets one or two out and pays for the first pipe.
+  - *Tools.* `?world=guests&scene=<name>` (first, night<n>, organ<n>, reel<n>, grip<n>, fling, grey, imps, slam, piano, crash,
+    panic, crowd, finale, end), `K.debug.look(x, y, scale, { freeze })` (x may be `ghost`, `item:<kind>`, `person:<id>`,
+    `door`, `crate`), 19 close-ups in `K.debug.props`, `snap()`; `?fps` (`=flush` in the test browser only), `?dpr=`, `?fx=0`,
+    `?film=0`, `?people=0`, `?things=0`, `?whirl=0`. Every thing is a sprite made once per scale; sequences wait on game time.
+  - *Critic rounds on the remake.* First (phone and desktop filmstrips, real input): 6/4/6/6/5 and **4**. Changed after it:
+    the counter starts at 0, labels and screams move out of each other's way, the pale rim only on someone frightened, a
+    bolder whirl and larger crockery, the ring kept inside the walls, the coat cut to the body, the organ's register whole on
+    a phone, on a desktop a larger house and the cast in a column.
+  - *Still open:* the figures (heads and hands), juice on a hit (bodies thrown back), the desktop's empty sides, the organ's
+    pipe states, the night card's scale, close-ups.
 
 ## Ideas, considered and not chosen
 
