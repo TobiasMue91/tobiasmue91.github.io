@@ -1245,6 +1245,16 @@ still undone, most valuable first:
     drawn than there are, every rabbit near the castle and within a defender's reach is drawn, and the rest of the crowd
     shares what is left (monks shot at nothing and the wall was bitten by rabbits that were not drawn). An F5 in
     `?world=warren` loses the game, as that mode saves nothing; `&keep` plays into the real save.
+  - *The opening, in the round* (November 2026, the owner: "it looks rather two-dimensional"). The lid used to tip as a flat
+    picture and a separately drawn box then grew over it. Now the shrine is opened as a small model: the lid swings back on its
+    hinge along the back edge (its outer face shortens with the cosine of the angle, then the hollow of the roof shows its red
+    velvet lining, narrower at the ridge, with a gilt hinge band), light pours from the opening, and the camera rises over the
+    shrine: the front shortens with the cosine of the pitch, the opening grows with its sine, the inside is four gilt walls in
+    perspective round a floor of light, until the camera looks straight down into it; that opening is the rectangle handed to
+    the shell. Filmed frame by frame on the game's clock (`?speed=0.25`). The film found two more faults: the end card's
+    timer reset the finale's own clock 1.4 s in, so the closing miniature faded in twice, and the herald's scroll for the
+    kneeling king lay over it. Also from the close-up list: no tufts or scuffs on the fields (a mask of the cells under them),
+    the horde's worn ways as uneven scuffs rather than a ruled band, and no ink beyond the painted land.
   - *Two calls the owner left to the session* (November 2026). The leaf keeps running into millions: the genre the box follows
     (Sir, We Have an Orc Problem, the paid incrementals) counts up that way, the tree's prices are built on it, and rescaling it
     would retune every folio for a complaint about tone; the colophon and the chronicle count in plain figures. The playfield

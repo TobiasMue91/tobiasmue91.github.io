@@ -9765,6 +9765,11 @@ function span(c, x0, y0, x1, y1, w) {
 }
 // a path through its points, every bend rounded off
 function trace(c, o) { c.beginPath(); c.moveTo(o[3], o[4]); for (let k = 5; k < o.length - 2; k += 2) c.arcTo(o[k], o[k + 1], o[k + 2], o[k + 3], min(12, hypot(o[k] - o[k - 2], o[k + 1] - o[k - 1]) * .45, hypot(o[k + 2] - o[k], o[k + 3] - o[k + 1]) * .45)); c.lineTo(o[o.length - 2], o[o.length - 1]); }
+// the cells under a field, so that grass tufts, flowers and worn scuffs are not painted over its crops
+let fieldMask = null, fieldF = -1;
+const inField = i => { if (fieldF !== S.folio) { fieldF = S.folio; fieldMask = new Uint8Array(NC); for (const q of fieldsOf(S.folio)) { const [fx, fy, fw, fh, an] = q, ca = cos(-an), sa = sin(-an), R = hypot(fw, fh) / 2 + 3;
+  for (let y = fy - R; y <= fy + R; y += 2) for (let x = fx - R; x <= fx + R; x += 2) { const dx = x - fx, dy = y - fy, u = dx * ca - dy * sa, v = dx * sa + dy * ca; if (abs(u) < fw / 2 + 1.5 && abs(v) < fh / 2 + 1.5) { const k = cellAt(x, y); if (k >= 0) fieldMask[k] = 1; } } } }
+ return fieldMask[i] === 1; };
 function paintTile(c, tx, ty) {
  const x0 = tx * TU, y0 = ty * TU, f = S.folio, T = CORE.terrain(f), END = CORE.terrain(FOLIOS.length - 1), X0 = cX(0) - 2, Y0 = cY(0) - 2;
  if (wornK !== f) { const tr = CORE.flow({ folio: f, tw: [] }).tr; worn = new Float32Array(NC); wornK = f; for (let i = GW * 3; i < NC - GW * 3; i++) if (tr[i] > 0) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) worn[i + dy * GW + dx] = max(worn[i + dy * GW + dx], 1 - hypot(dx, dy) / 3.2); }
@@ -9854,9 +9859,10 @@ function paintTile(c, tx, ty) {
  c.globalAlpha = .45; layer(t => t === T_.SCRUB, (x, y, i, h) => { disc(c, PAT.bracken, x + h - .5, y, 5); }); c.globalAlpha = 1;
  layer(t => t === T_.SCRUB, (x, y, i, h) => { disc(c, PAT.bracken, x + h - .5, y, 3.2); });
  layer(t => t === T_.ROCK, (x, y, i, h) => { disc(c, 'rgba(150,140,115,.55)', x + h - .5, y, 3.9); });
- layer((t, i) => t === T_.GRASS && worn[i] > 0, (x, y, i, h) => { c.fillStyle = `rgba(150,118,70,${worn[i] * .18})`; c.beginPath(); c.ellipse(x + h - .5, y, 5, 4, h * 3, 0, TAU); c.fill(); });
+ // the ways the horde wears into the grass: uneven scuffs, never a band of the same width (it read as a ruler line), not on fields
+ layer((t, i) => t === T_.GRASS && worn[i] > 0 && !inField(i), (x, y, i, h, h2) => { c.fillStyle = `rgba(150,118,70,${worn[i] * (.07 + h2 * .14)})`; c.beginPath(); c.ellipse(x + (h - .5) * 3.4, y + (h2 - .5) * 3.4, 2.6 + h * 3, 2 + h2 * 2.6, h * 3, 0, TAU); c.fill(); });
  const wet = i => [1, -1, GW, -GW].some(d => T[i + d] === T_.WATER || T[i + d] === T_.BRIDGE);
- layer((t, i) => t === T_.GRASS && worn[i] < .4 && !wet(i), (x, y, i, h, h2) => {
+ layer((t, i) => t === T_.GRASS && worn[i] < .4 && !wet(i) && !inField(i), (x, y, i, h, h2) => {
   if (h2 < .035) { const col = ['#fbf6ea', '#f0c84a', '#d8483a', '#b07ad8', '#9ab8f0'][h * 5 | 0]; for (let j = 0; j < 4; j++) { const u = x + hash(i, j, 43) * 4 - 2, v = y + hash(i, j, 42) * 4 - 2; pen(c, 0, '#4f7a2c', .2); ln(c, u, v, u, v + 1.2); disc(c, col, u, v, .55); disc(c, '#f3d77a', u, v, .18); } }
   else if (h < .12) { pen(c, 0, 'rgba(60,90,30,.6)', .3); c.beginPath(); for (let j = -2; j <= 2; j++) { c.moveTo(x + j * .5, y + 1); c.quadraticCurveTo(x + j * .7, y - .5, x + j * 1.1, y - 2.4 + abs(j) * .5); } c.stroke(); }
  });
@@ -10387,7 +10393,9 @@ function drawInk() {
  // ink: a spilt pool along the line, glossy, with splashes round it
  for (const p of S.ink) {
   const a = min(1, p.t / 1.5), L = hypot(p.x2 - p.x1, p.y2 - p.y1), n = max(3, L / 5 | 0), seed = p.x1 * 13 + p.y1 | 0, blobs = [];
-  for (let k = 0; k <= n; k++) { const u = k / n, j = (hash(seed, k, 60) - .5) * 4; blobs.push([lerp(p.x1, p.x2, u) - (p.y2 - p.y1) / (L || 1) * j, lerp(p.y1, p.y2, u) + (p.x2 - p.x1) / (L || 1) * j, (5 + hash(seed, k, 61) * 3.5) * (.7 + .3 * a)]); }
+  const TT = CORE.terrain(S.folio);
+  for (let k = 0; k <= n; k++) { const u = k / n, j = (hash(seed, k, 60) - .5) * 4, bx = lerp(p.x1, p.x2, u), by = lerp(p.y1, p.y2, u), bc = cellAt(bx, by); if (bc < 0 || !TT[bc]) continue; blobs.push([lerp(p.x1, p.x2, u) - (p.y2 - p.y1) / (L || 1) * j, lerp(p.y1, p.y2, u) + (p.x2 - p.x1) / (L || 1) * j, (5 + hash(seed, k, 61) * 3.5) * (.7 + .3 * a)]); }
+  if (blobs.length < 2) continue;
   g.save(); g.globalAlpha = a;
   g.fillStyle = 'rgba(14,16,32,.35)'; for (const [x, y, r] of blobs) { dot(g, sx(x), sy(y), (r + 1.4) * s); g.fill(); }
   g.fillStyle = '#12152a'; for (const [x, y, r] of blobs) { dot(g, sx(x), sy(y), r * s); g.fill(); }
@@ -10966,10 +10974,11 @@ function shrineRect() { const { fw, fh, fy0 } = frameRect(), w = min(fw * .5, 32
 // the reliquary: a chasse, a little gabled house of gilt copper and blue enamel (Limoges, about 1200, as the rabbit court
 // would have it): a plinth on four paws, an arcade of trefoil arches with a gold rabbit saint in each, a pitched lid diapered
 // with quatrefoils, a pierced cresting along its ridge with a crystal knop at either end, cabochons and pearls on every frame
-function shrine(r, lift) {
+function shrine(r, lift, part = 'all') {
  const ink = C.ink, W = r.w, x0 = r.x, bot = r.y + r.h, gem = (x, y, rr, col) => { disc(g, rad(g, x - rr * .35, y - rr * .4, rr * .1, x, y, rr, '#fff', col, '#1a0d08'), x, y, rr); strk(g, '#7a5a14', max(1, rr * .28)); };
  const gilt = (y0, y1) => lin(g, 0, y0, 0, y1, '#fff1b0', '#e8bf4a', '#b38420', '#e2b545'), U = W / 100;
  const ph = 10 * U, by1 = bot - ph, bh = 40 * U, by0 = by1 - bh, rh = 26 * U, bx0 = x0 + 6 * U, bw = W - 12 * U;
+ if (part !== 'lid') {
  oval(g, 'rgba(20,12,6,.4)', x0 + W / 2 + 4 * U, bot + 1.5 * U, W * .56, 4 * U);
  // four lion's paws and the plinth, moulded
  for (const fx of [.12, .36, .64, .88]) { pen(g, gilt(bot - 5 * U, bot), ink, 1.6); g.beginPath(); g.ellipse(x0 + W * fx, bot - 2.4 * U, 4.2 * U, 2.6 * U, 0, PI, 0); g.lineTo(x0 + W * fx + 4.2 * U, bot); g.lineTo(x0 + W * fx - 4.2 * U, bot); g.closePath(); fs(g); pen(g, 0, 'rgba(90,60,10,.6)', 1); for (const d of [-1.6, 0, 1.6]) ln(g, x0 + W * fx + d * U, bot - 3.4 * U, x0 + W * fx + d * U, bot - .6 * U); }
@@ -10995,6 +11004,8 @@ function shrine(r, lift) {
  pen(g, 0, ink, 1.5); g.strokeRect(ix, iy, iw, ih);
  for (const [jx, jy, col] of [[0, 0, C.red], [1, 0, C.lapis], [0, 1, C.lapis], [1, 1, C.red]]) gem(bx0 + 2 * U + jx * (bw - 4 * U), by0 + 2 * U + jy * (bh - 4 * U), 2.2 * U, col);
  for (let x = bx0 + 9 * U; x < bx0 + bw - 8 * U; x += 8 * U) { disc(g, '#fbf8f1', x, by0 + 2 * U, .9 * U); disc(g, '#fbf8f1', x, by1 - 2 * U, .9 * U); }
+ }
+ if (part === 'body') return;
  // the lid, hinged along the back of the ridge: it lifts and tips away when the shrine is opened
  g.save(); const hx = x0 + W / 2, hy = by0 - rh; g.translate(hx, hy - lift * 8 * U); g.rotate(-lift * .5); g.scale(1, 1 - lift * .55); g.translate(-hx, -hy);
  const lx0 = bx0 - 3 * U, lx1 = bx0 + bw + 3 * U, tx0 = bx0 + 9 * U, tx1 = bx0 + bw - 9 * U;
@@ -11013,22 +11024,55 @@ function shrine(r, lift) {
  for (const kx of [tx0 - 1 * U, tx1 + 1 * U]) { pen(g, gilt(hy - 6 * U, hy), ink, 1); g.fillRect(kx - .8 * U, hy - 4 * U, 1.6 * U, 4 * U); g.strokeRect(kx - .8 * U, hy - 4 * U, 1.6 * U, 4 * U); oval(g, rad(g, kx - U, hy - 7.5 * U, .2, kx, hy - 6.4 * U, 3.2 * U, '#ffffff', '#cfe6ff', '#5a86c8'), kx, hy - 6.4 * U, 2.6 * U, 3 * U); strk(g, '#7a5a14', 1.2); }
  g.restore();
 }
-// the shrine seen from above as the camera rises over it: gilt walls round a floor of light, which is where the dive goes
-function mouthRect() { const r = shrineRect(), w = min(VW * .62, VH * .5, 420), h = w * .62; return { x: VW / 2 - w / 2, y: VH * .46 - h / 2, w, h, r }; }
-function lookIn(k) {
- // the opening grows out of the shrine's own top until it fills the view
- const M = mouthRect(), r = M.r, e = ease.inOut(k), m = { x: lerp(r.x + r.w * .1, M.x, e), y: lerp(r.y + r.h * .3, M.y, e), w: lerp(r.w * .8, M.w, e), h: lerp(r.h * .08, M.h, e) }, U = m.w / 100, cx = VW / 2, cy = m.y + m.h / 2, wall = 14 * U * (1 - k * .4);
- if (k <= 0) return; g.save(); g.globalAlpha = min(1, k * 4);
- g.fillStyle = `rgba(20,12,6,${.85 * k})`; g.fillRect(0, 0, VW, VH);
- const ox = m.x - wall, oy = m.y - wall, ow = m.w + wall * 2, oh = m.h + wall * 2;
- // the rim, gilt, with pearls; then four walls in perspective, lit from the floor
- pen(g, lin(g, 0, oy, 0, oy + oh, '#fff1b0', '#e2b545', '#a97a1c'), C.ink, 2); g.fillRect(ox - 6 * U, oy - 6 * U, ow + 12 * U, oh + 12 * U); g.strokeRect(ox - 6 * U, oy - 6 * U, ow + 12 * U, oh + 12 * U);
- for (let x = ox - 2 * U; x < ox + ow + 4 * U; x += 5 * U) { disc(g, '#fbf8f1', x, oy - 3 * U, 1.1 * U); disc(g, '#fbf8f1', x, oy + oh + 3 * U, 1.1 * U); }
- const q = [[ox, oy, ox + ow, oy, m.x + m.w, m.y, m.x, m.y, '#c99a2e'], [ox + ow, oy, ox + ow, oy + oh, m.x + m.w, m.y + m.h, m.x + m.w, m.y, '#a97a1c'], [ox + ow, oy + oh, ox, oy + oh, m.x, m.y + m.h, m.x + m.w, m.y + m.h, '#e8c060'], [ox, oy + oh, ox, oy, m.x, m.y, m.x, m.y + m.h, '#b88a22']];
- for (const w of q) { g.beginPath(); g.moveTo(w[0], w[1]); g.lineTo(w[2], w[3]); g.lineTo(w[4], w[5]); g.lineTo(w[6], w[7]); g.closePath(); g.fillStyle = w[8]; g.fill(); strk(g, 'rgba(43,29,20,.7)', 1.2); }
- g.fillStyle = rad(g, cx, cy, 2, cx, cy, m.w * .7, '#fffef4', '#fff3c4', '#f3d77a'); g.fillRect(m.x, m.y, m.w, m.h);
+// Opening the shrine, as a small model rather than flat pictures: the lid swings back on its hinge along the back edge (seen
+// from the front it shortens, then shows its red velvet lining), light pours from the opening, then the camera rises over the
+// shrine: its front shortens with the cosine of the camera's pitch and the opening grows with the sine, the inside shown as four
+// gilt walls in perspective round a floor of light, until the camera looks straight down into it and fills the view with it.
+// That opening is the rectangle handed to the shell, the place the dive goes.
+const gilt0 = (y0, y1) => lin(g, 0, y0, 0, y1, '#fff1b0', '#e8bf4a', '#b38420', '#e2b545');
+function openShrine(r, t) {
+ const W = r.w, U = W / 100, bot = r.y + r.h, by1 = bot - 10 * U, bh = 40 * U, by0 = by1 - bh, bx0 = r.x + 6 * U, bw = W - 12 * U, D = bw * .62, M = mouthRect(), P0 = .2;
+ const tA = clamp(t / .9, 0, 1), th = ease.inOut(tA) * 1.95, eB = ease.inOut(clamp((t - .9) / 1.1, 0, 1)), p = lerp(P0, PI / 2, eB), sp = sin(p), cp = cos(p);
+ g.fillStyle = `rgba(20,12,6,${.9 * eB})`; g.fillRect(0, 0, VW, VH);
+ const z = lerp(1, M.w / bw, eB), Ox = bx0 + bw / 2, Oy = by0 - D * sp / 2;
+ g.save(); g.translate(lerp(Ox, M.x + M.w / 2, eB), lerp(Oy, M.y + M.h / 2, eB)); g.scale(z, z); g.translate(-Ox, -Oy);
+ const yh = by0 - D * sp, oh = D * sp, quad = (q, col) => { g.beginPath(); g.moveTo(q[0], q[1]); for (let k = 2; k < 8; k += 2) g.lineTo(q[k], q[k + 1]); g.closePath(); g.fillStyle = col; g.fill(); };
+ // the open lid stands behind the far edge, its velvet lining towards us, foreshortened as the camera rises
+ const LH = bh * .95 * sin(th) * cp / cos(P0), lx = bx0 - 3 * U, lw = bw + 6 * U;
+ if (LH > 1) {
+  // the hollow of the roof seen from inside: narrower at its ridge, lined with velvet, its gilt rim, a gilt hinge band at the foot
+  const tw = lw * .82, shape = () => { g.beginPath(); g.moveTo(lx, yh); g.lineTo(lx + (lw - tw) / 2, yh - LH); g.lineTo(lx + (lw + tw) / 2, yh - LH); g.lineTo(lx + lw, yh); g.closePath(); };
+  shape(); g.fillStyle = lin(g, 0, yh - LH, 0, yh, '#4a0b08', '#9c2716', '#6e140c'); g.fill();
+  g.save(); shape(); g.clip(); g.fillStyle = 'rgba(243,215,122,.5)'; for (let y = yh - LH + 5 * U; y < yh - 3 * U; y += 6 * U * max(.25, cp / cos(P0))) for (let x = lx + 5 * U; x < lx + lw - 3 * U; x += 7 * U) { dot(g, x, y, .7 * U); g.fill(); }
+  g.fillStyle = lin(g, 0, yh - LH, 0, yh - LH * .4, 'rgba(0,0,0,.35)', 'rgba(0,0,0,0)'); g.fillRect(lx, yh - LH, lw, LH); g.restore();
+  shape(); pen(g, 0, '#e2b545', 2 * U); g.stroke(); pen(g, 0, C.ink, 1); g.stroke();
+  pen(g, gilt0(yh - 2 * U, yh), C.ink, 1); g.fillRect(lx, yh - 2 * U, lw, 2 * U); g.strokeRect(lx, yh - 2 * U, lw, 2 * U); for (const hx2 of [lx + lw * .2, lx + lw * .8]) { pen(g, '#8a6a1c', C.ink, .8); g.fillRect(hx2 - 2 * U, yh - 2.6 * U, 4 * U, 3.2 * U); g.strokeRect(hx2 - 2 * U, yh - 2.6 * U, 4 * U, 3.2 * U); } }
+ // the inside: gilt walls round a floor of light
+ if (oh > .5) {
+  g.save(); g.beginPath(); g.rect(bx0, yh, bw, oh); g.clip();
+  const f = .74, fw = bw * f, fh = oh * f, fx = Ox - fw / 2, fy = yh + oh / 2 - fh / 2 + bh * cp * .55, nx = bx0 + bw, ny = yh + oh;
+  quad([bx0, yh, nx, yh, fx + fw, fy, fx, fy], lin(g, 0, yh, 0, fy + .01, '#7a5a14', '#c99a2e'));
+  quad([bx0, yh, fx, fy, fx, fy + fh, bx0, ny], lin(g, bx0, 0, fx + .01, 0, '#6e5012', '#b88a22'));
+  quad([nx, yh, nx, ny, fx + fw, fy + fh, fx + fw, fy], lin(g, nx, 0, fx + fw - .01, 0, '#6e5012', '#b88a22'));
+  quad([bx0, ny, fx, fy + fh, fx + fw, fy + fh, nx, ny], lin(g, 0, ny, 0, fy + fh - .01, '#a97a1c', '#e8c060'));
+  pen(g, 0, 'rgba(43,29,20,.45)', .8); for (const [a1, b1, a2, b2] of [[bx0, yh, fx, fy], [nx, yh, fx + fw, fy], [bx0, ny, fx, fy + fh], [nx, ny, fx + fw, fy + fh]]) ln(g, a1, b1, a2, b2);
+  g.fillStyle = rad(g, Ox, fy + fh / 2, 1, Ox, fy + fh / 2, fw * .7, '#fffef4', '#fff3c4', '#f3d77a'); g.fillRect(fx, fy, fw, fh);
+  g.fillStyle = `rgba(255,244,200,${.55 * tA * (1 - eB)})`; g.fillRect(bx0, yh, bw, oh);
+  g.restore();
+  // the rim of the opening, gilt with pearls
+  pen(g, 0, '#e2b545', 1.8 * U); g.strokeRect(bx0 - .9 * U, yh - .9 * U, bw + 1.8 * U, oh + 1.8 * U); pen(g, 0, C.ink, 1); g.strokeRect(bx0 - 1.8 * U, yh - 1.8 * U, bw + 3.6 * U, oh + 3.6 * U);
+  if (sp > .5) for (let x = bx0 + 2 * U; x < bx0 + bw; x += 5 * U) { disc(g, '#fbf8f1', x, yh - .9 * U, .7 * U); disc(g, '#fbf8f1', x, ny + .9 * U, .7 * U); }
+ }
+ // the front of the shrine, shortening as the camera rises over it
+ if (cp > .01) { g.save(); g.translate(0, by0); g.scale(1, cp / cos(P0)); g.translate(0, -by0); shrine(r, 0, 'body'); g.restore(); }
+ // the closed lid's outer face as it swings back on its hinge
+ if (cos(th) > .01) { g.save(); g.translate(0, yh); g.scale(1, cos(th)); g.translate(0, -yh); shrine(r, 0, 'lid'); g.restore(); }
+ // light pouring out while the lid opens
+ if (!K.reduced && tA > 0 && eB < 1) { g.save(); g.globalAlpha = tA * (1 - eB) * .9; g.translate(Ox, yh + oh / 2); for (let j = 0; j < 9; j++) { const a = -PI / 2 + (j - 4) * .2 + sin(gt * 1.3 + j) * .02; g.fillStyle = 'rgba(255,245,200,.16)'; g.beginPath(); g.moveTo(-bw * .3, 0); g.lineTo(cos(a) * W * 1.4 - W * .05, sin(a) * W * 1.4); g.lineTo(cos(a) * W * 1.4 + W * .05, sin(a) * W * 1.4); g.lineTo(bw * .3, 0); g.fill(); } g.restore(); }
  g.restore();
 }
+// the rectangle the opening fills once the camera looks straight down into it: where the dive goes
+function mouthRect() { const r = shrineRect(), w = min(VW * .62, VH * .5, 420), h = w * .62; return { x: VW / 2 - w / 2, y: VH * .46 - h / 2, w, h, r }; }
 function finale(dt) {
  finT += dt; const r = shrineRect(), k = ease.out(clamp(finT / 1.2, 0, 1)), { fw, fh, fx0, fy0 } = frameRect(), gy = fy0 + fh * .74;
  $('say').classList.add('off'); $('hud').style.visibility = 'hidden'; $('bar').style.visibility = 'hidden'; $('call').style.visibility = 'hidden'; $('chron').style.visibility = 'hidden';
@@ -11049,16 +11093,14 @@ function finale(dt) {
  // the court behind, the king kneeling before the shrine
  for (let j = 0; j < 6; j++) { const sw = fw * .15, x = fx0 + fw * (.07 + j * .045), y = gy + fh * (.1 + (j & 1) * .08); g.drawImage(AT, cellOf(j & 3, 0, j === 2 ? 1 : 0) * AC, 0, AC, AC, x - sw / 2, y - sw * .875, sw, sw); }
  kingFig(g, fx0 + fw * .88, gy + fh * .2, fw / 24, 1);
- const lift = opened ? ease.back(clamp((gt - opened) / .9, 0, 1)) : 0;
- if (opened && !K.reduced) { g.save(); g.globalAlpha = clamp((gt - opened) / .5, 0, 1); g.translate(r.x + r.w / 2, r.y + r.h * .3); for (let j = 0; j < 12; j++) { g.rotate(PI / 6 + sin(gt + j) * .02); g.fillStyle = 'rgba(255,245,200,.18)'; g.beginPath(); g.moveTo(0, 0); g.lineTo(-r.w * .12, -r.w * 1.6); g.lineTo(r.w * .12, -r.w * 1.6); g.fill(); } g.fillStyle = rad(g, 0, 0, 4, 0, 0, r.w, 'rgba(255,248,210,1)', 'rgba(255,240,180,0)'); g.fillRect(-r.w, -r.w, r.w * 2, r.w * 2); g.restore(); }
- shrine(r, lift);
  g.fillStyle = C.vel; g.font = `800 ${round(min(56, fw / 12))}px ${GOT}`; g.textAlign = 'center'; g.fillText('Explicit.', VW / 2, fy0 + fh * .12);
  g.font = `italic 500 ${round(min(26, fw / 24))}px "EB Garamond",serif`; g.fillText('The king has brought you a box.', VW / 2, fy0 + fh * .12 + min(40, fw / 16));
  // the colophon: what the book cost, in the scribe's hand
  g.font = `600 ${round(min(19, fw / 30))}px "EB Garamond",serif`; g.fillStyle = C.gold2; g.fillText(`${fmt(S.slain || 0)} rabbits slain · ${ROM(FOLIOS.length)} folios held · ${S.runs} battles`, VW / 2, fy0 + fh * .12 + min(40, fw / 16) + min(30, fw / 20));
+ if (!opened) shrine(r, 0);
  g.restore();
- // once the lid is up, the camera rises over the shrine and looks into it
- if (opened) lookIn(clamp((gt - opened - .9) / 1.1, 0, 1));
+ // opened: the lid swings back and the camera rises over the shrine into it
+ if (opened) openShrine(r, gt - opened);
  $('fin').hidden = !(finT > 1.4 && !opened);
 }
 $('fin').onclick = () => { if (opened) return; opened = gt; $('fin').hidden = true; sfxBell(1); later(2.15, () => { if (CORE.act(S, 'open')) K.save(); const m = mouthRect(); K.complete({ x: m.x, y: m.y, w: m.w, h: m.h }); }); };
@@ -11160,7 +11202,7 @@ function frame(dt) {
  part('hud:pre'); if (DIAG.hud) { if ((gt * 10 | 0) !== drawMini.t) { drawMini.t = gt * 10 | 0; drawMini(); } part('hud:mini'); if ((gt * 15 | 0) !== hud.t) { hud.t = gt * 15 | 0; hud(st); } } part('hud:dom'); musicTick(); part('hud:music'); if ((gt * 2 | 0) !== (chronTick.t | 0)) { chronTick.t = gt * 2 | 0; chronTick(); } part('hud');
  if (DIAG.fps) fpsMeter();
  if (S.phase === 'fin') finale(dt);
- if (endAt && gt >= endAt.at) { const e = endAt.e; endAt = null; if (S.fin) { finT = 0; } else endCard(e); }
+ if (endAt && gt >= endAt.at) { const e = endAt.e; endAt = null; if (!S.fin) endCard(e); }   // (the finale keeps its own clock: resetting it here faded it in twice)
  if (sayT > 0 && (sayT -= dt) <= 0) $('say').classList.add('off');
  const p = CORE.progress(S); if (abs(p - lastP) > .002) { lastP = p; K.progress(p); }
 }
@@ -11203,7 +11245,7 @@ function banner(x, y, txt, k = 1) {
 // a herald's scroll for the great moments: it drops from the top, sways once, holds, and rolls away, on game time
 const HER = []; function herald(t, sub) { HER.length = 0; HER.push({ t: 0, txt: t, sub }); sfxPage(); }
 function drawHerald(dt) {
- const h = HER[0]; if (!h) return; h.t += dt; const T = 3.6, u = h.t; if (u > T) { HER.length = 0; return; }
+ const h = HER[0]; if (!h || S.phase === 'fin') return; h.t += dt; const T = 3.6, u = h.t; if (u > T) { HER.length = 0; return; }
  const drop = ease.out(clamp(u / .45, 0, 1)), out = clamp((u - T + .5) / .5, 0, 1), y = lerp(-60, VH * .3, drop) - out * 40, k = desk ? 1.7 : 1.35;
  g.save(); g.globalAlpha = 1 - out; g.translate(VW / 2, y); g.rotate(sin(u * 5) * .05 * max(0, 1 - u / 1.2)); g.translate(-VW / 2, -y); banner(VW / 2, y, h.txt, k);
  if (h.sub) { g.font = `italic 600 ${round(16 * UI * (desk ? 1.2 : 1))}px "EB Garamond",serif`; g.textAlign = 'center'; pen(g, C.vel, 'rgba(43,29,20,.85)', 4); g.lineJoin = 'round'; g.strokeText(h.sub, VW / 2, y + 34 * UI * k); g.fillText(h.sub, VW / 2, y + 34 * UI * k); }
