@@ -1337,8 +1337,9 @@ still undone, most valuable first:
     for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
     "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one
     wallpaper motif in six tints, the same small-caps plate on every surface, copy that sounds like labels. These are the next
-    session's: give the paper an edge (a deckled stroke on rooms and props drawn once into the tiles), a motif per room, and a
-    pass over every line of copy.
+    session's: a motif per room, an edge on the props and figures, and a pass over every line of copy. Begun: what is built in
+    casts its own shadow on the wall a few units down and right, as a layer of cut paper does, and the ceiling and the walls
+    cast a torn edge of shadow into each room; the study's window spills a soft light (all painted once into the backdrop).
 
 ## Ideas, considered and not chosen
 
