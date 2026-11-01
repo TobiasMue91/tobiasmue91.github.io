@@ -1205,6 +1205,14 @@ still undone, most valuable first:
     only with `?fps=flush` (for the test browser); `?fps` is a strip over everything at the top of the page. Then the
     silhouettes: composited over the screen (or round each hidden figure) they cost 13 to 60 ms in the software renderer; now
     each kind of figure has its outline made once, and a hidden one is a single draw (0.1 ms). Lesson below.
+  - *Firefox on a phone.* On the owner's Redmi Note 13 Pro the stripped-down scene (`?land=0&horde=300&body=0&border=0&fx=0&
+    hud=0&dpr=1`) ran at 59 fps in Chrome and 6 in Firefox (frame 168 ms, script 24 ms), and Tilt ran at 9 in Firefox too:
+    Firefox there pays for every draw call, whatever is drawn. So the count of calls came down (`K.debug.pcalls()` counts them
+    by part): the crowd's shadow under thinned stretches was an ellipse a cell (714 calls; now four paths by strength), arrows
+    in flight two strokes each (now two strokes in all), every defender and its footing drawn stroke by stroke (now painted
+    once at 12 px a unit, a monk once per 32 turns of his bow, drawn or just loosed, and per what the tree gave his arrows,
+    then placed with one draw), the page border's ivy every frame (now painted into the tiles). The scene went from about
+    1,700 calls to about 450 at 300 rabbits; the rabbit budget falls to 250 when frames stay slow.
   - *Sound*, rendered offline (`OfflineAudioContext`, the box's own sound functions in a page of their own): the music peaks
     at −19 dB with an average of −37; a dense moment of effects (kills, bites, stones, the dragon, the bell, the flood, a hare)
     peaks at −10 dB, average −32. Nothing clips; nothing changed.
@@ -1878,6 +1886,10 @@ A box that answers these in a dull way (pull a ball back and let it go; tap an a
 is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
+
+- **Firefox on Android pays for every canvas call.** The same page ran at 59 fps in Chrome and 6 in Firefox on one phone, and
+  the box before it fared no better there. Count draw calls per part and keep them down: paint what does not change into
+  tiles, paint each figure once into a sprite and place it, gather many small shapes into one path.
 
 - **Never read a canvas back on a phone, not even to measure it.** Reading one pixel after each part of a frame shows the
   raster's real cost in a software renderer, but on a phone each read stalls the GPU and Chrome then moves the canvas to the
