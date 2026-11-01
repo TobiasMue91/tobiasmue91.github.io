@@ -1361,6 +1361,13 @@ still undone, most valuable first:
     bots earn more a night than a person does, so their pacing never showed it). Each register now starts cheap (14, 35, 50,
     90) and grows steeply to the same top; the later casts have more nerve to keep the pace (eager 36.8–38.2, casual
     80.3–83.8, the longest wait 3.4 min). The suite wants four pipes under two first nights.
+  - *The owner's verdict on the remake* (November 2026): still the dullest box; repetitive after five minutes, the number of
+    people in the house (on which the score depends) is not theirs to change, little growth, nothing left to discover. Three
+    answers compared (rule 5): **A, the house's reputation** (screams spread rumours, the organ buys more and new kinds of
+    guests, the house is built onto: cellar, attic, crypt, tower); **B, a haunting on tour** (a new house each stage: cottage,
+    hotel, opera, castle); **C, haunting cards** (one of three random rule-changing cards a night). A answers every point (the
+    crowd is the player's to grow, as in Garbage Growth; the house grows in the frame), B escalates but keeps the cast
+    fixed, C varies without growing. Chosen: A, with B's new scenery as the annexes; the owner lets the house change shape.
   - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
     for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
     "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one
