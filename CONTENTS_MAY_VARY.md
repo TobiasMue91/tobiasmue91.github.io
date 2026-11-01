@@ -1305,8 +1305,17 @@ still undone, most valuable first:
     the counter starts at 0, labels and screams move out of each other's way, the pale rim only on someone frightened, a
     bolder whirl and larger crockery, the ring kept inside the walls, the coat cut to the body, the organ's register whole on
     a phone, on a desktop a larger house and the cast in a column.
-  - *Still open:* the figures (heads and hands), juice on a hit (bodies thrown back), the desktop's empty sides, the organ's
-    pipe states, the night card's scale, close-ups.
+  - *Second round* (fresh critic, same captures): 7/5/7/6/6 and **5**. Changed after it and the close-ups
+    (`util/cmv_props.mjs guests`, 19 tiles): a heavy hit knocks someone over about their feet and they get up again; the
+    ghost swells with what it carries; hands with a thumb, hair, legs with some weight to them; a portrait is an ancestor's
+    silhouette on a pale oval; calm people keep a little apart, so a crowd stands as people; the whirl and what it carries
+    are clipped to the house, and nothing in the ring comes closer to a wall than its own half-width; every lesson is said in
+    one place, in the sky over the roof, and THE DOOR is named only once someone panics; the bar says reel and night; a night
+    that got someone out is not called a fade; on a desktop the cast column, the counter and the bill are larger.
+    Pacing after it: eager 33.0–37.0, casual 73.7–76.1, the longest wait 2.3 min.
+  - *Still open:* the people are one parametric template with a different hat each (the critics' plainest giveaway); the
+    organ's locked pipes say nothing; the desktop's empty sides (a cinema's proscenium and curtains round the film?); the
+    night card's scale; a close-up critic with the checklist; the frame rate on the owner's phone in Firefox.
 
 ## Ideas, considered and not chosen
 
