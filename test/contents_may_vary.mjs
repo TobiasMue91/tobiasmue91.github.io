@@ -718,14 +718,14 @@ if (suites.includes('guests') && guests) {
     // frightened past their nerve they panic, run down the stair and out of the front door
     const S = alone(1, 600); S.people[0].fear = S.people[0].nerve * 2; S.people[0].panic = 1;
     const ev = run(S, 20); const out = ev.find(e => e.k === 'out');
-    check(out && out.via === 'door' && S.people[0].res === S.people[0].res0 - out.loss, 'in a panic they go down the stair and out of the door, a pip of resolve the poorer');
+    check(out && out.via === 'door' && S.people[0].st === 'out', 'in a panic they go down the stair and out of the front door');
     const T = alone(0, 40); run(T, 6);
     check(T.people[0].st === 'in', 'someone who is not in a panic does not leave by the door they stand at');
   }
   {
-    // the professor scoffs at a teacup, not at a chair
-    const S = CORE.init(5); CORE.moveIn(S, 1); S.ev = []; CORE.act(S, 'night');
-    const prof = S.people.find(p => p.id === 'prof'); S.people.forEach(p => { if (p !== prof) p.st = 'out'; }); prof.f = 0; prof.x = 600;
+    // a man of science scoffs at a teacup, not at a chair
+    const S = CORE.init(5); S.lv.skeptic = 1; S.ev = []; CORE.act(S, 'night');
+    const prof = S.people.find(p => p.skeptic); S.people.forEach(p => { if (p !== prof) p.st = 'out'; }); prof.f = 0; prof.x = 600;
     const cup = S.th.find(t => t.k === 'cup'); cup.st = 1; cup.o = 0; cup.x = 600; cup.y = -150; cup.cd = 0; S.g.on = 1; S.g.x = 700; S.g.y = -150; S.g.tx = 700; S.g.ty = -150;
     CORE.step(S, .05); const f0 = prof.fear;
     const chair = S.th.find(t => t.k === 'chair'); chair.st = 1; chair.o = 0; chair.x = prof.x; chair.y = -150; chair.cd = 0; cup.st = 0;
@@ -740,7 +740,7 @@ if (suites.includes('guests') && guests) {
     const lands = ev.filter(e => e.k === 'land'), broke = lands.filter(e => e.broke).length;
     check(carried > 0 && lands.length === carried && broke > 0, `let go, the ${carried} things carried come down (${broke} broken)`);
     check(S.people[0].fear > f0, 'a crash beside someone frightens them');
-    check(S.th.every(t => t.y <= 0 && t.st !== 2), 'nothing lands below the ground floor, and nothing stays in the air');
+    check(S.th.every(t => t.st === 4 || (t.y <= 0 && t.st !== 2)), 'nothing on the ground floor lands below it, and nothing stays in the air');
   }
   {
     // the whirl's ring keeps to its floor: nothing it carries goes through the ceiling or the floor
@@ -770,13 +770,25 @@ if (suites.includes('guests') && guests) {
     CORE.act(S, 'night'); check(!CORE.act(S, 'buy', CORE.PIPES.find(p => p.reg === 1 && p.n === 0).id), 'nothing is bought in the middle of a night');
   }
   {
+    // the house's reputation is the player's to grow: rumours bring more guests, and new kinds of them
+    const S = CORE.init(9); CORE.act(S, 'night'); const n0 = S.people.length; S.phase = 'organ';
+    S.lv.whisper = 1; S.lv.hunter = 1; CORE.act(S, 'night');
+    check(n0 === 3 && S.people.length === 3 + 3 + 3 && S.people.some(p => p.lantern), `rumours bring guests (${n0} → ${S.people.length}), and ghost hunters with lanterns`);
+    // the house grows: a new floor brings its rooms and things, joined to the rest by the stair
+    const T = CORE.init(9); T.$ = 1e9; for (const p of CORE.PIPES.filter(p => p.reg === 1)) CORE.act(T, 'buy', p.id);
+    check(CORE.floorsOf(T).join() === '-2,-1,0,1,2,3,4' && T.th.filter(t => t.st === 0).length === CORE.SLOTS.length, `the house is built onto, from the crypt to the tower (${CORE.floorsOf(T).join()})`);
+    // someone in a panic in the crypt goes up the stair to the ground floor and out of the door
+    CORE.act(T, 'night'); const p = T.people[0]; T.people.forEach((q, k) => { if (k) q.st = 'out'; }); p.f = -2; p.x = 600; p.fear = p.nerve * 2; p.panic = 1;
+    const ev = run(T, 25); check(ev.some(e => e.k === 'out' && e.via === 'door'), 'from the crypt, a panic runs up the stair and out of the front door');
+  }
+  {
     // older saves were other games in the same house; a finished game can be gone back to from the shelf
-    for (const v of [1, 2]) { const M = CORE.migrate({ v, seed: 3, reel: 2, people: [], lv: { ecto: 3 } }, v); check(M.v === 3 && M.reel === 0 && M.phase === 'organ' && M.people.length === 3 && M.th.length === CORE.SLOTS.length, `a save of version ${v} starts afresh`); }
+    for (const v of [1, 2, 3]) { const M = CORE.migrate({ v, seed: 3, reel: 2, people: [], lv: { ecto: 3 } }, v); check(M.v === 4 && M.reel === 0 && M.phase === 'organ' && M.people.length === 3 && M.th.length === CORE.SLOTS.length, `a save of version ${v} starts afresh`); }
     const S = CORE.init(7), bot = CORE.bots.eager, m = { seed: 99 }; let t = 0;
     while (!CORE.done(S) && t < 120 * 60) { bot(S, m, .1); CORE.step(S, .1); S.ev.length = 0; t += .1; }
     check(CORE.done(S), `the eager bot plays the box through (${min(t)})`);
     const p0 = CORE.progress(S), R = CORE.revisit(JSON.parse(JSON.stringify(S)));
-    check(!CORE.done(R) && R.phase === 'organ' && R.reel === CORE.REELS.length - 1 && R.people.every(p => p.st !== 'gone') && R.bought === S.bought, 'revisit: the picture people come back for another take, the organ kept');
+    check(!CORE.done(R) && R.phase === 'organ' && R.bought === S.bought && CORE.floorsOf(R).length === 7, 'revisit: the house open again, as built, the organ kept');
     check(CORE.progress(R) >= p0 - .03, 'revisit does not take the shelf\'s progress back');
     let t2 = 0; while (!CORE.done(R) && t2 < 60 * 60) { bot(R, m, .1); CORE.step(R, .1); R.ev.length = 0; t2 += .1; }
     check(CORE.done(R), `the revisited box can be finished again (${min(t2)})`);

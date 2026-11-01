@@ -1368,6 +1368,19 @@ still undone, most valuable first:
     hotel, opera, castle); **C, haunting cards** (one of three random rule-changing cards a night). A answers every point (the
     crowd is the player's to grow, as in Garbage Growth; the house grows in the frame), B escalates but keeps the cast
     fixed, C varies without growing. Chosen: A, with B's new scenery as the annexes; the owner lets the house change shape.
+  - *The house's reputation, built* (`CORE.version` 4; `migrate` starts versions 1 to 3 afresh). The Pembertons live in the
+    house and come back every night; everyone else is a guest the organ's third register draws (more visitors, then new
+    kinds: neighbours, men of science who scoff at teacups, ghost hunters whose lanterns drain the ghost, reporters whose
+    flash in a panic frightens their floor, a wedding party braver two by two, the picture people). Guests' nerve does not
+    grow with fame: a first version made them braver as the house grew famous, and the bots never drove out more than eleven
+    a night whatever they bought (the escalation cancelled itself out); with fixed nerve and braver kinds, a late night
+    drives out thirty and more. The house is built onto (a wine cellar with the old kitchen, an attic under a new roof, the
+    crypt, a tower with a spire), each floor with its own light, paper and furniture and things to tear loose (casks,
+    bottles, urns, coffins, trunks, birdcages, a telescope, a globe); the stair at the left joins them all. A house taller
+    than the screen keeps its size and the camera follows the ghost up and down; the house is painted into a tile of the
+    world once and the frame only moves it. The last gate is the verb: with the tower built and the picture people come,
+    they film the house, and every person driven out is filmed (six reels of sixty, each one news); then the delivery.
+    Pacing: eager 32.9–33.4, casual 56.5–62.0, the longest wait 4.4 min.
   - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
     for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
     "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one

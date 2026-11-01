@@ -12179,7 +12179,15 @@ let S, W = 0, H = 0, DPR = 1, wide = false, now = 0, filmW = 1, plate = null, to
 /* the world: a house 1000 wide with three floors of 420; the ground floor's floor is y = 0 and up is negative */
 const FH = 420, HW = 1000, floorY = f => -f * FH;
 const view = { cx: 500, cy: -800, s: .3 }, home = { cx: 500, cy: -800, s: .3 }, inner = { w: 1, h: 1 };
-const HOUSE = { x: -70, y: -3 * FH - 370, w: HW + 140, h: 3 * FH + 410 }, GARDEN = { x: 870, y: -800, w: 720, h: 880 };
+const GARDEN = { x: 870, y: -800, w: 720, h: 880 };
+// the house as built tonight: the lowest and highest floors, the roof's top (a spire over the tower), the ground under the cellars
+const floorsNow = () => S ? CORE.floorsOf(S) : [0, 1, 2];
+const topFull = () => Math.max(...floorsNow().filter(f => f < 4));
+function houseBox() {
+  const fl = floorsNow(), lo = fl[0], tower = fl.includes(4), top = tower ? -5 * FH - 330 : -(topFull() + 1) * FH - 370;
+  return { x: -70, y: top, w: HW + 140, h: -lo * FH + 40 - top };
+}
+let follow = false, tile = null, tileX = 0, tileY = 0;
 let ox = 0, oy = 0;
 const X = x => ox + (x - view.cx) * view.s, Y = y => oy + (y - view.cy) * view.s, Sc = v => v * view.s;
 const toWorld = (px, py) => ({ x: (px - ox) / view.s + view.cx, y: (py - oy) / view.s + view.cy });
@@ -12189,7 +12197,10 @@ function resize() {
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   const top = wide ? 62 : 124, bottom = wide ? 14 : 104;
   inner.w = W - (wide ? 300 : 8); inner.h = H - top - bottom; ox = W / 2; oy = top + inner.h / 2;
-  Object.assign(home, fit(wide ? { x: HOUSE.x - 20, y: HOUSE.y + 170, w: HOUSE.w + 40, h: HOUSE.h - 140 } : { x: HOUSE.x - 40, y: HOUSE.y + 40, w: HOUSE.w + 50, h: HOUSE.h - 40 }));
+  const B = houseBox(), fr = fit(wide ? { x: B.x - 20, y: B.y + 170, w: B.w + 40, h: B.h - 140 } : { x: B.x - 40, y: B.y + 40, w: B.w + 50, h: B.h - 40 }), minS = wide ? .34 : .27;
+  // a house too tall for the screen at a size people can be read at: keep the size, and let the camera follow the ghost up and down
+  follow = fr.s < minS; Object.assign(home, follow ? { s: minS, cx: B.x + B.w / 2, cy: home.cy || fr.cy } : fr);
+  if (follow) home.cy = clamp(home.cy, B.y + inner.h / 2 / minS, B.y + B.h - inner.h / 2 / minS);
   camera();
   bg.width = cv.width; bg.height = cv.height; bgDirty = true; sprites = {};
   plate = $('screams').getBoundingClientRect();
@@ -12197,7 +12208,7 @@ function resize() {
 // the camera holds the whole house, and at the very end walks out to the garden gate; K.debug.look holds it anywhere
 function camera() {
   if (zoom) { view.s = zoom.s; view.cx = zoom.x; view.cy = zoom.y; return; }
-  if (!S || !S.finale) return Object.assign(view, home);
+  if (!S || !S.finale) { Object.assign(view, home); return; }
   const u = ease.inOut(clamp(fin.t / 2.6, 0, 1)), t = fit(GARDEN);
   view.s = lerp(home.s, t.s, u); view.cx = lerp(home.cx, t.cx, u); view.cy = lerp(home.cy, t.cy, u);
 }
@@ -12241,10 +12252,12 @@ function backdrop() {
     c.fillStyle = `rgba(22,28,58,${a})`; c.beginPath(); c.moveTo(A, y);
     for (let k = 0; x < A + L; k++) { const e = Math.sin(Math.PI * clamp((x - A) / L, 0, 1)), rr = Math.max(2, r * (.6 + .6 * hash(k, Math.round(r))) * (.25 + .75 * e)); c.arc(x + rr, y, rr, Math.PI, 0); x += rr * 2; }
     c.quadraticCurveTo((A + x) / 2, y + r * 1.1, A, y); c.fill(); }
-  // far hills, a shade lighter than the ground
-  c.fillStyle = lerpC([20, 26, 46], [60, 50, 70], d); c.beginPath(); c.moveTo(0, H);
-  for (let k = 0; k <= 24; k++) { const x = k / 24 * filmW, y = Y(0) - Sc(240) - Math.sin(k * .7 + 1) * Sc(70) - hash(k, 9) * Sc(40); c.lineTo(x, y); }
-  c.lineTo(filmW, H); c.fill();
+}
+function hills() {
+  const d = clamp(((S && S.phase === 'night' ? moonU : 0) - .72) / .28, 0, 1);
+  c.fillStyle = lerpC([20, 26, 46], [60, 50, 70], d); c.beginPath(); c.moveTo(X(-2600), Y(0));
+  for (let k = 0; k <= 60; k++) { const x = -2600 + k * 110; c.lineTo(X(x), Y(-240 - Math.sin(k * .7 + 1) * 70 - hash(k, 9) * 40)); }
+  c.lineTo(X(4000), Y(0)); c.fill();
 }
 // a bare tree, grown from a fixed seed so it is the same tree every time
 function tree(x, y, a, l, w, d, k) {
@@ -12280,6 +12293,10 @@ const ROOMC = [
   [[214, 226, 166], [26, 70, 56]], [[214, 188, 238], [52, 36, 92]], [[248, 206, 196], [108, 52, 84]]
 ];
 const LAMP = [[250, 260], [190, 250], [240, 300], [330, 250], [260, 250], [250, 250]];
+// the wine cellar and the old kitchen below stairs by candlelight, the crypt cold, the attic in warm wood, the tower in starlight
+Object.assign(ROOMC, { '-2': [[228, 190, 136], [58, 36, 26]], '-1': [[216, 178, 128], [50, 34, 26]], '-4': [[170, 194, 190], [22, 32, 38]], '-3': [[178, 182, 210], [28, 28, 50]],
+  6: [[234, 206, 166], [82, 60, 42]], 7: [[222, 200, 174], [70, 52, 46]], 8: [[184, 204, 240], [20, 32, 70]] });
+Object.assign(LAMP, { '-2': [250, 220], '-1': [140, 220], '-4': [260, 240], '-3': [250, 240], 6: [250, 230], 7: [250, 230], 8: [250, 260] });
 const shade = (r, u) => rgba(mix(ROOMC[r][1], [8, 6, 6], u), 1);
 function room(r) {
   const f = r >> 1, x0 = (r & 1) * 500, y0 = floorY(f) - FH, [li, wa] = ROOMC[r], [lx, ly] = LAMP[r];
@@ -12290,7 +12307,10 @@ function room(r) {
   // a paper of its own for every room: quatrefoils, kitchen stripes, damask lozenges, a dotted study, a trailing vine, nursery stars
   for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
     const px = x0 + 20 + i * 70 + (j & 1) * 35, py = y0 + 40 + j * 56;
-    if (r === 0) for (const [qx, qy] of [[-8, 0], [8, 0], [0, -8], [0, 8]]) E(X(px + qx), Y(py + qy), Sc(7), Sc(7));
+    if (r < 0) { if (i < 7) c.rect(X(x0 + i * 72 + (j & 1) * 36), Y(y0 + j * 56 + 30), Sc(66), Sc(50)); }
+    else if (r === 6 || r === 7) { if (j === 0) c.rect(X(x0 + i * 64 + 4), Y(y0), Sc(3), Sc(FH)); }
+    else if (r === 8) { if (hash(i, j, 8) > .55) E(X(px), Y(py), Sc(2.5), Sc(2.5)); }
+    else if (r === 0) for (const [qx, qy] of [[-8, 0], [8, 0], [0, -8], [0, 8]]) E(X(px + qx), Y(py + qy), Sc(7), Sc(7));
     else if (r === 1) { if (j === 0) c.rect(X(x0 + i * 70 + 8), Y(y0), Sc(22), Sc(FH)); }
     else if (r === 2) { c.moveTo(X(px), Y(py - 18)); c.lineTo(X(px + 11), Y(py)); c.lineTo(X(px), Y(py + 18)); c.lineTo(X(px - 11), Y(py)); c.closePath(); E(X(px), Y(py - 26), Sc(3), Sc(3)); }
     else if (r === 3) { E(X(px), Y(py), Sc(3.5), Sc(3.5)); E(X(px + 17), Y(py + 14), Sc(2), Sc(2)); }
@@ -12316,11 +12336,12 @@ let paperShadow = 0;
 // what is built in and never moves: one plane back, the room's own colour, deeper
 function furniture(r, x0, fy) {
   const sh = paperShadow ? 'rgba(8,4,6,.3)' : null, b = fn => fill(sh || shade(r, .45), fn), dark = fn => fill(sh || shade(r, .75), fn), lit = (fn, a = .8) => { if (!sh) fill(`rgba(255,226,160,${a})`, fn); };
-  if (r === 0 || r === 2) { // a spiral stair at the left, up to the next floor: a newel post, steps that turn
+  const fl = floorsNow(), f0 = r >> 1, upStair = !(r & 1) && fl.includes(f0 + 1), topRail = !(r & 1) && fl.includes(f0 - 1) && !fl.includes(f0 + 1);
+  if (upStair) { // a spiral stair at the left, up to the next floor: a newel post, steps that turn
     dark(() => rect(46, fy - FH, 8, FH));
     dark(() => { for (let k = 0; k < 10; k++) { const y = fy - 26 - k * 40; poly(k & 1 ? [[50, y], [98, y - 8], [98, y + 4], [50, y + 11]] : [[50, y], [2, y - 8], [2, y + 4], [50, y + 11]]); c.closePath(); } });
   }
-  if (r === 4) b(() => { rect(4, fy - 112, 100, 9); rect(8, fy - 104, 7, 104); rect(94, fy - 104, 7, 104); for (let k = 1; k < 6; k++) rect(10 + k * 14, fy - 102, 4, 98); });
+  if (topRail) b(() => { rect(4, fy - 112, 100, 9); rect(8, fy - 104, 7, 104); rect(94, fy - 104, 7, 104); for (let k = 1; k < 6; k++) rect(10 + k * 14, fy - 102, 4, 98); });
   if (r === 0) { // the fireplace: a mantel for the candles and the clock, a fire behind a guard
     b(() => { rect(x0 + 140, fy - 176, 160, 176); rect(x0 + 128, fy - 190, 184, 14); });
     dark(() => { c.moveTo(X(x0 + 172), Y(fy)); c.lineTo(X(x0 + 172), Y(fy - 96)); c.quadraticCurveTo(X(x0 + 220), Y(fy - 140), X(x0 + 268), Y(fy - 96)); c.lineTo(X(x0 + 268), Y(fy)); c.closePath(); });
@@ -12356,23 +12377,59 @@ function furniture(r, x0, fy) {
     b(() => { rect(x0 + 200, fy - 112, 92, 10); rect(x0 + 200, fy - 112, 8, 112); rect(x0 + 284, fy - 112, 8, 112); for (let k = 1; k < 6; k++) rect(x0 + 202 + k * 15, fy - 104, 4, 92); rect(x0 + 200, fy - 18, 92, 8); });
     b(() => { rect(x0 + 192, fy - 290, 116, 8); poly([[x0 + 198, fy - 282], [x0 + 220, fy - 282], [x0 + 198, fy - 258]]); poly([[x0 + 302, fy - 282], [x0 + 280, fy - 282], [x0 + 302, fy - 258]]); });
   }
+  if (r === -2) { // the wine cellar: brick vaults, a rack for the bottles, a cask on its stand
+    dark(() => { for (const vx of [0, 250]) { c.moveTo(X(x0 + vx), Y(fy - FH + 26)); c.quadraticCurveTo(X(x0 + vx + 125), Y(fy - FH + 140), X(x0 + vx + 250), Y(fy - FH + 26)); c.lineTo(X(x0 + vx + 250), Y(fy - FH + 20)); c.lineTo(X(x0 + vx), Y(fy - FH + 20)); c.closePath(); } });
+    b(() => { rect(x0 + 326, fy - 156, 126, 8); rect(x0 + 326, fy - 96, 126, 8); rect(x0 + 326, fy - 156, 8, 156); rect(x0 + 444, fy - 156, 8, 156); for (let q = 0; q < 4; q++) E(X(x0 + 350 + q * 26), Y(fy - 70), Sc(9), Sc(9)); });
+  }
+  if (r === -1) { // the old kitchen below stairs: a great hearth, a candle bracket, a shelf
+    b(() => { rect(x0 + 220, fy - 230, 230, 230); rect(x0 + 206, fy - 246, 258, 18); });
+    dark(() => { c.moveTo(X(x0 + 250), Y(fy)); c.lineTo(X(x0 + 250), Y(fy - 140)); c.quadraticCurveTo(X(x0 + 335), Y(fy - 200), X(x0 + 420), Y(fy - 140)); c.lineTo(X(x0 + 420), Y(fy)); c.closePath(); });
+    lit(() => { for (let q = 0; q < 5; q++) { const fx = x0 + 280 + q * 26, fh = 40 + 30 * hash(q, 7); c.moveTo(X(fx - 11), Y(fy - 8)); c.quadraticCurveTo(X(fx - 8), Y(fy - fh * .6), X(fx + 2), Y(fy - fh)); c.quadraticCurveTo(X(fx + 4), Y(fy - fh * .5), X(fx + 11), Y(fy - 8)); c.closePath(); } }, .8);
+    b(() => { rect(x0 + 70, fy - 146, 56, 8); rect(x0 + 380, fy - 126, 80, 8); });
+  }
+  if (r === -4 || r === -3) { // the crypt: arched niches for the urns, a stone shelf, a carved slab
+    const nx = r === -4 ? 120 : 50;
+    dark(() => { for (let q = 0; q < 2; q++) { const ax = x0 + nx + q * 80; c.moveTo(X(ax), Y(fy - 110)); c.lineTo(X(ax), Y(fy - 190)); c.quadraticCurveTo(X(ax + 30), Y(fy - 236), X(ax + 60), Y(fy - 190)); c.lineTo(X(ax + 60), Y(fy - 110)); c.closePath(); } });
+    b(() => { rect(x0 + nx - 10, fy - 118, 160, 10); rect(x0 + (r === -4 ? 300 : 180), fy - 40, 170, 40); });
+    dark(() => { for (const q of [0, 1]) { const cx = x0 + (r === -4 ? 330 : 210) + q * 110; rect(cx - 3, fy - 120, 6, 40); rect(cx - 16, fy - 106, 32, 6); } });
+  }
+  if (r === 6 || r === 7) { // the attic: rafters under the new roof, a dust sheet over something, a hook in a beam
+    dark(() => { for (let q = 0; q < 4; q++) { const bx = x0 + 40 + q * 125; poly([[bx, fy - FH + 26], [bx + 20, fy - FH + 26], [bx + 90, fy - 150], [bx + 74, fy - 146]]); c.closePath(); } });
+    b(() => { c.moveTo(X(x0 + (r === 6 ? 40 : 330)), Y(fy)); c.quadraticCurveTo(X(x0 + (r === 6 ? 70 : 360)), Y(fy - 120), X(x0 + (r === 6 ? 110 : 410)), Y(fy - 130)); c.quadraticCurveTo(X(x0 + (r === 6 ? 150 : 450)), Y(fy - 110), X(x0 + (r === 6 ? 160 : 470)), Y(fy)); c.closePath(); });
+    dark(() => rect(x0 + (r === 6 ? 258 : 178), fy - FH + 26, 4, FH - 26 - (r === 6 ? 296 : 316)));
+  }
+  if (r === 8) { // the tower: a round window full of stars, a shelf of books
+    if (!sh) fill('rgba(214,226,255,.55)', () => ell(x0 + 330, fy - 250, 90, 90));
+    dark(() => { E(X(x0 + 330), Y(fy - 250), Sc(98), Sc(98)); c.moveTo(X(x0 + 330 + 90), Y(fy - 250)); c.ellipse(X(x0 + 330), Y(fy - 250), Sc(90), Sc(90), 0, 0, 6.2832, true); rect(x0 + 326, fy - 340, 8, 180); rect(x0 + 240, fy - 254, 180, 8); });
+    b(() => rect(x0 + 60, fy - 126, 110, 8));
+  }
 }
 // the bones of the house: roof, walls, floors, the doorways between rooms, the front door standing open
 function bones() {
-  const top = -3 * FH;
+  const fl = floorsNow(), lo = fl[0], tf = topFull(), top = -(tf + 1) * FH, bottom = -lo * FH, tower = fl.includes(4);
   fill(INK, () => poly([[-112, top + 6], [500, top - 330], [1112, top + 6]]));
   fill(INK, () => { rect(770, top - 330, 76, 236); rect(758, top - 344, 100, 18); });
   c.fillStyle = INK; c.beginPath(); for (let k = 0; k <= 30; k++) { c.moveTo(X(-90 + k * 40 + 14), Y(top + 6)); c.arc(X(-90 + k * 40), Y(top + 6), Sc(14), 0, Math.PI); } c.fill();
   fill('#f2d79a', () => ell(500, top - 120, 44, 44)); line(INK, 8, () => { c.moveTo(X(456), Y(top - 120)); c.lineTo(X(544), Y(top - 120)); c.moveTo(X(500), Y(top - 164)); c.lineTo(X(500), Y(top - 76)); });
-  fill(INK, () => { rect(-40, top, 40, 3 * FH + 40); rect(HW, top, 40, 3 * FH + 40); for (let f = 0; f <= 3; f++) { if (f === 1 || f === 2) { rect(-40, floorY(f), 42, 26); rect(104, floorY(f), HW - 64, 26); } else rect(-40, floorY(f), HW + 80, f === 3 ? 10 : 26); } for (let f = 0; f < 3; f++) { rect(492, floorY(f) - FH + 8, 16, FH - 236); rect(478, floorY(f) - 236, 44, 12); rect(480, floorY(f) - 226, 6, 226); rect(514, floorY(f) - 226, 6, 226); } });
+  fill(INK, () => { rect(-40, top, 40, bottom - top + 40); rect(HW, top, 40, bottom - top + 40);
+    // a floor under every storey, with a hole at the left where the stair comes up from the one below
+    for (let f = lo; f <= tf + 1; f++) { const y = floorY(f), hole = fl.includes(f) && fl.includes(f - 1); if (hole) { rect(-40, y, 42, 26); rect(104, y, HW - 64, 26); } else rect(-40, y, HW + 80, f === tf + 1 ? 10 : 26); }
+    for (const f of fl) if (f < 4) { rect(492, floorY(f) - FH + 8, 16, FH - 236); rect(478, floorY(f) - 236, 44, 12); rect(480, floorY(f) - 226, 6, 226); rect(514, floorY(f) - 226, 6, 226); } });
   // the stair goes up through a hole in each floor, with a rail round it
-  line(INK, 4, () => { for (const f of [1, 2]) { c.moveTo(X(4), Y(floorY(f) - 2)); c.lineTo(X(4), Y(floorY(f) - 60)); c.lineTo(X(102), Y(floorY(f) - 60)); c.lineTo(X(102), Y(floorY(f) - 2)); } });
+  line(INK, 4, () => { for (const f of fl) if (fl.includes(f - 1)) { c.moveTo(X(4), Y(floorY(f) - 2)); c.lineTo(X(4), Y(floorY(f) - 60)); c.lineTo(X(102), Y(floorY(f) - 60)); c.lineTo(X(102), Y(floorY(f) - 2)); } });
+  // the tower stands on the roof's left half: its walls, its own floor, a spire with a weathervane
+  if (tower) {
+    room(8);
+    fill(INK, () => { rect(-40, -5 * FH, 40, FH + 20); rect(500, -5 * FH, 40, FH + 20); rect(-40, -5 * FH - 10, 580, 14); poly([[-70, -5 * FH], [250, -5 * FH - 330], [570, -5 * FH]]); rect(246, -5 * FH - 400, 8, 80); });
+    line(INK, 5, () => { c.moveTo(X(220), Y(-5 * FH - 370)); c.lineTo(X(280), Y(-5 * FH - 370)); });
+    c.fillStyle = INK; c.beginPath(); for (let k = 0; k <= 15; k++) { c.moveTo(X(-60 + k * 40 + 14), Y(-5 * FH + 6)); c.arc(X(-60 + k * 40), Y(-5 * FH + 6), Sc(14), 0, Math.PI); } c.fill();
+  }
   // the front door stands open on the night, its light spilling on the path
   fill('#f2d79a', () => rect(-40, -224, 40, 224));
   fill(INK, () => { rect(-62, -300, 8, 44); ell(-58, -310, 13, 15); rect(-58, -296, 18, 5); });
   fill('#ffe6a8', () => ell(-58, -292, 6, 9));
   if (S && CORE.has(S, 'back')) { fill('#f2d79a', () => rect(HW, -224, 40, 224)); fill(INK, () => poly([[HW + 40, -226], [HW + 104, -212], [HW + 104, -14], [HW + 40, -2]])); }
-  if (S && CORE.has(S, 'window')) for (let f = 1; f < 3; f++) { const y = floorY(f); fill('#f2d79a', () => rect(HW + 4, y - 296, 32, 162)); fill(INK, () => { rect(HW, y - 300, 40, 8); rect(HW, y - 142, 40, 10); rect(HW + 17, y - 296, 6, 160); poly([[HW + 40, y - 300], [HW + 74, y - 290], [HW + 74, y - 148], [HW + 40, y - 136]]); }); line('rgba(242,215,154,.45)', 2, () => { poly([[HW + 46, y - 288], [HW + 68, y - 281], [HW + 68, y - 222], [HW + 46, y - 226]]); c.closePath(); poly([[HW + 46, y - 212], [HW + 68, y - 210], [HW + 68, y - 154], [HW + 46, y - 148]]); c.closePath(); }); }
+  if (S && CORE.has(S, 'window')) for (const f of fl) if (f >= 1 && f <= 3) { const y = floorY(f); fill('#f2d79a', () => rect(HW + 4, y - 296, 32, 162)); fill(INK, () => { rect(HW, y - 300, 40, 8); rect(HW, y - 142, 40, 10); rect(HW + 17, y - 296, 6, 160); poly([[HW + 40, y - 300], [HW + 74, y - 290], [HW + 74, y - 148], [HW + 40, y - 136]]); }); line('rgba(242,215,154,.45)', 2, () => { poly([[HW + 46, y - 288], [HW + 68, y - 281], [HW + 68, y - 222], [HW + 46, y - 226]]); c.closePath(); poly([[HW + 46, y - 212], [HW + 68, y - 210], [HW + 68, y - 154], [HW + 46, y - 148]]); c.closePath(); }); }
 }
 
 /* ---------------- what the ghost tears loose ----------------
@@ -12383,7 +12440,8 @@ const ITEM = {
   // kind: [width, height] in house units; the sprite's origin is its middle, its foot at +h/2
   cup: [30, 22], plate: [34, 34], teapot: [48, 40], jar: [28, 46], candle: [22, 62], mclock: [40, 50], book: [16, 52], ink: [26, 22], pillow: [56, 30],
   doll: [24, 50], musicbox: [42, 34], chair: [70, 150], lamp: [46, 84], portrait: [76, 96], horse: [130, 120], clock: [72, 340], armour: [90, 300],
-  wardrobe: [150, 340], piano: [176, 200], chandelier: [170, 92]
+  wardrobe: [150, 340], piano: [176, 200], chandelier: [170, 92],
+  bottle: [16, 50], urn: [36, 50], birdcage: [44, 64], barrel: [90, 110], trunk: [110, 70], telescope: [120, 150], globe: [70, 110], coffin: [190, 70]
 };
 function itemPath(k, w, h) {
   // drawn about (0, 0), y down, in house units
@@ -12408,6 +12466,14 @@ function itemPath(k, w, h) {
   else if (k === 'armour') { c.moveTo(-18, T + 50); c.quadraticCurveTo(-24, T + 4, 0, T); c.quadraticCurveTo(24, T + 4, 18, T + 50); c.closePath(); c.moveTo(0, T - 4); c.quadraticCurveTo(10, T - 22, 4, T - 34); c.quadraticCurveTo(-4, T - 16, 0, T - 4); c.moveTo(-30, T + 58); c.quadraticCurveTo(-46, T + 56, -46, T + 74); c.lineTo(-40, T + 140); c.lineTo(-30, T + 146); c.lineTo(-26, T + 150); c.lineTo(-22, B - 12); c.lineTo(-32, B); c.lineTo(-4, B); c.lineTo(-4, T + 162); c.lineTo(4, T + 162); c.lineTo(4, B); c.lineTo(32, B); c.lineTo(22, B - 12); c.lineTo(26, T + 150); c.lineTo(34, T + 104); c.lineTo(40, T + 96); c.lineTo(46, T + 74); c.quadraticCurveTo(46, T + 56, 30, T + 58); c.lineTo(20, T + 52); c.lineTo(-20, T + 52); c.closePath(); R(40, T + 10, 6, h - 10); c.moveTo(43, T - 10); c.lineTo(52, T + 14); c.lineTo(34, T + 14); c.closePath(); el(43, T + 98, 9, 8); }
   else if (k === 'wardrobe') { R(L + 4, T + 26, w - 8, h - 36); R(L, T + 16, w, 14); c.moveTo(L + 30, T + 18); c.quadraticCurveTo(0, T - 16, w / 2 - 30, T + 18); R(L + 8, B - 10, 12, 10); R(w / 2 - 20, B - 10, 12, 10); }
   else if (k === 'piano') { R(L + 6, T + 22, w - 12, 150); R(L, T + 14, w, 10); R(L - 6, T + 94, w + 12, 12); R(L + 10, B - 28, 14, 28); R(w / 2 - 24, B - 28, 14, 28); R(-30, T, 6, 16); R(24, T, 6, 16); }
+  else if (k === 'bottle') { R(-6, -6, 12, B + 6); c.moveTo(-6, -6); c.quadraticCurveTo(-6, -14, -3, -16); c.lineTo(-3, T + 4); c.lineTo(3, T + 4); c.lineTo(3, -16); c.quadraticCurveTo(6, -14, 6, -6); c.closePath(); R(-4, T, 8, 5); }
+  else if (k === 'urn') { c.moveTo(-8, B); c.lineTo(8, B); c.lineTo(6, B - 6); c.quadraticCurveTo(18, 4, 14, -8); c.quadraticCurveTo(10, T + 10, 6, T + 8); c.lineTo(-6, T + 8); c.quadraticCurveTo(-10, T + 10, -14, -8); c.quadraticCurveTo(-18, 4, -6, B - 6); c.closePath(); R(-9, T + 2, 18, 7); el(0, T + 1, 4, 3); }
+  else if (k === 'birdcage') { c.moveTo(L + 4, B); c.lineTo(L + 4, -6); c.quadraticCurveTo(0, T - 4, w / 2 - 4, -6); c.lineTo(w / 2 - 4, B); c.closePath(); R(-2, T - 8, 4, 10); }
+  else if (k === 'barrel') { c.moveTo(L + 10, T); c.lineTo(w / 2 - 10, T); c.quadraticCurveTo(w / 2 + 6, 0, w / 2 - 10, B); c.lineTo(L + 10, B); c.quadraticCurveTo(L - 6, 0, L + 10, T); }
+  else if (k === 'trunk') { R(L, -14, w, B + 14); c.moveTo(L, -14); c.quadraticCurveTo(0, T - 14, w / 2, -14); c.closePath(); }
+  else if (k === 'telescope') { c.save(); c.translate(0, T + 46); c.rotate(-.5); R(-52, -11, 104, 22); R(44, -15, 14, 30); R(-62, -7, 12, 14); c.restore(); c.moveTo(-3, T + 46); c.lineTo(-40, B); c.lineTo(-32, B); c.lineTo(0, T + 60); c.lineTo(32, B); c.lineTo(40, B); c.lineTo(3, T + 46); c.closePath(); }
+  else if (k === 'globe') { el(0, T + 36, 34, 34); R(-3, T + 70, 6, 24); c.moveTo(-26, B); c.lineTo(26, B); c.lineTo(10, B - 16); c.lineTo(-10, B - 16); c.closePath(); }
+  else if (k === 'coffin') { c.moveTo(L, -10); c.lineTo(L + 40, T); c.lineTo(w / 2 - 10, T + 6); c.lineTo(w / 2, -6); c.lineTo(w / 2 - 10, B); c.lineTo(L + 40, B); c.closePath(); }
   else if (k === 'chandelier') { R(-3, T, 6, 30); el(0, T + 30, 12, 8); c.moveTo(-80, T + 58); c.quadraticCurveTo(0, B + 16, 80, T + 58); c.lineTo(66, T + 52); c.lineTo(-66, T + 52); c.closePath(); for (let q = -2; q <= 2; q++) R(q * 32 - 3, T + 32, 6, 24); }
 }
 // the lace and highlights cut out of a sprite, so a black thing still reads as a teacup and not a blot
@@ -12429,6 +12495,13 @@ function itemLace(k, w, h) {
   else if (k === 'horse') { el(54, T + 26, 2.5, 2.5); }
   else if (k === 'lamp') { for (let q = -1; q <= 1; q++) el(q * 9, T + 16, 2, 2); }
   else if (k === 'doll') { el(3, T + 7, 1.5, 1.5); }
+  else if (k === 'bottle') { c.rect(-4, 4, 8, 12); }
+  else if (k === 'urn') { for (let q = -1; q <= 1; q++) el(q * 7, 0, 1.8, 1.8); }
+  else if (k === 'birdcage') { for (let q = -2; q <= 2; q++) c.rect(q * 7 - 1, -2, 2, B); c.rect(L + 6, 10, w - 12, 2); }
+  else if (k === 'barrel') { for (const yy of [T + 16, -4, B - 20]) c.rect(L + 6, yy, w - 12, 4); el(0, 6, 3, 3); }
+  else if (k === 'trunk') { c.rect(L + 8, -4, w - 16, 3); c.rect(-6, -12, 12, 14); for (let q = 0; q < 6; q++) el(L + 12 + q * 17, B - 8, 2, 2); }
+  else if (k === 'globe') { E(0, T + 36, 26, 26); c.rect(-26, T + 35, 52, 2); }
+  else if (k === 'coffin') { c.moveTo(L + 70, T + 22); c.lineTo(L + 82, T + 22); c.lineTo(L + 82, -2); c.lineTo(L + 70, -2); c.closePath(); c.rect(L + 60, T + 30, 32, 8); }
 }
 let sprites = {};
 // the small things are drawn larger than life, so a teacup reads at a phone's size
@@ -12594,11 +12667,11 @@ const LINES = {
   ada: ['Teddy!', 'Hold me, darling!', 'What was that?'], teddy: ['There, there.', 'Ada!', 'Steady on!'],
   kessler: ['That was not in the script!', 'Who moved my props?', 'I said QUIET on set!'], lulu: ['My close-up!', 'EEEEK!', 'I simply cannot!'], sparks: ['Did you get that?', 'Keep rolling!', 'Blimey!']
 };
-const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
 const roman = n => { let r = ''; for (const [v, l] of [[50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]) while (n >= v) { r += l; n -= v; } return r; };
 const CROWD = { 'a lodger': 'Lodgers', 'a sitter': 'The circle', 'a wedding guest': 'Guests', 'an extra': 'Extras' };
 const lesson = { grab: 0, hit: 0, panic: 0, let: 0, scoff: 0, out: 0 };
-let saidScoff = -99;
+let saidScoff = -99, saidLamp = -99, flash = 0;
 const cardQ = [];
 const byP = id => S.people.find(p => p.id === id);
 function events() {
@@ -12609,7 +12682,9 @@ function events() {
     else if (e.k === 'land') onLand(e);
     else if (e.k === 'let') { lesson.let++; sfx.whoosh(e.n); }
     else if (e.k === 'out') onOut(e);
-    else if (e.k === 'gone') { const p = byP(e.id); if (p) say(nameOf(p).toUpperCase(), CORE.CAST[e.id] ? 'has left the house. For good.' : 'will not be back.', e.id); }
+    else if (e.k === 'flash') { flash = 1; sfx.flash(); }
+    else if (e.k === 'can') { say('THE PICTURE PEOPLE', 'Reel ' + e.n + ' of ' + CORE.P.film / 60 + ' is in the can.'); sfx.sting(3); }
+    else if (e.k === 'annex') { bgDirty = true; resize(); }
     else if (e.k === 'panic') { lesson.panic++; const v = people[e.id]; if (v) { v.hat = 1; v.jt = 0; } if (CORE.CAST[e.id] && Math.random() < .6) say(SHORT[e.id].toUpperCase(), pick(LINES[e.id]), e.id); sfx.sting(1); }
     else if (e.k === 'night') onNight(e);
     else if (e.k === 'dawn') onDawn(e);
@@ -12617,7 +12692,7 @@ function events() {
     else if (e.k === 'buy') { sfx.pipe(CORE.byId[e.id], 1 - 1); bgDirty = true; sprites = {}; pipeBurst = { id: e.id, t: 0 }; }
     else if (e.k === 'slam') { lastAt.slam = [500, floorY(e.f) - 150]; slams[e.f] = 0; sfx.slam(); shake = Math.max(shake, .5); for (const p of S.people) { const v = people[p.id]; if (v && p.f === e.f) { v.jt = 0; v.flinch = 1; } } }
     else if (e.k === 'imp') { const q = CORE.slotXY(e.ti); lastAt.imp = [q.x - 20, q.y - 40]; imps.push({ ti: e.ti, t: 0, s: Math.random() * 1e3 }); sfx.imp(); }
-    else if (e.k === 'bound') { sfx.bound(); say('ZOSTRA', 'I SEE you, spirit! You are bound!', 'zostra'); }
+    else if (e.k === 'bound') { sfx.bound(); if (now - saidLamp > 8) { saidLamp = now; say('A GHOST HUNTER', pick(['There! In the lamplight!', 'Hold the lantern steady!', 'It is weakening, gentlemen!'])); } }
     else if (e.k === 'scoff') { lesson.scoff++; if (now - saidScoff > 6) { saidScoff = now; say('THE PROFESSOR', pick(['Draughts.', 'A teacup. How frightening.', 'Settling timbers. Nothing more.', 'Bring something bigger, if you are real.']), 'prof'); } }
     else if (e.k === 'spent') sfx.fade();
     else if (e.k === 'finale' && e.step === 1) { fin.t = 0; document.body.classList.add('end'); resize(); queueCard('', 'The End?', 'The last of them had gone, and Hollowmere House was quiet at last.', 'Then, after dark, a delivery came. It was addressed to nobody.', 6); }
@@ -12765,7 +12840,7 @@ function ghostLayer(dt) {
   const G = S.g;
   if (S.phase === 'night' && !S.finale) {
     const lit = G.on ? 1 : G.fade > 0 ? clamp(G.fade / CORE.P.linger, 0, 1) * .6 : 0, R = CORE.reachOf(S);
-    c.save(); c.beginPath(); c.rect(X(0), Y(-3 * FH), Sc(HW), Sc(3 * FH)); c.clip();
+    { const B = houseBox(); c.save(); c.beginPath(); c.rect(X(0), Y(B.y), Sc(HW), Sc(B.h)); c.clip(); }
     if (S.grey) whirlDraw(S.grey.x, S.grey.y, R * .8, loadOf(1), .8, 1);
     if (lit > 0) whirlDraw(G.x, G.y, R, loadOf(0), lit);
     c.restore();
@@ -12796,7 +12871,7 @@ function flyLayer(dt) {
     const v = people[f.id], POP = .25, HOLD = f.big ? .9 : .45, FLY = .35;
     if (f.t >= HOLD + FLY) { land(f); flyers.splice(k, 1); continue; }
     const bx = v ? (f.big ? f.x0 : v.x) : 0, by = v ? (f.big ? f.y0 : v.y) : 0;
-    let x = clamp(X(bx), Math.max(50, X(0) + 40), Math.min(W - 50, X(HW) - 40)), y = Math.max(Y(-3 * FH) + 24, Y(by - hOf(v ? v.look : 'tophat') * SZ) - 22), s = (wide ? 1 : .8) * (f.big ? 1.45 : .9 + .3 * Math.min(1, f.e)), r = f.r;
+    let x = clamp(X(bx), Math.max(50, X(0) + 40), Math.min(W - 50, X(HW) - 40)), y = Math.max(Y(-(topFull() + 1) * FH) + 24, Y(by - hOf(v ? v.look : 'tophat') * SZ) - 22), s = (wide ? 1 : .8) * (f.big ? 1.45 : .9 + .3 * Math.min(1, f.e)), r = f.r;
     if (f.t < POP) s *= ease.back(f.t / POP); else if (f.t > HOLD) { const u = ease.in(clamp((f.t - HOLD) / FLY, 0, 1)); x = lerp(x, plate.left + plate.width / 2, u); y = lerp(y, plate.top + plate.height / 2, u) - Math.sin(u * Math.PI) * 60; s = lerp(s, .35, u); r *= 1 - u; }
     c.font = '17px Limelight, Georgia, serif'; const pw = c.measureText(f.w).width + 20, ph = 28;
     if (f.t <= HOLD) { if (f.y == null) f.y = free(x, y, pw * s, (ph + 16) * s); else free(x, f.y, pw * s, (ph + 16) * s); y = f.y; }
@@ -12809,7 +12884,7 @@ function flyLayer(dt) {
 }
 // how to play, in the house's own hand, until it has been done: tear something loose, sweep it into someone, they run
 function teach() {
-  const sc = wide ? 1.1 : .9, bob = Math.sin(now * 5) * 6, G = S.g, slot = Math.max(Y(-3 * FH - 330) - (wide ? 20 : 34), billB + 16 * sc);
+  const sc = wide ? 1.1 : .9, bob = Math.sin(now * 5) * 6, G = S.g, slot = follow ? billB + 16 * sc : Math.max(Y(houseBox().y + 40) - (wide ? 20 : 34), billB + 16 * sc);
   const say1 = t => tag(t, W / 2, slot, sc, 15);
   if (S.reel === 0 && S.night <= 2 && !lesson.grab) {
     const i = S.th.findIndex(t => t.k === 'teapot'), v = tv[i]; say1('HOLD YOUR FINGER ON THE TEAPOT'); if (v && !G.on) manicule(X(v.x) - 34 * sc + bob, Y(v.y), sc);
@@ -12817,7 +12892,7 @@ function teach() {
   else if (S.reel === 0 && S.night <= 3 && !lesson.panic) say1('AGAIN AND AGAIN — TILL THEY PANIC');
   else if (S.reel === 0 && S.night <= 3 && !lesson.out) say1('IN A PANIC THEY RUN FOR THE DOOR');
   else if (S.reel === 0 && S.night >= 2 && S.night <= 4 && !lesson.let && G.on) say1('LET GO, AND IT ALL COMES CRASHING DOWN');
-  else if (S.reel === 1 && CORE.gripOf(S) < 1 && lesson.scoff) say1('THE PROFESSOR SCOFFS AT TEACUPS');
+  else if (CORE.gripOf(S) < 1 && lesson.scoff) say1('MEN OF SCIENCE SCOFF AT TEACUPS');
   if (S.reel === 0 && S.outs < 3 && lesson.panic) tag('THE DOOR', X(-20), Y(-250) - 30 * sc, sc, 14);
 }
 // the doorway in the middle of each floor slams shut when the whirl goes by, and swings open again
@@ -12864,19 +12939,32 @@ function fpsMeter() {
   let el = $('fpsM'); if (!el) { el = document.createElement('div'); el.id = 'fpsM'; el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:50;pointer-events:none;background:rgba(0,0,0,.8);color:#7dff6a;font:600 12px/1.3 monospace;padding:3px 6px;white-space:normal'; document.body.appendChild(el); }
   if (m.txt && el.textContent !== m.txt) el.textContent = m.txt;
 }
+// the house and its garden are painted once into a tile of the world, as wide as the screen and as tall as the house, so a
+// camera that follows the ghost up and down only moves a picture; the sky stays on the screen behind it
+function paintTile() {
+  c = bgc; bgc.setTransform(DPR, 0, 0, DPR, 0, 0); backdrop();
+  const B = houseBox(), x0 = view.cx - (W / 2 + 40) / view.s, y0 = B.y - 120, x1 = view.cx + (W / 2 + 40) / view.s, y1 = Math.max(B.y + B.h, 0) + 900;
+  if (!tile) tile = document.createElement('canvas');
+  tile.width = Math.ceil((x1 - x0) * view.s * DPR); tile.height = Math.ceil((y1 - y0) * view.s * DPR);
+  const tc = tile.getContext('2d'), kx = ox, ky = oy; tc.setTransform(DPR, 0, 0, DPR, 0, 0); c = tc;
+  // draw the world with the camera moved so that (x0, y0) lands on the tile's corner
+  ox = -(x0 - view.cx) * view.s; oy = -(y0 - view.cy) * view.s;
+  hills(); garden(); for (const r of CORE.roomsOf(S)) if (r !== 8) room(r); bones();
+  ox = kx; oy = ky; tileX = x0; tileY = y0; c = g; bgDirty = false;
+}
 function stepShards(dt) {
   for (const s of shards) if (s.t < s.life) { s.t += dt; s.vy += 2200 * dt; s.x += s.vx * dt; s.y = Math.min(s.fy - 3, s.y + s.vy * dt); s.x = clamp(s.x, 6, HW - 6); if (s.y >= s.fy - 3) { s.vx *= .6; s.vy *= -.25; } }
 }
 function draw(dt) {
   CALLS = 0; part(); placed.length = 0;
   if (S.phase === 'organ' && !S.finale) { g.setTransform(DPR, 0, 0, DPR, 0, 0); c = g; if (cardUp) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); } else { organ(dt); film(); drawIris(); } part('organ'); if (DIAG.fps) fpsMeter(); return; }
-  if (bgDirty) { c = bgc; bgc.setTransform(DPR, 0, 0, DPR, 0, 0); backdrop(); garden(); for (let r = 0; r < 6; r++) room(r); bones(); c = g; bgDirty = false; }
+  if (bgDirty) paintTile();
   const wv = FX() && DIAG.film ? (hash(Math.floor(now * 18), 21) - .5) * 1.2 * DPR : 0, sk = FX() && shake > .02 ? shake * 7 * DPR : 0, sx = sk ? (Math.random() - .5) * sk : 0, sy = sk ? (Math.random() - .5) * sk : 0;
-  g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(bg, sx, wv + sy);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(bg, sx, wv + sy); g.drawImage(tile, Math.round(X(tileX) * DPR + sx), Math.round(Y(tileY) * DPR + wv + sy));
   g.setTransform(DPR, 0, 0, DPR, sx / DPR, (wv + sy) / DPR); c = g; part('house');
   if (DIAG.things) thingsAtRest(); part('rest');
   doors(); impsDraw(dt);
-  c.save(); c.beginPath(); c.rect(X(0), Y(-3 * FH - 400), Sc(HW), Sc(3 * FH + 400)); c.clip(); if (DIAG.things) { thingsInAir(false); thingsInAir(true); } c.restore();
+  { const B = houseBox(); c.save(); c.beginPath(); c.rect(X(0), Y(B.y), Sc(HW), Sc(B.h)); c.clip(); } if (DIAG.things) { thingsInAir(false); thingsInAir(true); } c.restore();
   if (DIAG.people) for (const p of S.people) person(p);
   part('people');
   if (DIAG.things) { c.fillStyle = INK; c.beginPath(); for (const s of shards) if (s.t < s.life) { const x = X(s.x), y = Y(s.y), r = Sc(s.r); c.moveTo(x - r, y); c.lineTo(x + r * .3, y - r * .8); c.lineTo(x + r, y + .5); c.closePath(); } c.fill(); }
@@ -12885,6 +12973,7 @@ function draw(dt) {
   ghostLayer(dt); flyLayer(dt); part('ghost');
   g.setTransform(DPR, 0, 0, DPR, 0, 0); c = g;
   film(); curtains(); part('film');
+  if (flash > 0) { if (!K.reduced) { g.fillStyle = `rgba(255,252,240,${.45 * flash})`; g.fillRect(0, 0, W, H); } flash = Math.max(0, flash - dt * 3); }
   if (S.finale) finaleGlow();
   drawIris();
   if (DIAG.fps) fpsMeter();
@@ -13024,20 +13113,21 @@ function say(who, words, id) {
 let castReel = -1;
 function castList() {
   const box = $('cast'), xs = S.people.filter(p => !CORE.CAST[p.id]);
-  if (castReel !== S.reel) {
-    castReel = S.reel; box.innerHTML = '';
+  const ck = S.reel * 1000 + S.night;
+  if (castReel !== ck) {
+    castReel = ck; box.innerHTML = '';
     for (const p of S.people) if (CORE.CAST[p.id]) { const el = document.createElement('div'); el.className = 'who plate'; el.dataset.id = p.id; el.innerHTML = '<canvas width="96" height="96"></canvas><b></b><div class="bar"><i></i></div><s></s>'; el.querySelector('b').textContent = SHORT[p.id]; cameo(el.querySelector('canvas'), p.look); box.appendChild(el); }
     if (xs.length) { const el = document.createElement('div'); el.className = 'who plate crowd'; el.dataset.id = '*'; el.innerHTML = '<canvas width="96" height="96"></canvas><b></b><div class="bar"><i></i></div><s></s>'; cameo(el.querySelector('canvas'), xs[0].look); box.appendChild(el); }
   }
   for (const el of box.children) {
     const grp = el.dataset.id === '*' ? xs : [byP(el.dataset.id)].filter(Boolean); if (!grp.length) continue;
     const ins = grp.filter(p => p.st === 'in'), e = ins.length ? Math.max(...ins.map(p => clamp(p.fear / (CORE.nerveOf(p) * CORE.panicOf(S)), 0, 1))) : 0;
-    const left = grp.reduce((a, p) => a + p.res, 0), all = grp.every(p => p.st === 'gone');
+    const all = false, outs = grp.filter(p => p.st === 'out').length;
     el.querySelector('i').style.width = (e * 100) + '%';
     el.classList.toggle('near', e > .5); el.classList.toggle('edge', !!ins.some(p => p.panic)); el.classList.toggle('gone', all); el.classList.toggle('out', !all && !ins.length && S.phase === 'night');
-    const k = el.dataset.id === '*' ? `${CROWD[grp[0].name] || 'Others'} · ${grp.filter(p => p.st !== 'gone').length}` : '';
+    const k = el.dataset.id === '*' ? `Guests · ${grp.length}` : '';
     if (k && el._k !== k) { el._k = k; el.querySelector('b').textContent = k; }
-    const pips = el.dataset.id === '*' ? `<i style="font-style:normal;font-size:12px;font-family:var(--sc)">${left} flights left</i>` : '<u class="on"></u>'.repeat(grp[0].res) + '<u></u>'.repeat(grp[0].res0 - grp[0].res);
+    const pips = `<i style="font-style:normal;font-size:12px;font-family:var(--sc)">${S.phase !== 'night' ? '' : el.dataset.id === '*' ? outs + ' out' : outs ? 'out tonight' : 'in the house'}</i>`;
     if (el._p !== pips) { el._p = pips; el.querySelector('s').innerHTML = pips; }
   }
 }
@@ -13054,7 +13144,7 @@ function cameo(cnv, look) {
    rest are dark. Tap a pipe to read it, BUY to buy it, the button below to haunt the next night. */
 let selPipe = null, selReg = 0, hoverPipe = null;
 const organHits = [];
-const EMB = { cap: 'cup', reach: 'whirl', ecto: 'ghost', spin: 'whirl', grey: 'ghost', drain: 'ghost', grip: 'chand', slam: 'door', dawn: 'moon', back: 'door', window: 'win', hearse: 'hearse', fear: 'frost', worth: 'mouth', fling: 'cup', heir: 'chand', china: 'cup', panic: 'eye', calm: 'eye', imps: 'imp', stamp: 'chain', dread: 'eye' };
+const EMB = { cellar: 'door', attic: 'win', crypt: 'door', tower: 'win', whisper: 'mouth', neigh: 'eye', paper: 'mouth', skeptic: 'eye', hunter: 'eye', tours: 'mouth', reporter: 'eye', pair: 'chain', crew: 'eye', cap: 'cup', reach: 'whirl', ecto: 'ghost', spin: 'whirl', grey: 'ghost', drain: 'ghost', grip: 'chand', slam: 'door', dawn: 'moon', back: 'door', window: 'win', hearse: 'hearse', fear: 'frost', worth: 'mouth', fling: 'cup', heir: 'chand', china: 'cup', panic: 'eye', calm: 'eye', imps: 'imp', stamp: 'chain', dread: 'eye' };
 function emblem(k, x, y, r) {
   c.beginPath(); const e = EMB[k] || 'eye';
   if (e === 'door') { c.moveTo(x - r * .5, y + r); c.lineTo(x - r * .5, y - r * .3); c.quadraticCurveTo(x, y - r, x + r * .5, y - r * .3); c.lineTo(x + r * .5, y + r); c.closePath(); }
@@ -13138,7 +13228,7 @@ function organ(dt) {
   // the header, and the way back up into the house
   c.fillStyle = INK; c.font = `${wide ? 15 : 13}px "IM Fell English SC", Georgia, serif`; c.fillText('— THE ORGAN IN THE CELLAR —', cx, wide ? 46 : 92);
   c.font = `${wide ? 36 : 32}px Limelight, Georgia, serif`; c.fillText(fmt(S.$) + ' screams', cx, wide ? 90 : 128);
-  const nx = S.night + 1, label = CORE.REELS[S.reel] && S.people.every(p => p.res === p.res0) && S.night > 0 ? 'REEL ' + ROMAN[S.reel] + ' · NIGHT ' + nx + '  ▸' : 'HAUNT NIGHT ' + nx + '  ▸';
+  const nx = S.night + 1, label = 'HAUNT NIGHT ' + nx + '  ▸';
   c.font = '16px "IM Fell English SC", Georgia, serif'; const hw = Math.max(250, c.measureText(label).width + 50), hx = cx - hw / 2, hy = cy0 + bh + (wide ? 14 : 18);
   const pu = .5 + .5 * Math.sin(now * 3);
   c.fillStyle = INK; c.fillRect(hx, hy, hw, 50); c.strokeStyle = `rgba(244,234,210,${.7 + .3 * pu})`; c.lineWidth = 1.5; c.strokeRect(hx + 5, hy + 5, hw - 10, 40);
@@ -13237,6 +13327,7 @@ const sfx = {
   // china breaking: a bright crack and a scatter of tinkles
   smash(m) { const t = T0(); if (t == null) return; hiss(.35, 'highpass', 2800, .7, .18, 1400); for (let k = 0; k < 6; k++) ping(2400 + Math.random() * 2600, t + .02 + Math.random() * .25, .02, .12); if (m > 8) hiss(1.2, 'highpass', 4000, .5, .14, 900); },
   // a heavy landing: a low thud, more of the floor in it the heavier it was
+  flash() { hiss(.12, 'highpass', 5000, .5, .25); const t = T0(); if (t != null) note(100, t, .03, .2, A.sfx); },
   thud(m) { const t = T0(); if (t == null) return; hiss(.2 + Math.min(.5, m * .03), 'lowpass', 220, 1, Math.min(.28, .1 + m * .015)); if (m >= 3) note(26 + Math.round(8 / Math.sqrt(m)), t, Math.min(.09, .04 + m * .004), .7, A.sfx); }
 };
 // the whirl's own wind: a band of noise that swells with what it carries
@@ -13276,9 +13367,9 @@ const music = (() => {
 let uiT = 0, progT = 0, moonU = 0, billB = 0;
 function bill() {
   const R = CORE.REELS[S.reel], night = S.phase === 'night';
-  $('billT').textContent = night ? (wide ? R.title.toUpperCase() + ' · ' : '') + 'REEL ' + ROMAN[S.reel] + ', NIGHT ' + roman(S.rn || S.night) : R.title.toUpperCase();
+  $('billT').textContent = night ? 'NIGHT ' + roman(S.night) + (wide ? ' · HOLLOWMERE HOUSE' : '') : 'HOLLOWMERE HOUSE';
   const out = S.tally ? S.tally.out : 0, there = S.tally ? S.tally.start : 0;
-  const o = night ? `out tonight <i>${out}</i> of ${there}` : '';
+  const o = !night ? '' : CORE.finalReady(S) ? `out tonight <i>${out}</i> of ${there} · filmed <i>${S.film | 0}</i> of ${CORE.P.film}` : `out tonight <i>${out}</i> of ${there}`;
   if ($('billO').innerHTML !== o) $('billO').innerHTML = o;
   billB = $('bill').getBoundingClientRect().bottom;
   const u = night ? clamp(S.nt / CORE.dawnOf(S), 0, 1) : 0; if (Math.abs(u - moonU) > .012) { moonU = u; bgDirty = true; }
@@ -13288,7 +13379,7 @@ function bill() {
 let keep = null;
 K.world({
   start(saved) {
-    S = saved && saved.v === 3 && saved.people && saved.th ? saved : CORE.init(K.n * 1000 + 13);
+    S = saved && saved.v === 4 && saved.people && saved.th ? saved : CORE.init(K.n * 1000 + 13);
     if (K.slot === 'dev' && QS.get('scene')) { const T = scene(QS.get('scene')); if (T) { S = T; keep = T.ev; } }
     resize(); addEventListener('resize', resize);
     document.fonts && document.fonts.ready.then(() => { bgDirty = true; sprites = {}; plate = $('screams').getBoundingClientRect(); });
@@ -13316,7 +13407,8 @@ const SCENES = {
   fling: (S, n, ev) => CORE.has(S, 'fling') && ev.some(e => e.k === 'let' && e.n >= 4), grey: S => S.grey && S.nt > 5, imps: (S, n, ev) => ev.some(e => e.k === 'imp'),
   slam: (S, n, ev) => ev.some(e => e.k === 'slam'), piano: (S, n, ev) => ev.some(e => e.k === 'hit' && S.th[e.ti].k === 'piano'),
   crash: (S, n, ev) => ev.some(e => e.k === 'land' && e.m >= 8), panic: (S, n, ev) => ev.some(e => e.k === 'panic'),
-  crowd: S => S.reel === 4 && S.phase === 'night' && S.nt > 6 && S.people.filter(p => p.st === 'in').length > 18,
+  crowd: S => S.phase === 'night' && S.nt > 6 && S.people.filter(p => p.st === 'in').length > 25, tower: S => CORE.has(S, 'tower') && S.phase === 'night' && S.nt > 4,
+  cellar: S => CORE.has(S, 'cellar') && S.phase === 'night' && S.nt > 4, crypt: S => CORE.has(S, 'crypt') && S.phase === 'night' && S.nt > 4,
   finale: S => S.finale === 1, end: (S, n, ev) => S.finale === 1 && ev.some(e => e.k === 'finale')
 };
 const MOMENT = /^(fling|imps|slam|piano|crash|panic|end)$/;
@@ -13401,6 +13493,10 @@ K.loop((dt, t) => {
   iris.t += dt; if (fin.open >= 0) fin.open += dt; shake = Math.max(0, shake - dt * 3);
   for (let f = 0; f < 3; f++) slams[f] += dt; doorT += dt;
   events(); stepPeople(dt); stepThings(dt); stepShards(dt);
+  if (follow && !S.finale && !zoom) {
+    const B = houseBox(), half = inner.h / 2 / home.s, G = S.g, want = G.on || G.fade > 0 ? G.y : S.phase === 'night' ? home.cy : -FH * 1.5;
+    home.cy += (clamp(want, B.y + half, B.y + B.h - half) - home.cy) * Math.min(1, dt * 3); camera();
+  }
   wind.set(S.phase === 'night' && S.g.on && !cardUp ? loadOf(0) + 2 : 0);
   document.body.classList.toggle('organ', S.phase === 'organ' && !S.finale);
   if (S.finale) { camera(); if (fin.t < 2.8) bgDirty = true; if (fin.t > 4.9) { const r = crateRect(); if (iris.to !== 0) irisTo(1, 0, 1.2); Object.assign(iris, { x: r.x + r.w / 2, y: r.y + r.h / 2, r: Math.hypot(r.w, r.h) * .78 }); } }
@@ -13418,90 +13514,114 @@ K.loop((dt, t) => {
 </template>
 <script type="text/x-core" data-world="guests">
 /* UNWELCOME GUESTS — the rules. No DOM, no clock, no randomness but the PRNG in the state.
-   A house of three floors, a spiral stair at the left and the front door at the foot of it. You are a poltergeist:
-   in a night you hold a finger on the house and a whirl follows it, tearing loose whatever it passes (teacups,
-   books, candles; later chairs, clocks, the piano) into a ring that spins round the finger. Whatever spins hits
-   whoever it passes: they shriek, stagger away from the whirl, and once frightened past their nerve they panic and
-   run for the nearest way out. Let go and everything in the ring falls (or, later, flies) and crashes. A night ends
-   when the ectoplasm is spent or the dawn comes; each person driven out loses a pip of resolve for good, and a cast
-   with none left makes way for a bigger one. Between nights the screams buy pipes on the organ in the cellar. */
+   Hollowmere House, and you the poltergeist in it. In a night you hold a finger on the house and a whirl follows it,
+   tearing loose whatever it passes (teacups and candles first; chairs, clocks, the piano later) into a ring that spins
+   round the finger. What spins hits whoever it passes: they shriek, stagger away, and frightened past their nerve they
+   panic and run for the nearest way out. Let go and everything in the ring falls (or flies) and crashes. A night ends
+   when the ectoplasm is spent or the dawn comes. The Pembertons live here and come back every night; everyone else is a
+   guest, drawn by the house's reputation: the organ in the cellar buys rumours (more guests, and new kinds of them:
+   neighbours, a man of science, ghost hunters with lanterns, the press, a wedding party, a film company) and the house
+   grows for them (a wine cellar, an attic, a crypt, a tower), and the screams that pay for it make the house famous.
+   When it is famous enough and has its tower, a delivery comes after dark. */
 const CORE = (() => {
   const { rand, clamp } = KIT, { abs, min, max, sign, floor, pow, sqrt, cos, sin, atan2, hypot, round } = Math;
   const HW = 1000, FH = 420, STAIR = 60;
   const P = {
     ecto: 12, drain: 1, idle: .3, appear: .6, linger: 1,           // seconds of haunting; drain a second held; while held over nobody; to appear
     speed: 520, reach: 120, cap: 3.2, spin: 3.4,                     // the whirl's glide, its pull, how much mass it carries, its turn (rad/s)
-    fear: 28, worth: 4, outPay: 6,                                    // fright of a 1-mass hit; screams for a whole nerve's worth of fright; an exit pays this much
+    fear: 28, worth: 4, outPay: 6,                                    // fright of a 1-mass hit; screams for a hit of mass 1; an exit pays this much
     run: 250, walk: 95, climb: .8, shove: 34, stagger: .35,           // people: units a second fleeing and walking; seconds a floor on the stair; a hit's push
-    calm: .12, calmAfter: 2, panic: .8, wear: 6, wearMax: .65, wearOut: .12,
-    dawn: 40, dawnStep: 14, grav: 2200, crash: .45, slam: 1.6,
-    imp: [0, 3.2, 1.7], impF: 1.1,
-    ns: [4, 28, 43, 54, 46], pm: 4                                      // nerve by reel, and the organ's prices, as tuned with the bots
+    calm: .12, calmAfter: 2, panic: .8,
+    dawn: 40, dawnStep: 14, grav: 2200, crash: .45, slam: 1.6, flash: 2.2,
+    imp: [0, 3.2, 1.7],
+    nerve: 520,                                                      // a guest's nerve (later kinds are braver by their own measure)
+    film: 360, pm: 1                                              // a full house, emptied, brings the delivery; the organ's prices, as tuned with the bots
   };
   /* what can be torn loose, by kind: mass, tier (the grip that lifts it), and whether it breaks when it lands */
   const KIND = {
     cup: [.8, 0, 1], plate: [.8, 0, 1], teapot: [1.2, 0, 1], jar: [1, 0, 1], candle: [.8, 0, 0], mclock: [1.5, 0, 1], book: [1, 0, 0],
-    ink: [.8, 0, 1], pillow: [.6, 0, 0], doll: [1, 0, 0], musicbox: [1.2, 0, 1],
-    chair: [3, 1, 0], lamp: [2.5, 1, 1], portrait: [3, 1, 0], horse: [4, 1, 0],
-    clock: [8, 2, 0], armour: [10, 2, 0], wardrobe: [12, 2, 0],
+    ink: [.8, 0, 1], pillow: [.6, 0, 0], doll: [1, 0, 0], musicbox: [1.2, 0, 1], bottle: [.7, 0, 1], urn: [1.4, 0, 1], birdcage: [1.5, 0, 0],
+    chair: [3, 1, 0], lamp: [2.5, 1, 1], portrait: [3, 1, 0], horse: [4, 1, 0], barrel: [4, 1, 0], trunk: [3.5, 1, 0], telescope: [3, 1, 1], globe: [2.5, 1, 0],
+    clock: [8, 2, 0], armour: [10, 2, 0], wardrobe: [12, 2, 0], coffin: [9, 2, 0],
     piano: [22, 3, 0], chandelier: [16, 3, 1]
   };
-  /* where everything stands when the night begins: room (floor * 2 + right half), kind, x across the room, h above its floor */
+  /* the house: floors from the crypt (-2) to the tower (4); the first three stand from the start, the rest are built.
+     A room is floor * 2 + its half (the tower has only its left half); the stair at the left joins every floor. */
+  const ANNEX = { '-1': 'cellar', '3': 'attic', '-2': 'crypt', '4': 'tower' };
+  const floorsOf = S => [-2, -1, 0, 1, 2, 3, 4].filter(f => (f >= 0 && f <= 2) || has(S, ANNEX[f]));
+  const RW = f => f === 4 ? 500 : HW;
+  const roomsOf = S => floorsOf(S).flatMap(f => f === 4 ? [8] : [f * 2, f * 2 + 1]);
+  /* where everything stands when the night begins: room, kind, x across the room, h above its floor */
   const SLOTS = [
     [0, 'candle', 172, 182], [0, 'mclock', 222, 182], [0, 'candle', 272, 182], [0, 'portrait', 222, 270], [0, 'piano', 398, 0],
     [1, 'cup', 140, 104], [1, 'teapot', 190, 104], [1, 'plate', 240, 104], [1, 'jar', 318, 286], [1, 'jar', 356, 286], [1, 'jar', 394, 286], [1, 'chair', 64, 0],
     [2, 'plate', 172, 118], [2, 'cup', 212, 118], [2, 'candle', 250, 118], [2, 'plate', 300, 118], [2, 'chair', 116, 0], [2, 'chair', 364, 0], [2, 'chandelier', 240, 290], [2, 'clock', 446, 0],
     [3, 'book', 52, 252], [3, 'book', 102, 252], [3, 'book', 152, 252], [3, 'book', 76, 168], [3, 'book', 132, 168], [3, 'armour', 236, 0], [3, 'lamp', 318, 118], [3, 'ink', 430, 118],
     [4, 'wardrobe', 214, 0], [4, 'pillow', 352, 72], [4, 'pillow', 404, 72], [4, 'portrait', 392, 270],
-    [5, 'musicbox', 88, 106], [5, 'doll', 146, 106], [5, 'doll', 214, 290], [5, 'doll', 250, 290], [5, 'doll', 286, 290], [5, 'horse', 404, 0]
+    [5, 'musicbox', 88, 106], [5, 'doll', 146, 106], [5, 'doll', 214, 290], [5, 'doll', 250, 290], [5, 'doll', 286, 290], [5, 'horse', 404, 0],
+    // the wine cellar: casks, a rack of bottles; the old kitchen below stairs
+    [-2, 'barrel', 150, 0], [-2, 'barrel', 270, 0], [-2, 'bottle', 352, 150], [-2, 'bottle', 390, 150], [-2, 'bottle', 428, 150],
+    [-1, 'candle', 96, 140], [-1, 'chair', 190, 0], [-1, 'barrel', 330, 0], [-1, 'bottle', 420, 120],
+    // the attic: trunks, a birdcage on its hook, the old nursery's leavings
+    [6, 'trunk', 150, 0], [6, 'birdcage', 260, 230], [6, 'doll', 350, 0], [6, 'trunk', 420, 0],
+    [7, 'chair', 100, 0], [7, 'horse', 260, 0], [7, 'portrait', 400, 230], [7, 'birdcage', 180, 250],
+    // the crypt: urns in their niches, coffins, a candle for the dead
+    [-4, 'urn', 150, 120], [-4, 'urn', 230, 120], [-4, 'coffin', 380, 0], [-4, 'candle', 90, 0],
+    [-3, 'urn', 90, 120], [-3, 'coffin', 250, 0], [-3, 'candle', 420, 0], [-3, 'urn', 160, 120],
+    // the tower: an astronomer's room
+    [8, 'telescope', 230, 0], [8, 'globe', 380, 0], [8, 'book', 96, 120], [8, 'book', 126, 120]
   ];
-  // the cast: nerve, resolve (exits before they leave for good), worth, the rooms they keep, a look, a height
+  // the family who live here, and come back every night however often they flee
   const CAST = {
-    harold: { name: 'Harold Pemberton', look: 'tophat', nerve: 150, res: 4, worth: 1, home: [3, 0] },
-    edith: { name: 'Edith Pemberton', look: 'bonnet', nerve: 120, res: 4, worth: 1, home: [1, 2] },
-    violet: { name: 'Violet Pemberton', look: 'girl', nerve: 90, res: 4, worth: .8, home: [5, 4] },
-    prof: { name: 'Professor Hargreave', look: 'prof', nerve: 300, res: 5, worth: 1.8, home: [3, 3], skeptic: 2 },
-    mudge: { name: 'Mrs Mudge', look: 'maid', nerve: 200, res: 5, worth: 1.6, home: [1, 1], shriek: .3 },
-    zostra: { name: 'Madame Zostra', look: 'turban', nerve: 650, res: 6, worth: 2.6, home: [2, 0], medium: 1 },
-    cyril: { name: 'Cyril', look: 'boy', nerve: 420, res: 5, worth: 2.4, home: [5, 2] },
-    ada: { name: 'Ada Fairweather', look: 'bride', nerve: 1100, res: 6, worth: 4, home: [4, 2], pair: 1 },
-    teddy: { name: 'Teddy Fairweather', look: 'groom', nerve: 1300, res: 6, worth: 4, home: [4, 0], pair: 1 },
-    kessler: { name: 'Mr Kessler, director', look: 'director', nerve: 2600, res: 7, worth: 6, home: [2, 3] },
-    lulu: { name: 'Miss Lulu Lamont', look: 'star', nerve: 2000, res: 6, worth: 6, home: [4, 5] },
-    sparks: { name: '“Sparks”, camera', look: 'cameraman', nerve: 2300, res: 6, worth: 6, home: [3, 1] }
+    harold: { name: 'Harold Pemberton', look: 'tophat', nerve: 1.2, worth: 1, home: [3, 0] },
+    edith: { name: 'Edith Pemberton', look: 'bonnet', nerve: 1, worth: 1, home: [1, 2] },
+    violet: { name: 'Violet Pemberton', look: 'girl', nerve: .8, worth: .8, home: [5, 4] }
+  };
+  // the kinds of guest the house's reputation draws, in the order the organ opens them
+  const GUESTS = {
+    visitor: { name: 'a visitor', looks: ['tophat', 'bonnet', 'maid', 'groom', 'boy'], nerve: 1, worth: 1 },
+    neigh: { name: 'a neighbour', looks: ['tophat', 'bonnet', 'maid', 'girl', 'boy'], nerve: 1.1, worth: 1.2, n: 3 },
+    skeptic: { name: 'a man of science', looks: ['prof'], nerve: 2.4, worth: 1.8, n: 2, skeptic: 1 },
+    hunter: { name: 'a ghost hunter', looks: ['cameraman', 'tophat'], nerve: 3.5, worth: 2.2, n: 3, lantern: 1 },
+    reporter: { name: 'a reporter', looks: ['director', 'star'], nerve: 5, worth: 2, n: 3, flash: 1 },
+    pair: { name: 'a wedding guest', looks: ['bride', 'groom'], nerve: 8, worth: 2.6, n: 6, pair: 1 },
+    crew: { name: 'the picture people', looks: ['director', 'star', 'cameraman'], nerve: 12, worth: 3, n: 8 }
   };
   const LOOKS = ['tophat', 'bonnet', 'maid', 'boy', 'girl', 'groom', 'bride', 'cameraman'];
   const TALL = { girl: 210, boy: 216, prof: 330, director: 330 }, tallOf = l => TALL[l] || 315;
-  // who moves in; extras are walk-on parts (a share of a principal's nerve)
+  // the intertitles, one for each new kind of guest (and one for the family at the start)
   const REELS = [
-    { cast: ['harold', 'edith', 'violet'], extras: 0, title: 'The Pembertons', card: 'For a hundred years Hollowmere House was perfectly quiet. Then the Pembertons moved in.' },
-    { cast: ['prof', 'mudge'], extras: 3, xn: 160, xw: 1.2, xr: 4, xname: 'a lodger', title: 'A Man of Science', card: 'Professor Hargreave does not believe in ghosts. He believes in draughts. He has taken lodgers.' },
-    { cast: ['zostra', 'cyril'], extras: 6, xn: 350, xw: 1.8, xr: 4, xname: 'a sitter', title: 'The Medium', card: 'Madame Zostra has come to speak with the dead, and brought a seance circle. She may not like the answer.' },
-    { cast: ['ada', 'teddy'], extras: 10, xn: 700, xw: 2.4, xr: 4, xname: 'a wedding guest', title: 'Newlyweds', card: 'Nothing frightens Ada and Teddy Fairweather — as long as they are together. Nor their wedding party.' },
-    { cast: ['kessler', 'lulu', 'sparks'], extras: 26, xn: 1300, xw: 3, xr: 4, xname: 'an extra', title: 'The Picture People', card: 'A motion-picture company has rented the house to film a ghost story, with a coach-load of extras. Without a ghost.' }
+    { kind: null, title: 'The Pembertons', card: 'For a hundred years Hollowmere House was perfectly quiet. Then the Pembertons moved in.' },
+    { kind: 'neigh', title: 'The Neighbours', card: 'Word gets round a village. The neighbours have come to see the haunted house for themselves.' },
+    { kind: 'skeptic', title: 'A Man of Science', card: 'Professor Hargreave does not believe in ghosts. He believes in draughts. He has brought a colleague.' },
+    { kind: 'hunter', title: 'Ghost Hunters', card: 'Gentlemen with lanterns and notebooks. Where their lamps fall, a ghost grows thin.' },
+    { kind: 'reporter', title: 'The Press', card: 'The newspapers have sent reporters. A frightened reporter makes a photograph, and a photograph makes a name.' },
+    { kind: 'pair', title: 'A Wedding Party', card: 'A wedding party has taken the house for the night. They are braver two by two.' },
+    { kind: 'crew', title: 'The Picture People', card: 'A motion-picture company has come to film the most haunted house in England. With a ghost.' }
   ];
   /* the organ: four registers, each a chain of pipes from the centre outwards. k: what a pipe adds to */
-  const REG = ['The whirl', 'The house', 'The fright', 'Their fears'];
+  const REG = ['The whirl', 'The house', 'The rumour', 'The fright'];
   const PIPES = [];
-  // each register starts cheap, so the first nights buy something every night or two, and grows steeply to the same top as
-  // before; a flat factor on every price (as first tuned) made the second pipe cost eight first nights
-  const FIRST = [14, 35, 50, 90], GROW = [2.36, 2.33, 2.19, 2.29];
-  const pipe = (reg, k, name, desc) => { const n = PIPES.filter(p => p.reg === reg).length; PIPES.push({ id: k + (PIPES.filter(p => p.k === k).length + 1), reg, k, name, desc, c: round(FIRST[reg] * pow(GROW[reg], n) * P.pm / 4), n }); };
+  // each register starts cheap and grows steeply; as tuned with the bots, and read against what a person's first night pays
+  const FIRST = [14, 30, 22, 50], GROW = [2.3, 2.15, 2.2, 2.05];
+  const pipe = (reg, k, name, desc) => { const n = PIPES.filter(p => p.reg === reg).length; PIPES.push({ id: k + (PIPES.filter(p => p.k === k).length + 1), reg, k, name, desc, c: round(FIRST[reg] * pow(GROW[reg], n) * P.pm), n }); };
   [['cap', 'More hands', 'The whirl carries more.'], ['reach', 'A wider pull', 'The whirl tears things loose from further off.'], ['ecto', 'More ectoplasm', 'Haunt for longer each night.'],
    ['cap', 'Many hands', 'The whirl carries more.'], ['spin', 'A faster spin', 'Everything in the whirl goes round faster, and hits more often.'], ['grey', 'The grey lady', 'A second whirl follows your path, three seconds behind.'],
    ['ecto', 'A deeper well', 'Haunt for longer each night.'], ['cap', 'A hundred hands', 'The whirl carries more.'], ['drain', 'Thrift', 'Ectoplasm lasts longer while you haunt.'], ['spin', 'A maelstrom', 'Everything in the whirl goes round faster.']]
     .forEach(([k, n, d]) => pipe(0, k, n, d));
-  [['grip', 'Chairs and lamps', 'The whirl can lift chairs, lamps, portraits and the rocking horse.'], ['slam', 'Doors that slam', 'Every doorway the whirl passes slams, and the whole floor jumps.'], ['dawn', 'Longer nights', 'The dawn comes later.'],
-   ['grip', 'Clocks and armour', 'The whirl can lift the long-case clock, the suit of armour and the wardrobe.'], ['back', 'The back door', 'The kitchen door at the far end lets them out too.'], ['window', 'Open windows', 'Upstairs, they will jump from the windows at the far end.'],
-   ['grip', 'The piano', 'The whirl can lift the piano and the chandelier.'], ['dawn', 'Winter nights', 'The dawn comes later.'], ['hearse', 'The hearse at the gate', 'Everyone driven out pays twice.']]
+  [['grip', 'Chairs and lamps', 'The whirl can lift chairs, lamps, portraits, casks and trunks.'], ['cellar', 'The wine cellar', 'The house gains a cellar: casks, bottles, and room for more guests.'], ['slam', 'Doors that slam', 'Every doorway the whirl passes slams, and the whole floor jumps.'],
+   ['attic', 'The attic', 'The house gains an attic under a new roof.'], ['grip', 'Clocks and armour', 'The whirl can lift the long-case clock, the armour, the wardrobe and the coffins.'], ['back', 'The back door', 'The kitchen door at the far end lets them out too.'],
+   ['crypt', 'The crypt', 'Under the cellar, the family crypt.'], ['window', 'Open windows', 'Upstairs, they will jump from the windows at the far end.'], ['grip', 'The piano', 'The whirl can lift the piano and the chandelier.'],
+   ['tower', 'The tower', 'A tower rises over the roof, the most haunted room in England.'], ['hearse', 'The hearse at the gate', 'Everyone driven out pays twice.']]
     .forEach(([k, n, d]) => pipe(1, k, n, d));
-  [['fear', 'Colder breath', 'Every hit frightens more.'], ['worth', 'Louder screams', 'Every scream is worth more.'], ['fling', 'Fling', 'Let go and the whirl throws everything it carries, and a thing in flight hits twice as hard.'],
-   ['fear', 'Frost on the inside', 'Every hit frightens more.'], ['heir', 'Family silver', 'Each night a few heirlooms glint in the house: a hit with one is worth five.'], ['worth', 'A story in the paper', 'Every scream is worth more.'],
-   ['china', 'Bone china', 'Crockery that breaks frightens everyone near it three times as much.'], ['fear', 'A grave’s own chill', 'Every hit frightens more.'], ['worth', 'A chapter in a book', 'Every scream is worth more.']]
+  [['whisper', 'A whisper in the village', 'Three more visitors come to the house each night.'], ['neigh', 'The neighbours', 'The neighbours come to look: three more each night.'], ['paper', 'A note in the paper', 'Three more visitors each night.'],
+   ['skeptic', 'A man of science', 'Two men of science come. Teacups do not frighten them.'], ['hunter', 'Ghost hunters', 'Three ghost hunters come, worth twice as much. Their lanterns drain the ghost.'], ['tours', 'Tours of the house', 'Five more visitors each night.'],
+   ['reporter', 'The press', 'Three reporters come. One who panics takes a photograph, and the flash frightens the whole floor.'], ['pair', 'A wedding party', 'Six wedding guests come, braver two by two.'], ['crew', 'The picture people', 'A film company of eight, worth three times as much.']]
     .forEach(([k, n, d]) => pipe(2, k, n, d));
-  [['panic', 'Shaken', 'They panic sooner.'], ['calm', 'Restless', 'They calm down more slowly.'], ['imps', 'An imp', 'An imp throws things in the rooms you are not in.'],
-   ['stamp', 'Stampede', 'Whoever panics frightens everyone they run past.'], ['panic', 'Unnerved', 'They panic sooner.'], ['imps', 'A nest of imps', 'The imps throw more often.'],
-   ['dread', 'Dread', 'Sometimes one exit costs them two of their resolve.'], ['dread', 'Terror', 'More often, one exit costs two.']]
+  [['fear', 'Colder breath', 'Every hit frightens more.'], ['worth', 'Louder screams', 'Every scream is worth more.'], ['fling', 'Fling', 'Let go and the whirl throws everything it carries, and a thing in flight hits twice as hard.'],
+   ['panic', 'Shaken', 'They panic sooner.'], ['imps', 'An imp', 'An imp throws things in the rooms you are not in.'], ['fear', 'Frost on the inside', 'Every hit frightens more.'],
+   ['heir', 'Family silver', 'Each night a few heirlooms glint in the house: a hit with one is worth five.'], ['stamp', 'Stampede', 'Whoever panics frightens everyone they run past.'], ['worth', 'A story in the paper', 'Every scream is worth more.'],
+   ['china', 'Bone china', 'Crockery that breaks frightens everyone near it three times as much.'], ['imps', 'A nest of imps', 'The imps throw more often.'], ['fear', 'A grave’s own chill', 'Every hit frightens more.']]
     .forEach(([k, n, d]) => pipe(3, k, n, d));
   const byId = Object.fromEntries(PIPES.map(p => [p.id, p]));
   const lvOf = (S, k) => S.lv[k] || 0;
@@ -13518,38 +13638,55 @@ const CORE = (() => {
   const worthOf = S => P.worth * pow(1.5, lvOf(S, 'worth'));
   const dawnOf = S => P.dawn + P.dawnStep * lvOf(S, 'dawn');
   const panicOf = S => P.panic * pow(.85, lvOf(S, 'panic'));
-  const calmOf = S => P.calm * pow(.7, lvOf(S, 'calm'));
-  const floorAt = y => clamp(floor(-y / FH), 0, 2);
+  const calmOf = S => P.calm;
+  const floorAt = y => clamp(floor(-y / FH), -2, 4);
   const has = (S, k) => lvOf(S, k) > 0;
   const price = p => p.c;
   const open = (S, p) => !S.own[p.id] && (p.n === 0 || PIPES.some(q => q.reg === p.reg && q.n === p.n - 1 && S.own[q.id]));
   const can = (S, p) => open(S, p) && S.$ >= p.c && S.phase === 'organ' && !S.finale;
   const live = S => S.people.filter(p => p.st !== 'gone');
-  const nerveOf = p => p.nerve * (1 - P.wearMax * min(1, p.wear || 0));
+  const nerveOf = p => p.nerve;
   const massOf = t => KIND[t.k][0], tierOf = t => KIND[t.k][1], fragile = t => !!KIND[t.k][2];
+  // the house's fame: every scream it has ever had; what each new kind of guest is braver by
+  const fameOf = S => S.earned;
+  const finalReady = S => has(S, 'tower') && has(S, 'crew');
+  const braveOf = S => 1;
+  // how many guests come tonight, and of which kinds
+  function guestList(S) {
+    const L = [];
+    const add = (k, n) => { for (let q = 0; q < n; q++) L.push(k); };
+    add('visitor', 3 * lvOf(S, 'whisper') + 3 * lvOf(S, 'paper') + 5 * lvOf(S, 'tours'));
+    for (const k of ['neigh', 'skeptic', 'hunter', 'reporter', 'pair', 'crew']) if (has(S, k)) add(k, GUESTS[k].n);
+    return L;
+  }
   // where a slot stands, in house units
   const slotXY = i => { const s = SLOTS[i]; return { x: (s[0] & 1) * 500 + s[2], y: -(s[0] >> 1) * FH - s[3], f: s[0] >> 1 }; };
-  // the exits on a floor, as x positions
-  function exits(S, f) { const e = []; if (f === 0) { e.push(-30); if (has(S, 'back')) e.push(HW + 30); } else if (has(S, 'window')) e.push(HW + 30); return e; }
-  // which way a panicking person runs: towards the nearer way out, counting the stair down at the left
-  function fleeDir(S, p) { const E = exits(S, p.f); const left = p.f === 0 ? p.x : p.x + 260 * p.f; return E.some(e => e > HW) && HW - p.x < left ? 1 : -1; }
+  // the exits on a floor, as x positions: the front door on the ground floor, the back door, windows upstairs
+  function exits(S, f) { const e = []; if (f === 0) { e.push(-30); if (has(S, 'back')) e.push(HW + 30); } else if (f > 0 && RW(f) === HW && has(S, 'window')) e.push(HW + 30); return e; }
+  // which way a panicking person runs: towards the nearer way out, counting the stairs to the ground floor at the left
+  function fleeDir(S, p) { const E = exits(S, p.f); const left = p.f === 0 ? p.x : p.x + 260 * abs(p.f); return E.some(e => e > HW) && HW - p.x < left ? 1 : -1; }
 
-  function newPerson(S, id, R) {
-    const c = CAST[id] || null, home = c ? c.home : [floor(rand(S) * 6), floor(rand(S) * 6)], look = c ? c.look : LOOKS[floor(rand(S) * LOOKS.length)];
-    return { id, look, h: tallOf(look), name: c ? c.name : R.xname, x: 0, f: 0, fear: 0, res: c ? c.res : R.xr, res0: c ? c.res : R.xr,
-      nerve: round((c ? c.nerve : R.xn * (.7 + .6 * rand(S))) * P.ns[REELS.indexOf(R)]), worth: c ? c.worth : R.xw, home, st: 'in', climb: 0, to: 0, dir: 0, panic: 0, stag: 0, quiet: 9, acc: 0, tx: -1, wear: 0 };
+  function newPerson(S, id, kind, home) {
+    const c = CAST[id] || null, G = c ? null : GUESTS[kind], look = c ? c.look : G.looks[floor(rand(S) * G.looks.length)];
+    const nerve = round(P.nerve * (c ? c.nerve : G.nerve) * braveOf(S) * (c ? 1 : .8 + .4 * rand(S)));
+    return { id, kind: c ? 'family' : kind, look, h: tallOf(look), name: c ? c.name : G.name, x: 0, f: 0, fear: 0, nerve, worth: c ? c.worth : G.worth, home,
+      skeptic: G && G.skeptic ? 1 : 0, lantern: G && G.lantern ? 1 : 0, flash: G && G.flash ? 1 : 0, pair: G && G.pair ? 1 : 0,
+      st: 'in', climb: 0, to: 0, dir: 0, panic: 0, stag: 0, quiet: 9, acc: 0, tx: -1 };
   }
-  function moveIn(S, r) {
-    const R = REELS[r]; S.reel = r; S.rn = 0; S.people = R.cast.map(id => newPerson(S, id, R));
-    for (let k = 0; k < R.extras; k++) S.people.push(newPerson(S, 'x' + k, R));
-    ev(S, { k: 'reel', reel: r });
+  // the family, and tonight's guests, each in a room of their own choosing
+  function gather(S) {
+    const rooms = roomsOf(S), pick = () => rooms[floor(rand(S) * rooms.length)];
+    const fam = Object.keys(CAST).map(id => newPerson(S, id, null, CAST[id].home));
+    let k = 0; const guests = guestList(S).map(kind => newPerson(S, 'g' + (k++), kind, [pick(), pick()]));
+    S.people = fam.concat(guests);
   }
-  function freshThings() { return SLOTS.map((s, i) => { const q = slotXY(i); return { k: s[1], st: 0, x: q.x, y: q.y, vx: 0, vy: 0, a: 0, r: 0, o: 0, cd: 0, gold: 0 }; }); }
+  function freshThings(S) { const fl = floorsOf(S); return SLOTS.map((s, i) => { const q = slotXY(i); return { k: s[1], st: fl.includes(q.f) ? 0 : 4, x: q.x, y: q.y, vx: 0, vy: 0, a: 0, r: 0, o: 0, cd: 0, gold: 0 }; }); }
   function init(seed) {
-    const S = { v: 3, seed: seed >>> 0 || 1, t: 0, $: 0, earned: 0, reel: 0, lv: {}, own: {}, bought: 0, phase: 'organ', night: 0, nt: 0, ecto: 0, people: [], th: freshThings(),
-      g: { x: 500, y: -FH * 1.5, on: 0, tx: 500, ty: -FH * 1.5, vx: 0, vy: 0, fade: 0 }, grey: null, path: [], slam: [0, 0, 0], imp: 0, outs: 0, chain: 0, chainT: -9,
-      tally: null, finale: 0, ev: [], gone: 0, end: 0, hits: 0, broke: 0, heirs: 0, piano: 0 };
-    moveIn(S, 0);
+    const S = { v: 4, seed: seed >>> 0 || 1, t: 0, $: 0, earned: 0, reel: 0, lv: {}, own: {}, bought: 0, phase: 'organ', night: 0, nt: 0, ecto: 0, people: [], th: [],
+      g: { x: 500, y: -FH * 1.5, on: 0, tx: 500, ty: -FH * 1.5, vx: 0, vy: 0, fade: 0 }, grey: null, path: [], slam: [0, 0, 0, 0, 0, 0, 0], imp: 0, outs: 0, chain: 0, chainT: -9,
+      tally: null, finale: 0, ev: [], end: 0, hits: 0, broke: 0, heirs: 0, piano: 0 };
+    S.th = freshThings(S); gather(S);
+    ev(S, { k: 'reel', reel: 0 });
     return S;
   }
   const ev = (S, e) => { S.ev.push(e); if (S.ev.length > 80) S.ev.shift(); };
@@ -13558,27 +13695,35 @@ const CORE = (() => {
   /* ---------- the night ---------- */
   function startNight(S) {
     if (S.phase !== 'organ' || S.finale) return false;
-    S.phase = 'night'; S.night++; S.rn = (S.rn | 0) + 1; S.nt = 0; S.ecto = ectoMax(S); S.end = 0; S.path = []; S.slam = [0, 0, 0];
-    S.g.on = 0; S.g.fade = 0; S.grey = null; S.chain = 0; S.tally = { out: 0, v: 0, gone: 0, hits: 0, start: S.people.filter(p => p.st !== 'gone').length };
+    S.phase = 'night'; S.night++; S.rn = (S.rn | 0) + 1; S.nt = 0; S.ecto = ectoMax(S); S.end = 0; S.path = []; S.slam = [0, 0, 0, 0, 0, 0, 0];
+    S.g.on = 0; S.g.fade = 0; S.grey = null; S.chain = 0;
+    // a new kind of guest arrives: its intertitle
+    for (let r = S.reel + 1; r < REELS.length; r++) if (has(S, REELS[r].kind)) { S.reel = r; ev(S, { k: 'reel', reel: r }); }
     // the house is tidied in the day, and a few heirlooms are out where they glint
-    S.th = freshThings();
-    if (has(S, 'heir')) for (let k = 0; k < 3; k++) { const c = S.th.filter(t => tierOf(t) <= 1 && !t.gold); const t = c[floor(rand(S) * c.length)]; if (t) t.gold = 1; }
+    S.th = freshThings(S); gather(S);
+    S.tally = { out: 0, v: 0, gone: 0, hits: 0, start: S.people.length };
+    if (has(S, 'heir')) for (let k = 0; k < 3; k++) { const c = S.th.filter(t => t.st === 0 && tierOf(t) <= 1 && !t.gold); const t = c[floor(rand(S) * c.length)]; if (t) t.gold = 1; }
     // everyone is where they keep themselves in the evening, a little spread
-    for (const p of S.people) if (p.st !== 'gone') {
-      const r = p.home[S.night % 2]; p.st = 'in'; p.f = r >> 1; p.x = (r & 1) * 500 + 110 + rand(S) * 320; p.fear = 0; p.panic = 0; p.stag = 0; p.climb = 0; p.quiet = 9; p.tx = -1;
+    for (const p of S.people) {
+      const r = p.home[S.night % 2]; p.f = r >> 1; p.x = (r & 1) * 500 + 110 + rand(S) * (RW(p.f) === 500 ? 280 : 320);
     }
     ev(S, { k: 'night', n: S.night });
     return true;
   }
   function endNight(S, why) {
-    S.phase = 'organ'; S.g.on = 0; const T = S.tally; T.why = why; T.night = S.night; T.rn = S.rn; T.len = S.nt; if (why === 'empty' && T.out >= 3) S.sweeps = (S.sweeps | 0) + 1; S.bestNight = max(S.bestNight | 0, T.out); if (T.out >= 3 && !T.broke) S.tidy = 1; S.tally = null;
+    S.phase = 'organ'; S.g.on = 0; const T = S.tally; T.why = why; T.night = S.night; T.rn = S.rn; T.len = S.nt;
+    if (why === 'empty' && T.out >= 3) S.sweeps = (S.sweeps | 0) + 1; S.bestNight = max(S.bestNight | 0, T.out); if (T.out >= 3 && !T.broke) S.tidy = 1;
+    S.tally = null;
     ev(S, Object.assign({ k: 'dawn' }, T));
-    if (S.people.every(p => p.st === 'gone')) { if (S.reel + 1 < REELS.length) moveIn(S, S.reel + 1); else { S.finale = 1; S.won = 1; ev(S, { k: 'finale', step: 1 }); } }
+    // the last gate is the verb: with the tower built, the picture people film the most haunted house in England, and once
+    // they have filmed enough people fleeing it (every exit counts), the delivery comes
+    if (S.film >= P.film && finalReady(S)) { S.finale = 1; S.won = 1; ev(S, { k: 'finale', step: 1 }); }
   }
   // the finger: down (or moved) at x, y in house units; lifted
   function ghost(S, x, y) {
     if (S.phase !== 'night' || S.end) return false;
-    x = clamp(x, 0, HW); y = clamp(y, -3 * FH + 30, -30);
+    const fl = floorsOf(S), lo = fl[0], hi = fl[fl.length - 1];
+    y = clamp(y, -(hi + 1) * FH + 30, -lo * FH - 30); x = clamp(x, 0, RW(floorAt(y)));
     const G = S.g;
     if (!G.on) {
       if (S.ecto <= 0) return false;
@@ -13598,47 +13743,43 @@ const CORE = (() => {
   }
   function lift(S) { if (!S.g.on) return false; S.g.on = 0; S.g.fade = P.linger; release(S, 0); return true; }
 
-  // fright f lands on p: fear, screams, and maybe panic
-  function fright(S, p, f, mul) {
+  // fright f lands on p: fear, and maybe panic; a reporter in a panic takes a photograph, and the flash frightens the floor
+  function fright(S, p, f) {
     p.fear += f; p.quiet = 0;
-    p.wear = (p.wear || 0) + f / (p.nerve * P.wear);
-    p.acc += earn(S, f / P.fear * worthOf(S) * .25 * p.worth * (mul || 1) / pow(1.4, lvOf(S, 'fear')));
     if (!p.panic && p.fear >= nerveOf(p) * panicOf(S)) {
       p.panic = 1; ev(S, { k: 'panic', id: p.id });
-      const c = CAST[p.id]; if (c && c.shriek) for (const q of S.people) if (q !== p && q.st === 'in' && q.f === p.f) { q.fear += fearOf(S) * 4; q.quiet = 0; }
+      if (p.flash) { ev(S, { k: 'flash', id: p.id, f: p.f, x: p.x }); for (const q of S.people) if (q !== p && q.st === 'in' && q.f === p.f && !(q.climb > 0)) { q.fear += fearOf(S) * P.flash * braveOf(S) * .5; q.quiet = 0; } }
     }
   }
-  // a thing in the whirl or in the air meets a person
+  // a thing in the whirl or in the air meets a person: screams by its mass and their worth
   function hit(S, t, p, gx) {
-    const c = CAST[p.id], m = massOf(t);
-    if (c && c.skeptic && tierOf(t) < 1) { t.cd = .5; if (rand(S) < .25) ev(S, { k: 'scoff', id: p.id }); return; }
+    const m = massOf(t);
+    if (p.skeptic && tierOf(t) < 1) { t.cd = .5; if (rand(S) < .25) ev(S, { k: 'scoff', id: p.id }); return; }
     let f = fearOf(S) * pow(m, .85) * (t.st === 2 && t.fl ? 2 : 1);
-    if (c && c.pair && S.people.some(q => q !== p && q.st === 'in' && CAST[q.id] && CAST[q.id].pair && q.f === p.f && abs(q.x - p.x) < 200)) f *= .55;
+    if (p.pair && S.people.some(q => q !== p && q.st === 'in' && q.pair && q.f === p.f && abs(q.x - p.x) < 200)) f *= .55;
     const mul = t.gold ? 5 : 1;
-    fright(S, p, f, mul); S.hits++; if (S.tally) S.tally.hits++; if (t.gold) S.heirs++; if (t.k === 'piano') S.piano++;
+    fright(S, p, f); p.acc += earn(S, pow(m, .85) * (t.st === 2 && t.fl ? 2 : 1) * worthOf(S) * .25 * p.worth * mul);
+    S.hits++; if (S.tally) S.tally.hits++; if (t.gold) S.heirs++; if (t.k === 'piano') S.piano++;
     // knocked away from the whirl; against the far wall they duck past it; in a panic a hit only speeds them on
     let d = sign(p.x - gx) || (p.x < 500 ? -1 : 1);
-    if (p.panic) d = fleeDir(S, p); else if (d > 0 && p.x > HW - 60) d = -1;
+    if (p.panic) d = fleeDir(S, p); else if (d > 0 && p.x > RW(p.f) - 60) d = -1;
     p.fear = min(p.fear, nerveOf(p) * 1.6);
-    p.x = clamp(p.x + d * P.shove * min(3, sqrt(m)), 8, HW - 8); p.stag = p.panic ? 0 : P.stagger; p.dir = d;
+    p.x = clamp(p.x + d * P.shove * min(3, sqrt(m)), 8, RW(p.f) - 8); p.stag = p.panic ? 0 : P.stagger; p.dir = d;
     t.cd = .3; ev(S, { k: 'hit', id: p.id, ti: S.th.indexOf(t), m, gold: t.gold });
   }
   function out(S, p, via) {
-    p.st = 'out'; S.outs++; p.wear = (p.wear || 0) + P.wearOut;
+    p.st = 'out'; S.outs++;
     if (S.nt - S.chainT < 4) S.chain++; else S.chain = 0; S.chainT = S.nt; S.bestChain = max(S.bestChain | 0, S.chain);
-    const dread = [0, .25, .5][lvOf(S, 'dread')], loss = rand(S) < dread ? 2 : 1;
-    p.res = max(0, p.res - loss);
-    const v = earn(S, P.outPay * worthOf(S) / P.worth * p.worth * (has(S, 'hearse') ? 2 : 1) * (1 + .2 * min(8, S.chain)));
-    S.tally.out++;
-    ev(S, { k: 'out', id: p.id, v, via, loss, chain: S.chain });
-    if (p.res <= 0) { p.st = 'gone'; S.gone++; S.tally.gone++; ev(S, { k: 'gone', id: p.id }); }
+    const v = earn(S, P.outPay * worthOf(S) / P.worth * p.worth * braveOf(S) * (has(S, 'hearse') ? 2 : 1) * (1 + .2 * min(8, S.chain)));
+    S.tally.out++; if (finalReady(S)) { S.film = (S.film | 0) + 1; if (S.film % 60 === 0) ev(S, { k: 'can', n: S.film / 60 }); }
+    ev(S, { k: 'out', id: p.id, v, via, chain: S.chain });
   }
 
   /* ---------- time ---------- */
   function step(S, dt) { while (dt > 0) { const h = min(dt, .05); tick(S, h); dt -= h; } }
   // a whirl at G with owner o: pull in what it passes, carry it round
   function whirl(S, G, o, dt, capMul) {
-    const R = reachOf(S) * (o ? .8 : 1), f = floorAt(G.y), cap = capOf(S) * capMul, w = spinOf(S), grip = gripOf(S);
+    const R = reachOf(S) * (o ? .8 : 1), f = floorAt(G.y), cap = capOf(S) * capMul, w = spinOf(S), grip = gripOf(S), W = RW(f);
     let load = 0, n = 0; for (const t of S.th) if (t.st === 1 && t.o === o) { load += massOf(t); n++; }
     for (const t of S.th) {
       if (t.st !== 0 || tierOf(t) > grip) continue;
@@ -13647,11 +13788,11 @@ const CORE = (() => {
       t.st = 1; t.o = o; t.a = atan2(dy / .55, dx); t.r = R * (.5 + .5 * ((n * .618) % 1)) * (1 + .12 * min(3, sqrt(massOf(t)) - 1)); load += massOf(t); n++;
       ev(S, { k: 'grab', ti: S.th.indexOf(t), o });
     }
-    // round and round: the ring is squashed to fit the room, and stays inside the ghost's floor
+    // round and round: the ring is squashed to fit the room, and stays inside the ghost's floor and its walls
     const top = -f * FH - FH + 34, bot = -f * FH - 6;
     for (const t of S.th) if (t.st === 1 && t.o === o) {
       t.a += w * dt * (1.1 - .1 * min(4, sqrt(massOf(t))) * .25);
-      const hw = 10 + 18 * sqrt(massOf(t)), tx = clamp(G.x + cos(t.a) * t.r, hw, HW - hw), ty = clamp(G.y + sin(t.a) * t.r * .55, top, bot), k = min(1, dt * 9);
+      const hw = 10 + 18 * sqrt(massOf(t)), tx = clamp(G.x + cos(t.a) * t.r, hw, W - hw), ty = clamp(G.y + sin(t.a) * t.r * .55, top, bot), k = min(1, dt * 9);
       t.x += (tx - t.x) * k; t.y += (ty - t.y) * k; t.cd = max(0, t.cd - dt);
     }
     return load;
@@ -13660,7 +13801,7 @@ const CORE = (() => {
     S.t += dt;
     if (S.phase !== 'night') return;
     S.nt += dt;
-    const G = S.g, F = fearOf(S);
+    const G = S.g, F = fearOf(S) * braveOf(S) * .5;
     // the whirl glides after the finger and drains while it is out; when it is spent it lets go
     let load = 0;
     if (G.on) {
@@ -13679,23 +13820,23 @@ const CORE = (() => {
       if (on) { const ox = S.grey ? S.grey.x : q[1], oy = S.grey ? S.grey.y : q[2]; S.grey = { x: q[1], y: q[2], vx: (q[1] - ox) / dt, vy: (q[2] - oy) / dt }; whirl(S, S.grey, 1, dt, .5); }
       else if (S.grey) { release(S, 1); S.grey = null; }
     }
-    // doors that slam: the whirl passing a doorway (the middle of a floor) slams it, and the whole floor jumps
-    if (has(S, 'slam')) for (let f = 0; f < 3; f++) {
-      S.slam[f] = max(0, S.slam[f] - dt);
-      if (G.on && floorAt(G.y) === f && abs(G.x - 500) < 40 && S.slam[f] <= 0) {
-        S.slam[f] = 4; S.slams = (S.slams | 0) + 1; ev(S, { k: 'slam', f });
+    // doors that slam: the whirl passing a doorway (the middle of a full floor) slams it, and the whole floor jumps
+    if (has(S, 'slam')) for (const f of floorsOf(S)) {
+      if (RW(f) < HW) continue; const k = f + 2;
+      S.slam[k] = max(0, S.slam[k] - dt);
+      if (G.on && floorAt(G.y) === f && abs(G.x - 500) < 40 && S.slam[k] <= 0) {
+        S.slam[k] = 4; S.slams = (S.slams | 0) + 1; ev(S, { k: 'slam', f });
         for (const p of S.people) if (p.st === 'in' && !(p.climb > 0) && p.f === f) fright(S, p, F * P.slam);
       }
     }
-    // Madame Zostra opens her third eye now and then; the ghost caught in it on her floor bleeds ectoplasm
-    const z = S.people.find(p => p.id === 'zostra' && p.st === 'in');
-    const was = S.bound; S.bound = z && (S.nt % 11) > 7.5 && G.on && floorAt(G.y) === z.f && abs(G.x - z.x) < 380 ? 1 : 0;
+    // a ghost hunter's lantern: the whirl near one on their floor bleeds ectoplasm
+    const was = S.bound; S.bound = G.on && S.people.some(p => p.lantern && p.st === 'in' && !p.panic && p.f === floorAt(G.y) && abs(G.x - p.x) < 300) ? 1 : 0;
     if (S.bound && !was) ev(S, { k: 'bound' });
     // things in flight: they fall, bounce off the walls, and land; crockery breaks
     for (const t of S.th) if (t.st === 2) {
-      const f = t.f, fy = -f * FH;
+      const f = t.f, fy = -f * FH, W = RW(f);
       t.vy += P.grav * dt; t.x += t.vx * dt; t.y += t.vy * dt; t.cd = max(0, t.cd - dt);
-      if (t.x < 12 || t.x > HW - 12) { t.x = clamp(t.x, 12, HW - 12); t.vx *= -.4; }
+      if (t.x < 12 || t.x > W - 12) { t.x = clamp(t.x, 12, W - 12); t.vx *= -.4; }
       if (t.y < fy - FH + 30) { t.y = fy - FH + 30; t.vy = abs(t.vy) * .3; }
       if (t.y >= fy) { t.y = fy; land(S, t, f); }
     }
@@ -13711,18 +13852,18 @@ const CORE = (() => {
       }
     }
     // the imps: in rooms the ghost is not in, one throws something at someone now and then
-    const il = lvOf(S, 'imps');
+    const il = min(2, lvOf(S, 'imps'));
     if (il) {
       S.imp -= dt;
       if (S.imp <= 0) {
         S.imp = P.imp[il];
-        const gr = G.on ? floorAt(G.y) * 2 + (G.x >= 500 ? 1 : 0) : -1;
+        const gr = G.on ? floorAt(G.y) * 2 + (G.x >= 500 ? 1 : 0) : 99;
         const tg = S.people.filter(p => p.st === 'in' && !(p.climb > 0) && p.f * 2 + (p.x >= 500 ? 1 : 0) !== gr);
         if (tg.length) {
           const p = tg[floor(rand(S) * tg.length)], room = p.f * 2 + (p.x >= 500 ? 1 : 0);
           const ts = S.th.filter((t, i) => t.st === 0 && tierOf(t) <= min(1, gripOf(S)) && SLOTS[i][0] === room);
           const t = ts[floor(rand(S) * ts.length)];
-          if (t) { const d = p.x - t.x, ty = 1.1 + rand(S) * .5, fy = -p.f * FH - p.h * .6; t.st = 2; t.f = p.f; t.fl = 0; t.vx = d / .5; t.vy = (fy - t.y) / .5 - P.grav * .25; t.imp = 1; ev(S, { k: 'imp', room, ti: S.th.indexOf(t), id: p.id }); }
+          if (t) { const d = p.x - t.x, fy = -p.f * FH - p.h * .6; t.st = 2; t.f = p.f; t.fl = 0; t.vx = d / .5; t.vy = (fy - t.y) / .5 - P.grav * .25; t.imp = 1; ev(S, { k: 'imp', room, ti: S.th.indexOf(t), id: p.id }); }
         }
       }
     }
@@ -13732,7 +13873,7 @@ const CORE = (() => {
       if (p.st !== 'in') continue;
       p.stag = max(0, p.stag - dt); p.quiet += dt;
       if (p.climb > 0) { p.climb -= dt; if (p.climb <= 0) { p.climb = 0; p.f = p.to; p.x = STAIR + 10; } continue; }
-      const N = nerveOf(p);
+      const N = nerveOf(p), W = RW(p.f);
       if (p.quiet > P.calmAfter) p.fear = max(0, p.fear - max(1, cal * N) * dt * (p.panic ? .5 : 1));
       if (p.panic && p.fear < N * .25) p.panic = 0;
       if (p.acc > 0 && (p.acc > worthOf(S) * p.worth * .12 || p.quiet > .25)) { ev(S, { k: 'scream', id: p.id, v: p.acc, e: clamp(p.fear / N, 0, 1.2) }); p.acc = 0; }
@@ -13740,33 +13881,32 @@ const CORE = (() => {
       // where to: in a panic to the nearest way out; near the whirl, away from it; else home
       let dir = 0, sp = P.walk;
       const near = G.on && floorAt(G.y) === p.f && abs(p.x - G.x) < reachOf(S) * 1.4;
+      const r = p.home[S.night % 2], hf = r >> 1;
       if (p.panic) { sp = P.run; dir = fleeDir(S, p); }
-      else if (near) { dir = sign(p.x - G.x) || 1; if (dir > 0 && p.x > HW - 60) dir = -1; sp = P.walk + (P.run - P.walk) * clamp(p.fear / (N * panicOf(S)), 0, 1); }
+      else if (near) { dir = sign(p.x - G.x) || 1; if (dir > 0 && p.x > W - 60) dir = -1; sp = P.walk + (P.run - P.walk) * clamp(p.fear / (N * panicOf(S)), 0, 1); }
       else if (p.quiet < 1.2 && p.dir) { dir = p.dir; sp = P.walk * 1.4; }
       else {
-        const r = p.home[S.night % 2], hf = r >> 1;
         if (hf !== p.f) dir = -1;
-        else { if (p.tx < 0 || abs(p.tx - p.x) < 8) { p.tx = (r & 1) * 500 + 90 + rand(S) * 320; if (rand(S) < .5) p.tx = p.x; } dir = abs(p.tx - p.x) < 8 ? 0 : sign(p.tx - p.x);
+        else { if (p.tx < 0 || abs(p.tx - p.x) < 8) { p.tx = (r & 1) * 500 + 90 + rand(S) * (W === 500 ? 280 : 320); if (rand(S) < .5) p.tx = p.x; } dir = abs(p.tx - p.x) < 8 ? 0 : sign(p.tx - p.x);
           // and keep a little apart from whoever stands too close, so a crowd stands as people and not as one shape
-          if (!dir) for (const q of S.people) if (q !== p && q.st === 'in' && q.f === p.f && !(q.climb > 0) && abs(q.x - p.x) < 36) { dir = q.x > p.x || (q.x === p.x && q.id < p.id) ? -1 : 1; sp = P.walk * .5; if ((p.x < STAIR + 30 && dir < 0) || (p.x > HW - 30 && dir > 0)) dir = 0; break; } }
+          if (!dir) for (const q of S.people) if (q !== p && q.st === 'in' && q.f === p.f && !(q.climb > 0) && abs(q.x - p.x) < 36) { dir = q.x > p.x || (q.x === p.x && q.id < p.id) ? -1 : 1; sp = P.walk * .5; if ((p.x < STAIR + 30 && dir < 0) || (p.x > W - 30 && dir > 0)) dir = 0; break; } }
       }
       p.dir = dir;
       if (!dir) continue;
       let nx = p.x + dir * sp * dt;
       if (p.panic && stamp) for (const q of S.people) if (q !== p && q.st === 'in' && !q.panic && q.f === p.f && !(q.climb > 0) && abs(q.x - nx) < 40) fright(S, q, F * 1.2 * dt);
-      // the stair at the left: down when running for the door, up or down when going home
+      // the stair at the left joins every floor: towards the ground floor when running for the door, else towards home
       if (nx <= STAIR && dir < 0) {
-        const r = p.home[S.night % 2], hf = r >> 1, wantUp = !p.panic && !near && hf > p.f;
-        if (p.f > 0 && !wantUp) { p.to = p.f - 1; p.climb = P.climb; p.x = STAIR; continue; }
-        if (wantUp) { p.to = p.f + 1; p.climb = P.climb; p.x = STAIR; continue; }
+        const tf = p.panic || near ? 0 : hf;
+        if (p.f !== tf) { p.to = p.f + sign(tf - p.f); p.climb = P.climb; p.x = STAIR; continue; }
         if (p.f === 0 && p.panic && nx <= 4) { out(S, p, 'door'); continue; }
-        if (p.f === 0) nx = max(nx, p.panic ? 0 : STAIR + 4);
+        if (p.f === 0 || !p.panic) nx = max(nx, p.panic ? 0 : STAIR + 4);
       }
-      if (nx >= HW - 4) {
+      if (nx >= W - 4) {
         if (p.panic && exits(S, p.f).some(e => e > HW)) { out(S, p, p.f ? 'window' : 'back'); continue; }
-        nx = HW - 12;
+        nx = W - 12;
       }
-      p.x = clamp(nx, -10, HW - 8);
+      p.x = clamp(nx, -10, W - 8);
     }
     // the night is over when the ghost is spent and its last things have landed, at dawn, or when the house is empty
     if (!S.end && ((S.ecto <= 0 && !G.on && G.fade <= 0 && !S.th.some(t => t.st === 2)) || S.nt >= dawnOf(S) || S.people.every(p => p.st !== 'in'))) {
@@ -13776,7 +13916,7 @@ const CORE = (() => {
   }
   // a thing comes down: crockery breaks, the rest lands with a thud; either way everyone near it jumps
   function land(S, t, f) {
-    const m = massOf(t), broke = fragile(t), F = fearOf(S), ti = S.th.indexOf(t);
+    const m = massOf(t), broke = fragile(t), F = fearOf(S) * braveOf(S) * .5, ti = S.th.indexOf(t);
     const r = broke ? 170 : 90 + 22 * m, k = (broke ? (has(S, 'china') ? 3 : 1) : .5) * P.crash * pow(m, .85);
     let n = 0;
     for (const p of S.people) if (p.st === 'in' && !(p.climb > 0) && p.f === f && abs(p.x - t.x) < r) { fright(S, p, F * k * (1 - abs(p.x - t.x) / r * .5)); n++; }
@@ -13787,7 +13927,10 @@ const CORE = (() => {
   function buy(S, id) {
     const p = byId[id]; if (!p || !can(S, p)) return false;
     S.$ -= p.c; S.own[id] = 1; S.lv[p.k] = lvOf(S, p.k) + 1; S.bought++;
-    ev(S, { k: 'buy', id }); return true;
+    ev(S, { k: 'buy', id });
+    // a new floor: its things stand ready at once, so the organ's picture of the house is right
+    if (ANNEX[Object.keys(ANNEX).find(f => ANNEX[f] === p.k)]) { S.th = freshThings(S); ev(S, { k: 'annex', f: +Object.keys(ANNEX).find(f => ANNEX[f] === p.k) }); }
+    return true;
   }
   function finale(S, step) { if (!S.finale || step !== S.finale + 1 || step > 2) return false; S.finale = step; ev(S, { k: 'finale', step }); return true; }
   function act(S, what, a, b) {
@@ -13801,26 +13944,25 @@ const CORE = (() => {
 
   /* ---------- for the shell and the tests ---------- */
   const done = S => S.finale >= 2;
-  const milestones = S => S.reel * 1e4 + S.bought * 1e3 + S.people.reduce((a, p) => a + p.res0 - p.res, 0) + S.finale * 1e6 + (S.won | 0) * 1e7;
+  // a reel of the picture people's film is in the can for every sixtieth person filmed fleeing: something new
+  const milestones = S => S.reel * 1e5 + S.bought * 1e3 + floor((S.film | 0) / 60) * 10 + S.finale * 1e6 + (S.won | 0) * 1e7;
   function progress(S) {
     if (S.won) return S.finale ? .97 + .015 * S.finale : 1;
-    const tot = S.people.reduce((a, p) => a + p.res0, 0), left = S.people.reduce((a, p) => a + p.res, 0);
-    return clamp((S.reel + .97 * (1 - left / max(1, tot))) / REELS.length, 0, .97);
+    return clamp(.97 * S.bought / PIPES.length, 0, .97);
   }
-  // version 1 and 2 were other games in the same house: an old save starts afresh
-  function migrate(S, from) { return from < 3 ? init(S && S.seed || 1) : S; }
-  // back from the shelf: the picture people come back for a second take, every pipe still to buy can be bought
+  // versions 1 to 3 were other games in the same house: an old save starts afresh
+  function migrate(S, from) { return from < 4 ? init(S && S.seed || 1) : S; }
+  // back from the shelf: the house open again, every pipe still to buy can be bought, and the next delivery a while off
   function revisit(S) {
     if (!S.finale) return S;
-    S.finale = 0; S.phase = 'organ'; S.end = 0; S.g.on = 0; S.ev = []; S.encore = (S.encore | 0) + 1;
-    moveIn(S, REELS.length - 1); S.ev = [];
+    S.finale = 0; S.phase = 'organ'; S.end = 0; S.g.on = 0; S.ev = []; S.encore = (S.encore | 0) + 1; S.film = 0;
     return S;
   }
 
   /* ---------- people, for the pacing tests ----------
      One hand. Between nights they buy what they can afford, cheapest first. In a night they gather an armful of
      things, then sweep the whirl through whoever is most nearly frightened out, from the side away from the way out,
-     with a person's reaction time and aim; they let go when the ectoplasm is nearly gone, over a crowd if they can. */
+     with a person's reaction time and aim; they let go when the ectoplasm is nearly gone. */
   function person(o) {
     return (S, m, dt) => {
       m.t = (m.t || 0) + dt; m.busy = (m.busy || 0) - dt;
@@ -13839,7 +13981,6 @@ const CORE = (() => {
       if (S.end) return;
       const G = S.g, ins = S.people.filter(p => p.st === 'in' && !p.panic);
       if (!ins.length) { if (G.on && !S.people.some(p => p.st === 'in')) act(S, 'lift'); m.busy = o.react; return; }
-      // nearly spent: let go over whoever is nearest
       if (G.on && S.ecto < o.letGo) { act(S, 'lift'); m.busy = o.react * 2; return; }
       let load = 0; for (const t of S.th) if (t.st === 1 && !t.o) load += massOf(t);
       const cap = capOf(S), grip = gripOf(S);
@@ -13852,13 +13993,12 @@ const CORE = (() => {
         }
       }
       // the target: whoever is nearest to panic, by share of their nerve, and near to hand
-      const immune = q => CAST[q.id] && CAST[q.id].skeptic && !S.th.some(t => t.st === 1 && !t.o && tierOf(t) >= 1);
+      const immune = q => q.skeptic && !S.th.some(t => t.st === 1 && !t.o && tierOf(t) >= 1);
       const score = q => immune(q) ? -9 : q.fear / nerveOf(q) - abs(q.f - floorAt(G.y)) * .15 - abs(q.x - G.x) / 3000;
       if (!m.aim || !ins.includes(m.aim) || immune(m.aim) || r() < dt / o.retarget) m.aim = ins.reduce((a, b) => score(b) > score(a) ? b : a);
       const p = m.aim, pf = p.climb > 0 ? p.to : p.f, px = p.climb > 0 ? STAIR + 40 : p.x, side = -fleeDir(S, p), R = reachOf(S);
-      // circle through them from their far side, so every hit pushes them towards the way out
       const sweep = sin(m.t * 2.2) * R * .35;
-      const gx = clamp(px + side * R * o.lead + sweep + (r() - .5) * o.wobble, 20, HW - 20), gy = -pf * FH - p.h * .5;
+      const gx = clamp(px + side * R * o.lead + sweep + (r() - .5) * o.wobble, 20, RW(pf) - 20), gy = -pf * FH - p.h * .5;
       act(S, 'ghost', gx, gy); m.busy = o.react * (.6 + .8 * r());
     };
   }
@@ -13871,13 +14011,13 @@ const CORE = (() => {
   const feats = [
     ['piano', 'Grand finale', 'Hit someone with the piano.', S => (S.piano | 0) >= 1],
     ['chain', 'Stampede', 'Drive eight out of the house one straight after another.', S => (S.bestChain | 0) >= 7],
-    ['ten', 'Standing room only', 'Drive ten people out in a single night.', S => (S.bestNight | 0) >= 10],
+    ['ten', 'Standing room only', 'Drive twenty-five people out in a single night.', S => (S.bestNight | 0) >= 25],
     ['tidy', 'Not a cup out of place', 'Drive three out in a night in which nothing breaks.', S => (S.tidy | 0) >= 1],
     ['organ', 'Full organ', 'Buy every pipe on the organ in the cellar.', S => S.bought >= PIPES.length]
   ];
 
-  return { version: 3, moveIn, P, HW, FH, STAIR, CAST, LOOKS, REELS, REG, PIPES, KIND, SLOTS, byId, init, step, act, done, milestones, progress, bots, pace, migrate, revisit, feats,
-    ectoMax, drainOf, speedOf, reachOf, capOf, spinOf, gripOf, fearOf, worthOf, dawnOf, panicOf, floorAt, has, open, can, price, exits, live, nerveOf, lvOf, massOf, tierOf, fragile, slotXY, tallOf };
+  return { version: 4, P, HW, FH, STAIR, CAST, GUESTS, LOOKS, REELS, REG, PIPES, KIND, SLOTS, ANNEX, byId, init, step, act, done, milestones, progress, bots, pace, migrate, revisit, feats,
+    finalReady, ectoMax, drainOf, speedOf, reachOf, capOf, spinOf, gripOf, fearOf, worthOf, dawnOf, panicOf, floorAt, floorsOf, roomsOf, RW, guestList, braveOf, fameOf, has, open, can, price, exits, live, nerveOf, lvOf, massOf, tierOf, fragile, slotXY, tallOf };
 })();
 </script>
 
