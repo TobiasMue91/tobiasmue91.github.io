@@ -1233,6 +1233,18 @@ still undone, most valuable first:
     mirrored); a river that ended in a blunt cap in the meadow rises from a spring in a ring of stones with rushes; the young
     green field's dark plot with hard lines read as a grate (rows of green with soil between). Not done, from the same list:
     straight worn tracks across the world map's meadow, tufts drawn over the fields, the ink running past the painted land.
+  - *The owner's long play on a desktop* (November 2026). They liked the kill split in the chronicle. Their notes and what
+    changed: the chronicle folds away to its title (a click on it; the save keeps which); the grey-brown mass of a big crowd
+    is a light, warm fur half see-through to the ground, laid only under a thick crowd, with more of each rabbit showing
+    above it; the monk's handle is drawn last of all, over trees and figures; from the tray a click (no drag) picks a kind up
+    and every click on the land sets the next one down until none is left (Esc, a right click or the tray again stops), and
+    *Set all* puts every waiting defender on the ground the bots would choose (a click on the tray used to set the defender
+    down right under it); the last run's rabbits are cleared when a run starts (the view's walkers outlived the rules' count
+    for a moment); trees no longer jump between layers (a tree redrawn because someone stood behind it was drawn over its
+    neighbours in front, which were only in the tile: those that overlap it are redrawn with it); when fewer rabbits can be
+    drawn than there are, every rabbit near the castle and within a defender's reach is drawn, and the rest of the crowd
+    shares what is left (monks shot at nothing and the wall was bitten by rabbits that were not drawn). An F5 in
+    `?world=warren` loses the game, as that mode saves nothing; `&keep` plays into the real save.
   - *Two calls the owner left to the session* (November 2026). The leaf keeps running into millions: the genre the box follows
     (Sir, We Have an Orc Problem, the paid incrementals) counts up that way, the tree's prices are built on it, and rescaling it
     would retune every folio for a complaint about tone; the colophon and the chronicle count in plain figures. The playfield
