@@ -1199,6 +1199,12 @@ still undone, most valuable first:
     from one frame to the next as well as the horde's own cost, down to 500 rabbits drawn when a device cannot keep up. The
     main canvas is opaque. In the software renderer the sorted pass fell from 30–80 ms to 11–15 ms. Still to be measured on
     the device.
+  - *The frame meter itself was the brake.* On the owner's phone every variant ran at about one frame a second, all of them
+    with `?fps`: the meter read one pixel back after each part of the frame (Tilt's way of timing the raster), and on a real
+    phone each read makes the GPU stop and wait, after which Chrome moves the canvas to the CPU for good. The read now happens
+    only with `?fps=flush` (for the test browser); `?fps` is a strip over everything at the top of the page. Then the
+    silhouettes: composited over the screen (or round each hidden figure) they cost 13 to 60 ms in the software renderer; now
+    each kind of figure has its outline made once, and a hidden one is a single draw (0.1 ms). Lesson below.
   - *Sound*, rendered offline (`OfflineAudioContext`, the box's own sound functions in a page of their own): the music peaks
     at −19 dB with an average of −37; a dense moment of effects (kills, bites, stones, the dragon, the bell, the flood, a hare)
     peaks at −10 dB, average −32. Nothing clips; nothing changed.
@@ -1872,6 +1878,13 @@ A box that answers these in a dull way (pull a ball back and let it go; tap an a
 is not saved by its art direction: the owner played both and stopped.
 
 ## Lessons from the boxes so far
+
+- **Never read a canvas back on a phone, not even to measure it.** Reading one pixel after each part of a frame shows the
+  raster's real cost in a software renderer, but on a phone each read stalls the GPU and Chrome then moves the canvas to the
+  CPU: Here Be Rabbits' frame meter turned every test link into a slide show. Keep the read behind a switch of its own.
+- **Effects that composite a whole screen are made once, not every frame.** Silhouettes, vignettes and cloud shadows built as
+  screen-sized layers per frame were the largest costs after the sprites; a silhouette sprite per kind of figure, and small
+  canvases stretched to the screen, cost almost nothing.
 
 - **A bot's threshold above what the rules can hold means it never acts.** Here Be Rabbits' bots waited for 25 rabbits in one
   cell to ring the bell, and a cell holds 24: in the whole of the eager bot's game the bell never rang, and the pacing had been

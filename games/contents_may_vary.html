@@ -9226,7 +9226,7 @@ const cam = { x: 20, y: 70, s: 3.6, auto: 1, fit: 3.6 };
 // switches in the address, to narrow down on a real phone what only a phone shows: ?fps (frame cost, draw calls, rabbits),
 // ?dpr=1, ?fx=0 (no particles, cloud shadows, vignette or shake), ?glow=0 (no shadowBlur), ?horde=<n> (rabbits drawn at most)
 const QS = (() => { try { return new URLSearchParams(parent.location.search); } catch (e) { return new URLSearchParams(); } })();
-const DIAG = { fps: QS.has('fps'), dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', glow: QS.get('glow') !== '0', horde: +QS.get('horde') || 0 };
+const DIAG = { fps: QS.has('fps'), flush: QS.get('fps') === 'flush', dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', glow: QS.get('glow') !== '0', horde: +QS.get('horde') || 0 };
 // a sequence waits in game time, never on the clock: paused, it waits; under express post it keeps step
 const LATER = []; function later(sec, fn) { LATER.push({ t: sec, fn }); }
 const C = { vel: '#efe2c2', vel2: '#e3cfa3', ink: '#2b1d14', red: '#b8321f', lapis: '#2c4f9e', lap2: '#5b80cf', verd: '#3e8a68', gold: '#d6a838', gold2: '#f3d77a', desk: '#2a1b11' };
@@ -10045,16 +10045,19 @@ function drawBody() {
 function slay(c, n, by) { for (const d of [0, -1, 1, -GW, GW, -GW - 1, -GW + 1, GW - 1, GW + 1]) { const l = byCell.get(c + d); if (l) for (const p of l) if (n > 0 && !p.out) { p.out = 1; p.die = 0; p.burn = by === 'dragon' || by === 'fire' ? 1 : 0; n--; } } }
 const SILO = document.createElement('canvas'), SG = SILO.getContext('2d'), SILO2 = document.createElement('canvas'), SG2 = SILO2.getContext('2d');
 // every hidden figure of the frame goes into one layer, which is then filled pale and laid over the picture once
-function silo(list) {
- if (!list.length) return;
- if (SILO.width !== cv.width || SILO.height !== cv.height) { SILO.width = cv.width; SILO.height = cv.height; }
- SG.setTransform(DPR, 0, 0, DPR, 0, 0); SG.clearRect(0, 0, VW, VH); SG.globalCompositeOperation = 'source-over'; for (const draw of list) draw(SG);
- SG.globalCompositeOperation = 'source-in'; SG.fillStyle = '#f6dc84'; SG.fillRect(0, 0, VW, VH);
- if (SILO2.width !== SILO.width || SILO2.height !== SILO.height) { SILO2.width = SILO.width; SILO2.height = SILO.height; }
- const o = SG2, d = 1.6 * DPR; o.setTransform(1, 0, 0, 1, 0, 0); o.globalCompositeOperation = 'source-over'; o.clearRect(0, 0, SILO2.width, SILO2.height);
- for (const [ax, ay] of [[d, 0], [-d, 0], [0, d], [0, -d]]) o.drawImage(SILO, ax, ay); o.globalCompositeOperation = 'destination-out'; o.drawImage(SILO, 0, 0);
- g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = .22; g.drawImage(SILO, 0, 0); g.globalAlpha = .95; g.drawImage(SILO2, 0, 0); g.restore();
+// a hidden figure's silhouette (a gold outline round a faint fill) is made once per kind of figure, at 10 px a unit, and then
+// only placed: one draw a hidden figure, never a pass over the screen
+const SILK = {};
+function siloSprite(k) {
+ if (SILK[k]) return SILK[k];
+ const s0 = 10, W = 220, Hh = 260, ox = 110, oy = 200, [a, qa] = mk(W, Hh), [b, qb] = mk(W, Hh);
+ if (k === 'king') kingFig(qa, ox, oy, s0 * 2.8, 0); else if (k === 'hare') qa.drawImage(AT, cellOf(4, 0, 0) * AC, 0, AC, AC, ox - 4.5 * s0, oy - 7.9 * s0, 9 * s0, 9 * s0); else fig(qa, k, ox, oy, s0 * 1.25, -PI / 2, null);
+ qa.globalCompositeOperation = 'source-in'; qa.fillStyle = '#f6dc84'; qa.fillRect(0, 0, W, Hh);
+ for (const [dx, dy] of [[2, 0], [-2, 0], [0, 2], [0, -2], [1.4, 1.4], [-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4]]) qb.drawImage(a, dx, dy);
+ qb.globalCompositeOperation = 'destination-out'; qb.drawImage(a, 0, 0); qb.globalCompositeOperation = 'source-over'; qb.globalAlpha = .24; qb.drawImage(a, 0, 0);
+ return (SILK[k] = { c: b, s0, ox, oy });
 }
+function siloAt(k, x, y, s) { const q = siloSprite(k), f = s / q.s0; g.drawImage(q.c, x - q.ox * f, y - q.oy * f, q.c.width * f, q.c.height * f); }
 function drawHorde(st) {
  const s = cam.s, sw = (desk ? 6.6 : 7.8) * s;
  // before the horn they peer out of their holes
@@ -10116,9 +10119,7 @@ function drawHorde(st) {
  // a defender, a hare or the king the crowd stands in front of shows through it as a ghost, so nobody the player needs is lost
  const crowded = (x, y) => { let n = 0; for (let dy = 0; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++) { const l = byCell.get(cellAt(x + dx * CS, y + dy * CS)); if (l) for (const p of l) if (p.y > y && !p.out) n++; } return n > 2; };
  // whoever a tree, a cottage or the crowd stands in front of is drawn over it as a pale silhouette, as strategy games do
- const hid = [];
- if (S.phase !== 'fin') for (const f of FG) { if (f[1] === 0) { const p = towerXY(f[2]); if (p && (f[5][5] || crowded(p.x, p.y))) hid.push(c => fig(c, f[2].t, f[3], f[4], s * 1.25, f[2].a, st, f[2].id)); } else if (f[1] === 2 && (f[5][5] || crowded(f[2].x, f[2].y))) hid.push(c => kingFig(c, sx(f[2].x), sy(f[2].y), s * 2.8, 0)); else if (f[1] === 1 && f[5][5]) hid.push(c => c.drawImage(AT, cellOf(4, 0, 0) * AC, 0, AC, AC, sx(f[2].x) - 4.5 * s, sy(f[2].y) - 7.9 * s, 9 * s, 9 * s)); }
- silo(hid); part('h:silo');
+ if (S.phase !== 'fin') for (const f of FG) { if (f[1] === 0) { const p = towerXY(f[2]); if (p && (f[5][5] || crowded(p.x, p.y))) siloAt(f[2].t, f[3], f[4], s); } else if (f[1] === 2 && (f[5][5] || crowded(f[2].x, f[2].y))) siloAt('king', sx(f[2].x), sy(f[2].y), s); else if (f[1] === 1 && f[5][5]) siloAt('hare', sx(f[2].x), sy(f[2].y), s); } part('h:silo');
  if (S.king) { const q = S.king; hpBar(sx(q.x), sy(q.y) - 28 * s, q.hp / CORE.kingMax(), 20 * s); }
  drawn = PT.length;
  const fz = new Set(); for (const z of S.frz) for (const i of z.c) fz.add(i);
@@ -11141,12 +11142,15 @@ function teach() {
 /* ======================= for a session at work on the box: scenes, close-ups, a frame meter ======================= */
 // ?fps: what a frame costs by part (each part flushed with a one-pixel read, so the raster is counted, not only the script)
 let CALLS = 0, PT0 = 0; const PARTS = {};
-function part(name) { if (!DIAG.fps) return; g.getImageData(0, 0, 1, 1); const t = performance.now(); if (name) PARTS[name] = (PARTS[name] || 0) * .9 + (t - PT0) * .1; PT0 = t; }
+// (the one-pixel read forces the GPU to finish, which a real phone pays for dearly: only with ?fps=flush, for the test browser)
+function part(name) { if (!DIAG.fps) return; if (DIAG.flush) g.getImageData(0, 0, 1, 1); const t = performance.now(); if (name) PARTS[name] = (PARTS[name] || 0) * .9 + (t - PT0) * .1; PT0 = t; }
 if (DIAG.fps) for (const m of ['drawImage', 'fill', 'stroke', 'fillRect', 'strokeRect', 'fillText', 'strokeText']) { const f = g[m]; g[m] = function () { CALLS++; return f.apply(this, arguments); }; }
 function fpsMeter() {
  const t = performance.now(), m = fpsMeter; m.n = (m.n || 0) + 1; if (!m.t0) m.t0 = t;
  if (t - m.t0 > 1000) { m.txt = (m.n * 1000 / (t - m.t0)).toFixed(0) + ' fps · ' + CALLS + ' calls · ' + PT.length + ' rabbits (budget ' + round(budget) + ') · dpr ' + DPR + ' · ' + cv.width + '×' + cv.height; m.txt2 = Object.entries(PARTS).map(([k, v]) => k + ' ' + v.toFixed(1)).join(' · ') + ' ms'; m.n = 0; m.t0 = t; }
- g.save(); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.font = '400 11px monospace'; g.textAlign = 'left'; g.fillStyle = 'rgba(0,0,0,.75)'; g.fillRect(0, 0, VW, 32); g.fillStyle = '#7dff6a'; g.fillText(m.txt || '…', 6, 13); g.fillText(m.txt2 || '', 6, 27); g.restore();
+ // a strip of its own over everything, so no panel or button covers it
+ let el = $('fpsM'); if (!el) { el = document.createElement('div'); el.id = 'fpsM'; el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:50;pointer-events:none;background:rgba(0,0,0,.8);color:#7dff6a;font:600 12px/1.3 monospace;padding:3px 6px;white-space:normal'; document.body.appendChild(el); }
+ const txt = (m.txt || '…') + ' · ' + (m.txt2 || ''); if (el.textContent !== txt) el.textContent = txt;
 }
 /* ?world=warren&scene=<name> plays the eager bot (?bot=casual, ?seed=n) until the moment comes and starts there, so every folio
    and moment is reached in a real state of play, never a staged one: first, tree1 (after the first folio's first try), prep
