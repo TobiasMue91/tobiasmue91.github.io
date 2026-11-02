@@ -2100,6 +2100,32 @@ keyboard and text-size pass per box, the big-lever pass with public-domain sourc
 passes for Starter and Snow Day, loudness levelled across the boxes, and a first impression (trailer, title screen) that
 sells the anthology in ten seconds.
 
+### Worth Its Salt (draft, November 2026)
+
+The owner wanted an incremental in a 3D world that is walked freely, with no run timer, and leaned towards a classic
+(fishing, mining). A research round over the walkable incrementals the owner plays and their neighbours (Berry Bury
+Berry, Sip Fisher, How to Fish, A Game About Digging a Hole, Cast n Chill) found the same shape in all of them: **one
+place that changes visibly** (the lake drains, the hole deepens, walls come down) rather than new places; no clock, the
+limit is the gear; walking is the cost and the upgrades shorten it (Sip Fisher's later walks to the shop are its most
+common complaint); a verb that is good before any upgrade; an absurd or uncanny thread under a cosy surface; a short
+game with a real ending (abrupt endings are what Digging a Hole and Keep on Mining are blamed for).
+
+The owner chose a salt mine whose wall becomes a chapel, after Wieliczka, and asked whether it could look right. The
+answer the prototype tests: **the carving already waits in the rock.** `CORE.relief(x, y)` is a designed altar wall
+(dado, fluted pilasters with capitals, a frieze of rosettes, a scallop-shell niche, St Kinga on a pedestal, the miners'
+crossed hammer and pick in a medallion), and every blow only takes rock off down to it, so the end is as good as the
+design and never depends on where the player struck. The rules keep a grid of cells (7.5 cm) with the depth each is cut
+to; the view draws `max(rough face, min(carving, cut))` into a 920-wide half-float heightfield with a cubic B-spline over
+the cells (bilinear showed every cell's edge), chisel grooves on the cut, crystalline facets on the rough face (rock salt
+breaks along cubes), and bedding that runs on through the carving. The **mason's chalk** on the rough face, drawn where
+the carving steps, shows from the first second where the figure waits and where to strike (rule 10).
+
+Light: the lantern is held low and to the right and a miner's lamp stands by the wall, so the relief is raked rather
+than lit from the eye. A first-person pick built from boxes looked like a stepped black bar and was taken out; a tool in
+the hand needs to be modelled properly or left away. Pacing (prototype tuning): eager 31 to 33 min, casual 66 to 72.
+Still to come before it is a box: automation (helpers or a cart), walking that matters (the cart, a lift), music, the way
+out (a casket in the pedestal with the next number), a proper pick, stickers, a critic round.
+
 ## Lessons from the boxes so far
 
 - **A lid that opens is a model, not a squashed picture.** Scaling the closed lid's picture and growing a lining picture behind it
