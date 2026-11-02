@@ -14,7 +14,7 @@
 //   node test/contents_may_vary.mjs browser                 # needs Playwright's Chromium
 //   node test/contents_may_vary.mjs --page=old.html
 //
-// Suites: registry, budget, contract, saves, pacing, starter, lawn, clew, flurry, warren, guests, browser.
+// Suites: registry, budget, contract, saves, pacing, starter, lawn, clew, flurry, warren, guests, browser, perf.
 
 import {readFileSync, existsSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -121,6 +121,25 @@ if (suites.includes('contract')) {
     check(F.every(f => /^[a-z]+$/.test(f[0]) && f[1] && f[2] && typeof f[3] === 'function'), `${w.id}: every sticker has an id, a name, a description and a test`);
     let threw = null; const got = F.filter(f => { try { return f[3](CORE.init(3)) === true; } catch (e) { threw = e.message; return false; } });
     check(!threw && !got.length, `${w.id}: no sticker is earned in a fresh state, and none throws`, threw || got.map(f => f[0]).join(', '));
+  }
+}
+
+/* ---------------- novice ----------------
+   The eager and casual bots earn faster than a person playing a box for the first time, so a steep start hides from them (the
+   owner played four nights of Unwelcome Guests and could afford one pipe when the bots bought five). A box may bring a third
+   bot, bots.novice: slow, unsure, often off target. Its first ten minutes must bring something new within two minutes and at
+   least six new things in all (the milestones the pacing suite reads). */
+if (suites.includes('pacing') || suites.includes('novice')) {
+  section('novice');
+  for (const w of worlds.filter(w => !w.draft)) {
+    const { CORE, KIT } = load(w); if (!CORE.bots.novice) continue;
+    for (const seed of [1, 2, 3]) {
+      const S = CORE.init(seed), m = { seed: seed * 31 + 7 }; let t = 0, first = null, n = 0, ms = CORE.milestones(S);
+      while (t < 600) { CORE.bots.novice(S, m, .1); CORE.step(S, .1); S.ev.length = 0; t += .1; const k = CORE.milestones(S); if (k !== ms) { ms = k; n++; if (first == null) first = t; } }
+      if (REPORT) console.log(`  ${w.id} novice, seed ${seed}: first new thing at ${first == null ? '-' : first.toFixed(0) + ' s'}, ${n} in ten minutes`);
+      check(first != null && first <= 120, `${w.id}: a newcomer has something new within two minutes (seed ${seed}: ${first == null ? 'never' : first.toFixed(0) + ' s'})`);
+      check(n >= 6, `${w.id}: a newcomer has at least six new things in ten minutes (seed ${seed}: ${n})`);
+    }
   }
 }
 
@@ -1001,6 +1020,65 @@ if (suites.includes('browser')) {
       if (stack[0] === 'starter') check(await p.evaluate(() => CMV.win().K.debug.state().t >= 100), 'post: a fresh box starts with its head start');
       check(p.errs.length === 0, 'stickers, return and post office: no errors on the way', p.errs.join(' | '));
       await p.close();
+    }
+    await b.close(); srv.close();
+  }
+}
+
+/* ---------------- perf ----------------
+   Every box in a late, full moment on a phone (390×844 at twice the pixels), measured from outside the box, so every box is
+   measured alike: the canvas and WebGL draws a frame (counted in every frame, the box's iframe included) and, for a box that
+   draws on a 2D canvas, the main thread's work a frame in Chromium's software renderer. Each box may not grow past its budget
+   below: what it measured when the budgets were set (November 2026) and about a third more. A box that slows down on purpose
+   raises its budget here and says why in CONTENTS_MAY_VARY.md. Firefox on Android pays for every draw call (see the lessons),
+   so a box over a thousand calls a frame is a candidate for the next pass. Needs Chromium; not in the default run.
+     node test/contents_may_vary.mjs perf [--world=<id>] [--report]   */
+if (suites.includes('perf')) {
+  section('perf');
+  let chromium = null;
+  try { ({ chromium } = await import('playwright')); } catch (e) {
+    for (const p of ['/opt/node22/lib/node_modules/playwright/index.mjs', '/opt/node-tools/node_modules/playwright/index.mjs']) { if (!chromium && existsSync(p)) try { ({ chromium } = await import(p)); } catch (e2) {} }
+  }
+  if (!chromium) console.log('  skip  (no Playwright)');
+  else {
+    // where each box is late and full, the budget of draw calls a frame, and of milliseconds a frame (none for WebGL boxes:
+    // SwiftShader draws them at a frame a second, which says nothing about a phone)
+    const LATE = {
+      starter: ['&at=28', 2000, 40], lawn: ['&at=26', 20, 0], clew: ['&scene=board5', 550, 15],
+      flurry: ['&scene=crowd', 1200, 0], warren: ['&scene=crowd', 1300, 40], guests: ['&scene=crowd', 200, 25]
+    };
+    const http = await import('http');
+    const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json' };
+    const srv = http.createServer((q, s) => { const f = join(ROOT, decodeURIComponent(q.url.split('?')[0])); if (!f.startsWith(ROOT) || !existsSync(f)) { s.writeHead(404); return s.end(); } s.writeHead(200, { 'content-type': TYPES[extname(f)] || 'application/octet-stream' }); s.end(readFileSync(f)); });
+    await new Promise(r => srv.listen(0, r));
+    const base = `http://127.0.0.1:${srv.address().port}/games/contents_may_vary.html`;
+    const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+    for (const w of worlds) {
+      const L = LATE[w.id]; if (!L) continue;
+      const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+      await ctx.addInitScript(() => {
+        window.__calls = 0; window.__frames = 0;
+        const wrap = (P, names) => { if (!P) return; for (const n of names) { const f = P.prototype[n]; if (f) P.prototype[n] = function () { window.__calls++; return f.apply(this, arguments); }; } };
+        wrap(window.CanvasRenderingContext2D, ['fill', 'stroke', 'fillRect', 'strokeRect', 'drawImage', 'fillText', 'strokeText', 'putImageData']);
+        wrap(window.WebGL2RenderingContext, ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']);
+        wrap(window.WebGLRenderingContext, ['drawArrays', 'drawElements']);
+        const raf = window.requestAnimationFrame; window.requestAnimationFrame = function (fn) { return raf.call(window, t => { window.__frames++; fn(t); }); };
+      });
+      const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+      await p.goto(base + '?world=' + w.id + L[0]);
+      let fr = null; for (let k = 0; k < 120 && !fr; k++) { fr = p.frames().find(f => f.url() === 'about:srcdoc'); if (!fr) await p.waitForTimeout(250); }
+      await p.waitForTimeout(12000);
+      const cdp = await ctx.newCDPSession(p); await cdp.send('Performance.enable');
+      const metric = async () => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
+      const m0 = await metric(), c0 = await fr.evaluate(() => [window.__calls, window.__frames]);
+      await p.waitForTimeout(5000);
+      const m1 = await metric(), c1 = await fr.evaluate(() => [window.__calls, window.__frames]);
+      const frames = Math.max(1, c1[1] - c0[1]), calls = Math.round((c1[0] - c0[0]) / frames), ms = (m1.TaskDuration - m0.TaskDuration) * 1000 / frames;
+      if (REPORT) console.log(`  ${w.id}: ${calls} draws a frame${L[2] ? `, ${ms.toFixed(1)} ms a frame` : ''} (${frames} frames in 5 s)`);
+      check(!errs.length, `${w.id}: a late scene runs without errors`, errs.join(' | '));
+      check(calls <= L[1], `${w.id}: at most ${L[1]} draw calls a frame late in the box (${calls})`);
+      if (L[2]) check(ms <= L[2], `${w.id}: at most ${L[2]} ms of work a frame late in the box (${ms.toFixed(1)})`);
+      await ctx.close();
     }
     await b.close(); srv.close();
   }

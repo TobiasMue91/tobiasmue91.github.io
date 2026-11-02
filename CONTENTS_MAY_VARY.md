@@ -2069,6 +2069,37 @@ Before the core is written, answer each with one sentence:
 A box that answers these in a dull way (pull a ball back and let it go; tap an arrow at a junction)
 is not saved by its art direction: the owner played both and stopped.
 
+### Measuring the whole stack (November 2026)
+
+After Unwelcome Guests the owner asked for what the whole anthology needs to shine under a commercial lens. Agreed: no common
+thread, no shared mechanics and no shared interface between boxes ("the more different, the better"); everything else was
+taken up. Done in that session:
+
+- **A performance budget for every box** (`npm run test:cmv:perf`): each box in a late, full moment on a phone, measured alike
+  from outside the box (draw calls a frame for every box; for a 2D box the main thread's work a frame in Chromium's software
+  renderer). Measured then: Starter 1,537 draws and 22 ms, Keep Off the Grass 8 draws, Tilt 412 and 7 ms, Snow Day 1,071
+  draws, Here Be Rabbits 918 and 18 ms, Unwelcome Guests 84 and 15 ms. The budgets are those and about a third more, so a box
+  may not quietly get slower. Starter and Snow Day draw over a thousand times a frame, which Firefox on Android pays for one by
+  one: the next candidates for a pass.
+- **A newcomer bot** (`bots.novice`, the `novice` suite): the eager and casual bots earn faster than a person new to a box, so a
+  steep start hides from them. A box that brings one must give a newcomer something new within two minutes and six new things
+  in ten. Unwelcome Guests has one; the other boxes should get theirs in their next pass.
+- **Notes from real players**: the packing slip of every box has *A note on this box* (one to five stars, where it dragged,
+  what was liked), kept with the save; the shell quietly keeps how long the first new thing took and at what progress a player
+  left the box. *Copy all notes* gives it all as plain text to hand to the session that works on a box.
+- **Touch targets of 44 px**: measured on a 390 px phone, every control of every box; the shell's menu button (42 px),
+  Starter's peek (30 px, now a larger invisible hit area round the same disc) and Here Be Rabbits' *Auto* (30 px high) were
+  short and are mended.
+- **Keep Off the Grass's cup in software GL**: the browser suite's kick-off checks wait up to two minutes of real time, and in
+  this container's SwiftShader the cup pitch draws about one frame in four seconds (the same before this session), so they
+  can fail here while passing on a GPU. A run that fails only those two is not a regression; the cup pitch's draw cost is
+  worth a look in Keep Off the Grass's next pass.
+
+Left for later, each too large for one session: a German translation (per box, text lives in cores and views alike), a
+keyboard and text-size pass per box, the big-lever pass with public-domain sources for the boxes that have none, draw-call
+passes for Starter and Snow Day, loudness levelled across the boxes, and a first impression (trailer, title screen) that
+sells the anthology in ten seconds.
+
 ## Lessons from the boxes so far
 
 - **A lid that opens is a model, not a squashed picture.** Scaling the closed lid's picture and growing a lining picture behind it
