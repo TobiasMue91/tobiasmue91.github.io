@@ -1387,6 +1387,17 @@ still undone, most valuable first:
     under the valance); the house's tile was painted afresh, its canvas allocated anew, twice a second as the moon moved (the
     moon now moves only the sky); forty traced silhouettes were filled path by path every frame (each figure, step and rim is
     now a bitmap made once at the camera's scale).
+  - *Peaks and choices* (the owner chose two of three: a frenzy and a booking a night; an exorcist who ends a night early was
+    turned down as needless frustration, and nights had felt short). Every hit fills a meter under the ectoplasm; full, the
+    whirl runs wild for seven seconds (gold ribbons, POLTERGEIST! across the screen, the piano agitato): it lifts one tier
+    heavier, carries more, spins faster, drains nothing and screams pay half again; each frenzy in a night wants more. A first
+    version lifted everything and paid double, and the first night emptied the house. Before every night from the third, three
+    bookings are offered and one taken: an ordinary night, a séance (sitters and a medium whose lamp drains the ghost, screams
+    worth half again), a Halloween ball (twelve dancers, a short night), a thunderstorm (thunder frightens the whole house, the
+    ghost stronger), buyers (hard to frighten, worth six), a full moon (more ectoplasm). Nights last longer (15 s of ectoplasm,
+    dawn at 46 s). The sticker *Not a cup out of place* made way for *Poltergeist* (four frenzies in a night).
+    The curtain was drawn in device pixels and scaled by the device's pixel ratio once more: lopsided on any screen but a
+    test browser's. Pacing: eager 32.8–33.7, casual 53.3–57.5, the longest wait 5.0 min.
   - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
     for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
     "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one
