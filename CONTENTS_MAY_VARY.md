@@ -2156,6 +2156,15 @@ The first build ran its sky, wind and water on `K.loop`'s second argument, which
 not seconds: the owner saw clouds race and trees shiver at a thousand times their pace. A view keeps its own clock
 (`now += dt`), which also stops with the box when it is paused.
 
+The owner then could not land a single fish: the line always snapped. A person strikes and keeps the finger down, so
+the reel winds against the first run, and with the first tackle a perch loaded the line past its strength and snapped
+it in 0.4 s, quicker than anyone sees the bar and lets go. Measured with two people in the rules (one who always holds,
+one who lets go half a second after the line passes 90 %), both lost every perch. Now the reel loads the line less, an
+overloaded line holds for 1.1 s times the rod's soak (2.5 times that for the first three fish), and the line creaks, the
+phone buzzes and the hint says *Red! Let go!*. After three fish the one who always holds lands every roach and about
+half the perch, the late one four in five: holding through works at first, letting go is learned from the perch.
+`.work/fish/naive.mjs` was the measure; the bots never showed it, because they let go at once.
+
 Still open: the owner's verdict on the catch; music (ask first); a proper look pass (the trees are lumps of spheres,
 the rod a ribbon); the second rod's bell needs the walk to matter; stickers; critics.
 

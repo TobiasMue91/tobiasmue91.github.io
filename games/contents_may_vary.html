@@ -14802,7 +14802,7 @@ function drain() {
     else if (e.k === 'early') { flash('Too soon — wait for it to go under.'); }
     else if (e.k === 'missed') { flash('Too late — it took the bait and went.'); }
     else if (e.k === 'run') { const p = floatPos(); if (p && Math.random() < .5) splash(p[0], p[1], 8, .7); }
-    else if (e.k === 'snap') { flash('Snap! The line broke.'); tone(900, .08, .2, 0, 300, 'square'); rodBend = 0; }
+    else if (e.k === 'snap') { flash('Snap! Let go when the line turns red — it gives the fish line.'); tone(900, .08, .2, 0, 300, 'square'); rodBend = 0; }
     else if (e.k === 'gone') { flash('It ran off with all the line.'); }
     else if (e.k === 'catch') { showCatch(e); jingle(e.first); if (S.caught % 25 === 0) flash(S.caught + ' fish off this jetty. Another notch in the post.'); const p = floatPos(); splash(eyeP[0] + fwd[0] * 1.5, eyeP[2] + fwd[2] * 1.5, 18); }
     else if (e.k === 'collect') { flash(`The second rod: a ${NAME[e.f].toLowerCase()}, ${e.w.toFixed(2)} kg, £${e.v.toFixed(2)}.`); jingle(0); }
@@ -14811,7 +14811,7 @@ function drain() {
   }
   S.ev.length = 0;
 }
-let dip = 0, flashT = 0;
+let dip = 0, flashT = 0, strainT = 0;
 function flash(t) { $('flash').textContent = t; $('flash').classList.add('on'); flashT = 2.4; }
 function showCatch(e) {
   const c = $('catch'); c.classList.add('on');
@@ -14856,7 +14856,8 @@ function frame(dt) {
   // the fish's side-to-side, the rod's bend, the float's dip
   if (S.phase === 'fight' && S.fish) { const F = S.fish; fishSide += ((F.run ? F.dir * min(4, F.dist * .3) : fishSide * .6) - fishSide) * min(1, dt * .8); rodBend += (min(1.2, F.tens) - rodBend) * min(1, dt * 8);
     if (AU) { AU.reelT -= dt * (S.hold ? 18 : F.run ? 26 : 0); if (AU.reelT < 0) { AU.reelT = 1; nz(.02, S.hold ? 3000 : 4200, 4, S.hold ? .05 : .08); } }
-    if (F.run && Math.random() < dt * 3 && fp) ripple(fp[0], fp[1], .5); }
+    if (F.run && Math.random() < dt * 3 && fp) ripple(fp[0], fp[1], .5);
+    strainT -= dt; if (F.tens > .95 && strainT <= 0) { strainT = .25; nz(.18, 700 + F.tens * 300, 6, .07, 'bandpass'); try { navigator.vibrate && navigator.vibrate(25); } catch (e) {} } }
   else { fishSide *= .9; rodBend += (0 - rodBend) * min(1, dt * 4); }
   rodLift += (0 - rodLift) * min(1, dt * 3); dip = max(0, dip - dt * 1.5);
   if (cast.fly < 1 && S.bob) { cast.fly = min(1, cast.fly + dt / .9); if (cast.fly >= 1 && fp) { splash(fp[0], fp[1], 6, .5); plop(0); } }
@@ -14869,7 +14870,7 @@ function frame(dt) {
   const fight = S.phase === 'fight' && S.fish;
   document.body.classList.toggle('fight', !!fight); document.body.classList.toggle('busy', S.phase !== 'idle');
   if (fight) { const F = S.fish; $('tens').style.width = min(100, F.tens * 100) + '%'; $('tens').className = F.tens > 1 ? 'hot' : F.tens > .85 ? 'warm' : ''; $('dist').textContent = F.dist.toFixed(1) + ' m'; }
-  hint(S.phase === 'idle' && !hints.cast ? 'Swipe up to cast' : S.phase === 'bite' && !hints.strike ? 'Now! Tap!' : S.phase === 'wait' && !hints.strike ? 'Wait for the float to go under…' : fight && !hints.reel ? 'Hold to reel in · let go when the line is tight' : '');
+  hint(S.phase === 'idle' && !hints.cast ? 'Swipe up to cast' : S.phase === 'bite' && !hints.strike ? 'Now! Tap!' : S.phase === 'wait' && !hints.strike ? 'Wait for the float to go under…' : fight && !hints.reel ? (S.fish.tens > .95 ? 'Red! Let go!' : 'Hold to reel in · let go when it turns red') : '');
   if (fight && S.fish.dist < S.bob.d * .6) hints.reel = 1;
   $('charge').style.transform = `scaleY(${charge})`; $('charge').parentNode.classList.toggle('on', !!(press && press.mode === 'cast'));
   if (flashT > 0) { flashT -= dt; if (flashT <= 0) $('flash').classList.remove('on'); }
@@ -15054,6 +15055,9 @@ const CORE = (() => {
   // what the tackle does
   const castMax = S => 9 + 2.6 * S.lv.rod, reach = S => 5 * S.lv.jetty;
   const strength = S => 1 + .42 * S.lv.line, soak = S => 1 + .22 * S.lv.rod, reelSpeed = S => 1.5 * (1 + .3 * S.lv.reel);
+  // how long a line may stay overloaded before it snaps: a person needs most of a second to see it and let go;
+  // the first few fish are forgiven more, while the hands learn
+  const grace = S => 1.1 * soak(S) * (S.caught < 3 ? 2.5 : 1);
   const window = S => .7 * (1 + .3 * S.lv.hook), biteMean = S => 7 * .84 ** S.lv.bait, worth = S => 1 + .3 * S.lv.smoke;
   const todOf = S => { const u = (S.t % DAY) / DAY; let n = 'dawn'; for (const [a, k] of TOD) if (u >= a) n = k; return n; };
   const BIT = { dawn: 1, day: 2, dusk: 4, night: 8 };
@@ -15106,15 +15110,15 @@ const CORE = (() => {
     const tired = F.stam <= 0, pull = F.str * (F.run ? 1 + .3 * min(1, F.stam / 6) : tired ? .12 : .3);
     let hold = S.hold;
     const sStr = strength(S) * soak(S);
-    let force = hold ? pull + .3 * F.str + .18 : pull * .35;
+    let force = hold ? pull + .12 * F.str + .08 : pull * .35;
     if (hold && S.lv.brake && force / sStr > .92) { hold = 0; force = pull * .35; }   // the brake gives line for you
     F.tens = force / sStr;
     if (hold) F.dist -= reelSpeed(S) * dt * (F.run ? .2 : 1);
     else if (F.run) F.dist += (.9 + F.str * .25) * dt;
     if (F.run) F.stam -= dt * (hold ? 1.3 : .6);
     else if (!tired && !hold) F.stam = min(F.stam + dt * .15, 30);
-    if (F.tens > 1) F.over += dt; else F.over = max(0, F.over - dt * 2);
-    if (F.over > .4 * soak(S)) { ev(S, { k: 'snap', f: F.k }); S.snaps++; S.lost++; S.fish = null; S.phase = 'idle'; S.bob = null; return; }
+    if (F.tens > 1) F.over += dt; else F.over = max(0, F.over - dt * 3);
+    if (F.over > grace(S)) { ev(S, { k: 'snap', f: F.k }); S.snaps++; S.lost++; S.fish = null; S.phase = 'idle'; S.bob = null; return; }
     if (F.dist > castMax(S) + reach(S) + 14) { ev(S, { k: 'gone', f: F.k }); S.lost++; S.fish = null; S.phase = 'idle'; S.bob = null; return; }
     if (F.dist <= 1.2) land(S);
   }
@@ -15210,6 +15214,8 @@ const CORE = (() => {
 })();
 </script>
 <!-- end of jetty -->
+
+
 
 
 
