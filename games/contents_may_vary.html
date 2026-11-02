@@ -293,6 +293,12 @@ details.more summary{cursor:pointer;font-weight:700;font-size:13px;letter-spacin
     <div class="set"><label for="sMusic">Music</label><input type="range" id="sMusic" min="0" max="1" step="0.05"></div>
     <div class="set"><span>Motion</span><div class="seg" id="sMotion"><button data-v="full">Full</button><button data-v="reduced">Reduced</button></div></div>
   </div>
+  <details class="more" id="mNote"><summary>A note on this box</summary>
+    <p class="fine">For the maker: how is this box, and where did it start to drag? Kept with your save; copy them all to send.</p>
+    <div class="seg" id="sStars" aria-label="How is this box"><button data-v="1">★</button><button data-v="2">★★</button><button data-v="3">★★★</button><button data-v="4">★★★★</button><button data-v="5">★★★★★</button></div>
+    <textarea id="sNote" spellcheck="true" aria-label="Your note" placeholder="Where did it drag? What did you like?"></textarea>
+    <div class="acts" style="flex-direction:row"><button class="sbtn" id="sNotes">Copy all notes</button></div>
+  </details>
   <details class="more"><summary>Save file</summary>
     <p class="fine">Progress is kept in this browser. Copy the code below to keep it elsewhere, or paste one in to load it.</p>
     <textarea id="sCode" spellcheck="false" aria-label="Save code"></textarea>
@@ -803,6 +809,8 @@ const CMV = window.CMV = (() => {
     $('#sCode').value = '';
     $('#sRestart').hidden = live.slot !== 'main';
     $('#sReturn').hidden = live.slot !== 'main' || !!rec(w.id).done;
+    const nr = live.slot === 'main' ? rec(w.id) : null; $('#mNote').hidden = !nr;
+    if (nr) { $('#sNote').value = nr.note || ''; for (const b of $('#sStars').children) b.setAttribute('aria-pressed', +b.dataset.v === nr.stars); }
     const F = featsOf(w), M = $('#mFeats'); M.innerHTML = '';
     $('#mFeatN').textContent = F.filter(f => SAVE.feats[w.id + '.' + f[0]]).length + ' of ' + F.length;
     for (const f of F) M.appendChild(stk(w.id + '.' + f[0], f));
@@ -1091,6 +1099,16 @@ const CMV = window.CMV = (() => {
     $('#tPost').onclick = () => { unlock(); postOffice(); }; $('#poClose').onclick = titleScreen; $('#poRepack').onclick = repack;
     $('#shClose').onclick = () => { if (live && live.ready) resumeFromShelf(); else titleScreen(); };
     $('#sSound').oninput = e => { SAVE.settings.sound = +e.target.value; applySettings(); };
+    // a player's note on a box, and the quiet measures the shell keeps: all of it as text to send to the maker
+    for (const b of $('#sStars').children) b.onclick = () => { const r = rec(live.w.id); r.stars = +b.dataset.v; for (const x of $('#sStars').children) x.setAttribute('aria-pressed', x === b); writeSave(); };
+    $('#sNote').oninput = e => { rec(live.w.id).note = e.target.value.slice(0, 2000); writeSave(); };
+    $('#sNotes').onclick = () => {
+      pull(); const L = ['Contents May Vary, notes of ' + new Date().toISOString().slice(0, 10)];
+      for (const w of WORLDS) { const r = SAVE.worlds[w.id]; if (!r || !(r.time > 0)) continue;
+        L.push(`№${w.n} ${w.title} (${w.id}): ${r.stars ? '★'.repeat(r.stars) : 'no stars'}, ${KIT.time(r.time)} inside, ${Math.round((r.progress || 0) * 100)}%${r.done ? ', opened' : ''}` +
+          (r.firstNew != null ? `, first new thing after ${KIT.time(r.firstNew)}` : '') + (r.left && r.left.length ? `, left at ${r.left.map(x => x + '%').join(' ')}` : '') + (r.note ? `\n  “${r.note}”` : '')); }
+      const t = L.join('\n'); $('#sCode').value = t; $('#sCode').closest('details').open = true; try { navigator.clipboard.writeText(t).catch(() => {}); } catch (e) {}
+    };
     $('#sMusic').oninput = e => { SAVE.settings.music = +e.target.value; applySettings(); };
     for (const b of $('#sMotion').children) b.onclick = () => { SAVE.settings.motion = b.dataset.v; for (const x of $('#sMotion').children) x.setAttribute('aria-pressed', x === b); applySettings(); };
     $('#sCopy').onclick = () => { award('cmv.copy'); pull(); writeSave(); const code = btoa(unescape(encodeURIComponent(JSON.stringify(SAVE)))); $('#sCode').value = code; $('#sCode').select(); navigator.clipboard && navigator.clipboard.writeText(code).catch(() => {}); };
@@ -1111,13 +1129,14 @@ const CMV = window.CMV = (() => {
     if (WORLDS.every(x => SAVE.opened.includes(x.id)) && !SAVE.skipped.length) { award('cmv.careful', true); if (WORLDS.reduce((a, x) => a + (rec(x.id).time || 0), 0) < 4 * 3600) award('cmv.nextday', true); }
     setInterval(() => {
       if (!live || !live.ready || state !== 'playing' || live.slot === 'dev') return;
-      const k = K(live); try { checkBox(live.w, k && k.peek()); } catch (e) {}
+      const k = K(live); let st = null; try { st = k && k.peek(); checkBox(live.w, st); } catch (e) {}
+      if (live.slot === 'main' && st) { const r = rec(live.w.id), core = coreOf(live.w); if (r.firstNew == null && core) { try { const ms = core.milestones(st); if (r.ms0 == null) r.ms0 = ms; else if (ms !== r.ms0) { pull(); r.firstNew = Math.round(r.time); } } catch (e) {} } }
       if (new Date().getHours() < 4) award('cmv.night');
     }, 2000);
     setInterval(() => { if (live && live.ready && state === 'playing' && live.slot !== 'dev') writeSave(); }, 5000);
     let hiddenAt = 0;
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { hiddenAt = Date.now(); if (live && live.slot !== 'dev') writeSave(); setPaused(true); }
+      if (document.hidden) { hiddenAt = Date.now(); if (live && live.slot === 'main') { const r = rec(live.w.id), pc = Math.round((r.progress || 0) * 100); r.left = (r.left || []).concat(pc).slice(-8); } if (live && live.slot !== 'dev') writeSave(); setPaused(true); }
       else { const k = K(live); if (k && hiddenAt) k._away((Date.now() - hiddenAt) / 1000); if (state === 'playing' && !menuOpen) setPaused(false); }
     });
     addEventListener('pagehide', () => { if (live && live.slot !== 'dev') writeSave(); });
@@ -14075,12 +14094,16 @@ const CORE = (() => {
       const p = m.aim, pf = p.climb > 0 ? p.to : p.f, px = p.climb > 0 ? STAIR + 40 : p.x, side = -fleeDir(S, p), R = reachOf(S);
       const sweep = sin(m.t * 2.2) * R * .35;
       const gx = clamp(px + side * R * o.lead + sweep + (r() - .5) * o.wobble, 20, RW(pf) - 20), gy = -pf * FH - p.h * .5;
+      // a newcomer's hand wanders: now and then the whirl goes somewhere that helps nobody
+      if (o.aimless && r() < o.aimless) { act(S, 'ghost', 100 + r() * 800, -floorAt(G.y) * FH - 150 - r() * 120); m.busy = o.react * 2; return; }
       act(S, 'ghost', gx, gy); m.busy = o.react * (.6 + .8 * r());
     };
   }
   const bots = {
     eager: person({ react: .28, buy: 1.1, read: 6, lead: .55, wobble: 50, retarget: 3, armful: .6, letGo: .8 }),
-    casual: person({ react: .6, buy: 2.4, read: 14, lead: .7, wobble: 120, retarget: 1.5, armful: .4, letGo: .4, breakEvery: 160, breakLen: 25 })
+    casual: person({ react: .6, buy: 2.4, read: 14, lead: .7, wobble: 120, retarget: 1.5, armful: .4, letGo: .4, breakEvery: 160, breakLen: 25 }),
+    // someone playing for the first time: slow, unsure, often off target, and reading every pipe before buying it
+    novice: person({ react: .95, buy: 5, read: 25, lead: .9, wobble: 220, retarget: 1, armful: .3, letGo: .2, aimless: .25 })
   };
   const pace = { eager: 32, casual: 85, gap: 5 };
   // stickers the shell hands out: [id, name, what earns it, a test on the state]

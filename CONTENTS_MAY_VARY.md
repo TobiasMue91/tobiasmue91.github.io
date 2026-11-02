@@ -2069,6 +2069,25 @@ Before the core is written, answer each with one sentence:
 A box that answers these in a dull way (pull a ball back and let it go; tap an arrow at a junction)
 is not saved by its art direction: the owner played both and stopped.
 
+### Measuring the whole stack (November 2026)
+
+After Unwelcome Guests the owner asked for what the whole anthology needs to shine under a commercial lens. Agreed: no common
+thread, no shared mechanics and no shared interface between boxes ("the more different, the better"); everything else was
+taken up. Done in that session:
+
+- **A performance budget for every box** (`npm run test:cmv:perf`): each box in a late, full moment on a phone, measured alike
+  from outside the box (draw calls a frame for every box; for a 2D box the main thread's work a frame in Chromium's software
+  renderer). Measured then: Starter 1,537 draws and 22 ms, Keep Off the Grass 8 draws, Tilt 412 and 7 ms, Snow Day 1,071
+  draws, Here Be Rabbits 918 and 18 ms, Unwelcome Guests 84 and 15 ms. The budgets are those and about a third more, so a box
+  may not quietly get slower. Starter and Snow Day draw over a thousand times a frame, which Firefox on Android pays for one by
+  one: the next candidates for a pass.
+- **A newcomer bot** (`bots.novice`, the `novice` suite): the eager and casual bots earn faster than a person new to a box, so a
+  steep start hides from them. A box that brings one must give a newcomer something new within two minutes and six new things
+  in ten. Unwelcome Guests has one; the other boxes should get theirs in their next pass.
+- **Notes from real players**: the packing slip of every box has *A note on this box* (one to five stars, where it dragged,
+  what was liked), kept with the save; the shell quietly keeps how long the first new thing took and at what progress a player
+  left the box. *Copy all notes* gives it all as plain text to hand to the session that works on a box.
+
 ## Lessons from the boxes so far
 
 - **A lid that opens is a model, not a squashed picture.** Scaling the closed lid's picture and growing a lining picture behind it
