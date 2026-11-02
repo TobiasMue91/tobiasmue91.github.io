@@ -40,6 +40,9 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    Snow Day may weigh **230 KB**: its refinement session (October 2026) began at 116 KB and passed 130 KB with its scenes,
    close-ups and diagnostic switches and the first round of art (cotton-wool snow, wood, the leaders, the present); the owner
    lifted the cap in advance.
+   Unwelcome Guests may weigh **260 KB**: for its refinement session (November 2026, rule 16) the owner let it be remade
+   from the verb up (a poltergeist's whirl in place of the cold that herded people) and lifted the cap; the remade box
+   began at 145 KB with its scenes, close-ups and diagnostic switches.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -267,11 +270,11 @@ The long-term answer is a habit and a tool:
 | 3 | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
-| 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft) | hold a finger on the house and drag: the ghost glides after it and its cold drives people away; tap a doorway, the telephone, the chandelier | short nights against ectoplasm and the dawn, the organ between them; every exit costs a pip of resolve for good; five casts, from a family of three to a film company and thirty extras | silent film: Reiniger cut-outs, black people before grey furniture, frost round a cream card ghost, tinted stock, grain, intertitles, iris | night blue, cream, black; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought, a telephone, a crash | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
+| 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft, shipped as a cold that herded people, remade in November 2026 as a poltergeist) | hold a finger on the house: a whirl follows it, tears loose whatever it passes (teacups and candles first, chairs, then the long-case clock and the armour, last the piano and the chandelier) and carries it round; what it carries hits people; let go and it all crashes down, or with Fling flies on | short nights against ectoplasm and the dawn, the organ between them; a hit frightens and shoves, past their nerve they panic and run out of the door, and every exit costs a pip of resolve for good; five casts, from a family of three to a film company and twenty-six extras | silent film in coloured cut paper: black silhouettes before rooms of lit, tinted paper (teal, ochre, wine, green, violet, rose), what is built in one plane back in the room's own shade, a cream card ghost, grain, intertitles, iris | indigo night, six room colours, black, cream; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought; porcelain, thuds, smashes and the whirl's wind | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 35–36 / 62–64 (after its refinement session),
-Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–38 / 71–78.
+Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–37 / 66–71 (remade, November 2026).
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -1271,9 +1274,137 @@ still undone, most valuable first:
     peaks at −10 dB, average −32. Nothing clips; nothing changed.
   - *Cost of a frame* (`?fps`, the world map's largest horde, phone, headless software rendering): about 2,000 rabbits drawn,
     1,800 draw calls, horde 29 ms, land 7 to 14 ms. Nobody has measured it on a real phone yet.
-- **Unwelcome Guests** (box 6, remade; the notes below are the old draft's, kept where they still apply): a graphics pass for glitches at phone size first; then more of Reiniger in the puppets (finer filigree, lace that reads at phone size),
-  the cast list and repertoire in fewer, larger plates on a phone, and a fresh critique of the reworked
-  haunt, which nobody but its author has seen yet.
+- **Unwelcome Guests** (box 6). **The refinement session** (November 2026, rule 16). The owner found it the least fun of the
+  boxes (though its music among the best), lifted the cap (rule 2: 260 KB) and let everything be remade.
+  - *Why it was not fun, counted by the bots.* A hundred nights of 24 seconds; 80% ended because the ectoplasm ran out; one in
+    five nights nobody left; a panic (the state that sends someone to the door by themselves) came two or three times in the
+    whole game, so the pipes that act on it did nothing; the bots never slammed a door; the organ took 1.4 of 40 minutes; minute
+    25 looked like minute 1. A fresh critic scored 6/4/6/5/4 and 3: the verb is a leash, the night ends on a timer, feedback is
+    text, crowds are a black mass, the finger covers the ghost.
+  - *Chosen* (rule 5, nine pairs; the owner picked the first, liking the second's theme more): **the poltergeist's whirl**, over a
+    night parade of tsukumogami in an Edo inn (woodblock print), and shaking a dollhouse. The look keeps the silhouette film and
+    the music, and moves from Reiniger's grey to Michel Ocelot's lit colour.
+  - *The core, `CORE.version` 3* (`migrate` starts versions 1 and 2 afresh; `revisit` brings the picture people back for another
+    take, the organ kept). Thirty-eight things in six rooms in four tiers (the grip pipes open each); each has a mass, crockery
+    breaks. A hit frightens by the power of the mass and shoves away from the whirl; a panicking person runs for the nearest way
+    out and a hit only speeds them on; nobody is pinned against the far wall (they duck past). Screams are paid by the hit, not
+    by the share of someone's nerve, so a bigger cast pays more. Pipes that change the game: the grip (chairs, clocks and
+    armour, the piano), doors that slam as the whirl passes, Fling, the grey lady's whirl, imps that throw things in other
+    rooms, a stampede, heirlooms worth five. Stickers: the piano, eight in a row, ten in a night, three out with nothing broken,
+    the full organ (a whole game by a bot earns two or three).
+  - *Two bugs that held up the first tuning.* A thing standing on a floor (`y = -f * FH`) was counted to the floor below, so the
+    whirl never picked up a chair and the bot hovered over it all night; a panicking person hit from the door's side was shoved
+    against the far wall and pinned there by the whirl for the rest of the night.
+  - *Pacing* (three seeds): eager 35.0–36.6 min, casual 66.4–71.2, the longest wait 1.5 min; the first night lasts 15 seconds,
+    gets one or two out and pays for the first pipe.
+  - *Tools.* `?world=guests&scene=<name>` (first, night<n>, organ<n>, reel<n>, grip<n>, fling, grey, imps, slam, piano, crash,
+    panic, crowd, finale, end), `K.debug.look(x, y, scale, { freeze })` (x may be `ghost`, `item:<kind>`, `person:<id>`,
+    `door`, `crate`), 19 close-ups in `K.debug.props`, `snap()`; `?fps` (`=flush` in the test browser only), `?dpr=`, `?fx=0`,
+    `?film=0`, `?people=0`, `?things=0`, `?whirl=0`. Every thing is a sprite made once per scale; sequences wait on game time.
+  - *Critic rounds on the remake.* First (phone and desktop filmstrips, real input): 6/4/6/6/5 and **4**. Changed after it:
+    the counter starts at 0, labels and screams move out of each other's way, the pale rim only on someone frightened, a
+    bolder whirl and larger crockery, the ring kept inside the walls, the coat cut to the body, the organ's register whole on
+    a phone, on a desktop a larger house and the cast in a column.
+  - *Second round* (fresh critic, same captures): 7/5/7/6/6 and **5**. Changed after it and the close-ups
+    (`util/cmv_props.mjs guests`, 19 tiles): a heavy hit knocks someone over about their feet and they get up again; the
+    ghost swells with what it carries; hands with a thumb, hair, legs with some weight to them; a portrait is an ancestor's
+    silhouette on a pale oval; calm people keep a little apart, so a crowd stands as people; the whirl and what it carries
+    are clipped to the house, and nothing in the ring comes closer to a wall than its own half-width; every lesson is said in
+    one place, in the sky over the roof, and THE DOOR is named only once someone panics; the bar says reel and night; a night
+    that got someone out is not called a fade; on a desktop the cast column, the counter and the bill are larger.
+    Pacing after it: eager 33.0–37.0, casual 73.7–76.1, the longest wait 2.3 min.
+  - *Third pass.* The people are no longer one template with a hat each: a build and a nose of their own, a bustle, a train,
+    a fringed dress, an apron, a shawl, a stooping professor with a cane, a camera on Sparks's shoulder, girls with legs under
+    a knee-length frock (`K.debug.lineup()` draws every look side by side). Locked pipes show their emblem, dimmed. On a wide
+    screen the film is shown in a picture house: red velvet curtains held back with gold ropes, a valance with a fringe,
+    painted once and laid over the film in one draw. Sound measured offline: the densest moment (four heavy hits, the piano
+    landing, china smashing, a door slamming, at once) peaked at −1 dB and now at −4 dB; nothing clips.
+  - *The close-up critic* (19 tiles, the checklist): Edith climbing the stair stood through the ceiling (each floor now has a
+    hole for the stair, with a rail round it); a figure knocked over rotated through floors and walls (clipped to its room);
+    doorways between rooms were wall stubs ending in the air (a lintel and posts); the armour was boxes (one silhouette with
+    pauldrons, a gauntlet round the spear); the piano read as a sideboard (pale keys in every look); the rocking horse
+    floated over its rocker; candles in the whirl burnt upside down (blown out in the air); the range had no hob; the lamp
+    by the front door hung on the sky (a bracket); the door was a slab (panels and a knob). Six tiles aimed at nothing, the
+    props list's fault: they aim at the last hit, slam, imp or landing now, and the curtains stay off in a close-up.
+  - *Third critic round* (fresh, filmstrips): 7/5/7/6/6 and **5** again, the plateau. Done after it: what the whirl carries
+    keeps a pale paper edge of a fixed width on screen, so a piano in a heap of chairs still reads; the whirl draws torn
+    paper scraps spiralling in instead of frost crystals (critics read the crystals as snow); OUT! and the scream plates stay
+    inside the house; half the extras are a breath lighter than black, so a crowd has depth (lighter still read as
+    see-through); the HUD fades out faster when the organ comes; the bed has a frame, the maid's apron is a bib in half-tone
+    (a white bar read as a hole); the intertitle card fills more of the screen; on a phone the house sits higher.
+    The owner looked at the frame rate on their phone and found it fine.
+  - *Fourth round* (fresh critic, after paper layers, wallpapers and copy): 7/5/6/6/5 and **4**, the plateau again, now with
+    one critic's spread. Done after it: the cellar opens with the iris from black after the night's card (the card, the
+    organ and the cast cards had shown through each other for a frame); the film's scratch lines are gone (two critics took
+    them for a rendering fault; the dust specks stay); screams stay under the roof; the front door's leaf is drawn in the
+    frame and flung wide when someone bolts through it, then swings back; a lesson sits in a slot measured under the bill;
+    plates fly to the counter sooner; a heavy hit holds only its victim for a moment; the ring spreads heavy things further
+    out; the organ's copy is plainer. Pacing after it: eager 34.3–36.5, casual 70.1–70.8 (two seeds).
+  - *The people, traced from period silhouettes* (the owner's go-ahead for the large lever, rule 16). Every figure now comes
+    from a cut-paper silhouette of the 1830s and 1840s in the Metropolitan Museum of Art's Open Access collection (CC0,
+    public domain; most by Auguste Edouart, d. 1861, one by J. D. Croome): Harold is James Tooley with his top hat and cane,
+    the professor Aaron Willard with spectacles in his hand, Teddy George Wright holding a cup, Kessler J. Schwartz Massett
+    reading, Sparks the Reverend Gorham Abbott with both hands out; the ladies are Kate Lucas (without her dog) and a young
+    girl with long braids; Cyril is Harry Lucas; extras draw from eight gentlemen and the two ladies.
+    `util/guests/silhouettes.py` fetches them through the museum's API, finds the figure, traces it with potrace into a path
+    1000 high with its feet on y = 0, and measures the trouser legs; the table `SIL` in the view is its output (about 23 KB).
+    A gentleman walking is cut at the knee and his shins swing below it; a lady's skirt hides her feet, so she bobs like a
+    puppet on its stick. Wikimedia Commons, where most of these are also kept, refuses requests from this environment.
+  - *Fifth round* (fresh critic, with the traced people): 7/**6**/7/6/6 and **5**; the traced silhouettes are "the best thing
+    here". Done after it: what the whirl carries goes round behind the people, so whoever it hits is seen; extras are all
+    black again (a shade lighter read as see-through); the upstairs windows are frames with an open casement, not cream tabs.
+    Next, by the critic's list: the props are still drawn from primitives beside traced people (the same lever again: cut-paper
+    furniture of the period, Edouart's own chairs, tables and harp, traced the same way), every reel in the same staging, the
+    boxed small-caps panels everywhere.
+  - *The owner's first play* (November 2026): four nights from the start bought one pipe. The tuning had raised every price by
+    one factor to fit the bots' pace, so after the first pipe (14) the cheapest cost 240, eight first nights for a person (the
+    bots earn more a night than a person does, so their pacing never showed it). Each register now starts cheap (14, 35, 50,
+    90) and grows steeply to the same top; the later casts have more nerve to keep the pace (eager 36.8–38.2, casual
+    80.3–83.8, the longest wait 3.4 min). The suite wants four pipes under two first nights.
+  - *The owner's verdict on the remake* (November 2026): still the dullest box; repetitive after five minutes, the number of
+    people in the house (on which the score depends) is not theirs to change, little growth, nothing left to discover. Three
+    answers compared (rule 5): **A, the house's reputation** (screams spread rumours, the organ buys more and new kinds of
+    guests, the house is built onto: cellar, attic, crypt, tower); **B, a haunting on tour** (a new house each stage: cottage,
+    hotel, opera, castle); **C, haunting cards** (one of three random rule-changing cards a night). A answers every point (the
+    crowd is the player's to grow, as in Garbage Growth; the house grows in the frame), B escalates but keeps the cast
+    fixed, C varies without growing. Chosen: A, with B's new scenery as the annexes; the owner lets the house change shape.
+  - *The house's reputation, built* (`CORE.version` 4; `migrate` starts versions 1 to 3 afresh). The Pembertons live in the
+    house and come back every night; everyone else is a guest the organ's third register draws (more visitors, then new
+    kinds: neighbours, men of science who scoff at teacups, ghost hunters whose lanterns drain the ghost, reporters whose
+    flash in a panic frightens their floor, a wedding party braver two by two, the picture people). Guests' nerve does not
+    grow with fame: a first version made them braver as the house grew famous, and the bots never drove out more than eleven
+    a night whatever they bought (the escalation cancelled itself out); with fixed nerve and braver kinds, a late night
+    drives out thirty and more. The house is built onto (a wine cellar with the old kitchen, an attic under a new roof, the
+    crypt, a tower with a spire), each floor with its own light, paper and furniture and things to tear loose (casks,
+    bottles, urns, coffins, trunks, birdcages, a telescope, a globe); the stair at the left joins them all. A house taller
+    than the screen keeps its size and the camera follows the ghost up and down; the house is painted into a tile of the
+    world once and the frame only moves it. The last gate is the verb: with the tower built and the picture people come,
+    they film the house, and every person driven out is filmed (six reels of sixty, each one news); then the delivery.
+    Pacing: eager 32.9–33.4, casual 56.5–62.0, the longest wait 4.4 min.
+  - *The owner's play of the reputation* (November 2026): fun, the cosiest box and still the dullest; the curtain was lopsided
+    and hung into the tower on a desktop; the last nights lagged on a phone and a desktop. The curtain was painted once for the
+    first scale and never again as the house grew (it now follows the scale, keeps clear of the walls, and the film starts
+    under the valance); the house's tile was painted afresh, its canvas allocated anew, twice a second as the moon moved (the
+    moon now moves only the sky); forty traced silhouettes were filled path by path every frame (each figure, step and rim is
+    now a bitmap made once at the camera's scale).
+  - *Peaks and choices* (the owner chose two of three: a frenzy and a booking a night; an exorcist who ends a night early was
+    turned down as needless frustration, and nights had felt short). Every hit fills a meter under the ectoplasm; full, the
+    whirl runs wild for seven seconds (gold ribbons, POLTERGEIST! across the screen, the piano agitato): it lifts one tier
+    heavier, carries more, spins faster, drains nothing and screams pay half again; each frenzy in a night wants more. A first
+    version lifted everything and paid double, and the first night emptied the house. Before every night from the third, three
+    bookings are offered and one taken: an ordinary night, a séance (sitters and a medium whose lamp drains the ghost, screams
+    worth half again), a Halloween ball (twelve dancers, a short night), a thunderstorm (thunder frightens the whole house, the
+    ghost stronger), buyers (hard to frighten, worth six), a full moon (more ectoplasm). Nights last longer (15 s of ectoplasm,
+    dawn at 46 s). The sticker *Not a cup out of place* made way for *Poltergeist* (four frenzies in a night).
+    The curtain was drawn in device pixels and scaled by the device's pixel ratio once more: lopsided on any screen but a
+    test browser's. Pacing: eager 32.8–33.7, casual 53.3–57.5, the longest wait 5.0 min.
+  - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
+    for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
+    "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one
+    wallpaper motif in six tints, the same small-caps plate on every surface, copy that sounds like labels. These are the next
+    session's: a motif per room, an edge on the props and figures, and a pass over every line of copy. Begun: what is built in
+    casts its own shadow on the wall a few units down and right, as a layer of cut paper does, and the ceiling and the walls
+    cast a torn edge of shadow into each room; the study's window spills a soft light (all painted once into the backdrop).
 
 ## Ideas, considered and not chosen
 
@@ -1944,6 +2075,18 @@ is not saved by its art direction: the owner played both and stopped.
   looked like two lids and a box on a box. A few projected points (a box, a roof turning on its hinge, a camera that pitches)
   with culled faces and the paintings laid on them read as an object at once, and match the still picture exactly when the
   projection starts from the picture's own view.
+- **A close-up script waits on the box's clock; a frozen camera stops that clock.** `util/cmv_props.mjs` waits until the
+  state's `t` has moved on, and `look(..., { freeze })` stops the rules, so every tile waited a minute and the run timed out.
+  A frozen view keeps its clock running without stepping the rules.
+- **A staircase needs a hole in the floor above it.** The stair was drawn, the floor over it was whole, and every climber
+  stood through the ceiling for a second. Whatever passes between floors needs the opening drawn.
+- **A score paid by the share of someone's nerve starves a bigger cast.** Unwelcome Guests paid screams as fright over nerve,
+  so the reel after the Pembertons paid a third as much per hit and the bot stalled for two hours. Pay by what the hand did
+  (the mass that struck) and let the cast's nerve set how long it takes.
+
+- **The bots earn faster than a person, so they hide a steep start.** Unwelcome Guests' eager bot bought its second pipe in a
+  minute; the owner bought one in four nights. Read the first prices against what a person's first night pays, not the bot's,
+  and keep the first few nodes of every branch within a night or two of it.
 
 - **Firefox on Android pays for every canvas call.** The same page ran at 59 fps in Chrome and 6 in Firefox on one phone, and
   the box before it fared no better there. Count draw calls per part and keep them down: paint what does not change into

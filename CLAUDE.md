@@ -36,7 +36,8 @@ appears on the site only once it is in that JSON.
 Check these before calling a remade page done; each has now shipped broken in several games.
 
 - **Balance tuned on top of a bug.** Tilt's mega balls stuck and Snow Day's knocked-down kids could not be hit by the
-  next snowball; both games were paced around the fault, and mending it took ten and more minutes off a bot's game.
+  next snowball; both games were paced around the fault, and mending it took ten and more minutes off a bot's game. The
+  remade Unwelcome Guests counted a thing standing on a floor to the floor below, so its whirl never lifted a chair.
   Before tuning anything, have a bot count what the core verb actually achieves (hits against throws, by cause) and
   look for a cause that should be rare and is not; after a fix, run the pacing again.
 - **Backdrops that move wrong under the camera.** Every layer has a depth: the ground and what grows on it (soil,
