@@ -2087,6 +2087,18 @@ taken up. Done in that session:
 - **Notes from real players**: the packing slip of every box has *A note on this box* (one to five stars, where it dragged,
   what was liked), kept with the save; the shell quietly keeps how long the first new thing took and at what progress a player
   left the box. *Copy all notes* gives it all as plain text to hand to the session that works on a box.
+- **Touch targets of 44 px**: measured on a 390 px phone, every control of every box; the shell's menu button (42 px),
+  Starter's peek (30 px, now a larger invisible hit area round the same disc) and Here Be Rabbits' *Auto* (30 px high) were
+  short and are mended.
+- **Keep Off the Grass's cup in software GL**: the browser suite's kick-off checks wait up to two minutes of real time, and in
+  this container's SwiftShader the cup pitch draws about one frame in four seconds (the same before this session), so they
+  can fail here while passing on a GPU. A run that fails only those two is not a regression; the cup pitch's draw cost is
+  worth a look in Keep Off the Grass's next pass.
+
+Left for later, each too large for one session: a German translation (per box, text lives in cores and views alike), a
+keyboard and text-size pass per box, the big-lever pass with public-domain sources for the boxes that have none, draw-call
+passes for Starter and Snow Day, loudness levelled across the boxes, and a first impression (trailer, title screen) that
+sells the anthology in ten seconds.
 
 ## Lessons from the boxes so far
 
