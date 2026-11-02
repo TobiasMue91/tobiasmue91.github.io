@@ -1381,6 +1381,12 @@ still undone, most valuable first:
     world once and the frame only moves it. The last gate is the verb: with the tower built and the picture people come,
     they film the house, and every person driven out is filmed (six reels of sixty, each one news); then the delivery.
     Pacing: eager 32.9–33.4, casual 56.5–62.0, the longest wait 4.4 min.
+  - *The owner's play of the reputation* (November 2026): fun, the cosiest box and still the dullest; the curtain was lopsided
+    and hung into the tower on a desktop; the last nights lagged on a phone and a desktop. The curtain was painted once for the
+    first scale and never again as the house grew (it now follows the scale, keeps clear of the walls, and the film starts
+    under the valance); the house's tile was painted afresh, its canvas allocated anew, twice a second as the moon moved (the
+    moon now moves only the sky); forty traced silhouettes were filled path by path every frame (each figure, step and rim is
+    now a bitmap made once at the camera's scale).
   - *Scores that stayed below 8* (the last critic's, phone first): clarity 5 (the pips, "104 to go" and the counter that waits
     for its plates before it counts still need reading), phone 6 (sky above the roof and a band under the house), feel 6,
     "commercial" 5. What the critics still name: flat vector rather than cut paper (no torn edges, no off-register), one

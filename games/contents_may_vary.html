@@ -12187,7 +12187,7 @@ function houseBox() {
   const fl = floorsNow(), lo = fl[0], tower = fl.includes(4), top = tower ? -5 * FH - 330 : -(topFull() + 1) * FH - 370;
   return { x: -70, y: top, w: HW + 140, h: -lo * FH + 40 - top };
 }
-let follow = false, tile = null, tileX = 0, tileY = 0;
+let follow = false, tile = null, tileX = 0, tileY = 0, skyDirty = true;
 let ox = 0, oy = 0;
 const X = x => ox + (x - view.cx) * view.s, Y = y => oy + (y - view.cy) * view.s, Sc = v => v * view.s;
 const toWorld = (px, py) => ({ x: (px - ox) / view.s + view.cx, y: (py - oy) / view.s + view.cy });
@@ -12195,14 +12195,14 @@ const fit = fr => ({ s: Math.min(inner.w / fr.w, inner.h / fr.h), cx: fr.x + fr.
 function resize() {
   DPR = DIAG.dpr || Math.min(touch ? 1.75 : 2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; wide = W >= 900; filmW = W;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
-  const top = wide ? 62 : 124, bottom = wide ? 14 : 104;
+  const top = wide ? 84 : 124, bottom = wide ? 14 : 104;
   inner.w = W - (wide ? 300 : 8); inner.h = H - top - bottom; ox = W / 2; oy = top + inner.h / 2;
   const B = houseBox(), fr = fit(wide ? { x: B.x - 20, y: B.y + 170, w: B.w + 40, h: B.h - 140 } : { x: B.x - 40, y: B.y + 40, w: B.w + 50, h: B.h - 40 }), minS = wide ? .34 : .27;
   // a house too tall for the screen at a size people can be read at: keep the size, and let the camera follow the ghost up and down
   follow = fr.s < minS; Object.assign(home, follow ? { s: minS, cx: B.x + B.w / 2, cy: home.cy || fr.cy } : fr);
   if (follow) home.cy = clamp(home.cy, B.y + inner.h / 2 / minS, B.y + B.h - inner.h / 2 / minS);
   camera();
-  bg.width = cv.width; bg.height = cv.height; bgDirty = true; sprites = {};
+  bg.width = cv.width; bg.height = cv.height; bgDirty = true; sprites = {}; figSprites = {};
   plate = $('screams').getBoundingClientRect();
 }
 // the camera holds the whole house, and at the very end walks out to the garden gate; K.debug.look holds it anywhere
@@ -12618,6 +12618,21 @@ function figure(look, o) {
   } else paint();
   c.restore();
 }
+// a figure is painted once per look, build, step and rim into a bitmap at the camera's scale, then placed with one draw:
+// forty traced silhouettes filled path by path every frame were what the last nights of a full house paid for
+let figSprites = {};
+function figSprite(look, o, st, rim) {
+  const n = o.sil || SILOF[look], key = n + look + st + rim + (o.bw || 1).toFixed(2), h = hOf(look);
+  let sp = figSprites[key];
+  if (!sp) {
+    const k = Math.max(.1, view.s) * DPR * SZ * 1.15, w = h * 1.5, top = h * 1.12;
+    sp = document.createElement('canvas'); sp.width = Math.ceil(w * k); sp.height = Math.ceil((top + h * .06) * k);
+    const x = sp.getContext('2d'), keep = c; c = x; x.scale(k, k); x.translate(w / 2, top);
+    figure(look, Object.assign({}, o, { walk: st, rim, lw: rim ? 6 / (view.s * SZ) : 1, ink: INK })); c = keep;
+    sp = figSprites[key] = { cv: sp, w, top, hh: top + h * .06 };
+  }
+  c.drawImage(sp.cv, -sp.w / 2, -sp.top, sp.w, sp.hh);
+}
 const people = {};   // per person: where they are drawn, which way they face, a flinch, a hop, a hat in the air
 const SZ = 1.12;
 // builds of the principals (an extra's comes from their own number)
@@ -12633,7 +12648,9 @@ function person(p) {
   // knocked over by something heavy: down about the feet away from the blow, a moment on the floor, up again
   const fa = v.fall < 1.1 ? (v.fall < .16 ? ease.out(v.fall / .16) : v.fall < .7 ? 1 : 1 - ease.inOut((v.fall - .7) / .4)) * 1.35 * v.fd : 0;
   c.save(); if (fa && p.st === 'in') { c.beginPath(); c.rect(X(0), Y(v.y - FH + 26), Sc(HW), Sc(FH - 26)); c.clip(); } c.translate(X(v.x + shake), Y(v.y - hop)); if (fa) c.rotate(fa); const sz = SZ * (.9 + .2 * v.k); c.scale(view.s * v.dir * sz, view.s * sz); c.rotate(lean);
-  if (v.hot || p.panic || v.flinch > .2) { o.rim = 1; figure(v.look, o); } o.rim = 0; figure(v.look, o);
+  const st = (o.walk === 1 || o.walk === 3) ? o.walk : 0;
+  if (v.hot || p.panic || v.flinch > .2) figSprite(v.look, o, st, 1);
+  figSprite(v.look, o, st, 0);
   c.restore();
 }
 // the view follows the rules: where they stand, the spiral stair, and a run out of the house when they go
@@ -12942,16 +12959,20 @@ function fpsMeter() {
 }
 // the house and its garden are painted once into a tile of the world, as wide as the screen and as tall as the house, so a
 // camera that follows the ghost up and down only moves a picture; the sky stays on the screen behind it
+let tileMs = 0, tileN = 0;
 function paintTile() {
+  const t0 = performance.now();
   c = bgc; bgc.setTransform(DPR, 0, 0, DPR, 0, 0); backdrop();
   const B = houseBox(), x0 = view.cx - (W / 2 + 40) / view.s, y0 = B.y - 120, x1 = view.cx + (W / 2 + 40) / view.s, y1 = Math.max(B.y + B.h, 0) + 900;
   if (!tile) tile = document.createElement('canvas');
-  tile.width = Math.ceil((x1 - x0) * view.s * DPR); tile.height = Math.ceil((y1 - y0) * view.s * DPR);
+  const tw = Math.ceil((x1 - x0) * view.s * DPR), th = Math.ceil((y1 - y0) * view.s * DPR);
+  if (tile.width !== tw || tile.height !== th) { tile.width = tw; tile.height = th; } else tile.getContext('2d').clearRect(0, 0, tw, th);
   const tc = tile.getContext('2d'), kx = ox, ky = oy; tc.setTransform(DPR, 0, 0, DPR, 0, 0); c = tc;
   // draw the world with the camera moved so that (x0, y0) lands on the tile's corner
   ox = -(x0 - view.cx) * view.s; oy = -(y0 - view.cy) * view.s;
   hills(); garden(); for (const r of CORE.roomsOf(S)) if (r !== 8) room(r); bones();
   ox = kx; oy = ky; tileX = x0; tileY = y0; c = g; bgDirty = false;
+  tileMs += performance.now() - t0; tileN++;
 }
 function stepShards(dt) {
   for (const s of shards) if (s.t < s.life) { s.t += dt; s.vy += 2200 * dt; s.x += s.vx * dt; s.y = Math.min(s.fy - 3, s.y + s.vy * dt); s.x = clamp(s.x, 6, HW - 6); if (s.y >= s.fy - 3) { s.vx *= .6; s.vy *= -.25; } }
@@ -12959,7 +12980,7 @@ function stepShards(dt) {
 function draw(dt) {
   CALLS = 0; part(); placed.length = 0;
   if (S.phase === 'organ' && !S.finale) { g.setTransform(DPR, 0, 0, DPR, 0, 0); c = g; if (cardUp) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); } else { organ(dt); film(); drawIris(); } part('organ'); if (DIAG.fps) fpsMeter(); return; }
-  if (bgDirty) paintTile();
+  if (bgDirty) paintTile(); else if (skyDirty) { c = bgc; bgc.setTransform(DPR, 0, 0, DPR, 0, 0); backdrop(); c = g; skyDirty = false; }
   const wv = FX() && DIAG.film ? (hash(Math.floor(now * 18), 21) - .5) * 1.2 * DPR : 0, sk = FX() && shake > .02 ? shake * 7 * DPR : 0, sx = sk ? (Math.random() - .5) * sk : 0, sy = sk ? (Math.random() - .5) * sk : 0;
   g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(bg, sx, wv + sy); g.drawImage(tile, Math.round(X(tileX) * DPR + sx), Math.round(Y(tileY) * DPR + wv + sy));
   g.setTransform(DPR, 0, 0, DPR, sx / DPR, (wv + sy) / DPR); c = g; part('house');
@@ -12988,9 +13009,10 @@ let grain = null, vign = null, cur = null;
 // gold fringe across the top; painted once for the size of the screen, laid over the film in one draw
 function curtains() {
   if (!wide || !DIAG.film || zoom) return;
-  if (!cur || cur.width !== cv.width || cur.height !== cv.height) {
-    cur = document.createElement('canvas'); cur.width = cv.width; cur.height = cv.height; const x = cur.getContext('2d'); x.scale(DPR, DPR);
-    const cw = Math.max(90, (W - Sc(HW + 160)) / 2 - 150), tie = H * .62;
+  if (!cur || cur.width !== cv.width || cur.height !== cv.height || cur.s !== view.s) {
+    cur = document.createElement('canvas'); cur.width = cv.width; cur.height = cv.height; cur.s = view.s; const x = cur.getContext('2d'); x.scale(DPR, DPR);
+    // drawn back far enough that the gathered curtain at its narrowest stays clear of the house's walls on both sides
+    const cw = Math.max(80, Math.min((W - Sc(HW + 160)) / 2 - 60, (W / 2 - Sc(HW / 2 + 140)) / 1.05)), tie = H * .62;
     for (const side of [0, 1]) {
       x.save(); if (side) { x.translate(W, 0); x.scale(-1, 1); }
       const gr = x.createLinearGradient(0, 0, cw, 0); for (let k = 0; k <= 12; k++) { const u = k / 12; gr.addColorStop(u, k % 2 ? '#7c1822' : '#3a080d'); }
@@ -13373,7 +13395,7 @@ function bill() {
   const o = !night ? '' : CORE.finalReady(S) ? `out tonight <i>${out}</i> of ${there} · filmed <i>${S.film | 0}</i> of ${CORE.P.film}` : `out tonight <i>${out}</i> of ${there}`;
   if ($('billO').innerHTML !== o) $('billO').innerHTML = o;
   billB = $('bill').getBoundingClientRect().bottom;
-  const u = night ? clamp(S.nt / CORE.dawnOf(S), 0, 1) : 0; if (Math.abs(u - moonU) > .012) { moonU = u; bgDirty = true; }
+  const u = night ? clamp(S.nt / CORE.dawnOf(S), 0, 1) : 0; if (Math.abs(u - moonU) > .012) { moonU = u; skyDirty = true; }
   const em = CORE.ectoMax(S); $('ecto').firstChild.style.width = (100 * S.ecto / em) + '%';
   $('ectoT').textContent = 'ectoplasm · ' + Math.ceil(S.ecto) + ' s'; $('ectoP').classList.toggle('low', night && S.ecto < em * .25);
 }
@@ -13439,7 +13461,7 @@ function lookAt(x, y) {
 }
 function look(x, y, s = 1, o = {}) {
   if (x == null) { zoom = null; camera(); bgDirty = true; return; }
-  const [lx, ly] = lookAt(x, y); zoom = { x: lx, y: ly, s, freeze: !!o.freeze }; camera(); bgDirty = true; sprites = {};
+  const [lx, ly] = lookAt(x, y); zoom = { x: lx, y: ly, s, freeze: !!o.freeze }; camera(); bgDirty = true; sprites = {}; figSprites = {};
 }
 // every object worth a close look, as [name, minutes, x, y, scale, options] for util/cmv_props.mjs
 const PROPS = (() => {
@@ -13476,6 +13498,7 @@ K.debug = {
   box: () => S.finale ? crateRect() : null,
   card: () => cardUp,
   look, props: PROPS, scenes: Object.keys(SCENES), snap: () => cv.toDataURL('image/png'),
+  tileTime: () => ({ n: tileN, ms: Math.round(tileMs / Math.max(1, tileN)) }),
   parts: () => Object.assign({ calls: CALLS }, PARTS), pcalls: () => Object.assign({}, PCALLS),
   // every look side by side, large, on a pale sheet: with ?world=guests, K.debug.lineup() then snap()
   lineup(pose = {}) {
