@@ -2152,6 +2152,10 @@ line by itself before the line breaks. Fish: ten kinds by distance, hour and bai
 wash by the view; when the book is full and the jetty long, the Old One takes the bait in the deep with the next box in
 its jaw. Pacing (prototype tuning): eager 32 to 49 min, casual 34 to 41.
 
+The first build ran its sky, wind and water on `K.loop`'s second argument, which is the page's clock in milliseconds,
+not seconds: the owner saw clouds race and trees shiver at a thousand times their pace. A view keeps its own clock
+(`now += dt`), which also stops with the box when it is paused.
+
 Still open: the owner's verdict on the catch; music (ask first); a proper look pass (the trees are lumps of spheres,
 the rod a ribbon); the second rod's bell needs the walk to matter; stickers; critics.
 
