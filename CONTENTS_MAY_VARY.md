@@ -2126,6 +2126,35 @@ the hand needs to be modelled properly or left away. Pacing (prototype tuning): 
 Still to come before it is a box: automation (helpers or a cart), walking that matters (the cart, a lift), music, the way
 out (a casket in the pedestal with the next number), a proper pick, stickers, a critic round.
 
+**Dropped** (the owner, the same day): progress felt slow and stodgy, striking the wall over and over was tedious on a
+phone, and the result still had faults. The lesson: a verb that is one tap repeated thousands of times needs a
+strong answer per tap and a fast early curve, and a prototype of a verb should be judged in the hand before its look is
+polished. The draft was taken out of the page; the commit that added it is
+`940774956afd8dbe9912b284167152a8fe99d875`. In its place the owner asked for a fishing game at one idyllic jetty in a
+very green landscape, with a catch mechanic that scales with upgrades so later fish come quicker and easier.
+
+### Still Water (draft, November 2026)
+
+The jetty the owner asked for, as a first-person prototype to try the catch in the hand before anything is polished
+(`?world=jetty`). One wooden jetty on a lake in a green bowl of hills: broadleaves, pines, willows, reeds with bulrushes,
+lilies, a meadow; the water mirrors it all (a half-size reflection pass) and rings where the float lands or a fish runs.
+The day turns on its own (eight minutes: dawn, day, a gold dusk, night with fireflies and stars), with showers now and
+then; there is no run timer anywhere.
+
+The catch, in the rules: swipe up to cast (the length of the swipe is the distance); the float waits and goes under;
+a tap in that moment strikes; then the fight: holding winds the fish in and loads the line, letting go gives it line;
+a fish runs and rests and tires, and a line loaded past its strength for longer than the rod can soak up snaps. Every
+part of it scales with the tackle, as the owner asked, so later fish come quicker and easier: sharper hooks widen the
+strike's moment, a stronger line and a longer rod raise what a run can do before it snaps, a faster reel shortens the
+fight, better bait brings bites sooner and rarer fish, a longer jetty reaches the deep, a lantern opens the night, a
+second rod rings its bell when it has caught (walk over and take it), a smokehouse pays more, and the reel brake gives
+line by itself before the line breaks. Fish: ten kinds by distance, hour and bait, each drawn for the logbook in ink and
+wash by the view; when the book is full and the jetty long, the Old One takes the bait in the deep with the next box in
+its jaw. Pacing (prototype tuning): eager 32 to 49 min, casual 34 to 41.
+
+Still open: the owner's verdict on the catch; music (ask first); a proper look pass (the trees are lumps of spheres,
+the rod a ribbon); the second rod's bell needs the walk to matter; stickers; critics.
+
 ## Lessons from the boxes so far
 
 - **A lid that opens is a model, not a squashed picture.** Scaling the closed lid's picture and growing a lining picture behind it
