@@ -14535,13 +14535,16 @@ void main() {
   } else if (m < 1.5 || (m > 2.5 && m < 3.5)) {   // leaves and blades: a cut-out from the atlas, lit through
     vec2 uv = (vec2(mod(vY.y, 2.), floor(vY.y / 2.)) + clamp(vX.xy, .002, .998)) * .5;
     vec4 t = texture(uAtlas, uv); alpha = cutout(vX, vY);
+    if (m < 1.5) { vec3 gN = normalize(cross(dFdx(vP), dFdy(vP))); alpha *= smoothstep(.1, .32, abs(dot(gN, normalize(uEye - vP)))); }   /* a leaf card seen edge-on is a sliver: fade it */
     if (uA2C < .5 && alpha < .5) discard;
     vec3 tc = t.rgb / max(t.a, .004), alb = tc * tc * vC.rgb * .75;
     col = shade(vP, N, alb, .45, m < 1.5 ? .4 : .22, .02, vY.x);   /* light through a leaf, less through a blade: grass that glows reads as a lamp */
-  } else if (m < 2.5) {   // bark
+  } else if (m < 2.5) {   // bark: grey-brown plates between long furrows, moss low on the trunk
     float r = vn(vec3(vP.x * 9., vP.y * 1.8, vP.z * 9.)), r2 = vn(vec3(vP.x * 30., vP.y * 4., vP.z * 30.));
-    vec3 alb = mix(vec3(.07, .06, .05), vec3(.22, .2, .17), r * .7 + r2 * .3);
-    col = shade(vP, N, alb, .2, 0., 0., .8 + .2 * min(vP.y, 1.));
+    float fur = sin(vX.y * 6.2832 * 7. + r * 4. + vn(vec3(vP.xz * 3., vP.y * .7)) * 3.), plate = smoothstep(-.35, .45, fur);
+    vec3 alb = mix(vec3(.075, .062, .048), vec3(.25, .225, .19), r * .45 + r2 * .25 + plate * .3) * (.5 + .5 * plate);
+    alb = mix(alb, vec3(.06, .09, .03) * (.8 + .4 * r2), smoothstep(.9, .1, vX.x) * smoothstep(.3, .7, r) * .7);
+    col = shade(vP, N, alb, .2, 0., 0., (.7 + .3 * min(max(vX.x, 0.), 1.)) * (.55 + .45 * plate));
   } else if (m < 4.5) {   // a lily pad with its veins, or a flower's petal
     vec3 alb;
     if (vX.w > .5) alb = mix(vec3(.95, .93, .9), vec3(.98, .7, .78), vC.r) * (.8 + .2 * vX.y);
@@ -14636,25 +14639,33 @@ const rng = s => () => (s = (s * 16807) % 2147483647) / 2147483647;
 
 /* the trees, built once: a broadleaf (two builds), a willow, a pine */
 function broadleaf(seed, tall, far) {
-  const r = rng(seed), m = new Mesh(), H = tall ? 3.6 : 2.6, top = [(r() - .5) * .4, H, (r() - .5) * .4];
-  tube(m, [0, -.4, 0], top, tall ? .26 : .34, .2, [0, 0, 2, 0], far ? 4 : 8, [1, 0]);
-  const crownC = [0, H + (tall ? 2.4 : 1.9), 0], CR = tall ? [2.1, 2.7, 2.1] : [2.7, 2.1, 2.7], clumps = [];
+  // as an oak or an ash grows: a short, stout trunk flaring into its roots; limbs leaving it at different heights, each
+  // forking once; the leaves in many clumps over an uneven dome, lit on top, dark beneath and inside
+  const r = rng(seed), m = new Mesh(), H = tall ? 2.7 : 1.9, top = [(r() - .5) * .3, H, (r() - .5) * .3];
+  if (!far) tube(m, [0, -.4, 0], [0, .4, 0], tall ? .55 : .66, tall ? .3 : .38, [0, 0, 2, 0], 9, [1, 0]);
+  tube(m, [0, -.4, 0], top, tall ? .3 : .38, .24, [0, 0, 2, 0], far ? 4 : 9, [1, 0]);
+  const CR = tall ? [2.3, 2.7, 2.3] : [3.1, 2.2, 3.1], crownC = [0, H + CR[1] * .78 * (far ? .9 : 1), 0], clumps = [];
   const nl = tall ? 5 : 6;
   for (let k = 0; k < nl; k++) {
-    const a = k / nl * TAU + r() * .6, up = .45 + r() * .5, end = [crownC[0] + cos(a) * CR[0] * .72, crownC[1] + (up - .55) * CR[1] * 1.1, crownC[2] + sin(a) * CR[2] * .72];
-    const mid = V3.lerp(top, end, .5); mid[1] += .25;
-    if (!far) { tube(m, V3.lerp(top, [0, H * .8, 0], .4), mid, .15, .1, [0, 0, 2, .2], 6, [1, 0]); tube(m, mid, end, .1, .045, [0, 0, 2, .6], 5, [1, 0]); }
-    clumps.push(end, V3.lerp(mid, end, .45));
+    const a = k / nl * TAU + r() * .7, from = V3.lerp([0, H * .55, 0], top, .2 + .8 * r()), up = .2 + r() * .7;
+    const end = [crownC[0] + cos(a) * CR[0] * .78, crownC[1] + (up - .5) * CR[1] * 1.1, crownC[2] + sin(a) * CR[2] * .78], mid = V3.lerp(from, end, .45); mid[1] += .35 + r() * .3;
+    const fa = a + (r() < .5 ? -1 : 1) * (.5 + r() * .4), fk = [crownC[0] + cos(fa) * CR[0] * .62, crownC[1] + (r() - .2) * CR[1] * .8, crownC[2] + sin(fa) * CR[2] * .62];
+    if (!far) { tube(m, from, mid, tall ? .16 : .19, .11, [0, 0, 2, .15], 7, [1, 0], 0, .05); tube(m, mid, end, .11, .045, [0, 0, 2, .6], 5, [1, 0], 0, .15); tube(m, mid, fk, .07, .03, [0, 0, 2, .6], 4, [1, 0], 0, .15); }
+    clumps.push(end, fk, V3.lerp(mid, end, .55));
   }
-  clumps.push([crownC[0], crownC[1] + CR[1] * .55, crownC[2]], [crownC[0] + .4, crownC[1] + CR[1] * .2, crownC[2] - .3]);
+  // and clumps over the rest of the dome, so its outline is a cloud of smaller clouds, not one ball
+  for (let k = 0; k < (far ? 6 : 9); k++) { const u = r() * TAU, v = Math.acos(r() * 1.5 - .5), rr = .7 + r() * .3;
+    clumps.push([crownC[0] + sin(v) * cos(u) * CR[0] * rr, crownC[1] + cos(v) * CR[1] * rr * .9, crownC[2] + sin(v) * sin(u) * CR[2] * rr]); }
+  const bottom = crownC[1] - CR[1], span = CR[1] * 2;
   for (const c of clumps) {
-    const cr = .95 + r() * .5;
-    for (let k = 0; k < (far ? 3 : 9); k++) {
+    const cr = .75 + r() * .45, tone = .82 + r() * .3;   // each clump a little lighter or darker than its neighbours
+    for (let k = 0; k < (far ? 4 : 12); k++) {
       // cards spread over the clump's outer half, facing out, turned at random in their plane
-      const u = r() * TAU, v = Math.acos(r() * 1.6 - .6), d = [sin(v) * cos(u), cos(v), sin(v) * sin(u)], p = V3.add(c, V3.mul(d, cr * (.35 + .5 * r())));
-      const t1 = V3.norm(V3.cross(d, abs(d[1]) > .9 ? [1, 0, 0] : [0, 1, 0])), t2 = V3.cross(d, t1), sp = r() * TAU, s = (.95 + r() * .5) * (far ? 1.45 : 1);
+      const u = r() * TAU, v = Math.acos(r() * 1.6 - .6), d = [sin(v) * cos(u), cos(v), sin(v) * sin(u)], p = V3.add(c, V3.mul(d, cr * (.3 + .55 * r())));
+      const t1 = V3.norm(V3.cross(d, abs(d[1]) > .9 ? [1, 0, 0] : [0, 1, 0])), t2 = V3.cross(d, t1), sp = r() * TAU, s = (.62 + r() * .38) * (far ? 1.7 : 1);
       const ax = V3.mul(V3.add(V3.mul(t1, cos(sp)), V3.mul(t2, sin(sp))), s), ay = V3.mul(V3.add(V3.mul(t1, -sin(sp)), V3.mul(t2, cos(sp))), s);
-      card(m, p, ax, ay, 1, 0, crownC, q => .55 + .45 * min(1, (q[1] - H) / 3), q => clamp(.3 + .7 * hypot((q[0] - crownC[0]) / CR[0], (q[1] - crownC[1]) / CR[1], (q[2] - crownC[2]) / CR[2]) * (.7 + .3 * (q[1] - H) / (CR[1] * 2)), .25, 1));
+      card(m, p, ax, ay, 1, 0, crownC, q => .5 + .5 * min(1, (q[1] - H) / 3),
+        q => clamp((.28 + .72 * hypot((q[0] - crownC[0]) / CR[0], (q[1] - crownC[1]) / CR[1], (q[2] - crownC[2]) / CR[2])) * (.5 + .5 * clamp((q[1] - bottom) / span, 0, 1)) * tone, .18, 1.1));
     }
   }
   return m;
@@ -14741,7 +14752,7 @@ function lilyFlower() {   // two rings of pointed petals round a yellow heart
 }
 function buildThings() {
   const rnd = rng(7);
-  const MESH = { oak: [broadleaf(3, 0), 160], ash: [broadleaf(9, 1), 120], oakF: [broadleaf(3, 0, 1), 420], ashF: [broadleaf(9, 1, 1), 260], pineF: [pine(4, 1), 360], bush: [bush(), 500], wil: [willow(), 8], pine: [pine(4), 140], reed: [reeds(), 900], grass: [tuft(.26, .36, 3, .6), 9000], lily: [lilyPad(), 420], flower: [lilyFlower(), 60] };
+  const MESH = { oak: [broadleaf(3, 0), 160], ash: [broadleaf(9, 1), 120], oakF: [broadleaf(3, 0, 1), 420], ashF: [broadleaf(9, 1, 1), 260], pineF: [pine(4, 1), 360], bush: [bush(), 1100], wil: [willow(), 8], pine: [pine(4), 140], reed: [reeds(), 900], grass: [tuft(.26, .36, 3, .6), 9000], lily: [lilyPad(), 420], flower: [lilyFlower(), 60] };
   for (const k in MESH) SET[k] = instMesh(MESH[k][0], MESH[k][1]);
   // where they grow: broadleaves on the near slopes, pines higher up and further round, never in the view down the lake
   const oaks = [], ashes = [], pines = [], reedL = [], grs = [], lil = [], fl = [], wils = [], bushes = [];
@@ -14752,7 +14763,8 @@ function buildThings() {
     const y = ground(x, z), s = .8 + rnd() * .55, hue = rnd(), col = [.52 + hue * .3, .72 + rnd() * .2, .3 + rnd() * .14];
     const clump = fbm2(x * .05, z * .05);   // trees grow in woods and stands, not evenly
     if (clump < .42 && rnd() < .7) continue;
-    if (rnd() < .5 && bushes.length < 500 && R < lakeR(th) * 2) bushes.push([x + (rnd() - .5) * 3, y - .1, z + (rnd() - .5) * 3, .7 + rnd() * .6, col[0] * .9, col[1] * .9, col[2], rnd() * TAU]);
+    // undergrowth under the trees, so a wood is a wood and not a row of stems under a roof of crowns
+    for (let b = 0; b < 2; b++) if (rnd() < .6 && bushes.length < 1100) bushes.push([x + (rnd() - .5) * 4, y - .1, z + (rnd() - .5) * 4, .8 + rnd() * .9 + (R > lakeR(th) * 1.6 ? .5 : 0), col[0] * .85, col[1] * .85, col[2], rnd() * TAU]);
     if (y > 10 || (rnd() < .35 + y * .03)) { if (pines.length < 360) pines.push([x, y - .1, z, s * 1.05, .3 + rnd() * .06, .44 + rnd() * .08, .34, rnd() * TAU]); }
     else if (rnd() < .6) { if (oaks.length < 420) oaks.push([x, y - .1, z, s, ...col, rnd() * TAU]); }
     else if (ashes.length < 260) ashes.push([x, y - .1, z, s * .95, col[0] * 1.08, col[1] * 1.05, col[2], rnd() * TAU]);
@@ -15441,6 +15453,9 @@ function bird() {   // a phrase of a songbird: a few quick sweeps
 }
 function cricket() { const A = AU; if (!A) return; for (let k = 0; k < 3; k++) tone(4300, .025, .012, k * .045, 4300, 'triangle', A.amb); }
 function bell() { tone(1568, 1.2, .1, 0, 1568, 'sine'); tone(3136, .6, .03, 0, 3136); tone(1568, 1, .07, .25); }
+function garlandJingle(n) {   // a run up the scale, one note for every fish on the line
+  const sc = [523, 587, 659, 784, 880, 1046, 1175, 1319, 1568, 1760]; for (let i = 0; i < n; i++) tone(sc[i], .7, .06, i * .07, sc[i], 'triangle'); tone(sc[n - 1] * .5, 1.4, .05, n * .07, sc[n - 1] * .5, 'sine');
+}
 function jingle(first) { const notes = first ? [523, 659, 784, 1046] : [587, 784]; notes.forEach((f, i) => tone(f, .9, .07, i * .09, f, 'triangle')); }
 /* ================= the music: a fingerpicked acoustic guitar that follows the hour ================= */
 // Each string is a Karplus-Strong pluck rendered once into a buffer (a burst of noise round a delay line that loses a little
@@ -15451,11 +15466,14 @@ const MUS = { on: false, t: 0, bar: 0, step: 0, bufs: {}, out: null, rnd: rng(99
 const NOTE = n => 440 * pow(2, (n - 69) / 12);
 function pluckBuf(ctx, midi, bright) {
   const key = midi + ':' + bright; if (MUS.bufs[key]) return MUS.bufs[key];
-  const sr = ctx.sampleRate, f = NOTE(midi), N = max(2, Math.round(sr / f - .5)), len = floor(sr * (midi < 50 ? 3.2 : 2.4)), d = new Float32Array(len), r = rng(midi * 7 + 1);
-  let lp = 0; for (let i = 0; i < N; i++) { const x = r() * 2 - 1; lp += (x - lp) * (bright ? .7 : .45); d[i] = lp; }   // the pluck: noise, softened by the finger
-  const loss = midi < 50 ? .4985 : .497 + (midi - 50) * .00003;
-  for (let i = N + 1; i < len; i++) d[i] = (d[i - N] + d[i - N - 1]) * loss;
-  for (let i = 0; i < 80; i++) d[i] *= i / 80;
+  // the loop below delays by N + 1 samples (a three-tap average), so N is one less than the period
+  const sr = ctx.sampleRate, f = NOTE(midi), N = max(2, Math.round(sr / f - 1)), len = floor(sr * (midi < 50 ? 3.4 : 2.8)), d = new Float32Array(len), r = rng(midi * 7 + 1);
+  // the pluck: the flesh of a fingertip, not a nail: noise smoothed twice, so it starts round
+  let lp = 0, lp2 = 0; for (let i = 0; i < N + 2; i++) { const x = r() * 2 - 1; lp += (x - lp) * (bright ? .3 : .22); lp2 += (lp - lp2) * .5; d[i] = lp2 * 2.2; }
+  const loss = midi < 50 ? .9978 : .9968 + (midi - 50) * .00004;
+  // a three-tap average in the loop takes the high overtones down sooner than two taps: a nylon string's warmth
+  for (let i = N + 2; i < len; i++) d[i] = (d[i - N] * .25 + d[i - N - 1] * .5 + d[i - N - 2] * .25) * loss;
+  for (let i = 0; i < 260; i++) d[i] *= i / 260;   /* a soft onset */
   const b = ctx.createBuffer(1, len, sr); b.copyToChannel(d, 0); return (MUS.bufs[key] = b);
 }
 function harmBuf(ctx, midi) {   // a natural harmonic: a bell-like sine with a breath of noise
@@ -15468,10 +15486,10 @@ function musicOut() {
   if (MUS.out || !AU) return MUS.out;
   const { ctx } = AU, music = AU.musicTo || K.audio.music;
   const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 190; body.Q.value = 1.4; body.gain.value = 5;
-  const top = ctx.createBiquadFilter(); top.type = 'lowpass'; top.frequency.value = 4200;
+  const top = ctx.createBiquadFilter(); top.type = 'lowpass'; top.frequency.value = 2300; top.Q.value = .5;
   const room = ctx.createConvolver(), sr = ctx.sampleRate, ir = ctx.createBuffer(2, sr * 1.6, sr);
   for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c), r = rng(c + 3); for (let i = 0; i < d.length; i++) d[i] = (r() * 2 - 1) * pow(1 - i / d.length, 3) * .5; }
-  room.buffer = ir; const wet = ctx.createGain(); wet.gain.value = .22; const dry = ctx.createGain(); dry.gain.value = .85; const lvl = ctx.createGain(); lvl.gain.value = .36;
+  room.buffer = ir; const wet = ctx.createGain(); wet.gain.value = .32; const dry = ctx.createGain(); dry.gain.value = .8; const lvl = ctx.createGain(); lvl.gain.value = .36;
   body.connect(top); top.connect(dry); top.connect(room); room.connect(wet); dry.connect(lvl); wet.connect(lvl); lvl.connect(music);
   return (MUS.out = { in: body, lvl });
 }
@@ -15502,10 +15520,10 @@ function music(dt, tod) {
     if (tod === 'night') { if (s === 0 && MUS.rnd() < .5) pluck(ch[2][floor(MUS.rnd() * 4)] + 12, at, .5, 1); if (s === 4 && MUS.rnd() < .25) pluck(ch[2][2] + 12, at, .4, 1); }
     else {
       // the thumb: root on one and three, the second bass on two and four
-      if (s % 2 === 0 && (song.dens > .5 || s === 0 || (s === 4 && MUS.rnd() < .6))) pluck(s % 4 === 0 ? ch[0] : ch[1], at, s === 0 ? .9 : .7);
+      if (s % 2 === 0 && (song.dens > .5 || s === 0 || (s === 4 && MUS.rnd() < .6))) pluck(s % 4 === 0 ? ch[0] : ch[1], at, s === 0 ? .72 : .58);
       // the fingers: between the thumb's beats, a pattern that walks up and back, thinned by the hour
-      if (s % 2 === 1 && MUS.rnd() < song.dens) pluck(ch[2][[1, 2, 3, 2][(s >> 1) % 4]], at + sw, .55 + MUS.rnd() * .2, 0);
-      if (s === 0 && MUS.rnd() < song.dens * .6) pluck(ch[2][3], at + .01, .6);   // a pinch on the downbeat
+      if (s % 2 === 1 && MUS.rnd() < song.dens) pluck(ch[2][[1, 2, 3, 2][(s >> 1) % 4]], at + sw, .45 + MUS.rnd() * .15, 0);
+      if (s === 0 && MUS.rnd() < song.dens * .6) pluck(ch[2][3], at + .03, .45);   // a pinch on the downbeat, rolled a little after the thumb
       if (tod === 'day' && MUS.bar % 16 >= 8 && s === 3 && MUS.rnd() < .5) pluck(ch[2][3] + 2, at, .55);   // a little turn in the second half
     }
     MUS.t += eighth; MUS.step = (s + 1) % 8; if (!MUS.step) MUS.bar++;
@@ -15552,7 +15570,16 @@ function showCatch(e) {
   $('cName').textContent = NAME[e.f] + (e.first ? ' — new in the book' : '');
   $('cW').textContent = e.w.toFixed(2) + ' kg'; $('cV').textContent = e.f === 'old' ? '' : '£' + e.v.toFixed(2);
   const k = e.f, cvs = $('cFish'); drawFish(cvs, k, 600, 280);
-  const notes = [];
+  const notes = [], more = e.more || [];
+  if (more.length) {   // a garland: the lead's painting, the whole haul in words and sums
+    const all = [{ f: e.f, w: e.w, v: e.v, first: e.first, size: e.size }, ...more], cnt = {};
+    for (const c of all) cnt[c.f] = (cnt[c.f] | 0) + 1;
+    $('cName').textContent = 'A garland of ' + all.length;
+    $('cW').textContent = all.reduce((a, c) => a + c.w, 0).toFixed(2) + ' kg'; $('cV').textContent = '£' + (e.total != null ? e.total : all.reduce((a, c) => a + c.v, 0)).toFixed(2);
+    const top = max(...all.map(c => c.size)); $('cTag').textContent = top ? SIZEN[top] : ''; $('cTag').className = 's' + top;
+    notes.push(Object.entries(cnt).map(([f, n]) => (n > 1 ? n + ' ' : 'a ') + NAME[f].toLowerCase() + (all.some(c => c.f === f && c.first) ? ' (new!)' : '')).join(', ') + '.');
+    $('cNote').textContent = notes.join(' '); $('cGo').textContent = 'tap to go on'; return;
+  }
   if (e.f === 'old') { notes.push('Something hangs from its jaw on a wire: a little tin box with a number on it.'); paintTin(cvs); }
   else { if (e.newSize) notes.push('Your first ' + SIZEN[e.size] + '.'); if (e.first) notes.push(HOW[k][0].toUpperCase() + HOW[k].slice(1) + '.'); }
   $('cNote').textContent = notes.join(' '); $('cGo').textContent = e.f === 'old' ? 'tap the tin to open it' : 'tap to go on';
@@ -15600,7 +15627,12 @@ function drain() {
     else if (e.k === 'pump') { tone(180 + e.n * 30, .12, .06); }
     else if (e.k === 'lifted') { flash('Off the bottom!', 1.6); tut('pump'); }
     else if (e.k === 'lost') { flash(LOSS[e.why] || 'It got away.', 3.4); if (e.why === 'snap' || e.why === 'threw') { tone(900, .08, .2, 0, 300, 'square'); const p = floatPos(); } rodBend = 0; if (fightRod === 2) goBack(); fightRod = 1; }
-    else if (e.k === 'catch') { landA = { t: 0, k: e.f, w: e.w, from: floatPos() || [eyeP[0] + fwd[0] * 3, eyeP[2] + fwd[2] * 3], e, drop: 0 }; jingle(e.first || e.size >= 2); if (S.caught % 20 === 0) flash(S.caught + ' fish off this jetty: another notch in the end post.', 3); }
+    else if (e.k === 'catch') { const n = 1 + (e.more ? e.more.length : 0); landA = { t: 0, k: e.f, w: e.w, from: floatPos() || [eyeP[0] + fwd[0] * 3, eyeP[2] + fwd[2] * 3], e, drop: 0, more: e.more || [] };
+      if (n > 1) garlandJingle(n); else jingle(e.first || e.size >= 2);
+      if (floor(S.caught / 20) > floor((S.caught - n) / 20)) flash(floor(S.caught / 20) * 20 + ' fish off this jetty: another notch in the end post.', 3); }
+    else if (e.k === 'join') { const p = floatPos(); if (p) { splash(p[0] + (Math.random() - .5) * 1.2, p[1] + (Math.random() - .5) * 1.2, 8, .6); ripple(p[0], p[1], .6); } plop(0, .7); tone(660 + e.n * 70, .12, .05, 0, 660 + e.n * 70, 'triangle');
+      if (!knows('garland')) { tut('garland'); flash('Another fish on a free hook! Every hook of the paternoster can hold one: land them all together.', 4); } }
+    else if (e.k === 'pfree') { const s = podSpot(e.i), d = CORE.podD(S); beep(e.i, 5, .05); ripple(s.tip[0] + s.f[0] * d, s.tip[2] + s.f[1] * d, .5); }
     else if (e.k === 'off2') flash('The bank rod: whatever was on it has got off.', 2.6);
     else if (e.k === 'alarm') { const V = PODV[e.i] || (PODV[e.i] = {}); V.beep = 1.4; V.bt = 0; if (e.f === 'old') { flash('Rod ' + (e.i + 1) + ': a run like you have never heard. Something huge.', 4); } else if (!knows('alarm')) flash((TOUCH ? 'An alarm! Tap the rod (or the card) to pick it up.' : 'An alarm! Click its rod, press ' + (e.i + 1) + ', or the card.'), 4); }
     else if (e.k === 'pbite') { const V = PODV[e.i] || (PODV[e.i] = {}); V.r0 = 0; beep(e.i, 3, .1); if (S.lv.rig && !knows('auto')) { tut('auto'); flash('A small one hooks itself: the rest winds it in, into the keepnet.', 3.4); } }
@@ -15691,6 +15723,15 @@ function frame(dt) {
   if (loaded) render(); else { gl.clearColor(.62, .72, .8, 1); gl.clear(gl.COLOR_BUFFER_BIT); }   /* the first, heavy frame waits until the page has loaded */
   hud(dt, F);
 }
+// a landed garland: every other fish on its dropper up the line from the lead, hanging head up
+function garlandDrops() {
+  if (!landA || !landA.more || !landA.more.length) return [];
+  const p = landPos(), lenL = fishLen(landA.k, landA.w), top = V3.add(p, [0, lenL * .5, 0]), n = landA.more.length, out = [];
+  landA.more.forEach((x, j) => { const len = fishLen(x.f, x.w), t = (j + 1) / (n + 1), on = V3.lerp(top, garlandTip || top, t * .8), side = (j % 2 ? 1 : -1) * (.09 + len * .25), sw = sin(now * 1.9 + j) * .03;
+    const at = V3.add(V3.add(on, V3.mul(right, side + sw)), [0, -.05, 0]); out.push({ k: x.f, len, j, on, at, p: V3.add(at, [0, -len * .5, 0]) }); });
+  return out;
+}
+let garlandTip = null;
 // the landed fish: lifted from the water on the line to hang before you, then lowered into the keepnet
 function landPos() {
   const A = landA, L = fishLen(A.k, A.w), hang = V3.add(V3.add(eyeP, V3.mul(fwd, .85 + L * .7)), V3.mul(upv, (W < H ? .26 : .12) - L * .25)), t = smooth(0, 1, min(1, A.t / .95));
@@ -15708,7 +15749,7 @@ function hud(dt, F) {
     const [m, c] = MODE(F); const el = $('mode'); if (el.textContent !== m) el.textContent = m; el.className = c;
     $('tens').style.width = min(100, F.tens * 82) + '%'; $('tens').className = F.tens > 1 ? 'hot' : F.tens > .85 ? 'warm' : '';
     $('over').style.width = min(18, F.over / max(.1, CORE.grace ? CORE.grace(S) : 1) * 18) + '%';
-    $('dist').textContent = F.dist.toFixed(1) + ' m';
+    $('dist').textContent = F.dist.toFixed(1) + ' m' + (F.extra && F.extra.length ? ' · ' + (F.extra.length + 1) + ' on the line' : '');
     const cover = F.way.cover, half = CORE.COVER + 1;
     $('lane').classList.toggle('nocover', !cover); $('lane').classList.toggle('hide', !cover);
     $('fishM').style.left = (50 + clamp(F.lat / half, -1, 1) * 44) + '%'; $('fishM').style.transform = F.dir < 0 && (F.mode === 'run' || F.mode === 'jump') ? 'scaleX(1)' : 'scaleX(-1)';
@@ -15893,7 +15934,8 @@ function render() {
     ribbon([rtip, floatAt], .0012, .0012, [.92, .92, .86, .7]);
     if (Math.random() < .3 && up < .2) ripple(floatAt[0], floatAt[2], .12);
   }
-  if (landA) { const p = landPos(), pts = [rtip, [p[0], p[1] + fishLen(landA.k, landA.w) * .02, p[2]]]; ribbon(pts, .0012, .0012, [.92, .92, .86, .7]); }
+  if (landA) { garlandTip = rtip; const p = landPos(), pts = [rtip, [p[0], p[1] + fishLen(landA.k, landA.w) * .02, p[2]]]; ribbon(pts, .0012, .0012, [.92, .92, .86, .7]);
+    for (const d of garlandDrops()) ribbon([d.on, d.at], .0008, .0008, [.9, .9, .85, .6]); }
   gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, lineD, 0, lineN * 7);
   let n = 0;
   for (const p of parts) { if (n >= PMAX) break; const a = p.ff ? (.5 + .5 * sin(now * 4 + p.x * 9)) * min(1, p.t, p.life - p.t) : p.c[3] * (1 - p.t / p.life); ptD.set([p.x, p.y, p.z, p.smoke ? p.s * (1 + p.t) : p.s, p.c[0] * (p.ff ? 3 : 1), p.c[1] * (p.ff ? 3 : 1), p.c[2], a], n * 8); n++; }
@@ -15901,7 +15943,7 @@ function render() {
   if (n) { gl.bindBuffer(gl.ARRAY_BUFFER, ptBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, ptD, 0, n * 8); }
   const fishes = fishList(fp);
   const extras = (mirror, under) => {
-    for (const f of fishes) if (!!f.under === under && (!mirror || !f.under)) drawFish3(f, pal, mirror);
+    for (const f of fishes) if (!!f.under === under && (!mirror || (!f.under && !f.extra))) drawFish3(f, pal, mirror);
     if (under) return;
     uniforms(thingP, pal, mirror);
     // a float far out keeps a size the eye can find (as a real one's bright tip does), never a speck
@@ -15944,10 +15986,14 @@ function render() {
 function fishList(fp) {
   const out = [], F = S.phase === 'fight' && S.fish;
   if (F && fp && !jumpA && F.mode !== 'jump') { const len = fishLen(F.k, F.w), away = F.mode === 'run' ? .5 : -.9, yaw = atan2(-(swim.f[1] * away + swim.r[1] * F.dir * (F.mode === 'run' ? F.way.lat : 0)), swim.f[0] * away + swim.r[0] * F.dir * (F.mode === 'run' ? F.way.lat : 0));
-    out.push({ k: F.k, len, p: [fp[0], F.mode === 'sulk' ? -.9 : F.mode === 'run' ? -.1 - len * .06 : -.2 - len * .08, fp[1]], yaw, pitch: 0, roll: F.mode === 'run' ? sin(now * 9) * .3 : 0, wig: F.mode === 'run' ? .16 : .07, ph: now * (F.mode === 'run' ? 16 : 7), under: F.mode === 'sulk' ? .85 : F.mode === 'run' ? .2 : .4 }); }
+    out.push({ k: F.k, len, p: [fp[0], F.mode === 'sulk' ? -.9 : F.mode === 'run' ? -.1 - len * .06 : -.2 - len * .08, fp[1]], yaw, pitch: 0, roll: F.mode === 'run' ? sin(now * 9) * .3 : 0, wig: F.mode === 'run' ? .16 : .07, ph: now * (F.mode === 'run' ? 16 : 7), under: F.mode === 'sulk' ? .85 : F.mode === 'run' ? .45 : .6 }); }
+  if (F && fp && F.extra) F.extra.forEach((x, j) => {   /* the rest of the garland, dark shapes on their droppers behind the lead */
+    const len = fishLen(x.k, x.w), q = inSwim(max(.8, F.dist - .45 * (j + 1)), fishLat + sin(now * 1.7 + j * 2.1) * .5 + (j % 2 ? .35 : -.35)), run = x.mode === 'run';
+    out.push({ k: x.k, len, p: [q[0], -.25 - len * .1 - (j % 3) * .08, q[1]], yaw: atan2(-swim.f[1], swim.f[0]) + (run ? x.dir * .9 : sin(now + j) * .3), pitch: 0, roll: run ? sin(now * 9 + j) * .3 : 0, wig: run ? .16 : .07, ph: now * (run ? 16 : 7) + j, under: .78, extra: 1 }); });
   if (jumpA) { const t = jumpA.t / .85, len = fishLen(jumpA.k, jumpA.w), h = .5 + len * .8, p = floatPos() || jumpA.p;
     out.push({ k: jumpA.k, len, p: [p[0], sin(t * PI) * h - .15, p[1]], yaw: jumpA.dir > 0 ? 0 : PI, pitch: (.5 - t) * 2.4, roll: sin(t * PI * 2) * .6, wig: .2, ph: now * 20, under: 0 }); }
-  if (landA) { const p = landPos(), len = fishLen(landA.k, landA.w); out.push({ k: landA.k, len, p, yaw: me.yaw + sin(now * 2.3) * .35, pitch: PI / 2 - .12, roll: sin(now * 9) * .25, wig: landA.drop ? .1 : .12 + .1 * sin(now * 3), ph: now * 12, under: 0, hang: 1 }); }
+  if (landA) { const p = landPos(), len = fishLen(landA.k, landA.w); out.push({ k: landA.k, len, p, yaw: me.yaw + sin(now * 2.3) * .35, pitch: PI / 2 - .12, roll: sin(now * 9) * .25, wig: landA.drop ? .1 : .12 + .1 * sin(now * 3), ph: now * 12, under: 0, hang: 1 });
+    for (const d of garlandDrops()) out.push({ k: d.k, len: d.len, p: d.p, yaw: me.yaw + sin(now * 2.1 + d.j) * .5, pitch: PI / 2 - .1, roll: sin(now * 8 + d.j * 1.7) * .3, wig: landA.drop ? .1 : .14 + .1 * sin(now * 3 + d.j), ph: now * 12 + d.j, under: 0, hang: 1, extra: 1 }); }
   return out;
 }
 function drawFish3(f, pal, mirror) {
@@ -15957,7 +16003,7 @@ function drawFish3(f, pal, mirror) {
   gl.disable(gl.CULL_FACE); gl.bindVertexArray(M.vao); gl.drawArrays(gl.TRIANGLES, 0, M.n);
 }
 
-/* ================= scenes for a session at work: ?scene=min<n>, fight:<kind>, jump, land:<kind>, night, dark, bell, old, pods ================= */
+/* ================= scenes for a session at work: ?scene=min<n>, fight:<kind>, jump, land:<kind>, night, dark, bell, old, pods, garland, garland:landed ================= */
 function sceneState(name) {
   let m = /^min(\d+)$/.exec(name);
   const T = CORE.init(1);
@@ -15973,8 +16019,11 @@ function sceneState(name) {
   if (name === 'dark') { play(3); T.t = CORE.DAY * .7; T.lv.lamp = 0; return T; }
   if (name === 'bell') { play(22); T.lv.rod2 = max(1, T.lv.rod2); T.rod2.bell = 1; T.rod2.wait = 40; return T; }
   if (name === 'old') { play(60); return T; }
+  if (name === 'garland' || name === 'garland:landed') { play(36); T.t = CORE.DAY * .3; T.lv.pater = 9; T.rain = 0; T.rainT = 999; const F = CORE.fightWith(T, 'bream', 2.2, 12); T.vt = { cast: 1, strike: 1, reel: 1, garland: 1 };
+    const ks = ['perch', 'roach', 'rudd', 'perch', 'tench', 'roach', 'bream']; for (let j = 0; j < 7; j++) F.extra.push({ k: ks[j], w: [.4, .25, .3, .5, 1.2, .3, 1.5][j], size: 0, str: 1, stam: 3, stam0: 3, mode: j % 2 ? 'run' : 'rest', mt: 1, dir: j % 2 ? 1 : -1 });
+    if (name === 'garland:landed') F.dist = 1.25; return T; }
   if (name === 'pods') { play(36); T.t = CORE.DAY * .3; T.lv.pod = 8; T.lv.rig = max(T.lv.rig, 1); T.rain = 0; T.rainT = 999;
-    T.pods = []; for (let i = 0; i < 8; i++) T.pods.push({ t: 20 + i * 4, on: i === 2 || i === 5 ? 1 : 0, wait: 25, k: i === 2 ? 'carp' : 'pike', w: 4, reel: i === 4 ? 4 : 0 }); return T; }
+    T.pods = []; for (let i = 0; i < 8; i++) T.pods.push({ t: 20 + i * 4, on: 0, wait: 0, k: 'roach', w: .3, reel: i === 4 || i === 1 ? 4 : 0 }); return T; }
   return null;
 }
 K.world({
@@ -15987,9 +16036,9 @@ K.world({
     if (K.dev) console.log('[jetty] built in ' + (performance.now() - t0).toFixed(0) + ' ms');
     me.x = 0; me.z = jettyEnd() + .8; me.yaw = 0;   /* past the mooring post, so it is not a cut-off block at a phone's edge */
     if (S.phase === 'fight') { fightRod = S.rodN || 1; setSwim(fightRod); if (fightRod === 2) { me.x = R2.x + sin(R2.yaw) * .6; me.z = R2.z + cos(R2.yaw) * .6; me.yaw = R2.yaw; } }
-    if (sc && /^land/.test(sc)) { for (let k = 0; k < 200 && S.phase === 'fight'; k++) { CORE.act(S, 'reel', 1, 0); CORE.step(S, .05); } }
+    if (sc && /^land|landed$/.test(sc) && S.phase === 'fight') { for (let k = 0; k < 200 && S.phase === 'fight'; k++) { CORE.act(S, 'reel', 1, 0); CORE.step(S, .05); } }
     shown = S.$; board();
-    if (S.phase === 'land' && S.landed) { landA = { t: 2, k: S.landed.k, w: S.landed.w, from: [0, jettyEnd() - 2], e: Object.assign({ f: S.landed.k }, S.landed), shown: 1, drop: 0 }; showCatch(landA.e); }
+    if (S.phase === 'land' && S.landed) { landA = { t: 2, k: S.landed.k, w: S.landed.w, from: [0, jettyEnd() - 2], e: Object.assign({ f: S.landed.k }, S.landed), shown: 1, drop: 0, more: S.landed.more || [] }; showCatch(landA.e); }
     $('fps').hidden = !DIAG.fps;
     if (CORE.done(S)) tinT = 1.0;   // opened, but the page closed before the trip inside: the tin opens once more and the shell dives
   },
@@ -16080,8 +16129,9 @@ const CORE = (() => {
     { id: 'bait', name: 'Better bait', what: 'quicker bites, rarer and bigger fish', max: 4, base: 14, g: 2.6 },
     { id: 'jetty', name: 'Longer jetty', what: 'reaches deeper water', max: 3, base: 45, g: 3.4 },
     { id: 'rod2', name: 'Bank rod', what: 'fishes by itself in the reeds; listen for its bell', max: 4, base: 30, g: 2.6 },
-    { id: 'pod', name: 'Rod on a rest', what: 'another line out from the end, with a bite alarm', max: 8, base: 55, g: 1.55 },
-    { id: 'rig', name: 'Self-hooking rigs', what: 'small fish on the rests land themselves', max: 3, base: 180, g: 2.6 },
+    { id: 'pod', name: 'Rod on a rest', what: 'another line out from the end; it fishes by itself', max: 8, base: 55, g: 1.55 },
+    { id: 'rig', name: 'Self-hooking rigs', what: 'bigger fish on the rests land themselves', max: 3, base: 180, g: 2.6 },
+    { id: 'pater', name: 'Paternoster', what: 'another hook on your line: more fish on at once', max: 9, base: 40, g: 1.78 },
     { id: 'lamp', name: 'Lantern', what: 'fish on into the night', max: 1, base: 40, g: 1 },
     { id: 'smoke', name: 'Smokehouse', what: 'smoked fish sell dearer', max: 4, base: 60, g: 2.3 },
     { id: 'brake', name: 'Reel brake', what: 'slips before the line snaps, but gives line', max: 1, base: 500, g: 1 }
@@ -16105,8 +16155,11 @@ const CORE = (() => {
   const wait2 = S => S.lv.rod2 >= 2 ? 45 : 28;  // how long a fish on the bank rod stays on
   // the rods on the rests at the jetty's end: each casts out three quarters of the hand's reach and bites on its own clock;
   // a fish whose pull the rig can hold hooks itself and is wound in to the keepnet; anything bigger sets the alarm off
-  const podD = S => castMax(S) * .6, podT = S => biteMean(S) * 11, podWait = S => 30;
-  const RIG = [0, .9, 1.7, 2.7], rigCap = S => RIG[S.lv.rig | 0];
+  const podD = S => castMax(S) * .6, podT = S => biteMean(S) * 9, podWait = S => 30;
+  // what a rest's rig can hold and land by itself; anything stronger shakes free (the rests fish on their own, no alarms)
+  const RIG = [.9, 1.8, 2.8, 99], rigCap = S => RIG[S.lv.rig | 0];
+  // the paternoster: hooks on droppers along the hand's line; while a fish is on, the commotion draws others to the free ones
+  const hooks = S => 1 + (S.lv.pater | 0), joinRate = S => .07 * (1 + .25 * S.lv.bait);
 
   function init(seed) {
     const S = { seed: seed >>> 0 || 1, t: DAY * .02, $: 0, earned: 0, phase: 'idle', bob: null, fish: null, wait: 0, hold: 0, steer: 0, log: {}, caught: 0, lost: 0, snaps: 0,
@@ -16118,7 +16171,8 @@ const CORE = (() => {
   const ev = (S, e) => { S.ev.push(e); if (S.ev.length > 40) S.ev.splice(0, S.ev.length - 40); };
   const kinds = S => Object.keys(S.log).filter(k => k !== 'old').length;
   // the Old One comes to a lake full of lines: the book full, the jetty long, every rest out
-  function oldReady(S) { return S.lv.jetty >= 3 && kinds(S) >= FISH.length && (S.lv.pod | 0) >= byId.pod.max && !S.fin; }
+  // the Old One comes to the full paternoster: the book full, the jetty long, every hook on the line
+  function oldReady(S) { return S.lv.jetty >= 3 && kinds(S) >= FISH.length && (S.lv.pater | 0) >= byId.pater.max && !S.fin; }
   function choose(S, d, noOld) {   // which fish takes the bait at this distance, now
     const bit = BIT[todOf(S)], pool = [];
     for (const f of FISH) {
@@ -16140,7 +16194,13 @@ const CORE = (() => {
   function newFish(S, f, d, w) {
     const way = WAY[f[0]], str = f[5] * pow(w / f[4], .65);
     return { k: f[0], w, size: sizeOf(f[0], w), str, way, stam: 3 + pow(w / f[4], .5) * (4 + 2.2 * pow(f[4], .35)) * (f === OLD ? 2.2 : 1), stam0: 0,
-      mode: 'rest', mt: .5, dist: d, lat: 0, dir: rand(S) < .5 ? -1 : 1, tens: 0, over: 0, snag: 0, pump: 0, need: 0, held: 0, free: 0, creep: 0 };
+      mode: 'rest', mt: .5, dist: d, lat: 0, dir: rand(S) < .5 ? -1 : 1, tens: 0, over: 0, snag: 0, pump: 0, need: 0, held: 0, free: 0, creep: 0, extra: [] };
+  }
+  // another fish on a free hook of the paternoster: it runs and rests its own way, pulls on the same line, tires
+  function addExtra(S, F) {
+    const f = choose(S, F.dist + reach(S), 1), w = weigh(S, f), str = f[5] * pow(w / f[4], .65), stam = 2 + pow(w / f[4], .5) * (2.5 + 1.5 * pow(f[4], .35));
+    F.extra.push({ k: f[0], w, size: sizeOf(f[0], w), str, stam, stam0: stam, mode: 'run', mt: .6 + rand(S) * .6, dir: rand(S) < .5 ? -1 : 1 });
+    ev(S, { k: 'join', f: f[0], n: F.extra.length + 1 });
   }
   // a fight with a given fish, for scenes and measures: the kind, its weight (or a usual one), how far out
   function fightWith(S, k, w, d = 12) {
@@ -16165,7 +16225,7 @@ const CORE = (() => {
     }
   }
   function lose(S, why) {
-    const F = S.fish; ev(S, { k: 'lost', why, f: F.k, w: F.w }); S.lost++; S.run = 0; S.why[why] = (S.why[why] | 0) + 1;
+    const F = S.fish; ev(S, { k: 'lost', why, f: F.k, w: F.w, n: 1 + (F.extra ? F.extra.length : 0) }); S.lost++; S.run = 0; S.why[why] = (S.why[why] | 0) + 1;
     if (why === 'snap') S.snaps++;
     S.fish = null; S.phase = 'idle'; S.bob = null; S.rodN = 0;
   }
@@ -16188,10 +16248,19 @@ const CORE = (() => {
     let base = F.str * (F.mode === 'run' ? runF : F.mode === 'jump' ? (2.5 - .25 * S.lv.hook) * runF : F.mode === 'rise' ? .6 : F.mode === 'sulk' ? .8 : tired ? .12 : W.heavy ? .42 : .3);
     if (F.snag > 0) base = max(base, F.str * .75);
     const sStr = strength(S) * soak(S);
+    // the rest of the garland: each on its own dropper, running and resting; together they load the line
+    let xp = 0; const X = F.extra || (F.extra = []);
+    for (const x of X) {
+      x.mt -= dt; if (x.mt <= 0) { if (x.mode === 'run' || x.stam <= 0) { x.mode = 'rest'; x.mt = .5 + rand(S) * .9; } else { x.mode = 'run'; x.mt = .4 + rand(S) * .8; x.dir = rand(S) < .5 ? -1 : 1; } }
+      const xf = max(0, x.stam / x.stam0);
+      xp += x.str * (x.mode === 'run' ? .35 + .35 * xf : x.stam > 0 ? .16 : .07);
+      if (x.mode === 'run') { x.stam -= dt * (hold ? 1.5 : .8); F.lat += x.dir * .18 * dt; }
+    }
+    if (X.length < hooks(S) - 1 && F.dist > 3 && F.k !== 'old' && rand(S) < dt * joinRate(S) * (hooks(S) - 1 - X.length)) addExtra(S, F);
     if (F.mode === 'sulk' && hold) { F.creep += dt; base *= 1 + .4 * F.creep; } else F.creep = max(0, F.creep - dt * 2);
     // leaning the rod against a run takes the strain on the rod's side: less on the line; leaning with it, more
     const rodTurn = .7 + .12 * S.lv.rod, lean = (F.mode === 'run' || F.mode === 'jump') ? -steer * F.dir : 0;
-    let force = hold ? (base * (lean > 0 ? 1 - .42 * lean * rodTurn : 1 - .25 * lean) + .15 * F.str + .05) : base * .35, slip = 0;
+    let force = hold ? (base * (lean > 0 ? 1 - .42 * lean * rodTurn : 1 - .25 * lean) + .15 * F.str + .05 + xp) : (base + xp) * .35, slip = 0;
     if (hold && S.lv.brake && force > .9 * sStr) { const x = force - .9 * sStr; slip = x / sStr; force = .9 * sStr + x * .45; }   // the brake slips: softer, but line goes out
     F.tens = force / sStr;
     // how far, and where to the side
@@ -16212,7 +16281,7 @@ const CORE = (() => {
         F.dist += runSp * sqrt(max(0, 1 - W.lat * W.lat * .6)) * dt * (hold ? (slip ? .5 + slip : .12) : 1);
         F.stam -= dt * (hold ? 1.2 : .55);
       } else if (hold) {
-        const sp = reelSpeed(S) * dt * (tired ? 1.3 : 1) / (W.heavy ? 1.25 : 1);
+        const sp = reelSpeed(S) * dt * (tired ? 1.3 : 1) / (W.heavy ? 1.25 : 1) / (1 + .07 * X.length);   // a garland comes in slower
         if (F.lat) F.lat -= F.lat * min(1, sp / max(2, F.dist));
         F.dist -= sp; if (!tired) F.stam -= dt * .35;
       } else if (!tired) F.stam = min(F.stam + dt * .2, F.stam0);
@@ -16223,7 +16292,14 @@ const CORE = (() => {
     }
     // the line under load: past its strength it snaps; in a jump it shakes the hook sooner
     if (F.tens > 1) F.over += dt * (F.mode === 'jump' ? 4 : 1); else F.over = max(0, F.over - dt * 3);
-    if (F.over > grace(S)) { lose(S, F.mode === 'jump' ? 'threw' : 'snap'); return; }
+    if (F.over > grace(S)) {
+      if (F.mode === 'jump' && X.length) {   // the jumper throws its hook; the rest of the garland stays on, the strongest leads now
+        ev(S, { k: 'lost', why: 'threw', f: F.k, w: F.w, n: 1, some: 1 }); S.why.threw = (S.why.threw | 0) + 1;
+        X.sort((a, b) => b.str - a.str); const x = X.shift(), N = newFish(S, kind(x.k), F.dist, x.w);
+        N.stam = x.stam; N.stam0 = x.stam0 + 1; N.lat = F.lat; N.extra = X; S.fish = N; return;
+      }
+      lose(S, F.mode === 'jump' ? 'threw' : 'snap'); return;
+    }
     if (F.dist > spool(S)) { lose(S, 'gone'); return; }
     if (F.dist <= 1.2) land(S);
   }
@@ -16237,10 +16313,10 @@ const CORE = (() => {
       P.t -= h * (S.rain ? 1.4 : 1);
       if (P.t > 0) continue;
       if (!canFish(S)) { P.t = 3; continue; }
-      const f = choose(S, podD(S) + reach(S)), w = weigh(S, f), pull = f === OLD ? 99 : f[5] * pow(w / f[4], .65);   // the Old One may take a rest's bait too
+      const f = choose(S, podD(S) + reach(S), 1), w = weigh(S, f), pull = f[5] * pow(w / f[4], .65);
       P.k = f[0]; P.w = w;
       if (pull <= rigCap(S)) { P.reel = 2.5 + sqrt(w) * 2; ev(S, { k: 'pbite', i, f: f[0] }); }   // it hooks itself; the rest's reel brings it in
-      else { P.on = 1; P.wait = podWait(S); ev(S, { k: 'alarm', i, f: f[0], size: sizeOf(f[0], w) }); }
+      else { P.k = null; P.t = podT(S) * (.5 + rand(S)); ev(S, { k: 'pfree', i, f: f[0] }); }   // too strong for the rig: a screaming run, and it is off
     }
   }
   function autoLand(S, i, P) {   // a small fish from a rest, into the keepnet: paid and written in the book, not a fish of the hand's
@@ -16250,16 +16326,21 @@ const CORE = (() => {
     ev(S, { k: 'auto', i, f: P.k, w: P.w, v, first });
     P.reel = 0; P.k = null; P.t = podT(S) * (.5 + rand(S));
   }
-  function land(S) {
-    const F = S.fish, f = kind(F.k), v = +(F.w * f[6] * PAY * worth(S)).toFixed(2);
-    const e = S.log[F.k] || (S.log[F.k] = { n: 0, best: 0 }), first = !e.n, size = F.size;
-    e.n++; if (F.w > e.best) e.best = F.w;
-    S.$ += v; S.earned += v; S.caught++; S.best = max(S.best, F.w); S.run++; S.bestRun = max(S.bestRun, S.run);
+  function book(S, k, w, size) {   // one fish into the book and the till; its worth
+    const f = kind(k), v = +(w * f[6] * PAY * worth(S)).toFixed(2), e = S.log[k] || (S.log[k] = { n: 0, best: 0 }), first = !e.n;
+    e.n++; if (w > e.best) e.best = w;
+    S.$ += v; S.earned += v; S.caught++; S.best = max(S.best, w); S.run++; S.bestRun = max(S.bestRun, S.run);
     if (night(S)) S.nightN++;
     if (size === 3) S.trophies++;
-    const newSize = size > (S.sizes | 0); if (newSize) S.sizes = size;
-    ev(S, { k: 'catch', f: F.k, w: F.w, v, first, size, newSize, rod: S.rodN || 1 });
-    S.phase = 'land'; S.landed = { k: F.k, w: F.w, v, first, size }; S.fish = null; S.bob = null; S.rodN = 0;
+    return { f: k, w, v, first, size };
+  }
+  function land(S) {
+    const F = S.fish, lead = book(S, F.k, F.w, F.size), { v, first, size } = lead;
+    const more = (F.extra || []).map(x => book(S, x.k, x.w, x.size)), all = [lead, ...more], total = +all.reduce((a, c) => a + c.v, 0).toFixed(2);
+    const top = max(...all.map(c => c.size)), newSize = top > (S.sizes | 0); if (newSize) S.sizes = top;
+    if (all.length > 1) { S.garland = max(S.garland | 0, all.length); }
+    ev(S, { k: 'catch', f: F.k, w: F.w, v, first, size, newSize, rod: S.rodN || 1, more, total });
+    S.phase = 'land'; S.landed = { k: F.k, w: F.w, v, first, size, more, total }; S.fish = null; S.bob = null; S.rodN = 0;
     if (F.k === 'old') { S.fin = 1; ev(S, { k: 'box' }); }
   }
   function step(S, dt) {
@@ -16320,8 +16401,9 @@ const CORE = (() => {
   // a new kind, a new size, a big one of a kind for the book, a new piece of tackle, every 20th fish (a notch in the jetty's post)
   const milestones = S => { let n = Object.keys(S.log).length * 100 + S.fin * 10000 + floor(S.caught / 20) * 1e5 + (S.sizes | 0) * 1e7; for (const k in S.lv) n += S.lv[k]; for (const k in S.log) n += sizeOf(k, S.log[k].best) * 1e8; return n; };
   // back from the shelf: the tackle and the book kept, and the Old One back in the deep
-  function migrate(S, from) {   // version 2 brought the rests and the rigs
+  function migrate(S, from) {   // version 2 brought the rests and the rigs; version 3 the paternoster, and rests that fish alone
     if (from < 2) { S.lv.pod = S.lv.pod | 0; S.lv.rig = S.lv.rig | 0; S.pods = S.pods || []; }
+    if (from < 3) { S.lv.pater = S.lv.pater | 0; for (const P of S.pods || []) if (P.on) { P.on = 0; P.k = null; P.t = 5; } if (S.fish && !S.fish.extra) S.fish.extra = []; }
     return S;
   }
   function revisit(S) { S.fin = 0; S.phase = 'idle'; S.bob = null; S.fish = null; S.landed = null; S.ev = []; S.oldTries = 0; return S; }
@@ -16390,7 +16472,7 @@ const CORE = (() => {
     novice: person({ react: .7, strike: .6, shop: 45, hear: 10, pace: 1.6, look: 4, castT: 4, wobble: .6, off: 1, on: .55, bow: 0, steer: 0 })
   };
 
-  return { version: 2, migrate, podD, rigCap, DAY, FISH, OLD, WAY, UP, R2, SIZE, COVER, byId, kind, price, castMax, reach, spool, strength, soak, reelSpeed, grace, window, biteMean, worth, sizeOf,
+  return { version: 3, migrate, podD, rigCap, hooks, DAY, FISH, OLD, WAY, UP, R2, SIZE, COVER, byId, kind, price, castMax, reach, spool, strength, soak, reelSpeed, grace, window, biteMean, worth, sizeOf,
     todOf, canFish, oldReady, fightWith, walk2, wait2, kinds, hand, init, step, act, done, progress, milestones, revisit, feats, bots, pace: { eager: 30, casual: 90 } };
 })();
 </script>

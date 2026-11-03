@@ -2216,7 +2216,7 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   card, light comes out on the box's own clock, and the shell dives into the tin's mouth. `revisit` brings a finished jetty
   back with the book and tackle, and the Old One takes the bait again.
 - *Tools*: `?world=jetty&scene=` `min<n>` (the eager bot's game), `fight:<kind>`, `jump`, `land:<kind>`, `night`, `dark`,
-  `bell`, `old`, `pods`; `?tod=0..1`, `?rain=0|1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
+  `bell`, `old`, `pods`, `garland`, `garland:landed`; `?tod=0..1`, `?rain=0|1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
   which dithered in the software renderer); `K.debug.look(x, z, yaw, pitch)`, `tod(u)`, `snap()` (renders, then reads the canvas).
 - *Controls*: a mouse looks the way it moves; a finger drags the world. The owner found the mouse's up and down inverted.
   Then, at the owner's wish, the first click with a mouse takes the pointer (pointer lock) and puts the whole page in full
@@ -2322,6 +2322,28 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
 - *The guitar, heard at last by someone*: `K.debug.music(seconds, hour)` renders the box's own music code into an
   OfflineAudioContext and returns a WAV; measured, the day plays at about -17 dB with no gaps, the night is harmonics over
   silence.
+
+**The third look** (November 2026, the owner after playing: "many fish on one rod would satisfy more than working many rods").
+- *The paternoster* (the owner chose a garland that fights at once, and rests that fish alone). `pater` (9 levels) puts more
+  hooks on droppers along the hand's line, up to ten. While a fish is on and still out past three metres, the commotion draws
+  others to the free hooks (`joinRate`, more with better bait); each runs and rests its own way, pulls on the same line and
+  tires, a garland reels in a little slower, and the line holds or snaps for all of them. A jumper that throws its hook leaves
+  the rest on, the strongest leading. The garland is landed, booked and paid together; it hangs before you on its droppers, the
+  card says "A garland of 7" with every kind and the sum, and a run up the scale plays one note per fish. Under the water the
+  others follow the lead as dark shapes (a pale belly at half darkness read as a ghost). The Old One now waits for the full
+  paternoster and never joins a garland. Measured with people in the rules at the 4th, 7th and 10th hook: someone who only
+  holds lands 63 to 83 % of garlands, the one who leans every one, about eight or nine fish a garland at ten hooks, fifteen
+  seconds a fight. Pacing: eager 38.5 to 48.7 min, casual 45.6 to 50.4, the longest wait 3.6.
+- *The rests fish alone*: no alarms to answer; what the rig can hold (0.9, 1.8, 2.8, anything) is wound into the keepnet,
+  anything stronger runs and is off. Version 3 of the rules; `migrate` clears an old save's alarms.
+- *Softer guitar*: the pluck is a fingertip's (noise smoothed twice), a three-tap average in the string's loop takes the high
+  overtones down sooner, a slower onset, the tone cut at 2.3 kHz, more room, a lighter thumb. Measured on the offline render:
+  the spectral centroid fell from about 2200 Hz to 1050, the energy above 2 kHz from 12 % to 1 %, the strings within 7 cents.
+- *Trees, again*: a broadleaf is grown as an oak or an ash grows: a short, stout trunk flaring into its roots, limbs leaving at
+  different heights and forking once, twenty-odd clumps of smaller cards over an uneven dome (a cloud of clouds, not a ball),
+  each clump its own shade, dark beneath and inside. Cards seen edge-on fade out (their true face normal from `dFdx`/`dFdy`)
+  instead of standing as slivers; bark has long furrows between plates and moss low down; twice the undergrowth closes the
+  woods so no colonnade of stems shows under far crowns.
 
 ## Lessons from the boxes so far
 

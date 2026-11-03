@@ -1076,19 +1076,20 @@ if (suites.includes('jetty') && jetty) {
     const U = CORE.init(8); U.lv.rod2 = 1; U.rod2.t = .1; CORE.step(U, .5); CORE.step(U, CORE.wait2(U) + 1);
     check(!U.rod2.bell && U.ev.some(e => e.k === 'off2'), 'jetty: left too long, it gets off');
   }
-  { // the rods on rests: a fish too strong for the rig sets the alarm off and waits for the hand; one the rig holds lands itself
-    const S = CORE.init(12); S.lv.pod = 2; S.lv.rig = 0; S.lv.bait = 2; S.t = CORE.DAY * .3; let alarm = null;
-    for (let k = 0; k < 4000 && !alarm; k++) { CORE.step(S, .1); for (const e of S.ev) if (e.k === 'alarm') alarm = e; S.ev.length = 0; }
-    check(!!alarm, 'jetty: a rod on a rest sets its alarm off when something takes the bait');
-    check(alarm && CORE.act(S, 'takeP', alarm.i) && S.phase === 'fight' && S.rodN === 10 + alarm.i, 'jetty: picked up off its rest, it is played by hand');
-    const A = CORE.init(13); A.lv.pod = 3; A.lv.rig = 3; A.t = CORE.DAY * .3; let auto = 0, alarms = 0; const $0 = A.$;
-    for (let k = 0; k < 6000; k++) { CORE.step(A, .1); for (const e of A.ev) { if (e.k === 'auto') auto++; if (e.k === 'alarm') alarms++; } A.ev.length = 0; }
-    check(auto > 5 && A.$ > $0 && A.caught === auto, `jetty: with the rigs, small fish land themselves into the keepnet (${auto} landed, ${alarms} alarms for the hand)`);
+  { // the rods on rests fish alone: what the rig can hold lands itself, anything stronger shakes free; no alarm calls the hand
+    const A = CORE.init(13); A.lv.pod = 3; A.lv.rig = 1; A.t = CORE.DAY * .3; let auto = 0, free = 0, alarms = 0; const $0 = A.$;
+    for (let k = 0; k < 6000; k++) { CORE.step(A, .1); for (const e of A.ev) { if (e.k === 'auto') auto++; if (e.k === 'pfree') free++; if (e.k === 'alarm') alarms++; } A.ev.length = 0; }
+    check(auto > 5 && A.$ > $0 && A.caught === auto && !alarms, `jetty: the rests land what their rigs hold by themselves (${auto} landed, ${free} too strong, no alarms)`);
+    // the paternoster: while a fish is on, others take the free hooks; the garland is landed and paid together
+    const G = CORE.init(16); G.lv.pater = 9; G.lv.line = 9; G.lv.rod = 6; G.lv.reel = 7; G.t = CORE.DAY * .3; CORE.fightWith(G, 'bream', null, 20); const hand = CORE.hand({ react: .3, off: .92, on: .7, bow: 1, steer: 1 }); let most = 0, ft = 0; const g$ = G.$;
+    while (G.phase === 'fight' && ft < 200) { hand(G, {}, .05); CORE.step(G, .05); ft += .05; if (G.fish) most = Math.max(most, G.fish.extra.length + 1); }
+    check(most >= 4 && most <= CORE.hooks(G), `jetty: with the paternoster several fish are on one line at once (up to ${most} of ${CORE.hooks(G)} hooks)`);
+    check(G.phase === 'land' && G.landed.more.length >= 2 && G.caught === 1 + G.landed.more.length && Math.abs(G.$ - g$ - G.landed.total) < .02, 'jetty: and the whole garland is landed, booked and paid together');
     const O = CORE.init(14); O.lv.jetty = 3; for (const f of CORE.FISH) O.log[f[0]] = { n: 1, best: 1 };
-    check(!CORE.oldReady(O), 'jetty: the Old One waits for a lake full of lines');
-    O.lv.pod = CORE.byId.pod.max; check(CORE.oldReady(O), 'jetty: and comes once every rest is out');
-    const V = CORE.init(15); delete V.lv.pod; delete V.lv.rig; delete V.pods; const M = CORE.migrate(V, 1);
-    check(M.lv.pod === 0 && M.lv.rig === 0 && Array.isArray(M.pods), 'jetty: a save from before the rests carries on');
+    check(!CORE.oldReady(O), 'jetty: the Old One waits for the full paternoster');
+    O.lv.pater = CORE.byId.pater.max; check(CORE.oldReady(O), 'jetty: and comes once every hook is on the line');
+    const V = CORE.init(15); delete V.lv.pod; delete V.lv.rig; delete V.lv.pater; delete V.pods; const M = CORE.migrate(V, 1);
+    check(M.lv.pod === 0 && M.lv.rig === 0 && M.lv.pater === 0 && Array.isArray(M.pods), 'jetty: a save from before the rests and the paternoster carries on');
   }
   { // a night without a lantern passes quickly; the box can be gone back to
     const S = CORE.init(9); S.t = CORE.DAY * .66; const t0 = S.t; CORE.step(S, 10);
