@@ -14253,7 +14253,7 @@ const $ = id => document.getElementById(id);
 const { clamp, lerp, fmt } = K;
 const QS = (() => { try { return new URLSearchParams(parent.location.search); } catch (e) { return new URLSearchParams(); } })();
 // switches for a session at work on the box: ?fps, ?dpr=1, ?fx=0, ?refl=0, ?shadow=0, ?a2c=1 (leaves through alpha to coverage), ?tod=0..1, ?rain=0|1, ?scene=<name>
-const DIAG = { hide: new Set((QS.get('hide') || '').split(',')), a2c: QS.get('a2c') === '1', fps: QS.has('fps'), dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', refl: QS.get('refl') !== '0', shadow: QS.get('shadow') !== '0', tod: QS.has('tod') ? +QS.get('tod') : null, rain: QS.has('rain') ? +QS.get('rain') : null };
+const DIAG = { hide: new Set((QS.get('hide') || '').split(',')), a2c: QS.get('a2c') === '1', fps: QS.has('fps'), dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', refl: QS.get('refl') !== '0', shadow: QS.get('shadow') !== '0', tod: QS.has('tod') ? +QS.get('tod') : null, rain: QS.has('rain') ? +QS.get('rain') : null, refr: QS.get('refr') !== '0' };
 const FX = () => DIAG.fx && !K.reduced;
 const TOUCH = matchMedia('(pointer: coarse)').matches;
 const { sin, cos, abs, min, max, sqrt, floor, hypot, PI, exp, atan2, pow, sign } = Math;
@@ -14299,7 +14299,7 @@ float vn(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
              mix(mix(h13(i + vec3(0, 0, 1)), h13(i + vec3(1, 0, 1)), f.x), mix(h13(i + vec3(0, 1, 1)), h13(i + vec3(1, 1, 1)), f.x), f.y), f.z); }
 float sunShadow(vec3 P, vec3 N) {
   if (uShOn < .5) return 1.;
-  vec4 q = uSM * vec4(P + N * .06 + uSun * .04, 1.); vec3 c = q.xyz / q.w * .5 + .5;
+  vec4 q = uSM * vec4(P + N * .12 + uSun * .05, 1.); vec3 c = q.xyz / q.w * .5 + .5;   /* bias along the normal: no striped acne on round posts */
   if (c.x < 0. || c.y < 0. || c.x > 1. || c.y > 1. || c.z > 1.) return 1.;
   float d = ${(1.25 / SMN).toFixed(6)}, s = 0.;
   s += texture(uSh, vec3(c.xy + vec2(-d, -d), c.z)); s += texture(uSh, vec3(c.xy + vec2(d, -d), c.z));
@@ -14322,7 +14322,8 @@ vec3 haze(vec3 col, vec3 P) {
   float d = length(P - uEye), f = (1. - exp(-d * .0042 * (1. + uMist * 3.5))) * (.9 + uMist * .06), low = exp(-max(P.y, 0.) * .35) * (1. - exp(-d * .03)) * .35;
   return mix(col, uFog, clamp(f + low * uWet, 0., 1.));
 }
-vec3 tone(vec3 c) { c *= .62; c = clamp((c * (2.51 * c + .03)) / (c * (2.43 * c + .59) + .14), 0., 1.); float l = dot(c, vec3(.3, .59, .11)); c = mix(vec3(l), c, 1.12); return pow(max(c, 0.), vec3(1. / 2.2)); }
+vec3 tone(vec3 c) { float lum = dot(c, vec3(.3, .59, .11)); c = mix(vec3(lum) * vec3(.72, .86, 1.2), c, smoothstep(.012, .14, lum));   /* in the dark the eye sees blue-grey, not green */
+  c *= .62; c = clamp((c * (2.51 * c + .03)) / (c * (2.43 * c + .59) + .14), 0., 1.); float l = dot(c, vec3(.3, .59, .11)); c = mix(vec3(l), c, 1.12); return pow(max(c, 0.), vec3(1. / 2.2)); }
 vec4 outc(vec3 col) { return vec4(tone(col), 1.); }`;
 
 /* ---- the land: a lake in a green bowl of hills ---- */
@@ -14551,7 +14552,7 @@ void main() {
   } else if (m < 4.5) {   // a lily pad with its veins, or a flower's petal
     vec3 alb;
     if (vX.w > .5) alb = mix(vec3(.95, .93, .9), vec3(.98, .7, .78), vC.r) * (.8 + .2 * vX.y);
-    else { float a = atan(vX.y, vX.x), vein = smoothstep(.9, 1., sin(a * 22.)) * .3; alb = mix(vec3(.12, .24, .06), vec3(.26, .38, .1), vn(vP * 7.)) * (1. - vein) * (.9 + .4 * length(vX.xy)); }
+    else { float a = atan(vX.y, vX.x), vein = smoothstep(.9, 1., sin(a * 22.)) * .3; alb = mix(vec3(.16, .3, .08), vec3(.32, .44, .13), vn(vP * 7.)) * (1. - vein) * (.95 + .4 * length(vX.xy)); }
     col = shade(vP, N, alb, .4, .3, .5, 1.);
   } else if (m < 5.5) {   // the float: a red tip, a white band, a dark body
     vec3 alb = vX.x > .5 ? vec3(.9, .12, .05) : vX.x > .25 ? vec3(.92) : vec3(.15, .12, .1);
@@ -14713,8 +14714,8 @@ function willow() {
   }
   return m;
 }
-function pine(seed, far) {
-  const r = rng(seed), m = new Mesh(), H = 8.5;
+function pine(seed, far, tall) {   // tall: a second build, taller and sparser, so a wood of them is not one tree repeated
+  const r = rng(seed), m = new Mesh(), H = tall ? 10.5 : 8.5;
   tube(m, [0, -.4, 0], [0, H, 0], .26, .04, [0, 0, 2, 0], far ? 4 : 7, [1, 0]);
   for (let y = 1.4; y < H - .3; y += (.42 + r() * .12) * (far ? 2 : 1)) {
     const t = (y - 1.4) / (H - 1.7), R = (1 - t) * 2.5 + .35, n = far ? 4 : 5 + floor((1 - t) * 3);
@@ -14755,7 +14756,7 @@ function lilyFlower() {   // two rings of pointed petals round a yellow heart
 }
 function buildThings() {
   const rnd = rng(7);
-  const MESH = { oak: [broadleaf(3, 0), 160], ash: [broadleaf(9, 1), 120], oakF: [broadleaf(3, 0, 1), 420], ashF: [broadleaf(9, 1, 1), 260], pineF: [pine(4, 1), 360], bush: [bush(), 1100], wil: [willow(), 8], pine: [pine(4), 140], reed: [reeds(), 900], grass: [tuft(.26, .36, 3, .6), 9000], lily: [lilyPad(), 420], flower: [lilyFlower(), 60] };
+  const MESH = { oak: [broadleaf(3, 0), 160], ash: [broadleaf(9, 1), 120], oakF: [broadleaf(3, 0, 1), 420], ashF: [broadleaf(9, 1, 1), 260], pineF: [pine(4, 1), 360], bush: [bush(), 1100], wil: [willow(), 8], pine: [pine(4), 140], pine2: [pine(8, 0, 1), 140], pineF2: [pine(8, 1, 1), 200], reed: [reeds(), 900], grass: [tuft(.26, .36, 3, .6), 9000], lily: [lilyPad(), 420], flower: [lilyFlower(), 60] };
   for (const k in MESH) SET[k] = instMesh(MESH[k][0], MESH[k][1]);
   // where they grow: broadleaves on the near slopes, pines higher up and further round, never in the view down the lake
   const oaks = [], ashes = [], pines = [], reedL = [], grs = [], lil = [], fl = [], wils = [], bushes = [];
@@ -14768,7 +14769,7 @@ function buildThings() {
     if (clump < .42 && rnd() < .7) continue;
     // undergrowth under the trees, so a wood is a wood and not a row of stems under a roof of crowns
     for (let b = 0; b < 2; b++) if (rnd() < .6 && bushes.length < 1100) bushes.push([x + (rnd() - .5) * 4, y - .1, z + (rnd() - .5) * 4, .8 + rnd() * .9 + (R > lakeR(th) * 1.6 ? .5 : 0), col[0] * .85, col[1] * .85, col[2], rnd() * TAU]);
-    if (y > 10 || (rnd() < .35 + y * .03)) { if (pines.length < 360) pines.push([x, y - .1, z, s * 1.05, .3 + rnd() * .06, .44 + rnd() * .08, .34, rnd() * TAU]); }
+    if (y > 10 || (rnd() < .35 + y * .03)) { if (pines.length < 360) pines.push([x, y - .1, z, s * (.7 + rnd() * .75), .26 + rnd() * .1, .4 + rnd() * .12, .3 + rnd() * .08, rnd() * TAU]); }
     else if (rnd() < .6) { if (oaks.length < 420) oaks.push([x, y - .1, z, s, ...col, rnd() * TAU]); }
     else if (ashes.length < 260) ashes.push([x, y - .1, z, s * .95, col[0] * 1.08, col[1] * 1.05, col[2], rnd() * TAU]);
   }
@@ -14797,8 +14798,8 @@ function buildThings() {
   // near the jetty the full trees; beyond, the same trees with fewer, larger cards
   const near = l => l.filter(i => hypot(i[0], i[2] - (SHORE - 10)) < 48), far = l => l.filter(i => hypot(i[0], i[2] - (SHORE - 10)) >= 48);
   const thin = l => l.filter((i, k) => k % 2 === 0 || hypot(i[0], i[2] - (SHORE - 10)) < 70);   // the far woods: every other tree, the land paints the canopy between them
-  setInst(SET.oakF, thin(far(oaks))); setInst(SET.ashF, thin(far(ashes))); setInst(SET.pineF, thin(far(pines))); oaks.splice(0, oaks.length, ...near(oaks)); ashes.splice(0, ashes.length, ...near(ashes)); pines.splice(0, pines.length, ...near(pines));
-  setInst(SET.oak, oaks); setInst(SET.bush, bushes); setInst(SET.ash, ashes); setInst(SET.pine, pines); setInst(SET.reed, reedL); setInst(SET.grass, grs); setInst(SET.lily, lil); setInst(SET.flower, fl); setInst(SET.wil, wils);
+  setInst(SET.oakF, thin(far(oaks))); setInst(SET.ashF, thin(far(ashes))); { const pf = thin(far(pines)); setInst(SET.pineF, pf.filter((p, i) => i % 2 === 0)); setInst(SET.pineF2, pf.filter((p, i) => i % 2 === 1)); } oaks.splice(0, oaks.length, ...near(oaks)); ashes.splice(0, ashes.length, ...near(ashes)); pines.splice(0, pines.length, ...near(pines));
+  setInst(SET.oak, oaks); setInst(SET.bush, bushes); setInst(SET.ash, ashes); setInst(SET.pine, pines.filter((p, i) => i % 2 === 0)); setInst(SET.pine2, pines.filter((p, i) => i % 2 === 1)); setInst(SET.reed, reedL); setInst(SET.grass, grs); setInst(SET.lily, lil); setInst(SET.flower, fl); setInst(SET.wil, wils);
 }
 // the jetty and what stands on it, rebuilt when the tackle changes: planks, posts, the lantern, the bank rod's rest,
 // the boardwalk, the smokehouse, the bench, the notches on the end post
@@ -14901,7 +14902,7 @@ const waterP = prog(`#version 300 es
 layout(location=0) in vec2 aQ; uniform mat4 uVP; out vec3 vP; void main() { vP = vec3(aQ.x, 0., aQ.y); gl_Position = uVP * vec4(vP, 1.); }`,
 `#version 300 es
 precision highp float; ${COMMON}
-uniform sampler2D uRefl, uBed, uWave, uScene; uniform vec3 uMoon, uJet; uniform vec2 uRes; uniform vec4 uRip[10], uBedR, uWake; uniform float uRain, uNight, uWakeS; in vec3 vP; out vec4 o;
+uniform sampler2D uRefl, uBed, uWave, uScene; uniform vec3 uMoon, uJet; uniform vec2 uRes; uniform vec4 uRip[10], uBedR, uWake; uniform float uRain, uNight, uWakeS, uRefr; in vec3 vP; out vec4 o;
 float depthAt(vec2 p) { vec4 t = texture(uBed, (p - uBedR.xy) / uBedR.zw); return -(.5 - (t.r * 255. * 256. + t.g * 255.) / 65535.) * 8.; }
 vec2 slope(vec2 uv) { return texture(uWave, uv).rg * 2. - 1.; }
 // rain on still water: in every cell of a grid a drop lands now and then, somewhere new each time, and a ring runs out from it
@@ -14937,12 +14938,15 @@ void main() {
   vec3 refl = texture(uRefl, gl_FragCoord.xy / uRes + N.xz * .05).rgb; refl = pow(refl, vec3(2.2)) * 1.05;
   float shd = sunShadow(vP, vec3(0, 1, 0));
   // the peat-brown green body of the lake, deeper and darker away from the bank, lit by the sky
-  vec3 deep = vec3(.018, .05, .04) * (uSkyC * 1.2 + uSunC * .2 * shd), shallow = vec3(.11, .12, .06) * (uSkyC * .9 + uSunC * .45 * shd);
+  float wsh = mix(.72, 1., shd);   /* on water a shadow shows only faintly: it falls on what the water scatters, not on a surface */
+  vec3 deep = vec3(.018, .05, .04) * (uSkyC * 1.2 + uSunC * .16 * wsh), shallow = vec3(.11, .12, .06) * (uSkyC * .9 + uSunC * .3 * wsh);
   vec3 body = mix(shallow, deep, smoothstep(.1, 2.2, dep));
   vec3 col = mix(body, refl, clamp(fr * 1.15 + .03, 0., 1.));
   // the sun glints off the steep sides of the ripples; never a disc at your feet
   vec3 R = reflect(-V, N); float near = smoothstep(2.5, 10., dist);
-  col += uSunC * pow(max(dot(R, uSun), 0.), 700.) * 9. * (1. - uNight) * shd * near * (1. - uRain * .8);
+  // the sun's own reflection breaks into sparks on the ripples: never a soft pale patch (it read as a smear on the lens)
+  float spark = smoothstep(.62, .9, vn(vec3(p * 38., t * 2.5))) * smoothstep(.35, .7, vn(vec3(p * 6. + 3., t * .6)));
+  col += uSunC * pow(max(dot(R, uSun), 0.), 500.) * 28. * spark * (1. - uNight) * shd * near * (1. - uRain * .8);
   // a low sun lays a broad path of gold across the ripples toward you (only low: at noon it would sit at your feet)
   float low = 1. - smoothstep(.08, .38, uSun.y), path = pow(max(dot(R, uSun), 0.), 40.);
   col += uSunC * path * (.35 + 1.6 * smoothstep(.45, .8, vn(vec3(p * 9., t * 2.)))) * low * (1. - uNight) * (1. - uRain * .9) * .9;
@@ -14955,7 +14959,7 @@ void main() {
   float a = clamp(.55 + fr * .6 + smoothstep(0., 1.4, dep) * .4, 0., 1.) * smoothstep(-.02, .06, dep);
   // what lies below, bent by the surface: less near the bank where the water is thin
   vec2 bend = clamp(g, -.25, .25) * .03 * smoothstep(0., .8, dep) / (1. + dist * .05);   /* bounded: a steep ring must not fetch what stands above the water */
-  vec3 under = texture(uScene, gl_FragCoord.xy / uRes + bend).rgb * vec3(.92, .96, .9);
+  vec3 under = uRefr > .5 ? texture(uScene, gl_FragCoord.xy / uRes + bend).rgb * vec3(.92, .96, .9) : vec3(0);
   o = vec4(mix(under, tone(haze(col, vP)), a), 1.);
 }`);
 const waterVAO = gl.createVertexArray();
@@ -15075,7 +15079,7 @@ const LOOK = {   // body height to length, colours of back, flank, belly, fins; 
 };
 // the outline of a kind, in the painting's own pixels: where the back and the belly lie along the length
 function shape(k, W2, H2) {
-  const L = LOOK[k] || LOOK.roach, len = W2 * .78, hh = len * L.h, x0 = W2 * .1, cy = H2 * .55;
+  const L = LOOK[k] || LOOK.roach, len = W2 * .78 * (L.h > .4 ? .82 : 1), hh = len * L.h, x0 = W2 * (L.h > .4 ? .14 : .1), cy = H2 * .55;   /* a deep fish drawn smaller, so its fins stay on the plate */
   const prof = t => L.eel ? (t < .1 ? sqrt(t / .1) : L.eel === 1 ? pow(max(0, 1 - (t - .1) / .86), .6) : 1 - (t - .1) * .7) : max(L.thick && t > .8 ? .32 : 0, sin(PI * pow(t, L.peak || (L.long ? .62 : .75))));
   return { L, len, hh, x0, cy, tailW: L.eel ? len * .05 : len * .17, top: t => cy - hh * prof(t) * (L.round ? 1.05 : 1) * .55, bot: t => cy + hh * prof(t) * .45, X: t => x0 + t * len };
 }
@@ -15611,7 +15615,7 @@ function logbook() {
   let h = '';
   for (const f of [...CORE.FISH, CORE.OLD]) { const e = S.log[f[0]]; if (f[0] === 'old' && !e) continue;
     const best = e ? CORE.sizeOf(f[0], e.best) : 0;
-    h += `<div class="pg ${e ? '' : 'un'}"><canvas data-k="${f[0]}" width="300" height="140"></canvas><b>${e ? f[1] : '?'}</b><i>${e ? 'best ' + e.best.toFixed(2) + ' kg' + (best ? ' · ' + SIZEN[best] : '') + ' · ' + e.n + ' caught' : 'not yet caught'}</i><u>${e ? HOW[f[0]] : ''}</u></div>`; }
+    h += `<div class="pg ${e ? '' : 'un'}"><canvas data-k="${f[0]}" width="300" height="140"></canvas><b>${e ? f[1] : '?'}</b><i>${e ? 'best ' + e.best.toFixed(2) + ' kg' + (best ? ' · ' + SIZEN[best] : '') + ' · ' + e.n + '\u00a0caught' : 'not yet caught'}</i><u>${e ? HOW[f[0]] : ''}</u></div>`; }
   $('grid').innerHTML = h; $('bookSum').textContent = CORE.kinds(S) + ' of ' + CORE.FISH.length + ' kinds · ' + S.caught + ' fish';
   for (const c of $('grid').querySelectorAll('canvas')) { drawFish(c, c.dataset.k, 300, 140); if (!S.log[c.dataset.k]) { const g = c.getContext('2d'); g.globalCompositeOperation = 'source-in'; g.fillStyle = 'rgba(60,50,35,.3)'; g.fillRect(0, 0, 300, 140); } }
 }
@@ -15882,7 +15886,7 @@ function uniforms(P, pal, mirror) {
   if (u.uA2C) gl.uniform1f(u.uA2C, mirror || !DIAG.a2c ? 0 : 1);
   if (u.uShore) gl.uniform1f(u.uShore, SHORE);
 }
-const TREES = ['oak', 'ash', 'pine', 'wil'];
+const TREES = ['oak', 'ash', 'pine', 'pine2', 'wil'];
 function things(pal, mirror, list) {
   uniforms(thingP, pal, mirror);
   if (!mirror && DIAG.a2c) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
@@ -15895,7 +15899,7 @@ function scene(pal, mirror) {
   gl.uniform3fv(skyP.u.uTop, pal.top); gl.uniform3fv(skyP.u.uHor, pal.hor); gl.uniform3fv(skyP.u.uMoon, I.moon); gl.uniform1f(skyP.u.uMirror, mirror ? 1 : 0); gl.uniform1f(skyP.u.uNight, I.night); gl.uniform1f(skyP.u.uCloud, .15 + .85 * rainA); gl.uniform1f(skyP.u.uStar, S.t * .004); gl.uniform1f(skyP.u.uDay, S.t / CORE.DAY);   /* steadily with the game's clock: the sky never jumps */
   gl.depthMask(false); gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.depthMask(true);
   uniforms(landP, pal, mirror); gl.bindVertexArray(land.vao); gl.drawElements(gl.TRIANGLES, land.n, gl.UNSIGNED_INT, 0);
-  things(pal, mirror, mirror ? ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pine', 'wil', 'reed', 'jetty'] : ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'bush', 'pine', 'wil', 'reed', 'grass', 'lily', 'flower', 'jetty']);
+  things(pal, mirror, mirror ? ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pineF2', 'pine', 'pine2', 'wil', 'reed', 'jetty'] : ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pineF2', 'bush', 'pine', 'pine2', 'wil', 'reed', 'grass', 'lily', 'flower', 'jetty']);
 }
 // the sun's view for the shadow map: an orthographic box round the near lake and banks
 function sunMatrix() {
@@ -15911,7 +15915,7 @@ function shadowPass(pal) {
   gl.useProgram(depthLandP.p); gl.uniformMatrix4fv(depthLandP.u.uVP, false, VP); gl.bindVertexArray(land.vao); gl.drawElements(gl.TRIANGLES, land.n, gl.UNSIGNED_INT, 0);
   gl.useProgram(depthP.p); gl.uniformMatrix4fv(depthP.u.uVP, false, VP); gl.uniform1f(depthP.u.uTime, now); gl.uniform1f(depthP.u.uWind, 1);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ATLAS.tex); gl.uniform1i(depthP.u.uAtlas, 1);
-  for (const k of ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pine', 'wil', 'reed', 'jetty']) { const o = SET[k]; if (!o || !o.count) continue; gl.bindVertexArray(o.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, o.n, o.count); }
+  for (const k of ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pineF2', 'pine', 'pine2', 'wil', 'reed', 'jetty']) { const o = SET[k]; if (!o || !o.count) continue; gl.bindVertexArray(o.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, o.n, o.count); }
   gl.disable(gl.POLYGON_OFFSET_FILL); gl.colorMask(true, true, true, true); gl.bindFramebuffer(gl.FRAMEBUFFER, null); VP = keep;
 }
 let floatAt = null, loaded = document.readyState === 'complete';
@@ -16030,7 +16034,7 @@ function render() {
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, waveTex); gl.uniform1i(waterP.u.uWave, 5);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, sceneTex); gl.uniform1i(waterP.u.uScene, 6);
   gl.uniform3f(waterP.u.uJet, SHORE + 3 - .3, jettyEnd(), 2.1);
-  gl.uniform4f(waterP.u.uWake, wake.x, wake.z, wake.dx, wake.dz); gl.uniform1f(waterP.u.uWakeS, wake.s);
+  gl.uniform4f(waterP.u.uWake, wake.x, wake.z, wake.dx, wake.dz); gl.uniform1f(waterP.u.uWakeS, wake.s); gl.uniform1f(waterP.u.uRefr, DIAG.refr ? 1 : 0);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, bedTex); gl.uniform1i(waterP.u.uBed, 2); gl.uniform4f(waterP.u.uBedR, BED.x0, BED.z0, BED.w, BED.d);
   const rp = new Float32Array(40); rips.forEach((r, i) => rp.set(r, i * 4)); gl.uniform4fv(waterP.u.uRip, rp); gl.uniform1f(waterP.u.uRain, rainA); gl.uniform1f(waterP.u.uNight, I.night); gl.uniform3fv(waterP.u.uMoon, I.moon);
   gl.depthMask(false); gl.bindVertexArray(waterVAO); gl.drawArrays(gl.TRIANGLES, 0, waterVAO.n); gl.depthMask(true);

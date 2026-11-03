@@ -2345,6 +2345,27 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   instead of standing as slivers; bark has long furrows between plates and moss low down; twice the undergrowth closes the
   woods so no colonnade of stems shows under far crowns.
 
+**A graphics pass** (November 2026, before the owner's next look).
+- *Fish as field-guide plates*: the outlined, cel-filled fish were the critics' plainest giveaway. `drawFish` now paints volume
+  (a soft rim shade blurred inside the body, light along the upper flank, shade under the belly), scales as glints of light
+  on their rims at random strength, see-through fins with their rays and a lighter edge, sitting where each kind has them
+  (`FINS`: the perch's and zander's spiny first dorsal, the pike's far back, the bream's long anal fin, the carp's long dorsal,
+  the tench's rounded fins, the wels's long fin beneath), a gill cover with a soft shadow, an iris with a pupil and a glint, and
+  a fine edge in the body's own dark instead of black ink. The eel tapers to its tail inside a narrow fin fringe. A deep fish is
+  drawn smaller on its plate so its fins stay on it. The same painting wraps the 3D fish, so the lake's fish changed with it.
+  `K.debug.fishArt(kind)` returns one plate.
+- *The jetty*: grain along every board and up every post (in world space), knots bending it, tops weathered silver, two nail
+  heads over each stringer; the shadow's normal bias doubled (striped acne on round posts).
+- *Light*: a low sun lays a broad gold path over the ripples; the sun's reflection near you breaks into sparks (a high sun's
+  reflection on the smooth near water read as a pale smear on the lens; three critics saw it, found by switching the water's
+  terms off one at a time); shadows show on water only faintly; in the dark colours fade to blue-grey (`tone()`), so the night
+  is moonlit, not green.
+- *Plants*: greener, darker reeds and grass; bulrushes each with their own head; a second, taller pine and pines from 0.7 to 1.45
+  in size; a quieter willow; lily pads green, not black far out.
+- *Critic round 3* (graphics only): 5/4/5 and **3**. Still open from it: the HUD's parchment cards read as web UI to the critic,
+  hints over the water, the shore a hard seam with no muddy bank, the rope round the mooring post a stack of beads.
+- Draws: 38 a frame (budget 45) with the second pine.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
