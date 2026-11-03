@@ -2163,7 +2163,8 @@ one who lets go half a second after the line passes 90 %), both lost every perch
 overloaded line holds for 1.1 s times the rod's soak (2.5 times that for the first three fish), and the line creaks, the
 phone buzzes and the hint says *Red! Let go!*. After three fish the one who always holds lands every roach and about
 half the perch, the late one four in five: holding through works at first, letting go is learned from the perch.
-`.work/fish/naive.mjs` was the measure; the bots never showed it, because they let go at once.
+`node util/jetty/naive.mjs [fish caught]` is the measure; the bots never showed it, because they let go at once. The owner
+then found the line could not snap at all after the first few upgrades: the fight must stay a fight for the later fish.
 
 Still open: the owner's verdict on the catch; music (ask first); a proper look pass (the trees are lumps of spheres,
 the rod a ribbon); the second rod's bell needs the walk to matter; stickers; critics.
