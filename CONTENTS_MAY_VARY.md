@@ -2100,6 +2100,75 @@ keyboard and text-size pass per box, the big-lever pass with public-domain sourc
 passes for Starter and Snow Day, loudness levelled across the boxes, and a first impression (trailer, title screen) that
 sells the anthology in ten seconds.
 
+### Worth Its Salt (draft, November 2026)
+
+The owner wanted an incremental in a 3D world that is walked freely, with no run timer, and leaned towards a classic
+(fishing, mining). A research round over the walkable incrementals the owner plays and their neighbours (Berry Bury
+Berry, Sip Fisher, How to Fish, A Game About Digging a Hole, Cast n Chill) found the same shape in all of them: **one
+place that changes visibly** (the lake drains, the hole deepens, walls come down) rather than new places; no clock, the
+limit is the gear; walking is the cost and the upgrades shorten it (Sip Fisher's later walks to the shop are its most
+common complaint); a verb that is good before any upgrade; an absurd or uncanny thread under a cosy surface; a short
+game with a real ending (abrupt endings are what Digging a Hole and Keep on Mining are blamed for).
+
+The owner chose a salt mine whose wall becomes a chapel, after Wieliczka, and asked whether it could look right. The
+answer the prototype tests: **the carving already waits in the rock.** `CORE.relief(x, y)` is a designed altar wall
+(dado, fluted pilasters with capitals, a frieze of rosettes, a scallop-shell niche, St Kinga on a pedestal, the miners'
+crossed hammer and pick in a medallion), and every blow only takes rock off down to it, so the end is as good as the
+design and never depends on where the player struck. The rules keep a grid of cells (7.5 cm) with the depth each is cut
+to; the view draws `max(rough face, min(carving, cut))` into a 920-wide half-float heightfield with a cubic B-spline over
+the cells (bilinear showed every cell's edge), chisel grooves on the cut, crystalline facets on the rough face (rock salt
+breaks along cubes), and bedding that runs on through the carving. The **mason's chalk** on the rough face, drawn where
+the carving steps, shows from the first second where the figure waits and where to strike (rule 10).
+
+Light: the lantern is held low and to the right and a miner's lamp stands by the wall, so the relief is raked rather
+than lit from the eye. A first-person pick built from boxes looked like a stepped black bar and was taken out; a tool in
+the hand needs to be modelled properly or left away. Pacing (prototype tuning): eager 31 to 33 min, casual 66 to 72.
+Still to come before it is a box: automation (helpers or a cart), walking that matters (the cart, a lift), music, the way
+out (a casket in the pedestal with the next number), a proper pick, stickers, a critic round.
+
+**Dropped** (the owner, the same day): progress felt slow and stodgy, striking the wall over and over was tedious on a
+phone, and the result still had faults. The lesson: a verb that is one tap repeated thousands of times needs a
+strong answer per tap and a fast early curve, and a prototype of a verb should be judged in the hand before its look is
+polished. The draft was taken out of the page; the commit that added it is
+`940774956afd8dbe9912b284167152a8fe99d875`. In its place the owner asked for a fishing game at one idyllic jetty in a
+very green landscape, with a catch mechanic that scales with upgrades so later fish come quicker and easier.
+
+### Still Water (draft, November 2026)
+
+The jetty the owner asked for, as a first-person prototype to try the catch in the hand before anything is polished
+(`?world=jetty`). One wooden jetty on a lake in a green bowl of hills: broadleaves, pines, willows, reeds with bulrushes,
+lilies, a meadow; the water mirrors it all (a half-size reflection pass) and rings where the float lands or a fish runs.
+The day turns on its own (eight minutes: dawn, day, a gold dusk, night with fireflies and stars), with showers now and
+then; there is no run timer anywhere.
+
+The catch, in the rules: swipe up to cast (the length of the swipe is the distance); the float waits and goes under;
+a tap in that moment strikes; then the fight: holding winds the fish in and loads the line, letting go gives it line;
+a fish runs and rests and tires, and a line loaded past its strength for longer than the rod can soak up snaps. Every
+part of it scales with the tackle, as the owner asked, so later fish come quicker and easier: sharper hooks widen the
+strike's moment, a stronger line and a longer rod raise what a run can do before it snaps, a faster reel shortens the
+fight, better bait brings bites sooner and rarer fish, a longer jetty reaches the deep, a lantern opens the night, a
+second rod rings its bell when it has caught (walk over and take it), a smokehouse pays more, and the reel brake gives
+line by itself before the line breaks. Fish: ten kinds by distance, hour and bait, each drawn for the logbook in ink and
+wash by the view; when the book is full and the jetty long, the Old One takes the bait in the deep with the next box in
+its jaw. Pacing (prototype tuning): eager 32 to 49 min, casual 34 to 41.
+
+The first build ran its sky, wind and water on `K.loop`'s second argument, which is the page's clock in milliseconds,
+not seconds: the owner saw clouds race and trees shiver at a thousand times their pace. A view keeps its own clock
+(`now += dt`), which also stops with the box when it is paused.
+
+The owner then could not land a single fish: the line always snapped. A person strikes and keeps the finger down, so
+the reel winds against the first run, and with the first tackle a perch loaded the line past its strength and snapped
+it in 0.4 s, quicker than anyone sees the bar and lets go. Measured with two people in the rules (one who always holds,
+one who lets go half a second after the line passes 90 %), both lost every perch. Now the reel loads the line less, an
+overloaded line holds for 1.1 s times the rod's soak (2.5 times that for the first three fish), and the line creaks, the
+phone buzzes and the hint says *Red! Let go!*. After three fish the one who always holds lands every roach and about
+half the perch, the late one four in five: holding through works at first, letting go is learned from the perch.
+`node util/jetty/naive.mjs [fish caught]` is the measure; the bots never showed it, because they let go at once. The owner
+then found the line could not snap at all after the first few upgrades: the fight must stay a fight for the later fish.
+
+Still open: the owner's verdict on the catch; music (ask first); a proper look pass (the trees are lumps of spheres,
+the rod a ribbon); the second rod's bell needs the walk to matter; stickers; critics.
+
 ## Lessons from the boxes so far
 
 - **A lid that opens is a model, not a squashed picture.** Scaling the closed lid's picture and growing a lining picture behind it
