@@ -14226,7 +14226,7 @@ const $ = id => document.getElementById(id);
 const { clamp, lerp, fmt } = K;
 const QS = (() => { try { return new URLSearchParams(parent.location.search); } catch (e) { return new URLSearchParams(); } })();
 // switches for a session at work on the box: ?fps, ?dpr=1, ?fx=0, ?refl=0, ?shadow=0, ?a2c=1 (leaves through alpha to coverage), ?tod=0..1, ?scene=<name>
-const DIAG = { a2c: QS.get('a2c') === '1', fps: QS.has('fps'), dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', refl: QS.get('refl') !== '0', shadow: QS.get('shadow') !== '0', tod: QS.has('tod') ? +QS.get('tod') : null };
+const DIAG = { hide: new Set((QS.get('hide') || '').split(',')), a2c: QS.get('a2c') === '1', fps: QS.has('fps'), dpr: +QS.get('dpr') || 0, fx: QS.get('fx') !== '0', refl: QS.get('refl') !== '0', shadow: QS.get('shadow') !== '0', tod: QS.has('tod') ? +QS.get('tod') : null };
 const FX = () => DIAG.fx && !K.reduced;
 const TOUCH = matchMedia('(pointer: coarse)').matches;
 const { sin, cos, abs, min, max, sqrt, floor, hypot, PI, exp, atan2, pow, sign } = Math;
@@ -14341,6 +14341,10 @@ void main() {
   float bank = smoothstep(.4, .02, vP.y);
   alb = mix(alb, mix(vec3(.17, .13, .07), vec3(.3, .26, .17), n2) * (.7 + .4 * n4), bank * .9);   // wet earth and pebbles at the water's edge
   alb = mix(alb, vec3(.22, .25, .17) * (.7 + .4 * n1), smoothstep(.5, .9, 1. - N.y) * .7);   // steeper ground
+  // the woods on the far slopes: a dark, lumpy canopy painted into the land between the trees that stand on it
+  float far = smoothstep(46., 64., length(vP.xz - vec2(0., uShore - 10.))), wood = smoothstep(.36, .5, vn(vec3(vP.xz * .05, 0.)) * .5 + vn(vec3(vP.xz * .1, 1.)) * .27 + vn(vec3(vP.xz * .2, 2.)) * .14 + .05);
+  float lump = vn(vec3(vP.xz * .7, 3.)) * .6 + vn(vec3(vP.xz * 2.2, 4.)) * .4;
+  alb = mix(alb, mix(vec3(.025, .05, .02), vec3(.07, .11, .035), lump), far * wood * smoothstep(.2, 1.5, vP.y));
   vec3 col = shade(vP, N, alb, .25, 0., 0., 1.);
   if (vP.y < 0.) { float d = -vP.y; col = mix(col * vec3(.5, .62, .48), uFog * vec3(.1, .2, .17), 1. - exp(-d * .8)); }   // the lake bed, seen through the water
   o = outc(haze(col, vP));
@@ -14482,7 +14486,7 @@ uniform sampler2D uAtlas; uniform float uA2C;
 float cutout(vec4 X, vec2 Y) {
   vec2 uv = (vec2(mod(Y.y, 2.), floor(Y.y / 2.)) + clamp(X.xy, .002, .998)) * .5;
   float a = texture(uAtlas, uv).a; vec2 px = uv * 1024.; float lod = log2(max(max(length(dFdx(px)), length(dFdy(px))), 1.));
-  return a * (1. + lod * .35);
+  return a * (1. + lod * .5);
 }`;
 const thingP = prog(THING_VS, `#version 300 es
 precision highp float; ${COMMON} ${ALPHA}
@@ -14593,24 +14597,24 @@ const SET = {};
 const rng = s => () => (s = (s * 16807) % 2147483647) / 2147483647;
 
 /* the trees, built once: a broadleaf (two builds), a willow, a pine */
-function broadleaf(seed, tall) {
+function broadleaf(seed, tall, far) {
   const r = rng(seed), m = new Mesh(), H = tall ? 3.6 : 2.6, top = [(r() - .5) * .4, H, (r() - .5) * .4];
-  tube(m, [0, -.4, 0], top, tall ? .26 : .34, .2, [0, 0, 2, 0], 8, [1, 0]);
+  tube(m, [0, -.4, 0], top, tall ? .26 : .34, .2, [0, 0, 2, 0], far ? 4 : 8, [1, 0]);
   const crownC = [0, H + (tall ? 2.4 : 1.9), 0], CR = tall ? [2.1, 2.7, 2.1] : [2.7, 2.1, 2.7], clumps = [];
   const nl = tall ? 5 : 6;
   for (let k = 0; k < nl; k++) {
     const a = k / nl * TAU + r() * .6, up = .45 + r() * .5, end = [crownC[0] + cos(a) * CR[0] * .72, crownC[1] + (up - .55) * CR[1] * 1.1, crownC[2] + sin(a) * CR[2] * .72];
     const mid = V3.lerp(top, end, .5); mid[1] += .25;
-    tube(m, V3.lerp(top, [0, H * .8, 0], .4), mid, .15, .1, [0, 0, 2, .2], 6, [1, 0]); tube(m, mid, end, .1, .045, [0, 0, 2, .6], 5, [1, 0]);
+    if (!far) { tube(m, V3.lerp(top, [0, H * .8, 0], .4), mid, .15, .1, [0, 0, 2, .2], 6, [1, 0]); tube(m, mid, end, .1, .045, [0, 0, 2, .6], 5, [1, 0]); }
     clumps.push(end, V3.lerp(mid, end, .45));
   }
   clumps.push([crownC[0], crownC[1] + CR[1] * .55, crownC[2]], [crownC[0] + .4, crownC[1] + CR[1] * .2, crownC[2] - .3]);
   for (const c of clumps) {
     const cr = .95 + r() * .5;
-    for (let k = 0; k < 9; k++) {
+    for (let k = 0; k < (far ? 3 : 9); k++) {
       // cards spread over the clump's outer half, facing out, turned at random in their plane
       const u = r() * TAU, v = Math.acos(r() * 1.6 - .6), d = [sin(v) * cos(u), cos(v), sin(v) * sin(u)], p = V3.add(c, V3.mul(d, cr * (.35 + .5 * r())));
-      const t1 = V3.norm(V3.cross(d, abs(d[1]) > .9 ? [1, 0, 0] : [0, 1, 0])), t2 = V3.cross(d, t1), sp = r() * TAU, s = .95 + r() * .5;
+      const t1 = V3.norm(V3.cross(d, abs(d[1]) > .9 ? [1, 0, 0] : [0, 1, 0])), t2 = V3.cross(d, t1), sp = r() * TAU, s = (.95 + r() * .5) * (far ? 1.45 : 1);
       const ax = V3.mul(V3.add(V3.mul(t1, cos(sp)), V3.mul(t2, sin(sp))), s), ay = V3.mul(V3.add(V3.mul(t1, -sin(sp)), V3.mul(t2, cos(sp))), s);
       card(m, p, ax, ay, 1, 0, crownC, q => .55 + .45 * min(1, (q[1] - H) / 3), q => clamp(.3 + .7 * hypot((q[0] - crownC[0]) / CR[0], (q[1] - crownC[1]) / CR[1], (q[2] - crownC[2]) / CR[2]) * (.7 + .3 * (q[1] - H) / (CR[1] * 2)), .25, 1));
     }
@@ -14643,16 +14647,16 @@ function willow() {
   for (let k = 0; k < 10; k++) { const a = r() * TAU, rr = r() * 1.8, p = [C[0] + cos(a) * rr, 5.3 + r() * .7, C[2] + sin(a) * rr], s = 1 + r() * .4; card(m, p, [s, 0, 0], [0, s * .6, s * .8], 1, 0, [C[0], 4, C[2]], .4, .9); }
   return m;
 }
-function pine(seed) {
+function pine(seed, far) {
   const r = rng(seed), m = new Mesh(), H = 8.5;
-  tube(m, [0, -.4, 0], [0, H, 0], .26, .04, [0, 0, 2, 0], 7, [1, 0]);
-  for (let y = 1.4; y < H - .3; y += .42 + r() * .12) {
-    const t = (y - 1.4) / (H - 1.7), R = (1 - t) * 2.5 + .35, n = 5 + floor((1 - t) * 3);
+  tube(m, [0, -.4, 0], [0, H, 0], .26, .04, [0, 0, 2, 0], far ? 4 : 7, [1, 0]);
+  for (let y = 1.4; y < H - .3; y += (.42 + r() * .12) * (far ? 2 : 1)) {
+    const t = (y - 1.4) / (H - 1.7), R = (1 - t) * 2.5 + .35, n = far ? 4 : 5 + floor((1 - t) * 3);
     for (let k = 0; k < n; k++) {
       const a = k / n * TAU + r() * 1.2 + y, dir = [cos(a), -.32 - r() * .2, sin(a)], c = V3.add([0, y, 0], V3.mul(dir, R * .5));
-      const ax = V3.mul(V3.norm(dir), R * .55), side = V3.norm(V3.cross(dir, [0, 1, 0])), ay = V3.mul(V3.norm(V3.add(V3.cross(side, dir), V3.mul(side, .3))), .55);
+      const ax = V3.mul(V3.norm(dir), R * .55), side = V3.norm(V3.cross(dir, [0, 1, 0])), ay = V3.mul(V3.norm(V3.add(V3.cross(side, dir), V3.mul(side, .3))), far ? .95 : .55);
       card(m, c, ax, ay, 1, 2, [0, y - .4, 0], q => .3 + .7 * hypot(q[0], q[2]) / 2.5, q => clamp(.35 + .65 * (hypot(q[0], q[2]) / max(R, .5)) * (.6 + .4 * t), .3, 1), true);
-      if (k % 2 === 0) card(m, c, ax, V3.mul(side, .5), 1, 2, [0, y - .4, 0], .5, .55, true);
+      if (k % 2 === 0 && !far) card(m, c, ax, V3.mul(side, .5), 1, 2, [0, y - .4, 0], .5, .55, true);
     }
   }
   return m;
@@ -14684,7 +14688,7 @@ function lilyFlower() {   // two rings of pointed petals round a yellow heart
 }
 function buildThings() {
   const rnd = rng(7);
-  const MESH = { oak: [broadleaf(3, 0), 420], ash: [broadleaf(9, 1), 260], bush: [bush(), 500], wil: [willow(), 8], pine: [pine(4), 360], reed: [reeds(), 900], grass: [tuft(.26, .36, 3, .6), 9000], lily: [lilyPad(), 420], flower: [lilyFlower(), 60] };
+  const MESH = { oak: [broadleaf(3, 0), 160], ash: [broadleaf(9, 1), 120], oakF: [broadleaf(3, 0, 1), 420], ashF: [broadleaf(9, 1, 1), 260], pineF: [pine(4, 1), 360], bush: [bush(), 500], wil: [willow(), 8], pine: [pine(4), 140], reed: [reeds(), 900], grass: [tuft(.26, .36, 3, .6), 9000], lily: [lilyPad(), 420], flower: [lilyFlower(), 60] };
   for (const k in MESH) SET[k] = instMesh(MESH[k][0], MESH[k][1]);
   // where they grow: broadleaves on the near slopes, pines higher up and further round, never in the view down the lake
   const oaks = [], ashes = [], pines = [], reedL = [], grs = [], lil = [], fl = [], wils = [], bushes = [];
@@ -14721,6 +14725,10 @@ function buildThings() {
   const ex = SHORE - 7 - 15;
   for (const s of [-1, 1]) for (let z = SHORE - 6; z > ex - 26; z -= 3.5) bed(s * (LILY_X + 1.6 + (rnd() - .5)), z, 3.4, 3.6, 12);
   for (let c = 0; c < 8; c++) { const th = rnd() * TAU, R = lakeR(th) * (.72 + rnd() * .18), cx = LC[0] + cos(th) * R, cz = LC[1] + sin(th) * R; if (abs(cx) < LILY_X + 4) continue; bed(cx, cz, 5, 5, 16); }
+  // near the jetty the full trees; beyond, the same trees with fewer, larger cards
+  const near = l => l.filter(i => hypot(i[0], i[2] - (SHORE - 10)) < 48), far = l => l.filter(i => hypot(i[0], i[2] - (SHORE - 10)) >= 48);
+  const thin = l => l.filter((i, k) => k % 2 === 0 || hypot(i[0], i[2] - (SHORE - 10)) < 70);   // the far woods: every other tree, the land paints the canopy between them
+  setInst(SET.oakF, thin(far(oaks))); setInst(SET.ashF, thin(far(ashes))); setInst(SET.pineF, thin(far(pines))); oaks.splice(0, oaks.length, ...near(oaks)); ashes.splice(0, ashes.length, ...near(ashes)); pines.splice(0, pines.length, ...near(pines));
   setInst(SET.oak, oaks); setInst(SET.bush, bushes); setInst(SET.ash, ashes); setInst(SET.pine, pines); setInst(SET.reed, reedL); setInst(SET.grass, grs); setInst(SET.lily, lil); setInst(SET.flower, fl); setInst(SET.wil, wils);
 }
 // the jetty and what stands on it, rebuilt when the tackle changes: planks, posts, the lantern, the bank rod's rest,
@@ -15195,7 +15203,7 @@ function musicOut() {
   const top = ctx.createBiquadFilter(); top.type = 'lowpass'; top.frequency.value = 4200;
   const room = ctx.createConvolver(), sr = ctx.sampleRate, ir = ctx.createBuffer(2, sr * 1.6, sr);
   for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c), r = rng(c + 3); for (let i = 0; i < d.length; i++) d[i] = (r() * 2 - 1) * pow(1 - i / d.length, 3) * .5; }
-  room.buffer = ir; const wet = ctx.createGain(); wet.gain.value = .22; const dry = ctx.createGain(); dry.gain.value = .85; const lvl = ctx.createGain(); lvl.gain.value = .55;
+  room.buffer = ir; const wet = ctx.createGain(); wet.gain.value = .22; const dry = ctx.createGain(); dry.gain.value = .85; const lvl = ctx.createGain(); lvl.gain.value = .36;
   body.connect(top); top.connect(dry); top.connect(room); room.connect(wet); dry.connect(lvl); wet.connect(lvl); lvl.connect(music);
   return (MUS.out = { in: body, lvl });
 }
@@ -15381,7 +15389,7 @@ function frame(dt) {
   if (cast.fly < 1 && S.bob) { cast.fly = min(1, cast.fly + dt / .9); if (cast.fly >= 1 && fp) { splash(fp[0], fp[1], 6, .5); plop(0); } }
   if (jumpA) { jumpA.t += dt; if (jumpA.t > .85) { const p = floatPos() || jumpA.p; splash(p[0], p[1], 18, 1); plop(1); jumpA = null; } }
   if (landA) { landA.t += dt; if (landA.t > 1.05 && !landA.shown) { landA.shown = 1; showCatch(landA.e); } if (landA.drop) { landA.drop += dt; if (landA.drop > .7) { const p = landPos(); splash(p[0], p[2], 10, .6); landA = null; } } }
-  if (tinT >= 0 && tinT < 50) tinStep(dt);
+  if (tinT >= 0 && tinT < 50) { if (!$('catch').classList.contains('on')) showCatch({ f: 'old', w: 38, v: 0, size: 0 }); tinStep(dt); }
   physics(dt);
   render();
   hud(dt, F);
@@ -15469,7 +15477,7 @@ function things(pal, mirror, list) {
   uniforms(thingP, pal, mirror);
   if (!mirror && DIAG.a2c) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
   gl.disable(gl.CULL_FACE);
-  for (const k of list) { const o = SET[k]; if (!o || !o.count) continue; gl.bindVertexArray(o.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, o.n, o.count); }
+  for (const k of list) { const o = SET[k]; if (!o || !o.count || DIAG.hide.has(k)) continue; gl.bindVertexArray(o.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, o.n, o.count); }
   gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
 }
 function scene(pal, mirror) {
@@ -15477,7 +15485,7 @@ function scene(pal, mirror) {
   gl.uniform3fv(skyP.u.uTop, pal.top); gl.uniform3fv(skyP.u.uHor, pal.hor); gl.uniform3fv(skyP.u.uMoon, I.moon); gl.uniform1f(skyP.u.uMirror, mirror ? 1 : 0); gl.uniform1f(skyP.u.uNight, I.night); gl.uniform1f(skyP.u.uCloud, S.rain ? 1 : .15); gl.uniform1f(skyP.u.uStar, S.t * .004);
   gl.depthMask(false); gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.depthMask(true);
   uniforms(landP, pal, mirror); gl.bindVertexArray(land.vao); gl.drawElements(gl.TRIANGLES, land.n, gl.UNSIGNED_INT, 0);
-  things(pal, mirror, mirror ? ['oak', 'ash', 'bush', 'pine', 'wil', 'reed', 'jetty'] : ['oak', 'ash', 'bush', 'pine', 'wil', 'reed', 'grass', 'lily', 'flower', 'jetty']);
+  things(pal, mirror, mirror ? ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pine', 'wil', 'reed', 'jetty'] : ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'bush', 'pine', 'wil', 'reed', 'grass', 'lily', 'flower', 'jetty']);
 }
 // the sun's view for the shadow map: an orthographic box round the near lake and banks
 function sunMatrix() {
@@ -15493,7 +15501,7 @@ function shadowPass(pal) {
   gl.useProgram(depthLandP.p); gl.uniformMatrix4fv(depthLandP.u.uVP, false, VP); gl.bindVertexArray(land.vao); gl.drawElements(gl.TRIANGLES, land.n, gl.UNSIGNED_INT, 0);
   gl.useProgram(depthP.p); gl.uniformMatrix4fv(depthP.u.uVP, false, VP); gl.uniform1f(depthP.u.uTime, now); gl.uniform1f(depthP.u.uWind, 1);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ATLAS.tex); gl.uniform1i(depthP.u.uAtlas, 1);
-  for (const k of ['oak', 'ash', 'pine', 'wil', 'reed', 'jetty']) { const o = SET[k]; if (!o || !o.count) continue; gl.bindVertexArray(o.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, o.n, o.count); }
+  for (const k of ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pine', 'wil', 'reed', 'jetty']) { const o = SET[k]; if (!o || !o.count) continue; gl.bindVertexArray(o.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, o.n, o.count); }
   gl.disable(gl.POLYGON_OFFSET_FILL); gl.colorMask(true, true, true, true); gl.bindFramebuffer(gl.FRAMEBUFFER, null); VP = keep;
 }
 let floatAt = null;
@@ -15622,6 +15630,7 @@ K.world({
     shown = S.$; board();
     if (S.phase === 'land' && S.landed) { landA = { t: 2, k: S.landed.k, w: S.landed.w, from: [0, jettyEnd() - 2], e: Object.assign({ f: S.landed.k }, S.landed), shown: 1, drop: 0 }; showCatch(landA.e); }
     $('fps').hidden = !DIAG.fps;
+    if (CORE.done(S)) tinT = 1.0;   // opened, but the page closed before the trip inside: the tin opens once more and the shell dives
   },
   save() { return S; },
   pause() { if (AU) AU.amb.gain.setTargetAtTime(0, AU.ctx.currentTime, .2); if (S && S.phase === 'fight') CORE.act(S, 'reel', 0, 0); press = null; },
