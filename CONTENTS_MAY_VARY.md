@@ -2240,6 +2240,15 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   the painted fish and the photographic lake are two styles (a paper frame round the catch card helps, a painterly pass on
   the water would close it); no hands on the rod (a hand drawn from primitives would be worse than none: rule 16 says take a
   licensed one, or leave it); the shell's №7 chip is the shell's, not the box's.
+- *The owner's look after it* (November 2026): the right direction, and seven points left for the next session. (1) Reeds and
+  trees look broken: crowns grow darker toward their rim and grass toward its tips (the atlas's transparent texels are black,
+  and mipmapping bleeds them into every edge: bleed the colours out into the transparent texels or premultiply), the willows
+  read as rectangular curtains under bare arcs, the bulrush heads float apart from their stalks (a tube's first ring sways 0
+  and its last fully, so a head built on a stalk's tip does not move with it); take real tree models and photographs as the
+  reference. (2) The water should be measured against the best three.js water examples. (3) No way to run. (4) The rain shows
+  single drops; it needs streaks, rings and a darker, misty light. (5) No way to reel in a line cast by mistake (the rules
+  have `reelin`; the view gives it no gesture). (6) The jetty's posts are hollow tubes (no caps). (7) The late game should
+  escalate: more lines at once, up to ten baits in the water, the fight perhaps left to the small fish by then.
 - *Performance*: 32 draw calls a frame late in the game (the perf suite's budget is 45). In the software renderer the trees cost
   86 % of a frame, mostly the far woods seen edge on, layer behind layer; beyond 48 m they use fewer, larger cards and every
   other tree, the slopes carry a painted canopy, and a phone frame went from 2.6 to 1.4 s there. Nobody has measured it on a
