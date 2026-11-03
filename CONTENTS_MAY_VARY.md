@@ -2219,6 +2219,29 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   `bell`, `old`; `?tod=0..1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
   which dithered in the software renderer); `K.debug.look(x, z, yaw, pitch)`, `tod(u)`, `snap()` (renders, then reads the canvas).
 - *Controls*: a mouse looks the way it moves; a finger drags the world. The owner found the mouse's up and down inverted.
+- *Critic rounds* (fresh critics on twelve phone frames of every moment, scored first impression, clarity, art direction, phone,
+  feel and "would pass as commercial"): 7/6/6/5/5 and **5**, then 7/6/6/6/4 and **5**. Fixed after the first: the sun's
+  reflection was a smooth white disc at the angler's feet (it breaks into glitter now, faded near the eye, and the moon lays
+  a path at night); the lantern was a box cut off at the screen's edge (a hurricane lamp on a hook, below the eye); the
+  rod stayed straight (it bends half as much again); the logbook lay under the tackle cards and had no close button; the
+  strip of cards gave no sign it scrolls; the tension bar had no words; the Old One's tin sat on its belly (it hangs from the
+  jaw on a wire); every fish was one outline recoloured (bream deep, tench round-tailed and thick at the tail, rudd high-
+  backed, an eel's fin all round with a pectoral fin and a bigger eye, whiskers that taper). After the second: the night was
+  black (moonlight now lights the jetty and the banks), the frame showed sky more than jetty (the view tilts down), the
+  fish under the water was too deep to see on a run (it rolls just under the surface, and a sulk sends up silt bubbles), the
+  line hums near breaking and the rod kicks in the hands, the bank rod's bell no longer pops up over a fight.
+  Still open, from both critics: the fight shows less in a still than in play (a jump between frames, a wake that moves);
+  the painted fish and the photographic lake are two styles (a paper frame round the catch card helps, a painterly pass on
+  the water would close it); no hands on the rod (a hand drawn from primitives would be worse than none: rule 16 says take a
+  licensed one, or leave it); the shell's №7 chip is the shell's, not the box's.
+- *Performance*: 32 draw calls a frame late in the game (the perf suite's budget is 45). In the software renderer the trees cost
+  86 % of a frame, mostly the far woods seen edge on, layer behind layer; beyond 48 m they use fewer, larger cards and every
+  other tree, the slopes carry a painted canopy, and a phone frame went from 2.6 to 1.4 s there. Nobody has measured it on a
+  real phone yet; `?fps`, `?dpr=1`, `?refl=0`, `?shadow=0` and `?hide=oak,pine,…` narrow down a slow device. The guitar has
+  had no ears on it either.
+- *Loading in the test browser*: a desktop page took 18 to 20 seconds to fire `load` because the shell's own fonts from
+  fonts.gstatic.com came slowly through the session's proxy; the box built in about 150 ms. The browser suite's 30-second
+  `goto` can fail on that, not on the box. The box now draws its first heavy frame only after the page has loaded.
 
 ## Lessons from the boxes so far
 
