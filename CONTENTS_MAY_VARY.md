@@ -2219,6 +2219,12 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   `bell`, `old`; `?tod=0..1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
   which dithered in the software renderer); `K.debug.look(x, z, yaw, pitch)`, `tod(u)`, `snap()` (renders, then reads the canvas).
 - *Controls*: a mouse looks the way it moves; a finger drags the world. The owner found the mouse's up and down inverted.
+  Then, at the owner's wish, the first click with a mouse takes the pointer (pointer lock) and puts the whole page in full
+  screen (the parent's document, so the shell's menu stays): the mouse looks without dragging, a held click winds up a cast
+  and throws on release (the view turns to the lake if it faced away), a click strikes, a held click reels and moving the
+  mouse sideways leans the rod, a short click walks to the boards under the dot in the middle; E goes to the bank rod, L
+  opens the logbook, Esc frees the mouse for the tackle cards. The pointer must be asked for before full screen: the full
+  screen request uses up the click's activation, and the lock is then refused.
 - *Critic rounds* (fresh critics on twelve phone frames of every moment, scored first impression, clarity, art direction, phone,
   feel and "would pass as commercial"): 7/6/6/5/5 and **5**, then 7/6/6/6/4 and **5**. Fixed after the first: the sun's
   reflection was a smooth white disc at the angler's feet (it breaks into glitter now, faded near the eye, and the moon lays
