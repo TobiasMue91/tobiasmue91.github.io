@@ -43,6 +43,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    Unwelcome Guests may weigh **260 KB**: for its refinement session (November 2026, rule 16) the owner let it be remade
    from the verb up (a poltergeist's whirl in place of the cold that herded people) and lifted the cap; the remade box
    began at 145 KB with its scenes, close-ups and diagnostic switches.
+   Still Water may weigh **300 KB**: for its refinement session (November 2026) the owner set the cap there, calling it arbitrary
+   anyway; the box passed 130 KB with its leaf-card woods, the fish in 3D, the remade fight and the guitar.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -271,10 +273,11 @@ The long-term answer is a habit and a tool:
 | 4 | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | 5 | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
 | 6 | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft, shipped as a cold that herded people, remade in November 2026 as a poltergeist) | hold a finger on the house: a whirl follows it, tears loose whatever it passes (teacups and candles first, chairs, then the long-case clock and the armour, last the piano and the chandelier) and carries it round; what it carries hits people; let go and it all crashes down, or with Fling flies on | short nights against ectoplasm and the dawn, the organ between them; a hit frightens and shoves, past their nerve they panic and run out of the door, and every exit costs a pip of resolve for good; five casts, from a family of three to a film company and twenty-six extras | silent film in coloured cut paper: black silhouettes before rooms of lit, tinted paper (teal, ochre, wine, green, violet, rose), what is built in one plane back in the room's own shade, a cream card ghost, grain, intertitles, iris | indigo night, six room colours, black, cream; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought; porcelain, thuds, smashes and the whirl's wind | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
+| 7 | `jetty` | Still Water · "Keep away from water." | walk the jetty, swipe up to cast, tap when the float goes under, then play the fish: hold to reel, let go when the line is red, slide the held finger to lean against a run, let go while it jumps, pump a sulk | no runs and no clock: a day of eight minutes turns over one lake; ten kinds by distance, hour and bait, each met with the tackle of its time and fighting its own way, sizes up to a trophy; the tackle board between casts; a bank rod in the reeds that rings and is walked to | first-person real-time 3D in hand-written WebGL 2: leaf-card woods, willows and reeds from a painted atlas, the sun's shadow, a lake that knows its depth and mirrors the banks; fish painted in ink and wash, the same painting wrapped round a 3D body | meadow and willow greens, peat water, a red float; gold dusk, blue night with fireflies | English summer, cosy angling, the uncanny in the deep | lapping water, birds, crickets, the reel's clicks; a fingerpicked acoustic guitar (Karplus-Strong) that thins at dawn, slows into B minor at dusk and plays harmonics at night | paper cards on the water: the tackle board, the logbook of painted fish, the catch card | the Old One takes the bait in the deep with a tobacco tin wired to its jaw, the next number on the lid; tap it and the lid lifts |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 35–36 / 62–64 (after its refinement session),
-Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–37 / 66–71 (remade, November 2026).
+Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–37 / 66–71 (remade, November 2026), Still Water 40–50 / 40–46.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -2133,7 +2136,7 @@ polished. The draft was taken out of the page; the commit that added it is
 `940774956afd8dbe9912b284167152a8fe99d875`. In its place the owner asked for a fishing game at one idyllic jetty in a
 very green landscape, with a catch mechanic that scales with upgrades so later fish come quicker and easier.
 
-### Still Water (draft, November 2026)
+### Box 7: Still Water (draft, then shipped, November 2026)
 
 The jetty the owner asked for, as a first-person prototype to try the catch in the hand before anything is polished
 (`?world=jetty`). One wooden jetty on a lake in a green bowl of hills: broadleaves, pines, willows, reeds with bulrushes,
@@ -2169,7 +2172,64 @@ then found the line could not snap at all after the first few upgrades: the figh
 Still open: the owner's verdict on the catch; music (ask first); a proper look pass (the trees are lumps of spheres,
 the rod a ribbon); the second rod's bell needs the walk to matter; stickers; critics.
 
+**The refinement session** (November 2026, rule 16), which took the draft into the stack as box 7.
+- *Research: how the paid fishing games keep a fight a fight.* Webfishing scales its reel by the fish's difficulty, size and
+  quality (a size multiplier of 0.7 to 1.8 and a flat step per quality tier), so a better rod never makes every fish trivial;
+  Dredge gives every kind of water and fish its own minigame and makes the gear faster, not the game different; Cast n Chill
+  lets a fish run past the line's length until the line is upgraded, and loses a fish off the hook rather than with the line;
+  Stardew's bar moves differently per fish (darting, sinking, floating). What they share: the fish grows to meet the tackle,
+  and each kind fights its own way. Players of Sip Fisher complain most about walking the same way again and again.
+- *The fight, remade in the rules* (the owner chose leaning plus a way per kind): holding winds in and loads the line, letting
+  go gives line; sliding the held finger leans the rod: against a run it takes the strain on the rod's side (the line carries
+  up to 40 % less and the fish tires and turns sooner), with the run it carries more. Every kind has a way (`WAY` in the core):
+  roach and rudd short runs, perch darts, tench and carp run for the lilies (a fish past `COVER` metres to the side is caught in
+  them and lost in three seconds unless led out by leaning the other way), bream heavy, pike rise (a swirl, then a leap: held
+  through, the hook is thrown), zander zigzag, the wels sulks on the bottom (only hold, let go, hold lifts it, holding on
+  loads the line more and more), eels zigzag for the roots at night, the Old One does all of it. Weights spread to *big*,
+  *specimen* and *trophy*, and pull grows with weight, so a trophy roach fights like a perch. Pulls are set against the
+  tackle each kind is met with in the eager bot's game. The reel brake no longer stops every snap: it softens the load past
+  90 % and lets line out. The bank rod sits in the reeds left of the jetty; when something has hooked itself its bell rings
+  and it stays on 28 seconds (45 with the bite alarm); walking there (along the bank, or the boardwalk from the second level)
+  brings the line on the jetty in, and the fish is played by hand. A night without a lantern passes six times as fast while
+  the angler dozes on the bench. A kind not yet in the book bites two and a half times as readily, so the book never stalls on
+  luck. Milestones count a new size per kind and a notch every twenty fish.
+- *Measured with people, not bots* (`node util/jetty/naive.mjs`, 100 fights each, at the meeting tackle): someone who only
+  holds lands 0 to 20 % of every kind from the tench on (the perch 20 %, the roach about three in four); someone who lets go
+  0.6 s late but never leans lands the open-water kinds and loses carp and the Old One to the lilies (10 to 17 %); the same
+  person leaning lands nearly all but the wels and the Old One (two in three); a quick hand lands nearly all, with the line
+  above 85 % for a fifth to a third of the fight. Three purchases later the late hand's carp is still only 17 %: leaning is
+  the skill, not the tackle. The box's suite holds the lines.
+- *Pacing* (three seeds): eager 39.6 to 49.5 min, casual 40.4 to 45.3, the longest wait 3.4 min; the casual bot's first fish
+  in about 15 s pays for the first hook. Both bots earn two or three stickers (the whole book, the Old One first time, often a
+  trophy); *Out of the lilies* (lead five back out) and *Night shift* (forty at night) want a purpose.
+- *The look, rebuilt* (every limit lifted, rule 2). Crowns are leaf cards cut from a painted atlas (clumps of broad leaves on
+  twigs, willow strands, pine boughs, grass and reed blades), turned outward over clumps on real limbs, their normals bent
+  out from the crown's centre and darker inside it; undergrowth closes the woods' edge; trees grow in stands by a noise, not
+  evenly. The sun casts a shadow map over the near lake and banks, refreshed every twenty frames. The lake bed is baked into
+  a texture, so the water is clear and brown in the shallows, dark green in the deep, with a pale wet line at the edge and a
+  sun glitter that fades at your feet. The rod is a solid: tapered cane with whipped rings, a cork grip, a reel whose handle
+  turns while it winds. Fish are the logbook's painting wrapped round a body lofted from the same outline, with the fins and
+  tail as a cut-out card through it: dark under the water while they fight, in the air when they jump, hanging on the line
+  in front of you when landed. A jetty with posts and cross-braces, a bench, a mooring post with a notch for every twenty
+  fish, a lantern on a bracket, the smokehouse with plank walls and a shingled roof, the boardwalk.
+- *The way out*: the Old One lands with a tobacco tin wired to its jaw, the next number on its lid; a tap lifts the lid on the
+  card, light comes out on the box's own clock, and the shell dives into the tin's mouth. `revisit` brings a finished jetty
+  back with the book and tackle, and the Old One takes the bait again.
+- *Tools*: `?world=jetty&scene=` `min<n>` (the eager bot's game), `fight:<kind>`, `jump`, `land:<kind>`, `night`, `dark`,
+  `bell`, `old`; `?tod=0..1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
+  which dithered in the software renderer); `K.debug.look(x, z, yaw, pitch)`, `tod(u)`, `snap()` (renders, then reads the canvas).
+- *Controls*: a mouse looks the way it moves; a finger drags the world. The owner found the mouse's up and down inverted.
+
 ## Lessons from the boxes so far
+
+- **A tackle that only grows makes the fight vanish.** Still Water's line, rod and reel each scaled the margin while the fish stayed
+  as they were, so after four purchases nobody could snap a line. Set each kind against the tackle it is met with in a bot's
+  game, let size push back, and measure people (one who only holds, one who is late, one who is quick) rather than the bots,
+  which let go at once.
+- **Cut-out cards keep their crown's normal on both faces.** Flipping the normal for back faces, as solids need, lit every
+  grass card black on one side; leaves and blades take the normal bent out from their clump whichever side is seen.
+- **A canvas read after the frame is blank.** WebGL clears the drawing buffer once it is shown, so a snapshot must draw the frame
+  and read it in the same call.
 
 - **A lid that opens is a model, not a squashed picture.** Scaling the closed lid's picture and growing a lining picture behind it
   looked like two lids and a box on a box. A few projected points (a box, a roof turning on its hinge, a camera that pitches)

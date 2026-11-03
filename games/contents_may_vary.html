@@ -14121,12 +14121,11 @@ const CORE = (() => {
 })();
 </script>
 
-<!-- ═══════════ the next box goes above this line ═══════════ -->
-
-<!-- ═══════════════ DRAFT · jetty · "Still Water" ═══════════════
-     One wooden jetty on a green lake, walked freely, from dawn to night. Cast, strike when the float goes under,
-     play the fish (hold to reel, let go when the line is tight); the tackle scales the catch. A prototype. -->
-<template data-world="jetty" data-title="Still Water" data-handling="Keep away from water." data-draft>
+<!-- ═══════════════ BOX 7 · jetty · "Still Water" ═══════════════
+     One wooden jetty on a green lake, walked freely, from dawn to night. Cast, strike when the float goes under, play
+     the fish (hold to reel, let go when the line is red, lean against a run, let go for a jump, pump a sulk); the tackle
+     makes it quicker and kinder, the fish grow to meet it. The Old One carries the next box in its jaw. -->
+<template data-world="jetty" data-title="Still Water" data-handling="Keep away from water.">
 <svg data-part="souvenir" viewBox="0 0 100 100"><defs><linearGradient id="swS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2c98a"/><stop offset="1" stop-color="#9fc2c9"/></linearGradient><linearGradient id="swW" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6d9a95"/><stop offset="1" stop-color="#2c4f52"/></linearGradient></defs><circle cx="50" cy="50" r="46" fill="url(#swS)"/><path d="M4 52q14-12 26-6t22-4 20 2 24 6v6H4z" fill="#4f7a3a"/><path d="M4 56h92a46 46 0 0 1-92 0z" fill="url(#swW)"/><path d="M58 57h34l-1 3H58z" fill="#7b5a3a"/><path d="M62 60v9M70 60v10M78 60v10M86 60v9" stroke="#4a3624" stroke-width="2"/><path d="M8 56c10-1 14-8 18-14M14 56c3-6 4-12 9-17" stroke="#6c7d37" stroke-width="1.6" fill="none"/><path d="M60 57 40 20" stroke="#5a3a22" stroke-width="1.6"/><path d="M40 20Q34 44 30 64" stroke="#efe9da" stroke-width=".6" fill="none"/><circle cx="30" cy="64" r="2.2" fill="#d23a1e"/><path d="M26 66q4-2 8 0" stroke="#e7f0ee" stroke-width=".8" fill="none"/></svg>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,400&display=swap">
 <style>
@@ -15167,6 +15166,75 @@ function bird() {   // a phrase of a songbird: a few quick sweeps
 function cricket() { const A = AU; if (!A) return; for (let k = 0; k < 3; k++) tone(4300, .025, .012, k * .045, 4300, 'triangle', A.amb); }
 function bell() { tone(1568, 1.2, .1, 0, 1568, 'sine'); tone(3136, .6, .03, 0, 3136); tone(1568, 1, .07, .25); }
 function jingle(first) { const notes = first ? [523, 659, 784, 1046] : [587, 784]; notes.forEach((f, i) => tone(f, .9, .07, i * .09, f, 'triangle')); }
+/* ================= the music: a fingerpicked acoustic guitar that follows the hour ================= */
+// Each string is a Karplus-Strong pluck rendered once into a buffer (a burst of noise round a delay line that loses a little
+// on every pass), played through a body (a low resonance and a soft top cut) and a small room. A day is a travis pattern in D
+// (a thumb alternating on the bass, fingers on the treble), dawn plays a few notes and lets them ring, dusk slows into B minor,
+// night is natural harmonics now and then over the crickets.
+const MUS = { on: false, t: 0, bar: 0, step: 0, bufs: {}, out: null, rnd: rng(99) };
+const NOTE = n => 440 * pow(2, (n - 69) / 12);
+function pluckBuf(ctx, midi, bright) {
+  const key = midi + ':' + bright; if (MUS.bufs[key]) return MUS.bufs[key];
+  const sr = ctx.sampleRate, f = NOTE(midi), N = max(2, Math.round(sr / f - .5)), len = floor(sr * (midi < 50 ? 3.2 : 2.4)), d = new Float32Array(len), r = rng(midi * 7 + 1);
+  let lp = 0; for (let i = 0; i < N; i++) { const x = r() * 2 - 1; lp += (x - lp) * (bright ? .7 : .45); d[i] = lp; }   // the pluck: noise, softened by the finger
+  const loss = midi < 50 ? .4985 : .497 + (midi - 50) * .00003;
+  for (let i = N + 1; i < len; i++) d[i] = (d[i - N] + d[i - N - 1]) * loss;
+  for (let i = 0; i < 80; i++) d[i] *= i / 80;
+  const b = ctx.createBuffer(1, len, sr); b.copyToChannel(d, 0); return (MUS.bufs[key] = b);
+}
+function harmBuf(ctx, midi) {   // a natural harmonic: a bell-like sine with a breath of noise
+  const key = 'h' + midi; if (MUS.bufs[key]) return MUS.bufs[key];
+  const sr = ctx.sampleRate, f = NOTE(midi), len = floor(sr * 3), d = new Float32Array(len);
+  for (let i = 0; i < len; i++) { const t = i / sr; d[i] = (sin(TAU * f * t) + .25 * sin(TAU * f * 2 * t) * exp(-t * 3)) * exp(-t * 1.6) * min(1, t * 400) * .5; }
+  const b = ctx.createBuffer(1, len, sr); b.copyToChannel(d, 0); return (MUS.bufs[key] = b);
+}
+function musicOut() {
+  if (MUS.out || !AU) return MUS.out;
+  const { ctx } = AU, music = K.audio.music;
+  const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 190; body.Q.value = 1.4; body.gain.value = 5;
+  const top = ctx.createBiquadFilter(); top.type = 'lowpass'; top.frequency.value = 4200;
+  const room = ctx.createConvolver(), sr = ctx.sampleRate, ir = ctx.createBuffer(2, sr * 1.6, sr);
+  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c), r = rng(c + 3); for (let i = 0; i < d.length; i++) d[i] = (r() * 2 - 1) * pow(1 - i / d.length, 3) * .5; }
+  room.buffer = ir; const wet = ctx.createGain(); wet.gain.value = .22; const dry = ctx.createGain(); dry.gain.value = .85; const lvl = ctx.createGain(); lvl.gain.value = .55;
+  body.connect(top); top.connect(dry); top.connect(room); room.connect(wet); dry.connect(lvl); wet.connect(lvl); lvl.connect(music);
+  return (MUS.out = { in: body, lvl });
+}
+function pluck(midi, at, vel, harm) {
+  const o = musicOut(); if (!o) return; const { ctx } = AU, s = ctx.createBufferSource(), g = ctx.createGain();
+  s.buffer = harm ? harmBuf(ctx, midi) : pluckBuf(ctx, midi, vel > .8); s.playbackRate.value = 1 + (MUS.rnd() - .5) * .002;
+  g.gain.value = vel * (harm ? .35 : .5); s.connect(g); g.connect(o.in); s.start(at); s.stop(at + s.buffer.duration);
+}
+// chords as the strings sound them (MIDI): a bass, a second bass, and the treble notes the fingers pick
+const CH = {
+  D: [50, 57, [62, 66, 69, 74]], G: [43, 50, [59, 62, 67, 71]], A: [45, 52, [57, 61, 64, 69]], Bm: [47, 54, [59, 62, 66, 71]], Em: [40, 47, [59, 64, 67, 71]],
+  Dsus: [50, 57, [62, 67, 69, 74]], Gadd: [43, 50, [57, 62, 67, 69]], F$m: [42, 49, [57, 61, 66, 69]]
+};
+const SONG = {   // per hour: the chords, a bar each; how fast; how many of the treble notes are played
+  day: { ch: ['D', 'Dsus', 'G', 'D', 'Bm', 'G', 'A', 'A', 'D', 'Dsus', 'G', 'Gadd', 'Em', 'G', 'A', 'D'], bpm: 86, dens: .9 },
+  dawn: { ch: ['D', 'G', 'D', 'A', 'Bm', 'G', 'D', 'D'], bpm: 64, dens: .35 },
+  dusk: { ch: ['Bm', 'G', 'D', 'A', 'Bm', 'F$m', 'G', 'A'], bpm: 70, dens: .6 },
+  night: { ch: ['D', 'G', 'Bm', 'A'], bpm: 48, dens: 0 }
+};
+function music(dt, tod) {
+  if (!AU || K.paused) return;
+  const ctx = AU.ctx, song = SONG[tod] || SONG.day;
+  if (!MUS.on) { MUS.on = true; MUS.t = ctx.currentTime + .3; MUS.step = 0; MUS.bar = 0; }
+  if (MUS.t < ctx.currentTime - .5) MUS.t = ctx.currentTime + .05;   // after a pause, start again a beat on
+  const eighth = 60 / song.bpm / 2;
+  while (MUS.t < ctx.currentTime + .25) {
+    const ch = CH[song.ch[MUS.bar % song.ch.length]], s = MUS.step, at = MUS.t + (MUS.rnd() - .5) * .012, sw = s % 2 ? eighth * .08 : 0;
+    if (tod === 'night') { if (s === 0 && MUS.rnd() < .5) pluck(ch[2][floor(MUS.rnd() * 4)] + 12, at, .5, 1); if (s === 4 && MUS.rnd() < .25) pluck(ch[2][2] + 12, at, .4, 1); }
+    else {
+      // the thumb: root on one and three, the second bass on two and four
+      if (s % 2 === 0 && (song.dens > .5 || s === 0 || (s === 4 && MUS.rnd() < .6))) pluck(s % 4 === 0 ? ch[0] : ch[1], at, s === 0 ? .9 : .7);
+      // the fingers: between the thumb's beats, a pattern that walks up and back, thinned by the hour
+      if (s % 2 === 1 && MUS.rnd() < song.dens) pluck(ch[2][[1, 2, 3, 2][(s >> 1) % 4]], at + sw, .55 + MUS.rnd() * .2, 0);
+      if (s === 0 && MUS.rnd() < song.dens * .6) pluck(ch[2][3], at + .01, .6);   // a pinch on the downbeat
+      if (tod === 'day' && MUS.bar % 16 >= 8 && s === 3 && MUS.rnd() < .5) pluck(ch[2][3] + 2, at, .55);   // a little turn in the second half
+    }
+    MUS.t += eighth; MUS.step = (s + 1) % 8; if (!MUS.step) MUS.bar++;
+  }
+}
 /* ================= the tackle board, the logbook, the catch ================= */
 const NAME = {}; for (const f of CORE.FISH) NAME[f[0]] = f[1]; NAME.old = CORE.OLD[1];
 const HOW = { roach: 'an easy first fish', rudd: 'quick little runs', perch: 'darts this way and that', tench: 'makes for the lilies', bream: 'heavy, sluggish', eel: 'night: wriggles for the roots',
@@ -15369,7 +15437,7 @@ function hud(dt, F) {
   const B = S.rod2; $('bell').classList.toggle('on', !!B.bell && !(F && fightRod === 2));
   if (B.bell) $('bellT').textContent = atRod2() ? 'tap to pick it up' : 'tap to walk over · ' + max(0, B.wait).toFixed(0) + ' s';
   uiT -= dt; if (uiT <= 0) { uiT = .25; board(); buildJetty(); }
-  if (AU) ambience(dt, tod);
+  if (AU) { ambience(dt, tod); music(dt, dark ? 'night' : tod); }
   progT -= dt; if (progT <= 0) { progT = 2; K.progress(CORE.progress(S)); }
   if (DIAG.fps) { fpsT += dt; fpsN++; if (fpsT > 1) { $('fps').textContent = (fpsN / fpsT).toFixed(0) + ' fps · ' + cv.width + '×' + cv.height; fpsT = fpsN = 0; } }
 }
@@ -15651,7 +15719,7 @@ const CORE = (() => {
   const wait2 = S => S.lv.rod2 >= 2 ? 45 : 28;  // how long a fish on the bank rod stays on
 
   function init(seed) {
-    const S = { seed: seed >>> 0 || 1, t: DAY * .02, $: 0, phase: 'idle', bob: null, fish: null, wait: 0, hold: 0, steer: 0, log: {}, caught: 0, lost: 0, snaps: 0,
+    const S = { seed: seed >>> 0 || 1, t: DAY * .02, $: 0, earned: 0, phase: 'idle', bob: null, fish: null, wait: 0, hold: 0, steer: 0, log: {}, caught: 0, lost: 0, snaps: 0,
       rod2: { t: 30, bell: 0, wait: 0 }, rain: 0, rainT: 200, fin: 0, best: 0, lv: {}, ev: [],
       run: 0, bestRun: 0, nightN: 0, trophies: 0, oldTries: 0, sizes: 0, why: {} };
     for (const u of UP) S.lv[u.id] = 0;
@@ -15772,7 +15840,7 @@ const CORE = (() => {
     const F = S.fish, f = kind(F.k), v = +(F.w * f[6] * PAY * worth(S)).toFixed(2);
     const e = S.log[F.k] || (S.log[F.k] = { n: 0, best: 0 }), first = !e.n, size = F.size;
     e.n++; if (F.w > e.best) e.best = F.w;
-    S.$ += v; S.caught++; S.best = max(S.best, F.w); S.run++; S.bestRun = max(S.bestRun, S.run);
+    S.$ += v; S.earned += v; S.caught++; S.best = max(S.best, F.w); S.run++; S.bestRun = max(S.bestRun, S.run);
     if (night(S)) S.nightN++;
     if (size === 3) S.trophies++;
     const newSize = size > (S.sizes | 0); if (newSize) S.sizes = size;
@@ -15898,6 +15966,10 @@ const CORE = (() => {
 })();
 </script>
 <!-- end of jetty -->
+
+<!-- ═══════════ the next box goes above this line ═══════════ -->
+
+
 
 
 
