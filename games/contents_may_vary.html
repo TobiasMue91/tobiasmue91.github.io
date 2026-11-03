@@ -14217,6 +14217,8 @@ body.sulk #pumps{display:flex}
 #alarm b{position:absolute;left:11px;top:50%;width:14px;height:14px;margin-top:-7px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px var(--ink)}
 #alarm.on b{animation:led .3s steps(2) infinite}
 @keyframes led{50%{opacity:.25}}
+#doze{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity 2.5s;background:linear-gradient(180deg,#05070a 0,rgba(5,7,10,.92) 18%,rgba(5,7,10,0) 42%,rgba(5,7,10,0) 58%,rgba(5,7,10,.92) 82%,#05070a 100%)}
+#doze.on{opacity:1}
 .pin{position:fixed;left:0;top:0;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid var(--c,#c23a22);background:rgba(243,236,216,.85);font:700 15px/28px var(--f);color:var(--ink);text-align:center;pointer-events:none;box-shadow:0 0 0 4px rgba(0,0,0,.12);animation:pin .6s ease-in-out infinite alternate}
 .pin.edge{border-radius:8px}
 @keyframes pin{to{box-shadow:0 0 0 10px rgba(194,58,34,0)}}
@@ -14229,7 +14231,7 @@ body.locked #cross{display:block}body.locked.fight #cross{display:none}
 @media (min-width:900px){#catch{top:68%}#board{justify-content:center}#board button{width:158px}#meter{width:380px}}
 @media (prefers-reduced-motion:reduce){#bell.on svg{animation:none}#alarm.on b{animation:none}}
 </style>
-<canvas id="gl"></canvas>
+<canvas id="gl"></canvas><div id="doze"></div>
 <div id="top"><div id="money" class="card">£0.00<small id="tod">dawn</small></div><button id="bookBtn" class="card">Logbook<i id="kinds">0 / 10</i></button></div>
 <button id="bell" class="card"><svg viewBox="0 0 24 24"><path d="M12 3c-3.3 0-5.5 2.6-5.5 6v4.2L4.6 16.5h14.8l-1.9-3.3V9c0-3.4-2.2-6-5.5-6z" fill="#c9962e" stroke="#2a2116" stroke-width="1.4" stroke-linejoin="round"/><circle cx="12" cy="19" r="2" fill="#2a2116"/></svg>The bank rod!<i id="bellT">something is on</i></button>
 <div id="flash" class="card"></div>
@@ -15366,11 +15368,11 @@ function stepTags(dt) { for (let k = tags.length - 1; k >= 0; k--) { const g = t
 // over every rod whose alarm sounds: its number in a ring at the alarm, or at the screen's edge pointing the way to it
 const PINS = [];
 function pins(F) {
-  for (let i = 0; i < 8; i++) {
-    const P = S.pods && S.pods[i], on = !!(P && i < (S.lv.pod | 0) && P.on && !F && !landA);
+  for (let i = 0; i < 9; i++) {
+    const P = i < 8 ? S.pods && S.pods[i] : null, on = i < 8 ? !!(P && i < (S.lv.pod | 0) && P.on && !F && !landA) : !!(S.rod2.bell && !F && !landA && !atRod2());
     let el = PINS[i]; if (!on) { if (el) el.hidden = true; continue; }
-    if (!el) { el = PINS[i] = document.createElement('div'); el.className = 'pin'; el.textContent = i + 1; el.style.setProperty('--c', `rgb(${POD_C[i].map(v => v * 220 | 0)})`); $('tags').appendChild(el); }
-    el.hidden = false; const sp = podSpot(i), q = project(sp.rest[0], sp.rest[1] + .12, sp.rest[2]);
+    if (!el) { el = PINS[i] = document.createElement('div'); el.className = 'pin'; el.textContent = i < 8 ? i + 1 : '♪'; el.style.setProperty('--c', i < 8 ? `rgb(${POD_C[i].map(v => v * 220 | 0)})` : '#c9962e'); $('tags').appendChild(el); }
+    el.hidden = false; const sp = i < 8 ? podSpot(i) : { rest: I.bellAt || [R2.x, ground(R2.x, R2.z) + .8, R2.z] }, q = project(sp.rest[0], sp.rest[1] + .12, sp.rest[2]);
     let x, y, edge = false;
     if (q && q[0] > 20 && q[0] < W - 20 && q[1] > 60 && q[1] < H - 20) { x = q[0]; y = q[1]; }
     else { const d = [sp.rest[0] - eyeP[0], sp.rest[2] - eyeP[2]], a = atan2(d[0] * right[0] + d[1] * right[2], d[0] * fwd[0] + d[1] * fwd[2]); edge = true;
@@ -15715,7 +15717,8 @@ function hud(dt, F) {
   }
   // what to do next, said once, where it is needed
   let h = '';
-  if (dark) h = 'Too dark to see the float. You doze on the bench till dawn (a lantern would let you fish on).';
+  $('doze').classList.toggle('on', dark && S.phase === 'idle' && !landA && !K.reduced);   /* the lids come down, from above and below */
+  if (dark) h = 'Too dark to fish: you doze till dawn. A lantern would let you fish on.';
   else if (S.phase === 'idle' && !landA) {
     if (!knows('cast')) h = atEnd() ? (locked() ? 'Hold the button to cast, let go to throw' : 'Swipe up to cast') : (locked() ? 'Walk out to the end: W, or click the boards' : 'Tap the jetty’s end to walk out');
     else if (S.rod2.bell) h = '';
@@ -15834,7 +15837,7 @@ function render() {
   lineN = 0;
   const base = rodBase(), rd = rodDir(), RL = 2.75, tip0 = V3.add(base, V3.mul(rd, RL));
   let pull = V3.mul(upv, -1); if (fp) pull = V3.norm(V3.sub([fp[0], 0, fp[1]], tip0));
-  const bend = rodBend * 1.35 + (S.phase === 'wait' || S.phase === 'bite' ? .06 : 0) + (landA && !landA.drop ? .25 : 0);
+  const bend = rodBend * 1.2 + (S.phase === 'fight' ? .32 : 0) + (S.phase === 'wait' || S.phase === 'bite' ? .06 : 0) + (landA && !landA.drop ? .25 : 0);   /* a rod with a fish on is always loaded */
   const rodPts = []; for (let k = 0; k <= 14; k++) { const t = k / 14; rodPts.push(V3.add(V3.add(base, V3.mul(rd, RL * t * (1 - bend * .14 * t))), V3.mul(V3.add(V3.mul(pull, .75), [0, -.4, 0]), bend * t * t * .9))); }
   const rtip = rodPts[14];
   const showMain = !(fightRod === 2 && !S.bob) && !(atRod2() && S.phase === 'idle' && !landA && S.rod2.bell);

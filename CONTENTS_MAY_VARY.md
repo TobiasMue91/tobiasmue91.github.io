@@ -2299,6 +2299,21 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   bite half as often, the Old One can come on a rest. Pacing: eager 45.8 to 47.8 min, casual 49.7 to 54.7, the longest wait
   3.6 min; the rests come from minute 14 and the eighth just before the end. The people in the rules (`naive.mjs`) are where
   they were: holding alone loses nearly everything from the tench on, leaning is the skill. Draws: 35 a frame (budget 45).
+- *Critic round 1* (fifteen phone frames and close-ups): 6/6/5/6/4 and **4**. Fixed: the fight showed nothing in the world (a
+  wake now opens behind a running fish at Kelvin's angle, from the fish's own motion, with a boil where the line goes in); the
+  rod stood straight in a fight unless the finger was down (a rod with a fish on is always loaded); floats far out were specks
+  (they keep a size the eye can find); grass and reeds glowed like lamps and stood like wallpaper (less light through blades,
+  darker, tufts of every size, a quarter sun-dried); the lantern at the end was a cut-off blob at a phone's left edge (it hangs
+  behind where you stand to cast); pale smears on the water near the rests (every running rest set a ring nearly every frame,
+  and the refraction followed their steep slopes: rings now come at a pace, the refraction's bend is bounded); which rod was
+  running could not be told (a numbered ring in the rod's colour over its alarm, or at the screen's edge pointing the way, and
+  a bell for the bank rod); the shop strip kept spent cards in front (they go to its end); dozing was only a sentence (the lids
+  come down from above and below); the rain was thin and the boards stayed dry (denser streaks, wet dark shining boards).
+  Still open from it: no hands on the rod (rule 16: a licensed model or none), the landed fish read as a cut-out to the critic,
+  the logbook's fish too alike, dusk without a low sun on the water, the boards' texture smeared.
+- *The guitar, heard at last by someone*: `K.debug.music(seconds, hour)` renders the box's own music code into an
+  OfflineAudioContext and returns a WAV; measured, the day plays at about -17 dB with no gaps, the night is harmonics over
+  silence.
 
 ## Lessons from the boxes so far
 
