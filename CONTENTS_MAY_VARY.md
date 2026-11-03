@@ -2311,6 +2311,14 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   come down from above and below); the rain was thin and the boards stayed dry (denser streaks, wet dark shining boards).
   Still open from it: no hands on the rod (rule 16: a licensed model or none), the landed fish read as a cut-out to the critic,
   the logbook's fish too alike, dusk without a low sun on the water, the boards' texture smeared.
+- *Critic round 2*: 6/6/4/5/5 and **3** (critics differ by a point or two from round to round on the same frames). Fixed: clouds
+  lit white at night (a cloud is a darker shape against the stars), the same cloud in the same place in every frame (the sky
+  drifts with the game's clock, a day's worth of drift between one dawn and the next, never a jump), floats still specks far out
+  (larger with distance), the mooring post a cut-off block at a phone's left edge (you start just past it). Still open, and
+  now the largest: the painted, outlined fish (card, logbook, the landed fish in 3D) against the lit lake read as two games; the
+  logbook's kinds too alike in outline; the jetty's boards plain at a phone's size; the shop strip and the parchment cards
+  cover the lower fifth and read as a template to the critic (a tackle-box drawer would clear it); dusk without a low sun's
+  path on the water; no hands.
 - *The guitar, heard at last by someone*: `K.debug.music(seconds, hour)` renders the box's own music code into an
   OfflineAudioContext and returns a WAV; measured, the day plays at about -17 dB with no gaps, the night is harmonics over
   silence.
