@@ -14,7 +14,7 @@
 //   node test/contents_may_vary.mjs browser                 # needs Playwright's Chromium
 //   node test/contents_may_vary.mjs --page=old.html
 //
-// Suites: registry, budget, contract, saves, pacing, starter, lawn, clew, flurry, warren, guests, browser, perf.
+// Suites: registry, budget, contract, saves, pacing, starter, lawn, clew, flurry, warren, guests, jetty, browser, perf.
 
 import {readFileSync, existsSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -28,17 +28,17 @@ const opt = k => { const a = args.find(x => x.startsWith('--' + k + '=')); retur
 const PAGE = opt('page') || join(ROOT, 'games', 'contents_may_vary.html');
 const ONLY = opt('world');
 const REPORT = args.includes('--report');
-const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter', 'lawn', 'clew', 'flurry', 'warren', 'guests'];
+const ALL = ['registry', 'budget', 'contract', 'saves', 'pacing', 'starter', 'lawn', 'clew', 'flurry', 'warren', 'guests', 'jetty'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
 /* Boxes that have shipped, in play order. Saves refer to boxes by id and the page plays them in
    file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
-const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests'];
+const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests', 'jetty'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { guests: 260 * 1024, warren: 300 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024, flurry: 230 * 1024 };
+const BOX_CAP = { jetty: 300 * 1024, guests: 260 * 1024, warren: 300 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024, flurry: 230 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -1025,6 +1025,68 @@ if (suites.includes('browser')) {
   }
 }
 
+/* ---------------- jetty ----------------
+   Still Water: the fight must stay a fight for every kind, met with the tackle of its time (the owner found the line could
+   not snap after the first few upgrades), and every kind's own way of fighting must do what its hint says. The measure of
+   people in the rules is util/jetty/naive.mjs; here a short version of it holds the line. */
+const jetty = worlds.find(w => w.id === 'jetty');
+if (suites.includes('jetty') && jetty) {
+  section('jetty');
+  const { CORE } = load(jetty);
+  // the tackle at each kind's first meeting in the eager bot's game
+  const meet = {}; { const S = CORE.init(1), m = { seed: 7 }; let t = 0;
+    while (!CORE.done(S) && t < 7200) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1; for (const e of S.ev) if (e.k === 'hooked' && !meet[e.f]) meet[e.f] = { ...S.lv }; S.ev.length = 0; } }
+  const play = (k, lv, o, n = 60) => { const hand = CORE.hand(o); let ok = 0;
+    for (let seed = 1; seed <= n; seed++) { const S = CORE.init(seed); S.caught = 20; Object.assign(S.lv, lv); S.t = CORE.DAY * (k === 'eel' || k === 'catfish' ? .75 : .3);
+      CORE.fightWith(S, k, null, Math.min(CORE.castMax(S) + CORE.reach(S), 8 + CORE.kind(k)[2])); const m = {}; let ft = 0;
+      while (S.phase === 'fight' && ft < 400) { hand(S, m, .05); CORE.step(S, .05); ft += .05; } if (S.phase === 'land') ok++; }
+    return ok / n; };
+  const holds = { react: 0, off: 9, on: 9, bow: 0, steer: 0 }, quick = { react: .3, off: .92, on: .7, bow: 1, steer: 1 }, late = { react: .6, off: .95, on: .6, bow: 1, steer: 0 };
+  for (const k of ['perch', 'tench', 'bream', 'eel', 'carp', 'pike', 'zander', 'catfish', 'old']) {
+    if (!meet[k]) { fail(`jetty: the eager bot meets the ${k}`); continue; }
+    const h = play(k, meet[k], holds), q = play(k, meet[k], quick);
+    check(h <= .7, `jetty: with the tackle it is met with, a ${k} is lost by someone who only holds (lands ${(h * 100).toFixed(0)}%)`);
+    check(q >= .9, `jetty: and landed by a quick hand that lets go and leans (${(q * 100).toFixed(0)}%)`);
+  }
+  check(play('carp', meet.carp, late) < play('carp', meet.carp, { ...late, steer: 1 }) - .3, 'jetty: leaning against a carp’s runs keeps it out of the lilies');
+  { // the moves: a run leaned against loads the line less, a jump held through is thrown, a sulk is pumped up, lilies hold a fish
+    const S = CORE.init(3); CORE.fightWith(S, 'carp', 3.6, 10); const F = S.fish; F.mode = 'run'; F.mt = 5; F.dir = 1;
+    CORE.act(S, 'reel', 1, 0); CORE.step(S, .05); const plain = F.tens; CORE.act(S, 'reel', 1, -1); CORE.step(S, .05); const against = F.tens; CORE.act(S, 'reel', 1, 1); CORE.step(S, .05);
+    check(against < plain * .8 && F.tens > plain, `jetty: leaning against a run loads the line less, leaning with it more (${against.toFixed(2)} < ${plain.toFixed(2)} < ${F.tens.toFixed(2)})`);
+    const P = CORE.init(4); CORE.fightWith(P, 'pike', 5, 10); P.fish.mode = 'jump'; P.fish.mt = 2; let why = null;
+    for (let k = 0; k < 40 && P.phase === 'fight'; k++) { CORE.act(P, 'reel', 1, 0); CORE.step(P, .05); for (const e of P.ev) if (e.k === 'lost') why = e.why; P.ev.length = 0; }
+    check(why === 'threw', 'jetty: a big pike held hard through a jump throws the hook');
+    const C = CORE.init(5); C.lv.line = 6; C.lv.rod = 5; CORE.fightWith(C, 'catfish', 11, 10); C.fish.mode = 'sulk'; C.fish.mt = 99; C.fish.need = 3; C.fish.pump = 0; C.fish.free = 0;
+    for (let k = 0; k < 80 && C.fish && C.fish.mode === 'sulk'; k++) { CORE.act(C, 'reel', k % 12 < 6 ? 1 : 0, 0); CORE.step(C, .05); }
+    check(C.fish && C.fish.mode !== 'sulk', 'jetty: hold, let go, hold pumps a sulking wels off the bottom');
+    const T = CORE.init(6); CORE.fightWith(T, 'tench', 1.1, 8); T.fish.lat = CORE.COVER + .5; T.fish.mode = 'run'; T.fish.dir = 1; T.fish.mt = 1; CORE.step(T, .05);
+    check(T.fish.snag > 0, 'jetty: a tench that reaches the lilies is caught in them');
+    for (let k = 0; k < 60 && T.fish && T.fish.snag; k++) { CORE.act(T, 'reel', 1, -1); CORE.step(T, .05); }
+    check(T.fish && !T.fish.snag, 'jetty: held and leaned the other way, it is led back out');
+  }
+  { // the first fish comes quickly and buys something at once
+    const S = CORE.init(11), m = { seed: 3 }; let t = 0; while (!S.caught && t < 120) { CORE.bots.casual(S, m, .1); CORE.step(S, .1); t += .1; }
+    check(t >= 8 && t <= 35, `jetty: the casual bot lands its first fish in ${t.toFixed(0)} s`);
+    check(CORE.UP.some(u => CORE.price(S, u.id) <= S.$ + 1e-9), 'jetty: and can buy something with it at once');
+  }
+  { // the bank rod: what hooks itself waits only so long; picked up, it is a fight like any other
+    const S = CORE.init(7); S.lv.rod2 = 1; S.rod2.t = .1; CORE.step(S, .5);
+    check(S.rod2.bell === 1, 'jetty: the bank rod rings when something has hooked itself');
+    check(CORE.act(S, 'take2') && S.phase === 'fight' && S.rodN === 2, 'jetty: picked up, the bank rod is played by hand');
+    const U = CORE.init(8); U.lv.rod2 = 1; U.rod2.t = .1; CORE.step(U, .5); CORE.step(U, CORE.wait2(U) + 1);
+    check(!U.rod2.bell && U.ev.some(e => e.k === 'off2'), 'jetty: left too long, it gets off');
+  }
+  { // a night without a lantern passes quickly; the box can be gone back to
+    const S = CORE.init(9); S.t = CORE.DAY * .66; const t0 = S.t; CORE.step(S, 10);
+    check(S.t - t0 > 40, 'jetty: a night without a lantern passes six times as fast while you doze');
+    const E = KITrun(CORE); const R = CORE.revisit(E);
+    check(!CORE.done(R) && R.phase === 'idle' && CORE.kinds(R) >= CORE.FISH.length, 'jetty: revisit brings a finished jetty back with the book and the tackle kept');
+    let met = false; for (let k = 0; k < 4000 && !met; k++) { if (R.phase === 'idle') CORE.act(R, 'cast', 1, 0); CORE.step(R, .1); if (R.phase === 'bite') { met = R.fish.k === 'old'; CORE.act(R, 'reelin'); } R.ev.length = 0; }
+    check(met, 'jetty: and the Old One takes the bait in the deep again');
+  }
+}
+function KITrun(CORE) { const S = CORE.init(2), m = { seed: 2 }; let t = 0; while (!CORE.done(S) && t < 7200) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1; S.ev.length = 0; } return S; }
+
 /* ---------------- perf ----------------
    Every box in a late, full moment on a phone (390×844 at twice the pixels), measured from outside the box, so every box is
    measured alike: the canvas and WebGL draws a frame (counted in every frame, the box's iframe included) and, for a box that
@@ -1045,7 +1107,7 @@ if (suites.includes('perf')) {
     // SwiftShader draws them at a frame a second, which says nothing about a phone)
     const LATE = {
       starter: ['&at=28', 2000, 40], lawn: ['&at=26', 20, 0], clew: ['&scene=board5', 550, 15],
-      flurry: ['&scene=crowd', 1200, 0], warren: ['&scene=crowd', 1300, 40], guests: ['&scene=crowd', 200, 25]
+      flurry: ['&scene=crowd', 1200, 0], warren: ['&scene=crowd', 1300, 40], guests: ['&scene=crowd', 200, 25], jetty: ['&scene=min40', 45, 0]
     };
     const http = await import('http');
     const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json' };
