@@ -2216,7 +2216,7 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   card, light comes out on the box's own clock, and the shell dives into the tin's mouth. `revisit` brings a finished jetty
   back with the book and tackle, and the Old One takes the bait again.
 - *Tools*: `?world=jetty&scene=` `min<n>` (the eager bot's game), `fight:<kind>`, `jump`, `land:<kind>`, `night`, `dark`,
-  `bell`, `old`; `?tod=0..1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
+  `bell`, `old`, `pods`; `?tod=0..1`, `?rain=0|1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
   which dithered in the software renderer); `K.debug.look(x, z, yaw, pitch)`, `tod(u)`, `snap()` (renders, then reads the canvas).
 - *Controls*: a mouse looks the way it moves; a finger drags the world. The owner found the mouse's up and down inverted.
   Then, at the owner's wish, the first click with a mouse takes the pointer (pointer lock) and puts the whole page in full
@@ -2258,7 +2258,60 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   fonts.gstatic.com came slowly through the session's proxy; the box built in about 150 ms. The browser suite's 30-second
   `goto` can fail on that, not on the box. The box now draws its first heavy frame only after the page has loaded.
 
+**The second refinement session** (November 2026, the owner's seven points).
+- *Foliage.* The atlas goes up premultiplied and the shader divides the alpha back out, so the black of the clear texels no
+  longer bleeds into every rim through the mipmaps (crowns no longer darken outward, blades no longer toward their tips); with
+  the black gone the grass tips were straw-yellow and are now a dry olive, the pines darker. The oak tile's twigs began below
+  its leaves and stuck out of every card as a fan of black spikes; they now stay inside the leaf mass. The willow is rebuilt
+  from how a weeping willow grows (a short trunk, five limbs that climb and arch over, unbranched hanging shoots all along
+  them, longest at the outer end, so the curtain is a rounded dome down to the grass; narrow cards with ragged lower ends;
+  shoots draped over the top of every limb so no bare bow shows). `tube()` takes the sway at its start (`s0`), so a bulrush
+  head built on a stalk's tip sways with it, and caps (`caps`: 1 start, 2 end), so posts are solid. It also ignored the first
+  element of its material vector: the float's red tip and white band and every bit of brass had never shown.
+- *Water* (the owner chose the techniques of three.js's Water and Water2 in the box's own renderer over a port). A tileable
+  field of slopes baked at start from sine waves with whole-number wave vectors, sampled in three layers that drift apart; a
+  breeze that ruffles the water in patches (cat's paws) and leaves calm lanes; refraction from a copy of the frame taken
+  before the water is drawn (a `blitFramebuffer`, not a draw call); Schlick's fresnel with water's 0.02; sun glints only off
+  the steep sides of ripples; foam broken by noise at the bank and round every post, with a ring round each post.
+- *The canvas's alpha.* Cut-out edges and blended lines wrote an alpha below 1, which a page shows as a pale fringe round every
+  leaf (white "snow" on the trees in rain). The frame now writes colour only after its clear.
+- *Rain* (the owner: single drops). Streaks, as Tatarchuk's ATI rain work and every game since: one instanced draw of thin
+  quads placed by a hash of their number in a box that stays put in the world, falling on the shader's clock, brighter against
+  the light; two layers of ring cells in the water's slopes; the light greys and dims, the haze thickens with the shower
+  (`uMist`), shadows fade, and all of it eases in and out over seconds (`rainA`), never at a switch; the sound is a bright
+  hiss over a dull body with single plinks on the water and taps on the boards; splashes jump off the boards round you.
+  `?rain=1` holds a shower for captures.
+- *Running and reeling in.* Shift runs; a second tap or click on the spot you are walking to runs there (a tip says so once
+  on the first long walk); walking slides along an edge rather than stopping dead. A line out by mistake comes back with the
+  *Reel in* card (bottom right while the float is out), a swipe down, R, or the right button with the mouse taken; the float
+  skims home across the water and rises to the tip.
+- *Escalation* (the owner chose rods on rests with bite alarms out of rests, a paternoster, and a feeder swim with a whip).
+  *Rod on a rest* (8 levels) sets another rod on the end's rails, alternately left and right, lines fanned out over the water;
+  each bites on its own clock (11 times the hand's mean wait), a fish takes it and runs, the alarm sounds in the rod's own pitch
+  and its LED flashes, the hanger snaps up, and the hand picks it up (tap the rod, the card, or its number) and plays it;
+  thirty seconds untaken and it is off. *Self-hooking rigs* (3 levels) let a fish whose pull the rig can hold (0.9, 1.7, 2.7)
+  hook itself; the rest winds it into a keepnet hung off the end, a price tag rises off the rod, and it is paid and written in
+  the book. With the hand rod and the bank rod that is ten lines. The Old One now comes to a lake full of lines (every rest
+  out) and may take a rest's bait, its run unlike any other. Version 2 of the rules; `migrate` adds the rests to an old save.
+- *Measured.* The first build stalled the eager bot past 150 minutes: it took every alarm, so its own line never went out
+  again, it never shopped (it shopped only when idle) and the Old One, then only on the hand's line, never came. Counted by
+  cause with a log of the bot's game (`hookedH` stuck at 49 after minute 35). Now the bots shop between fights, the rests
+  bite half as often, the Old One can come on a rest. Pacing: eager 45.8 to 47.8 min, casual 49.7 to 54.7, the longest wait
+  3.6 min; the rests come from minute 14 and the eighth just before the end. The people in the rules (`naive.mjs`) are where
+  they were: holding alone loses nearly everything from the tench on, leaning is the skill. Draws: 35 a frame (budget 45).
+
 ## Lessons from the boxes so far
+
+- **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
+  averages that black into every edge, so leaves darken toward a crown's rim and blades toward their tips, more the further
+  away. Upload with `UNPACK_PREMULTIPLY_ALPHA_WEBGL` and divide by alpha in the shader. And whatever the atlas hid under that
+  black (Still Water's straw-yellow grass tips) shows once it is gone: look again after the fix.
+- **The canvas's alpha must stay 1.** A soft cut-out edge or a blended line that writes alpha below 1 is composited by the page
+  as a pale fringe; mask alpha out after the clear.
+- **More lines for the hand can starve the goal.** Rods on rests that rang faster than a fight lasts kept the bot in fights for
+  good: its own line never went out, it never shopped, and the last fish, which came only on that line, never came. Count a
+  bot's actions by kind before tuning (here fights by rod), let the goal come by the new verb too, and let shopping happen
+  between the new verb's turns.
 
 - **A tackle that only grows makes the fight vanish.** Still Water's line, rod and reel each scaled the margin while the fish stayed
   as they were, so after four purchases nobody could snap a line. Set each kind against the tackle it is met with in a bot's
