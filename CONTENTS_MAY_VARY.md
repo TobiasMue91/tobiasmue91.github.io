@@ -2407,7 +2407,9 @@ beads). Then the leaves, the same way: three oak leaves, three willow leaves and
 Set 016, 013* and *019*, cut out by their opacity maps and packed into one 192×128 WebP with alpha (8 KB). The atlas is
 painted at once as before, and when the photograph has decoded its first three tiles are painted again with it: each leaf in
 four lights, oak leaves pointing out round a clump, willow leaves along the strands, sprigs fanned along a pine's drooping
-bough; then the atlas is uploaded again. The box weighs 286 KB of its 300.
+bough; then the atlas is uploaded again. The roofs are split shingles cut from the same wood photograph, row on row. A
+photographed leaf has many holes smaller than a pixel far off, which sparkled as a distant crown's alpha thinned in the
+mipmaps; the cut-out's threshold now lifts more with distance. The box weighs 286 KB of its 300.
 
 ## Lessons from the boxes so far
 
