@@ -2403,7 +2403,11 @@ start. Every piece of wood takes one of the three boards (`vY.y`), laid along it
 round wood takes whole periods round its girth; the photograph is stretched to 2.2 m so a wall of boards shows no grid; sawn
 tops of posts draw rings round the heart instead of a smear of one texel row. Trunks wear the bark, greyed toward an oak's,
 twice round and a metre up. The rope round the mooring post is a helix three turns round, its end hanging (it was a stack of
-beads). The box weighs 272 KB of its 300.
+beads). Then the leaves, the same way: three oak leaves, three willow leaves and a conifer's sprig from ambientCG's CC0 *Leaf
+Set 016, 013* and *019*, cut out by their opacity maps and packed into one 192×128 WebP with alpha (8 KB). The atlas is
+painted at once as before, and when the photograph has decoded its first three tiles are painted again with it: each leaf in
+four lights, oak leaves pointing out round a clump, willow leaves along the strands, sprigs fanned along a pine's drooping
+bough; then the atlas is uploaded again. The box weighs 286 KB of its 300.
 
 ## Lessons from the boxes so far
 
