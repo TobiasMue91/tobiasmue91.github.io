@@ -2395,6 +2395,16 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   `K.debug.openShop()`.
 - Draws: 39 a frame (budget 45) with the sign's fish.
 
+**Wood from photographs** (November 2026, the owner: the wood still did not convince; look for reference). Procedural grain kept
+reading as stripes, so the box now carries two small CC0 photographs from Poly Haven, as rule 16 allows: three weathered boards
+cut from Rob Tuytel's *Brown Planks 03* (gaps trimmed, side by side, a metre long, 192×512, 17 KB) and Dimitrios Savva's *Bark
+Willow* (processed by Dario Barresi; 256×256, 7.5 KB), both as JPEG data in the template (`PHOTO`), loaded into textures on
+start. Every piece of wood takes one of the three boards (`vY.y`), laid along its length and mirrored across so no seam shows;
+round wood takes whole periods round its girth; the photograph is stretched to 2.2 m so a wall of boards shows no grid; sawn
+tops of posts draw rings round the heart instead of a smear of one texel row. Trunks wear the bark, greyed toward an oak's,
+twice round and a metre up. The rope round the mooring post is a helix three turns round, its end hanging (it was a stack of
+beads). The box weighs 272 KB of its 300.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
