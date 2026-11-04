@@ -2366,6 +2366,33 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   hints over the water, the shore a hard seam with no muddy bank, the rope round the mooring post a stack of beads.
 - Draws: 38 a frame (budget 45) with the second pine.
 
+**The owner's fourth look** (November 2026) and what it found.
+- *The garland's lines* did not meet: the extra fish hung by their middle and their droppers left the main line high up near
+  the tip. A paternoster's droppers sit at even steps on the main line just above the lead, short, each fish by its mouth.
+- *Wood that looked wrong everywhere*: the grain was laid in world coordinates, so it ran right only on boards lying across the
+  jetty; on the bench, its legs and every beam it ran across the piece as zebra stripes, too strong and fine enough to shimmer.
+  `cuboid()` now gives wood u along its longest side and v across it, in metres, offset per piece; round wood (`tube()` with
+  material 0) takes v round its girth in metres; the shader lays long streaks, fine lines that fade before they would alias
+  (`fwidth`), and a knot now and then.
+- *Stars* were raster cells switched on whole (little squares, blinking as one). Each is now a point at its own place in its
+  cell, about a pixel across and anti-aliased, faint to bright on a power law, warm to blue, a quiet twinkle, and a faint
+  Milky Way.
+- *Crowns that came off their wood in the wind*: the shader moves a vertex by its sway times its height, and leaf cards, limbs
+  and trunks each had sways of their own. A tree now has one sway field read by every part (`stube()` for its tubes); a willow's
+  hanging shoot starts with the limb's movement at its top and swings more below.
+- *A wake that flipped*: its V followed the smoothed velocity's direction, so a fish turning about turned it at once. The V now
+  turns at most 1.2 radians a second, and while the fish swims against it the old wake dies away before a new one builds.
+- *Fish that gaped*: the lofted body ended open at the root of the tail card, hollow inside; from behind it read as two flanks
+  pulling apart. The body is closed there.
+- *The tackle hut* (the owner: a little shop, no shopkeeper). The strip of tackle cards along the bottom is gone; the screen is
+  the lake's. A board hut stands on the meadow by the path: an open window with its shutter propped over a counter, rods for
+  sale leaning inside, a shingled roof, a sign with one of the box's own fish. Tapping it, or *Tackle* by the logbook (T on a
+  keyboard), walks you there at a run (a line out comes in) and opens it: paper tags on brass pegs on a board wall, each
+  thing drawn small in the fish's ink and wash (`drawIcon`), its levels and its price; what is as good as it gets hangs at the
+  end. The button counts what you can afford; once a first fish is in and the cast is learnt, a hint says where to buy.
+  `K.debug.openShop()`.
+- Draws: 39 a frame (budget 45) with the sign's fish.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
