@@ -2369,6 +2369,8 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
 **The owner's fourth look** (November 2026) and what it found.
 - *The garland's lines* did not meet: the extra fish hung by their middle and their droppers left the main line high up near
   the tip. A paternoster's droppers sit at even steps on the main line just above the lead, short, each fish by its mouth.
+  Lifted, the garland hangs upright as a paternoster does (the line from the rod's tip to the top of a short run, droppers left
+  and right in turn, the lead at the bottom): along the slanting line to the tip, the topmost fish came at the eye.
 - *Wood that looked wrong everywhere*: the grain was laid in world coordinates, so it ran right only on boards lying across the
   jetty; on the bench, its legs and every beam it ran across the piece as zebra stripes, too strong and fine enough to shimmer.
   `cuboid()` now gives wood u along its longest side and v across it, in metres, offset per piece; round wood (`tube()` with
