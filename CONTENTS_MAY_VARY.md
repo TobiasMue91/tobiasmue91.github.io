@@ -2425,7 +2425,9 @@ mipmaps; the cut-out's threshold now lifts more with distance. The box weighs 28
   three crossed cards were a starfish from above, and a symmetric ring of leaning cards a pentagon. Every clump of a broadleaf's
   dome is held by a branch from the nearest limb, so wood reaches through the whole crown. The rope round the mooring post shows
   its three strands laid in a twist (rope's u starts at 5, so the shader tells it from a cork grip). A band of wet mud, darker and
-  shining a little, runs just above the water along every bank.
+  shining a little, runs just above the water along every bank. The rod's material was meant to whip it in red here and there,
+  but `tube()` handed it the angle round the blank instead, so one side of the rod was red all along it (the critics' "orange
+  plastic"): the blank is now a deep varnished cane, and a short silk whipping holds each ring.
 
 ## Lessons from the boxes so far
 
