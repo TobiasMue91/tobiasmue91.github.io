@@ -14382,7 +14382,9 @@ void main() {
   float far = smoothstep(46., 64., length(vP.xz - vec2(0., uShore - 10.))), wood = smoothstep(.36, .5, vn(vec3(vP.xz * .05, 0.)) * .5 + vn(vec3(vP.xz * .1, 1.)) * .27 + vn(vec3(vP.xz * .2, 2.)) * .14 + .05);
   float lump = vn(vec3(vP.xz * .7, 3.)) * .6 + vn(vec3(vP.xz * 2.2, 4.)) * .4;
   alb = mix(alb, mix(vec3(.025, .05, .02), vec3(.07, .11, .035), lump), far * wood * smoothstep(.2, 1.5, vP.y));
-  vec3 col = shade(vP, N, alb, .25, 0., 0., 1.);
+  float wetB = smoothstep(.24, .02, vP.y) * smoothstep(-.06, .0, vP.y);   // the wet mud line just above the water
+  alb *= 1. - .45 * wetB;
+  vec3 col = shade(vP, N, alb, .25, 0., .35 * wetB, 1.);
   if (vP.y < 0.) { float d = -vP.y; col = mix(col * vec3(.5, .62, .48), uFog * vec3(.1, .2, .17), 1. - exp(-d * .8)); }   // the lake bed, seen through the water
   o = outc(haze(col, vP));
 }`);
@@ -14640,8 +14642,9 @@ void main() {
     vec3 alb = mix(vec3(.16, .09, .04), vec3(.26, .15, .06), vn(vec3(vX.x * 6., vX.y * 2., 0.)));
     alb = mix(alb, vec3(.35, .05, .03), step(.5, vX.y));
     col = shade(vP, N, alb, .1, 0., .9, 1.);
-  } else if (m < 10.5) {   // cork, rope
-    col = shade(vP, N, vec3(.55, .42, .27) * (.7 + .4 * vn(vP * 90.)), .2, 0., 0., 1.);
+  } else if (m < 10.5) {   // cork, rope (u from 5 on): the rope's three strands laid in a twist
+    float strand = vX.x > 4.5 ? .6 + .4 * smoothstep(-.6, .9, sin((vX.x - 5.) * 190. + vX.y * 18.85)) : 1.;
+    col = shade(vP, N, (vX.x > 4.5 ? vec3(.48, .4, .28) : vec3(.55, .42, .27)) * (.7 + .4 * vn(vP * 90.)) * strand, .2, 0., 0., 1.);
   } else if (m < 11.5) {   // stones
     col = shade(vP, N, vec3(.36, .35, .32) * (.6 + .5 * vn(vP * 6.)), .2, 0., .05, 1.);
   } else if (m < 12.5) {   // a reed's stalk
@@ -14732,17 +14735,20 @@ function broadleaf(seed, tall, far) {
   if (!far) stube(m, sw, [0, -.4, 0], [0, .4, 0], tall ? .55 : .66, tall ? .3 : .38, 2, 9, [1, 0]);
   stube(m, sw, [0, -.4, 0], top, tall ? .3 : .38, .24, 2, far ? 4 : 9, [1, 0]);
   const crownC = [0, H + CR[1] * .78 * (far ? .9 : 1), 0], clumps = [];
-  const nl = tall ? 5 : 6;
+  const nl = tall ? 5 : 6, limbPts = [];
   for (let k = 0; k < nl; k++) {
     const a = k / nl * TAU + r() * .7, from = V3.lerp([0, H * .55, 0], top, .2 + .8 * r()), up = .2 + r() * .7;
     const end = [crownC[0] + cos(a) * CR[0] * .78, crownC[1] + (up - .5) * CR[1] * 1.1, crownC[2] + sin(a) * CR[2] * .78], mid = V3.lerp(from, end, .45); mid[1] += .35 + r() * .3;
     const fa = a + (r() < .5 ? -1 : 1) * (.5 + r() * .4), fk = [crownC[0] + cos(fa) * CR[0] * .62, crownC[1] + (r() - .2) * CR[1] * .8, crownC[2] + sin(fa) * CR[2] * .62];
     if (!far) { stube(m, sw, from, mid, tall ? .16 : .19, .11, 2, 7, [1, 0]); stube(m, sw, mid, end, .11, .045, 2, 5, [1, 0]); stube(m, sw, mid, fk, .07, .03, 2, 4, [1, 0]); }
-    clumps.push(end, fk, V3.lerp(mid, end, .55));
+    clumps.push(end, fk, V3.lerp(mid, end, .55)); limbPts.push(mid, V3.lerp(mid, end, .5), V3.lerp(mid, fk, .5));
   }
-  // and clumps over the rest of the dome, so its outline is a cloud of smaller clouds, not one ball
+  // and clumps over the rest of the dome, so its outline is a cloud of smaller clouds, not one ball; each held by a branch
+  // from the nearest limb, so the wood reaches into the whole crown and shows in its gaps
   for (let k = 0; k < (far ? 6 : 9); k++) { const u = r() * TAU, v = Math.acos(r() * 1.5 - .5), rr = .7 + r() * .3;
-    clumps.push([crownC[0] + sin(v) * cos(u) * CR[0] * rr, crownC[1] + cos(v) * CR[1] * rr * .9, crownC[2] + sin(v) * sin(u) * CR[2] * rr]); }
+    const c = [crownC[0] + sin(v) * cos(u) * CR[0] * rr, crownC[1] + cos(v) * CR[1] * rr * .9, crownC[2] + sin(v) * sin(u) * CR[2] * rr]; clumps.push(c);
+    if (!far) { let best = limbPts[0], bd = 1e9; for (const q of limbPts) { const d = hypot(q[0] - c[0], q[1] - c[1], q[2] - c[2]); if (d < bd) { bd = d; best = q; } }
+      const bend = V3.add(V3.lerp(best, c, .5), [0, .25, 0]); stube(m, sw, best, bend, .06, .04, 2, 4, [1, 0]); stube(m, sw, bend, V3.lerp(bend, c, .85), .04, .018, 2, 4, [1, 0]); } }
   const bottom = crownC[1] - CR[1], span = CR[1] * 2;
   for (const c of clumps) {
     const cr = .75 + r() * .45, tone = .82 + r() * .3;   // each clump a little lighter or darker than its neighbours
@@ -14812,7 +14818,13 @@ function pine(seed, far, tall) {   // tall: a second build, taller and sparser, 
   return m;
 }
 // a tuft of grass: three crossed cards; a clump of reeds: tall blades and a bulrush or two
-function tuft(w, h, tile, swayW) { const m = new Mesh(); for (let k = 0; k < 3; k++) { const a = k / 3 * PI; card(m, [0, h / 2, 0], [cos(a) * w, 0, sin(a) * w], [0, h / 2, 0], 3, tile, [0, -6, 0], q => swayW * q[1] / h, q => .4 + .6 * q[1] / h); } return m; }
+function tuft(w, h, tile, swayW) {   // blades at odds with each other: no symmetry for the eye to find from above (three crossed cards were a star, a ring a pentagon)
+  const m = new Mesh(), r = rng(31 + tile);
+  for (let k = 0; k < 5; k++) { const yaw = r() * PI, la = r() * TAU, lean = .1 + r() * .35, off = [(r() - .5) * w * .7, 0, (r() - .5) * w * .7], hh = h * (.7 + r() * .45), ww = w * (.6 + r() * .5);
+    const up = [cos(la) * hh * lean * .5, hh * .48, sin(la) * hh * lean * .5];
+    card(m, V3.add(off, up), [cos(yaw) * ww, 0, sin(yaw) * ww], up, 3, tile, [0, -6, 0], q => swayW * q[1] / h, q => .3 + .7 * q[1] / h); }
+  return m;
+}
 function reeds() {
   const m = tuft(.42, 1.7, 3, 1.2), r = rng(5);
   for (let k = 0; k < 4; k++) { const a = r() * TAU, x = cos(a) * (.08 + r() * .14), z = sin(a) * (.08 + r() * .14), h = 1.2 + r() * .8, hl = .14 + r() * .12, hr = .022 + r() * .014;
@@ -14863,7 +14875,11 @@ function buildThings() {
     const th = rnd() * TAU, R = lakeR(th) * (.93 + rnd() * .08), x = LC[0] + cos(th) * R, z = LC[1] + sin(th) * R, y = ground(x, z);
     if (y > .2 || y < -.75 || (abs(x) < 1.8 && z > SHORE - 9)) continue;
     if (vn2(x * .2, z * .2, 5) < .4) continue;   // reed beds, with gaps of open bank between them
-    reedL.push([x, max(y, -.75), z, .65 + rnd() * .7, .34 + rnd() * .1, .47 + rnd() * .08, .3, rnd() * TAU]);
+    // a clump: a few stools close together, each its own height, the odd one gone dry and pale
+    const n = 2 + floor(rnd() * 4), base = .6 + rnd() * .7;
+    for (let j = 0; j < n && reedL.length < 900; j++) { const a = rnd() * TAU, rr = rnd() * .55, xx = x + cos(a) * rr, zz = z + sin(a) * rr, yy = ground(xx, zz); if (yy > .25 || yy < -.8) continue;
+      const dry = rnd() < .15; reedL.push([xx, max(yy, -.75), zz, base * (.55 + rnd() * .75), dry ? .5 : .32 + rnd() * .1, dry ? .47 : .45 + rnd() * .08, dry ? .3 : .28, rnd() * TAU]); }
+    k += n;
   }
   // the bank rod's reed bed
   for (let k = 0; k < 70; k++) { const x = R2.x + (rnd() - .5) * 7, z = R2.z + (rnd() - .3) * 4; if (hypot(x - R2.x, z - R2.z) < 1.3) continue; const y = ground(x, z); if (y > .3 || y < -.7) continue; reedL.push([x, max(y, -.7), z, .7 + rnd() * .6, .38, .5, .3, rnd() * TAU]); }
@@ -14903,7 +14919,7 @@ function buildJetty() {
   // the end: a step down, a mooring post with rope round it, and the notches, one for every twenty fish
   const ez = z1 + .15; tube(m, [-.74, -1, ez], [-.74, DECK + .48, ez], .1, .095, [0, 0, 0, 0], 10, [.9, 0], 2);
   { const hx = q => [-.74 + cos(q * TAU) * .121, DECK + .27 + q * .045, ez + sin(q * TAU) * .121];   // a rope wound round the post three times, its end hanging
-    for (let q = 0; q < 3; q += 1 / 14) tube(m, hx(q), hx(q + 1 / 14), .019, .019, [0, 0, 10, 0], 6);
+    for (let q = 0; q < 3; q += 1 / 14) tube(m, hx(q), hx(q + 1 / 14), .019, .019, [5 + q * .76, 0, 10, 0], 6);   // u from 5 on: rope, not cork
     const e0 = hx(3); tube(m, e0, [e0[0] - .05, DECK + .12, e0[2] - .04], .019, .016, [0, 0, 10, 0], 6, undefined, 2); }
   for (let k = 0; k < notches && k < 40; k++) { const col = floor(k / 10), row = k % 10, y = DECK + .05 + row * .036; cuboid(m, [-.74 + .1 - col * .03, y, ez + (row % 5 === 4 ? .02 : -.02) * 0 - .02 + col * .05], [.012, .006, row % 5 === 4 ? .06 : .03], [0, 0, 7, 0]); }
   // a bench at the jetty's root, where the angler sits out the night

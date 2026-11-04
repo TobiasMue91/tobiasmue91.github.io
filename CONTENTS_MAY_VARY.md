@@ -2420,6 +2420,13 @@ mipmaps; the cut-out's threshold now lifts more with distance. The box weighs 28
   (a fill from the sky and the lake on the near flank). Still open: trees without a branch skeleton up into the crown, grass
   tufts that read as starfish from above, reeds in an even comb, the rope.
 
+- *Polish after round 4.* Reeds grow in clumps of two to five stools, each its own height, the odd one dry and pale (they stood
+  in an even comb). A grass tuft is five blades at odds with each other, turned, set off the root and leaning each its own way:
+  three crossed cards were a starfish from above, and a symmetric ring of leaning cards a pentagon. Every clump of a broadleaf's
+  dome is held by a branch from the nearest limb, so wood reaches through the whole crown. The rope round the mooring post shows
+  its three strands laid in a twist (rope's u starts at 5, so the shader tells it from a cork grip). A band of wet mud, darker and
+  shining a little, runs just above the water along every bank.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
