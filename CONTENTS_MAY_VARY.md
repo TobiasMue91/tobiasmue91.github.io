@@ -2411,6 +2411,15 @@ bough; then the atlas is uploaded again. The roofs are split shingles cut from t
 photographed leaf has many holes smaller than a pixel far off, which sparkled as a distant crown's alpha thinned in the
 mipmaps; the cut-out's threshold now lifts more with distance. The box weighs 286 KB of its 300.
 
+- *Critic round 4* (graphics, after the photographs): 6/6, wood 4, foliage 3, and **4**. Fixed from it: the moon stood behind the
+  angler and was never seen (it rises ahead and to the left, where its light comes from, and lays its path on the water); the
+  bench was four blocks (slats with gaps, a rail under the seat); every deck board one width with its ends in a line (widths and
+  lengths vary, the odd board a shade off); posts clean to the water (a slick of algae where it laps them); the hut's gable an
+  open black triangle (boarded, board by board); willows a curtain with a straight hem (five narrow shoots a point, every
+  length); the garland hidden behind a phone's catch card (it hangs above it); fish out of the water black against the sun
+  (a fill from the sky and the lake on the near flank). Still open: trees without a branch skeleton up into the crown, grass
+  tufts that read as starfish from above, reeds in an even comb, the rope.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
