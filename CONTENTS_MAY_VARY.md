@@ -2431,6 +2431,37 @@ mipmaps; the cut-out's threshold now lifts more with distance. The box weighs 28
   but `tube()` handed it the angle round the blank instead, so one side of the rod was red all along it (the critics' "orange
   plastic"): the blank is now a deep varnished cane, and a short silk whipping holds each ring.
 
+**Toward a commercial feel** (November 2026). A producer's critique on fresh frames (5 for "commercial": the lake would sell a
+capsule, the minute-to-minute play would not) and research into Stardew, Dredge, Cast n Chill, Webfishing and Nodebuster gave
+nine gaps; the owner chose the first four for this iteration (the rest are below, under *still open*).
+- *The fight on the water.* The strike snaps the rod up, jolts the view and thumps the phone; the rod is loaded harder under
+  tension; a running fish sits just under the surface and throws spray; a jump plays a third of a second in slow motion on the
+  box's clock (the view slows `dt`, the rules see the same smaller steps); the fight panel is slimmer.
+- *The catch's ceremony.* On the card, on the box's own clock: a brass spring balance whose needle swings past and settles
+  while the weight counts up (its scale in quarters of 1, 2, 4, 8, 12, 20, 40 or 60 kg, so the numbers are round); the money
+  counting up in rising clicks; a stamp, NEW for a first of its kind, RECORD for a heavier one than the book had (the rules
+  now say `rec`), a new kind's plate painted in from left to right, and a phrase on the guitar. Money shows pence only below ten
+  pounds.
+- *Gestures, not prose.* On a touch screen a hand (Fluent Emoji's pointing finger, MIT, as another box draws it) shows each
+  gesture where it is needed: a tap on the jetty's end, a swipe up to cast, a tap on the float that goes under, hold to reel,
+  lift for red or a jump, slide away from the lilies, pump a sulk, a tap on *Tackle*; beside it at most four words. Every longer
+  message was cut to a few words. At dusk without a lantern it says once a day that night is coming. The very first float goes
+  under within seconds (the rules wait 2.5 to 4.5 s while nothing has been caught).
+- *Upgrades that say what they do, and a goal in sight.* Every tag in the hut gives the purchase's effect in an angler's
+  measures (lb of line, metres cast, metres a second wound, seconds to a bite, hooks, rods out, which kind the rigs land up to,
+  the smokehouse's price); the logbook and the hut list what brings the Old One (every kind, the jetty's reach, ten hooks),
+  ticked as each comes true, and each is said when it does.
+- *Measured, and what it moved.* The faster first bite shifted the eager bot's whole game, and with it the tackle each kind is met
+  with: a tench met at minute 11 and a zander at minute 33 were landed by someone who only holds. Checked over five seeds, not
+  one: the tench pulls 2.65 and the zander 6.6 now. The paternoster had let fish join a sulking wels until even a quick hand
+  landed it two times in three: nothing joins a sulking fish now. The top rig could land a wels on a rest, and once the book
+  filled without the hand ever playing one: rigs land up to a carp. Pacing: eager 40.5 to 43.7 min, casual 44.6 to 47.7. The
+  rests' alarm code, dead since they fish alone, is gone. The owner raised the box's cap to 350 KB; it weighs 299.
+- *Still open from the critique:* a finale (rumours of the Old One from minute ten, a last night of fog, a fight in phases, the tin
+  as an object); conditions per kind and rare colour variants; life in the world (a heron, dragonflies, moths at the lantern, a
+  pool of its light); a second typeface for numbers; the sound checks a producer would make (a drag that screams with the
+  tension, the guitar drawing back in a fight).
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
