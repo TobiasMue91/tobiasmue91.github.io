@@ -2532,6 +2532,13 @@ on the water casts, longer held throws further, and from anywhere off the jetty'
   The suite now counts a kind as met when it first comes onto the line, as the lead or on a free hook: with the paternoster,
   some kinds are met only in a garland. Pacing: eager 33.5 to 45.1 min, casual 40.8 to 52.0, the longest wait 3.5.
 
+**The owner's ninth look**: half an hour of play, "real fun"; the sound fits. They wondered at a second hut that appeared, with
+graphics faults, its purpose unknown: the smokehouse, still the first session's rough build (a stack of boxes, sheets for a
+roof, gables of one texel). Rebuilt as the tackle hut was: board walls with a plank door, its battens and latch, gables of
+boards, a roof of two closed slabs whose slope passes the wall tops, a stone chimney with its cap and its smoke; before the door
+a rack with fish hung by the mouth in the smoke, so what it is for shows. Buying it says that every fish sells for more now, and
+each catch card says "Smoked: ×1.3". It is solid too. Lesson: an upgrade that appears in the world must say what it is, there.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
