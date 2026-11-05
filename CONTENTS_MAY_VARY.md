@@ -2489,6 +2489,22 @@ nine gaps; the owner chose the first four for this iteration (the rest are below
 - *Rigs by kind*: a small zander pulled less than a big carp and was landed by a rest, so once the book filled without the hand
   ever playing one. A rest now lands a kind only if its usual pull is within the rig, whatever the fish's size.
 
+**The owner's sixth look** (November 2026). The owner saw no decoration (they meant the hut in the world, not its shop screen)
+and the trees in the water as blocky as before (they meant the willows standing in the lake, not the mirror). Both read again:
+- *The hut in the world*: a red and white life ring beside the window, an oar at the corner, a barrel of floats with iron hoops,
+  a net drying on the side wall, floats on the counter, a lamp from the shutter. Its gable was stepped boards that poked through
+  the roof; it is one triangle of boards now, the photograph laid across it.
+- *Willows*: two stood in the lake (their places were never checked against the ground); each is walked out from the lake's
+  middle until the ground is dry. Their shoots hung straight, so the curtain was a box with a black inside and a hem cut by the
+  water: they flare out as they fall (a bell), stop short of the ground at ragged lengths, and are narrower with light between.
+- *Golden fish*: about one in forty of a kind comes golden, worth four times, stamped GOLDEN, its painting in warm metal, counted
+  in the book. Whether a fish is golden is read from its weight by a hash, not drawn from the PRNG, so every game the bots play
+  is the same as before.
+- *Each kind its hour or weather*: tench bite best at dawn, eels in rain, pike at dusk, rudd by day, carp shy of rain.
+- *Life*: dragonflies over the lilies on a dry day (moved on the box's clock, drawn with the line), moths circling a lit lantern.
+- *Rumours of the Old One*: from five kinds in the book, every few minutes something huge rolls far out (a great ring, spray, a
+  deep sound; said once), more often once all three conditions are met; its nights then come in fog.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
