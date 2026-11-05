@@ -45,6 +45,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    began at 145 KB with its scenes, close-ups and diagnostic switches.
    Still Water may weigh **300 KB**: for its refinement session (November 2026) the owner set the cap there, calling it arbitrary
    anyway; the box passed 130 KB with its leaf-card woods, the fish in 3D, the remade fight and the guitar.
+   The owner raised it to **350 KB** (November 2026) for the work toward a commercial feel (the catch's ceremony, gestures with a
+   licensed hand, upgrades that show what they do), when the box stood at 287 KB with three small CC0 photographs in it.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
