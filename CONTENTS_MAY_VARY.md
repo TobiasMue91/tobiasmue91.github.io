@@ -2505,6 +2505,15 @@ and the trees in the water as blocky as before (they meant the willows standing 
 - *Rumours of the Old One*: from five kinds in the book, every few minutes something huge rolls far out (a great ring, spray, a
   deep sound; said once), more often once all three conditions are met; its nights then come in fog.
 
+**The owner's seventh look**: "many graphics faults". The life ring was sixteen tubes with gaps at every joint (one torus now);
+the roof floated a hand's breadth over the walls (its slope passed through the wall tops only if the eaves sat lower: they do,
+with a fascia under each, and an underside); the hut could be walked through (it and the barrel and the sign's post are solid now,
+for the keys and for a path of taps); floats stood on the counter and in the barrel like orange pins nobody could read, and a lamp
+perched on the shutter like a chimney: all gone; the shutter is propped low enough to clear the eave. Lesson: dressing drawn as
+a few primitives at small size reads as faults, not as things; a prop earns its place only if it reads at play size. The
+willows are out of the scene for now, at the owner's wish (they read as blocks however they were built). On a desktop a click
+on the water casts, longer held throws further, and from anywhere off the jetty's end the angler walks out first.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
