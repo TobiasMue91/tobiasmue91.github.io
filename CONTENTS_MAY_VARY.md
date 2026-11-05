@@ -2218,7 +2218,7 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
 - *Tools*: `?world=jetty&scene=` `min<n>` (the eager bot's game), `fight:<kind>`, `jump`, `land:<kind>`, `night`, `dark`,
   `bell`, `old`, `pods`, `garland`, `garland:landed`; `?tod=0..1`, `?rain=0|1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
   which dithered in the software renderer); `K.debug.look(x, z, yaw, pitch)`, `tod(u)`, `snap()` (renders, then reads the canvas).
-- *Controls*: a mouse looks the way it moves; a finger drags the world. The owner found the mouse's up and down inverted.
+- *Controls*: a mouse looks the way it moves; so does a finger (it first dragged the world as on a map, which the owner found inverted on both axes). The owner found the mouse's up and down inverted.
   Then, at the owner's wish, the first click with a mouse takes the pointer (pointer lock) and puts the whole page in full
   screen (the parent's document, so the shell's menu stays): the mouse looks without dragging, a held click winds up a cast
   and throws on release (the view turns to the lake if it faced away), a click strikes, a held click reels and moving the
