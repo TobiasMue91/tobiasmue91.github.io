@@ -2457,6 +2457,13 @@ nine gaps; the owner chose the first four for this iteration (the rest are below
   landed it two times in three: nothing joins a sulking fish now. The top rig could land a wels on a rest, and once the book
   filled without the hand ever playing one: rigs land up to a carp. Pacing: eager 40.5 to 43.7 min, casual 44.6 to 47.7. The
   rests' alarm code, dead since they fish alone, is gone. The owner raised the box's cap to 350 KB; it weighs 299.
+- *The producer again* on fresh frames: **6** (from 5): the hut's effects and the Old One's checklist make the goal clear, the
+  hand and its few words are a commercial tutorial, the catch has ceremony. Fixed from it at once: the weight on the card
+  counted past its value with the needle (it read as a wrong number on a still; the number only climbs now, the needle alone
+  swings), the plate painted in behind a hard vertical cut (a wet, feathered edge now), the bank rod's "♪" floated unlabelled
+  over the water ("♪ bank rod"). Next, by its ranking: the fish seen in the water while it fights (a dark shape and a swirl
+  where the line goes in, the jump framed), the Old One's catch as a moment of its own (a gold-framed plate, a closing page of
+  the hours and fish), every kind on a garland's card, bounties on a board in the hut for the middle of the game.
 - *Still open from the critique:* a finale (rumours of the Old One from minute ten, a last night of fog, a fight in phases, the tin
   as an object); conditions per kind and rare colour variants; life in the world (a heron, dragonflies, moths at the lantern, a
   pool of its light); a second typeface for numbers; the sound checks a producer would make (a drag that screams with the
