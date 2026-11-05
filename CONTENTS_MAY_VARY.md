@@ -2469,6 +2469,26 @@ nine gaps; the owner chose the first four for this iteration (the rest are below
   pool of its light); a second typeface for numbers; the sound checks a producer would make (a drag that screams with the
   tension, the guitar drawing back in a fight).
 
+**The producer's next four, and the owner's fifth look** (November 2026).
+- *The fish seen while it fights*: the water darkens in a body's shape along the fish's way (drawn a little larger than life so
+  it reads ten metres out, the mirror thinned over it) with a swirl where the line goes in.
+- *A garland's card* shows every kind on a small plate of its own, a badge for the count.
+- *The Old One's catch*: its card framed in gold, the angler's season on it (days at the water, fish landed, kinds, trophies, the
+  heaviest before it), a moment of slow motion as it comes in; then the tin.
+- *Bounties*: once three kinds are in the book, the hut's cork board holds two notes ("Tench over 1.6 kg, £40"): a kind from the
+  book above about one and a third of its usual weight, paid on top when the hand lands one, a new note in its place. The bots
+  fill thirteen to seventeen in a game, about a twentieth of what they earn; the longest wait for something new fell from 3.6 to
+  1.6 minutes. Pacing: eager 34.0 to 35.6 min, casual 40.3 to 43.9.
+- *The hut dressed*: the heaviest fish so far mounted on green felt in a wooden frame with a brass plate, the bounties pinned to
+  cork, a landing net on its peg with a coil of rope.
+- *The owner*: the space bar casts no more and jumps instead (gravity, a soft bend of the knees and a thud on landing; it still
+  strikes at a bite and reels in a fight); the rod's tip twitches at nibbles while you wait and pulls down at a take; the lily
+  beds grow in ragged patches of every size, and the first fish that heads for them says that it gets stuck there; the mirror
+  (drawn at half size) is softened by five taps, so trees in the water no longer show hard steps, and a willow's inside is less
+  black.
+- *Rigs by kind*: a small zander pulled less than a big carp and was landed by a rest, so once the book filled without the hand
+  ever playing one. A rest now lands a kind only if its usual pull is within the rig, whatever the fish's size.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
