@@ -2514,6 +2514,24 @@ a few primitives at small size reads as faults, not as things; a prop earns its 
 willows are out of the scene for now, at the owner's wish (they read as blocks however they were built). On a desktop a click
 on the water casts, longer held throws further, and from anywhere off the jetty's end the angler walks out first.
 
+**The owner's eighth look.**
+- *The rod's bend*: a fixed share of every bend pointed down, so a fish to the side bent the tip below the line that pulled it.
+  The blank now turns along its length from its own direction toward the line's (stiff at the butt, most at the tip), and never
+  past it; with no fish on it droops a little under its weight. The rests' rods the same way.
+- *The float* stood on the water like a skittle: it hangs lower, only the painted tip out, with a faint ring now and then.
+- *The roof* was two sheets with an open edge and a single texel of colour beneath: each side is a slab now, shingles on top,
+  boards beneath, its three edges closed.
+- *Inside the hut*, seen through the window: three shelves of brass and dark tins, boxes and jars of floats, a table with an
+  open ledger, a wooden stool, a landing net on a peg in each corner.
+- *A desktop*: the browser takes Esc to free the mouse (and leave full screen), so a second Esc was needed for the packing slip;
+  when the mouse is freed and the box did not free it, the box now opens the slip itself. While the mouse is held, L and T are
+  shown on the logbook's and the hut's buttons.
+- *Three more kinds* (thirteen in the book): a gudgeon in the near shallows by day (dark-blotched, a barbel), a crucian carp at
+  dawn and dusk that runs for the lilies (deep and round, big scales), a burbot deep at night that twists (barbel, a long low
+  fin, mottled). The crucian first pulled 1.9 and was met so late that someone who only holds landed nine in ten; it pulls 2.7.
+  The suite now counts a kind as met when it first comes onto the line, as the lead or on a free hook: with the paternoster,
+  some kinds are met only in a garland. Pacing: eager 33.5 to 45.1 min, casual 40.8 to 52.0, the longest wait 3.5.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours

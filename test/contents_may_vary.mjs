@@ -1035,14 +1035,14 @@ if (suites.includes('jetty') && jetty) {
   const { CORE } = load(jetty);
   // the tackle at each kind's first meeting in the eager bot's game
   const meet = {}; { const S = CORE.init(1), m = { seed: 7 }; let t = 0;
-    while (!CORE.done(S) && t < 7200) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1; for (const e of S.ev) if (e.k === 'hooked' && !meet[e.f]) meet[e.f] = { ...S.lv }; S.ev.length = 0; } }
+    while (!CORE.done(S) && t < 7200) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1; for (const e of S.ev) if ((e.k === 'hooked' || e.k === 'join') && !meet[e.f]) meet[e.f] = { ...S.lv }; /* met as the lead, or on a free hook of the paternoster */ S.ev.length = 0; } }
   const play = (k, lv, o, n = 60) => { const hand = CORE.hand(o); let ok = 0;
     for (let seed = 1; seed <= n; seed++) { const S = CORE.init(seed); S.caught = 20; Object.assign(S.lv, lv); S.t = CORE.DAY * (k === 'eel' || k === 'catfish' ? .75 : .3);
       CORE.fightWith(S, k, null, Math.min(CORE.castMax(S) + CORE.reach(S), 8 + CORE.kind(k)[2])); const m = {}; let ft = 0;
       while (S.phase === 'fight' && ft < 400) { hand(S, m, .05); CORE.step(S, .05); ft += .05; } if (S.phase === 'land') ok++; }
     return ok / n; };
   const holds = { react: 0, off: 9, on: 9, bow: 0, steer: 0 }, quick = { react: .3, off: .92, on: .7, bow: 1, steer: 1 }, late = { react: .6, off: .95, on: .6, bow: 1, steer: 0 };
-  for (const k of ['perch', 'tench', 'bream', 'eel', 'carp', 'pike', 'zander', 'catfish', 'old']) {
+  for (const k of ['perch', 'tench', 'crucian', 'bream', 'eel', 'carp', 'pike', 'zander', 'burbot', 'catfish', 'old']) {
     if (!meet[k]) { fail(`jetty: the eager bot meets the ${k}`); continue; }
     const h = play(k, meet[k], holds), q = play(k, meet[k], quick);
     check(h <= .7, `jetty: with the tackle it is met with, a ${k} is lost by someone who only holds (lands ${(h * 100).toFixed(0)}%)`);
