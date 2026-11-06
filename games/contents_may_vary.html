@@ -14313,10 +14313,13 @@ function resize() {
 }
 function texP(f, wrap) { gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f === gl.LINEAR_MIPMAP_LINEAR ? gl.LINEAR : f); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap); }
 // the sun's shadow: a depth map over the jetty, the near banks and the trees round them
-const SMN = TOUCH ? 1024 : 2048, smTex = gl.createTexture(), smFB = gl.createFramebuffer();
-gl.bindTexture(gl.TEXTURE_2D, smTex); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, SMN, SMN);
-texP(gl.LINEAR, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
-gl.bindFramebuffer(gl.FRAMEBUFFER, smFB); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, smTex, 0); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+/* two of them: the map is redrawn only every so often while the sun moves on, and a low sun's long shadows jumped a metre at
+   each redraw; the newest map fades in over the last one until the next is drawn */
+const SMN = TOUCH ? 1024 : 2048, SMT = [0, 1].map(() => {
+  const tex = gl.createTexture(), fb = gl.createFramebuffer(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, SMN, SMN);
+  texP(gl.LINEAR, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, tex, 0); gl.bindFramebuffer(gl.FRAMEBUFFER, null); return { tex, fb, M: new Float32Array(16) }; });
+let smI = 0, smK = 1, smFresh = 1;
 function sh(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) + '\n' + src.split('\n').map((l, i) => i + 1 + ' ' + l).join('\n')); return s; }
 function prog(vs, fs) {
   const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
@@ -14328,20 +14331,24 @@ function prog(vs, fs) {
 /* ---- the light of the hour: sky, sun, haze, the sun's shadow; shared by every program ---- */
 const COMMON = `
 uniform vec3 uEye, uSun, uSunC, uSkyC, uGndC, uFog, uLamp, uLampC; uniform float uTime, uClip, uWet, uShOn, uMist;
-uniform highp sampler2DShadow uSh; uniform mat4 uSM;
+uniform highp sampler2DShadow uSh, uSh0; uniform mat4 uSM, uSM0; uniform float uShK;
 float h13(vec3 p) { p = fract(p * .1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
 float vn(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
   return mix(mix(mix(h13(i), h13(i + vec3(1, 0, 0)), f.x), mix(h13(i + vec3(0, 1, 0)), h13(i + vec3(1, 1, 0)), f.x), f.y),
              mix(mix(h13(i + vec3(0, 0, 1)), h13(i + vec3(1, 0, 1)), f.x), mix(h13(i + vec3(0, 1, 1)), h13(i + vec3(1, 1, 1)), f.x), f.y), f.z); }
-float sunShadow(vec3 P, vec3 N) {
-  if (uShOn < .5) return 1.;
-  vec4 q = uSM * vec4(P + N * .12 + uSun * .05, 1.); vec3 c = q.xyz / q.w * .5 + .5;   /* bias along the normal: no striped acne on round posts */
+float shadowIn(highp sampler2DShadow T, mat4 M, vec3 P) {
+  vec4 q = M * vec4(P, 1.); vec3 c = q.xyz / q.w * .5 + .5;
   if (c.x < 0. || c.y < 0. || c.x > 1. || c.y > 1. || c.z > 1.) return 1.;
   float d = ${(1.25 / SMN).toFixed(6)}, s = 0.;
-  s += texture(uSh, vec3(c.xy + vec2(-d, -d), c.z)); s += texture(uSh, vec3(c.xy + vec2(d, -d), c.z));
-  s += texture(uSh, vec3(c.xy + vec2(-d, d), c.z)); s += texture(uSh, vec3(c.xy + vec2(d, d), c.z));
+  s += texture(T, vec3(c.xy + vec2(-d, -d), c.z)); s += texture(T, vec3(c.xy + vec2(d, -d), c.z));
+  s += texture(T, vec3(c.xy + vec2(-d, d), c.z)); s += texture(T, vec3(c.xy + vec2(d, d), c.z));
   float e = smoothstep(.0, .06, min(min(c.x, c.y), min(1. - c.x, 1. - c.y)));
   return mix(1., s * .25, e);
+}
+float sunShadow(vec3 P, vec3 N) {
+  if (uShOn < .5) return 1.;
+  vec3 B = P + N * .12 + uSun * .05;   /* bias along the normal: no striped acne on round posts */
+  float a = shadowIn(uSh, uSM, B); return uShK > .995 ? a : mix(shadowIn(uSh0, uSM0, B), a, uShK);
 }
 vec3 shade(vec3 P, vec3 N, vec3 alb, float wrap, float sss, float spec, float ao) {
   vec3 V = normalize(uEye - P), L = uSun;
@@ -15472,20 +15479,24 @@ function fishModel(k, gold) {
   // body space: x along the fish from the snout (0) to the tail's tip (about 1.1), y up, z across; one unit is the body's length
   const bx = t => t, by = Y => (F.cy - Y) / F.len;
   const ring = t => { const a = F.top(t), b = F.bot(t), mid = (a + b) / 2, hh = (b - a) / 2; const out = [];
-    for (let i = 0; i <= R; i++) { const ang = i / R * TAU, Y = mid - cos(ang) * hh, Yt = mid - cos(ang) * hh * .86, z = sin(ang) * hh * thick / F.len; out.push([bx(t), by(Y), z, -cos(ang) * hh, sin(ang) * hh * thick, F.X(min(t, .9)) / W2, Yt / H2]); } return out; };   /* the painting read inside its outline: at the rim its alpha falls and the cut-out opened gaps */
+    for (let i = 0; i <= R; i++) { const ang = i / R * TAU, Y = mid - cos(ang) * hh, Yt = mid - cos(ang) * hh * .86, z = sin(ang) * hh * thick / F.len; out.push([bx(t), by(Y), z, -cos(ang) * hh, sin(ang) * hh * thick, F.X(min(t, .9)) / W2, Yt / H2 * .5]); } return out; };   /* the painting read inside its outline: at the rim its alpha falls and the cut-out opened gaps */
   const T = [0, .015, .04, .08, .13, .2, .3, .42, .55, .68, .8, .88, .92];
   for (let s = 0; s < T.length - 1; s++) { const A = ring(T[s]), B = ring(T[s + 1]);
     for (let i = 0; i < R; i++) for (const q of [A[i], B[i], B[i + 1], A[i], B[i + 1], A[i + 1]]) { const n = V3.norm([s ? 0 : -1, q[3], q[4] / thick * .9]); v.push(q[0], q[1], q[2], n[0], n[1], n[2], q[5], q[6]); } }
   // the body closed where the tail card takes over: an open, hollow end showed its inside, as if the two flanks gaped apart
   { const E = ring(T[T.length - 1]), cx = E[0][0], cyy = (E[0][1] + E[R >> 1][1]) / 2, cu = E[0][5], cv = (E[0][6] + E[R >> 1][6]) / 2;
     for (let i = 0; i < R; i++) for (const q of [[cx + .02, cyy, 0, cu, cv], E[i], E[i + 1]]) v.push(q[0], q[1], q[2], 1, 0, 0, q.length > 5 ? q[5] : q[3], q.length > 5 ? q[6] : q[4]); }
-  // the card through the middle: the whole painting, cut out by its own alpha (fins, the tail)
-  const corner = (u, w) => [(u * W2 - F.x0) / F.len, by(w * H2), 0, 0, 0, 1, u, w];
-  for (const q of [corner(0, 0), corner(1, 0), corner(1, 1), corner(0, 0), corner(1, 1), corner(0, 1)]) v.push(...q);
+  /* the card through the middle carries the fins and the tail. It was one quad: the body bends with the wiggle and a quad can
+     only stay flat, so its painted body cut out through a flank as the fish thrashed, a pale second half gaping from the first.
+     Now it is cut in strips along the fish, bending as the body does, and the body is erased from its painting */
+  const corner = (u, w) => [(u * W2 - F.x0) / F.len, by(w * H2), 0, 0, 0, 1, u, .5 + w * .5];
+  for (let i = 0, N = 48; i < N; i++) { const u0 = i / N, u1 = (i + 1) / N; for (const q of [corner(u0, 0), corner(u1, 0), corner(u1, 1), corner(u0, 0), corner(u1, 1), corner(u0, 1)]) v.push(...q); }
   const vao = gl.createVertexArray(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 32, 12); gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 32, 24);
   gl.bindVertexArray(null);
-  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.generateMipmap(gl.TEXTURE_2D); texP(gl.LINEAR_MIPMAP_LINEAR, gl.CLAMP_TO_EDGE);
+  const A = document.createElement('canvas'); A.width = W2; A.height = H2 * 2; const ga = A.getContext('2d'); ga.drawImage(c, 0, 0); ga.drawImage(c, 0, H2);
+  ga.translate(0, H2); ga.globalCompositeOperation = 'destination-out'; ga.beginPath(); ga.moveTo(F.X(0), F.cy); for (let t = .01; t <= .92; t += .01) ga.lineTo(F.X(t), F.top(t)); for (let t = .92; t >= .01; t -= .01) ga.lineTo(F.X(t), F.bot(t)); ga.closePath(); ga.fill(); ga.lineWidth = 2; ga.stroke();
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, A); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.generateMipmap(gl.TEXTURE_2D); texP(gl.LINEAR_MIPMAP_LINEAR, gl.CLAMP_TO_EDGE);
   return (FISH3[key] = { vao, n: v.length / 8, tex, eel: !!F.L.eel });
 }
 // how long a fish of this kind and weight is, in metres
@@ -16393,7 +16404,8 @@ function uniforms(P, pal, mirror) {
   if (u.uSun) gl.uniform3fv(u.uSun, I.sun); if (u.uSunC) gl.uniform3fv(u.uSunC, pal.sun); if (u.uSkyC) gl.uniform3fv(u.uSkyC, pal.sky); if (u.uGndC) gl.uniform3fv(u.uGndC, pal.gnd);
   if (u.uFog) gl.uniform3fv(u.uFog, pal.fog); if (u.uTime) gl.uniform1f(u.uTime, now); if (u.uClip) gl.uniform1f(u.uClip, mirror ? 1 : 0); if (u.uWet) gl.uniform1f(u.uWet, I.wet);
   if (u.uLamp) gl.uniform3fv(u.uLamp, I.lamp); if (u.uLampC) gl.uniform3fv(u.uLampC, I.lampC); if (u.uWind) gl.uniform1f(u.uWind, 1 + .8 * rainA); if (u.uMist) gl.uniform1f(u.uMist, max(rainA, S && CORE.oldReady(S) && I.night > .1 ? .55 * I.night : 0));   /* the Old One's nights come in fog */
-  if (u.uSh) { gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, smTex); gl.uniform1i(u.uSh, 3); gl.uniformMatrix4fv(u.uSM, false, I.SM); gl.uniform1f(u.uShOn, I.shOn); }
+  if (u.uSh) { const A = SMT[smI], B = SMT[1 - smI]; gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, A.tex); gl.uniform1i(u.uSh, 3); gl.uniformMatrix4fv(u.uSM, false, I.SM);
+    gl.activeTexture(gl.TEXTURE9); gl.bindTexture(gl.TEXTURE_2D, B.tex); gl.uniform1i(u.uSh0, 9); gl.uniformMatrix4fv(u.uSM0, false, B.M); gl.uniform1f(u.uShK, smK); gl.uniform1f(u.uShOn, I.shOn); }
   if (u.uAtlas) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ATLAS.tex); gl.uniform1i(u.uAtlas, 1); }
   if (u.uWood) { gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, woodTex); gl.uniform1i(u.uWood, 7); }
   if (u.uBark) { gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, barkTex); gl.uniform1i(u.uBark, 8); }
@@ -16423,8 +16435,8 @@ function sunMatrix() {
   return mul(P, Vm);
 }
 function shadowPass(pal) {
-  I.SM = sunMatrix(); const keep = VP; VP = I.SM;
-  gl.bindFramebuffer(gl.FRAMEBUFFER, smFB); gl.viewport(0, 0, SMN, SMN); gl.clear(gl.DEPTH_BUFFER_BIT); gl.colorMask(false, false, false, false);
+  smI = 1 - smI; I.SM = SMT[smI].M = sunMatrix(); smK = smFresh ? 1 : 0; smFresh = 0; const keep = VP; VP = I.SM;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, SMT[smI].fb); gl.viewport(0, 0, SMN, SMN); gl.clear(gl.DEPTH_BUFFER_BIT); gl.colorMask(false, false, false, false);
   gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(2, 4);
   gl.useProgram(depthLandP.p); gl.uniformMatrix4fv(depthLandP.u.uVP, false, VP); gl.bindVertexArray(land.vao); gl.drawElements(gl.TRIANGLES, land.n, gl.UNSIGNED_INT, 0);
   gl.useProgram(depthP.p); gl.uniformMatrix4fv(depthP.u.uVP, false, VP); gl.uniform1f(depthP.u.uTime, now); gl.uniform1f(depthP.u.uWind, 0);   /* still: the map is redrawn only every so often, a swaying shadow jumped */
@@ -16452,7 +16464,7 @@ function render() {
     pal.sun = pal.sun.map(v => v * (1 - .72 * r)); pal.sky = grey(pal.sky, .5 * r).map(v => v * (1 - .2 * r)); pal.fog = grey(pal.fog, .6 * r).map(v => v * (1 - .35 * r));
     pal.top = pal.top.map((v, i) => lerp(v, pal.fog[i] * .75, .8 * r)); pal.hor = pal.hor.map((v, i) => lerp(v, pal.fog[i] * 1.05, .75 * r)); }
   gl.enable(gl.DEPTH_TEST);
-  if (I.shOn > 0) { shT -= 1; if (shT <= 0 || !I.SM) { shT = 20; shadowPass(pal); } } else I.SM = I.SM || new Float32Array(16);
+  if (I.shOn > 0) { shT -= 1; smK = min(1, smK + 1 / 18); if (shT <= 0 || !I.SM || smFresh) { shT = 20; shadowPass(pal); } } else { I.SM = I.SM || new Float32Array(16); smFresh = 1; }   /* after a night or a shower, the first map comes in whole */
   // the moving things: the rods, the float, the line, the fish
   const fp = S.bob ? floatPos() : null;
   lineN = 0;
