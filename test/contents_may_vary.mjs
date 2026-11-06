@@ -1154,7 +1154,7 @@ if (suites.includes('perf')) {
     // SwiftShader draws them at a frame a second, which says nothing about a phone)
     const LATE = {
       starter: ['&at=28', 2000, 40], lawn: ['&at=26', 20, 0], clew: ['&scene=board5', 550, 15],
-      flurry: ['&scene=crowd', 1200, 0], warren: ['&scene=crowd', 1300, 40], guests: ['&scene=crowd', 200, 8], jetty: ['&scene=min40', 45, 0]
+      flurry: ['&scene=crowd', 1200, 0], warren: ['&scene=crowd', 1300, 40], guests: ['&scene=crowd', 200, 10], jetty: ['&scene=min40', 45, 0]
     };
     const http = await import('http');
     const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json' };
