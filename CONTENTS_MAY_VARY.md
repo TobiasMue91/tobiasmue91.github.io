@@ -2662,6 +2662,19 @@ box or two. Starter, box 1 until then, opens on a still jar and earns "about 0¢
   first touch, ghost balls run from the top through the teaching hand, so the board shows what a thumb does. On the
   sign, the first-time hint and "N MORE OUT OF VIEW" were drawn on one line over each other; the hint now has it to
   itself. A swipe that leaves no bulb you can buy in view lets the sign glide back.
+- *Critics on the new opening* (fresh, phone stills of the first minute played with real touch): 6/6/6/6/6 and **5**, then,
+  after the fixes below, 6/5/6/6/5 and **5**: the plateau *Stills plateau* names. Done between them: repeated sums merge
+  into one growing number; a hit on a prize block no longer pops a bare "−1" beside the coins; between games the tray says
+  NEXT GAME: and in the first game "25 ON THE HOUSE", so the fifteen after it is not a tray that shrank; the first game's
+  blow on the Big One is counted in points ("YOU KNOCKED 34 OFF THE BIG ONE") until it is worth five per cent; the buy
+  button says BUY; HUD labels and the teaching plate are larger and darker; a bulb takes a tap from 22 px; the first two
+  machines have curved fences of nails along their walls (the ways), so the field reads as laid out, not tiled (funnels
+  of nails over the tulips were tried and let balls rest on a closed tulip, and slowed the casual bot to 88 minutes).
+  Still open from the critics, most valuable first: a tulip catch taught by the event (time slows, the ball flies back
+  to the tray) instead of the pill; a designed board 1 with gates and a windmill; one display face and one number face;
+  the sign's tree larger and less symmetric, its edge labels inside the screen; a celebration on buying a bulb and on
+  every blow to the Big One. One critic would show the return tag later (after a purchase), since it invites a stranger
+  to leave; the owner asked for it to be found in the first minute, so it stays at 45 seconds.
 - *Returning a box, found.* Both critics found no way to tell, in the first minute, that a box can be sent back: the
   title said "Finish one to find out what is in the next", and the packing slip is behind an unlabelled chip. The
   title now adds "or send one back unopened from its packing slip", and once per save, 45 seconds into a first box,
