@@ -2616,6 +2616,15 @@ fixed at their cause.
 - *The light points in the hut*: two large glow sprites with no source hung in the room. A storm lantern hangs from the rafters
   now, its glass lit from dusk (a flag on the lantern-glass material, `uHutL`), with a small halo on the glass only.
 
+**Polish the owner chose** (fourteenth look).
+- *The hut at night*: the lantern lights the room now: a warm point light in `shade()` (`uHutP`, `uHutB`), full inside the hut's
+  box and outside only along rays that leave through the open window, so it does not shine through the walls. The water
+  mirrors the lit window: where a reflected ray meets the window's opening, a warm pane broken by the ripples.
+- *The float at a desktop*: it keeps a size the eye can find further out (0.21 of its distance instead of 0.16), and while a
+  fish has it, a ring spreads from where it went under every third of a second, on the box's clock.
+- *Night sounds*: a tawny owl far off now and then (the hoot or the kee-wick), frogs in the reeds from dusk, and under rain
+  near the hut the drum of drops on its roof, louder as you come near.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours

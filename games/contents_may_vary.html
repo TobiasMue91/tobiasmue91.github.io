@@ -14330,7 +14330,7 @@ function prog(vs, fs) {
 
 /* ---- the light of the hour: sky, sun, haze, the sun's shadow; shared by every program ---- */
 const COMMON = `
-uniform vec3 uEye, uSun, uSunC, uSkyC, uGndC, uFog, uLamp, uLampC; uniform float uTime, uClip, uWet, uShOn, uMist, uHutL;
+uniform vec3 uEye, uSun, uSunC, uSkyC, uGndC, uFog, uLamp, uLampC; uniform float uTime, uClip, uWet, uShOn, uMist, uHutL; uniform vec3 uHutP, uHutB;
 uniform highp sampler2DShadow uSh, uSh0; uniform mat4 uSM, uSM0; uniform float uShK;
 float h13(vec3 p) { p = fract(p * .1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
 float vn(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
@@ -14359,6 +14359,14 @@ vec3 shade(vec3 P, vec3 N, vec3 alb, float wrap, float sss, float spec, float ao
   col += uSunC * spec * pow(max(dot(N, normalize(L + V)), 0.), 40.) * shd;
   vec3 lp = uLamp - P; float ld = dot(lp, lp);
   col += alb * uLampC * max(dot(N, normalize(lp)) * .7 + .3, 0.) / (1. + ld * .5);
+  // the hut's lantern: it lights the room, and outside only what it sees through the open window (a wall stops the rest)
+  if (uHutL > .01) {
+    vec3 hp = uHutP - P; float hd = dot(hp, hp), k = 0.;
+    vec3 q = P - uHutB; if (abs(q.x) < 1.07 && abs(q.z) < 1.33 && q.y < 2.65) k = 1.;
+    else if (q.x < -1.05) { float t = (uHutB.x - 1.05 - uHutP.x) / (P.x - uHutP.x), y = uHutP.y + t * (P.y - uHutP.y) - uHutB.y, z = uHutP.z + t * (P.z - uHutP.z) - uHutB.z;
+      k = smoothstep(.8, .7, abs(z)) * smoothstep(.93, 1., y) * smoothstep(1.7, 1.63, y); }
+    col += alb * vec3(1.5, .95, .42) * uHutL * k * max(dot(N, normalize(hp)) * .75 + .25, 0.) * 1.1 / (1. + hd * 1.6);
+  }
   return col;
 }
 vec3 haze(vec3 col, vec3 P) {
@@ -15225,6 +15233,11 @@ void main() {
   col += uSunC * path * (.35 + 1.6 * smoothstep(.45, .8, vn(vec3(p * 9., t * 2.)))) * low * (1. - uNight) * (1. - uRain * .9) * .9;
   col += vec3(.75, .8, 1.) * pow(max(dot(R, uMoon), 0.), 120.) * 2. * uNight * near;   /* the moon's path */
   vec3 lp = uLamp - vP; col += uLampC * pow(max(dot(R, normalize(lp)), 0.), 60.) * 1.6 / (1. + dot(lp, lp) * .04);
+  if (uHutL > .01 && R.x > .01) {   /* the hut's lit window, mirrored: where the reflected ray meets the open window, a warm pane of light, broken by the ripples */
+    float t = (uHutB.x - 1.05 - vP.x) / R.x; vec3 h = vP + R * t - uHutB;
+    float k = smoothstep(.8, .66, abs(h.z)) * smoothstep(.95, 1.05, h.y) * smoothstep(1.7, 1.6, h.y);
+    col += vec3(1.5, .95, .42) * uHutL * k * .55 * (.6 + .8 * vn(vec3(vP.xz * 9., uTime)));
+  }
   // foam: a broken pale line where little waves fold on the bank, and round the posts
   float fn = vn(vec3(p * 5.5 + vec2(0., t * .25), t * .2)) * .6 + vn(vec3(p * 13., t * .5)) * .4;
   float foam = smoothstep(.16, .0, dep) * smoothstep(.35, .62, fn + .25 * sin(t * 1.3 + p.x * 3. + p.y * 2.)) + postFoam * smoothstep(.45, .7, fn);
@@ -15803,13 +15816,32 @@ const plop = (big, v = 1) => { tone(big ? 220 : 520, .12, .18 * v, 0, big ? 90 :
 const rustle = () => { nz(.5, 2400, .6, .08, 'bandpass'); nz(.35, 1200, .8, .06, 'bandpass', .12); };
 const creak = () => { tone(320, .4, .05, 0, 240, 'sawtooth'); nz(.3, 900, 3, .05, 'bandpass', .1); };
 const step1 = wood => nz(.07, wood ? 500 : 1300, wood ? 2 : .7, wood ? .07 : .03, wood ? 'bandpass' : 'lowpass');
-function ambience(dt, tod) { const night = tod === 'night'; AU.bird -= dt; if (AU.bird < 0) { AU.bird = night ? 99 : 2 + Math.random() * 6; if (!S.rain) bird(); } if (night) { AU.cricket -= dt; if (AU.cricket < 0) { AU.cricket = .4 + Math.random() * .6; cricket(); } } AU.rg.gain.setTargetAtTime(rainA * .09, AU.ctx.currentTime, .5);
+function ambience(dt, tod) { const night = tod === 'night'; AU.bird -= dt; if (AU.bird < 0) { AU.bird = night ? 99 : 2 + Math.random() * 6; if (!S.rain) bird(); } if (night) { AU.cricket -= dt; if (AU.cricket < 0) { AU.cricket = .4 + Math.random() * .6; cricket(); } }
+  if (!S.rain) { AU.owl = (AU.owl == null ? 25 : AU.owl) - (night ? dt : 0); if (AU.owl < 0) { AU.owl = 35 + Math.random() * 50; owl(); }
+    AU.frog = (AU.frog == null ? 6 : AU.frog) - (tod === 'dusk' || night ? dt : 0); if (AU.frog < 0) { AU.frog = (tod === 'dusk' ? 3 : 8) + Math.random() * 7; frog(); } }
+  if (rainA > .2 && !K.reduced) { const near = max(0, 1 - hypot(me.x - SHOP.x, me.z - SHOP.z) / 9); if (near > 0) { AU.roof = (AU.roof || 0) - dt * 30 * rainA * near; while (AU.roof < 0) { AU.roof += .5 + Math.random();
+      nz(.05, 260 + Math.random() * 200, 2, .03 * near, 'bandpass', Math.random() * .05, AU.amb); } } }   /* drops drumming on the hut's roof as you come near it */ AU.rg.gain.setTargetAtTime(rainA * .09, AU.ctx.currentTime, .5);
   // single drops: a plink on the water, now and then a tap on the boards or the leaves
   if (rainA > .1 && !K.reduced) { AU.drop = (AU.drop || 0) - dt * 16 * rainA; while (AU.drop < 0) { AU.drop += .3 + Math.random() * 1.4; const at = Math.random() * .06, f = 1800 + Math.random() * 3200;
     if (Math.random() < .7) tone(f, .035, .006 + Math.random() * .01, at, f * .6, 'sine', AU.amb); else nz(.03, 700 + Math.random() * 700, 3, .02, 'bandpass', at, AU.amb); } } }
 function bird() {   // a phrase of a songbird: a few quick sweeps
   const A = AU; if (!A) return; const b = 2200 + Math.random() * 1600, n = 2 + floor(Math.random() * 5);
   for (let k = 0; k < n; k++) tone(b * (1 + (Math.random() - .5) * .3), .07 + Math.random() * .06, .025, k * (.09 + Math.random() * .05), b * (1.2 + Math.random() * .5), 'sine', A.amb);
+}
+/* night and dusk: a tawny owl far off in the woods now and then (the female's kee-wick, the male's long hoot), frogs in the
+   reeds at dusk, and under rain near the hut the drum of drops on its roof */
+function owl() {
+  const A = AU; if (!A) return; const v = .016, at = 0, hoot = (t0, d, f) => { const t = A.ctx.currentTime + t0, o = A.ctx.createOscillator(), g = A.ctx.createGain(), lfo = A.ctx.createOscillator(), lg = A.ctx.createGain();
+    o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * .93, t + d); lfo.frequency.value = 7; lg.gain.value = f * .012; lfo.connect(lg); lg.connect(o.frequency);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .08); g.gain.setValueAtTime(v, t + d - .15); g.gain.linearRampToValueAtTime(0, t + d); o.connect(g); g.connect(A.amb); o.start(t); lfo.start(t); o.stop(t + d + .05); lfo.stop(t + d + .05); };
+  if (Math.random() < .5) { hoot(at, .45, 410); hoot(at + 2.1, .18, 380); hoot(at + 2.4, .2, 400); hoot(at + 2.75, .9, 395); }
+  else { tone(1500, .12, .012, 0, 1900, 'sine', A.amb); tone(1250, .25, .01, .13, 900, 'sine', A.amb); }
+}
+function frog() {   // a few dry croaks: low buzz in pulses through a narrow filter
+  const A = AU; if (!A) return; const n = 2 + floor(Math.random() * 4), f0 = 140 + Math.random() * 60;
+  for (let k = 0; k < n; k++) { const t = A.ctx.currentTime + k * (.22 + Math.random() * .06), o = A.ctx.createOscillator(), fl = A.ctx.createBiquadFilter(), g = A.ctx.createGain();
+    o.type = 'sawtooth'; o.frequency.value = f0; fl.type = 'bandpass'; fl.frequency.value = 700; fl.Q.value = 4; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.02, t + .02); g.gain.exponentialRampToValueAtTime(.0005, t + .13);
+    o.connect(fl); fl.connect(g); g.connect(A.amb); o.start(t); o.stop(t + .16); }
 }
 function cricket() { const A = AU; if (!A) return; for (let k = 0; k < 3; k++) tone(4300, .025, .012, k * .045, 4300, 'triangle', A.amb); }
 function bell() { tone(1568, 1.2, .1, 0, 1568, 'sine'); tone(3136, .6, .03, 0, 3136); tone(1568, 1, .07, .25); }
@@ -16210,7 +16242,7 @@ function flies(u) {
 }
 const wake = { x: 0, z: 0, dx: 0, dz: -1, vx: 0, vz: 0, s: 0, px: null };
 let rainA = 0;   // the shower as the eye sees it: it comes and goes over a few seconds, never at a switch
-let slowT = 0, kickT = 0, nibT = 0, rumT = 90, floatRip = 0;
+let biteR = 0, slowT = 0, kickT = 0, nibT = 0, rumT = 90, floatRip = 0;
 /* the first fights, taught calmly: when a lesson is due the water all but stops, a card above the panel says what the fish
    is doing and what the hand does about it, and the box runs on once the hand has done it (each lesson once, kept with the
    save). Reading is about real time, so the card's own timers run on the frame's dt before any slowing */
@@ -16301,6 +16333,7 @@ function frame(dt) {
   }
   carry += ((S.phase === 'idle' && !landA && !atEnd() && fightRod !== 2 ? 1 : 0) - carry) * min(1, dt * 3);
   if (retr.t < 1) { retr.t = min(1, retr.t + dt / .9); reelSpin += dt * 30; }
+  if (S.phase === 'bite') { biteR -= dt; if (biteR <= 0) { biteR = .32; const p = floatPos(); if (p) ripple(p[0], p[1], .5); } } else biteR = 0;   /* while it is taken, rings keep spreading from where the float went under: a bite seen from the far end of a desktop */
   nibT = max(0, nibT - dt * 2.5); if (S.phase === 'wait' && cast.fly >= 1 && Math.random() < dt * .3) { nibT = .35; dip = max(dip, .35); }   /* a fish nosing the bait: the tip and the float twitch */
   rodLift += (0 - rodLift) * min(1, dt * 3); kickT = max(0, kickT - dt); dip = max(0, dip - dt * 1.5); riseT = max(0, riseT - dt);
   if (cast.fly < 1 && S.bob) { cast.fly = min(1, cast.fly + dt / .9); if (cast.fly >= 1 && fp) { splash(fp[0], fp[1], 6, .5); plop(0); } }
@@ -16405,7 +16438,7 @@ function physics(dt) {
     for (let j = 0; j < 2; j++) parts.push({ x, y: DECK + .03, z, vx: (Math.random() - .5) * .6, vy: .6 + Math.random() * .6, vz: (Math.random() - .5) * .6, t: 0, life: .35, s: .008, c: [.8, .85, .9, .7], g: 1, dry: 1 }); }
   fliesStep(dt);
   // at dusk and night the hut's window glows warm, a light to walk back to (a soft glow in the window, no lamp to see)
-  I.hutL = max(I.night, smooth(.58, .64, u));
+  I.hutL = max(I.night, smooth(.58, .64, u)); I.hutB = I.hutB || [SHOP.x, ground(SHOP.x, SHOP.z) - .05, SHOP.z]; I.hutP = I.hutP || [SHOP.x - .25, I.hutB[1] + 1.38, SHOP.z + .5];
   if (I.hutL > .05) parts.push({ x: SHOP.x - .25, y: ground(SHOP.x, SHOP.z) - .05 + 1.38, z: SHOP.z + .5, vx: 0, vy: 0, vz: 0, t: 0, life: dt * 1.01, s: .3, c: [1.6, 1.05, .5, .5 * I.hutL], g: 0 });   /* a small halo round the lamp's glass; the big free glows floated in the hut */
   if (I.lampC && I.lampC[0] > .1) parts.push({ x: I.lamp[0], y: I.lamp[1], z: I.lamp[2], vx: 0, vy: 0, vz: 0, t: 0, life: dt * 1.01, s: .55, c: [1.6, 1.05, .5, .6 * min(1, I.lampC[0] / 1.6)], g: 0 });   /* the lantern's halo */
   // rumours of the Old One: once the book is half full, now and then something huge rolls far out in the deep
@@ -16426,7 +16459,7 @@ function uniforms(P, pal, mirror) {
   if (u.uEye) gl.uniform3fv(u.uEye, mirror ? [eyeP[0], -eyeP[1], eyeP[2]] : eyeP);
   if (u.uSun) gl.uniform3fv(u.uSun, I.sun); if (u.uSunC) gl.uniform3fv(u.uSunC, pal.sun); if (u.uSkyC) gl.uniform3fv(u.uSkyC, pal.sky); if (u.uGndC) gl.uniform3fv(u.uGndC, pal.gnd);
   if (u.uFog) gl.uniform3fv(u.uFog, pal.fog); if (u.uTime) gl.uniform1f(u.uTime, now); if (u.uClip) gl.uniform1f(u.uClip, mirror ? 1 : 0); if (u.uWet) gl.uniform1f(u.uWet, I.wet);
-  if (u.uHutL) gl.uniform1f(u.uHutL, I.hutL || 0); if (u.uLamp) gl.uniform3fv(u.uLamp, I.lamp); if (u.uLampC) gl.uniform3fv(u.uLampC, I.lampC); if (u.uWind) gl.uniform1f(u.uWind, 1 + .8 * rainA); if (u.uMist) gl.uniform1f(u.uMist, max(rainA, S && CORE.oldReady(S) && I.night > .1 ? .55 * I.night : 0));   /* the Old One's nights come in fog */
+  if (u.uHutL) { gl.uniform1f(u.uHutL, I.hutL || 0); gl.uniform3fv(u.uHutP, I.hutP || [0, -99, 0]); gl.uniform3fv(u.uHutB, I.hutB || [0, -99, 0]); } if (u.uLamp) gl.uniform3fv(u.uLamp, I.lamp); if (u.uLampC) gl.uniform3fv(u.uLampC, I.lampC); if (u.uWind) gl.uniform1f(u.uWind, 1 + .8 * rainA); if (u.uMist) gl.uniform1f(u.uMist, max(rainA, S && CORE.oldReady(S) && I.night > .1 ? .55 * I.night : 0));   /* the Old One's nights come in fog */
   if (u.uSh) { const A = SMT[smI], B = SMT[1 - smI]; gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, A.tex); gl.uniform1i(u.uSh, 3); gl.uniformMatrix4fv(u.uSM, false, I.SM);
     gl.activeTexture(gl.TEXTURE9); gl.bindTexture(gl.TEXTURE_2D, B.tex); gl.uniform1i(u.uSh0, 9); gl.uniformMatrix4fv(u.uSM0, false, B.M); gl.uniform1f(u.uShK, smK); gl.uniform1f(u.uShOn, I.shOn); }
   if (u.uAtlas) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ATLAS.tex); gl.uniform1i(u.uAtlas, 1); }
@@ -16569,7 +16602,7 @@ function render() {
     if (under || mirror) {   // the floats go in before the water: the water then hides the part under it, as a real float sits half sunk
       uniforms(thingP, pal, mirror);
     // a float far out keeps a size the eye can find (as a real one's bright tip does), never a speck
-    const fsz = q => max(1.5, hypot(q[0] - eyeP[0], q[2] - eyeP[2]) * .16), fl = (floatAt ? [[floatAt[0], floatAt[1], floatAt[2], 1.5, 1, 1, 1, 0], ...podFloats] : podFloats).map(q => { q[3] = fsz(q); return q; });
+    const fsz = q => max(1.5, hypot(q[0] - eyeP[0], q[2] - eyeP[2]) * .21), fl = (floatAt ? [[floatAt[0], floatAt[1], floatAt[2], 1.5, 1, 1, 1, 0], ...podFloats] : podFloats).map(q => { q[3] = fsz(q); return q; });
     if (fl.length) { const o = SET.float; setInst(o, fl); gl.bindVertexArray(o.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, o.n, o.count); }
     }
     if (under) return;
