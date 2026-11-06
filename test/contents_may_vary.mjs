@@ -33,8 +33,10 @@ const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
 /* Boxes that have shipped, in play order. Saves refer to boxes by id and the page plays them in
-   file order, so this list may only ever grow at the end. Append a box's id here when it ships. */
-const SHIPPED = ['starter', 'lawn', 'clew', 'flurry', 'warren', 'guests', 'jetty'];
+   file order, so this list may only ever grow at the end. Append a box's id here when it ships.
+   (Once, on 2026-11-06, the owner had the shipped boxes reordered, Tilt first; it was
+   starter, lawn, clew, flurry, warren, guests, jetty. The 'browser' suite plays a save from before it.) */
+const SHIPPED = ['clew', 'flurry', 'warren', 'jetty', 'guests', 'starter', 'lawn'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
@@ -879,6 +881,36 @@ if (suites.includes('browser')) {
         check(await p.evaluate(() => CMV.save.current) === stack[1], 'and the save holds box 2 as the open one');
       } else fail('box 1 can be played again from the shelf');
       check(p.errs.length === 0, 'no errors with an old save', p.errs.join(' | '));
+      await p.close();
+    }
+    {
+      // a save from before the one reorder (2026-11-06, Tilt first): the player had opened Starter, Keep Off the Grass
+      // and Tilt and was in Snow Day. Nothing is lost, the open box stays open, and each box goes on into the first one
+      // this save has not opened, whose number its way out shows.
+      const p = await page(''), ids = worlds.filter(w => !w.draft).map(w => w.id);
+      if (['starter', 'lawn', 'clew', 'flurry', 'warren'].every(id => ids.includes(id))) {
+        const done = { state: null, v: 0, time: 1500, done: true, progress: 1 };
+        const old = { v: 1, started: Date.now(), last: Date.now(), current: 'flurry', opened: ['starter', 'lawn', 'clew'], ever: ['starter', 'lawn', 'clew'],
+          worlds: { starter: Object.assign({ note: 'kept' }, done), lawn: done, clew: done, flurry: { state: null, v: 0, time: 300, done: false, progress: .1 } },
+          feats: { 'starter.perfect': 1, 'cmv.first': 1 }, postage: 6, perks: { x: 1, h: 0 }, printing: 1, replay: null, settings: { sound: 0, music: 0, motion: 'full' } };
+        await p.goto(base.replace(/[^/]*$/, '__blank')); await p.evaluate(o => localStorage.setItem('cmv.save', JSON.stringify(o)), old);
+        await p.goto(base);
+        check(await until(p, () => !document.querySelector('#title').hidden && /Back in the box/.test(document.querySelector('#tGo').textContent)), 'reorder: an old save comes back to the box it was in');
+        check(await p.evaluate(() => /new numbers/.test(document.querySelector('#tNote').textContent)), 'reorder: the title says once that the boxes have new numbers');
+        const sv = await p.evaluate(() => CMV.save);
+        check(sv.current === 'flurry' && ['starter', 'lawn', 'clew'].every(id => sv.opened.includes(id)) && sv.worlds.starter.note === 'kept' && sv.postage === 6 && sv.perks.x === 1 && sv.feats['starter.perfect'],
+          'reorder: opened boxes, notes, stamps, perks and stickers are all kept', JSON.stringify(sv).slice(0, 300));
+        await p.click('#tGo');
+        if (await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.ready, 30000)) {
+          const want = await p.evaluate(() => CMV.worlds.find(w => w.id === 'warren').n);
+          check(await p.evaluate(() => CMV.win().K.next && CMV.win().K.next.n) === want, `reorder: Snow Day's way out shows the box that really comes next (№ ${want})`);
+          await p.evaluate(() => CMV._complete(CMV.live.token, null));
+          check(await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.w.id === 'warren', 30000), 'reorder: finishing it goes on into the first box this save has not opened');
+        } else fail('reorder: the old save opens its box');
+        await p.reload();
+        check(await until(p, () => !document.querySelector('#title').hidden) && await p.evaluate(() => !/new numbers/.test(document.querySelector('#tNote').textContent)), 'reorder: the note is said only once');
+      }
+      check(p.errs.length === 0, 'no errors with a save from before the reorder', p.errs.join(' | '));
       await p.close();
     }
     {
