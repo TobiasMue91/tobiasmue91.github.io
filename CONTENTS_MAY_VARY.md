@@ -2539,6 +2539,17 @@ boards, a roof of two closed slabs whose slope passes the wall tops, a stone chi
 a rack with fish hung by the mouth in the smoke, so what it is for shows. Buying it says that every fish sells for more now, and
 each catch card says "Smoked: ×1.3". It is solid too. Lesson: an upgrade that appears in the world must say what it is, there.
 
+**Critic round after the ninth look**: 7/5/7/6 and **4**. The worst it found was real and old: every board of the jetty and both
+huts showed a pattern of waves instead of the photographed wood. `cuboid()` gave wood its v (across the grain) from the world
+coordinate plus a per-piece offset, and both go negative (the lake lies at negative z; `%` keeps the sign in JS); a negative v
+is how a post's sawn top asks the shader for growth rings, so every such board was drawn as end grain. v now counts from the
+piece's own middle and the offset is kept positive: the jetty, the walls, the bench and the door show the weathered boards at
+last. Lesson: a value that doubles as a flag (v < 0 means end grain) must be made impossible elsewhere, not just unlikely.
+Also fixed from the round: the rests' front sticks stood out past the jetty's edge in the water (they stand on the boards now);
+toasts covered the catch card (they wait until it is put away); the balance was clipped off a phone's left edge; the smokehouse's
+rack hid its door (it stands beside the house, each fish on a string); a garland's fish crowded and turned face-on (wider
+droppers, side-on); the rod is carried low away from the water's edge.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
