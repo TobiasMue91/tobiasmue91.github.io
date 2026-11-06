@@ -14474,14 +14474,8 @@ void main() {
   // night: stars, turning slowly (a night is a few minutes; more and they slid visibly), and the moon
   if (uNight > .01) {
     float r = uStar; vec3 ds = vec3(d.x * cos(r) - d.z * sin(r), d.y, d.x * sin(r) + d.z * cos(r));
-    // stars: a point at its own place in each lucky cell, about a pixel across and anti-aliased; most faint, a few bright,
-    // warm to blue; a quiet twinkle; and the faint band of the Milky Way across them
-    // each star a point well inside its cell (a star at a cell's edge was cut into a broken shape), under a pixel and a half across;
-    // clouds and rain hide them
-    vec3 q = ds * 230., c = floor(q), f = fract(q) - .5; float px = length(fwidth(q)) * .5, hs = h13(c), vis = smoothstep(.0, .2, d.y) * (1. - smoothstep(.15, .5, a)) * (1. - smoothstep(.2, .6, uCloud));
-    if (hs > .9955 && vis > .01) { vec3 off = (vec3(h13(c + 1.), h13(c + 2.), h13(c + 3.)) - .5) * .3; float dd = length(f - off);   /* the pixel's size is taken above, outside the branch: a derivative where neighbours skip it is undefined, and a real GPU drew broken shapes */
-      float br = .25 + 2.6 * pow(h13(c + 4.), 6.), tw = .85 + .15 * sin(uTime * (2. + 3. * h13(c + 6.)) + hs * 60.);
-      col += mix(vec3(1., .86, .72), vec3(.78, .87, 1.), h13(c + 5.)) * (1. - smoothstep(px * .35, px * 1.1, dd)) * br * tw * vis * uNight; }
+    // the stars themselves are points of their own (starP below); here the Milky Way's faint band, and the moon
+    float vis = smoothstep(.0, .2, d.y) * (1. - smoothstep(.15, .5, a)) * (1. - smoothstep(.2, .6, uCloud));
     float mw = exp(-pow(dot(ds, normalize(vec3(.35, .6, -.72))) * 5., 2.)) * (vn(ds * 9.) * .6 + vn(ds * 23.) * .4);
     col += vec3(.55, .6, .75) * mw * .05 * vis * uNight;   /* the Milky Way, gone under cloud as well */
     float md = dot(d, uMoon); col += vec3(.9, .92, 1.) * (smoothstep(.9994, .9996, md) * 1.6 + pow(max(md, 0.), 60.) * .14) * uNight;
@@ -14489,6 +14483,30 @@ void main() {
   col = mix(col, uFog, smoothstep(.1, 0., d.y) * .7);
   o = outc(col);
 }`);
+/* the stars: a fixed list of points, each a round dot a pixel or two across. They were drawn in the sky shader from cells of
+   space, one lucky cell in a few hundred holding a star; on real GPUs that came out as the outlines of the cells, broken
+   squares and triangles, while the software renderer used for screenshots drew them clean. Points look the same everywhere */
+const STARN = 1600, starVAO = (() => { const v = [], R = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  for (let i = 0; i < STARN; i++) { const y = R(), a = R() * TAU, r = sqrt(1 - y * y); v.push(r * cos(a), y, r * sin(a), .25 + 2.6 * pow(R(), 6), R(), R()); }
+  const o = gl.createVertexArray(); gl.bindVertexArray(o); gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 24, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 24, 16); gl.bindVertexArray(null); return o; })();
+const starP = prog(`#version 300 es
+precision highp float; ${COMMON}
+layout(location=0) in vec4 aS; layout(location=1) in vec2 aK; uniform mat4 uVP; uniform float uStar, uNight, uCloud, uDay, uPx; out vec3 vC;
+float cl(vec2 p) { return vn(vec3(p, 1.)) * .5 + vn(vec3(p * 2.03, 2.)) * .25 + vn(vec3(p * 4.1, 3.)) * .14 + vn(vec3(p * 8.3, 4.)) * .07; }
+void main() {
+  float r = -uStar; vec3 d = vec3(aS.x * cos(r) - aS.z * sin(r), aS.y, aS.x * sin(r) + aS.z * cos(r));   // the sky turning: the sky shader turns the view the other way
+  vec2 cp = d.xz / (d.y + .1) * 1.4 + vec2(uTime * .014, uTime * .005) + vec2(uDay * 7.31, uDay * 3.17);
+  float cov = .58 - uCloud * .22, a = smoothstep(cov, cov + .22, cl(cp * .9)) * smoothstep(0., .22, d.y);   /* the same cloud as the sky shader draws: it hides them */
+  float vis = smoothstep(.0, .2, d.y) * (1. - smoothstep(.15, .5, a)) * (1. - smoothstep(.2, .6, uCloud)) * uNight;
+  float tw = .85 + .15 * sin(uTime * (2. + 3. * aK.y) + aK.x * 60.);
+  vC = mix(vec3(1., .86, .72), vec3(.78, .87, 1.), aK.x) * aS.w * tw * vis;
+  gl_Position = uVP * vec4(uEye + d * 400., 1.); gl_Position.z = gl_Position.w * .99985;
+  gl_PointSize = vis > .003 ? uPx * (1.3 + .5 * min(aS.w, 1.5)) : 0.;
+}`, `#version 300 es
+precision highp float; ${COMMON}
+in vec3 vC; out vec4 o;
+void main() { float r = length(gl_PointCoord - .5) * 2., k = 1. - smoothstep(.35, 1., r); o = vec4(tone(vC * 1.6) * k, 0.); }`);
 const quadVAO = gl.createVertexArray();
 gl.bindVertexArray(quadVAO); gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 /* ---- the foliage atlas: leaves, willow strands, pine boughs, grass and reeds, painted once into four tiles ---- */
@@ -16428,7 +16446,10 @@ function things(pal, mirror, list) {
 function scene(pal, mirror) {
   uniforms(skyP, pal, mirror); gl.uniform3fv(skyP.u.uF, fwd); gl.uniform3fv(skyP.u.uR, right); gl.uniform3fv(skyP.u.uU, upv); gl.uniform2f(skyP.u.uTan, tanH, tanV);
   gl.uniform3fv(skyP.u.uTop, pal.top); gl.uniform3fv(skyP.u.uHor, pal.hor); gl.uniform3fv(skyP.u.uMoon, I.moon); gl.uniform1f(skyP.u.uMirror, mirror ? 1 : 0); gl.uniform1f(skyP.u.uNight, I.night); gl.uniform1f(skyP.u.uCloud, .15 + .85 * rainA); gl.uniform1f(skyP.u.uStar, S.t * .0005); gl.uniform1f(skyP.u.uDay, S.t / CORE.DAY);   /* steadily with the game's clock: the sky never jumps */
-  gl.depthMask(false); gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.depthMask(true);
+  gl.depthMask(false); gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  if (I.night > .01) { uniforms(starP, pal, mirror); gl.uniform1f(starP.u.uStar, S.t * .0005); gl.uniform1f(starP.u.uNight, I.night); gl.uniform1f(starP.u.uCloud, .15 + .85 * rainA); gl.uniform1f(starP.u.uDay, S.t / CORE.DAY);
+    gl.uniform1f(starP.u.uPx, mirror ? 1 : DPR); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.bindVertexArray(starVAO); gl.drawArrays(gl.POINTS, 0, STARN); gl.disable(gl.BLEND); }
+  gl.depthMask(true);
   uniforms(landP, pal, mirror); gl.bindVertexArray(land.vao); gl.drawElements(gl.TRIANGLES, land.n, gl.UNSIGNED_INT, 0);
   things(pal, mirror, mirror ? ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pineF2', 'pine', 'pine2', 'wil', 'reed', 'jetty'] : ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pineF2', 'bush', 'pine', 'pine2', 'wil', 'reed', 'grass', 'lily', 'flower', 'jetty']);
 }

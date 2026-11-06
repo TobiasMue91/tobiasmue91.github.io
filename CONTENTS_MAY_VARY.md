@@ -2605,11 +2605,12 @@ fixed at their cause.
   roof over its walls and its stone chimney.
 
 **Stars and the hut's light, on the owner's GPU** (thirteenth look).
-- *Stars looked different on a real GPU*: they were drawn as broken corners and strokes there and as clean points here. The
-  pixel's size (`fwidth`) was taken inside the branch that only a lucky cell enters; a derivative in control flow that
-  neighbouring pixels skip is undefined, and the software renderer used for screenshots happens to compute it anyway. It is
-  taken before the branch now. Lesson: never call `fwidth`/`dFdx` under a condition that varies per pixel, and do not trust a
-  software renderer to show the fault.
+- *Stars looked different on a real GPU*: they were drawn as broken corners and strokes there and as clean points here. Moving
+  the pixel-size derivative out of the per-pixel branch did not mend it: on the owner's GPU they were still the outlines of
+  little squares and triangles, the shapes where the sky's sphere cuts the cells of space the shader hashed into stars. The
+  stars are no longer made in the sky shader at all: 1600 fixed directions drawn as round points (`starP`, one draw at night),
+  a pixel or two across, hidden by the same cloud the sky draws and by rain. Lesson: a sky detail made from cells and
+  derivatives can look right in the software renderer and wrong on hardware; plain geometry looks the same everywhere.
 - *Stars slid across the sky*: they turned at 0.004 rad per second of the box's clock, a star's width in a few seconds. Now
   0.0005: a whole night turns them a few degrees.
 - *The light points in the hut*: two large glow sprites with no source hung in the room. A storm lantern hangs from the rafters
