@@ -2572,6 +2572,22 @@ the hut's window glows warm at dusk and night, and the jetty's lantern has a hal
 - *Stars*: a star near its cell's edge was cut into a broken shape, and under rain they showed through the cloud. Each sits well
   inside its cell, under a pixel and a half, and clouds and rain hide them (and the Milky Way).
 
+- *The bank rod asked for a long walk with nothing to show for it*: the bell now says what is on, and it is always worth it:
+  the bank rod's fish is picked when the bell rings (tench, rudd, crucian; carp from the fourth bank-rod level; eel and burbot
+  at night), heavier than the jetty's, and its card names it with the seconds left.
+- *The smokehouse*: its walls stood through the roof; the eaves sit above them now, and the tin chimney is a fieldstone stack.
+- *The fight's panel*: higher, just under the horizon where the fish is, and larger at a desktop.
+- *Trees through trees*: trees are placed on a four-metre grid with a minimum distance of 3.3 m; the woods stay as dense.
+
+**The first fight, explained calmly** (eleventh look). The owner: the fight's two rules (do not pull against a fish that flees,
+lean against one that pulls to a side) were only ever said in two words. Now each is a lesson, given once and kept with the
+save, during the first five catches (`&lesson` in the address shows them on any save): when one is due, the water eases almost to a stop (to 7%, over a fifth of a second), a card
+high above the panel names what the fish is doing and what the hand does about it, the panel's row it is about is ringed, and the
+hand shows the gesture under the panel. The box runs on once the hand has done it for half a second (and the card has stood at
+least 1.6 s): *It's on!* (hold to wind in), then at the first run *It bolts!* (let go), then at a later run *It pulls to the
+right* (hold and lean the other way). A lesson whose run ends first comes back at the next run. The card's timers run on the
+frame's own time, since reading is about real time; the fish, as always, on the box's.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
