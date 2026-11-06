@@ -11282,7 +11282,7 @@ const rot = (px, py, a, fn) => { c.save(); c.translate(X(px), Y(py)); c.rotate(a
 const bg = document.createElement('canvas'), bgc = bg.getContext('2d');
 let bgDirty = true;
 // where the browser says so, a lost and restored canvas has every cache painted again at once
-for (const el of [cv, bg]) el.addEventListener('contextrestored', () => { bgDirty = true; skyDirty = true; tile = null; dropSprites(); dropFigs(); grain = vign = grade = cur = null; });
+for (const el of [cv, bg]) el.addEventListener('contextrestored', () => { bgDirty = true; skyDirty = true; tile = null; comp = null; dropSprites(); dropFigs(); grain = vign = grade = cur = null; });
 const lerpC = (a, b, u) => `rgb(${a.map((v, i) => Math.round(lerp(v, b[i], u))).join(',')})`;
 const rgba = (a, al) => `rgba(${a.map(Math.round).join(',')},${al})`;
 const mix = (a, b, u) => a.map((v, i) => lerp(v, b[i], u));
@@ -12030,7 +12030,8 @@ function fpsMeter() {
 }
 // the house and its garden are painted once into a tile of the world, as wide as the screen and as tall as the house, so a
 // camera that follows the ghost up and down only moves a picture; the sky stays on the screen behind it
-let tileMs = 0, tileN = 0;
+let tileMs = 0, tileN = 0, comp = null;
+const held = { x: NaN, y: NaN, n: 0 };
 function paintTile() {
   const t0 = performance.now();
   c = bgc; bgc.setTransform(DPR, 0, 0, DPR, 0, 0); backdrop();
@@ -12051,9 +12052,22 @@ function stepShards(dt) {
 function draw(dt) {
   CALLS = 0; part(); placed.length = 0;
   if (S.phase === 'organ' && !S.finale) { g.setTransform(DPR, 0, 0, DPR, 0, 0); c = g; if (cardUp) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); } else { organ(dt); film(); drawIris(); } part('organ'); if (DIAG.fps) fpsMeter(); return; }
-  if (bgDirty) paintTile(); else if (skyDirty) { c = bgc; bgc.setTransform(DPR, 0, 0, DPR, 0, 0); backdrop(); c = g; skyDirty = false; }
+  let fresh = false;
+  if (bgDirty) { paintTile(); fresh = true; } else if (skyDirty) { c = bgc; bgc.setTransform(DPR, 0, 0, DPR, 0, 0); backdrop(); c = g; skyDirty = false; fresh = true; }
   const wv = FX() && DIAG.film ? (hash(Math.floor(now * 18), 21) - .5) * 1.2 * DPR : 0, sk = FX() && shake > .02 ? shake * 7 * DPR : 0, sx = sk ? (Math.random() - .5) * sk : 0, sy = sk ? (Math.random() - .5) * sk : 0;
-  g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(bg, sx, wv + sy); g.drawImage(tile, Math.round(X(tileX) * DPR + sx), Math.round(Y(tileY) * DPR + wv + sy));
+  // sky and house are two screens of pixels; while neither changes and the camera holds still they are laid together once
+  // into one picture, and a frame draws that (a camera on the move, or the walk-out, draws the two as before)
+  const tx = Math.round(X(tileX) * DPR), ty = Math.round(Y(tileY) * DPR);
+  if (fresh || tx !== held.x || ty !== held.y) { held.x = tx; held.y = ty; held.n = 0; } else held.n++;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  if (held.n >= 2) {
+    if (held.n === 2 || !comp || comp.width !== cv.width || comp.height !== cv.height) {
+      if (!comp) comp = document.createElement('canvas');
+      if (comp.width !== cv.width || comp.height !== cv.height) { comp.width = cv.width; comp.height = cv.height; }
+      const x = comp.getContext('2d'); x.clearRect(0, 0, comp.width, comp.height); x.drawImage(bg, 0, 0); x.drawImage(tile, tx, ty);
+    }
+    g.drawImage(comp, Math.round(sx), Math.round(wv + sy));
+  } else { g.drawImage(bg, sx, wv + sy); g.drawImage(tile, Math.round(tx + sx), Math.round(ty + wv + sy)); }
   g.setTransform(DPR, 0, 0, DPR, sx / DPR, (wv + sy) / DPR); c = g; part('house');
   if (DIAG.things) thingsAtRest(); part('rest');
   doors(); impsDraw(dt);
