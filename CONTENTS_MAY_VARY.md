@@ -2557,6 +2557,74 @@ kinds in view) and the hut a narrow board (wider, five or six tags a row); the H
 larger). Before: the carp became a mirror carp (a row of great flat scales, longer barbels), the Old One scarred and pale-eyed;
 the hut's window glows warm at dusk and night, and the jetty's lantern has a halo.
 
+**The owner at the desktop** (tenth look).
+- *Fish that gaped for a few frames*: the lofted body read the painting right up to its outline, where the painting's alpha falls;
+  the cut-out then opened slits along the back and belly whenever the mip level changed. The body reads the painting a little
+  inside its outline now.
+- *Tree shadows that jumped*: the shadow map is redrawn every twenty frames, and the trees swayed in it, so each redraw moved the
+  shadows at once. The shadow pass draws the trees still.
+- *Two floating lights in the hut at night*: the window's glow points are seen only from outside, more than three metres off.
+- *The float on the water*: it was drawn after the water, so all of it showed above the surface. Floats are drawn before the
+  water now, and the water hides what is under it: only the painted tip stands out, at a bite less.
+- *A garland's lines*: every line runs from the rod's tip straight to a mouth.
+- *The fish's shadow pointed elsewhere than the fish*: the dark shape in the water took the wake's direction; it takes the 3D
+  fish's own heading now.
+- *Stars*: a star near its cell's edge was cut into a broken shape, and under rain they showed through the cloud. Each sits well
+  inside its cell, under a pixel and a half, and clouds and rain hide them (and the Milky Way).
+
+- *The bank rod asked for a long walk with nothing to show for it*: the bell now says what is on, and it is always worth it:
+  the bank rod's fish is picked when the bell rings (tench, rudd, crucian; carp from the fourth bank-rod level; eel and burbot
+  at night), heavier than the jetty's, and its card names it with the seconds left.
+- *The smokehouse*: its walls stood through the roof; the eaves sit above them now, and the tin chimney is a fieldstone stack.
+- *The fight's panel*: higher, just under the horizon where the fish is, and larger at a desktop.
+- *Trees through trees*: trees are placed on a four-metre grid with a minimum distance of 3.3 m; the woods stay as dense.
+
+**The first fight, explained calmly** (eleventh look). The owner: the fight's two rules (do not pull against a fish that flees,
+lean against one that pulls to a side) were only ever said in two words. Now each is a lesson, given once and kept with the
+save, during the first five catches (`&lesson` in the address shows them on any save): when one is due, the water eases almost to a stop (to 7%, over a fifth of a second), a card
+high above the panel names what the fish is doing and what the hand does about it, the panel's row it is about is ringed, and the
+hand shows the gesture under the panel. The box runs on once the hand has done it for half a second (and the card has stood at
+least 1.6 s): *It's on!* (hold to wind in), then at the first run *It bolts!* (let go), then at a later run *It pulls to the
+right* (hold and lean the other way). A lesson whose run ends first comes back at the next run. The card's timers run on the
+frame's own time, since reading is about real time; the fish, as always, on the box's.
+
+**The owner's list, checked again** (twelfth look). The owner asked whether every point had been looked at; two had not been
+fixed at their cause.
+- *Fish still split open*: the earlier fix (reading the painting inside its outline) was a guess at the wrong cause. The fins
+  and tail sit on a card through the fish's middle that carried the whole painting, body included, and it was one flat quad.
+  The wiggle bends the body per vertex; a quad has four, so the card stayed flat while the body curved away, and its painted
+  body cut out through a flank as a pale second half. The card is now 48 strips along the fish, bending with the body, and its
+  painting has the body erased (a second half of the fish's texture). Lesson: a part that has to move with another needs the
+  same vertices along the direction of the motion, not only the same shader.
+- *Tree shadows still jumped*: drawing the trees still in the shadow pass was not enough. The map is redrawn every twentieth
+  frame while the sun moves on, and a low sun's shadow of a 15 m tree is 80 m long: a fifth of a degree moves its tip more than
+  a metre. There are two maps now, and the newest fades in over the last before the next is drawn.
+- *Words for the mouse*: at a desktop the bite said "Tap!" and the catch card "tap to go on"; they say click.
+- Checked at a desktop and found right: the float shows only its painted tip and goes under at a bite; no light points in the
+  hut at night; stars small and hidden by rain; a garland's lines all from the rod's tip; the lifebuoy whole; the smokehouse's
+  roof over its walls and its stone chimney.
+
+**Stars and the hut's light, on the owner's GPU** (thirteenth look).
+- *Stars looked different on a real GPU*: they were drawn as broken corners and strokes there and as clean points here. Moving
+  the pixel-size derivative out of the per-pixel branch did not mend it: on the owner's GPU they were still the outlines of
+  little squares and triangles, the shapes where the sky's sphere cuts the cells of space the shader hashed into stars. The
+  stars are no longer made in the sky shader at all: 1600 fixed directions drawn as round points (`starP`, one draw at night),
+  a pixel or two across, hidden by the same cloud the sky draws and by rain. Lesson: a sky detail made from cells and
+  derivatives can look right in the software renderer and wrong on hardware; plain geometry looks the same everywhere.
+- *Stars slid across the sky*: they turned at 0.004 rad per second of the box's clock, a star's width in a few seconds. Now
+  0.0005: a whole night turns them a few degrees.
+- *The light points in the hut*: two large glow sprites with no source hung in the room. A storm lantern hangs from the rafters
+  now, its glass lit from dusk (a flag on the lantern-glass material, `uHutL`), with a small halo on the glass only.
+
+**Polish the owner chose** (fourteenth look).
+- *The hut at night*: the lantern lights the room now: a warm point light in `shade()` (`uHutP`, `uHutB`), full inside the hut's
+  box and outside only along rays that leave through the open window, so it does not shine through the walls. The water
+  mirrors the lit window: where a reflected ray meets the window's opening, a warm pane broken by the ripples.
+- *The float at a desktop*: it keeps a size the eye can find further out (0.21 of its distance instead of 0.16), and while a
+  fish has it, a ring spreads from where it went under every third of a second, on the box's clock.
+- *Night sounds*: a tawny owl far off now and then (the hoot or the kee-wick), frogs in the reeds from dusk, and under rain
+  near the hut the drum of drops on its roof, louder as you come near.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
