@@ -2550,6 +2550,13 @@ toasts covered the catch card (they wait until it is put away); the balance was 
 rack hid its door (it stands beside the house, each fish on a string); a garland's fish crowded and turned face-on (wider
 droppers, side-on); the rod is carried low away from the water's edge.
 
+**A desktop critic** (1280×800, the way the owner plays): 7/6, desktop UI 5, and **5**. Fixed: the landed catch hung behind its
+card on a wide screen (it hangs above it now, a garland too); before the mouse was taken a desktop was told to "swipe up" (it
+is told to click), and a lean said "Slide" (it says "Mouse ←"); the logbook was a 620-pixel column (four columns, all thirteen
+kinds in view) and the hut a narrow board (wider, five or six tags a row); the HUD was small for a large window (a sixth
+larger). Before: the carp became a mirror carp (a row of great flat scales, longer barbels), the Old One scarred and pale-eyed;
+the hut's window glows warm at dusk and night, and the jetty's lantern has a halo.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
