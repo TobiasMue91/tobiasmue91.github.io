@@ -2604,6 +2604,17 @@ fixed at their cause.
   hut at night; stars small and hidden by rain; a garland's lines all from the rod's tip; the lifebuoy whole; the smokehouse's
   roof over its walls and its stone chimney.
 
+**Stars and the hut's light, on the owner's GPU** (thirteenth look).
+- *Stars looked different on a real GPU*: they were drawn as broken corners and strokes there and as clean points here. The
+  pixel's size (`fwidth`) was taken inside the branch that only a lucky cell enters; a derivative in control flow that
+  neighbouring pixels skip is undefined, and the software renderer used for screenshots happens to compute it anyway. It is
+  taken before the branch now. Lesson: never call `fwidth`/`dFdx` under a condition that varies per pixel, and do not trust a
+  software renderer to show the fault.
+- *Stars slid across the sky*: they turned at 0.004 rad per second of the box's clock, a star's width in a few seconds. Now
+  0.0005: a whole night turns them a few degrees.
+- *The light points in the hut*: two large glow sprites with no source hung in the room. A storm lantern hangs from the rafters
+  now, its glass lit from dusk (a flag on the lantern-glass material, `uHutL`), with a small halo on the glass only.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
