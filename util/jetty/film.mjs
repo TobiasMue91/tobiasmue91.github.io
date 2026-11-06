@@ -17,7 +17,7 @@ for (const [name, q, js] of SC.filter((c, i, a) => !from || i >= a.findIndex(x =
   const p = await b.newPage({ viewport: { width: +w, height: +h }, deviceScaleFactor: 1 }); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.goto('http://localhost:8099/games/contents_may_vary.html?world=jetty&dpr=1&' + q, { waitUntil: 'domcontentloaded', timeout: 90000 });
   let fr = null; for (let k = 0; k < 80 && !fr; k++) { fr = p.frames().find(f => f.url() === 'about:srcdoc'); if (!fr) await p.waitForTimeout(250); }
-  await p.waitForTimeout(7000); if (js) { await fr.evaluate(js); await p.waitForTimeout(3500); }
+  for (let k = 0; k < 60; k++) { if (await fr.evaluate(() => !!(window.K && K.debug && K.debug.state()))) break; await p.waitForTimeout(1000); } await p.waitForTimeout(4000); if (js) { await fr.evaluate(js); await p.waitForTimeout(3500); }
   await p.screenshot({ path: pre + name + '.png', timeout: 180000 }); console.log(name, errs.join(' | ') || 'ok'); await p.close();
 }
 await b.close();
