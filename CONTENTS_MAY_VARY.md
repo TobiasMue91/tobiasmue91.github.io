@@ -2588,6 +2588,22 @@ least 1.6 s): *It's on!* (hold to wind in), then at the first run *It bolts!* (l
 right* (hold and lean the other way). A lesson whose run ends first comes back at the next run. The card's timers run on the
 frame's own time, since reading is about real time; the fish, as always, on the box's.
 
+**The owner's list, checked again** (twelfth look). The owner asked whether every point had been looked at; two had not been
+fixed at their cause.
+- *Fish still split open*: the earlier fix (reading the painting inside its outline) was a guess at the wrong cause. The fins
+  and tail sit on a card through the fish's middle that carried the whole painting, body included, and it was one flat quad.
+  The wiggle bends the body per vertex; a quad has four, so the card stayed flat while the body curved away, and its painted
+  body cut out through a flank as a pale second half. The card is now 48 strips along the fish, bending with the body, and its
+  painting has the body erased (a second half of the fish's texture). Lesson: a part that has to move with another needs the
+  same vertices along the direction of the motion, not only the same shader.
+- *Tree shadows still jumped*: drawing the trees still in the shadow pass was not enough. The map is redrawn every twentieth
+  frame while the sun moves on, and a low sun's shadow of a 15 m tree is 80 m long: a fifth of a degree moves its tip more than
+  a metre. There are two maps now, and the newest fades in over the last before the next is drawn.
+- *Words for the mouse*: at a desktop the bite said "Tap!" and the catch card "tap to go on"; they say click.
+- Checked at a desktop and found right: the float shows only its painted tip and goes under at a bite; no light points in the
+  hut at night; stars small and hidden by rain; a garland's lines all from the rod's tip; the lifebuoy whole; the smokehouse's
+  roof over its walls and its stone chimney.
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
