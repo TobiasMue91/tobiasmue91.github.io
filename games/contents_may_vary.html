@@ -11219,7 +11219,13 @@ body.card #hud,body.card #cast,body.card #bill,body.end #hud,body.end #cast,body
 <script>
 (() => {
 'use strict';
-const cv = document.getElementById('cv'), g = cv.getContext('2d');
+// Firefox draws a 2D canvas on the graphics card, and in this box that card's process went down within seconds of a
+// late-game night: the whole window greyed, and every large cached bitmap (the house's tile, the figures, the curtains)
+// came back blank. So in Firefox every canvas here is drawn by the processor (willReadFrequently keeps a canvas off the
+// card), at no more than 1.5 device pixels to the pixel; ?gpu brings the card back to try, ?cpu tries this elsewhere.
+const CPU = !location.search.includes('gpu') && (location.search.includes('cpu') || /Firefox\//.test(navigator.userAgent));
+const ctx2 = el => el.getContext('2d', CPU ? { willReadFrequently: true } : undefined);
+const cv = document.getElementById('cv'), g = ctx2(cv);
 const $ = id => document.getElementById(id);
 const { clamp, lerp, ease, hash, fmt } = K;
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -11245,7 +11251,7 @@ const X = x => ox + (x - view.cx) * view.s, Y = y => oy + (y - view.cy) * view.s
 const toWorld = (px, py) => ({ x: (px - ox) / view.s + view.cx, y: (py - oy) / view.s + view.cy });
 const fit = fr => ({ s: Math.min(inner.w / fr.w, inner.h / fr.h), cx: fr.x + fr.w / 2, cy: fr.y + fr.h / 2 });
 function resize() {
-  DPR = DIAG.dpr || Math.min(touch ? 1.75 : 2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; wide = W >= 900; filmW = W;
+  DPR = DIAG.dpr || Math.min(CPU ? 1.5 : touch ? 1.75 : 2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; wide = W >= 900; filmW = W;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   const top = wide ? 84 : 124, bottom = wide ? 14 : 104;
   inner.w = W - (wide ? 300 : 8); inner.h = H - top - bottom; ox = W / 2; oy = top + inner.h / 2;
@@ -11279,7 +11285,7 @@ function E(x, y, rx, ry, a = 0, s0 = 0, s1 = 6.2832) { const px = rx * Math.cos(
 const ell = (x, y, rx, ry, a = 0) => E(X(x), Y(y), Sc(Math.max(.1, rx)), Sc(Math.max(.1, ry)), a);
 const poly = pts => pts.forEach(([x, y], k) => k ? c.lineTo(X(x), Y(y)) : c.moveTo(X(x), Y(y)));
 const rot = (px, py, a, fn) => { c.save(); c.translate(X(px), Y(py)); c.rotate(a); c.translate(-X(px), -Y(py)); fn(); c.restore(); };
-const bg = document.createElement('canvas'), bgc = bg.getContext('2d');
+const bg = document.createElement('canvas'), bgc = ctx2(bg);
 let bgDirty = true;
 // where the browser says so, a lost and restored canvas has every cache painted again at once
 for (const el of [cv, bg]) el.addEventListener('contextrestored', () => { bgDirty = true; skyDirty = true; tile = null; dropSprites(); dropFigs(); grain = vign = grade = cur = null; });
@@ -11568,7 +11574,7 @@ const BIG = k => CORE.KIND[k][1] ? (CORE.KIND[k][1] === 1 ? 1.15 : 1) : 1.8;
 function sprite(k, look, r, noFlame) {
   const key = k + look + (look ? '' : r) + (noFlame ? 'n' : ''), s0 = sprites[key]; if (s0) return s0;
   const [w, h] = ITEM[k], s = Math.max(.12, view.s) * DPR * BIG(k), pad = 8, cw = Math.ceil((w + pad * 2) * s), ch = Math.ceil((h + pad * 2) * s);
-  const cnv = document.createElement('canvas'); cnv.width = cw; cnv.height = ch; const x = cnv.getContext('2d'), keep = c; c = x;
+  const cnv = document.createElement('canvas'); cnv.width = cw; cnv.height = ch; const x = ctx2(cnv), keep = c; c = x;
   x.translate(cw / 2, ch / 2); x.scale(s, s); x.lineJoin = 'round';
   const body = look === 2 ? '#c99a3e' : look === 1 ? INK : shade(r, .45);
   if (look) { x.strokeStyle = look === 2 ? 'rgba(255,236,170,.95)' : noFlame ? 'rgba(250,244,230,.9)' : RIM; x.lineWidth = (noFlame ? 2.6 : 1.8) * DPR / s; x.beginPath(); itemPath(k, w, h); x.stroke(); }
@@ -11692,7 +11698,7 @@ function figSprite(look, o, st, rim) {
     if (++figN > FIG_MAX) { dropFigs(); figN = 1; }
     const k = Math.max(.1, view.s) * DPR * SZ * 1.15, w = h * 1.5, top = h * 1.12;
     sp = document.createElement('canvas'); sp.width = Math.ceil(w * k); sp.height = Math.ceil((top + h * .06) * k);
-    const x = sp.getContext('2d'), keep = c; c = x; x.scale(k, k); x.translate(w / 2, top);
+    const x = ctx2(sp), keep = c; c = x; x.scale(k, k); x.translate(w / 2, top);
     figure(look, Object.assign({}, o, { walk: st, rim, lw: rim ? 6 / (view.s * SZ) : 1, ink: INK })); c = keep;
     sp = figSprites[key] = { cv: sp, w, top, hh: top + h * .06 };
   }
@@ -12037,8 +12043,8 @@ function paintTile() {
   const B = houseBox(), x0 = view.cx - (W / 2 + 40) / view.s, y0 = B.y - 120, x1 = view.cx + (W / 2 + 40) / view.s, y1 = Math.max(B.y + B.h, 0) + 900;
   if (!tile) tile = document.createElement('canvas');
   const tw = Math.ceil((x1 - x0) * view.s * DPR), th = Math.ceil((y1 - y0) * view.s * DPR);
-  if (tile.width !== tw || tile.height !== th) { tile.width = tw; tile.height = th; } else tile.getContext('2d').clearRect(0, 0, tw, th);
-  const tc = tile.getContext('2d'), kx = ox, ky = oy; tc.setTransform(DPR, 0, 0, DPR, 0, 0); c = tc;
+  if (tile.width !== tw || tile.height !== th) { tile.width = tw; tile.height = th; } else ctx2(tile).clearRect(0, 0, tw, th);
+  const tc = ctx2(tile), kx = ox, ky = oy; tc.setTransform(DPR, 0, 0, DPR, 0, 0); c = tc;
   // draw the world with the camera moved so that (x0, y0) lands on the tile's corner
   ox = -(x0 - view.cx) * view.s; oy = -(y0 - view.cy) * view.s;
   hills(); garden(); for (const r of CORE.roomsOf(S)) if (r !== 8) room(r); bones();
@@ -12081,7 +12087,7 @@ let grain = null, vign = null, grade = null, cur = null;
 function curtains() {
   if (!wide || !DIAG.film || zoom) return;
   if (!cur || cur.width !== cv.width || cur.height !== cv.height || cur.s !== view.s) {
-    cur = document.createElement('canvas'); cur.width = cv.width; cur.height = cv.height; cur.s = view.s; const x = cur.getContext('2d'); x.scale(DPR, DPR);
+    cur = document.createElement('canvas'); cur.width = cv.width; cur.height = cv.height; cur.s = view.s; const x = ctx2(cur); x.scale(DPR, DPR);
     // drawn back far enough that the gathered curtain at its narrowest stays clear of the house's walls on both sides
     const cw = Math.max(80, Math.min((W - Sc(HW + 160)) / 2 - 60, (W / 2 - Sc(HW / 2 + 140)) / 1.05)), tie = H * .62;
     for (const side of [0, 1]) {
@@ -12113,7 +12119,7 @@ function film() {
   if (!DIAG.film) return;
   const [r, gg, b] = tint(), w = cv.width, h = cv.height;
   g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
-  if (!grain) { grain = document.createElement('canvas'); grain.width = grain.height = 256; const x = grain.getContext('2d'), id = x.createImageData(256, 256); for (let k = 0; k < id.data.length; k += 4) { id.data[k] = id.data[k + 1] = id.data[k + 2] = Math.random() * 255; id.data[k + 3] = 22; } x.putImageData(id, 0, 0); }
+  if (!grain) { grain = document.createElement('canvas'); grain.width = grain.height = 256; const x = ctx2(grain), id = x.createImageData(256, 256); for (let k = 0; k < id.data.length; k += 4) { id.data[k] = id.data[k + 1] = id.data[k + 2] = Math.random() * 255; id.data[k + 3] = 22; } x.putImageData(id, 0, 0); }
   if (FX()) {
     const fr = Math.floor(now * 18);
     g.translate((fr * 97) % 256, (fr * 61) % 256); g.fillStyle = g.createPattern(grain, 'repeat'); g.fillRect(-256, -256, w + 512, h + 512); g.setTransform(1, 0, 0, 1, 0, 0);
@@ -12124,9 +12130,9 @@ function film() {
   // square stretched over the screen every frame, and that stretch alone cost more than everything else in the grade.)
   const key = r + ',' + gg + ',' + b;
   if (!grade || grade.width !== w || grade.height !== h || grade.key !== key) {
-    if (!vign) { vign = document.createElement('canvas'); vign.width = vign.height = 64; const x = vign.getContext('2d'), vg = x.createRadialGradient(32, 29, 18, 32, 29, 46); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)'); x.fillStyle = vg; x.fillRect(0, 0, 64, 64); }
+    if (!vign) { vign = document.createElement('canvas'); vign.width = vign.height = 64; const x = ctx2(vign), vg = x.createRadialGradient(32, 29, 18, 32, 29, 46); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)'); x.fillStyle = vg; x.fillRect(0, 0, 64, 64); }
     if (!grade) grade = document.createElement('canvas');
-    grade.width = w; grade.height = h; grade.key = key; const x = grade.getContext('2d');
+    grade.width = w; grade.height = h; grade.key = key; const x = ctx2(grade);
     x.fillStyle = `rgb(${key})`; x.fillRect(0, 0, w, h); x.drawImage(vign, 0, 0, w, h);
   }
   g.globalCompositeOperation = 'multiply'; g.drawImage(grade, 0, 0); g.globalCompositeOperation = 'source-over';
@@ -12234,7 +12240,7 @@ function castList() {
 }
 // a cameo: head and shoulders in an oval, drawn once
 function cameo(cnv, look) {
-  const x = cnv.getContext('2d'), h = hOf(look), s = cnv.width / (h * .5), keep = c;
+  const x = ctx2(cnv), h = hOf(look), s = cnv.width / (h * .5), keep = c;
   x.fillStyle = '#d9d2bf'; x.fillRect(0, 0, cnv.width, cnv.height);
   c = x; x.save(); x.translate(cnv.width * .45, cnv.height * .46 + h * .885 * s); x.scale(s, s); figure(look, { lw: 1, hat: 0 }); x.restore(); c = keep;
 }
