@@ -2557,6 +2557,21 @@ kinds in view) and the hut a narrow board (wider, five or six tags a row); the H
 larger). Before: the carp became a mirror carp (a row of great flat scales, longer barbels), the Old One scarred and pale-eyed;
 the hut's window glows warm at dusk and night, and the jetty's lantern has a halo.
 
+**The owner at the desktop** (tenth look).
+- *Fish that gaped for a few frames*: the lofted body read the painting right up to its outline, where the painting's alpha falls;
+  the cut-out then opened slits along the back and belly whenever the mip level changed. The body reads the painting a little
+  inside its outline now.
+- *Tree shadows that jumped*: the shadow map is redrawn every twenty frames, and the trees swayed in it, so each redraw moved the
+  shadows at once. The shadow pass draws the trees still.
+- *Two floating lights in the hut at night*: the window's glow points are seen only from outside, more than three metres off.
+- *The float on the water*: it was drawn after the water, so all of it showed above the surface. Floats are drawn before the
+  water now, and the water hides what is under it: only the painted tip stands out, at a bite less.
+- *A garland's lines*: every line runs from the rod's tip straight to a mouth.
+- *The fish's shadow pointed elsewhere than the fish*: the dark shape in the water took the wake's direction; it takes the 3D
+  fish's own heading now.
+- *Stars*: a star near its cell's edge was cut into a broken shape, and under rain they showed through the cloud. Each sits well
+  inside its cell, under a pixel and a half, and clouds and rain hide them (and the Milky Way).
+
 ## Lessons from the boxes so far
 
 - **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours

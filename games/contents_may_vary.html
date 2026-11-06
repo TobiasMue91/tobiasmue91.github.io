@@ -14465,12 +14465,14 @@ void main() {
     float r = uStar; vec3 ds = vec3(d.x * cos(r) - d.z * sin(r), d.y, d.x * sin(r) + d.z * cos(r));
     // stars: a point at its own place in each lucky cell, about a pixel across and anti-aliased; most faint, a few bright,
     // warm to blue; a quiet twinkle; and the faint band of the Milky Way across them
-    vec3 q = ds * 230., c = floor(q), f = fract(q) - .5; float hs = h13(c), vis = smoothstep(.0, .2, d.y) * (1. - a);
-    if (hs > .9955) { vec3 off = (vec3(h13(c + 1.), h13(c + 2.), h13(c + 3.)) - .5) * .5; float dd = length(f - off), px = length(fwidth(q)) * .7 + .02;
+    // each star a point well inside its cell (a star at a cell's edge was cut into a broken shape), under a pixel and a half across;
+    // clouds and rain hide them
+    vec3 q = ds * 230., c = floor(q), f = fract(q) - .5; float hs = h13(c), vis = smoothstep(.0, .2, d.y) * (1. - smoothstep(.15, .5, a)) * (1. - smoothstep(.2, .6, uCloud));
+    if (hs > .9955 && vis > .01) { vec3 off = (vec3(h13(c + 1.), h13(c + 2.), h13(c + 3.)) - .5) * .3; float px = length(fwidth(q)) * .5, dd = length(f - off);
       float br = .25 + 2.6 * pow(h13(c + 4.), 6.), tw = .85 + .15 * sin(uTime * (2. + 3. * h13(c + 6.)) + hs * 60.);
-      col += mix(vec3(1., .86, .72), vec3(.78, .87, 1.), h13(c + 5.)) * smoothstep(px * 1.5, px * .2, dd) * br * tw * vis * uNight; }
+      col += mix(vec3(1., .86, .72), vec3(.78, .87, 1.), h13(c + 5.)) * (1. - smoothstep(px * .35, px * 1.1, dd)) * br * tw * vis * uNight; }
     float mw = exp(-pow(dot(ds, normalize(vec3(.35, .6, -.72))) * 5., 2.)) * (vn(ds * 9.) * .6 + vn(ds * 23.) * .4);
-    col += vec3(.55, .6, .75) * mw * .05 * vis * uNight;
+    col += vec3(.55, .6, .75) * mw * .05 * vis * uNight;   /* the Milky Way, gone under cloud as well */
     float md = dot(d, uMoon); col += vec3(.9, .92, 1.) * (smoothstep(.9994, .9996, md) * 1.6 + pow(max(md, 0.), 60.) * .14) * uNight;
   }
   col = mix(col, uFog, smoothstep(.1, 0., d.y) * .7);
@@ -15122,7 +15124,7 @@ const waterP = prog(`#version 300 es
 layout(location=0) in vec2 aQ; uniform mat4 uVP; out vec3 vP; void main() { vP = vec3(aQ.x, 0., aQ.y); gl_Position = uVP * vec4(vP, 1.); }`,
 `#version 300 es
 precision highp float; ${COMMON}
-uniform sampler2D uRefl, uBed, uWave, uScene; uniform vec3 uMoon, uJet; uniform vec2 uRes; uniform vec4 uRip[10], uBedR, uWake; uniform float uRain, uNight, uWakeS, uRefr; uniform vec4 uFishW; in vec3 vP; out vec4 o;
+uniform sampler2D uRefl, uBed, uWave, uScene; uniform vec3 uMoon, uJet; uniform vec2 uRes; uniform vec4 uRip[10], uBedR, uWake; uniform float uRain, uNight, uWakeS, uRefr; uniform vec4 uFishW; uniform vec2 uFishD; in vec3 vP; out vec4 o;
 float depthAt(vec2 p) { vec4 t = texture(uBed, (p - uBedR.xy) / uBedR.zw); return -(.5 - (t.r * 255. * 256. + t.g * 255.) / 65535.) * 8.; }
 vec2 slope(vec2 uv) { return texture(uWave, uv).rg * 2. - 1.; }
 // rain on still water: in every cell of a grid a drop lands now and then, somewhere new each time, and a ring runs out from it
@@ -15154,7 +15156,7 @@ void main() {
   g += onJ * jp / (pl + 1e-3) * sin(pl * 30. - t * 4.) * exp(-pl * 6.) * .04;
   // the fish on the line, seen from above: a dark body in the water along its way, and a swirl where the line goes in
   float fishSh = 0.;
-  if (uFishW.w > .01) { vec2 q = p - uFishW.xy, dr = uWake.zw; float al = dot(q, dr), ac = dot(q, vec2(-dr.y, dr.x)), L = uFishW.z;
+  if (uFishW.w > .01) { vec2 q = p - uFishW.xy, dr = uFishD;   /* along the fish's own body, as the 3D fish lies */ float al = dot(q, dr), ac = dot(q, vec2(-dr.y, dr.x)), L = uFishW.z;
     fishSh = smoothstep(1., .45, length(vec2(al / (L * .8), ac / (L * .26)))) * uFishW.w;   /* drawn a little larger than life: a shape the eye can follow ten metres out */
     float l = length(q) + 1e-3; g += vec2(-q.y, q.x) / l * sin(l * 18. - t * 6.) * exp(-l * 2.2) * .12 * uFishW.w; }
   float lap = smoothstep(.35, 0., dep); g *= 1. - lap * .5;
@@ -15457,7 +15459,7 @@ function fishModel(k, gold) {
   // body space: x along the fish from the snout (0) to the tail's tip (about 1.1), y up, z across; one unit is the body's length
   const bx = t => t, by = Y => (F.cy - Y) / F.len;
   const ring = t => { const a = F.top(t), b = F.bot(t), mid = (a + b) / 2, hh = (b - a) / 2; const out = [];
-    for (let i = 0; i <= R; i++) { const ang = i / R * TAU, Y = mid - cos(ang) * hh, z = sin(ang) * hh * thick / F.len; out.push([bx(t), by(Y), z, -cos(ang) * hh, sin(ang) * hh * thick, F.X(t) / W2, Y / H2]); } return out; };
+    for (let i = 0; i <= R; i++) { const ang = i / R * TAU, Y = mid - cos(ang) * hh, Yt = mid - cos(ang) * hh * .86, z = sin(ang) * hh * thick / F.len; out.push([bx(t), by(Y), z, -cos(ang) * hh, sin(ang) * hh * thick, F.X(min(t, .9)) / W2, Yt / H2]); } return out; };   /* the painting read inside its outline: at the rim its alpha falls and the cut-out opened gaps */
   const T = [0, .015, .04, .08, .13, .2, .3, .42, .55, .68, .8, .88, .92];
   for (let s = 0; s < T.length - 1; s++) { const A = ring(T[s]), B = ring(T[s + 1]);
     for (let i = 0; i < R; i++) for (const q of [A[i], B[i], B[i + 1], A[i], B[i + 1], A[i + 1]]) { const n = V3.norm([s ? 0 : -1, q[3], q[4] / thick * .9]); v.push(q[0], q[1], q[2], n[0], n[1], n[2], q[5], q[6]); } }
@@ -16322,7 +16324,7 @@ function physics(dt) {
     for (let j = 0; j < 2; j++) parts.push({ x, y: DECK + .03, z, vx: (Math.random() - .5) * .6, vy: .6 + Math.random() * .6, vz: (Math.random() - .5) * .6, t: 0, life: .35, s: .008, c: [.8, .85, .9, .7], g: 1, dry: 1 }); }
   fliesStep(dt);
   // at dusk and night the hut's window glows warm, a light to walk back to (a soft glow in the window, no lamp to see)
-  if (I.night > .15 || u > .58) { const gy = ground(SHOP.x, SHOP.z) - .05 + 1.3, k = max(I.night, smooth(.58, .64, u));
+  if ((I.night > .15 || u > .58) && hypot(me.x - SHOP.x, me.z - SHOP.z) > 3) { const gy = ground(SHOP.x, SHOP.z) - .05 + 1.3, k = max(I.night, smooth(.58, .64, u));
     parts.push({ x: SHOP.x - 1.05 - .02, y: gy, z: SHOP.z, vx: 0, vy: 0, vz: 0, t: 0, life: dt * 1.01, s: 1.4, c: [1.4, .9, .45, .55 * k], g: 0 });
     parts.push({ x: SHOP.x - .4, y: gy + .1, z: SHOP.z, vx: 0, vy: 0, vz: 0, t: 0, life: dt * 1.01, s: .5, c: [2, 1.4, .7, .9 * k], g: 0 }); }
   if (I.lampC && I.lampC[0] > .1) parts.push({ x: I.lamp[0], y: I.lamp[1], z: I.lamp[2], vx: 0, vy: 0, vz: 0, t: 0, life: dt * 1.01, s: .55, c: [1.6, 1.05, .5, .6 * min(1, I.lampC[0] / 1.6)], g: 0 });   /* the lantern's halo */
@@ -16379,7 +16381,7 @@ function shadowPass(pal) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, smFB); gl.viewport(0, 0, SMN, SMN); gl.clear(gl.DEPTH_BUFFER_BIT); gl.colorMask(false, false, false, false);
   gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(2, 4);
   gl.useProgram(depthLandP.p); gl.uniformMatrix4fv(depthLandP.u.uVP, false, VP); gl.bindVertexArray(land.vao); gl.drawElements(gl.TRIANGLES, land.n, gl.UNSIGNED_INT, 0);
-  gl.useProgram(depthP.p); gl.uniformMatrix4fv(depthP.u.uVP, false, VP); gl.uniform1f(depthP.u.uTime, now); gl.uniform1f(depthP.u.uWind, 1);
+  gl.useProgram(depthP.p); gl.uniformMatrix4fv(depthP.u.uVP, false, VP); gl.uniform1f(depthP.u.uTime, now); gl.uniform1f(depthP.u.uWind, 0);   /* still: the map is redrawn only every so often, a swaying shadow jumped */
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ATLAS.tex); gl.uniform1i(depthP.u.uAtlas, 1);
   for (const k of ['oak', 'ash', 'oakF', 'ashF', 'pineF', 'pineF2', 'pine', 'pine2', 'wil', 'reed', 'jetty']) { const o = SET[k]; if (!o || !o.count) continue; gl.bindVertexArray(o.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, o.n, o.count); }
   gl.disable(gl.POLYGON_OFFSET_FILL); gl.colorMask(true, true, true, true); gl.bindFramebuffer(gl.FRAMEBUFFER, null); VP = keep;
@@ -16470,8 +16472,8 @@ function render() {
   }
   flies(u);
   if (S.lv.smoke) { const z = SHORE + 8.5 + .85 + .8, y = ground(-5.5, SHORE + 8.5) - .05 + 1.28; for (let i = 0; i < 3; i++) ribbon([[-5.95 + i * .45, y, z], [-5.95 + i * .45, y - .1, z]], .0015, .0015, [.6, .55, .45, .9]); }   /* each fish on its string */
-  if (landA) { garlandTip = rtip; const p = landPos(), gh = garlandH(), pts = gh ? [rtip, V3.add(p, [0, gh, 0]), p] : [rtip, [p[0], p[1] + fishLen(landA.k, landA.w) * .02, p[2]]]; ribbon(pts, .0012, .0012, [.92, .92, .86, .7]);
-    for (const d of garlandDrops()) ribbon([d.on, d.at], .0008, .0008, [.9, .9, .85, .6]); }
+  if (landA) { garlandTip = rtip; const p = landPos(), pts = [rtip, [p[0], p[1] + fishLen(landA.k, landA.w) * .02, p[2]]];   /* every line from the tip straight to a mouth */ ribbon(pts, .0012, .0012, [.92, .92, .86, .7]);
+    for (const d of garlandDrops()) ribbon([rtip, d.at], .0008, .0008, [.9, .9, .85, .6]); }
   gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, lineD, 0, lineN * 7);
   let n = 0;
   for (const p of parts) { if (n >= PMAX) break; const a = p.ff ? (.5 + .5 * sin(now * 4 + p.x * 9)) * min(1, p.t, p.life - p.t) : p.c[3] * (1 - p.t / p.life); ptD.set([p.x, p.y, p.z, p.smoke ? p.s * (1 + p.t) : p.s, p.c[0] * (p.ff ? 3 : 1), p.c[1] * (p.ff ? 3 : 1), p.c[2], a], n * 8); n++; }
@@ -16480,11 +16482,14 @@ function render() {
   const fishes = fishList(fp);
   const extras = (mirror, under) => {
     for (const f of fishes) if (!!f.under === under && (!mirror || (!f.under && !f.extra))) drawFish3(f, pal, mirror);
-    if (under) return;
-    uniforms(thingP, pal, mirror);
+    if (under || mirror) {   // the floats go in before the water: the water then hides the part under it, as a real float sits half sunk
+      uniforms(thingP, pal, mirror);
     // a float far out keeps a size the eye can find (as a real one's bright tip does), never a speck
     const fsz = q => max(1.5, hypot(q[0] - eyeP[0], q[2] - eyeP[2]) * .16), fl = (floatAt ? [[floatAt[0], floatAt[1], floatAt[2], 1.5, 1, 1, 1, 0], ...podFloats] : podFloats).map(q => { q[3] = fsz(q); return q; });
     if (fl.length) { const o = SET.float; setInst(o, fl); gl.bindVertexArray(o.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, o.n, o.count); }
+    }
+    if (under) return;
+    uniforms(thingP, pal, mirror);
     if (!mirror && rodN) { gl.bindVertexArray(rodVAO); gl.drawArrays(gl.TRIANGLES, 0, rodN); }
     uniforms(lineP, pal, mirror); gl.bindVertexArray(lineVAO); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.drawArrays(gl.TRIANGLES, 0, lineN); gl.disable(gl.BLEND);
     if (n) { uniforms(ptP, pal, mirror); gl.uniform1f(ptP.u.uPx, (mirror ? RH : cv.height) * .5); gl.bindVertexArray(ptVAO); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.drawArrays(gl.POINTS, 0, n); gl.depthMask(true); gl.disable(gl.BLEND); }
@@ -16506,7 +16511,8 @@ function render() {
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, sceneTex); gl.uniform1i(waterP.u.uScene, 6);
   gl.uniform3f(waterP.u.uJet, SHORE + 3 - .3, jettyEnd(), 2.1);
   gl.uniform4f(waterP.u.uWake, wake.x, wake.z, wake.dx, wake.dz); gl.uniform1f(waterP.u.uWakeS, wake.s);
-  { const Fw = S.phase === 'fight' && S.fish, q = Fw && fp; gl.uniform4f(waterP.u.uFishW, q ? q[0] : 0, q ? q[1] : 0, Fw ? max(1.1, fishLen(Fw.k, Fw.w) * 1.3) : 1, q && !jumpA ? (Fw.mode === 'sulk' ? .35 : Fw.mode === 'run' ? 1 : .75) : 0); } gl.uniform1f(waterP.u.uRefr, DIAG.refr ? 1 : 0);
+  { const ff = fishes.find(f => !f.extra && f.under), fd = ff ? [cos(ff.yaw), -sin(ff.yaw)] : [0, -1]; gl.uniform2f(waterP.u.uFishD, fd[0], fd[1]);
+    const Fw = S.phase === 'fight' && S.fish, q = Fw && fp; gl.uniform4f(waterP.u.uFishW, q ? q[0] : 0, q ? q[1] : 0, Fw ? max(1.1, fishLen(Fw.k, Fw.w) * 1.3) : 1, q && !jumpA ? (Fw.mode === 'sulk' ? .35 : Fw.mode === 'run' ? 1 : .75) : 0); } gl.uniform1f(waterP.u.uRefr, DIAG.refr ? 1 : 0);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, bedTex); gl.uniform1i(waterP.u.uBed, 2); gl.uniform4f(waterP.u.uBedR, BED.x0, BED.z0, BED.w, BED.d);
   const rp = new Float32Array(40); rips.forEach((r, i) => rp.set(r, i * 4)); gl.uniform4fv(waterP.u.uRip, rp); gl.uniform1f(waterP.u.uRain, rainA); gl.uniform1f(waterP.u.uNight, I.night); gl.uniform3fv(waterP.u.uMoon, I.moon);
   gl.depthMask(false); gl.bindVertexArray(waterVAO); gl.drawArrays(gl.TRIANGLES, 0, waterVAO.n); gl.depthMask(true);
