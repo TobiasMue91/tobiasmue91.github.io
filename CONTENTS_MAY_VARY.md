@@ -45,6 +45,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    began at 145 KB with its scenes, close-ups and diagnostic switches.
    Still Water may weigh **300 KB**: for its refinement session (November 2026) the owner set the cap there, calling it arbitrary
    anyway; the box passed 130 KB with its leaf-card woods, the fish in 3D, the remade fight and the guitar.
+   The owner raised it to **350 KB** (November 2026) for the work toward a commercial feel (the catch's ceremony, gestures with a
+   licensed hand, upgrades that show what they do), when the box stood at 287 KB with three small CC0 photographs in it.
 3. **As different as possible.** Every box differs from every box before it. The ledger below
    records each box on seven axes — the verb (what the hands do), the loop, the art medium, the
    palette, the era or genre, the sound, and the interface metaphor. A new box must be new on at least
@@ -2216,9 +2218,9 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   card, light comes out on the box's own clock, and the shell dives into the tin's mouth. `revisit` brings a finished jetty
   back with the book and tackle, and the Old One takes the bait again.
 - *Tools*: `?world=jetty&scene=` `min<n>` (the eager bot's game), `fight:<kind>`, `jump`, `land:<kind>`, `night`, `dark`,
-  `bell`, `old`; `?tod=0..1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
+  `bell`, `old`, `pods`, `garland`, `garland:landed`; `?tod=0..1`, `?rain=0|1`, `?fps`, `?dpr=1`, `?fx=0`, `?refl=0`, `?shadow=0`, `?a2c=1` (leaves through alpha to coverage,
   which dithered in the software renderer); `K.debug.look(x, z, yaw, pitch)`, `tod(u)`, `snap()` (renders, then reads the canvas).
-- *Controls*: a mouse looks the way it moves; a finger drags the world. The owner found the mouse's up and down inverted.
+- *Controls*: a mouse looks the way it moves; so does a finger (it first dragged the world as on a map, which the owner found inverted on both axes). The owner found the mouse's up and down inverted.
   Then, at the owner's wish, the first click with a mouse takes the pointer (pointer lock) and puts the whole page in full
   screen (the parent's document, so the shell's menu stays): the mouse looks without dragging, a held click winds up a cast
   and throws on release (the view turns to the lake if it faced away), a click strikes, a held click reels and moving the
@@ -2258,7 +2260,315 @@ the rod a ribbon); the second rod's bell needs the walk to matter; stickers; cri
   fonts.gstatic.com came slowly through the session's proxy; the box built in about 150 ms. The browser suite's 30-second
   `goto` can fail on that, not on the box. The box now draws its first heavy frame only after the page has loaded.
 
+**The second refinement session** (November 2026, the owner's seven points).
+- *Foliage.* The atlas goes up premultiplied and the shader divides the alpha back out, so the black of the clear texels no
+  longer bleeds into every rim through the mipmaps (crowns no longer darken outward, blades no longer toward their tips); with
+  the black gone the grass tips were straw-yellow and are now a dry olive, the pines darker. The oak tile's twigs began below
+  its leaves and stuck out of every card as a fan of black spikes; they now stay inside the leaf mass. The willow is rebuilt
+  from how a weeping willow grows (a short trunk, five limbs that climb and arch over, unbranched hanging shoots all along
+  them, longest at the outer end, so the curtain is a rounded dome down to the grass; narrow cards with ragged lower ends;
+  shoots draped over the top of every limb so no bare bow shows). `tube()` takes the sway at its start (`s0`), so a bulrush
+  head built on a stalk's tip sways with it, and caps (`caps`: 1 start, 2 end), so posts are solid. It also ignored the first
+  element of its material vector: the float's red tip and white band and every bit of brass had never shown.
+- *Water* (the owner chose the techniques of three.js's Water and Water2 in the box's own renderer over a port). A tileable
+  field of slopes baked at start from sine waves with whole-number wave vectors, sampled in three layers that drift apart; a
+  breeze that ruffles the water in patches (cat's paws) and leaves calm lanes; refraction from a copy of the frame taken
+  before the water is drawn (a `blitFramebuffer`, not a draw call); Schlick's fresnel with water's 0.02; sun glints only off
+  the steep sides of ripples; foam broken by noise at the bank and round every post, with a ring round each post.
+- *The canvas's alpha.* Cut-out edges and blended lines wrote an alpha below 1, which a page shows as a pale fringe round every
+  leaf (white "snow" on the trees in rain). The frame now writes colour only after its clear.
+- *Rain* (the owner: single drops). Streaks, as Tatarchuk's ATI rain work and every game since: one instanced draw of thin
+  quads placed by a hash of their number in a box that stays put in the world, falling on the shader's clock, brighter against
+  the light; two layers of ring cells in the water's slopes; the light greys and dims, the haze thickens with the shower
+  (`uMist`), shadows fade, and all of it eases in and out over seconds (`rainA`), never at a switch; the sound is a bright
+  hiss over a dull body with single plinks on the water and taps on the boards; splashes jump off the boards round you.
+  `?rain=1` holds a shower for captures.
+- *Running and reeling in.* Shift runs; a second tap or click on the spot you are walking to runs there (a tip says so once
+  on the first long walk); walking slides along an edge rather than stopping dead. A line out by mistake comes back with the
+  *Reel in* card (bottom right while the float is out), a swipe down, R, or the right button with the mouse taken; the float
+  skims home across the water and rises to the tip.
+- *Escalation* (the owner chose rods on rests with bite alarms out of rests, a paternoster, and a feeder swim with a whip).
+  *Rod on a rest* (8 levels) sets another rod on the end's rails, alternately left and right, lines fanned out over the water;
+  each bites on its own clock (11 times the hand's mean wait), a fish takes it and runs, the alarm sounds in the rod's own pitch
+  and its LED flashes, the hanger snaps up, and the hand picks it up (tap the rod, the card, or its number) and plays it;
+  thirty seconds untaken and it is off. *Self-hooking rigs* (3 levels) let a fish whose pull the rig can hold (0.9, 1.7, 2.7)
+  hook itself; the rest winds it into a keepnet hung off the end, a price tag rises off the rod, and it is paid and written in
+  the book. With the hand rod and the bank rod that is ten lines. The Old One now comes to a lake full of lines (every rest
+  out) and may take a rest's bait, its run unlike any other. Version 2 of the rules; `migrate` adds the rests to an old save.
+- *Measured.* The first build stalled the eager bot past 150 minutes: it took every alarm, so its own line never went out
+  again, it never shopped (it shopped only when idle) and the Old One, then only on the hand's line, never came. Counted by
+  cause with a log of the bot's game (`hookedH` stuck at 49 after minute 35). Now the bots shop between fights, the rests
+  bite half as often, the Old One can come on a rest. Pacing: eager 45.8 to 47.8 min, casual 49.7 to 54.7, the longest wait
+  3.6 min; the rests come from minute 14 and the eighth just before the end. The people in the rules (`naive.mjs`) are where
+  they were: holding alone loses nearly everything from the tench on, leaning is the skill. Draws: 35 a frame (budget 45).
+- *Critic round 1* (fifteen phone frames and close-ups): 6/6/5/6/4 and **4**. Fixed: the fight showed nothing in the world (a
+  wake now opens behind a running fish at Kelvin's angle, from the fish's own motion, with a boil where the line goes in); the
+  rod stood straight in a fight unless the finger was down (a rod with a fish on is always loaded); floats far out were specks
+  (they keep a size the eye can find); grass and reeds glowed like lamps and stood like wallpaper (less light through blades,
+  darker, tufts of every size, a quarter sun-dried); the lantern at the end was a cut-off blob at a phone's left edge (it hangs
+  behind where you stand to cast); pale smears on the water near the rests (every running rest set a ring nearly every frame,
+  and the refraction followed their steep slopes: rings now come at a pace, the refraction's bend is bounded); which rod was
+  running could not be told (a numbered ring in the rod's colour over its alarm, or at the screen's edge pointing the way, and
+  a bell for the bank rod); the shop strip kept spent cards in front (they go to its end); dozing was only a sentence (the lids
+  come down from above and below); the rain was thin and the boards stayed dry (denser streaks, wet dark shining boards).
+  Still open from it: no hands on the rod (rule 16: a licensed model or none), the landed fish read as a cut-out to the critic,
+  the logbook's fish too alike, dusk without a low sun on the water, the boards' texture smeared.
+- *Critic round 2*: 6/6/4/5/5 and **3** (critics differ by a point or two from round to round on the same frames). Fixed: clouds
+  lit white at night (a cloud is a darker shape against the stars), the same cloud in the same place in every frame (the sky
+  drifts with the game's clock, a day's worth of drift between one dawn and the next, never a jump), floats still specks far out
+  (larger with distance), the mooring post a cut-off block at a phone's left edge (you start just past it). Still open, and
+  now the largest: the painted, outlined fish (card, logbook, the landed fish in 3D) against the lit lake read as two games; the
+  logbook's kinds too alike in outline; the jetty's boards plain at a phone's size; the shop strip and the parchment cards
+  cover the lower fifth and read as a template to the critic (a tackle-box drawer would clear it); dusk without a low sun's
+  path on the water; no hands.
+- *The guitar, heard at last by someone*: `K.debug.music(seconds, hour)` renders the box's own music code into an
+  OfflineAudioContext and returns a WAV; measured, the day plays at about -17 dB with no gaps, the night is harmonics over
+  silence.
+
+**The third look** (November 2026, the owner after playing: "many fish on one rod would satisfy more than working many rods").
+- *The paternoster* (the owner chose a garland that fights at once, and rests that fish alone). `pater` (9 levels) puts more
+  hooks on droppers along the hand's line, up to ten. While a fish is on and still out past three metres, the commotion draws
+  others to the free hooks (`joinRate`, more with better bait); each runs and rests its own way, pulls on the same line and
+  tires, a garland reels in a little slower, and the line holds or snaps for all of them. A jumper that throws its hook leaves
+  the rest on, the strongest leading. The garland is landed, booked and paid together; it hangs before you on its droppers, the
+  card says "A garland of 7" with every kind and the sum, and a run up the scale plays one note per fish. Under the water the
+  others follow the lead as dark shapes (a pale belly at half darkness read as a ghost). The Old One now waits for the full
+  paternoster and never joins a garland. Measured with people in the rules at the 4th, 7th and 10th hook: someone who only
+  holds lands 63 to 83 % of garlands, the one who leans every one, about eight or nine fish a garland at ten hooks, fifteen
+  seconds a fight. Pacing: eager 38.5 to 48.7 min, casual 45.6 to 50.4, the longest wait 3.6.
+- *The rests fish alone*: no alarms to answer; what the rig can hold (0.9, 1.8, 2.8, anything) is wound into the keepnet,
+  anything stronger runs and is off. Version 3 of the rules; `migrate` clears an old save's alarms.
+- *Softer guitar*: the pluck is a fingertip's (noise smoothed twice), a three-tap average in the string's loop takes the high
+  overtones down sooner, a slower onset, the tone cut at 2.3 kHz, more room, a lighter thumb. Measured on the offline render:
+  the spectral centroid fell from about 2200 Hz to 1050, the energy above 2 kHz from 12 % to 1 %, the strings within 7 cents.
+- *Trees, again*: a broadleaf is grown as an oak or an ash grows: a short, stout trunk flaring into its roots, limbs leaving at
+  different heights and forking once, twenty-odd clumps of smaller cards over an uneven dome (a cloud of clouds, not a ball),
+  each clump its own shade, dark beneath and inside. Cards seen edge-on fade out (their true face normal from `dFdx`/`dFdy`)
+  instead of standing as slivers; bark has long furrows between plates and moss low down; twice the undergrowth closes the
+  woods so no colonnade of stems shows under far crowns.
+
+**A graphics pass** (November 2026, before the owner's next look).
+- *Fish as field-guide plates*: the outlined, cel-filled fish were the critics' plainest giveaway. `drawFish` now paints volume
+  (a soft rim shade blurred inside the body, light along the upper flank, shade under the belly), scales as glints of light
+  on their rims at random strength, see-through fins with their rays and a lighter edge, sitting where each kind has them
+  (`FINS`: the perch's and zander's spiny first dorsal, the pike's far back, the bream's long anal fin, the carp's long dorsal,
+  the tench's rounded fins, the wels's long fin beneath), a gill cover with a soft shadow, an iris with a pupil and a glint, and
+  a fine edge in the body's own dark instead of black ink. The eel tapers to its tail inside a narrow fin fringe. A deep fish is
+  drawn smaller on its plate so its fins stay on it. The same painting wraps the 3D fish, so the lake's fish changed with it.
+  `K.debug.fishArt(kind)` returns one plate.
+- *The jetty*: grain along every board and up every post (in world space), knots bending it, tops weathered silver, two nail
+  heads over each stringer; the shadow's normal bias doubled (striped acne on round posts).
+- *Light*: a low sun lays a broad gold path over the ripples; the sun's reflection near you breaks into sparks (a high sun's
+  reflection on the smooth near water read as a pale smear on the lens; three critics saw it, found by switching the water's
+  terms off one at a time); shadows show on water only faintly; in the dark colours fade to blue-grey (`tone()`), so the night
+  is moonlit, not green.
+- *Plants*: greener, darker reeds and grass; bulrushes each with their own head; a second, taller pine and pines from 0.7 to 1.45
+  in size; a quieter willow; lily pads green, not black far out.
+- *Critic round 3* (graphics only): 5/4/5 and **3**. Still open from it: the HUD's parchment cards read as web UI to the critic,
+  hints over the water, the shore a hard seam with no muddy bank, the rope round the mooring post a stack of beads.
+- Draws: 38 a frame (budget 45) with the second pine.
+
+**The owner's fourth look** (November 2026) and what it found.
+- *The garland's lines* did not meet: the extra fish hung by their middle and their droppers left the main line high up near
+  the tip. A paternoster's droppers sit at even steps on the main line just above the lead, short, each fish by its mouth.
+  Lifted, the garland hangs upright as a paternoster does (the line from the rod's tip to the top of a short run, droppers left
+  and right in turn, the lead at the bottom): along the slanting line to the tip, the topmost fish came at the eye.
+- *Wood that looked wrong everywhere*: the grain was laid in world coordinates, so it ran right only on boards lying across the
+  jetty; on the bench, its legs and every beam it ran across the piece as zebra stripes, too strong and fine enough to shimmer.
+  `cuboid()` now gives wood u along its longest side and v across it, in metres, offset per piece; round wood (`tube()` with
+  material 0) takes v round its girth in metres; the shader lays long streaks, fine lines that fade before they would alias
+  (`fwidth`), and a knot now and then.
+- *Stars* were raster cells switched on whole (little squares, blinking as one). Each is now a point at its own place in its
+  cell, about a pixel across and anti-aliased, faint to bright on a power law, warm to blue, a quiet twinkle, and a faint
+  Milky Way.
+- *Crowns that came off their wood in the wind*: the shader moves a vertex by its sway times its height, and leaf cards, limbs
+  and trunks each had sways of their own. A tree now has one sway field read by every part (`stube()` for its tubes); a willow's
+  hanging shoot starts with the limb's movement at its top and swings more below.
+- *A wake that flipped*: its V followed the smoothed velocity's direction, so a fish turning about turned it at once. The V now
+  turns at most 1.2 radians a second, and while the fish swims against it the old wake dies away before a new one builds.
+- *Fish that gaped*: the lofted body ended open at the root of the tail card, hollow inside; from behind it read as two flanks
+  pulling apart. The body is closed there.
+- *The tackle hut* (the owner: a little shop, no shopkeeper). The strip of tackle cards along the bottom is gone; the screen is
+  the lake's. A board hut stands on the meadow by the path: an open window with its shutter propped over a counter, rods for
+  sale leaning inside, a shingled roof, a sign with one of the box's own fish. Tapping it, or *Tackle* by the logbook (T on a
+  keyboard), walks you there at a run (a line out comes in) and opens it: paper tags on brass pegs on a board wall, each
+  thing drawn small in the fish's ink and wash (`drawIcon`), its levels and its price; what is as good as it gets hangs at the
+  end. The button counts what you can afford; once a first fish is in and the cast is learnt, a hint says where to buy.
+  `K.debug.openShop()`.
+- Draws: 39 a frame (budget 45) with the sign's fish.
+
+**Wood from photographs** (November 2026, the owner: the wood still did not convince; look for reference). Procedural grain kept
+reading as stripes, so the box now carries two small CC0 photographs from Poly Haven, as rule 16 allows: three weathered boards
+cut from Rob Tuytel's *Brown Planks 03* (gaps trimmed, side by side, a metre long, 192×512, 17 KB) and Dimitrios Savva's *Bark
+Willow* (processed by Dario Barresi; 256×256, 7.5 KB), both as JPEG data in the template (`PHOTO`), loaded into textures on
+start. Every piece of wood takes one of the three boards (`vY.y`), laid along its length and mirrored across so no seam shows;
+round wood takes whole periods round its girth; the photograph is stretched to 2.2 m so a wall of boards shows no grid; sawn
+tops of posts draw rings round the heart instead of a smear of one texel row. Trunks wear the bark, greyed toward an oak's,
+twice round and a metre up. The rope round the mooring post is a helix three turns round, its end hanging (it was a stack of
+beads). Then the leaves, the same way: three oak leaves, three willow leaves and a conifer's sprig from ambientCG's CC0 *Leaf
+Set 016, 013* and *019*, cut out by their opacity maps and packed into one 192×128 WebP with alpha (8 KB). The atlas is
+painted at once as before, and when the photograph has decoded its first three tiles are painted again with it: each leaf in
+four lights, oak leaves pointing out round a clump, willow leaves along the strands, sprigs fanned along a pine's drooping
+bough; then the atlas is uploaded again. The roofs are split shingles cut from the same wood photograph, row on row. A
+photographed leaf has many holes smaller than a pixel far off, which sparkled as a distant crown's alpha thinned in the
+mipmaps; the cut-out's threshold now lifts more with distance. The box weighs 286 KB of its 300.
+
+- *Critic round 4* (graphics, after the photographs): 6/6, wood 4, foliage 3, and **4**. Fixed from it: the moon stood behind the
+  angler and was never seen (it rises ahead and to the left, where its light comes from, and lays its path on the water); the
+  bench was four blocks (slats with gaps, a rail under the seat); every deck board one width with its ends in a line (widths and
+  lengths vary, the odd board a shade off); posts clean to the water (a slick of algae where it laps them); the hut's gable an
+  open black triangle (boarded, board by board); willows a curtain with a straight hem (five narrow shoots a point, every
+  length); the garland hidden behind a phone's catch card (it hangs above it); fish out of the water black against the sun
+  (a fill from the sky and the lake on the near flank). Still open: trees without a branch skeleton up into the crown, grass
+  tufts that read as starfish from above, reeds in an even comb, the rope.
+
+- *Polish after round 4.* Reeds grow in clumps of two to five stools, each its own height, the odd one dry and pale (they stood
+  in an even comb). A grass tuft is five blades at odds with each other, turned, set off the root and leaning each its own way:
+  three crossed cards were a starfish from above, and a symmetric ring of leaning cards a pentagon. Every clump of a broadleaf's
+  dome is held by a branch from the nearest limb, so wood reaches through the whole crown. The rope round the mooring post shows
+  its three strands laid in a twist (rope's u starts at 5, so the shader tells it from a cork grip). A band of wet mud, darker and
+  shining a little, runs just above the water along every bank. The rod's material was meant to whip it in red here and there,
+  but `tube()` handed it the angle round the blank instead, so one side of the rod was red all along it (the critics' "orange
+  plastic"): the blank is now a deep varnished cane, and a short silk whipping holds each ring.
+
+**Toward a commercial feel** (November 2026). A producer's critique on fresh frames (5 for "commercial": the lake would sell a
+capsule, the minute-to-minute play would not) and research into Stardew, Dredge, Cast n Chill, Webfishing and Nodebuster gave
+nine gaps; the owner chose the first four for this iteration (the rest are below, under *still open*).
+- *The fight on the water.* The strike snaps the rod up, jolts the view and thumps the phone; the rod is loaded harder under
+  tension; a running fish sits just under the surface and throws spray; a jump plays a third of a second in slow motion on the
+  box's clock (the view slows `dt`, the rules see the same smaller steps); the fight panel is slimmer.
+- *The catch's ceremony.* On the card, on the box's own clock: a brass spring balance whose needle swings past and settles
+  while the weight counts up (its scale in quarters of 1, 2, 4, 8, 12, 20, 40 or 60 kg, so the numbers are round); the money
+  counting up in rising clicks; a stamp, NEW for a first of its kind, RECORD for a heavier one than the book had (the rules
+  now say `rec`), a new kind's plate painted in from left to right, and a phrase on the guitar. Money shows pence only below ten
+  pounds.
+- *Gestures, not prose.* On a touch screen a hand (Fluent Emoji's pointing finger, MIT, as another box draws it) shows each
+  gesture where it is needed: a tap on the jetty's end, a swipe up to cast, a tap on the float that goes under, hold to reel,
+  lift for red or a jump, slide away from the lilies, pump a sulk, a tap on *Tackle*; beside it at most four words. Every longer
+  message was cut to a few words. At dusk without a lantern it says once a day that night is coming. The very first float goes
+  under within seconds (the rules wait 2.5 to 4.5 s while nothing has been caught).
+- *Upgrades that say what they do, and a goal in sight.* Every tag in the hut gives the purchase's effect in an angler's
+  measures (lb of line, metres cast, metres a second wound, seconds to a bite, hooks, rods out, which kind the rigs land up to,
+  the smokehouse's price); the logbook and the hut list what brings the Old One (every kind, the jetty's reach, ten hooks),
+  ticked as each comes true, and each is said when it does.
+- *Measured, and what it moved.* The faster first bite shifted the eager bot's whole game, and with it the tackle each kind is met
+  with: a tench met at minute 11 and a zander at minute 33 were landed by someone who only holds. Checked over five seeds, not
+  one: the tench pulls 2.65 and the zander 6.6 now. The paternoster had let fish join a sulking wels until even a quick hand
+  landed it two times in three: nothing joins a sulking fish now. The top rig could land a wels on a rest, and once the book
+  filled without the hand ever playing one: rigs land up to a carp. Pacing: eager 40.5 to 43.7 min, casual 44.6 to 47.7. The
+  rests' alarm code, dead since they fish alone, is gone. The owner raised the box's cap to 350 KB; it weighs 299.
+- *The producer again* on fresh frames: **6** (from 5): the hut's effects and the Old One's checklist make the goal clear, the
+  hand and its few words are a commercial tutorial, the catch has ceremony. Fixed from it at once: the weight on the card
+  counted past its value with the needle (it read as a wrong number on a still; the number only climbs now, the needle alone
+  swings), the plate painted in behind a hard vertical cut (a wet, feathered edge now), the bank rod's "♪" floated unlabelled
+  over the water ("♪ bank rod"). Next, by its ranking: the fish seen in the water while it fights (a dark shape and a swirl
+  where the line goes in, the jump framed), the Old One's catch as a moment of its own (a gold-framed plate, a closing page of
+  the hours and fish), every kind on a garland's card, bounties on a board in the hut for the middle of the game.
+- *Still open from the critique:* a finale (rumours of the Old One from minute ten, a last night of fog, a fight in phases, the tin
+  as an object); conditions per kind and rare colour variants; life in the world (a heron, dragonflies, moths at the lantern, a
+  pool of its light); a second typeface for numbers; the sound checks a producer would make (a drag that screams with the
+  tension, the guitar drawing back in a fight).
+
+**The producer's next four, and the owner's fifth look** (November 2026).
+- *The fish seen while it fights*: the water darkens in a body's shape along the fish's way (drawn a little larger than life so
+  it reads ten metres out, the mirror thinned over it) with a swirl where the line goes in.
+- *A garland's card* shows every kind on a small plate of its own, a badge for the count.
+- *The Old One's catch*: its card framed in gold, the angler's season on it (days at the water, fish landed, kinds, trophies, the
+  heaviest before it), a moment of slow motion as it comes in; then the tin.
+- *Bounties*: once three kinds are in the book, the hut's cork board holds two notes ("Tench over 1.6 kg, £40"): a kind from the
+  book above about one and a third of its usual weight, paid on top when the hand lands one, a new note in its place. The bots
+  fill thirteen to seventeen in a game, about a twentieth of what they earn; the longest wait for something new fell from 3.6 to
+  1.6 minutes. Pacing: eager 34.0 to 35.6 min, casual 40.3 to 43.9.
+- *The hut dressed*: the heaviest fish so far mounted on green felt in a wooden frame with a brass plate, the bounties pinned to
+  cork, a landing net on its peg with a coil of rope.
+- *The owner*: the space bar casts no more and jumps instead (gravity, a soft bend of the knees and a thud on landing; it still
+  strikes at a bite and reels in a fight); the rod's tip twitches at nibbles while you wait and pulls down at a take; the lily
+  beds grow in ragged patches of every size, and the first fish that heads for them says that it gets stuck there; the mirror
+  (drawn at half size) is softened by five taps, so trees in the water no longer show hard steps, and a willow's inside is less
+  black.
+- *Rigs by kind*: a small zander pulled less than a big carp and was landed by a rest, so once the book filled without the hand
+  ever playing one. A rest now lands a kind only if its usual pull is within the rig, whatever the fish's size.
+
+**The owner's sixth look** (November 2026). The owner saw no decoration (they meant the hut in the world, not its shop screen)
+and the trees in the water as blocky as before (they meant the willows standing in the lake, not the mirror). Both read again:
+- *The hut in the world*: a red and white life ring beside the window, an oar at the corner, a barrel of floats with iron hoops,
+  a net drying on the side wall, floats on the counter, a lamp from the shutter. Its gable was stepped boards that poked through
+  the roof; it is one triangle of boards now, the photograph laid across it.
+- *Willows*: two stood in the lake (their places were never checked against the ground); each is walked out from the lake's
+  middle until the ground is dry. Their shoots hung straight, so the curtain was a box with a black inside and a hem cut by the
+  water: they flare out as they fall (a bell), stop short of the ground at ragged lengths, and are narrower with light between.
+- *Golden fish*: about one in forty of a kind comes golden, worth four times, stamped GOLDEN, its painting in warm metal, counted
+  in the book. Whether a fish is golden is read from its weight by a hash, not drawn from the PRNG, so every game the bots play
+  is the same as before.
+- *Each kind its hour or weather*: tench bite best at dawn, eels in rain, pike at dusk, rudd by day, carp shy of rain.
+- *Life*: dragonflies over the lilies on a dry day (moved on the box's clock, drawn with the line), moths circling a lit lantern.
+- *Rumours of the Old One*: from five kinds in the book, every few minutes something huge rolls far out (a great ring, spray, a
+  deep sound; said once), more often once all three conditions are met; its nights then come in fog.
+
+**The owner's seventh look**: "many graphics faults". The life ring was sixteen tubes with gaps at every joint (one torus now);
+the roof floated a hand's breadth over the walls (its slope passed through the wall tops only if the eaves sat lower: they do,
+with a fascia under each, and an underside); the hut could be walked through (it and the barrel and the sign's post are solid now,
+for the keys and for a path of taps); floats stood on the counter and in the barrel like orange pins nobody could read, and a lamp
+perched on the shutter like a chimney: all gone; the shutter is propped low enough to clear the eave. Lesson: dressing drawn as
+a few primitives at small size reads as faults, not as things; a prop earns its place only if it reads at play size. The
+willows are out of the scene for now, at the owner's wish (they read as blocks however they were built). On a desktop a click
+on the water casts, longer held throws further, and from anywhere off the jetty's end the angler walks out first.
+
+**The owner's eighth look.**
+- *The rod's bend*: a fixed share of every bend pointed down, so a fish to the side bent the tip below the line that pulled it.
+  The blank now turns along its length from its own direction toward the line's (stiff at the butt, most at the tip), and never
+  past it; with no fish on it droops a little under its weight. The rests' rods the same way.
+- *The float* stood on the water like a skittle: it hangs lower, only the painted tip out, with a faint ring now and then.
+- *The roof* was two sheets with an open edge and a single texel of colour beneath: each side is a slab now, shingles on top,
+  boards beneath, its three edges closed.
+- *Inside the hut*, seen through the window: three shelves of brass and dark tins, boxes and jars of floats, a table with an
+  open ledger, a wooden stool, a landing net on a peg in each corner.
+- *A desktop*: the browser takes Esc to free the mouse (and leave full screen), so a second Esc was needed for the packing slip;
+  when the mouse is freed and the box did not free it, the box now opens the slip itself. While the mouse is held, L and T are
+  shown on the logbook's and the hut's buttons.
+- *Three more kinds* (thirteen in the book): a gudgeon in the near shallows by day (dark-blotched, a barbel), a crucian carp at
+  dawn and dusk that runs for the lilies (deep and round, big scales), a burbot deep at night that twists (barbel, a long low
+  fin, mottled). The crucian first pulled 1.9 and was met so late that someone who only holds landed nine in ten; it pulls 2.7.
+  The suite now counts a kind as met when it first comes onto the line, as the lead or on a free hook: with the paternoster,
+  some kinds are met only in a garland. Pacing: eager 33.5 to 45.1 min, casual 40.8 to 52.0, the longest wait 3.5.
+
+**The owner's ninth look**: half an hour of play, "real fun"; the sound fits. They wondered at a second hut that appeared, with
+graphics faults, its purpose unknown: the smokehouse, still the first session's rough build (a stack of boxes, sheets for a
+roof, gables of one texel). Rebuilt as the tackle hut was: board walls with a plank door, its battens and latch, gables of
+boards, a roof of two closed slabs whose slope passes the wall tops, a stone chimney with its cap and its smoke; before the door
+a rack with fish hung by the mouth in the smoke, so what it is for shows. Buying it says that every fish sells for more now, and
+each catch card says "Smoked: ×1.3". It is solid too. Lesson: an upgrade that appears in the world must say what it is, there.
+
+**Critic round after the ninth look**: 7/5/7/6 and **4**. The worst it found was real and old: every board of the jetty and both
+huts showed a pattern of waves instead of the photographed wood. `cuboid()` gave wood its v (across the grain) from the world
+coordinate plus a per-piece offset, and both go negative (the lake lies at negative z; `%` keeps the sign in JS); a negative v
+is how a post's sawn top asks the shader for growth rings, so every such board was drawn as end grain. v now counts from the
+piece's own middle and the offset is kept positive: the jetty, the walls, the bench and the door show the weathered boards at
+last. Lesson: a value that doubles as a flag (v < 0 means end grain) must be made impossible elsewhere, not just unlikely.
+Also fixed from the round: the rests' front sticks stood out past the jetty's edge in the water (they stand on the boards now);
+toasts covered the catch card (they wait until it is put away); the balance was clipped off a phone's left edge; the smokehouse's
+rack hid its door (it stands beside the house, each fish on a string); a garland's fish crowded and turned face-on (wider
+droppers, side-on); the rod is carried low away from the water's edge.
+
+**A desktop critic** (1280×800, the way the owner plays): 7/6, desktop UI 5, and **5**. Fixed: the landed catch hung behind its
+card on a wide screen (it hangs above it now, a garland too); before the mouse was taken a desktop was told to "swipe up" (it
+is told to click), and a lean said "Slide" (it says "Mouse ←"); the logbook was a 620-pixel column (four columns, all thirteen
+kinds in view) and the hut a narrow board (wider, five or six tags a row); the HUD was small for a large window (a sixth
+larger). Before: the carp became a mirror carp (a row of great flat scales, longer barbels), the Old One scarred and pale-eyed;
+the hut's window glows warm at dusk and night, and the jetty's lantern has a halo.
+
 ## Lessons from the boxes so far
+
+- **A cut-out atlas goes up premultiplied.** Clear texels painted by a 2D canvas are black; a mipmap of straight colours
+  averages that black into every edge, so leaves darken toward a crown's rim and blades toward their tips, more the further
+  away. Upload with `UNPACK_PREMULTIPLY_ALPHA_WEBGL` and divide by alpha in the shader. And whatever the atlas hid under that
+  black (Still Water's straw-yellow grass tips) shows once it is gone: look again after the fix.
+- **The canvas's alpha must stay 1.** A soft cut-out edge or a blended line that writes alpha below 1 is composited by the page
+  as a pale fringe; mask alpha out after the clear.
+- **More lines for the hand can starve the goal.** Rods on rests that rang faster than a fight lasts kept the bot in fights for
+  good: its own line never went out, it never shopped, and the last fish, which came only on that line, never came. Count a
+  bot's actions by kind before tuning (here fights by rod), let the goal come by the new verb too, and let shopping happen
+  between the new verb's turns.
 
 - **A tackle that only grows makes the fight vanish.** Still Water's line, rod and reel each scaled the margin while the fish stayed
   as they were, so after four purchases nobody could snap a line. Set each kind against the tackle it is met with in a bot's
