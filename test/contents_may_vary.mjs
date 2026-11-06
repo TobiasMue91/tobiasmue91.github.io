@@ -1001,9 +1001,10 @@ if (suites.includes('browser')) {
           const early = await until(f, () => K.debug.state().gold === 5 && K.debug.ko().t < 0, 60000) && await f.evaluate(() => !K.debug.card('night'));
           check(early, 'lawn: the cup won, the note in it is not on the pegboard before the rosette');
           const out = await until(f, () => K.debug.ko().t > 1.5, 120000) && await f.evaluate(() => K.debug.ko().cue === 1 && !K.debug.card('night'));
-          check(out, 'lawn: the teams walk out before the whistle, and the note still waits');
+          const why = () => f.evaluate(() => JSON.stringify({ ko: K.debug.ko(), frames: window.__frames, night: !!K.debug.card('night') }));
+          check(out, 'lawn: the teams walk out before the whistle, and the note still waits', out ? '' : await why());
           const on = await until(f, () => K.debug.ko().t > 9.6 && !!K.debug.card('night'), 120000);
-          check(on, 'lawn: after the kick-off the note in the cup is on the pegboard');
+          check(on, 'lawn: after the kick-off the note in the cup is on the pegboard', on ? '' : await why());
         }
       }
       await p.close();
