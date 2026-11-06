@@ -11254,7 +11254,7 @@ function resize() {
   follow = fr.s < minS; Object.assign(home, follow ? { s: minS, cx: B.x + B.w / 2, cy: home.cy || fr.cy } : fr);
   if (follow) home.cy = clamp(home.cy, B.y + inner.h / 2 / minS, B.y + B.h - inner.h / 2 / minS);
   camera();
-  bg.width = cv.width; bg.height = cv.height; bgDirty = true; sprites = {}; figSprites = {};
+  bg.width = cv.width; bg.height = cv.height; bgDirty = true; dropSprites(); dropFigs();
   plate = $('screams').getBoundingClientRect();
 }
 // the camera holds the whole house, and at the very end walks out to the garden gate; K.debug.look holds it anywhere
@@ -11281,6 +11281,8 @@ const poly = pts => pts.forEach(([x, y], k) => k ? c.lineTo(X(x), Y(y)) : c.move
 const rot = (px, py, a, fn) => { c.save(); c.translate(X(px), Y(py)); c.rotate(a); c.translate(-X(px), -Y(py)); fn(); c.restore(); };
 const bg = document.createElement('canvas'), bgc = bg.getContext('2d');
 let bgDirty = true;
+// where the browser says so, a lost and restored canvas has every cache painted again at once
+for (const el of [cv, bg]) el.addEventListener('contextrestored', () => { bgDirty = true; skyDirty = true; tile = null; dropSprites(); dropFigs(); grain = vign = grade = cur = null; });
 const lerpC = (a, b, u) => `rgb(${a.map((v, i) => Math.round(lerp(v, b[i], u))).join(',')})`;
 const rgba = (a, al) => `rgba(${a.map(Math.round).join(',')},${al})`;
 const mix = (a, b, u) => a.map((v, i) => lerp(v, b[i], u));
@@ -11556,6 +11558,10 @@ function itemLace(k, w, h) {
   else if (k === 'coffin') { c.moveTo(L + 70, T + 22); c.lineTo(L + 82, T + 22); c.lineTo(L + 82, -2); c.lineTo(L + 70, -2); c.closePath(); c.rect(L + 60, T + 30, 32, 8); }
 }
 let sprites = {};
+// a dropped cache gives its bitmaps back at once: shrunk to nothing, a canvas no longer holds memory (in Firefox, GPU memory)
+// while it waits for the collector, and a long session drops these caches often
+function freeCanvases(o) { for (const k in o) { const v = o[k], cv = v && (v.cv || v); if (cv && cv.width) cv.width = cv.height = 0; } }
+function dropSprites() { freeCanvases(sprites); sprites = {}; }
 // the small things are drawn larger than life, so a teacup reads at a phone's size
 const BIG = k => CORE.KIND[k][1] ? (CORE.KIND[k][1] === 1 ? 1.15 : 1) : 1.8;
 // one sprite per kind and look: 0 the house's own shade (too heavy yet), 1 black card, 2 gilt
@@ -11672,11 +11678,18 @@ function figure(look, o) {
 }
 // a figure is painted once per look, build, step and rim into a bitmap at the camera's scale, then placed with one draw:
 // forty traced silhouettes filled path by path every frame were what the last nights of a full house paid for
-let figSprites = {};
+// The key holds an extra's build in a few steps only (see person): keyed by every build to two places, each new guest
+// added up to six bitmaps of their own, never let go, and a long session's thousands of them ran a browser out of
+// graphics memory - Firefox then blanked its whole window and came back with the house's tile empty. FIG_MAX is a
+// last guard: past it the cache starts afresh.
+let figSprites = {}, figN = 0;
+const FIG_MAX = 360;
+function dropFigs() { freeCanvases(figSprites); figSprites = {}; figN = 0; }
 function figSprite(look, o, st, rim) {
   const n = o.sil || SILOF[look], key = n + look + st + rim + (o.bw || 1).toFixed(2), h = hOf(look);
   let sp = figSprites[key];
   if (!sp) {
+    if (++figN > FIG_MAX) { dropFigs(); figN = 1; }
     const k = Math.max(.1, view.s) * DPR * SZ * 1.15, w = h * 1.5, top = h * 1.12;
     sp = document.createElement('canvas'); sp.width = Math.ceil(w * k); sp.height = Math.ceil((top + h * .06) * k);
     const x = sp.getContext('2d'), keep = c; c = x; x.scale(k, k); x.translate(w / 2, top);
@@ -11696,7 +11709,7 @@ function person(p) {
   const e = clamp(p.fear / CORE.nerveOf(p), 0, 1), fr = Math.floor(now * (v.run ? 24 : 12)), walk = v.run || v.vx ? fr % 4 : 0;
   const shake = K.reduced || v.run ? 0 : (e > .3 ? (hash(fr, v.k) - .5) * 18 * (e - .3) : 0) + v.flinch * (hash(fr, 3) - .5) * 22;
   const hop = v.jt < .22 ? Math.sin(v.jt / .22 * Math.PI) * 32 : 0, lean = (v.run || v.hot ? .14 : -.15 * clamp((e - .5) / .5, 0, 1)) + (v.look === 'prof' && !v.run ? .1 : 0);
-  const o = { sil: CORE.CAST[p.id] ? null : v.look === 'boy' ? 'boy' : DRESS[v.look] && v.look !== 'girl' ? WOMEN[Math.floor(v.k * 2)] : v.look === 'girl' ? 'girl' : MEN[Math.floor(v.k * MEN.length)], ink: INK, bw: CORE.CAST[p.id] ? BUILD[v.look] : .86 + .32 * v.k, nose: .75 + .6 * hash(v.k * 97, 3), walk, arms: !!v.run || v.hot || e > .6 || v.flinch > .4, hat: Math.max(Math.min(1.4, v.hat), p.panic && !K.reduced ? .1 + .04 * Math.sin(now * 30) : 0), hair: e > .45 ? e : 0, lw: (p.panic ? 6 : 3) / view.s };
+  const o = { sil: CORE.CAST[p.id] ? null : v.look === 'boy' ? 'boy' : DRESS[v.look] && v.look !== 'girl' ? WOMEN[Math.floor(v.k * 2)] : v.look === 'girl' ? 'girl' : MEN[Math.floor(v.k * MEN.length)], ink: INK, bw: CORE.CAST[p.id] ? BUILD[v.look] : .86 + .04 * Math.round(8 * v.k), nose: .75 + .6 * hash(v.k * 97, 3), walk, arms: !!v.run || v.hot || e > .6 || v.flinch > .4, hat: Math.max(Math.min(1.4, v.hat), p.panic && !K.reduced ? .1 + .04 * Math.sin(now * 30) : 0), hair: e > .45 ? e : 0, lw: (p.panic ? 6 : 3) / view.s };
   // knocked over by something heavy: down about the feet away from the blow, a moment on the floor, up again
   const fa = v.fall < 1.1 ? (v.fall < .16 ? ease.out(v.fall / .16) : v.fall < .7 ? 1 : 1 - ease.inOut((v.fall - .7) / .4)) * 1.35 * v.fd : 0;
   c.save(); if (fa && p.st === 'in') { c.beginPath(); c.rect(X(0), Y(v.y - FH + 26), Sc(HW), Sc(FH - 26)); c.clip(); } c.translate(X(v.x + shake), Y(v.y - hop)); if (fa) c.rotate(fa); const sz = SZ * (.9 + .2 * v.k); c.scale(view.s * v.dir * sz, view.s * sz); c.rotate(lean);
@@ -11760,7 +11773,7 @@ function events() {
     else if (e.k === 'night') onNight(e);
     else if (e.k === 'dawn') onDawn(e);
     else if (e.k === 'reel') onReel(e.reel);
-    else if (e.k === 'buy') { sfx.pipe(CORE.byId[e.id], 1 - 1); bgDirty = true; sprites = {}; pipeBurst = { id: e.id, t: 0 }; }
+    else if (e.k === 'buy') { sfx.pipe(CORE.byId[e.id], 1 - 1); bgDirty = true; dropSprites(); pipeBurst = { id: e.id, t: 0 }; }
     else if (e.k === 'slam') { lastAt.slam = [500, floorY(e.f) - 150]; slams[e.f] = 0; sfx.slam(); shake = Math.max(shake, .5); for (const p of S.people) { const v = people[p.id]; if (v && p.f === e.f) { v.jt = 0; v.flinch = 1; } } }
     else if (e.k === 'imp') { const q = CORE.slotXY(e.ti); lastAt.imp = [q.x - 20, q.y - 40]; imps.push({ ti: e.ti, t: 0, s: Math.random() * 1e3 }); sfx.imp(); }
     else if (e.k === 'bound') { sfx.bound(); if (now - saidLamp > 8) { saidLamp = now; say('A GHOST HUNTER', pick(['There! In the lamplight!', 'Hold the lantern steady!', 'It is weakening, gentlemen!'])); } }
@@ -11818,6 +11831,9 @@ function onOut(e) {
   } else inflight = Math.max(0, inflight - e.v);
 }
 function onNight(e) {
+  // the house's tile is painted again at nightfall: if the browser lost its graphics memory in the night before, the
+  // cached bitmaps came back blank and nothing else would have painted them again
+  bgDirty = true; dropSprites(); dropFigs();
   for (const id in people) { const v = people[id]; v.run = null; v.out = 0; v.x = -9999; }
   flyers.length = 0; imps.length = 0; shards.length = 0; fxs.length = 0; tv.length = 0; inflight = 0; shown = S.$;
   irisTo(0, 1, .9, W / 2, H / 2); sfx.night();
@@ -12059,7 +12075,7 @@ function draw(dt) {
 /* ---------------- the film itself: a grade for the hour, grain, scratches, a weave in the gate ---------------- */
 // the cellar's sepia between nights; at night only a cool breath over the coloured rooms, so their colour survives
 function tint() { return S.phase === 'organ' && !S.finale ? [242, 214, 168] : [222, 228, 246]; }
-let grain = null, vign = null, cur = null;
+let grain = null, vign = null, grade = null, cur = null;
 // on a wide screen the film is shown in a picture house: red velvet curtains drawn back at both sides, a valance with a
 // gold fringe across the top; painted once for the size of the screen, laid over the film in one draw
 function curtains() {
@@ -12097,16 +12113,23 @@ function film() {
   if (!DIAG.film) return;
   const [r, gg, b] = tint(), w = cv.width, h = cv.height;
   g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
-  g.globalCompositeOperation = 'multiply'; g.fillStyle = `rgb(${r},${gg},${b})`; g.fillRect(0, 0, w, h); g.globalCompositeOperation = 'source-over';
   if (!grain) { grain = document.createElement('canvas'); grain.width = grain.height = 256; const x = grain.getContext('2d'), id = x.createImageData(256, 256); for (let k = 0; k < id.data.length; k += 4) { id.data[k] = id.data[k + 1] = id.data[k + 2] = Math.random() * 255; id.data[k + 3] = 22; } x.putImageData(id, 0, 0); }
   if (FX()) {
     const fr = Math.floor(now * 18);
     g.translate((fr * 97) % 256, (fr * 61) % 256); g.fillStyle = g.createPattern(grain, 'repeat'); g.fillRect(-256, -256, w + 512, h + 512); g.setTransform(1, 0, 0, 1, 0, 0);
     if (hash(fr, 11) > .76) { g.fillStyle = 'rgba(20,16,12,.5)'; g.beginPath(); g.arc(hash(fr, 12) * w, hash(fr, 13) * h, (1.5 + hash(fr, 14) * 3) * DPR, 0, 7); g.fill(); }
   }
-  // the vignette is painted once, small, and stretched
-  if (!vign) { vign = document.createElement('canvas'); vign.width = vign.height = 64; const x = vign.getContext('2d'), vg = x.createRadialGradient(32, 29, 18, 32, 29, 46); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)'); x.fillStyle = vg; x.fillRect(0, 0, 64, 64); }
-  g.drawImage(vign, 0, 0, w, h);
+  // the grade for the hour and the vignette are one multiply: the vignette darkens towards black by a, which is a multiply
+  // by 1 - a, so a screen-sized sheet of tint × (1 - a), painted once, does both in one pass. (The vignette was a 64-pixel
+  // square stretched over the screen every frame, and that stretch alone cost more than everything else in the grade.)
+  const key = r + ',' + gg + ',' + b;
+  if (!grade || grade.width !== w || grade.height !== h || grade.key !== key) {
+    if (!vign) { vign = document.createElement('canvas'); vign.width = vign.height = 64; const x = vign.getContext('2d'), vg = x.createRadialGradient(32, 29, 18, 32, 29, 46); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)'); x.fillStyle = vg; x.fillRect(0, 0, 64, 64); }
+    if (!grade) grade = document.createElement('canvas');
+    grade.width = w; grade.height = h; grade.key = key; const x = grade.getContext('2d');
+    x.fillStyle = `rgb(${key})`; x.fillRect(0, 0, w, h); x.drawImage(vign, 0, 0, w, h);
+  }
+  g.globalCompositeOperation = 'multiply'; g.drawImage(grade, 0, 0); g.globalCompositeOperation = 'source-over';
   g.restore();
 }
 
@@ -12470,7 +12493,7 @@ K.world({
     S = saved && saved.v === 4 && saved.people && saved.th ? saved : CORE.init(K.sn * 1000 + 13);
     if (K.slot === 'dev' && QS.get('scene')) { const T = scene(QS.get('scene')); if (T) { S = T; keep = T.ev; } }
     resize(); addEventListener('resize', resize);
-    document.fonts && document.fonts.ready.then(() => { bgDirty = true; sprites = {}; plate = $('screams').getBoundingClientRect(); });
+    document.fonts && document.fonts.ready.then(() => { bgDirty = true; dropSprites(); plate = $('screams').getBoundingClientRect(); });
     shown = S.$;
     if (!saved && !keep) { onReel(0); S.ev.length = 0; } else { S.ev = keep || []; keep = null; }
     if (S.finale) { fin.t = 9; document.body.classList.add('end'); camera(); }
@@ -12526,7 +12549,7 @@ function lookAt(x, y) {
 }
 function look(x, y, s = 1, o = {}) {
   if (x == null) { zoom = null; camera(); bgDirty = true; return; }
-  const [lx, ly] = lookAt(x, y); zoom = { x: lx, y: ly, s, freeze: !!o.freeze }; camera(); bgDirty = true; sprites = {}; figSprites = {};
+  const [lx, ly] = lookAt(x, y); zoom = { x: lx, y: ly, s, freeze: !!o.freeze }; camera(); bgDirty = true; dropSprites(); dropFigs();
 }
 // every object worth a close look, as [name, minutes, x, y, scale, options] for util/cmv_props.mjs
 const PROPS = (() => {
