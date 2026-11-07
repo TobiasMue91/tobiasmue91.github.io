@@ -2080,6 +2080,98 @@ box uses it.
     gather behind one cover and their bars and labels pile up; kids at the edges of the park and the mountain are cut by
     the screen; your side shows only as hats at the foot of a phone; the win of a yard stays a card in an empty yard; the
     numbers run into the hundreds of millions on the mountain.
+- **Snow Day, the second refinement** (November 2026, `CORE.version` 2). The owner played the whole box (3/5): from about the
+  third yard it was only wild clicking; after a yard change the bars went down depressingly slowly; the overlays could not be
+  read in time; kids now and then looked through the snow walls; nobody learnt what an action was worth because the sound
+  words ("SPLAT!") covered the coins; the dog's tail seemed to stroke a kid's hat; and spam-clicking pinned kids to the
+  ground and finished the box in about 28 minutes. That pinning stays (impatient players like it, and half an hour is enough
+  for this box); aiming had to be rewarded on top of it, not spamming punished.
+  - *The question first* (the lesson Tilt left: the late game is where a box tips over). What does the player decide in
+    minute 25 that they did not in minute 2? In version 1, nothing: in minute 2 you tap whoever stands, in minute 25 too,
+    harder, and your side does three quarters of the work. Upgrades that make the same verb stronger do not answer it.
+    Version 2's answer: *whom first and whom to hold down*. Each yard adds a kind of kid who asks for a choice (a little one
+    worth four times the coins, an ace who never misses and must be stopped while winding up, a kid behind a dustbin lid who
+    can only be hit while throwing), and a goal on the board that wants aiming, as Tilt's "LIGHT EVERY PIN" did: **all of
+    them flat at once**.
+  - *Research* (with sources). Rail and light-gun shooters keep one verb fresh by colour-coding enemies by what they ask of
+    you: Time Crisis's red soldiers never miss and die to one shot, its yellow and orange ones pay ammunition, time and points
+    and some never shoot ([Time Crisis wiki](https://timecrisispedia.fandom.com/wiki/Time_Crisis_II/Game_Mechanics),
+    [Tropedia](https://tropedia.fandom.com/wiki/Time_Crisis)); Hogan's Alley put gangsters and bystanders on screen together
+    so a shot is a decision ([Wikipedia](https://en.wikipedia.org/wiki/Hogan%27s_Alley_(video_game))); House of the Dead pays
+    for headshots, rescues, and kills in a row without a miss
+    ([Wikipedia](https://en.wikipedia.org/wiki/The_House_of_the_Dead_(video_game)),
+    [Overkill wiki](https://thehouseofthedead.fandom.com/wiki/The_House_of_the_Dead:_Overkill?oldid=9510)). Vampire Survivors
+    changes its enemy mix on a schedule, about once a minute, and keeps bosses outside the schedule
+    ([wiki](https://vampire-survivors.fandom.com/wiki/Enemies), [Steam](https://steamcommunity.com/app/1794680/discussions/0/3837675385314588820));
+    BALL x PIT's reviews praise variety per stage and blame a thin late layer and uneven pacing
+    ([GamesRadar](https://www.gamesradar.com/games/roguelike/ball-x-pit-review), [Game Informer](https://gameinformer.com/review/ball-x-pit/breathtaking-brick-breaking));
+    Nodebuster's players complain of a slow start and upgrades out of reach ([Mancunion](https://mancunion.com/2025/05/08/nodebuster-review-a-short-and-sweet-incremental-game/));
+    Bills Must Be Paid sells on tactile feedback and is faulted for a short shallow loop
+    ([gaming.net](https://www.gaming.net/reviews/bills-must-be-paid-review-pc/), [VaporLens](https://vaporlens.app/app/4421010/bills_must_be_paid)).
+    Juice: Vlambeer's "Art of Screenshake" ([Game Developer](https://gamedeveloper.com/design/vlambeer-co-founder-shares-advice-on-building-better-action-games)).
+    Damage numbers: outline them, cap how many show, keep them off nameplates and targets, give types their own places so two
+    numbers never run together, and let hit reactions carry the feedback too
+    ([Tim Cain on damage numbers](https://turbo-wiki.pages.dev/tim-cain/ux-design/damage-numbers),
+    [Last Epoch forum](https://forum.lastepoch.com/t/floating-combat-text-placement-emphasis-duration-speed-length-custom-elements/22864)).
+    Tutorials on phones: short, part of play, a clear Continue ([PlaytestCloud](https://blog.playtestcloud.com/mistakes-mobile-game-tutorials/),
+    [That Games UX](https://thatgamesux.com/mobile-games-tutorials-should-fit-mobile-attention-spans)). No outside asset was
+    needed: every change is drawn with the box's own puppets and felt.
+  - *Measured first* (bots over the whole game; `bots.spammer` is new: no swatting, no choosing, the nearest kid in reach tapped
+    seven times a second, the cheapest decoration bought first; on version 1 it opened the box in 29.4 minutes against the
+    owner's 28, so it stands for the owner's way of playing). In version 1, after each yard change the gang was worn down by
+    0.8, 2.4, 6.9 % in the first three minutes (schoolyard, eager bot): each yard's resolve rose 20 to 50 times while the
+    player arrived with the last yard's strength. Over 80 % of the player's own hits landed on kids already down. From the
+    schoolyard on, your side earned 50 to 75 % of the coins and did nearly all the damage; the catapult, wound by everyone's
+    hits, did 59 %. "All of them flat at once" already happened 57 to 74 times per late yard by itself (your side and the
+    boulder knocked everyone down), so as a goal it needed a change of rule first, as Tilt's pins did. Then, after the first
+    changes: the leaders held out alone for 3 to 6 minutes at the end of each yard (the rest of the gang came over between
+    minutes 2 and 4), and the tree was bought out at minute 23 of 31.
+  - *Bugs under the balance?* None this time in the rules; the measurements above are the rules working as written.
+  - *What changed in the rules.* (1) **Graded gangs**: each gang's first kid holds out for a fraction of its leader (a fifth
+    at most), the rest in steps, so a yard just reached gives up a kid within a run or two; the gang's strip counts every
+    kid as an equal share. (2) **Kinds of kid**, one more per yard: the street's Little June (gold hat, never throws, ×4
+    coins), the schoolyard's aces (red hat and scarf, wind up in .6 of the time, never miss, a hit costs half as much warmth
+    again), the park's dustbin lids (a lid held up stops a plain snowball with a BONG; lowered to throw, or once its kid is
+    down, it stops nothing; ice goes through), the mountain all of them. (3) **Only your own snowballs knock a kid flat**;
+    your side's wear resolve down and spoil a wind-up for a quarter second. (4) **All of them flat**: when every kid left
+    lies in the snow at once and your snowball put the last one there, the whole gang takes twenty-five of your snowballs
+    each, stays down 2.2 seconds, and it pays ten throws' coins a kid. (5) **The spread**: each other kid your own snowballs
+    hit within three seconds adds half to your damage and coins, up to ×3; a stream on one kid stays ×1. (6) A throw stopped
+    while it is wound up pays twice. (7) Your side hits for half what it did and its two upgrades give ×7.3 in all instead
+    of ×250; the catapult winds on your own hits only. (8) Leaders hold out for about half as long; the tree's upper tiers
+    cost 1.5, 3, 4 and 5 times what they did, so it lasts to the mountain. Kept: pinning a kid down with a stream (a snowball
+    on a kid who is down still lands, and one in the next .3 s knocks them down again).
+  - *Tried and dropped on the way.* A "clean hit" (×2, then ×3 damage on a kid standing up): a stream of snowballs on one kid
+    catches them standing every time they get up, so it paid the spammer as much as anyone. Winding the catapult on clean hits
+    only, then on spread: it then did 60 % of all damage. Leaving the stopped kid dizzy twice as long: noise in the measurement,
+    no gain. Making your side strong enough to matter (×250): it played the late game by itself, which is what the owner felt.
+  - *Does aiming pay?* With the same thumb (seven taps a second), a *juggler* that keeps every kid it knocked over down with
+    one snowball timed for their getting up and spends the rest on whoever stands (an ace winding up first) against the
+    *pinner* (one kid, nailed down until they give up) and the spammer, a minute each, twelve times, walking into each yard
+    (seed 1): the street 4.0 % / 2.7 % / 3.1 %, the schoolyard 7.0 / 10.7 / 6.3, the park 12.9 / 6.1 / 6.1, the mountain
+    7.2 / 4.2 / 7.6; summed, aiming wears down 31 % against 24 % and 23 %, and it lays the whole gang flat many times more
+    often (the park: 6 to 7 times a minute against none). Pinning the easy first kid is a good opening, so a yard can go
+    either way; over the game it may not. Where the gang has thinned to its leader, there is nothing to choose and the three
+    play alike. The suite checks the sum.
+  - *Pacing after it* (`CORE.pace.eager` 27, from 30). The owner's measure is about half an hour for a quick player and
+    nothing that draws it out. The spammer now takes 25 minutes, the eager bot (a quick, attentive player who also swats and
+    reads the tree) 30 to 31, the casual bot 77 to 79 (under 90). The eager bot's floor was 30: a box this short should be
+    allowed to sit just under it when a quick player plays well, and 27 still catches a change that makes it a 20-minute
+    box. Longest wait for something new: 2.7 minutes eager, 4.6 casual. The tree is no longer full before the end. In the
+    first minute after a yard change the gang is now worn down 5 to 20 % (eager), against 1 to 3 %.
+  - *Reading.* A card that teaches holds the yard still until GOT IT is tapped (`teach()`): a kid coming over, getting cold
+    in the first run, the catapult, Hold to throw, and each yard's new kind of kid after its title card. Everything else is a
+    banner that lets the game run on (a yard won, all of them flat, the first hit). The coins a hit of yours earned sit on a
+    tag of their own under the kid's feet, summed while hits keep coming, with what multiplied them beside it (FIRST ×3,
+    STOPPED ×2, ×2.5 spread); words (STOPPED!, BONG!, SPLAT!, ICE!) go over the head. The spread shows under the cocoa; once
+    two kids are down, the ones still standing get a blue marker (an arrow at the edge if off screen) and "3 of 6 down" sits
+    under the yard's name; an ace winding up flashes red at the feet, as a light-gun game warns of a crisis shot.
+  - *Drawing.* Kids crouched behind cover poked their faces into the snow lumps on a phone: the rules stand a kid .7 behind
+    their cover, and a puppet drawn 1.6 times as large and leaning forward needs about 1.15. The view now stands a kid back
+    by .75 × (scale − 1) and .3 more crouched, and leans them less. The dog's long tail lay back over the hat of whoever stood
+    behind him; it is a short tail held up and wagging, the simpler shape. New props: the little one (smaller, gold hat and
+    scarf, waves instead of throwing), the ace (red hat and scarf), the lid (a ribbed grey disc with rim and handle, held up
+    over chest and chin by the left arm, lowered to the side to throw).
 
 ### Working on a box that has shipped
 
