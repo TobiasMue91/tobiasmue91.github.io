@@ -1853,6 +1853,49 @@ box uses it.
     still land on the reels; the boards share no material language beyond pins and tulips (the parlour shows nothing
     on its side); the bottom drain tulips are half under the rim on board 1; coins run to billions against a Big One
     of millions. Nobody has heard the sound yet.
+  **The owner's play-test before release** (November 2026, `CORE.version` 5). The owner played Tilt to board 4 and noted:
+  ordinary balls hung between the nails on the first board; the reels seemed to jump to a random result at the end; prices
+  on the sign were hidden by other bulbs when zoomed out; the sign kept gliding back to the middle, so its right side could
+  not be looked at; did the twin stream follow the auto-launcher; balls poured from the tray and never seen; from board 3 the
+  game grew slow with the sign nearly bought out and the Big One far from broken, and on board 4 there was nothing left to
+  save for and nothing to do but tap lanterns. They suggested a goal on the board (light every pin for a big blow) and
+  upgrades that go on. Measured first with the bots (eager, seed 1): 19 / 425 / 72 / 366 / 161 balls shaken loose as stuck
+  on the five boards; the glass at its cap of 260 balls 40% of the time; the sign bought out 3.2 minutes into an 8-minute
+  board 4; at the end of every game from board 2 on, every pin had been struck at least once.
+  - *Hanging balls, three causes.* The nails of the ways stood 3.2 apart, so a ball (2.4) lay in the notch between two of
+    them, and the first nail left a gap at the wall to wedge in; a mega ball (6.8) was wider than the gap between the wall
+    and a *closed* drain tulip (6.6) on boards 4 and 5, and the balls behind it piled up (the old test only dropped mega
+    balls past open tulips); and the shake-loose only came after 1.5 s. Now the ways' nails stand closer than half a ball
+    with the first one at the wall, a mega ball rolls over a closed dome as over pins, and a ball that has all but stopped for
+    a quarter of a second gets the knock a player gives the glass. About twenty a game are left (a crowd on top of a Big One).
+    Mending it, as with the mega balls in October, changed the pacing, so the balance below was set after it.
+  - *The reels.* The result was rolled when the reels had stopped: the right reel had stopped at 0.8 s on the previous
+    result, and at 1.3 s all three swapped to the new one. Now the rules decide as the reels start (the `spin` event carries
+    the symbols); each reel runs up, turns at a speed chosen so that an even brake ends a little past its symbol at its stop
+    time, and settles back onto it, left to right a quarter of a second apart (the pattern of commercial slot reels: spin,
+    eased stop with overshoot, a short settle). On a REACH, as on a real pachinko machine, the first two agree and the third
+    drops to a crawl for 1.4 s more under a pulsing pink frame and a rising whine before it decides; every win goes through a
+    reach, so a reach is a real chance (about one in two). The stops click on game time, not on timers from the spin.
+  - *The sign's camera is the player's.* A drag that left no bulb you could buy in view made it glide back to the middle;
+    now it stays where it was left, from game to game, may zoom out until the whole wheel fits, is held to the wheel with a
+    little give, and CENTRE frames the bulbs again. Prices are drawn last, over every bulb, the one being read first and
+    then the cheapest, each trying under, over and beside its bulb and left out where it would cover another tab or bulb.
+  - *Seen overflow.* With the glass full and the mega ball bought, what the tray pours goes into the mega ball being saved
+    up at the tray's end (a gauge, and balls seen going there); without it the tray says GLASS FULL · WAITING.
+  - *Twin stream* now follows the auto-launcher too, as "every ball you pour" promised.
+  - *FULL HOUSE.* The owner's idea as such would have been met by itself (every pin is struck sooner or later), so a pin
+    glows for a few seconds after a ball strikes it (5.5 · 7.5 · 6 · 4.5 · 5 s by board) and every pin glowing at once is
+    FULL HOUSE: 3% of the Big One off (the first of a game; each after it in the same game less), three seconds of fever,
+    and every pin goes dark again. A tube on the top of the rim fills with the share alight; past 85% the dark pins pulse
+    pink on the glass and on the map strip, so the thumb goes where the board is still dark. The ways' nails, the tulips'
+    posts and the pins in a way's shade (no ball comes there; those pins were taken out) do not count. From the third game
+    on, so board 1 has it within its first minutes. The eager bot aims at dark pins (the casual one a little).
+  - *Overtime.* Four bulbs between the star's quarters that never run out (balls +5%, afterglow +6%, the Big One +5%,
+    coins +10% a level, each level twice the last), opening on board 3 and priced for the board you are on, so coins
+    always buy something. A damage bulb's card says what it does against the Big One (the square root of a blow).
+  - *Balance after it* (eager / casual, three seeds): 39.7–41.1 / 66–71 minutes (before: 39–40 / 62–65), longest wait for
+    something new 2.7 min; the Big Ones are 1,500 · 200K · 2M · 60M · 1.8B; from board 3 a game takes about 10 to 30% off
+    the Big One, with up to ten FULL HOUSEs a game on board 4.
 
 - **Snow Day** (box 4). **The refinement session** (October 2026, rule 16). The owner asked for Snow Day to be taken to the
   bar of a finished commercial game, with research rounds between the critic rounds, and lifted the byte cap in advance
@@ -2770,6 +2813,13 @@ box or two. Starter, box 1 until then, opens on a still jar and earns "about 0¢
 - **A shadow follows its object.** A rounded-rectangle shadow under every block sprite left a dark square tile behind
   an irregular rock and a dark plate under a bank's pediment; a close-up critic found both at once. Draw each shadow
   from the object's own outline.
+- **Test the closed state too.** Tilt's mega balls passed the test that dropped them past every tulip, but only open ones:
+  closed, a drain tulip's dome left less room by the wall than a mega ball needs. A test that clears a path should also run
+  with everything that can close, fill up or be bought in its other state.
+- **Decide a result when its animation starts.** A reel stopped by the view before the rules had rolled shows the old
+  result and then swaps. Roll first, send the result with the start, and drive each moving part to it on game time.
+- **A goal that the late game meets by itself is not a goal.** Before adding "do X for a bonus", have the bot measure how
+  often X already happens; with hundreds of balls every pin was struck every game, so the goal had to be "at once".
 - **Stills plateau, close-ups do not.** Three critics on play-size filmstrips scored Tilt's "commercial" 3, 4, 4 while
   the art changed a great deal; one critic on 28 close-ups returned forty concrete faults, every one fixable. Alternate
   the two, and send the close-ups first when the scores stop moving.
