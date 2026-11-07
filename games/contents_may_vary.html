@@ -1529,7 +1529,16 @@ function drawMachine(alpha) {
   // balls
   const rB = CORE.R * sc * 1.35 + 4, rM = CORE.P.megaR * sc * 1.1 + 4, gb = S.fever > 0;
   if (!K.reduced) for (const b of S.balls) if (b.k === 1 && Math.random() < .5 && parts.length < 300) parts.push({ x: b.x + (Math.random() - .5), y: b.y - 1, vx: (Math.random() - .5) * 8, vy: -6, t: 0, life: .35, col: Math.random() < .5 ? '#ffb05a' : '#fff3c8', r: 1 });
-  for (const b of S.balls) { if (!vis(b.y)) continue; const s = b.k === 2 ? spr.mega : b.k === 1 ? spr.bomb : gb ? spr.gold : spr.ball, r = b.k === 2 ? rM : rB; c.drawImage(s, X(b.x) - r, Y(b.y) - r, r * 2, r * 2); }
+  // every ball in view is drawn, however many: up to a few hundred each is its own sprite; past that the plain ones go in
+  // four batched paths (shadow, body, rim, highlight), which cost the same for a thousand balls as for one, so a crowded
+  // glass never has to leave any out
+  { let n = 0; for (const b of S.balls) if (!b.k && vis(b.y)) n++;
+    const batch = n > 220, rb = CORE.R * sc * 1.35;
+    for (const b of S.balls) { if (!vis(b.y) || (batch && !b.k)) continue; const s = b.k === 2 ? spr.mega : b.k === 1 ? spr.bomb : gb ? spr.gold : spr.ball, r = b.k === 2 ? rM : rB; c.drawImage(s, X(b.x) - r, Y(b.y) - r, r * 2, r * 2); }
+    if (batch) { const path = (dx, dy, rr2) => { c.beginPath(); for (const b of S.balls) if (!b.k && vis(b.y)) { const x = X(b.x) + dx, y = Y(b.y) + dy; c.moveTo(x + rr2, y); c.arc(x, y, rr2, 0, 6.2832); } };
+      path(rb * .3, rb * .42, rb * .92); c.fillStyle = 'rgba(0,0,0,.3)'; c.fill();
+      path(0, 0, rb); c.fillStyle = gb ? '#ffb020' : '#8d95aa'; c.fill(); c.strokeStyle = 'rgba(12,16,32,.6)'; c.lineWidth = Math.max(.8, rb * .14); c.stroke();
+      path(-rb * .3, -rb * .34, rb * .42); c.fillStyle = gb ? '#fff3c0' : '#e8edf6'; c.fill(); } }
   tm = mark('m.balls', tm);
   if (reachK > .36) { c.fillStyle = 'rgba(4,2,12,' + (.6 * (reachK - .35) / .65) + ')'; c.fillRect(ox, oy, bw, vh); }
   reels(B); lantern(); fxDraw(); reels(B, true); tm = mark('m.fx', tm);
@@ -2717,7 +2726,7 @@ const SCENES = {
   // the reels in a REACH; most of a board alight (FULL HOUSE in reach); the glass full and pouring into the mega ball
   reach: S => S.phase === 'run' && S.fever <= 0 && S.reel && S.reel.reach && S.reel.T - S.reel.t < .3,
   house: S => S.phase === 'run' && S.board >= 1 && S.balls.length > 120 && S.tray > 60 && S.glow && S.on / CORE.board(S.board, CORE.stats(S).tulip).nl > .93,
-  full: S => S.phase === 'run' && CORE.stats(S).mega && S.balls.length >= CORE.CAP && S.tray > 50
+  full: S => S.phase === 'run' && S.balls.length >= 600 && S.tray > 50
 };
 function scene(name) {
   const m = /^([a-z]+?)(\d?)$/.exec(name), f = m && SCENES[m[1]]; if (!f) { console.warn('[clew] no scene ' + name); return null; }
@@ -2797,13 +2806,13 @@ K.debug = {
    step of 1/120 s, a spatial grid of 4-unit cells. */
 const CORE = (() => {
   const { rand, hash, clamp } = KIT, { sqrt, abs, sin, floor, min, max, hypot, sign, round, pow, ceil } = Math;
-  const W = 100, DT = 1 / 120, G = 160, VMAX = 120, R = 1.2, C = 4, CAP = 400;
-  const P = { hitV: 4.5, rest: .3, lastCall: 60, lanLife: 8, lanFever: 4, feverT: 10, feverRate: 24, spin: 1.3, reach: 2.2, demoFever: 3, glowT: [5.5, 7.5, 6, 4.5, 5], houseF: .018, houseFever: 3, megaR: 3.4, megaEvery: 60, triple: .11 };
+  const W = 100, DT = 1 / 120, G = 160, VMAX = 120, R = 1.2, C = 4, CAP = 1000;
+  const P = { hitV: 4.5, rest: .3, lastCall: 60, lanLife: 8, lanFever: 4, feverT: 10, feverRate: 24, spin: 1.3, reach: 2.2, demoFever: 3, glowT: [5.5, 7.5, 6, 4.5, 5], houseF: .03, houseFever: 3, megaR: 3.4, megaEvery: 60, triple: .11 };
   const BOARDS = ['The machine', 'The tall machine', 'The parlour', 'The street', 'The mountain'];
   const BH = [180, 360, 460, 560, 660];                    // board heights
   const HPm = [1, 3, 10, 40, 160], VALm = [1, 2.5, 6, 15, 40];
-  const BIG = [1500, 3e5, 2.9e6, 8e7, 2.4e9];        // the Big One on each board
-  const ARMC = [1, 600, 4e4, 1e6, 1.5e8];            // what a bulb on each panel of the sign costs
+  const BIG = [1500, 4.2e5, 5.7e6, 1.6e8, 5.6e9];        // the Big One on each board
+  const ARMC = [1, 600, 4e4, 1e6, 8e7];            // what a bulb on each panel of the sign costs
 
   /* ---------------- the tree: the parlour's neon sign ----------------
      arm: the board that opens it; p: the node it hangs from; add/mul per level. */
@@ -3018,7 +3027,8 @@ const CORE = (() => {
   }
   const ev = (S, e) => { S.ev.push(e); if (S.ev.length > 160) S.ev.splice(0, 60); };
   const pay = (S, v) => { if (S.fever > 0) v *= 2; S.$ += v; S.earned += v; S.runC += v; return v; };
-  const spawn = (S, x, y, k, vx) => { const b = { x, y, vx: vx == null ? (rand(S) - .5) * 6 : vx, vy: 12, k: k || 0, s: 0, h: 0, w: 0, ax: x, ay: y }; S.balls.push(b); return b; };
+  // a ball is kept lean (the glass holds a thousand, and a save holds the glass): what is zero is left out until it is set
+  const spawn = (S, x, y, k, vx) => { const b = { x, y, vx: vx == null ? (rand(S) - .5) * 6 : vx, vy: 12, ax: round(x * 10) / 10, ay: round(y * 10) / 10 }; if (k) b.k = k; S.balls.push(b); return b; };
 
   // damage to a prize block or the Big One
   function hurt(S, B, r, d, x, y) {
@@ -3057,7 +3067,7 @@ const CORE = (() => {
   const houseOn = S => S.runs >= 2 || S.board > 0;
   const light = (S, v, G) => { if (S.rt - S.glow[v] >= G) S.on++; S.glow[v] = S.rt; };
   function house(S, B) {
-    const d = BIG[S.board] * P.houseF * stats(S).houseX / (1 + .6 * (S.runH | 0));   // the first of a game is the heaviest
+    const d = BIG[S.board] * P.houseF * stats(S).houseX / ((1 + (S.runH | 0)) ** 2);   // the first of a game is the heaviest
     S.glow.fill(-99); S.on = 0; S.houses = (S.houses | 0) + 1; S.runH = (S.runH | 0) + 1;
     // the first two of a game bring a burst of fever, and none after last call: with hundreds of balls on the glass, fever
     // lit every pin again and again and a game ran on for minutes after the tray was empty
@@ -3077,9 +3087,8 @@ const CORE = (() => {
     // with the glass full, what is poured still goes in where the thumb is: the lowest ball already past the Big One, in the
     // drain where it can do nothing more, makes room for it (and counts towards the mega ball, as it is caught). Only with
     // none down there does the tray hold back (or feed the mega ball), so the tray never counts down with nothing poured
-    // (failing that, the lowest ball a long way under the rail, where the eye watching the pour is not)
-    const room = () => { let j = -1; for (let i = 0; i < balls.length; i++) { const q = balls[i]; if (q.k === 0 && (j < 0 || q.y > balls[j].y)) j = i; }
-      if (j < 0 || balls[j].y < min(B.big.y + B.big.h + 2, 100)) return false; balls.splice(j, 1); if (st.mega) S.caught++; return true; };
+    const room = () => { const by = B.big.y + B.big.h + 2; let j = -1; for (let i = 0; i < balls.length; i++) { const q = balls[i]; if (!q.k && q.y > by && (j < 0 || q.y > balls[j].y)) j = i; }
+      if (j < 0) return false; balls.splice(j, 1); if (st.mega) S.caught++; return true; };
     const liveP = () => balls.length < CAP || room();
     const rush = last ? 3 : 1;   // last call: the tray empties three times as fast and the pockets stop paying
     const launching = st.auto && S.launch != null;
@@ -3179,7 +3188,7 @@ const CORE = (() => {
             const vn = b.vx * nx + b.vy * ny;
             if (vn < 0) {
               if ((rc.t === 'b' || rc.t === 'B') && b.k === 1) { boom(S, B, b.x, b.y); out.push(n); gone = true; break; }
-              if ((rc.t === 'b' || rc.t === 'B') && (vn < -P.hitV || (mega && rc.t === 'b')) && b.h <= 0) {   // a mega ball grinds through blocks, but must strike the Big One, not lie on it
+              if ((rc.t === 'b' || rc.t === 'B') && (vn < -P.hitV || (mega && rc.t === 'b')) && !(b.h > 0)) {   // a mega ball grinds through blocks, but must strike the Big One, not lie on it
                 const dmg = st.dmg * (mega ? st.megaX : 1);
                 hurt(S, B, rc, dmg, b.x, b.y); if (mega) b.h = .08;
                 if (mega && rc.t === 'b' && S.hp[rc.i] <= 0) continue;   // it broke: plough on
@@ -3196,9 +3205,11 @@ const CORE = (() => {
       if (mega) megas.push(b);
       // a ball that has all but stopped (in the notch between two nails, against a wall) gets the knock a player gives the
       // glass: a quarter of a second at walking pace and it is nudged sideways and up, so nothing is seen hanging
-      if (!gone) { if (b.vx * b.vx + b.vy * b.vy < 16) { b.st = (b.st || 0) + dt; if (b.st > .25) { b.st = 0; b.vx += (rand(S) < .5 ? -1 : 1) * (mega ? 30 : 22); b.vy -= mega ? 20 : 14; ev(S, { k: 'knock', x: b.x, y: b.y }); } } else b.st = 0; }
+      // positions and speeds kept to a thousandth, so a save of a full glass stays small (it changes nothing one can see)
+      if (!gone) { b.x = round(b.x * 1e3) / 1e3; b.y = round(b.y * 1e3) / 1e3; b.vx = round(b.vx * 100) / 100; b.vy = round(b.vy * 100) / 100; }
+      if (!gone) { if (b.vx * b.vx + b.vy * b.vy < 16) { b.st = (b.st | 0) + 1; if (b.st > 30) { b.st = 0; b.vx += (rand(S) < .5 ? -1 : 1) * (mega ? 30 : 22); b.vy -= mega ? 20 : 14; ev(S, { k: 'knock', x: b.x, y: b.y }); } } else b.st = 0; }
       // a ball wedged somewhere for two seconds is shaken loose and dropped
-      if (!gone) { b.w = (b.w || 0) + dt; if (b.w > 1.5) { if ((b.x - b.ax) ** 2 + (b.y - b.ay) ** 2 < 2) { out.push(n); ev(S, { k: 'lost', x: b.x, y: b.y }); } b.ax = b.x; b.ay = b.y; b.w = 0; } }
+      if (!gone) { b.w = (b.w | 0) + 1; if (b.w > 180) { if ((b.x - b.ax) ** 2 + (b.y - b.ay) ** 2 < 2) { out.push(n); ev(S, { k: 'lost', x: b.x, y: b.y }); } b.ax = round(b.x * 10) / 10; b.ay = round(b.y * 10) / 10; b.w = 0; } }
     }
     // a mega ball shoulders ordinary balls aside
     if (megas.length) for (const m of megas) for (const b of balls) {

@@ -474,7 +474,7 @@ if (suites.includes('clew') && clew) {
       for (let t = 0; t < 60; t += .1) { CORE.act(S, 'hold', 50 + 44 * Math.sin(t * .7)); CORE.step(S, .1); n += S.ev.filter(e => e.k === 'lost').length; S.ev.length = 0; }
       lost.push(n); }
     // (what is left is a crowd jostling on top of a Big One that cannot break here)
-    check(lost.every(n => n <= 5), `a minute of pouring on each board shakes at most five balls loose as stuck (${lost.join(', ')})`);
+    check(lost.every(n => n <= 15), `a minute of pouring a glass of up to ${CORE.CAP} balls on each board shakes at most fifteen loose as stuck (${lost.join(', ')})`);
   }
   {
     // a mega ball rolls over a closed tulip's dome as it does over pins (it is wider than the gap between it and the wall)
@@ -612,8 +612,10 @@ if (suites.includes('clew') && clew) {
     const S = CORE.init(8), B = CORE.board(0, 0), r = B.blocks[0]; S.lv.bomb = 1; S.bought++;
     S.balls.push({ x: r.x + 3, y: r.y - 6, vx: 0, vy: 30, k: 1, s: 0, h: 0, w: 0, ax: 0, ay: 0 }); S.hp = S.hp.map(() => 5); run(S, .5);
     check(S.ev.some(e => e.k === 'boom') && S.hp.filter(h => h === 0).length >= 3, `a bomb ball breaks the blocks round it (${S.hp.filter(h => h === 0).length})`);
+    // (a glass held full near the rail, so there is no ball in the drain to make room: the tray then feeds the mega ball)
     const T = onBoard(1, { mega: 1, rate: 5, t_rate: 3, m_rate: 3, s_fev: 3 }); T.tray = 2000; T.big = 1e30; T.fever = 40; CORE.act(T, 'hold', 50); let megas = 0;
-    run(T, 40, () => { megas += T.ev.filter(e => e.k === 'mega').length; T.ev.length = 0; });
+    const fill = () => { while (T.balls.length < CORE.CAP) T.balls.push({ x: 5 + (T.balls.length * 7.3) % 90, y: 6 + (T.balls.length % 7), vx: 0, vy: 0, k: 0, ax: 0, ay: 0 }); };
+    run(T, 20, () => { fill(); megas += T.ev.filter(e => e.k === 'mega').length; T.ev.length = 0; });
     check(T.balls.length <= CORE.CAP + 4 && megas > 0, `the board never holds more than ${CORE.CAP} balls, and the overflow becomes mega balls (${megas})`);
   }
   {
