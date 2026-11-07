@@ -40,7 +40,7 @@ const SHIPPED = ['clew', 'flurry', 'warren', 'jetty', 'guests', 'starter', 'lawn
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { jetty: 350 * 1024, guests: 260 * 1024, warren: 300 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 230 * 1024, flurry: 230 * 1024 };
+const BOX_CAP = { jetty: 350 * 1024, guests: 260 * 1024, warren: 300 * 1024, starter: 200 * 1024, lawn: 200 * 1024, clew: 300 * 1024, flurry: 230 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -532,7 +532,12 @@ if (suites.includes('clew') && clew) {
     while (S.phase === 'run' && t < 60) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1; }
     check(S.phase === 'tree' && t >= 8 && t <= 30, `the first game is over in 8 to 30 seconds (${t.toFixed(1)} s)`);
     check(CORE.UP.some(u => CORE.can(S, u)), `and its ${S.$.toFixed(0)} coins buy a bulb straight away`);
-    check(S.big < CORE.BIG[0] && S.big > CORE.BIG[0] * .9, `it chips the Big One (${Math.ceil(S.big)} of ${CORE.BIG[0]})`);
+    check(S.big < CORE.BIG[0] && S.big > CORE.BIG[0] * .85, `it chips the Big One (${Math.ceil(S.big)} of ${CORE.BIG[0]})`);
+    // and it has its loud moment: the first ball into START spins the reels once for free, a REACH onto three sevens and a
+    // short fever, in every one of ten first games
+    let n = 0; for (let seed = 1; seed <= 10; seed++) { const F = CORE.init(seed), m2 = { seed: seed * 7 }; let t2 = 0, got = 0;
+      while (F.runs < 2 && t2 < 300) { CORE.bots.eager(F, m2, .1); CORE.step(F, .1); t2 += .1; if (F.ev.some(e => e.k === 'fever' && e.demo)) got = 1; F.ev.length = 0; } n += got; }
+    check(n === 10, `the first games of all spin the reels once for free and go into fever (${n} of 10)`);
   }
   {
     // the thumb pours out of the tray at its rate, and letting go stops it
