@@ -466,6 +466,67 @@ if (suites.includes('clew') && clew) {
     check(!stuck.length, 'a mega ball dropped anywhere on any board ploughs through to the bottom without sticking', stuck.join(', '));
   }
   {
+    // nothing is seen hanging: on every board, everything bought (mega balls too) and the tulips filling up and closing,
+    // a minute of pouring sweeping across the board shakes no ball loose as stuck (the nails of the ways once held balls in
+    // their notches, and a mega ball wedged between a wall and a closed drain tulip: about a thousand a game)
+    const lv = Object.fromEntries(CORE.UP.filter(u => !u.ot).map(u => [u.id, u.max])); const lost = [];
+    for (let b = 0; b < 5; b++) { const S = onBoard(b, lv); S.big = 1e30; S.tray = 5000; let n = 0;
+      for (let t = 0; t < 60; t += .1) { CORE.act(S, 'hold', 50 + 44 * Math.sin(t * .7)); CORE.step(S, .1); n += S.ev.filter(e => e.k === 'lost').length; S.ev.length = 0; }
+      lost.push(n); }
+    // (what is left is a crowd jostling on top of a Big One that cannot break here)
+    check(lost.every(n => n <= 5), `a minute of pouring on each board shakes at most five balls loose as stuck (${lost.join(', ')})`);
+  }
+  {
+    // a mega ball rolls over a closed tulip's dome as it does over pins (it is wider than the gap between it and the wall)
+    const stuck = [];
+    for (let b = 0; b < 5; b++) for (let x = 2; x <= 98; x += 4) {
+      const S = onBoard(b, { mega: 1, t_tulip: 3 }); S.big = 1e30; S.tray = 0; S.caught = 0; S.cap = S.cap.map(() => 0); S.balls = [{ x, y: 1.5, vx: 0, vy: 12, k: 2, s: 0, h: 0, w: 0, ax: x, ay: 1.5 }];
+      let t = 0, lost = false; while (S.balls.length && t < 40) { CORE.step(S, .05); t += .05; if (S.ev.some(e => e.k === 'lost')) { lost = true; break; } S.ev.length = 0; }
+      if (lost || S.balls.length) stuck.push(`board ${b + 1} at ${x}`);
+    }
+    check(!stuck.length, 'with every tulip closed, a mega ball dropped anywhere still reaches the bottom', stuck.join(', '));
+  }
+  {
+    // the reels show what they decide: the symbols travel with the spin, a REACH is two alike and turns longer, a win is three
+    const S = onBoard(0, { start: 1, luck: 3 }); S.big = 1e30; S.tray = 0; S.spins = 3; S.balls = [];
+    const spins = [], reels = []; let t = 0;
+    while (t < 30 && reels.length < 3) { S.spins = Math.max(S.spins, 1); CORE.step(S, .05); t += .05; for (const e of S.ev) { if (e.k === 'spin') spins.push(Object.assign({ at: t }, e)); if (e.k === 'reel') reels.push(Object.assign({ at: t }, e)); } S.ev.length = 0; }
+    const ok = reels.every((e, i) => spins[i] && spins[i].r.join() === e.r.join() && spins[i].reach === (e.r[0] === e.r[1]) && Math.abs(e.at - spins[i].at - spins[i].T) < .11 && spins[i].T === CORE.P.spin + (spins[i].reach ? CORE.P.reach : 0) && e.win === (e.r[0] === e.r[1] && e.r[1] === e.r[2]));
+    check(reels.length === 3 && ok, 'the reels stop on the symbols they were sent off with, and a REACH turns longer', JSON.stringify({ spins, reels }));
+  }
+  {
+    // the twin stream follows the auto-launcher too, as its bulb says ("every ball you pour")
+    const S = onBoard(0, { auto: 1, twin: 1, rate: 4 }); S.big = 1e30; S.tray = 40; CORE.act(S, 'launch', 20);
+    run(S, .6); const left = S.balls.filter(q => q.x < 50).length, right = S.balls.filter(q => q.x >= 50).length;
+    check(left > 0 && right > 0 && Math.abs(left - right) <= 1, `the auto-launcher's balls come with a twin on the other side (${left} and ${right})`);
+  }
+  {
+    // FULL HOUSE: every pin glowing at once is a blow of a share of the Big One, then every pin goes dark; not in the first two games
+    const S = onBoard(2, {}); S.big = CORE.BIG[2]; S.tray = 5; const B = CORE.board(2, 0); S.balls = []; CORE.step(S, .02);
+    const lights = B.pins.map((p, i) => i).filter(i => !B.pins[i].dim), last = lights[lights.length - 1], q = B.pins[last];
+    for (const i of lights) S.glow[i] = S.rt; S.glow[last] = -99; S.on = lights.length - 1;
+    S.balls = [{ x: q.x, y: q.y - q.r - CORE.R - .3, vx: 0, vy: 20, k: 0, s: 0, h: 0, w: 0, ax: 0, ay: 0 }]; S.ev.length = 0; S.gk = -99;
+    for (let k = 0; k < 30 && !S.ev.some(e => e.k === 'house'); k++) CORE.step(S, 1 / 120);
+    const h = S.ev.find(e => e.k === 'house');
+    check(h && Math.abs(CORE.BIG[2] - S.big - CORE.BIG[2] * CORE.P.houseF) < 1 && S.on === 0 && S.glow.every(g => g < 0) && S.fever > 0, 'the last dark pin struck is FULL HOUSE: a share of the Big One off, a burst of fever, every pin dark again');
+    const F = CORE.init(9); check(!CORE.houseOn(F), 'and the first two games of all do without it');
+    check(lights.length === B.nl && CORE.board(1, 0).pins.every(p => !p.way || p.dim), 'the nails of a way and the posts of a tulip do not count');
+  }
+  {
+    // overtime: from the parlour on, four bulbs that never run out, each level dearer than the last
+    const S = onBoard(1, {}); const ot = CORE.UP.filter(u => u.ot);
+    check(ot.length === 4 && ot.every(u => !CORE.open(S, u)), 'overtime is shut on the first two boards');
+    const P2 = onBoard(2, {}); P2.$ = 1e30; const u = ot[2], p0 = CORE.price(P2, u); for (let i = 0; i < 40; i++) CORE.act(P2, 'buy', u.id);
+    check(P2.lv[u.id] === 40 && CORE.can(P2, u) && CORE.price(P2, u) > p0 * 1e6, 'from the parlour on it opens, can be bought forty times over and still be bought, and grows dearer');
+  }
+  {
+    // a version 4 game goes on in version 5: the bulbs, the coins and the board are kept
+    const S = CORE.init(4); S.lv = { balls: 6, rate: 2 }; S.$ = 1234; S.board = 2; S.big = 99; delete S.glow; S.reel = { t: .5, r: null };
+    const M = CORE.migrate(JSON.parse(JSON.stringify(S)), 4);
+    check(M.lv.balls === 6 && M.$ === 1234 && M.board === 2 && M.big === 99 && M.reel === null, 'a version 4 save keeps its bulbs, coins, board and Big One');
+    let ok = true; try { CORE.act(M, 'run'); for (let k = 0; k < 50; k++) CORE.step(M, .1); } catch (e) { ok = false; } check(ok, 'and plays on');
+  }
+  {
     // the first game: short, and it pays for a bulb
     const S = CORE.init(1), m = { seed: 5 }; let t = 0;
     while (S.phase === 'run' && t < 60) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1; }

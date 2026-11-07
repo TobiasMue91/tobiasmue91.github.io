@@ -1483,9 +1483,21 @@ function drawMachine(alpha) {
   c.save(); rr(ox, oy, bw, vh, 8); c.clip();
   tm = mark('m.rim', tm); c.drawImage(a.cn, 0, cam * sc * a.k, a.cn.width, vh * a.k, ox, oy, bw, vh); tm = mark('m.art', tm);
   const top = cam - 4, bot = cam + vh / sc + 4, vis = y => y > top && y < bot;
-  // lit pins
-  const ls = spr.lit, lw = 11;
-  for (let i = 0; i < B.pins.length; i++) if (S.lit[i] && B.pins[i].k < 2 && vis(B.pins[i].y)) c.drawImage(ls, X(B.pins[i].x) - lw / 2, Y(B.pins[i].y) - lw / 2, lw, lw);
+  // lit pins: a pin glows when a ball strikes it and fades over the seconds after; with most of the board alight the
+  // pins still dark pulse, so the thumb knows where FULL HOUSE is waiting
+  const ls = spr.lit, darkPins = [], GL = CORE.glowT(S), hs = CORE.houseOn(S) && S.phase === 'run', fr = hs && S.glow ? S.on / B.nl : 0, pz = .5 + .5 * Math.sin(now * 7);
+  if (S.glow && S.glow.length === B.pins.length) for (let i = 0; i < B.pins.length; i++) { const p = B.pins[i]; if (p.dim || !vis(p.y)) continue; const age = S.rt - S.glow[i], lw = Math.max(11, p.r * sc * 3.2);
+    if (age < GL) { c.globalAlpha = (hs ? Math.min(1, (GL - age) / (GL * .35)) : 1) * (fr > .85 ? .4 : 1); c.drawImage(ls, X(p.x) - lw / 2, Y(p.y) - lw / 2, lw, lw); }
+    else if (fr > .85) { darkPins.push(p); c.globalAlpha = .85; c.fillStyle = '#05040a'; c.beginPath(); c.arc(X(p.x), Y(p.y), Math.max(2.5, p.r * sc * 1.2), 0, 7); c.fill(); } }
+  c.globalAlpha = 1;
+  // past 85% the pins still dark are what the player hunts: a hard white ring on a black edge, larger than anything else on
+  // the glass and pulsing, so the last three can be pointed at; the lit ones step back
+  if (darkPins.length) { const rd = Math.max(9, 3 * sc) * (1 + .25 * pz); c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,.8)'; c.beginPath(); for (const p of darkPins) { c.moveTo(X(p.x) + rd, Y(p.y)); c.arc(X(p.x), Y(p.y), rd, 0, 7); } c.stroke();
+    c.lineWidth = 2.5; c.strokeStyle = LIME; glow(LIME, 12); c.beginPath(); for (const p of darkPins) { c.moveTo(X(p.x) + rd, Y(p.y)); c.arc(X(p.x), Y(p.y), rd, 0, 7); } c.stroke(); noGlow(); darkPins.length = 0; }
+  // the dark pins above and below the glass: a lime arrow at that edge with how many
+  if (fr > .85 && S.glow) { let up = 0, dn = 0; for (let i = 0; i < B.pins.length; i++) { const p = B.pins[i]; if (p.dim || S.rt - S.glow[i] < GL) continue; if (p.y < top + 4) up++; else if (p.y > bot - 4) dn++; }
+    for (const [n, yy, d] of [[up, oy + 26, -1], [dn, oy + vh - 26, 1]]) if (n) { const ax = ox + bw / 2; c.fillStyle = 'rgba(8,6,16,.88)'; rr(ax - 38, yy - 13, 76, 26, 13); c.fill(); c.strokeStyle = LIME; c.lineWidth = 2; c.stroke();
+      c.fillStyle = LIME; c.beginPath(); c.moveTo(ax - 22, yy - 5 * d); c.lineTo(ax - 14, yy + 5 * d); c.lineTo(ax - 6, yy - 5 * d); c.fill(); c.font = '400 13px Bungee, sans-serif'; c.textAlign = 'left'; c.fillText(n + (d < 0 ? ' UP' : ' DOWN'), ax, yy + 5); } }
   tm = mark('m.lit', tm);
   // golden pins
   if (gold) for (const i of gold) { const p = B.pins[i]; if (!vis(p.y)) continue; const gx = X(p.x), gy = Y(p.y), gr = Math.max(2.6, p.r * sc * 1.5), q = c.createRadialGradient(gx - gr * .35, gy - gr * .4, 0, gx, gy, gr); q.addColorStop(0, '#fffbe0'); q.addColorStop(.45, '#ffc93c'); q.addColorStop(1, '#8a5206'); glow(GOLD, 10); c.fillStyle = q; c.beginPath(); c.arc(gx, gy, gr, 0, 7); c.fill(); noGlow(); }
@@ -1504,16 +1516,29 @@ function drawMachine(alpha) {
   const rB = CORE.R * sc * 1.35 + 4, rM = CORE.P.megaR * sc * 1.1 + 4, gb = S.fever > 0;
   if (!K.reduced) for (const b of S.balls) if (b.k === 1 && Math.random() < .5 && parts.length < 300) parts.push({ x: b.x + (Math.random() - .5), y: b.y - 1, vx: (Math.random() - .5) * 8, vy: -6, t: 0, life: .35, col: Math.random() < .5 ? '#ffb05a' : '#fff3c8', r: 1 });
   for (const b of S.balls) { if (!vis(b.y)) continue; const s = b.k === 2 ? spr.mega : b.k === 1 ? spr.bomb : gb ? spr.gold : spr.ball, r = b.k === 2 ? rM : rB; c.drawImage(s, X(b.x) - r, Y(b.y) - r, r * 2, r * 2); }
-  tm = mark('m.balls', tm); reels(B); lantern(); fxDraw(); reels(B, true); tm = mark('m.fx', tm);
+  tm = mark('m.balls', tm);
+  if (reachK > .36) { c.fillStyle = 'rgba(4,2,12,' + (.6 * (reachK - .35) / .65) + ')'; c.fillRect(ox, oy, bw, vh); }
+  reels(B); lantern(); fxDraw(); reels(B, true); tm = mark('m.fx', tm);
   // glass glare
   c.drawImage(gl.glare, ox, oy, bw, vh);
+  if (flash.house > 0 && !K.reduced && DIAG.fx) { c.fillStyle = 'rgba(220,255,255,' + Math.min(.55, flash.house * .55) + ')'; c.fillRect(ox, oy, bw, vh); }
   if (feverT > 0 && !K.reduced) { c.fillStyle = `hsla(${(now * 90) % 360},100%,60%,${.06 + .04 * Math.sin(now * 6)})`; c.fillRect(ox, oy, bw, vh); }
   c.restore(); tm = mark('m.glare', tm);
+  // LIGHT EVERY PIN: a neon tube along the top of the rim fills as the pins glow
+  if (hs && S.glow) { const ty = oy - rim / 2, f = clamp(fr, 0, 1), hot = f > .85; c.fillStyle = 'rgba(8,6,16,.85)'; rr(ox + 6, ty - 4, bw - 12, 8, 4); c.fill();
+    const tg = c.createLinearGradient(ox, 0, ox + bw, 0); tg.addColorStop(0, CYAN); tg.addColorStop(1, hot ? PINK : '#a6f8ff'); glow(hot ? PINK : CYAN, 8 + (hot ? pz * 8 : 0)); c.fillStyle = tg; rr(ox + 7, ty - 3, (bw - 14) * f, 6, 3); c.fill(); noGlow();
+    const left = B.nl - S.on; if (left <= 3) closeT = 2; else if (closeT > 0 && closeT < 1.99 && left > 8 && !slip) { slip = 1.3; snd.miss(); } if (left <= 3) slip = 0;
+    const lt = houseT > 0 ? 'FULL HOUSE!' : slip > 0 ? 'SO CLOSE! THE PINS FADED' : hot ? 'LIGHT EVERY PIN · ' + left + (left === 1 ? ' PIN LEFT' : ' PINS LEFT') : 'LIGHT EVERY PIN · ' + Math.floor(f * 100) + '%'; c.font = '400 10px Bungee, sans-serif'; c.textAlign = 'center'; const lw2 = c.measureText(lt).width + 14;
+    c.fillStyle = 'rgba(8,6,16,.9)'; rr(ox + bw / 2 - lw2 / 2, ty - 8, lw2, 16, 8); c.fill(); c.fillStyle = houseT > 0 ? GOLD : slip > 0 ? '#ff8a80' : hot ? LIME : '#d8fdff'; c.fillText(lt, ox + bw / 2, ty + 4);
+    // the first time it is there: what it wants, once, for a few seconds
+    if (!(S.houses | 0) && S.rt < 7 && houseTip < 3) { const t = 'LIGHT EVERY PIN AT ONCE FOR A BIG BLOW'; c.font = '400 11px Bungee, sans-serif'; const tw = Math.min(bw - 10, c.measureText(t).width + 24); c.globalAlpha = clamp(Math.min(S.rt * 3, 7 - S.rt), 0, 1);
+      c.fillStyle = 'rgba(8,6,16,.9)'; rr(ox + bw / 2 - tw / 2, oy + 44, tw, 24, 12); c.fill(); c.strokeStyle = CYAN; c.lineWidth = 1.5; c.stroke(); fit(t, 11, tw - 16, 'Bungee'); c.fillStyle = '#d8fdff'; c.fillText(t, ox + bw / 2, oy + 60); c.globalAlpha = 1; } }
   // a map of a board taller than the glass, on the rim
   if (B.H * sc > vh + 2) { const mx = ox + bw + 1, mh = vh, f = mh / B.H; c.fillStyle = 'rgba(10,12,30,.85)'; c.fillRect(mx, oy, 8, mh); c.fillStyle = manualCam ? 'rgba(255,233,166,.7)' : 'rgba(56,242,255,.45)'; rr(mx, oy + cam * f, 8, vh / sc * f, 3); c.fill();
     c.fillStyle = 'rgba(220,230,255,.7)'; for (const [ty, d] of [[oy + 4, -1], [oy + mh - 4, 1]]) { c.beginPath(); c.moveTo(mx + 1, ty - d * 2); c.lineTo(mx + 7, ty - d * 2); c.lineTo(mx + 4, ty + d * 2); c.fill(); }
     if (!manualCam && stripHint < 3 && S.phase === 'run' && S.rt < 6 && !(CORE.stats(S).auto && S.launch == null && autoSet < 2)) { c.font = '400 10px Bungee, sans-serif'; c.textAlign = 'right'; const ty = oy + 40; c.fillStyle = 'rgba(8,6,16,.85)'; rr(mx - 96, ty - 11, 90, 18, 9); c.fill(); c.fillStyle = '#d8fdff'; c.fillText('DRAG TO LOOK ▸', mx - 12, ty + 2); }
     c.fillStyle = GOLD; c.fillRect(mx, oy + B.big.y * f, 8, Math.max(3, B.big.h * f)); c.fillStyle = '#fff'; for (let i = 0; i < S.balls.length; i += 3) c.fillRect(mx + 2.5, oy + S.balls[i].y * f, 3, 1.5);
+    if (fr > .85) { c.fillStyle = LIME; for (let i = 0; i < B.pins.length; i++) if (!B.pins[i].dim && S.rt - S.glow[i] >= GL) c.fillRect(mx, oy + B.pins[i].y * f - 1, 8, 2); }
     // taken by hand: a button gives the camera back
     if (manualCam && !zoom) { const t = 'AUTO CAMERA', bx = ox + bw - 112, by = oy + 10; c.fillStyle = 'rgba(8,6,16,.85)'; rr(bx, by, 104, 30, 15); c.fill(); c.strokeStyle = CYAN; c.lineWidth = 2; c.stroke(); c.font = '400 11px Bungee, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#d8fdff'; c.fillText(t, bx + 52, by + 19); autoBtn = { x: bx, y: by, w: 104, h: 30 }; } else autoBtn = null; }
   else autoBtn = null;
@@ -1600,39 +1625,92 @@ function reelSym(i, x, y, r) {
   else { c.beginPath(); c.moveTo(-.6, -.75); c.lineTo(.65, -.75); c.lineTo(.65, -.5); c.quadraticCurveTo(.05, .1, -.05, .82); c.lineTo(-.42, .82); c.quadraticCurveTo(-.32, .05, .2, -.45); c.lineTo(-.6, -.45); c.closePath(); out('#e2203a'); }
   c.restore();
 }
-let reel = { spin: 0, r: [6, 2, 6], win: 0 };
+/* The reels. The rules decide the symbols as the reels start to turn (the 'spin' event carries them), so each reel can
+   be driven to its own symbol: it runs up, turns at speed, brakes evenly so that it comes to rest a little past its
+   symbol at its stop time, and settles back onto it. Left to right, a quarter of a second apart; on a REACH (the first
+   two agree) the third reel drops to a crawl until the rules decide. Positions are in symbols, the strip runs downwards,
+   and the clock is the game's, so a slow frame or a pause cannot make a reel jump. */
+let reel = { r: [0, 3, 5], win: 0, pos: [0, 3, 5], plan: null, el: 0, stopped: 0 };
+const RV = 20, RUP = .2, ROV = .18, RSET = .22, RSTOP = [.8, 1.05];
+function planReels(r, T, reach) {
+  const p0 = reel.pos.map(Math.round), plan = [];
+  for (let i = 0; i < 3; i++) {
+    const Ti = i < 2 ? RSTOP[i] : T, D = i < 2 ? .45 : .55, P0 = p0[i];
+    if (i === 2 && reach) {   // run at speed until the second reel stops, slow to a crawl, then brake onto the symbol
+      const T1 = RSTOP[1], R = .35, D2 = .7, pT1 = P0 + RV * (T1 - RUP / 2);
+      let Pf = Math.ceil(pT1 + RV * R / 2 + 1.5 - ROV); Pf += ((r[i] - Pf) % 7 + 7) % 7;
+      const vr = (Pf + ROV - pT1 - RV * R / 2) / (T - T1 - R / 2 - D2 / 2);
+      plan.push({ P0, v: RV, Ti: T, Pf, reach: { T1, R, vr, D2, pT1 } }); continue;
+    }
+    // the speed is chosen within a few symbols a second of RV so that the even brake ends just past the symbol
+    const run = Ti - RUP / 2 - D / 2, X = P0 + RV * run; let Pf = Math.round(X - ROV); Pf += ((r[i] - Pf) % 7 + 7) % 7; if (Pf + ROV - X > 3.5) Pf -= 7;
+    plan.push({ P0, v: (Pf + ROV - P0) / run, Ti, D, Pf });
+  }
+  return plan;
+}
+// where reel i is at time t of its spin, and how fast it is turning
+function reelAt(q, t) {
+  const v = q.v, up = t < RUP ? v * t * t / (2 * RUP) : v * (t - RUP / 2);
+  if (t >= q.Ti) { const u = Math.min(1, (t - q.Ti) / RSET); return [q.Pf + ROV * (1 - u * u * (3 - 2 * u)), 0]; }
+  if (q.reach) { const R = q.reach; if (t < R.T1) return [q.P0 + up, t < RUP ? v * t / RUP : v];
+    const u = t - R.T1;
+    if (u < R.R) return [R.pT1 + v * u + (R.vr - v) * u * u / (2 * R.R), v + (R.vr - v) * u / R.R];
+    const pR = R.pT1 + (v + R.vr) / 2 * R.R, tD = q.Ti - R.D2;
+    if (t < tD) return [pR + R.vr * (t - R.T1 - R.R), R.vr];
+    const pD = pR + R.vr * (tD - R.T1 - R.R), w = t - tD; return [pD + R.vr * w - R.vr * w * w / (2 * R.D2), R.vr * (1 - w / R.D2)]; }
+  const tD = q.Ti - q.D; if (t < tD) return [q.P0 + up, t < RUP ? v * t / RUP : v];
+  const pD = q.P0 + v * (tD - RUP / 2), w = t - tD; return [pD + v * w - v * w * w / (2 * q.D), v * (1 - w / q.D)];
+}
+function reelTick(dt) {
+  if (!reel.plan && S.reel && S.reel.r) { reel.plan = planReels(S.reel.r, S.reel.T || CORE.P.spin, S.reel.reach); reel.el = (S.reel.T || CORE.P.spin) - S.reel.t; reel.stopped = 0; }   // a game picked up mid-spin
+  if (!reel.plan) return;
+  reel.el += dt; const P = reel.plan;
+  for (let i = 0; i < 3; i++) { reel.pos[i] = reelAt(P[i], reel.el)[0]; if (reel.stopped <= i && reel.el >= P[i].Ti) { reel.stopped = i + 1; snd.stop(i); if (i === 1 && P[2].reach) snd.reach(P[2].Ti - P[1].Ti); } }
+  if (reel.el > P[2].Ti + RSET) { reel.pos = P.map(q => q.Pf % 7); reel.plan = null; }
+}
+let reachK = 0;
+const reachOn = () => reel.plan && reel.plan[2].reach && reel.el > reel.plan[1].Ti && reel.el < reel.plan[2].Ti;
 function reels(B, pinned) {
   const sp = B.pockets.find(p => p.k === 1); if (!sp) return;
   const sc = Lo.sc, w = 30 * sc, h = 11 * sc, on = CORE.stats(S).start; let x = X(sp.cx), y = Y(sp.y - 16);
   const off = y < Lo.oy + h || y > Lo.oy + Lo.vh - h;
-  if (pinned) { if (!off || !on || !(S.spins > 0 || reel.spin > 0 || (reel.miss && now - reel.miss < 1.2) || reel.win > .5)) return; x = Lo.ox + Lo.bw / 2; y = Lo.oy + h / 2 + 12; }
+  if (pinned) { if (!off || !on || !(S.spins > 0 || reel.plan || (reel.miss && now - reel.miss < 1.2) || reel.win > .5)) return; x = Lo.ox + Lo.bw / 2; y = Lo.oy + h / 2 + 12; }
   else if (off) return;
+  // spinning, the reels come forward a little; in a REACH a good deal more, over a darkened board
+  const zk = 1 + .18 * Math.min(reachK, .35) / .35 + .5 * Math.max(0, reachK - .35) / .65; c.save(); c.translate(x, y); c.scale(zk, zk); c.translate(-x, -y);
   // the housing: a chrome bezel under a gold arch, as the centre fitting of a real machine
   c.fillStyle = 'rgba(0,0,0,.4)'; rr(x - w / 2 - 2, y - h / 2 + 2, w + 10, h + 10, 9); c.fill();
   c.fillStyle = chrome(c, 0, y - h / 2 - 6, 0, y + h / 2 + 6); rr(x - w / 2 - 6, y - h / 2 - 6, w + 12, h + 12, 9); c.fill(); c.strokeStyle = 'rgba(10,6,20,.8)'; c.lineWidth = 1; c.stroke();
   const ag = c.createLinearGradient(0, y - h / 2 - 6 - h * .35, 0, y - h / 2 - 4); ag.addColorStop(0, '#fff1a8'); ag.addColorStop(1, '#c47a10'); c.fillStyle = ag; c.beginPath(); c.ellipse(x, y - h / 2 - 5, w * .32, h * .35, 0, Math.PI, 0); c.fill(); c.stroke();
   for (const k of [-1, 0, 1]) reelSym(6, x + k * h * .2, y - h / 2 - 5 - h * .14, h * .1);
   c.fillStyle = '#05060f'; rr(x - w / 2 - 2, y - h / 2 - 2, w + 4, h + 4, 5); c.fill();
-  glow(reel.win > 0 ? GOLD : CYAN, 10 + reel.win * 14); c.strokeStyle = on ? (reel.win > 0 ? GOLD : CYAN) : 'rgba(56,242,255,.3)'; c.lineWidth = 1.6; c.stroke(); noGlow();
+  const rc = reachOn(), rp = rc ? .5 + .5 * Math.sin(reel.el * 14) : 0;
+  glow(rc ? PINK : reel.win > 0 ? GOLD : CYAN, 10 + reel.win * 14 + rp * 12); c.strokeStyle = on ? (rc ? PINK : reel.win > 0 ? GOLD : CYAN) : 'rgba(56,242,255,.3)'; c.lineWidth = 1.6 + rp * 1.4; c.stroke(); noGlow();
   c.textAlign = 'center'; c.textBaseline = 'middle';
   for (let i = 0; i < 3; i++) {
-    const cx = x - w / 3 + i * w / 3, stop = reel.spin - i * .25;
+    const cx = x - w / 3 + i * w / 3, q = reel.plan && reel.plan[i], pv = q ? reelAt(q, reel.el) : [reel.pos[i], 0];
     c.fillStyle = on ? '#fbf3df' : '#3a3648'; rr(cx - w / 7, y - h / 2, w * 2 / 7, h, 3); c.fill();
     c.save(); rr(cx - w / 7, y - h / 2, w * 2 / 7, h, 3); c.clip();
-    const spinning = on && stop > 0, s = spinning ? Math.floor(now * 14 + i * 3) % 7 : reel.r[i], dy = spinning ? ((now * 14) % 1) * h - h / 2 : 0;
-    if (on || true) { c.globalAlpha = on ? 1 : .25; reelSym(s, cx, y + dy, h * .36); if (spinning) { c.globalAlpha = .35; reelSym((s + 1) % 7, cx, y + dy - h, h * .36); } c.globalAlpha = 1; }
+    // the strip: the symbol at the window and its neighbours above and below; fast, they smear into each other
+    const pp = on ? pv[0] : reel.pos[i], fl = Math.floor(pp), fr = pp - fl, sp = Math.abs(pv[1]), bl = Math.min(1, sp / 16);
+    c.globalAlpha = on ? 1 - bl * .45 : .25;
+    for (const k of [-1, 0, 1]) { const s = ((fl - k) % 7 + 7) % 7, yy = y + (fr + k) * h * .78; reelSym(s, cx, yy, h * .36);
+      if (bl > .2) { c.globalAlpha *= .4; reelSym(s, cx, yy - h * .2 * bl, h * .36); c.globalAlpha /= .4; } }
+    c.globalAlpha = 1;
     const dg2 = c.createLinearGradient(0, y - h / 2, 0, y + h / 2); dg2.addColorStop(0, 'rgba(0,0,0,.45)'); dg2.addColorStop(.3, 'rgba(0,0,0,0)'); dg2.addColorStop(.7, 'rgba(0,0,0,0)'); dg2.addColorStop(1, 'rgba(0,0,0,.5)'); c.fillStyle = dg2; c.fillRect(cx - w / 7, y - h / 2, w * 2 / 7, h);
     c.restore();
   }
   if (!on) { c.fillStyle = 'rgba(10,6,20,.55)'; rr(x - w / 2, y - h / 2, w, h, 3); c.fill();
     const lk = h * .3, lx = x, ly = y + h * .08; c.strokeStyle = '#ffd36a'; c.lineWidth = Math.max(1.5, lk * .28); c.beginPath(); c.arc(lx, ly - lk * .55, lk * .55, Math.PI, 0); c.stroke();
-    c.fillStyle = '#ffc93c'; rr(lx - lk * .9, ly - lk * .55, lk * 1.8, lk * 1.35, lk * .25); c.fill(); c.fillStyle = '#5a3a08'; c.beginPath(); c.arc(lx, ly + .05 * lk, lk * .2, 0, 7); c.fill(); }
+    c.fillStyle = '#ffc93c'; rr(lx - lk * .9, ly - lk * .55, lk * 1.8, lk * 1.35, lk * .25); c.fill(); c.fillStyle = '#5a3a08'; c.beginPath(); c.arc(lx, ly + .05 * lk, lk * .2, 0, 7); c.fill();
+    if (S.bought > 0) { c.font = '400 ' + Math.max(10, Math.round(h * .26)) + 'px Bungee, sans-serif'; c.fillStyle = 'rgba(255,211,106,.85)'; c.fillText('A BULB ON THE SIGN OPENS IT', x, y + h * .95); } }
   else {
     for (let i = 0; i < S.spins; i++) { c.fillStyle = GOLD; c.beginPath(); c.arc(x + w / 2 + 8, y - h / 3 + i * h / 3, 2.6, 0, 7); c.fill(); }
     if (flash.beam > 0 && !pinned) { c.globalAlpha = flash.beam; c.strokeStyle = GOLD; c.lineWidth = 3; c.setLineDash([4, 5]); c.beginPath(); c.moveTo(x, Y(sp.y)); c.lineTo(x, y + h / 2 + 3); c.stroke(); c.setLineDash([]); c.globalAlpha = 1; }
-    if (reel.miss && now - reel.miss < 1) { c.font = '400 ' + Math.round(h * .3) + 'px Bungee, sans-serif'; c.fillStyle = 'rgba(200,190,220,' + (1 - (now - reel.miss)) + ')'; c.fillText('NO WIN', x, y + h * .85); }
+    if (rc) { c.font = '400 ' + Math.round(h * .34) + 'px Bungee, sans-serif'; c.fillStyle = PINK; c.globalAlpha = .7 + .3 * rp; c.fillText('REACH!', x, y + h * .9); c.globalAlpha = 1; }
+    else if (reel.miss && now - reel.miss < 1) { c.font = '400 ' + Math.round(h * .3) + 'px Bungee, sans-serif'; c.fillStyle = 'rgba(200,190,220,' + (1 - (now - reel.miss)) + ')'; c.fillText('NO WIN', x, y + h * .85); }
   }
-  c.textBaseline = 'alphabetic';
+  c.restore(); c.textBaseline = 'alphabetic';
 }
 /* Prize blocks, painted once per kind and size and stamped: an acrylic prize lamp with a star or a coin in it on the
    machines, a pachinko cabinet in the parlour, a vending machine and a night bus in the street, a log cabin and a
@@ -1815,13 +1893,16 @@ function bigPaint(x, y, w, h, n, q, sc) {
 // coins from pins and the Big One land in many small amounts: gather them by place for a quarter second
 const coinAcc = new Map(), dmgAcc = new Map(), flyers = [], tip = { t: 9, done: false }, waves = [];
 let trayBump = 0;
-let fx = [], parts = [], flash = {}, feverT = 0, gold = null, banner = null, shake = 0;
+let fx = [], parts = [], flash = {}, feverT = 0, gold = null, banner = null, shake = 0, bq = [];
+// one banner at a time, each for its whole length; what comes while one is up waits its turn (and a repeat is dropped)
+function say(b) { if (!banner) banner = b; else if (bq.length < 2 && banner.txt !== b.txt && !bq.some(q => q.txt === b.txt)) bq.push(b); }
 function pop(x, y, txt, col, size, v) {
   if (v != null) for (const q of fx) if (q.v != null && q.t < .9 && q.col === col && Math.abs(q.x - x) < 22 && Math.abs((q.y0 ?? q.y) - y) < 22) { q.v += v; q.txt = '+' + fmt(q.v); q.t = Math.min(q.t, .15); q.s = Math.max(q.s, size || 1); return; }
   for (let k = 0; k < 4; k++) { const hit = fx.find(q => q.t < .8 && Math.abs(q.x - x) < 14 && Math.abs((q.y - q.t * 26 / Lo.sc) - y) < 4.5); if (!hit) break; y = hit.y - hit.t * 26 / Lo.sc - 5; }
   fx.push({ x, y, y0: y, txt, col: col || '#ffe9a6', t: 0, s: size || 1, v }); if (fx.length > 9) { let m = 0; for (let i = 1; i < fx.length - 1; i++) if (fx[i].s < fx[m].s) m = i; fx.splice(m, 1); } }
 // what the Big One has taken lately: one sum under its counter, kept while blows keep coming
-const tally = { v: 0, t: 9 }; let popMax = 1;
+const bg0 = () => CORE.board(S.board, CORE.stats(S).tulip).big;
+const tally = { v: 0, t: 9 }; let popMax = 1, ovfFly = [], ovfSeen = 0;
 function burst(x, y, n, col, sp) { if (K.reduced) n = Math.ceil(n / 4); for (let i = 0; i < n && parts.length < 320; i++) { const a = Math.random() * 6.28, v = (sp || 30) * (.3 + Math.random()); parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 15, t: 0, life: .6 + Math.random() * .6, col: col || GOLD, r: 1 + Math.random() * 1.5 }); } }
 function fxTick(dt) {
   popMax = Math.max(1, popMax * (1 - dt * .5));
@@ -1832,13 +1913,15 @@ function fxTick(dt) {
   for (const w of waves) w.t += dt; while (waves.length && waves[0].t > .45) waves.shift();
   for (const f of flyers) f.t += dt; while (flyers.length && flyers[0].t > .45) flyers.shift();
   trayBump = Math.max(0, trayBump - dt * 3); tip.t += dt;
+  { const o = S.ovf || 0; if (o < ovfSeen) ovfSeen = o; if (o > ovfSeen && ovfFly.length < 8) { ovfFly.push({ x: Lo.ox + 8 + Math.random() * Math.min(80, Lo.bw * .4), t: 0 }); ovfSeen = Math.min(o, ovfSeen + Math.max(1, (o - ovfSeen) / 4 | 0)); } else if (o > ovfSeen + 40) ovfSeen = o - 40;
+    for (const f of ovfFly) f.t += dt; ovfFly = ovfFly.filter(f => f.t < .35); }
   for (const f of fx) f.t += dt; fx = fx.filter(f => f.t < 1.1);
   for (const p of parts) { p.t += dt; p.vy += 90 * dt; p.x += p.vx * dt; p.y += p.vy * dt; } parts = parts.filter(p => p.t < p.life);
   for (const k in flash) { flash[k] -= dt * 3; if (flash[k] <= 0) delete flash[k]; }
-  if (reel.spin > 0) reel.spin -= dt; if (reel.win > 0) reel.win -= dt * .4;
+  reelTick(dt); reachK += ((reachOn() ? 1 : reel.plan ? .35 : 0) - reachK) * Math.min(1, dt * 7); if (reel.win > 0) reel.win -= dt * .4; houseT = Math.max(0, houseT - dt); closeT = Math.max(0, closeT - dt); slip = Math.max(0, slip - dt);
   bigShake = Math.max(0, bigShake - dt * 4); shake = Math.max(0, shake - dt * 2);
   if (!DIAG.fx) { parts.length = 0; waves.length = 0; shake = bigShake = 0; for (const k in flash) delete flash[k]; }
-  if (banner) { banner.t += dt; if (banner.t > banner.d) banner = null; }
+  if (banner) { banner.t += dt; if (banner.t > banner.d) banner = bq.shift() || null; }
 }
 function fxDraw() {
   const sc = Lo.sc;
@@ -1895,7 +1978,7 @@ function transDraw() {
 }
 
 /* ================= events from the rules ================= */
-let autoSet = 0, stripHint = 0, lastClk = 0, endT = 0, summary = null, trans = null, firstPour = false, coinsShown = 0, bump = 0;
+let houseT = 0, closeT = 0, slip = 0, houseTip = 0, autoSet = 0, stripHint = 0, lastClk = 0, endT = 0, summary = null, trans = null, firstPour = false, coinsShown = 0, bump = 0;
 function drain() {
   for (const e of S.ev) switch (e.k) {
     case 'brk': pop(e.x, e.y, '+' + fmt(e.v), GOLD, 1.35); burst(e.x, e.y, 10, GOLD, 32); snd.ching(); bump = .3; break;
@@ -1913,20 +1996,22 @@ function drain() {
     case 'big': bigShake = Math.min(1, bigShake + .4); burst(e.x, e.y, 3, '#fff1a8', 20); snd.thunk(); break;
     case 'split': burst(e.x, e.y, 4, GOLD, 14); break;
     case 'boom': burst(e.x, e.y, 40, '#ff7a3a', 80); burst(e.x, e.y, 14, '#fff3c8', 40); pop(e.x, e.y - 3, 'BOOM!', '#ffb05a', 1.5); snd.boom(); shake = Math.min(1, shake + .5); waves.push({ x: e.x, y: e.y, r: e.r, t: 0 }); break;
-    case 'spin': reel.spin = CORE.P.spin; reel.win = 0; snd.spin(); break;
+    case 'spin': reel.miss = 0; if (e.r) { reel.plan = planReels(e.r, e.T, e.reach); reel.el = 0; reel.stopped = 0; } reel.win = 0; snd.spin(); break;
     case 'lantern': snd.chime(2); break;
-    case 'lancatch': feverT = 1; burst(e.x, e.y, 30, '#ff9a3a', 60); banner = { txt: 'LANTERN!', sub: 'you caught it: a few seconds of fever', t: 0, d: 2.2, col: '#ff9a3a' }; snd.fanfare(); music.fever(1); break;
+    case 'house': houseT = 2.4; houseTip = 9; feverT = 1; bigShake = 1; shake = Math.min(1, shake + .4); flash.house = 1; { const bg = CORE.board(S.board, CORE.stats(S).tulip).big; burst(bg.x + bg.w / 2, bg.y, 60, CYAN, 90); burst(bg.x + bg.w / 2, bg.y, 40, '#fff1a8', 60); }
+      pop(bg0().x + bg0().w / 2, bg0().y - 8, '−' + fmt(Math.round(e.d)), CYAN, 2); bq = banner ? [banner].concat(bq).slice(0, 2) : bq; banner = null; say({ txt: 'FULL HOUSE!', sub: 'every pin alight at once: −' + fmt(Math.round(e.d)) + ' off the Big One', t: 0, d: 2.6, col: CYAN }); snd.fanfare(); later(.25, () => snd.crash()); music.fever(1); break;
+    case 'lancatch': feverT = 1; burst(e.x, e.y, 30, '#ff9a3a', 60); say({ txt: 'LANTERN!', sub: 'you caught it: a few seconds of fever', t: 0, d: 2.2, col: '#ff9a3a' }); snd.fanfare(); music.fever(1); break;
     case 'launch': pop(e.x, 6, 'AUTO-LAUNCHER', GOLD, .8); snd.tick(); autoSet++; break;
-    case 'reel': reel.r = e.r; reel.spin = 0; if (e.win) reel.win = 1; else reel.miss = now; break;
-    case 'fever': feverT = 1; banner = { txt: e.jack ? 'JACKPOT!' : 'FEVER!', sub: e.jack ? 'three sevens: mega balls and a double fever' : 'three of a kind on the reels: balls rain', t: 0, d: 2.6, col: e.jack ? GOLD : PINK }; snd.fanfare(); music.fever(1); break;
+    case 'reel': reel.r = e.r; if (!reel.plan) reel.pos = e.r.slice(); if (e.win) reel.win = 1; else reel.miss = now; break;
+    case 'fever': feverT = 1; say({ txt: e.jack ? 'JACKPOT!' : 'FEVER!', sub: e.jack ? 'three sevens: mega balls and a double fever' : 'three of a kind on the reels: balls rain', t: 0, d: 2.6, col: e.jack ? GOLD : PINK }); snd.fanfare(); music.fever(1); break;
     case 'feverend': feverT = 0; music.fever(0); break;
     case 'mega': pop(e.x, 6, 'MEGA BALL', PINK, 1.1); snd.whoosh(); break;
     case 'bigbreak': shake = 1; burst(e.x, e.y, 80, GOLD, 90); snd.crash(); if (S.board === e.b + 1 || e.b < 4) breakAt(e.b); break;
-    case 'end': summary = { c: e.c, big: e.big, prev: e.prev, best: e.best, won: e.won, t: 0 }; endT = 0; letGo(); snd.bell(); if (e.best) later(.5, () => snd.fanfare()); break;
+    case 'end': summary = { c: e.c, big: e.big, prev: e.prev, best: e.best, won: e.won, houses: e.houses | 0, t: 0 }; endT = 0; letGo(); snd.bell(); if (e.best) later(.5, () => snd.fanfare()); break;
     case 'board': if (!trans) breakAt(e.b - 1); summary = null; letGo(); art = null; signArt = null; later(TR.drop, () => { music.part(e.b); snd.whoosh(); }); break;
     case 'fin': fin.t = 0; letGo(); music.part(5); break;
-    case 'run': fx = []; parts = []; summary = null; if (manualCam) stripHint = 9; manualCam = false; if (S.board) stripHint++; break;
-    case 'buy': lightAt[e.id + ':' + e.lv] = now; snd.buzz(); break;
+    case 'run': fx = []; parts = []; summary = null; bq = []; if (CORE.houseOn(S)) houseTip++; if (manualCam) stripHint = 9; manualCam = false; if (S.board) stripHint++; break;
+    case 'buy': lightAt[e.id + ':' + (CORE.byId[e.id].ot ? 1 : e.lv)] = now; snd.buzz(); break;
   }
   S.ev.length = 0;
   const d = S.clk - lastClk; lastClk = S.clk; if (d > 0) snd.clicks(Math.min(d, 8));
@@ -1939,9 +2024,10 @@ function drain() {
    more that curl back towards the axis. Round it run four rings, one per board, dark until its Big One
    breaks. Lit up completely, the sign is a wheel with a four-petalled star inside. What has not been
    found yet shows as a faint dot, so the figure is there from the start. */
+const LIME = '#b6ff3c';
 const QUAD = [['balls', 'rate', 'pocket', 'auto', 'wide', 'autor', 'boy'], ['pins', 'gold', 'magnet', 'start', 'mega', 'luck', 'fuse'], ['heavy', 'prize', 'hard', 'bomb', 'bank', 'bang', 'crack'], ['neon', 'fever', 'rain', 'jack', 'twin', 'loaded', 'crate']];
 // each quarter of the star burns in its own colour (balls, pins and reels, damage, fever); the rings in their board's
-const QCOL = ['#38f2ff', '#ffc93c', '#ff3fa4', '#ff8a3a'], colOf = u => u.arm ? ARMCOL[u.arm] : QCOL[QUAD.findIndex(q => q.includes(u.id))];
+const QCOL = ['#38f2ff', '#ffc93c', '#ff3fa4', '#ff8a3a'], colOf = u => u.ot ? QCOL[u.q] : u.arm ? ARMCOL[u.arm] : QCOL[QUAD.findIndex(q => q.includes(u.id))];
 const RING = [0, 14.6, 16, 17.4, 18.8];
 const WEB = (() => {
   const P = {}, g = .9, rad = d => d * Math.PI / 180;
@@ -1961,14 +2047,17 @@ const WEB = (() => {
     const a0 = -Math.PI / 2 - (chains[0].max - 1) * step / 2;
     for (const u of chains) for (let l = 1; l <= u.max; l++, i++) { const a = a0 + i * step; P[u.id + ':' + l] = [Math.cos(a) * RING[k], Math.sin(a) * RING[k]]; }
   }
+  // overtime: one bulb between each quarter and the next, that never runs out
+  for (const u of CORE.UP) if (u.ot) { const a = rad(-45 + u.q * 90); P[u.id + ':1'] = [Math.cos(a) * 9.6, Math.sin(a) * 9.6]; }
   return { P, R: RING[4] };
 })();
 // a bulb is "id:k", the k-th level of upgrade id; a chain follows on from the last bulb of the one it hangs from
-const bulbs = CORE.UP.flatMap(u => Array.from({ length: u.max }, (_, i) => ({ u, k: i + 1, key: u.id + ':' + (i + 1) })));
+const bulbs = CORE.UP.flatMap(u => Array.from({ length: u.ot ? 1 : u.max }, (_, i) => ({ u, k: i + 1, key: u.id + ':' + (i + 1) })));
 const byKey = Object.fromEntries(bulbs.map(b => [b.key, b]));
 let signArt = null;   // nothing is cached any more; kept so old resets stay harmless
 const prev = b => b.k > 1 ? b.u.id + ':' + (b.k - 1) : b.u.p ? b.u.p + ':' + CORE.byId[b.u.p].max : null;
 function bstate(b) {
+  if (b.u.ot) return !CORE.open(S, b.u) ? (SB() >= 1 ? 'peek' : 'hidden') : CORE.can(S, b.u) ? 'buy' : 'next';
   const L = S.lv[b.u.id] | 0;
   if (L >= b.k) return 'lit';
   if (b.u.arm > SB()) return 'dark';
@@ -1982,9 +2071,18 @@ const SPX = () => Math.max(38, Math.min(54, (Lo.desk ? Lo.pw : VW) / 9));
 const signW = () => Lo.desk ? Lo.pw : VW, sigTop = () => Lo.desk ? 70 : 64;
 const sigCx = () => Lo.sx + signW() / 2, sigCy = () => sigTop() + (VH - sigTop() - (Lo.desk ? 120 : 150)) / 2;
 function toS(key) { const p = WEB.P[key], s = SPX() * cam2.z; return [sigCx() + (p[0] - cam2.x) * s, sigCy() + (p[1] - cam2.y) * s]; }
-function bulbAt(id) { const L = S.lv[id] | 0, u = CORE.byId[id]; return toS(id + ':' + Math.min(u.max, L + 1)); }
+function bulbAt(id) { const L = S.lv[id] | 0, u = CORE.byId[id]; return toS(id + ':' + (u.ot ? 1 : Math.min(u.max, L + 1))); }
 // is any bulb that can be lit now on screen? (a swipe that loses them all lets the sign glide back)
 function buyInView() { const x0 = Lo.sx, w = signW(); return bulbs.some(b => { if (bstate(b) !== 'buy') return false; const [x, y] = toS(b.key); return x > x0 + 20 && x < x0 + w - 20 && y > sigTop() + 30 && y < VH - (Lo.desk ? 130 : 160); }); }
+// the camera is the player's once they have moved it: it stays where they left it from game to game, may zoom out until the
+// whole wheel fits, and is held so that the wheel never leaves the screen (it gives a little at the edge and springs back)
+const zMin = () => Math.min(.6, Math.min(signW() - 30, VH - sigTop() - (Lo.desk ? 130 : 170)) / ((2 * RING[4] + 3) * SPX()));
+function holdCam() {
+  if (drag && !drag.pinch) return; const ext = (SB() ? RING[SB()] : 9.5) + 1;
+  cam2.z = clamp(cam2.z, zMin(), 1.8);
+  for (const k of ['x', 'y']) { const v = cam2[k], c0 = clamp(v, -ext, ext); if (v !== c0) cam2[k] = lerp(v, c0, .25); }
+}
+let centreBtn = null;
 // frame everything that can be seen, once on the way into the sign and when a board opens a ring
 function fitSign() {
   let x0 = -2.5, x1 = 2.5, y0 = -1.5, y1 = 1.5;
@@ -1999,7 +2097,7 @@ const brick = (() => { let k = null; return (w, h) => { if (k && k.width === Mat
    meant nothing until a bulb was read). Drawn once per colour and state into the bulb's sprite, in a box of ±1. */
 const ICON = { balls: 'balls', rate: 'speed', pocket: 'tulip', auto: 'launch', wide: 'twin', autor: 'launch', boy: 'bucket', pins: 'nail', gold: 'split', magnet: 'magnet', start: 'reels', mega: 'mega', luck: 'seven', fuse: 'merge',
   heavy: 'weight', prize: 'coin', hard: 'weight', bomb: 'bomb', bank: 'block', bang: 'burst', crack: 'crack', neon: 'bulb', fever: 'sun', rain: 'cloud', jack: 'seven', twin: 'twin', loaded: 'seven', crate: 'crate',
-  t_balls: 'bucket', t_rate: 'speed', t_tulip: 'tulip', t_dmg: 'weight', t_coin: 'coin', p_balls: 'bucket', p_bomb: 'bomb', p_dmg: 'weight', p_coin: 'coin', s_balls: 'crate', s_fev: 'cloud', s_mega: 'mega', s_dmg: 'weight', s_coin: 'coin',
+  x_balls: 'balls', x_glow: 'nail', x_big: 'crack', x_coin: 'coin', t_balls: 'bucket', t_rate: 'speed', t_tulip: 'tulip', t_dmg: 'weight', t_coin: 'coin', p_balls: 'bucket', p_bomb: 'bomb', p_dmg: 'weight', p_coin: 'coin', s_balls: 'crate', s_fev: 'cloud', s_mega: 'mega', s_dmg: 'weight', s_coin: 'coin',
   m_balls: 'crate', m_rate: 'speed', m_rock: 'block', m_big: 'crack', m_dmg: 'meteor', m_coin: 'coin' };
 const ICO = {
   ball: g => { g.beginPath(); g.arc(0, 0, .55, 0, 7); g.stroke(); g.beginPath(); g.arc(-.2, -.2, .14, 0, 7); g.fill(); },
@@ -2044,6 +2142,7 @@ function bulbSprite(col, st, kind) {
 }
 function drawSign(dim) {
   const w = signW(), x0 = Lo.sx;
+  holdCam();
   if (camGoal) { const f = .14; cam2.x = lerp(cam2.x, camGoal.x, f); cam2.y = lerp(cam2.y, camGoal.y, f); cam2.z = lerp(cam2.z, camGoal.z, f); if (Math.abs(cam2.z - camGoal.z) < .002 && Math.hypot(cam2.x - camGoal.x, cam2.y - camGoal.y) < .01) camGoal = null; }
   c.save(); c.beginPath(); c.rect(x0, 0, w, VH); c.clip();
   c.drawImage(brick(w, VH), x0, 0, w, VH);
@@ -2066,12 +2165,12 @@ function drawSign(dim) {
   c.fillStyle = 'rgba(190,180,215,.22)';
   for (const b of bulbs) if (st[b.key] === 'hidden' || st[b.key] === 'dark') { const p = WEB.P[b.key]; c.beginPath(); c.arc(X2(p[0]), Y2(p[1]), Math.max(1.5, s * (b.u.big ? .13 : .09)), 0, 7); c.fill(); }
   // each quarter of the star says what it holds, at the root of its spine
-  { const NAMES = ['BALLS', 'PINS · REELS', 'DAMAGE', 'FEVER · COINS'], fs = Math.round(clamp(s * .24, 9, 13)); c.font = '400 ' + fs + 'px Bungee, sans-serif'; c.textAlign = 'center';
+  { const NAMES = ['BALLS', 'PINS · REELS', 'DAMAGE', 'FEVER · COINS'], fs = Math.round(clamp(s * .24, 11, 13)); c.font = '400 ' + fs + 'px Bungee, sans-serif'; c.textAlign = 'center';
     for (let q = 0; q < 4; q++) { const a = -Math.PI / 2 + q * Math.PI / 2, d = q % 2 ? 3.9 : 1.3, lx = X2(Math.cos(a) * d + (q % 2 ? 0 : 1.4)), ly = Y2(Math.sin(a) * d) + (q % 2 ? -s * .55 : fs * .35); c.globalAlpha = .8; c.fillStyle = QCOL[q]; c.fillText(NAMES[q], lx, ly); } c.globalAlpha = 1; }
   // the sign in the middle
   c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '400 ' + Math.round(s * 1.5) + 'px "Tilt Neon", sans-serif'; c.fillStyle = '#ffe0f1'; c.strokeStyle = PINK; c.lineWidth = 2;
   neon('TILT', X2(0), Y2(0), PINK, s * 1.5); for (const sx2 of [-1.2, 1.2]) { c.fillStyle = '#8d93a8'; c.beginPath(); c.arc(X2(sx2), Y2(.62), Math.max(1.5, s * .05), 0, 7); c.fill(); }
-  const pulse = .75 + .25 * Math.sin(now * 4);
+  const pulse = .75 + .25 * Math.sin(now * 4), tags = [], discs = [];
   for (const b of bulbs) {
     const t = st[b.key]; if (t === 'hidden' || t === 'dark') continue; const [wx, wy] = WEB.P[b.key], x = X2(wx), y = Y2(wy); if (x < x0 - 40 || x > x0 + w + 40 || y < -40 || y > VH + 40) continue;
     const col = colOf(b.u), rr2 = r * (b.u.big ? 1.25 : 1) * (t === 'peek' || t === 'dark' ? .8 : 1) * (b.u.max > 1 ? .86 + .22 * (b.k - 1) / (b.u.max - 1) : 1), sp = bulbSprite(col, t, ICON[b.u.id]), sc2 = rr2 / sp.R0;
@@ -2079,23 +2178,41 @@ function drawSign(dim) {
       const k = (now * 1.1 + b.k * .13) % 1; c.strokeStyle = col; c.lineWidth = 3 * (1 - k); c.globalAlpha = .9 * (1 - k); c.beginPath(); c.arc(x, y, rr2 * (1.1 + k * 1.1), 0, 7); c.stroke();
       c.globalAlpha = .28; c.fillStyle = col; c.beginPath(); c.arc(x, y, rr2, 0, 7); c.fill(); c.globalAlpha = 1; }
     c.drawImage(sp.k, x - sp.m * sc2, y - sp.m * sc2, sp.k.width * sc2, sp.k.height * sc2);
-    if (b.u.max > 1 && t !== 'peek' && t !== 'dark' && rr2 > 9) for (let q = 0; q < b.k; q++) { const a = -Math.PI / 2 + (q - (b.k - 1) / 2) * .38; c.fillStyle = t === 'lit' ? '#fff' : col; c.globalAlpha = t === 'next' ? .5 : 1; c.beginPath(); c.arc(x + Math.cos(a) * (rr2 + 3.5), y + Math.sin(a) * (rr2 + 3.5), Math.max(1.3, rr2 * .09), 0, 7); c.fill(); c.globalAlpha = 1; }
+    if (b.u.ot && t !== 'peek' && (S.lv[b.u.id] | 0)) { const lt = '' + (S.lv[b.u.id] | 0), fs2 = Math.round(clamp(rr2 * .55, 8, 12)); c.font = '400 ' + fs2 + 'px Bungee, sans-serif'; c.textAlign = 'center'; const bx2 = x + rr2 * .8, by2 = y - rr2 * .8, bw3 = c.measureText(lt).width + 8;
+      c.fillStyle = col; rr(bx2 - bw3 / 2, by2 - fs2 * .6 - 2, bw3, fs2 * 1.2 + 4, 6); c.fill(); c.fillStyle = '#140c18'; c.fillText(lt, bx2, by2 + fs2 * .38); }
+    else if (b.u.max > 1 && t !== 'peek' && t !== 'dark' && rr2 > 9) for (let q = 0; q < b.k; q++) { const a = -Math.PI / 2 + (q - (b.k - 1) / 2) * .38; c.fillStyle = t === 'lit' ? '#fff' : col; c.globalAlpha = t === 'next' ? .5 : 1; c.beginPath(); c.arc(x + Math.cos(a) * (rr2 + 3.5), y + Math.sin(a) * (rr2 + 3.5), Math.max(1.3, rr2 * .09), 0, 7); c.fill(); c.globalAlpha = 1; }
     if (sel === b.key || hov === b.key) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.setLineDash([4, 4]); c.beginPath(); c.arc(x, y, rr2 + 7, 0, 7); c.stroke(); c.setLineDash([]); }
-    // its price on a dark tab under it, for the bulbs that can be lit now and the one being read
-    if ((t === 'buy' || (t === 'next' && sel === b.key)) && y + rr2 > sigTop() + 40) { const pt2 = '¢' + fmt(CORE.price(S, b.u)); c.font = '400 ' + Math.round(clamp(s * .22, 9, 12)) + 'px Bungee, sans-serif'; const pw = c.measureText(pt2).width + 10, py = y + rr2 + 9;
-      c.fillStyle = 'rgba(8,6,16,.9)'; rr(x - pw / 2, py - 8, pw, 15, 7); c.fill(); c.fillStyle = t === 'buy' ? '#ffe9a6' : 'rgba(255,233,166,.6)'; c.fillText(pt2, x, py); }
+    discs.push([x, y, rr2]);
+    if (t === 'buy' || (t === 'next' && sel === b.key)) tags.push({ x, y, r: rr2, t, key: b.key, p: CORE.price(S, b.u) });
   }
+  // the prices go on last, over every bulb, each on a dark tab: the one being read first, then the cheapest; a tab tries
+  // under its bulb, over it, then beside it, and is left out where it would cover another tab or another bulb (the one
+  // being read always shows), the way a map is lettered
+  { const fs = Math.round(clamp(s * .22, 11, 13)), placed = []; c.font = '400 ' + fs + 'px Bungee, sans-serif';
+    tags.sort((a, b2) => (b2.key === sel) - (a.key === sel) || a.p - b2.p);
+    const hitsDisc = (x1, y1, x2, y2, own) => discs.some(d => d !== own && d[0] + d[2] * .8 > x1 && d[0] - d[2] * .8 < x2 && d[1] + d[2] * .8 > y1 && d[1] - d[2] * .8 < y2);
+    for (const g of tags) { const pt2 = '¢' + fmt(g.p), pw = c.measureText(pt2).width + 10, ph = 15, own = discs.find(d => d[0] === g.x && d[1] === g.y);
+      let at = null;
+      for (const [dx, dy] of [[0, g.r + 9], [0, -g.r - 9], [g.r + pw / 2 + 4, 0], [-g.r - pw / 2 - 4, 0]]) { const cx2 = g.x + dx, cy2 = g.y + dy, x1 = cx2 - pw / 2, y1 = cy2 - 8, x2 = x1 + pw, y2 = y1 + ph;
+        if (y1 < sigTop() + 30) continue;
+        if (placed.some(q => x1 < q[2] && x2 > q[0] && y1 < q[3] && y2 > q[1]) || hitsDisc(x1, y1, x2, y2, own)) continue; at = [cx2, cy2, x1, y1, x2, y2]; break; }
+      if (!at && g.key === sel) at = [g.x, g.y + g.r + 9, g.x - pw / 2, g.y + g.r + 1, g.x + pw / 2, g.y + g.r + 16];
+      if (!at) continue; placed.push(at.slice(2));
+      c.fillStyle = 'rgba(8,6,16,.92)'; rr(at[2], at[3], pw, ph, 7); c.fill(); c.fillStyle = g.t === 'buy' ? '#ffe9a6' : 'rgba(255,233,166,.6)'; c.textAlign = 'center'; c.fillText(pt2, at[0], at[1]); } }
   c.textBaseline = 'alphabetic';
   // how many can be lit, and arrows at the edge to the ones out of view
   if (!dim && S.phase === 'tree') {
     const can = bulbs.filter(b => st[b.key] === 'buy'), top = sigTop() + (Lo.desk ? 0 : 16), bot = VH - (Lo.desk ? 130 : 160);
-    if (can.length) { const tx = x0 + w / 2, ty = top + 6, txt = can.length + (can.length === 1 ? ' BULB' : ' BULBS') + ' YOU CAN LIGHT'; c.font = '400 13px Bungee, sans-serif'; const tw = c.measureText(txt).width + 28;
+    if (can.length) { const tx = x0 + w / 2 - (userMoved && w < 600 ? 40 : 0), ty = top + 6, txt = can.length + (can.length === 1 ? ' BULB' : ' BULBS') + ' YOU CAN LIGHT'; c.font = '400 13px Bungee, sans-serif'; const tw = c.measureText(txt).width + 28;
       c.fillStyle = 'rgba(8,6,16,.85)'; rr(tx - tw / 2, ty - 12, tw, 26, 13); c.fill(); c.strokeStyle = GOLD; c.lineWidth = 1.5; c.stroke(); c.fillStyle = '#ffe9a6'; c.textAlign = 'center'; c.fillText(txt, tx, ty + 6); }
     // the ones out of view: the edge they lie beyond glows in their colour, and the pill says how many and what to do
     let off = 0; for (const b of can) { const [bx, by] = toS(b.key); if (bx > x0 + 14 && bx < x0 + w - 14 && by > top + 20 && by < bot) continue; off++;
       const sdx = bx < x0 + 14 ? -1 : bx > x0 + w - 14 ? 1 : 0, sdy = by <= top + 20 ? -1 : by >= bot ? 1 : 0, col = colOf(b.u), gw = 46, pulse2 = .35 + .2 * Math.sin(now * 4);
       const ex = sdx < 0 ? x0 : sdx > 0 ? x0 + w : clamp(bx, x0, x0 + w), ey = sdy < 0 ? top : sdy > 0 ? bot : clamp(by, top, bot), q = c.createRadialGradient(ex, ey, 0, ex, ey, gw * 1.6);
       q.addColorStop(0, col); q.addColorStop(1, 'rgba(0,0,0,0)'); c.globalAlpha = pulse2; c.fillStyle = q; c.fillRect(ex - gw * 1.6, ey - gw * 1.6, gw * 3.2, gw * 3.2); c.globalAlpha = 1; }
+    centreBtn = null;
+    if (userMoved) { const t3 = 'CENTRE'; c.font = '400 11px Bungee, sans-serif'; const bx = x0 + w - c.measureText(t3).width - 36, by = top - 8; c.font = '400 11px Bungee, sans-serif'; const bw2 = c.measureText(t3).width + 26; c.fillStyle = 'rgba(8,6,16,.85)'; rr(bx, by, bw2, 28, 14); c.fill();
+      c.strokeStyle = CYAN; c.lineWidth = 1.5; c.stroke(); c.fillStyle = '#d8fdff'; c.textAlign = 'center'; c.fillText(t3, bx + bw2 / 2, by + 18); centreBtn = { x: bx, y: by, w: bw2, h: 28 }; }
     if (off && S.bought > 0) { const t2 = off + ' MORE OUT OF VIEW · DRAG TO LOOK'; c.font = '400 10px Bungee, sans-serif'; c.textAlign = 'center'; c.fillStyle = 'rgba(255,233,166,.75)'; c.fillText(t2, x0 + w / 2, top + 34); }
   }
   // a bulb lighting up: a flicker and then a bloom
@@ -2159,8 +2276,16 @@ function tray(y) {
   const x0 = Lo.ox - 14, w = Lo.bw + 28, tg = c.createLinearGradient(0, y, 0, y + 64); tg.addColorStop(0, '#d9dfeb'); tg.addColorStop(.15, '#7c8296'); tg.addColorStop(1, '#2b2f3e');
   c.fillStyle = tg; rr(x0, y, w, 60, 14); c.fill(); c.fillStyle = '#10121c'; rr(x0 + 10, y + 9, w - 20, 26, 13); c.fill();
   const n = S.phase === 'run' ? S.tray : CORE.stats(S).balls, per = Math.floor((w - 40) / 13), show = Math.min(n, per);
-  for (let i = 0; i < show; i++) c.drawImage(spr.ball, x0 + 22 + i * 13 - 7, y + 22 - 7, 14, 14);
-  const st = CORE.stats(S), last = S.phase === 'run' && S.rt > CORE.P.lastCall;
+  const st = CORE.stats(S), last = S.phase === 'run' && S.rt > CORE.P.lastCall, full = S.phase === 'run' && S.balls.length >= CORE.CAP && S.tray > 0;
+  // with the glass full the tray does not stop: what it pours goes into the mega ball being saved up at its end, and
+  // is seen going there; without the mega ball it waits, and says so
+  const gx = x0 + w - 30, gy = y + 22, mg = st.mega && S.phase === 'run';
+  for (let i = 0; i < Math.min(show, mg ? per - 2 : per); i++) c.drawImage(spr.ball, x0 + 22 + i * 13 - 7, y + 22 - 7, 14, 14);
+  if (mg) { const f = clamp(S.caught / st.megaN, 0, 1); c.strokeStyle = 'rgba(255,63,164,.25)'; c.lineWidth = 3; c.beginPath(); c.arc(gx, gy, 10, 0, 7); c.stroke();
+    glow(PINK, 8); c.strokeStyle = PINK; c.beginPath(); c.arc(gx, gy, 10, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); c.stroke(); noGlow(); c.drawImage(spr.mega, gx - 7, gy - 7, 14, 14);
+    for (const o of ovfFly) { const k = clamp(o.t / .35, 0, 1), e2 = ease.inOut(k); c.globalAlpha = 1 - k * .5; c.drawImage(spr.ball, lerp(o.x, gx, e2) - 5, lerp(gy, gy, e2) - 5 - Math.sin(k * Math.PI) * 9, 10, 10); } c.globalAlpha = 1; }
+  if (full) { const ft = mg ? 'GLASS FULL · INTO THE MEGA BALL' : 'GLASS FULL · POURS ON AS IT DRAINS'; c.font = '400 10px Bungee, sans-serif'; c.textAlign = 'center'; const fw = c.measureText(ft).width + 16, fx2 = x0 + (mg ? w - 44 : w) / 2 + 4;
+    c.fillStyle = 'rgba(16,18,28,.88)'; rr(fx2 - fw / 2, gy - 8, fw, 16, 8); c.fill(); c.fillStyle = mg ? '#ffb0d8' : '#d8dcea'; c.fillText(ft, fx2, gy + 4); }
   c.fillStyle = 'rgba(10,12,22,.75)'; rr(x0 + 8, y + 40, w * .55, 16, 8); c.fill(); if (S.fever > 0) { const ff = clamp(S.fever / CORE.stats(S).fT, 0, 1); c.fillStyle = 'rgba(255,201,60,.35)'; rr(x0 + 8, y + 40, w * .55 * ff, 16, 8); c.fill(); }
   c.font = '400 11px Bungee, sans-serif'; c.textAlign = 'center'; c.fillStyle = last ? '#ff6a5f' : S.fever > 0 ? '#ffe9a6' : '#d8dcea';
   c.textAlign = 'left'; { const tt = last ? 'LAST CALL!' : (S.phase === 'run' ? '' : 'NEXT GAME: ') + fmt(n) + (n === 1 ? ' BALL' : ' BALLS') + (S.phase === 'run' && !S.board && !S.runs ? ' · 25 ON THE HOUSE' : ' · POWER ' + fmt(Math.round(st.dmg))) + (S.fever > 0 ? ' · FEVER' : ''); fit(tt, 12, w * .55 - 14, 'Bungee'); c.fillText(tt, x0 + 16, y + 52); }
@@ -2235,6 +2360,7 @@ cv.addEventListener('pointerdown', e => {
   if (S.phase === 'run' && !trans && inMachine(x, y)) {
     if (S.lan) { const L = S.lan, lx = X(L.x), ly = Y(L.y); if (Math.hypot(x - lx, y - ly) < Math.max(34, 7 * Lo.sc)) { CORE.act(S, 'tap', L.x, L.y); drain(); return; } }
     holding = e.pointerId; press = { t: now, x, y }; cv.setPointerCapture(e.pointerId); pourAt(x); return; }
+  if (centreBtn && S.phase === 'tree' && onSign(x) && x > centreBtn.x - 6 && x < centreBtn.x + centreBtn.w + 6 && y > centreBtn.y - 8 && y < centreBtn.y + centreBtn.h + 8) { fitSign(); snd.tick(); return; }
   if (onSign(x)) { touches.set(e.pointerId, { x, y }); cv.setPointerCapture(e.pointerId); camGoal = null;
     drag = touches.size === 1 ? { id: e.pointerId, x, y, cx: cam2.x, cy: cam2.y, moved: 0, mouse: e.pointerType === 'mouse' } : null;
     if (touches.size === 2) { const [p1, p2] = [...touches.values()]; drag = { pinch: Math.hypot(p1.x - p2.x, p1.y - p2.y), z: cam2.z, moved: 99 }; } }
@@ -2243,7 +2369,7 @@ cv.addEventListener('pointermove', e => {
   if (camDrag === e.pointerId) { camTo(e.clientY); return; }
   if (holding === e.pointerId) { pourAt(e.clientX); return; }
   if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (drag && drag.pinch && touches.size === 2) { const [p1, p2] = [...touches.values()]; cam2.z = clamp(drag.z * Math.hypot(p1.x - p2.x, p1.y - p2.y) / drag.pinch, .35, 1.8); userMoved = true; return; }
+  if (drag && drag.pinch && touches.size === 2) { const [p1, p2] = [...touches.values()]; cam2.z = clamp(drag.z * Math.hypot(p1.x - p2.x, p1.y - p2.y) / drag.pinch, zMin(), 1.8); userMoved = true; return; }
   if (drag && drag.id === e.pointerId) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved = Math.max(drag.moved, Math.hypot(dx, dy)); if (drag.moved > 6) { const s = SPX() * cam2.z; cam2.x = drag.cx - dx / s; cam2.y = drag.cy - dy / s; userMoved = true; } return; }
   // a mouse over a bulb reads it out at once
   if (e.pointerType === 'mouse' && onSign(e.clientX) && S.phase === 'tree' && !trans) { const h = bulbHit(e.clientX, e.clientY); if (h !== hov) { hov = h; if (h) sel = h; card(); cv.style.cursor = h ? 'pointer' : 'grab'; } }
@@ -2257,13 +2383,13 @@ function up(e) {
     press = null; letGo();
   }
   touches.delete(e.pointerId);
-  if (drag && drag.id === e.pointerId) { if (drag.moved < 8) tapSign(e.clientX, e.clientY, drag.mouse); else if (S.phase === 'tree' && !buyInView()) fitSign(); drag = null; }
+  if (drag && drag.id === e.pointerId) { if (drag.moved < 8) tapSign(e.clientX, e.clientY, drag.mouse); drag = null; }
   if (drag && drag.pinch && touches.size < 2) drag = null;
 }
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('wheel', e => { if (!onSign(e.clientX)) { if (camStrip() && (Lo.desk ? e.clientX < Lo.mw : show === 'board')) { e.preventDefault(); manualCam = true; cam += e.deltaY / Lo.sc; } return; } e.preventDefault(); camGoal = null; userMoved = true;
   const s0 = SPX() * cam2.z, wx = cam2.x + (e.clientX - sigCx()) / s0, wy = cam2.y + (e.clientY - sigCy()) / s0;
-  cam2.z = clamp(cam2.z * Math.exp(-e.deltaY * .0015), .35, 1.8); const s1 = SPX() * cam2.z; cam2.x = wx - (e.clientX - sigCx()) / s1; cam2.y = wy - (e.clientY - sigCy()) / s1; }, { passive: false });
+  cam2.z = clamp(cam2.z * Math.exp(-e.deltaY * .0015), zMin(), 1.8); const s1 = SPX() * cam2.z; cam2.x = wx - (e.clientX - sigCx()) / s1; cam2.y = wy - (e.clientY - sigCy()) / s1; }, { passive: false });
 addEventListener('keydown', e => { if (e.code === 'Space' && S.phase === 'tree' && !trans) { e.preventDefault(); nextGame(); } });
 function tryBuy(key) { const b = byKey[key]; if (!b || bstate(b) !== 'buy') return false; if (!CORE.act(S, 'buy', b.u.id)) return false; drain(); card(); K.save(); return true; }
 // a mouse click on a bulb you can afford buys it; a finger taps once to read and again to buy
@@ -2278,10 +2404,12 @@ function card() {
   if (!b || !signVisible() || S.fin || S.phase !== 'tree' || trans) { el.hidden = true; return; }
   const u = b.u, t = bstate(b), Lv = S.lv[u.id] | 0, cb = t === 'buy';
   el.hidden = false; el.style.setProperty('--c', colOf(u));
-  if (t === 'peek' || t === 'dark' || t === 'hidden') { $('cN').textContent = '?'; $('cD').textContent = t === 'dark' ? 'Break Big One № ' + u.arm + ' to light this ring.' : u.need && !(S.lv[u.need] | 0) ? 'Needs the ' + CORE.byId[u.need].name.toLowerCase() + '.' : 'Light every bulb before it first.'; $('cL').textContent = ''; $('cB').hidden = true; placeCard(); return; }
+  if (t === 'peek' || t === 'dark' || t === 'hidden') { $('cN').textContent = '?'; $('cD').textContent = u.ot ? 'Opens on board 3, the parlour: a bulb that never runs out.' : t === 'dark' ? 'Break Big One № ' + u.arm + ' to light this ring.' : u.need && !(S.lv[u.need] | 0) ? 'Needs the ' + CORE.byId[u.need].name.toLowerCase() + '.' : 'Light every bulb before it first.'; $('cL').textContent = ''; $('cB').hidden = true; placeCard(); return; }
   $('cB').hidden = false;
-  $('cN').textContent = u.name; $('cD').textContent = u.d[0].toUpperCase() + u.d.slice(1) + '.';
-  $('cL').textContent = (u.max > 1 ? 'BULB ' + b.k + ' OF ' + u.max : '') + (t === 'next' ? (u.max > 1 ? ' · ' : '') + 'YOU HAVE ¢ ' + fmt(Math.floor(S.$)) : '');
+  // the Big One feels the square root of a blow (its own multipliers in full), so a damage bulb says what it does to it
+  const vsBig = u.mul && u.mul.dmg ? ' Against the Big One ×' + Math.sqrt(u.mul.dmg).toFixed(2) + '.' : u.add && u.add.dmg ? ' Against the Big One a little less.' : '';
+  $('cN').textContent = u.name; $('cD').textContent = u.d[0].toUpperCase() + u.d.slice(1) + '.' + vsBig;
+  $('cL').textContent = (u.ot ? 'LEVEL ' + Lv + ' · NO LIMIT' : u.max > 1 ? 'BULB ' + b.k + ' OF ' + u.max : '') + (t === 'next' ? (u.max > 1 ? ' · ' : '') + 'YOU HAVE ¢ ' + fmt(Math.floor(S.$)) : '');
   const bt = $('cB'); bt.disabled = !cb; bt.textContent = t === 'lit' ? 'LIT' : 'BUY ¢' + fmt(CORE.price(S, u));
   placeCard();
 }
@@ -2311,7 +2439,7 @@ function screens(dt) {
   const tree = S.phase === 'tree' && !trans && signVisible();
   $('goB').hidden = !tree; $('goS').hidden = !tree;
   if (tree) { const st = CORE.stats(S); $('goS').textContent = st.balls + ' BALLS · BIG ONE ' + fmt(Math.ceil(S.big)) + ' LEFT'; }
-  if (tree && !screens.was) { const b = bulbs.find(v => bstate(v) === 'buy'); sel = b ? b.key : null; hov = null; fitSign(); } screens.was = tree;
+  if (tree && !screens.was) { const b = bulbs.find(v => bstate(v) === 'buy'); sel = b ? b.key : null; hov = null; if (!userMoved) fitSign(); } screens.was = tree;
   if (!tree) $('card').hidden = true; else { if ((now * 4 | 0) !== card.k) { card.k = now * 4 | 0; card(); } placeCard(); }
   $('openB').hidden = !(S.fin === 1 && fin.t > 1.6); $('openB').style.left = Lo.ox + Lo.bw / 2 + 'px'; if (fin.rect) $('openB').style.bottom = Math.max(20, VH - fin.rect.y + 14) + 'px';   // under the box, not between the machine and the sign
 }
@@ -2348,7 +2476,7 @@ function fit(t, px, w, face) { c.font = '400 ' + px + 'px ' + face + ', sans-ser
 function overlays() {
   const cx = Lo.ox + Lo.bw / 2;
   if (banner) { const k = banner.t / banner.d, s = ease.back(clamp(banner.t / .35, 0, 1)), y = Lo.oy + Lo.vh * .32; c.save(); c.globalAlpha = k > .8 ? (1 - k) / .2 : 1; c.translate(cx, y); c.scale(s, s); c.rotate(-.06);
-    fit(banner.txt, 64, Lo.bw - 40, '"Tilt Neon"'); c.textAlign = 'center'; neon(banner.txt, 0, 0, banner.col, +c.font.match(/([\d.]+)px/)[1]); c.font = '400 14px Bungee, sans-serif'; glow(banner.col, 8); c.fillStyle = banner.col; c.fillText(banner.sub.toUpperCase(), 0, 30); noGlow(); c.restore(); }
+    fit(banner.txt, 64, Lo.bw - 40, '"Tilt Neon"'); c.textAlign = 'center'; neon(banner.txt, 0, 0, banner.col, +c.font.match(/([\d.]+)px/)[1]); const sb = banner.sub.toUpperCase(); fit(sb, 14, (Lo.bw - 24) / s, 'Bungee'); { const sw = c.measureText(sb).width + 22; c.fillStyle = 'rgba(8,6,16,.85)'; rr(-sw / 2, 15, sw, 22, 11); c.fill(); } glow(banner.col, 8); c.fillStyle = banner.col; c.fillText(sb, 0, 30); noGlow(); c.restore(); }
   // the end of a game: what it earned, counted up, against the game before
   if (summary && S.phase === 'tree' && !trans) {
     summary.t += fdt; const W = Math.min(Lo.bw - 20, 380), H = 210, x0 = cx - W / 2, y0 = Lo.oy + Math.min(Lo.vh * .22, 140), a = clamp(summary.t * 4, 0, 1), sc2 = ease.back(a);
@@ -2361,14 +2489,15 @@ function overlays() {
       c.fillText((up ? '▲ +' : '▼ ') + fmt(Math.round(d)) + '% ON THE LAST GAME', cx, y0 + 124); }
     if (summary.best && k > .9) { c.save(); c.translate(x0 + W - 46, y0 + 26); c.rotate(.25); c.fillStyle = GOLD; rr(-40, -13, 80, 26, 6); c.fill(); c.font = '400 12px Bungee, sans-serif'; c.fillStyle = '#2a1804'; c.fillText('BEST YET', 0, 5); c.restore(); }
     c.font = '400 13px Bungee, sans-serif'; c.fillStyle = CYAN; { const pc = Math.round(100 * summary.big / CORE.BIG[S.board]); c.fillText(pc >= 5 ? 'BIG ONE ' + fmt(Math.ceil(S.big)) + ' LEFT  (−' + pc + '%)' : 'YOU KNOCKED ' + fmt(Math.round(summary.big)) + ' OFF THE BIG ONE', cx, y0 + 156); }
-    c.fillStyle = '#ffd6ec'; c.fillText(summary.won ? fmt(summary.won) + (summary.won === 1 ? ' TULIP CATCH' : ' TULIP CATCHES') : 'NO TULIP CATCHES', cx, y0 + 182);
+    c.fillStyle = '#ffd6ec'; c.fillText((summary.won ? fmt(summary.won) + (summary.won === 1 ? ' TULIP CATCH' : ' TULIP CATCHES') : 'NO TULIP CATCHES') + (summary.houses ? ' · ' + summary.houses + ' FULL HOUSE' + (summary.houses > 1 ? 'S' : '') : ''), cx, y0 + 182);
     c.restore();
   }
   if (trans && trans.t > .12 && trans.t < TR.drop + .3) { // BIG ONE BROKEN springs up over the pieces, then goes with the floor
     const t = trans.t - .12, s = ease.back(clamp(t / .4, 0, 1)), a = clamp((TR.drop + .3 - trans.t) / .3, 0, 1); c.save(); c.globalAlpha = a; c.translate(cx, Lo.oy + Lo.vh * .34); c.scale(s, s); c.rotate(-.05);
     fit('BIG ONE BROKEN', 54, Lo.bw - 30, '"Tilt Neon"'); c.textAlign = 'center'; neon('BIG ONE BROKEN', 0, 0, GOLD, +c.font.match(/([\d.]+)px/)[1]); c.restore(); }
   if (trans && trans.t > TR.drop + .2) { const t = trans.t - TR.drop - .2, d = TR.end - TR.drop - .2; c.textAlign = 'center'; c.globalAlpha = clamp(Math.min(t * 4, (d - t) * 3), 0, 1);
-    const y = Lo.oy + Lo.vh * .3 + (1 - ease.out(clamp(t * 2, 0, 1))) * 20;
+    const y = Lo.oy + Lo.vh * .3 + (1 - ease.out(clamp(t * 2, 0, 1))) * 20, pw2 = Math.min(Lo.bw - 16, 360);
+    c.fillStyle = 'rgba(8,6,16,.8)'; rr(cx - pw2 / 2, y - 44, pw2, 112, 16); c.fill();
     fit('THE FLOOR GIVES WAY', 46, Lo.bw - 30, '"Tilt Neon"'); glow(GOLD, 26); c.fillStyle = '#fff'; c.fillText('THE FLOOR GIVES WAY', cx, y); c.font = '400 14px Bungee, sans-serif'; c.fillStyle = GOLD; c.fillText('BOARD ' + (S.board + 1) + ': ' + BOARDN[S.board], cx, y + 32); if (CORE.VALm) { c.fillStyle = '#ffe9a6'; c.font = '400 13px Bungee, sans-serif'; c.fillText('EVERYTHING HERE PAYS ×' + +(CORE.VALm[S.board] / CORE.VALm[S.board - 1]).toFixed(1), cx, y + 54); } noGlow(); c.globalAlpha = 1; }
   if (S.fin === 1 && fin.t > .4) { c.textAlign = 'center'; c.fillStyle = 'rgba(8,6,16,.78)'; rr(cx - Math.min(Lo.bw - 20, 300) / 2, Lo.oy + 34, Math.min(Lo.bw - 20, 300), 66, 14); c.fill(); c.font = '400 22px "Tilt Neon", sans-serif'; glow(GOLD, 14); c.fillStyle = '#fff3c8'; c.fillText('Under the mountain: a box.', cx, Lo.oy + 60); c.fillText('It has a number on it.', cx, Lo.oy + 88); noGlow(); }
 }
@@ -2419,7 +2548,7 @@ K.loop((dt, t) => {
 /* ================= sound: clicks, chimes, a neon buzz, and a march ================= */
 const A = K.audio;
 const snd = (() => {
-  const no = () => {}; if (!A) return { clicks: no, chime: no, ching: no, thunk: no, boom: no, spin: no, fanfare: no, whoosh: no, crash: no, bell: no, buzz: no, tick: no };
+  const no = () => {}; if (!A) return { clicks: no, chime: no, ching: no, thunk: no, boom: no, spin: no, stop: no, reach: no, miss: no, fanfare: no, whoosh: no, crash: no, bell: no, buzz: no, tick: no };
   const ctx = A.ctx, out = A.sfx, nb = ctx.createBuffer(1, ctx.sampleRate * .5, ctx.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   const ok = () => ctx.state === 'running';
   const tone = (f, t, dur, type, vol, f2) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .005); g.gain.exponentialRampToValueAtTime(.0008, t + dur); o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + .02); };
@@ -2432,14 +2561,19 @@ const snd = (() => {
     ching() { if (!ok() || ctx.currentTime - lastChing < .04) return; lastChing = ctx.currentTime; const t = lastChing; tone(2093, t, .25, 'square', .03); tone(2637, t + .03, .3, 'triangle', .06); hiss(t, .12, 6000, 2, .05, 'highpass'); },
     thunk() { if (!ok() || ctx.currentTime - lastThunk < .07) return; lastThunk = ctx.currentTime; tone(110, lastThunk, .18, 'sine', .25, 60); },
     boom() { if (!ok()) return; const t = ctx.currentTime; hiss(t, .5, 300, .7, .4, 'lowpass'); tone(80, t, .4, 'sine', .4, 35); },
-    spin() { if (!ok()) return; const t = ctx.currentTime; for (let i = 0; i < 16; i++) tone(1400 + (i % 3) * 200, t + i * .07, .03, 'square', .025); [0, .25, .5].forEach(k => tone(220, t + CORE.P.spin - .5 + k, .08, 'square', .06)); },
+    spin() { if (!ok()) return; const t = ctx.currentTime; for (let i = 0; i < 10; i++) tone(1400 + (i % 3) * 200, t + i * .07, .03, 'square', .022); },
+    // a reel stopping: a clack, lower for each; a reach: a rising whine that lasts until the third reel decides
+    stop(i) { if (!ok()) return; const t = ctx.currentTime; tone(260 - i * 30, t, .09, 'square', .07); hiss(t, .04, 2200, 4, .08); },
+    reach(d) { if (!ok()) return; const t = ctx.currentTime; tone(440, t, Math.max(.3, d), 'sawtooth', .035, 1320); for (let i = 0; i < 6; i++) tone(880 + i * 110, t + i * d / 6, .06, 'square', .03); },
     fanfare() { if (!ok()) return; const t = ctx.currentTime; [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => { tone(f, t + i * .09, .22, 'square', .07); tone(f / 2, t + i * .09, .22, 'triangle', .08); }); },
     whoosh() { if (!ok()) return; const t = ctx.currentTime; hiss(t, .6, 500, 1, .2, 'lowpass'); tone(300, t, .5, 'sawtooth', .04, 80); },
     crash() { if (!ok()) return; const t = ctx.currentTime; hiss(t, 1.4, 900, .5, .6, 'lowpass'); hiss(t, 1, 5000, 1, .25); tone(60, t, 1, 'sine', .5, 30); for (let i = 0; i < 24; i++) tone(1800 + Math.random() * 2400, t + .1 + i * .05, .25, 'triangle', .04); },
     bell() { if (!ok()) return; const t = ctx.currentTime; tone(1568, t, .8, 'sine', .12); tone(1568 * 2.76, t, .5, 'sine', .04); },
     // a neon tube striking: a 100 Hz hum with crackle
     buzz() { if (!ok()) return; const t = ctx.currentTime; for (let i = 0; i < 3; i++) hiss(t + i * .05, .03, 2500, 3, .12); tone(100, t + .12, .5, 'sawtooth', .05); tone(200, t + .12, .5, 'square', .015); },
-    tick() { if (!ok()) return; tone(1800, ctx.currentTime, .03, 'square', .03); }
+    tick() { if (!ok()) return; tone(1800, ctx.currentTime, .03, 'square', .03); },
+    // FULL HOUSE slipping away: a falling two-note groan
+    miss() { if (!ok()) return; const t = ctx.currentTime; tone(392, t, .22, 'triangle', .08, 330); tone(311, t + .2, .35, 'triangle', .08, 247); }
   };
 })();
 /* An original march for the parlour, in the manner of the brass marches parlours played: square lead,
@@ -2500,14 +2634,19 @@ K.world({
 /* ================= for a session at work on the box: scenes, close-ups ================= */
 /* ?world=clew&scene=<name> plays the eager bot (?bot=casual, ?seed=n) until the scene comes up and starts there, so
    every board and moment can be reached in a real state of play, not a staged one: first, tree1 (after the first
-   game), reels, fever, lantern, auto, nearly1..5 (that board's Big One under a tenth), board2..5 (just opened), end. */
+   game), reels, fever, lantern, auto, nearly1..5 (that board's Big One under a tenth), board2..5 (just opened), end,
+   reach (the reels in a REACH), house (nine pins in ten alight), full (the glass full, pouring into the mega ball). */
 const SCENES = {
   first: () => true, tree1: S => S.phase === 'tree' && S.runs >= 1,
   reels: S => S.phase === 'run' && CORE.stats(S).start && S.rt > 3 && S.balls.length > 8,
   fever: S => S.phase === 'run' && S.fever > 3, lantern: S => S.phase === 'run' && S.lan && S.lan.t > 1,
   auto: S => S.phase === 'run' && S.launch != null && S.rt > 4,
   nearly: (S, n) => S.board === n - 1 && !S.fin && S.big / CORE.BIG[n - 1] < .1 && (S.phase === 'tree' || S.big / CORE.BIG[n - 1] < .03),
-  board: (S, n) => S.board === n - 1 && S.phase === 'tree', end: S => S.fin === 1
+  board: (S, n) => S.board === n - 1 && S.phase === 'tree', end: S => S.fin === 1,
+  // the reels in a REACH; most of a board alight (FULL HOUSE in reach); the glass full and pouring into the mega ball
+  reach: S => S.phase === 'run' && S.fever <= 0 && S.reel && S.reel.reach && S.reel.T - S.reel.t < .3,
+  house: S => S.phase === 'run' && S.board >= 1 && S.balls.length > 120 && S.tray > 60 && S.glow && S.on / CORE.board(S.board, CORE.stats(S).tulip).nl > .93,
+  full: S => S.phase === 'run' && CORE.stats(S).mega && S.balls.length >= CORE.CAP && S.tray > 50
 };
 function scene(name) {
   const m = /^([a-z]+?)(\d?)$/.exec(name), f = m && SCENES[m[1]]; if (!f) { console.warn('[clew] no scene ' + name); return null; }
@@ -2588,11 +2727,11 @@ K.debug = {
 const CORE = (() => {
   const { rand, hash, clamp } = KIT, { sqrt, abs, sin, floor, min, max, hypot, sign, round, pow, ceil } = Math;
   const W = 100, DT = 1 / 120, G = 160, VMAX = 120, R = 1.2, C = 4, CAP = 260;
-  const P = { hitV: 4.5, rest: .3, lastCall: 60, lanLife: 8, lanFever: 4, feverT: 10, feverRate: 24, spin: 1.3, megaR: 3.4, megaEvery: 60, triple: .11 };
+  const P = { hitV: 4.5, rest: .3, lastCall: 60, lanLife: 8, lanFever: 4, feverT: 10, feverRate: 24, spin: 1.3, reach: 2.2, glowT: [5.5, 7.5, 6, 4.5, 5], houseF: .025, houseFever: 3, megaR: 3.4, megaEvery: 60, triple: .11 };
   const BOARDS = ['The machine', 'The tall machine', 'The parlour', 'The street', 'The mountain'];
   const BH = [180, 360, 460, 560, 660];                    // board heights
   const HPm = [1, 3, 10, 40, 160], VALm = [1, 2.5, 6, 15, 40];
-  const BIG = [1500, 1.5e5, 1.4e6, 1.8e7, 6e8];        // the Big One on each board
+  const BIG = [1500, 2.6e5, 2.3e6, 6.5e7, 1.8e9];        // the Big One on each board
   const ARMC = [1, 600, 4e4, 3e6, 2e8];            // what a bulb on each panel of the sign costs
 
   /* ---------------- the tree: the parlour's neon sign ----------------
@@ -2652,11 +2791,17 @@ const CORE = (() => {
     { id: 'm_rock', arm: 4, p: null, name: 'Rockfall', d: 'every block that breaks spills three balls', base: .8, k: 1, max: 1, add: { rock: 3 }, big: 1 },
     { id: 'm_big', arm: 4, p: null, name: 'Open sesame', d: 'the Big One takes ×2 damage', base: 2, k: 2.6, max: 3, mul: { big: 2 } },
     { id: 'm_dmg', arm: 4, p: null, name: 'Meteor steel', d: 'damage ×1.8', base: 1.3, k: 2.6, max: 5, mul: { dmg: 1.8 } },
-    { id: 'm_coin', arm: 4, p: null, name: 'Mountain gold', d: 'everything pays ×2', base: 1.5, k: 2.7, max: 4, mul: { coin: 2 } }
+    { id: 'm_coin', arm: 4, p: null, name: 'Mountain gold', d: 'everything pays ×2', base: 1.5, k: 2.7, max: 4, mul: { coin: 2 } },
+    // overtime: four bulbs in the middle of the star that never run out, from the parlour on, so coins always buy
+    // something; each costs half as much again as the last, priced for the board you are on
+    { id: 'x_balls', ot: 1, q: 0, arm: 0, p: null, name: 'Overtime: balls', big: 1, d: 'every level, 5% more balls in the tray', base: 3, k: 2, max: Infinity, mul: { ballsX: 1.05 } },
+    { id: 'x_glow', ot: 1, q: 1, arm: 0, p: null, name: 'Overtime: afterglow', big: 1, d: 'every level, pins stay lit 6% longer', base: 3, k: 2, max: Infinity, mul: { glowX: 1.06 } },
+    { id: 'x_big', ot: 1, q: 2, arm: 0, p: null, name: 'Overtime: crowbar', big: 1, d: 'every level, the Big One takes 5% more damage', base: 3, k: 2, max: Infinity, mul: { big: 1.05 } },
+    { id: 'x_coin', ot: 1, q: 3, arm: 0, p: null, name: 'Overtime: jackpot tax', big: 1, d: 'every level, everything pays 10% more', base: 3, k: 2, max: Infinity, mul: { coin: 1.1 } }
   ];
   const byId = Object.fromEntries(UP.map(u => [u.id, u]));
   const BASE = { balls: 15, rate: 4, dmg: 1, pin: 0, coin: 1, pocket: 1, cap: 2, tulipX: 1, gold: 0, start: 0, luck: 0, fT: P.feverT, fR: 1, bomb: 0, bombR: 6, bombX: 6,
-    auto: 0, boy: 0, mag: 0, mega: 0, megaN: 1, megaX: 30, tulip: 0, twin: 0, jack: 0, big: 1, rock: 0 };
+    auto: 0, boy: 0, mag: 0, mega: 0, megaN: 1, megaX: 30, tulip: 0, twin: 0, jack: 0, big: 1, rock: 0, ballsX: 1, glowX: 1, houseX: 1 };
   const memo = new WeakMap();
   function stats(S) {
     const key = S.bought, m = memo.get(S); if (m && m.key === key) return m.st;
@@ -2664,12 +2809,13 @@ const CORE = (() => {
     for (const u of UP) { const L = S.lv[u.id] | 0; if (!L) continue;
       if (u.add) for (const k in u.add) st[k] += u.add[k] * L;
       if (u.mul) for (const k in u.mul) st[k] *= pow(u.mul[k], L); }
-    st.auto *= st.rate; st.megaN = round(P.megaEvery * st.megaN);
+    st.auto *= st.rate; st.megaN = round(P.megaEvery * st.megaN); st.balls = round(st.balls * st.ballsX);
     memo.set(S, { key, st }); return st;
   }
-  const price = (S, u) => u.base * ARMC[u.arm] * pow(u.k, S.lv[u.id] | 0);
+  const OT = 2;   // the board overtime opens on
+  const price = (S, u) => u.base * ARMC[u.ot ? max(OT, S.board) : u.arm] * pow(u.k, S.lv[u.id] | 0);
   // a chain opens when the one it hangs from is full
-  const open = (S, u) => S.board >= u.arm && (!u.p || (S.lv[u.p] | 0) >= byId[u.p].max) && (!u.need || (S.lv[u.need] | 0) > 0);
+  const open = (S, u) => u.ot ? S.board >= OT : S.board >= u.arm && (!u.p || (S.lv[u.p] | 0) >= byId[u.p].max) && (!u.need || (S.lv[u.need] | 0) > 0);
   const can = (S, u) => !S.fin && (S.lv[u.id] | 0) < u.max && open(S, u) && S.$ >= price(S, u);
 
   /* ---------------- the boards ----------------
@@ -2745,13 +2891,19 @@ const CORE = (() => {
     // middle, and the field fills round them
     if (b <= 1) {
       const ways = b ? [[18, 30], [96, 26], [174, 30], [252, 26]] : [[16, 24], [60, 20]];
-      for (const [y0, len] of ways) for (const sd of [-1, 1]) for (let i = 0; i <= 7; i++) { const u = i / 7, x0 = 3.2 + len * u * .62, y = y0 + len * (u * u * .55 + u * .35), x = sd < 0 ? x0 : W - x0;
-        if (!rs.some(r => r.t === 'p' && Math.abs(x - r.cx) < r.w / 2 + 9 && y > r.y - 16 && y < r.y + 6)) pin(x, y, .6); }
+      // the nails stand closer than half a ball (a notch between two of them is too shallow to hold one) and the first
+    // touches the wall, so nothing slips in behind a fence and nothing comes to rest along it
+    for (const [y0, len] of ways) for (const sd of [-1, 1]) { const n = ceil(len * 1.15); for (let i = 0; i <= n; i++) { const u = i / n, x0 = .9 + (2.3 + len * .62) * u, y = y0 + len * (u * u * .55 + u * .35), x = sd < 0 ? x0 : W - x0;
+        if (!rs.some(r => r.t === 'p' && Math.abs(x - r.cx) < r.w / 2 + 9 && y > r.y - 16 && y < r.y + 6)) { pin(x, y, .6); pins[pins.length - 1].way = 1; } } }
     }
     // the pin field fills what is left, row by row
     const sx = b === 2 ? 11 : b === 3 ? 10 : 8, sy = b === 2 ? 9 : b === 3 ? 8 : 7, pr = b === 2 ? 1.2 : b === 4 ? .8 : .6;
+    // nothing grows in a fence's shade: under a way no ball comes, so a pin there could never light
+    const shade = (x, y) => b <= 1 && (b ? [[18, 30], [96, 26], [174, 30], [252, 26]] : [[16, 24], [60, 20]]).some(([y0, len]) => { const xs = min(x, W - x), u = (xs - .9) / (2.3 + len * .62);
+      return u <= 1.05 && y > y0 + len * (.55 * u * u + .35 * u) - 1 && y < y0 + len * .9 + 12; });
     const keep = (x, y) => {
-      if (x < pr + 2 * R + .6 || x > W - pr - 2 * R - .6) return false;
+      if (x < pr + 2 * R + .6 || x > W - pr - 2 * R - .6 || shade(x, y)) return false;
+      for (const r of rs) if (r.t === 'w' && r.w > 8 && x > r.x + 2 && x < r.x + r.w - 2 && y > r.y && y < r.y + r.h + 13) return false;   // nor under a ledge
       for (const r of rs) { const a = r.mv ? r.mv.a : 0; const m = pr + 2 * R + .8; if (x > r.x - a - m && x < r.x + r.w + a + m && y > r.y - m && y < r.y + r.h + m) return false;
         if (r.t === 'p' && (x - r.x - r.w / 2) ** 2 + (y - r.y - 1.5) ** 2 < (r.w / 2 + 1.6 + m) ** 2) return false; }   // and a ball's width from a closed tulip's dome
       for (const p of pins) if ((x - p.x) ** 2 + (y - p.y) ** 2 < (p.r + pr + 2 * R + .8) ** 2) return false;
@@ -2767,13 +2919,13 @@ const CORE = (() => {
     const order = pins.map((p, i) => i).filter(i => pins[i].k !== 9 && pins[i].r < 1.5 && pins[i].y > 16 && pins[i].y < big - 10).sort((a, c) => h(a, 5) - h(c, 5));
     const blocks = rs.filter(r => r.t === 'b'), pockets = rs.filter(r => r.t === 'p');
     blocks.forEach((r, i) => r.i = i); pockets.forEach((r, i) => r.i = i);
-    for (const p of pins) if (p.of) { p.pi = p.of.i; delete p.of; }   // a tulip's two posts know their tulip
+    for (const p of pins) { if (p.of) { p.pi = p.of.i; delete p.of; } p.dim = p.k === 9 || p.way ? 1 : 0; }   // a tulip's posts and a way's nails do not take part in FULL HOUSE   // a tulip's two posts know their tulip
     // the grid: every cell lists the pins (i) and rects (-1 - j) it touches
     const rows = ceil((H + 8) / C), cols = ceil(W / C), grid = Array.from({ length: rows * cols }, () => []);
     const put = (x0, y0, x1, y1, v) => { for (let gy = max(0, floor(y0 / C)); gy <= min(rows - 1, floor(y1 / C)); gy++) for (let gx = max(0, floor(x0 / C)); gx <= min(cols - 1, floor(x1 / C)); gx++) grid[gy * cols + gx].push(v); };
     pins.forEach((p, i) => put(p.x - p.r, p.y - p.r, p.x + p.r, p.y + p.r, i));
     rs.forEach((r, j) => { const a = r.mv ? r.mv.a : 0, d = r.t === 'p' ? r.w / 2 + 2.5 : 0; put(r.x - a - (d ? 2.5 : 0), r.y - d, r.x + r.w + a + (d ? 2.5 : 0), r.y + r.h, -1 - j); });   // a tulip's cells cover its dome
-    const B = { b, H, pv: .5 * VALm[b] * 160 / pins.length, pins, rs, blocks, pockets, big: rs.find(r => r.t === 'B'), order, grid, rows, cols, name: BOARDS[b] };
+    const B = { b, H, nl: pins.filter(p => p.k !== 9 && !p.way).length, pv: .5 * VALm[b] * 160 / pins.length, pins, rs, blocks, pockets, big: rs.find(r => r.t === 'B'), order, grid, rows, cols, name: BOARDS[b] };
     cache.set(key, B); return B;
   }
   const goldOf = (S, B) => { const st = stats(S), g = new Set(B.order.slice(0, st.gold)); return g; };
@@ -2790,8 +2942,8 @@ const CORE = (() => {
   }
   function begin(S) {
     const B = board(S.board, stats(S).tulip), st = stats(S);
-    S.phase = 'run'; S.rt = 0; S.tray = st.balls + (!S.runs && !S.board ? HOUSE : 0); S.balls = []; S.runC = 0; S.runBig = 0; S.runW = 0; S.em = S.ae = S.fe = 0; S.fever = 0; S.spins = 0; S.reel = null;
-    S.hp = B.blocks.map(r => r.hp); S.lit = B.pins.map(() => 0); S.cap = B.pockets.map(p => p.k === 1 && st.start ? 4 : st.cap); S.hold = null; S.nb = 0; S.launch = null; S.lan = null;
+    S.phase = 'run'; S.rt = 0; S.runH = 0; S.tray = st.balls + (!S.runs && !S.board ? HOUSE : 0); S.balls = []; S.runC = 0; S.runBig = 0; S.runW = 0; S.em = S.ae = S.fe = 0; S.fever = 0; S.spins = 0; S.reel = null;
+    S.hp = B.blocks.map(r => r.hp); S.lit = B.pins.map(() => 0); S.glow = B.pins.map(() => -99); S.on = 0; S.gk = 0; S.cap = B.pockets.map(p => p.k === 1 && st.start ? 4 : st.cap); S.hold = null; S.nb = 0; S.launch = null; S.lan = null;
   }
   const ev = (S, e) => { S.ev.push(e); if (S.ev.length > 160) S.ev.splice(0, 60); };
   const pay = (S, v) => { if (S.fever > 0) v *= 2; S.$ += v; S.earned += v; S.runC += v; return v; };
@@ -2825,15 +2977,33 @@ const CORE = (() => {
     ev(S, { k: 'boom', x, y, r: R2 });
   }
 
+  /* FULL HOUSE. A pin a ball strikes glows for a few seconds; with every pin on the board glowing at once the machine
+     pays out: a heavy blow on the Big One (a share of all it had), a burst of fever, and every pin goes dark for the next
+     round. With hundreds of balls every pin lights sooner or later, but not all at the same time: the thumb has to go
+     where the board is still dark. From the third game on. */
+  // with the last few pins to go the lit ones hold twice as long, so the hunt for the last ones can be won
+  const glowT = S => P.glowT[S.board] * stats(S).glowX * (S.on && S.glow && S.on >= .96 * board(S.board, stats(S).tulip).nl ? 2 : 1);
+  const houseOn = S => S.runs >= 2 || S.board > 0;
+  const light = (S, v, G) => { if (S.rt - S.glow[v] >= G) S.on++; S.glow[v] = S.rt; };
+  function house(S, B) {
+    const d = BIG[S.board] * P.houseF * stats(S).houseX / (1 + .4 * (S.runH | 0));   // the first of a game is the heaviest
+    S.glow.fill(-99); S.on = 0; S.houses = (S.houses | 0) + 1; S.runH = (S.runH | 0) + 1;
+    S.fever = max(S.fever, P.houseFever); S.fevers++;
+    ev(S, { k: 'house', d, n: S.runH });
+    if (S.big > 0) { S.big = max(0, S.big - d); S.runBig += d; ev(S, { k: 'bd', d, x: 50, y: B.big.y + B.big.h }); if (S.big <= 0) { ev(S, { k: 'bigbreak', b: S.board, x: 50, y: B.big.y }); S.broke = 1; } }
+  }
+
   /* one fixed step of the physics */
   function phys(S, B, gold) {
-    const st = stats(S), dt = DT, last = S.rt > P.lastCall, balls = S.balls, out = [];
+    const st = stats(S), dt = DT, last = S.rt > P.lastCall, balls = S.balls, out = [], GL = glowT(S);
     S.rt += dt;
+    if (!S.glow || S.glow.length !== B.pins.length) { S.glow = B.pins.map(() => -99); S.on = 0; }   // a game saved before the pins glowed
+    if (++S.gk >= 12) { S.gk = 0; let n = 0; for (let i = 0; i < S.glow.length; i++) if (S.rt - S.glow[i] < GL && !B.pins[i].dim) n++; S.on = n; }
     // pour: the thumb, the auto-launcher, the twin and the fever
     const live = () => balls.length < CAP;
     const rush = last ? 3 : 1;   // last call: the tray empties three times as fast and the pockets stop paying
     const launching = st.auto && S.launch != null;
-    if (st.mega && !live() && S.tray > 0 && (S.hold != null || launching)) { const n = min(S.tray, ((S.hold != null ? st.rate : 0) + (launching ? st.auto : 0)) * rush * dt + (S.em || 0)); S.tray -= floor(n); S.caught += floor(n); S.em = n - floor(n); }
+    if (st.mega && !live() && S.tray > 0 && (S.hold != null || launching)) { const n = min(S.tray, ((S.hold != null ? st.rate : 0) + (launching ? st.auto : 0)) * rush * dt + (S.em || 0)); S.tray -= floor(n); S.caught += floor(n); S.ovf = (S.ovf || 0) + floor(n); S.em = n - floor(n); }
     if (S.hold != null && S.tray > 0) {
       S.em += st.rate * rush * dt;
       while (S.em >= 1 && S.tray > 0 && live()) {
@@ -2846,7 +3016,7 @@ const CORE = (() => {
     // the auto-launcher pours where it was set this game, alongside the thumb
     if (launching && S.tray > 0) {
       S.ae += st.auto * rush * dt;
-      while (S.ae >= 1 && S.tray > 0 && live()) { S.ae -= 1; S.tray--; S.nb++; spawn(S, clamp(S.launch + (rand(S) - .5) * 3, 2, W - 2), 1.5, st.bomb && S.nb % 12 === 0 ? 1 : 0); }
+      while (S.ae >= 1 && S.tray > 0 && live()) { S.ae -= 1; S.tray--; S.nb++; const ab = spawn(S, clamp(S.launch + (rand(S) - .5) * 3, 2, W - 2), 1.5, st.bomb && S.nb % 12 === 0 ? 1 : 0); if (st.twin && live()) spawn(S, W - ab.x, 1.5, 0, -ab.vx); }
       if (S.ae > 1) S.ae = 1;
     }
     // now and then a paper lantern drifts down the glass; catch it and it rains
@@ -2861,7 +3031,7 @@ const CORE = (() => {
       if (S.fever <= 0) { S.fever = 0; ev(S, { k: 'feverend' }); }
     }
     if (S.reel) { S.reel.t -= dt; if (S.reel.t <= 0) settleReel(S); }
-    else if (S.spins > 0) { S.spins--; S.reel = { t: P.spin, r: null }; ev(S, { k: 'spin' }); }
+    else if (S.spins > 0) { S.spins--; const o = roll(S), T = P.spin + (o.reach ? P.reach : 0); S.reel = { t: T, T, r: o.r, win: o.win, reach: o.reach }; ev(S, { k: 'spin', r: o.r, T, reach: o.reach }); }
     const megas = [];
     for (let n = 0; n < balls.length; n++) {
       const b = balls[n], mega = b.k === 2, r = mega ? P.megaR : R;
@@ -2887,7 +3057,7 @@ const CORE = (() => {
             const dx = b.x - p.x, dy = b.y - p.y, rr = r + p.r, d2 = dx * dx + dy * dy;
             if (d2 >= rr * rr || d2 === 0) continue;
             // a mega ball ploughs through pins, bumpers, boulders and a tulip's posts (it is wider than the gaps between them): it lights them and slows a little
-            if (mega) { if (!S.lit[v] && p.k !== 9) { S.lit[v] = 1; if (st.pin) ev(S, { k: '$', v: pay(S, st.pin * B.pv * st.coin), x: p.x, y: p.y }); } b.vx *= .996; b.vy *= .992; continue; }
+            if (mega) { if (!p.dim) light(S, v, GL); if (!S.lit[v] && p.k !== 9) { S.lit[v] = 1; if (st.pin) ev(S, { k: '$', v: pay(S, st.pin * B.pv * st.coin), x: p.x, y: p.y }); } b.vx *= .996; b.vy *= .992; continue; }
             const d = sqrt(d2), nx = dx / d, ny = dy / d, vn = b.vx * nx + b.vy * ny;
             b.x = p.x + nx * rr; b.y = p.y + ny * rr;
             if (vn < 0) {
@@ -2895,6 +3065,7 @@ const CORE = (() => {
               b.vx -= (1 + e) * vn * nx; b.vy -= (1 + e) * vn * ny;
               b.vx += (((b.x * 12.9898 + b.y * 78.233) * 437.585) % 1 - .5) * 2.2; b.vx *= .985;
               if (vn < -3) S.clk++;
+              if (!p.dim) light(S, v, GL);
               if (!S.lit[v] && p.k !== 9) { S.lit[v] = 1; if (st.pin) ev(S, { k: '$', v: pay(S, st.pin * B.pv * st.coin), x: p.x, y: p.y }); }
               if (!b.s && !mega && gold.has(v) && live()) { b.s = 1; const c = spawn(S, b.x, b.y, 0, -b.vx - 3 * sign(b.vx || 1)); c.vy = b.vy; c.s = 1; ev(S, { k: 'split', x: p.x, y: p.y }); }
             }
@@ -2908,6 +3079,7 @@ const CORE = (() => {
               continue;
             }
             if (rc.t === 'p') { // a closed tulip is a dome over its two posts, so nothing comes to rest on it
+              if (mega) continue;   // a mega ball is wider than the gap between a wall and a dome: it rolls over domes as over pins
               const ccx = x0 + rc.w / 2, ccy = rc.y + 1.5, dx = b.x - ccx, dy = b.y - ccy, rr = r + rc.w / 2 + 1.6, d2 = dx * dx + dy * dy;
               if (d2 >= rr * rr || d2 === 0) continue;
               const d = sqrt(d2), nx = dx / d, ny = dy / d, vn = b.vx * nx + b.vy * ny; b.x = ccx + nx * rr; b.y = ccy + ny * rr;
@@ -2942,6 +3114,9 @@ const CORE = (() => {
         }
       }
       if (mega) megas.push(b);
+      // a ball that has all but stopped (in the notch between two nails, against a wall) gets the knock a player gives the
+      // glass: a quarter of a second at walking pace and it is nudged sideways and up, so nothing is seen hanging
+      if (!gone) { if (b.vx * b.vx + b.vy * b.vy < 16) { b.st = (b.st || 0) + dt; if (b.st > .25) { b.st = 0; b.vx += (rand(S) < .5 ? -1 : 1) * (mega ? 30 : 22); b.vy -= mega ? 20 : 14; b.kn = (b.kn | 0) + 1; ev(S, { k: 'knock', x: b.x, y: b.y }); } } else b.st = 0; }
       // a ball wedged somewhere for two seconds is shaken loose and dropped
       if (!gone) { b.w = (b.w || 0) + dt; if (b.w > 1.5) { if ((b.x - b.ax) ** 2 + (b.y - b.ay) ** 2 < 2) { out.push(n); ev(S, { k: 'lost', x: b.x, y: b.y }); } b.ax = b.x; b.ay = b.y; b.w = 0; } }
     }
@@ -2951,6 +3126,7 @@ const CORE = (() => {
       if (d2 < rr * rr && d2 > 0) { const d = sqrt(d2); b.x = m.x + dx / d * rr; b.y = m.y + dy / d * rr; b.vx += dx / d * 20; b.vy += dy / d * 10; }
     }
     if (out.length) { const dead = new Set(out); S.balls = balls.filter((b, i) => !dead.has(i)); }
+    if (S.on >= B.nl && houseOn(S)) house(S, B);
     // the mega balls the pockets have saved up
     if (st.mega) while (S.caught >= st.megaN) { S.caught -= st.megaN; const m = spawn(S, 15 + rand(S) * 70, 1.5, 2); m.vx = (rand(S) - .5) * 10; ev(S, { k: 'mega', x: m.x }); }
   }
@@ -2966,11 +3142,17 @@ const CORE = (() => {
     if (p.k === 1 && st.start && S.spins < 3) S.spins++;
     ev(S, { k: 'catch', i: p.i, n, v, x: p.cx, y: p.y, left: S.cap[p.i], spin: p.k === 1 && st.start ? 1 : 0 });
   }
-  function settleReel(S) {
+  // the reels are decided as they start to turn, so the view can stop them on what they show; when the first two agree
+  // it is a REACH, as on a real machine: the third reel crawls on for a while longer before it decides
+  function roll(S) {
     const st = stats(S), win = rand(S) < min(.32, P.triple + .03 * st.luck);
     let r;
     if (win) { const s = rand(S) < .2 + .05 * st.luck ? 6 : floor(rand(S) * 6); r = [s, s, s]; }
     else { r = [0, 1, 2].map(() => floor(rand(S) * 7)); if (r[0] === r[1] && r[1] === r[2]) r[2] = (r[2] + 1) % 7; }
+    return { r, win, reach: r[0] === r[1] };
+  }
+  function settleReel(S) {
+    const st = stats(S), o = S.reel && S.reel.r ? S.reel : roll(S), r = o.r, win = o.win;   // a save from before rolls now
     S.reel = null;
     ev(S, { k: 'reel', r, win, left: S.spins });
     if (win) {
@@ -2983,7 +3165,7 @@ const CORE = (() => {
   function end(S) {
     S.phase = 'tree'; S.runs++; S.hold = null; S.balls = [];
     const prev = S.lastC || 0, best = S.runC > (S.bestC || 0) && S.runs > 1;
-    ev(S, { k: 'end', c: S.runC, big: S.runBig, runs: S.runs, prev, best, won: S.runW || 0 });
+    ev(S, { k: 'end', c: S.runC, big: S.runBig, runs: S.runs, prev, best, won: S.runW || 0, houses: S.runH | 0 });
     S.lastC = S.runC; S.bestC = max(S.bestC || 0, S.runC);
   }
   function breakBig(S) {
@@ -3034,8 +3216,12 @@ const CORE = (() => {
   function aim(S, mm, o) {
     const B = board(S.board, stats(S).tulip), st = stats(S), r = () => rand(mm);
     let best = 50, bs = -1;
+    // with most of the board alight, the dark pins are worth chasing: a column scores by its share of them
+    const GL = glowT(S), frac = S.glow && S.glow.length === B.pins.length && houseOn(S) ? S.on / B.nl : 0, dark = [];
+    if (o.lit && frac > .5) for (let i = 0; i < B.pins.length; i++) if (!B.pins[i].dim && S.rt - S.glow[i] >= GL) dark.push(B.pins[i].x);
     for (let x = 6; x <= 94; x += 4) {
       let s = 0;
+      if (dark.length) { let n = 0; for (const px of dark) if (abs(px - x) < 12) n++; s += o.lit * VALm[S.board] * 8 * frac * n / dark.length; }
       for (const rc of B.blocks) if (S.hp[rc.i] > 0) { const d = abs(rc.x + rc.w / 2 - x); s += rc.val / (1 + d * d / 30) / (1 + rc.y / 120); }
       const bg = B.big, dbx = abs(bg.x + bg.w / 2 - x); s += o.big * VALm[S.board] * 4 / (1 + dbx * dbx / 200);
       if (st.start) { const sp = B.pockets.find(p => p.k === 1), d = abs(sp.cx - x); s += o.reel * VALm[S.board] * 6 / (1 + d * d / 8); }
@@ -3068,13 +3254,18 @@ const CORE = (() => {
     };
   }
   const bots = {
-    eager: person({ read: 3, buy: .9, maxBuys: 99, react: .5, retarget: 1.8, miss: 4, big: .6, reel: 1, breakEvery: 0, lanReact: .9, lanCatch: .85 }),
-    casual: person({ read: 7, buy: 2, maxBuys: 4, react: 1.5, retarget: 4, miss: 14, big: .4, reel: .4, picky: 1, rest: 9, restLen: 2.5, breakEvery: 420, breakLen: 50, lanReact: 1.8, lanCatch: .45 })
+    eager: person({ read: 3, buy: .9, maxBuys: 99, react: .5, retarget: 1.8, miss: 4, big: .6, reel: 1, lit: 1, breakEvery: 0, lanReact: .9, lanCatch: .85 }),
+    casual: person({ read: 7, buy: 2, maxBuys: 4, react: 1.5, retarget: 4, miss: 14, big: .4, reel: .4, lit: .3, picky: 1, rest: 9, restLen: 2.5, breakEvery: 420, breakLen: 50, lanReact: 1.8, lanCatch: .45 })
   };
   const pace = { eager: 35, casual: 90, gap: 3 };
 
-  // box 3 was a survey, a jailbreak and a demolition firm before it was a pachinko parlour: old saves start afresh
-  function migrate(S) { return init((S && S.ms) || 1); }
+  // box 3 was a survey, a jailbreak and a demolition firm before it was a pachinko parlour: those saves start afresh.
+  // Version 5 (November 2026) only added to the parlour (pins that glow for FULL HOUSE, reels decided as they start,
+  // overtime bulbs), so a version 4 game carries on where it was: the pins start dark and a reel mid-spin rolls anew
+  function migrate(S, from) {
+    if (from === 4 && S && S.lv) { if (S.reel && !S.reel.r) S.reel = null; S.glow = null; S.on = 0; S.gk = 0; return S; }
+    return init((S && S.ms) || 1);
+  }
   // back to the parlour from the shelf after the end: on the mountain again, every bulb kept, the bulbs not yet lit
   // for sale, and a fresh box under the mountain to break open once more
   function revisit(S) {
@@ -3082,15 +3273,15 @@ const CORE = (() => {
     return S;
   }
 
-  const BULBS = UP.reduce((a, u) => a + u.max, 0), feats = [
+  const BULBS = UP.reduce((a, u) => a + (u.ot ? 0 : u.max), 0), feats = [
     ['fever', 'Fever pitch', 'Go into fever a hundred times.', S => S.fevers >= 100],
     ['lantern', 'Lamplighter', 'Catch seventy-five paper lanterns.', S => (S.lanC | 0) >= 75],
     ['jack', 'Seven, seven, seven', 'Hit the jackpot twenty times.', S => (S.jacks | 0) >= 20],
     ['roller', 'High roller', 'Win ten billion coins in a single game.', S => (S.bestC || 0) >= 1e10],
-    ['wheel', 'Lit up like the Ginza', 'Light every bulb on the sign.', S => S.bought >= BULBS]
+    ['wheel', 'Lit up like the Ginza', 'Light every bulb on the sign.', S => UP.every(u => u.ot || (S.lv[u.id] | 0) >= u.max)]
   ];
-  return { version: 4, migrate, revisit, P, W, DT, R, CAP, BOARDS, BH, BIG, UP, byId, board, stats, price, open, can, goldOf, mvx,
-    VALm, init, step, act, done, progress, milestones, crack, tulipPay, bots, pace, feats };
+  return { version: 5, migrate, revisit, P, W, DT, R, CAP, BOARDS, BH, BIG, UP, byId, board, stats, price, open, can, goldOf, mvx,
+    VALm, init, step, act, done, progress, milestones, crack, tulipPay, bots, pace, feats, glowT, houseOn };
 })();
 </script>
 
