@@ -1000,10 +1000,13 @@ if (suites.includes('browser')) {
             for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = (x >> 1) % 2 + 1; } CORE.act(S, 'judge'); });   /* what the judges' button does */
           const early = await until(f, () => K.debug.state().gold === 5 && K.debug.ko().t < 0, 60000) && await f.evaluate(() => !K.debug.card('night'));
           check(early, 'lawn: the cup won, the note in it is not on the pegboard before the rosette');
-          const out = await until(f, () => K.debug.ko().t > 1.5, 120000) && await f.evaluate(() => K.debug.ko().cue === 1 && !K.debug.card('night'));
-          check(out, 'lawn: the teams walk out before the whistle, and the note still waits');
-          const on = await until(f, () => K.debug.ko().t > 9.6 && !!K.debug.card('night'), 120000);
-          check(on, 'lawn: after the kick-off the note in the cup is on the pegboard');
+          // (four minutes, not two: SwiftShader draws the green at well under a frame a second and the match clock moves at most
+          // 0.25 s a frame, so two minutes ran out a frame or two short of the cue in about half the runs)
+          const out = await until(f, () => K.debug.ko().t > 1.5, 240000) && await f.evaluate(() => K.debug.ko().cue === 1 && !K.debug.card('night'));
+          const why = () => f.evaluate(() => JSON.stringify({ ko: K.debug.ko(), frames: window.__frames, night: !!K.debug.card('night') }));
+          check(out, 'lawn: the teams walk out before the whistle, and the note still waits', out ? '' : await why());
+          const on = await until(f, () => K.debug.ko().t > 9.6 && !!K.debug.card('night'), 240000);
+          check(on, 'lawn: after the kick-off the note in the cup is on the pegboard', on ? '' : await why());
         }
       }
       await p.close();
@@ -1154,7 +1157,7 @@ if (suites.includes('perf')) {
     // SwiftShader draws them at a frame a second, which says nothing about a phone)
     const LATE = {
       starter: ['&at=28', 2000, 40], lawn: ['&at=26', 20, 0], clew: ['&scene=board5', 550, 15],
-      flurry: ['&scene=crowd', 1200, 0], warren: ['&scene=crowd', 1300, 40], guests: ['&scene=crowd', 200, 25], jetty: ['&scene=min40', 45, 0]
+      flurry: ['&scene=crowd', 1200, 0], warren: ['&scene=crowd', 1300, 40], guests: ['&scene=crowd', 200, 10], jetty: ['&scene=min40', 45, 0]
     };
     const http = await import('http');
     const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json' };
