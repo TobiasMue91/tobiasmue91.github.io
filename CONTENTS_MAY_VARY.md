@@ -1874,7 +1874,7 @@ box uses it.
     the symbols); each reel runs up, turns at a speed chosen so that an even brake ends a little past its symbol at its stop
     time, and settles back onto it, left to right a quarter of a second apart (the pattern of commercial slot reels: spin,
     eased stop with overshoot, a short settle). On a REACH, as on a real pachinko machine, the first two agree and the third
-    drops to a crawl for 1.4 s more under a pulsing pink frame and a rising whine before it decides; every win goes through a
+    drops to a crawl for 1.4 s more (2.2 s since the critic rounds) under a pulsing pink frame and a rising whine before it decides; every win goes through a
     reach, so a reach is a real chance (about one in two). The stops click on game time, not on timers from the spin.
   - *The sign's camera is the player's.* A drag that left no bulb you could buy in view made it glide back to the middle;
     now it stays where it was left, from game to game, may zoom out until the whole wheel fits, is held to the wheel with a
@@ -1885,7 +1885,7 @@ box uses it.
   - *Twin stream* now follows the auto-launcher too, as "every ball you pour" promised.
   - *FULL HOUSE.* The owner's idea as such would have been met by itself (every pin is struck sooner or later), so a pin
     glows for a few seconds after a ball strikes it (5.5 · 7.5 · 6 · 4.5 · 5 s by board) and every pin glowing at once is
-    FULL HOUSE: 3% of the Big One off (the first of a game; each after it in the same game less), three seconds of fever,
+    FULL HOUSE: a share of the Big One off (2.5% since the critic rounds; the first of a game, each after it less), three seconds of fever,
     and every pin goes dark again. A tube on the top of the rim fills with the share alight; past 85% the dark pins pulse
     pink on the glass and on the map strip, so the thumb goes where the board is still dark. The ways' nails, the tulips'
     posts and the pins in a way's shade (no ball comes there; those pins were taken out) do not count. From the third game
@@ -1893,9 +1893,25 @@ box uses it.
   - *Overtime.* Four bulbs between the star's quarters that never run out (balls +5%, afterglow +6%, the Big One +5%,
     coins +10% a level, each level twice the last), opening on board 3 and priced for the board you are on, so coins
     always buy something. A damage bulb's card says what it does against the Big One (the square root of a blow).
-  - *Balance after it* (eager / casual, three seeds): 39.7–41.1 / 66–71 minutes (before: 39–40 / 62–65), longest wait for
-    something new 2.7 min; the Big Ones are 1,500 · 200K · 2M · 60M · 1.8B; from board 3 a game takes about 10 to 30% off
-    the Big One, with up to ten FULL HOUSEs a game on board 4.
+  - *Critic rounds after it* (three fresh critics on filmstrips of real play, phone 390×844 and desktop 1280×800, new scenes
+    `reach`, `house` and `full`). Phone first impression / clarity / art / phone / feel / commercial: 7/4/7/7/6/5, then
+    7/4/6/6/6/5, then 6/4/6/6/5/4; desktop 5/4/6/–/5/4, 4/3/5/–/5/3, 4/3/5/–/4/3: the plateau *Stills plateau* names.
+    Fixed between them: banners queue one at a time with their subtitles fitted on a plate (FULL HOUSE goes first, with a
+    flash of the glass and its blow over the Big One); a REACH darkens the board and brings the reels half again as large
+    and crawls for 2.2 s; reels rest on an unremarkable set; past 85% the lit pins step back, the dark ones turn black with
+    a pulsing lime ring (no ball, pin or glow is lime) and lime arrows at the glass's edges count those out of view; the
+    meter counts the pins left and says SO CLOSE with a groan when the house slips away; with 96% alight the lit pins hold
+    twice as long, so the hunt for the last ones can be won (the critics watched it fail for ten seconds); pins under the
+    parlour's ledges were taken out like those in a way's shade; the padlock on the reels says a bulb opens it; THE FLOOR
+    GIVES WAY sits on a plate (it could not be read on snow); the sign's labels and tags are at least 11 px and CENTRE
+    sits beside the count, clear of the tree. Still open from them, most valuable first: the first game ends without a
+    loud moment (the owner kept it as it is); late boards in fever are a field of gold where balls and lit pins look
+    alike; pop-ups print over the Big One's name; the desktop is a phone column among dim cabinets with small type; the
+    phone sign's bulbs are small and its card covers the tree's foot; "25 ON THE HOUSE", "POWER" and the №1 box go
+    unexplained.
+  - *Balance after it* (eager / casual, three seeds): 36.2–43.3 / 63–68 minutes (before: 39–40 / 62–65), longest wait for
+    something new 3.0 min; the Big Ones are 1,500 · 260K · 2.3M · 65M · 1.8B, a FULL HOUSE takes 2.5% (the first of a game);
+    from board 3 a game takes about 10 to 30% off the Big One.
 
 - **Snow Day** (box 4). **The refinement session** (October 2026, rule 16). The owner asked for Snow Day to be taken to the
   bar of a finished commercial game, with research rounds between the critic rounds, and lifted the byte cap in advance
