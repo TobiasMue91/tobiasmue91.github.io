@@ -2190,7 +2190,11 @@ needs a field in `K` and an answer from each box, so it belongs to a session abo
     from a crowded phone top; coin tags fade fast. Round 3, the close-ups (35 props, the checklist above): art 5, commercial
     **3**. Done after it: a berm of packed snow along the foot of every snow wall; the park's sun glow fades round, not over
     the wrong axes (it had a hard rim), and the sun stands inside a phone's frame; the dog's ears grow out of his head and
-    his far eye sits inside it; the car's lamps sit in its body.
+    his far eye sits inside it; the car's lamps sit in its body. Round 4, phone 7/5/7/6/5 and **5**, desktop 6/4/7/–/5 and
+    **4**: the first phone score of 5 for "commercial" in Snow Day's history; asked for, most valuable first, pips that read
+    at a glance (made larger, filling in gold, after it), fewer popups at once (three coin tags at most, after it), the yard's
+    title card off the desktop's yeti, a desktop camera as high as the phone's, felt snowballs in flight, and again the
+    crowd, the tree's silhouette, the economy's billions and the empty band of snow at a phone's foot in the garden.
   - *Still open, most valuable first* (what the critics asked for and this session did not do): on a phone the deep yard
     is compressed and the puppets are drawn 1.6 times as large, so a gang of eight or nine overlaps on screen into one heap
     (the rules keep them apart: no two kids share a cover, and on average .28 pairs stand closer than .9); a different phone
@@ -2199,7 +2203,8 @@ needs a field in `K` and an answer from each box, so it belongs to a session abo
     sledge's runners, the bench's snow, the houses' eaves, the yeti's arms and missing legs, the ice crystals that show
     what is behind them; and the felt tree is flat. The numbers still reach the billions on the mountain (an economy
     flattened to "a handful per decoration" would need every price and payout redone). Scores that stayed under 8 after
-    four rounds: everything; "would pass as commercial" stayed at 4 on a phone and 5 on a desktop, 3 in close-up.
+    four rounds: every one; "would pass as commercial" ended at 5 on a phone and 4 on a desktop (from 4 and 5 before this
+    session), 3 in close-up; clarity 5 and 4, feel 5, art direction 7.
 
 ### Working on a box that has shipped
 
