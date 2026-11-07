@@ -1904,11 +1904,24 @@ box uses it.
     twice as long, so the hunt for the last ones can be won (the critics watched it fail for ten seconds); pins under the
     parlour's ledges were taken out like those in a way's shade; the padlock on the reels says a bulb opens it; THE FLOOR
     GIVES WAY sits on a plate (it could not be read on snow); the sign's labels and tags are at least 11 px and CENTRE
-    sits beside the count, clear of the tree. Still open from them, most valuable first: the first game ends without a
-    loud moment (the owner kept it as it is); late boards in fever are a field of gold where balls and lit pins look
+    sits beside the count, clear of the tree. Still open from them, most valuable first (see the owner's second look below for
+    what was done since): the first game ends without a loud moment; late boards in fever are a field of gold where balls and lit pins look
     alike; pop-ups print over the Big One's name; the desktop is a phone column among dim cabinets with small type; the
     phone sign's bulbs are small and its card covers the tree's foot; "25 ON THE HOUSE", "POWER" and the №1 box go
     unexplained.
+  - *The owner's second look* (November 2026): the arrows' "4 DOWN" and THE FLOOR GIVES WAY ran past their plates (both
+    plates now measure their text); on the mountain, cabins and boulders stood in front of the far peaks and seemed to float
+    (the two ranges now stand above the field, the slope starts at a tenth of the board, and the first row of things came
+    down onto it); and, from the shell, the return's last step had no sign that the box wanted stamping, and the next box
+    sometimes showed too early (below, under the reorder). Then the open points, at the owner's word: the first game has its
+    loud moment (the first ball into START in the first two games spins the reels once for free, a REACH onto three sevens
+    and three seconds of fever, "a free spin: a bulb on the sign keeps the reels"; every one of ten bot starts has it, at 6
+    to 13 seconds); a lit pin glows cyan-white, the colour of its tube, so it is not taken for a ball in fever's gold;
+    pop-ups rise from above the Big One's name and the reels, not over them; a new FULL HOUSE or BIG ONE BROKEN clears the
+    banners in the way; the tray says "25 OF THEM FREE" and "EACH HITS 1,061" (not "ON THE HOUSE" and "POWER"); on a phone the
+    sign frames the bulbs above the docked card and never zooms below 0.85, so a bulb stays about 30 px. Not done: the
+    desktop is still a phone column among cabinets (a layout of its own is a larger job), and the box stands at 229.6 KB of
+    its 230.
   - *Balance after it* (eager / casual, three seeds): 36.2–43.3 / 63–68 minutes (before: 39–40 / 62–65), longest wait for
     something new 3.0 min; the Big Ones are 1,500 · 260K · 2.3M · 65M · 1.8B, a FULL HOUSE takes 2.5% (the first of a game);
     from board 3 a game takes about 10 to 30% off the Big One.
@@ -2739,6 +2752,12 @@ box or two. Starter, box 1 until then, opens on a still jar and earns "about 0¢
   title now adds "or send one back unopened from its packing slip", and once per save, 45 seconds into a first box,
   a shipping tag swings out under the chip ("Not for you? Send it back") and opens the slip with the return button
   nudging (`SAVE.tag`).
+- *The stamp and the reveal* (November 2026, the owner). Once the three seams were taped, only a line of small type said
+  to tap the box to stamp it; now a rubber stamp bobs over the box above a pulsing dashed outline of RETURN TO SENDER, with
+  TAP THE BOX TO STAMP IT under it. The returned box then goes on as from the title (the box just taped grows into the next
+  one while the table dims), not by diving the paused world into a spot where the return's box happened to be drawn. And the
+  tissue in a box now stays opaque while it swings open: it faded to a fifth as it turned, so the next world showed through
+  closed tissue before the box had opened.
 
 ## Lessons from the boxes so far
 
