@@ -1938,6 +1938,11 @@ box uses it.
     edge instead of being cut off by it. Rebalanced (Big Ones 1,500 · 300K · 2.9M · 80M · 2.4B; the street's and the
     mountain's rings cost 1M and 150M a bulb; a FULL HOUSE 1.8% and less for each after the first): eager 41.5–42.2,
     casual 67–75 minutes, longest wait 2.6.
+  - *Stickers set against a real play.* The owner's whole first play (read from the console with `CMV.win().K.debug.state()`):
+    12 jackpots, 38 lanterns, 87 fevers, 18 FULL HOUSEs, a best game of 67 billion; the bots 10 to 16, 40 to 60, 124 to
+    135 and 50 to 160 billion. High roller (then ten billion) came with every play, Fever pitch (a hundred) nearly, so the
+    stickers now want about twice a play: 200 fevers, 75 lanterns, 25 jackpots, 300 billion in one game; lighting every bulb
+    stays the one a whole play earns. Stickers already earned are kept.
   - *Balance after it* (eager / casual, three seeds): 36.2–43.3 / 63–68 minutes (before: 39–40 / 62–65), longest wait for
     something new 3.0 min; the Big Ones are 1,500 · 260K · 2.3M · 65M · 1.8B, a FULL HOUSE takes 2.5% (the first of a game);
     from board 3 a game takes about 10 to 30% off the Big One.
