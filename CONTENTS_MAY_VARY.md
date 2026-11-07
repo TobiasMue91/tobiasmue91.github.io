@@ -1944,6 +1944,16 @@ needs a field in `K` and an answer from each box, so it belongs to a session abo
     edge instead of being cut off by it. Rebalanced (Big Ones 1,500 · 300K · 2.9M · 80M · 2.4B; the street's and the
     mountain's rings cost 1M and 150M a bulb; a FULL HOUSE 1.8% and less for each after the first): eager 41.5–42.2,
     casual 67–75 minutes, longest wait 2.6.
+  - *Every ball in view is drawn* (the owner, once more): with the cap at 400, the lowest ball made room for the next one
+    even in mid-glass, so balls seemed to vanish into nothing. Now the glass holds **1,000** for everyone (the same rules on
+    every device, so the balance does not depend on the phone), and only a ball already in the drain under the Big One
+    makes room; failing one there, the tray feeds the mega ball and says so. The view draws every ball in view: past 220 the
+    plain ones go into four batched paths (shadow, body, rim, highlight), so a thousand cost what one does (measured in
+    Chromium at a full glass on a 390×844 phone: physics 1.8 ms, drawing 1.6 ms a frame). A ball is kept lean for the save
+    (no zero fields, positions to a thousandth, speeds to a hundredth, its stuck counters in whole steps), so a save of a
+    full glass stays under 100 KB. With more balls the late boards went faster, so a FULL HOUSE takes 3% for the first of a
+    game and falls with the square of the count after it, and the Big Ones are 1,500 · 420K · 5.7M · 160M · 5.6B (the mountain's ring 80M a bulb), overtime 1.8 times dearer a level (was 2, which left nearly four minutes without a purchase near the end), and the eager bot's floor in `CORE.pace` is 33 minutes, not 35 (rule 6 asks for 30; the owner wanted no grind): eager 34.5–38.4.
+    (Found on the way: a ball whose zero fields were left out never struck a block, as `undefined <= 0` is false.)
   - *Stickers set against a real play.* The owner's whole first play (read from the console with `CMV.win().K.debug.state()`):
     12 jackpots, 38 lanterns, 87 fevers, 18 FULL HOUSEs, a best game of 67 billion; the bots 10 to 16, 40 to 60, 124 to
     135 and 50 to 160 billion. High roller (then ten billion) came with every play, Fever pitch (a hundred) nearly, so the
