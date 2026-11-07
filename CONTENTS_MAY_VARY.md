@@ -36,7 +36,9 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    133 KB, over the old cap, once the box had its close-up camera and props list.
    Tilt may weigh **230 KB**: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
    scenes, close-ups and diagnostic switches before a pixel of the art had changed, then 200 KB when the street and the
-   mountain were redrawn at the owner's request; the owner lifted the cap in advance.
+   mountain were redrawn at the owner's request; the owner lifted the cap in advance. The owner raised it to **300 KB**
+   (November 2026, calling the limit arbitrary anyway) when the play-test's fixes had brought the box to 229.6 KB and the
+   open points (a desktop layout of its own among them) were still to do.
    Snow Day may weigh **230 KB**: its refinement session (October 2026) began at 116 KB and passed 130 KB with its scenes,
    close-ups and diagnostic switches and the first round of art (cotton-wool snow, wood, the leaders, the present); the owner
    lifted the cap in advance.
@@ -1919,9 +1921,11 @@ box uses it.
     to 13 seconds); a lit pin glows cyan-white, the colour of its tube, so it is not taken for a ball in fever's gold;
     pop-ups rise from above the Big One's name and the reels, not over them; a new FULL HOUSE or BIG ONE BROKEN clears the
     banners in the way; the tray says "25 OF THEM FREE" and "EACH HITS 1,061" (not "ON THE HOUSE" and "POWER"); on a phone the
-    sign frames the bulbs above the docked card and never zooms below 0.85, so a bulb stays about 30 px. Not done: the
-    desktop is still a phone column among cabinets (a layout of its own is a larger job), and the box stands at 229.6 KB of
-    its 230.
+    sign frames the bulbs above the docked card and never zooms below 0.85, so a bulb stays about 30 px. Then, with the cap
+    at 300 KB: on a desktop the aisle either side of the machine holds two cards while it plays (the Big One's counter,
+    what this game took off it and LIGHT EVERY PIN on the left; the four cheapest bulbs being saved for, each with how far the
+    coins have got, on the right), which fade as the sign slides in; and a phone sign with more to show than fits at a usable
+    size frames the cheapest bulb that can be lit, the one its card reads.
   - *Balance after it* (eager / casual, three seeds): 36.2–43.3 / 63–68 minutes (before: 39–40 / 62–65), longest wait for
     something new 3.0 min; the Big Ones are 1,500 · 260K · 2.3M · 65M · 1.8B, a FULL HOUSE takes 2.5% (the first of a game);
     from board 3 a game takes about 10 to 30% off the Big One.

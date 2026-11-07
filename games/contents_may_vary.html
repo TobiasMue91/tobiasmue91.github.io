@@ -1298,7 +1298,7 @@ function resize() {
   const desk = VW >= 900 && VW / VH > 1.1, pw = desk ? clamp(Math.round(VW * .42), 400, 640) : VW;
   document.body.classList.toggle('desk', desk); document.body.style.setProperty('--pw', pw + 'px');
   const mw = desk ? VW - pw : VW, top = 64, bot = 78;
-  const sc = desk ? Math.min((VH - top - bot - 20) / CORE.BH[0], (mw - 90) / 100) : Math.min((VW - 30) / 100, (VH - top - bot - 26) / CORE.BH[0]);
+  const sc = desk ? Math.min((VH - top - bot - 26) / CORE.BH[0], (mw - 90) / 100) : Math.min((VW - 30) / 100, (VH - top - bot - 26) / CORE.BH[0]);
   const bw = 100 * sc, vh = Math.min(VH - top - bot - 26, desk ? VH : 1e9);
   // on a desktop the machine and the sign stand together in the middle, however wide the screen
   const gap = 90, gx = desk ? Math.max(0, (VW - (bw + gap * 2 + pw)) / 2) : 0, ox = desk ? gx + gap : (mw - bw) / 2, sx = desk ? ox + bw + gap : 0;
@@ -2102,7 +2102,10 @@ function fitSign() {
   for (const b of bulbs) { const s = bstate(b); if (s !== 'buy' && s !== 'next') continue; const [x, y] = WEB.P[b.key]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
   // on a phone the card docks over the foot of the sign, so the frame stops above it; and the bulbs stay big enough to read
   // and to hit (what does not fit is a drag away, and the edges glow towards it)
-  const w = signW() - 40, h = VH - sigTop() - (Lo.desk ? 130 : 260), z = clamp(Math.min(w / ((x1 - x0 + 2) * SPX()), h / ((y1 - y0 + 2) * SPX())), Lo.desk ? .5 : .85, 1.35);
+  const w = signW() - 40, h = VH - sigTop() - (Lo.desk ? 130 : 260), zf = Math.min(w / ((x1 - x0 + 2) * SPX()), h / ((y1 - y0 + 2) * SPX())); let z = clamp(zf, Lo.desk ? .5 : .85, 1.35);
+  // too much to show at a size a finger can use: frame the bulbs that can be lit now, and leave the rest a drag away
+  // (centred on the cheapest of them, which is the one the card is reading)
+  if (!Lo.desk && zf < .85) { const can = bulbs.filter(b => bstate(b) === 'buy').sort((a2, b2) => CORE.price(S, a2.u) - CORE.price(S, b2.u)); if (can.length) { const [x, y] = WEB.P[can[0].key]; x0 = x1 = x; y0 = y1 = y; z = .85; } }
   camGoal = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 + (Lo.desk ? 0 : 50 / (SPX() * z)), z }; userMoved = false;
 }
 const brick = (() => { let k = null; return (w, h) => { if (k && k.width === Math.ceil(w * DPR) && k.height === Math.ceil(h * DPR)) return k; k = can2(w * DPR, h * DPR); const g = k.getContext('2d'); g.scale(DPR, DPR);
@@ -2310,6 +2313,44 @@ function tray(y) {
   if (trayBump > 0) { c.restore(); c.globalAlpha = trayBump * .5; c.fillStyle = '#ffd6ec'; rr(x0 + 10, y + 9, w - 20, 26, 13); c.fill(); c.globalAlpha = 1; }
 }
 
+/* ================= a desktop's two side cards, while the machine plays alone in the middle =================
+   The aisle either side of the machine is not only scenery: on the left a card for this board's goal (the Big One's
+   counter, what this game took off it, LIGHT EVERY PIN), on the right the bulbs being saved for, cheapest first, each with
+   how far the coins have got. They fade out as the sign slides in between games. */
+function sidePanels() {
+  if (!Lo.desk || zoom || S.fin) return; const a = clamp(1 - deskK * 1.6, 0, 1); if (a <= 0) return;
+  const fl = Lo.ox - 70, fr = VW - (Lo.ox + Lo.bw) - 70, W2 = Math.min(310, fl, fr); if (W2 < 210) return;
+  const y0 = Lo.oy + 6, card = (x, h, col, title) => { c.fillStyle = 'rgba(10,6,22,.9)'; rr(x, y0, W2, h, 16); c.fill(); glow(col, 14); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); noGlow();
+    c.textAlign = 'left'; c.font = '400 14px Bungee, sans-serif'; c.fillStyle = col; c.fillText(title, x + 18, y0 + 30); };
+  const bar = (x, y, w, f, col, back) => { c.fillStyle = back || 'rgba(255,255,255,.08)'; rr(x, y, w, 10, 5); c.fill(); c.fillStyle = col; rr(x, y, Math.max(10, w * clamp(f, 0, 1)), 10, 5); c.fill(); };
+  c.save(); c.globalAlpha = a;
+  // the goal
+  { const x = Lo.ox - 40 - W2, B = CORE.board(SB(), CORE.stats(S).tulip), on = CORE.houseOn(S) && S.phase === 'run' && S.glow && S.glow.length === B.pins.length, h = on ? 300 : 210;
+    card(x, h, '#ff8a80', 'BIG ONE № ' + (S.board + 1));
+    c.font = '400 13px Bungee, sans-serif'; c.fillStyle = 'rgba(255,214,236,.75)'; c.fillText(BOARDN[S.board], x + 18, y0 + 52);
+    c.font = '400 40px Bungee, sans-serif'; glow('#ff3b2f', 16); c.fillStyle = '#ff6a5f'; c.fillText(fmt(Math.ceil(S.big)), x + 18, y0 + 102); noGlow();
+    bar(x + 18, y0 + 118, W2 - 36, S.big / CORE.BIG[S.board], '#ff3b2f', 'rgba(255,59,47,.15)');
+    c.font = '400 13px Bungee, sans-serif'; c.fillStyle = '#ffd6d2';
+    const pc = 100 * S.runBig / CORE.BIG[S.board]; c.fillText(S.phase === 'run' && S.runBig < 1 ? 'NOTHING OFF IT YET THIS GAME' : S.phase === 'run' ? 'THIS GAME −' + fmt(Math.round(S.runBig)) + (pc >= .5 ? ' (' + pc.toFixed(pc < 10 ? 1 : 0) + '%)' : '') : 'BREAK IT TO OPEN THE NEXT BOARD', x + 18, y0 + 154);
+    c.fillStyle = 'rgba(255,214,210,.6)'; c.fillText(S.board < 4 ? 'THE FLOOR GIVES WAY BEHIND IT' : 'UNDER IT: A BOX', x + 18, y0 + 180);
+    if (on) { const f = S.on / B.nl, left = B.nl - S.on; c.font = '400 14px Bungee, sans-serif'; c.fillStyle = CYAN; c.fillText('LIGHT EVERY PIN', x + 18, y0 + 222);
+      c.font = '400 28px Bungee, sans-serif'; glow(CYAN, 10); c.fillStyle = f > .85 ? LIME : '#d8fdff'; c.fillText(f > .85 ? left + ' LEFT' : Math.floor(f * 100) + '%', x + 18, y0 + 256); noGlow();
+      bar(x + 18, y0 + 268, W2 - 36, f, f > .85 ? LIME : CYAN, 'rgba(56,242,255,.12)');
+      if (S.runH) { c.font = '400 12px Bungee, sans-serif'; c.textAlign = 'right'; c.fillStyle = GOLD; c.fillText(S.runH + ' FULL HOUSE' + (S.runH > 1 ? 'S' : ''), x + W2 - 18, y0 + 222); } } }
+  // the bulbs being saved for
+  { const x = Lo.ox + Lo.bw + 40, L = CORE.UP.filter(u => CORE.open(S, u) && (S.lv[u.id] | 0) < u.max).sort((u1, u2) => CORE.price(S, u1) - CORE.price(S, u2)).slice(0, 4), h = 60 + Math.max(1, L.length) * 58 + 30;
+    card(x, h, GOLD, 'SAVING FOR');
+    c.font = '400 13px Bungee, sans-serif'; c.textAlign = 'right'; c.fillStyle = '#ffe9a6'; c.fillText('¢' + fmt(Math.floor(coinsShown)), x + W2 - 18, y0 + 30); c.textAlign = 'left';
+    if (!L.length) { c.fillStyle = 'rgba(255,233,166,.7)'; c.fillText('EVERY BULB IS LIT', x + 18, y0 + 70); }
+    L.forEach((u, i) => { const yy = y0 + 66 + i * 58, pr = CORE.price(S, u), f = S.$ / pr, col = colOf(u), sp = bulbSprite(col, f >= 1 ? 'buy' : 'next', ICON[u.id]), r = 16, s2 = r / sp.R0;
+      c.drawImage(sp.k, x + 34 - sp.m * s2, yy + 8 - sp.m * s2, sp.k.width * s2, sp.k.height * s2);
+      c.font = '400 15px "Tilt Neon", sans-serif'; c.fillStyle = '#fff3e0'; fit(u.name, 15, W2 - 150, '"Tilt Neon"'); c.fillText(u.name, x + 60, yy + 6);
+      c.font = '400 12px Bungee, sans-serif'; c.textAlign = 'right'; c.fillStyle = f >= 1 ? LIME : '#ffe9a6'; c.fillText(f >= 1 ? 'READY' : '¢' + fmt(pr), x + W2 - 18, yy + 6); c.textAlign = 'left';
+      bar(x + 60, yy + 16, W2 - 78, f, f >= 1 ? LIME : col); });
+    c.font = '400 11px Bungee, sans-serif'; c.fillStyle = 'rgba(255,233,166,.55)'; c.fillText('BETWEEN GAMES, ON THE SIGN', x + 18, y0 + h - 14); }
+  c.restore();
+}
+
 /* ================= the end: the last Big One is a box ================= */
 const fin = { t: 0, ot: 0, rect: null };
 /* The way out. Shut, the box under the mountain is the carton the Big One was. Opened, its four flaps swing out, the
@@ -2454,7 +2495,7 @@ function screens(dt) {
   const tree = S.phase === 'tree' && !trans && signVisible();
   $('goB').hidden = !tree; $('goS').hidden = !tree;
   if (tree) { const st = CORE.stats(S); $('goS').textContent = st.balls + ' BALLS · BIG ONE ' + fmt(Math.ceil(S.big)) + ' LEFT'; }
-  if (tree && !screens.was) { const b = bulbs.find(v => bstate(v) === 'buy'); sel = b ? b.key : null; hov = null; if (!userMoved) fitSign(); } screens.was = tree;
+  if (tree && !screens.was) { const b = bulbs.filter(v => bstate(v) === 'buy').sort((a2, b2) => CORE.price(S, a2.u) - CORE.price(S, b2.u))[0]; sel = b ? b.key : null; hov = null; if (!userMoved) fitSign(); } screens.was = tree;
   if (!tree) $('card').hidden = true; else { if ((now * 4 | 0) !== card.k) { card.k = now * 4 | 0; card(); } placeCard(); }
   $('openB').hidden = !(S.fin === 1 && fin.t > 1.6); $('openB').style.left = Lo.ox + Lo.bw / 2 + 'px'; if (fin.rect) $('openB').style.bottom = Math.max(20, VH - fin.rect.y + 14) + 'px';   // under the box, not between the machine and the sign
 }
@@ -2535,7 +2576,7 @@ function frame(dt) {
     parlour(); tm = mark('parlour', tm);
     if (trans) transDraw(); else drawMachine(); tm = mark('machine', tm);
     tray(Lo.oy + Math.min(Lo.vh, CORE.board(HB(), CORE.stats(S).tulip).H * Lo.sc) + 14); tm = mark('tray', tm);
-    teach(); hud(Lo.desk ? Lo.ox - 14 : 0, Lo.desk ? Lo.bw + 28 : VW); overlays(); tm = mark('hud', tm);
+    teach(); hud(Lo.desk ? Lo.ox - 14 : 0, Lo.desk ? Lo.bw + 28 : VW); sidePanels(); overlays(); tm = mark('hud', tm);
     c.globalAlpha = 1;
   }
   if (Lo.desk && !(zoom && zoom.on === 'board') && Lo.sx < VW) { drawSign(S.phase !== 'tree' || !!trans); signCoins(); tm = mark('sign', tm); }
