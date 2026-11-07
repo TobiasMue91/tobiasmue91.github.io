@@ -284,13 +284,13 @@ Numbered as the boxes stand since the reorder of 2026-11-06 (the slot each first
 | 6 (1) | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, index cards in a red enamel recipe tin, each with a cut of its own | the whole house bakes into a loaf; slicing it shows a bakery box tied with string in the crumb |
 | 7 (2) | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → five shows, each judged once and each a good deal larger than the last (a village green, a county showground, the National, the racecourse infield, a cup final pitch), each with a wish of its own (stripes towards the judges' table or along it, edged with a lap) and something to chase off it (a dog, a sheep, geese, a loose horse, a pitch invader) → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map, shown through a miniature photographer's lens (tilt-shift, contact shade) | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 1 (3) | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
-| 2 (4) | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
+| 2 (4) | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult; since version 2 choose whom first (a little one worth ×4, aces to stop as they wind up, kids behind dustbin lids to hit while they throw) and lay the whole gang flat at once | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | 3 (5) | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
 | 5 (6) | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft, shipped as a cold that herded people, remade in November 2026 as a poltergeist) | hold a finger on the house: a whirl follows it, tears loose whatever it passes (teacups and candles first, chairs, then the long-case clock and the armour, last the piano and the chandelier) and carries it round; what it carries hits people; let go and it all crashes down, or with Fling flies on | short nights against ectoplasm and the dawn, the organ between them; a hit frightens and shoves, past their nerve they panic and run out of the door, and every exit costs a pip of resolve for good; five casts, from a family of three to a film company and twenty-six extras | silent film in coloured cut paper: black silhouettes before rooms of lit, tinted paper (teal, ochre, wine, green, violet, rose), what is built in one plane back in the room's own shade, a cream card ghost, grain, intertitles, iris | indigo night, six room colours, black, cream; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought; porcelain, thuds, smashes and the whirl's wind | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 | 4 (7) | `jetty` | Still Water · "Keep away from water." | walk the jetty, swipe up to cast, tap when the float goes under, then play the fish: hold to reel, let go when the line is red, slide the held finger to lean against a run, let go while it jumps, pump a sulk | no runs and no clock: a day of eight minutes turns over one lake; ten kinds by distance, hour and bait, each met with the tackle of its time and fighting its own way, sizes up to a trophy; the tackle board between casts; a bank rod in the reeds that rings and is walked to | first-person real-time 3D in hand-written WebGL 2: leaf-card woods, willows and reeds from a painted atlas, the sun's shadow, a lake that knows its depth and mirrors the banks; fish painted in ink and wash, the same painting wrapped round a 3D body | meadow and willow greens, peat water, a red float; gold dusk, blue night with fireflies | English summer, cosy angling, the uncanny in the deep | lapping water, birds, crickets, the reel's clicks; a fingerpicked acoustic guitar (Karplus-Strong) that thins at dawn, slows into B minor at dusk and plays harmonics at night | paper cards on the water: the tackle board, the logbook of painted fish, the catch card | the Old One takes the bait in the deep with a tobacco tin wired to its jaw, the next number on the lid; tap it and the lid lifts |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
-Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 35–36 / 62–64 (after its refinement session),
+Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
 Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–37 / 66–71 (remade, November 2026), Still Water 40–50 / 40–46.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -1428,6 +1428,12 @@ still undone, most valuable first:
 Free to take, change or ignore; each is a pair of a mechanic and a look. Strike one through when a
 box uses it.
 
+*For the anthology as a whole, not a box* (noted during Snow Day's second refinement, November 2026, and not built, since
+that session was to touch Snow Day only): **souvenirs that help a little later on** — each box's souvenir on the shelf
+gives the next boxes a small, themed head start (Snow Day's bobble hat a few seconds more of whatever a box's limit is,
+Tilt's steel ball one more of something), shown on the packing slip, so finishing a box is felt in the next one. It
+needs a field in `K` and an answer from each box, so it belongs to a session about the shell.
+
 - **hi.exe** — you are a virus on a Windows 95 desktop: copy yourself between folders, hide from
   scans, crash the machine. Grey bevels, pixel icons, the chime and the error ding.
 - **The Hamster Power Plant** — a five-year plan for a plant run on hamster wheels; quotas, shifts,
@@ -2090,6 +2096,125 @@ box uses it.
     gather behind one cover and their bars and labels pile up; kids at the edges of the park and the mountain are cut by
     the screen; your side shows only as hats at the foot of a phone; the win of a yard stays a card in an empty yard; the
     numbers run into the hundreds of millions on the mountain.
+- **Snow Day, the second refinement** (November 2026, `CORE.version` 2). The owner played the whole box (3/5): from about the
+  third yard it was only wild clicking; after a yard change the bars went down depressingly slowly; the overlays could not be
+  read in time; kids now and then looked through the snow walls; nobody learnt what an action was worth because the sound
+  words ("SPLAT!") covered the coins; the dog's tail seemed to stroke a kid's hat; and spam-clicking pinned kids to the
+  ground and finished the box in about 28 minutes. That pinning stays (impatient players like it, and half an hour is enough
+  for this box); aiming had to be rewarded on top of it, not spamming punished.
+  - *The question first* (the lesson Tilt left: the late game is where a box tips over). What does the player decide in
+    minute 25 that they did not in minute 2? In version 1, nothing: in minute 2 you tap whoever stands, in minute 25 too,
+    harder, and your side does three quarters of the work. Upgrades that make the same verb stronger do not answer it.
+    Version 2's answer: *whom first and whom to hold down*. Each yard adds a kind of kid who asks for a choice (a little one
+    worth four times the coins, an ace who never misses and must be stopped while winding up, a kid behind a dustbin lid who
+    can only be hit while throwing), and a goal on the board that wants aiming, as Tilt's "LIGHT EVERY PIN" did: **all of
+    them flat at once**.
+  - *Research* (with sources). Rail and light-gun shooters keep one verb fresh by colour-coding enemies by what they ask of
+    you: Time Crisis's red soldiers never miss and die to one shot, its yellow and orange ones pay ammunition, time and points
+    and some never shoot ([Time Crisis wiki](https://timecrisispedia.fandom.com/wiki/Time_Crisis_II/Game_Mechanics),
+    [Tropedia](https://tropedia.fandom.com/wiki/Time_Crisis)); Hogan's Alley put gangsters and bystanders on screen together
+    so a shot is a decision ([Wikipedia](https://en.wikipedia.org/wiki/Hogan%27s_Alley_(video_game))); House of the Dead pays
+    for headshots, rescues, and kills in a row without a miss
+    ([Wikipedia](https://en.wikipedia.org/wiki/The_House_of_the_Dead_(video_game)),
+    [Overkill wiki](https://thehouseofthedead.fandom.com/wiki/The_House_of_the_Dead:_Overkill?oldid=9510)). Vampire Survivors
+    changes its enemy mix on a schedule, about once a minute, and keeps bosses outside the schedule
+    ([wiki](https://vampire-survivors.fandom.com/wiki/Enemies), [Steam](https://steamcommunity.com/app/1794680/discussions/0/3837675385314588820));
+    BALL x PIT's reviews praise variety per stage and blame a thin late layer and uneven pacing
+    ([GamesRadar](https://www.gamesradar.com/games/roguelike/ball-x-pit-review), [Game Informer](https://gameinformer.com/review/ball-x-pit/breathtaking-brick-breaking));
+    Nodebuster's players complain of a slow start and upgrades out of reach ([Mancunion](https://mancunion.com/2025/05/08/nodebuster-review-a-short-and-sweet-incremental-game/));
+    Bills Must Be Paid sells on tactile feedback and is faulted for a short shallow loop
+    ([gaming.net](https://www.gaming.net/reviews/bills-must-be-paid-review-pc/), [VaporLens](https://vaporlens.app/app/4421010/bills_must_be_paid)).
+    Juice: Vlambeer's "Art of Screenshake" ([Game Developer](https://gamedeveloper.com/design/vlambeer-co-founder-shares-advice-on-building-better-action-games)).
+    Damage numbers: outline them, cap how many show, keep them off nameplates and targets, give types their own places so two
+    numbers never run together, and let hit reactions carry the feedback too
+    ([Tim Cain on damage numbers](https://turbo-wiki.pages.dev/tim-cain/ux-design/damage-numbers),
+    [Last Epoch forum](https://forum.lastepoch.com/t/floating-combat-text-placement-emphasis-duration-speed-length-custom-elements/22864)).
+    Tutorials on phones: short, part of play, a clear Continue ([PlaytestCloud](https://blog.playtestcloud.com/mistakes-mobile-game-tutorials/),
+    [That Games UX](https://thatgamesux.com/mobile-games-tutorials-should-fit-mobile-attention-spans)). No outside asset was
+    needed: every change is drawn with the box's own puppets and felt.
+  - *Measured first* (bots over the whole game; `bots.spammer` is new: no swatting, no choosing, the nearest kid in reach tapped
+    seven times a second, the cheapest decoration bought first; on version 1 it opened the box in 29.4 minutes against the
+    owner's 28, so it stands for the owner's way of playing). In version 1, after each yard change the gang was worn down by
+    0.8, 2.4, 6.9 % in the first three minutes (schoolyard, eager bot): each yard's resolve rose 20 to 50 times while the
+    player arrived with the last yard's strength. Over 80 % of the player's own hits landed on kids already down. From the
+    schoolyard on, your side earned 50 to 75 % of the coins and did nearly all the damage; the catapult, wound by everyone's
+    hits, did 59 %. "All of them flat at once" already happened 57 to 74 times per late yard by itself (your side and the
+    boulder knocked everyone down), so as a goal it needed a change of rule first, as Tilt's pins did. Then, after the first
+    changes: the leaders held out alone for 3 to 6 minutes at the end of each yard (the rest of the gang came over between
+    minutes 2 and 4), and the tree was bought out at minute 23 of 31.
+  - *Bugs under the balance?* None this time in the rules; the measurements above are the rules working as written.
+  - *What changed in the rules.* (1) **Graded gangs**: each gang's first kid holds out for a fraction of its leader (a fifth
+    at most), the rest in steps, so a yard just reached gives up a kid within a run or two; the gang's strip counts every
+    kid as an equal share. (2) **Kinds of kid**, one more per yard: the street's Little June (gold hat, never throws, ×4
+    coins), the schoolyard's aces (red hat and scarf, wind up in .6 of the time, never miss, a hit costs half as much warmth
+    again), the park's dustbin lids (a lid held up stops a plain snowball with a BONG; lowered to throw, or once its kid is
+    down, it stops nothing; ice goes through), the mountain all of them. (3) **Only your own snowballs knock a kid flat**;
+    your side's wear resolve down and spoil a wind-up for a quarter second. (4) **All of them flat**: when every kid left
+    lies in the snow at once and your snowball put the last one there, the whole gang takes twenty-five of your snowballs
+    each, stays down 2.2 seconds, and it pays ten throws' coins a kid. (5) **The spread**: each other kid your own snowballs
+    hit within three seconds adds half to your damage and coins, up to ×3; a stream on one kid stays ×1. (6) A throw stopped
+    while it is wound up pays twice. (7) Your side hits for half what it did and its two upgrades give ×7.3 in all instead
+    of ×250; the catapult winds on your own hits only. (8) Leaders hold out for about half as long; the tree's upper tiers
+    cost 1.5, 3, 4 and 5 times what they did, so it lasts to the mountain. Kept: pinning a kid down with a stream (a snowball
+    on a kid who is down still lands, and one in the next .3 s knocks them down again).
+  - *Tried and dropped on the way.* A "clean hit" (×2, then ×3 damage on a kid standing up): a stream of snowballs on one kid
+    catches them standing every time they get up, so it paid the spammer as much as anyone. Winding the catapult on clean hits
+    only, then on spread: it then did 60 % of all damage. Leaving the stopped kid dizzy twice as long: noise in the measurement,
+    no gain. Making your side strong enough to matter (×250): it played the late game by itself, which is what the owner felt.
+  - *Does aiming pay?* With the same thumb (seven taps a second), a *juggler* that keeps every kid it knocked over down with
+    one snowball timed for their getting up and spends the rest on whoever stands (an ace winding up first) against the
+    *pinner* (one kid, nailed down until they give up) and the spammer, a minute each, twelve times, walking into each yard
+    (seed 1): the street 4.0 % / 2.7 % / 3.1 %, the schoolyard 7.0 / 10.7 / 6.3, the park 12.9 / 6.1 / 6.1, the mountain
+    7.2 / 4.2 / 7.6; summed, aiming wears down 31 % against 24 % and 23 %, and it lays the whole gang flat many times more
+    often (the park: 6 to 7 times a minute against none). Pinning the easy first kid is a good opening, so a yard can go
+    either way; over the game it may not. Where the gang has thinned to its leader, there is nothing to choose and the three
+    play alike. The suite checks the sum.
+  - *Pacing after it* (`CORE.pace.eager` 27, from 30). The owner's measure is about half an hour for a quick player and
+    nothing that draws it out. The spammer now takes 25 minutes, the eager bot (a quick, attentive player who also swats and
+    reads the tree) 30 to 31, the casual bot 77 to 79 (under 90). The eager bot's floor was 30: a box this short should be
+    allowed to sit just under it when a quick player plays well, and 27 still catches a change that makes it a 20-minute
+    box. Longest wait for something new: 2.7 minutes eager, 4.6 casual. The tree is no longer full before the end. In the
+    first minute after a yard change the gang is now worn down 5 to 20 % (eager), against 1 to 3 %.
+  - *Reading.* A card that teaches holds the yard still until GOT IT is tapped (`teach()`): a kid coming over, getting cold
+    in the first run, the catapult, Hold to throw, and each yard's new kind of kid after its title card. Everything else is a
+    banner that lets the game run on (a yard won, all of them flat, the first hit). The coins a hit of yours earned sit on a
+    tag of their own under the kid's feet, summed while hits keep coming, with what multiplied them beside it (FIRST ×3,
+    STOPPED ×2, ×2.5 spread); words (STOPPED!, BONG!, SPLAT!, ICE!) go over the head. The spread shows under the cocoa; once
+    two kids are down, the ones still standing get a blue marker (an arrow at the edge if off screen) and "3 of 6 down" sits
+    under the yard's name; an ace winding up flashes red at the feet, as a light-gun game warns of a crisis shot.
+  - *Drawing.* Kids crouched behind cover poked their faces into the snow lumps on a phone: the rules stand a kid .7 behind
+    their cover, and a puppet drawn 1.6 times as large and leaning forward needs about 1.15. The view now stands a kid back
+    by .75 × (scale − 1) and .3 more crouched, and leans them less. The dog's long tail lay back over the hat of whoever stood
+    behind him; it is a short tail held up and wagging, the simpler shape. New props: the little one (smaller, gold hat and
+    scarf, waves instead of throwing), the ace (red hat and scarf), the lid (a ribbed grey disc with rim and handle, held up
+    over chest and chin by the left arm, lowered to the side to throw).
+  - *Critics* (fresh each round; frames from real touch and mouse input, full size, phone first; first impression, clarity,
+    art, phone, feel, and **commercial**). Round 1, phone: 6/4/6/4/5 and **4**. Done after it: Ned gives up within the first
+    run (the first minute's loud moment: a kid comes over and a card says what that means); an ace's warning moved from a
+    ring at the feet, which fell behind the cover and read as a tap marker at chest height, to a blinking red "!" over the
+    head; coin tags push each other apart; one word per kid, solid until its last fifth; the spread chip counts its kids;
+    a gold pompom on the little one; the mountain's boulders carry their snow as one cap (four pads floated beside them
+    and read as a sheep); the bin's handles are little hoops on the rim, not a slab through it. Round 2, phone 7/4/6/4/4 and
+    **4**, desktop 7/5/6/–/5 and **5**. Done after it: a felt pip per kid under the yard's name that fills as they wear
+    down and turns green once they are yours ("0 of 9 won over" never seemed to move); the "from your side" chip is gone
+    from a crowded phone top; coin tags fade fast. Round 3, the close-ups (35 props, the checklist above): art 5, commercial
+    **3**. Done after it: a berm of packed snow along the foot of every snow wall; the park's sun glow fades round, not over
+    the wrong axes (it had a hard rim), and the sun stands inside a phone's frame; the dog's ears grow out of his head and
+    his far eye sits inside it; the car's lamps sit in its body. Round 4, phone 7/5/7/6/5 and **5**, desktop 6/4/7/–/5 and
+    **4**: the first phone score of 5 for "commercial" in Snow Day's history; asked for, most valuable first, pips that read
+    at a glance (made larger, filling in gold, after it), fewer popups at once (three coin tags at most, after it), the yard's
+    title card off the desktop's yeti, a desktop camera as high as the phone's, felt snowballs in flight, and again the
+    crowd, the tree's silhouette, the economy's billions and the empty band of snow at a phone's foot in the garden.
+  - *Still open, most valuable first* (what the critics asked for and this session did not do): on a phone the deep yard
+    is compressed and the puppets are drawn 1.6 times as large, so a gang of eight or nine overlaps on screen into one heap
+    (the rules keep them apart: no two kids share a cover, and on average .28 pairs stand closer than .9); a different phone
+    camera, or smaller puppets with larger invisible tap targets, is the next step. Your own side is still a row of hats
+    at a phone's foot. The props are spheres, boxes and discs: the car, the hedge's core, the catapult's arm and cup, the
+    sledge's runners, the bench's snow, the houses' eaves, the yeti's arms and missing legs, the ice crystals that show
+    what is behind them; and the felt tree is flat. The numbers still reach the billions on the mountain (an economy
+    flattened to "a handful per decoration" would need every price and payout redone). Scores that stayed under 8 after
+    four rounds: every one; "would pass as commercial" ended at 5 on a phone and 4 on a desktop (from 4 and 5 before this
+    session), 3 in close-up; clarity 5 and 4, feel 5, art direction 7.
 
 ### Working on a box that has shipped
 
@@ -3190,3 +3315,14 @@ box or two. Starter, box 1 until then, opens on a still jar and earns "about 0¢
 - **A browser intervention is a console error.** `navigator.vibrate` before the player has touched the frame does
   nothing and logs a console error, which the browser suite counts; it failed two runs in five, whenever events
   from a scripted state reached the view before a tap. Guard such calls with `navigator.userActivation.hasBeenActive`.
+- **Reward aiming with what a stream cannot do.** Snow Day's first try paid a "clean hit" on a kid standing up; a stream of
+  snowballs on one kid catches them standing every time they rise, so it paid the spammer as much as anyone. What a stream
+  on one target cannot reach is breadth: hitting different kids in a row (the spread) and having the whole gang down at
+  once. Bonuses that count distinct targets or a state of the whole board separate aiming from spam; per-hit bonuses do not.
+- **Compare aiming and spam with the same thumb.** A bot that aims and a bot that spams differ in taps a second as well as in
+  choices, and the faster one wins either way. Give both seven taps a second, start them from the same states, shake the
+  dice a dozen times, and compare where the board leaves a choice: Snow Day's juggler wore down 31 % of four yards against
+  24 % for one kid nailed down, while a yard down to its leader leaves nothing to choose.
+- **A leader alone is a dead stretch.** Snow Day's gangs fell in a rush between minutes two and four and then the leader
+  held out alone for three to six minutes, a third of the yard spent pinning one puppet. Measure when the last ordinary
+  member falls against when the yard ends, and keep the boss's share small.

@@ -687,10 +687,10 @@ if (suites.includes('flurry') && flurry) {
   {
     // the last yard: the yeti comes over, he brings a present, and opening it is the end
     const T = CORE.init(5); T.yard = 3; T.tier = 3; T.kids = CORE.makeKids(3); CORE.act(T, 'run');
-    for (const k of T.kids) { k.r = 1e-9; k.st = 'up'; k.t = 99; } T.ammo = 99; T.lv.pile = 4; T.warm = T.warmMax = 1e12;
+    for (const k of T.kids) { k.r = 1e-9; k.st = 'wind'; k.t = 99; } T.ammo = 99; T.lv.pile = 4; T.warm = T.warmMax = 1e12;
     for (let j = 0; j < T.kids.length; j++) { if (T.phase !== 'run') break; T.ammo = 9; CORE.act(T, 'throw', j); CORE.step(T, 1); }
     check(T.yard === 4 && T.phase === 'shop' && T.allies.length >= 9, 'winning a yard moves the war on and keeps your side');
-    CORE.act(T, 'run'); for (const k of T.kids) { k.r = 1e-9; k.st = 'up'; k.t = 99; } T.warm = T.warmMax = 1e12;
+    CORE.act(T, 'run'); for (const k of T.kids) { k.r = 1e-9; k.st = 'wind'; k.t = 99; } T.warm = T.warmMax = 1e12;
     for (let j = 0; j < T.kids.length && !T.fin; j++) { T.ammo = 9; CORE.act(T, 'throw', j); CORE.step(T, 1); }
     check(T.fin === 1 && !CORE.done(T) && CORE.progress(T) < 1, 'the yeti comes over and the box is not open yet');
     check(!T.balls.length && !T.inc.length && !T.sledge, 'nothing is left in the air once the rules stop at the end');
@@ -702,9 +702,113 @@ if (suites.includes('flurry') && flurry) {
       'revisit puts you back on the mountain with your coins, the tree and your side, and the mountain’s gang to win over again');
     check(R.allies.every((a, j) => a.slot === j), 'your side keeps its places at the wall');
     check(CORE.act(R, 'run') && R.phase === 'run', 'and a run can be played from there');
-    for (const k of R.kids) { k.r = 1e-9; k.st = 'up'; k.t = 99; } R.warm = R.warmMax = 1e12;
+    for (const k of R.kids) { k.r = 1e-9; k.st = 'wind'; k.t = 99; } R.warm = R.warmMax = 1e12;
     for (let j = 0; j < R.kids.length && !R.fin; j++) { R.ammo = 9; CORE.act(R, 'throw', j); CORE.step(R, 1); }
     check(R.fin === 1 && CORE.act(R, 'open') && CORE.done(R), 'and the yeti brings his present once more');
+  }
+  /* version 2 (November 2026): graded gangs, kinds of kid, the spread, all of them flat at once, only your own snowballs
+     knock a kid down, and aiming has to pay against an impatient thumb that only pins (CONTENTS_MAY_VARY.md, Snow Day) */
+  const KIT = load(flurry).KIT;
+  const kidOf = (S, kind) => S.kids.find(k => k.kind === kind);
+  const atYard = (y, seed = 4) => { const S = CORE.init(seed); S.yard = y; S.tier = y; S.kids = CORE.makeKids(y); CORE.act(S, 'run'); S.warm = S.warmMax = 1e9; S.ev.length = 0; for (const k of S.kids) { k.st = 'hide'; k.t = 1e9; } return S; };
+  {
+    // a dustbin lid held up stops a plain snowball; lowered to throw it stops nothing; an ice ball goes through it
+    const S = atYard(3), k = kidOf(S, 3); S.ammo = 99; S.lv.pile = 4;
+    k.st = 'up'; k.t = 1e9; const r0 = k.r; let clang = 0; CORE.act(S, 'throw', k.i); run(S, 1.2, X => { clang += X.ev.filter(e => e.k === 'clang').length; X.ev.length = 0; });
+    check(k.r === r0 && clang > 0, 'a dustbin lid held up stops a plain snowball, and says so');
+    k.st = 'wind'; k.t = 1e9; CORE.act(S, 'throw', k.i); run(S, 1.2);
+    check(k.r < r0 && k.st === 'down', 'lowered to throw, the lid stops nothing and the kid goes down');
+    const T = atYard(3), q = kidOf(T, 3); T.lv.ice = 1; T.ammo = 99; T.throws = 4; q.st = 'up'; q.t = 1e9; const q0 = q.r; CORE.act(T, 'throw', q.i); run(T, 1.2);
+    check(q.r < q0, 'an ice ball goes through a lid');
+  }
+  {
+    // the little one never throws; an ace never misses
+    const S = atYard(1); const k = kidOf(S, 1); k.t = 0; let threw = 0;
+    run(S, 60, X => { threw += X.ev.filter(e => e.k === 'throw' && e.i === k.i).length; X.ev.length = 0; if (k.st === 'hide' && k.t > 5) k.t = .1; });
+    check(threw === 0, 'the little one never throws');
+    const A = atYard(2); const ace = kidOf(A, 2); ace.st = 'hide'; ace.t = 0; let miss = 0, n = 0;
+    run(A, 60, X => { for (const b of X.inc) if (b.who === ace.i && !b.seen) { b.seen = 1; n++; miss += b.miss; } if (ace.st === 'hide' && ace.t > 3) ace.t = .1; });
+    check(n > 3 && miss === 0, `an ace never misses (${n} throws)`);
+  }
+  {
+    // only your own snowballs knock a kid flat; your side's wear them down where they stand
+    const S = atYard(1), k = S.kids[0]; k.st = 'up'; k.t = 1e9; const r0 = k.r;
+    S.balls.push({ id: 900, fx: 0, x: k.x, z: k.z, t: 0, T: .1, d: 1, kind: 0, tgt: k.i, by: 1, r: 0 }); run(S, .3);
+    check(k.r < r0 && k.st === 'up', 'a snowball from your side wears a kid down and leaves them standing');
+    S.ammo = 9; CORE.act(S, 'throw', k.i); run(S, 1.2); check(k.st === 'down', 'one of your own knocks them down');
+  }
+  {
+    // all of them flat at once, the last by your hand: a big one for the whole gang, and they stay down a while; not with one left
+    const S = atYard(1); S.ammo = 99; S.lv.pile = 4; for (const k of S.kids) { k.st = 'down'; k.t = 9; } const last = S.kids[2]; last.st = 'up'; last.t = 1e9;
+    const r0 = S.kids.map(k => k.r); let flat = 0; CORE.act(S, 'throw', last.i); run(S, 1.2, X => { flat += X.ev.filter(e => e.k === 'flat').length; X.ev.length = 0; });
+    check(flat === 1 && S.kids.every((k, j) => k.ally || k.r < r0[j]) && S.kids.every(k => k.ally || k.st === 'down' && k.t > 1), 'every kid down at once by your hand: the whole gang takes a big one and stays down');
+    const T = atYard(1); for (const k of T.kids) { k.ally = 1; } const solo = T.kids[5]; solo.ally = 0; solo.st = 'up'; solo.t = 1e9; T.ammo = 9; let f2 = 0;
+    CORE.act(T, 'throw', solo.i); run(T, 1.2, X => { f2 += X.ev.filter(e => e.k === 'flat').length; X.ev.length = 0; });
+    check(f2 === 0, 'one kid left on their own is never “all of them”');
+  }
+  {
+    // the spread: your hits on different kids one after another multiply, up to ×3; a stream on one kid stays ×1
+    const S = atYard(2); S.ammo = 99; S.lv.pile = 4; for (const k of S.kids) { k.st = 'up'; k.t = 1e9; }
+    for (let j = 0; j < 5; j++) { CORE.act(S, 'throw', j); run(S, .15); } run(S, 1);
+    check(Math.abs(CORE.spread(S) - 3) < 1e-9, `five different kids hit in a row make a spread of ×3 (${CORE.spread(S)})`);
+    const T = atYard(2); T.ammo = 99; T.lv.pile = 4; const k = T.kids[4]; k.st = 'up'; k.t = 1e9;
+    for (let j = 0; j < 8; j++) { CORE.act(T, 'throw', k.i); run(T, .15); } run(T, 1);
+    check(CORE.spread(T) === 1, 'a stream of snowballs on one kid keeps the spread at ×1');
+  }
+  {
+    // every gang is graded: its first kid gives up for a fraction of what its leader takes, so a yard just reached moves at once
+    const bad = CORE.YARDS.filter(Y => Y.kids[0][1] * 5 > Math.max(...Y.kids.map(k => k[1]))).map(Y => Y.name);
+    check(!bad.length, 'every gang’s first kid holds out for under a fifth of its leader', bad.join(', '));
+  }
+  {
+    // an old save (version 1) carries on: its yard, its tree, its coins and its side, the gang dealt again with what each had left
+    const S = CORE.init(6); S.yard = 2; S.tier = 2; S.$ = 1234; S.lv.hard = 3; S.allies = [{ i: 0, name: 'Abe', cap: 0, y: 2, t: 1, slot: 0 }];
+    S.kids = S.kids.map((k, j) => Object.assign({}, k, { i: j, R: 100, r: j === 0 ? 0 : 50, ally: j === 0 ? 1 : 0, kind: undefined })); S.kids.length = 8; for (let j = 4; j < 8; j++) S.kids[j] = Object.assign({}, S.kids[1], { i: j });
+    S.phase = 'run';
+    const M = CORE.migrate(JSON.parse(JSON.stringify(S)), 1);
+    check(M.yard === 2 && M.$ === 1234 && M.lv.hard === 3 && M.allies.length === 1 && M.phase === 'shop', 'a version 1 save keeps its yard, coins, tree and side, and waits in the front room');
+    check(M.kids.length === CORE.YARDS[2].kids.length && M.kids[0].ally && M.kids.slice(1).every(k => !k.ally && Math.abs(k.r / k.R - .5) < 1e-9) && M.kids.some(k => k.kind === 2), 'its gang is dealt again with the kinds of kid, each keeping the share of resolve left');
+    let ok = true; try { CORE.act(M, 'run'); CORE.step(M, 30); } catch (e) { ok = false; } check(ok && M.kids.every(k => isFinite(k.r)), 'and plays on');
+  }
+  {
+    /* aiming pays against an impatient thumb. The spammer (bots.spammer) taps the nearest kid seven times a second and pins
+       them; the juggler has the same thumb but keeps everyone it knocked down down with one snowball each, timed to land as
+       they get up, and spends the rest on whoever stands. From the same states of the eager bot's game, the juggler wears
+       down more of the yard in a minute. The spammer still opens the box in about the half hour the owner took. */
+    const juggle = (S, m, dt) => { m.busy = (m.busy || 0) - dt; m.t = (m.t || 0) + dt; if (m.busy > 0) return;
+      if (S.phase !== 'run' || S.fin) { CORE.bots.spammer(S, m, dt); return; } if (CORE.stats(S).cata && S.cata >= 1) { CORE.act(S, 'cata'); m.busy = .15; return; }
+      for (const k of S.kids) if (CORE.hittable(k)) { if (m['s' + k.i] == null) m['s' + k.i] = m.t + .3; } else m['s' + k.i] = null;
+      const inAir = i => S.balls.some(b => b.by === 0 && b.tgt === i && b.T - b.t > .05), ft = k => CORE.flyT(k.z) * CORE.stats(S).fly;
+      const keep = S.kids.filter(k => !k.ally && k.st === 'down' && k.t < ft(k) + .15 && !inAir(k.i)).sort((a, b) => a.t - b.t)[0];
+      const up = S.kids.filter(k => CORE.hittable(k) && m['s' + k.i] <= m.t && !inAir(k.i) && !(k.kind === 3 && k.st !== 'wind')).sort((a, b) => (a.st === 'wind' ? 0 : 1) - (b.st === 'wind' ? 0 : 1) || a.z - b.z);
+      const dn = S.kids.filter(k => !k.ally && k.st === 'down').sort((a, b) => a.t - b.t), k = keep || up[0] || dn[0];
+      if (!k) { m.busy = .05; return; } CORE.act(S, 'throw', k.i); m.busy = 1 / 7; };
+    // the owner's exploit at its plainest: one kid, nailed down until they give up, whether they stand, lie or hide
+    const pinner = (S, m, dt) => { m.busy = (m.busy || 0) - dt; if (m.busy > 0) return; if (S.phase !== 'run' || S.fin) { CORE.bots.spammer(S, m, dt); return; }
+      if (CORE.stats(S).cata && S.cata >= 1) { CORE.act(S, 'cata'); m.busy = .15; return; }
+      let k = S.kids[m.cur]; if (!k || k.ally) { k = S.kids.filter(k => !k.ally && (CORE.hittable(k) || k.st === 'down')).sort((a, b) => a.z - b.z)[0]; if (!k) { m.busy = .05; return; } m.cur = k.i; }
+      CORE.act(S, 'throw', k.i); m.busy = 1 / 7; };
+    // a minute of a run (warmth no object) from one state, twelve times over with the yard's dice shaken: the share of the yard worn down
+    const minute = (base, bot) => { let worn = 0; for (let r = 0; r < 12; r++) { const S = JSON.parse(JSON.stringify(base)); S.ms = (S.ms + r * 977) >>> 0; CORE.act(S, 'run'); S.warm = S.warmMax = 1e9;
+      const y0 = S.yard, L0 = CORE.yardLeft(S), m = { seed: r + 3 }; for (let t = 0; t < 60 && S.yard === y0; t += .1) { bot(S, m, .1); CORE.step(S, .1); S.ev.length = 0; } worn += (S.yard === y0 ? CORE.yardLeft(S) : 1) - L0; } return worn / 12; };
+    const rows = [];
+    // the states: the eager bot's game as it walks into each later yard, whose whole gang is still there to choose from
+    { const S = CORE.init(1), m = { seed: 7936 }; let y = 0; while (y < 4 && !CORE.done(S)) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); S.ev.length = 0; if (S.yard !== y && S.phase === 'shop') { y = S.yard; const base = JSON.parse(JSON.stringify(S)); rows.push([CORE.YARDS[y].name, minute(base, juggle), minute(base, pinner), minute(base, CORE.bots.spammer)]); } } }
+    const sum = j => rows.reduce((a, r) => a + r[j], 0), say = rows.map(([t, a, b, c]) => `${t}: ${(100 * a).toFixed(1)}% against ${(100 * b).toFixed(1)}% pinned, ${(100 * c).toFixed(1)}% spammed`).join('; ');
+    if (REPORT) console.log('  ' + say);
+    // per yard it can go either way (pinning the gang's easy first kid is a fine opening); over the four it may not
+    check(rows.length === 4 && sum(1) > sum(2) * 1.2 && sum(1) > sum(3) * 1.15, `over those yards, aimed play wears down a fifth more than nailing one kid down, and more than spamming the nearest (${(100 * sum(1)).toFixed(0)}% against ${(100 * sum(2)).toFixed(0)}% and ${(100 * sum(3)).toFixed(0)}%)`);
+    const sp = [1, 2, 3].map(seed => KIT.simulate(CORE, 'spammer', { seed, minutes: 90 }));
+    check(sp.every(r => r.done && r.minutes >= 22 && r.minutes <= 34), 'an impatient spammer still opens the box in about half an hour (22 to 34 min)', sp.map(r => r.minutes.toFixed(1)).join(', '));
+  }
+  {
+    // no yard ends in a long stretch against its leader alone, and the tree still has something to buy on the mountain
+    const S = CORE.init(2), m = { seed: 2 * 7919 + 17 }; let t = 0, y = 0, y0 = 0, lastPlain = 0, worst = 0, lastBuy = 0;
+    while (!CORE.done(S) && t < 5400) { CORE.bots.eager(S, m, .1); CORE.step(S, .1); t += .1;
+      for (const e of S.ev) { if (e.k === 'join' && !e.cap) lastPlain = t; if (e.k === 'buy') lastBuy = t; } S.ev.length = 0;
+      if (S.yard !== y) { worst = Math.max(worst, (t - lastPlain) / (t - y0)); y = S.yard; y0 = t; } }
+    check(worst < .45, `no leader holds out alone for half their yard (at most ${(100 * worst).toFixed(0)}%)`);
+    check(t - lastBuy < 300, `the tree still has something to buy in the last five minutes (last bought ${((t - lastBuy) / 60).toFixed(1)} min before the end)`);
   }
   {
     // a line comment written into the middle of a line swallows the code after it; twice in Snow Day's refinement session
