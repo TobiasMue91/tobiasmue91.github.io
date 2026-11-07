@@ -1926,6 +1926,18 @@ box uses it.
     what this game took off it and LIGHT EVERY PIN on the left; the four cheapest bulbs being saved for, each with how far the
     coins have got, on the right), which fade as the sign slides in; and a phone sign with more to show than fits at a usable
     size frames the cheapest bulb that can be lit, the one its card reads.
+  - *Poured balls that were never seen* (the owner, again): with 2,000 balls in the tray, a thumb on the rail poured nothing
+    while the tray counted down, because at the glass's cap of 260 the tray fed the mega ball unseen. A cap of 1,200 was
+    tried and broke the box: the late games ran three to four minutes (that overflow had been the tray's drain), saves passed
+    230 KB, the casual bot took 108 minutes. What stayed: the cap is 400, and at the cap a ball poured still goes in where the
+    thumb is, while the lowest ball on the glass (past the Big One, or else a long way under the rail) makes room and counts
+    towards the mega ball; only with every ball near the rail does the tray feed the mega ball, and GLASS FULL then shows at
+    the thumb and in the tray, never merely because the glass is crowded. Fever's rain does not push balls out, and a
+    FULL HOUSE brings fever only for the first two of a game and not after last call (fever lit every pin again and again,
+    and a game ran on for minutes after the tray was empty). The reels' housing, grown in a REACH, moves in from the glass's
+    edge instead of being cut off by it. Rebalanced (Big Ones 1,500 · 300K · 2.9M · 80M · 2.4B; the street's and the
+    mountain's rings cost 1M and 150M a bulb; a FULL HOUSE 1.8% and less for each after the first): eager 41.5–42.2,
+    casual 67–75 minutes, longest wait 2.6.
   - *Balance after it* (eager / casual, three seeds): 36.2–43.3 / 63–68 minutes (before: 39–40 / 62–65), longest wait for
     something new 3.0 min; the Big Ones are 1,500 · 260K · 2.3M · 65M · 1.8B, a FULL HOUSE takes 2.5% (the first of a game);
     from board 3 a game takes about 10 to 30% off the Big One.
