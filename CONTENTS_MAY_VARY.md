@@ -1952,7 +1952,7 @@ needs a field in `K` and an answer from each box, so it belongs to a session abo
     Chromium at a full glass on a 390×844 phone: physics 1.8 ms, drawing 1.6 ms a frame). A ball is kept lean for the save
     (no zero fields, positions to a thousandth, speeds to a hundredth, its stuck counters in whole steps), so a save of a
     full glass stays under 100 KB. With more balls the late boards went faster, so a FULL HOUSE takes 3% for the first of a
-    game and falls with the square of the count after it, and the Big Ones are 1,500 · 420K · 5.7M · 160M · 5.6B (the mountain's ring 80M a bulb).
+    game and falls with the square of the count after it, and the Big Ones are 1,500 · 420K · 5.7M · 160M · 5.6B (the mountain's ring 80M a bulb), overtime 1.8 times dearer a level (was 2, which left nearly four minutes without a purchase near the end), and the eager bot's floor in `CORE.pace` is 33 minutes, not 35 (rule 6 asks for 30; the owner wanted no grind): eager 34.5–38.4.
     (Found on the way: a ball whose zero fields were left out never struck a block, as `undefined <= 0` is false.)
   - *Stickers set against a real play.* The owner's whole first play (read from the console with `CMV.win().K.debug.state()`):
     12 jackpots, 38 lanterns, 87 fevers, 18 FULL HOUSEs, a best game of 67 billion; the bots 10 to 16, 40 to 60, 124 to
