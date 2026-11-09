@@ -285,13 +285,13 @@ Numbered as the boxes stand since the reorder of 2026-11-06 (the slot each first
 | 7 (2) | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → five shows, each judged once and each a good deal larger than the last (a village green, a county showground, the National, the racecourse infield, a cup final pitch), each with a wish of its own (stripes towards the judges' table or along it, edged with a lap) and something to chase off it (a dog, a sheep, geese, a loose horse, a pitch invader) → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map, shown through a miniature photographer's lens (tilt-shift, contact shade) | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 1 (3) | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 2 (4) | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult; since version 2 choose whom first (a little one worth ×4, aces to stop as they wind up, kids behind dustbin lids to hit while they throw) and lay the whole gang flat at once | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
-| 3 (5) | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
+| 3 (5) | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle; meet the armoured rabbit knights (from the river on) with stones, falcons and the gifts, since arrows glance off them | folios of waves with a pause between them and one wall for them all; a lost folio starts over, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
 | 5 (6) | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft, shipped as a cold that herded people, remade in November 2026 as a poltergeist) | hold a finger on the house: a whirl follows it, tears loose whatever it passes (teacups and candles first, chairs, then the long-case clock and the armour, last the piano and the chandelier) and carries it round; what it carries hits people; let go and it all crashes down, or with Fling flies on | short nights against ectoplasm and the dawn, the organ between them; a hit frightens and shoves, past their nerve they panic and run out of the door, and every exit costs a pip of resolve for good; five casts, from a family of three to a film company and twenty-six extras | silent film in coloured cut paper: black silhouettes before rooms of lit, tinted paper (teal, ochre, wine, green, violet, rose), what is built in one plane back in the room's own shade, a cream card ghost, grain, intertitles, iris | indigo night, six room colours, black, cream; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought; porcelain, thuds, smashes and the whirl's wind | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 | 4 (7) | `jetty` | Still Water · "Keep away from water." | walk the jetty, swipe up to cast, tap when the float goes under, then play the fish: hold to reel, let go when the line is red, slide the held finger to lean against a run, let go while it jumps, pump a sulk | no runs and no clock: a day of eight minutes turns over one lake; ten kinds by distance, hour and bait, each met with the tackle of its time and fighting its own way, sizes up to a trophy; the tackle board between casts; a bank rod in the reeds that rings and is walked to | first-person real-time 3D in hand-written WebGL 2: leaf-card woods, willows and reeds from a painted atlas, the sun's shadow, a lake that knows its depth and mirrors the banks; fish painted in ink and wash, the same painting wrapped round a 3D body | meadow and willow greens, peat water, a red float; gold dusk, blue night with fireflies | English summer, cosy angling, the uncanny in the deep | lapping water, birds, crickets, the reel's clicks; a fingerpicked acoustic guitar (Karplus-Strong) that thins at dawn, slows into B minor at dusk and plays harmonics at night | paper cards on the water: the tackle board, the logbook of painted fish, the catch card | the Old One takes the bait in the deep with a tobacco tin wired to its jaw, the next number on the lid; tap it and the lid lifts |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
-Here Be Rabbits 41–43 / 75–85, Unwelcome Guests 35–37 / 66–71 (remade, November 2026), Still Water 40–50 / 40–46.
+Here Be Rabbits 42–45 / 78–83 (version 2, with the knights; its impatient bot 31–36), Unwelcome Guests 35–37 / 66–71 (remade, November 2026), Still Water 40–50 / 40–46.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -1291,6 +1291,86 @@ still undone, most valuable first:
     peaks at −10 dB, average −32. Nothing clips; nothing changed.
   - *Cost of a frame* (`?fps`, the world map's largest horde, phone, headless software rendering): about 2,000 rabbits drawn,
     1,800 draw calls, horde 29 ms, land 7 to 14 ms. Nobody has measured it on a real phone yet.
+- **Here Be Rabbits, the second refinement** (November 2026, `CORE.version` 2). Asked to take the box to the bar of a paid
+  game in every respect, with no owner's feedback this time; the session played first, then measured, then changed.
+  - *Played first* (real touch on a 390×844 phone, real mouse at 1280×800, frames at full size). What got in the way as a
+    player, before any code was read: on a phone the monk dragged from the tray **could not be set down at all** (the
+    tutorial kept pointing, the first wave walked in unopposed); a stack of decimal losses ("−4.8 wall", "−14.3 wall")
+    piled on each other over the castle; "Wave II of III" banners repeated what the HUD says and covered the castle; the
+    Tree of Jesse on a desktop ended in a hard vertical cut where its canvas stopped; its caption ran off a phone's edges;
+    a gift spent for the run (the first run's free dragon) went grey with no word.
+  - *The touch drop.* A touch is captured by the element it starts on. The tray tried to release the capture from `#tray`,
+    but the capture was held by the button inside it, so `pointerup` named the button and the drop was judged "on the bar"
+    and silently ignored. The capture is now released from the button and the drop is judged by where the finger lifts.
+    The suite checks both (it is the first verb of the box). Nothing in the bots could have found it.
+  - *Research* (with sources). Kingdom Rush gives armour and magic resistance to different enemies so each pushes the
+    player toward a different tower, and an armoured kind recurs in every level as a theme of its design
+    ([Ironhide's armour guide](https://support.ironhidegames.com/support/solutions/articles/4000223666-armor-types-breakdown-kingdom-rush-battles-guide),
+    [Dark Knight](https://kingdomrushtd.fandom.com/wiki/Dark_Knight),
+    [Game Developer on its campaign](https://www.gamedeveloper.com/design/kingdom-rush---the-wonderful-campaign-level-design));
+    Bloons TD's lead and camo bloons make a defence that lacks one kind of tower fail on a known round
+    ([Lead Bloon](https://www.bloonswiki.com/Lead_Bloon_(BTD6)), [Camo Bloon](https://www.bloonswiki.com/Camo_Bloon_(BTD6)),
+    [strategy](https://www.bloonswiki.com/Strategy:Bloons_TD_6)); calling a wave early pays because the waves then overlap
+    ([Kingdom Rush Frontiers tips](https://www.pocketgamer.com/kingdom-rush-frontiers/how-to-survive-in-kingdom-rush-frontiers-hints-tips-and-tricks/),
+    [Siege of Centauri dev journal](https://forums.sinsofasolarempire2.com/495008/siege-of-centauri-dev-journal-what-makes-a-good-tower-defense-game));
+    Sir, We Have an Orc Problem's players praise the scale and fault it as simple, with few frills
+    ([VaporLens summary](https://vaporlens.app/app/4594150/sir_we_have_an_orc_problem)); damage numbers should not overlap
+    each other or the thing they are about ([Tim Cain](https://turbo-wiki.pages.dev/tim-cain/ux-design/damage-numbers)).
+    No outside asset was needed: the knight is drawn with the box's own rabbit, in its own pen.
+  - *Measured first* (the bots over the whole game, kills counted by cause and by folio). Before: monks took 40
+    to 60% of every folio's kills (the stubborn bot's 80%), falcons 2%, the bell 2%; the trebuchet, falconer and ferret
+    were only more ways to kill the same crowd, so minute 25 asked nothing minute 2 had not. `bots.impatient` (every
+    wave called the moment it may, every gift loosed the moment it is back, never a hare) opened the box in **27.8**
+    minutes, under rule 6. `bots.stubborn` (the eager bot's towers and purchases, never a gift) in 59.7: the gifts pay.
+    No bug was holding the balance up this time (the bell's, found last session, is mended).
+  - *The answer to minute 25: rabbit knights.* From the river (folio iv) armoured rabbits ride with the waves, one to
+    six a wave by folio, half as many again each later wave, as agents with a life of their own (60 × the folio's
+    toughness). An arrow glances off: a monk's shot takes an eighth of what it does to the crowd off the knight it
+    reaches, so a line of monks alone lets them through; a trebuchet throws at a knight in reach before any crowd and
+    its stone does 2.5 times its weight, a falcon stoops on knights after hares and the king, the dragon unhorses one in
+    its path, ink drowns them a tenth a second, the flood takes them, the bell holds them. A knight at the wall
+    batters 6% of it away. So in minute 2 the player decides where the monks stand and when to call; in minute 25,
+    which way the knights ride, where the stones and falcons go to meet them, which bough of the tree to grow, and
+    whether the dragon goes on the crowd or on the knight nearest the wall. Counted in the eager bot's game: knights are
+    unhorsed by trebuchets, falcons, ink and the dragon in about two thirds of cases, and the stubborn bot, which
+    looses no gift, loses three to four folios more than before.
+  - *Tried and dropped.* Knights at a walk (5.5 units a second against the crowd's 14): every folio waited for the last of
+    them and the casual bot took 100 minutes. Knights spawned at the wave's own pace from a queue that never emptied:
+    the run went on long after the horde was beaten (eager 55 minutes). Now each wave's knights ride in within four
+    fifths of its arrival time, at 9 units a second, and the pause between waves is 7 seconds (was 9).
+  - *Pacing after it* (three seeds): eager 41.9 to 45.1, casual 78.1 to 83.1, impatient 30.7 to 35.9 (the suite now wants
+    at least 29), stubborn about 60; the longest wait for something new 3.1 minutes eager, 4.6 casual.
+  - *Reading.* The wall's losses sum on one red tag under its count in the HUD, in whole points, never over the castle; a
+    wave's banner shows only when calling it early paid; a save past folio i is not taught the first minute again (the
+    cards for the horn, the wave, the bite); the first knight of a save is brought into view by the camera with a
+    herald's scroll (*Milites leporum*); the auto camera weighs each knight as a crowd of sixty; knights stand over the
+    crowd with a dashed steel ring and a bar once hurt, a spark and a faint ting when an arrow glances off, a helm that
+    tumbles when one is unhorsed; the colophon counts the knights. A gift spent for the run says *spent*.
+  - *Drawing.* The knight is the field rabbit in grey with a mail coat (rows of rings, a steel sheen), a red surcoat skirt,
+    a bascinet with a visor slit and a crest, a kite shield argent a chevron gules, and a lance couched under the shield
+    with a pennon. Close-ups at four times the size found a lance that floated behind the body, a crest that lay over the
+    ear like a band, and a lance tip cut by the atlas cell; all three were redrawn. The Tree of Jesse on a desktop fades
+    out at its canvas's edges instead of stopping in a line; its caption is two lines.
+  - *Critics* (fresh each round, phone frames first, real input; first impression, clarity, art, phone, feel and
+    **commercial**): round 1 7/4/7/4/6 and **5**; round 2 7/4/7/5/6 and **5**; round 3 7/4/7/4/5 and **4**; round 4
+    7/4/7/5/5 and **5**. Done between them: tutorial cards no longer return for a save past folio i (two critics took them
+    for nagging); the knight was drawn larger, with its ring and a herald's scroll on its first ride, and the camera
+    weighs it as a crowd of sixty; the wall's loss tag moved from over the castle into the HUD, on the wall's own bar;
+    *A− / A+* in a plain serif (in the textura they read *R− R+*); the colophon counts the knights and breaks onto two
+    lines on a phone rather than shrinking to 8 px; an unhorsed knight throws up its helm and a red *Unhorsed!*.
+    Research between rounds: horde games put the silhouette first and test readability in the busiest moment
+    ([Age of Darkness](https://www.unrealengine.com/en-US/developer-interviews/age-of-darkness-is-an-rts-that-throws-thousands-of-undead-monsters-at-you),
+    [readable game art](https://bugnet.io/blog/readable-game-art-why-clarity-beats-detail)); hence the knight's shield,
+    lance and steel ring instead of a recoloured rabbit.
+  - *Still open, most valuable first* (the critics' points this session did not do; every score stayed under 8, clarity at
+    4 and "commercial" at 4 to 5): the big horde from folio v on reads as gravel at phone size, and a knight inside it is
+    found by its ring rather than seen (a count banner on a dense stretch, or fewer, larger rabbits with a fur underneath,
+    is the next step); the knight is drawn in flat fills with an even outline next to the hatched monks, and a hatched
+    redraw would fit better; on a phone the tray only shows defenders waiting to be set, so a player who has set them
+    all sees no defenders to buy or move from the bar; the Tree of Jesse still shows every later chapter as rows of grey
+    numeral coins (one sealed bud per chapter would read better); the tray and horn float over the road at a phone's
+    foot; the king's folio frames the king and leaves the castle out; the leaf in millions (kept, the owner's call above).
+    Nobody has played the knights on a real phone yet.
 - **Unwelcome Guests** (box 6). **The refinement session** (November 2026, rule 16). The owner found it the least fun of the
   boxes (though its music among the best), lifted the cap (rule 2: 260 KB) and let everything be remade.
   - *Why it was not fun, counted by the bots.* A hundred nights of 24 seconds; 80% ended because the ectoplasm ran out; one in
@@ -3262,6 +3342,12 @@ box or two. Starter, box 1 until then, opens on a still jar and earns "about 0¢
 - **Look at every sprite on its own, large.** Faults hide at play size and in motion: a hand that is not
   a hand, a stick rabbit for a king, a counterweight tilting with its arm. Dump all sprites into one
   gallery (a debug call returning data URLs) and shoot each scene close up before calling art done.
+- **A drop judged by the event's target fails for touch.** A touch stays captured by the element it began on, so a
+  defender dragged out of a tray "landed" on the tray every time on a phone, while the mouse worked. Release the capture
+  from the element that holds it, judge a drop by where the finger lifts, and play the first verb with real touch input.
+- **Late-game choice comes from what the enemy is, not from bigger numbers.** Here Be Rabbits' towers were five ways to
+  kill one crowd; one armoured kind that arrows glance off made where the stones and falcons stand and which bough grows
+  a decision. Count kills by cause before and after: the answer should move the shares.
 - **Weigh the box while building it, not after.** Here Be Rabbits reached 157 KB before anyone measured;
   getting under 130 cost the rabbit knights and the bell tower. Give each part a budget before writing it.
 - **Prove a refactor with frozen frames.** To shrink a box without changing it, freeze the box's clock: an
