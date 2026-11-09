@@ -870,6 +870,30 @@ if (suites.includes('warren') && warren) {
     check(!bad.length, 'no line comment in the view swallows a statement after it', bad.map(l => l.trim().slice(0, 90)).join(' | '));
   }
   {
+    // rabbit knights (version 2): arrows glance off them, a trebuchet's stones do not, and one at the wall batters a piece out
+    const rig = (tw) => { const S = CORE.init(6); S.lv = { treb: 1, monk1: 1 }; S.folio = 4; S.ch = 1; CORE.act(S, 'run');
+      for (const t of S.tw) t.at = -1; for (const t of S.tw) if (tw.includes(t.t)) CORE.act(S, 'place', t.id, CORE.bestSpot(S, t));
+      S.wave = S.called = CORE.FOLIOS[S.folio].W - 1; S.prep = 0; S.pool = 0; S.knP = 1; S.knT = 0; S.knI = 4; let k = 0, life = 0; while (k++ < 900 && S.phase === 'run') { CORE.step(S, .1); if (S.kn.length) life = k; if (k > 20 && !S.kn.length && !S.knP) break; } return { S, life }; };
+    const arrows = rig(['monk']), stones = rig(['treb']);
+    check(arrows.S.wall < arrows.S.wallMax && stones.S.wall === stones.S.wallMax, `a knight rides past an archer to the wall (wall ${arrows.S.wall.toFixed(0)} / ${arrows.S.wallMax}) but falls to a trebuchet`);
+    const M = CORE.migrate({ ...CORE.init(1), kn: undefined, knP: undefined }, 1);
+    check(Array.isArray(M.kn) && M.knP === 0 && CORE.version >= 2, 'a save from version 1 gains the knights’ fields');
+    check(CORE.KN.slice(0, 3).every(n => !n) && CORE.KN.slice(3).every(n => n > 0), 'knights ride from the second chapter on, never in the first');
+  }
+  {
+    // the drop of a defender dragged by touch: a touch is captured by the button it starts on, so the tray must let go of it
+    // there, and the drop is judged by where the finger is, not by the element the event names
+    const view = warren.tpl.slice(warren.tpl.indexOf('<script>'));
+    check(/b\.releasePointerCapture\(e\.pointerId\)/.test(view) && /const onBar = e\.clientY >= \$\('bar'\)/.test(view), 'a defender dragged from the tray by touch is set down where the finger lets go');
+  }
+  {
+    // clever play pays: the bot that looses the gifts is much quicker than one that only places towers; and the impatient
+    // bot, which calls every wave at once and looses every gift at once, still takes half an hour
+    const e = KIT.simulate(CORE, 'eager', { seed: 1, minutes: 150 }), st = KIT.simulate(CORE, 'stubborn', { seed: 1, minutes: 150 }), im = [1, 2].map(seed => KIT.simulate(CORE, 'impatient', { seed, minutes: 150 }));
+    check(e.done && st.done && st.minutes > e.minutes * 1.2, `the gifts pay: eager ${e.minutes.toFixed(1)} min against ${st.minutes.toFixed(1)} for towers alone`);
+    check(im.every(r => r.done && r.minutes >= 29), `the impatient bot takes at least half an hour (${im.map(r => r.minutes.toFixed(1)).join(', ')} min)`);
+  }
+  {
     // no farming: the bots never need more than four lost runs on one folio
     for (const bot of ['eager', 'casual']) { const r = KIT.simulate(CORE, bot, { seed: 2, minutes: 150 }); check(r.done && r.S.maxLost <= 4, `the ${bot} bot never loses a folio more than four times (worst ${r.S.maxLost})`); }
   }
