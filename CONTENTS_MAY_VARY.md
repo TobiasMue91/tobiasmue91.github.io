@@ -2096,6 +2096,9 @@ needs a field in `K` and an answer from each box, so it belongs to a session abo
     gather behind one cover and their bars and labels pile up; kids at the edges of the park and the mountain are cut by
     the screen; your side shows only as hats at the foot of a phone; the win of a yard stays a card in an empty yard; the
     numbers run into the hundreds of millions on the mountain.
+  *A key for the catapult* (November 2026, the owner): on a keyboard the space bar (or F) fires it, so a hand on the mouse
+  can keep throwing; a small SPACE tag under the FIRE patch says so where there is a fine pointer, and the catapult's
+  first teaching card mentions it.
 - **Snow Day, the second refinement** (November 2026, `CORE.version` 2). The owner played the whole box (3/5): from about the
   third yard it was only wild clicking; after a yard change the bars went down depressingly slowly; the overlays could not be
   read in time; kids now and then looked through the snow walls; nobody learnt what an action was worth because the sound
