@@ -1,5 +1,5 @@
 // Here Be Rabbits, measured by folio: each bot over the whole game, how long each folio took, runs and losses, kills by
-// cause, knights unhorsed by cause and knights that reached the wall.
+// cause, knights unhorsed by cause, knights that reached the wall, and molehills.
 //   node util/warren/measure.mjs games/contents_may_vary.html eager,casual,impatient,stubborn 1
 import { readFileSync } from 'fs'; import vm from 'vm';
 const HTML = readFileSync(process.argv[2] || 'games/contents_may_vary.html', 'utf8');
@@ -16,7 +16,7 @@ export function run(botName, seed = 1, opt = {}) {
     const any = CORE.UP.some(u => CORE.can(S, u)); if (any) lastBuy = t; 
     for (const e of S.ev) {
       if (e.k === 'knDown') { const c = typeof e.by === 'number' ? (S.tw.find(q => q.id === e.by) || {}).t : e.by; cur.kd = cur.kd || {}; cur.kd[c] = (cur.kd[c] || 0) + 1; }
-      if (e.k === 'knBite') cur.kb = (cur.kb || 0) + 1;
+      if (e.k === 'knBite') cur.kb = (cur.kb || 0) + 1; if (e.k === 'sap') cur.sap = (cur.sap || 0) + 1;
       if (e.k === 'kill') { const c = typeof e.by === 'number' ? (S.tw.find(q => q.id === e.by) || {}).t : e.by; by[c] = (by[c] || 0) + e.n; cur.kills[c] = (cur.kills[c] || 0) + e.n; }
       if (['dragon', 'ink', 'bell', 'flood', 'hare', 'go'].includes(e.k)) uses[e.k + (e.auto ? 'A' : '')] = (uses[e.k] || 0) + 1;
       if (e.k === 'end') { cur.runs++; if (e.why !== 'won') cur.lost++; cur.wallEnd.push(e.why === 'won' ? +(S.wall / S.wallMax).toFixed(2) : 0); }
@@ -34,6 +34,6 @@ if (process.argv[1].endsWith('measure.mjs')) {
     const tot = Object.values(r.by).reduce((a, b) => a + b, 0);
     console.log(' kills by cause', Object.entries(r.by).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + (100 * v / tot).toFixed(1) + '%').join(', '));
     console.log(' uses', JSON.stringify(r.uses));
-    for (const f of r.fol) { const tk = Object.values(f.kills).reduce((a, b) => a + b, 0); console.log(` f${f.f} ${((f.t1 - f.t0) / 60).toFixed(1)}min runs ${f.runs} lost ${f.lost} wall ${f.wallEnd.join('/')} knights ${JSON.stringify(f.kd || {})} bit ${f.kb || 0} top: ${Object.entries(f.kills).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => k + ' ' + (100 * v / tk | 0) + '%').join(' ')}`); }
+    for (const f of r.fol) { const tk = Object.values(f.kills).reduce((a, b) => a + b, 0); console.log(` f${f.f} ${((f.t1 - f.t0) / 60).toFixed(1)}min runs ${f.runs} lost ${f.lost} wall ${f.wallEnd.join('/')} knights ${JSON.stringify(f.kd || {})} bit ${f.kb || 0} saps ${f.sap || 0} top: ${Object.entries(f.kills).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => k + ' ' + (100 * v / tk | 0) + '%').join(' ')}`); }
   }
 }
