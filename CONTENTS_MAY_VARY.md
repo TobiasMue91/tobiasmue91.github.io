@@ -1412,11 +1412,13 @@ still undone, most valuable first:
     folio's own lower-case numerals and, after a loss, shows the wave that comes again (the card said wave iii, the HUD
     wave I); a red dash under the wave's name was the wall's loss tag showing through at rest (a rule for `#fol i`
     outweighed its own).
-  - *Still open, most valuable first.* Feel is the lowest score: a stone's flight and its impact, a falcon's stoop and a
-    slain rabbit's fall are small at phone size, and leaf does not visibly fly to the counter. On a phone the tray still
-    shows only defenders waiting to be set, and the Tree of Jesse's medallions carry no price tags at its phone framing.
-    The king is no larger than his snail and has no bar of his own in the HUD (one was tried last session and lay over
-    the castle's marker). Knights and Jesse are flat next to the hatched land. Defenders of one kind look alike whatever
+  - *Done after that list, at the owner's word.* A stone is half as large again, casts a shadow as it flies and lands in a
+    ring of dust with clods thrown up; a fleck of leaf flies from where rabbits fall to the counter, which bumps as it
+    lands (one every seventh of a second at most, none with reduced motion or `?fx=0`); the king is drawn 1.4 times as
+    large with his bar higher, and the HUD's own bar becomes his: *Rex leporum*, his life in per cent, the bar thicker.
+  - *Still open, most valuable first.* Feel is still the lowest score: a falcon's stoop and a slain rabbit's fall are
+    small at phone size. On a phone the tray shows only defenders waiting to be set (four gifts, recall and the map fill
+    390 px; it wants a second row or a drawer). Knights and Jesse are flat next to the hatched land. Defenders of one kind look alike whatever
     the tree gave them. The leaf in millions and the painted land stay, the owner's calls. Nobody has played knights,
     sappers or the new horde on a real phone.
 - **Unwelcome Guests** (box 6). **The refinement session** (November 2026, rule 16). The owner found it the least fun of the
