@@ -6369,7 +6369,8 @@ function paintTile(c, tx, ty) {
  layer(t => t === T_.SCRUB, (x, y, i, h, h2) => { if (h < .5) c.drawImage(FERN, x - 4 + h2 * 2, y - 5.5, 8, 6.5); });
  for (const o of ops) if (o[0] === 'd' && o[1] === T_.ROCK && o[4] >= 12) { const w = o[4] * 2.2; c.drawImage(MOUNT, o[2] - w / 2, o[3] + o[4] * .3 - w * .62, w, w * .68); }
  // trees and cottages are painted into the page; one with someone standing behind it is drawn again over them (standing())
- layer(t => t === T_.TREE, (x, y, i, h, h2) => { if (h < .6) tree(c, x + (h2 - .5) * 3, y, 4 + h2 * 2.4, i); });
+ // (in the order of the line each stands on, the same order the sorted pass uses, so a tree drawn again never changes places)
+ { const L = []; layer(t => t === T_.TREE, (x, y, i, h, h2) => { if (h < .6) { const r = 4 + h2 * 2.4; L.push([y + .7 * r, x + (h2 - .5) * 3, y, r, i]); } }); L.sort((a, b) => a[0] - b[0] || a[4] - b[4]); for (const o of L) tree(c, o[1], o[2], o[3], o[4]); }
  for (const o of ops) if (o[0] === 'r') { if (o[1] === T_.HOUSE) cottage(c, o[2], o[3], o[4] - o[2], o[5] - o[3], o[2] | 0); else if (o[1] === T_.KEEP) castle(c, (o[2] + o[4]) / 2, (o[3] + o[5]) / 2); }
  if (FOLIOS[f].ch >= 3) { c.font = '800 9px ' + GOT; c.fillStyle = 'rgba(184,50,31,.55)'; c.textAlign = 'center'; for (const [t, x, y] of [['ASIA', -32, -150], ['EVROPA', -220, 300], ['AFFRICA', 160, 300], ['hic sunt lepores', -300, 170], ['hic sunt lepores', 240, 0]]) c.fillText(t, x, y); }
  // burrows spaced along each entrance
@@ -6391,7 +6392,7 @@ function standing() {
  }
  for (let f = 0; f <= S.folio; f++) for (const o of FOLIOS[f].add) if (o[0] === 'r' && o[1] === CORE.HOUSE) STAND.push([o[5] - .5, 1, o[2], o[3], o[4] - o[2], o[5] - o[3], o[2] | 0]);
  STAND.push([9, 2, 0, 0]);
- STAND.sort((a, b) => a[0] - b[0]); return STAND;
+ STAND.sort((a, b) => a[0] - b[0] || (a[5] | 0) - (b[5] | 0)); return STAND;
 }
 // a tree or a cottage in front of a defender, a hare or the king grows see-through, so nobody the player needs is hidden
 let BEHIND = [];
@@ -6575,7 +6576,10 @@ function drawBody() {
  g.drawImage(BODYC, 0, 0, w, h, dx - 4 * f, dy - 4 * f, w * f, h * f);
 }
 // the rules slew rabbits in a cell: the view's rabbits there go at once, and tumble
-function slay(c, n, by) { for (const d of [0, -1, 1, -GW, GW, -GW - 1, -GW + 1, GW - 1, GW + 1]) { const l = byCell.get(c + d); if (l) for (const p of l) if (n > 0 && !p.out) { p.out = 1; p.die = 0; p.burn = by === 'dragon' || by === 'fire' ? 1 : 0; n--; } } }
+// (nearest cells first, out to two cells: the view's rabbits run a little ahead of or behind the rules' count; the first one
+// slain is handed back, so an arrow flies at a rabbit that is drawn and never at bare ground)
+const SLAYD = []; for (let r = 0; r <= 2; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (max(abs(dx), abs(dy)) === r) SLAYD.push(dy * GW + dx);
+function slay(c, n, by) { let first = null; for (const d of SLAYD) { if (n <= 0) break; const l = byCell.get(c + d); if (l) for (const p of l) if (n > 0 && !p.out) { p.out = 1; p.die = 0; p.burn = by === 'dragon' || by === 'fire' ? 1 : 0; n--; first = first || p; } } return first; }
 const SILO = document.createElement('canvas'), SG = SILO.getContext('2d'), SILO2 = document.createElement('canvas'), SG2 = SILO2.getContext('2d');
 // every hidden figure of the frame goes into one layer, which is then filled pale and laid over the picture once
 // a hidden figure's silhouette (a gold outline round a faint fill) is made once per kind of figure, at 10 px a unit, and then
@@ -6621,7 +6625,7 @@ function drawHorde(st) {
   const vis = standing().filter(o => o[0] > y0 && o[0] < y1 && o[2] > x0 - 30 && o[2] < x1 + 10), on = new Set(vis.filter(behind));
   // whatever stands in front of a redrawn tree and overlaps it is redrawn too, or the tree behind would jump in front of it
   const reach = o => o[1] === 2 ? 22 : o[1] ? o[4] : o[4] * 1.45, hgt = o => o[1] === 2 ? 40 : o[1] ? o[5] + 4 : o[4] * 3.2;
-  for (let pass = 0; pass < 3; pass++) { let grew = 0; for (const o of vis) { if (on.has(o)) continue; for (const b of on) if (o[0] > b[0] && o[0] - hgt(o) < b[0] && abs(o[2] - b[2]) < reach(o) + reach(b)) { on.add(o); grew = 1; break; } } if (!grew) break; }
+  for (let pass = 0; pass < 12; pass++) { let grew = 0; for (const o of vis) { if (on.has(o)) continue; for (const b of on) if (o[0] > b[0] && o[0] - hgt(o) < b[0] && abs(o[2] - b[2]) < reach(o) + reach(b)) { on.add(o); grew = 1; break; } } if (!grew) break; }
   for (const o of on) FG.push([o[0], 3, o]); }
  FG.sort((a, b) => a[0] - b[0]);
  if (hurtT > 0 && S.phase === 'run' && !FG.some(f => f[1] === 3 && f[2][1] === 2)) castleHit();
@@ -6845,16 +6849,15 @@ function onEvents() {
   if (e.k === 'kill') {
    const x = cX(e.c), y = cY(e.c);
    const t = typeof e.by === 'number' ? towerById(e.by) : null, p = t && towerXY(t);
-   if (p && t.t === 'monk') shotAt[t.id] = gt;
-   if (p && t.t === 'monk') addFx({ k: 'arrow', x0: p.x, y0: p.y - 3, x1: x, y1: y - 1.5, t: 0, T: .32 });
+   const vic = slay(e.c, e.n, e.by);
+   if (p && t.t === 'monk' && vic) { shotAt[t.id] = gt; addFx({ k: 'arrow', x0: p.x, y0: p.y - 3, x1: vic.x, y1: vic.y - 1.5, t: 0, T: .32 }); }
    // a ferret ducks at its catch; earth flies up
    if (p && t.t === 'ferret' && gt - (pounce[t.id] || -9) > .45) { pounce[t.id] = gt; for (let j = 0; j < 5; j++) addFx({ k: 'chip', x: x + (hash(e.c, j, 7) - .5) * 3, y: y - 1, vx: (hash(e.c, j, 8) - .5) * 24, vy: -10 - hash(e.c, j, 9) * 14, t: 0, T: .5, earth: 1 }); }
    // a few of the slain tumble; a cloud of them only smears the ground
    const n = DIAG.fx ? min(e.n > 3 ? 1 : 0, max(0, 18 - tumbling)) : 0;
    tumbling += n;
    for (let j = 0; j < n; j++) addFx({ k: 'tumble', x: x + (hash(e.c, j, 50) - .5) * 4, y, vx: (hash(e.c, j, 51) - .5) * 30, vy: -14 - hash(e.c, j, 52) * 16, r: 0, vr: (hash(e.c, j, 53) - .5) * 14, t: 0, T: .6, cell: cellOf(j & 3, hash(e.c, j, 54) > .5 ? 1 : 0, 0) });
-   slay(e.c, e.n, e.by);
-   if (DIAG.fx && !K.reduced && every('fly', .14)) { const X = sx(x), Y = sy(y); if (X > 0 && X < VW && Y > 0 && Y < VH) addFx({ k: 'fly', X, Y, t: 0, T: .55 + Math.random() * .2, b: (Math.random() - .5) * 90 }); }
+   if (DIAG.fx && !K.reduced && vic && every('fly', .14)) { const X = sx(x), Y = sy(y); if (X > 0 && X < VW && Y > 0 && Y < VH) addFx({ k: 'fly', X, Y, t: 0, T: .55 + Math.random() * .2, b: (Math.random() - .5) * 90 }); }
    sfxKill(e.n, e.by);
    { const k = typeof e.by === 'number' ? (t ? t.t : 'monk') : e.by; CHR.by[k] = (CHR.by[k] || 0) + e.n; }
    if (typeof e.by === 'string') { const q = tally[e.by] || (tally[e.by] = { n: 0, x, y }); q.n += e.n; q.t = max(q.t || 0, 1.1); q.x = x; q.y = y; }
@@ -6887,7 +6890,7 @@ function onEvents() {
   else if (e.k === 'kneel') { herald('The king kneels', 'the world is the right way up again'); say('The king kneels.', 'The world turns the right way up again.', 5); }
   else if (e.k === 'ready') { const b = abBtn[e.what]; if (b) { b.classList.add('ready'); later(2.8, () => b.classList.remove('ready')); } }
   else if (e.k === 'place') sfxQuill();
-  else if (e.k === 'end' && e.why === 'won' && !S.fin) { holdPage(e.f); chron(e.why === 'won' ? FOLIOS[e.f].name + ' held: ' + fmt(e.kills) + ' slain.' : ''); endAt = { at: gt + 1.4, e }; }
+  else if (e.k === 'end' && e.why === 'won' && !S.fin) { for (const q of PT) if (!q.out) { q.out = 1; q.hm = 0; } holdPage(e.f); chron(e.why === 'won' ? FOLIOS[e.f].name + ' held: ' + fmt(e.kills) + ' slain.' : ''); endAt = { at: gt + 1.4, e }; }
   else if (e.k === 'end') { chron(e.why === 'won' ? FOLIOS[e.f].name + ' held: ' + fmt(e.kills) + ' slain.' : 'The wall is eaten in wave ' + ROM(e.wave + 1) + '.'); endAt = { at: gt + 1.4, e }; if (e.why === 'wall' && !K.reduced) { shake = 1.2; hurtT = 1.2; } }
   else if (e.k === 'folio' || e.k === 'chapter') { tiles.clear(); tileKey = ''; miniKey = ''; }
   else if (e.k === 'buy') { sfxBuy(); if (e.id === 'falc') say('The falconer', 'Set him where the horde comes close: his falcon stoops on whatever is nearest the wall, and on golden hares.', 6); if (e.id === 'ferret') say('A ferret', 'Set it beside a rabbit hole: it bolts the rabbits as they come out.', 6); }
@@ -7151,6 +7154,7 @@ let boundsF = -1;
 let knLook = 0, sapLook = 0, sapOff = null;
 function camera(dt) {
  if (boundsF !== S.folio) { boundsF = S.folio; mapBounds(); }
+ const hb = (camera.hb = gt - (camera.ht || -9) > 1 || !camera.hb ? ($('hud').getBoundingClientRect().bottom + 6) : camera.hb); if (gt - (camera.ht || -9) > 1) camera.ht = gt;
  const dr = fx.find(p => p.k === 'dragonPath' && p.t < CORE.P.dragonT + .6);
  // the first knight of a save is shown to the player as it rides in
  if ((sapLook -= dt) > 0 && cam.auto && S.sap && !dr) { cam.x += (S.sap.x - cam.x) * min(1, dt * 2.5); cam.y += (S.sap.y - cam.y) * min(1, dt * 2.5); cam.gx = cam.gy = null; }
@@ -7162,6 +7166,7 @@ function camera(dt) {
  } else if (cam.auto && S.phase === 'run') {
   // the eased middle of the front nearest the castle (or of the holes), framed with the castle when
   // both fit; the view moves only once that leaves the middle of the screen
+  if (cam.gx == null) cam.dx = null;
   let w = 0, fx = 0, fy = 0;
   if (!S.hi.length) for (let k = 0; k < F.src.length; k += 2) { fx += cX(F.src[k]); fy += cY(F.src[k]); w++; }
   else S.hi.forEach((i, k) => { const q = S.hn[k] / (1 + F.dist[i] / 40) ** 2; fx += cX(i) * q; fy += cY(i) * q; w += q; });
@@ -7173,12 +7178,15 @@ function camera(dt) {
   fx /= w || 1; fy /= w || 1;
   const hw = VW / cam.s / 2 - 10, hh = (VH - 190) / cam.s / 2, kz = S.king ? .15 : .6, tx = abs(fx) < hw * 1.6 ? fx / 2 : fx - Math.sign(fx) * hw * kz, ty = abs(fy) < hh * 1.6 ? fy / 2 : fy - Math.sign(fy) * hh * kz;
   cam.gx = cam.gx == null ? tx : lerp(cam.gx, tx, min(1, dt * .7)); cam.gy = cam.gy == null ? ty : lerp(cam.gy, ty, min(1, dt * .7));
-  const ex = cam.gx - cam.x, ey = cam.gy - cam.y, zx = hw * (S.king ? .08 : .3), zy = hh * (S.king ? .08 : .3);
-  if (abs(ex) > zx) cam.x += (ex - Math.sign(ex) * zx) * min(1, dt * 1.6);
-  if (abs(ey) > zy) cam.y += (ey - Math.sign(ey) * zy) * min(1, dt * 1.6);
- }
- // the castle is what the player defends: when it is near the top, the camera eases it out from under the HUD
- if (cam.auto && S.phase === 'run') { const hb = (camera.hb = gt - (camera.ht || -9) > 1 ? ($('hud').getBoundingClientRect().bottom + 6) : camera.hb); if (gt - (camera.ht || -9) > 1) camera.ht = gt; const cy = sy(-34); if (cy < hb && cy > hb - 260 && abs(sx(0) - VW / 2) < VW * .45) cam.y -= (hb - cy) / cam.s * min(1, dt * 2); }
+  // the view rests. Only when the front has left the middle of the screen does it glide to a new place, and rest again:
+  // a camera that creeps after the horde every frame makes the whole land tremble
+  let gx = cam.gx, gy = cam.gy; const zx = hw * (S.king ? .08 : .3), zy = hh * (S.king ? .08 : .3);
+  // (the castle is kept out from under the HUD when it would lie near the top)
+  { const cy = (-34 - gy) * cam.s + VCY; if (cy < hb && cy > hb - 260 && abs(gx) * cam.s < VW * .45) gy = -34 - (hb - VCY) / cam.s; }
+  if (cam.dx == null || abs(gx - cam.dx) > zx || abs(gy - cam.dy) > zy) { cam.dx = gx; cam.dy = gy; }
+  const k = 1 - Math.exp(-dt * 2.4); cam.x += (cam.dx - cam.x) * k; cam.y += (cam.dy - cam.y) * k;
+  if (abs(cam.dx - cam.x) * cam.s < .5) cam.x = cam.dx; if (abs(cam.dy - cam.y) * cam.s < .5) cam.y = cam.dy;
+ } else cam.dx = null;
  const hw = VW / cam.s / 2, hh = VH / cam.s / 2;
  cam.x = clamp(cam.x, min(bounds.x0 + hw, (bounds.x0 + bounds.x1) / 2), max(bounds.x1 - hw, (bounds.x0 + bounds.x1) / 2));
  cam.y = clamp(cam.y, min(bounds.y0 + hh - 40, (bounds.y0 + bounds.y1) / 2), max(bounds.y1 - hh + 60, (bounds.y0 + bounds.y1) / 2));
@@ -7224,7 +7232,15 @@ mc.addEventListener('pointerup', () => { mc.onpointermove = null; });
 const ptrs = new Map(); let pinch = null, pan = null;
 function hitTower(x, y) { let best = null, bd = max(26, 6 * cam.s); for (const t of S.tw) { const p = towerXY(t); if (!p) continue; const d = hypot(sx(p.x) - x, sy(p.y) - y + 2 * cam.s); if (d < bd) { bd = d; best = t; } } return best; }
 const lift = () => drag && drag.touch ? 46 : 0;
-function spotAt(x, y, t) { const o = t.t === 'snail' ? 2 : 0; return cellAt(wx(x) - o, wy(y - lift()) - o); }
+// where a defender held at (x, y) would stand: the cell under it, or, when that is no good ground (a tree, the road's edge
+// by the castle, another defender too near), the nearest cell that is, within a few steps: the finger need not find the
+// exact spot, and the figure shown is always where it will stand
+function spotAt(x, y, t) {
+ const o = t.t === 'snail' ? 2 : 0, X = wx(x) - o, Y = wy(y - lift()) - o, c = cellAt(X, Y); if (c < 0 || CORE.placeOk(S, t, c)) return c;
+ const R = t.t === 'ferret' ? 7 : 4; let best = c, bd = 1e9;
+ for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) { const q = c + dy * GW + dx; if (q < 0 || q >= NC || abs(q % GW - c % GW) > R) continue; const d = hypot(cX(q) - X, cY(q) - Y); if (d < bd && d <= R * CS && CORE.placeOk(S, t, q)) { bd = d; best = q; } }
+ return best;
+}
 cv.addEventListener('pointerdown', e => {
  if (!S || !$('tree').hidden) return; e.preventDefault(); K.unlock(); tipOff();
  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); cv.setPointerCapture(e.pointerId);
@@ -7776,11 +7792,12 @@ function frame(dt) {
  { const t = performance.now(); drawHorde(st); hT += performance.now() - t; } part('horde'); gauge(hT); drawFx(dt); drawHandle(st); part('fx'); sky(); part('sky'); sapMark();
  if (hurtT > 0 && S.phase !== 'run' && !turn.img) { g.save(); g.globalAlpha = min(.5, hurtT * .6); g.drawImage(CASTLE_HIT, 0, 0, 400, 312, sx(-25), sy(-30), 50 * cam.s, 39 * cam.s); g.restore(); }
  if (drag && drag.moved && drag.t) {
-  const c = drag.hot, ok = CORE.placeOk(S, drag.t, c), y = drag.y - lift();
+  const c = drag.hot, ok = CORE.placeOk(S, drag.t, c), o2 = drag.t.t === 'snail' ? 2 : 0, X = ok ? sx(cX(c) + o2) : drag.x, y = ok ? sy(cY(c) + o2) : drag.y - lift();
+  if (ok && drag.touch) { pen(g, 0, 'rgba(62,138,104,.7)', 2); g.setLineDash([4, 4]); ln(g, drag.x, drag.y, X, y); g.setLineDash([]); }
   if (drag.best >= 0) { pen(g, 0, `rgba(243,215,122,${.5 + .4 * sin(gt * 6)})`, 3); dot(g, sx(cX(drag.best)), sy(cY(drag.best)), 7 * cam.s); g.stroke(); }
-  if (drag.t.t === 'monk') { disc(g, ok ? 'rgba(184,50,31,.08)' : 'rgba(0,0,0,0)', drag.x, y, st.mRng * cam.s); }
-  pen(g, ok ? 'rgba(80,160,60,.35)' : 'rgba(200,40,20,.35)', ok ? '#3e8a68' : C.red, 2); dot(g, drag.x, y, 6 * cam.s); fs(g);
-  g.globalAlpha = .9; fig(g, drag.t.t, drag.x, y, cam.s * 1.25, -PI / 2, st); g.globalAlpha = 1; }
+  if (drag.t.t === 'monk') { disc(g, ok ? 'rgba(184,50,31,.08)' : 'rgba(0,0,0,0)', X, y, st.mRng * cam.s); }
+  pen(g, ok ? 'rgba(80,160,60,.35)' : 'rgba(200,40,20,.35)', ok ? '#3e8a68' : C.red, 2); dot(g, X, y, 6 * cam.s); fs(g);
+  g.globalAlpha = .9; fig(g, drag.t.t, X, y, cam.s * 1.25, -PI / 2, st); g.globalAlpha = 1; }
  if (stroke) {
   pen(g, 0, stroke.k === 'dragon' ? 'rgba(255,120,30,.8)' : stroke.k === 'ink' ? 'rgba(18,22,38,.7)' : 'rgba(243,215,122,.9)', stroke.k === 'dragon' ? 14 * cam.s * st.dW / 2 : 10); g.lineCap = 'round'; g.setLineDash([12, 8]);
   g.beginPath(); if (stroke.k === 'bell') g.arc(stroke.x0, stroke.y0, clamp(hypot(stroke.x1 - stroke.x0, stroke.y1 - stroke.y0), 14 * cam.s, 44 * cam.s), 0, TAU); else { g.moveTo(stroke.x0, stroke.y0); g.lineTo(stroke.x1, stroke.y1); } g.stroke(); g.setLineDash([]);
