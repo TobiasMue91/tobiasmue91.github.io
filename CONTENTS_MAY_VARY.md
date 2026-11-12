@@ -293,7 +293,7 @@ Numbered as the boxes stand since the reorder of 2026-11-06 (the slot each first
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
-Here Be Rabbits 42–43 / 75–83 (version 2, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 35–37 / 66–71 (remade, November 2026), Still Water 40–50 / 40–46.
+Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 35–37 / 66–71 (remade, November 2026), Still Water 40–50 / 40–46.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -1472,9 +1472,22 @@ still undone, most valuable first:
     minutes); at 1.6 and 2 times: eager 42.2 to 42.8, casual 74.8 to 82.9, impatient about 33. With bees, belfries
     and these the towers alone now nearly keep pace (stubborn 44 to 48 minutes): the gifts pay two to five minutes
     where they paid fifteen, which is the next thing to set right (the suite's bound is a bare 2%).
-  - *Not done, and it should be said plainly.* The owner's larger complaints stand: the art's manner, the Tree of Jesse
-    as a list of percentages, and lands that are discs of meadow with woods dropped on them. Two units and five mended
-    faults are not the rebuild that was asked for. What it would take, in the order this session would do it: (1) the
+  - *The day after* (`CORE.version` 3). (a) *Threat.* Counted first: the eager bot lost no folio after its first run and
+    ended most with the wall whole; the bot that looses no gift lost none either, so the gifts bought two to five minutes.
+    Shorter rests for the gifts changed nothing (the game's length is set by when waves come, not by how fast rabbits
+    fall). What did: more knights from the forest on (3 to 6 a wave where it was 2 to 4), since a knight is what the gifts
+    and the chosen engines answer, and tougher hordes on folios x to xii (66 · 84 · 112). The gifts rest 40, 22, 24 and
+    70 seconds (60, 30, 35, 90), so the hands have more to do. (b) *The tree.* 117 medallions were 89: every strength that
+    came in three small steps comes in two, every one in two comes at once, each step as much larger and priced for it
+    (a pass over the list in the rules; the card's line is written from the effect: "monks kill ×1.5"). A save keeps
+    what it bought (`migrate` holds a level to its medallion's last). (c) *Places.* Every folio has a name in the HUD
+    (Warren Lane, Abbot's Bridge, Coney Garth, The West Road, Miller's Ford … The King's Road) and the land is lettered
+    in the scribe's red where its features are (The Warren, Monks' Wood, Carp Pond, Thorpe, Gallows Cross), on a wash of
+    vellum so the names read over meadow and wood. Three seeds: eager 42.0 to 43.4, casual 77.1 to 78.4, impatient
+    about 33, stubborn 45 to 47 minutes. On a desktop the tray's seven kinds no longer run under the gifts.
+  - *Not done, and it should be said plainly.* The owner's larger complaints stand in part: the art's manner is as it
+    was, the tree is shorter but most of its medallions are still strengths, and the lands have names now but are still
+    discs of meadow with woods dropped on them. This is not yet the rebuild that was asked for. What it would take, in the order this session would do it: (1) the
     tree cut to about forty medallions, every one of which changes what is on the land, with a choice of two at each
     defender's third step, as Kingdom Rush does; (2) every folio a land with a reason (a ford, a mill race, a walled
     village, a pass), drawn from a plan and not from discs, with two or three places where a defender plainly belongs;

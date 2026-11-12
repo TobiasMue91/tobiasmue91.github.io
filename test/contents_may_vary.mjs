@@ -909,6 +909,14 @@ if (suites.includes('warren') && warren) {
     check(bees > 20 && bees === all, `a skep’s swarm stings the crowd that passes (${bees} in 30 s)`);
   }
   {
+    // version 3: fewer, larger medallions; a save from before keeps what it bought, never more than a medallion's last level
+    const n = CORE.UP.reduce((a, u) => a + u.max, 0);
+    check(n <= 92 && CORE.UP.every(u => u.max <= 3 && u.d && !/undefined|NaN/.test(u.d)), `the tree has ${n} medallions (92 at most), each with a line that says what it does`);
+    const M = CORE.migrate({ ...CORE.init(1), lv: { arrow: 3, bow: 2, monk: 3 } }, 2);
+    check(M.lv.arrow === CORE.byId.arrow.max && M.lv.bow === CORE.byId.bow.max && M.lv.monk === 3 && CORE.version === 3, 'a version 2 save with three levels of a medallion that now has two keeps two');
+    check(CORE.PLACE.length === CORE.FOLIOS.length && CORE.NAMES.every(q => q[3] < CORE.FOLIOS.length), 'every folio is a named place');
+  }
+  {
     // a choice of two on the tree: gilding one bars the other for good, and each does what it says
     const S = CORE.init(3); S.ch = 1; S.folio = 3; S.lv = { monk1: 1, monk: 1, bow: 1, arrow: 1, treb: 1 }; S.leaf = 1e9;
     check(CORE.can(S, CORE.byId.cross) && CORE.can(S, CORE.byId.war) && CORE.act(S, 'buy', 'cross') && !CORE.can(S, CORE.byId.war) && CORE.barred(S, CORE.byId.war) && !CORE.act(S, 'buy', 'war'), 'Crossbows bars War bows');
@@ -924,7 +932,7 @@ if (suites.includes('warren') && warren) {
     // clever play pays: the bot that looses the gifts is much quicker than one that only places towers; and the impatient
     // bot, which calls every wave at once and looses every gift at once, still takes half an hour
     const e = KIT.simulate(CORE, 'eager', { seed: 1, minutes: 150 }), st = KIT.simulate(CORE, 'stubborn', { seed: 1, minutes: 150 }), im = [1, 2].map(seed => KIT.simulate(CORE, 'impatient', { seed, minutes: 150 }));
-    check(e.done && st.done && st.minutes > e.minutes * 1.02, `the gifts pay: eager ${e.minutes.toFixed(1)} min against ${st.minutes.toFixed(1)} for towers alone`);
+    check(e.done && st.done && st.minutes > e.minutes * 1.04, `the gifts pay: eager ${e.minutes.toFixed(1)} min against ${st.minutes.toFixed(1)} for towers alone`);
     check(im.every(r => r.done && r.minutes >= 29), `the impatient bot takes at least half an hour (${im.map(r => r.minutes.toFixed(1)).join(', ')} min)`);
   }
   {
