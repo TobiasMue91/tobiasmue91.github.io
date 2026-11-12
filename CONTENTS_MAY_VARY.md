@@ -1500,6 +1500,17 @@ still undone, most valuable first:
     sixteen pixels a unit: the ricks' outline had been stroked along the last straw line instead of the silhouette, the
     cross stood on the road, and ricks, wells and signposts first came nowhere because their own rule for open ground
     excluded the field, the village and the road's end they belong to.
+  - *The owner's next look* ("much better on the whole"), five small faults. Rabbits (and a knight) still stood behind the
+    card of a folio held: the page kept on the desk is a copy of the canvas, which at that moment still shows the frame
+    before the last rabbit fell; the land is now drawn once more without the horde before any event of that step is
+    handled, while the folio's tiles are still painted (a first try redrew it after the tiles had been cleared for the
+    next page and kept a blank sheet: tiles are painted a few a frame). Sheep in a flock overlapped back over front: a
+    flock is sorted by the line each sheep stands on and no two stand in each other. On a phone the tree jumped back to
+    Jesse when a medallion was chosen: the card under it changes height, the canvas with it, and a changed size framed
+    the tree anew; it is framed only when it opens. The tooltip stood far from the pointer with larger text: its place
+    was set in pixels the page's zoom then scaled. A golden hare paid fifty rabbits' worth on every folio, nothing beside
+    a late wave; it pays a twenty-fifth of the folio's whole horde (fifty rabbits at least). Pacing unchanged: eager
+    42.6 to 42.8, casual 77.9 to 78.9 minutes.
   - *Not done, and it should be said plainly.* The owner's larger complaints stand in part: the art's manner is as it
     was, the tree is shorter but most of its medallions are still strengths, and the lands have names now but are still
     discs of meadow, though dressed now. Smoke rises from the cottages now (three soft puffs a house on the
