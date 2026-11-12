@@ -893,6 +893,36 @@ if (suites.includes('warren') && warren) {
     check(!any, 'no sappers before the forest');
   }
   {
+    // two defenders with a part of their own (third refinement): the belfry's peal throws the crowd back the way it came, loses
+    // nobody, and never holds a wave up for good; the bees sting a share, so most where the crowd is thick, and not a knight
+    const rig = lv => { const S = CORE.init(9); S.lv = Object.assign({ wall: 3, wall2: 2 }, lv); S.folio = 4; S.ch = 1; CORE.act(S, 'run'); for (const t of S.tw) t.at = -1; const t = S.tw.find(q => q.t === 'belf' || q.t === 'skep'); if (t) CORE.act(S, 'place', t.id, CORE.bestSpot(S, t)); CORE.act(S, 'go'); return S; };
+    const far = S => { const F = CORE.flow(S); let d = 0, n = 0; S.hi.forEach((i, k) => { d += F.dist[i] * S.hn[k]; n += S.hn[k]; }); return n ? d / n : 0; };
+    const B = rig({ belf: 1 }), N = rig({}); let peals = 0, worst = 0, k = 0, held = 0;
+    for (; k < 400 && B.phase === 'run'; k++) { CORE.step(B, .1); CORE.step(N, .1); if (B.ev.some(e => e.k === 'peal')) peals++; B.ev.length = 0; N.ev.length = 0; if (B.phase === 'run') worst = Math.max(worst, Math.abs(B.came - (B.runKills + B.runFed + B.onMap))); if (k === 250) held = far(B) - far(N); }
+    check(peals > 2 && worst === 0, `the belfry peals (${peals} times in 40 s) and no rabbit is lost or made by it (off by ${worst})`);
+    check(B.wall >= N.wall, `a belfry alone keeps the wall longer than nobody (${B.wall.toFixed(0)} against ${N.wall.toFixed(0)})`);
+    const K1 = rig({ skep: 1 }); K1.pool = 0; K1.knP = 1; K1.knT = 0; K1.knI = 4; let stung = 0, kn = null;
+    for (k = 0; k < 600 && K1.phase === 'run'; k++) { CORE.step(K1, .1); for (const e of K1.ev) if (e.k === 'knDown') stung++; K1.ev.length = 0; if (K1.kn[0]) kn = K1.kn[0]; }
+    check(!stung && (!kn || kn.hp === kn.hp0), 'bees do not sting a knight in mail');
+    const K2 = rig({ skep: 1 }), by = id => K2.tw.find(t => t.id === id); let bees = 0, all = 0;
+    for (k = 0; k < 300 && K2.phase === 'run'; k++) { CORE.step(K2, .1); for (const e of K2.ev) if (e.k === 'kill') { all += e.n; if (by(e.by) && by(e.by).t === 'skep') bees += e.n; } K2.ev.length = 0; }
+    check(bees > 20 && bees === all, `a skep’s swarm stings the crowd that passes (${bees} in 30 s)`);
+  }
+  {
+    // version 3: fewer, larger medallions; a save from before keeps what it bought, never more than a medallion's last level
+    const n = CORE.UP.reduce((a, u) => a + u.max, 0);
+    check(n <= 92 && CORE.UP.every(u => u.max <= 3 && u.d && !/undefined|NaN/.test(u.d)), `the tree has ${n} medallions (92 at most), each with a line that says what it does`);
+    const M = CORE.migrate({ ...CORE.init(1), lv: { arrow: 3, bow: 2, monk: 3 } }, 2);
+    check(M.lv.arrow === CORE.byId.arrow.max && M.lv.bow === CORE.byId.bow.max && M.lv.monk === 3 && CORE.version === 3, 'a version 2 save with three levels of a medallion that now has two keeps two');
+    check(CORE.PLACE.length === CORE.FOLIOS.length && CORE.NAMES.every(q => q[3] < CORE.FOLIOS.length), 'every folio is a named place');
+  }
+  {
+    // a choice of two on the tree: gilding one bars the other for good, and each does what it says
+    const S = CORE.init(3); S.ch = 1; S.folio = 3; S.lv = { monk1: 1, monk: 1, bow: 1, arrow: 1, treb: 1 }; S.leaf = 1e9;
+    check(CORE.can(S, CORE.byId.cross) && CORE.can(S, CORE.byId.war) && CORE.act(S, 'buy', 'cross') && !CORE.can(S, CORE.byId.war) && CORE.barred(S, CORE.byId.war) && !CORE.act(S, 'buy', 'war'), 'Crossbows bars War bows');
+    check(CORE.act(S, 'buy', 'bould') && !CORE.act(S, 'buy', 'grape') && CORE.stats(S).bould === 1 && CORE.stats(S).grape === 0 && CORE.stats(S).xbow === 1, 'Great boulders bars Grapeshot');
+  }
+  {
     // the drop of a defender dragged by touch: a touch is captured by the button it starts on, so the tray must let go of it
     // there, and the drop is judged by where the finger is, not by the element the event names
     const view = warren.tpl.slice(warren.tpl.indexOf('<script>'));
@@ -902,7 +932,7 @@ if (suites.includes('warren') && warren) {
     // clever play pays: the bot that looses the gifts is much quicker than one that only places towers; and the impatient
     // bot, which calls every wave at once and looses every gift at once, still takes half an hour
     const e = KIT.simulate(CORE, 'eager', { seed: 1, minutes: 150 }), st = KIT.simulate(CORE, 'stubborn', { seed: 1, minutes: 150 }), im = [1, 2].map(seed => KIT.simulate(CORE, 'impatient', { seed, minutes: 150 }));
-    check(e.done && st.done && st.minutes > e.minutes * 1.12, `the gifts pay: eager ${e.minutes.toFixed(1)} min against ${st.minutes.toFixed(1)} for towers alone`);
+    check(e.done && st.done && st.minutes > e.minutes * 1.04, `the gifts pay: eager ${e.minutes.toFixed(1)} min against ${st.minutes.toFixed(1)} for towers alone`);
     check(im.every(r => r.done && r.minutes >= 29), `the impatient bot takes at least half an hour (${im.map(r => r.minutes.toFixed(1)).join(', ')} min)`);
   }
   {

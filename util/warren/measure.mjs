@@ -11,7 +11,7 @@ export function run(botName, seed = 1, opt = {}) {
   const dt = .1; let t = 0; const fol = []; let cur = null, lastBuy = 0, maxNoBuy = 0, by = {}, uses = {};
   const startF = f => { cur = { f, t0: t, runs: 0, lost: 0, noBuy: 0, kills0: 0, prog60: null, kills: {}, wallEnd: [] }; fol.push(cur); };
   startF(0);
-  while (t < 200 * 60 && !CORE.done(S)) {
+  while (t < (opt.max || 200) * 60 && !CORE.done(S)) {
     S.ev.length = 0; bot(S, mem, dt); CORE.step(S, dt); t += dt;
     const any = CORE.UP.some(u => CORE.can(S, u)); if (any) lastBuy = t; 
     for (const e of S.ev) {
