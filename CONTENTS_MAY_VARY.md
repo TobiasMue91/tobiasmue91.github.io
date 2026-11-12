@@ -1502,8 +1502,9 @@ still undone, most valuable first:
     excluded the field, the village and the road's end they belong to.
   - *Not done, and it should be said plainly.* The owner's larger complaints stand in part: the art's manner is as it
     was, the tree is shorter but most of its medallions are still strengths, and the lands have names now but are still
-    discs of meadow, though dressed now. Still to do in the art: the castle's own surroundings (a moat, a bailey), smoke
-    from the cottages, a mill at Miller's Ford, and the knights and Jesse in the land's hatched manner. What it would take, in the order this session would do it: (1) the
+    discs of meadow, though dressed now. Smoke rises from the cottages now (three soft puffs a house on the
+    game's clock, none with reduced motion). Still to do in the art: the castle's own surroundings (a moat, a bailey), a
+    mill at Miller's Ford, and the knights and Jesse in the land's hatched manner. What it would take, in the order this session would do it: (1) the
     tree cut to about forty medallions, every one of which changes what is on the land, with a choice of two at each
     defender's third step, as Kingdom Rush does; (2) every folio a land with a reason (a ford, a mill race, a walled
     village, a pass), drawn from a plan and not from discs, with two or three places where a defender plainly belongs;
