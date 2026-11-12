@@ -1485,9 +1485,25 @@ still undone, most valuable first:
     in the scribe's red where its features are (The Warren, Monks' Wood, Carp Pond, Thorpe, Gallows Cross), on a wash of
     vellum so the names read over meadow and wood. Three seeds: eager 42.0 to 43.4, casual 77.1 to 78.4, impatient
     about 33, stubborn 45 to 47 minutes. On a desktop the tray's seven kinds no longer run under the gifts.
+  - *The land, dressed* (the owner: nothing against the style, but it is "strewn about without love", and wants more
+    detail and finish). Looked at whole first: a uniform lawn, woods as heaps of trees on it, fields and a village with
+    nothing round them, a pond alone. Now a pass works out, once a folio, what belongs where, each thing by a rule tied
+    to what it belongs to, never by chance alone, and paints it into the tiles back to front (`dressOf`, `drawProp`;
+    `?dress=0` leaves it out; the rules never see it, so nothing in the balance moved): along the roads post-and-rail
+    fences (only where the road runs across the page: seen end on a fence is a pole), milestones with a red cross, bushes
+    with berries, and a signpost where a road ends at another; by the fields, at the end away from the road, a pair of
+    ricks; by each cottage a fenced garden in rows and one well a village; at a wood's edge stumps with a felled log,
+    mushrooms, bushes; in open meadow away from the horde's ways sheep in flocks of three to five, some grazing; on each
+    pond two ducks; a stone cross on steps at Gallows Cross. The meadow itself has large soft patches of lighter and
+    darker grass and its flowers grow in drifts of one colour instead of singly; a wood has a floor (one shade under all
+    its trees and a little past them, with leaf litter), so it reads as a place. Each prop was looked at alone at
+    sixteen pixels a unit: the ricks' outline had been stroked along the last straw line instead of the silhouette, the
+    cross stood on the road, and ricks, wells and signposts first came nowhere because their own rule for open ground
+    excluded the field, the village and the road's end they belong to.
   - *Not done, and it should be said plainly.* The owner's larger complaints stand in part: the art's manner is as it
     was, the tree is shorter but most of its medallions are still strengths, and the lands have names now but are still
-    discs of meadow with woods dropped on them. This is not yet the rebuild that was asked for. What it would take, in the order this session would do it: (1) the
+    discs of meadow, though dressed now. Still to do in the art: the castle's own surroundings (a moat, a bailey), smoke
+    from the cottages, a mill at Miller's Ford, and the knights and Jesse in the land's hatched manner. What it would take, in the order this session would do it: (1) the
     tree cut to about forty medallions, every one of which changes what is on the land, with a choice of two at each
     defender's third step, as Kingdom Rush does; (2) every folio a land with a reason (a ford, a mill race, a walled
     village, a pass), drawn from a plan and not from discs, with two or three places where a defender plainly belongs;

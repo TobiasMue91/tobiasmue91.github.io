@@ -6268,6 +6268,82 @@ let fieldMask = null, fieldF = -1;
 const inField = i => { if (fieldF !== S.folio) { fieldF = S.folio; fieldMask = new Uint8Array(NC); for (const q of fieldsOf(S.folio)) { const [fx, fy, fw, fh, an] = q, ca = cos(-an), sa = sin(-an), R = hypot(fw, fh) / 2 + 3;
   for (let y = fy - R; y <= fy + R; y += 2) for (let x = fx - R; x <= fx + R; x += 2) { const dx = x - fx, dy = y - fy, u = dx * ca - dy * sa, v = dx * sa + dy * ca; if (abs(u) < fw / 2 + 1.5 && abs(v) < fh / 2 + 1.5) { const k = cellAt(x, y); if (k >= 0) fieldMask[k] = 1; } } } }
  return fieldMask[i] === 1; };
+/* —— dressing the land. Nothing here is scattered: every thing is set by a rule tied to what it belongs to (a fence and a
+ milestone to a road, stumps and mushrooms to a wood's edge, ricks to a field, a garden and a well to a cottage, sheep to open
+ meadow away from the horde's ways, ducks to a pond), worked out once a folio and painted into the tiles, back to front. The
+ rules never see any of it. —— */
+const dressC = [];
+function dressOf(f) {
+ if (dressC[f]) return dressC[f];
+ const T = CORE.terrain(f), tr = CORE.flow({ folio: f, tw: [] }).tr, out = [], G = CORE.GRASS, FL = fieldsOf(f);
+ const at = (x, y) => { const i = cellAt(x, y); return i < 0 ? 0 : T[i]; };
+ const inF = (x, y, m) => FL.some(q => hypot(q[0] - x, q[1] - y) < hypot(q[2], q[3]) / 2 + m);
+ const open = (x, y, r) => { for (const [dx, dy] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) if (at(x + dx, y + dy) !== G) return false; return hypot(x, y) > 27 && !inF(x, y, 1.5) && !FOLIOS[f].src.some(q => abs((q[0] + q[2]) / 2 - x) < 16 && abs((q[1] + q[3]) / 2 - y) < 14); };
+ const busy = (x, y, r) => { const c = cellAt(x, y), g = ceil(r / CS); for (let dy = -g; dy <= g; dy++) for (let dx = -g; dx <= g; dx++) if (tr[c + dy * GW + dx] > 0) return true; return false; };
+ const near = (x, y, t, r) => { for (let a = 0; a < 8; a++) if (at(x + cos(a * .785) * r, y + sin(a * .785) * r) === t) return true; return false; };
+ const far = (x, y, r) => !out.some(p => p[1] !== 'wash' && p[1] !== 'drift' && hypot(p[2] - x, p[3] - y) < r);
+ for (let i = 0; i <= f; i++) for (const o of FOLIOS[i].add) {
+  if (o[0] === 'p' && o[1] === CORE.ROAD) { let run = 10;
+   for (let s = 3; s + 3 < o.length; s += 2) { const ax = o[s], ay = o[s + 1], L = hypot(o[s + 2] - ax, o[s + 3] - ay), ux = (o[s + 2] - ax) / L, uy = (o[s + 3] - ay) / L;
+    for (let t = 0; t < L; t++) { if (++run < 22) continue; run = 0; const k = hash(ax | 0, (ay + t) | 0, 81), sd = hash(ax | 0, t | 0, 82) < .5 ? -1 : 1, off = o[2] / 2 + 3.4, x = ax + (ux * t - uy * off * sd), y = ay + (uy * t + ux * off * sd);
+     if (k < .4 && abs(ux) > .55) { const P = []; for (let u = 0; u <= 17.5; u += 3.5) { const px = x + ux * u, py = y + uy * u; if (!open(px, py, 1)) break; P.push(px, py); } if (P.length >= 6) { out.push([max(P[1], P[P.length - 1]), 'fence', P[0], P[1], P]); run = -12; } }
+     else if (k < .52) { if (open(x, y, 1.5) && far(x, y, 6)) out.push([y, 'stone', x, y, k]); }
+     else if (k < .72) { if (open(x, y, 2) && far(x, y, 5)) out.push([y + 1, 'bush', x, y, k]); }
+    } }
+   // a signpost where a road ends at another: tried at both ends, on either side
+   for (const e of [3, o.length - 2]) { let done = 0; for (const [dx, dy] of [[6, 4], [-6, 4], [6, -5], [-6, -5]]) { const bx = o[e] + dx, by = o[e + 1] + dy; if (!done && hypot(bx, by) > 44 && open(bx, by, 1.5) && far(bx, by, 8)) { out.push([by, 'post', bx, by, i]); done = 1; } } } }
+  if (o[0] === 'r' && o[1] === CORE.HOUSE) { const w = o[4] - o[2], gx = (o[2] + o[4]) / 2 + (hash(o[2] | 0, 5, 83) < .5 ? -w : w) * .95, gy = o[5] - 1.2;
+   if (open(gx, gy, 3)) out.push([gy + 2.2, 'garden', gx, gy, o[2] | 0]);
+   for (const [dx, dy] of [[-5, 6], [o[4] - o[2] + 5, 6], [-6, -2]]) { const wx0 = o[2] + dx, wy0 = o[5] + dy; if (open(wx0, wy0, 2) && far(wx0, wy0, 5) && !out.some(p => p[1] === 'well' && hypot(p[2] - wx0, p[3] - wy0) < 70)) { out.push([wy0, 'well', wx0, wy0, 0]); break; } } }
+  if (o[0] === 'd' && o[1] === CORE.WATER) for (let k = 0; k < 2; k++) out.push([-1e8, 'duck', o[2] + (k ? 2.6 : -2), o[3] + (k ? 1.4 : -1.2), k]);
+ }
+ // ricks stand by the fields, at the end away from the road
+ for (const q of FL) { const x = q[0] - sin(q[4]) * (q[3] / 2 + 3.5) * (hash(q[5], 1, 85) < .5 ? 1 : -1), y = q[1] + cos(q[4]) * (q[3] / 2 + 3.5) * (hash(q[5], 1, 85) < .5 ? 1 : -1); if (hash(q[5], 2, 86) < .75 && hypot(x, y) > 30 && [[0, 0], [3, 0], [-2, 0], [0, 2], [4, 1]].every(([dx, dy]) => at(x + dx, y + dy) === G) && !FL.some(r => r !== q && hypot(r[0] - x, r[1] - y) < hypot(r[2], r[3]) / 2) && !busy(x, y, 3)) out.push([y + 1, 'rick', x, y, q[5]]); }
+ // the meadow and the woods' edges, on a lattice so that nothing crowds
+ for (let gy = -16; gy <= 26; gy++) for (let gx = -22; gx <= 18; gx++) {
+  const x = gx * 18 + (hash(gx, gy, 87) - .5) * 11, y = gy * 18 + (hash(gx, gy, 88) - .5) * 11, h = hash(gx, gy, 89); if (at(x, y) !== G) continue;
+  out.push([-1e9, 'wash', x, y, h]);
+  if (!open(x, y, 2.5)) continue;
+  if (near(x, y, CORE.TREE, 6)) { if (h < .3 && far(x, y, 7)) out.push([y, 'stump', x, y, h]); else if (h < .55) out.push([y, 'shroom', x, y, h]); else if (h < .8 && far(x, y, 6)) out.push([y + 1, 'bush', x, y, h]); }
+  else if (h < .36) out.push([-1e9 + 1, 'drift', x, y, h]);
+  else if (h < .62 && !busy(x, y, 12) && open(x, y, 6) && far(x, y, 40)) out.push([y + 3, 'sheep', x, y, h]);
+ }
+ if (f >= 8) for (const [dx, dy] of [[8, 6], [-9, 6], [9, -6], [-9, -7], [0, 10]]) if (open(200 + dx, 226 + dy, 2.5)) { out.push([226 + dy, 'cross', 200 + dx, 226 + dy, 0]); break; }
+ out.sort((a, b) => a[0] - b[0]);
+ return (dressC[f] = out);
+}
+const DROP = (c, x, y, rx, ry) => oval(c, 'rgba(30,25,10,.26)', x + rx * .2, y + ry * .3, rx, ry);
+function drawProp(c, p) {
+ const k = p[1], x = p[2], y = p[3], h = p[4], ink = C.ink; c.lineJoin = 'round'; c.lineCap = 'round';
+ if (k === 'wash') { const lit = h < .5, r = 9 + h * 9; c.save(); c.translate(x, y); c.rotate(h * 6); c.scale(1, .55); c.fillStyle = rad(c, 0, 0, 0, 0, 0, r, lit ? 'rgba(236,240,150,.2)' : 'rgba(30,62,22,.2)', lit ? 'rgba(236,240,150,0)' : 'rgba(30,62,22,0)'); dot(c, 0, 0, r); c.fill(); c.restore(); }
+ else if (k === 'drift') { const col = ['#fbf6ea', '#f0c84a', '#d8483a', '#b07ad8', '#9ab8f0'][h * 10 % 5 | 0], a = h * 9;
+  for (let j = 0; j < 24; j++) { const r = Math.sqrt(hash(j, x | 0, 90)), t = hash(j, y | 0, 91) * TAU, u = x + (cos(t) * 7.5 * cos(a) - sin(t) * 3 * sin(a)) * r, v = y + (cos(t) * 7.5 * sin(a) + sin(t) * 3 * cos(a)) * r * .7; pen(c, 0, '#4f7a2c', .18); ln(c, u, v, u + .1, v + 1.1); disc(c, col, u, v, .5); disc(c, '#f3d77a', u, v, .17); } }
+ else if (k === 'fence') { const P = h; pen(c, 0, 'rgba(30,25,10,.22)', .5); c.beginPath(); c.moveTo(P[0] + .5, P[1] + .5); for (let j = 2; j < P.length; j += 2) c.lineTo(P[j] + .5, P[j + 1] + .5); c.stroke();
+  for (const dy of [-.75, -1.5]) { pen(c, 0, ink, .5); c.beginPath(); c.moveTo(P[0], P[1] + dy); for (let j = 2; j < P.length; j += 2) c.lineTo(P[j], P[j + 1] + dy + ((j >> 1) & 1 ? .12 : -.1)); c.stroke(); pen(c, 0, '#b98850', .28); c.stroke(); }
+  for (let j = 0; j < P.length; j += 2) { pen(c, lin(c, P[j] - .3, 0, P[j] + .3, 0, '#b07a44', '#7a4e26'), ink, .16); c.beginPath(); c.rect(P[j] - .3, P[j + 1] - 2.1, .6, 2.2); fs(c); } }
+ else if (k === 'stone') { DROP(c, x, y, 1.2, .45); c.beginPath(); c.moveTo(x - .7, y); c.lineTo(x - .7, y - 1.3); c.quadraticCurveTo(x, y - 2.3, x + .7, y - 1.3); c.lineTo(x + .7, y); c.closePath(); pen(c, lin(c, x - .7, 0, x + .7, 0, '#e3ddd0', '#a59d8e'), ink, .18); fs(c); pen(c, 0, '#8e2416', .16); ln(c, x - .3, y - 1.1, x + .3, y - 1.1); ln(c, x, y - 1.4, x, y - .7); }
+ else if (k === 'post') { DROP(c, x, y, 1.3, .45); pen(c, '#8a5a2e', ink, .16); c.beginPath(); c.rect(x - .22, y - 4.6, .44, 4.6); fs(c); for (const [dy, sd] of [[-4.3, 1], [-3.3, -1]]) { c.beginPath(); c.moveTo(x, y + dy - .4); c.lineTo(x + sd * 2.2, y + dy - .4); c.lineTo(x + sd * 2.7, y + dy); c.lineTo(x + sd * 2.2, y + dy + .4); c.lineTo(x, y + dy + .4); c.closePath(); pen(c, '#e9dcbc', ink, .16); fs(c); } }
+ else if (k === 'bush') { const r = 1.7 + h * .9, L = [[-r * .7, -r * .5, r * .7], [r * .6, -r * .55, r * .75], [0, -r * 1.05, r * .8]]; DROP(c, x, y, r * 1.5, r * .45);
+  pen(c, 0, ink, .5); for (const [dx, dy, q] of L) { dot(c, x + dx, y + dy, q); c.stroke(); } for (const [dx, dy, q] of L) disc(c, '#2f6a2c', x + dx, y + dy, q);
+  for (const [dx, dy, q] of L) disc(c, 'rgba(120,180,70,.55)', x + dx - q * .25, y + dy - q * .3, q * .55); if (h > .5) for (let j = 0; j < 5; j++) disc(c, '#c9301c', x + (hash(j, x | 0, 92) - .5) * r * 2, y - r * .3 - hash(j, y | 0, 93) * r * 1.1, .22); }
+ else if (k === 'stump') { DROP(c, x, y, 1.6, .5); pen(c, lin(c, x - 1, 0, x + 1, 0, '#8a5a2e', '#5a3a1e'), ink, .18); c.beginPath(); c.moveTo(x - 1.05, y - 1.1); c.lineTo(x - 1.25, y); c.quadraticCurveTo(x, y + .5, x + 1.25, y); c.lineTo(x + 1.05, y - 1.1); c.closePath(); fs(c); pen(c, '#e2c690', ink, .16); ell(c, x, y - 1.1, 1.05, .45); fs(c); pen(c, 0, 'rgba(120,80,40,.7)', .1); ell(c, x, y - 1.1, .55, .22); c.stroke();
+  const lx = x + (h < .15 ? -4.2 : 3.4), ly = y + .6; DROP(c, lx, ly, 2.4, .5); pen(c, lin(c, 0, ly - 1, 0, ly, '#9a6a3a', '#5a3a1e'), ink, .18); c.beginPath(); c.moveTo(lx - 2, ly - .9); c.lineTo(lx + 1.6, ly - .9); c.arc(lx + 1.6, ly - .45, .45, -PI / 2, PI / 2); c.lineTo(lx - 2, ly); c.closePath(); fs(c); pen(c, '#e2c690', ink, .14); ell(c, lx - 2, ly - .45, .3, .45); fs(c); }
+ else if (k === 'shroom') { for (let j = 0; j < 3; j++) { const u = x + (j - 1) * 1.1 + (hash(j, x | 0, 94) - .5) * .6, v = y + (j & 1) * .5, q = .42 + hash(j, y | 0, 95) * .25; pen(c, '#f3ead6', ink, .1); c.beginPath(); c.rect(u - q * .25, v - q * 1.4, q * .5, q * 1.4); fs(c); c.beginPath(); c.arc(u, v - q * 1.4, q, PI, 0); c.closePath(); pen(c, h < .42 ? '#c9301c' : '#b98850', ink, .12); fs(c); if (h < .42) { disc(c, '#fff', u - q * .35, v - q * 1.75, q * .16); disc(c, '#fff', u + q * .3, v - q * 1.65, q * .14); } } }
+ else if (k === 'rick') { for (const [dx, dy, q] of [[0, 0, 1], [3.3, .8, .82]]) { const u = x + dx, v = y + dy; DROP(c, u, v, 2.3 * q, .7 * q); c.beginPath(); c.moveTo(u - 1.9 * q, v); c.bezierCurveTo(u - 2.1 * q, v - 2.3 * q, u - .9 * q, v - 3.8 * q, u, v - 3.9 * q); c.bezierCurveTo(u + .9 * q, v - 3.8 * q, u + 2.1 * q, v - 2.3 * q, u + 1.9 * q, v); c.quadraticCurveTo(u, v + .6 * q, u - 1.9 * q, v); c.closePath();
+   c.fillStyle = lin(c, u - 2 * q, 0, u + 2 * q, 0, '#f6dc84', '#e0b94e', '#b98a2a'); c.fill(); c.save(); c.clip(); pen(c, 0, 'rgba(120,80,20,.5)', .12); for (let j = -5; j <= 5; j++) ln(c, u + j * .2 * q, v - 3.9 * q, u + j * .45 * q, v + .4); c.restore(); c.beginPath(); c.moveTo(u - 1.9 * q, v); c.bezierCurveTo(u - 2.1 * q, v - 2.3 * q, u - .9 * q, v - 3.8 * q, u, v - 3.9 * q); c.bezierCurveTo(u + .9 * q, v - 3.8 * q, u + 2.1 * q, v - 2.3 * q, u + 1.9 * q, v); c.quadraticCurveTo(u, v + .6 * q, u - 1.9 * q, v); c.closePath(); pen(c, 0, ink, .18); c.stroke(); pen(c, 0, '#7a4e26', .2); ln(c, u, v - 3.9 * q, u, v - 4.7 * q); } }
+ else if (k === 'garden') { DROP(c, x, y, 4, 1.2); pen(c, '#6b4d2c', ink, .16); c.beginPath(); c.rect(x - 3.6, y - 1.6, 7.2, 3.2); fs(c); for (let r = 0; r < 3; r++) for (let j = 0; j < 6; j++) { const u = x - 3 + j * 1.2, v = y - 1 + r * 1; disc(c, r === 1 ? '#7fb24a' : '#3f8a3a', u, v, .38); disc(c, 'rgba(220,240,160,.6)', u - .1, v - .12, .15); }
+  pen(c, 0, ink, .34); c.strokeRect(x - 3.9, y - 2.2, 7.8, 4.1); pen(c, 0, '#b98850', .2); c.strokeRect(x - 3.9, y - 2.2, 7.8, 4.1); for (let j = 0; j <= 4; j++) { pen(c, '#8a5a2e', ink, .12); c.beginPath(); c.rect(x - 4.05 + j * 1.95, y + 1.1, .3, 1.2); fs(c); } }
+ else if (k === 'well') { DROP(c, x, y, 2.3, .7); pen(c, lin(c, x - 1.5, 0, x + 1.5, 0, '#d8d2c4', '#8f8878'), ink, .18); c.beginPath(); c.moveTo(x - 1.5, y - 1.5); c.lineTo(x - 1.5, y - .2); c.quadraticCurveTo(x, y + .5, x + 1.5, y - .2); c.lineTo(x + 1.5, y - 1.5); c.closePath(); fs(c); pen(c, '#1c2c4a', ink, .16); ell(c, x, y - 1.5, 1.5, .55); fs(c);
+  pen(c, '#8a5a2e', ink, .14); for (const sd of [-1, 1]) { c.beginPath(); c.rect(x + sd * 1.45 - .16, y - 4.6, .32, 3.4); fs(c); } pen(c, 0, ink, .12); ln(c, x, y - 4.2, x, y - 2.6); pen(c, '#8a5a2e', ink, .12); c.beginPath(); c.rect(x - .35, y - 2.7, .7, .6); fs(c);
+  poly(c, x - 2.3, y - 4.4, x, y - 6, x + 2.3, y - 4.4); pen(c, lin(c, x - 2, 0, x + 2, 0, '#c9452f', '#8e2416'), ink, .18); fs(c); }
+ else if (k === 'sheep') { for (let j = 0; j < 3 + (h * 40 % 3 | 0); j++) { const u = x + (hash(j, x | 0, 96) - .5) * 11, v = y + (hash(j, y | 0, 97) - .5) * 6, fl = hash(j, 3, 98) < .5 ? -1 : 1, gr = hash(j, 4, 99) < .4;
+   DROP(c, u, v, 1.7, .5); pen(c, 0, ink, .22); for (const lx of [-.8, -.3, .4, .9]) ln(c, u + lx, v - .6, u + lx, v);
+   const L = [[-.8, -1.25, .75], [0, -1.5, .85], [.8, -1.25, .75], [0, -.95, .9]]; pen(c, 0, ink, .36); for (const [dx, dy, q] of L) { dot(c, u + dx, v + dy, q); c.stroke(); } for (const [dx, dy, q] of L) disc(c, '#f4efe3', u + dx, v + dy, q); disc(c, 'rgba(160,150,130,.35)', u + .2, v - .8, .7);
+   const hx = u + fl * 1.5, hy = v - (gr ? .55 : 1.5); pen(c, '#2b1d14', ink, .1); ell(c, hx, hy, .5, .42, fl * (gr ? .9 : .2)); fs(c); ell(c, hx - fl * .35, hy - .32, .2, .12, -fl * .6); c.fill(); } }
+ else if (k === 'duck') { pen(c, 0, 'rgba(255,255,255,.5)', .12); ell(c, x, y + .2, 1.5, .5); c.stroke(); pen(c, h ? '#f4efe3' : '#8a6a3c', ink, .12); ell(c, x, y, .8, .45); fs(c); dot(c, x + .75, y - .45, .34); fs(c); pen(c, '#e89a2a', 0); poly(c, x + 1.05, y - .5, x + 1.5, y - .38, x + 1.05, y - .3); c.fill(); }
+ else if (k === 'cross') { DROP(c, x, y, 2.6, .8); const st = lin(c, x - 1.6, 0, x + 1.6, 0, '#e3ddd0', '#9a9283'); pen(c, st, ink, .2); c.beginPath(); c.rect(x - 1.9, y - .7, 3.8, .9); fs(c); c.beginPath(); c.rect(x - 1.3, y - 1.4, 2.6, .8); fs(c);
+  c.beginPath(); c.moveTo(x - .4, y - 1.4); c.lineTo(x - .4, y - 4.6); c.lineTo(x - 1.5, y - 4.6); c.lineTo(x - 1.5, y - 5.4); c.lineTo(x - .4, y - 5.4); c.lineTo(x - .4, y - 6.6); c.lineTo(x + .4, y - 6.6); c.lineTo(x + .4, y - 5.4); c.lineTo(x + 1.5, y - 5.4); c.lineTo(x + 1.5, y - 4.6); c.lineTo(x + .4, y - 4.6); c.lineTo(x + .4, y - 1.4); c.closePath(); fs(c); }
+}
 function paintTile(c, tx, ty) {
  const x0 = tx * TU, y0 = ty * TU, f = S.folio, T = CORE.terrain(f), END = CORE.terrain(FOLIOS.length - 1), X0 = cX(0) - 2, Y0 = cY(0) - 2;
  if (wornK !== f) { const tr = CORE.flow({ folio: f, tw: [] }).tr; worn = new Float32Array(NC); wornK = f; for (let i = GW * 3; i < NC - GW * 3; i++) if (tr[i] > 0) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) worn[i + dy * GW + dx] = max(worn[i + dy * GW + dx], 1 - hypot(dx, dy) / 3.2); }
@@ -6365,11 +6441,17 @@ function paintTile(c, tx, ty) {
   else if (h < .12) { pen(c, 0, 'rgba(60,90,30,.6)', .3); c.beginPath(); for (let j = -2; j <= 2; j++) { c.moveTo(x + j * .5, y + 1); c.quadraticCurveTo(x + j * .7, y - .5, x + j * 1.1, y - 2.4 + abs(j) * .5); } c.stroke(); }
  });
  c.restore();
+ // the land's dressing, ground first and then what stands, back to front
+ if (QS.get('dress') !== '0') for (const p of dressOf(f)) if (p[2] > x0 - 24 && p[2] < x0 + TU + 24 && p[3] > y0 - 14 && p[3] < y0 + TU + 16) drawProp(c, p);
  // what stands on the land, back to front
  layer(t => t === T_.ROCK, (x, y, i, h) => { if (h < .35) c.drawImage(ROCKS[i % 3], x - 4, y - 3.8, 8, 6); });
  layer(t => t === T_.SCRUB, (x, y, i, h, h2) => { if (h < .5) c.drawImage(FERN, x - 4 + h2 * 2, y - 5.5, 8, 6.5); });
  for (const o of ops) if (o[0] === 'd' && o[1] === T_.ROCK && o[4] >= 12) { const w = o[4] * 2.2; c.drawImage(MOUNT, o[2] - w / 2, o[3] + o[4] * .3 - w * .62, w, w * .68); }
  // trees and cottages are painted into the page; one with someone standing behind it is drawn again over them (standing())
+ // the floor of a wood: one soft shade under all its trees and a little past them, with leaf litter, so a wood is a place and
+ // not a heap of trees on a lawn
+ c.fillStyle = 'rgba(22,44,18,.2)'; c.beginPath(); layer(t => t === T_.TREE, (x, y) => { c.moveTo(x + 4.2, y + 1.6); c.ellipse(x, y + 1.6, 4.2, 3, 0, 0, TAU); }); c.fill();
+ layer(t => t === T_.TREE, (x, y, i, h, h2) => { if (h > .8) { disc(c, h2 < .5 ? 'rgba(150,100,40,.5)' : 'rgba(190,140,50,.45)', x + (h2 - .5) * 3, y + 2 + (h - .9) * 8, .3); disc(c, 'rgba(120,80,30,.45)', x - 1.2 + h2 * 2, y + 1.1, .24); } });
  // (in the order of the line each stands on, the same order the sorted pass uses, so a tree drawn again never changes places)
  { const L = []; layer(t => t === T_.TREE, (x, y, i, h, h2) => { if (h < .6) { const r = 4 + h2 * 2.4; L.push([y + .7 * r, x + (h2 - .5) * 3, y, r, i]); } }); L.sort((a, b) => a[0] - b[0] || a[4] - b[4]); for (const o of L) tree(c, o[1], o[2], o[3], o[4]); }
  for (const o of ops) if (o[0] === 'r') { if (o[1] === T_.HOUSE) cottage(c, o[2], o[3], o[4] - o[2], o[5] - o[3], o[2] | 0); else if (o[1] === T_.KEEP) castle(c, (o[2] + o[4]) / 2, (o[3] + o[5]) / 2); }
@@ -6880,7 +6962,7 @@ const tally = {}, pounce = {}; let bitten = 0, biteT = 0, tumbling = 0;
 function addFx(o) { if (!DIAG.fx && (o.k === 'chip' || o.k === 'spark' || o.k === 'tumble')) return; if (fx.length > (K.reduced ? 160 : 420)) { const k = fx.findIndex(p => p.k !== 'dragonPath'); if (k >= 0) fx.splice(k, 1); } fx.push(o); }
 function towerById(id) { return S.tw.find(t => t.id === id); }
 // the desktop's left page: who slew how many on this folio, and what has happened, in the scribe's hand
-const CHR = { by: {}, key: '' }, CHN = { monk: 'Archer monks', treb: 'Trebuchets', falc: 'Falconers', ferret: 'Ferrets', dragon: 'The dragon', ink: 'The inkpot', bell: 'The great bell', flood: 'The flood', fire: 'Fire arrows', king: 'The king’s fall' };
+const CHR = { by: {}, key: '' }, CHN = { monk: 'Archer monks', treb: 'Trebuchets', falc: 'Falconers', ferret: 'Ferrets', skep: 'Bee skeps', belf: 'Belfries', dragon: 'The dragon', ink: 'The inkpot', bell: 'The great bell', flood: 'The flood', fire: 'Fire arrows', king: 'The king’s fall' };
 // the chronicle folds away to its title and back, a click on the title; the save keeps which
 $('chron').querySelector('h3').addEventListener('click', () => { if (!S) return; S.chronShut = S.chronShut ? 0 : 1; foldChron(); K.save(); });
 function foldChron() { $('chron').classList.toggle('shut', !!(S && S.chronShut)); $('chron').querySelector('h3 i').textContent = S && S.chronShut ? '▸' : '▾'; }
@@ -8075,7 +8157,7 @@ K.debug = {
  ch: () => { const c = CH; CH = []; return c; },
  art: () => [KAT, FALC, FALC0, FERRET, (() => { const [c, q] = mk(120, 120); falconFly(q, 60, 60, 14, -PI / 2, 1); return c; })(), (() => { const [c, q] = mk(120, 120); falconFly(q, 60, 60, 14, 0, .2); return c; })(), HAND, MONK, CASTLE, BURROW, AT, ...TREES, ...HOUSES, ...ROCKS, ...Object.values(abBtn).map(b => b.querySelector('canvas'))].map(c => c.toDataURL()),
  walkers: () => PT.slice(0, 400).map(p => ({ x: +p.x.toFixed(1), y: +p.y.toFixed(1), v: +(p.v || 0).toFixed(2), a: +p.a.toFixed(2), out: p.out | 0, go: p.go | 0, wd: +(p.wd || 0).toFixed(2) })),
- state: () => S, churn: () => { const c = churn; churn = 0; return { c, n: PT.length }; },
+ dress: () => dressOf(S.folio), state: () => S, churn: () => { const c = churn; churn = 0; return { c, n: PT.length }; },
  toScreen: (x, y) => ({ x: sx(x), y: sy(y) }),
  spot: c => ({ x: sx(cX(c)), y: sy(cY(c)) + (drag && drag.touch ? 46 : 0) }),
  tray: () => [...document.querySelectorAll('#tray .tw')].map(b => { const r = b.getBoundingClientRect(); return { t: b.dataset.t, x: r.left + r.width / 2, y: r.top + r.height / 2 }; }),
