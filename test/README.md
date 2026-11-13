@@ -1513,6 +1513,7 @@ npm run test:wordexplainer  # Word Explainer suite (plain Node, no server or bro
 npm run test:names          # Baby Name Generator suite (plain Node, no server or browser)
 npm run test:cmv            # Contents May Vary suite (plain Node; its browser suite needs Playwright's Chromium)
 npm run test:aspect         # Aspect Ratio Calculator suite (plain Node; its page suite needs Playwright's Chromium and a server on :8099)
+npm run test:maze           # Escape the Maze suite (plain Node, no server or browser)
 ```
 
 `test/everything_converter.mjs` drives
@@ -2513,4 +2514,23 @@ Each core check was seen failing on purpose: a Euclid that stops at 1, a 1 % tol
 approximately, ambiguous separators always read as decimals, rounding half down, fit scaled by the larger factor, the
 ratio's terms swapped, typos refused, the CSV pair rule removed, fractions shown as decimals, the wrong nearby step, the
 list cap ignored and other scripts' digits left unread.
+
+## Escape the Maze
+
+```sh
+npm run test:maze                         # or: node test/escape_the_maze.mjs
+node test/escape_the_maze.mjs maze seed   # named suites only
+```
+
+`escape_the_maze.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` block of
+`games/escape_the_maze.html` in Node. The page builds its hedges, its parchment map, the daylight it gives you and the
+links people share from what that core generates, so a maze with a sealed-off pocket, a second hole in the outer hedge,
+or a seed that quietly yields a different maze would break the game in ways one look at one maze would not show.
+
+| suite | what it checks |
+| --- | --- |
+| `maze` | on 69 mazes (every level size, the daily size, 4 × 4 and 20 × 20): every cell reachable, walls agree from both sides, the outer hedge closed except one gate opening outward from a perimeter cell, the start on the south edge facing an open way, the gate the farthest allowed perimeter cell, `shortest` equal to the BFS distance plus the step out and to the length of `shortestPath` |
+| `moves` | `canMove` only through open sides and off the grid only through the gate; `sight` runs straight and stops at hedges |
+| `seed` | the same seed gives the same maze, different seeds differ, and golden hashes pin `garden-1`, `garden-7` and a daily seed - a generator change silently changes every level and every shared link, so updating them must be deliberate |
+| `pace` | an explorer bot that walks toward the light with memory, at a human-ish 0.32 s a step, 0.3 s a quarter turn and 0.7 s per junction, finishes every level inside 85 % of daylight on 24 mazes each, daylight is never absurdly generous, and it grows level by level; stars are 3 by sunset, 2 by 1.5 × daylight, 1 after |
 
