@@ -16,6 +16,8 @@
 //   moves  canMove leaves the grid only through the gate; sight stops at walls
 //   seed   the same seed gives the same maze; a golden hash of three seeds pins the generator, because a
 //          changed generator silently changes every shared link and every level
+//   walk   free walking on desktop: a walker pushed out of the hedges by collide never ends up inside one, never
+//          leaves the hedge ring except through the gate, and can walk every corridor of the shortest way out
 //   pace   an explorer bot that walks toward the light finishes every level well inside daylight at
 //          human pace, and daylight grows with the levels
 
@@ -28,7 +30,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const a = args.find(x => x.startsWith(`--${name}=`)); return a ? a.split('=')[1] : dflt; };
 const PAGE = opt('page', join(HERE, '..', 'games', 'escape_the_maze.html'));
-const ALL = ['maze', 'moves', 'seed', 'pace'];
+const ALL = ['maze', 'moves', 'seed', 'walk', 'pace'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -107,6 +109,36 @@ if (suites.includes('seed')) {
   for (const [s, want] of Object.entries(golden)) {
     const n = s.startsWith('garden') ? +s.split('-')[1] : 0, size = n ? M.levelSize(n) : 12, got = sig(M.generate(size, size, s));
     check(got === want, `${s}: generator unchanged (shared links and levels stay the same)`, `got ${got}, want ${want} - if the change is deliberate, update the golden value and say so`);
+  }
+}
+
+if (suites.includes('walk')) {
+  section('walk');
+  const C = 2.6, T = 0.5, R = 0.34;
+  const inside = (rects, x, z, r) => rects.some(q => { const cx = Math.min(Math.max(x, q[0]), q[2]), cz = Math.min(Math.max(z, q[1]), q[3]); return (x - cx) ** 2 + (z - cz) ** 2 < (r - 1e-3) ** 2; });
+  for (const { name, m } of SAMPLES.filter((_, i) => i % 6 === 0).concat(SAMPLES.slice(-3))) {
+    const rects = M.wallRects(m, C, T), rnd = M.rng('walk' + name);
+    let x = (m.start.x + 0.5) * C, z = (m.start.y + 0.5) * C, yaw = 0, bad = 0, escapes = 0, wrongExit = 0, steps = 0;
+    for (let i = 0; i < 6000; i++) {
+      if (rnd() < 0.05) yaw += (rnd() - 0.5) * 3; const sp = rnd() < 0.1 ? 0.3 : 0.09; // big lunges too
+      const r = M.collide(rects, x + Math.sin(yaw) * sp, z - Math.cos(yaw) * sp, R); x = r[0]; z = r[1]; steps++;
+      if (inside(rects, x, z, R)) bad++;
+      const cx = Math.floor(x / C), cz = Math.floor(z / C);
+      if (!M.inside(m, cx, cz)) { escapes++; const e = m.exit; if (!(cx === e.x + M.DX[e.dir] && cz === e.y + M.DY[e.dir])) wrongExit++;
+        x = (m.start.x + 0.5) * C; z = (m.start.y + 0.5) * C; }
+    }
+    check(bad === 0, `${name}: a walker never ends up inside a hedge`, `${bad} of ${steps} frames`);
+    check(wrongExit === 0, `${name}: the hedge ring is only left through the gate`, `${wrongExit} of ${escapes} escapes elsewhere`);
+    // follow the shortest way through cell centres at walking speed; collision must never stop it
+    const path = M.shortestPath(m).map(([cx, cz]) => [(cx + 0.5) * C, (cz + 0.5) * C]);
+    path.push([(m.exit.x + 0.5 + M.DX[m.exit.dir]) * C, (m.exit.y + 0.5 + M.DY[m.exit.dir]) * C]);
+    let px = path[0][0], pz = path[0][1], ok = true;
+    for (let i = 1; i < path.length && ok; i++) {
+      for (let f = 0; f < 200; f++) { const dx = path[i][0] - px, dz = path[i][1] - pz, d = Math.hypot(dx, dz); if (d < 0.05) break;
+        const s = Math.min(0.1, d), r = M.collide(rects, px + dx / d * s, pz + dz / d * s, R); px = r[0]; pz = r[1]; }
+      if (Math.hypot(path[i][0] - px, path[i][1] - pz) > 0.06) ok = false;
+    }
+    check(ok, `${name}: every corridor of the way out is wide enough to walk`);
   }
 }
 

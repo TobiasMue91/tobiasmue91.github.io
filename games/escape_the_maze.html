@@ -134,6 +134,8 @@ h1 { font-size: clamp(54px, 11vw, 112px); line-height: .9; margin: 10px 0 0; fon
   #results .menu { justify-items: stretch; }
   #results .links { justify-content: flex-start; }
 }
+.sens { display: flex; align-items: center; gap: 12px; font-size: 17px; font-style: italic; color: var(--ink); }
+.sens input { accent-color: #6b4a2b; width: 150px; }
 .card h2 { margin: 0; font-size: 38px; font-style: italic; font-weight: 600; line-height: 1; }
 .card .when { font-size: 15px; letter-spacing: .24em; text-transform: uppercase; color: var(--ink-soft); font-weight: 700; }
 .suns { display: flex; justify-content: center; gap: 10px; margin: 10px 0 6px; }
@@ -202,7 +204,8 @@ h1 { font-size: clamp(54px, 11vw, 112px); line-height: .9; margin: 10px 0 0; fon
         <h2 id="pauseName">Maze 1</h2>
         <div class="menu" style="margin:18px auto 4px">
           <button class="btn" id="resumeBtn">Keep walking</button>
-          <div class="links"><button class="link" id="restartBtn">Start this maze again</button><button class="link" id="soundBtn2">Sound on</button><button class="link" id="leaveBtn">Leave</button></div>
+          <label id="sensWrap" class="sens">Mouse speed <input id="sens" type="range" min="0.4" max="2.2" step="0.05" value="1"></label>
+          <div class="links"><button class="link" id="restartBtn">Start this maze again</button><button class="link" id="soundBtn2">Sound on</button><button class="link" id="moveBtn">Moving freely</button><button class="link" id="leaveBtn">Leave</button></div>
         </div>
       </div>
     </div>
@@ -297,13 +300,46 @@ var MAZE = (function () {
     while (dist[y * m.w + x] > 0) { for (var d = 0; d < 4; d++) { var nx = x + DX[d], ny = y + DY[d]; if (inside(m, nx, ny) && open(m, x, y, d) && dist[ny * m.w + nx] === dist[y * m.w + x] - 1) { x = nx; y = ny; break; } } out.push([x, y]); }
     return out.reverse();
   }
+  // Hedges as axis-aligned rectangles [x0, z0, x1, z1] in world units: merged runs plus a post at every corner.
+  function wallRects(m, C, T) {
+    var w = m.w, h = m.h, t2 = T / 2, rects = [], x, y, run, wall;
+    for (y = 0; y <= h; y++) { run = -1;
+      for (x = 0; x <= w; x++) { wall = x < w && (y < h ? !open(m, x, y, 0) : !open(m, x, h - 1, 2));
+        if (wall && run < 0) run = x;
+        if (!wall && run >= 0) { rects.push([run * C - t2, y * C - t2, x * C + t2, y * C + t2]); run = -1; } } }
+    for (x = 0; x <= w; x++) { run = -1;
+      for (y = 0; y <= h; y++) { wall = y < h && (x < w ? !open(m, x, y, 3) : !open(m, w - 1, y, 1));
+        if (wall && run < 0) run = y;
+        if (!wall && run >= 0) { rects.push([x * C - t2, run * C - t2, x * C + t2, y * C + t2]); run = -1; } } }
+    for (y = 0; y <= h; y++) for (x = 0; x <= w; x++) rects.push([x * C - t2, y * C - t2, x * C + t2, y * C + t2]);
+    return rects;
+  }
+  // Push a walker of radius r at (x, z) out of every rectangle. Returns [x, z, pushed].
+  function collide(rects, x, z, r) {
+    var pushed = 0;
+    for (var pass = 0; pass < 4; pass++) {
+      var moved = false;
+      for (var i = 0; i < rects.length; i++) {
+        var q = rects[i]; if (x < q[0] - r || x > q[2] + r || z < q[1] - r || z > q[3] + r) continue;
+        var cx = x < q[0] ? q[0] : x > q[2] ? q[2] : x, cz = z < q[1] ? q[1] : z > q[3] ? q[3] : z, dx = x - cx, dz = z - cz, d2 = dx * dx + dz * dz;
+        if (d2 >= r * r - 1e-9) continue;
+        if (d2 > 1e-12) { var d = Math.sqrt(d2), k = (r - d) / d; x += dx * k; z += dz * k; pushed += r - d; }
+        else { // centre inside: leave by the nearest side
+          var l = x - q[0] + r, rr = q[2] + r - x, t = z - q[1] + r, b = q[3] + r - z, mn = Math.min(l, rr, t, b);
+          if (mn === l) x -= l; else if (mn === rr) x += rr; else if (mn === t) z -= t; else z += b; pushed += mn; }
+        moved = true;
+      }
+      if (!moved) break;
+    }
+    return [x, z, pushed];
+  }
   var SIZES = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
   function levelSize(n) { return SIZES[Math.min(n - 1, SIZES.length - 1)]; }
   function levelSeed(n) { return 'garden-' + n; }
   // Daylight in seconds: what a careful first-time walker needs. Calibrated by the explorer bot in test/.
   function daylight(m) { return Math.round(15 + m.shortest * 1.5 + m.w * m.h * 0.3); }
   function stars(seconds, light) { return seconds <= light ? 3 : seconds <= light * 1.5 ? 2 : 1; }
-  return { DX: DX, DY: DY, hash: hash, rng: rng, generate: generate, canMove: canMove, open: open, inside: inside, bfs: bfs, sight: sight, shortestPath: shortestPath, degree: degree, levelSize: levelSize, levelSeed: levelSeed, daylight: daylight, stars: stars };
+  return { DX: DX, DY: DY, hash: hash, rng: rng, generate: generate, canMove: canMove, open: open, inside: inside, bfs: bfs, sight: sight, shortestPath: shortestPath, wallRects: wallRects, collide: collide, degree: degree, levelSize: levelSize, levelSeed: levelSeed, daylight: daylight, stars: stars };
 })();
 </script>
 <script>
@@ -317,7 +353,7 @@ var C = 2.6, T = 0.5, H = 2.5, F = 0.6, EYE = 1.5;
 var SAVE_KEY = 'escape_the_maze_v2';
 
 // ---------- save ----------
-var save = { level: 1, best: {}, daily: {}, sound: true, taught: false };
+var save = { level: 1, best: {}, daily: {}, sound: true, taught: false, move: 'free', sens: 1 };
 try { var raw = localStorage.getItem(SAVE_KEY); if (raw) { var p = JSON.parse(raw); for (var k in p) save[k] = p[k]; } } catch (e) {}
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
 
@@ -396,7 +432,8 @@ var groundProg = program(
   ' float macro = 0.85 + 0.3 * vnoise(vPos.xz * 0.7);' +
   ' vec2 pa = uPath.xy, pb = uPath.zw, pp = vPos.xz - pa, ab = pb - pa; float ph = clamp(dot(pp, ab) / dot(ab, ab), 0.0, 1.0); float pd = length(pp - ab * ph);' +
   ' float path = smoothstep(0.85, 0.65, pd + 0.08 * vnoise(vPos.xz * 3.0)) * lawn; float pool = smoothstep(1.6, 1.2, length(vPos.xz - pb) + 0.1 * vnoise(vPos.xz * 3.0)) * lawn;' +
-  ' vec3 base = mix(g, gr, lawn * (1.0 - max(path, pool))) * macro;' +
+  ' float stripe = mix(1.0, 0.9 + 0.2 * step(0.5, fract(vPos.x / 3.2)), exp(-length(vPos - uCam) * 0.015));' +
+  ' vec3 base = mix(g, gr * stripe, lawn * (1.0 - max(path, pool))) * macro;' +
   ' float inR = step(0.0, mu.x) * step(0.0, mu.y) * step(mu.x, 1.0) * step(mu.y, 1.0);' +
   ' float ao = mix(1.0, texture2D(uAO, mu).r, inR);' +
   ' base = mix(base, vec3(0.24, 0.18, 0.12) * macro, smoothstep(0.62, 0.3, ao) * 0.85 * (1.0 - lawn));' +
@@ -409,9 +446,16 @@ var groundProg = program(
 var skyProg = program(
   'attribute vec2 aPos; uniform vec3 uFwd, uRight, uUp; uniform vec2 uTan; varying vec3 vDir;' +
   'void main(){ vDir = uFwd + uRight * aPos.x * uTan.x + uUp * aPos.y * uTan.y; gl_Position = vec4(aPos, 0.9999, 1.0); }',
-  'precision mediump float; uniform vec3 uZen, uHor, uGlow, uSunDir, uSunCol, uTrees; uniform vec2 uBeacon; uniform float uNight, uSunI, uBeamI, uBeamW, uClock; varying vec3 vDir;' +
+  'precision mediump float; uniform vec3 uZen, uHor, uGlow, uSunDir, uSunCol, uTrees, uFog; uniform vec2 uBeacon; uniform float uNight, uSunI, uBeamI, uBeamW, uClock, uHouseAz, uLit; varying vec3 vDir;' +
   'float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }' +
   'float h1(float n){ return fract(sin(n * 91.345 + 3.1) * 47453.5453); }' +
+  // round crowns of varied size on a fixed grid of azimuth cells, overlapping their neighbours: rigid under the camera
+  'float wood(float az, float k, float s){ float st = 6.28318 / k, a = az + 3.14159, i0 = floor(a / st), h = 0.0;' +
+  '  for (int j = -2; j <= 2; j++) { float i = i0 + float(j), ii = mod(i, k) + s, gap = step(0.12, h1(ii * 3.3));' +
+  '    float c = (i + 0.5 + (h1(ii) - 0.5) * 0.7) * st, r = st * (0.7 + 0.9 * h1(ii + 1.7)), ht = r * (0.55 + 0.45 * h1(ii + 4.1));' +
+  '    float q = (a - c) / r; h = max(h, ht * sqrt(max(0.0, 1.0 - q * q)) * gap); }' +
+  '  float fz = a * k * 6.0; float fi = floor(fz); float leafy = mix(h1(fi + s), h1(fi + 1.0 + s), smoothstep(0.0, 1.0, fract(fz)));' +
+  '  return h + (leafy - 0.5) * st * 0.18 * step(0.0005, h); }' +
   // tree crowns on a fixed grid of azimuth cells: rigid with the camera, wrap seamlessly at +-pi
   'float crown(float az, float k, float s){ float a = (az / 6.28318 + 0.5) * k; float i = floor(a), f = fract(a); float hh = h1(mod(i, k) + s); return (0.012 + 0.032 * hh) * sqrt(max(0.0, 1.0 - pow(2.0 * f - 1.0, 2.0))) * step(0.25, hh); }' +
   'void main(){ vec3 d = normalize(vDir); float e = d.y;' +
@@ -427,12 +471,29 @@ var skyProg = program(
   ' col += beamC * pow(max(bk, 0.0), 30.0) * 0.12 * exp(-max(e, 0.0) * 5.0) * uBeamI;' +
   ' float beam = (exp(-pow(dA / uBeamW, 2.0)) * 0.85 + exp(-pow(dA / (uBeamW * 4.0), 2.0)) * 0.22) * step(0.0, bk) * smoothstep(-0.005, 0.02, e) * (0.45 + 0.55 * exp(-e * 1.2)) * (0.9 + 0.1 * sin(uClock * 1.6));' +
   ' col = mix(col, beamC, clamp(beam * uBeamI, 0.0, 1.0));' +
-  ' float far2 = 0.04 + 0.012 * sin(az * 1.0 + 2.1) + max(crown(az, 120.0, 21.0), crown(az, 151.0, 5.0)) * 0.5;' +
-  ' col = mix(col, mix(uTrees, uHor, 0.78), smoothstep(far2 + 0.002, far2 - 0.002, e));' +
-  ' float far = 0.026 + 0.01 * sin(az * 2.0 + 0.7) + max(crown(az, 70.0, 3.0), crown(az, 97.0, 11.0)) * 0.7;' +
-  ' col = mix(col, mix(uTrees, uHor, 0.55), smoothstep(far + 0.002, far - 0.002, e));' +
-  ' float tl = 0.012 + 0.006 * sin(az * 3.0 + 1.3) + max(crown(az, 38.0, 0.0), crown(az, 57.0, 7.0));' +
-  ' col = mix(col, mix(uTrees, uHor, 0.12 * smoothstep(-0.02, tl, e)), smoothstep(tl + 0.002, tl - 0.002, e));' +
+  // the estate's horizon: a hazy far wood, the house in a clearing, a nearer wood lit on the sun side; below it, haze
+  ' float hx = atan(sin(az - uHouseAz), cos(az - uHouseAz)) / 1.6; float ax = abs(hx); float eh = e / 1.6;' +
+  ' float sunSide = 0.5 + 0.5 * dot(normalize(d.xz + 1e-4), normalize(uSunDir.xz + 1e-4));' +
+  ' float hill = 0.004 + 0.003 * sin(az * 2.0 + 0.5) + 0.002 * sin(az * 5.0 + 1.7);' +
+  ' float far = hill + 0.75 * wood(az, 260.0, 4.0);' +
+  ' col = mix(col, mix(uTrees, uFog, 0.62), smoothstep(far + 0.0015, far - 0.0015, e));' +
+  ' vec3 house = mix(uTrees, uFog, 0.38);' +
+  ' float roofM = min(0.031, 0.021 + (0.06 - ax) * 0.42); float roofW = min(0.021, 0.014 + (0.104 - ax) * 0.2);' +
+  ' float body = step(ax, 0.06) * step(eh, roofM) + step(0.06, ax) * step(ax, 0.104) * step(eh, roofW);' +
+  ' float chim = (step(abs(ax - 0.03), 0.0022) * step(eh, 0.037) + step(abs(ax - 0.085), 0.002) * step(eh, 0.026));' +
+  ' float hm = clamp(body + chim, 0.0, 1.0) * step(-0.01, e);' +
+  ' col = mix(col, house, hm);' +
+  ' vec2 wg = vec2(hx / 0.0085, eh / 0.0072); vec2 wi = floor(wg), wf = fract(wg);' +
+  ' float win = step(0.3, wf.x) * step(wf.x, 0.7) * step(0.25, wf.y) * step(wf.y, 0.8) * step(0.5, h1(wi.x * 7.0 + wi.y * 13.0 + 2.0));' +
+  ' float rows = (step(ax, 0.056) * step(wi.y, 1.5) + step(0.064, ax) * step(ax, 0.1) * step(wi.y, 0.5)) * step(0.0, wi.y);' +
+  ' col = mix(col, vec3(1.0, 0.74, 0.4) * (0.55 + 0.6 * uLit), win * rows * hm * uLit);' +
+  ' float near = hill * 0.6 + max(wood(az, 150.0, 9.0), wood(az, 210.0, 17.0) * 0.8) * smoothstep(0.16, 0.24, ax);' +
+  ' float nm = smoothstep(near + 0.0015, near - 0.0015, e);' +
+  ' float leaf = 0.86 + 0.22 * hash(floor(vec3(az * 900.0, e * 900.0, 1.0)));' +
+  ' float rim = smoothstep(near - 0.006, near, e) * sunSide * uSunI;' +
+  ' vec3 trees = mix(uTrees, uFog, 0.18 * smoothstep(near, -0.004, e)) * leaf + uGlow * rim * 0.22;' +
+  ' col = mix(col, trees, nm);' +
+  ' col = mix(col, uFog, smoothstep(0.0, -0.004, e));' +
   ' gl_FragColor = vec4(col, 1.0); }');
 
 var glowProg = program(
@@ -542,39 +603,20 @@ function buildMazeGeometry(m) {
     var y1 = top + fr, y0 = bot || 0;
     quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]); // south face (+z)
     quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], [[-x1, y0], [-x0, y0], [-x0, y1], [-x1, y1]]);
-    quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, y0], [[z1, y0], [z0, y0], [z0, y1], [z1, y1]]);
-    quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, y0], [[-z0, y0], [-z1, y0], [-z1, y1], [-z0, y1]]);
-    quad([x0, top, z1], [x1, top, z1], [x1, top, z0], [x0, top, z0], [0, 1, y0], [[x0, z1], [x1, z1], [x1, z0], [x0, z0]]);
+    quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], [[z1, y0], [z0, y0], [z0, y1], [z1, y1]]);
+    quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], [[-z0, y0], [-z1, y0], [-z1, y1], [-z0, y1]]);
+    quad([x0, top, z1], [x1, top, z1], [x1, top, z0], [x0, top, z0], [0, 1, 0], [[x0, z1], [x1, z1], [x1, z0], [x0, z0]]);
     if (y0 > 0) quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]);
   }
-  var w = m.w, h = m.h, t2 = T / 2, rects = [];
-  // horizontal runs (north edges of each row, plus the south edge of the last row)
-  for (var y = 0; y <= h; y++) {
-    var run = -1;
-    for (var x = 0; x <= w; x++) {
-      var wall = x < w && (y < h ? !MAZE.open(m, x, y, 0) : !MAZE.open(m, x, h - 1, 2));
-      if (wall && run < 0) run = x;
-      if (!wall && run >= 0) { rects.push([run * C - t2, y * C - t2, x * C + t2, y * C + t2]); run = -1; }
-    }
-  }
-  for (var x2 = 0; x2 <= w; x2++) {
-    var run2 = -1;
-    for (var y2 = 0; y2 <= h; y2++) {
-      var wall2 = y2 < h && (x2 < w ? !MAZE.open(m, x2, y2, 3) : !MAZE.open(m, w - 1, y2, 1));
-      if (wall2 && run2 < 0) run2 = y2;
-      if (!wall2 && run2 >= 0) { rects.push([x2 * C - t2, run2 * C - t2, x2 * C + t2, y2 * C + t2]); run2 = -1; }
-    }
-  }
-  // corner posts keep every joint closed even where no run passes through
-  for (var py = 0; py <= h; py++) for (var px = 0; px <= w; px++) rects.push([px * C - t2, py * C - t2, px * C + t2, py * C + t2]);
+  var w = m.w, h = m.h, rects = MAZE.wallRects(m, C, T);
   rects.forEach(function (r) { box(r[0], r[1], r[2], r[3], H, F); });
-  G.rects = rects;
+  G.rects = rects; G.solid = rects.slice();
   if (G.hedge) gl.deleteBuffer(G.hedge);
   G.hedge = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, G.hedge); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW); G.nHedge = v.length / 8;
 
   // ground and overlays: the overlay rect is the maze plus two cells of lawn all round
   var M = 2 * C; RECT = [-M, -M, w * C + 2 * M, h * C + 2 * M];
-  var gx0 = -60, gz0 = -60, gx1 = w * C + 60, gz1 = h * C + 60;
+  var gx0 = -700, gz0 = -700, gx1 = w * C + 700, gz1 = h * C + 700; // the lawn runs out to the haze
   var gv = new Float32Array([gx0, 0, gz0, gx1, 0, gz0, gx1, 0, gz1, gx0, 0, gz0, gx1, 0, gz1, gx0, 0, gz1]);
   if (!G.ground) G.ground = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, G.ground); gl.bufferData(gl.ARRAY_BUFFER, gv, gl.STATIC_DRAW);
   var cw = Math.min(2048, Math.round(RECT[2] * PPU)), ch = Math.min(2048, Math.round(RECT[3] * PPU));
@@ -596,7 +638,7 @@ function buildMazeGeometry(m) {
   var ox = MAZE.DX[e.dir], oz = MAZE.DY[e.dir], mx = ex + ox * C / 2, mz = ez + oz * C / 2; // middle of the gate edge
   [-1, 1].forEach(function (sd) {
     var px = mx + (oz !== 0 ? 0 : 0) + (ox === 0 ? sd * C / 2 : 0), pz = mz + (oz === 0 ? sd * C / 2 : 0);
-    var s = 0.3; box(px - s, pz - s, px + s, pz + s, 3.0, 0);
+    var s = 0.3; box(px - s, pz - s, px + s, pz + s, 3.0, 0); G.solid.push([px - s, pz - s, px + s, pz + s]);
     var s2 = 0.38; box(px - s2, pz - s2, px + s2, pz + s2, 3.16, 0, 3.0); // cap
     var s3 = 0.22; box(px - s3, pz - s3, px + s3, pz + s3, 3.5, 0, 3.16); // finial block
   });
@@ -610,6 +652,7 @@ function buildMazeGeometry(m) {
     var along = MAZE.DX[back] === 0 ? [1, 0] : [0, 1], hw = 0.62, hd = 0.22;
     var sx0 = cxb - along[0] * hw - along[1] * hd, sx1 = cxb + along[0] * hw + along[1] * hd, sz0 = czb - along[1] * hw - along[0] * hd, sz1 = czb + along[1] * hw + along[0] * hd;
     box(sx0, sz0, sx1, sz1, 0.47, 0, 0.39); // seat slab
+    G.solid.push([Math.min(sx0, sx1), Math.min(sz0, sz1), Math.max(sx0, sx1), Math.max(sz0, sz1)]);
     [-1, 1].forEach(function (s) { var lx = cxb + along[0] * s * 0.45, lz = czb + along[1] * s * 0.45, lw = 0.09 + along[1] * 0.1, ld = 0.09 + along[0] * 0.1; box(lx - lw, lz - ld, lx + lw, lz + ld, 0.39, 0); });
     G.benches.push([bx2, by, back]);
   }
@@ -692,9 +735,13 @@ function startMaze(kind, arg) {
   S.x = m.start.x; S.y = m.start.y; S.dir = m.start.dir; var c = cellCenter(S.x, S.y); S.px = c[0]; S.pz = c[1]; S.yaw = S.dir === 3 ? -Math.PI / 2 : S.dir * Math.PI / 2;
   S.tween = null; S.queue = []; S.elapsed = 0; S.steps = 0; S.exitT = 0; S.bump = 0;
   S.seen = new Uint8Array(m.w * m.h); markSeen();
+  S.free = !TOUCH && save.move !== 'steps'; S.pitch = -0.08; S.vx = 0; S.vz = 0; S.turnV = 0; S.keys = {}; S.bobD = 0; S.stepAcc = 0; S.hitCool = 0; S.lookSum = 0;
   S.thread = [[c[0], (S.y + 1) * C - T / 2 - 0.02], [c[0] + 0.05, c[1] + 0.15]]; S.threadK = 0; drawThread(S.thread);
   S.light = MAZE.daylight(m);
   var sr = MAZE.rng(seed + '-sun'), a = sr(); // the sun sets off to one side of the gate, so the beam never drowns in it
+  // the house stands on the horizon just left of where the title shot looks, so the title shows where you are
+  var tcx = m.w * C / 2, tcz = m.h * C + 1.2, ty = Math.atan2(G.beacon[0] - tcx, -(G.beacon[1] - tcz)) * 0.6 - 0.5;
+  S.houseAz = Math.atan2(-Math.cos(ty), Math.sin(ty));
   S.sunAz = m.exit.dir * Math.PI / 2 + (sr() < 0.5 ? -1 : 1) * Math.PI * (0.38 + a * 0.22);
   $('mazeName').textContent = LABEL;
   updateSunArc();
@@ -736,12 +783,16 @@ function finishTween(tw) {
     S.threadK++; var j = jitter(S.x, S.y, S.threadK), c = cellCenter(S.x, S.y);
     S.thread.push([c[0] + j[0], c[1] + j[1]]); drawThread(S.thread);
   } else if (tw.kind === 'turn') { S.yaw = tw.y1; }
+  else if (tw.kind === 'snap') { S.px = tw.b[0]; S.pz = tw.b[1]; S.yaw = tw.y1; }
 }
 
 function beginExit() {
   S.mode = 'exiting'; S.steps++;
   var m = S.maze, e = m.exit, c = cellCenter(e.x, e.y);
-  S.tween = { kind: 'exit', t: 0, dur: 2000, a: [S.px, S.pz], b: [c[0] + MAZE.DX[e.dir] * C * 1.9, c[1] + MAZE.DY[e.dir] * C * 1.9] };
+  var yE = e.dir * Math.PI / 2; yE += Math.round((S.yaw - yE) / (2 * Math.PI)) * 2 * Math.PI;
+  S.tween = { kind: 'exit', t: 0, dur: 2000, a: [S.px, S.pz], b: [c[0] + MAZE.DX[e.dir] * C * 1.9, c[1] + MAZE.DY[e.dir] * C * 1.9], y0: S.yaw, y1: yE, p0: S.free ? S.pitch : -0.11 };
+  S.vx = S.vz = 0; S.keys = {};
+  if (document.pointerLockElement === cv && document.exitPointerLock) { S.locked = false; document.exitPointerLock(); }
   ['mapWrap', 'hudL', 'sunArc', 'bearing', 'pad'].forEach(function (h) { $(h).style.opacity = 0; }); setHint('');
   S.finalTime = S.elapsed;
   audio.gate();
@@ -803,9 +854,10 @@ function hintStart() {
   if (save.taught && S.kind !== 'level') return;
   if (save.taught || S.level > 1) { hintState = 3; setHint(''); return; }
   hintState = 1; S.taught = { walk: 0, turn: 0 };
-  setHint('Head for the light<br><small>' + (TOUCH ? 'walk <kbd>↑</kbd> · turn <kbd>↶</kbd> <kbd>↷</kbd>' : 'walk <kbd>↑</kbd> · turn <kbd>←</kbd> <kbd>→</kbd>') + '</small>');
+  setHint('Head for the light<br><small>' + (S.free ? 'click to look around · walk <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>' : TOUCH ? 'walk <kbd>↑</kbd> · turn <kbd>↶</kbd> <kbd>↷</kbd>' : 'walk <kbd>↑</kbd> · turn <kbd>←</kbd> <kbd>→</kbd>') + '</small>');
 }
 function hintTick() {
+  if (S.free && S.lookSum > 0.6) S.taught.turn = Math.max(S.taught.turn, 1);
   if (hintState === 1 && S.taught.walk >= 2 && S.taught.turn >= 1) { hintState = 2; setHint('The gate is under the light'); schedule(3.5, function () { if (hintState === 2) { hintState = 3; setHint(''); } }); }
 }
 function setHint(html) { var h = $('hint'); if (!html) { h.classList.remove('on'); return; } h.innerHTML = html; h.classList.add('on'); }
@@ -935,14 +987,17 @@ function haptic(ms) { if (navigator.vibrate && TOUCH) try { navigator.vibrate(ms
 // ---------- controls ----------
 var keymap = { ArrowUp: 'F', KeyW: 'F', ArrowLeft: 'L', KeyA: 'L', KeyQ: 'L', ArrowRight: 'R', KeyD: 'R', KeyE: 'R', ArrowDown: 'B', KeyS: 'B' };
 var btnFor = { F: 'bF', L: 'bL', R: 'bR', B: 'bB' };
+var FREE_KEYS = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, KeyQ: 1, KeyE: 1, ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, ShiftLeft: 1, ShiftRight: 1 };
 window.addEventListener('keydown', function (e) {
-  if (e.code === 'Escape' || e.code === 'KeyP') { if (S.mode === 'play') pause(); else if (S.mode === 'paused') resume(); return; }
+  if (e.code === 'Escape' || e.code === 'KeyP') { if (S.mode === 'play') pause(); else if (S.mode === 'paused' && performance.now() - (S.pausedAt || 0) > 400) resume(); return; }
   if (S.mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); $('playBtn').click(); return; }
+  if (S.free && FREE_KEYS[e.code]) { e.preventDefault(); S.keys[e.code] = true; audio.wake(); return; }
   var c = keymap[e.code]; if (!c) return; e.preventDefault();
   if (e.repeat) return;
   S.held[c] = true; input(c);
 });
-window.addEventListener('keyup', function (e) { var c = keymap[e.code]; if (c) S.held[c] = false; });
+window.addEventListener('keyup', function (e) { S.keys && (S.keys[e.code] = false); var c = keymap[e.code]; if (c) S.held[c] = false; });
+window.addEventListener('blur', function () { S.keys = {}; S.held = {}; });
 Object.keys(btnFor).forEach(function (c) {
   var b = $(btnFor[c]);
   b.addEventListener('pointerdown', function (e) { e.preventDefault(); b.classList.add('down'); S.held[c] = true; input(c); });
@@ -950,9 +1005,26 @@ Object.keys(btnFor).forEach(function (c) {
 });
 // the view: tap ahead to walk, tap a side to turn; swipes drag the world (swipe left turns right)
 var touchStart = null;
-$('view').addEventListener('pointerdown', function (e) { if (S.mode !== 'play' || e.target.closest('button')) return; touchStart = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId }; if (S.mode === 'play') { var r = $('view').getBoundingClientRect(), fx = (e.clientX - r.left) / r.width; S.pressZone = fx < 0.3 ? 'L' : fx > 0.7 ? 'R' : 'F'; } });
+function lockPointer() { if (!S.free || !cv.requestPointerLock) return; try { var r = cv.requestPointerLock(); if (r && r.catch) r.catch(function () {}); } catch (err) {} }
+document.addEventListener('pointerlockchange', function () {
+  if (document.pointerLockElement === cv) { S.locked = true; return; }
+  if (S.locked && S.mode === 'play' && S.free) pause();
+  S.locked = false;
+});
+var drag = null;
+function look(dx, dy) { var k = 0.0022 * (save.sens || 1); S.yaw += dx * k; S.pitch = clamp(S.pitch - dy * k, -1.25, 1.25); S.lookSum += Math.abs(dx * k); }
+document.addEventListener('mousemove', function (e) {
+  if (!S.free || S.mode !== 'play') return;
+  if (document.pointerLockElement === cv) look(e.movementX || 0, e.movementY || 0);
+  else if (drag) { look(e.clientX - drag.x, e.clientY - drag.y); drag = { x: e.clientX, y: e.clientY }; }
+});
+window.addEventListener('mouseup', function () { drag = null; });
+$('view').addEventListener('pointerdown', function (e) {
+  if (S.free && S.mode === 'play' && !e.target.closest('button') && e.pointerType === 'mouse') { audio.wake(); drag = { x: e.clientX, y: e.clientY }; lockPointer(); }
+});
+$('view').addEventListener('pointerdown', function (e) { if (S.free || S.mode !== 'play' || e.target.closest('button')) return; touchStart = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId }; if (S.mode === 'play') { var r = $('view').getBoundingClientRect(), fx = (e.clientX - r.left) / r.width; S.pressZone = fx < 0.3 ? 'L' : fx > 0.7 ? 'R' : 'F'; } });
 $('view').addEventListener('pointerup', function (e) {
-  if (!touchStart || e.pointerId !== touchStart.id) return; var dx = e.clientX - touchStart.x, dy = e.clientY - touchStart.y; touchStart = null;
+  if (S.free || !touchStart || e.pointerId !== touchStart.id) return; var dx = e.clientX - touchStart.x, dy = e.clientY - touchStart.y; touchStart = null;
   if (Math.hypot(dx, dy) > 28) { if (Math.abs(dx) > Math.abs(dy)) input(dx < 0 ? 'R' : 'L'); else input(dy < 0 ? 'F' : 'B'); }
   else input(S.pressZone);
 });
@@ -974,8 +1046,18 @@ $('shareBtn').addEventListener('click', function () {
 function soundLabel() { var t = save.sound ? 'Sound on' : 'Sound off'; $('soundBtn').textContent = t; $('soundBtn2').textContent = t; }
 [$('soundBtn'), $('soundBtn2')].forEach(function (b) { b.addEventListener('click', function () { save.sound = !save.sound; persist(); soundLabel(); audio.wake(); audio.setOn(save.sound); }); });
 function restart() { if (S.kind === 'level') startMaze('level', S.level); else if (S.kind === 'daily') startMaze('daily', S.dailyKey); else startMaze('shared', { seed: S.seedStr, size: S.size }); play(); }
-function pause() { if (S.mode !== 'play') return; S.mode = 'paused'; $('pauseName').textContent = LABEL; overlay('pause'); }
-function resume() { if (S.mode !== 'paused') return; S.mode = 'play'; overlay(null); }
+function pause() { if (S.mode !== 'play') return; S.mode = 'paused'; S.pausedAt = performance.now(); S.keys = {}; drag = null; $('pauseName').textContent = LABEL; moveLabel(); overlay('pause'); if (document.pointerLockElement === cv && document.exitPointerLock) document.exitPointerLock(); }
+function resume() { if (S.mode !== 'paused') return; S.mode = 'play'; overlay(null); lockPointer(); }
+function moveLabel() { $('moveBtn').textContent = S.free ? 'Moving freely' : 'Moving in steps'; $('moveBtn').style.display = TOUCH ? 'none' : ''; $('sensWrap').style.display = TOUCH || !S.free ? 'none' : ''; }
+$('moveBtn').addEventListener('click', function () {
+  save.move = S.free ? 'steps' : 'free'; persist();
+  if (S.free) { // settle into the grid: nearest cell centre, nearest quarter turn, eased
+    S.free = false; var qd = Math.round(S.yaw / (Math.PI / 2)), cx = clamp(Math.floor(S.px / C), 0, S.maze.w - 1), cz = clamp(Math.floor(S.pz / C), 0, S.maze.h - 1), c = cellCenter(cx, cz);
+    S.x = cx; S.y = cz; S.dir = ((qd % 4) + 4) % 4; S.tween = { kind: 'snap', t: 0, dur: 450, a: [S.px, S.pz], b: c, y0: S.yaw, y1: qd * Math.PI / 2, p0: S.pitch };
+  } else { S.free = true; S.pitch = -0.11; S.vx = S.vz = 0; }
+  moveLabel();
+});
+$('sens').addEventListener('input', function () { save.sens = +this.value; persist(); });
 function toast(t) { var el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(function () { el.classList.remove('on'); }, 2200); }
 document.addEventListener('visibilitychange', function () { if (document.hidden && S.mode === 'play') pause(); });
 
@@ -994,10 +1076,10 @@ function updateSunArc() {
 
 // ---------- leaves shaken loose when you walk into a hedge ----------
 var fx = $('fx'), fxc = fx.getContext('2d'), leaves = [];
-function shakeLeaves() {
+function shakeLeaves(n) {
   if (REDUCED) return;
   var r = Math.random;
-  for (var i = 0; i < 8; i++) leaves.push({ x: 0.5 + (r() - 0.5) * 0.7, y: 0.12 + r() * 0.3, vx: (r() - 0.5) * 0.25, vy: -0.05 - r() * 0.15, a: r() * 6.28, va: (r() - 0.5) * 8, s: 12 + r() * 12, life: 0, max: 0.6 + r() * 0.35, l: r() });
+  for (var i = 0; i < (n || 8); i++) leaves.push({ x: 0.5 + (r() - 0.5) * 0.7, y: 0.12 + r() * 0.3, vx: (r() - 0.5) * 0.25, vy: -0.05 - r() * 0.15, a: r() * 6.28, va: (r() - 0.5) * 8, s: 12 + r() * 12, life: 0, max: 0.6 + r() * 0.35, l: r() });
 }
 function drawLeaves(dt) {
   var w = fx.clientWidth, h = fx.clientHeight, d = Math.min(2, window.devicePixelRatio || 1);
@@ -1017,6 +1099,33 @@ function drawLeaves(dt) {
     fxc.shadowBlur = 0; fxc.strokeStyle = 'rgba(30,45,15,.7)'; fxc.lineWidth = 1.2; fxc.beginPath(); fxc.moveTo(-f.s, 0); fxc.lineTo(f.s, 0); fxc.stroke();
     fxc.restore();
   }
+}
+
+// ---------- free walking (desktop): eased velocity, sliding collision, thread and map follow ----------
+var RADIUS = 0.34;
+function freeWalk(dt) {
+  if (!dt) return;
+  var k = S.keys, f = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0), s = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0);
+  var t = (k.ArrowRight || k.KeyE ? 1 : 0) - (k.ArrowLeft || k.KeyQ ? 1 : 0);
+  S.turnV += (t * 2.3 - S.turnV) * (1 - Math.exp(-dt * 10)); S.yaw += S.turnV * dt; S.lookSum += Math.abs(S.turnV * dt);
+  var fx = Math.sin(S.yaw), fz = -Math.cos(S.yaw), rx = Math.cos(S.yaw), rz = Math.sin(S.yaw);
+  var mx = fx * f + rx * s, mz = fz * f + rz * s, ml = Math.hypot(mx, mz), speed = (k.ShiftLeft || k.ShiftRight) ? 5.0 : 3.0;
+  if (ml > 0) { mx = mx / ml * speed; mz = mz / ml * speed; }
+  var a = 1 - Math.exp(-dt * (ml > 0 ? 9 : 12)); S.vx += (mx - S.vx) * a; S.vz += (mz - S.vz) * a;
+  if (Math.abs(S.vx) + Math.abs(S.vz) < 0.002) { S.vx = S.vz = 0; return; }
+  var ox = S.px, oz = S.pz, res = MAZE.collide(G.solid, ox + S.vx * dt, oz + S.vz * dt, RADIUS);
+  S.px = res[0]; S.pz = res[1];
+  var moved = Math.hypot(S.px - ox, S.pz - oz), want = Math.hypot(S.vx, S.vz) * dt;
+  if (res[2] > 0) { S.vx = (S.px - ox) / dt; S.vz = (S.pz - oz) / dt; } // slide along the hedge, lose what went into it
+  if (res[2] > 0.01 && want > 0.035 && moved < want * 0.6 && clock > S.hitCool) { S.hitCool = clock + 0.8; audio.rustle(); shakeLeaves(4); }
+  S.bobD += moved; S.stepAcc += moved;
+  if (S.stepAcc > 1.25) { S.stepAcc = 0; audio.step(); }
+  // left the grid: the only way out of the hedge ring is the gate
+  var cx = Math.floor(S.px / C), cz = Math.floor(S.pz / C);
+  if (!MAZE.inside(S.maze, cx, cz)) { beginExit(); return; }
+  if (cx !== S.x || cz !== S.y) { S.x = cx; S.y = cz; S.steps++; S.taught.walk++; markSeen(); }
+  var L = S.thread[S.thread.length - 1];
+  if (Math.hypot(S.px - L[0], S.pz - L[1]) > 0.8) { S.thread.push([S.px, S.pz]); drawThread(S.thread); }
 }
 
 // ---------- bearing pip: where the gate's light is, along the top edge ----------
@@ -1053,7 +1162,7 @@ function render(cam) {
   var cy = Math.cos(cam.pitch), fw = [Math.sin(cam.yaw) * cy, Math.sin(cam.pitch), -Math.cos(cam.yaw) * cy], rl = cam.roll || 0;
   var upW = [Math.sin(rl) * Math.cos(cam.yaw), Math.cos(rl), Math.sin(rl) * Math.sin(cam.yaw)];
   var right = norm(cross(fw, upW)), up = cross(right, fw);
-  var V = view(cam.pos, fw, upW), P = persp(fovY, aspect, 0.05, 140), VP = mul(P, V);
+  var V = view(cam.pos, fw, upW), P = persp(fovY, aspect, 0.06, 1000), VP = mul(P, V);
   cam.right = right; cam.up = up;
   var sk = skyAt(cam.t);
   var el = sk.elev * Math.PI / 180, sunDir = [Math.cos(el) * Math.sin(S.sunAz), Math.sin(el), -Math.cos(el) * Math.cos(S.sunAz)];
@@ -1071,6 +1180,7 @@ function render(cam) {
   gl.uniform2f(skyProg.u.uTan, Math.tan(fovY / 2) * aspect, Math.tan(fovY / 2));
   gl.uniform3fv(skyProg.u.uZen, sk.zen); gl.uniform3fv(skyProg.u.uHor, sk.hor); gl.uniform3fv(skyProg.u.uGlow, sk.glow); gl.uniform3fv(skyProg.u.uSunDir, sunDir);
   gl.uniform3fv(skyProg.u.uSunCol, sk.sun); gl.uniform3fv(skyProg.u.uTrees, sk.trees); gl.uniform1f(skyProg.u.uNight, sk.night); gl.uniform1f(skyProg.u.uSunI, sk.sunI);
+  gl.uniform3fv(skyProg.u.uFog, fogCol); gl.uniform1f(skyProg.u.uHouseAz, S.houseAz || 0); gl.uniform1f(skyProg.u.uLit, clamp(0.25 + cam.t * 0.75, 0, 1));
   var bvx = G.beacon[0] - cam.pos[0], bvz = G.beacon[1] - cam.pos[2], bvl = Math.hypot(bvx, bvz) || 1; gl.uniform2f(skyProg.u.uBeacon, bvx / bvl, bvz / bvl); gl.uniform1f(skyProg.u.uBeamI, 0.85 + 0.15 * clamp(cam.t, 0, 1.4)); gl.uniform1f(skyProg.u.uBeamW, Math.max(0.006, Math.atan(0.42 / bvl))); gl.uniform1f(skyProg.u.uClock, cam.clock);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.disableVertexAttribArray(skyProg.a.aPos);
@@ -1130,18 +1240,21 @@ function frame(now) {
   var dt = FILM ? (window.__budget === undefined || window.__budget > 0 ? 1 / 30 : 0) : Math.min(0.05, (now - last) / 1000);
   if (FILM && window.__budget > 0) window.__budget--; last = now; clock += dt; window.__frames++;
   tickTimers(dt);
-  var cam = { pos: [S.px, EYE, S.pz], yaw: S.yaw, pitch: -0.11, t: 0, clock: clock };
+  if (S.mode === 'play' && S.free && !S.tween) freeWalk(dt);
+  var cam = { pos: [S.px, EYE, S.pz], yaw: S.yaw, pitch: S.free ? S.pitch : -0.11, t: 0, clock: clock };
+  if (S.free && S.mode === 'play' && !REDUCED) { var sp = Math.hypot(S.vx, S.vz); cam.pos[1] += Math.sin(S.bobD * Math.PI / 1.25) * 0.03 * Math.min(1, sp / 3); }
   if (S.mode === 'play') { S.elapsed += dt; }
   if (S.tween) {
     var tw = S.tween; tw.t += dt * 1000; var k = clamp(tw.t / tw.dur, 0, 1);
+    if (tw.kind === 'snap') { var es = easeOut(k); cam.pos[0] = lerp(tw.a[0], tw.b[0], es); cam.pos[2] = lerp(tw.a[1], tw.b[1], es); cam.yaw = lerp(tw.y0, tw.y1, es); cam.pitch = lerp(tw.p0, -0.11, es); }
     if (tw.kind === 'walk') { var e = easeWalk(k); cam.pos[0] = lerp(tw.a[0], tw.b[0], e); cam.pos[2] = lerp(tw.a[1], tw.b[1], e); if (!REDUCED) cam.pos[1] += Math.sin(k * Math.PI) * 0.035; }
     else if (tw.kind === 'turn') { cam.yaw = lerp(tw.y0, tw.y1, easeOut(k)); }
     else if (tw.kind === 'bump') { var b = Math.sin(k * Math.PI) * (1 - k * 0.3) * (REDUCED ? 0.05 : 0.42); if (!REDUCED) { var pk = Math.sin(k * Math.PI) * Math.exp(-k * 1.5); cam.pos[1] -= pk * 0.08; cam.pitch -= pk * 0.07; cam.roll = Math.sin(k * Math.PI * 2.2) * 0.06 * (1 - k); cam.fovK = -pk * 0.1; }
       S.bumpPulse = Math.sin(k * Math.PI); cam.pos[0] += Math.sin(S.yaw) * b; cam.pos[2] -= Math.cos(S.yaw) * b; if (!REDUCED) cam.yaw += Math.sin(k * Math.PI * 3) * 0.012 * (1 - k); }
-    else if (tw.kind === 'exit') { var e2 = easeStep(k); cam.pos[0] = lerp(tw.a[0], tw.b[0], e2); cam.pos[2] = lerp(tw.a[1], tw.b[1], e2); cam.pitch = -0.11 + e2 * 0.5; S.endPitch = cam.pitch; $('fade').style.opacity = clamp((k - 0.45) / 0.55, 0, 1) * 0.8; }
+    else if (tw.kind === 'exit') { var e2 = easeStep(k); cam.pos[0] = lerp(tw.a[0], tw.b[0], e2); cam.pos[2] = lerp(tw.a[1], tw.b[1], e2); cam.yaw = lerp(tw.y0, tw.y1, easeOut(Math.min(1, k * 1.6))); cam.pitch = lerp(tw.p0, 0.39, e2); S.endPitch = cam.pitch; $('fade').style.opacity = clamp((k - 0.45) / 0.55, 0, 1) * 0.8; }
     if (k >= 1) {
       S.tween = null;
-      if (tw.kind === 'exit') { S.px = tw.b[0]; S.pz = tw.b[1]; $('fade').style.transition = 'opacity 1s ease'; showResults(); requestAnimationFrame(function () { $('fade').style.opacity = 0.5; }); setTimeout(function () { $('fade').style.transition = ''; }, 1100); }
+      if (tw.kind === 'exit') { S.px = tw.b[0]; S.pz = tw.b[1]; S.yaw = tw.y1; $('fade').style.transition = 'opacity 1s ease'; showResults(); requestAnimationFrame(function () { $('fade').style.opacity = 0.5; }); setTimeout(function () { $('fade').style.transition = ''; }, 1100); }
       else {
         finishTween(tw);
         cam.pos = [S.px, EYE, S.pz]; cam.yaw = S.yaw;
@@ -1172,6 +1285,7 @@ function frame(now) {
 // ---------- boot ----------
 buildTextures();
 soundLabel();
+$('sens').value = save.sens || 1;
 var q = new URLSearchParams(location.search);
 window.__maze = S; window.__C = C; // for tests and filmstrips
 if (q.get('maze')) { var sz = clamp(parseInt(q.get('size'), 10) || 10, 4, 20); startMaze('shared', { seed: q.get('maze'), size: sz }); overlay('title'); $('playSub').textContent = 'A shared maze · ' + sz + ' × ' + sz; S.mode = 'title';
