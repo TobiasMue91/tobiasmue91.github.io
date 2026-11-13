@@ -1567,6 +1567,19 @@ Chromium's own parser and layout for CSS and HTML - every stylesheet and every p
 goes through, and must mean and draw the same - Python's `ast` over the local standard library,
 PHP's tokenizer, and SQL scripts written out exactly. A minifier that changes what code does
 looks exactly like one that does not, so run it after touching either page's core.
+`test/javascript_obfuscator.mjs` runs the DOM-free core of `tools/javascript_obfuscator.html` the
+same way, and for the same reason: an obfuscator makes exactly a minifier's promise - the wall of
+`_0x` hex it hands back must do what the code it was given did - and nothing on the page can show
+whether it kept it. It loads the page's `<script id="core">` in Node's `vm` and judges it with
+things that do not come from the page: every sample program is run before and after obfuscation,
+at all three levels, in a fresh `vm`, and must return the same value, print the same console lines
+and throw the same errors; each level's output must carry the transforms it promises (hex names, a
+string array, base64/rc4 markers, control flow); a locked seed must give byte-identical output;
+and the edges - empty, non-ASCII, huge, syntax errors, JSON, ES modules - must land where they
+should. The obfuscation engine is `javascript-obfuscator` (the obfuscator.io engine), not bundled:
+`npm i --no-save javascript-obfuscator@5.9.0` and the suite picks it up, otherwise it skips every
+engine check and says so (the pure helpers still run). Keep that version in step with the CDN URL
+in the page. Run it after touching the core.
 `test/family_tree.mjs` runs the DOM-free core of `tools/family_tree_builder.html` (the family
 model, its generation layout and the Link rules) against families generated the way people enter
 them - descendants, in-laws with their own parents, a tree built up from one person - and against
