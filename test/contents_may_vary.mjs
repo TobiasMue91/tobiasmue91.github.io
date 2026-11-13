@@ -35,8 +35,9 @@ const suites = picked.length ? picked : ALL;
 /* Boxes that have shipped, in play order. Saves refer to boxes by id and the page plays them in
    file order, so this list may only ever grow at the end. Append a box's id here when it ships.
    (Once, on 2026-11-06, the owner had the shipped boxes reordered, Tilt first; it was
-   starter, lawn, clew, flurry, warren, guests, jetty. The 'browser' suite plays a save from before it.) */
-const SHIPPED = ['clew', 'flurry', 'warren', 'jetty', 'guests', 'starter', 'lawn'];
+   starter, lawn, clew, flurry, warren, guests, jetty. The 'browser' suite plays a save from before it. And once more, on
+   2026-11-13, Here Be Rabbits went from third to last.) */
+const SHIPPED = ['clew', 'flurry', 'jetty', 'guests', 'starter', 'lawn', 'warren'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
 // boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
@@ -1140,10 +1141,10 @@ if (suites.includes('browser')) {
           'reorder: opened boxes, notes, stamps, perks and stickers are all kept', JSON.stringify(sv).slice(0, 300));
         await p.click('#tGo');
         if (await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.ready, 30000)) {
-          const want = await p.evaluate(() => CMV.worlds.find(w => w.id === 'warren').n);
+          const nextId = ids.find(id => !['starter', 'lawn', 'clew', 'flurry'].includes(id)), want = await p.evaluate(id => CMV.worlds.find(w => w.id === id).n, nextId);
           check(await p.evaluate(() => CMV.win().K.next && CMV.win().K.next.n) === want, `reorder: Snow Day's way out shows the box that really comes next (№ ${want})`);
           await p.evaluate(() => CMV._complete(CMV.live.token, null));
-          check(await until(p, () => CMV.state === 'playing' && CMV.live && CMV.live.w.id === 'warren', 30000), 'reorder: finishing it goes on into the first box this save has not opened');
+          check(await until(p, id => CMV.state === 'playing' && CMV.live && CMV.live.w.id === id, 30000, nextId), `reorder: finishing it goes on into the first box this save has not opened (${nextId})`);
         } else fail('reorder: the old save opens its box');
         await p.reload();
         check(await until(p, () => !document.querySelector('#title').hidden) && await p.evaluate(() => !/new numbers/.test(document.querySelector('#tNote').textContent)), 'reorder: the note is said only once');
