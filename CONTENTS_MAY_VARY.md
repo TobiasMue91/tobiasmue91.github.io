@@ -1733,8 +1733,9 @@ still undone, most valuable first:
     let-go (it stood over all of night 2); a night card names the pipe the night now pays for; the organ's card says
     what a pipe does in numbers (carries 3 → 6, ectoplasm 15 s → 21 s, lifts teacups → chairs); what the whirl carries is
     drawn edge first and fill second, so a heap has one pale outline round its outside instead of a wireframe of every
-    piece; the rocking horse stands on its rocker; the open front door lays a fading wedge of light on the path.
-  - *Left open*: night cards are still text on black; the kitchen canisters seen floating in the crowd tile; the paper star
+    piece; the rocking horse stands on its rocker; the open front door lays a fading wedge of light on the path; a night
+    card shows everyone the night drove out as a row of cameos cut from the same paper as the cast cards.
+  - *Left open*: the kitchen canisters seen floating in the crowd tile; the paper star
     of a hit hardly shows in a still; the study window's light ends at its frame; the ghost covers much of a heavy heap.
     The second half of the game has fewer new things (ten pipes in 25 minutes; the wedding party, the piano, the picture
     people and the tower carry it); a stage of the house or a kind of guest between minutes 15 and 25 would serve it
