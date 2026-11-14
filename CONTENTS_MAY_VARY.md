@@ -299,7 +299,7 @@ Numbered as the boxes stand since the reorders of 2026-11-06 and 2026-11-13 (the
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
-Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 32–33 / 58–62 (version 5, November 2026: fewer systems, extras in the film; its impatient bot 29.5–31, its hand that never lets go 38.7–39.6), Still Water 40–50 / 40–46.
+Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 31–32 / 57–60 (version 5, November 2026: fewer systems, extras in the film; its impatient bot 29.5–31, its hand that never lets go 38.7–39.6, measured before the last price change), Still Water 40–50 / 40–46.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -1746,9 +1746,21 @@ still undone, most valuable first:
     reel in the can brings five more extras for the next night (a guest of the softest kind but the visitors, nerve 2,
     worth 1.5; the picture people say so when a reel is done): the house fills towards the end, and the film takes 9.5–10.8
     and 15 minutes. Eager 31.7–33.1, casual 58.4–62.1; the box's own floor for the eager bot (`pace.eager`) is 31, it was 32.
-  - *Left open*: the second half still has fewer new things than the first (ten pipes from minute 10 to 30); the ghost
-    itself is the one prop critics call clip art next to the cut paper; the night cards' cameos are the only picture on
-    them.
+  - *A third pass on the open points*: the ghost is cut from cream card like everything else, with no ink line round it,
+    a paper shadow down and to the right as the furniture casts, and the card lit from above (critics had called it the
+    one piece of clip art among the cut paper). *The second half, counted*: of 27 moments that change the game (a new
+    kind of guest, a grip, a floor, a door, the imp, the heirlooms, the hearse, a reel in the can), 10 to 12 fall in the
+    second half; the eager bot never waits more than 4.5–5.4 minutes for one, but the casual bot waited 7.5 and 9.1
+    minutes between minutes 24 and 43, where the wedding party and the picture people were the dearest pipes of their
+    register. The last three rumours now cost .81 of what they did and every other pipe but the first of each register
+    1.05 times (`pm` 1.84): the casual bot's longest wait for such a moment is 5.2–7.7 minutes. Cheaper still (.75, .6)
+    closed it further but put the eager bot under 31 on one seed in three. Pacing: eager 31.2–32.0, casual 56.6–59.5.
+    The cast cards' nerve bars take the rims' colours (amber, red), and the night card's prompt is readable.
+  - *Fifth critic round* (after the open points): 7/5/8/6/6 and **5.5**, against the fourth's 7/6/8/6/6 and 6 from another
+    critic: the plateau. What it still names: a crowd of eight in one room overlaps even with the rims, prompts and the
+    bill sit over the roof on a desktop while the camera follows, the two bars in the ectoplasm plate need reading, the
+    iris at the end is low on a phone with black above it, the organ's pipes look alike at the start.
+  - *Left open*: the five points of the fifth round; the night cards' cameos are the only picture on them.
 
 ## Ideas, considered and not chosen
 
