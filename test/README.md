@@ -2548,3 +2548,32 @@ or a seed that quietly yields a different maze would break the game in ways one 
 | `walk` | free walking on desktop: random walkers (with lunges) pushed out by `collide` never end up inside a hedge and leave the hedge ring only through the gate; a walker following the shortest way through cell centres at walking speed is never stopped, so every corridor is wide enough |
 | `pace` | an explorer bot that walks toward the light with memory, at a human-ish 0.32 s a step, 0.3 s a quarter turn and 0.7 s per junction, finishes every level inside 85 % of daylight on 24 mazes each, daylight is never absurdly generous, and it grows level by level; stars are 3 by sunset, 2 by 1.5 × daylight, 1 after |
 
+
+## Markdown to HTML Converter
+
+```sh
+npm i --no-save markdown-it@14.1.0          # once; the same version the page loads from jsDelivr
+npm run test:markdown                       # or: node test/markdown_converter.mjs
+node test/markdown_converter.mjs spec gfm   # named suites only
+```
+
+`markdown_converter.mjs` needs no browser and no server. It runs the DOM-free `<script id="core">` block of
+`tools/markdown_converter.html` in Node's `vm` with markdown-it, the same text the page hands its Web Worker for
+inputs over 200,000 characters, and warns if the page pins a different markdown-it than `node_modules` holds. The page
+promises HTML a stranger can paste into a CMS or an e-mail without checking it elsewhere, so the expected values come
+from the published specs: `test/fixtures/commonmark-0.31.2.json` is spec.commonmark.org's `spec.json`, and
+`test/fixtures/gfm-extensions.json` holds the table, strikethrough, autolink and task-list examples cut from
+github/cmark-gfm's `test/spec.txt`.
+
+| suite | what it checks |
+| --- | --- |
+| `spec` | all 652 CommonMark examples pass with the GFM extensions on; autolinks change exactly the four examples with bare URLs, the safe-HTML default exactly the ones with script, style, handlers or `javascript:`, and nothing dangerous survives in those |
+| `gfm` | the GFM extension examples; five autolink edge cases where linkify-it is stricter than cmark-gfm are pinned so a change shows; task items loose, ordered, nested and with markup |
+| `safety` | ~45 XSS vectors (entity-encoded and split schemes, svg/math, srcdoc, srcset, CSS expressions, unclosed and nested tags) come out inert, while details, kbd, sub/sup, aligned images, mailto/relative/#links, data:image, styles, comments and video stay byte-identical; removals are counted and named |
+| `contract` | the old page's (marked 15 + DOMPurify) output for the inventory's inputs, and the two deliberate differences (`javascript:` links stay text; footnotes are not an extension) |
+| `options` | defaults, migration of the old `markpro-settings`, breaks, autolinks without bare domains, smart quotes, GitHub heading slugs and the "auto" rule that adds ids only when the text links to `#something` |
+| `hints` | the warning for rows that look like a table but are not one, not inside code or setext headings, at most three, and the one-tap fix that keeps alignment (a missing column takes the last one's) and leaves a real table |
+| `indent` | the indented layout (on by default) adds only leading spaces, never inside `<pre>`, on all 652 + 23 spec examples |
+| `rich` | the inline styles the e-mail/Docs copy adds to tables, code and quotes, and nothing else |
+| `edges` | BOM, CRLF, bare CR, tabs, NUL, null input, astral characters, UTF-8 byte counts, titles and file names, the download wrapper, a 1 MB input, 5,000-deep quotes, 20,000 asterisks and 5,000 unclosed links |
+| `editor` | the toolbar's text transforms and the selection each leaves |
