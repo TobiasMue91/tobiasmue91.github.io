@@ -1658,6 +1658,78 @@ still undone, most valuable first:
     session's: a motif per room, an edge on the props and figures, and a pass over every line of copy. Begun: what is built in
     casts its own shadow on the wall a few units down and right, as a layer of cut paper does, and the ceiling and the walls
     cast a torn edge of shadow into each room; the study's window spills a soft light (all painted once into the backdrop).
+  - *Round before rich* (November 2026, `CORE.version` 5; the brief: feel like a finished paid game, take away before adding,
+    every new system justified by a measurement). **What the box had**: one verb (hold: the whirl; let go), two limits
+    (ectoplasm, dawn), the family and eight kinds of guest (four with a rule of their own: scoffing, lanterns, a flash, braver
+    in pairs), three exits, seven floors, twenty-eight kinds of thing, forty-two pipes in four registers, a frenzy, six
+    bookings, a chain bonus, heirlooms, the grey lady, imps, slamming doors, a thunderstorm, a stampede, bone china, Fling,
+    the film company's count. **What carried, counted by the bots** (fright that went towards someone's panic, by cause): the
+    whirl 86–90 %; everything else under 3 % each: heirlooms 2.4–2.9, doors 2.4–2.6, imps 2.0–3.4, thunder 1.4–1.7, the grey
+    lady 1.2–1.5, Fling 0–1.8, the stampede 0.4–0.5, what came down when let go 0.5–1.1 together, the reporters' flash 0.
+    The chain bonus paid on every night the house emptied, which for the eager bot was 45 to 50 nights in 53: met by
+    itself. A frenzy came 2.7 times a night, a habit and no peak. Buying the whirl's pipes first instead of the guests'
+    took 50 minutes instead of 30, so the whirl was never the limit and the night never bit. The booking a player chose
+    changed the game by 10 % at most, and always the same way (séance first).
+  - *Taken away*: the grey lady, doors that slam, the stampede, bone china, the reporters' flash (they are plain guests,
+    harder and worth more), the thunderstorm booking, the chain bonus (still counted, for the sticker), the second imp
+    pipe, and Fling as a pipe. Forty-two pipes became thirty-six. A version 4 save keeps its house and its guests and is
+    paid back what each lost pipe cost (`migrate`).
+  - *Made to carry instead of added*: **letting go**. What the whirl carries is always thrown on the way it was going,
+    hits whoever it passes and lands with a crash that frightens everyone near by its mass, and **everyone the crash
+    frightens screams for it** (a crash first only frightened, and a bot that let go over crowds finished *slower* than one
+    that never did, 28 against 26 minutes). One pipe, *An almighty crash*, doubles it, in Fling's place. Now the crash and
+    the throw make 20–25 % of the fright when the bot lets go over three or more, and the eager hand that lets go finishes
+    in 34–36 minutes against 39–42 for the same hand that never does: the first measured reward for playing well in this
+    box. The bot learns it (`drop` in the bots' options; `bots.stubborn` never lets go, `bots.impatient` takes the richest
+    booking and reads nothing).
+  - *The limit bites*: guests are braver by kind (a visitor 1.2 times a Pemberton's nerve, then 1.5, 4.5, 7, 10, 16 and 24
+    for the picture people, buyers 12); the family keeps its nerve, so a person's first night still gets one or two out. A
+    first try raised every guest's nerve alike (1400 for 520), and the scripted person drove two of eleven out on night 3:
+    the bots' better aim hid the wall again (lesson *The bots earn faster than a person*). The eager bot now empties the
+    house on 45–50 % of nights (51 % in minutes 0–10, 76 % in 10–20, 15 % in 20–30, when the wedding party and the
+    picture people come), the casual one on 11 %. Prices above each register's first pipe are 1.75 times what they were,
+    the first pipes unchanged (14, 30, 22, 50). A frenzy wants three times the hits it did and each one in a night more
+    than the last: 1.3 a night. The sticker *Poltergeist* wants three in a night (it wanted four).
+  - *Pacing* (three seeds): eager 33.7–36.0, casual 62.1–66.4, impatient 31.6–32.5, the hand that never lets go 38–42,
+    the longest wait for something new 2.3 / 4.4 minutes; the novice 100–103 (it was 98: the box is harder for a hand that
+    wanders a quarter of the time, and no rule binds the novice). Minutes 0–10 buy 27 pipes, 10–20 six, 20–30 four; the
+    eager bot's last eight minutes are the film (600 people filmed fleeing), the casual bot's longest stretch between
+    pipes 8 minutes, bridged by the reels in the can.
+  - *Which decision does the player make in minute 25 that they did not have in minute 2?* In minute 2 there is one: whom
+    to sweep the teacups into. In minute 25: which booking to take against a crowd that may not empty (a ball's twelve
+    more in a short night, a séance's half again with a lamp that drains, two buyers worth six who are hard to frighten, a
+    moon's longer night); whether to keep carrying a full whirl or throw it down on a knot of wedding guests, where the
+    crockery breaks and is gone for the night; whether to go for the ghost hunters first, whose lanterns drain the ghost,
+    or keep away from them; and on the organ, whether to bring more guests or more power, which now pull against each
+    other (more guests pay more only while the whirl can frighten them).
+  - *Found while playing with real touch*: the first lesson pointed a hand at the teapot and said to hold a finger there,
+    but on a touch screen the ghost floats 58 px above the fingertip, so a finger on the teapot put the whirl above it; the
+    hand now points where the finger goes (PUT YOUR FINGER HERE, AND HOLD). The view took a save only if it was version 4,
+    so raising `CORE.version` would have thrown every save away silently; it reads `CORE.version` now, and the suite
+    checks it. The hint after night 1 still spoke of "the dots on their card" from the version that had resolve pips, and
+    the neighbours' intertitle carried the professor's line.
+  - *The view*: a desktop shows the whole house large while it fits at .4 or more and follows the ghost at .5 once it is
+    taller (it was .34: a column a third of the screen wide between the curtains); the camera has a place of rest and a
+    glide of fixed length (a sweep up and down the whole house moved the picture in 31 % of frames, 133 of them by less
+    than a pixel; now 14 % in four glides, 4 % on a phone); the frenzy bar is labelled; a guest a third of the way to
+    panic shows a small gauge over the head; a lesson shrinks to the screen's width; the crate is pale card in the porch
+    lamp's light (it was black on a black path), its brace behind its posts, and the last card counts the nights, the
+    people driven out and the screams; the night card says how many of how many and marks the best night yet (from the
+    research: a run's end says why it ended and what it beat, as Deskrawl's run summary shows its share of each total,
+    https://wikily.gg/deskrawl/combat/run-summary; and a run is measured against its limit, as Bills Must Be Paid's
+    stamina is, https://www.treyexgaming.com/?p=16191); the card of someone out tonight dims its contents instead
+    of turning see-through over the cellar.
+  - *Critic rounds*: first 6/4/7/4/5 and **4**; second 7/5/7/5/5 and **4**; third 7/4/7/5/6 and **5** (the crowd of a late night still reads as one black mass, floors
+    still go out of view while the camera follows a tall house, the ending's iris closes before the tap, as every box's does);
+    ROUND4.
+  - *Left open*: the close-up critic's list from this session, not done: the pale edge drawn round everything the whirl
+    carries reads to a fresh eye as wireframe (it was added on purpose two sessions ago, so a piano in a heap of chairs
+    reads; a better answer is one silhouette per heap with one outline); the rocking horse's legs stop short of the rocker;
+    kitchen canisters with no shelf; the paper star of a hit hardly shows in a still; the light of the front door and the
+    study window still ends at a hard edge. The organ still reads to critics as forty dark pipes; showing a pipe's effect
+    as a number (reach 120 → 150) is the next step there. The second half of the game is still thin in new things (ten
+    pipes in 25 minutes); a stage of the house or a kind of guest between minutes 15 and 25 would serve it better than
+    any new system.
 
 ## Ideas, considered and not chosen
 
@@ -3589,3 +3661,10 @@ box or two. Starter, box 1 until then, opens on a still jar and earns "about 0¢
 - **A leader alone is a dead stretch.** Snow Day's gangs fell in a rush between minutes two and four and then the leader
   held out alone for three to six minutes, a third of the yard spent pinning one puppet. Measure when the last ordinary
   member falls against when the yard ends, and keep the boss's share small.
+- **A move that only frightens is not taken.** Unwelcome Guests' let-go crashed and frightened everyone near, and paid
+  nothing: a bot that let go over crowds finished slower than one that never did, because the screams came from the hits it
+  gave up. A move is worth making only when it pays in the currency the player is counting; then measure the hand that makes
+  it against the same hand that never does.
+- **Raising `CORE.version` is two changes.** The core migrates, but a view may also check the version of what it is handed:
+  Unwelcome Guests' view took a save only if it said version 4, so version 5 would have started every player afresh with no
+  error anywhere. Search the template for the old number, and let the suite look for it.
