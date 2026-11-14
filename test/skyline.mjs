@@ -8,7 +8,7 @@
 //
 //   wave     the slab's triangle-wave swing, axis alternation, speed ramp
 //   drop     every drop on thousands of random towers across plan levels and slab types: placed +
-//            sliced-off = slab in hand, the placed floor lies inside the one below, perfects snap, near misses
+//            sliced-off = slab in hand, windows carried by the slab and fixed once placed, the placed floor lies inside the one below, perfects snap, near misses
 //            align only inside the auto-align window, growth only on a long chain and never past the lot, a
 //            miss only when nothing overlaps, a strut saves exactly one miss each
 //   systems  storm timing and escalation, the vault, golden slabs, the crane never aiming inside the window,
@@ -105,6 +105,14 @@ if (suites.includes('drop')) {
         continue;
       }
       if (!(r.value > 0)) bad.push('a placed floor paid nothing');
+      // windows: the slab in hand carries the grid of the floor below shifted by its slide; a placed floor
+      // keeps the grid it was seen with (a cut) or the one below it snapped onto (perfect, align)
+      const G = C.GRID, wrap = v => ((v % G) + G) % G, same = (a, b) => Math.min(Math.abs(a - b), G - Math.abs(a - b)) < 1e-6;
+      const slid = ax === 'x' ? 'ox' : 'oz', still = ax === 'x' ? 'oz' : 'ox';
+      if (!same(mv[slid], wrap((top[slid] || 0) + (mv[ax] - top[ax]))) || !same(mv[still], top[still] || 0)) bad.push('the slab in hand does not carry its windows');
+      const want = r.kind === 'cut' ? mv : top;
+      if (!same(r.placed.ox, want.ox || 0) || !same(r.placed.oz, want.oz || 0)) bad.push('windows moved when the floor was placed');
+      if (r.debris && (!same(r.debris.ox, mv.ox) || !same(r.debris.oz, mv.oz))) bad.push('the sliced piece lost its windows');
       if (r.kind === 'align') {
         aligns++;
         const a = Math.abs(mv[ax] - top[ax]);

@@ -103,7 +103,10 @@ button:focus-visible{outline:2px solid var(--window);outline-offset:3px}
   background:var(--cream);color:var(--ink);transition:transform .12s}
 .btn:active{transform:scale(.97)}
 .btn.ghost{flex:0 0 54px;background:rgba(255,244,228,.1);color:var(--cream);display:grid;place-items:center}
-.btn.ghost.wide{flex:0 0 96px}
+.btn.ghost.wide{flex:0 0 84px}
+.btn.ghost.plans{flex:0 0 112px;display:flex;align-items:center;justify-content:center;gap:7px}
+.btn.ghost.plans em{font-style:normal;background:var(--window);color:var(--ink);border-radius:999px;font-size:13px;padding:4px 7px 3px;letter-spacing:.02em}
+@media (max-width:400px){.btn{letter-spacing:.1em;font-size:16px}.btn.ghost.wide{flex-basis:70px}.btn.ghost.plans{flex-basis:100px}}
 .btn.ghost svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
 #sheetback{position:absolute;inset:0;background:rgba(14,10,30,.35)}
@@ -245,6 +248,7 @@ button:focus-visible{outline:2px solid var(--window);outline-offset:3px}
     <p id="rrent" class="rrent"></p>
     <div class="row">
       <button class="btn ghost wide" id="tocity">City</button>
+      <button class="btn ghost plans" id="toplans">Plans<em id="plancount" class="hide"></em></button>
       <button class="btn" id="again">Build next</button>
     </div>
   </div>
@@ -278,6 +282,7 @@ const SkyCore = (() => {
   const STORM_BUILD = 30;      // seconds from first wind to full strength
   const PRESTIGE_MIN = 40;     // a district can be left once a tower in it reached this height
   const VAULT_FILL = 8;        // perfects to fill the vault
+  const GRID = 12.5;           // window pitch on the curtain wall
 
   // the four branches of plans; each node needs one level of `req`
   const UPGRADES = [
@@ -408,7 +413,7 @@ const SkyCore = (() => {
 
   function newRun(up, arch, opt = {}) {
     const p = params(up, arch, opt);
-    const s = {p, floors: [{x: 0, z: 0, w: p.size, d: p.size}], phase: 0, time: 0, rng: (opt.seed | 0) || 1,
+    const s = {p, floors: [{x: 0, z: 0, w: p.size, d: p.size, ox: 0, oz: 0}], phase: 0, time: 0, rng: (opt.seed | 0) || 1,
       streak: 0, bestStreak: 0, perfects: 0, cuts: 0, aligns: 0, earned: 0, struts: p.struts, vault: 0,
       golden: false, goldens: 0, stormFloors: 0, over: false};
     s.golden = rand(s) < GOLDEN_CHANCE;
@@ -416,8 +421,10 @@ const SkyCore = (() => {
   }
   function mover(s) {
     const n = s.floors.length, top = s.floors[n - 1], ax = axisOf(n), off = offset(s.phase);
-    const m = {x: top.x, z: top.z, w: top.w, d: top.d, axis: ax, off, golden: s.golden};
+    const m = {x: top.x, z: top.z, w: top.w, d: top.d, axis: ax, off, golden: s.golden, ox: top.ox || 0, oz: top.oz || 0};
     m[ax] += off;
+    // the windows travel with the slab: its grid is the one below, shifted by how far it has slid
+    if (ax === 'x') m.ox = wrapGrid(m.ox + off); else m.oz = wrapGrid(m.oz + off);
     return m;
   }
   // the storm: calm, then wind that builds and never stops building
@@ -427,6 +434,7 @@ const SkyCore = (() => {
     const ramp = Math.min(1, t / STORM_BUILD), late = Math.max(0, t - STORM_BUILD) / 60;
     return Math.min(2, (ramp + late) * s.p.stormPower);
   }
+  const wrapGrid = v => ((v % GRID) + GRID) % GRID;
   const gust = t => 0.6 * Math.sin(t * 2.1) + 0.4 * Math.sin(t * 0.9 + 1);
   function step(s, dt) {
     if (s.over) return;
@@ -451,7 +459,7 @@ const SkyCore = (() => {
     let kind, placed, debris = null, grew = 0;
     if (a <= s.p.tol) {
       kind = 'perfect';
-      placed = {x: top.x, z: top.z, w: top.w, d: top.d};
+      placed = {x: top.x, z: top.z, w: top.w, d: top.d, ox: top.ox || 0, oz: top.oz || 0};
       s.streak++; s.perfects++;
       if (s.p.vault) s.vault = Math.min(1, s.vault + 1 / VAULT_FILL);
       if (s.streak >= s.p.regrowAt && top[dim] < s.p.size - 1e-9) {
@@ -460,7 +468,7 @@ const SkyCore = (() => {
       }
     } else if (a <= s.p.snap && a < top[dim]) {
       kind = 'align'; s.aligns++;
-      placed = {x: top.x, z: top.z, w: top.w, d: top.d};
+      placed = {x: top.x, z: top.z, w: top.w, d: top.d, ox: top.ox || 0, oz: top.oz || 0};
       s.streak = Math.max(0, s.streak - 3);
     } else {
       const overlap = top[dim] - a;
@@ -477,10 +485,10 @@ const SkyCore = (() => {
       }
       kind = 'cut'; s.cuts++;
       s.streak = Math.max(0, s.streak - 3);
-      placed = {x: top.x, z: top.z, w: top.w, d: top.d};
+      placed = {x: top.x, z: top.z, w: top.w, d: top.d, ox: m.ox, oz: m.oz};
       placed[dim] = overlap;
       placed[ax] = top[ax] + off / 2;
-      debris = {x: m.x, z: m.z, w: m.w, d: m.d};
+      debris = {x: m.x, z: m.z, w: m.w, d: m.d, ox: m.ox, oz: m.oz};
       debris[dim] = a;
       debris[ax] = placed[ax] + Math.sign(off) * (overlap + a) / 2;
     }
@@ -542,7 +550,7 @@ const SkyCore = (() => {
     const p = plot(i);
     return {x: p.a * SPACING, z: p.b * SPACING, diag: p.diag};
   }
-  return {BASE, SLAB, PLINTH, RANGE, GROW, SPACING, GOLDEN_CHANCE, GOLDEN_MULT, RUSH_MULT, RUSH_DUR, STORM_BUILD,
+  return {BASE, SLAB, PLINTH, RANGE, GROW, SPACING, GRID, GOLDEN_CHANCE, GOLDEN_MULT, RUSH_MULT, RUSH_DUR, STORM_BUILD,
     PRESTIGE_MIN, VAULT_FILL, UPGRADES, ARCH, TYPES, ACHIEVEMENTS, levels, archLevels, cost, archCost, unlocked,
     typeOpen, params, speedAt, axisOf, offset, newRun, mover, storm, step, drop, cashVault, floorValue, chainMult,
     craneError, craneRhythm, towerFloors, rentPerHour, rentCapHours, offlineRent, blueprints, newAchievements,
@@ -647,8 +655,8 @@ function persist() {
   } catch (e) { /* ignore */ }
 }
 // towers are stored as [[x,z,w,d],...] relative to their plot centre
-const packTower = floors => ({f: floors.map(f => f.g ? [f.x, f.z, f.w, f.d, 1] : [f.x, f.z, f.w, f.d]), s: (Math.random() * 1e6) | 0});
-const unpack = t => t.f.map(a => ({x: a[0], z: a[1], w: a[2], d: a[3], g: a[4] ? 1 : 0}));
+const packTower = floors => ({f: floors.map(f => [f.x, f.z, f.w, f.d, f.g ? 1 : 0, f.ox || 0, f.oz || 0]), s: (Math.random() * 1e6) | 0});
+const unpack = t => t.f.map(a => ({x: a[0], z: a[1], w: a[2], d: a[3], g: a[4] ? 1 : 0, ox: a[5] || 0, oz: a[6] || 0}));
 
 /* ---------------- audio ---------------- */
 const Sound = {
@@ -776,7 +784,7 @@ function towerTop(floorsLen) { return C.PLINTH + (floorsLen - 1) * C.SLAB; }
 function boardDiags() { return C.plot(save.towers.length).diag + 1; }
 
 function aimCamera(snap) {
-  if (mode === 'city' || mode === 'permits') {
+  if (mode === 'city') {
     // fit the board and its towers
     const D = demolish ? demolish.ring : boardDiags(), ext = D * C.SPACING;
     let maxH = 60;
@@ -851,44 +859,33 @@ function drawFloor(X, Z, f, n, y0, h, seed, alpha = 1, hz = 0, outline = false, 
     ctx.fillStyle = p.BL; quad(x0, y0 + band, z1, x1, y0 + band, z1, x1, y0, z1, x0, y0, z1); ctx.fill();
     ctx.fillStyle = p.BR; quad(x1, y0 + band, z1, x1, y0 + band, z0, x1, y0, z0, x1, y0, z1); ctx.fill();
   }
-  if (px1 > 34 && cam.s * h > 5 && hz < .3) {
-    // mullions on a world grid, so a cut floor keeps lining up with the one below
-    const G = 12.5, night = p.night;
-    ctx.lineWidth = Math.max(1, cam.s * .7);
-    const gx0 = Math.ceil((x0 + .01) / G), gx1 = Math.floor((x1 - .01) / G);
-    const gz0 = Math.ceil((z0 + .01) / G), gz1 = Math.floor((z1 - .01) / G);
-    if (night > 0.02) {
-      ctx.fillStyle = rgb(WIN, 0.92 * night);
-      for (let i = gx0 - 1; i <= gx1; i++) if (hash(seed, n * 131 + i, 1) < 0.5 * night + .05) {
-        const a = Math.max(x0, i * G), b = Math.min(x1, (i + 1) * G);
-        if (b - a > 2) { quad(a + .8, y1 - 1.5, z1, b - .8, y1 - 1.5, z1, b - .8, y0 + band + .8, z1, a + .8, y0 + band + .8, z1); ctx.fill(); }
-      }
-      ctx.fillStyle = rgb(mix(WIN, SHADE, .3), 0.85 * night);
-      for (let i = gz0 - 1; i <= gz1; i++) if (hash(seed, n * 131 + i, 2) < 0.42 * night + .03) {
-        const a = Math.max(z0, i * G), b = Math.min(z1, (i + 1) * G);
-        if (b - a > 2) { quad(x1, y1 - 1.5, b - .8, x1, y1 - 1.5, a + .8, x1, y0 + band + .8, a + .8, x1, y0 + band + .8, b - .8); ctx.fill(); }
-      }
+  // windows: a grid fixed to the floor itself (its tower plus the origin it was set with), so nothing on a
+  // placed floor ever moves; which rooms are lit depends only on the floor and the room, never on zoom or haze
+  const G = C.GRID, gox = X - f.x + (f.ox || 0), goz = Z - f.z + (f.oz || 0);
+  const ix0 = Math.floor((x0 - gox) / G), ix1 = Math.ceil((x1 - gox) / G) - 1;
+  const iz0 = Math.floor((z0 - goz) / G), iz1 = Math.ceil((z1 - goz) / G) - 1;
+  const litN = smooth(22, 40, n), detail = px1 > 34 && cam.s * h > 5;
+  if (litN > .02 && p.night > .02 && hz < .5) {
+    const inset = detail ? .8 : 0, top = detail ? y1 - 1.5 : y0 + h * .8, bot = detail ? y0 + band + .8 : y0 + h * .25;
+    ctx.fillStyle = rgb(WIN, .92 * p.night);
+    for (let i = ix0; i <= ix1; i++) if (hash(seed, n * 131 + i, 1) < .5 * litN + .05) {
+      const a = Math.max(x0, gox + i * G) + inset, b = Math.min(x1, gox + (i + 1) * G) - inset;
+      if (b - a > 1.5) { quad(a, top, z1, b, top, z1, b, bot, z1, a, bot, z1); ctx.fill(); }
     }
+    ctx.fillStyle = rgb(mix(WIN, SHADE, .3), .85 * p.night);
+    for (let i = iz0; i <= iz1; i++) if (hash(seed, n * 131 + i, 2) < .42 * litN + .03) {
+      const a = Math.max(z0, goz + i * G) + inset, b = Math.min(z1, goz + (i + 1) * G) - inset;
+      if (b - a > 1.5) { quad(x1, top, b, x1, top, a, x1, bot, a, x1, bot, b); ctx.fill(); }
+    }
+  }
+  if (detail && hz < .3) { // mullions on the same grid
+    ctx.lineWidth = Math.max(1, cam.s * .7);
     ctx.strokeStyle = p.M; ctx.beginPath();
-    for (let i = gx0; i <= gx1; i++) { P(i * G, y1, z1); ctx.moveTo(px, py); P(i * G, y0 + band, z1); ctx.lineTo(px, py); }
+    for (let i = ix0 + 1; i <= ix1; i++) { const x = gox + i * G; if (x <= x0 + .01 || x >= x1 - .01) continue; P(x, y1, z1); ctx.moveTo(px, py); P(x, y0 + band, z1); ctx.lineTo(px, py); }
     ctx.stroke();
     ctx.strokeStyle = p.MR; ctx.beginPath();
-    for (let i = gz0; i <= gz1; i++) { P(x1, y1, i * G); ctx.moveTo(px, py); P(x1, y0 + band, i * G); ctx.lineTo(px, py); }
+    for (let i = iz0 + 1; i <= iz1; i++) { const z = goz + i * G; if (z <= z0 + .01 || z >= z1 - .01) continue; P(x1, y1, z); ctx.moveTo(px, py); P(x1, y0 + band, z); ctx.lineTo(px, py); }
     ctx.stroke();
-  }
-  else if (p.night > .08 && hz < .5) { // too small for windows: a lit strip says someone is home
-    // lit rooms in runs along the floor, picked by a hash so they stay put
-    const G = 25, gx0 = Math.floor(x0 / G), gx1 = Math.floor(x1 / G), gz0 = Math.floor(z0 / G), gz1 = Math.floor(z1 / G);
-    ctx.fillStyle = rgb(WIN, .95 * p.night);
-    for (let i = gx0; i <= gx1; i++) if (hash(seed, n * 57 + i, 5) < .6) {
-      const a = Math.max(x0, i * G), b = Math.min(x1, (i + 1) * G);
-      if (b - a > 3) { quad(a, y0 + h * .8, z1, b, y0 + h * .8, z1, b, y0 + h * .25, z1, a, y0 + h * .25, z1); ctx.fill(); }
-    }
-    ctx.fillStyle = rgb(mix(WIN, SHADE, .3), .8 * p.night);
-    for (let i = gz0; i <= gz1; i++) if (hash(seed, n * 57 + i, 6) < .5) {
-      const a = Math.max(z0, i * G), b = Math.min(z1, (i + 1) * G);
-      if (b - a > 3) { quad(x1, y0 + h * .8, b, x1, y0 + h * .8, a, x1, y0 + h * .25, a, x1, y0 + h * .25, b); ctx.fill(); }
-    }
   }
   // top
   ctx.fillStyle = p.T; quad(x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1); ctx.fill();
@@ -1018,7 +1015,7 @@ function drawBoard() {
     ctx.stroke(); ctx.setLineDash([]);
   }
   // plots: pavement pads with a curb
-  const built = save.towers.length + (run && mode !== 'city' && mode !== 'permits' ? 1 : 0);
+  const built = save.towers.length + (run && mode !== 'city' ? 1 : 0);
   const count = Math.round(D) * (Math.round(D) + 1) / 2;
   for (let i = 0; i < Math.max(count, built + 1); i++) {
     const q = C.plotPos(i);
@@ -1030,7 +1027,7 @@ function drawBoard() {
     quad(q.x + r, 3, q.z + r, q.x + r, 3, q.z - r, q.x + r, 0, q.z - r, q.x + r, 0, q.z + r); ctx.fill();
     ctx.fillStyle = '#93839a';
     quad(q.x - r, 3, q.z - r, q.x + r, 3, q.z - r, q.x + r, 3, q.z + r, q.x - r, 3, q.z + r); ctx.fill();
-    if (i === built && (mode === 'city' || mode === 'permits')) { // the next lot breathes
+    if (i === built && (mode === 'city')) { // the next lot breathes
       const t = (perfNow % 1800) / 1800, pulse = reduced.matches ? .5 : .5 + .5 * Math.sin(t * Math.PI * 2);
       ctx.fillStyle = `rgba(255,210,122,${.18 + .2 * pulse})`;
       quad(q.x - r, 3, q.z - r, q.x + r, 3, q.z - r, q.x + r, 3, q.z + r, q.x - r, 3, q.z + r); ctx.fill();
@@ -1066,7 +1063,7 @@ function drawTree(t) {
 
 /* ---------------- sky ---------------- */
 function skyHour() { // hour of the sky, in floors
-  if (mode === 'city' || mode === 'permits') return 15;
+  if (mode === 'city') return 15;
   return Math.max(0, (cam.y - C.PLINTH) / C.SLAB);
 }
 let cloudDrift = 0, skyHr = 15;
@@ -1097,41 +1094,112 @@ function drawSky(hr) {
     ctx.fillStyle = sg; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = `rgba(255,246,220,${.9 * sunA})`; ctx.beginPath(); ctx.arc(sx, sy, Math.min(W, H) * .045, 0, 7); ctx.fill();
   }
-  // distant skyline silhouette, a slow layer
-  const camPx = Math.max(0, cam.y - 80) * cam.s; // one rule in every mode, so nothing jumps between screens
-  const baseY = H * .80 + Math.min(camPx * .12, H);
-  if (baseY < H + 10) {
-    const fc = mix(low, midc, .55), fc2 = mix(fc, top, .25);
-    const cell = 26;
-    for (let layer = 0; layer < 2; layer++) {
-      ctx.fillStyle = rgb(layer ? fc : fc2, layer ? .9 : .55);
-      const off = layer ? 0 : 13, by = baseY + layer * 18;
-      ctx.beginPath(); ctx.moveTo(0, H);
-      for (let gx = -1; gx * cell < W + cell; gx++) {
-        const hh = 18 + hash(gx, layer, 21) * (layer ? 70 : 110) * (hash(gx >> 2, layer, 22) * .7 + .3);
-        const x = gx * cell + off;
-        ctx.lineTo(x, by - hh); ctx.lineTo(x + cell - 3, by - hh); ctx.lineTo(x + cell - 3, by - hh * .6); ctx.lineTo(x + cell, by - hh * .6);
-      }
-      ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
-      ctx.fillRect(0, by, W, H - by + 2);
+  // the moon rises as the sun goes; a crescent, fixed to the sky
+  const moonA = smooth(16, 32, hr);
+  if (moonA > 0) {
+    const mx = W * .2, my = H * .16, r = Math.min(W, H) * .036;
+    const mg = ctx.createRadialGradient(mx, my, 0, mx, my, r * 6);
+    mg.addColorStop(0, `rgba(230,225,255,${.22 * moonA})`); mg.addColorStop(1, 'rgba(230,225,255,0)');
+    ctx.fillStyle = mg; ctx.fillRect(mx - r * 6, my - r * 6, r * 12, r * 12);
+    ctx.fillStyle = `rgba(255,248,232,${.95 * moonA})`;
+    ctx.beginPath(); ctx.arc(mx, my, r, 0, 7); ctx.arc(mx + r * .42, my - r * .22, r * .9, 0, 7, true); ctx.fill('evenodd');
+  }
+  const T = perfNow / 1000;
+  // birds cross the golden hour; a plane blinks across the night. Both move on their own clock, not the camera's
+  const birdsA = 1 - smooth(10, 18, hr);
+  if (birdsA > 0 && !reduced.matches) {
+    const period = 26, k = Math.floor(T / period), u = (T % period) / period;
+    if (hash(k, 1, 41) < .75) {
+      const dir = hash(k, 2, 41) < .5 ? 1 : -1, y0 = H * (.1 + hash(k, 3, 41) * .22), x0 = dir > 0 ? -80 + u * (W + 160) : W + 80 - u * (W + 160);
+      ctx.strokeStyle = rgb(mix(SHADE, top, .2), .6 * birdsA); ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+      ctx.beginPath();
+      [[0, 0], [-14, 7], [-14, -6], [-27, 13], [-29, -11], [-40, 19]].forEach(([dx, dy], j) => {
+        const bx = x0 + dx * dir, by = y0 + dy + Math.sin(T * 1.1 + j) * 1.5, fl = Math.sin(T * 9 + j * 1.7) * 2.5;
+        ctx.moveTo(bx - 5, by - 1 - fl); ctx.quadraticCurveTo(bx - 2, by - 1, bx, by + 1); ctx.quadraticCurveTo(bx + 2, by - 1, bx + 5, by - 1 - fl);
+      });
+      ctx.stroke(); ctx.lineCap = 'butt';
     }
   }
-  // clouds: a mid layer that moves at a third of the camera
+  const planeA = smooth(22, 32, hr);
+  if (planeA > 0 && !reduced.matches) {
+    const period = 44, k = Math.floor(T / period), u = (T % period) / period;
+    if (hash(k, 5, 43) < .8) {
+      const dir = hash(k, 6, 43) < .5 ? 1 : -1, y = H * (.07 + hash(k, 7, 43) * .14) - u * 12, x = dir > 0 ? -20 + u * (W + 40) : W + 20 - u * (W + 40);
+      ctx.fillStyle = `rgba(255,244,228,${.75 * planeA})`; ctx.fillRect(x - 1, y - 1, 2.2, 2.2);
+      if ((T * 1.6) % 1 < .14) { ctx.fillStyle = `rgba(255,90,90,${planeA})`; ctx.beginPath(); ctx.arc(x - 5 * dir, y + 1, 1.8, 0, 7); ctx.fill(); }
+    }
+  }
+  // the far city: three rigid layers, each sliding by its own small share of the camera, lighting up with the hour
+  const camPx = Math.max(0, cam.y - 80) * cam.s; // one rule in every mode, so nothing jumps between screens
+  const camX = (cam.x - cam.z) * ISO_C * cam.s;
+  const nightF = smooth(14, 34, hr);
+  const FAR = [
+    {k: .05, kx: .02, cell: 34, hmin: 34, hvar: 120, col: mix(mix(low, midc, .5), top, .35), a: .55, win: 0, dy: 0},
+    {k: .09, kx: .05, cell: 28, hmin: 24, hvar: 95, col: mix(low, midc, .6), a: .85, win: .5, dy: 16},
+    {k: .14, kx: .09, cell: 22, hmin: 16, hvar: 70, col: mix(mix(low, midc, .7), SHADE, .28), a: 1, win: .75, dy: 34},
+  ];
+  FAR.forEach((L, li) => {
+    const by = H * .78 + L.dy + Math.min(camPx * L.k, H * 1.3);
+    if (by - L.hmin - L.hvar > H) return;
+    const ox = -camX * L.kx, i0 = Math.floor(-ox / L.cell) - 1, i1 = Math.ceil((W - ox) / L.cell) + 1;
+    ctx.fillStyle = rgb(L.col, L.a);
+    ctx.fillRect(0, by - 1, W, H - by + 2);
+    for (let i = i0; i <= i1; i++) {
+      const hh = L.hmin + hash(i, li, 21) * L.hvar * (hash(i >> 2, li, 22) * .7 + .3);
+      const x = ox + i * L.cell, w = L.cell - 2 - hash(i, li, 23) * 6;
+      ctx.fillStyle = rgb(L.col, L.a);
+      ctx.fillRect(x, by - hh, w, hh);
+      if (hash(i, li, 24) < .18) ctx.fillRect(x + w * .45, by - hh - 9, 1.5, 9);
+      if (hash(i, li, 26) < .25) ctx.fillRect(x + w * .2, by - hh - 4, w * .5, 4); // a setback on top
+      if (L.win && nightF > .02) {
+        ctx.fillStyle = rgb(WIN, L.win * nightF);
+        for (let r = 0; r * 6 + 9 < hh; r++) for (let c = 0; c * 5 + 4 < w; c++)
+          if (hash(i * 37 + c, r, 25 + li) < .32 * nightF) ctx.fillRect(x + 2 + c * 5, by - hh + 6 + r * 6, 2, 2.5);
+      }
+    }
+  });
+  // clouds: a mid layer that moves at a third of the camera; lit from below at sunset
   const cloudA = 1 - .55 * smooth(24, 40, hr);
   const cc = mix(mix(midc, WHITE, .45), top, smooth(18, 40, hr) * .7);
-  const csz = 170, layerY = (cam.y * cam.s) * .33;
+  const under = mix(mix(low, WARM, .35), mix(top, SHADE, .3), smooth(14, 34, hr));
+  const csz = 170, layerY = (cam.y * cam.s) * .33, cxs = -camX * .25;
   const rowsTop = Math.floor((-layerY - csz) / csz), rowsBot = Math.ceil((H - layerY + csz) / csz);
-  ctx.fillStyle = rgb(cc, .55 * cloudA);
   for (let gy = rowsTop; gy <= rowsBot; gy++) {
     const yy = gy * csz + layerY;
-    for (let gx = -1; gx * csz < W + csz * 2; gx++) {
-      const cxI = gx - Math.floor(cloudDrift / csz);
+    for (let gx = -2; gx * csz < W + csz * 2; gx++) {
+      const shift = cloudDrift + cxs, cxI = gx - Math.floor(shift / csz);
       if (hash(cxI, gy, 31) > .28) continue;
-      const X = gx * csz + ((cloudDrift % csz) + csz) % csz + hash(cxI, gy, 32) * 60;
+      const X = gx * csz + ((shift % csz) + csz) % csz + hash(cxI, gy, 32) * 60;
       const Y = yy + hash(cxI, gy, 33) * 80, w = 70 + hash(cxI, gy, 34) * 90;
-      cloud(X, Y, w);
+      ctx.fillStyle = rgb(under, .5 * cloudA); cloud(X, Y + w * .035, w);
+      ctx.fillStyle = rgb(cc, .6 * cloudA); cloud(X, Y - w * .01, w * .97);
     }
   }
+}
+// above floor ~30 the city sinks under a deck of cloud; it rises past the camera like any layer near the tower
+const DECK_Y = 440;
+let deckA = 0;
+function drawDeck(hr, dt) {
+  const want = mode === 'build' || mode === 'fall' || mode === 'intro' || mode === 'result' ? 1 : 0;
+  deckA += (want - deckA) * (1 - Math.exp(-dt * 3));
+  const vis = deckA * smooth(DECK_Y, DECK_Y + 160, cam.y);
+  if (vis < .01) return;
+  const y = H * cam.ay + (cam.y - DECK_Y) * cam.s * .8;
+  if (y > H + 60) return;
+  const top = ramp(SKY_TOP, hr), midc = ramp(SKY_MID, hr), low = ramp(SKY_LOW, hr);
+  const lit = mix(mix(midc, WHITE, .42), mix(top, WHITE, .12), smooth(18, 40, hr) * .75), body = mix(lit, mix(low, SHADE, .4), .45);
+  const g = ctx.createLinearGradient(0, y - 30, 0, Math.max(y + 10, H));
+  g.addColorStop(0, rgb(lit, .92 * vis)); g.addColorStop(1, rgb(body, .96 * vis));
+  ctx.fillStyle = g;
+  const camX = (cam.x - cam.z) * ISO_C * cam.s, ox = -camX * .7 + cloudDrift * .5, cell = 64;
+  ctx.beginPath(); ctx.moveTo(0, H + 2); ctx.lineTo(0, y);
+  const i0 = Math.floor(-ox / cell) - 1, i1 = Math.ceil((W - ox) / cell) + 1;
+  for (let i = i0; i <= i1; i++) { // puffs on a grid in the deck's own space
+    const cx = ox + i * cell + hash(i, 9, 51) * 18, r = 22 + hash(i, 9, 52) * 26;
+    ctx.moveTo(cx - r, y + 4); ctx.arc(cx, y + 6 - hash(i, 9, 53) * 10, r, Math.PI, 0);
+  }
+  ctx.rect(0, y + 4, W, H - y + 4);
+  ctx.fill();
 }
 function cloud(x, y, w) {
   ctx.beginPath();
@@ -1166,7 +1234,7 @@ function drawRings(dt) {
 }
 function spawnDebris(X, Z, f, y, n, off, axis, whole, gold) {
   const dir = Math.sign(off) || 1;
-  debris.push({X: X + f.x, Z: Z + f.z, f: {x: 0, z: 0, w: f.w, d: f.d}, y, n, seed: runSeed, gold,
+  debris.push({X: X + f.x, Z: Z + f.z, f: {x: 0, z: 0, w: f.w, d: f.d, ox: (f.ox || 0) - f.x, oz: (f.oz || 0) - f.z}, y, n, seed: runSeed, gold,
     vx: axis === 'x' ? dir * (whole ? 40 : 70) : 0, vz: axis === 'z' ? dir * (whole ? 40 : 70) : 0, vy: whole ? 10 : 46,
     rot: 0, vr: dir * (axis === 'x' ? 1 : -1) * (whole ? 1.1 : 3.2) * (.8 + Math.random() * .4), t: 0});
 }
@@ -1204,7 +1272,7 @@ function drawSparks(dt) {
 const coins = [];
 let coinClock = 0;
 function cityCoins(dt) {
-  if ((mode !== 'city' && mode !== 'permits') || !save.towers.length) { coins.length = 0; return; }
+  if ((mode !== 'city') || !save.towers.length) { coins.length = 0; return; }
   coinClock -= dt;
   if (coinClock <= 0) {
     coinClock = 1.4 / Math.min(4, Math.sqrt(save.towers.length));
@@ -1376,7 +1444,7 @@ function goldGlint(x, z, f, y) {
 /* ---------------- flow ---------------- */
 function setMode(m) {
   mode = m; modeT = 0;
-  const city = m === 'city' || m === 'permits';
+  const city = m === 'city';
   const playing = m === 'intro' || m === 'build' || m === 'fall';
   $('title').classList.toggle('hide', !city);
   $('cash').classList.toggle('hide', !city && m !== 'result');
@@ -1393,14 +1461,13 @@ function setMode(m) {
   $('loadout').classList.toggle('hide', m !== 'city' || !$('loadout').childElementCount);
   if (!playing) { $('stormchip').classList.add('hide'); Sound.setWind(0); }
   $('result').classList.add('hide');
-  $('permits').classList.toggle('hide', m !== 'permits');
-  $('sheetback').classList.toggle('hide', m !== 'permits');
+  closeSheet(true);
   if (m !== 'result') $('toast').classList.add('hide');
   const prev = setMode.prev; setMode.prev = m;
   aimCamera(false);
   if (m === 'intro') flyTo(prev === 'result' ? 1.1 : 1.0, prev === 'result' ? .35 : .12);
   else if (m === 'result') flyTo(1.0);
-  else if (m === 'city' && prev !== 'permits') flyTo(1.1, .05);
+  else if (m === 'city') flyTo(1.1, .05);
   refreshCity();
 }
 
@@ -1505,11 +1572,13 @@ function endRun() {
   $('rrent').innerHTML = addRent > 0 ? `This tower pays <b>$${fmt(addRent)}/h</b> rent from now on` : '';
   countUp = {t: 0, to: run.earned};
   cashShown = save.money - run.earned;
+  resultShown = false;
   setMode('result');
+  renderPlanCount();
   checkAchievements();
   if (craneOn()) autoNext = 2.4; // the crane starts the next tower by itself
 }
-let countUp = null;
+let countUp = null, resultShown = false;
 let boardRingTarget = 1;
 
 function toCity() {
@@ -1520,6 +1589,7 @@ function toCity() {
 
 function primary() {
   if (paused) { resume(); return; }
+  if (sheetOpen) return;
   if (mode === 'city') startBuild();
   else if (mode === 'build') doDrop();
   else if (mode === 'result' && modeT > 1.2) startBuild();
@@ -1545,7 +1615,8 @@ function refreshCity() {
     || C.ARCH.some(a => C.archCost(a.id, save.arch[a.id]) <= save.bp);
   $('permitbadge').classList.toggle('hide', !can);
   renderSound();
-  if (mode === 'permits') renderPermits();
+  if (sheetOpen) renderPermits();
+  renderPlanCount();
 }
 // one mark per branch: a crane hook, a laser level, a strut, a skyline
 const BRANCH = {
@@ -1600,13 +1671,37 @@ const ACH_TEXT = {
   district_5: ['Serial developer', 'Found five districts'], rich_10k: ['Brick by brick', 'Earn $10K'],
   rich_1m: ['Tycoon', 'Earn $1M'],
 };
-let sheetTab = 'plans', foundArm = 0, branchTab = 'structure';
+let sheetTab = 'plans', foundArm = 0, branchTab = 'structure', sheetOpen = false;
+const affordable = () => C.UPGRADES.filter(u => C.unlocked(u.id, save.up) && C.cost(u.id, save.up[u.id]) <= save.money);
+function openSheet() {
+  if (sheetOpen) return;
+  sheetOpen = true; Sound.tick();
+  // open where the money can go: the first branch with something affordable
+  const can = affordable();
+  if (sheetTab === 'plans' && can.length && !can.some(u => u.branch === branchTab)) branchTab = can[0].branch;
+  $('permits').classList.remove('hide'); $('sheetback').classList.remove('hide');
+  $('permitsbtn').classList.add('hide'); $('loadout').classList.add('hide'); $('cta').classList.add('hide');
+  $('result').classList.add('hide');
+  renderPermits();
+}
+function closeSheet(quiet) {
+  if (!sheetOpen) return;
+  sheetOpen = false; if (!quiet) Sound.tick();
+  $('permits').classList.add('hide'); $('sheetback').classList.add('hide');
+  if (quiet) return;
+  if (mode === 'city') { $('permitsbtn').classList.remove('hide'); renderLoadout(); $('cta').classList.toggle('hide', save.runs >= 3); }
+  if (mode === 'result') { $('result').classList.remove('hide'); renderPlanCount(); }
+}
+function renderPlanCount() {
+  const n = affordable().length, el = $('plancount');
+  el.textContent = n; el.classList.toggle('hide', !n);
+}
 function renderPermits() {
   const tabs = $('permits').querySelectorAll('.tabs button');
   if (!renderPermits.wired) {
     renderPermits.wired = true;
     tabs.forEach(t => t.addEventListener('click', e => { e.stopPropagation(); sheetTab = t.dataset.tab; Sound.tick(); renderPermits(); }));
-    $('permits').querySelector('.grab').addEventListener('click', () => setMode('city'));
+    $('permits').querySelector('.grab').addEventListener('click', () => closeSheet());
     $('permits').addEventListener('click', e => {
       const sub = e.target.closest('button[data-branch]');
       if (sub) { e.stopPropagation(); branchTab = sub.dataset.branch; Sound.tick(); renderPermits(); return; }
@@ -1769,13 +1864,14 @@ window.addEventListener('keydown', e => {
   } else if (e.code === 'KeyV') { cashVault();
   } else if (e.code === 'KeyC' && owned('crane')) { save.crane = !save.crane; renderCraneBtn(); renderLoadout(); persist();
   } else if (e.code === 'Escape' || e.code === 'KeyP') {
-    if (mode === 'permits') setMode('city');
+    if (sheetOpen) closeSheet();
     else if (paused) resume(); else pause();
   }
 });
 $('sound').addEventListener('click', () => { save.muted = !save.muted; persist(); Sound.init(); renderSound(); Sound.tick(); });
-$('permitsbtn').addEventListener('click', () => { Sound.init(); Sound.tick(); setMode('permits'); });
-$('sheetback').addEventListener('click', () => { Sound.tick(); setMode('city'); });
+$('permitsbtn').addEventListener('click', () => { Sound.init(); openSheet(); });
+$('toplans').addEventListener('click', e => { e.stopPropagation(); Sound.init(); openSheet(); });
+$('sheetback').addEventListener('click', () => closeSheet());
 $('again').addEventListener('click', () => startBuild());
 $('tocity').addEventListener('click', () => { Sound.tick(); toCity(); });
 $('pausebtn').addEventListener('click', e => { e.stopPropagation(); pause(); });
@@ -1805,10 +1901,10 @@ function tick(dt) {
     if (rushT > 0) { rushT = Math.max(0, rushT - dt); $('rush').querySelector('i').style.width = (100 * rushT / C.RUSH_DUR).toFixed(1) + '%'; $('rush').querySelector('b').textContent = `Rush ×3 · ${Math.ceil(rushT)}s`; if (!rushT) $('rush').classList.add('hide'); }
     tickStorm(dt); tickBlimp(dt); tickCrane(dt);
   }
-  if (live && mode === 'result' && autoNext > 0) { autoNext -= dt; if (autoNext <= 0) { autoNext = -1; if (craneOn()) startBuild(); } }
+  if (live && mode === 'result' && autoNext > 0 && !sheetOpen) { autoNext -= dt; if (autoNext <= 0) { autoNext = -1; if (craneOn()) startBuild(); } }
   if (live && mode === 'fall' && modeT > 1.1) endRun();
-  if (mode === 'result' && modeT > (reduced.matches ? .2 : .95) && $('result').classList.contains('hide')) { $('result').classList.remove('hide'); countUp && (countUp.t = 0); }
-  if (mode === 'city' || mode === 'permits') {
+  if (mode === 'result' && !sheetOpen && !resultShown && modeT > (reduced.matches ? .2 : .95)) { resultShown = true; $('result').classList.remove('hide'); countUp && (countUp.t = 0); }
+  if (mode === 'city') {
     const rph = C.rentPerHour(save.towers, save.up, save.arch);
     if (rph) { save.money += rph / 3600 * dt; save.stats.lifetime += rph / 3600 * dt; if ((perfNow | 0) % 5000 < 20) persist(); }
   }
@@ -1830,14 +1926,14 @@ function tick(dt) {
     cloudDrift += dt * 6;
     const hzT = (mode === 'intro' || mode === 'build' || mode === 'fall') ? .86 : mode === 'result' ? .8 : 0;
     hazeAmt += (hzT - hazeAmt) * (1 - Math.exp(-dt * 4));
-    if (mode !== 'result' && mode !== 'city' && mode !== 'permits') lastFade += (1 - lastFade) * (1 - Math.exp(-dt * 3));
+    if (mode !== 'result' && mode !== 'city') lastFade += (1 - lastFade) * (1 - Math.exp(-dt * 3));
     boardRing += (boardRingTarget - boardRing) * (1 - Math.exp(-dt * 3));
     if (Math.abs(boardRing - boardRingTarget) < .002) boardRing = boardRingTarget;
   }
   shake *= Math.exp(-dt * 12);
   // cash display
   const target = save.money;
-  if (countUp && !$('result').classList.contains('hide')) {
+  if (countUp && resultShown) {
     countUp.t += dt;
     const e = clamp((countUp.t - .3) / .9, 0, 1), v = Math.round(countUp.to * (1 - Math.pow(1 - e, 3)));
     if (v !== countUp.v) { if ((countUp.n = (countUp.n || 0) + 1) % 3 === 0) Sound.coin(countUp.n % 7); countUp.v = v; }
@@ -1855,6 +1951,7 @@ function render(dt) {
   const hr = skyHr += (skyHour() - skyHr) * (1 - Math.exp(-Math.min(dt, .05) * 3)); // the sky never jumps between screens
   { const f = mix(mix(ramp(SKY_TOP, hr), ramp(SKY_MID, hr), .3), SHADE, .2 + .3 * smooth(6, 26, hr)); const g = (f[0] + f[1] + f[2]) / 3; hazeCol = mix(f, [g, g, g * 1.08], .35); } hazeKey = Math.round(hr / 3) & 127;
   drawSky(hr);
+  drawDeck(hr, dt);
   ctx.save();
   if (shake > .05) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
   drawBoard();
@@ -1901,7 +1998,7 @@ function render(dt) {
   drawStorm(dt);
   drawBlimp(dt);
   drawFloats(dt);
-  if (mode === 'city' || mode === 'permits') { // the next lot: a gold chevron bobbing above it, never hidden by towers
+  if (mode === 'city') { // the next lot: a gold chevron bobbing above it, never hidden by towers
     const q = C.plotPos(save.towers.length), b = reduced.matches ? 0 : Math.sin(perfNow * .004) * 5;
     P(q.x, 6, q.z);
     const x = px, y = py - 26 + b, k = Math.max(7, Math.min(13, cam.s * 30));
