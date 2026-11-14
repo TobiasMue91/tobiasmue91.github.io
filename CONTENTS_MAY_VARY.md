@@ -1760,7 +1760,12 @@ still undone, most valuable first:
     critic: the plateau. What it still names: a crowd of eight in one room overlaps even with the rims, prompts and the
     bill sit over the roof on a desktop while the camera follows, the two bars in the ectoplasm plate need reading, the
     iris at the end is low on a phone with black above it, the organ's pipes look alike at the start.
-  - *Left open*: the five points of the fifth round; the night cards' cameos are the only picture on them.
+  - *After it*: once the crate is down the camera brings it to the middle of the screen while the iris closes (on a phone
+    it closed in the lower third with black above it).
+  - *Left open*: from the fifth round, a crowd of eight in one room still overlaps (people further back drawn smaller or
+    greyer was tried two sessions ago and read as see-through), prompts and the bill over the roof on a desktop while the
+    camera follows, two bars in the ectoplasm plate, organ pipes that look alike at the start; the night cards' cameos are
+    the only picture on them.
 
 ## Ideas, considered and not chosen
 
