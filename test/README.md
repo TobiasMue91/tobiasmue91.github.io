@@ -2549,6 +2549,24 @@ or a seed that quietly yields a different maze would break the game in ways one 
 | `pace` | an explorer bot that walks toward the light with memory, at a human-ish 0.32 s a step, 0.3 s a quarter turn and 0.7 s per junction, finishes every level inside 85 % of daylight on 24 mazes each, daylight is never absurdly generous, and it grows level by level; stars are 3 by sunset, 2 by 1.5 × daylight, 1 after |
 
 
+## Skyline
+
+```sh
+npm run test:skyline               # or: node test/skyline.mjs
+node test/skyline.mjs drop pacing  # named suites only
+```
+
+`skyline.mjs` runs the DOM-free `<script id="core">` of `games/skyline.html` (SkyCore) in a vm,
+with no browser and no dependencies.
+
+| suite | what it checks |
+| --- | --- |
+| `wave` | the moving slab's triangle-wave swing is continuous with period 4 × RANGE, axes alternate, speed only rises and is capped |
+| `drop` | every drop of 3,000 bot towers across plan levels and all three slab types: the placed floor and the sliced-off piece tile the slab in hand exactly, the placed floor never overhangs the one below, perfects snap only inside the window, auto-align only inside its own window and without changing the floor, growth only on a long chain and never past the lot, a miss only when nothing overlaps, each strut saves exactly one miss, every placed floor pays |
+| `systems` | storm calm, build-up and endless escalation, shutters and weathering, wind speeding the slab; the vault fills, pays once and empties; golden slabs at their chance and multiplier; rush hour; the crane's aim tightening with a floor; prerequisites inside their branch; slab types locked behind their plan; overdrive; and that every plan and architect level changes something |
+| `city` | plots are unique and each new one is on the frontmost diagonal, so an older tower can never hide the one being built |
+| `economy` | plan and architect costs rise and stop at max, levels are clamped, rent per floor, the offline cap and night shift, a clock running backwards pays nothing, blueprints need a tall tower and grow with the city, achievements are earned once |
+| `pacing` | bots tapping with a normal timing error (60, 35 and 18 ms), with build time feeding the storm: prints median and p90 height and perfect rate, and fails if a casual tower leaves 6-25 floors, a decent one 15-60, or skill or plans stop paying. Then a whole career per bot - runs, rent between them, buying the cheapest open plan - and fails unless the first plan comes after the first tower and a decent player can found a new district for 5 blueprints within 4-90 minutes |
 ## Markdown to HTML Converter
 
 ```sh

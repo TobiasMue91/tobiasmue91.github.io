@@ -16,8 +16,9 @@ against the old page, not against the original from years ago, and not against o
 this site. A stranger who came across it should believe someone was paid to design it.
 
 WHAT YOU MAY CHANGE
-Nearly everything. Keep only the file name and URL, the core idea the catalogue entry promises,
-and any saved data worth migrating. Look, structure, screens, modes and even the name are open.
+Nearly everything. Keep the file name and URL, the core idea the catalogue entry promises, the
+depth the old game offers its players (step 2), and any saved data worth migrating. Look,
+structure, screens, modes and even the name are open.
 Write the new page from an empty file. Do not read the old page's code until step 7. If the page
 already has a DOM-free core that a suite in test/ checks, you may keep that core, because its
 tests prove it. Everything around it starts fresh.
@@ -30,6 +31,12 @@ tests prove it. Everything around it starts fresh.
 2. UNDERSTAND THE GAME, NOT THE PAGE. In a few lines: what the best versions of this game do
    well, what the one moment is that makes it satisfying, what the player should feel, and what
    a phone player needs. That is your design thesis.
+   Then play the old page in a browser for a few minutes (play it, do not read its code) and list
+   what it offers a player: modes, progression, upgrades, unlocks, meta systems, content. That list
+   is a floor, not a wish list. The remake keeps at least that much depth, reworked to fit the new
+   design, unless a system is broken or redundant. Name every system you drop in the PR, with the
+   reason. In genres whose appeal is the long game (incremental, idle, roguelite, management),
+   the progression systems are part of the core, not extras.
 3. CHOOSE THE ART DIRECTION. Derive it from the design thesis and the game's theme: palette,
    typography, shapes, a motion idea and a sound idea. Write down why each belongs to this game;
    a reason that would fit any game is not a reason. The game gets its own identity, independent
@@ -69,6 +76,7 @@ PRINCIPLES
   player decide nor makes them feel something goes.
 * The game teaches through play, not through text. Settings and modes only where the game
   would be worse without them.
-* Polish before features: no system the core game does not need.
+* Polish before features: add no new system the core game does not need. This is about new
+  systems; what the old game already offered is covered by step 2.
 
 One game per session.
