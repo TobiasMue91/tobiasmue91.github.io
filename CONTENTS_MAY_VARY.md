@@ -1725,14 +1725,20 @@ still undone, most valuable first:
     after the four rounds: clarity 6 and the phone 6 (a late crowd still merges into one shape; on a phone the HUD and the
     cast cards take a third of the height, and a tall house's lowest floor goes under the cards while the camera is up),
     feel 6, commercial 6 (night cards that are text on black; a hint that stays up all of night 2).
-  - *Left open*: the close-up critic's list from this session, not done: the pale edge drawn round everything the whirl
-    carries reads to a fresh eye as wireframe (it was added on purpose two sessions ago, so a piano in a heap of chairs
-    reads; a better answer is one silhouette per heap with one outline); the rocking horse's legs stop short of the rocker;
-    kitchen canisters with no shelf; the paper star of a hit hardly shows in a still; the light of the front door and the
-    study window still ends at a hard edge. The organ still reads to critics as forty dark pipes; showing a pipe's effect
-    as a number (reach 120 → 150) is the next step there. The second half of the game is still thin in new things (ten
-    pipes in 25 minutes); a stage of the house or a kind of guest between minutes 15 and 25 would serve it better than
-    any new system.
+  - *After the four rounds* (the owner asked to go on with what was open): a frightened person's paper rim warms with
+    their fear, cream, then amber past half their nerve, red on the brink (a small gauge over the head was tried first and
+    read at play size as stray grey labels; no critic had noticed it), so a late crowd comes apart into people and the
+    next to run shows; on a phone the cast cards are one low row (cameo, name, nerve) and the house gains forty pixels, so
+    the lowest floor is no longer under them; the let-go lesson shows only with two people in reach and until the first
+    let-go (it stood over all of night 2); a night card names the pipe the night now pays for; the organ's card says
+    what a pipe does in numbers (carries 3 → 6, ectoplasm 15 s → 21 s, lifts teacups → chairs); what the whirl carries is
+    drawn edge first and fill second, so a heap has one pale outline round its outside instead of a wireframe of every
+    piece; the rocking horse stands on its rocker; the open front door lays a fading wedge of light on the path.
+  - *Left open*: night cards are still text on black; the kitchen canisters seen floating in the crowd tile; the paper star
+    of a hit hardly shows in a still; the study window's light ends at its frame; the ghost covers much of a heavy heap.
+    The second half of the game has fewer new things (ten pipes in 25 minutes; the wedding party, the piano, the picture
+    people and the tower carry it); a stage of the house or a kind of guest between minutes 15 and 25 would serve it
+    better than any new system.
 
 ## Ideas, considered and not chosen
 
