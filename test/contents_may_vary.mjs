@@ -1043,7 +1043,30 @@ if (suites.includes('guests') && guests) {
   }
   {
     // older saves were other games in the same house; a finished game can be gone back to from the shelf
-    for (const v of [1, 2, 3]) { const M = CORE.migrate({ v, seed: 3, reel: 2, people: [], lv: { ecto: 3 } }, v); check(M.v === 4 && M.reel === 0 && M.phase === 'organ' && M.people.length === 3 && M.th.length === CORE.SLOTS.length, `a save of version ${v} starts afresh`); }
+    for (const v of [1, 2, 3]) { const M = CORE.migrate({ v, seed: 3, reel: 2, people: [], lv: { ecto: 3 } }, v); check(M.v === 5 && M.reel === 0 && M.phase === 'organ' && M.people.length === 3 && M.th.length === CORE.SLOTS.length, `a save of version ${v} starts afresh`); }
+    // the view takes a save of the core's own version (a view that still asked for version 4 would have thrown every save away)
+    check(/saved\.v === CORE\.version/.test(guests.tpl), 'the view keeps a save of the current version');
+    // version 4 had pipes that are gone (the grey lady, slamming doors, fling, a stampede, bone china, a second imp): a save
+    // keeps its house and its guests, and is paid back for each, at what it cost
+    {
+      const O = CORE.init(3); O.v = 4; O.own = { cap1: 1, reach1: 1, grey1: 1, fear1: 1, fling1: 1, slam1: 1, grip1: 1 }; O.bought = 7; O.$ = 0; O.booking = 'storm'; O.grey = null; O.slam = [0];
+      const M = CORE.migrate(JSON.parse(JSON.stringify(O)), 4), back = Math.round(14 * 2.45 ** 5) + Math.round(50 * 2.2 ** 2) + Math.round(30 * 2.3 ** 2);
+      check(M.v === 5 && !M.own.grey1 && !M.own.fling1 && !M.own.slam1 && M.bought === 4 && M.lv.cap === 1 && M.lv.fear === 1 && M.lv.grip === 1 && Math.round(M.$) === back && M.booking === 'quiet',
+        `a version 4 save keeps its pipes and is paid ${back} back for the three that are gone (${Math.round(M.$)}, ${Object.keys(M.own)})`);
+      CORE.act(M, 'night'); let ok = true; try { for (let k = 0; k < 300; k++) { CORE.act(M, 'ghost', 300 + k, -150); CORE.step(M, .1); } } catch (e) { ok = false; }
+      check(ok && M.phase !== undefined, 'and plays a night afterwards');
+    }
+    // letting go is the big move: an eager hand that lets go over a knot of people finishes sooner than one that never does
+    {
+      const T = (who, seed) => { const S = CORE.init(seed), bot = CORE.bots[who], m = { seed: seed * 7919 + 17 }; let t = 0; while (!CORE.done(S) && t < 120 * 60) { bot(S, m, .1); CORE.step(S, .1); S.ev.length = 0; t += .1; } return t; };
+      const a = T('eager', 1) + T('eager', 2), b = T('stubborn', 1) + T('stubborn', 2);
+      check(a < b * .93, `letting go over a crowd pays: ${min(a / 2)} against ${min(b / 2)} for a hand that never lets go`);
+      // and the house is not emptied every night: the ectoplasm is the limit, not the number of guests
+      const S = CORE.init(4), bot = CORE.bots.eager, m = { seed: 5 }; let t = 0, n = 0, empty = 0, fr = 0;
+      while (!CORE.done(S) && t < 120 * 60) { bot(S, m, .1); CORE.step(S, .1); for (const e of S.ev) { if (e.k === 'dawn') { n++; if (e.why === 'empty') empty++; } if (e.k === 'frenzy' && e.on) fr++; } S.ev.length = 0; t += .1; }
+      check(empty / n > .08 && empty / n < .5, `the eager hand empties the house on some nights, not all (${empty} of ${n})`);
+      check(fr / n < 1.8, `running wild is a peak, not a habit (${(fr / n).toFixed(1)} a night)`);
+    }
     const S = CORE.init(7), bot = CORE.bots.eager, m = { seed: 99 }; let t = 0;
     while (!CORE.done(S) && t < 120 * 60) { bot(S, m, .1); CORE.step(S, .1); S.ev.length = 0; t += .1; }
     check(CORE.done(S), `the eager bot plays the box through (${min(t)})`);

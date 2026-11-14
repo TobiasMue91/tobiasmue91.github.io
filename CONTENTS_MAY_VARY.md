@@ -294,12 +294,12 @@ Numbered as the boxes stand since the reorders of 2026-11-06 and 2026-11-13 (the
 | 1 (3) | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 2 (4) | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult; since version 2 choose whom first (a little one worth ×4, aces to stop as they wind up, kids behind dustbin lids to hit while they throw) and lay the whole gang flat at once | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | 7 (5) | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle; meet the armoured rabbit knights (from the river on) with stones, falcons and the gifts, since arrows glance off them; take a ferret to the sappers' molehill (from the forest on); set a belfry before the archers and bee skeps where the crowd jams | folios of waves with a pause between them and one wall for them all; a lost folio is taken up again at the wave that broke it, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
-| 4 (6) | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft, shipped as a cold that herded people, remade in November 2026 as a poltergeist) | hold a finger on the house: a whirl follows it, tears loose whatever it passes (teacups and candles first, chairs, then the long-case clock and the armour, last the piano and the chandelier) and carries it round; what it carries hits people; let go and it all crashes down, or with Fling flies on | short nights against ectoplasm and the dawn, the organ between them; a hit frightens and shoves, past their nerve they panic and run out of the door, and every exit costs a pip of resolve for good; five casts, from a family of three to a film company and twenty-six extras | silent film in coloured cut paper: black silhouettes before rooms of lit, tinted paper (teal, ochre, wine, green, violet, rose), what is built in one plane back in the room's own shade, a cream card ghost, grain, intertitles, iris | indigo night, six room colours, black, cream; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought; porcelain, thuds, smashes and the whirl's wind | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
+| 4 (6) | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft, shipped as a cold that herded people, remade in November 2026 as a poltergeist) | hold a finger on the house: a whirl follows it, tears loose whatever it passes (teacups and candles first, chairs, then the long-case clock and the armour, last the piano and the chandelier) and carries it round; what it carries hits people; let go and it is all flung down and crashes, frightening everyone where it lands | short nights against ectoplasm and the dawn, the organ between them; a hit frightens and shoves, past their nerve they panic and run out of the door, and every exit costs a pip of resolve for good; five casts, from a family of three to a film company and twenty-six extras | silent film in coloured cut paper: black silhouettes before rooms of lit, tinted paper (teal, ochre, wine, green, violet, rose), what is built in one plane back in the room's own shade, a cream card ghost, grain, intertitles, iris | indigo night, six room colours, black, cream; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought; porcelain, thuds, smashes and the whirl's wind | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 | 3 (7) | `jetty` | Still Water · "Keep away from water." | walk the jetty, swipe up to cast, tap when the float goes under, then play the fish: hold to reel, let go when the line is red, slide the held finger to lean against a run, let go while it jumps, pump a sulk | no runs and no clock: a day of eight minutes turns over one lake; ten kinds by distance, hour and bait, each met with the tackle of its time and fighting its own way, sizes up to a trophy; the tackle board between casts; a bank rod in the reeds that rings and is walked to | first-person real-time 3D in hand-written WebGL 2: leaf-card woods, willows and reeds from a painted atlas, the sun's shadow, a lake that knows its depth and mirrors the banks; fish painted in ink and wash, the same painting wrapped round a 3D body | meadow and willow greens, peat water, a red float; gold dusk, blue night with fireflies | English summer, cosy angling, the uncanny in the deep | lapping water, birds, crickets, the reel's clicks; a fingerpicked acoustic guitar (Karplus-Strong) that thins at dawn, slows into B minor at dusk and plays harmonics at night | paper cards on the water: the tackle board, the logbook of painted fish, the catch card | the Old One takes the bait in the deep with a tobacco tin wired to its jaw, the next number on the lid; tap it and the lid lifts |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
-Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 35–37 / 66–71 (remade, November 2026), Still Water 40–50 / 40–46.
+Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 31–32 / 57–60 (version 5, November 2026: fewer systems, extras in the film; its impatient bot 29.5–31, its hand that never lets go 38.7–39.6, measured before the last price change), Still Water 40–50 / 40–46.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -1658,6 +1658,114 @@ still undone, most valuable first:
     session's: a motif per room, an edge on the props and figures, and a pass over every line of copy. Begun: what is built in
     casts its own shadow on the wall a few units down and right, as a layer of cut paper does, and the ceiling and the walls
     cast a torn edge of shadow into each room; the study's window spills a soft light (all painted once into the backdrop).
+  - *Round before rich* (November 2026, `CORE.version` 5; the brief: feel like a finished paid game, take away before adding,
+    every new system justified by a measurement). **What the box had**: one verb (hold: the whirl; let go), two limits
+    (ectoplasm, dawn), the family and eight kinds of guest (four with a rule of their own: scoffing, lanterns, a flash, braver
+    in pairs), three exits, seven floors, twenty-eight kinds of thing, forty-two pipes in four registers, a frenzy, six
+    bookings, a chain bonus, heirlooms, the grey lady, imps, slamming doors, a thunderstorm, a stampede, bone china, Fling,
+    the film company's count. **What carried, counted by the bots** (fright that went towards someone's panic, by cause): the
+    whirl 86–90 %; everything else under 3 % each: heirlooms 2.4–2.9, doors 2.4–2.6, imps 2.0–3.4, thunder 1.4–1.7, the grey
+    lady 1.2–1.5, Fling 0–1.8, the stampede 0.4–0.5, what came down when let go 0.5–1.1 together, the reporters' flash 0.
+    The chain bonus paid on every night the house emptied, which for the eager bot was 45 to 50 nights in 53: met by
+    itself. A frenzy came 2.7 times a night, a habit and no peak. Buying the whirl's pipes first instead of the guests'
+    took 50 minutes instead of 30, so the whirl was never the limit and the night never bit. The booking a player chose
+    changed the game by 10 % at most, and always the same way (séance first).
+  - *Taken away*: the grey lady, doors that slam, the stampede, bone china, the reporters' flash (they are plain guests,
+    harder and worth more), the thunderstorm booking, the chain bonus (still counted, for the sticker), the second imp
+    pipe, and Fling as a pipe. Forty-two pipes became thirty-six. A version 4 save keeps its house and its guests and is
+    paid back what each lost pipe cost (`migrate`).
+  - *Made to carry instead of added*: **letting go**. What the whirl carries is always thrown on the way it was going,
+    hits whoever it passes and lands with a crash that frightens everyone near by its mass, and **everyone the crash
+    frightens screams for it** (a crash first only frightened, and a bot that let go over crowds finished *slower* than one
+    that never did, 28 against 26 minutes). One pipe, *An almighty crash*, doubles it, in Fling's place. Now the crash and
+    the throw make 20–25 % of the fright when the bot lets go over three or more, and the eager hand that lets go finishes
+    in 34–36 minutes against 39–42 for the same hand that never does: the first measured reward for playing well in this
+    box. The bot learns it (`drop` in the bots' options; `bots.stubborn` never lets go, `bots.impatient` takes the richest
+    booking and reads nothing).
+  - *The limit bites*: guests are braver by kind (a visitor 1.2 times a Pemberton's nerve, then 1.5, 4.5, 7, 10, 16 and 24
+    for the picture people, buyers 12); the family keeps its nerve, so a person's first night still gets one or two out. A
+    first try raised every guest's nerve alike (1400 for 520), and the scripted person drove two of eleven out on night 3:
+    the bots' better aim hid the wall again (lesson *The bots earn faster than a person*). The eager bot now empties the
+    house on 45–50 % of nights (51 % in minutes 0–10, 76 % in 10–20, 15 % in 20–30, when the wedding party and the
+    picture people come), the casual one on 11 %. Prices above each register's first pipe are 1.75 times what they were,
+    the first pipes unchanged (14, 30, 22, 50). A frenzy wants three times the hits it did and each one in a night more
+    than the last: 1.3 a night. The sticker *Poltergeist* wants three in a night (it wanted four).
+  - *Pacing* (three seeds): eager 33.7–36.0, casual 62.1–66.4, impatient 31.6–32.5, the hand that never lets go 38–42,
+    the longest wait for something new 2.3 / 4.4 minutes; the novice 100–103 (it was 98: the box is harder for a hand that
+    wanders a quarter of the time, and no rule binds the novice). Minutes 0–10 buy 27 pipes, 10–20 six, 20–30 four; the
+    eager bot's last eight minutes are the film (600 people filmed fleeing), the casual bot's longest stretch between
+    pipes 8 minutes, bridged by the reels in the can.
+  - *Which decision does the player make in minute 25 that they did not have in minute 2?* In minute 2 there is one: whom
+    to sweep the teacups into. In minute 25: which booking to take against a crowd that may not empty (a ball's twelve
+    more in a short night, a séance's half again with a lamp that drains, two buyers worth six who are hard to frighten, a
+    moon's longer night); whether to keep carrying a full whirl or throw it down on a knot of wedding guests, where the
+    crockery breaks and is gone for the night; whether to go for the ghost hunters first, whose lanterns drain the ghost,
+    or keep away from them; and on the organ, whether to bring more guests or more power, which now pull against each
+    other (more guests pay more only while the whirl can frighten them).
+  - *Found while playing with real touch*: the first lesson pointed a hand at the teapot and said to hold a finger there,
+    but on a touch screen the ghost floats 58 px above the fingertip, so a finger on the teapot put the whirl above it; the
+    hand now points where the finger goes (PUT YOUR FINGER HERE, AND HOLD). The view took a save only if it was version 4,
+    so raising `CORE.version` would have thrown every save away silently; it reads `CORE.version` now, and the suite
+    checks it. The hint after night 1 still spoke of "the dots on their card" from the version that had resolve pips, and
+    the neighbours' intertitle carried the professor's line.
+  - *The view*: a desktop shows the whole house large while it fits at .4 or more and follows the ghost at .5 once it is
+    taller (it was .34: a column a third of the screen wide between the curtains); the camera has a place of rest and a
+    glide of fixed length (a sweep up and down the whole house moved the picture in 31 % of frames, 133 of them by less
+    than a pixel; now 14 % in four glides, 4 % on a phone); the frenzy bar is labelled; a guest a third of the way to
+    panic shows a small gauge over the head; a lesson shrinks to the screen's width; the crate is pale card in the porch
+    lamp's light (it was black on a black path), its brace behind its posts, and the last card counts the nights, the
+    people driven out and the screams; the night card says how many of how many and marks the best night yet (from the
+    research: a run's end says why it ended and what it beat, as Deskrawl's run summary shows its share of each total,
+    https://wikily.gg/deskrawl/combat/run-summary; and a run is measured against its limit, as Bills Must Be Paid's
+    stamina is, https://www.treyexgaming.com/?p=16191); the card of someone out tonight dims its contents instead
+    of turning see-through over the cellar.
+  - *Critic rounds*: first 6/4/7/4/5 and **4**; second 7/5/7/5/5 and **4**; third 7/4/7/5/6 and **5** (the crowd of a late night still reads as one black mass, floors
+    still go out of view while the camera follows a tall house, the ending's iris closes before the tap, as every box's does);
+    fourth 7/6/8/6/6 and **6** (desktop first impression 8). Below 8
+    after the four rounds: clarity 6 and the phone 6 (a late crowd still merges into one shape; on a phone the HUD and the
+    cast cards take a third of the height, and a tall house's lowest floor goes under the cards while the camera is up),
+    feel 6, commercial 6 (night cards that are text on black; a hint that stays up all of night 2).
+  - *After the four rounds* (the owner asked to go on with what was open): a frightened person's paper rim warms with
+    their fear, cream, then amber past half their nerve, red on the brink (a small gauge over the head was tried first and
+    read at play size as stray grey labels; no critic had noticed it), so a late crowd comes apart into people and the
+    next to run shows; on a phone the cast cards are one low row (cameo, name, nerve) and the house gains forty pixels, so
+    the lowest floor is no longer under them; the let-go lesson shows only with two people in reach and until the first
+    let-go (it stood over all of night 2); a night card names the pipe the night now pays for; the organ's card says
+    what a pipe does in numbers (carries 3 → 6, ectoplasm 15 s → 21 s, lifts teacups → chairs); what the whirl carries is
+    drawn edge first and fill second, so a heap has one pale outline round its outside instead of a wireframe of every
+    piece; the rocking horse stands on its rocker; the open front door lays a fading wedge of light on the path; a night
+    card shows everyone the night drove out as a row of cameos cut from the same paper as the cast cards.
+  - *The second session on the open points*: the ghost was drawn over everything, so a heavy heap vanished behind it;
+    now the far half of the ring, the ghost, the near half in front of it, then the people over all of it. The study
+    window has a frame, moonlit glass that fades downwards and a patch of light on the floor; a hit's paper star lasts a
+    little longer and has an ink edge. The kitchen canisters the close-up critic saw floating stand on their shelf: the
+    heads of the crowd in front hid the board.
+  - *The film at the end, measured*: from the tower and the picture people to the delivery (600 people filmed fleeing)
+    took the eager bot 11.7–12.8 minutes and the casual one 19–20, a third of the game with two or three pipes in it and
+    nothing that grew. A shorter count alone moved minutes and changed nothing (400 put the eager bot under 30). Now every
+    reel in the can brings five more extras for the next night (a guest of the softest kind but the visitors, nerve 2,
+    worth 1.5; the picture people say so when a reel is done): the house fills towards the end, and the film takes 9.5–10.8
+    and 15 minutes. Eager 31.7–33.1, casual 58.4–62.1; the box's own floor for the eager bot (`pace.eager`) is 31, it was 32.
+  - *A third pass on the open points*: the ghost is cut from cream card like everything else, with no ink line round it,
+    a paper shadow down and to the right as the furniture casts, and the card lit from above (critics had called it the
+    one piece of clip art among the cut paper). *The second half, counted*: of 27 moments that change the game (a new
+    kind of guest, a grip, a floor, a door, the imp, the heirlooms, the hearse, a reel in the can), 10 to 12 fall in the
+    second half; the eager bot never waits more than 4.5–5.4 minutes for one, but the casual bot waited 7.5 and 9.1
+    minutes between minutes 24 and 43, where the wedding party and the picture people were the dearest pipes of their
+    register. The last three rumours now cost .81 of what they did and every other pipe but the first of each register
+    1.05 times (`pm` 1.84): the casual bot's longest wait for such a moment is 5.2–7.7 minutes. Cheaper still (.75, .6)
+    closed it further but put the eager bot under 31 on one seed in three. Pacing: eager 31.2–32.0, casual 56.6–59.5.
+    The cast cards' nerve bars take the rims' colours (amber, red), and the night card's prompt is readable.
+  - *Fifth critic round* (after the open points): 7/5/8/6/6 and **5.5**, against the fourth's 7/6/8/6/6 and 6 from another
+    critic: the plateau. What it still names: a crowd of eight in one room overlaps even with the rims, prompts and the
+    bill sit over the roof on a desktop while the camera follows, the two bars in the ectoplasm plate need reading, the
+    iris at the end is low on a phone with black above it, the organ's pipes look alike at the start.
+  - *After it*: once the crate is down the camera brings it to the middle of the screen while the iris closes (on a phone
+    it closed in the lower third with black above it).
+  - *Left open*: from the fifth round, a crowd of eight in one room still overlaps (people further back drawn smaller or
+    greyer was tried two sessions ago and read as see-through), prompts and the bill over the roof on a desktop while the
+    camera follows, two bars in the ectoplasm plate, organ pipes that look alike at the start; the night cards' cameos are
+    the only picture on them.
 
 ## Ideas, considered and not chosen
 
@@ -3589,3 +3697,10 @@ box or two. Starter, box 1 until then, opens on a still jar and earns "about 0¢
 - **A leader alone is a dead stretch.** Snow Day's gangs fell in a rush between minutes two and four and then the leader
   held out alone for three to six minutes, a third of the yard spent pinning one puppet. Measure when the last ordinary
   member falls against when the yard ends, and keep the boss's share small.
+- **A move that only frightens is not taken.** Unwelcome Guests' let-go crashed and frightened everyone near, and paid
+  nothing: a bot that let go over crowds finished slower than one that never did, because the screams came from the hits it
+  gave up. A move is worth making only when it pays in the currency the player is counting; then measure the hand that makes
+  it against the same hand that never does.
+- **Raising `CORE.version` is two changes.** The core migrates, but a view may also check the version of what it is handed:
+  Unwelcome Guests' view took a save only if it said version 4, so version 5 would have started every player afresh with no
+  error anywhere. Search the template for the old number, and let the suite look for it.
