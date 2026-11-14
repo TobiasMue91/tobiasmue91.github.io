@@ -2548,3 +2548,21 @@ or a seed that quietly yields a different maze would break the game in ways one 
 | `walk` | free walking on desktop: random walkers (with lunges) pushed out by `collide` never end up inside a hedge and leave the hedge ring only through the gate; a walker following the shortest way through cell centres at walking speed is never stopped, so every corridor is wide enough |
 | `pace` | an explorer bot that walks toward the light with memory, at a human-ish 0.32 s a step, 0.3 s a quarter turn and 0.7 s per junction, finishes every level inside 85 % of daylight on 24 mazes each, daylight is never absurdly generous, and it grows level by level; stars are 3 by sunset, 2 by 1.5 × daylight, 1 after |
 
+
+## Skyline
+
+```sh
+npm run test:skyline               # or: node test/skyline.mjs
+node test/skyline.mjs drop pacing  # named suites only
+```
+
+`skyline.mjs` runs the DOM-free `<script id="core">` of `games/skyline.html` (SkyCore) in a vm,
+with no browser and no dependencies.
+
+| suite | what it checks |
+| --- | --- |
+| `wave` | the moving slab's triangle-wave swing is continuous with period 4 × RANGE, axes alternate, speed only rises and is capped |
+| `drop` | every drop of 3,000 bot towers across permit levels: the placed floor and the sliced-off piece tile the slab in hand exactly, the placed floor never overhangs the one below, perfects snap and only happen inside the window, growth only on a long chain and never past the lot, a miss only when nothing overlaps |
+| `city` | plots are unique and each new one is on the frontmost diagonal, so an older tower can never hide the one being built |
+| `economy` | permit costs rise and stop at max, levels are clamped, rent per floor, the offline cap, a clock running backwards pays nothing |
+| `pacing` | bots tapping with a normal timing error (60, 35 and 18 ms) and a fully permitted one: prints median and p90 height and perfect rate, and fails if a casual tower leaves 6-25 floors, a decent one 15-60, skill or permits stop paying, or the first permit takes more than four runs |
