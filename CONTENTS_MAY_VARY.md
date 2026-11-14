@@ -299,7 +299,7 @@ Numbered as the boxes stand since the reorders of 2026-11-06 and 2026-11-13 (the
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
-Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 34–36 / 62–67 (version 5, November 2026: fewer systems; its impatient bot 32–33, its hand that never lets go 39–42), Still Water 40–50 / 40–46.
+Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 32–33 / 58–62 (version 5, November 2026: fewer systems, extras in the film; its impatient bot 30–32, its hand that never lets go 38–42), Still Water 40–50 / 40–46.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
 Starter's rhythm (wait until something is ready, then tap it), so two boxes in a row felt like the same
@@ -1735,11 +1735,20 @@ still undone, most valuable first:
     drawn edge first and fill second, so a heap has one pale outline round its outside instead of a wireframe of every
     piece; the rocking horse stands on its rocker; the open front door lays a fading wedge of light on the path; a night
     card shows everyone the night drove out as a row of cameos cut from the same paper as the cast cards.
-  - *Left open*: the kitchen canisters seen floating in the crowd tile; the paper star
-    of a hit hardly shows in a still; the study window's light ends at its frame; the ghost covers much of a heavy heap.
-    The second half of the game has fewer new things (ten pipes in 25 minutes; the wedding party, the piano, the picture
-    people and the tower carry it); a stage of the house or a kind of guest between minutes 15 and 25 would serve it
-    better than any new system.
+  - *The second session on the open points*: the ghost was drawn over everything, so a heavy heap vanished behind it;
+    now the far half of the ring, the ghost, the near half in front of it, then the people over all of it. The study
+    window has a frame, moonlit glass that fades downwards and a patch of light on the floor; a hit's paper star lasts a
+    little longer and has an ink edge. The kitchen canisters the close-up critic saw floating stand on their shelf: the
+    heads of the crowd in front hid the board.
+  - *The film at the end, measured*: from the tower and the picture people to the delivery (600 people filmed fleeing)
+    took the eager bot 11.7–12.8 minutes and the casual one 19–20, a third of the game with two or three pipes in it and
+    nothing that grew. A shorter count alone moved minutes and changed nothing (400 put the eager bot under 30). Now every
+    reel in the can brings five more extras for the next night (a guest of the softest kind but the visitors, nerve 2,
+    worth 1.5; the picture people say so when a reel is done): the house fills towards the end, and the film takes 9.5–10.8
+    and 15 minutes. Eager 31.7–33.1, casual 58.4–62.1; the box's own floor for the eager bot (`pace.eager`) is 31, it was 32.
+  - *Left open*: the second half still has fewer new things than the first (ten pipes from minute 10 to 30); the ghost
+    itself is the one prop critics call clip art next to the cut paper; the night cards' cameos are the only picture on
+    them.
 
 ## Ideas, considered and not chosen
 
