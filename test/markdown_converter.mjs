@@ -258,6 +258,11 @@ if (suites.includes('indent')) {
   eq(C.indent(conv('- a\n  - b\n- c')), '<ul>\n  <li>a\n    <ul>\n      <li>b</li>\n    </ul>\n  </li>\n  <li>c</li>\n</ul>\n', 'nested list');
   eq(C.indent(conv('> - x\n>\n>   ```\n>   y\n>     z\n>   ```')), '<blockquote>\n  <ul>\n    <li>\n      <p>x</p>\n<pre><code>y\n  z\n</code></pre>\n    </li>\n  </ul>\n</blockquote>\n'.replace('<pre>', '      <pre>'), 'code inside a list inside a quote keeps its text');
   eq(C.indent(''), '', 'empty');
+  eq(C.indent(conv('- one\n  two\n- three')), '<ul>\n  <li>one\ntwo</li>\n  <li>three</li>\n</ul>\n', 'a list item over two lines closes its level');
+  const readme = readFileSync(join(HERE, '..', 'README.md'), 'utf8').repeat(50), ri = C.indent(conv(readme)), rh = conv(readme);
+  check(ri.length < rh.length * 1.25, `indenting the README 50 times adds ${((ri.length / rh.length - 1) * 100).toFixed(1)} %, so levels do not drift`);
+  eq(C.indent('<div>\n<div>\n<p>x</p>\n</div>\n</div>\n'.repeat(3)).split('\n').filter(l => l === '</div>').length, 3, 'balanced blocks end at column 0 every time');
+  eq(C.indent('</ul>\n</ul>\n<p>x</p>'), '</ul>\n</ul>\n<p>x</p>', 'stray closing tags never go negative');
   eq(C.indent(conv('<div>\n<div>\n\nx\n\n</div>\n</div>', {html: 'all'})), '<div>\n  <div>\n    <p>x</p>\n  </div>\n</div>', 'raw nested divs');
 }
 

@@ -121,6 +121,8 @@ textarea#md::placeholder { color: var(--ink-3); }
 .menuwrap { position: relative; }
 .pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: min(340px, calc(100vw - 32px)); background: var(--paper); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow); padding: 6px 14px 12px; font-size: 14px; max-height: calc(100vh - 120px); overflow: auto; }
 .pop[hidden] { display: none; }
+.pophead { display: flex; align-items: center; justify-content: space-between; position: sticky; top: -6px; margin: -6px -14px 0; padding: 8px 10px 8px 14px; background: var(--paper); border-bottom: 1px solid var(--line); font-weight: 650; z-index: 1; }
+.pophead button { border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 7px; padding: 5px 14px; font-weight: 600; cursor: pointer; }
 .pop fieldset { border: 0; padding: 0; margin: 10px 0 0; }
 .pop legend { font-size: 12px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); padding: 0; margin-bottom: 4px; }
 .pop label { display: flex; gap: 9px; align-items: flex-start; padding: 5px 0; cursor: pointer; line-height: 1.35; }
@@ -193,7 +195,7 @@ footer a { color: var(--ink-2); }
         <button class="tb ph-hide" type="button" data-k="image" title="Image" aria-label="Image"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg></button>
         <button class="tb ph-hide" type="button" data-k="rule" title="Divider" aria-label="Divider"><svg viewBox="0 0 24 24"><path d="M3 12h18"/></svg></button>
       </div>
-      <textarea id="md" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="md-err incount" placeholder="Paste or type Markdown here, or drop a .md file"></textarea>
+      <textarea id="md" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="md-err incount" placeholder="Paste or type Markdown here"></textarea>
       <div class="fieldmsg" id="md-err" role="alert"></div>
     </div>
     <div class="inmeta">
@@ -214,7 +216,8 @@ footer a { color: var(--ink-2); }
       <span class="spacer"></span>
       <div class="menuwrap">
         <button class="btn" id="optbtn" type="button" aria-label="Options" aria-expanded="false" aria-controls="opts" title="Options"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="wide">Options</span></button>
-        <div class="pop" id="opts" hidden>
+        <div class="pop" id="opts" role="dialog" aria-label="Options" hidden>
+          <div class="pophead"><span>Options</span><button type="button" id="optdone">Done</button></div>
           <fieldset><legend>Raw HTML in your Markdown</legend>
             <label><input type="radio" name="html" value="safe" checked><span>Keep, but remove anything that runs code<small>Scripts, event handlers, javascript: links, iframes</small></span></label>
             <label><input type="radio" name="html" value="all"><span>Keep everything as written</span></label>
@@ -462,15 +465,18 @@ footer a { color: var(--ink-2); }
     for (var i = 0; i < lines.length; i++) {
       var l = lines[i];
       if (inPre) { out.push(l); if (/<\/(pre|textarea|script|style)>/i.test(l)) inPre = false; continue; }
-      var opens = /^<(\w+)[^>]*>/.exec(l), closesOnly = /^<\/(\w+)>$/.exec(l);
-      if (closesOnly && NEST[closesOnly[1].toLowerCase()]) level = Math.max(0, level - 1);
-      out.push(l === '' ? '' : new Array(level + 1).join('  ') + l);
-      if (opens && NEST[opens[1].toLowerCase()]) {
-        var tag = opens[1].toLowerCase();
-        // opened on this line and not closed on it -> children go one level deeper
-        var o = (l.match(new RegExp('<' + tag + '\\b', 'gi')) || []).length, c = (l.match(new RegExp('</' + tag + '>', 'gi')) || []).length;
-        if (o > c) level++;
+      // net nesting of this line: closing tags at its start count before it is printed, everything else after
+      var tags = l.match(/<\/?[a-zA-Z][\w-]*/g) || [], lead = 0, net = 0, atStart = true, rest = l;
+      for (var k = 0; k < tags.length; k++) {
+        var close = tags[k].charAt(1) === '/', nm = tags[k].slice(close ? 2 : 1).toLowerCase();
+        if (atStart && close && rest.indexOf(tags[k]) === 0) { rest = rest.slice(rest.indexOf('>') + 1).replace(/^\s+/, ''); if (NEST[nm]) lead++; continue; }
+        atStart = false;
+        if (NEST[nm]) net += close ? -1 : 1;
       }
+      level = Math.max(0, level - lead);
+      // a line that continues text (a wrapped paragraph or list item) is left as it is
+      out.push(l.charAt(0) !== '<' ? l : new Array(level + 1).join('  ') + l);
+      level = Math.max(0, level + net);
       if (/<(pre|textarea|script|style)\b/i.test(l) && !/<\/(pre|textarea|script|style)>/i.test(l)) inPre = true;
     }
     return out.join('\n');
@@ -772,7 +778,8 @@ footer a { color: var(--ink-2); }
           while ((i = v.indexOf('\n', i + 1)) >= 0) starts.push(i + 1);
           var a = starts[h.line - 1], b = h.line < starts.length ? starts[h.line] - 1 : v.length;
           if (v.charAt(b - 1) === '\r') b--;
-          ta.focus(); ta.setSelectionRange(a, b); replaceSelection(h.fix);
+          ta.focus(); ta.setSelectionRange(a, b); replaceSelection(h.fix, 0, h.fix.length);
+          toast('Line ' + h.line + ' now has ' + (h.fix.split('|').length - 2) + ' columns, like the header.');
         };
         row.append(' ', f);
       }
@@ -853,7 +860,7 @@ footer a { color: var(--ink-2); }
   function initFrame() {
     frame.srcdoc = '<!DOCTYPE html><html><head><meta charset="utf-8"><base href="' + location.href.replace(/[^/]*$/, '') + '" target="_blank">' +
       '<style id="vars">' + frameVars() + '</style><style>' + FRAME_CSS + '</style></head><body><div id="doc"></div></body></html>';
-    frame.onload = function () { frameReady = true; if (last) { var p = last; last = null; done(p); } };
+    frame.onload = function () { frameReady = true; frame.contentDocument.addEventListener('selectionchange', syncRichLabel); if (last) { var p = last; last = null; done(p); } };
   }
   function syncFrameTheme() { if (frameReady) frame.contentDocument.getElementById('vars').textContent = frameVars(); }
 
@@ -901,6 +908,7 @@ footer a { color: var(--ink-2); }
   /* ---------- tabs ---------- */
   function setTab(t, focus) {
     tab = t;
+    if (!$('toastbtn').hidden) $('toast').hidden = true;
     $('tab-preview').setAttribute('aria-selected', t === 'preview'); $('tab-html').setAttribute('aria-selected', t === 'html');
     $('tab-preview').tabIndex = t === 'preview' ? 0 : -1; $('tab-html').tabIndex = t === 'html' ? 0 : -1;
     $('view').setAttribute('aria-labelledby', 'tab-' + t);
@@ -930,22 +938,43 @@ footer a { color: var(--ink-2); }
       function () { setTab('html'); selectSource(); toast('Copying was blocked. The HTML is selected – press Ctrl+C.'); });
   };
   function selectSource() { var s = getSelection(), rg = document.createRange(); rg.selectNodeContents(source); s.removeAllRanges(); s.addRange(rg); }
+  // A selection in the preview (say, one table) is copied on its own; otherwise the whole result.
+  function previewSelection() {
+    if (!frameReady || tab !== 'preview') return null;
+    var d = frame.contentDocument, s = d.getSelection();
+    if (!s || s.isCollapsed || !s.rangeCount || !d.getElementById('doc').contains(s.getRangeAt(0).commonAncestorContainer)) return null;
+    var box = d.createElement('div');
+    for (var i = 0; i < s.rangeCount; i++) box.appendChild(s.getRangeAt(i).cloneContents());
+    box.querySelectorAll('[data-line],[class]').forEach(function (el) {
+      el.removeAttribute('data-line');
+      var c = (el.getAttribute('class') || '').split(/\s+/).filter(function (x) { return x && x !== 'now' && x !== 'fade' && !/^token$/.test(x); });
+      if (el.classList.contains('token')) { el.replaceWith.apply(el, Array.prototype.slice.call(el.childNodes)); return; }
+      if (c.length) el.setAttribute('class', c.join(' ')); else el.removeAttribute('class');
+    });
+    return {html: box.innerHTML, text: s.toString()};
+  }
+  function syncRichLabel() {
+    var sel = !!previewSelection();
+    $('copyrich').querySelector('.idle').innerHTML = sel ? 'Copy selection<span class="dsk"> for e-mail</span>' : 'Copy for e-mail<span class="dsk"> / Docs</span>';
+  }
+  $('copyrich').addEventListener('pointerdown', function (e) { e.preventDefault(); });   // keep the preview selection
   $('copyrich').onclick = function () {
     var r = current(); if (!r) return;
-    var plain = frameReady ? frame.contentDocument.getElementById('doc').innerText : r.html;
-    var ok = function () { flash($('copyrich')); announce('Formatted text copied'); toast('Copied as formatted text – paste it into an e-mail or document.'); };
+    var sel = previewSelection();
+    var html = C.richHtml(sel ? sel.html : r.html);
+    var plain = sel ? sel.text : frameReady ? frame.contentDocument.getElementById('doc').innerText : r.html;
+    var ok = function () { flash($('copyrich')); announce('Formatted text copied'); toast(sel ? 'Copied the selected part as formatted text.' : 'Copied as formatted text – paste it into an e-mail or document.'); };
+    // A copy event first: Chrome's async clipboard rewrites "#install" into an absolute link to this page.
+    var done = false;
+    var onCopy = function (e) { e.clipboardData.setData('text/html', html); e.clipboardData.setData('text/plain', plain); e.preventDefault(); done = true; };
+    document.addEventListener('copy', onCopy);
+    try { document.execCommand('copy'); } catch (x) {}
+    document.removeEventListener('copy', onCopy);
+    if (done) return ok();
     if (navigator.clipboard && window.ClipboardItem && window.isSecureContext) {
-      navigator.clipboard.write([new ClipboardItem({'text/html': new Blob([C.richHtml(r.html)], {type: 'text/html'}), 'text/plain': new Blob([plain], {type: 'text/plain'})})])
-        .then(ok, legacyRich);
-    } else legacyRich();
-    function legacyRich() {
-      if (!frameReady) return toast('Copying was blocked by the browser.');
-      var d = frame.contentDocument, s = d.getSelection(), rg = d.createRange();
-      rg.selectNodeContents(d.getElementById('doc')); s.removeAllRanges(); s.addRange(rg);
-      var done = false; try { done = d.execCommand('copy'); } catch (e) {}
-      s.removeAllRanges();
-      done ? ok() : toast('Copying was blocked by the browser.');
-    }
+      navigator.clipboard.write([new ClipboardItem({'text/html': new Blob([html], {type: 'text/html'}), 'text/plain': new Blob([plain], {type: 'text/plain'})})])
+        .then(ok, function () { toast('Copying was blocked by the browser.'); });
+    } else toast('Copying was blocked by the browser.');
   };
   $('dl').onclick = function () {
     var r = current(); if (!r) return;
@@ -1015,6 +1044,7 @@ footer a { color: var(--ink-2); }
   function hasFile(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') >= 0; }
   function readFile(f) {
     var err = $('md-err');
+    $('toast').hidden = true;
     if (f.size > 50 * 1048576) { err.textContent = '“' + f.name + '” is ' + size(f.size) + '. Files up to 50 MB can be opened.'; return; }
     var r = new FileReader();
     r.onload = function () {
@@ -1032,8 +1062,9 @@ footer a { color: var(--ink-2); }
 
   /* ---------- options ---------- */
   var pop = $('opts'), optbtn = $('optbtn');
-  function setPop(open) { pop.hidden = !open; optbtn.setAttribute('aria-expanded', open); if (open) pop.querySelector('input:checked, input').focus(); }
+  function setPop(open) { pop.hidden = !open; optbtn.setAttribute('aria-expanded', open); if (open) { $('toast').hidden = true; pop.querySelector('input:checked, input').focus({preventScroll: true}); } }
   optbtn.onclick = function () { setPop(pop.hidden); };
+  $('optdone').onclick = function () { setPop(false); optbtn.focus(); };
   document.addEventListener('click', function (e) { if (!pop.hidden && !e.target.closest('.menuwrap')) setPop(false); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !pop.hidden) { setPop(false); optbtn.focus(); } });
   function syncOptions() {
