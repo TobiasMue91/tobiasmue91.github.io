@@ -1721,7 +1721,10 @@ still undone, most valuable first:
     of turning see-through over the cellar.
   - *Critic rounds*: first 6/4/7/4/5 and **4**; second 7/5/7/5/5 and **4**; third 7/4/7/5/6 and **5** (the crowd of a late night still reads as one black mass, floors
     still go out of view while the camera follows a tall house, the ending's iris closes before the tap, as every box's does);
-    ROUND4.
+    fourth 7/6/8/6/6 and **6** (desktop first impression 8). Below 8
+    after the four rounds: clarity 6 and the phone 6 (a late crowd still merges into one shape; on a phone the HUD and the
+    cast cards take a third of the height, and a tall house's lowest floor goes under the cards while the camera is up),
+    feel 6, commercial 6 (night cards that are text on black; a hint that stays up all of night 2).
   - *Left open*: the close-up critic's list from this session, not done: the pale edge drawn round everything the whirl
     carries reads to a fresh eye as wireframe (it was added on purpose two sessions ago, so a piano in a heap of chairs
     reads; a better answer is one silhouette per heap with one outline); the rocking horse's legs stop short of the rocker;
