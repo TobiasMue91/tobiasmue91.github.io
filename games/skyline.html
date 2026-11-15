@@ -766,6 +766,7 @@ let demo = null; // bot driver for screenshots
 let rushT = 0;                    // seconds of Rush Hour left
 let blimp = null, blimpClock = 60; // the supply blimp and the build time until the next one
 let craneAim = null, craneWait = 0, autoNext = -1;
+function cancelAuto() { if (autoNext > 0) { autoNext = -1; $('again').textContent = 'Build next'; } }
 let lightning = 0;
 let demolish = null;              // towers of the district being left, fading out
 const owned = id => (save.up[id] || 0) > 0;
@@ -1476,7 +1477,7 @@ function startBuild() {
   firstRun = save.runs === 0;
   runSeed = (Math.random() * 1e6) | 0;
   run = C.newRun(save.up, save.arch, {type: save.type, overdrive: save.overdrive, towers: save.towers.length, best: save.best, seed: runSeed + 1});
-  craneAim = null; craneWait = 0; autoNext = -1;
+  craneAim = null; craneWait = 0; autoNext = -1; $('again').textContent = 'Build next';
   blimp = null; blimpClock = 50 + Math.random() * 60;
   renderStruts(); renderVault(); renderCraneBtn();
   $('rush').classList.toggle('hide', !(rushT > 0));
@@ -1576,7 +1577,7 @@ function endRun() {
   setMode('result');
   renderPlanCount();
   checkAchievements();
-  if (craneOn()) autoNext = 2.4; // the crane starts the next tower by itself
+  if (craneOn()) autoNext = 3.5; // the crane starts the next tower by itself, counting down on the button
 }
 let countUp = null, resultShown = false;
 let boardRingTarget = 1;
@@ -1587,12 +1588,13 @@ function toCity() {
   setMode('city');
 }
 
-function primary() {
+function primary(byKey) {
   if (paused) { resume(); return; }
   if (sheetOpen) return;
   if (mode === 'city') startBuild();
   else if (mode === 'build') doDrop();
-  else if (mode === 'result' && modeT > 1.2) startBuild();
+  else if (mode === 'result' && byKey && modeT > 1.2) startBuild();
+  else if (mode === 'result') cancelAuto(); // a tap only stops the crane's countdown
 }
 function pause() { if (mode !== 'build' || paused) return; paused = true; $('pause').classList.remove('hide'); }
 function resume() { paused = false; $('pause').classList.add('hide'); Sound.init(); }
@@ -1760,7 +1762,6 @@ function buy(id) {
   const L = save.up[id], c = C.cost(id, L);
   if (!C.unlocked(id, save.up) || !(c <= save.money)) return;
   save.money -= c; save.up[id] = L + 1; cashShown = save.money;
-  if (id === 'crane' && L === 0) save.crane = true;
   persist(); Sound.buy();
   refreshCity();
   const row = document.querySelector(`.perm[data-id="${id}"]`);
@@ -1860,7 +1861,7 @@ window.addEventListener('keydown', e => {
   if (e.repeat) return;
   if (e.code === 'Space' || e.code === 'Enter') {
     if (document.activeElement && document.activeElement.tagName === 'BUTTON' && mode !== 'build') return;
-    e.preventDefault(); Sound.init(); primary();
+    e.preventDefault(); Sound.init(); primary(true);
   } else if (e.code === 'KeyV') { cashVault();
   } else if (e.code === 'KeyC' && owned('crane')) { save.crane = !save.crane; renderCraneBtn(); renderLoadout(); persist();
   } else if (e.code === 'Escape' || e.code === 'KeyP') {
@@ -1870,10 +1871,11 @@ window.addEventListener('keydown', e => {
 });
 $('sound').addEventListener('click', () => { save.muted = !save.muted; persist(); Sound.init(); renderSound(); Sound.tick(); });
 $('permitsbtn').addEventListener('click', () => { Sound.init(); openSheet(); });
-$('toplans').addEventListener('click', e => { e.stopPropagation(); Sound.init(); openSheet(); });
+$('toplans').addEventListener('click', e => { e.stopPropagation(); Sound.init(); cancelAuto(); openSheet(); });
+$('result').addEventListener('pointerdown', () => cancelAuto());
 $('sheetback').addEventListener('click', () => closeSheet());
 $('again').addEventListener('click', () => startBuild());
-$('tocity').addEventListener('click', () => { Sound.tick(); toCity(); });
+$('tocity').addEventListener('click', () => { Sound.tick(); cancelAuto(); toCity(); });
 $('pausebtn').addEventListener('click', e => { e.stopPropagation(); pause(); });
 $('vaultbtn').addEventListener('click', e => { e.stopPropagation(); cashVault(); });
 $('cranebtn').addEventListener('click', e => { e.stopPropagation(); save.crane = !save.crane; Sound.tick(); renderCraneBtn(); persist(); });
@@ -1901,7 +1903,12 @@ function tick(dt) {
     if (rushT > 0) { rushT = Math.max(0, rushT - dt); $('rush').querySelector('i').style.width = (100 * rushT / C.RUSH_DUR).toFixed(1) + '%'; $('rush').querySelector('b').textContent = `Rush ×3 · ${Math.ceil(rushT)}s`; if (!rushT) $('rush').classList.add('hide'); }
     tickStorm(dt); tickBlimp(dt); tickCrane(dt);
   }
-  if (live && mode === 'result' && autoNext > 0 && !sheetOpen) { autoNext -= dt; if (autoNext <= 0) { autoNext = -1; if (craneOn()) startBuild(); } }
+  if (live && mode === 'result' && autoNext > 0 && !sheetOpen && resultShown) {
+    autoNext -= dt;
+    const label = autoNext > 0 ? `Build next · ${Math.ceil(autoNext)}` : 'Build next';
+    if ($('again').textContent !== label) $('again').textContent = label;
+    if (autoNext <= 0) { autoNext = -1; if (craneOn()) startBuild(); }
+  }
   if (live && mode === 'fall' && modeT > 1.1) endRun();
   if (mode === 'result' && !sheetOpen && !resultShown && modeT > (reduced.matches ? .2 : .95)) { resultShown = true; $('result').classList.remove('hide'); countUp && (countUp.t = 0); }
   if (mode === 'city') {
