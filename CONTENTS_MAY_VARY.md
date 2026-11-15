@@ -1764,8 +1764,14 @@ still undone, most valuable first:
     it closed in the lower third with black above it).
   - *Left open*: from the fifth round, a crowd of eight in one room still overlaps (people further back drawn smaller or
     greyer was tried two sessions ago and read as see-through), prompts and the bill over the roof on a desktop while the
-    camera follows, two bars in the ectoplasm plate, organ pipes that look alike at the start; the night cards' cameos are
-    the only picture on them.
+    camera follows, two bars in the ectoplasm plate; the night cards' cameos are the only picture on them.
+  - *From the owner's play*: the organ was too low in contrast to read, its clickable parts did not stand out, and it did
+    not obviously read as an organ; a panic and a fright looked alike, since both wore a cream rim. Now the cellar has a
+    light grade and half the vignette (it is read, not watched); a manual of keys sits under the pipes; bought pipes are
+    cream, the ones that can be bought next are brass (bright when there is enough to pay) with their price on a tag over
+    them, the locked ones grey with light emblems; every pipe has a dark mouth; on a desk the pointer turns to a hand
+    over whatever takes a click and a hovered pipe lightens. On the stage a panic now wears the red rim and carries a
+    sign over the head, a cream disc with an arrow the way they run, which a frightened person never has.
 
 ## Ideas, considered and not chosen
 
