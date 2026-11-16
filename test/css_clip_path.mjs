@@ -434,7 +434,7 @@ if (suites.includes('browser')) {
       await p.fill('#code', 'clip-path: circle(30% at 25% 50%;');
       const st = await p.evaluate(() => ({msg: document.getElementById('msg').textContent, clip: getComputedStyle(document.getElementById('stage')).clipPath,
         code: document.getElementById('code').value, copy: document.getElementById('copy').disabled}));
-      check(/missing/.test(st.msg) && st.clip === 'circle(30% at 25% 50%)' && st.code.endsWith('50%;') && st.copy, `${tag}: an error keeps the text and the last good preview`, JSON.stringify(st));
+      check(/missing/.test(st.msg) && st.clip === 'circle(30% at 25% 50%)' && st.code.endsWith('50%;') && !st.copy, `${tag}: a missing ) keeps the text, previews the fix and offers it on Copy`, JSON.stringify(st));
       await p.reload(); await p.waitForTimeout(200);
       eq(await p.inputValue('#code'), 'clip-path: circle(30% at 25% 50%;', `${tag}: unfinished text survives a reload`);
       await p.click('.pre[aria-label="Triangle"]');
@@ -494,10 +494,16 @@ if (suites.includes('browser')) {
         const dt = new DataTransfer(); dt.setData('text/plain', '.x { clip-path: polygon(0 0, 100% 0, 50% 100%); }');
         c.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true})); });
       eq(await p.evaluate(() => getComputedStyle(document.getElementById('stage')).clipPath), 'polygon(0% 0%, 100% 0%, 50% 100%)', `${tag}: a paste mid-line replaces the box`);
+      // a px polygon from a design tool offers its frame as the element size, and taking it keeps the numbers
+      await p.fill('#code', 'clip-path:polygon(0px 0px,320px 0px,320px 180px,40px 180px)');
+      await p.click('#msg button');
+      eq(await p.evaluate(() => [document.getElementById('stage').style.width, document.getElementById('stage').style.height]), ['320px', '180px'], `${tag}: the offered element size is taken`);
+      await p.click('#units button[data-unit="%"]');
+      eq(await p.inputValue('#code'), 'clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 12.5% 100%);', `${tag}: and % are of that frame`);
       // a missing ) previews the draft it would make, not the old shape
       await p.fill('#code', 'clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100% ;');
       eq(await p.evaluate(() => getComputedStyle(document.getElementById('stage')).clipPath), 'polygon(0% 0%, 100% 0%, 100% 85%, 0% 100%)', `${tag}: missing ) previews the fixed line`);
-      check(await p.evaluate(() => document.getElementById('copy').disabled), `${tag}: but Copy waits for the fix`);
+      eq(await p.evaluate(() => document.getElementById('copy').textContent), 'Add ) and copy', `${tag}: and Copy offers the fix`);
       // a missing ) is offered as a one-tap fix
       await p.fill('#code', 'clip-path: polygon(0 0, 100% 0, 50% 100% ;');
       await p.click('#msg button');
