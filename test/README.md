@@ -2174,6 +2174,17 @@ asked for twelve give three, a noisy four-colour photo gives its four at 25% eac
 pixel of its image with its marker on a pixel of that colour, shares that add to 100, exports byte for byte and saved settings that
 trust nothing. Run it after touching the core.
 
+`test/photo_filter_editor.mjs` (`npm run test:photofilter`) runs the DOM-free `<script id="core">` block of
+`tools/photo_filter_editor.html` (Photo Filter Editor), whose promise is that the saved file is the photo on screen at the
+photo's own size: "Original" leaves every byte alone, sepia and black & white follow the Filter Effects 1 matrices, exposure
+is stops of linear light under the sRGB curve, saturation −100 is a luminance grey, no mix of tone sliders ever reverses an
+order of brightness, the eight turn/flip states compose like a rectangle's symmetries and fill the output exactly, grain is
+reproducible and looks the same in a preview as in the full file shrunk, sharpening leaves flat areas, borders and alpha
+alone, every look visibly differs from Original and from every other look, typed numbers (−20, +35, 12,5, 40 %) are read as
+meant, file names and stored state trust nothing. Its `browser` suite (Playwright and `npx http-server -p 8099`) saves real
+files and checks them pixel for pixel against the core, plus undo, reload, the JPEG-with-transparency case, a refused PDF and
+that no request leaves the site. Run it after touching the core or a look.
+
 `test/word_explainer.mjs` runs the DOM-free `<script id="core">` block of `tools/word_explainer.html` (Word Explainer)
 against the dictionary it loads, `data/word_explainer/<two letters>.json`, which `util/word_explainer/build.py` makes from
 Princeton WordNet 3.0 (every synset, with its examples, synonyms, opposites and the word it is a kind of, sharded by the
