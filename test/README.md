@@ -1496,6 +1496,7 @@ npm run test:challenge      # AI Game Challenge Generator suite (plain Node; its
 npm run test:opposites      # Opposite Word Finder suite (plain Node, no server or browser)
 npm run test:textshadow     # CSS Text Shadow Generator suite (plain Node; its browser suite uses Playwright's Chromium)
 npm run test:gradient       # CSS Gradient Generator suite (plain Node; its browser suite uses Playwright's Chromium)
+npm run test:clippath       # CSS clip-path Generator suite (plain Node; its browser suite uses Playwright's Chromium and serves the page itself)
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
 npm run test:timer          # Online Timer suite (plain Node, no server or browser)
 npm run test:pomodoro       # Pomodoro Timer suite (plain Node, no server or browser)
@@ -2595,3 +2596,32 @@ github/cmark-gfm's `test/spec.txt`.
 | `rich` | the inline styles the e-mail/Docs copy adds to tables, code and quotes, and nothing else |
 | `edges` | BOM, CRLF, bare CR, tabs, NUL, null input, astral characters, UTF-8 byte counts, titles and file names, the download wrapper, a 1 MB input, 5,000-deep quotes, 20,000 asterisks and 5,000 unclosed links |
 | `editor` | the toolbar's text transforms and the selection each leaves |
+
+## CSS clip-path Generator
+
+```sh
+npm run test:clippath                    # or: node test/css_clip_path.mjs
+node test/css_clip_path.mjs parse geo    # named suites only
+```
+
+`css_clip_path.mjs` runs the DOM-free `<script id="core">` block of `tools/css_clip_path_generator.html` in Node's `vm`.
+The page promises that a pasted clip-path is read the way a browser reads it, that the line it writes is the shortest
+correct form of what is on screen, and that the outline it draws is exactly the area the browser clips. Expected
+numbers are worked by hand from CSS Shapes 1/2, CSS Values 4 `<position>` and CSS Backgrounds 3 radius scaling.
+
+| suite | what it checks |
+| --- | --- |
+| `parse` | round trips of every shape form; what people paste (a whole rule with a `-webkit-` line, `!important`, newlines, capitals, unitless zeros, exponents, a reference box before or after); `rect()` and `xywh()` rewritten as the `inset()` they draw; mixed units said out loud |
+| `position` | one, two and four value positions, keywords in either order, edge offsets in % and px, and the nine invalid forms |
+| `errors` | 40 refusals, each naming the bad token and what would be accepted: missing units, other units, `calc()`/`var()`, too few points, doubled commas, a missing or extra `)`, a decimal comma (refused rather than misread), `path()`/`shape()`/`url()` |
+| `format` | zero as `0%` / `0`, four decimals at most, float dust, keyword radii, highlight keys, and that a written value parses back to the same model |
+| `geo` | circle % of √(w²+h²)/√2, closest/farthest-side (also from outside the box), overlapping insets halved, `round` % against the reference box, radii scaled down together, paths |
+| `edits` | drags snapped to the step and clamped to the box, add on any edge including the closing one, never below three points, arrow-key nudges, radius/centre/side/corner handles and where they sit |
+| `units` | % ⇄ px for every shape (the circle on its diagonal basis), keywords kept, round trip stable |
+| `presets` | every preset parses, is written canonically, stays in the box and does not cross itself |
+| `huge` | 20,000 points parse and write in well under half a second; half a megabyte of junk fails fast with a short message |
+| `fuzz` | 4,000 random strings: never a throw, anything accepted writes back stably and draws without NaN |
+| `browser` | Chromium clips a box with every preset and 18 awkward values and a canvas fills the page's outline: they must agree to 4 pixels (they agree exactly). Then the real page at desktop and phone size: worked example and Copy without scrolling, typing updates the preview, an error keeps the text and the last good shape, unfinished text survives a reload, preset, drag, add by dragging a midpoint, undo/redo, arrow keys, Delete, units, a decimal-comma width, 5,000 points shown as text only, no console errors, no request leaving the page |
+
+The `round` percentage basis was found by the `browser` suite: the first core resolved it against the inset rectangle,
+as a reading of the spec suggests, and differed from Chromium by 6,713 pixels.
