@@ -1046,6 +1046,9 @@ if (suites.includes('guests') && guests) {
     for (const v of [1, 2, 3]) { const M = CORE.migrate({ v, seed: 3, reel: 2, people: [], lv: { ecto: 3 } }, v); check(M.v === 5 && M.reel === 0 && M.phase === 'organ' && M.people.length === 3 && M.th.length === CORE.SLOTS.length, `a save of version ${v} starts afresh`); }
     // the view takes a save of the core's own version (a view that still asked for version 4 would have thrown every save away)
     check(/saved\.v === CORE\.version/.test(guests.tpl), 'the view keeps a save of the current version');
+    { // a walking leg is a leg: no silhouette swings a stick as a shin (Harold's cane once got a shoe)
+      const legs = [...guests.tpl.matchAll(/^  (\w+): \[-?1, \[((?:\[-?\d+, \d+\],? ?)*)\]/gm)].map(m => [m[1], [...m[2].matchAll(/\[(-?\d+), (\d+)\]/g)].map(q => +q[2])]);
+      check(legs.length >= 10 && legs.every(([, w]) => w.every(v => v >= 40)), 'every silhouette that walks swings legs, not a stick (' + legs.filter(([, w]) => w.some(v => v < 40)).map(l => l[0]).join(', ') + ')'); }
     // version 4 had pipes that are gone (the grey lady, slamming doors, fling, a stampede, bone china, a second imp): a save
     // keeps its house and its guests, and is paid back for each, at what it cost
     {
