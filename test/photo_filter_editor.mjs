@@ -367,7 +367,7 @@ if (suites.includes('browser')) {
       const x = c.getContext('2d'); x.setTransform(...t.m); x.drawImage(p.bmp, 0, 0); const id = x.getImageData(0, 0, t.w, t.h);
       PF.render(id.data, t.w, t.h, S, {full: Math.max(t.w, t.h), seed: p.seed}); return {w: t.w, h: t.h, d: Array.from(id.data)};
     });
-    await page.selectOption('#fmt', 'png');
+    await page.selectOption('#saveAs', 'png');
     await page.click('.look[data-id=cinema]');
     await page.click('#tabAdjust'); await page.fill('#s_sharpen + .num', '50'); await page.press('#s_sharpen + .num', 'Enter');
     await page.click('#turnR');
@@ -393,7 +393,7 @@ if (suites.includes('browser')) {
     check((await page.textContent('#s_contrast ~ .fielderr')).includes('Too high: −100 to +100'), 'the error next to the box says what is wrong and names the range');
     eq(await page.evaluate(() => __pf.state.adj.contrast), 0, 'and the photo is unchanged');
     // JPEG with transparency: white, not black
-    await mk(true); await page.selectOption('#fmt', 'jpeg'); await page.click('#tabLooks'); await page.click('.look[data-id=original]');
+    await mk(true); await page.selectOption('#saveAs', 'jpeg:92'); await page.click('#tabLooks'); await page.click('.look[data-id=original]');
     check((await page.textContent('#note')).includes('white'), 'the note says JPEG fills transparency with white');
     dl = await save(); got = await decode(await dl.path());
     check(got.d[0] > 240 && got.d[1] > 240 && got.d[2] > 240, 'transparent corner is white in the JPEG', got.d.slice(0, 3));
