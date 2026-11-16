@@ -394,7 +394,8 @@ if (suites.includes('browser')) {
     eq(await page.evaluate(() => __pf.state.adj.contrast), 0, 'and the photo is unchanged');
     await page.click('#tabAdjust'); // leave the box
     eq(await page.inputValue('#s_contrast + .num'), '0', 'leaving the box puts back the value the photo has (never a number that is not in use)');
-    check((await page.textContent('#s_contrast ~ .fielderr')).includes('kept 0'), 'and says it kept 0');
+    check((await page.getAttribute('#s_contrast + .num', 'title')).includes('Kept 0'), 'and says it kept 0');
+    eq(await page.evaluate(() => getComputedStyle(document.getElementById('s_contrast')).visibility), 'visible', 'with the slider back in place');
     // JPEG with transparency: white, not black
     await mk(true); await page.selectOption('#saveAs', 'jpeg:92'); await page.click('#tabLooks'); await page.click('.look[data-id=original]');
     check((await page.textContent('#note')).includes('white'), 'the note says JPEG fills transparency with white');
