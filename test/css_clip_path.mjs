@@ -283,7 +283,7 @@ if (suites.includes('edits')) {
   eq(CP.format(CP.rescale(model('polygon(300px 0, 600px 400px, 0 400px)'), 600, 400, 300, 300)), 'polygon(150px 0, 300px 300px, 0 300px)', 'px polygon follows');
   eq(CP.format(CP.rescale(tri, 600, 400, 300, 300)), CP.format(tri), 'a % shape needs no rescale');
   eq(CP.closeParen('polygon(0 0, 1px 1px, 2px 2px'), 'polygon(0 0, 1px 1px, 2px 2px)', 'close a bare value');
-  eq(CP.closeParen('clip-path: circle(10% at 1% 2% ;'), 'clip-path: circle(10% at 1% 2%) ;', 'before the semicolon');
+  eq(CP.closeParen('clip-path: circle(10% at 1% 2% ;'), 'clip-path: circle(10% at 1% 2%);', 'before the semicolon, no stray space');
   eq(CP.closeParen('.hero { clip-path: polygon(0 0, 1% 0, 0 1% }'), '.hero { clip-path: polygon(0 0, 1% 0, 0 1%) }', 'inside a rule');
   eq(CP.parse(CP.closeParen('.a{ -webkit-clip-path: circle(1%  ; clip-path: x }')).ok, true, 'fixes the line it reads');
   eq(CP.align(297, [0, 300, 600], 5), 300, 'align pulls onto a line');
@@ -463,10 +463,10 @@ if (suites.includes('browser')) {
       await p.keyboard.press('Delete');
       eq(await p.inputValue('#code'), 'clip-path: polygon(100% 100%, 50% 80%, 0% 100%);', `${tag}: Delete removes it`);
       // units
-      await p.click('#more summary');
       await p.click('#units button[data-unit="px"]');
       eq(await p.inputValue('#code'), 'clip-path: polygon(600px 400px, 300px 320px, 0 400px);', `${tag}: switch to px`);
       // element size changes px shapes not at all, and is validated
+      await p.click('#more summary');
       await p.fill('#bw', '30x'); check(await p.evaluate(() => document.getElementById('bw').classList.contains('bad')), `${tag}: bad width is flagged`);
       await p.fill('#bw', '800,0');
       eq(await p.evaluate(() => document.getElementById('stage').style.width), '800px', `${tag}: decimal comma width`);
@@ -479,13 +479,18 @@ if (suites.includes('browser')) {
       // tester 3's path: px, a 120 x 120 element, the circle stays centred
       await p.click('.pre[aria-label="Circle"]');
       await p.click('#units button[data-unit="px"]');
-      await p.fill('#bw', '120'); await p.fill('#bh', '120'); await p.click('h1');
+      const before = await p.locator('#bh').boundingBox();
+      await p.fill('#bw', '120');
+      const after = await p.locator('#bh').boundingBox();
+      check(tag === 'desktop' || Math.abs(before.y - after.y) <= 2, `${tag}: typing a width does not move the height field`, `${before.y} -> ${after.y}`);
+      await p.fill('#bw', '120x120'); await p.click('h1');
+      eq(await p.evaluate(() => [document.getElementById('bw').value, document.getElementById('bh').value]), ['120', '120'], `${tag}: 120x120 in one field sets both`);
       const circ = await p.inputValue('#code');
       check(/^clip-path: circle\(\d+px at 60px 60px\);$/.test(circ), `${tag}: a px circle follows the element when it is resized`, circ);
       // a missing ) is offered as a one-tap fix
       await p.fill('#code', 'clip-path: polygon(0 0, 100% 0, 50% 100% ;');
       await p.click('#msg button');
-      eq(await p.inputValue('#code'), 'clip-path: polygon(0 0, 100% 0, 50% 100%) ;', `${tag}: Add ) fixes the line`);
+      eq(await p.inputValue('#code'), 'clip-path: polygon(0 0, 100% 0, 50% 100%);', `${tag}: Add ) fixes the line`);
       check(!(await p.evaluate(() => document.getElementById('copy').disabled)), `${tag}: and Copy is back`);
       await p.click('#flipy');
       check((await p.inputValue('#code')) === 'clip-path: polygon(0% 100%, 100% 100%, 50% 0%);', `${tag}: flip button`, await p.inputValue('#code'));
