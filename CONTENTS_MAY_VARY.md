@@ -1775,6 +1775,12 @@ still undone, most valuable first:
     The tutorial's pointing hand, drawn here by eye from a rectangle and curves, read as deformed; it is now the backhand
     pointing finger of Microsoft's Fluent Emoji (MIT), the outline another box of the anthology already uses, cut from
     cream card with an ink edge and a paper shadow.
+    Harold's walk was broken: the knee cut took his walking stick for a second leg and gave it a shoe, and his two legs
+    swung as one block. Every gentleman's walk also crossed his shins into an X on every other step, since each shin
+    hung from its own knee and the two swapped which led. Now the leg in front stays in front (a long step, then a
+    short one), the professor and the cameraman have their legs measured from the silhouette instead of guessed, and a
+    walking stick (the fourth entry of a silhouette) is cut at the knee and drawn on as a stick that swings a little.
+    Checked on a sheet of every silhouette in its three poses at four times its size, and frame by frame in the house.
 
 ## Ideas, considered and not chosen
 
