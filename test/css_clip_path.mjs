@@ -487,6 +487,17 @@ if (suites.includes('browser')) {
       eq(await p.evaluate(() => [document.getElementById('bw').value, document.getElementById('bh').value]), ['120', '120'], `${tag}: 120x120 in one field sets both`);
       const circ = await p.inputValue('#code');
       check(/^clip-path: circle\(\d+px at 60px 60px\);$/.test(circ), `${tag}: a px circle follows the element when it is resized`, circ);
+      // pasting a whole rule into the middle of the old line replaces it
+      await c2.grantPermissions(['clipboard-read', 'clipboard-write']);
+      await p.click('.pre[aria-label="Hexagon"]');
+      await p.evaluate(() => { const c = document.getElementById('code'); c.focus(); c.setSelectionRange(20, 20);
+        const dt = new DataTransfer(); dt.setData('text/plain', '.x { clip-path: polygon(0 0, 100% 0, 50% 100%); }');
+        c.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true})); });
+      eq(await p.evaluate(() => getComputedStyle(document.getElementById('stage')).clipPath), 'polygon(0% 0%, 100% 0%, 50% 100%)', `${tag}: a paste mid-line replaces the box`);
+      // a missing ) previews the draft it would make, not the old shape
+      await p.fill('#code', 'clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100% ;');
+      eq(await p.evaluate(() => getComputedStyle(document.getElementById('stage')).clipPath), 'polygon(0% 0%, 100% 0%, 100% 85%, 0% 100%)', `${tag}: missing ) previews the fixed line`);
+      check(await p.evaluate(() => document.getElementById('copy').disabled), `${tag}: but Copy waits for the fix`);
       // a missing ) is offered as a one-tap fix
       await p.fill('#code', 'clip-path: polygon(0 0, 100% 0, 50% 100% ;');
       await p.click('#msg button');
