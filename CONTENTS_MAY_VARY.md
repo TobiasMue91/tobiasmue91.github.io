@@ -1764,7 +1764,10 @@ still undone, most valuable first:
     it closed in the lower third with black above it).
   - *Left open*: from the fifth round, a crowd of eight in one room still overlaps (people further back drawn smaller or
     greyer was tried two sessions ago and read as see-through), prompts and the bill over the roof on a desktop while the
-    camera follows, two bars in the ectoplasm plate; the night cards' cameos are the only picture on them.
+    camera follows, two bars in the ectoplasm plate; the night cards' cameos are the only picture on them. Since: the
+    count under the bill sits on a dark strip, so on a desk, where the following camera puts the top floor under it, it
+    is no longer lost on the wallpaper (the floor still passes under it: keeping the whole house below the bill would cost
+    the follow its zoom); the frenzy's meter is a fuse of ten amber segments instead of a second framed bar.
   - *From the owner's play*: the organ was too low in contrast to read, its clickable parts did not stand out, and it did
     not obviously read as an organ; a panic and a fright looked alike, since both wore a cream rim. Now the cellar has a
     light grade and half the vignette (it is read, not watched); a manual of keys sits under the pipes; bought pipes are
