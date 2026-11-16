@@ -268,6 +268,27 @@ if (suites.includes('edits')) {
   const ch = CP.handles(model('circle(10% at 95% 50%)'), W, H).find(h => h.key === 'r');
   check(ch.x <= W, 'radius handle flips inside the box', JSON.stringify(ch));
   eq(CP.handles(model('inset(10%)'), W, H).map(h => h.key), ['t', 'r_', 'b', 'l', 'round'], 'inset handles');
+  // flips keep point order; insets swap sides and corners
+  eq(CP.format(CP.mirror(model('polygon(0% 0%, 100% 0%, 100% 82%, 0% 100%)'), 'x', W, H)), 'polygon(100% 0%, 0% 0%, 0% 82%, 100% 100%)', 'flip left-right');
+  eq(CP.format(CP.mirror(tri, 'y', W, H)), 'polygon(50% 100%, 100% 0%, 0% 0%)', 'flip top-bottom');
+  eq(CP.format(CP.mirror(model('polygon(10px 0, 100px 0, 10px 50px)'), 'x', W, H)), 'polygon(590px 0, 500px 0, 590px 50px)', 'flip in px uses the width');
+  eq(CP.format(CP.mirror(model('circle(10% at 20% 30%)'), 'x', W, H)), 'circle(10% at 80% 30%)', 'flip circle');
+  eq(CP.format(CP.mirror(model('inset(1% 2% 3% 4% round 1px 2px 3px 4px)'), 'x', W, H)), 'inset(1% 4% 3% 2% round 2px 1px 4px 3px)', 'flip inset left-right');
+  eq(CP.format(CP.mirror(model('inset(1% 2% 3% 4% round 1px 2px 3px 4px)'), 'y', W, H)), 'inset(3% 2% 1% 4% round 4px 3px 2px 1px)', 'flip inset top-bottom');
+  eq(CP.format(CP.mirror(CP.mirror(model('ellipse(1% 2% at 3% 4%)'), 'x', W, H), 'x', W, H)), 'ellipse(1% 2% at 3% 4%)', 'flipping twice is identity');
+  // unit switches are rounded to the snap step; a px shape follows a resized element
+  eq(CP.format(CP.snapAll(CP.convert(model('circle(38% at 50% 50%)'), 'px', W, H), 1)), 'circle(194px at 300px 200px)', 'converted values snap');
+  eq(CP.format(CP.snapAll(model('circle(farthest-side at 1.26% 2%)'), 0.1)), 'circle(farthest-side at 1.3% 2%)', 'keywords survive a snap');
+  eq(CP.format(CP.rescale(model('circle(194px at 300px 200px)'), 600, 400, 120, 120)), 'circle(45.6558px at 60px 60px)', 'px circle follows the element (diagonal basis)');
+  eq(CP.format(CP.rescale(model('polygon(300px 0, 600px 400px, 0 400px)'), 600, 400, 300, 300)), 'polygon(150px 0, 300px 300px, 0 300px)', 'px polygon follows');
+  eq(CP.format(CP.rescale(tri, 600, 400, 300, 300)), CP.format(tri), 'a % shape needs no rescale');
+  eq(CP.closeParen('polygon(0 0, 1px 1px, 2px 2px'), 'polygon(0 0, 1px 1px, 2px 2px)', 'close a bare value');
+  eq(CP.closeParen('clip-path: circle(10% at 1% 2% ;'), 'clip-path: circle(10% at 1% 2%) ;', 'before the semicolon');
+  eq(CP.closeParen('.hero { clip-path: polygon(0 0, 1% 0, 0 1% }'), '.hero { clip-path: polygon(0 0, 1% 0, 0 1%) }', 'inside a rule');
+  eq(CP.parse(CP.closeParen('.a{ -webkit-clip-path: circle(1%  ; clip-path: x }')).ok, true, 'fixes the line it reads');
+  eq(CP.align(297, [0, 300, 600], 5), 300, 'align pulls onto a line');
+  eq(CP.align(290, [0, 300, 600], 5), 290, 'but only within tolerance');
+  eq(CP.align(302, [300, 303], 5), 303, 'nearest line wins');
 }
 
 if (suites.includes('units')) {
@@ -455,6 +476,19 @@ if (suites.includes('browser')) {
       await p.evaluate(v => { const c = document.getElementById('code'); c.value = v; c.dispatchEvent(new Event('input')); }, big);
       const hb2 = await p.evaluate(() => ({n: document.querySelectorAll('.h').length, info: document.getElementById('selinfo').textContent}));
       check(hb2.n === 0 && /too many to drag/.test(hb2.info) && Date.now() - t0 < 1500, `${tag}: 5000 points render as text only, quickly`, JSON.stringify(hb2) + ' ' + (Date.now() - t0) + 'ms');
+      // tester 3's path: px, a 120 x 120 element, the circle stays centred
+      await p.click('.pre[aria-label="Circle"]');
+      await p.click('#units button[data-unit="px"]');
+      await p.fill('#bw', '120'); await p.fill('#bh', '120'); await p.click('h1');
+      const circ = await p.inputValue('#code');
+      check(/^clip-path: circle\(\d+px at 60px 60px\);$/.test(circ), `${tag}: a px circle follows the element when it is resized`, circ);
+      // a missing ) is offered as a one-tap fix
+      await p.fill('#code', 'clip-path: polygon(0 0, 100% 0, 50% 100% ;');
+      await p.click('#msg button');
+      eq(await p.inputValue('#code'), 'clip-path: polygon(0 0, 100% 0, 50% 100%) ;', `${tag}: Add ) fixes the line`);
+      check(!(await p.evaluate(() => document.getElementById('copy').disabled)), `${tag}: and Copy is back`);
+      await p.click('#flipy');
+      check((await p.inputValue('#code')) === 'clip-path: polygon(0% 100%, 100% 100%, 50% 0%);', `${tag}: flip button`, await p.inputValue('#code'));
       eq(errs, [], `${tag}: no console errors`);
       eq(foreign, [], `${tag}: no request leaves the page`);
       await c2.close();
