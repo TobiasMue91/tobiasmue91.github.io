@@ -1772,6 +1772,9 @@ still undone, most valuable first:
     them, the locked ones grey with light emblems; every pipe has a dark mouth; on a desk the pointer turns to a hand
     over whatever takes a click and a hovered pipe lightens. On the stage a panic now wears the red rim and carries a
     sign over the head, a cream disc with an arrow the way they run, which a frightened person never has.
+    The tutorial's pointing hand, drawn here by eye from a rectangle and curves, read as deformed; it is now the backhand
+    pointing finger of Microsoft's Fluent Emoji (MIT), the outline another box of the anthology already uses, cut from
+    cream card with an ink edge and a paper shadow.
 
 ## Ideas, considered and not chosen
 
