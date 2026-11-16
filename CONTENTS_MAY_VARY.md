@@ -1768,6 +1768,12 @@ still undone, most valuable first:
     count under the bill sits on a dark strip, so on a desk, where the following camera puts the top floor under it, it
     is no longer lost on the wallpaper (the floor still passes under it: keeping the whole house below the bill would cost
     the follow its zoom); the frenzy's meter is a fuse of ten amber segments instead of a second framed bar.
+    A crowd is drawn standing apart: on each floor the view relaxes the people's drawn places at least 78 apart, by at
+    most 60 units either way, eased in and out (home again on the stair and the run, so nobody jumps), the outermost
+    pushed inwards only; the rules and every hit are untouched. In the crowd scene pairs drawn closer than 40 fell from
+    979 to 604 of 4,367 (60 against 300 in the perf suite's sample); a wider spread (75, 90) took them only to 510 while
+    moving people further from where a hit finds them. The largest step of a drawn person in a frame is the same with and
+    without it (11–17 px, from shoves and the camera).
   - *From the owner's play*: the organ was too low in contrast to read, its clickable parts did not stand out, and it did
     not obviously read as an organ; a panic and a fright looked alike, since both wore a cream rim. Now the cellar has a
     light grade and half the vignette (it is read, not watched); a manual of keys sits under the pipes; bought pipes are

@@ -1455,6 +1455,16 @@ if (suites.includes('perf')) {
       check(!errs.length, `${w.id}: a late scene runs without errors`, errs.join(' | '));
       check(calls <= L[1], `${w.id}: at most ${L[1]} draw calls a frame late in the box (${calls})`);
       if (L[2]) check(ms <= L[2], `${w.id}: at most ${L[2]} ms of work a frame late in the box (${ms.toFixed(1)})`);
+      // Unwelcome Guests: a crowd that the rules stack on one spot is drawn standing apart (spread in the view), by at
+      // most 60 units, so pairs drawn closer than 40 are a good deal fewer than pairs the rules put that close
+      if (w.id === 'guests') {
+        const r = await fr.evaluate(async () => { let a = 0, b = 0, mx = 0; for (let k = 0; k < 20; k++) { const S = K.debug.state(), sp = K.debug.spread(); mx = Math.max(mx, ...sp.map(Math.abs));
+          const L = S.people.map((q, i) => ({ f: q.f, x: q.x, d: q.x + sp[i] })).filter((q, i) => S.people[i].st === 'in' && !(S.people[i].climb > 0));
+          for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) if (L[i].f === L[j].f) { if (Math.abs(L[i].x - L[j].x) < 40) a++; if (Math.abs(L[i].d - L[j].d) < 40) b++; }
+          await new Promise(res => setTimeout(res, 150)); } return [a, b, mx]; });
+        if (REPORT) console.log(`  guests: pairs closer than 40, by the rules ${r[0]}, as drawn ${r[1]}; the largest shift ${r[2].toFixed(1)}`);
+        check(r[0] > 20 && r[1] < r[0] * .8 && r[2] <= 60.01, `guests: a crowd is drawn standing apart, by 60 at most (${r[1]} of ${r[0]} close pairs left, shift ${r[2].toFixed(1)})`);
+      }
       await ctx.close();
     }
     await b.close(); srv.close();
