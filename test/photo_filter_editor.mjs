@@ -392,6 +392,9 @@ if (suites.includes('browser')) {
     eq(await page.inputValue('#s_contrast + .num'), '1000', 'what was typed stays in the box');
     check((await page.textContent('#s_contrast ~ .fielderr')).includes('Too high: −100 to +100'), 'the error next to the box says what is wrong and names the range');
     eq(await page.evaluate(() => __pf.state.adj.contrast), 0, 'and the photo is unchanged');
+    await page.click('#tabAdjust'); // leave the box
+    eq(await page.inputValue('#s_contrast + .num'), '0', 'leaving the box puts back the value the photo has (never a number that is not in use)');
+    check((await page.textContent('#s_contrast ~ .fielderr')).includes('kept 0'), 'and says it kept 0');
     // JPEG with transparency: white, not black
     await mk(true); await page.selectOption('#saveAs', 'jpeg:92'); await page.click('#tabLooks'); await page.click('.look[data-id=original]');
     check((await page.textContent('#note')).includes('white'), 'the note says JPEG fills transparency with white');
