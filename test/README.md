@@ -1162,6 +1162,20 @@ server; about ten seconds. Suites: `setup`, `rules`, `ref`, `score`, `undo`, `sa
 | `save` | a save comes back and plays on dice for dice; rubbish, wrong checker counts, impossible dice and unknown phases are refused |
 | `ai` | the computer only plays legal moves and uses every die it can; hard beats random almost always, easy still beats random, hard beats easy and is not weaker than medium; it hits and makes a point with 4-4 and enters from the bar first |
 
+## 8-Ball Pool
+
+`node test/8-ball.mjs` (or `npm run test:8ball`) runs the DOM-free `<script id="core">` block of `games/8-ball.html` in Node. No browser, no
+server; about a minute, almost all of it the `ai` suite. Suites: `geometry`, `physics`, `guide`, `rules`, `save`, `ai`.
+
+| suite | what it checks |
+| --- | --- |
+| `geometry` | six pockets, no resting spot on the bed counts as potted, the rack does not overlap, the apex on the foot spot, the eight in the middle, a solid and a stripe in the back corners |
+| `physics` | a rolling ball comes to rest and rolls straight; stun, draw and follow; energy never grows from step to step; forty breaks leave nothing overlapping, pot about a ball, rarely scratch and always open the rack (contacts are solved together, so a ball pressed against two others shares its push); full power does not tunnel; right english comes off the rail to the ball's right; ghost-ball aims pot cuts up to 55°; a ball running past a side pocket at a shallow angle stays up |
+| `guide` | the aim guide names the ball the cue ball really hits first, and the object ball leaves along the guide line |
+| `rules` | scratch, no ball hit, wrong ball first (the eight on an open table too) and no rail are fouls with ball in hand; a fair miss passes the turn; the first pot after the break claims a group; the break never assigns; a break scratch is ball in hand behind the head string; the eight wins only after your group, loses early or with a scratch, and is spotted when it drops on the break; ball in hand refuses overlaps and the kitchen line |
+| `save` | a save restores every ball, the turn, groups and ball in hand; junk, forged groups and a game without the eight are refused |
+| `ai` | every house game ends; the Shark and the Regular beat the Barfly; the Shark pots more of what it tries; house fouls are printed by cause, and scratches stay under 8 % of shots |
+
 ## Two Truths & a Lie
 
 ```sh
@@ -1462,6 +1476,7 @@ npm run test:catchcircle    # Catch Circle suite (plain Node, no server or brows
 npm run test:voidrunner     # Void Runner suite (plain Node, no server or browser)
 npm run test:void           # VOID (black hole) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:backgammon     # Backgammon suite (plain Node, no server or browser)
+npm run test:8ball          # 8-Ball Pool suite (plain Node, no server or browser)
 npm run test:truths         # Two Truths & a Lie suite (plain Node, no server or browser)
 npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
@@ -1828,6 +1843,8 @@ on the screen, up to twelve hole radii, is drawn at every size and wherever the 
 touching a number in the core (`TUNE`), a kind in the catalogue or the page.
 
 `test/backgammon.mjs` runs the DOM-free `<script id="core">` block of `games/backgammon.html`, a board game whose rules have more corners than they look: a second move generator written the other way round (own-side coordinates, every dice order) must agree with the core on every roll of thousands of positions, so the duty to play as many dice as possible, the larger die when only one fits, the bar before anything else and bearing off with a higher die only from the rearmost point are all judged by something that does not share the core's code. Gammons and backgammons score 2 and 3, undo restores a position exactly, a save carries on dice for dice and refuses forged ones, and the computer only ever plays legal moves and is ordered hard, medium, easy, random by playing strength. Run it after touching the core or the evaluation.
+
+`test/8-ball.mjs` runs the DOM-free `<script id="core">` block of `games/8-ball.html`: ball physics, the eight-ball referee and the house players. A rolling ball must come to rest, stun, draw and follow must behave, a collision never makes energy, every break must open the rack, and the aim guide must name the ball the cue ball really meets and send the object ball where it really goes. The referee is checked shot by shot, and the house players are played against each other, ordered by strength, with their fouls counted by cause. Run it after touching the physics constants, the contact solver, the rules or the planner.
 
 `test/two_truths.mjs` runs the DOM-free `<script id="core">` block of `games/two_truths_one_lie.html`, whose one
 promise is that a lie can only be found by knowing: the bank of 60 cases is two truths, one lie and a correction each, the lie
