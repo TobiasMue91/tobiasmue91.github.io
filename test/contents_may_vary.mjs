@@ -284,6 +284,15 @@ if (suites.includes('starter') && starter) {
           'a version 2 save gets back what its baskets, baker and rolling pins cost, and loses her liveliness');
         CORE.step(M, 5); check(Number.isFinite(M.$) && Number.isFinite(M.proof), 'and plays on');
       }
+      {
+        // an ordinary heave pushes her through one place after another: never more than heaveCap at once outside a great
+        // heave, and a mix of ages rather than one crowd that ripens together
+        const H = JSON.parse(JSON.stringify(r.S)); H.lv.heave = 3; H.great = 3; let most = 0, mixed = 0, n = 0;
+        for (let k = 0; k < 3000; k++) { CORE.step(H, .1); H.ev.length = 0; most = Math.max(most, H.bulges.length); if (H.bulges.length >= 3) { n++; const a = H.bulges.map(b => b.age); if (Math.max(...a) - Math.min(...a) > 1.5) mixed++; } }
+        check(most <= CORE.P.heaveCap && n && mixed / n > .6, `outside a great heave at most ${CORE.P.heaveCap} bulges at once (saw ${most}), and their ages differ (${(100 * mixed / n).toFixed(0)}% of crowded moments)`);
+        const v3 = JSON.parse(JSON.stringify(r.S)); delete v3.push; delete v3.pushT; const M3 = CORE.migrate(v3, 3); M3.heave = 0; CORE.step(M3, 6);
+        check(M3.push >= 0 && M3.bulges.length > 0 && Number.isFinite(M3.proof), 'a version 3 save plays on in version 4, and she heaves');
+      }
       const G = JSON.parse(JSON.stringify(r.S)); G.bulges = []; G.heave = 99; G.proof = .25; G.great = 0; CORE.step(G, .1);
       check(G.bulges.length === CORE.SLOTS && G.great === 1, 'a quarter risen, she heaves through every place at once');
       const old = JSON.parse(JSON.stringify(r.S)); delete old.proof; delete old.great; old.earned = 2e6; old.note = 8;
