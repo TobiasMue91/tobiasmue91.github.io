@@ -297,7 +297,7 @@ Numbered as the boxes stand since the reorders of 2026-11-06 and 2026-11-13 (the
 | 4 (6) | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft, shipped as a cold that herded people, remade in November 2026 as a poltergeist) | hold a finger on the house: a whirl follows it, tears loose whatever it passes (teacups and candles first, chairs, then the long-case clock and the armour, last the piano and the chandelier) and carries it round; what it carries hits people; let go and it is all flung down and crashes, frightening everyone where it lands | short nights against ectoplasm and the dawn, the organ between them; a hit frightens and shoves, past their nerve they panic and run out of the door, and every exit costs a pip of resolve for good; five casts, from a family of three to a film company and twenty-six extras | silent film in coloured cut paper: black silhouettes before rooms of lit, tinted paper (teal, ochre, wine, green, violet, rose), what is built in one plane back in the room's own shade, a cream card ghost, grain, intertitles, iris | indigo night, six room colours, black, cream; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought; porcelain, thuds, smashes and the whirl's wind | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 | 3 (7) | `jetty` | Still Water · "Keep away from water." | walk the jetty, swipe up to cast, tap when the float goes under, then play the fish: hold to reel, let go when the line is red, slide the held finger to lean against a run, let go while it jumps, pump a sulk | no runs and no clock: a day of eight minutes turns over one lake; ten kinds by distance, hour and bait, each met with the tackle of its time and fighting its own way, sizes up to a trophy; the tackle board between casts; a bank rod in the reeds that rings and is walked to | first-person real-time 3D in hand-written WebGL 2: leaf-card woods, willows and reeds from a painted atlas, the sun's shadow, a lake that knows its depth and mirrors the banks; fish painted in ink and wash, the same painting wrapped round a 3D body | meadow and willow greens, peat water, a red float; gold dusk, blue night with fireflies | English summer, cosy angling, the uncanny in the deep | lapping water, birds, crickets, the reel's clicks; a fingerpicked acoustic guitar (Karplus-Strong) that thins at dawn, slows into B minor at dusk and plays harmonics at night | paper cards on the water: the tackle board, the logbook of painted fish, the catch card | the Old One takes the bait in the deep with a tobacco tin wired to its jaw, the next number on the lid; tap it and the lid lifts |
 
-Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–32 / 53–54 (version 3, November 2026: round before rich; its stubborn hand 35–36, its impatient bot 40–42),
+Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30.5–32 / 55–58 (version 4, November 2026: round before rich; its stubborn hand 36–38, its impatient bot 41–42, its novice 58–62),
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
 Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 31–32 / 57–60 (version 5, November 2026: fewer systems, extras in the film; its impatient bot 29.5–31, its hand that never lets go 38.7–39.6, measured before the last price change), Still Water 40–50 / 40–46.
 
@@ -1197,7 +1197,26 @@ still undone, most valuable first:
     has no way back but a swipe; (4) on a phone the fridge and the oven are cut at the frame's edges from the bakery on (a
     layout composed for 390 px, the old open point); (5) the ending: the crumb reads as cheese to two critics, the house
     under the loaf does not look baked, and the dough lettering stays the owner's call. No critic reached 8 on clarity,
-    phone or feel; "commercial" stayed at 6. The `novice` bot this box should get (Measuring the whole stack) is not built.
+    phone or feel; "commercial" stayed at 6.
+  - *The open points, taken up* (November 2026, the same session, `CORE.version` 4).
+    *The cellar's crowd.* Measured first: a heave brought its 3 to 8 bulges at once (4 to 7 most of the time) and 39% of the
+    eager bot's cellar had none, so they ripened together, golden was a flood, and "which one now?" seldom came up. Now an
+    ordinary heave pushes her through one place after another (`push`, every 0.5 to 1.3 seconds, `P.heaveGap`), at most six
+    at once (`P.heaveCap`); the three great heaves still come through all twelve places. On screen: 0 bulges 28% of the time,
+    1 to 4 most of it, golden ones 0 or 1; the eager hand lets 13 burst in a game instead of 60, and the stubborn hand is six
+    minutes behind it (it was four). A version 3 save plays on. The size of a bulge and its twelve places stay as the owner
+    set them; the lowest left place on a phone moved into the frame. *The burst.* Over its last second and a half a bulge's
+    cracks run out from three places, lengthen and fork, its rim darkens to rust, flour sifts from it, and it creaks once.
+    *The rail.* On a phone two whole cards stand beside the envelope (134 px cards, 78 px envelope, smaller pips), the
+    envelope stays put while the cards turn under it, and a ‹ beside it turns them back; long descriptions shortened.
+    *Framing.* The phone's bakery frame is x 125 to 1390 (Mother's jar and the whole oven; the oven was cut through its
+    arch); the fridge, which a phone only ever saw as a sliver at the cellar's edge, is drawn on a phone only when the
+    camera pulls out for the end, fading in with the glide. *The crumb* is cream with many fine, stretched pores, few
+    large holes and a darker crust band (it read as cheese). *A newcomer* (`bots.novice`: slow to see a peak, a third of
+    taps late, a shaky swipe, shops every 25 seconds) took 69 to 77 seconds to anything new; the first flour costs 25¢
+    (was 40¢) and the bakery $240 (was $180), and the novice's first new thing comes at 41 to 50 seconds, thirteen in ten
+    minutes; it opens the box in 58 to 62 minutes. Pacing now: eager 30.5–31.8, casual 55–58, stubborn 36–38, impatient
+    41–42 (acts for the eager hand 6.2 / 11.2 / 13.4 minutes); `proofNeed` 960.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
