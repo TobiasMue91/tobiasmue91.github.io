@@ -1178,6 +1178,26 @@ still undone, most valuable first:
     first. In minute 25: whether to punch a bulge now (it pays at once, keeps a combo going and never bursts) or let it go
     golden (it counts twice towards the Last Loaf but may burst while the hand is elsewhere), and with which card to answer:
     beams (more time to ripen), heave (more of her at once) or diet (more money for both).
+  - *Also found and mended*: the jar's squash is a stiff spring stepped with explicit Euler, and a long frame (the shell's
+    cap of 0.25 s: a slow phone, a resumed tab, a loaded save) blew it up, so a jar stretched for a frame into a thin column
+    up to the roof; it is stepped in sixtieths now. Steam off a ready jar is clipped under the shelf above it (it rose in
+    front of the plank). On a phone the rail's › sits on the tin's rolled edge and the cards fade under it (it lay on a card's
+    words). The three highest places Mother comes through on a phone are a little lower, clear of the money tag. Puffs of
+    flour are capped at forty on screen and fade sooner.
+  - *Critics* (three fresh ones, phone and desktop frames with real touch, the shop, the golden hint, the openings of the
+    bakery and the cellar and the ending; first impression, clarity, art direction, phone, feel, commercial): before the
+    second round's fixes 7/5/7/5/6 and 5, then 7/5/7/5/5 and 5, then 7/5/**8**/5/6 and **6**. *Research* (sources: clicker
+    UI guides and itch.io devlogs on upgrade tabs, articles on telegraphing): affordability at a glance, shorter names in
+    the shop, and a telegraph that is distinct before it is pretty, which is what the golden state follows. A search for how
+    many cards a portrait shop should show found nothing usable.
+  - *Still open*, from those critics, most valuable first: (1) the cellar on a phone at minute 28 is a crowd of bulges over
+    the jars and the bench, and the critics want fewer at once, smaller, and coming out of surfaces rather than lying over
+    props (the twelve places and `BR` are the owner's earlier choice); (2) the last second before a burst wants more
+    warning (lengthening cracks, a creak); (3) the phone rail shows a card and a third beside the envelope, and turning it
+    has no way back but a swipe; (4) on a phone the fridge and the oven are cut at the frame's edges from the bakery on (a
+    layout composed for 390 px, the old open point); (5) the ending: the crumb reads as cheese to two critics, the house
+    under the loaf does not look baked, and the dough lettering stays the owner's call. No critic reached 8 on clarity,
+    phone or feel; "commercial" stayed at 6. The `novice` bot this box should get (Measuring the whole stack) is not built.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
