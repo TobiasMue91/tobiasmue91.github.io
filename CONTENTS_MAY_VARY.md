@@ -1217,6 +1217,14 @@ still undone, most valuable first:
     (was 40¢) and the bakery $240 (was $180), and the novice's first new thing comes at 41 to 50 seconds, thirteen in ten
     minutes; it opens the box in 58 to 62 minutes. Pacing now: eager 30.5–31.8, casual 55–58, stubborn 36–38, impatient
     41–42 (acts for the eager hand 6.2 / 11.2 / 13.4 minutes); `proofNeed` 960.
+    *A fourth critic* (fresh, the same moments plus the cellar played live, the rail and the bulge's states): 7/5/8/5/6
+    and 6, the plateau of *Stills plateau*. Mended from it: the narrow envelope, once she is ready, says only *bake her*
+    (its line overprinted the title on a phone). Its other points stay open, for the owner's own play first: on a phone
+    the bakery leaves the top quarter of the screen to the ceiling (the frame is held by its width; the room upstairs is
+    the cellar's reveal and is not drawn before it); the holes Mother leaves are flat patches without depth; a golden sum
+    in script over the pink bedroom is hard to read; the bulge's swell from fresh to ripe (to 1.25 times) still reads as
+    one size in stills; the box in the crumb sits still between the slice and the tap. No critic reached 8 on clarity,
+    phone or feel.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
