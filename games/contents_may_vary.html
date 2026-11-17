@@ -9201,7 +9201,7 @@ function person(p) {
   const o = { sil: CORE.CAST[p.id] ? null : v.look === 'boy' ? 'boy' : DRESS[v.look] && v.look !== 'girl' ? WOMEN[Math.floor(v.k * 2)] : v.look === 'girl' ? 'girl' : MEN[Math.floor(v.k * MEN.length)], ink: INK, bw: CORE.CAST[p.id] ? BUILD[v.look] : .86 + .04 * Math.round(8 * v.k), nose: .75 + .6 * hash(v.k * 97, 3), walk, arms: !!v.run || v.hot || e > .6 || v.flinch > .4, hat: Math.max(Math.min(1.4, v.hat), p.panic && !K.reduced ? .1 + .04 * Math.sin(now * 30) : 0), hair: e > .45 ? e : 0, lw: (p.panic ? 6 : 3) / view.s };
   // knocked over by something heavy: down about the feet away from the blow, a moment on the floor, up again
   const fa = v.fall < 1.1 ? (v.fall < .16 ? ease.out(v.fall / .16) : v.fall < .7 ? 1 : 1 - ease.inOut((v.fall - .7) / .4)) * 1.35 * v.fd : 0;
-  c.save(); if (fa && p.st === 'in') { c.beginPath(); c.rect(X(0), Y(v.y - FH + 26), Sc(HW), Sc(FH - 26)); c.clip(); } c.translate(X(v.x + shake), Y(v.y - hop)); if (fa) c.rotate(fa); const sz = SZ * (.9 + .2 * v.k); c.scale(view.s * v.dir * sz, view.s * sz); c.rotate(lean);
+  c.save(); if (fa && p.st === 'in') { c.beginPath(); c.rect(X(0), Y(v.y - FH + 26), Sc(HW), Sc(FH - 26)); c.clip(); } c.translate(X(v.x + (v.sp || 0) + shake), Y(v.y - hop)); if (fa) c.rotate(fa); const sz = SZ * (.9 + .2 * v.k); c.scale(view.s * v.dir * sz, view.s * sz); c.rotate(lean);
   const st = (o.walk === 1 || o.walk === 3) ? o.walk : 0;
   // the rim: cream once someone is frightened, amber past half their nerve, red on the brink and in a panic
   const pe = clamp(p.fear / (CORE.nerveOf(p) * CORE.panicOf(S)), 0, 1), rl = p.panic || v.run ? 3 : pe > .8 ? 3 : pe > .5 ? 2 : 1;
@@ -9210,7 +9210,7 @@ function person(p) {
   c.restore();
   // someone who has panicked carries a sign over their head: a cream disc with an arrow the way they run, so a person
   // already on their way out reads apart from one merely frightened (a red rim alone said both)
-  if ((p.panic || v.run) && !fa) fleeSign(X(v.x), Y(v.y - hop - hOf(v.look) * sz * 1.08), v.dir, v.k);
+  if ((p.panic || v.run) && !fa) fleeSign(X(v.x + (v.sp || 0)), Y(v.y - hop - hOf(v.look) * sz * 1.08), v.dir, v.k);
 }
 function fleeSign(x, y, d, k) {
   const r = clamp(Sc(20), 10, 16), b = K.reduced ? 0 : Math.sin(now * 9 + k * 6) * r * .18;
@@ -9234,6 +9234,24 @@ function stepPeople(dt) {
     const ty = floorY(p.f), dx = p.x - v.x;
     if (Math.abs(dx) > 300 || Math.abs(ty - v.y) > 4) { v.x = p.x; v.y = ty; } else v.x += clamp(dx, -900 * dt, 900 * dt);
     v.vx = p.dir || 0; if (v.vx) v.dir = v.vx;
+  }
+  spread(dt);
+}
+// a crowd in one room is drawn standing a little apart: the rules let eight people share a spot, and eight black
+// silhouettes on one spot read as one blot. Only the drawing moves, by at most SPREAD either way and eased, so a hit
+// still lands where the rules say; the outermost of a floor are pushed inwards only.
+const SPREAD = 60, ELBOW = 78;
+function spread(dt) {
+  const by = {};
+  for (const p of S.people) { const v = people[p.id]; if (!v || v.out || v.run || p.st !== 'in' || p.climb > 0) { if (v) v.sp = v.out ? 0 : (v.sp || 0) * Math.max(0, 1 - dt * 6); continue; }   /* eased home on the stair or the run, so nobody jumps */ (by[p.f] = by[p.f] || []).push(v); }
+  for (const f in by) {
+    const L = by[f].sort((a, b) => a.x - b.x || a.k - b.k); if (L.length < 2) { L[0].sp = (L[0].sp || 0) * Math.max(0, 1 - dt * 4); continue; }
+    const t = L.map(() => 0);
+    for (let it = 0; it < 6; it++) for (let i = 1; i < L.length; i++) {
+      const gap = L[i].x + t[i] - L[i - 1].x - t[i - 1]; if (gap >= ELBOW) continue;
+      const push = (ELBOW - gap) / 2; t[i - 1] = clamp(t[i - 1] - push, i - 1 === 0 ? 0 : -SPREAD, SPREAD); t[i] = clamp(t[i] + push, -SPREAD, i === L.length - 1 ? 0 : SPREAD);
+    }
+    L.forEach((v, i) => { v.sp = (v.sp || 0) + (t[i] - (v.sp || 0)) * Math.min(1, dt * 3); });
   }
 }
 // out of the front door and away down the garden path; out of the kitchen door; out of a window and a drop
@@ -10144,7 +10162,9 @@ K.debug = {
   give: v => { S.$ += v; S.earned += v; },
   // screen position of a point in the house: x across, f the floor, up how far above its floor
   toScreen: (x, f, up = 160) => [X(x), Y(floorY(f) - up)],
-  people: () => S.people.map(p => { const v = people[p.id]; return v && { id: p.id, x: X(v.x), y: Y(v.y), out: v.out }; }),
+  people: () => S.people.map(p => { const v = people[p.id]; return v && { id: p.id, x: X(v.x + (v.sp || 0)), y: Y(v.y), out: v.out }; }),
+  // how far the drawing stands people apart from where the rules put them (see spread)
+  spread: () => S.people.map(p => (people[p.id] || {}).sp || 0),
   things: () => S.th.map((t, i) => { const v = tv[i] || t; return { k: t.k, st: t.st, x: X(v.x), y: Y(v.y) }; }),
   organ: () => organHits.map(h => Object.assign({}, h)),
   box: () => S.finale ? crateRect() : null,
