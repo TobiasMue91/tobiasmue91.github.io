@@ -286,7 +286,7 @@ async function pageSuite(chromium) {
   check(ten.length === 10 && ten.every(x => RE(4).test(x)) && new Set(ten).size === 10, '10 distinct v4 in the list');
   await p.fill('#count', '12x'); await p.waitForTimeout(250);
   check(/whole number/.test(await p.textContent('#countErr')), 'a bad count says what is accepted');
-  check(await p.evaluate(() => document.querySelector('.result').classList.contains('stale')) && await p.isDisabled('#copy'), 'and the old list is marked stale, Copy off');
+  check(await p.isVisible('.keptnote') && !(await p.isDisabled('#copy')), 'and the last list stays usable, marked as kept');
   eq(await p.$$eval('#list li button', l => l.map(x => x.textContent)), ten, 'the old list is kept, not lost');
   await p.fill('#count', '1000000');
   await p.waitForSelector('#working:not(.hidden)', {timeout: 5000});
