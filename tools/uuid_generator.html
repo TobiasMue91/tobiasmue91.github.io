@@ -36,8 +36,6 @@ button{cursor:pointer}
 .versions{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;background:var(--soft);padding:4px;border-radius:10px;margin:0 0 12px}
 .versions button{border:0;background:transparent;border-radius:7px;padding:7px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:1px;min-height:44px}
 .versions b{font:600 15px var(--mono)}
-.versions .legacy b{font-weight:400;color:var(--muted)}
-.versions .legacy[aria-checked=true] b{color:var(--ink);font-weight:600}
 .versions small{font-size:11px;color:var(--muted);white-space:nowrap}
 .versions .old{position:relative}
 .versions .old::before{content:'';position:absolute;left:-3px;top:8px;bottom:8px;width:1px;background:var(--line)}
@@ -150,11 +148,11 @@ footer a{color:inherit}
 
 <div class="versions" role="radiogroup" aria-label="UUID version" id="versions">
   <button role="radio" data-v="4"><b>v4</b><small>random</small></button>
-  <button role="radio" data-v="7"><b>v7</b><small>by time</small></button>
+  <button role="radio" data-v="7"><b>v7</b><small>sortable</small></button>
   <button role="radio" data-v="5"><b>v5</b><small>from name</small></button>
-  <button role="radio" data-v="1" class="old legacy"><b>v1</b><small>old, time</small></button>
-  <button role="radio" data-v="6" class="legacy"><b>v6</b><small>v1, sortable</small></button>
-  <button role="radio" data-v="3" class="legacy"><b>v3</b><small>old, MD5</small></button>
+  <button role="radio" data-v="1" class="old legacy"><b>v1</b><small>legacy</small></button>
+  <button role="radio" data-v="6" class="legacy"><b>v6</b><small>legacy, sorts</small></button>
+  <button role="radio" data-v="3" class="legacy"><b>v3</b><small>legacy, MD5</small></button>
 </div>
 
 <section class="result" aria-label="Result">
@@ -550,7 +548,7 @@ footer a{color:inherit}
   const C = self.UUIDCore, $ = id => document.getElementById(id);
   const KEY = 'uuid_generator.v1';
   const VERSIONS = {
-    4: {trust: 'Version 4 · 122 random bits from crypto.getRandomValues · RFC 9562 · database key? v7 sorts and indexes better', legend: 'version 4 · variant'},
+    4: {trust: 'Version 4 · 122 random bits from crypto.getRandomValues · RFC 9562 · need a database key? v7 sorts and indexes better', legend: 'version 4 · variant'},
     7: {trust: 'Version 7 · 48-bit millisecond time, a 12-bit counter that keeps a batch in order, 62 random bits from crypto.getRandomValues · RFC 9562', legend: 'version 7 · variant'},
     1: {trust: 'Version 1 · 100-ns timestamp, random clock sequence and random node (no MAC address) · RFC 9562', legend: 'version 1 · variant'},
     6: {trust: 'Version 6 · the v1 fields reordered so it sorts by time · random node · RFC 9562', legend: 'version 6 · variant'},
@@ -659,7 +657,13 @@ footer a{color:inherit}
 
   function cancelWork() { if (worker) { worker.terminate(); worker = null; } }
 
+  // Over 100,000 lines the file is the sensible way out; the clipboard stays available.
+  function bigPrimary(n) {
+    const big = n > 100000;
+    $('copy').classList.toggle('primary', !big); $('dlBtn').classList.toggle('primary', big);
+  }
   function commit(lines, bytes, names) {
+    bigPrimary(lines.length);
     current = {lines, bytes: bytes || null, names: names || null, text: lines.join('\n'), n: lines.length};
     if (lines.length === 1) {
       paint($('uuidOne'), lines[0], true); lastSingle = lines[0];
@@ -699,14 +703,14 @@ footer a{color:inherit}
       if (w !== worker) return;
       if (e.data.p != null) {
         const t = 'Making ' + Math.round(e.data.p * n).toLocaleString('en-US') + ' of ' + n.toLocaleString('en-US') + '…';
-        $('bar').style.width = Math.round(e.data.p * 100) + '%'; $('workText').textContent = t; $('countHint').textContent = t + ' (Cancel is in the result box)'; return;
+        $('bar').style.width = Math.round(e.data.p * 100) + '%'; $('workText').textContent = t; $('countHint').textContent = t; return;
       }
       worker = null; w.terminate();
       const text = e.data.done;
       const head = []; let pos = 0;
       for (let i = 0; i < SHOW; i++) { const j = text.indexOf('\n', pos); head.push(text.slice(pos, j < 0 ? undefined : j)); if (j < 0) break; pos = j + 1; }
       current = {lines: null, head, text, n};
-      showList(head, n); setView('multi');
+      showList(head, n); setView('multi'); bigPrimary(n);
       $('copy').querySelector('.label').textContent = 'Copy all'; $('copy').classList.remove('copied');
       announce(n.toLocaleString('en-US') + ' UUIDs ready');
     };
@@ -722,7 +726,7 @@ footer a{color:inherit}
       if (p.error) { setErr('nsField', 'nsErr', p.error === 'empty' ? 'Paste the namespace UUID.' : p.message); $('emptyMsg').textContent = 'Its UUID appears here once the namespace below is a UUID.'; setView('none'); clearOut(); return; }
       setErr('nsField', 'nsErr', ''); nsBytes = p.bytes;
     } else { setErr('nsField', 'nsErr', ''); nsBytes = C.parse(C.NAMESPACES[S.ns]).bytes; }
-    $('nsId').textContent = S.ns === 'custom' ? '' : C.NAMESPACES[S.ns];
+    $('nsId').textContent = S.ns === 'custom' ? '' : (S.upper ? C.NAMESPACES[S.ns].toUpperCase() : C.NAMESPACES[S.ns]);
     const raw = $('names').value.replace(/\r/g, '');
     let names = raw.split('\n');
     if (names.length > 1) names = names.filter(x => x !== '');
@@ -742,6 +746,7 @@ footer a{color:inherit}
   function stale(on) {
     $('single').closest('.result').classList.toggle('stale', on);
     $('again').disabled = on;
+    $('copy').querySelector('.label').textContent = on ? (current.n === 1 ? 'Copy previous' : 'Copy previous ' + current.n.toLocaleString('en-US')) : (current.n === 1 ? 'Copy' : 'Copy all');
   }
   function setErr(fieldId, errId, msg) { $(fieldId).classList.toggle('bad', !!msg); $(errId).textContent = msg || ''; }
 
