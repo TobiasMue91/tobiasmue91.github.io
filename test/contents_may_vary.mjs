@@ -253,14 +253,14 @@ if (suites.includes('starter') && starter) {
   {
     const r = KIT.simulate(CORE, 'eager', { minutes: 26, seed: 4 }); const S = r.S;
     check(S.act === 3, 'the eager bot is downstairs with Mother by minute 26');
-    S.lv.pin = 3; let early = 0;
-    for (let k = 0; k < 3000; k++) {
-      const before = Object.fromEntries(S.bulges.map(b => [b.slot, b.age]));
-      CORE.step(S, .1);
-      for (const e of S.ev) if (e.k === 'punch' && e.who === 'pin' && before[e.slot] < CORE.ripeAt(S) - .2) early++;
-      S.ev.length = 0;
+    {
+      // patience is the cellar's decision: the eager hand that lets bulges ripen beats the same hand punching on sight,
+      // and the hand that takes every shortcut is slowest of the three
+      const T = (bot, seed) => KIT.simulate(CORE, bot, { seed }).minutes, e = T('eager', 2), st = T('stubborn', 2), im = T('impatient', 2);
+      check(st > e * 1.05 && im > st, `letting bulges ripen pays: eager ${e.toFixed(1)}, stubborn ${st.toFixed(1)}, impatient ${im.toFixed(1)} min`);
+      const r2 = KIT.simulate(CORE, 'eager', { seed: 2 });
+      check(r2.S.ripes > 200 && CORE.feats.find(f => f[0] === 'ripe')[3](r2.S), `the eager hand punches ${r2.S.ripes} bulges ripe and earns Golden`);
     }
-    check(early === 0, 'rolling pins only take bulges that have ripened', early + ' taken early');
     {
       // a ripe bulge pays more than a fresh one: waiting is a choice, and beams make room for it
       const a = { age: CORE.P.bulgeGrow }, b = { age: CORE.P.bulgeGrow + 2 };
@@ -272,10 +272,18 @@ if (suites.includes('starter') && starter) {
       const T = JSON.parse(JSON.stringify(S)); T.$ = 1e12;
       check(!CORE.act(T, 'buy', 'last') && T.act === 3, 'a trillion dollars does not buy the Last Loaf before she has risen');
       const idle = JSON.parse(JSON.stringify(r.S)), busy = JSON.parse(JSON.stringify(r.S)), m = { seed: 4 };
-      for (const X of [idle, busy]) Object.assign(X.lv, { pin: 3, heave: 3, beams: 3 });
+      for (const X of [idle, busy]) Object.assign(X.lv, { heave: 3, beams: 3 });
       for (let k = 0; k < 1800; k++) { CORE.step(idle, .1); const $ = busy.$; busy.$ = 0; CORE.bots.eager(busy, m, .1); busy.$ += $; CORE.step(busy, .1); idle.ev.length = busy.ev.length = 0; }
       const gain = X => X.proof - r.S.proof;
-      check(gain(idle) < gain(busy) * .35, `left to its pins she proves ${(100 * gain(idle) / gain(busy)).toFixed(0)}% as far as when she is punched (under 35%)`);
+      check(gain(idle) === 0 && gain(busy) > .1, `left alone she does not prove at all; punched, ${(100 * gain(busy)).toFixed(0)}% in three minutes`);
+      {
+        // version 2 had baskets, a baker, rolling pins and a liveliness: a save from then is paid back what they cost
+        const v2 = JSON.parse(JSON.stringify(r.S)); Object.assign(v2.lv, { basket: 2, baker: 1, pin: 1 }); v2.vigor = 2.5; v2.baker = 1; v2.pin = .4; delete v2.ripes;
+        const $0 = v2.$, M = CORE.migrate(v2, 2);
+        check(Math.abs(M.$ - $0 - (450 + 450 * 3.5 + 1500 + 5e5)) < 1e-6 && !('basket' in M.lv) && !('pin' in M.lv) && !('vigor' in M) && M.ripes === 0 && CORE.UP.every(u => M.lv[u.id] >= 0),
+          'a version 2 save gets back what its baskets, baker and rolling pins cost, and loses her liveliness');
+        CORE.step(M, 5); check(Number.isFinite(M.$) && Number.isFinite(M.proof), 'and plays on');
+      }
       const G = JSON.parse(JSON.stringify(r.S)); G.bulges = []; G.heave = 99; G.proof = .25; G.great = 0; CORE.step(G, .1);
       check(G.bulges.length === CORE.SLOTS && G.great === 1, 'a quarter risen, she heaves through every place at once');
       const old = JSON.parse(JSON.stringify(r.S)); delete old.proof; delete old.great; old.earned = 2e6; old.note = 8;
@@ -296,8 +304,9 @@ if (suites.includes('starter') && starter) {
     check(Math.abs(S.$ - before - CORE.scoreMax(S)) < 1e-9, 'a perfect score multiplies the loaf by the pattern’s maximum');
     S.bench.push({ v: 1, age: 0, pat: 0 }); S.lv.pattern = 2; const b2 = S.$; CORE.act(S, 'score', 0, 0);
     check(Math.abs(S.$ - b2 - CORE.scoreMax(S, 0)) < 1e-9, 'a loaf shaped before a new pattern is paid by the pattern it was given');
-    S.bench.push({ v: 1, age: CORE.bakerAt(S) + 1, pat: 0 }); S.lv.baker = 1; CORE.act(S, 'hold', 0); CORE.step(S, .1);
-    check(S.bench.length === 1, 'the baker leaves alone a loaf you are scoring');
+    S.bench.push({ v: 1, age: 0, pat: 0 }); CORE.step(S, CORE.benchWait(S) - .5);
+    check(S.bench.length === 1, 'a loaf waits on the bench for you'); CORE.step(S, 1);
+    check(S.bench.length === 0, 'and goes into the oven as it is when nobody scores it');
     check(!CORE.act(S, 'name', 0, 'Bob') && S.jars[0].name === 'Mother', 'Mother keeps her name');
   }
 }

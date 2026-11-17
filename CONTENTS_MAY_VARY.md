@@ -297,7 +297,7 @@ Numbered as the boxes stand since the reorders of 2026-11-06 and 2026-11-13 (the
 | 4 (6) | `guests` | Unwelcome Guests · "Do not open after dark." (built first as a tap-the-furniture draft, shipped as a cold that herded people, remade in November 2026 as a poltergeist) | hold a finger on the house: a whirl follows it, tears loose whatever it passes (teacups and candles first, chairs, then the long-case clock and the armour, last the piano and the chandelier) and carries it round; what it carries hits people; let go and it is all flung down and crashes, frightening everyone where it lands | short nights against ectoplasm and the dawn, the organ between them; a hit frightens and shoves, past their nerve they panic and run out of the door, and every exit costs a pip of resolve for good; five casts, from a family of three to a film company and twenty-six extras | silent film in coloured cut paper: black silhouettes before rooms of lit, tinted paper (teal, ochre, wine, green, violet, rose), what is built in one plane back in the room's own shade, a cream card ghost, grain, intertitles, iris | indigo night, six room colours, black, cream; warm sepia in the cellar | 1920s, gothic comedy | an upright piano in the pit, organ pipes that sound when bought; porcelain, thuds, smashes and the whirl's wind | intertitle plates, cast cards with pips of resolve, the organ in the cellar | a crate delivered after dark; the iris closes on it |
 | 3 (7) | `jetty` | Still Water · "Keep away from water." | walk the jetty, swipe up to cast, tap when the float goes under, then play the fish: hold to reel, let go when the line is red, slide the held finger to lean against a run, let go while it jumps, pump a sulk | no runs and no clock: a day of eight minutes turns over one lake; ten kinds by distance, hour and bait, each met with the tackle of its time and fighting its own way, sizes up to a trophy; the tackle board between casts; a bank rod in the reeds that rings and is walked to | first-person real-time 3D in hand-written WebGL 2: leaf-card woods, willows and reeds from a painted atlas, the sun's shadow, a lake that knows its depth and mirrors the banks; fish painted in ink and wash, the same painting wrapped round a 3D body | meadow and willow greens, peat water, a red float; gold dusk, blue night with fireflies | English summer, cosy angling, the uncanny in the deep | lapping water, birds, crickets, the reel's clicks; a fingerpicked acoustic guitar (Karplus-Strong) that thins at dawn, slows into B minor at dusk and plays harmonics at night | paper cards on the water: the tackle board, the logbook of painted fish, the catch card | the Old One takes the bait in the deep with a tobacco tin wired to its jaw, the next number on the lid; tap it and the lid lifts |
 
-Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30–32 / 48–50,
+Pacing as measured by the test (eager / casual minutes, three seeds): Starter 31–32 / 53–54 (version 3, November 2026: round before rich; its stubborn hand 35–36, its impatient bot 40–42),
 Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
 Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 31–32 / 57–60 (version 5, November 2026: fewer systems, extras in the film; its impatient bot 29.5–31, its hand that never lets go 38.7–39.6, measured before the last price change), Still Water 40–50 / 40–46.
 
@@ -1135,6 +1135,49 @@ still undone, most valuable first:
   edge), and the neighbours moved in so the desktop cellar has no bare margins. Ready for the owner's playtest.
   **The owner's playtest** (October 2026): the box "looks much more mature"; the bulges were too large and are 10%
   smaller (`BR`: 180 on a wide screen, 194 on a phone).
+  - *Round before rich* (November 2026, `CORE.version` 3; the brief: feel like a finished paid game, take away before adding,
+    every new system justified by a measurement, as Unwelcome Guests was remade). **What the box had**: three verbs (tap a jar
+    at its peak, swipe a score along a loaf, punch a bulge), eighteen cards (68 levels), three helpers (the apprentice, the
+    baker, rolling pins), four multipliers (the streak, Mother's liveliness, the punch combo, a bulge's ripeness), notes on the
+    wall, great heaves. **Played first** (phone, real touch, then desktop): the price tag said "about 0¢ a minute" after the first
+    loaf; card titles were cut off on both sizes ("An apprentice...", "An oven the size of a...", "A reinforced..."); the HUD in
+    the cellar read "Mother is lively ×2.89", a number nobody can act on; the strand from Mother to her word on the wall stayed
+    across the jars for eight seconds; the cellar's last six to nine minutes had nothing left to buy (the rail held only the
+    envelope) while the money climbed to $57M; the Last Loaf asked $1M of a player holding $89M.
+  - *What carried, measured* (three seeds, each card taken out of the shop in turn, `need` forced false): without the proofing
+    baskets the eager bot finished 0.6 minutes *sooner* and the casual one 1.2–2.8 sooner; without the baker 0.9–1.0 and
+    0.9–2.6 sooner; without the rolling pins 0.1–0.2 and 0.2–1.3 sooner. The pins punched **two** bulges in the eager bot's whole
+    game (9–13 % of the casual one's cellar money). Liveliness averaged 2.92 of its cap of 3 for the eager bot and 2.7–2.8 for
+    the casual one: always full. Everything else carried (without size, pattern or the apprentice the game takes hours; oven
+    13 minutes, heave 9, timer 2–3, lame 1–2, diet 2). Ripeness was the one real decision and nobody took it: a hand that lets
+    bulges turn ripe before punching finished the cellar about a quarter sooner than one punching on sight, but the bots
+    punched on sight, so the oak beams (which give a bulge longer to ripen) measured as nothing, and the view showed ripe as a
+    slightly deeper beige that went pale again just before the burst.
+  - *Taken away*: the proofing baskets (a loaf waits 14 seconds, the old middle), the baker (an unscored loaf goes into the
+    oven plain after its wait), the rolling pins, liveliness (and the HUD line), the `hold` action the baker needed, and three
+    sounds and a sequence that ran on `setTimeout` (they wait on game time now). Eighteen cards became fifteen. A version 2
+    save is paid back what its baskets, baker and pins cost and loses its liveliness (`migrate`); the view takes any save
+    with jars, whatever its version.
+  - *Made to carry instead of added*: **ripeness**. A bulge is pale while it swells, turns golden in a quarter of a second
+    once ripe (a gold ring that pulses, two turning glints, a soft chime), stays golden until it bursts (the cracks and the
+    shake say "now or never"); a golden punch says *golden!* and rings; the first golden ones carry a hand-written note,
+    "golden ones prove twice as much!". The eager bot now waits for gold (`ripe` in the bots' options), `bots.stubborn` is the
+    same hand punching on sight, `bots.impatient` taps as soon as a jar has risen at all, slashes at once and punches on
+    sight. The fifth sticker, *Full of life* (liveliness at ×2.9), became *Golden* (200 bulges punched ripe; the eager bot
+    gets about 385, the casual one about 100).
+  - *The cellar's money*: everything in the cellar was worth three times as much (the old liveliness, folded in as
+    `cellarMul`) and the rail emptied at minute 25; at ×1 the cellar's cards come about one every 1.5 minutes until she has
+    risen (the last, Champagne, often still for sale). The Last Loaf costs nothing: she opens it by rising; its envelope says
+    *bake her*. `proofNeed` 920 (was 800), the cellar door $100k (was $80k), the first jar starts half risen (it started a third risen), so the
+    first peak comes about a second sooner. Long card names shortened (Old-country flour, A keen / head apprentice, A room of
+    ovens, Steel all round), and a title that would still be cut gets a smaller face (`.t.long`).
+  - *Pacing* (five seeds): eager 31.2–32.5 (acts 7.0 / 11.2 / 13.3), casual 52.6–53.8, stubborn 34.6–36.4, impatient
+    40.1–42.2; longest wait for something new 2.7 / 4.9 minutes. Patience in the cellar is worth about four minutes to the
+    same hand, shortcuts about nine: the first measured reward in this box for playing well beyond tapping on time.
+  - *Which decision does the player make in minute 25 that they did not have in minute 2?* In minute 2: which jar to tap
+    first. In minute 25: whether to punch a bulge now (it pays at once, keeps a combo going and never bursts) or let it go
+    golden (it counts twice towards the Last Loaf but may burst while the hand is elsewhere), and with which card to answer:
+    beams (more time to ripen), heave (more of her at once) or diet (more money for both).
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
