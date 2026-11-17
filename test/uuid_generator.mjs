@@ -211,13 +211,14 @@ if (suites.includes('format')) {
   eq(F({sep: ''}), 'f81d4fae7dec11d0a76500a0c91e6bf6', 'no hyphens');
   eq(F({wrap: 'braces', upper: true}), '{F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6}', 'braces');
   eq(F({wrap: 'quotes'}), '"f81d4fae-7dec-11d0-a765-00a0c91e6bf6"', 'quotes');
+  eq(F({wrap: 'squotes'}), "'f81d4fae-7dec-11d0-a765-00a0c91e6bf6'", 'single quotes, for SQL');
   eq(F({wrap: 'urn'}), 'urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6', 'URN');
   eq(F({wrap: 'urn', upper: true}), 'urn:uuid:F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6', 'URN prefix stays lowercase');
   eq(F({sep: '_'}), 'f81d4fae_7dec_11d0_a765_00a0c91e6bf6', 'custom separator');
   eq(F({sep: 'x', upper: true}), 'F81D4FAExDEC'.replace('xDEC', 'x7DEC') + 'x11D0xA765x00A0C91E6BF6', 'case leaves a custom separator alone');
   eq(F({sep: '$&'}), 'f81d4fae$&7dec$&11d0$&a765$&00a0c91e6bf6', 'separator is literal, never a replace pattern');
   eq(F({sep: '<b>'}), 'f81d4fae<b>7dec<b>11d0<b>a765<b>00a0c91e6bf6', 'separator is text, not markup');
-  for (const o of [{}, {upper: true}, {sep: ''}, {wrap: 'braces'}, {wrap: 'urn'}, {wrap: 'quotes', upper: true}])
+  for (const o of [{}, {upper: true}, {sep: ''}, {wrap: 'braces'}, {wrap: 'urn'}, {wrap: 'quotes', upper: true}, {wrap: 'squotes'}])
     eq(C.str(C.parse(F(o)).bytes), 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6', `every output reads back: ${JSON.stringify(o)}`);
 }
 
