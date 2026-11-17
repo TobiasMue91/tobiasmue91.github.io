@@ -2636,3 +2636,30 @@ numbers are worked by hand from CSS Shapes 1/2, CSS Values 4 `<position>` and CS
 
 The `round` percentage basis was found by the `browser` suite: the first core resolved it against the inset rectangle,
 as a reading of the spec suggests, and differed from Chromium by 6,713 pixels.
+
+## UUID Generator
+
+```sh
+npm run test:uuid                       # or: node test/uuid_generator.mjs
+node test/uuid_generator.mjs named rfc  # named suites only
+npx http-server -p 8099                 # the page suite needs it, and is skipped without it
+```
+
+`uuid_generator.mjs` runs the DOM-free `<script id="core">` block of `tools/uuid_generator.html` in Node's `vm`. The page
+promises UUIDs laid out exactly as RFC 9562 says, v3/v5 equal to every other implementation, batches that never repeat
+and (v7, v6) sort in creation order, and a checker that reads what people paste. Expected v3/v5 values and v1 fields come
+from `test/uuid_generator.vectors.json`, written by Python's `uuid` module; MD5 and SHA-1 are checked against Node's
+`crypto`; the rest are RFC 9562 Appendix A.
+
+| suite | what it checks |
+| --- | --- |
+| `hashes` | MD5 and SHA-1: RFC 1321 / FIPS 180 examples, every input length 0–299 (all padding boundaries) and 1 MiB against Node's `crypto` |
+| `rfc` | the Appendix A examples: v3 and v5 of `www.example.com`, v1, v6 and v7 at 2022-02-22 19:22:22Z built and decoded, nil, max, the four namespace IDs |
+| `named` | 96 v3/v5 values equal Python's (empty name, non-ASCII, emoji, 1,000 characters, a trailing space, a custom namespace); case and spaces are part of the name |
+| `generate` | 20,000 each of v4, v7, v1, v6: version and variant bits, no repeat, v7/v6 sorted as text; every free v4 bit set 50 % ± 2 %; 200,000 v7 in one frozen millisecond still increasing and borrowing at most a few ms; a clock that steps back; v1 node random with the multicast bit; the 48-bit v7 maximum |
+| `parse` | what people paste: braces, `urn:uuid:`, quotes, a trailing comma, no hyphens, any case, stray space; refusals naming the bad character, the digit count, misplaced hyphens, a letter O, full-width letters, 100,000 characters of junk |
+| `inspect` | nil, max, every version 1–8 and an undefined 9, the four variants, v1 time against Python to the 100 ns, time zero (1582-10-15), the largest v1 and v7 times, a real MAC told from a random node |
+| `format` | case, no hyphens, braces, single and double quotes, URN, a custom separator kept literal (`$&`, `<b>`) and out of the case change; every output parses back |
+| `exports` | TXT, CSV, JSON, SQL, JavaScript, XML stay valid with quotes and markup in the values; the file name; a million lines in a few seconds |
+| `count` | thousands separators of four kinds, too many clamped with a word, zero, negatives, `1e3` and words refused; 100,000 formatted v7 in a few seconds; progress reported |
+| `page` | in Chromium at phone size: a v4 and Copy on screen on arrival and Copy putting exactly it on the clipboard, a format change keeping the same UUID, a bad count keeping the last list usable and saying so, a million made in the worker with Cancel over the dimmed last list and a JSON download of a million distinct v4, v5 opening on the RFC example and updating per line as you type, a trailing space pointed out, names surviving a reload, `?v=7&n=3`, the checker, dark mode, no console errors and no request leaving the page |
