@@ -290,8 +290,8 @@ async function pageSuite(chromium) {
   eq(await p.$$eval('#list li button', l => l.map(x => x.textContent)), ten, 'the old list is kept, not lost');
   await p.fill('#count', '1000000');
   await p.waitForSelector('#working:not(.hidden)', {timeout: 5000});
-  check(await p.isVisible('#cancel'), 'a million: progress and Cancel while it works');
-  await p.waitForSelector('#multi:not(.hidden)', {timeout: 60000});
+  check(await p.isVisible('#cancel') && await p.isVisible('#list'), 'a million: progress and Cancel while it works, the last list still there');
+  await p.waitForSelector('#working', {state: 'hidden', timeout: 60000});
   eq(await p.textContent('#listCount'), '1,000,000 UUIDs', 'a million made');
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#dlBtn').then(() => p.click('#dlMenu button:has-text("JSON")'))]);
   const arr = JSON.parse(rf(await dl.path(), 'utf8'));
