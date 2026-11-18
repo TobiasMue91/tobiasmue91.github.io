@@ -34,6 +34,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    when it stood in the way.
    Starter may weigh **200 KB**: for its refinement session (rule 16) the owner lifted every limit the
    anthology had set itself where it stood in the way of the result.
+   It may weigh **230 KB** since its round-before-rich session (November 2026): the box stood at 197 KB of 200 after the
+   cellar's rhythm, the burst's warning, the phone's rail and chapter headings, and the owner calls the limit arbitrary.
    Keep Off the Grass may weigh **200 KB** for the same reason: its refinement session (October 2026) began at
    133 KB, over the old cap, once the box had its close-up camera and props list.
    Tilt may weigh **230 KB**: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
@@ -1225,6 +1227,16 @@ still undone, most valuable first:
     in script over the pink bedroom is hard to read; the bulge's swell from fresh to ripe (to 1.25 times) still reads as
     one size in stills; the box in the crumb sits still between the slice and the tap. No critic reached 8 on clarity,
     phone or feel.
+  - *The fourth critic's points, taken up* (November 2026). *The holes* she leaves are recessed: the rim is shaded inward
+    in two strokes and the upper wall is in shadow fading down to her lit dough (they were flat patches). *Golden sums*
+    are printed in a dark rust (`#8a4108`) instead of amber, readable on the pink bedroom. *A bulge swells* from 70% to its
+    full size by the time it is ripe (eased; it was 80%), so fresh, swelling and ripe differ in size as well as colour.
+    *The box in the crumb* rises and settles slowly in a warm glow until it is opened (game time, `fin.t`), where it stood
+    still. *The phone's empty paper* above the kitchen is a cookbook's chapter heading where it fits (at least 90 px
+    between the money tag and the ceiling): "chapter two · The Bakery" over the whole bakery act, "chapter one · The
+    Kitchen" only in the first minute when the camera still leaves room; drawn into the cached backdrop, so it costs
+    nothing a frame. Pacing unchanged (eager 30.5–31.8, casual 55–58). Still the owner's call: the bulges' size and
+    places, and the dough lettering of the ending.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
