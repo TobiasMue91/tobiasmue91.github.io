@@ -166,10 +166,34 @@ if (suites.includes('areas')) {
   check(r.areas[0].w * r.areas[0].h >= r.areas[1].w * r.areas[1].h, 'largest first');
   B = new Uint8ClampedArray(A); paint(B, 100, 100, 2, 2); paint(B, 100 + cell * 2, 100, 2, 2);
   eq(C.diff(A, B, W, H, {}).areas.length, 1, 'specks a couple of cells apart join into one spot');
-  B = new Uint8ClampedArray(A); paint(B, 0, 0, W, H);
-  r = C.diff(A, B, W, H, {});
-  check(r.areas.length === 1 && r.areas[0].broad, 'a change over the whole image is one broad area, not outlined');
-  check(/most of the image/.test(C.verdict(r).sub), 'and the verdict says it is spread', C.verdict(r).sub);
+  // a scene with real texture, so a tone change is a curve and not one colour
+  const P = img(W, H, (x, y) => [40 + (x * 7 + y * 3) % 180, 30 + (x * 3 + y * 5) % 200, 60 + (x + y * 2) % 150]);
+  const lift = c => Math.min(255, Math.round(c * 1.15 + 18));
+  const L = img(W, H, (x, y) => { const k = (y * W + x) * 4; return [lift(P[k]), lift(P[k + 1]), lift(P[k + 2])]; });
+  r = C.diff(P, L, W, H, {});
+  check(r.count > 0.25 * r.total && r.tone && r.local === 0, 'a brightness lift: many pixels differ, all explained by the tone change', JSON.stringify({count: r.count, local: r.local, tone: r.tone}));
+  check(/mostly an overall tone change/.test(C.verdict(r).head) && /no local edits/.test(C.verdict(r).sub), 'and the verdict says so', JSON.stringify(C.verdict(r)));
+  const L2 = new Uint8ClampedArray(L);
+  const dust = [[50, 40], [200, 150], [330, 250]];
+  for (const [x, y] of dust) for (let dy = 0; dy < 6; dy++) for (let dx = 0; dx < 6; dx++) L2.set([20, 20, 20, 255], ((y + dy) * W + x + dx) * 4);
+  r = C.diff(P, L2, W, H, {picture: true});
+  const solidAreas = r.areas.filter(a => !a.faint && !a.broad);
+  check(r.tone && solidAreas.length === 3 && dust.every(([x, y]) => solidAreas.some(a => covers(a, x, y, 6, 6))), 'a lift plus three retouched spots: exactly the three spots outlined', JSON.stringify(r.areas));
+  check(/beyond it, 3 spots outlined/.test(C.verdict(r).sub), 'verdict names the spots beyond the tone change', C.verdict(r).sub);
+  const k0 = (100 * W + 100) * 4, k1 = (42 * W + 52) * 4;
+  check(r.picture[k1] > 120 && r.picture[k1 + 1] < 60 && !(r.picture[k0] > 150 && r.picture[k0 + 1] < 90), 'the map shows the spots magenta and the toned rest not', JSON.stringify([[...r.picture.slice(k1, k1 + 3)], [...r.picture.slice(k0, k0 + 3)]]));
+  const R2 = img(W, H, (x, y) => [((x * 31) ^ (y * 17)) & 255, ((x * 7) ^ (y * 29)) & 255, ((x * 13) + y * 11) & 255]);
+  r = C.diff(P, R2, W, H, {});
+  check(!r.tone && r.areas.some(a => a.broad), 'a different picture altogether is not called a tone change', JSON.stringify({tone: r.tone, local: r.local, count: r.count}));
+  // an evenly recoloured button, below the threshold: outlined as a faint area
+  const U = solid(W, H, [246, 247, 249]), U2 = new Uint8ClampedArray(U);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x >= 100 && x < 300 && y >= 200 && y < 240) { U.set([47, 111, 222, 255], (y * W + x) * 4); U2.set([42, 100, 201, 255], (y * W + x) * 4); }
+  r = C.diff(U, U2, W, H, {});
+  const fa = r.areas.filter(a => a.faint);
+  check(r.count === 0 && fa.length === 1 && covers(fa[0], 104, 204, 192, 32), 'a button recoloured #2f6fde → #2a64c9: not counted, but outlined as one faint area', JSON.stringify(r.areas));
+  check(/changed slightly but evenly/.test(C.verdict(r).sub), 'and named in the verdict', C.verdict(r).sub);
+  const J = img(W, H, (x, y) => [100 + ((x * 7 + y * 13) % 3), 100, 100]);
+  eq(C.diff(solid(W, H, [100, 100, 100]), J, W, H, {}).areas.filter(a => a.faint).length, 0, 'noise over the whole image is not a faint area');
   B = new Uint8ClampedArray(A); for (let i = 0; i < 40; i++) paint(B, (i % 8) * 50 + 5, Math.floor(i / 8) * 60 + 5, 3, 3);
   r = C.diff(A, B, W, H, {});
   eq(r.areas.length, 40, '40 scattered specks: 40 spots');
@@ -187,11 +211,13 @@ if (suites.includes('words')) {
   const base = {w: 1600, h: 1000, total: 1.6e6, threshold: 0.1, areas: [{x: 1, y: 1, w: 9, h: 9}]};
   let v = C.verdict({...base, count: 712475, any: 900000});
   eq(v.head, '44.5 % of pixels differ', 'headline');
-  check(/noise threshold/.test(v.sub) && /1600×1000/.test(v.sub) && /1 spot outlined/.test(v.sub), 'says how and at what size', v.sub);
+  check(/changed faintly/.test(v.sub) && /1600×1000/.test(v.sub) && /1 spot outlined/.test(v.sub), 'says how and at what size', v.sub);
   check(/187 525 px more changed faintly/.test(v.sub), 'names the faint changes it did not count', v.sub);
   v = C.verdict({...base, count: 10, any: 10, threshold: 0}, {w: 8000, h: 5000});
   check(/JPEG noise ignored/.test(C.verdict({...base, count: 5, any: 5}).sub), 'no faint changes: says what it ignores', C.verdict({...base, count: 5, any: 5}).sub);
-  check(/every change counted/.test(v.sub) && /scaled from 8000×5000/.test(v.sub), 'says when it measured a scaled copy', v.sub);
+  check(/every change counted/.test(v.sub) && /20 % scale \(1600×1000 of 8000×5000\)/.test(v.sub), 'says when it measured a scaled copy', v.sub);
+  v = C.verdict({...base, count: 0, any: 0, areas: []}, {w: 8000, h: 5000});
+  check(v.head === 'No difference found' && /pixel or two/.test(v.sub), 'a scaled measurement never claims "pixel for pixel"', JSON.stringify(v));
   eq(C.measureSize(4000, 3000), {w: 4000, h: 3000, scaled: false}, '12 MP is measured as is');
   const m = C.measureSize(8000, 6000);
   check(m.scaled && m.w * m.h <= C.MAX_DIFF_PIXELS && Math.abs(m.w / m.h - 4 / 3) < 0.002, '48 MP scaled under the cap, shape kept', JSON.stringify(m));
@@ -214,8 +240,8 @@ if (suites.includes('layout')) {
   }
   passes++;
   eq(C.alignNote({w: 10, h: 10}, {w: 10, h: 10}, 'fit'), '', 'same size: no note');
-  check(/scaled to 800×600/.test(C.alignNote({w: 800, h: 600}, {w: 1600, h: 1200}, 'fit')), 'note: scaled');
-  check(/fitted inside 800×600/.test(C.alignNote({w: 800, h: 600}, {w: 400, h: 800}, 'fit')), 'note: fitted');
+  check(/scaled to A’s 800×600/.test(C.alignNote({w: 800, h: 600}, {w: 1600, h: 1200}, 'fit')), 'note: scaled');
+  check(/fitted inside A’s 800×600/.test(C.alignNote({w: 800, h: 600}, {w: 400, h: 800}, 'fit')), 'note: fitted');
   check(/stretched/.test(C.alignNote({w: 800, h: 600}, {w: 400, h: 800}, 'stretch')), 'note: stretched');
   check(/actual pixels/.test(C.alignNote({w: 800, h: 600}, {w: 400, h: 800}, 'actual')), 'note: actual');
 }
