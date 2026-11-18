@@ -1081,6 +1081,26 @@ pays the wrong amount or a wave that never ends all look fine on a screenshot.
 | `waves` | forty seeds of twelve waves on both skies: the right number of warheads, each aimed at something standing, no splitters before wave 3, every wave ends; fall time does not depend on angle; same seed and taps, same game |
 | `bots` | players with a person's reaction time: one who never fires is gone by wave 3, a careful one outlasts a sloppy one, gets past wave 6 and sees chains of three |
 
+## Chess
+
+```sh
+npm run test:chess                     # or: node test/chess.mjs (about 20 seconds)
+node test/chess.mjs rules notation     # named suites only
+node test/chess.mjs --games=4          # more games per pairing in the skill suite (default 2 each way)
+```
+
+`chess.mjs` runs the DOM-free `<script id="core">` block of `games/chess.html` in Node (no server, no browser). The page only
+animates what its core returns, and the Web Worker that does the opponent's thinking is built from the same script text, so a
+castling or en-passant rule that is slightly off looks right on screen and plays wrong.
+
+| suite | what it checks |
+|---|---|
+| `rules` | perft of six published positions (start, Kiwipete, positions 3 to 6) to depth 3-4; FEN round trips; no castling out of, through or into check, b1 attacked does not stop the long castle; en passant only straight after the double step and never when it uncovers the king; make/unmake restores board, hash and rights across 200 random games, and the incremental hash equals a fresh one |
+| `notation` | every legal SAN of 120 random games parses back to its own move; disambiguation by file, rank and square; + and #; promotions and under-promotions; PGN of a replayed game; an illegal move stops a replay |
+| `end` | checkmate, stalemate, threefold repetition (not twofold), the fifty-move rule and its reset, insufficient material (and two knights, a pawn, a rook or bishops on both colours that are not) |
+| `search` | every opponent mates in one; a mate in two is seen; levels 3-5 take a hanging queen; every opponent moves legally from random positions; the worker request reports the evaluation from White's side |
+| `skill` | fixed node budgets, no clock: the Club Player beats the Beginner and the Tournament player beats Casual, without a loss |
+
 ## Checkers
 
 ```sh
@@ -1467,6 +1487,7 @@ npm run test:stack          # Stack Tower suite (plain Node, no server or browse
 npm run test:lanternfall    # Lanternfall (WebCraft) suite (plain Node, no server or browser)
 npm run test:reversi        # Reversi suite (plain Node, no server or browser)
 npm run test:checkers       # Checkers suite (plain Node, no server or browser)
+npm run test:chess          # Chess suite (plain Node, no server or browser)
 npm run test:nonogram       # Tesserae (Nonogram) suite (plain Node, no server or browser)
 npm run test:shatter        # Shatter Field (3D Asteroids) suite (plain Node, no server or browser)
 npm run test:feud           # We Asked 100 (Family Feud) suite (plain Node, no server or browser)
@@ -1789,6 +1810,11 @@ whose page only draws what the core returns: a bolt touches what its swept path 
 apart carrying the parent's momentum, the red warnings name exactly the rocks that would hit (against a brute-force run), the aim assist never bends a
 bolt past its cone, score, chain, hull and field rules, a seed deals the same night to everyone, and bots with a person's reflexes must reach deeper
 fields in order of skill while a player who never fires is gone by field 3. Run it after touching the core.
+
+`test/chess.mjs` runs the DOM-free `<script id="core">` block of `games/chess.html`, whose page only animates what its core
+returns: perft against published counts, castling and en-passant edge cases, make/unmake and hash consistency over random games,
+SAN that parses back to its move, the draw rules, mates found by every opponent, and five opponents that must be ordered by
+strength. Run it after touching the core, the evaluation or a level.
 
 `test/checkers.mjs` runs the DOM-free `<script id="core">` block of `games/checkers.html`, whose page only animates the moves
 its core returns: perft against the published American-checkers counts, every position of hundreds of random games against a move
