@@ -1237,6 +1237,9 @@ still undone, most valuable first:
     Kitchen" only in the first minute when the camera still leaves room; drawn into the cached backdrop, so it costs
     nothing a frame. Pacing unchanged (eager 30.5–31.8, casual 55–58). Still the owner's call: the bulges' size and
     places, and the dough lettering of the ending.
+    *The cookbooks* (the owner: "they look more like tubes"): each spine had rounded ends and a page block standing out
+    of its right end like a cap. Now the spine has square corners and its right end is the book's head, seen past it: the
+    two boards in the cloth's colour with the block of pages set in between them, outlined as one piece.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
