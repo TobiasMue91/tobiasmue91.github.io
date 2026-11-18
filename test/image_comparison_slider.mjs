@@ -172,14 +172,14 @@ if (suites.includes('areas')) {
   const L = img(W, H, (x, y) => { const k = (y * W + x) * 4; return [lift(P[k]), lift(P[k + 1]), lift(P[k + 2])]; });
   r = C.diff(P, L, W, H, {});
   check(r.count > 0.25 * r.total && r.tone && r.local === 0, 'a brightness lift: many pixels differ, all explained by the tone change', JSON.stringify({count: r.count, local: r.local, tone: r.tone}));
-  check(/mostly an overall tone change/.test(C.verdict(r).head) && /no local edits/.test(C.verdict(r).sub), 'and the verdict says so', JSON.stringify(C.verdict(r)));
+  check(C.verdict(r).head === 'Only an overall tone change' && /no local edits/.test(C.verdict(r).sub), 'and the verdict says so', JSON.stringify(C.verdict(r)));
   const L2 = new Uint8ClampedArray(L);
   const dust = [[50, 40], [200, 150], [330, 250]];
   for (const [x, y] of dust) for (let dy = 0; dy < 6; dy++) for (let dx = 0; dx < 6; dx++) L2.set([20, 20, 20, 255], ((y + dy) * W + x + dx) * 4);
   r = C.diff(P, L2, W, H, {picture: true});
   const solidAreas = r.areas.filter(a => !a.faint && !a.broad);
   check(r.tone && solidAreas.length === 3 && dust.every(([x, y]) => solidAreas.some(a => covers(a, x, y, 6, 6))), 'a lift plus three retouched spots: exactly the three spots outlined', JSON.stringify(r.areas));
-  check(/beyond it, 3 spots outlined/.test(C.verdict(r).sub), 'verdict names the spots beyond the tone change', C.verdict(r).sub);
+  check(/· 3 spots outlined · plus an overall tone change/.test(C.verdict(r).sub) && /of pixels changed$/.test(C.verdict(r).head), 'verdict leads with the spots, the tone change follows', C.verdict(r).sub);
   const k0 = (100 * W + 100) * 4, k1 = (42 * W + 52) * 4;
   check(r.picture[k1] > 120 && r.picture[k1 + 1] < 60 && !(r.picture[k0] > 150 && r.picture[k0 + 1] < 90), 'the map shows the spots magenta and the toned rest not', JSON.stringify([[...r.picture.slice(k1, k1 + 3)], [...r.picture.slice(k0, k0 + 3)]]));
   const R2 = img(W, H, (x, y) => [((x * 31) ^ (y * 17)) & 255, ((x * 7) ^ (y * 29)) & 255, ((x * 13) + y * 11) & 255]);
@@ -192,6 +192,17 @@ if (suites.includes('areas')) {
   const fa = r.areas.filter(a => a.faint);
   check(r.count === 0 && fa.length === 1 && covers(fa[0], 104, 204, 192, 32), 'a button recoloured #2f6fde → #2a64c9: not counted, but outlined as one faint area', JSON.stringify(r.areas));
   check(/changed slightly but evenly/.test(C.verdict(r).sub), 'and named in the verdict', C.verdict(r).sub);
+  // an edge moved by one pixel (resampling, anti-aliasing) is not a change of content; a lone changed pixel is
+  const E1 = img(W, H, x => x < 150 ? [20, 20, 20] : [230, 230, 230]), E2 = img(W, H, x => x < 151 ? [20, 20, 20] : [230, 230, 230]);
+  r = C.diff(E1, E2, W, H, {});
+  check(r.count === H && r.local === 0 && r.edge === H && r.areas.length === 0, 'a hard edge shifted by one pixel: counted by pixelmatch, but no spot', JSON.stringify({count: r.count, local: r.local, edge: r.edge, areas: r.areas.length}));
+  eq(C.verdict(r).head, 'Only edges differ', 'and the verdict says only edges differ');
+  const E3 = new Uint8ClampedArray(E1); E3.set([230, 20, 20, 255], (40 * W + 60) * 4);
+  r = C.diff(E1, E3, W, H, {});
+  eq([r.local, r.areas.length, C.verdict(r).head], [1, 1, '< 0.01 % of pixels changed'], 'one red pixel in a dark field is still a change at the default sensitivity');
+  const E4 = new Uint8ClampedArray(E1); E4.set([20, 20, 20, 255], (40 * W + 200) * 4);
+  eq(C.diff(E1, E4, W, H, {}).local, 1, 'a dark speck far from the dark side is a change, not an edge');
+  eq(C.diff(E1, E2, W, H, {threshold: 0}).local, H, '"every change" does not forgive shifted edges');
   const J = img(W, H, (x, y) => [100 + ((x * 7 + y * 13) % 3), 100, 100]);
   eq(C.diff(solid(W, H, [100, 100, 100]), J, W, H, {}).areas.filter(a => a.faint).length, 0, 'noise over the whole image is not a faint area');
   B = new Uint8ClampedArray(A); for (let i = 0; i < 40; i++) paint(B, (i % 8) * 50 + 5, Math.floor(i / 8) * 60 + 5, 3, 3);
@@ -210,9 +221,9 @@ if (suites.includes('words')) {
   eq(C.group(712475), '712 475', 'thin-space thousands');
   const base = {w: 1600, h: 1000, total: 1.6e6, threshold: 0.1, areas: [{x: 1, y: 1, w: 9, h: 9}]};
   let v = C.verdict({...base, count: 712475, any: 900000});
-  eq(v.head, '44.5 % of pixels differ', 'headline');
+  eq(v.head, '44.5 % of pixels changed', 'headline');
   check(/changed faintly/.test(v.sub) && /1600×1000/.test(v.sub) && /1 spot outlined/.test(v.sub), 'says how and at what size', v.sub);
-  check(/187 525 px more changed faintly/.test(v.sub), 'names the faint changes it did not count', v.sub);
+  check(/plus 187 525 px changed faintly · at/.test(v.sub), 'names the faint changes it did not count', v.sub);
   v = C.verdict({...base, count: 10, any: 10, threshold: 0}, {w: 8000, h: 5000});
   check(/JPEG noise ignored/.test(C.verdict({...base, count: 5, any: 5}).sub), 'no faint changes: says what it ignores', C.verdict({...base, count: 5, any: 5}).sub);
   check(/every change counted/.test(v.sub) && /20 % scale \(1600×1000 of 8000×5000\)/.test(v.sub), 'says when it measured a scaled copy', v.sub);

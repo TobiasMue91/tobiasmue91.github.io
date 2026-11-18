@@ -2184,7 +2184,9 @@ Comparison Slider), whose promise is that the two images line up the way the pag
 with `npm i --no-save pixelmatch@5.3.0` - the count of differing pixels equal to pixelmatch's own on random, noisy, graded and
 half-transparent pairs at all three sensitivities; images whose answer is known (one pixel, an exact block box, noise below the
 threshold, transparent pixels hiding different colours, 1x1, 5000x1); outlined spots that split, join and leave a whole-image
-change unboxed; percentages that never say 0 % or 100 % for a partial change; fit, stretch and actual-pixel layouts; zoom that
+change unboxed; a brightness lift read as a tone change with exactly the three retouched spots outlined beyond it, a different
+picture never called a tone change, a hard edge moved by one pixel not called a change while one stray pixel is, and an evenly
+recoloured button below the threshold outlined as a faint area; percentages that never say 0 % or 100 % for a partial change; fit, stretch and actual-pixel layouts; zoom that
 keeps the point under the finger and never loses the image; ARIA slider keys; saved-image sizes and the 8192 px cap; file
 names; the file types it explains; saved settings and `?mode=fade&dir=v&pos=30` links. Run it after touching the core.
 

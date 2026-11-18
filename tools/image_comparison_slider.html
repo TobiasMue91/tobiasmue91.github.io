@@ -75,7 +75,6 @@ main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 316px;gap:14px;padd
 .verdict{min-height:52px;display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
 .verdict .vh{font-weight:650;font-size:16px}
 .verdict .vs{color:var(--dim);font-size:13px}
-.verdict[data-kind="diff"] .vh::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--mark);margin-right:8px;vertical-align:1px}
 .verdict[data-kind="same"] .vh::before{content:"✓";margin-right:7px;font-weight:700}
 .verdict .vtext{flex:1;min-width:0}
 .verdict .ex{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:1px 5px;margin-right:6px;vertical-align:2px}
@@ -98,7 +97,7 @@ aside{display:flex;flex-direction:column;gap:10px;min-width:0}
 .err{color:var(--bad);font-size:13px;margin:0}
 .slotbtns{display:flex;gap:6px}
 .slotbtns .ibtn{height:30px;font-size:13px}
-.swaprow{display:flex;justify-content:center;margin:-6px 0}
+.swaprow{display:flex;justify-content:center;margin:-3px 0}
 .swaprow .ibtn{height:28px;font-size:13px;border-radius:14px}
 .primary{background:var(--btn);color:var(--btn-ink);border:0;border-radius:9px;height:42px;font-weight:650;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;width:100%}
 .primary:disabled{opacity:.45;cursor:default}
@@ -153,6 +152,11 @@ kbd{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px
   .swaprow .ibtn::before{content:"⇄";font-size:16px}
   .err{font-size:12.5px}
   .toast{top:10px;bottom:auto;max-width:calc(100vw - 24px)}
+  .paired .slotbtns,.paired .fname.num{display:none}
+  .paired .slots .card{padding:6px 8px}
+  .paired .thumb{width:36px;height:36px}
+  .paired .swaprow .ibtn{width:30px;height:30px}
+  .paired.showbtns .slotbtns{display:flex}
   .pickhint-own{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -265,6 +269,7 @@ kbd{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px
         <label class="chk"><input type="checkbox" id="optOutline"> Outline changed areas on the images</label>
         <label class="chk"><input type="checkbox" id="optLabels"> Show labels (also in saved images)</label>
         <label class="chk"><input type="checkbox" id="optGrid"> Rule-of-thirds grid</label>
+        <button class="linkbtn" id="showAdj" style="align-self:flex-start">Adjust brightness, contrast, colour of each image…</button>
         <label class="chk"><input type="checkbox" id="optKeep"> Keep my images after reload <span class="note">(in this browser only)</span></label>
         <div class="keys" aria-label="Keyboard shortcuts">
           <kbd>← →</kbd><span>move divider (Shift: 10×)</span>
@@ -316,7 +321,7 @@ kbd{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px
     const sz = o => `${o.w}×${o.h}`;
     if (align === 'actual') return `Sizes differ: both shown at actual pixels from the top-left (A ${sz(A)}, B ${sz(B)}).`;
     if (align === 'stretch' && !C.sameAspect(A.w, A.h, B.w, B.h)) return `Sizes differ: B (${sz(B)}) is stretched to A’s ${sz(A)}.`;
-    if (C.sameAspect(A.w, A.h, B.w, B.h)) return `Sizes differ: B (${sz(B)}) is scaled to A’s ${sz(A)}.`;
+    if (C.sameAspect(A.w, A.h, B.w, B.h)) return `Sizes differ: B (${sz(B)}) is scaled to A’s ${sz(A)}, so small text and fine lines can differ a little from the scaling alone.`;
     return `Shapes differ: B (${sz(B)}) is fitted inside A’s ${sz(A)}, centred.`;
   };
 
@@ -404,13 +409,27 @@ kbd{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px
     const lut = count >= 0.25 * total && lim > 0 ? C.toneCurve(hist) : null;
     // pass 2: what is local, the picture, the outlines
     const grid = new Uint8Array(gw * gh), faintN = new Uint32Array(gw * gh), cellN = new Uint32Array(gw * gh);
-    let local = 0, x0 = w, y0 = h, x1 = -1, y1 = -1;
+    let local = 0, edge = 0, x0 = w, y0 = h, x1 = -1, y1 = -1;
+    // A as the tone curve predicts it, at byte k
+    const ar = k => lut ? lut[a[k]] : a[k], ag = k => lut ? lut[256 + a[k + 1]] : a[k + 1], ab = k => lut ? lut[512 + a[k + 2]] : a[k + 2];
+    // does some pixel of the other image within one pixel of (x, y) match this colour? (resampling and anti-aliasing move edges by a pixel)
+    const near = (x, y, r, g, bl, al, inA) => {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
+        const j = (Y * w + X) * 4;
+        const d = inA ? C.colorDelta(r, g, bl, al, ar(j), ag(j), ab(j), a[j + 3]) : C.colorDelta(r, g, bl, al, b[j], b[j + 1], b[j + 2], b[j + 3]);
+        if (d <= lim) return true;
+      }
+      return false;
+    };
     for (let y = 0; y < h; y++) {
       const gy = (y / cell | 0) * gw;
       for (let x = 0, k = y * w * 4; x < w; x++, k += 4) {
         const d = C.colorDelta(a[k], a[k + 1], a[k + 2], a[k + 3], b[k], b[k + 1], b[k + 2], b[k + 3]);
         const dl = lut && d > 0 ? C.colorDelta(lut[a[k]], lut[256 + a[k + 1]], lut[512 + a[k + 2]], a[k + 3], b[k], b[k + 1], b[k + 2], b[k + 3]) : d;
-        const hit = (lut ? Math.min(d, dl) : d) > lim, c = gy + (x / cell | 0);
+        let hit = (lut ? Math.min(d, dl) : d) > lim;
+        const c = gy + (x / cell | 0);
+        if (hit && lim > 0 && near(x, y, ar(k), ag(k), ab(k), a[k + 3], false) && near(x, y, b[k], b[k + 1], b[k + 2], b[k + 3], true)) { hit = false; edge++; }
         cellN[c]++;
         if (hit) { local++; grid[c] = 1; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
         else if (d > 0) faintN[c]++;
@@ -422,7 +441,7 @@ kbd{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px
             const al = a[k + 3] / 255, lum = blend(a[k] * 0.299 + a[k + 1] * 0.587 + a[k + 2] * 0.114, al);
             const g = 24 + lum * 0.22;
             if (d > 0) {
-              const m = 0.45 + 0.4 * Math.min(1, lim ? Math.sqrt(Math.min(d, lim) / lim) : 1);
+              const m = 0.22 + 0.33 * Math.min(1, lim ? Math.sqrt(Math.min(d, lim) / lim) : 1);
               pic[k] = g + (128 - g) * m; pic[k + 1] = g + (72 - g) * m; pic[k + 2] = g + (168 - g) * m;
             } else pic[k] = pic[k + 1] = pic[k + 2] = g;
           }
@@ -440,7 +459,7 @@ kbd{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px
       if (n) for (const ar of C.areas(fg, gw, gh, cell, w, h)) if (ar.cells >= 2 && !ar.broad) { ar.faint = true; areas.push(ar); }
     }
     return {
-      w, h, total, count, any, maxDelta: max, threshold: t, local, tone: !!lut && local <= 0.5 * count,
+      w, h, total, count, any, maxDelta: max, threshold: t, local, edge, tone: !!lut && local + edge <= 0.5 * count,
       box: local ? {x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1} : null,
       areas, picture: pic,
     };
@@ -511,27 +530,35 @@ kbd{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px
     return (s === '100.0' ? '99.9' : s) + ' %';
   };
   C.group = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  // The headline always counts local changes: pixels that differ beyond the noise threshold and that neither an overall
+  // tone change nor a one-pixel shift of an edge explains. What else changed follows as one clause.
   C.verdict = function (r, scaledFrom) {
     const how = r.threshold === 0 ? 'every change counted' : r.threshold <= 0.1 ? 'changes as faint as JPEG noise ignored' : 'only clear changes counted';
     const pct = scaledFrom ? Math.round(r.w / scaledFrom.w * 100) : 100;
     const at = scaledFrom ? ` · measured at ${pct} % scale (${r.w}×${r.h} of ${scaledFrom.w}×${scaledFrom.h})` : ` · at ${r.w}×${r.h}`;
-    const faintAreas = r.areas.filter(o => o.faint).length;
-    const faintNote = faintAreas ? ` · ${faintAreas === 1 ? '1 area' : faintAreas + ' areas'} changed slightly but evenly (dashed)` : '';
     if (!r.any) return scaledFrom
       ? {kind: 'same', head: 'No difference found', sub: `Measured at ${pct} % scale (${r.w}×${r.h} of ${scaledFrom.w}×${scaledFrom.h}) — a change of a pixel or two might not show`}
       : {kind: 'same', head: 'Identical', sub: 'Pixel for pixel, no difference at all' + at};
-    if (!r.count) return {kind: 'near', head: 'Only faint differences',
-      sub: `${C.percent(r.any, r.total)} of pixels (${C.group(r.any)} px) changed slightly, below the noise threshold` + faintNote + at};
-    const solid = r.areas.filter(o => !o.faint);
-    const broad = solid.some(o => o.broad), n = solid.filter(o => !o.broad).length;
+    const local = r.local == null ? r.count : r.local, edge = r.edge || 0;
+    const faintAreas = r.areas.filter(o => o.faint).length;
+    const solid = r.areas.filter(o => !o.faint), broad = solid.some(o => o.broad), n = solid.filter(o => !o.broad).length;
     const spots = n === 0 ? '' : n === 1 ? '1 spot outlined' : n <= 12 ? `${n} spots outlined` : `${n} separate spots`;
     const faint = r.any - r.count;
-    const tail = (faintAreas ? faintNote.slice(3) : faint && r.threshold && !r.tone ? `${C.group(faint)} px more changed faintly` : how) + at;
-    if (r.tone) return {kind: 'diff', head: `${C.percent(r.count, r.total)} of pixels differ — mostly an overall tone change`,
-      sub: (n ? `beyond it, ${spots}` : broad ? 'beyond it, changes across much of the image' : 'no local edits beyond it') + ' · ' + tail};
+    const also = [];
+    if (r.tone) also.push(`an overall tone change across ${C.percent(r.count, r.total)} of the image`);
+    if (faintAreas) also.push(`${faintAreas === 1 ? '1 area' : faintAreas + ' areas'} changed slightly but evenly (dashed)`);
+    if (edge && !r.tone) also.push(`${C.group(edge)} px of edges shifted by a pixel`);
+    if (faint > 0.5 * r.total && r.threshold) also.push(`faint changes across ${C.percent(faint, r.total)} of the image`);
+    else if (faint && r.threshold && !also.length) also.push(`${C.group(faint)} px changed faintly`);
+    if (!local) {
+      if (r.tone) return {kind: 'near', head: 'Only an overall tone change', sub: `${C.percent(r.count, r.total)} of pixels shifted together (brightness or colour), no local edits` + at};
+      if (faintAreas) return {kind: 'near', head: 'Only slight changes', sub: also.join(' · ') + at};
+      if (r.count) return {kind: 'near', head: 'Only edges differ', sub: `${C.group(edge)} px along edges are off by a pixel, as resizing or re-rendering leaves them — no change of content` + at};
+      return {kind: 'near', head: 'Only faint differences', sub: `${C.percent(r.any, r.total)} of pixels (${C.group(r.any)} px) changed slightly, below the noise threshold` + at};
+    }
     const where = broad ? (spots ? `most of the image + ${spots}` : 'most of the image') : spots;
-    return {kind: 'diff', head: `${C.percent(r.count, r.total)} of pixels differ`,
-      sub: `${C.group(r.count)} px · ${where} · ` + tail};
+    return {kind: 'diff', head: `${C.percent(local, r.total)} of pixels changed`,
+      sub: `${C.group(local)} px · ${where}` + (also.length ? ' · plus ' + also.join(', ') : ' · ' + how) + at};
   };
 
   // Longest side and pixel cap for the measurement (memory: two RGBA copies plus a picture).
@@ -1122,6 +1149,7 @@ function refreshAll(changed) {
   $('swapBtn').disabled = !(slots.a || slots.b);
   $('saveBtn').disabled = $('copyBtn').disabled = !both;
   $('pickHint').classList.toggle('pickhint-own', both && !slots.a.example);
+  $('app').classList.toggle('paired', both && !slots.a.example);
   if (!navigator.clipboard || !window.ClipboardItem) $('copyBtn').hidden = true;
   syncControls();
   scheduleDiff(); renderVerdict();
@@ -1149,8 +1177,10 @@ function syncControls() {
 }
 function setMode(m) {
   if (!C.MODES.includes(m) || m === S.mode) return;
+  const sideChange = (m === 'side') !== (S.mode === 'side');
   S.mode = m; saveSettings(); syncControls();
-  fitStageHeight(); resetView(); renderVerdict(); draw();
+  fitStageHeight(); if (sideChange || !v) resetView(); else { const pp = panes()[0]; v = C.clampView(v, lay.w, lay.h, pp.w, pp.h); } // keep the zoom across modes
+  renderVerdict(); draw();
   announce({split: 'Slider', side: 'Side by side', fade: 'Fade', diff: 'Difference map'}[m]);
 }
 // motion: when a new image lands, the divider sweeps in from the side that changed, so the eye sees what is new
@@ -1457,6 +1487,7 @@ $('saveMenu').addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeMenu(); $('saveBtn').focus(); }
 });
 $('copyBtn').onclick = copy;
+$('showAdj').onclick = () => { $('app').classList.add('showbtns'); for (const s of ['a', 'b']) if (slots[s]) { $('adj' + s.toUpperCase()).hidden = false; document.querySelector(`[data-adjust="${s}"]`).setAttribute('aria-expanded', 'true'); } $('cardA').scrollIntoView({block: 'nearest', behavior: 'smooth'}); };
 $('whereBtn').onclick = () => setMode('diff');
 $('toastUndo').onclick = undo;
 $('cancelBtn').onclick = () => { cancelDiff(); diffKey = ''; renderVerdict('Measuring cancelled. Change a setting or image to measure again.'); };
