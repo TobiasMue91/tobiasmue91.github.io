@@ -2735,3 +2735,23 @@ Zalgo cleaned rather than piled onto), that a setting is the average marks per l
 gives the same text and typing more only adds marks, that "fit to" stays within the limit and thins
 rather than empties, that "remove" keeps accents typed as one letter and other scripts' marks, and that
 saved settings of any shape load. Also runs the core without `Intl.Segmenter`.
+
+## Character Map
+
+```sh
+npm run test:charmap             # or: node test/character_map_explorer.mjs [data names cross notations parse search text storage page]
+python util/character_map/build.py   # rebuild data/character_map/unicode.txt (needs the network, or --cache DIR)
+```
+
+`character_map_explorer.mjs` runs the DOM-free `<script id="core">` of `tools/character_map_explorer.html` in
+Node against the real `data/character_map/unicode.txt`, which `util/character_map/build.py` builds from the
+Unicode 17.0 UCD (UnicodeData, NameAliases, Blocks), the WHATWG named character references and CLDR's English
+keywords; never edit it by hand. It holds the data to Unicode 17.0's published count of 159,801 graphic and format
+characters, checks names and code point labels (`<reserved-0378>`, `<noncharacter-FFFE>`, Hangul names by the
+§3.12 algorithm with the standard's PWILH example) and cross-checks every name against Python's `unicodedata`
+(skipped without python3). Every notation it hands out is decoded again by something independent of it: Buffer
+for UTF-8, `decodeURIComponent`, `JSON.parse`, JavaScript's own parser for `\u…` and `\u{…}`, the entity list.
+`parse` covers what people type (U+, 0x, &#…;, &name;, \u, \U, \x, \N{…}, CSS escapes, %-bytes, UTF-8 bytes,
+bare digits read both ways, pasted text, typos with a suggestion, codes past U+10FFFF); `search` fixes what must
+come first for everyday words; `storage` the migration of the old page's `favorites`/`recentChars` keys. The `page`
+suite starts its own static server and drives the page in Chromium at phone size (skipped without Playwright).
