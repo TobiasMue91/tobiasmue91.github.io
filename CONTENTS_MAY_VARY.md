@@ -1240,6 +1240,24 @@ still undone, most valuable first:
     *The cookbooks* (the owner: "they look more like tubes"): each spine had rounded ends and a page block standing out
     of its right end like a cap. Now the spine has square corners and its right end is the book's head, seen past it: the
     two boards in the cloth's colour with the block of pages set in between them, outlined as one piece.
+  - *A third round* (November 2026, the owner: "another thorough refinement round"; view only, `CORE.version` 4 and the
+    pacing unchanged). Played live with real touch on a phone (the first three minutes, two in the bakery, two in the
+    cellar) and on a desktop, then a fresh critic: 7/6/8/6/6 and 6 (clarity and phone up one each from the fourth round).
+    Mended: Mother's word on the wall (*WARMER*, *DOWN*) was written over the phone's chapter heading; the heading is now
+    drawn each frame and steps aside while she writes. The rail's › and ‹ were discs over the words of the outer cards
+    ("Bulges hold longer, so" lost its *so*); they are paper tabs on the tin's rims now. Only the loaf whose turn it is
+    (the longest waiting, or any about to go in plain) has the bold marching line; the others wait with it pencilled in
+    faintly, so a full bench no longer shows four black spirals. The bench dial stands on a cocktail pick stuck in its
+    loaf (it floated over the cupboard seams). The desktop bakery frame shows the whole oven and chimney (they were cut
+    by the recipe tin). A second jar was never taught: the first time it peaks before the player has tapped it, a
+    pencilled line says *Gus rises too: tap now*. Once she is ready, a pointer bobs at the envelope (*bake her! ↓* on a
+    phone, *she is ready: bake her →* beside the tin), after her own word has gone. A score's slip prints its sum at 13 px
+    at least (it was 10). A burst's dough falls away and shrinks within a second and a half (it hung over the jars for
+    two and a half like a stain). *Let Mother into the cellar* is *The cellar door* (a title in three lines ran through
+    the card's rule). Left for the owner, from the critic: the ending reads as a loaf sitting on the house like a hat
+    rather than the house become a loaf; wall bulges drawn over the jars and the fridge rather than behind them (the
+    places are the owner's, and drawing them behind would split the cached kitchen into two layers); the phone's
+    kitchen is barer than the desktop's (no window or fridge); the dough lettering.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
