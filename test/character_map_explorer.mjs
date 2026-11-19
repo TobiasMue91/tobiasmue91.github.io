@@ -360,7 +360,7 @@ if (suites.includes('page')) {
     await page.keyboard.insertText(' jose\u00A0garc\u00EDa\u200B ');
     await page.waitForTimeout(150);
     check((await page.locator('.facts-chips').innerText()).includes('NBSP'), 'a pasted username: the no-break space is named');
-    check((await page.locator('.facts-chips').innerText()).includes('start and end'), 'and the spaces at the ends');
+    check((await page.locator('.facts-chips').innerText()).includes('1 space at the start, 1 space at the end'), 'and the spaces at each end');
     await page.click('[data-copytext="clean"]');
     await page.waitForTimeout(100);
     eq(await page.evaluate(() => navigator.clipboard.readText()), 'jose garc\u00EDa', 'the cleaned username keeps its word gap');
