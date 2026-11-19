@@ -1277,6 +1277,19 @@ still undone, most valuable first:
     *Her lettering* (SCORE ME, SLICE ME, OPEN IT, her words on the wall) stays dough, printed like the page: a tomato
     plate a little off register under her, a heavier key line, a third as many holes and specks; on a phone the words in
     the sky are larger (2.7, was 2.1).
+  - *A fourth round* (November 2026, the owner: "one more refinement round"; view only, pacing unchanged). A fresh critic
+    scored 8/6/7/6/6 and 5, and its first point was the one that mattered: the baked loaf, a wide dome on a narrower body
+    with an overhanging lip, read as a mushroom (or worse), with a ruled seam where the two met and the halftone stopping
+    at it. The loaf is now one path whose points move, with the bake, from the risen dome on the roof to a round loaf
+    standing on the house's foot, widest a little below its middle and nearly as wide as it is tall: she slumps outward and
+    down over the whole house, her top coming down with her (the score, the steam, the knife and the words follow it), one
+    outline, the halftone turned across all of her. The slice parts that loaf. Also from it: the envelope says where it
+    opens (*Opens in the cellar, two rooms on* / *the next room*; it said *Sealed till the cellar* for twenty minutes);
+    the slicing guide starts below *SLICE ME* (it began inside the word); her word on the wall sits clear of the money tag
+    on a phone, and the tag a little lower so its slant is never cut at the top; the phone's cellar frame shows the
+    fridge's name (x -330, a little wider), the desktop bakery the whole chimney (x -395). Tried and taken back: floor
+    bulges behind the bench, as the critic asked; the bench and its loaves then hid them almost whole, and punching is the
+    verb, so through the floor she stays in front.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
