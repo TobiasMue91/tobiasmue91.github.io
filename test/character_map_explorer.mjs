@@ -404,6 +404,15 @@ if (suites.includes('page')) {
     await page.goto(url + '#U+1F600');
     await page.waitForFunction(() => document.getElementById('name').textContent === 'GRINNING FACE', null, {timeout: 3000}).catch(() => {});
     eq(await text('name'), 'GRINNING FACE', '#U+1F600 opens that character');
+    // the marks above capitals (À Á Â Ã Ä) were once clipped by tight glyph boxes, making them look alike
+    await page.fill('#q', '\u00C0\u00C1\u00C2\u1EA4\u1EAA');
+    await page.waitForTimeout(150);
+    const boxes = await page.evaluate(() => [...document.querySelectorAll('#results .cg, .tile .g, .primary .pg')].map(e => {
+      const cs = getComputedStyle(e);
+      return {cls: e.className, oy: cs.overflowY, lh: parseFloat(cs.lineHeight) / parseFloat(cs.fontSize)};
+    }));
+    const bad = boxes.filter(b => b.oy === 'hidden' || b.oy === 'clip' || !(b.lh >= 1.3));
+    check(boxes.length >= 5 && !bad.length, 'glyph boxes never clip marks above or below', JSON.stringify(bad.slice(0, 3)));
     eq(errors, [], 'no console errors');
     eq(foreign, [], 'no request leaves the page');
     await browser.close();
