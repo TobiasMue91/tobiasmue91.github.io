@@ -1262,6 +1262,21 @@ still undone, most valuable first:
     kitchen the backdrop drew the house from outside, so the bedroom upstairs showed for two seconds of chapter one; the
     house is drawn from outside now only when one end of the glide is far enough out to see it, and the chapter heading
     fades in once the camera has settled.
+  - *The owner's open points, taken up* (November 2026: "go on with the open points"; view only, pacing unchanged).
+    *Behind, not over.* In the cellar the backdrop is two sheets, the walls and what stands in front of them (shelves,
+    counter, fridge, window, oven, bed: `LAYER`, `fg`), so Mother has three depths: through bare wall or boards she comes
+    out behind the furniture and the jars; through something she breaks (the fridge's door, a window, the oven's bricks)
+    she is in front of it and behind the jars; through the floor and the ceiling in front of everything. Wherever a bulge
+    is behind something, its outline is drawn over it, dashed, gold while ripe, so she is never lost; taps go to her
+    first, as before. The twelve places and the bulge's size are unchanged. *The phone's fridge* comes in with the
+    cellar (fading in with the glide), where the places at the left are hers to come through its door; it was seen on a
+    phone for the first time in the ending. *The house becomes the loaf.* As she bakes, her crust runs down over the whole
+    house to its foot in lobes, so the house is the body of a tin loaf under her domed and scored top, round (its shade
+    turns, a soft sheen down its left, the tin's darker band under the overhang); the slice parts the whole loaf, and
+    between the halves is her crumb all the way down, with a hollow round the box (it sat on the roof between two crusts).
+    *Her lettering* (SCORE ME, SLICE ME, OPEN IT, her words on the wall) stays dough, printed like the page: a tomato
+    plate a little off register under her, a heavier key line, a third as many holes and specks; on a phone the words in
+    the sky are larger (2.7, was 2.1).
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
