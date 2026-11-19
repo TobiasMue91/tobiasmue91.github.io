@@ -1258,6 +1258,10 @@ still undone, most valuable first:
     rather than the house become a loaf; wall bulges drawn over the jars and the fridge rather than behind them (the
     places are the owner's, and drawing them behind would split the cached kitchen into two layers); the phone's
     kitchen is barer than the desktop's (no window or fridge); the dough lettering.
+    The critic's second look (7/7/8/6/6 and 6.5) found what had been there all along: while the camera glided inside the
+    kitchen the backdrop drew the house from outside, so the bedroom upstairs showed for two seconds of chapter one; the
+    house is drawn from outside now only when one end of the glide is far enough out to see it, and the chapter heading
+    fades in once the camera has settled.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
