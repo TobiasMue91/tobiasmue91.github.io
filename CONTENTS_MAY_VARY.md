@@ -1290,6 +1290,12 @@ still undone, most valuable first:
     fridge's name (x -330, a little wider), the desktop bakery the whole chimney (x -395). Tried and taken back: floor
     bulges behind the bench, as the critic asked; the bench and its loaves then hid them almost whole, and punching is the
     verb, so through the floor she stays in front.
+    The critic's second look (8/7/7.5/6/6 and 6.5): the baked loaf reads as bread now, but the risen stage still opened
+    the film on the mushroom (a dome wider than the house with a straight edge over the sky). Risen, she now rests on the
+    house from eave to eave (the shape's first points sit on the eave board) and runs down its walls from the eaves, one
+    side further than the other, as dough over the rim of a pot; the lobes draw back as she slumps. Also: the envelope's
+    line is short enough for a phone (*Opens in the cellar.* / *The cellar is next.*), the loaf stands on the house's
+    foot, no steam rises on the knife's line, the phone's cellar frame shows the fridge's whole name.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
