@@ -14,6 +14,8 @@
 // Suites:
 //   rules   - splits (two, three with Fragmenter or crystal), scores and the combo multiplier,
 //             armoured rocks, shields before lives, extra ships on a rising scale, the end of a run
+//   extras  - gold rocks drop crystals, power cells refill shields, iron and Big Bore, drones and
+//             mines, Orbital Blade, Afterburn, Arc Ricochet, Graze Coils
 //   draft   - offers are distinct and never past an upgrade's cap, a boss wave offers a rare one,
 //             an exhausted pool still offers Bounty, choosing starts the next wave
 //   bosses  - a bot kills the Dreadnought (turrets, then the open core) and the Void Serpent
@@ -33,7 +35,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const pageArg = args.find(a => a.startsWith('--page='));
 const PAGE = pageArg ? pageArg.slice(7) : join(HERE, '..', 'games', 'asteroids.html');
-const ALL = ['rules', 'draft', 'bosses', 'hyper', 'meta', 'bots'];
+const ALL = ['rules', 'extras', 'draft', 'bosses', 'hyper', 'meta', 'bots'];
 const picked = args.filter(a => !a.startsWith('--'));
 const suites = picked.length ? picked : ALL;
 
@@ -144,7 +146,7 @@ function rules() {
         s.ship.inv = 0; clearField(s);
         s.rocks.push({id: 9, size: 2, r: 29, x: s.ship.x + 10, y: s.ship.y, vx: 0, vy: 0, a: 0, va: 0, shape: 1, kind: 'rock', born: 0, hp: 1, maxHp: 1});
         const ev = run(s, .05);
-        check(ev.some(e => e.t === 'shield') && s.lives === 2 && s.shield === 1 && s.ship.alive, 'a hit spends a shield before a ship');
+        check(ev.some(e => e.t === 'shield') && s.lives === 2 && (s.shield === 1 || ev.some(e => e.t === 'cell')) && s.ship.alive, 'a hit spends a shield before a ship');
         const d = fresh(); play(d); clearField(d); d.lives = 1; d.ship.inv = 0;
         d.eshots.push({x: d.ship.x + 2, y: d.ship.y, vx: 0, vy: 0, life: 1, grazed: false, src: 'saucer'});
         const ev2 = run(d, .05);
@@ -167,6 +169,80 @@ function rules() {
         }
         check(at.length >= 3 && at[0] >= 10000 && at[0] < 12000, 'the first extra ship comes at 10 000', at.slice(0, 4).join(' '));
         check(at.every((v, i) => !i || v - at[i - 1] > (at[i - 1] - (at[i - 2] || 0)) * .9), 'each later one costs more than the last', at.join(' '));
+    }
+}
+
+// ------------------------------------------------------------------ extras
+function extras() {
+    section('extras');
+    const rock = (o) => Object.assign({id: Math.random() * 1e9 | 0, size: 3, r: 54, x: 600, y: 400, vx: 0, vy: 0, a: 0, va: 0, shape: 1, kind: 'rock', born: 0, hp: 1, maxHp: 1}, o);
+    const shoot = (s, k) => s.shots.push({x: k.x - 30, y: k.y, px: k.x - 30, py: k.y, vx: 700, vy: 0, life: 1, pierce: 0, dmg: 1 + A.lvl(s, 'bore'), heavy: false, hitIds: []});
+    // gold rocks drop crystals, and the hull collects them
+    {
+        const s = fresh(); clearField(s); play(s); s.ship.x = 100; s.ship.y = 100;
+        const k = rock({kind: 'gold'}); s.rocks.push(k); shoot(s, k); run(s, .1);
+        check(s.pickups.filter(p => p.kind === 'crystal').length === 5, 'a large gold rock drops five crystals', s.pickups.length);
+        const before = s.score; s.ship.x = 600; s.ship.y = 400; s.rocks.length = 0;
+        const ev = run(s, 1.5);
+        check(ev.filter(e => e.t === 'crystal').length === 5 && s.score - before >= 125, 'flying through them collects them');
+    }
+    // cells refill a shield, or pay when shields are full
+    {
+        const s = fresh({hull: 'bastion'}); clearField(s); play(s); s.shield = 1;
+        s.pickups.push({x: s.ship.x, y: s.ship.y, vx: 0, vy: 0, kind: 'cell', life: 5, max: 5, spin: 0});
+        run(s, .05);
+        check(s.shield === 2, 'a power cell refills a shield');
+        const before = s.score; s.pickups.push({x: s.ship.x, y: s.ship.y, vx: 0, vy: 0, kind: 'cell', life: 5, max: 5, spin: 0}); run(s, .05);
+        check(s.score - before === 150, 'with shields full it pays 150');
+        const t = fresh(); clearField(t); play(t); t.ship.vx = t.ship.vy = 0;
+        t.pickups.push({x: t.ship.x + 170, y: t.ship.y, vx: 0, vy: 0, kind: 'crystal', life: 5, max: 5, spin: 0});
+        run(t, 2); const plain = t.pickups.length;
+        t.mods.tractor = 1; run(t, 2);
+        check(plain === 1 && t.pickups.length === 0, 'Tractor Field reaches crystals the bare hull does not');
+    }
+    // iron rocks and Big Bore
+    {
+        const s = fresh({wave: 3}); clearField(s); play(s); s.ship.x = 100; s.ship.y = 100;
+        const k = rock({kind: 'iron', hp: 3, maxHp: 3}); s.rocks.push(k);
+        shoot(s, k); run(s, .1); check(k.hp === 2, 'iron takes three shots when large');
+        s.mods.bore = 1; shoot(s, k); run(s, .1);
+        check(!s.rocks.includes(k), 'Big Bore hits for two');
+        const mix = {}; for (let seed = 1; seed < 60; seed++) for (const r of fresh({seed, wave: 4}).rocks) mix[r.kind] = (mix[r.kind] || 0) + 1;
+        check(mix.iron > 0 && mix.volatile > 0 && mix.gold > 0, 'by wave 4 iron, volatile and gold rocks all turn up', JSON.stringify(mix));
+        const one = {}; for (let seed = 1; seed < 60; seed++) for (const r of fresh({seed, wave: 1}).rocks) one[r.kind] = (one[r.kind] || 0) + 1;
+        check(!one.iron && !one.volatile, 'wave 1 has no iron or volatile rocks', JSON.stringify(one));
+    }
+    // drones hunt, mines wake
+    {
+        const s = fresh({wave: 3}); clearField(s); play(s); s.droneT = 0; s.ship.inv = 0;
+        const ev = run(s, .05);
+        check(ev.some(e => e.t === 'droneIn') && s.drones.length >= 1, 'drones arrive from wave 3');
+        const d = s.drones[0], d0 = Math.hypot(...A.wd(s, d.x, d.y, s.ship.x, s.ship.y)); run(s, 1);
+        check(!s.drones.includes(d) || Math.hypot(...A.wd(s, d.x, d.y, s.ship.x, s.ship.y)) < d0, 'a drone closes on the ship');
+        const m = fresh({wave: 7}); clearField(m); play(m); m.ship.inv = 0;
+        m.mines.push({x: m.ship.x + 60, y: m.ship.y, vx: 0, vy: 0, arm: 0, ph: 0});
+        const evm = run(m, 1.2);
+        check(evm.some(e => e.t === 'mineArm') && evm.some(e => e.t === 'blast' && e.why === 'mine') && evm.some(e => e.t === 'death' || e.t === 'shield'), 'a mine wakes, counts down and goes off on a ship that stays');
+        let fields = 0; for (let seed = 1; seed < 80; seed++) { const q = fresh({seed, wave: 8}); if (q.anomaly === 'mines') { fields++; if (!q.mines.length || q.mines.some(n => Math.hypot(...A.wd(q, n.x, n.y, q.ship.x, q.ship.y)) < 150)) fail('mines are laid away from the ship'); } }
+        check(fields > 0, 'the minefield anomaly occurs', fields);
+    }
+    // blades, afterburn, ricochet, graze coils
+    {
+        const s = fresh(); clearField(s); play(s); s.mods.blade = 1;
+        const k = rock({size: 1, r: 15, x: s.ship.x + 46, y: s.ship.y}); s.rocks.push(k); run(s, 2);
+        check(!s.rocks.includes(k), 'the orbital blade cuts a small rock it passes');
+        const b = fresh(); clearField(b); play(b); b.mods.burn = 1; b.ship.a = 0;
+        const kb = rock({size: 1, r: 15, x: b.ship.x - 45, y: b.ship.y}); b.rocks.push(kb);
+        run(b, .5, {thrust: 0}); const still = b.rocks.includes(kb);
+        b.ship.x = kb.x + 45; b.ship.y = kb.y; b.ship.vx = b.ship.vy = 0; run(b, .3, {thrust: 1});
+        check(still && !b.rocks.includes(kb), 'Afterburn scorches a rock behind the thrusting ship, not an idle one');
+        const r = fresh(); clearField(r); play(r); r.mods.ricochet = 1; r.ship.x = 100; r.ship.y = 100;
+        const r1 = rock({size: 1, r: 15, x: 600, y: 400}), r2 = rock({size: 1, r: 15, x: 600, y: 560}); r.rocks.push(r1, r2);
+        shoot(r, r1); run(r, .6);
+        check(r.rocks.length === 0, 'Arc Ricochet sends the shot on to the next rock');
+        const c = fresh(); clearField(c); play(c); c.mods.graze = 1; c.ship.inv = 0;
+        for (let i = 0; i < 8; i++) { c.eshots.push({x: c.ship.x + 30, y: c.ship.y - 200, vx: 0, vy: 600, life: 1, grazed: false, src: 'saucer'}); run(c, .7); }
+        check(c.shield >= 1 && c.lives === A.HULLS.drifter.lives, 'eight grazes with Graze Coils charge a shield', `${c.grazes} grazes, shield ${c.shield}`);
     }
 }
 
@@ -286,7 +362,7 @@ function bots() {
     check(survived >= 6, 'drifting idle through the first twelve seconds of wave 1 is usually safe', survived + '/10');
 }
 
-const fns = {rules, draft, bosses, hyper, meta, bots};
+const fns = {rules, extras, draft, bosses, hyper, meta, bots};
 for (const s of suites) { if (!fns[s]) { console.log('unknown suite ' + s); process.exit(1); } fns[s](); }
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
