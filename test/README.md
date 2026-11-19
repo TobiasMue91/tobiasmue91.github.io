@@ -2778,3 +2778,21 @@ for UTF-8, `decodeURIComponent`, `JSON.parse`, JavaScript's own parser for `\uâ€
 bare digits read both ways, pasted text, typos with a suggestion, codes past U+10FFFF); `search` fixes what must
 come first for everyday words; `storage` the migration of the old page's `favorites`/`recentChars` keys. The `page`
 suite starts its own static server and drives the page in Chromium at phone size (skipped without Playwright).
+
+## Moonhop
+
+```sh
+npm run test:jump                # or: node test/jump.mjs [world rules pacing]
+VERBOSE=1 node test/jump.mjs pacing   # print the bot's heights, causes of death and landings by kind
+```
+
+`jump.mjs` runs the DOM-free `<script id="core">` of `games/jump.html` in Node; no browser or server. `world`
+builds the course for 40 seeds to 4,000 m and holds it to the one promise an endless bouncer makes: the chain of
+solid clouds never asks for more than `T.maxGap` (well under a bounce), no puff cloud is load-bearing, and no solid
+cloud anywhere is a dead end (from each one the chain is in reach above). It also checks that nothing crowds, the
+lane above the start is clear, glooms keep their distance from the chain, and each thing the game teaches (spring,
+puff, drifter, wisp, balloons, comet, gloom) first appears by a fixed height. `rules` pokes one bounce at a time:
+bounce height, one-way clouds, edges, puffs, wisps, springs, both rides, stomp versus side hit, blasting through
+off a spring, shooting, wrap-around, finger drag, the idle roof, falling out and the camera that never goes down.
+`pacing` lets an attentive bot (it shoots glooms above it, takes springs and rides) climb 24 seeds and checks the
+spread of heights, that it seldom stalls, and that glooms, puffs and drifters each carry a real share of the play.
