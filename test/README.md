@@ -630,6 +630,29 @@ with the wrong panes.
 `bots` prints each bot's night - windows, minutes, candles lost, longest window, longest dry
 rally - which is the place to look after changing a window, a speed or the stall assist.
 
+## Asteroids: Afterglow
+
+```sh
+npm run test:asteroids                   # or: node test/asteroids.mjs
+node test/asteroids.mjs rules bosses     # one or more named suites
+```
+
+`asteroids.mjs` runs the DOM-free `<script id="core">` block of `games/asteroids.html` in Node. The
+page is an Asteroids roguelite: waves of rocks, a draft of upgrades after each, a boss every fifth
+wave, three hulls. Its failures are quiet ones, and several happened while it was being built: a
+Dreadnought whose open core sat behind a hull that swallowed every shot, a draft with nothing left
+to offer that froze the run at wave 28, an enemy-shot loop that crashed when a blast emptied it.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | rocks break into two (three with Fragmenter or as crystal) and fly apart; small rocks leave nothing; the combo steps up every few quick kills, caps, runs out; Salvage Rig scales score; armoured rocks take a hit per layer and only appear in deep sectors; shields go before ships; the last ship ends the run; a lost ship comes back protected; extra ships start at 10 000 and each costs more |
+| `extras` | gold rocks drop crystals the hull collects; power cells refill a shield or pay 150; Tractor Field reaches further; iron takes a shot per size and Big Bore hits for two; iron, volatile and gold rocks turn up by wave 4 and none of the first two in wave 1; drones arrive from wave 3 and close in; a mine wakes, counts down and goes off; minefields are laid away from the ship; Orbital Blade, Afterburn, Arc Ricochet and Graze Coils each do what their card says |
+| `draft` | forty drafts: three distinct offers under their caps, choosing starts the next wave; a boss wave always offers a rare upgrade; a run that has taken everything is offered Bounty; capped and unknown ids are refused |
+| `bosses` | a perfect-aim bot kills the Dreadnought (spiral volleys, turrets, then the open core) and the Void Serpent (segments split the chain) in sectors I to V within 150 s |
+| `hyper` | a jump lands clear of every rock; a second jump waits for the recharge; Phase Drive shortens it |
+| `meta` | the old page's `nd_meta` save is read as it is; reaching wave 5 unlocks Wasp, a boss kill unlocks Bastion; bests only go up |
+| `bots` | a seed replays exactly; the bot plays every hull for 400 s without a phase stalling or a position going NaN, clearing six waves or more with a draft after each; idling through the start of wave 1 is usually safe |
+
 ## Last Words (Hangman)
 
 ```sh
