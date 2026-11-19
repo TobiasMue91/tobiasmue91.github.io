@@ -2719,3 +2719,19 @@ from `test/uuid_generator.vectors.json`, written by Python's `uuid` module; MD5 
 | `exports` | TXT, CSV, JSON, SQL, JavaScript, XML stay valid with quotes and markup in the values; the file name; a million lines in a few seconds |
 | `count` | thousands separators of four kinds, too many clamped with a word, zero, negatives, `1e3` and words refused; 100,000 formatted v7 in a few seconds; progress reported |
 | `page` | in Chromium at phone size: a v4 and Copy on screen on arrival and Copy putting exactly it on the clipboard, a format change keeping the same UUID, a bad count keeping the last list usable and saying so, a million made in the worker with Cancel over the dimmed last list and a JSON download of a million distinct v4, v5 opening on the RFC example and updating per line as you type, a trailing space pointed out, names surviving a reload, `?v=7&n=3`, the checker, dark mode, no console errors and no request leaving the page |
+
+## Zalgo Text Generator
+
+```sh
+npm run test:zalgo               # or: node test/zalgo_text_generator.mjs [marks generate stable fit remove settings edges]
+```
+
+`zalgo_text_generator.mjs` runs the DOM-free `<script id="core">` of `tools/zalgo_text_generator.html` in
+Node; no browser or server. It holds the three mark sets to the canonical combining classes of U+0300–036F
+(written into the suite from Python's `unicodedata`, Unicode 15.1: above = 230/232/216, through = 1,
+below = 220/202/240) and checks that no mark changes under NFC, that the typed letters come back intact
+under any setting (emoji, ZWJ families and flags never split, nothing on spaces or line breaks, pasted
+Zalgo cleaned rather than piled onto), that a setting is the average marks per letter, that the same seed
+gives the same text and typing more only adds marks, that "fit to" stays within the limit and thins
+rather than empties, that "remove" keeps accents typed as one letter and other scripts' marks, and that
+saved settings of any shape load. Also runs the core without `Intl.Segmenter`.
