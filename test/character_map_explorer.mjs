@@ -229,6 +229,9 @@ if (suites.includes('parse')) {
   eq([typo.suggest, typo.suggestCp], ['&eacute;', 0xE9], 'typo &eacut; suggests &eacute;');
   eq(P('&EACUTE;').suggest, '&Eacute;', 'wrong case suggests the real one');
   eq(P('&zzzzzzzz;').suggest, null, 'no wild suggestions');
+  const others = P('&eacut;').others.map(o => o.ref);
+  check(others.length >= 2 && others[0] === '&eacute;' && new Set(P('&eacut;').others.map(o => o.cp)).size === others.length, 'a typo lists several close names, one per character', JSON.stringify(others));
+  eq(C.nearEntities(db, 'rarrr', 3)[0], 'rarr', 'one letter too many');
   eq(C.parseQuery('&eacute;', null).loading, true, 'entity names wait for the data');
   const kind = (q, k) => eq(P(q).kind, k, `“${q}” is ${k}`);
   kind('', 'empty'); kind('   ', 'empty'); kind('\n\t', 'empty');
@@ -340,6 +343,12 @@ if (suites.includes('page')) {
     const type = async q => { await page.fill('#q', q); await page.waitForTimeout(120); };
     await type('degree');
     eq(await text('name'), 'DEGREE SIGN', 'typing “degree” shows the degree sign');
+    const strip = await page.locator('#strip button.c').evaluateAll(bs => bs.filter(b => { const r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth; }).length);
+    check(strip >= 3, 'phone: the next matches are on screen right under the field', `${strip} in view`);
+    await type('zzzzqqq');
+    eq(await page.locator('#card').evaluate(e => e.classList.contains('is-stale')), true, 'no match: the card says so instead of showing a fallback');
+    check(await page.locator('#results button.c').count() > 10, 'no match: common characters to pick from instead');
+    await type('degree');
     await page.click('#copyChar');
     await page.waitForTimeout(100);
     eq(await page.evaluate(() => navigator.clipboard.readText()), '°', 'Copy puts exactly ° on the clipboard');
@@ -379,9 +388,13 @@ if (suites.includes('page')) {
     await page.waitForFunction(() => document.getElementById('src').textContent.includes('17.0'));
     eq(await page.inputValue('#q'), 'arrow', 'the query survives a reload');
     eq(await text('name'), before, 'and the same character is shown');
+    await page.setViewportSize({width: 1280, height: 860}); // keyboards belong to desktops; phones get the strip
     await page.locator('#results button.c').first().focus();
     await page.keyboard.press('ArrowRight');
     eq(await text('name'), 'UPWARDS ARROW', 'arrow keys move through the results');
+    await page.setViewportSize({width: 390, height: 844});
+    const stripFirst = await page.locator('#strip button.c').first().getAttribute('data-cp');
+    check(await page.locator(`#results button.c[data-cp="${stripFirst}"]`).isHidden(), 'phone: the strip’s matches are not repeated in the grid below');
     await page.fill('#q', '');
     await page.click('[data-tab="saved"]');
     eq(await page.locator('#results button.c').count(), 2, 'the old page’s favourites are in Saved');
