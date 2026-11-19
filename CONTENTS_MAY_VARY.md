@@ -1237,6 +1237,65 @@ still undone, most valuable first:
     Kitchen" only in the first minute when the camera still leaves room; drawn into the cached backdrop, so it costs
     nothing a frame. Pacing unchanged (eager 30.5–31.8, casual 55–58). Still the owner's call: the bulges' size and
     places, and the dough lettering of the ending.
+    *The cookbooks* (the owner: "they look more like tubes"): each spine had rounded ends and a page block standing out
+    of its right end like a cap. Now the spine has square corners and its right end is the book's head, seen past it: the
+    two boards in the cloth's colour with the block of pages set in between them, outlined as one piece.
+  - *A third round* (November 2026, the owner: "another thorough refinement round"; view only, `CORE.version` 4 and the
+    pacing unchanged). Played live with real touch on a phone (the first three minutes, two in the bakery, two in the
+    cellar) and on a desktop, then a fresh critic: 7/6/8/6/6 and 6 (clarity and phone up one each from the fourth round).
+    Mended: Mother's word on the wall (*WARMER*, *DOWN*) was written over the phone's chapter heading; the heading is now
+    drawn each frame and steps aside while she writes. The rail's › and ‹ were discs over the words of the outer cards
+    ("Bulges hold longer, so" lost its *so*); they are paper tabs on the tin's rims now. Only the loaf whose turn it is
+    (the longest waiting, or any about to go in plain) has the bold marching line; the others wait with it pencilled in
+    faintly, so a full bench no longer shows four black spirals. The bench dial stands on a cocktail pick stuck in its
+    loaf (it floated over the cupboard seams). The desktop bakery frame shows the whole oven and chimney (they were cut
+    by the recipe tin). A second jar was never taught: the first time it peaks before the player has tapped it, a
+    pencilled line says *Gus rises too: tap now*. Once she is ready, a pointer bobs at the envelope (*bake her! ↓* on a
+    phone, *she is ready: bake her →* beside the tin), after her own word has gone. A score's slip prints its sum at 13 px
+    at least (it was 10). A burst's dough falls away and shrinks within a second and a half (it hung over the jars for
+    two and a half like a stain). *Let Mother into the cellar* is *The cellar door* (a title in three lines ran through
+    the card's rule). Left for the owner, from the critic: the ending reads as a loaf sitting on the house like a hat
+    rather than the house become a loaf; wall bulges drawn over the jars and the fridge rather than behind them (the
+    places are the owner's, and drawing them behind would split the cached kitchen into two layers); the phone's
+    kitchen is barer than the desktop's (no window or fridge); the dough lettering.
+    The critic's second look (7/7/8/6/6 and 6.5) found what had been there all along: while the camera glided inside the
+    kitchen the backdrop drew the house from outside, so the bedroom upstairs showed for two seconds of chapter one; the
+    house is drawn from outside now only when one end of the glide is far enough out to see it, and the chapter heading
+    fades in once the camera has settled.
+  - *The owner's open points, taken up* (November 2026: "go on with the open points"; view only, pacing unchanged).
+    *Behind, not over.* In the cellar the backdrop is two sheets, the walls and what stands in front of them (shelves,
+    counter, fridge, window, oven, bed: `LAYER`, `fg`), so Mother has three depths: through bare wall or boards she comes
+    out behind the furniture and the jars; through something she breaks (the fridge's door, a window, the oven's bricks)
+    she is in front of it and behind the jars; through the floor and the ceiling in front of everything. Wherever a bulge
+    is behind something, its outline is drawn over it, dashed, gold while ripe, so she is never lost; taps go to her
+    first, as before. The twelve places and the bulge's size are unchanged. *The phone's fridge* comes in with the
+    cellar (fading in with the glide), where the places at the left are hers to come through its door; it was seen on a
+    phone for the first time in the ending. *The house becomes the loaf.* As she bakes, her crust runs down over the whole
+    house to its foot in lobes, so the house is the body of a tin loaf under her domed and scored top, round (its shade
+    turns, a soft sheen down its left, the tin's darker band under the overhang); the slice parts the whole loaf, and
+    between the halves is her crumb all the way down, with a hollow round the box (it sat on the roof between two crusts).
+    *Her lettering* (SCORE ME, SLICE ME, OPEN IT, her words on the wall) stays dough, printed like the page: a tomato
+    plate a little off register under her, a heavier key line, a third as many holes and specks; on a phone the words in
+    the sky are larger (2.7, was 2.1).
+  - *A fourth round* (November 2026, the owner: "one more refinement round"; view only, pacing unchanged). A fresh critic
+    scored 8/6/7/6/6 and 5, and its first point was the one that mattered: the baked loaf, a wide dome on a narrower body
+    with an overhanging lip, read as a mushroom (or worse), with a ruled seam where the two met and the halftone stopping
+    at it. The loaf is now one path whose points move, with the bake, from the risen dome on the roof to a round loaf
+    standing on the house's foot, widest a little below its middle and nearly as wide as it is tall: she slumps outward and
+    down over the whole house, her top coming down with her (the score, the steam, the knife and the words follow it), one
+    outline, the halftone turned across all of her. The slice parts that loaf. Also from it: the envelope says where it
+    opens (*Opens in the cellar, two rooms on* / *the next room*; it said *Sealed till the cellar* for twenty minutes);
+    the slicing guide starts below *SLICE ME* (it began inside the word); her word on the wall sits clear of the money tag
+    on a phone, and the tag a little lower so its slant is never cut at the top; the phone's cellar frame shows the
+    fridge's name (x -330, a little wider), the desktop bakery the whole chimney (x -395). Tried and taken back: floor
+    bulges behind the bench, as the critic asked; the bench and its loaves then hid them almost whole, and punching is the
+    verb, so through the floor she stays in front.
+    The critic's second look (8/7/7.5/6/6 and 6.5): the baked loaf reads as bread now, but the risen stage still opened
+    the film on the mushroom (a dome wider than the house with a straight edge over the sky). Risen, she now rests on the
+    house from eave to eave (the shape's first points sit on the eave board) and runs down its walls from the eaves, one
+    side further than the other, as dough over the rim of a pot; the lobes draw back as she slumps. Also: the envelope's
+    line is short enough for a phone (*Opens in the cellar.* / *The cellar is next.*), the loaf stands on the house's
+    foot, no steam rises on the knife's line, the phone's cellar frame shows the fridge's whole name.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
