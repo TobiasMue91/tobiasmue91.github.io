@@ -124,6 +124,15 @@ if (suites.includes('fit')) {
   }
   const r280 = Z.fit(t, O({up: 15, mid: 5, down: 15}), 280);
   check(r280.fitted && r280.text.length >= 280 - 25, 'thins to just under the limit rather than emptying', `${r280.text.length}`);
+  // Strokes through the letters go first: up and down are only thinned once middle is at 0.
+  for (const lim of [60, 120, 200, 280, 400]) {
+    const r = Z.fit(t, O({up: 15, mid: 5, down: 15}), lim);
+    check(r.scales[0] === 1 || r.scales[1] === 0, `fit ${lim}: middle drops before above/below`, JSON.stringify(r.scales));
+    if (r.scales[0] < 1) check(!marksIn(r.text).some(c => Z.MID.includes(c)), `fit ${lim}: no strokes left once above/below thin`);
+  }
+  const mOnly = Z.fit('abcdefghij', O({up: 2, mid: 6, down: 2}), 60);
+  eq([mOnly.scales[0], mOnly.scales[2]], [1, 1], 'room enough without strokes: above and below untouched');
+  check(mOnly.scales[1] > 0 && mOnly.scales[1] < 1 && mOnly.text.length <= 60, 'and middle thinned only as far as needed', JSON.stringify(mOnly.scales) + ' ' + mOnly.text.length);
   const small = Z.fit('hi', O(), 280);
   eq([small.ok, small.fitted, small.text], [true, false, Z.zalgo('hi', O())], 'already fits: untouched');
   const over = Z.fit('this text is longer than thirty-two characters', O(), 32);
@@ -139,7 +148,7 @@ if (suites.includes('fit')) {
 if (suites.includes('remove')) {
   section('remove');
   for (const s of ['hello', 'Do not look behind you', 'a b\nc', '💀 skull 👨‍👩‍👧', 'Ünïcödé ß ñ', 'Привет', 'नमस्ते', 'สวัสดี', '日本語']) {
-    eq(Z.remove(Z.zalgo(s, O({up: 15, mid: 5, down: 15}))), Z.remove(s), `round trip ${JSON.stringify(s)}`);
+    eq(Z.remove(Z.zalgo(s, O({up: 15, mid: 5, down: 15}))), s, `round trip ${JSON.stringify(s)}`);
   }
   eq(Z.remove('héllo Ångström ñ'), 'héllo Ångström ñ', 'precomposed accents stay (the old page stripped them)');
   eq(Z.remove('नमस्ते'), 'नमस्ते', 'Devanagari vowel signs and virama are not Zalgo marks');
@@ -147,6 +156,7 @@ if (suites.includes('remove')) {
   eq(Z.remove('a⃒⃣b᪰c᷀d︠e҉f'), 'abcdef', 'marks from the other combining blocks go too');
   eq(Z.remove('😀̖́x'), '😀x', 'marks inside an emoji are removed and the pair rejoins');
   eq(Z.countMarks('á̴̖b'), 3, 'counts removed marks');
+  eq(Z.remove('  m\u0301e\u0316et\nat 8 \u0334 \n'), 'meet\nat 8', 'outer spaces and line breaks trimmed, inner kept');
   eq(Z.remove(''), '', 'empty');
   eq(Z.remove(null), '', 'null');
 }
