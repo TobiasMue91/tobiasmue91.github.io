@@ -631,6 +631,22 @@ button.c.nofont::before { content: "no font"; position: absolute; top: 3px; left
     return {kind: 'words', words: s.toUpperCase().split(/[\s]+/).filter(Boolean), raw: s, single: q.length === 1 ? q.codePointAt(0) : null};
   }
 
+  // the script a letter belongs to, from its name: LATIN, CYRILLIC, GREEK… (null for anything that is not a letter)
+  function scriptOf(db, cp) {
+    const i = info(db, cp);
+    if (i.gc[0] !== 'L' || i.label) return null;
+    const m = i.name.match(/^(LATIN|CYRILLIC|GREEK|ARMENIAN|GEORGIAN|HEBREW|ARABIC|CHEROKEE|COPTIC|FULLWIDTH LATIN|MATHEMATICAL)\b/);
+    return m ? (m[1] === 'FULLWIDTH LATIN' ? 'FULLWIDTH' : m[1]) : null;
+  }
+  // letters of a second script inside Latin text: the classic look-alike (Cyrillic а in "pаypal")
+  function mixedScripts(db, cps) {
+    const by = new Map();
+    cps.forEach((cp, i) => { const s = scriptOf(db, cp); if (s) { if (!by.has(s)) by.set(s, []); by.get(s).push(i + 1); } });
+    if (by.size < 2) return [];
+    const main = [...by].sort((a, b) => b[1].length - a[1].length)[0][0];
+    return [...by].filter(([s]) => s !== main).map(([script, at]) => ({script, at}));
+  }
+
   // the closest real entity name for a typo: same letters in another case, else one or two edits away
   function nearEntity(db, name) { return nearEntities(db, name, 1)[0] || null; }
   // up to n real names within two edits, closest first; the same name in another case counts as no edit
@@ -644,7 +660,8 @@ button.c.nofont::before { content: "no font"; position: absolute; top: 3px; left
     }
     // closest, then the one whose case matches best (&eacut; -> &eacute;, &EACUTE; -> &Eacute;), then shorter
     const same = e => [...e].filter((ch, i) => ch === name[i]).length; // letters that also match in case
-    found.sort((a, b) => a[1] - b[1] || same(b[0]) - same(a[0]) || a[0].length - b[0].length || (a[0] < b[0] ? -1 : 1));
+    const ci = e => editDistance(e.toLowerCase(), lo, 3); // spelling first, case second: &eacut; is &eacute;, then &Eacute;
+    found.sort((a, b) => ci(a[0]) - ci(b[0]) || a[1] - b[1] || same(b[0]) - same(a[0]) || a[0].length - b[0].length || (a[0] < b[0] ? -1 : 1));
     const seen = new Set(), out = [];
     for (const [e] of found) {
       const cp = db.entityCp.get(e);
@@ -811,7 +828,7 @@ button.c.nofont::before { content: "no font"; position: absolute; top: 3px; left
   }
 
   const api = {hex, uplus, GC, parseData, info, notations, display, parseQuery, clusters, buildIndex, search,
-    searchBlocks, blockChars, nearEntity, nearEntities, cleanText, editDistance, blockOf, findName, hangulName, utf8, utf16, migrateList, isSurrogate};
+    searchBlocks, blockChars, scriptOf, mixedScripts, nearEntity, nearEntities, cleanText, editDistance, blockOf, findName, hangulName, utf8, utf16, migrateList, isSurrogate};
   if (typeof module !== 'undefined') module.exports = api;
   if (typeof window !== 'undefined') window.CharCore = api;
 })();
@@ -1023,7 +1040,8 @@ button.c.nofont::before { content: "no font"; position: absolute; top: 3px; left
   }
   // tile captions keep the words that tell characters apart: "SMALL E WITH ACUTE", not "LATIN SMALL LETTER E WITH…"
   function shortName(n) {
-    return n.replace(/^(LATIN|GREEK|CYRILLIC|ARMENIAN|GEORGIAN|COPTIC) (SMALL|CAPITAL) LETTER /, '$2 ')
+    // only Latin loses its script: a Cyrillic а must still say CYRILLIC under the glyph
+    return n.replace(/^LATIN (SMALL|CAPITAL) LETTER /, '$1 ').replace(/^(GREEK|CYRILLIC|ARMENIAN|GEORGIAN|COPTIC) (SMALL|CAPITAL) LETTER /, '$1 $2 ')
       .replace(/^EMOJI MODIFIER FITZPATRICK TYPE-/, 'SKIN TONE ').replace(/^VARIATION SELECTOR-/, 'VS');
   }
   let noMark = false; // while a grid stands in for a missing answer, nothing in it is "the selected one"
@@ -1049,7 +1067,9 @@ button.c.nofont::before { content: "no font"; position: absolute; top: 3px; left
     const b = db && C.blockOf(db, cp);
     if (!b) return null;
     const all = C.blockChars(db, b), at = Math.max(0, all.indexOf(cp));
-    const from = Math.max(0, at - 12), list = all.slice(from, from + (small ? 40 : 72));
+    // start on a code chart row (a multiple of 16), one row above the character's own
+    const f0 = all.findIndex(c => c >= (cp & ~0xF) - 0x10);
+    const from = Math.max(0, f0 < 0 ? at - 12 : f0), list = all.slice(from, from + (small ? 48 : 80));
     return {list, title: `Near ${C.uplus(cp)} in ${esc(b.name)}`,
       html: `<div class="chips"><button type="button" data-block="${db.blocks.indexOf(b)}">Browse all ${fmtN(all.length)} in ${esc(b.name)}</button></div>` + gridHTML(list)};
   }
@@ -1145,6 +1165,10 @@ button.c.nofont::before { content: "no font"; position: absolute; top: 3px; left
       for (const [c, ats] of [...byCp].slice(0, 4)) {
         const inf = infoOf(c);
         chips.push(`<button type="button" class="w" data-cp="${c}">${ats.length} × ${esc(shortLabel(inf) || inf.name)} <span style="font-weight:400">${ats.length > 1 ? 'characters' : 'character'} ${ats.length > 3 ? ats.slice(0, 3).join(', ') + '…' : ats.join(', ')}</span></button>`);
+      }
+      if (p.kind === 'text' && db) for (const m of C.mixedScripts(db, p.cps).slice(0, 2)) {
+        const word = m.script[0] + m.script.slice(1).toLowerCase();
+        chips.push(`<button type="button" class="w" data-cp="${p.cps[m.at[0] - 1]}">${m.at.length} × ${esc(word)} ${m.at.length > 1 ? 'letters' : 'letter'} <span style="font-weight:400">${m.at.length > 1 ? 'characters' : 'character'} ${m.at.slice(0, 3).join(', ')}${m.at.length > 3 ? '…' : ''}</span></button>`);
       }
       const joined = cl.clusters.filter(k => k.cps.length > 1);
       for (const k of joined.slice(0, 3)) chips.push(`<button type="button" class="j" data-cp="${k.cps[0]}"><span class="fg">${esc(k.text)}</span> = 1 character, ${k.cps.length} code points (underlined)</button>`);
