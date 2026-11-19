@@ -1551,6 +1551,7 @@ npm run test:names          # Baby Name Generator suite (plain Node, no server o
 npm run test:cmv            # Contents May Vary suite (plain Node; its browser suite needs Playwright's Chromium)
 npm run test:aspect         # Aspect Ratio Calculator suite (plain Node; its page suite needs Playwright's Chromium and a server on :8099)
 npm run test:maze           # Escape the Maze suite (plain Node, no server or browser)
+npm run test:imagecompare   # Image Comparison Slider suite (plain Node; npm i --no-save pixelmatch@5.3.0 adds the pixelmatch cross-check)
 ```
 
 `test/everything_converter.mjs` drives
@@ -2202,6 +2203,18 @@ type them in a print dialog (1-3, 5, 8-, 5-1, en dashes, "last", fullwidth digit
 their %PDF- header rather than their type, a password-locked file is refused instead of merged as garbled pages, and merges of
 source files whose every page has its own size are read back page by page with pdf-lib (`npm i --no-save pdf-lib@1.17.1`).
 Run it after touching the core.
+
+`test/image_comparison_slider.mjs` runs the DOM-free `<script id="core">` block of `tools/image_comparison_slider.html` (Image
+Comparison Slider), whose promise is that the two images line up the way the page says and that "x % of pixels differ",
+"No visible difference" and "Identical" are true: the colour delta against pixelmatch's YIQ formula written out apart, and -
+with `npm i --no-save pixelmatch@5.3.0` - the count of differing pixels equal to pixelmatch's own on random, noisy, graded and
+half-transparent pairs at all three sensitivities; images whose answer is known (one pixel, an exact block box, noise below the
+threshold, transparent pixels hiding different colours, 1x1, 5000x1); outlined spots that split, join and leave a whole-image
+change unboxed; a brightness lift read as a tone change with exactly the three retouched spots outlined beyond it, a different
+picture never called a tone change, a hard edge moved by one pixel not called a change while one stray pixel is, and an evenly
+recoloured button below the threshold outlined as a faint area; percentages that never say 0 % or 100 % for a partial change; fit, stretch and actual-pixel layouts; zoom that
+keeps the point under the finger and never loses the image; ARIA slider keys; saved-image sizes and the 8192 px cap; file
+names; the file types it explains; saved settings and `?mode=fade&dir=v&pos=30` links. Run it after touching the core.
 
 `test/image_cropper.mjs` runs the DOM-free `<script id="core">` block of `tools/image_cropper.html` (Image Cropper), whose
 promise is that the file holds exactly what the frame shows: the draw matrix against crops, quarter turns and flips done the
