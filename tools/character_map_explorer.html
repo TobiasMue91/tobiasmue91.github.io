@@ -50,7 +50,7 @@ h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
 #q::placeholder { color: var(--ink3); }
 #clear { border: 0; background: none; width: 44px; color: var(--ink3); font-size: 20px; display: grid; place-items: center; }
 #clear[hidden] { display: none; }
-.hint { min-height: 22px; font-size: 13px; color: var(--ink3); padding: 3px 2px 0; }
+.hint { min-height: 24px; font-size: 13px; color: var(--ink3); padding: 5px 2px 0; }
 .hint.err { color: var(--err); }
 .hint b { font-weight: 600; color: var(--ink2); }
 
@@ -874,9 +874,11 @@ footer.f a { color: var(--ink3); text-decoration: none; border-bottom: 1px solid
   const ROWS_MAIN = [['HTML', 'html'], ['CSS', 'css'], ['JavaScript', 'js'], ['UTF-8 bytes', 'utf8'], ['URL', 'url'], ['Decimal', 'decimal']];
   const ROWS_MORE = [['CSS ::after', 'cssContent'], ['HTML decimal', 'htmlDec'], ['HTML hex', 'htmlHex'], ['JS, UTF-16', 'jsPair'], ['JSON, Java, C#', 'json'],
     ['Python', 'python'], ['Python name', 'pythonName'], ['Rust, Swift', 'rust'], ['UTF-16', 'utf16']];
-  function rows(defs, n) {
+  function rows(defs, n, pendingHtml) {
     return defs.filter(([, k]) => !(k === 'jsPair' && n.js === n.jsPair)).map(([label, k]) => {
       const v = n[k];
+      // the named entity is not known until the data arrives: do not show a value that will change
+      if (k === 'html' && pendingHtml) return `<tr class="na"><th scope="row">${label}</th><td><button class="v" type="button" disabled><span class="code">…</span></button></td></tr>`;
       if (!v) return `<tr class="na"><th scope="row">${label}</th><td><button class="v" type="button" disabled><span class="code">${k === 'pythonName' ? 'No name to use' : 'Cannot be encoded alone'}</span></button></td></tr>`;
       return `<tr><th scope="row">${label}</th><td><button class="v" type="button" data-copy="${esc(v)}" aria-label="Copy ${label}: ${esc(v)}"><span class="code">${esc(v)}</span><span class="cy">Copy</span></button></td></tr>`;
     }).join('');
@@ -900,8 +902,9 @@ footer.f a { color: var(--ink3); text-decoration: none; border-bottom: 1px solid
     lastCard = cp;
     // on arrival the card is a worked example (or what was picked last time), not an answer to anything typed
     const kick = $('kick');
-    kick.hidden = parsed.kind !== 'empty' || picked;
-    kick.textContent = hadLast ? 'Your last character' : 'Example';
+    const reading = parsed.kind === 'number' && parsed.reads.length > 1 && (parsed.reads.find(r => r.cp === cp) || {}).how;
+    kick.hidden = !reading && (parsed.kind !== 'empty' || picked);
+    kick.textContent = reading ? 'Read as ' + reading : hadLast ? 'Your last character' : 'Example';
     const nm = $('name');
     nm.textContent = inf.name;
     nm.className = 'nm' + (inf.label ? ' lbl' : '');
@@ -925,7 +928,8 @@ footer.f a { color: var(--ink3); text-decoration: none; border-bottom: 1px solid
     $('copyLbl').textContent = !n.char ? 'Nothing to copy' : d.kind === 'char' || d.kind === 'mark' ? 'Copy' : d.kind === 'space' ? 'Copy space' : 'Copy ' + (d.text.length <= 6 ? d.text : 'character');
     $('copyGlyph').textContent = d.kind === 'char' || d.kind === 'mark' ? d.text : '';
     pc.setAttribute('aria-label', n.char ? 'Copy the character ' + inf.name : 'Nothing to copy');
-    $('fmtMain').tBodies[0].innerHTML = rows(ROWS_MAIN, n);
+    const pend = !db && !dbFailed && inf.loading;
+    $('fmtMain').tBodies[0].innerHTML = rows(ROWS_MAIN, n, pend);
     // phones show three rows up front; the other three lead the folded list instead
     $('fmtMore').tBodies[0].innerHTML = rows(ROWS_MAIN.slice(3), n).replace(/<tr( class="na")?/g, (m, na) => '<tr class="ph' + (na ? ' na' : '') + '"') + rows(ROWS_MORE, n);
     const facts = [];
@@ -967,8 +971,9 @@ footer.f a { color: var(--ink3); text-decoration: none; border-bottom: 1px solid
   function tryChips() {
     return `<div class="try">${['heart', 'U+00E9', '&nbsp;', 'check mark', '233'].map(t => `<button type="button" data-try="${esc(t)}">${esc(t)}</button>`).join('')}</div>`;
   }
-  function gridHTML(cps, more) {
-    let h = `<div class="grid" role="group" aria-label="Characters">${cps.slice(0, shown).map(c => cell(c)).join('')}</div>`;
+  // named: a short name under every cell, so a search result can be told apart without picking each one
+  function gridHTML(cps, named) {
+    let h = `<div class="grid${named ? ' named' : ''}" role="group" aria-label="Characters">${cps.slice(0, shown).map(c => cell(c, false, named)).join('')}</div>`;
     if (cps.length > shown) h += `<button class="morebtn" type="button" id="moreBtn">Show ${fmtN(Math.min(PAGE, cps.length - shown))} more of ${fmtN(cps.length - shown)}</button>`;
     return h;
   }
@@ -976,8 +981,8 @@ footer.f a { color: var(--ink3); text-decoration: none; border-bottom: 1px solid
     const t = (id, label) => `<button type="button" role="tab" data-tab="${id}" aria-selected="${tab === id}">${label}</button>`;
     let h = `<div class="tabs" role="tablist" aria-label="Show">${t('common', 'Common')}${t('recent', 'Recent')}${t('saved', 'Saved')}${t('browse', 'Browse')}</div>`;
     if (tab === 'browse') {
-      const opts = db ? db.blocks.map((b, i) => `<option value="${i}"${i === blockIdx ? ' selected' : ''}>${esc(b.name)} (${C.hex(b.start)}–${C.hex(b.end)})</option>`).join('') : '<option>Loading blocks…</option>';
-      h += `<div class="browse"><button type="button" id="prevB" aria-label="Previous block" title="Previous block ([)"${blockIdx <= 0 ? ' disabled' : ''}>‹</button><label class="sr" for="blockSel">Unicode block</label><select id="blockSel">${opts}</select><button type="button" id="nextB" aria-label="Next block" title="Next block (])"${db && blockIdx >= db.blocks.length - 1 ? ' disabled' : ''}>›</button></div>`;
+      const opts = db ? db.blocks.map((b, i) => `<option value="${i}"${i === blockIdx ? ' selected' : ''}>${esc(b.name)} (${C.hex(b.start)}–${C.hex(b.end)})</option>`).join('') : (dbFailed ? '<option>Blocks unavailable</option>' : '<option>Loading blocks…</option>');
+      h += `<div class="browse"><button type="button" id="prevB" aria-label="Previous block" title="Previous block ([)"${blockIdx <= 0 ? ' disabled' : ''}>‹</button><label class="sr" for="blockSel">Unicode block</label><select id="blockSel"${db ? '' : ' disabled'}>${opts}</select><button type="button" id="nextB" aria-label="Next block" title="Next block (])"${db && blockIdx >= db.blocks.length - 1 ? ' disabled' : ''}>›</button></div>`;
     }
     return h;
   }
@@ -1007,9 +1012,9 @@ footer.f a { color: var(--ink3); text-decoration: none; border-bottom: 1px solid
         list = r.hits;
         if (p.single != null) list = [p.single, ...list.filter(c => c !== p.single)];
         const blocks = C.searchBlocks(db, p.words).slice(0, 4);
-        hd = `<h2 class="rtitle" id="rtitle">${list.length ? fmtN(list.length) : 'No'} ${list.length === 1 ? 'character' : 'characters'} <span class="n">named with “${esc(p.words.join(' ').toLowerCase())}”</span></h2>`;
+        hd = list.length ? `<h2 class="rtitle" id="rtitle">${fmtN(list.length)} ${list.length === 1 ? 'character' : 'characters'} <span class="n">named with “${esc(p.words.join(' ').toLowerCase())}”</span></h2>` : '';
         if (blocks.length) h += `<div class="chips"><span class="summary" style="margin:0">Blocks:</span>${blocks.map(b => `<button type="button" data-block="${db.blocks.indexOf(b)}" aria-label="Browse the ${esc(b.name)} block">${esc(b.name)}</button>`).join('')}</div>`;
-        if (list.length) h += gridHTML(list);
+        if (list.length) h += gridHTML(list, true);
       }
     } else if (p.kind === 'code' && p.cps.length === 1) {
       // one exact answer is the card; beside it, its neighbours in the code chart
@@ -1073,7 +1078,7 @@ footer.f a { color: var(--ink3); text-decoration: none; border-bottom: 1px solid
         }).join('');
         h = `<div class="clean"><div class="ck">Cleaned up <span>(${esc(what)})</span></div>
           <div class="cl">Pasted</div><code class="cv was">${mark(text)}</code>
-          <div class="cl">Clean</div><code class="cv">${cleaned.text ? mark(cleaned.text) : '<i>nothing left</i>'}</code>
+          <div class="cl">Clean, exactly what Copy gives you</div><code class="cv">${cleaned.text ? esc([...cleaned.text].slice(0, 300).join('')) : '<i>nothing left</i>'}</code>
           <button type="button" class="primary" data-copytext="clean">Copy clean text</button></div>` + h;
       }
       if (text && [...text].length > 1) {
@@ -1303,7 +1308,8 @@ footer.f a { color: var(--ink3); text-decoration: none; border-bottom: 1px solid
   // only the card as it stands: never while it is a guess, an empty state or an error
   updateDock = () => {
     const c = $('card');
-    const show = actsOff && !c.classList.contains('is-stale') && !c.classList.contains('is-guess');
+    const cleaning = parsed.kind === 'text' && parsed.copyClean !== parsed.text;
+    const show = actsOff && !cleaning && !c.classList.contains('is-stale') && !c.classList.contains('is-guess');
     dock.classList.toggle('on', show); document.body.classList.toggle('docked', show);
     dock.setAttribute('aria-hidden', show ? 'false' : 'true');
     dock.querySelectorAll('button').forEach(b => b.tabIndex = show ? 0 : -1);
