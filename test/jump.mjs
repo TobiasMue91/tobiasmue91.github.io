@@ -246,6 +246,15 @@ if (suites.includes('rules')) {
     run(s, 2);
     check(s.over && s.cause === 'fall', 'falling below the view ends the run');
   }
+  { // the moon: reaching it is coming home, once per run, and the climb goes on
+    const s = lab(); s.p.y = T.homeM * 10 - 30; s.p.vy = T.bounce; s.cam = s.p.y - 300;
+    run(s, 0.3);
+    const homes = () => s.events.filter(e => e.type === 'home').length;
+    check(homes() === 1 && s.home, `passing ${T.homeM} m brings you home`);
+    s.p.y = T.homeM * 10 - 200; s.p.vy = T.bounce; run(s, 0.6);
+    check(homes() === 1, 'and only once per run, however often you cross that height');
+    check(MH.BANDS[MH.BANDS.length - 1][0] === T.homeM, 'the last band, Beyond, starts at the moon');
+  }
   { // the camera only goes up
     const s = lab(); s.cam = 500; s.p.y = 600; s.p.vy = 0; const c0 = s.cam;
     run(s, 0.3);

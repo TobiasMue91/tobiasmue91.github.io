@@ -2793,6 +2793,7 @@ cloud anywhere is a dead end (from each one the chain is in reach above). It als
 lane above the start is clear, glooms keep their distance from the chain, and each thing the game teaches (spring,
 puff, drifter, wisp, balloons, comet, gloom) first appears by a fixed height. `rules` pokes one bounce at a time:
 bounce height, one-way clouds, edges, puffs, wisps, springs, both rides, stomp versus side hit, blasting through
-off a spring, shooting, wrap-around, finger drag, the idle roof, falling out and the camera that never goes down.
+off a spring, shooting, wrap-around, finger drag, the idle roof, falling out, the camera that never goes down,
+and coming home: passing `T.homeM` (the moon, where the Beyond band starts) fires `home` exactly once per run.
 `pacing` lets an attentive bot (it shoots glooms above it, takes springs and rides) climb 24 seeds and checks the
 spread of heights, that it seldom stalls, and that glooms, puffs and drifters each carry a real share of the play.
