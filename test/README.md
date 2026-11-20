@@ -2778,3 +2778,21 @@ for UTF-8, `decodeURIComponent`, `JSON.parse`, JavaScript's own parser for `\u‚Ä
 bare digits read both ways, pasted text, typos with a suggestion, codes past U+10FFFF); `search` fixes what must
 come first for everyday words; `storage` the migration of the old page's `favorites`/`recentChars` keys. The `page`
 suite starts its own static server and drives the page in Chromium at phone size (skipped without Playwright).
+
+## Chord Identifier
+
+```sh
+npm run test:chord                         # or: node test/chord_identifier.mjs
+node test/chord_identifier.mjs name spell  # named suites only
+VERBOSE=1 node test/chord_identifier.mjs hear   # print the hit rate of each synthesized-sound kind
+```
+
+`chord_identifier.mjs` runs the DOM-free `<script id="core">` of `tools/chord_identifier.html` in Node's vm.
+`parse` and `tab` cover note names and tab as people type them (Unicode accidentals, solf√®ge, German H/Fis/Es,
+run-together letters, chord symbols typed by mistake, a megabyte paste). `name` holds the reference table of
+lead-sheet names, open guitar shapes and inversions, and checks that note order above the bass and doubled notes
+never change a name. `spell` checks root letters and chord-tone spelling; `round` turns every chord symbol the
+page knows, at all 12 roots, into notes and names them back. `hear` synthesizes chords (bright, dull, noisy,
+out of tune, a phone microphone without its low end) and requires a hit rate for each; it is seeded, so a change
+in the numbers means the detector changed. `page` needs Chromium and `npx http-server -p 8099` and is skipped
+without them.
