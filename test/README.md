@@ -2835,7 +2835,7 @@ spread of heights, that it seldom stalls, and that glooms, puffs and drifters ea
 
 `test/pixelate.mjs` runs the DOM-free `<script id="core">` block of `tools/pixelate.html` (Pixelate Image), whose promise is
 that every block is the opacity-weighted sRGB average of the picture's own pixels under it, on one grid anchored at the
-top-left, and that only the marked areas change. Block colours are checked against a brute-force reference on random
+top-left, that only the marked areas change, and that marked areas grow out to whole blocks so none is cut. Block colours are checked against a brute-force reference on random
 pictures with partial edge blocks and random opacity, plus hand-worked vectors (checkerboard, half-clear red, 1x1); every
 pixel inside and outside random areas (dragged backwards, past the edge, empty, overlapping); greyscale, sepia, inverted,
 strength and round dots; "1 pixel per block"; the block sizes people type (12 px, 12,5, 1,000, -3); the slider scale;

@@ -9,7 +9,7 @@
 //   average  block colours against a brute-force reference written apart from the core, on random pictures with
 //            partial edge blocks and random opacity, plus vectors worked by hand (checkerboard, half-clear red, 1x1);
 //   mosaic   whole picture and areas: outside untouched, inside exactly the block colour, overlaps, areas past the
-//            edge, empty areas, block 1 is the picture itself, a block bigger than the picture is one colour;
+//            edge, empty areas, areas grown out to whole blocks (the page's default) so no block is cut, block 1 is the picture itself, a block bigger than the picture is one colour;
 //   style    greyscale (Rec. 601), sepia and inverted against hand values; strength 0 is the original and 1 the
 //            mosaic; round dots are solid at the centre and clear in the corners;
 //   tiny     "1 pixel per block" is the block colours at ceil(W/b) x ceil(H/b);
@@ -159,6 +159,28 @@ if (suites.includes('mosaic')) {
     eq(Array.from(C.mosaic(d, W, H, 3, [{x: -4, y: -4, w: 100, h: 100}])), Array.from(C.mosaic(d, W, H, 3)), 'an area larger than the picture equals the whole picture');
     eq(Array.from(C.mosaic(d, W, H, 3, [{x: 0, y: 0, w: 5, h: 7}, {x: 5, y: 0, w: 4, h: 7}])), Array.from(C.mosaic(d, W, H, 3)),
       'two areas side by side share one grid: no seam');
+  }
+  eq(C.snapRect({x: 13, y: 7, w: 10, h: 2}, 8, 40, 30), {x: 8, y: 0, w: 16, h: 16}, 'snapped area grows out to whole blocks');
+  eq(C.snapRect({x: 33, y: 25, w: 10, h: 10}, 8, 38, 30), {x: 32, y: 24, w: 6, h: 6}, 'snapped area stops at the picture edge');
+  eq(C.snapRect({x: 5, y: 5, w: 0, h: 9}, 8, 40, 30), {x: 5, y: 5, w: 0, h: 9}, 'an empty area stays empty when snapped');
+  {
+    // with snap, a cut block is never left half original: every block is either all mosaic or all original
+    let bad = 0;
+    for (let t2 = 0; t2 < 60; t2++) {
+      const W = ri(4, 40), H = ri(4, 40), b = ri(2, 7), d = randImage(W, H, 'opaque');
+      const r = {x: ri(0, W - 1), y: ri(0, H - 1), w: ri(1, 15), h: ri(1, 15)};
+      const out = C.mosaic(d, W, H, b, [r], {snap: true}), m = C.mosaic(d, W, H, b);
+      for (let by = 0; by * b < H; by++) for (let bx = 0; bx * b < W; bx++) {
+        let mos = 0, org = 0;
+        for (let y = by * b; y < Math.min(H, by * b + b); y++) for (let x = bx * b; x < Math.min(W, bx * b + b); x++) {
+          const i = (y * W + x) * 4, same = out[i] === m[i] && out[i + 1] === m[i + 1] && out[i + 2] === m[i + 2];
+          const orig = out[i] === d[i] && out[i + 1] === d[i + 1] && out[i + 2] === d[i + 2];
+          if (same && !orig) mos++; else if (orig && !same) org++;
+        }
+        if (mos && org) bad++;
+      }
+    }
+    check(bad === 0, 'snapped areas never leave a block half pixelated', `${bad} blocks cut`);
   }
   eq(C.clampRect({x: 10, y: 8, w: -6, h: -3}, 20, 20), {x: 4, y: 5, w: 6, h: 3}, 'an area dragged up and left is normalised');
   eq(C.clampRect({x: 2.4, y: 2.6, w: 3.3, h: 0.2}, 4, 4), {x: 2, y: 3, w: 2, h: 0}, 'areas are clamped to whole pixels inside the picture');
