@@ -2779,6 +2779,23 @@ bare digits read both ways, pasted text, typos with a suggestion, codes past U+1
 come first for everyday words; `storage` the migration of the old page's `favorites`/`recentChars` keys. The `page`
 suite starts its own static server and drives the page in Chromium at phone size (skipped without Playwright).
 
+## Pixel Art Editor
+
+```sh
+npx http-server -p 8099              # only the ui suite needs it
+npm run test:pixelart                # or: node test/online_pixel_art_editor.mjs [color dims line shapes fill resize scale import stroke history storage ui]
+```
+
+`online_pixel_art_editor.mjs` runs the DOM-free `<script id="core">` of `tools/online_pixel_art_editor.html` in
+Node: Bresenham lines against hand-checked vectors (including the old page's own (0,0)–(5,2)), Zingl's ellipse held to
+its bounding box, both symmetries, the ideal curve and a closed outline, a 4-connected fill that must not leak through
+a diagonal wall and must fill black onto transparent (the old page could not), resizes that add or trim pixels and never
+stretch, integer upscales with exact block edges and partial alpha, an import that recognises its own 2×–16× exports and
+reduces a photo to fit 256, strokes without gaps, mirror and pixel-perfect corners, history that restores canvas sizes,
+and storage that survives a round trip and refuses junk. The `ui` suite (needs the server, Playwright and python3 with
+Pillow; skipped without them) draws through the real page, downloads the PNG and decodes it with Pillow, checks that a
+second finger takes back the first finger's stroke, that a reload restores the drawing, that the downloaded PNG opens
+back pixel for pixel, and that nothing is requested from another host.
 ## Chord Identifier
 
 ```sh
