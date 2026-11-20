@@ -12945,6 +12945,7 @@ body.night #stars{opacity:1}
 .bl .fx{display:block;margin-top:2px;font-size:12px;font-weight:600;color:var(--cobalt);opacity:1}
 .bl .lv{display:flex;gap:3px;margin-top:6px}.bl .lv i{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink)}.bl .lv i.on{background:var(--leaf)}
 .bl.can .pr{background:var(--orange)}
+.bl.near::after{content:"";position:absolute;left:74px;right:14px;bottom:5px;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--leaf) calc(var(--p,0) * 100%),rgba(31,42,68,.14) 0)}
 .bl:not(.can){filter:saturate(.5);opacity:.78;cursor:default}
 .bl.gate{background:linear-gradient(#fff2a8,#ffd23f)}
 @media (hover:hover){.bl.can:hover{transform:rotate(-1deg) translateY(-2px)}}
@@ -12957,7 +12958,8 @@ body.night #stars{opacity:1}
 @media not ((min-width:900px) and (min-aspect-ratio:1/1)){
   #peg{left:0;right:0;bottom:0;height:auto;max-height:min(212px,33vh);border-left:0;border-top:4px solid #8a6534;display:flex;align-items:flex-start;gap:12px;padding:6px 12px 10px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity}
   #peg h2{display:none}
-  .bl{flex:0 0 232px;margin-top:16px;scroll-snap-align:start;min-height:0;max-height:178px;padding:10px 10px 8px 66px}
+  /* one card whole and the next one's picture only, so no title is cut mid-word (a critic, November 2026) */
+  .bl{flex:0 0 min(calc(100vw - 106px),284px);margin-top:16px;scroll-snap-align:start;min-height:0;max-height:178px;padding:10px 10px 8px 66px}
   .bl .ic{left:8px;width:50px;height:50px}.bl .d{font-size:12px}
   /* on a phone the judges' sheet is a bar at the thumb, over the pegboard, so the lawn above it is clear */
   #jp{top:auto;left:8px;right:8px;width:auto;bottom:var(--pegh,8px);display:grid;grid-template-columns:1fr 1fr;column-gap:12px;row-gap:1px;padding:6px 10px 8px}
@@ -13015,7 +13017,7 @@ body.night #stars{opacity:1}
 <script>
 (() => {
 const $ = id => document.getElementById(id);
-const { clamp, lerp, ease, fmt, hash } = KIT;
+const { clamp, lerp, ease, fmt, hash, smooth } = KIT;
 const money = v => v < 1000 ? '$' + v.toFixed(2) : '$' + fmt(v);
 const TAU = Math.PI * 2;
 let S = null, L = null, now = 0;
@@ -13066,7 +13068,7 @@ const PM = prog(VS, FS), PD = prog(VS, '#version 300 es\nprecision mediump float
    way the mower went, which is where real stripes come from. */
 const VSB = `#version 300 es
 layout(location=0) in vec2 aB; layout(location=1) in vec2 aCell;
-uniform mat4 uVP, uM, uL; uniform sampler2D uHt; uniform float uN, uTime, uAll; uniform vec3 uPush, uEye;
+uniform mat4 uVP, uM, uL; uniform sampler2D uHt, uFine; uniform float uN, uTime, uAll; uniform vec3 uPush, uEye;
 out vec3 vN, vC, vW; out vec4 vL; out float vT;
 float h1(float n) { return fract(sin(n) * 43758.5453); }
 void main() {
@@ -13075,7 +13077,26 @@ void main() {
   if (hd.b > .5 && uAll < .5) { gl_Position = vec4(2., 2., 2., 1.); return; }
   float kind = floor(hd.a * 3. + .5), wheat = kind == 2. ? 1. : 0.;
   vec2 p = aCell + vec2(h1(s), h1(s + 1.7));
-  float j = h1(s + 3.1), hv = hd.r * 2.6;
+  /* a cut edge follows the blade, not the cell: the height is read between the four nearest cells of the same kind of
+     grass and sharpened again, so a diagonal pass leaves a clean slanted edge instead of a staircase of cells */
+  float hr = hd.r, fv = floor(texelFetch(uFine, ivec2(p * 4.), 0).r * 255. + .5);
+  if (fv > 7.5) {
+    /* where the view saw the mower's deck pass, a quarter of a cell at a time: the cut follows the deck, not the cells */
+    float fd = fv - 8.;
+    if (fd > .5) { hr = min(hd.r, .045); if (hd.r > .06 || hd.g > .002) hd.g = fd / 255.; }   /* a scuffed stripe stays scuffed */
+    else if (hd.r < .06) hr = .385;
+  } else if (hd.b > .2 && hd.b < .5) {   /* only a cell on an edge (marked by the view) pays for it */
+  vec2 q = p - .5, f = fract(q); ivec2 c0 = ivec2(floor(q)), sz = textureSize(uHt, 0);
+  float fam = kind == 3. ? 0. : kind, acc = 0., e0 = hd.r, e1 = hd.r, low = hd.r, gn = hd.g;
+  for (int k = 0; k < 4; k++) {
+    ivec2 o = ivec2(k & 1, k >> 1); vec4 n = texelFetch(uHt, clamp(c0 + o, ivec2(0), sz - 1), 0); float nk = floor(n.a * 3. + .5);
+    float v = n.r > .01 && n.b < .5 && (nk == 3. ? 0. : nk) == fam ? n.r : hd.r;
+    acc += v * (o.x == 1 ? f.x : 1. - f.x) * (o.y == 1 ? f.y : 1. - f.y); e0 = min(e0, v); e1 = max(e1, v); if (v < low) { low = v; gn = n.g; }
+  }
+  hr = e1 - e0 > .02 ? mix(e0, e1, smoothstep(.3, .7, (acc - e0) / (e1 - e0))) : acc;
+  if (hr < (e0 + e1) * .5 && hd.g < .002) hd.g = gn;   /* a blade cut by the edge of a pass lies the way that pass went */
+  }
+  float j = h1(s + 3.1), hv = hr * 2.6;
   float H = (wheat > .5 ? .2 + hv * .9 : .03 + hv * .5) * (.65 + .7 * j);
   float dir = floor(hd.g * 255. + .5);
   vec2 lean = (vec2(h1(s + 7.), h1(s + 8.)) - .5) * .8;
@@ -13354,6 +13375,39 @@ function house(B, x0, y0, w, wall, roof, door, dx, ovL = .2, ovR = .2) {
   for (const wx of [x0 + w * .2, x0 + w * .5, x0 + w * .8]) { if (Math.abs(wx - dx) > 1.5) win(wx, .75, 1.3, 1.15); win(wx, 2.2, 1.3, .95); }
   bx(B, dx, y0 + .12, 0, 1, .16, 2, door); bx(B, dx + .3, y0 + .05, 1, .08, .08, .08, C.lemon); bx(B, dx, y0 - .3, 0, 1.4, .6, .12, C.paving);
 }
+/* The rules know a cell as cut or not; the view keeps a finer mask, four by four to a cell, of where it saw a deck pass
+   (0: not seen, so the cell decides; 8: seen and not cut; 8 + the way it went: cut). A diagonal pass leaves a straight
+   slanted edge instead of a staircase of cells (a critic, November 2026). A save, a robot unseen or time away fall back on
+   the cells. */
+const fine = { m: null, obs: null, hp: null, dirty: 0, rb: [] };
+let ftex = null;
+function fineReset() {
+  fine.m = new Uint8Array(L.W * 4 * L.H * 4); fine.obs = new Uint8Array(L.W * L.H); fine.hp = Int16Array.from(S.h); fine.rb = []; fine.dirty = 0;
+  if (ftex) gl.deleteTexture(ftex); ftex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, ftex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, L.W * 4, L.H * 4, 0, gl.RED, gl.UNSIGNED_BYTE, fine.m);
+  for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
+}
+function stamp(x0, y0, x1, y1, r) {
+  const dx = x1 - x0, dy = y1 - y0, len2 = dx * dx + dy * dy; if (len2 < 1e-8 || len2 > 36) return;   /* further than a slow frame at full speed: a jump, not a pass */
+  const dir = Math.abs(dy) >= Math.abs(dx) ? (dy > 0 ? 1 : 2) : (dx > 0 ? 3 : 4), FW = L.W * 4, m = fine.m;
+  const tx0 = Math.max(0, Math.floor((Math.min(x0, x1) - r) * 4)), tx1 = Math.min(FW - 1, Math.floor((Math.max(x0, x1) + r) * 4));
+  const ty0 = Math.max(0, Math.floor((Math.min(y0, y1) - r) * 4)), ty1 = Math.min(L.H * 4 - 1, Math.floor((Math.max(y0, y1) + r) * 4));
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+    const px = (tx + .5) / 4, py = (ty + .5) / 4, c = (py | 0) * L.W + (px | 0); if (L.K[c] !== 1) continue;
+    const t = clamp(((px - x0) * dx + (py - y0) * dy) / len2, 0, 1), ex = x0 + dx * t - px, ey = y0 + dy * t - py; if (ex * ex + ey * ey > r * r) continue;
+    if (!fine.obs[c]) { fine.obs[c] = 1; const cx = (c % L.W) * 4, cy = ((c / L.W) | 0) * 4; for (let b = 0; b < 4; b++) for (let a = 0; a < 4; a++) { const k = (cy + b) * FW + cx + a; if (!m[k]) m[k] = 8; } }
+    m[ty * FW + tx] = 8 + dir; fine.dirty = 1;
+  }
+}
+function fineStep(m0x, m0y) {
+  if (!fine.m) return;
+  const cutting = !(S.site === 'green' && S.m.up) && !(S.site === 'field' && S.finale) && !(CORE.bagged(S) && S.full);
+  if (cutting) stamp(m0x, m0y, S.m.x, S.m.y, CORE.cutW(S) / 2);
+  S.rb.forEach((r, k) => { const q = fine.rb[k]; if (q && S.site === 'street') stamp(q[0], q[1], r.x, r.y, CORE.P.robotDeck / 2); fine.rb[k] = [r.x, r.y]; });
+  // a lawn growing back forgets where it was cut
+  const FW = L.W * 4;
+  for (let i = 0; i < S.h.length; i++) { if (fine.obs[i] && S.h[i] > fine.hp[i] + 1) { fine.obs[i] = 0; const cx = (i % L.W) * 4, cy = ((i / L.W) | 0) * 4; for (let b = 0; b < 4; b++) fine.m.fill(0, (cy + b) * FW + cx, (cy + b) * FW + cx + 4); fine.dirty = 1; } fine.hp[i] = S.h[i]; }
+}
 function build() {
   L = CORE.layout(S.site, S.tier); stat.n = 0; vh.length = 0;
   const cells = []; for (let i = 0; i < L.K.length; i++) if (L.K[i] === 1 || (S.site === 'green' && L.K[i] === 2 && S.tier <= 3)) cells.push(i);   /* round the two largest lawns the rough is ground, not blades */
@@ -13384,6 +13438,7 @@ function build() {
   if (htex) gl.deleteTexture(htex); htex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, htex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, L.W, L.H, 0, gl.RGBA, gl.UNSIGNED_BYTE, hdat);
   for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
+  fineReset();
   const B = stat, K = L.K;
   if (S.site === 'field') { buildField(); upload(B); return; }
   // ground: what is not lawn is road, pavement, path or rough grass; under a garden's ornaments, the lawn's own earth
@@ -13620,17 +13675,46 @@ function drawGrass(dt) {
     if (vh[i] == null) vh[i] = h;
     if (flapOn && (inFlap(x, y) >= 0 || (fin.ang[3] > .6 && x >= 16 && x < 24 && y >= 16 && y < 24))) { hdat[i * 4 + 2] = 255; continue; }   /* folded, the box is hollow: no wheat inside it */
     if (h < vh[i] - 60) { if (vh[i] > 250) spray(x + .5, y + .5, field); vh[i] = h; } else vh[i] += (h - vh[i]) * k;
-    ground(B, x, y, vh[i], S.d[i] & 7, field);
-    const o = i * 4; hdat[o] = Math.min(255, vh[i] / 2600 * 255); hdat[o + 1] = S.d[i] & 7; hdat[o + 2] = flapOn && inFlap(x, y) >= 0 ? 255 : 0;
+    const edge = edgeGround(B, x, y, i, field);
+    const o = i * 4; hdat[o] = Math.min(255, vh[i] / 2600 * 255); hdat[o + 1] = S.d[i] & 7; hdat[o + 2] = flapOn && inFlap(x, y) >= 0 ? 255 : edge ? 80 : 0;   /* 80: an edge, for the blades */
   }
   upload(B);
   gl.bindTexture(gl.TEXTURE_2D, htex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, L.W, L.H, gl.RGBA, gl.UNSIGNED_BYTE, hdat);
 }
 // the earth between the blades: dark under long grass, the mower's colour where it is short
-function ground(B, x, y, v, d, field, z = 0) {
+function earth(x, y, v, d, field) {
   const r = hash(x, y, 5), t = clamp((v - 100) / 500, 0, 1);
   const c = field ? mix3(mix3(C.wheat, C.white, .4), mix3(C.stub, C.soil, .5), t) : mix3(d === 1 ? C.cut1 : d === 2 ? C.cut2 : C.cut0, hex('#2a4219'), .45 + t * .45);
-  bx(B, x + .5, y + .5, z - .02, 1, 1, .03, mix3(c, C.ink, r * .08));
+  return mix3(c, C.ink, r * .08 * (.25 + .75 * t));   /* cut earth is nearly even, so no cell shows through a pass */
+}
+function ground(B, x, y, v, d, field, z = 0) { bx(B, x + .5, y + .5, z - .02, 1, 1, .03, earth(x, y, v, d, field)); }
+/* where cut meets uncut, the earth follows the pass rather than the cells: the cell is laid in nine pieces, each coloured
+   from the heights round it read between the cells and sharpened again, as the blades are in the shader */
+function edgeGround(B, x, y, i, field) {
+  const W = L.W, K = L.K, v = vh[i], d = S.d[i] & 7, at = j => (K[j] === 1 && vh[j] != null ? vh[j] : v);
+  if (fine.obs && fine.obs[i]) {
+    const FW = W * 4, m = fine.m, o = y * 4 * FW + x * 4, first = m[o]; let mixed = false;
+    for (let b = 0; b < 4 && !mixed; b++) for (let a = 0; a < 4; a++) if ((m[o + b * FW + a] > 8) !== (first > 8)) { mixed = true; break; }
+    const tall = Math.max(v, 1000), col = q => q > 8 ? earth(x, y, Math.min(v, 100), S.h[i] <= 120 && !d ? 0 : q - 8, field) : earth(x, y, v < 300 ? tall : v, d, field);
+    let same = !mixed; for (let b = 0; b < 4 && same; b++) for (let a = 0; a < 4; a++) if (m[o + b * FW + a] !== first) { same = false; break; }
+    if (same) { bx(B, x + .5, y + .5, -.02, 1, 1, .03, col(first)); return true; }   /* a cell crossed by two passes is laid in pieces too */
+    for (let b = 0; b < 4; b++) for (let a = 0; a < 4; a++) bx(B, x + (a + .5) / 4, y + (b + .5) / 4, -.02, .25, .25, .03, col(m[o + b * FW + a]));
+    return true;
+  }
+  let edge = false;
+  for (let b = -1; b <= 1 && !edge; b++) for (let a = -1; a <= 1; a++) { const xx = x + a, yy = y + b; if (xx >= 0 && yy >= 0 && xx < W && yy < L.H && ((at(yy * W + xx) < 300) !== (v < 300))) { edge = true; break; } }
+  if (!edge) { ground(B, x, y, v, d, field); return false; }
+  for (let sy = 0; sy < 3; sy++) for (let sx = 0; sx < 3; sx++) {
+    const px = x + (sx + .5) / 3 - .5, py = y + (sy + .5) / 3 - .5, cx = Math.floor(px), cy = Math.floor(py), fx = px - cx, fy = py - cy;
+    let acc = 0, e0 = v, e1 = v, low = v, ld = d;
+    for (const [a, b] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      const xx = clamp(cx + a, 0, W - 1), yy = clamp(cy + b, 0, L.H - 1), j = yy * W + xx, h = at(j);
+      acc += h * (a ? fx : 1 - fx) * (b ? fy : 1 - fy); e0 = Math.min(e0, h); e1 = Math.max(e1, h); if (h < low) { low = h; ld = S.d[j] & 7; }
+    }
+    const hr = e1 - e0 > 50 ? lerp(e0, e1, smooth(clamp(((acc - e0) / (e1 - e0) - .3) / .4, 0, 1))) : acc;
+    bx(B, x + (sx + .5) / 3, y + (sy + .5) / 3, -.02, 1 / 3, 1 / 3, .03, earth(x, y, hr, hr < (e0 + e1) / 2 && !d ? ld : d, field));
+  }
+  return true;
 }
 
 /* ---- things that move ---- */
@@ -14078,6 +14162,9 @@ function shop(force) {
     const pt = p ? money(p).replace('.00', '') : 'free'; if (b._p !== pt) { b._p = pt; b.querySelector('.pr').textContent = pt; }
     if (b._l !== lv) { b._l = lv; b.querySelector('.lv').innerHTML = u.max > 1 ? Array.from({ length: u.max }, (_, k) => '<i' + (k < lv ? ' class="on"' : '') + '></i>').join('') : ''; }
     b.classList.toggle('can', CORE.can(S, u));
+    // how far the money has come toward a card not yet in reach, from a fifth of its price on (a shelf of grey tags read as
+    // "nothing to do" to a critic)
+    const f = p ? S.$ / p : 1; b.classList.toggle('near', f >= .2 && f < 1); if (f >= .2 && f < 1) b.style.setProperty('--p', f.toFixed(3));
   }
   more();
   const empty = !Object.keys(cards).length; if (peg.hidden !== empty || (!empty && peg.offsetHeight !== shop.h)) { peg.hidden = empty; shop.h = peg.offsetHeight; resize(); aim(); }
@@ -14230,7 +14317,9 @@ function moveCam(dt) {
   const steering = ptr.on || ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].some(k => keys[k]);
   const r = cam.r, hw = () => cam.gd * Math.tan(cam.fov / 2) * (W / H) * .9, hh = () => cam.gd * Math.tan(cam.fov / 2) * 1.1, cx2 = v => clamp(v, Math.min(r[0] + hw(), (r[0] + r[2]) / 2), Math.max(r[2] - hw(), (r[0] + r[2]) / 2)), cy2 = v => clamp(v - 1, Math.min(r[1] + hh() * .6, (r[1] + r[3]) / 2), Math.max(r[3] - hh(), (r[1] + r[3]) / 2));
   // the follow alone, which the held point is kept against
-  const kf = 1 - Math.exp(-dt * (follow ? 3 : 1.6)), fx0 = follow ? cx2(S.m.x) : cam.gx, fy0 = follow ? cy2(S.m.y) : cam.gy;
+  // on a show lawn the follow leans most of the way toward the lawn, so a mower at its edge does not leave half the screen to hedges
+  const sh = S.site === 'green' && L && L.show, lean = (v, a, b, h) => { const lo = a + h * .6, hi = b - h * .6; return lerp(v, lo > hi ? (a + b) / 2 : clamp(v, lo, hi), .8); };
+  const kf = 1 - Math.exp(-dt * (follow ? 3 : 1.6)), fx0 = follow ? cx2(sh ? lean(S.m.x, sh.x0, sh.x1 + 1, hw()) : S.m.x) : cam.gx, fy0 = follow ? cy2(sh ? lean(S.m.y, sh.y0, sh.y1 + 1, hh()) : S.m.y) : cam.gy;
   if (cam.fx == null) { cam.fx = fx0; cam.fy = fy0; } cam.fx += (fx0 - cam.fx) * kf; cam.fy += (fy0 - cam.fy) * kf;
   if (follow) {
     // with the grass box full, look halfway to the compost bin so the way there is on screen
@@ -14364,8 +14453,10 @@ function develop() {
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, post.td); gl.uniform1i(u.uD, 1); gl.activeTexture(gl.TEXTURE0);
   // the band of focus: the middle of the free part of the screen, or the mower when the camera follows it
   const fy = follow && !cam.hold && S.m ? toScreen(S.m.x, S.m.y)[1] : (area.y0 + area.y1) / 2;
-  gl.uniform2f(u.uPx, 1 / w, 1 / h); gl.uniform1f(u.uFoc, 1 - clamp(fy / H, .25, .75)); gl.uniform1f(u.uBand, H > W ? .2 : .16);
-  gl.uniform1f(u.uBlur, K.reduced ? 0 : LENS.blur * DPR); gl.uniform1f(u.uAO, gauge.cuts >= 2 ? 0 : LENS.ao); gl.uniform1f(u.uSat, LENS.sat); gl.uniform1f(u.uVig, LENS.vig); gl.uniform1f(u.uAOR, .5 * h / (2 * Math.tan(cam.fov / 2)));
+  // close behind the mower on a show lawn the lens is gentler, so the lawn ahead stays readable (a critic, November 2026)
+  const close = follow && !cam.hold && S.site === 'green' ? clamp((cam.gd * 3 - cam.d) / (cam.gd * .6), 0, 1) : 0;   /* eased, so it never pops */
+  gl.uniform2f(u.uPx, 1 / w, 1 / h); gl.uniform1f(u.uFoc, 1 - clamp(fy / H, .25, .75)); gl.uniform1f(u.uBand, (H > W ? .2 : .16) * (1 + .4 * close));
+  gl.uniform1f(u.uBlur, K.reduced ? 0 : LENS.blur * DPR * (1 - .45 * close)); gl.uniform1f(u.uAO, gauge.cuts >= 2 ? 0 : LENS.ao); gl.uniform1f(u.uSat, LENS.sat); gl.uniform1f(u.uVig, LENS.vig); gl.uniform1f(u.uAOR, .5 * h / (2 * Math.tan(cam.fov / 2)));
   gl.uniform1f(u.uN, .5); gl.uniform1f(u.uF, 1500);   // (a device that had to lose blades twice loses the contact shade too)
   gl.bindVertexArray(null); gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE);
@@ -14405,7 +14496,9 @@ function render() {
   gl.uniform3f(v.uLamp, S.m.x + Math.cos(vis.a) * 1.5, 1.6, -(S.m.y + Math.sin(vis.a) * 1.5)); gl.uniform1f(v.uLampI, LT.lamp * (S.finale ? .3 : 1));
   gl.uniform3f(v.uPush, S.m.x, S.m.y, flapOn ? 0 : CORE.cutW(S) / 2 + .5);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, shTex); gl.uniform1i(v.uSh, 0);
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, htex); gl.uniform1i(v.uHt, 1); gl.activeTexture(gl.TEXTURE0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, htex); gl.uniform1i(v.uHt, 1);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, ftex); if (fine.dirty) { gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, L.W * 4, L.H * 4, gl.RED, gl.UNSIGNED_BYTE, fine.m); fine.dirty = 0; }
+  gl.uniform1i(v.uFine, 2); gl.activeTexture(gl.TEXTURE0);
   const sets = [[blades, I4, 0]]; if (flapOn) flapBlades.forEach((b, f) => { if (fin.ang[f] < .97) sets.push([b, flapM(f), 1]); });   /* up, a flap's wheat is inside the lined box */
   for (const [b, M, all] of sets) {
     if (!b || !b.n) continue;
@@ -14448,7 +14541,7 @@ function hud(dt) {
     const j = $('jg'), ok = CORE.canJudge(S); j.disabled = !ok || jd.t >= 0; j.classList.toggle('won', S.gold >= S.tier && !(judging && !won));   /* won here: a plaque, not a dead button */
     j.textContent = judging && !won ? 'Judging…' : S.pest ? ['Not with a dog on the lawn', 'Not with a sheep on the lawn', 'Not with geese on the lawn', 'Not with a horse on it', 'Not with him on the pitch'][S.pest.k] : S.gold >= S.tier ? 'Gold won here' : S.judgeCd > 0 ? 'Judges back in ' + Math.ceil(S.judgeCd) + 's' : S.gw[0] > 0 ? 'The lawn is growing…' : 'Call the judges';
   }
-  if (rate > .01 && S.act < 4) $('rate').textContent = 'about ' + money(rate * 1.5) + ' a minute'; else $('rate').textContent = S.act === 4 ? (fin.low ? 'dawn' : 'midnight') : '';
+  if (rate > .01 && S.act < 4) $('rate').textContent = 'about ' + money(rate * 1.5) + ' a minute'; else $('rate').textContent = S.act === 4 ? (fin.low ? 'dawn' : S.finale ? 'midnight' : 'midnight · along the string ' + Math.round(Math.min(1, CORE.stencilDone(S) / .92) * 100) + '%') : '';   /* the goal and how far it is, for a stranger */
 }
 function pin() {
   edgeMark($('pin'), S.pest && !S.pest.flee && vis.pest && S.site === 'green' ? vis.pest : null);
@@ -14481,7 +14574,7 @@ K.loop((dt, t) => {
   if (dt > 0) {
     steer();
     const m0x = S.m.x, m0y = S.m.y, c0 = S.cut || 0;
-    CORE.step(S, dt);
+    CORE.step(S, dt); fineStep(m0x, m0y);
     eng.set(Math.hypot(S.m.x - m0x, S.m.y - m0y) / dt, ((S.cut || 0) - c0) / dt, S.lv.ride, dt);
     events(); runLater(dt); stepFinale(dt);
     const up = S.site === 'green' && S.m.up ? 1 : 0;
@@ -14518,7 +14611,7 @@ K.world({
   settings() { document.body.classList.toggle('lowfx', K.reduced); }
 });
 K.debug = {
-  state: () => S, toScreen, toGround, cam: () => cam, lens: LENS, hint, ko: () => ko, boxes: () => ({ stat: stat.n, dyn: dyn.n, grass: blades ? blades.n * blades.bn : 0, parts: parts.length }),
+  state: () => S, toScreen, toGround, cam: () => cam, lens: LENS, hint, fine: () => fine, ko: () => ko, boxes: () => ({ stat: stat.n, dyn: dyn.n, grass: blades ? blades.n * blades.bn : 0, parts: parts.length }),
   mower: () => toScreen(S.m.x, S.m.y), box: () => fin.box,
   blades: () => ({ drawn: blades ? blades.n * blades.bn : 0, perCell: blades && blades.bn, cap: gauge.cap, med: gauge.med, lock: gauge.lock, cuts: gauge.cuts }), watch, snap: () => { render(); return cv.toDataURL(); },
   card: id => { const b = cards[id]; return b && b.getBoundingClientRect(); },

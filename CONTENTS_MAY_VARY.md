@@ -36,10 +36,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    anthology had set itself where it stood in the way of the result.
    It may weigh **230 KB** since its round-before-rich session (November 2026): the box stood at 197 KB of 200 after the
    cellar's rhythm, the burst's warning, the phone's rail and chapter headings, and the owner calls the limit arbitrary.
-   Keep Off the Grass may weigh **200 KB** for the same reason: its refinement session (October 2026) began at
-   133 KB, over the old cap, once the box had its close-up camera and props list.
-   It may weigh **230 KB** since its round-before-rich session (November 2026): with three cards taken out and two bots, a
-   steering fix, a ring round the mower and a badge for the judges' table put in, it stood at 199.3 KB of 200.
+   Keep Off the Grass has **no limit**: the owner struck it (November 2026, its round-before-rich session, when it stood at
+   199.3 KB of the 200 KB it had been given in October).
    Tilt may weigh **230 KB**: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
    scenes, close-ups and diagnostic switches before a pixel of the art had changed, then 200 KB when the street and the
    mountain were redrawn at the owner's request; the owner lifted the cap in advance. The owner raised it to **300 KB**
@@ -2353,13 +2351,30 @@ needs a field in `K` and an answer from each box, so it belongs to a session abo
     wrong way."): "Stripes 98 %, Mown 41 %, no medal" read as a bug. Closer, the judges' table was off screen while every wish
     is named by it: a cobalt badge with a table at the screen's edge points to it (`edgeMark`, shared with the intruder's).
     Some points came from the capture (`?at` shows a mower standing still, money right after the bot has spent).
-  - *Still open*, most valuable first: (1) at the phone's closer distance the mown edges show the cells as staircases (the
-    mask is one value a cell; a stripe's edge could follow the mower's path); (2) the tilt-shift is heavy when close and hides
-    the lawn ahead; (3) a camera near a lawn's edge shows half hedge, and could lean toward the lawn; (4) on a show every card
-    on the pegboard is far out of reach for a while (a "to go" bar on the nearest one); (5) the phone strip still cuts its
-    second card mid-title; (6) the crop circle reads as a cross with wireframe boxes to a stranger (by design the net of a
-    box; the string could read more as string); (7) frame times on a real device, still unmeasured, and the critique of
-    played video rather than stills; (8) a show that asks for a new kind of pattern, if the shows read as alike.
+  - *Then the critic's open points* (the owner: "take care of the rest"). The mown edge showed the cells as staircases at
+    the phone's closer distance, because each blade read its own cell's height and the earth under the blades was one box a
+    cell. A first try read the heights between cells and sharpened them (still in `VSB` and `edgeGround` for cells the view
+    never saw cut: a save, time away); the same critic called it "the same staircase with smaller steps". What carried: the
+    view keeps a mask of its own, four by four to a cell (`fine`), stamps into it the capsule the deck actually sweeps each
+    frame (the player's mower and the robots), and the blades and the earth read it where it has been seen; a lawn growing
+    back clears it. The rules stay in cells. A diagonal pass now leaves a straight slanted swath with a round end. A frame
+    costs what it did (software renderer, phone, the Racecourse with many edges: 298 ms against 312 before, inside the
+    noise; a first version with every blade reading four cells took 384, so only cells on an edge read more). Close behind
+    the mower on a show lawn the tilt-shift eases off (blur ×.55, the sharp band ×1.4, eased by distance so it never pops);
+    the follow leans most of the way toward the lawn's middle near its edge, so a mower at the rope no longer leaves half the
+    screen to hedges; a card not yet in reach shows a thin bar of how far the money has come, from a fifth of its price; on a
+    phone the strip shows one card whole and only the next one's picture, so no title is cut; at midnight the dashboard says
+    "along the string 45%". The critic's second look, before the mask: 7/6/6/7/6 and **5**; its third, on passes filmed live
+    with the mask: 7/6/7/7/7 and **6** ("the first time the core verb looks like the genre it copies"). Found on the way: on
+    the largest grounds the mower runs about 8 units a second, so a slow frame (the shell's cap of .25 s) carries it two
+    units, which the first mask took for a jump and skipped, leaving whole cells to the old staircase; a jump is now six
+    units or more. Cut earth no longer carries each cell's random tint (it showed the grid through a pass).
+  - *Still open*: frame times on a real device (the gauge thins the grass by itself, but nobody has read `K.debug.blades()`
+    on a phone); a critique of played video rather than stills; from the last critic, a fine sawtooth on the swath's edge
+    (quarter cells; a soft fade of one quarter would hide it), a turn on the spot stamping a full disc, the chalk of the
+    Cup's lines reading as speckle, and too little to plan by at the stand-back distance on a fresh lawn (a faint guide
+    along the wished direction, or the lawn's edge marked); a show that asks for a new kind of pattern (a chequerboard, a
+    diamond), chosen not to build: the shows now differ in size, wish and intruder, and the brief was to take away first.
     Not done this session: a live play-through filmed at speed (SwiftShader drew the National at a frame in several seconds,
     so the live runs were the first minutes and the scripted checks of the held stripe); the props sheet was shot again only
     for the two props whose places moved (the manor, the racecourse stand).
