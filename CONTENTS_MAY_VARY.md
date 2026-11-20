@@ -1296,6 +1296,11 @@ still undone, most valuable first:
     side further than the other, as dough over the rim of a pot; the lobes draw back as she slumps. Also: the envelope's
     line is short enough for a phone (*Opens in the cellar.* / *The cellar is next.*), the loaf stands on the house's
     foot, no steam rises on the knife's line, the phone's cellar frame shows the fridge's whole name.
+    *The owner's two notes* after it: a slip's words stood level while its paper was pinned on at a slant (the paper was
+    turned in its own save and restore, the type after it); they turn with the paper now. The geranium's leaves were
+    stars with pointed teeth, "no plant I know looks like that": they are a zonal geranium's now, round to kidney-shaped
+    with a rim of nine shallow rounded scallops, a notch where the stalk joins, pale veins fanning from that point, a
+    soft dark horseshoe band partway out, each tipped towards its side and the ones behind drawn first.
 - **Here Be Rabbits** (box 5). **The refinement session** (October 2026, rule 16). The owner asked for the box to be taken to
   the bar of a finished commercial game, lifted the byte cap (rule 2: now 300 KB; the box began at 204 KB) and gave four notes
   from their own play: the hint "Draw across the horde" jumped about, rabbits slowed by a snail should change colour, the
