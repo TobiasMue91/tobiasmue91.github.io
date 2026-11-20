@@ -2796,3 +2796,38 @@ and storage that survives a round trip and refuses junk. The `ui` suite (needs t
 Pillow; skipped without them) draws through the real page, downloads the PNG and decodes it with Pillow, checks that a
 second finger takes back the first finger's stroke, that a reload restores the drawing, that the downloaded PNG opens
 back pixel for pixel, and that nothing is requested from another host.
+## Chord Identifier
+
+```sh
+npm run test:chord                         # or: node test/chord_identifier.mjs
+node test/chord_identifier.mjs name spell  # named suites only
+VERBOSE=1 node test/chord_identifier.mjs hear   # print the hit rate of each synthesized-sound kind
+```
+
+`chord_identifier.mjs` runs the DOM-free `<script id="core">` of `tools/chord_identifier.html` in Node's vm.
+`parse` and `tab` cover note names and tab as people type them (Unicode accidentals, solfège, German H/Fis/Es,
+run-together letters, chord symbols typed by mistake, a megabyte paste). `name` holds the reference table of
+lead-sheet names, open guitar shapes and inversions, and checks that note order above the bass and doubled notes
+never change a name. `spell` checks root letters and chord-tone spelling; `round` turns every chord symbol the
+page knows, at all 12 roots, into notes and names them back. `hear` synthesizes chords (bright, dull, noisy,
+out of tune, a phone microphone without its low end) and requires a hit rate for each; it is seeded, so a change
+in the numbers means the detector changed. `page` needs Chromium and `npx http-server -p 8099` and is skipped
+without them.
+## Moonhop
+
+```sh
+npm run test:jump                # or: node test/jump.mjs [world rules pacing]
+VERBOSE=1 node test/jump.mjs pacing   # print the bot's heights, causes of death and landings by kind
+```
+
+`jump.mjs` runs the DOM-free `<script id="core">` of `games/jump.html` in Node; no browser or server. `world`
+builds the course for 40 seeds to 4,000 m and holds it to the one promise an endless bouncer makes: the chain of
+solid clouds never asks for more than `T.maxGap` (well under a bounce), no puff cloud is load-bearing, and no solid
+cloud anywhere is a dead end (from each one the chain is in reach above). It also checks that nothing crowds, the
+lane above the start is clear, glooms keep their distance from the chain, and each thing the game teaches (spring,
+puff, drifter, wisp, balloons, comet, gloom) first appears by a fixed height. `rules` pokes one bounce at a time:
+bounce height, one-way clouds, edges, puffs, wisps, springs, both rides, stomp versus side hit, blasting through
+off a spring, shooting, wrap-around, finger drag, the idle roof, falling out, the camera that never goes down,
+and coming home: passing `T.homeM` (the moon, where the Beyond band starts) fires `home` exactly once per run.
+`pacing` lets an attentive bot (it shoots glooms above it, takes springs and rides) climb 24 seeds and checks the
+spread of heights, that it seldom stalls, and that glooms, puffs and drifters each carry a real share of the play.
