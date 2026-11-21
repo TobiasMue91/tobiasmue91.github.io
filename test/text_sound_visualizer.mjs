@@ -197,6 +197,7 @@ if (suites.includes('render')) {
   const hiE = (tone) => { const x = T.render(z, {sound: 'electronic', tone}); return goertzel(x, sr, 3 * 1567.98, 4410, 22050) / goertzel(x, sr, 1567.98, 4410, 22050); };
   check(hiE(0) < hiE(50) && hiE(50) < hiE(100), 'tone 0 is darker than 50, 100 brighter', J([hiE(0), hiE(50), hiE(100)]));
   near(T.cutoff('ambient', 50), 3000, 1e-9, 'tone 50 keeps the sound\'s own brightness');
+  eq(T.settings({}).sound, 'melodic', 'the default sound is Melodic: plucked and dry, so each note is heard on its own');
   near(T.cutoff('ambient', 75), 6000, 1e-9, '  each 25 steps is an octave');
   const t0 = Date.now(); T.render(T.schedule('The quick brown fox jumps over the lazy dog. '.repeat(3)).notes, {}); const ms = Date.now() - t0;
   check(ms < 1500, `a sentence three times over renders in ${ms} ms`);
@@ -226,12 +227,12 @@ if (suites.includes('misc')) {
   eq(T.fileName('😀 ### 中文'), 'text-sound.wav', '  nothing usable: a plain name');
   eq(T.fileName('a'.repeat(100)), 'text-sound-' + 'a'.repeat(40) + '.wav', '  at most 40 characters of text');
   eq([T.clock(0), T.clock(6.44), T.clock(59.96), T.clock(61), T.clock(300)], ['0.0 s', '6.4 s', '60.0 s', '1:01', '5:00'], 'durations as text');
-  const q = T.linkQuery('Hi & bye #1', {sound: 'melodic', speed: 150, tone: 50, volume: 70});
-  eq(q, '?text=Hi+%26+bye+%231&sound=melodic&speed=150', 'a share link carries the text and only what differs from the defaults');
-  eq(plain(T.readQuery(q)), {sound: 'melodic', speed: 150, tone: 50, volume: 70, text: 'Hi & bye #1'}, '  and reads back');
-  eq(plain(T.readQuery('?text=x&sound=nope&speed=999&tone=-4&volume=abc')), {sound: 'ambient', speed: 200, tone: 0, volume: 70, text: 'x'}, '  bad values are clamped or ignored');
+  const q = T.linkQuery('Hi & bye #1', {sound: 'rhythmic', speed: 150, tone: 50, volume: 70});
+  eq(q, '?text=Hi+%26+bye+%231&sound=rhythmic&speed=150', 'a share link carries the text and only what differs from the defaults');
+  eq(plain(T.readQuery(q)), {sound: 'rhythmic', speed: 150, tone: 50, volume: 70, text: 'Hi & bye #1'}, '  and reads back');
+  eq(plain(T.readQuery('?text=x&sound=nope&speed=999&tone=-4&volume=abc')), {sound: 'melodic', speed: 200, tone: 0, volume: 70, text: 'x'}, '  bad values are clamped or ignored');
   eq(T.readQuery('?foo=1'), null, 'no text in the link: nothing to read');
-  eq(plain(T.readQuery('?text=')), {sound: 'ambient', speed: 100, tone: 50, volume: 70, text: ''}, 'an empty text in a link is still a text');
+  eq(plain(T.readQuery('?text=')), {sound: 'melodic', speed: 100, tone: 50, volume: 70, text: ''}, 'an empty text in a link is still a text');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -274,7 +275,9 @@ async function pageSuite(chromium) {
   // Typing: the roll and counts follow every key.
   await page.fill('#text', '');
   await page.type('#text', 'Hi Ann');
-  eq(await txt('#stats'), '5 letters · 2 words · 0 punctuation', 'typing: counts follow without pressing anything');
+  check((await txt('#stats')).startsWith('5 letters · 2 words · 0 punctuation'), 'typing: counts follow without pressing anything', await txt('#stats'));
+  await ready();
+  check(/WAV file \d+\.\d s: the melody and \d+\.\d s of fade-out/.test(await txt('#stats')), '  once rendered, the file length with its ring-out is named', await txt('#stats'));
   check((await state()).sched.notes.length === 5, '  five notes scheduled');
 
   // Error state and its fix.
