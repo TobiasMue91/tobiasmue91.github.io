@@ -12931,7 +12931,7 @@ body.night #stars{opacity:1}
 #jp.turn #jwi{transform:rotate(-90deg)}
 #jer[hidden]{display:none}
 #jg{width:100%;font:600 15px var(--f);color:#fff;background:var(--red);border:3px solid var(--ink);border-radius:12px;padding:7px 0;box-shadow:0 4px 0 var(--ink);cursor:pointer}
-#jg:disabled{background:#b9a99a;cursor:default}#jg.won{background:var(--gold,#f2c230);color:var(--ink)}#jg:not(:disabled):active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+#jg:disabled{background:#b9a99a;cursor:default}#jg:not(.ready):not(:disabled):not(.won){background:var(--cream);color:var(--ink)}#jg.won{background:var(--gold,#f2c230);color:var(--ink)}#jg:not(:disabled):active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
 /* the pegboard: blister packs on hooks */
 #peg{position:fixed;z-index:2;background-color:var(--peg);background-image:radial-gradient(circle,rgba(60,35,10,.45) 2.2px,transparent 2.8px);background-size:22px 22px;border-left:4px solid #8a6534;overflow:auto;scrollbar-width:thin}
 #peg h2{margin:10px 14px 4px;font-size:15px;font-weight:600;color:#3b2a14;letter-spacing:.5px;text-transform:uppercase}
@@ -12979,6 +12979,7 @@ body.night #stars{opacity:1}
 .pt{position:absolute;font-weight:700;font-size:22px;color:#fff;-webkit-text-stroke:5px var(--ink);paint-order:stroke;transform:translate(-50%,-50%);white-space:nowrap;animation:rise 1.3s ease-out forwards}
 @keyframes rise{0%{transform:translate(-50%,-30%) scale(.6);opacity:0}15%{transform:translate(-50%,-60%) scale(1.1);opacity:1}100%{transform:translate(-50%,-160%) scale(1);opacity:0}}
 .sc{position:absolute;width:64px;padding:6px 0;text-align:center;background:#fff;border:2.5px solid var(--ink);border-radius:8px;font-weight:700;font-size:22px;transform:translate(-50%,-100%);animation:flip .5s cubic-bezier(.2,1.5,.4,1) backwards}
+.sc.gone{opacity:0;transform:translate(-50%,-160%);transition:opacity .35s,transform .35s}
 .sc small{display:block;font-size:10.5px;font-weight:600;opacity:.7}.sc small.no{color:var(--red,#e8483a);opacity:1;font-size:10px}
 @keyframes flip{from{transform:translate(-50%,-100%) rotateX(90deg)}}
 .ro{position:absolute;width:130px;height:130px;margin:-65px 0 0 -65px;border-radius:50%;display:grid;place-items:center;text-align:center;font-weight:700;font-size:17px;line-height:1.1;color:#fff;border:4px solid var(--ink);box-shadow:inset 0 0 0 5px rgba(255,255,255,.35);animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
@@ -13068,7 +13069,7 @@ const PM = prog(VS, FS), PD = prog(VS, '#version 300 es\nprecision mediump float
    way the mower went, which is where real stripes come from. */
 const VSB = `#version 300 es
 layout(location=0) in vec2 aB; layout(location=1) in vec2 aCell;
-uniform mat4 uVP, uM, uL; uniform sampler2D uHt, uFine; uniform float uN, uTime, uAll; uniform vec3 uPush, uEye;
+uniform mat4 uVP, uM, uL; uniform sampler2D uHt, uFine, uChalk; uniform float uN, uTime, uAll; uniform vec3 uPush, uEye;
 out vec3 vN, vC, vW; out vec4 vL; out float vT;
 float h1(float n) { return fract(sin(n) * 43758.5453); }
 void main() {
@@ -13081,9 +13082,10 @@ void main() {
      grass and sharpened again, so a diagonal pass leaves a clean slanted edge instead of a staircase of cells */
   float hr = hd.r, fv = floor(texelFetch(uFine, ivec2(p * 4.), 0).r * 255. + .5);
   if (fv > 7.5) {
-    /* where the view saw the mower's deck pass, a quarter of a cell at a time: the cut follows the deck, not the cells */
-    float fd = fv - 8.;
-    if (fd > .5) { hr = min(hd.r, .045); if (hd.r > .06 || hd.g > .002) hd.g = fd / 255.; }   /* a scuffed stripe stays scuffed */
+    /* where the view saw the mower's deck pass, a quarter of a cell at a time: the cut follows the deck, not the cells;
+       across the deck's soft edge each blade is cut or not by its own hash */
+    float cov = floor(fv / 8.), fd = fv - cov * 8.;
+    if (h1(s + 9.7) < (cov - 1.) / 30.) { hr = min(hd.r, .045); if (fd > .5 && (hd.r > .06 || hd.g > .002)) hd.g = fd / 255.; }   /* a scuffed stripe stays scuffed */
     else if (hd.r < .06) hr = .385;
   } else if (hd.b > .2 && hd.b < .5) {   /* only a cell on an edge (marked by the view) pays for it */
   vec2 q = p - .5, f = fract(q); ivec2 c0 = ivec2(floor(q)), sz = textureSize(uHt, 0);
@@ -13121,10 +13123,11 @@ void main() {
   /* far off a blade is smaller than a pixel: its dark foot and bright tip would flicker like static, so the far lawn settles to its mean */
   float far = smoothstep(35., 120., dist);
   vC = mix(lo, hi, mix(t * .85 + .15, .62, far)) * (.8 + .4 * mix(j, .5, far * .8)) * (kind == 1. ? vec3(.9, .92, .75) : vec3(1.));
-  if (kind == 3.) vC = mix(vC, vec3(.95), .75);
+  float chalk = texelFetch(uChalk, ivec2(p * 4.), 0).r;
+  if (chalk > .5) vC = mix(vC, vec3(.95), .75);
   // stripes: short grass laid away from the lens catches the light, laid toward it looks dark
   float cut = (1. - clamp(hv * 1.6, 0., 1.)) * (1. - wheat);
-  if (dir > .5 && kind != 3.) vC *= 1. + cut * (mod(dir, 2.) > .5 ? .42 : -.36);
+  if (dir > .5 && chalk < .5) vC *= 1. + cut * (mod(dir, 2.) > .5 ? .42 : -.36);
   gl_Position = uVP * wp;
 }`;
 const FSB = `#version 300 es
@@ -13269,7 +13272,7 @@ function resize() {
   W = innerWidth; H = innerHeight; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   const side = matchMedia('(min-width:900px) and (min-aspect-ratio:1/1)').matches, peg = $('peg').getBoundingClientRect();
   area = { x0: 0, y0: 0, x1: side && peg.width ? W - peg.width : W, y1: !side && peg.height ? H - peg.height : H };
-  const jp = $('jp'); jp.style.setProperty('--pegh', (!side && peg.height ? peg.height : 0) + 8 + 'px');
+  const jp = $('jp'); jp.style.setProperty('--pegh', (!side && peg.height ? peg.height + 8 : 14) + 'px');
   if (!side && !jp.hidden) area.y1 = jp.getBoundingClientRect().top - 4;   /* the sheet's bar sits over the pegboard: frame what is above it */
 }
 function camMats(c) {
@@ -13375,34 +13378,40 @@ function house(B, x0, y0, w, wall, roof, door, dx, ovL = .2, ovR = .2) {
   for (const wx of [x0 + w * .2, x0 + w * .5, x0 + w * .8]) { if (Math.abs(wx - dx) > 1.5) win(wx, .75, 1.3, 1.15); win(wx, 2.2, 1.3, .95); }
   bx(B, dx, y0 + .12, 0, 1, .16, 2, door); bx(B, dx + .3, y0 + .05, 1, .08, .08, .08, C.lemon); bx(B, dx, y0 - .3, 0, 1.4, .6, .12, C.paving);
 }
-/* The rules know a cell as cut or not; the view keeps a finer mask, four by four to a cell, of where it saw a deck pass
-   (0: not seen, so the cell decides; 8: seen and not cut; 8 + the way it went: cut). A diagonal pass leaves a straight
-   slanted edge instead of a staircase of cells (a critic, November 2026). A save, a robot unseen or time away fall back on
-   the cells. */
+/* The rules know a cell as cut or not; the view keeps a finer mask, four by four to a cell, of where it saw a deck pass:
+   0 not seen (the cell decides), else how much of the quarter the deck covered (bits 3 to 7: 1 none to 31 all) and the way
+   it went (bits 0 to 2). The deck's edge fades over a quarter of a cell, so a blade there is cut or not by its own hash: a
+   pass leaves a straight swath with a ragged edge, as a real one does, not a staircase of cells nor a saw (two critics,
+   November 2026). A save, a robot unseen or time away fall back on the cells. */
+const covOf = v => ((v >> 3) - 1) / 30;
 const fine = { m: null, obs: null, hp: null, dirty: 0, rb: [] };
-let ftex = null;
+let ftex = null, ctex = null;
 function fineReset() {
   fine.m = new Uint8Array(L.W * 4 * L.H * 4); fine.obs = new Uint8Array(L.W * L.H); fine.hp = Int16Array.from(S.h); fine.rb = []; fine.dirty = 0;
   if (ftex) gl.deleteTexture(ftex); ftex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, ftex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, L.W * 4, L.H * 4, 0, gl.RED, gl.UNSIGNED_BYTE, fine.m);
   for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
 }
-function stamp(x0, y0, x1, y1, r) {
+function stamp(x0, y0, x1, y1, r, relay = true) {
   const dx = x1 - x0, dy = y1 - y0, len2 = dx * dx + dy * dy; if (len2 < 1e-8 || len2 > 36) return;   /* further than a slow frame at full speed: a jump, not a pass */
-  const dir = Math.abs(dy) >= Math.abs(dx) ? (dy > 0 ? 1 : 2) : (dx > 0 ? 3 : 4), FW = L.W * 4, m = fine.m;
-  const tx0 = Math.max(0, Math.floor((Math.min(x0, x1) - r) * 4)), tx1 = Math.min(FW - 1, Math.floor((Math.max(x0, x1) + r) * 4));
-  const ty0 = Math.max(0, Math.floor((Math.min(y0, y1) - r) * 4)), ty1 = Math.min(L.H * 4 - 1, Math.floor((Math.max(y0, y1) + r) * 4));
+  const dir = Math.abs(dy) >= Math.abs(dx) ? (dy > 0 ? 1 : 2) : (dx > 0 ? 3 : 4), FW = L.W * 4, m = fine.m, len = Math.sqrt(len2), ux = dx / len, uy = dy / len, hd = CORE.P.depth, e = Math.max(r, hd) + .2;
+  const tx0 = Math.max(0, Math.floor((Math.min(x0, x1) - e) * 4)), tx1 = Math.min(FW - 1, Math.floor((Math.max(x0, x1) + e) * 4));
+  const ty0 = Math.max(0, Math.floor((Math.min(y0, y1) - e) * 4)), ty1 = Math.min(L.H * 4 - 1, Math.floor((Math.max(y0, y1) + e) * 4));
   for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
     const px = (tx + .5) / 4, py = (ty + .5) / 4, c = (py | 0) * L.W + (px | 0); if (L.K[c] !== 1) continue;
-    const t = clamp(((px - x0) * dx + (py - y0) * dy) / len2, 0, 1), ex = x0 + dx * t - px, ey = y0 + dy * t - py; if (ex * ex + ey * ey > r * r) continue;
+    /* the deck's strip, as the rules cut it: half-width r across, P.depth beyond each end, each edge fading over a quarter */
+    const al = (px - x0) * ux + (py - y0) * uy, beyond = Math.max(0, -al, al - len), side = Math.abs((py - y0) * ux - (px - x0) * uy);
+    const f = clamp((r + .125 - side) * 4, 0, 1) * clamp((hd + .125 - beyond) * 4, 0, 1); if (f <= 0) continue;
     if (!fine.obs[c]) { fine.obs[c] = 1; const cx = (c % L.W) * 4, cy = ((c / L.W) | 0) * 4; for (let b = 0; b < 4; b++) for (let a = 0; a < 4; a++) { const k = (cy + b) * FW + cx + a; if (!m[k]) m[k] = 8; } }
-    m[ty * FW + tx] = 8 + dir; fine.dirty = 1;
+    const k = ty * FW + tx, old = m[k], cov = Math.max(covOf(old), f);
+    if (!relay && covOf(old) > .5) continue;   /* chasing: grass already short is not laid again, as in the rules */
+    m[k] = (Math.round(cov * 30) + 1) << 3 | (f > .5 || !(old & 7) ? dir : old & 7); fine.dirty = 1;
   }
 }
 function fineStep(m0x, m0y) {
   if (!fine.m) return;
   const cutting = !(S.site === 'green' && S.m.up) && !(S.site === 'field' && S.finale) && !(CORE.bagged(S) && S.full);
-  if (cutting) stamp(m0x, m0y, S.m.x, S.m.y, CORE.cutW(S) / 2);
+  if (cutting) stamp(m0x, m0y, S.m.x, S.m.y, CORE.cutW(S) / 2, !(S.pest && !S.pest.flee));
   S.rb.forEach((r, k) => { const q = fine.rb[k]; if (q && S.site === 'street') stamp(q[0], q[1], r.x, r.y, CORE.P.robotDeck / 2); fine.rb[k] = [r.x, r.y]; });
   // a lawn growing back forgets where it was cut
   const FW = L.W * 4;
@@ -13412,7 +13421,7 @@ function build() {
   L = CORE.layout(S.site, S.tier); stat.n = 0; vh.length = 0;
   const cells = []; for (let i = 0; i < L.K.length; i++) if (L.K[i] === 1 || (S.site === 'green' && L.K[i] === 2 && S.tier <= 3)) cells.push(i);   /* round the two largest lawns the rough is ground, not blades */
   blades = bladeSet(cells); flapBlades = []; visitors.length = 0; jd.n = 0; gauge.ms.length = 0; gauge.prev = null; gauge.last = 0;
-  hdat = new Uint8Array(L.W * L.H * 4);
+  hdat = new Uint8Array(L.W * L.H * 4); const chalk = new Uint8Array(L.W * L.H * 16);
   for (const i of cells) { if (L.K[i] === 2) { hdat[i * 4] = 34 + hash(i, 3) * 22; hdat[i * 4 + 3] = 85; /* the show ground is kept shorter than the lawn on show */ } else hdat[i * 4 + 3] = S.site === 'field' ? 170 : 0; }
   if (L.pitch) { /* the markings, in a real pitch's proportions: touchlines, halfway line, centre circle and spot,
        penalty areas with their spots and arcs, goal areas. The blades over them are chalked cell by cell; the paint on
@@ -13420,21 +13429,27 @@ function build() {
     const s = L.show, w = s.x1 - s.x0 + 1, h = s.y1 - s.y0 + 1, cx = s.x0 + w / 2, cy = s.y0 + h / 2;
     const bw = Math.round(w * .157), bh = Math.round(h * .59), gw = Math.round(w * .052), gh = Math.round(h * .27), pen = Math.round(w * .105), R = w * .087;
     const spots = [[s.x0 + pen + .5, cy], [s.x1 - pen + .5, cy]], arcOut = (X, j) => j ? X < s.x1 - bw : X > s.x0 + bw + 1;
-    for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) {
-      const X = x + .5, Y = y + .5, dy = Math.abs(Y - cy);
-      const box = (d, hh) => ((x === s.x0 + d || x === s.x1 - d) && dy < hh / 2) || (Math.abs(dy - hh / 2) <= .5 && (x < s.x0 + d || x > s.x1 - d));
-      const round = Math.abs(Math.hypot(X - cx, Y - cy) - R) < .5 || spots.some(([px, py], j) => Math.abs(Math.hypot(X - px, Y - py) - R) < .5 && arcOut(X, j));
-      const straight = x === s.x0 || x === s.x1 || y === s.y0 || y === s.y1 || x === Math.round(cx - .5) || box(bw, bh) || box(gw, gh);
-      if (straight || round) hdat[(y * L.W + x) * 4 + 3] = 255;
-      if (straight) bx(stat, X, Y, .004, 1, 1, .02, C.white);   /* the paint is on the ground too: mowing cannot take it off */
-    }
-    const arc = (ox, oy, from, to) => { const n = Math.ceil((to - from) * R / .8); for (let k = 0; k < n; k++) { const a = from + (k + .5) / n * (to - from);
-      bx(stat, ox + Math.cos(a) * R, oy + Math.sin(a) * R, .004, (to - from) * R / n * 1.08, .9, .02, C.white, a + Math.PI / 2); } };
-    arc(cx, cy, 0, TAU);
+    /* every line as it is: straight lines and arcs a third of a cell wide, painted on the ground and chalked on the blades over
+       them through a mask four by four to a cell (they were chalked a whole cell wide, which read as speckle: a critic) */
+    const hw = .17, X0 = s.x0 + .5, X1 = s.x1 + .5, Y0 = s.y0 + .5, Y1 = s.y1 + .5, HX = Math.round(cx - .5) + .5;
+    const segs = [[X0, Y0, X1, Y0], [X0, Y1, X1, Y1], [X0, Y0, X0, Y1], [X1, Y0, X1, Y1], [HX, Y0, HX, Y1]];
+    for (const [d, hh] of [[bw, bh], [gw, gh]]) for (const [xl, xe] of [[s.x0 + d + .5, X0], [s.x1 - d + .5, X1]]) segs.push([xl, cy - hh / 2, xl, cy + hh / 2], [xe, cy - hh / 2, xl, cy - hh / 2], [xe, cy + hh / 2, xl, cy + hh / 2]);
     const t = Math.acos(Math.min(1, (bw + .5 - pen) / R));   /* where the arc leaves the penalty area */
-    arc(spots[0][0], cy, -t, t); arc(spots[1][0], cy, Math.PI - t, Math.PI + t);
-    for (const [px, py] of [...spots, [cx, cy]]) bx(stat, px, py, .006, .9, .9, .02, C.white);
+    const arcs = [[cx, cy, 0, TAU], [spots[0][0], cy, -t, t], [spots[1][0], cy, Math.PI - t, Math.PI + t]];
+    const near = (X, Y) => {
+      for (const [a, b, c, e] of segs) { const dx = c - a, dy = e - b, l2 = dx * dx + dy * dy || 1, u = clamp(((X - a) * dx + (Y - b) * dy) / l2, 0, 1); if (Math.hypot(a + dx * u - X, b + dy * u - Y) < hw) return true; }
+      for (const [ox, oy, f, g] of arcs) { let an = Math.atan2(Y - oy, X - ox); if (an < f) an += TAU; if (an > g) an -= TAU; if (an >= f && an <= g && Math.abs(Math.hypot(X - ox, Y - oy) - R) < hw) return true; }
+      return [...spots, [cx, cy]].some(([px, py]) => Math.hypot(X - px, Y - py) < .3);
+    };
+    for (let ty = (s.y0 - 1) * 4; ty < (s.y1 + 2) * 4; ty++) for (let tx = (s.x0 - 1) * 4; tx < (s.x1 + 2) * 4; tx++) if (near((tx + .5) / 4, (ty + .5) / 4)) chalk[ty * L.W * 4 + tx] = 255;
+    for (const [a, b, c, e] of segs) bx(stat, (a + c) / 2, (b + e) / 2, .004, Math.abs(c - a) + 2 * hw, Math.abs(e - b) + 2 * hw, .02, C.white);   /* the paint is on the ground too: mowing cannot take it off */
+    for (const [ox, oy, from, to] of arcs) { const n = Math.ceil((to - from) * R / .6); for (let k = 0; k < n; k++) { const a = from + (k + .5) / n * (to - from);
+      bx(stat, ox + Math.cos(a) * R, oy + Math.sin(a) * R, .004, (to - from) * R / n * 1.06, 2 * hw, .02, C.white, a + Math.PI / 2); } }
+    for (const [px, py] of [...spots, [cx, cy]]) bx(stat, px, py, .006, .5, .5, .02, C.white);
   }
+  if (ctex) gl.deleteTexture(ctex); ctex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, ctex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, L.W * 4, L.H * 4, 0, gl.RED, gl.UNSIGNED_BYTE, chalk);
+  for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
   if (htex) gl.deleteTexture(htex); htex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, htex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, L.W, L.H, 0, gl.RGBA, gl.UNSIGNED_BYTE, hdat);
   for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
@@ -13693,10 +13708,10 @@ function ground(B, x, y, v, d, field, z = 0) { bx(B, x + .5, y + .5, z - .02, 1,
 function edgeGround(B, x, y, i, field) {
   const W = L.W, K = L.K, v = vh[i], d = S.d[i] & 7, at = j => (K[j] === 1 && vh[j] != null ? vh[j] : v);
   if (fine.obs && fine.obs[i]) {
-    const FW = W * 4, m = fine.m, o = y * 4 * FW + x * 4, first = m[o]; let mixed = false;
-    for (let b = 0; b < 4 && !mixed; b++) for (let a = 0; a < 4; a++) if ((m[o + b * FW + a] > 8) !== (first > 8)) { mixed = true; break; }
-    const tall = Math.max(v, 1000), col = q => q > 8 ? earth(x, y, Math.min(v, 100), S.h[i] <= 120 && !d ? 0 : q - 8, field) : earth(x, y, v < 300 ? tall : v, d, field);
-    let same = !mixed; for (let b = 0; b < 4 && same; b++) for (let a = 0; a < 4; a++) if (m[o + b * FW + a] !== first) { same = false; break; }
+    const FW = W * 4, m = fine.m, o = y * 4 * FW + x * 4, first = m[o], tall = v < 300 ? Math.max(v, 1000) : v;
+    // the earth of a quarter: as cut as the deck covered it, laid the way it went
+    const col = q => { const c = covOf(q); return c <= 0 ? earth(x, y, tall, d, field) : earth(x, y, lerp(tall, Math.min(v, 100), c), S.h[i] <= 120 && !d ? 0 : q & 7, field); };
+    let same = true; for (let b = 0; b < 4 && same; b++) for (let a = 0; a < 4; a++) if (m[o + b * FW + a] !== first) { same = false; break; }
     if (same) { bx(B, x + .5, y + .5, -.02, 1, 1, .03, col(first)); return true; }   /* a cell crossed by two passes is laid in pieces too */
     for (let b = 0; b < 4; b++) for (let a = 0; a < 4; a++) bx(B, x + (a + .5) / 4, y + (b + .5) / 4, -.02, .25, .25, .03, col(m[o + b * FW + a]));
     return true;
@@ -13760,7 +13775,19 @@ function drawDyn(dt) {
     /* the inside of the walls, card too, a shade lighter toward the light */
     for (const [x, y, w, d, t] of [[20, 16.08, 8, .06, .3], [20, 23.92, 8, .06, .45], [16.08, 20, .06, 7.8, .38], [23.92, 20, .06, 7.8, .34]]) bx(B, x, y, 0, w, d, 7.96 * Math.min(1, (fin.ang[3] - .6) / .35), mix3(CARD, C.ink, t)); for (let k = 0; k < 6; k++) bx(B, 17 + hash(k, 3) * 6, 17 + hash(k, 5) * 6, .03, .3, .3, .05, C.stub, hash(k, 7) * 3); }   /* its floor: dark card, a few stalks */
   if (hint.bin > 0 && L.bin) { const b = Math.abs(Math.sin(now * 5)) * .4, [x, y] = BIN; bx(B, x, y, 2.2 + b, .2, .2, .7, C.orange); bx(B, x, y, 1.95 + b, .5, .5, .25, C.orange); bx(B, x, y, 1.8 + b, .2, .2, .2, C.orange); }
-  if (S.site === 'green' && S.m.go) { // the string line, ahead of the mower when it runs straight
+  const wAc = (CORE.WISH[S.wish | 0] || CORE.WISH[0]).across, onAxis = wAc ? Math.abs(Math.cos(vis.a)) > .97 : Math.abs(Math.sin(vis.a)) > .97;
+  const lanes = S.site === 'green' && L.show && S.gold < S.tier && jd.t < 0 && (S.m.go ? onAxis && !S.m.up : cam.idle > .9);
+  if (lanes) {
+    /* standing, or running the way the judges want the stripes, the lane is pegged out with two strings at the deck's edges
+       across the whole lawn: something to keep a pass straight and butted to the last one by (two critics, November 2026) */
+    const sh = L.show, ac = (CORE.WISH[S.wish | 0] || CORE.WISH[0]).across, hw2 = CORE.cutW(S) / 2;
+    for (const o of [-hw2, hw2]) {
+      const c = (ac ? m.y : m.x) + o, a0 = ac ? sh.x0 : sh.y0, a1 = (ac ? sh.x1 : sh.y1) + 1;
+      if (c < (ac ? sh.y0 : sh.x0) || c > (ac ? sh.y1 : sh.x1) + 1) continue;
+      for (let q = a0 + .45; q < a1; q += .9) bx(B, ac ? q : c, ac ? c : q, .02, ac ? .45 : .05, ac ? .05 : .45, .02, C.white);
+    }
+  }
+  if (S.site === 'green' && S.m.go && !lanes) { // the string line, ahead of the mower when it runs straight
     const a = vis.a, sx = Math.abs(Math.cos(a)) > .97, sy = Math.abs(Math.sin(a)) > .97;
     if (sx || sy) for (let k = 1; k < 9; k++) bx(B, m.x + Math.cos(a) * k * .9, m.y + Math.sin(a) * k * .9, .02, sx ? .45 : .05, sy ? .45 : .05, .02, C.white);
   }
@@ -13789,7 +13816,7 @@ function mower(B, x, y, a, sp) {
     at(.15, 0, .04 + up * .4, 1.2, dw, .1, C.dark); at(.15, 0, .12 + up * .4, 1.05, dw * .97, .16, mix3(C.red, C.ink, .25)); at(.15, 0, .12 + up * .4, 1.3, dw * .8, .16, mix3(C.red, C.ink, .25));
     at(.15, -dw / 2 - .05, .08 + up * .4, .45, .25, .16, C.dark);   /* the deck: a housing under the chassis, its skirt and the chute */
     at(-.15, 0, .3 + buzz, 1.7, 1.1, .45, C.red); at(.5, 0, .75 + buzz, .7, .9, .3, C.red);
-    at(.85, 0, .3, .1, .7, .3, C.dark); at(-.4, 0, .75, .5, .6, .25, C.dark); at(-.62, 0, .75, .12, .6, .55, C.dark);
+    at(.85, 0, .3, .1, .7, .3, C.dark); for (const l of [-.3, .3]) { at(.88, l, .5, .08, .2, .14, C.white); at(.9, l, .52, .04, .12, .08, C.lemon); }   /* headlamps: a front you can tell from above */ at(-.4, 0, .75, .5, .6, .25, C.dark); at(-.62, 0, .75, .12, .6, .55, C.dark);
     for (const [f, l, s] of [[.6, .55, .45], [.6, -.55, .45], [-.55, .62, .65], [-.55, -.62, .65]]) at(f, l, 0, s, .2, s, C.dark);
     at(.15, 0, 1.0, .06, .06, .35, C.dark); at(.15, 0, 1.33, .1, .45, .06, C.dark);
     person(B, x - ca * .5, y - sa * .5, a, { sit: 1, shirt: C.lemon, pants: C.denim, hat: C.cobalt, z: .9, s: 1.3 });
@@ -13916,7 +13943,8 @@ function place(f) {
   const [sx, sy] = toScreen(f.x, f.y, f.z);
   if (f.w == null) { f.w = f.el.offsetWidth + 2 * Math.abs(parseFloat(f.el.style.marginLeft) || 0); f.h = f.el.classList.contains('sp') ? f.el.offsetHeight : 0; }
   const t0 = f.h ? ($('jp').hidden || !wideBoard() ? $('dash') : $('jp')).getBoundingClientRect().bottom + f.h + 14 : 60;   // a speech bubble hangs below the dashboard and the judges' sheet
-  f.el.style.left = clamp(sx, f.w / 2 + 6, Math.max(f.w / 2 + 6, area.x1 - f.w / 2 - 6)) + 'px'; f.el.style.top = clamp(sy, t0, Math.max(t0, area.y1 - 12)) + 'px';
+  const side = f.h ? 54 : 6;   /* a bubble keeps clear of the badges at the screen's edges (they covered its words: a filmed play-through) */
+  f.el.style.left = clamp(sx, f.w / 2 + side, Math.max(f.w / 2 + side, area.x1 - f.w / 2 - side)) + 'px'; f.el.style.top = clamp(sy, t0, Math.max(t0, area.y1 - 12)) + 'px';
 }
 /* money lands: coins fly from where it was earned to the dashboard, and the sum there counts up as they arrive */
 let held = 0, flying = 0, heldT = 0;
@@ -14145,7 +14173,7 @@ function shop(force) {
     let b = cards[u.id];
     if (!b) {
       if (!S.earned || !near && !(S.$ >= p)) continue;
-      if ((jd.t >= 0 || ko.t != null && ko.t < KO + 3) && (u.gate || u.tier)) continue;   /* a place the medal opens waits for the medal, at the cup for the kick-off */
+      if ((jd.t >= 0 && jd.t < 4.3 / jd.k + 1.2 || ko.t != null && ko.t < KO + 3) && (u.gate || u.tier)) continue;   /* a new place waits for the medal, a moment after it (it waited for the whole ceremony, five seconds more) */   /* a place the medal opens waits for the medal, at the cup for the kick-off */
       b = document.createElement('button'); b.className = 'bl' + (u.gate || u.tier ? ' gate' : '') + (first ? '' : ' new');
       pictures(); const pic = picFor(u.id);
       b.innerHTML = '<span class="ic">' + (pic ? '<img alt="" src="' + pic + '">' : '<svg viewBox="0 0 24 24" fill="none" stroke="#1f2a44" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">' + iconFor(u.id) + '</svg>') + '</span><span class="t"></span><span class="d"></span><span class="lv"></span><span class="pr"></span>';
@@ -14167,7 +14195,9 @@ function shop(force) {
     const f = p ? S.$ / p : 1; b.classList.toggle('near', f >= .2 && f < 1); if (f >= .2 && f < 1) b.style.setProperty('--p', f.toFixed(3));
   }
   more();
-  const empty = !Object.keys(cards).length; if (peg.hidden !== empty || (!empty && peg.offsetHeight !== shop.h)) { peg.hidden = empty; shop.h = peg.offsetHeight; resize(); aim(); }
+  // on a phone at a show the strip and the judges' sheet took a third of the height: while nothing on it can be bought the
+  // strip steps aside (a critic, November 2026), and comes back with the first card in reach
+  const empty = !Object.keys(cards).length || (!wideBoard() && S.site === 'green' && !Object.values(cards).some(b => b.classList.contains('can'))); if (peg.hidden !== empty || (!empty && peg.offsetHeight !== shop.h)) { peg.hidden = empty; shop.h = peg.offsetHeight; resize(); aim(); }
 }
 // on a phone the strip scrolls sideways: fade its right edge while there is more to see
 const more = () => peg.classList.toggle('more', peg.scrollWidth > peg.clientWidth + 4 && peg.scrollLeft + peg.clientWidth < peg.scrollWidth - 4);
@@ -14180,9 +14210,10 @@ function buy(id, b) {
 
 /* ================= input: press and hold where the mower should go ================= */
 /* The point held is kept on the ground relative to the camera's follow of the mower (cam.fx, cam.fy), not to the picture:
-   when the camera frames something, stands back or comes in, the mower drives on where the finger sent it, and only a
-   moving finger moves the target, by as much ground as it moved over. (The owner's note, November 2026: on a large
-   show lawn an intruder swung the camera, the ground slid under a held pointer and the mower swerved across the stripes.) */
+   when the camera frames something, stands back or comes in, the mower drives on where the finger sent it; a moving finger
+   moves the target by as much ground as it moved over, and the target is drawn back to the point under the finger gently
+   (`steer`), so the two never part for long. (The owner's note, November 2026: on a large show lawn an intruder swung the
+   camera, the ground slid under a held pointer and the mower swerved across the stripes.) */
 const ptr = { on: false, x: 0, y: 0, id: null, moved: 0, rel: null }, keys = {};
 cv.addEventListener('pointerdown', e => {
   K.unlock(); cv.focus();
@@ -14198,10 +14229,17 @@ cv.addEventListener('pointermove', e => {
 const up = e => { if (e.pointerId === ptr.id) { ptr.on = false; ptr.rel = null; CORE.act(S, 'stop'); } };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 addEventListener('keydown', e => { keys[e.key] = 1; }); addEventListener('keyup', e => { keys[e.key] = 0; if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].some(k => keys[k])) CORE.act(S, 'stop'); });
-function steer() {
+function steer(dt) {
   if (S.finale) return;
   if (ptr.on) {
-    if (!ptr.rel) { const g = toGround(ptr.x, ptr.y); if (g) ptr.rel = [g[0] - cam.fx, g[1] - cam.fy]; }
+    const g = toGround(ptr.x, ptr.y);
+    if (!ptr.rel) { if (g) ptr.rel = [g[0] - cam.fx, g[1] - cam.fy]; }
+    else if (g) {
+      /* and drawn back to the point under the finger, by half in about half a second: a camera that moved under a still finger
+         (coming in after the press, leaning toward the lawn) never jerks the mower aside, and never leaves it chasing a point
+         the finger is not on (a filmed play-through found the mower pressed into a corner, the finger across the screen) */
+      const k = 1 - Math.exp(-dt * 1.4); ptr.rel[0] += (g[0] - cam.fx - ptr.rel[0]) * k; ptr.rel[1] += (g[1] - cam.fy - ptr.rel[1]) * k;
+    }
     if (ptr.rel) { CORE.act(S, 'go', cam.fx + ptr.rel[0], cam.fy + ptr.rel[1]); ptr.moved = 1; }
     return;
   }
@@ -14209,7 +14247,10 @@ function steer() {
   const kx = (keys.ArrowRight || keys.d ? 1 : 0) - (keys.ArrowLeft || keys.a ? 1 : 0), ky = (keys.ArrowUp || keys.w ? 1 : 0) - (keys.ArrowDown || keys.s ? 1 : 0);
   if (kx || ky) { const [mx, my] = toScreen(S.m.x, S.m.y), g = toGround(mx + kx * 80, my - ky * 80); if (g) CORE.act(S, 'go', g[0], g[1]); ptr.moved = 1; }
 }
-$('jg').onclick = () => { K.unlock(); if (CORE.act(S, 'judge')) K.save(); };
+// gold won: the next place (or the note in the cup) once its card is on the pegboard, so the button where the judges were called
+// is the way on, not a plaque to stare at while the strip below holds the next show (a critic, November 2026)
+const onward = () => CORE.UP.find(u => (u.tier === S.tier + 1 || u.id === 'night') && CORE.can(S, u) && cards[u.id]);
+$('jg').onclick = () => { K.unlock(); const nx = S.gold >= S.tier && onward(); if (nx) { buy(nx.id, cards[nx.id]); return; } if (CORE.act(S, 'judge')) K.save(); };
 
 /* ================= what the rules say happened ================= */
 const hint = { bin: 0, hand: 1, t: 0 };
@@ -14271,6 +14312,7 @@ function judged(e) {
       el.innerHTML = vals[k].toFixed(1) + '<small' + (why ? ' class="no"' : '') + '>' + (why || ['mown', 'stripes', 'overall'][k]) + '</small>'; anchor(el, cx, cy, 4.2, 4); });
   });
   later(4.3 / k, () => {
+    document.querySelectorAll('.sc').forEach(c => c.classList.add('gone'));   /* read; the medal now has the stage to itself */
     const el = document.createElement('div'); el.className = 'ro';
     el.style.background = e.medal ? ['', '#c98a4a', '#9aa3b5', '#e0a91c'][e.medal] : '#8a8f9c'; el.style.setProperty('--rc', el.style.background);
     el.innerHTML = (e.medal ? ['', 'Bronze', 'Silver', 'Gold'][e.medal] : 'Commended') + '<small>' + (e.prize ? '+' + money(e.prize) : 'better luck next time') + '</small>' + (e.trophy ? '<small>Trophy: all pay ×2</small>' : '');
@@ -14301,11 +14343,11 @@ function aim(snap) {
   cam.turn = S.site === 'green' && H > W * 1.3; cam.yaw = cam.turn ? .32 - Math.PI / 2 : .32;
   if (S.site === 'street') r = S.act === 1 ? [11.5, 1, 22.5, 17, 0, 2] : [0, 0, 45, 18, 0, 2];
   else if (S.site === 'green') { const s = L.show; cam.gpitch = H > W * 1.3 ? 1.22 : .98; r = L.pitch ? [s.x0 - 9, s.y0 - 9, s.x1 + 10, s.y1 + 10, 0, 3] : [s.x0 - 3, s.y0 - 3, s.x1 + 4, L.top + 1, 0, 2]; }
-  else r = fin.low ? [13, 13, 27, 25, 0, 8.5] : S.finale ? [8, 6, 32, 34, 0, 1] : [6, 4, 34, 36, 0, 1];
+  else r = fin.low ? [13, 13, 27, 25, 0, 8.5] : S.finale ? [8, 6, 32, 34, 0, 1] : [6, 0, 34, 36, 0, 1];   /* from the near edge, where the mower starts */
   const f = fit(r);
   // too small to steer: follow the mower instead, close enough to see each cell
   // (Dad's lawn on a phone held upright: closer, so the garden fills the height rather than the street the width)
-  const ppu = H / (2 * f.d * Math.tan(cam.fov / 2)), need = S.finale ? 0 : W < 600 ? (S.act === 1 && S.site === 'street' && H > W ? 31 : 26) : 19;
+  const ppu = H / (2 * f.d * Math.tan(cam.fov / 2)), need = S.finale ? 0 : W < 600 ? (S.site === 'green' ? 15 : S.act === 1 && S.site === 'street' && H > W ? 31 : 26) : 19;   /* a show lawn on a phone: further off, so the stripes being laid stay in view (a critic, November 2026) */
   follow = ppu < need;
   cam.wd = f.d; cam.gd = follow ? f.d * ppu / need : f.d; cam.gx = f.x; cam.gy = f.y; cam.r = r;
   if (snap) { cam.fx = cam.x = cam.gx; cam.fy = cam.y = cam.gy; cam.d = S.site === 'green' ? cam.wd * 1.7 : cam.gd * 1.6; cam.pitch = cam.gpitch; cam.est = S.site === 'green' ? 1.8 : 0; }   /* a show ground first seen whole, with its country, then the camera comes in */
@@ -14315,11 +14357,18 @@ function moveCam(dt) {
   let tx = cam.gx, ty = cam.gy;
   // steering: the finger is down or a key held. Then the camera only follows the mower; it frames nothing of its own accord
   const steering = ptr.on || ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].some(k => keys[k]);
-  const r = cam.r, hw = () => cam.gd * Math.tan(cam.fov / 2) * (W / H) * .9, hh = () => cam.gd * Math.tan(cam.fov / 2) * 1.1, cx2 = v => clamp(v, Math.min(r[0] + hw(), (r[0] + r[2]) / 2), Math.max(r[2] - hw(), (r[0] + r[2]) / 2)), cy2 = v => clamp(v - 1, Math.min(r[1] + hh() * .6, (r[1] + r[3]) / 2), Math.max(r[3] - hh(), (r[1] + r[3]) / 2));
+  const r = cam.r, hw = () => cam.gd * Math.tan(cam.fov / 2) * (W / H) * .9, hh = () => cam.gd * Math.tan(cam.fov / 2) * 1.1, cx2 = v => clamp(v, Math.min(r[0] + hw(), (r[0] + r[2]) / 2), Math.max(r[2] - hw(), (r[0] + r[2]) / 2)), cy2 = v => cam.turn ? clamp(v, Math.min(r[1] + hw(), (r[1] + r[3]) / 2), Math.max(r[3] - hw(), (r[1] + r[3]) / 2))   /* turned a quarter, y runs across the narrow screen */
+    : clamp(v - 1, Math.min(r[1] + hh() * .6, (r[1] + r[3]) / 2), Math.max(r[3] - hh(), (r[1] + r[3]) / 2));
   // the follow alone, which the held point is kept against
   // on a show lawn the follow leans most of the way toward the lawn, so a mower at its edge does not leave half the screen to hedges
-  const sh = S.site === 'green' && L && L.show, lean = (v, a, b, h) => { const lo = a + h * .6, hi = b - h * .6; return lerp(v, lo > hi ? (a + b) / 2 : clamp(v, lo, hi), .8); };
-  const kf = 1 - Math.exp(-dt * (follow ? 3 : 1.6)), fx0 = follow ? cx2(sh ? lean(S.m.x, sh.x0, sh.x1 + 1, hw()) : S.m.x) : cam.gx, fy0 = follow ? cy2(sh ? lean(S.m.y, sh.y0, sh.y1 + 1, hh()) : S.m.y) : cam.gy;
+  // (each axis by the screen's extent along it: on an upright phone a show lawn is turned a quarter, so its x runs up the
+  // screen and its y across the narrow width; and never further than half that extent from the mower, which stays in view:
+  // a filmed play-through found it pushed off the screen's edge on the headland, and the follow itself held back across
+  // the lawn by the screen's height, which left the mower half off the side whenever it mowed near a long edge)
+  // (up the screen, where the perspective leaves less room ahead, by a quarter of the extent at most)
+  const sh = S.site === 'green' && L && L.show, lean = (v, a, b, h, cap) => { const lo = a + h * .6, hi = b - h * .6, c = lo > hi ? (a + b) / 2 : clamp(v, lo, hi); return v + clamp((c - v) * .8, -h * cap, h * cap); };
+  const ex = () => cam.turn ? hh() : hw(), ey = () => cam.turn ? hw() : hh(), capx = cam.turn ? .25 : .45, capy = cam.turn ? .45 : .25;
+  const kf = 1 - Math.exp(-dt * (follow ? 3 : 1.6)), fx0 = follow ? cx2(sh ? lean(S.m.x, sh.x0, sh.x1 + 1, ex(), capx) : S.m.x) : cam.gx, fy0 = follow ? cy2(sh ? lean(S.m.y, sh.y0, sh.y1 + 1, ey(), capy) : S.m.y) : cam.gy;
   if (cam.fx == null) { cam.fx = fx0; cam.fy = fy0; } cam.fx += (fx0 - cam.fx) * kf; cam.fy += (fy0 - cam.fy) * kf;
   if (follow) {
     // with the grass box full, look halfway to the compost bin so the way there is on screen
@@ -14332,7 +14381,7 @@ function moveCam(dt) {
   if (follow && S.site === 'green' && (cam.idle > .9 || jd.t >= 0)) {
     tx = cam.gx; ty = cam.gy; td = cam.wd;
     // on a phone a large ground seen whole leaves the mower a speck: stand back only so far, still over the mower
-    if (W < 600 && jd.t < 0 && cam.wd > cam.gd * 2.4) { td = cam.gd * 2.4; tx = fx0; ty = fy0; }
+    if (W < 600 && jd.t < 0 && cam.wd > cam.gd * 1.7) { td = cam.gd * 1.7; tx = fx0; ty = fy0; }
   }
   // something on the lawn and the player not steering: keep both it and the mower in view (the badge at the edge points
   // to it while they steer)
@@ -14454,7 +14503,7 @@ function develop() {
   // the band of focus: the middle of the free part of the screen, or the mower when the camera follows it
   const fy = follow && !cam.hold && S.m ? toScreen(S.m.x, S.m.y)[1] : (area.y0 + area.y1) / 2;
   // close behind the mower on a show lawn the lens is gentler, so the lawn ahead stays readable (a critic, November 2026)
-  const close = follow && !cam.hold && S.site === 'green' ? clamp((cam.gd * 3 - cam.d) / (cam.gd * .6), 0, 1) : 0;   /* eased, so it never pops */
+  const close = follow && !cam.hold && S.site === 'green' ? clamp((cam.gd * 2.3 - cam.d) / (cam.gd * .6), 0, 1) : 0;   /* eased, so it never pops */
   gl.uniform2f(u.uPx, 1 / w, 1 / h); gl.uniform1f(u.uFoc, 1 - clamp(fy / H, .25, .75)); gl.uniform1f(u.uBand, (H > W ? .2 : .16) * (1 + .4 * close));
   gl.uniform1f(u.uBlur, K.reduced ? 0 : LENS.blur * DPR * (1 - .45 * close)); gl.uniform1f(u.uAO, gauge.cuts >= 2 ? 0 : LENS.ao); gl.uniform1f(u.uSat, LENS.sat); gl.uniform1f(u.uVig, LENS.vig); gl.uniform1f(u.uAOR, .5 * h / (2 * Math.tan(cam.fov / 2)));
   gl.uniform1f(u.uN, .5); gl.uniform1f(u.uF, 1500);   // (a device that had to lose blades twice loses the contact shade too)
@@ -14498,7 +14547,7 @@ function render() {
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, shTex); gl.uniform1i(v.uSh, 0);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, htex); gl.uniform1i(v.uHt, 1);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, ftex); if (fine.dirty) { gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, L.W * 4, L.H * 4, gl.RED, gl.UNSIGNED_BYTE, fine.m); fine.dirty = 0; }
-  gl.uniform1i(v.uFine, 2); gl.activeTexture(gl.TEXTURE0);
+  gl.uniform1i(v.uFine, 2); gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, ctex); gl.uniform1i(v.uChalk, 3); gl.activeTexture(gl.TEXTURE0);
   const sets = [[blades, I4, 0]]; if (flapOn) flapBlades.forEach((b, f) => { if (fin.ang[f] < .97) sets.push([b, flapM(f), 1]); });   /* up, a flap's wheat is inside the lined box */
   for (const [b, M, all] of sets) {
     if (!b || !b.n) continue;
@@ -14538,8 +14587,9 @@ function hud(dt) {
     const won = judging && jd.t > 4.3;
     const day = !L.pitch || judging ? '' : S.gold < S.tier ? 'Before kick-off. ' : ko.t != null && ko.t < KO ? 'The teams are coming out. ' : 'The match is on. ';
     $('jm').textContent = day + (won ? (jd.r.medal ? ['', 'Bronze', 'Silver', 'Gold'][jd.r.medal] + '!' : 'Commended.') + ' The judges are leaving.' : judging ? 'The judges are looking…' : S.gold >= S.tier ? (S.tier < CORE.SHOWS.length ? 'Gold! The next show is on the pegboard, and it is bigger.' : ko.note || ko.cue ? 'Gold!' : 'Gold, and a note in the cup.') : 'As it stands: ' + (md ? ['', 'bronze', 'silver', 'gold'][md] : 'no medal') + (md === 3 ? '' : r.cov < .9 ? (wd.edge ? '. Mow the rest, then a lap round the edge.' : '. Mow the rest of it.') : wd.edge && r.edge < .8 ? '. Now a lap round the edge.' : r.stripes < .5 ? '. The stripes run the wrong way.' : '. Straighter stripes.'));
-    const j = $('jg'), ok = CORE.canJudge(S); j.disabled = !ok || jd.t >= 0; j.classList.toggle('won', S.gold >= S.tier && !(judging && !won));   /* won here: a plaque, not a dead button */
-    j.textContent = judging && !won ? 'Judging…' : S.pest ? ['Not with a dog on the lawn', 'Not with a sheep on the lawn', 'Not with geese on the lawn', 'Not with a horse on it', 'Not with him on the pitch'][S.pest.k] : S.gold >= S.tier ? 'Gold won here' : S.judgeCd > 0 ? 'Judges back in ' + Math.ceil(S.judgeCd) + 's' : S.gw[0] > 0 ? 'The lawn is growing…' : 'Call the judges';
+    const j = $('jg'), ok = CORE.canJudge(S), nx = S.gold >= S.tier && !(judging && !won) ? onward() : null;
+    j.disabled = !(ok || nx) || (jd.t >= 0 && !nx); j.classList.toggle('ready', md === 3 || !!nx); j.classList.toggle('won', S.gold >= S.tier && !(judging && !won) && !nx);   /* won here: a plaque, or the way on */
+    j.textContent = nx ? (nx.id === 'night' ? 'Read the note in the cup' : 'On to ' + CORE.SHOWS[nx.tier - 1].name.replace(/^The /, 'the ')) : judging && !won ? 'Judging…' : S.pest ? ['Not with a dog on the lawn', 'Not with a sheep on the lawn', 'Not with geese on the lawn', 'Not with a horse on it', 'Not with him on the pitch'][S.pest.k] : S.gold >= S.tier ? 'Gold won here' : S.judgeCd > 0 ? 'Judges back in ' + Math.ceil(S.judgeCd) + 's' : S.gw[0] > 0 ? 'The lawn is growing…' : 'Call the judges';
   }
   if (rate > .01 && S.act < 4) $('rate').textContent = 'about ' + money(rate * 1.5) + ' a minute'; else $('rate').textContent = S.act === 4 ? (fin.low ? 'dawn' : S.finale ? 'midnight' : 'midnight · along the string ' + Math.round(Math.min(1, CORE.stencilDone(S) / .92) * 100) + '%') : '';   /* the goal and how far it is, for a stranger */
 }
@@ -14572,7 +14622,7 @@ K.loop((dt, t) => {
   now = t / 1000; watch(t);
   if (innerWidth !== lastW || innerHeight !== lastH) { lastW = innerWidth; lastH = innerHeight; resize(); aim(); }
   if (dt > 0) {
-    steer();
+    steer(dt);
     const m0x = S.m.x, m0y = S.m.y, c0 = S.cut || 0;
     CORE.step(S, dt); fineStep(m0x, m0y);
     eng.set(Math.hypot(S.m.x - m0x, S.m.y - m0y) / dt, ((S.cut || 0) - c0) / dt, S.lv.ride, dt);
@@ -14666,7 +14716,8 @@ const CORE = (() => {
     robotSpeed: 1.25, robotDeck: .8, robotRate: .55,
     medals: [[.45, .65, .82], [.5, .72, .88], [.55, .74, .87], [.55, .73, .85], [.55, .74, .87]], judgeGap: 10, prize: 1.7, wheat: .35,
     gang: [1, 1.6, 2.1, 2.6, 3.1],
-    pestGap: [18, 18], pestLife: 22, shoo: .08, shooR: 2.2
+    pestGap: [18, 18], pestLife: 22, shoo: .08, shooR: 2.2,
+    depth: .35         // half the length of a deck's strip along the way it goes
   };
   // something gets onto every show lawn now and then and scuffs the stripes; drive at it to see it off.
   // n: how many times it dodges the mower before it runs for good
@@ -14819,19 +14870,26 @@ const CORE = (() => {
     }
     return true;
   }
-  // a capsule of grass from (x0,y0) to (x1,y1), half-width r: returns the units cut
+  // the strip of grass a deck sweeps from (x0,y0) to (x1,y1): half-width r across the way it goes, P.depth along it, so a
+  // pass ends square and a turn where it stands cuts nothing (it was a capsule until November 2026: round ends, and a disc
+  // wherever the mower turned, which two critics read as a stamp); returns the units cut
   function sweep(S, x0, y0, x1, y1, r, dir, pay) {
-    const L = lay(S), len = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(len / .3) + 1;
+    const L = lay(S), len = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(len / .3) + 1, hd = P.depth, rr = Math.max(r, hd) + .5;
+    if (len < 1e-6) return 0;
+    const ux = (x1 - x0) / len, uy = (y1 - y0) / len;
+    // while something is on the lawn and being chased, short grass is not laid again: chasing it across finished stripes
+    // spoilt them (a filmed play-through: stripes 88% to 49% for one dog), and only the intruder's own feet scuff them now
+    const relay = L.show && !(S.pest && !S.pest.flee);
     let got = 0, room = bagged(S) ? cap(S) - S.bag : Infinity;
     for (let s = 0; s < n; s++) {
       const t = n === 1 ? 1 : s / (n - 1), px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t;
-      for (let cy = Math.floor(py - r); cy <= Math.floor(py + r); cy++) for (let cx = Math.floor(px - r); cx <= Math.floor(px + r); cx++) {
+      for (let cy = Math.floor(py - rr); cy <= Math.floor(py + rr); cy++) for (let cx = Math.floor(px - rr); cx <= Math.floor(px + rr); cx++) {
         if (cx < 0 || cy < 0 || cx >= L.W || cy >= L.H) continue;
         const i = cy * L.W + cx;
         if (L.K[i] !== 1) continue;
-        const dx = cx + .5 - px, dy = cy + .5 - py; if (dx * dx + dy * dy > r * r) continue;
+        const dx = cx + .5 - px, dy = cy + .5 - py; if (Math.abs(dx * ux + dy * uy) > hd || Math.abs(dy * ux - dx * uy) > r) continue;
         // on a show lawn the mower lays short grass the way it goes, as a striping roller does: a stripe can be put right
-        if (S.h[i] <= P.cutAt) { if (L.show) S.d[i] = (S.d[i] & 8) | dir; continue; }   /* a scuffed stripe, too, is put right */
+        if (S.h[i] <= P.cutAt) { if (relay) S.d[i] = (S.d[i] & 8) | dir; continue; }   /* a scuffed stripe, too, is put right */
         if (got >= room) { if (!S.full) { S.full = 1; ev(S, { k: 'full' }); } return got; }
         const u = (S.h[i] - P.cutTo) / 1000; got += u; S.h[i] = P.cutTo; S.d[i] = dir | (S.gw[L.G[i]] > 0 ? 8 : 0);   // 8: cut while the lawn was growing back, so it stays cut
         if (pay) pay(u, L.G[i]);
@@ -14926,7 +14984,7 @@ const CORE = (() => {
     const inside = () => [s.x0 + 1 + rand(S) * (s.x1 - s.x0 - 1), s.y0 + 1 + rand(S) * (s.y1 - s.y0 - 1)];
     if (!S.pest) {
       S.pestT = (S.pestT == null ? 20 : S.pestT) - dt;
-      if (S.pestT > 0 || S.gw[0] > 0) return;
+      if (S.pestT > 0 || S.gw[0] > 0 || S.gold >= S.tier) return;   /* a lawn already won is left in peace (a critic: a sheep on it only blocked the way on) */
       if (showScore(S).cov < .3) { S.pestT = 5; return; }
       // never in the middle of a stripe: it waits for the turn on the headland, a stop, or 25 seconds at most
       // (the owner's note, November 2026: something arriving mid-stripe made the player swerve across their stripes)

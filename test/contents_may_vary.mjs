@@ -329,7 +329,7 @@ if (suites.includes('lawn') && lawn) {
   {
     // a full grass box stops the cutting; tipping it in the bin pays
     const S = CORE.init(3); S.lv.deck = 3;
-    drive(S, 15.5, 14, 6); drive(S, 16.5, 5, 6); drive(S, 17.5, 14, 6); drive(S, 18.5, 5, 6);
+    drive(S, 15.5, 14, 6); drive(S, 16.5, 5, 6); drive(S, 17.5, 14, 6); drive(S, 18.5, 5, 6); drive(S, 13.2, 5.2, 3); drive(S, 13.2, 14, 6);
     check(S.bag >= CORE.cap(S) - 1 && S.$ === 0, `mowing fills the grass box and pays nothing yet (${S.bag.toFixed(1)} of ${CORE.cap(S)})`);
     S.bag = CORE.cap(S); const before = S.h.slice(); drive(S, 13.2, 14, 6);
     check(S.h.every((h, i) => h === before[i] || h > before[i]), 'with the box full the mower cuts nothing');
@@ -432,6 +432,32 @@ if (suites.includes('lawn') && lawn) {
     // refinement session, once shipping a ride-on mower without its body): no comment in the view may hold a call
     const bad = lawn.tpl.split('\n').filter(l => /\/\/[^'"`]*\b(at|bx|say|later|tone|hiss|person|tree|card|visit)\(/.test(l));
     check(!bad.length, 'no line comment in the view swallows a drawing or a call', bad.map(l => l.trim().slice(0, 90)).join(' | '));
+  }
+  {
+    // a deck cuts a strip, not a capsule: a pass ends square, just past where the mower stopped, however wide the deck
+    const S = CORE.init(24); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.lv.ride = 1; S.lv.deck = 4; S.$ = 0; S.pestT = 999; const L = CORE.layout('green', 1), s = L.show, x = s.x0 + 8.5;
+    S.m.x = x; S.m.y = s.y0 + .5; CORE.act(S, 'go', x, s.y0 + 6.5); for (let t = 0; t < 8 && S.m.go; t += .1) CORE.step(S, .1);
+    const r = CORE.cutW(S) / 2, cut = (cx, cy) => S.h[cy * L.W + cx] <= CORE.P.cutAt, end = Math.floor(S.m.y + CORE.P.depth + .5);
+    check(r > 1 && cut(Math.floor(x - r + .6), s.y0 + 3) && cut(Math.floor(x + r - .6), s.y0 + 3) && !cut(Math.floor(x), end + 1) && !cut(Math.floor(x - r + .6), end),
+      `a pass ${(2 * r).toFixed(1)} cells wide ends square: nothing cut a cell past its end, nor round its corners`);
+  }
+  {
+    // a lawn already won is left in peace: nothing new gets onto it to stand between the player and the way on
+    const S = CORE.init(26); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.$ = 0; const L = CORE.layout('green', 1), s = L.show;
+    for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) S.h[y * L.W + x] = CORE.P.cutTo;
+    S.gold = 1; S.pestT = 0; S.m.go = 0; for (let t = 0; t < 60; t += .1) CORE.step(S, .1);
+    check(!S.pest, 'no intruder comes onto a show lawn already won');
+  }
+  {
+    // chasing something off the lawn does not lay the stripes again: only its own feet scuff them (a filmed play-through lost
+    // 88% stripes to 49% chasing one dog); once it is gone, driving over short grass lays it the way the mower goes again
+    const S = CORE.init(25); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.lv.ride = 1; S.$ = 0; const L = CORE.layout('green', 1), s = L.show;
+    for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = 1; }
+    S.pest = { k: 0, x: -50, y: -50, tx: -50, ty: -50, n: 9, life: 999, age: 0, flee: 0, dodge: 0 }; S.pestT = 999;
+    const across = () => { S.m.x = s.x0 + .5; S.m.y = s.y0 + 5.5; CORE.act(S, 'go', s.x1 + .5, s.y0 + 5.5); for (let t = 0; t < 10 && S.m.go; t += .1) CORE.step(S, .1); };
+    across(); const kept = [...Array(s.x1 - s.x0 + 1)].every((_, k) => (S.d[(s.y0 + 5) * L.W + s.x0 + k] & 7) === 1);
+    S.pest = null; across(); const laid = (S.d[(s.y0 + 5) * L.W + s.x0 + 6] & 7) === 3;
+    check(kept && laid, 'chasing an intruder across the stripes leaves them as they were; without one, driving across lays them anew');
   }
   {
     // version 4. A medal lawn judged twice pays once: calling the judges again pays only what a better lawn adds
@@ -1320,16 +1346,23 @@ if (suites.includes('browser')) {
       await f.evaluate(() => { const S = K.debug.state(); S.pestT = 0; S.pestW = 99; S.m.ls = 0; });
       const r = await f.evaluate(() => new Promise(done => {
         /* the target is set in the frame before the camera moves: compare it with the follow as it stood a frame earlier */
-        const S = K.debug.state(), c = K.debug.cam(); let rel0 = null, pf = null, worst = 0, framed = 0, n = 0, pest = 0;
-        K.loop(() => { if (n > 40) return; n++; if (S.pest) pest++; if (pf) { const rel = [S.m.tx - pf[0], S.m.ty - pf[1]]; if (!rel0) rel0 = rel; worst = Math.max(worst, Math.hypot(rel[0] - rel0[0], rel[1] - rel0[1])); } pf = [c.fx, c.fy];
+        /* the largest step of the target against the follow from one frame to the next: a swerve is a jump, while the target
+           being drawn back to the point under the finger is a glide */
+        const S = K.debug.state(), c = K.debug.cam(); let last = null, pf = null, worst = 0, framed = 0, n = 0, pest = 0;
+        K.loop(() => { if (n > 40) return; n++; if (S.pest) pest++; if (pf) { const rel = [S.m.tx - pf[0], S.m.ty - pf[1]]; if (last) worst = Math.max(worst, Math.hypot(rel[0] - last[0], rel[1] - last[1])); last = rel; } pf = [c.fx, c.fy];
           framed = Math.max(framed, Math.hypot(c.x - c.fx, c.y - c.fy)); if (n === 41) done({ worst, framed, pest, n }); });
       }));
+      // and the target never parts from the point under the finger for long: the camera stands back (as it does for the
+      // judges), the finger stays still, and within three seconds the mower is heading for what the finger is on again
+      const far = await f.evaluate(([x, y]) => new Promise(done => { const S = K.debug.state(), c = K.debug.cam(), t0 = S.t; c.wd0 = c.wd; c.gd *= 1.6;
+        K.loop(() => { if (S.t - t0 < 3 || done.ok) return; done.ok = 1; c.gd /= 1.6; const g = K.debug.toGround(x, y); done({ d: Math.hypot(S.m.tx - g[0], S.m.ty - g[1]) }); }); }), [ms[0], ms[1] - 110]);
+      check(far.d < .6, `lawn: with the finger still and the camera moved, the target comes back to the point under the finger (${far.d.toFixed(2)} apart)`);
       await p.mouse.up();
       // the view's own finer mask of where the deck passed (four by four to a cell) has every cell the rules cut while it
       // watched, so a pass draws as the swath it was and not as a staircase of cells
       const fm = await f.evaluate(() => { const S = K.debug.state(), F = K.debug.fine(); let cut = 0, seen = 0; for (let i = 0; i < S.h.length; i++) if (window.__h0[i] > 120 && S.h[i] <= 120) { cut++; if (F.obs[i]) seen++; } return { cut, seen }; });
       check(fm.cut > 5 && fm.seen === fm.cut, `lawn: every cell cut while watched is in the view's fine mask (${fm.seen} of ${fm.cut})`);
-      check(r.pest > 20 && r.worst < .05 && r.framed < 1, `lawn: an intruder comes while the pointer is held; the target stays put (moved ${r.worst.toFixed(3)} against the follow) and the camera frames nothing (${r.framed.toFixed(2)} off the follow)`, JSON.stringify(r));
+      check(r.pest > 20 && r.worst < .3 && r.framed < 1, `lawn: an intruder comes while the pointer is held; the target never jumps (at most ${r.worst.toFixed(3)} a frame against the follow) and the camera frames nothing (${r.framed.toFixed(2)} off the follow)`, JSON.stringify(r));
       check(p.errs.length === 0, 'lawn: no errors while holding a stripe', p.errs.join(' | '));
       await p.close();
     }

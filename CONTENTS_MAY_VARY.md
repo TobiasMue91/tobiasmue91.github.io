@@ -300,7 +300,7 @@ Numbered as the boxes stand since the reorders of 2026-11-06 and 2026-11-13 (the
 | 3 (7) | `jetty` | Still Water · "Keep away from water." | walk the jetty, swipe up to cast, tap when the float goes under, then play the fish: hold to reel, let go when the line is red, slide the held finger to lean against a run, let go while it jumps, pump a sulk | no runs and no clock: a day of eight minutes turns over one lake; ten kinds by distance, hour and bait, each met with the tackle of its time and fighting its own way, sizes up to a trophy; the tackle board between casts; a bank rod in the reeds that rings and is walked to | first-person real-time 3D in hand-written WebGL 2: leaf-card woods, willows and reeds from a painted atlas, the sun's shadow, a lake that knows its depth and mirrors the banks; fish painted in ink and wash, the same painting wrapped round a 3D body | meadow and willow greens, peat water, a red float; gold dusk, blue night with fireflies | English summer, cosy angling, the uncanny in the deep | lapping water, birds, crickets, the reel's clicks; a fingerpicked acoustic guitar (Karplus-Strong) that thins at dawn, slows into B minor at dusk and plays harmonics at night | paper cards on the water: the tackle board, the logbook of painted fish, the catch card | the Old One takes the bait in the deep with a tobacco tin wired to its jaw, the next number on the lid; tap it and the lid lifts |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30.5–32 / 55–58 (version 4, November 2026: round before rich; its stubborn hand 36–38, its impatient bot 41–42, its novice 58–62),
-Keep Off the Grass 31–36 / 53–57 (version 4, November 2026: round before rich; its impatient bot 43–45, its novice 65–71), Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
+Keep Off the Grass 31–34 / 53–58 (version 4, November 2026: round before rich, a deck that cuts a strip; its impatient bot 43–46, its novice 64–70), Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
 Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 31–32 / 57–60 (version 5, November 2026: fewer systems, extras in the film; its impatient bot 29.5–31, its hand that never lets go 38.7–39.6, measured before the last price change), Still Water 40–50 / 40–46.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -2369,12 +2369,59 @@ needs a field in `K` and an answer from each box, so it belongs to a session abo
     the largest grounds the mower runs about 8 units a second, so a slow frame (the shell's cap of .25 s) carries it two
     units, which the first mask took for a jump and skipped, leaving whole cells to the old staircase; a jump is now six
     units or more. Cut earth no longer carries each cell's random tint (it showed the grid through a pass).
+  - *The critic's last points* (November 21). The mask holds how much of each quarter the deck covered (bits 3 to 7) and the
+    way it went (bits 0 to 2); the deck's edge fades over a quarter of a cell, and a blade in that fade is cut or not by its
+    own hash, so a swath's edge is ragged like a real one rather than a saw (the earth beneath still steps in quarters, mostly
+    hidden by the blades). The Cup's lines were chalked a whole cell wide, which read as white speckle: every line is now
+    its real geometry, a third of a cell wide, painted on the ground and chalked on the blades over it through a mask of its
+    own, four by four to a cell (`uChalk`); the stripes' tint is kept off the chalk blade by blade, not cell by cell. While
+    the mower stands on a show lawn not yet won, two strings are pegged out along the lane it would cut next, the way the
+    judges want the stripes, across the whole lawn: something to plan by on a lawn still all one green. Kept as it is: the
+    round end of a pass and the disc of a turn on the spot (the rules cut a capsule; a lane's end is on the headland, where
+    the cutters lift, so a disc shows only where a player stops mid-lawn; square ends would mean another footprint in the
+    rules).
+  - *Played, filmed* (November 21: real touch on an upright phone at the County Show, `recordVideo`, a script that lays the
+    lanes the sheet asks for, chases what gets on, and keeps its finger on the lane's end or on the screen's edge toward it).
+    Two faults that no still had shown. The held point, kept against the camera's follow, drifted apart from the finger
+    whenever the camera moved under a still finger (coming in after the press, leaning toward the lawn): the finger lay
+    across the screen while the mower pressed into the rope's corner for ten minutes. The point is now drawn back to the
+    one under the finger, by half in about half a second (`steer`), so a camera that moves never jerks the mower aside and
+    never leaves it chasing a point the finger is not on; the browser suite moves the camera under a still finger and wants
+    the two together again within three seconds, and the target never to jump while an intruder comes. And the lean toward the lawn's middle took the screen's height for both axes,
+    but on an upright phone a show lawn is turned a quarter, so across it the screen is narrow: on the headland the mower
+    went off the screen's edge. Each axis now leans by the screen's extent along it, and never by more than .45 of it across the screen or .25 up it (the perspective leaves less room ahead there; a second film had the mower at the top edge). The
+    follow's own bounds (older than this session) had the same fault: across a turned lawn they held the camera back by the
+    screen's height, so a mower working near a long edge sat half off the side of the screen in most frames of the film.
+  - *A fresh critic on the film* (phone first, the played County Show, then stills of the other places): 6/4/7/3/5 and **4**,
+    harsher than the critic before it on stills, as the film showed the phone as it plays. Done from it: a deck cuts a strip,
+    not a capsule (half its width across the way it goes, `P.depth` .35 along it), in the rules and in the view's mask
+    alike, so a pass ends square and the mower turning where it stands cuts no disc; the pacing barely moved (six seeds:
+    eager 31.3–33.5, casual 53.0–57.8, impatient 43–46, novice 64–70), and the suite now wants a pass that ends square. On a
+    phone a show lawn is followed from further off (15 pixels a cell, was 26) and stands back to 1.7 times that, not 2.4,
+    so the stripes being laid stay in view while the mower stays a machine; the strip of cards steps aside at a show while
+    nothing on it can be bought (it and the sheet took a third of the height for a card out of reach); the lane strings
+    run across the whole lawn while the mower runs the way the judges want, not only while it stands; the judges' button is
+    red only when the sheet says gold, a plain card button before; the ride-on has headlamps, so its front reads from
+    above; at midnight the camera frames the field from its near edge, where the mower starts. And from the same film, the
+    owner's first complaint in another shape: the game asks the player to chase an intruder, and chasing it across finished
+    stripes laid the short grass anew (88% stripes to 49% for one dog). While something is on the lawn and not yet running
+    off, the mower still cuts tall grass but lays no short grass again, in the rules and in the view's mask; only the
+    intruder's own feet scuff the stripes, which is its threat. The pacing did not move. Not taken: hold-to-call for
+    the judges (a call that misses costs nothing since version 4), docking every speech bubble at the top, and the №6 crate
+    (it is the shell's, not the box's).
+  - *The same critic on a second film* (the County Show played to gold): 7/5/7/5/5 and **5** (from 6/4/7/3/5 and 4). Its
+    sharpest point: once a lawn is won, the game had nowhere to send you. The gold rosette came down over the score cards,
+    a sheep still came onto the won lawn and turned the plaque into "Not with a sheep on the lawn", and the way on was a
+    card in the strip below. Now nothing new gets onto a lawn already won; once the next show's card is on the pegboard (or,
+    at the cup, the note), the sheet's button is the way on ("On to the National", "Read the note in the cup") and buys it;
+    the score cards rise away as the rosette comes, so the medal has the stage to itself; and the next place's card comes
+    a moment after the medal rather than at the end of the whole ceremony, five seconds later. A speech bubble keeps 54 px
+    off the screen's sides, where the edge badges sit (in the film they covered "A sheep is out of the pens!"). The critic could not judge the
+    stripes themselves: the film starts from a simulated save whose cells the view never saw mown.
   - *Still open*: frame times on a real device (the gauge thins the grass by itself, but nobody has read `K.debug.blades()`
-    on a phone); a critique of played video rather than stills; from the last critic, a fine sawtooth on the swath's edge
-    (quarter cells; a soft fade of one quarter would hide it), a turn on the spot stamping a full disc, the chalk of the
-    Cup's lines reading as speckle, and too little to plan by at the stand-back distance on a fresh lawn (a faint guide
-    along the wished direction, or the lawn's edge marked); a show that asks for a new kind of pattern (a chequerboard, a
-    diamond), chosen not to build: the shows now differ in size, wish and intruder, and the brief was to take away first.
+    on a phone); a film from a fresh lawn, so a
+    critic can judge the stripes as laid rather than inherited; a show that asks for a new kind of pattern (a chequerboard, a diamond), chosen not to build: the shows now
+    differ in size, wish and intruder, and the brief was to take away first.
     Not done this session: a live play-through filmed at speed (SwiftShader drew the National at a frame in several seconds,
     so the live runs were the first minutes and the scripted checks of the held stripe); the props sheet was shot again only
     for the two props whose places moved (the manor, the racecourse stand).
