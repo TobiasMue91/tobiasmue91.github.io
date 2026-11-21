@@ -2353,6 +2353,22 @@ by hand. The `browser` suite needs Chromium via Playwright (a global install is 
 prints must pass `CSS.supports`, placing areas by name and by line number must give identical boxes, and stacking must
 give one column below its width and not above; it is skipped without it.
 
+## CSS Cursor Types
+
+```sh
+npm run test:csscursor                          # or: node test/css_cursor_playground.mjs
+node test/css_cursor_playground.mjs parse fix   # named suites only
+```
+
+`css_cursor_playground.mjs` runs the DOM-free `<script id="core">` of `tools/css_cursor_playground.html` in Node: the 36
+keywords against the list in CSS Basic User Interface 4 §5.1, how a pasted value is read (declarations, `!important`,
+comments, case, quotes and CSS escapes in `url()`, `image-set()`, unit-less hotspots, prefixed and CSS-wide keywords),
+the plain-word errors for the mistakes people make (no fallback keyword, no comma, units on the hotspot, a bare string,
+an everyday word such as "hand"), the "Fix it" corrections, search by name, use and everyday word, hotspot clamping and
+shrinking, the image rule (escaping, read back unchanged), the old page's `darkMode` setting and sample outputs, and huge
+or malformed pastes. The `browser` suite needs Chromium via Playwright: Chromium's `CSS.supports` must agree with the core
+on every value it accepts or rejects, and on what it prints; it is skipped without it.
+
 ## CSS Filter Generator
 
 ```sh
