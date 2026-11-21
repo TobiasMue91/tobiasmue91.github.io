@@ -442,6 +442,35 @@ if (suites.includes('lawn') && lawn) {
       `a pass ${(2 * r).toFixed(1)} cells wide ends square: nothing cut a cell past its end, nor round its corners`);
   }
   {
+    // the cup final asks for a chequer: stripes towards the table, then across them along it; one way alone wins nothing,
+    // and a version 4 save at the cup final, not yet won, is asked for the chequer too
+    const S = CORE.init(27); S.act = 3; S.gold = 4; S.$ = 1e12; for (const k of ['show1', 'show2', 'show3', 'race']) S.lv[k] = 1; CORE.act(S, 'buy', 'show4'); S.pest = null; S.pestT = 999;
+    const L = CORE.layout('green', 5), s = L.show, lay = (fn) => { for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { const i = y * L.W + x; S.h[i] = CORE.P.cutTo; S.d[i] = fn(x, y); } };
+    check(CORE.WISH[S.wish].check && !CORE.wantAcross(S), 'the cup final wants a chequer, and towards the table first');
+    lay((x, y) => (x >> 2) % 2 + 1); const one = CORE.showScore(S);
+    check(CORE.wantAcross(S) && CORE.medal(S, one.score) < 3, `laid one way only, it is half a chequer: across next, and no gold (${one.score.toFixed(2)})`);
+    S.lv.roller = 3; S.tries = 6; lay((x, y) => (y >> 2) % 2 + 3); const across = CORE.showScore(S);
+    check(CORE.medal(S, across.score) < 3, `even with the heaviest roller and every try's goodwill, one way alone wins no gold (${across.score.toFixed(2)})`);
+    lay((x, y) => ((y >> 2) % 2 + 3) | ((x >> 2) % 2 + 1) << 4); const both = CORE.showScore(S);
+    check(CORE.medal(S, both.score) === 3, `laid both ways, it wins gold (${both.score.toFixed(2)})`);
+    // driving across short grass laid the other way keeps the first pass beneath
+    lay((x, y) => (x >> 2) % 2 + 1); S.m.x = s.x0 + .5; S.m.y = s.y0 + 4.5; CORE.act(S, 'go', s.x0 + 20, s.y0 + 4.5); for (let t = 0; t < 10 && S.m.go; t += .1) CORE.step(S, .1);
+    const c = S.d[(s.y0 + 4) * L.W + s.x0 + 8];
+    check((c & 7) === 3 && ((c >> 4) & 7) === 2, 'a pass across short grass lays it the new way and keeps the pass before beneath');
+    const old = CORE.init(28); Object.assign(old, { act: 3, gold: 4, site: 'green', tier: 5, wish: 0 }); old.h = S.h.slice(); old.d = S.d.slice();
+    check(CORE.migrate(JSON.parse(JSON.stringify(old)), 4).wish === 4, 'a version 4 save at the cup final is asked for the chequer');
+  }
+  {
+    // on a show lawn the roller marks only a straight run: a diagonal pass cuts the grass but lays it no way, and over grass
+    // already short it leaves the stripes as they were
+    const S = CORE.init(29); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.lv.ride = 1; S.$ = 0; S.pest = null; S.pestT = 999; const L = CORE.layout('green', 1), s = L.show;
+    S.m.x = s.x0 + 1.5; S.m.y = s.y0 + 1.5; CORE.act(S, 'go', s.x0 + 9.5, s.y0 + 9.5); for (let t = 0; t < 8 && S.m.go; t += .1) CORE.step(S, .1);
+    const i = (s.y0 + 5) * L.W + s.x0 + 5;
+    check(S.h[i] <= CORE.P.cutAt && (S.d[i] & 7) === 0, 'a pass at forty-five degrees cuts the grass and lays no stripe');
+    S.d[i] = 1; S.m.x = s.x0 + 1.5; S.m.y = s.y0 + 1.5; CORE.act(S, 'go', s.x0 + 9.5, s.y0 + 9.5); for (let t = 0; t < 8 && S.m.go; t += .1) CORE.step(S, .1);
+    check((S.d[i] & 7) === 1, 'and over a stripe already laid it leaves it as it was');
+  }
+  {
     // a lawn already won is left in peace: nothing new gets onto it to stand between the player and the way on
     const S = CORE.init(26); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.$ = 0; const L = CORE.layout('green', 1), s = L.show;
     for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) S.h[y * L.W + x] = CORE.P.cutTo;
@@ -1346,8 +1375,9 @@ if (suites.includes('browser')) {
       await f.evaluate(() => { const S = K.debug.state(); S.pestT = 0; S.pestW = 99; S.m.ls = 0; });
       const r = await f.evaluate(() => new Promise(done => {
         /* the target is set in the frame before the camera moves: compare it with the follow as it stood a frame earlier */
-        /* the largest step of the target against the follow from one frame to the next: a swerve is a jump, while the target
-           being drawn back to the point under the finger is a glide */
+        /* the largest step of the target against the follow from one frame to the next: a swerve is a jump of several cells,
+           while the target being drawn back to the point under the finger is a glide (a third of a cell a frame at the
+           software renderer's slowest frames, a quarter second each) */
         const S = K.debug.state(), c = K.debug.cam(); let last = null, pf = null, worst = 0, framed = 0, n = 0, pest = 0;
         K.loop(() => { if (n > 40) return; n++; if (S.pest) pest++; if (pf) { const rel = [S.m.tx - pf[0], S.m.ty - pf[1]]; if (last) worst = Math.max(worst, Math.hypot(rel[0] - last[0], rel[1] - last[1])); last = rel; } pf = [c.fx, c.fy];
           framed = Math.max(framed, Math.hypot(c.x - c.fx, c.y - c.fy)); if (n === 41) done({ worst, framed, pest, n }); });
@@ -1362,7 +1392,7 @@ if (suites.includes('browser')) {
       // watched, so a pass draws as the swath it was and not as a staircase of cells
       const fm = await f.evaluate(() => { const S = K.debug.state(), F = K.debug.fine(); let cut = 0, seen = 0; for (let i = 0; i < S.h.length; i++) if (window.__h0[i] > 120 && S.h[i] <= 120) { cut++; if (F.obs[i]) seen++; } return { cut, seen }; });
       check(fm.cut > 5 && fm.seen === fm.cut, `lawn: every cell cut while watched is in the view's fine mask (${fm.seen} of ${fm.cut})`);
-      check(r.pest > 20 && r.worst < .3 && r.framed < 1, `lawn: an intruder comes while the pointer is held; the target never jumps (at most ${r.worst.toFixed(3)} a frame against the follow) and the camera frames nothing (${r.framed.toFixed(2)} off the follow)`, JSON.stringify(r));
+      check(r.pest > 20 && r.worst < .6 && r.framed < 1, `lawn: an intruder comes while the pointer is held; the target never jumps (at most ${r.worst.toFixed(3)} a frame against the follow) and the camera frames nothing (${r.framed.toFixed(2)} off the follow)`, JSON.stringify(r));
       check(p.errs.length === 0, 'lawn: no errors while holding a stripe', p.errs.join(' | '));
       await p.close();
     }
@@ -1382,7 +1412,7 @@ if (suites.includes('browser')) {
         if (id === 'show4') {
           // the cup won: the rosette, then the teams walk out, then the whistle; the note in the cup waits for the kick-off
           await f.evaluate(() => { const S = K.debug.state(), L = CORE.layout(S.site, S.tier), s = L.show; S.pest = null; S.pestT = 999; S.gw[0] = 0;
-            for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = (x >> 1) % 2 + 1; } CORE.act(S, 'judge'); });   /* what the judges' button does */
+            for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = ((y >> 1) % 2 + 3) | ((x >> 1) % 2 + 1) << 4; } CORE.act(S, 'judge'); });   /* a chequer, as the cup asks; what the judges' button does */
           const early = await until(f, () => K.debug.state().gold === 5 && K.debug.ko().t < 0, 60000) && await f.evaluate(() => !K.debug.card('night'));
           check(early, 'lawn: the cup won, the note in it is not on the pegboard before the rosette');
           // (four minutes, not two: SwiftShader draws the green at well under a frame a second and the match clock moves at most
