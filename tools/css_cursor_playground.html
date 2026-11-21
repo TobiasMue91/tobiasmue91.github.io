@@ -24,11 +24,14 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#141414;--panel:#1f1f1f;--ink:#ececea;--muted:#a4a4a0;--line:#363634;--soft:#2a2a28;
   --accent:#86adff;--accentbg:rgba(134,173,255,.14);--err:#ff8b80;--errbg:#3a1d1a;--warn:#f2c46b;--warnbg:#33290f;
-  --swatch:#e9e9e5;--swline:#4a4a46;color-scheme:dark}}
+  --swatch:#2b2b29;--swline:#454542;color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#141414;--panel:#1f1f1f;--ink:#ececea;--muted:#a4a4a0;--line:#363634;--soft:#2a2a28;
   --accent:#86adff;--accentbg:rgba(134,173,255,.14);--err:#ff8b80;--errbg:#3a1d1a;--warn:#f2c46b;--warnbg:#33290f;
-  --swatch:#e9e9e5;--swline:#4a4a46;color-scheme:dark}
+  --swatch:#2b2b29;--swline:#454542;color-scheme:dark}
+
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sw svg,:root:not([data-theme="light"]) .padicon svg,:root:not([data-theme="light"]) .si svg{filter:invert(1) hue-rotate(180deg)}}
+:root[data-theme="dark"] .sw svg,:root[data-theme="dark"] .padicon svg,:root[data-theme="dark"] .si svg{filter:invert(1) hue-rotate(180deg)}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);-webkit-text-size-adjust:100%}
@@ -60,6 +63,9 @@ h1{font-size:19px;margin:0;letter-spacing:-.01em;font-weight:680}
 #out .nw{white-space:nowrap}
 #out.longv{font-size:13px;line-height:19px;max-height:96px;word-break:break-all;background:var(--soft);border-radius:7px;padding:6px 8px}
 .stalemsg{font-size:13px;color:var(--muted);margin-top:2px}
+.result.preview .rbox{outline:1.5px dashed var(--accent);outline-offset:-1px}
+.result.preview .status{display:none}
+.result.stale:not(.preview) #out{opacity:.45}
 .stalemsg[hidden]{display:none}
 .primary:disabled{opacity:.35;cursor:not-allowed}
 .kt{display:flex;flex-direction:column;min-width:0}
@@ -146,7 +152,7 @@ select.txt{font-family:var(--mono)}
 .size .szwarn,.size .szhint{display:block;margin-top:3px}
 .size.bad .szwarn{color:var(--err)}
 .szhint{color:var(--warn)}
-.dz{margin-top:12px;border:1.5px dashed var(--line);border-radius:10px;min-height:150px;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:13.5px;padding:12px}
+.dz{margin-top:12px;border:1.5px dashed var(--line);border-radius:10px;min-height:88px;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:13.5px;padding:12px}
 .dz[hidden]{display:none}
 #groups.flat{columns:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:0 8px}
 #groups.flat .grp{display:contents}
@@ -806,7 +812,7 @@ var CUR = (function () {
     var long = R.value.length > 140;
     var h = '';
     R.value.split(/(url\("(?:[^"\\]|\\.)*"\))/).forEach(function (p) {
-      h += '<span class="tok">' + esc(p).replace(/(\S) (?=[+-]?[\d.])/g, '$1&nbsp;') + '</span>';
+      h += '<span class="tok">' + (/^url\(/.test(p) ? esc(p) : esc(p).replace(/([^,]) /g, '$1&nbsp;')) + '</span>';
     });
     out.classList.toggle('longv', long);
     h = '<span class="pfx">cursor: </span>' + h;
@@ -855,15 +861,32 @@ var CUR = (function () {
     save();
   }
 
-  var stale = false;
+  var stale = false, staleFix = null;
   function applyStale() {
     $('result').classList.toggle('stale', stale);
+    $('result').classList.toggle('preview', !!(stale && staleFix));
     $('stalemsg').hidden = !stale;
+    copyBtn.disabled = stale && !staleFix;
+    copyBtn.textContent = stale && staleFix ? 'Copy fix' : 'Copy';
+    if (stale && staleFix) {
+      var fr = CUR.parse(staleFix);
+      out.innerHTML = '<span class="pfx">cursor: </span>' + fmtValue(fr.value);
+      $('stalemsg').textContent = 'Preview of the corrected line. Copy copies it; your pasted value had an error (see below).';
+    } else $('stalemsg').textContent = 'Your pasted value has an error (see below) and nothing could fix it, so there is nothing new to copy.';
+  }
+  function fmtValue(v) {
+    var h = '';
+    v.split(/(url\("(?:[^"\\]|\\.)*"\))/).forEach(function (p) {
+      h += '<span class="tok">' + (/^url\(/.test(p) ? esc(p) : esc(p).replace(/([^,]) /g, '$1&nbsp;')) + '</span>';
+    });
+    return h.replace(/([\w-]+(?: !important)?)<\/span>$/, '<span class="nw">$1<span class="semi">;</span></span></span>');
   }
   /* ---------- the find / check box ---------- */
   function findUpdate(fromTyping) {
     var v = q.value, r = CUR.parse(v);
-    stale = false; applyStale();
+    var was = stale;
+    stale = false; staleFix = null; applyStale();
+    if (was) render(false);
     if (fromTyping && img.error) { img.error = null; renderPanel(); }
     qmsg.className = 'qmsg';
     q.removeAttribute('aria-invalid');
@@ -886,7 +909,7 @@ var CUR = (function () {
       return;
     }
     setFilter(null);
-    stale = true; applyStale();
+    stale = true; staleFix = CUR.fix(v); applyStale();
     qmsg.className = 'qmsg err';
     q.setAttribute('aria-invalid', 'true');
     $('qwrap').classList.add('bad');
@@ -1109,7 +1132,10 @@ var CUR = (function () {
     q.value = ''; findUpdate(); setResult({src: 'kw', kw: b.dataset.k});
   });
   $('qclear').addEventListener('click', function () { q.value = ''; findUpdate(); q.focus(); });
-  copyBtn.addEventListener('click', function () { copyText(R.css, copyBtn); });
+  copyBtn.addEventListener('click', function () {
+    if (stale && staleFix) { var t = CUR.parse(staleFix).css; q.value = staleFix; findUpdate(true); copyText(t, copyBtn); return; }
+    copyText(R.css, copyBtn);
+  });
   $('useimg').addEventListener('click', function () { setResult({src: 'img'}); drawStage(); });
   $('toimg').addEventListener('click', function () { $('builder').scrollIntoView({behavior: reduce.matches ? 'auto' : 'smooth', block: 'start'}); });
   document.addEventListener('keydown', function (e) {
