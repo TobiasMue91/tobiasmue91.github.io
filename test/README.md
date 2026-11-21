@@ -2840,3 +2840,30 @@ pictures with partial edge blocks and random opacity, plus hand-worked vectors (
 pixel inside and outside random areas (dragged backwards, past the edge, empty, overlapping); greyscale, sepia, inverted,
 strength and round dots; "1 pixel per block"; the block sizes people type (12 px, 12,5, 1,000, -3); the slider scale;
 pictures shrunk to what a browser can hold; files refused with a reason; safe file names; settings and `?size=` links.
+
+## Text to Sound
+
+```sh
+npm run test:textsound                           # or: node test/text_sound_visualizer.mjs
+node test/text_sound_visualizer.mjs notes marks  # named suites only
+npx http-server -p 8099                          # the page suite needs it, and is skipped without it
+```
+
+`text_sound_visualizer.mjs` runs the DOM-free `<script id="core">` block of `tools/text_sound_visualizer.html` in Node,
+the same text the page hands its Web Worker to render sound. The page promises that a text always plays the same
+melody, by a stated rule (a = C3 up the C-major scale to z = G6, punctuation as low beats), that what the roll draws is
+what is heard, and that the WAV it saves is a real WAV of that sound. Letter timings are checked against values
+measured on the previous page, which the remake keeps; frequencies against A4 = 440 Hz; the rendered pitch with a
+Goertzel filter, independently of the synth code.
+
+| suite | what it checks |
+| --- | --- |
+| `fold` | which characters sound and as what: a-z either case, accents, ß = ss, ligatures, full-width forms, Kelvin sign, Cyrillic and Greek by their Latin spelling, typographic quotes and … as marks; digits, emoji, CJK, Hebrew and symbols silent |
+| `notes` | the letter table as names, MIDI and Hz; timings and loudness of hello, HeLLo hello, a newline and a hyphenated word as measured before; counts; words read in Latin reported |
+| `marks` | each mark's note and loudness; a mark sounds where it stands (the old page stacked every repeat on the first one); runs step 0.1 s |
+| `speed` | 50 % and 200 % scale every start and length and never the pitch; junk speeds fall back |
+| `edge` | empty, spaces, silent-only, one letter, a 1000-letter word capped at 16 letters' length, 112,000 characters stopping at 5:00 on a word boundary, zero-width characters, lone surrogates, null |
+| `render` | every sound renders the same samples twice, without NaN, peaking at 0.9, no longer than the melody and its ring-out; a held "a" sounds at C3 and is silent before it starts; tone 0 < 50 < 100 in brightness; speed of a long render |
+| `wav` | RIFF header fields byte by byte, 16-bit clipping, volume, an empty WAV |
+| `misc` | file names, durations as text, share links round-tripping and clamping bad values |
+| `page` | in Chromium at phone size: the example on arrival with Play on screen, counts while typing, the error state and its fix, silent characters named and Привет → privet, Download giving a RIFF/WAVE file named after the text, Play and Stop, text and sound over a reload, a share link opened and then not overriding later edits, Copy link, a 560,000-character paste, no console errors and no request leaving the site |
