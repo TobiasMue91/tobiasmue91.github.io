@@ -1316,7 +1316,7 @@ dialog::backdrop { background: rgba(15,17,22,.45); }
     var l = C.localeFor(doc.locale, doc.currency); if (l !== doc.locale) { doc.locale = l; $('localeSel').value = l; }
   }
   function edited() {
-    if (undoFn && Date.now() - toastAt > 1500) { $('toast').classList.remove('on'); undoFn = null; } // a past change's undo does not hang over new typing
+    if (undoFn && Date.now() - toastAt > 300) { $('toast').classList.remove('on'); undoFn = null; } // a past change's undo does not hang over new typing
     if (isExample) { isExample = false; curId = newId(); $('banner').hidden = true; }
     schedule(); saveSoon();
   }
@@ -1374,6 +1374,18 @@ dialog::backdrop { background: rgba(15,17,22,.45); }
     if (f === 'desc') grow(e.target);
     edited();
   });
+  // on leaving a number field, "£350" or "3,5h" becomes the plain number it was read as, in the invoice's own decimal style
+  function plain(raw) {
+    var dec = C.decimalSep(doc.locale), r = C.parseNumber(raw, dec);
+    if (r.value === undefined || !/[^\d.,\-\s]/.test(raw)) return null;
+    var v = r.value, neg = v < 0n, a = (neg ? -v : v).toString().padStart(C.SCALE + 1, '0'), ip = a.slice(0, -C.SCALE), fp = a.slice(-C.SCALE).replace(/0+$/, '');
+    return (neg ? '-' : '') + ip + (fp ? dec + fp : '');
+  }
+  itemsEl.addEventListener('focusout', function (e) {
+    var f = e.target.dataset.f; if (f !== 'qty' && f !== 'price') return;
+    var v = plain(e.target.value); if (v === null || v === e.target.value) return;
+    var i = +e.target.closest('.item').dataset.i; doc.items[i][f] = v; e.target.value = v; schedule(); saveSoon();
+  });
   itemsEl.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && e.target.dataset.f && e.target.dataset.f !== 'desc') { // Enter in the last number field adds a line
       var i = +e.target.closest('.item').dataset.i;
@@ -1405,6 +1417,18 @@ dialog::backdrop { background: rgba(15,17,22,.45); }
     }
   });
   document.addEventListener('click', function (e) { document.querySelectorAll('.lmenu[open]').forEach(function (d) { if (!d.contains(e.target)) d.open = false; }); });
+  // on leaving a number field, "£350" or "3,5h" becomes the plain number it was read as, in the invoice's own decimal style
+  function plain(raw) {
+    var dec = C.decimalSep(doc.locale), r = C.parseNumber(raw, dec);
+    if (r.value === undefined || !/[^\d.,\-\s]/.test(raw)) return null;
+    var v = r.value, neg = v < 0n, a = (neg ? -v : v).toString().padStart(C.SCALE + 1, '0'), ip = a.slice(0, -C.SCALE), fp = a.slice(-C.SCALE).replace(/0+$/, '');
+    return (neg ? '-' : '') + ip + (fp ? dec + fp : '');
+  }
+  itemsEl.addEventListener('focusout', function (e) {
+    var f = e.target.dataset.f; if (f !== 'qty' && f !== 'price') return;
+    var v = plain(e.target.value); if (v === null || v === e.target.value) return;
+    var i = +e.target.closest('.item').dataset.i; doc.items[i][f] = v; e.target.value = v; schedule(); saveSoon();
+  });
   itemsEl.addEventListener('keydown', function (e) { if (e.key === 'Escape') { var d = e.target.closest('.lmenu'); if (d && d.open) { d.open = false; d.querySelector('summary').focus(); } } });
   function addLine(preset) {
     var last = doc.items[doc.items.length - 1];
@@ -1621,7 +1645,7 @@ dialog::backdrop { background: rgba(15,17,22,.45); }
     if (keys.length) {
       pb.classList.add('on');
       pb.innerHTML = (keys.length === 1 ? 'Fix this before downloading: ' : 'Fix these before downloading: ') + keys.map(function (k) { return '<button type="button" data-go="' + esc(k) + '">' + esc(problemLabel(k)) + '</button>'; }).join(' ');
-    } else { pb.classList.remove('on'); pb.textContent = ''; }
+    } else if (pdfFail) { if (!document.getElementById('failPrint')) showFail(); } else { pb.classList.remove('on'); pb.textContent = ''; }
     ['pdfBtn', 'dockPdf'].forEach(function (id) {
       var b = $(id); b.classList.toggle('blocked', !!keys.length); b.classList.toggle('primary', !keys.length);
       var s = b.querySelector('span'); s.innerHTML = keys.length ? 'Fix ' + keys.length + (keys.length === 1 ? ' problem' : ' problems') : (id === 'dockPdf' ? '<span class="long">Download </span>PDF' : 'Download PDF');
@@ -1721,7 +1745,7 @@ dialog::backdrop { background: rgba(15,17,22,.45); }
     renderNow();
     if (problemKeys.length) { goToProblem(); return; }
     if (!fontsReady) { toast('The PDF font couldn’t load. Check your connection, or use Print → Save as PDF.'); loadFonts(); return; }
-    busy = true; setBusy(true); $('toast').classList.remove('on');
+    busy = true; pdfFail = ''; setBusy(true); var tt = $('toast'); tt.style.transition = 'none'; tt.classList.remove('on'); void tt.offsetWidth; tt.style.transition = '';
     var snap = last;
     Promise.all([loadScript(LIBS.pdf), loadScript(LIBS.fontkit)]).then(function () {
       var P = window.PDFLib;
@@ -1753,9 +1777,16 @@ dialog::backdrop { background: rgba(15,17,22,.45); }
       toast('Downloaded ' + fileName('pdf'));
     }).catch(function (e) {
       console.warn(e);
-      toast('The PDF couldn’t be made (' + (e && e.message === 'load' ? 'no connection to load the PDF maker' : 'unexpected error') + '). Print → Save as PDF works too.');
-    }).then(function () { busy = false; setBusy(false); });
+      pdfFail = 'The PDF couldn\u2019t be made: ' + (e && e.message === 'load' ? 'the PDF maker didn\u2019t load (no connection?).' : 'something unexpected went wrong.') + ' ';
+    }).then(function () { busy = false; setBusy(false); if (pdfFail) showFail(); });
   }
+  var pdfFail = '';
+  function showFail() {
+    var pb = $('problems'); pb.classList.add('on');
+    pb.innerHTML = esc(pdfFail) + '<button type="button" id="failPrint">Print instead</button> <button type="button" id="failRetry">Try again</button> <span style="color:var(--soft)">(Print \u2192 Save as PDF makes the same pages.)</span>';
+    showTab('prev'); pb.scrollIntoView({block: 'nearest'});
+  }
+  document.addEventListener('click', function (e) { if (e.target.id === 'failPrint') doPrint(); else if (e.target.id === 'failRetry') makePdf(); });
   function clean(s) { // characters the font lacks become a plain space-free replacement so pdf-lib never throws
     var out = ''; for (var ch of s) out += (ch === '\t' ? ' ' : ch); return out;
   }
@@ -1880,7 +1911,7 @@ dialog::backdrop { background: rgba(15,17,22,.45); }
     var ids = Object.keys(store.invoices).sort(function (a, b) { return (store.invoices[b].saved || '') < (store.invoices[a].saved || '') ? -1 : 1; });
     var html = ids.map(function (id) {
       var e = store.invoices[id], inv = e.inv, rr = C.compute(inv), amt = C.formatMoney(rr.balance, inv.currency, inv.locale);
-      var client = (inv.to || '').split('\n')[0].trim() || 'No client yet', when = e.saved ? new Date(e.saved).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'}) : '';
+      var client = (inv.to || '').split('\n')[0].trim() || 'No client yet', when = e.saved ? C.formatDate(C.isoToday(new Date(e.saved)), inv.locale) : '';
       var hay = (inv.number + ' ' + client + ' ' + amt + ' ' + C.formatDate(inv.issued, inv.locale)).toLowerCase();
       if (q && hay.indexOf(q) < 0) return '';
       return '<li' + (id === curId && !isExample ? ' class="cur"' : '') + '><button class="main" type="button" data-open="' + id + '"><b>' + esc(inv.number || 'No number') + ' · ' + esc(clip(client, 40)) + '</b><small>' + esc(C.formatDate(inv.issued, inv.locale)) + (when ? ' · edited ' + esc(when) : '') + '</small></button>' +
