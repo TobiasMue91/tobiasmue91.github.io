@@ -40,8 +40,8 @@ const suites = picked.length ? picked : ALL;
 const SHIPPED = ['clew', 'flurry', 'jetty', 'guests', 'starter', 'lawn', 'warren'];
 // the budget: what one box and the shell may weigh, unminified, in bytes
 const BOX_MAX = 130 * 1024, BOX_AIM = 100 * 1024, SHELL_MAX = 96 * 1024;
-// boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2)
-const BOX_CAP = { jetty: 350 * 1024, guests: 260 * 1024, warren: 340 * 1024, starter: 230 * 1024, lawn: 200 * 1024, clew: 300 * 1024, flurry: 230 * 1024 };
+// boxes the owner gave more room, by name (CONTENTS_MAY_VARY.md, rule 2); Infinity: no limit at all
+const BOX_CAP = { jetty: 350 * 1024, guests: 260 * 1024, warren: 340 * 1024, starter: 230 * 1024, lawn: Infinity, clew: 300 * 1024, flurry: 230 * 1024 };
 // a person's pace, in minutes, for every box: the eager bot may not finish sooner, the casual one not later
 const PACE = { eager: 30, casual: 90 };
 
@@ -324,12 +324,12 @@ if (suites.includes('starter') && starter) {
 const lawn = worlds.find(w => w.id === 'lawn');
 if (suites.includes('lawn') && lawn) {
   section('lawn');
-  const { CORE } = load(lawn);
+  const { CORE, KIT } = load(lawn);
   const drive = (S, x, y, sec) => { CORE.act(S, 'go', x, y); for (let t = 0; t < sec; t += .1) CORE.step(S, .1); };
   {
     // a full grass box stops the cutting; tipping it in the bin pays
     const S = CORE.init(3); S.lv.deck = 3;
-    drive(S, 15.5, 14, 6); drive(S, 16.5, 5, 6); drive(S, 17.5, 14, 6); drive(S, 18.5, 5, 6);
+    drive(S, 15.5, 14, 6); drive(S, 16.5, 5, 6); drive(S, 17.5, 14, 6); drive(S, 18.5, 5, 6); drive(S, 13.2, 5.2, 3); drive(S, 13.2, 14, 6);
     check(S.bag >= CORE.cap(S) - 1 && S.$ === 0, `mowing fills the grass box and pays nothing yet (${S.bag.toFixed(1)} of ${CORE.cap(S)})`);
     S.bag = CORE.cap(S); const before = S.h.slice(); drive(S, 13.2, 14, 6);
     check(S.h.every((h, i) => h === before[i] || h > before[i]), 'with the box full the mower cuts nothing');
@@ -373,8 +373,8 @@ if (suites.includes('lawn') && lawn) {
     S.m.x = s.x0 + 3.5; S.m.y = s.y0 + .5; CORE.act(S, 'go', s.x0 + 3.5, s.y1 + .5); for (let t = 0; t < 8; t += .1) CORE.step(S, .1);
     const col = [...Array(s.y1 - s.y0 + 1)].map((_, k) => S.d[(s.y0 + k) * L.W + s.x0 + 3] & 7);
     check(col.every(d => d === 1), 'driving up a short lawn lays its grass the way the mower goes', col.join(''));
-    mow('across'); CORE.act(S, 'judge');
-    check(S.gold === 0 && S.wish === CORE.SHOWS[0].wish && S.gw[0] > 0, 'a lawn that missed grows back for another go at the same wish');
+    mow('across'); const h0 = S.h.slice(); CORE.act(S, 'judge'); CORE.step(S, 3);
+    check(S.gold === 0 && S.wish === CORE.SHOWS[0].wish && S.gw[0] === 0 && S.h.every((h, i) => h === h0[i]), 'a lawn that missed stays as it is, to be put right for the same wish');
     S.judgeCd = 0; mow('along'); CORE.act(S, 'judge');
     check(S.gold === 1 && !CORE.canJudge(S) && CORE.can(S, CORE.byId.show2) && CORE.price(S, CORE.byId.show2) === 0, 'gold wins the show, the judges do not come back, and the County Show is open, free');
     const areas = CORE.SHOWS.map(q => q.w * q.h);
@@ -422,7 +422,7 @@ if (suites.includes('lawn') && lawn) {
     const R = CORE.revisit(JSON.parse(JSON.stringify(S)));
     check(CORE.done(S) && !CORE.done(R) && R.act === 3 && R.site === 'green' && R.tier === CORE.SHOWS.length && R.gold === CORE.SHOWS.length, 'revisit puts the groundsman back at the Cup Final, every show won');
     R.$ = 1e9; const left = CORE.UP.filter(u => CORE.can(R, u)).map(u => u.id);
-    check(left.includes('night') && left.includes('roller') && left.includes('lush') && !left.includes('show4') && !left.includes('street'), 'with the rest of the pegboard for sale and the note in the cup again', left.join(' '));
+    check(left.includes('night') && left.includes('roller') && left.includes('engine') && !left.includes('show4') && !left.includes('street'), 'with the rest of the pegboard for sale and the note in the cup again', left.join(' '));
     check(!CORE.canJudge(R) && R.gold === CORE.SHOWS.length, 'and the cup, won once, is not judged again');
     CORE.act(R, 'buy', 'night'); for (const i of L.stencil) R.h[i] = CORE.P.cutTo; CORE.step(R, .2); CORE.act(R, 'finale', 2); CORE.act(R, 'finale', 3);
     check(CORE.done(R), 'and the crop circle can be mown and folded again from there');
@@ -432,6 +432,94 @@ if (suites.includes('lawn') && lawn) {
     // refinement session, once shipping a ride-on mower without its body): no comment in the view may hold a call
     const bad = lawn.tpl.split('\n').filter(l => /\/\/[^'"`]*\b(at|bx|say|later|tone|hiss|person|tree|card|visit)\(/.test(l));
     check(!bad.length, 'no line comment in the view swallows a drawing or a call', bad.map(l => l.trim().slice(0, 90)).join(' | '));
+  }
+  {
+    // a deck cuts a strip, not a capsule: a pass ends square, just past where the mower stopped, however wide the deck
+    const S = CORE.init(24); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.lv.ride = 1; S.lv.deck = 4; S.$ = 0; S.pestT = 999; const L = CORE.layout('green', 1), s = L.show, x = s.x0 + 8.5;
+    S.m.x = x; S.m.y = s.y0 + .5; CORE.act(S, 'go', x, s.y0 + 6.5); for (let t = 0; t < 8 && S.m.go; t += .1) CORE.step(S, .1);
+    const r = CORE.cutW(S) / 2, cut = (cx, cy) => S.h[cy * L.W + cx] <= CORE.P.cutAt, end = Math.floor(S.m.y + CORE.P.depth + .5);
+    check(r > 1 && cut(Math.floor(x - r + .6), s.y0 + 3) && cut(Math.floor(x + r - .6), s.y0 + 3) && !cut(Math.floor(x), end + 1) && !cut(Math.floor(x - r + .6), end),
+      `a pass ${(2 * r).toFixed(1)} cells wide ends square: nothing cut a cell past its end, nor round its corners`);
+  }
+  {
+    // the cup final asks for a chequer: stripes towards the table, then across them along it; one way alone wins nothing,
+    // and a version 4 save at the cup final, not yet won, is asked for the chequer too
+    const S = CORE.init(27); S.act = 3; S.gold = 4; S.$ = 1e12; for (const k of ['show1', 'show2', 'show3', 'race']) S.lv[k] = 1; CORE.act(S, 'buy', 'show4'); S.pest = null; S.pestT = 999;
+    const L = CORE.layout('green', 5), s = L.show, lay = (fn) => { for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { const i = y * L.W + x; S.h[i] = CORE.P.cutTo; S.d[i] = fn(x, y); } };
+    check(CORE.WISH[S.wish].check && !CORE.wantAcross(S), 'the cup final wants a chequer, and towards the table first');
+    lay((x, y) => (x >> 2) % 2 + 1); const one = CORE.showScore(S);
+    check(CORE.wantAcross(S) && CORE.medal(S, one.score) < 3, `laid one way only, it is half a chequer: across next, and no gold (${one.score.toFixed(2)})`);
+    S.lv.roller = 3; S.tries = 6; lay((x, y) => (y >> 2) % 2 + 3); const across = CORE.showScore(S);
+    check(CORE.medal(S, across.score) < 3, `even with the heaviest roller and every try's goodwill, one way alone wins no gold (${across.score.toFixed(2)})`);
+    lay((x, y) => ((y >> 2) % 2 + 3) | ((x >> 2) % 2 + 1) << 4); const both = CORE.showScore(S);
+    check(CORE.medal(S, both.score) === 3, `laid both ways, it wins gold (${both.score.toFixed(2)})`);
+    // driving across short grass laid the other way keeps the first pass beneath
+    lay((x, y) => (x >> 2) % 2 + 1); S.m.x = s.x0 + .5; S.m.y = s.y0 + 4.5; CORE.act(S, 'go', s.x0 + 20, s.y0 + 4.5); for (let t = 0; t < 10 && S.m.go; t += .1) CORE.step(S, .1);
+    const c = S.d[(s.y0 + 4) * L.W + s.x0 + 8];
+    check((c & 7) === 3 && ((c >> 4) & 7) === 2, 'a pass across short grass lays it the new way and keeps the pass before beneath');
+    const old = CORE.init(28); Object.assign(old, { act: 3, gold: 4, site: 'green', tier: 5, wish: 0 }); old.h = S.h.slice(); old.d = S.d.slice();
+    check(CORE.migrate(JSON.parse(JSON.stringify(old)), 4).wish === 4, 'a version 4 save at the cup final is asked for the chequer');
+  }
+  {
+    // on a show lawn the roller marks only a straight run: a diagonal pass cuts the grass but lays it no way, and over grass
+    // already short it leaves the stripes as they were
+    const S = CORE.init(29); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.lv.ride = 1; S.$ = 0; S.pest = null; S.pestT = 999; const L = CORE.layout('green', 1), s = L.show;
+    S.m.x = s.x0 + 1.5; S.m.y = s.y0 + 1.5; CORE.act(S, 'go', s.x0 + 9.5, s.y0 + 9.5); for (let t = 0; t < 8 && S.m.go; t += .1) CORE.step(S, .1);
+    const i = (s.y0 + 5) * L.W + s.x0 + 5;
+    check(S.h[i] <= CORE.P.cutAt && (S.d[i] & 7) === 0, 'a pass at forty-five degrees cuts the grass and lays no stripe');
+    S.d[i] = 1; S.m.x = s.x0 + 1.5; S.m.y = s.y0 + 1.5; CORE.act(S, 'go', s.x0 + 9.5, s.y0 + 9.5); for (let t = 0; t < 8 && S.m.go; t += .1) CORE.step(S, .1);
+    check((S.d[i] & 7) === 1, 'and over a stripe already laid it leaves it as it was');
+  }
+  {
+    // a lawn already won is left in peace: nothing new gets onto it to stand between the player and the way on
+    const S = CORE.init(26); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.$ = 0; const L = CORE.layout('green', 1), s = L.show;
+    for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) S.h[y * L.W + x] = CORE.P.cutTo;
+    S.gold = 1; S.pestT = 0; S.m.go = 0; for (let t = 0; t < 60; t += .1) CORE.step(S, .1);
+    check(!S.pest, 'no intruder comes onto a show lawn already won');
+  }
+  {
+    // chasing something off the lawn does not lay the stripes again: only its own feet scuff them (a filmed play-through lost
+    // 88% stripes to 49% chasing one dog); once it is gone, driving over short grass lays it the way the mower goes again
+    const S = CORE.init(25); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.lv.ride = 1; S.$ = 0; const L = CORE.layout('green', 1), s = L.show;
+    for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = 1; }
+    S.pest = { k: 0, x: -50, y: -50, tx: -50, ty: -50, n: 9, life: 999, age: 0, flee: 0, dodge: 0 }; S.pestT = 999;
+    const across = () => { S.m.x = s.x0 + .5; S.m.y = s.y0 + 5.5; CORE.act(S, 'go', s.x1 + .5, s.y0 + 5.5); for (let t = 0; t < 10 && S.m.go; t += .1) CORE.step(S, .1); };
+    across(); const kept = [...Array(s.x1 - s.x0 + 1)].every((_, k) => (S.d[(s.y0 + 5) * L.W + s.x0 + k] & 7) === 1);
+    S.pest = null; across(); const laid = (S.d[(s.y0 + 5) * L.W + s.x0 + 6] & 7) === 3;
+    check(kept && laid, 'chasing an intruder across the stripes leaves them as they were; without one, driving across lays them anew');
+  }
+  {
+    // version 4. A medal lawn judged twice pays once: calling the judges again pays only what a better lawn adds
+    const S = CORE.init(21); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.$ = 0; const L = CORE.layout('green', 1), s = L.show;
+    for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { const i = y * L.W + x; S.h[i] = CORE.P.cutTo; S.d[i] = (x * 7 + y * 3) % 3 === 0 ? 3 : (x >> 1) % 2 + 1; }
+    S.pest = null; S.pestT = 999; const sc = CORE.showScore(S), md = CORE.medal(S, sc.score); CORE.act(S, 'judge'); const first = S.$;
+    S.judgeCd = 0; S.tries = 0; CORE.act(S, 'judge'); const again = S.$ - first;
+    check(md > 0 && md < 3 && first > 0 && again < first * .1, `a lawn with a medal short of gold (${md}), judged again, pays ${again.toFixed(0)} more, not another ${first.toFixed(0)}`);
+  }
+  {
+    // version 4. Nothing gets onto the lawn in the middle of a stripe: it waits for the turn on the headland or a stop
+    const S = CORE.init(22); S.act = 2; S.$ = 1e9; CORE.act(S, 'buy', 'show1'); S.lv.ride = 1; S.$ = 0; const L = CORE.layout('green', 1), s = L.show;
+    for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = 1; }
+    S.pestT = 999; S.m.x = s.x0 + 2.5; S.m.y = s.y0 + .5; CORE.act(S, 'go', s.x0 + 2.5, s.y1 + .5); CORE.step(S, 1.5); S.pestT = 0; let mid = 0;
+    for (let t = 0; t < 30 && S.m.go; t += .1) { CORE.step(S, .1); if (S.pest && S.m.go) mid++; }
+    for (let t = 0; t < 2 && !S.pest; t += .1) CORE.step(S, .1);
+    check(mid === 0 && !!S.pest, `driving a stripe up the lawn, the intruder waits, and comes once the mower stops (${mid} steps mid-stripe)`);
+  }
+  {
+    // version 4 took away the sprinklers, the string line (on every show lawn now) and the show feed: a version 3 save is
+    // paid back what they cost, and a save on the National, which grew, is laid out again at its new size
+    const r = CORE.init(23); r.act = 3; r.site = 'green'; r.tier = 3; r.gold = 2; r.lv.show1 = r.lv.show2 = r.lv.show3 = 1; Object.assign(r.lv, { sprinkler: 2, assist: 1, lush: 3 });
+    r.h = new Array(88 * 60).fill(100); r.d = new Array(88 * 60).fill(1); r.$ = 0; r.paid = undefined;
+    const M = CORE.migrate(JSON.parse(JSON.stringify(r)), 3), L = CORE.layout('green', 3), back = 8000 + 48000 + 6000 + 30000 + 135000 + 608000;
+    check(M.$ === back && !('lush' in M.lv) && !('sprinkler' in M.lv) && !('assist' in M.lv) && M.h.length === L.W * L.H && Array.isArray(M.paid),
+      `a version 3 save gets back what its sprinklers, string line and show feed cost (${M.$} of ${back}) and the National is laid out at ${L.show.x1 - L.show.x0 + 1} by ${L.show.y1 - L.show.y0 + 1}`);
+    CORE.step(M, 5); check(Number.isFinite(M.$) && M.site === 'green' && M.tier === 3, 'and plays on');
+  }
+  {
+    // the hand that calls the judges the moment they will come (the impatient bot) still gets through: before version 4 a
+    // missed lawn grew back, and it judged the National 500 times in two hours without a medal
+    const runs = [1, 2].map(seed => KIT.simulate(CORE, 'impatient', { seed, minutes: 90 }));
+    check(runs.every(r => r.done && r.minutes < 60), `the impatient hand opens the box in ${runs.map(r => r.minutes.toFixed(1)).join(', ')} min`);
   }
   {
     // midnight: the end needs the string mown, and nothing else will do
@@ -1265,6 +1353,50 @@ if (suites.includes('browser')) {
       await p.close();
     }
     if (worlds.find(w => w.id === 'lawn')) {
+      // the owner's note (November 2026): holding the pointer still to lay a stripe on a large show lawn, an intruder came,
+      // the camera swung to frame it, the ground slid under the pointer and the mower swerved across the stripes. Now the
+      // held point keeps to the camera's follow of the mower, and the camera frames nothing of its own accord while held.
+      // Real input on an upright phone at the County Show (large enough that the camera follows the mower).
+      const p = await page('?world=lawn', 390, 844);
+      check(await until(p, () => CMV.state === 'playing'), 'lawn: starts for the held stripe');
+      const f = p.frames()[1];
+      await f.evaluate(() => { const S = K.debug.state(); S.$ = 1e15; S.lv.ride = 1; S.gold = 1; CORE.act(S, 'buy', 'show1'); S.gold = 1; S.act = 3; CORE.act(S, 'buy', 'show2'); });
+      const there = await until(f, () => { const S = K.debug.state(), c = K.debug.cam(); return S.site === 'green' && S.tier === 2 && !(c.est > 0) && getComputedStyle(document.getElementById('veil')).opacity === '0'; }, 120000);
+      check(there, 'lawn: at the County Show for the held stripe');
+      const box = await (await f.frameElement()).boundingBox();
+      // drive onto the lawn first, then hold still ahead of the mower, up the screen
+      const ms = await f.evaluate(() => { const S = K.debug.state(), L = CORE.layout(S.site, S.tier), s = L.show; S.m.x = s.x0 + 6.5; S.m.y = s.y0 + 4.5; S.pest = null; S.pestT = 999;
+        for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) if (x > s.x0 + 9) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = 1; }   /* enough mown for an intruder to come */
+        window.__h0 = S.h.slice(); return K.debug.mower(); });   /* what was cut before the pointer went down */
+      await p.mouse.move(box.x + ms[0], box.y + ms[1] - 110); await p.mouse.down();
+      await until(f, () => K.debug.state().m.go === 1, 20000);
+      const t0 = await f.evaluate(() => K.debug.state().t); await until(f, t0 => K.debug.state().t > t0 + 1.5, 60000, t0);
+      // something gets onto the lawn while the pointer is held
+      await f.evaluate(() => { const S = K.debug.state(); S.pestT = 0; S.pestW = 99; S.m.ls = 0; });
+      const r = await f.evaluate(() => new Promise(done => {
+        /* the target is set in the frame before the camera moves: compare it with the follow as it stood a frame earlier */
+        /* the largest step of the target against the follow from one frame to the next: a swerve is a jump of several cells,
+           while the target being drawn back to the point under the finger is a glide (a third of a cell a frame at the
+           software renderer's slowest frames, a quarter second each) */
+        const S = K.debug.state(), c = K.debug.cam(); let last = null, pf = null, worst = 0, framed = 0, n = 0, pest = 0;
+        K.loop(() => { if (n > 40) return; n++; if (S.pest) pest++; if (pf) { const rel = [S.m.tx - pf[0], S.m.ty - pf[1]]; if (last) worst = Math.max(worst, Math.hypot(rel[0] - last[0], rel[1] - last[1])); last = rel; } pf = [c.fx, c.fy];
+          framed = Math.max(framed, Math.hypot(c.x - c.fx, c.y - c.fy)); if (n === 41) done({ worst, framed, pest, n }); });
+      }));
+      // and the target never parts from the point under the finger for long: the camera stands back (as it does for the
+      // judges), the finger stays still, and within three seconds the mower is heading for what the finger is on again
+      const far = await f.evaluate(([x, y]) => new Promise(done => { const S = K.debug.state(), c = K.debug.cam(), t0 = S.t; c.wd0 = c.wd; c.gd *= 1.6;
+        K.loop(() => { if (S.t - t0 < 3 || done.ok) return; done.ok = 1; c.gd /= 1.6; const g = K.debug.toGround(x, y); done({ d: Math.hypot(S.m.tx - g[0], S.m.ty - g[1]) }); }); }), [ms[0], ms[1] - 110]);
+      check(far.d < .6, `lawn: with the finger still and the camera moved, the target comes back to the point under the finger (${far.d.toFixed(2)} apart)`);
+      await p.mouse.up();
+      // the view's own finer mask of where the deck passed (four by four to a cell) has every cell the rules cut while it
+      // watched, so a pass draws as the swath it was and not as a staircase of cells
+      const fm = await f.evaluate(() => { const S = K.debug.state(), F = K.debug.fine(); let cut = 0, seen = 0; for (let i = 0; i < S.h.length; i++) if (window.__h0[i] > 120 && S.h[i] <= 120) { cut++; if (F.obs[i]) seen++; } return { cut, seen }; });
+      check(fm.cut > 5 && fm.seen === fm.cut, `lawn: every cell cut while watched is in the view's fine mask (${fm.seen} of ${fm.cut})`);
+      check(r.pest > 20 && r.worst < .6 && r.framed < 1, `lawn: an intruder comes while the pointer is held; the target never jumps (at most ${r.worst.toFixed(3)} a frame against the follow) and the camera frames nothing (${r.framed.toFixed(2)} off the follow)`, JSON.stringify(r));
+      check(p.errs.length === 0, 'lawn: no errors while holding a stripe', p.errs.join(' | '));
+      await p.close();
+    }
+    if (worlds.find(w => w.id === 'lawn')) {
       // every place Keep Off the Grass moves to is built and drawn without an error: buying a show once
       // crashed the view for a moment, between the rules moving on and the veil hiding the old place
       const p = await page('?world=lawn');
@@ -1280,7 +1412,7 @@ if (suites.includes('browser')) {
         if (id === 'show4') {
           // the cup won: the rosette, then the teams walk out, then the whistle; the note in the cup waits for the kick-off
           await f.evaluate(() => { const S = K.debug.state(), L = CORE.layout(S.site, S.tier), s = L.show; S.pest = null; S.pestT = 999; S.gw[0] = 0;
-            for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = (x >> 1) % 2 + 1; } CORE.act(S, 'judge'); });   /* what the judges' button does */
+            for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) { S.h[y * L.W + x] = CORE.P.cutTo; S.d[y * L.W + x] = ((y >> 1) % 2 + 3) | ((x >> 1) % 2 + 1) << 4; } CORE.act(S, 'judge'); });   /* a chequer, as the cup asks; what the judges' button does */
           const early = await until(f, () => K.debug.state().gold === 5 && K.debug.ko().t < 0, 60000) && await f.evaluate(() => !K.debug.card('night'));
           check(early, 'lawn: the cup won, the note in it is not on the pegboard before the rosette');
           // (four minutes, not two: SwiftShader draws the green at well under a frame a second and the match clock moves at most

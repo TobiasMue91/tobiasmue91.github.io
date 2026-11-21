@@ -36,8 +36,8 @@ sourdough kitchen can be followed by a haunted house in a silent film, and that 
    anthology had set itself where it stood in the way of the result.
    It may weigh **230 KB** since its round-before-rich session (November 2026): the box stood at 197 KB of 200 after the
    cellar's rhythm, the burst's warning, the phone's rail and chapter headings, and the owner calls the limit arbitrary.
-   Keep Off the Grass may weigh **200 KB** for the same reason: its refinement session (October 2026) began at
-   133 KB, over the old cap, once the box had its close-up camera and props list.
+   Keep Off the Grass has **no limit**: the owner struck it (November 2026, its round-before-rich session, when it stood at
+   199.3 KB of the 200 KB it had been given in October).
    Tilt may weigh **230 KB**: its refinement session (October 2026) began at 126 KB and passed 130 KB with its
    scenes, close-ups and diagnostic switches before a pixel of the art had changed, then 200 KB when the street and the
    mountain were redrawn at the owner's request; the owner lifted the cap in advance. The owner raised it to **300 KB**
@@ -292,7 +292,7 @@ Numbered as the boxes stand since the reorders of 2026-11-06 and 2026-11-13 (the
 | № | id | title · handling | verb | loop | medium | palette | era · genre | sound | interface | ends with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 5 (1) | `starter` | Starter · "Contains live culture." | tap jars at their peak, swipe along a scoring line, punch bulges flat | timing streaks → bench and oven → containing a creature that grows through a house | 1950s cookbook print: key line, misregistered colour plates, halftone | mint, tomato, mustard, cream | mid-century domestic, cosy | kitchen foley, lounge exotica with vibraphone and theremin | a price tag on a string, index cards in a red enamel recipe tin, each with a cut of its own | the whole house bakes into a loaf; slicing it shows a bakery box tied with string in the crumb |
-| 6 (2) | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → five shows, each judged once and each a good deal larger than the last (a village green, a county showground, the National, the racecourse infield, a cup final pitch), each with a wish of its own (stripes towards the judges' table or along it, edged with a lap) and something to chase off it (a dog, a sheep, geese, a loose horse, a pitch invader) → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map, shown through a miniature photographer's lens (tilt-shift, contact shade) | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
+| 6 (2) | `lawn` | Keep Off the Grass · "Keep hands and feet clear." | steer a mower by holding and dragging; no timing anywhere | grass box and compost trips → jobs for the street and robot mowers → five shows, each judged once and each a good deal larger than the last (a village green, a county showground, the National, the racecourse infield, a cup final pitch), each with a wish of its own (stripes towards the judges' table or along it, edged with a lap, a chequer at the cup) and something to chase off it (a dog, a sheep, geese, a loose horse, a pitch invader) → a crop circle | real-time miniature: toy voxel houses on real grass, blade by blade, in hand-written WebGL 2 with a shadow map, shown through a miniature photographer's lens (tilt-shift, contact shade) | lawn greens in stripes, lemon, cobalt, flamingo pink; indigo and moonlight at the end | 1990s suburban summer, small-town show | a two-stroke engine and grass hiss, a cheap keyboard's demo song, brass for the show, a music box at midnight | a moulded plastic dashboard, blister packs on a hardware-store pegboard | the field was a box: the crop circle is its net, it folds up, and the number is printed underneath |
 | 1 (3) | `clew` | Tilt · "Contents may rattle." (first shipped as Minos Wants a Map · "Do not unwind.", then as The Minotaur Moves Out, then built as Stand Well Back) | hold a thumb on the board and steel balls pour in at that column; slide to aim the stream; tap to set the auto-launcher and to catch lanterns | games of a few seconds to two minutes, each ending with the tray, and a skill tree between them; a Big One on each board keeps its damage between games and opens the next, taller board | 2D canvas neon: glowing tubes, chrome balls with a hard highlight, a painted playfield behind glass, a brick wall at night for the sign | navy, hot pink, cyan, gold, cigarette haze | 1980s pachinko parlour, escalating to the absurd (the parlour on its side, the street, the mountain) | thousands of tiny ticks, tulip chimes, the reels, a fever fanfare, a neon tube striking; an original chiptune march that gains a part per board | the parlour's neon sign as a lucky wheel: 162 bulbs, a four-quartered star round TILT and a ring per board | the mountain's Big One is a cardboard box with the next number; OPEN IT, and the lid lets the light out |
 | 2 (4) | `flurry` | Snow Day · "Contents may be thrown." | tap a kid to throw at them (the rules lead a runner, cover stops a plain ball); tap their snowballs in the air to swat them; tap a passing sledge; fire the catapult; since version 2 choose whom first (a little one worth ×4, aces to stop as they wind up, kids behind dustbin lids to hit while they throw) and lay the whole gang flat at once | runs that end when you are too cold, a felt tree between them; every hit wears a kid's resolve down for good, and a kid with none left crosses over and throws for you, so the gang you fight becomes the army you have; a yard falls when its whole gang has come over | real-time 3D as a stop-motion TV special: felt puppets with fibre and fuzz, cotton-wool snow, poses that change twelve times a second, a warm grade, grain and vignette | snow white and frost blue, cranberry, pine, mustard; the light goes from morning to a pink sunset to a violet night | 1960s Christmas TV special, winter suburb escalating to a yeti's mountain | crunch and splat foley, sleigh bells, a celesta waltz with pizzicato bass that gains a voice per yard, muffled indoors | a felt Christmas tree on a wall hanging in the front room, a tier per yard, baubles as nodes | the yeti gives up last and brings a present with the next number on its tag; open it and the lid lets the light out |
 | 7 (5) | `warren` | Here Be Rabbits · "Contents may multiply." | drag towers anywhere on open ground and turn a monk's fan; sound the horn for the next wave; draw the dragon's line, the ink's pour and the great bell's ring across the horde; tap golden hares that run for the castle; meet the armoured rabbit knights (from the river on) with stones, falcons and the gifts, since arrows glance off them; take a ferret to the sappers' molehill (from the forest on); set a belfry before the archers and bee skeps where the crowd jams | folios of waves with a pause between them and one wall for them all; a lost folio is taken up again at the wave that broke it, its leaf kept; the Tree of Jesse between folios and between waves; the castle's valley, the river, the forest and village, the mappa mundi, the rabbit king | an English Gothic manuscript of about 1320 on a 2D canvas: every folio a page painted with more of the land (meadow, roads, bracken, woods, a river with bridges, a village) round a castle, the rest of the page a faint underdrawing; a crowd of tens of thousands of marginal rabbits | vellum, iron-gall brown, vermilion, lapis, verdigris, raised gold | the 14th century, the world turned upside down | quill scratches, arrows, squeaks, a bell, a dragon's roar; an original estampie for shawm over a hurdy-gurdy drone that gains a tabor, a second shawm and chimes chapter by chapter | a Tree of Jesse: Jesse asleep at the root, four scrolling boughs, a gilded initial in every medallion | the defeated rabbit king kneels with a book shrine (a cumdach) with the next number on its lid; OPEN IT, and the light comes out |
@@ -300,7 +300,7 @@ Numbered as the boxes stand since the reorders of 2026-11-06 and 2026-11-13 (the
 | 3 (7) | `jetty` | Still Water · "Keep away from water." | walk the jetty, swipe up to cast, tap when the float goes under, then play the fish: hold to reel, let go when the line is red, slide the held finger to lean against a run, let go while it jumps, pump a sulk | no runs and no clock: a day of eight minutes turns over one lake; ten kinds by distance, hour and bait, each met with the tackle of its time and fighting its own way, sizes up to a trophy; the tackle board between casts; a bank rod in the reeds that rings and is walked to | first-person real-time 3D in hand-written WebGL 2: leaf-card woods, willows and reeds from a painted atlas, the sun's shadow, a lake that knows its depth and mirrors the banks; fish painted in ink and wash, the same painting wrapped round a 3D body | meadow and willow greens, peat water, a red float; gold dusk, blue night with fireflies | English summer, cosy angling, the uncanny in the deep | lapping water, birds, crickets, the reel's clicks; a fingerpicked acoustic guitar (Karplus-Strong) that thins at dawn, slows into B minor at dusk and plays harmonics at night | paper cards on the water: the tackle board, the logbook of painted fish, the catch card | the Old One takes the bait in the deep with a tobacco tin wired to its jaw, the next number on the lid; tap it and the lid lifts |
 
 Pacing as measured by the test (eager / casual minutes, three seeds): Starter 30.5–32 / 55–58 (version 4, November 2026: round before rich; its stubborn hand 36–38, its impatient bot 41–42, its novice 58–62),
-Keep Off the Grass 30–34 / 59–61, Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
+Keep Off the Grass 33–36 / 57–62 (version 5, November 2026: round before rich, a deck that cuts a strip, a chequer at the cup; its impatient bot 44–47, its novice 70–73), Tilt 38–41 / 60–62, Snow Day 30–32 / 77–80 (after its second refinement; its spammer 25–26),
 Here Be Rabbits 42–43 / 77–78 (version 3, with knights, sappers and folios taken up where they broke; its impatient bot 35–36), Unwelcome Guests 31–32 / 57–60 (version 5, November 2026: fewer systems, extras in the film; its impatient bot 29.5–31, its hand that never lets go 38.7–39.6, measured before the last price change), Still Water 40–50 / 40–46.
 
 Unwelcome Guests was built as box 2 and taken out of the stack again before it shipped: it shares
@@ -2059,9 +2059,9 @@ needs a field in `K` and an answer from each box, so it belongs to a session abo
   (`PESTS` in the core) and is seen off by driving at it; the judges' pause is 15 s, not 30, and their
   ceremony is brisk after the first visit at each show, with a comment on what was missing; three
   new upgrades (sprinklers, a bigger engine, a sheepdog); the cup final is a match day; and entry
-  fees are lower, so fewer judgings are needed only for money. The judges still come round 13 to 19
-  times a show for the eager bot: that is what keeps the eager game over 30 minutes. If it still
-  drags, the next lever is a show that asks for something new each visit, not more of the same.
+  fees are lower, so fewer judgings are needed only for money. (Since the remake below each show is
+  judged once, so the judges' 13 to 19 visits a show are history; the size of the grounds keeps the
+  eager game over 30 minutes.)
   Everything before the second playtest came from the first. No outside critique has run yet. Open, most
   valuable first:
   - **Performance is still unmeasured on real devices**, but the view now looks after itself: grass
@@ -2289,6 +2289,177 @@ needs a field in `K` and an answer from each box, so it belongs to a session abo
   low; the tilt-shift is strong round the match. Gold at the cup now has its beat: at the whistle the stands throw
   confetti in the teams' colours, most of it from the stand by the tunnel where the camera is (420 cards, none with
   reduced motion).
+  - *Round before rich* (November 2026, `CORE.version` 4; the brief: feel like a finished paid game, take away before adding,
+    every new system justified by a measurement). **The owner's note that started it**: on the large show lawns, laying stripes
+    with the pointer held, an intruder arrived, the camera swung to frame it and mower and intruder together, the ground slid
+    under the held pointer, and the mower swerved across the stripes already laid. **Why**: `steer()` turned the held screen
+    point into ground every frame, so anything the camera did of its own accord (framing an intruder, the look toward the
+    compost bin, the establishing look) moved the target. **Mended**: the held point is kept on the ground against the
+    camera's follow of the mower (`cam.fx`, `cam.fy`), not against the picture; only a moving finger moves it, by as much ground
+    as it moved over. While a finger or key steers, the camera follows and frames nothing else (an intruder off screen gets the
+    badge at the edge; let go and the camera frames it as before). The browser suite holds a pointer still on the County Show
+    at phone size while an intruder comes. And in the rules, nothing gets onto a show lawn in the middle of a stripe: it waits
+    for the turn on the headland, a stop, or 25 seconds (`S.m.ls`, the seconds on one heading).
+  - *Bots*: two new ones (`bots.impatient` reads nothing, buys the moment it can, calls the judges as soon as they come;
+    `bots.novice` is slow and ragged, shops every 35 s, takes breaks). **What they found**: the impatient hand never got
+    through. Called early, the judges turned the lawn down, it grew back (a whole 76 by 46 National to mow again), it was
+    called early again: 500 to 700 judgings of the National in 150 minutes without a medal, a 60-minute stretch with nothing
+    new. The eager bot lost a regrown National in one seed of three too (minutes 16.6 to 23.3).
+  - *What carried, measured* (three seeds each, every card taken off the pegboard in turn with `need` false, before the
+    changes): without the sprinklers the eager bot finished −1.7 to +0.1 minutes and the casual one −4.9 to −1.0 (sooner);
+    without the string line ±1 and −4.5 to +0.2; without the show feed (six tiers, prizes ×1.5 each) −1.2 to +5.1 and
+    −7.0 to −2.0. Everything else carried (without the blade 90 to 120 minutes longer, legs 30 to 75, seed 35 to 76, the
+    deck 14 to 45, the gang 8 to 28, the ride-on 10 to 24, the sheepdog up to 17, the roller 15 to 27 for the eager hand).
+    Pests: without them the eager bot finished 4 to 5 minutes sooner; they cost the eager hand 2.5 minutes on the lawn a game
+    and pay about $2·10⁷ in all. They stay: chasing them is the show's second verb, and the owner asked for them.
+  - *Taken away*: a missed lawn growing back (the lawn stays as it is, to be put right; the judges come back after 10 s, not
+    15); the sprinklers (they only made the regrowth faster); the string line as a card (it is on every show lawn now: a finger
+    on a phone cannot hold a stripe straight across a racecourse); the show feed. Prizes pay only what a better lawn adds over
+    what this show has already paid (`S.paid`), so calling the judges again and again pays nothing. Twenty-three cards
+    became twenty. A version 3 save is paid back what its sprinklers, string line and show feed cost and a save on the
+    National or the Racecourse is laid out again at its new size (`migrate`).
+  - *Made to carry instead*: the size of the grounds, the owner's own escalation: the National is 82 by 50 (was 76 by 46),
+    the Racecourse 110 by 68 (was 104 by 64; the Cup Final stays 1.33 times larger), and the widest gangs cut a little less
+    (×3.1, was ×3.4), so the two largest lawns are mowing, not waiting. On a large ground seen whole, the mower has a pulsing
+    ring round it once a cell is under 9 px (`#you`), the old point "the mower is a speck on a phone".
+  - *The last tufts*: the novice bot mowed Dad's lawn round and round at 95 % and was never paid, since a lawn counted as done
+    at 96 % (in one seed of four it earned nothing in three hours; in the others it took 110 to 145 minutes in all). A person
+    meets the same hunt for the last specks. A lawn on the street is done at 92 % now, its last tufts going with it as before,
+    and a finished lawn's bonus is .6 of a unit a cell (was 1), since every lawn is done sooner.
+  - *Pacing* (six seeds): eager 31.1–35.7 (was 30.4–34.1), casual 52.6–56.4 (was 58.7–60.6), impatient 42.8–45.4 (never
+    finished before), novice 64.7–70.7 (110 to never), 7 or 8 new things in its first ten minutes. Longest wait for something
+    new: eager 2.9–3.1, casual 3.8–4.4, impatient 3.4, novice 3.8–4.6 minutes.
+  - *Which decision does the player make in minute 25 that they did not have in minute 2?* In minute 2: which strip of Dad's
+    lawn next, and when to walk to the compost bin; at the pegboard, blade or deck. In minute 25: how to lay a racecourse that
+    wants its stripes along the table and a lap round its edge, in which order (stripes first, the lap last, or the lanes undo
+    the ring); whether to break off a stripe for the horse or finish it and turn on the headland; when the estimate is good
+    enough to call the judges, now that a second call pays only the difference; and whether the money goes on the next gang
+    (wider, but harder to turn at the edges) or the engine. The first is still mostly execution; a show that asks for a new
+    kind of pattern (a chequerboard, a diamond) would add one, and is the next lever if the shows read as alike.
+  - *Research* (sources): PowerWash Simulator's makers took out the real job's chores (soaps for each surface) so the player
+    does only the satisfying part, https://store.epicgames.com/news/powerwash-simulator-2-futurlab-interview-nick-mccarthy-sequel-add-leave-out,
+    and keep the feedback nearly constant, https://toucharcade.com/2023/03/02/powerwash-simulator-interview-lead-designer-final-fantasy-7-dlc-midgar-next-game-ios-port-switch-gyro-support-ps5-dualsense/:
+    a lawn that grows back after a miss is such a chore. Lawn Mowing Simulator's stripe challenges are where its reviewers
+    stopped enjoying it, https://www.gamepitt.co.uk/?p=43777. Players of mobile games report a camera that moves under a held
+    control as the frustration it is, and the usual remedy is to keep the touch that steers apart from anything that moves the
+    view, https://feedback.minecraft.net/hc/en-us/community/posts/47470720773133-Improve-Mobile-Touch-Controls-for-Multi-Finger-Players.
+  - *Critic* (a fresh one on phone and desktop stills of every place, then the same one on the changed frames; first
+    impression, clarity, art direction, phone, feel, commercial): 7/4/7/5/5 and **4**, then 7/5/6/6/6 and **5**. Fixed from it:
+    on a phone the camera, let go on a large ground, stood back to the whole ground and left the mower a dot in its ring; it
+    now stands back to 2.4 times its follow and stays over the mower (on a desktop it still shows the ground whole). The
+    judges' sheet says what is missing for the next medal ("Mow the rest, then a lap round the edge.", "The stripes run the
+    wrong way."): "Stripes 98 %, Mown 41 %, no medal" read as a bug. Closer, the judges' table was off screen while every wish
+    is named by it: a cobalt badge with a table at the screen's edge points to it (`edgeMark`, shared with the intruder's).
+    Some points came from the capture (`?at` shows a mower standing still, money right after the bot has spent).
+  - *Then the critic's open points* (the owner: "take care of the rest"). The mown edge showed the cells as staircases at
+    the phone's closer distance, because each blade read its own cell's height and the earth under the blades was one box a
+    cell. A first try read the heights between cells and sharpened them (still in `VSB` and `edgeGround` for cells the view
+    never saw cut: a save, time away); the same critic called it "the same staircase with smaller steps". What carried: the
+    view keeps a mask of its own, four by four to a cell (`fine`), stamps into it the capsule the deck actually sweeps each
+    frame (the player's mower and the robots), and the blades and the earth read it where it has been seen; a lawn growing
+    back clears it. The rules stay in cells. A diagonal pass now leaves a straight slanted swath with a round end. A frame
+    costs what it did (software renderer, phone, the Racecourse with many edges: 298 ms against 312 before, inside the
+    noise; a first version with every blade reading four cells took 384, so only cells on an edge read more). Close behind
+    the mower on a show lawn the tilt-shift eases off (blur ×.55, the sharp band ×1.4, eased by distance so it never pops);
+    the follow leans most of the way toward the lawn's middle near its edge, so a mower at the rope no longer leaves half the
+    screen to hedges; a card not yet in reach shows a thin bar of how far the money has come, from a fifth of its price; on a
+    phone the strip shows one card whole and only the next one's picture, so no title is cut; at midnight the dashboard says
+    "along the string 45%". The critic's second look, before the mask: 7/6/6/7/6 and **5**; its third, on passes filmed live
+    with the mask: 7/6/7/7/7 and **6** ("the first time the core verb looks like the genre it copies"). Found on the way: on
+    the largest grounds the mower runs about 8 units a second, so a slow frame (the shell's cap of .25 s) carries it two
+    units, which the first mask took for a jump and skipped, leaving whole cells to the old staircase; a jump is now six
+    units or more. Cut earth no longer carries each cell's random tint (it showed the grid through a pass).
+  - *The critic's last points* (November 21). The mask holds how much of each quarter the deck covered (bits 3 to 7) and the
+    way it went (bits 0 to 2); the deck's edge fades over a quarter of a cell, and a blade in that fade is cut or not by its
+    own hash, so a swath's edge is ragged like a real one rather than a saw (the earth beneath still steps in quarters, mostly
+    hidden by the blades). The Cup's lines were chalked a whole cell wide, which read as white speckle: every line is now
+    its real geometry, a third of a cell wide, painted on the ground and chalked on the blades over it through a mask of its
+    own, four by four to a cell (`uChalk`); the stripes' tint is kept off the chalk blade by blade, not cell by cell. While
+    the mower stands on a show lawn not yet won, two strings are pegged out along the lane it would cut next, the way the
+    judges want the stripes, across the whole lawn: something to plan by on a lawn still all one green. Kept as it is: the
+    round end of a pass and the disc of a turn on the spot (the rules cut a capsule; a lane's end is on the headland, where
+    the cutters lift, so a disc shows only where a player stops mid-lawn; square ends would mean another footprint in the
+    rules).
+  - *Played, filmed* (November 21: real touch on an upright phone at the County Show, `recordVideo`, a script that lays the
+    lanes the sheet asks for, chases what gets on, and keeps its finger on the lane's end or on the screen's edge toward it).
+    Two faults that no still had shown. The held point, kept against the camera's follow, drifted apart from the finger
+    whenever the camera moved under a still finger (coming in after the press, leaning toward the lawn): the finger lay
+    across the screen while the mower pressed into the rope's corner for ten minutes. The point is now drawn back to the
+    one under the finger, by half in about half a second (`steer`), so a camera that moves never jerks the mower aside and
+    never leaves it chasing a point the finger is not on; the browser suite moves the camera under a still finger and wants
+    the two together again within three seconds, and the target never to jump while an intruder comes. And the lean toward the lawn's middle took the screen's height for both axes,
+    but on an upright phone a show lawn is turned a quarter, so across it the screen is narrow: on the headland the mower
+    went off the screen's edge. Each axis now leans by the screen's extent along it, and never by more than .45 of it across the screen or .25 up it (the perspective leaves less room ahead there; a second film had the mower at the top edge). The
+    follow's own bounds (older than this session) had the same fault: across a turned lawn they held the camera back by the
+    screen's height, so a mower working near a long edge sat half off the side of the screen in most frames of the film.
+  - *A fresh critic on the film* (phone first, the played County Show, then stills of the other places): 6/4/7/3/5 and **4**,
+    harsher than the critic before it on stills, as the film showed the phone as it plays. Done from it: a deck cuts a strip,
+    not a capsule (half its width across the way it goes, `P.depth` .35 along it), in the rules and in the view's mask
+    alike, so a pass ends square and the mower turning where it stands cuts no disc; the pacing barely moved (six seeds:
+    eager 31.3–33.5, casual 53.0–57.8, impatient 43–46, novice 64–70), and the suite now wants a pass that ends square. On a
+    phone a show lawn is followed from further off (15 pixels a cell, was 26) and stands back to 1.7 times that, not 2.4,
+    so the stripes being laid stay in view while the mower stays a machine; the strip of cards steps aside at a show while
+    nothing on it can be bought (it and the sheet took a third of the height for a card out of reach); the lane strings
+    run across the whole lawn while the mower runs the way the judges want, not only while it stands; the judges' button is
+    red only when the sheet says gold, a plain card button before; the ride-on has headlamps, so its front reads from
+    above; at midnight the camera frames the field from its near edge, where the mower starts. And from the same film, the
+    owner's first complaint in another shape: the game asks the player to chase an intruder, and chasing it across finished
+    stripes laid the short grass anew (88% stripes to 49% for one dog). While something is on the lawn and not yet running
+    off, the mower still cuts tall grass but lays no short grass again, in the rules and in the view's mask; only the
+    intruder's own feet scuff the stripes, which is its threat. The pacing did not move. Not taken: hold-to-call for
+    the judges (a call that misses costs nothing since version 4), docking every speech bubble at the top, and the №6 crate
+    (it is the shell's, not the box's).
+  - *The same critic on a second film* (the County Show played to gold): 7/5/7/5/5 and **5** (from 6/4/7/3/5 and 4). Its
+    sharpest point: once a lawn is won, the game had nowhere to send you. The gold rosette came down over the score cards,
+    a sheep still came onto the won lawn and turned the plaque into "Not with a sheep on the lawn", and the way on was a
+    card in the strip below. Now nothing new gets onto a lawn already won; once the next show's card is on the pegboard (or,
+    at the cup, the note), the sheet's button is the way on ("On to the National", "Read the note in the cup") and buys it;
+    the score cards rise away as the rosette comes, so the medal has the stage to itself; and the next place's card comes
+    a moment after the medal rather than at the end of the whole ceremony, five seconds later. A speech bubble keeps 54 px
+    off the screen's sides, where the edge badges sit (in the film they covered "A sheep is out of the pens!"). The critic could not judge the
+    stripes themselves: the film starts from a simulated save whose cells the view never saw mown.
+  - *A show that asks for something new* (November 21, the owner: "take care of all three"). The Cup Final asked for what
+    the Village Show asked (stripes towards the table) on a lawn forty times its size. Now it wants a **chequer**, as a
+    pitch is mown for a final: stripes towards the table, then across them along it. A cell keeps the way the last pass
+    laid it and, in bits 4 to 6 of `S.d`, the way the pass before laid it if that ran the other way; the score takes both
+    ways (each forgiven by the roller on its own, so one way alone is half a chequer and wins no gold, whatever the tries);
+    `CORE.wantAcross(S)` says which way the next passes should run, and the bots, the chalked arrows and the lane strings
+    follow it; half a chequer laid is a milestone, a chime and "Half the chequer! Now along the table, across your
+    stripes."; the sheet's little lawn is chequered; the blades show the pass beneath at half strength. The earth under the
+    blades had no colour for stripes laid across (both ways were the same plain green, so every across wish showed mostly
+    through the blades' lean): it has one now, and mixes in the pass beneath. `CORE.version` 5: a save at the cup final not
+    yet won is asked for the chequer. Pacing (six seeds): eager 33.7–35.6 (the cup takes two minutes longer), casual
+    57.1–61.6, impatient 44–47, novice 70–73; the longest wait for something new 2.7–3.0 / 3.8–4.2 minutes (5.5 for the
+    eager hand until half a chequer counted as something new).
+  - *Frame time.* Nothing here can measure a real device, so the box now carries what is needed to read one: `?fps` shows
+    frames a second, the median frame over the last sixty, blades and boxes drawn, the canvas and how often the grass has
+    been thinned (`games/contents_may_vary.html?world=lawn&at=31&fps` on a phone, at the cup). Read on the software renderer,
+    it showed the gauge never thinning at all: a frame over 250 ms counted as a stall and a reading wanted 120 frames, so a
+    phone drawing a frame in 300 ms would never be relieved, and sixteen blades a cell was the floor, which on the cup's pitch
+    is 159,000 blades on a phone, over the phone's own budget of 110,000. A reading is now two seconds of frames (at least
+    eight; only a frame over 1.5 s is a stall), and a thinned lawn may go down to six blades a cell. In SwiftShader at
+    390×844: the cup 159,000 → 69,000 blades and 550 → 317 ms a frame, the County 110,000 → 25,000 and 400 → 167 ms,
+    after which the gauge locks; what the cup still costs is its 24,000 boxes, most of them the crowd.
+  - *Entering a show.* The mower arrived at the way in, outside the rope; pointed at the lawn it slid along the rope into the
+    rope's corner instead of finding the gate (a scripted player stuck there for half an hour of a film, as a person would
+    for a confused moment). It now arrives inside the rope, on the headland in front of the gate.
+  - *A film from a fresh lawn* (the County Show reset to freshly grown, as a show is entered, then played with real touch):
+    for the first time stripes could be seen being laid, long straight lanes light and dark. A fresh critic on it and the
+    chequer: 6/5/6/5/5 and **4**, the cup's chequer "clean and believable, the standard for the rest". Done from it: every
+    turn and chase laid a curved swath with a stripe's shade (a turn between lanes in the tall grass, the sheep chased in
+    arcs), so a finished lawn showed banana-shaped bands; on a show lawn the roller now marks only a straight run (within
+    20 degrees of an axis, in the rules and in the view's mask): off that, grass is cut but laid no way, and short grass is
+    left as it was, so a curve leaves unstriped grass that the judges count against you and a straight lane puts right. The
+    title card of a new show said "Short, straight stripes" whatever the sheet asked; it says the show's wish now. Not
+    taken from it: hiding the strip of cards while a finger is down (the layout would move under the finger), and a low
+    flyover before the medal (worth doing; the camera's judging stand-back is the old choice). The same critic on a second
+    film from a fresh lawn: 6/6/6.5/5/6 and **5** ("the lawn finally reads as straight light and dark bands"; chase paths
+    "an obvious mistake to tidy up, the right incentive"). Its largest point left: snap the mower sideways onto a grid of
+    lanes one deck wide, so the bands come out even. Not done, and the owner's to decide: it would take the skill out of
+    the verb the judges score, and the bots, whose lanes overlap by design, could be pulled onto lanes already mown and loop.
+    The string line already holds the heading straight.
+  - *Still open*: a reading of `?fps` on a real phone, above all at the cup final; the judging moment as a flyover along the
+    stripes; the strip of cards and the sheet still take about a third of a phone's height while something is affordable.
 
 - **Tilt** (box 3, fourth version) has had one critic round, on filmstrips of the first minute, minutes
   10, 30 (with a fever) and 45, a Big One breaking and the ending, at 390×844 and 1280×800 with a real
