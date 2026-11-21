@@ -1575,6 +1575,7 @@ npm run test:cmv            # Contents May Vary suite (plain Node; its browser s
 npm run test:aspect         # Aspect Ratio Calculator suite (plain Node; its page suite needs Playwright's Chromium and a server on :8099)
 npm run test:maze           # Escape the Maze suite (plain Node, no server or browser)
 npm run test:imagecompare   # Image Comparison Slider suite (plain Node; npm i --no-save pixelmatch@5.3.0 adds the pixelmatch cross-check)
+npm run test:pixelate       # Pixelate Image suite (plain Node, no server or browser)
 ```
 
 `test/everything_converter.mjs` drives
@@ -2831,3 +2832,11 @@ off a spring, shooting, wrap-around, finger drag, the idle roof, falling out, th
 and coming home: passing `T.homeM` (the moon, where the Beyond band starts) fires `home` exactly once per run.
 `pacing` lets an attentive bot (it shoots glooms above it, takes springs and rides) climb 24 seeds and checks the
 spread of heights, that it seldom stalls, and that glooms, puffs and drifters each carry a real share of the play.
+
+`test/pixelate.mjs` runs the DOM-free `<script id="core">` block of `tools/pixelate.html` (Pixelate Image), whose promise is
+that every block is the opacity-weighted sRGB average of the picture's own pixels under it, on one grid anchored at the
+top-left, that only the marked areas change, and that marked areas grow out to whole blocks so none is cut. Block colours are checked against a brute-force reference on random
+pictures with partial edge blocks and random opacity, plus hand-worked vectors (checkerboard, half-clear red, 1x1); every
+pixel inside and outside random areas (dragged backwards, past the edge, empty, overlapping); greyscale, sepia, inverted,
+strength and round dots; "1 pixel per block"; the block sizes people type (12 px, 12,5, 1,000, -3); the slider scale;
+pictures shrunk to what a browser can hold; files refused with a reason; safe file names; settings and `?size=` links.
