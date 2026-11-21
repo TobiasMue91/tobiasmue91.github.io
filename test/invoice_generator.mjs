@@ -68,6 +68,7 @@ if (suites.includes('parse')) {
   eq(P('0,125', '.'), '0.125', '0,125 is never a thousands group');
   eq(P('12,5', '.'), '12.5', 'two digits after a comma are decimals anywhere');
   check(C.parseNumber('abc').error.length > 10, 'errors say what would be accepted');
+  eq(['45o', '4S', 'l00', '1o.5', '12,5O', 'abc', 'o'].map(x => C.parseNumber(x).suggest || ''), ['450', '45', '100', '10.5', '12,50', '', ''], 'a letter typed for a digit gets a suggested fix');
 }
 
 if (suites.includes('money')) {
@@ -281,6 +282,13 @@ if (suites.includes('saves')) {
   eq(C.sanitize(null).items.length, 1, 'sanitize(null) is a blank invoice');
   eq(C.sanitize({items: Array.from({length: 5000}, () => ({}))}).items.length, 2000, 'at most 2000 lines');
   eq(C.sanitize({logo: 'data:image/png;base64,iVBORw0KGgo='}).logo, 'data:image/png;base64,iVBORw0KGgo=', 'a PNG logo survives');
+  // tax names and typed currencies
+  eq(['en-US/USD', 'en-GB/GBP', 'en-IE/EUR', 'en-AU/AUD', 'de-DE/EUR', 'fr-FR/EUR', 'nl-NL/EUR', 'pl-PL/PLN'].map(x => { const [l, c] = x.split('/'); return C.taxLabel({locale: l, currency: c, taxName: ''}); }),
+    ['Tax', 'VAT', 'VAT', 'GST', 'USt.', 'TVA', 'Btw', 'VAT'], 'default tax names follow language and currency');
+  eq(C.taxLabel({locale: 'de-DE', currency: 'EUR', taxName: ' MwSt. '}), 'MwSt.', 'a typed tax name wins');
+  eq(['£350', '42,50 €', '12 EUR', '1.234 zł', '$5', '350', 'abc'].map(C.typedCurrency), ['GBP', 'EUR', 'EUR', 'PLN', '', '', ''], 'currencies people type into amounts');
+  eq([C.localeFor('en-US', 'GBP'), C.localeFor('en-US', 'EUR'), C.localeFor('de-DE', 'CHF'), C.localeFor('fr-FR', 'CAD'), C.localeFor('de-DE', 'JPY'), C.localeFor('en-GB', 'GBP')],
+    ['en-GB', 'en-IE', 'de-CH', 'fr-CA', 'de-DE', 'en-GB'], 'the format follows a new currency within the same language');
   // locale picking
   eq(C.pickLocale(['de-AT', 'en']), 'de-AT', 'exact browser locale'); eq(C.pickLocale(['de']), 'de-DE', 'language only'); eq(C.pickLocale(['ja-JP']), 'en-US', 'unsupported falls back');
   eq(C.labelsFor('de-CH').invoice, 'Rechnung', 'German labels'); eq(C.labelsFor('xx').invoice, 'Invoice', 'English fallback');
