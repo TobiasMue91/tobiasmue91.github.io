@@ -740,6 +740,15 @@ if (typeof module !== 'undefined') module.exports = RT;
     el.textContent = text;
     if (lastText !== null) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
   }
+  // Speeches have slots: measure against the nearest common length.
+  function fitLine(r) {
+    var s = Math.round(r.speakSeconds), T = [1, 2, 3, 5, 10, 15, 20, 30, 45, 60], t = T[0];
+    for (var i = 0; i < T.length; i++) if (Math.abs(T[i] * 60 - s) < Math.abs(t * 60 - s)) t = T[i];
+    var d = t * 60 - s;
+    if (d >= 0) return d ? 'Fits ' + t + ' min with ' + C.formatDuration(d) + ' to spare' : 'Exactly ' + t + ' min';
+    var cut = Math.ceil(-d / 60 * (r.words ? r.speakWpm : C.SPEAK_CPM[r.lang] * r.speakWpm / C.DEFAULTS.speakWpm));
+    return C.formatDuration(-d) + ' over ' + t + ' min: cut about ' + C.fmtInt(cut) + (r.words ? ' words' : ' characters');
+  }
   function keep(s) { return s.replace(/(\d) /g, '$1\u00A0'); }   // "1 min 20 s" may break between groups, never before a unit
   function n1(x) { return x == null ? '–' : (Math.round(x * 10) / 10).toFixed(1); }
   function speedName(w) {
@@ -761,7 +770,7 @@ if (typeof module !== 'undefined') module.exports = RT;
     var parts = '';
     if (empty) parts = input.value.trim() ? 'No words found: only letters and numbers count.' : 'Paste or type your text to time it, or ';
     else if (r.images) parts = C.formatDuration(r.readSeconds - r.imageSeconds) + ' of text + ' + C.formatDuration(r.imageSeconds) +
-      ' for ' + r.images + (r.images === 1 ? ' image' : ' images') + ' (Medium\u2019s rule: 12 s, then 1 s less each)';
+      ' for ' + r.images + (r.images === 1 ? ' image' : ' images');
     var skip = [];
     if (r.frontMatter) skip.push('front matter');
     if (r.codeBlocks) skip.push(r.codeBlocks + (r.codeBlocks === 1 ? ' code block' : ' code blocks'));
@@ -769,7 +778,7 @@ if (typeof module !== 'undefined') module.exports = RT;
     $('parts').textContent = parts;
     $('readSpd').textContent = '\u00B7 ' + (r.cjk && !r.words ? Math.round(C.CPM[r.lang] * r.wpm / C.DEFAULTS.wpm) + '/min' : r.wpm + ' wpm');
     $('speakSpd').textContent = '\u00B7 ' + (r.cjk && !r.words ? Math.round(C.SPEAK_CPM[r.lang] * r.speakWpm / C.DEFAULTS.speakWpm) + '/min' : r.speakWpm + ' wpm');
-    $('fitT').textContent = empty || r.cjk ? '' : 'Fits in 1 / 3 / 5 min: ' + [1, 3, 5].map(function (n) { return C.fmtInt(n * r.speakWpm); }).join(' / ') + ' words';
+    $('fitT').textContent = empty ? '' : fitLine(r);
     if (empty && !input.value.trim()) {
       var ex = document.createElement('button'); ex.type = 'button'; ex.textContent = 'bring back the example';
       ex.addEventListener('click', function () { setText(SAMPLE); });
@@ -785,6 +794,7 @@ if (typeof module !== 'undefined') module.exports = RT;
     var nm = speedName(r.wpm);
     var m = 'At ' + r.wpm + ' words a minute' + (r.wpm === 238 ? ', the adult average (Brysbaert 2019)' : nm ? ', ' + nm : '') +
       '; aloud at ' + r.speakWpm + '.';
+    if (r.images) m += ' Images: 12 s for the first, 1 s less for each next (Medium\u2019s rule).';
     if (r.cjk) {
       var zh = r.lang === 'ja' ? 'Japanese' : 'Chinese', sc = r.wpm / C.DEFAULTS.wpm, ss = r.speakWpm / C.DEFAULTS.speakWpm;
       var cm = zh + ' is read at ' + Math.round(C.CPM[r.lang] * sc) + ' characters a minute and said aloud at ' + Math.round(C.SPEAK_CPM[r.lang] * ss) +
@@ -1121,7 +1131,11 @@ if (typeof module !== 'undefined') module.exports = RT;
       document.querySelectorAll('.presets[data-kind="' + kind + '"] button').forEach(function (b) { b.setAttribute('aria-pressed', +b.dataset.v === r.value); });
       lastText = ''; analyze(input.value);
     });
-    el.addEventListener('blur', function () { if (!el.getAttribute('aria-invalid')) el.value = speeds[kind]; });
+    el.addEventListener('blur', function () {
+      // leaving the field: show the speed in use again rather than a stale error
+      el.value = speeds[kind]; el.removeAttribute('aria-invalid'); $(errId).textContent = '';
+      if (last) render(last);
+    });
   }
   speedField('wpm', 'wpmErr', 'wpm', 50, 1000);
   speedField('spk', 'spkErr', 'speak', 50, 400);
