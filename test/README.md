@@ -1473,6 +1473,7 @@ npm run test:pingu          # Pingu Throw suite (plain Node, no server or browse
 npm run test:moorhuhn       # Moor Chicken suite (plain Node, no server or browser)
 npm run test:minesweeper    # Minesweeper suite (plain Node, no server or browser)
 npm run test:connect4       # Connect Four AI suite (plain Node, no server or browser)
+npm run test:readingtime    # Reading Time Estimator suite (plain Node, no server or browser)
 npm run test:downhill       # Downhill Dreamer suite (plain Node, no server or browser)
 npm run test:bubble         # Bubble Break suite (plain Node, no server or browser)
 npm run test:towers         # Three Gates suite (plain Node, no server or browser)
@@ -2431,6 +2432,22 @@ the forgiving decoder (whitespace, URL-safe alphabet, missing or extra padding, 
 %-escapes, a copied `"key": "…",` JSON line), errors with their positions, the text encodings
 (UTF-8, ISO-8859-1, UTF-16LE), file-type sniffing, the hex dump and the paste-direction guess.
 Suites: rfc, roundtrip, lenient, errors, text, sniff, detect.
+
+## Reading Time Estimator
+
+```sh
+npm run test:readingtime                  # or: node test/reading_time_estimator.mjs
+node test/reading_time_estimator.mjs words time   # named suites only
+```
+
+`reading_time_estimator.mjs` runs the DOM-free `<script id="core">` of `tools/reading_time_estimator.html` in
+Node; no browser, no server. It checks what counts as a word (hyphenated once, dashes split, emoji and lone
+punctuation not at all, Chinese and Japanese per character, Thai segmented), what Markdown and HTML stripping
+leaves (front matter, fenced code, image and link syntax, URLs, entities), sentence and paragraph splitting
+(abbreviations, initials, decimals, hard-wrapped lines), the time arithmetic (238/140 wpm defaults, 260/400
+characters a minute, Medium's image rule), duration formatting without "1 min 60 s", a 280-word syllable
+table, the four readability formulas against hand-computed values, speed-field parsing, grapheme counts, and a
+5 MB text. Suites: words, markup, sentences, time, format, syllables, readability, speed, misc, huge.
 
 ## Pomodoro Timer
 
