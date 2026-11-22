@@ -2938,3 +2938,38 @@ from the page's own code.
 | `list` | a pasted column: one result per line and a blank where unreadable; 120,000 lines capped at 100,000 with the count, and progress reported |
 | `page` | in Chromium at phone size: this year as the labelled example, the result above the fold, results while typing, copy, an error in place of the result without moving anything, the suggestion button and undo, case and separator kept over a reload, `?q=` and `#` links, a 40,000-line paste read in the worker, dark mode, no console errors and no request leaving the site |
 
+
+## Image Background Remover
+
+```sh
+npm run test:background                           # or: node test/image_background_remover.mjs
+node test/image_background_remover.mjs fg page    # named suites only
+npx http-server -p 8099                           # the page suite needs it, and is skipped without it
+```
+
+`image_background_remover.mjs` runs the DOM-free `<script id="core">` block of `tools/image_background_remover.html`
+in Node's `vm`, the same text the page hands its worker. The model (ORMBG, loaded from Hugging Face) is not under
+test; everything the page does with its matte is: tidying it, the Edge control, the touch-up brushes, edge colour
+correction and the file that comes out. The page suite runs with `?engine=fake`, a soft ellipse in place of the
+model, so it needs no download and no network.
+
+| suite | what it checks |
+| --- | --- |
+| `size` | photos over 16.7 MP scaled with their shape (10000 × 10000, 48 MP, a 100000 × 10 strip), what the model is fed |
+| `resize` | bilinear resize at pixel centres: hand-worked values, identity, constant planes, a ramp stays monotone |
+| `matte` | specks and far haze dropped, soft pixels near the subject kept and faded, two subjects kept, an empty matte left alone, speed |
+| `edge` | the Edge LUT at every setting: monotone, ends fixed, higher keeps less (the old Detection Precision direction) |
+| `compose` | restore and erase, the later stroke winning, restored pixels in the photo's colour, touch-ups surviving the Edge control |
+| `stamp` | the soft brush: centre, rim, radius, dirty rectangle, strokes off and across the image edge |
+| `blur` | the running-sum box blur against a naive mean on random planes, radius 0 to wider than the image |
+| `fg` | blur-fusion foreground estimation against `image_background_remover.vectors.json`, and a true composite whose green rim must at least halve |
+| `export` | crop box, coverage, flattening onto a colour, packing the saved masks |
+| `text` | colour parsing, download names (paths, dots, non-ASCII, reserved characters, 200 characters), byte labels |
+| `sniff` | file kind from its first bytes for twelve formats, an SVG with BOM, prolog or comment, and text that is no picture |
+| `page` | in Chromium: the example on arrival, a chosen and a pasted photo cut out, PNG with alpha, JPG on a colour, crop to subject, erase with undo and redo, Edge, the job back after a reload, a text file and an unreadable HEIC refused next to the button, start over, the old `theme` key, phone buttons in the first screen, no console errors and no request leaving the site |
+
+`image_background_remover.vectors.json` holds four small pictures and the foreground colours that Forte & Pitié's
+reference code (`FB_blur_fusion_foreground_estimator_2`) gives for them, with `cv2.blur` replaced by an in-bounds mean
+over a (2r+1)-wide window, the box the page uses. To re-record it, run that code with numpy and
+opencv-python-headless on the `rgba` and `alpha` arrays in the file, with the radii `max(4, round(45·s))` and
+`max(1, round(3·s))` where `s` is the long side / 1024, and keep solid and empty pixels at the photo's own colour.
