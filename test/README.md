@@ -1574,6 +1574,7 @@ npm run test:wordexplainer  # Word Explainer suite (plain Node, no server or bro
 npm run test:names          # Baby Name Generator suite (plain Node, no server or browser)
 npm run test:cmv            # Contents May Vary suite (plain Node; its browser suite needs Playwright's Chromium)
 npm run test:aspect         # Aspect Ratio Calculator suite (plain Node; its page suite needs Playwright's Chromium and a server on :8099)
+npm run test:roman          # Roman Numeral Converter suite (plain Node; its page suite needs Playwright's Chromium and a server on :8099)
 npm run test:maze           # Escape the Maze suite (plain Node, no server or browser)
 npm run test:imagecompare   # Image Comparison Slider suite (plain Node; npm i --no-save pixelmatch@5.3.0 adds the pixelmatch cross-check)
 npm run test:pixelate       # Pixelate Image suite (plain Node, no server or browser)
@@ -2894,3 +2895,29 @@ Goertzel filter, independently of the synth code.
 | `wav` | RIFF header fields byte by byte, 16-bit clipping, volume, an empty WAV |
 | `misc` | file names, durations as text, share links round-tripping and clamping bad values |
 | `page` | in Chromium at phone size: the example on arrival with Play on screen, counts while typing, the error state and its fix, silent characters named and Привет → privet, Download giving a RIFF/WAVE file named after the text, Play and Stop, text and sound over a reload, a share link opened and then not overriding later edits, Copy link, a 560,000-character paste, no console errors and no request leaving the site |
+
+## Roman Numeral Converter
+
+```sh
+npm run test:roman                                # or: node test/roman_numeral_converter.mjs
+node test/roman_numeral_converter.mjs grammar     # named suites only
+npx http-server -p 8099                           # the page suite needs it, and is skipped without it
+```
+
+`roman_numeral_converter.mjs` runs the DOM-free `<script id="core">` block of `tools/roman_numeral_converter.html` in
+Node's `vm`, the same text the page hands its Web Worker for long pasted lists. The page promises a number written
+correctly in Roman numerals, a numeral read correctly or refused with the rule it breaks, and the working for each.
+Expected values come from published lists, an independent greedy encoder and the textbook validating regexes, never
+from the page's own code.
+
+| suite | what it checks |
+| --- | --- |
+| `vectors` | 40-odd published values both ways (Wikipedia's examples, Super Bowls, film years) and the vinculum up to 3,999,999 |
+| `encode` | every number 1..3,999,999 against a greedy encoder written in the suite; the working adds up and spells the numeral; reading back gives the number without a note |
+| `grammar` | all 137,256 strings of one to six letters from IVXLCDM: accepted exactly when the strict or the additive (IIII, VIIII, XXXX, MMMM) regex accepts them, a note exactly on the non-standard ones, and every refusal names its rule |
+| `input` | spaces, thousands in five styles, a decimal comma, digits of other scripts, full-width, Unicode numerals (Ⅻ, ↀ, ↁ), dotted letters, overlines and macrons, zero, negative, decimal, exponent, too large, badly grouped, empty |
+| `text` | a numeral or number inside a sentence (Louis XIV, Super Bowl LIX, chapter 12), and capitalised words made of numeral letters (Did, Civil) not taken for numerals |
+| `dates` | numeric and Roman dates both ways, the separator kept or chosen, lowercase, a zero or malformed part refused, 1.000.000 still a number |
+| `list` | a pasted column: one result per line and a blank where unreadable; 120,000 lines capped at 100,000 with the count, and progress reported |
+| `page` | in Chromium at phone size: this year as the labelled example, the result above the fold, results while typing, copy, an error in place of the result without moving anything, the suggestion button and undo, case and separator kept over a reload, `?q=` and `#` links, a 40,000-line paste read in the worker, dark mode, no console errors and no request leaving the site |
+
