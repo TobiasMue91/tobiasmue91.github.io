@@ -275,9 +275,13 @@ vec3 applyAtmo(vec3 col, vec3 ro, vec3 wp){
 	float b = uFogFall; float roy = max(abs(ro.y), 0.0);
 	float k = rd.y * b;
 	float g = abs(k) < 1e-5 ? dist : (1. - exp(-dist * k)) / k;
-	float fa = 1. - exp(-uFogDen * exp(-roy * b) * g);
+	// the near field keeps its blacks; haze builds with distance
+	float fa = (1. - exp(-uFogDen * exp(-roy * b) * g)) * smoothstep(20., 420., dist);
 	vec3 fc = skyLUT(normalize(vec3(rd.x, max(rd.y, 0.) * 0.25 + 0.035, rd.z))) * uFogMul;
-	fc += uSunCol * pow(max(dot(rd, uSunDir), 0.), 9.) * 0.018 * uFogSun;
+	// warm toward the sun, cool away from it
+	float sAz = dot(normalize(rd.xz + 1e-4), normalize(uSunDir.xz + 1e-4)), sf = max(dot(rd, uSunDir), 0.);
+	fc *= mix(vec3(0.9, 0.95, 1.05), vec3(1.06, 1.0, 0.9), smoothstep(-0.4, 0.9, sAz));
+	fc += uSunCol * (pow(sf, 9.) * 0.018 + pow(sf, 3.) * 0.01) * uFogSun;
 	return mix(col, fc, clamp(fa, 0., 1.));
 }
 `;
@@ -570,7 +574,7 @@ vec3 atmosphere(vec3 rd, vec3 r0, vec3 s, float I){
 		if (!blk){ vec3 att = exp(-(kM * 1.1 * (odM + oM) + kR * (odR + oR))); tR += dR * att; tM += dM * att; }
 		tI += st;
 	}
-	return I * (pR * kR * tR + pM * kM * tM * 0.6);
+	return I * (pR * kR * tR * 1.08 + pM * kM * tM * 0.36);
 }
 `;
 
@@ -720,9 +724,9 @@ void main(){
 // ── time-of-day keyframes (tod 0 → 1) ──
 // elev in degrees; exposure; fog; env intensity; night; aurora
 const KEYS = [
-	{ t: 0.00, elev: 17,  az: 0.48, exp: 0.85, fog: 0.00022, env: 1.0,  night: 0, aur: 0,    cov: 0.50, tw: 0 },
-	{ t: 0.30, elev: 8.5, az: 0.55, exp: 0.95, fog: 0.00026, env: 0.95, night: 0, aur: 0,    cov: 0.51, tw: 0 },
-	{ t: 0.50, elev: 2.2, az: 0.62, exp: 1.25, fog: 0.00030, env: 0.85, night: 0, aur: 0,    cov: 0.52, tw: 0.3 },
+	{ t: 0.00, elev: 17,  az: 0.48, exp: 0.85, fog: 0.00022, env: 1.0,  night: 0, aur: 0,    cov: 0.50, tw: 0.12 },
+	{ t: 0.30, elev: 8.5, az: 0.55, exp: 0.95, fog: 0.00026, env: 0.95, night: 0, aur: 0,    cov: 0.51, tw: 0.5 },
+	{ t: 0.50, elev: 2.2, az: 0.62, exp: 1.25, fog: 0.00030, env: 0.85, night: 0, aur: 0,    cov: 0.52, tw: 0.6 },
 	{ t: 0.64, elev: -1.8,az: 0.68, exp: 2.2,  fog: 0.00030, env: 0.9,  night: 0.05, aur: 0, cov: 0.53, tw: 1 },
 	{ t: 0.78, elev: -6,  az: 0.74, exp: 3.4,  fog: 0.00026, env: 1.1,  night: 0.45, aur: 0.15, cov: 0.55, tw: 0.8 },
 	{ t: 0.90, elev: -11, az: 0.80, exp: 4.6,  fog: 0.00022, env: 1.4,  night: 0.9,  aur: 0.55, cov: 0.57, tw: 0.25 },
@@ -803,7 +807,10 @@ class SkySystem {
 		U.uFogDen.value = s.fog;
 
 		const T = transmittance(sun.y, 150);
-		const sunI = 3.4;
+		// colour script: the lower the sun, the more amber its light, beyond what single scattering gives
+		const gold = smoothstep(28, 1, s.elev);
+		[1 + 0.16 * gold, 1 - 0.07 * gold, 1 - 0.3 * gold].forEach((k, i) => T[i] *= k);
+		const sunI = 3.4 * (1 + 1.1 * gold);   // a low sun is the key light of the whole picture
 		U.uSunCol.value.setRGB(T[0] * sunI, T[1] * sunI, T[2] * sunI);
 		// clouds see the sun longer than the ground does
 		const Tc = transmittance(Math.max(-0.06, sun.y + 0.045), 2400);
@@ -1190,7 +1197,7 @@ function spruceGeometry(seed, o) {
 				sides2.push(sd.clone().multiplyScalar(Math.cos(1.2)).addScaledVector(nrm, Math.sin(1.2) * (k % 2 ? 1 : -1)));
 				w1.push(hw * (0.55 + 0.45 * s)); w2.push(hw * 0.85 * (0.45 + 0.55 * s));
 			}
-			ribbon(pts, sides, w1, out, 0.4, 1.0, lowShade);
+			ribbon(pts, sides, w1, out, 0.5, 1.0, lowShade);
 			if (o.cross) ribbon(pts, sides2, w2, out, 0.36, 0.92, lowShade);
 		}
 	}
@@ -1247,12 +1254,12 @@ function paintSpruceSpray(cv, seed = 3) {
 	}
 	// dark core along every twig
 	for (const [P, nl] of twigs) {
-		cx.strokeStyle = 'rgb(26,50,34)'; cx.lineWidth = nl * 1.25;
+		cx.strokeStyle = 'rgb(36,66,44)'; cx.lineWidth = nl * 1.25;
 		cx.beginPath(); P.forEach(([x, y], i) => i ? cx.lineTo(x, y) : cx.moveTo(x, y)); cx.stroke();
 	}
 	// needles, inner and older ones first
 	const col = (k, fresh) => {
-		const d = [34 + k * 30, 64 + k * 44, 42 + k * 20], f = [128, 166, 78];
+		const d = [48 + k * 36, 86 + k * 50, 54 + k * 22], f = [150, 182, 88];
 		const m = fresh * (0.7 + r() * 0.3), j = 0.85 + r() * 0.3;
 		return `rgb(${(d[0] + (f[0] - d[0]) * m) * j | 0},${(d[1] + (f[1] - d[1]) * m) * j | 0},${(d[2] + (f[2] - d[2]) * m) * j | 0})`;
 	};
@@ -1349,6 +1356,8 @@ function buildVegetation(world, count, scene, tx) {
 				float back = pow(max(dot(vd, uLightDir), 0.), 4.);
 				// light scattering through the leaves (thin-surface translucency)
 				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * vec3(0.9, 1.1, 0.5) * (back * 1.3 + 0.12) * gFarSh * vColor.r;
+				// soft wrap from the sun side: a crown of needles scatters light around its whole shape
+				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * max(dot(normalize((vec4(normal, 0.) * viewMatrix).xyz), uLightDir) * 0.5 + 0.5, 0.) * 0.22 * gFarSh;
 			}`,
 	});
 	const mats = [bark, leaves];
@@ -1516,7 +1525,7 @@ void main(){
 	// absorption (red dies first) + in-scattered light
 	float L = pathLen + dVert;
 	vec3 T = exp(-vec3(0.42, 0.085, 0.06) * L);
-	vec3 scatterCol = vec3(0.012, 0.085, 0.095) * (uLightCol * (0.15 + ld) * 0.55 * sh + skyUp * 0.9);
+	vec3 scatterCol = vec3(0.018, 0.12, 0.15) * (uLightCol * (0.15 + ld) * 0.55 * sh + skyUp * 0.9);
 	vec3 body = seabed * T + scatterCol * (1. - T);
 	// light through wave crests when looking toward the light
 	vec2 lh = normalize(uLightDir.xz + 1e-4), vh = normalize(-V.xz + 1e-4);
@@ -1762,7 +1771,7 @@ class FinalPass extends Pass {
 		this.uniforms = {
 			tDiffuse: { value: null }, tDirt: { value: dirtTex }, uExposure: { value: 1 }, uTime: { value: 0 },
 			uSat: { value: 1.12 }, uContrast: { value: 1.18 }, uShadowTint: { value: new THREE.Color(0.0, 0.01, 0.025) },
-			uHiTint: { value: new THREE.Color(1.03, 1.0, 0.96) }, uVignette: { value: 0.32 }, uGrain: { value: 0.018 }, uCA: { value: 0.0035 },
+			uHiTint: { value: new THREE.Color(1.03, 1.0, 0.96) }, uCool: { value: new THREE.Color(0.94, 0.97, 1.05) }, uVignette: { value: 0.32 }, uGrain: { value: 0.018 }, uCA: { value: 0.0035 },
 			uSun: { value: new THREE.Vector2(0.5, 0.5) }, uSunVis: { value: 0 }, uFlareCol: { value: new THREE.Color(1, 0.7, 0.4) },
 			uAspect: { value: 1 }, uFade: { value: 0 }, uFlash: { value: 0 }, uBlur: { value: 0 }, uDirt: { value: 0.22 },
 		};
@@ -1771,7 +1780,7 @@ class FinalPass extends Pass {
 			fragmentShader: /* glsl */`
 				uniform sampler2D tDiffuse; uniform sampler2D tDirt;
 				uniform float uExposure, uTime, uSat, uContrast, uVignette, uGrain, uCA, uSunVis, uAspect, uFade, uFlash, uBlur, uDirt;
-				uniform vec3 uShadowTint, uHiTint, uFlareCol; uniform vec2 uSun;
+				uniform vec3 uShadowTint, uHiTint, uCool, uFlareCol; uniform vec2 uSun;
 				varying vec2 vUv;
 				${NOISE_GLSL}
 				vec3 aces(vec3 x){
@@ -1814,7 +1823,9 @@ class FinalPass extends Pass {
 					col = mix(vec3(l), col, uSat);
 					col = (col - 0.18) * uContrast + 0.18;
 					col = max(col, 0.);
-					col = col * uHiTint + uShadowTint * (1. - smoothstep(0., 0.35, l));
+					// split tone: warm light, cool shade
+col *= mix(uCool, uHiTint, smoothstep(0.04, 0.6, l));
+col += uShadowTint * (1. - smoothstep(0., 0.35, l));
 					col *= 1. - uVignette * smoothstep(0.08, 0.6, r2 * 1.6);
 					col = toSRGB(clamp(col, 0., 1.));
 					col += (hash12(gl_FragCoord.xy + fract(uTime) * 517.) - 0.5) * uGrain;
@@ -2468,7 +2479,10 @@ function makeGlider() {
 			{ vec3 vd = normalize(gWPos - cameraPosition);
 			  float back = pow(max(dot(vd, uLightDir), 0.), 3.);
 			  float panel = 1. - smoothstep(0.1, 0.13, vMapUv.y);
-			  totalEmissiveRadiance += diffuseColor.rgb * (1. - panel) * (uLightCol * back * 0.9 * gFarSh + uLantern * uGlow * 0.5 * (1. - vMapUv.y * 0.5)); }`,
+			  totalEmissiveRadiance += diffuseColor.rgb * (1. - panel) * (uLightCol * back * 0.9 * gFarSh + uLantern * uGlow * 0.5 * (1. - vMapUv.y * 0.5));
+  // a rim of sky and lantern light keeps the sail's outline against glare and dark water alike
+  float rim = pow(1. - abs(dot(normalize(vNormal), normalize(vViewPosition))), 3.);
+  totalEmissiveRadiance += (uLightCol * 0.3 * gFarSh + uLantern * uGlow * 0.35) * rim; }`,
 	});
 	const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); white.needsUpdate = true;
 	wingMat.map = white;
@@ -2544,7 +2558,14 @@ function makeGlider() {
 	const lmesh = new THREE.Mesh(lg, lmat); lmesh.scale.setScalar(0.5); lmesh.position.y = -0.62; lantern.add(lmesh);
 	const light = new THREE.PointLight(0xffa050, 60, 90, 1.6); light.position.y = -0.25; lantern.add(light);
 	g.add(lantern);
-	g.userData = { billow, lantern, light, lmat };
+	// a soft halo, so the flame reads as the brightest thing on screen at any distance and against any sky
+const hc = document.createElement('canvas'); hc.width = hc.height = 64;
+const hx = hc.getContext('2d'), hg = hx.createRadialGradient(32, 32, 0, 32, 32, 32);
+hg.addColorStop(0, 'rgba(255,255,255,1)'); hg.addColorStop(0.18, 'rgba(255,255,255,0.55)'); hg.addColorStop(0.5, 'rgba(255,255,255,0.12)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
+hx.fillStyle = hg; hx.fillRect(0, 0, 64, 64);
+const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(hc), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, color: 0xffa050 }));
+halo.scale.setScalar(2.6); halo.position.y = -0.32; halo.renderOrder = 24; lantern.add(halo);
+g.userData = { billow, lantern, light, lmat, halo };
 	g.traverse(o => o.layers.enable(2));
 	return g;
 }
@@ -3423,7 +3444,7 @@ function frame(dt, freezeTime) {
 	if (Math.abs(S.tod - S.todTarget) < 0.0005) S.tod = S.todTarget;
 	const todNow = S.photoTod ?? S.tod;
 	if (sky.update(todNow, dt)) scene.environment = sky.envRT.texture;
-	scene.environmentIntensity = sky.state.env;
+	scene.environmentIntensity = sky.state.env * lerp(0.72, 1, U.uNight.value);   // softer sky fill by day: contrast between sunlit and shaded faces
 	if (++farTick % 2 === 0) farShadow.update();
 
 	// glider transform
@@ -3436,6 +3457,7 @@ function frame(dt, freezeTime) {
 	const li = 0.55 + 0.45 * P.energy;
 	glider.userData.lmat.uniforms.uI.value = li;
 	glider.userData.light.intensity = (30 + 40 * U.uNight.value) * li * (0.9 + 0.1 * Math.sin(t * 11)) * U.uGlow.value;
+	glider.userData.halo.material.color.setRGB(1.1, 0.62, 0.26).multiplyScalar(li * U.uGlow.value * (0.55 + 0.45 * U.uNight.value) * (0.92 + 0.08 * Math.sin(t * 9)));
 	U.uPlayer.value.copy(glider.userData.lantern.getWorldPosition(tmp));
 	streaks.uVel.value.copy(fwd).multiplyScalar(P.speed);
 	streaks.uA.value = damp(streaks.uA.value, playing && P.alive && !S.cine ? 0.18 + smoothstep(30, 80, P.speed) * 0.3 + P.boost * 0.22 : 0, 4, dt);
@@ -3516,6 +3538,9 @@ function frame(dt, freezeTime) {
 	fu.uFlash.value = P.flash * P.flash * (REDUCED ? 0.08 : 0.22);
 	fu.uBlur.value = playing && !REDUCED ? P.boost * 0.8 + smoothstep(60, 105, P.speed) * 0.5 : 0;
 	fu.uSat.value = lerp(1.14, 1.05, U.uNight.value);
+	const nn = U.uNight.value;
+	fu.uHiTint.value.setRGB(lerp(1.07, 1.0, nn), lerp(1.0, 0.98, nn), lerp(0.87, 0.96, nn));
+	fu.uCool.value.setRGB(lerp(0.92, 0.95, nn), lerp(0.97, 0.97, nn), lerp(1.07, 1.04, nn));
 	fu.uShadowTint.value.setRGB(0.004, 0.01 + 0.01 * U.uNight.value, 0.03 + 0.02 * U.uNight.value);
 	bloomPass.strength = (0.27 + 0.22 * U.uNight.value) * QUALITY[quality].bloom;
 	bloomPass.threshold = lerp(4.2, 2.0, U.uNight.value) / st.exp;
