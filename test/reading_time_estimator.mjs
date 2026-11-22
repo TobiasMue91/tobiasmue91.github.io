@@ -214,7 +214,7 @@ if (suites.includes('readability')) {
   const ru = A(Array(40).fill('Привет').join(' ') + '.');
   check(!ru.english && ru.fleschReadingEase === null, 'Cyrillic text is not scored as English');
   check(A(cat + ' 我们也翻译了。').english, 'a stray Chinese line keeps English scores on');
-  eq(A(cat).notes, ['Reads well: no long sentences or heavy vocabulary.'], 'easy text gets the all-clear note');
+  eq(A(cat).notes, [], 'easy text gets no canned note');
   const long = Array(5).fill(Array(25).fill('word').join(' ') + '.').join(' ');
   check(A(long).notes.some(n => /Sentences average 25/.test(n)), 'long sentences are named with their length');
   const blob = Array(12).fill('The cat sat on the mat.').join(' ');
