@@ -1558,6 +1558,7 @@ npm run test:gradient       # CSS Gradient Generator suite (plain Node; its brow
 npm run test:clippath       # CSS clip-path Generator suite (plain Node; its browser suite uses Playwright's Chromium and serves the page itself)
 npm run test:bmi            # BMI Calculator suite (plain Node, no server or browser)
 npm run test:timer          # Online Timer suite (plain Node, no server or browser)
+npm run test:invoice        # Invoice Generator suite (plain Node, no server or browser)
 npm run test:pomodoro       # Pomodoro Timer suite (plain Node, no server or browser)
 npm run test:palette        # Color Palette Generator suite (plain Node, no server or browser)
 npm run test:colorpicker    # Color Picker suite (plain Node, no server or browser)
@@ -2191,6 +2192,16 @@ reads what people type (decimal commas, units, feet and inches, stone) and the o
 everything else is an error that names the problem; a countdown that shows the full length at the start and 0:00 only at the end;
 the "ends" clock across midnight, new year, leap day and both DST changes; links with `?t=`; and the old page's `timerSettings`
 read back and written in a shape the old fields still fit. Run it after touching the core.
+
+`test/invoice_generator.mjs` runs the DOM-free `<script id="core">` block of `tools/invoice_generator.html` against figures worked
+out by hand from the rules the page prints beside its total: exact decimal money (BigInt minor units), each line rounded to the
+currency's minor unit (ISO 4217: JPY 0, KWD 3), a discount taken before tax and shared over the tax rates so the bases add up, tax
+rounded once per rate, halves away from zero, tax-inclusive prices split as gross x r / (100 + r), credit lines that stay negative,
+and errors (not silent caps) for discounts above the subtotal or negative rates. It reads what people type (decimal commas, symbols,
+codes, units, brackets, a letter o for a zero), checks IBANs against the registry examples and the payment QR text against EPC069-12,
+re-runs the old page's sample invoices and reads its `invoices`, `savedClients` and `catalogItems` back, and lays out pages: Letter
+or A4 by locale, wrapping, pagination with a repeated header, nothing off the paper, and no total printed while a field is wrong.
+Run it after touching the core.
 
 `test/word_scrambler.mjs` runs the DOM-free `<script id="core">` block of `tools/online_word_scrambler.html` (Word Scrambler),
 whose promises nobody can check by eye on a long text: every word comes out a rearrangement of its own letters with every
