@@ -438,13 +438,14 @@ async function pageSuite(chromium) {
 
     // Bad input: text, then a HEIC this Chromium cannot decode. The current picture stays.
     await page.setInputFiles('#fileInput', {name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello')});
-    await page.waitForFunction(() => /not a picture/.test(document.getElementById('fileErr').textContent), null, {timeout: 5000}).catch(() => {});
-    check(/not a picture/.test(await page.textContent('#fileErr')), 'a text file is refused next to the button', await page.textContent('#fileErr'));
-    check(await page.isVisible('#notice'), 'and on the picture');
+    await page.waitForFunction(() => /not a picture/.test(document.getElementById('noticeText').textContent), null, {timeout: 5000}).catch(() => {});
+    check(/not a picture/.test(await page.textContent('#noticeText')) && await page.isVisible('#notice'), 'a text file is refused once, on the picture it would replace', await page.textContent('#noticeText'));
+    check(/previous photo/.test(await page.textContent('#status')), 'and the status says the previous photo is still the one shown', await page.textContent('#status'));
     eq(await page.textContent('#metaName'), 'My Photo (1).png', 'the current cutout is kept');
     await page.setInputFiles('#fileInput', {name: 'IMG_0001.HEIC', mimeType: 'image/heic', buffer: Buffer.from('\0\0\0\x18ftypheic\0\0\0\0mif1heic', 'latin1')});
-    await page.waitForFunction(() => /HEIC/.test(document.getElementById('fileErr').textContent), null, {timeout: 5000}).catch(() => {});
-    check(/HEIC/.test(await page.textContent('#fileErr')), 'a HEIC this browser cannot read gets a HEIC answer', await page.textContent('#fileErr'));
+    await page.waitForFunction(() => /HEIC/.test(document.getElementById('noticeText').textContent), null, {timeout: 5000}).catch(() => {});
+    check(/HEIC/.test(await page.textContent('#noticeText')), 'a HEIC this browser cannot read gets a HEIC answer', await page.textContent('#noticeText'));
+    await page.click('#noticeClose');
 
     // Paste an image.
     await page.evaluate(async b64 => {

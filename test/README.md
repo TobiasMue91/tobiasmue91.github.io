@@ -2966,7 +2966,7 @@ model, so it needs no download and no network.
 | `export` | crop box, coverage, flattening onto a colour, packing the saved masks |
 | `text` | colour parsing, download names (paths, dots, non-ASCII, reserved characters, 200 characters), byte labels |
 | `sniff` | file kind from its first bytes for twelve formats, an SVG with BOM, prolog or comment, and text that is no picture |
-| `page` | in Chromium: the example on arrival, a chosen and a pasted photo cut out, PNG with alpha, JPG on a colour, crop to subject, erase with undo and redo, Edge, the job back after a reload, a text file and an unreadable HEIC refused next to the button, start over, the old `theme` key, phone buttons in the first screen, no console errors and no request leaving the site |
+| `page` | in Chromium: the example on arrival, a chosen and a pasted photo cut out, PNG with alpha, JPG on a colour, crop to subject, erase with undo and redo, Edge, the job back after a reload, a text file and an unreadable HEIC refused on the picture, start over, the old `theme` key, phone buttons in the first screen, no console errors and no request leaving the site |
 
 `image_background_remover.vectors.json` holds four small pictures and the foreground colours that Forte & Pitié's
 reference code (`FB_blur_fusion_foreground_estimator_2`) gives for them, with `cv2.blur` replaced by an in-bounds mean
