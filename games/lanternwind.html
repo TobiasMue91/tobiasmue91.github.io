@@ -1021,14 +1021,14 @@ function buildTerrain(world, tex, mats, segs) {
 				sandW *= 1. - smoothstep(0.35, 0.6, slope);
 				float soft = (1. - rockW) * (1. - sandW);
 				float forest = smoothstep(0.25, 0.7, gHS.b + (n3 - 0.5) * 0.3) * smoothstep(150., 90., h);
-				float dry = smoothstep(0.55, 0.85, n1 + h * 0.002);
+				float dry = smoothstep(0.62, 0.92, n1 + h * 0.002);
 				float w0 = soft * (1. - forest) * (1. - dry), w1 = soft * (1. - forest) * dry, w2 = soft * forest;
 				float moss = smoothstep(0.45, 0.7, n2 + gN.y * 0.4 - 0.25) * smoothstep(8., 30., h);
 				float w4 = rockW * (1. - moss), w5 = rockW * moss;
 				float w3 = sandW;
 				vec3 alb = vec3(0.), nd = vec3(0.);
 				planar(0., 4.5, w0, far, alb, nd);
-				planar(1., 6., w1, far, alb, nd);
+				vec3 albD = vec3(0.); planar(1., 6., w1, far, albD, nd); alb += albD * vec3(0.9, 1.0, 0.72);   // dry meadow goes straw, not rust
 				planar(2., 5., w2, far, alb, nd);
 				planar(3., 6.5, w3, far, alb, nd);
 				vec3 albR = vec3(0.); triplanar(4., 8., w4, albR, nd);
@@ -2000,8 +2000,8 @@ class Sparks {
 function lanternGeometry() {
 	const pts = [];
 	for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new THREE.Vector2(0.34 + 0.16 * Math.sin(t * Math.PI) - t * 0.06, t * 1.15)); }
-	const g = new THREE.LatheGeometry(pts, 14);
-	const top = new THREE.CircleGeometry(0.33, 14); top.rotateX(-Math.PI / 2); top.translate(0, 1.15, 0);
+	const g = new THREE.LatheGeometry(pts, 6);
+	const top = new THREE.CircleGeometry(0.33, 6); top.rotateX(-Math.PI / 2); top.translate(0, 1.15, 0);
 	return mergeGeometries([g.toNonIndexed(), top.toNonIndexed()]);
 }
 
@@ -2053,7 +2053,7 @@ class SkyLanterns {
 				p.xy = mat2(cos(tilt), -sin(tilt), sin(tilt), cos(tilt)) * p.xy;
 				vW = c + p; vL = position;
 				vF = 0.8 + 0.2 * sin(uTime * 9. + aSeed.x * 100.) * sin(uTime * 3.7 + aSeed.x * 40.);
-				vCol = mix(vec3(5.5, 2.0, 0.55), vec3(5.0, 1.3, 0.6), aSeed.w);
+				vCol = mix(vec3(4.2, 1.55, 0.42), vec3(3.8, 1.0, 0.45), aSeed.w);
 				gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.);
 			}`;
 		this.mat = new THREE.ShaderMaterial({ uniforms: { ...U }, vertexShader: vs, fragmentShader: LANTERN_FRAG, side: THREE.DoubleSide });
@@ -2411,15 +2411,34 @@ function makeShrine(pos) {
 			  diffuseColor.rgb = mix(moss, stone, mix(joint, 1., side * 0.0)) * mix(1., 0.8, side); }`,
 	});
 	add(new THREE.CylinderGeometry(19.5, 20.5, 1.6, 64), pave, 0, -0.72, 0).castShadow = false;
-	add(new THREE.CylinderGeometry(11, 12.5, 2.2, 28), sm, 0, 0.4, 0);
-	add(new THREE.CylinderGeometry(8, 9, 1.2, 28), sm, 0, 2.0, 0);
-	for (let i = 0; i < 6; i++) {
-		const a = i / 6 * Math.PI * 2;
-		add(new THREE.BoxGeometry(1.3, 9 + (i % 2) * 2.5, 1.3), sm, Math.cos(a) * 10, 5.5 + (i % 2) * 1.2, Math.sin(a) * 10).rotation.y = -a;
+	const steps = [];
+	// a ring of rough standing stones, older than anyone remembers, around a stepped stone brazier
+	const nz = makeNoise(Math.round(pos.x * 7 + pos.z * 13) & 0xffff);
+	const hewn = (geo, amp, f, seed) => {       // chisel: displace by position only, so the split box vertices stay together
+		const p = geo.attributes.position;
+		for (let i = 0; i < p.count; i++) {
+			const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+			p.setXYZ(i, x + nz.n2(y * f + seed, z * f) * amp, y + nz.n2(x * f, z * f + seed) * amp * 0.5, z + nz.n2(x * f + seed, y * f) * amp);
+		}
+		geo.computeVertexNormals(); return geo;
+	};
+	const rs = mulberry32(Math.round(pos.x * 3 + pos.z * 5) & 0xffff);
+	for (let i = 0; i < 7; i++) {
+		const a = (i + rs() * 0.35) / 7 * Math.PI * 2, h = 4.6 + rs() * 3.6, w = 1.7 + rs() * 0.9, d = 1.0 + rs() * 0.6;
+		const geo = new THREE.BoxGeometry(w, h, d, 3, 6, 2);
+		const p = geo.attributes.position;
+		for (let k = 0; k < p.count; k++) { const t = (p.getY(k) + h / 2) / h, sc = 1 - 0.32 * t * t; p.setX(k, p.getX(k) * sc); p.setZ(k, p.getZ(k) * sc); if (t > 0.98) p.setY(k, p.getY(k) - Math.abs(p.getX(k)) * 0.5); }
+		const m = add(hewn(geo, 0.22, 0.55, i * 9.1), sm, Math.cos(a) * 12.9, h / 2 - 0.7, Math.sin(a) * 12.9);
+		m.rotation.set((rs() - 0.5) * 0.14, -a + (rs() - 0.5) * 0.3, (rs() - 0.5) * 0.14);
 	}
-	add(new THREE.CylinderGeometry(1.0, 1.6, 4.5, 12), sm, 0, 4.6, 0);
-	const bowl = new THREE.LatheGeometry([new THREE.Vector2(0.4, 0), new THREE.Vector2(2.6, 0.4), new THREE.Vector2(3.6, 1.5), new THREE.Vector2(3.9, 2.2), new THREE.Vector2(3.4, 2.2), new THREE.Vector2(2.5, 1.0)], 28);
-	add(bowl, metal, 0, 6.6, 0);
+	// two low hewn steps carry the brazier
+add(hewn(new THREE.CylinderGeometry(7.2, 7.8, 0.9, 8, 1), 0.14, 0.7, 1.1), sm, 0, 0.35, 0).rotation.y = 0.2;
+add(hewn(new THREE.CylinderGeometry(5.3, 5.8, 0.9, 8, 1), 0.12, 0.8, 2.2), sm, 0, 1.2, 0).rotation.y = 0.6;
+add(hewn(new THREE.CylinderGeometry(3.6, 4.1, 1.3, 8, 1), 0.12, 0.8, 3.3), sm, 0, 2.2, 0);
+	add(hewn(new THREE.CylinderGeometry(1.6, 2.3, 4.0, 8, 3), 0.12, 0.8, 5.1), sm, 0, 4.8, 0);
+	const bowl = new THREE.LatheGeometry([new THREE.Vector2(0.6, 0), new THREE.Vector2(2.4, 0.25), new THREE.Vector2(3.5, 1.1), new THREE.Vector2(4.1, 2.1), new THREE.Vector2(3.75, 2.25), new THREE.Vector2(2.9, 1.3), new THREE.Vector2(0.5, 1.2)], 8);
+	add(hewn(bowl, 0.08, 1.1, 7.7), sm, 0, 6.6, 0).rotation.y = Math.PI / 8;
+	add(new THREE.TorusGeometry(3.95, 0.12, 6, 8), metal, 0, 8.82, 0).rotation.set(Math.PI / 2, 0, Math.PI / 8);
 	// rune ring
 	const ringU = { value: 0 };
 	const ringMat = new THREE.ShaderMaterial({
@@ -2437,8 +2456,8 @@ function makeShrine(pos) {
 		side: THREE.DoubleSide,
 	});
 	// the runes are carved into a low band around the plinth, not floating in the air
-	const ring = new THREE.Mesh(new THREE.CylinderGeometry(11.55, 11.55, 0.7, 96, 1, true), ringMat);
-	ring.position.y = 0.75; g.add(ring);
+	const ring = new THREE.Mesh(new THREE.CylinderGeometry(7.72, 7.72, 0.5, 8, 1, true), ringMat);
+	ring.position.y = 0.35; ring.rotation.y = 0.2; g.add(ring);
 	const ring2 = new THREE.Object3D();
 	g.position.copy(pos);
 	g.userData = { ringU, ring, ring2 };
