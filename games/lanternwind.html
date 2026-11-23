@@ -295,13 +295,18 @@ function patchStandard(mat, opts = {}) {
 		Object.assign(sh.uniforms, U);
 		if (opts.uniforms) Object.assign(sh.uniforms, opts.uniforms);
 		sh.fragmentShader = sh.fragmentShader
-			.replace('#include <common>', '#include <common>\n' + NOISE_GLSL + ATMO_GLSL + '\nfloat gFarSh = 1.0; vec3 gWPos;\n' + (opts.fragHead || ''))
+			.replace('#include <common>', '#include <common>\n' + NOISE_GLSL + ATMO_GLSL + '\nuniform float uNight; float gFarSh = 1.0; vec3 gWPos;\n' + (opts.fragHead || ''))
 			.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 				gWPos = cameraPosition + (vec4(-vViewPosition, 0.) * viewMatrix).xyz;
 				gFarSh = farShadow(gWPos);
 				${opts.fragMain || ''}`)
 			.replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight ); directLight.color *= gFarSh;')
-			.replace('#include <fog_fragment>', 'gl_FragColor.rgb = applyAtmo(gl_FragColor.rgb, cameraPosition, gWPos);');
+			.replace('#include <fog_fragment>', `
+				// twilight fill: once the sun is low, the bright horizon lights the ground more than the dark zenith does
+				{ float lowSun = smoothstep(0.07, -0.06, uSunDir.y);   // from the last minutes of sunset on
+				  vec3 fill = skyLUT(vec3(0., 1., 0.)) * 0.3 + skyLUT(normalize(vec3(uSunDir.x, 0.06, uSunDir.z))) * 0.09 + skyLUT(normalize(vec3(-uSunDir.x, 0.06, -uSunDir.z))) * 0.12;
+				  gl_FragColor.rgb += diffuseColor.rgb * fill * (0.08 + 2.4 * lowSun) * mix(1., 0.55, uNight); }
+				gl_FragColor.rgb = applyAtmo(gl_FragColor.rgb, cameraPosition, gWPos);`);
 		if (opts.mapFragment) sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', opts.mapFragment);
 		if (opts.normalFragment) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + opts.normalFragment);
 		if (opts.roughFragment) sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n' + opts.roughFragment);
@@ -593,7 +598,7 @@ void main(){
 	float az = dot(normalize(dd.xz + 1e-5), normalize(uSunDir.xz + 1e-5));
 	float hz = exp(-dd.y * 7.);
 	col += uTwilight * hz * mix(vec3(0.05, 0.035, 0.07), vec3(0.5, 0.16, 0.05), smoothstep(-0.2, 1., az) * smoothstep(-0.2, 1., az)) * 0.55;
-	col += uTwilight * exp(-pow((dd.y - 0.1) * 9., 2.)) * smoothstep(0.2, -0.9, az) * vec3(0.16, 0.07, 0.11) * 0.6;
+	col += uTwilight * exp(-((dd.y - 0.1) * 9.) * ((dd.y - 0.1) * 9.)) * smoothstep(0.2, -0.9, az) * vec3(0.16, 0.07, 0.11) * 0.6;
 	col += uTwilight * (1. - hz) * vec3(0.012, 0.02, 0.06);
 	// night base + moon halo
 	vec3 night = vec3(0.004, 0.008, 0.021) * (1. + 1.2 * hz) + vec3(0.003, 0.004, 0.006) * hz;
@@ -656,7 +661,7 @@ vec3 aurora(vec3 rd){
 		float u = p.x * 0.55 + p.y * 0.2;
 		float v = -p.y;
 		float v0 = 2.4 + 0.7 * sin(u * 0.35 + uTime * 0.06) + 0.9 * (fbm2(vec2(u * 0.22 + uTime * 0.015, 1.3), 3) - .5);
-		float curtain = exp(-pow((v - v0) * 2.2, 2.));
+		float cd = (v - v0) * 2.2; float curtain = exp(-cd * cd);
 		float rays = 0.35 + 0.65 * vnoise(vec2(u * 9. + uTime * 0.25, fi * 0.03));
 		vec3 c = mix(vec3(0.05, 1.0, 0.45), vec3(0.75, 0.15, 1.0), smoothstep(6., 26., fi));
 		acc += c * curtain * rays * exp(-fi * 0.085);
@@ -997,6 +1002,7 @@ function buildTerrain(world, tex, mats, segs) {
 				if (w < 0.004) return;
 				vec3 bw = pow(abs(gN), vec3(4.)); bw /= dot(bw, vec3(1.));
 				vec3 p = gWPos / s;
+				p += (vec3(fbm2(gWPos.zy * 0.03, 2), fbm2(gWPos.xz * 0.03 + 5., 2), fbm2(gWPos.xy * 0.03 + 9., 2)) - 0.5) * 2.4;   // warped: no rows of tiles
 				vec2 ux = p.zy, uy = p.xz, uz = p.xy;
 				vec3 ax = texture(uAlb, vec3(ux, l)).rgb, ay = texture(uAlb, vec3(uy, l)).rgb, az = texture(uAlb, vec3(uz, l)).rgb;
 				alb += (ax * bw.x + ay * bw.y + az * bw.z) * w;
@@ -1063,10 +1069,10 @@ function buildTerrain(world, tex, mats, segs) {
 				if (d > 0.){ totalEmissiveRadiance += uLightCol * caust(gWPos.xz) * 0.35 * exp(-d * 0.18) * smoothstep(0., 0.6, d) * gFarSh * diffuseColor.rgb * 3.; }
 				// a ring of firelight runs out across the island from a beacon as it catches
 				float wa = uTime - uWave.w;
-				if (wa > 0. && wa < 6.){ float wd = distance(gWPos.xz, uWave.xy); float ring = exp(-pow((wd - wa * 85.) / 7., 2.)) * smoothstep(0., 0.4, wa) * smoothstep(20., 50., wd);
+				if (wa > 0. && wa < 6.){ float wd = distance(gWPos.xz, uWave.xy); float ring = exp(-((wd - wa * 85.) / 7.) * ((wd - wa * 85.) / 7.)) * smoothstep(0., 0.4, wa) * smoothstep(20., 50., wd);
 					totalEmissiveRadiance += diffuseColor.rgb * vec3(3.2, 1.3, 0.35) * ring * exp(-wa * 0.55) * uGlow * 0.0; }
 			}`,
-		aoFragment: 'reflectedLight.indirectDiffuse *= mix(0.45, 1.0, gHS.g); reflectedLight.indirectSpecular *= mix(0.45, 1.0, gHS.g);',
+		aoFragment: 'reflectedLight.indirectDiffuse *= mix(0.62, 1.0, gHS.g); reflectedLight.indirectSpecular *= mix(0.55, 1.0, gHS.g);',
 	});
 	const mesh = new THREE.Mesh(geo, mat);
 	mesh.receiveShadow = true;
@@ -1364,6 +1370,8 @@ function buildVegetation(world, count, scene, tx) {
 				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * vec3(0.9, 1.1, 0.5) * (back * 1.3 + 0.12) * gFarSh * vColor.r;
 				// soft wrap from the sun side: a crown of needles scatters light around its whole shape
 				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * max(dot(normalize((vec4(normal, 0.) * viewMatrix).xyz), uLightDir) * 0.5 + 0.5, 0.) * 0.22 * gFarSh;
+				// needles scatter the whole sky dome, not only the light that hits them square: a crown is never a black hole
+				totalEmissiveRadiance += diffuseColor.rgb * (skyLUT(vec3(0., 1., 0.)) * 0.3 + skyLUT(normalize(vec3(uSunDir.x, 0.08, uSunDir.z))) * 0.08) * (1. + 2.5 * smoothstep(0.07, -0.06, uSunDir.y)) * (0.55 + 0.45 * vColor.r);
 			}`,
 	});
 	const mats = [bark, leaves];
@@ -1419,11 +1427,12 @@ function buildRocks(world, scene, count = 1400, mats) {
 				vec3 gN = normalize((vec4(vNormal, 0.) * viewMatrix).xyz);
 				vec3 bw = pow(abs(gN), vec3(4.)); bw /= dot(bw, vec3(1.));
 				float l = fbm2(gWPos.xz * 0.05, 2) > 0.55 ? 5. : 4.;
-				vec3 p = gWPos / 2.6, p2 = gWPos / 11.3 + 0.37;
+				vec3 wq = (vec3(fbm2(gWPos.zy * 0.05, 2), fbm2(gWPos.xz * 0.05 + 5., 2), fbm2(gWPos.xy * 0.05 + 9., 2)) - 0.5) * 2.;
+				vec3 p = gWPos / 4.3 + wq, p2 = gWPos / 13.7 + 0.37 + wq * 0.5;   // warped projections: the bedded texture never stacks into regular rows
 				// two scales, so a cliff seen up close does not repeat like knitting
 				rA = texture(uAlb, vec3(p.zy, l)).rgb * bw.x + texture(uAlb, vec3(p.xz, l)).rgb * bw.y + texture(uAlb, vec3(p.xy, l)).rgb * bw.z;
 				vec3 rB = texture(uAlb, vec3(p2.zy, l)).rgb * bw.x + texture(uAlb, vec3(p2.xz, l)).rgb * bw.y + texture(uAlb, vec3(p2.xy, l)).rgb * bw.z;
-				rA = mix(rA, rB, 0.6) * (0.8 + 0.4 * fbm2(gWPos.xz * 0.04 + gWPos.y * 0.03, 3));
+				rA = mix(rA, rB, 0.65) * (0.8 + 0.4 * fbm2(gWPos.xz * 0.04 + gWPos.y * 0.03, 3));
 				vec3 sx = sign(gN);
 				vec3 nx = texture(uNrm, vec3(p.zy, l)).xyz * 2. - 1., ny = texture(uNrm, vec3(p.xz, l)).xyz * 2. - 1., nz = texture(uNrm, vec3(p.xy, l)).xyz * 2. - 1.;
 				nx.x *= sx.x; ny.x *= sx.y; nz.x *= -sx.z;
@@ -1556,7 +1565,7 @@ void main(){ gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(po
 const WATER_FRAG = /* glsl */`
 uniform sampler2D uRefl; uniform sampler2D uReflBlur; uniform sampler2D uNormals; uniform sampler2D uHeightTex;
 uniform sampler2D tScene; uniform sampler2D tDepth; uniform vec2 uRes; uniform float uNear; uniform float uFar;
-uniform mat4 uInvVP; uniform mat4 uTexMat;
+uniform mat4 uInvVP; uniform mat4 uTexMat; uniform mat4 uProj;
 uniform vec3 uLightCol; uniform vec3 uMoonDir; uniform float uNight; uniform vec3 uPlayer; uniform vec3 uLantern; uniform float uLanternI;
 uniform float uReflOn; uniform vec2 uWind;
 ${NOISE_GLSL}
@@ -1604,7 +1613,11 @@ void main(){
 
 	// ── depth from the opaque pass ──
 	vec2 suv = gl_FragCoord.xy / uRes;
-	float zw = linZ(gl_FragCoord.z);
+	// the water's own depth comes from the exact plane point, not from two 60 km triangles: no z-fighting with the beach
+	vec4 wclip = uProj * viewMatrix * vec4(vW, 1.);
+	float wz = wclip.z / wclip.w * 0.5 + 0.5;
+	gl_FragDepth = wz;
+	float zw = linZ(wz);
 	float zs = linZ(texture2D(tDepth, suv).r);
 	float rayScale = dist / max(zw, 1e-3);
 	float dVert0 = max(zs - zw, 0.) * rayScale * max(V.y, 0.02);
@@ -1623,7 +1636,8 @@ void main(){
 	// absorption (red dies first) + in-scattered light
 	float L = pathLen + dVert;
 	vec3 T = exp(-vec3(0.42, 0.085, 0.06) * L);
-	vec3 scatterCol = vec3(0.012, 0.072, 0.11) * (uLightCol * (0.15 + ld) * 0.55 * sh + skyUp * 0.9);
+	vec3 hzn = skyLUT(normalize(vec3(uSunDir.x, 0.06, uSunDir.z))) * 0.35 + skyLUT(normalize(vec3(-uSunDir.x, 0.06, -uSunDir.z))) * 0.35;
+	vec3 scatterCol = vec3(0.012, 0.072, 0.11) * (uLightCol * (0.15 + ld) * 0.55 * sh + skyUp * 0.9 + hzn * 2.2 * smoothstep(0.07, -0.06, uSunDir.y) * mix(1., 0.5, uNight));   // at dusk the bright horizon still lights the water body
 	vec3 body = seabed * T + scatterCol * (1. - T);
 	// light through wave crests when looking toward the light
 	vec2 lh = normalize(uLightDir.xz + 1e-4), vh = normalize(-V.xz + 1e-4);
@@ -1660,17 +1674,19 @@ void main(){
 
 	// foam: lapping shore bands driven by true depth + sparse whitecaps
 	float fn = fbm2(vW.xz * 0.32 + t * 0.15, 3);
-	float shore = (1. - smoothstep(0.0, 1.4, dVert + (fn - 0.5) * 0.8)) * (1. - 0.85 * smoothstep(0.4, 2.5, fwidth(dVert)));   // no hairline of foam where a cliff drops straight into deep water
+	vec2 huv = (vW.xz + 2048.) / 4096.; float hx = texture2D(uHeightTex, huv + vec2(1. / 1024., 0.)).r - texture2D(uHeightTex, huv - vec2(1. / 1024., 0.)).r, hz = texture2D(uHeightTex, huv + vec2(0., 1. / 1024.)).r - texture2D(uHeightTex, huv - vec2(0., 1. / 1024.)).r;
+	float cliff = max(smoothstep(0.5, 1.4, length(vec2(hx, hz)) / 8.), smoothstep(-2.5, -7., texture2D(uHeightTex, huv).r));   // steep ground, or rock standing in deep water (stacks, the arch)   // terrain slope at the shore, from the height map: stable from frame to frame
+	float shore = (1. - smoothstep(0.0, 1.4, dVert + (fn - 0.5) * 0.8)) * (1. - 0.85 * cliff);   // no hairline of foam where a cliff drops straight into deep water
 	float bands = smoothstep(0.62, 0.95, sin(dVert * 3.2 - t * 1.3 + fn * 5.) * 0.5 + 0.5) * (1. - smoothstep(0.3, 3.5, dVert));
 	float caps = smoothstep(0.6, 0.85, wh * 0.9 + (fn - 0.5) * 0.7) * smoothstep(0.55, 0.75, vnoise(vW.xz * 0.04 + t * 0.04)) * 0.25 * exp(-dist * 0.0012);
 	caps *= smoothstep(0.45, 0.75, fbm2(vW.xz * 0.85 + vec2(t * 0.25, -t * 0.18), 3)) * a2 + (1. - a2) * 0.35;   // lacy, broken foam rather than blots
 	float lace = smoothstep(0.38, 0.72, fbm2(vW.xz * 0.55 + vec2(t * 0.22, -t * 0.15), 3));   // foam washes in patches, never as a drawn line
 	float foam = clamp(shore * smoothstep(0.32, 0.6, fn + shore * 0.35) * (0.35 + 0.65 * lace) + bands * 0.4 * lace + caps, 0., 1.) * (1. - smoothstep(0.5, 1.0, -dVert));
 	vec3 foamCol = vec3(0.86, 0.9, 0.92) * (uLightCol * (0.3 + ld) * 0.42 * sh + skyUp * 0.9);
-	col = mix(col, foamCol, foam * 0.5 * (0.35 + 0.65 * exp(-dist * 0.004)) * (1. - 0.92 * smoothstep(0.15, 1.2, fwidth(dVert))));   // beaches get lapping bands, cliffs dropping into deep water do not
+	col = mix(col, foamCol, foam * 0.5 * (0.35 + 0.65 * exp(-dist * 0.004)) * (1. - 0.85 * cliff) * (1. - smoothstep(0.6, 3., fp)));   // no foam finer than a pixel can hold   // beaches get lapping bands, cliffs dropping into deep water do not
 
 	// where water and land meet the water thins to nothing → no z-fighting shimmer at the shoreline
-	col = mix(seabed, col, smoothstep(0.0, 0.18, dVert));
+	col = mix(seabed, col, smoothstep(0.0, 0.18 + fp * 0.45, dVert));   // the water's edge fades over about two pixels: it does not crawl as the camera moves
 	col = applyAtmo(col, cameraPosition, vW);
 	gl_FragColor = vec4(col, 1.);
 }`;
@@ -1702,7 +1718,7 @@ class Ocean {
 		normalsTex.wrapS = normalsTex.wrapT = THREE.RepeatWrapping;
 		normalsTex.anisotropy = 16;
 		this.reflOn = { value: 1 };
-		this.scene = { tScene: { value: null }, tDepth: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uNear: { value: 1 }, uFar: { value: 1000 }, uInvVP: { value: this.invVP } };
+		this.scene = { tScene: { value: null }, tDepth: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uNear: { value: 1 }, uFar: { value: 1000 }, uInvVP: { value: this.invVP }, uProj: { value: new THREE.Matrix4() } };
 		this.mat = new THREE.ShaderMaterial({
 			uniforms: {
 				...U, ...this.scene,
@@ -1723,6 +1739,7 @@ class Ocean {
 		this.scene.tScene.value = rt.texture; this.scene.tDepth.value = rt.depthTexture;
 		this.scene.uRes.value.set(rt.width, rt.height); this.scene.uNear.value = camera.near; this.scene.uFar.value = camera.far;
 		this.invVP.multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
+		this.scene.uProj.value.copy(camera.projectionMatrix);
 	}
 	setQuality(scale, trees, samples = 4) {
 		this.scale = scale;
@@ -2240,7 +2257,7 @@ function makePillar(pos, color = new THREE.Color(1.25, 0.78, 0.42)) {   // a war
 			${NOISE_GLSL}
 			void main(){
 				vec3 V = normalize(cameraPosition - vW);
-				float edge = pow(abs(dot(normalize(vN.xz), normalize(V.xz))), 4.);
+				float edge = pow(abs(dot(normalize(vN.xz + 1e-5), normalize(V.xz + 1e-5))), 4.);
 				float up = (exp(-vY / 160.) + 0.25 * exp(-vY / 600.)) * smoothstep(0., 12., vY) * (0.85 + 0.15 * sin(uTime * 3.1 + vY * 0.02));
 				float flow = 0.7 + 0.3 * vnoise(vec2(atan(vN.z, vN.x) * 3., vY * 0.02 - uTime * 0.6));
 				float dist = length(cameraPosition - vW);
@@ -2296,7 +2313,7 @@ function makeThermal(pos, radius = 40, height = 320) {
 			${NOISE_GLSL}
 			void main(){
 				vec3 V = normalize(cameraPosition - vW);
-				float edge = pow(abs(dot(normalize(vN.xz), normalize(V.xz))), 2.);   // brightest through the column's core, gone at its sides: no box outline
+				float edge = pow(abs(dot(normalize(vN.xz + 1e-5), normalize(V.xz + 1e-5))), 2.);   // brightest through the column's core, gone at its sides: no box outline
 				float swirl = smoothstep(0.55, 0.9, vnoise(vec2(atan(vN.z, vN.x) * 2. + vY * 0.02 + uTime * 0.4, vY * 0.03 - uTime * 0.5)));
 				float a = edge * (0.4 + swirl * 0.6) * smoothstep(0., 40., vY) * exp(-vY / 200.) * 0.06;
 				gl_FragColor = vec4(vec3(1.2, 0.85, 0.5) * a * (0.6 + uNight) * uGlow, 1.);
@@ -3614,7 +3631,7 @@ function frame(dt, freezeTime) {
 	if (Math.abs(S.tod - S.todTarget) < 0.0005) S.tod = S.todTarget;
 	const todNow = S.photoTod ?? S.tod;
 	if (sky.update(todNow, dt)) scene.environment = sky.envRT.texture;
-	scene.environmentIntensity = sky.state.env * lerp(0.84, 1, U.uNight.value);   // softer sky fill by day: contrast between sunlit and shaded faces
+	scene.environmentIntensity = sky.state.env * lerp(0.9, 1.15, U.uNight.value);   // softer sky fill by day: contrast between sunlit and shaded faces
 	if (++farTick % 2 === 0) farShadow.update();
 
 	// glider transform
@@ -3718,7 +3735,7 @@ function frame(dt, freezeTime) {
 	const nn = U.uNight.value;
 	fu.uHiTint.value.setRGB(lerp(1.1, 1.0, nn), lerp(1.0, 0.98, nn), lerp(0.82, 0.96, nn));
 	fu.uCool.value.setRGB(lerp(0.92, 0.95, nn), lerp(0.97, 0.97, nn), lerp(1.07, 1.04, nn));
-	fu.uShadowTint.value.setRGB(0.004, 0.01 + 0.01 * U.uNight.value, 0.03 + 0.02 * U.uNight.value);
+	fu.uShadowTint.value.setRGB(0.008, 0.009 + 0.006 * U.uNight.value, 0.014 + 0.012 * U.uNight.value);
 	bloomPass.strength = (0.27 + 0.22 * U.uNight.value) * QUALITY[quality].bloom;
 	bloomPass.threshold = lerp(4.2, 2.0, U.uNight.value) / st.exp;
 	bloomPass.highPassUniforms.smoothWidth.value = bloomPass.threshold * 0.6;
