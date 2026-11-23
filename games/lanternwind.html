@@ -1329,7 +1329,10 @@ function buildVegetation(world, count, scene, tx) {
 		if (near) continue;
 		const ci = Math.min(CH - 1, Math.floor((x + 2048) / CS)), cj = Math.min(CH - 1, Math.floor((z + 2048) / CS));
 		const type = (h > 60 || rnd() < 0.62) ? 0 : 1;
-		buckets[cj * CH + ci][type].push([x, h - 0.4, z, 0.75 + rnd() * 0.7, rnd() * Math.PI * 2, rnd()]);
+		// stands, not a carpet: old tall trees in the heart of a wood, young ones at its edge, whole patches of one age
+		const stand = 0.8 + 0.5 * Math.max(0, Math.min(1, (Math.sin(x * 0.011 + z * 0.007) + Math.sin(x * 0.005 - z * 0.013)) * 0.5 + 0.5));
+		const edge = 0.5 + 0.5 * smoothstep(0.15, 0.75, f);
+		buckets[cj * CH + ci][type].push([x, h - 0.4, z, (0.6 + rnd() * 0.55) * stand * edge, rnd() * Math.PI * 2, rnd(), h]);
 		placed++;
 	}
 	// near & far LOD geometry per species
@@ -1373,7 +1376,9 @@ function buildVegetation(world, count, scene, tx) {
 				q.setFromAxisAngle(up, t[4]); s.setScalar(t[3] * (k ? 1.1 : 1.15)); s.y *= 0.88 + t[5] * 0.3; pp.set(t[0], t[1], t[2]);
 				m4.compose(pp, q, s); im.setMatrixAt(i, m4);
 				const v = 0.82 + t[5] * 0.36;
-				if (k === 0) col.setRGB(v * 0.95, v, v * 0.92); else col.setRGB(v * (0.96 + t[5] * 0.1), v, v * (0.9 - t[5] * 0.1));
+				// higher up the trees grow sparser and their needles bluer; low and sheltered, a warmer green
+				const hi = smoothstep(20, 120, t[6]);
+				if (k === 0) col.setRGB(v * (0.98 - 0.12 * hi), v * (1.02 - 0.04 * hi), v * (0.86 + 0.14 * hi)); else col.setRGB(v * (0.96 + t[5] * 0.1), v, v * (0.9 - t[5] * 0.1));
 				if (k === 1 && t[5] > 0.93) col.setRGB(1.22, 0.98, 0.55);
 				im.setColorAt(i, col);
 			});
@@ -2055,7 +2060,7 @@ class SkyLanterns {
 				float age = uTime - aSpawn.w;
 				float alive = step(0., age);
 				vec3 c = lanternPos(max(age, 0.));
-				float s = (1.4 + 1.5 * fract(aSeed.x * 7.13)) * alive * min(1., age * 1.5) * smoothstep(6., 32., distance(c, cameraPosition));   // none swell into bokeh in front of the lens
+				float s = (1.4 + 1.5 * fract(aSeed.x * 7.13)) * alive * min(1., age * 1.5) * smoothstep(25., 75., distance(c, cameraPosition));   // none swell into bokeh in front of the lens
 				vec3 p = position * s;
 				float tilt = sin(uTime * 0.7 + aSeed.x * 40.) * 0.12;
 				p.xy = mat2(cos(tilt), -sin(tilt), sin(tilt), cos(tilt)) * p.xy;
@@ -2083,7 +2088,7 @@ class SkyLanterns {
 				float age = uTime - aSpawn.w;
 				if (age < 0.){ gl_Position = vec4(2., 2., 2., 1.); gl_PointSize = 0.; return; }
 					vec3 c = lanternPath(aSpawn, aSeed, age) + vec3(0., 1.2, 0.);
-					float near = smoothstep(8., 40., distance(c, cameraPosition));
+					float near = smoothstep(30., 85., distance(c, cameraPosition));
 					vec4 mv = viewMatrix * vec4(c, 1.);
 					gl_Position = projectionMatrix * mv;
 					float d = -mv.z;
@@ -2196,7 +2201,7 @@ function makeFire(origin, scale = 1) {
 				gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.);
 			}`,
 		fragmentShader: /* glsl */`
-			uniform float uI;
+			uniform float uI; uniform float uNight;
 			varying vec2 vUv; varying float vK; varying float vSeed; varying vec3 vW;
 			${NOISE_GLSL}
 			${ATMO_GLSL}
@@ -2208,7 +2213,7 @@ function makeFire(origin, scale = 1) {
 				vec3 hot = vec3(7., 4.6, 2.), mid = vec3(5.5, 1.7, 0.35), cool = vec3(1.1, 0.18, 0.04);
 				vec3 c = vK < 0.35 ? mix(hot, mid, vK / 0.35) : mix(mid, cool, (vK - 0.35) / 0.65);
 				a *= (1. - vK) * (1. - vK) * 0.55;
-				gl_FragColor = vec4(c * a * fogKeep(vW) * uGlow, 1.);
+				gl_FragColor = vec4(c * a * fogKeep(vW) * uGlow * mix(1., 0.45, uNight), 1.);
 			}`,
 		...addBlend,
 	});
@@ -2481,7 +2486,7 @@ function makeLighthouse(pos) {
 		key: 'lighthouse', uniforms: { uLit: glassU },
 		fragHead: 'uniform float uLit; float gWin = 0.;',
 		// once it wakes, the lamp spills down the tower and the keeper's windows light
-		emissiveFragment: `{ float y = gWPos.y - ${pos.y.toFixed(1)}; totalEmissiveRadiance += diffuseColor.rgb * vec3(1., 0.78, 0.5) * smoothstep(0.2, 1., uLit) * (0.05 + 0.75 * smoothstep(9., 57., y)) * uGlow + gWin * vec3(4., 2.2, 0.8) * smoothstep(0.2, 1., uLit) * uGlow; }`,
+		emissiveFragment: `{ float y = gWPos.y - ${pos.y.toFixed(1)}; totalEmissiveRadiance += diffuseColor.rgb * vec3(1., 0.78, 0.5) * smoothstep(0.2, 1., uLit) * (0.03 + 0.2 * smoothstep(20., 57., y)) * uGlow + gWin * vec3(4., 2.2, 0.8) * smoothstep(0.2, 1., uLit) * uGlow; }`,
 		// lime-washed masonry: courses and staggered joints, rain streaks under the gallery, a dark stone plinth, three windows
 		mapFragment: /* glsl */`
 			{ float y = (gWPos.y - ${pos.y.toFixed(1)}) / 1.5;
@@ -3475,7 +3480,7 @@ function ignite(b) {
 	if (b.central) {
 		S.finale = true; S.finaleT = U.uTime.value; S.todTarget = 1;
 		audio.finale();
-		for (const o of beacons) if (!o.central) lanterns.release(o.target.x, o.target.y, o.target.z, 160, 18, 2, 20);
+		for (const o of beacons) if (!o.central) lanterns.release(o.target.x, o.target.y, o.target.z, 120, 8, 1, 45);   // every fire answers with a long thread of lanterns
 		message('The old lighthouse wakes', 'Every fire answers. The isles remember the way home.', 8);
 		// the camera leaves the glider for a wide shot of the lighthouse, the lanterns and the sky; the HUD steps aside
 		const ctr = b.target;
@@ -3621,7 +3626,7 @@ function frame(dt, freezeTime) {
 			const k = t - b.litT;
 			const burst = Math.exp(-k * 0.5) * 1.4;
 			b.fire.userData.uI.value = 1.0 + burst;
-			b.light.intensity = (b.central ? 3200 : 1900) * (0.9 + 0.1 * Math.sin(t * 13 + b.x)) * (1 + burst * 0.5) * Math.min(1, k * 2) * U.uGlow.value;
+			b.light.intensity = (b.central ? 1300 : 1900) * (0.9 + 0.1 * Math.sin(t * 13 + b.x)) * (1 + burst * 0.5) * Math.min(1, k * 2) * U.uGlow.value;
 			b.pillar.userData.uA.value = Math.max(0, b.pillar.userData.uA.value - dt * 0.6);
 			if (!b.central) b.obj.userData.ringU.value = Math.min(1, k * 0.8);
 			// a lit fire keeps sending a lantern up now and then: from afar every beacon is a thread of lights, not a puff of sparks
