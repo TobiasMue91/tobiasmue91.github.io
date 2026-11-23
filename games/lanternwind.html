@@ -961,6 +961,73 @@ function combineAlpha(colorImg, alphaImg) {
 	return t;
 }
 
+// ── texture without repetition (after Inigo Quilez): every region of the surface picks its own offset into the
+// tile, chosen by a slow noise, and neighbouring regions cross-fade where they meet. Albedo and normal share the
+// offsets; textureGrad keeps the mip level of the plain coordinate, so the seams do not sparkle.
+const NOREPEAT_GLSL = /* glsl */`
+// Hex-tiling after Mikkelsen, "Practical Real-Time Hex-Tiling" (JCGT 2022): the surface is covered with hexagons,
+// each samples the photo with its own random offset and rotation, and three are blended per pixel with weights that
+// keep the contrast (gamma 7, beta 0.6, ramp r 0.7). Normals are blended as height derivatives, rotated with their tile.
+void hexGrid(vec2 st, out vec3 w, out vec2 v1, out vec2 v2, out vec2 v3){
+	st *= 3.46410162;
+	vec2 sk = mat2(vec2(1., 0.), vec2(-0.57735027, 1.15470054)) * st;
+	vec2 base = floor(sk);
+	vec3 t = vec3(fract(sk), 0.); t.z = 1. - t.x - t.y;
+	float s = step(0., -t.z), s2 = 2. * s - 1.;
+	w = vec3(-t.z * s2, s - t.y * s2, s - t.x * s2);
+	v1 = base + vec2(s, s); v2 = base + vec2(s, 1. - s); v3 = base + vec2(1. - s, s);
+}
+vec2 hexCen(vec2 v){ return (mat2(vec2(1., 0.), vec2(0.5, 0.8660254)) * v) / 3.46410162; }
+vec2 hexHash(vec2 p){ return fract(sin(mat2(vec2(127.1, 269.5), vec2(311.7, 183.3)) * p) * 43758.5453); }
+mat2 hexRot(vec2 v){ float a = (hexHash(v + 7.3).x * 2. - 1.) * 3.14159265; float c = cos(a), s = sin(a); return mat2(vec2(c, s), vec2(-s, c)); }
+vec3 hexGain(vec3 x, float r){
+	float k = log(1. - r) / log(0.5);
+	vec3 s = 2. * step(vec3(0.5), x), m = 2. * (1. - s);
+	vec3 res = 0.5 * s + 0.25 * m * pow(max(vec3(0.), s + x * m), vec3(k));
+	return res / (res.x + res.y + res.z);
+}
+vec2 nToDeriv(vec3 n){ vec3 a = abs(n); return -n.xy / max(a.z, max(a.x, a.y) / 128.); }
+void hexSample(highp sampler2DArray A, highp sampler2DArray Nm, vec2 uv, vec2 dx, vec2 dy, float l, out vec3 alb, out vec2 der){
+	vec3 w; vec2 v1, v2, v3; hexGrid(uv, w, v1, v2, v3);
+	mat2 r1 = hexRot(v1), r2 = hexRot(v2), r3 = hexRot(v3);
+	vec2 c1 = hexCen(v1), c2 = hexCen(v2), c3 = hexCen(v3);
+	vec2 s1 = r1 * (uv - c1) + c1 + hexHash(v1), s2 = r2 * (uv - c2) + c2 + hexHash(v2), s3 = r3 * (uv - c3) + c3 + hexHash(v3);
+	vec3 a1 = textureGrad(A, vec3(s1, l), r1 * dx, r1 * dy).rgb, a2 = textureGrad(A, vec3(s2, l), r2 * dx, r2 * dy).rgb, a3 = textureGrad(A, vec3(s3, l), r3 * dx, r3 * dy).rgb;
+	// the sampled slope is turned back into the surface's frame: t = R s, so dH/ds = transpose(R) dT/dt
+	vec2 d1 = transpose(r1) * nToDeriv(textureGrad(Nm, vec3(s1, l), r1 * dx, r1 * dy).xyz * 2. - 1.);
+	vec2 d2 = transpose(r2) * nToDeriv(textureGrad(Nm, vec3(s2, l), r2 * dx, r2 * dy).xyz * 2. - 1.);
+	vec2 d3 = transpose(r3) * nToDeriv(textureGrad(Nm, vec3(s3, l), r3 * dx, r3 * dy).xyz * 2. - 1.);
+	vec3 pw = pow(w, vec3(7.));
+	vec3 Lc = vec3(dot(a1, vec3(0.299, 0.587, 0.114)), dot(a2, vec3(0.299, 0.587, 0.114)), dot(a3, vec3(0.299, 0.587, 0.114)));
+	vec3 W = mix(vec3(1.), Lc, 0.6) * pw; W = hexGain(W / (W.x + W.y + W.z), 0.7);
+	alb = W.x * a1 + W.y * a2 + W.z * a3;
+	vec3 D = vec3(dot(d1, d1), dot(d2, d2), dot(d3, d3));
+	vec3 Wn = mix(vec3(1.), sqrt(D / (1. + D)), 0.6) * pw; Wn /= Wn.x + Wn.y + Wn.z;
+	der = Wn.x * d1 + Wn.y * d2 + Wn.z * d3;
+}
+// The photo's features must not shrink to a few pixels: that is what reads as knitting from afar. As a tile gets small
+// on screen, a second, 7x larger sampling takes over ("vista" coordinates), and the bumps fade before they are sub-pixel.
+void sampleNRg(highp sampler2DArray A, highp sampler2DArray Nm, vec2 uv, vec2 dx, vec2 dy, float l, out vec3 alb, out vec3 nrm){
+	float f = max(length(dx), length(dy));                 // tiles per pixel
+	float kv = smoothstep(1. / 220., 1. / 60., f);
+	vec3 a0 = vec3(0.), a1 = vec3(0.); vec2 g0 = vec2(0.), g1 = vec2(0.);
+	if (kv < 0.995) hexSample(A, Nm, uv, dx, dy, l, a0, g0);
+	if (kv > 0.005) hexSample(A, Nm, uv / 7. + 0.37, dx / 7., dy / 7., l, a1, g1);
+	alb = mix(a0, a1, kv);
+	vec2 d = mix(g0, g1, kv) * (1. - smoothstep(1. / 90., 1. / 14., f / 7.));
+	nrm = normalize(vec3(-d, 1.));
+}
+void sampleNR(highp sampler2DArray A, highp sampler2DArray Nm, vec2 uv, float l, out vec3 alb, out vec3 nrm){ sampleNRg(A, Nm, uv, dFdx(uv), dFdy(uv), l, alb, nrm); }
+// tri-planar through hex-tiling; a projection that carries next to no weight is skipped (derivatives are taken first)
+void triNR(highp sampler2DArray A, highp sampler2DArray Nm, vec3 p, vec3 bw, float l, out vec3 ax, out vec3 ay, out vec3 az, out vec3 nx, out vec3 ny, out vec3 nz){
+	vec2 ux = p.zy, uy = p.xz, uz = p.xy;
+	vec2 dxx = dFdx(ux), dyx = dFdy(ux), dxy = dFdx(uy), dyy = dFdy(uy), dxz = dFdx(uz), dyz = dFdy(uz);
+	ax = ay = az = vec3(0.); nx = ny = nz = vec3(0., 0., 1.);
+	if (bw.x > 0.015) sampleNRg(A, Nm, ux, dxx, dyx, l, ax, nx);
+	if (bw.y > 0.015) sampleNRg(A, Nm, uy, dxy, dyy, l, ay, ny);
+	if (bw.z > 0.015) sampleNRg(A, Nm, uz, dxz, dyz, l, az, nz);
+}`;
+
 // ── terrain ──
 // layers: 0 lush grass · 1 meadow · 2 forest floor · 3 sand · 4 rock face · 5 lichen rock
 function buildTerrain(world, tex, mats, segs) {
@@ -978,6 +1045,7 @@ function buildTerrain(world, tex, mats, segs) {
 			uniform sampler2D uHeightTex; uniform sampler2D uNormalTex; uniform vec3 uLightCol; uniform vec4 uWave;
 			uniform highp sampler2DArray uAlb; uniform highp sampler2DArray uNrm;
 			vec3 gN; vec4 gHS; float gRough; float gWet; vec3 gAlb; vec3 gNd;
+			${NOREPEAT_GLSL}
 			float caust(vec2 p){
 				float t = uTime * 0.6; vec2 q = p * 0.22;
 				float c = 0.;
@@ -990,8 +1058,7 @@ function buildTerrain(world, tex, mats, segs) {
 				if (w < 0.004) return;
 				vec2 p = gWPos.xz / s;
 				vec2 p2 = mat2(0.8, -0.6, 0.6, 0.8) * gWPos.xz / (s * 3.7) + 0.37;
-				vec3 a1 = texture(uAlb, vec3(p, l)).rgb, a2 = texture(uAlb, vec3(p2, l)).rgb;
-				vec3 n1 = tN(p, l), n2 = tN(p2, l);
+				vec3 a1, n1; sampleNR(uAlb, uNrm, p, l, a1, n1); vec3 a2 = a1, n2 = n1;   // hex-tiling replaces the second, decorrelated scale
 				float m = clamp(0.35 + far * 0.5, 0., 0.85);
 				alb += mix(a1, a2, m) * w;
 				vec3 n = mix(n1, n2, m);
@@ -1002,12 +1069,11 @@ function buildTerrain(world, tex, mats, segs) {
 				if (w < 0.004) return;
 				vec3 bw = pow(abs(gN), vec3(4.)); bw /= dot(bw, vec3(1.));
 				vec3 p = gWPos / s;
-				p += (vec3(fbm2(gWPos.zy * 0.03, 2), fbm2(gWPos.xz * 0.03 + 5., 2), fbm2(gWPos.xy * 0.03 + 9., 2)) - 0.5) * 2.4;   // warped: no rows of tiles
 				vec2 ux = p.zy, uy = p.xz, uz = p.xy;
-				vec3 ax = texture(uAlb, vec3(ux, l)).rgb, ay = texture(uAlb, vec3(uy, l)).rgb, az = texture(uAlb, vec3(uz, l)).rgb;
+				vec3 ax, ay, az, nx, ny, nz;
+				triNR(uAlb, uNrm, p, bw, l, ax, ay, az, nx, ny, nz);
 				alb += (ax * bw.x + ay * bw.y + az * bw.z) * w;
 				vec3 sx = sign(gN);
-				vec3 nx = tN(ux, l), ny = tN(uy, l), nz = tN(uz, l);
 				nx.x *= sx.x; ny.x *= sx.y; nz.x *= -sx.z;
 				nx = vec3(nx.xy + gN.zy, abs(nx.z) * gN.x);
 				ny = vec3(ny.xy + gN.xz, abs(ny.z) * gN.y);
@@ -1421,30 +1487,27 @@ function buildRocks(world, scene, count = 1400, mats) {
 		uniforms: { uAlb: { value: mats.alb }, uNrm: { value: mats.nrm } },
 		fragHead: /* glsl */`
 			uniform highp sampler2DArray uAlb; uniform highp sampler2DArray uNrm; uniform vec3 uLightCol;
-			vec3 rN; vec3 rA; float rWet;`,
+			vec3 rN; vec3 rA; float rWet;
+			${NOREPEAT_GLSL}`,
 		fragMain: /* glsl */`
 			{
 				vec3 gN = normalize((vec4(vNormal, 0.) * viewMatrix).xyz);
 				vec3 bw = pow(abs(gN), vec3(4.)); bw /= dot(bw, vec3(1.));
 				float l = fbm2(gWPos.xz * 0.05, 2) > 0.55 ? 5. : 4.;
-				vec3 wq = (vec3(fbm2(gWPos.zy * 0.05, 2), fbm2(gWPos.xz * 0.05 + 5., 2), fbm2(gWPos.xy * 0.05 + 9., 2)) - 0.5) * 2.;
-				vec3 p = gWPos / 4.3 + wq, p2 = gWPos / 13.7 + 0.37 + wq * 0.5;   // warped projections: the bedded texture never stacks into regular rows
-				// two scales, so a cliff seen up close does not repeat like knitting
-				rA = texture(uAlb, vec3(p.zy, l)).rgb * bw.x + texture(uAlb, vec3(p.xz, l)).rgb * bw.y + texture(uAlb, vec3(p.xy, l)).rgb * bw.z;
-				vec3 rB = texture(uAlb, vec3(p2.zy, l)).rgb * bw.x + texture(uAlb, vec3(p2.xz, l)).rgb * bw.y + texture(uAlb, vec3(p2.xy, l)).rgb * bw.z;
-				rA = mix(rA, rB, 0.65) * (0.8 + 0.4 * fbm2(gWPos.xz * 0.04 + gWPos.y * 0.03, 3));
+				vec3 p = gWPos / 6.5;
+				vec3 ax, ay, az, nx, ny, nz;
+				triNR(uAlb, uNrm, p, bw, l, ax, ay, az, nx, ny, nz);
+				rA = (ax * bw.x + ay * bw.y + az * bw.z) * (0.82 + 0.36 * fbm2(gWPos.xz * 0.03 + gWPos.y * 0.02, 3));
 				vec3 sx = sign(gN);
-				vec3 nx = texture(uNrm, vec3(p.zy, l)).xyz * 2. - 1., ny = texture(uNrm, vec3(p.xz, l)).xyz * 2. - 1., nz = texture(uNrm, vec3(p.xy, l)).xyz * 2. - 1.;
 				nx.x *= sx.x; ny.x *= sx.y; nz.x *= -sx.z;
 				nx = vec3(nx.xy + gN.zy, abs(nx.z) * gN.x); ny = vec3(ny.xy + gN.xz, abs(ny.z) * gN.y); nz = vec3(nz.xy + gN.xy, abs(nz.z) * gN.z);
 				rN = normalize(nx.zyx * bw.x + ny.xzy * bw.y + nz.xyz * bw.z);
 				rWet = smoothstep(1.2, -0.2, gWPos.y);
 			}`,
 		mapFragment: /* glsl */`{
-			// cool granite with bedding planes: bands that wander a little, darker seams between them, weed and wet at the foot
+			// cool granite: weed and wet at the foot, lichen on the ledges
 			float lr = dot(rA, vec3(0.3, 0.55, 0.15)); vec3 a = mix(vec3(lr), rA, 0.3) * vec3(0.92, 0.94, 0.99) * 1.1;
-			float bed = gWPos.y * 0.2 + fbm2(gWPos.xz * 0.02, 3) * 2.5;
-			a *= 0.88 + 0.16 * smoothstep(0.2, 0.8, fract(bed)) - 0.14 * smoothstep(0.06, 0.0, fract(bed)) * smoothstep(1.5, 4., gWPos.y);
+			
 			a = mix(a, vec3(0.1, 0.12, 0.06), smoothstep(2.5, 0.3, gWPos.y) * 0.6);
 			a = mix(a, a * vec3(0.95, 1.05, 0.8) * 1.1, smoothstep(0.55, 0.9, rN.y) * smoothstep(3., 8., gWPos.y) * 0.6);
 			a = mix(a, a * vec3(0.25, 0.4, 0.42), smoothstep(0.1, -1.5, gWPos.y));   // below the waterline the rock goes dark and sea-green
@@ -1481,7 +1544,19 @@ function buildLandmarks(world, scene, rockMat) {
 	const N = makeNoise(world.seed + 911), rnd = mulberry32(world.seed * 7 + 29);
 	const group = new THREE.Group();
 	const H = (x, z) => sampleHeight(world.H, x, z);
-	const addMesh = (geo) => { geo.deleteAttribute('uv'); geo.deleteAttribute('normal'); geo = mergeVertices(geo, 1e-3); geo.computeVertexNormals(); const m = new THREE.Mesh(geo, rockMat); m.castShadow = m.receiveShadow = true; group.add(m); return m; };
+	// weathering in world space: the same noise field for every rock, so no bump follows the mesh's own rings
+	const n3 = (x, y, z) => (N.n2(x, y) + N.n2(y + 31.7, z) + N.n2(z - 17.3, x)) / 3;
+	const fb3 = (x, y, z) => n3(x, y, z) * 0.55 + n3(x * 2.1 + 5, y * 2.1, z * 2.1) * 0.28 + n3(x * 4.3, y * 4.3 + 9, z * 4.3) * 0.12 + n3(x * 9.1, y * 9.1, z * 9.1 + 3) * 0.05;
+	const weather = (geo, amp) => {
+		geo.computeVertexNormals();
+		const p = geo.attributes.position, nn = geo.attributes.normal;
+		for (let i = 0; i < p.count; i++) {
+			const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+			const d = fb3(x * 0.035, y * 0.035, z * 0.035) * amp + Math.abs(n3(x * 0.11, y * 0.11, z * 0.11)) * amp * -0.35;
+			p.setXYZ(i, x + nn.getX(i) * d, y + nn.getY(i) * d * 0.6, z + nn.getZ(i) * d);
+		}
+	};
+	const addMesh = (geo, amp = 4) => { geo.deleteAttribute('uv'); geo.deleteAttribute('normal'); geo = mergeVertices(geo, 1e-3); weather(geo, amp); geo.computeVertexNormals(); const m = new THREE.Mesh(geo, rockMat); m.castShadow = m.receiveShadow = true; group.add(m); return m; };
 	const tops = [];
 	// stacks
 	const stacks = [];
@@ -1496,20 +1571,19 @@ function buildLandmarks(world, scene, rockMat) {
 		stacks.push({ x, z, R: 9 + rnd() * 9, h: 38 + rnd() * 50, seed: rnd() * 100 });
 	}
 	for (const st of stacks) {
-		const prof = [], n = 26;
+		const prof = [], n = 44;
 		for (let i = 0; i <= n; i++) {
 			const t = i / n, y = -14 + t * (st.h + 14);
 			let rr = st.R * (1.3 - 0.5 * t) * (1 + 0.14 * N.n2(y * 0.05, st.seed));
-			rr *= 1 + 0.05 * (1 - ((y / (5 + 3 * Math.abs(Math.sin(y * 0.07 + st.seed))) + st.seed) % 1));   // ledges at uneven beds
 			if (t > 0.9) rr *= Math.sqrt(Math.max(0, (1 - t) / 0.1)) * 0.9 + 0.1;
 			prof.push(new THREE.Vector2(Math.max(0.3, rr), y));
 		}
 		prof.push(new THREE.Vector2(0.01, st.h + 1.5));
-		const g = new THREE.LatheGeometry(prof, 22);
+		const g = new THREE.LatheGeometry(prof, 40);
 		const p = g.attributes.position;
 		for (let i = 0; i < p.count; i++) {
 			const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x);
-			const k = 1 + 0.38 * N.fbm(Math.cos(a) * 0.9 + st.seed + y * 0.012, Math.sin(a) * 0.9 + y * 0.03, 4) + 0.08 * N.n2(Math.cos(a) * 3 + y * 0.1, Math.sin(a) * 3);
+			const k = 1 + 0.3 * N.fbm(Math.cos(a) * 0.9 + st.seed, Math.sin(a) * 0.9 + st.seed, 3);   // only the plan shape here; the surface is weathered in world space
 			p.setXYZ(i, st.x + x * k, y, st.z + z * k);
 		}
 		addMesh(g);
@@ -1522,19 +1596,19 @@ function buildLandmarks(world, scene, rockMat) {
 	const pts = [];
 	for (let i = 0; i <= 24; i++) { const t = i / 24, th = Math.PI * (1 - t); const sq = Math.sign(Math.cos(th)) * Math.pow(Math.abs(Math.cos(th)), 0.8); pts.push(new THREE.Vector3(ax + sx * sq * 66, -16 + Math.pow(Math.sin(th), 0.7) * 128, az + sz * sq * 66)); }
 	const curve = new THREE.CatmullRomCurve3(pts);
-	const TS = 90, RS = 20, g = new THREE.TubeGeometry(curve, TS, 19, RS, false);
+	const TS = 180, RS = 36, g = new THREE.TubeGeometry(curve, TS, 19, RS, false);
 	const p = g.attributes.position;
 	for (let i = 0; i <= TS; i++) {
 		const u = i / TS, c = curve.getPointAt(u), thick = 1 + 1.1 * Math.pow(1 - Math.sin(Math.PI * u), 2);
 		for (let j = 0; j <= RS; j++) {
 			const idx = i * (RS + 1) + j, ang = j / RS * Math.PI * 2;   // periodic in the angle, so the tube's seam closes
 			const v = new THREE.Vector3(p.getX(idx), p.getY(idx), p.getZ(idx)).sub(c);
-			const k = thick * (1 + 0.42 * N.fbm(u * 5 + Math.cos(ang) * 0.8 + 3.1, Math.sin(ang) * 0.8 + c.y * 0.015, 4));
+			const k = thick * (1 + 0.12 * N.fbm(Math.cos(ang) * 0.7 + 3.1, Math.sin(ang) * 0.7 + u * 2., 2));
 			v.multiplyScalar(k); if (v.y > 0) v.y *= 1.35;
 			p.setXYZ(idx, c.x + v.x, c.y + v.y, c.z + v.z);
 		}
 	}
-	addMesh(g);
+	addMesh(g, 6);
 	const ap = []; for (let i = 0; i <= 60; i++) { const u = i / 60, c = curve.getPointAt(u); ap.push([c.x, c.y, c.z, 19 * (1 + 1.1 * Math.pow(1 - Math.sin(Math.PI * u), 2)) * 1.05]); }
 	OBST.push({ pts: ap, cx: ax, cz: az });
 	tops.push({ x: ax, z: az, y: 112 + 19 * 1.25, r: 9 });
