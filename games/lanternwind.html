@@ -238,6 +238,7 @@ const U = {
 	uPlayer: { value: new THREE.Vector3() },
 	uLantern: { value: new THREE.Color(1, 0.6, 0.25) },
 	uGlow: { value: 1 },
+	uHexQ: { value: 1 },   // 0 on Low: plain sampling instead of hex-tiling (a third of the texture taps)
 	uWave: { value: new THREE.Vector4(0, 0, 0, -1e4) },   // xz of the last fire lit, w = when
 };
 
@@ -987,7 +988,9 @@ vec3 hexGain(vec3 x, float r){
 	return res / (res.x + res.y + res.z);
 }
 vec2 nToDeriv(vec3 n){ vec3 a = abs(n); return -n.xy / max(a.z, max(a.x, a.y) / 128.); }
+uniform float uHexQ;
 void hexSample(highp sampler2DArray A, highp sampler2DArray Nm, vec2 uv, vec2 dx, vec2 dy, float l, out vec3 alb, out vec2 der){
+	if (uHexQ < 0.5) { alb = textureGrad(A, vec3(uv, l), dx, dy).rgb; der = nToDeriv(textureGrad(Nm, vec3(uv, l), dx, dy).xyz * 2. - 1.); return; }
 	vec3 w; vec2 v1, v2, v3; hexGrid(uv, w, v1, v2, v3);
 	mat2 r1 = hexRot(v1), r2 = hexRot(v2), r3 = hexRot(v3);
 	vec2 c1 = hexCen(v1), c2 = hexCen(v2), c3 = hexCen(v3);
@@ -2808,6 +2811,7 @@ hx.fillStyle = hg; hx.fillRect(0, 0, 64, 64);
 const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(hc), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, color: 0xffa050 }));
 halo.scale.setScalar(2.6); halo.position.y = -0.32; halo.renderOrder = 24; lantern.add(halo);
 g.userData = { billow, lantern, light, lmat, halo };
+	g.scale.setScalar(1.15);   // a touch larger: the glider is what the player watches all game
 	g.traverse(o => o.layers.enable(2));
 	return g;
 }
@@ -3082,7 +3086,7 @@ const TOD0 = 0.38;   // the flight starts with the sun a hand above the sea and 
 const LOD_D = [330 * 330, 820 * 820, 1900 * 1900];   // squared chunk distances: full sprays · lighter crowns · far silhouettes
 
 let renderer, scene, camera, sky, farShadow, ocean, composer, rayPass, bloomPass, finalPass, sun;
-let streaks, world, glider, sparks, lanterns, wisps, ribbons = [], birds, audio;
+let gShadow, streaks, world, glider, sparks, lanterns, wisps, ribbons = [], birds, audio;
 const beacons = []; const thermals = [];
 let quality = 'high', resScale = 1;
 const S = {
@@ -3241,6 +3245,26 @@ function buildSetPieces() {
 	scene.add(makeFireflies(world));
 	glider = makeGlider(); scene.add(glider);
 	streaks = new WindStreaks(); scene.add(streaks.mesh);
+	// a soft shadow of the wing on whatever lies below, water included: the glider has a place in the world
+	{
+		const sg = new THREE.PlaneGeometry(1, 1); sg.rotateX(-Math.PI / 2);
+		gShadow = new THREE.Mesh(sg, new THREE.ShaderMaterial({
+			uniforms: { uA: { value: 0 } },
+			vertexShader: 'varying vec2 vP; void main(){ vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+			fragmentShader: /* glsl */`
+				uniform float uA; varying vec2 vP;
+				void main(){
+					// the wing's delta, softened: nose forward (-z), trailing edge back
+					vec2 p = vP * vec2(1., 1.25) + vec2(0., 0.08);
+					float d = max(abs(p.x) * 0.9 + p.y * 0.55 - 0.32, -p.y - 0.3);
+					float a = (1. - smoothstep(-0.05, 0.12, d)) * uA;
+					gl_FragColor = vec4(mix(vec3(1.), vec3(0.55, 0.62, 0.72), a), 1.);
+				}`,
+			transparent: true, depthWrite: false,
+			blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
+		}));
+		gShadow.frustumCulled = false; gShadow.renderOrder = 13; gShadow.layers.set(4); scene.add(gShadow);
+	}
 	ribbons = [new Ribbon(), new Ribbon()]; ribbons.forEach(r => scene.add(r.mesh));
 	// pips
 	$('#pips').innerHTML = beacons.map(b => `<i class="${b.central ? 'lh' : ''}"></i>`).join('');
@@ -3282,6 +3306,7 @@ function applyQuality(q, first) {
 	world.veg.leaves.alphaToCoverage = Q.msaa > 0; world.veg.leaves.needsUpdate = true;
 	ocean.setQuality(Q.refl, Q.reflTrees, Q.msaa);
 	rayPass.raysOn = Q.rays;
+	U.uHexQ.value = q === 'low' ? 0 : 1;
 	bloomPass.strength = 0.55 * Q.bloom;
 	// tree density: show a prefix of every chunk
 	world.veg.group.children.forEach(im => { im.userData.full ??= im.count; im.count = Math.max(0, Math.round(im.userData.full * Q.trees)); });
@@ -3679,7 +3704,7 @@ function loop(now) {
 	if (window.__lwManual) return;
 	frame(dt);
 }
-function frame(dt, freezeTime) {
+function frame(dt, freezeTime, noRender) {
 	if (!freezeTime) U.uTime.value += dt;
 	const t = U.uTime.value;
 	const playing = S.mode === 'play' || S.mode === 'end';
@@ -3705,7 +3730,7 @@ function frame(dt, freezeTime) {
 	if (Math.abs(S.tod - S.todTarget) < 0.0005) S.tod = S.todTarget;
 	const todNow = S.photoTod ?? S.tod;
 	if (sky.update(todNow, dt)) scene.environment = sky.envRT.texture;
-	scene.environmentIntensity = sky.state.env * lerp(0.9, 1.15, U.uNight.value);   // softer sky fill by day: contrast between sunlit and shaded faces
+	scene.environmentIntensity = sky.state.env * lerp(1.7, 1.25, U.uNight.value);   // shade at golden hour is lit blue-grey by the whole sky, not black   // softer sky fill by day: contrast between sunlit and shaded faces
 	if (++farTick % 2 === 0) farShadow.update();
 
 	// glider transform
@@ -3726,9 +3751,19 @@ function frame(dt, freezeTime) {
 	glider.userData.halo.material.color.setRGB(1.1, 0.62, 0.26).multiplyScalar(li * U.uGlow.value * (0.55 + 0.45 * U.uNight.value) * (0.92 + 0.08 * Math.sin(t * 9)));
 	U.uPlayer.value.copy(glider.userData.lantern.getWorldPosition(tmp));
 	streaks.uVel.value.copy(fwd).multiplyScalar(P.speed);
+	{
+		// the shade the wing casts against the open sky, straight below it: softer and fainter the higher it flies
+		const gy = Math.max(0, sampleHeight(world.H, P.pos.x, P.pos.z));
+		const h = Math.max(0.5, P.pos.y - gy);
+		gShadow.position.set(P.pos.x, gy + 0.25, P.pos.z);
+		gShadow.rotation.y = P.yaw;
+		const spread = 1 + h * 0.025;
+		gShadow.scale.set(10.5 * spread, 1, 4.6 * spread);
+		gShadow.material.uniforms.uA.value = (playing && P.alive ? 1 : 0) * smoothstep(60, 4, h) * 0.75 / spread * (1 - U.uNight.value * 0.7);
+	}
 	streaks.uA.value = damp(streaks.uA.value, playing && P.alive && !S.cine ? 0.18 + smoothstep(30, 80, P.speed) * 0.3 + P.boost * 0.22 : 0, 4, dt);
 	if (P.alive && playing) {
-		const tipL = GLIDER.tipL.clone().applyQuaternion(q).add(P.pos), tipR = GLIDER.tipR.clone().applyQuaternion(q).add(P.pos);
+		const tipL = GLIDER.tipL.clone().multiplyScalar(1.15).applyQuaternion(q).add(P.pos), tipR = GLIDER.tipR.clone().multiplyScalar(1.15).applyQuaternion(q).add(P.pos);
 		ribbons[0].push(tipL, upV); ribbons[1].push(tipR, upV);
 		ribbons.forEach(r => r.uA.value = 0.25 + P.boost * 0.9 + smoothstep(40, 90, P.speed) * 0.4);
 	}
@@ -3816,10 +3851,8 @@ function frame(dt, freezeTime) {
 	bloomPass.highPassUniforms.uMaxLum.value = 9 / st.exp;
 
 	// render
-	ocean.render(scene, camera);
 	sparks.flush();
-	renderScene();
-	composer.render(dt);
+	if (!noRender) { ocean.render(scene, camera); renderScene(); composer.render(dt); }   // the test harness can step the world without drawing it
 
 	// audio & HUD
 	if (audio.ctx) audio.update(dt, { speed: playing ? P.speed : 20, boost: P.boost, alt: playing ? P.alt ?? 100 : 120, fire: nearestFire(), layers: S.lit, night: U.uNight.value });
