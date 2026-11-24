@@ -1715,7 +1715,7 @@ void main(){
 	float L = pathLen + dVert;
 	vec3 T = exp(-vec3(0.42, 0.085, 0.06) * L);
 	vec3 hzn = skyLUT(normalize(vec3(uSunDir.x, 0.06, uSunDir.z))) * 0.35 + skyLUT(normalize(vec3(-uSunDir.x, 0.06, -uSunDir.z))) * 0.35;
-	vec3 scatterCol = vec3(0.012, 0.072, 0.11) * (uLightCol * (0.15 + ld) * 0.55 * sh + skyUp * 0.9 + hzn * 2.2 * smoothstep(0.07, -0.06, uSunDir.y) * mix(1., 0.5, uNight));   // at dusk the bright horizon still lights the water body
+	vec3 scatterCol = vec3(0.014, 0.088, 0.128) * (uLightCol * (0.15 + ld) * 0.55 * sh + skyUp * 0.9 + hzn * 2.2 * smoothstep(0.07, -0.06, uSunDir.y) * mix(1., 0.5, uNight));   // at dusk the bright horizon still lights the water body
 	vec3 body = seabed * T + scatterCol * (1. - T);
 	// light through wave crests when looking toward the light
 	vec2 lh = normalize(uLightDir.xz + 1e-4), vh = normalize(-V.xz + 1e-4);
@@ -2130,6 +2130,11 @@ const LANTERN_FRAG = /* glsl */`
 // ── sky lanterns released by beacons (fully GPU animated) ──
 // They leave the fire as a column, climbing fast at first, and only fan out once they are high above it.
 const LANTERN_PATH = /* glsl */`
+// no two lanterns alike: most a mellow amber, a few pale gold or nearly red, some burning low, one in eight bright
+vec3 lanternTint(float w){ float h = fract(w * 5.31), r = fract(w * 17.9);
+	vec3 c = mix(vec3(4.0, 1.45, 0.4), vec3(4.3, 2.25, 0.85), smoothstep(0.55, 1., h));
+	return mix(c, vec3(3.7, 0.85, 0.32), step(0.84, r)); }
+float lanternBright(float w){ float b = fract(w * 31.7); return 0.45 + 0.75 * b * b + 0.5 * step(0.88, fract(w * 3.77)); }
 vec3 lanternPath(vec4 sp, vec4 sd, float age){
 	float rise = sd.z * (1. - exp(-age * sd.y * 5. / sd.z));
 	vec2 dir = normalize(vec2(sin(sd.x * 61.), cos(sd.x * 61.)) + 1e-4);
@@ -2157,13 +2162,13 @@ class SkyLanterns {
 				float age = uTime - aSpawn.w;
 				float alive = step(0., age);
 				vec3 c = lanternPos(max(age, 0.));
-				float s = (1.4 + 1.5 * fract(aSeed.x * 7.13)) * alive * min(1., age * 1.5) * smoothstep(25., 75., distance(c, cameraPosition));   // none swell into bokeh in front of the lens
+				float s = (1.15 + 2.1 * pow(fract(aSeed.w * 7.13), 1.6)) * alive * min(1., age * 1.5) * smoothstep(25., 75., distance(c, cameraPosition));   // none swell into bokeh in front of the lens
 				vec3 p = position * s;
-				float tilt = sin(uTime * 0.7 + aSeed.x * 40.) * 0.12;
+				float tilt = sin(uTime * 0.7 + aSeed.w * 40.) * 0.12;
 				p.xy = mat2(cos(tilt), -sin(tilt), sin(tilt), cos(tilt)) * p.xy;
 				vW = c + p; vL = position;
-				vF = 0.8 + 0.2 * sin(uTime * 9. + aSeed.x * 100.) * sin(uTime * 3.7 + aSeed.x * 40.);
-				vCol = mix(vec3(4.2, 1.55, 0.42), vec3(3.8, 1.0, 0.45), aSeed.w);
+				vF = (0.8 + 0.2 * sin(uTime * 9. + aSeed.w * 100.) * sin(uTime * 3.7 + aSeed.w * 40.)) * lanternBright(aSeed.w);
+				vCol = lanternTint(aSeed.w);
 				gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.);
 			}`;
 		this.mat = new THREE.ShaderMaterial({ uniforms: { ...U }, vertexShader: vs, fragmentShader: LANTERN_FRAG, side: THREE.DoubleSide });
@@ -2179,7 +2184,7 @@ class SkyLanterns {
 			uniforms: { ...U },
 			vertexShader: /* glsl */`
 				uniform float uTime; uniform vec2 uWind; uniform float uFogDen; uniform float uNight; uniform float uGlow;
-				attribute vec4 aSpawn; attribute vec4 aSeed; varying float vA;
+				attribute vec4 aSpawn; attribute vec4 aSeed; varying float vA; varying vec3 vTint;
 				${LANTERN_PATH}
 				void main(){
 				float age = uTime - aSpawn.w;
@@ -2189,12 +2194,14 @@ class SkyLanterns {
 					vec4 mv = viewMatrix * vec4(c, 1.);
 					gl_Position = projectionMatrix * mv;
 					float d = -mv.z;
-					gl_PointSize = clamp(2400. / d, 3., 22.);   // a point of light, never a lens blob
-					vA = min(1., pow(2400. / d / 3., 2.)) * near * (0.25 + 0.75 * uNight) * min(1., age) * exp(-uFogDen * d * 0.5) * (0.8 + 0.2 * sin(uTime * 7. + aSeed.x * 90.)) * uGlow;
+					float sz = 1.15 + 2.1 * pow(fract(aSeed.w * 7.13), 1.6);
+					gl_PointSize = clamp(sz * 900. / d, 3., 22.);   // a point of light, never a lens blob
+					vTint = lanternTint(aSeed.w) / 2.6 * lanternBright(aSeed.w);
+					vA = min(1., pow(sz * 900. / d / 3., 2.)) * near * (0.25 + 0.75 * uNight) * min(1., age) * exp(-uFogDen * d * 0.5) * (0.8 + 0.2 * sin(uTime * 7. + aSeed.w * 90.)) * uGlow;
 				}`,
 			fragmentShader: /* glsl */`
-				varying float vA;
-				void main(){ float d = length(gl_PointCoord - 0.5); float a = exp(-d * d * 22.) * 0.9 + smoothstep(0.08, 0., d) * 0.8; gl_FragColor = vec4(vec3(1.6, 0.6, 0.18) * a * vA, 1.); }`,
+				varying float vA; varying vec3 vTint;
+				void main(){ float d = length(gl_PointCoord - 0.5); float a = exp(-d * d * 22.) * 0.9 + smoothstep(0.08, 0., d) * 0.8; gl_FragColor = vec4(vTint * a * vA, 1.); }`,
 			...addBlend,
 		}));
 		this.halo.frustumCulled = false; this.halo.renderOrder = 21; this.halo.layers.enable(2);
@@ -2202,12 +2209,29 @@ class SkyLanterns {
 	}
 	release(x, y, z, n, spread = 30, delay = 0, stagger = 9) {
 	const t = U.uTime.value, r = this.rnd; this.stagger = stagger;
+		// people let lanterns go in little groups: a cluster leaves together from one spot, shares a drift and a height,
+		// and only a few go up alone. So the sky fills in knots and strands, not as an even sprinkle.
+		const groups = [];
+		for (let k = 0, m = Math.max(1, Math.round(n / 9)); k < m; k++) {
+			const a = r() * Math.PI * 2, d = Math.sqrt(r()) * spread;
+			groups.push({ x: x + Math.cos(a) * d, z: z + Math.sin(a) * d, t: Math.pow(r(), 1.6) * this.stagger, sx: r(), sy: 1.4 + r() * 1.8, sz: 160 + r() * 520 });
+		}
 		for (let k = 0; k < n; k++) {
 			const i = this.i; this.i = (this.i + 1) % this.max;
-			const a = r() * Math.PI * 2, d = Math.sqrt(r()) * spread;
-			this.spawn[i * 4] = x + Math.cos(a) * d; this.spawn[i * 4 + 1] = y + r() * 4; this.spawn[i * 4 + 2] = z + Math.sin(a) * d;
-			this.spawn[i * 4 + 3] = t + delay + Math.pow(r(), 1.6) * this.stagger;
-			this.seed[i * 4] = r(); this.seed[i * 4 + 1] = 1.4 + r() * 1.8; this.seed[i * 4 + 2] = 160 + r() * 520; this.seed[i * 4 + 3] = r();
+			const lone = r() < 0.22, G = groups[(r() * groups.length) | 0];
+			if (lone) {
+				const a = r() * Math.PI * 2, d = Math.sqrt(r()) * spread;
+				this.spawn[i * 4] = x + Math.cos(a) * d; this.spawn[i * 4 + 2] = z + Math.sin(a) * d;
+				this.spawn[i * 4 + 3] = t + delay + Math.pow(r(), 1.6) * this.stagger;
+				this.seed[i * 4] = r(); this.seed[i * 4 + 1] = 1.4 + r() * 1.8; this.seed[i * 4 + 2] = 160 + r() * 520;
+			} else {
+				const a = r() * Math.PI * 2, d = Math.sqrt(r()) * Math.min(14, spread * 0.3);
+				this.spawn[i * 4] = G.x + Math.cos(a) * d; this.spawn[i * 4 + 2] = G.z + Math.sin(a) * d;
+				this.spawn[i * 4 + 3] = t + delay + G.t + r() * 2.5;
+				this.seed[i * 4] = G.sx + (r() - 0.5) * 0.012; this.seed[i * 4 + 1] = G.sy * (0.85 + r() * 0.3); this.seed[i * 4 + 2] = G.sz * (0.8 + r() * 0.4);
+			}
+			this.spawn[i * 4 + 1] = y + r() * 4;
+			this.seed[i * 4 + 3] = r();
 		}
 		for (const o of [this.mesh.geometry, this.halo.geometry]) { o.attributes.aSpawn.needsUpdate = true; o.attributes.aSeed.needsUpdate = true; }
 	}
@@ -2322,7 +2346,7 @@ function makeFire(origin, scale = 1) {
 
 // ── guiding light pillar over unlit beacons ──
 function makePillar(pos, color = new THREE.Color(1.25, 0.78, 0.42)) {   // a warm plume of light, of a piece with the fire it calls you to
-	const g = new THREE.CylinderGeometry(10, 22, 900, 32, 1, true); g.translate(0, 450, 0);
+	const g = new THREE.CylinderGeometry(17, 38, 900, 32, 1, true); g.translate(0, 450, 0);
 	const uA = { value: 1 };
 	const mat = new THREE.ShaderMaterial({
 		uniforms: { ...U, uA, uCol: { value: color } },
@@ -2335,8 +2359,10 @@ function makePillar(pos, color = new THREE.Color(1.25, 0.78, 0.42)) {   // a war
 			${NOISE_GLSL}
 			void main(){
 				vec3 V = normalize(cameraPosition - vW);
-				float edge = pow(abs(dot(normalize(vN.xz + 1e-5), normalize(V.xz + 1e-5))), 4.);
-				float up = (exp(-vY / 160.) + 0.25 * exp(-vY / 600.)) * smoothstep(0., 12., vY) * (0.85 + 0.15 * sin(uTime * 3.1 + vY * 0.02));
+				// seen across, the column is a gaussian of light (exp(-x²)), wide and soft, never a tube with an outline; it rises out of the fire, not off a cut
+				float cth = abs(dot(normalize(vN.xz + 1e-5), normalize(V.xz + 1e-5)));
+				float edge = exp(-4.5 * (1. - cth * cth)) * smoothstep(0., 0.35, cth);
+				float up = (exp(-vY / 230.) + 0.25 * exp(-vY / 650.)) * smoothstep(0., 16., vY) * (0.85 + 0.15 * sin(uTime * 3.1 + vY * 0.02));
 				float flow = 0.7 + 0.3 * vnoise(vec2(atan(vN.z, vN.x) * 3., vY * 0.02 - uTime * 0.6));
 				float dist = length(cameraPosition - vW);
 				float a = edge * up * flow * uA * smoothstep(30., 140., dist) * (0.7 + 0.6 * uNight);
@@ -2391,10 +2417,11 @@ function makeThermal(pos, radius = 40, height = 320) {
 			${NOISE_GLSL}
 			void main(){
 				vec3 V = normalize(cameraPosition - vW);
-				float edge = pow(abs(dot(normalize(vN.xz + 1e-5), normalize(V.xz + 1e-5))), 2.);   // brightest through the column's core, gone at its sides: no box outline
+				float cth = abs(dot(normalize(vN.xz + 1e-5), normalize(V.xz + 1e-5)));
+				float edge = exp(-3.5 * (1. - cth * cth)) * smoothstep(0., 0.35, cth);   // brightest through the column's core, gone long before its sides: no outline
 				float swirl = smoothstep(0.55, 0.9, vnoise(vec2(atan(vN.z, vN.x) * 2. + vY * 0.02 + uTime * 0.4, vY * 0.03 - uTime * 0.5)));
-				float a = edge * (0.4 + swirl * 0.6) * smoothstep(0., 40., vY) * exp(-vY / 200.) * 0.06;
-				gl_FragColor = vec4(vec3(1.2, 0.85, 0.5) * a * (0.6 + uNight) * uGlow, 1.);
+				float a = edge * (0.55 + swirl * 0.45) * smoothstep(0., 60., vY) * exp(-vY / 200.) * 0.05;
+				gl_FragColor = vec4(vec3(1.2, 0.85, 0.5) * a * (0.6 + 0.25 * uNight) * uGlow, 1.);
 			}`,
 		...addBlend, side: THREE.DoubleSide,
 	}));
@@ -2583,22 +2610,34 @@ function makeLighthouse(pos) {
 		key: 'lighthouse', uniforms: { uLit: glassU },
 		fragHead: 'uniform float uLit; float gWin = 0.;',
 		// once it wakes, the lamp spills down the tower and the keeper's windows light
-		emissiveFragment: `{ float y = gWPos.y - ${pos.y.toFixed(1)}; totalEmissiveRadiance += diffuseColor.rgb * vec3(1., 0.78, 0.5) * smoothstep(0.2, 1., uLit) * (0.03 + 0.2 * smoothstep(20., 57., y)) * uGlow + gWin * vec3(4., 2.2, 0.8) * smoothstep(0.2, 1., uLit) * uGlow; }`,
+		// the lamp's spill dies within a few metres below the gallery: the tower stands dark in the night with its windows lit, not as a glowing pole
+		emissiveFragment: `{ float y = gWPos.y - ${pos.y.toFixed(1)}; totalEmissiveRadiance += diffuseColor.rgb * vec3(1., 0.78, 0.5) * smoothstep(0.2, 1., uLit) * (0.008 + 0.16 * exp((y - 57.) / 4.5)) * uGlow + gWin * vec3(4., 2.2, 0.8) * smoothstep(0.2, 1., uLit) * uGlow; }`,
 		// lime-washed masonry: courses and staggered joints, rain streaks under the gallery, a dark stone plinth, three windows
 		mapFragment: /* glsl */`
 			{ float y = (gWPos.y - ${pos.y.toFixed(1)}) / 1.5;
 			  vec2 d = gWPos.xz - vec2(${pos.x.toFixed(1)}, ${pos.z.toFixed(1)}); float ang = atan(d.y, d.x);
 			  float row = floor(y / 0.9), u = ang * 7.5 + row * 0.5;
 			  float joint = max(smoothstep(0.05, 0.0, abs(fract(y / 0.9) - 0.5) - 0.44), smoothstep(0.04, 0.0, abs(fract(u) - 0.5) - 0.46));
-			  vec3 c = vec3(0.86, 0.82, 0.74) * (0.9 + 0.1 * hash12(vec2(row, floor(u))));
+			  vec3 c = vec3(0.86, 0.82, 0.74) * (0.96 + 0.04 * hash12(vec2(row, floor(u))));   // painted over: the courses only just show through
+			  // two oxide-red daymark bands, the paint worn thin in places
+			  float bandM = (step(16.2, y) - step(21.6, y)) + (step(27.4, y) - step(32.8, y));
+			  c = mix(c, vec3(0.52, 0.12, 0.085) * (0.94 + 0.1 * vnoise(vec2(ang * 5., y * 0.8))), bandM * (1. - 0.2 * smoothstep(0.62, 0.9, vnoise(vec2(ang * 7., y * 0.9 + 3.)))));
 			  c *= 1. - 0.28 * smoothstep(0.35, 0.8, fbm2(vec2(ang * 9., y * 0.25), 4)) * smoothstep(6., 34., y);   // streaks
 			  c = mix(c, vec3(0.42, 0.4, 0.37) * (0.85 + 0.3 * hash12(vec2(row, floor(u)))), smoothstep(5.5, 4.8, y));
-			  c *= 1. - joint * 0.35;
-			  float win = 0.;
-			  for (int k = 0; k < 3; k++) { float wy = 11. + float(k) * 8.5, wa = 1.2 + float(k) * 2.1;
-			    win = max(win, step(abs(y - wy), 1.1) * step(abs(mod(ang - wa + 3.14159, 6.28318) - 3.14159), 0.12)); }
-			  gWin = win;
-			  diffuseColor.rgb = mix(c, vec3(0.05, 0.05, 0.06), win); }`,
+			  c *= 1. - joint * 0.16;
+			  // five windows climb the stair in a spiral; three of them are lit, with a warm sill of light on the wall below
+			  float win = 0., lit = 0., frm = 0., gy = 0.;
+			  for (int k = 0; k < 5; k++) { float wy = 8.5 + float(k) * 5.6, wa = 0.9 + float(k) * 2.4;
+			    float da = abs(mod(ang - wa + 3.14159, 6.28318) - 3.14159);
+			    float w = step(abs(y - wy), 1.05) * step(da, 0.11);
+			    float on = (k == 1 || k == 3 || k == 4) ? 1. : 0.;
+			    frm = max(frm, step(abs(y - wy), 1.4) * step(da, 0.145) * (1. - w));   // a dressed stone surround
+			    if (w > 0.5) gy = (y - wy + 1.05) / 2.1;
+			    win = max(win, w); lit = max(lit, w * on);
+			    gWin += on * 0.05 * smoothstep(0.3, 0., da) * smoothstep(-3.5, -1.05, y - wy) * step(y - wy, -1.05); }
+			  gWin += lit;
+			  c = mix(c, vec3(0.93, 0.91, 0.86), frm);
+			  diffuseColor.rgb = mix(c, vec3(0.045, 0.05, 0.06) + vec3(0.05, 0.065, 0.085) * gy, win); }`,   // dark panes that catch a little sky at the top
 	});
 	const sm = stoneMat();
 	const add = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
@@ -2630,8 +2669,17 @@ const wall = new THREE.Mesh(new THREE.BoxGeometry(8, 4.2, 5.5), white); wall.pos
 const roofG = new THREE.CylinderGeometry(3.6, 3.6, 8.6, 3, 1); roofG.rotateZ(Math.PI / 2); roofG.scale(1, 0.62, 1.05);
 const roof = new THREE.Mesh(roofG, patchStandard(new THREE.MeshStandardMaterial({ color: 0x5a2a20, roughness: 0.8 }), { key: 'slate' })); roof.position.y = 4.2 + 1.1; roof.castShadow = true; cot.add(roof);
 const chim = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), sm); chim.position.set(2.6, 6.2, 0.8); cot.add(chim);
+// the keeper is home: four-paned windows, dark by day, warm once the lamp is lit
+const paneMat = new THREE.ShaderMaterial({
+	uniforms: { ...U, uLit: glassU },
+	vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
+	fragmentShader: 'uniform float uLit; uniform float uGlow; varying vec2 vUv; void main(){ vec2 q = abs(vUv - 0.5); float bar = max(step(q.x, 0.04), step(q.y, 0.035)) + step(0.42, max(q.x, q.y)); float glow = 1. - 0.45 * length(vUv - vec2(0.5, 0.35)); vec3 lit = vec3(3.4, 1.7, 0.55) * glow * uGlow; gl_FragColor = vec4(mix(mix(vec3(0.04, 0.05, 0.06), lit, smoothstep(0.2, 1., uLit)), vec3(0.06, 0.05, 0.045), clamp(bar, 0., 1.)), 1.); }',
+});
+for (const [x, z, ry] of [[-2.2, 2.77, 0], [2.0, 2.77, 0], [-1.4, -2.77, Math.PI], [4.01, 0, Math.PI / 2]]) {
+	const w = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.3), paneMat); w.position.set(x, 2.3, z); w.rotation.y = ry; cot.add(w);
+}
 	// sweeping beams
-	const beamGeo = new THREE.ConeGeometry(70, 1100, 96, 1, true);
+	const beamGeo = new THREE.ConeGeometry(100, 1100, 96, 1, true);
 	beamGeo.translate(0, -550, 0); beamGeo.rotateX(-Math.PI / 2);
 	const beamU = { value: 0 };
 	const beamMat = new THREE.ShaderMaterial({
@@ -2644,7 +2692,9 @@ const chim = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), sm); chim.posi
 			void main(){
 				float along = clamp(vL.z / 1100., 0., 1.);
 				// a cone seen from the side is brightest where the eye looks through its core, fading at its rim
-				float through = pow(abs(dot(normalize(vN), normalize(cameraPosition - vW))), 3.);
+				// a gaussian of light across the cone, not a solid with a rim: what the eye sees through it falls off as exp(-x²), so no edge is ever drawn
+				float cth = abs(dot(normalize(vN), normalize(cameraPosition - vW)));
+				float through = exp(-4.5 * (1. - cth * cth)) * smoothstep(0., 0.35, cth) * 1.6;
 				float a = exp(-along * 1.5) * (1. - smoothstep(0.45, 1., along)) * through * smoothstep(0., 0.02, along) * uA * (0.8 + 0.2 * vnoise(vec2(vL.z * 0.01 - uTime, atan(vL.y, vL.x) * 3.)));
 				gl_FragColor = vec4(vec3(2.4, 1.9, 1.2) * a * 0.2 * mix(0.4, 1., fogKeep(vW)) * uGlow, 1.);
 			}`,
@@ -3206,7 +3256,7 @@ function buildSetPieces() {
 			o.obj = makeShrine(pos); scene.add(o.obj);
 			o.fire = makeFire(pos.clone().setY(b.y + 8.2), 1);
 			o.target = pos.clone().setY(b.y + 10);
-			o.pillar = makePillar(pos.clone().setY(b.y + 12));
+			o.pillar = makePillar(pos.clone().setY(b.y + 7));   // its foot sinks into the shrine, so no cut edge shows
 		}
 		o.fire.visible = false; scene.add(o.fire, o.pillar);
 		o.light = new THREE.PointLight(0xffb37a, 0, b.central ? 260 : 170, 2);
@@ -3256,8 +3306,9 @@ function buildSetPieces() {
 				uniform float uA; varying vec2 vP;
 				void main(){
 					// the wing's delta, softened: nose forward (-z), trailing edge back
-					vec2 p = vP * vec2(1., 1.25) + vec2(0., 0.08);
-					float d = max(abs(p.x) * 0.9 + p.y * 0.55 - 0.32, -p.y - 0.3);
+					// vP.y < 0 is ahead (the plane's z runs back along the flight): the point leads, the trailing edge is straight
+					vec2 p = vP * vec2(1., 1.25) - vec2(0., 0.08);
+					float d = max(abs(p.x) * 0.9 - p.y * 0.55 - 0.32, p.y - 0.3);
 					float a = (1. - smoothstep(-0.05, 0.12, d)) * uA;
 					gl_FragColor = vec4(mix(vec3(1.), vec3(0.55, 0.62, 0.72), a), 1.);
 				}`,
@@ -3675,7 +3726,7 @@ function updateCamera(dt, snap) {
 		return;
 	}
 	const flatF = new THREE.Vector3(-Math.sin(P.yaw), 0, -Math.cos(P.yaw));
-	const near = camera.aspect < 1 ? 0.95 : 1;
+	const near = camera.aspect < 1 ? 0.86 : 1;   // on a tall screen the glider sits closer and larger: it, not dark water, fills the lower half
 	S.igniteLift = Math.max(0, (S.igniteLift || 0) - dt * 0.35);
 	const lift = smoothstep(0, 0.6, S.igniteLift) * 9;   // as a fire catches the camera rises, and the flame shows below the wing
 	const want = P.pos.clone().addScaledVector(flatF, -(10.8 + P.boost * 2.2 + lift * 0.4) * near).addScaledVector(fwd, -1.5).add(new THREE.Vector3(0, (6.6 + lift) * near, 0));
@@ -3764,7 +3815,8 @@ function frame(dt, freezeTime, noRender) {
 		gShadow.rotation.y = P.yaw;
 		const spread = 1 + h * 0.025;
 		gShadow.scale.set(10.5 * spread, 1, 4.6 * spread);
-		gShadow.material.uniforms.uA.value = (playing && P.alive ? 1 : 0) * smoothstep(60, 4, h) * 0.75 / spread * (1 - U.uNight.value * 0.7);
+		const overSea = sampleHeight(world.H, P.pos.x, P.pos.z) < 0 ? 0.4 : 1;   // water takes a shadow only faintly: it has no matte face to darken
+		gShadow.material.uniforms.uA.value = (playing && P.alive ? 1 : 0) * smoothstep(60, 4, h) * 0.75 / spread * (1 - U.uNight.value * 0.7) * overSea;
 	}
 	streaks.uA.value = damp(streaks.uA.value, playing && P.alive && !S.cine ? 0.18 + smoothstep(30, 80, P.speed) * 0.3 + P.boost * 0.22 : 0, 4, dt);
 	if (P.alive && playing) {
