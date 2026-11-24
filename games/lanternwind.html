@@ -234,6 +234,7 @@ const U = {
 	uHeightTex: { value: null },
 	uNight: { value: 0 },
 	uAurora: { value: 0 },
+	uViewH: { value: 1080 },   // drawing-buffer height in pixels, for things that must stay at least a pixel wide
 	uWind: { value: new THREE.Vector2(0.8, 0.3) },
 	uPlayer: { value: new THREE.Vector3() },
 	uLantern: { value: new THREE.Color(1, 0.6, 0.25) },
@@ -1509,6 +1510,8 @@ function buildRocks(world, scene, count = 1400, mats) {
 				nx = vec3(nx.xy + gN.zy, abs(nx.z) * gN.x); ny = vec3(ny.xy + gN.xz, abs(ny.z) * gN.y); nz = vec3(nz.xy + gN.xy, abs(nz.z) * gN.z);
 				rN = normalize(nx.zyx * bw.x + ny.xzy * bw.y + nz.xyz * bw.z);
 				rWet = smoothstep(1.2, -0.2, gWPos.y);
+				// the tide's reach: a dark, damp band a few metres tall with a ragged upper edge
+				rWet = max(rWet, 0.75 * smoothstep(4.2, 1.2, gWPos.y + (fbm2(gWPos.xz * 0.09 + gWPos.y * 0.05, 3) - 0.5) * 2.2));
 			}`,
 		mapFragment: /* glsl */`{
 			// cool granite: weed and wet at the foot, lichen on the ledges
@@ -1517,7 +1520,10 @@ function buildRocks(world, scene, count = 1400, mats) {
 			a = mix(a, vec3(0.1, 0.12, 0.06), smoothstep(2.5, 0.3, gWPos.y) * 0.6);
 			a = mix(a, a * vec3(0.95, 1.05, 0.8) * 1.1, smoothstep(0.55, 0.9, rN.y) * smoothstep(3., 8., gWPos.y) * 0.6);
 			a = mix(a, a * vec3(0.82, 0.92, 0.7), smoothstep(0.4, 0.75, fbm2(gWPos.xz * 0.045 + gWPos.y * 0.03, 4)) * 0.35);   // broad, soft lichen patches
-			a = mix(a, a * vec3(0.25, 0.4, 0.42), smoothstep(0.1, -1.5, gWPos.y));   // below the waterline the rock goes dark and sea-green
+			// courses in the stone: each bed a slightly different tone, a darker seam where two meet
+			float bedY = gWPos.y / 6.5 + (fbm2(gWPos.xz * 0.008, 2) - 0.5) * 2.6, bf = fract(bedY);
+			a *= (0.9 + 0.2 * hash12(vec2(floor(bedY), 3.7))) * (1. - 0.22 * smoothstep(0.9, 0.99, bf) * smoothstep(0.5, 0.2, abs(rN.y)));
+			a = mix(a, a * vec3(0.14, 0.22, 0.22), smoothstep(0.1, -1.5, gWPos.y));   // below the waterline the rock goes dark: no pale ring glowing up through the sea
 	diffuseColor.rgb = a * mix(1., 0.5, rWet); }`,
 		normalFragment: 'normal = normalize((viewMatrix * vec4(rN, 0.)).xyz);',
 		roughFragment: 'roughnessFactor = mix(0.86, 0.6, rWet);',
@@ -1559,7 +1565,12 @@ function buildLandmarks(world, scene, rockMat) {
 		const p = geo.attributes.position, nn = geo.attributes.normal;
 		for (let i = 0; i < p.count; i++) {
 			const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-			const d = fb3(x * 0.035, y * 0.035, z * 0.035) * amp + Math.abs(n3(x * 0.11, y * 0.11, z * 0.11)) * amp * -0.35;
+			let d = fb3(x * 0.035, y * 0.035, z * 0.035) * amp + Math.abs(n3(x * 0.11, y * 0.11, z * 0.11)) * amp * -0.35;
+			// bedding: the walls step back in courses a few metres tall, each a slope that ends in a jutting lip;
+			// the beds wander a little in height, so they read as rock laid down, not as rings turned on a lathe
+			const bed = y / 6.5 + n3(x * 0.008, y * 0.003, z * 0.008) * 1.3, sb = bed - Math.floor(bed);
+			const tooth = sb < 0.8 ? sb / 0.8 : (1 - sb) / 0.2;
+			d += amp * 0.42 * (tooth - 0.5) * (1 - Math.abs(nn.getY(i)));
 			p.setXYZ(i, x + nn.getX(i) * d, y + nn.getY(i) * d * 0.6, z + nn.getZ(i) * d);
 		}
 	};
@@ -1603,7 +1614,7 @@ function buildLandmarks(world, scene, rockMat) {
 	const pts = [];
 	for (let i = 0; i <= 24; i++) { const t = i / 24, th = Math.PI * (1 - t); const sq = Math.sign(Math.cos(th)) * Math.pow(Math.abs(Math.cos(th)), 0.8); pts.push(new THREE.Vector3(ax + sx * sq * 66, -16 + Math.pow(Math.sin(th), 0.7) * 128, az + sz * sq * 66)); }
 	const curve = new THREE.CatmullRomCurve3(pts);
-	const TS = 180, RS = 36, g = new THREE.TubeGeometry(curve, TS, 19, RS, false);
+	const TS = 300, RS = 40, g = new THREE.TubeGeometry(curve, TS, 19, RS, false);
 	const p = g.attributes.position;
 	for (let i = 0; i <= TS; i++) {
 		const u = i / TS, c = curve.getPointAt(u), thick = 1 + 1.1 * Math.pow(1 - Math.sin(Math.PI * u), 2);
@@ -2356,11 +2367,16 @@ function makePillar(pos, color = new THREE.Color(1.25, 0.78, 0.42)) {   // a war
 	const mat = new THREE.ShaderMaterial({
 		uniforms: { ...U, uA, uCol: { value: color } },
 		vertexShader: /* glsl */`
-			varying vec3 vW; varying vec3 vN; varying float vY;
-			void main(){ vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vY = position.y; gl_Position = projectionMatrix * viewMatrix * w; }`,
+			varying vec3 vW; varying vec3 vN; varying float vY; varying float vK;
+			void main(){
+				// far off, a column only metres across would shrink to a one-pixel thread: it widens with distance and dims to match, a soft glow at any range
+				vec3 ax = (modelMatrix * vec4(0., 0., 0., 1.)).xyz;
+				vK = max(1., length(cameraPosition.xz - ax.xz) / 900.);
+				vec3 p = vec3(position.x * vK, position.y, position.z * vK);
+				vec4 w = modelMatrix * vec4(p, 1.); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vY = position.y; gl_Position = projectionMatrix * viewMatrix * w; }`,
 		fragmentShader: /* glsl */`
 			uniform float uA; uniform vec3 uCol; uniform float uTime; uniform float uNight; uniform float uGlow;
-			varying vec3 vW; varying vec3 vN; varying float vY;
+			varying vec3 vW; varying vec3 vN; varying float vY; varying float vK;
 			${NOISE_GLSL}
 			void main(){
 				vec3 V = normalize(cameraPosition - vW);
@@ -2371,7 +2387,7 @@ function makePillar(pos, color = new THREE.Color(1.25, 0.78, 0.42)) {   // a war
 				float flow = 0.7 + 0.3 * vnoise(vec2(atan(vN.z, vN.x) * 3., vY * 0.02 - uTime * 0.6));
 				float dist = length(cameraPosition - vW);
 				float a = edge * up * flow * uA * smoothstep(30., 140., dist) * (0.7 + 0.6 * uNight);
-				gl_FragColor = vec4(uCol * a * 0.42 * uGlow, 1.);
+				gl_FragColor = vec4(uCol * a * 0.42 * uGlow / vK, 1.);
 			}`,
 		...addBlend, side: THREE.DoubleSide,
 	});
@@ -2792,6 +2808,28 @@ c = mix(c, c * 0.72, smoothstep(0.82, 1.0, uv.y));
 	const alu = patchStandard(new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.32, metalness: 0.85 }), { key: 'alu' });
 	const dark = patchStandard(new THREE.MeshStandardMaterial({ color: 0x1b1c20, roughness: 0.5, metalness: 0.4 }), { key: 'darkTube' });
 	const wireM = patchStandard(new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.4, metalness: 0.6 }), { key: 'wire' });
+	// the rigging wires are thinner than a pixel from the chase camera: drawn as they are, they break into dashes. Each is
+	// widened to about one pixel and faded by how much it was widened, so it reads as a fine continuous line at any distance.
+	const wireAA = new THREE.ShaderMaterial({
+		uniforms: { ...U, uR: { value: 0.008 } },
+		vertexShader: /* glsl */`
+			uniform float uViewH; uniform float uR; varying float vA; varying float vY;
+			void main(){
+				vec4 mv0 = modelViewMatrix * vec4(position, 1.);
+				float px = 2. * -mv0.z / (projectionMatrix[1][1] * uViewH);   // metres per pixel at this depth
+				float sc = length(modelMatrix[0].xyz);
+				float R = max(uR * sc, px * 0.6);
+				vA = clamp(uR * sc / R, 0., 1.);
+				vec3 n = normalize(normalMatrix * normal);
+				mv0.xyz += n * (R - uR * sc);
+				vY = (modelMatrix * vec4(position, 1.)).y;
+				gl_Position = projectionMatrix * mv0;
+			}`,
+		fragmentShader: /* glsl */`
+			uniform float uNight; uniform float uGlow; varying float vA;
+			void main(){ gl_FragColor = vec4(vec3(0.045, 0.045, 0.05) * (1. - 0.5 * uNight), clamp(vA * 1.6, 0., 0.9)); }`,
+		transparent: true, depthWrite: false,
+	});
 	const tube = (a, b, r, mat) => {
 		const d = new THREE.Vector3().subVectors(b, a); const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), r > 0.02 ? 8 : 4), mat);
 		m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); m.castShadow = r > 0.02; g.add(m); return m;
@@ -2808,12 +2846,12 @@ c = mix(c, c * 0.72, smoothstep(0.82, 1.0, uv.y));
 	// king-post above the keel, top wires to nose, tips and tail
 	const kpBase = new THREE.Vector3(0, 0.28, -0.35), kpTop = new THREE.Vector3(0, 1.45, -0.35);
 	tube(kpBase, kpTop, 0.035, alu);
-	for (const p of [nose, tipL, tipR, tail]) tube(kpTop, p, 0.008, wireM);
+	for (const p of [nose, tipL, tipR, tail]) tube(kpTop, p, 0.008, wireAA);
 	// A-frame (control frame) hanging below
 	const apex = new THREE.Vector3(0, 0.16, -0.35);
 	const barL = new THREE.Vector3(-0.78, -1.62, -0.95), barR = new THREE.Vector3(0.78, -1.62, -0.95);
 	tube(apex, barL, 0.035, dark); tube(apex, barR, 0.035, dark); tube(barL, barR, 0.04, dark);
-	for (const b of [barL, barR]) for (const p of [nose, tipL, tipR, tail]) tube(b, p, 0.008, wireM);
+	for (const b of [barL, barR]) for (const p of [nose, tipL, tipR, tail]) tube(b, p, 0.008, wireAA);
 	// the pilot hangs prone from the hang point in a cocoon harness, hands on the base bar
 	const hang = new THREE.Vector3(0, 0.15, -0.15);
 	const suit = patchStandard(new THREE.MeshStandardMaterial({ color: 0x8a6440, roughness: 0.74 }), { key: 'suit',
@@ -2916,34 +2954,42 @@ class WindStreaks {
 
 // ── wingtip ribbons ──
 class Ribbon {
-	constructor(len = 26, width = 0.09) {
+	// a wingtip vortex drawn as a band that always turns its face to the camera, soft at both edges: from above it is
+	// a faint wisp, never a hairline seen edge-on
+	constructor(len = 26, width = 0.2) {
 		this.len = len; this.w = width; this.pts = [];
 		const g = new THREE.BufferGeometry();
-		this.pos = new Float32Array(len * 2 * 3); this.k = new Float32Array(len * 2);
-		for (let i = 0; i < len; i++) { this.k[i * 2] = this.k[i * 2 + 1] = i / (len - 1); }
+		this.pos = new Float32Array(len * 2 * 3); this.k = new Float32Array(len * 2); const sd = new Float32Array(len * 2);
+		for (let i = 0; i < len; i++) { this.k[i * 2] = this.k[i * 2 + 1] = i / (len - 1); sd[i * 2] = 1; sd[i * 2 + 1] = -1; }
 		const idx = [];
 		for (let i = 0; i < len - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
 		g.setIndex(idx);
 		g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
 		g.setAttribute('aK', new THREE.BufferAttribute(this.k, 1));
+		g.setAttribute('aS', new THREE.BufferAttribute(sd, 1));
 		this.uA = { value: 0.5 };
 		this.mesh = new THREE.Mesh(g, new THREE.ShaderMaterial({
 			uniforms: { ...U, uA: this.uA },
-			vertexShader: 'attribute float aK; varying float vK; varying float vD; void main(){ vK = aK; vec4 mv = viewMatrix * vec4(position, 1.); vD = -mv.z; gl_Position = projectionMatrix * mv; }',
+			vertexShader: 'attribute float aK; attribute float aS; varying float vK; varying float vD; varying float vS; void main(){ vK = aK; vS = aS; vec4 mv = viewMatrix * vec4(position, 1.); vD = -mv.z; gl_Position = projectionMatrix * mv; }',
 			// the trail fades before it reaches the camera, so it never streaks across the screen
-			fragmentShader: 'uniform float uA; uniform vec3 uLantern; uniform float uGlow; varying float vK; varying float vD; void main(){ float a = pow(max(1. - vK, 0.), 3.) * uA * uGlow * 0.35 * smoothstep(0., 0.08, vK) * smoothstep(12., 21., vD); gl_FragColor = vec4(mix(vec3(1.4, 1.2, 1.0), uLantern * 2., vK) * a, 1.); }',
+			fragmentShader: 'uniform float uA; uniform vec3 uLantern; uniform float uGlow; varying float vK; varying float vD; varying float vS; void main(){ float a = pow(max(1. - vK, 0.), 2.5) * uA * uGlow * 0.16 * smoothstep(0., 0.08, vK) * smoothstep(12., 26., vD) * (1. - vS * vS); gl_FragColor = vec4(mix(vec3(1.4, 1.2, 1.0), uLantern * 2., vK) * a, 1.); }',
 			...addBlend, side: THREE.DoubleSide,
 		}));
 		this.mesh.frustumCulled = false; this.mesh.renderOrder = 25;
+		this.tmp = new THREE.Vector3(); this.tmp2 = new THREE.Vector3();
 	}
-	push(p, side) {
-		this.pts.unshift([p.clone(), side.clone()]);
+	push(p) {
+		this.pts.unshift(p.clone());
 		if (this.pts.length > this.len) this.pts.pop();
+		const n = this.pts.length;
 		for (let i = 0; i < this.len; i++) {
-			const e = this.pts[Math.min(i, this.pts.length - 1)];
-			const w = this.w * (1 - i / this.len);
-			this.pos[i * 6] = e[0].x + e[1].x * w; this.pos[i * 6 + 1] = e[0].y + e[1].y * w; this.pos[i * 6 + 2] = e[0].z + e[1].z * w;
-			this.pos[i * 6 + 3] = e[0].x - e[1].x * w; this.pos[i * 6 + 4] = e[0].y - e[1].y * w; this.pos[i * 6 + 5] = e[0].z - e[1].z * w;
+			const e = this.pts[Math.min(i, n - 1)], f = this.pts[Math.min(i + 1, n - 1)], b = this.pts[Math.min(Math.max(i - 1, 0), n - 1)];
+			const t = this.tmp.subVectors(b, f), v = this.tmp2.subVectors(camera.position, e);
+			const side = t.cross(v); const l = side.length();
+			if (l > 1e-6) side.multiplyScalar(1 / l); else side.set(0, 1, 0);
+			const w = this.w * (0.35 + 0.65 * i / this.len);   // the vortex widens as it drifts back
+			this.pos[i * 6] = e.x + side.x * w; this.pos[i * 6 + 1] = e.y + side.y * w; this.pos[i * 6 + 2] = e.z + side.z * w;
+			this.pos[i * 6 + 3] = e.x - side.x * w; this.pos[i * 6 + 4] = e.y - side.y * w; this.pos[i * 6 + 5] = e.z - side.z * w;
 		}
 		this.mesh.geometry.attributes.position.needsUpdate = true;
 	}
@@ -3375,6 +3421,7 @@ function onResize() {
 	camera.aspect = w / h; camera.updateProjectionMatrix();
 	renderer.setSize(w, h, false);
 	const pr = renderer.getPixelRatio();
+	U.uViewH.value = h * pr;
 	composer.setPixelRatio(pr);
 	composer.setSize(w, h);
 	sceneRT.setSize(Math.round(w * pr), Math.round(h * pr));
@@ -3837,7 +3884,7 @@ function frame(dt, freezeTime, noRender) {
 	streaks.uA.value = damp(streaks.uA.value, playing && P.alive && !S.cine ? 0.18 + smoothstep(30, 80, P.speed) * 0.3 + P.boost * 0.22 : 0, 4, dt);
 	if (P.alive && playing) {
 		const tipL = GLIDER.tipL.clone().multiplyScalar(1.15).applyQuaternion(q).add(P.pos), tipR = GLIDER.tipR.clone().multiplyScalar(1.15).applyQuaternion(q).add(P.pos);
-		ribbons[0].push(tipL, upV); ribbons[1].push(tipR, upV);
+		ribbons[0].push(tipL); ribbons[1].push(tipR);
 		ribbons.forEach(r => r.uA.value = 0.25 + P.boost * 0.9 + smoothstep(40, 90, P.speed) * 0.4);
 	}
 	ribbons.forEach(r => r.mesh.visible = playing && P.alive);
