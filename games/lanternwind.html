@@ -1675,7 +1675,7 @@ uniform sampler2D uRefl; uniform sampler2D uReflBlur; uniform sampler2D uNormals
 uniform sampler2D tScene; uniform sampler2D tDepth; uniform vec2 uRes; uniform float uNear; uniform float uFar;
 uniform mat4 uInvVP; uniform mat4 uTexMat; uniform mat4 uProj;
 uniform vec3 uLightCol; uniform vec3 uMoonDir; uniform float uNight; uniform vec3 uPlayer; uniform vec3 uLantern; uniform float uLanternI;
-uniform float uReflOn; uniform vec2 uWind;
+uniform float uReflOn; uniform vec2 uWind; uniform float uHuntW; float gHuntMark = 0.;
 ${NOISE_GLSL}
 ${ATMO_GLSL}
 float linZ(float d){ float z = d * 2. - 1.; return 2. * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
@@ -1764,6 +1764,9 @@ void main(){
 		float soft = smoothstep(30., 700., dist) * 0.85 + clamp(length(wg) * 2.5, 0., 0.35);
 		vec3 rs = texture2D(uRefl, rr).rgb, rb = texture2D(uReflBlur, rr).rgb;
 		refl = mix(rs, rb, clamp(soft, 0., 0.92));
+		// the mirror is drawn at half size: one overheated texel in it (a spark, a sprite's hot core) would show here as a
+		// glowing block for a frame. Nothing the sea mirrors is brighter than this.
+		float rL = dot(refl, vec3(0.2126, 0.7152, 0.0722)); if (uHuntW > 0.5 && rL > uHuntW) gHuntMark = 1.; if (rL > 6.) refl *= 6. / rL;
 	} else refl = skyLUT(reflect(-V, N));
 	if (any(isnan(refl)) || any(isinf(refl))) refl = skyLUT(reflect(-V, N));   // a bad texel in the mirror must not print a dark blot
 	vec3 col = mix(body, refl, fres);
@@ -1775,7 +1778,9 @@ void main(){
 	rough = sqrt(rough * rough + kern);
 	vec3 Hs = normalize(V + uSunDir);
 	float spec = D_GGX(max(dot(N, Hs), 0.), rough) * fres * 0.25;
-	col += uSunCol * min(spec, 40.) * sh * smoothstep(-0.02, 0.02, uSunDir.y);
+	vec3 glint = uSunCol * min(spec, 40.) * sh * smoothstep(-0.02, 0.02, uSunDir.y);
+	if (uHuntW > 0.5 && dot(glint, vec3(0.2126, 0.7152, 0.0722)) > uHuntW * 4.) gHuntMark = 2.;
+	col += glint;
 	vec3 Hm = normalize(V + uMoonDir);
 	col += vec3(0.6, 0.7, 0.9) * min(D_GGX(max(dot(N, Hm), 0.), sqrt(rough * rough * 1.7)) * fres * 0.02, 4.) * uNight;
 	vec3 Lp = uPlayer - vW; float lpd = length(Lp); Lp /= lpd;
@@ -1798,12 +1803,12 @@ void main(){
 	// where water and land meet the water thins to nothing → no z-fighting shimmer at the shoreline
 	col = mix(seabed, col, smoothstep(0.0, 0.18 + fp * 0.45, dVert));   // the water's edge fades over about two pixels: it does not crawl as the camera moves
 	col = applyAtmo(col, cameraPosition, vW);
-	gl_FragColor = vec4(col, 1.);
+	gl_FragColor = vec4(gHuntMark > 1.5 ? vec3(0., 50., 0.) : gHuntMark > 0.5 ? vec3(50., 0., 50.) : col, 1.);
 }`;
 
 const BLUR_FRAG = /* glsl */`
 uniform sampler2D tSrc; uniform vec2 uDir; varying vec2 vUv;
-vec3 tap(vec2 uv){ vec3 c = texture2D(tSrc, uv).rgb; return (any(isnan(c)) || any(isinf(c))) ? vec3(0.) : min(c, vec3(500.)); }
+vec3 tap(vec2 uv){ vec3 c = texture2D(tSrc, uv).rgb; if (any(isnan(c)) || any(isinf(c))) return vec3(0.); float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); return l > 6. ? c * 6. / l : c; }
 void main(){
 	vec3 c = tap(vUv) * 0.2270270270;
 	c += (tap(vUv + uDir * 1.3846153846) + tap(vUv - uDir * 1.3846153846)) * 0.3162162162;
@@ -1833,7 +1838,7 @@ class Ocean {
 			uniforms: {
 				...U, ...this.scene,
 				uRefl: { value: this.rt.texture }, uReflBlur: { value: this.blurB.texture }, uTexMat: { value: this.texMat }, uNormals: { value: normalsTex },
-				uReflOn: this.reflOn, uLanternI: { value: 1 },
+				uReflOn: this.reflOn, uLanternI: { value: 1 }, uHuntW: { value: 0 },
 			},
 			vertexShader: WATER_VERT, fragmentShader: WATER_FRAG,
 		});
