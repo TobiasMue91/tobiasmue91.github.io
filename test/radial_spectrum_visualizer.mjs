@@ -12,7 +12,7 @@
 //   node test/radial_spectrum_visualizer.mjs all              # both
 //   VERBOSE=1 node test/radial_spectrum_visualizer.mjs        # print every passing check
 //
-// Core suites: fft, spectrum, bands, motion, settings, helpers, wav, demo.
+// Core suites: fft, spectrum, bands, motion, settings, helpers, wav, webm, demo.
 // browser: serves nothing itself - start `npx http-server -p 8099` first (or set RSV_URL). It checks
 //   the core spectrum against Chromium's AnalyserNode, that a 1 kHz tone played through the page
 //   lights the bars at 1 kHz, that the page makes no request carrying audio, and has no console errors.
@@ -24,7 +24,7 @@ import vm from 'vm';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PAGE = join(HERE, '..', 'tools', 'radial_spectrum_visualizer.html');
-const CORE_SUITES = ['fft', 'spectrum', 'bands', 'motion', 'settings', 'helpers', 'wav', 'demo'];
+const CORE_SUITES = ['fft', 'spectrum', 'bands', 'motion', 'settings', 'helpers', 'wav', 'webm', 'demo'];
 const args = process.argv.slice(2);
 let suites = args.length ? args : CORE_SUITES;
 if (suites.includes('all')) suites = [...CORE_SUITES, 'browser'];
@@ -231,6 +231,43 @@ if (suites.includes('wav')) {
     check(s(6) === Math.round(0.5 * 32767), '0.5 rounds to 16384');
 }
 
+if (suites.includes('webm')) {
+    section('webm');
+    // a minimal live-stream WebM as MediaRecorder writes it: EBML header, Segment of unknown size,
+    // Info with TimecodeScale and no Duration, then a Cluster
+    const el = (id, body) => { const n = body.length; return [...id, 0x80 | n, ...body]; }; // sizes < 127
+    const ebml = el([0x1A, 0x45, 0xDF, 0xA3], el([0x42, 0x82], [...'webm'].map(c => c.charCodeAt(0))));
+    const info = el([0x15, 0x49, 0xA9, 0x66], [...el([0x2A, 0xD7, 0xB1], [0x0F, 0x42, 0x40]), ...el([0x4D, 0x80], [0x43, 0x68])]);
+    const cluster = el([0x1F, 0x43, 0xB6, 0x75], el([0xE7], [0]));
+    const live = Uint8Array.from([...ebml, 0x18, 0x53, 0x80, 0x67, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, ...info, ...cluster]);
+    const findDuration = b => { // scan for 0x44 0x89 0x88 and read the float64 after it
+        for (let i = 0; i + 11 <= b.length; i++) if (b[i] === 0x44 && b[i + 1] === 0x89 && b[i + 2] === 0x88)
+            return new DataView(b.buffer, b.byteOffset + i + 3, 8).getFloat64(0);
+        return null;
+    };
+    const fixed = C.webmSetDuration(live, 12345.6);
+    near(findDuration(fixed), 12345.6, 1e-9, 'Duration is written in ms (TimecodeScale 1 000 000)');
+    check(fixed.length === live.length + 11 + 7, 'Info grows by the Duration element and an 8-byte size', `${live.length} -> ${fixed.length}`);
+    const infoAt = ebml.length + 12;
+    const iv = C.readVint(fixed, infoAt + 4);
+    check(iv && iv.len === 8 && iv.v === info.length - 5 + 11, 'Info size is rewritten to cover the new element', JSON.stringify(iv));
+    check(fixed.slice(-cluster.length).every((v, i) => v === cluster[i]), 'the clusters after Info are untouched');
+    const again = C.webmSetDuration(fixed, 500);
+    check(again.length === fixed.length && Math.abs(findDuration(again) - 500) < 1e-9, 'a second pass overwrites Duration in place');
+    // a scale of 1 000 000 000 ns (1 s) stores seconds
+    const info2 = el([0x15, 0x49, 0xA9, 0x66], el([0x2A, 0xD7, 0xB1], [0x3B, 0x9A, 0xCA, 0x00]));
+    const live2 = Uint8Array.from([...ebml, 0x18, 0x53, 0x80, 0x67, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, ...info2, ...cluster]);
+    near(findDuration(C.webmSetDuration(live2, 2500)), 2.5, 1e-9, 'Duration follows the file’s TimecodeScale');
+    // a sized Segment grows by the same amount
+    const body = [...info, ...cluster];
+    const sized = Uint8Array.from([...ebml, 0x18, 0x53, 0x80, 0x67, 0x40, body.length, ...body]);
+    const fs = C.webmSetDuration(sized, 1000), sv = C.readVint(fs, ebml.length + 4);
+    check(sv.len === 2 && sv.v === body.length + 18, 'a sized Segment has its size raised to match', JSON.stringify(sv));
+    const junk = Uint8Array.from([1, 2, 3, 4, 5]);
+    check(C.webmSetDuration(junk, 10) === junk, 'bytes that are not WebM come back unchanged');
+    check(C.webmSetDuration(new Uint8Array(0), 10).length === 0, 'an empty file comes back unchanged');
+}
+
 if (suites.includes('demo')) {
     section('demo');
     const a = C.demoScore(7), b = C.demoScore(7), c = C.demoScore(8);
@@ -318,7 +355,33 @@ async function browserSuite() {
         check(tone.lo <= 1060 && tone.hi >= 940, 'the 1 kHz tone peaks in the bar that holds 1 kHz', JSON.stringify(tone));
         check(tone.peak > 0.5 && tone.far < 0.05, 'and bars more than six bands away stay dark', JSON.stringify(tone));
 
-        // 3. nothing the person loads leaves the browser
+        // 3. a real MediaRecorder WebM from this Chromium, with its Duration written, reads back at its length
+        const webm = await page.evaluate(async () => {
+            const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+            const g = c.getContext('2d'), st = c.captureStream(30), mr = new MediaRecorder(st, {mimeType: 'video/webm'});
+            const chunks = []; mr.ondataavailable = e => chunks.push(e.data);
+            let f = 0; const tick = setInterval(() => { g.fillStyle = `hsl(${f++ * 10},80%,50%)`; g.fillRect(0, 0, 64, 64); }, 33);
+            const t0 = performance.now(); mr.start(200);
+            await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => { mr.onstop = r; mr.stop(); });
+            clearInterval(tick);
+            const ms = performance.now() - t0;
+            const raw = new Uint8Array(await new Blob(chunks).arrayBuffer());
+            const fixed = RSV.webmSetDuration(raw, ms);
+            return {ms, grew: fixed.length - raw.length, bytes: Array.from(fixed)};
+        });
+        check(webm.grew === 18, 'Chromium’s WebM takes the Duration element', `grew by ${webm.grew}`);
+        try {
+            const {execFileSync} = await import('child_process');
+            const {writeFileSync, mkdtempSync} = await import('fs');
+            const {tmpdir} = await import('os');
+            const f = join(mkdtempSync(join(tmpdir(), 'rsv-')), 'fixed.webm');
+            writeFileSync(f, Buffer.from(webm.bytes));
+            const d = parseFloat(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString());
+            near(d, webm.ms / 1000, 0.15, 'ffprobe reads the written duration');
+        } catch (e) { console.log('  (ffprobe not available, duration read-back skipped)'); }
+
+        // 4. nothing the person loads leaves the browser
         const origin = new globalThis.URL(URL).origin;
         const foreign = requests.filter(u => !u.startsWith(origin) && !u.startsWith('blob:') && !u.startsWith('data:'));
         check(foreign.length === 0, 'no request leaves the page’s own origin', foreign.join(', '));

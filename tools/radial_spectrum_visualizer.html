@@ -289,8 +289,12 @@
                 <label class="swatch" id="baseSwatch"><input type="color" id="baseColor" value="#1db954">Colour</label>
                 <label class="swatch"><input type="color" id="background" value="#0b0d12">Background</label>
             </div>
+            <div class="field">
+                <div class="lab"><label for="title">Title on the picture</label></div>
+                <input class="text" id="title" type="text" maxlength="80" placeholder="Artist – Song" autocomplete="off" enterkeyhint="done">
+            </div>
             <details class="more">
-            <summary>More: height, thickness, bass, title, centre image</summary>
+            <summary>More: height, thickness, bass, centre image</summary>
             <div class="field">
                 <div class="lab"><label for="sensitivity">Height</label><output for="sensitivity" class="num" id="sensitivityOut"></output></div>
                 <input type="range" id="sensitivity" min="0.5" max="3" step="0.1">
@@ -312,10 +316,6 @@
                 <label class="tog"><input type="checkbox" id="showWaveform">Waveform</label>
                 <label class="tog"><input type="checkbox" id="glow">Glow</label>
                 <label class="tog"><input type="checkbox" id="scale">Hz scale</label>
-            </div>
-            <div class="field">
-                <div class="lab"><label for="title">Title on the picture</label></div>
-                <input class="text" id="title" type="text" maxlength="80" placeholder="Artist – Song" autocomplete="off" enterkeyhint="done">
             </div>
             <div class="field fileline">
                 <button class="btn" id="coverBtn" type="button">Centre image…</button>
@@ -597,6 +597,78 @@
     }
     function mimeExt(m) { return /mp4/.test(m) ? 'mp4' : 'webm'; }
 
+    // ---- WebM duration -------------------------------------------------------------------------
+    // MediaRecorder writes WebM as a live stream: Segment Info has no Duration, so players show no
+    // length and some upload sites refuse the file. This writes Duration (EBML id 0x4489, float64,
+    // in TimecodeScale units - 1 ms unless the file says otherwise) into Info. Returns the bytes
+    // unchanged if the layout is not the one expected.
+    function readVint(b, p, keepMarker) {
+        const first = b[p];
+        if (first === undefined || first === 0) return null;
+        let len = 1;
+        while (!(first & (0x80 >> (len - 1)))) len++;
+        if (p + len > b.length) return null;
+        let v = keepMarker ? first : first & (0xFF >> len), unknown = (first & (0xFF >> len)) === (0xFF >> len);
+        for (let i = 1; i < len; i++) { v = v * 256 + b[p + i]; if (b[p + i] !== 0xFF) unknown = false; }
+        return { v, len, unknown };
+    }
+    function vint8(n) { // 8-byte size vint
+        const out = [0x01]; let hi = Math.floor(n / 4294967296), lo = n >>> 0;
+        out.push(hi >>> 16 & 0xFF, hi >>> 8 & 0xFF, hi & 0xFF, lo >>> 24 & 0xFF, lo >>> 16 & 0xFF, lo >>> 8 & 0xFF, lo & 0xFF);
+        return out;
+    }
+    function webmSetDuration(b, ms) {
+        let p = 0;
+        const id0 = readVint(b, p, true); if (!id0 || id0.v !== 0x1A45DFA3) return b;
+        const s0 = readVint(b, p + id0.len); if (!s0) return b;
+        p += id0.len + s0.len + s0.v;
+        const sid = readVint(b, p, true); if (!sid || sid.v !== 0x18538067) return b;
+        const ssz = readVint(b, p + sid.len); if (!ssz) return b;
+        const segSizeAt = p + sid.len, segBody = segSizeAt + ssz.len;
+        const segEnd = ssz.unknown ? b.length : Math.min(b.length, segBody + ssz.v);
+        for (let q = segBody; q < segEnd;) {
+            const id = readVint(b, q, true), sz = id && readVint(b, q + id.len);
+            if (!id || !sz || sz.unknown) return b;
+            const body = q + id.len + sz.len, end = body + sz.v;
+            if (id.v === 0x1549A966) {
+                let scale = 1e6;
+                for (let r = body; r < end;) {
+                    const cid = readVint(b, r, true), csz = cid && readVint(b, r + cid.len);
+                    if (!cid || !csz) return b;
+                    const cb = r + cid.len + csz.len;
+                    if (cid.v === 0x2AD7B1) { scale = 0; for (let i = 0; i < csz.v; i++) scale = scale * 256 + b[cb + i]; }
+                    if (cid.v === 0x4489) { // already there: overwrite in place
+                        const out = b.slice(), dv = new DataView(out.buffer, out.byteOffset, out.byteLength), d = ms * 1e6 / (scale || 1e6);
+                        if (csz.v === 8) dv.setFloat64(cb, d); else if (csz.v === 4) dv.setFloat32(cb, d); else return b;
+                        return out;
+                    }
+                    r = cb + csz.v;
+                }
+                const dur = new Uint8Array(11); dur[0] = 0x44; dur[1] = 0x89; dur[2] = 0x88;
+                new DataView(dur.buffer).setFloat64(3, ms * 1e6 / (scale || 1e6));
+                const idBytes = b.slice(q, q + id.len), size = vint8(sz.v + 11);
+                const grow = id.len + 8 + sz.v + 11 - (end - q);
+                const out = new Uint8Array(b.length + grow);
+                out.set(b.subarray(0, q), 0);
+                let o = q;
+                out.set(idBytes, o); o += id.len;
+                out.set(size, o); o += 8;
+                out.set(b.subarray(body, end), o); o += sz.v;
+                out.set(dur, o); o += 11;
+                out.set(b.subarray(end), o);
+                if (!ssz.unknown) { // a sized Segment grows too; rewrite its size in the same width
+                    let n = ssz.v + grow;
+                    if (n >= Math.pow(2, 7 * ssz.len) - 1) return b;
+                    for (let i = ssz.len - 1; i >= 0; i--) { out[segSizeAt + i] = n % 256; n = Math.floor(n / 256); }
+                    out[segSizeAt] |= 0x80 >> (ssz.len - 1);
+                }
+                return out;
+            }
+            q = end;
+        }
+        return b;
+    }
+
     // ---- WAV (RIFF, PCM 16 bit little endian) --------------------------------------------------
     function encodeWav(channels, sampleRate) {
         const nc = channels.length, len = channels[0].length, bytes = len * nc * 2;
@@ -676,7 +748,7 @@
     root.RSV = {
         mulberry32, blackman, fft, spectrumDb, logBands, bandLevels, dbToLevel, bassWeight,
         smoothingToTau, follow, trebleLiftDb, sanitize, toNumber, DEFAULTS, NUM, MODES, COLOR_MODES, FORMATS,
-        formatTime, acceptFile, baseName, safeFileName, pickMime, mimeExt, encodeWav, demoScore,
+        formatTime, acceptFile, webmSetDuration, readVint, baseName, safeFileName, pickMime, mimeExt, encodeWav, demoScore,
         ringLayout, bandAngles, F_MIN, F_MAX
     };
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1583,6 +1655,7 @@
     function finishRecording() {
         if (!rec) return;
         const r = rec;
+        r.tEnd = performance.now();
         lastRec = r; rec = null;
         try { r.mr.state !== 'inactive' && r.mr.stop(); } catch (e) { onRecStop(r); }
         if (r.kind === 'track') media.pause();
@@ -1603,19 +1676,26 @@
         updateRecLabel();
     }
     let lastVideoUrl = '';
-    function onRecStop(r) {
+    async function onRecStop(r) {
         if (!r || r.done) return;
         r.done = true;
         if (r.cancelled || !r.chunks.length) return;
         const type = (r.mime || 'video/webm').split(';')[0];
-        const blob = new Blob(r.chunks, { type });
+        let blob = new Blob(r.chunks, { type });
+        if (type === 'video/webm' && r.tEnd) {
+            try {
+                const fixed = C.webmSetDuration(new Uint8Array(await blob.arrayBuffer()), r.tEnd - r.t0);
+                blob = new Blob([fixed], { type });
+            } catch (e) { /* keep the file as recorded */ }
+        }
         if (lastVideoUrl) URL.revokeObjectURL(lastVideoUrl);
         lastVideoUrl = URL.createObjectURL(blob);
         const file = r.name + '-visualizer.' + C.mimeExt(type);
         download(lastVideoUrl, file);
         const el = $('recMsg');
         el.className = 'msg ok';
-        el.textContent = `Saved ${file} (${(blob.size / 1048576).toFixed(1)} MB). `;
+        el.textContent = `Saved ${file} (${(blob.size / 1048576).toFixed(1)} MB). ` +
+            (C.mimeExt(type) === 'webm' ? 'This browser writes WebM: YouTube and browsers play it, Instagram and iPhones want MP4 (Chrome, Edge and Safari record MP4). ' : '');
         const a = document.createElement('a');
         a.href = lastVideoUrl; a.download = file; a.textContent = 'Download again';
         a.style.color = 'inherit';

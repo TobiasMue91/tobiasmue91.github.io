@@ -2997,6 +2997,7 @@ suite runs in Node's `vm` against references that do not come from the page.
 | `settings` | the old page's defaults, clamping, decimal comma, units, typographic minus, colours, an empty or inverted dB window (which crashed the old page), long and non-ASCII titles, prototype keys |
 | `helpers` | time display (hours, Infinity, NaN), which files count as audio (missing MIME types, video, PDFs, images), safe download names, MP4-before-WebM recorder choice, frame layouts, mirrored band angles |
 | `wav` | the RIFF/WAVE header field by field, interleaving, clipping, NaN |
+| `webm` | Duration written into a live-stream WebM's Info as MediaRecorder leaves it: in ms or the file's TimecodeScale, Info and a sized Segment resized, clusters untouched, a second pass in place, non-WebM bytes left alone |
 | `demo` | the seeded demo score: deterministic, in time, kicks on the beat, the break, the bass range |
-| `browser` | in Chromium (needs the server): the core spectrum against Chromium's own AnalyserNode within 0.5 dB on the same three-tone signal, a 1 kHz tone played through the page lighting the 1 kHz bar and nothing six bands away, no request leaving the origin, no console errors |
+| `browser` | in Chromium (needs the server): the core spectrum against Chromium's own AnalyserNode within 0.5 dB on the same three-tone signal, a 1 kHz tone played through the page lighting the 1 kHz bar and nothing six bands away, a real Chromium WebM taking the Duration and ffprobe reading it back, no request leaving the origin, no console errors |
 
