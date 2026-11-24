@@ -2574,6 +2574,29 @@ const stoneMat = () => patchStandard(new THREE.MeshStandardMaterial({ color: 0x9
 		{ float n = fbm2(gWPos.xz * 0.9 + gWPos.y * 0.7, 4);
 		  diffuseColor.rgb *= mix(vec3(0.55, 0.52, 0.48), vec3(1.0, 0.95, 0.86), n) * (0.75 + 0.25 * smoothstep(0.3, 0.9, vNormal.y)); }`,
 });
+// dressed stone: courses of blocks with mortar joints on the walls, irregular flags on top
+const masonMat = () => patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86 }), {
+	key: 'mason',
+	mapFragment: /* glsl */`
+		{ vec3 nW = normalize((vec4(vNormal, 0.) * viewMatrix).xyz);
+		  float top = smoothstep(0.6, 0.85, nW.y);
+		  // walls: courses 0.55 m tall, blocks staggered along the wall
+		  float h = abs(nW.x) > abs(nW.z) ? gWPos.z : gWPos.x;   // run along whichever horizontal axis the wall faces across
+		  vec2 q = vec2(h / (1.1 + 0.5 * hash12(vec2(floor(gWPos.y / 0.55), 9.))), gWPos.y / 0.55);   // blocks of uneven length per course
+		  float row = floor(q.y); q.x += row * 0.5 + hash12(vec2(row, 1.)) * 0.3;
+		  float jw = 1. - smoothstep(0.0, 0.07, min(fract(q.y), 1. - fract(q.y))) * smoothstep(0.0, 0.05, min(fract(q.x), 1. - fract(q.x)));
+		  float tw = hash12(vec2(floor(q.x), row));
+		  // top: flags from a cell pattern
+		  vec2 f = gWPos.xz * 0.75; vec2 fi = floor(f), ff = fract(f); float d1 = 9., d2 = 9.; vec2 id = vec2(0.);
+		  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 gg = vec2(float(x), float(y)); vec2 o = vec2(hash12(fi + gg), hash12(fi + gg + 7.1)) * 0.8 + 0.1; float d = length(gg + o - ff); if (d < d1) { d2 = d1; d1 = d; id = fi + gg; } else if (d < d2) d2 = d; }
+		  float jt = 1. - smoothstep(0.02, 0.08, d2 - d1);
+		  float tt = hash12(id * 3.1);
+		  float j = mix(jw, jt, top), t = mix(tw, tt, top);
+		  vec3 c = mix(vec3(0.34, 0.32, 0.29), vec3(0.5, 0.47, 0.42), t) * (0.8 + 0.4 * fbm2(gWPos.xz * 1.3 + gWPos.y * 0.9, 3));   // weathered granite, not fresh render
+		  c = mix(c, vec3(0.22, 0.21, 0.2), j * 0.45);
+		  c = mix(c, c * vec3(0.8, 0.95, 0.65), 0.4 * smoothstep(0.55, 0.85, fbm2(gWPos.xz * 0.35, 3)) * top);   // moss on the flags
+		  diffuseColor.rgb = c; }`,
+});
 function makeShrine(pos) {
 	const g = new THREE.Group();
 	const sm = stoneMat();
@@ -2669,7 +2692,7 @@ function makeLighthouse(pos) {
 			  float bandM = (step(16.2, y) - step(21.6, y)) + (step(27.4, y) - step(32.8, y));
 			  c = mix(c, vec3(0.52, 0.12, 0.085) * (0.94 + 0.1 * vnoise(vec2(ang * 5., y * 0.8))), bandM * (1. - 0.1 * smoothstep(0.62, 0.9, vnoise(vec2(ang * 7., y * 0.9 + 3.)))));
 			  c *= 1. - 0.28 * smoothstep(0.35, 0.8, fbm2(vec2(ang * 9., y * 0.25), 4)) * smoothstep(6., 34., y);   // streaks
-			  c = mix(c, vec3(0.42, 0.4, 0.37) * (0.85 + 0.3 * hash12(vec2(row, floor(u)))), smoothstep(5.5, 4.8, y));
+			  c = mix(c, vec3(0.4, 0.38, 0.35) * (0.93 + 0.1 * hash12(vec2(row, floor(u)))) * (0.85 + 0.3 * vnoise(vec2(ang * 6., y * 1.5))), smoothstep(5.5, 4.8, y));
 			  c *= 1. - joint * 0.16;
 			  // five windows climb the stair in a spiral; three of them are lit, with a warm sill of light on the wall below
 			  float win = 0., lit = 0., frm = 0., gy = 0.;
@@ -2683,9 +2706,9 @@ function makeLighthouse(pos) {
 			    gWin += on * 0.05 * smoothstep(0.3, 0., da) * smoothstep(-3.5, -1.05, y - wy) * step(y - wy, -1.05); }
 			  gWin += lit;
 			  c = mix(c, vec3(0.93, 0.91, 0.86), frm);
-			  diffuseColor.rgb = mix(c, vec3(0.045, 0.05, 0.06) + vec3(0.05, 0.065, 0.085) * gy, win); }`,   // dark panes that catch a little sky at the top
+			  diffuseColor.rgb = mix(c, vec3(0.06, 0.07, 0.085) + vec3(0.12, 0.15, 0.19) * gy * gy, win); }`,   // dark panes that catch the sky toward the top   // dark panes that catch a little sky at the top
 	});
-	const sm = stoneMat();
+	const sm = masonMat();
 	const add = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
 	add(new THREE.CylinderGeometry(13, 15, 3, 32), sm, 0.5);
 	const prof = [];
@@ -2709,22 +2732,66 @@ add(new THREE.CylinderGeometry(3.95, 3.95, 1.1, 24), iron, 39.3);
 const dome = add(new THREE.SphereGeometry(4.3, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), verd, 43.8); dome.scale.y = 0.75;
 add(new THREE.CylinderGeometry(0.35, 0.5, 1.4, 8), verd, 47.6);
 add(new THREE.SphereGeometry(0.45, 10, 8), iron, 48.5);
-// the keeper's cottage at the foot of the tower
-const cot = new THREE.Group(); cot.position.set(10.5, 2, 3); cot.rotation.y = -0.5; g.add(cot);
-const wall = new THREE.Mesh(new THREE.BoxGeometry(8, 4.2, 5.5), white); wall.position.y = 2.1; wall.castShadow = wall.receiveShadow = true; cot.add(wall);
-const roofG = new THREE.CylinderGeometry(3.6, 3.6, 8.6, 3, 1, true); roofG.rotateZ(Math.PI / 2); roofG.scale(1, 0.62, 1.05);   // open ends: the slates overhang, the gables below are wall
-const gableG = new THREE.CylinderGeometry(3.45, 3.45, 7.98, 3, 1); gableG.rotateZ(Math.PI / 2); gableG.scale(1, 0.62, 1.05);
-const gable = new THREE.Mesh(gableG, white); gable.position.y = 4.2 + 1.1 - 0.06; gable.castShadow = gable.receiveShadow = true; cot.add(gable);
-const roof = new THREE.Mesh(roofG, patchStandard(new THREE.MeshStandardMaterial({ color: 0x5a2a20, roughness: 0.8, side: THREE.DoubleSide }), { key: 'slate' })); roof.position.y = 4.2 + 1.1; roof.castShadow = true; cot.add(roof);
-const chim = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), sm); chim.position.set(2.6, 6.2, 0.8); cot.add(chim);
+// the keeper's cottage, built against the foot of the tower: whitewashed walls on a stone footing, a steep slate
+// gable roof with eaves, a chimney on the ridge, a door between two windows
+const cotWall = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92 }), {
+	key: 'cotwall',
+	mapFragment: /* glsl */`
+		{ float y = gWPos.y - ${pos.y.toFixed(1)} - 3.;   // metres above the terrace
+		  vec3 c = vec3(0.9, 0.88, 0.83) * (0.95 + 0.05 * vnoise(gWPos.xz * 0.9 + gWPos.y * 0.7));
+		  c *= 1. - 0.18 * smoothstep(1.6, 0., y) * vnoise(vec2(gWPos.x + gWPos.z, gWPos.y) * 1.7);   // splash and damp near the ground
+		  c *= 1. - 0.12 * smoothstep(0.55, 0.85, vnoise(vec2((gWPos.x + gWPos.z) * 0.6, gWPos.y * 0.15)));   // rain runs from the eaves
+		  diffuseColor.rgb = c; }`,
+});
+const slate = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 }), {
+	key: 'slate2',
+	mapFragment: /* glsl */`
+		{ vec2 q = vec2(gWPos.x * 2.2 + gWPos.z * 2.2, gWPos.y * 3.2);   // courses of small slates, staggered
+		  float row = floor(q.y); q.x += row * 0.5;
+		  float edge = smoothstep(0.0, 0.08, fract(q.y)) * (0.75 + 0.25 * smoothstep(0.0, 0.06, abs(fract(q.x) - 0.5) - 0.44 + 0.5));
+		  vec3 c = vec3(0.2, 0.21, 0.24) * (0.8 + 0.4 * hash12(vec2(floor(q.x), row)));
+		  c = mix(c, vec3(0.3, 0.33, 0.22), 0.35 * smoothstep(0.55, 0.85, vnoise(gWPos.xz * 0.5)));   // lichen
+		  diffuseColor.rgb = c * (0.6 + 0.4 * edge); }`,
+});
+const cot = new THREE.Group(); cot.position.set(9.3, 2, 1.2); cot.rotation.y = -0.18; g.add(cot);
+const cAdd = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; cot.add(m); return m; };
+const CL = 7.6, CW = 5.4, CH = 3.9, RH = 2.5, OV = 0.45;   // length (x, away from the tower), width, wall height, roof rise, eave overhang
+cAdd(new THREE.BoxGeometry(CL + 0.3, 0.6, CW + 0.3), sm, 0, 0.3, 0);                   // stone footing
+cAdd(new THREE.BoxGeometry(CL, CH, CW), cotWall, 0, 0.6 + CH / 2, 0);
+// the attic: a prism whose two ends are the whitewashed gables
+const gab = new THREE.Shape(); gab.moveTo(-CW / 2, 0); gab.lineTo(CW / 2, 0); gab.lineTo(0, RH); gab.closePath();
+const gabG = new THREE.ExtrudeGeometry(gab, { depth: CL, bevelEnabled: false }); gabG.rotateY(Math.PI / 2); gabG.translate(-CL / 2, 0, 0);
+cAdd(gabG, cotWall, 0, 0.6 + CH, 0);
+// two slate planes meeting at the ridge, overhanging eaves and gables
+const slope = Math.atan2(RH, CW / 2), sl = Math.hypot(RH, CW / 2) + OV;
+for (const sd of [-1, 1]) {
+	const r = cAdd(new THREE.BoxGeometry(CL + OV * 2, 0.16, sl), slate, 0, 0, 0);
+	r.rotation.x = sd * slope;
+	r.position.set(0, 0.6 + CH + RH / 2 - Math.sin(slope) * OV / 2 + 0.08, sd * (CW / 4 + Math.cos(slope) * OV / 2) * 0.98);
+}
+cAdd(new THREE.BoxGeometry(CL + OV * 2, 0.22, 0.32), slate, 0, 0.6 + CH + RH + 0.04, 0);   // ridge cap
+cAdd(new THREE.BoxGeometry(0.8, 1.9, 0.8), sm, 1.9, 0.6 + CH + RH + 0.3, 0);               // chimney through the ridge
+cAdd(new THREE.BoxGeometry(0.95, 0.14, 0.95), sm, 1.9, 0.6 + CH + RH + 1.3, 0);
+// a plank door with a stone step
+const door = cAdd(new THREE.BoxGeometry(1.05, 2.05, 0.08), patchStandard(new THREE.MeshStandardMaterial({ color: 0x3b2a1e, roughness: 0.8 }), { key: 'door' }), 0.2, 0.6 + 1.03, CW / 2 + 0.02);
+cAdd(new THREE.BoxGeometry(1.5, 0.25, 0.6), sm, 0.2, 0.12, CW / 2 + 0.3);
 // the keeper is home: four-paned windows, dark by day, warm once the lamp is lit
 const paneMat = new THREE.ShaderMaterial({
 	uniforms: { ...U, uLit: glassU },
 	vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
 	fragmentShader: 'uniform float uLit; uniform float uGlow; varying vec2 vUv; void main(){ vec2 q = abs(vUv - 0.5); float bar = max(step(q.x, 0.04), step(q.y, 0.035)) + step(0.42, max(q.x, q.y)); float glow = 1. - 0.45 * length(vUv - vec2(0.5, 0.35)); vec3 lit = vec3(3.4, 1.7, 0.55) * glow * uGlow; gl_FragColor = vec4(mix(mix(vec3(0.04, 0.05, 0.06), lit, smoothstep(0.2, 1., uLit)), vec3(0.06, 0.05, 0.045), clamp(bar, 0., 1.)), 1.); }',
 });
-for (const [x, z, ry] of [[-2.2, 2.77, 0], [2.0, 2.77, 0], [-1.4, -2.77, Math.PI], [4.01, 0, Math.PI / 2]]) {
-	const w = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.3), paneMat); w.position.set(x, 2.3, z); w.rotation.y = ry; cot.add(w);
+for (const [x, z, ry] of [[-2.1, CW / 2 + 0.02, 0], [2.3, CW / 2 + 0.02, 0], [-1.2, -CW / 2 - 0.02, Math.PI], [1.8, -CW / 2 - 0.02, Math.PI], [CL / 2 + 0.02, 0, Math.PI / 2]]) {
+	const w = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.25), paneMat); w.position.set(x, 0.6 + 2.15, z); w.rotation.y = ry; cot.add(w);
+	// a painted frame and a stone sill round each window
+	const fr = new THREE.Mesh(new THREE.BoxGeometry(1.24, 1.5, 0.06), cotWall); fr.position.set(x, 0.6 + 2.15, z); fr.rotation.y = ry; fr.translateZ(-0.03); cot.add(fr);
+	const sill = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 0.26), sm); sill.position.set(x, 0.6 + 1.47, z); sill.rotation.y = ry; sill.translateZ(0.08); cot.add(sill);
+}
+// a low dry-stone wall rings the terrace, open toward the cottage door
+{
+	const prof = [new THREE.Vector2(13.9, 0), new THREE.Vector2(14.6, 0), new THREE.Vector2(14.5, 1.0), new THREE.Vector2(14.25, 1.15), new THREE.Vector2(14.0, 1.0)];
+	const wg = new THREE.LatheGeometry(prof, 72, 0.55, Math.PI * 2 - 0.7);
+	const wm = new THREE.Mesh(wg, sm); wm.position.y = 2; wm.castShadow = wm.receiveShadow = true; g.add(wm);
 }
 	// sweeping beams
 	const beamGeo = new THREE.ConeGeometry(100, 1100, 96, 1, true);
