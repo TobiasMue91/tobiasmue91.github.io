@@ -106,6 +106,7 @@ if (suites.includes('contract')) {
   eq(row('<a href="http://[bad">bad</a>').map(r => r[1]), ['invalid'], 'unparseable is invalid, not dropped');
   eq(row('<a href="http://exa mple.com/">s</a>').map(r => r[1]), ['invalid'], 'space in host is invalid');
   eq(L.analyze('<a href="https://b.com/p>Broken</a> <a href="https://c.com/">c</a>').problems.map(p => p.type), ['markup'], 'href swallowing markup is flagged');
+  eq(L.analyze('<a href="https://s.com/gift cards">g</a><a href=" https://s.com/ok ">o</a>').problems.map(p => p.type + ':' + p.href), ['space:https://s.com/gift cards'], 'space inside an address flagged, not at its ends');
 }
 
 if (suites.includes('resolve')) {
