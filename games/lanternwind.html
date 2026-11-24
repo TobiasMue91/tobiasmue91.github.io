@@ -1960,14 +1960,26 @@ class GodRayPass extends Pass {
 			depthTest: false, depthWrite: false,
 		}));
 		this.comp = new FullScreenQuad(new THREE.ShaderMaterial({
-			uniforms: { tDiffuse: { value: null }, tRays: { value: this.rt.texture }, uStrength: this.uniforms.uStrength, uTint: this.uniforms.uTint },
+			uniforms: { tDiffuse: { value: null }, tRays: { value: this.rt.texture }, uStrength: this.uniforms.uStrength, uTint: this.uniforms.uTint, uHunt: { value: 0 } },
 			vertexShader: FS_VERT,
 			fragmentShader: /* glsl */`
-				uniform sampler2D tDiffuse; uniform sampler2D tRays; uniform float uStrength; uniform vec3 uTint; varying vec2 vUv;
-				void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb + texture2D(tRays, vUv).rgb * uStrength * uTint;
-					// one bad pixel must not become a blooming blot: drop NaN/Inf before the bloom sees it
-					if (any(isnan(c)) || any(isinf(c))) c = vec3(0.);
-					gl_FragColor = vec4(min(max(c, 0.), vec3(60000.)), 1.); }`,
+				uniform sampler2D tDiffuse; uniform sampler2D tRays; uniform float uStrength; uniform vec3 uTint; uniform float uHunt; varying vec2 vUv;
+				float lumS(vec3 c){ return (any(isnan(c)) || any(isinf(c))) ? 0. : dot(max(c, 0.), vec3(0.2126, 0.7152, 0.0722)); }
+				void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb;
+					bool bad = any(isnan(c)) || any(isinf(c));
+					if (bad) c = vec3(0.);
+					// a lone pixel far brighter than every neighbour is a firefly (a glint caught by one sample, a sprite's
+					// hot core): the bloom would blow it up into a glowing blot for one frame. Hold it to its surroundings.
+					vec2 px = 1. / vec2(textureSize(tDiffuse, 0));
+					float n = max(max(lumS(texture2D(tDiffuse, vUv + vec2(px.x, 0.)).rgb), lumS(texture2D(tDiffuse, vUv - vec2(px.x, 0.)).rgb)),
+					              max(lumS(texture2D(tDiffuse, vUv + vec2(0., px.y)).rgb), lumS(texture2D(tDiffuse, vUv - vec2(0., px.y)).rgb)));
+					float l = lumS(c), cap = 4. * n + 6.;
+					bool fly = l > cap;
+					if (fly) c *= cap / l;
+					c = min(c, vec3(4000.));
+					c += texture2D(tRays, vUv).rgb * uStrength * uTint;
+					if (uHunt > 0.5) { if (bad) c = vec3(0., 50., 0.); else if ((fly && l > 40.) || (uHunt > 1.5 && l > 2.)) c = vec3(50., 0., 50.); }
+					gl_FragColor = vec4(max(c, 0.), 1.); }`,
 			depthTest: false, depthWrite: false,
 		}));
 	}
@@ -3773,13 +3785,16 @@ function updateCamera(dt, snap) {
 	if (S.cine && S.mode !== 'photo') {
 		const c = S.cine; c.k += dt;
 		const ctr = beacons.find(b => b.central).target;
-		const ang = c.a0 + c.k * 0.045;
-		const rad = 190 + 260 * smoothstep(2, 18, c.k);   // a slow pull-back: the isle, then the sea of lanterns around it
-		const want = new THREE.Vector3(ctr.x + Math.sin(ang) * rad, ctr.y - 10 + 30 * smoothstep(2, 18, c.k), ctr.z + Math.cos(ang) * rad);
-		want.y = Math.max(want.y, sampleHeight(world.H, want.x, want.z) + 25, 12);
+		// first a close, slow turn round the waking lamp: the lantern room, the gallery rail, the lit stair windows, lanterns
+		// rising past; then a long pull-back to the isle and the sea of lanterns around it
+		const pull = smoothstep(7, 21, c.k);
+		const ang = c.a0 + c.k * 0.05 + 0.5 * smoothstep(0, 7, c.k);
+		const rad = 78 + 372 * pull;
+		const want = new THREE.Vector3(ctr.x + Math.sin(ang) * rad, ctr.y - 15 + 35 * pull, ctr.z + Math.cos(ang) * rad);   // a little under the beams, never in them
+		want.y = Math.max(want.y, sampleHeight(world.H, want.x, want.z) + (pull > 0.2 ? 25 : 8), 12);
 		// aim right of the tower so it stands on the left third, and low enough to keep the sea in frame
 		const side = new THREE.Vector3(Math.cos(ang), 0, -Math.sin(ang));
-		const look = ctr.clone().add(new THREE.Vector3(0, 0 - 25 * smoothstep(2, 18, c.k), 0)).addScaledVector(side, rad * 0.32);
+		const look = ctr.clone().add(new THREE.Vector3(0, -6 - 19 * pull, 0)).addScaledVector(side, rad * (0.22 + 0.1 * pull));
 		const e = smoothstep(0, 4, c.k); const ee = e * e * (3 - 2 * e);
 		camera.position.copy(c.from).lerp(want, ee);
 		camera.up.set(0, 1, 0); camera.lookAt(c.fromLook.clone().lerp(look, smoothstep(0, 2.5, c.k)));
@@ -3810,9 +3825,9 @@ function updateCamera(dt, snap) {
 	const lift = smoothstep(0, 0.6, S.igniteLift) * 8;   // as a fire catches the camera rises, and the flame shows below the wing
 	const want = P.pos.clone().addScaledVector(flatF, -(10.8 + P.boost * 2.2 + lift * 0.4) * near).addScaledVector(fwd, -1.5).add(new THREE.Vector3(0, (6.6 + lift) * near, 0));
 	want.addScaledVector(new THREE.Vector3(-flatF.z, 0, flatF.x), lift * 1.1 * near);   // and swings aside, so the flame stands beside the wing instead of under it
-	// swing wide in a turn (the glider slides off-centre and the turn reads), and never sit perfectly still
+	// swing in a turn (the glider slides off-centre and the turn reads), and never sit perfectly still
 	const tt = U.uTime.value;
-	want.addScaledVector(new THREE.Vector3(-flatF.z, 0, flatF.x), -P.roll * 3.2 * near);
+	want.addScaledVector(new THREE.Vector3(-flatF.z, 0, flatF.x), 3.0 * P.roll * near);   // to the inside of the turn: the camera looks onto the banked sail, never along its edge
 	want.add(new THREE.Vector3(Math.sin(tt * 0.37) * 0.35, Math.sin(tt * 0.53 + 1) * 0.25, Math.cos(tt * 0.31) * 0.3).multiplyScalar(REDUCED ? 0 : 1));
 	const look = P.pos.clone().addScaledVector(flatF, 18).add(new THREE.Vector3(0, clamp(fwd.y * 18, -8, 6) - 1.2 + (camera.aspect < 1 ? 7 : 0), 0));
 	if (snap) { camState.pos.copy(want); camState.look.copy(look); }
