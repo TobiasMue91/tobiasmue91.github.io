@@ -1716,6 +1716,8 @@ void main(){
 	vec3 T = exp(-vec3(0.42, 0.085, 0.06) * L);
 	vec3 hzn = skyLUT(normalize(vec3(uSunDir.x, 0.06, uSunDir.z))) * 0.35 + skyLUT(normalize(vec3(-uSunDir.x, 0.06, -uSunDir.z))) * 0.35;
 	vec3 scatterCol = vec3(0.014, 0.088, 0.128) * (uLightCol * (0.15 + ld) * 0.55 * sh + skyUp * 0.9 + hzn * 2.2 * smoothstep(0.07, -0.06, uSunDir.y) * mix(1., 0.5, uNight));   // at dusk the bright horizon still lights the water body
+	// looking down into it, the eye meets the light coming up out of the water, not the sky's thin mirror: the sea below the glider is a lit green-blue, never a black floor
+	scatterCol *= 1. + 1.1 * smoothstep(0.3, 0.85, V.y) * (1. - 0.6 * uNight);
 	vec3 body = seabed * T + scatterCol * (1. - T);
 	// light through wave crests when looking toward the light
 	vec2 lh = normalize(uLightDir.xz + 1e-4), vh = normalize(-V.xz + 1e-4);
@@ -2621,7 +2623,7 @@ function makeLighthouse(pos) {
 			  vec3 c = vec3(0.86, 0.82, 0.74) * (0.96 + 0.04 * hash12(vec2(row, floor(u))));   // painted over: the courses only just show through
 			  // two oxide-red daymark bands, the paint worn thin in places
 			  float bandM = (step(16.2, y) - step(21.6, y)) + (step(27.4, y) - step(32.8, y));
-			  c = mix(c, vec3(0.52, 0.12, 0.085) * (0.94 + 0.1 * vnoise(vec2(ang * 5., y * 0.8))), bandM * (1. - 0.2 * smoothstep(0.62, 0.9, vnoise(vec2(ang * 7., y * 0.9 + 3.)))));
+			  c = mix(c, vec3(0.52, 0.12, 0.085) * (0.94 + 0.1 * vnoise(vec2(ang * 5., y * 0.8))), bandM * (1. - 0.1 * smoothstep(0.62, 0.9, vnoise(vec2(ang * 7., y * 0.9 + 3.)))));
 			  c *= 1. - 0.28 * smoothstep(0.35, 0.8, fbm2(vec2(ang * 9., y * 0.25), 4)) * smoothstep(6., 34., y);   // streaks
 			  c = mix(c, vec3(0.42, 0.4, 0.37) * (0.85 + 0.3 * hash12(vec2(row, floor(u)))), smoothstep(5.5, 4.8, y));
 			  c *= 1. - joint * 0.16;
@@ -3808,15 +3810,20 @@ function frame(dt, freezeTime, noRender) {
 	U.uPlayer.value.copy(glider.userData.lantern.getWorldPosition(tmp));
 	streaks.uVel.value.copy(fwd).multiplyScalar(P.speed);
 	{
-		// the shade the wing casts against the open sky, straight below it: softer and fainter the higher it flies
-		const gy = Math.max(0, sampleHeight(world.H, P.pos.x, P.pos.z));
-		const h = Math.max(0.5, P.pos.y - gy);
-		gShadow.position.set(P.pos.x, gy + 0.25, P.pos.z);
+		// the wing's shade falls along the sunlight (straight down by night): with the sun behind you it runs ahead over the ground
+		const sd = U.uSunDir.value, sunUp = sd.y > 0.12 && U.uNight.value < 0.5;
+		let sx = P.pos.x, sz = P.pos.z, gy = Math.max(0, sampleHeight(world.H, sx, sz)), h = Math.max(0.5, P.pos.y - gy), L = h;
+		if (sunUp) for (let it = 0; it < 2; it++) {
+			L = Math.min(h / sd.y, 120);
+			sx = P.pos.x - sd.x * L; sz = P.pos.z - sd.z * L;
+			gy = Math.max(0, sampleHeight(world.H, sx, sz)); h = Math.max(0.5, P.pos.y - gy);
+		}
+		gShadow.position.set(sx, gy + 0.25, sz);
 		gShadow.rotation.y = P.yaw;
-		const spread = 1 + h * 0.025;
+		const spread = 1 + L * 0.02;
 		gShadow.scale.set(10.5 * spread, 1, 4.6 * spread);
-		const overSea = sampleHeight(world.H, P.pos.x, P.pos.z) < 0 ? 0.4 : 1;   // water takes a shadow only faintly: it has no matte face to darken
-		gShadow.material.uniforms.uA.value = (playing && P.alive ? 1 : 0) * smoothstep(60, 4, h) * 0.75 / spread * (1 - U.uNight.value * 0.7) * overSea;
+		const overSea = sampleHeight(world.H, sx, sz) < 0 ? 0.4 : 1;   // water takes a shadow only faintly: it has no matte face to darken
+		gShadow.material.uniforms.uA.value = (playing && P.alive ? 1 : 0) * smoothstep(80, 4, L) * 0.75 / spread * (1 - U.uNight.value * 0.7) * overSea;
 	}
 	streaks.uA.value = damp(streaks.uA.value, playing && P.alive && !S.cine ? 0.18 + smoothstep(30, 80, P.speed) * 0.3 + P.boost * 0.22 : 0, 4, dt);
 	if (P.alive && playing) {
@@ -4021,7 +4028,7 @@ boot().catch(err => {
 	$('#loadmsg').textContent = 'Could not start: ' + (err && err.message || err) + ' — this game needs WebGL2.';
 });
 
-window.__lw = { get ribbons() { return ribbons; }, get wisps() { return wisps; }, get sparks() { return sparks; }, lab(k, lod, x, y, z, sc = 1) { const v = world.veg; const im = new THREE.InstancedMesh(v.geos[k][lod], v.mats, 1); im.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc))); im.setColorAt(0, new THREE.Color(1, 1, 1)); im.layers.set(2); im.frustumCulled = false; scene.add(im); return im; }, frame, THREE, camState, get glider() { return glider; }, get world() { return world; }, get ocean() { return ocean; }, S, P, U, get audio() { return audio; }, get renderer() { return renderer; }, get sky() { return sky; }, get passes() { return { rayPass, bloomPass, finalPass, composer }; }, get scene() { return scene; }, get beacons() { return beacons; }, startGame, setMode, ignite: i => ignite(beacons[i]), step(n, dt, keys = []) { keys.forEach(k => input.keys.add(k)); const log = []; for (let i = 0; i < n; i++) { updatePlayer(dt); if (i % Math.round(1 / dt) === 0) log.push([+(i * dt).toFixed(1), Math.round(P.pos.y), +P.speed.toFixed(1), +P.pitch.toFixed(2), P.alive]); } keys.forEach(k => input.keys.delete(k)); return log; }, setTod(v) { S.tod = S.todTarget = v; sky.update(v, 0, true); scene.environment = sky.envRT.texture; farShadow.update(true); }, teleport(x, y, z, yaw, pitch = 0) { P.pos.set(x, y, z); P.yaw = yaw; P.pitch = pitch; ribbons.forEach(r => r.reset()); playerBasis(); const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)); camState.pos.copy(P.pos).addScaledVector(f, -17).add(new THREE.Vector3(0, 6.2, 0)); camState.look.copy(P.pos).addScaledVector(fwd, 16); }, get camera() { return camera; }, applyQuality, resetPlayer };
+window.__lw = { get ribbons() { return ribbons; }, get wisps() { return wisps; }, get sparks() { return sparks; }, lab(k, lod, x, y, z, sc = 1) { const v = world.veg; const im = new THREE.InstancedMesh(v.geos[k][lod], v.mats, 1); im.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc))); im.setColorAt(0, new THREE.Color(1, 1, 1)); im.layers.set(2); im.frustumCulled = false; scene.add(im); return im; }, frame, THREE, camState, get glider() { return glider; }, get world() { return world; }, get ocean() { return ocean; }, S, P, U, get audio() { return audio; }, get renderer() { return renderer; }, get sky() { return sky; }, get passes() { return { rayPass, bloomPass, finalPass, composer }; }, get scene() { return scene; }, get beacons() { return beacons; }, startGame, setMode, ignite: i => ignite(beacons[i]), step(n, dt, keys = []) { keys.forEach(k => input.keys.add(k)); const log = []; for (let i = 0; i < n; i++) { updatePlayer(dt); if (i % Math.round(1 / dt) === 0) log.push([+(i * dt).toFixed(1), Math.round(P.pos.y), +P.speed.toFixed(1), +P.pitch.toFixed(2), P.alive]); } keys.forEach(k => input.keys.delete(k)); return log; }, setTod(v) { S.tod = S.todTarget = v; sky.update(v, 0, true); scene.environment = sky.envRT.texture; farShadow.update(true); }, teleport(x, y, z, yaw, pitch = 0) { P.pos.set(x, y, z); P.yaw = yaw; P.pitch = pitch; ribbons.forEach(r => r.reset()); playerBasis(); const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)); camState.pos.copy(P.pos).addScaledVector(f, -17).add(new THREE.Vector3(0, 6.2, 0)); camState.look.copy(P.pos).addScaledVector(fwd, 16); }, get camera() { return camera; }, applyQuality, resetPlayer, ground: (x, z) => sampleHeight(world.H, x, z) };
 
 </script>
 </body>
