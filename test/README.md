@@ -1522,6 +1522,7 @@ npm run test:voidrunner     # Void Runner suite (plain Node, no server or browse
 npm run test:void           # VOID (black hole) suite (plain Node; its page suite uses Playwright's Chromium)
 npm run test:backgammon     # Backgammon suite (plain Node, no server or browser)
 npm run test:8ball          # 8-Ball Pool suite (plain Node, no server or browser)
+npm run test:radial         # Radial Spectrum Visualizer suite (plain Node; `browser` uses Playwright's Chromium and a server on :8099)
 npm run test:truths         # Two Truths & a Lie suite (plain Node, no server or browser)
 npm run test:hotseat        # Hot Seat (Who Wants to Be a Millionaire) suite (plain Node, no server or browser)
 npm run test:deathbyai      # Death by AI suite (plain Node, no server, browser or network)
@@ -2973,6 +2974,32 @@ reference code (`FB_blur_fusion_foreground_estimator_2`) gives for them, with `c
 over a (2r+1)-wide window, the box the page uses. To re-record it, run that code with numpy and
 opencv-python-headless on the `rgba` and `alpha` arrays in the file, with the radii `max(4, round(45·s))` and
 `max(1, round(3·s))` where `s` is the long side / 1024, and keep solid and empty pixels at the photo's own colour.
+
+
+## Radial Spectrum Visualizer
+
+```sh
+npm run test:radial                                   # or: node test/radial_spectrum_visualizer.mjs
+node test/radial_spectrum_visualizer.mjs bands wav    # named suites only
+npx http-server -p 8099                               # then: node test/radial_spectrum_visualizer.mjs browser
+```
+
+The page draws a spectrum, and nobody can tell from a picture whether the bar at 1 kHz is 1 kHz. Its
+arithmetic lives in the `<script id="core">` block of `tools/radial_spectrum_visualizer.html`, which the
+suite runs in Node's `vm` against references that do not come from the page.
+
+| suite | what it checks |
+| --- | --- |
+| `fft` | the radix-2 FFT against a direct DFT, Parseval, a size that is not a power of two refused |
+| `spectrum` | the AnalyserNode definition in the Web Audio spec: Blackman (alpha 0.16) end and centre values, a bin-centred full-scale sine at 20·log10(0.21) dB, its neighbour at 20·log10(a1/4), side lobes, 6.02 dB per halving, silence |
+| `bands` | log band edges 30 Hz–16 kHz, tones at 60 Hz–12 kHz peaking in their own band at their own level, interpolated (not stepped) bass bands, 44.1 kHz, -Infinity and NaN bins, the dB window, bass boost and treble lift curves |
+| `motion` | the old per-frame smoothing turned into a time constant: same decay per 60 fps frame, same fall at 30 and 144 fps |
+| `settings` | the old page's defaults, clamping, decimal comma, units, typographic minus, colours, an empty or inverted dB window (which crashed the old page), long and non-ASCII titles, prototype keys |
+| `helpers` | time display (hours, Infinity, NaN), which files count as audio (missing MIME types, video, PDFs, images), safe download names, MP4-before-WebM recorder choice, frame layouts, mirrored band angles |
+| `wav` | the RIFF/WAVE header field by field, interleaving, clipping, NaN |
+| `webm` | Duration written into a live-stream WebM's Info as MediaRecorder leaves it: in ms or the file's TimecodeScale, Info and a sized Segment resized, clusters untouched, a second pass in place, non-WebM bytes left alone |
+| `demo` | the seeded demo score: deterministic, in time, kicks on the beat, the break, the bass range |
+| `browser` | in Chromium (needs the server): the core spectrum against Chromium's own AnalyserNode within 0.5 dB on the same three-tone signal, a 1 kHz tone played through the page lighting the 1 kHz bar and nothing six bands away, a real Chromium WebM taking the Duration and ffprobe reading it back, no request leaving the origin, no console errors |
 
 ## HTML Link Extractor
 
