@@ -2973,3 +2973,32 @@ reference code (`FB_blur_fusion_foreground_estimator_2`) gives for them, with `c
 over a (2r+1)-wide window, the box the page uses. To re-record it, run that code with numpy and
 opencv-python-headless on the `rgba` and `alpha` arrays in the file, with the radii `max(4, round(45·s))` and
 `max(1, round(3·s))` where `s` is the long side / 1024, and keep solid and empty pixels at the photo's own colour.
+
+## HTML Link Extractor
+
+```sh
+npm run test:linkextractor                       # or: node test/html_link_extractor.mjs
+node test/html_link_extractor.mjs decode resolve # named suites only
+```
+
+`html_link_extractor.mjs` runs the page's DOM-free `<script id="core">` (LinkCore) in Node. The core carries
+its own HTML tokenizer, so it can run in a Worker on big pages and report the source line of every link. What
+it promises is that it finds the links a browser finds, with the same `href` and anchor text. The `browser`
+suite checks that against Chromium's DOMParser on about 40 hand-picked awkward documents plus 300 seeded fuzz
+documents, so nothing in it is a hand-written expectation. It needs Playwright's Chromium and is skipped
+without it. Two rules in that comparison are deliberate. The parse is prefixed with a comment, because
+Blink's DOMParser fast path decodes `&copy=1` inside attributes against the spec, while the full parser that
+page loads use follows it. And a browser's clones of an open `<a>` (from `<a href=x>one<p>two</a>`) count as
+the one link they are in the source.
+
+| suite | what it checks |
+| --- | --- |
+| `decode` | character references: the WHATWG table, legacy names without `;`, the attribute rule, numeric edge cases |
+| `tokenize` | attributes, comments, raw-text and RCDATA elements, stray `<`, tags cut off at the end |
+| `contract` | the old page's sample inputs, and each place the new one deliberately differs from it |
+| `resolve` | `<base href>`, the page address, the canonical/og:url guess, protocol-relative and whitespace hrefs |
+| `classify` | internal/external/same page/schemes, anchor-text fallbacks, `<area>`, SVG, srcset, source lines |
+| `text` | bare URLs in plain text: trailing punctuation, parentheses, Markdown |
+| `export` | CSV (the old columns first, formula guard), TSV, Markdown, JSON, display decoding |
+| `big` | a 1.6 MB page under a time limit, very long hrefs, pathological input |
+| `browser` | agreement with Chromium's parser, as above |
