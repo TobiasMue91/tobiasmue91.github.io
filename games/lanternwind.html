@@ -2518,15 +2518,59 @@ function makeThermal(pos, radius = 40, height = 320) {
 }
 
 // ── gulls circling the islands ──
+// A herring gull in metres, nose at +z, right wing at +x: a lofted body with head and yellow bill, a short white tail,
+// and wings in two parts (arm from the shoulder, hand from the wrist) so a beat bends them and a glide holds the gull's
+// shallow M. Grey above, white below, black hand with a white mirror; the thin wings let the low sun shine through.
 function makeBirds(world, count = 140) {
-	const body = new THREE.BufferGeometry();
-	// span ±1.0 in x, nose at +z; uv.x = flap weight
-	const v = [0, 0, 0.6, -1.0, 0.05, -0.1, -0.15, 0, 0.15, 0, 0, 0.6, 0.15, 0, 0.15, 1.0, 0.05, -0.1, 0, 0, 0.6, 0, 0, -0.5, -0.15, 0, 0.15, 0, 0, 0.6, 0.15, 0, 0.15, 0, 0, -0.5];
-	const w = [0, 1, 0.2, 0.2, 0, 1, 0, 0, 0.2, 0, 0.2, 0];
-	body.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-	body.setAttribute('aFlap', new THREE.Float32BufferAttribute(w, 1));
+	const pos = [], nrm = [], col = [], part = [], idx = [];
+	const vert = (p, n, c, k) => { pos.push(...p); nrm.push(...n); col.push(...c); part.push(...k); return pos.length / 3 - 1; };
+	// every triangle faces the way its vertex normals do, so DoubleSide's front is always the outside / the upper side
+	const tri = (a, b, c) => {
+		const P = i => [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]], N = i => [nrm[i * 3], nrm[i * 3 + 1], nrm[i * 3 + 2]];
+		const A = P(a), B = P(b), C = P(c), u = B.map((v, i) => v - A[i]), w = C.map((v, i) => v - A[i]);
+		const g = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+		const n = [0, 1, 2].map(i => N(a)[i] + N(b)[i] + N(c)[i]);
+		if (g[0] * n[0] + g[1] * n[1] + g[2] * n[2] < 0) idx.push(a, c, b); else idx.push(a, b, c);
+	};
+	// body: rings along z (z, centre y, half width, half height), tail to bill tip
+	const ST = [[-0.27, 0, 0.02, 0.016], [-0.18, 0, 0.05, 0.045], [-0.06, 0, 0.078, 0.072], [0.06, 0.005, 0.08, 0.076], [0.15, 0.018, 0.064, 0.064],
+		[0.21, 0.035, 0.046, 0.05], [0.26, 0.042, 0.05, 0.054], [0.3, 0.037, 0.034, 0.037], [0.324, 0.03, 0.012, 0.015], [0.39, 0.022, 0.001, 0.001]];
+	const R = 8, b0 = pos.length / 3;
+	for (const [z, cy, rx, ry] of ST) for (let j = 0; j < R; j++) {
+		const a = j / R * Math.PI * 2, cx = Math.cos(a), sy = Math.sin(a);
+		const n = [cx / rx, sy / ry, 0]; const l = Math.hypot(n[0], n[1]);
+		const bill = z > 0.315, mantle = !bill && sy > 0.45 && z > -0.16 && z < 0.17;
+		vert([cx * rx, cy + sy * ry, z], [n[0] / l, n[1] / l, 0], bill ? [0.9, 0.7, 0.2] : mantle ? [0.38, 0.41, 0.46] : [0.84, 0.84, 0.82], [0, 0, 0]);
+	}
+	for (let i = 0; i < ST.length - 1; i++) for (let j = 0; j < R; j++) {
+		const a = b0 + i * R + j, b = b0 + i * R + (j + 1) % R, c = a + R, d = b + R;
+		tri(a, b, c); tri(b, d, c);
+	}
+	// wings: stations along the span (x, leading edge z, trailing edge z); the wrist, station 3 at x = 0.40, leads the
+	// broad arm and the hand sweeps back from it to a point
+	const WS = [[0.04, 0.1, -0.13], [0.16, 0.12, -0.17], [0.28, 0.14, -0.165], [0.4, 0.15, -0.14], [0.52, 0.11, -0.12], [0.63, 0.05, -0.1], [0.72, -0.03, -0.1], [0.8, -0.13, -0.135]];
+	for (const sd of [1, -1]) {
+		const w0 = pos.length / 3;
+		for (const [x, le, te] of WS) for (let k = 0; k < 3; k++) {
+			const v = k / 2, ch = le - te;
+			vert([sd * x, (k === 1 ? 0.014 : 0) * Math.min(1, ch / 0.2), le - ch * v], [0, 1, 0], [1, 1, 1], [1, (x - 0.04) / 0.75, v]);
+		}
+		for (let i = 0; i < WS.length - 1; i++) for (let k = 0; k < 2; k++) {
+			const a = w0 + i * 3 + k, b = a + 1, c = a + 3, d = b + 3;
+			tri(a, c, b); tri(b, c, d);
+		}
+	}
+	// tail: a short fan behind the body
+	const t0 = pos.length / 3;
+	for (const [x, z] of [[-0.035, -0.15], [0.035, -0.15], [-0.075, -0.34], [0, -0.36], [0.075, -0.34]]) vert([x, 0.012, z], [0, 1, 0], [0.84, 0.84, 0.82], [2, 0, 0]);
+	tri(t0, t0 + 1, t0 + 3); tri(t0, t0 + 3, t0 + 2); tri(t0 + 1, t0 + 4, t0 + 3);
+
 	const g = new THREE.InstancedBufferGeometry();
-	g.attributes.position = body.attributes.position; g.attributes.aFlap = body.attributes.aFlap;
+	g.setIndex(idx);
+	g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+	g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+	g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+	g.setAttribute('aPart', new THREE.Float32BufferAttribute(part, 3));
 	const a = new Float32Array(count * 4), b = new Float32Array(count * 4);
 	const r = mulberry32(17);
 	const isl = world.islands.filter(o => !o.stack && o.r > 60);
@@ -2535,38 +2579,78 @@ function makeBirds(world, count = 140) {
 		a[i * 4] = o.x + (r() - 0.5) * o.r; a[i * 4 + 1] = o.z + (r() - 0.5) * o.r; a[i * 4 + 2] = 30 + r() * 110; a[i * 4 + 3] = Math.max(25, o.h) + 15 + r() * 70;
 		b[i * 4] = (8 + r() * 6) * (r() < 0.5 ? -1 : 1); b[i * 4 + 1] = r() * 100; b[i * 4 + 2] = 5 + r() * 4; b[i * 4 + 3] = 0.9 + r() * 0.5;
 	}
-	g.setAttribute('aA', new THREE.InstancedBufferAttribute(a, 4));
-	g.setAttribute('aB', new THREE.InstancedBufferAttribute(b, 4));
+	g.setAttribute('aA', new THREE.InstancedBufferAttribute(a, 4));   // circle centre x, z, radius, height
+	g.setAttribute('aB', new THREE.InstancedBufferAttribute(b, 4));   // speed (sign = direction), phase, beat rate, size
 	g.instanceCount = count;
-	const mat = new THREE.ShaderMaterial({
-		uniforms: { ...U },
-		vertexShader: /* glsl */`
-			uniform float uTime; attribute float aFlap; attribute vec4 aA; attribute vec4 aB; varying vec3 vW; varying float vShade;
-			void main(){
-				float ang = aB.y + uTime * aB.x / aA.z;
-				vec3 c = vec3(aA.x + cos(ang) * aA.z, aA.w + sin(uTime * 0.3 + aB.y) * 7., aA.y + sin(ang) * aA.z);
-				vec3 fwd = normalize(vec3(-sin(ang), 0., cos(ang)) * sign(aB.x));
-				vec3 right = normalize(cross(vec3(0., 1., 0.), fwd));
-				float glide = smoothstep(-0.3, 0.6, sin(uTime * 0.5 + aB.y * 3.));
-				float flap = sin(uTime * aB.z + aB.y) * (1. - glide * 0.85);
-				vec3 p = position * 1.3 * aB.w;
-				p.y += flap * aFlap * 0.75 + aFlap * 0.12;
-				float bank = -0.35 * sign(aB.x);
-				vec3 upv = normalize(vec3(0., 1., 0.) + right * bank);
-				vW = c + right * p.x + upv * p.y + fwd * p.z;
-				vShade = 0.6 + 0.4 * aFlap;
-				gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.);
-			}`,
-		fragmentShader: /* glsl */`
-			uniform vec3 uLightCol; varying vec3 vW; varying float vShade;
-			${NOISE_GLSL}
-			${ATMO_GLSL}
-			void main(){
-				vec3 amb = skyLUT(vec3(0., 1., 0.)) * 0.8;
-				vec3 c = vec3(0.8, 0.8, 0.78) * (amb + uLightCol * 0.35 * vShade);
-				gl_FragColor = vec4(applyAtmo(c, cameraPosition, vW), 1.);
-			}`,
-		side: THREE.DoubleSide,
+	g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+	const mat = patchStandard(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, side: THREE.DoubleSide }), {
+		key: 'gull',
+		vertHead: /* glsl */`uniform float uTime; uniform float uViewH; attribute vec4 aA; attribute vec4 aB; attribute vec3 aPart; varying vec3 vPart;`,
+		vertBegin: /* glsl */`
+		{
+			vPart = aPart;
+			float ang = aB.y + uTime * aB.x / aA.z, spd = abs(aB.x);
+			float bobT = uTime * 0.3 + aB.y;
+			vec3 c = vec3(aA.x + cos(ang) * aA.z, aA.w + sin(bobT) * 7., aA.y + sin(ang) * aA.z);
+			// heading along the circle, nose up or down with the slow climb and sink
+			vec3 fwd = normalize(vec3(-sin(ang) * sign(aB.x) * spd, cos(bobT) * 2.1, cos(ang) * sign(aB.x) * spd));
+			// lift leans into the turn (gravity plus the pull toward the centre, a little exaggerated), with a rocking gust
+			vec3 toC = -vec3(cos(ang), 0., sin(ang));
+			vec3 lift = vec3(0., 9.81, 0.) + toC * spd * spd / aA.z * 1.8;
+			vec3 right0 = normalize(cross(lift, fwd));
+			lift += right0 * (sin(uTime * 1.3 + aB.y * 5.) + 0.5 * sin(uTime * 2.9 + aB.y)) * 0.9;
+			vec3 right = normalize(cross(lift, fwd)), upv = cross(fwd, right);
+			// bursts of beats between long glides; the hand lags the arm, so the wing bends through each stroke
+			float glide = smoothstep(-0.3, 0.6, sin(uTime * 0.5 + aB.y * 3.));
+			float amp = 1. - glide;
+			float ph = uTime * (aB.z * 1.2 + 6.) + aB.y * 7.;
+			float t1 = 0.17 + amp * (0.55 * sin(ph) + 0.08);
+			float fold = amp * 0.45 * max(cos(ph - 0.3), 0.);   // on the upstroke the hand sweeps back and the span shortens
+			float t2 = -0.24 + amp * (0.5 * sin(ph - 1.1) + 0.12);
+			c -= upv * amp * 0.05 * sin(ph);
+			vec3 p = position, n = normal;
+			if (aPart.x > 0.5 && aPart.x < 1.5) {
+				float sd = sign(p.x), th = 0.;
+				vec2 q = vec2(abs(p.x), p.y);
+				if (q.x > 0.401) { vec2 h = vec2(q.x - 0.4, p.z - 0.15); h = vec2(h.x * cos(fold) + h.y * sin(fold), h.y * cos(fold) - h.x * sin(fold)); q.x = 0.4 + h.x; p.z = 0.15 + h.y;
+					vec2 d = q - vec2(0.4, 0.); q = vec2(0.4, 0.) + vec2(d.x * cos(t2) - d.y * sin(t2), d.x * sin(t2) + d.y * cos(t2)); th = t2; }
+				else if (q.x > 0.399) th = t2 * 0.5;
+				vec2 d = q - vec2(0.04, 0.); q = vec2(0.04, 0.) + vec2(d.x * cos(t1) - d.y * sin(t1), d.x * sin(t1) + d.y * cos(t1)); th += t1;
+				p.x = sd * q.x; p.y = q.y;
+				n = normalize(vec3(-sd * sin(th), cos(th), (0.5 - aPart.z) * 0.6));   // cambered: the leading edge faces forward
+			}
+			// a far gull stays about four pixels across instead of shrinking to a sparkle
+			float dist = length(c - cameraPosition);
+			float px = 1.6 * projectionMatrix[1][1] * uViewH * 0.5 / dist;
+			float sc = (1. + (aB.w - 0.9) * 0.5) * 1.1 * clamp(4. / px, 1., 3.);
+			transformed = c + (right * p.x + upv * p.y + fwd * p.z) * sc;
+			vNormal = normalize((viewMatrix * vec4(right * n.x + upv * n.y + fwd * n.z, 0.)).xyz);
+		}`,
+		vertProject: /* glsl */`vec4 mvPosition = viewMatrix * vec4(transformed, 1.); gl_Position = projectionMatrix * mvPosition;`,
+		fragHead: /* glsl */`uniform vec3 uLightCol; uniform float uMirror; varying vec3 vPart;`,
+		mapFragment: /* glsl */`
+		if (vPart.x > 0.5 && vPart.x < 1.5) {
+			float u = vPart.y, v = vPart.z;
+			// black hand: the outer primaries, their inner edge ragged feather by feather
+			float tip = smoothstep(0.73, 0.77, u + 0.04 * v + 0.012 * sin(v * 22.));
+			float mir = 1. - smoothstep(0.045, 0.07, length(vec2((u - 0.935) * 1.6, v - 0.5)));   // the white mirror near the tip
+			vec3 topC = mix(vec3(0.38, 0.41, 0.46), vec3(0.05, 0.05, 0.055), tip);
+			topC = mix(topC, vec3(0.84), smoothstep(0.8, 0.97, v) * (1. - tip) * 0.8);   // white trailing edge
+			vec3 botC = mix(vec3(0.8, 0.8, 0.78), vec3(0.16, 0.16, 0.17), tip * 0.9);
+			diffuseColor.rgb = mix(gl_FrontFacing ? topC : botC, vec3(0.84), mir * tip);
+		}
+		diffuseColor.rgb *= mix(1., 0.55, uNight);   // white under the moon is pale, not a lamp over the dark sea`,
+		emissiveFragment: /* glsl */`
+		{
+			// thin feathers carry the sun through: a white underside glows against the low sun, the black hand does not
+			float thin = step(0.5, vPart.x);
+			vec3 L = normalize((viewMatrix * vec4(uLightDir, 0.)).xyz);
+			float through = max(-dot(normal, L), 0.);
+			float toward = pow(max(dot(normalize(gWPos - cameraPosition), uLightDir), 0.), 3.);
+			totalEmissiveRadiance += uLightCol * diffuseColor.rgb * vec3(1., 0.93, 0.82) * thin * through * (0.03 + 0.22 * toward) * mix(1., 0.3, uMirror) * gFarSh;
+			// a white bird over a bright sea: light thrown up from below fills the underside
+			totalEmissiveRadiance += diffuseColor.rgb * skyLUT(vec3(0., 1., 0.)) * 0.12 * (1. - uNight) * max(-dot(normal, normalize((viewMatrix * vec4(0., 1., 0., 0.)).xyz)), 0.);
+		}`,
 	});
 	const m = new THREE.Mesh(g, mat);
 	m.frustumCulled = false; m.layers.enable(2);
