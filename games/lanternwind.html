@@ -3957,6 +3957,7 @@ function resetPlayer(start) {
 		const flatF = new THREE.Vector3(-Math.sin(P.yaw), 0, -Math.cos(P.yaw));
 		camState.pos.copy(P.pos).addScaledVector(flatF, -17).add(new THREE.Vector3(0, 6.2, 0));
 		camState.look.copy(P.pos).addScaledVector(fwd, 16);
+		camState.off = null;   // the camera's spring starts again from here
 	}
 }
 
@@ -4151,6 +4152,17 @@ function endCine() {
 	if (!S.cine) return;
 	S.cine = null; $('#hud').classList.remove('cine');
 	camState.pos.copy(camera.position); camState.look.copy(camera.position).add(camera.getWorldDirection(tmp).multiplyScalar(40));
+	camState.off = null;   // glide back from the wide shot on the spring
+}
+// critically damped spring toward a target (after Game Programming Gems 4, 1.10): eases in and out, never overshoots,
+// stable at any frame time. Horizontal and vertical get their own smoothing time.
+function springDamp(cur, target, vel, tH, tV, dt) {
+	for (const [k, st] of [['x', tH], ['y', tV], ['z', tH]]) {
+		const w = 2 / st, x = w * dt, e = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+		const ch = cur[k] - target[k], tmp = (vel[k] + w * ch) * dt;
+		vel[k] = (vel[k] - w * tmp) * e;
+		cur[k] = target[k] + (ch + tmp) * e;
+	}
 }
 function updateCamera(dt, snap) {
 	const q = playerBasis();
@@ -4207,11 +4219,22 @@ function updateCamera(dt, snap) {
 	want.addScaledVector(new THREE.Vector3(-flatF.z, 0, flatF.x), lift * 1.1 * near);   // and swings aside, so the flame stands beside the wing instead of under it
 	// swing in a turn (the glider slides off-centre and the turn reads), and never sit perfectly still
 	const tt = U.uTime.value;
-	want.addScaledVector(new THREE.Vector3(-flatF.z, 0, flatF.x), 3.0 * P.roll * near);   // to the inside of the turn: the camera looks onto the banked sail, never along its edge
+	want.addScaledVector(new THREE.Vector3(-flatF.z, 0, flatF.x), 4.2 * P.roll * near);   // to the inside of the turn: the camera looks onto the banked sail, never along its edge
 	want.add(new THREE.Vector3(Math.sin(tt * 0.37) * 0.35, Math.sin(tt * 0.53 + 1) * 0.25, Math.cos(tt * 0.31) * 0.3).multiplyScalar(REDUCED ? 0 : 1));
 	const look = P.pos.clone().addScaledVector(flatF, 18).add(new THREE.Vector3(0, clamp(fwd.y * 18, -8, 6) - 1.2 + (camera.aspect < 1 ? 7 : 0), 0));
-	if (snap) { camState.pos.copy(want); camState.look.copy(look); }
-	camState.pos.lerp(want, 1 - Math.exp(-dt * 5.5));
+	// the camera rides on a spring, not a rail: what is smoothed is its offset from the glider (so speed does not drag it
+	// back), through a critically damped spring (so it gathers pace and settles instead of snapping to each new aim).
+	// In a turn the offset swings round late: the camera drifts to the outside, the glider slides across the frame and
+	// shows its banked sail; a climb or a dive lifts or drops the glider in the picture before the camera follows.
+	want.addScaledVector(flatF, -P.speed * 0.15 * near);   // a little farther back the faster it flies (as far as the old smoothing used to lag)
+	const offW = want.sub(P.pos);
+	if (snap || !camState.off || camState.lastP.distanceToSquared(P.pos) > 60 * 60) {   // first frame, a teleport or a respawn
+		camState.off = (snap ? offW.clone() : camState.pos.clone().sub(P.pos)); camState.offV = new THREE.Vector3(); camState.lastP = P.pos.clone();
+		if (snap) camState.look.copy(look);
+	}
+	camState.lastP.copy(P.pos);
+	springDamp(camState.off, offW, camState.offV, REDUCED ? 0.25 : 0.42, REDUCED ? 0.25 : 0.55, dt);
+	camState.pos.copy(P.pos).add(camState.off);
 	camState.look.lerp(look, 1 - Math.exp(-dt * 9));
 	const g = Math.max(0, sampleHeight(world.H, camState.pos.x, camState.pos.z));
 	camState.pos.y = Math.max(camState.pos.y, g + 2.5);
@@ -4512,7 +4535,7 @@ boot().catch(err => {
 	$('#loadmsg').textContent = 'Could not start: ' + (err && err.message || err) + ' — this game needs WebGL2.';
 });
 
-window.__lw = { get ribbons() { return ribbons; }, get wisps() { return wisps; }, get sparks() { return sparks; }, lab(k, lod, x, y, z, sc = 1) { const v = world.veg; const im = new THREE.InstancedMesh(v.geos[k][lod], v.mats, 1); im.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc))); im.setColorAt(0, new THREE.Color(1, 1, 1)); im.layers.set(2); im.frustumCulled = false; scene.add(im); return im; }, frame, THREE, camState, get glider() { return glider; }, get world() { return world; }, get ocean() { return ocean; }, S, P, U, get audio() { return audio; }, get renderer() { return renderer; }, get sky() { return sky; }, get passes() { return { rayPass, bloomPass, finalPass, composer }; }, get scene() { return scene; }, get beacons() { return beacons; }, startGame, setMode, ignite: i => ignite(beacons[i]), step(n, dt, keys = []) { keys.forEach(k => input.keys.add(k)); const log = []; for (let i = 0; i < n; i++) { updatePlayer(dt); if (i % Math.round(1 / dt) === 0) log.push([+(i * dt).toFixed(1), Math.round(P.pos.y), +P.speed.toFixed(1), +P.pitch.toFixed(2), P.alive]); } keys.forEach(k => input.keys.delete(k)); return log; }, setTod(v) { S.tod = S.todTarget = v; sky.update(v, 0, true); scene.environment = sky.envRT.texture; farShadow.update(true); }, teleport(x, y, z, yaw, pitch = 0) { P.pos.set(x, y, z); P.yaw = yaw; P.pitch = pitch; ribbons.forEach(r => r.reset()); playerBasis(); const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)); camState.pos.copy(P.pos).addScaledVector(f, -17).add(new THREE.Vector3(0, 6.2, 0)); camState.look.copy(P.pos).addScaledVector(fwd, 16); }, get camera() { return camera; }, applyQuality, resetPlayer, ground: (x, z) => sampleHeight(world.H, x, z) };
+window.__lw = { get ribbons() { return ribbons; }, get wisps() { return wisps; }, get sparks() { return sparks; }, lab(k, lod, x, y, z, sc = 1) { const v = world.veg; const im = new THREE.InstancedMesh(v.geos[k][lod], v.mats, 1); im.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc))); im.setColorAt(0, new THREE.Color(1, 1, 1)); im.layers.set(2); im.frustumCulled = false; scene.add(im); return im; }, frame, THREE, camState, get glider() { return glider; }, get world() { return world; }, get ocean() { return ocean; }, S, P, U, get audio() { return audio; }, get renderer() { return renderer; }, get sky() { return sky; }, get passes() { return { rayPass, bloomPass, finalPass, composer }; }, get scene() { return scene; }, get beacons() { return beacons; }, startGame, setMode, ignite: i => ignite(beacons[i]), step(n, dt, keys = []) { keys.forEach(k => input.keys.add(k)); const log = []; for (let i = 0; i < n; i++) { updatePlayer(dt); if (i % Math.round(1 / dt) === 0) log.push([+(i * dt).toFixed(1), Math.round(P.pos.y), +P.speed.toFixed(1), +P.pitch.toFixed(2), P.alive]); } keys.forEach(k => input.keys.delete(k)); return log; }, setTod(v) { S.tod = S.todTarget = v; sky.update(v, 0, true); scene.environment = sky.envRT.texture; farShadow.update(true); }, teleport(x, y, z, yaw, pitch = 0) { P.pos.set(x, y, z); P.yaw = yaw; P.pitch = pitch; ribbons.forEach(r => r.reset()); playerBasis(); const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)); camState.pos.copy(P.pos).addScaledVector(f, -17).add(new THREE.Vector3(0, 6.2, 0)); camState.look.copy(P.pos).addScaledVector(fwd, 16); camState.off = null; }, get camera() { return camera; }, applyQuality, resetPlayer, ground: (x, z) => sampleHeight(world.H, x, z) };
 
 </script>
 </body>
