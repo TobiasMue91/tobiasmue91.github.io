@@ -243,7 +243,12 @@ const T = {
 
   scale() {
     // Settings are fractions of the long edge: the full-size result, shrunk, looks like the small preview.
-    const big = card(480, 360), small = card(240, 180);
+    // The small image is the big one shrunk 2×2, so both are the same picture.
+    const big = card(480, 360), small = new Uint8ClampedArray(240 * 180 * 4);
+    for (let y = 0; y < 180; y++) for (let x = 0; x < 240; x++) for (let c = 0; c < 4; c++) {
+      let a = 0; for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) a += big[((2 * y + dy) * 480 + 2 * x + dx) * 4 + c];
+      small[(y * 240 + x) * 4 + c] = a / 4;
+    }
     for (const st of ['pencil', 'outline', 'colour']) {
       const B = S.render(big, 480, 360, {style: st}), Sm = S.render(small, 240, 180, {style: st});
       let mae = 0;
