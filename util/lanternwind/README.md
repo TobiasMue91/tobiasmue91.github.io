@@ -8,6 +8,7 @@ so nothing depends on the wall clock. Chromium + Playwright as preinstalled; Swi
 - `sheet.py` – a contact sheet of a filmstrip (needs `pillow`).
 - `hunt.js` – flies and counts pixels the page's own detectors mark; finds flashes that last one frame.
 - `gull.js` – follows one gull at arm's length through its wingbeat (the gulls are too rare to film from the glider).
+- `orbit.js` – close-ups of any point from chosen distances and angles (masonry, rock, the tower's plaster).
 
 ## The standard round (what the critic rounds looked at)
 
