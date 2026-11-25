@@ -35,14 +35,15 @@ const speed = s => Math.hypot(s.bx - s.pbx, s.by - s.pby) / (Core.DT / Core.SUB)
 const LEGS = [
   ['first crate', 2.3, 3.1, 1.25], ['past the crate', 3.6, 4.8, 0.4], ['crate stack', 5.3, 6.0, 2.15], ['boulder', 8.3, 9.8, 2.6],
   ['bow', 11.0, 13.0, 3.6], ['mast', 14.5, 16.2, 7.6], ['crow\'s nest', 17.2, 19.6, 11.6],
-  ['wall ledge 1', 20.5, 21.6, 13.9], ['wall ledge 2', 20.9, 21.9, 16.3], ['wall ledge 3', 21.5, 22.5, 18.6], ['wall ledge 4', 22.1, 23.1, 20.9],
-  ['wall top', 23.4, 25.0, 22.4], ['weed 1', 26.2, 27.8, 24.0], ['weed 2', 28.4, 30.2, 25.8], ['weed 3', 30.8, 32.6, 27.6], ['weed rock', 33.3, 36.0, 29.2],
-  ...[0, 1, 2, 3, 4, 5].map(k => ['girder ' + (k + 1), 35.4, 36.6, 31.22 + k * 2.5 + 0.4]),
-  ['crane cab', 36.0, 38.0, 47.4], ['jib', 31, 33.5, 49.4], ['jib end', 27.4, 29.5, 51.4], ['cliff lip', 25.0, 27.7, 53.7],
-  ['broken rock', 23.0, 25.0, 55.2], ['broken rock 2', 21.4, 22.6, 55.3], ['chimney foot', 18.9, 21.6, 57.3], ['chimney', 17.6, 18.9, 63.5],
-  ['chimney top', 17.4, 22, 70.3], ['step', 16.5, 19.4, 72.3], ['lighthouse rock', 12.6, 16.6, 74.4],
-  ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(r => ['rung ' + (r + 1), 12.0, 13.2, 75.4 + r * 1.25 + 0.6]),
-  ['gallery', 11.6, 13.1, 88.6]
+  ['wall step 1', 20.1, 21.2, 13.95], ['wall step 2', 21.1, 22.1, 16.05], ['wall step 3', 22.05, 23.05, 18.15], ['wall step 4', 23.0, 24.0, 20.25],
+  ['wall top', 23.9, 25.0, 22.3], ['weed 1', 26.2, 27.8, 24.0], ['weed 2', 28.4, 30.2, 25.8], ['weed 3', 30.8, 32.6, 27.6], ['weed rock', 33.3, 36.0, 29.2],
+  ['boom 1', 35.6, 39.6, 30.8], ['landing 1', 40.0, 42.0, 33.0], ['boom 2', 35.0, 39.0, 36.0], ['landing 2', 30.9, 33.2, 38.6],
+  ['pulley', 29.8, 31.0, 40.5], ['boom 3', 33.0, 38.5, 41.8], ['landing 3', 39.9, 41.2, 44.8], ['jib', 33.0, 36.5, 48.2], ['jib end', 27.4, 29.5, 50.0],
+  ['cliff step 1', 25.1, 26.8, 52.0], ['cliff step 2', 23.1, 24.8, 54.0], ['cliff step 3', 21.1, 22.8, 56.0], ['chimney foot', 17.5, 18.9, 58.3],
+  ...[59.6, 61.1, 62.6, 64.1, 65.6, 67.1, 68.6].map((y, k) => ['chimney ledge ' + (k + 1), k % 2 ? 18.0 : 17.6, k % 2 ? 18.7 : 18.3, y + 0.6]),
+  ['chimney top', 18.9, 22, 70.3], ['west wall', 16.0, 17.4, 72.3], ['rock step 1', 14.8, 16.0, 74.3], ['rock step 2', 13.6, 14.8, 76.3], ['rock step 3', 12.4, 13.6, 78.3],
+  ['rock top', 11.5, 12.4, 80.3], ['tower step 1', 10.6, 11.5, 82.3], ['tower step 2', 9.7, 10.6, 84.3], ['tower step 3', 8.8, 9.7, 86.3],
+  ['the lamp', 7.9, 8.9, 88.3]
 ].map(([name, x0, x1, y]) => ({name, x0, x1, y}));
 
 function play(state, keys, settle = 1.2) {
@@ -53,10 +54,12 @@ function play(state, keys, settle = 1.2) {
     let cx = prev[0], cy = prev[1];
     if (k < keys.length) { const u = Math.min(1, kt / keys[k][2]), e = u * u * (3 - 2 * u), tx = Math.cos(keys[k][0]) * keys[k][1], ty = Math.sin(keys[k][0]) * keys[k][1]; cx = prev[0] + (tx - prev[0]) * e; cy = prev[1] + (ty - prev[1]) * e; }
     Core.step(s, {cx, cy}, ev); kt += Core.DT;
+    if (i === steps - 30) { s._rx = s.bx; s._ry = s.by; }
   }
   s._ev = ev; return s;
 }
-const inLeg = (s, g) => s.bx >= g.x0 && s.bx <= g.x1 && s.by >= g.y && speed(s) < 0.5;
+const settled = s => s._rx == null || Math.hypot(s.bx - s._rx, s.by - s._ry) < 0.06; // moved under 6 cm in the last quarter second
+const inLeg = (s, g) => s.bx >= g.x0 && s.bx <= g.x1 && s.by >= g.y && settled(s);
 function begin() { const s = Core.create(); run(s, 1.0, () => ({cx: 1.1, cy: 0.3})); return s; }
 
 const suites = {
@@ -98,7 +101,9 @@ const suites = {
     const c = [];
     LEGS.forEach((g, i) => {
       for (let seed = 1; seed <= 3; seed++) {
-        const s = Core.create({x: (g.x0 + g.x1) / 2, y: g.y + 0.2}); let r = seed * 7919 + i;
+        let sy = g.y + 0.2; const sx = (g.x0 + g.x1) / 2;
+        while (Core.circle(sx, sy, Core.RB + 0.05, c).length || Core.circle(sx, sy + Core.TDY, Core.RT + 0.05, c).length || Core.circle(sx, sy + Core.PDY + 0.8, Core.RH + 0.05, c).length) sy += 0.1; // start clear of the rock
+        const s = Core.create({x: sx, y: sy, cx: 0, cy: 0.8}); let r = seed * 7919 + i;
         const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
         let a = rnd() * 6.28, R = 1;
         for (let k = 0; k < 120 * 6; k++) {
@@ -119,14 +124,14 @@ const suites = {
     ok(Core.section(0.4) === 0 && Core.section(Core.TOP) === Core.SECTIONS.length - 1, 'sections run from the shingle to the lighthouse');
     ok(Core.SECTIONS.every((s, i) => i === 0 || s.y > Core.SECTIONS[i - 1].y), 'sections climb');
     // the summit is the gallery: standing there ends the climb once
-    const s = Core.create({x: 12.4, y: Core.TOP + Core.RB + 0.02}); const ev = run(s, 1);
+    const s = Core.create({x: 8.4, y: Core.TOP + Core.RB + 0.02, cx: 0.5, cy: 0.8}); const ev = run(s, 1);
     ok(ev.filter(e => e.type === 'summit').length === 1 && s.done, 'the gallery is the summit, and it is announced once');
     // falls are measured from the last perch
-    // a tub let go in the gap between the crow's nest and the harbour wall drops to the trench floor
-    const f = Core.create({x: 20.1, y: 12.2, cx: 0, cy: -0.5});
+    // a tub let go twelve metres over open shingle lands as one fall of about that height
+    const f = Core.create({x: 4.2, y: 12.2, cx: 0, cy: -0.5});
     const ev2 = run(f, 4);
     const fall = ev2.find(e => e.type === 'fall');
-    ok(fall && fall.m > 8, 'a drop from the crow\'s nest down to the trench is a fall of more than 8 m: ' + (fall ? fall.m.toFixed(1) : 'none'));
+    ok(fall && fall.m > 10 && ev2.filter(e => e.type === 'fall').length === 1, 'a drop from 12 m onto the shingle is one fall of more than 10 m: ' + (fall ? fall.m.toFixed(1) : 'none'));
   },
   route() {
     if (!existsSync(ROUTE)) { ok(false, 'no recorded route: run with --record'); return; }
@@ -148,7 +153,7 @@ function solve(state, goal, seed) {
   let r = seed >>> 0 || 1; const rnd = () => { r ^= r << 13; r >>>= 0; r ^= r >> 17; r ^= r << 5; r >>>= 0; return r / 4294967296; };
   const gauss = () => Math.sqrt(-2 * Math.log(rnd() || 1e-9)) * Math.cos(2 * Math.PI * rnd());
   const K = 5, mu = [], sd = []; for (let k = 0; k < K; k++) { mu.push([Math.PI / 2, 1.2, 0.4]); sd.push([1.8, 0.5, 0.25]); }
-  const score = s => (s.bx < goal.x0 ? goal.x0 - s.bx : s.bx > goal.x1 ? s.bx - goal.x1 : 0) + Math.max(0, goal.y - s.by) * 1.5 + (speed(s) < 0.5 ? 0 : 0.3);
+  const score = s => (s.bx < goal.x0 ? goal.x0 - s.bx : s.bx > goal.x1 ? s.bx - goal.x1 : 0) + Math.max(0, goal.y - s.by) * 1.5 + (settled(s) ? 0 : 0.3);
   let best = null;
   for (let it = 0; it < 10; it++) {
     const cand = [];
@@ -168,7 +173,9 @@ function solve(state, goal, seed) {
 }
 function record() {
   const sol = existsSync(ROUTE) && process.argv.includes('--resume') ? JSON.parse(readFileSync(ROUTE, 'utf8')) : [];
-  let s = begin(); for (const d of sol) s = play(s, d.keys);
+  let s = begin(), kept = 0;
+  for (const d of sol) { const n2 = play(s, d.keys); if (!inLeg(n2, LEGS[kept])) break; s = n2; kept++; } // keep only the legs that still replay
+  if (kept < sol.length) { console.log('legs ' + (kept + 1) + '..' + sol.length + ' no longer replay; searching again from leg ' + (kept + 1)); sol.length = kept; }
   for (let i = sol.length; i < LEGS.length; i++) {
     let b = null; const t0 = Date.now();
     for (let seed = 1; seed <= 8 && !(b && b.sc === 0); seed++) { const r = solve(s, LEGS[i], seed); if (!b || r.sc < b.sc) b = r; }
