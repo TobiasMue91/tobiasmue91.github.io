@@ -296,7 +296,7 @@ const T = {
     const d = S.loadState(null);
     eq(d.style, 'pencil', 'nothing saved: pencil');
     eq(d.per.charcoal, {style: 'charcoal', ...S.DEFAULTS.charcoal}, 'nothing saved: charcoal defaults');
-    eq(d.format, 'png', 'nothing saved: PNG');
+    eq(d.format, 'jpg', 'nothing saved: JPG (a phone-friendly file; PNG is one tap away)');
     for (const bad of ['', '{', 'null', '[]', '42', '"x"', 'undefined']) eq(S.loadState(bad).style, 'pencil', `broken save ${JSON.stringify(bad)}`);
     const s = S.loadState(JSON.stringify({style: 'hatching', format: 'jpg', per: {hatching: {lines: '70', dark: 140, shade: -3, paper: 'aged'}, pencil: {lines: 12.6}}}));
     eq([s.style, s.format], ['hatching', 'jpg'], 'saved style and format');
