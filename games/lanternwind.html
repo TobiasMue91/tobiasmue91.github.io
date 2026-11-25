@@ -240,7 +240,8 @@ const U = {
 	uHeightTex: { value: null },
 	uNight: { value: 0 },
 	uAurora: { value: 0 },
-	uViewH: { value: 1080 },   // drawing-buffer height in pixels, for things that must stay at least a pixel wide
+	uViewH: { value: 1080 },
+	uMirror: { value: 0 },   // 1 while the sea's mirror is drawn   // drawing-buffer height in pixels, for things that must stay at least a pixel wide
 	uWind: { value: new THREE.Vector2(0.8, 0.3) },
 	uPlayer: { value: new THREE.Vector3() },
 	uLantern: { value: new THREE.Color(1, 0.6, 0.25) },
@@ -1441,7 +1442,7 @@ function buildVegetation(world, count, scene, tx) {
 		key: 'leaves',
 		vertHead: 'uniform float uTime; attribute float aLeaf;',
 		vertBegin: WIND_VERT,
-		fragHead: 'uniform vec3 uLightCol;',
+		fragHead: 'uniform vec3 uLightCol; uniform float uMirror;',
 		normalFragment: 'normal = normalize(vNormal);',
 		// keep foliage from thinning out as mip levels average the alpha away
 		mapFragment: `#include <map_fragment>
@@ -1452,7 +1453,9 @@ function buildVegetation(world, count, scene, tx) {
 				vec3 vd = normalize(gWPos - cameraPosition);
 				float back = pow(max(dot(vd, uLightDir), 0.), 4.);
 				// light scattering through the leaves (thin-surface translucency)
-				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * vec3(0.9, 1.1, 0.5) * (back * 1.3 + 0.12) * gFarSh * vColor.r;
+				// in the sea's mirror the crowns are seen from below with the sun beyond them, and at half size one leaf can
+				// take this whole glow into a single texel for a single frame: there it is kept to a soft fraction
+				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * vec3(0.9, 1.1, 0.5) * (back * mix(1.3, 0.25, uMirror) + 0.12) * gFarSh * vColor.r;
 				// soft wrap from the sun side: a crown of needles scatters light around its whole shape
 				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * max(dot(normalize((vec4(normal, 0.) * viewMatrix).xyz), uLightDir) * 0.5 + 0.5, 0.) * 0.22 * gFarSh;
 				// needles scatter the whole sky dome, not only the light that hits them square: a crown is never a black hole
@@ -1763,6 +1766,7 @@ void main(){
 		// near water: a crisp, wave-bent mirror; farther out the image smears along the view like on open sea
 		float soft = smoothstep(30., 700., dist) * 0.85 + clamp(length(wg) * 2.5, 0., 0.35);
 		vec3 rs = texture2D(uRefl, rr).rgb, rb = texture2D(uReflBlur, rr).rgb;
+		{ float ls = dot(rs, vec3(0.2126, 0.7152, 0.0722)), lb = dot(rb, vec3(0.2126, 0.7152, 0.0722)), capS = lb * 2.2 + 0.2; if (ls > capS) rs *= capS / ls; }   // the sharp mirror may not outshine its own soft copy by much
 		refl = mix(rs, rb, clamp(soft, 0., 0.92));
 		// the mirror is drawn at half size: one overheated texel in it (a spark, a sprite's hot core) would show here as a
 		// glowing block for a frame. Nothing the sea mirrors is brighter than this.
@@ -1915,7 +1919,7 @@ class Ocean {
 		this.mesh.visible = false;
 		const sAuto = r.shadowMap.autoUpdate; r.shadowMap.autoUpdate = false;
 		const prevRT = r.getRenderTarget();
-		r.setRenderTarget(this.rt); r.clear(); r.render(scene, m);
+		U.uMirror.value = 1; r.setRenderTarget(this.rt); r.clear(); r.render(scene, m); U.uMirror.value = 0;
 		// soft copy: a long blur along the screen's vertical (the direction a wavy sea stretches reflections), a short one across
 		const bm = this.blurMat.uniforms;
 		this.cleanMat.uniforms.tSrc.value = this.rt.texture; this.cleanMat.uniforms.uTx.value.set(1 / this.rt.width, 1 / this.rt.height);
