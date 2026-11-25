@@ -111,9 +111,10 @@ details[open] summary::before{transform:rotate(45deg)}
 .zoom .bar2{display:flex;gap:8px;align-items:center;padding:8px 10px;color:#eee;font-size:13px}
 .zoom .bar2 .btn{color:#eee;border-color:#444;min-height:38px}
 .zoom .bar2 span{flex:1}
-.zoom .view{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;display:grid;place-items:center}
-.zoom .view canvas{display:block;background:#fff}
-.zoom .view.fit canvas{max-width:100%;max-height:100%;width:auto;height:auto}
+.zoom .view{flex:1;overflow:hidden;position:relative;touch-action:none;cursor:grab}
+.zoom .view canvas{position:absolute;left:0;top:0;transform-origin:0 0;background:#fff;image-rendering:auto}
+.zoom .hint2{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);color:#ddd;background:rgba(0,0,0,.6);padding:4px 10px;border-radius:12px;font-size:12.5px;pointer-events:none}
+.zoom .bar2 .btn{min-width:40px;padding:0 10px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (max-width:860px){
   .app{display:block;height:auto}
@@ -208,7 +209,7 @@ details[open] summary::before{transform:rotate(45deg)}
         </div>
         <div class="paper" role="radiogroup" aria-label="File type" id="fmt" style="margin-top:8px">
           <button type="button" class="chip" role="radio" data-fmt="png">PNG <span class="chipsub">lossless</span></button>
-          <button type="button" class="chip" role="radio" data-fmt="jpg">JPG <span class="chipsub">smaller</span></button>
+          <button type="button" class="chip" role="radio" data-fmt="jpg">JPG <span class="chipsub">smaller file</span></button>
         </div>
         <div class="row" style="margin-top:10px">
           <button class="btn" id="reset" type="button">Reset this style</button>
@@ -236,7 +237,9 @@ details[open] summary::before{transform:rotate(45deg)}
 
 <div class="drop" id="drop" aria-hidden="true"><div>Drop the photo to sketch it</div></div>
 <div class="zoom" id="zoom" role="dialog" aria-modal="true" aria-label="Full-size sketch">
-  <div class="bar2"><span id="zoomInfo" class="num"></span><button class="btn" id="zoomFit" type="button">Fit</button><button class="btn" id="zoomClose" type="button">Close</button></div>
+  <div class="bar2"><span id="zoomInfo" class="num"></span>
+    <button class="btn" id="zoomOut" type="button" aria-label="Zoom out">−</button><button class="btn" id="zoomIn" type="button" aria-label="Zoom in">+</button>
+    <button class="btn" id="zoomFit" type="button">Fit</button><button class="btn" id="zoomClose" type="button">Close</button></div>
   <div class="view" id="zoomView"></div>
 </div>
 <div class="sr" id="live" aria-live="polite"></div>
@@ -249,8 +252,8 @@ var Sketch = (function () {
   var LABELS = {pencil: 'Pencil', charcoal: 'Charcoal', outline: 'Ink', hatching: 'Hatching', colour: 'Colour'};
   // Per-style defaults for the three sliders (0..100) and the paper.
   var DEFAULTS = {
-    pencil:   {lines: 30, dark: 45, shade: 50, paper: 'white'},
-    charcoal: {lines: 45, dark: 60, shade: 60, paper: 'grain'},
+    pencil:   {lines: 25, dark: 35, shade: 45, paper: 'white'},
+    charcoal: {lines: 40, dark: 40, shade: 55, paper: 'grain'},
     outline:  {lines: 30, dark: 60, shade: 0,  paper: 'white'},
     hatching: {lines: 35, dark: 50, shade: 55, paper: 'white'},
     colour:   {lines: 30, dark: 40, shade: 50, paper: 'white'}
@@ -451,7 +454,7 @@ var Sketch = (function () {
     var s = opts && opts.scale > 0 ? opts.scale : Math.max(w, h) / REF, seed = (opts && opts.seed) || 7;
     var Y = gray(rgba, n); prog(0.1);
     var sigma = Math.max(0.35, (0.4 + o.lines / 100 * 7) * s);
-    var gamma = 1 + o.dark / 100 * 4;
+    var gamma = 1.4 + o.dark / 100 * 1.6;
     var shade = o.shade / 100;
     var R, G, B, i, x, y, v, k;
     var V = new Float32Array(n), cr = null, cg = null, cb = null;
@@ -466,12 +469,13 @@ var Sketch = (function () {
       prog(0.55);
       var T = null, Wd = null;
       if (shade > 0 && o.style !== 'colour') {
-        T = blur(Y, w, h, Math.max(1, sg * 1.5));
+        T = blur(Y, w, h, Math.max(0.8, 1.2 * s));
         // Where the photo has detail (fur, hair, brickwork) it gets shading; smooth, out-of-focus areas mostly stay
         // paper, the way an artist leaves a soft background light.
-        var Yb = blur(Y, w, h, Math.max(0.8, 1.5 * s)), dd0 = new Float32Array(n);
-        for (i = 0; i < n; i++) dd0[i] = Math.abs(Y[i] - Yb[i]);
-        Wd = blur(dd0, w, h, Math.max(2, 8 * s));
+        // measured as a band between two blurs scaled to the image, so a full-size photo and its preview agree
+        var Yb = blur(Y, w, h, 1.5 * s), Yb2 = blur(Y, w, h, 3 * s), dd0 = new Float32Array(n);
+        for (i = 0; i < n; i++) dd0[i] = Math.min(4, Math.abs(Yb[i] - Yb2[i])) * 2.2; // capped: one strong edge is not texture
+        Wd = blur(dd0, w, h, Math.max(1.5, 3.5 * s));
       }
       prog(0.7);
       // Shading: graphite density follows the tone, laid down as strokes along two drifting diagonals.
@@ -481,7 +485,7 @@ var Sketch = (function () {
         v = P[i];
         if (T) {
           var t = T[i] / 255, wd = clamp((Wd[i] - 1.2) / 4.5, 0, 1);
-          var k2 = Math.pow(1 - t, 1.15) * (0.18 + 0.82 * wd * wd * (3 - 2 * wd));
+          var k2 = Math.pow(1 - t, 1.15) * Math.max(clamp((0.42 - t) / 0.3, 0, 1), 0.12 + 0.88 * wd * wd * (3 - 2 * wd)); // dark tones always shaded
           if (k2 > 0.002) {
             var su = (x * ang + y * bng), sv = (x * bng - y * ang);
             var streak = noise(su / along * across, sv, across, seed + 3);
@@ -537,6 +541,11 @@ var Sketch = (function () {
     }
     prog(0.85);
 
+    // Darkness, last: a tone curve over the whole drawing (paper stays paper, every grey gets darker or lighter).
+    if (o.style !== 'outline') {
+      var curve = 0.45 + o.dark / 100 * 1.5;
+      for (i = 0; i < n; i++) V[i] = 255 * Math.pow(clamp(V[i], 0, 255) / 255, curve);
+    }
     var paper = o.paper, pr = 255, pg = 255, pb = 255;
     if (paper === 'aged') { pr = 246; pg = 236; pb = 214; }
     for (y = 0, i = 0; y < h; y++) for (x = 0; x < w; x++, i++) {
@@ -995,7 +1004,11 @@ if (typeof module !== 'undefined') module.exports = Sketch;
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key || '').toLowerCase() === 'z' && !$('zoom').classList.contains('on')) {
       if (undoStack.length) { e.preventDefault(); undo(); }
     }
-    if (e.key === 'Escape' && $('zoom').classList.contains('on')) closeZoom();
+    if ($('zoom').classList.contains('on')) {
+      if (e.key === 'Escape') closeZoom();
+      else if (e.key === '+' || e.key === '=') zZoom(zv.k * 1.6);
+      else if (e.key === '-') zZoom(zv.k / 1.6);
+    }
   });
   document.querySelectorAll('#fmt .chip').forEach(function (b) {
     b.addEventListener('click', function () { state.format = b.dataset.fmt; save(); syncControls(); });
@@ -1171,36 +1184,86 @@ if (typeof module !== 'undefined') module.exports = Sketch;
       .catch(function (e) { setProgress(0); status(e && e.message === 'cancel' ? '' : 'Couldn’t copy the image here. Use Download instead.', e && e.message === 'cancel' ? '' : 'bad'); });
   });
 
-  var zoomCanvas = null;
+  // Full-size viewer with its own pan and zoom (pinch, drag, wheel, double-tap, − / +), so the page itself never zooms.
+  var zoomCanvas = null, zv = {k: 1, x: 0, y: 0, fit: 1};
+  function zApply() {
+    if (!zoomCanvas) return;
+    zoomCanvas.style.transform = 'translate(' + zv.x + 'px,' + zv.y + 'px) scale(' + zv.k + ')';
+    var dpr = window.devicePixelRatio || 1;
+    $('zoomInfo').textContent = px(zoomCanvas.width, zoomCanvas.height) + ' · ' + Math.round(zv.k * dpr * 100) + '%';
+  }
+  function zClamp() {
+    var v = $('zoomView'), W = v.clientWidth, H = v.clientHeight, cw = zoomCanvas.width * zv.k, ch = zoomCanvas.height * zv.k;
+    zv.x = cw <= W ? (W - cw) / 2 : Math.min(0, Math.max(W - cw, zv.x));
+    zv.y = ch <= H ? (H - ch) / 2 : Math.min(0, Math.max(H - ch, zv.y));
+  }
+  function zZoom(k, cx, cy) {
+    var v = $('zoomView'), dpr = window.devicePixelRatio || 1;
+    if (cx == null) { cx = v.clientWidth / 2; cy = v.clientHeight / 2; }
+    k = Math.max(zv.fit, Math.min(8 / dpr, k));
+    zv.x = cx - (cx - zv.x) * k / zv.k; zv.y = cy - (cy - zv.y) * k / zv.k; zv.k = k;
+    zClamp(); zApply();
+  }
+  function zFit() {
+    var v = $('zoomView');
+    zv.fit = Math.min(1, v.clientWidth / zoomCanvas.width, v.clientHeight / zoomCanvas.height);
+    zv.k = zv.fit; zv.x = 0; zv.y = 0; zClamp(); zApply();
+  }
+  (function () {
+    var v = $('zoomView'), pts = {}, last = null, lastTap = 0;
+    function rel(e) { var r = v.getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; }
+    v.addEventListener('pointerdown', function (e) {
+      v.setPointerCapture(e.pointerId); pts[e.pointerId] = rel(e); last = null;
+      var now = Date.now();
+      if (Object.keys(pts).length === 1 && now - lastTap < 300 && zoomCanvas) { // double tap: fit ↔ 100%
+        var p = rel(e); if (zv.k > zv.fit * 1.05) zFit(); else zZoom(Math.max(1 / (window.devicePixelRatio || 1), zv.fit * 2), p.x, p.y);
+      }
+      lastTap = now;
+    });
+    v.addEventListener('pointermove', function (e) {
+      if (!(e.pointerId in pts) || !zoomCanvas) return;
+      var prev = pts[e.pointerId], cur = rel(e); pts[e.pointerId] = cur;
+      var ids = Object.keys(pts);
+      if (ids.length === 1) { zv.x += cur.x - prev.x; zv.y += cur.y - prev.y; zClamp(); zApply(); }
+      else if (ids.length === 2) {
+        var a = pts[ids[0]], b = pts[ids[1]], d = Math.hypot(a.x - b.x, a.y - b.y), m = {x: (a.x + b.x) / 2, y: (a.y + b.y) / 2};
+        if (last) { zv.x += m.x - last.m.x; zv.y += m.y - last.m.y; zZoom(zv.k * d / last.d, m.x, m.y); }
+        last = {d: d, m: m};
+      }
+    });
+    var up = function (e) { delete pts[e.pointerId]; last = null; };
+    v.addEventListener('pointerup', up); v.addEventListener('pointercancel', up);
+    v.addEventListener('wheel', function (e) { if (!zoomCanvas) return; e.preventDefault(); var p = rel(e); zZoom(zv.k * Math.exp(-e.deltaY * 0.002), p.x, p.y); }, {passive: false});
+  })();
   function openZoom() {
     if (!img) return;
     var z = $('zoom'), v = $('zoomView');
-    z.classList.add('on'); v.innerHTML = ''; v.className = 'view';
+    z.classList.add('on'); v.innerHTML = '';
     $('zoomInfo').textContent = 'Drawing full size…';
     renderFull(function (f) { $('zoomInfo').textContent = 'Drawing full size… ' + Math.round(f * 100) + '%'; }).then(function (c) {
       if (!z.classList.contains('on')) return;
-      zoomCanvas = c; c.style.width = (c.width / (window.devicePixelRatio || 1)) + 'px';
-      v.appendChild(c);
-      $('zoomInfo').textContent = px(c.width, c.height) + ' · 100%';
-      $('zoomFit').textContent = 'Fit';
-      v.scrollLeft = (v.scrollWidth - v.clientWidth) / 2; v.scrollTop = (v.scrollHeight - v.clientHeight) / 2;
+      zoomCanvas = c; v.appendChild(c);
+      var h = document.createElement('div'); h.className = 'hint2'; h.textContent = 'Pinch or double-tap to zoom, drag to move'; v.appendChild(h);
+      setTimeout(function () { h.remove(); }, 2500);
+      zFit();
+      // open magnified around the middle, which is what people come here to check: 100%, or twice "fit" on a dense
+      // phone screen where 100% would look no bigger than fit
+      zZoom(Math.max(1 / (window.devicePixelRatio || 1), zv.fit * 2));
     }).catch(function (e) { if (!(e && e.message === 'cancel')) $('zoomInfo').textContent = errText(e); });
     $('zoomClose').focus();
   }
   function closeZoom() {
     $('zoom').classList.remove('on');
-    if (zoomCanvas) { zoomCanvas.style.width = ''; zoomCanvas.remove(); zoomCanvas = null; }
+    if (zoomCanvas) { zoomCanvas.style.transform = ''; zoomCanvas.remove(); zoomCanvas = null; }
     $('zoomBtn').focus();
   }
   $('zoomBtn').addEventListener('click', openZoom);
   $('mZoom').addEventListener('click', openZoom);
   $('zoomClose').addEventListener('click', closeZoom);
-  $('zoomFit').addEventListener('click', function () {
-    var v = $('zoomView'), fit = v.classList.toggle('fit');
-    if (zoomCanvas) zoomCanvas.style.width = fit ? '' : (zoomCanvas.width / (window.devicePixelRatio || 1)) + 'px';
-    $('zoomFit').textContent = fit ? '100%' : 'Fit';
-    if (zoomCanvas) $('zoomInfo').textContent = px(zoomCanvas.width, zoomCanvas.height) + (fit ? ' · fit to screen' : ' · 100%');
-  });
+  $('zoomFit').addEventListener('click', function () { if (zoomCanvas) zFit(); });
+  $('zoomIn').addEventListener('click', function () { if (zoomCanvas) zZoom(zv.k * 1.6); });
+  $('zoomOut').addEventListener('click', function () { if (zoomCanvas) zZoom(zv.k / 1.6); });
+  window.addEventListener('resize', function () { if (zoomCanvas) { var k = zv.k; zFit(); zZoom(k); } });
 
   /* ---------- start ---------- */
   syncControls();

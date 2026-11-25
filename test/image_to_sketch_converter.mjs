@@ -175,6 +175,10 @@ const T = {
     // Darkness only ever darkens; shading only ever darkens.
     const lo = S.render(d, w, h, {...o, dark: 10}), hi = S.render(d, w, h, {...o, dark: 90}), sh = S.render(d, w, h, {...o, shade: 80});
     check(meanOf(hi) < meanOf(got) && meanOf(got) < meanOf(lo), 'darkness slider darkens', `${meanOf(lo)} > ${meanOf(got)} > ${meanOf(hi)}`);
+    for (const st of ['pencil', 'charcoal', 'hatching']) {
+      const a = meanOf(S.render(d, w, h, {style: st, dark: 0})), b = meanOf(S.render(d, w, h, {style: st, dark: 100}));
+      check(a - b > 40, `${st}: the darkness slider spans a visible range`, `dark 0 → ${a.toFixed(0)}, dark 100 → ${b.toFixed(0)}`);
+    }
     check(sh.every((v, i) => v <= got[i]), 'shading never lightens a pixel');
   },
 
@@ -242,21 +246,25 @@ const T = {
   },
 
   scale() {
-    // Settings are fractions of the long edge: the full-size result, shrunk, looks like the small preview.
-    // The small image is the big one shrunk 2×2, so both are the same picture.
-    const big = card(480, 360), small = new Uint8ClampedArray(240 * 180 * 4);
-    for (let y = 0; y < 180; y++) for (let x = 0; x < 240; x++) for (let c = 0; c < 4; c++) {
-      let a = 0; for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) a += big[((2 * y + dy) * 480 + 2 * x + dx) * 4 + c];
-      small[(y * 240 + x) * 4 + c] = a / 4;
+    // Settings are fractions of the long edge: the full-size result, shrunk, looks like the preview. Sizes are those of
+    // real previews (the page never previews below 600 px), the full size twice that.
+    const BW = 1200, BH = 900, SW = 600, SH = 450, big = card(BW, BH), small = new Uint8ClampedArray(SW * SH * 4);
+    for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) for (let c = 0; c < 4; c++) {
+      let a = 0; for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) a += big[((2 * y + dy) * BW + 2 * x + dx) * 4 + c];
+      small[(y * SW + x) * 4 + c] = a / 4;
     }
-    for (const st of ['pencil', 'outline', 'colour']) {
-      const B = S.render(big, 480, 360, {style: st}), Sm = S.render(small, 240, 180, {style: st});
+    for (const st of S.STYLES) {
+      const B = S.render(big, BW, BH, {style: st}), Sm = S.render(small, SW, SH, {style: st});
+      // overall tone must agree closely: a preview lighter than the download is a preview that lies
+      // (charcoal's paper tooth is a texture at 1-2 px in the preview, so it may differ by a few levels more)
+      check(Math.abs(meanOf(B) - meanOf(Sm)) < (st === 'charcoal' ? 5 : 4), `${st}: preview and full size have the same overall tone`, `${meanOf(B).toFixed(1)} vs ${meanOf(Sm).toFixed(1)}`);
+      if (st === 'hatching') continue; // hatch lines alias when shrunk; the tone check above is what holds
       let mae = 0;
-      for (let y = 0; y < 180; y++) for (let x = 0; x < 240; x++) {
-        let a = 0; for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) a += B[((2 * y + dy) * 480 + 2 * x + dx) * 4];
-        mae += Math.abs(a / 4 - Sm[(y * 240 + x) * 4]);
+      for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) {
+        let a = 0; for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) a += B[((2 * y + dy) * BW + 2 * x + dx) * 4];
+        mae += Math.abs(a / 4 - Sm[(y * SW + x) * 4]);
       }
-      mae /= 240 * 180;
+      mae /= SW * SH;
       check(mae < 14, `${st}: full size shrunk ≈ preview`, `mean difference ${mae.toFixed(2)} levels`);
     }
   },
