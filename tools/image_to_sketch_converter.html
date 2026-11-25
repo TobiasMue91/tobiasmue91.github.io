@@ -71,7 +71,7 @@ aside{background:var(--panel);border-left:1px solid var(--line);overflow:auto;pa
 .err{display:none;margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--err-bg);color:var(--err);font-size:13.5px}
 .err.on{display:block}
 .errx{float:right;border:0;background:none;color:inherit;font-size:20px;line-height:1;padding:0 0 0 10px;margin:-2px -2px 0 0;cursor:pointer;min-width:32px;min-height:28px}
-.styles{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.styles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .style{border:1px solid var(--line);background:transparent;border-radius:8px;padding:4px 4px 5px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px;font-size:11.5px;font-weight:600;color:var(--ink2);line-height:1.15;text-align:center}
 .style canvas{width:100%;aspect-ratio:1;flex:none;border-radius:4px;background:#fff;display:block}
 .style[aria-checked="true"]{border-color:var(--sel);box-shadow:inset 0 0 0 1px var(--sel);color:var(--ink)}
@@ -98,7 +98,8 @@ details[open] summary::before{transform:rotate(45deg)}
 .fmt{appearance:none;-webkit-appearance:none;border:1px solid var(--graphite);border-left:1px solid rgba(255,255,255,.25);background:var(--graphite);color:var(--on-graphite);border-radius:0 8px 8px 0;padding:0 26px 0 10px;font-weight:600;cursor:pointer;min-height:44px;
   background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 13px) 19px,calc(100% - 9px) 19px;background-size:4px 4px;background-repeat:no-repeat}
 .progress{position:relative;overflow:hidden}
-.progress .bar{position:absolute;left:0;top:0;bottom:0;background:rgba(255,255,255,.18);width:0}
+.btn.busy svg{display:none}
+.progress .bar{position:absolute;left:0;bottom:0;height:3px;background:currentColor;opacity:.85;width:0}
 .status{font-size:13px;color:var(--ink2);min-height:18px}
 .status.ok{color:var(--ok)}
 .status.bad{color:var(--err)}
@@ -116,7 +117,7 @@ details[open] summary::before{transform:rotate(45deg)}
 .zoom .bar2 .btn{color:#eee;border-color:#444;min-height:38px}
 .zoom .bar2 span{flex:1}
 .zoom .view{flex:1;overflow:hidden;position:relative;touch-action:none;cursor:grab}
-.zoom .view canvas{position:absolute;left:0;top:0;transform-origin:0 0;background:#fff;image-rendering:auto}
+.zoom .view canvas{position:absolute;left:0;top:0;transform-origin:0 0;background:#fff;image-rendering:auto;max-width:none;max-height:none}
 .zoom .hint2{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);color:#ddd;background:rgba(0,0,0,.6);padding:4px 10px;border-radius:12px;font-size:12.5px;pointer-events:none}
 .zoom .bar2 .btn{min-width:40px;padding:0 10px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -140,7 +141,7 @@ details[open] summary::before{transform:rotate(45deg)}
   .save .mobile-actions{order:1;flex:none}
   .save .mobile-actions .btn{flex:none;padding:0 12px}
   #mZoom{padding:0 10px}
-  .save .status{order:3;flex-basis:100%}
+  .save .status{position:absolute;left:12px;right:12px;bottom:100%;margin-bottom:6px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
   .save .row,.save .status{display:none}
   .merr.on{display:block !important;margin:2px 0 0}
   .photoblock .err{display:none !important}
@@ -158,6 +159,7 @@ details[open] summary::before{transform:rotate(45deg)}
   .save.showstatus .status{display:block}
   .mobile-actions{display:flex !important}
   .lbl{margin-bottom:6px}
+  #lblStyle{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 }
 .mobile-actions{display:none;gap:8px}
 .mobile-actions .btn{flex:1}
@@ -320,17 +322,19 @@ var Sketch = (function () {
   }
   // A wide blur keeps no fine detail, so it is computed on an image shrunk by f (area average, which itself adds a
   // variance of (f^2 - 1) / 12 in shrunk pixels) and scaled back up bilinearly.
-  function blurReduced(src, w, h, sigma) {
-    var f = Math.min(8, Math.floor(sigma / 2.5)), sw = Math.ceil(w / f), sh = Math.ceil(h / f), small = new Float32Array(sw * sh);
-    var x, y, X, Y, i, o;
+  // Area-average shrink by an integer factor f, and bilinear enlargement back to w x h.
+  function shrink(src, w, h, f) {
+    var sw = Math.ceil(w / f), sh = Math.ceil(h / f), small = new Float32Array(sw * sh), x, y, X, Y, i, o;
     var colOf = new Int32Array(w); for (x = 0; x < w; x++) colOf[x] = (x / f) | 0;
     for (y = 0; y < h; y++) { o = ((y / f) | 0) * sw; i = y * w; for (x = 0; x < w; x++) small[o + colOf[x]] += src[i + x]; }
     for (Y = 0; Y < sh; Y++) {
       var rows = Math.min(h, (Y + 1) * f) - Y * f;
       for (X = 0; X < sw; X++) small[Y * sw + X] /= rows * (Math.min(w, (X + 1) * f) - X * f);
     }
-    var s2 = Math.sqrt(Math.max(0.01, (sigma / f) * (sigma / f) - (f * f - 1) / 12 / (f * f)));
-    var b = blur(small, sw, sh, s2), out = new Float32Array(w * h);
+    return {d: small, w: sw, h: sh};
+  }
+  function enlarge(b, sw, sh, w, h, f) {
+    var out = new Float32Array(w * h), x, y, o;
     var XA = new Int32Array(w), XB = new Int32Array(w), TX = new Float32Array(w), rowA = new Float32Array(w), rowB = new Float32Array(w);
     for (x = 0; x < w; x++) {
       var fx = (x + 0.5) / f - 0.5, x0 = Math.floor(fx);
@@ -351,6 +355,11 @@ var Sketch = (function () {
       for (x = 0; x < w; x++) out[o + x] = rowA[x] + (rowB[x] - rowA[x]) * ty;
     }
     return out;
+  }
+  function blurReduced(src, w, h, sigma) {
+    var f = Math.min(8, Math.floor(sigma / 2.5)), sm = shrink(src, w, h, f);
+    var s2 = Math.sqrt(Math.max(0.01, (sigma / f) * (sigma / f) - (f * f - 1) / 12 / (f * f)));
+    return enlarge(blur(sm.d, sm.w, sm.h, s2), sm.w, sm.h, w, h, f);
   }
   // The same fractional box down every column at once, sweeping rows: running sums per column.
   function boxCols(img, w, h, r) {
@@ -492,33 +501,56 @@ var Sketch = (function () {
       var Cn = contour(Y, w, h, Math.max(0.5, 0.9 * s + sg * 0.15), 0.985, 30), cAmt = 0.3 + o.dark / 100 * 0.45;
       for (i = 0; i < n; i++) P[i] *= 1 - cAmt * (1 - Cn[i]);
       prog(0.55);
-      var T = null, Wd = null;
+      var T = null, Wd = null, Ox = null, Oy = null;
       if (shade > 0 && o.style !== 'colour') {
-        T = blur(Y, w, h, Math.max(0.8, 1.2 * s));
-        // Where the photo has detail (fur, hair, brickwork) it gets shading; smooth, out-of-focus areas mostly stay
-        // paper, the way an artist leaves a soft background light.
-        // measured as a band between two blurs scaled to the image, so a full-size photo and its preview agree
-        var Yb = blur(Y, w, h, 1.5 * s), Yb2 = blur(Y, w, h, 3 * s), dd0 = new Float32Array(n);
-        for (i = 0; i < n; i++) dd0[i] = Math.min(2.5, Math.abs(Yb[i] - Yb2[i])) * 2.2; // capped: one strong edge is not texture
-        Wd = blur(dd0, w, h, Math.max(1.5, 3.5 * s));
+        // The tone, detail and direction maps are smooth, so on a big photo they are worked out on a copy shrunk so
+        // that one of its pixels is about 1.5 thousandths of the long edge, then enlarged.
+        var ff = Math.max(1, Math.floor(s / 1.5)), fs = s / ff, sm = ff > 1 ? shrink(Y, w, h, ff) : {d: Y, w: w, h: h};
+        var fw = sm.w, fh = sm.h, fn = fw * fh, Yf = sm.d, j;
+        var Tf = blur(Yf, fw, fh, Math.max(0.8, 1.2 * fs));
+        // Detail is measured on a fine band (fur, hair, grain), capped per pixel, so a smooth or out-of-focus area and
+        // the strip beside a single strong edge stay paper.
+        var Yb = blur(Yf, fw, fh, 0.8 * fs), Yb2 = blur(Yf, fw, fh, 1.8 * fs), dd0 = new Float32Array(fn);
+        for (j = 0; j < fn; j++) dd0[j] = Math.min(1.6, Math.abs(Yb[j] - Yb2[j]));
+        var Wf = blur(dd0, fw, fh, Math.max(1.2, 2.5 * fs));
+        // Stroke direction: along the contours of the picture (the minor axis of the smoothed structure tensor).
+        var Jxx = new Float32Array(fn), Jxy = new Float32Array(fn), Jyy = new Float32Array(fn);
+        for (y = 0, j = 0; y < fh; y++) for (x = 0; x < fw; x++, j++) {
+          var gx = Tf[y * fw + (x < fw - 1 ? x + 1 : x)] - Tf[y * fw + (x > 0 ? x - 1 : x)];
+          var gy = Tf[(y < fh - 1 ? y + 1 : y) * fw + x] - Tf[(y > 0 ? y - 1 : y) * fw + x];
+          Jxx[j] = gx * gx; Jxy[j] = gx * gy; Jyy[j] = gy * gy;
+        }
+        var ts = Math.max(2, 6 * fs);
+        Jxx = blur(Jxx, fw, fh, ts); Jxy = blur(Jxy, fw, fh, ts); Jyy = blur(Jyy, fw, fh, ts);
+        var Oxf = new Float32Array(fn), Oyf = new Float32Array(fn);
+        var base = o.style === 'charcoal' ? 0.35 : 0.7071, bse = Math.sqrt(1 - base * base);
+        for (j = 0; j < fn; j++) {
+          var a0 = Jxx[j] - Jyy[j], b0 = 2 * Jxy[j], mag = Math.sqrt(a0 * a0 + b0 * b0), tr = Jxx[j] + Jyy[j] + 1e-3;
+          var coh = clamp(mag / tr * 1.5, 0, 1) * clamp((tr * fs * fs - 6) / 40, 0, 1); // a clear direction, and enough contrast to have one
+          // contour direction (-sin t, cos t) from the double angle: cos 2t = a0 / mag, sin 2t = b0 / mag
+          var c2 = mag > 1e-9 ? a0 / mag : 1, ct = Math.sqrt((1 + c2) / 2), st2 = Math.sqrt(Math.max(0, (1 - c2) / 2)) * (b0 < 0 ? -1 : 1);
+          var dx = -st2 * coh + base * (1 - coh), dy = ct * coh + bse * (1 - coh), dl = Math.sqrt(dx * dx + dy * dy) || 1;
+          Oxf[j] = dx / dl; Oyf[j] = dy / dl;
+        }
+        if (ff > 1) {
+          T = enlarge(Tf, fw, fh, w, h, ff); Wd = enlarge(Wf, fw, fh, w, h, ff);
+          Ox = enlarge(Oxf, fw, fh, w, h, ff); Oy = enlarge(Oyf, fw, fh, w, h, ff);
+        } else { T = Tf; Wd = Wf; Ox = Oxf; Oy = Oyf; }
       }
       prog(0.7);
-      // Shading: graphite density follows the tone, laid down as strokes along two drifting diagonals.
-      var ang = o.style === 'charcoal' ? 0.35 : 0.7071, bng = Math.sqrt(1 - ang * ang);
-      var along = (o.style === 'charcoal' ? 6 : 9) * s, across = (o.style === 'charcoal' ? 1.4 : 0.9) * s;
+      // Shading: graphite density follows the tone, laid down as strokes: noise averaged along the stroke direction.
+      var cell = (o.style === 'charcoal' ? 1.1 : 0.75) * s, stepL = (o.style === 'charcoal' ? 2.2 : 3) * s;
       var p115 = powLut(1.15);
       for (y = 0, i = 0; y < h; y++) for (x = 0; x < w; x++, i++) {
         v = P[i];
         if (T) {
-          var t = T[i] / 255, wd = clamp((Wd[i] - 1.2) / 4.5, 0, 1);
-          var k2 = p115(1 - t) * Math.max(clamp((0.42 - t) / 0.3, 0, 1), 0.12 + 0.88 * wd * wd * (3 - 2 * wd)); // dark tones always shaded
+          var t = T[i] / 255, wd = clamp((Wd[i] - 0.5) / 2.2, 0, 1);
+          var k2 = p115(1 - t) * Math.max(clamp((0.42 - t) / 0.3, 0, 1), 0.22 + 0.78 * wd * wd * (3 - 2 * wd)); // dark tones always shaded
           if (k2 > 0.002) {
-            var su = (x * ang + y * bng), sv = (x * bng - y * ang);
-            var streak = noise(su / along * across, sv, across, seed + 3);
-            var su2 = (x * bng + y * ang), sv2 = (y * bng - x * ang);
-            var streak2 = noise(su2 / along * across, sv2, across, seed + 4), mixd = noise(x, y, 60 * s, seed + 6);
-            streak = streak * mixd + streak2 * (1 - mixd);
-            v *= 1 - Math.min(0.92, shade * 2 * k2 * (0.7 + 0.45 * streak));
+            var ox = Ox[i] * stepL, oy = Oy[i] * stepL, acc = 0;
+            for (var q = -2; q <= 2; q++) acc += noise(x + ox * q, y + oy * q, cell, seed + 3);
+            var streak = clamp(0.5 + (acc / 5 - 0.5) * 2.2, 0, 1);
+            v *= 1 - Math.min(0.92, shade * 2 * k2 * (0.55 + 0.75 * streak));
           }
         }
         V[i] = v;
@@ -579,7 +611,7 @@ var Sketch = (function () {
     for (y = 0, i = 0; y < h; y++) for (x = 0; x < w; x++, i++) {
       v = clamp(V[i], 0, 255) / 255;
       var gm2 = 1;
-      if (paper === 'grain') gm2 = 1 - 0.05 * noise(x, y, 1.2 * s + 0.3, seed + 5) - 0.04 * noise(x, y, 3.5 * s, seed + 9);
+      if (paper === 'grain') gm2 = 1 - 0.035 * noise(x, y, 1.2 * s + 0.3, seed + 5) - 0.02 * noise(x, y, 3.5 * s, seed + 9);
       if (cr) {
         // Coloured pencil: the colour goes down in diagonal strokes, heavier where the photo is more saturated.
         var cu = (x + y) * 0.7071, cv = (x - y) * 0.7071;
@@ -827,7 +859,10 @@ if (typeof module !== 'undefined') module.exports = Sketch;
     preview = {w: pv.w, h: pv.h};
     var o = $('orig'); o.width = pv.w; o.height = pv.h; o.getContext('2d').drawImage(pc, 0, 0);
     // paint the photo first, so there is never an empty sheet while the sketch is drawn
-    var out = $('out'); out.width = pv.w; out.height = pv.h; out.getContext('2d').drawImage(pc, 0, 0);
+    // their own photo shows at once and then turns into the sketch; the example arrives as a sketch on blank paper
+    var out = $('out'); out.width = pv.w; out.height = pv.h;
+    if (!img.sample) out.getContext('2d').drawImage(pc, 0, 0);
+    else { var ox = out.getContext('2d'); ox.fillStyle = '#fff'; ox.fillRect(0, 0, pv.w, pv.h); }
     // the photo's own thumbnail sits on white, like the sketch, so a transparent logo does not show up black
     var pt = document.createElement('canvas'); pt.width = pt.height = 120;
     var ptx = pt.getContext('2d'); ptx.fillStyle = '#fff'; ptx.fillRect(0, 0, 120, 120); ptx.drawImage(tc, 0, 0);
@@ -836,8 +871,8 @@ if (typeof module !== 'undefined') module.exports = Sketch;
     worker.postMessage({type: 'image', data: data, w: pv.w, h: pv.h, small: small});
     sizeSheet();
     refreshPhotoInfo();
-    firstForImage = true;
-    setCompare(REDUCED ? 0 : 1);
+    firstForImage = !img.sample;
+    setCompare(REDUCED || img.sample ? 0 : 1);
     busy = false; pending = false;
     requestRender();
     requestThumbs();
@@ -1112,7 +1147,7 @@ if (typeof module !== 'undefined') module.exports = Sketch;
 
   function keptHint() {
     var h = $('pickHint');
-    h.innerHTML = 'Kept in this browser for a day so a reload doesn’t lose it. <button type="button" id="forget" class="linkbtn">Forget it</button>';
+    h.innerHTML = 'Stored only on this device for 24 hours, so a reload doesn’t lose it. <button type="button" id="forget" class="linkbtn">Forget it</button>';
     $('forget').addEventListener('click', function () {
       forgetPhoto(); undoStack = []; loadSample().then(function () { syncControls(); h.textContent = 'Forgotten. Showing the example again.'; });
     });
@@ -1162,7 +1197,7 @@ if (typeof module !== 'undefined') module.exports = Sketch;
   function setProgress(f) { $('dlbar').style.width = (f * 100).toFixed(1) + '%'; }
   var saving = false;
   function busyButton(on, txt) {
-    saving = on;
+    saving = on; $('dl').classList.toggle('busy', on);
     $('dlTxt').textContent = on ? txt : PHONE() ? (canShareFiles() ? 'Save' : 'Download') : 'Download ' + state.format.toUpperCase();
     if (!on) setProgress(0);
   }
@@ -1181,8 +1216,8 @@ if (typeof module !== 'undefined') module.exports = Sketch;
     if (saving) { if (job) job.cancel(); return; }
     var fmt = state.format, name = S.fileName(img.sample ? 'beagle' : img.name, state.style, fmt);
     busyButton(true, 'Drawing… (cancel)');
-    status('Drawing the full-size sketch… tap the button again to cancel');
-    renderFull(function (f) { setProgress(f); $('dlTxt').textContent = Math.round(f * 100) + (PHONE() ? '% ✕' : '% · Cancel'); })
+    status(PHONE() ? '' : 'Drawing the full-size sketch…');
+    renderFull(function (f) { setProgress(f); $('dlTxt').textContent = Math.round(f * 100) + '% · Cancel'; })
       .then(function (c) { $('dlTxt').textContent = 'Saving…'; setProgress(1); return toBlob(c, fmt).then(function (b) { return {b: b, c: c}; }); })
       .then(function (r) {
         var file = new File([r.b], name, {type: r.b.type});
@@ -1226,7 +1261,8 @@ if (typeof module !== 'undefined') module.exports = Sketch;
     if (!zoomCanvas) return;
     zoomCanvas.style.transform = 'translate(' + zv.x + 'px,' + zv.y + 'px) scale(' + zv.k + ')';
     var dpr = window.devicePixelRatio || 1;
-    $('zoomInfo').textContent = px(zoomCanvas.width, zoomCanvas.height) + ' · ' + Math.round(zv.k * dpr * 100) + '%';
+    var pc = Math.round(zv.k * dpr * 100);
+    $('zoomInfo').textContent = px(zoomCanvas.width, zoomCanvas.height) + ' · ' + pc + '%' + (pc === 100 ? ' (actual pixels)' : zv.k <= zv.fit * 1.001 ? ' (fit)' : '');
   }
   function zClamp() {
     var v = $('zoomView'), W = v.clientWidth, H = v.clientHeight, cw = zoomCanvas.width * zv.k, ch = zoomCanvas.height * zv.k;
@@ -1252,7 +1288,8 @@ if (typeof module !== 'undefined') module.exports = Sketch;
       v.setPointerCapture(e.pointerId); pts[e.pointerId] = rel(e); last = null;
       var now = Date.now();
       if (Object.keys(pts).length === 1 && now - lastTap < 300 && zoomCanvas) { // double tap: fit ↔ 100%
-        var p = rel(e); if (zv.k > zv.fit * 1.05) zFit(); else zZoom(Math.max(1 / (window.devicePixelRatio || 1), zv.fit * 2), p.x, p.y);
+        var p = rel(e), one = 1 / (window.devicePixelRatio || 1);
+        if (Math.abs(zv.k - one) > 1e-3) zZoom(one, p.x, p.y); else zZoom(zv.fit * 2.5 > one ? zv.fit * 2.5 : one * 2, p.x, p.y);
       }
       lastTap = now;
     });
@@ -1279,12 +1316,11 @@ if (typeof module !== 'undefined') module.exports = Sketch;
     renderFull(function (f) { $('zoomInfo').textContent = 'Drawing full size… ' + Math.round(f * 100) + '%'; }).then(function (c) {
       if (!z.classList.contains('on')) return;
       zoomCanvas = c; v.appendChild(c);
-      var h = document.createElement('div'); h.className = 'hint2'; h.textContent = 'Pinch or double-tap to zoom, drag to move'; v.appendChild(h);
+      var h = document.createElement('div'); h.className = 'hint2'; h.textContent = 'Pinch or + to enlarge, drag to move'; v.appendChild(h);
       setTimeout(function () { h.remove(); }, 2500);
       zFit();
-      // open magnified around the middle, which is what people come here to check: 100%, or twice "fit" on a dense
-      // phone screen where 100% would look no bigger than fit
-      zZoom(Math.max(1 / (window.devicePixelRatio || 1), zv.fit * 2));
+      // open at 100%: one pixel of the file on one pixel of the screen, never enlarged past that unless asked
+      zZoom(1 / (window.devicePixelRatio || 1));
     }).catch(function (e) { if (!(e && e.message === 'cancel')) $('zoomInfo').textContent = errText(e); });
     $('zoomClose').focus();
   }
