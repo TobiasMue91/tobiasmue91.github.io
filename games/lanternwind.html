@@ -321,6 +321,12 @@ function patchStandard(mat, opts = {}) {
 		if (opts.mapFragment) sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', opts.mapFragment);
 		if (opts.normalFragment) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + opts.normalFragment);
 		if (opts.roughFragment) sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n' + opts.roughFragment);
+		// specular anti-aliasing from the final, detail-mapped normal: where the normal turns faster than a pixel can show,
+		// the highlight is widened instead of left to land on one pixel in one frame (wet sand at the waterline used to
+		// catch the low sun that way and flare, through the bloom, into a glowing block for a single frame)
+		sh.fragmentShader = sh.fragmentShader.replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+			{ vec3 dnx = dFdx(normal), dny = dFdy(normal); float kAA = min(0.5 * (dot(dnx, dnx) + dot(dny, dny)), 0.3);
+			  material.roughness = min(sqrt(material.roughness * material.roughness + kAA), 1.); }`);
 		if (opts.emissiveFragment) sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + opts.emissiveFragment);
 		if (opts.aoFragment) sh.fragmentShader = sh.fragmentShader.replace('#include <aomap_fragment>', '#include <aomap_fragment>\n' + opts.aoFragment);
 		if (opts.vertHead) sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + NOISE_GLSL + opts.vertHead);
@@ -1134,7 +1140,7 @@ function buildTerrain(world, tex, mats, segs) {
 				gNd = nd * nStr;
 				gWet = smoothstep(1.4, 0.2, h + 0.3 * sin(uTime * 0.9 + gWPos.x * 0.05) * 0.5);
 				float uw = smoothstep(0.0, -6.0, h);
-				gRough = mix(mix(0.95, 0.8, rockW), 0.25, gWet * (1. - uw));
+				gRough = mix(mix(0.95, 0.8, rockW), 0.4, gWet * (1. - uw));   // wet sand: a sheen, not a mirror
 				gAlb *= mix(1.0, 0.55, gWet);
 				gAlb = mix(gAlb, gAlb * vec3(0.6, 0.8, 0.76), uw);
 				gN = normalize(gN + gNd);
@@ -1669,7 +1675,7 @@ uniform sampler2D uRefl; uniform sampler2D uReflBlur; uniform sampler2D uNormals
 uniform sampler2D tScene; uniform sampler2D tDepth; uniform vec2 uRes; uniform float uNear; uniform float uFar;
 uniform mat4 uInvVP; uniform mat4 uTexMat; uniform mat4 uProj;
 uniform vec3 uLightCol; uniform vec3 uMoonDir; uniform float uNight; uniform vec3 uPlayer; uniform vec3 uLantern; uniform float uLanternI;
-uniform float uReflOn; uniform vec2 uWind;
+uniform float uReflOn; uniform vec2 uWind; uniform float uHuntW; float gHuntMark = 0.;
 ${NOISE_GLSL}
 ${ATMO_GLSL}
 float linZ(float d){ float z = d * 2. - 1.; return 2. * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
@@ -1758,6 +1764,9 @@ void main(){
 		float soft = smoothstep(30., 700., dist) * 0.85 + clamp(length(wg) * 2.5, 0., 0.35);
 		vec3 rs = texture2D(uRefl, rr).rgb, rb = texture2D(uReflBlur, rr).rgb;
 		refl = mix(rs, rb, clamp(soft, 0., 0.92));
+		// the mirror is drawn at half size: one overheated texel in it (a spark, a sprite's hot core) would show here as a
+		// glowing block for a frame. Nothing the sea mirrors is brighter than this.
+		float rL = dot(refl, vec3(0.2126, 0.7152, 0.0722)); if (uHuntW > 0.5 && rL > uHuntW) gHuntMark = 1.; if (rL > 6.) refl *= 6. / rL;
 	} else refl = skyLUT(reflect(-V, N));
 	if (any(isnan(refl)) || any(isinf(refl))) refl = skyLUT(reflect(-V, N));   // a bad texel in the mirror must not print a dark blot
 	vec3 col = mix(body, refl, fres);
@@ -1769,7 +1778,9 @@ void main(){
 	rough = sqrt(rough * rough + kern);
 	vec3 Hs = normalize(V + uSunDir);
 	float spec = D_GGX(max(dot(N, Hs), 0.), rough) * fres * 0.25;
-	col += uSunCol * min(spec, 40.) * sh * smoothstep(-0.02, 0.02, uSunDir.y);
+	vec3 glint = uSunCol * min(spec, 40.) * sh * smoothstep(-0.02, 0.02, uSunDir.y);
+	if (uHuntW > 0.5 && dot(glint, vec3(0.2126, 0.7152, 0.0722)) > uHuntW * 4.) gHuntMark = 2.;
+	col += glint;
 	vec3 Hm = normalize(V + uMoonDir);
 	col += vec3(0.6, 0.7, 0.9) * min(D_GGX(max(dot(N, Hm), 0.), sqrt(rough * rough * 1.7)) * fres * 0.02, 4.) * uNight;
 	vec3 Lp = uPlayer - vW; float lpd = length(Lp); Lp /= lpd;
@@ -1792,12 +1803,12 @@ void main(){
 	// where water and land meet the water thins to nothing → no z-fighting shimmer at the shoreline
 	col = mix(seabed, col, smoothstep(0.0, 0.18 + fp * 0.45, dVert));   // the water's edge fades over about two pixels: it does not crawl as the camera moves
 	col = applyAtmo(col, cameraPosition, vW);
-	gl_FragColor = vec4(col, 1.);
+	gl_FragColor = vec4(gHuntMark > 1.5 ? vec3(0., 50., 0.) : gHuntMark > 0.5 ? vec3(50., 0., 50.) : col, 1.);
 }`;
 
 const BLUR_FRAG = /* glsl */`
 uniform sampler2D tSrc; uniform vec2 uDir; varying vec2 vUv;
-vec3 tap(vec2 uv){ vec3 c = texture2D(tSrc, uv).rgb; return (any(isnan(c)) || any(isinf(c))) ? vec3(0.) : min(c, vec3(500.)); }
+vec3 tap(vec2 uv){ vec3 c = texture2D(tSrc, uv).rgb; if (any(isnan(c)) || any(isinf(c))) return vec3(0.); float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); return l > 6. ? c * 6. / l : c; }
 void main(){
 	vec3 c = tap(vUv) * 0.2270270270;
 	c += (tap(vUv + uDir * 1.3846153846) + tap(vUv - uDir * 1.3846153846)) * 0.3162162162;
@@ -1815,6 +1826,25 @@ class Ocean {
 		this.blurB = new THREE.WebGLRenderTarget(16, 16, { ...hf, depthBuffer: false });
 		this.blurMat = new THREE.ShaderMaterial({ uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } }, vertexShader: FS_VERT, fragmentShader: BLUR_FRAG, depthTest: false, depthWrite: false });
 		this.blurQuad = new FullScreenQuad(this.blurMat);
+		// the mirror is drawn at half size, so a leaf the low sun shines through from below can light one or two texels
+		// far hotter than all around them, in one frame and gone in the next; the sea magnifies such a texel into a glowing
+		// block. Every texel is held to a little above the mean of its 5x5 neighbourhood: lone hot specks go, broad light
+		// (the sky, the sun's disc, a lit cliff) stays as it is.
+		this.clean = new THREE.WebGLRenderTarget(16, 16, { ...hf, depthBuffer: false });
+		this.cleanMat = new THREE.ShaderMaterial({
+			uniforms: { tSrc: { value: null }, uTx: { value: new THREE.Vector2() } },
+			vertexShader: FS_VERT,
+			fragmentShader: `uniform sampler2D tSrc; uniform vec2 uTx; varying vec2 vUv;
+				vec3 sm(vec2 o){ vec3 c = texture2D(tSrc, vUv + o * uTx).rgb; return (any(isnan(c)) || any(isinf(c))) ? vec3(0.) : c; }
+				void main(){ vec3 c = sm(vec2(0.)); vec3 m = vec3(0.);
+					for (int y = -2; y <= 2; y++) for (int x = -2; x <= 2; x++) m += sm(vec2(float(x), float(y)));
+					m /= 25.;
+					float lc = dot(c, vec3(0.2126, 0.7152, 0.0722)), lm = dot(m, vec3(0.2126, 0.7152, 0.0722));
+					float cap = lm * 1.8 + 0.15;
+					gl_FragColor = vec4(lc > cap ? c * cap / lc : c, 1.); }`,
+			depthTest: false, depthWrite: false,
+		});
+		this.cleanQuad = new FullScreenQuad(this.cleanMat);
 		this.texMat = new THREE.Matrix4();
 		this.invVP = new THREE.Matrix4();
 		this.mirror = new THREE.PerspectiveCamera();
@@ -1826,8 +1856,8 @@ class Ocean {
 		this.mat = new THREE.ShaderMaterial({
 			uniforms: {
 				...U, ...this.scene,
-				uRefl: { value: this.rt.texture }, uReflBlur: { value: this.blurB.texture }, uTexMat: { value: this.texMat }, uNormals: { value: normalsTex },
-				uReflOn: this.reflOn, uLanternI: { value: 1 },
+				uRefl: { value: this.clean.texture }, uReflBlur: { value: this.blurB.texture }, uTexMat: { value: this.texMat }, uNormals: { value: normalsTex },
+				uReflOn: this.reflOn, uLanternI: { value: 1 }, uHuntW: { value: 0 },
 			},
 			vertexShader: WATER_VERT, fragmentShader: WATER_FRAG,
 		});
@@ -1852,7 +1882,7 @@ class Ocean {
 	}
 	setSize(w, h) {
 		const rw = Math.max(16, Math.round(w * this.scale)), rh = Math.max(16, Math.round(h * this.scale));
-		this.rt.setSize(rw, rh);
+		this.rt.setSize(rw, rh); this.clean.setSize(rw, rh);
 		this.blurA.setSize(Math.max(8, rw >> 1), Math.max(8, rh >> 1)); this.blurB.setSize(Math.max(8, rw >> 1), Math.max(8, rh >> 1));
 	}
 	render(scene, camera) {
@@ -1888,7 +1918,9 @@ class Ocean {
 		r.setRenderTarget(this.rt); r.clear(); r.render(scene, m);
 		// soft copy: a long blur along the screen's vertical (the direction a wavy sea stretches reflections), a short one across
 		const bm = this.blurMat.uniforms;
-		bm.tSrc.value = this.rt.texture; bm.uDir.value.set(0, 2.2 / this.rt.height);
+		this.cleanMat.uniforms.tSrc.value = this.rt.texture; this.cleanMat.uniforms.uTx.value.set(1 / this.rt.width, 1 / this.rt.height);
+		r.setRenderTarget(this.clean); this.cleanQuad.render(r);
+		bm.tSrc.value = this.clean.texture; bm.uDir.value.set(0, 2.2 / this.rt.height);
 		r.setRenderTarget(this.blurA); this.blurQuad.render(r);
 		bm.tSrc.value = this.blurA.texture; bm.uDir.value.set(1.2 / this.blurA.width, 0);
 		r.setRenderTarget(this.blurB); this.blurQuad.render(r);
@@ -1960,10 +1992,10 @@ class GodRayPass extends Pass {
 			depthTest: false, depthWrite: false,
 		}));
 		this.comp = new FullScreenQuad(new THREE.ShaderMaterial({
-			uniforms: { tDiffuse: { value: null }, tRays: { value: this.rt.texture }, uStrength: this.uniforms.uStrength, uTint: this.uniforms.uTint, uHunt: { value: 0 } },
+			uniforms: { tDiffuse: { value: null }, tRays: { value: this.rt.texture }, uStrength: this.uniforms.uStrength, uTint: this.uniforms.uTint, uHunt: { value: 0 }, uSun: this.uniforms.uSun, uAspect: this.uniforms.uAspect, uSunOn: { value: 0 } },
 			vertexShader: FS_VERT,
 			fragmentShader: /* glsl */`
-				uniform sampler2D tDiffuse; uniform sampler2D tRays; uniform float uStrength; uniform vec3 uTint; uniform float uHunt; varying vec2 vUv;
+				uniform sampler2D tDiffuse; uniform sampler2D tRays; uniform float uStrength; uniform vec3 uTint; uniform float uHunt; uniform vec2 uSun; uniform float uAspect; uniform float uSunOn; varying vec2 vUv;
 				float lumS(vec3 c){ return (any(isnan(c)) || any(isinf(c))) ? 0. : dot(max(c, 0.), vec3(0.2126, 0.7152, 0.0722)); }
 				void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb;
 					bool bad = any(isnan(c)) || any(isinf(c));
@@ -1976,10 +2008,14 @@ class GodRayPass extends Pass {
 					float l = lumS(c), cap = 4. * n + 6.;
 					bool fly = l > cap;
 					if (fly) c *= cap / l;
-					// and nothing at all may be hotter than the sun's own disc: a few-pixel sprite or glint that is, would flare just the same
-					float lc = lumS(c); if (lc > 400.) c *= 400. / lc;
+					// and nothing but the sun's own disc may be this hot: a glint or the sun's mirror image a few pixels across on
+					// calm water would pass the neighbour test and still flare into a glowing block. Away from the disc the
+					// ceiling is low enough that the bloom gives a soft halo, never a blot.
+					float dSun = length((vUv - uSun) * vec2(uAspect, 1.));
+					float ceil = mix(48., 400., uSunOn * (1. - smoothstep(0.03, 0.07, dSun)));
+					float lc = lumS(c); if (lc > ceil) c *= ceil / lc;
 					c += texture2D(tRays, vUv).rgb * uStrength * uTint;
-					if (uHunt > 0.5) { if (bad) c = vec3(0., 50., 0.); else if ((fly && l > 40.) || (uHunt > 1.5 && l > 2.)) c = vec3(50., 0., 50.); }
+					if (uHunt > 0.5) { if (bad) c = vec3(0., 50., 0.); else if ((fly && l > 40.) || lc > ceil || (uHunt > 1.5 && l > 2.)) c = vec3(50., 0., 50.); }
 					gl_FragColor = vec4(max(c, 0.), 1.); }`,
 			depthTest: false, depthWrite: false,
 		}));
@@ -3497,6 +3533,7 @@ function buildPost(dirt) {
 	hp.needsUpdate = true;
 	finalPass = new FinalPass(dirt);
 	composer.addPass(rayPass); composer.addPass(bloomPass); composer.addPass(finalPass);
+	if (new URLSearchParams(location.search).has('flashdebug')) { rayPass.comp.material.uniforms.uHunt.value = 1; ocean.mat.uniforms.uHuntW.value = 6; }   // every pixel the flare filter holds back shows magenta, so a flash can be told apart from anything else
 }
 
 function applyQuality(q, first) {
@@ -3888,12 +3925,20 @@ function updateCamera(dt, snap) {
 		return;
 	}
 	if (S.mode === 'title') {
-		const t = U.uTime.value * 0.03;
-		const c = new THREE.Vector3(0, 0, 1550);
-		camera.position.set(c.x + Math.sin(t) * 260, 120 + Math.sin(t * 0.7) * 20, c.z + Math.cos(t) * 140);
+		// the opening picture: the old lighthouse against the low sun, a road of glitter on the sea toward it, the camera
+		// swaying slowly to and fro off its shoulder; the tower on the right third, the words on the left
+		const t = U.uTime.value * 0.05;
+		const lh = beacons.find(b => b.central).pos, sd = U.uSunDir.value;
+		const sa = Math.atan2(sd.x, sd.z);                       // azimuth of the sun
+		const va = sa + 2.3 + Math.sin(t) * 0.06;   // the sun over the left shoulder: the tower lit warm against the sea, the arch and the next isles behind it
+		const rad = 620 + Math.sin(t * 0.7) * 25;
+		camera.position.set(lh.x - Math.sin(va) * rad, 0, lh.z - Math.cos(va) * rad);
+		camera.position.y = Math.max(lh.y + 45 + Math.sin(t * 0.6) * 8, Math.max(0, sampleHeight(world.H, camera.position.x, camera.position.z)) + 40);   // above the summit: the tower against the sea, not a mountain's shadow side
 		camera.up.set(0, 1, 0);
-		camera.lookAt(-150, 90, 0);
-		camera.fov = fovFor(58); camera.updateProjectionMatrix();
+		const toL = new THREE.Vector3(lh.x - camera.position.x, 0, lh.z - camera.position.z).normalize();
+		const left = new THREE.Vector3(toL.z, 0, -toL.x);
+		camera.lookAt(lh.x + left.x * rad * 0.2, lh.y - 5, lh.z + left.z * rad * 0.2);
+		camera.fov = fovFor(44); camera.updateProjectionMatrix();
 		return;
 	}
 	const flatF = new THREE.Vector3(-Math.sin(P.yaw), 0, -Math.cos(P.yaw));
@@ -4069,6 +4114,7 @@ function frame(dt, freezeTime, noRender) {
 	const sunVis = facing * onScreen * above;
 	rayPass.uniforms.uSun.value.set(sunNdc.x * 0.5 + 0.5, sunNdc.y * 0.5 + 0.5);
 	rayPass.uniforms.uVis.value = sunVis;
+	rayPass.comp.material.uniforms.uSunOn.value = facing * onScreen * above;   // where the disc is, it may stay as hot as it is
 	rayPass.uniforms.uTime.value = t;
 	rayPass.uniforms.uStrength.value = 0.22 + 0.25 * (1 - smoothstep(3, 14, st.elev));
 	rayPass.uniforms.uTint.value.setRGB(1, 0.85, 0.7);
