@@ -405,12 +405,19 @@ var Sketch = (function () {
     h ^= h >>> 16;
     return (h >>> 0) / 4294967296;
   }
+  // Value noise read from a 1024 x 1024 table of hashed values (built once): a table read is far cheaper than four
+  // hashes per sample, and 1024 cells is wider than any photo's worth of strokes. Seeds offset into the table.
+  var NT = null;
   function noise(x, y, cell, seed) {
-    var fx = x / cell, fy = y / cell, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
+    if (!NT) { NT = new Float32Array(1024 * 1024); for (var q = 0; q < NT.length; q++) NT[q] = hash(q & 1023, q >> 10, 1); }
+    var fx = x / cell + seed * 97.3, fy = y / cell + seed * 61.7, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
     tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
-    var a = hash(ix, iy, seed), b = hash(ix + 1, iy, seed), c = hash(ix, iy + 1, seed), d = hash(ix + 1, iy + 1, seed);
-    return (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * ty;
+    var x0 = ix & 1023, x1 = (ix + 1) & 1023, r0 = (iy & 1023) << 10, r1 = ((iy + 1) & 1023) << 10;
+    var a = NT[r0 + x0], b = NT[r0 + x1], c = NT[r1 + x0], d = NT[r1 + x1];
+    var top = a + (b - a) * tx;
+    return top + ((c + (d - c) * tx) - top) * ty;
   }
+
 
   function settings(style, raw) {
     style = STYLES.indexOf(style) >= 0 ? style : 'pencil';
@@ -424,13 +431,19 @@ var Sketch = (function () {
   }
 
   // The pencil layer: colour-dodge of the gray image with its blurred negative, then darkened by a power curve.
+  // x^e on 0..1 through a 4096-entry table (pow per pixel is the slowest thing on a 24-megapixel photo).
+  function powLut(e) {
+    var t = new Float32Array(4097);
+    for (var i = 0; i <= 4096; i++) t[i] = Math.pow(i / 4096, e);
+    return function (x) { x = x <= 0 ? 0 : x >= 1 ? 4096 : x * 4096; var j = x | 0, f = x - j; return j >= 4096 ? t[4096] : t[j] + (t[j + 1] - t[j]) * f; };
+  }
   // Y is smoothed a little first so sensor noise does not turn into speckle, and the result's white point is set
   // just below paper white so soft backgrounds come out as clean paper instead of a grey wash.
   function pencilLayer(Y, w, h, sigma, gamma, pre) {
     var n = w * h, i, Ys = pre > 0.3 ? blur(Y, w, h, pre) : Y, inv = new Float32Array(n);
     for (i = 0; i < n; i++) inv[i] = 255 - Ys[i];
-    var b = blur(inv, w, h, sigma), out = new Float32Array(n);
-    for (i = 0; i < n; i++) out[i] = 255 * Math.pow(Math.min(1, dodge(Ys[i], b[i]) / 255 / WHITE), gamma);
+    var b = blur(inv, w, h, sigma), out = new Float32Array(n), pw = powLut(gamma);
+    for (i = 0; i < n; i++) out[i] = 255 * pw(dodge(Ys[i], b[i]) / 255 / WHITE);
     return out;
   }
 
@@ -481,11 +494,12 @@ var Sketch = (function () {
       // Shading: graphite density follows the tone, laid down as strokes along two drifting diagonals.
       var ang = o.style === 'charcoal' ? 0.35 : 0.7071, bng = Math.sqrt(1 - ang * ang);
       var along = (o.style === 'charcoal' ? 6 : 9) * s, across = (o.style === 'charcoal' ? 1.4 : 0.9) * s;
+      var p115 = powLut(1.15);
       for (y = 0, i = 0; y < h; y++) for (x = 0; x < w; x++, i++) {
         v = P[i];
         if (T) {
           var t = T[i] / 255, wd = clamp((Wd[i] - 1.2) / 4.5, 0, 1);
-          var k2 = Math.pow(1 - t, 1.15) * Math.max(clamp((0.42 - t) / 0.3, 0, 1), 0.12 + 0.88 * wd * wd * (3 - 2 * wd)); // dark tones always shaded
+          var k2 = p115(1 - t) * Math.max(clamp((0.42 - t) / 0.3, 0, 1), 0.12 + 0.88 * wd * wd * (3 - 2 * wd)); // dark tones always shaded
           if (k2 > 0.002) {
             var su = (x * ang + y * bng), sv = (x * bng - y * ang);
             var streak = noise(su / along * across, sv, across, seed + 3);
@@ -543,8 +557,8 @@ var Sketch = (function () {
 
     // Darkness, last: a tone curve over the whole drawing (paper stays paper, every grey gets darker or lighter).
     if (o.style !== 'outline') {
-      var curve = 0.45 + o.dark / 100 * 1.5;
-      for (i = 0; i < n; i++) V[i] = 255 * Math.pow(clamp(V[i], 0, 255) / 255, curve);
+      var curve = powLut(0.45 + o.dark / 100 * 1.5);
+      for (i = 0; i < n; i++) V[i] = 255 * curve(V[i] / 255);
     }
     var paper = o.paper, pr = 255, pg = 255, pb = 255;
     if (paper === 'aged') { pr = 246; pg = 236; pb = 214; }
