@@ -2931,14 +2931,82 @@ add(new THREE.TorusGeometry(6.35, 0.07, 6, 48), iron, 39.9).rotation.x = Math.PI
 add(new THREE.TorusGeometry(6.35, 0.05, 6, 48), iron, 39.25).rotation.x = Math.PI / 2;
 for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; const p = add(new THREE.CylinderGeometry(0.05, 0.05, 1.3, 4), iron, 39.4); p.position.x = Math.cos(a) * 6.35; p.position.z = Math.sin(a) * 6.35; p.castShadow = false; }
 add(new THREE.CylinderGeometry(3.95, 3.95, 1.1, 24), iron, 39.3);
-	const glass = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 5, 16, 1, true), new THREE.ShaderMaterial({
-		uniforms: { ...U, uLit: glassU },
-		vertexShader: 'varying vec3 vN; varying vec2 vUv; void main(){ vN = normal; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
-		fragmentShader: 'uniform float uLit; uniform float uGlow; varying vec3 vN; varying vec2 vUv; void main(){ float mull = step(0.08, fract(vUv.x * 16.)) * step(0.1, fract(vUv.y * 3.)); float core = exp(-pow((vUv.y - 0.5) * 3.2, 2.)); gl_FragColor = vec4(mix(vec3(0.03,0.04,0.05), vec3(2.6,1.85,0.9) * (0.55 + 0.9 * core) * uGlow, uLit) * mix(0.06, 1., mull), 1.); }',   // bright enough to glow, not so bright the bloom swallows the panes and their bars
+	// the lantern room: panes of glass in a diamond lattice of iron astragals. The pane mirrors the sky at a glance and
+	// shows the room behind it face on: a dark room with the lens on its axis, a barrel of glass prisms in eight bullseye
+	// panels. The lens is found by intersecting the view ray with it, so the glazing stays one opaque surface (nothing to
+	// sort, the same in the sea's mirror). Once lit, the prisms burn.
+	const LR = 1.45, LH = 1.75;   // lens radius and half height, in the tower's own metres
+	const glass = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 5, 32, 1, true), new THREE.ShaderMaterial({
+		uniforms: { ...U, uLit: glassU, uLC: { value: new THREE.Vector3(pos.x, pos.y + 41.3 * 1.5, pos.z) } },
+		vertexShader: /* glsl */`varying vec3 vW; varying vec3 vNw; varying vec2 vUv;
+			void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; vNw = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
+		fragmentShader: /* glsl */`
+			uniform float uLit; uniform vec3 uLC; uniform vec3 uLightCol; varying vec3 vW; varying vec3 vNw; varying vec2 vUv;
+			${NOISE_GLSL}
+			${ATMO_GLSL}
+			void main(){
+				vec3 V = normalize(vW - cameraPosition);
+				vec3 N = normalize(vNw); if (dot(N, V) > 0.) N = -N;
+				float lit = smoothstep(0.2, 1., uLit);
+				vec3 skyUp = skyLUT(vec3(0., 1., 0.));
+				// behind the pane: the room, and the lens if the ray meets it
+				vec3 room = vec3(0.012, 0.013, 0.016) + vec3(0.14, 0.09, 0.035) * lit * uGlow;
+				{ const float R = ${(LR * 1.5).toFixed(3)}, H = ${(LH * 1.5).toFixed(3)};
+				  vec2 o = vW.xz - uLC.xz, d = V.xz; float a = dot(d, d), b = dot(o, d), c = dot(o, o) - R * R, disc = b * b - a * c;
+				  if (disc > 0. && a > 1e-6) { float t = (-b - sqrt(disc)) / a; vec3 lp = vW + V * t; float hy = lp.y - uLC.y;
+				    if (t > 0. && abs(hy) < H) {
+				      float ang = atan(lp.z - uLC.z, lp.x - uLC.x), pu = (fract(ang * 1.2732395 + 0.5) - 0.5) * 6.2831853 * R / 8.;
+				      float frame = smoothstep(0.42, 0.47, abs(fract(ang * 1.2732395 + 0.5) - 0.5)) + smoothstep(H - 0.15, H - 0.05, abs(hy));
+				      // bullseye rings in the middle of each panel, horizontal prisms above and below it
+				      float r = length(vec2(pu, hy)), ring = r < 1.2 ? fract(r * 5.5) : fract(abs(hy) * 4.5);
+				      float edge = pow(ring, 5.);
+				      vec3 sky = skyLUT(normalize(vec3(-V.x, 0.25 + 0.7 * ring, -V.z)));
+				      // by day the prisms gather the room's warm dusk and a thin edge of sky each; a faint gold of the brass behind
+				      vec3 lens = mix(vec3(0.05, 0.04, 0.025), sky * 0.5, 0.25 + 0.5 * edge) * (0.5 + 0.5 * edge) + uSunCol * 0.03 * edge * max(dot(-V, uSunDir), 0.);
+				      lens += vec3(2.6, 1.85, 0.9) * (0.35 + 1.6 * edge) * exp(-r * r * 0.25) * lit * uGlow;
+				      room = mix(lens, vec3(0.16, 0.11, 0.05) * (skyUp * 0.5 + uLightCol * 0.06) + vec3(0.6, 0.4, 0.15) * lit * uGlow * 0.3, clamp(frame, 0., 1.));   // brass frames
+				    } } }
+				// the pane: a little salt-dimmed, mirroring the sky and, in a narrow sliver, the sun
+				vec3 Rf = reflect(V, N);
+				float F = 0.04 + 0.96 * pow(1. - max(dot(N, -V), 0.), 5.);
+				// what a pane mirrors below the horizon is the dark sea, not the sky table's ground
+				vec3 env = mix(skyLUT(vec3(Rf.x, max(Rf.y, 0.02), Rf.z)), vec3(0.02, 0.05, 0.065) + skyUp * 0.08, smoothstep(0.0, -0.25, Rf.y));
+				vec3 col = room * 0.85 + env * (F * 0.9 + 0.03) + uSunCol * min(pow(max(dot(Rf, uSunDir), 0.), 600.) * 3., 8.) * F * (1. - lit);
+				// diamond astragals and the top and bottom rails
+				vec2 uv = vec2(vUv.x * 26., vUv.y * 4.);
+				float x1 = abs(fract(uv.x + uv.y) - 0.5), x2 = abs(fract(uv.x - uv.y) - 0.5);
+				float aa = fwidth(uv.x) * 1.2;
+				float bar = max(smoothstep(0.5 - 0.035 - aa, 0.5 - 0.035, max(x1, x2)), smoothstep(0.04 + aa, 0.04, min(vUv.y, 1. - vUv.y)));
+				vec3 iron = vec3(0.72, 0.71, 0.67) * (skyUp * 0.8 + uLightCol * 0.3 * max(dot(N, uLightDir), 0.)) + env * 0.04;   // painted white like the tower: the lattice reads from afar by day, and stands dark against the lit lens by night
+				col = mix(col, iron, bar);
+				gl_FragColor = vec4(applyAtmo(col, cameraPosition, vW), 1.);
+			}`,
 		side: THREE.DoubleSide,
 	}));
 	glass.position.y = 41.3; g.add(glass);
-	const verd = patchStandard(new THREE.MeshStandardMaterial({ color: 0x4f7d6a, roughness: 0.55, metalness: 0.35 }), { key: 'roof' });
+	// copper gone to verdigris: pale blue-green where the rain washes it, streaked downward, still brown copper under the
+	// lip and round the ventilator where the rain does not reach; standing seams run up the cone
+	const verd = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0 }), {
+		key: 'roof2',
+		fragHead: 'float gRoofH = 0., gCu = 0.;',
+		mapFragment: /* glsl */`
+			{ vec2 d = gWPos.xz - vec2(${pos.x.toFixed(1)}, ${pos.z.toFixed(1)}); float ang = atan(d.y, d.x), y = (gWPos.y - ${pos.y.toFixed(1)}) / 1.5;
+			  float seam = abs(fract(ang * 3.8197186) - 0.5);   // 24 seams round the cone
+			  float sm = smoothstep(0.47, 0.495, seam);
+			  float streak = fbm2(vec2(ang * 30., y * 0.6), 4), blot = fbm2(vec2(ang * 4., y * 0.9) + 5.3, 3);
+			  vec3 c = mix(vec3(0.3, 0.5, 0.42), vec3(0.48, 0.66, 0.58), smoothstep(0.3, 0.75, streak));
+			  c = mix(c, c * vec3(0.8, 0.85, 0.82), smoothstep(0.5, 0.7, blot) * 0.6);
+			  gCu = max(smoothstep(44.4, 44.0, y) * 0.8, smoothstep(47.2, 47.9, y)) * smoothstep(0.35, 0.6, fbm2(vec2(ang * 12., y * 3.), 3) + 0.25);
+			  c = mix(c, vec3(0.36, 0.2, 0.12) * (0.8 + 0.4 * streak), gCu);
+			  c = mix(c, c * 0.8, sm * 0.5);
+			  gRoofH = sm * 0.012 * (1. - smoothstep(0.01, 0.04, max(length(dFdx(gWPos)), length(dFdy(gWPos)))));
+			  diffuseColor.rgb = c; }`,
+		normalFragment: /* glsl */`
+			{ vec3 sX = dFdx(-vViewPosition), sY = dFdy(-vViewPosition);
+			  vec3 R1 = cross(sY, normal), R2 = cross(normal, sX); float det = dot(sX, R1);
+			  normal = normalize(abs(det) * normal - sign(det) * (dFdx(gRoofH) * R1 + dFdy(gRoofH) * R2)); }
+			metalnessFactor = gCu * 0.7; roughnessFactor = mix(0.65, 0.4, gCu);`,
+	});
 // the lantern roof: a drip-edge lip just wider than the glazing, then a concave copper cone up to a ventilator ball
 { const rp = [];
   rp.push(new THREE.Vector2(3.55, -0.1), new THREE.Vector2(4.05, 0.0), new THREE.Vector2(4.1, 0.22), new THREE.Vector2(3.9, 0.3));
@@ -2958,15 +3026,32 @@ const cotWall = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, 
 		  c *= 1. - 0.12 * smoothstep(0.55, 0.85, vnoise(vec2((gWPos.x + gWPos.z) * 0.6, gWPos.y * 0.15)));   // rain runs from the eaves
 		  diffuseColor.rgb = c; }`,
 });
-const slate = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 }), {
-	key: 'slate2',
+// slates: small, laid in courses up the slope with each course lapping the one below (a step and a shadow line at
+// every lower edge), each slate its own shade of blue-grey to plum, orange sea lichen and moss in patches
+const eave = new THREE.Vector2(Math.cos(-0.18), -Math.sin(-0.18));   // the cottage's long axis, in the world
+const slate = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62 }), {
+	key: 'slate3',
+	fragHead: 'float gSlH = 0.;',
 	mapFragment: /* glsl */`
-		{ vec2 q = vec2(gWPos.x * 2.2 + gWPos.z * 2.2, gWPos.y * 3.2);   // courses of small slates, staggered
-		  float row = floor(q.y); q.x += row * 0.5;
-		  float edge = smoothstep(0.0, 0.08, fract(q.y)) * (0.75 + 0.25 * smoothstep(0.0, 0.06, abs(fract(q.x) - 0.5) - 0.44 + 0.5));
-		  vec3 c = vec3(0.2, 0.21, 0.24) * (0.8 + 0.4 * hash12(vec2(floor(q.x), row)));
-		  c = mix(c, vec3(0.3, 0.33, 0.22), 0.35 * smoothstep(0.55, 0.85, vnoise(gWPos.xz * 0.5)));   // lichen
-		  diffuseColor.rgb = c * (0.6 + 0.4 * edge); }`,
+		{ float fp = max(length(dFdx(gWPos)), length(dFdy(gWPos)));
+		  vec2 q = vec2(dot(gWPos.xz, vec2(${eave.x.toFixed(4)}, ${eave.y.toFixed(4)})) / 0.42, gWPos.y / 0.16);
+		  float row = floor(q.y); q.x += row * 0.5 + hash12(vec2(row, 2.)) * 0.2;
+		  vec2 id = vec2(floor(q.x), row); float h = hash12(id), h2 = hash12(id + 3.3);
+		  float gap = smoothstep(0.02 + fp * 2., 0.02, abs(fract(q.x) - 0.5) - 0.47 + 0.5);
+		  vec3 c = mix(vec3(0.13, 0.145, 0.165), vec3(0.22, 0.23, 0.25), h);
+		  c *= h2 < 0.15 ? vec3(1.05, 0.97, 1.02) : h2 > 0.8 ? vec3(0.92, 0.96, 1.0) : vec3(1.);   // a few plum, a few colder
+		  c *= 0.9 + 0.2 * vnoise(gWPos.xz * 9. + gWPos.y * 7.);
+		  c *= 1. - 0.45 * smoothstep(0.86, 1., fract(q.y)) - 0.35 * gap;   // the shadow just below each lapping edge, the gaps
+		  float lich = smoothstep(0.6, 0.8, fbm2(gWPos.xz * 0.9 + gWPos.y * 0.5, 4));
+		  c = mix(c, vec3(0.62, 0.36, 0.1), lich * 0.55 * step(0.4, hash12(id + 9.1)));   // orange sea lichen
+		  c = mix(c, vec3(0.2, 0.26, 0.12), 0.4 * smoothstep(0.55, 0.85, vnoise(gWPos.xz * 0.5)));
+		  gSlH = ((1. - fract(q.y)) * smoothstep(0., 0.1, fract(q.y)) * 0.012 - gap * 0.004)   // up the roof, a step onto each course's lower edge, rounded off
+			 * (1. - smoothstep(0.004, 0.02, fp));
+		  diffuseColor.rgb = c; }`,
+	normalFragment: /* glsl */`
+		{ vec3 sX = dFdx(-vViewPosition), sY = dFdy(-vViewPosition);
+		  vec3 R1 = cross(sY, normal), R2 = cross(normal, sX); float det = dot(sX, R1);
+		  normal = normalize(abs(det) * normal - sign(det) * (dFdx(gSlH) * R1 + dFdy(gSlH) * R2)); }`,
 });
 const trim = patchStandard(new THREE.MeshStandardMaterial({ color: 0x2f4b4f, roughness: 0.6 }), { key: 'trim' });   // painted sea-green frames and door, the old keeper's colour
 const cot = new THREE.Group(); cot.position.set(9.3, 2, 1.2); cot.rotation.y = -0.18; g.add(cot);
