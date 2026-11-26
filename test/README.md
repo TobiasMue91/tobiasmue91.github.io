@@ -3029,3 +3029,29 @@ the one link they are in the source.
 | `export` | CSV (the old columns first, formula guard), TSV, Markdown, JSON, display decoding |
 | `big` | a 1.6 MB page under a time limit, very long hrefs, pathological input |
 | `browser` | agreement with Chromium's parser, as above |
+
+## Image to ASCII Converter
+
+```sh
+npm run test:ascii                               # or: node test/image_to_ascii_converter.mjs
+node test/image_to_ascii_converter.mjs braille   # named suites only
+```
+
+`image_to_ascii_converter.mjs` runs the DOM-free `<script id="core">` block of `tools/image_to_ascii_converter.html`
+in Node. Its promise is that each character stands for how light that patch of the picture looks, in a shape
+that keeps the picture's proportions in a monospace font, and that what is copied is what is shown. No Chromium
+or server needed.
+
+| suite | what it checks |
+| --- | --- |
+| `srgb` | sRGB decoding (IEC 61966-2-1) and CIE L* against published values, every 8-bit value round-tripping |
+| `filter` | the box filter's weights against brute-force overlaps, means preserved, averaging in linear light |
+| `grid` | rows for a width, square braille dots, the 1,000-line cap, 1-pixel-high and 1x1 images |
+| `mapping` | lightness to ramp on dark and light backgrounds, transparency always blank, monotone gradients |
+| `adjust` | auto levels, brightness, contrast, invert, and the "faint logo" hint |
+| `braille` | dot bits against the Unicode chart, U+2800 for blank cells, Floyd-Steinberg keeping a grey's tone |
+| `ramps` | Paul Bourke's ramps quoted exactly, custom ramps read by code point (emoji stay whole) |
+| `colour` | cell colours averaged in linear light, grey mode, transparent pixels not bleeding colour |
+| `widths` | the widths people type (`80 cols`, `72,6`, `1,000`, `9000`) and the errors for the rest |
+| `output` | code-block fences, HTML export escaped and showing exactly the copied text, file names |
+| `settings` | saved settings that trust nothing |
