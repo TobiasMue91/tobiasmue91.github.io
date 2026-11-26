@@ -250,6 +250,7 @@ if (suites.includes('colour')) {
   const br = conv(solid(16, 16, [10, 200, 30, 255]), 16, 16, {cols: 4, style: 'braille', colour: 'colour'});
   eq([br.colours.length, br.colours[0]], [br.cols * br.rows, [10, 200, 30]], 'braille gets one colour per character, the cell\'s average');
   eq(conv(solid(4, 4, [255, 0, 0, 255]), 4, 4, {cols: 2}).colours, undefined, 'no colour work when colour is off');
+  eq(conv(solid(4, 4, [10, 20, 200, 255]), 4, 4, {cols: 2, colour: 'colour', invert: true}).colours[0], [245, 235, 55], 'invert turns colours over too, so a dark logo shows on dark');
 }
 
 if (suites.includes('widths')) {
@@ -263,7 +264,7 @@ if (suites.includes('widths')) {
   eq(thou.clamp, 400, '"1,000" is a thousand (and so too wide), not 1');
   eq(A.parseCols('-5').clamp, 4, 'a negative width is refused and clamps to the least');
   eq(A.options({cols: 1e9}).cols, 400, 'options clamp a huge width');
-  eq(A.options({cols: 'x'}).cols, 80, 'options give 80 for nonsense');
+  eq(A.options({cols: 'x'}).cols, 60, 'options give 60 for nonsense');
 }
 
 if (suites.includes('output')) {
@@ -288,10 +289,10 @@ if (suites.includes('output')) {
 if (suites.includes('settings')) {
   section('settings');
   const d = A.loadSettings(null);
-  eq([d.cols, d.style, d.bg, d.auto, d.invert, d.colour, d.dither], [80, 'simple', 'dark', true, false, 'none', true], 'no saved settings give the defaults');
+  eq([d.cols, d.style, d.bg, d.auto, d.invert, d.colour, d.dither], [60, 'simple', 'dark', true, false, 'none', true], 'no saved settings give the defaults (60, as the old page)');
   for (const raw of ['{', '"x"', '[]', 'null', '{"cols":"<script>","style":"evil","bg":3,"contrast":"9e9","custom":42}']) {
     const s = A.loadSettings(raw);
-    check(s.cols === 80 && A.STYLES.includes(s.style) && (s.bg === 'dark' || s.bg === 'light') && s.contrast <= 100 && typeof s.custom === 'string', `garbage ${raw} gives sane settings`);
+    check(s.cols === 60 && A.STYLES.includes(s.style) && (s.bg === 'dark' || s.bg === 'light') && s.contrast <= 100 && typeof s.custom === 'string', `garbage ${raw} gives sane settings`);
   }
   const s = A.loadSettings(JSON.stringify({cols: 120, style: 'braille', bg: 'light', invert: true, contrast: 30, brightness: -20, auto: false, colour: 'gray', custom: 'ab'}));
   eq([s.cols, s.style, s.bg, s.invert, s.contrast, s.brightness, s.auto, s.colour, s.custom], [120, 'braille', 'light', true, 30, -20, false, 'gray', 'ab'], 'saved settings come back as saved');
