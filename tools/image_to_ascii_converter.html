@@ -94,8 +94,12 @@ h1 { font-size: 20px; line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
 .busy { position: absolute; inset: 0; display: none; place-items: center; background: #0006; color: #fff; font-weight: 600; }
 .busy.on { display: grid; }
 .method { font-size: 12.5px; color: var(--muted); padding: 6px 10px 7px; margin: 0; border-top: 1px solid var(--line); }
-.hint { margin: 0; padding: 8px 10px; display: flex; gap: 10px; align-items: center; justify-content: space-between; background: var(--flash); color: var(--text); font-size: 13.5px; }
+.hint { margin: 0; padding: 8px 10px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; justify-content: space-between; background: var(--flash); color: var(--text); font-size: 13.5px; }
 .hint[hidden] { display: none; }
+.dims .warn { color: var(--err); }
+.fit { border: 1px solid var(--line-strong); background: var(--card); border-radius: 6px; padding: 1px 8px; cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 600; }
+.bg-help { padding: 0 0 10px; margin-top: -4px; border-bottom: 1px solid var(--line); }
+.row.two { border-bottom: 0; padding-bottom: 8px; }
 .hint .btn { min-height: 32px; flex: none; }
 .stale-note { color: var(--err); }
 .save { position: relative; }
@@ -187,7 +191,7 @@ details[open] summary::after { transform: rotate(-135deg); margin-top: 8px; }
 
     <section class="result card" aria-label="ASCII art">
       <div class="bar">
-        <div class="dims" id="dims"><b id="dCols">80</b> × <b id="dRows">25</b> · <b id="dChars">2,025</b> characters</div>
+        <div class="dims" id="dims"><b id="dCols">80</b> × <b id="dRows">25</b> · <b id="dChars">2,025</b> characters<span id="discord" hidden> · <span class="warn">over Discord’s 2,000</span> <button type="button" class="fit" id="fitBtn">Fit</button></span></div>
         <button class="btn primary" id="copyBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy</button>
         <button class="btn" id="fenceBtn" type="button" title="Wrapped in ``` so Discord, GitHub and Slack keep the spacing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/></svg><span class="long">Copy for Discord</span><span class="short">Copy for Discord</span></button>
         <div class="save">
@@ -199,11 +203,11 @@ details[open] summary::after { transform: rotate(-135deg); margin-top: 8px; }
           </div>
         </div>
       </div>
+      <p class="hint" id="hint" hidden><span id="hintText"></span> <button type="button" class="btn" id="hintBtn">Invert</button></p>
       <div class="stage dark fit" id="stage">
         <canvas id="art" role="img" aria-label="ASCII art preview"></canvas>
         <div class="busy" id="busy">Reading image…</div>
       </div>
-      <p class="hint" id="hint" hidden><span id="hintText"></span> <button type="button" class="btn" id="hintBtn">Invert</button></p>
       <p class="method" id="method"></p>
     </section>
 
@@ -245,6 +249,7 @@ details[open] summary::after { transform: rotate(-135deg); margin-top: 8px; }
           <button type="button" role="radio" data-v="light" aria-checked="false">Light</button>
         </div>
       </div>
+      <div class="src-meta bg-help" id="bgHelp">Dark: the light parts of your picture get the dense characters.</div>
       <details id="more">
         <summary>Brightness, contrast, invert, colour</summary>
         <div class="sub-row">
@@ -465,10 +470,19 @@ var ASCII = (function () {
     for (var q = 0; q < n; q++) if (cov[q] >= 0.5) { solid++; solidInk += ink[q]; }
     var faint = solid >= Math.max(2, n * 0.02) && solid < n * 0.98 && solidInk / solid < 0.12;
     var lines = o.style === 'braille' ? brailleLines(ink, g, o.dither) : rampLines(ink, g, o.style === 'custom' ? customRamp(o.custom) : Array.from(RAMPS[o.style]));
-    var out = {text: lines.join('\n'), lines: lines, cols: g.cols, rows: g.rows, style: o.style, bg: o.bg, limited: g.limited, faint: faint};
-    if (wantColour) out.colours = cellColours(pl, g, o.colour === 'gray');
+    // Empty margins (transparent or background-coloured) above and below would only be blank lines to delete
+    // by hand after pasting; drop them. A picture that is blank all through keeps its lines.
+    var top = 0, bot = lines.length;
+    while (top < bot && isBlank(lines[top])) top++;
+    while (bot > top && isBlank(lines[bot - 1])) bot--;
+    if (top === bot) { top = 0; bot = lines.length; }
+    var kept = lines.slice(top, bot);
+    var out = {text: kept.join('\n'), lines: kept, cols: g.cols, rows: kept.length, style: o.style, bg: o.bg, limited: g.limited, faint: faint, trimmed: lines.length - kept.length};
+    if (wantColour) out.colours = cellColours(pl, g, o.colour === 'gray').slice(top * g.cols, bot * g.cols);
     return out;
   }
+
+  function isBlank(line) { return /^[ \u2800]*$/.test(line); }
 
   function rampLines(ink, g, ramp) {
     var n = ramp.length, lines = [];
@@ -818,6 +832,7 @@ if (typeof module !== 'undefined') module.exports = ASCII;
       }
       lastDims[k] = vals[k];
     });
+    $('discord').hidden = vals.dChars + 8 <= 2000;
   }
   function reduceMotion() { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   function updateMethod() {
@@ -835,7 +850,8 @@ if (typeof module !== 'undefined') module.exports = ASCII;
     $('cols').value = opts.cols;
     $('stepper').classList.remove('bad'); $('colsErr').textContent = ''; $('dims').classList.remove('stale');
     document.querySelectorAll('.chip').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.dataset.cols === opts.cols)); });
-    seg('styleSeg', opts.style); seg('bgSeg', opts.bg); seg('colSeg', opts.colour); seg('zoomSeg', zoom);
+    seg('styleSeg', opts.style); seg('bgSeg', opts.bg);
+    $('bgHelp').textContent = opts.bg === 'dark' ? 'Dark: the light parts of your picture get the dense characters.' : 'Light: the dark parts of your picture get the dense characters.'; seg('colSeg', opts.colour); seg('zoomSeg', zoom);
     $('customWrap').hidden = opts.style !== 'custom';
     if ($('custom').value !== opts.custom) $('custom').value = opts.custom;
     $('ditherRow').hidden = opts.style !== 'braille';
@@ -851,6 +867,7 @@ if (typeof module !== 'undefined') module.exports = ASCII;
     });
   }
   function change(patch, opt) {
+    $('toast').classList.remove('on');
     Object.keys(patch).forEach(function (k) { opts[k] = patch[k]; });
     opts = ASCII.options(opts);
     persist();
@@ -908,6 +925,7 @@ if (typeof module !== 'undefined') module.exports = ASCII;
 
   $('custom').addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); });
   $('custom').addEventListener('input', function () { change({custom: $('custom').value.replace(/[\r\n\t]/g, '')}, {keepField: true}); });
+  $('fitBtn').addEventListener('click', function () { change({cols: suggestWidth()}); toast('Width set to ' + opts.cols + ': fits one Discord message as a code block.'); });
   $('hintBtn').addEventListener('click', function () { change({invert: !opts.invert}); });
   $('invert').addEventListener('change', function () { change({invert: this.checked}); });
   $('auto').addEventListener('change', function () { change({auto: this.checked}); });

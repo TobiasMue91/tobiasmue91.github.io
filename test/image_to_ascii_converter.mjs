@@ -141,6 +141,11 @@ if (suites.includes('mapping')) {
   const g118 = conv(solid(3, 3, [118, 118, 118, 255]), 3, 3, o);
   eq(g118.lines[0][0], '=', 'sRGB 118 grey (L* 49.5) maps to the 5th of 10 glyphs on dark');
   eq(conv(solid(3, 3, [118, 118, 118, 255]), 3, 3, {...o, bg: 'light'}).lines[0][0], '+', 'and the 6th on light (ink 0.505)');
+  // Empty margins above and below are dropped; blank lines inside the picture are kept.
+  const framed = conv(img(10, 30, (x, y) => (y >= 10 && y < 20 && (y < 13 || y >= 17) ? W : T0)), 10, 30, {cols: 10, auto: false});
+  eq([framed.rows, framed.trimmed, framed.lines.map(l => l ? 'x' : '-').join('')], [5, 10, 'xx-xx'], 'blank rows above and below are trimmed, the gap inside stays');
+  const fc = conv(img(10, 30, (x, y) => (y >= 10 && y < 20 ? [255, 0, 0, 255] : T0)), 10, 30, {cols: 10, colour: 'colour'});
+  eq([fc.colours.length, fc.colours[0]], [fc.rows * fc.cols, [255, 0, 0]], 'colours are trimmed with their rows');
   // Half-covered white cell is lighter than a full one.
   const half = conv(img(2, 2, (x) => x ? W : T0), 2, 2, {...o, cols: 1});
   const full = conv(solid(2, 2, W), 2, 2, {...o, cols: 1});
