@@ -22,8 +22,10 @@ import vm from 'vm';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'games', 'getting_up_here.html'), 'utf8');
-const src = html.match(/<script id="core">([\s\S]*?)<\/script>/)[1];
-const Core = vm.runInNewContext(src + ';Core');
+// the page ships Planck.js in its own block; the core runs on top of it
+const ctx = vm.createContext({});
+vm.runInContext(html.match(/<script id="planck">([\s\S]*?)<\/script>/)[1], ctx);
+const Core = vm.runInContext(html.match(/<script id="core">([\s\S]*?)<\/script>/)[1] + ';Core', ctx);
 const ROUTE = join(HERE, 'getting_up_here.route.json');
 
 let fails = 0, n = 0;
@@ -34,26 +36,34 @@ const speed = s => Math.hypot(s.bx - s.pbx, s.by - s.pby) / (Core.DT / Core.SUB)
 // The legs of the climb: each a region the tub must come to rest in, in order.
 const LEGS = [
   ['first crate', 2.3, 3.1, 1.25], ['past the crate', 3.6, 4.8, 0.4], ['crate stack', 5.3, 6.0, 2.15], ['boulder', 8.3, 9.8, 2.6],
-  ['bow', 11.0, 13.0, 3.6], ['mast', 14.5, 16.2, 7.6], ['crow\'s nest', 17.2, 19.6, 11.6],
+  ['bow', 11.0, 13.0, 3.6], ['mast cleat 1', 13.6, 14.4, 6.8], ['mast cleat 2', 14.7, 15.5, 8.1], ['mast cleat 3', 15.8, 16.6, 9.4], ['crow\'s nest', 17.2, 19.6, 11.6],
   ['wall step 1', 20.1, 21.2, 13.95], ['wall step 2', 21.1, 22.1, 16.05], ['wall step 3', 22.05, 23.05, 18.15], ['wall step 4', 23.0, 24.0, 20.25],
-  ['wall top', 23.9, 25.0, 22.3], ['weed 1', 26.2, 27.8, 24.0], ['weed 2', 28.4, 30.2, 25.8], ['weed 3', 30.8, 32.6, 27.6], ['weed rock', 33.3, 36.0, 29.2],
-  ['boom 1', 35.6, 39.6, 30.8], ['landing 1', 40.0, 42.0, 33.0], ['crate on the landing', 40.6, 41.4, 34.0], ['boom 2', 36.8, 37.7, 36.3], ['boom 2 mid', 35.6, 36.5, 37.1], ['boom 2 upper', 34.4, 35.3, 37.9], ['landing 2', 32.3, 33.6, 38.6],
-  ['crate on landing 2', 31.3, 32.1, 39.6], ['boom 3', 35.2, 36.1, 42.4], ['boom 3 mid', 36.7, 37.6, 43.3], ['boom 3 upper', 38.1, 39.1, 44.2], ['landing 3', 39.9, 41.2, 44.8], ['jib', 33.0, 36.5, 47.7], ['jib end', 27.4, 29.5, 50.0],
-  ['cliff step 1', 25.1, 26.8, 52.0], ['cliff step 2', 23.1, 24.8, 54.0], ['cliff step 3', 21.1, 22.8, 56.0], ['chimney foot', 17.5, 18.9, 57.9],
-  ...[59.4, 60.9, 62.4, 63.9, 65.4, 66.9, 68.4].map((y, k) => ['chimney ledge ' + (k + 1), k % 2 ? 18.0 : 17.6, k % 2 ? 18.7 : 18.3, y + 0.6]),
-  ['chimney top', 18.9, 22, 70.3], ['west wall', 16.0, 17.4, 72.3], ['rock step 1', 14.8, 16.0, 74.3], ['rock step 2', 13.6, 14.8, 76.3], ['rock step 3', 12.4, 13.6, 78.3],
-  ['rock top', 11.5, 12.4, 80.3], ['tower step 1', 10.6, 11.5, 82.3], ['tower step 2', 9.7, 10.6, 84.3], ['tower step 3', 8.8, 9.7, 86.3],
-  ['the lamp', 7.9, 8.9, 88.3]
+  ['wall top', 23.9, 25.0, 22.3], ['weed 1', 26.2, 27.8, 24.0], ['weed 2', 28.4, 30.2, 25.8], ['weed 3', 30.8, 32.6, 27.6], ['weed rock', 33.3, 36.0, 28.9],
+  ['boom 1', 35.6, 39.6, 30.8], ['landing 1', 40.0, 42.0, 33.0], ['crate on the landing', 40.6, 41.4, 34.0], ['boom 2 cleat 1', 37.79, 38.59, 36.19], ['boom 2 cleat 2', 36.88, 37.68, 36.8], ['boom 2 cleat 3', 35.96, 36.76, 37.41], ['boom 2 cleat 4', 35.04, 35.84, 38.03], ['boom 2 cleat 5', 34.05, 34.85, 38.52], ['landing 2', 30.5, 33.6, 38.6],
+  ['crate on landing 2', 29.0, 30.3, 40.4], ['foot plate', 31.0, 32.4, 42.1], ['boom 3 cleat 1', 33.65, 34.45, 43.41], ['boom 3 cleat 2', 34.88, 35.68, 44.17], ['boom 3 cleat 3', 36.12, 36.92, 44.92], ['boom 3 cleat 4', 37.35, 38.15, 45.67], ['boom 3 cleat 5', 38.59, 39.39, 46.43], ['boom 3 cleat 6', 39.82, 40.62, 47.18],
+  ['landing 3', 41.9, 43.9, 47.8], ['crate on landing 3', 44.3, 45.1, 49.2], ['jib', 33.0, 38.0, 50.2], ['jib end', 27.6, 29.5, 50.0],
+  ['cliff step 1', 25.1, 26.8, 52.0], ['cliff step 2', 23.1, 24.8, 54.0], ['cliff step 3', 21.1, 22.8, 56.0], ['chimney foot', 17.5, 19.5, 57.9],
+  ...[59.4, 60.9, 62.4, 63.9, 65.4, 66.9, 68.4].map((y, k) => ['chimney ledge ' + (k + 1), k % 2 ? 18.6 : 17.6, k % 2 ? 19.3 : 18.3, y + 0.6]),
+  ['chimney top', 19.5, 22, 70.3], ['west wall', 16.0, 17.4, 72.3], ['rock step 1', 14.8, 16.0, 74.3], ['rock step 2', 13.6, 14.8, 76.3], ['rock step 3', 12.4, 13.6, 78.3],
+  ['rock top', 11.2, 12.4, 80.3], ['tower step 1', 10.0, 11.2, 82.3], ['tower step 2', 8.8, 10.0, 84.3], ['tower step 3', 7.6, 8.8, 86.3],
+  ['the lamp', 6.4, 7.6, 88.3]
 ].map(([name, x0, x1, y]) => ({name, x0, x1, y}));
 
+// A bot's hand: each keyframe is a point in the world, given as an offset from where the shoulder was when the
+// keyframe began, reached along an eased path. Between keyframes the hand stays put, like a player's, so a hook
+// planted on something stays planted while the tub moves.
 function play(state, keys, settle = 1.2) {
-  const s = Core.snapshot(state); let k = 0, kt = 0, prev = [s.cx, s.cy];
+  const s = Core.snapshot(state); let k = -1, kt = 0, from = [s.mx, s.my], to = from;
   const tot = keys.reduce((a, b) => a + b[2], 0), steps = Math.round((tot + settle) / Core.DT), ev = [];
   for (let i = 0; i < steps; i++) {
-    while (k < keys.length && kt >= keys[k][2]) { kt -= keys[k][2]; prev = [Math.cos(keys[k][0]) * keys[k][1], Math.sin(keys[k][0]) * keys[k][1]]; k++; }
-    let cx = prev[0], cy = prev[1];
-    if (k < keys.length) { const u = Math.min(1, kt / keys[k][2]), e = u * u * (3 - 2 * u), tx = Math.cos(keys[k][0]) * keys[k][1], ty = Math.sin(keys[k][0]) * keys[k][1]; cx = prev[0] + (tx - prev[0]) * e; cy = prev[1] + (ty - prev[1]) * e; }
-    Core.step(s, {cx, cy}, ev); kt += Core.DT;
+    while (k < keys.length && (k < 0 || kt >= keys[k][2])) {
+      if (k >= 0) kt -= keys[k][2];
+      from = to; k++;
+      if (k < keys.length) { const sx = s.bx, sy = s.by + Core.PDY; to = [sx + Math.cos(keys[k][0]) * keys[k][1], sy + Math.sin(keys[k][0]) * keys[k][1]]; }
+    }
+    let tx = to[0], ty = to[1];
+    if (k < keys.length) { const u = Math.min(1, kt / keys[k][2]), e = u * u * (3 - 2 * u); tx = from[0] + (to[0] - from[0]) * e; ty = from[1] + (to[1] - from[1]) * e; }
+    Core.step(s, {dx: tx - s.mx, dy: ty - s.my}, ev); kt += Core.DT;
     if (i === steps - 30) { s._rx = s.bx; s._ry = s.by; }
   }
   s._ev = ev; return s;
@@ -124,7 +134,7 @@ const suites = {
     ok(Core.section(0.4) === 0 && Core.section(Core.TOP) === Core.SECTIONS.length - 1, 'sections run from the shingle to the lighthouse');
     ok(Core.SECTIONS.every((s, i) => i === 0 || s.y > Core.SECTIONS[i - 1].y), 'sections climb');
     // the summit is the gallery: standing there ends the climb once
-    const s = Core.create({x: 8.4, y: Core.TOP + Core.RB + 0.02, cx: 0.5, cy: 0.8}); const ev = run(s, 1);
+    const s = Core.create({x: 7.0, y: Core.TOP + Core.RB + 0.02, cx: 0.5, cy: 0.8}); const ev = run(s, 1);
     ok(ev.filter(e => e.type === 'summit').length === 1 && s.done, 'the gallery is the summit, and it is announced once');
     // falls are measured from the last perch
     // a tub let go twelve metres over open shingle lands as one fall of about that height
@@ -149,16 +159,16 @@ const suites = {
 };
 
 // cross-entropy search for one leg; deterministic for a seed
-function solve(state, goal, seed) {
+function solve(state, goal, seed, K = 5, iters = 10) {
   let r = seed >>> 0 || 1; const rnd = () => { r ^= r << 13; r >>>= 0; r ^= r >> 17; r ^= r << 5; r >>>= 0; return r / 4294967296; };
   const gauss = () => Math.sqrt(-2 * Math.log(rnd() || 1e-9)) * Math.cos(2 * Math.PI * rnd());
-  const K = 5, mu = [], sd = []; for (let k = 0; k < K; k++) { mu.push([Math.PI / 2, 1.2, 0.4]); sd.push([1.8, 0.5, 0.25]); }
+  const mu = [], sd = []; for (let k = 0; k < K; k++) { mu.push([Math.PI / 2, 1.6, 0.4]); sd.push([1.8, 0.7, 0.25]); }
   const score = s => (s.bx < goal.x0 ? goal.x0 - s.bx : s.bx > goal.x1 ? s.bx - goal.x1 : 0) + Math.max(0, goal.y - s.by) * 1.5 + (settled(s) ? 0 : 0.3);
   let best = null;
-  for (let it = 0; it < 10; it++) {
+  for (let it = 0; it < iters; it++) {
     const cand = [];
     for (let p = 0; p < 64; p++) {
-      const keys = mu.map((m, k) => [m[0] + gauss() * sd[k][0], Math.min(1.75, Math.max(0.3, m[1] + gauss() * sd[k][1])), Math.min(0.9, Math.max(0.06, m[2] + gauss() * sd[k][2]))]);
+      const keys = mu.map((m, k) => [m[0] + gauss() * sd[k][0], Math.min(Core.LMAX + 0.1, Math.max(Core.LMIN, m[1] + gauss() * sd[k][1])), Math.min(0.9, Math.max(0.06, m[2] + gauss() * sd[k][2]))]);
       const s = play(state, keys), sc = score(s); cand.push({keys, sc, s});
       if (!best || sc < best.sc) best = {keys, sc, s};
       if (sc === 0) return best;
@@ -179,6 +189,8 @@ function record() {
   for (let i = sol.length; i < LEGS.length; i++) {
     let b = null; const t0 = Date.now();
     for (let seed = 1; seed <= 8 && !(b && b.sc === 0); seed++) { const r = solve(s, LEGS[i], seed); if (!b || r.sc < b.sc) b = r; }
+    // a hard leg gets a second, longer search with one more keyframe
+    for (let seed = 9; seed <= 16 && !(b && b.sc === 0); seed++) { const r = solve(s, LEGS[i], seed, 6, 14); if (!b || r.sc < b.sc) b = r; }
     console.log((i + 1) + ' ' + LEGS[i].name + ': ' + (b.sc === 0 ? 'climbed' : 'STUCK at ' + b.s.bx.toFixed(2) + ', ' + b.s.by.toFixed(2)) + ' in ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s');
     if (b.sc > 0) process.exit(1);
     sol.push({name: LEGS[i].name, keys: b.keys}); writeFileSync(ROUTE, JSON.stringify(sol)); s = play(s, sol[i].keys);
