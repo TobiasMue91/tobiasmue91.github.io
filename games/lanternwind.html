@@ -1233,7 +1233,9 @@ function broadleafGeometry(seed, nCards) {
 function spruceGeometry(seed, o) {
 	const rnd = mulberry32(seed);
 	const H = 15.5, base = 1.15;
-	const trunks = [trunkGeo(0.4, 0.035, H + 0.5, o.trunkSegs)];
+	// the stem thins fast once inside the crown and ends as a slender leader below the tip: a trunk drawn to the top
+	// stood out of every crown as a dark skewer, seen from above
+	const trunks = [trunkGeo(0.4, 0.11, H * 0.6, o.trunkSegs), trunkGeo(0.11, 0.02, H * 0.3, Math.max(4, o.trunkSegs - 2), new THREE.Vector3(0, H * 0.6, 0))];
 	if (o.flare) trunks.push(trunkGeo(0.62, 0.39, 1.1, o.trunkSegs));
 	const C = { P: [], N: [], UV: [], C: [], L: [], I: [] };
 	const UP = new THREE.Vector3(0, 1, 0);
@@ -1312,7 +1314,7 @@ function spruceGeometry(seed, o) {
 		for (let j = 0; j < 2; j++) { const q = b0 + j * 2; C.I.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
 	}
 	// the trunk is lit below the crown and sits in deep shade inside it
-	return treeFromParts(trunks, C, y => y < base ? 0.7 : lerp(0.45, 0.1, smoothstep(base, base + 4, y)));
+	return treeFromParts(trunks, C, y => y < base ? 0.7 : lerp(lerp(0.45, 0.1, smoothstep(base, base + 4, y)), 0.18, smoothstep(H * 0.5, H * 0.85, y)));   // the thin upper crown lets a little light in to the leader
 }
 
 // Paints the spruce spray into the right half of the foliage atlas: a twig with alternating side shoots, each
@@ -1506,9 +1508,9 @@ function buildRocks(world, scene, count = 1400, mats) {
 	base.computeVertexNormals();
 	const mat = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }), {
 		key: 'rock2',
-		uniforms: { uAlb: { value: mats.alb }, uNrm: { value: mats.nrm } },
+		uniforms: { uAlb: { value: mats.alb }, uNrm: { value: mats.nrm }, uRockMean: { value: 0.16 } },
 		fragHead: /* glsl */`
-			uniform highp sampler2DArray uAlb; uniform highp sampler2DArray uNrm; uniform vec3 uLightCol;
+			uniform highp sampler2DArray uAlb; uniform highp sampler2DArray uNrm; uniform vec3 uLightCol; uniform float uRockMean;
 			vec3 rN; vec3 rA; float rWet;
 			${NOREPEAT_GLSL}`,
 		fragMain: /* glsl */`
@@ -1524,6 +1526,29 @@ function buildRocks(world, scene, count = 1400, mats) {
 				nx.x *= sx.x; ny.x *= sx.y; nz.x *= -sx.z;
 				nx = vec3(nx.xy + gN.zy, abs(nx.z) * gN.x); ny = vec3(ny.xy + gN.xz, abs(ny.z) * gN.y); nz = vec3(nz.xy + gN.xy, abs(nz.z) * gN.z);
 				rN = normalize(nx.zyx * bw.x + ny.xzy * bw.y + nz.xyz * bw.z);
+				// close up, one photo over 6.5 m has nothing left to show: a 1.6 m sampling of the same granite adds grain,
+				// small cracks and pits. It is weighed by its own size on screen (a tile must span 50 px or more to show at
+				// all), so it is there wherever it can be read and never knits from afar; gradients are taken before the branch.
+				{
+					vec3 q = gWPos / 1.6 + 17.3;
+					vec2 ux = q.zy, uy = q.xz, uz = q.xy;
+					vec2 dxx = dFdx(ux), dyx = dFdy(ux), dxy = dFdx(uy), dyy = dFdy(uy), dxz = dFdx(uz), dyz = dFdy(uz);
+					vec3 wd = vec3(max(length(dxx), length(dyx)), max(length(dxy), length(dyy)), max(length(dxz), length(dyz)));   // tiles per pixel
+					wd = (1. - smoothstep(1. / 150., 1. / 50., wd)) * step(0.015, bw);
+					if (dot(wd, bw) > 0.01) {
+						vec3 bx = vec3(0.), by = vec3(0.), bz = vec3(0.); vec2 gx = vec2(0.), gy = vec2(0.), gz = vec2(0.);
+						if (wd.x > 0.) hexSample(uAlb, uNrm, ux, dxx, dyx, l, bx, gx);
+						if (wd.y > 0.) hexSample(uAlb, uNrm, uy, dxy, dyy, l, by, gy);
+						if (wd.z > 0.) hexSample(uAlb, uNrm, uz, dxz, dyz, l, bz, gz);
+						vec3 lw = vec3(dot(bx, vec3(0.299, 0.587, 0.114)), dot(by, vec3(0.299, 0.587, 0.114)), dot(bz, vec3(0.299, 0.587, 0.114)));
+						vec3 k = mix(vec3(1.), clamp(lw / uRockMean, 0.5, 1.6), wd * 0.55);
+						rA *= dot(k, bw);
+						vec3 mx = normalize(vec3(-gx * wd.x, 1.)), my = normalize(vec3(-gy * wd.y, 1.)), mz = normalize(vec3(-gz * wd.z, 1.));   // as sampleNRg builds them
+						mx.x *= sx.x; my.x *= sx.y; mz.x *= -sx.z;
+						mx = vec3(mx.xy + gN.zy, abs(mx.z) * gN.x); my = vec3(my.xy + gN.xz, abs(my.z) * gN.y); mz = vec3(mz.xy + gN.xy, abs(mz.z) * gN.z);
+						rN = normalize(rN + (normalize(mx.zyx * bw.x + my.xzy * bw.y + mz.xyz * bw.z) - gN) * 0.8);
+					}
+				}
 				rWet = smoothstep(1.2, -0.2, gWPos.y);
 				// the tide's reach: a dark, damp band a few metres tall with a ragged upper edge
 				rWet = max(rWet, 0.75 * smoothstep(4.2, 1.2, gWPos.y + (fbm2(gWPos.xz * 0.09 + gWPos.y * 0.05, 3) - 0.5) * 2.2));
@@ -1679,6 +1704,7 @@ uniform sampler2D tScene; uniform sampler2D tDepth; uniform vec2 uRes; uniform f
 uniform mat4 uInvVP; uniform mat4 uTexMat; uniform mat4 uProj;
 uniform vec3 uLightCol; uniform vec3 uMoonDir; uniform float uNight; uniform vec3 uPlayer; uniform vec3 uLantern; uniform float uLanternI;
 uniform float uReflOn; uniform vec2 uWind; uniform float uHuntW; float gHuntMark = 0.;
+uniform float uGlitSheen; uniform float uGlitCap; uniform float uGlitSpark;
 ${NOISE_GLSL}
 ${ATMO_GLSL}
 float linZ(float d){ float z = d * 2. - 1.; return 2. * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
@@ -1782,7 +1808,27 @@ void main(){
 	rough = sqrt(rough * rough + kern);
 	vec3 Hs = normalize(V + uSunDir);
 	float spec = D_GGX(max(dot(N, Hs), 0.), rough) * fres * 0.25;
-	vec3 glint = uSunCol * min(spec, 40.) * sh * smoothstep(-0.02, 0.02, uSunDir.y);
+	// glitter: the lobe says how much of the sea here faces the sun, but a real sun path is points of light on darker
+	// water, not one white sheet. A soft sheen keeps part of it (compressed, so its core never clips flat white) and a
+	// field of points on a world-anchored grid carries the rest. The points are about two pixels across at two blended
+	// scales (nothing pops as the distance changes), foreshortened into short dashes toward the horizon like real
+	// glitter, and each swells and fades over a third of a second: never a one-frame flash.
+	float spark = 0.;
+	{
+		float lv = log2(max(fp * 3.2, 0.05) / 0.05), l0 = floor(lv), fr = lv - l0;
+		vec2 pw = vW.xz - uWind * t * 0.6;
+		for (int k = 0; k < 2; k++) {
+			float lk = l0 + float(k), s = 0.05 * exp2(lk);
+			vec2 q = pw / s, ci = floor(q), cf = fract(q), seed = ci + lk * 37.;
+			float h = hash12(seed);
+			vec2 o = vec2(hash12(seed + 3.1), hash12(seed + 5.7)) * 0.5 + 0.25;
+			float life = max(0., sin(t * (3. + 4. * h) + h * 60.)); life *= life * life;
+			spark += smoothstep(0.32, 0.06, length(cf - o)) * life * (k == 0 ? 1. - fr : fr);
+		}
+	}
+	float farG = smoothstep(250., 2500., dist);   // far off, the points crowd too close to tell apart and merge into a bright band
+	vec3 sheen = uSunCol * spec * mix(uGlitSheen, 0.9, farG); sheen /= 1. + dot(sheen, vec3(0.2126, 0.7152, 0.0722)) / mix(uGlitCap, 10., farG);
+	vec3 glint = (sheen + uSunCol * min(spec, 40.) * spark * uGlitSpark) * sh * smoothstep(-0.02, 0.02, uSunDir.y);
 	if (uHuntW > 0.5 && dot(glint, vec3(0.2126, 0.7152, 0.0722)) > uHuntW * 4.) gHuntMark = 2.;
 	col += glint;
 	vec3 Hm = normalize(V + uMoonDir);
@@ -1861,7 +1907,7 @@ class Ocean {
 			uniforms: {
 				...U, ...this.scene,
 				uRefl: { value: this.clean.texture }, uReflBlur: { value: this.blurB.texture }, uTexMat: { value: this.texMat }, uNormals: { value: normalsTex },
-				uReflOn: this.reflOn, uLanternI: { value: 1 }, uHuntW: { value: 0 },
+				uReflOn: this.reflOn, uLanternI: { value: 1 }, uHuntW: { value: 0 }, uGlitSheen: { value: 0.35 }, uGlitCap: { value: 2.5 }, uGlitSpark: { value: 9 },
 			},
 			vertexShader: WATER_VERT, fragmentShader: WATER_FRAG,
 		});
@@ -2698,28 +2744,53 @@ const stoneMat = () => patchStandard(new THREE.MeshStandardMaterial({ color: 0x9
 		{ float n = fbm2(gWPos.xz * 0.9 + gWPos.y * 0.7, 4);
 		  diffuseColor.rgb *= mix(vec3(0.55, 0.52, 0.48), vec3(1.0, 0.95, 0.86), n) * (0.75 + 0.25 * smoothstep(0.3, 0.9, vNormal.y)); }`,
 });
-// dressed stone: courses of blocks with mortar joints on the walls, irregular flags on top
-const masonMat = () => patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86 }), {
-	key: 'mason',
+// dressed stone: courses of blocks with mortar joints on the walls, irregular flags on top. The courses run along the
+// wall whatever way it faces; round work (plinth, terrace wall, gallery) passes `round` = {x, z, r} (world centre and
+// radius) so the blocks follow the curve with a whole number per course and no seam. The joints are sunk and the
+// arrises rounded through a bump on the shading normal, faded out before a joint gets thinner than a pixel.
+const masonMat = (round) => patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86 }), {
+	key: round ? 'mason_r' : 'mason',
+	uniforms: round ? { uMC: { value: new THREE.Vector2(round.x, round.z) }, uMR: { value: round.r } } : {},
+	fragHead: (round ? 'uniform vec2 uMC; uniform float uMR;\n' : '') + 'float gMasonH = 0.;',
 	mapFragment: /* glsl */`
 		{ vec3 nW = normalize((vec4(vNormal, 0.) * viewMatrix).xyz);
 		  float top = smoothstep(0.6, 0.85, nW.y);
-		  // walls: courses 0.55 m tall, blocks staggered along the wall
-		  float h = abs(nW.x) > abs(nW.z) ? gWPos.z : gWPos.x;   // run along whichever horizontal axis the wall faces across
-		  vec2 q = vec2(h / (1.1 + 0.5 * hash12(vec2(floor(gWPos.y / 0.55), 9.))), gWPos.y / 0.55);   // blocks of uneven length per course
-		  float row = floor(q.y); q.x += row * 0.5 + hash12(vec2(row, 1.)) * 0.3;
-		  float jw = 1. - smoothstep(0.0, 0.07, min(fract(q.y), 1. - fract(q.y))) * smoothstep(0.0, 0.05, min(fract(q.x), 1. - fract(q.x)));
-		  float tw = hash12(vec2(floor(q.x), row));
+		  float fp = max(length(dFdx(gWPos)), length(dFdy(gWPos)));   // metres per pixel
+		  // walls: courses 0.55 m tall, blocks of uneven length per course, staggered
+		  float row = floor(gWPos.y / 0.55);
+		  float bl = 1.1 + 0.5 * hash12(vec2(row, 9.)), run, bn = 1e6;
+		  ${round ? `vec2 dc = gWPos.xz - uMC; bn = max(3., floor(6.2831853 * uMR / bl)); bl = 6.2831853 * uMR / bn; run = (atan(dc.y, dc.x) / 6.2831853 + 0.5) * bn;`
+		          : `vec2 tg = normalize(vec2(-nW.z, nW.x) + 1e-5); run = dot(gWPos.xz, tg) / bl;`}
+		  vec2 q = vec2(run + row * 0.5 + hash12(vec2(row, 1.)) * 0.3, gWPos.y / 0.55);
+		  float bi = mod(floor(q.x), bn);
+		  float ew = min(min(fract(q.x), 1. - fract(q.x)) * bl, min(fract(q.y), 1. - fract(q.y)) * 0.55);   // metres to the nearest joint
+		  float jw = 1. - smoothstep(0.008, 0.02 + fp, ew), hw = smoothstep(0., 0.05, ew);
+		  float tw = hash12(vec2(bi, row)), uw = hash12(vec2(bi, row) + 4.4);
 		  // top: flags from a cell pattern
 		  vec2 f = gWPos.xz * 0.75; vec2 fi = floor(f), ff = fract(f); float d1 = 9., d2 = 9.; vec2 id = vec2(0.);
 		  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 gg = vec2(float(x), float(y)); vec2 o = vec2(hash12(fi + gg), hash12(fi + gg + 7.1)) * 0.8 + 0.1; float d = length(gg + o - ff); if (d < d1) { d2 = d1; d1 = d; id = fi + gg; } else if (d < d2) d2 = d; }
-		  float jt = 1. - smoothstep(0.02, 0.08, d2 - d1);
-		  float tt = hash12(id * 3.1);
-		  float j = mix(jw, jt, top), t = mix(tw, tt, top);
-		  vec3 c = mix(vec3(0.34, 0.32, 0.29), vec3(0.5, 0.47, 0.42), t) * (0.8 + 0.4 * fbm2(gWPos.xz * 1.3 + gWPos.y * 0.9, 3));   // weathered granite, not fresh render
-		  c = mix(c, vec3(0.22, 0.21, 0.2), j * 0.3);
+		  float et = (d2 - d1) * 0.5 / 0.75;
+		  float jt = 1. - smoothstep(0.01, 0.025 + fp, et), ht = smoothstep(0., 0.05, et);
+		  float tt = hash12(id * 3.1), ut = hash12(id * 3.1 + 4.4);
+		  float j = mix(jw, jt, top), t = mix(tw, tt, top), u = mix(uw, ut, top), e = mix(ew, et, top);
+		  // granite, stone by stone: grey, a few warmer with feldspar, a few cooler; weathered in broad patches
+		  vec3 c = mix(vec3(0.26, 0.245, 0.225), vec3(0.47, 0.44, 0.39), t);
+		  c *= u < 0.25 ? vec3(1.07, 0.98, 0.92) : u > 0.8 ? vec3(0.94, 0.97, 1.03) : vec3(1.);
+		  c *= 0.82 + 0.36 * fbm2(gWPos.xz * 1.3 + gWPos.y * 0.9, 3);
+		  float near = 1. - smoothstep(0.006, 0.03, fp);   // grain only where a pixel is smaller than it
+		  vec3 gp = gWPos * 38.;
+		  c *= 1. + near * ((vnoise3(gp) - 0.5) * 0.3 - 0.22 * smoothstep(0.81, 0.86, vnoise3(gp * 1.7 + 3.1)));   // crystals and dark mica
+		  c *= 1. + 0.07 * (1. - smoothstep(0.02, 0.06, e)) * (1. - j);   // worn, paler arrises
+		  c = mix(c, vec3(0.2, 0.19, 0.17), j * 0.6);   // sunk mortar in shade
 		  c = mix(c, c * vec3(0.8, 0.95, 0.65), 0.4 * smoothstep(0.55, 0.85, fbm2(gWPos.xz * 0.35, 3)) * top);   // moss on the flags
+		  c = mix(c, vec3(0.2, 0.25, 0.12), j * 0.35 * smoothstep(0.45, 0.75, fbm2(gWPos.xz * 0.6 + gWPos.y, 3)));   // and in the joints
+		  gMasonH = ((mix(hw, ht, top) - 1.) * 0.03 + smoothstep(0., 0.3, e) * (0.008 + 0.014 * t) + (vnoise3(gWPos * 5.) - 0.5) * 0.008) * (1. - smoothstep(0.01, 0.05, fp));   // sunk joints, faces that bulge a little, stone by stone
 		  diffuseColor.rgb = c; }`,
+	// bump from gMasonH, as three.js does it for bump maps (Mikkelsen's surface gradient from screen derivatives)
+	normalFragment: /* glsl */`
+		{ vec3 sX = dFdx(-vViewPosition), sY = dFdy(-vViewPosition);
+		  vec3 R1 = cross(sY, normal), R2 = cross(normal, sX); float det = dot(sX, R1);
+		  normal = normalize(abs(det) * normal - sign(det) * (dFdx(gMasonH) * R1 + dFdy(gMasonH) * R2)); }`,
 });
 function makeShrine(pos) {
 	const g = new THREE.Group();
@@ -2814,9 +2885,25 @@ function makeLighthouse(pos) {
 			  vec3 c = vec3(0.86, 0.82, 0.74) * (0.96 + 0.04 * hash12(vec2(row, floor(u))));   // painted over: the courses only just show through
 			  // two oxide-red daymark bands, the paint worn thin in places
 			  float bandM = (step(16.2, y) - step(21.6, y)) + (step(27.4, y) - step(32.8, y));
-			  c = mix(c, vec3(0.52, 0.12, 0.085) * (0.94 + 0.1 * vnoise(vec2(ang * 5., y * 0.8))), bandM * (1. - 0.04 * smoothstep(0.62, 0.9, vnoise(vec2(ang * 7., y * 0.9 + 3.)))));
+			  c = mix(c, mix(vec3(0.52, 0.12, 0.085), vec3(0.6, 0.3, 0.24), 0.4 * smoothstep(0.4, 0.8, fbm2(vec2(ang * 4., y * 0.5) + 31., 3))) * (0.94 + 0.1 * vnoise(vec2(ang * 5., y * 0.8))),   // chalky where the sun has faded it
+			     bandM * (1. - 0.04 * smoothstep(0.62, 0.9, vnoise(vec2(ang * 7., y * 0.9 + 3.)))));
 			  c *= 1. - 0.28 * smoothstep(0.35, 0.8, fbm2(vec2(ang * 9., y * 0.25), 4)) * smoothstep(6., 34., y);   // streaks
 			  c = mix(c, vec3(0.4, 0.38, 0.35) * (0.93 + 0.1 * hash12(vec2(row, floor(u)))) * (0.85 + 0.3 * vnoise(vec2(ang * 6., y * 1.5))), smoothstep(5.5, 4.8, y));
+			  // a century of weather: the lime wash laid on by hand and renewed unevenly, flaking to the stone where the
+			  // gales strike and low down, dirt run from every sill, damp green at the foot on the windward side
+			  { c *= 0.93 + 0.12 * fbm2(vec2(ang * 3.2, y * 0.35) + 7.1, 4);
+			    c = mix(c, c * vec3(1.03, 1.0, 0.93), smoothstep(0.45, 0.7, fbm2(vec2(ang * 1.7, y * 0.18) + 2.3, 3)) * 0.6);
+			    float weather = 0.5 + 0.5 * cos(ang + 2.78);   // the side facing into the wind
+			    float fk = fbm2(vec2(ang * 11., y * 1.1) + 13.7, 4) + 0.12 * weather * weather + 0.14 * smoothstep(14., 5., y);
+			    float flake = smoothstep(0.79, 0.8, fk), lip = smoothstep(0.75, 0.79, fk) * (1. - flake);
+			    vec3 stone = vec3(0.6, 0.58, 0.53) * (0.85 + 0.3 * vnoise(vec2(ang * 30., y * 6.)));   // an older, greyer coat and the render under it
+			    c = mix(c * (1. - 0.12 * lip), stone, flake);
+			    float grime = 0.;
+			    for (int k = 0; k < 5; k++) { float wy = 8.5 + float(k) * 5.6, wa = 0.9 + float(k) * 2.4;
+			      float da = abs(mod(ang - wa + 3.14159, 6.28318) - 3.14159), below = wy - 0.85 - y;
+			      grime = max(grime, step(0., below) * exp(-below / 3.5) * smoothstep(0.11, 0.035, da + 0.025 * vnoise(vec2(y * 1.5, float(k) * 7.))) * (0.55 + 0.45 * vnoise(vec2(ang * 90., y * 0.4)))); }
+			    c *= 1. - 0.38 * grime;
+			    c = mix(c, c * vec3(0.7, 0.8, 0.6), smoothstep(10., 5.6, y + 2.5 * fbm2(vec2(ang * 6., y * 0.4), 3)) * (0.3 + 0.55 * weather) * 0.65); }
 			  c *= 1. - joint * 0.16;
 			  // five windows climb the stair in a spiral; three of them are lit, with a warm sill of light on the wall below
 			  float win = 0., lit = 0., frm = 0., gy = 0.;
@@ -2832,28 +2919,96 @@ function makeLighthouse(pos) {
 			  c = mix(c, vec3(0.93, 0.91, 0.86), frm);
 			  diffuseColor.rgb = mix(c, vec3(0.06, 0.07, 0.085) + vec3(0.12, 0.15, 0.19) * gy * gy, win); }`,   // dark panes that catch the sky toward the top   // dark panes that catch a little sky at the top
 	});
-	const sm = masonMat();
+	const sm = masonMat(), smR = masonMat({ x: pos.x, z: pos.z, r: 14 * 1.5 }), smG = masonMat({ x: pos.x, z: pos.z, r: 6.1 * 1.5 });
 	const add = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
-	add(new THREE.CylinderGeometry(13, 15, 3, 32), sm, 0.5);
+	add(new THREE.CylinderGeometry(13, 15, 3, 32), smR, 0.5);
 	const prof = [];
 	for (let i = 0; i <= 12; i++) { const t = i / 12; prof.push(new THREE.Vector2(7.2 - t * 2.6 + Math.sin(t * 3) * 0.2, t * 36)); }
 	add(new THREE.LatheGeometry(prof, 32), white, 2);
 	// gallery with a railing, lantern room on an iron drum, a verdigris dome
-add(new THREE.CylinderGeometry(6.6, 5.6, 0.9, 32), sm, 38.3);
+add(new THREE.CylinderGeometry(6.6, 5.6, 0.9, 32), smG, 38.3);
 for (let i = 0; i < 20; i++) { const a = i / 20 * Math.PI * 2, c = add(new THREE.BoxGeometry(0.55, 1.5, 1.0), sm, Math.cos(a) * 5.15, 37.2, Math.sin(a) * 5.15); c.rotation.y = -a; c.castShadow = false; }   // stone brackets carry the gallery
 const iron = patchStandard(new THREE.MeshStandardMaterial({ color: 0x1d2024, roughness: 0.5, metalness: 0.7 }), { key: 'iron' });
 add(new THREE.TorusGeometry(6.35, 0.07, 6, 48), iron, 39.9).rotation.x = Math.PI / 2;
 add(new THREE.TorusGeometry(6.35, 0.05, 6, 48), iron, 39.25).rotation.x = Math.PI / 2;
 for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; const p = add(new THREE.CylinderGeometry(0.05, 0.05, 1.3, 4), iron, 39.4); p.position.x = Math.cos(a) * 6.35; p.position.z = Math.sin(a) * 6.35; p.castShadow = false; }
 add(new THREE.CylinderGeometry(3.95, 3.95, 1.1, 24), iron, 39.3);
-	const glass = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 5, 16, 1, true), new THREE.ShaderMaterial({
-		uniforms: { ...U, uLit: glassU },
-		vertexShader: 'varying vec3 vN; varying vec2 vUv; void main(){ vN = normal; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
-		fragmentShader: 'uniform float uLit; uniform float uGlow; varying vec3 vN; varying vec2 vUv; void main(){ float mull = step(0.08, fract(vUv.x * 16.)) * step(0.1, fract(vUv.y * 3.)); float core = exp(-pow((vUv.y - 0.5) * 3.2, 2.)); gl_FragColor = vec4(mix(vec3(0.03,0.04,0.05), vec3(2.6,1.85,0.9) * (0.55 + 0.9 * core) * uGlow, uLit) * mix(0.06, 1., mull), 1.); }',   // bright enough to glow, not so bright the bloom swallows the panes and their bars
+	// the lantern room: panes of glass in a diamond lattice of iron astragals. The pane mirrors the sky at a glance and
+	// shows the room behind it face on: a dark room with the lens on its axis, a barrel of glass prisms in eight bullseye
+	// panels. The lens is found by intersecting the view ray with it, so the glazing stays one opaque surface (nothing to
+	// sort, the same in the sea's mirror). Once lit, the prisms burn.
+	const LR = 1.45, LH = 1.75;   // lens radius and half height, in the tower's own metres
+	const glass = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 5, 32, 1, true), new THREE.ShaderMaterial({
+		uniforms: { ...U, uLit: glassU, uLC: { value: new THREE.Vector3(pos.x, pos.y + 41.3 * 1.5, pos.z) } },
+		vertexShader: /* glsl */`varying vec3 vW; varying vec3 vNw; varying vec2 vUv;
+			void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; vNw = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
+		fragmentShader: /* glsl */`
+			uniform float uLit; uniform vec3 uLC; uniform vec3 uLightCol; varying vec3 vW; varying vec3 vNw; varying vec2 vUv;
+			${NOISE_GLSL}
+			${ATMO_GLSL}
+			void main(){
+				vec3 V = normalize(vW - cameraPosition);
+				vec3 N = normalize(vNw); if (dot(N, V) > 0.) N = -N;
+				float lit = smoothstep(0.2, 1., uLit);
+				vec3 skyUp = skyLUT(vec3(0., 1., 0.));
+				// behind the pane: the room, and the lens if the ray meets it
+				vec3 room = vec3(0.012, 0.013, 0.016) + vec3(0.14, 0.09, 0.035) * lit * uGlow;
+				{ const float R = ${(LR * 1.5).toFixed(3)}, H = ${(LH * 1.5).toFixed(3)};
+				  vec2 o = vW.xz - uLC.xz, d = V.xz; float a = dot(d, d), b = dot(o, d), c = dot(o, o) - R * R, disc = b * b - a * c;
+				  if (disc > 0. && a > 1e-6) { float t = (-b - sqrt(disc)) / a; vec3 lp = vW + V * t; float hy = lp.y - uLC.y;
+				    if (t > 0. && abs(hy) < H) {
+				      float ang = atan(lp.z - uLC.z, lp.x - uLC.x), pu = (fract(ang * 1.2732395 + 0.5) - 0.5) * 6.2831853 * R / 8.;
+				      float frame = smoothstep(0.42, 0.47, abs(fract(ang * 1.2732395 + 0.5) - 0.5)) + smoothstep(H - 0.15, H - 0.05, abs(hy));
+				      // bullseye rings in the middle of each panel, horizontal prisms above and below it
+				      float r = length(vec2(pu, hy)), ring = r < 1.2 ? fract(r * 5.5) : fract(abs(hy) * 4.5);
+				      float edge = pow(ring, 5.);
+				      vec3 sky = skyLUT(normalize(vec3(-V.x, 0.25 + 0.7 * ring, -V.z)));
+				      // by day the prisms gather the room's warm dusk and a thin edge of sky each; a faint gold of the brass behind
+				      vec3 lens = mix(vec3(0.05, 0.04, 0.025), sky * 0.5, 0.25 + 0.5 * edge) * (0.5 + 0.5 * edge) + uSunCol * 0.03 * edge * max(dot(-V, uSunDir), 0.);
+				      lens += vec3(2.6, 1.85, 0.9) * (0.35 + 1.6 * edge) * exp(-r * r * 0.25) * lit * uGlow;
+				      room = mix(lens, vec3(0.16, 0.11, 0.05) * (skyUp * 0.5 + uLightCol * 0.06) + vec3(0.6, 0.4, 0.15) * lit * uGlow * 0.3, clamp(frame, 0., 1.));   // brass frames
+				    } } }
+				// the pane: a little salt-dimmed, mirroring the sky and, in a narrow sliver, the sun
+				vec3 Rf = reflect(V, N);
+				float F = 0.04 + 0.96 * pow(1. - max(dot(N, -V), 0.), 5.);
+				// what a pane mirrors below the horizon is the dark sea, not the sky table's ground
+				vec3 env = mix(skyLUT(vec3(Rf.x, max(Rf.y, 0.02), Rf.z)), vec3(0.02, 0.05, 0.065) + skyUp * 0.08, smoothstep(0.0, -0.25, Rf.y));
+				vec3 col = room * 0.85 + env * (F * 0.9 + 0.03) + uSunCol * min(pow(max(dot(Rf, uSunDir), 0.), 600.) * 3., 8.) * F * (1. - lit);
+				// diamond astragals and the top and bottom rails
+				vec2 uv = vec2(vUv.x * 26., vUv.y * 4.);
+				float x1 = abs(fract(uv.x + uv.y) - 0.5), x2 = abs(fract(uv.x - uv.y) - 0.5);
+				float aa = fwidth(uv.x) * 1.2;
+				float bar = max(smoothstep(0.5 - 0.035 - aa, 0.5 - 0.035, max(x1, x2)), smoothstep(0.04 + aa, 0.04, min(vUv.y, 1. - vUv.y)));
+				vec3 iron = vec3(0.72, 0.71, 0.67) * (skyUp * 0.8 + uLightCol * 0.3 * max(dot(N, uLightDir), 0.)) + env * 0.04;   // painted white like the tower: the lattice reads from afar by day, and stands dark against the lit lens by night
+				col = mix(col, iron, bar);
+				gl_FragColor = vec4(applyAtmo(col, cameraPosition, vW), 1.);
+			}`,
 		side: THREE.DoubleSide,
 	}));
 	glass.position.y = 41.3; g.add(glass);
-	const verd = patchStandard(new THREE.MeshStandardMaterial({ color: 0x4f7d6a, roughness: 0.55, metalness: 0.35 }), { key: 'roof' });
+	// copper gone to verdigris: pale blue-green where the rain washes it, streaked downward, still brown copper under the
+	// lip and round the ventilator where the rain does not reach; standing seams run up the cone
+	const verd = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0 }), {
+		key: 'roof2',
+		fragHead: 'float gRoofH = 0., gCu = 0.;',
+		mapFragment: /* glsl */`
+			{ vec2 d = gWPos.xz - vec2(${pos.x.toFixed(1)}, ${pos.z.toFixed(1)}); float ang = atan(d.y, d.x), y = (gWPos.y - ${pos.y.toFixed(1)}) / 1.5;
+			  float seam = abs(fract(ang * 3.8197186) - 0.5);   // 24 seams round the cone
+			  float sm = smoothstep(0.47, 0.495, seam);
+			  float streak = fbm2(vec2(ang * 30., y * 0.6), 4), blot = fbm2(vec2(ang * 4., y * 0.9) + 5.3, 3);
+			  vec3 c = mix(vec3(0.3, 0.5, 0.42), vec3(0.48, 0.66, 0.58), smoothstep(0.3, 0.75, streak));
+			  c = mix(c, c * vec3(0.8, 0.85, 0.82), smoothstep(0.5, 0.7, blot) * 0.6);
+			  gCu = max(smoothstep(44.4, 44.0, y) * 0.8, smoothstep(47.2, 47.9, y)) * smoothstep(0.35, 0.6, fbm2(vec2(ang * 12., y * 3.), 3) + 0.25);
+			  c = mix(c, vec3(0.36, 0.2, 0.12) * (0.8 + 0.4 * streak), gCu);
+			  c = mix(c, c * 0.8, sm * 0.5);
+			  gRoofH = sm * 0.012 * (1. - smoothstep(0.01, 0.04, max(length(dFdx(gWPos)), length(dFdy(gWPos)))));
+			  diffuseColor.rgb = c; }`,
+		normalFragment: /* glsl */`
+			{ vec3 sX = dFdx(-vViewPosition), sY = dFdy(-vViewPosition);
+			  vec3 R1 = cross(sY, normal), R2 = cross(normal, sX); float det = dot(sX, R1);
+			  normal = normalize(abs(det) * normal - sign(det) * (dFdx(gRoofH) * R1 + dFdy(gRoofH) * R2)); }
+			metalnessFactor = gCu * 0.7; roughnessFactor = mix(0.65, 0.4, gCu);`,
+	});
 // the lantern roof: a drip-edge lip just wider than the glazing, then a concave copper cone up to a ventilator ball
 { const rp = [];
   rp.push(new THREE.Vector2(3.55, -0.1), new THREE.Vector2(4.05, 0.0), new THREE.Vector2(4.1, 0.22), new THREE.Vector2(3.9, 0.3));
@@ -2873,15 +3028,32 @@ const cotWall = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, 
 		  c *= 1. - 0.12 * smoothstep(0.55, 0.85, vnoise(vec2((gWPos.x + gWPos.z) * 0.6, gWPos.y * 0.15)));   // rain runs from the eaves
 		  diffuseColor.rgb = c; }`,
 });
-const slate = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 }), {
-	key: 'slate2',
+// slates: small, laid in courses up the slope with each course lapping the one below (a step and a shadow line at
+// every lower edge), each slate its own shade of blue-grey to plum, orange sea lichen and moss in patches
+const eave = new THREE.Vector2(Math.cos(-0.18), -Math.sin(-0.18));   // the cottage's long axis, in the world
+const slate = patchStandard(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62 }), {
+	key: 'slate3',
+	fragHead: 'float gSlH = 0.;',
 	mapFragment: /* glsl */`
-		{ vec2 q = vec2(gWPos.x * 2.2 + gWPos.z * 2.2, gWPos.y * 3.2);   // courses of small slates, staggered
-		  float row = floor(q.y); q.x += row * 0.5;
-		  float edge = smoothstep(0.0, 0.08, fract(q.y)) * (0.75 + 0.25 * smoothstep(0.0, 0.06, abs(fract(q.x) - 0.5) - 0.44 + 0.5));
-		  vec3 c = vec3(0.2, 0.21, 0.24) * (0.8 + 0.4 * hash12(vec2(floor(q.x), row)));
-		  c = mix(c, vec3(0.3, 0.33, 0.22), 0.35 * smoothstep(0.55, 0.85, vnoise(gWPos.xz * 0.5)));   // lichen
-		  diffuseColor.rgb = c * (0.6 + 0.4 * edge); }`,
+		{ float fp = max(length(dFdx(gWPos)), length(dFdy(gWPos)));
+		  vec2 q = vec2(dot(gWPos.xz, vec2(${eave.x.toFixed(4)}, ${eave.y.toFixed(4)})) / 0.42, gWPos.y / 0.16);
+		  float row = floor(q.y); q.x += row * 0.5 + hash12(vec2(row, 2.)) * 0.2;
+		  vec2 id = vec2(floor(q.x), row); float h = hash12(id), h2 = hash12(id + 3.3);
+		  float gap = smoothstep(0.02 + fp * 2., 0.02, abs(fract(q.x) - 0.5) - 0.47 + 0.5);
+		  vec3 c = mix(vec3(0.13, 0.145, 0.165), vec3(0.22, 0.23, 0.25), h);
+		  c *= h2 < 0.15 ? vec3(1.05, 0.97, 1.02) : h2 > 0.8 ? vec3(0.92, 0.96, 1.0) : vec3(1.);   // a few plum, a few colder
+		  c *= 0.9 + 0.2 * vnoise(gWPos.xz * 9. + gWPos.y * 7.);
+		  c *= 1. - 0.45 * smoothstep(0.86, 1., fract(q.y)) - 0.35 * gap;   // the shadow just below each lapping edge, the gaps
+		  float lich = smoothstep(0.6, 0.8, fbm2(gWPos.xz * 0.9 + gWPos.y * 0.5, 4));
+		  c = mix(c, vec3(0.62, 0.36, 0.1), lich * 0.55 * step(0.4, hash12(id + 9.1)));   // orange sea lichen
+		  c = mix(c, vec3(0.2, 0.26, 0.12), 0.4 * smoothstep(0.55, 0.85, vnoise(gWPos.xz * 0.5)));
+		  gSlH = ((1. - fract(q.y)) * smoothstep(0., 0.1, fract(q.y)) * 0.012 - gap * 0.004)   // up the roof, a step onto each course's lower edge, rounded off
+			 * (1. - smoothstep(0.004, 0.02, fp));
+		  diffuseColor.rgb = c; }`,
+	normalFragment: /* glsl */`
+		{ vec3 sX = dFdx(-vViewPosition), sY = dFdy(-vViewPosition);
+		  vec3 R1 = cross(sY, normal), R2 = cross(normal, sX); float det = dot(sX, R1);
+		  normal = normalize(abs(det) * normal - sign(det) * (dFdx(gSlH) * R1 + dFdy(gSlH) * R2)); }`,
 });
 const trim = patchStandard(new THREE.MeshStandardMaterial({ color: 0x2f4b4f, roughness: 0.6 }), { key: 'trim' });   // painted sea-green frames and door, the old keeper's colour
 const cot = new THREE.Group(); cot.position.set(9.3, 2, 1.2); cot.rotation.y = -0.18; g.add(cot);
@@ -2922,7 +3094,7 @@ for (const [x, z, ry] of [[-2.1, CW / 2 + 0.02, 0], [2.3, CW / 2 + 0.02, 0], [-1
 {
 	const prof = [new THREE.Vector2(13.5, -0.05), new THREE.Vector2(14.75, -0.3), new THREE.Vector2(14.6, 0.75), new THREE.Vector2(14.3, 0.92), new THREE.Vector2(13.85, 0.9), new THREE.Vector2(13.6, 0.75), new THREE.Vector2(13.5, -0.05)];
 	const wg = new THREE.LatheGeometry(prof, 72, 0.55, Math.PI * 2 - 0.7);
-	const wm = new THREE.Mesh(wg, sm); wm.position.y = 2; wm.castShadow = wm.receiveShadow = true; g.add(wm);
+	const wm = new THREE.Mesh(wg, smR); wm.position.y = 2; wm.castShadow = wm.receiveShadow = true; g.add(wm);
 }
 	// sweeping beams
 	const beamGeo = new THREE.ConeGeometry(100, 1100, 96, 1, true);
@@ -3787,6 +3959,7 @@ function resetPlayer(start) {
 		const flatF = new THREE.Vector3(-Math.sin(P.yaw), 0, -Math.cos(P.yaw));
 		camState.pos.copy(P.pos).addScaledVector(flatF, -17).add(new THREE.Vector3(0, 6.2, 0));
 		camState.look.copy(P.pos).addScaledVector(fwd, 16);
+		camState.off = null;   // the camera's spring starts again from here
 	}
 }
 
@@ -3981,6 +4154,17 @@ function endCine() {
 	if (!S.cine) return;
 	S.cine = null; $('#hud').classList.remove('cine');
 	camState.pos.copy(camera.position); camState.look.copy(camera.position).add(camera.getWorldDirection(tmp).multiplyScalar(40));
+	camState.off = null;   // glide back from the wide shot on the spring
+}
+// critically damped spring toward a target (after Game Programming Gems 4, 1.10): eases in and out, never overshoots,
+// stable at any frame time. Horizontal and vertical get their own smoothing time.
+function springDamp(cur, target, vel, tH, tV, dt) {
+	for (const [k, st] of [['x', tH], ['y', tV], ['z', tH]]) {
+		const w = 2 / st, x = w * dt, e = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+		const ch = cur[k] - target[k], tmp = (vel[k] + w * ch) * dt;
+		vel[k] = (vel[k] - w * tmp) * e;
+		cur[k] = target[k] + (ch + tmp) * e;
+	}
 }
 function updateCamera(dt, snap) {
 	const q = playerBasis();
@@ -4037,11 +4221,22 @@ function updateCamera(dt, snap) {
 	want.addScaledVector(new THREE.Vector3(-flatF.z, 0, flatF.x), lift * 1.1 * near);   // and swings aside, so the flame stands beside the wing instead of under it
 	// swing in a turn (the glider slides off-centre and the turn reads), and never sit perfectly still
 	const tt = U.uTime.value;
-	want.addScaledVector(new THREE.Vector3(-flatF.z, 0, flatF.x), 3.0 * P.roll * near);   // to the inside of the turn: the camera looks onto the banked sail, never along its edge
+	want.addScaledVector(new THREE.Vector3(-flatF.z, 0, flatF.x), 4.2 * P.roll * near);   // to the inside of the turn: the camera looks onto the banked sail, never along its edge
 	want.add(new THREE.Vector3(Math.sin(tt * 0.37) * 0.35, Math.sin(tt * 0.53 + 1) * 0.25, Math.cos(tt * 0.31) * 0.3).multiplyScalar(REDUCED ? 0 : 1));
 	const look = P.pos.clone().addScaledVector(flatF, 18).add(new THREE.Vector3(0, clamp(fwd.y * 18, -8, 6) - 1.2 + (camera.aspect < 1 ? 7 : 0), 0));
-	if (snap) { camState.pos.copy(want); camState.look.copy(look); }
-	camState.pos.lerp(want, 1 - Math.exp(-dt * 5.5));
+	// the camera rides on a spring, not a rail: what is smoothed is its offset from the glider (so speed does not drag it
+	// back), through a critically damped spring (so it gathers pace and settles instead of snapping to each new aim).
+	// In a turn the offset swings round late: the camera drifts to the outside, the glider slides across the frame and
+	// shows its banked sail; a climb or a dive lifts or drops the glider in the picture before the camera follows.
+	want.addScaledVector(flatF, -P.speed * 0.15 * near);   // a little farther back the faster it flies (as far as the old smoothing used to lag)
+	const offW = want.sub(P.pos);
+	if (snap || !camState.off || camState.lastP.distanceToSquared(P.pos) > 60 * 60) {   // first frame, a teleport or a respawn
+		camState.off = (snap ? offW.clone() : camState.pos.clone().sub(P.pos)); camState.offV = new THREE.Vector3(); camState.lastP = P.pos.clone();
+		if (snap) camState.look.copy(look);
+	}
+	camState.lastP.copy(P.pos);
+	springDamp(camState.off, offW, camState.offV, REDUCED ? 0.25 : 0.42, REDUCED ? 0.25 : 0.55, dt);
+	camState.pos.copy(P.pos).add(camState.off);
 	camState.look.lerp(look, 1 - Math.exp(-dt * 9));
 	const g = Math.max(0, sampleHeight(world.H, camState.pos.x, camState.pos.z));
 	camState.pos.y = Math.max(camState.pos.y, g + 2.5);
@@ -4072,7 +4267,9 @@ function loop(now) {
 	frame(dt);
 }
 function frame(dt, freezeTime, noRender) {
-	if (!freezeTime) U.uTime.value += dt;
+	// photo mode holds the moment: gulls, sea, lanterns and sparks all run on uTime; only the camera moves
+	const still = S.mode === 'photo';
+	if (!freezeTime && !still) U.uTime.value += dt;
 	const t = U.uTime.value;
 	const playing = S.mode === 'play' || S.mode === 'end';
 
@@ -4155,7 +4352,7 @@ function frame(dt, freezeTime, noRender) {
 			if (!b.central) b.obj.userData.ringU.value = Math.min(1, k * 0.8);
 			// a lit fire keeps sending a lantern up now and then: from afar every beacon is a thread of lights, not a puff of sparks
 			if (!b.central && t > (b.nextL ?? 0)) { b.nextL = t + 1.6 + Math.random() * 1.6; lanterns.release(b.target.x, b.target.y - 2, b.target.z, 1, 6, 0, 0.5); }
-			if (Math.random() < 0.15 && b.target.distanceToSquared(camera.position) < 250 * 250) sparks.emit(b.target.x + (Math.random() - 0.5) * 4, b.target.y + 2, b.target.z + (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 3, 6 + Math.random() * 8, (Math.random() - 0.5) * 3, 3 + Math.random() * 2, 0.6, 4.5, 1.5, 0.4, 1.5);
+			if (!still && Math.random() < 0.15 && b.target.distanceToSquared(camera.position) < 250 * 250) sparks.emit(b.target.x + (Math.random() - 0.5) * 4, b.target.y + 2, b.target.z + (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 3, 6 + Math.random() * 8, (Math.random() - 0.5) * 3, 3 + Math.random() * 2, 0.6, 4.5, 1.5, 0.4, 1.5);
 		} else if (b.central && S.lit >= 8) {
 			b.pillar.userData.uA.value = Math.min(1.2, b.pillar.userData.uA.value + dt * 0.4);
 		}
@@ -4330,8 +4527,36 @@ function updateHUD(dt) {
 		const lab = one ? (ahead ? b === focus : b === nearest) : ((b === focus && bestD < 0.35) || b === nearest);
 		e.querySelector('span').textContent = lab ? `${b.name} · ${(b.pos.distanceTo(P.pos) / 1000).toFixed(1)} km` : '';   // always the name: a bare distance tells you nothing
 		e.style.zIndex = lab ? 2 : 1;
-		if (lab) { const x = parseFloat(e.style.left); e.style.left = clamp(x, 95, W - 95) + 'px'; }   // a label never runs off the strip
 		if (lab && open.includes(b)) e.style.opacity = 1;
+	});
+	// two fires in nearly the same direction must not print one flame over the other: markers closer than a flame's
+	// width are spread apart around their shared bearing, as a group, keeping their order
+	const gap = W < 560 ? 17 : 23;
+	const mks = [...c.querySelectorAll('.mk')].filter(e => +e.style.opacity > 0).map(e => ({ e, x: parseFloat(e.style.left) })).sort((p, q) => p.x - q.x);
+	let groups = mks.map(m => ({ items: [m], c: m.x }));
+	const mid = g => clamp(g.c, (g.items.length - 1) * gap / 2 + 8, W - (g.items.length - 1) * gap / 2 - 8);   // a group's centre, kept on the strip
+	for (let it = 0; it < 12; it++) {
+		let merged = false;
+		for (let i = 0; i + 1 < groups.length; i++) {
+			const A = groups[i], B = groups[i + 1];
+			if ((mid(B) - (B.items.length - 1) * gap / 2) - (mid(A) + (A.items.length - 1) * gap / 2) < gap - 0.5) {
+				const n = A.items.length + B.items.length;
+				groups.splice(i, 2, { items: A.items.concat(B.items), c: (A.c * A.items.length + B.c * B.items.length) / n });
+				merged = true; i--;
+			}
+		}
+		if (!merged) break;
+	}
+	for (const g of groups) {
+		const n = g.items.length, c0 = mid(g);
+		g.items.forEach((m, k) => { m.x = c0 + (k - (n - 1) / 2) * gap; m.e.style.left = m.x + 'px'; });
+	}
+	// a cardinal letter under a flame steps back
+	c.querySelectorAll('.card').forEach(e => { const x = parseFloat(e.style.left); if (+e.style.opacity > 0 && mks.some(m => Math.abs(m.x - x) < 11)) e.style.opacity = 0.2; });
+	// a label never runs off the strip: the pill slides in, the flame above it stays on its bearing
+	c.querySelectorAll('.mk').forEach(e => {
+		const sp = e.querySelector('span'), x = parseFloat(e.style.left);
+		sp.style.transform = sp.textContent ? `translateX(${(clamp(x, 95, W - 95) - x).toFixed(1)}px)` : '';
 	});
 }
 
@@ -4340,7 +4565,7 @@ boot().catch(err => {
 	$('#loadmsg').textContent = 'Could not start: ' + (err && err.message || err) + ' — this game needs WebGL2.';
 });
 
-window.__lw = { get ribbons() { return ribbons; }, get wisps() { return wisps; }, get sparks() { return sparks; }, lab(k, lod, x, y, z, sc = 1) { const v = world.veg; const im = new THREE.InstancedMesh(v.geos[k][lod], v.mats, 1); im.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc))); im.setColorAt(0, new THREE.Color(1, 1, 1)); im.layers.set(2); im.frustumCulled = false; scene.add(im); return im; }, frame, THREE, camState, get glider() { return glider; }, get world() { return world; }, get ocean() { return ocean; }, S, P, U, get audio() { return audio; }, get renderer() { return renderer; }, get sky() { return sky; }, get passes() { return { rayPass, bloomPass, finalPass, composer }; }, get scene() { return scene; }, get beacons() { return beacons; }, startGame, setMode, ignite: i => ignite(beacons[i]), step(n, dt, keys = []) { keys.forEach(k => input.keys.add(k)); const log = []; for (let i = 0; i < n; i++) { updatePlayer(dt); if (i % Math.round(1 / dt) === 0) log.push([+(i * dt).toFixed(1), Math.round(P.pos.y), +P.speed.toFixed(1), +P.pitch.toFixed(2), P.alive]); } keys.forEach(k => input.keys.delete(k)); return log; }, setTod(v) { S.tod = S.todTarget = v; sky.update(v, 0, true); scene.environment = sky.envRT.texture; farShadow.update(true); }, teleport(x, y, z, yaw, pitch = 0) { P.pos.set(x, y, z); P.yaw = yaw; P.pitch = pitch; ribbons.forEach(r => r.reset()); playerBasis(); const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)); camState.pos.copy(P.pos).addScaledVector(f, -17).add(new THREE.Vector3(0, 6.2, 0)); camState.look.copy(P.pos).addScaledVector(fwd, 16); }, get camera() { return camera; }, applyQuality, resetPlayer, ground: (x, z) => sampleHeight(world.H, x, z) };
+window.__lw = { get ribbons() { return ribbons; }, get wisps() { return wisps; }, get sparks() { return sparks; }, lab(k, lod, x, y, z, sc = 1) { const v = world.veg; const im = new THREE.InstancedMesh(v.geos[k][lod], v.mats, 1); im.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc))); im.setColorAt(0, new THREE.Color(1, 1, 1)); im.layers.set(2); im.frustumCulled = false; scene.add(im); return im; }, frame, THREE, camState, get glider() { return glider; }, get world() { return world; }, get ocean() { return ocean; }, S, P, U, get audio() { return audio; }, get renderer() { return renderer; }, get sky() { return sky; }, get passes() { return { rayPass, bloomPass, finalPass, composer }; }, get scene() { return scene; }, get beacons() { return beacons; }, startGame, setMode, ignite: i => ignite(beacons[i]), step(n, dt, keys = []) { keys.forEach(k => input.keys.add(k)); const log = []; for (let i = 0; i < n; i++) { updatePlayer(dt); if (i % Math.round(1 / dt) === 0) log.push([+(i * dt).toFixed(1), Math.round(P.pos.y), +P.speed.toFixed(1), +P.pitch.toFixed(2), P.alive]); } keys.forEach(k => input.keys.delete(k)); return log; }, setTod(v) { S.tod = S.todTarget = v; sky.update(v, 0, true); scene.environment = sky.envRT.texture; farShadow.update(true); }, teleport(x, y, z, yaw, pitch = 0) { P.pos.set(x, y, z); P.yaw = yaw; P.pitch = pitch; ribbons.forEach(r => r.reset()); playerBasis(); const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)); camState.pos.copy(P.pos).addScaledVector(f, -17).add(new THREE.Vector3(0, 6.2, 0)); camState.look.copy(P.pos).addScaledVector(fwd, 16); camState.off = null; }, get camera() { return camera; }, applyQuality, resetPlayer, ground: (x, z) => sampleHeight(world.H, x, z) };
 
 </script>
 </body>
