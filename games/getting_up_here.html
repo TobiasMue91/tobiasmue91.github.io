@@ -16,6 +16,7 @@
 html,body{margin:0;height:100%;background:var(--night);overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 body{font-family:'Special Elite','Courier New',monospace;color:var(--ink)}
 canvas{display:block;position:fixed;inset:0;touch-action:none;cursor:crosshair}
+canvas.layer{width:100vw;height:100vh;pointer-events:none}
 body.playing canvas{cursor:none}
 .hud{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .6s ease .25s}
 body.playing .hud{opacity:1}
@@ -947,7 +948,8 @@ var R = (function () {
   }
   // static terrain is painted once into world-anchored tiles and only translated afterwards
   var TILE = 4, tiles = {}, tileOrder = [], tileScale = 0, tilePx = 0;
-  function terrainCached(ctx, polys, t, cs) {
+  function terrainCached(ctx, polys, t, cs, dpr) {
+    dpr = dpr || 1;
     if (Math.abs(cs - tileScale) > 0.5) { tiles = {}; tileOrder = []; tileScale = cs; tilePx = 0; }
     var s = cam.s, k = s / tileScale;
     var vx0 = cam.x - W / s / 2, vx1 = cam.x + W / s / 2, vy0 = cam.y - Hh / s / 2, vy1 = cam.y + Hh / s / 2;
@@ -967,7 +969,10 @@ var R = (function () {
       }
       if (!tc) continue;
       var sx = X(ix * TILE), sy = Y((iy + 1) * TILE), sz = TILE * s;
-      ctx.drawImage(tc, Math.floor(sx), Math.floor(sy), Math.ceil(sz + sx - Math.floor(sx)) + 1, Math.ceil(sz + sy - Math.floor(sy)) + 1);
+      if (Math.abs(s * dpr / tileScale - 1) < 0.0012) { // same scale: a plain copy at whole device pixels, no resampling
+        ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(tc, Math.round(sx * dpr), Math.round(sy * dpr)); ctx.restore();
+      } else ctx.drawImage(tc, Math.floor(sx), Math.floor(sy), Math.ceil(sz + sx - Math.floor(sx)) + 1, Math.ceil(sz + sy - Math.floor(sy)) + 1);
     }
   }
   function weedFringe(ctx, ax, ay, bx, by, seed, t) {
@@ -1025,11 +1030,12 @@ var R = (function () {
   }
   // rain: two world-anchored layers of streaks on a grid, falling in their own space, bent by gusts
   function gust(t) { return 0.5 + 0.35 * Math.sin(t * 0.37) + 0.25 * Math.sin(t * 1.13 + 1.7); }
-  function rain(ctx, t, amt) {
+  function rain(ctx, t, amt, from, to) {
     if (amt <= 0) return;
     var s = cam.s, gw = gust(t);
+    from = from || 0; to = to == null ? 3 : to;
     var layers = [[0.5, 0.42, 8, 0.11, 1, 0.012], [0.85, 0.8, 11, 0.18, 1.1, 0.014], [1.25, 0.8, 17, 0.38, 1.9, 0.024]];
-    for (var L = 0; L < 3; L++) {
+    for (var L = from; L < to; L++) {
       var k = layers[L][0], sp = layers[L][1], fall = t * layers[L][2], al = layers[L][3] * amt, lw = layers[L][4], len = layers[L][5] * layers[L][2];
       var wind = t * (3 + 3 * gw) * (L + 1) * 0.6, slant = 0.18 + gw * 0.25;
       var ox = cam.x * k + wind, oy = cam.y * k - fall;
@@ -1045,8 +1051,11 @@ var R = (function () {
       }
       ctx.stroke();
     }
-    // gust sheets: broad soft bands of heavier rain sweeping through
-    var sh = (t * 0.35) % 2.2 - 0.6;
+  }
+  // gust sheets: broad soft bands of heavier rain sweeping through
+  function gusts(ctx, t, amt) {
+    if (amt <= 0) return;
+    var gw = gust(t), sh = (t * 0.35) % 2.2 - 0.6;
     var sx2 = sh * W, gg = ctx.createLinearGradient(sx2 - W * 0.25, 0, sx2 + W * 0.25, Hh * 0.3);
     gg.addColorStop(0, 'rgba(150,170,180,0)'); gg.addColorStop(0.5, 'rgba(150,170,180,' + 0.07 * amt * gw + ')'); gg.addColorStop(1, 'rgba(150,170,180,0)');
     ctx.fillStyle = gg; ctx.fillRect(0, 0, W, Hh);
@@ -1199,11 +1208,9 @@ var R = (function () {
     var g = ctx.createRadialGradient(lx, ly, s * 0.3, lx, ly, s * 6.5);
     g.addColorStop(0, 'rgba(4,8,12,0)'); g.addColorStop(0.4, 'rgba(4,8,12,' + 0.25 * fl + ')'); g.addColorStop(1, 'rgba(4,8,12,' + 0.62 * fl + ')');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh);
-    ctx.globalCompositeOperation = 'lighter';
     var w = ctx.createRadialGradient(lx, ly, 0, lx, ly, s * 3.2);
-    w.addColorStop(0, 'rgba(255,170,80,' + 0.38 * fl + ')'); w.addColorStop(0.35, 'rgba(255,150,70,' + 0.14 * fl + ')'); w.addColorStop(1, 'rgba(255,140,60,0)');
+    w.addColorStop(0, 'rgba(255,176,90,' + 0.26 * fl + ')'); w.addColorStop(0.35, 'rgba(255,160,80,' + 0.1 * fl + ')'); w.addColorStop(1, 'rgba(255,150,70,0)');
     ctx.fillStyle = w; ctx.fillRect(lx - s * 3.2, ly - s * 3.2, s * 6.4, s * 6.4);
-    ctx.globalCompositeOperation = 'source-over';
   }
   function lantern(ctx, x, y, sw, t) {
     // a storm lantern hung off the tub's handle, swinging on its bail
@@ -1296,7 +1303,7 @@ var R = (function () {
   }
 
 
-  return { stack: stack, setKeeper: setKeeper, terrainCached: terrainCached, setLight: setLight, night: night, lantern: lantern, ghost: ghost, splashes: splashes, gust: gust, C: C, hash: hash, setView: setView, X: X, Y: Y, sky: sky, far: far, clouds: clouds, beam: beam, terrain: terrain, sea: sea, rain: rain, climber: climber, lamp: lamp, alt: alt, mix: mix };
+  return { gusts: gusts, stack: stack, setKeeper: setKeeper, terrainCached: terrainCached, setLight: setLight, night: night, lantern: lantern, ghost: ghost, splashes: splashes, gust: gust, C: C, hash: hash, setView: setView, X: X, Y: Y, sky: sky, far: far, clouds: clouds, beam: beam, terrain: terrain, sea: sea, rain: rain, climber: climber, lamp: lamp, alt: alt, mix: mix };
 })();
 
 // Getting Up Here — the page: input, camera, HUD, the keeper's log, sound, screens, saves.
@@ -1319,11 +1326,32 @@ var R = (function () {
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {} }
 
   // ---- view -----------------------------------------------------------------------------------
+  // the sky and everything far off is painted at a third of the size, the night and the gusts at a quarter:
+  // they are soft anyway, and full-screen fills were what made big screens slow
+  var bg = document.createElement('canvas'), bgx = bg.getContext('2d', { alpha: false }), ov = document.createElement('canvas'), ovx = ov.getContext('2d');
+  // they are their own layers behind and above the main canvas, so the compositor does the scaling, not us
+  bg.className = 'layer'; ov.className = 'layer'; bg.setAttribute('aria-hidden', 'true'); ov.setAttribute('aria-hidden', 'true');
+  cv.parentNode.insertBefore(bg, cv); cv.parentNode.insertBefore(ov, cv.nextSibling);
+  var BGK = 3, OVK = 4, dprCap = 2, dprScale = 1;
   function resize() {
-    DPR = Math.min(2, window.devicePixelRatio || 1);
+    DPR = Math.min(dprCap, window.devicePixelRatio || 1) * dprScale;
     W = innerWidth; H = innerHeight; PHONE = W < 700 || matchMedia('(pointer: coarse)').matches;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    bg.width = Math.ceil(W / BGK); bg.height = Math.ceil(H / BGK);
+    ov.width = Math.ceil(W / OVK); ov.height = Math.ceil(H / OVK);
+  }
+  // when frames come slowly, draw fewer device pixels; when they come easily again, give them back
+  var ftAvg = 1 / 60, ftT = 0, slowT = 0, fastT = 0;
+  function adapt(dt) {
+    if (document.hidden || dt > 0.25 || location.hash === '#fixed') return; // #fixed: keep the resolution, for measuring
+    ftAvg += (dt - ftAvg) * 0.05; ftT += dt;
+    if (ftT < 1) return; ftT = 0;
+    var native = Math.min(dprCap, window.devicePixelRatio || 1);
+    if (ftAvg > 1 / 48) { slowT++; fastT = 0; } else if (ftAvg < 1 / 57) { fastT++; slowT = 0; } else { slowT = fastT = 0; }
+    if (slowT >= 2 && native * dprScale > 1.01) { dprScale = Math.max(1 / native, dprScale - 0.15); slowT = 0; resize(); }
+    else if (slowT >= 3 && native * dprScale <= 1.01 && dprScale > 0.7) { dprScale = Math.max(0.7, dprScale - 0.1); slowT = 0; resize(); }
+    else if (fastT >= 8 && dprScale < 1) { dprScale = Math.min(1, dprScale + 0.1); fastT = 0; resize(); }
   }
   addEventListener('resize', resize); resize();
   function baseScale() { return Math.min(H / 6.4, W / 4.4); }
@@ -1684,7 +1712,7 @@ var R = (function () {
   // ---- frame ----------------------------------------------------------------------------------
   function frame(ts) {
     requestAnimationFrame(frame);
-    var dt = last ? Math.min(0.1, (ts - last) / 1000) : 1 / 60; last = ts; clock += dt;
+    var raw = last ? (ts - last) / 1000 : 1 / 60, dt = Math.min(0.1, raw); last = ts; clock += dt; adapt(raw);
     var ev = [];
     if (mode === 'play' || mode === 'title' || mode === 'summit') {
       acc += dt; var n = 0;
@@ -1736,6 +1764,7 @@ var R = (function () {
     if (mode !== 'summit' && by > cam.y + my) { cam.y = by - my; camV.y = Math.max(camV.y, vy); }
     if (mode !== 'summit') { if (bx < cam.x - mx) cam.x = bx + mx; if (bx > cam.x + mx) cam.x = bx - mx; }
     cam.s += (ts2 - cam.s) * Math.min(1, dt * (mode === 'summit' ? 8 : 3));
+    if (Math.abs(cam.s - ts2) < ts2 * 0.001) cam.s = ts2; // settle exactly, so the terrain tiles copy without resampling
     // the climber's body language: lean into the motion, lantern on a damped pendulum
     var leanT = Math.max(-0.28, Math.min(0.28, -vx * 0.03 + (hx - bx) * 0.05));
     var freefall = Math.max(0, -vy - 7) * (S.hookOn ? 0.2 : 1);
@@ -1761,14 +1790,18 @@ var R = (function () {
     var lanx = bx - face * 0.5 * Math.cos(vis.lean) , lany = by + 0.05 - face * 0.5 * Math.sin(vis.lean);
     var zk = Math.max(0, Math.min(1, (cam.s / baseScale() - 0.3) / 0.6));
     R.setLight({ x: lanx + Math.sin(vis.sw) * 0.25, y: lany - 0.2, k: zk });
-    R.sky(ctx, t); R.far(ctx, t); R.clouds(ctx, t); R.beam(ctx, t, Core.LAMP); R.sea(ctx, t, false);
-    var zq = cam.s / baseScale(), cs = baseScale() * DPR * (zq < 0.35 ? 0.25 : zq < 0.7 ? 0.5 : 1);
+    var zq = cam.s / baseScale();
+    var rainAmt = Math.max(0, 1 - a * 1.1) * (RM ? 0.5 : 1) * Math.max(0, Math.min(1, (zq - 0.25) / 0.4));
+    bgx.setTransform(1 / BGK, 0, 0, 1 / BGK, 0, 0);
+    R.sky(bgx, t); R.far(bgx, t); R.clouds(bgx, t); R.beam(bgx, t, Core.LAMP); R.rain(bgx, t, rainAmt, 0, 1);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    R.sea(ctx, t, false);
+    var cs = baseScale() * DPR * (zq < 0.35 ? 0.25 : zq < 0.7 ? 0.5 : 1);
     var farA = Math.max(0, Math.min(1, (0.5 - zq) / 0.18)); // from far off the course melts into one silhouette
-    if (farA < 1) { if (farA > 0) ctx.globalAlpha = 1 - farA; R.terrainCached(ctx, Core.polys, t, Math.round(cs)); ctx.globalAlpha = 1; if (!farA) R.terrain(ctx, Core.polys, t, true); }
+    if (farA < 1) { if (farA > 0) ctx.globalAlpha = 1 - farA; R.terrainCached(ctx, Core.polys, t, cs, DPR); ctx.globalAlpha = 1; if (!farA) R.terrain(ctx, Core.polys, t, true); }
     R.stack(ctx, farA);
     R.setKeeper(mode === 'summit' ? Math.max(0, Math.min(1, (summitT - 0.8) / 1.4)) : 0);
     R.lamp(ctx, Core.LAMP, t);
-    var rainAmt = Math.max(0, 1 - a * 1.1) * (RM ? 0.5 : 1) * Math.max(0, Math.min(1, (zq - 0.25) / 0.4));
     R.splashes(ctx, t, Core.polys, rainAmt);
     // strain: when something holds the hook back, show where it is being asked to go
     var px = bx, py = by + Core.PDY;
@@ -1780,9 +1813,10 @@ var R = (function () {
     R.climber(ctx, S, { x: bx, y: by, hx: hx, hy: hy, lean: vis.lean, strain: S.strain || 0, squash: vis.squash, flail: vis.flail });
     drawParts(dt || 0);
     R.ghost(ctx, hx, hy, gx, gy, px, py, vis.ghost);
-    R.night(ctx, t);
+    ovx.setTransform(1, 0, 0, 1, 0, 0); ovx.clearRect(0, 0, ov.width, ov.height); ovx.setTransform(1 / OVK, 0, 0, 1 / OVK, 0, 0);
+    R.night(ovx, t); R.gusts(ovx, t, rainAmt);
     R.sea(ctx, t, true);
-    R.rain(ctx, t, rainAmt);
+    R.rain(ctx, t, rainAmt, 1, 3);
   }
   syncTitle(); show(title, true);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { lastH = -1; });
