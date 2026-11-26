@@ -182,6 +182,12 @@ if (suites.includes('adjust')) {
   check(atL({contrast: 60}) > atL({}) && atL({contrast: -60}) < atL({}), 'contrast pushes a light grey further from the middle');
   eq(conv(solid(2, 2, [255, 255, 255, 255]), 2, 2, {cols: 3, invert: true}).lines[0], '', 'invert makes white blank on dark');
   eq(conv(solid(2, 2, [0, 0, 0, 255]), 2, 2, {cols: 3, invert: true}).lines[0], '@@@', 'invert makes black dense on dark');
+  eq(conv(solid(9, 9, [128, 128, 128, 255]), 9, 9, {cols: 4, sharpen: 2}).lines[0], '++++', 'sharpening leaves a flat area alone');
+  const edge = img(40, 20, (x) => (x < 20 ? [100, 100, 100, 255] : [160, 160, 160, 255]));
+  const plain = chars(conv(edge, 40, 20, {cols: 20, auto: false}).lines[0]), sharp = chars(conv(edge, 40, 20, {cols: 20, auto: false, sharpen: 1}).lines[0].padEnd(20));
+  const at2 = (l, i) => A.RAMPS.simple.indexOf(l[i]);
+  check(at2(sharp, 9) <= at2(plain, 9) && at2(sharp, 10) >= at2(plain, 10) && (at2(sharp, 9) < at2(plain, 9) || at2(sharp, 10) > at2(plain, 10)), 'sharpening pulls the two sides of an edge apart', plain.join('') + ' / ' + sharp.join(''));
+  eq([at2(sharp, 0), at2(sharp, 19)], [at2(plain, 0), at2(plain, 19)], 'and leaves the far, flat parts as they were');
   const logo = img(40, 40, (x, y) => (Math.hypot(x - 20, y - 20) < 12 ? [10, 10, 10, 255] : [0, 0, 0, 0]));
   check(conv(logo, 40, 40, {cols: 20}).faint, 'a black logo on transparency is flagged faint on a dark background');
   check(!conv(logo, 40, 40, {cols: 20, invert: true}).faint, 'and not once inverted');
