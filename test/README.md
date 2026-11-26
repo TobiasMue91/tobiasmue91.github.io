@@ -3055,3 +3055,29 @@ or server needed.
 | `widths` | the widths people type (`80 cols`, `72,6`, `1,000`, `9000`) and the errors for the rest |
 | `output` | code-block fences, HTML export escaped and showing exactly the copied text, file names |
 | `settings` | saved settings that trust nothing |
+## Image to Sketch Converter
+
+```sh
+npm run test:sketch                                # or: node test/image_to_sketch_converter.mjs
+node test/image_to_sketch_converter.mjs blur pencil  # named suites only
+```
+
+`image_to_sketch_converter.mjs` runs the page's DOM-free `<script id="core">` (Sketch) in Node; no browser or server
+needed. Expected values come from outside the page: BT.601 luma weights, the W3C Compositing and Blending Level 1
+color-dodge definition, XDoG as Winnemöller, Kyprianidis & Olsen (2012) publish it, and a Gaussian convolved directly
+in the test, which every blur path of the page (exact kernel, four fractional box passes, the shrunk copy for wide
+blurs) must match. The whole pencil pipeline is rebuilt in the test from those pieces and compared pixel by pixel.
+
+| suite | what it checks |
+| --- | --- |
+| `luma` | BT.601 weights; transparent pixels land on white paper, not black |
+| `dodge` | the W3C color-dodge cases, including backdrop 0 against source 1 |
+| `blur` | box variance equals σ², impulse responses and whole images against a true Gaussian, flat images, 0×0 and 1×1 |
+| `pencil` | dodge(gray, gauss(255 − gray))^γ × contours, rebuilt independently; flat areas paper, flat black black; sliders only darken |
+| `render` | every style at odd sizes is opaque and the right size, deterministic, transparent input is paper, garbage options act as defaults, paper colours, progress |
+| `styles` | ink outline inks edges and leaves flats blank, charcoal edges dark, hatching is lines (also bottom-left of tall images), colour pencil keeps hue |
+| `scale` | a full-size render shrunk matches the preview render (settings are fractions of the long edge) |
+| `fit` | download size caps: never upscale, keep the aspect, area limit for iOS |
+| `names` | download file names from camera, non-ASCII, reserved-character and empty names |
+| `saves` | saved settings: broken JSON, clamping, partial saves, round trip |
+| `links` | `?style=` and `#style=` links, old and alternative style names |
