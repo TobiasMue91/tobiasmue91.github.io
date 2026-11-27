@@ -1158,15 +1158,18 @@ function buildTerrain(world, segs) {
 				float n1 = fbm2(gWPos.xz * 0.011, 4), n2 = fbm2(gWPos.xz * 0.07 + 7., 3), n3 = vnoise(gWPos.xz * 0.4);
 				float band = sin(h * 1.9 + n1 * 7. + n2 * 2.) * .5 + .5;
 				// the land: meadows, dry grass and darker copses, in patches the size of fields
-				float fields = fbm2(gWPos.xz * 0.004 + 9., 3), copse = smoothstep(.58, .7, fbm2(gWPos.xz * 0.012 + 4., 4));
+				// (each zone's noise is only worked out where that zone can be: the branches follow height, so they are coherent)
 				vec3 grass = mix(vec3(0.06, 0.1, 0.03), vec3(0.17, 0.17, 0.06), smoothstep(.3, .75, n1 + n3 * .2));
-				grass = mix(grass, vec3(0.26, 0.22, 0.1), smoothstep(.55, .7, fields) * .8);
-				grass = mix(grass, vec3(0.025, 0.05, 0.02), copse * .85);
+				if (h > 1.) {
+					float fields = fbm2(gWPos.xz * 0.004 + 9., 3), copse = smoothstep(.58, .7, fbm2(gWPos.xz * 0.012 + 4., 4));
+					grass = mix(grass, vec3(0.26, 0.22, 0.1), smoothstep(.55, .7, fields) * .8);
+					grass = mix(grass, vec3(0.025, 0.05, 0.02), copse * .85);
+				}
 				vec3 sand = mix(vec3(0.36, 0.29, 0.19), vec3(0.46, 0.38, 0.26), n2);
 				vec3 shelf = mix(vec3(0.27, 0.24, 0.18), vec3(0.36, 0.31, 0.23), n2);
 				vec3 silt = mix(vec3(0.18, 0.16, 0.14), vec3(0.25, 0.22, 0.18), n2);
 				vec3 ooze = mix(vec3(0.12, 0.12, 0.11), vec3(0.19, 0.18, 0.16), n1);
-				ooze = mix(ooze, vec3(0.2, 0.12, 0.085) * (0.8 + 0.4 * n2), smoothstep(.42, .68, fbm2(gWPos.xz * 0.005 + 21., 3)) * .8);   // red abyssal clay in drifts
+				if (h < -55.) ooze = mix(ooze, vec3(0.2, 0.12, 0.085) * (0.8 + 0.4 * n2), smoothstep(.42, .68, fbm2(gWPos.xz * 0.005 + 21., 3)) * .8);   // red abyssal clay in drifts
 				vec3 basalt = vec3(0.065, 0.065, 0.07) * (0.8 + 0.4 * n3);
 				vec3 strata = mix(vec3(0.3, 0.24, 0.18), vec3(0.13, 0.12, 0.11), smoothstep(.35, .65, band)) * (0.85 + 0.3 * n3);
 				vec3 rock = mix(vec3(0.2, 0.2, 0.19), vec3(0.34, 0.33, 0.3), n3) * (0.85 + 0.3 * band);
@@ -1185,7 +1188,7 @@ function buildTerrain(world, segs) {
 				float sp = smoothstep(.9, .93, vnoise(gWPos.xz * 3.1 + 3.)) * smoothstep(-1., -3., h) * smoothstep(-34., -20., h) * (1. - rockW);
 				alb = mix(alb, vec3(.78, .74, .66), sp * .55);
 				// a green film where the sea was shallow and lit
-				float algae = smoothstep(-2., -6., h) * smoothstep(-30., -16., h) * smoothstep(.45, .7, fbm2(gWPos.xz * 0.03 + 2., 3));
+				float algae = 0.; if (h < -2. && h > -30.) algae = smoothstep(-2., -6., h) * smoothstep(-30., -16., h) * smoothstep(.45, .7, fbm2(gWPos.xz * 0.03 + 2., 3));
 				alb = mix(alb, alb * vec3(0.7, 0.95, 0.55), algae * .6);
 				// the drain: white enamel, a chrome ring
 				float dp = distance(gWPos.xz, uPlug.xy);
@@ -1197,7 +1200,7 @@ function buildTerrain(world, segs) {
 				float age = expAge(h);
 				float hollow = smoothstep(0.45, 1.4, hs.g - h) * (inMap ? 1. : 0.);
 				float pud = 0.;   // standing puddles were tried: the foot of every ledge read as one, a white ring in the sun
-				float salt = smoothstep(uDry * 1.2, uDry * 5., age) * smoothstep(.5, .78, fbm2(gWPos.xz * 0.07, 3) + hollow * .5) * step(h, -1.5) * (1. - rockW) * (1. - gPorc) * (1. - gUnder);
+				float salt = 0.; if (age > uDry * 1.2 && h < -1.5) salt = smoothstep(uDry * 1.2, uDry * 5., age) * smoothstep(.5, .78, fbm2(gWPos.xz * 0.07, 3) + hollow * .5) * (1. - rockW) * (1. - gPorc) * (1. - gUnder);
 				alb = mix(alb, vec3(0.62, 0.61, 0.58), salt * .55);
 				gWet = wet;
 				alb *= mix(1., 0.5, wet * (1. - gPorc * .85));
@@ -1629,6 +1632,29 @@ function plankTexture(seed = 1, base = [118, 84, 52]) {
 function stdMat(o, key, extra) { return patchStandard(new THREE.MeshStandardMaterial(o), Object.assign({ key }, WET_PROP, extra || {})); }
 function shadowAll(g, cast = true) { g.traverse(o => { if (o.isMesh) { o.castShadow = cast; o.receiveShadow = true; } }); return g; }
 
+
+// Many-part props are built from boxes and tubes; drawn as they are, a fire engine is forty draw calls in every pass.
+// Once built, the parts that share a material are baked into one mesh.
+function mergeByMaterial(group) {
+	group.updateMatrixWorld(true);
+	const inv = new THREE.Matrix4().copy(group.matrixWorld).invert(), byMat = new Map(), keep = [];
+	group.traverse(o => {
+		if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || o.userData.keep) return;
+		const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+		for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+		if (!g.attributes.normal) g.computeVertexNormals();
+		if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+		g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+		if (!byMat.has(o.material)) byMat.set(o.material, { geos: [], cast: false });
+		const e = byMat.get(o.material); e.geos.push(g); e.cast = e.cast || o.castShadow;
+		keep.push(o);
+	});
+	for (const o of keep) o.parent.remove(o);
+	// whatever is left (instanced coins, groups now empty) stays; the merged meshes join it
+	for (const [mat, e] of byMat) { const m = new THREE.Mesh(mergeGeometries(e.geos), mat); m.castShadow = e.cast; m.receiveShadow = true; group.add(m); }
+	return group;
+}
+
 // ── a flip-flop, left foot ──
 function makeFlipflop() {
 	const g = new THREE.Group();
@@ -1725,8 +1751,9 @@ function makeChest() {
 	}
 	g.add(coins);
 	for (let i = 0; i < 7; i++) { const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.55), new THREE.MeshStandardMaterial({ color: [0xd2223a, 0x22b05a, 0x3a5ad8][i % 3], roughness: 0.1, metalness: 0.1, emissive: [0x400008, 0x003a10, 0x0a1040][i % 3] })); gem.position.set((rnd() - .5) * 6, Hh + 0.6 + rnd() * 1.2, (rnd() - .5) * 3); gem.rotation.set(rnd() * 3, rnd() * 3, 0); g.add(gem); }
+	shadowAll(g); mergeByMaterial(g);
 	g.userData = { top: 6.2, r: 9 };
-	return shadowAll(g);
+	return g;
 }
 
 // ── a shipwreck, listing, masts snapped ──
@@ -1795,6 +1822,7 @@ function makeWreck() {
 	}
 	// a hole in the planking
 	const hole = new THREE.Mesh(new THREE.CircleGeometry(2.4, 18), new THREE.MeshBasicMaterial({ color: 0x050505 })); hole.scale.set(1.5, 0.8, 1); hole.position.set(L * 0.18, -4.2, B / 2 * 0.86); hole.rotation.y = 0.15; hole.rotation.x = -0.25; g.add(hole);
+	shadowAll(g); mergeByMaterial(g);
 	g.rotation.x = 0.3;   // listing to one side
 	const outer = new THREE.Group(); outer.add(g); g.position.y = 8.6;
 	outer.userData = { top: 9.5, r: 36 };
@@ -1895,8 +1923,9 @@ function makeColumn() {
 	const ech = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 2.6, 1.6, 40), mat); cap.add(ech);
 	const aba = new THREE.Mesh(new THREE.BoxGeometry(8, 1.1, 8), mat); aba.position.y = 1.3; cap.add(aba);
 	cap.rotation.set(0.5, 0.4, 2.3); cap.position.set(3, 2.6, -8); g.add(cap);
+	shadowAll(g); mergeByMaterial(g);
 	g.userData = { top: 20.5, r: 14 };
-	return shadowAll(g);
+	return g;
 }
 
 // ── the plug, with a ring, a chain and the drain it sits in ──
@@ -1942,7 +1971,7 @@ function makeChain(world, from, az, n = 120) {
 
 // ── rocks: noisy, flattened icosahedra ──
 function rockGeometry(seed) {
-	let g = new THREE.IcosahedronGeometry(1, 3);
+	let g = new THREE.IcosahedronGeometry(1, 2);   // detail 3 cost four times the triangles, three passes a frame, for nothing seen from this far
 	g = mergeVertices(g);
 	const p = g.attributes.position, s = seed * 13.1;
 	for (let i = 0; i < p.count; i++) {
@@ -2106,8 +2135,9 @@ function makePier(world, az) {
 	const lampP = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 5, 8), new THREE.MeshStandardMaterial({ color: 0x2b2f33, metalness: 0.6, roughness: 0.4 })); lampP.position.set(-W / 2 + 0.4, deckY + 2.5, -L + 2); g.add(lampP);
 	const lampH = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff0d0, emissive: 0xffd9a0, emissiveIntensity: 0.6 })); lampH.position.set(-W / 2 + 0.4, deckY + 5.1, -L + 2); g.add(lampH);
 	const bench = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 4), wood); bench.position.set(-W / 2 + 1.2, deckY + 0.8, -L * 0.6); g.add(bench);
+	shadowAll(g); mergeByMaterial(g);
 	g.position.set(ox, 0, oz); g.rotation.y = Math.atan2(c.dx, c.dz);
-	return shadowAll(g);
+	return g;
 }
 function makeLighthouse(world, az) {
 	const c = coastPoint(world, az, 4), g = new THREE.Group();
@@ -2128,9 +2158,10 @@ function makeLighthouse(world, az) {
 	const rg = new THREE.ExtrudeGeometry(rs, { depth: 11, bevelEnabled: false }); rg.rotateY(Math.PI / 2); rg.translate(-5.5, 0, 0);
 	const roofH = new THREE.Mesh(rg, stdMat({ color: 0x5a3a32, roughness: 0.8 }, 'slate')); roofH.position.set(9, 5, 2); g.add(roofH);
 	const door = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.6), new THREE.MeshStandardMaterial({ color: 0x2f4a5c })); door.position.set(9, 1.3, 5.52); g.add(door);
+	shadowAll(g); mergeByMaterial(g);
 	g.position.set(x, gy - 0.3, z); g.rotation.y = Math.atan2(-c.dx, -c.dz);
 	world.keepOut.push([x, z, 34]);
-	return shadowAll(g);
+	return g;
 }
 
 
@@ -2175,9 +2206,9 @@ function makeFireEngine() {
 	const mon = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 2.2, 10), chrome); mon.rotation.x = -0.9; mon.position.set(0, 5.4, -5.5); g.add(mon);
 	const wg = new THREE.CylinderGeometry(0.95, 0.95, 0.75, 16); wg.rotateZ(Math.PI / 2);
 	for (const z of [4.4, -2.6, -4.6]) for (const sx of [-1, 1]) { const w = new THREE.Mesh(wg, dark); w.position.set(sx * 2.0, 0.95, z); g.add(w); }
-	g.scale.setScalar(1.5);
 	g.userData.cannon = new THREE.Vector3(0, 6.2, -6.4);
-	return shadowAll(g);
+	shadowAll(g); mergeByMaterial(g); g.scale.setScalar(1.5);
+	return g;
 }
 function makeStation() {
 	const g = new THREE.Group();
@@ -2188,7 +2219,7 @@ function makeStation() {
 	const ch = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 9, 12), brick); ch.position.set(5, 13.5, -3); g.add(ch);
 	const door = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 5), new THREE.MeshStandardMaterial({ color: 0x2b4256 })); door.position.set(-3, 2.5, 6.02); g.add(door);
 	for (const x of [2.5, 6]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), new THREE.MeshStandardMaterial({ color: 0xd8c27a, emissive: 0x403010 })); w.position.set(x, 5.5, 6.02); g.add(w); }
-	return shadowAll(g);
+	return mergeByMaterial(shadowAll(g));
 }
 function strawGeometry() {
 	const a = new THREE.CylinderGeometry(0.32, 0.32, 7, 8, 6, true); a.translate(0, 3.5, 0);
@@ -2212,8 +2243,8 @@ function coniferGeometry() {
 }
 function broadleafGeometry(seed) {
 	const rnd = mulberry32(seed), parts = [colorize(plain(new THREE.CylinderGeometry(0.4, 0.65, 4.5, 6).translate(0, 2.25, 0)), 0x5a4330)];
-	for (let k = 0; k < 4; k++) {
-		const r = 2.2 + rnd() * 1.4, b = plain(new THREE.IcosahedronGeometry(r, 1));
+	for (let k = 0; k < 3; k++) {
+		const r = 2.5 + rnd() * 1.5, b = plain(new THREE.IcosahedronGeometry(r, 1));
 		const p = b.attributes.position;
 		for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), d = 1 + (vnoise(x * 0.9 + seed + k, z * 0.9 + y) - 0.5) * 0.35; p.setXYZ(i, x * d, y * d * 0.85, z * d); }
 		b.computeVertexNormals();
@@ -3083,7 +3114,7 @@ function applyQuality(q, first) {
 	ocean.setQuality(Q.refl, Q.msaa, Q.mirror);
 	bloomPass.strength = 0.32 * Q.bloom;
 	rocks.forEach(r => r.count = Math.round(r.userData.full * Q.rocks));
-	trees.forEach(t => t.count = Math.round(t.userData.full * (q === 'low' ? 0.4 : q === 'medium' ? 0.75 : 1)));
+	trees.forEach(t => { t.count = Math.round(t.userData.full * (q === 'low' ? 0.4 : q === 'medium' ? 0.75 : 1)); t.castShadow = q === 'high' || q === 'ultra'; t.layers.set(q === 'ultra' ? 0 : 2); });   // on all but Ultra the woods stay out of the sea's mirror
 	weed.geometry.instanceCount = Math.round(weed.userData.full * Q.weed);
 	fishes.mesh.count = Math.min(fishes.n, Q.fish);
 	if (!first) onResize();
@@ -3853,7 +3884,7 @@ boot().catch(err => { console.error(err); $('#loadmsg').textContent = 'Could not
 
 // test hooks: the harness can step the world and look at it
 window.__bots = {
-	get S() { return S; }, get V() { return V; }, get scene() { return scene; }, cam, finds, SEA: SEA_, U,
+	get S() { return S; }, get V() { return V; }, get scene() { return scene; }, get renderer() { return renderer; }, cam, finds, SEA: SEA_, U,
 	frame(dt = 1 / 30, n = 1, noRender = false) { for (let i = 0; i < n; i++) frame(dt, noRender || i < n - 1); },
 	setP(p) { S.removed = Math.max(S.removed, SEA_.removedAt(p)); SEA_.step(S, 0.001); },
 	// let the game run for a while without drawing it (the water sinks, things dry)
