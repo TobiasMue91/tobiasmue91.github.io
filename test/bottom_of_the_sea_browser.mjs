@@ -103,7 +103,7 @@ if (run('german')) {
     });
     ok(r.h2 === 'Einstellungen' && r.shop === 'Ausrüstung', 'menu and shop are German', `${r.h2} / ${r.shop}`);
     ok(/unter dem Meeresspiegel/.test(r.level) && /\d\.\d{3}/.test(r.level), 'the depth reads in German with German digit grouping', r.level);
-    const english = [' per scoop', 'needs bigger storage', 'in all ·', 'the next adds', 'Helpers turn up', 'Your scoop', 'below sea level', 'Back to scooping', 'Scoops by hand', 'Supplies'];
+    const english = [' per scoop', 'needs bigger storage', 'in all ·', 'the next adds', 'Helpers turn up', 'Your scoop', 'below sea level', 'Back to scooping', 'Scoops by hand', 'Supplies', 'Coastal authorities', 'A crab has noticed'];
     const left = english.filter(w => r.text.includes(w));
     ok(!left.length, 'no English phrase is left on the screen', left.join(', '));
     ok(!errs.length, 'no error in German', errs.slice(0, 3).join(' | '));
