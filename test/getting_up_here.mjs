@@ -101,6 +101,12 @@ const suites = {
     const pole = Core.create(); run(pole, 1, () => ({cx: 0.3, cy: -0.3})); run(pole, 0.6, t => ({cx: 0.3, cy: -0.3 - 2 * t})); run(pole, 1, () => ({cx: 0.3, cy: -1.5}));
     ok(pole.by > 1.0 && speed(pole) < 0.3, 'the hook planted below holds the tub up: ' + pole.by.toFixed(2));
     // the hook can hold his weight from an edge: hang from the first crate's far corner
+    // and he stays up when the hand stops: a planted push must not drain away (it once did, in about a second)
+    const hold = Core.create(); run(hold, 1, () => ({cx: 0.5, cy: -0.85}));
+    const hx0 = hold.mx, hy0 = hold.my, hn = Math.round(1 / Core.DT);
+    for (let i = 0; i < hn; i++) Core.step(hold, {dx: hx0 - hold.mx, dy: (hy0 - 0.9 * (i + 1) / hn) - hold.my}, []);
+    const up = hold.by; run(hold, 3, () => ({dx: 0, dy: 0}));
+    ok(up > 1.8 && Math.abs(hold.by - up) < 0.25, 'pushed up on a planted hook, he stays up with the hand still: ' + up.toFixed(2) + ' -> ' + hold.by.toFixed(2));
     // the sea floats him
     const sea = Core.create({x: -9, y: 1}); run(sea, 6);
     ok(sea.by > Core.SEA - 0.5 && sea.by < Core.SEA + 0.4, 'the tub floats at the water line: ' + sea.by.toFixed(2));
