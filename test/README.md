@@ -112,6 +112,28 @@ purpose, rides both edges to pan and reloads when dry.
 Everything cosmetic on the page (feathers, dust, shells, shake) draws on `Math.random`, never on
 the seeded stream, which is what lets a repaint leave the trace alone.
 
+## Flyway (Duck Hunt)
+
+```sh
+npm run test:flyway                      # or: node test/duck_hunt.mjs
+node test/duck_hunt.mjs shot flight      # named suites only
+node test/duck_hunt.mjs --page=old.html  # run against another copy of the page
+VERBOSE=1 node test/duck_hunt.mjs pacing # also print each bot's reach and its escapes by cause
+```
+
+Runs the DOM-free `<script id="core">` block of `games/duck_hunt.html` in Node's `vm`: no DOM,
+no browser, no server. The core is the whole hunt in plate units and game time; the page only
+paints it, so this is where a change to one corner shows up in another.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | quota, speed and flush time only climb (with floors and ceilings), species arrive in order, the goose closes every third stop, the stop plan's shape and its banded birds, and that a daily seed is the date |
+| `shot` | the pattern radius to the unit, doubles at twice the price, the clean-flush bonus, dry fire, an empty gun sending the flush off, the goose's three hits (never in the tally), and the fourth-shell and calm-air perks |
+| `flight` | over whole bot seasons on a wide and a tall plate: every flush ends, no bird leaves the plate sideways or flies into the treeline, every fall lands in the water; the same seed and shots replay the same season; a miss does not change today's birds; a resize keeps birds in place |
+| `pacing` | three deterministic bots (sharp, average, new) must each clear a band of stops, and the phone and desktop plates must play alike |
+
+If the balance is changed on purpose, move the bands in `pacing` with it and say why.
+
 ## Minesweeper
 
 ```sh
@@ -1471,6 +1493,7 @@ npm run test:cypress        # Cypress e2e — its baseUrl is :8080, so point one
 npm run test:converter      # Everything Converter suite (needs a server on :8099)
 npm run test:pingu          # Pingu Throw suite (plain Node, no server or browser)
 npm run test:moorhuhn       # Moor Chicken suite (plain Node, no server or browser)
+npm run test:flyway         # Flyway (Duck Hunt) suite (plain Node, no server or browser)
 npm run test:minesweeper    # Minesweeper suite (plain Node, no server or browser)
 npm run test:connect4       # Connect Four AI suite (plain Node, no server or browser)
 npm run test:readingtime    # Reading Time Estimator suite (plain Node, no server or browser)
@@ -1594,6 +1617,9 @@ and checks every distance against a table recorded before the page was remade, s
 work there cannot quietly change the throw. Run it after any change to that page.
 `test/moorhuhn.mjs` does the same for `games/moorhuhn.html`: a deterministic bot plays whole
 seeded hunts and the second-by-second trace must match its table.
+`test/duck_hunt.mjs` runs the DOM-free `<script id="core">` block of `games/duck_hunt.html` (Flyway):
+the shot, the stop plan, the goose and the perks, bounds on every bird's flight, and bots of three
+skills whose reach must stay in its band and agree between a phone and a desktop plate.
 `test/minesweeper.mjs` runs the DOM-free `<script id="core">` block of `games/minesweeper.html`
 and checks that the no-guess solver is sound and that every board it passes really can be
 cleared without a guess — the one promise on that page nobody can see from the page.
