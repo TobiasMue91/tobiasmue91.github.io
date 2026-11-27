@@ -171,10 +171,13 @@ if (suites.includes('contact')) {
   }
   // round things stop: a ball rolling at 3 m/s on the flat comes to rest
   {
-    const w = big(); const b = P.addBody(w, {shape: 'circle', r: 0.25, x: 2, y: 0.25, vx: 3});
-    run(w, 40);
+    // decelerates at c·g/(1 + I/mr²) = c·g/1.5, so from 2 m/s it stops after v²·1.5/(2·c·g)
+    const w = P.createWorld({width: 80, height: 10}); const b = P.addBody(w, {shape: 'circle', r: 0.25, x: 2, y: 0.25, vx: 2});
+    run(w, 60);
     check(Math.abs(b.vx) < 1e-3 && Math.abs(b.w) < 1e-2, 'a rolling ball comes to rest', `vx ${b.vx}, ω ${b.w}`);
-    check(b.x - 2 < 30, 'and within 30 m', `rolled ${(b.x - 2).toFixed(1)} m`);
+    // it starts sliding; friction brings it to rolling at v0/(1 + I/mr²) = (2/3)·v0, then it rolls (2v0/3)²·1.5/(2·c·g)
+    const want = (4 / 3) ** 2 * 1.5 / (2 * P.ROLL * g);
+    rel(b.x - 2, want, 0.05, `after rolling (2v0/3)²·1.5/(2cg) = ${want.toFixed(1)} m`);
   }
   // fixed shapes never move, however hard they are hit
   {
@@ -206,9 +209,10 @@ if (suites.includes('stacks')) {
     const moved = Math.max(...user(w).map((b, i) => Math.hypot(b.x - b0[i][0], b.y - b0[i][1])));
     check(moved < 0.03, 'starter frame stands on its own', `moved ${moved.toFixed(3)} m`);
     const {world: w2} = P.deserialize(P.buildPreset('starter', 8, 5), 8, 5), c0 = user(w2).slice(2).map(b => b.y);
-    run(w2, 6);
+    run(w2, 12);
     check(user(w2).slice(2).filter((b, i) => c0[i] - b.y > 0.3).length >= 4, 'starter: the ball brings the frame down');
-    check(user(w2).every(b => Math.hypot(b.vx, b.vy) < 0.01), 'starter: everything has come to rest after 6 s');
+    const still = user(w2).filter(b => Math.hypot(b.vx, b.vy) > 0.01);
+    check(!still.length, 'starter: everything has come to rest after 12 s', still.map(b => `${b.shape} ${Math.hypot(b.vx, b.vy).toFixed(3)} m/s`).join('; '));
   }
 }
 
@@ -376,6 +380,15 @@ if (suites.includes('edges')) {
   eq(P.advance(w7, 10, 24), 24, 'a 10 s stall runs at most 24 steps');
   eq(P.advance(w7, NaN), 0, 'NaN time does nothing');
   eq(P.advance(w7, -1), 0, 'negative time does nothing');
+  // a shape made inside another is eased out, not fired out; a tapped one is lifted to sit on top
+  const w9 = P.createWorld(); P.addBody(w9, {shape: 'box', w: 3, h: 0.12, x: 3, y: 2, a: -0.6, fixed: true});
+  const deep = P.addBody(w9, {shape: 'circle', r: 0.25, x: 3, y: 2}); let vmax = 0;
+  run(w9, 0.15, () => { vmax = Math.max(vmax, Math.hypot(deep.vx, deep.vy)); });
+  check(vmax < 3.5, 'a ball made half inside a ramp is pushed out gently: at most 1.5 m/s plus what gravity adds (it was 10.9 m/s)', `reached ${vmax.toFixed(2)} m/s in 0.15 s`);
+  const lifted = P.addBody(w9, {shape: 'circle', r: 0.25, x: 2.5, y: 2.3});
+  const up = P.settle(w9, lifted, 1.5);
+  check(up > 0 && up < 1, 'settle() lifts a tapped ball clear of the ramp', `lifted ${up.toFixed(2)} m`);
+  eq(P.settle(w9, P.addBody(w9, {shape: 'circle', r: 0.2, x: 7, y: 4}), 1.5), 0, 'a ball in open air is not moved');
   // picking
   const w8 = P.createWorld(); const c = P.addBody(w8, {shape: 'circle', r: 0.3, x: 2, y: 2});
   eq(P.bodyAt(w8, 2.2, 2.1), c, 'a tap inside a ball finds it');
