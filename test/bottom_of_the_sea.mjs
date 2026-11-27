@@ -10,7 +10,7 @@
 //   node test/bottom_of_the_sea.mjs rules pacing    # named suites only
 //   node test/bottom_of_the_sea.mjs --page=old.html # run against another copy of the page
 //
-// Suites: rules, effects, save, idle, pacing.
+// Suites: rules, effects, save, idle, pacing (which also counts the records each bot earns).
 
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -177,6 +177,8 @@ if (suites.includes('pacing')) {
     // the gauge never stands still for long: at most three minutes without a percent of progress
     let worst = 0; for (let i = 3; i < lv.length; i++) { let j = i; while (j > 0 && lv[i][1] - lv[j - 1][1] < 0.01) j--; worst = Math.max(worst, lv[i][0] - lv[j][0]); }
     check(worst <= 3, `${style}: the water never stays put for more than three minutes`, `${worst} min`);
+    const recs = Object.keys(r.S.rec || {});
+    check(recs.length >= 6 && recs.length < CFG.records.length, `${style}: earns some of the records by playing, not all of them`, `${recs.length}: ${recs.join(', ')}`);
     const hand = r.S.scoopedL / r.S.removed;
     if (style !== 'novice') check(hand > 0.2 && hand < 0.8, `${style}: scooping by hand still matters, but the helpers do much of it`, `${(hand * 100).toFixed(0)} % by hand`);
     if (style === 'novice') {

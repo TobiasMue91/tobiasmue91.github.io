@@ -198,6 +198,12 @@ button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 .cr{font-size:12.5px;color:var(--faint);margin-top:18px}
 .cr a{color:var(--dim)}
 
+#records{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#records div{padding:7px 10px;border-radius:10px;background:rgba(255,255,255,.04);font-size:12.5px;line-height:1.3;color:var(--faint)}
+#records div b{display:block;font-weight:700;font-size:13px;color:var(--dim)}
+#records div.got{background:rgba(224,187,114,.1)}#records div.got b{color:var(--brass)}#records div.got{color:var(--dim)}
+#stats2{font-size:13px;color:var(--dim);display:grid;grid-template-columns:1fr auto;gap:2px 12px}#stats2 b{color:var(--ink);font-weight:700;text-align:right}
+@media (max-width:520px){#records{grid-template-columns:1fr}}
 #fps{position:absolute;right:390px;top:16px;font:500 12px/1 var(--mono);color:rgba(255,255,255,.55)}
 #shopBtn{display:none}
 
@@ -309,6 +315,10 @@ button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 			<button class="tog" id="impBtn">Restore save</button>
 			<button class="tog" id="resetBtn">Start over</button>
 		</div>
+		<div class="label">So far</div>
+		<div id="stats2"></div>
+		<div class="label">Records</div>
+		<div id="records"></div>
 		<div class="row"><button class="btn" id="resume">Back to scooping</button></div>
 		<p class="cr">Progress is saved in this browser. Everything you see and hear is made in code. A game on <a href="https://www.gptgames.dev/" target="_blank" rel="noopener">gptgames.dev</a>. Water rendering after Lanternwind; three.js.</p>
 	</div>
@@ -422,6 +432,23 @@ const CFG = {
     { id:'plug',     at:0.985, name:'The plug',              bonus:{},                     effect:'Pull it',
       copy:'About the size of a cathedral. There is a chain. Of course there is a chain.' },
   ],
+  /* Records: a little list of things worth noting. Pure tests on the state; they change nothing in the game. */
+  records: [
+    ['first',    'It is a start',             'Scoop once.',                                         S => S.scoops >= 1],
+    ['spill',    'That one went back',        'Scoop with a full storage.',                          S => S.spiltL > 0],
+    ['hundred',  'Repetitive strain',         'Scoop a hundred times by hand.',                      S => S.scoops >= 100],
+    ['thousand', 'Tennis elbow',              'Scoop a thousand times by hand.',                     S => S.scoops >= 1000],
+    ['fivek',    'The hand of the year',      'Scoop five thousand times by hand.',                  S => S.scoops >= 5000],
+    ['bucket',   'Now we are getting somewhere', 'Own a bucket.',                                    S => S.tool >= 4],
+    ['delegate', 'Delegation',                'Hire your first helper.',                             S => S.helpers.some(n => n > 0)],
+    ['manager',  'Middle management',         'Have two hundred helpers at once.',                   S => S.helpers.reduce((a, b) => a + b, 0) >= 200],
+    ['km3',      'One down',                  'Take out a whole cubic kilometre. 1,334,999,999 to go.', S => S.removed >= 1e12],
+    ['belgium',  'Over Belgium',              'Store water in the clouds.',                          S => S.storage >= 10],
+    ['octo',     'Eight hands',               'Get the octopus to help.',                            S => !!S.found.octopus],
+    ['lost',     'Lost property',             'Pick up everything on the bottom before the plug.',   S => ['flipflop', 'bottle', 'wreck', 'chest', 'octopus', 'column'].every(id => S.found[id])],
+    ['winning',  'The sea is winning',        'Leave your storage full for a whole minute.',         S => S.fullT >= 60],
+    ['hurry',    'In a hurry',                'Pull the plug within twenty-five minutes.',           S => S.done && S.doneT <= 25 * 60],
+  ],
 };
 
 const OCEAN = CFG.ocean, T = CFG.tools, H = CFG.helpers, ST = CFG.storage, F = CFG.finds;
@@ -432,7 +459,7 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 function newState(){
   return { v:VERSION, t:0, water:0, removed:0, tool:0, storage:0, helpers:H.map(() => 0),
            found:{}, exposed:{}, scoops:0, scoopedL:0, helperL:0, spiltL:0, blownL:0, fullT:0,
-           done:false, doneT:0, pulled:false, autoAcc:0, lastSeen:0, ev:[] };
+           done:false, doneT:0, pulled:false, autoAcc:0, lastSeen:0, rec:{}, recT:0, ev:[] };
 }
 function load(json){
   const S = newState(); if(!json) return S;
@@ -445,8 +472,9 @@ function load(json){
     S.storage = clamp(Math.floor(num(o.storage)), 0, ST.length - 1);
     S.helpers = H.map((h, k) => Math.floor(num(o.helpers && o.helpers[k])));
     for(const f of F){ if(o.found && o.found[f.id]) S.found[f.id] = true; if(o.exposed && o.exposed[f.id]) S.exposed[f.id] = true; }
-    for(const k of ['scoops', 'scoopedL', 'helperL', 'spiltL', 'blownL', 'fullT', 'doneT', 'lastSeen']) S[k] = num(o[k]);
+    for(const k of ['scoops', 'scoopedL', 'helperL', 'spiltL', 'blownL', 'fullT', 'doneT', 'lastSeen', 'recT']) S[k] = num(o[k]);
     S.done = !!o.done; S.pulled = !!o.pulled;
+    if (o.rec && typeof o.rec === 'object') for (const k of Object.keys(o.rec)) if (o.rec[k] && CFG.records.some(r => r[0] === k)) S.rec[k] = true;
     S.water = Math.min(S.water, cap(S));
     if(o.ui && typeof o.ui === 'object') S.ui = o.ui;
   } catch(e){ return newState(); }
@@ -544,10 +572,14 @@ function act(S, what, a){
     case 'pull': {
       if(S.done || !S.exposed.plug) return false;
       S.found.plug = true; S.pulled = true; S.done = true; S.doneT = S.t;
-      S.removed = OCEAN; ev(S, { k:'pulled' }); return true;
+      S.removed = OCEAN; ev(S, { k:'pulled' }); checkRecords(S); return true;
     }
   }
   return false;
+}
+
+function checkRecords(S){
+  for(const [id, name, what, test] of CFG.records) if(!S.rec[id]){ let ok = false; try { ok = !!test(S); } catch(e){} if(ok){ S.rec[id] = true; ev(S, { k:'record', id, name, what }); } }
 }
 
 /* ---------- Time ---------- */
@@ -563,6 +595,7 @@ function step(S, dt){
   const isFull = full(S);
   if(isFull) S.fullT += dt;
   if(isFull && !wasFull) ev(S, { k:'full' });
+  if((S.recT = (S.recT || 0) + dt) >= 1){ S.recT = 0; checkRecords(S); }
   const p = progress(S);
   for(const f of F) if(!S.exposed[f.id] && p >= f.at){ S.exposed[f.id] = true; ev(S, { k:'exposed', id:f.id }); }
 }
@@ -668,7 +701,7 @@ function simulate(style, maxT = 3600, dt = 0.1, seed = 1){
   return { S, log, end: S.done ? S.doneT : null };
 }
 
-return { VERSION, CFG, newState, load, save, act, step, away, simulate, BOTS, botTurn,
+return { VERSION, CFG, checkRecords, newState, load, save, act, step, away, simulate, BOTS, botTurn,
          progress, removedAt, remaining, depthM, rate, helperRate, scoopOf, autoScoops, cap, blows, full,
          toolCost, storageCost, helperCost, helperAfford, helperOpen, milestoneMul, nextMilestone, bonus, costMul };
 })();
@@ -2094,6 +2127,7 @@ function makeLighthouse(world, az) {
 	const roofH = new THREE.Mesh(rg, stdMat({ color: 0x5a3a32, roughness: 0.8 }, 'slate')); roofH.position.set(9, 5, 2); g.add(roofH);
 	const door = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.6), new THREE.MeshStandardMaterial({ color: 0x2f4a5c })); door.position.set(9, 1.3, 5.52); g.add(door);
 	g.position.set(x, gy - 0.3, z); g.rotation.y = Math.atan2(-c.dx, -c.dz);
+	world.keepOut.push([x, z, 34]);
 	return shadowAll(g);
 }
 
@@ -2158,6 +2192,100 @@ function strawGeometry() {
 	const a = new THREE.CylinderGeometry(0.32, 0.32, 7, 8, 6, true); a.translate(0, 3.5, 0);
 	const b = new THREE.CylinderGeometry(0.32, 0.32, 2.6, 8, 2, true); b.translate(0, 1.3, 0); b.rotateZ(-0.8); b.translate(0, 7, 0);
 	return mergeGeometries([a.toNonIndexed(), b.toNonIndexed()]);
+}
+
+
+// ── the land: woods of two kinds of tree, and a seaside village round the pier ──
+function colorize(geo, hex) { const c = new THREE.Color(hex), n = geo.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } geo.setAttribute('color', new THREE.BufferAttribute(a, 3)); return geo; }
+function plain(geo) { const g = geo.index ? geo.toNonIndexed() : geo; for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k); return g; }
+function coniferGeometry() {
+	const trunk = colorize(plain(new THREE.CylinderGeometry(0.35, 0.55, 3.2, 6).translate(0, 1.6, 0)), 0x4a3524);
+	const prof = [[0, 2], [3.3, 2.5], [1.3, 4.7], [2.8, 5.1], [1.0, 7.3], [2.1, 7.6], [0.6, 9.7], [1.3, 9.9], [0, 12.6]].map(([r, y]) => new THREE.Vector2(r, y));
+	const crown = plain(new THREE.LatheGeometry(prof, 9));
+	crown.computeVertexNormals();
+	const col = new Float32Array(crown.attributes.position.count * 3), p = crown.attributes.position;
+	for (let i = 0; i < p.count; i++) { const k = 0.65 + 0.35 * (p.getY(i) - 2) / 10.6; col.set([0.05 * k, 0.16 * k, 0.07 * k], i * 3); }
+	crown.setAttribute('color', new THREE.BufferAttribute(col, 3));
+	return mergeGeometries([trunk, crown]);
+}
+function broadleafGeometry(seed) {
+	const rnd = mulberry32(seed), parts = [colorize(plain(new THREE.CylinderGeometry(0.4, 0.65, 4.5, 6).translate(0, 2.25, 0)), 0x5a4330)];
+	for (let k = 0; k < 4; k++) {
+		const r = 2.2 + rnd() * 1.4, b = plain(new THREE.IcosahedronGeometry(r, 1));
+		const p = b.attributes.position;
+		for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), d = 1 + (vnoise(x * 0.9 + seed + k, z * 0.9 + y) - 0.5) * 0.35; p.setXYZ(i, x * d, y * d * 0.85, z * d); }
+		b.computeVertexNormals();
+		b.translate((rnd() - .5) * 3, 5.5 + k * 0.9 + rnd(), (rnd() - .5) * 3);
+		parts.push(colorize(b, [0x2f5a1e, 0x3b6a24, 0x2a4f1c, 0x4a7330][k]));
+	}
+	return mergeGeometries(parts);
+}
+function buildTrees(world, count) {
+	const mat = patchStandard(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), { key: 'tree' });
+	const kinds = [coniferGeometry(), broadleafGeometry(3), broadleafGeometry(8)];
+	const ims = kinds.map(g => new THREE.InstancedMesh(g, mat, Math.ceil(count / 2)));
+	const used = ims.map(() => 0), rnd = mulberry32(91), m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
+	for (let tries = 0, n = 0; n < count && tries < count * 40; tries++) {
+		const x = (rnd() * 2 - 1) * (HALF - 40), z = (rnd() * 2 - 1) * (HALF - 40);
+		if (Math.hypot(x, z) > HALF - 50) continue;
+		const { rr, th } = basinRR(x, z); if (rr < 1.17) continue;
+		if (world.keepOut.some(([kx, kz, kr]) => Math.hypot(x - kx, z - kz) < kr)) continue;
+		// woods where the noise says so, a lone tree now and then elsewhere
+		const wood = fbm(x * 0.006 + 3, z * 0.006 - 2, 4);
+		if (rnd() > (wood > 0.55 ? 0.9 : 0.04)) continue;
+		const h = sampleH(world.H, x, z), k = wood > 0.62 ? (rnd() < 0.7 ? 0 : 1 + (rnd() < .5 ? 1 : 0)) : 1 + (rnd() < .5 ? 1 : 0);
+		if (used[k] >= ims[k].count) continue;
+		const sc = 1.1 + rnd() * 0.9;
+		q.setFromEuler(new THREE.Euler((rnd() - .5) * 0.08, rnd() * 6.28, (rnd() - .5) * 0.08));
+		m.compose(new THREE.Vector3(x, h - 0.4, z), q, new THREE.Vector3(sc, sc * (0.85 + rnd() * 0.35), sc));
+		ims[k].setMatrixAt(used[k], m); ims[k].setColorAt(used[k], c.setHSL(0.2 + (rnd() - .5) * 0.08, 0.35, 0.5 + rnd() * 0.2).multiplyScalar(1.25)); used[k]++; n++;
+	}
+	ims.forEach((im, i) => { im.count = used[i]; im.userData.full = used[i]; im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); });
+	return ims;
+}
+function signTexture(text) {
+	return canvasTex(512, 128, (g, w, h) => {
+		g.fillStyle = '#f4ecd6'; g.fillRect(0, 0, w, h); g.strokeStyle = '#7a1d18'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12);
+		g.fillStyle = '#7a1d18'; g.font = '700 58px Georgia, "Times New Roman", serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, w / 2, h / 2 + 3);
+	}, true, false);
+}
+function buildVillage(world, az0, az1) {
+	const walls = [], roofs = [], dark = [], rnd = mulberry32(17);
+	const wallC = [0xf2efe6, 0xe9dcc0, 0xd7e3e6, 0xf0d9c8, 0xe6e6da], roofC = [0xa84a32, 0x8d3b2a, 0x4b5560, 0xb05a3a];
+	let hotel = null;
+	for (let i = 0; i < 26; i++) {
+		const az = lerp(az0, az1, rnd()), c = coastPoint(world, az, 3.5), back = 18 + rnd() * 70;
+		const x = c.x + c.dx * back, z = c.z + c.dz * back;
+		if (world.keepOut.some(([kx, kz, kr]) => Math.hypot(x - kx, z - kz) < kr * 0.6)) continue;
+		const big = i === 0, w = big ? 22 : 7 + rnd() * 5, d = big ? 12 : 6 + rnd() * 3, hgt = big ? 15 : 4.5 + rnd() * 3;
+		const y = sampleH(world.H, x, z) - 0.5, yaw = Math.atan2(-c.dx, -c.dz);   // fronts to the sea
+		world.keepOut.push([x, z, Math.max(w, d) * 0.9]);
+		const T = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)), new THREE.Vector3(1, 1, 1));
+		walls.push(colorize(plain(new THREE.BoxGeometry(w, hgt, d).translate(0, hgt / 2, 0)).applyMatrix4(T), wallC[i % wallC.length]));
+		const rs = new THREE.Shape(); rs.moveTo(-d / 2 - 0.6, 0); rs.lineTo(0, d * 0.42); rs.lineTo(d / 2 + 0.6, 0); rs.closePath();
+		const rg = plain(new THREE.ExtrudeGeometry(rs, { depth: w + 1, bevelEnabled: false })); rg.rotateY(Math.PI / 2); rg.translate(-(w + 1) / 2, hgt, 0); rg.computeVertexNormals();
+		roofs.push(colorize(rg.applyMatrix4(T), roofC[(i * 7) % roofC.length]));
+		// a door and windows on the side that faces the water
+		const floors = big ? 4 : 1, cols = Math.max(2, Math.floor(w / 3.2));
+		for (let f = 0; f < floors; f++) for (let k = 0; k < cols; k++) {
+			if (f === 0 && k === (cols >> 1)) { dark.push(plain(new THREE.PlaneGeometry(1.4, 2.4).translate((k + 0.5 - cols / 2) * (w / cols), 1.2, d / 2 + 0.05)).applyMatrix4(T)); continue; }
+			dark.push(plain(new THREE.PlaneGeometry(1.2, 1.3).translate((k + 0.5 - cols / 2) * (w / cols), 2.4 + f * 3.4, d / 2 + 0.05)).applyMatrix4(T));
+		}
+		if (big) hotel = { T, w, hgt, d };
+	}
+	const g = new THREE.Group();
+	const vm = patchStandard(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), { key: 'village' });
+	const wm = new THREE.Mesh(mergeGeometries(walls), vm), rm = new THREE.Mesh(mergeGeometries(roofs), vm);
+	const dm = new THREE.Mesh(mergeGeometries(dark), new THREE.MeshStandardMaterial({ color: 0x1d2a33, roughness: 0.2, metalness: 0.3, side: THREE.DoubleSide }));
+	for (const mm of [wm, rm, dm]) { mm.castShadow = true; mm.receiveShadow = true; g.add(mm); }
+	// the hotel's sign, which the sea news will come back to
+	if (hotel) {
+		const sign = new THREE.Mesh(new THREE.PlaneGeometry(16, 4), new THREE.MeshStandardMaterial({ map: signTexture('SEA VIEW HOTEL'), roughness: 0.7, side: THREE.DoubleSide }));
+		sign.position.set(0, hotel.hgt + hotel.d * 0.42 + 2.6, hotel.d * 0.1); sign.applyMatrix4(hotel.T);
+		const pm = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3, 0.4), new THREE.MeshStandardMaterial({ color: 0x333333 })); pm.position.set(0, hotel.hgt + hotel.d * 0.42 + 0.4, hotel.d * 0.1); pm.applyMatrix4(hotel.T);
+		g.add(sign, pm); g.userData.sign = sign;
+	}
+	return g;
 }
 
 // ═══════════════════════════ fish ═══════════════════════════
@@ -2503,7 +2631,7 @@ const QUALITY = {
 	ultra:  { pr: 2.0,  shadow: 4096, refl: 0.75, mirror: true,  msaa: 4, segs: 480, rocks: 1,    weed: 1,   fish: 240, bloom: 1 },
 };
 let quality = 'high', resScale = 1, slowT = 0, fastT = 0;
-let gear, renderer, scene, camera, sky, ocean, composer, cleanPass, bloomPass, finalPass, sun, world, terrain, exposure, drops, fishes, weed, rocks, stars, glowTex;
+let trees, gear, renderer, scene, camera, sky, ocean, composer, cleanPass, bloomPass, finalPass, sun, world, terrain, exposure, drops, fishes, weed, rocks, stars, glowTex;
 let sceneRT, sceneRT2, depthCopy;
 const finds = {};    // id -> { g, def, top, glow, wet }
 const audio = new AudioEngine(); audio.on = S.ui.sound;
@@ -2728,6 +2856,8 @@ async function boot() {
 	scene.add(makeChain(world, new THREE.Vector3(PLUG.x, FLOOR + 16.2, PLUG.z + 0.5), -0.6, 130));
 	const drain = makeDrain(); drain.position.set(PLUG.x, FLOOR, PLUG.z); scene.add(drain);
 	scene.add(makePier(world, -0.42), makeLighthouse(world, 1.75));
+	V.village = buildVillage(world, -0.78, -0.08); scene.add(V.village);
+	trees = buildTrees(world, 1600); trees.forEach(t => scene.add(t));
 	V.sponge = makeSponge(); scene.add(V.sponge);
 	gear = new Gear(); scene.add(gear.group);
 	glowTex = glowTexture();
@@ -2799,6 +2929,7 @@ function applyQuality(q, first) {
 	ocean.setQuality(Q.refl, Q.msaa, Q.mirror);
 	bloomPass.strength = 0.32 * Q.bloom;
 	rocks.forEach(r => r.count = Math.round(r.userData.full * Q.rocks));
+	trees.forEach(t => t.count = Math.round(t.userData.full * (q === 'low' ? 0.4 : q === 'medium' ? 0.75 : 1)));
 	weed.geometry.instanceCount = Math.round(weed.userData.full * Q.weed);
 	fishes.mesh.count = Math.min(fishes.n, Q.fish);
 	if (!first) onResize();
@@ -2879,6 +3010,12 @@ function frame(dt, noRender) {
 	updateFinds(dt);
 	if (playing || V.mode === 'end') { helperFx(dt); updateSponge(dt); if (!V.finale) gear.update(dt); }
 	if (V.finale) stepFinale(dt);
+	// the hotel keeps its name honest
+	if (V.village && V.village.userData.sign) {
+		const name = S.done ? 'HOTEL' : V.p >= 0.75 ? 'VIEW HOTEL' : V.p >= 0.45 ? 'SEA (SOMEWHERE) HOTEL' : V.p >= 0.1 ? 'SEA-ISH VIEW HOTEL' : 'SEA VIEW HOTEL';
+		const sg = V.village.userData.sign;
+		if (sg.userData.name !== name) { sg.userData.name = name; const old = sg.material.map; sg.material.map = signTexture(name); sg.material.needsUpdate = true; if (old) old.dispose(); }
+	}
 	sky.pile.value = damp(sky.pile.value, SEA_.blows(S) ? 0.35 + 0.65 * S.water / SEA_.cap(S) : 0, 0.5, dt);
 	drops.flush();
 	updateCamera(dt, false);
@@ -3165,6 +3302,7 @@ function onEvent(e) {
 			break;
 		case 'octo': if (Math.random() < 0.7) { const O = finds.octopus.g.position; const wl = waterlineAtXZ(O.x, O.z); drops.arc({ x: wl.x, y: V.wy, z: wl.z }, { x: O.x - (wl.x - O.x) * 0.6, y: O.y + 2, z: O.z - (wl.z - O.z) * 0.6 }, 0.9, 8, 3, 0.8); } break;
 		case 'pulled': startFinale(); break;
+		case 'record': if (V.mode === 'play' || V.mode === 'end') { toast(`<b>Record:</b> ${e.name}. <span style="color:var(--dim)">${e.what}</span>`, 5); audio.notes([[7, 0, 0.2], [14, 0.1, 0.4]], 'sine', 0.06); } renderRecords(); break;
 	}
 }
 function flashItem(kind) { const el = document.querySelector(`.item[data-k="${kind}"]`); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }
@@ -3477,10 +3615,16 @@ function bindUI() {
 	addEventListener('pagehide', save);
 	poleBuild();
 }
+function renderRecords() {
+	const el = $('#records'); if (!el) return;
+	el.innerHTML = CFG.records.map(([id, name, what]) => `<div class="${S.rec[id] ? 'got' : ''}"><b>${S.rec[id] ? name : '?'}</b>${what}</div>`).join('');
+	const rows = [['Time at it', fmtTime(S.t)], ['Scoops by hand', S.scoops.toLocaleString(LOC)], ['Taken out by hand', fmtL(S.scoopedL)], ['Taken out by helpers', fmtL(S.helperL)], ['Spilled back in', fmtL(S.spiltL)], ['Blown into the sky', fmtL(S.blownL)], ['Records', `${Object.keys(S.rec).length} of ${CFG.records.length}`]];
+	$('#stats2').innerHTML = rows.map(([a, b]) => `<span>${a}</span><b>${b}</b>`).join('');
+}
 function togglePause() {
 	if (V.mode !== 'play' && V.mode !== 'end') return;
 	const m = $('#pause');
-	if (m.classList.contains('hidden')) { openModal('#pause'); V.paused = true; }
+	if (m.classList.contains('hidden')) { renderRecords(); openModal('#pause'); V.paused = true; }
 	else { closeModal('#pause'); V.paused = false; }
 }
 function startGame() {
