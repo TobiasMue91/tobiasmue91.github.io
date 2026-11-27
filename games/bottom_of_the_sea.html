@@ -225,6 +225,7 @@ button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 	#fps{right:12px;top:auto;bottom:240px}
 }
 @media (max-width:820px) and (max-height:640px){#pole{display:none}}
+@media (max-height:780px){#pole .mark.out span{opacity:0}#pole:hover .mark span{opacity:1}}
 @media (prefers-reduced-motion:reduce){.fl{animation-duration:.01s}#store.full{animation:none}.modal,.panel{transition:none}}
 </style>
 </head>
@@ -368,6 +369,7 @@ const CFG = {
   gaugeZero: 60,            // litres: removed water is measured against this on the log gauge
   depthM: 10994,            // metres shown at the very bottom (the Challenger Deep, roughly)
   plugAt: 0.985,            // progress at which the plug comes clear of the water
+  duck: { boost: 2, sec: 30 },   // a rubber duck clicked: everything this much more, for this long
   awayCap: 8*3600,          // offline time counted, in seconds
   awayMin: 60,              // less than this away is not worth a report
   autosave: 10,             // seconds
@@ -449,6 +451,7 @@ const CFG = {
     ['octo',     'Eight hands',               'Get the octopus to help.',                            S => !!S.found.octopus],
     ['lost',     'Lost property',             'Pick up everything on the bottom before the plug.',   S => ['flipflop', 'bottle', 'wreck', 'chest', 'octopus', 'column'].every(id => S.found[id])],
     ['winning',  'The sea is winning',        'Leave your storage full for a whole minute.',         S => S.fullT >= 60],
+    ['quack',    'Quack',                     'Click five rubber ducks.',                            S => (S.ducks | 0) >= 5],
     ['hurry',    'In a hurry',                'Pull the plug within twenty-five minutes.',           S => S.done && S.doneT <= 25 * 60],
   ],
 };
@@ -461,7 +464,7 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 function newState(){
   return { v:VERSION, t:0, water:0, removed:0, tool:0, storage:0, helpers:H.map(() => 0),
            found:{}, exposed:{}, scoops:0, scoopedL:0, helperL:0, spiltL:0, blownL:0, fullT:0,
-           done:false, doneT:0, pulled:false, autoAcc:0, lastSeen:0, rec:{}, recT:0, ev:[] };
+           done:false, doneT:0, pulled:false, autoAcc:0, lastSeen:0, rec:{}, recT:0, boostT:0, ducks:0, ev:[] };
 }
 function load(json){
   const S = newState(); if(!json) return S;
@@ -474,7 +477,7 @@ function load(json){
     S.storage = clamp(Math.floor(num(o.storage)), 0, ST.length - 1);
     S.helpers = H.map((h, k) => Math.floor(num(o.helpers && o.helpers[k])));
     for(const f of F){ if(o.found && o.found[f.id]) S.found[f.id] = true; if(o.exposed && o.exposed[f.id]) S.exposed[f.id] = true; }
-    for(const k of ['scoops', 'scoopedL', 'helperL', 'spiltL', 'blownL', 'fullT', 'doneT', 'lastSeen', 'recT']) S[k] = num(o[k]);
+    for(const k of ['scoops', 'scoopedL', 'helperL', 'spiltL', 'blownL', 'fullT', 'doneT', 'lastSeen', 'recT', 'boostT', 'ducks']) S[k] = num(o[k]);
     S.done = !!o.done; S.pulled = !!o.pulled;
     if (o.rec && typeof o.rec === 'object') for (const k of Object.keys(o.rec)) if (o.rec[k] && CFG.records.some(r => r[0] === k)) S.rec[k] = true;
     S.water = Math.min(S.water, cap(S));
@@ -486,7 +489,7 @@ function save(S){ const o = Object.assign({}, S); delete o.ev; return JSON.strin
 
 /* ---------- Derived numbers: one owner for every curve, the shop's text reads these too ---------- */
 function bonus(S, key){
-  let m = 1;
+  let m = key === 'all' && S.boostT > 0 ? CFG.duck.boost : 1;
   for(const f of F) if(S.found[f.id] && f.bonus[key] != null) m *= f.bonus[key];
   return m;
 }
@@ -571,6 +574,10 @@ function act(S, what, a){
       const f = FIND[a]; if(!f || f.id === 'plug' || S.found[f.id] || !S.exposed[f.id]) return false;
       S.found[f.id] = true; ev(S, { k:'found', id:f.id }); return true;
     }
+    case 'duck': {
+      if (S.done) return false;
+      S.boostT = CFG.duck.sec; S.ducks = (S.ducks | 0) + 1; ev(S, { k:'duck' }); return true;
+    }
     case 'pull': {
       if(S.done || !S.exposed.plug) return false;
       S.found.plug = true; S.pulled = true; S.done = true; S.doneT = S.t;
@@ -588,6 +595,7 @@ function checkRecords(S){
 function step(S, dt){
   if(S.done || dt <= 0) return;
   S.t += dt;
+  if(S.boostT > 0) S.boostT = Math.max(0, S.boostT - dt);
   const wasFull = full(S);
   const r = rate(S);
   if(r > 0) take(S, r*dt, 'helper');
@@ -2321,6 +2329,20 @@ function buildVillage(world, az0, az1, signText = 'SEA VIEW HOTEL') {
 	return g;
 }
 
+
+// ── a rubber duck the size of a van, as one does ──
+function makeDuck() {
+	const g = new THREE.Group();
+	const yellow = stdMat({ color: 0xf5c518, roughness: 0.35 }, 'duck'), orange = stdMat({ color: 0xf07a1a, roughness: 0.4 }, 'beak');
+	const body = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), yellow); body.scale.set(4.2, 2.6, 3.2); body.position.y = 1.2; g.add(body);
+	const tail = new THREE.Mesh(new THREE.ConeGeometry(1.3, 2.4, 16), yellow); tail.rotation.z = 1.1; tail.position.set(-4.1, 2.6, 0); g.add(tail);
+	const head = new THREE.Mesh(new THREE.SphereGeometry(2.1, 24, 16), yellow); head.position.set(2.6, 4.9, 0); g.add(head);
+	const beak = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), orange); beak.scale.set(1.5, 0.45, 1.0); beak.position.set(4.6, 4.5, 0); g.add(beak);
+	const eyeM = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
+	for (const z of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), eyeM); e.position.set(3.9, 5.6, z * 1.25); g.add(e); }
+	return shadowAll(g);
+}
+
 // ═══════════════════════════ fish ═══════════════════════════
 function fishGeometry() {
 	const body = new THREE.SphereGeometry(1, 16, 10); body.scale(0.34, 0.62, 1.45);
@@ -2678,6 +2700,7 @@ const WORDS = {
 		'toast.saved': 'Save written to a file. Keep it somewhere dry.', 'toast.saveFail': 'Could not write the file.', 'toast.badFile': 'That file is not a Bottom of the Sea save.',
 		signs: ['SEA VIEW HOTEL', 'SEA-ISH VIEW HOTEL', 'SEA (SOMEWHERE) HOTEL', 'VIEW HOTEL', 'HOTEL'],
 		units: [[1e12, ' trillion'], [1e9, ' billion'], [1e6, ' million'], [1e3, ' thousand']],
+		'news.duck': 'A rubber duck has surfaced. Nobody is sure whose it is. It looks motivating.', 'fl.duck': 'Quack', 'toast.duck': '<b>Rubber duck.</b> It squeaks in a way that motivates everyone: everything twice as much for {s} s.',
 	},
 	de: {
 		load1: 'Fülle den Ozean…', load2: 'Forme den Meeresboden…', load3: 'Verstecke Dinge auf dem Grund…', load4: 'Verteile Sand…', load5: 'Lasse Seegras wachsen…', load6: 'Lasse Fische frei…', load7: 'Poliere die Linse…', ready: 'Bereit',
@@ -2713,6 +2736,7 @@ const WORDS = {
 		'toast.saved': 'Spielstand in eine Datei geschrieben. Trocken aufbewahren.', 'toast.saveFail': 'Die Datei ließ sich nicht schreiben.', 'toast.badFile': 'Diese Datei ist kein Spielstand von Bottom of the Sea.',
 		signs: ['HOTEL MEERBLICK', 'HOTEL MEERBLICK-ISH', 'HOTEL MEER (IRGENDWO)', 'HOTEL BLICK', 'HOTEL'],
 		units: [[1e12, ' Bio.'], [1e9, ' Mrd.'], [1e6, ' Mio.'], [1e3, ' Tsd.']],
+		'news.duck': 'Eine Gummiente ist aufgetaucht. Niemand weiß, wem sie gehört. Sie wirkt motivierend.', 'fl.duck': 'Quietsch', 'toast.duck': '<b>Gummiente.</b> Sie quietscht auf eine Art, die alle motiviert: {s} s lang alles doppelt.',
 	},
 };
 // German for everything in CFG, by kind and id: [name, copy, effect]
@@ -2758,7 +2782,7 @@ const DE = {
 		delegate: ['Delegieren', 'Den ersten Helfer anheuern.'], manager: ['Mittleres Management', 'Zweihundert Helfer gleichzeitig haben.'],
 		km3: ['Einer weniger', 'Einen ganzen Kubikkilometer herausholen. Noch 1.334.999.999.'], belgium: ['Über Belgien', 'Wasser in den Wolken lagern.'],
 		octo: ['Acht Hände', 'Den Kraken zum Mithelfen bringen.'], lost: ['Fundbüro', 'Alles auf dem Grund aufheben, bevor der Stöpsel kommt.'],
-		winning: ['Das Meer gewinnt', 'Das Lager eine ganze Minute lang voll lassen.'], hurry: ['In Eile', 'Den Stöpsel innerhalb von fünfundzwanzig Minuten ziehen.'],
+		winning: ['Das Meer gewinnt', 'Das Lager eine ganze Minute lang voll lassen.'], quack: ['Quietsch', 'Fünf Gummienten anklicken.'], hurry: ['In Eile', 'Den Stöpsel innerhalb von fünfundzwanzig Minuten ziehen.'],
 	},
 	news: [
 		'Küstenbehörden beschreiben das Meer als „ungefähr wie immer".', 'Eine Krabbe hat es bemerkt. Sie hat beschlossen, nichts zu sagen.',
@@ -3044,6 +3068,7 @@ async function boot() {
 	V.village = buildVillage(world, -0.78, -0.08, T('signs')[0]); scene.add(V.village);
 	trees = buildTrees(world, 1600); trees.forEach(t => scene.add(t));
 	V.sponge = makeSponge(); scene.add(V.sponge);
+	{ const g = makeDuck(); g.visible = false; scene.add(g); const hit = new THREE.Mesh(new THREE.SphereGeometry(9, 10, 8), new THREE.MeshBasicMaterial({ visible: false })); hit.visible = false; scene.add(hit); V.duck = { g, hit }; }
 	gear = new Gear(); scene.add(gear.group);
 	glowTex = glowTexture();
 	for (const id in finds) {
@@ -3165,6 +3190,12 @@ function updateCamera(dt, snap) {
 	pos.y = Math.max(pos.y, g + 14, V.wy + 6);
 	camera.position.copy(pos);
 	camera.lookAt(cam.target);
+	// a big scoop gives the view a small jolt that dies away (off with Splash shake or reduced motion)
+	if (V.shake > 0.001) {
+		const a = V.shake * V.shake * cam.dist * 0.0022;
+		camera.position.x += (Math.random() - 0.5) * a; camera.position.y += (Math.random() - 0.5) * a; camera.position.z += (Math.random() - 0.5) * a;
+		V.shake *= Math.exp(-dt * 9);
+	}
 }
 
 // ═══════════════════════════ the frame ═══════════════════════════
@@ -3194,6 +3225,7 @@ function frame(dt, noRender) {
 	fishes.update(dt, V.wy, V.t, { splash: (x, y, z, s) => { drops.splash(x, y, z, s * 0.6); ocean.ripple(x, z, s, V.t); } });
 	updateFinds(dt);
 	if (playing || V.mode === 'end') { helperFx(dt); updateSponge(dt); if (!V.finale) gear.update(dt); }
+	if (playing && !V.paused) updateDuck(dt);
 	if (V.finale) stepFinale(dt);
 	// the hotel keeps its name honest
 	if (V.village && V.village.userData.sign) {
@@ -3415,6 +3447,34 @@ function updateSponge(dt) {
 	sp.position.copy(pos); sp.scale.set((1 + (1 - sq) * 0.25) * 0.6, sq * 0.6, (1 + (1 - sq) * 0.25) * 0.6); sp.rotation.y = az + Math.PI / 2;
 }
 
+
+// ── the duck: now and then one bobs up in view, paddles about for twenty seconds, then paddles off and dips under ──
+function updateDuck(dt) {
+	const D = V.duck;
+	if (!D.state) {
+		D.wait = (D.wait ?? 70 + Math.random() * 40) - dt;
+		if (D.wait > 0 || V.mode !== 'play' || S.done || V.p > 0.97) return;
+		// somewhere in the water and in front of the camera
+		const c = cam.target, spot = fishes.waterSpot(V.wy, 4, { x: c.x, z: c.z });
+		D.pos = new THREE.Vector3(spot.x, V.wy, spot.z); D.dir = Math.random() * 6.28; D.t = 0; D.state = 'up'; D.g.visible = true; D.hit.visible = true;
+		news(T('news.duck'), true); audio.notes([[19, 0, 0.12], [24, 0.08, 0.15]], 'square', 0.03);
+	}
+	D.t += dt;
+	let rise = 1;
+	if (D.state === 'up') { rise = ease(Math.min(1, D.t / 1.2)); if (D.t >= 1.2) { D.state = 'swim'; D.t = 0; } }
+	else if (D.state === 'swim') { if (D.t > 20) { D.state = 'off'; D.t = 0; } }
+	else if (D.state === 'off' || D.state === 'got') { rise = 1 - ease(Math.min(1, D.t / 1.5)); if (D.t >= 1.5) { D.state = null; D.wait = 100 + Math.random() * 80; D.g.visible = false; D.hit.visible = false; return; } }
+	// paddle slowly, turning now and then; keep to water deeper than a duck
+	D.dir += Math.sin(V.t * 0.4) * dt * 0.4;
+	const sp = D.state === 'off' ? 10 : D.state === 'got' ? 0 : 3.5, nx = D.pos.x + Math.cos(D.dir) * sp * dt, nz = D.pos.z - Math.sin(D.dir) * sp * dt;
+	if (sampleH(world.H, nx, nz) < V.wy - 3) { D.pos.x = nx; D.pos.z = nz; } else D.dir += Math.PI * 0.7;
+	D.pos.y = V.wy;
+	D.g.position.set(D.pos.x, V.wy - 4 + 4 * rise + Math.sin(V.t * 2.1) * 0.35, D.pos.z);
+	D.g.rotation.set(Math.sin(V.t * 1.7) * 0.06, D.dir, Math.sin(V.t * 1.3) * 0.05);
+	D.hit.position.copy(D.g.position).y += 3;
+	if (Math.random() < dt * 2) ocean.ripple(D.pos.x, D.pos.z, 0.3, V.t);
+}
+
 // ── the finds: wet until they dry, a glow while they wait, a hop when picked up ──
 function updateFinds(dt) {
 	for (const id in finds) {
@@ -3487,6 +3547,7 @@ function onEvent(e) {
 			break;
 		case 'octo': if (Math.random() < 0.7) { const O = finds.octopus.g.position; const wl = waterlineAtXZ(O.x, O.z); drops.arc({ x: wl.x, y: V.wy, z: wl.z }, { x: O.x - (wl.x - O.x) * 0.6, y: O.y + 2, z: O.z - (wl.z - O.z) * 0.6 }, 0.9, 8, 3, 0.8); } break;
 		case 'pulled': startFinale(); break;
+		case 'duck': toast(T('toast.duck', { s: CFG.duck.sec }), 5); audio.notes([[14, 0, 0.1], [19, 0.07, 0.1], [26, 0.14, 0.25]], 'square', 0.035); break;
 		case 'record': if (V.mode === 'play' || V.mode === 'end') { { const rr = CFG.records.find(r => r[0] === e.id); toast(T('rec.toast', { n: N('records', rr, 0) }) + ` <span style="color:var(--dim)">${N('records', rr, 1)}</span>`, 5); } audio.notes([[7, 0, 0.2], [14, 0.1, 0.4]], 'sine', 0.06); } renderRecords(); break;
 	}
 }
@@ -3529,6 +3590,15 @@ function waterPoint(cx, cy) {
 function clickAt(cx, cy) {
 	if (V.mode !== 'play') return;
 	audio.start();
+	// the duck first: it is small and does not wait
+	if (V.duck.state === 'up' || V.duck.state === 'swim') {
+		ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+		if (ray.intersectObject(V.duck.hit, false).length) {
+			SEA_.act(S, 'duck'); for (const e of S.ev.splice(0)) onEvent(e);
+			V.duck.state = 'got'; V.duck.t = 0; floatText(cx, cy - 20, T('fl.duck'), 'gold');
+			return;
+		}
+	}
 	const F = pickFind(cx, cy);
 	if (F) {
 		if (F.id === 'plug' && S.exposed.plug && !S.done) { SEA_.act(S, 'pull'); for (const e of S.ev.splice(0)) onEvent(e); return; }
@@ -3544,6 +3614,7 @@ function clickAt(cx, cy) {
 	const size = clamp(Math.log10(1 + SEA_.scoopOf(S)) / 6, 0, 2.2);
 	if (wp) { drops.splash(wp.x, V.wy, wp.z, 0.5 + size); ocean.ripple(wp.x, wp.z, 0.7 + size * 0.6, V.t); }
 	audio.splash(size);
+	if (S.ui.shake !== false && !REDUCED) V.shake = Math.min(1, Math.max(V.shake || 0, 0.25 + size * 0.3));
 	if (got > 0) floatText(cx, cy - 10, '+' + fmtL(got), size > 1 ? 'big' : '');
 	else floatText(cx, cy - 10, SEA_.full(S) ? T('fl.full') : '', 'spill');
 	V.scoopsShown++;
@@ -3621,7 +3692,7 @@ function updateHUD() {
 	const pct = S.removed / CFG.ocean * 100;
 	$('#odosub').textContent = S.done ? T('hud.none') : `≈ ${fmtL(SEA_.remaining(S))} · ${pct === 0 ? '0' : pct < 1e-3 ? pct.toExponential(1) : pct.toLocaleString(LOC, { maximumSignificantDigits: 3 })} ${T('hud.gone')}`;
 	$('#rScoop').textContent = fmtL(SEA_.scoopOf(S)) + (SEA_.autoScoops(S) ? ' (+2/s)' : '');
-	$('#rRate').textContent = fmtRate(SEA_.rate(S));
+	$('#rRate').textContent = fmtRate(SEA_.rate(S)) + (S.boostT > 0 ? ` · ×${CFG.duck.boost} ${Math.ceil(S.boostT)} s` : '');
 	// storage
 	const cap = SEA_.cap(S), st = CFG.storage[S.storage], full = SEA_.full(S);
 	$('#stName').textContent = N('storage', st, 0);
@@ -3884,7 +3955,7 @@ boot().catch(err => { console.error(err); $('#loadmsg').textContent = 'Could not
 
 // test hooks: the harness can step the world and look at it
 window.__bots = {
-	get S() { return S; }, get V() { return V; }, get scene() { return scene; }, get renderer() { return renderer; }, cam, finds, SEA: SEA_, U,
+	get S() { return S; }, get V() { return V; }, get scene() { return scene; }, get renderer() { return renderer; }, get camera() { return camera; }, cam, finds, SEA: SEA_, U,
 	frame(dt = 1 / 30, n = 1, noRender = false) { for (let i = 0; i < n; i++) frame(dt, noRender || i < n - 1); },
 	setP(p) { S.removed = Math.max(S.removed, SEA_.removedAt(p)); SEA_.step(S, 0.001); },
 	// let the game run for a while without drawing it (the water sinks, things dry)

@@ -198,6 +198,7 @@ the push at an island border (the ring drifts), a border blend too short for Dre
 
 ```sh
 npm run test:sea                         # or: node test/bottom_of_the_sea.mjs  (about ten seconds)
+npm run test:sea-browser                 # the real page in Chromium (about five minutes; needs cdn.jsdelivr.net)
 node test/bottom_of_the_sea.mjs rules pacing      # named suites only
 node test/bottom_of_the_sea.mjs --page=old.html
 ```
@@ -212,6 +213,13 @@ unless the next tool is under three minutes away) play the whole sea; each must 
 24-34, 30-46 minutes), see the water drop within two minutes, find everything, never leave the water standing still for
 three minutes, and the newcomer must meet something new within two minutes and six new things in ten. Run it after
 touching any number in `CFG`.
+
+`test/bottom_of_the_sea_browser.mjs` drives the page itself in headless Chromium with its loop switched off
+(`window.__botsManual`) and frames stepped through `window.__bots`, drawing one only now and then because SwiftShader
+takes about a second a frame. `play`: the eager bot plays a whole sea through the page (shop, HUD, events, gear, finale)
+without a page or console error, ends on the end card with every find, the hotel sign at its last name and drops in the
+air, and a reload brings the empty sea back. `german`: with `?lang=de` the menu, shop and HUD are German and a list of
+English phrases is gone from the screen. `offline`: a save two hours old returns with what the helpers did meanwhile.
 
 ## Bubble Break
 
