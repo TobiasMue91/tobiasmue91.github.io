@@ -3018,7 +3018,8 @@ async function boot() {
 
 	setLoad(0.08, T('load1')); await tick();
 	sky = new SkySystem(renderer);
-	sky.setSun(27, 0.92);
+	V.p = SEA_.progress(S);
+	sky.setSun(sunElev(V.p), sunAz(V.p)); V.sunElev = sunElev(V.p);
 	scene.environment = sky.envRT.texture; scene.environmentIntensity = 0.9;
 	scene.add(sky.dome);
 
@@ -3093,6 +3094,7 @@ async function boot() {
 	sun.shadow.bias = -0.0005; sun.shadow.normalBias = 1.2;
 	sun.position.copy(U.uSunDir.value).multiplyScalar(1600); sun.target.position.set(0, -40, 0);
 	sun.color.copy(U.uSunCol.value); sun.intensity = 1;
+	V.expo = lerp(0.8, 0.95, smoothstep(28, 14, V.sunElev)); scene.environmentIntensity = lerp(0.9, 1.25, smoothstep(28, 14, V.sunElev));
 	scene.add(sun, sun.target);
 	// glowing things go after the water
 	scene.traverse(o => { if (o.material && !Array.isArray(o.material) && o.material.blending === THREE.AdditiveBlending) o.layers.set(4); });
@@ -3126,7 +3128,7 @@ function buildPost() {
 	bloomPass.highPassUniforms.uMaxLum = { value: 8 };
 	hp.fragmentShader = hp.fragmentShader.replace('uniform float smoothWidth;', 'uniform float smoothWidth; uniform float uMaxLum;').replace('vec4 texel = texture2D( tDiffuse, vUv );', 'vec4 texel = texture2D( tDiffuse, vUv ); texel.rgb *= min(1.0, uMaxLum / max(luminance(texel.rgb), 1e-4));');
 	hp.needsUpdate = true;
-	finalPass = new FinalPass();
+	finalPass = new FinalPass(); finalPass.uniforms.uExposure.value = V.expo || 0.8;
 	composer.addPass(cleanPass); composer.addPass(bloomPass); composer.addPass(finalPass);
 }
 function applyQuality(q, first) {
@@ -3200,6 +3202,18 @@ function updateCamera(dt, snap) {
 	}
 }
 
+// ── the day goes down with the sea: early afternoon at the first handful, golden hour at the plug ──
+const sunElev = p => 30 - 16 * Math.pow(smoothstep(0, 1, p), 1.15);   // lower than 14° and the trench, where the end is played, lies in its own shadow
+const sunAz = p => 0.92 + 0.22 * smoothstep(0, 1, p);
+function stepSun() {
+	const p = S.done ? 1 : V.p, e = sunElev(p);
+	if (Math.abs(e - V.sunElev) < 0.6) return;   // the sky and its light are re-made in steps too small to see, about once a minute
+	V.sunElev = e; sky.setSun(e, sunAz(p)); scene.environment = sky.envRT.texture;
+	sun.position.copy(U.uSunDir.value).multiplyScalar(1600); sun.color.copy(U.uSunCol.value);
+	finalPass.uniforms.uExposure.value = lerp(0.8, 0.95, smoothstep(28, 14, e));
+	scene.environmentIntensity = lerp(0.9, 1.25, smoothstep(28, 14, e));
+}
+
 // ═══════════════════════════ the frame ═══════════════════════════
 let last = 0;
 function loop(now) {
@@ -3235,6 +3249,7 @@ function frame(dt, noRender) {
 		const sg = V.village.userData.sign;
 		if (sg.userData.name !== name) { sg.userData.name = name; const old = sg.material.map; sg.material.map = signTexture(name); sg.material.needsUpdate = true; if (old) old.dispose(); }
 	}
+	stepSun();
 	sky.pile.value = damp(sky.pile.value, SEA_.blows(S) ? 0.35 + 0.65 * S.water / SEA_.cap(S) : 0, 0.5, dt);
 	drops.flush();
 	updateCamera(dt, false);
