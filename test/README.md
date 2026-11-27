@@ -3081,3 +3081,28 @@ blurs) must match. The whole pencil pipeline is rebuilt in the test from those p
 | `names` | download file names from camera, non-ASCII, reserved-character and empty names |
 | `saves` | saved settings: broken JSON, clamping, partial saves, round trip |
 | `links` | `?style=` and `#style=` links, old and alternative style names |
+
+## Physics Simulator
+
+```sh
+npm run test:physics                               # or: node test/physics_simulator.mjs
+node test/physics_simulator.mjs motion contact     # named suites only
+```
+
+`physics_simulator.mjs` runs the page's DOM-free `<script id="core">` (the 2D rigid-body engine, its presets, scene
+links and number parsing) in Node; no browser or server needed. The page promises motion a student can check with a
+calculator, so expected values come from textbook formulas, never from the engine: free fall √(2h/g), projectile range
+2·vx·vy/g, a slide to rest after v²/(2μg), the incline threshold tan θ = μ and g(sin θ − μ cos θ) beyond it, a disc
+rolling at g(sin θ − c cos θ)/1.5, rebound height e²·h, the pendulum period 2π√(L/g)(1+θ²/16), and the one-dimensional
+collision formulas. A full run takes a few seconds.
+
+| suite | what it checks |
+| --- | --- |
+| `motion` | free fall on Earth and the Moon, projectile range, pendulum period and amplitude, energy kept by elastic bouncing, every readout term (½mv², ½Iω², mgh, mass from 100 kg/m²) |
+| `contact` | bounce heights for circles and boxes, bounce 0, sliding distance and keeping flat, frictionless sliding, incline hold and slide, rolling without slipping, momentum and restitution in equal and unequal collisions, a rolling ball stopping, fixed shapes staying put |
+| `stacks` | columns of 5, 10 and 14 boxes standing for 10 s, the Tower preset untouched, the starter's frame standing alone and falling when the ball arrives |
+| `cradle` | the first impact leaves four balls at rest and sends the last off at √(2gL(1−cos 45°)); 10 to 20 s later the middle still hangs still; energy within 1% |
+| `presets` | every preset built in full, finite and inside the 8 × 5 m box after 10 s; gravity per preset; dominoes all fall; the slingshot's band lets go |
+| `parse` | the gravity people type (`9,81`, `9.81 m/s²`, `.5`) and the refusals, with an example in the message |
+| `scenes` | save/load round trip, strings and the slingshot band surviving, hostile scene data (bad shapes, 5000 bodies, script in labels, bad joints), clamped settings, scenes from a wider box scaled, `#preset=`/`#g=`/`#s=` links |
+| `edges` | shapes refused (zero, negative, too thin, 2 or 99 sides, infinite), convex hull, a shape made inside a ramp eased out rather than fired out, tapped shapes lifted clear, the 400-shape limit and its speed, pin and release, erasing a cradle ball, zero g under the ceiling, no tunnelling at g = 50, fixed steps whatever the frame time, picking with a finger's slack |
