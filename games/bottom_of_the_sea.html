@@ -1036,10 +1036,11 @@ function placeFind(world, az, groundY, rMin = 0.1) {
 	return best;
 }
 function levelGround(world, x, z, y, r) {
-	const H = world.H, i0 = Math.floor((x - r * 1.8 + HALF) / CELL), i1 = Math.ceil((x + r * 1.8 + HALF) / CELL), j0 = Math.floor((z - r * 1.8 + HALF) / CELL), j1 = Math.ceil((z + r * 1.8 + HALF) / CELL);
+	const R = r * 2.6, H = world.H, i0 = Math.floor((x - R + HALF) / CELL), i1 = Math.ceil((x + R + HALF) / CELL), j0 = Math.floor((z - R + HALF) / CELL), j1 = Math.ceil((z + R + HALF) / CELL);
 	for (let j = Math.max(0, j0); j <= Math.min(HN - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(HN - 1, i1); i++) {
 		const px = -HALF + i * CELL, pz = -HALF + j * CELL, d = Math.hypot(px - x, pz - z);
-		const w = 1 - smoothstep(r, r * 1.8, d);
+		// a gentle shelf, not a mesa: full height under the thing, eased out over more than its own width
+		let w = 1 - smoothstep(r * 0.55, R, d); w = w * w * (3 - 2 * w);
 		H[j * HN + i] = lerp(H[j * HN + i], y, w);
 	}
 }
@@ -1145,7 +1146,7 @@ function buildTerrain(world, segs) {
 				// manganese nodules on the plain, shells and pebbles on the shelf
 				float nod = smoothstep(.86, .92, vnoise(gWPos.xz * 0.7)) * smoothstep(-58., -70., h) * (1. - rockW) * smoothstep(.4, .6, n2);
 				alb = mix(alb, vec3(0.06, 0.05, 0.045), nod * .7);
-				float sp = smoothstep(.87, .91, vnoise(gWPos.xz * 1.6 + 3.)) * smoothstep(-1., -3., h) * smoothstep(-34., -20., h) * (1. - rockW);
+				float sp = smoothstep(.9, .93, vnoise(gWPos.xz * 3.1 + 3.)) * smoothstep(-1., -3., h) * smoothstep(-34., -20., h) * (1. - rockW);
 				alb = mix(alb, vec3(.78, .74, .66), sp * .55);
 				// a green film where the sea was shallow and lit
 				float algae = smoothstep(-2., -6., h) * smoothstep(-30., -16., h) * smoothstep(.45, .7, fbm2(gWPos.xz * 0.03 + 2., 3));
@@ -1159,15 +1160,15 @@ function buildTerrain(world, segs) {
 				gUnder = step(h, uWaterY);
 				float age = expAge(h);
 				float hollow = smoothstep(0.45, 1.4, hs.g - h) * (inMap ? 1. : 0.);
-				float pud = hollow * exp(-max(age, 0.) / (uDry * 5.)) * (1. - gUnder) * (1. - rockW) * (1. - gPorc) * smoothstep(0.965, 0.99, gN.y);
+				float pud = 0.;   // standing puddles were tried: the foot of every ledge read as one, a white ring in the sun
 				float salt = smoothstep(uDry * 1.2, uDry * 5., age) * smoothstep(.5, .78, fbm2(gWPos.xz * 0.07, 3) + hollow * .5) * step(h, -1.5) * (1. - rockW) * (1. - gPorc) * (1. - gUnder);
 				alb = mix(alb, vec3(0.62, 0.61, 0.58), salt * .55);
 				gWet = wet;
 				alb *= mix(1., 0.5, wet * (1. - gPorc * .85));
 				alb = mix(alb, alb * vec3(.5, .56, .62), pud * .85);
 				gAlb = alb;
-				gRough = mix(mix(0.93, 0.85, rockW), mix(0.4, 0.55, smoothstep(0.85, 0.6, gN.y)), wet);
-				gRough = mix(gRough, 0.12, pud);
+				gRough = mix(mix(0.93, 0.85, rockW), mix(0.5, 0.62, smoothstep(0.92, 0.7, gN.y)), wet);
+				gRough = mix(gRough, 0.16, pud);
 				gRough = mix(gRough, 0.12, gPorc);
 				// sand ripples, washed flat where it is steep
 				float sandM = (1. - rockW) * (1. - landW) * (1. - gPorc) * smoothstep(-40., -1., h) * (1. - smoothstep(0.6, 3., dist / 300.));
@@ -2198,14 +2199,23 @@ class Fishes {
 					const gx = sampleH(F, f.p.x + 6, f.p.z) - sampleH(F, f.p.x - 6, f.p.z), gz = sampleH(F, f.p.x, f.p.z + 6) - sampleH(F, f.p.x, f.p.z - 6), L = Math.hypot(gx, gz) + 1e-4;
 					acc.x -= gx / L * 10; acc.z -= gz / L * 10;
 				}
+				// left on the sand when the water went faster than it could swim: it flops downhill, hop by hop, until it is back in
+				f.stranded = depth < 0.6 && !this.drain;
+				if (f.stranded) {
+					const gx = sampleH(F, f.p.x + 6, f.p.z) - sampleH(F, f.p.x - 6, f.p.z), gz = sampleH(F, f.p.x, f.p.z + 6) - sampleH(F, f.p.x, f.p.z - 6), L = Math.hypot(gx, gz) + 1e-4;
+					f.v.set(-gx / L * 9, 0, -gz / L * 9);
+				}
 				f.v.addScaledVector(acc, dt);
-				const sp = f.v.length(), max = this.drain ? 20 : 7 + crowd * 4, min = 2.2;
+				const sp = f.v.length(), max = this.drain ? 20 : f.stranded ? 9 : 7 + crowd * 4, min = 2.2;
 				if (sp > max) f.v.multiplyScalar(max / sp); else if (sp < min) f.v.multiplyScalar(min / Math.max(sp, 1e-3));
 				f.p.addScaledVector(f.v, dt);
 				const g2 = this.ground(f.p.x, f.p.z);
 				const lo = this.drain && Math.hypot(f.p.x - PLUG.x, f.p.z - PLUG.z) < 8 ? -1e9 : g2 + 1.0, hi = Math.max(lo + 0.2, wy - 0.7);
-				if (f.p.y < lo) { f.p.y = lerp(f.p.y, lo, 0.3); f.v.y = Math.abs(f.v.y) * 0.5; }
-				if (f.p.y > hi) { f.p.y = lerp(f.p.y, hi, 0.3); f.v.y = -Math.abs(f.v.y) * 0.5; }
+				if (f.stranded) f.p.y = g2 + 0.6 + Math.abs(Math.sin(t * 9 + this.phase[i])) * 1.6;
+				else {
+					if (f.p.y < lo) { f.p.y = lerp(f.p.y, lo, 0.3); f.v.y = Math.abs(f.v.y) * 0.5; }
+					if (f.p.y > hi) { f.p.y = lerp(f.p.y, hi, 0.3); f.v.y = -Math.abs(f.v.y) * 0.5; }
+				}
 				// now and then one jumps, more often the more crowded they are
 				if (!this.drain && wy - f.p.y < 3 && depth > 2 && this.rnd() < this.jumpRate * dt * 10) { f.jump = { t: 0 }; f.v.y = 9 + this.rnd() * 6; f.v.x *= 1.3; f.v.z *= 1.3; f.p.y = wy - 0.2; fx.splash(f.p.x, wy, f.p.z, 0.5); }
 			}
@@ -2263,19 +2273,19 @@ class Drops {
 		this.points = new THREE.Points(geo, this.mat); this.points.frustumCulled = false; this.points.layers.set(4);
 		this.lo = cap; this.hi = -1;
 	}
-	emit(x, y, z, vx, vy, vz, life, size, kind = 0) {
+	emit(x, y, z, vx, vy, vz, life, size, kind = 0, delay = 0) {
 		const i = this.i; this.i = (this.i + 1) % this.cap;
 		this.p0[i * 3] = x; this.p0[i * 3 + 1] = y; this.p0[i * 3 + 2] = z;
 		this.v0[i * 3] = vx; this.v0[i * 3 + 1] = vy; this.v0[i * 3 + 2] = vz;
-		this.tt[i * 2] = U.uTime.value; this.tt[i * 2 + 1] = life; this.ss[i * 2] = size; this.ss[i * 2 + 1] = kind;
+		this.tt[i * 2] = U.uTime.value + delay; this.tt[i * 2 + 1] = life; this.ss[i * 2] = size; this.ss[i * 2 + 1] = kind;
 		this.lo = Math.min(this.lo, i); this.hi = Math.max(this.hi, i);
 	}
 	// a lob from a to b that takes T seconds
-	arc(a, b, T, n, spread, size, kind = 0) {
+	arc(a, b, T, n, spread, size, kind = 0, stagger = 0) {
 		const G = 26, rnd = Math.random;
 		for (let k = 0; k < n; k++) {
 			const T2 = T * (0.9 + rnd() * 0.2), dx = b.x - a.x + (rnd() - .5) * spread, dz = b.z - a.z + (rnd() - .5) * spread, dy = b.y - a.y;
-			this.emit(a.x + (rnd() - .5) * spread * 0.15, a.y, a.z + (rnd() - .5) * spread * 0.15, dx / T2, dy / T2 + 0.5 * G * T2, dz / T2, T2, size * (0.7 + rnd() * 0.6), kind);
+			this.emit(a.x + (rnd() - .5) * spread * 0.15, a.y, a.z + (rnd() - .5) * spread * 0.15, dx / T2, dy / T2 + 0.5 * G * T2, dz / T2, T2, size * (0.7 + rnd() * 0.6), kind, rnd() * stagger);
 		}
 	}
 	splash(x, y, z, strength) {
@@ -2283,11 +2293,12 @@ class Drops {
 		for (let k = 0; k < n; k++) { const a = rnd() * 6.283, r = rnd(), up = (5 + rnd() * 9) * (0.6 + strength * 0.7); this.emit(x, y + 0.2, z, Math.cos(a) * r * 6 * (0.5 + strength), up, Math.sin(a) * r * 6 * (0.5 + strength), up / 13 + 0.15, 0.5 + rnd() * 0.6 + strength * 0.4, 0); }
 		for (let k = 0; k < 3 + strength * 4; k++) this.emit(x + (rnd() - .5) * 3, y + 1, z + (rnd() - .5) * 3, (rnd() - .5) * 3, 3 + rnd() * 3, (rnd() - .5) * 3, 1.0 + rnd() * 0.5, 1.0 + strength * 0.8, 1);
 	}
+	// what was written since the last draw goes up in one range; it is only forgotten once a frame has drawn it
 	flush() {
 		if (this.hi < this.lo) return;
 		for (const k in this.a) { const at = this.a[k], s = at.itemSize; at.clearUpdateRanges(); at.addUpdateRange(this.lo * s, (this.hi - this.lo + 1) * s); at.needsUpdate = true; }
-		this.lo = this.cap; this.hi = -1;
 	}
+	drawn() { this.lo = this.cap; this.hi = -1; }
 }
 
 // a soft glow over a find that is lying in the open
@@ -2761,7 +2772,7 @@ function frame(dt, noRender) {
 	drops.flush();
 	updateCamera(dt, false);
 	finalPass.uniforms.uTime.value = V.t;
-	if (!noRender) { ocean.render(scene, camera); renderScene(); composer.render(dt); }
+	if (!noRender) { ocean.render(scene, camera); renderScene(); composer.render(dt); drops.drawn(); }
 	if (audio.ctx) audio.update(dt, V.p, V.t, V.finale ? V.finale.drain : 0);
 	if (playing || V.mode === 'end') {
 		V.hudT -= dt; if (V.hudT <= 0) { V.hudT = 0.1; updateHUD(); }
@@ -2821,8 +2832,10 @@ function helperFx(dt) {
 			const bx = wl.x + wl.dx * st.out, bz = wl.z + wl.dz * st.out;
 			const b = { x: bx, y: Math.max(V.wy, sampleH(world.H, bx, bz)) + 0.5, z: bz };
 			const T = Math.sqrt(8 * st.up / 26);   // the flight time that lifts it `up` high
-			drops.arc(a, b, T, st.n, st.spread, st.size, 0);
-			for (let m = 0; m < st.mist; m++) drops.arc(a, b, T * 1.1, 1, st.spread * 2, st.size * 3, 1);
+			// a lob for buckets and tubs; for hoses, engines and pumps the drops are spread over the interval so they read as a jet
+			const jet = st.every < 0.2;
+			drops.arc(a, b, T, Math.round(st.n * (jet ? 1 : 1.5)), st.spread, st.size * 1.8, 0, jet ? st.every * 2 : 0.12);
+			for (let m = 0; m < st.mist; m++) drops.arc(a, b, T * 1.1, 1, st.spread * 2, st.size * 4, 1, 0.2);
 			if (k !== 2 && k !== 3 && k !== 4 || Math.random() < 0.05) ocean.ripple(a.x, a.z, 0.25 + k * 0.08, V.t);
 		}
 	}
