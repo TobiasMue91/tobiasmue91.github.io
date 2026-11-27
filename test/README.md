@@ -197,29 +197,36 @@ the push at an island border (the ring drifts), a border blend too short for Dre
 ## Bottom of the Sea
 
 ```sh
-npm run test:sea                         # or: node test/bottom_of_the_sea.mjs  (about ten seconds)
-npm run test:sea-browser                 # the real page in Chromium (about five minutes; needs cdn.jsdelivr.net)
+npm run test:sea                         # or: node test/bottom_of_the_sea.mjs  (about fifteen seconds)
+npm run test:sea-browser                 # the real page in Chromium (a few minutes; needs cdn.jsdelivr.net)
 node test/bottom_of_the_sea.mjs rules pacing      # named suites only
 node test/bottom_of_the_sea.mjs --page=old.html
 ```
 
-`test/bottom_of_the_sea.mjs` runs the DOM-free `<script id="core">` block of `games/bottom_of_the_sea.html`
-(the tools, helpers, storage tiers and finds, all in its `CFG`). `rules`: a full store spills and removes nothing
-until the clouds take the overflow, prices are paid exactly, finds and the plug only open once the gauge passes them,
-the log gauge and `removedAt` are inverses. `effects`: every tool, helper, storage tier and find changes a number.
-`save`: a game round-trips and nonsense in a save is clamped. `idle`: time away fills storage and stops, counts for at
-most eight hours and is not play time. `pacing`: three bots (eager, casual, and a newcomer who buys the cheapest thing
-unless the next tool is under three minutes away) play the whole sea; each must reach the plug in its window (18-26,
-24-34, 30-46 minutes), see the water drop within two minutes, find everything, never leave the water standing still for
-three minutes, and the newcomer must meet something new within two minutes and six new things in ten. Run it after
+`test/bottom_of_the_sea.mjs` runs the DOM-free `<script id="core">` block of `games/bottom_of_the_sea.html` (tools,
+carriers, ways about, contracts, buyers, helpers, stages and finds, all in its `CFG`). `rules`: a scoop goes into what you
+carry and spills when it is full, selling pays the price a litre, the pipeline sells every scoop at once, each rail goes
+exactly as far as its stage allows, a helper waits for the buyer tier that can take its water, what the buyer cannot
+take runs back (or, under the clouds, is blown away with some of it raining back), promotions wait for their depth and
+their price, finds and the plug open only once the gauge passes them, the walk to the water grows with the beach's
+slope, and the forecast starts at "never". `effects`: every find, the duck and the milestones change the number their
+card names. `save`: a game round-trips, an old basin save starts afresh, nonsense is clamped. `idle`: time away is paid
+for no faster than the buyer takes it, for at most eight hours, and is not play time. `pacing`: three bots (eager,
+casual, and a newcomer who buys the cheapest thing but stops hiring once the shop says their water runs back) walk the
+beach and play the whole sea; each must pull the plug in its window (22-34, 30-50, 45-85 minutes) with no long wait for
+anything new, lay the pipeline before the promotion and the promotion before orbit, and find everything; the eager bot
+spends more than half the game on foot, walks kilometres and earns the records an eager player would. Run it after
 touching any number in `CFG`.
 
 `test/bottom_of_the_sea_browser.mjs` drives the page itself in headless Chromium with its loop switched off
 (`window.__botsManual`) and frames stepped through `window.__bots`, drawing one only now and then because SwiftShader
-takes about a second a frame. `play`: the eager bot plays a whole sea through the page (shop, HUD, events, gear, finale)
-without a page or console error, ends on the end card with every find, the hotel sign at its last name and drops in the
-air, and a reload brings the empty sea back. `german`: with `?lang=de` the menu, shop and HUD are German and a list of
-English phrases is gone from the screen. `offline`: a save two hours old returns with what the helpers did meanwhile.
+takes about a second a frame. `beach`: by real input, W walks you down the sand and the walk is counted, clicks on the
+water fill the bag until it says it is full, a click on the machine walks you up and sells, the receipt prints the
+sea's remaining litres and the machine shows a new price after a contract. `career`: the rest of a game bought through
+the core and seen through the page; the promotion lifts the view to above the bay, the planet's oceans shrink until the
+plug's glint can be clicked, a click on the plug at the bottom pulls it and the end card comes up, with no page or
+console error, and a reload opens at the bottom of the empty sea. `duck`: a duck bobs up in view and a click on it
+starts the boost. `offline`: a save two hours old returns with what the helpers sold meanwhile.
 
 ## Bubble Break
 

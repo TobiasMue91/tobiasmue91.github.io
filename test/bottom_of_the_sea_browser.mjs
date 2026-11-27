@@ -1,18 +1,19 @@
 #!/usr/bin/env node
-// Browser suite for games/bottom_of_the_sea.html: the real page, its view and its UI, driven in headless Chromium.
+// Browser suite for games/bottom_of_the_sea.html: the real page, its view and its input, driven in headless Chromium.
 //
 // test/bottom_of_the_sea.mjs checks the rules and the pacing in Node. This one checks what only the page can get wrong:
-//   play     - the eager bot plays a whole sea through the page itself (shop, HUD, events, gear, fish, finale) with frames
-//              stepped by hand through window.__bots, drawing one now and then. It promises no page error and no console
-//              error on the way, the plug pulled and the end card shown, every find picked up, the hotel sign at its last
-//              name, a save in localStorage that brings the empty sea back after a reload, and water drops in the air
-//              while helpers work.
-//   german   - with ?lang=de the menu, the shop and the HUD speak German, and none of a list of English phrases is left.
-//   duck     - a rubber duck bobs up in view, a click on it where it is drawn starts the boost, and it dips away again.
-//   offline  - a save whose lastSeen is two hours old comes back with a toast about what the helpers did meanwhile.
-// SwiftShader draws a frame in about a second here, so the suite draws as few as it can; about five minutes in all.
+//   beach   - first person, by real input: W walks you down the sand (and the walk is counted), a click on the water
+//             scoops into the bag, a full bag says so, a click on the machine walks you up to it and sells, the receipt
+//             prints the sea's remaining litres, and the machine's face shows the new price after a contract.
+//   career  - the rest of a game, bought through the core but seen through the page: the beach view lifts into the view
+//             over the bay at the promotion, then cuts to the planet, whose glint is clicked when the plug comes clear;
+//             at the bottom a click on the plug pulls it, and the end card comes up. No page or console error on the way,
+//             and after a reload the game knows the sea is empty and opens at the bottom.
+//   duck     - a rubber duck bobs up in front of you, a click on it where it is drawn starts the boost, and it dips away.
+//   offline  - a save whose lastSeen is two hours old comes back with a toast about what the helpers sold meanwhile.
+// SwiftShader draws a frame in about a second here, so the suite draws as few as it can; a few minutes in all.
 // Needs Playwright's Chromium and network access to cdn.jsdelivr.net (three.js).
-//   node test/bottom_of_the_sea_browser.mjs [play] [german] [duck] [offline]      (npm run test:sea-browser)
+//   node test/bottom_of_the_sea_browser.mjs [beach] [career] [duck] [offline]      (npm run test:sea-browser)
 
 import {createServer} from 'http';
 import {readFileSync, existsSync} from 'fs';
@@ -31,7 +32,7 @@ let chromium;
 try { ({chromium} = await import('playwright')); } catch (e) {
     try { ({chromium} = createRequire(join(execSync('npm root -g').toString().trim(), 'x'))('playwright')); } catch (e2) { console.log('skip  (no Playwright)'); process.exit(0); }
 }
-const TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.webp': 'image/webp'};
+const TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.webp': 'image/webp', '.jpg': 'image/jpeg'};
 const server = createServer((req, res) => {
     const f = join(ROOT, decodeURIComponent(req.url.split('?')[0]));
     if (!f.startsWith(ROOT) || !existsSync(f)) { res.writeHead(404); res.end(); return; }
@@ -54,59 +55,83 @@ async function open(q, init) {
     await page.waitForFunction(() => (window.__bots && window.__bots.V.mode === 'title') || /Could not/.test(document.querySelector('#loadmsg').textContent), null, {timeout: 240000});
     return {page, ctx, errs};
 }
+const frames = (page, n, dt = 1 / 30) => page.evaluate(([n, dt]) => window.__bots.frame(dt, n, true), [n, dt]);
 
-if (run('play')) {
-    console.log('\n=== play ===');
-    // a clean slate on the first load only: the reload at the end must find the save
-    const {page, ctx, errs} = await open('', () => { try { if (!sessionStorage.getItem('fresh')) { localStorage.clear(); sessionStorage.setItem('fresh', '1'); } } catch (e) {} });
-    await page.evaluate(() => window.__bots.start());
-    const r = await page.evaluate(() => {
-        const B = window.__bots, S = B.S, SEA = B.SEA, mem = {cps: 6, notice: 2, seen: {}, thinkT: 0};
-        let acc = 0, think = 0, t = 0, maxDrops = 0;
-        const dt = 1 / 10;
-        while (t < 40 * 60 && !S.done) {
-            acc += 6 * dt; while (acc >= 1) { acc--; SEA.act(S, 'scoop'); }
-            think -= dt; if (think <= 0) { think = 1; SEA.botTurn(S, mem, 'eager'); }
-            const draw = Math.round(t * 10) % 1200 === 600;   // a frame drawn every two minutes
-            B.frame(dt, 1, !draw); t += dt;
-            if (draw) { const d = B.drops(), now = B.U.uTime.value; let k = 0; for (let i = 0; i < d.cap; i++) { const a = now - d.tt[i * 2]; if (a >= 0 && a <= d.tt[i * 2 + 1]) k++; } maxDrops = Math.max(maxDrops, k); }
-        }
-        for (let i = 0; i < 160; i++) B.frame(1 / 10, 1, i % 40 !== 39);
-        return { t, done: S.done, mode: B.V.mode, endShown: !document.querySelector('#end').classList.contains('hidden'),
-                 found: Object.keys(S.found).length, recs: Object.keys(S.rec).length, sign: B.V.village.userData.sign.userData.name,
-                 saved: !!localStorage.getItem('bottom_of_the_sea_v1'), maxDrops, gear: B.V.sponge !== undefined };
-    });
-    info(`plug pulled at ${(r.t / 60).toFixed(1)} min of play, ${r.recs} records, up to ${r.maxDrops} drops in the air`);
-    ok(r.done && r.mode === 'end' && r.endShown, 'the bot reaches the plug and the end card is shown');
-    ok(r.found === 7, 'every find is picked up on the way', `${r.found} of 7`);
-    ok(r.sign === 'HOTEL', 'the hotel sign has lost its view by the end', r.sign);
-    ok(r.maxDrops > 200, 'helpers throw water you can see', `${r.maxDrops} drops`);
-    ok(r.saved, 'the game is saved in localStorage');
-    ok(!errs.length, 'no page or console error in a whole game', errs.slice(0, 5).join(' | '));
-    // and back: the empty sea is still empty after a reload
-    await page.reload();
-    await page.waitForFunction(() => window.__bots && window.__bots.V.mode === 'title', null, {timeout: 240000});
-    const back = await page.evaluate(() => { window.__bots.start(); window.__bots.frame(1 / 30, 3, true); return { done: window.__bots.S.done, mode: window.__bots.V.mode, play: document.querySelector('#play').textContent }; });
-    ok(back.done && back.mode === 'end', 'after a reload the sea is still empty and the game knows it is over', JSON.stringify(back));
+if (run('beach')) {
+    console.log('\n=== beach ===');
+    const {page, ctx, errs} = await open('', () => { try { localStorage.clear(); } catch (e) {} });
+    await page.evaluate(() => { window.__bots.start(); window.__bots.goto(0.4, 6, 0, -0.1); });
+    await frames(page, 2);
+    // W walks you down to the water
+    const z0 = await page.evaluate(() => window.__bots.V.player.z);
+    await page.keyboard.down('KeyW'); await frames(page, 150); await page.keyboard.up('KeyW'); await frames(page, 10);
+    const w = await page.evaluate(() => ({ z: window.__bots.V.player.z, walked: window.__bots.S.walked, can: window.__bots.canScoop() }));
+    ok(w.z < z0 - 6 && w.walked > 6, 'W walks you down the sand, and the walk is counted', JSON.stringify(w));
+    ok(w.can, 'down at the water you can scoop', JSON.stringify(w));
+    // a click on the water scoops into the bag, until it is full
+    await page.evaluate(() => { const B = window.__bots; B.goto(B.V.player.x, B.V.player.z, 0, -0.5); B.frame(1 / 30, 1); });
+    for (let i = 0; i < 16; i++) { await page.mouse.click(600, 560); await frames(page, 4); }
+    const s = await page.evaluate(() => ({ held: window.__bots.S.held, cap: window.__bots.SEA.capOf(window.__bots.S), scoops: window.__bots.S.scoops, removed: window.__bots.S.removed, hint: document.querySelector('#hint').textContent, carry: document.querySelector('#carry').className }));
+    ok(s.scoops >= 12 && s.held === s.cap && s.removed === s.cap, 'clicks on the water scoop it into the bag until the bag is full', JSON.stringify(s));
+    ok(/full/i.test(s.hint) && /full/.test(s.carry), 'a full bag says so', s.hint);
+    // a click on the machine walks you up to it and sells
+    await page.evaluate(() => { const B = window.__bots; B.goto(B.V.player.x, B.V.player.z, Math.PI, 0.05); B.frame(1 / 30, 1); });
+    const m = await page.evaluate(() => window.__bots.machineXY());
+    await page.mouse.click(m.x, m.y);
+    for (let i = 0; i < 20 && await page.evaluate(() => window.__bots.S.held > 0); i++) await frames(page, 30);
+    await frames(page, 2);
+    const sold = await page.evaluate(() => ({ held: window.__bots.S.held, money: window.__bots.S.money, near: window.__bots.near(), receipt: document.querySelector('#receipt').textContent, on: document.querySelector('#receipt').classList.contains('on'), shop: document.querySelector('#shop').classList.contains('open') }));
+    ok(sold.held === 0 && Math.abs(sold.money - s.cap * 0.05) < 1e-9 && sold.near, 'a click on the machine walks you up to it and sells the bag', JSON.stringify(sold).slice(0, 200));
+    ok(sold.on && /1,334,999,999,999,999,999,99\d L/.test(sold.receipt) && /TOTAL/.test(sold.receipt), 'the receipt prints what is still in the sea', sold.receipt);
+    ok(sold.shop, 'and the shop opens at the machine');
+    // the machine's face follows the price
+    const face = await page.evaluate(() => { const B = window.__bots; B.S.money = 10; B.SEA.act(B.S, 'buy', 'contract'); B.frame(1 / 30, 3, true); return B.scene.children.find(o => o.userData && o.userData.price).userData.price; });
+    ok(face === '12.5¢', 'after a contract the machine shows the new price', face);
+    ok(!errs.length, 'no page or console error on the beach', errs.slice(0, 3).join(' | '));
     await ctx.close();
 }
 
-if (run('german')) {
-    console.log('\n=== german ===');
-    const {page, ctx, errs} = await open('&lang=de', () => { try { localStorage.clear(); } catch (e) {} });
-    const r = await page.evaluate(() => {
-        const B = window.__bots, S = B.S; B.start(); S.tool = 7; S.helpers = [40, 30, 22, 8, 0, 0, 0]; S.storage = 8; S.water = 1e11; S.found.flipflop = true;
-        B.setP(0.45); B.frame(1 / 10, 30, true);
-        document.querySelector('#menuBtn').click(); B.frame(1 / 10, 3, true);
-        const text = document.body.innerText;
-        return { h2: document.querySelector('#pause h2').textContent, shop: document.querySelector('#shop h2').textContent, level: document.querySelector('#level').textContent, text };
+if (run('career')) {
+    console.log('\n=== career ===');
+    const {page, ctx, errs} = await open('', () => { try { if (!sessionStorage.getItem('fresh')) { localStorage.clear(); sessionStorage.setItem('fresh', '1'); } } catch (e) {} });
+    await page.evaluate(() => window.__bots.start());
+    // the beach, bought out; the water down to the promotion
+    const r1 = await page.evaluate(() => {
+        const B = window.__bots, S = B.S, SEA = B.SEA; S.money = 1e12;
+        for (let i = 0; i < 20; i++) for (const r of ['tool', 'carry', 'move', 'contract', 'buyer']) SEA.act(S, 'buy', r);
+        for (let k = 0; k < 5; k++) SEA.act(S, 'helper', k, 10);
+        B.setP(0.37); B.advance(20);
+        const gear = { walkers: B.scene.children.some(o => o.children && o.children.some(c => c.isInstancedMesh && c.count > 10)) };
+        SEA.act(S, 'stage'); B.frame(1 / 30, 1, true);
+        const flying = !!B.V.fly; B.frame(1 / 30, 130, true); B.frame(1 / 30, 1);
+        return { view: B.V.view, flying, landed: !B.V.fly, camY: B.camera.position.y, gear, finds: Object.keys(S.found).length };
     });
-    ok(r.h2 === 'Einstellungen' && r.shop === 'Ausrüstung', 'menu and shop are German', `${r.h2} / ${r.shop}`);
-    ok(/unter dem Meeresspiegel/.test(r.level) && /\d\.\d{3}/.test(r.level), 'the depth reads in German with German digit grouping', r.level);
-    const english = [' per scoop', 'needs bigger storage', 'in all ·', 'the next adds', 'Helpers turn up', 'Your scoop', 'below sea level', 'Back to scooping', 'Scoops by hand', 'Supplies', 'Coastal authorities', 'A crab has noticed'];
-    const left = english.filter(w => r.text.includes(w));
-    ok(!left.length, 'no English phrase is left on the screen', left.join(', '));
-    ok(!errs.length, 'no error in German', errs.slice(0, 3).join(' | '));
+    ok(r1.view === 'air' && r1.flying && r1.landed && r1.camY > 300, 'the promotion lifts the view off the beach to above the bay', JSON.stringify(r1));
+    ok(r1.gear.walkers, 'helpers walk the beach with their buckets');
+    // the planet, and the plug from orbit
+    const r2 = await page.evaluate(() => {
+        const B = window.__bots, S = B.S, SEA = B.SEA; S.money = 1e30;
+        B.setP(0.65); B.advance(5); SEA.act(S, 'stage'); B.frame(1 / 30, 60, true);
+        const view = B.V.view;
+        for (let i = 0; i < 14; i++) SEA.act(S, 'buy', 'buyer');
+        B.setP(0.99); B.advance(30);
+        const g = B.globe(); g.view.yaw = Math.atan2(g.plugDir.x, g.plugDir.z); g.view.pitch = Math.asin(g.plugDir.y); g.view.vyaw = 0; B.frame(1 / 30, 2);
+        return { view, plug: !!S.exposed.plug, level: g.u.uLevel.value, xy: B.glintXY() };
+    });
+    ok(r2.view === 'globe' && r2.plug && r2.level < 0, 'the planet: the oceans shrink until the plug comes clear', JSON.stringify(r2));
+    await page.mouse.click(r2.xy.x, r2.xy.y); await frames(page, 60);
+    const r3 = await page.evaluate(() => { const B = window.__bots; B.goto(0, 30, 0, 0.25); B.frame(1 / 30, 1); return { view: B.V.view, xy: B.plugXY() }; });
+    ok(r3.view === 'plug', 'a click on the glint takes you down to the plug', JSON.stringify(r3));
+    await page.mouse.click(r3.xy.x, r3.xy.y); await frames(page, 30);
+    await frames(page, 480, 1 / 30);
+    const r4 = await page.evaluate(() => ({ done: window.__bots.S.done, mode: window.__bots.V.mode, end: !document.querySelector('#end').classList.contains('hidden'), saved: !!localStorage.getItem('bottom_of_the_sea_v2'), recs: Object.keys(window.__bots.S.rec).length }));
+    ok(r4.done && r4.mode === 'end' && r4.end, 'a click on the plug pulls it, and the end card comes up', JSON.stringify(r4));
+    ok(r4.saved, 'the game is saved in localStorage');
+    ok(!errs.length, 'no page or console error in a whole career', errs.slice(0, 5).join(' | '));
+    await page.reload();
+    await page.waitForFunction(() => window.__bots && window.__bots.V.mode === 'title', null, {timeout: 240000});
+    const back = await page.evaluate(() => { window.__bots.start(); window.__bots.frame(1 / 30, 3, true); return { done: window.__bots.S.done, mode: window.__bots.V.mode, view: window.__bots.V.view, play: document.querySelector('#play').textContent }; });
+    ok(back.done && back.mode === 'end' && back.view === 'plug', 'after a reload the sea is still empty and you are at the bottom', JSON.stringify(back));
     await ctx.close();
 }
 
@@ -114,29 +139,26 @@ if (run('duck')) {
     console.log('\n=== duck ===');
     const {page, ctx, errs} = await open('', () => { try { localStorage.clear(); } catch (e) {} });
     const r = await page.evaluate(() => {
-        const B = window.__bots, V = B.V; B.start(); B.setP(0.3); B.frame(1 / 10, 40, true);
-        V.duck.wait = 0; B.frame(1 / 10, 20, true); B.frame(1 / 30, 1);   // one drawn frame: world matrices are brought up to date when drawing
-        const up = V.duck.state, p = V.duck.g.position.clone().project(B.camera);
-        const x = (p.x * 0.5 + 0.5) * innerWidth, y = (-p.y * 0.5 + 0.5) * innerHeight, c = document.querySelector('#gl');
-        c.dispatchEvent(new PointerEvent('pointerdown', { clientX: x, clientY: y, pointerId: 1, bubbles: true }));
-        c.dispatchEvent(new PointerEvent('pointerup', { clientX: x, clientY: y, pointerId: 1, bubbles: true }));
-        const boost = B.S.boostT, rate = document.querySelector('#rRate').textContent;
-        B.frame(1 / 10, 25, true);
-        return { up, boost, state: V.duck.state, visible: V.duck.g.visible, ducks: B.S.ducks, rate };
+        const B = window.__bots, V = B.V; B.start(); B.setP(0.05); B.advance(10); B.goto(0, B.edge(0) + 2, 0, -0.15);
+        V.duck.wait = 0; B.frame(1 / 10, 20, true); B.frame(1 / 30, 1);
+        const up = V.duck.state, p = B.project(V.duck.g.position.x, V.duck.g.position.y + 0.4, V.duck.g.position.z);
+        return { up, p };
     });
-    ok(r.up === 'swim', 'a duck bobs up and swims', r.up);
-    ok(r.boost > 25 && r.ducks === 1, 'clicking it starts the boost', JSON.stringify(r));
-    ok(r.state === null && !r.visible, 'and it dips back under, gone after a moment', `${r.state} ${r.visible}`);
+    ok(r.up === 'swim' && r.p.z < 1 && r.p.x > 0 && r.p.x < 1200, 'a duck bobs up in front of you', JSON.stringify(r));
+    await page.mouse.click(r.p.x, r.p.y);
+    const r2 = await page.evaluate(() => { const B = window.__bots; const boost = B.S.boostT, ducks = B.S.ducks; B.frame(1 / 10, 25, true); return { boost, ducks, state: B.V.duck.state, visible: B.V.duck.g.visible }; });
+    ok(r2.boost > 25 && r2.ducks === 1, 'clicking it starts the boost', JSON.stringify(r2));
+    ok(r2.state === null && !r2.visible, 'and it dips back under, gone after a moment', JSON.stringify(r2));
     ok(!errs.length, 'no error with the duck', errs.slice(0, 3).join(' | '));
     await ctx.close();
 }
 
 if (run('offline')) {
     console.log('\n=== offline ===');
-    const save = JSON.stringify({ v: 1, t: 600, water: 0, removed: 1e9, tool: 5, storage: 6, helpers: [40, 20, 0, 0, 0, 0, 0], found: {}, exposed: {}, scoops: 500, lastSeen: Date.now() - 2 * 3600 * 1000, rec: {} });
-    const {page, ctx, errs} = await open('', new Function(`try { localStorage.setItem('bottom_of_the_sea_v1', ${JSON.stringify(save)}); } catch (e) {}`));
-    const r = await page.evaluate(() => { const B = window.__bots; const before = B.S.removed; B.start(); B.frame(1 / 10, 20, true); return { gained: B.S.removed - before, toasts: [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' | '), play: document.querySelector('#play').textContent }; });
-    ok(r.gained > 0, 'two hours away: the helpers took water out meanwhile', `+${r.gained.toExponential(2)} L`);
+    const save = JSON.stringify({ v: 2, t: 600, removed: 1e9, money: 10, tool: 5, carry: 5, buyer: 2, helpers: [40, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0], found: {}, exposed: {}, scoops: 500, lastSeen: Date.now() - 2 * 3600 * 1000, rec: {} });
+    const {page, ctx, errs} = await open('', new Function(`try { localStorage.setItem('bottom_of_the_sea_v2', ${JSON.stringify(save)}); } catch (e) {}`));
+    const r = await page.evaluate(() => { const B = window.__bots; const before = B.S.money; B.start(); B.frame(1 / 10, 20, true); return { gained: B.S.money - before, toasts: [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' | ') }; });
+    ok(r.gained > 0, 'two hours away: the helpers sold water meanwhile', `+$${r.gained.toFixed(2)}`);
     ok(/away for 2 h/.test(r.toasts), 'and a toast says so', r.toasts);
     ok(!errs.length, 'no error coming back', errs.slice(0, 3).join(' | '));
     await ctx.close();
