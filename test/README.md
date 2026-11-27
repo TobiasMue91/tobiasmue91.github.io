@@ -3081,3 +3081,29 @@ blurs) must match. The whole pencil pipeline is rebuilt in the test from those p
 | `names` | download file names from camera, non-ASCII, reserved-character and empty names |
 | `saves` | saved settings: broken JSON, clamping, partial saves, round trip |
 | `links` | `?style=` and `#style=` links, old and alternative style names |
+
+## Metadata Cleaner
+
+```sh
+npm i --no-save pdf-lib@1.17.1           # for the pdf suite; the same version the page loads
+npm run test:metadata                    # or: node test/metadata_cleaner.mjs
+node test/metadata_cleaner.mjs formats pdf   # named suites only
+```
+
+`metadata_cleaner.mjs` needs no browser and no server. It runs the page's `<script id="core">` in Node
+and holds it to the three promises the page cannot show: what it lists is really in the file (GPS read
+to the right decimal), the clean copy has none of it left (searched as raw bytes, not just as fields),
+and the picture or sound is untouched (same bytes, no re-encoding).
+
+| suite | what it checks |
+| --- | --- |
+| `exif` | Exif/TIFF reading against published conversions: DMS to decimal, hemispheres, byte orders, loops, 0,0 placeholders |
+| `formats` | real files made by Pillow, exiftool and ffmpeg (`metadata_cleaner.fixtures.json`, which says how): what is listed, what is left, data identical |
+| `built` | structures built here from the specs: every PNG text chunk, APNG, JPEG trailers and APP segments, WebP flags, stacked MP3 tags (ID3v2 twice, APE, Lyrics3, ID3v1), a 70 KB Ogg comment that forces re-pagination, FLAC last-block flag, an iPhone-style HEIF, the zip |
+| `oracle` | exiftool must find no privacy tag in any clean fixture, ffmpeg must decode it to the same md5 (skipped, not passed, when they are not installed) |
+| `pdf` | a PDF with info, custom keys, XMP, a GPS-tagged photo inside, a comment author and an incremental update: nothing of it left in the bytes; encrypted and signed PDFs |
+| `broken` | empty, foreign, renamed, cut-off and bit-flipped files, and a 40 MB JPEG against the clock |
+| `page` | the markup: no third-party hosts beyond the CDNs, no network in the core, the pinned pdf-lib |
+
+The fixtures are small real files kept as base64. To change one, regenerate it with the tool named in the
+file's `_how` and re-run `formats` and `oracle`.
