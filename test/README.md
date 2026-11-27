@@ -194,6 +194,25 @@ Each check has been seen failing: no dive tuck (the feel floors fall), a predict
 the push at an island border (the ring drifts), a border blend too short for Dreamland's hills
 (a cliff at island 29), and a fever one slide late.
 
+## Bottom of the Sea
+
+```sh
+npm run test:sea                         # or: node test/bottom_of_the_sea.mjs  (about ten seconds)
+node test/bottom_of_the_sea.mjs rules pacing      # named suites only
+node test/bottom_of_the_sea.mjs --page=old.html
+```
+
+`test/bottom_of_the_sea.mjs` runs the DOM-free `<script id="core">` block of `games/bottom_of_the_sea.html`
+(the tools, helpers, storage tiers and finds, all in its `CFG`). `rules`: a full store spills and removes nothing
+until the clouds take the overflow, prices are paid exactly, finds and the plug only open once the gauge passes them,
+the log gauge and `removedAt` are inverses. `effects`: every tool, helper, storage tier and find changes a number.
+`save`: a game round-trips and nonsense in a save is clamped. `idle`: time away fills storage and stops, counts for at
+most eight hours and is not play time. `pacing`: three bots (eager, casual, and a newcomer who buys the cheapest thing
+unless the next tool is under three minutes away) play the whole sea; each must reach the plug in its window (18-26,
+24-34, 30-46 minutes), see the water drop within two minutes, find everything, never leave the water standing still for
+three minutes, and the newcomer must meet something new within two minutes and six new things in ten. Run it after
+touching any number in `CFG`.
+
 ## Bubble Break
 
 ```sh
