@@ -327,6 +327,8 @@ if (suites.includes('scenes')) {
   eq(JSON.stringify(P.parseHash('#preset=newton&g=1,62')), '{"preset":"cradle","g":1.62}', 'aliases and a decimal comma');
   eq(JSON.stringify(P.parseHash('#preset=Pool')), '{"preset":"pool"}', 'case does not matter');
   eq(JSON.stringify(P.parseHash('#preset=moonbase')), '{"badPreset":"moonbase"}', 'unknown scene is reported, not loaded');
+  eq(JSON.stringify(P.parseHash('#preset=cradle&g=1.62&e=0.9&mu=0,2')), '{"preset":"cradle","g":1.62,"e":0.9,"mu":0.2}', 'bounce and friction travel in a preset link');
+  eq(JSON.stringify(P.parseHash('#e=2&mu=-1')), '{}', 'out-of-range bounce and friction in a link are ignored');
   eq(JSON.stringify(P.parseHash('#g=abc')), '{}', 'bad gravity in a link is ignored');
   eq(JSON.stringify(P.parseHash('#g=99')), '{}', 'out-of-range gravity in a link is ignored');
   eq(JSON.stringify(P.parseHash('')), '{}', 'no hash');
@@ -389,6 +391,16 @@ if (suites.includes('edges')) {
   const up = P.settle(w9, lifted, 1.5);
   check(up > 0 && up < 1, 'settle() lifts a tapped ball clear of the ramp', `lifted ${up.toFixed(2)} m`);
   eq(P.settle(w9, P.addBody(w9, {shape: 'circle', r: 0.2, x: 7, y: 4}), 1.5), 0, 'a ball in open air is not moved');
+  eq(P.settle(w9, P.addBody(w9, {shape: 'circle', r: 0.2, x: 7, y: 3}), 1.5, 0.4), 0, 'nor with a drop allowed, when nothing is within reach below');
+  {
+    const w = P.createWorld(); P.addBody(w, {shape: 'box', w: 4, h: 0.12, x: 3, y: 2, a: -0.5, fixed: true});
+    const ball = P.addBody(w, {shape: 'circle', r: 0.25, x: 2.5, y: 2.9});
+    const d = P.settle(w, ball, 1.5, 0.4);
+    // centre of a ball resting on the plank's top face: on the face's normal, r + half the thickness away
+    const nx = -Math.sin(-0.5), ny = Math.cos(-0.5), dist = (ball.x - 3) * nx + (ball.y - 2) * ny;
+    check(d < 0 && Math.abs(dist - (0.25 + 0.06)) < 0.01, 'a ball tapped just above a slope is set down onto it', `moved ${d.toFixed(3)}, gap ${(dist - 0.31).toFixed(4)} m`);
+    const y0 = ball.y; run(w, 0.05); check(Math.abs(ball.y - y0) < 0.02, 'and starts rolling from there without a drop');
+  }
   // picking
   const w8 = P.createWorld(); const c = P.addBody(w8, {shape: 'circle', r: 0.3, x: 2, y: 2});
   eq(P.bodyAt(w8, 2.2, 2.1), c, 'a tap inside a ball finds it');
