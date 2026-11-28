@@ -3183,3 +3183,20 @@ collision formulas. A full run takes a few seconds.
 | `parse` | the gravity people type (`9,81`, `9.81 m/s²`, `.5`) and the refusals, with an example in the message |
 | `scenes` | save/load round trip, strings and the slingshot band surviving, hostile scene data (bad shapes, 5000 bodies, script in labels, bad joints), clamped settings, scenes from a wider box scaled, `#preset=`/`#g=`/`#s=` links |
 | `edges` | shapes refused (zero, negative, too thin, 2 or 99 sides, infinite), convex hull, a shape made inside a ramp eased out rather than fired out, tapped shapes lifted clear, the 400-shape limit and its speed, pin and release, erasing a cradle ball, zero g under the ceiling, no tunnelling at g = 50, fixed steps whatever the frame time, picking with a finger's slack |
+
+## ASCII Camera
+
+```sh
+npm run test:asciicamera                 # or: node test/ascii_camera.mjs [suite ...]
+```
+
+`test/ascii_camera.mjs` runs the DOM-free `<script id="core">` block of `tools/ascii_camera.html` in Node; no browser or
+server. The page promises that each character stands for the average brightness of its patch, that the art keeps the
+picture's shape in 1:2 monospace cells, and that what is copied is what the screen shows. Checked: Rec. 709 luma and the
+sRGB transfer function; the box average against brute force on random pictures, including grids finer than the picture;
+transparency as empty paper; rows per width; auto levels ignoring outliers and leaving flat pictures alone; brightness and
+contrast by the CSS Filter Effects formulas; ink-measured character choice against a brute-force nearest search; braille's
+dot numbering and the ordered dither's grey levels; mirror and flip; text that keeps leading spaces, drops trailing ones
+and never splits an emoji; colour modes; typed widths (` 120 cols`, `64,0`), custom sets and hostile saved settings.
+The `INK` table in the core was measured from JetBrains Mono Regular in Chromium, drawn the way the page draws a glyph
+(cell 1 × 2, glyph centred, alpha summed); re-measure it the same way if the font or the glyph placement changes.
