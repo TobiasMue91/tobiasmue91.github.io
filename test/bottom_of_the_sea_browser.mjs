@@ -10,13 +10,15 @@
 //             takes management back down to the water's edge and up again, a click from orbit sends the Moon spoon down, then cuts to the planet, whose glint is clicked when the plug comes clear;
 //             at the bottom a click on the plug pulls it, and the end card comes up. No page or console error on the way,
 //             and after a reload the game knows the sea is empty and opens at the bottom.
+//   mouse    - on a desktop the first click captures the mouse, moving it turns you, a click acts at the crosshair, Shift
+//              runs once you own running shoes, and Tab hands the mouse back for the shop.
 //   walk     - a bot walks the real beach through the page's own goals, scooping and selling and buying the cheapest
 //              thing at the machine; the pipeline comes about when the core's straight-line reckoning says it would.
 //   duck     - a rubber duck bobs up in front of you, a click on it where it is drawn starts the boost, and it dips away.
 //   offline  - a save whose lastSeen is two hours old comes back with a toast about what the helpers sold meanwhile.
 // SwiftShader draws a frame in about a second here, so the suite draws as few as it can; a few minutes in all.
 // Needs Playwright's Chromium and network access to cdn.jsdelivr.net (three.js).
-//   node test/bottom_of_the_sea_browser.mjs [beach] [career] [walk] [duck] [offline]      (npm run test:sea-browser)
+//   node test/bottom_of_the_sea_browser.mjs [beach] [career] [mouse] [walk] [duck] [offline]      (npm run test:sea-browser)
 
 import {createServer} from 'http';
 import {readFileSync, existsSync} from 'fs';
@@ -149,6 +151,37 @@ if (run('career')) {
     await page.waitForFunction(() => window.__bots && window.__bots.V.mode === 'title', null, {timeout: 240000});
     const back = await page.evaluate(() => { window.__bots.start(); window.__bots.frame(1 / 30, 3, true); return { done: window.__bots.S.done, mode: window.__bots.V.mode, view: window.__bots.V.view, play: document.querySelector('#play').textContent }; });
     ok(back.done && back.mode === 'end' && back.view === 'plug', 'after a reload the sea is still empty and you are at the bottom', JSON.stringify(back));
+    await ctx.close();
+}
+
+if (run('mouse')) {
+    console.log('\n=== mouse ===');
+    // the desktop: a click captures the mouse, moving it turns your head, a click then acts at the crosshair, Tab frees it
+    const {page, ctx, errs} = await open('', () => { try { localStorage.clear(); } catch (e) {} window.__botsLock = true; });
+    await page.evaluate(() => { const B = window.__bots; B.start(); B.frame(1 / 30, 40, true); B.goto(0.4, -2.5, 0, -0.5); B.frame(1 / 30, 2); });
+    await page.mouse.click(600, 560); await frames(page, 4);
+    const r1 = await page.evaluate(() => ({ locked: document.pointerLockElement === document.querySelector('#gl'), scoops: window.__bots.S.scoops, yaw: window.__bots.V.player.yaw }));
+    ok(r1.locked && r1.scoops === 1, 'the first click acts and captures the mouse', JSON.stringify(r1));
+    // headless Chromium reports no movement under a captured mouse: the event the browser would send, sent by hand
+    await page.evaluate(() => document.querySelector('#gl').dispatchEvent(new PointerEvent('pointermove', { movementX: 120, movementY: 0, bubbles: true }))); await frames(page, 2);
+    const yaw = await page.evaluate(() => window.__bots.V.player.yaw);
+    ok(yaw < r1.yaw - 0.1, 'moving the mouse to the right turns you right', `${r1.yaw} -> ${yaw}`);
+    await page.evaluate(() => window.__bots.goto(window.__bots.V.player.x, window.__bots.V.player.z, 0, -0.5));
+    await page.mouse.click(100, 100); await frames(page, 4);
+    ok(await page.evaluate(() => window.__bots.S.scoops) === 2, 'a click while captured scoops where the crosshair is, wherever the pointer was');
+    await page.keyboard.down('ShiftLeft'); await page.keyboard.down('KeyS'); await frames(page, 20);
+    const run0 = await page.evaluate(() => window.__bots.V.runK);
+    await page.keyboard.up('KeyS'); await page.keyboard.up('ShiftLeft');
+    ok(run0 < 0.05, 'no running in bare feet', `${run0}`);
+    await page.evaluate(() => { const B = window.__bots; B.S.money = 1; B.SEA.act(B.S, 'buy', 'move'); });
+    await page.keyboard.down('ShiftLeft'); await page.keyboard.down('KeyS'); await frames(page, 20);
+    const run1 = await page.evaluate(() => ({ k: window.__bots.V.runK, v: Math.hypot(window.__bots.V.player.vx, window.__bots.V.player.vz) }));
+    await page.keyboard.up('KeyS'); await page.keyboard.up('ShiftLeft');
+    ok(run1.k > 0.8 && run1.v > 5, 'with running shoes Shift runs', JSON.stringify(run1));
+    await page.keyboard.press('Tab'); await frames(page, 2);
+    const r3 = await page.evaluate(() => ({ locked: document.pointerLockElement === document.querySelector('#gl'), shop: document.querySelector('#shop').classList.contains('open'), paused: !!window.__bots.V.paused }));
+    ok(!r3.locked && r3.shop && !r3.paused, 'Tab hands the mouse back for the shop without pausing', JSON.stringify(r3));
+    ok(!errs.length, 'no error with the mouse', errs.slice(0, 3).join(' | '));
     await ctx.close();
 }
 
