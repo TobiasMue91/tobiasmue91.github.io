@@ -6,7 +6,7 @@
 // when pasted into a monospace block, and that what is copied is what the screen shows. So: luma against
 // Rec. 709's coefficients; the box average against a brute-force average over hand-built pictures, including sizes
 // that do not divide evenly and pictures smaller than the grid; transparency counted as empty paper; rows from the
-// 1:2 cell; auto levels on a picture with outliers and on a flat one; brightness and contrast against the CSS
+// 1:2 cell; auto levels on a picture with outliers and on a flat one; the unsharp mask; brightness and contrast against the CSS
 // Filter Effects formulas; ink-measured character choice against a brute-force nearest search; braille bit layout
 // against Unicode's dot numbering and the ordered dither's grey levels; mirror and flip; text that keeps leading
 // spaces, drops trailing ones and never splits an emoji; and the typed widths, custom sets and saved settings
@@ -15,7 +15,7 @@
 //   node test/ascii_camera.mjs              # everything
 //   node test/ascii_camera.mjs braille text # named suites only
 //
-// Suites: luma, sample, grid, levels, tone, glyphs, braille, flip, text, colour, input, settings.
+// Suites: luma, sample, grid, levels (with sharpen), tone, glyphs, braille, flip, text, colour, input, settings.
 
 import {readFileSync} from 'fs';
 import {fileURLToPath} from 'url';
@@ -50,7 +50,7 @@ function pic(w, h, f) {
   return px;
 }
 const grey = v => [v, v, v];
-const base = {set: 'standard', cols: 20, auto: false, bright: 0, contrast: 0, invert: false, light: false, color: 'mono', dither: true};
+const base = {set: 'standard', cols: 20, auto: false, sharpen: false, bright: 0, contrast: 0, invert: false, light: false, color: 'mono', dither: true};
 const conv = (px, w, h, o) => C.convert(px, w, h, Object.assign({}, base, o));
 let seed = 12345;
 const rnd = () => (seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296;
@@ -124,6 +124,20 @@ if (suites.includes('levels')) {
   eq(C.autoLevels(new Float32Array(5).fill(0.5), new Float32Array(5).fill(0)), {lo: 0, hi: 1}, 'fully transparent picture');
   const Lt = new Float32Array([0.1, 0.9, 0.5, 0.5]), At = new Float32Array([0, 0, 1, 1]);
   eq(C.autoLevels(Lt, At), {lo: 0, hi: 1}, 'transparent pixels do not count');
+}
+
+if (suites.includes('levels')) {
+  section('sharpen: unsharp mask on the cell grid');
+  const flat = new Float32Array(25).fill(0.4); C.sharpen(flat, 5, 5, 0.8);
+  check([...flat].every(v => Math.abs(v - 0.4) < 1e-6), 'flat area untouched');
+  const edge = new Float32Array(25); for (let i = 0; i < 25; i++) edge[i] = (i % 5) < 2 ? 0.2 : 0.8;
+  C.sharpen(edge, 5, 5, 0.8);
+  check(edge[1] < 0.2 && edge[2] > 0.8, 'an edge gets steeper on both sides', `${edge[1]} ${edge[2]}`);
+  near(edge[0], 0.2, 1e-6, 'cells away from the edge keep their value');
+  const hot = new Float32Array(9).fill(0.95); hot[4] = 1; C.sharpen(hot, 3, 3, 5);
+  check([...hot].every(v => v >= 0 && v <= 1), 'results stay in 0..1');
+  const tiny = Float32Array.from([0.1, 0.9]); C.sharpen(tiny, 2, 1, 0.8);
+  eq([...tiny].map(v => +v.toFixed(3)), [0.1, 0.9], 'grids under 3×3 are left alone');
 }
 
 if (suites.includes('tone')) {

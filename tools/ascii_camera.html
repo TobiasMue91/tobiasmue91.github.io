@@ -33,6 +33,8 @@ button{cursor:pointer}
 header{grid-area:head;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.01em}
 header p{margin:0;color:var(--muted);font-size:14px}
+.home{margin-left:auto;color:var(--muted);font-size:13px;text-decoration:none;border-bottom:1px solid var(--line)}
+.home:hover{color:var(--text)}
 
 .stagecol{grid-area:stage;min-width:0;display:flex;flex-direction:column;align-items:center}
 .frame{display:flex;flex-direction:column;gap:10px;width:100%}
@@ -86,7 +88,7 @@ header p{margin:0;color:var(--muted);font-size:14px}
 .label output,.label .val{font:600 13px var(--mono);color:var(--text);text-transform:none;letter-spacing:0;font-variant-numeric:tabular-nums}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:8px;min-height:38px;padding:4px 10px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:1px;font-size:13px;font-weight:600}
-.chip small{font:500 11px var(--mono);color:var(--muted);letter-spacing:.02em;white-space:pre;max-width:110px;overflow:hidden}
+.chip small{font:500 11px var(--mono);color:var(--muted);letter-spacing:.02em;white-space:pre}
 .chip[aria-checked="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--raised)}
 .chip[aria-checked="true"] small{color:var(--text)}
 #sets .extra{display:none}
@@ -126,7 +128,7 @@ summary::-webkit-details-marker{display:none}
   .app{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "stage" "side";padding:10px 12px 28px;gap:10px}
   header p{display:none}
   .frame{width:100%}
-  .stage{max-height:58vh;min-height:0}
+  .stage{max-height:46vh;max-height:46svh;min-height:0}
 
   .bar{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
   .bar .grow{display:none}
@@ -147,6 +149,7 @@ summary::-webkit-details-marker{display:none}
   <header>
     <h1>ASCII Camera</h1>
     <p>Your webcam or a photo, drawn in characters, live. Nothing leaves this device.</p>
+    <a class="home" href="https://www.gptgames.dev/">gptgames.dev</a>
   </header>
 
   <div class="stagecol" id="stagecol"><div class="frame">
@@ -172,7 +175,7 @@ summary::-webkit-details-marker{display:none}
     <div class="metarow"><canvas class="thumb" id="thumb" width="160" height="120" title="The picture being converted" aria-hidden="true"></canvas>
     <div class="meta" id="meta" aria-hidden="true">
       <span class="state" id="state" data-k="example"><span class="dot"></span><span id="stateText">Example</span></span>
-      <span><b id="mSize">80 × 30</b> characters</span>
+      <span><b id="mSize">80×30</b> characters</span>
       <span id="mMethod" title="Each character stands for the average brightness (Rec. 709) of its part of the picture, in linear light, so its share of ink matches how bright that part looks.">brighter areas get denser characters</span>
     </div></div>
   </div></div>
@@ -184,7 +187,7 @@ summary::-webkit-details-marker{display:none}
     </div>
     <div class="group">
       <div class="label" id="setLbl">Characters</div>
-      <div class="chips"><div id="sets" role="radiogroup" aria-labelledby="setLbl" style="display:contents"></div><button class="chip morechip" id="moreSets" type="button" aria-expanded="false">More sets<small>01 · moons · own</small></button></div>
+      <div class="chips"><div id="sets" role="radiogroup" aria-labelledby="setLbl" style="display:contents"></div><button class="chip morechip" id="moreSets" type="button" aria-expanded="false">More sets<small>binary, moons, yours</small></button></div>
       <input class="text" id="custom" type="text" spellcheck="false" autocomplete="off" aria-label="Custom characters, from empty to full" aria-describedby="customErr" hidden>
       <div class="err" id="customErr"></div>
     </div>
@@ -208,7 +211,10 @@ summary::-webkit-details-marker{display:none}
           <div class="label" id="themeLbl">Screen colours</div>
           <div class="swatches" id="themes" role="radiogroup" aria-labelledby="themeLbl"></div>
         </div>
-        <label class="tog"><input type="checkbox" id="auto" checked> Auto levels</label>
+        <div class="toggles">
+          <label class="tog"><input type="checkbox" id="auto" checked> Auto levels</label>
+          <label class="tog"><input type="checkbox" id="sharpen" checked> Sharpen edges</label>
+        </div>
         <div class="group">
           <div class="label"><label for="bright">Brightness</label><output id="brightVal" for="bright">0</output></div>
           <input type="range" id="bright" min="-50" max="50" step="1" value="0">
@@ -341,6 +347,22 @@ summary::-webkit-details-marker{display:none}
     return { gw, gh, L, A, R, G, B };
   }
 
+  // Unsharp mask on the cell grid: each cell moves away from the mean of its 3×3 neighbourhood by `amount`.
+  // At 80 columns a cell is a big patch, and averaging it softens the edges (eyes, mouth, outline) that make a
+  // picture recognisable; this restores them. Flat areas are untouched.
+  function sharpen(L, w, h, amount) {
+    if (w < 3 || h < 3 || !(amount > 0)) return L;
+    const src = Float32Array.from(L);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let sum = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) { const yy = y + dy; if (yy < 0 || yy >= h) continue;
+        for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if (xx < 0 || xx >= w) continue; sum += src[yy * w + xx]; n++; } }
+      const k = y * w + x, v = src[k] + amount * (src[k] - sum / n);
+      L[k] = v < 0 ? 0 : v > 1 ? 1 : v;
+    }
+    return L;
+  }
+
   // Auto levels: the 1st and 99th percentile of brightness (opaque cells only) become black and white.
   // A near-flat picture is left alone rather than blown up into noise.
   function autoLevels(L, A) {
@@ -394,6 +416,7 @@ summary::-webkit-details-marker{display:none}
     const glyphs = glyphsFor(setId, opt.custom);
     const g = gridFor(w, h, opt.cols, setId);
     const s = sample(px, w, h, g.sw, g.sh);
+    if (opt.sharpen !== false) sharpen(s.L, s.gw, s.gh, setId === 'braille' ? 0.6 : 0.8);
     const lv = opt.auto === false ? { lo: 0, hi: 1 } : autoLevels(s.L, s.A);
     const bright = clampNum(opt.bright, -50, 50, 0), contrast = clampNum(opt.contrast, -50, 50, 0);
     const own = !!SETS[setId].own;
@@ -470,7 +493,7 @@ summary::-webkit-details-marker{display:none}
   const COLORS = ['mono', 'color', 'cells', 'gradient'];
 
   const DEFAULTS = { v: 1, set: 'standard', custom: ' .:-=+*#%@', cols: 80, auto: true, bright: 0, contrast: 0,
-    invert: false, paper: 'dark', color: 'mono', flipH: false, flipV: false, dither: true, camera: false };
+    invert: false, paper: 'dark', color: 'mono', flipH: false, flipV: false, dither: true, sharpen: true, camera: false };
 
   // Saved settings come from localStorage and are trusted for nothing.
   function cleanSettings(raw) {
@@ -481,7 +504,7 @@ summary::-webkit-details-marker{display:none}
     if (has(SETS, o.set)) s.set = o.set;
     if (typeof o.custom === 'string' && parseCustom(o.custom).value) s.custom = o.custom;
     const c = parseCols(o.cols); if (c.value) s.cols = c.value;
-    for (const k of ['auto', 'invert', 'flipH', 'flipV', 'dither', 'camera']) if (typeof o[k] === 'boolean') s[k] = o[k];
+    for (const k of ['auto', 'invert', 'flipH', 'flipV', 'dither', 'sharpen', 'camera']) if (typeof o[k] === 'boolean') s[k] = o[k];
     s.bright = Math.round(clampNum(o.bright, -50, 50, 0)); s.contrast = Math.round(clampNum(o.contrast, -50, 50, 0));
     if (has(PAPERS, o.paper)) s.paper = o.paper;
     if (COLORS.includes(o.color)) s.color = o.color;
@@ -495,7 +518,7 @@ summary::-webkit-details-marker{display:none}
   }
 
   const api = { SETS, SET_IDS, PAPERS, COLORS, GRADIENT, DEFAULTS, CELL_ASPECT, MIN_COLS, MAX_COLS, BRAILLE_BITS, BAYER4,
-    INK, lutFor, luma, toLinear, parseCols, parseCustom, glyphsFor, gridFor, sample, autoLevels, tone, pick, convert, toText, cleanSettings, fileName };
+    INK, lutFor, luma, toLinear, parseCols, parseCustom, glyphsFor, gridFor, sample, autoLevels, sharpen, tone, pick, convert, toText, cleanSettings, fileName };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.AsciiCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -511,7 +534,7 @@ let saved = null;
 try { saved = localStorage.getItem(KEY); } catch (e) {}
 S = C.cleanSettings(saved);
 // First visit on a phone: 64 columns, fine enough for a face at phone pixel density and short enough for a chat message.
-if (!saved && Math.min(screen.width || 9999, innerWidth) < 600) S.cols = 64;
+if (!saved) S.cols = Math.min(screen.width || 9999, innerWidth) < 600 ? 64 : 100;
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
 
 const stage = $('stage'), art = $('art'), actx = art.getContext('2d');
@@ -658,7 +681,7 @@ function frame() {
   drawThumb(sz);
   const grey = !out.colourful && S.color !== 'mono' && !C.SETS[out.set].own;
   $('mGrey').hidden = !grey;
-  $('mSize').textContent = `${out.cols} × ${out.rows}`;
+  $('mSize').textContent = `${out.cols}×${out.rows}`;
   art.setAttribute('aria-label', `ASCII art, ${out.cols} by ${out.rows} characters, ${labelOfMode()}`);
 }
 function labelOfMode() { return { example: 'example picture', live: 'live camera', frozen: 'frozen camera frame', photo: 'from your photo', starting: 'starting camera', error: 'example picture' }[mode]; }
@@ -742,8 +765,8 @@ async function startCamera() {
   } catch (err) {
     stopCamera(); setMode('error'); S.camera = false; save();
     const n = err && err.name;
-    if (n === 'NotAllowedError' || n === 'SecurityError') showMsg('Camera is blocked', 'Allow the camera for this site (the camera icon in the address bar), then try again. Or use a photo instead.', [['Try again', startCamera, true]]);
-    else if (n === 'NotFoundError' || n === 'OverconstrainedError') showMsg('No camera found', 'Plug one in and try again, or choose Photo below to convert a picture instead.', [['Try again', startCamera]]);
+    if (n === 'NotAllowedError' || n === 'SecurityError') showMsg('Camera is blocked', 'Allow the camera for this site (the camera icon in the address bar, or your phone’s browser settings), then try again.', [['Try again', startCamera, true], ['Choose a photo', pickPhoto]]);
+    else if (n === 'NotFoundError' || n === 'OverconstrainedError') showMsg('No camera found', 'This device has no camera this page can use. Convert a photo instead.', [['Choose a photo', pickPhoto, true], ['Try again', startCamera]]);
     else if (n === 'NotReadableError' || n === 'AbortError') showMsg('The camera is busy', 'Another app or tab is using it. Close that one and try again.', [['Try again', startCamera, true], ['Use a photo', pickPhoto]]);
     else showMsg('The camera didn’t start', (err && err.message ? err.message + '. ' : '') + 'Try again, or use a photo.', [['Try again', startCamera, true], ['Use a photo', pickPhoto]]);
     say('Camera could not start.');
@@ -904,7 +927,7 @@ function sync() {
   if (document.activeElement !== $('custom')) $('custom').value = S.custom;
   $('colsRange').value = S.cols;
   if (document.activeElement !== $('colsNum')) { $('colsNum').value = S.cols; $('colsNum').removeAttribute('aria-invalid'); $('colsErr').textContent = ''; }
-  $('auto').checked = S.auto; $('bright').value = S.bright; $('brightVal').textContent = (S.bright > 0 ? '+' : '') + S.bright;
+  $('auto').checked = S.auto; $('sharpen').checked = S.sharpen; $('bright').value = S.bright; $('brightVal').textContent = (S.bright > 0 ? '+' : '') + S.bright;
   $('contrast').value = S.contrast; $('contrastVal').textContent = (S.contrast > 0 ? '+' : '') + S.contrast;
   $('invert').checked = S.invert; $('flipH').checked = S.flipH; $('flipV').checked = S.flipV; $('dither').checked = S.dither;
   $('ditherTog').hidden = S.set !== 'braille';
@@ -927,8 +950,8 @@ $('custom').oninput = e => {
   else { e.target.setAttribute('aria-invalid', 'true'); $('customErr').textContent = p.error + ' Showing your last good set.'; }
 };
 for (const id of ['bright', 'contrast']) $(id).oninput = e => { S[id] = +e.target.value; sync(); };
-for (const id of ['auto', 'invert', 'flipH', 'flipV', 'dither']) $(id).onchange = e => { S[id] = e.target.checked; sync(); };
-$('resetBtn').onclick = () => { const cam = S.camera; S = C.cleanSettings(null); S.camera = cam; sync(); toast('Settings reset'); };
+for (const id of ['auto', 'sharpen', 'invert', 'flipH', 'flipV', 'dither']) $(id).onchange = e => { S[id] = e.target.checked; sync(); };
+$('resetBtn').onclick = () => { const cam = S.camera; S = C.cleanSettings(null); S.camera = cam; S.cols = Math.min(screen.width || 9999, innerWidth) < 600 ? 64 : 100; sync(); toast('Settings reset'); };
 
 addEventListener('resize', () => { dirty = true; });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { atlasKey = ''; dirty = true; });
@@ -941,6 +964,5 @@ if (S.camera && navigator.permissions && navigator.permissions.query) {
 window.__ascii = { get last() { return last; }, get mode() { return mode; }, loadPhoto, S: () => S };
 })();
 </script>
-<script src="../logo.js"></script>
 </body>
 </html>
