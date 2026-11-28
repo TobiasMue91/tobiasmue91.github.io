@@ -3235,7 +3235,7 @@ function makeBathtub() {
 	const paint = new THREE.MeshStandardMaterial({ color: 0x2f4a3e, roughness: 0.35, metalness: 0.1 }), enamel = new THREE.MeshStandardMaterial({ color: 0xf8f8f4, roughness: 0.08 });
 	grp.add(new THREE.Mesh(shell(outer, false), paint), new THREE.Mesh(shell(inner, true), enamel));
 	const fl = new THREE.Shape(); for (let c = 0; c <= N; c++) { const [x, z] = plan(c / N * Math.PI * 2, 0.8); c ? fl.lineTo(x, z) : fl.moveTo(x, z); }
-	const floor = new THREE.Mesh(new THREE.ShapeGeometry(fl, 24), enamel); floor.rotation.x = Math.PI / 2; floor.position.y = base + 0.04; grp.add(floor);
+	const floor = new THREE.Mesh(new THREE.ShapeGeometry(fl, 24), enamel); floor.rotation.x = -Math.PI / 2; floor.position.y = base + 0.04;   // facing up, into the tub grp.add(floor);
 	const under = new THREE.Mesh(new THREE.ShapeGeometry(fl, 24), paint); under.rotation.x = Math.PI / 2; under.position.y = base; grp.add(under);
 	const rimPts = []; for (let c = 0; c < N; c++) { const [x, z] = plan(c / N * Math.PI * 2, 1.0 - 0.027); rimPts.push(V3(x, base + Hs + 0.004, z)); }
 	grp.add(new THREE.Mesh(tube(rimPts, 0.03, 160, 12, true), enamel));
@@ -3669,17 +3669,19 @@ class Drops {
 					gl_Position = projectionMatrix * mv;
 					float u = t / a_tt.y;
 					float grow = isDrop ? 1. - 0.4 * u : 1. + 1.6 * u;
-					gl_PointSize = clamp(a_ss.x * grow * uScale / -mv.z, 1.2, 120.);
+					float px = a_ss.x * grow * uScale / -mv.z;
+					gl_PointSize = clamp(px, 1.2, isDrop ? 26. : 90.);
 					vA = (1. - smoothstep(0.65, 1., u)) * smoothstep(0., 0.06, u) * (isDrop ? 0.8 : 0.16) * clamp(a_ss.x * uScale / -mv.z / 1.2, 0.3, 1.);
 					vK = isDrop ? 0. : a_ss.y;
+					if (isDrop) vA *= 1. - smoothstep(14., 40., px);
 				}`,
 			fragmentShader: /* glsl */`
 				uniform vec3 uSunCol; uniform sampler2D uSkyTex; varying float vA; varying float vK;
 				void main(){
 					vec2 c = gl_PointCoord * 2. - 1.; float d = dot(c, c); if (d > 1.) discard;
 					vec3 sky = texture2D(uSkyTex, vec2(0.5, 0.95)).rgb;
-					vec3 col = sky * vec3(0.75, 0.9, 1.05) + uSunCol * 0.12 + uSunCol * 0.45 * smoothstep(0.5, 0., length(c - vec2(-.3, .3))) * step(vK, .5);
-					float a = vA * (vK < .5 ? smoothstep(1., 0.6, d) : (1. - d) * (1. - d));
+					vec3 col = sky * vec3(0.75, 0.9, 1.05) + uSunCol * 0.12 + uSunCol * 0.15;
+					float a = vA * (vK < .5 ? smoothstep(1., 0.1, d) : (1. - d) * (1. - d));
 					gl_FragColor = vec4(col, a * 0.85);
 				}`,
 			transparent: true, depthWrite: false,
@@ -4330,6 +4332,40 @@ function tubGeometry() {
 // Nothing appears or moves in a jump: a new hose unrolls from the top, a new engine drives down from the road, new straws
 // grow up out of the water, and all of them follow the waterline smoothly.
 const GEAR_X = { hose: [16, 19.5, 23, 13, 26.5, 30, 9.5, 33.5, 37, 40.5, 44, 47.5], engine: [60, 78, 96, 114, 132, 150, 168, 186, 204, 222], station: [-40, -62, -84, -106, -150, -172, -194, -216], straws: [240, -260, 320, -340, 400, -420, 480, -500] };
+// a fire engine's jet: a tube bent in the vertex shader along the arc from the monitor to where it lands, thin and
+// glassy at the nozzle, breaking up into spray towards the end, its streaks running along it
+function makeJet() {
+	const geo = new THREE.CylinderGeometry(1, 1, 1, 10, 48, true);
+	const mat = new THREE.ShaderMaterial({
+		uniforms: { uA: { value: new THREE.Vector3() }, uB: { value: new THREE.Vector3() }, uUp: { value: 9 }, uK: { value: 0 }, uTime: U.uTime, uSunCol: U.uSunCol },
+		vertexShader: `uniform vec3 uA; uniform vec3 uB; uniform float uUp; uniform float uK; varying float vT; varying vec2 vC; varying vec3 vN; varying vec3 vV;
+			void main(){
+				float t = (position.y + 0.5) * uK;
+				vec3 P = mix(uA, uB, t) + vec3(0., 4. * uUp * t * (1. - t), 0.);
+				vec3 T = normalize(uB - uA + vec3(0., 4. * uUp * (1. - 2. * t), 0.));
+				vec3 S = normalize(cross(T, vec3(0., 1., 0.))), W = cross(S, T);
+				float r = mix(0.08, 0.9, pow(t / max(uK, 0.001), 1.8));
+				vec3 n = S * position.x + W * position.z;
+				vec4 wp = modelMatrix * vec4(P + n * r, 1.);
+				vT = t; vC = vec2(atan(position.z, position.x), t); vN = n; vV = cameraPosition - wp.xyz;
+				gl_Position = projectionMatrix * viewMatrix * wp;
+			}`,
+		fragmentShader: `uniform float uTime; uniform float uK; uniform vec3 uSunCol; varying float vT; varying vec2 vC; varying vec3 vN; varying vec3 vV;
+			float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+			float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h(i), h(i + vec2(1., 0.)), f.x), mix(h(i + vec2(0., 1.)), h(i + vec2(1., 1.)), f.x), f.y); }
+			void main(){
+				float rim = 1. - abs(dot(normalize(vN), normalize(vV)));
+				float s = n2(vec2(vC.x * 2.5, vT * 40. - uTime * 22.)) * 0.6 + n2(vec2(vC.x * 6., vT * 110. - uTime * 50.)) * 0.4;
+				float tail = vT / max(uK, 0.001);
+				float a = (0.35 + 0.45 * rim) * mix(0.9, smoothstep(0.35, 0.8, s), smoothstep(0.25, 0.9, tail)) * (1. - smoothstep(0.88, 1., tail));
+				vec3 col = mix(vec3(0.72, 0.85, 0.92), vec3(1.), 0.4 + 0.5 * s) * (0.65 + 0.45 * uSunCol);
+				gl_FragColor = vec4(col, a * 0.6);
+			}`,
+		transparent: true, depthWrite: false, side: THREE.DoubleSide,
+	});
+	const m = new THREE.Mesh(geo, mat); m.frustumCulled = false; m.layers.set(4); m.visible = false;
+	return m;
+}
 class Gear {
 	constructor() {
 		this.group = new THREE.Group();
@@ -4404,6 +4440,12 @@ class Gear {
 			const y0 = sampleH(world.H, tr.pos.x, tr.pos.z), yF = sampleH(world.H, tr.pos.x, tr.pos.z - 3), yB = sampleH(world.H, tr.pos.x, tr.pos.z + 3);
 			tr.g.position.set(tr.pos.x, Math.max(y0, V.wy - 0.3), tr.pos.z);
 			tr.g.rotation.set(0, 0, 0); tr.g.rotateY(Math.PI); tr.g.rotateX(Math.atan2(yF - yB, 6));
+			// the jet: one arc of water from the monitor up the beach, once the engine has stopped at the water
+			if (!tr.jet) { tr.jet = makeJet(); this.group.add(tr.jet); tr.jetK = 0; }
+			tr.jetK = damp(tr.jetK, L < 3 ? 1 : 0, 1.5, dt); tr.g.updateMatrixWorld();
+			const u = tr.jet.material.uniforms, a = tr.g.localToWorld(tr.g.userData.cannon.clone()), bz = coastZ(a.x) + 18;
+			u.uA.value.copy(a); const reach = Math.min(42, bz - a.z), lz = a.z + reach; u.uB.value.set(a.x + Math.sin(tr.pos.x * 0.37) * 2, groundAt(a.x, lz) + 0.2, lz); u.uUp.value = 2 + reach * 0.14; u.uK.value = tr.jetK;
+			tr.jet.visible = tr.jetK > 0.01 && V.view !== 'globe';
 		}
 		// straws: rows at the water's edge, twenty to a stretch
 		const ns = n[7] ? Math.min(this.STRAWS, 20 + Math.floor(n[7] * 6)) : 0;
@@ -4463,7 +4505,7 @@ class Gear {
 		const pick = a => { const b = a.filter(Boolean); return b[(Math.random() * b.length) | 0]; };
 		if (k === 2) { const o = pick(this.hoses); if (o && o.grow >= 1) { const a = o.start.clone(); a.z += 0.4; a.y += 0.25; return { a, b: a.clone().add(new THREE.Vector3(0, -0.2, 2.2)), up: 0.4 }; } }
 		if (k === 4) { const o = pick(this.pipes); if (o && o.grow >= 1) { const a = o.start.clone(); a.y += 1.2; a.z += 2; return { a, b: a.clone().add(new THREE.Vector3(0, -0.5, 6)), up: 1.5 }; } }
-		if (k === 3) { const tr = pick(this.trucks); if (tr) { const a = tr.g.localToWorld(tr.g.userData.cannon.clone()); return { a, b: new THREE.Vector3(a.x + (Math.random() - .5) * 4, coastZ(a.x) * 0 + groundAt(a.x, coastZ(a.x) + 18) + 1, coastZ(a.x) + 18), up: 9 }; } }
+		if (k === 3) { const tr = pick(this.trucks); if (tr && tr.jet && tr.jetK > 0.9) { const u = tr.jet.material.uniforms; return { a: u.uB.value.clone().lerp(u.uA.value, 0.12).setY(u.uB.value.y + u.uUp.value * 0.4), b: u.uB.value.clone().add(new THREE.Vector3((Math.random() - .5) * 3, 0, (Math.random() - .5) * 3)), up: 1.2 }; } }
 		return null;
 	}
 }
@@ -5501,7 +5543,7 @@ const VM_POSE = [
 	{ s: 1, p: [-0.15, -0.27, -0.5], r: [1.0, 0.25, 0.1] },
 	{ s: 1, p: [-0.2, -0.2, -0.38], r: [0.25, -0.9, 0] },
 	{ s: 1, p: [-0.3, -0.52, -0.62], r: [0.25, -0.3, 0] },
-	{ s: 1, p: [0.3, -1.05, -1.55], r: [0.15, 0.35, 0] },
+	{ s: 1, p: [-0.22, -1.05, -1.55], r: [0.15, -0.35, 0] },
 ];
 const CLIPBOARD = { s: 1, p: [0.14, -0.27, -0.42], r: [0.95, -0.3, 0.1] };
 function setTool(i, snap) {
@@ -5784,7 +5826,7 @@ function onEvent(e) {
 		}
 		case 'sold': {
 			receipt(e.L, e.$); coins();
-			earnTip(e.$);
+			if (!SEA_.piped(S)) earnTip(e.$);   // piped, the scoop itself shows what it earned
 			if (!S.ui.hints.sold) { S.ui.hints.sold = 1; later(1.5, () => hint('Spend it on Supplies: a teaspoon would help. Somewhat.', 6)); }
 			break;
 		}
