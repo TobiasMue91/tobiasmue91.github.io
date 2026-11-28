@@ -12,7 +12,8 @@
 //             and after a reload the game knows the sea is empty and opens at the bottom.
 //   mouse    - on a desktop the first click captures the mouse, moving it turns you, a click acts at the crosshair, Shift
 //              runs once you own running shoes, Tab hands the mouse back for the shop, and the view from above keeps
-//              the mouse: it swings the camera, W A S D slide the view. The pier can be walked on.
+//              the mouse: it swings the camera, W A S D slide the view; the planet stops when turned, the plug keeps
+//              the mouse. The pier can be walked on.
 //   walk     - a bot walks the real beach through the page's own goals, scooping and selling and buying the cheapest
 //              thing at the machine; the pipeline comes about when the core's straight-line reckoning says it would.
 //   duck     - a rubber duck bobs up in front of you, a click on it where it is drawn starts the boost, and it dips away.
@@ -196,6 +197,12 @@ if (run('mouse')) {
     await page.keyboard.down('KeyD'); await frames(page, 30); await page.keyboard.up('KeyD');
     const a2 = await page.evaluate(() => window.__bots.V.airPan ? window.__bots.V.airPan.length() : 0);
     ok(a2 > 100, 'D slides the view along the coast', `${a2}`);
+    // from orbit the planet stays where the mouse put it, and down at the plug the mouse is still captured
+    const gl = await page.evaluate(() => { const B = window.__bots; B.S.stage = 2; B.view('globe'); B.frame(1 / 30, 2); document.querySelector('#gl').dispatchEvent(new PointerEvent('pointermove', { movementX: 60, movementY: 0, bubbles: true })); B.frame(1 / 30, 30); const y0 = B.globe().view.yaw; B.frame(1 / 30, 90); return { d: Math.abs(B.globe().view.yaw - y0) }; });
+    ok(gl.d < 0.01, 'the planet stops turning once you have turned it', JSON.stringify(gl));
+    await page.evaluate(() => { const B = window.__bots; B.view('plug'); B.frame(1 / 30, 2); });
+    const pl = await page.evaluate(() => ({ locked: document.pointerLockElement === document.querySelector('#gl'), shop: document.querySelector('#shop').classList.contains('open') }));
+    ok(pl.locked && !pl.shop, 'at the plug the mouse is still captured and the shop is shut', JSON.stringify(pl));
     // the pier: up its steps from the dune and out along the deck, held between the railings
     const pier = await page.evaluate(() => { const B = window.__bots, V = B.V, p = V.pier; B.view('beach'); B.S.stage = 0; V.keys = {}; B.goto((p.x0 + p.x1) / 2 + 1.5, p.z0 + 3, 0.15, -0.1); V.keys.KeyW = true; for (let i = 0; i < 450; i++) B.frame(1 / 10, 1, true); V.keys = {}; return { z: V.player.z, x: V.player.x, on: !!V.player.onPier, y: B.camera.position.y, p }; });
     ok(pier.on && pier.z < pier.p.z1 + 6 && pier.y > pier.p.top + 1, 'the pier can be walked on, out to its end', JSON.stringify(pier));
