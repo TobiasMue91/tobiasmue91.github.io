@@ -256,6 +256,8 @@ body.locked #tip{transform:translate(-50%,24px)}
 #navA{width:44px;height:44px;border-radius:50%;background:rgba(6,18,26,.62);border:1.5px solid var(--brass);display:grid;place-items:center;box-shadow:0 0 18px rgba(224,187,114,.45)}
 #navA svg{width:24px;height:24px;fill:var(--brass)}
 #navD{font:700 12.5px/1 var(--ui);color:var(--ink);background:rgba(6,18,26,.62);padding:4px 9px;border-radius:999px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.fl.earn{font:800 15px/1 var(--ui);color:var(--brass);background:rgba(6,18,26,.78);border:1px solid rgba(224,187,114,.55);padding:6px 11px;border-radius:999px;text-shadow:none;box-shadow:0 6px 18px rgba(0,0,0,.35);animation:earn 1.3s cubic-bezier(.2,.7,.3,1) forwards}
+@keyframes earn{0%{opacity:0;transform:translate(-50%,-20%) scale(.8)}12%{opacity:1;transform:translate(-50%,-100%) scale(1.06)}75%{opacity:1;transform:translate(-50%,-150%) scale(1)}100%{opacity:0;transform:translate(-50%,-190%) scale(1)}}
 #fade{position:fixed;inset:0;background:#02070a;opacity:0;pointer-events:none;transition:opacity .8s ease;z-index:9}
 #fade.on{opacity:1}
 #hud[data-view=globe] #carry,#hud[data-view=plug] #carry{display:none}
@@ -1166,14 +1168,15 @@ const WORLD = 6000, HALF = WORLD / 2, HN = 1024, CELL = WORLD / (HN - 1);
 const REGION = { x0: -1700, x1: 1700, z0: -2900, z1: 500 };   // where props are scattered
 const MACHINE = new THREE.Vector3(0, 0, 12);
 function generateWorld() {
-	const H = new Float32Array(HN * HN), P = new Float32Array(HN * HN);
+	const H = new Float32Array(HN * HN), P = new Float32Array(HN * HN), L = new Float32Array(HN * HN);
 	for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) {
 		const x = -HALF + i * CELL, z = -HALF + j * CELL, k = j * HN + i;
 		H[k] = rawHeight(x, z);
 		// the promenade: paving along the top of the beach
 		const u = seaU(x, z); P[k] = smoothstep(9.5, 11, u) * (1 - smoothstep(26, 28, u)) * (1 - smoothstep(560, 680, Math.abs(x)));
+		L[k] = smoothstep(28, 36, u + (fbm(x * 0.05, z * 0.05, 2) - 0.5) * 6);   // meadow from just behind the promenade
 	}
-	return { H, P };
+	return { H, P, L };
 }
 function sampleH(H, x, z) {
 	const fx = clamp((x + HALF) / CELL, 0, HN - 1.001), fz = clamp((z + HALF) / CELL, 0, HN - 1.001);
@@ -1215,7 +1218,7 @@ function buildHeightTextures(world) {
 	const data = new Uint16Array(HN * HN * 4), toH = THREE.DataUtils.toHalfFloat, nrm = new Uint8Array(HN * HN * 4);
 	for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) {
 		const k = j * HN + i;
-		data[k * 4] = toH(H[k]); data[k * 4 + 1] = toH(blur[k]); data[k * 4 + 2] = toH(world.P[k]); data[k * 4 + 3] = toH(1);
+		data[k * 4] = toH(H[k]); data[k * 4 + 1] = toH(blur[k]); data[k * 4 + 2] = toH(world.P[k]); data[k * 4 + 3] = toH(world.L[k]);
 		const l = H[j * HN + Math.max(0, i - 1)], r = H[j * HN + Math.min(HN - 1, i + 1)], d = H[Math.max(0, j - 1) * HN + i], u = H[Math.min(HN - 1, j + 1) * HN + i];
 		let nx = l - r, ny = 2 * CELL, nz = d - u; const L = Math.hypot(nx, ny, nz); nx /= L; ny /= L; nz /= L;
 		nrm[k * 4] = (nx * 0.5 + 0.5) * 255; nrm[k * 4 + 1] = (ny * 0.5 + 0.5) * 255; nrm[k * 4 + 2] = (nz * 0.5 + 0.5) * 255; nrm[k * 4 + 3] = 255;
@@ -1311,7 +1314,7 @@ function buildTerrain(world, segs) {
 				float band = sin(h * 1.9 + n1 * 7. + n2 * 2.) * .5 + .5;
 				// the land: meadows, dry grass and darker copses, in patches the size of fields
 				// (each zone's noise is only worked out where that zone can be: the branches follow height, so they are coherent)
-				vec3 grass = mix(vec3(0.06, 0.1, 0.03), vec3(0.17, 0.17, 0.06), smoothstep(.3, .75, n1 + n3 * .2));
+				vec3 grass = mix(vec3(0.09, 0.15, 0.045), vec3(0.22, 0.23, 0.085), smoothstep(.3, .75, n1 + n3 * .2));
 				if (h > 1.) {
 					float fields = fbm2(gWPos.xz * 0.004 + 9., 3), copse = smoothstep(.58, .7, fbm2(gWPos.xz * 0.012 + 4., 4));
 					grass = mix(grass, vec3(0.26, 0.22, 0.1), smoothstep(.55, .7, fields) * .8);
@@ -1326,7 +1329,7 @@ function buildTerrain(world, segs) {
 				vec3 strata = mix(vec3(0.3, 0.24, 0.18), vec3(0.13, 0.12, 0.11), smoothstep(.35, .65, band)) * (0.85 + 0.3 * n3);
 				vec3 rock = mix(vec3(0.2, 0.2, 0.19), vec3(0.34, 0.33, 0.3), n3) * (0.85 + 0.3 * band);
 				vec3 alb = sand;
-				float landW = smoothstep(3.4, 6., h + (n1 - .5) * 2.);
+				float landW = max(smoothstep(3.4, 6., h + (n1 - .5) * 2.) * (inMap ? 0. : 1.), inMap ? hs.a : 0.);
 				alb = mix(alb, grass, landW);
 				alb = mix(alb, shelf, smoothstep(-1.2, -4., h));
 				alb = mix(alb, silt, smoothstep(-24., -36., h + (n1 - .5) * 10.));
@@ -1369,19 +1372,19 @@ function buildTerrain(world, segs) {
 				float sandOnly = (1. - rockW) * (1. - landW) * (1. - pave) * (1. - gPorc);
 				float fpx = length(fwidth(gWPos.xz));
 				float g1 = hash12(floor(gWPos.xz * 260.)), g2 = hash12(floor(gWPos.xz * 110.) + 7.), g3 = hash12(floor(gWPos.xz * 45.) + 3.);
-				float gr = (step(0.9, g1) * -0.42 + step(g1, 0.07) * 0.28) * (1. - smoothstep(0.0015, 0.005, fpx)) + (step(0.94, g2) * -0.3 + step(g2, 0.05) * 0.18) * (1. - smoothstep(0.004, 0.012, fpx)) + (step(0.96, g3) * -0.2) * (1. - smoothstep(0.01, 0.03, fpx));
+				float gr = (step(0.92, g1) * -0.24 + step(g1, 0.06) * 0.18) * (1. - smoothstep(0.0015, 0.005, fpx)) + (step(0.95, g2) * -0.16 + step(g2, 0.04) * 0.12) * (1. - smoothstep(0.004, 0.012, fpx)) + (step(0.97, g3) * -0.1) * (1. - smoothstep(0.01, 0.03, fpx));
 				alb *= 1. + gr * sandOnly;
 				// mottling at the size of a footstep, and the damp darkening that lags behind the water in patches
 				alb *= mix(1., 0.9 + 0.2 * vnoise(gWPos.xz * 2.3), sandOnly * (1. - smoothstep(25., 120., dist)));
 				// swash lines: the reach of the last few waves, thin dark lines of wet sand and foam residue above the water
 				float above = h - uWaterY;
-				float sw = smoothstep(0.86, 1., sin(above * 55. + n1 * 7. + vnoise(gWPos.xz * 0.4) * 3.)) * step(0., above) * (1. - smoothstep(0.08, 0.45, above));
-				alb = mix(alb, alb * vec3(0.72, 0.7, 0.66), sw * sandOnly * 0.8);
+				float sw = smoothstep(0.86, 1., sin(above * 55. + n1 * 7. + vnoise(gWPos.xz * 0.4) * 3.)) * smoothstep(0., 0.05, above) * (1. - smoothstep(0.08, 0.45, above));
+				alb = mix(alb, alb * vec3(0.8, 0.78, 0.74), sw * sandOnly * 0.6);
 				gAlb = alb;
 				gRough = mix(mix(0.93, 0.85, rockW), mix(0.5, 0.62, smoothstep(0.92, 0.7, gN.y)), wet);
 				gRough = mix(gRough, 0.16, pud);
 				// the glassy film of water left on the sand just above the waterline: it mirrors the sky
-				gRough = mix(gRough, 0.3, smoothstep(0.12, 0.0, h - uWaterY) * step(uWaterY, h) * (1. - rockW) * (1. - pave));
+				gRough = mix(gRough, 0.3, smoothstep(0.12, 0.0, h - uWaterY) * (1. - rockW) * (1. - pave));
 				gRough = mix(gRough, 0.12, gPorc);
 				// sand ripples, washed flat where it is steep
 				float sandM = (1. - rockW) * (1. - landW) * (1. - gPorc) * (1. - pave) * smoothstep(-40., -1., h) * (1. - smoothstep(0.6, 3., dist / 300.));
@@ -2741,8 +2744,9 @@ function buildTrees(world, count) {
 			{
 				vec3 vd = normalize(gWPos - cameraPosition);
 				float back = pow(max(dot(vd, uSunDir), 0.), 4.);
-				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * vec3(0.9, 1.1, 0.5) * (back * mix(1.3, 0.25, uMirror) + 0.12) * vColor.r;
-				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * max(dot(normalize((vec4(normal, 0.) * viewMatrix).xyz), uSunDir) * 0.5 + 0.5, 0.) * 0.22;
+				// (Lanternwind's light is about a third of this sun's, so its glow terms are scaled down to match)
+				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * vec3(0.9, 1.1, 0.5) * (back * mix(1.3, 0.25, uMirror) + 0.12) * vColor.r * 0.33;
+				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * max(dot(normalize((vec4(normal, 0.) * viewMatrix).xyz), uSunDir) * 0.5 + 0.5, 0.) * 0.07;
 				totalEmissiveRadiance += diffuseColor.rgb * (skyLUT(vec3(0., 1., 0.)) * 0.3 + skyLUT(normalize(vec3(uSunDir.x, 0.08, uSunDir.z))) * 0.08) * (0.55 + 0.45 * vColor.r);
 			}`,
 	});
@@ -2764,8 +2768,8 @@ function buildTrees(world, count) {
 		// woods where the noise says so, a lone tree now and then elsewhere
 		const wood = fbm(x * 0.006 + 3, z * 0.006 - 2, 4);
 		const garden = seaU(x, z) < 200 && Math.abs(x) < 520 ? 0.16 : 0.05;   // gardens behind the town have a tree or two
-		if (rnd() > (wood > 0.55 ? 0.9 : garden)) continue;
-		const k = wood > 0.6 && rnd() < 0.65 ? 0 : 1;
+		if (rnd() > (wood > 0.5 ? 0.95 : garden)) continue;
+		const k = wood > 0.56 && rnd() < 0.65 ? 0 : 1;
 		const d = Math.hypot(x, z - 60), lod = d < 420 ? 0 : d < 1100 ? 1 : 2;
 		const stand = 0.8 + 0.4 * smoothstep(0.55, 0.75, wood);
 		lists[k][lod].push([x, h - 0.3, z, (0.6 + rnd() * 0.5) * stand, rnd() * Math.PI * 2, rnd()]);
@@ -2877,15 +2881,18 @@ function buildVillage(world, x0, x1, signText = 'SEA VIEW HOTEL') {
 		const wc = wallC[(rnd() * wallC.length) | 0], rc = roofC[(rnd() * roofC.length) | 0];
 		const R = big ? 0 : d * 0.42;
 		// the walls: a box for a flat-roofed hotel, a prism with gable ends for a house
-		let wg;
-		if (big) { wg = new THREE.BoxGeometry(w, H, d); wg.translate(0, H / 2, 0); }
-		else {
-			const sh = new THREE.Shape(); sh.moveTo(-d / 2, 0); sh.lineTo(d / 2, 0); sh.lineTo(d / 2, H); sh.lineTo(0, H + R); sh.lineTo(-d / 2, H); sh.closePath();
-			wg = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: false }); wg.rotateY(Math.PI / 2); wg.translate(-w / 2, 0, 0); wg.computeVertexNormals();
-		}
-		wg = keepUV(wg); wg.computeVertexNormals(); wg.translate(w / 2, 0, d / 2); meterUV(wg, 3, 3); wg.translate(-w / 2, 0, -d / 2);   // bays counted from the corner: whole bays, centred windows
-		// the ground floor's middle bay is the door, not a window: the facade tile is shifted up there by a storey
+		// the walls: windows by the bay, counted from the corner so every bay is whole and every window centred
+		let wg = new THREE.BoxGeometry(w, H, d); wg.translate(0, H / 2, 0);
+		wg = keepUV(wg); wg.computeVertexNormals(); wg.translate(w / 2, 0, d / 2); meterUV(wg, 3, 3); wg.translate(-w / 2, 0, -d / 2);
 		walls.push(tint(wg.applyMatrix4(T), wc));
+		// the gable ends above the eaves are plain plaster: a window there would be cut off by the roof
+		const plasterUV = (geo, u0 = 0.02, u1 = 0.12, v0 = 0.84, v1 = 0.97) => { const p = geo.attributes.position, uv = geo.attributes.uv, b = new THREE.Box3().setFromBufferAttribute(p), sz = b.getSize(new THREE.Vector3()); for (let i = 0; i < p.count; i++) { const a = sz.x > sz.z ? (p.getX(i) - b.min.x) / Math.max(sz.x, 1e-6) : (p.getZ(i) - b.min.z) / Math.max(sz.z, 1e-6), c = (p.getY(i) - b.min.y) / Math.max(sz.y, 1e-6); uv.setXY(i, lerp(u0, u1, a), lerp(v0, v1, c)); } return geo; };
+		if (!big) for (const sx of [-1, 1]) {
+			const tri = new THREE.BufferGeometry(), x = sx * w / 2;
+			tri.setAttribute('position', new THREE.Float32BufferAttribute(sx > 0 ? [x, H, d / 2, x, H, -d / 2, x, H + R, 0] : [x, H, -d / 2, x, H, d / 2, x, H + R, 0], 3));
+			tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 2)); tri.computeVertexNormals(); plasterUV(tri);
+			walls.push(tint(tri.applyMatrix4(T), wc));
+		}
 		// a plinth, darker, all round
 		const pl = new THREE.BoxGeometry(w + 0.12, 0.7, d + 0.12); pl.translate(0, 0.35, 0); bits.push(tint(plain(pl).applyMatrix4(T), 0x8f8a80));
 		if (big) {
@@ -2911,7 +2918,10 @@ function buildVillage(world, x0, x1, signText = 'SEA VIEW HOTEL') {
 			if (rnd() < 0.8) { const ch = new THREE.BoxGeometry(0.7, 1.8, 0.7); ch.translate(w / 2 - 1.2, H + R * 0.6 + 0.6, -d / 6); bits.push(tint(plain(ch).applyMatrix4(T), 0x8a4a3a)); const cap = new THREE.BoxGeometry(0.85, 0.12, 0.85); cap.translate(w / 2 - 1.2, H + R * 0.6 + 1.55, -d / 6); bits.push(tint(plain(cap).applyMatrix4(T), 0x5a5550)); }
 		}
 		// the door, in its frame, up a step, on the side that faces the sea
-		const dx = big ? 0 : (bays % 2 ? 0 : -1.5);
+		const dx = big ? -1.5 : (bays % 2 ? 0 : -1.5);
+		// a plain plaster panel over the door's bay up to the first floor, so no window or shutter shows round the door
+		let pan = new THREE.BoxGeometry(3, 2.75, 0.02); pan.translate(dx, 1.375, d / 2 + 0.012); pan = keepUV(pan); pan.computeVertexNormals(); plasterUV(pan);
+		walls.push(tint(pan.applyMatrix4(T), wc));
 		const fr = new THREE.BoxGeometry(1.5, 2.5, 0.1); fr.translate(dx, 1.25 + 0.4, d / 2 + 0.04); bits.push(tint(plain(fr).applyMatrix4(T), 0xf2f0ea));
 		const door = new THREE.BoxGeometry(1.1, 2.2, 0.1); door.translate(dx, 1.1 + 0.4, d / 2 + 0.08); bits.push(tint(plain(door).applyMatrix4(T), [0x2f4f5f, 0x6b2a24, 0x2f5a3a, 0x3b3b3b][(rnd() * 4) | 0]));
 		const step = new THREE.BoxGeometry(1.8, 0.4, 0.8); step.translate(dx, 0.2, d / 2 + 0.4); bits.push(tint(plain(step).applyMatrix4(T), 0xb8b2a6));
@@ -3135,12 +3145,12 @@ function makeHand(side) {
 		});
 	});
 	// the thumb: from the heel of the hand along the outer edge, lying a little over the palm
-	const tr = new THREE.Group(); tr.position.set(0.04 * side, 0.004, 0.02); tr.rotation.set(0.2, 0.75 * side, 0.4 * side); h.add(tr);
+	const tr = new THREE.Group(); tr.position.set(0.042 * side, 0.004, 0.018); tr.rotation.set(0.25, -0.55 * side, -0.25 * side);   // forward and out, as a thumb lies beside an open palm h.add(tr);
 	let par = tr;
-	for (const [len, r] of [[0.04, 0.012], [0.032, 0.0105], [0.026, 0.0095]]) { const seg = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), skinM()); seg.rotation.x = Math.PI / 2; seg.position.z = -len / 2; const j = new THREE.Group(); j.add(seg); par.add(j); const nx = new THREE.Group(); nx.position.z = -len; nx.rotation.set(0.25, -0.1 * side, 0); j.add(nx); par = nx; }
+	for (const [len, r] of [[0.04, 0.012], [0.032, 0.0105], [0.026, 0.0095]]) { const seg = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), skinM()); seg.rotation.x = Math.PI / 2; seg.position.z = -len / 2; const j = new THREE.Group(); j.add(seg); par.add(j); const nx = new THREE.Group(); nx.position.z = -len; nx.rotation.set(0.15, 0.12 * side, 0); j.add(nx); par = nx; }
 	// wrist and forearm, out of sight below; a sleeve
-	const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.22, 4, 14), skinM()); arm.rotation.x = Math.PI / 2 + 0.55; arm.position.set(0, -0.06, 0.15); arm.scale.set(1.25, 1, 0.8); h.add(arm);
-	const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.05, 0.2, 18), pmat('sleeve', () => new THREE.MeshStandardMaterial({ color: 0x2f5f8a, roughness: 0.85 }))); sl.rotation.x = Math.PI / 2 + 0.55; sl.position.set(0, -0.12, 0.27); h.add(sl);
+	const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.22, 4, 14), skinM()); arm.rotation.x = Math.PI / 2 + 1.05; arm.position.set(0, -0.1, 0.075); arm.scale.set(1.1, 1, 0.8); h.add(arm);
+	const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.05, 0.2, 18), pmat('sleeve', () => new THREE.MeshStandardMaterial({ color: 0x2f5f8a, roughness: 0.85 }))); sl.rotation.x = Math.PI / 2 + 1.05; sl.position.set(0, -0.22, 0.14); h.add(sl);
 	return h;
 }
 function makeCuppedHands() {
@@ -3939,9 +3949,10 @@ function makeMachine() {
 	// the window: a steel frame, the lit poster set back, glass in front
 	const ww = 0.58, wh = 0.98, wx = -0.15, wy = 1.12;
 	const poster = new THREE.MeshStandardMaterial({ map: machinePoster('5¢'), roughness: 0.5 }); poster.emissiveMap = poster.map; poster.emissive = new THREE.Color(0xffffff); poster.emissiveIntensity = 0.45;
-	add(new THREE.PlaneGeometry(ww - 0.04, wh - 0.04), poster, wx, wy, D / 2 - 0.035);
-	for (const [w2, h2, x, y] of [[ww + 0.04, 0.03, wx, wy + wh / 2], [ww + 0.04, 0.03, wx, wy - wh / 2], [0.03, wh, wx - ww / 2, wy], [0.03, wh, wx + ww / 2, wy]]) add(new THREE.BoxGeometry(w2, h2, 0.05), steel, x, y, D / 2 - 0.005);
-	const glass = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), new THREE.MeshStandardMaterial({ color: 0x9fb8c0, roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.22 })); glass.position.set(wx, wy, D / 2 + 0.006); g.add(glass);
+	add(new THREE.BoxGeometry(ww + 0.02, wh + 0.02, 0.01), dark, wx, wy, D / 2 + 0.004);
+	add(new THREE.PlaneGeometry(ww - 0.04, wh - 0.04), poster, wx, wy, D / 2 + 0.011);
+	for (const [w2, h2, x, y] of [[ww + 0.04, 0.03, wx, wy + wh / 2], [ww + 0.04, 0.03, wx, wy - wh / 2], [0.03, wh, wx - ww / 2, wy], [0.03, wh, wx + ww / 2, wy]]) add(new THREE.BoxGeometry(w2, h2, 0.03), steel, x, y, D / 2 + 0.015);
+	const glass = new THREE.Mesh(new THREE.PlaneGeometry(ww - 0.02, wh - 0.02), new THREE.MeshStandardMaterial({ color: 0x9fb8c0, roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.16, depthWrite: false })); glass.position.set(wx, wy, D / 2 + 0.024); g.add(glass);
 	// the control column: display, keys, coin slot, receipt slot
 	const cx = 0.31;
 	add(new THREE.BoxGeometry(0.26, 0.98, 0.02), steel, cx, wy, D / 2 + 0.008);
@@ -3951,11 +3962,18 @@ function makeMachine() {
 	add(new THREE.BoxGeometry(0.05, 0.008, 0.01), dark, cx, 1.2, D / 2 + 0.02);   // coin slot
 	add(new THREE.BoxGeometry(0.14, 0.012, 0.01), dark, cx, 0.72, D / 2 + 0.02);  // receipt slot
 	// the funnel: a recess in the column, a stainless funnel in it, a drip tray under it
-	const rec = add(new THREE.BoxGeometry(0.22, 0.2, 0.02), dark, cx, 0.96, D / 2 + 0.02);
-	const prof = []; for (let i = 0; i <= 10; i++) { const t = i / 10; prof.push(new THREE.Vector2(0.02 + 0.075 * Math.pow(t, 1.6), -0.06 + t * 0.09)); }
-	const fun = add(new THREE.LatheGeometry(prof, 32), stdMat({ color: 0xd8dde0, metalness: 1, roughness: 0.18, side: THREE.DoubleSide }, 'mFunnel'), cx, 0.99, D / 2 + 0.085, Math.PI / 2 - 0.35);
-	add(new THREE.TorusGeometry(0.095, 0.006, 6, 32), steel, cx, 0.99 + Math.sin(0.35) * 0.03, D / 2 + 0.085 + 0.03, Math.PI / 2 - 0.35);
-	add(new THREE.BoxGeometry(0.2, 0.015, 0.09), steel, cx, 0.86, D / 2 + 0.05);
+	// the funnel: a wide, shallow steel funnel on a bracket, its mouth turned up and toward you, its neck into the column
+	add(new THREE.BoxGeometry(0.22, 0.2, 0.02), dark, cx, 0.98, D / 2 + 0.02);
+	const fg = new THREE.Group(); fg.position.set(cx, 1.0, D / 2 + 0.1); fg.rotation.x = 0.3; g.add(fg);
+	const prof = []; for (let i = 0; i <= 12; i++) { const t = i / 12; prof.push(new THREE.Vector2(0.016 + 0.094 * Math.pow(t, 1.35), -0.05 + t * 0.07)); }
+	prof.push(new THREE.Vector2(0.112, 0.022), new THREE.Vector2(0.112, 0.016));
+	const brushed = stdMat({ color: 0xc9ced1, metalness: 0.85, roughness: 0.38 }, 'mFunnel'), within = stdMat({ color: 0x5c6266, metalness: 0.7, roughness: 0.5, side: THREE.BackSide }, 'mFunnelIn');
+	const lg = new THREE.LatheGeometry(prof, 40), fun = new THREE.Mesh(lg, brushed); fg.add(fun, new THREE.Mesh(lg, within));
+	const lip = new THREE.Mesh(new THREE.TorusGeometry(0.112, 0.0055, 8, 40), brushed); lip.rotation.x = Math.PI / 2; lip.position.y = 0.022; fg.add(lip);
+	const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.12, 12), brushed); neck.position.set(0, -0.1, 0); fg.add(neck);
+	const inside = new THREE.Mesh(new THREE.CircleGeometry(0.017, 12), dark); inside.rotation.x = -Math.PI / 2; inside.position.y = -0.049; fg.add(inside);
+	const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.012, 0.1), steel); bracket.position.set(cx, 0.9, D / 2 + 0.06); g.add(bracket);
+	for (const sx of [-0.06, 0.06]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.09, 0.012), steel); st.position.set(cx + sx, 0.94, D / 2 + 0.1); g.add(st); }
 	// the delivery flap across the bottom
 	add(new THREE.BoxGeometry(W - 0.2, 0.2, 0.02), dark, 0, 0.42, D / 2 + 0.006);
 	add(new THREE.BoxGeometry(W - 0.24, 0.16, 0.012), stdMat({ color: 0x2a3035, roughness: 0.3, metalness: 0.4 }, 'mFlap'), 0, 0.42, D / 2 + 0.018, -0.12);
@@ -3964,7 +3982,7 @@ function makeMachine() {
 	add(new THREE.PlaneGeometry(0.16, 0.08), st, cx, 0.61, D / 2 + 0.02);
 	for (let k = 0; k < 6; k++) add(new THREE.BoxGeometry(0.01, 0.02, 0.3), dark, W / 2 + 0.002, 1.55 + k * 0.035, -0.1);
 	shadowAll(outer);
-	outer.userData = { faceMat: poster, price: '5¢', funnel: fun, inner: g };
+	outer.userData = { faceMat: poster, price: '5¢', funnel: fg, inner: g };
 	return outer;
 }
 function setMachinePrice(m, txt) {
@@ -4918,7 +4936,7 @@ async function boot() {
 	{ const cab = makeCable(world, 300); scene.add(cab); const ys = cab.userData.pts.map(p => p.y).sort((a, b) => a - b); V.sights.push(['cable', ys[Math.floor(ys.length * 0.55)]]); }
 	scene.add(makePier(world, -115), makeLighthouse(world, 960));
 	V.village = buildVillage(world, -430, 300, SIGNS[0]); scene.add(V.village);
-	trees = buildTrees(world, 2200); trees.forEach(t => scene.add(t));
+	trees = buildTrees(world, 6500); trees.forEach(t => scene.add(t));
 	machine = makeMachine(); machine.position.set(MACHINE.x, groundAt(MACHINE.x, MACHINE.z) - 0.02, MACHINE.z); scene.add(machine);
 	buyers = new Buyers(); scene.add(buyers.group);
 	// canvas text drawn before the web fonts arrive keeps the fallback face: draw the faces again once they are here
@@ -5458,8 +5476,7 @@ function onEvent(e) {
 		}
 		case 'sold': {
 			receipt(e.L, e.$); coins();
-			const p = machine.position.clone().add(new THREE.Vector3(0, 1.4, 0)).project(camera);
-			if (p.z < 1) floatText((p.x * 0.5 + 0.5) * innerWidth, (-p.y * 0.5 + 0.5) * innerHeight - 30, '+' + fmtMoney(e.$), 'gold');
+			earnTip(e.$);
 			if (!S.ui.hints.sold) { S.ui.hints.sold = 1; later(1.5, () => hint('Spend it on Supplies: a teaspoon would help. Somewhat.', 6)); }
 			break;
 		}
@@ -5561,7 +5578,13 @@ function what(cx, cy) {
 	if (g.water) return { kind: 'water', g };
 	return { kind: 'walk', g };
 }
+// what you just earned, in a small tag just above the pointer (the crosshair when the mouse is captured)
+function earnTip(money, L) {
+	const lk = document.pointerLockElement === document.querySelector('#gl'), at = lk || !V.lastClick || V.t - V.lastClick.t > 1.5 ? { x: innerWidth / 2, y: innerHeight / 2 } : V.lastClick;   // a sale on arriving at the machine shows at the centre
+	floatText(at.x, at.y - 30, '+' + fmtMoney(money) + (L ? '  ·  ' + fmtL(L) : ''), 'earn');
+}
 function clickAt(cx, cy) {
+	V.lastClick = { x: cx, y: cy, t: V.t };
 	if (V.mode !== 'play' && !(V.mode === 'end' && V.view === 'plug')) return;
 	audio.start();
 	const w = what(cx, cy), P = V.player;
@@ -5629,7 +5652,7 @@ function scoopAt(g, cx, cy) {
 		audio.splash(size);
 		if (S.ui.shake !== false && !REDUCED) V.shake = Math.min(1, Math.max(V.shake || 0, 0.25 + size * 0.3));
 	}
-	if (got > 0) floatText(cx, cy - 10, '+' + fmtL(got) + (SEA_.piped(S) ? ' · ' + fmtMoney(got * SEA_.price(S)) : ''), '');
+	if (got > 0) { if (SEA_.piped(S)) earnTip(got * SEA_.price(S), got); else floatText(cx, cy - 10, '+' + fmtL(got), ''); }
 	else floatText(cx, cy - 10, 'Full. It runs back in.', 'spill');
 	if (full && !S.ui.hints.full) { S.ui.hints.full = 1; hint(`${CFG.carry[S.carry].name} is full. Take it up to the machine and sell it.`, 6); }
 	if (!S.ui.hints.first) { S.ui.hints.first = 1; $('#hint').classList.remove('on'); }
@@ -5653,7 +5676,7 @@ function clickGlobe(cx, cy) {
 	SEA_.act(S, 'scoop'); const ev = S.ev.find(e => e.k === 'scoop'); S.ev = S.ev.filter(e => e.k !== 'scoop');
 	if (S.tool >= CFG.tools.findIndex(t => t.id === 'scoopsat')) globe.order(h); else globe.flash(h);
 	audio.splash(1.5);
-	if (ev && ev.L > 0) floatText(cx, cy - 10, '+' + fmtL(ev.L) + ' · ' + fmtMoney(ev.L * SEA_.price(S)), 'big');
+	if (ev && ev.L > 0) earnTip(ev.L * SEA_.price(S), ev.L);
 }
 function startFinale() {
 	if (V.view === 'plug') return;
@@ -5694,7 +5717,7 @@ function updateHUD() {
 	const m = SEA_.measure(S);
 	$('#gone').innerHTML = `Gone so far: <b>${fmtL(S.removed)}</b>${m >= 0 ? ` · about ${CFG.measures[m][0]}` : ''}`;
 	const drop = SEA_.fpDrop(V.p);
-	if (V.view === 'globe' || V.view === 'plug') $('#edge').innerHTML = `The gauge: <b>${Math.round(V.p * 100)} %</b> of the way down`; else $('#edge').innerHTML = V.view === 'beach' && !SEA_.piped(S) ? `The water's edge: <b>${fmtM(SEA_.shoreDist(V.p))}</b> from the machine` : `Sea level: <b>−${fmtM(drop)}</b> at the beach`;
+	if (V.view === 'globe' || V.view === 'plug') $('#edge').innerHTML = `The gauge: <b>${Math.round(V.p * 100)} %</b> of the way down`; else $('#edge').innerHTML = V.view === 'beach' && !SEA_.piped(S) ? `The water's edge: <b>${fmtM(SEA_.shoreDist(V.p))}</b> from the machine` : (drop < 0.005 ? `Sea level: <b>as it was</b> at the beach` : `Sea level: <b>−${fmtM(drop)}</b> at the beach`);
 	// what you carry
 	const cap = SEA_.capOf(S), c = CFG.carry[S.carry], piped = SEA_.piped(S);
 	$('#carry').classList.toggle('piped', piped); $('#carry').classList.toggle('full', !piped && S.held >= cap - 1e-9);
