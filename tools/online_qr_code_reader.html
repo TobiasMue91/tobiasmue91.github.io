@@ -99,6 +99,7 @@ kbd{font:500 12px var(--mono);border:1px solid var(--line2);border-bottom-width:
 .big.danger{color:var(--danger)}
 .titlerow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .titlerow .big{flex:1}
+.real b{font-weight:700;font-size:17px}
 .real{font:500 15px/1.5 var(--mono);overflow-wrap:anywhere;margin:0 0 6px}
 .path{font:400 14px/1.45 var(--mono);color:var(--ink2);overflow-wrap:anywhere;margin:0 0 10px}
 .textbody{font:400 18px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:break-word;margin:2px 0 10px;max-height:16.5em;overflow:auto}
@@ -967,7 +968,9 @@ input[type=file]{display:none}
     const set = new Set(s);
     const confusable = [['0', 'O', 'o'], ['1', 'l', 'I', '|'], ['5', 'S'], ['2', 'Z'], ['8', 'B'], ['`', "'"]];
     const flag = new Set([' ']);
-    for (const g of confusable) if (g.filter(c => set.has(c)).length >= 1 && g.some(c => set.has(c)) && (g.filter(c => set.has(c)).length > 1 || g.length > 1)) for (const c of g) if (set.has(c)) flag.add(c);
+    // 0 O 1 l I | are misread on their own; the rest only when a look-alike is in the same text.
+    for (const c of '0O1lI|') if (set.has(c)) flag.add(c);
+    for (const g of confusable) { const here = g.filter(c => set.has(c)); if (here.length > 1) here.forEach(c => flag.add(c)); }
     return Array.from(s).map(ch => ({ ch, name: flag.has(ch) ? LOOKALIKE[ch] || null : null }));
   }
 
@@ -1329,19 +1332,19 @@ const ICON = {
 const warnList = ws => ws.length ? `<ul class="warn">${ws.map(w => `<li class="${w.level}">${ICON[w.level] || ICON.info}<span>${esc(w.text)}</span></li>`).join('')}</ul>` : '';
 const copyBtn = (value, label) => `<button class="mini" type="button" data-copy="${esc(value)}" aria-label="${esc(label)}">Copy</button>`;
 
-function spellBlock(value, showWord) {
+function spellBlock(value, showWord, closed) {
   const cells = C.spellOut(value), seen = new Set(), legend = [];
   for (const c of cells) if (c.name && c.ch !== ' ' && !seen.has(c.ch)) { seen.add(c.ch); legend.push(`<span><code>${esc(c.ch)}</code> ${esc(c.name)}</span>`); }
   if (showWord && cells.some(c => c.ch === ' ')) legend.push('<span><code>␣</code> space</span>');
   const word = cells.map(c => c.name ? `<b>${c.ch === ' ' ? '␣' : esc(c.ch)}</b>` : esc(c.ch)).join('');
   const NAME = ch => ch === ' ' ? 'space' : /[A-Z]/.test(ch) ? 'capital ' + ch : /[a-z]/.test(ch) ? 'small ' + ch.toUpperCase() : /[0-9]/.test(ch) ? ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][+ch] : ({';': 'semicolon', ':': 'colon', ',': 'comma', '.': 'dot', '-': 'dash', '_': 'underscore', '|': 'bar', '!': 'exclam.', '@': 'at', '#': 'hash', '$': 'dollar', '%': 'percent', '&': 'and', '*': 'star', '/': 'slash', '\\': 'backslash', '"': 'quote', "'": 'apostr.', '`': 'backtick', '~': 'tilde', '^': 'caret', '+': 'plus', '=': 'equals', '?': 'question', '(': 'paren', ')': 'paren', '[': 'bracket', ']': 'bracket', '{': 'brace', '}': 'brace', '<': 'less', '>': 'greater'})[ch] || '';
-  const spell = [...value].length <= 64 ? `<details class="spellout"><summary>Spell it out</summary><ol>${Array.from(value).map(ch => `<li><b>${ch === ' ' ? '␣' : esc(ch)}</b><small>${esc(NAME(ch))}</small></li>`).join('')}</ol></details>` : '';
+  const spell = [...value].length <= 64 ? `<details class="spellout"${legend.length && !closed ? ' open' : ''}><summary>Spell it out</summary><ol>${Array.from(value).map(ch => `<li><b>${ch === ' ' ? '␣' : esc(ch)}</b><small>${esc(NAME(ch))}</small></li>`).join('')}</ol></details>` : '';
   return `${showWord ? `<span class="pw mono">${word}</span>` : ''}${legend.length ? `<span class="legend">${legend.join('')}</span>` : ''}${spell}`;
 }
 function fieldHtml(f, primaryCopy) {
   let v;
   if (f.label === 'Password' || f.secret) {
-    v = `<span class="v">${spellBlock(f.value, true)}</span>`;
+    v = `<span class="v">${spellBlock(f.value, true, current && current.example)}</span>`;
     if (f.secret) v = `<span class="v"><button class="mini" type="button" data-reveal>Show secret</button><span class="pw mono" hidden>${esc(f.value)}</span></span>`;
   } else if (f.url && f.url.openable) {
     v = `<span class="v">${esc(f.value)}<br><small class="lede">opens ${esc(f.url.registrable)}</small></span>`;
@@ -1351,7 +1354,8 @@ function fieldHtml(f, primaryCopy) {
     v = `<span class="v mono">${f.value.split(' ').map(g => `<span class="grp">${esc(g)}</span>`).join(' ')}</span>`;
   } else v = `<span class="v${f.mono ? ' mono' : ''}">${esc(f.value)}</span>`;
   const cp = f.copy || f.value;
-  const showCopy = (f.mono || /^(Password|Pay to|Email|Address)/.test(f.label)) && !f.secret && cp !== primaryCopy;
+  // Copy sits next to every value someone may type elsewhere; the big button is a shortcut for the likeliest one.
+  const showCopy = (f.mono || /^(Password|Pay to|Payment note|Message|Email|Address)/.test(f.label)) && !f.secret;
   return `<div><dt>${esc(f.label)}</dt><dd>${v}${showCopy ? copyBtn(cp, 'Copy ' + f.label) : ''}</dd></div>`;
 }
 
@@ -1371,7 +1375,7 @@ function renderResult(fresh) {
       h += `<p class="big danger">Do not open this link</p>`;
       if (u.pretends) h += `<p class="lede">It looks like <b>${esc(u.pretends)}</b> but really goes to</p>`;
       else h += `<p class="lede">It really goes to</p>`;
-      h += `<p class="real">${esc(u.hostUnicode)}</p>`;
+      h += `<p class="real">${esc(u.sub)}<b>${esc(u.registrable)}</b>${u.path ? `<span class="lede">${esc(u.path.length > 80 ? u.path.slice(0, 80) + '…' : u.path)}</span>` : ''}</p>`;
       ws = ws.filter(w => w.level === 'danger').concat(ws.filter(w => w.level !== 'danger'));
     } else if (!u.openable) {
       h += `<p class="chip danger"><i></i>Unsafe link</p><p class="big danger">This code holds a script, not a web address</p>`;
@@ -1559,10 +1563,10 @@ $('histBody').addEventListener('click', e => {
 renderHistory();
 
 // ---------- example ----------
-// A real QR code (version 2-M, "https://www.gptgames.dev/tools/") drawn from its module rows, so the
-// example on arrival is the exact output of the reader for this picture.
-const EXAMPLE_TEXT = 'https://www.gptgames.dev/tools/';
-const EXAMPLE_ROWS = ["11111110010100011011101111111","10000010001100000000001000001","10111010111100101000101011101","10111010101100001100001011101","10111010101001110001101011101","10000010110001111100001000001","11111110101010101010101111111","00000000100001010011100000000","10111110010110110111001111100","10010001110000011111011110001","10101010011010000100100000000","00001001010100101001001101010","01011110111100001100100001100","10000100011011110001101010001","01110111001001111000110101100","11001100100011010010110110010","01001110110100110100000101100","11111100010000011111101110101","10000110011100000100100100100","10011000011110101000110110010","10101111110110000101111110111","00000000100111110110100011111","11111110000101111101101011100","10000010111001001001100010001","10111010111010100100111110101","10111010111101000111000101100","10111010100010111000011111110","10000010010110000010100101010","11111110101011011101001111100"];
+// A real QR code (version 2-M, a café's guest Wi-Fi) drawn from its module rows, so the example on
+// arrival is the exact output of the reader for this picture.
+const EXAMPLE_TEXT = 'WIFI:T:WPA;S:Café Guest;P:espresso2go;;';
+const EXAMPLE_ROWS = ["11111110001110101010101111111","10000010010011000110101000001","10111010101011101101101011101","10111010110011011110101011101","10111010101000101001001011101","10000010101011010000101000001","11111110101010101010101111111","00000000110111101001100000000","10111110010011010010101111100","11101001010010100010101011001","10100111000100011110000010101","11000100110010000101111111001","10000111000100011110110001111","00101001001001001010100001111","10011110001111100100100100100","01011000111111001011111011100","01000111010010111000100100100","11001101101100000001111011011","10010010110010011100001110010","10010101011100101000110111001","10001010010010011110111110111","00000000100001100000100011100","11111110010101111100101011100","10000010101101001000100011000","10111010110000111010111110000","10111010100101011010110100010","10111010100010010100001001010","10000010001110101001011101111","11111110111000110110111010110"];
 (function example() {
   const n = EXAMPLE_ROWS.length, q = 3, s = 8, W = (n + 2 * q) * s;
   const cv = document.createElement('canvas'); cv.width = cv.height = W;

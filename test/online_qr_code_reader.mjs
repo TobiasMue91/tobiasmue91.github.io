@@ -362,6 +362,11 @@ const T = {
     eq(C.describeSymbol({format: 'QRCode', version: '3', ecLevel: 'M', isInverted: true, sequenceSize: -1}), 'QR code · version 3 · error correction M · inverted colours', 'symbol description');
     eq(C.describeSymbol({format: 'EAN13', version: '', ecLevel: ''}), 'EAN13', 'barcode description');
     eq(C.describeSymbol({format: 'QRCode', sequenceSize: 3, sequenceIndex: 0}), 'QR code · part 1 of 3', 'structured append');
+    const flagged = t => C.spellOut(t).filter(c => c.name).map(c => c.ch).join('');
+    eq(flagged('Tr0ut;lIl1nes0O'), '0lIl10O', 'zero, O, one, small L, capital i flagged');
+    eq(flagged('espresso2go'), '', 'o and 2 alone are not confusable');
+    eq(flagged('So5'), 'S5', 'S and 5 together are');
+    eq(flagged('a b'), ' ', 'spaces are always pointed out');
     eq(C.fmtMoney('5', 'EUR'), 'EUR 5.00', 'whole amount');
     eq(C.fmtCoord(0, 0), '0° N, 0° E', 'zero coordinates');
   },
