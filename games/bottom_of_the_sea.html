@@ -223,6 +223,8 @@ button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 #shop.open{transform:none}
 #shop .close{display:block;border:0;background:none;color:var(--dim);font-size:22px;padding:0 4px;margin-left:8px}
 #shopBtn{display:flex;position:absolute;right:max(16px,env(safe-area-inset-right));top:max(14px,env(safe-area-inset-top));height:42px;padding:0 16px;pointer-events:auto;border-radius:14px;align-items:center;gap:8px;font-weight:800}
+#shopBtn kbd{font:600 11px/1 var(--mono);padding:3px 6px;border-radius:5px;border:1px solid rgba(238,245,243,.35);color:var(--dim);margin-left:2px}
+@media (hover:none){#shopBtn kbd{display:none}}
 #shopBtn .dot{width:8px;height:8px;border-radius:50%;background:var(--brass);box-shadow:0 0 10px var(--brass);display:none}
 #shopBtn.can .dot{display:block}
 #shop.open ~ #shopBtn{opacity:0;pointer-events:none}
@@ -314,7 +316,7 @@ body.locked #tip{transform:translate(-50%,24px)}
 		<header><h2>Supplies</h2><span class="purse">You have <b id="shopMoney" class="num">$0</b></span><button class="close" id="shopClose" aria-label="Close">×</button></header>
 		<div id="shopList"></div>
 	</div>
-	<button id="shopBtn" class="glass"><span class="dot"></span>Supplies</button>
+	<button id="shopBtn" class="glass"><span class="dot"></span>Supplies<kbd>Tab</kbd></button>
 	<div id="receipt"></div>
 	<button id="viewBtn" class="glass" hidden>Go down to the beach</button>
 	<div id="nav"><div id="navA"><svg viewBox="0 0 24 24"><path d="M12 3 20 14h-5v7H9v-7H4Z"/></svg></div><div id="navD"></div></div>
@@ -887,6 +889,7 @@ const U = {
 	uFogFall: { value: 0.0035 },
 	uFogMul: { value: 1.0 },
 	uWaterY: { value: 0 },
+	uWater0: { value: 0 },
 	uExpTex: { value: null },
 	uHeightTex: { value: null },
 	uNormalTex: { value: null },
@@ -932,7 +935,7 @@ vec3 applyAtmo(vec3 col, vec3 ro, vec3 wp){
 
 // when the falling water left a height: wet, dark and shiny at first, dry after a minute or two
 const EXPO_GLSL = /* glsl */`
-uniform sampler2D uExpTex; uniform float uWaterY; uniform float uDry;
+uniform sampler2D uExpTex; uniform float uWaterY; uniform float uDry; uniform float uWater0;
 float expAge(float y){ float f = clamp((y - (${YMIN}.)) / (${YMAX - YMIN}.), 0., 1.) * ${EXPN - 1}., i0 = floor(f); float t0 = texture2D(uExpTex, vec2((i0 + .5) / ${EXPN}., .5)).r, t1 = texture2D(uExpTex, vec2((min(i0 + 1., ${EXPN - 1}.) + .5) / ${EXPN}., .5)).r; return uTime - mix(t0, t1, f - i0); }
 float wetness(float y){
 	if (y < uWaterY) return 1.;
@@ -1379,7 +1382,10 @@ function buildTerrain(world, segs) {
 				// swash lines: the reach of the last few waves, thin dark lines of wet sand and foam residue above the water
 				float above = h - uWaterY;
 				float sw = smoothstep(0.86, 1., sin(above * 55. + n1 * 7. + vnoise(gWPos.xz * 0.4) * 3.)) * smoothstep(0., 0.05, above) * (1. - smoothstep(0.08, 0.45, above));
-				alb = mix(alb, alb * vec3(0.8, 0.78, 0.74), sw * sandOnly * 0.6);
+				alb = mix(alb, alb * vec3(0.72, 0.7, 0.66), sw * sandOnly * 0.8);
+				// the high-water mark
+				float hwm = abs(h - uWater0) / max(fwidth(h), 1e-5);
+				alb = mix(alb, vec3(0.86, 0.85, 0.8), (1. - smoothstep(0.5, 1.4, hwm)) * 0.6 * (1. - rockW) * (1. - landW) * smoothstep(0.02, 0.15, uWater0 - uWaterY));
 				gAlb = alb;
 				gRough = mix(mix(0.93, 0.85, rockW), mix(0.5, 0.62, smoothstep(0.92, 0.7, gN.y)), wet);
 				gRough = mix(gRough, 0.16, pud);
@@ -3243,35 +3249,162 @@ function makeBathtub() {
 	return grp;
 }
 // ── hands, cupped together palms up: a palm, three-jointed fingers that curl up, a thumb, the wrist, a sleeve ──
+// ── hands: one continuous skin, polygonised from a distance field of bones with flesh round them ──
+// Built palm up, fingers towards -z, thumb towards +x (a right hand); the left is its mirror. Sizes in metres from an
+// average adult hand (length 19 cm, breadth 8.5 cm; phalanges index 40/24/19 mm, middle 45/28/20, ring 42/26/20,
+// little 33/19/18; thumb metacarpal 42, phalanges 31/25). Fingers lie together as when scooping water, the palm is
+// hollowed across, the thumb comes off the heel of the hand along the index finger, as in a pair of cupped hands.
+const HAND_SDF = (() => {
+	const V = (x, y, z) => new THREE.Vector3(x, y, z);
+	const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+	const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+	// a rounded cone between two points: the radius runs from r0 to r1
+	const cone = (s, px, py, pz) => {
+		const ax = px - s.a.x, ay = py - s.a.y, az = pz - s.a.z;
+		const h = clamp01((ax * s.d.x + ay * s.d.y + az * s.d.z) / s.L);
+		const qx = ax - s.d.x * s.L * h, qy = ay - s.d.y * s.L * h, qz = az - s.d.z * s.L * h;
+		return Math.sqrt(qx * qx + qy * qy + qz * qz) - (s.r0 + (s.r1 - s.r0) * h);
+	};
+	const mk = (a, b, r0, r1) => { const d = b.clone().sub(a), L = d.length(); return { a, b, d: d.normalize(), L, r0, r1 }; };
+	const ell = (px, py, pz, c, r) => { const x = (px - c.x) / r.x, y = (py - c.y) / r.y, z = (pz - c.z) / r.z, k0 = Math.sqrt(x * x + y * y + z * z), k1 = Math.sqrt(x * x / (r.x * r.x) + y * y / (r.y * r.y) + z * z / (r.z * r.z)); return k1 > 0 ? k0 * (k0 - 1) / k1 : -Math.min(r.x, r.y, r.z); };
+
+	// the fingers: index, middle, ring, little; each a chain of three, flexed at the knuckle and both finger joints
+	const FING = [
+		{ x: 0.0285, z: -0.044, L: [0.040, 0.024, 0.019], r: [0.0098, 0.0088, 0.0079, 0.0070], spread: -0.035 },
+		{ x: 0.0095, z: -0.047, L: [0.045, 0.028, 0.020], r: [0.0101, 0.0091, 0.0081, 0.0072], spread: -0.008 },
+		{ x: -0.0095, z: -0.045, L: [0.042, 0.026, 0.020], r: [0.0096, 0.0087, 0.0078, 0.0069], spread: 0.02 },
+		{ x: -0.0275, z: -0.039, L: [0.033, 0.019, 0.018], r: [0.0086, 0.0078, 0.0071, 0.0064], spread: 0.055 },
+	];
+	function pose(flex) {
+		const segs = [], fingers = [];
+		for (const f of FING) {
+			let p = V(f.x, -0.001, f.z), ang = 0; const chain = [];
+			const bends = [0.2 + flex * 0.25, 0.28 + flex * 0.3, 0.16 + flex * 0.2];
+			f.L.forEach((L, k) => {
+				ang += bends[k];
+				const d = V(Math.sin(f.spread), 0, -Math.cos(f.spread)), e = V(d.x, Math.sin(ang), d.z * Math.cos(ang)).normalize();
+				const q = p.clone().addScaledVector(e, L);
+				chain.push(mk(p, q, f.r[k], f.r[k + 1])); p = q;
+			});
+			fingers.push(chain);
+		}
+		// the thumb: metacarpal sunk in the ball of the thumb, then two phalanges turned in along the index finger
+		const t0 = V(0.022, -0.004, 0.036);
+		const dirs = [V(0.62, 0.3, -0.72), V(0.38, 0.4, -0.83), V(0.2, 0.45, -0.87)], lens = [0.044, 0.031, 0.025], rr = [0.0135, 0.0112, 0.0102, 0.0088];
+		const thumb = []; let p = t0;
+		dirs.forEach((d, k) => { const q = p.clone().addScaledVector(d.normalize(), lens[k]); thumb.push(mk(p, q, rr[k], rr[k + 1])); p = q; });
+		const arm = mk(V(0, -0.004, 0.05), V(0, -0.075, 0.215), 0.0235, 0.03);
+		return { fingers, thumb, arm };
+	}
+	function field(P) {
+		return (x, y0, z) => {
+			// hollow the palm across: the sides come up, the middle stays down
+			const y = y0 - 4.5 * x * x;
+			// the palm narrows to the wrist
+			const nx = x / (1 - 0.2 * Math.min(1, Math.max(0, (z + 0.005) / 0.055)));
+			let pb; { const qx = Math.abs(nx) - 0.031, qy = Math.abs(y + 0.001) - 0.0055, qz = Math.abs(z) - 0.035; pb = Math.sqrt(Math.max(qx, 0) ** 2 + Math.max(qy, 0) ** 2 + Math.max(qz, 0) ** 2) + Math.min(Math.max(qx, qy, qz), 0) - 0.0105; }
+			let palm = smin(pb, ell(x, y, z, { x: 0.022, y: 0.006, z: 0.02 }, { x: 0.02, y: 0.013, z: 0.03 }), 0.012);
+			palm = smin(palm, ell(x, y, z, { x: -0.025, y: 0.004, z: 0.016 }, { x: 0.014, y: 0.0105, z: 0.032 }), 0.012);
+			// pads under the knuckles
+			palm = smin(palm, ell(x, y, z, { x: 0.0, y: 0.005, z: -0.036 }, { x: 0.036, y: 0.009, z: 0.012 }), 0.01);
+			palm = smin(palm, Math.min(cone(P.arm, x, y0, z), 1), 0.02);
+			let th = Infinity; for (const s of P.thumb) th = Math.min(th, cone(s, x, y0, z));
+			let d = smin(palm, th, 0.016);
+			for (const ch of P.fingers) { let f = Infinity; for (const s of ch) f = smin(f, cone(s, x, y0, z), 0.003); d = Math.min(d, smin(palm, f, 0.009)); }
+			return d;
+		};
+	}
+	// naive surface nets over a grid, skipping blocks far from the surface
+	function polygonise(F, lo, hi, h) {
+		const nx = Math.ceil((hi.x - lo.x) / h) + 1, ny = Math.ceil((hi.y - lo.y) / h) + 1, nz = Math.ceil((hi.z - lo.z) / h) + 1;
+		const val = new Float32Array(nx * ny * nz), id = (i, j, k) => i + nx * (j + ny * k);
+		const B = 4, far = h * B * 1.2;
+		for (let bk = 0; bk < nz; bk += B) for (let bj = 0; bj < ny; bj += B) for (let bi = 0; bi < nx; bi += B) {
+			const c = F(lo.x + (bi + B / 2) * h, lo.y + (bj + B / 2) * h, lo.z + (bk + B / 2) * h), skip = Math.abs(c) > far;
+			for (let k = bk; k < Math.min(nz, bk + B + 1); k++) for (let j = bj; j < Math.min(ny, bj + B + 1); j++) for (let i = bi; i < Math.min(nx, bi + B + 1); i++)
+				val[id(i, j, k)] = skip ? c : F(lo.x + i * h, lo.y + j * h, lo.z + k * h);
+		}
+		const vid = new Int32Array(nx * ny * nz).fill(-1), pos = [];
+		const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+		const co = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+		for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+			const v = co.map(([a, b, c]) => val[id(i + a, j + b, k + c)]);
+			let inside = 0; for (const x of v) if (x < 0) inside++;
+			if (inside === 0 || inside === 8) continue;
+			let sx = 0, sy = 0, sz = 0, n = 0;
+			for (const [a, b] of E) { if ((v[a] < 0) === (v[b] < 0)) continue; const t = v[a] / (v[a] - v[b]); sx += co[a][0] + (co[b][0] - co[a][0]) * t; sy += co[a][1] + (co[b][1] - co[a][1]) * t; sz += co[a][2] + (co[b][2] - co[a][2]) * t; n++; }
+			vid[id(i, j, k)] = pos.length / 3; pos.push(lo.x + (i + sx / n) * h, lo.y + (j + sy / n) * h, lo.z + (k + sz / n) * h);
+		}
+		const idx = [];
+		const quad = (a, b, c, d, flip) => { if (a < 0 || b < 0 || c < 0 || d < 0) return; if (!flip) idx.push(a, c, b, a, d, c); else idx.push(a, b, c, a, c, d); };
+		for (let k = 1; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
+			const s0 = val[id(i, j, k)] < 0;
+			if (s0 !== (val[id(i + 1, j, k)] < 0)) quad(vid[id(i, j - 1, k - 1)], vid[id(i, j, k - 1)], vid[id(i, j, k)], vid[id(i, j - 1, k)], s0);
+			if (s0 !== (val[id(i, j + 1, k)] < 0)) quad(vid[id(i - 1, j, k - 1)], vid[id(i - 1, j, k)], vid[id(i, j, k)], vid[id(i, j, k - 1)], s0);
+			if (s0 !== (val[id(i, j, k + 1)] < 0)) quad(vid[id(i - 1, j - 1, k)], vid[id(i, j - 1, k)], vid[id(i, j, k)], vid[id(i - 1, j, k)], s0);
+		}
+		return { pos, idx };
+	}
+	const cache = {};
+	function geometry(flex = 0.35) {
+		if (cache[flex]) return cache[flex];
+		const P = pose(flex), F = field(P);
+		const { pos, idx } = polygonise(F, V(-0.07, -0.085, -0.15), V(0.085, 0.07, 0.15), 0.0018);
+		const n = pos.length / 3, nor = new Float32Array(n * 3), col = new Float32Array(n * 3), e = 0.0006;
+		const palmC = new THREE.Color(0xd99a7e), backC = new THREE.Color(0xc4825f), nailC = new THREE.Color(0xe7c0b2), c = new THREE.Color();
+		// the nails: on the back of each last phalanx (the thumb's faces out and down)
+		const tips = P.fingers.map(ch => ch[2]).concat([P.thumb[2]]);
+		const nailDir = tips.map((s, i) => i < 4 ? V(0, -1, 0).addScaledVector(s.d, s.d.y).normalize() : V(0.8, -0.55, 0.15).normalize());
+		for (let i = 0; i < n; i++) {
+			const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+			let gx = F(x + e, y, z) - F(x - e, y, z), gy = F(x, y + e, z) - F(x, y - e, z), gz = F(x, y, z + e) - F(x, y, z - e);
+			const L = Math.hypot(gx, gy, gz) || 1; gx /= L; gy /= L; gz /= L;
+			nor[i * 3] = gx; nor[i * 3 + 1] = gy; nor[i * 3 + 2] = gz;
+			c.copy(backC).lerp(palmC, Math.min(1, Math.max(0, (gy + 0.1) / 0.9)) * 0.8);
+			tips.forEach((s, t) => {
+				const ax = x - s.a.x, ay = y - s.a.y, az = z - s.a.z, along = (ax * s.d.x + ay * s.d.y + az * s.d.z) / s.L;
+				const nd = gx * nailDir[t].x + gy * nailDir[t].y + gz * nailDir[t].z;
+				const qx = ax - s.d.x * s.L * along, qy = ay - s.d.y * s.L * along, qz = az - s.d.z * s.L * along;
+				if (Math.hypot(qx, qy, qz) < s.r0 + 0.004 && along > 0.25 && along < 1.05 && nd > 0.55) c.lerp(nailC, Math.min(1, (nd - 0.55) * 5) * Math.min(1, (1.05 - along) * 8));
+			});
+			// shade the creases between fingers and in the hollow: how much room the skin has to its front
+			const ao = Math.min(1, Math.max(0, F(x + gx * 0.006, y + gy * 0.006, z + gz * 0.006) / 0.006));
+			c.multiplyScalar(0.7 + 0.3 * ao);
+			col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+		}
+		const g = new THREE.BufferGeometry();
+		g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+		g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+		g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+		g.setIndex(idx);
+		return cache[flex] = g;
+	}
+	function mirrored(g) {
+		const m = g.clone(), p = m.attributes.position, n = m.attributes.normal;
+		for (let i = 0; i < p.count; i++) { p.setX(i, -p.getX(i)); n.setX(i, -n.getX(i)); }
+		const ix = m.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; }
+		return m;
+	}
+	return { geometry, mirrored };
+})();
+function handSkin() { return pmat('skin3', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0, envMapIntensity: 0.6 })); }
 function makeHand(side) {
-	const h = new THREE.Group();
-	const palm = new THREE.Mesh(new RoundedBoxGeometry(0.085, 0.024, 0.095, 4, 0.011), skinM()); palm.position.set(0, 0, 0); h.add(palm);
-	// fingers: index to little, roots along the far edge of the palm, each bent up at three joints to cup
-	const lens = [[0.046, 0.026, 0.021], [0.05, 0.03, 0.023], [0.047, 0.028, 0.022], [0.037, 0.021, 0.019]];
-	const rad = [0.0088, 0.0092, 0.0087, 0.0076];
-	lens.forEach((L, f) => {
-		const x = (f - 1.5) * 0.0205 * -side, root = new THREE.Group(); root.position.set(x, 0.002, -0.046); root.rotation.set(0.12, (f - 1.5) * 0.06 * side, 0); h.add(root);
-		let parent = root;
-		L.forEach((len, k) => {
-			const seg = new THREE.Mesh(new THREE.CapsuleGeometry(rad[f] * (1 - k * 0.1), len, 4, 10), skinM()); seg.rotation.x = Math.PI / 2; seg.position.z = -len / 2;
-			const joint = new THREE.Group(); joint.add(seg); parent.add(joint);
-			const next = new THREE.Group(); next.position.z = -len; next.rotation.x = 0.16 + k * 0.08; joint.add(next); parent = next;
-		});
-	});
-	// the thumb: from the heel of the hand along the outer edge, lying a little over the palm
-	const tr = new THREE.Group(); tr.position.set(0.042 * side, 0.004, 0.018); tr.rotation.set(0.25, -0.55 * side, -0.25 * side);   // forward and out, as a thumb lies beside an open palm h.add(tr);
-	let par = tr;
-	for (const [len, r] of [[0.04, 0.012], [0.032, 0.0105], [0.026, 0.0095]]) { const seg = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), skinM()); seg.rotation.x = Math.PI / 2; seg.position.z = -len / 2; const j = new THREE.Group(); j.add(seg); par.add(j); const nx = new THREE.Group(); nx.position.z = -len; nx.rotation.set(0.15, 0.12 * side, 0); j.add(nx); par = nx; }
-	// wrist and forearm, out of sight below; a sleeve
-	const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.22, 4, 14), skinM()); arm.rotation.x = Math.PI / 2 + 1.05; arm.position.set(0, -0.1, 0.075); arm.scale.set(1.1, 1, 0.8); h.add(arm);
-	const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.05, 0.2, 18), pmat('sleeve', () => new THREE.MeshStandardMaterial({ color: 0x2f5f8a, roughness: 0.85 }))); sl.rotation.x = Math.PI / 2 + 1.05; sl.position.set(0, -0.22, 0.14); h.add(sl);
+	const h = new THREE.Group(), g0 = HAND_SDF.geometry(0.6);
+	const m = new THREE.Mesh(side > 0 ? g0 : (makeHand.left || (makeHand.left = HAND_SDF.mirrored(g0))), handSkin()); h.add(m);
+	// the sleeve, over the forearm a hand's length behind the wrist
+	const a = new THREE.Vector3(0, -0.004, 0.05), d = new THREE.Vector3(0, -0.071, 0.165).normalize();
+	const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.22, 20, 1, true), pmat('sleeve', () => new THREE.MeshStandardMaterial({ color: 0x2f5f8a, roughness: 0.85, side: THREE.DoubleSide })));
+	sl.position.copy(a).addScaledVector(d, 0.22); sl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d); h.add(sl);
+	const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.005, 8, 24), pmat('sleeve', () => null)); cuff.position.copy(a).addScaledVector(d, 0.11); cuff.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d); h.add(cuff);
 	return h;
 }
 function makeCuppedHands() {
+	// little fingers together, the outer edges raised: one bowl of two hands
 	const g = new THREE.Group();
-	for (const s of [-1, 1]) { const h = makeHand(s); h.position.x = s * 0.047; h.rotation.z = -s * 0.32; g.add(h); }
+	for (const s of [-1, 1]) { const h = makeHand(s); h.position.set(s * 0.044, 0, 0); h.rotation.set(0, -s * 0.06, s * 0.22); g.add(h); }
 	return g;
 }
+
 // ── a supermarket bag: the THANK YOU kind, white and thin, hanging from its handles; it swells with what it holds ──
 function bagTexture() {
 	return canvasTex(256, 256, (g, w, h) => {
@@ -5037,7 +5170,7 @@ async function boot() {
 
 	setLoad(0.45, 'Laying sand…'); await tick();
 	exposure = new Exposure();
-	V.p = SEA_.progress(S); V.wy = levelY(S.done ? 1 : V.p); U.uWaterY.value = V.wy;
+	V.p = SEA_.progress(S); V.wy = levelY(S.done ? 1 : V.p); U.uWaterY.value = V.wy; U.uWater0.value = levelY(0);
 	exposure.reset(V.wy, 0);
 	terrain = buildTerrain(world, Q0.segs);
 	scene.add(terrain.group);
@@ -5315,13 +5448,14 @@ function stepSun() {
 }
 
 // ═══════════════════════════ what you hold ═══════════════════════════
-// The tool sits low and to the right. A scoop is a spring, not a clip: each click kicks it, so quick clicks never snap it back.
+// The tool sits low and to the left, what you carry low and to the right, so the two never meet in the middle; the
+// cupped hands are both hands, so they sit in the middle. A scoop is a spring, not a clip: each click kicks it.
 const VM_POSE = [
-	{ s: 1, p: [0, -0.19, -0.36], r: [-0.25, 0, 0] },
-	{ s: 1, p: [0.05, -0.09, -0.21], r: [0.05, -0.4, 0.1] },
-	{ s: 1, p: [0.12, -0.2, -0.45], r: [-1.25, -0.35, 0.1] },
-	{ s: 1, p: [0.13, -0.2, -0.38], r: [0.25, -2.3, 0] },
-	{ s: 1, p: [0.18, -0.52, -0.62], r: [0.25, 0.3, 0] },
+	{ s: 1, p: [0, -0.2, -0.34], r: [-0.15, 0, 0] },
+	{ s: 1, p: [-0.1, -0.1, -0.22], r: [0.05, 0.4, -0.1] },
+	{ s: 1, p: [-0.15, -0.27, -0.5], r: [1.0, 0.25, 0.1] },
+	{ s: 1, p: [-0.2, -0.2, -0.38], r: [0.25, -0.9, 0] },
+	{ s: 1, p: [-0.3, -0.52, -0.62], r: [0.25, -0.3, 0] },
 	{ s: 1, p: [0.3, -1.05, -1.55], r: [0.15, 0.35, 0] },
 ];
 const CLIPBOARD = { s: 1, p: [0.14, -0.27, -0.42], r: [0.95, -0.3, 0.1] };
@@ -6168,7 +6302,7 @@ window.__bots = {
 	glintXY() { const v = globe.plugDir.clone().multiplyScalar(1.01).project(globe.cam); return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight, z: v.z }; },
 	plugXY() { finale.plug.updateMatrixWorld(); return this.project(finale.plug.position.x, finale.plug.position.y + 6, finale.plug.position.z); },
 	lock(p, t) { V.camLock = p ? { p: new THREE.Vector3(...p), t: new THREE.Vector3(...t) } : null; },
-	tool(i) { S.tool = i; setTool(i, true); },
+	tool(i) { S.tool = i; setTool(i, true); syncHeld(true); },
 	edge: x => edgeAt(x), finaleGo: () => startFinale(), pull: () => pullPlug(), canScoop: () => canScoop(), near: () => nearMachine(), what: (x, y) => what(x, y),
 	quality: q => applyQuality(q), drops: () => drops, fishes: () => fishes, world: () => world,
 };
