@@ -112,6 +112,28 @@ purpose, rides both edges to pan and reloads when dry.
 Everything cosmetic on the page (feathers, dust, shells, shake) draws on `Math.random`, never on
 the seeded stream, which is what lets a repaint leave the trace alone.
 
+## Flyway (Duck Hunt)
+
+```sh
+npm run test:flyway                      # or: node test/duck_hunt.mjs
+node test/duck_hunt.mjs shot flight      # named suites only
+node test/duck_hunt.mjs --page=old.html  # run against another copy of the page
+VERBOSE=1 node test/duck_hunt.mjs pacing # also print each bot's reach and its escapes by cause
+```
+
+Runs the DOM-free `<script id="core">` block of `games/duck_hunt.html` in Node's `vm`: no DOM,
+no browser, no server. The core is the whole hunt in plate units and game time; the page only
+paints it, so this is where a change to one corner shows up in another.
+
+| suite | what it checks |
+| --- | --- |
+| `rules` | quota, speed and flush time only climb (with floors and ceilings), species arrive in order, the goose closes every third stop, the stop plan's shape and its banded birds, and that a daily seed is the date |
+| `shot` | the pattern radius to the unit, doubles at twice the price, the clean-flush bonus, dry fire, an empty gun sending the flush off, the goose's three hits (never in the tally), and the fourth-shell and calm-air perks |
+| `flight` | over whole bot seasons on a wide and a tall plate: every flush ends, no bird leaves the plate sideways or flies into the treeline, every fall lands in the water; the same seed and shots replay the same season; a miss does not change today's birds; a resize keeps birds in place |
+| `pacing` | three deterministic bots (sharp, average, new) must each clear a band of stops, and the phone and desktop plates must play alike |
+
+If the balance is changed on purpose, move the bands in `pacing` with it and say why.
+
 ## Minesweeper
 
 ```sh
@@ -1471,6 +1493,7 @@ npm run test:cypress        # Cypress e2e — its baseUrl is :8080, so point one
 npm run test:converter      # Everything Converter suite (needs a server on :8099)
 npm run test:pingu          # Pingu Throw suite (plain Node, no server or browser)
 npm run test:moorhuhn       # Moor Chicken suite (plain Node, no server or browser)
+npm run test:flyway         # Flyway (Duck Hunt) suite (plain Node, no server or browser)
 npm run test:minesweeper    # Minesweeper suite (plain Node, no server or browser)
 npm run test:connect4       # Connect Four AI suite (plain Node, no server or browser)
 npm run test:readingtime    # Reading Time Estimator suite (plain Node, no server or browser)
@@ -1594,6 +1617,9 @@ and checks every distance against a table recorded before the page was remade, s
 work there cannot quietly change the throw. Run it after any change to that page.
 `test/moorhuhn.mjs` does the same for `games/moorhuhn.html`: a deterministic bot plays whole
 seeded hunts and the second-by-second trace must match its table.
+`test/duck_hunt.mjs` runs the DOM-free `<script id="core">` block of `games/duck_hunt.html` (Flyway):
+the shot, the stop plan, the goose and the perks, bounds on every bird's flight, and bots of three
+skills whose reach must stay in its band and agree between a phone and a desktop plate.
 `test/minesweeper.mjs` runs the DOM-free `<script id="core">` block of `games/minesweeper.html`
 and checks that the no-guess solver is sound and that every board it passes really can be
 cleared without a guess — the one promise on that page nobody can see from the page.
@@ -3030,6 +3056,32 @@ the one link they are in the source.
 | `big` | a 1.6 MB page under a time limit, very long hrefs, pathological input |
 | `browser` | agreement with Chromium's parser, as above |
 
+## Getting Up Here
+
+```sh
+npm run test:gettingup                       # or: node test/getting_up_here.mjs (about a minute)
+node test/getting_up_here.mjs physics route  # named suites only
+node test/getting_up_here.mjs --record       # find the route again after changing the course (slow: tens of minutes)
+```
+
+`getting_up_here.mjs` runs the DOM-free `<script id="core">` block of `games/getting_up_here.html` (the course and the
+physics of the tub, the sailor and the boat hook) in Node, on the Planck.js build the page ships in its `<script id="planck">`
+block. No browser, no server. What breaks quietly here is
+physical: a tweak to friction or arm strength that makes one ledge impossible, a new beam that lets the tub tunnel,
+a slope it can no longer rest on. None of that shows on a screenshot.
+
+| suite | what it checks |
+| --- | --- |
+| `physics` | same input same climb to the bit (snapshots rebuild the Planck world identically), the tub rests on flat ground and on a slope without creeping, a shove along the shingle comes to rest, a pogo off flat ground rises 1.2–4.5 m, a planted hook holds the tub up without bobbing, the sea floats it |
+| `solid` | flailing the hook for six seconds on every leg of the course never buries the tub or the hook in rock |
+| `course` | sections climb in order, standing on the gallery is the summit and is announced once, a 12 m drop is one fall |
+| `route` | replays `getting_up_here.route.json`, a hand's keyframes per leg (points in the world, reached along eased paths, held in between) found by a cross-entropy search, from the shingle to the lamp, and wants the tub at rest in each leg's region |
+| `softlock` | slow, only when named (`node test/getting_up_here.mjs softlock`, about an hour): lets the tub come to rest on every free spot of a 0.6 × 0.8 m grid, gives a hand random moves from each rest, and wants every rest to reach the bot's route or the sea by some chain of such moves. A rest that cannot is a pocket a player would be stuck in for good |
+
+The route is the proof that the course can be climbed by a hand moving the hook, leg by leg. Change the course or
+the physics and the replay fails at the first leg that no longer works; `--record --resume` keeps the legs that still
+replay and searches on from there, and a leg the search cannot climb is a leg to redesign, not to tune around.
+
 ## Image to ASCII Converter
 
 ```sh
@@ -3107,3 +3159,27 @@ and the picture or sound is untouched (same bytes, no re-encoding).
 
 The fixtures are small real files kept as base64. To change one, regenerate it with the tool named in the
 file's `_how` and re-run `formats` and `oracle`.
+## Physics Simulator
+
+```sh
+npm run test:physics                               # or: node test/physics_simulator.mjs
+node test/physics_simulator.mjs motion contact     # named suites only
+```
+
+`physics_simulator.mjs` runs the page's DOM-free `<script id="core">` (the 2D rigid-body engine, its presets, scene
+links and number parsing) in Node; no browser or server needed. The page promises motion a student can check with a
+calculator, so expected values come from textbook formulas, never from the engine: free fall √(2h/g), projectile range
+2·vx·vy/g, a slide to rest after v²/(2μg), the incline threshold tan θ = μ and g(sin θ − μ cos θ) beyond it, a disc
+rolling at g(sin θ − c cos θ)/1.5, rebound height e²·h, the pendulum period 2π√(L/g)(1+θ²/16), and the one-dimensional
+collision formulas. A full run takes a few seconds.
+
+| suite | what it checks |
+| --- | --- |
+| `motion` | free fall on Earth and the Moon, projectile range, pendulum period and amplitude, energy kept by elastic bouncing, every readout term (½mv², ½Iω², mgh, mass from 100 kg/m²) |
+| `contact` | bounce heights for circles and boxes, bounce 0, sliding distance and keeping flat, frictionless sliding, incline hold and slide, rolling without slipping, momentum and restitution in equal and unequal collisions, a rolling ball stopping, fixed shapes staying put |
+| `stacks` | columns of 5, 10 and 14 boxes standing for 10 s, the Tower preset untouched, the starter's frame standing alone and falling when the ball arrives |
+| `cradle` | the first impact leaves four balls at rest and sends the last off at √(2gL(1−cos 45°)); 10 to 20 s later the middle still hangs still; energy within 1% |
+| `presets` | every preset built in full, finite and inside the 8 × 5 m box after 10 s; gravity per preset; dominoes all fall; the slingshot's band lets go |
+| `parse` | the gravity people type (`9,81`, `9.81 m/s²`, `.5`) and the refusals, with an example in the message |
+| `scenes` | save/load round trip, strings and the slingshot band surviving, hostile scene data (bad shapes, 5000 bodies, script in labels, bad joints), clamped settings, scenes from a wider box scaled, `#preset=`/`#g=`/`#s=` links |
+| `edges` | shapes refused (zero, negative, too thin, 2 or 99 sides, infinite), convex hull, a shape made inside a ramp eased out rather than fired out, tapped shapes lifted clear, the 400-shape limit and its speed, pin and release, erasing a cradle ball, zero g under the ceiling, no tunnelling at g = 50, fixed steps whatever the frame time, picking with a finger's slack |
