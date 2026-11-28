@@ -3,7 +3,7 @@
 //
 // test/bottom_of_the_sea.mjs checks the rules and the pacing in Node. This one checks what only the page can get wrong:
 //   beach   - first person, by real input: W walks you down the sand (and the walk is counted), a click on the water
-//             scoops into the bag, a full bag says so, a click on the machine walks you up to it and sells, the receipt
+//             scoops into the bag, a full bag says so and points the way to the machine, a click on the machine walks you up to it and sells, the receipt
 //             prints the sea's remaining litres, and the machine's face shows the new price after a contract.
 //   career  - the rest of a game, bought through the core but seen through the page: the beach view lifts into the view
 //             over the bay at the promotion (the pipeline lying on the sand, statements coming in by the minute), a button
@@ -79,6 +79,9 @@ if (run('beach')) {
     const s = await page.evaluate(() => ({ held: window.__bots.S.held, cap: window.__bots.SEA.capOf(window.__bots.S), scoops: window.__bots.S.scoops, removed: window.__bots.S.removed, hint: document.querySelector('#hint').textContent, carry: document.querySelector('#carry').className }));
     ok(s.scoops >= 12 && s.held === s.cap && s.removed === s.cap, 'clicks on the water scoop it into the bag until the bag is full', JSON.stringify(s));
     ok(/full/i.test(s.hint) && /full/.test(s.carry), 'a full bag says so', s.hint);
+    await frames(page, 15);
+    const nav = await page.evaluate(() => ({ o: +document.querySelector('#nav').style.opacity, d: document.querySelector('#navD').textContent }));
+    ok(nav.o > 0.8 && /Sell it here · \d+ m/.test(nav.d), 'and a pointer shows the way to the machine', JSON.stringify(nav));
     // a click on the machine walks you up to it and sells
     await page.evaluate(() => { const B = window.__bots; B.goto(B.V.player.x, B.V.player.z, Math.PI, 0.05); B.frame(1 / 30, 1); });
     const m = await page.evaluate(() => window.__bots.machineXY());
