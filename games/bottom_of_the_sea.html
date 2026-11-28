@@ -3254,7 +3254,7 @@ function makeBathtub() {
 	const paint = new THREE.MeshStandardMaterial({ color: 0x2f4a3e, roughness: 0.35, metalness: 0.1 }), enamel = new THREE.MeshStandardMaterial({ color: 0xf8f8f4, roughness: 0.08 });
 	grp.add(new THREE.Mesh(shell(outer, false), paint), new THREE.Mesh(shell(inner, true), enamel));
 	const fl = new THREE.Shape(); for (let c = 0; c <= N; c++) { const [x, z] = plan(c / N * Math.PI * 2, 0.8); c ? fl.lineTo(x, z) : fl.moveTo(x, z); }
-	const floor = new THREE.Mesh(new THREE.ShapeGeometry(fl, 24), enamel); floor.rotation.x = -Math.PI / 2; floor.position.y = base + 0.04;   // facing up, into the tub grp.add(floor);
+	const floor = new THREE.Mesh(new THREE.ShapeGeometry(fl, 24), enamel); floor.rotation.x = -Math.PI / 2; floor.position.y = base + 0.04; grp.add(floor);   // facing up, into the tub
 	const under = new THREE.Mesh(new THREE.ShapeGeometry(fl, 24), paint); under.rotation.x = Math.PI / 2; under.position.y = base; grp.add(under);
 	const rimPts = []; for (let c = 0; c < N; c++) { const [x, z] = plan(c / N * Math.PI * 2, 1.0 - 0.027); rimPts.push(V3(x, base + Hs + 0.004, z)); }
 	grp.add(new THREE.Mesh(tube(rimPts, 0.03, 160, 12, true), enamel));
@@ -5150,6 +5150,188 @@ class Finale {
 		renderer.setRenderTarget(sceneRT2); renderer.render(this.scene, camera); renderer.setRenderTarget(null);
 	}
 }
+
+// ═══════════════════════════ down the plughole ═══════════════════════════
+// After the end, the drain is open. Walk into it and you go down with the last of the sea: a long fall down the pipe,
+// the hole shrinking overhead, a light coming up from below, and out of a tap, a quarter of a kilometre up, over
+// somebody's bath. The sea is running into it. The duck is theirs. You come to rest on its rim and may look round.
+// Built at the size of a real bathroom times K: to the one who fell down the plughole, a bath is a landscape.
+function tileTexture(cols, grout, n, seed) {
+	return canvasTex(512, 512, (g, w, h) => {
+		const r = mulberry32(seed), s = w / n;
+		g.fillStyle = grout; g.fillRect(0, 0, w, h);
+		for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+			const c = typeof cols === 'function' ? cols(i, j) : cols, v = (r() - 0.5) * 10;
+			const gr = g.createLinearGradient(i * s, j * s, i * s + s, j * s + s);
+			gr.addColorStop(0, `rgb(${c[0] + v + 8},${c[1] + v + 8},${c[2] + v + 8})`); gr.addColorStop(1, `rgb(${c[0] + v - 6},${c[1] + v - 6},${c[2] + v - 6})`);
+			g.fillStyle = gr; g.fillRect(i * s + 3, j * s + 3, s - 6, s - 6);
+		}
+	});
+}
+class Plughole {
+	constructor() {
+		this.t = 0; this.phase = 0; this.roar = 0; this.landed = false; this.card = false;
+		this.from = { x: V.player.x, z: V.player.z, yaw: V.player.yaw, pitch: V.player.pitch };
+		this.buildPipe(); this.buildBath();
+		$('#hud').style.visibility = 'hidden';
+		this.white = document.createElement('div');
+		this.white.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:40;transition:none';
+		document.body.appendChild(this.white);
+		audio.big();
+	}
+	buildPipe() {
+		const sc = this.pipe = new THREE.Scene(); sc.background = new THREE.Color(0x020203);
+		const tex = canvasTex(256, 256, (g, w, h) => {
+			g.fillStyle = '#2b2a27'; g.fillRect(0, 0, w, h);
+			const r = mulberry32(9);
+			for (let i = 0; i < 140; i++) { g.fillStyle = `rgba(${150 + r() * 60},${150 + r() * 60},${140 + r() * 50},${0.05 + r() * 0.08})`; g.fillRect(r() * w, 0, 1 + r() * 2, h); }
+			g.fillStyle = '#121110'; g.fillRect(0, h - 10, w, 10); g.fillStyle = '#4a4740'; g.fillRect(0, h - 13, w, 3);
+		});
+		tex.repeat.set(5, 70);
+		const tube = new THREE.Mesh(new THREE.CylinderGeometry(12, 12, 900, 40, 1, true), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.35, metalness: 0.4, side: THREE.BackSide }));
+		tube.position.y = -450; sc.add(tube);
+		const sky = new THREE.Mesh(new THREE.CircleGeometry(12, 48), new THREE.MeshBasicMaterial({ color: 0xdfeefa })); sky.rotation.x = Math.PI / 2; sky.position.y = 0; sc.add(sky);
+		const glow = new THREE.Mesh(new THREE.CircleGeometry(12, 48), new THREE.MeshBasicMaterial({ color: 0xfff6e8 })); glow.rotation.x = -Math.PI / 2; glow.position.y = -880; sc.add(glow);
+		this.lamp = new THREE.PointLight(0xdfeefa, 900, 120, 1.6); sc.add(this.lamp);
+		this.lamp2 = new THREE.PointLight(0xfff0dd, 0, 200, 1.4); sc.add(this.lamp2);
+		sc.add(new THREE.AmbientLight(0x404650, 0.4));
+		// the water going down with you: streaks on the wall, falling a little faster than you do
+		const n = 500, pos = new Float32Array(n * 6), r = mulberry32(4);
+		for (let i = 0; i < n; i++) { const a = r() * 6.283, rr = 3 + r() * 8.5, y = -r() * 880, L = 2 + r() * 6; pos.set([Math.cos(a) * rr, y, Math.sin(a) * rr, Math.cos(a) * rr, y - L, Math.sin(a) * rr], i * 6); }
+		const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+		this.streaks = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xbfd6e2, transparent: true, opacity: 0.45 }));
+		sc.add(this.streaks);
+	}
+	buildBath() {
+		const K = this.K = 250, sc = this.bath = new THREE.Scene();
+		sc.background = new THREE.Color(0xe8eef0); sc.environment = scene.environment; sc.environmentIntensity = 0.8;
+		const A = 0.775, B = 0.38, rimY = 0.62 * K, wallX = -(A + 0.03) * K, wallZ = -(B + 0.03) * K;
+		// the room: a floor of small black and white tiles, two walls of pale green tiles to shoulder height, plaster above
+		const floorT = tileTexture((i, j) => (i + j) % 2 ? [236, 234, 226] : [38, 40, 44], '#bdb8ac', 8, 3); floorT.repeat.set(1000 / (0.6 * K), 1000 / (0.6 * K));
+		const floor = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({ map: floorT, roughness: 0.3 })); floor.rotation.x = -Math.PI / 2; floor.position.set(wallX + 500, 0, wallZ + 500); floor.receiveShadow = true; sc.add(floor);
+		const wallT = tileTexture([196, 224, 212], '#eef0ea', 4, 5); wallT.repeat.set(1000 / (0.6 * K), 1.3 * K / (0.6 * K));
+		const plaster = new THREE.MeshStandardMaterial({ color: 0xf1ece2, roughness: 0.9 }), tiles = new THREE.MeshStandardMaterial({ map: wallT, roughness: 0.15 });
+		for (const [rx, x, z] of [[0, wallX + 500, wallZ], [Math.PI / 2, wallX, wallZ + 500]]) {
+			const t = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1.3 * K), tiles); t.rotation.y = rx; t.position.set(x, 0.65 * K, z); t.receiveShadow = true; sc.add(t);
+			const p = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1.2 * K), plaster); p.rotation.y = rx; p.position.set(x, 1.9 * K, z); sc.add(p);
+		}
+		// a window over the far end of the bath, full of daylight
+		const win = new THREE.Mesh(new THREE.PlaneGeometry(0.7 * K, 0.9 * K), new THREE.MeshBasicMaterial({ color: 0xfaf8f0 })); win.position.set(0.55 * K, 1.75 * K, wallZ + 0.5); sc.add(win);
+		const frameM = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+		for (const [w, h, x, y] of [[0.78, 0.04, 0, 0.47], [0.78, 0.06, 0, -0.47], [0.04, 0.98, -0.37, 0], [0.04, 0.98, 0.37, 0], [0.7, 0.025, 0, 0.08], [0.025, 0.9, 0, 0]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(w * K, h * K, 0.04 * K), frameM); b.position.set(0.55 * K + x * K, 1.75 * K + y * K, wallZ + 0.02 * K); sc.add(b); }
+		// the bath, and in it the sea
+		const tub = makeBathtub(); tub.scale.setScalar(K); tub.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); sc.add(tub);
+		const plan = (th, k) => { const c = Math.cos(th), s = Math.sin(th); return [k * A * Math.sign(c) * Math.pow(Math.abs(c), 2 / 3.2), k * B * Math.sign(s) * Math.pow(Math.abs(s), 2 / 3.2)]; };
+		this.waterY = 0.43 * K;
+		const ws = new THREE.Shape(); for (let c = 0; c <= 96; c++) { const [x, z] = plan(c / 96 * Math.PI * 2, 0.975); c ? ws.lineTo(x * K, -z * K) : ws.moveTo(x * K, -z * K); }
+		this.waterMat = new THREE.MeshStandardMaterial({ color: 0x3f8fa6, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.82 });
+		if (waterNormals) { this.waterMat.normalMap = waterNormals; this.waterMat.normalScale.set(0.6, 0.6); }
+		const water = new THREE.Mesh(new THREE.ShapeGeometry(ws, 24), this.waterMat); water.rotation.x = -Math.PI / 2; water.position.y = this.waterY; sc.add(water); this.water = water;
+		// the tap, on the end wall: a wall plate, a spout that comes out and turns down, two cross heads
+		const chrome = new THREE.MeshStandardMaterial({ color: 0xe6e9eb, metalness: 1, roughness: 0.12 });
+		const ty = rimY + 0.22 * K, mouthX = wallX + 0.2 * K;
+		const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.035 * K, 0.035 * K, 0.012 * K, 32), chrome); plate.rotation.z = Math.PI / 2; plate.position.set(wallX + 0.006 * K, ty, 0); sc.add(plate);
+		const spout = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(wallX, ty, 0), new THREE.Vector3(wallX + 0.12 * K, ty, 0), new THREE.Vector3(mouthX, ty - 0.04 * K, 0), new THREE.Vector3(mouthX, ty - 0.08 * K, 0)]), 40, 0.016 * K, 20), chrome); sc.add(spout);
+		const lip = new THREE.Mesh(new THREE.TorusGeometry(0.016 * K, 0.003 * K, 10, 32), chrome); lip.rotation.x = Math.PI / 2; lip.position.set(mouthX, ty - 0.08 * K, 0); sc.add(lip);
+		for (const s of [-1, 1]) {
+			const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012 * K, 0.014 * K, 0.06 * K, 16), chrome); stem.rotation.z = Math.PI / 2; stem.position.set(wallX + 0.03 * K, ty + 0.06 * K, s * 0.13 * K); sc.add(stem);
+			for (const a of [0, Math.PI / 2]) { const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.008 * K, 0.07 * K, 4, 10), chrome); arm.rotation.set(a, 0, 0); arm.position.set(wallX + 0.065 * K, ty + 0.06 * K, s * 0.13 * K); sc.add(arm); }
+			const cap = new THREE.Mesh(new THREE.CircleGeometry(0.009 * K, 20), new THREE.MeshStandardMaterial({ color: s < 0 ? 0x2456c8 : 0xc8282a, roughness: 0.3 })); cap.rotation.y = Math.PI / 2; cap.position.set(wallX + 0.066 * K, ty + 0.06 * K, s * 0.13 * K); sc.add(cap);
+		}
+		this.mouth = new THREE.Vector3(mouthX, ty - 0.08 * K, 0);
+		// the sea, running out of the tap into the bath
+		const colG = new THREE.CylinderGeometry(0.013 * K, 0.017 * K, this.mouth.y - this.waterY, 24, 30, true); colG.translate(0, (this.mouth.y + this.waterY) / 2, 0);
+		this.colMat = new THREE.ShaderMaterial({
+			uniforms: { uTime: U.uTime, uTop: { value: this.mouth.y }, uBot: { value: this.waterY } },
+			vertexShader: 'uniform float uTop; uniform float uBot; varying float vY; varying vec3 vN; varying vec3 vV; void main(){ vY = (position.y - uBot) / (uTop - uBot); vec4 wp = modelMatrix * vec4(position, 1.); vN = normalize(mat3(modelMatrix) * normal); vV = cameraPosition - wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }',
+			fragmentShader: 'uniform float uTime; varying float vY; varying vec3 vN; varying vec3 vV; float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); } float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h(i), h(i + vec2(1., 0.)), f.x), mix(h(i + vec2(0., 1.)), h(i + vec2(1., 1.)), f.x), f.y); } void main(){ float rim = 1. - abs(dot(vN, normalize(vV))); float s = n2(vec2(atan(vN.z, vN.x) * 3., vY * 30. + uTime * 9.)); vec3 c = mix(vec3(0.55, 0.78, 0.86), vec3(1.), 0.35 + 0.5 * s); gl_FragColor = vec4(c, (0.35 + 0.5 * rim) * (0.75 + 0.25 * s)); }',
+			transparent: true, depthWrite: false, side: THREE.DoubleSide,
+		});
+		this.column = new THREE.Mesh(colG, this.colMat); this.column.position.set(this.mouth.x, 0, 0); sc.add(this.column);
+		// foam where it lands
+		const foam = new THREE.Mesh(new THREE.CircleGeometry(0.06 * K, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false })); foam.rotation.x = -Math.PI / 2; foam.position.set(this.mouth.x, this.waterY + 0.2, 0); sc.add(foam); this.foam = foam;
+		// the duck, theirs, drifting; a bar of soap on the rim; a towel over the side
+		this.duck = fitSize(makeDuck(), 0.11 * K); this.duck.traverse(o => { if (o.isMesh) o.castShadow = true; }); sc.add(this.duck);
+		this.duckP = new THREE.Vector3(0.25 * K, this.waterY, 0.05 * K);
+		const soap = new THREE.Mesh(new RoundedBoxGeometry(0.09 * K, 0.025 * K, 0.055 * K, 3, 0.012 * K), new THREE.MeshStandardMaterial({ color: 0xf0d9e6, roughness: 0.4 })); soap.position.set(0.45 * K, rimY + 0.025 * K, -(B - 0.03) * K); soap.rotation.y = 0.3; soap.castShadow = true; sc.add(soap);
+		const towel = new THREE.Mesh(new THREE.BoxGeometry(0.5 * K, 0.012 * K, 0.3 * K), new THREE.MeshStandardMaterial({ color: 0xe9a23b, roughness: 1 })); towel.position.set(0.95 * K + 0.25 * K, 0.006 * K, 0.6 * K); towel.rotation.y = 0.15; towel.receiveShadow = true; sc.add(towel);
+		// light: the window's daylight, the room's bounce
+		const sun = new THREE.DirectionalLight(0xfff4e2, 2.4); sun.position.set(0.55 * K, 2.6 * K, 2.2 * K); sun.target.position.set(0, 0, 0); sun.castShadow = true;
+		const c = sun.shadow.camera; c.left = -500; c.right = 500; c.top = 500; c.bottom = -500; c.near = 10; c.far = 2000; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005;
+		sc.add(sun, sun.target, new THREE.HemisphereLight(0xf4f2ea, 0x9a948a, 1.1));
+	}
+	update(dt) {
+		this.t += dt; const t = this.t;
+		if (this.phase === 0 && t > 1.1) { this.phase = 1; this.t0 = t; }
+		if (this.phase === 1 && t - this.t0 > 5.2) { this.phase = 2; this.t0 = t; audio.splash(1.4); }
+		this.roar = this.phase === 1 ? smoothstep(0, 4, t - this.t0) : this.phase === 0 ? smoothstep(0.3, 1.1, t) * 0.6 : Math.max(0, 0.7 - (t - this.t0) * 0.08);
+		// the white: up as the light below fills the pipe, down over the bathroom
+		const w = this.phase === 1 ? smoothstep(4.5, 5.2, t - this.t0) : this.phase === 2 ? 1 - smoothstep(0, 1.2, t - this.t0) : 0;
+		this.white.style.opacity = w.toFixed(3);
+		if (this.phase === 2) {
+			const u = t - this.t0, bob = Math.sin(V.t * 0.9) * 0.012 * this.K;
+			this.duckP.x = 0.25 * this.K - Math.min(u, 30) * 0.6;
+			this.duck.position.set(this.duckP.x, this.waterY - 0.01 * this.K + bob, this.duckP.z); this.duck.rotation.set(Math.sin(V.t * 0.7) * 0.05, 2.4 + Math.sin(V.t * 0.3) * 0.2, Math.sin(V.t * 1.1) * 0.04);
+			this.water.rotation.z += dt * 0.01; this.foam.scale.setScalar(1 + Math.sin(V.t * 7) * 0.08);
+			if (u > 9 && !this.card) {
+				this.card = true; this.landed = true;
+				showCard({ id: 'tub', name: 'Down the plughole', copy: 'The sea goes down the plughole, along a great many pipes, and comes out of a tap. Somebody is running a bath. The duck is theirs.', effect: 'Look round. E or a click: climb back up the pipe.' });
+			}
+		}
+	}
+	camPose() {
+		const t = this.t, P = this.from;
+		if (this.phase === 0) {
+			// down into the hole: the eye goes to the middle of it and drops, looking down
+			const u = ease(clamp(t / 1.1, 0, 1));
+			camera.position.set(lerp(P.x, 0, u), lerp(EYE + finale.ground(P.x, P.z), -0.5, u * u), lerp(P.z, 0, u));
+			camera.rotation.set(lerp(P.pitch, -1.45, u), P.yaw, 0, 'YXZ');
+			return;
+		}
+		if (this.phase === 1) {
+			// the fall: faster and faster, looking up at the hole as it shrinks, a slow turn; then down at the light
+			const u = t - this.t0, y = -6 - 18 * u * u;
+			camera.position.set(Math.sin(u * 1.3) * 3, y, Math.cos(u * 1.1) * 3);
+			const look = lerp(lerp(-1.45, 1.4, smoothstep(0, 0.8, u)), -1.5, smoothstep(3.2, 4.4, u));
+			camera.rotation.set(look, u * 0.9, 0, 'YXZ');
+			this.lamp.position.set(0, y + 20, 0); this.lamp.intensity = 900 * (1 - smoothstep(1.5, 4, u));
+			this.lamp2.position.set(0, y - 30, 0); this.lamp2.intensity = 4000 * smoothstep(3, 5, u);
+			this.streaks.position.y = -u * u * 26 + 0;
+			return;
+		}
+		// out of the tap, slowly, as in a dream: down beside the falling sea, then across the bath to its rim, where you stand
+		const u = t - this.t0, K = this.K, M = this.mouth;
+		const a = new THREE.Vector3(M.x + 0.03 * K, M.y - 0.02 * K, 0.02 * K), d = new THREE.Vector3(0.48 * K, 0.62 * K + 0.035 * K + EYE + 0.04 * K, (0.38 - 0.03) * K);
+		const mid = new THREE.Vector3(0.05 * K, this.waterY + 0.25 * K, 0.1 * K);
+		const k = ease(clamp(u / 8.5, 0, 1)), p = a.clone().lerp(mid, k).lerp(mid.clone().lerp(d, k), k);
+		camera.position.copy(p);
+		if (!this.landed) {
+			const look = lerp(-1.35, -0.22, smoothstep(1.5, 7.5, u)), yaw = lerp(-Math.PI / 2 - 0.3, Math.PI / 2 - 0.15, smoothstep(2, 8.5, u));
+			camera.rotation.set(look, yaw, 0, 'YXZ'); V.player.yaw = yaw; V.player.pitch = look;
+		} else camera.rotation.set(clamp(V.player.pitch, -1.4, 1.4), V.player.yaw, 0, 'YXZ');
+	}
+	render() {
+		this.camPose(); camera.updateMatrixWorld();
+		if (this.phase === 0) { finale.render(); return; }
+		const fov = camera.fov; camera.fov = this.phase === 1 ? 85 : 70; camera.updateProjectionMatrix();
+		const far = camera.far; camera.far = 4000; camera.updateProjectionMatrix();
+		renderer.setRenderTarget(sceneRT2); renderer.render(this.phase === 1 ? this.pipe : this.bath, camera); renderer.setRenderTarget(null);
+		camera.fov = fov; camera.far = far; camera.updateProjectionMatrix();
+	}
+	leave() {
+		this.white.remove(); $('#hud').style.visibility = '';
+		const sc = [this.pipe, this.bath]; for (const s of sc) s.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+	}
+}
+function enterPlughole() {
+	if (V.hole) return;
+	V.hole = new Plughole(); V.view = 'hole'; $('#hud').dataset.view = 'hole';
+	news('You step into the drain. It is not a step.', true);
+}
+function leavePlughole() {
+	const h = V.hole; if (!h || !h.landed) return;
+	fadeTo(() => { h.leave(); V.hole = null; setView('plug'); const P = V.player; P.x = 0; P.z = 40; P.yaw = 0; P.pitch = 0.05; V.snapEye = true; lockMouse(); hint('You climb back up. It takes a while. Nobody mentions the bath.', 6); });
+}
 // ═══════════════════════════ boot ═══════════════════════════
 const setLoad = (p, msg) => { $('#loadbar').style.width = (p * 100).toFixed(0) + '%'; $('#loadmsg').textContent = msg; };
 const tick = () => new Promise(r => setTimeout(r, 16));
@@ -5454,6 +5636,8 @@ function stepPlayer(dt) {
 	else if (ok(nx, P.z)) { P.x = nx; P.vz *= 0.5; }
 	else if (ok(P.x, nz)) { P.z = nz; P.vx *= 0.5; }
 	else { P.vx *= 0.3; P.vz *= 0.3; if (V.goal) { V.goal = null; } }
+	// the open drain, after the end: step into it
+	if (V.view === 'plug' && finale && finale.pulled && S.done && Math.hypot(P.x, P.z) < 8) enterPlughole();
 	if (V.view === 'beach' && V.pier) { const inside = inPier(P.x, P.z); P.onPier = inside && (P.onPier || P.z > V.pier.z0 - 1.5); }
 	// the walk is kept: the records count it, and the water you walk through splashes
 	const moved = Math.hypot(P.x - x0, P.z - z0);
@@ -5704,6 +5888,7 @@ function frame(dt, noRender) {
 	}
 	if (V.view === 'globe') globe.update(dt);
 	if (V.view === 'plug') finale.update(dt);
+	if (V.view === 'hole' && V.hole) V.hole.update(dt);
 	if ((playing || V.mode === 'end') && !V.paused) stepPlayer(dt);
 	stepSun();
 	if (playing && V.sights) for (const [id, top] of V.sights) if (!S.ui.sights?.[id] && V.wy < top - 0.3) { S.ui.sights = Object.assign({}, S.ui.sights, { [id]: 1 }); later(1.5, () => news(SIGHT_NEWS[id], true)); }
@@ -5717,7 +5902,7 @@ function frame(dt, noRender) {
 	// the surf is as loud as the water is near: at the edge it is all around you, from up the beach a murmur
 	if (audio.ctx) {
 		const P = V.player, near = V.view === 'beach' ? clamp(Math.max(0, P.z - edgeAt(P.x)) / 380, 0, 0.92) : V.view === 'plug' ? 1 : V.p;
-		audio.update(dt, near, V.t, V.view === 'plug' && finale ? finale.drainLevel || 0 : 0);
+		audio.update(dt, near, V.t, V.view === 'hole' && V.hole ? V.hole.roar : V.view === 'plug' && finale ? finale.drainLevel || 0 : 0);
 	}
 	if (playing || V.mode === 'end') {
 		V.hudT -= dt; if (V.hudT <= 0) { V.hudT = 0.1; updateHUD(); }
@@ -5732,6 +5917,7 @@ function frame(dt, noRender) {
 function render(dt) {
 	if (V.view === 'globe') { globe.render(); composer.render(dt); }
 	else if (V.view === 'plug') { finale.render(); composer.render(dt); }
+	else if (V.view === 'hole') { V.hole.render(); composer.render(dt); }
 	else { ocean.render(scene, camera); renderScene(); composer.render(dt); }
 	drops.drawn();
 }
@@ -5955,6 +6141,7 @@ function earnTip(money, L) {
 }
 function clickAt(cx, cy) {
 	V.lastClick = { x: cx, y: cy, t: V.t };
+	if (V.view === 'hole') { leavePlughole(); return; }
 	if (V.mode !== 'play' && !(V.mode === 'end' && V.view === 'plug')) return;
 	audio.start();
 	const w = what(cx, cy), P = V.player;
@@ -5998,6 +6185,7 @@ function clickAt(cx, cy) {
 	}
 }
 function interactCentre() {
+	if (V.view === 'hole') { leavePlughole(); return; }
 	if (V.view === 'beach' && nearMachine() && S.held > 0) { sellHere(); return; }
 	if (V.view === 'beach' && canScoop()) {
 		const r = rayFrom(innerWidth / 2, innerHeight / 2), g = groundHit(r, 30), P = V.player;
@@ -6240,7 +6428,7 @@ function bindUI() {
 		if (p.moved > 6) {
 			V.dragging = true; cv.classList.add('drag');
 			const inv = S.ui.inv ? -1 : 1;
-			if (V.view === 'beach' || V.view === 'plug') { V.player.yaw += dx * 0.0042; V.player.pitch += dy * 0.0036 * inv; if (V.goal) V.goal.keepLook = true; }
+			if (V.view === 'beach' || V.view === 'plug' || V.view === 'hole') { V.player.yaw += dx * 0.0042; V.player.pitch += dy * 0.0036 * inv; if (V.goal) V.goal.keepLook = true; }
 			else if (V.view === 'air') { cam.yaw -= dx * 0.004; cam.pitch += dy * 0.003; cam.vyaw = -dx * 0.25; cam.vpitch = dy * 0.2; }
 			else if (V.view === 'globe') { globe.view.yaw -= dx * 0.005; globe.view.pitch += dy * 0.004; globe.view.vyaw = -dx * 0.3; V.globeT = V.t; }
 		}
@@ -6326,7 +6514,7 @@ function bindUI() {
 // ── the mouse on a desktop: captured while you walk, so it looks around like your eyes; handed back for menus ──
 const locked = () => document.pointerLockElement === $('#gl');
 function lockMouse() {
-	if ((window.__botsManual && !window.__botsLock) || COARSE || locked() || (V.mode !== 'play' && !(V.mode === 'end' && V.view === 'plug')) || V.paused || (V.view !== 'beach' && V.view !== 'plug' && V.view !== 'air' && V.view !== 'globe') || V.fly || !$('#card').classList.contains('hidden')) return;
+	if ((window.__botsManual && !window.__botsLock) || COARSE || locked() || (V.mode !== 'play' && !(V.mode === 'end' && V.view === 'plug')) || V.paused || (V.view !== 'beach' && V.view !== 'plug' && V.view !== 'air' && V.view !== 'globe' && V.view !== 'hole') || V.fly || !$('#card').classList.contains('hidden')) return;
 	if (innerWidth > 820 && $('#shop').classList.contains('open') && !V.autoShop) return;
 	try { const r = $('#gl').requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch { }
 }

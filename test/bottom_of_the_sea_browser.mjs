@@ -13,7 +13,7 @@
 //   mouse    - on a desktop the first click captures the mouse, moving it turns you, a click acts at the crosshair, Shift
 //              runs once you own running shoes, Tab hands the mouse back for the shop, and the view from above keeps
 //              the mouse: it swings the camera, W A S D slide the view; the planet stops when turned, the plug keeps
-//              the mouse. The pier can be walked on.
+//              the mouse, the open drain at the end leads somewhere and back. The pier can be walked on.
 //   walk     - a bot walks the real beach through the page's own goals, scooping and selling and buying the cheapest
 //              thing at the machine; the pipeline comes about when the core's straight-line reckoning says it would.
 //   duck     - a rubber duck bobs up in front of you, a click on it where it is drawn starts the boost, and it dips away.
@@ -203,6 +203,9 @@ if (run('mouse')) {
     await page.evaluate(() => { const B = window.__bots; B.view('plug'); B.frame(1 / 30, 2); });
     const pl = await page.evaluate(() => ({ locked: document.pointerLockElement === document.querySelector('#gl'), shop: document.querySelector('#shop').classList.contains('open') }));
     ok(pl.locked && !pl.shop, 'at the plug the mouse is still captured and the shop is shut', JSON.stringify(pl));
+    // after the end, into the open drain: down the pipe, out of a tap over a bath, and back up again
+    const hole = await page.evaluate(() => { const B = window.__bots, V = B.V; B.S.done = true; B.S.doneT = B.S.t; B.view('plug'); B.finale().pulled = true; B.finale().t = 99; B.goto(0, 4, 0, -0.2); B.frame(1 / 30, 2); const r = { entered: V.view }; for (let i = 0; i < 170; i++) B.frame(1 / 10, 1, true); r.card = !document.querySelector('#card').classList.contains('hidden'); document.querySelector('#cardOk').click(); B.interact(); for (let i = 0; i < 30; i++) B.frame(1 / 10, 1, true); r.back = V.view; r.hud = document.querySelector('#hud').style.visibility; return r; });
+    ok(hole.entered === 'hole' && hole.card && hole.back === 'plug' && hole.hud === '', 'the open drain leads somewhere, and back', JSON.stringify(hole));
     // the pier: up its steps from the dune and out along the deck, held between the railings
     const pier = await page.evaluate(() => { const B = window.__bots, V = B.V, p = V.pier; B.view('beach'); B.S.stage = 0; V.keys = {}; B.goto((p.x0 + p.x1) / 2 + 1.5, p.z0 + 3, 0.15, -0.1); V.keys.KeyW = true; for (let i = 0; i < 450; i++) B.frame(1 / 10, 1, true); V.keys = {}; return { z: V.player.z, x: V.player.x, on: !!V.player.onPier, y: B.camera.position.y, p }; });
     ok(pier.on && pier.z < pier.p.z1 + 6 && pier.y > pier.p.top + 1, 'the pier can be walked on, out to its end', JSON.stringify(pier));
