@@ -36,7 +36,7 @@ const speed = s => Math.hypot(s.bx - s.pbx, s.by - s.pby) / (Core.DT / Core.SUB)
 // The legs of the climb: each a region the tub must come to rest in, in order.
 const LEGS = [
   ['first crate', 2.3, 3.1, 1.25], ['past the crate', 3.6, 4.8, 0.4], ['crate stack', 5.3, 6.0, 2.15], ['boulder', 8.3, 9.8, 2.6],
-  ['bow', 11.0, 13.0, 3.6], ['mast cleat 1', 13.6, 14.4, 6.8], ['mast cleat 2', 14.7, 15.5, 8.1], ['mast cleat 3', 15.8, 16.6, 9.4], ['crow\'s nest', 17.2, 19.6, 11.6],
+  ['bow', 11.0, 13.0, 3.6], ['mast step', 11.8, 13.0, 6.2], ['mast cleat 1', 13.6, 14.4, 6.8], ['mast cleat 2', 14.7, 15.5, 8.1], ['mast cleat 3', 15.8, 16.6, 9.4], ['crow\'s nest', 17.2, 19.6, 11.6],
   ['wall step 1', 20.1, 21.2, 13.95], ['wall step 2', 21.1, 22.1, 16.05], ['wall step 3', 22.05, 23.05, 18.15], ['wall step 4', 23.0, 24.0, 20.25],
   ['wall top', 23.9, 25.0, 22.3], ['weed 1', 26.2, 27.8, 24.0], ['weed 2', 28.4, 30.2, 25.8], ['weed 3', 30.8, 32.6, 27.6], ['weed rock', 33.3, 36.0, 28.9],
   ['boom 1', 35.6, 39.6, 30.8], ['landing 1', 40.0, 42.0, 33.0], ['crate on the landing', 40.6, 41.4, 34.0], ['boom 2 cleat 1', 37.79, 38.59, 36.19], ['boom 2 cleat 2', 36.88, 37.68, 36.8], ['boom 2 cleat 3', 35.96, 36.76, 37.41], ['boom 2 cleat 4', 35.04, 35.84, 38.03], ['boom 2 cleat 5', 34.05, 34.85, 38.52], ['landing 2', 30.5, 33.6, 38.6],
@@ -203,10 +203,55 @@ function record() {
   }
 }
 
+// Slow suites, run only by name. `softlock` lets the tub come to rest at every free spot of the course (a 0.6 x 0.8 m
+// grid), gives a hand random moves from each rest and records where the tub comes to rest again. From every rest some
+// chain of such moves must lead onto the bot's route (or into the sea, which floats him back to the shingle): a rest
+// that cannot is a pocket a player would be stuck in for good, like the old gap by the crow's nest.
+const slow = {
+  softlock() {
+    const c = [], t0 = Date.now();
+    const clear = (x, y, r) => !Core.circle(x, y, r, c).length && !Core.polys.some(o => Core.inside(o, x, y));
+    const rests = [];
+    for (let x = -6; x <= 46.4; x += 0.6) for (let y = 0.5; y <= 92; y += 0.8) {
+      if (!clear(x, y, 0.5) || !clear(x, y + Core.TDY, Core.RT + 0.05)) continue;
+      const dir = [[0, 1.2], [1.1, 0.5], [-1.1, 0.5], [0, -0.7]].find(([dx, dy]) => clear(x + dx, y + Core.PDY + dy, 0.3));
+      if (!dir) continue;
+      const s = Core.create({x, y, cx: dir[0], cy: dir[1]}); run(s, 2.5, () => ({dx: 0, dy: 0}));
+      const a0 = [s.bx, s.by]; run(s, 0.25, () => ({dx: 0, dy: 0}));
+      if (Math.hypot(s.bx - a0[0], s.by - a0[1]) > 0.03 || s.wet) continue; // still moving, or in the sea (which floats him ashore)
+      if (rests.some(r => Math.hypot(r.bx - s.bx, r.by - s.by) < 0.45)) continue;
+      rests.push(Core.serialize(s));
+    }
+    console.log('  ' + rests.length + ' places to rest, found in ' + Math.round((Date.now() - t0) / 1000) + ' s');
+    // the places a player is known to get on from: the bot's route, from the shingle to the lamp
+    const route = existsSync(ROUTE) ? JSON.parse(readFileSync(ROUTE, 'utf8')) : [];
+    const good = []; { let st = begin(); good.push([st.bx, st.by]); for (const d of route) { st = play(st, d.keys); good.push([st.bx, st.by]); } }
+    const nodes = rests.map(st => [st.bx, st.by]), N = nodes.length;
+    const near = (x, y) => { let bi = -1, bd = 0.7; for (let i = 0; i < N; i++) { const d = Math.hypot(nodes[i][0] - x, nodes[i][1] - y); if (d < bd) { bd = d; bi = i; } } return bi; };
+    const isGood = (x, y, wet) => wet || good.some(g => Math.hypot(g[0] - x, g[1] - y) < 0.8);
+    // from each rest, a hand tries random moves; where the tub comes to rest again is an edge of the graph
+    let r = 12345; const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+    const edges = rests.map(() => new Set()), ok0 = rests.map(st => isGood(st.bx, st.by, false));
+    rests.forEach((st, i) => {
+      const s0 = Core.restore(st);
+      for (let k = 0; k < 40; k++) {
+        const keys = []; for (let j = 0; j < 4; j++) keys.push([rnd() * Math.PI * 2, Core.LMIN + rnd() * (Core.LMAX - Core.LMIN), 0.15 + rnd() * 0.55]);
+        const e = play(s0, keys);
+        if (isGood(e.bx, e.by, e.wet)) { ok0[i] = true; break; }
+        const j = near(e.bx, e.by); if (j >= 0 && j !== i) edges[i].add(j);
+      }
+    });
+    // a rest is fine if some chain of moves leads from it to a place on the route (or into the sea, which floats him home)
+    const fine = ok0.slice(); let changed = true;
+    while (changed) { changed = false; for (let i = 0; i < N; i++) if (!fine[i]) for (const j of edges[i]) if (fine[j]) { fine[i] = true; changed = true; break; } }
+    const stuck = nodes.filter((_, i) => !fine[i]).map(q => q[0].toFixed(2) + ', ' + q[1].toFixed(2));
+    ok(!stuck.length, 'from every place he can come to rest, some way leads back onto the route: ' + (stuck.length ? stuck.length + ' cut off: ' + stuck.join(' | ') : N + ' places, ' + Math.round((Date.now() - t0) / 1000) + ' s'));
+  }
+};
 if (process.argv.includes('--record')) record();
 else {
   const want = process.argv.slice(2).filter(a => !a.startsWith('-'));
-  for (const [name, fn] of Object.entries(suites)) if (!want.length || want.includes(name)) { const f0 = fails; fn(); console.log(name + ': ' + (fails === f0 ? 'ok' : (fails - f0) + ' failed')); }
+  for (const [name, fn] of Object.entries(suites).concat(Object.entries(slow).filter(([k]) => want.includes(k)))) if (!want.length && !(name in slow) || want.includes(name)) { const f0 = fails; fn(); console.log(name + ': ' + (fails === f0 ? 'ok' : (fails - f0) + ' failed')); }
   console.log(fails ? fails + ' of ' + n + ' checks failed' : 'all ' + n + ' checks passed');
   process.exit(fails ? 1 : 0);
 }
