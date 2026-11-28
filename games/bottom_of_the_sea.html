@@ -847,6 +847,7 @@ window.SEA = SEA;
 <script type="module">
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -2971,98 +2972,260 @@ function makeCable(world, x0) {
 	return m;
 }
 
-// ── the scoop you click with, dipped into the water where you clicked: one small model per tool ──
-function makeToolModel(i) {
+// ── the things you hold, at their real sizes (metres), each shaped after the real object ──
+// Shapes are lathed (round things), lofted from a width and height profile (spoon), or swept along a path (handles,
+// rims), so each reads as one object with one outline, not as a heap of primitives.
+const PM = {};   // shared materials, made on first use
+function pmat(key, make) { return PM[key] || (PM[key] = make()); }
+const steelM = () => pmat('steel', () => new THREE.MeshStandardMaterial({ color: 0xd9dde0, metalness: 1, roughness: 0.22, side: THREE.DoubleSide }));
+const skinM = () => pmat('skin', () => new THREE.MeshStandardMaterial({ color: 0xd9a080, roughness: 0.58 }));
+// a sheet lofted along a centre line: width and lift as functions of t along it, a dish across it
+function loftSheet(n, m, at) {
+	const pos = [], idx = [], uv = [];
+	for (let i = 0; i <= n; i++) for (let j = 0; j <= m; j++) { const p = at(i / n, j / m * 2 - 1); pos.push(p[0], p[1], p[2]); uv.push(i / n, 1 - j / m); }
+	for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) { const a = i * (m + 1) + j, b = a + m + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+	const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+	return g;
+}
+// a closed solid from a sheet: the sheet, a copy offset along its normals, and the edges sewn
+function thicken(sheet, th) {
+	const p = sheet.attributes.position, nr = sheet.attributes.normal, cnt = p.count, pos = new Float32Array(cnt * 6);
+	for (let i = 0; i < cnt; i++) for (let k = 0; k < 3; k++) { pos[i * 3 + k] = p.array[i * 3 + k]; pos[(i + cnt) * 3 + k] = p.array[i * 3 + k] - nr.array[i * 3 + k] * th; }
+	const idx = [...sheet.index.array]; const id = sheet.index.array;
+	for (let i = 0; i < id.length; i += 3) idx.push(id[i] + cnt, id[i + 2] + cnt, id[i + 1] + cnt);
+	const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+	return g;
+}
+function tube(points, r, segs = 64, radial = 10, closed = false) { return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points, closed, 'centripetal'), segs, r, radial, closed); }
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ── a teaspoon: 14 cm; an egg-shaped bowl 4.2 × 2.8 cm and 6 mm deep, a narrow neck, a handle that widens and lifts ──
+function makeTeaspoon() {
+	const L = 0.14, bowl = 0.3;
+	const half = t => {
+		if (t < bowl) { const u = t / bowl; return 0.0142 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.85)), 0.62) * (1 - 0.18 * u); }
+		const u = (t - bowl) / (1 - bowl);
+		return lerp(0.0026, 0.0062, smoothstep(0.05, 0.85, u)) * (u > 0.93 ? Math.sqrt(Math.max(0, 1 - Math.pow((u - 0.93) / 0.07, 2))) * 0.85 + 0.15 : 1);
+	};
+	const g = loftSheet(90, 18, (t, v) => {
+		const w = half(t), x = v * w;
+		const dish = t < bowl ? -0.0062 * (1 - v * v) * Math.sin(Math.PI * t / bowl) : -0.0006 * (1 - v * v);
+		const lift = 0.013 * smoothstep(bowl * 0.9, 1, t) + 0.004 * Math.sin(Math.PI * Math.min(1, t / bowl)) * 0;
+		return [x, dish + lift, -L / 2 + t * L];
+	});
+	const m = new THREE.Mesh(thicken(g, 0.0014), steelM());
+	const grp = new THREE.Group(); grp.add(m); return grp;
+}
+// ── a soup ladle: a 9 cm bowl 4.5 cm deep with a rolled lip, a 28 cm handle rising from the rim, a hook at its end ──
+function makeLadle() {
+	const grp = new THREE.Group(), R = 0.045;
+	const prof = []; for (let i = 0; i <= 16; i++) { const a = i / 16 * Math.PI / 2; prof.push(new THREE.Vector2(Math.sin(a) * R + 0.0001, -Math.cos(a) * R * 0.95)); }
+	grp.add(new THREE.Mesh(new THREE.LatheGeometry(prof, 40), steelM()));
+	const lip = new THREE.Mesh(new THREE.TorusGeometry(R, 0.0022, 8, 48), steelM()); lip.rotation.x = Math.PI / 2; grp.add(lip);
+	const h = tube([V3(0, 0.002, R - 0.003), V3(0, 0.03, R + 0.012), V3(0, 0.12, R + 0.05), V3(0, 0.22, R + 0.085), V3(0, 0.28, R + 0.1), V3(0, 0.3, R + 0.085), V3(0, 0.292, R + 0.07)], 0.0042, 80, 8);
+	h.scale(1, 1, 1); const hm = new THREE.Mesh(h, steelM()); hm.scale.set(1.5, 1, 0.6); grp.add(hm);
+	return grp;
+}
+// ── a mug: 8.2 cm across, 9.5 cm tall, a C handle; white glaze, a blue band and its slogan ──
+function mugTexture() {
+	return canvasTex(512, 128, (g, w, h) => {
+		g.fillStyle = '#f6f4ee'; g.fillRect(0, 0, w, h);
+		g.fillStyle = '#245a96'; g.fillRect(0, h * 0.06, w, h * 0.1);
+		g.font = '800 26px Manrope, Arial, sans-serif'; g.textAlign = 'center';
+		g.fillText("WORLD'S BEST", w * 0.75, h * 0.5); g.fillText('OCEAN DRAINER', w * 0.75, h * 0.78);
+	}, true, false);
+}
+function makeMug() {
+	const grp = new THREE.Group(), R = 0.041, H = 0.095, t = 0.004;
+	const prof = [V3(0, 0, 0), V3(R - 0.006, 0, 0), V3(R - 0.002, 0.002, 0), V3(R, 0.008, 0), V3(R + 0.0006, H - 0.004, 0), V3(R - 0.001, H, 0), V3(R - t, H - 0.001, 0), V3(R - t, 0.008, 0), V3(R - t - 0.004, 0.006, 0), V3(0, 0.006, 0)].map(p => new THREE.Vector2(p.x, p.y));
+	const glaze = new THREE.MeshStandardMaterial({ color: 0xf6f4ee, roughness: 0.18, side: THREE.DoubleSide });
+	const body = new THREE.Mesh(new THREE.LatheGeometry(prof, 48), glaze); grp.add(body);
+	const print = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.0009, R + 0.0009, 0.07, 48, 1, true), new THREE.MeshStandardMaterial({ map: mugTexture(), roughness: 0.18 }));
+	print.position.y = 0.052; print.rotation.y = -Math.PI / 2; grp.add(print);
+	const hp = []; for (let i = 0; i <= 20; i++) { const a = -Math.PI / 2 + i / 20 * Math.PI; hp.push(V3(R + 0.002 + Math.cos(a) * 0.024, H * 0.52 + Math.sin(a) * 0.03, 0)); }
+	const hm = new THREE.Mesh(tube(hp, 0.0055, 40, 10), new THREE.MeshStandardMaterial({ color: 0xf6f4ee, roughness: 0.18 })); hm.scale.set(1, 1, 1.4); grp.add(hm);
+	grp.children[1].scale.z = 1; return grp;
+}
+// ── a galvanised bucket: 30 cm across the top, 24 at the base, 27 tall, a rolled rim, ears and a wire bail with a grip ──
+function zincTexture() {
+	return canvasTex(256, 256, (g, w, h) => {
+		g.fillStyle = '#a9b0b4'; g.fillRect(0, 0, w, h);
+		const r = mulberry32(3);
+		for (let i = 0; i < 140; i++) { const v = 150 + r() * 70 | 0; g.fillStyle = `rgba(${v},${v + 4},${v + 8},0.35)`; g.beginPath(); const x = r() * w, y = r() * h, s = 6 + r() * 26; for (let k = 0; k < 7; k++) { const a = k / 7 * 6.283; g.lineTo(x + Math.cos(a) * s * (0.6 + r() * 0.5), y + Math.sin(a) * s * (0.6 + r() * 0.5)); } g.fill(); }
+		for (let y = 0; y < h; y += 32) { g.fillStyle = 'rgba(60,66,70,0.25)'; g.fillRect(0, y, w, 3); g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(0, y + 3, w, 2); }
+	}, true, true);
+}
+function makeBucket() {
+	const grp = new THREE.Group(), Rt = 0.15, Rb = 0.12, H = 0.27;
+	const zinc = new THREE.MeshStandardMaterial({ color: 0xffffff, map: zincTexture(), metalness: 0.75, roughness: 0.42, side: THREE.DoubleSide });
+	const prof = [new THREE.Vector2(0, 0.004), new THREE.Vector2(Rb - 0.006, 0.004), new THREE.Vector2(Rb, 0.012), new THREE.Vector2(Rb + 0.001, 0.0)];
+	for (let i = 0; i <= 10; i++) prof.push(new THREE.Vector2(lerp(Rb, Rt, i / 10), 0.012 + i / 10 * (H - 0.012)));
+	grp.add(new THREE.Mesh(new THREE.LatheGeometry(prof, 56), zinc));
+	const rim = new THREE.Mesh(new THREE.TorusGeometry(Rt + 0.003, 0.0045, 10, 64), zinc); rim.rotation.x = Math.PI / 2; rim.position.y = H; grp.add(rim);
+	for (const s of [-1, 1]) { const ear = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.03, 0.025), zinc); ear.position.set(s * (Rt - 0.004), H - 0.025, 0); grp.add(ear); }
+	const bp = []; for (let i = 0; i <= 24; i++) { const a = Math.PI * i / 24; bp.push(V3(-Math.cos(a) * (Rt + 0.004), H - 0.025 + Math.sin(a) * 0.17, 0)); }
+	grp.add(new THREE.Mesh(tube(bp, 0.0025, 60, 6), steelM()));
+	const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.1, 12), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5 })); grip.rotation.z = Math.PI / 2; grip.position.y = H - 0.025 + 0.17; grp.add(grip);
+	return grp;
+}
+// ── a cast-iron roll-top bathtub with claw feet: 1.55 m long, 0.76 wide, 0.62 high, white enamel inside ──
+function makeBathtub() {
+	const grp = new THREE.Group(), A = 0.775, B = 0.38, n = 3.2;
+	const plan = (th, k) => { const c = Math.cos(th), s = Math.sin(th); return [k * A * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), k * B * Math.sign(s) * Math.pow(Math.abs(s), 2 / n)]; };
+	const outer = [], inner = [], N = 96, Hs = 0.5, base = 0.12;
+	const shell = (pts, flip) => { const g = new THREE.BufferGeometry(), pos = [], idx = [], rows = pts.length, cols = N + 1; pts.forEach(row => row.forEach(p => pos.push(...p))); for (let r = 0; r < rows - 1; r++) for (let c = 0; c < N; c++) { const a = r * cols + c, b = a + cols; flip ? idx.push(a, a + 1, b, b, a + 1, b + 1) : idx.push(a, b, a + 1, b, b + 1, a + 1); } g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g; };
+	for (let r = 0; r <= 12; r++) {
+		const t = r / 12, y = base + t * Hs, k = 0.86 + 0.14 * Math.sin(t * Math.PI / 2) ** 0.7, row = [], rowI = [];
+		for (let c = 0; c <= N; c++) { const th = c / N * Math.PI * 2, [x, z] = plan(th, k), [xi, zi] = plan(th, k - 0.055); row.push([x, y, z]); rowI.push([xi, base + 0.04 + t * (Hs - 0.04) * 1.0, zi]); }
+		// the bottom of the outside closes underneath; the inside floor dips at the middle
+		outer.push(row); inner.push(rowI);
+	}
+	const paint = new THREE.MeshStandardMaterial({ color: 0x2f4a3e, roughness: 0.35, metalness: 0.1 }), enamel = new THREE.MeshStandardMaterial({ color: 0xf8f8f4, roughness: 0.08 });
+	grp.add(new THREE.Mesh(shell(outer, false), paint), new THREE.Mesh(shell(inner, true), enamel));
+	const fl = new THREE.Shape(); for (let c = 0; c <= N; c++) { const [x, z] = plan(c / N * Math.PI * 2, 0.8); c ? fl.lineTo(x, z) : fl.moveTo(x, z); }
+	const floor = new THREE.Mesh(new THREE.ShapeGeometry(fl, 24), enamel); floor.rotation.x = Math.PI / 2; floor.position.y = base + 0.04; grp.add(floor);
+	const under = new THREE.Mesh(new THREE.ShapeGeometry(fl, 24), paint); under.rotation.x = Math.PI / 2; under.position.y = base; grp.add(under);
+	const rimPts = []; for (let c = 0; c < N; c++) { const [x, z] = plan(c / N * Math.PI * 2, 1.0 - 0.027); rimPts.push(V3(x, base + Hs + 0.004, z)); }
+	grp.add(new THREE.Mesh(tube(rimPts, 0.03, 160, 12, true), enamel));
+	const gold = new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 1, roughness: 0.3 });
+	for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+		const foot = new THREE.Group(); foot.position.set(sx * (A - 0.16), 0, sz * (B - 0.08));
+		const leg = new THREE.Mesh(tube([V3(0, base + 0.02, 0), V3(sx * 0.02, 0.07, sz * 0.015), V3(sx * 0.045, 0.02, sz * 0.03)], 0.022, 16, 10), gold); foot.add(leg);
+		for (let k = -1; k <= 1; k++) { const toe = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), gold); toe.position.set(sx * 0.055 + k * 0.012 * sz, 0.012, sz * 0.035 + k * 0.015 * sx); foot.add(toe); }
+		grp.add(foot);
+	}
+	return grp;
+}
+// ── hands, cupped together palms up: a palm, three-jointed fingers that curl up, a thumb, the wrist, a sleeve ──
+function makeHand(side) {
+	const h = new THREE.Group();
+	const palm = new THREE.Mesh(new RoundedBoxGeometry(0.085, 0.024, 0.095, 4, 0.011), skinM()); palm.position.set(0, 0, 0); h.add(palm);
+	// fingers: index to little, roots along the far edge of the palm, each bent up at three joints to cup
+	const lens = [[0.046, 0.026, 0.021], [0.05, 0.03, 0.023], [0.047, 0.028, 0.022], [0.037, 0.021, 0.019]];
+	const rad = [0.0088, 0.0092, 0.0087, 0.0076];
+	lens.forEach((L, f) => {
+		const x = (f - 1.5) * 0.0205 * -side, root = new THREE.Group(); root.position.set(x, 0.002, -0.046); root.rotation.set(0.12, (f - 1.5) * 0.06 * side, 0); h.add(root);
+		let parent = root;
+		L.forEach((len, k) => {
+			const seg = new THREE.Mesh(new THREE.CapsuleGeometry(rad[f] * (1 - k * 0.1), len, 4, 10), skinM()); seg.rotation.x = Math.PI / 2; seg.position.z = -len / 2;
+			const joint = new THREE.Group(); joint.add(seg); parent.add(joint);
+			const next = new THREE.Group(); next.position.z = -len; next.rotation.x = 0.16 + k * 0.08; joint.add(next); parent = next;
+		});
+	});
+	// the thumb: from the heel of the hand along the outer edge, lying a little over the palm
+	const tr = new THREE.Group(); tr.position.set(0.04 * side, 0.004, 0.02); tr.rotation.set(0.2, 0.75 * side, 0.4 * side); h.add(tr);
+	let par = tr;
+	for (const [len, r] of [[0.04, 0.012], [0.032, 0.0105], [0.026, 0.0095]]) { const seg = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), skinM()); seg.rotation.x = Math.PI / 2; seg.position.z = -len / 2; const j = new THREE.Group(); j.add(seg); par.add(j); const nx = new THREE.Group(); nx.position.z = -len; nx.rotation.set(0.25, -0.1 * side, 0); j.add(nx); par = nx; }
+	// wrist and forearm, out of sight below; a sleeve
+	const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.22, 4, 14), skinM()); arm.rotation.x = Math.PI / 2 + 0.55; arm.position.set(0, -0.06, 0.15); arm.scale.set(1.25, 1, 0.8); h.add(arm);
+	const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.05, 0.2, 18), pmat('sleeve', () => new THREE.MeshStandardMaterial({ color: 0x2f5f8a, roughness: 0.85 }))); sl.rotation.x = Math.PI / 2 + 0.55; sl.position.set(0, -0.12, 0.27); h.add(sl);
+	return h;
+}
+function makeCuppedHands() {
 	const g = new THREE.Group();
-	const steel = new THREE.MeshStandardMaterial({ color: 0xd8dde0, metalness: 0.9, roughness: 0.25, side: THREE.DoubleSide });
-	const add = (geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m; };
-	const bowl = (r, mat) => { const gg = new THREE.SphereGeometry(r, 20, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2); return add(gg, mat); };
-	switch (i) {
-		case 0: { // cupped hands: two palms side by side, fingers curled up at the front, forearms out of sight below
-			const skin = new THREE.MeshStandardMaterial({ color: 0xd9a07f, roughness: 0.55, side: THREE.DoubleSide });
-			const sleeve = new THREE.MeshStandardMaterial({ color: 0x2f5f8a, roughness: 0.8 });
-			for (const s of [-1, 1]) {
-				const h = new THREE.Group(); h.position.x = s * 0.82; h.rotation.z = s * 0.22; g.add(h);
-				const palm = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), skin); palm.scale.set(0.82, 0.48, 1.15); h.add(palm);
-				for (let f = 0; f < 4; f++) {
-					const x = (f - 1.5) * 0.36 * (s > 0 ? 1 : -1) * -1, fg = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.75 - Math.abs(f - 1.5) * 0.12, 4, 8), skin);
-					fg.position.set(x, 0.12, -1.25); fg.rotation.x = -1.0; h.add(fg);
-				}
-				const th = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.7, 4, 8), skin); th.position.set(s * 0.8, 0.2, -0.35); th.rotation.set(-0.5, 0, s * 0.9); h.add(th);
-				const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 3, 12), skin); arm.position.set(0, -0.55, 1.9); arm.rotation.x = Math.PI / 2 - 0.4; h.add(arm);
-				const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.62, 2, 12), sleeve); cuff.position.set(0, -1.15, 3.6); cuff.rotation.x = Math.PI / 2 - 0.4; h.add(cuff);
-			}
-			break; }
-		case 1: { const b = bowl(0.9, steel); b.scale.set(1, 0.5, 1.4); add(new THREE.CylinderGeometry(0.12, 0.16, 4, 8), steel, 0, 0.9, 2.5, 1.2); break; }
-		case 2: { bowl(1.3, steel); add(new THREE.CylinderGeometry(0.14, 0.14, 6, 8), steel, 0, 2.9, 0.6, -0.25); add(new THREE.TorusGeometry(0.35, 0.1, 6, 12), steel, 0, 5.9, 1.35); break; }
-		case 3: { const white = new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.35, side: THREE.DoubleSide });
-			add(new THREE.CylinderGeometry(1.2, 1.05, 2.4, 20, 1, true), white, 0, 0.6); add(new THREE.CircleGeometry(1.05, 20), white, 0, -0.59, 0, Math.PI / 2);
-			add(new THREE.TorusGeometry(0.6, 0.16, 8, 16, Math.PI * 1.3), white, 1.35, 0.7, 0, 0, 0, -Math.PI * 0.65);
-			add(new THREE.CylinderGeometry(1.25, 1.25, 0.35, 20, 1, true), new THREE.MeshStandardMaterial({ color: 0x2b6a9c, roughness: 0.4, side: THREE.DoubleSide }), 0, 1.2); break; }
-		case 4: { const zinc = new THREE.MeshStandardMaterial({ color: 0xa7adb1, metalness: 0.8, roughness: 0.35, side: THREE.DoubleSide });
-			add(new THREE.CylinderGeometry(1.7, 1.3, 2.6, 22, 1, true), zinc, 0, 0.8); add(new THREE.CircleGeometry(1.3, 22), zinc, 0, -0.49, 0, Math.PI / 2);
-			add(new THREE.TorusGeometry(1.7, 0.08, 6, 24, Math.PI), steel, 0, 2.1, 0); break; }
-		case 5: { const en = new THREE.MeshStandardMaterial({ color: 0xf4f2ee, roughness: 0.2, side: THREE.DoubleSide });
-			const tub = new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2); const t = add(tub, en); t.scale.set(3, 1.6, 1.6);
-			for (const x of [-2.2, 2.2]) for (const z of [-1, 1]) add(new THREE.SphereGeometry(0.3, 8, 6), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.9, roughness: 0.3 }), x, -1.4, z); break; }
-		case 6: { const green = new THREE.MeshStandardMaterial({ color: 0x2c8a3c, roughness: 0.45 });
-			add(new THREE.CylinderGeometry(0.4, 0.4, 6, 10), green, 0, 3, 0); add(new THREE.CylinderGeometry(0.5, 0.65, 1.2, 10), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.9, roughness: 0.3 }), 0, -0.3); break; }
-		case 7: { const red = new THREE.MeshStandardMaterial({ color: 0xb81d18, roughness: 0.45 });
-			add(new THREE.CylinderGeometry(0.7, 0.7, 7, 12), red, 0, 3.5); add(new THREE.CylinderGeometry(0.55, 0.9, 1.8, 12), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.9, roughness: 0.3 }), 0, -0.4); break; }
-		case 8: { const pipe = new THREE.MeshStandardMaterial({ color: 0x8b949a, metalness: 0.6, roughness: 0.4 });
-			add(new THREE.CylinderGeometry(1.6, 1.6, 9, 16), pipe, 0, 4.5); add(new THREE.TorusGeometry(1.9, 0.35, 8, 20), pipe, 0, 0.2, 0, Math.PI / 2); break; }
-		case 9: { const red = new THREE.MeshStandardMaterial({ color: 0xd8342c, roughness: 0.35 });
-			add(new THREE.CylinderGeometry(0.6, 0.6, 12, 12), red, 0, 6); add(new THREE.CylinderGeometry(0.6, 0.6, 4, 12), red, 1.3, 13.3, 0, 0, 0, -0.8); break; }
-		case 99: { // management: a clipboard, the orders on it
-			const board = new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.7 }), paper = new THREE.MeshStandardMaterial({ map: canvasTex(128, 160, (c, w, h) => { c.fillStyle = '#f6f2e6'; c.fillRect(0, 0, w, h); c.fillStyle = '#2a2a2a'; c.font = '700 13px Manrope, Arial, sans-serif'; c.fillText('ORDERS', 12, 30); c.fillStyle = '#7a7468'; for (let i = 0; i < 7; i++) c.fillRect(12, 46 + i * 15, 60 + (i * 37) % 44, 3); c.strokeStyle = '#b8302a'; c.lineWidth = 3; c.beginPath(); c.moveTo(14, 148); c.lineTo(110, 128); c.stroke(); }, true, false), roughness: 0.8 });
-			add(new THREE.BoxGeometry(2.4, 0.12, 3.2), board, 0, 0, 0);
-			add(new THREE.PlaneGeometry(2.1, 2.7), paper, 0, 0.07, 0.1, -Math.PI / 2);
-			add(new THREE.BoxGeometry(1.0, 0.25, 0.4), new THREE.MeshStandardMaterial({ color: 0xc8cdd0, metalness: 0.9, roughness: 0.3 }), 0, 0.12, -1.45);
-			break; }
-		default: { const sp = makeSponge(); sp.visible = true; sp.scale.setScalar(0.06); g.add(sp); }
+	for (const s of [-1, 1]) { const h = makeHand(s); h.position.x = s * 0.047; h.rotation.z = -s * 0.32; g.add(h); }
+	return g;
+}
+// ── a supermarket bag: the THANK YOU kind, white and thin, hanging from its handles; it swells with what it holds ──
+function bagTexture() {
+	return canvasTex(256, 256, (g, w, h) => {
+		g.fillStyle = '#f4f2ec'; g.fillRect(0, 0, w, h);
+		g.fillStyle = '#c8262a'; g.font = '800 26px Arial, sans-serif'; g.textAlign = 'center';
+		for (let i = 0; i < 4; i++) g.fillText('THANK YOU', w / 2, 90 + i * 30);
+		g.font = '700 16px Arial, sans-serif'; g.fillText('HAVE A NICE DAY', w / 2, 220);
+	}, true, false);
+}
+function makeBag() {
+	const grp = new THREE.Group(), W = 0.15, H = 0.3;
+	// the body: a sack whose depth is the fill (the vertex shader-free way: rebuilt as it fills)
+	const bt = bagTexture(); bt.wrapS = THREE.RepeatWrapping; bt.repeat.set(-2, 1);   // once on each side, and read the right way round from either
+	const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: bt, roughness: 0.45, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+	const body = new THREE.Mesh(new THREE.BufferGeometry(), mat); grp.add(body);
+	const water = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0x2b6f88, roughness: 0.1, transparent: true, opacity: 0.55 })); grp.add(water);
+	const r = mulberry32(8), wr = []; for (let i = 0; i < 12; i++) wr.push([r() * 6.28, r() * 6.28, 0.3 + r()]);
+	const sack = (fill, shrink) => loftSheet(40, 40, (t, v) => {
+		// t: around the bag, v: top (-1) to bottom (1); depth bulges with the fill toward the bottom
+		const a = t * Math.PI * 2, y = -H * (v + 1) / 2, low = (v + 1) / 2;
+		const bulge = 0.025 + (0.03 + 0.07 * fill) * Math.pow(Math.sin(Math.PI * Math.min(1, low * 1.05)), 0.7) * (0.4 + 0.6 * low);
+		let crease = 0; for (const [p, q, s] of wr) crease += Math.sin(a * 3 * s + p + y * 40 * s) * 0.0015 * s;
+		const x = Math.cos(a) * W * (1 - 0.15 * (1 - low)) * shrink, z = Math.sin(a) * bulge * shrink;
+		const bottom = v > 0.85 ? (v - 0.85) / 0.15 : 0;
+		return [x * (1 - bottom * 0.25) + crease, y + bottom * 0.02 * fill, z * (1 - bottom * 0.4) + crease];
+	});
+	grp.userData.setFill = f => {
+		if (Math.abs((grp.userData.f ?? -1) - f) < 0.02) return; grp.userData.f = f;
+		body.geometry.dispose(); body.geometry = sack(f, 1);
+		water.geometry.dispose(); water.geometry = sack(f, 0.93); water.visible = f > 0.03;
+		const lvl = -H * (1 - 0.85 * f); water.material.clippingPlanes = null; water.scale.y = 1; water.position.y = 0; water.userData.lvl = lvl;
+	};
+	grp.userData.setFill(0);
+	// the handles: two loops up from the sides, gathered where they hang from your fingers
+	for (const s of [-1, 1]) { const hp = [V3(s * W * 0.75, -0.01, 0), V3(s * W * 0.6, 0.08, 0), V3(s * 0.02, 0.16, 0), V3(0, 0.17, 0)]; const hm = new THREE.Mesh(tube(hp, 0.006, 24, 6), mat); hm.scale.z = 0.4; grp.add(hm); }
+	return grp;
+}
+// ── a plastic watering can: 22 cm tall, an oval body, a handle arching over the top, a long spout from the foot, a rose ──
+function makeWateringCan() {
+	const grp = new THREE.Group(), green = new THREE.MeshStandardMaterial({ color: 0x3c8f4c, roughness: 0.38 });
+	const body = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.22, 36), green); body.scale.z = 0.7; body.position.y = 0.11; grp.add(body);
+	const top = new THREE.Mesh(new THREE.SphereGeometry(0.085, 36, 12, 0, Math.PI * 2, 0, Math.PI / 2), green); top.scale.set(1, 0.35, 0.7); top.position.y = 0.22; grp.add(top);
+	const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 20), green); neck.position.set(0.04, 0.245, 0); grp.add(neck);
+	grp.add(new THREE.Mesh(tube([V3(-0.085, 0.13, 0), V3(-0.1, 0.24, 0), V3(-0.05, 0.31, 0), V3(0.05, 0.3, 0), V3(0.075, 0.25, 0)], 0.012, 40, 10), green));
+	grp.add(new THREE.Mesh(tube([V3(0.08, 0.03, 0), V3(0.15, 0.09, 0), V3(0.23, 0.2, 0), V3(0.28, 0.27, 0)], 0.011, 30, 10), green));
+	const rose = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.014, 0.04, 20), green); rose.position.set(0.295, 0.285, 0); rose.rotation.z = -0.85; grp.add(rose);
+	const face = new THREE.Mesh(new THREE.CircleGeometry(0.034, 20), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.8, roughness: 0.4, side: THREE.DoubleSide })); face.rotation.x = -Math.PI / 2; face.position.y = 0.0205; rose.add(face);
+	return grp;
+}
+// ── a 20-litre jerrycan: 47 × 35 × 16 cm, the stamped X on the sides, three handles on top, a spout with its cap ──
+function makeJerrycan() {
+	const grp = new THREE.Group(), red = new THREE.MeshStandardMaterial({ color: 0xa82a22, roughness: 0.45, metalness: 0.25 });
+	const body = new THREE.Mesh(new RoundedBoxGeometry(0.35, 0.44, 0.16, 4, 0.02), red); body.position.y = 0.22; grp.add(body);
+	for (const s of [-1, 1]) for (const a of [-1, 1]) { const x = new THREE.Mesh(new RoundedBoxGeometry(0.04, 0.42, 0.012, 2, 0.005), red); x.position.set(0, 0.21, s * 0.08); x.rotation.z = a * 0.62; grp.add(x); }
+	const rim = new THREE.Mesh(new RoundedBoxGeometry(0.36, 0.02, 0.17, 2, 0.008), red); rim.position.y = 0.225; grp.add(rim);
+	for (let k = -1; k <= 1; k++) { const hp = [V3(k * 0.075 - 0.025, 0.44, 0), V3(k * 0.075 - 0.025, 0.475, 0), V3(k * 0.075 + 0.025, 0.475, 0), V3(k * 0.075 + 0.025, 0.44, 0)]; grp.add(new THREE.Mesh(tube(hp, 0.007, 16, 8), red)); }
+	const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.04, 16), red); spout.position.set(0.14, 0.455, 0); spout.rotation.z = -0.5; grp.add(spout);
+	const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.02, 16), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 })); cap.position.set(0.152, 0.474, 0); cap.rotation.z = -0.5; grp.add(cap);
+	return grp;
+}
+// ── a wheelbarrow: an 80 cm tray, a pneumatic wheel at the front, two long handles back to you, two legs ──
+function makeWheelbarrow() {
+	const grp = new THREE.Group(), tray = new THREE.MeshStandardMaterial({ color: 0x2c6aa0, roughness: 0.4, metalness: 0.35, side: THREE.DoubleSide });
+	// the tray: a pressed steel tub, rounded-square in plan (a superellipse), sides flared out to a rolled lip
+	const A = 0.33, B = 0.42, n = 4, N = 64, plan = (th, k) => { const c = Math.cos(th), s2 = Math.sin(th); return [k * A * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), k * B * Math.sign(s2) * Math.pow(Math.abs(s2), 2 / n)]; };
+	const pos = [], idx = [], rows = 8;
+	for (let r = 0; r <= rows; r++) { const t = r / rows, y = 0.62 - (1 - t) * 0.26, k = 0.62 + 0.38 * Math.pow(t, 0.8); for (let c = 0; c <= N; c++) { const [x, z] = plan(c / N * Math.PI * 2, k); pos.push(x, y - (z < 0 ? -z * 0.12 * (1 - t) : 0), z); } }
+	for (let r = 0; r < rows; r++) for (let c = 0; c < N; c++) { const a2 = r * (N + 1) + c, b2 = a2 + N + 1; idx.push(a2, a2 + 1, b2, b2, a2 + 1, b2 + 1); }
+	const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); tg.setIndex(idx); tg.computeVertexNormals(); grp.add(new THREE.Mesh(tg, tray));
+	const fl = new THREE.Shape(); for (let c = 0; c <= N; c++) { const [x, z] = plan(c / N * Math.PI * 2, 0.62); c ? fl.lineTo(x, z) : fl.moveTo(x, z); }
+	const floor = new THREE.Mesh(new THREE.ShapeGeometry(fl, 16), tray); floor.rotation.x = Math.PI / 2; floor.position.y = 0.36; grp.add(floor);
+	const lip = []; for (let c = 0; c < N; c++) { const [x, z] = plan(c / N * Math.PI * 2, 1.0); lip.push(V3(x, 0.62, z)); }
+	grp.add(new THREE.Mesh(tube(lip, 0.009, 128, 6, true), tray));
+	const water = new THREE.Mesh(new THREE.ShapeGeometry(fl, 16), new THREE.MeshStandardMaterial({ color: 0x2b6f88, roughness: 0.06, transparent: true, opacity: 0.85 })); water.rotation.x = Math.PI / 2; grp.add(water);
+	grp.userData.setFill = f => { water.visible = f > 0.03; water.position.y = 0.37 + 0.22 * f; const k = (0.64 + 0.34 * f) / 0.62; water.scale.set(k, k, 1); };
+	grp.userData.setFill(0);
+	const tyre = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.05, 12, 32), new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.85 })); tyre.rotation.y = Math.PI / 2; tyre.position.set(0, 0.21, -0.62); grp.add(tyre);
+	const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.07, 16), new THREE.MeshStandardMaterial({ color: 0xc9cdd0, metalness: 0.8, roughness: 0.35 })); hub.rotation.z = Math.PI / 2; hub.position.copy(tyre.position); grp.add(hub);
+	const steel = new THREE.MeshStandardMaterial({ color: 0x3a3f44, metalness: 0.6, roughness: 0.4 });
+	for (const s of [-1, 1]) {
+		grp.add(new THREE.Mesh(tube([V3(s * 0.04, 0.21, -0.62), V3(s * 0.14, 0.31, -0.32), V3(s * 0.2, 0.335, 0.15), V3(s * 0.24, 0.39, 0.46), V3(s * 0.28, 0.6, 0.8)], 0.016, 36, 8), steel));
+		const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.14, 12), new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.7 })); grip.rotation.x = Math.PI / 2 - 0.5; grip.position.set(s * 0.285, 0.63, 0.86); grp.add(grip);
+		grp.add(new THREE.Mesh(tube([V3(s * 0.2, 0.335, 0.2), V3(s * 0.23, 0.15, 0.24), V3(s * 0.25, 0.0, 0.26)], 0.013, 12, 8), steel));
 	}
+	return grp;
+}
+function makeToolModel(i) {
+	if (i === 99) return makeClipboard();
+	return [makeCuppedHands, makeTeaspoon, makeLadle, makeMug, makeBucket, makeBathtub][Math.min(i, 5)]();
+}
+function makeCarryModel(i) { return [makeBag, makeWateringCan, makeJerrycan, makeWheelbarrow][i] ? [makeBag, makeWateringCan, makeJerrycan, makeWheelbarrow][i]() : new THREE.Group(); }
+function makeClipboard() {
+	const g = new THREE.Group();
+	const board = new THREE.Mesh(new RoundedBoxGeometry(0.23, 0.006, 0.32, 2, 0.003), new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.7 })); g.add(board);
+	const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.21, 0.27), new THREE.MeshStandardMaterial({ map: canvasTex(128, 160, (c, w, h) => { c.fillStyle = '#f6f2e6'; c.fillRect(0, 0, w, h); c.fillStyle = '#2a2a2a'; c.font = '700 13px Manrope, Arial, sans-serif'; c.fillText('ORDERS', 12, 30); c.fillStyle = '#7a7468'; for (let i = 0; i < 7; i++) c.fillRect(12, 46 + i * 15, 60 + (i * 37) % 44, 3); c.strokeStyle = '#b8302a'; c.lineWidth = 3; c.beginPath(); c.moveTo(14, 148); c.lineTo(110, 128); c.stroke(); }, true, false), roughness: 0.8 }));
+	paper.rotation.x = -Math.PI / 2; paper.position.set(0, 0.0035, 0.015); g.add(paper);
+	const clip = new THREE.Mesh(new RoundedBoxGeometry(0.09, 0.012, 0.035, 2, 0.004), steelM()); clip.position.set(0, 0.008, -0.14); g.add(clip);
 	return g;
 }
 
-
-// ── what you carry it in, low on the left; the bag bulges and the barrow fills with what is in them ──
-function makeCarryModel(i) {
-	const g = new THREE.Group(), add = (geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m; };
-	const water = new THREE.MeshStandardMaterial({ color: 0x2c6f86, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.85 });
-	g.userData = {};
-	switch (i) {
-		case 0: { // a supermarket bag, by its handles
-			const bag = add(new THREE.SphereGeometry(1, 18, 12), new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.35, transparent: true, opacity: 0.88 }), 0, -0.3, 0);
-			bag.scale.set(0.9, 1.3, 0.55);
-			for (const x of [-0.35, 0.35]) add(new THREE.TorusGeometry(0.42, 0.05, 6, 16, Math.PI), bag.material, x, 0.85, 0);
-			g.userData.bulge = bag; break; }
-		case 1: { // a watering can
-			const green = new THREE.MeshStandardMaterial({ color: 0x3f8f4a, roughness: 0.4, metalness: 0.3 });
-			add(new THREE.CylinderGeometry(0.8, 0.85, 1.5, 20), green, 0, 0, 0);
-			add(new THREE.CylinderGeometry(0.1, 0.16, 2.0, 8), green, 0.95, 0.35, -0.6, 0.9, 0, -0.8);
-			add(new THREE.CylinderGeometry(0.32, 0.12, 0.25, 12), green, 1.65, 1.0, -1.15, 0.9, 0, -0.8);
-			add(new THREE.TorusGeometry(0.55, 0.08, 6, 16, Math.PI), green, 0, 1.0, 0.2, 0, Math.PI / 2, 0);
-			break; }
-		case 2: { // a jerrycan
-			const red = new THREE.MeshStandardMaterial({ color: 0xb8302a, roughness: 0.5, metalness: 0.2 });
-			add(new THREE.BoxGeometry(1.0, 1.5, 0.6), red, 0, 0, 0);
-			for (const x of [-0.25, 0, 0.25]) add(new THREE.BoxGeometry(0.1, 0.32, 0.12), red, x, 0.9, 0);
-			add(new THREE.BoxGeometry(0.7, 0.1, 0.12), red, 0, 1.06, 0);
-			add(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 8), new THREE.MeshStandardMaterial({ color: 0x222222 }), 0.4, 0.85, 0);
-			break; }
-		case 3: { // a wheelbarrow with a tank on it, pushed in front of you
-			const tray = new THREE.MeshStandardMaterial({ color: 0x2e6b9a, roughness: 0.45, metalness: 0.4, side: THREE.DoubleSide });
-			const t = add(new THREE.CylinderGeometry(1.6, 1.1, 1.0, 4, 1, true), tray, 0, 0, -0.5, 0, Math.PI / 4, 0); t.scale.set(1, 1, 1.3);
-			add(new THREE.BoxGeometry(1.5, 0.05, 2.0), tray, 0, -0.5, -0.5);
-			const w = add(new THREE.TorusGeometry(0.45, 0.16, 8, 20), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 }), 0, -0.9, -2.4, 0, Math.PI / 2, 0);
-			const wood = new THREE.MeshStandardMaterial({ color: 0x7a5534, roughness: 0.8 });
-			for (const x of [-0.9, 0.9]) add(new THREE.CylinderGeometry(0.08, 0.08, 3.2, 8), wood, x, -0.3, 0.6, Math.PI / 2 - 0.2, 0, 0);
-			const lvl = add(new THREE.PlaneGeometry(2.0, 2.5), water, 0, -0.45, -0.5, -Math.PI / 2, 0, 0);
-			g.userData.level = lvl; g.userData.wheel = w; break; }
-		default: break;   // the bike trailer rides behind you; the pipeline is not carried
-	}
-	return g;
-}
 // ── what you ride: handlebars, a steering wheel ──
 function makeRideModel(i) {
 	const g = new THREE.Group(), add = (geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m; };
@@ -4297,7 +4460,7 @@ class Globe {
 		this.sponge = null;
 	}
 	makeScooper(kind) {
-		if (kind === 'spoon') { const g = makeToolModel(1); g.scale.setScalar(0.3); return g; }   // the teaspoon from the beach, the size of the Moon
+		if (kind === 'spoon') { const g = makeToolModel(1); g.scale.setScalar(10); return g; }   // the teaspoon from the beach, the size of the Moon
 		const g = new THREE.Group(); g.scale.setScalar(2.2);
 		const gold = new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.8, roughness: 0.35, side: THREE.DoubleSide }), panel = new THREE.MeshStandardMaterial({ color: 0x1f3f8a, metalness: 0.3, roughness: 0.4, side: THREE.DoubleSide });
 		g.add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.04), gold));
@@ -4882,14 +5045,14 @@ function stepSun() {
 // ═══════════════════════════ what you hold ═══════════════════════════
 // The tool sits low and to the right. A scoop is a spring, not a clip: each click kicks it, so quick clicks never snap it back.
 const VM_POSE = [
-	{ s: 0.068, p: [0.02, -0.34, -0.56], r: [-0.3, 0, 0] },
-	{ s: 0.05, p: [0.1, -0.22, -0.46], r: [0.35, -0.25, 0] },
-	{ s: 0.045, p: [0.12, -0.27, -0.6], r: [-1.0, -0.3, 0] },
-	{ s: 0.05, p: [0.12, -0.22, -0.55], r: [0.25, 0.4, 0] },
-	{ s: 0.085, p: [0.14, -0.42, -0.72], r: [0.2, 0.3, 0] },
-	{ s: 0.15, p: [0.26, -0.62, -1.25], r: [0.2, 0.35, 0] },
+	{ s: 1, p: [0, -0.19, -0.36], r: [-0.25, 0, 0] },
+	{ s: 1, p: [0.05, -0.09, -0.21], r: [0.05, -0.4, 0.1] },
+	{ s: 1, p: [0.12, -0.2, -0.45], r: [-1.25, -0.35, 0.1] },
+	{ s: 1, p: [0.13, -0.2, -0.38], r: [0.25, -2.3, 0] },
+	{ s: 1, p: [0.18, -0.52, -0.62], r: [0.25, 0.3, 0] },
+	{ s: 1, p: [0.3, -1.05, -1.55], r: [0.15, 0.35, 0] },
 ];
-const CLIPBOARD = { s: 0.09, p: [0.16, -0.3, -0.5], r: [0.9, -0.3, 0.1] };
+const CLIPBOARD = { s: 1, p: [0.14, -0.27, -0.42], r: [0.95, -0.3, 0.1] };
 function setTool(i, snap) {
 	const mgr = S.stage >= 1, pose = mgr ? CLIPBOARD : VM_POSE[Math.min(i, 5)];
 	const g = makeToolModel(mgr ? 99 : Math.min(i, 5)); g.scale.setScalar(pose.s);
@@ -4929,16 +5092,15 @@ function updateViewmodel(dt) {
 		sl.g.rotation.set(pose.r[0], pose.r[1], pose.r[2] + sway);
 		sl.g.visible = show > 0.01;
 		const u = sl.g.userData;
-		if (u.bulge) u.bulge.scale.set(0.7 + 0.3 * fill, 0.75 + 0.6 * fill, 0.4 + 0.25 * fill);
-		if (u.level) { u.level.visible = fill > 0.02; u.level.position.y = -0.48 + fill * 0.45; u.level.scale.set(0.7 + 0.3 * fill, 0.7 + 0.3 * fill, 1); }
+		if (u.setFill) u.setFill(fill);
 	}
 }
 // what you carry and what you ride, each in its own slot: a new one comes up from below, the old one goes down
 const CARRY_POSE = [
-	{ s: 0.085, p: [0.36, -0.37, -0.58], r: [0, -0.3, -0.05] },
-	{ s: 0.075, p: [0.38, -0.42, -0.64], r: [0, -2.4, 0] },
-	{ s: 0.09, p: [0.38, -0.42, -0.62], r: [0, -0.25, -0.05] },
-	{ s: 0.32, p: [0, -0.92, -1.15], r: [0.12, 0, 0] },
+	{ s: 1, p: [0.36, -0.2, -0.5], r: [0.1, -0.4, 0.05] },
+	{ s: 1, p: [0.38, -0.55, -0.55], r: [0.1, 2.6, 0] },
+	{ s: 1, p: [0.42, -0.78, -0.6], r: [0.1, 1.4, 0] },
+	{ s: 1, p: [0, -1.32, -1.05], r: [0.1, 0, 0] },
 ];
 const RIDE_POSE = { 2: { s: 0.42, p: [0, -0.27, -0.7], r: [0.12, 0, 0] }, 3: { s: 0.55, p: [0, -0.2, -0.75], r: [0.05, 0, 0] }, 4: { s: 0.42, p: [0, -0.28, -0.72], r: [0.12, 0, 0] } };
 function setSlot(name, i, make, pose, snap) {
