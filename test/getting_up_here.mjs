@@ -188,6 +188,7 @@ function solve(state, goal, seed, K = 5, iters = 10) {
   }
   return best;
 }
+const SEEDS = +process.env.GU_SEEDS || 16; // GU_SEEDS=40 gives a stubborn leg a longer search
 function record() {
   const sol = existsSync(ROUTE) && process.argv.includes('--resume') ? JSON.parse(readFileSync(ROUTE, 'utf8')) : [];
   let s = begin(), kept = 0;
@@ -197,7 +198,7 @@ function record() {
     let b = null; const t0 = Date.now();
     for (let seed = 1; seed <= 8 && !(b && b.sc === 0); seed++) { const r = solve(s, LEGS[i], seed); if (!b || r.sc < b.sc) b = r; }
     // a hard leg gets a second, longer search with one more keyframe
-    for (let seed = 9; seed <= 16 && !(b && b.sc === 0); seed++) { const r = solve(s, LEGS[i], seed, 6, 14); if (!b || r.sc < b.sc) b = r; }
+    for (let seed = 9; seed <= SEEDS && !(b && b.sc === 0); seed++) { const r = solve(s, LEGS[i], seed, 6, 14); if (!b || r.sc < b.sc) b = r; }
     console.log((i + 1) + ' ' + LEGS[i].name + ': ' + (b.sc === 0 ? 'climbed' : 'STUCK at ' + b.s.bx.toFixed(2) + ', ' + b.s.by.toFixed(2)) + ' in ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s');
     if (b.sc > 0) process.exit(1);
     sol.push({name: LEGS[i].name, keys: b.keys}); writeFileSync(ROUTE, JSON.stringify(sol)); s = play(s, sol[i].keys);
