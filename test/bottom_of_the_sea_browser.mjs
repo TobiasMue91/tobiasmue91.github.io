@@ -6,7 +6,8 @@
 //             scoops into the bag, a full bag says so, a click on the machine walks you up to it and sells, the receipt
 //             prints the sea's remaining litres, and the machine's face shows the new price after a contract.
 //   career  - the rest of a game, bought through the core but seen through the page: the beach view lifts into the view
-//             over the bay at the promotion, a button takes management back down to the water's edge and up again, then cuts to the planet, whose glint is clicked when the plug comes clear;
+//             over the bay at the promotion (the pipeline lying on the sand, statements coming in by the minute), a button
+//             takes management back down to the water's edge and up again, a click from orbit sends the Moon spoon down, then cuts to the planet, whose glint is clicked when the plug comes clear;
 //             at the bottom a click on the plug pulls it, and the end card comes up. No page or console error on the way,
 //             and after a reload the game knows the sea is empty and opens at the bottom.
 //   walk     - a bot walks the real beach through the page's own goals, scooping and selling and buying the cheapest
@@ -102,14 +103,18 @@ if (run('career')) {
         const B = window.__bots, S = B.S, SEA = B.SEA; S.money = 1e12;
         for (let i = 0; i < 20; i++) for (const r of ['tool', 'carry', 'move', 'contract', 'buyer']) SEA.act(S, 'buy', r);
         for (let k = 0; k < 5; k++) SEA.act(S, 'helper', k, 10);
-        B.setP(0.37); B.advance(20);
-        const gear = { walkers: B.scene.children.some(o => o.children && o.children.some(c => c.isInstancedMesh && c.count > 10)) };
+        B.setP(0.37); B.advance(64);
+        const gear = { walkers: B.scene.children.some(o => o.children && o.children.some(c => c.isInstancedMesh && c.count > 10)),
+                       pipe: B.scene.children.some(o => o.children && o.children.some(c => c.isMesh && c.geometry.type === 'TubeGeometry' && c.material.color && c.material.color.getHex() === 0x2f6fb0 && c.visible)),
+                       statements: S.ui.stmt | 0 };
         SEA.act(S, 'stage'); B.frame(1 / 30, 1, true);
         const flying = !!B.V.fly; B.frame(1 / 30, 130, true); B.frame(1 / 30, 1);
         return { view: B.V.view, flying, landed: !B.V.fly, camY: B.camera.position.y, gear, finds: Object.keys(S.found).length };
     });
     ok(r1.view === 'air' && r1.flying && r1.landed && r1.camY > 300, 'the promotion lifts the view off the beach to above the bay', JSON.stringify(r1));
     ok(r1.gear.walkers, 'helpers walk the beach with their buckets');
+    ok(r1.gear.pipe, 'the pipeline lies on the sand from the machine to you');
+    ok(r1.gear.statements >= 1, 'with the money coming in by itself the buyer posts a statement every minute', JSON.stringify(r1.gear));
     // management may still go down and look
     await page.click('#viewBtn'); await frames(page, 100);
     const down = await page.evaluate(() => { const B = window.__bots; B.frame(1 / 30, 1); return { view: B.V.view, z: B.V.player.z, edge: B.edge(B.V.player.x), camY: B.camera.position.y, eye: B.camera.position.y - B.V.wy }; });
@@ -121,12 +126,16 @@ if (run('career')) {
         const B = window.__bots, S = B.S, SEA = B.SEA; S.money = 1e30;
         B.setP(0.65); B.advance(5); SEA.act(S, 'stage'); B.frame(1 / 30, 60, true);
         const view = B.V.view;
-        for (let i = 0; i < 14; i++) SEA.act(S, 'buy', 'buyer');
+        for (let i = 0; i < 14; i++) { SEA.act(S, 'buy', 'buyer'); SEA.act(S, 'buy', 'tool'); }
         B.setP(0.99); B.advance(30);
         const g = B.globe(); g.view.yaw = Math.atan2(g.plugDir.x, g.plugDir.z); g.view.pitch = Math.asin(g.plugDir.y); g.view.vyaw = 0; B.frame(1 / 30, 2);
-        return { view, plug: !!S.exposed.plug, level: g.u.uLevel.value, xy: B.glintXY() };
+        B.click(innerWidth * 0.3, innerHeight * 0.5); B.frame(1 / 30, 25, true);
+        const spoon = { kind: g.scooperKind, r: g.sc.pos.length(), busy: !!g.sc.job };
+        B.frame(1 / 30, 120, true);
+        return { view, plug: !!S.exposed.plug, level: g.u.uLevel.value, xy: B.glintXY(), spoon };
     });
     ok(r2.view === 'globe' && r2.plug && r2.level < 0, 'the planet: the oceans shrink until the plug comes clear', JSON.stringify(r2));
+    ok(r2.spoon.kind === 'spoon' && r2.spoon.busy && r2.spoon.r < 1.6, 'a click sends the Moon spoon down to the sea', JSON.stringify(r2.spoon));
     await page.mouse.click(r2.xy.x, r2.xy.y); await frames(page, 60);
     const r3 = await page.evaluate(() => { const B = window.__bots; B.goto(0, 30, 0, 0.25); B.frame(1 / 30, 1); return { view: B.V.view, xy: B.plugXY() }; });
     ok(r3.view === 'plug', 'a click on the glint takes you down to the plug', JSON.stringify(r3));
