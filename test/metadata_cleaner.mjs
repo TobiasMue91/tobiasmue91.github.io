@@ -363,7 +363,7 @@ if (suites.includes('pdf')) {
         check(check0.getTitle() === 'Secret plan v2', 'built PDF with an incremental update reads as "Secret plan v2"');
         const r = await M.clean(bytes, 'plan.pdf', {}, deps);
         // the update's info dictionary replaces the first one; Keywords, Producer, Company now live only in the old revision
-        for (const l of ['Title', 'Author', 'Date modified', 'Created with', 'Creator', 'Earlier saved versions still inside the file', 'Comment authors and dates', 'Photo metadata inside embedded images', 'Document ID'])
+        for (const l of ['Title', 'Author', 'Date modified', 'Created with', 'Creator', 'Earlier saved versions', 'Comment authors and dates', 'Photo metadata inside embedded images', 'Document ID'])
             check(labels(r).includes(l), `PDF: lists ${l}`, labels(r).join(', '));
         check(value(r, 'Title') === 'Secret plan v2', 'PDF: title shown is the file\'s own, not one pdf-lib made up', value(r, 'Title'));
         check(/with GPS/.test(value(r, 'Photo metadata inside embedded images')), 'PDF: notices the GPS position of the photo inside');
@@ -372,6 +372,8 @@ if (suites.includes('pdf')) {
         check(r.left.length === 0, 'PDF: re-reading the clean copy finds nothing', JSON.stringify(r.left));
         const back = await PDFDocument.load(r.output);
         check(back.getPageCount() === 1, 'PDF: still opens, still one page');
+        const tr = Buffer.from(r.output).toString('latin1'), sz = +/\/Size (\d+)/.exec(tr)[1], top = Math.max(...[...tr.matchAll(/(\d+) 0 obj/g)].map(m => +m[1]));
+        check(sz === top + 1, `PDF: trailer /Size is one more than the highest object (${sz} vs ${top})`);
         check(has(r.output, 'Looks good'), 'PDF: the comment text itself is kept (it is content), only its author and date go');
         // encrypted
         const enc = u8(...asc('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R /Encrypt << /Filter /Standard /V 2 >> >>\n%%EOF'));
@@ -405,6 +407,7 @@ if (suites.includes('broken')) {
     const p = png([pngChunk('tEXt', asc('Author\0Jane'))]);
     const r = await M.clean(p, 'holiday.jpg', {}, deps);
     check(r.format === 'png' && r.notes.some(n => /really a PNG/.test(n)) && !has(r.output, 'Jane'), 'PNG named .jpg: cleaned as PNG, with a note');
+    check(M.cleanName('holiday.jpg', 'png') === 'clean_holiday.png' && M.cleanName('IMG_1.JPEG', 'jpeg') === 'clean_IMG_1.JPEG' && M.cleanName('noext', 'jpeg') === 'clean_noext.jpg', 'download name: wrong extension corrected, right one kept as typed, missing one added');
     // cut-off files: every prefix either cleans or is refused in plain words; nothing hangs or crashes
     for (const name of ['a.jpg', 'c.png', 'd.webp', 'l.gif', 'h.avif', 'f.mp3', 'f.flac', 'f.wav', 'f.opus', 'v.mp4']) {
         const b = fx(name); let crashes = [], ok = 0;
@@ -439,7 +442,7 @@ if (suites.includes('broken')) {
 if (suites.includes('page')) {
     section('page - promises the page makes in its markup');
     check(/<title>[^<]*Metadata[^<]*<\/title>/i.test(HTML), 'title says Metadata');
-    check(!/https?:\/\/(?!cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com|www\.gptgames\.dev|gptgames\.dev|fonts\.googleapis\.com|fonts\.gstatic\.com)[a-z]/i.test(HTML.replace(/xmlns[^"]*"[^"]*"|ns\.adobe\.com[^'"]*|purl\.org[^'"]*|www\.w3\.org[^'"]*/g, '')), 'no requests to any other host');
+    check(!/https?:\/\/(?!cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com|www\.gptgames\.dev|gptgames\.dev|fonts\.googleapis\.com|fonts\.gstatic\.com|www\.openstreetmap\.org)[a-z]/i.test(HTML.replace(/xmlns[^"]*"[^"]*"|ns\.adobe\.com[^'"]*|purl\.org[^'"]*|www\.w3\.org[^'"]*/g, '')), 'no requests to any other host');
     check(!/fetch\(|XMLHttpRequest|sendBeacon/.test(coreSrc[1]), 'core never touches the network');
     check(/pdf-lib@1\.17\.1|pdf-lib\/1\.17\.1/.test(HTML), 'loads pdf-lib 1.17.1, the version this suite tests');
 }
