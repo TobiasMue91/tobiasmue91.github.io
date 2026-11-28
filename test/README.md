@@ -1491,6 +1491,7 @@ Run a page's suite before and after changing that page.
 npm run test:server         # http-server on :80
 npm run test:cypress        # Cypress e2e — its baseUrl is :8080, so point one at the other
 npm run test:converter      # Everything Converter suite (needs a server on :8099)
+npm run test:qrreader       # QR Code Reader suite (plain Node; `decode` needs npm i --no-save zxing-wasm@3.1.6 qrcode@1.5.4)
 npm run test:pingu          # Pingu Throw suite (plain Node, no server or browser)
 npm run test:moorhuhn       # Moor Chicken suite (plain Node, no server or browser)
 npm run test:flyway         # Flyway (Duck Hunt) suite (plain Node, no server or browser)
@@ -3183,3 +3184,31 @@ collision formulas. A full run takes a few seconds.
 | `parse` | the gravity people type (`9,81`, `9.81 m/s²`, `.5`) and the refusals, with an example in the message |
 | `scenes` | save/load round trip, strings and the slingshot band surviving, hostile scene data (bad shapes, 5000 bodies, script in labels, bad joints), clamped settings, scenes from a wider box scaled, `#preset=`/`#g=`/`#s=` links |
 | `edges` | shapes refused (zero, negative, too thin, 2 or 99 sides, infinite), convex hull, a shape made inside a ramp eased out rather than fired out, tapped shapes lifted clear, the 400-shape limit and its speed, pin and release, erasing a cradle ball, zero g under the ceiling, no tunnelling at g = 50, fixed steps whatever the frame time, picking with a finger's slack |
+
+## QR Code Reader
+
+```sh
+npm i --no-save zxing-wasm@3.1.6 qrcode@1.5.4   # only for the decode suite; skipped without them
+npm run test:qrreader                             # or: node test/online_qr_code_reader.mjs
+node test/online_qr_code_reader.mjs url wifi      # named suites only
+```
+
+`online_qr_code_reader.mjs` runs the DOM-free `<script id="core">` of `tools/online_qr_code_reader.html` in Node:
+what a decoded string means and whether it is safe to act on. Expected values come from each format's own definition
+and examples, and from independent implementations (Node's `url.domainToUnicode`, BigInt MOD 97), never from the page.
+The `decode` suite draws codes with the `qrcode` package and reads them with the same zxing-wasm build the page loads
+from jsDelivr (it fails if the installed version differs from the page's pin), using the page's own `READER_OPTIONS`.
+
+| suite | what it checks |
+| --- | --- |
+| `url` | where a link really goes: subdomain split, two-level suffixes, http, IP, ports, the `user@host` decoy, Cyrillic look-alikes shown encoded, honest IDNs shown in Unicode, short links, bare hosts, `javascript:`/`data:` never openable |
+| `puny` | the RFC 3492 sample strings and agreement with Node's IDNA |
+| `wifi` | `WIFI:` escapes, field order, quotes, open/WEP/WPA3/enterprise networks |
+| `contact` | vCard 2.1 (quoted-printable), 3.0, 4.0 and MECARD, folding and escapes, the .vcf saved |
+| `mail` `phone` `geo` `event` `otp` | RFC 6068, 3966/5724, 5870 and 5545 examples, MATMSG/SMSTO forms, the Google Authenticator key URI |
+| `pay` | IBAN check digits (ECBS examples, BigInt cross-check), EPC069-12 GiroCode, Swiss QR-bill, BIP 21 |
+| `text` | empty, blank, non-ASCII, a 200 000 character payload, product barcodes |
+| `history` | the `scanHistory` key: the old page's `{text, timestamp}` entries load as they are, corrupt JSON and wrong types never break the page, 2FA secrets never stored, cap of 50 |
+| `summary` | the one-line history rows never show a password or account number and keep a fake link's verdict |
+| `decode` | pixels to text and back: non-ASCII, 1500 characters, inverted codes, two codes in one image, a blank image |
+
