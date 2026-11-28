@@ -9,11 +9,13 @@
 //             over the bay at the promotion, a button takes management back down to the water's edge and up again, then cuts to the planet, whose glint is clicked when the plug comes clear;
 //             at the bottom a click on the plug pulls it, and the end card comes up. No page or console error on the way,
 //             and after a reload the game knows the sea is empty and opens at the bottom.
+//   walk     - a bot walks the real beach through the page's own goals, scooping and selling and buying the cheapest
+//              thing at the machine; the pipeline comes about when the core's straight-line reckoning says it would.
 //   duck     - a rubber duck bobs up in front of you, a click on it where it is drawn starts the boost, and it dips away.
 //   offline  - a save whose lastSeen is two hours old comes back with a toast about what the helpers sold meanwhile.
 // SwiftShader draws a frame in about a second here, so the suite draws as few as it can; a few minutes in all.
 // Needs Playwright's Chromium and network access to cdn.jsdelivr.net (three.js).
-//   node test/bottom_of_the_sea_browser.mjs [beach] [career] [duck] [offline]      (npm run test:sea-browser)
+//   node test/bottom_of_the_sea_browser.mjs [beach] [career] [walk] [duck] [offline]      (npm run test:sea-browser)
 
 import {createServer} from 'http';
 import {readFileSync, existsSync} from 'fs';
@@ -138,6 +140,35 @@ if (run('career')) {
     await page.waitForFunction(() => window.__bots && window.__bots.V.mode === 'title', null, {timeout: 240000});
     const back = await page.evaluate(() => { window.__bots.start(); window.__bots.frame(1 / 30, 3, true); return { done: window.__bots.S.done, mode: window.__bots.V.mode, view: window.__bots.V.view, play: document.querySelector('#play').textContent }; });
     ok(back.done && back.mode === 'end' && back.view === 'plug', 'after a reload the sea is still empty and you are at the bottom', JSON.stringify(back));
+    await ctx.close();
+}
+
+if (run('walk')) {
+    console.log('\n=== walk ===');
+    // the core times the beach as a straight walk to shoreDist() and back; this walks the real one, through the page's
+    // own goals, scoops and sales, and buys the cheapest thing at the machine, until the pipeline ends the walking
+    const {page, ctx, errs} = await open('', () => { try { localStorage.clear(); } catch (e) {} });
+    const r = await page.evaluate(() => {
+        const B = window.__bots, S = B.S, SEA = B.SEA, V = B.V; B.start();
+        let acc = 0, t = 0; const dt = 0.1;
+        const shop = () => { for (let g = 0; g < 20; g++) { let best = null; for (const r of ['carry', 'tool', 'move', 'contract']) { const c = SEA.railCost(S, r); if (c <= S.money && (!best || c < best.c)) best = { r, c }; } if (!best) break; SEA.act(S, 'buy', best.r); } };
+        while (t < 16 * 60 && !SEA.piped(S)) {
+            if (B.near()) shop();
+            const full = S.held >= SEA.capOf(S) - 1e-9;
+            if (!V.goal) {
+                if (full) { if (B.near()) B.interact(); else V.goal = { x: 0, z: 10.5, then: 'sell', r: 0.6 }; }
+                else if (B.canScoop()) { acc += 6 * dt; while (acc >= 1) { acc--; B.interact(); } }
+                else V.goal = { x: V.player.x, z: B.edge(V.player.x) + 2.2, then: 'water', r: 0.8 };
+            }
+            B.frame(dt, 1, true); t += dt;
+        }
+        const sim = SEA.simulate('eager', 3600, 0.1).log.at['carry:pipe'];
+        return { min: t / 60, piped: SEA.piped(S), walked: S.walked, sim: sim / 60 };
+    });
+    info(`the pipeline after ${r.min.toFixed(1)} min on the real beach (the core's eager bot: ${r.sim.toFixed(1)}), ${(r.walked / 1000).toFixed(1)} km walked`);
+    ok(r.piped && r.min < r.sim * 1.3, 'walking the real beach takes about as long as the core reckons', JSON.stringify(r));
+    ok(r.walked > 2000, 'and is kilometres of walking', `${r.walked.toFixed(0)} m`);
+    ok(!errs.length, 'no error on the way', errs.slice(0, 3).join(' | '));
     await ctx.close();
 }
 
