@@ -3030,6 +3030,32 @@ the one link they are in the source.
 | `big` | a 1.6 MB page under a time limit, very long hrefs, pathological input |
 | `browser` | agreement with Chromium's parser, as above |
 
+## Getting Up Here
+
+```sh
+npm run test:gettingup                       # or: node test/getting_up_here.mjs (about a minute)
+node test/getting_up_here.mjs physics route  # named suites only
+node test/getting_up_here.mjs --record       # find the route again after changing the course (slow: tens of minutes)
+```
+
+`getting_up_here.mjs` runs the DOM-free `<script id="core">` block of `games/getting_up_here.html` (the course and the
+physics of the tub, the sailor and the boat hook) in Node, on the Planck.js build the page ships in its `<script id="planck">`
+block. No browser, no server. What breaks quietly here is
+physical: a tweak to friction or arm strength that makes one ledge impossible, a new beam that lets the tub tunnel,
+a slope it can no longer rest on. None of that shows on a screenshot.
+
+| suite | what it checks |
+| --- | --- |
+| `physics` | same input same climb to the bit (snapshots rebuild the Planck world identically), the tub rests on flat ground and on a slope without creeping, a shove along the shingle comes to rest, a pogo off flat ground rises 1.2–4.5 m, a planted hook holds the tub up without bobbing, the sea floats it |
+| `solid` | flailing the hook for six seconds on every leg of the course never buries the tub or the hook in rock |
+| `course` | sections climb in order, standing on the gallery is the summit and is announced once, a 12 m drop is one fall |
+| `route` | replays `getting_up_here.route.json`, a hand's keyframes per leg (points in the world, reached along eased paths, held in between) found by a cross-entropy search, from the shingle to the lamp, and wants the tub at rest in each leg's region |
+| `softlock` | slow, only when named (`node test/getting_up_here.mjs softlock`, about an hour): lets the tub come to rest on every free spot of a 0.6 × 0.8 m grid, gives a hand random moves from each rest, and wants every rest to reach the bot's route or the sea by some chain of such moves. A rest that cannot is a pocket a player would be stuck in for good |
+
+The route is the proof that the course can be climbed by a hand moving the hook, leg by leg. Change the course or
+the physics and the replay fails at the first leg that no longer works; `--record --resume` keeps the legs that still
+replay and searches on from there, and a leg the search cannot climb is a leg to redesign, not to tune around.
+
 ## Image to ASCII Converter
 
 ```sh
