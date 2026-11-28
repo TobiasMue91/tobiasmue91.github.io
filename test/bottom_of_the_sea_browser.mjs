@@ -6,7 +6,7 @@
 //             scoops into the bag, a full bag says so, a click on the machine walks you up to it and sells, the receipt
 //             prints the sea's remaining litres, and the machine's face shows the new price after a contract.
 //   career  - the rest of a game, bought through the core but seen through the page: the beach view lifts into the view
-//             over the bay at the promotion, then cuts to the planet, whose glint is clicked when the plug comes clear;
+//             over the bay at the promotion, a button takes management back down to the water's edge and up again, then cuts to the planet, whose glint is clicked when the plug comes clear;
 //             at the bottom a click on the plug pulls it, and the end card comes up. No page or console error on the way,
 //             and after a reload the game knows the sea is empty and opens at the bottom.
 //   duck     - a rubber duck bobs up in front of you, a click on it where it is drawn starts the boost, and it dips away.
@@ -108,6 +108,12 @@ if (run('career')) {
     });
     ok(r1.view === 'air' && r1.flying && r1.landed && r1.camY > 300, 'the promotion lifts the view off the beach to above the bay', JSON.stringify(r1));
     ok(r1.gear.walkers, 'helpers walk the beach with their buckets');
+    // management may still go down and look
+    await page.click('#viewBtn'); await frames(page, 100);
+    const down = await page.evaluate(() => { const B = window.__bots; B.frame(1 / 30, 1); return { view: B.V.view, z: B.V.player.z, edge: B.edge(B.V.player.x), camY: B.camera.position.y, eye: B.camera.position.y - B.V.wy }; });
+    ok(down.view === 'beach' && Math.abs(down.z - down.edge) < 12 && down.eye < 4, 'the office button puts you back on your feet at the water\'s edge', JSON.stringify(down));
+    await page.click('#viewBtn'); await frames(page, 130);
+    ok(await page.evaluate(() => window.__bots.V.view === 'air' && window.__bots.camera.position.y > 300), 'and takes you back up');
     // the planet, and the plug from orbit
     const r2 = await page.evaluate(() => {
         const B = window.__bots, S = B.S, SEA = B.SEA; S.money = 1e30;

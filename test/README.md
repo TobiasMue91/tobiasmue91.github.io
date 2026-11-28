@@ -223,7 +223,7 @@ touching any number in `CFG`.
 takes about a second a frame. `beach`: by real input, W walks you down the sand and the walk is counted, clicks on the
 water fill the bag until it says it is full, a click on the machine walks you up and sells, the receipt prints the
 sea's remaining litres and the machine shows a new price after a contract. `career`: the rest of a game bought through
-the core and seen through the page; the promotion lifts the view to above the bay, the planet's oceans shrink until the
+the core and seen through the page; the promotion lifts the view to above the bay, a button takes you back down to the water's edge and up again, the planet's oceans shrink until the
 plug's glint can be clicked, a click on the plug at the bottom pulls it and the end card comes up, with no page or
 console error, and a reload opens at the bottom of the empty sea. `duck`: a duck bobs up in view and a click on it
 starts the boost. `offline`: a save two hours old returns with what the helpers sold meanwhile.
