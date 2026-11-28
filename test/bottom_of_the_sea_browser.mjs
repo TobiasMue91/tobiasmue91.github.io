@@ -11,7 +11,8 @@
 //             at the bottom a click on the plug pulls it, and the end card comes up. No page or console error on the way,
 //             and after a reload the game knows the sea is empty and opens at the bottom.
 //   mouse    - on a desktop the first click captures the mouse, moving it turns you, a click acts at the crosshair, Shift
-//              runs once you own running shoes, and Tab hands the mouse back for the shop.
+//              runs once you own running shoes, Tab hands the mouse back for the shop, and the view from above keeps
+//              the mouse: it swings the camera, W A S D slide the view.
 //   walk     - a bot walks the real beach through the page's own goals, scooping and selling and buying the cheapest
 //              thing at the machine; the pipeline comes about when the core's straight-line reckoning says it would.
 //   duck     - a rubber duck bobs up in front of you, a click on it where it is drawn starts the boost, and it dips away.
@@ -184,6 +185,17 @@ if (run('mouse')) {
     await page.keyboard.press('Tab'); await frames(page, 2);
     const r3 = await page.evaluate(() => ({ locked: document.pointerLockElement === document.querySelector('#gl'), shop: document.querySelector('#shop').classList.contains('open'), paused: !!window.__bots.V.paused }));
     ok(!r3.locked && r3.shop && !r3.paused, 'Tab hands the mouse back for the shop without pausing', JSON.stringify(r3));
+    // up to the office: the mouse stays captured, moving it swings the camera, W A S D slide the view over the coast
+    await page.keyboard.press('Tab'); await frames(page, 2);
+    await page.evaluate(() => { const B = window.__bots; B.S.stage = 1; B.view('air'); B.V.fly = null; B.frame(1 / 30, 2); });
+    const a0 = await page.evaluate(() => ({ locked: document.pointerLockElement === document.querySelector('#gl'), x: window.__bots.camera.position.x, z: window.__bots.camera.position.z }));
+    ok(a0.locked, 'the view from above keeps the mouse captured', JSON.stringify(a0));
+    await page.evaluate(() => document.querySelector('#gl').dispatchEvent(new PointerEvent('pointermove', { movementX: 200, movementY: 0, bubbles: true }))); await frames(page, 2);
+    const a1 = await page.evaluate(() => ({ x: window.__bots.camera.position.x, z: window.__bots.camera.position.z }));
+    ok(Math.hypot(a1.x - a0.x, a1.z - a0.z) > 50, 'moving the mouse swings the camera round the coast', JSON.stringify([a0, a1]));
+    await page.keyboard.down('KeyD'); await frames(page, 30); await page.keyboard.up('KeyD');
+    const a2 = await page.evaluate(() => window.__bots.V.airPan ? window.__bots.V.airPan.length() : 0);
+    ok(a2 > 100, 'D slides the view along the coast', `${a2}`);
     ok(!errs.length, 'no error with the mouse', errs.slice(0, 3).join(' | '));
     await ctx.close();
 }

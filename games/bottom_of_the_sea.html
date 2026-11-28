@@ -4943,6 +4943,7 @@ class Globe {
 		// the planet turns slowly; you can turn it faster
 		const v = this.view;
 		if (!V.dragging) { v.yaw += v.vyaw * dt; v.vyaw = damp(v.vyaw, 0.04, 0.5, dt); v.pitch += v.vpitch * dt; v.vpitch *= Math.exp(-dt * 3); }
+		{ const k = V.keys; v.yaw += ((k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0)) * 1.1 * dt; v.pitch += ((k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0)) * 0.9 * dt; }
 		v.pitch = clamp(v.pitch, -1.2, 1.2); v.dist = clamp(v.dist, 1.45, 7);
 		const cp = Math.cos(v.pitch);
 		this.cam.position.set(Math.sin(v.yaw) * cp, Math.sin(v.pitch), Math.cos(v.yaw) * cp).multiplyScalar(v.dist);
@@ -5320,8 +5321,8 @@ function setView(v, snap) {
 	sun.shadow.normalBias = big ? 1.2 : 0.05;
 	dropScale();
 	V.shopT = 0; V.hudT = 0; shopSig = '';
-	if (v !== 'beach') $('#shop').classList.add('open');
-	if (v === 'air' || v === 'globe') unlockMouse();
+	// the shop opens by itself in the views from above, but the mouse stays captured: Tab hands it over, as on the beach
+	if (v !== 'beach' && !$('#shop').classList.contains('open')) { $('#shop').classList.add('open'); V.autoShop = true; }
 }
 // a cut through black: the planet and the bottom are other places
 function fadeTo(fn) { $('#fade').classList.add('on'); later(0.85, () => { fn(); later(0.3, () => $('#fade').classList.remove('on')); }); }
@@ -5410,8 +5411,13 @@ function updateCamera(dt) {
 			if (V.flyDown.t >= 3) V.flyDown = null;
 		}
 	} else if (V.view === 'air') {
-		const tgt = new THREE.Vector3(0, V.wy, Math.max(-1400, edgeAt(0) - 260));
-		cam.target.lerp(tgt, 1 - Math.exp(-dt * 0.8));
+		// W A S D slide the view over the coast, in the direction the camera faces; Q and E or the arrows turn it
+		const k = V.keys, fz = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0), fx = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0);
+		V.airPan = V.airPan || new THREE.Vector2();
+		if (fx || fz) { const sp = cam.dist * 0.55 * dt, sy = Math.sin(cam.yaw), cy = Math.cos(cam.yaw); V.airPan.x += (-sy * fz + cy * fx) * sp; V.airPan.y += (-cy * fz - sy * fx) * sp; if (V.airPan.length() > 2600) V.airPan.setLength(2600); }
+		cam.yaw += ((k.ArrowLeft ? 1 : 0) - (k.ArrowRight ? 1 : 0)) * 1.2 * dt;
+		const tgt = new THREE.Vector3(V.airPan.x, V.wy, Math.max(-1400, edgeAt(0) - 260) + V.airPan.y);
+		cam.target.lerp(tgt, 1 - Math.exp(-dt * (fx || fz ? 6 : 0.8)));
 		if (!V.dragging) { cam.yaw += cam.vyaw * dt; cam.pitch += cam.vpitch * dt; cam.vyaw *= Math.exp(-dt * 4); cam.vpitch *= Math.exp(-dt * 4); }
 		cam.pitch = clamp(cam.pitch, 0.15, 1.3); cam.userZoom = clamp(cam.userZoom, 0.25, 1.8);
 		const narrow = clamp(Math.pow(1.45 / camera.aspect, 0.85), 1, 2.3);
@@ -5995,8 +6001,8 @@ function updateHUD() {
 		else if (near) pr = 'The machine is waiting. Go and get it some sea.';
 		else pr = COARSE ? 'Walk down to the water: tap where you want to go' : 'Walk down to the water: <kbd>W A S D</kbd>, or click where you want to go';
 		if (V.goal) pr = COARSE ? 'Walking…' : 'Walking… <kbd>W A S D</kbd> to stop';
-	} else if (V.view === 'air') pr = `${TAP} the sea to send `  + (S.tool >= 6 ? CFG.tools[S.tool].name.toLowerCase() : 'orders');
-	else if (V.view === 'globe') pr = S.exposed.plug ? `There is a glint where the last of the sea is. ${TAP} it.` : `${TAP} an ocean to send orders. Drag to turn the planet.`;
+	} else if (V.view === 'air') pr = `${COARSE ? 'Tap' : 'Click'} the sea to send ` + (S.tool >= 6 ? CFG.tools[S.tool].name.toLowerCase() : 'orders') + (COARSE ? '' : '. <kbd>W A S D</kbd> to move, the wheel to zoom');
+	else if (V.view === 'globe') pr = S.exposed.plug ? `There is a glint where the last of the sea is. ${TAP} it.` : `${TAP} an ocean to send orders. ${COARSE ? 'Drag' : 'The mouse or <kbd>W A S D</kbd>'} to turn the planet.`;
 	else if (V.view === 'plug') pr = finale && finale.pulled ? (S.done ? 'Not a drop.' : '') : `Walk up to the plug and ${TAP.toLowerCase()} it to pull`;
 	if ($('#prompt').dataset.t !== pr) { $('#prompt').dataset.t = pr; $('#prompt').innerHTML = pr; }
 	$('#shopMoney').textContent = fmtMoney(S.money);
@@ -6115,7 +6121,15 @@ function bindUI() {
 		ptr.set(e.pointerId, p);
 	});
 	cv.addEventListener('pointermove', e => {
-		if (locked()) { const inv = S.ui.inv ? -1 : 1, k = 0.0022 * (S.ui.sens || 1); V.player.yaw -= e.movementX * k; V.player.pitch -= e.movementY * k * inv; return; }
+		if (locked()) {
+			const inv = S.ui.inv ? -1 : 1, k = 0.0022 * (S.ui.sens || 1);
+			// the same mouse in every view: on the beach it turns your head, over the coast it swings the camera round
+			// what it looks at, from orbit it turns the planet
+			if (V.view === 'air') { cam.yaw -= e.movementX * k * 1.2; cam.pitch += e.movementY * k * inv; cam.vyaw = cam.vpitch = 0; }
+			else if (V.view === 'globe') { globe.view.yaw -= e.movementX * k * 1.3; globe.view.pitch += e.movementY * k * inv; globe.view.vyaw = 0; }
+			else { V.player.yaw -= e.movementX * k; V.player.pitch -= e.movementY * k * inv; }
+			return;
+		}
 		const p = ptr.get(e.pointerId);
 		if (!p) { V.hoverAt = { x: e.clientX, y: e.clientY }; return; }
 		const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY; p.moved += Math.abs(dx) + Math.abs(dy);
@@ -6209,7 +6223,7 @@ function bindUI() {
 // ── the mouse on a desktop: captured while you walk, so it looks around like your eyes; handed back for menus ──
 const locked = () => document.pointerLockElement === $('#gl');
 function lockMouse() {
-	if ((window.__botsManual && !window.__botsLock) || COARSE || locked() || (V.mode !== 'play' && !(V.mode === 'end' && V.view === 'plug')) || V.paused || (V.view !== 'beach' && V.view !== 'plug') || !$('#card').classList.contains('hidden')) return;
+	if ((window.__botsManual && !window.__botsLock) || COARSE || locked() || (V.mode !== 'play' && !(V.mode === 'end' && V.view === 'plug')) || V.paused || (V.view !== 'beach' && V.view !== 'plug' && V.view !== 'air' && V.view !== 'globe') || V.fly || !$('#card').classList.contains('hidden')) return;
 	if (innerWidth > 820 && $('#shop').classList.contains('open') && !V.autoShop) return;
 	try { const r = $('#gl').requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch { }
 }
