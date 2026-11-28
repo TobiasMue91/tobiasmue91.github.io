@@ -1385,7 +1385,7 @@ function buildTerrain(world, segs) {
 				alb = mix(alb, alb * vec3(0.72, 0.7, 0.66), sw * sandOnly * 0.8);
 				// the high-water mark
 				float hwm = abs(h - uWater0) / max(fwidth(h), 1e-5);
-				alb = mix(alb, vec3(0.86, 0.85, 0.8), (1. - smoothstep(0.5, 1.4, hwm)) * 0.6 * (1. - rockW) * (1. - landW) * smoothstep(0.02, 0.15, uWater0 - uWaterY));
+				alb = mix(alb, vec3(0.86, 0.85, 0.8), (1. - smoothstep(0.5, 1.4, hwm)) * 0.42 * (1. - rockW) * (1. - landW) * smoothstep(0.02, 0.15, uWater0 - uWaterY));
 				gAlb = alb;
 				gRough = mix(mix(0.93, 0.85, rockW), mix(0.5, 0.62, smoothstep(0.92, 0.7, gN.y)), wet);
 				gRough = mix(gRough, 0.16, pud);
@@ -4316,11 +4316,13 @@ function bucketGeometry() {
 	const parts = [colorize(plain(new THREE.CylinderGeometry(0.15, 0.11, 0.24, 12, 1, true)), 0xa7adb1), colorize(plain(new THREE.CircleGeometry(0.11, 12).rotateX(Math.PI / 2).translate(0, -0.12, 0)), 0xa7adb1)];
 	return mergeGeometries(parts);
 }
+// the helpers' tub is the player's own claw-foot bath, merged into one coloured mesh for instancing; its origin is
+// its middle, at the height where the two carrying it hold the rim
 function tubGeometry() {
-	const t = new THREE.SphereGeometry(1, 18, 9, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2); t.scale(0.85, 0.42, 0.38);
-	const parts = [colorize(plain(t), 0xf4f2ee)];
-	for (const x of [-0.65, 0.65]) for (const z of [-0.22, 0.22]) parts.push(colorize(plain(new THREE.SphereGeometry(0.06, 6, 5).translate(x, -0.4, z)), 0xc9a24a));
-	return mergeGeometries(parts);
+	const g = makeBathtub(), parts = []; g.updateMatrixWorld(true);
+	g.traverse(o => { if (o.isMesh) parts.push(colorize(plain(o.geometry.clone().applyMatrix4(o.matrixWorld)), o.material.color.getHex())); });
+	const m = mergeGeometries(parts); m.translate(0, -0.55, 0); m.scale(0.85, 0.85, 0.85);
+	return m;
 }
 // ═══════════════════════════ the helpers' gear ═══════════════════════════
 // Hoses run from the promenade down the bared sand into the water and grow longer as it sinks; fire engines drive
@@ -4637,7 +4639,7 @@ class Walkers {
 			if (p.kind === 'tub') {
 				// two of them, the tub held between them in front at the hips; the pair walks in step
 				const full = p.task === 'up';
-				for (const s of [-0.62, 0.62]) crowd.person({ x: p.x + s, y, z: p.z, yaw: yaw - Math.sign(s) * 0.0, cols: s < 0 ? p.cols : p.cols2, walk: walking ? 0.7 : 0, phase: p.walkPh + (s < 0 ? 0 : 0.4), stoop: stoop * 0.6, arms: { l: [0.55 + stoop, 0.7, 0.05], r: [0.55 + stoop, 0.7, 0.05] } });
+				for (const s of [-0.78, 0.78]) crowd.person({ x: p.x + s, y, z: p.z, yaw: yaw - Math.sign(s) * 0.0, cols: s < 0 ? p.cols : p.cols2, walk: walking ? 0.7 : 0, phase: p.walkPh + (s < 0 ? 0 : 0.4), stoop: stoop * 0.6, arms: { l: [0.55 + stoop, 0.7, 0.05], r: [0.55 + stoop, 0.7, 0.05] } });
 				this.e.set(0, yaw + Math.PI / 2, 0); this.q.setFromEuler(this.e);
 				this.m.compose(this.v.set(p.x, y + 0.78 - stoop * 0.35, p.z + (yaw ? -0.3 : 0.3)), this.q, this.one); this.tubs.setMatrixAt(nt++, this.m);
 				if (full && Math.random() < dt * 3) drops.emit(p.x + (Math.random() - .5), y + 0.8, p.z, 0, 0.5, 0, 0.5, 0.05, 3);
@@ -5183,6 +5185,12 @@ async function boot() {
 	for (const id in finds) scene.add(finds[id].g, finds[id].hit);
 	{ const cab = makeCable(world, 300); scene.add(cab); const ys = cab.userData.pts.map(p => p.y).sort((a, b) => a - b); V.sights.push(['cable', ys[Math.floor(ys.length * 0.55)]]); }
 	scene.add(makePier(world, -115), makeLighthouse(world, 960));
+	// the pier's deck, for walking on (makePier lays it 14 m inland of where the land rises past 1.5 m, 120 m out to sea)
+	{ const c = coastPoint(world, -115, 1.5), ox = c.x, oz = c.z + 14; V.pier = { x0: ox - 2.45, x1: ox + 2.45, z0: oz + 0.2, z1: oz - 119.5, top: 3.85 };
+		// steps up to the deck from the dune at its landward end, as many as the height needs
+		const gy = groundAt(ox, oz + 1.5), n = Math.max(0, Math.ceil((V.pier.top - gy) / 0.22)), st = new THREE.Group(), wood = stdMat({ map: plankTexture(17, [128, 98, 70]), roughness: 0.9 }, 'pier');
+		for (let i = 0; i < n; i++) { const h = V.pier.top - (i + 1) * (V.pier.top - gy) / (n + 1) - gy + 0.6; const b = new THREE.Mesh(new THREE.BoxGeometry(4.2, h, 0.34), wood); b.position.set(ox, gy - 0.6 + h / 2, oz + 0.17 + i * 0.34); st.add(b); }
+		V.pier.z0 += n * 0.34; V.pier.steps = { z: oz, n, gy }; shadowAll(st); scene.add(st); }
 	V.village = buildVillage(world, -430, 300, SIGNS[0]); scene.add(V.village);
 	trees = buildTrees(world, 6500); trees.forEach(t => scene.add(t));
 	machine = makeMachine(); machine.position.set(MACHINE.x, groundAt(MACHINE.x, MACHINE.z) - 0.02, MACHINE.z); scene.add(machine);
@@ -5336,7 +5344,15 @@ function walkable(x, z) {
 	for (const it of buyers.items) if (it && it.g.userData.isMachine && Math.hypot(x - it.x, z - it.z) < 0.75) return false;
 	return true;
 }
-function groundHere(x, z) { return V.view === 'plug' ? finale.ground(x, z) : groundAt(x, z); }
+// the pier: you are on its deck once you step onto it from the dune at its height, and stay on it till you walk
+// off its landward end; from the beach below you walk underneath it
+function inPier(x, z) { const p = V.pier; return !!p && x > p.x0 - 0.4 && x < p.x1 + 0.4 && z < p.z0 && z > p.z1 - 0.4; }
+function groundHere(x, z) {
+	if (V.view === 'plug') return finale.ground(x, z);
+	if (V.view !== 'beach' || !V.player.onPier || !inPier(x, z)) return groundAt(x, z);
+	const p = V.pier, st = p.steps, k = st && st.n ? clamp((z - st.z) / (st.n * 0.34), 0, 1) : 0;
+	return Math.max(groundAt(x, z), lerp(p.top, st ? st.gy : p.top, k));
+}
 function stepPlayer(dt) {
 	const P = V.player, k = V.keys;
 	if (V.view !== 'beach' && V.view !== 'plug') return;
@@ -5367,10 +5383,16 @@ function stepPlayer(dt) {
 	const sp = (V.view === 'plug' ? 3 : SEA_.speed(S)) * (wet ? 0.55 : 1) * (1 + V.runK * (S.move >= 2 && V.view === 'beach' ? 0.3 : 0.65));
 	P.vx = damp(P.vx, mx * sp, 9, dt); P.vz = damp(P.vz, mz * sp, 9, dt);
 	const nx = P.x + P.vx * dt, nz = P.z + P.vz * dt, x0 = P.x, z0 = P.z;
-	if (walkable(nx, nz)) { P.x = nx; P.z = nz; }
-	else if (walkable(nx, P.z)) { P.x = nx; P.vz *= 0.5; }
-	else if (walkable(P.x, nz)) { P.z = nz; P.vx *= 0.5; }
+	// on the deck the railings hold you and the end of it is the end; under it, the posts keep you off the middle
+	const pr = V.pier, ok = (x, z) => {
+		if (V.view === 'beach' && P.onPier && pr) return z > pr.z0 - 1 ? walkable(x, z) || inPier(x, z) : x > pr.x0 && x < pr.x1 && z > pr.z1;
+		return walkable(x, z);
+	};
+	if (ok(nx, nz)) { P.x = nx; P.z = nz; }
+	else if (ok(nx, P.z)) { P.x = nx; P.vz *= 0.5; }
+	else if (ok(P.x, nz)) { P.z = nz; P.vx *= 0.5; }
 	else { P.vx *= 0.3; P.vz *= 0.3; if (V.goal) { V.goal = null; } }
+	if (V.view === 'beach' && V.pier) { const inside = inPier(P.x, P.z); P.onPier = inside && (P.onPier || P.z > V.pier.z0 - 1.5); }
 	// the walk is kept: the records count it, and the water you walk through splashes
 	const moved = Math.hypot(P.x - x0, P.z - z0);
 	if (moved > 0 && V.view === 'beach') SEA_.act(S, 'walk', moved);
@@ -5454,6 +5476,23 @@ function stepSun() {
 }
 
 // ═══════════════════════════ what you hold ═══════════════════════════
+// What you hold is drawn with its depth squeezed into the first sliver in front of the eye: the sand and the sea can
+// never cut into it, however low you hold it, and its own parts still hide each other as they should.
+const VM_MATS = new Map();
+function vmMat(m) {
+	if (!m || m.userData.vm) return m;
+	if (VM_MATS.has(m)) return VM_MATS.get(m);
+	const c = m.clone(), prev = m.onBeforeCompile, key = m.customProgramCacheKey ? m.customProgramCacheKey.bind(m) : () => '';
+	c.userData.vm = true;
+	c.onBeforeCompile = (sh, r) => {
+		if (prev) prev.call(m, sh, r);
+		const i = sh.vertexShader.lastIndexOf('}');
+		sh.vertexShader = sh.vertexShader.slice(0, i) + '\tgl_Position.z = mix(-gl_Position.w, gl_Position.z, 0.02);\n}';
+	};
+	c.customProgramCacheKey = () => key() + '|vm';
+	VM_MATS.set(m, c); return c;
+}
+function toVm(g) { g.traverse(o => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(vmMat) : vmMat(o.material); }); }
 // The tool sits low and to the left, what you carry low and to the right, so the two never meet in the middle; the
 // cupped hands are both hands, so they sit in the middle. A scoop is a spring, not a clip: each click kicks it.
 const VM_POSE = [
@@ -5468,7 +5507,7 @@ const CLIPBOARD = { s: 1, p: [0.14, -0.27, -0.42], r: [0.95, -0.3, 0.1] };
 function setTool(i, snap) {
 	const mgr = S.stage >= 1, pose = mgr ? CLIPBOARD : VM_POSE[Math.min(i, 5)];
 	const g = makeToolModel(mgr ? 99 : Math.min(i, 5)); g.scale.setScalar(pose.s);
-	g.traverse(o => { if (o.isMesh) { o.layers.set(2); o.castShadow = false; o.frustumCulled = false; } });
+	g.traverse(o => { if (o.isMesh) { o.layers.set(2); o.castShadow = false; o.frustumCulled = false; } }); toVm(g);
 	const old = vm.userData.tool;
 	if (V.vmOut) { vm.remove(V.vmOut.g); V.vmOut = null; }
 	if (old && !snap) { V.vmOut = { g: old, t: 0 }; } else if (old) vm.remove(old);
@@ -5490,7 +5529,9 @@ function updateViewmodel(dt) {
 	// riding: the handlebars come up while you move, the tool goes down out of the way, and back when you stop
 	const riding = S.move >= 2 && (P.speed || 0) > 0.6;
 	V.rideK = damp(V.rideK || 0, riding ? 1 : 0, 4, dt);
-	g.position.y -= ease(V.rideK) * 0.28;
+	// both hands are on the handlebars: the tool goes down out of sight, as far as its size needs, and is hidden there
+	g.position.y -= ease(V.rideK) * (0.35 + Math.abs(pose.p[1]) * 1.2 + Math.abs(pose.p[2]) * 0.4);
+	g.visible = V.rideK < 0.97;
 	const fill = SEA_.piped(S) ? 0 : clamp(S.held / SEA_.capOf(S), 0, 1);
 	for (const name of ['carry', 'ride']) {
 		const sl = V.slots[name];
@@ -5523,7 +5564,7 @@ function setSlot(name, i, make, pose, snap) {
 	sl.g = null; sl.i = i;
 	if (!pose) return;
 	const g = make(i); g.scale.setScalar(pose.s);
-	g.traverse(o => { o.layers.set(2); if (o.isMesh) { o.castShadow = false; o.frustumCulled = false; } });
+	g.traverse(o => { o.layers.set(2); if (o.isMesh) { o.castShadow = false; o.frustumCulled = false; } }); toVm(g);
 	vm.add(g); sl.g = g; sl.pose = pose; sl.k = snap ? 1 : 0;
 }
 function syncHeld(snap) {

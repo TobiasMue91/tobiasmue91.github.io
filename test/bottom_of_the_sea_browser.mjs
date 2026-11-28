@@ -12,7 +12,7 @@
 //             and after a reload the game knows the sea is empty and opens at the bottom.
 //   mouse    - on a desktop the first click captures the mouse, moving it turns you, a click acts at the crosshair, Shift
 //              runs once you own running shoes, Tab hands the mouse back for the shop, and the view from above keeps
-//              the mouse: it swings the camera, W A S D slide the view.
+//              the mouse: it swings the camera, W A S D slide the view. The pier can be walked on.
 //   walk     - a bot walks the real beach through the page's own goals, scooping and selling and buying the cheapest
 //              thing at the machine; the pipeline comes about when the core's straight-line reckoning says it would.
 //   duck     - a rubber duck bobs up in front of you, a click on it where it is drawn starts the boost, and it dips away.
@@ -196,6 +196,10 @@ if (run('mouse')) {
     await page.keyboard.down('KeyD'); await frames(page, 30); await page.keyboard.up('KeyD');
     const a2 = await page.evaluate(() => window.__bots.V.airPan ? window.__bots.V.airPan.length() : 0);
     ok(a2 > 100, 'D slides the view along the coast', `${a2}`);
+    // the pier: up its steps from the dune and out along the deck, held between the railings
+    const pier = await page.evaluate(() => { const B = window.__bots, V = B.V, p = V.pier; B.view('beach'); B.S.stage = 0; V.keys = {}; B.goto((p.x0 + p.x1) / 2 + 1.5, p.z0 + 3, 0.15, -0.1); V.keys.KeyW = true; for (let i = 0; i < 450; i++) B.frame(1 / 10, 1, true); V.keys = {}; return { z: V.player.z, x: V.player.x, on: !!V.player.onPier, y: B.camera.position.y, p }; });
+    ok(pier.on && pier.z < pier.p.z1 + 6 && pier.y > pier.p.top + 1, 'the pier can be walked on, out to its end', JSON.stringify(pier));
+    ok(pier.x > pier.p.x0 && pier.x < pier.p.x1, 'and the railings keep you on the deck', `${pier.x}`);
     ok(!errs.length, 'no error with the mouse', errs.slice(0, 3).join(' | '));
     await ctx.close();
 }
