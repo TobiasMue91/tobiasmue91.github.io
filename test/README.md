@@ -3050,6 +3050,7 @@ a slope it can no longer rest on. None of that shows on a screenshot.
 | `solid` | flailing the hook for six seconds on every leg of the course never buries the tub or the hook in rock |
 | `course` | sections climb in order, standing on the gallery is the summit and is announced once, a 12 m drop is one fall |
 | `route` | replays `getting_up_here.route.json`, a hand's keyframes per leg (points in the world, reached along eased paths, held in between) found by a cross-entropy search, from the shingle to the lamp, and wants the tub at rest in each leg's region |
+| `softlock` | slow, only when named (`node test/getting_up_here.mjs softlock`, about an hour): lets the tub come to rest on every free spot of a 0.6 × 0.8 m grid, gives a hand random moves from each rest, and wants every rest to reach the bot's route or the sea by some chain of such moves. A rest that cannot is a pocket a player would be stuck in for good |
 
 The route is the proof that the course can be climbed by a hand moving the hook, leg by leg. Change the course or
 the physics and the replay fails at the first leg that no longer works; `--record --resume` keeps the legs that still

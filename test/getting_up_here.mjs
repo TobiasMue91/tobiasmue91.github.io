@@ -9,6 +9,7 @@
 //
 //   node test/getting_up_here.mjs                  # all suites
 //   node test/getting_up_here.mjs physics route    # named suites
+//   node test/getting_up_here.mjs softlock         # every rest on the course can get back onto the route (slow, ~1 h)
 //   node test/getting_up_here.mjs --record         # re-find the route after changing the course (slow)
 //
 // The route is a list of cursor keyframes per leg in test/getting_up_here.route.json, found by a
