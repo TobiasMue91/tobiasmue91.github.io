@@ -2381,92 +2381,537 @@ function strawGeometry() {
 // ── the land: woods of two kinds of tree, and a seaside village round the pier ──
 function colorize(geo, hex) { const c = new THREE.Color(hex), n = geo.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } geo.setAttribute('color', new THREE.BufferAttribute(a, 3)); return geo; }
 function plain(geo) { const g = geo.index ? geo.toNonIndexed() : geo; for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k); return g; }
-function coniferGeometry() {
-	const trunk = colorize(plain(new THREE.CylinderGeometry(0.35, 0.55, 3.2, 6).translate(0, 1.6, 0)), 0x4a3524);
-	const prof = [[0, 2], [3.3, 2.5], [1.3, 4.7], [2.8, 5.1], [1.0, 7.3], [2.1, 7.6], [0.6, 9.7], [1.3, 9.9], [0, 12.6]].map(([r, y]) => new THREE.Vector2(r, y));
-	const crown = plain(new THREE.LatheGeometry(prof, 9));
-	crown.computeVertexNormals();
-	const col = new Float32Array(crown.attributes.position.count * 3), p = crown.attributes.position;
-	for (let i = 0; i < p.count; i++) { const k = 0.65 + 0.35 * (p.getY(i) - 2) / 10.6; col.set([0.05 * k, 0.16 * k, 0.07 * k], i * 3); }
-	crown.setAttribute('color', new THREE.BufferAttribute(col, 3));
-	return mergeGeometries([trunk, crown]);
+// (the trees below are from Lanternwind, games/lanternwind.html)
+// ── vegetation: bark + alpha-tested foliage cards (atlas: left half broadleaf cluster, right half fir frond) ──
+function addCard(P, N, UV, C, L, corners, uvs, normals, ao, leaf = 1) {
+	const base = P.length / 3;
+	for (let i = 0; i < 4; i++) { P.push(...corners[i]); N.push(...normals[i]); UV.push(...uvs[i]); C.push(ao[i], ao[i], ao[i]); L.push(leaf); }
+	return [base, base + 1, base + 2, base, base + 2, base + 3];
 }
-function broadleafGeometry(seed) {
-	const rnd = mulberry32(seed), parts = [colorize(plain(new THREE.CylinderGeometry(0.4, 0.65, 4.5, 6).translate(0, 2.25, 0)), 0x5a4330)];
-	for (let k = 0; k < 3; k++) {
-		const r = 2.5 + rnd() * 1.5, b = plain(new THREE.IcosahedronGeometry(r, 1));
-		const p = b.attributes.position;
-		for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), d = 1 + (vnoise(x * 0.9 + seed + k, z * 0.9 + y) - 0.5) * 0.35; p.setXYZ(i, x * d, y * d * 0.85, z * d); }
-		b.computeVertexNormals();
-		b.translate((rnd() - .5) * 3, 5.5 + k * 0.9 + rnd(), (rnd() - .5) * 3);
-		parts.push(colorize(b, [0x2f5a1e, 0x3b6a24, 0x2a4f1c, 0x4a7330][k]));
+function treeFromParts(trunks, cards, shade = y => 0.55 + Math.min(0.45, y * 0.06)) {
+	// trunks: merged bark geometry (non-indexed); cards: {P,N,UV,C,L,I}
+	const g1 = mergeGeometries(trunks.map(t => t.toNonIndexed()));
+	const n1 = g1.attributes.position.count;
+	g1.setAttribute('color', new THREE.Float32BufferAttribute(new Array(n1 * 3).fill(1).map((v, i) => shade(g1.attributes.position.getY(Math.floor(i / 3)))), 3));
+	g1.setAttribute('aLeaf', new THREE.Float32BufferAttribute(new Array(n1).fill(0), 1));
+	const g2 = new THREE.BufferGeometry();
+	g2.setAttribute('position', new THREE.Float32BufferAttribute(cards.P, 3));
+	g2.setAttribute('normal', new THREE.Float32BufferAttribute(cards.N, 3));
+	g2.setAttribute('uv', new THREE.Float32BufferAttribute(cards.UV, 2));
+	g2.setAttribute('color', new THREE.Float32BufferAttribute(cards.C, 3));
+	g2.setAttribute('aLeaf', new THREE.Float32BufferAttribute(cards.L, 1));
+	g2.setIndex(cards.I);
+	const g = mergeGeometries([g1, g2.toNonIndexed()], true);
+	g.computeBoundingSphere();
+	return g;
+}
+function trunkGeo(r0, r1, h, segs = 7, from = new THREE.Vector3(), dir = new THREE.Vector3(0, 1, 0)) {
+	const c = new THREE.CylinderGeometry(r1, r0, h, segs, 3, true);
+	c.translate(0, h / 2, 0);
+	const uv = c.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 2, uv.getY(i) * h * 0.45);
+	const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+	c.applyQuaternion(q); c.translate(from.x, from.y, from.z);
+	return c;
+}
+function broadleafGeometry(seed, nCards) {
+	const rnd = mulberry32(seed);
+	const trunks = [trunkGeo(0.42, 0.2, 6.2)];
+	const ctr = new THREE.Vector3(0, 7.6, 0), R = new THREE.Vector3(3.9, 3.2, 3.9);
+	for (let k = 0; k < 5; k++) {
+		const a = k / 5 * Math.PI * 2 + rnd(), y = 3.6 + rnd() * 2.2;
+		trunks.push(trunkGeo(0.16, 0.05, 3.2, 5, new THREE.Vector3(0, y, 0), new THREE.Vector3(Math.cos(a), 0.9, Math.sin(a))));
 	}
-	return mergeGeometries(parts);
+	const C = { P: [], N: [], UV: [], C: [], L: [], I: [] };
+	const tmp = new THREE.Vector3(), ax = new THREE.Vector3(), ay = new THREE.Vector3(), n = new THREE.Vector3();
+	for (let k = 0; k < nCards; k++) {
+		const th = rnd() * Math.PI * 2, ph = Math.acos(rnd() * 1.6 - 0.6), rr = 0.5 + 0.5 * Math.sqrt(rnd());
+		const dir = new THREE.Vector3(Math.sin(ph) * Math.cos(th), Math.cos(ph), Math.sin(ph) * Math.sin(th));
+		const c = ctr.clone().add(new THREE.Vector3(dir.x * R.x * rr, dir.y * R.y * rr, dir.z * R.z * rr));
+		// card faces mostly outward, randomly rolled
+		n.copy(dir).add(new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(1.2)).normalize();
+		ax.set(0, 1, 0).cross(n); if (ax.lengthSq() < 1e-3) ax.set(1, 0, 0); ax.normalize();
+		ay.crossVectors(n, ax).normalize();
+		const roll = rnd() * Math.PI * 2; const ca = Math.cos(roll), sa = Math.sin(roll);
+		const X = ax.clone().multiplyScalar(ca).addScaledVector(ay, sa), Y = ay.clone().multiplyScalar(ca).addScaledVector(ax, -sa);
+		const s = 1.5 + rnd() * 0.8;
+		const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => c.clone().addScaledVector(X, u * s).addScaledVector(Y, v * s).toArray());
+		const uvs = [[0, 0], [0.5, 0], [0.5, 1], [0, 1]];
+		const normals = corners.map(p => tmp.fromArray(p).sub(ctr).multiply(new THREE.Vector3(1, 1.3, 1)).normalize().add(new THREE.Vector3(0, 0.25, 0)).normalize().toArray());
+		const ao = corners.map(p => { const q = tmp.fromArray(p).sub(ctr); const sh = Math.min(1, q.length() / 4.2); return 0.35 + 0.65 * sh * (0.75 + 0.25 * Math.max(-1, Math.min(1, q.y / 3))); });
+		C.I.push(...addCard(C.P, C.N, C.UV, C.C, C.L, corners, uvs, normals, ao));
+	}
+	return treeFromParts(trunks, C);
+}
+// ── conifer: a spruce crown of whorled sprays that hang from the trunk and lift again at the tips ──
+// Each branch is a bent ribbon carrying the painted spray, plus a second ribbon turned ~70° about the branch
+// so the crown keeps its body seen from the side. Normals point out of the crown (soft, volumetric light);
+// vertex colour is occlusion: dark at the trunk and under the lower whorls, bright at the new-growth tips.
+function spruceGeometry(seed, o) {
+	const rnd = mulberry32(seed);
+	const H = 15.5, base = 1.15;
+	// the stem thins fast once inside the crown and ends as a slender leader below the tip: a trunk drawn to the top
+	// stood out of every crown as a dark skewer, seen from above
+	const trunks = [trunkGeo(0.4, 0.11, H * 0.6, o.trunkSegs), trunkGeo(0.11, 0.02, H * 0.3, Math.max(4, o.trunkSegs - 2), new THREE.Vector3(0, H * 0.6, 0))];
+	if (o.flare) trunks.push(trunkGeo(0.62, 0.39, 1.1, o.trunkSegs));
+	const C = { P: [], N: [], UV: [], C: [], L: [], I: [] };
+	const UP = new THREE.Vector3(0, 1, 0);
+	const crownN = (p, out, s) => {
+		const r = Math.hypot(p.x, p.z);
+		const hx = r > 0.4 ? p.x / r : out.x, hz = r > 0.4 ? p.z / r : out.z;
+		const ny = 0.55 + (p.y / H - 0.5) * 0.5;
+		const n = new THREE.Vector3(hx * (0.55 + 0.35 * s), ny, hz * (0.55 + 0.35 * s));
+		return n.normalize().toArray();
+	};
+	const ribbon = (pts, sides, widths, out, aoIn, aoOut, lowShade) => {
+		const base = C.P.length / 3, n = pts.length;
+		for (let j = 0; j < n; j++) {
+			const s = j / (n - 1);
+			for (let e = 0; e < 2; e++) {
+				const p = pts[j].clone().addScaledVector(sides[j], (e ? 1 : -1) * widths[j]);
+				C.P.push(p.x, p.y, p.z);
+				C.N.push(...crownN(p, out, s));
+				C.UV.push(0.52 + 0.48 * s, e);
+				let ao = lerp(aoIn, aoOut, Math.pow(s, 0.8)) * lowShade;
+				if (p.y < pts[j].y - 0.05) ao *= 0.82;           // the underside of a spray sits in its own shade
+				C.C.push(ao, ao, ao); C.L.push(0.35 + 0.65 * s);
+			}
+		}
+		for (let j = 0; j < n - 1; j++) { const a = base + j * 2; C.I.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+	};
+	for (let i = 0; i < o.levels; i++) {
+		const t = i / (o.levels - 1);
+		const y = base + Math.pow(t, 0.95) * (H - base - 1.1) + (rnd() - 0.5) * (H / o.levels) * 0.5;
+		const whorl = i % 2 === 0 || !o.inter;            // interwhorl shoots between the main tiers: shorter, fewer
+		const Rb = (0.42 + 3.45 * Math.pow(1 - t, 0.9)) * (whorl ? 1 : 0.72);
+		const per = Math.max(3, Math.round(o.per * (0.7 + 0.3 * (1 - t)) * (whorl ? 1 : 0.6)));
+		const rise = lerp(0.02, 0.6, t), droop = lerp(0.68, 0.12, t), lift = lerp(0.4, 0.04, t);
+		const lowShade = 0.55 + 0.45 * Math.pow(t, 0.7);
+		for (let k = 0; k < per; k++) {
+			if (t < 0.88 && rnd() < o.gap) continue;
+			const a = (k + rnd() * 0.75) / per * Math.PI * 2 + i * 2.39996;
+			const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+			const side = new THREE.Vector3(-out.z, 0, out.x);
+			const R = Rb * (0.72 + rnd() * 0.45 + (rnd() < 0.08 ? 0.25 : 0));
+			const roll = (rnd() - 0.5) * 0.7;
+			const root = new THREE.Vector3(out.x * 0.15, y + rnd() * 0.25, out.z * 0.15);
+			const pts = [], sides = [], sides2 = [], w1 = [], w2 = [];
+			const hw = R * (0.44 + rnd() * 0.12);
+			for (let j = 0; j <= o.segs; j++) {
+				const s = j / o.segs;
+				const h = R * (rise * s - droop * s * s + lift * s * s * s * s);
+				const p = root.clone().addScaledVector(out, R * s).add(new THREE.Vector3(0, h, 0));
+				pts.push(p);
+				// tangent of the bend → the spray rolls with it
+				const dh = R * (rise - 2 * droop * s + 4 * lift * s * s * s);
+				const tan = out.clone().multiplyScalar(R).add(new THREE.Vector3(0, dh, 0)).normalize();
+				const sd = side.clone().multiplyScalar(Math.cos(roll)).addScaledVector(UP, Math.sin(roll));
+				const nrm = new THREE.Vector3().crossVectors(tan, sd).normalize();
+				sides.push(sd);
+				sides2.push(sd.clone().multiplyScalar(Math.cos(1.2)).addScaledVector(nrm, Math.sin(1.2) * (k % 2 ? 1 : -1)));
+				w1.push(hw * (0.55 + 0.45 * s)); w2.push(hw * 0.85 * (0.45 + 0.55 * s));
+			}
+			ribbon(pts, sides, w1, out, 0.5, 1.0, lowShade);
+			if (o.cross) ribbon(pts, sides2, w2, out, 0.36, 0.92, lowShade);
+		}
+	}
+	// leader: two crossed upright sprays crowning the tree
+	for (let k = 0; k < 2; k++) {
+		const a = k * Math.PI / 2 + 0.4, sd = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+		const pts = [new THREE.Vector3(0, H - 1.9, 0), new THREE.Vector3(0.03, H - 0.6, 0), new THREE.Vector3(0.05, H + 0.75, 0)];
+		const b0 = C.P.length / 3;
+		pts.forEach((p, j) => {
+			const w = [0.55, 0.34, 0.1][j];
+			for (let e = 0; e < 2; e++) {
+				const q = p.clone().addScaledVector(sd, (e ? 1 : -1) * w);
+				C.P.push(q.x, q.y, q.z); C.N.push(sd.z * 0.3, 0.95, -sd.x * 0.3); C.UV.push(0.52 + 0.24 * j, e);
+				const ao = 0.85 + 0.15 * j; C.C.push(ao, ao, ao); C.L.push(0.5);
+			}
+		});
+		for (let j = 0; j < 2; j++) { const q = b0 + j * 2; C.I.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
+	}
+	// the trunk is lit below the crown and sits in deep shade inside it
+	return treeFromParts(trunks, C, y => y < base ? 0.7 : lerp(lerp(0.45, 0.1, smoothstep(base, base + 4, y)), 0.18, smoothstep(H * 0.5, H * 0.85, y)));   // the thin upper crown lets a little light in to the leader
+}
+
+// Paints the spruce spray into the right half of the foliage atlas: a twig with alternating side shoots, each
+// bristling with needles over a dark core (the core keeps coverage when the mip levels average the needles away),
+// last year's growth pale at every tip.
+function paintSpruceSpray(cv, seed = 3) {
+	const cx = cv.getContext('2d'), W = cv.width / 2, Hh = cv.height, x0 = W;
+	const r = mulberry32(seed);
+	cx.clearRect(x0, 0, W, Hh);
+	cx.lineCap = 'round';
+	const cy = Hh / 2, len = W - 30;
+	const axis = u => [x0 + 14 + u * len, cy + Math.sin(u * Math.PI) * 5];
+	const env = u => (Hh / 2 - 16) * Math.max(0.1, Math.pow(Math.sin(Math.PI * Math.pow(Math.min(u, 1), 0.78)), 0.85));
+	const twigs = [];   // [points[], needle length, depth]
+	const pathOf = (x, y, ang, L, bend, n = 10) => { const p = []; for (let i = 0; i <= n; i++) { const t = i / n, a = ang + bend * t; p.push([x + Math.cos(a) * L * t, y + Math.sin(a) * L * t]); } return p; };
+	twigs.push([Array.from({ length: 30 }, (_, i) => axis(i / 29)), 15, 0]);
+	let sgn = 1;
+	for (let u = 0.035; u < 0.95; u += 0.034 + r() * 0.012) {
+		sgn = -sgn;
+		const [x, y] = axis(u);
+		const ang = sgn * (0.78 + r() * 0.22);
+		const reach = env(Math.min(1, u + 0.07)) / Math.sin(Math.abs(ang)) * (0.82 + r() * 0.2);
+		const P = pathOf(x, y, ang, reach, -sgn * 0.28);
+		twigs.push([P, 12.5, 1]);
+		// a few shorter shoots off each side shoot
+		for (let v = 0.3; v < 0.85; v += 0.2 + r() * 0.08) {
+			const i = Math.floor(v * (P.length - 1)), [px, py] = P[i];
+			for (const ss of [-1, 1]) {
+				if (r() < 0.25) continue;
+				const a2 = ang - sgn * 0.28 * v + ss * (0.72 + r() * 0.2);
+				twigs.push([pathOf(px, py, a2, reach * (0.3 + r() * 0.12) * (1 - v * 0.5), -ss * 0.2, 6), 10, 2]);
+			}
+		}
+	}
+	// dark core along every twig
+	for (const [P, nl] of twigs) {
+		cx.strokeStyle = 'rgb(36,66,44)'; cx.lineWidth = nl * 1.25;
+		cx.beginPath(); P.forEach(([x, y], i) => i ? cx.lineTo(x, y) : cx.moveTo(x, y)); cx.stroke();
+	}
+	// needles, inner and older ones first
+	const col = (k, fresh) => {
+		const d = [48 + k * 36, 86 + k * 50, 54 + k * 22], f = [150, 182, 88];
+		const m = fresh * (0.7 + r() * 0.3), j = 0.85 + r() * 0.3;
+		return `rgb(${(d[0] + (f[0] - d[0]) * m) * j | 0},${(d[1] + (f[1] - d[1]) * m) * j | 0},${(d[2] + (f[2] - d[2]) * m) * j | 0})`;
+	};
+	cx.lineWidth = 1.7;
+	for (const [P, nl, depth] of twigs) {
+		let acc = 0;
+		for (let i = 1; i < P.length; i++) {
+			const [ax, ay] = P[i - 1], [bx, by] = P[i];
+			const seg = Math.hypot(bx - ax, by - ay), dir = Math.atan2(by - ay, bx - ax);
+			for (let d = 0; d < seg; d += 2.1) {
+				acc += 2.1;
+				const t = (i - 1 + d / seg) / (P.length - 1);
+				const x = ax + (bx - ax) * d / seg, y = ay + (by - ay) * d / seg;
+				const fresh = smoothstep(0.62, 0.95, t);
+				for (const ss of [-1, 1]) {
+					const a = dir + ss * (0.55 + r() * 0.5);
+					const l = nl * (0.75 + r() * 0.4) * (1 - t * 0.3);
+					cx.strokeStyle = col(depth === 0 ? 0.3 : r() * 0.6 + 0.2, fresh);
+					cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); cx.stroke();
+				}
+			}
+		}
+	}
+	// the twigs themselves
+	for (const [P, nl, depth] of twigs) {
+		cx.strokeStyle = depth ? 'rgba(92,70,48,0.9)' : 'rgb(98,74,50)'; cx.lineWidth = depth ? 1.6 : 3.2;
+		cx.beginPath(); P.forEach(([x, y], i) => i ? cx.lineTo(x, y) : cx.moveTo(x, y)); cx.stroke();
+	}
+}
+
+// Paints the broadleaf cluster into the left half of the foliage atlas, in place of the photo of thirty big leaves
+// (on a card three to four metres across each of those leaves came out half a metre long). A few forking twigs carry
+// some fifteen hundred small leaves, about a hand long on the card: shaded ones inside and below, fresher and yellower ones
+// at the rim, each with its midrib and a lit and a shaded half; a dark core behind them keeps the cluster's coverage
+// when the mip levels average the leaves away.
+function paintLeafCluster(cv, seed = 9) {
+	const cx = cv.getContext('2d'), W = cv.width / 2, Hh = cv.height;
+	const r = mulberry32(seed);
+	cx.clearRect(0, 0, W, Hh);
+	cx.lineCap = 'round'; cx.lineJoin = 'round';
+	const cxm = W / 2, cym = Hh / 2, R = W * 0.43;
+	const inside = (x, y) => { const a = Math.atan2(y - cym, x - cxm), rr = R * (0.86 + 0.14 * Math.sin(a * 3 + 1.3) * Math.sin(a * 5 + 0.4)); return Math.hypot(x - cxm, y - cym) / rr; };
+	// twigs: from below the centre, forking outward
+	const twigs = [];
+	const grow = (x, y, ang, L, w, d) => {
+		const P = [[x, y]]; let a = ang;
+		for (let i = 0; i < 8; i++) { a += (r() - 0.5) * 0.35; const nx = x + Math.cos(a) * L / 8, ny = y + Math.sin(a) * L / 8; if (inside(nx, ny) > 0.88) break; x = nx; y = ny; P.push([x, y]); }   // twigs end inside the leaves
+		if (P.length < 3) return;
+		twigs.push([P, w, d]);
+		if (d < 2) for (let k = 0; k < 3; k++) { const t = 0.35 + k * 0.22 + r() * 0.08, q = P[Math.min(P.length - 1, Math.round(t * (P.length - 1)))]; grow(q[0], q[1], a + (k % 2 ? 1 : -1) * (0.5 + r() * 0.4), L * (0.55 - k * 0.08), w * 0.6, d + 1); }
+	};
+	for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + (k - 2) * 0.62 + (r() - 0.5) * 0.3; grow(cxm + (r() - 0.5) * 30, cym + R * 0.55, a, R * (0.85 + r() * 0.2), 5.5, 0); }
+	// the dark core
+	const g = cx.createRadialGradient(cxm, cym, R * 0.1, cxm, cym, R * 0.82);
+	g.addColorStop(0, 'rgb(34,56,30)'); g.addColorStop(1, 'rgb(44,70,36)');
+	cx.fillStyle = g; cx.beginPath();
+	for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2, rr = R * 0.6 * (0.85 + 0.15 * Math.sin(a * 3 + 1.3) * Math.sin(a * 5 + 0.4)); i ? cx.lineTo(cxm + Math.cos(a) * rr, cym + Math.sin(a) * rr) : cx.moveTo(cxm + Math.cos(a) * rr, cym + Math.sin(a) * rr); }
+	cx.fill();
+	for (const [P, w] of twigs) { cx.strokeStyle = 'rgb(70,56,40)'; cx.lineWidth = w; cx.beginPath(); P.forEach(([x, y], i) => i ? cx.lineTo(x, y) : cx.moveTo(x, y)); cx.stroke(); }
+	// leaves along every twig past its first third, deep ones first
+	const leaves = [];
+	for (const [P, w, d] of twigs) for (let i = 2; i < P.length; i++) {
+		const [ax, ay] = P[i - 1], [bx, by] = P[i], dir = Math.atan2(by - ay, bx - ax);
+		for (let k = 0; k < 5; k++) {
+			const t = r(), x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+			const a = dir + (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.9), L = 16 + r() * 10;
+			const lx = x + Math.cos(a) * L * 0.55, ly = y + Math.sin(a) * L * 0.55, e = inside(lx, ly);
+			if (e > 1.02) continue;
+			leaves.push([x, y, a, L, e, d]);
+		}
+	}
+	// and the crown filled out: leaves on short unseen stalks all through the outline, turned outward
+	for (let k = 0; k < 1100; k++) {
+		const a0 = r() * Math.PI * 2, rr = R * Math.sqrt(r()) * 0.74, x = cxm + Math.cos(a0) * rr, y = cym + Math.sin(a0) * rr;
+		const a = a0 + (r() - 0.5) * 1.6, L = 16 + r() * 10, e = inside(x + Math.cos(a) * L * 0.55, y + Math.sin(a) * L * 0.55);
+		if (e <= 0.92) leaves.push([x, y, a, L, e, 3]);   // the rim is left to the leaves on twigs: nothing floats free
+	}
+	leaves.sort((p, q) => p[4] - q[4] + (r() - 0.5) * 0.25);
+	for (const [x, y, a, L, e, d] of leaves) {
+		const lift = Math.min(1, Math.max(0, 0.3 + e * 0.65 + (cym - y) / R * 0.2 + (r() - 0.5) * 0.3));   // the rim and the top catch light; the card's own shading darkens the inside further
+		const yel = r() < 0.12 ? 0.35 : 0;
+		const base = [36 + 50 * lift + 40 * yel, 66 + 64 * lift + 22 * yel, 32 + 30 * lift - 6 * yel].map(v => v * (0.9 + r() * 0.2));
+		const half = (k) => `rgb(${base[0] * k | 0},${base[1] * k | 0},${base[2] * k | 0})`;
+		cx.save(); cx.translate(x, y); cx.rotate(a);
+		const wd = L * (0.36 + r() * 0.1);
+		// two halves of an almond, the one turned to the light a little paler
+		cx.fillStyle = half(1.08); cx.beginPath(); cx.moveTo(0, 0); cx.quadraticCurveTo(L * 0.4, -wd, L, 0); cx.closePath(); cx.fill();
+		cx.fillStyle = half(0.86); cx.beginPath(); cx.moveTo(0, 0); cx.quadraticCurveTo(L * 0.4, wd, L, 0); cx.closePath(); cx.fill();
+		cx.strokeStyle = half(0.7); cx.lineWidth = 0.9; cx.beginPath(); cx.moveTo(0, 0); cx.lineTo(L * 0.92, 0); cx.stroke();
+		cx.restore();
+	}
+}
+
+const WIND_VERT = /* glsl */`
+	{
+		vec3 ip = vec3(instanceMatrix[3]);
+		float sway = pow(max(position.y, 0.) / 12., 2.);
+		float ph = uTime * 1.1 + ip.x * 0.045 + ip.z * 0.03;
+		float gust = 0.6 + 0.4 * sin(uTime * 0.31 + ip.x * 0.004);
+		transformed.x += (sin(ph) * 0.2 + sin(ph * 2.3) * 0.05) * sway * gust;
+		transformed.z += (cos(ph * 0.8) * 0.14) * sway * gust;
+		transformed += aLeaf * normal * sin(uTime * 7. + position.x * 3. + position.y * 2. + ip.z) * 0.06 * gust;
+	}`;
+
+
+// ── the woods behind the town: Lanternwind's spruces and broadleaves (cards painted into one atlas, bark, wind) ──
+function barkTexture() {
+	return canvasTex(128, 256, (g, w, h) => {
+		g.fillStyle = '#5a4634'; g.fillRect(0, 0, w, h);
+		const r = mulberry32(12);
+		// furrows: long vertical cracks that wander a little and wrap round the trunk
+		for (let i = 0; i < 70; i++) {
+			const x0 = r() * w, len = 40 + r() * 160, y0 = r() * h, wd = 1 + r() * 3.5;
+			g.strokeStyle = `rgba(${28 + r() * 20 | 0},${22 + r() * 14 | 0},${16 + r() * 10 | 0},${0.5 + r() * 0.4})`; g.lineWidth = wd;
+			g.beginPath(); let x = x0; g.moveTo(x, y0); for (let y = y0; y < y0 + len; y += 8) { x += (r() - 0.5) * 3; g.lineTo(x, y); } g.stroke();
+		}
+		// lit ridges between them, and a little lichen
+		for (let i = 0; i < 90; i++) { g.fillStyle = `rgba(${130 + r() * 40 | 0},${110 + r() * 30 | 0},${88 + r() * 20 | 0},${0.12 + r() * 0.15})`; g.fillRect(r() * w, r() * h, 1 + r() * 3, 6 + r() * 30); }
+		for (let i = 0; i < 25; i++) { g.fillStyle = `rgba(140,150,110,${0.1 + r() * 0.15})`; g.beginPath(); g.arc(r() * w, r() * h, 2 + r() * 5, 0, 7); g.fill(); }
+	}, true, true);
+}
+function foliageAtlas() {
+	const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 512;
+	paintLeafCluster(cv); paintSpruceSpray(cv);
+	const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter;
+	return t;
 }
 function buildTrees(world, count) {
-	const mat = patchStandard(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), { key: 'tree' });
-	const kinds = [coniferGeometry(), broadleafGeometry(3), broadleafGeometry(8)];
-	const ims = kinds.map(g => new THREE.InstancedMesh(g, mat, Math.ceil(count / 2)));
-	const used = ims.map(() => 0), rnd = mulberry32(91), m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
+	const barkMap = barkTexture(); barkMap.wrapS = barkMap.wrapT = THREE.RepeatWrapping;
+	const bark = new THREE.MeshStandardMaterial({ map: barkMap, roughness: 0.92, vertexColors: true });
+	patchStandard(bark, { key: 'bark', vertHead: 'uniform float uTime; attribute float aLeaf;', vertBegin: WIND_VERT });
+	const leaves = new THREE.MeshStandardMaterial({ map: foliageAtlas(), alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.72, vertexColors: true });
+	patchStandard(leaves, {
+		key: 'leaves',
+		vertHead: 'uniform float uTime; attribute float aLeaf;',
+		vertBegin: WIND_VERT,
+		fragHead: 'uniform vec3 uLightCol; uniform float uMirror;',
+		normalFragment: 'normal = normalize(vNormal);',
+		// keep foliage from thinning out as mip levels average the alpha away
+		mapFragment: `{ vec2 tx = vMapUv * vec2(1024., 512.); vec2 d = max(abs(dFdx(tx)), abs(dFdy(tx)));
+			  diffuseColor.a *= 1. + max(0., log2(max(d.x, d.y))) * 0.28; }`,
+		emissiveFragment: /* glsl */`
+			{
+				vec3 vd = normalize(gWPos - cameraPosition);
+				float back = pow(max(dot(vd, uSunDir), 0.), 4.);
+				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * vec3(0.9, 1.1, 0.5) * (back * mix(1.3, 0.25, uMirror) + 0.12) * vColor.r;
+				totalEmissiveRadiance += uLightCol * diffuseColor.rgb * max(dot(normalize((vec4(normal, 0.) * viewMatrix).xyz), uSunDir) * 0.5 + 0.5, 0.) * 0.22;
+				totalEmissiveRadiance += diffuseColor.rgb * (skyLUT(vec3(0., 1., 0.)) * 0.3 + skyLUT(normalize(vec3(uSunDir.x, 0.08, uSunDir.z))) * 0.08) * (0.55 + 0.45 * vColor.r);
+			}`,
+	});
+	const mats = [bark, leaves];
+	// three levels of detail by distance from the beach, where you are nearly always
+	const geos = [
+		[spruceGeometry(11, { levels: 22, per: 8, segs: 3, cross: true, inter: true, gap: 0.08, trunkSegs: 9, flare: true }),
+		 spruceGeometry(11, { levels: 15, per: 7, segs: 2, cross: true, inter: true, gap: 0.05, trunkSegs: 6 }),
+		 spruceGeometry(11, { levels: 9, per: 6, segs: 1, cross: true, gap: 0.0, trunkSegs: 5 })],
+		[broadleafGeometry(21, 52), broadleafGeometry(23, 30), broadleafGeometry(22, 18)]];
+	const lists = [[[], [], []], [[], [], []]];
+	const rnd = mulberry32(91);
 	for (let tries = 0, n = 0; n < count && tries < count * 40; tries++) {
-		const x = (rnd() * 2 - 1) * 2300, z = coastZ(x) + 60 + Math.pow(rnd(), 1.3) * 2300;
+		const x = (rnd() * 2 - 1) * 2300, z = coastZ(x) + 70 + Math.pow(rnd(), 1.3) * 2300;
 		if (z > HALF - 30) continue;
-		const { rr, th } = basinRR(x, z); if (rr < 1.17) continue;
 		if (world.keepOut.some(([kx, kz, kr]) => Math.hypot(x - kx, z - kz) < kr)) continue;
+		const h = sampleH(world.H, x, z), sl = Math.hypot(sampleH(world.H, x + 3, z) - h, sampleH(world.H, x, z + 3) - h) / 3;
+		if (sl > 0.45) continue;
 		// woods where the noise says so, a lone tree now and then elsewhere
 		const wood = fbm(x * 0.006 + 3, z * 0.006 - 2, 4);
-		if (rnd() > (wood > 0.55 ? 0.9 : 0.04)) continue;
-		const h = sampleH(world.H, x, z), k = wood > 0.62 ? (rnd() < 0.7 ? 0 : 1 + (rnd() < .5 ? 1 : 0)) : 1 + (rnd() < .5 ? 1 : 0);
-		if (used[k] >= ims[k].count) continue;
-		const sc = 1.1 + rnd() * 0.9;
-		q.setFromEuler(new THREE.Euler((rnd() - .5) * 0.08, rnd() * 6.28, (rnd() - .5) * 0.08));
-		m.compose(new THREE.Vector3(x, h - 0.4, z), q, new THREE.Vector3(sc, sc * (0.85 + rnd() * 0.35), sc));
-		ims[k].setMatrixAt(used[k], m); ims[k].setColorAt(used[k], c.setHSL(0.2 + (rnd() - .5) * 0.08, 0.35, 0.5 + rnd() * 0.2).multiplyScalar(1.25)); used[k]++; n++;
+		const garden = seaU(x, z) < 200 && Math.abs(x) < 520 ? 0.16 : 0.05;   // gardens behind the town have a tree or two
+		if (rnd() > (wood > 0.55 ? 0.9 : garden)) continue;
+		const k = wood > 0.6 && rnd() < 0.65 ? 0 : 1;
+		const d = Math.hypot(x, z - 60), lod = d < 420 ? 0 : d < 1100 ? 1 : 2;
+		const stand = 0.8 + 0.4 * smoothstep(0.55, 0.75, wood);
+		lists[k][lod].push([x, h - 0.3, z, (0.6 + rnd() * 0.5) * stand, rnd() * Math.PI * 2, rnd()]);
+		n++;
 	}
-	ims.forEach((im, i) => { im.count = used[i]; im.userData.full = used[i]; im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); });
-	return ims;
+	const out = [], m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), pp = new THREE.Vector3(), col = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
+	for (let k = 0; k < 2; k++) for (let lod = 0; lod < 3; lod++) {
+		const list = lists[k][lod]; if (!list.length) continue;
+		const im = new THREE.InstancedMesh(geos[k][lod], mats, list.length);
+		list.forEach((t, i) => {
+			q.setFromAxisAngle(up, t[4]); s.setScalar(t[3] * (k ? 1.1 : 1.15)); s.y *= 0.88 + t[5] * 0.3; pp.set(t[0], t[1], t[2]);
+			m4.compose(pp, q, s); im.setMatrixAt(i, m4);
+			const v = 0.82 + t[5] * 0.36;
+			if (k === 0) col.setRGB(v * 0.95, v * 1.01, v * 0.9); else col.setRGB(v * (0.96 + t[5] * 0.1), v, v * (0.9 - t[5] * 0.1));
+			if (k === 1 && t[5] > 0.93) col.setRGB(1.22, 0.98, 0.55);
+			im.setColorAt(i, col);
+		});
+		im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; im.computeBoundingSphere();
+		im.userData.full = list.length; im.castShadow = lod === 0; im.receiveShadow = true;
+		out.push(im);
+	}
+	return out;
 }
+
+// ── the town behind the promenade: rendered plaster, sash windows with shutters, tiled gables, and the hotel ──
+// Walls carry one facade tile (a 3 m bay of one storey: plaster, a window with its frame, sill and shutters), laid by
+// the metre so every house of whole bays gets centred windows; the wall colour comes from the vertex colour.
+function facadeTexture() {
+	return canvasTex(256, 256, (g, w, h) => {
+		const r = mulberry32(31);
+		g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, w, h);
+		for (let i = 0; i < 900; i++) { const v = 200 + r() * 55 | 0; g.fillStyle = `rgba(${v},${v - 4},${v - 12},0.18)`; g.fillRect(r() * w, r() * h, 1 + r() * 3, 1 + r() * 3); }
+		const px = m => m / 3 * w, py = m => h - m / 3 * h;      // metres in the bay -> pixels (y up)
+		const x0 = px(0.95), x1 = px(2.05), y0 = py(2.35), y1 = py(0.95);
+		// shutters, painted wood
+		for (const [a, b] of [[px(0.42), x0 - 3], [x1 + 3, px(2.58)]]) {
+			g.fillStyle = '#4f7a86'; g.fillRect(a, y0, b - a, y1 - y0);
+			g.strokeStyle = 'rgba(20,40,45,0.55)'; g.lineWidth = 2; for (let y = y0 + 6; y < y1; y += 9) { g.beginPath(); g.moveTo(a + 3, y); g.lineTo(b - 3, y); g.stroke(); }
+			g.strokeRect(a + 1, y0 + 1, b - a - 2, y1 - y0 - 2);
+		}
+		// the lintel and the sill
+		g.fillStyle = '#d9d3c6'; g.fillRect(x0 - 8, y0 - 9, x1 - x0 + 16, 9); g.fillRect(x0 - 10, y1, x1 - x0 + 20, 8);
+		g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x0 - 10, y1 + 8, x1 - x0 + 20, 3);
+		// the glass: the sky in it, darker below
+		const gr = g.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, '#9fb7c4'); gr.addColorStop(0.45, '#4d6672'); gr.addColorStop(1, '#22303a');
+		g.fillStyle = gr; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+		g.fillStyle = 'rgba(255,255,255,0.18)'; g.beginPath(); g.moveTo(x0, y0 + 40); g.lineTo(x0 + 30, y0); g.lineTo(x0 + 50, y0); g.lineTo(x0, y0 + 70); g.fill();
+		// frame and glazing bars
+		g.strokeStyle = '#fbfaf6'; g.lineWidth = 6; g.strokeRect(x0 + 2, y0 + 2, x1 - x0 - 4, y1 - y0 - 4);
+		g.lineWidth = 4; const xm = (x0 + x1) / 2, ym = y0 + (y1 - y0) * 0.45;
+		g.beginPath(); g.moveTo(xm, y0); g.lineTo(xm, y1); g.moveTo(x0, ym); g.lineTo(x1, ym); g.stroke();
+		g.lineWidth = 2; g.beginPath(); g.moveTo(x0, y0 + (ym - y0) / 2); g.lineTo(x1, y0 + (ym - y0) / 2); g.moveTo(x0, ym + (y1 - ym) / 2); g.lineTo(x1, ym + (y1 - ym) / 2); g.stroke();
+		// a little weathering under the sill
+		const st = g.createLinearGradient(0, y1 + 8, 0, y1 + 60); st.addColorStop(0, 'rgba(90,80,60,0.18)'); st.addColorStop(1, 'rgba(90,80,60,0)');
+		g.fillStyle = st; g.fillRect(x0, y1 + 8, x1 - x0, 52);
+	}, true, true);
+}
+function roofTexture() {
+	return canvasTex(256, 256, (g, w, h) => {
+		const r = mulberry32(17), rows = 8, cols = 7;
+		g.fillStyle = '#6a6460'; g.fillRect(0, 0, w, h);
+		for (let j = 0; j < rows; j++) for (let i = -1; i < cols + 1; i++) {
+			const x = (i + (j % 2) * 0.5) * w / cols, y = j * h / rows, tw = w / cols, th = h / rows, v = 0.8 + r() * 0.35;
+			const c = [168 * v | 0, 160 * v | 0, 156 * v | 0];
+			const gr = g.createLinearGradient(0, y, 0, y + th); gr.addColorStop(0, `rgb(${c})`); gr.addColorStop(1, `rgb(${c.map(k => k * 0.62 | 0)})`);
+			g.fillStyle = gr; g.beginPath(); g.moveTo(x + 2, y); g.lineTo(x + tw - 2, y); g.lineTo(x + tw - 2, y + th * 0.7); g.quadraticCurveTo(x + tw / 2, y + th + 4, x + 2, y + th * 0.7); g.fill();
+		}
+		g.fillStyle = 'rgba(0,0,0,0.12)'; for (let j = 0; j < rows; j++) g.fillRect(0, j * h / rows, w, 3);
+	}, true, true);
+}
+// the hotel's sign: the words always fit the board, whatever its name has been worn down to
 function signTexture(text) {
-	return canvasTex(512, 128, (g, w, h) => {
-		g.fillStyle = '#f4ecd6'; g.fillRect(0, 0, w, h); g.strokeStyle = '#7a1d18'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12);
-		g.fillStyle = '#7a1d18'; g.font = '700 58px Georgia, "Times New Roman", serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, w / 2, h / 2 + 3);
+	return canvasTex(1024, 192, (g, w, h) => {
+		g.fillStyle = '#f4ecd6'; g.fillRect(0, 0, w, h);
+		g.strokeStyle = '#7a1d18'; g.lineWidth = 14; g.strokeRect(10, 10, w - 20, h - 20);
+		g.lineWidth = 3; g.strokeRect(28, 28, w - 56, h - 56);
+		g.fillStyle = '#7a1d18'; g.textAlign = 'center'; g.textBaseline = 'middle';
+		let size = 112; g.font = `700 ${size}px Georgia, "Times New Roman", serif`;
+		const room = w - 110; const m = g.measureText(text).width; if (m > room) { size = Math.floor(size * room / m); g.font = `700 ${size}px Georgia, "Times New Roman", serif`; }
+		g.fillText(text, w / 2, h / 2 + 6);
 	}, true, false);
 }
-function buildVillage(world, az0, az1, signText = 'SEA VIEW HOTEL') {
-	const walls = [], roofs = [], dark = [], rnd = mulberry32(17);
-	const wallC = [0xf2efe6, 0xe9dcc0, 0xd7e3e6, 0xf0d9c8, 0xe6e6da], roofC = [0xa84a32, 0x8d3b2a, 0x4b5560, 0xb05a3a];
-	let hotel = null;
-	for (let i = 0; i < 26; i++) {
-		const c = coastPoint(world, i === 0 ? -64 : lerp(az0, az1, rnd()), 3.2), back = i === 0 ? 6 : 12 + rnd() * 70;
-		const x = c.x + c.dx * back, z = c.z + c.dz * back;
-		if (world.keepOut.some(([kx, kz, kr]) => Math.hypot(x - kx, z - kz) < kr * 0.6)) continue;
-		const big = i === 0, w = big ? 22 : 7 + rnd() * 5, d = big ? 12 : 6 + rnd() * 3, hgt = big ? 15 : 4.5 + rnd() * 3;
-		const y = sampleH(world.H, x, z) - 0.5, yaw = Math.atan2(-c.dx, -c.dz);   // fronts to the sea
-		world.keepOut.push([x, z, Math.max(w, d) * 0.9]);
-		const T = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)), new THREE.Vector3(1, 1, 1));
-		walls.push(colorize(plain(new THREE.BoxGeometry(w, hgt, d).translate(0, hgt / 2, 0)).applyMatrix4(T), wallC[i % wallC.length]));
-		const rs = new THREE.Shape(); rs.moveTo(-d / 2 - 0.6, 0); rs.lineTo(0, d * 0.42); rs.lineTo(d / 2 + 0.6, 0); rs.closePath();
-		const rg = plain(new THREE.ExtrudeGeometry(rs, { depth: w + 1, bevelEnabled: false })); rg.rotateY(Math.PI / 2); rg.translate(-(w + 1) / 2, hgt, 0); rg.computeVertexNormals();
-		roofs.push(colorize(rg.applyMatrix4(T), roofC[(i * 7) % roofC.length]));
-		// a door and windows on the side that faces the water
-		const floors = big ? 4 : 1, cols = Math.max(2, Math.floor(w / 3.2));
-		for (let f = 0; f < floors; f++) for (let k = 0; k < cols; k++) {
-			if (f === 0 && k === (cols >> 1)) { dark.push(plain(new THREE.PlaneGeometry(1.4, 2.4).translate((k + 0.5 - cols / 2) * (w / cols), 1.2, d / 2 + 0.05)).applyMatrix4(T)); continue; }
-			dark.push(plain(new THREE.PlaneGeometry(1.2, 1.3).translate((k + 0.5 - cols / 2) * (w / cols), 2.4 + f * 3.4, d / 2 + 0.05)).applyMatrix4(T));
-		}
-		if (big) hotel = { T, w, hgt, d };
+// geometry helpers: UVs by the metre (u along the wall, v up), keeping uv when merging
+function meterUV(geo, su, sv) {
+	const p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
+	for (let i = 0; i < p.count; i++) {
+		const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i)), nz = Math.abs(n.getZ(i));
+		if (ny > 0.9) uv.setXY(i, p.getX(i) / su, p.getZ(i) / sv);
+		else uv.setXY(i, (nx > nz ? -Math.sign(n.getX(i)) * p.getZ(i) : Math.sign(n.getZ(i)) * p.getX(i)) / su, p.getY(i) / sv);
 	}
+	return geo;
+}
+function keepUV(geo) { const g = geo.index ? geo.toNonIndexed() : geo; for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k); return g; }
+function tint(geo, hex) { return colorize(geo, hex); }
+function buildVillage(world, x0, x1, signText = 'SEA VIEW HOTEL') {
+	const walls = [], roofs = [], bits = [], rnd = mulberry32(17);
+	const wallC = [0xf4efe4, 0xeadcc2, 0xd9e4e6, 0xf0dccb, 0xe8e6d9, 0xdfe7d6], roofC = [0xb4553c, 0x9a4632, 0x5d646c, 0xa8603e];
+	let hotel = null;
+	const place = (x, back, kind) => {
+		const c = coastPoint(world, x, 3.2), z = c.z + back;
+		const big = kind === 'hotel', bays = big ? 8 : 2 + (rnd() * 3 | 0), deep = big ? 4 : 2 + (rnd() < 0.4 ? 1 : 0), floors = big ? 5 : 1 + (rnd() < 0.55 ? 1 : 0);
+		const w = bays * 3, d = deep * 3, H = floors * 3 + 0.4;
+		if (world.keepOut.some(([kx, kz, kr]) => Math.hypot(x - kx, z - kz) < kr + Math.max(w, d) * 0.45)) return false;
+		// stood on the lowest corner, so no corner of it hangs in the air
+		let gy = Infinity; for (const sx of [-1, 1]) for (const sz of [-1, 1]) gy = Math.min(gy, sampleH(world.H, x + sx * w / 2, z + sz * d / 2));
+		const yaw = Math.PI + (big ? 0 : (rnd() - 0.5) * 0.12);
+		const T = new THREE.Matrix4().compose(new THREE.Vector3(x, gy - 0.3, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)), new THREE.Vector3(1, 1, 1));
+		world.keepOut.push([x, z, Math.max(w, d) * 0.7]);
+		const wc = wallC[(rnd() * wallC.length) | 0], rc = roofC[(rnd() * roofC.length) | 0];
+		const R = big ? 0 : d * 0.42;
+		// the walls: a box for a flat-roofed hotel, a prism with gable ends for a house
+		let wg;
+		if (big) { wg = new THREE.BoxGeometry(w, H, d); wg.translate(0, H / 2, 0); }
+		else {
+			const sh = new THREE.Shape(); sh.moveTo(-d / 2, 0); sh.lineTo(d / 2, 0); sh.lineTo(d / 2, H); sh.lineTo(0, H + R); sh.lineTo(-d / 2, H); sh.closePath();
+			wg = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: false }); wg.rotateY(Math.PI / 2); wg.translate(-w / 2, 0, 0); wg.computeVertexNormals();
+		}
+		wg = keepUV(wg); wg.computeVertexNormals(); wg.translate(w / 2, 0, d / 2); meterUV(wg, 3, 3); wg.translate(-w / 2, 0, -d / 2);   // bays counted from the corner: whole bays, centred windows
+		// the ground floor's middle bay is the door, not a window: the facade tile is shifted up there by a storey
+		walls.push(tint(wg.applyMatrix4(T), wc));
+		// a plinth, darker, all round
+		const pl = new THREE.BoxGeometry(w + 0.12, 0.7, d + 0.12); pl.translate(0, 0.35, 0); bits.push(tint(plain(pl).applyMatrix4(T), 0x8f8a80));
+		if (big) {
+			// a flat roof behind a parapet, balconies on every upper floor, and the sign on posts above
+			const pr = new THREE.BoxGeometry(w + 0.4, 0.9, d + 0.4); pr.translate(0, H + 0.45, 0); bits.push(tint(plain(pr).applyMatrix4(T), 0xe9e4d8));
+			const top = new THREE.BoxGeometry(w - 0.4, 0.2, d - 0.4); top.translate(0, H + 0.2, 0); bits.push(tint(plain(top).applyMatrix4(T), 0x6c6a66));
+			for (let f = 1; f < floors; f++) {
+				const sl = new THREE.BoxGeometry(w - 1, 0.18, 1.3); sl.translate(0, f * 3 + 0.05, d / 2 + 0.65); bits.push(tint(plain(sl).applyMatrix4(T), 0xdedad0));
+				const rail = new THREE.BoxGeometry(w - 1, 0.08, 0.08); rail.translate(0, f * 3 + 1.05, d / 2 + 1.25); bits.push(tint(plain(rail).applyMatrix4(T), 0x3a3f44));
+				for (let k = 0; k <= bays * 3; k++) { const b = new THREE.BoxGeometry(0.05, 1.0, 0.05); b.translate(-w / 2 + 0.5 + k * (w - 1) / (bays * 3), f * 3 + 0.55, d / 2 + 1.25); bits.push(tint(plain(b).applyMatrix4(T), 0x3a3f44)); }
+			}
+			const canopy = new THREE.BoxGeometry(7, 0.2, 2.2); canopy.translate(0, 2.9, d / 2 + 1.1); bits.push(tint(plain(canopy).applyMatrix4(T), 0x7a1d18));
+			hotel = { T, w, H, d };
+		} else {
+			// two roof planes from the eaves (half a metre out) to the ridge, overhanging the gables by forty centimetres
+			const half = d / 2 + 0.5, rise = R + 0.5 * R / (d / 2), L = Math.hypot(half, rise), ang = Math.atan2(rise, half);
+			for (const sd of [-1, 1]) {
+				let rg = new THREE.BoxGeometry(w + 0.8, 0.16, L); rg = keepUV(rg); rg.computeVertexNormals(); meterUV(rg, 2, 2);
+				rg.rotateX(sd * ang); rg.translate(0, H - 0.5 * R / (d / 2) + rise / 2 + 0.05, sd * half / 2);
+				roofs.push(tint(rg.applyMatrix4(T), rc));
+			}
+			const ridge = new THREE.BoxGeometry(w + 0.85, 0.22, 0.32); ridge.translate(0, H + R + 0.08, 0); bits.push(tint(plain(ridge).applyMatrix4(T), 0x6a3a2c));
+			if (rnd() < 0.8) { const ch = new THREE.BoxGeometry(0.7, 1.8, 0.7); ch.translate(w / 2 - 1.2, H + R * 0.6 + 0.6, -d / 6); bits.push(tint(plain(ch).applyMatrix4(T), 0x8a4a3a)); const cap = new THREE.BoxGeometry(0.85, 0.12, 0.85); cap.translate(w / 2 - 1.2, H + R * 0.6 + 1.55, -d / 6); bits.push(tint(plain(cap).applyMatrix4(T), 0x5a5550)); }
+		}
+		// the door, in its frame, up a step, on the side that faces the sea
+		const dx = big ? 0 : (bays % 2 ? 0 : -1.5);
+		const fr = new THREE.BoxGeometry(1.5, 2.5, 0.1); fr.translate(dx, 1.25 + 0.4, d / 2 + 0.04); bits.push(tint(plain(fr).applyMatrix4(T), 0xf2f0ea));
+		const door = new THREE.BoxGeometry(1.1, 2.2, 0.1); door.translate(dx, 1.1 + 0.4, d / 2 + 0.08); bits.push(tint(plain(door).applyMatrix4(T), [0x2f4f5f, 0x6b2a24, 0x2f5a3a, 0x3b3b3b][(rnd() * 4) | 0]));
+		const step = new THREE.BoxGeometry(1.8, 0.4, 0.8); step.translate(dx, 0.2, d / 2 + 0.4); bits.push(tint(plain(step).applyMatrix4(T), 0xb8b2a6));
+		return true;
+	};
+	place(-64, 4, 'hotel');
+	// rows of houses parallel to the promenade, with gaps for gardens
+	for (const [back, gap] of [[10, 7], [34, 9], [58, 12]]) for (let x = x0; x < x1; x += 10 + rnd() * gap) { if (rnd() < 0.2) continue; place(x + (rnd() - 0.5) * 3, back + (rnd() - 0.5) * 6, 'house'); }
 	const g = new THREE.Group();
-	const vm = patchStandard(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), { key: 'village' });
-	const wm = new THREE.Mesh(mergeGeometries(walls), vm), rm = new THREE.Mesh(mergeGeometries(roofs), vm);
-	const dm = new THREE.Mesh(mergeGeometries(dark), new THREE.MeshStandardMaterial({ color: 0x1d2a33, roughness: 0.2, metalness: 0.3, side: THREE.DoubleSide }));
-	for (const mm of [wm, rm, dm]) { mm.castShadow = true; mm.receiveShadow = true; g.add(mm); }
-	// the hotel's sign, which the sea news will come back to
+	const fac = facadeTexture(); fac.wrapS = fac.wrapT = THREE.RepeatWrapping; fac.anisotropy = 8;
+	const rt = roofTexture(); rt.wrapS = rt.wrapT = THREE.RepeatWrapping; rt.anisotropy = 8;
+	const wm = new THREE.Mesh(mergeGeometries(walls), patchStandard(new THREE.MeshStandardMaterial({ map: fac, vertexColors: true, roughness: 0.85 }), { key: 'facade' }));
+	const rm = new THREE.Mesh(mergeGeometries(roofs), patchStandard(new THREE.MeshStandardMaterial({ map: rt, vertexColors: true, roughness: 0.75 }), { key: 'rooftile' }));
+	const bm = new THREE.Mesh(mergeGeometries(bits), patchStandard(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 }), { key: 'townbits' }));
+	for (const mm of [wm, rm, bm]) { mm.castShadow = true; mm.receiveShadow = true; g.add(mm); }
 	if (hotel) {
-		const sign = new THREE.Mesh(new THREE.PlaneGeometry(16, 4), new THREE.MeshStandardMaterial({ map: signTexture(signText), roughness: 0.7, side: THREE.DoubleSide }));
-		sign.position.set(0, hotel.hgt + hotel.d * 0.42 + 2.6, hotel.d * 0.1); sign.applyMatrix4(hotel.T);
-		const pm = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3, 0.4), new THREE.MeshStandardMaterial({ color: 0x333333 })); pm.position.set(0, hotel.hgt + hotel.d * 0.42 + 0.4, hotel.d * 0.1); pm.applyMatrix4(hotel.T);
-		g.add(sign, pm); g.userData.sign = sign;
+		const sign = new THREE.Mesh(new THREE.PlaneGeometry(15, 2.8), new THREE.MeshStandardMaterial({ map: signTexture(signText), roughness: 0.7, side: THREE.DoubleSide }));
+		sign.position.set(0, hotel.H + 3.1, hotel.d * 0.1 + 0.15); sign.applyMatrix4(hotel.T);
+		const back = new THREE.Mesh(new THREE.BoxGeometry(15.4, 3.2, 0.14), new THREE.MeshStandardMaterial({ color: 0x5a1612, roughness: 0.6 }));
+		back.position.set(0, hotel.H + 3.1, hotel.d * 0.1); back.applyMatrix4(hotel.T);
+		g.add(sign, back); g.userData.sign = sign;
+		for (const sx of [-5, 5]) { const pm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 2.4, 0.25), new THREE.MeshStandardMaterial({ color: 0x333333 })); pm.position.set(sx, hotel.H + 1.2, hotel.d * 0.1 - 0.2); pm.applyMatrix4(hotel.T); g.add(pm); }
+		for (const o of [back]) { o.castShadow = true; }
 	}
 	return g;
 }
