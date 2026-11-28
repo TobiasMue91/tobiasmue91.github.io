@@ -931,12 +931,12 @@ vec3 applyAtmo(vec3 col, vec3 ro, vec3 wp){
 // when the falling water left a height: wet, dark and shiny at first, dry after a minute or two
 const EXPO_GLSL = /* glsl */`
 uniform sampler2D uExpTex; uniform float uWaterY; uniform float uDry;
-float expAge(float y){ float t = texture2D(uExpTex, vec2(clamp((y - (${YMIN}.)) / (${YMAX - YMIN}.), 0., 1.), 0.5)).r; return uTime - t; }
+float expAge(float y){ float f = clamp((y - (${YMIN}.)) / (${YMAX - YMIN}.), 0., 1.) * ${EXPN - 1}., i0 = floor(f); float t0 = texture2D(uExpTex, vec2((i0 + .5) / ${EXPN}., .5)).r, t1 = texture2D(uExpTex, vec2((min(i0 + 1., ${EXPN - 1}.) + .5) / ${EXPN}., .5)).r; return uTime - mix(t0, t1, f - i0); }
 float wetness(float y){
 	if (y < uWaterY) return 1.;
 	float a = expAge(y);
 	float w = a < 0. ? 1. : exp(-a / uDry);
-	return max(w, smoothstep(1.6, 0., y - uWaterY));   // the band just above the water stays wet
+	return max(w, smoothstep(0.45, 0., y - uWaterY));   // the band just above the water stays wet
 }
 `;
 
@@ -1317,8 +1317,8 @@ function buildTerrain(world, segs) {
 					grass = mix(grass, vec3(0.26, 0.22, 0.1), smoothstep(.55, .7, fields) * .8);
 					grass = mix(grass, vec3(0.025, 0.05, 0.02), copse * .85);
 				}
-				vec3 sand = mix(vec3(0.36, 0.29, 0.19), vec3(0.46, 0.38, 0.26), n2);
-				vec3 shelf = mix(vec3(0.27, 0.24, 0.18), vec3(0.36, 0.31, 0.23), n2);
+				vec3 sand = mix(vec3(0.55, 0.45, 0.3), vec3(0.66, 0.55, 0.37), n2) * (0.94 + 0.12 * vnoise(gWPos.xz * 0.35));
+				vec3 shelf = mix(vec3(0.4, 0.34, 0.24), vec3(0.5, 0.42, 0.29), n2);
 				vec3 silt = mix(vec3(0.18, 0.16, 0.14), vec3(0.25, 0.22, 0.18), n2);
 				vec3 ooze = mix(vec3(0.12, 0.12, 0.11), vec3(0.19, 0.18, 0.16), n1);
 				if (h < -55.) ooze = mix(ooze, vec3(0.2, 0.12, 0.085) * (0.8 + 0.4 * n2), smoothstep(.42, .68, fbm2(gWPos.xz * 0.005 + 21., 3)) * .8);   // red abyssal clay in drifts
@@ -1365,10 +1365,23 @@ function buildTerrain(world, segs) {
 				gWet = wet;
 				alb *= mix(1., 0.5, wet * (1. - gPorc * .85));
 				alb = mix(alb, alb * vec3(.5, .56, .62), pud * .85);
-				alb *= mix(1., 0.88 + 0.24 * vnoise(gWPos.xz * 6.3) * vnoise(gWPos.xz * 17.), (1. - smoothstep(8., 50., dist)) * (1. - gPorc));
+				// grains: pale quartz and dark mineral grains, only where a pixel is small enough to show one (no shimmer)
+				float sandOnly = (1. - rockW) * (1. - landW) * (1. - pave) * (1. - gPorc);
+				float fpx = length(fwidth(gWPos.xz));
+				float g1 = hash12(floor(gWPos.xz * 260.)), g2 = hash12(floor(gWPos.xz * 110.) + 7.), g3 = hash12(floor(gWPos.xz * 45.) + 3.);
+				float gr = (step(0.9, g1) * -0.42 + step(g1, 0.07) * 0.28) * (1. - smoothstep(0.0015, 0.005, fpx)) + (step(0.94, g2) * -0.3 + step(g2, 0.05) * 0.18) * (1. - smoothstep(0.004, 0.012, fpx)) + (step(0.96, g3) * -0.2) * (1. - smoothstep(0.01, 0.03, fpx));
+				alb *= 1. + gr * sandOnly;
+				// mottling at the size of a footstep, and the damp darkening that lags behind the water in patches
+				alb *= mix(1., 0.9 + 0.2 * vnoise(gWPos.xz * 2.3), sandOnly * (1. - smoothstep(25., 120., dist)));
+				// swash lines: the reach of the last few waves, thin dark lines of wet sand and foam residue above the water
+				float above = h - uWaterY;
+				float sw = smoothstep(0.86, 1., sin(above * 55. + n1 * 7. + vnoise(gWPos.xz * 0.4) * 3.)) * step(0., above) * (1. - smoothstep(0.08, 0.45, above));
+				alb = mix(alb, alb * vec3(0.72, 0.7, 0.66), sw * sandOnly * 0.8);
 				gAlb = alb;
 				gRough = mix(mix(0.93, 0.85, rockW), mix(0.5, 0.62, smoothstep(0.92, 0.7, gN.y)), wet);
 				gRough = mix(gRough, 0.16, pud);
+				// the glassy film of water left on the sand just above the waterline: it mirrors the sky
+				gRough = mix(gRough, 0.3, smoothstep(0.12, 0.0, h - uWaterY) * step(uWaterY, h) * (1. - rockW) * (1. - pave));
 				gRough = mix(gRough, 0.12, gPorc);
 				// sand ripples, washed flat where it is steep
 				float sandM = (1. - rockW) * (1. - landW) * (1. - gPorc) * (1. - pave) * smoothstep(-40., -1., h) * (1. - smoothstep(0.6, 3., dist / 300.));
@@ -1376,6 +1389,10 @@ function buildTerrain(world, segs) {
 				float ph = dot(gWPos.xz, rd) * 1.7 + n1 * 3. + vnoise(gWPos.xz * 0.15) * 2.;
 				float cr = pow(abs(sin(ph * 0.5)), 3.) * 2. - 1.;   // sharp crests, wide troughs
 				vec2 rip = rd * cr * 0.11 * sandM * (1. - pud) * (0.6 + 0.4 * vnoise(gWPos.xz * 0.05));
+				// wind ripples on the dry sand: low, close together, only near
+				float dryR = (1. - wet) * (1. - rockW) * (1. - landW) * (1. - pave) * (1. - gPorc) * (1. - smoothstep(4., 30., dist));
+				vec2 wd = normalize(vec2(0.35, 1.)); float wph = dot(gWPos.xz, wd) * 38. + vnoise(gWPos.xz * 0.9) * 7.;
+				rip += wd * (pow(abs(sin(wph * 0.5)), 3.) * 2. - 1.) * 0.06 * dryR;
 				vec3 bump = vec3(n2 - .5, 0., n3 - .5) * 0.25 * rockW;
 				gN = normalize(gN + vec3(rip.x, 0., rip.y) + bump);
 			}`,
