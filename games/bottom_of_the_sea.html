@@ -4040,62 +4040,6 @@ function tubGeometry() {
 	for (const x of [-0.65, 0.65]) for (const z of [-0.22, 0.22]) parts.push(colorize(plain(new THREE.SphereGeometry(0.06, 6, 5).translate(x, -0.4, z)), 0xc9a24a));
 	return mergeGeometries(parts);
 }
-// Walkers go down to the water empty, fill up, and walk back to their depot on the promenade. They are made and dropped
-// only at the depot, behind the promenade, never in sight on the sand: a count that grows adds walkers there.
-class Walkers {
-	constructor() {
-		const mat = patchStandard(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), Object.assign({ key: 'walker' }, WET_PROP));
-		this.MAX = 72;
-		this.people = new THREE.InstancedMesh(personGeometry(), mat, this.MAX); this.people.count = 0; this.people.frustumCulled = false; this.people.castShadow = true;
-		this.buckets = new THREE.InstancedMesh(bucketGeometry(), mat, this.MAX); this.buckets.count = 0; this.buckets.frustumCulled = false; this.buckets.castShadow = true;
-		this.tubs = new THREE.InstancedMesh(tubGeometry(), mat, 12); this.tubs.count = 0; this.tubs.frustumCulled = false; this.tubs.castShadow = true;
-		this.group = new THREE.Group(); this.group.add(this.people, this.buckets, this.tubs);
-		this.list = []; this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.e = new THREE.Euler(); this.v = new THREE.Vector3(); this.one = new THREE.Vector3(1, 1, 1);
-		const cols = [0xd8342c, 0x2f6fd0, 0xe0a020, 0x2f9a48, 0xc04a9a, 0xf0efe8, 0x6a4fd0, 0xe07040]; this.cols = cols;
-		for (let i = 0; i < this.MAX; i++) this.people.setColorAt(i, new THREE.Color(cols[i % cols.length]));
-	}
-	want() { return { vol: Math.min(48, S.helpers[0]), tub: Math.min(6, S.helpers[1]) }; }
-	update(dt) {
-		const w = V.view === 'globe' ? { vol: 0, tub: 0 } : this.want();
-		// lanes: volunteers to the left of the machine, bathtub teams to the right
-		const spawn = (kind, k) => {
-			const lane = kind === 'vol' ? -5 - (k % 8) * 1.6 : 6 + (k % 3) * 3.2, x = lane + (Math.random() - .5) * 0.8;
-			const depot = coastZ(x) + 30;   // behind the promenade
-			return { kind, k, x, z: depot, depot, task: 'down', fill: 0, ph: Math.random() * 6.28, sp: 1.15 + Math.random() * 0.3, leave: false };
-		};
-		for (const kind of ['vol', 'tub']) {
-			const have = this.list.filter(p => p.kind === kind && !p.leave), n = w[kind];
-			if (have.length < n) for (let k = have.length; k < n; k++) this.list.push(spawn(kind, k));
-			if (have.length > n) for (let k = n; k < have.length; k++) have[k].leave = true;
-		}
-		let np = 0, nb = 0, nt = 0;
-		for (const p of this.list) {
-			const edge = edgeAt(p.x) + 0.8, up = p.depot, sp = p.sp * (p.kind === 'tub' ? 0.8 : 1);
-			if (p.task === 'down') { p.z -= sp * dt; if (p.z <= edge) { p.z = edge; p.task = 'fill'; p.fill = 0; } if (p.leave) p.task = 'up'; }
-			else if (p.task === 'fill') { p.fill += dt; if (p.fill > 1.6) { p.task = 'up'; if (p.kind === 'vol' && Math.random() < 0.5) drops.splash(p.x, V.wy, p.z - 0.6, 0.05); } }
-			else if (p.task === 'up') { p.z += sp * 0.85 * dt; if (p.z >= up) { p.z = up; p.task = p.leave ? 'gone' : 'down'; } }
-			if (p.task === 'gone') continue;
-			const walking = p.task !== 'fill', yaw = p.task === 'down' || p.task === 'fill' ? Math.PI : 0, bob = walking ? Math.abs(Math.sin(V.t * 7 * sp + p.ph)) * 0.05 : 0;
-			const y = groundAt(p.x, p.z) + bob, stoop = p.task === 'fill' ? 0.35 * Math.sin(Math.min(1, p.fill / 0.8) * Math.PI) : 0;
-			if (p.kind === 'tub') {
-				// two of them, one tub between: the pair walks side by side
-				for (const s of [-0.75, 0.75]) { this.e.set(stoop, yaw, 0); this.q.setFromEuler(this.e); this.m.compose(this.v.set(p.x + s, y, p.z), this.q, this.one); this.people.setMatrixAt(np++, this.m); }
-				const full = p.task === 'up' ? 1 : 0;
-				this.e.set(0, yaw + Math.PI / 2, 0); this.q.setFromEuler(this.e); this.m.compose(this.v.set(p.x, y + 0.85 - stoop * 0.8, p.z), this.q, this.one); this.tubs.setMatrixAt(nt++, this.m);
-				if (full && Math.random() < dt * 3) drops.emit(p.x + (Math.random() - .5), y + 0.8, p.z, 0, 0.5, 0, 0.5, 0.05, 3);
-			} else {
-				this.e.set(stoop, yaw, 0); this.q.setFromEuler(this.e); this.m.compose(this.v.set(p.x, y, p.z), this.q, this.one); this.people.setMatrixAt(np++, this.m);
-				const side = 0.3; this.e.set(0, yaw, 0); this.q.setFromEuler(this.e);
-				this.v.set(p.x + Math.cos(yaw) * side, y + 0.62 - stoop * 0.5 + (p.task === 'up' ? 0 : 0.05), p.z - Math.sin(yaw) * side);
-				this.m.compose(this.v, this.q, this.one); this.buckets.setMatrixAt(nb++, this.m);
-			}
-		}
-		this.list = this.list.filter(p => p.task !== 'gone');
-		this.people.count = Math.min(this.MAX, np); this.buckets.count = Math.min(this.MAX, nb); this.tubs.count = Math.min(12, nt);
-		for (const im of [this.people, this.buckets, this.tubs]) im.instanceMatrix.needsUpdate = true;
-	}
-}
-
 // ═══════════════════════════ the helpers' gear ═══════════════════════════
 // Hoses run from the promenade down the bared sand into the water and grow longer as it sinks; fire engines drive
 // down after it; pumping stations stand on the promenade with a pipe each; straws stand in rows at the water's edge.
@@ -4295,31 +4239,155 @@ class Tankers {
 	}
 }
 
-// ── sunbathers: towel, umbrella, a person lying on the towel. They like to be near the water, so as it goes they get
-// up, carry the lot down after it and lie down again. They walk at a walking pace; nobody is ever moved in a jump.
 function towelGeometry() { const g = new THREE.PlaneGeometry(0.9, 1.9, 1, 6); g.rotateX(-Math.PI / 2); const c = g.attributes.position, col = new Float32Array(c.count * 3); for (let i = 0; i < c.count; i++) { const stripe = Math.floor((c.getZ(i) + 0.95) / 1.9 * 6 + 0.01) % 2 ? 1 : 0.55; col.set([stripe, stripe, stripe], i * 3); } g.setAttribute('color', new THREE.BufferAttribute(col, 3)); return plain2(g); }
 function plain2(g) { for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'color') g.deleteAttribute(k); return g; }
-function umbrellaGeometry() {
-	const top = new THREE.ConeGeometry(1.1, 0.45, 12, 1, true); top.translate(0, 2.05, 0);
-	const pole = new THREE.CylinderGeometry(0.025, 0.025, 2.1, 6); pole.translate(0, 1.05, 0);
-	return mergeGeometries([colorize(plain(top), 0xffffff), colorize(plain(pole), 0x6a6a6a)]);
+
+// ═══════════════════════════ people ═══════════════════════════
+// Everyone on the beach is drawn from one crowd: each body part is an instanced capsule (torso, hips, head and hair,
+// upper and lower arms, thighs, shins, feet), placed every frame from a small skeleton, so people walk with swinging
+// legs and arms, stoop to fill a bucket, carry, sit and lie down. Skin, hair and swimwear vary per person.
+const SKIN = [0xd9a47e, 0xc98f6a, 0xb07650, 0x8c5a38, 0x5e3a22, 0xe2b08c], HAIR = [0x2b1d14, 0x5a3a22, 0xc9a25c, 0x161616, 0x8f8f8f, 0x9c4e2a];
+const TOPS = [0xd8342c, 0x2f6fd0, 0xe0a020, 0x2f9a48, 0xc04a9a, 0xf2f0ea, 0x6a4fd0, 0xe07040, 0x24a0a0], BOTTOMS = [0x2f4f7a, 0x1f2f3a, 0xd8342c, 0xefeae0, 0x3f6f3f, 0xe0a020, 0x6b4a8a];
+function personColours(seed) { const r = mulberry32(seed * 7919 + 13); const pick = a => a[(r() * a.length) | 0]; return { skin: pick(SKIN), hair: pick(HAIR), top: pick(TOPS), bottom: pick(BOTTOMS), bald: r() < 0.12 }; }
+class Crowd {
+	constructor(max) {
+		this.max = max; this.group = new THREE.Group();
+		const mat = patchStandard(new THREE.MeshStandardMaterial({ roughness: 0.72 }), Object.assign({ key: 'crowd' }, WET_PROP));
+		const cap = (r, l, sx = 1, sz = 1) => { const g = new THREE.CapsuleGeometry(r, l, 4, 12); g.scale(sx, 1, sz); return g; };
+		const hairG = new THREE.SphereGeometry(0.113, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55); hairG.translate(0, 0.004, -0.008);
+		const footG = new RoundedBoxGeometry(0.09, 0.06, 0.23, 2, 0.025); footG.translate(0, 0.03, 0.05);
+		const defs = { torso: [cap(0.15, 0.28, 1.22, 0.72), 1], hips: [cap(0.125, 0.1, 1.25, 0.8), 1], head: [new THREE.SphereGeometry(0.105, 18, 14), 1], hair: [hairG, 1],
+			uarm: [cap(0.043, 0.22), 2], farm: [cap(0.037, 0.21), 2], thigh: [cap(0.068, 0.32), 2], shin: [cap(0.05, 0.34), 2], foot: [footG, 2] };
+		this.p = {};
+		for (const k in defs) { const [g, per] = defs[k], im = new THREE.InstancedMesh(g, mat, max * per); im.count = 0; im.frustumCulled = false; im.castShadow = true; im.receiveShadow = true; this.group.add(im); this.p[k] = { im, n: 0 }; }
+		this.M = new THREE.Matrix4(); this.R = new THREE.Matrix4(); this.T = new THREE.Matrix4(); this.c = new THREE.Color(); this.v = new THREE.Vector3(); this.q = new THREE.Quaternion(); this.e = new THREE.Euler();
+	}
+	begin() { for (const k in this.p) this.p[k].n = 0; }
+	end() { for (const k in this.p) { const P = this.p[k]; P.im.count = P.n; P.im.instanceMatrix.needsUpdate = true; if (P.im.instanceColor) P.im.instanceColor.needsUpdate = true; } }
+	put(k, m, hex) { const P = this.p[k]; if (P.n >= P.im.instanceMatrix.count) return; P.im.setMatrixAt(P.n, m); P.im.setColorAt(P.n, this.c.setHex(hex)); P.n++; }
+	// a rotation matrix from euler angles (XYZ order, radians)
+	rot(x, y, z) { return new THREE.Matrix4().makeRotationFromEuler(this.e.set(x, y, z)); }
+	// o: { x, y, z, yaw, cols, walk (0..1), phase, lean, stoop, lie ('back'|'sit'|null), arms: { l: [swing, bend, out], r: [...] }, legs: {...} }
+	// returns where the right and left hands are, in the world
+	person(o) {
+		const col = o.cols, amp = o.walk || 0, ph = o.phase || 0;
+		const root = new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).multiply(this.rot(0, o.yaw || 0, 0));
+		let pelvisY = 0.92 + Math.abs(Math.cos(ph)) * 0.03 * amp;
+		if (o.lie === 'back') { root.multiply(new THREE.Matrix4().makeTranslation(0, 0.13, 0.92)).multiply(this.rot(-Math.PI / 2, 0, 0)); pelvisY = 0; }
+		if (o.lie === 'sit') pelvisY = 0.14;
+		const stoop = o.stoop || 0, lean = (o.lean || 0) + stoop * 1.05;
+		const pelvis = root.clone().multiply(new THREE.Matrix4().makeTranslation(0, pelvisY - stoop * 0.12, 0));
+		const torsoM = pelvis.clone().multiply(this.rot(lean, 0, Math.sin(ph) * 0.04 * amp));
+		const at = (base, x, y, z) => base.clone().multiply(new THREE.Matrix4().makeTranslation(x, y, z));
+		// hips, torso, head
+		this.put('hips', at(pelvis, 0, 0.02, 0).multiply(this.rot(0, 0, Math.PI / 2)), col.bottom);
+		this.put('torso', at(torsoM, 0, 0.29, 0), col.top);
+		const head = at(torsoM, 0, 0.665, 0.012).multiply(this.rot(-lean * 0.5 + (o.lie === 'back' ? 0.25 : 0), 0, 0));
+		this.put('head', head, col.skin); if (!col.bald) this.put('hair', head, col.hair);
+		// legs: swing from the hip, bend at the knee, feet flat
+		const legs = o.legs || {};
+		const hands = {};
+		for (const s of [-1, 1]) {
+			const side = s < 0 ? 'l' : 'r', w = Math.sin(ph + (s < 0 ? 0 : Math.PI)) * amp;
+			const [lsw, lkn] = legs[side] || [0.42 * w + stoop * 0.35 + (o.lie === 'sit' ? 1.5 : 0), Math.max(0, -Math.cos(ph + (s < 0 ? 0 : Math.PI))) * 0.7 * amp + 0.06 + stoop * 0.55 + (o.lie === 'sit' ? 0.35 : 0)];
+			const hip = at(pelvis, s * 0.09, -0.02, 0).multiply(this.rot(-lsw, 0, 0));
+			this.put('thigh', at(hip, 0, -0.22, 0), col.bottom);
+			const knee = at(hip, 0, -0.44, 0).multiply(this.rot(lkn, 0, 0));
+			this.put('shin', at(knee, 0, -0.21, 0), col.skin);
+			this.put('foot', at(knee, 0, -0.46, 0).multiply(this.rot(-lkn + lsw - (o.lie === 'back' ? 0 : 0), 0, 0)), col.skin);
+			// arms: swing against the legs, bend at the elbow
+			const [asw, abn, aout] = (o.arms && o.arms[side]) || [-0.5 * w + stoop * 1.05, 0.25 + 0.15 * amp, 0.1];
+			const sh = at(torsoM, s * 0.205, 0.5, 0).multiply(this.rot(-asw, 0, s * aout));
+			this.put('uarm', at(sh, 0, -0.145, 0), col.skin);
+			const el = at(sh, 0, -0.29, 0).multiply(this.rot(-abn, 0, 0));
+			this.put('farm', at(el, 0, -0.14, 0), col.skin);
+			hands[side] = new THREE.Vector3().setFromMatrixPosition(at(el, 0, -0.3, 0));
+		}
+		return hands;
+	}
 }
+// a beach umbrella: eight panels, every other one pale, on a pole with a finial
+function umbrellaGeometry() {
+	const top = new THREE.ConeGeometry(1.05, 0.34, 8, 1, true).toNonIndexed(); top.translate(0, 2.05, 0);
+	const col = new Float32Array(top.attributes.position.count * 3);
+	for (let i = 0; i < top.attributes.position.count; i += 3) { const p = top.attributes.position, cx = (p.getX(i) + p.getX(i + 1) + p.getX(i + 2)) / 3, cz = (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3, k = Math.floor(((Math.atan2(cz, cx) + Math.PI) / (Math.PI * 2)) * 8 + 0.5) % 2 ? 1 : 0.42; for (let j = 0; j < 3; j++) col.set([k, k, k], (i + j) * 3); }
+	top.setAttribute('color', new THREE.BufferAttribute(col, 3)); for (const k of Object.keys(top.attributes)) if (!['position', 'normal', 'color'].includes(k)) top.deleteAttribute(k);
+	const pole = new THREE.CylinderGeometry(0.022, 0.022, 2.25, 8); pole.translate(0, 1.05, 0);
+	const fin = new THREE.SphereGeometry(0.045, 8, 6); fin.translate(0, 2.25, 0);
+	return mergeGeometries([top, colorize(plain(pole), 0x9a9a9a), colorize(plain(fin), 0xf2f0ea)]);
+}
+
+// Walkers go down to the water empty, fill up, and walk back to their depot on the promenade. They are made and dropped
+// only at the depot, behind the promenade, never in sight on the sand: a count that grows adds walkers there.
+class Walkers {
+	constructor() {
+		const mat = patchStandard(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), Object.assign({ key: 'walker' }, WET_PROP));
+		this.MAX = 72;
+		this.buckets = new THREE.InstancedMesh(bucketGeometry(), mat, this.MAX); this.buckets.count = 0; this.buckets.frustumCulled = false; this.buckets.castShadow = true;
+		this.tubs = new THREE.InstancedMesh(tubGeometry(), mat, 12); this.tubs.count = 0; this.tubs.frustumCulled = false; this.tubs.castShadow = true;
+		this.group = new THREE.Group(); this.group.add(this.buckets, this.tubs);
+		this.list = []; this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.e = new THREE.Euler(); this.v = new THREE.Vector3(); this.one = new THREE.Vector3(1, 1, 1);
+		this.seed = 1;
+	}
+	want() { return { vol: Math.min(48, S.helpers[0]), tub: Math.min(6, S.helpers[1]) }; }
+	update(dt) {
+		const w = V.view === 'globe' ? { vol: 0, tub: 0 } : this.want();
+		const spawn = (kind, k) => {
+			const lane = kind === 'vol' ? -5 - (k % 8) * 1.6 : 6 + (k % 3) * 3.2, x = lane + (Math.random() - .5) * 0.8;
+			const depot = coastZ(x) + 30;   // behind the promenade
+			return { kind, k, x, z: depot, depot, task: 'down', fill: 0, ph: Math.random() * 6.28, sp: 1.15 + Math.random() * 0.3, leave: false, cols: personColours(this.seed++), cols2: personColours(this.seed++), walkPh: 0 };
+		};
+		for (const kind of ['vol', 'tub']) {
+			const have = this.list.filter(p => p.kind === kind && !p.leave), n = w[kind];
+			if (have.length < n) for (let k = have.length; k < n; k++) this.list.push(spawn(kind, k));
+			if (have.length > n) for (let k = n; k < have.length; k++) have[k].leave = true;
+		}
+		let nb = 0, nt = 0;
+		for (const p of this.list) {
+			const edge = edgeAt(p.x) + 0.8, up = p.depot, sp = p.sp * (p.kind === 'tub' ? 0.8 : 1);
+			if (p.task === 'down') { p.z -= sp * dt; if (p.z <= edge) { p.z = edge; p.task = 'fill'; p.fill = 0; } if (p.leave) p.task = 'up'; }
+			else if (p.task === 'fill') { p.fill += dt; if (p.fill > 1.6) { p.task = 'up'; if (p.kind === 'vol' && Math.random() < 0.5) drops.splash(p.x, V.wy, p.z - 0.6, 0.05); } }
+			else if (p.task === 'up') { p.z += sp * 0.85 * dt; if (p.z >= up) { p.z = up; p.task = p.leave ? 'gone' : 'down'; } }
+			if (p.task === 'gone') continue;
+			const walking = p.task !== 'fill', yaw = p.task === 'down' || p.task === 'fill' ? Math.PI : 0;
+			if (walking) p.walkPh += dt * sp * 5.2;
+			const y = groundAt(p.x, p.z), stoop = p.task === 'fill' ? Math.sin(Math.min(1, p.fill / 0.8) * Math.PI) * 0.9 : 0;
+			if (p.kind === 'tub') {
+				// two of them, the tub held between them in front at the hips; the pair walks in step
+				const full = p.task === 'up';
+				for (const s of [-0.62, 0.62]) crowd.person({ x: p.x + s, y, z: p.z, yaw: yaw - Math.sign(s) * 0.0, cols: s < 0 ? p.cols : p.cols2, walk: walking ? 0.7 : 0, phase: p.walkPh + (s < 0 ? 0 : 0.4), stoop: stoop * 0.6, arms: { l: [0.55 + stoop, 0.7, 0.05], r: [0.55 + stoop, 0.7, 0.05] } });
+				this.e.set(0, yaw + Math.PI / 2, 0); this.q.setFromEuler(this.e);
+				this.m.compose(this.v.set(p.x, y + 0.78 - stoop * 0.35, p.z + (yaw ? -0.3 : 0.3)), this.q, this.one); this.tubs.setMatrixAt(nt++, this.m);
+				if (full && Math.random() < dt * 3) drops.emit(p.x + (Math.random() - .5), y + 0.8, p.z, 0, 0.5, 0, 0.5, 0.05, 3);
+			} else {
+				// the bucket hangs from the right hand; it swings a little less than the arm
+				const hands = crowd.person({ x: p.x, y, z: p.z, yaw, cols: p.cols, walk: walking ? 1 : 0, phase: p.walkPh, stoop, arms: { l: null, r: [stoop * 1.05 + (walking ? 0.08 * Math.sin(p.walkPh) : 0), 0.1, 0.16] } });
+				this.e.set(0, yaw, 0); this.q.setFromEuler(this.e);
+				this.m.compose(this.v.copy(hands.r).add(new THREE.Vector3(0, -0.13, 0)), this.q, this.one); this.buckets.setMatrixAt(nb++, this.m);
+			}
+		}
+		this.list = this.list.filter(p => p.task !== 'gone');
+		this.buckets.count = Math.min(this.MAX, nb); this.tubs.count = Math.min(12, nt);
+		for (const im of [this.buckets, this.tubs]) im.instanceMatrix.needsUpdate = true;
+	}
+}
+
+// ── sunbathers: towel, umbrella, a person lying or sitting on the towel. They like to be near the water, so as it goes
+// they get up, carry the lot down after it and settle again. They walk at a walking pace; nobody is moved in a jump.
 class Sunbathers {
 	constructor() {
 		const mat = patchStandard(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), { key: 'sunbath' });
 		this.N = 40;
 		this.towels = new THREE.InstancedMesh(towelGeometry(), mat, this.N); this.umbrellas = new THREE.InstancedMesh(umbrellaGeometry(), mat, this.N);
-		this.people = new THREE.InstancedMesh(personGeometry(), mat, this.N);
-		for (const im of [this.towels, this.umbrellas, this.people]) { im.frustumCulled = false; im.castShadow = true; im.receiveShadow = true; }
+		for (const im of [this.towels, this.umbrellas]) { im.frustumCulled = false; im.castShadow = true; im.receiveShadow = true; }
 		this.towels.castShadow = false;
-		this.group = new THREE.Group(); this.group.add(this.towels, this.umbrellas, this.people);
+		this.group = new THREE.Group(); this.group.add(this.towels, this.umbrellas);
 		const rnd = mulberry32(61), cols = [0xd8342c, 0x2f6fd0, 0xe0a020, 0x2f9a48, 0xc04a9a, 0xf07a1a, 0x24a0a0], c = new THREE.Color();
 		this.list = [];
 		for (let i = 0; i < this.N; i++) {
 			let x; do { x = (rnd() * 2 - 1) * 170; } while (x > -9 && x < 46);
-			const s = { x, off: 4 + rnd() * 6, yaw: (rnd() - 0.5) * 0.6, z: null, walk: 0, ph: rnd() * 6 };
+			const s = { x, off: 4 + rnd() * 6, yaw: (rnd() - 0.5) * 0.6, z: null, walk: 0, ph: rnd() * 6, wph: 0, cols: personColours(500 + i), pose: rnd() < 0.65 ? 'back' : 'sit', knee: rnd() < 0.4, armsUp: rnd() < 0.35 };
 			this.towels.setColorAt(i, c.setHex(cols[(i * 3) % cols.length])); this.umbrellas.setColorAt(i, c.setHex(cols[(i * 5 + 2) % cols.length]));
-			this.people.setColorAt(i, c.setHex(cols[(i * 2 + 1) % cols.length]));
 			this.list.push(s);
 		}
 		this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.e = new THREE.Euler(); this.v = new THREE.Vector3(); this.one = new THREE.Vector3(1, 1, 1);
@@ -4334,19 +4402,26 @@ class Sunbathers {
 			const d = want - s.z;
 			// a few metres off is fine; more and they pack up and go
 			if (Math.abs(d) > 6 && !s.walk) s.walk = 1;
-			if (s.walk) { const st = Math.sign(d) * Math.min(Math.abs(d), 1.1 * dt); s.z += st; moved++; if (Math.abs(d) < 0.3) s.walk = 0; }
-			const y = groundAt(s.x, s.z), walking = !!s.walk;
-			// the towel and the umbrella go with them, carried, while they walk
-			this.e.set(0, s.yaw, 0); this.q.setFromEuler(this.e);
-			this.m.compose(this.v.set(s.x, y + (walking ? 1.0 : 0.02), s.z + (walking ? 0.3 : 0)), this.q, walking ? this.v.clone().set(0.35, 1, 0.35) : this.one); this.towels.setMatrixAt(i, this.m);
-			this.e.set(walking ? 1.2 : 0.12, s.yaw, 0); this.q.setFromEuler(this.e);
-			this.m.compose(this.v.set(s.x + (walking ? 0.35 : 0.9), y + (walking ? 0.9 : -0.1), s.z + (walking ? -0.2 : 0.8)), this.q, this.one); this.umbrellas.setMatrixAt(i, this.m);
-			if (walking) { this.e.set(0, s.yaw + Math.PI, 0); this.q.setFromEuler(this.e); this.m.compose(this.v.set(s.x, y + Math.abs(Math.sin(V.t * 7 + s.ph)) * 0.04, s.z), this.q, this.one); }
-			else { this.e.set(-Math.PI / 2, s.yaw, 0); this.q.setFromEuler(this.e); this.m.compose(this.v.set(s.x, y + 0.12, s.z + 0.9), this.q, this.one); }
-			this.people.setMatrixAt(i, this.m);
+			if (s.walk) { const st = Math.sign(d) * Math.min(Math.abs(d), 1.1 * dt); s.z += st; moved++; s.wph += dt * 5.5; if (Math.abs(d) < 0.3) s.walk = 0; }
+			const y = groundAt(s.x, s.z), walking = !!s.walk, heading = d < 0 ? Math.PI : 0;
+			if (walking) {
+				// up and carrying: the towel rolled under one arm, the umbrella closed over the other shoulder
+				const hands = crowd.person({ x: s.x, y, z: s.z, yaw: heading, cols: s.cols, walk: 1, phase: s.wph, arms: { l: [0.1, 1.2, 0.35], r: [0.3, 1.4, 0.1] } });
+				this.e.set(0, heading, 0); this.q.setFromEuler(this.e);
+				this.m.compose(this.v.copy(hands.l).add(new THREE.Vector3(0, 0.1, 0)), this.q, this.v.clone().set(0.3, 1, 0.25)); this.towels.setMatrixAt(i, this.m);
+				this.e.set(heading ? 1.15 : -1.15, heading, 0); this.q.setFromEuler(this.e);
+				this.m.compose(this.v.copy(hands.r).add(new THREE.Vector3(0, -0.2, 0)), this.q, this.v.clone().set(0.2, 0.9, 0.2)); this.umbrellas.setMatrixAt(i, this.m);
+			} else {
+				this.e.set(0, s.yaw, 0); this.q.setFromEuler(this.e);
+				this.m.compose(this.v.set(s.x, y + 0.02, s.z), this.q, this.one); this.towels.setMatrixAt(i, this.m);
+				this.e.set(0.12, s.yaw, 0.05); this.q.setFromEuler(this.e);
+				this.m.compose(this.v.set(s.x + 0.9, y - 0.1, s.z + 0.8), this.q, this.one); this.umbrellas.setMatrixAt(i, this.m);
+				if (s.pose === 'back') crowd.person({ x: s.x, y, z: s.z, yaw: s.yaw + Math.PI, cols: s.cols, lie: 'back', arms: s.armsUp ? { l: [2.9, 0.6, 0.2], r: [2.9, 0.6, 0.2] } : { l: [0, 0.05, 0.12], r: [0, 0.05, 0.12] }, legs: s.knee ? { l: [0.75, 1.4], r: [0, 0.03] } : { l: [0, 0.03], r: [0, 0.03] } });
+				else crowd.person({ x: s.x, y, z: s.z - 0.4, yaw: s.yaw + Math.PI, cols: s.cols, lie: 'sit', lean: -0.35, arms: { l: [-0.45, 0.05, 0.28], r: [-0.45, 0.05, 0.28] } });
+			}
 			i++;
 		}
-		for (const im of [this.towels, this.umbrellas, this.people]) { im.instanceMatrix.needsUpdate = true; im.count = i; }
+		for (const im of [this.towels, this.umbrellas]) { im.instanceMatrix.needsUpdate = true; im.count = i; }
 		if (moved > 6 && !S.ui.towels && V.mode === 'play') { S.ui.towels = 1; news('Beachgoers have moved their towels down to the water again. They would like it to stay put.', true); }
 	}
 }
@@ -4733,7 +4808,7 @@ class Finale {
 const setLoad = (p, msg) => { $('#loadbar').style.width = (p * 100).toFixed(0) + '%'; $('#loadmsg').textContent = msg; };
 const tick = () => new Promise(r => setTimeout(r, 16));
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-let machine, buyers, walkers, tankers, vm, waterNormals;
+let machine, buyers, walkers, tankers, vm, waterNormals, crowd;
 function guessQuality() {
 	try {
 		const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info'), r = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '';
@@ -4831,6 +4906,7 @@ async function boot() {
 	buyers = new Buyers(); scene.add(buyers.group);
 	// canvas text drawn before the web fonts arrive keeps the fallback face: draw the faces again once they are here
 	if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { machine.userData.price = null; for (const it of buyers.items) if (it && it.g.userData.isMachine) it.g.userData.price = null; });
+	crowd = new Crowd(150); scene.add(crowd.group);
 	walkers = new Walkers(); scene.add(walkers.group);
 	V.sun = new Sunbathers(); scene.add(V.sun.group);
 	tankers = new Tankers(); scene.add(tankers.group);
@@ -5111,7 +5187,7 @@ function setTool(i, snap) {
 	g.layers.set(2);
 }
 function updateViewmodel(dt) {
-	vm.visible = V.view === 'beach' && !V.flyDown;
+	vm.visible = V.view === 'beach' && !V.flyDown && !V.noVm;
 	if (V.view !== 'beach') return;
 	const g = vm.userData.tool, pose = vm.userData.pose; if (!g) return;
 	// the dip spring
@@ -5229,7 +5305,7 @@ function frame(dt, noRender) {
 	if (V.view === 'beach' || V.view === 'air') {
 		fishes.update(dt, V.wy, V.t, { splash: (x, y, z, s) => { if (V.view === 'beach') fpSplash(x, y, z, s * 0.25); else drops.splash(x, y, z, s * 0.6); ocean.ripple(x, z, s * 0.3, V.t); } });
 		updateFinds(dt);
-		buyers.update(dt); walkers.update(dt); V.sun.update(dt); V.canal.update(dt); gear.update(dt); tankers.update(dt); helperFx(dt);
+		buyers.update(dt); crowd.begin(); walkers.update(dt); V.sun.update(dt); crowd.end(); V.canal.update(dt); gear.update(dt); tankers.update(dt); helperFx(dt);
 		if (playing && !V.paused) updateDuck(dt);
 		updateSign();
 		setMachinePrice(machine, fmtCents(SEA_.price(S))); for (const it of buyers.items) if (it && it.g.userData.isMachine) setMachinePrice(it.g, fmtCents(SEA_.price(S)));
